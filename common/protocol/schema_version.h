@@ -1,0 +1,8 @@
+#ifndef PTC_SCHEMA_VERSION_H
+#define PTC_SCHEMA_VERSION_H
+
+#define PTC_SCHEMA_VERSION 1
+#define PTC_TOKEN_VERSION 1
+
+#endif
+

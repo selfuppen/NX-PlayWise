@@ -1,0 +1,211 @@
+# Protocol
+
+This document defines the v1 file and token contracts used between companion, sysmodule, and developer tools.
+
+## SD Card Root
+
+```text
+sdmc:/switch/play-time-control/
+```
+
+## Directory Layout
+
+```text
+sdmc:/switch/play-time-control/
+├── config.json
+├── auth.json
+├── rules.json
+├── state.json
+├── capabilities.json
+├── inbox/
+│   ├── pending/
+│   ├── processing/
+│   └── done/
+├── results/
+├── logs/
+│   ├── sysmodule.log
+│   └── events.jsonl
+├── ledger/
+│   └── used_nonces.jsonl
+├── backups/
+│   └── last_pctl_backup.txt
+└── flags/
+    └── disable.flag
+```
+
+All JSON files must include `"version": 1`.
+
+## Config Files
+
+`config.json`:
+
+```json
+{
+  "version": 1,
+  "device_id": "kid-switch",
+  "grant_secret": "replace-with-long-random-secret",
+  "max_add_minutes": 120,
+  "control_mode": "observe",
+  "allow_unlimited_to_limited": false,
+  "default_request_timeout_ms": 8000
+}
+```
+
+`auth.json`:
+
+```json
+{
+  "version": 1,
+  "pin_hash": "hex-encoded-hmac-sha256",
+  "pin_salt": "hex-encoded-16-bytes",
+  "hash": "hmac-sha256",
+  "updated_at": 1783526400
+}
+```
+
+`capabilities.json`:
+
+```json
+{
+  "version": 1,
+  "raw_block_verified": false,
+  "suspend_verified": false,
+  "verified_at": {
+    "raw_block": null,
+    "suspend": null
+  }
+}
+```
+
+## Token v1
+
+Display format:
+
+```text
+XXXXX-XXXXX-XXXXX-XXXXX
+```
+
+Encoding:
+
+- Crockford Base32.
+- 20 symbols total.
+- 100 bits total.
+- 60-bit payload.
+- 40-bit truncated HMAC-SHA256.
+
+Payload:
+
+```text
+version:              4 bit
+action:               4 bit
+minutes:             11 bit
+day_index_since_2020:16 bit
+nonce:               25 bit
+```
+
+HMAC input:
+
+```text
+"PTC1" || device_id || NUL || payload_bits_as_bytes
+```
+
+Supported action:
+
+```text
+1 = add_today_minutes
+```
+
+Other local parent operations must use request queue types, not offline token actions.
+
+## Request Queue
+
+Companion writes requests atomically:
+
+1. Generate `request_id` as `<unix_ms>-<random16>`.
+2. Write `inbox/pending/<request_id>.json.tmp`.
+3. Rename to `inbox/pending/<request_id>.json`.
+
+Sysmodule processing:
+
+1. Rename pending request to `inbox/processing/<request_id>.json`.
+2. Process request.
+3. Write `results/<request_id>.json`.
+4. Move original request to `inbox/done/<request_id>.json`.
+
+Request shape:
+
+```json
+{
+  "version": 1,
+  "request_id": "1783526400123-a4f2",
+  "type": "offline_code",
+  "created_at": 1783526400,
+  "payload": {
+    "code": "ABCDE-FGHIJ-KLMNO-PQRST"
+  }
+}
+```
+
+Supported request types:
+
+- `offline_code`
+- `status`
+- `set_today_limit`
+- `add_today_minutes`
+- `disable_today_limit`
+- `block_today`
+- `restore_today_policy`
+- `set_weekly_template`
+- `set_bedtime`
+- `set_limit_action`
+- `parent_unlock_start`
+- `parent_unlock_end`
+- `probe_raw_block`
+- `probe_suspend`
+
+Success result shape:
+
+```json
+{
+  "version": 1,
+  "request_id": "1783526400123-a4f2",
+  "type": "offline_code",
+  "status": "ok",
+  "mode": "observe",
+  "dry_run": true,
+  "state": {},
+  "capabilities": {},
+  "completed_at": 1783526401
+}
+```
+
+Error result shape:
+
+```json
+{
+  "version": 1,
+  "request_id": "1783526400123-a4f2",
+  "type": "offline_code",
+  "status": "error",
+  "mode": "observe",
+  "dry_run": true,
+  "error": {
+    "code": 203,
+    "reason": "bad_signature",
+    "message": "授权码签名不匹配"
+  },
+  "completed_at": 1783526401
+}
+```
+
+## Error Contract
+
+Each error code must have:
+
+- Numeric code.
+- Stable reason string.
+- User-facing Chinese message.
+- Developer log detail.
+
+Unknown schema, unknown request type, bad JSON, bad token, disabled mode, capability guard failure, backup failure, PCTL failure, and storage failure must all map to stable errors.
+

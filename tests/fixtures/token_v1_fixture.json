@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "device_id": "test-device",
+  "grant_secret": "test-secret",
+  "max_add_minutes": 120,
+  "cases": [
+    {
+      "name": "valid_30min",
+      "minutes": 30,
+      "day_index": 2380,
+      "nonce": 4660,
+      "expect": "ok",
+      "code": "241W2-AC004-HM7YW-51R84"
+    },
+    {
+      "name": "over_limit_180min",
+      "minutes": 180,
+      "day_index": 2380,
+      "nonce": 4661,
+      "expect": "minutes_exceed_limit",
+      "code": "24B82-AC004-HNMGY-D0FAS"
+    }
+  ]
+}
