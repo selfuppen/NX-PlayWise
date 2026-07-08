@@ -33,6 +33,14 @@ def write_zip(root: Path, zip_path: Path) -> None:
             package.write(file_path, file_path.relative_to(root).as_posix())
 
 
+def require_file(parser: argparse.ArgumentParser, option: str, path: Path | None) -> Path | None:
+    if path is None:
+        return None
+    if not path.is_file():
+        parser.error(f"{option} file not found: {path}. Replace the example path with a real build artifact, or omit {option}.")
+    return path
+
+
 def create_package(
     out: Path,
     mode: str,
@@ -126,6 +134,9 @@ def main() -> int:
 
     if args.max_add_minutes <= 0:
         parser.error("--max-add-minutes must be positive")
+    args.nro = require_file(parser, "--nro", args.nro)
+    args.sysmodule_exefs = require_file(parser, "--sysmodule-exefs", args.sysmodule_exefs)
+    args.toolbox = require_file(parser, "--toolbox", args.toolbox)
     if args.boot2 and args.sysmodule_exefs is None:
         parser.error("--boot2 requires --sysmodule-exefs so the package cannot enable an empty boot2 entry")
 

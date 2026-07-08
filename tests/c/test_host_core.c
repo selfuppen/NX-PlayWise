@@ -7,6 +7,7 @@
 #include "../../common/protocol/error_code.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/token/token_v1.h"
+#include "../../companion/file_protocol.h"
 #include "../../companion/request_client.h"
 #include "../../platform/host/fake_time.h"
 #include "../../platform/host/mem_storage.h"
@@ -97,6 +98,51 @@ static void test_time_and_policy(void)
 
     decision = ptc_policy_decide(PTC_CONTROL_GRANT, true, PTC_OPERATION_STATUS, &caps, false, true);
     check_int(decision.error, PTC_ERR_DISABLED, "disable flag wins");
+}
+
+static void test_companion_request_builder_and_file_protocol(void)
+{
+    PtcMemStorage mem;
+    PtcCompanionFileClient client;
+    char request_id[PTC_COMPANION_REQUEST_ID_SIZE];
+    char json[1024];
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_companion_file_client_init(&client, "app", &mem.storage);
+
+    check_int(ptc_companion_make_request_id(request_id, sizeof(request_id), 1783526400123LL, 0xa4f2), PTC_COMPANION_OK, "request id made");
+    check_str(request_id, "1783526400123-a4f2", "request id format");
+
+    (void)ptc_companion_status_request_json(json, sizeof(json), request_id, 1783526400);
+    check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"status\",\"created_at\":1783526400,\"payload\":{}}\n", "status request json");
+
+    (void)ptc_companion_offline_code_request_json(json, sizeof(json), request_id, 1783526400, "241W2-AC004-HM7YW-51R84");
+    check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"offline_code\",\"created_at\":1783526400,\"payload\":{\"code\":\"241W2-AC004-HM7YW-51R84\"}}\n", "offline code request json");
+
+    (void)ptc_companion_parent_minutes_request_json(json, sizeof(json), request_id, 1783526400, "add_today_minutes", 30);
+    check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"add_today_minutes\",\"created_at\":1783526400,\"payload\":{\"minutes\":30}}\n", "parent minutes request json");
+
+    check_int(ptc_companion_submit_status(&client, request_id, 1783526400), PTC_COMPANION_OK, "submit status");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/1783526400123-a4f2.json.tmp"), "tmp request renamed");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/1783526400123-a4f2.json"), "pending request visible");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/inbox/pending/1783526400123-a4f2.json", result, sizeof(result)), "pending request readable");
+    check_true(strstr(result, "\"type\":\"status\"") != NULL, "pending request content");
+
+    check_int(ptc_companion_read_result(&client, request_id, 7999, 8000, result, sizeof(result)), PTC_COMPANION_PENDING, "missing result pending");
+    check_int(ptc_companion_read_result(&client, request_id, 8000, 8000, result, sizeof(result)), PTC_COMPANION_TIMEOUT, "missing result timeout");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/1783526400123-a4f2.json", "{\"version\":1,\"request_id\":\"other\",\"status\":\"ok\"}\n"), "write mismatched result");
+    check_int(ptc_companion_read_result(&client, request_id, 0, 8000, result, sizeof(result)), PTC_COMPANION_RESULT_MISMATCH, "mismatched result rejected");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/1783526400123-a4f2.json", "{\"version\":1,\"status\":\"ok\"}\n"), "write invalid result");
+    check_int(ptc_companion_read_result(&client, request_id, 0, 8000, result, sizeof(result)), PTC_COMPANION_RESULT_INVALID, "invalid result rejected");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/1783526400123-a4f2.json", "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"status\":\"ok\"}\n"), "write matching result");
+    check_int(ptc_companion_read_result(&client, request_id, 0, 8000, result, sizeof(result)), PTC_COMPANION_OK, "matching result accepted");
+
+    mem.fail_renames = true;
+    check_int(ptc_companion_submit_offline_code(&client, "1783526400124-0001", 1783526401, "241W2-AC004-HM7YW-51R84"), PTC_COMPANION_RENAME_FAILED, "rename failure surfaced");
 }
 
 static void write_default_files(PtcMemStorage *mem, const char *mode, bool allow_unlimited)
@@ -222,6 +268,7 @@ int main(void)
 {
     test_token_v1();
     test_time_and_policy();
+    test_companion_request_builder_and_file_protocol();
     test_observe_status_flow();
     test_grant_flow_consumes_nonce_after_write();
     test_backup_failure_blocks_write();

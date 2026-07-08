@@ -22,7 +22,7 @@
 - C common core 已包含 token v1、错误映射、时间计算、规则基础、控制策略和 result builder。
 - 平台抽象已包含 `StorageVTable`、`PctlVTable`、time provider、logger，以及 host doubles：`mem_storage`、`pctl_stub`、fake time。
 - `sysmodule/sysmodule_core.c` 已提供 host-testable 队列编排、stuck processing 恢复、backup gate、grant nonce ledger 和 result 写入。
-- `companion/request_client.c` 已提供 request JSON 构建；真实 NRO UI 仍待实现。
+- `companion/request_client.c` 和 `companion/file_protocol.c` 已提供 request JSON 构建、pending 写入和 result 匹配；`companion/nro/` 已提供最小孩子主界面 NRO 骨架。
 - `Makefile` 已提供主机 C 测试、Python 测试和 SDMC package 目标。
 
 ## 核心原则
