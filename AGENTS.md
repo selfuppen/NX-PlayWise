@@ -19,6 +19,14 @@
 - `python tools/grant_code.py --minutes 30 --device test-device --secret test-secret --day-index 2380 --nonce 4660`：生成离线加时代码示例。
 - `python tools/protocol_probe.py init --root <tmp-dir> --device <id> --secret <secret>`：初始化本地协议目录用于手工探测。
 
+远程 devkitPro 容器通过 SSH 别名 `249-nintendo-switch-dev` 访问，远程项目路径为 `/ws/switch-play-time-control-local`，使用 `master` 分支开发。需要验证远程环境时，先在本地通过测试、提交并推送 `master`，再让远程仓库快进拉取并运行测试：
+
+- `ssh 249-nintendo-switch-dev 'cd /ws/switch-play-time-control-local && git pull --ff-only origin master && python3 tests/mvp/test_token_v1.py && python3 tests/observe/test_observe_queue.py'`：远程拉取最新 `master` 并运行当前 host 侧测试。
+
+当前仓库还没有 Makefile 或 CMake 构建入口，因此远程直接运行 `make` 会返回 `No targets specified and no makefile found`。后续加入 sysmodule/companion 构建目标后，非交互 SSH 会话应显式设置 devkitPro 环境变量再编译：
+
+- `ssh 249-nintendo-switch-dev 'export DEVKITPRO=/opt/devkitpro; export DEVKITARM=/opt/devkitpro/devkitARM; export DEVKITA64=/opt/devkitpro/devkitA64; export PATH=$DEVKITA64/bin:$PATH; cd /ws/switch-play-time-control-local && git pull --ff-only origin master && make'`：远程拉取并执行 devkitPro 构建。
+
 ## 编码风格与命名约定
 
 Python 代码使用 4 空格缩进、类型注解和 `from __future__ import annotations`。保持工具脚本无第三方依赖，便于在早期主机测试中直接运行。文件、函数和变量使用 `snake_case`；协议常量使用全大写，例如 `TOKEN_VERSION`。C 头文件保持小型、稳定、无平台依赖，`common` 不应引用 libnx、SD 卡路径、UI、真实时钟或进程级可变状态。
@@ -42,3 +50,5 @@ Python 代码使用 4 空格缩进、类型注解和 `from __future__ import ann
 ## Agent 专用说明
 
 修改前先查看 `docs/DEVELOPMENT_GUIDE.md`、`docs/PROTOCOL.md` 和相关测试。优先保持变更小而可验证；不要重写无关文档或回退用户改动。新增行为时同时补测试和必要文档，并在最终回复中列出实际执行过的命令。
+
+涉及远程编译或容器验证时，使用 `249-nintendo-switch-dev` 和 `/ws/switch-play-time-control-local`；不要假设远程已自动同步本地工作区，必须通过本地提交、推送、远程 `git pull --ff-only origin master` 后再测试。
