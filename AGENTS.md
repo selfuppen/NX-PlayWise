@@ -51,4 +51,6 @@ Python 代码使用 4 空格缩进、类型注解和 `from __future__ import ann
 
 修改前先查看 `docs/DEVELOPMENT_GUIDE.md`、`docs/PROTOCOL.md` 和相关测试。优先保持变更小而可验证；不要重写无关文档或回退用户改动。新增行为时同时补测试和必要文档，并在最终回复中列出实际执行过的命令。
 
+本仓库中文文档使用 UTF-8。PowerShell 默认编码或控制台显示可能把中文读成乱码；读取或写入 `AGENTS.md`、`docs/*.md` 等中文文档时，应显式使用 UTF-8，例如 `Get-Content <file> -Encoding utf8`，避免误判编码或把文档写坏。
+
 涉及远程编译或容器验证时，使用 `249-nintendo-switch-dev` 和 `/ws/switch-play-time-control-local`；不要假设远程已自动同步本地工作区，必须通过本地提交、推送、远程 `git pull --ff-only origin master` 后再测试。
