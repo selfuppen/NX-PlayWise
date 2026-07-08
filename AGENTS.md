@@ -43,6 +43,8 @@ Python 代码使用 4 空格缩进、类型注解和 `from __future__ import ann
 
 历史提交主要使用简洁主题行，包含 `feat(scope): ...`、`docs(scope): ...`、`doc: ...` 等形式，也接受 `Initial commit` 这类基础提交。建议提交信息使用现在时，说明用户可观察的变化，例如 `feat(observe): validate offline code requests`。PR 应包含变更摘要、已运行的测试命令、风险点；涉及 UI、协议文件或真实设备流程时，附截图、样例 JSON 或设备验证记录。
 
+在 Windows PowerShell 中创建包含中文的 commit message 时，必须使用无 BOM 的 UTF-8 message 文件再执行 `git commit -F <file>`；不要使用会写入 BOM 的 `Set-Content -Encoding utf8` 生成提交信息文件。可使用 `[System.Text.UTF8Encoding]::new($false)` 和 `[System.IO.File]::WriteAllText(...)` 写入。提交后必须运行 `git log -1 --pretty=%B` 验证标题前没有不可见 BOM；如果发现标题前有异常隐藏字符，立即用无 BOM message 文件 `git commit --amend -F <file>` 修正。
+
 ## 安全与配置提示
 
 默认控制模式必须保持 `observe`，默认包不应包含 `boot2.flag`。`disable.flag` 优先于所有控制模式。无效 token、dry-run、PCTL 写失败和备份失败路径不得消耗 nonce。不要在 child-visible UI、日志、fixture 之外的示例中泄露真实 `grant_secret`。
