@@ -19,13 +19,13 @@
 - `python tools/grant_code.py --minutes 30 --device test-device --secret test-secret --day-index 2380 --nonce 4660`：生成离线加时代码示例。
 - `python tools/protocol_probe.py init --root <tmp-dir> --device <id> --secret <secret>`：初始化本地协议目录用于手工探测。
 
-远程 devkitPro 容器通过 SSH 别名 `249-nintendo-switch-dev` 访问，远程项目路径为 `/ws/switch-play-time-control-local`，使用 `master` 分支开发。需要验证远程环境时，先在本地通过测试、提交并推送 `master`，再让远程仓库快进拉取并运行测试：
+远程 devkitPro 容器通过 SSH 别名 `249-nintendo-switch-dev` 访问，远程项目路径为 `/ws/switch-play-time-control-local`，使用 `master` 分支开发。需要验证远程环境时，先在本地通过测试、提交并推送 `master`，再让远程仓库快进拉取并运行构建测试：
 
-- `ssh 249-nintendo-switch-dev 'cd /ws/switch-play-time-control-local && git pull --ff-only origin master && python3 tests/mvp/test_token_v1.py && python3 tests/observe/test_observe_queue.py'`：远程拉取最新 `master` 并运行当前 host 侧测试。
+- `ssh 249-nintendo-switch-dev 'cd /ws/switch-play-time-control-local && git pull --ff-only origin master && make'`：远程拉取最新 `master`，编译并运行 C host 测试和 Python 回归。
 
-当前仓库还没有 Makefile 或 CMake 构建入口，因此远程直接运行 `make` 会返回 `No targets specified and no makefile found`。后续加入 sysmodule/companion 构建目标后，非交互 SSH 会话应显式设置 devkitPro 环境变量再编译：
+当前仓库已有 Makefile，远程完整验证应直接在 devkitPro 容器内执行。非交互 SSH 会话需要显式设置 devkitPro 环境变量：
 
-- `ssh 249-nintendo-switch-dev 'export DEVKITPRO=/opt/devkitpro; export DEVKITARM=/opt/devkitpro/devkitARM; export DEVKITA64=/opt/devkitpro/devkitA64; export PATH=$DEVKITA64/bin:$PATH; cd /ws/switch-play-time-control-local && git pull --ff-only origin master && make'`：远程拉取并执行 devkitPro 构建。
+- `ssh 249-nintendo-switch-dev 'export DEVKITPRO=/opt/devkitpro; export DEVKITARM=/opt/devkitpro/devkitARM; export DEVKITA64=/opt/devkitpro/devkitA64; export PATH=$DEVKITA64/bin:$PATH; cd /ws/switch-play-time-control-local && git pull --ff-only origin master && make && make companion-nro && make package-safe package-observe package-safe-nro'`：远程拉取并执行 host 测试、Companion NRO 构建和当前 package 验证。
 
 ## 编码风格与命名约定
 
