@@ -5,9 +5,11 @@ import argparse
 import json
 from pathlib import Path
 import shutil
+import zipfile
 
 
 APP_DIR = Path("switch") / "play-time-control"
+ATMOSPHERE_CONTENT_DIR = Path("atmosphere") / "contents" / "010000000000BD23"
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -15,7 +17,34 @@ def write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def create_package(out: Path, mode: str, include_boot2: bool) -> None:
+def copy_file(src: Path, dst: Path) -> None:
+    if not src.is_file():
+        raise FileNotFoundError(f"missing input file: {src}")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+
+
+def write_zip(root: Path, zip_path: Path) -> None:
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as package:
+        for directory in sorted(path for path in root.rglob("*") if path.is_dir()):
+            package.writestr(directory.relative_to(root).as_posix() + "/", "")
+        for file_path in sorted(path for path in root.rglob("*") if path.is_file()):
+            package.write(file_path, file_path.relative_to(root).as_posix())
+
+
+def create_package(
+    out: Path,
+    mode: str,
+    *,
+    include_boot2: bool,
+    device_id: str,
+    grant_secret: str,
+    max_add_minutes: int,
+    nro: Path | None,
+    sysmodule_exefs: Path | None,
+    toolbox: Path | None,
+) -> None:
     if out.exists():
         shutil.rmtree(out)
     app = out / APP_DIR
@@ -36,9 +65,9 @@ def create_package(out: Path, mode: str, include_boot2: bool) -> None:
         app / "config.json",
         {
             "version": 1,
-            "device_id": "kid-switch",
-            "grant_secret": "replace-with-long-random-secret",
-            "max_add_minutes": 120,
+            "device_id": device_id,
+            "grant_secret": grant_secret,
+            "max_add_minutes": max_add_minutes,
             "control_mode": control_mode,
             "allow_unlimited_to_limited": False,
             "default_request_timeout_ms": 8000,
@@ -66,8 +95,17 @@ def create_package(out: Path, mode: str, include_boot2: bool) -> None:
     write_json(app / "state.json", {"version": 1, "day_index": None, "parent_unlock": {"active": False, "until": 0}, "bedtime_active": False, "last_applied": None})
     write_json(app / "capabilities.json", {"version": 1, "raw_block_verified": False, "suspend_verified": False, "verified_at": {"raw_block": None, "suspend": None}})
 
-    if include_boot2:
-        boot2 = out / "atmosphere" / "contents" / "010000000000BD23" / "flags" / "boot2.flag"
+    if nro is not None:
+        copy_file(nro, app / nro.name)
+
+    if sysmodule_exefs is not None:
+        copy_file(sysmodule_exefs, out / ATMOSPHERE_CONTENT_DIR / "exefs.nsp")
+
+    if toolbox is not None:
+        copy_file(toolbox, out / ATMOSPHERE_CONTENT_DIR / "toolbox.json")
+
+    if include_boot2 and sysmodule_exefs is not None:
+        boot2 = out / ATMOSPHERE_CONTENT_DIR / "flags" / "boot2.flag"
         boot2.parent.mkdir(parents=True, exist_ok=True)
         boot2.write_text("", encoding="utf-8")
 
@@ -76,10 +114,36 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Create staged SDMC packages for play-time-control.")
     parser.add_argument("--mode", choices=["safe", "observe", "disabled", "grant", "enforce"], default="safe")
     parser.add_argument("--out", required=True)
-    parser.add_argument("--boot2", action="store_true", help="Explicitly include Atmosphere boot2 flag.")
+    parser.add_argument("--device-id", default="kid-switch")
+    parser.add_argument("--grant-secret", default="replace-with-long-random-secret")
+    parser.add_argument("--max-add-minutes", type=int, default=120)
+    parser.add_argument("--zip", dest="zip_path", help="Write a zip whose top-level entries are switch/ and optional atmosphere/.")
+    parser.add_argument("--nro", type=Path, help="Optional companion NRO copied under switch/play-time-control/.")
+    parser.add_argument("--sysmodule-exefs", type=Path, help="Optional sysmodule exefs.nsp copied under atmosphere/contents.")
+    parser.add_argument("--toolbox", type=Path, help="Optional Atmosphere toolbox.json copied beside exefs.nsp.")
+    parser.add_argument("--boot2", action="store_true", help="Include boot2.flag; requires --sysmodule-exefs.")
     args = parser.parse_args()
 
-    create_package(Path(args.out), args.mode, args.boot2)
+    if args.max_add_minutes <= 0:
+        parser.error("--max-add-minutes must be positive")
+    if args.boot2 and args.sysmodule_exefs is None:
+        parser.error("--boot2 requires --sysmodule-exefs so the package cannot enable an empty boot2 entry")
+
+    out = Path(args.out)
+    create_package(
+        out,
+        args.mode,
+        include_boot2=args.boot2,
+        device_id=args.device_id,
+        grant_secret=args.grant_secret,
+        max_add_minutes=args.max_add_minutes,
+        nro=args.nro,
+        sysmodule_exefs=args.sysmodule_exefs,
+        toolbox=args.toolbox,
+    )
+    if args.zip_path is not None:
+        write_zip(out, Path(args.zip_path))
+        print(Path(args.zip_path))
     print(Path(args.out))
     return 0
 
