@@ -4,7 +4,7 @@ This directory contains implementation-facing documentation for the clean-slate 
 
 The source architecture review is:
 
-- `docs/TECH_ARCHITECTURE_STABILITY_TESTABILITY_PLAN.md`
+- `TECH_ARCHITECTURE_STABILITY_TESTABILITY_PLAN.md`
 
 Read these documents in this order when starting development:
 
