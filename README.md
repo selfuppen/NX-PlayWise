@@ -1,20 +1,20 @@
 # 开发文档
 
-本目录保存 Nintendo Switch 游玩时间控制项目的实现文档。当前项目按“稳定性和可测试性优先”推进：先在主机侧证明协议、令牌、队列、控制策略和失败路径，再进入真实 Switch PCTL 写入。
+本仓库保存 Nintendo Switch 游玩时间控制项目的实现文档。当前项目按“稳定性和可测试性优先”推进：先在主机侧证明协议、令牌、队列、控制策略和失败路径，再进入真实 Switch PCTL 写入。
 
 源架构评审稿：
 
-- `TECH_ARCHITECTURE_STABILITY_TESTABILITY_PLAN.md`
+- `docs/稳定性与可测试性优先技术架构计划.md`
 
 建议按以下顺序阅读：
 
-1. `DEVELOPMENT_GUIDE.md`：编码边界、模块职责和默认工程规则。
-2. `ARCHITECTURE.md`：运行层次、依赖方向和平台隔离。
-3. `PROTOCOL.md`：SD 卡布局、令牌协议、请求队列、结果 JSON 和错误契约。
-4. `TESTING.md`：主机侧单元测试、集成测试和远程容器验证方式。
-5. `DETAILED_TEST_PLAN.md`：开发、模拟器和真机 observe 的分步测试。
-6. `REAL_SWITCH_TESTING.md`：真机分阶段验证清单。
-7. `IMPLEMENTATION_ROADMAP.md`：实现顺序、当前状态和验收门槛。
+1. `docs/开发指南.md`：编码边界、模块职责和默认工程规则。
+2. `docs/架构.md`：运行层次、依赖方向和平台隔离。
+3. `docs/协议.md`：SD 卡布局、令牌协议、请求队列、结果 JSON 和错误契约。
+4. `docs/测试指南.md`：主机侧单元测试、集成测试和远程容器验证方式。
+5. `docs/详细测试计划.md`：开发、模拟器和真机 observe 的分步测试。
+6. `docs/真机测试指南.md`：真机分阶段验证清单。
+7. `docs/实施路线图.md`：实现顺序、当前状态和验收门槛。
 
 ## 当前实现重点
 
