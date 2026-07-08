@@ -1,24 +1,24 @@
-# Development Guide
+# 开发指南
 
-This project should be implemented stability-first. The first useful milestone is not a polished UI; it is a host-testable core that proves token handling, request processing, control policy, and failure behavior before touching real PCTL writes.
+本项目优先实现稳定、可测试的核心闭环。第一个有价值的里程碑不是精致 UI，而是在 host 环境证明 token、request queue、control policy、backup gate、nonce 消费和失败路径，然后再接触真实 PCTL 写入。
 
-## Language And Runtime
+## 语言与运行时
 
-- Use C by default for `common`, `sysmodule`, and `companion`.
-- Keep `common` free of libnx, filesystem calls, SD card paths, UI, and real clocks.
-- Use Python for developer tools such as fixture generation and protocol probing.
-- Do not introduce C++ unless a later decision records why it is needed.
+- `common`、`sysmodule`、`companion` 默认使用 C。
+- `common` 不得依赖 libnx、文件系统、SD 卡路径、UI、真实时钟或进程级可变平台状态。
+- Python 用于开发工具，例如 fixture 生成、协议 probe 和 package 生成。
+- 不引入 C++，除非后续决策明确记录原因。
 
-If C++ is introduced later:
+如果后续引入 C++：
 
-- Build with `-fno-exceptions`.
-- Build with `-fno-rtti`.
-- Avoid complex static initialization.
-- Avoid uncontrolled dynamic allocation in sysmodule hot paths.
+- 使用 `-fno-exceptions`。
+- 使用 `-fno-rtti`。
+- 避免复杂静态初始化。
+- 避免在 sysmodule 热路径使用不可控动态分配。
 
-## Dependency Direction
+## 依赖方向
 
-Allowed direction:
+允许方向：
 
 ```text
 companion      -> common
@@ -29,7 +29,7 @@ tests          -> test doubles
 tools          -> protocol-compatible fixture logic
 ```
 
-Forbidden direction:
+禁止方向：
 
 ```text
 common         -> libnx
@@ -39,72 +39,68 @@ common         -> process-global mutable platform state
 business logic -> raw PCTL u16 layout
 ```
 
-## Module Responsibilities
+## 模块职责
 
-`common`:
+`common`：
 
-- Token encode/decode.
-- HMAC verification.
-- Time math.
-- Rule evaluation.
-- Control policy.
-- Request/result schema constants.
-- Stable error codes.
+- Token 编码、解码和 HMAC 校验。
+- day index、weekday 和 bedtime 时间计算。
+- 规则评估和控制策略。
+- request/result schema 常量。
+- 稳定错误码、reason 和中文 message 映射。
+- nonce 消费时机决策。
 
-`sysmodule`:
+`platform`：
 
-- Boot lifecycle.
-- Service initialization and retry.
-- Request queue processing.
-- Config/state/capabilities loading.
-- Backup orchestration.
-- Event logging.
-- PCTL adapter calls.
+- `StorageVTable`、`PctlVTable`、time provider、logger。
+- host doubles：`mem_storage`、`pctl_stub`、fake time。
+- 后续真实 SDMC/libnx/PCTL adapter 必须停留在本层。
 
-`companion`:
+`sysmodule`：
 
-- Child status screen.
-- Offline code entry.
-- Parent-zone PIN flow.
-- Local rule editing UI.
-- Request file creation.
-- Result display.
+- boot lifecycle 和服务初始化。
+- request queue 扫描与 stuck processing 恢复。
+- config/rules/state/capabilities 加载。
+- backup 编排、event logging、nonce ledger。
+- 调用 PCTL adapter 并写入 result。
 
-`tools`:
+`companion`：
 
-- Grant code generation.
-- Deterministic fixture generation.
-- Protocol probing.
-- SD card package assembly.
+- 孩子状态页、离线码输入、request file 创建。
+- matching result 等待和展示。
+- PIN 保护的家长区与本地规则编辑。
 
-`tests`:
+`tools`：
 
-- Host-side unit tests.
-- Host-side integration tests with `mem_storage` and `pctl_stub`.
-- Protocol fixtures.
+- 授权码生成。
+- deterministic fixture 生成。
+- 协议 probe。
+- SDMC package 生成。
 
-## Stability Rules
+`tests`：
 
-- Default config is `control_mode: "observe"`.
-- Default package must not include `boot2.flag`.
-- `disable.flag` overrides every control mode.
-- Unknown `control_mode` degrades to `observe`.
-- Bad JSON, unknown schema, and unknown request types must not touch PCTL.
-- Any request that can be parsed should produce a result file.
-- No invalid token path may consume a nonce.
-- No dry-run path may consume a nonce.
-- PCTL write failures must not consume a nonce.
-- Backup failure must block the write.
+- C host 单元测试。
+- `mem_storage + pctl_stub + fake time` 集成测试。
+- Python 协议和 fixture 回归测试。
 
-## Review Checklist
+## 稳定性规则
 
-Before merging implementation work, check:
+- 默认配置是 `control_mode: "observe"`。
+- 默认 package 不包含 `boot2.flag`。
+- `disable.flag` 覆盖所有 control mode。
+- 未知 `control_mode` 降级为 `observe`。
+- 坏 JSON、未知 schema 和未知 request type 不得触碰 PCTL。
+- 能解析到 request id 的请求应尽量写出结构化 result。
+- 无效 token 不得消费 nonce。
+- dry-run 不得消费 nonce。
+- PCTL 写失败不得消费 nonce。
+- backup 失败必须阻止写入。
 
-- Can the changed logic run in host tests without a Switch?
-- Does `observe` avoid writes and nonce consumption?
-- Does every write path require backup first?
-- Does every high-risk path check capabilities?
-- Are error codes stable and mapped to reason strings?
-- Are user-facing Chinese messages present for result errors?
-- Does the change avoid exposing `grant_secret` in child-visible UI?
+## 合并前检查
 
+- 改动逻辑是否能在无 Switch 的 host 测试中运行？
+- `observe` 是否避免写入和 nonce 消费？
+- 每个写路径是否先要求 backup？
+- 高风险路径是否检查 capability gate？
+- 错误码是否有稳定 reason 和中文 message？
+- child-visible UI 或日志中是否避免泄露真实 `grant_secret`？

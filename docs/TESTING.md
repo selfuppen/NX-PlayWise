@@ -1,145 +1,151 @@
-# Testing Guide
+# 测试指南
 
-Testing is part of the architecture. The project should prove behavior on host before using real Switch services.
+测试是架构的一部分。项目必须先在 host 环境证明行为，再使用真实 Switch 服务。
 
-## Test Layers
+## 测试层次
 
-Unit tests:
+单元测试：
 
-- Target pure `common` functions.
-- Do not use filesystem.
-- Do not use libnx.
-- Do not require real time.
+- 面向纯 `common` 函数。
+- 不使用文件系统。
+- 不使用 libnx。
+- 不依赖真实时间。
 
-Integration tests:
+集成测试：
 
-- Use `mem_storage`.
-- Use `pctl_stub`.
-- Use fake time.
-- Exercise request queue and control policy end to end.
+- 使用 `mem_storage`。
+- 使用 `pctl_stub`。
+- 使用 fake time。
+- 端到端覆盖 request queue 和 control policy。
 
-Simulator tests:
+模拟器测试：
 
-- Validate companion UI and file protocol only.
-- Do not claim real PCTL behavior.
+- 只验证 companion UI 和文件协议。
+- 不声称验证真实 PCTL 行为。
 
-Real Switch tests:
+真机测试：
 
-- Validate boot2, PCTL reads/writes, raw block, suspend, and play timer behavior.
+- 验证 boot2、PCTL 读写、raw block、suspend 和 play timer 行为。
 
-## Required Unit Coverage
+## 当前测试入口
 
-- Token encode/decode.
-- HMAC 40-bit verification.
-- Day index calculation.
-- Weekday calculation.
-- Bedtime cross-day logic.
-- Request/result schema validation.
-- Control mode decisions.
-- Unlimited guard.
-- Raw block capability guard.
-- Suspend capability guard.
-- Nonce lookup and consume timing.
-- Error code mapping.
+本地 Python 回归：
 
-## Required Integration Coverage
+```powershell
+python .\tests\mvp\test_token_v1.py
+python .\tests\observe\test_observe_queue.py
+```
 
-Use `mem_storage + pctl_stub + deterministic fixtures`.
+远程或具备 C 编译器的 host：
 
-Cases:
+```sh
+make
+make test-host
+make test-python
+```
 
-- Valid offline code in `observe` returns dry-run success.
-- Valid offline code in `grant` writes target.
-- Successful `grant` consumes nonce.
-- Repeated code is rejected after successful grant.
-- Wrong date is rejected.
-- Wrong secret is rejected.
-- Minutes over max are rejected.
-- `disable.flag` overrides all modes.
-- `set_today_limit` applies target.
-- `add_today_minutes` applies target.
-- `disable_today_limit` applies unlimited target.
-- `block_today` is rejected before raw block capability is verified.
-- `restore_today_policy` recalculates from weekly template.
-- `set_weekly_template` updates local rules.
-- `set_bedtime` updates local rules.
-- `parent_unlock_start`, `parent_unlock_end`, and expiry work.
-- `probe_raw_block` can mark capability in stub.
-- `probe_suspend` can mark capability in stub.
-- Backup failure blocks writes.
-- PCTL read failure returns stable error.
-- PCTL write failure returns stable error.
-- Storage write failure returns stable error where possible.
-- Request moves through pending -> processing -> done.
-- Stuck processing request is recovered on startup.
+`make` 当前会编译并运行 `tests/c/test_host_core.c`，然后运行两个 Python 回归测试。
 
-## Fixture Requirements
+## 当前 C Host 覆盖
 
-Fixtures should be generated, not handwritten.
+`tests/c/test_host_core.c` 当前覆盖：
 
-Each fixture should define:
+- C token v1 与 Python fixture 一致。
+- HMAC 校验、错密钥、错日期、重复 nonce、超上限。
+- day index、weekday 和跨天 bedtime。
+- 错误 reason 映射。
+- observe dry-run 策略。
+- grant 写入策略、backup gate 和 nonce 消费。
+- raw block capability gate。
+- `disable.flag` 优先级。
+- status request pending -> processing -> done -> result。
+- grant request 调用 `pctl_stub` 并写 backup/ledger。
+- backup failure 阻止 PCTL 写入且不消费 nonce。
+- stuck processing request 恢复。
 
-- Case name.
-- Device ID.
-- Grant secret.
-- Date or day index.
-- Nonce.
-- Minutes.
-- Expected token.
-- Expected result.
+## 仍需补充的覆盖
 
-`tools/make_fixtures.py` should generate deterministic fixture JSON and expected tokens from the same protocol rules used by `tools/grant_code.py`.
+- 更完整的 request/result schema validation。
+- `set_today_limit`、`add_today_minutes`、`disable_today_limit`。
+- `restore_today_policy`、`set_weekly_template`、`set_bedtime`。
+- `parent_unlock_start`、`parent_unlock_end` 和过期。
+- `probe_raw_block`、`probe_suspend` 在 stub 中更新 capability。
+- PCTL read/write failure 的更多 result 断言。
+- storage failure 的可恢复路径。
 
-## Test Acceptance Gates
+## Fixture 要求
 
-Before enabling real PCTL writes:
+Fixture 应生成，不手写。
 
-- All host unit tests pass.
-- All host integration tests pass.
-- `observe` verifies valid codes without nonce consumption.
-- Bad code paths never consume nonce.
-- Backup failure blocks writes.
-- Capability gates reject raw block and suspend before probe.
+每个 fixture 应定义：
 
-Before enabling `enforce`:
+- case name。
+- device id。
+- grant secret。
+- date 或 day index。
+- nonce。
+- minutes。
+- expected token。
+- expected result。
 
-- `grant` stage has passed real-device minimum write tests.
-- Rejection cases pass on real hardware.
-- Backup files are readable and useful.
-- Event logs capture success and failure paths.
+`tools/make_fixtures.py` 必须从与 `tools/grant_code.py` 相同的协议规则生成 deterministic fixture。
 
-## Remote Container Verification
+## 验收门槛
 
-The shared devkitPro container is reachable through the local SSH alias
-`249-nintendo-switch-dev`. The repository is checked out at:
+启用真实 PCTL 写入前：
+
+- 所有 host 单元测试通过。
+- 所有 host 集成测试通过。
+- `observe` 验证有效码但不消费 nonce。
+- 坏码路径从不消费 nonce。
+- backup failure 阻止写入。
+- capability gates 在 probe 前拒绝 raw block 和 suspend。
+
+启用 `enforce` 前：
+
+- `grant` 阶段已经通过真机最小写入测试。
+- 拒绝用例在真实硬件通过。
+- backup 文件可读且有恢复价值。
+- event log 能记录成功和失败路径。
+
+## 远程容器验证
+
+共享 devkitPro 容器通过本地 SSH 别名访问：
+
+```text
+249-nintendo-switch-dev
+```
+
+远程仓库路径：
 
 ```text
 /ws/switch-play-time-control-local
 ```
 
-Use `master` for development in both the local workspace and the remote
-container. To verify a change through the remote environment:
+本地和远程都使用 `master` 分支。远程不会自动同步本地工作区；必须先本地提交并推送，再让远程 `git pull --ff-only origin master`。
 
-1. Run the host tests locally.
-2. Commit the change locally and push `master`.
-3. Pull the pushed commit in the remote checkout.
-4. Run the remote host tests.
-5. Run the devkitPro `make` build once a Makefile or equivalent build entry
-   exists.
-
-Current remote host-test command:
+当前远程完整验证命令：
 
 ```sh
-ssh 249-nintendo-switch-dev 'cd /ws/switch-play-time-control-local && git pull --ff-only origin master && python3 tests/mvp/test_token_v1.py && python3 tests/observe/test_observe_queue.py'
+ssh 249-nintendo-switch-dev 'cd /ws/switch-play-time-control-local && git pull --ff-only origin master && make'
 ```
 
-Current repository state has no Makefile or CMake entry point, so plain
-`make` is expected to fail with "No targets specified and no makefile found."
-After Switch build targets are added, run the build with explicit devkitPro
-environment variables so non-interactive SSH sessions do not depend on shell
-profile loading:
+需要显式设置 devkitPro 环境变量时使用：
 
 ```sh
 ssh 249-nintendo-switch-dev 'export DEVKITPRO=/opt/devkitpro; export DEVKITARM=/opt/devkitpro/devkitARM; export DEVKITA64=/opt/devkitpro/devkitA64; export PATH=$DEVKITA64/bin:$PATH; cd /ws/switch-play-time-control-local && git pull --ff-only origin master && make'
 ```
 
+Package 验证示例：
+
+```sh
+ssh 249-nintendo-switch-dev 'cd /ws/switch-play-time-control-local && git pull --ff-only origin master && make package-safe package-observe'
+```
+
+默认 package 不应包含 `boot2.flag`。只有显式运行：
+
+```sh
+python3 tools/package_sdmc.py --mode observe --boot2 --out build/packages/observe-boot2
+```
+
+才应生成 boot2 flag。

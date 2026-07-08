@@ -1,119 +1,128 @@
-# Architecture
+# 架构
 
-The project is split into four layers so that risky Switch behavior is isolated and most behavior is testable on a desktop.
+项目分为四层，用来隔离高风险 Switch 行为，并让大部分逻辑可以在桌面 host 环境测试。
 
-## Layer 1: Common Core
+## 第一层：Common Core
 
-Common core is pure C logic.
+Common core 是纯 C 逻辑。
 
-Responsibilities:
+职责：
 
-- 20-character token encode/decode.
-- HMAC-SHA256 verification with 40-bit truncation.
-- Day index and weekday calculation.
-- Bedtime cross-day evaluation.
-- Request/result schema constants.
-- Error code mapping.
-- Rule engine.
-- Control policy.
-- Nonce consumption decision rules.
+- 20 字符 token 编码、解码。
+- HMAC-SHA256 40-bit 截断校验。
+- day index 和 weekday 计算。
+- bedtime 跨天判断。
+- request/result schema 常量。
+- 错误码、reason 和中文 message 映射。
+- 规则引擎。
+- 控制策略。
+- nonce 消费时机判断。
 
-Common core must not:
+Common core 不得：
 
-- Include libnx headers.
-- Read or write files.
-- Know SD card paths.
-- Call real PCTL IPC.
-- Render UI.
-- Depend on the current real clock except through injected inputs.
+- include libnx 头文件。
+- 读写文件。
+- 知道 SD 卡路径。
+- 调真实 PCTL IPC。
+- 渲染 UI。
+- 直接依赖真实当前时间。
 
-## Layer 2: Platform Adapters
+当前已实现：
 
-Platform adapters hide environment-specific operations behind C vtables.
+- `common/token/token_v1.c`
+- `common/protocol/error_code.c`
+- `common/protocol/result_builder.c`
+- `common/time/ptc_time.c`
+- `common/rules/rules.c`
+- `common/policy/control_policy.c`
 
-Required adapters:
+## 第二层：Platform Adapters
 
-- Storage: read, atomic write, append, rename, remove, exists, list JSON files.
-- PCTL: read status, apply target, start timer, stop timer, probe raw block, probe suspend.
-- Time: expose current Unix time and day index to orchestration code.
-- Logging: write human logs and append structured event lines.
+平台层用 C vtable 隔离环境相关操作。
 
-Host tests replace platform adapters with:
+所需 adapter：
+
+- Storage：read、atomic write、append、rename、remove、exists、list JSON。
+- PCTL：read status、backup、apply target、start timer、stop timer、probe raw block、probe suspend。
+- Time：向编排层提供 Unix time、day index 和 minute of day。
+- Logging：写人类日志和结构化 event。
+
+Host 测试替身：
 
 - `mem_storage`
 - `pctl_stub`
 - fake time provider
 
-## Layer 3: Sysmodule Orchestration
+真实 Switch 实现应只替换 adapter，不改变 common core 或策略逻辑。
 
-Sysmodule orchestration connects file protocol, common core decisions, platform adapters, and result writing.
+## 第三层：Sysmodule Orchestration
 
-Responsibilities:
+Sysmodule 编排层连接文件协议、common core 决策、平台 adapter 和 result 写入。
 
-- Initialize services after boot delay.
-- Load config, rules, state, and capabilities.
-- Recover stuck `processing` requests on startup.
-- Move requests through queue states.
-- Call common token verifier and control policy.
-- Create backups before PCTL writes.
-- Append events.
-- Write result files for success and error paths.
+职责：
 
-Sysmodule orchestration should be thin. If behavior can be tested without libnx, put it in common core.
+- boot 后初始化服务。
+- 加载 config、rules、state 和 capabilities。
+- 启动时恢复 stuck `processing` request。
+- 推动 request 的 pending -> processing -> done 状态迁移。
+- 调 token verifier 和 control policy。
+- PCTL 写入前创建 backup。
+- 写 event 和 result。
 
-## Layer 4: Companion UI
+当前 `sysmodule/sysmodule_core.c` 已实现 host-testable 编排核心，包括 request queue、status、offline_code、backup gate、grant nonce ledger 和 stuck processing 恢复。真实 boot2 lifecycle、SDMC adapter 和 libnx PCTL adapter 仍需后续补齐。
 
-Companion UI is a client of the request queue.
+## 第四层：Companion UI
 
-Responsibilities:
+Companion UI 是 request queue 的前台客户端，不是安全边界。
 
-- Display current status and latest result.
-- Accept child offline codes.
-- Protect parent zone with local PIN hash.
-- Submit parent-zone management requests.
-- Wait for matching result IDs.
-- Show timeout as backend-not-responding, not as business failure.
+职责：
 
-Companion UI is not the security boundary. Sysmodule must validate every request independently.
+- 显示当前状态和最近 result。
+- 接收孩子输入的离线码。
+- 使用本地 PIN 保护家长区。
+- 提交家长区管理 request。
+- 等待 matching result id。
+- 超时显示“后台未响应”，不能当作业务失败。
 
-## Control Modes
+当前 `companion/request_client.c` 已提供 request JSON 构建函数。真实 NRO UI、输入流程和家长区界面仍待实现。
 
-`disabled`:
+## 控制模式
 
-- Reject requests.
-- Do not read PCTL.
-- Do not write PCTL.
+`disabled`：
 
-`observe`:
+- 拒绝请求。
+- 不读 PCTL。
+- 不写 PCTL。
 
-- Read status if available.
-- Validate and compute expected results.
-- Do not write PCTL.
-- Do not consume nonces.
-- Mark results with `dry_run: true`.
+`observe`：
 
-`grant`:
+- 可读取状态。
+- 验证请求并计算预期结果。
+- 不写 PCTL。
+- 不消费 nonce。
+- result 标记 `dry_run: true`。
 
-- Allow valid offline grants and parent-zone operations to write PCTL.
-- Require backup first.
-- Consume nonce only after successful write and result persistence.
+`grant`：
 
-`enforce`:
+- 允许有效离线加时和家长区操作写 PCTL。
+- 写入前要求 backup。
+- 只有成功写入并持久化 result 后才消费 nonce。
 
-- Includes `grant`.
-- May enable or refresh play timer.
-- May execute bedtime/suspend strong-control behavior when capability gates pass.
+`enforce`：
 
-## High-Risk Capability Gates
+- 包含 `grant` 能力。
+- 可启用或刷新 play timer。
+- capability gate 通过后可执行 bedtime/suspend 等强控制行为。
 
-Raw block and suspend are implemented in v1 but gated.
+## 高风险 Capability Gate
 
-Required checks:
+Raw block 和 suspend 纳入 v1 架构，但默认 gate。
 
-- Control mode allows the operation.
-- `capabilities.json` marks the capability verified.
-- Backup succeeds.
-- PCTL adapter succeeds.
+执行条件：
 
-Host tests may verify gating behavior only. Real capability verification must happen on hardware.
+- control mode 允许该操作。
+- `capabilities.json` 标记对应 capability 已验证。
+- backup 成功。
+- PCTL adapter 成功。
 
+Host tests 只能验证 gating 逻辑，真实能力验证必须在硬件上完成。
