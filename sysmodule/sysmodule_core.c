@@ -101,7 +101,7 @@ static bool json_bool_value(const char *text, const char *key, bool *out)
 
 static bool load_config(PtcSysmodule *sysmodule, PtcRuntimeConfig *config)
 {
-    char path[160];
+    char path[320];
     char text[4096];
     char mode[24];
     join_path(path, sizeof(path), sysmodule->app_root, "config.json");
@@ -128,7 +128,7 @@ static bool load_config(PtcSysmodule *sysmodule, PtcRuntimeConfig *config)
 static PtcCapabilities load_capabilities(PtcSysmodule *sysmodule)
 {
     PtcCapabilities caps;
-    char path[160];
+    char path[320];
     char text[1024];
     caps.raw_block_verified = false;
     caps.suspend_verified = false;
@@ -143,7 +143,7 @@ static PtcCapabilities load_capabilities(PtcSysmodule *sysmodule)
 static bool nonce_used(uint16_t day_index, uint32_t nonce, void *ctx)
 {
     PtcSysmodule *sysmodule = (PtcSysmodule *)ctx;
-    char path[160];
+    char path[320];
     char text[4096];
     char needle[96];
     join_path(path, sizeof(path), sysmodule->app_root, "ledger/used_nonces.jsonl");
@@ -156,7 +156,7 @@ static bool nonce_used(uint16_t day_index, uint32_t nonce, void *ctx)
 
 static bool consume_nonce(PtcSysmodule *sysmodule, uint16_t day_index, uint32_t nonce)
 {
-    char path[160];
+    char path[320];
     char line[128];
     join_path(path, sizeof(path), sysmodule->app_root, "ledger/used_nonces.jsonl");
     snprintf(line, sizeof(line), "{\"day_index\":%u,\"nonce\":%lu}", day_index, (unsigned long)nonce);
@@ -177,14 +177,14 @@ static void state_from_pctl(PtcResultState *state, uint16_t day_index, const Ptc
 
 static bool write_result(PtcSysmodule *sysmodule, const char *request_id, const char *json)
 {
-    char path[192];
+    char path[320];
     snprintf(path, sizeof(path), "%s/results/%s.json", sysmodule->app_root, request_id);
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, json);
 }
 
 static PtcErrorCode backup_before_write(PtcSysmodule *sysmodule)
 {
-    char path[192];
+    char path[320];
     PtcPctlBackup backup;
     PtcErrorCode err = sysmodule->pctl->vtable->backup(sysmodule->pctl, &backup);
     if (err != PTC_ERR_OK) {
@@ -236,7 +236,7 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     PtcPctlStatus pctl_status;
     PtcResultState state;
     bool disable_flag;
-    char disable_path[160];
+    char disable_path[320];
     PtcPolicyDecision decision;
     PtcErrorCode err;
 
@@ -319,7 +319,7 @@ void ptc_sysmodule_init(
 
 int ptc_sysmodule_recover_processing(PtcSysmodule *sysmodule)
 {
-    char dir[160];
+    char dir[320];
     char names[32][128];
     size_t count = 0;
     size_t i;
@@ -329,8 +329,8 @@ int ptc_sysmodule_recover_processing(PtcSysmodule *sysmodule)
         return 0;
     }
     for (i = 0; i < count; ++i) {
-        char from[192];
-        char to[192];
+        char from[320];
+        char to[320];
         snprintf(from, sizeof(from), "%s/inbox/processing/%s", sysmodule->app_root, names[i]);
         snprintf(to, sizeof(to), "%s/inbox/pending/%s", sysmodule->app_root, names[i]);
         if (sysmodule->storage->vtable->rename_path(sysmodule->storage, from, to)) {
@@ -342,7 +342,7 @@ int ptc_sysmodule_recover_processing(PtcSysmodule *sysmodule)
 
 int ptc_sysmodule_process_all(PtcSysmodule *sysmodule)
 {
-    char dir[160];
+    char dir[320];
     char names[32][128];
     size_t count = 0;
     size_t i;
@@ -352,9 +352,9 @@ int ptc_sysmodule_process_all(PtcSysmodule *sysmodule)
         return 0;
     }
     for (i = 0; i < count; ++i) {
-        char pending[192];
-        char processing[192];
-        char done[192];
+        char pending[320];
+        char processing[320];
+        char done[320];
         char text[4096];
         snprintf(pending, sizeof(pending), "%s/inbox/pending/%s", sysmodule->app_root, names[i]);
         snprintf(processing, sizeof(processing), "%s/inbox/processing/%s", sysmodule->app_root, names[i]);
