@@ -11,6 +11,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = Path("switch") / "play-time-control"
+CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 PYTHON = sys.executable
 
 
@@ -232,7 +233,7 @@ def verify_safe_package() -> None:
         config = read_json(package_app / "config.json")
         assert_equal(config["control_mode"], "observe", "safe package control_mode")
         assert_equal(config["device_id"], "kid-switch", "safe package device_id")
-        assert_missing(out / "atmosphere" / "contents" / "010000000000BD23" / "flags" / "boot2.flag", "safe boot2 flag")
+        assert_missing(out / CONTENT_DIR / "flags" / "boot2.flag", "safe boot2 flag")
         assert_true(zip_path.is_file(), "safe zip exists")
 
         with zipfile.ZipFile(zip_path) as package:
@@ -260,7 +261,7 @@ def verify_boot2_requires_sysmodule() -> None:
         if result.returncode == 0:
             raise VerificationError("--boot2 without --sysmodule-exefs should fail")
         assert_true("--boot2 requires --sysmodule-exefs" in result.stderr, "boot2 failure message")
-        assert_missing(out / "atmosphere" / "contents" / "010000000000BD23" / "flags" / "boot2.flag", "failed boot2 flag")
+        assert_missing(out / CONTENT_DIR / "flags" / "boot2.flag", "failed boot2 flag")
 
 
 def run_step(name: str, fn) -> bool:

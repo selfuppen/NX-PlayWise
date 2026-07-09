@@ -9,7 +9,7 @@ import zipfile
 
 
 APP_DIR = Path("switch") / "play-time-control"
-ATMOSPHERE_CONTENT_DIR = Path("atmosphere") / "contents" / "010000000000BD23"
+ATMOSPHERE_CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 
 
 def write_json(path: Path, data: dict) -> None:

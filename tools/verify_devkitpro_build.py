@@ -31,7 +31,7 @@ BUILD_TARGETS = [
     ],
 ]
 APP_DIR = Path("switch") / "play-time-control"
-CONTENT_DIR = Path("atmosphere") / "contents" / "010000000000BD23"
+CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 VERIFY_MARKER = "devkitPro build artifacts verified"
 SAFE_NRO_ZIP = Path("build") / "packages" / "safe-nro.zip"
 DEFAULT_DOWNLOAD = ROOT / "build" / "downloads" / "safe-nro.zip"
@@ -42,7 +42,7 @@ import json
 import zipfile
 
 APP_DIR = Path("switch") / "play-time-control"
-CONTENT_DIR = Path("atmosphere") / "contents" / "010000000000BD23"
+CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 VERIFY_MARKER = "devkitPro build artifacts verified"
 
 
@@ -73,8 +73,8 @@ def verify_zip(path, *, expect_boot2, expect_exefs, expect_nro):
     if not all(name.startswith(("switch/", "atmosphere/")) for name in names):
         fail(f"{path}: unexpected top-level entry")
     checks = {
-        "boot2.flag": ("atmosphere/contents/010000000000BD23/flags/boot2.flag" in names, expect_boot2),
-        "exefs.nsp": ("atmosphere/contents/010000000000BD23/exefs.nsp" in names, expect_exefs),
+        "boot2.flag": ("atmosphere/contents/4200000000BD2300/flags/boot2.flag" in names, expect_boot2),
+        "exefs.nsp": ("atmosphere/contents/4200000000BD2300/exefs.nsp" in names, expect_exefs),
         "pctc.nro": ("switch/play-time-control/pctc.nro" in names, expect_nro),
     }
     for label, (actual, expected) in checks.items():
@@ -200,8 +200,8 @@ def verify_zip(path: Path, *, expect_boot2: bool, expect_exefs: bool, expect_nro
     names = zip_names(path)
     assert_true("switch/play-time-control/config.json" in names, f"{path}: missing config entry")
     assert_true(all(name.startswith(("switch/", "atmosphere/")) for name in names), f"{path}: unexpected top-level entry")
-    has_boot2 = "atmosphere/contents/010000000000BD23/flags/boot2.flag" in names
-    has_exefs = "atmosphere/contents/010000000000BD23/exefs.nsp" in names
+    has_boot2 = "atmosphere/contents/4200000000BD2300/flags/boot2.flag" in names
+    has_exefs = "atmosphere/contents/4200000000BD2300/exefs.nsp" in names
     has_nro = "switch/play-time-control/pctc.nro" in names
     assert_true(has_boot2 == expect_boot2, f"{path}: boot2.flag expectation failed")
     assert_true(has_exefs == expect_exefs, f"{path}: exefs.nsp expectation failed")

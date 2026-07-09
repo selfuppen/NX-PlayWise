@@ -32,7 +32,6 @@ int main(int argc, char **argv)
     (void)argv;
 
     svcSleepThread(PTC_STARTUP_DELAY_NS);
-    socketInitializeDefault();
     fsdevMountSdmc();
 
     ptc_fs_storage_init(&fs);
@@ -59,6 +58,5 @@ int main(int argc, char **argv)
 
     ptc_switch_pctl_exit(&pctl);
     fsdevUnmountDevice("sdmc");
-    socketExit();
     return 0;
 }
