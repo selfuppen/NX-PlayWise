@@ -470,6 +470,12 @@ static bool write_result(PtcSysmodule *sysmodule, const char *request_id, const 
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, json);
 }
 
+static bool request_file_path(char *out, size_t out_size, const PtcSysmodule *sysmodule, const char *queue, const char *name)
+{
+    int written = snprintf(out, out_size, "%s/inbox/%s/%.127s", sysmodule->app_root, queue, name);
+    return written >= 0 && (size_t)written < out_size;
+}
+
 static PtcErrorCode backup_before_write(PtcSysmodule *sysmodule, const PtcRequest *request)
 {
     char path[320];
@@ -885,8 +891,10 @@ int ptc_sysmodule_recover_processing(PtcSysmodule *sysmodule)
     for (i = 0; i < count; ++i) {
         char from[320];
         char to[320];
-        snprintf(from, sizeof(from), "%s/inbox/processing/%s", sysmodule->app_root, names[i]);
-        snprintf(to, sizeof(to), "%s/inbox/pending/%s", sysmodule->app_root, names[i]);
+        if (!request_file_path(from, sizeof(from), sysmodule, "processing", names[i]) ||
+            !request_file_path(to, sizeof(to), sysmodule, "pending", names[i])) {
+            continue;
+        }
         if (sysmodule->storage->vtable->rename_path(sysmodule->storage, from, to)) {
             ++recovered;
         }
@@ -910,9 +918,11 @@ int ptc_sysmodule_process_all(PtcSysmodule *sysmodule)
         char processing[320];
         char done[320];
         char text[4096];
-        snprintf(pending, sizeof(pending), "%s/inbox/pending/%s", sysmodule->app_root, names[i]);
-        snprintf(processing, sizeof(processing), "%s/inbox/processing/%s", sysmodule->app_root, names[i]);
-        snprintf(done, sizeof(done), "%s/inbox/done/%s", sysmodule->app_root, names[i]);
+        if (!request_file_path(pending, sizeof(pending), sysmodule, "pending", names[i]) ||
+            !request_file_path(processing, sizeof(processing), sysmodule, "processing", names[i]) ||
+            !request_file_path(done, sizeof(done), sysmodule, "done", names[i])) {
+            continue;
+        }
         if (!sysmodule->storage->vtable->rename_path(sysmodule->storage, pending, processing)) {
             continue;
         }
