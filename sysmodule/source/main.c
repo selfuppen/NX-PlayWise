@@ -9,8 +9,51 @@
 #include "../sysmodule_core.h"
 
 #define PTC_APP_ROOT "sdmc:/switch/play-time-control"
+#define PTC_INNER_HEAP_SIZE 0x80000
 #define PTC_LOOP_SLEEP_NS 500000000LL
 #define PTC_STARTUP_DELAY_NS 15000000000LL
+
+u32 __nx_applet_type = AppletType_None;
+u32 __nx_fs_num_sessions = 1;
+
+void __libnx_initheap(void)
+{
+    static u8 inner_heap[PTC_INNER_HEAP_SIZE];
+    extern void *fake_heap_start;
+    extern void *fake_heap_end;
+
+    fake_heap_start = inner_heap;
+    fake_heap_end = inner_heap + sizeof(inner_heap);
+}
+
+void __appInit(void)
+{
+    Result rc;
+
+    rc = smInitialize();
+    if (R_FAILED(rc)) {
+        diagAbortWithResult(MAKERESULT(Module_Libnx, LibnxError_InitFail_SM));
+    }
+
+    rc = fsInitialize();
+    if (R_FAILED(rc)) {
+        diagAbortWithResult(MAKERESULT(Module_Libnx, LibnxError_InitFail_FS));
+    }
+    (void)fsdevMountSdmc();
+
+    rc = timeInitialize();
+    if (R_FAILED(rc)) {
+        diagAbortWithResult(MAKERESULT(Module_Libnx, LibnxError_InitFail_Time));
+    }
+}
+
+void __appExit(void)
+{
+    timeExit();
+    fsdevUnmountAll();
+    fsExit();
+    smExit();
+}
 
 static void append_boot_log(PtcStorage *storage, const char *message)
 {
@@ -32,7 +75,6 @@ int main(int argc, char **argv)
     (void)argv;
 
     svcSleepThread(PTC_STARTUP_DELAY_NS);
-    fsdevMountSdmc();
 
     ptc_fs_storage_init(&fs);
     ptc_switch_pctl_init(&pctl);
@@ -57,6 +99,5 @@ int main(int argc, char **argv)
     }
 
     ptc_switch_pctl_exit(&pctl);
-    fsdevUnmountDevice("sdmc");
     return 0;
 }
