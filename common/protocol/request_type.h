@@ -2,6 +2,7 @@
 #define PTC_REQUEST_TYPE_H
 
 typedef enum {
+    PTC_REQUEST_UNKNOWN = 0,
     PTC_REQUEST_OFFLINE_CODE = 1,
     PTC_REQUEST_STATUS = 2,
     PTC_REQUEST_SET_TODAY_LIMIT = 3,
@@ -17,6 +18,9 @@ typedef enum {
     PTC_REQUEST_PROBE_RAW_BLOCK = 13,
     PTC_REQUEST_PROBE_SUSPEND = 14
 } PtcRequestType;
+
+PtcRequestType ptc_request_type_from_string(const char *value);
+const char *ptc_request_type_name(PtcRequestType type);
 
 #endif
 

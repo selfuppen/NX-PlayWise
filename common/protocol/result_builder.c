@@ -20,7 +20,8 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"state\":{\"day_index\":%u,\"limited_today\":%d,\"blocked_today\":%d,"
         "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%d,"
         "\"play_timer_enabled\":%d,\"restricted_now\":%d,\"bedtime_active\":%s,"
-        "\"parent_unlock_active\":%s},\"capabilities\":{}",
+        "\"parent_unlock_active\":%s},\"capabilities\":{\"raw_block_verified\":%s,"
+        "\"suspend_verified\":%s}",
         state->day_index,
         state->limited_today,
         state->blocked_today,
@@ -30,7 +31,9 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         state->play_timer_enabled,
         state->restricted_now,
         json_bool(state->bedtime_active),
-        json_bool(state->parent_unlock_active));
+        json_bool(state->parent_unlock_active),
+        json_bool(state->raw_block_verified),
+        json_bool(state->suspend_verified));
 }
 
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
@@ -45,6 +48,8 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->restricted_now = -1;
     state->bedtime_active = false;
     state->parent_unlock_active = false;
+    state->raw_block_verified = false;
+    state->suspend_verified = false;
 }
 
 int ptc_result_ok_json(

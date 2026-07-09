@@ -1,0 +1,26 @@
+#ifndef PTC_REQUEST_SCHEMA_H
+#define PTC_REQUEST_SCHEMA_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "../rules/rules.h"
+#include "error_code.h"
+#include "request_type.h"
+
+typedef struct {
+    PtcRequestType type;
+    char request_id[80];
+    char type_text[40];
+    int64_t created_at;
+    char code[80];
+    uint16_t minutes;
+    PtcDayRule week[7];
+    PtcBedtimeRule bedtime;
+    PtcLimitAction limit_action;
+    uint16_t duration_minutes;
+} PtcRequest;
+
+PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out);
+
+#endif

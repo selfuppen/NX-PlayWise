@@ -248,6 +248,135 @@ static void test_backup_failure_blocks_write(void)
     check_true(strstr(result, "\"reason\":\"pctl_backup_failed\"") != NULL, "backup failure reason");
 }
 
+static void test_bad_request_schema_writes_error_result(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char result[4096];
+    char events[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0004.json", "{\"version\":1,\"request_id\":\"1000-0004\",\"type\":\"set_today_limit\",\"created_at\":1004}\n"), "write malformed request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process malformed request");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0004.json", result, sizeof(result)), "bad request result");
+    check_true(strstr(result, "\"reason\":\"bad_request\"") != NULL, "bad request reason");
+    check_true(!pctl.applied, "bad request avoids pctl");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/events.jsonl", events, sizeof(events)), "bad request events");
+    check_true(strstr(events, "\"event\":\"result_error\"") != NULL, "bad request event");
+}
+
+static void test_observe_rule_request_is_dry_run(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "observe", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0005.json", "{\"version\":1,\"request_id\":\"1000-0005\",\"type\":\"set_today_limit\",\"created_at\":1005,\"payload\":{\"minutes\":45}}\n"), "write observe rule request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process observe rule request");
+    check_true(!pctl.applied, "observe rule request avoids pctl");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/rules.json"), "observe rule request avoids rules write");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0005.json", result, sizeof(result)), "observe rule result");
+    check_true(strstr(result, "\"dry_run\":true") != NULL, "observe rule dry run");
+}
+
+static void test_grant_set_today_limit_persists_applies_and_logs(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char result[4096];
+    char rules[4096];
+    char events[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0006.json", "{\"version\":1,\"request_id\":\"1000-0006\",\"type\":\"set_today_limit\",\"created_at\":1006,\"payload\":{\"minutes\":45}}\n"), "write grant set today request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process grant set today");
+    check_true(pctl.applied, "grant set today applies pctl");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "grant set target mode");
+    check_int(pctl.last_target.minutes, 45, "grant set target minutes");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", rules, sizeof(rules)), "rules persisted");
+    check_true(strstr(rules, "\"today_override_minutes\":45") != NULL, "today override minutes persisted");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0006.json", result, sizeof(result)), "grant set result");
+    check_true(strstr(result, "\"dry_run\":false") != NULL, "grant set not dry run");
+    check_true(strstr(result, "\"remaining_minutes\":45") != NULL, "grant set result state minutes");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/events.jsonl", events, sizeof(events)), "grant set events");
+    check_true(strstr(events, "\"event\":\"state_persisted\"") != NULL, "state persisted event");
+    check_true(strstr(events, "\"event\":\"pctl_apply\"") != NULL, "pctl apply event");
+}
+
+static void test_probe_raw_block_updates_capability(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char caps[1024];
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.raw_probe_succeeds = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0007.json", "{\"version\":1,\"request_id\":\"1000-0007\",\"type\":\"probe_raw_block\",\"created_at\":1007,\"payload\":{}}\n"), "write probe request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process raw probe");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "capabilities persisted");
+    check_true(strstr(caps, "\"raw_block_verified\":true") != NULL, "raw capability true");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0007.json", result, sizeof(result)), "probe result");
+    check_true(strstr(result, "\"raw_block_verified\":true") != NULL, "probe result capability");
+}
+
+static void test_parent_unlock_state_and_expiry(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char result[4096];
+    char state[1024];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0008.json", "{\"version\":1,\"request_id\":\"1000-0008\",\"type\":\"parent_unlock_start\",\"created_at\":1008,\"payload\":{\"duration_minutes\":15}}\n"), "write unlock start");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process unlock start");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", state, sizeof(state)), "state persisted");
+    check_true(strstr(state, "\"parent_unlock_until\":1783527301") != NULL, "unlock until persisted");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0008.json", result, sizeof(result)), "unlock start result");
+    check_true(strstr(result, "\"parent_unlock_active\":true") != NULL, "unlock active result");
+
+    fake_time.snapshot.unix_seconds = 1783527302;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0009.json", "{\"version\":1,\"request_id\":\"1000-0009\",\"type\":\"status\",\"created_at\":1009,\"payload\":{}}\n"), "write expiry status");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process expiry status");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0009.json", result, sizeof(result)), "expiry status result");
+    check_true(strstr(result, "\"parent_unlock_active\":false") != NULL, "unlock expired result");
+}
+
 static void test_recover_processing(void)
 {
     PtcMemStorage mem;
@@ -272,6 +401,11 @@ int main(void)
     test_observe_status_flow();
     test_grant_flow_consumes_nonce_after_write();
     test_backup_failure_blocks_write();
+    test_bad_request_schema_writes_error_result();
+    test_observe_rule_request_is_dry_run();
+    test_grant_set_today_limit_persists_applies_and_logs();
+    test_probe_raw_block_updates_capability();
+    test_parent_unlock_state_and_expiry();
     test_recover_processing();
 
     if (failures != 0) {

@@ -5,6 +5,7 @@ HOST_TEST := $(HOST_BUILD_DIR)/test_host_core
 
 COMMON_SRCS := \
 	common/protocol/error_code.c \
+	common/protocol/request_schema.c \
 	common/protocol/result_builder.c \
 	common/token/token_v1.c \
 	common/time/ptc_time.c \

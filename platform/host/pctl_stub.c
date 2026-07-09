@@ -38,6 +38,8 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
     stub->status.limited_today = target->mode == PTC_PCTL_TARGET_LIMIT;
     stub->status.blocked_today = target->mode == PTC_PCTL_TARGET_BLOCKED;
     stub->status.unrestricted_today = target->mode == PTC_PCTL_TARGET_UNLIMITED;
+    stub->status.remaining_available = target->mode == PTC_PCTL_TARGET_LIMIT;
+    stub->status.remaining_minutes = target->minutes;
     return PTC_ERR_OK;
 }
 

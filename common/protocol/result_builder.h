@@ -18,6 +18,8 @@ typedef struct {
     int restricted_now;
     bool bedtime_active;
     bool parent_unlock_active;
+    bool raw_block_verified;
+    bool suspend_verified;
 } PtcResultState;
 
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index);
