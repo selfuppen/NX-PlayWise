@@ -99,6 +99,32 @@ def main() -> int:
         assert_equal(over_result["status"], "error", "over result")
         assert_equal(over_result["error"]["reason"], "minutes_exceed_limit", "over reason")
 
+        manual_id = write_request(tmp, "status", request_id="1000-0005", created_at=1004)
+        manual = subprocess.run(
+            [
+                sys.executable,
+                str(TOOLS / "make_result.py"),
+                "--root",
+                str(tmp),
+                "--request-id",
+                manual_id,
+                "--day-index",
+                "2380",
+                "--completed-at",
+                "1005",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        manual_path = Path(manual.stdout.strip())
+        assert_equal(manual_path.name, f"{manual_id}.json", "manual result file")
+        assert_equal(manual_path.parent.name, "results", "manual result directory")
+        manual_result = result_for(paths, manual_id)
+        assert_equal(manual_result["request_id"], manual_id, "manual result id")
+        assert_equal(manual_result["status"], "ok", "manual result status")
+        assert_equal(manual_result["state"]["day_index"], 2380, "manual result day")
+
         print("Observe queue tests passed")
         return 0
     finally:

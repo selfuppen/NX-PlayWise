@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 from pathlib import Path
 import subprocess
 import sys
@@ -69,6 +70,28 @@ def main() -> int:
         capture_output=True,
     )
     assert_equal(cli.stdout.strip(), code, "CLI deterministic code")
+
+    token_date = date(2020, 1, 1) + timedelta(days=valid["day_index"])
+    cli_by_date = subprocess.run(
+        [
+            sys.executable,
+            str(TOOLS / "grant_code.py"),
+            "--minutes",
+            "30",
+            "--device",
+            device_id,
+            "--secret",
+            secret,
+            "--date",
+            token_date.isoformat(),
+            "--nonce",
+            hex(valid["nonce"]),
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    assert_equal(cli_by_date.stdout.strip(), code, "CLI date and hex nonce code")
 
     assert_reason("bad_signature", lambda: decode_token(code, device_id, "wrong-secret"))
     assert_reason(

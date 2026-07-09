@@ -11,7 +11,7 @@
 
 #define APP_ROOT "sdmc:/switch/play-time-control"
 #define RESULT_TEXT_SIZE 4096
-#define REQUEST_TIMEOUT_MS 8000
+#define REQUEST_TIMEOUT_MS 60000
 #define LOOP_SLEEP_NS 100000000LL
 #define LOOP_SLEEP_MS 100
 
@@ -96,13 +96,18 @@ static void submit_offline_code(UiState *ui)
     set_message(ui, "Offline code submit failed", status);
 }
 
-static void poll_result(UiState *ui)
+static void poll_result(UiState *ui, bool force)
 {
     PtcCompanionStatus status;
-    if (!ui->waiting) {
+    if (!ui->waiting && !force) {
         return;
     }
-    ui->elapsed_ms += LOOP_SLEEP_MS;
+    if (ui->active_request_id[0] == '\0') {
+        return;
+    }
+    if (ui->waiting) {
+        ui->elapsed_ms += LOOP_SLEEP_MS;
+    }
     status = ptc_companion_read_result(
         &ui->client,
         ui->active_request_id,
@@ -168,9 +173,9 @@ int main(int argc, char **argv)
         } else if (down & HidNpadButton_X) {
             submit_offline_code(&ui);
         } else if (down & HidNpadButton_Y) {
-            poll_result(&ui);
+            poll_result(&ui, true);
         }
-        poll_result(&ui);
+        poll_result(&ui, false);
         draw(&ui);
         svcSleepThread(LOOP_SLEEP_NS);
     }

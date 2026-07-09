@@ -78,7 +78,7 @@ def create_package(
             "max_add_minutes": max_add_minutes,
             "control_mode": control_mode,
             "allow_unlimited_to_limited": False,
-            "default_request_timeout_ms": 8000,
+            "default_request_timeout_ms": 60000,
         },
     )
     write_json(app / "auth.json", {"version": 1, "pin_hash": "", "pin_salt": "", "hash": "hmac-sha256", "updated_at": 0})

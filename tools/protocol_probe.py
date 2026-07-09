@@ -21,7 +21,7 @@ def init_sdmc(args: argparse.Namespace) -> int:
             "max_add_minutes": args.max_add_minutes,
             "control_mode": "observe",
             "allow_unlimited_to_limited": False,
-            "default_request_timeout_ms": 8000,
+            "default_request_timeout_ms": 60000,
         },
     )
     write_json_atomic(
