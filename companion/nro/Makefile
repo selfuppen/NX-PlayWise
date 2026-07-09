@@ -22,6 +22,8 @@ OBJS := \
 	$(BUILD)/main.o \
 	$(BUILD)/file_protocol.o \
 	$(BUILD)/request_client.o \
+	$(BUILD)/result_builder.o \
+	$(BUILD)/error_code.o \
 	$(BUILD)/fs_storage.o
 
 .PHONY: all clean
@@ -38,6 +40,12 @@ $(BUILD)/file_protocol.o: ../file_protocol.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/request_client.o: ../request_client.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/result_builder.o: ../../common/protocol/result_builder.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/error_code.o: ../../common/protocol/error_code.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/fs_storage.o: ../../platform/switch/fs_storage.c | $(BUILD)
