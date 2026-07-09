@@ -2,6 +2,7 @@ HOST_CC ?= gcc
 HOST_CFLAGS ?= -std=c99 -Wall -Wextra -Werror -I.
 HOST_BUILD_DIR := build/host
 HOST_TEST := $(HOST_BUILD_DIR)/test_host_core
+PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 
 COMMON_SRCS := \
 	common/protocol/error_code.c \
@@ -49,7 +50,7 @@ companion-nro:
 	cp companion/nro/pctc.nro build/switch/pctc.nro
 
 package-safe-nro: companion-nro
-	python3 tools/package_sdmc.py --mode safe --out build/packages/safe-nro --zip build/packages/safe-nro.zip --nro build/switch/pctc.nro
+	python3 tools/package_sdmc.py --mode safe --out build/packages/safe-nro --zip build/packages/safe-nro-$(PACKAGE_TIMESTAMP).zip --nro build/switch/pctc.nro
 
 sysmodule-nsp:
 	$(MAKE) -C sysmodule
@@ -60,7 +61,7 @@ package-safe package-observe package-disabled package-grant package-enforce:
 	python3 tools/package_sdmc.py --mode $(subst package-,,$@) --out build/packages/$(subst package-,,$@)
 
 package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2: sysmodule-nsp
-	python3 tools/package_sdmc.py --mode $(subst package-,,$(subst -boot2,,$@)) --out build/packages/$(subst package-,,$@) --zip build/packages/$(subst package-,,$@).zip --sysmodule-exefs build/switch/exefs.nsp --boot2
+	python3 tools/package_sdmc.py --mode $(subst package-,,$(subst -boot2,,$@)) --out build/packages/$(subst package-,,$@) --zip build/packages/$(subst package-,,$@)-$(PACKAGE_TIMESTAMP).zip --sysmodule-exefs build/switch/exefs.nsp --boot2
 
 clean:
 	rm -rf build

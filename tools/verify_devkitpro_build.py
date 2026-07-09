@@ -33,8 +33,14 @@ BUILD_TARGETS = [
 APP_DIR = Path("switch") / "play-time-control"
 CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 VERIFY_MARKER = "devkitPro build artifacts verified"
-SAFE_NRO_ZIP = Path("build") / "packages" / "safe-nro.zip"
+PACKAGE_ZIP_EXPECTATIONS = {
+    "safe-nro": {"expect_boot2": False, "expect_exefs": False, "expect_nro": True},
+    "disabled-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": False},
+    "observe-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": False},
+}
+SAFE_NRO_ZIP_PREFIX = "safe-nro"
 DEFAULT_DOWNLOAD = ROOT / "build" / "downloads" / "safe-nro.zip"
+DEFAULT_PACKAGE_DOWNLOAD_DIR = Path(r"D:\switch\play-time-controll") if os.name == "nt" else ROOT / "build" / "downloads" / "packages"
 DEFAULT_EDEN_SDMC = Path.home() / "AppData" / "Roaming" / "eden" / "sdmc"
 REMOTE_ARTIFACT_VERIFIER = r'''
 from pathlib import Path
@@ -44,6 +50,11 @@ import zipfile
 APP_DIR = Path("switch") / "play-time-control"
 CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 VERIFY_MARKER = "devkitPro build artifacts verified"
+PACKAGE_ZIP_EXPECTATIONS = {
+    "safe-nro": {"expect_boot2": False, "expect_exefs": False, "expect_nro": True},
+    "disabled-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": False},
+    "observe-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": False},
+}
 
 
 def fail(message):
@@ -80,6 +91,22 @@ def verify_zip(path, *, expect_boot2, expect_exefs, expect_nro):
     for label, (actual, expected) in checks.items():
         if actual != expected:
             fail(f"{path}: {label} expectation failed")
+
+
+def has_package_timestamp(path, prefix):
+    stem = path.stem
+    timestamp = stem[len(prefix) + 1:]
+    return len(timestamp) == 15 and timestamp[8] == "-" and timestamp[:8].isdigit() and timestamp[9:].isdigit()
+
+
+def latest_timestamped_zip(packages, prefix):
+    candidates = sorted(
+        (path for path in packages.glob(f"{prefix}-*.zip") if has_package_timestamp(path, prefix)),
+        key=lambda path: path.name,
+    )
+    if not candidates:
+        fail(f"missing timestamped zip for {prefix}")
+    return candidates[-1]
 
 
 def verify_package(package_root, *, expected_mode, expect_boot2, expect_exefs, expect_nro):
@@ -127,9 +154,8 @@ verify_package(packages / "observe", expected_mode="observe", expect_boot2=False
 verify_package(packages / "safe-nro", expected_mode="observe", expect_boot2=False, expect_exefs=False, expect_nro=True)
 verify_package(packages / "disabled-boot2", expected_mode="disabled", expect_boot2=True, expect_exefs=True, expect_nro=False)
 verify_package(packages / "observe-boot2", expected_mode="observe", expect_boot2=True, expect_exefs=True, expect_nro=False)
-verify_zip(packages / "safe-nro.zip", expect_boot2=False, expect_exefs=False, expect_nro=True)
-verify_zip(packages / "disabled-boot2.zip", expect_boot2=True, expect_exefs=True, expect_nro=False)
-verify_zip(packages / "observe-boot2.zip", expect_boot2=True, expect_exefs=True, expect_nro=False)
+for prefix, expectations in PACKAGE_ZIP_EXPECTATIONS.items():
+    verify_zip(latest_timestamped_zip(packages, prefix), **expectations)
 print(VERIFY_MARKER)
 '''.strip()
 
@@ -187,6 +213,22 @@ def zip_names(path: Path) -> set[str]:
         return set(package.namelist())
 
 
+def has_package_timestamp(path: Path, prefix: str) -> bool:
+    stem = path.stem
+    timestamp = stem[len(prefix) + 1 :]
+    return len(timestamp) == 15 and timestamp[8] == "-" and timestamp[:8].isdigit() and timestamp[9:].isdigit()
+
+
+def latest_timestamped_zip(packages: Path, prefix: str) -> Path:
+    candidates = sorted(
+        (path for path in packages.glob(f"{prefix}-*.zip") if has_package_timestamp(path, prefix)),
+        key=lambda path: path.name,
+    )
+    if not candidates:
+        raise VerificationError(f"missing timestamped zip for {prefix}")
+    return candidates[-1]
+
+
 def ensure_safe_zip_entry(target_root: Path, member_name: str) -> Path:
     target = (target_root / member_name).resolve()
     root = target_root.resolve()
@@ -210,6 +252,11 @@ def verify_zip(path: Path, *, expect_boot2: bool, expect_exefs: bool, expect_nro
 
 def verify_safe_nro_zip(path: Path) -> None:
     verify_zip(path, expect_boot2=False, expect_exefs=False, expect_nro=True)
+
+
+def verify_package_zip_by_prefix(path: Path, prefix: str) -> None:
+    expectations = PACKAGE_ZIP_EXPECTATIONS[prefix]
+    verify_zip(path, **expectations)
 
 
 def verify_package(
@@ -265,9 +312,8 @@ def verify_artifacts(root: Path) -> None:
     verify_package(packages / "disabled-boot2", expected_mode="disabled", expect_boot2=True, expect_exefs=True, expect_nro=False)
     verify_package(packages / "observe-boot2", expected_mode="observe", expect_boot2=True, expect_exefs=True, expect_nro=False)
 
-    verify_zip(packages / "safe-nro.zip", expect_boot2=False, expect_exefs=False, expect_nro=True)
-    verify_zip(packages / "disabled-boot2.zip", expect_boot2=True, expect_exefs=True, expect_nro=False)
-    verify_zip(packages / "observe-boot2.zip", expect_boot2=True, expect_exefs=True, expect_nro=False)
+    for prefix in PACKAGE_ZIP_EXPECTATIONS:
+        verify_package_zip_by_prefix(latest_timestamped_zip(packages, prefix), prefix)
     print(VERIFY_MARKER)
 
 
@@ -308,6 +354,38 @@ def remote_verify_command(remote_path: str) -> str:
     )
 
 
+def remote_package_manifest_command(remote_path: str) -> str:
+    script = f"""
+from pathlib import Path
+import json
+
+packages = Path("build") / "packages"
+prefixes = {list(PACKAGE_ZIP_EXPECTATIONS)!r}
+result = []
+for prefix in prefixes:
+    candidates = sorted(
+        (
+            path for path in packages.glob(f"{{prefix}}-*.zip")
+            if len(path.stem[len(prefix) + 1:]) == 15
+            and path.stem[len(prefix) + 9:len(prefix) + 10] == "-"
+            and path.stem[len(prefix) + 1:len(prefix) + 9].isdigit()
+            and path.stem[len(prefix) + 10:].isdigit()
+        ),
+        key=lambda path: path.name,
+    )
+    if not candidates:
+        raise AssertionError(f"missing timestamped zip for {{prefix}}")
+    result.append(candidates[-1].as_posix())
+print(json.dumps(result))
+""".strip()
+    encoded = base64.b64encode(script.encode("utf-8")).decode("ascii")
+    return (
+        f"cd {shlex.quote(remote_path)} "
+        "&& python3 -c "
+        + shlex.quote(f"import base64; exec(base64.b64decode('{encoded}').decode('utf-8'))")
+    )
+
+
 def run_remote_build(alias: str, remote_path: str, *, pull: bool) -> None:
     run(["ssh", alias, remote_build_command(remote_path, pull=pull)])
 
@@ -318,16 +396,71 @@ def run_remote_verify(alias: str, remote_path: str) -> None:
         raise VerificationError(f"missing verification marker: {VERIFY_MARKER!r}")
 
 
+def list_remote_package_zips(alias: str, remote_path: str) -> list[str]:
+    result = run(["ssh", alias, remote_package_manifest_command(remote_path)])
+    try:
+        paths = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise VerificationError("remote package manifest was not valid JSON") from exc
+    if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+        raise VerificationError("remote package manifest has unexpected shape")
+    return paths
+
+
 def download_remote_safe_nro(alias: str, remote_path: str, destination: Path) -> None:
+    remote_paths = [
+        path for path in list_remote_package_zips(alias, remote_path)
+        if Path(path).name.startswith(f"{SAFE_NRO_ZIP_PREFIX}-")
+    ]
+    if not remote_paths:
+        raise VerificationError("remote safe-nro timestamped zip was not found")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    remote_zip = f"{alias}:{remote_path}/{SAFE_NRO_ZIP.as_posix()}"
-    run(["scp", remote_zip, str(destination)])
+    remote_zip = f"{alias}:{remote_path}/{remote_paths[0]}"
+    downloaded = destination.parent / Path(remote_paths[0]).name
+    run(["scp", remote_zip, "."], cwd=destination.parent)
+    if downloaded != destination:
+        shutil.copy2(downloaded, destination)
     verify_safe_nro_zip(destination)
 
 
+def package_prefix_for_zip(path: Path) -> str:
+    for prefix in PACKAGE_ZIP_EXPECTATIONS:
+        if path.name.startswith(f"{prefix}-") and path.suffix == ".zip":
+            return prefix
+    raise VerificationError(f"unexpected package zip name: {path.name}")
+
+
+def extract_zip_to_named_dir(zip_path: Path) -> Path:
+    extract_root = zip_path.with_suffix("")
+    target = extract_root.resolve()
+    parent = zip_path.parent.resolve()
+    if os.path.commonpath([str(parent), str(target)]) != str(parent):
+        raise VerificationError(f"unsafe extract directory: {extract_root}")
+    if extract_root.exists():
+        raise VerificationError(f"extract directory already exists: {extract_root}")
+    extract_root.mkdir(parents=True)
+    with zipfile.ZipFile(zip_path) as package:
+        for member in package.infolist():
+            ensure_safe_zip_entry(extract_root, member.filename)
+        package.extractall(extract_root)
+    return extract_root
+
+
+def download_remote_package_zips(alias: str, remote_path: str, destination_dir: Path) -> None:
+    remote_paths = list_remote_package_zips(alias, remote_path)
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    for remote_rel in remote_paths:
+        local_zip = destination_dir / Path(remote_rel).name
+        remote_zip = f"{alias}:{remote_path}/{remote_rel}"
+        run(["scp", remote_zip, "."], cwd=destination_dir)
+        prefix = package_prefix_for_zip(local_zip)
+        verify_package_zip_by_prefix(local_zip, prefix)
+        extract_zip_to_named_dir(local_zip)
+
+
 def copy_local_safe_nro(destination: Path) -> None:
-    source = ROOT / SAFE_NRO_ZIP
-    require_file(source, "local safe-nro.zip")
+    source = latest_timestamped_zip(ROOT / "build" / "packages", SAFE_NRO_ZIP_PREFIX)
+    require_file(source, "local safe-nro timestamped zip")
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
     verify_safe_nro_zip(destination)
@@ -399,7 +532,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--install-safe-nro",
         action="store_true",
-        help="Download/copy safe-nro.zip and extract it to the emulator SD root after verification.",
+        help="Download/copy the latest safe NRO zip and extract it to the emulator SD root after verification.",
     )
     parser.add_argument(
         "--sdmc-root",
@@ -411,7 +544,18 @@ def parse_args() -> argparse.Namespace:
         "--safe-nro-zip",
         type=Path,
         default=DEFAULT_DOWNLOAD,
-        help=f"Local safe-nro.zip download/copy path. Default: {DEFAULT_DOWNLOAD}",
+        help=f"Local safe NRO zip download/copy path. Default: {DEFAULT_DOWNLOAD}",
+    )
+    parser.add_argument(
+        "--package-download-dir",
+        type=Path,
+        default=DEFAULT_PACKAGE_DOWNLOAD_DIR,
+        help=f"Remote package zip download/extract directory. Default: {DEFAULT_PACKAGE_DOWNLOAD_DIR}",
+    )
+    parser.add_argument(
+        "--skip-package-download",
+        action="store_true",
+        help="Skip downloading timestamped remote package zips after remote verification.",
     )
     parser.add_argument("--ssh-alias", default=REMOTE_ALIAS)
     parser.add_argument("--remote-path", default=REMOTE_PATH)
@@ -447,6 +591,17 @@ def main() -> int:
             ),
             ("remote build artifacts", lambda: run_remote_verify(args.ssh_alias, args.remote_path)),
         ]
+        if not args.skip_package_download:
+            steps.append(
+                (
+                    "download remote package zips",
+                    lambda: download_remote_package_zips(
+                        args.ssh_alias,
+                        args.remote_path,
+                        args.package_download_dir,
+                    ),
+                )
+            )
         if args.install_safe_nro:
             steps.append(
                 (
