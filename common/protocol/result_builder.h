@@ -23,6 +23,7 @@ typedef struct {
 } PtcResultState;
 
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index);
+PtcErrorCode ptc_result_validate(const char *text);
 int ptc_result_ok_json(
     char *out,
     size_t out_size,

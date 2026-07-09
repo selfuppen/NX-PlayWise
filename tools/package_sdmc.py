@@ -95,13 +95,18 @@ def create_package(
                 {"mode": "limit", "minutes": 60},
                 {"mode": "unlimited", "minutes": 120},
             ],
-            "today_override": None,
-            "bedtime": {"enabled": False, "start_min": 1260, "end_min": 480},
+            "today_override_present": False,
+            "today_override_day_index": 0,
+            "today_override_mode": "limit",
+            "today_override_minutes": 60,
+            "bedtime_enabled": False,
+            "bedtime_start_min": 1260,
+            "bedtime_end_min": 480,
             "limit_action": "remind",
         },
     )
-    write_json(app / "state.json", {"version": 1, "day_index": None, "parent_unlock": {"active": False, "until": 0}, "bedtime_active": False, "last_applied": None})
-    write_json(app / "capabilities.json", {"version": 1, "raw_block_verified": False, "suspend_verified": False, "verified_at": {"raw_block": None, "suspend": None}})
+    write_json(app / "state.json", {"version": 1, "parent_unlock_until": 0, "updated_at": 0})
+    write_json(app / "capabilities.json", {"version": 1, "raw_block_verified": False, "suspend_verified": False, "verified_at": {"raw_block": 0, "suspend": 0}})
 
     if nro is not None:
         copy_file(nro, app / nro.name)

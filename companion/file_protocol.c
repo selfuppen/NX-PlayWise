@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../common/protocol/result_builder.h"
 #include "request_client.h"
 
 static void join_path(char *out, size_t out_size, const char *a, const char *b)
@@ -138,6 +139,9 @@ PtcCompanionStatus ptc_companion_read_result(
         return PTC_COMPANION_PENDING;
     }
 
+    if (ptc_result_validate(out) != PTC_ERR_OK) {
+        return PTC_COMPANION_RESULT_INVALID;
+    }
     if (!has_value(out, "request_id", request_id)) {
         return strstr(out, "\"request_id\"") ? PTC_COMPANION_RESULT_MISMATCH : PTC_COMPANION_RESULT_INVALID;
     }

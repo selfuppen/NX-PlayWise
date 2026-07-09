@@ -47,7 +47,8 @@ static bool mem_write_text_atomic(PtcStorage *storage, const char *path, const c
 {
     PtcMemStorage *mem = (PtcMemStorage *)storage->ctx;
     int idx;
-    if (mem->fail_writes) {
+    if (mem->fail_writes ||
+        (mem->fail_write_path_contains && strstr(path, mem->fail_write_path_contains))) {
         return false;
     }
     idx = find_file(mem, path);
@@ -66,7 +67,8 @@ static bool mem_append_line(PtcStorage *storage, const char *path, const char *l
     PtcMemStorage *mem = (PtcMemStorage *)storage->ctx;
     int idx;
     size_t used;
-    if (mem->fail_writes) {
+    if (mem->fail_writes || mem->fail_appends ||
+        (mem->fail_write_path_contains && strstr(path, mem->fail_write_path_contains))) {
         return false;
     }
     idx = find_file(mem, path);

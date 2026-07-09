@@ -18,7 +18,9 @@ typedef struct {
     PtcMemStorageFile files[PTC_MEM_STORAGE_MAX_FILES];
     bool fail_reads;
     bool fail_writes;
+    bool fail_appends;
     bool fail_renames;
+    const char *fail_write_path_contains;
 } PtcMemStorage;
 
 void ptc_mem_storage_init(PtcMemStorage *mem);

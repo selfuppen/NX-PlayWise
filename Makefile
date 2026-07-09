@@ -24,7 +24,7 @@ ORCH_SRCS := \
 
 TEST_SRCS := tests/c/test_host_core.c
 
-.PHONY: all test-host test-python test companion-nro package-safe-nro clean package-safe package-observe package-disabled package-grant package-enforce
+.PHONY: all test-host test-python test companion-nro sysmodule-nsp package-safe-nro clean package-safe package-observe package-disabled package-grant package-enforce package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2
 
 all: test
 
@@ -51,8 +51,18 @@ companion-nro:
 package-safe-nro: companion-nro
 	python3 tools/package_sdmc.py --mode safe --out build/packages/safe-nro --zip build/packages/safe-nro.zip --nro build/switch/pctc.nro
 
+sysmodule-nsp:
+	$(MAKE) -C sysmodule
+	mkdir -p build/switch
+	cp sysmodule/pctc-sysmodule.nsp build/switch/exefs.nsp
+
 package-safe package-observe package-disabled package-grant package-enforce:
 	python3 tools/package_sdmc.py --mode $(subst package-,,$@) --out build/packages/$(subst package-,,$@)
 
+package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2: sysmodule-nsp
+	python3 tools/package_sdmc.py --mode $(subst package-,,$(subst -boot2,,$@)) --out build/packages/$(subst package-,,$@) --zip build/packages/$(subst package-,,$@).zip --sysmodule-exefs build/switch/exefs.nsp --boot2
+
 clean:
 	rm -rf build
+	$(MAKE) -C companion/nro clean || true
+	$(MAKE) -C sysmodule clean || true

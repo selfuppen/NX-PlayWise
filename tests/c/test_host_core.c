@@ -5,6 +5,7 @@
 
 #include "../../common/policy/control_policy.h"
 #include "../../common/protocol/error_code.h"
+#include "../../common/protocol/result_builder.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/token/token_v1.h"
 #include "../../companion/file_protocol.h"
@@ -107,6 +108,8 @@ static void test_companion_request_builder_and_file_protocol(void)
     char request_id[PTC_COMPANION_REQUEST_ID_SIZE];
     char json[1024];
     char result[4096];
+    PtcResultState result_state;
+    PtcBedtimeRule bedtime;
 
     ptc_mem_storage_init(&mem);
     ptc_companion_file_client_init(&client, "app", &mem.storage);
@@ -123,6 +126,21 @@ static void test_companion_request_builder_and_file_protocol(void)
     (void)ptc_companion_parent_minutes_request_json(json, sizeof(json), request_id, 1783526400, "add_today_minutes", 30);
     check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"add_today_minutes\",\"created_at\":1783526400,\"payload\":{\"minutes\":30}}\n", "parent minutes request json");
 
+    (void)ptc_companion_empty_payload_request_json(json, sizeof(json), request_id, 1783526400, "block_today");
+    check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"block_today\",\"created_at\":1783526400,\"payload\":{}}\n", "empty payload request json");
+
+    bedtime.enabled = true;
+    bedtime.start_min = 1260;
+    bedtime.end_min = 480;
+    (void)ptc_companion_set_bedtime_request_json(json, sizeof(json), request_id, 1783526400, &bedtime);
+    check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"set_bedtime\",\"created_at\":1783526400,\"payload\":{\"enabled\":true,\"start_min\":1260,\"end_min\":480}}\n", "bedtime request json");
+
+    (void)ptc_companion_set_limit_action_request_json(json, sizeof(json), request_id, 1783526400, PTC_LIMIT_ACTION_SUSPEND);
+    check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"set_limit_action\",\"created_at\":1783526400,\"payload\":{\"action\":\"suspend\"}}\n", "limit action request json");
+
+    (void)ptc_companion_parent_unlock_start_request_json(json, sizeof(json), request_id, 1783526400, 15);
+    check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"parent_unlock_start\",\"created_at\":1783526400,\"payload\":{\"duration_minutes\":15}}\n", "unlock start request json");
+
     check_int(ptc_companion_submit_status(&client, request_id, 1783526400), PTC_COMPANION_OK, "submit status");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/1783526400123-a4f2.json.tmp"), "tmp request renamed");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/1783526400123-a4f2.json"), "pending request visible");
@@ -132,17 +150,35 @@ static void test_companion_request_builder_and_file_protocol(void)
     check_int(ptc_companion_read_result(&client, request_id, 7999, 8000, result, sizeof(result)), PTC_COMPANION_PENDING, "missing result pending");
     check_int(ptc_companion_read_result(&client, request_id, 8000, 8000, result, sizeof(result)), PTC_COMPANION_TIMEOUT, "missing result timeout");
 
-    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/1783526400123-a4f2.json", "{\"version\":1,\"request_id\":\"other\",\"status\":\"ok\"}\n"), "write mismatched result");
+    ptc_result_state_default(&result_state, 2380);
+    (void)ptc_result_ok_json(result, sizeof(result), "other", "status", "observe", true, &result_state, 1783526401);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/1783526400123-a4f2.json", result), "write mismatched result");
     check_int(ptc_companion_read_result(&client, request_id, 0, 8000, result, sizeof(result)), PTC_COMPANION_RESULT_MISMATCH, "mismatched result rejected");
 
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/1783526400123-a4f2.json", "{\"version\":1,\"status\":\"ok\"}\n"), "write invalid result");
     check_int(ptc_companion_read_result(&client, request_id, 0, 8000, result, sizeof(result)), PTC_COMPANION_RESULT_INVALID, "invalid result rejected");
 
-    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/1783526400123-a4f2.json", "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"status\":\"ok\"}\n"), "write matching result");
+    (void)ptc_result_ok_json(result, sizeof(result), request_id, "status", "observe", true, &result_state, 1783526401);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/1783526400123-a4f2.json", result), "write matching result");
     check_int(ptc_companion_read_result(&client, request_id, 0, 8000, result, sizeof(result)), PTC_COMPANION_OK, "matching result accepted");
 
     mem.fail_renames = true;
     check_int(ptc_companion_submit_offline_code(&client, "1783526400124-0001", 1783526401, "241W2-AC004-HM7YW-51R84"), PTC_COMPANION_RENAME_FAILED, "rename failure surfaced");
+}
+
+static void test_result_validator(void)
+{
+    PtcResultState state;
+    char result[2048];
+    ptc_result_state_default(&state, 2380);
+    state.raw_block_verified = true;
+
+    check_int(ptc_result_ok_json(result, sizeof(result), "1000-0010", "status", "observe", true, &state, 1783526401), 0, "build ok result");
+    check_int(ptc_result_validate(result), PTC_ERR_OK, "validate ok result");
+
+    check_int(ptc_result_error_json(result, sizeof(result), "1000-0011", "offline_code", "grant", false, PTC_ERR_BAD_SIGNATURE, &state, 1783526402), 0, "build error result");
+    check_int(ptc_result_validate(result), PTC_ERR_OK, "validate error result");
+    check_int(ptc_result_validate("{\"version\":1,\"request_id\":\"x\",\"status\":\"ok\"}\n"), PTC_ERR_BAD_REQUEST, "reject incomplete result");
 }
 
 static void write_default_files(PtcMemStorage *mem, const char *mode, bool allow_unlimited)
@@ -157,6 +193,18 @@ static void write_default_files(PtcMemStorage *mem, const char *mode, bool allow
         allow_unlimited ? "true" : "false");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/config.json", config), "write config");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/capabilities.json", "{\"version\":1,\"raw_block_verified\":false,\"suspend_verified\":false}\n"), "write capabilities");
+}
+
+static void write_capabilities(PtcMemStorage *mem, bool raw_block_verified, bool suspend_verified)
+{
+    char caps[256];
+    snprintf(
+        caps,
+        sizeof(caps),
+        "{\"version\":1,\"raw_block_verified\":%s,\"suspend_verified\":%s}\n",
+        raw_block_verified ? "true" : "false",
+        suspend_verified ? "true" : "false");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/capabilities.json", caps), "write custom capabilities");
 }
 
 static void make_valid_code(char *out)
@@ -377,6 +425,136 @@ static void test_parent_unlock_state_and_expiry(void)
     check_true(strstr(result, "\"parent_unlock_active\":false") != NULL, "unlock expired result");
 }
 
+static void test_more_rule_requests_and_probe_suspend(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char result[4096];
+    char rules[4096];
+    char state[1024];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0012.json", "{\"version\":1,\"request_id\":\"1000-0012\",\"type\":\"add_today_minutes\",\"created_at\":1012,\"payload\":{\"minutes\":15}}\n"), "write add today request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process add today");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "add target mode");
+    check_int(pctl.last_target.minutes, 75, "add target minutes from default weekday");
+
+    pctl.applied = false;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0013.json", "{\"version\":1,\"request_id\":\"1000-0013\",\"type\":\"disable_today_limit\",\"created_at\":1013,\"payload\":{}}\n"), "write disable today request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process disable today");
+    check_true(pctl.applied, "disable applies pctl");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_UNLIMITED, "disable target unlimited");
+
+    pctl.applied = false;
+    write_capabilities(&mem, true, false);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0014.json", "{\"version\":1,\"request_id\":\"1000-0014\",\"type\":\"block_today\",\"created_at\":1014,\"payload\":{}}\n"), "write block today request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process block today");
+    check_true(pctl.applied, "block applies pctl");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_BLOCKED, "block target");
+
+    pctl.applied = false;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0015.json", "{\"version\":1,\"request_id\":\"1000-0015\",\"type\":\"restore_today_policy\",\"created_at\":1015,\"payload\":{}}\n"), "write restore policy request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process restore policy");
+    check_true(pctl.applied, "restore applies pctl");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "restore target mode");
+    check_int(pctl.last_target.minutes, 60, "restore target minutes");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0016.json", "{\"version\":1,\"request_id\":\"1000-0016\",\"type\":\"set_weekly_template\",\"created_at\":1016,\"payload\":{\"days\":[{\"mode\":\"limit\",\"minutes\":10},{\"mode\":\"limit\",\"minutes\":20},{\"mode\":\"limit\",\"minutes\":30},{\"mode\":\"limit\",\"minutes\":40},{\"mode\":\"limit\",\"minutes\":50},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}\n"), "write weekly request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process weekly");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", rules, sizeof(rules)), "weekly rules persisted");
+    check_true(strstr(rules, "\"minutes\":40") != NULL, "weekly minutes persisted");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0017.json", "{\"version\":1,\"request_id\":\"1000-0017\",\"type\":\"set_bedtime\",\"created_at\":1017,\"payload\":{\"enabled\":true,\"start_min\":1260,\"end_min\":480}}\n"), "write bedtime request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process bedtime");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", rules, sizeof(rules)), "bedtime rules persisted");
+    check_true(strstr(rules, "\"bedtime_enabled\":true") != NULL, "bedtime enabled persisted");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0018.json", "{\"version\":1,\"request_id\":\"1000-0018\",\"type\":\"set_limit_action\",\"created_at\":1018,\"payload\":{\"action\":\"suspend\"}}\n"), "write gated suspend action");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process gated suspend action");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0018.json", result, sizeof(result)), "gated suspend result");
+    check_true(strstr(result, "\"reason\":\"suspend_not_verified\"") != NULL, "suspend action gated");
+
+    write_capabilities(&mem, true, true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0019.json", "{\"version\":1,\"request_id\":\"1000-0019\",\"type\":\"set_limit_action\",\"created_at\":1019,\"payload\":{\"action\":\"suspend\"}}\n"), "write verified suspend action");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process verified suspend action");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", rules, sizeof(rules)), "limit action persisted");
+    check_true(strstr(rules, "\"limit_action\":\"suspend\"") != NULL, "suspend action persisted");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0020.json", "{\"version\":1,\"request_id\":\"1000-0020\",\"type\":\"parent_unlock_end\",\"created_at\":1020,\"payload\":{}}\n"), "write unlock end");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process unlock end");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", state, sizeof(state)), "unlock end state");
+    check_true(strstr(state, "\"parent_unlock_until\":0") != NULL, "unlock end persisted");
+
+    pctl.suspend_probe_succeeds = true;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0021.json", "{\"version\":1,\"request_id\":\"1000-0021\",\"type\":\"probe_suspend\",\"created_at\":1021,\"payload\":{}}\n"), "write suspend probe");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process suspend probe");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", rules, sizeof(rules)), "suspend capability persisted");
+    check_true(strstr(rules, "\"suspend_verified\":true") != NULL, "suspend capability true");
+}
+
+static void test_failure_paths_do_not_consume_nonce(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_TEXT_SIZE];
+    char request[512];
+    char result[4096];
+    char events[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0022", 1022, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0022.json", request), "write pctl fail grant");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process pctl fail grant");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "pctl failure avoids nonce");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0022.json", result, sizeof(result)), "pctl failure result");
+    check_true(strstr(result, "\"reason\":\"pctl_write_failed\"") != NULL, "pctl failure reason");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    mem.fail_write_path_contains = "results/";
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0023", 1023, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0023.json", request), "write result fail grant");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process result fail grant");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "result failure avoids nonce");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    mem.fail_write_path_contains = "ledger/";
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0024", 1024, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0024.json", request), "write ledger fail grant");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process ledger fail grant");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "ledger append failed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/events.jsonl", events, sizeof(events)), "ledger failure events");
+    check_true(strstr(events, "\"event\":\"nonce_failed\"") != NULL, "ledger failure event");
+}
+
 static void test_recover_processing(void)
 {
     PtcMemStorage mem;
@@ -398,6 +576,7 @@ int main(void)
     test_token_v1();
     test_time_and_policy();
     test_companion_request_builder_and_file_protocol();
+    test_result_validator();
     test_observe_status_flow();
     test_grant_flow_consumes_nonce_after_write();
     test_backup_failure_blocks_write();
@@ -406,6 +585,8 @@ int main(void)
     test_grant_set_today_limit_persists_applies_and_logs();
     test_probe_raw_block_updates_capability();
     test_parent_unlock_state_and_expiry();
+    test_more_rule_requests_and_probe_suspend();
+    test_failure_paths_do_not_consume_nonce();
     test_recover_processing();
 
     if (failures != 0) {
