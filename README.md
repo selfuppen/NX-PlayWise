@@ -19,11 +19,12 @@
 ## 当前实现重点
 
 - Python v1 token 工具和 observe request queue 已可用。
-- C common core 已包含 token v1、错误映射、时间计算、规则基础、控制策略和 result builder。
+- C common core 已包含 token v1、错误映射、时间计算、规则基础、控制策略、result builder 和 result schema validator。
 - 平台抽象已包含 `StorageVTable`、`PctlVTable`、time provider、logger，以及 host doubles：`mem_storage`、`pctl_stub`、fake time。
-- `sysmodule/sysmodule_core.c` 已提供 host-testable 队列编排、stuck processing 恢复、backup gate、grant nonce ledger 和 result 写入。
-- `companion/request_client.c` 和 `companion/file_protocol.c` 已提供 request JSON 构建、pending 写入和 result 匹配；`companion/nro/` 已提供最小孩子主界面 NRO 骨架。
-- `Makefile` 已提供主机 C 测试、Python 测试和 SDMC package 目标。
+- Switch 平台层已有 `platform/switch/fs_storage.c`、`time_provider.c` 和保守 PCTL adapter；当前真实 PCTL adapter 支持安全读状态/备份，写入、raw block 和 suspend probe 在真机 raw layout 验证前返回稳定错误。
+- `sysmodule/sysmodule_core.c` 已提供 host-testable 队列编排、stuck processing 恢复、backup gate、grant nonce ledger、规则/状态/能力请求和 result 写入；`sysmodule/` 已提供可远程构建的 boot2 sysmodule skeleton。
+- `companion/request_client.c` 和 `companion/file_protocol.c` 已提供完整 v1 request JSON 构建、pending 写入、result schema 校验和 request_id 匹配；`companion/nro/` 已提供最小孩子主界面 NRO 骨架。
+- `Makefile` 已提供主机 C 测试、Python 测试、Companion NRO、sysmodule NSP、SDMC package 和 disabled/observe boot2 package 目标。
 
 ## 核心原则
 
