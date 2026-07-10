@@ -16,7 +16,7 @@
 - `python tools/make_fixtures.py`：重新生成确定性的令牌 fixture。
 - `python tests/mvp/test_token_v1.py`：运行 MVP 令牌编码、解码和 CLI 一致性测试。
 - `python tests/observe/test_observe_queue.py`：运行 observe 请求队列和 dry-run 行为测试。
-- `python tools/grant_code.py --minutes 30 --device test-device --secret test-secret --day-index 2380 --nonce 4660`：生成离线加时代码示例。
+- `python tools/grant_code.py --minutes 30 --device kid-switch --secret replace-with-long-random-secret --day-index 2380 --nonce 4660`：生成离线加时代码示例。
 - `python tools/protocol_probe.py init --root <tmp-dir> --device <id> --secret <secret>`：初始化本地协议目录用于手工探测。
 
 远程 devkitPro 容器通过 SSH 别名 `249-nintendo-switch-dev` 访问，远程项目路径为 `/ws/switch-play-time-control-local`，使用 `master` 分支开发。需要验证 C host、NRO 或 package 时，不要因为本机缺少 `make`、`gcc` 或 WSL 发行版就判定“无法执行”；应先在本地通过 Python 快速回归、提交并推送 `master`，再让远程仓库快进拉取并运行构建测试：
