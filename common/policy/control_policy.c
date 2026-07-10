@@ -63,13 +63,13 @@ PtcPolicyDecision ptc_policy_decide(
         out.error = PTC_ERR_RAW_BLOCK_NOT_VERIFIED;
         return out;
     }
-    if ((operation == PTC_OPERATION_GRANT_MINUTES || operation == PTC_OPERATION_SET_TODAY_LIMIT) &&
-        current_unlimited && !allow_unlimited_to_limited) {
-        out.error = PTC_ERR_UNLIMITED_NOT_ALLOWED;
+    if (mode == PTC_CONTROL_OBSERVE) {
         return out;
     }
 
-    if (mode == PTC_CONTROL_OBSERVE) {
+    if ((operation == PTC_OPERATION_GRANT_MINUTES || operation == PTC_OPERATION_SET_TODAY_LIMIT) &&
+        current_unlimited && !allow_unlimited_to_limited) {
+        out.error = PTC_ERR_UNLIMITED_NOT_ALLOWED;
         return out;
     }
 

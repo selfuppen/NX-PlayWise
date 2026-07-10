@@ -17,10 +17,10 @@ import re
 TOKEN_VERSION = 1
 TOKEN_ACTION_ADD_TODAY_MINUTES = 1
 TOKEN_DOMAIN = b"PTC1"
-TOKEN_SYMBOLS = 20
+TOKEN_SYMBOLS = 16
 PAYLOAD_BITS = 60
-MAC_BITS = 40
-TOTAL_BITS = 100
+MAC_BITS = 20
+TOTAL_BITS = 80
 MAX_MINUTES = 1440
 MAX_NONCE = (1 << 25) - 1
 MAX_DAY_INDEX = (1 << 16) - 1
@@ -96,7 +96,7 @@ def _payload_bytes(payload_value: int) -> bytes:
 def calculate_mac(payload_value: int, device_id: str, secret: str) -> int:
     msg = TOKEN_DOMAIN + device_id.encode("utf-8") + b"\0" + _payload_bytes(payload_value)
     digest = hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).digest()
-    return int.from_bytes(digest[:5], "big")
+    return int.from_bytes(digest[:5], "big") >> (40 - MAC_BITS)
 
 
 def encode_base32(value: int) -> str:
@@ -105,13 +105,13 @@ def encode_base32(value: int) -> str:
     chars = []
     for shift in range(TOTAL_BITS - 5, -1, -5):
         chars.append(CROCKFORD_ALPHABET[(value >> shift) & 0x1F])
-    return "-".join("".join(chars[i : i + 5]) for i in range(0, TOKEN_SYMBOLS, 5))
+    return "-".join("".join(chars[i : i + 4]) for i in range(0, TOKEN_SYMBOLS, 4))
 
 
 def decode_base32(code: str) -> int:
     normalized = re.sub(r"[\s-]", "", code)
     if len(normalized) != TOKEN_SYMBOLS:
-        raise TokenError("bad_code", "token must contain 20 Crockford Base32 symbols")
+        raise TokenError("bad_code", "token must contain 16 Crockford Base32 symbols")
 
     value = 0
     for ch in normalized:

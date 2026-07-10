@@ -60,10 +60,11 @@ static void test_token_v1(void)
     payload.nonce = 4660;
 
     check_int(ptc_token_encode(&payload, "test-device", "test-secret", code), PTC_ERR_OK, "token encode ok");
-    check_str(code, "241W2-AC004-HM7YW-51R84", "token fixture parity");
+    check_str(code, "241W-2AC0-04HM-7YW5", "token fixture parity");
     check_int(ptc_token_verify(code, "test-device", "test-secret", 2380, 120, NULL, NULL, &decoded), PTC_ERR_OK, "token verify ok");
     check_int(decoded.minutes, 30, "decoded minutes");
     check_int(decoded.nonce, 4660, "decoded nonce");
+    check_int(ptc_token_decode("241W2-AC004-HM7YW-51R84", "test-device", "test-secret", &decoded), PTC_ERR_BAD_CODE, "legacy 20-symbol code rejected");
     check_int(ptc_token_decode(code, "test-device", "wrong-secret", &decoded), PTC_ERR_BAD_SIGNATURE, "bad signature");
     check_int(ptc_token_verify(code, "test-device", "test-secret", 2381, 120, NULL, NULL, &decoded), PTC_ERR_WRONG_DATE, "wrong date");
     check_int(ptc_token_verify(code, "test-device", "test-secret", 2380, 120, used_nonce_callback, NULL, &decoded), PTC_ERR_USED_TOKEN, "used nonce");
@@ -71,7 +72,7 @@ static void test_token_v1(void)
     payload.minutes = 180;
     payload.nonce = 4661;
     check_int(ptc_token_encode(&payload, "test-device", "test-secret", code), PTC_ERR_OK, "over-limit token encode");
-    check_str(code, "24B82-AC004-HNMGY-D0FAS", "over-limit fixture parity");
+    check_str(code, "24B8-2AC0-04HN-MGYD", "over-limit fixture parity");
     check_int(ptc_token_verify(code, "test-device", "test-secret", 2380, 120, NULL, NULL, &decoded), PTC_ERR_MINUTES_EXCEED_LIMIT, "minutes exceed");
 }
 
@@ -91,8 +92,14 @@ static void test_time_and_policy(void)
     decision = ptc_policy_decide(PTC_CONTROL_OBSERVE, false, PTC_OPERATION_GRANT_MINUTES, &caps, false, false);
     check_true(decision.dry_run && !decision.may_write_pctl && !decision.consume_nonce_after_success, "observe dry run");
 
+    decision = ptc_policy_decide(PTC_CONTROL_OBSERVE, false, PTC_OPERATION_GRANT_MINUTES, &caps, true, false);
+    check_int(decision.error, PTC_ERR_OK, "observe ignores unlimited guard");
+
     decision = ptc_policy_decide(PTC_CONTROL_GRANT, false, PTC_OPERATION_GRANT_MINUTES, &caps, false, true);
     check_true(!decision.dry_run && decision.may_write_pctl && decision.requires_backup && decision.consume_nonce_after_success, "grant write decision");
+
+    decision = ptc_policy_decide(PTC_CONTROL_GRANT, false, PTC_OPERATION_GRANT_MINUTES, &caps, true, false);
+    check_int(decision.error, PTC_ERR_UNLIMITED_NOT_ALLOWED, "grant unlimited guard");
 
     decision = ptc_policy_decide(PTC_CONTROL_GRANT, false, PTC_OPERATION_BLOCK_TODAY, &caps, false, true);
     check_int(decision.error, PTC_ERR_RAW_BLOCK_NOT_VERIFIED, "raw block gated");
@@ -120,8 +127,8 @@ static void test_companion_request_builder_and_file_protocol(void)
     (void)ptc_companion_status_request_json(json, sizeof(json), request_id, 1783526400);
     check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"status\",\"created_at\":1783526400,\"payload\":{}}\n", "status request json");
 
-    (void)ptc_companion_offline_code_request_json(json, sizeof(json), request_id, 1783526400, "241W2-AC004-HM7YW-51R84");
-    check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"offline_code\",\"created_at\":1783526400,\"payload\":{\"code\":\"241W2-AC004-HM7YW-51R84\"}}\n", "offline code request json");
+    (void)ptc_companion_offline_code_request_json(json, sizeof(json), request_id, 1783526400, "241W-2AC0-04HM-7YW5");
+    check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"offline_code\",\"created_at\":1783526400,\"payload\":{\"code\":\"241W-2AC0-04HM-7YW5\"}}\n", "offline code request json");
 
     (void)ptc_companion_parent_minutes_request_json(json, sizeof(json), request_id, 1783526400, "add_today_minutes", 30);
     check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"add_today_minutes\",\"created_at\":1783526400,\"payload\":{\"minutes\":30}}\n", "parent minutes request json");
@@ -163,7 +170,7 @@ static void test_companion_request_builder_and_file_protocol(void)
     check_int(ptc_companion_read_result(&client, request_id, 0, 8000, result, sizeof(result)), PTC_COMPANION_OK, "matching result accepted");
 
     mem.fail_renames = true;
-    check_int(ptc_companion_submit_offline_code(&client, "1783526400124-0001", 1783526401, "241W2-AC004-HM7YW-51R84"), PTC_COMPANION_RENAME_FAILED, "rename failure surfaced");
+    check_int(ptc_companion_submit_offline_code(&client, "1783526400124-0001", 1783526401, "241W-2AC0-04HM-7YW5"), PTC_COMPANION_RENAME_FAILED, "rename failure surfaced");
 }
 
 static void test_result_validator(void)
@@ -239,6 +246,58 @@ static void test_observe_status_flow(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0001.json", result, sizeof(result)), "status result written");
     check_true(strstr(result, "\"status\":\"ok\"") != NULL, "status ok result");
     check_true(strstr(result, "\"dry_run\":true") != NULL, "status dry run");
+}
+
+static void test_observe_offline_code_allows_unrestricted_dry_run(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_TEXT_SIZE];
+    char request[512];
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "observe", false);
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0025", 1025, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0025.json", request), "write observe unrestricted grant");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process observe unrestricted grant");
+    check_true(!pctl.applied, "observe unrestricted grant avoids pctl");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "observe unrestricted grant avoids nonce");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0025.json", result, sizeof(result)), "observe unrestricted grant result");
+    check_true(strstr(result, "\"status\":\"ok\"") != NULL, "observe unrestricted grant ok");
+    check_true(strstr(result, "\"dry_run\":true") != NULL, "observe unrestricted grant dry run");
+    check_true(strstr(result, "\"unrestricted_today\":1") != NULL, "observe unrestricted state reported");
+}
+
+static void test_grant_unrestricted_guard_rejects_without_nonce(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_TEXT_SIZE];
+    char request[512];
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", false);
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0026", 1026, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0026.json", request), "write grant unrestricted guard");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process grant unrestricted guard");
+    check_true(!pctl.applied, "grant unrestricted guard avoids pctl");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "grant unrestricted guard avoids nonce");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0026.json", result, sizeof(result)), "grant unrestricted guard result");
+    check_true(strstr(result, "\"reason\":\"unlimited_not_allowed\"") != NULL, "grant unrestricted guard reason");
 }
 
 static void test_grant_flow_consumes_nonce_after_write(void)
@@ -578,6 +637,8 @@ int main(void)
     test_companion_request_builder_and_file_protocol();
     test_result_validator();
     test_observe_status_flow();
+    test_observe_offline_code_allows_unrestricted_dry_run();
+    test_grant_unrestricted_guard_rejects_without_nonce();
     test_grant_flow_consumes_nonce_after_write();
     test_backup_failure_blocks_write();
     test_bad_request_schema_writes_error_result();

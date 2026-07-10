@@ -60,8 +60,8 @@ sysmodule-nsp:
 package-safe package-observe package-disabled package-grant package-enforce:
 	python3 tools/package_sdmc.py --mode $(subst package-,,$@) --out build/packages/$(subst package-,,$@)
 
-package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2: sysmodule-nsp
-	python3 tools/package_sdmc.py --mode $(subst package-,,$(subst -boot2,,$@)) --out build/packages/$(subst package-,,$@) --zip build/packages/$(subst package-,,$@)-$(PACKAGE_TIMESTAMP).zip --sysmodule-exefs build/switch/exefs.nsp --boot2
+package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2: sysmodule-nsp companion-nro
+	python3 tools/package_sdmc.py --mode $(subst package-,,$(subst -boot2,,$@)) --out build/packages/$(subst package-,,$@) --zip build/packages/$(subst package-,,$@)-$(PACKAGE_TIMESTAMP).zip --sysmodule-exefs build/switch/exefs.nsp --nro build/switch/pctc.nro --boot2
 
 clean:
 	rm -rf build

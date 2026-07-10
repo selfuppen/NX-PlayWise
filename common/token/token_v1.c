@@ -236,7 +236,7 @@ static uint64_t calculate_mac(uint64_t payload_value, const char *device_id, con
     pos += 8;
 
     hmac_sha256((const uint8_t *)secret, strlen(secret), msg, pos, digest);
-    return ((uint64_t)digest[0] << 32) | ((uint64_t)digest[1] << 24) | ((uint64_t)digest[2] << 16) | ((uint64_t)digest[3] << 8) | digest[4];
+    return (((uint64_t)digest[0] << 32) | ((uint64_t)digest[1] << 24) | ((uint64_t)digest[2] << 16) | ((uint64_t)digest[3] << 8) | digest[4]) >> (40u - PTC_TOKEN_MAC_BITS);
 }
 
 static const char CROCKFORD[] = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -344,8 +344,8 @@ PtcErrorCode ptc_token_encode(
     }
     payload_value = ptc_token_pack_payload(payload);
     mac = calculate_mac(payload_value, device_id, secret);
-    high = payload_value >> 24;
-    low = ((payload_value & 0xffffffu) << 40) | mac;
+    high = payload_value >> 44;
+    low = ((payload_value & 0xfffffffffffull) << PTC_TOKEN_MAC_BITS) | mac;
     encode_base32(high, low, out);
     return PTC_ERR_OK;
 }
@@ -365,8 +365,8 @@ PtcErrorCode ptc_token_decode(
     if (err != PTC_ERR_OK) {
         return err;
     }
-    payload_value = (high << 24) | (low >> 40);
-    actual_mac = low & 0xffffffffffull;
+    payload_value = (high << 44) | (low >> PTC_TOKEN_MAC_BITS);
+    actual_mac = low & ((1ull << PTC_TOKEN_MAC_BITS) - 1ull);
     expected_mac = calculate_mac(payload_value, device_id, secret);
     if (actual_mac != expected_mac) {
         return PTC_ERR_BAD_SIGNATURE;

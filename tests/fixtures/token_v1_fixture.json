@@ -10,7 +10,7 @@
       "day_index": 2380,
       "nonce": 4660,
       "expect": "ok",
-      "code": "241W2-AC004-HM7YW-51R84"
+      "code": "241W-2AC0-04HM-7YW5"
     },
     {
       "name": "over_limit_180min",
@@ -18,7 +18,7 @@
       "day_index": 2380,
       "nonce": 4661,
       "expect": "minutes_exceed_limit",
-      "code": "24B82-AC004-HNMGY-D0FAS"
+      "code": "24B8-2AC0-04HN-MGYD"
     }
   ]
 }

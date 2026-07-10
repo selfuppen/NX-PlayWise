@@ -35,8 +35,8 @@ CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 VERIFY_MARKER = "devkitPro build artifacts verified"
 PACKAGE_ZIP_EXPECTATIONS = {
     "safe-nro": {"expect_boot2": False, "expect_exefs": False, "expect_nro": True},
-    "disabled-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": False},
-    "observe-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": False},
+    "disabled-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
+    "observe-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
 }
 SAFE_NRO_ZIP_PREFIX = "safe-nro"
 DEFAULT_DOWNLOAD = ROOT / "build" / "downloads" / "safe-nro.zip"
@@ -52,8 +52,8 @@ CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 VERIFY_MARKER = "devkitPro build artifacts verified"
 PACKAGE_ZIP_EXPECTATIONS = {
     "safe-nro": {"expect_boot2": False, "expect_exefs": False, "expect_nro": True},
-    "disabled-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": False},
-    "observe-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": False},
+    "disabled-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
+    "observe-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
 }
 
 
@@ -152,8 +152,8 @@ packages = root / "build" / "packages"
 verify_package(packages / "safe", expected_mode="observe", expect_boot2=False, expect_exefs=False, expect_nro=False)
 verify_package(packages / "observe", expected_mode="observe", expect_boot2=False, expect_exefs=False, expect_nro=False)
 verify_package(packages / "safe-nro", expected_mode="observe", expect_boot2=False, expect_exefs=False, expect_nro=True)
-verify_package(packages / "disabled-boot2", expected_mode="disabled", expect_boot2=True, expect_exefs=True, expect_nro=False)
-verify_package(packages / "observe-boot2", expected_mode="observe", expect_boot2=True, expect_exefs=True, expect_nro=False)
+verify_package(packages / "disabled-boot2", expected_mode="disabled", expect_boot2=True, expect_exefs=True, expect_nro=True)
+verify_package(packages / "observe-boot2", expected_mode="observe", expect_boot2=True, expect_exefs=True, expect_nro=True)
 for prefix, expectations in PACKAGE_ZIP_EXPECTATIONS.items():
     verify_zip(latest_timestamped_zip(packages, prefix), **expectations)
 print(VERIFY_MARKER)
@@ -309,8 +309,8 @@ def verify_artifacts(root: Path) -> None:
     verify_package(packages / "safe", expected_mode="observe", expect_boot2=False, expect_exefs=False, expect_nro=False)
     verify_package(packages / "observe", expected_mode="observe", expect_boot2=False, expect_exefs=False, expect_nro=False)
     verify_package(packages / "safe-nro", expected_mode="observe", expect_boot2=False, expect_exefs=False, expect_nro=True)
-    verify_package(packages / "disabled-boot2", expected_mode="disabled", expect_boot2=True, expect_exefs=True, expect_nro=False)
-    verify_package(packages / "observe-boot2", expected_mode="observe", expect_boot2=True, expect_exefs=True, expect_nro=False)
+    verify_package(packages / "disabled-boot2", expected_mode="disabled", expect_boot2=True, expect_exefs=True, expect_nro=True)
+    verify_package(packages / "observe-boot2", expected_mode="observe", expect_boot2=True, expect_exefs=True, expect_nro=True)
 
     for prefix in PACKAGE_ZIP_EXPECTATIONS:
         verify_package_zip_by_prefix(latest_timestamped_zip(packages, prefix), prefix)

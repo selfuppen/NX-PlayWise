@@ -74,7 +74,7 @@ static void submit_offline_code(UiState *ui)
     }
     swkbdConfigMakePresetDefault(&keyboard);
     swkbdConfigSetHeaderText(&keyboard, "Offline code");
-    swkbdConfigSetGuideText(&keyboard, "XXXXX-XXXXX-XXXXX-XXXXX");
+    swkbdConfigSetGuideText(&keyboard, "XXXX-XXXX-XXXX-XXXX");
     rc = swkbdShow(&keyboard, code, sizeof(code));
     swkbdClose(&keyboard);
 

@@ -8,8 +8,8 @@
 #include "token_payload.h"
 #include "../protocol/error_code.h"
 
-#define PTC_TOKEN_TEXT_LEN 23
-#define PTC_TOKEN_TEXT_SIZE 24
+#define PTC_TOKEN_TEXT_LEN 19
+#define PTC_TOKEN_TEXT_SIZE 20
 #define PTC_TOKEN_MAX_DAY_INDEX 0xffffu
 
 typedef bool (*PtcNonceUsedFn)(uint16_t day_index, uint32_t nonce, void *ctx);
