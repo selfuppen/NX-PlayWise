@@ -37,17 +37,38 @@ static PtcErrorCode ensure_pctl(PtcSwitchPctl *adapter)
     return PTC_ERR_OK;
 }
 
+static Result dispatch_no_io(Service *service, u32 request_id)
+{
+    SfDispatchParams params;
+    memset(&params, 0, sizeof(params));
+    return serviceDispatchImpl(service, request_id, NULL, 0, NULL, 0, params);
+}
+
+static Result dispatch_in(Service *service, u32 request_id, const void *in_data, u32 in_size)
+{
+    SfDispatchParams params;
+    memset(&params, 0, sizeof(params));
+    return serviceDispatchImpl(service, request_id, in_data, in_size, NULL, 0, params);
+}
+
+static Result dispatch_out(Service *service, u32 request_id, void *out_data, u32 out_size)
+{
+    SfDispatchParams params;
+    memset(&params, 0, sizeof(params));
+    return serviceDispatchImpl(service, request_id, NULL, 0, out_data, out_size, params);
+}
+
 static PtcErrorCode get_play_timer_settings(PtcSwitchPlayTimerSettings *settings)
 {
     Service *service = pctlGetServiceSession_Service();
-    Result rc = serviceDispatchOut(service, PTC_PCTL_CMD_GET_PLAY_TIMER_SETTINGS, *settings);
+    Result rc = dispatch_out(service, PTC_PCTL_CMD_GET_PLAY_TIMER_SETTINGS, settings, sizeof(*settings));
     return R_SUCCEEDED(rc) ? PTC_ERR_OK : PTC_ERR_PCTL_READ_FAILED;
 }
 
 static PtcErrorCode set_play_timer_settings(const PtcSwitchPlayTimerSettings *settings)
 {
     Service *service = pctlGetServiceSession_Service();
-    Result rc = serviceDispatchIn(service, PTC_PCTL_CMD_SET_PLAY_TIMER_SETTINGS_FOR_DEBUG, *settings);
+    Result rc = dispatch_in(service, PTC_PCTL_CMD_SET_PLAY_TIMER_SETTINGS_FOR_DEBUG, settings, sizeof(*settings));
     return R_SUCCEEDED(rc) ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
 }
 
@@ -85,16 +106,16 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
     }
     (void)pctlIsRestrictionTemporaryUnlocked(&unlocked);
     (void)pctlIsPlayTimerAlarmDisabled(&alarm_disabled);
-    if (R_SUCCEEDED(serviceDispatchOut(service, PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED, timer_enabled))) {
+    if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED, &timer_enabled, sizeof(timer_enabled)))) {
         out->play_timer_enabled = timer_enabled;
     } else {
         out->play_timer_enabled = enabled && !alarm_disabled;
     }
-    if (R_SUCCEEDED(serviceDispatchOut(service, PTC_PCTL_CMD_GET_PLAY_TIMER_REMAINING_TIME, remaining))) {
+    if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_GET_PLAY_TIMER_REMAINING_TIME, &remaining, sizeof(remaining)))) {
         out->remaining_available = true;
         out->remaining_minutes = (uint16_t)(remaining > 65535 ? 65535 : remaining);
     }
-    if (R_SUCCEEDED(serviceDispatchOut(service, PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER, restricted))) {
+    if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER, &restricted, sizeof(restricted)))) {
         out->restricted_now = restricted;
     }
     out->unrestricted_today = !enabled || unlocked;
@@ -177,7 +198,7 @@ static PtcErrorCode switch_start_timer(PtcPctl *pctl)
     if (err != PTC_ERR_OK) {
         return err;
     }
-    rc = serviceDispatch(pctlGetServiceSession_Service(), PTC_PCTL_CMD_START_PLAY_TIMER);
+    rc = dispatch_no_io(pctlGetServiceSession_Service(), PTC_PCTL_CMD_START_PLAY_TIMER);
     return R_SUCCEEDED(rc) ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
 }
 
@@ -189,7 +210,7 @@ static PtcErrorCode switch_stop_timer(PtcPctl *pctl)
     if (err != PTC_ERR_OK) {
         return err;
     }
-    rc = serviceDispatch(pctlGetServiceSession_Service(), PTC_PCTL_CMD_STOP_PLAY_TIMER);
+    rc = dispatch_no_io(pctlGetServiceSession_Service(), PTC_PCTL_CMD_STOP_PLAY_TIMER);
     return R_SUCCEEDED(rc) ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
 }
 
