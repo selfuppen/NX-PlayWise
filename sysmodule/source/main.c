@@ -95,6 +95,7 @@ int main(int argc, char **argv)
 
     while (true) {
         (void)ptc_sysmodule_process_all(&sysmodule);
+        (void)ptc_sysmodule_enforce_tick(&sysmodule);
         svcSleepThread(PTC_LOOP_SLEEP_NS);
     }
 

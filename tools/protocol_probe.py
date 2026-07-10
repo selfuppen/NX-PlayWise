@@ -56,19 +56,21 @@ def init_sdmc(args: argparse.Namespace) -> int:
         paths.app_root / "state.json",
         {
             "version": 1,
-            "day_index": None,
-            "parent_unlock": {"active": False, "until": 0},
-            "bedtime_active": False,
-            "last_applied": None,
+            "parent_unlock_until": 0,
+            "last_enforced_day_index": 0,
+            "last_enforced_mode": 0,
+            "last_enforced_minutes": 0,
+            "updated_at": 0,
         },
     )
     write_json_atomic(
         paths.app_root / "capabilities.json",
         {
             "version": 1,
+            "play_timer_write_verified": False,
             "raw_block_verified": False,
             "suspend_verified": False,
-            "verified_at": {"raw_block": None, "suspend": None},
+            "verified_at": {"play_timer_write": None, "raw_block": None, "suspend": None},
         },
     )
     print(paths.app_root)
@@ -83,7 +85,25 @@ def submit_request(args: argparse.Namespace) -> int:
         payload["code"] = args.code
     if args.payload_json:
         payload.update(json.loads(args.payload_json))
-    request_id = write_request(Path(args.root), args.type, payload)
+    request_id = write_request(Path(args.root), args.type, payload, request_id=args.request_id, created_at=args.created_at)
+    print(request_id)
+    return 0
+
+
+def submit_raw(args: argparse.Namespace) -> int:
+    root = Path(args.root)
+    paths = create_layout(root)
+    request_id = args.request_id
+    text = args.text
+    if args.file:
+        text = Path(args.file).read_text(encoding="utf-8")
+    if text is None:
+        raise SystemExit("--text or --file is required")
+    write_json_atomic(paths.pending / f"{request_id}.json", {})
+    pending = paths.pending / f"{request_id}.json"
+    tmp = pending.with_name(pending.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(pending)
     print(request_id)
     return 0
 
@@ -110,7 +130,16 @@ def build_parser() -> argparse.ArgumentParser:
     request.add_argument("--type", required=True)
     request.add_argument("--code")
     request.add_argument("--payload-json")
+    request.add_argument("--request-id")
+    request.add_argument("--created-at", type=int)
     request.set_defaults(func=submit_request)
+
+    raw = sub.add_parser("raw-request", help="Write raw text to a pending request file.")
+    raw.add_argument("--root", required=True)
+    raw.add_argument("--request-id", required=True)
+    raw.add_argument("--text")
+    raw.add_argument("--file")
+    raw.set_defaults(func=submit_raw)
 
     process = sub.add_parser("process-observe", help="Process pending requests in observe dry-run mode.")
     process.add_argument("--root", required=True)

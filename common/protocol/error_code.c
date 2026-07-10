@@ -24,6 +24,7 @@ static const PtcErrorInfo PTC_ERROR_TABLE[] = {
     {PTC_ERR_UNLIMITED_NOT_ALLOWED, "unlimited_not_allowed", "当前无限制状态不允许改为有限制"},
     {PTC_ERR_RAW_BLOCK_NOT_VERIFIED, "raw_block_not_verified", "禁玩能力尚未验证"},
     {PTC_ERR_SUSPEND_NOT_VERIFIED, "suspend_not_verified", "暂停能力尚未验证"},
+    {PTC_ERR_PCTL_WRITE_NOT_VERIFIED, "pctl_write_not_verified", "家长控制写入能力尚未验证"},
     {PTC_ERR_PCTL_INIT_FAILED, "pctl_init_failed", "家长控制服务初始化失败"},
     {PTC_ERR_PCTL_READ_FAILED, "pctl_read_failed", "读取家长控制状态失败"},
     {PTC_ERR_PCTL_WRITE_FAILED, "pctl_write_failed", "写入家长控制设置失败"},

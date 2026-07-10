@@ -16,7 +16,8 @@ typedef enum {
     PTC_REQUEST_PARENT_UNLOCK_START = 11,
     PTC_REQUEST_PARENT_UNLOCK_END = 12,
     PTC_REQUEST_PROBE_RAW_BLOCK = 13,
-    PTC_REQUEST_PROBE_SUSPEND = 14
+    PTC_REQUEST_PROBE_SUSPEND = 14,
+    PTC_REQUEST_PROBE_PLAY_TIMER_WRITE = 15
 } PtcRequestType;
 
 PtcRequestType ptc_request_type_from_string(const char *value);

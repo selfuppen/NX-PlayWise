@@ -75,6 +75,14 @@ static PtcErrorCode stub_probe_suspend(PtcPctl *pctl, PtcProbeResult *out)
     return out->verified ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
 }
 
+static PtcErrorCode stub_probe_play_timer_write(PtcPctl *pctl, PtcProbeResult *out)
+{
+    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    out->verified = stub->play_timer_write_probe_succeeds;
+    snprintf(out->detail, sizeof(out->detail), "%s", out->verified ? "stub play timer write ok" : "stub play timer write failed");
+    return out->verified ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
+}
+
 static const PtcPctlVTable PCTL_STUB_VTABLE = {
     stub_read_status,
     stub_backup,
@@ -83,6 +91,7 @@ static const PtcPctlVTable PCTL_STUB_VTABLE = {
     stub_stop_timer,
     stub_probe_raw_block,
     stub_probe_suspend,
+    stub_probe_play_timer_write,
 };
 
 void ptc_pctl_stub_init(PtcPctlStub *stub)

@@ -18,6 +18,7 @@ typedef struct {
     int restricted_now;
     bool bedtime_active;
     bool parent_unlock_active;
+    bool play_timer_write_verified;
     bool raw_block_verified;
     bool suspend_verified;
 } PtcResultState;

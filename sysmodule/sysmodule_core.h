@@ -23,5 +23,6 @@ void ptc_sysmodule_init(
     PtcTimeProvider *time_provider);
 int ptc_sysmodule_recover_processing(PtcSysmodule *sysmodule);
 int ptc_sysmodule_process_all(PtcSysmodule *sysmodule);
+int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule);
 
 #endif

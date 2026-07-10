@@ -21,6 +21,9 @@ typedef struct {
 
 typedef struct {
     int64_t parent_unlock_until;
+    uint16_t last_enforced_day_index;
+    PtcPctlTargetMode last_enforced_mode;
+    uint16_t last_enforced_minutes;
 } PtcRuntimeState;
 
 static void join_path(char *out, size_t out_size, const char *a, const char *b)
@@ -276,10 +279,12 @@ static PtcCapabilities load_capabilities(PtcSysmodule *sysmodule)
     PtcCapabilities caps;
     char path[320];
     char text[1024];
+    caps.play_timer_write_verified = false;
     caps.raw_block_verified = false;
     caps.suspend_verified = false;
     join_path(path, sizeof(path), sysmodule->app_root, "capabilities.json");
     if (sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
+        (void)json_bool_value(text, "play_timer_write_verified", &caps.play_timer_write_verified);
         (void)json_bool_value(text, "raw_block_verified", &caps.raw_block_verified);
         (void)json_bool_value(text, "suspend_verified", &caps.suspend_verified);
     }
@@ -294,10 +299,13 @@ static bool save_capabilities(PtcSysmodule *sysmodule, const PtcCapabilities *ca
     snprintf(
         text,
         sizeof(text),
-        "{\"version\":1,\"raw_block_verified\":%s,\"suspend_verified\":%s,"
-        "\"verified_at\":{\"raw_block\":%lld,\"suspend\":%lld}}\n",
+        "{\"version\":1,\"play_timer_write_verified\":%s,\"raw_block_verified\":%s,"
+        "\"suspend_verified\":%s,\"verified_at\":{\"play_timer_write\":%lld,"
+        "\"raw_block\":%lld,\"suspend\":%lld}}\n",
+        caps->play_timer_write_verified ? "true" : "false",
         caps->raw_block_verified ? "true" : "false",
         caps->suspend_verified ? "true" : "false",
+        caps->play_timer_write_verified ? (long long)updated_at : 0LL,
         caps->raw_block_verified ? (long long)updated_at : 0LL,
         caps->suspend_verified ? (long long)updated_at : 0LL);
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
@@ -378,6 +386,9 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     char text[1024];
     int64_t version;
     state->parent_unlock_until = 0;
+    state->last_enforced_day_index = 0;
+    state->last_enforced_mode = 0;
+    state->last_enforced_minutes = 0;
     join_path(path, sizeof(path), sysmodule->app_root, "state.json");
     if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
         return true;
@@ -386,19 +397,31 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
         return false;
     }
     (void)json_i64(text, "parent_unlock_until", &state->parent_unlock_until);
+    (void)json_u16(text, "last_enforced_day_index", &state->last_enforced_day_index);
+    (void)json_u16(text, "last_enforced_minutes", &state->last_enforced_minutes);
+    {
+        uint16_t mode = 0;
+        if (json_u16(text, "last_enforced_mode", &mode)) {
+            state->last_enforced_mode = (PtcPctlTargetMode)mode;
+        }
+    }
     return true;
 }
 
 static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t updated_at)
 {
     char path[320];
-    char text[256];
+    char text[512];
     snprintf(path, sizeof(path), "%s/state.json", sysmodule->app_root);
     snprintf(
         text,
         sizeof(text),
-        "{\"version\":1,\"parent_unlock_until\":%lld,\"updated_at\":%lld}\n",
+        "{\"version\":1,\"parent_unlock_until\":%lld,\"last_enforced_day_index\":%u,"
+        "\"last_enforced_mode\":%u,\"last_enforced_minutes\":%u,\"updated_at\":%lld}\n",
         (long long)state->parent_unlock_until,
+        state->last_enforced_day_index,
+        (unsigned int)state->last_enforced_mode,
+        state->last_enforced_minutes,
         (long long)updated_at);
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
 }
@@ -450,6 +473,7 @@ static void result_state_from_pctl(
     state->bedtime_active = eval.bedtime_active;
     state->parent_unlock_active = eval.parent_unlock_active;
     state->restricted_now = (status->restricted_now || eval.restricted_now) ? 1 : 0;
+    state->play_timer_write_verified = caps->play_timer_write_verified;
     state->raw_block_verified = caps->raw_block_verified;
     state->suspend_verified = caps->suspend_verified;
 }
@@ -458,6 +482,7 @@ static void result_state_default_with_caps(PtcResultState *state, uint16_t day_i
 {
     ptc_result_state_default(state, day_index);
     if (caps) {
+        state->play_timer_write_verified = caps->play_timer_write_verified;
         state->raw_block_verified = caps->raw_block_verified;
         state->suspend_verified = caps->suspend_verified;
     }
@@ -494,15 +519,27 @@ static PtcErrorCode backup_before_write(PtcSysmodule *sysmodule, const PtcReques
     return PTC_ERR_OK;
 }
 
-static PtcErrorCode apply_target(PtcSysmodule *sysmodule, const PtcRequest *request, PtcPctlTargetMode mode, uint16_t minutes)
+static PtcErrorCode apply_target(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    const PtcCapabilities *caps,
+    PtcClockSnapshot now,
+    PtcPctlTargetMode mode,
+    uint16_t minutes)
 {
     PtcPctlTarget target;
-    PtcErrorCode err = backup_before_write(sysmodule, request);
+    PtcErrorCode err;
+    if (!caps || !caps->play_timer_write_verified) {
+        append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_WRITE_NOT_VERIFIED, "play_timer_write");
+        return PTC_ERR_PCTL_WRITE_NOT_VERIFIED;
+    }
+    err = backup_before_write(sysmodule, request);
     if (err != PTC_ERR_OK) {
         return err;
     }
     target.mode = mode;
     target.minutes = minutes;
+    target.weekday = ptc_weekday_from_day_index(now.day_index);
     err = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &target);
     append_event(sysmodule, request, err == PTC_ERR_OK ? "pctl_apply" : "pctl_apply_failed", err, rule_mode_name((PtcRuleMode)mode));
     return err;
@@ -550,6 +587,8 @@ static PtcOperation request_operation(PtcRequestType type)
         return PTC_OPERATION_PROBE_RAW_BLOCK;
     case PTC_REQUEST_PROBE_SUSPEND:
         return PTC_OPERATION_PROBE_SUSPEND;
+    case PTC_REQUEST_PROBE_PLAY_TIMER_WRITE:
+        return PTC_OPERATION_PROBE_PLAY_TIMER_WRITE;
     case PTC_REQUEST_OFFLINE_CODE:
         return PTC_OPERATION_GRANT_MINUTES;
     case PTC_REQUEST_STATUS:
@@ -698,7 +737,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
     }
     if (decision.may_write_pctl) {
-        err = apply_target(sysmodule, request, PTC_PCTL_TARGET_LIMIT, token.minutes);
+        err = apply_target(sysmodule, request, caps, now, PTC_PCTL_TARGET_LIMIT, token.minutes);
         if (err != PTC_ERR_OK) {
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
         }
@@ -734,7 +773,10 @@ static bool process_probe(PtcSysmodule *sysmodule, const PtcRequest *request, co
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
     }
-    if (request->type == PTC_REQUEST_PROBE_RAW_BLOCK) {
+    if (request->type == PTC_REQUEST_PROBE_PLAY_TIMER_WRITE) {
+        err = sysmodule->pctl->vtable->probe_play_timer_write(sysmodule->pctl, &probe);
+        caps->play_timer_write_verified = err == PTC_ERR_OK && probe.verified;
+    } else if (request->type == PTC_REQUEST_PROBE_RAW_BLOCK) {
         err = sysmodule->pctl->vtable->probe_raw_block(sysmodule->pctl, &probe);
         caps->raw_block_verified = err == PTC_ERR_OK && probe.verified;
     } else {
@@ -784,6 +826,16 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (decision.error != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
     }
+    if (!decision.dry_run &&
+        (request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
+            request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
+            request->type == PTC_REQUEST_DISABLE_TODAY_LIMIT ||
+            request->type == PTC_REQUEST_BLOCK_TODAY ||
+            request->type == PTC_REQUEST_RESTORE_TODAY_POLICY) &&
+        !caps->play_timer_write_verified) {
+        append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_WRITE_NOT_VERIFIED, "play_timer_write");
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_WRITE_NOT_VERIFIED, now.day_index, caps);
+    }
     if (!decision.dry_run) {
         err = update_rules_for_request(sysmodule, request, &rules, &runtime_state, now);
         if (err != PTC_ERR_OK) {
@@ -796,7 +848,7 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
             request->type == PTC_REQUEST_BLOCK_TODAY ||
             request->type == PTC_REQUEST_RESTORE_TODAY_POLICY) {
             active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-            err = apply_target(sysmodule, request, target_from_day_rule(active_rule), active_rule.minutes);
+            err = apply_target(sysmodule, request, caps, now, target_from_day_rule(active_rule), active_rule.minutes);
             if (err != PTC_ERR_OK) {
                 return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
             }
@@ -843,6 +895,7 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
         break;
     case PTC_REQUEST_PROBE_RAW_BLOCK:
     case PTC_REQUEST_PROBE_SUSPEND:
+    case PTC_REQUEST_PROBE_PLAY_TIMER_WRITE:
         (void)process_probe(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
     case PTC_REQUEST_SET_TODAY_LIMIT:
@@ -862,6 +915,57 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
         (void)finish_with_error(sysmodule, &request, ptc_control_mode_name(config.mode), true, PTC_ERR_UNKNOWN_REQUEST_TYPE, now.day_index, &caps);
         break;
     }
+}
+
+int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
+{
+    PtcRuntimeConfig config;
+    PtcCapabilities caps;
+    PtcRules rules;
+    PtcRuntimeState runtime_state;
+    PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    PtcDayRule active_rule;
+    PtcPctlTargetMode target_mode;
+    char disable_path[320];
+    PtcErrorCode err;
+
+    if (!load_config(sysmodule, &config) || config.mode != PTC_CONTROL_ENFORCE) {
+        return 0;
+    }
+    join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, disable_path)) {
+        return 0;
+    }
+    caps = load_capabilities(sysmodule);
+    if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
+        append_event(sysmodule, NULL, "result_error", PTC_ERR_RULES_INVALID, "enforce");
+        return 0;
+    }
+    active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+    target_mode = target_from_day_rule(active_rule);
+    if (runtime_state.last_enforced_day_index == now.day_index &&
+        runtime_state.last_enforced_mode == target_mode &&
+        runtime_state.last_enforced_minutes == active_rule.minutes) {
+        return 0;
+    }
+    err = apply_target(sysmodule, NULL, &caps, now, target_mode, active_rule.minutes);
+    if (err != PTC_ERR_OK) {
+        return 0;
+    }
+    err = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
+    append_event(sysmodule, NULL, err == PTC_ERR_OK ? "pctl_start_timer" : "pctl_apply_failed", err, "start_timer");
+    if (err != PTC_ERR_OK) {
+        return 0;
+    }
+    runtime_state.last_enforced_day_index = now.day_index;
+    runtime_state.last_enforced_mode = target_mode;
+    runtime_state.last_enforced_minutes = active_rule.minutes;
+    if (!save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+        append_event(sysmodule, NULL, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "enforce_state");
+        return 0;
+    }
+    append_event(sysmodule, NULL, "state_persisted", PTC_ERR_OK, "enforce");
+    return 1;
 }
 
 void ptc_sysmodule_init(

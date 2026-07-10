@@ -266,7 +266,8 @@ PtcCompanionStatus ptc_companion_format_result_summary(const char *result_json, 
             out,
             out_size,
             &used,
-            "cap: raw_block=%s suspend=%s\n",
+            "cap: play_write=%s raw_block=%s suspend=%s\n",
+            json_bool_text_or(capabilities, "play_timer_write_verified", "false"),
             json_bool_text_or(capabilities, "raw_block_verified", "unknown"),
             json_bool_text_or(capabilities, "suspend_verified", "unknown")) ||
         !appendf(out, out_size, &used, "completed_at: %lld\n", json_number_or(root, "completed_at", -1))) {

@@ -141,10 +141,11 @@ class ObserveProcessor:
         if path.exists():
             data = read_json(path)
             return {
+                "play_timer_write_verified": bool(data.get("play_timer_write_verified", False)),
                 "raw_block_verified": bool(data.get("raw_block_verified", False)),
                 "suspend_verified": bool(data.get("suspend_verified", False)),
             }
-        return {"raw_block_verified": False, "suspend_verified": False}
+        return {"play_timer_write_verified": False, "raw_block_verified": False, "suspend_verified": False}
 
     def ok_result(
         self,

@@ -27,6 +27,7 @@ typedef struct {
 typedef struct {
     PtcPctlTargetMode mode;
     uint16_t minutes;
+    uint8_t weekday;
 } PtcPctlTarget;
 
 typedef struct {
@@ -46,6 +47,7 @@ typedef struct {
     PtcErrorCode (*stop_timer)(PtcPctl *pctl);
     PtcErrorCode (*probe_raw_block)(PtcPctl *pctl, PtcProbeResult *out);
     PtcErrorCode (*probe_suspend)(PtcPctl *pctl, PtcProbeResult *out);
+    PtcErrorCode (*probe_play_timer_write)(PtcPctl *pctl, PtcProbeResult *out);
 } PtcPctlVTable;
 
 struct PtcPctl {

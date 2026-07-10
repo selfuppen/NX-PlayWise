@@ -22,10 +22,12 @@ typedef enum {
     PTC_OPERATION_BLOCK_TODAY = 5,
     PTC_OPERATION_PROBE_RAW_BLOCK = 6,
     PTC_OPERATION_PROBE_SUSPEND = 7,
-    PTC_OPERATION_RULE_UPDATE = 8
+    PTC_OPERATION_RULE_UPDATE = 8,
+    PTC_OPERATION_PROBE_PLAY_TIMER_WRITE = 9
 } PtcOperation;
 
 typedef struct {
+    bool play_timer_write_verified;
     bool raw_block_verified;
     bool suspend_verified;
 } PtcCapabilities;

@@ -80,6 +80,7 @@ static void test_time_and_policy(void)
 {
     PtcCapabilities caps;
     PtcPolicyDecision decision;
+    caps.play_timer_write_verified = false;
     caps.raw_block_verified = false;
     caps.suspend_verified = false;
 
@@ -209,16 +210,17 @@ static void write_default_files(PtcMemStorage *mem, const char *mode, bool allow
         mode,
         allow_unlimited ? "true" : "false");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/config.json", config), "write config");
-    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/capabilities.json", "{\"version\":1,\"raw_block_verified\":false,\"suspend_verified\":false}\n"), "write capabilities");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/capabilities.json", "{\"version\":1,\"play_timer_write_verified\":false,\"raw_block_verified\":false,\"suspend_verified\":false}\n"), "write capabilities");
 }
 
-static void write_capabilities(PtcMemStorage *mem, bool raw_block_verified, bool suspend_verified)
+static void write_capabilities(PtcMemStorage *mem, bool play_timer_write_verified, bool raw_block_verified, bool suspend_verified)
 {
     char caps[256];
     snprintf(
         caps,
         sizeof(caps),
-        "{\"version\":1,\"raw_block_verified\":%s,\"suspend_verified\":%s}\n",
+        "{\"version\":1,\"play_timer_write_verified\":%s,\"raw_block_verified\":%s,\"suspend_verified\":%s}\n",
+        play_timer_write_verified ? "true" : "false",
         raw_block_verified ? "true" : "false",
         suspend_verified ? "true" : "false");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/capabilities.json", caps), "write custom capabilities");
@@ -310,6 +312,58 @@ static void test_grant_unrestricted_guard_rejects_without_nonce(void)
     check_true(strstr(result, "\"reason\":\"unlimited_not_allowed\"") != NULL, "grant unrestricted guard reason");
 }
 
+static void test_grant_requires_play_timer_write_probe(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_TEXT_SIZE];
+    char request[512];
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0027", 1027, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0027.json", request), "write unprobed grant");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process unprobed grant");
+    check_true(!pctl.applied, "unprobed grant avoids pctl");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/backups/last_pctl_backup.txt"), "unprobed grant avoids backup");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "unprobed grant avoids nonce");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0027.json", result, sizeof(result)), "unprobed grant result");
+    check_true(strstr(result, "\"reason\":\"pctl_write_not_verified\"") != NULL, "unprobed grant reason");
+}
+
+static void test_probe_play_timer_write_updates_capability(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char caps[1024];
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.play_timer_write_probe_succeeds = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0028.json", "{\"version\":1,\"request_id\":\"1000-0028\",\"type\":\"probe_play_timer_write\",\"created_at\":1028,\"payload\":{}}\n"), "write play write probe");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process play write probe");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/backups/last_pctl_backup.txt"), "probe backup persisted");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "play write capabilities persisted");
+    check_true(strstr(caps, "\"play_timer_write_verified\":true") != NULL, "play write capability true");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0028.json", result, sizeof(result)), "play write probe result");
+    check_true(strstr(result, "\"play_timer_write_verified\":true") != NULL, "play write result capability");
+}
+
 static void test_grant_flow_consumes_nonce_after_write(void)
 {
     PtcMemStorage mem;
@@ -326,6 +380,7 @@ static void test_grant_flow_consumes_nonce_after_write(void)
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
     write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
     make_valid_code(code);
     (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0002", 1001, code);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0002.json", request), "write grant request");
@@ -336,6 +391,47 @@ static void test_grant_flow_consumes_nonce_after_write(void)
     check_true(mem.storage.vtable->exists(&mem.storage, "app/backups/last_pctl_backup.txt"), "backup persisted");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/ledger/used_nonces.jsonl", ledger, sizeof(ledger)), "ledger persisted");
     check_true(strstr(ledger, "\"day_index\":2380,\"nonce\":4660") != NULL, "nonce consumed");
+}
+
+static void test_enforce_tick_applies_once_and_respects_disable_flag(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char state[1024];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, false, false);
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "enforce applies first target");
+    check_true(pctl.applied, "enforce applies pctl");
+    check_true(pctl.timer_started, "enforce starts timer");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "enforce target mode");
+    check_int(pctl.last_target.minutes, 60, "enforce target minutes");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", state, sizeof(state)), "enforce state persisted");
+    check_true(strstr(state, "\"last_enforced_day_index\":2380") != NULL, "enforce day persisted");
+
+    pctl.applied = false;
+    pctl.timer_started = false;
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0, "enforce skips unchanged target");
+    check_true(!pctl.applied, "unchanged enforce avoids pctl");
+    check_true(!pctl.timer_started, "unchanged enforce avoids start timer");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, false, false);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/flags/disable.flag", ""), "write disable flag");
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0, "disabled enforce skipped");
+    check_true(!pctl.applied, "disabled enforce avoids pctl");
+    check_true(!pctl.timer_started, "disabled enforce avoids timer");
 }
 
 static void test_backup_failure_blocks_write(void)
@@ -355,6 +451,7 @@ static void test_backup_failure_blocks_write(void)
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
     write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
     make_valid_code(code);
     (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0003", 1002, code);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0003.json", request), "write backup fail request");
@@ -426,6 +523,7 @@ static void test_grant_set_today_limit_persists_applies_and_logs(void)
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
     write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0006.json", "{\"version\":1,\"request_id\":\"1000-0006\",\"type\":\"set_today_limit\",\"created_at\":1006,\"payload\":{\"minutes\":45}}\n"), "write grant set today request");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process grant set today");
     check_true(pctl.applied, "grant set today applies pctl");
@@ -510,6 +608,7 @@ static void test_more_rule_requests_and_probe_suspend(void)
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
     write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
 
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0012.json", "{\"version\":1,\"request_id\":\"1000-0012\",\"type\":\"add_today_minutes\",\"created_at\":1012,\"payload\":{\"minutes\":15}}\n"), "write add today request");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process add today");
@@ -523,7 +622,7 @@ static void test_more_rule_requests_and_probe_suspend(void)
     check_int(pctl.last_target.mode, PTC_PCTL_TARGET_UNLIMITED, "disable target unlimited");
 
     pctl.applied = false;
-    write_capabilities(&mem, true, false);
+    write_capabilities(&mem, true, true, false);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0014.json", "{\"version\":1,\"request_id\":\"1000-0014\",\"type\":\"block_today\",\"created_at\":1014,\"payload\":{}}\n"), "write block today request");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process block today");
     check_true(pctl.applied, "block applies pctl");
@@ -551,7 +650,7 @@ static void test_more_rule_requests_and_probe_suspend(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0018.json", result, sizeof(result)), "gated suspend result");
     check_true(strstr(result, "\"reason\":\"suspend_not_verified\"") != NULL, "suspend action gated");
 
-    write_capabilities(&mem, true, true);
+    write_capabilities(&mem, true, true, true);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0019.json", "{\"version\":1,\"request_id\":\"1000-0019\",\"type\":\"set_limit_action\",\"created_at\":1019,\"payload\":{\"action\":\"suspend\"}}\n"), "write verified suspend action");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process verified suspend action");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", rules, sizeof(rules)), "limit action persisted");
@@ -587,6 +686,7 @@ static void test_failure_paths_do_not_consume_nonce(void)
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
     write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
     make_valid_code(code);
     (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0022", 1022, code);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0022.json", request), "write pctl fail grant");
@@ -601,6 +701,7 @@ static void test_failure_paths_do_not_consume_nonce(void)
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
     write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
     mem.fail_write_path_contains = "results/";
     make_valid_code(code);
     (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0023", 1023, code);
@@ -614,6 +715,7 @@ static void test_failure_paths_do_not_consume_nonce(void)
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
     write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
     mem.fail_write_path_contains = "ledger/";
     make_valid_code(code);
     (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0024", 1024, code);
@@ -649,6 +751,8 @@ int main(void)
     test_observe_status_flow();
     test_observe_offline_code_allows_unrestricted_dry_run();
     test_grant_unrestricted_guard_rejects_without_nonce();
+    test_grant_requires_play_timer_write_probe();
+    test_probe_play_timer_write_updates_capability();
     test_grant_flow_consumes_nonce_after_write();
     test_backup_failure_blocks_write();
     test_bad_request_schema_writes_error_result();
@@ -657,6 +761,7 @@ int main(void)
     test_probe_raw_block_updates_capability();
     test_parent_unlock_state_and_expiry();
     test_more_rule_requests_and_probe_suspend();
+    test_enforce_tick_applies_once_and_respects_disable_flag();
     test_failure_paths_do_not_consume_nonce();
     test_recover_processing();
 

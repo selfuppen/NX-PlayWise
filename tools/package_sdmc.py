@@ -105,8 +105,27 @@ def create_package(
             "limit_action": "remind",
         },
     )
-    write_json(app / "state.json", {"version": 1, "parent_unlock_until": 0, "updated_at": 0})
-    write_json(app / "capabilities.json", {"version": 1, "raw_block_verified": False, "suspend_verified": False, "verified_at": {"raw_block": 0, "suspend": 0}})
+    write_json(
+        app / "state.json",
+        {
+            "version": 1,
+            "parent_unlock_until": 0,
+            "last_enforced_day_index": 0,
+            "last_enforced_mode": 0,
+            "last_enforced_minutes": 0,
+            "updated_at": 0,
+        },
+    )
+    write_json(
+        app / "capabilities.json",
+        {
+            "version": 1,
+            "play_timer_write_verified": False,
+            "raw_block_verified": False,
+            "suspend_verified": False,
+            "verified_at": {"play_timer_write": 0, "raw_block": 0, "suspend": 0},
+        },
+    )
 
     if nro is not None:
         copy_file(nro, app / nro.name)

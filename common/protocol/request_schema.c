@@ -223,6 +223,9 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "probe_suspend") == 0) {
         return PTC_REQUEST_PROBE_SUSPEND;
     }
+    if (strcmp(value, "probe_play_timer_write") == 0) {
+        return PTC_REQUEST_PROBE_PLAY_TIMER_WRITE;
+    }
     return PTC_REQUEST_UNKNOWN;
 }
 
@@ -257,6 +260,8 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "probe_raw_block";
     case PTC_REQUEST_PROBE_SUSPEND:
         return "probe_suspend";
+    case PTC_REQUEST_PROBE_PLAY_TIMER_WRITE:
+        return "probe_play_timer_write";
     case PTC_REQUEST_UNKNOWN:
     default:
         return "unknown";
@@ -320,6 +325,7 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
     case PTC_REQUEST_PARENT_UNLOCK_END:
     case PTC_REQUEST_PROBE_RAW_BLOCK:
     case PTC_REQUEST_PROBE_SUSPEND:
+    case PTC_REQUEST_PROBE_PLAY_TIMER_WRITE:
         return PTC_ERR_OK;
     case PTC_REQUEST_UNKNOWN:
     default:
