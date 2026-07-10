@@ -289,7 +289,7 @@ static void encode_base32(uint64_t high, uint64_t low, char out[PTC_TOKEN_TEXT_S
         for (j = 0; j < 5; ++j) {
             idx = (uint8_t)((idx << 1) | token_bit(high, low, shift + 4 - j));
         }
-        if (symbol > 0 && symbol % 5 == 0) {
+        if (symbol > 0 && symbol % PTC_TOKEN_GROUP_SYMBOLS == 0) {
             out[pos++] = '-';
         }
         out[pos++] = CROCKFORD[idx];
