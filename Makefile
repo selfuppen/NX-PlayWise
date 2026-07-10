@@ -13,6 +13,9 @@ COMMON_SRCS := \
 	common/rules/rules.c \
 	common/policy/control_policy.c
 
+THIRD_PARTY_SRCS := \
+	third_party/cjson/cJSON.c
+
 PLATFORM_HOST_SRCS := \
 	platform/host/mem_storage.c \
 	platform/host/pctl_stub.c \
@@ -32,8 +35,8 @@ all: test
 $(HOST_BUILD_DIR):
 	mkdir -p $(HOST_BUILD_DIR)
 
-$(HOST_TEST): $(COMMON_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS) | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(COMMON_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS)
+$(HOST_TEST): $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS) | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS)
 
 test-host: $(HOST_TEST)
 	$(HOST_TEST)

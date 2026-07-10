@@ -24,6 +24,7 @@ OBJS := \
 	$(BUILD)/request_client.o \
 	$(BUILD)/result_builder.o \
 	$(BUILD)/error_code.o \
+	$(BUILD)/cJSON.o \
 	$(BUILD)/fs_storage.o
 
 .PHONY: all clean
@@ -46,6 +47,9 @@ $(BUILD)/result_builder.o: ../../common/protocol/result_builder.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/error_code.o: ../../common/protocol/error_code.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/cJSON.o: ../../third_party/cjson/cJSON.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/fs_storage.o: ../../platform/switch/fs_storage.c | $(BUILD)

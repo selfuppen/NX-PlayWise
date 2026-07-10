@@ -120,6 +120,12 @@ static void poll_result(UiState *ui, bool force)
         return;
     }
     ui->waiting = false;
+    if (status == PTC_COMPANION_OK) {
+        char summary[RESULT_TEXT_SIZE];
+        if (ptc_companion_format_result_summary(ui->last_result, summary, sizeof(summary)) == PTC_COMPANION_OK) {
+            snprintf(ui->last_result, sizeof(ui->last_result), "%s", summary);
+        }
+    }
     set_message(ui, "Result", status);
 }
 

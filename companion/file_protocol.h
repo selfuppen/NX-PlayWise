@@ -35,6 +35,7 @@ PtcCompanionStatus ptc_companion_read_result(
     int timeout_ms,
     char *out,
     size_t out_size);
+PtcCompanionStatus ptc_companion_format_result_summary(const char *result_json, char *out, size_t out_size);
 const char *ptc_companion_status_name(PtcCompanionStatus status);
 
 #endif

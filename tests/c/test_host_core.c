@@ -115,6 +115,7 @@ static void test_companion_request_builder_and_file_protocol(void)
     char request_id[PTC_COMPANION_REQUEST_ID_SIZE];
     char json[1024];
     char result[4096];
+    char summary[2048];
     PtcResultState result_state;
     PtcBedtimeRule bedtime;
 
@@ -168,6 +169,15 @@ static void test_companion_request_builder_and_file_protocol(void)
     (void)ptc_result_ok_json(result, sizeof(result), request_id, "status", "observe", true, &result_state, 1783526401);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/1783526400123-a4f2.json", result), "write matching result");
     check_int(ptc_companion_read_result(&client, request_id, 0, 8000, result, sizeof(result)), PTC_COMPANION_OK, "matching result accepted");
+    check_int(ptc_companion_format_result_summary(result, summary, sizeof(summary)), PTC_COMPANION_OK, "ok result summary");
+    check_true(strstr(summary, "status: ok") != NULL, "ok summary status");
+    check_true(strstr(summary, "mode: observe  dry_run: true") != NULL, "ok summary mode");
+
+    (void)ptc_result_error_json(result, sizeof(result), request_id, "status", "disabled", true, PTC_ERR_DISABLED, &result_state, 1783526402);
+    check_int(ptc_companion_format_result_summary(result, summary, sizeof(summary)), PTC_COMPANION_OK, "error result summary");
+    check_true(strstr(summary, "status: error") != NULL, "error summary status");
+    check_true(strstr(summary, "error: disabled (300)") != NULL, "error summary reason");
+    check_true(strstr(summary, "message") == NULL, "summary avoids raw localized message");
 
     mem.fail_renames = true;
     check_int(ptc_companion_submit_offline_code(&client, "1783526400124-0001", 1783526401, "241W-2AC0-04HM-7YW5"), PTC_COMPANION_RENAME_FAILED, "rename failure surfaced");

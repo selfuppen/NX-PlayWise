@@ -1,9 +1,11 @@
 #include "file_protocol.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "../common/protocol/result_builder.h"
+#include "../third_party/cjson/cJSON.h"
 #include "request_client.h"
 
 static void join_path(char *out, size_t out_size, const char *a, const char *b)
@@ -11,34 +13,49 @@ static void join_path(char *out, size_t out_size, const char *a, const char *b)
     snprintf(out, out_size, "%s/%s", a, b);
 }
 
-static int has_value(const char *text, const char *key, const char *expected)
+static int appendf(char *out, size_t out_size, size_t *used, const char *fmt, ...)
 {
-    char pattern[64];
-    const char *pos;
-    const char *colon;
-    const char *start;
-    const char *end;
-    size_t expected_len = strlen(expected);
+    int written;
+    va_list args;
 
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-    pos = strstr(text, pattern);
-    if (!pos) {
+    if (*used >= out_size) {
         return 0;
     }
-    colon = strchr(pos + strlen(pattern), ':');
-    if (!colon) {
+    va_start(args, fmt);
+    written = vsnprintf(out + *used, out_size - *used, fmt, args);
+    va_end(args);
+    if (written < 0 || (size_t)written >= out_size - *used) {
+        if (out_size > 0) {
+            out[out_size - 1] = '\0';
+        }
         return 0;
     }
-    start = strchr(colon, '"');
-    if (!start) {
-        return 0;
+    *used += (size_t)written;
+    return 1;
+}
+
+static const char *json_string_or(const cJSON *object, const char *key, const char *fallback)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, key);
+    return cJSON_IsString(item) && item->valuestring ? item->valuestring : fallback;
+}
+
+static long long json_number_or(const cJSON *object, const char *key, long long fallback)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, key);
+    return cJSON_IsNumber(item) ? (long long)item->valuedouble : fallback;
+}
+
+static const char *json_bool_text_or(const cJSON *object, const char *key, const char *fallback)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, key);
+    if (cJSON_IsTrue(item)) {
+        return "true";
     }
-    ++start;
-    end = strchr(start, '"');
-    if (!end) {
-        return 0;
+    if (cJSON_IsFalse(item)) {
+        return "false";
     }
-    return (size_t)(end - start) == expected_len && strncmp(start, expected, expected_len) == 0;
+    return fallback;
 }
 
 static PtcCompanionStatus submit_json(PtcCompanionFileClient *client, const char *request_id, const char *json)
@@ -124,6 +141,8 @@ PtcCompanionStatus ptc_companion_read_result(
 {
     char result_name[80];
     char result_path[240];
+    cJSON *root;
+    const cJSON *json_request_id;
 
     if (!client || !client->storage || !request_id || !out || out_size == 0) {
         return PTC_COMPANION_BAD_ARGUMENT;
@@ -142,10 +161,122 @@ PtcCompanionStatus ptc_companion_read_result(
     if (ptc_result_validate(out) != PTC_ERR_OK) {
         return PTC_COMPANION_RESULT_INVALID;
     }
-    if (!has_value(out, "request_id", request_id)) {
-        return strstr(out, "\"request_id\"") ? PTC_COMPANION_RESULT_MISMATCH : PTC_COMPANION_RESULT_INVALID;
+    root = cJSON_Parse(out);
+    if (!root) {
+        return PTC_COMPANION_RESULT_INVALID;
     }
+    json_request_id = cJSON_GetObjectItemCaseSensitive(root, "request_id");
+    if (!cJSON_IsString(json_request_id) || !json_request_id->valuestring) {
+        cJSON_Delete(root);
+        return PTC_COMPANION_RESULT_INVALID;
+    }
+    if (strcmp(json_request_id->valuestring, request_id) != 0) {
+        cJSON_Delete(root);
+        return PTC_COMPANION_RESULT_MISMATCH;
+    }
+    cJSON_Delete(root);
     return PTC_COMPANION_OK;
+}
+
+PtcCompanionStatus ptc_companion_format_result_summary(const char *result_json, char *out, size_t out_size)
+{
+    cJSON *root;
+    const cJSON *error;
+    const cJSON *state;
+    const cJSON *capabilities;
+    const char *request_id;
+    const char *type;
+    const char *status;
+    const char *mode;
+    const char *dry_run;
+    const char *reason;
+    size_t used = 0;
+    PtcCompanionStatus result = PTC_COMPANION_OK;
+
+    if (!result_json || !out || out_size == 0) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    out[0] = '\0';
+    if (ptc_result_validate(result_json) != PTC_ERR_OK) {
+        return PTC_COMPANION_RESULT_INVALID;
+    }
+
+    root = cJSON_Parse(result_json);
+    if (!root) {
+        return PTC_COMPANION_RESULT_INVALID;
+    }
+    error = cJSON_GetObjectItemCaseSensitive(root, "error");
+    state = cJSON_GetObjectItemCaseSensitive(root, "state");
+    capabilities = cJSON_GetObjectItemCaseSensitive(root, "capabilities");
+    request_id = json_string_or(root, "request_id", "unknown");
+    type = json_string_or(root, "type", "unknown");
+    status = json_string_or(root, "status", "unknown");
+    mode = json_string_or(root, "mode", "unknown");
+    dry_run = json_bool_text_or(root, "dry_run", "unknown");
+    reason = json_string_or(error, "reason", "");
+
+    if (!appendf(out, out_size, &used, "Result summary\n")) {
+        result = PTC_COMPANION_BAD_ARGUMENT;
+        goto done;
+    }
+    if (!appendf(out, out_size, &used, "status: %s\n", status) ||
+        !appendf(out, out_size, &used, "request: %s\n", request_id) ||
+        !appendf(out, out_size, &used, "type: %s\n", type) ||
+        !appendf(out, out_size, &used, "mode: %s  dry_run: %s\n", mode, dry_run)) {
+        result = PTC_COMPANION_BAD_ARGUMENT;
+        goto done;
+    }
+    if (reason[0] != '\0') {
+        if (!appendf(out, out_size, &used, "error: %s (%lld)\n", reason, json_number_or(error, "code", -1))) {
+            result = PTC_COMPANION_BAD_ARGUMENT;
+            goto done;
+        }
+    }
+    if (!appendf(out, out_size, &used, "day_index: %lld\n", json_number_or(state, "day_index", -1)) ||
+        !appendf(
+            out,
+            out_size,
+            &used,
+            "remaining: %lld  available: %s\n",
+            json_number_or(state, "remaining_minutes", -1),
+            json_bool_text_or(state, "remaining_available", "unknown")) ||
+        !appendf(
+            out,
+            out_size,
+            &used,
+            "pctl: limited=%lld blocked=%lld unrestricted=%lld\n",
+            json_number_or(state, "limited_today", -1),
+            json_number_or(state, "blocked_today", -1),
+            json_number_or(state, "unrestricted_today", -1)) ||
+        !appendf(
+            out,
+            out_size,
+            &used,
+            "timer: enabled=%lld restricted_now=%lld\n",
+            json_number_or(state, "play_timer_enabled", -1),
+            json_number_or(state, "restricted_now", -1)) ||
+        !appendf(
+            out,
+            out_size,
+            &used,
+            "state: bedtime=%s unlock=%s\n",
+            json_bool_text_or(state, "bedtime_active", "unknown"),
+            json_bool_text_or(state, "parent_unlock_active", "unknown")) ||
+        !appendf(
+            out,
+            out_size,
+            &used,
+            "cap: raw_block=%s suspend=%s\n",
+            json_bool_text_or(capabilities, "raw_block_verified", "unknown"),
+            json_bool_text_or(capabilities, "suspend_verified", "unknown")) ||
+        !appendf(out, out_size, &used, "completed_at: %lld\n", json_number_or(root, "completed_at", -1))) {
+        result = PTC_COMPANION_BAD_ARGUMENT;
+        goto done;
+    }
+
+done:
+    cJSON_Delete(root);
+    return result;
 }
 
 const char *ptc_companion_status_name(PtcCompanionStatus status)
