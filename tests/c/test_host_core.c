@@ -2,6 +2,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <direct.h>
+#define mkdir(path, mode) _mkdir(path)
+#else
+#include <sys/stat.h>
+#endif
 
 #include "../../common/policy/control_policy.h"
 #include "../../common/protocol/error_code.h"
@@ -363,6 +369,18 @@ static void test_companion_self_check_play_write_probe(void)
     result = run_self_check_for_test(&mem, "sc-probe", PTC_SELF_CHECK_PLAY_WRITE_PROBE, report, sizeof(report));
     check_int(result.status, PTC_SELF_CHECK_PASS, "self-check play write probe passes");
     check_true(strstr(report, "PASS play write capability persisted") != NULL, "self-check probe capability evidence");
+
+    ptc_mem_storage_init(&mem);
+    write_self_check_result(&mem, "sc-probe-enforce", "probe_play_timer_write", "enforce", false, PTC_ERR_OK);
+    write_self_check_done(&mem, "sc-probe-enforce");
+    write_self_check_event(&mem, "sc-probe-enforce", "pctl_backup");
+    write_self_check_event(&mem, "sc-probe-enforce", "probe_ok");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/capabilities.json", "{\"version\":1,\"play_timer_write_verified\":true,\"play_timer_write_backend\":\"pctl-s-v1\",\"raw_block_verified\":false,\"suspend_verified\":false}\n"), "write self-check enforce caps");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/backups/last_pctl_backup.txt", "play_timer_settings_hex=001122\n"), "write self-check enforce backup");
+
+    result = run_self_check_for_test(&mem, "sc-probe-enforce", PTC_SELF_CHECK_PLAY_WRITE_PROBE, report, sizeof(report));
+    check_int(result.status, PTC_SELF_CHECK_PASS, "self-check play write probe accepts enforce mode");
+    check_true(strstr(report, "PASS result mode is write-capable") != NULL, "self-check probe write-capable mode evidence");
 }
 
 static void test_companion_self_check_missing_mismatch_and_pending_fail(void)
@@ -403,9 +421,45 @@ static void test_companion_self_check_enforce_snapshot(void)
     write_self_check_event(&mem, "unknown", "state_persisted");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/state.json", "{\"version\":1,\"parent_unlock_until\":0,\"last_enforced_day_index\":2380,\"last_enforced_mode\":1,\"last_enforced_minutes\":60,\"updated_at\":1783526401}\n"), "write enforce state");
 
-    result = run_self_check_for_test(&mem, "", PTC_SELF_CHECK_ENFORCE_SNAPSHOT, report, sizeof(report));
+    result = ptc_self_check_run(&mem.storage, app_root, "", PTC_SELF_CHECK_ENFORCE_SNAPSHOT, NULL, report, sizeof(report));
     check_int(result.status, PTC_SELF_CHECK_PASS, "self-check enforce snapshot passes");
     check_true(strstr(report, "PASS enforce pctl_apply event present") != NULL, "self-check enforce event evidence");
+}
+
+static void test_companion_self_check_scans_large_event_log(void)
+{
+    PtcMemStorage mem;
+    PtcSelfCheckResult result;
+    FILE *file;
+    char report[8192];
+    int i;
+    const char *app_root = "build/host/self_check_large_events_app";
+
+    (void)mkdir("build", 0777);
+    (void)mkdir("build/host", 0777);
+    (void)mkdir(app_root, 0777);
+    (void)mkdir("build/host/self_check_large_events_app/logs", 0777);
+    file = fopen("build/host/self_check_large_events_app/logs/events.jsonl", "wb");
+    check_true(file != NULL, "open large self-check events file");
+    if (!file) {
+        return;
+    }
+    for (i = 0; i < 220; ++i) {
+        fprintf(file, "{\"ts\":1783526401,\"request_id\":\"noise-%04d\",\"type\":\"status\",\"event\":\"result_ok\",\"error\":\"ok\",\"detail\":\"padding-padding-padding-padding-padding-padding\"}\n", i);
+    }
+    fprintf(file, "{\"ts\":1783526401,\"request_id\":\"unknown\",\"type\":\"unknown\",\"event\":\"pctl_backup\",\"error\":\"ok\",\"detail\":\"\"}\n");
+    fprintf(file, "{\"ts\":1783526401,\"request_id\":\"unknown\",\"type\":\"unknown\",\"event\":\"pctl_apply\",\"error\":\"ok\",\"detail\":\"\"}\n");
+    fprintf(file, "{\"ts\":1783526401,\"request_id\":\"unknown\",\"type\":\"unknown\",\"event\":\"pctl_start_timer\",\"error\":\"ok\",\"detail\":\"\"}\n");
+    fprintf(file, "{\"ts\":1783526401,\"request_id\":\"unknown\",\"type\":\"unknown\",\"event\":\"state_persisted\",\"error\":\"ok\",\"detail\":\"\"}\n");
+    fclose(file);
+
+    ptc_mem_storage_init(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "build/host/self_check_large_events_app/logs/events.jsonl", ""), "write dummy large events marker");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "build/host/self_check_large_events_app/state.json", "{\"version\":1,\"parent_unlock_until\":0,\"last_enforced_day_index\":2380,\"last_enforced_mode\":1,\"last_enforced_minutes\":60,\"updated_at\":1783526401}\n"), "write large events enforce state");
+
+    result = run_self_check_for_test(&mem, "", PTC_SELF_CHECK_ENFORCE_SNAPSHOT, report, sizeof(report));
+    check_int(result.status, PTC_SELF_CHECK_PASS, "self-check scans large events file");
+    check_true(strstr(report, "PASS enforce state_persisted event present") != NULL, "self-check large events evidence");
 }
 
 static void write_default_files(PtcMemStorage *mem, const char *mode, bool allow_unlimited)
@@ -995,6 +1049,7 @@ int main(void)
     test_companion_self_check_play_write_probe();
     test_companion_self_check_missing_mismatch_and_pending_fail();
     test_companion_self_check_enforce_snapshot();
+    test_companion_self_check_scans_large_event_log();
     test_observe_status_flow();
     test_observe_offline_code_allows_unrestricted_dry_run();
     test_grant_unrestricted_guard_rejects_without_nonce();

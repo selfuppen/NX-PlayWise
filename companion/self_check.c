@@ -112,6 +112,30 @@ static bool read_app_text(CheckContext *ctx, const char *relative_path, char *ou
     return ctx->storage && ctx->storage->vtable->read_text(ctx->storage, path, out, out_size);
 }
 
+static bool scan_app_lines(
+    CheckContext *ctx,
+    const char *relative_path,
+    const char *request_needle,
+    const char *event_needle)
+{
+    char path[320];
+    char line[1024];
+    FILE *file;
+    join_path(path, sizeof(path), ctx->app_root, relative_path);
+    file = fopen(path, "rb");
+    if (!file) {
+        return false;
+    }
+    while (fgets(line, sizeof(line), file)) {
+        if (text_contains(line, request_needle) && (!event_needle || text_contains(line, event_needle))) {
+            fclose(file);
+            return true;
+        }
+    }
+    fclose(file);
+    return false;
+}
+
 static bool exists_app_path(CheckContext *ctx, const char *relative_path)
 {
     char path[320];
@@ -186,8 +210,12 @@ static void check_queue_state(CheckContext *ctx)
 static bool read_events(CheckContext *ctx, char *events, size_t events_size)
 {
     if (!read_app_text(ctx, "logs/events.jsonl", events, events_size)) {
-        add_line(ctx, PTC_SELF_CHECK_WARN, "events log readable");
         events[0] = '\0';
+        if (exists_app_path(ctx, "logs/events.jsonl")) {
+            add_line(ctx, PTC_SELF_CHECK_PASS, "events log readable");
+            return false;
+        }
+        add_line(ctx, PTC_SELF_CHECK_WARN, "events log readable");
         return false;
     }
     add_line(ctx, PTC_SELF_CHECK_PASS, "events log readable");
@@ -197,14 +225,14 @@ static bool read_events(CheckContext *ctx, char *events, size_t events_size)
     return true;
 }
 
-static bool event_for_request_exists(const char *events, const char *request_id)
+static bool event_for_request_exists(CheckContext *ctx, const char *events, const char *request_id)
 {
     char needle[96];
     snprintf(needle, sizeof(needle), "\"request_id\":\"%s\"", request_id ? request_id : "");
-    return text_contains(events, needle);
+    return text_contains(events, needle) || scan_app_lines(ctx, "logs/events.jsonl", needle, NULL);
 }
 
-static bool event_has(const char *events, const char *request_id, const char *event_name)
+static bool event_has(CheckContext *ctx, const char *events, const char *request_id, const char *event_name)
 {
     char request_needle[96];
     char event_needle[96];
@@ -223,21 +251,21 @@ static bool event_has(const char *events, const char *request_id, const char *ev
         }
         cursor = line_end ? line_end + 1 : NULL;
     }
-    return false;
+    return scan_app_lines(ctx, "logs/events.jsonl", request_needle, event_needle);
 }
 
 static void expect_event(CheckContext *ctx, const char *events, const char *request_id, const char *event_name)
 {
     char label[96];
     snprintf(label, sizeof(label), "event %s present", event_name);
-    add_line(ctx, event_has(events, request_id, event_name) ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, label);
+    add_line(ctx, event_has(ctx, events, request_id, event_name) ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, label);
 }
 
 static void forbid_event(CheckContext *ctx, const char *events, const char *request_id, const char *event_name)
 {
     char label[96];
     snprintf(label, sizeof(label), "event %s absent", event_name);
-    add_line(ctx, !event_has(events, request_id, event_name) ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, label);
+    add_line(ctx, !event_has(ctx, events, request_id, event_name) ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, label);
 }
 
 static void expect_result_string(CheckContext *ctx, const char *actual, const char *expected, const char *label)
@@ -248,6 +276,16 @@ static void expect_result_string(CheckContext *ctx, const char *actual, const ch
 static void expect_result_bool(CheckContext *ctx, int actual, int expected, const char *label)
 {
     add_line(ctx, actual == expected ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, label);
+}
+
+static void expect_write_mode(CheckContext *ctx, const char *actual)
+{
+    add_line(
+        ctx,
+        strcmp(actual ? actual : "", "grant") == 0 || strcmp(actual ? actual : "", "enforce") == 0
+            ? PTC_SELF_CHECK_PASS
+            : PTC_SELF_CHECK_FAIL,
+        "result mode is write-capable");
 }
 
 static void forbid_pctl_and_nonce(CheckContext *ctx, const char *events, const char *request_id)
@@ -318,7 +356,7 @@ static void check_request_profile(CheckContext *ctx, PtcSelfCheckProfile profile
     check_queue_state(ctx);
     events_read = read_events(ctx, events, sizeof(events));
     if (events_read) {
-        add_line(ctx, event_for_request_exists(events, ctx->request_id) ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_WARN, "event for request exists");
+        add_line(ctx, event_for_request_exists(ctx, events, ctx->request_id) ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_WARN, "event for request exists");
     }
 
     switch (profile) {
@@ -358,7 +396,7 @@ static void check_request_profile(CheckContext *ctx, PtcSelfCheckProfile profile
     case PTC_SELF_CHECK_PLAY_WRITE_PROBE:
         expect_result_string(ctx, info.status, "ok", "result status is ok");
         expect_result_string(ctx, info.type, "probe_play_timer_write", "result type is play write probe");
-        expect_result_string(ctx, info.mode, "grant", "result mode is grant");
+        expect_write_mode(ctx, info.mode);
         expect_result_bool(ctx, info.dry_run, 0, "result dry_run is false");
         check_capabilities_play_write(ctx);
         check_backup(ctx, true);
@@ -405,10 +443,10 @@ static void check_enforce_snapshot(CheckContext *ctx)
     char state_text[2048];
     cJSON *state;
     read_events(ctx, events, sizeof(events));
-    add_line(ctx, event_has(events, "unknown", "pctl_backup") ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "enforce pctl_backup event present");
-    add_line(ctx, event_has(events, "unknown", "pctl_apply") ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "enforce pctl_apply event present");
-    add_line(ctx, event_has(events, "unknown", "pctl_start_timer") ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "enforce pctl_start_timer event present");
-    add_line(ctx, event_has(events, "unknown", "state_persisted") ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "enforce state_persisted event present");
+    add_line(ctx, event_has(ctx, events, "unknown", "pctl_backup") ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "enforce pctl_backup event present");
+    add_line(ctx, event_has(ctx, events, "unknown", "pctl_apply") ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "enforce pctl_apply event present");
+    add_line(ctx, event_has(ctx, events, "unknown", "pctl_start_timer") ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "enforce pctl_start_timer event present");
+    add_line(ctx, event_has(ctx, events, "unknown", "state_persisted") ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "enforce state_persisted event present");
 
     if (!read_app_text(ctx, "state.json", state_text, sizeof(state_text))) {
         add_line(ctx, PTC_SELF_CHECK_FAIL, "state.json readable");
