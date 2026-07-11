@@ -23,6 +23,7 @@ OBJS := \
 	$(BUILD)/auth.o \
 	$(BUILD)/file_protocol.o \
 	$(BUILD)/request_client.o \
+	$(BUILD)/self_check.o \
 	$(BUILD)/sha256.o \
 	$(BUILD)/result_builder.o \
 	$(BUILD)/error_code.o \
@@ -46,6 +47,9 @@ $(BUILD)/auth.o: ../auth.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/request_client.o: ../request_client.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/self_check.o: ../self_check.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sha256.o: ../../common/crypto/sha256.c | $(BUILD)

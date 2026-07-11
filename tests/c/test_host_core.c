@@ -11,6 +11,7 @@
 #include "../../companion/auth.h"
 #include "../../companion/file_protocol.h"
 #include "../../companion/request_client.h"
+#include "../../companion/self_check.h"
 #include "../../platform/host/fake_time.h"
 #include "../../platform/host/mem_storage.h"
 #include "../../platform/host/pctl_stub.h"
@@ -262,6 +263,149 @@ static void test_result_validator(void)
     check_int(ptc_result_error_json(result, sizeof(result), "1000-0011", "offline_code", "grant", false, PTC_ERR_BAD_SIGNATURE, &state, 1783526402), 0, "build error result");
     check_int(ptc_result_validate(result), PTC_ERR_OK, "validate error result");
     check_int(ptc_result_validate("{\"version\":1,\"request_id\":\"x\",\"status\":\"ok\"}\n"), PTC_ERR_BAD_REQUEST, "reject incomplete result");
+}
+
+static void write_self_check_done(PtcMemStorage *mem, const char *request_id)
+{
+    char path[128];
+    snprintf(path, sizeof(path), "app/inbox/done/%s.json", request_id);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, path, "{}\n"), "write self-check done request");
+}
+
+static void write_self_check_result(PtcMemStorage *mem, const char *request_id, const char *type, const char *mode, bool dry_run, PtcErrorCode error)
+{
+    PtcResultState state;
+    char path[128];
+    char result[4096];
+    ptc_result_state_default(&state, 2380);
+    state.play_timer_write_verified = true;
+    snprintf(path, sizeof(path), "app/results/%s.json", request_id);
+    if (error == PTC_ERR_OK) {
+        check_int(ptc_result_ok_json(result, sizeof(result), request_id, type, mode, dry_run, &state, 1783526401), 0, "build self-check ok result");
+    } else {
+        check_int(ptc_result_error_json(result, sizeof(result), request_id, type, mode, dry_run, error, &state, 1783526401), 0, "build self-check error result");
+    }
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, path, result), "write self-check result");
+}
+
+static void write_self_check_event(PtcMemStorage *mem, const char *request_id, const char *event)
+{
+    char line[256];
+    snprintf(line, sizeof(line), "{\"ts\":1783526401,\"request_id\":\"%s\",\"type\":\"status\",\"event\":\"%s\",\"error\":\"ok\",\"detail\":\"\"}", request_id, event);
+    check_true(mem->storage.vtable->append_line(&mem->storage, "app/logs/events.jsonl", line), "write self-check event");
+}
+
+static PtcSelfCheckResult run_self_check_for_test(PtcMemStorage *mem, const char *request_id, PtcSelfCheckProfile profile, char *report, size_t report_size)
+{
+    return ptc_self_check_run(&mem->storage, "app", request_id, profile, NULL, report, report_size);
+}
+
+static void test_companion_self_check_observe_success(void)
+{
+    PtcMemStorage mem;
+    PtcSelfCheckResult result;
+    char report[8192];
+    ptc_mem_storage_init(&mem);
+    write_self_check_result(&mem, "sc-observe-ok", "offline_code", "observe", true, PTC_ERR_OK);
+    write_self_check_done(&mem, "sc-observe-ok");
+    write_self_check_event(&mem, "sc-observe-ok", "request_received");
+    write_self_check_event(&mem, "sc-observe-ok", "result_ok");
+
+    result = run_self_check_for_test(&mem, "sc-observe-ok", PTC_SELF_CHECK_OBSERVE_SUCCESS, report, sizeof(report));
+    check_int(result.status, PTC_SELF_CHECK_PASS, "self-check observe success passes");
+    check_true(strstr(report, "SUMMARY PASS") != NULL, "self-check observe report pass");
+}
+
+static void test_companion_self_check_forbidden_event_fails(void)
+{
+    PtcMemStorage mem;
+    PtcSelfCheckResult result;
+    char report[8192];
+    ptc_mem_storage_init(&mem);
+    write_self_check_result(&mem, "sc-observe-bad", "offline_code", "observe", true, PTC_ERR_OK);
+    write_self_check_done(&mem, "sc-observe-bad");
+    write_self_check_event(&mem, "sc-observe-bad", "request_received");
+    write_self_check_event(&mem, "sc-observe-bad", "pctl_apply");
+
+    result = run_self_check_for_test(&mem, "sc-observe-bad", PTC_SELF_CHECK_OBSERVE_SUCCESS, report, sizeof(report));
+    check_int(result.status, PTC_SELF_CHECK_FAIL, "self-check forbidden event fails");
+    check_true(strstr(report, "FAIL event pctl_apply absent") != NULL, "self-check reports forbidden pctl apply");
+}
+
+static void test_companion_self_check_disabled_status(void)
+{
+    PtcMemStorage mem;
+    PtcSelfCheckResult result;
+    char report[8192];
+    ptc_mem_storage_init(&mem);
+    write_self_check_result(&mem, "sc-disabled", "status", "disabled", true, PTC_ERR_DISABLED);
+    write_self_check_done(&mem, "sc-disabled");
+    write_self_check_event(&mem, "sc-disabled", "result_error");
+
+    result = run_self_check_for_test(&mem, "sc-disabled", PTC_SELF_CHECK_DISABLED_STATUS, report, sizeof(report));
+    check_int(result.status, PTC_SELF_CHECK_PASS, "self-check disabled passes");
+}
+
+static void test_companion_self_check_play_write_probe(void)
+{
+    PtcMemStorage mem;
+    PtcSelfCheckResult result;
+    char report[8192];
+    ptc_mem_storage_init(&mem);
+    write_self_check_result(&mem, "sc-probe", "probe_play_timer_write", "grant", false, PTC_ERR_OK);
+    write_self_check_done(&mem, "sc-probe");
+    write_self_check_event(&mem, "sc-probe", "pctl_backup");
+    write_self_check_event(&mem, "sc-probe", "probe_ok");
+    write_self_check_event(&mem, "sc-probe", "result_ok");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/capabilities.json", "{\"version\":1,\"play_timer_write_verified\":true,\"play_timer_write_backend\":\"pctl-s-v1\",\"raw_block_verified\":false,\"suspend_verified\":false}\n"), "write self-check caps");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/backups/last_pctl_backup.txt", "play_timer_settings_hex=001122\n"), "write self-check backup");
+
+    result = run_self_check_for_test(&mem, "sc-probe", PTC_SELF_CHECK_PLAY_WRITE_PROBE, report, sizeof(report));
+    check_int(result.status, PTC_SELF_CHECK_PASS, "self-check play write probe passes");
+    check_true(strstr(report, "PASS play write capability persisted") != NULL, "self-check probe capability evidence");
+}
+
+static void test_companion_self_check_missing_mismatch_and_pending_fail(void)
+{
+    PtcMemStorage mem;
+    PtcSelfCheckResult result;
+    PtcResultState state;
+    char report[8192];
+    char bad_result[4096];
+    ptc_mem_storage_init(&mem);
+
+    result = run_self_check_for_test(&mem, "sc-missing", PTC_SELF_CHECK_GENERIC, report, sizeof(report));
+    check_int(result.status, PTC_SELF_CHECK_FAIL, "self-check missing result fails");
+
+    ptc_result_state_default(&state, 2380);
+    check_int(ptc_result_ok_json(bad_result, sizeof(bad_result), "different", "status", "observe", true, &state, 1783526401), 0, "build mismatched self-check result");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/sc-mismatch.json", bad_result), "write mismatched self-check result");
+    write_self_check_done(&mem, "sc-mismatch");
+    result = run_self_check_for_test(&mem, "sc-mismatch", PTC_SELF_CHECK_GENERIC, report, sizeof(report));
+    check_int(result.status, PTC_SELF_CHECK_FAIL, "self-check mismatched request fails");
+
+    ptc_mem_storage_init(&mem);
+    write_self_check_result(&mem, "sc-pending", "status", "observe", true, PTC_ERR_OK);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/sc-pending.json", "{}\n"), "write pending self-check residue");
+    result = run_self_check_for_test(&mem, "sc-pending", PTC_SELF_CHECK_GENERIC, report, sizeof(report));
+    check_int(result.status, PTC_SELF_CHECK_FAIL, "self-check pending residue fails");
+}
+
+static void test_companion_self_check_enforce_snapshot(void)
+{
+    PtcMemStorage mem;
+    PtcSelfCheckResult result;
+    char report[8192];
+    ptc_mem_storage_init(&mem);
+    write_self_check_event(&mem, "unknown", "pctl_backup");
+    write_self_check_event(&mem, "unknown", "pctl_apply");
+    write_self_check_event(&mem, "unknown", "pctl_start_timer");
+    write_self_check_event(&mem, "unknown", "state_persisted");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/state.json", "{\"version\":1,\"parent_unlock_until\":0,\"last_enforced_day_index\":2380,\"last_enforced_mode\":1,\"last_enforced_minutes\":60,\"updated_at\":1783526401}\n"), "write enforce state");
+
+    result = run_self_check_for_test(&mem, "", PTC_SELF_CHECK_ENFORCE_SNAPSHOT, report, sizeof(report));
+    check_int(result.status, PTC_SELF_CHECK_PASS, "self-check enforce snapshot passes");
+    check_true(strstr(report, "PASS enforce pctl_apply event present") != NULL, "self-check enforce event evidence");
 }
 
 static void write_default_files(PtcMemStorage *mem, const char *mode, bool allow_unlimited)
@@ -845,6 +989,12 @@ int main(void)
     test_companion_request_builder_and_file_protocol();
     test_companion_auth();
     test_result_validator();
+    test_companion_self_check_observe_success();
+    test_companion_self_check_forbidden_event_fails();
+    test_companion_self_check_disabled_status();
+    test_companion_self_check_play_write_probe();
+    test_companion_self_check_missing_mismatch_and_pending_fail();
+    test_companion_self_check_enforce_snapshot();
     test_observe_status_flow();
     test_observe_offline_code_allows_unrestricted_dry_run();
     test_grant_unrestricted_guard_rejects_without_nonce();

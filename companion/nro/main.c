@@ -8,6 +8,7 @@
 
 #include "../../companion/auth.h"
 #include "../../companion/file_protocol.h"
+#include "../../companion/self_check.h"
 #include "../../platform/switch/fs_storage.h"
 
 #define APP_ROOT "sdmc:/switch/play-time-control"
@@ -22,7 +23,8 @@
 typedef enum {
     UI_VIEW_CHILD = 0,
     UI_VIEW_PARENT = 1,
-    UI_VIEW_DANGER = 2
+    UI_VIEW_DANGER = 2,
+    UI_VIEW_SELF_CHECK = 3
 } UiView;
 
 typedef struct {
@@ -35,6 +37,7 @@ typedef struct {
     int hidden_ticks;
     int parent_index;
     int danger_index;
+    int self_check_index;
     bool waiting;
     bool parent_unlocked;
     bool child_x_pending;
@@ -395,6 +398,50 @@ static void enter_parent_area(UiState *ui)
     snprintf(ui->message, sizeof(ui->message), "Parent area unlocked.");
 }
 
+static PtcSelfCheckProfile current_self_check_profile(const UiState *ui)
+{
+    if (ui->self_check_index < 0 || ui->self_check_index > (int)PTC_SELF_CHECK_ENFORCE_SNAPSHOT) {
+        return PTC_SELF_CHECK_GENERIC;
+    }
+    return (PtcSelfCheckProfile)ui->self_check_index;
+}
+
+static void run_self_check(UiState *ui, bool prompt_request_id)
+{
+    char request_id[PTC_COMPANION_REQUEST_ID_SIZE];
+    PtcSelfCheckProfile profile = current_self_check_profile(ui);
+    PtcSelfCheckResult result;
+
+    snprintf(request_id, sizeof(request_id), "%s", ui->active_request_id);
+    if (prompt_request_id && profile != PTC_SELF_CHECK_ENFORCE_SNAPSHOT) {
+        if (!keyboard_text("Self-check request", "request_id", request_id, sizeof(request_id))) {
+            snprintf(ui->message, sizeof(ui->message), "Self-check cancelled.");
+            return;
+        }
+        snprintf(ui->active_request_id, sizeof(ui->active_request_id), "%s", request_id);
+    }
+
+    if (profile != PTC_SELF_CHECK_ENFORCE_SNAPSHOT && request_id[0] == '\0') {
+        snprintf(ui->message, sizeof(ui->message), "Self-check needs a request id.");
+        return;
+    }
+
+    result = ptc_self_check_run(
+        ui->client.storage,
+        APP_ROOT,
+        profile == PTC_SELF_CHECK_ENFORCE_SNAPSHOT ? "" : request_id,
+        profile,
+        NULL,
+        ui->last_result,
+        sizeof(ui->last_result));
+    snprintf(
+        ui->message,
+        sizeof(ui->message),
+        "Self-check %s: %s",
+        ptc_self_check_profile_name(profile),
+        ptc_self_check_status_name(result.status));
+}
+
 static void handle_parent_action(UiState *ui)
 {
     switch (ui->parent_index) {
@@ -432,12 +479,20 @@ static void handle_parent_action(UiState *ui)
         submit_noarg(ui, ptc_companion_submit_parent_unlock_end, "Unlock end request submitted.", "Unlock end failed");
         break;
     case 11:
+        ui->view = UI_VIEW_SELF_CHECK;
+        break;
+    case 12:
         ui->view = UI_VIEW_DANGER;
         break;
     default:
         ui->parent_index = 0;
         break;
     }
+}
+
+static void handle_self_check_action(UiState *ui)
+{
+    run_self_check(ui, false);
 }
 
 static void handle_danger_action(UiState *ui)
@@ -506,6 +561,7 @@ static void draw_parent(const UiState *ui)
         "Set limit action",
         "Parent unlock start",
         "Parent unlock end",
+        "Self-check",
         "Verification / recovery",
     };
     int count = (int)(sizeof(ACTIONS) / sizeof(ACTIONS[0]));
@@ -544,10 +600,28 @@ static void draw_danger(const UiState *ui)
     printf("Message: %s\n\n", ui->message);
 }
 
+static void draw_self_check(const UiState *ui)
+{
+    int count = (int)PTC_SELF_CHECK_ENFORCE_SNAPSHOT + 1;
+    int i;
+    printf("Self-check\n");
+    printf("==========\n\n");
+    printf("A Current request  X Input request  B Back\n");
+    printf("Y Poll result before check\n\n");
+    for (i = 0; i < count; ++i) {
+        printf("%c %s\n", i == ui->self_check_index ? '>' : ' ', ptc_self_check_profile_name((PtcSelfCheckProfile)i));
+    }
+    printf("\nCurrent request: %s\n", ui->active_request_id[0] ? ui->active_request_id : "(none)");
+    printf("State: %s\n", ui->waiting ? "waiting" : "idle");
+    printf("Message: %s\n\n", ui->message);
+}
+
 static void draw(const UiState *ui)
 {
     consoleClear();
-    if (ui->view == UI_VIEW_DANGER) {
+    if (ui->view == UI_VIEW_SELF_CHECK) {
+        draw_self_check(ui);
+    } else if (ui->view == UI_VIEW_DANGER) {
         draw_danger(ui);
     } else if (ui->view == UI_VIEW_PARENT) {
         draw_parent(ui);
@@ -627,11 +701,24 @@ int main(int argc, char **argv)
             if (down & (HidNpadButton_B | HidNpadButton_X)) {
                 ui.view = UI_VIEW_CHILD;
             } else if (down & HidNpadButton_Up) {
-                ui.parent_index = ui.parent_index <= 0 ? 11 : ui.parent_index - 1;
+                ui.parent_index = ui.parent_index <= 0 ? 12 : ui.parent_index - 1;
             } else if (down & HidNpadButton_Down) {
-                ui.parent_index = ui.parent_index >= 11 ? 0 : ui.parent_index + 1;
+                ui.parent_index = ui.parent_index >= 12 ? 0 : ui.parent_index + 1;
             } else if (down & HidNpadButton_A) {
                 handle_parent_action(&ui);
+            }
+        } else if (ui.view == UI_VIEW_SELF_CHECK) {
+            ui.child_x_pending = false;
+            if (down & HidNpadButton_B) {
+                ui.view = UI_VIEW_PARENT;
+            } else if (down & HidNpadButton_Up) {
+                ui.self_check_index = ui.self_check_index <= 0 ? (int)PTC_SELF_CHECK_ENFORCE_SNAPSHOT : ui.self_check_index - 1;
+            } else if (down & HidNpadButton_Down) {
+                ui.self_check_index = ui.self_check_index >= (int)PTC_SELF_CHECK_ENFORCE_SNAPSHOT ? 0 : ui.self_check_index + 1;
+            } else if (down & HidNpadButton_A) {
+                handle_self_check_action(&ui);
+            } else if (down & HidNpadButton_X) {
+                run_self_check(&ui, true);
             }
         } else {
             ui.child_x_pending = false;

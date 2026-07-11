@@ -26,7 +26,8 @@ ORCH_SRCS := \
 	sysmodule/sysmodule_core.c \
 	companion/auth.c \
 	companion/file_protocol.c \
-	companion/request_client.c
+	companion/request_client.c \
+	companion/self_check.c
 
 TEST_SRCS := tests/c/test_host_core.c
 
