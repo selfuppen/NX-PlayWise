@@ -421,7 +421,7 @@ static void test_companion_self_check_enforce_snapshot(void)
     write_self_check_event(&mem, "unknown", "state_persisted");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/state.json", "{\"version\":1,\"parent_unlock_until\":0,\"last_enforced_day_index\":2380,\"last_enforced_mode\":1,\"last_enforced_minutes\":60,\"updated_at\":1783526401}\n"), "write enforce state");
 
-    result = ptc_self_check_run(&mem.storage, app_root, "", PTC_SELF_CHECK_ENFORCE_SNAPSHOT, NULL, report, sizeof(report));
+    result = run_self_check_for_test(&mem, "", PTC_SELF_CHECK_ENFORCE_SNAPSHOT, report, sizeof(report));
     check_int(result.status, PTC_SELF_CHECK_PASS, "self-check enforce snapshot passes");
     check_true(strstr(report, "PASS enforce pctl_apply event present") != NULL, "self-check enforce event evidence");
 }
@@ -457,7 +457,7 @@ static void test_companion_self_check_scans_large_event_log(void)
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "build/host/self_check_large_events_app/logs/events.jsonl", ""), "write dummy large events marker");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "build/host/self_check_large_events_app/state.json", "{\"version\":1,\"parent_unlock_until\":0,\"last_enforced_day_index\":2380,\"last_enforced_mode\":1,\"last_enforced_minutes\":60,\"updated_at\":1783526401}\n"), "write large events enforce state");
 
-    result = run_self_check_for_test(&mem, "", PTC_SELF_CHECK_ENFORCE_SNAPSHOT, report, sizeof(report));
+    result = ptc_self_check_run(&mem.storage, app_root, "", PTC_SELF_CHECK_ENFORCE_SNAPSHOT, NULL, report, sizeof(report));
     check_int(result.status, PTC_SELF_CHECK_PASS, "self-check scans large events file");
     check_true(strstr(report, "PASS enforce state_persisted event present") != NULL, "self-check large events evidence");
 }
