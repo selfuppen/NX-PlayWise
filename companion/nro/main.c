@@ -484,6 +484,7 @@ static void draw_child(const UiState *ui)
     printf("A  Submit status request\n");
     printf("X  Enter offline code\n");
     printf("Y  Poll result now\n");
+    printf("Minus  Parent area\n");
     printf("Hold L/R or ZL/ZR + X  Parent area\n");
     printf("B/+ Exit\n\n");
     printf("Current request: %s\n", ui->active_request_id[0] ? ui->active_request_id : "(none)");
@@ -612,6 +613,9 @@ int main(int argc, char **argv)
                 running = false;
             } else if (down & HidNpadButton_A) {
                 submit_status(&ui);
+            } else if (down & HidNpadButton_Minus) {
+                ui.child_x_pending = false;
+                enter_parent_area(&ui);
             } else if ((down & HidNpadButton_X) && !parent_combo_held) {
                 ui.child_x_pending = true;
             } else if ((up & HidNpadButton_X) && ui.child_x_pending) {
