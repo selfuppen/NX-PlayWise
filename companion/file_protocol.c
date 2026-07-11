@@ -131,6 +131,139 @@ PtcCompanionStatus ptc_companion_submit_offline_code(PtcCompanionFileClient *cli
     return submit_json(client, request_id, json);
 }
 
+static PtcCompanionStatus submit_minutes(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, const char *type, uint16_t minutes)
+{
+    char json[512];
+    if (!request_id || request_id[0] == '\0' || !type) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    if (ptc_companion_parent_minutes_request_json(json, sizeof(json), request_id, created_at, type, minutes) >= (int)sizeof(json)) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    return submit_json(client, request_id, json);
+}
+
+static PtcCompanionStatus submit_empty(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, const char *type)
+{
+    char json[512];
+    if (!request_id || request_id[0] == '\0' || !type) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    if (ptc_companion_empty_payload_request_json(json, sizeof(json), request_id, created_at, type) >= (int)sizeof(json)) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    return submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_submit_set_today_limit(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, uint16_t minutes)
+{
+    return submit_minutes(client, request_id, created_at, "set_today_limit", minutes);
+}
+
+PtcCompanionStatus ptc_companion_submit_add_today_minutes(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, uint16_t minutes)
+{
+    return submit_minutes(client, request_id, created_at, "add_today_minutes", minutes);
+}
+
+PtcCompanionStatus ptc_companion_submit_disable_today_limit(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
+{
+    return submit_empty(client, request_id, created_at, "disable_today_limit");
+}
+
+PtcCompanionStatus ptc_companion_submit_block_today(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
+{
+    return submit_empty(client, request_id, created_at, "block_today");
+}
+
+PtcCompanionStatus ptc_companion_submit_restore_today_policy(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
+{
+    return submit_empty(client, request_id, created_at, "restore_today_policy");
+}
+
+PtcCompanionStatus ptc_companion_submit_set_weekly_template(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, const PtcDayRule week[7])
+{
+    char json[1024];
+    if (!request_id || request_id[0] == '\0' || !week) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    if (ptc_companion_set_weekly_template_request_json(json, sizeof(json), request_id, created_at, week) >= (int)sizeof(json)) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    return submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_submit_set_bedtime(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, const PtcBedtimeRule *bedtime)
+{
+    char json[512];
+    if (!request_id || request_id[0] == '\0' || !bedtime) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    if (ptc_companion_set_bedtime_request_json(json, sizeof(json), request_id, created_at, bedtime) >= (int)sizeof(json)) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    return submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_submit_set_limit_action(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, PtcLimitAction action)
+{
+    char json[512];
+    if (!request_id || request_id[0] == '\0') {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    if (ptc_companion_set_limit_action_request_json(json, sizeof(json), request_id, created_at, action) >= (int)sizeof(json)) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    return submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_submit_parent_unlock_start(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, uint16_t duration_minutes)
+{
+    char json[512];
+    if (!request_id || request_id[0] == '\0') {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    if (ptc_companion_parent_unlock_start_request_json(json, sizeof(json), request_id, created_at, duration_minutes) >= (int)sizeof(json)) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    return submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_submit_parent_unlock_end(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
+{
+    return submit_empty(client, request_id, created_at, "parent_unlock_end");
+}
+
+PtcCompanionStatus ptc_companion_submit_probe_play_timer_write(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
+{
+    return submit_empty(client, request_id, created_at, "probe_play_timer_write");
+}
+
+PtcCompanionStatus ptc_companion_submit_probe_raw_block(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
+{
+    return submit_empty(client, request_id, created_at, "probe_raw_block");
+}
+
+PtcCompanionStatus ptc_companion_submit_probe_suspend(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
+{
+    return submit_empty(client, request_id, created_at, "probe_suspend");
+}
+
+PtcCompanionStatus ptc_companion_set_disable_flag(PtcCompanionFileClient *client, bool enabled)
+{
+    char flag_path[160];
+    if (!client || !client->storage) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    join_path(flag_path, sizeof(flag_path), client->app_root, "flags/disable.flag");
+    if (enabled) {
+        return client->storage->vtable->write_text_atomic(client->storage, flag_path, "") ? PTC_COMPANION_OK : PTC_COMPANION_WRITE_FAILED;
+    }
+    if (!client->storage->vtable->exists(client->storage, flag_path)) {
+        return PTC_COMPANION_OK;
+    }
+    return client->storage->vtable->remove_path(client->storage, flag_path) ? PTC_COMPANION_OK : PTC_COMPANION_WRITE_FAILED;
+}
+
 PtcCompanionStatus ptc_companion_read_result(
     PtcCompanionFileClient *client,
     const char *request_id,

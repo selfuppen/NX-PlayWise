@@ -20,8 +20,10 @@ LIBS := -L$(DEVKITPRO)/libnx/lib -lnx
 
 OBJS := \
 	$(BUILD)/main.o \
+	$(BUILD)/auth.o \
 	$(BUILD)/file_protocol.o \
 	$(BUILD)/request_client.o \
+	$(BUILD)/sha256.o \
 	$(BUILD)/result_builder.o \
 	$(BUILD)/error_code.o \
 	$(BUILD)/cJSON.o \
@@ -40,7 +42,13 @@ $(BUILD)/main.o: main.c | $(BUILD)
 $(BUILD)/file_protocol.o: ../file_protocol.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/auth.o: ../auth.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/request_client.o: ../request_client.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sha256.o: ../../common/crypto/sha256.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/result_builder.o: ../../common/protocol/result_builder.c | $(BUILD)

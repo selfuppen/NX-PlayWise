@@ -5,6 +5,7 @@ HOST_TEST := $(HOST_BUILD_DIR)/test_host_core
 PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 
 COMMON_SRCS := \
+	common/crypto/sha256.c \
 	common/protocol/error_code.c \
 	common/protocol/request_schema.c \
 	common/protocol/result_builder.c \
@@ -23,6 +24,7 @@ PLATFORM_HOST_SRCS := \
 
 ORCH_SRCS := \
 	sysmodule/sysmodule_core.c \
+	companion/auth.c \
 	companion/file_protocol.c \
 	companion/request_client.c
 

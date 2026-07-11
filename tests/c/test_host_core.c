@@ -8,6 +8,7 @@
 #include "../../common/protocol/result_builder.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/token/token_v1.h"
+#include "../../companion/auth.h"
 #include "../../companion/file_protocol.h"
 #include "../../companion/request_client.h"
 #include "../../platform/host/fake_time.h"
@@ -45,6 +46,16 @@ static bool used_nonce_callback(uint16_t day_index, uint32_t nonce, void *ctx)
 {
     (void)ctx;
     return day_index == 2380 && nonce == 4660;
+}
+
+static bool fixed_random(uint8_t *out, size_t out_size, void *ctx)
+{
+    size_t i;
+    uint8_t seed = ctx ? *(uint8_t *)ctx : 0x10u;
+    for (i = 0; i < out_size; ++i) {
+        out[i] = (uint8_t)(seed + i);
+    }
+    return true;
 }
 
 static void test_token_v1(void)
@@ -119,6 +130,7 @@ static void test_companion_request_builder_and_file_protocol(void)
     char summary[2048];
     PtcResultState result_state;
     PtcBedtimeRule bedtime;
+    PtcDayRule week[7];
 
     ptc_mem_storage_init(&mem);
     ptc_companion_file_client_init(&client, "app", &mem.storage);
@@ -149,6 +161,35 @@ static void test_companion_request_builder_and_file_protocol(void)
 
     (void)ptc_companion_parent_unlock_start_request_json(json, sizeof(json), request_id, 1783526400, 15);
     check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"parent_unlock_start\",\"created_at\":1783526400,\"payload\":{\"duration_minutes\":15}}\n", "unlock start request json");
+
+    check_int(ptc_companion_submit_set_today_limit(&client, "1000-0101", 101, 45), PTC_COMPANION_OK, "submit set today");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/inbox/pending/1000-0101.json", result, sizeof(result)), "set today request readable");
+    check_true(strstr(result, "\"type\":\"set_today_limit\"") != NULL && strstr(result, "\"minutes\":45") != NULL, "set today request content");
+
+    check_int(ptc_companion_submit_add_today_minutes(&client, "1000-0102", 102, 15), PTC_COMPANION_OK, "submit add today");
+    check_int(ptc_companion_submit_disable_today_limit(&client, "1000-0103", 103), PTC_COMPANION_OK, "submit disable today");
+    check_int(ptc_companion_submit_block_today(&client, "1000-0104", 104), PTC_COMPANION_OK, "submit block today");
+    check_int(ptc_companion_submit_restore_today_policy(&client, "1000-0105", 105), PTC_COMPANION_OK, "submit restore today");
+
+    for (int i = 0; i < 7; ++i) {
+        week[i].mode = i == 6 ? PTC_RULE_MODE_UNLIMITED : PTC_RULE_MODE_LIMIT;
+        week[i].minutes = (uint16_t)((i + 1) * 10);
+    }
+    check_int(ptc_companion_submit_set_weekly_template(&client, "1000-0106", 106, week), PTC_COMPANION_OK, "submit weekly");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/inbox/pending/1000-0106.json", result, sizeof(result)), "weekly request readable");
+    check_true(strstr(result, "\"type\":\"set_weekly_template\"") != NULL && strstr(result, "\"mode\":\"unlimited\"") != NULL, "weekly request content");
+
+    check_int(ptc_companion_submit_set_bedtime(&client, "1000-0107", 107, &bedtime), PTC_COMPANION_OK, "submit bedtime");
+    check_int(ptc_companion_submit_set_limit_action(&client, "1000-0108", 108, PTC_LIMIT_ACTION_RAW_BLOCK), PTC_COMPANION_OK, "submit limit action");
+    check_int(ptc_companion_submit_parent_unlock_start(&client, "1000-0109", 109, 20), PTC_COMPANION_OK, "submit unlock start");
+    check_int(ptc_companion_submit_parent_unlock_end(&client, "1000-0110", 110), PTC_COMPANION_OK, "submit unlock end");
+    check_int(ptc_companion_submit_probe_play_timer_write(&client, "1000-0111", 111), PTC_COMPANION_OK, "submit play write probe");
+    check_int(ptc_companion_submit_probe_raw_block(&client, "1000-0112", 112), PTC_COMPANION_OK, "submit raw probe");
+    check_int(ptc_companion_submit_probe_suspend(&client, "1000-0113", 113), PTC_COMPANION_OK, "submit suspend probe");
+    check_int(ptc_companion_set_disable_flag(&client, true), PTC_COMPANION_OK, "set disable flag");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"), "disable flag exists");
+    check_int(ptc_companion_set_disable_flag(&client, false), PTC_COMPANION_OK, "clear disable flag");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"), "disable flag removed");
 
     check_int(ptc_companion_submit_status(&client, request_id, 1783526400), PTC_COMPANION_OK, "submit status");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/1783526400123-a4f2.json.tmp"), "tmp request renamed");
@@ -182,6 +223,30 @@ static void test_companion_request_builder_and_file_protocol(void)
 
     mem.fail_renames = true;
     check_int(ptc_companion_submit_offline_code(&client, "1783526400124-0001", 1783526401, "241W-2AC0-04HM-7YW5"), PTC_COMPANION_RENAME_FAILED, "rename failure surfaced");
+}
+
+static void test_companion_auth(void)
+{
+    PtcMemStorage mem;
+    PtcCompanionAuth auth;
+    char auth_json[512];
+    uint8_t seed = 0x21u;
+
+    ptc_mem_storage_init(&mem);
+    ptc_companion_auth_init(&auth, "app", &mem.storage);
+    check_int(ptc_companion_auth_state(&auth), PTC_AUTH_READ_FAILED, "missing auth read failed");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/auth.json", "{\"version\":1,\"pin_hash\":\"\",\"pin_salt\":\"\",\"hash\":\"hmac-sha256\",\"updated_at\":0}\n"), "write empty auth");
+    check_int(ptc_companion_auth_state(&auth), PTC_AUTH_EMPTY, "empty auth state");
+    check_int(ptc_companion_auth_verify_pin(&auth, "1234"), PTC_AUTH_EMPTY, "empty auth verify");
+    check_int(ptc_companion_auth_set_pin(&auth, "2468", 1783526400, fixed_random, &seed), PTC_AUTH_OK, "set pin");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/auth.json", auth_json, sizeof(auth_json)), "auth readable");
+    check_true(strstr(auth_json, "\"pin_hash\":\"\"") == NULL, "auth hash written");
+    check_true(strstr(auth_json, "\"pin_salt\":\"2122232425262728292a2b2c2d2e2f30\"") != NULL, "auth salt deterministic");
+    check_int(ptc_companion_auth_state(&auth), PTC_AUTH_OK, "auth configured");
+    check_int(ptc_companion_auth_verify_pin(&auth, "0000"), PTC_AUTH_DENIED, "wrong pin denied");
+    check_int(ptc_companion_auth_verify_pin(&auth, "2468"), PTC_AUTH_OK, "pin verified");
+    check_str(ptc_auth_status_name(PTC_AUTH_DENIED), "denied", "auth status name");
 }
 
 static void test_result_validator(void)
@@ -778,6 +843,7 @@ int main(void)
     test_token_v1();
     test_time_and_policy();
     test_companion_request_builder_and_file_protocol();
+    test_companion_auth();
     test_result_validator();
     test_observe_status_flow();
     test_observe_offline_code_allows_unrestricted_dry_run();
