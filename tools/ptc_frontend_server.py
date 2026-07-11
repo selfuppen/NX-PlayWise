@@ -293,7 +293,7 @@ HTML = r"""<!doctype html>
 
     <h3>Offline code</h3>
     <label>Device</label><input id="device" value="kid-switch">
-    <label>Secret</label><input id="secret" placeholder="grant_secret">
+    <label>Secret</label><input id="secret" value="replace-with-long-random-secret">
     <label>Minutes</label><input id="minutes" value="30">
     <label>Date</label><input id="date" placeholder="YYYY-MM-DD">
     <label>Nonce</label><input id="nonce" placeholder="optional">
