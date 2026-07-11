@@ -310,6 +310,27 @@ static void arm_self_check_after_result(UiState *ui, PtcSelfCheckProfile profile
     ui->self_check_after_profile = profile;
 }
 
+static void append_text_truncated(char *out, size_t out_size, const char *text)
+{
+    size_t used;
+    size_t available;
+    size_t text_len;
+    size_t copy_len;
+    if (!out || out_size == 0 || !text) {
+        return;
+    }
+    used = strlen(out);
+    if (used >= out_size - 1) {
+        out[out_size - 1] = '\0';
+        return;
+    }
+    available = out_size - used - 1;
+    text_len = strlen(text);
+    copy_len = text_len < available ? text_len : available;
+    memcpy(out + used, text, copy_len);
+    out[used + copy_len] = '\0';
+}
+
 static void submit_noarg(UiState *ui, SubmitNoArgFn submit, const char *ok_message, const char *fail_prefix)
 {
     PtcCompanionStatus status;
@@ -613,16 +634,9 @@ static void run_self_check_profile(UiState *ui, PtcSelfCheckProfile profile, boo
         out,
         out_size);
     if (prefix_text) {
-        size_t used;
         snprintf(ui->last_result, sizeof(ui->last_result), "%s", prefix_text);
-        used = strlen(ui->last_result);
-        if (used < sizeof(ui->last_result) - 1) {
-            strncat(ui->last_result, "\nSelf-check report\n", sizeof(ui->last_result) - used - 1);
-        }
-        used = strlen(ui->last_result);
-        if (used < sizeof(ui->last_result) - 1) {
-            strncat(ui->last_result, report, sizeof(ui->last_result) - used - 1);
-        }
+        append_text_truncated(ui->last_result, sizeof(ui->last_result), "\nSelf-check report\n");
+        append_text_truncated(ui->last_result, sizeof(ui->last_result), report);
     }
     snprintf(
         ui->message,
