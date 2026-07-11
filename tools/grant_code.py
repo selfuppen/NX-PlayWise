@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 import secrets
 
 from ptc_token_v1 import (
@@ -29,6 +29,10 @@ def day_index_for(target: date) -> int:
     return (target - date(2020, 1, 1)).days
 
 
+def today_utc8() -> date:
+    return datetime.now(timezone(timedelta(hours=8))).date()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate a v1 offline play-time grant code.")
     parser.add_argument("--minutes", type=int, required=True, help="Minutes to add today.")
@@ -40,7 +44,7 @@ def main() -> int:
     parser.add_argument("--nonce", type=parse_int, help="25-bit nonce. Defaults to random.")
     args = parser.parse_args()
 
-    day_index = args.day_index if args.day_index is not None else day_index_for(args.date or date.today())
+    day_index = args.day_index if args.day_index is not None else day_index_for(args.date or today_utc8())
     nonce = args.nonce if args.nonce is not None else secrets.randbelow(MAX_NONCE + 1)
     payload = TokenPayload(
         version=TOKEN_VERSION,

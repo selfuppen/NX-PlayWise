@@ -98,11 +98,19 @@ static void test_time_and_policy(void)
 {
     PtcCapabilities caps;
     PtcPolicyDecision decision;
+    uint16_t local_day = 0;
     caps.play_timer_write_verified = false;
     caps.raw_block_verified = false;
     caps.suspend_verified = false;
 
     check_int(ptc_day_index_from_unix(1577836800), 0, "2020 epoch day index");
+    check_int(ptc_day_index_from_unix(1783785600), 2383, "UTC day index before UTC midnight");
+    check_int(ptc_day_index_from_unix_utc8(1783785599), 2383, "UTC+8 day index before local midnight");
+    check_int(ptc_day_index_from_unix_utc8(1783785600), 2384, "UTC+8 day index after local midnight");
+    check_int(ptc_minute_of_day_from_unix_utc8(1783786320), 12, "UTC+8 minute of day");
+    check_true(ptc_day_index_from_date(2026, 7, 12, &local_day), "2026-07-12 local date accepted");
+    check_int(local_day, 2384, "2026-07-12 local day index");
+    check_true(!ptc_day_index_from_date(2026, 2, 29, &local_day), "invalid local date rejected");
     check_int(ptc_weekday_from_day_index(0), 3, "2020-01-01 weekday");
     check_true(ptc_bedtime_active(30, 1260, 480), "cross-midnight bedtime active");
     check_true(!ptc_bedtime_active(720, 1260, 480), "midday bedtime inactive");

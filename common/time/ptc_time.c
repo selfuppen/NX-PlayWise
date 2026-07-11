@@ -1,11 +1,85 @@
 #include "ptc_time.h"
 
+static bool is_leap_year(uint16_t year)
+{
+    return (year % 4u == 0u && year % 100u != 0u) || (year % 400u == 0u);
+}
+
+static uint8_t days_in_month(uint16_t year, uint8_t month)
+{
+    static const uint8_t MONTH_DAYS[12] = {
+        31, 28, 31, 30, 31, 30,
+        31, 31, 30, 31, 30, 31,
+    };
+    if (month == 2u && is_leap_year(year)) {
+        return 29;
+    }
+    if (month < 1u || month > 12u) {
+        return 0;
+    }
+    return MONTH_DAYS[month - 1u];
+}
+
 uint16_t ptc_day_index_from_unix(int64_t unix_seconds)
 {
     if (unix_seconds < PTC_DAY_INDEX_EPOCH_UNIX) {
         return 0;
     }
     return (uint16_t)((unix_seconds - PTC_DAY_INDEX_EPOCH_UNIX) / PTC_SECONDS_PER_DAY);
+}
+
+uint16_t ptc_day_index_from_unix_utc8(int64_t unix_seconds)
+{
+    if (unix_seconds < PTC_DAY_INDEX_EPOCH_UNIX - PTC_UTC8_OFFSET_SECONDS) {
+        return 0;
+    }
+    return (uint16_t)((unix_seconds + PTC_UTC8_OFFSET_SECONDS - PTC_DAY_INDEX_EPOCH_UNIX) / PTC_SECONDS_PER_DAY);
+}
+
+uint16_t ptc_minute_of_day_from_unix_utc8(int64_t unix_seconds)
+{
+    int64_t shifted = unix_seconds + PTC_UTC8_OFFSET_SECONDS;
+    int64_t seconds = shifted % PTC_SECONDS_PER_DAY;
+    if (seconds < 0) {
+        seconds += PTC_SECONDS_PER_DAY;
+    }
+    return (uint16_t)(seconds / 60);
+}
+
+bool ptc_day_index_from_date(uint16_t year, uint8_t month, uint8_t day, uint16_t *out)
+{
+    uint32_t days = 0;
+    uint16_t cursor_year;
+    uint8_t cursor_month;
+    uint8_t month_days;
+
+    if (!out || year < 2020u) {
+        return false;
+    }
+    month_days = days_in_month(year, month);
+    if (month_days == 0u || day < 1u || day > month_days) {
+        return false;
+    }
+
+    for (cursor_year = 2020u; cursor_year < year; ++cursor_year) {
+        days += is_leap_year(cursor_year) ? 366u : 365u;
+        if (days > 65535u) {
+            return false;
+        }
+    }
+    for (cursor_month = 1u; cursor_month < month; ++cursor_month) {
+        days += days_in_month(year, cursor_month);
+        if (days > 65535u) {
+            return false;
+        }
+    }
+    days += (uint32_t)day - 1u;
+    if (days > 65535u) {
+        return false;
+    }
+
+    *out = (uint16_t)days;
+    return true;
 }
 
 uint8_t ptc_weekday_from_day_index(uint16_t day_index_since_2020)

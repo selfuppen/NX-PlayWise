@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import argparse
 import json
@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 import zipfile
 
-from grant_code import day_index_for
+from grant_code import day_index_for, today_utc8
 from ptc_request_queue import APP_DIR, AppPaths, create_layout, new_request_id, write_json_atomic, write_request
 from ptc_token_v1 import MAX_NONCE, TOKEN_ACTION_ADD_TODAY_MINUTES, TOKEN_VERSION, TokenPayload, encode_token
 
@@ -185,7 +185,7 @@ def generate_offline_code(data: dict[str, Any]) -> dict[str, Any]:
     if data.get("day_index") not in (None, ""):
         day_index = int(data["day_index"])
     else:
-        day_index = day_index_for(datetime.strptime(target_date, "%Y-%m-%d").date() if target_date else date.today())
+        day_index = day_index_for(datetime.strptime(target_date, "%Y-%m-%d").date() if target_date else today_utc8())
     nonce = int(data["nonce"]) if data.get("nonce") not in (None, "") else int(time.time() * 1000) % (MAX_NONCE + 1)
     payload = TokenPayload(
         version=TOKEN_VERSION,
