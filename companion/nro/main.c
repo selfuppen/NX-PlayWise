@@ -16,6 +16,8 @@
 #define LOOP_SLEEP_NS 100000000LL
 #define LOOP_SLEEP_MS 100
 #define HIDDEN_HOLD_TICKS 20
+#define HIDDEN_LEFT_SHOULDER_MASK (HidNpadButton_L | HidNpadButton_ZL)
+#define HIDDEN_RIGHT_SHOULDER_MASK (HidNpadButton_R | HidNpadButton_ZR)
 
 typedef enum {
     UI_VIEW_CHILD = 0,
@@ -35,6 +37,7 @@ typedef struct {
     int danger_index;
     bool waiting;
     bool parent_unlocked;
+    bool child_x_pending;
     UiView view;
 } UiState;
 
@@ -62,6 +65,19 @@ static void set_message(UiState *ui, const char *prefix, PtcCompanionStatus stat
 static void set_auth_message(UiState *ui, const char *prefix, PtcAuthStatus status)
 {
     snprintf(ui->message, sizeof(ui->message), "%s: %s", prefix, ptc_auth_status_name(status));
+}
+
+static bool hidden_parent_combo_held(u64 buttons)
+{
+    return (buttons & HidNpadButton_X) &&
+           (buttons & HIDDEN_LEFT_SHOULDER_MASK) &&
+           (buttons & HIDDEN_RIGHT_SHOULDER_MASK);
+}
+
+static bool hidden_parent_combo_attempted(u64 buttons)
+{
+    return (buttons & HidNpadButton_X) &&
+           (buttons & (HIDDEN_LEFT_SHOULDER_MASK | HIDDEN_RIGHT_SHOULDER_MASK));
 }
 
 static bool switch_random(uint8_t *out, size_t out_size, void *ctx)
@@ -468,7 +484,7 @@ static void draw_child(const UiState *ui)
     printf("A  Submit status request\n");
     printf("X  Enter offline code\n");
     printf("Y  Poll result now\n");
-    printf("Hold L+R+X  Parent area\n");
+    printf("Hold L/R or ZL/ZR + X  Parent area\n");
     printf("B/+ Exit\n\n");
     printf("Current request: %s\n", ui->active_request_id[0] ? ui->active_request_id : "(none)");
     printf("State: %s\n", ui->waiting ? "waiting" : "idle");
@@ -566,17 +582,25 @@ int main(int argc, char **argv)
     while (appletMainLoop() && running) {
         u64 down;
         u64 held;
+        u64 up;
+        bool parent_combo_held;
         padUpdate(&pad);
         down = padGetButtonsDown(&pad);
         held = padGetButtons(&pad);
+        up = padGetButtonsUp(&pad);
+        parent_combo_held = hidden_parent_combo_held(held);
 
-        if ((held & HidNpadButton_L) && (held & HidNpadButton_R) && (held & HidNpadButton_X)) {
+        if (parent_combo_held) {
             ++ui.hidden_ticks;
+            ui.child_x_pending = false;
             if (ui.hidden_ticks == HIDDEN_HOLD_TICKS) {
                 enter_parent_area(&ui);
             }
         } else {
             ui.hidden_ticks = 0;
+            if (hidden_parent_combo_attempted(held)) {
+                ui.child_x_pending = false;
+            }
         }
 
         if (down & HidNpadButton_Y) {
@@ -588,10 +612,14 @@ int main(int argc, char **argv)
                 running = false;
             } else if (down & HidNpadButton_A) {
                 submit_status(&ui);
-            } else if ((down & HidNpadButton_X) && ui.hidden_ticks == 0) {
+            } else if ((down & HidNpadButton_X) && !parent_combo_held) {
+                ui.child_x_pending = true;
+            } else if ((up & HidNpadButton_X) && ui.child_x_pending) {
+                ui.child_x_pending = false;
                 submit_offline_code(&ui);
             }
         } else if (ui.view == UI_VIEW_PARENT) {
+            ui.child_x_pending = false;
             if (down & (HidNpadButton_B | HidNpadButton_X)) {
                 ui.view = UI_VIEW_CHILD;
             } else if (down & HidNpadButton_Up) {
@@ -602,6 +630,7 @@ int main(int argc, char **argv)
                 handle_parent_action(&ui);
             }
         } else {
+            ui.child_x_pending = false;
             if (down & HidNpadButton_B) {
                 ui.view = UI_VIEW_PARENT;
             } else if (down & HidNpadButton_Up) {
