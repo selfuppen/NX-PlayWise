@@ -24,7 +24,7 @@
 - Switch 平台层已有 `platform/switch/fs_storage.c`、`time_provider.c` 和保守 PCTL adapter；当前真实 PCTL adapter 支持安全读状态/备份，写入、raw block 和 suspend probe 在真机 raw layout 验证前返回稳定错误。
 - `sysmodule/sysmodule_core.c` 已提供 host-testable 队列编排、stuck processing 恢复、backup gate、grant nonce ledger、规则/状态/能力请求和 result 写入；`sysmodule/` 已提供可远程构建的 boot2 sysmodule skeleton。
 - `companion/request_client.c` 和 `companion/file_protocol.c` 已提供完整 v1 request JSON 构建、pending 写入、result schema 校验和 request_id 匹配；`companion/nro/` 已提供最小孩子主界面 NRO 骨架。
-- `Makefile` 已提供主机 C 测试、Python 测试、Companion NRO、sysmodule NSP、SDMC package 和 disabled/observe boot2 package 目标。
+- `Makefile` 已提供主机 C 测试、Python 测试、Companion NRO、sysmodule NSP、SDMC package 和 disabled/observe/grant/enforce boot2 package 目标；`tools/verify_grant_enforce_packages.py` 可专门验证 grant/enforce boot2 包并下载解压。
 
 ## 核心原则
 

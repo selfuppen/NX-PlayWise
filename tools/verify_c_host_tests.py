@@ -125,7 +125,8 @@ def run_local_test() -> None:
 def run_remote_test() -> None:
     remote_command = (
         "cd /ws/switch-play-time-control-local "
-        "&& git pull --ff-only origin master "
+        "&& git fetch origin master "
+        "&& git merge --ff-only FETCH_HEAD "
         "&& make test-host"
     )
     result = run(["ssh", "249-nintendo-switch-dev", remote_command])

@@ -28,16 +28,36 @@ BUILD_TARGETS = [
         "package-safe-nro",
         "package-disabled-boot2",
         "package-observe-boot2",
+        "package-grant-boot2",
+        "package-enforce-boot2",
     ],
+]
+WRITE_MODE_BUILD_TARGETS = [
+    ["make"],
+    ["make", "companion-nro"],
+    ["make", "sysmodule-nsp"],
+    ["make", "package-grant-boot2", "package-enforce-boot2"],
 ]
 APP_DIR = Path("switch") / "play-time-control"
 CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 VERIFY_MARKER = "devkitPro build artifacts verified"
+PACKAGE_ROOT_EXPECTATIONS = {
+    "safe": {"expected_mode": "observe", "expect_boot2": False, "expect_exefs": False, "expect_nro": False},
+    "observe": {"expected_mode": "observe", "expect_boot2": False, "expect_exefs": False, "expect_nro": False},
+    "safe-nro": {"expected_mode": "observe", "expect_boot2": False, "expect_exefs": False, "expect_nro": True},
+    "disabled-boot2": {"expected_mode": "disabled", "expect_boot2": True, "expect_exefs": True, "expect_nro": True},
+    "observe-boot2": {"expected_mode": "observe", "expect_boot2": True, "expect_exefs": True, "expect_nro": True},
+    "grant-boot2": {"expected_mode": "grant", "expect_boot2": True, "expect_exefs": True, "expect_nro": True},
+    "enforce-boot2": {"expected_mode": "enforce", "expect_boot2": True, "expect_exefs": True, "expect_nro": True},
+}
 PACKAGE_ZIP_EXPECTATIONS = {
     "safe-nro": {"expect_boot2": False, "expect_exefs": False, "expect_nro": True},
     "disabled-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
     "observe-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
+    "grant-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
+    "enforce-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
 }
+WRITE_MODE_PACKAGE_PREFIXES = ["grant-boot2", "enforce-boot2"]
 SAFE_NRO_ZIP_PREFIX = "safe-nro"
 DEFAULT_DOWNLOAD = ROOT / "build" / "downloads" / "safe-nro.zip"
 DEFAULT_PACKAGE_DOWNLOAD_DIR = Path(r"D:\switch\play-time-controll") if os.name == "nt" else ROOT / "build" / "downloads" / "packages"
@@ -54,6 +74,8 @@ PACKAGE_ZIP_EXPECTATIONS = {
     "safe-nro": {"expect_boot2": False, "expect_exefs": False, "expect_nro": True},
     "disabled-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
     "observe-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
+    "grant-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
+    "enforce-boot2": {"expect_boot2": True, "expect_exefs": True, "expect_nro": True},
 }
 
 
@@ -157,6 +179,8 @@ verify_package(packages / "observe", expected_mode="observe", expect_boot2=False
 verify_package(packages / "safe-nro", expected_mode="observe", expect_boot2=False, expect_exefs=False, expect_nro=True)
 verify_package(packages / "disabled-boot2", expected_mode="disabled", expect_boot2=True, expect_exefs=True, expect_nro=True)
 verify_package(packages / "observe-boot2", expected_mode="observe", expect_boot2=True, expect_exefs=True, expect_nro=True)
+verify_package(packages / "grant-boot2", expected_mode="grant", expect_boot2=True, expect_exefs=True, expect_nro=True)
+verify_package(packages / "enforce-boot2", expected_mode="enforce", expect_boot2=True, expect_exefs=True, expect_nro=True)
 for prefix, expectations in PACKAGE_ZIP_EXPECTATIONS.items():
     verify_zip(latest_timestamped_zip(packages, prefix), **expectations)
 print(VERIFY_MARKER)
@@ -309,18 +333,15 @@ def verify_package(
     assert_true(nro.is_file() == expect_nro, f"{package_root.name}: pctc.nro expectation failed")
 
 
-def verify_artifacts(root: Path) -> None:
+def verify_artifacts(root: Path, package_names: list[str] | None = None, zip_prefixes: list[str] | None = None) -> None:
     require_file(root / "build" / "switch" / "pctc.nro", "Companion NRO")
     require_file(root / "build" / "switch" / "exefs.nsp", "sysmodule NSP")
 
     packages = root / "build" / "packages"
-    verify_package(packages / "safe", expected_mode="observe", expect_boot2=False, expect_exefs=False, expect_nro=False)
-    verify_package(packages / "observe", expected_mode="observe", expect_boot2=False, expect_exefs=False, expect_nro=False)
-    verify_package(packages / "safe-nro", expected_mode="observe", expect_boot2=False, expect_exefs=False, expect_nro=True)
-    verify_package(packages / "disabled-boot2", expected_mode="disabled", expect_boot2=True, expect_exefs=True, expect_nro=True)
-    verify_package(packages / "observe-boot2", expected_mode="observe", expect_boot2=True, expect_exefs=True, expect_nro=True)
+    for name in package_names or list(PACKAGE_ROOT_EXPECTATIONS):
+        verify_package(packages / name, **PACKAGE_ROOT_EXPECTATIONS[name])
 
-    for prefix in PACKAGE_ZIP_EXPECTATIONS:
+    for prefix in zip_prefixes or list(PACKAGE_ZIP_EXPECTATIONS):
         verify_package_zip_by_prefix(latest_timestamped_zip(packages, prefix), prefix)
     print(VERIFY_MARKER)
 
@@ -343,13 +364,14 @@ def remote_shell_prefix(remote_path: str, *, pull: bool) -> str:
         f"cd {shlex.quote(remote_path)}",
     ]
     if pull:
-        parts.append("git pull --ff-only origin master")
+        parts.append("git fetch origin master")
+        parts.append("git merge --ff-only FETCH_HEAD")
     return " && ".join(parts)
 
 
-def remote_build_command(remote_path: str, *, pull: bool) -> str:
+def remote_build_command(remote_path: str, *, pull: bool, targets: list[list[str]] | None = None) -> str:
     commands = [remote_shell_prefix(remote_path, pull=pull)]
-    commands.extend(format_command(target) for target in BUILD_TARGETS)
+    commands.extend(format_command(target) for target in targets or BUILD_TARGETS)
     return " && ".join(commands)
 
 
@@ -362,13 +384,14 @@ def remote_verify_command(remote_path: str) -> str:
     )
 
 
-def remote_package_manifest_command(remote_path: str) -> str:
+def remote_package_manifest_command(remote_path: str, prefixes: list[str] | None = None) -> str:
+    selected_prefixes = prefixes or list(PACKAGE_ZIP_EXPECTATIONS)
     script = f"""
 from pathlib import Path
 import json
 
 packages = Path("build") / "packages"
-prefixes = {list(PACKAGE_ZIP_EXPECTATIONS)!r}
+prefixes = {selected_prefixes!r}
 result = []
 for prefix in prefixes:
     candidates = sorted(
@@ -394,8 +417,8 @@ print(json.dumps(result))
     )
 
 
-def run_remote_build(alias: str, remote_path: str, *, pull: bool) -> None:
-    run(["ssh", alias, remote_build_command(remote_path, pull=pull)])
+def run_remote_build(alias: str, remote_path: str, *, pull: bool, targets: list[list[str]] | None = None) -> None:
+    run(["ssh", alias, remote_build_command(remote_path, pull=pull, targets=targets)])
 
 
 def run_remote_verify(alias: str, remote_path: str) -> None:
@@ -404,8 +427,8 @@ def run_remote_verify(alias: str, remote_path: str) -> None:
         raise VerificationError(f"missing verification marker: {VERIFY_MARKER!r}")
 
 
-def list_remote_package_zips(alias: str, remote_path: str) -> list[str]:
-    result = run(["ssh", alias, remote_package_manifest_command(remote_path)])
+def list_remote_package_zips(alias: str, remote_path: str, prefixes: list[str] | None = None) -> list[str]:
+    result = run(["ssh", alias, remote_package_manifest_command(remote_path, prefixes)])
     try:
         paths = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -454,8 +477,13 @@ def extract_zip_to_named_dir(zip_path: Path) -> Path:
     return extract_root
 
 
-def download_remote_package_zips(alias: str, remote_path: str, destination_dir: Path) -> None:
-    remote_paths = list_remote_package_zips(alias, remote_path)
+def download_remote_package_zips(
+    alias: str,
+    remote_path: str,
+    destination_dir: Path,
+    prefixes: list[str] | None = None,
+) -> None:
+    remote_paths = list_remote_package_zips(alias, remote_path, prefixes)
     destination_dir.mkdir(parents=True, exist_ok=True)
     for remote_rel in remote_paths:
         local_zip = destination_dir / Path(remote_rel).name
@@ -463,7 +491,8 @@ def download_remote_package_zips(alias: str, remote_path: str, destination_dir: 
         run(["scp", remote_zip, "."], cwd=destination_dir)
         prefix = package_prefix_for_zip(local_zip)
         verify_package_zip_by_prefix(local_zip, prefix)
-        extract_zip_to_named_dir(local_zip)
+        extract_root = extract_zip_to_named_dir(local_zip)
+        verify_package(extract_root, **PACKAGE_ROOT_EXPECTATIONS[prefix])
 
 
 def copy_local_safe_nro(destination: Path) -> None:
@@ -488,9 +517,9 @@ def install_safe_nro_zip(zip_path: Path, sdmc_root: Path) -> None:
         raise VerificationError(f"boot2.flag exists after safe-nro install: {boot2}")
 
 
-def run_local_build() -> None:
+def run_local_build(targets: list[list[str]] | None = None) -> None:
     env = devkit_env()
-    for target in BUILD_TARGETS:
+    for target in targets or BUILD_TARGETS:
         run(target, env=env)
 
 
