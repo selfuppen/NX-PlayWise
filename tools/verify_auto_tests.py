@@ -84,6 +84,7 @@ def verify_existing_python_tests() -> None:
     run([PYTHON, "tests/mvp/test_token_v1.py"])
     run([PYTHON, "tests/observe/test_observe_queue.py"])
     run([PYTHON, "tests/frontend/test_ptc_frontend_server.py"])
+    run([PYTHON, "tests/devkit/test_verify_devkitpro_build.py"])
 
 
 def verify_protocol_probe() -> None:

@@ -10,7 +10,7 @@ import verify_devkitpro_build as devkit
 
 def copy_local_package_zips(destination_dir: Path) -> None:
     packages = devkit.ROOT / "build" / "packages"
-    destination_dir.mkdir(parents=True, exist_ok=True)
+    devkit.prepare_package_download_dir(destination_dir)
     for prefix in devkit.WRITE_MODE_PACKAGE_PREFIXES:
         source = devkit.latest_timestamped_zip(packages, prefix)
         local_zip = destination_dir / source.name

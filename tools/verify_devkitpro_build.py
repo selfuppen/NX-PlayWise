@@ -60,7 +60,7 @@ PACKAGE_ZIP_EXPECTATIONS = {
 WRITE_MODE_PACKAGE_PREFIXES = ["grant-boot2", "enforce-boot2"]
 SAFE_NRO_ZIP_PREFIX = "safe-nro"
 DEFAULT_DOWNLOAD = ROOT / "build" / "downloads" / "safe-nro.zip"
-DEFAULT_PACKAGE_DOWNLOAD_DIR = Path(r"D:\switch\play-time-controll") if os.name == "nt" else ROOT / "build" / "downloads" / "packages"
+DEFAULT_PACKAGE_DOWNLOAD_DIR = Path(r"D:\switch\play-time-controll\download") if os.name == "nt" else ROOT / "build" / "downloads" / "packages"
 DEFAULT_EDEN_SDMC = Path.home() / "AppData" / "Roaming" / "eden" / "sdmc"
 REMOTE_ARTIFACT_VERIFIER = r'''
 from pathlib import Path
@@ -477,6 +477,28 @@ def extract_zip_to_named_dir(zip_path: Path) -> Path:
     return extract_root
 
 
+def prepare_package_download_dir(destination_dir: Path) -> None:
+    destination = destination_dir.resolve()
+    protected = {
+        Path(destination.anchor).resolve(),
+        ROOT.resolve(),
+        ROOT.parent.resolve(),
+        Path.home().resolve(),
+    }
+    if destination in protected:
+        raise VerificationError(f"refusing to clear protected download directory: {destination}")
+    if len(destination.parts) < 3:
+        raise VerificationError(f"refusing to clear broad download directory: {destination}")
+    destination.mkdir(parents=True, exist_ok=True)
+    for child in destination.iterdir():
+        if child.is_symlink() or child.is_file():
+            child.unlink()
+        elif child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+
+
 def download_remote_package_zips(
     alias: str,
     remote_path: str,
@@ -484,7 +506,7 @@ def download_remote_package_zips(
     prefixes: list[str] | None = None,
 ) -> None:
     remote_paths = list_remote_package_zips(alias, remote_path, prefixes)
-    destination_dir.mkdir(parents=True, exist_ok=True)
+    prepare_package_download_dir(destination_dir)
     for remote_rel in remote_paths:
         local_zip = destination_dir / Path(remote_rel).name
         remote_zip = f"{alias}:{remote_path}/{remote_rel}"
