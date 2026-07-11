@@ -4,6 +4,11 @@
 #include <string.h>
 #include <switch.h>
 
+#define PTC_PCTL_FACTORY_CREATE_SERVICE 1
+#define PTC_PCTL_CMD_INITIALIZE 1
+#define PTC_PCTL_CMD_IS_RESTRICTION_TEMPORARY_UNLOCKED 1006
+#define PTC_PCTL_CMD_IS_RESTRICTION_ENABLED 1031
+#define PTC_PCTL_CMD_GET_CURRENT_SETTINGS 1035
 #define PTC_PCTL_CMD_START_PLAY_TIMER 1451
 #define PTC_PCTL_CMD_STOP_PLAY_TIMER 1452
 #define PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED 1453
@@ -11,6 +16,7 @@
 #define PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER 1455
 #define PTC_PCTL_CMD_GET_PLAY_TIMER_SETTINGS 145601
 #define PTC_PCTL_CMD_SET_PLAY_TIMER_SETTINGS_FOR_DEBUG 195101
+#define PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED 1458
 
 #define PTC_PLAY_TIMER_SETTINGS_WORDS 34
 #define PTC_PLAY_TIMER_DAY_STRIDE 4
@@ -23,19 +29,10 @@ typedef struct {
 typedef char PtcSwitchPlayTimerSettingsSizeCheck[
     sizeof(PtcSwitchPlayTimerSettings) == 0x44 ? 1 : -1];
 
-static PtcErrorCode ensure_pctl(PtcSwitchPctl *adapter)
-{
-    Result rc;
-    if (adapter->initialized) {
-        return PTC_ERR_OK;
-    }
-    rc = pctlInitialize();
-    if (R_FAILED(rc)) {
-        return PTC_ERR_PCTL_INIT_FAILED;
-    }
-    adapter->initialized = true;
-    return PTC_ERR_OK;
-}
+typedef struct {
+    Service factory;
+    Service service;
+} PtcSwitchSession;
 
 static Result dispatch_no_io(Service *service, u32 request_id)
 {
@@ -58,18 +55,89 @@ static Result dispatch_out(Service *service, u32 request_id, void *out_data, u32
     return serviceDispatchImpl(service, request_id, NULL, 0, out_data, out_size, params);
 }
 
-static PtcErrorCode get_play_timer_settings(PtcSwitchPlayTimerSettings *settings)
+static Result open_session(PtcSwitchPctl *adapter, const char *service_name, PtcSwitchSession *session)
 {
-    Service *service = pctlGetServiceSession_Service();
-    Result rc = dispatch_out(service, PTC_PCTL_CMD_GET_PLAY_TIMER_SETTINGS, settings, sizeof(*settings));
-    return R_SUCCEEDED(rc) ? PTC_ERR_OK : PTC_ERR_PCTL_READ_FAILED;
+    u64 reserved_pid = 0;
+    SfDispatchParams params;
+    Result rc;
+
+    memset(session, 0, sizeof(*session));
+    rc = smGetService(&session->factory, service_name);
+    if (R_FAILED(rc)) {
+        adapter->last_result = rc;
+        return rc;
+    }
+    rc = serviceConvertToDomain(&session->factory);
+    if (R_FAILED(rc)) {
+        adapter->last_result = rc;
+        serviceClose(&session->factory);
+        return rc;
+    }
+    memset(&params, 0, sizeof(params));
+    params.in_send_pid = true;
+    params.out_num_objects = 1;
+    params.out_objects = &session->service;
+    rc = serviceDispatchImpl(
+        &session->factory,
+        PTC_PCTL_FACTORY_CREATE_SERVICE,
+        &reserved_pid,
+        sizeof(reserved_pid),
+        NULL,
+        0,
+        params);
+    if (R_FAILED(rc)) {
+        adapter->last_result = rc;
+        serviceClose(&session->factory);
+        return rc;
+    }
+    rc = dispatch_no_io(&session->service, PTC_PCTL_CMD_INITIALIZE);
+    if (R_FAILED(rc)) {
+        adapter->last_result = rc;
+        serviceClose(&session->service);
+        serviceClose(&session->factory);
+        return rc;
+    }
+    return 0;
 }
 
-static PtcErrorCode set_play_timer_settings(const PtcSwitchPlayTimerSettings *settings)
+static void close_session(PtcSwitchSession *session)
 {
-    Service *service = pctlGetServiceSession_Service();
+    serviceClose(&session->service);
+    serviceClose(&session->factory);
+}
+
+static PtcErrorCode map_result(PtcSwitchPctl *adapter, Result rc, PtcErrorCode error)
+{
+    adapter->last_result = rc;
+    return R_SUCCEEDED(rc) ? PTC_ERR_OK : error;
+}
+
+static PtcErrorCode open_read_session(PtcSwitchPctl *adapter, PtcSwitchSession *session)
+{
+    return map_result(adapter, open_session(adapter, "pctl", session), PTC_ERR_PCTL_INIT_FAILED);
+}
+
+static PtcErrorCode open_write_session(PtcSwitchPctl *adapter, PtcSwitchSession *session)
+{
+    return map_result(adapter, open_session(adapter, "pctl:s", session), PTC_ERR_PCTL_INIT_FAILED);
+}
+
+static PtcErrorCode get_play_timer_settings(
+    PtcSwitchPctl *adapter,
+    Service *service,
+    PtcSwitchPlayTimerSettings *settings)
+{
+    Result rc = dispatch_out(service, PTC_PCTL_CMD_GET_PLAY_TIMER_SETTINGS, settings, sizeof(*settings));
+    return map_result(adapter, rc, PTC_ERR_PCTL_READ_FAILED);
+}
+
+static PtcErrorCode set_play_timer_settings(
+    PtcSwitchPctl *adapter,
+    Service *service,
+    const PtcSwitchPlayTimerSettings *settings)
+{
     Result rc = dispatch_in(service, PTC_PCTL_CMD_SET_PLAY_TIMER_SETTINGS_FOR_DEBUG, settings, sizeof(*settings));
-    return R_SUCCEEDED(rc) ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
+    return map_result(adapter, rc, PTC_ERR_PCTL_WRITE_FAILED);
 }
 
 static void settings_hex(char *out, size_t out_size, const PtcSwitchPlayTimerSettings *settings)
@@ -88,7 +156,8 @@ static void settings_hex(char *out, size_t out_size, const PtcSwitchPlayTimerSet
 static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
-    PtcErrorCode err = ensure_pctl(adapter);
+    PtcSwitchSession session;
+    PtcErrorCode err;
     bool enabled = false;
     bool unlocked = false;
     bool alarm_disabled = false;
@@ -96,16 +165,23 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
     bool restricted = false;
     u32 remaining = 0;
     Service *service;
+
+    err = open_read_session(adapter, &session);
     if (err != PTC_ERR_OK) {
         return err;
     }
-    service = pctlGetServiceSession_Service();
+    service = &session.service;
     memset(out, 0, sizeof(*out));
-    if (R_FAILED(pctlIsRestrictionEnabled(&enabled))) {
-        return PTC_ERR_PCTL_READ_FAILED;
+    err = map_result(
+        adapter,
+        dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTION_ENABLED, &enabled, sizeof(enabled)),
+        PTC_ERR_PCTL_READ_FAILED);
+    if (err != PTC_ERR_OK) {
+        close_session(&session);
+        return err;
     }
-    (void)pctlIsRestrictionTemporaryUnlocked(&unlocked);
-    (void)pctlIsPlayTimerAlarmDisabled(&alarm_disabled);
+    (void)dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTION_TEMPORARY_UNLOCKED, &unlocked, sizeof(unlocked));
+    (void)dispatch_out(service, PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED, &alarm_disabled, sizeof(alarm_disabled));
     if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED, &timer_enabled, sizeof(timer_enabled)))) {
         out->play_timer_enabled = timer_enabled;
     } else {
@@ -121,29 +197,37 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
     out->unrestricted_today = !enabled || unlocked;
     out->limited_today = enabled && !unlocked;
     out->blocked_today = false;
+    close_session(&session);
     return PTC_ERR_OK;
 }
 
 static PtcErrorCode switch_backup(PtcPctl *pctl, PtcPctlBackup *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
-    PtcErrorCode err = ensure_pctl(adapter);
+    PtcSwitchSession session;
     PtcSwitchPlayTimerSettings timer_settings;
-    char raw_hex[160];
     PctlRestrictionSettings settings;
+    char raw_hex[160];
     bool enabled = false;
     bool unlocked = false;
+    PtcErrorCode err = open_write_session(adapter, &session);
     if (err != PTC_ERR_OK) {
-        return err;
-    }
-    memset(&settings, 0, sizeof(settings));
-    (void)pctlIsRestrictionEnabled(&enabled);
-    (void)pctlIsRestrictionTemporaryUnlocked(&unlocked);
-    if (R_FAILED(pctlGetCurrentSettings(&settings))) {
         return PTC_ERR_PCTL_BACKUP_FAILED;
     }
+    memset(&settings, 0, sizeof(settings));
+    (void)dispatch_out(&session.service, PTC_PCTL_CMD_IS_RESTRICTION_ENABLED, &enabled, sizeof(enabled));
+    (void)dispatch_out(&session.service, PTC_PCTL_CMD_IS_RESTRICTION_TEMPORARY_UNLOCKED, &unlocked, sizeof(unlocked));
+    err = map_result(
+        adapter,
+        dispatch_out(&session.service, PTC_PCTL_CMD_GET_CURRENT_SETTINGS, &settings, sizeof(settings)),
+        PTC_ERR_PCTL_BACKUP_FAILED);
+    if (err != PTC_ERR_OK) {
+        close_session(&session);
+        return err;
+    }
     memset(&timer_settings, 0, sizeof(timer_settings));
-    err = get_play_timer_settings(&timer_settings);
+    err = get_play_timer_settings(adapter, &session.service, &timer_settings);
+    close_session(&session);
     if (err != PTC_ERR_OK) {
         return PTC_ERR_PCTL_BACKUP_FAILED;
     }
@@ -164,15 +248,17 @@ static PtcErrorCode switch_backup(PtcPctl *pctl, PtcPctlBackup *out)
 static PtcErrorCode switch_apply_target(PtcPctl *pctl, const PtcPctlTarget *target)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    PtcSwitchSession session;
     PtcSwitchPlayTimerSettings settings;
-    PtcErrorCode err = ensure_pctl(adapter);
+    PtcErrorCode err = open_write_session(adapter, &session);
     unsigned int weekday;
     unsigned int base;
     if (err != PTC_ERR_OK) {
         return err;
     }
-    err = get_play_timer_settings(&settings);
+    err = get_play_timer_settings(adapter, &session.service, &settings);
     if (err != PTC_ERR_OK) {
+        close_session(&session);
         return err;
     }
     weekday = target->weekday % 7U;
@@ -187,31 +273,37 @@ static PtcErrorCode switch_apply_target(PtcPctl *pctl, const PtcPctlTarget *targ
         settings.words[base + 2] = target->minutes;
     }
     settings.words[base + 3] = 0;
-    return set_play_timer_settings(&settings);
+    err = set_play_timer_settings(adapter, &session.service, &settings);
+    close_session(&session);
+    return err;
 }
 
 static PtcErrorCode switch_start_timer(PtcPctl *pctl)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
-    PtcErrorCode err = ensure_pctl(adapter);
+    PtcSwitchSession session;
+    PtcErrorCode err = open_write_session(adapter, &session);
     Result rc;
     if (err != PTC_ERR_OK) {
         return err;
     }
-    rc = dispatch_no_io(pctlGetServiceSession_Service(), PTC_PCTL_CMD_START_PLAY_TIMER);
-    return R_SUCCEEDED(rc) ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
+    rc = dispatch_no_io(&session.service, PTC_PCTL_CMD_START_PLAY_TIMER);
+    close_session(&session);
+    return map_result(adapter, rc, PTC_ERR_PCTL_WRITE_FAILED);
 }
 
 static PtcErrorCode switch_stop_timer(PtcPctl *pctl)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
-    PtcErrorCode err = ensure_pctl(adapter);
+    PtcSwitchSession session;
+    PtcErrorCode err = open_write_session(adapter, &session);
     Result rc;
     if (err != PTC_ERR_OK) {
         return err;
     }
-    rc = dispatch_no_io(pctlGetServiceSession_Service(), PTC_PCTL_CMD_STOP_PLAY_TIMER);
-    return R_SUCCEEDED(rc) ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
+    rc = dispatch_no_io(&session.service, PTC_PCTL_CMD_STOP_PLAY_TIMER);
+    close_session(&session);
+    return map_result(adapter, rc, PTC_ERR_PCTL_WRITE_FAILED);
 }
 
 static PtcErrorCode switch_probe_raw_block(PtcPctl *pctl, PtcProbeResult *out)
@@ -233,34 +325,30 @@ static PtcErrorCode switch_probe_suspend(PtcPctl *pctl, PtcProbeResult *out)
 static PtcErrorCode switch_probe_play_timer_write(PtcPctl *pctl, PtcProbeResult *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    PtcSwitchSession session;
     PtcSwitchPlayTimerSettings before;
     PtcSwitchPlayTimerSettings after;
-    PtcErrorCode err = ensure_pctl(adapter);
+    PtcErrorCode err = open_write_session(adapter, &session);
     if (err != PTC_ERR_OK) {
         out->verified = false;
-        snprintf(out->detail, sizeof(out->detail), "pctl init failed");
+        snprintf(out->detail, sizeof(out->detail), "pctl:s session open failed result=0x%x", adapter->last_result);
         return err;
     }
-    err = get_play_timer_settings(&before);
-    if (err != PTC_ERR_OK) {
-        out->verified = false;
-        snprintf(out->detail, sizeof(out->detail), "get play timer settings failed");
-        return err;
+    err = get_play_timer_settings(adapter, &session.service, &before);
+    if (err == PTC_ERR_OK) {
+        err = set_play_timer_settings(adapter, &session.service, &before);
     }
-    err = set_play_timer_settings(&before);
-    if (err != PTC_ERR_OK) {
-        out->verified = false;
-        snprintf(out->detail, sizeof(out->detail), "set play timer settings failed");
-        return err;
+    if (err == PTC_ERR_OK) {
+        err = get_play_timer_settings(adapter, &session.service, &after);
     }
-    err = get_play_timer_settings(&after);
+    close_session(&session);
     if (err != PTC_ERR_OK || memcmp(&before, &after, sizeof(before)) != 0) {
         out->verified = false;
-        snprintf(out->detail, sizeof(out->detail), "play timer write readback mismatch");
+        snprintf(out->detail, sizeof(out->detail), "pctl:s play timer write readback failed result=0x%x", adapter->last_result);
         return err == PTC_ERR_OK ? PTC_ERR_PCTL_WRITE_FAILED : err;
     }
     out->verified = true;
-    snprintf(out->detail, sizeof(out->detail), "play timer write readback ok");
+    snprintf(out->detail, sizeof(out->detail), "pctl:s play timer write readback ok");
     return PTC_ERR_OK;
 }
 
@@ -284,10 +372,7 @@ void ptc_switch_pctl_init(PtcSwitchPctl *adapter)
 
 void ptc_switch_pctl_exit(PtcSwitchPctl *adapter)
 {
-    if (adapter->initialized) {
-        pctlExit();
-        adapter->initialized = false;
-    }
+    (void)adapter;
 }
 
 PtcPctl *ptc_switch_pctl_as_pctl(PtcSwitchPctl *adapter)

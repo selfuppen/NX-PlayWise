@@ -11,6 +11,8 @@
 #include "../common/time/ptc_time.h"
 #include "../common/token/token_v1.h"
 
+#define PTC_PLAY_TIMER_WRITE_BACKEND "pctl-s-v1"
+
 typedef struct {
     char device_id[80];
     char grant_secret[128];
@@ -279,12 +281,17 @@ static PtcCapabilities load_capabilities(PtcSysmodule *sysmodule)
     PtcCapabilities caps;
     char path[320];
     char text[1024];
+    char backend[32];
     caps.play_timer_write_verified = false;
     caps.raw_block_verified = false;
     caps.suspend_verified = false;
     join_path(path, sizeof(path), sysmodule->app_root, "capabilities.json");
     if (sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
         (void)json_bool_value(text, "play_timer_write_verified", &caps.play_timer_write_verified);
+        if (!json_string(text, "play_timer_write_backend", backend, sizeof(backend)) ||
+            strcmp(backend, PTC_PLAY_TIMER_WRITE_BACKEND) != 0) {
+            caps.play_timer_write_verified = false;
+        }
         (void)json_bool_value(text, "raw_block_verified", &caps.raw_block_verified);
         (void)json_bool_value(text, "suspend_verified", &caps.suspend_verified);
     }
@@ -299,10 +306,12 @@ static bool save_capabilities(PtcSysmodule *sysmodule, const PtcCapabilities *ca
     snprintf(
         text,
         sizeof(text),
-        "{\"version\":1,\"play_timer_write_verified\":%s,\"raw_block_verified\":%s,"
+        "{\"version\":1,\"play_timer_write_verified\":%s,"
+        "\"play_timer_write_backend\":\"%s\",\"raw_block_verified\":%s,"
         "\"suspend_verified\":%s,\"verified_at\":{\"play_timer_write\":%lld,"
         "\"raw_block\":%lld,\"suspend\":%lld}}\n",
         caps->play_timer_write_verified ? "true" : "false",
+        PTC_PLAY_TIMER_WRITE_BACKEND,
         caps->raw_block_verified ? "true" : "false",
         caps->suspend_verified ? "true" : "false",
         caps->play_timer_write_verified ? (long long)updated_at : 0LL,

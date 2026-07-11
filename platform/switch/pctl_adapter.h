@@ -1,11 +1,13 @@
 #ifndef PTC_SWITCH_PCTL_ADAPTER_H
 #define PTC_SWITCH_PCTL_ADAPTER_H
 
+#include <switch.h>
+
 #include "../pctl.h"
 
 typedef struct {
     PtcPctl pctl;
-    bool initialized;
+    Result last_result;
 } PtcSwitchPctl;
 
 void ptc_switch_pctl_init(PtcSwitchPctl *adapter);

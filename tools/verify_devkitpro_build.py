@@ -135,6 +135,9 @@ def verify_package(package_root, *, expected_mode, expect_boot2, expect_exefs, e
     config = read_json(app / "config.json")
     if config.get("control_mode") != expected_mode:
         fail(f"{package_root.name}: unexpected control_mode")
+    capabilities = read_json(app / "capabilities.json")
+    if capabilities.get("play_timer_write_backend") != "pctl-s-v1":
+        fail(f"{package_root.name}: unexpected play_timer_write_backend")
     checks = {
         "boot2.flag": ((package_root / CONTENT_DIR / "flags" / "boot2.flag").is_file(), expect_boot2),
         "exefs.nsp": ((package_root / CONTENT_DIR / "exefs.nsp").is_file(), expect_exefs),
@@ -292,6 +295,11 @@ def verify_package(
 
     config = read_json(app / "config.json")
     assert_true(config.get("control_mode") == expected_mode, f"{package_root.name}: unexpected control_mode")
+    capabilities = read_json(app / "capabilities.json")
+    assert_true(
+        capabilities.get("play_timer_write_backend") == "pctl-s-v1",
+        f"{package_root.name}: unexpected play_timer_write_backend",
+    )
 
     boot2 = package_root / CONTENT_DIR / "flags" / "boot2.flag"
     exefs = package_root / CONTENT_DIR / "exefs.nsp"

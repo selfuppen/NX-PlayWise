@@ -219,7 +219,7 @@ static void write_capabilities(PtcMemStorage *mem, bool play_timer_write_verifie
     snprintf(
         caps,
         sizeof(caps),
-        "{\"version\":1,\"play_timer_write_verified\":%s,\"raw_block_verified\":%s,\"suspend_verified\":%s}\n",
+        "{\"version\":1,\"play_timer_write_verified\":%s,\"play_timer_write_backend\":\"pctl-s-v1\",\"raw_block_verified\":%s,\"suspend_verified\":%s}\n",
         play_timer_write_verified ? "true" : "false",
         raw_block_verified ? "true" : "false",
         suspend_verified ? "true" : "false");
@@ -362,6 +362,37 @@ static void test_probe_play_timer_write_updates_capability(void)
     check_true(strstr(caps, "\"play_timer_write_verified\":true") != NULL, "play write capability true");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0028.json", result, sizeof(result)), "play write probe result");
     check_true(strstr(result, "\"play_timer_write_verified\":true") != NULL, "play write result capability");
+}
+
+static void test_legacy_play_timer_capability_is_invalidated(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_TEXT_SIZE];
+    char request[512];
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(
+        mem.storage.vtable->write_text_atomic(
+            &mem.storage,
+            "app/capabilities.json",
+            "{\"version\":1,\"play_timer_write_verified\":true,\"raw_block_verified\":false,\"suspend_verified\":false}\n"),
+        "write legacy capability");
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0029", 1029, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0029.json", request), "write legacy capability grant");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process legacy capability grant");
+    check_true(!pctl.applied, "legacy capability avoids pctl write");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0029.json", result, sizeof(result)), "legacy capability result");
+    check_true(strstr(result, "\"reason\":\"pctl_write_not_verified\"") != NULL, "legacy capability reason");
 }
 
 static void test_grant_flow_consumes_nonce_after_write(void)
@@ -753,6 +784,7 @@ int main(void)
     test_grant_unrestricted_guard_rejects_without_nonce();
     test_grant_requires_play_timer_write_probe();
     test_probe_play_timer_write_updates_capability();
+    test_legacy_play_timer_capability_is_invalidated();
     test_grant_flow_consumes_nonce_after_write();
     test_backup_failure_blocks_write();
     test_bad_request_schema_writes_error_result();

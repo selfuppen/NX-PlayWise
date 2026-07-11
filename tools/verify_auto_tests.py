@@ -105,6 +105,8 @@ def verify_protocol_probe() -> None:
 
         config = read_json(app_root(sdmc_root) / "config.json")
         assert_equal(config["control_mode"], "observe", "probe control_mode")
+        capabilities = read_json(app_root(sdmc_root) / "capabilities.json")
+        assert_equal(capabilities["play_timer_write_backend"], "pctl-s-v1", "probe play timer backend")
 
         code = run(
             [
@@ -233,6 +235,8 @@ def verify_safe_package() -> None:
         config = read_json(package_app / "config.json")
         assert_equal(config["control_mode"], "observe", "safe package control_mode")
         assert_equal(config["device_id"], "kid-switch", "safe package device_id")
+        capabilities = read_json(package_app / "capabilities.json")
+        assert_equal(capabilities["play_timer_write_backend"], "pctl-s-v1", "safe package play timer backend")
         assert_missing(out / CONTENT_DIR / "flags" / "boot2.flag", "safe boot2 flag")
         assert_true(zip_path.is_file(), "safe zip exists")
 

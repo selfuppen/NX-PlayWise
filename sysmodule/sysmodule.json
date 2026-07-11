@@ -19,7 +19,10 @@
     "permissions": "0xffffffffffffffff"
   },
   "service_access": [
-    "*"
+    "fsp-srv",
+    "time:u",
+    "pctl",
+    "pctl:s"
   ],
   "service_host": [],
   "kernel_capabilities": [
