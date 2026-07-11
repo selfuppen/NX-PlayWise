@@ -14,6 +14,7 @@ BUILD := build
 SOURCES := \
 	source \
 	. \
+	../common/crypto \
 	../common/policy \
 	../common/protocol \
 	../common/rules \
@@ -21,7 +22,7 @@ SOURCES := \
 	../common/token \
 	../platform/switch
 DATA :=
-INCLUDES := . .. ../common ../platform ../platform/switch
+INCLUDES := . .. ../common ../common/crypto ../platform ../platform/switch
 CONFIG_JSON := sysmodule.json
 NO_ICON := 1
 NO_NACP := 1
