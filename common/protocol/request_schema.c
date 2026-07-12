@@ -226,6 +226,9 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "probe_play_timer_write") == 0) {
         return PTC_REQUEST_PROBE_PLAY_TIMER_WRITE;
     }
+    if (strcmp(value, "probe_apply_today_limit") == 0) {
+        return PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT;
+    }
     return PTC_REQUEST_UNKNOWN;
 }
 
@@ -262,6 +265,8 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "probe_suspend";
     case PTC_REQUEST_PROBE_PLAY_TIMER_WRITE:
         return "probe_play_timer_write";
+    case PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT:
+        return "probe_apply_today_limit";
     case PTC_REQUEST_UNKNOWN:
     default:
         return "unknown";
@@ -318,6 +323,12 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
             out->duration_minutes > 0
             ? PTC_ERR_OK
             : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT:
+        out->minutes = 1;
+        out->start_timer = true;
+        (void)json_u16(text, "minutes", &out->minutes);
+        (void)json_bool_value(text, "start_timer", &out->start_timer);
+        return out->minutes > 0 ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_STATUS:
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
     case PTC_REQUEST_BLOCK_TODAY:

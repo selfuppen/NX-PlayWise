@@ -238,6 +238,22 @@ PtcCompanionStatus ptc_companion_submit_probe_play_timer_write(PtcCompanionFileC
     return submit_empty(client, request_id, created_at, "probe_play_timer_write");
 }
 
+PtcCompanionStatus ptc_companion_submit_probe_apply_today_limit(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
+{
+    char json[512];
+    if (!request_id || request_id[0] == '\0') {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    snprintf(
+        json,
+        sizeof(json),
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"probe_apply_today_limit\","
+        "\"created_at\":%lld,\"payload\":{\"minutes\":1,\"start_timer\":true}}\n",
+        request_id,
+        (long long)created_at);
+    return submit_json(client, request_id, json);
+}
+
 PtcCompanionStatus ptc_companion_submit_probe_raw_block(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
 {
     return submit_empty(client, request_id, created_at, "probe_raw_block");

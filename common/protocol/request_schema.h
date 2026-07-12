@@ -19,6 +19,7 @@ typedef struct {
     PtcBedtimeRule bedtime;
     PtcLimitAction limit_action;
     uint16_t duration_minutes;
+    bool start_timer;
 } PtcRequest;
 
 PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out);

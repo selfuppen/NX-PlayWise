@@ -702,6 +702,143 @@ static PtcErrorCode apply_target(
     return err;
 }
 
+static void status_json(char *out, size_t out_size, const PtcPctlStatus *status, PtcErrorCode error)
+{
+    snprintf(
+        out,
+        out_size,
+        "{\"available\":%s,\"error\":\"%s\",\"limited_today\":%d,\"blocked_today\":%d,"
+        "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%d,"
+        "\"play_timer_enabled\":%d,\"restricted_now\":%d}",
+        error == PTC_ERR_OK ? "true" : "false",
+        ptc_error_reason(error),
+        error == PTC_ERR_OK && status->limited_today ? 1 : 0,
+        error == PTC_ERR_OK && status->blocked_today ? 1 : 0,
+        error == PTC_ERR_OK && status->unrestricted_today ? 1 : 0,
+        error == PTC_ERR_OK && status->remaining_available ? "true" : "false",
+        error == PTC_ERR_OK && status->remaining_available ? (int)status->remaining_minutes : -1,
+        error == PTC_ERR_OK && status->play_timer_enabled ? 1 : 0,
+        error == PTC_ERR_OK && status->restricted_now ? 1 : 0);
+}
+
+static const char *probe_apply_hint(PtcErrorCode error, bool raw_changed, bool start_timer_requested)
+{
+    if (error == PTC_ERR_PCTL_INIT_FAILED) {
+        return "suspect_pctl_s_session_init_permission";
+    }
+    if (error == PTC_ERR_PCTL_WRITE_FAILED) {
+        return start_timer_requested
+            ? "suspect_command_id_write_permission_parameter_shape_or_start_timer"
+            : "suspect_command_id_write_permission_or_parameter_shape";
+    }
+    if (error == PTC_ERR_PCTL_READ_FAILED) {
+        return "suspect_readback_or_status_session";
+    }
+    if (error == PTC_ERR_OK && raw_changed) {
+        return "manual_confirm_official_page_if_unchanged_suspect_raw_layout_or_missing_commit_apply_start";
+    }
+    if (error == PTC_ERR_OK) {
+        return "manual_confirm_official_page_or_play_timer_counting";
+    }
+    return "check_pctl_debug_stage_error";
+}
+
+static bool write_probe_apply_result(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    const char *mode,
+    bool dry_run,
+    PtcErrorCode error,
+    const PtcCapabilities *caps,
+    PtcClockSnapshot now,
+    const PtcPctlTarget *target,
+    const PtcPctlStatus *before_status,
+    PtcErrorCode before_status_error,
+    const PtcPctlStatus *after_status,
+    PtcErrorCode after_status_error,
+    const PtcPctlDebugSnapshot *before_snapshot,
+    const PtcPctlDebugSnapshot *after_snapshot,
+    bool start_timer_requested,
+    bool start_timer_called,
+    PtcErrorCode start_timer_error,
+    uint32_t write_ipc_result,
+    uint32_t start_timer_ipc_result)
+{
+    PtcResultState state;
+    char base[2048];
+    char json[6144];
+    char extra[4096];
+    char before_status_text[384];
+    char after_status_text[384];
+    char before_raw[160];
+    char before_slots[320];
+    char after_raw[160];
+    char after_slots[320];
+    char *completed_at;
+    bool raw_changed = before_snapshot && after_snapshot &&
+        before_snapshot->available && after_snapshot->available &&
+        strcmp(before_snapshot->raw_hex, after_snapshot->raw_hex) != 0;
+
+    result_state_default_with_caps(&state, now.day_index, caps);
+    if (after_status_error == PTC_ERR_OK) {
+        state.limited_today = after_status->limited_today ? 1 : 0;
+        state.blocked_today = after_status->blocked_today ? 1 : 0;
+        state.unrestricted_today = after_status->unrestricted_today ? 1 : 0;
+        state.remaining_available = after_status->remaining_available;
+        state.remaining_minutes = after_status->remaining_available ? after_status->remaining_minutes : -1;
+        state.play_timer_enabled = after_status->play_timer_enabled ? 1 : 0;
+        state.restricted_now = after_status->restricted_now ? 1 : 0;
+    }
+
+    if (error == PTC_ERR_OK) {
+        (void)ptc_result_ok_json(base, sizeof(base), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
+    } else {
+        (void)ptc_result_error_json(base, sizeof(base), request->request_id, request->type_text, mode, dry_run, error, &state, now.unix_seconds);
+    }
+
+    status_json(before_status_text, sizeof(before_status_text), before_status, before_status_error);
+    status_json(after_status_text, sizeof(after_status_text), after_status, after_status_error);
+    json_safe_copy(before_raw, sizeof(before_raw), before_snapshot ? before_snapshot->raw_hex : "");
+    json_safe_copy(before_slots, sizeof(before_slots), before_snapshot ? before_snapshot->decoded_slots : "");
+    json_safe_copy(after_raw, sizeof(after_raw), after_snapshot ? after_snapshot->raw_hex : "");
+    json_safe_copy(after_slots, sizeof(after_slots), after_snapshot ? after_snapshot->decoded_slots : "");
+    snprintf(
+        extra,
+        sizeof(extra),
+        "{\"target_weekday\":%u,\"target_minutes\":%u,\"target_mode\":\"%s\","
+        "\"start_timer_requested\":%s,\"start_timer_called\":%s,"
+        "\"pctl_error\":\"%s\",\"pctl_error_code\":%d,"
+        "\"write_ipc_result\":\"0x%08x\",\"start_timer_error\":\"%s\","
+        "\"start_timer_ipc_result\":\"0x%08x\",\"before_status\":%s,\"after_status\":%s,"
+        "\"debug_evidence\":{\"raw_changed\":%s,\"before_raw_hex\":\"%s\","
+        "\"after_raw_hex\":\"%s\",\"before_slots\":\"%s\",\"after_slots\":\"%s\","
+        "\"hint\":\"%s\"}}",
+        (unsigned int)target->weekday,
+        (unsigned int)target->minutes,
+        pctl_target_mode_name(target->mode),
+        start_timer_requested ? "true" : "false",
+        start_timer_called ? "true" : "false",
+        ptc_error_reason(error),
+        (int)error,
+        (unsigned int)write_ipc_result,
+        ptc_error_reason(start_timer_error),
+        (unsigned int)start_timer_ipc_result,
+        before_status_text,
+        after_status_text,
+        raw_changed ? "true" : "false",
+        before_raw,
+        after_raw,
+        before_slots,
+        after_slots,
+        probe_apply_hint(error, raw_changed, start_timer_requested));
+    completed_at = strstr(base, ",\"completed_at\"");
+    if (!completed_at) {
+        return false;
+    }
+    snprintf(json, sizeof(json), "%.*s,\"probe_apply\":%s%s", (int)(completed_at - base), base, extra, completed_at);
+    return write_result(sysmodule, request->request_id, json);
+}
+
 static bool finish_with_error(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
@@ -746,6 +883,8 @@ static PtcOperation request_operation(PtcRequestType type)
         return PTC_OPERATION_PROBE_SUSPEND;
     case PTC_REQUEST_PROBE_PLAY_TIMER_WRITE:
         return PTC_OPERATION_PROBE_PLAY_TIMER_WRITE;
+    case PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT:
+        return PTC_OPERATION_PROBE_APPLY_TODAY_LIMIT;
     case PTC_REQUEST_OFFLINE_CODE:
         return PTC_OPERATION_GRANT_MINUTES;
     case PTC_REQUEST_STATUS:
@@ -957,6 +1096,203 @@ static bool process_probe(PtcSysmodule *sysmodule, const PtcRequest *request, co
     return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
 }
 
+static bool process_probe_apply_today_limit(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
+{
+    PtcPolicyDecision decision = ptc_policy_decide(config->mode, disable_flag, PTC_OPERATION_PROBE_APPLY_TODAY_LIMIT, caps, false, config->allow_unlimited_to_limited);
+    PtcPctlTarget target;
+    PtcPctlStatus before_status;
+    PtcPctlStatus after_status;
+    PtcPctlDebugSnapshot before_snapshot;
+    PtcPctlDebugSnapshot after_write_snapshot;
+    PtcPctlDebugSnapshot after_status_snapshot;
+    PtcPctlDebugSnapshot start_before_snapshot;
+    PtcPctlDebugSnapshot start_after_snapshot;
+    PtcErrorCode before_status_error;
+    PtcErrorCode after_status_error = PTC_ERR_PCTL_READ_FAILED;
+    PtcErrorCode write_error = PTC_ERR_OK;
+    PtcErrorCode start_timer_error = PTC_ERR_OK;
+    PtcErrorCode final_error;
+    uint32_t write_ipc_result = 0;
+    uint32_t start_timer_ipc_result = 0;
+    bool write_attempted = false;
+    bool start_timer_called = false;
+    bool ok;
+
+    memset(&before_status, 0, sizeof(before_status));
+    memset(&after_status, 0, sizeof(after_status));
+    empty_pctl_debug_snapshot(&before_snapshot);
+    empty_pctl_debug_snapshot(&after_write_snapshot);
+    empty_pctl_debug_snapshot(&after_status_snapshot);
+    empty_pctl_debug_snapshot(&start_before_snapshot);
+    empty_pctl_debug_snapshot(&start_after_snapshot);
+
+    target.mode = PTC_PCTL_TARGET_LIMIT;
+    target.minutes = request->minutes == 0 ? 1 : request->minutes;
+    target.weekday = ptc_weekday_from_day_index(now.day_index);
+
+    if (decision.error != PTC_ERR_OK) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
+    }
+    if (decision.dry_run) {
+        return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), true, caps, now);
+    }
+
+    before_status_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &before_status);
+    take_pctl_debug_snapshot(sysmodule, &before_snapshot);
+    append_pctl_debug(
+        sysmodule,
+        request,
+        "probe_apply_before",
+        ptc_control_mode_name(config->mode),
+        &target,
+        before_status_error,
+        last_pctl_ipc_result(sysmodule),
+        &before_snapshot,
+        NULL);
+    if (before_status_error != PTC_ERR_OK) {
+        ok = write_probe_apply_result(
+            sysmodule,
+            request,
+            ptc_control_mode_name(config->mode),
+            false,
+            before_status_error,
+            caps,
+            now,
+            &target,
+            &before_status,
+            before_status_error,
+            &after_status,
+            after_status_error,
+            &before_snapshot,
+            &after_write_snapshot,
+            request->start_timer,
+            false,
+            start_timer_error,
+            write_ipc_result,
+            start_timer_ipc_result);
+        append_event(sysmodule, request, "probe_failed", before_status_error, "probe_apply_before");
+        append_event(sysmodule, request, "result_error", before_status_error, "");
+        return ok;
+    }
+
+    final_error = backup_before_write(sysmodule, request, ptc_control_mode_name(config->mode));
+    if (final_error == PTC_ERR_OK) {
+        write_attempted = true;
+        write_error = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &target);
+        write_ipc_result = last_pctl_ipc_result(sysmodule);
+        take_pctl_debug_snapshot(sysmodule, &after_write_snapshot);
+        append_pctl_debug(
+            sysmodule,
+            request,
+            "probe_apply_write",
+            ptc_control_mode_name(config->mode),
+            &target,
+            write_error,
+            write_ipc_result,
+            &before_snapshot,
+            &after_write_snapshot);
+        append_event(sysmodule, request, write_error == PTC_ERR_OK ? "pctl_apply" : "pctl_apply_failed", write_error, "probe_apply_today_limit");
+        final_error = write_error;
+        if (write_error != PTC_ERR_OK) {
+            append_pctl_debug(
+                sysmodule,
+                request,
+                "probe_apply_after",
+                ptc_control_mode_name(config->mode),
+                &target,
+                write_error,
+                write_ipc_result,
+                &before_snapshot,
+                &after_write_snapshot);
+            append_pctl_debug(
+                sysmodule,
+                request,
+                "probe_apply_start_timer",
+                ptc_control_mode_name(config->mode),
+                &target,
+                write_error,
+                write_ipc_result,
+                &after_write_snapshot,
+                &after_write_snapshot);
+        }
+    }
+
+    if (final_error == PTC_ERR_OK && request->start_timer) {
+        start_timer_called = true;
+        take_pctl_debug_snapshot(sysmodule, &start_before_snapshot);
+        start_timer_error = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
+        start_timer_ipc_result = last_pctl_ipc_result(sysmodule);
+        take_pctl_debug_snapshot(sysmodule, &start_after_snapshot);
+        append_pctl_debug(
+            sysmodule,
+            request,
+            "probe_apply_start_timer",
+            ptc_control_mode_name(config->mode),
+            &target,
+            start_timer_error,
+            start_timer_ipc_result,
+            &start_before_snapshot,
+            &start_after_snapshot);
+        append_event(sysmodule, request, start_timer_error == PTC_ERR_OK ? "pctl_start_timer" : "pctl_apply_failed", start_timer_error, "probe_apply_start_timer");
+        if (start_timer_error != PTC_ERR_OK) {
+            final_error = start_timer_error;
+        }
+    } else if (final_error == PTC_ERR_OK) {
+        append_pctl_debug(
+            sysmodule,
+            request,
+            "probe_apply_start_timer",
+            ptc_control_mode_name(config->mode),
+            &target,
+            PTC_ERR_OK,
+            0,
+            &after_write_snapshot,
+            &after_write_snapshot);
+    }
+
+    if (write_attempted && write_error == PTC_ERR_OK) {
+        after_status_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &after_status);
+        take_pctl_debug_snapshot(sysmodule, &after_status_snapshot);
+        append_pctl_debug(
+            sysmodule,
+            request,
+            "probe_apply_after",
+            ptc_control_mode_name(config->mode),
+            &target,
+            after_status_error,
+            last_pctl_ipc_result(sysmodule),
+            &before_snapshot,
+            &after_status_snapshot);
+        if (final_error == PTC_ERR_OK && after_status_error != PTC_ERR_OK) {
+            final_error = after_status_error;
+        }
+    }
+
+    ok = write_probe_apply_result(
+        sysmodule,
+        request,
+        ptc_control_mode_name(config->mode),
+        false,
+        final_error,
+        caps,
+        now,
+        &target,
+        &before_status,
+        before_status_error,
+        &after_status,
+        after_status_error,
+        &before_snapshot,
+        &after_write_snapshot,
+        request->start_timer,
+        start_timer_called,
+        start_timer_error,
+        write_ipc_result,
+        start_timer_ipc_result);
+    append_event(sysmodule, request, final_error == PTC_ERR_OK ? "probe_ok" : "probe_failed", final_error, "probe_apply_today_limit");
+    append_event(sysmodule, request, final_error == PTC_ERR_OK ? "result_ok" : "result_error", final_error, "");
+    return ok;
+}
+
 static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
 {
     PtcPctlStatus pctl_status;
@@ -1061,6 +1397,9 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     case PTC_REQUEST_PROBE_SUSPEND:
     case PTC_REQUEST_PROBE_PLAY_TIMER_WRITE:
         (void)process_probe(sysmodule, &request, &config, disable_flag, &caps, now);
+        break;
+    case PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT:
+        (void)process_probe_apply_today_limit(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
     case PTC_REQUEST_SET_TODAY_LIMIT:
     case PTC_REQUEST_ADD_TODAY_MINUTES:

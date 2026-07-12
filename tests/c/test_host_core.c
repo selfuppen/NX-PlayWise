@@ -199,8 +199,11 @@ static void test_companion_request_builder_and_file_protocol(void)
     check_int(ptc_companion_submit_parent_unlock_start(&client, "1000-0109", 109, 20), PTC_COMPANION_OK, "submit unlock start");
     check_int(ptc_companion_submit_parent_unlock_end(&client, "1000-0110", 110), PTC_COMPANION_OK, "submit unlock end");
     check_int(ptc_companion_submit_probe_play_timer_write(&client, "1000-0111", 111), PTC_COMPANION_OK, "submit play write probe");
-    check_int(ptc_companion_submit_probe_raw_block(&client, "1000-0112", 112), PTC_COMPANION_OK, "submit raw probe");
-    check_int(ptc_companion_submit_probe_suspend(&client, "1000-0113", 113), PTC_COMPANION_OK, "submit suspend probe");
+    check_int(ptc_companion_submit_probe_apply_today_limit(&client, "1000-0112", 112), PTC_COMPANION_OK, "submit probe apply today limit");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/inbox/pending/1000-0112.json", result, sizeof(result)), "probe apply request readable");
+    check_true(strstr(result, "\"type\":\"probe_apply_today_limit\"") != NULL && strstr(result, "\"minutes\":1") != NULL && strstr(result, "\"start_timer\":true") != NULL, "probe apply request content");
+    check_int(ptc_companion_submit_probe_raw_block(&client, "1000-0113", 113), PTC_COMPANION_OK, "submit raw probe");
+    check_int(ptc_companion_submit_probe_suspend(&client, "1000-0114", 114), PTC_COMPANION_OK, "submit suspend probe");
     check_int(ptc_companion_set_disable_flag(&client, true), PTC_COMPANION_OK, "set disable flag");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"), "disable flag exists");
     check_int(ptc_companion_set_disable_flag(&client, false), PTC_COMPANION_OK, "clear disable flag");
@@ -645,6 +648,94 @@ static void test_probe_play_timer_write_updates_capability(void)
     check_true(strstr(debug, "\"after_slots\"") != NULL, "probe debug after slots");
 }
 
+static void test_probe_apply_today_limit_paths(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char result[8192];
+    char backup[2048];
+    char debug[8192];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "observe", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/probe-apply-observe.json", "{\"version\":1,\"request_id\":\"probe-apply-observe\",\"type\":\"probe_apply_today_limit\",\"created_at\":1101,\"payload\":{\"minutes\":1,\"start_timer\":true}}\n"), "write observe probe apply");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process observe probe apply");
+    check_true(!pctl.applied, "observe probe apply avoids pctl write");
+    check_true(!pctl.timer_started, "observe probe apply avoids start timer");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/backups/last_pctl_backup.txt"), "observe probe apply avoids backup");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "observe probe apply avoids nonce");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/probe-apply-observe.json", result, sizeof(result)), "observe probe apply result");
+    check_true(strstr(result, "\"dry_run\":true") != NULL, "observe probe apply dry run");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/probe-apply-ok.json", "{\"version\":1,\"request_id\":\"probe-apply-ok\",\"type\":\"probe_apply_today_limit\",\"created_at\":1102,\"payload\":{\"minutes\":1,\"start_timer\":true}}\n"), "write grant probe apply");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process grant probe apply");
+    check_true(pctl.applied, "grant probe apply writes pctl");
+    check_true(pctl.timer_started, "grant probe apply starts timer");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "probe apply target mode");
+    check_int(pctl.last_target.minutes, 1, "probe apply target minutes");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "probe apply never consumes nonce");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/last_pctl_backup.txt", backup, sizeof(backup)), "probe apply backup readable");
+    check_true(strstr(backup, "play_timer_settings_hex=") != NULL, "probe apply backup raw hex");
+    check_true(strstr(backup, "play_timer_slots=") != NULL, "probe apply backup slots");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/probe-apply-ok.json", result, sizeof(result)), "probe apply result readable");
+    check_true(strstr(result, "\"status\":\"ok\"") != NULL, "probe apply result ok");
+    check_true(strstr(result, "\"probe_apply\"") != NULL, "probe apply result evidence object");
+    check_true(strstr(result, "\"target_minutes\":1") != NULL, "probe apply result target minutes");
+    check_true(strstr(result, "\"start_timer_called\":true") != NULL, "probe apply result start timer");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/pctl_debug.jsonl", debug, sizeof(debug)), "probe apply debug readable");
+    check_true(strstr(debug, "\"stage\":\"probe_apply_before\"") != NULL, "probe apply before debug");
+    check_true(strstr(debug, "\"stage\":\"probe_apply_write\"") != NULL, "probe apply write debug");
+    check_true(strstr(debug, "\"stage\":\"probe_apply_after\"") != NULL, "probe apply after debug");
+    check_true(strstr(debug, "\"stage\":\"probe_apply_start_timer\"") != NULL, "probe apply start timer debug");
+    check_true(strstr(debug, "\"target_minutes\":1") != NULL, "probe apply debug target minutes");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/probe-apply-write-fail.json", "{\"version\":1,\"request_id\":\"probe-apply-write-fail\",\"type\":\"probe_apply_today_limit\",\"created_at\":1103,\"payload\":{\"minutes\":1,\"start_timer\":true}}\n"), "write failing probe apply");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process failing probe apply");
+    check_true(!pctl.timer_started, "probe apply write failure avoids start timer");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "probe apply write failure avoids nonce");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/probe-apply-write-fail.json", result, sizeof(result)), "probe apply failure result");
+    check_true(strstr(result, "\"reason\":\"pctl_write_failed\"") != NULL, "probe apply failure reason");
+    check_true(strstr(result, "\"write_ipc_result\"") != NULL, "probe apply failure ipc result");
+    check_true(strstr(result, "suspect_command_id_write_permission") != NULL, "probe apply failure hint");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/pctl_debug.jsonl", debug, sizeof(debug)), "probe apply failure debug readable");
+    check_true(strstr(debug, "\"stage\":\"probe_apply_write\"") != NULL, "probe apply failure write stage");
+    check_true(strstr(debug, "\"error\":\"pctl_write_failed\"") != NULL, "probe apply failure debug error");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/flags/disable.flag", ""), "write disable flag for probe apply");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/probe-apply-disabled.json", "{\"version\":1,\"request_id\":\"probe-apply-disabled\",\"type\":\"probe_apply_today_limit\",\"created_at\":1104,\"payload\":{\"minutes\":1,\"start_timer\":true}}\n"), "write disabled probe apply");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process disabled probe apply");
+    check_true(!pctl.applied, "disable flag blocks probe apply write");
+    check_true(!pctl.timer_started, "disable flag blocks probe apply start timer");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/backups/last_pctl_backup.txt"), "disabled probe apply avoids backup");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/probe-apply-disabled.json", result, sizeof(result)), "disabled probe apply result");
+    check_true(strstr(result, "\"reason\":\"disabled\"") != NULL, "disabled probe apply reason");
+}
+
 static void test_legacy_play_timer_capability_is_invalidated(void)
 {
     PtcMemStorage mem;
@@ -1084,6 +1175,7 @@ int main(void)
     test_grant_unrestricted_guard_rejects_without_nonce();
     test_grant_requires_play_timer_write_probe();
     test_probe_play_timer_write_updates_capability();
+    test_probe_apply_today_limit_paths();
     test_legacy_play_timer_capability_is_invalidated();
     test_grant_flow_consumes_nonce_after_write();
     test_backup_failure_blocks_write();

@@ -60,12 +60,13 @@ typedef enum {
     TEST_CASE_OBSERVE_REJECTION = 2,
     TEST_CASE_GRANT_BEFORE_PROBE = 3,
     TEST_CASE_PROBE_PLAY_WRITE = 4,
-    TEST_CASE_PROBE_RAW_BLOCK = 5,
-    TEST_CASE_PROBE_SUSPEND = 6,
-    TEST_CASE_DISABLE_ON = 7,
-    TEST_CASE_DISABLE_OFF = 8,
-    TEST_CASE_ENFORCE_SNAPSHOT = 9,
-    TEST_CASE_COUNT = 10
+    TEST_CASE_PROBE_APPLY_TODAY_LIMIT = 5,
+    TEST_CASE_PROBE_RAW_BLOCK = 6,
+    TEST_CASE_PROBE_SUSPEND = 7,
+    TEST_CASE_DISABLE_ON = 8,
+    TEST_CASE_DISABLE_OFF = 9,
+    TEST_CASE_ENFORCE_SNAPSHOT = 10,
+    TEST_CASE_COUNT = 11
 } TestCase;
 
 typedef struct {
@@ -111,6 +112,13 @@ static const TestModeGuide TEST_GUIDES[TEST_CASE_COUNT] = {
         "A requires YES, submits probe_play_timer_write.",
         "Auto-runs play_write_probe after result.",
         "Confirm the official parental-control page did not change."
+    },
+    {
+        "Probe apply 1 min limit",
+        "Stage F bottom-layer apply check.",
+        "A requires YES, writes today limit to 1 minute.",
+        "Auto-runs generic result/queue check only.",
+        "Open the official parental-control page and confirm 1 minute."
     },
     {
         "Probe raw block",
@@ -277,6 +285,7 @@ static PtcSelfCheckProfile test_case_profile(const UiState *ui)
         return PTC_SELF_CHECK_GRANT_BEFORE_PROBE_REJECT;
     case TEST_CASE_PROBE_PLAY_WRITE:
         return PTC_SELF_CHECK_PLAY_WRITE_PROBE;
+    case TEST_CASE_PROBE_APPLY_TODAY_LIMIT:
     case TEST_CASE_PROBE_RAW_BLOCK:
     case TEST_CASE_PROBE_SUSPEND:
         return PTC_SELF_CHECK_GENERIC;
@@ -295,6 +304,7 @@ static bool test_case_has_result_check(const UiState *ui)
     case TEST_CASE_OBSERVE_REJECTION:
     case TEST_CASE_GRANT_BEFORE_PROBE:
     case TEST_CASE_PROBE_PLAY_WRITE:
+    case TEST_CASE_PROBE_APPLY_TODAY_LIMIT:
     case TEST_CASE_PROBE_RAW_BLOCK:
     case TEST_CASE_PROBE_SUSPEND:
     case TEST_CASE_ENFORCE_SNAPSHOT:
@@ -715,12 +725,15 @@ static void handle_danger_action(UiState *ui)
         submit_danger_request(ui, ptc_companion_submit_probe_play_timer_write, "Probe play write", "Play write probe submitted.");
         break;
     case 1:
-        submit_danger_request(ui, ptc_companion_submit_probe_raw_block, "Probe raw block", "Raw block probe submitted.");
+        submit_danger_request(ui, ptc_companion_submit_probe_apply_today_limit, "Probe apply 1 min limit", "Probe apply request submitted. Check official PCTL page.");
         break;
     case 2:
-        submit_danger_request(ui, ptc_companion_submit_probe_suspend, "Probe suspend", "Suspend probe submitted.");
+        submit_danger_request(ui, ptc_companion_submit_probe_raw_block, "Probe raw block", "Raw block probe submitted.");
         break;
     case 3:
+        submit_danger_request(ui, ptc_companion_submit_probe_suspend, "Probe suspend", "Suspend probe submitted.");
+        break;
+    case 4:
         if (!confirm_yes("Create disable.flag")) {
             snprintf(ui->message, sizeof(ui->message), "Disable flag cancelled.");
             break;
@@ -728,7 +741,7 @@ static void handle_danger_action(UiState *ui)
         status = ptc_companion_set_disable_flag(&ui->client, true);
         set_message(ui, "Create disable.flag", status);
         break;
-    case 4:
+    case 5:
         if (!confirm_yes("Remove disable.flag")) {
             snprintf(ui->message, sizeof(ui->message), "Disable flag removal cancelled.");
             break;
@@ -821,6 +834,14 @@ static void handle_test_mode_action(UiState *ui)
             "Play write probe submitted.",
             PTC_SELF_CHECK_PLAY_WRITE_PROBE);
         break;
+    case TEST_CASE_PROBE_APPLY_TODAY_LIMIT:
+        submit_test_danger_request(
+            ui,
+            ptc_companion_submit_probe_apply_today_limit,
+            "Probe apply 1 min limit",
+            "Probe apply request submitted. Check official PCTL page.",
+            PTC_SELF_CHECK_GENERIC);
+        break;
     case TEST_CASE_PROBE_RAW_BLOCK:
         submit_test_danger_request(
             ui,
@@ -911,6 +932,7 @@ static void draw_danger(const UiState *ui)
 {
     static const char *ACTIONS[] = {
         "probe_play_timer_write",
+        "probe_apply_today_limit",
         "probe_raw_block",
         "probe_suspend",
         "create disable.flag",
@@ -1101,9 +1123,9 @@ int main(int argc, char **argv)
             if (down & HidNpadButton_B) {
                 ui.view = UI_VIEW_PARENT;
             } else if (down & HidNpadButton_Up) {
-                ui.danger_index = ui.danger_index <= 0 ? 4 : ui.danger_index - 1;
+                ui.danger_index = ui.danger_index <= 0 ? 5 : ui.danger_index - 1;
             } else if (down & HidNpadButton_Down) {
-                ui.danger_index = ui.danger_index >= 4 ? 0 : ui.danger_index + 1;
+                ui.danger_index = ui.danger_index >= 5 ? 0 : ui.danger_index + 1;
             } else if (down & HidNpadButton_A) {
                 handle_danger_action(&ui);
             }
