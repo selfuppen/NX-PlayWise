@@ -617,6 +617,8 @@ static void test_probe_play_timer_write_updates_capability(void)
     PtcFakeTime fake_time;
     PtcSysmodule sysmodule;
     char caps[1024];
+    char backup[1024];
+    char debug[4096];
     char result[4096];
 
     ptc_mem_storage_init(&mem);
@@ -629,10 +631,18 @@ static void test_probe_play_timer_write_updates_capability(void)
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0028.json", "{\"version\":1,\"request_id\":\"1000-0028\",\"type\":\"probe_play_timer_write\",\"created_at\":1028,\"payload\":{}}\n"), "write play write probe");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process play write probe");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/backups/last_pctl_backup.txt"), "probe backup persisted");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/last_pctl_backup.txt", backup, sizeof(backup)), "probe backup readable");
+    check_true(strstr(backup, "play_timer_settings_hex=") != NULL, "probe backup raw hex");
+    check_true(strstr(backup, "play_timer_slots=") != NULL, "probe backup decoded slots");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "play write capabilities persisted");
     check_true(strstr(caps, "\"play_timer_write_verified\":true") != NULL, "play write capability true");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0028.json", result, sizeof(result)), "play write probe result");
     check_true(strstr(result, "\"play_timer_write_verified\":true") != NULL, "play write result capability");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/pctl_debug.jsonl", debug, sizeof(debug)), "probe pctl debug readable");
+    check_true(strstr(debug, "\"stage\":\"backup\"") != NULL, "probe debug backup stage");
+    check_true(strstr(debug, "\"stage\":\"probe_play_timer_write\"") != NULL, "probe debug stage");
+    check_true(strstr(debug, "\"before_raw_hex\"") != NULL, "probe debug before raw");
+    check_true(strstr(debug, "\"after_slots\"") != NULL, "probe debug after slots");
 }
 
 static void test_legacy_play_timer_capability_is_invalidated(void)
@@ -675,6 +685,7 @@ static void test_grant_flow_consumes_nonce_after_write(void)
     char code[PTC_TOKEN_TEXT_SIZE];
     char request[512];
     char ledger[4096];
+    char debug[4096];
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
@@ -693,6 +704,12 @@ static void test_grant_flow_consumes_nonce_after_write(void)
     check_true(mem.storage.vtable->exists(&mem.storage, "app/backups/last_pctl_backup.txt"), "backup persisted");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/ledger/used_nonces.jsonl", ledger, sizeof(ledger)), "ledger persisted");
     check_true(strstr(ledger, "\"day_index\":2380,\"nonce\":4660") != NULL, "nonce consumed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/pctl_debug.jsonl", debug, sizeof(debug)), "grant pctl debug readable");
+    check_true(strstr(debug, "\"stage\":\"apply_target\"") != NULL, "grant debug apply stage");
+    check_true(strstr(debug, "\"target_mode\":\"limit\"") != NULL, "grant debug target mode");
+    check_true(strstr(debug, "\"target_minutes\":30") != NULL, "grant debug target minutes");
+    check_true(strstr(debug, "\"before_raw_hex\"") != NULL, "grant debug before raw");
+    check_true(strstr(debug, "\"after_raw_hex\"") != NULL, "grant debug after raw");
 }
 
 static void test_enforce_tick_applies_once_and_respects_disable_flag(void)
@@ -980,6 +997,7 @@ static void test_failure_paths_do_not_consume_nonce(void)
     char request[512];
     char result[4096];
     char events[4096];
+    char debug[4096];
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
@@ -996,6 +1014,9 @@ static void test_failure_paths_do_not_consume_nonce(void)
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "pctl failure avoids nonce");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0022.json", result, sizeof(result)), "pctl failure result");
     check_true(strstr(result, "\"reason\":\"pctl_write_failed\"") != NULL, "pctl failure reason");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/pctl_debug.jsonl", debug, sizeof(debug)), "pctl failure debug readable");
+    check_true(strstr(debug, "\"stage\":\"apply_target\"") != NULL, "pctl failure debug apply stage");
+    check_true(strstr(debug, "\"error\":\"pctl_write_failed\"") != NULL, "pctl failure debug error");
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);

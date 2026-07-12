@@ -31,13 +31,21 @@ typedef struct {
 } PtcPctlTarget;
 
 typedef struct {
-    char text[512];
+    char text[1024];
 } PtcPctlBackup;
 
 typedef struct {
     bool verified;
     char detail[128];
 } PtcProbeResult;
+
+typedef struct {
+    bool available;
+    PtcErrorCode error;
+    uint32_t ipc_result;
+    char raw_hex[160];
+    char decoded_slots[320];
+} PtcPctlDebugSnapshot;
 
 typedef struct {
     PtcErrorCode (*read_status)(PtcPctl *pctl, PtcPctlStatus *out);
@@ -48,6 +56,8 @@ typedef struct {
     PtcErrorCode (*probe_raw_block)(PtcPctl *pctl, PtcProbeResult *out);
     PtcErrorCode (*probe_suspend)(PtcPctl *pctl, PtcProbeResult *out);
     PtcErrorCode (*probe_play_timer_write)(PtcPctl *pctl, PtcProbeResult *out);
+    PtcErrorCode (*debug_snapshot)(PtcPctl *pctl, PtcPctlDebugSnapshot *out);
+    uint32_t (*last_ipc_result)(PtcPctl *pctl);
 } PtcPctlVTable;
 
 struct PtcPctl {

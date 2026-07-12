@@ -170,6 +170,19 @@ static const char *limit_action_name(PtcLimitAction action)
     }
 }
 
+static const char *pctl_target_mode_name(PtcPctlTargetMode mode)
+{
+    switch (mode) {
+    case PTC_PCTL_TARGET_UNLIMITED:
+        return "unlimited";
+    case PTC_PCTL_TARGET_BLOCKED:
+        return "blocked";
+    case PTC_PCTL_TARGET_LIMIT:
+    default:
+        return "limit";
+    }
+}
+
 static bool parse_limit_action(const char *value, PtcLimitAction *out)
 {
     if (strcmp(value, "remind") == 0) {
@@ -245,6 +258,123 @@ static void append_event(PtcSysmodule *sysmodule, const PtcRequest *request, con
         event,
         ptc_error_reason(error),
         detail ? detail : "");
+    (void)sysmodule->storage->vtable->append_line(sysmodule->storage, path, line);
+}
+
+static void json_safe_copy(char *out, size_t out_size, const char *value)
+{
+    size_t used = 0;
+    if (out_size == 0) {
+        return;
+    }
+    if (!value) {
+        out[0] = '\0';
+        return;
+    }
+    while (*value && used + 1 < out_size) {
+        unsigned char ch = (unsigned char)*value++;
+        out[used++] = (ch >= 32U && ch != '"' && ch != '\\') ? (char)ch : '_';
+    }
+    out[used] = '\0';
+}
+
+static void empty_pctl_debug_snapshot(PtcPctlDebugSnapshot *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->available = false;
+    out->error = PTC_ERR_PCTL_READ_FAILED;
+}
+
+static void take_pctl_debug_snapshot(PtcSysmodule *sysmodule, PtcPctlDebugSnapshot *out)
+{
+    empty_pctl_debug_snapshot(out);
+    if (!sysmodule->pctl || !sysmodule->pctl->vtable || !sysmodule->pctl->vtable->debug_snapshot) {
+        return;
+    }
+    (void)sysmodule->pctl->vtable->debug_snapshot(sysmodule->pctl, out);
+}
+
+static uint32_t last_pctl_ipc_result(PtcSysmodule *sysmodule)
+{
+    if (!sysmodule->pctl || !sysmodule->pctl->vtable || !sysmodule->pctl->vtable->last_ipc_result) {
+        return 0;
+    }
+    return sysmodule->pctl->vtable->last_ipc_result(sysmodule->pctl);
+}
+
+static void append_pctl_debug(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    const char *stage,
+    const char *mode,
+    const PtcPctlTarget *target,
+    PtcErrorCode error,
+    uint32_t ipc_result,
+    const PtcPctlDebugSnapshot *before,
+    const PtcPctlDebugSnapshot *after)
+{
+    char path[320];
+    char line[2048];
+    char request_id[80];
+    char type[80];
+    char stage_safe[80];
+    char mode_safe[32];
+    char before_raw[160];
+    char before_slots[320];
+    char after_raw[160];
+    char after_slots[320];
+    const PtcPctlDebugSnapshot *before_snapshot = before;
+    const PtcPctlDebugSnapshot *after_snapshot = after;
+    PtcPctlDebugSnapshot empty_before;
+    PtcPctlDebugSnapshot empty_after;
+
+    if (!before_snapshot) {
+        empty_pctl_debug_snapshot(&empty_before);
+        before_snapshot = &empty_before;
+    }
+    if (!after_snapshot) {
+        empty_pctl_debug_snapshot(&empty_after);
+        after_snapshot = &empty_after;
+    }
+    json_safe_copy(request_id, sizeof(request_id), request ? request->request_id : "unknown");
+    json_safe_copy(type, sizeof(type), request ? request->type_text : "unknown");
+    json_safe_copy(stage_safe, sizeof(stage_safe), stage);
+    json_safe_copy(mode_safe, sizeof(mode_safe), mode ? mode : "unknown");
+    json_safe_copy(before_raw, sizeof(before_raw), before_snapshot->raw_hex);
+    json_safe_copy(before_slots, sizeof(before_slots), before_snapshot->decoded_slots);
+    json_safe_copy(after_raw, sizeof(after_raw), after_snapshot->raw_hex);
+    json_safe_copy(after_slots, sizeof(after_slots), after_snapshot->decoded_slots);
+    snprintf(path, sizeof(path), "%s/logs/pctl_debug.jsonl", sysmodule->app_root);
+    snprintf(
+        line,
+        sizeof(line),
+        "{\"ts\":%lld,\"request_id\":\"%s\",\"type\":\"%s\",\"stage\":\"%s\","
+        "\"mode\":\"%s\",\"target_mode\":\"%s\",\"target_minutes\":%u,\"weekday\":%u,"
+        "\"error\":\"%s\",\"ipc_result\":\"0x%08x\","
+        "\"before_available\":%s,\"before_error\":\"%s\",\"before_ipc_result\":\"0x%08x\","
+        "\"before_raw_hex\":\"%s\",\"before_slots\":\"%s\","
+        "\"after_available\":%s,\"after_error\":\"%s\",\"after_ipc_result\":\"0x%08x\","
+        "\"after_raw_hex\":\"%s\",\"after_slots\":\"%s\"}",
+        (long long)sysmodule->time_provider->vtable->now(sysmodule->time_provider).unix_seconds,
+        request_id,
+        type,
+        stage_safe,
+        mode_safe,
+        target ? pctl_target_mode_name(target->mode) : "none",
+        target ? (unsigned int)target->minutes : 0U,
+        target ? (unsigned int)target->weekday : 0U,
+        ptc_error_reason(error),
+        (unsigned int)ipc_result,
+        before_snapshot->available ? "true" : "false",
+        ptc_error_reason(before_snapshot->error),
+        (unsigned int)before_snapshot->ipc_result,
+        before_raw,
+        before_slots,
+        after_snapshot->available ? "true" : "false",
+        ptc_error_reason(after_snapshot->error),
+        (unsigned int)after_snapshot->ipc_result,
+        after_raw,
+        after_slots);
     (void)sysmodule->storage->vtable->append_line(sysmodule->storage, path, line);
 }
 
@@ -510,21 +640,30 @@ static bool request_file_path(char *out, size_t out_size, const PtcSysmodule *sy
     return written >= 0 && (size_t)written < out_size;
 }
 
-static PtcErrorCode backup_before_write(PtcSysmodule *sysmodule, const PtcRequest *request)
+static PtcErrorCode backup_before_write(PtcSysmodule *sysmodule, const PtcRequest *request, const char *mode)
 {
     char path[320];
     PtcPctlBackup backup;
+    PtcPctlDebugSnapshot snapshot;
+    uint32_t ipc_result;
     PtcErrorCode err = sysmodule->pctl->vtable->backup(sysmodule->pctl, &backup);
+    ipc_result = last_pctl_ipc_result(sysmodule);
     if (err != PTC_ERR_OK) {
         append_event(sysmodule, request, "pctl_backup_failed", err, "");
+        take_pctl_debug_snapshot(sysmodule, &snapshot);
+        append_pctl_debug(sysmodule, request, "backup", mode, NULL, err, ipc_result, NULL, &snapshot);
         return err;
     }
     snprintf(path, sizeof(path), "%s/backups/last_pctl_backup.txt", sysmodule->app_root);
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, backup.text)) {
         append_event(sysmodule, request, "pctl_backup_failed", PTC_ERR_PCTL_BACKUP_FAILED, "storage");
+        take_pctl_debug_snapshot(sysmodule, &snapshot);
+        append_pctl_debug(sysmodule, request, "backup", mode, NULL, PTC_ERR_PCTL_BACKUP_FAILED, ipc_result, NULL, &snapshot);
         return PTC_ERR_PCTL_BACKUP_FAILED;
     }
     append_event(sysmodule, request, "pctl_backup", PTC_ERR_OK, "");
+    take_pctl_debug_snapshot(sysmodule, &snapshot);
+    append_pctl_debug(sysmodule, request, "backup", mode, NULL, PTC_ERR_OK, ipc_result, NULL, &snapshot);
     return PTC_ERR_OK;
 }
 
@@ -533,24 +672,33 @@ static PtcErrorCode apply_target(
     const PtcRequest *request,
     const PtcCapabilities *caps,
     PtcClockSnapshot now,
+    const char *mode_name,
     PtcPctlTargetMode mode,
     uint16_t minutes)
 {
     PtcPctlTarget target;
+    PtcPctlDebugSnapshot before;
+    PtcPctlDebugSnapshot after;
     PtcErrorCode err;
     if (!caps || !caps->play_timer_write_verified) {
         append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_WRITE_NOT_VERIFIED, "play_timer_write");
         return PTC_ERR_PCTL_WRITE_NOT_VERIFIED;
     }
-    err = backup_before_write(sysmodule, request);
+    err = backup_before_write(sysmodule, request, mode_name);
     if (err != PTC_ERR_OK) {
         return err;
     }
     target.mode = mode;
     target.minutes = minutes;
     target.weekday = ptc_weekday_from_day_index(now.day_index);
+    take_pctl_debug_snapshot(sysmodule, &before);
     err = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &target);
-    append_event(sysmodule, request, err == PTC_ERR_OK ? "pctl_apply" : "pctl_apply_failed", err, rule_mode_name((PtcRuleMode)mode));
+    {
+        uint32_t ipc_result = last_pctl_ipc_result(sysmodule);
+        take_pctl_debug_snapshot(sysmodule, &after);
+        append_pctl_debug(sysmodule, request, "apply_target", mode_name, &target, err, ipc_result, &before, &after);
+    }
+    append_event(sysmodule, request, err == PTC_ERR_OK ? "pctl_apply" : "pctl_apply_failed", err, pctl_target_mode_name(mode));
     return err;
 }
 
@@ -746,7 +894,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
     }
     if (decision.may_write_pctl) {
-        err = apply_target(sysmodule, request, caps, now, PTC_PCTL_TARGET_LIMIT, token.minutes);
+        err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode), PTC_PCTL_TARGET_LIMIT, token.minutes);
         if (err != PTC_ERR_OK) {
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
         }
@@ -771,6 +919,9 @@ static bool process_probe(PtcSysmodule *sysmodule, const PtcRequest *request, co
 {
     PtcPolicyDecision decision = ptc_policy_decide(config->mode, disable_flag, request_operation(request->type), caps, false, config->allow_unlimited_to_limited);
     PtcProbeResult probe;
+    PtcPctlDebugSnapshot before;
+    PtcPctlDebugSnapshot after;
+    uint32_t ipc_result;
     PtcErrorCode err;
     if (decision.error != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
@@ -778,10 +929,11 @@ static bool process_probe(PtcSysmodule *sysmodule, const PtcRequest *request, co
     if (decision.dry_run) {
         return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), true, caps, now);
     }
-    err = backup_before_write(sysmodule, request);
+    err = backup_before_write(sysmodule, request, ptc_control_mode_name(config->mode));
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
     }
+    take_pctl_debug_snapshot(sysmodule, &before);
     if (request->type == PTC_REQUEST_PROBE_PLAY_TIMER_WRITE) {
         err = sysmodule->pctl->vtable->probe_play_timer_write(sysmodule->pctl, &probe);
         caps->play_timer_write_verified = err == PTC_ERR_OK && probe.verified;
@@ -792,6 +944,9 @@ static bool process_probe(PtcSysmodule *sysmodule, const PtcRequest *request, co
         err = sysmodule->pctl->vtable->probe_suspend(sysmodule->pctl, &probe);
         caps->suspend_verified = err == PTC_ERR_OK && probe.verified;
     }
+    ipc_result = last_pctl_ipc_result(sysmodule);
+    take_pctl_debug_snapshot(sysmodule, &after);
+    append_pctl_debug(sysmodule, request, request->type_text, ptc_control_mode_name(config->mode), NULL, err, ipc_result, &before, &after);
     append_event(sysmodule, request, err == PTC_ERR_OK ? "probe_ok" : "probe_failed", err, probe.detail);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
@@ -857,7 +1012,7 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
             request->type == PTC_REQUEST_BLOCK_TODAY ||
             request->type == PTC_REQUEST_RESTORE_TODAY_POLICY) {
             active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-            err = apply_target(sysmodule, request, caps, now, target_from_day_rule(active_rule), active_rule.minutes);
+            err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode), target_from_day_rule(active_rule), active_rule.minutes);
             if (err != PTC_ERR_OK) {
                 return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
             }
@@ -957,11 +1112,24 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         runtime_state.last_enforced_minutes == active_rule.minutes) {
         return 0;
     }
-    err = apply_target(sysmodule, NULL, &caps, now, target_mode, active_rule.minutes);
+    err = apply_target(sysmodule, NULL, &caps, now, ptc_control_mode_name(config.mode), target_mode, active_rule.minutes);
     if (err != PTC_ERR_OK) {
         return 0;
     }
-    err = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
+    {
+        PtcPctlTarget target;
+        PtcPctlDebugSnapshot before;
+        PtcPctlDebugSnapshot after;
+        uint32_t ipc_result;
+        target.mode = target_mode;
+        target.minutes = active_rule.minutes;
+        target.weekday = ptc_weekday_from_day_index(now.day_index);
+        take_pctl_debug_snapshot(sysmodule, &before);
+        err = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
+        ipc_result = last_pctl_ipc_result(sysmodule);
+        take_pctl_debug_snapshot(sysmodule, &after);
+        append_pctl_debug(sysmodule, NULL, "start_timer", ptc_control_mode_name(config.mode), &target, err, ipc_result, &before, &after);
+    }
     append_event(sysmodule, NULL, err == PTC_ERR_OK ? "pctl_start_timer" : "pctl_apply_failed", err, "start_timer");
     if (err != PTC_ERR_OK) {
         return 0;

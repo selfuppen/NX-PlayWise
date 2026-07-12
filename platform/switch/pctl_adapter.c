@@ -153,6 +153,30 @@ static void settings_hex(char *out, size_t out_size, const PtcSwitchPlayTimerSet
     }
 }
 
+static void settings_slots(char *out, size_t out_size, const PtcSwitchPlayTimerSettings *settings)
+{
+    size_t used = 0;
+    unsigned int day;
+    out[0] = '\0';
+    for (day = 0; day < 7U && used + 1 < out_size; ++day) {
+        unsigned int base = day * PTC_PLAY_TIMER_DAY_STRIDE;
+        int written = snprintf(
+            out + used,
+            out_size - used,
+            "%sd%u:e%u,l%u,m%u,x%u",
+            day == 0U ? "" : ";",
+            day,
+            (unsigned int)settings->words[base],
+            (unsigned int)settings->words[base + 1],
+            (unsigned int)settings->words[base + 2],
+            (unsigned int)settings->words[base + 3]);
+        if (written < 0 || (size_t)written >= out_size - used) {
+            break;
+        }
+        used += (size_t)written;
+    }
+}
+
 static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
@@ -208,6 +232,7 @@ static PtcErrorCode switch_backup(PtcPctl *pctl, PtcPctlBackup *out)
     PtcSwitchPlayTimerSettings timer_settings;
     PctlRestrictionSettings settings;
     char raw_hex[160];
+    char slots[320];
     bool enabled = false;
     bool unlocked = false;
     PtcErrorCode err = open_write_session(adapter, &session);
@@ -232,16 +257,18 @@ static PtcErrorCode switch_backup(PtcPctl *pctl, PtcPctlBackup *out)
         return PTC_ERR_PCTL_BACKUP_FAILED;
     }
     settings_hex(raw_hex, sizeof(raw_hex), &timer_settings);
+    settings_slots(slots, sizeof(slots), &timer_settings);
     snprintf(
         out->text,
         sizeof(out->text),
-        "pctl_current_settings rating_age=%u sns=%u free_comm=%u restriction_enabled=%u temporary_unlocked=%u play_timer_settings_hex=%s",
+        "pctl_current_settings rating_age=%u sns=%u free_comm=%u restriction_enabled=%u temporary_unlocked=%u play_timer_settings_hex=%s play_timer_slots=%s",
         (unsigned int)settings.rating_age,
         settings.sns_post_restriction ? 1U : 0U,
         settings.free_communication_restriction ? 1U : 0U,
         enabled ? 1U : 0U,
         unlocked ? 1U : 0U,
-        raw_hex);
+        raw_hex,
+        slots);
     return PTC_ERR_OK;
 }
 
@@ -352,6 +379,40 @@ static PtcErrorCode switch_probe_play_timer_write(PtcPctl *pctl, PtcProbeResult 
     return PTC_ERR_OK;
 }
 
+static PtcErrorCode switch_debug_snapshot(PtcPctl *pctl, PtcPctlDebugSnapshot *out)
+{
+    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    PtcSwitchSession session;
+    PtcSwitchPlayTimerSettings settings;
+    PtcErrorCode err;
+
+    memset(out, 0, sizeof(*out));
+    err = open_write_session(adapter, &session);
+    if (err != PTC_ERR_OK) {
+        out->available = false;
+        out->error = err;
+        out->ipc_result = adapter->last_result;
+        return err;
+    }
+    err = get_play_timer_settings(adapter, &session.service, &settings);
+    close_session(&session);
+    out->available = err == PTC_ERR_OK;
+    out->error = err;
+    out->ipc_result = adapter->last_result;
+    if (err != PTC_ERR_OK) {
+        return err;
+    }
+    settings_hex(out->raw_hex, sizeof(out->raw_hex), &settings);
+    settings_slots(out->decoded_slots, sizeof(out->decoded_slots), &settings);
+    return PTC_ERR_OK;
+}
+
+static uint32_t switch_last_ipc_result(PtcPctl *pctl)
+{
+    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    return adapter->last_result;
+}
+
 static const PtcPctlVTable SWITCH_PCTL_VTABLE = {
     switch_read_status,
     switch_backup,
@@ -361,6 +422,8 @@ static const PtcPctlVTable SWITCH_PCTL_VTABLE = {
     switch_probe_raw_block,
     switch_probe_suspend,
     switch_probe_play_timer_write,
+    switch_debug_snapshot,
+    switch_last_ipc_result,
 };
 
 void ptc_switch_pctl_init(PtcSwitchPctl *adapter)
