@@ -13,7 +13,15 @@ RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || tr
 # 设置时区为东八区（非交互式安装，避免弹出配置界面）
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
-    apt-get install -y tzdata && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        git \
+        openssh-server \
+        tzdata \
+        unzip \
+        wget \
+        zip && \
     ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone && \
     apt-get clean && \
@@ -23,15 +31,13 @@ RUN apt-get update && \
 ENV TZ=Asia/Shanghai
 
 # =============================
-# 2. 基础工具 & SSH
+# 2. SSH 配置
 # =============================
-RUN apt-get install -y curl zip unzip git wget build-essential openssh-server
-    
-RUN mkdir /var/run/sshd && \
+RUN mkdir -p /var/run/sshd && \
     echo 'root:root' | chpasswd && \
-    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -ri 's/^#?PermitRootLogin .*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' /etc/pam.d/sshd && \
-    sed -i 's/^#Port 22/Port 58791/' /etc/ssh/sshd_config
+    sed -ri 's/^#?Port .*/Port 58791/' /etc/ssh/sshd_config
 
 # =============================
 # 3. SSH 服务启动
