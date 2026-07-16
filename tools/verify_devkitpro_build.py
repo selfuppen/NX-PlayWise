@@ -5,7 +5,7 @@ import argparse
 import base64
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import shlex
 import subprocess
@@ -14,7 +14,9 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REMOTE_ALIAS = "249-nintendo-switch-dev"
+REMOTE_ALIAS = "renqi-nintendo-switch-dev"
+REMOTE_CONTAINER = "devkitpro-ssh-v1"
+REMOTE_HOST_PATH = "/home/ygq/nintendo/switch-play-time-control-local"
 REMOTE_PATH = "/ws/switch-play-time-control-local"
 DEVKITPRO = "/opt/devkitpro"
 BUILD_TARGETS = [
@@ -355,7 +357,7 @@ def devkit_env() -> dict[str, str]:
     return env
 
 
-def remote_shell_prefix(remote_path: str, *, pull: bool) -> str:
+def remote_shell_prefix(remote_path: str) -> str:
     parts = [
         f"export DEVKITPRO={shlex.quote(DEVKITPRO)}",
         "export DEVKITARM=$DEVKITPRO/devkitARM",
@@ -363,28 +365,50 @@ def remote_shell_prefix(remote_path: str, *, pull: bool) -> str:
         "export PATH=$DEVKITA64/bin:$PATH",
         f"cd {shlex.quote(remote_path)}",
     ]
-    if pull:
-        parts.append("git fetch origin master")
-        parts.append("git merge --ff-only FETCH_HEAD")
     return " && ".join(parts)
 
 
-def remote_build_command(remote_path: str, *, pull: bool, targets: list[list[str]] | None = None) -> str:
-    commands = [remote_shell_prefix(remote_path, pull=pull)]
-    commands.extend(format_command(target) for target in targets or BUILD_TARGETS)
-    return " && ".join(commands)
+def container_shell_command(container: str, command: str) -> str:
+    return f"docker exec {shlex.quote(container)} sh -lc {shlex.quote(command)}"
 
 
-def remote_verify_command(remote_path: str) -> str:
+def remote_build_command(
+    container: str,
+    host_path: str,
+    remote_path: str,
+    *,
+    pull: bool,
+    targets: list[list[str]] | None = None,
+) -> str:
+    host_commands = []
+    if pull:
+        host_commands.extend(
+            [
+                f"git -C {shlex.quote(host_path)} fetch origin master",
+                f"git -C {shlex.quote(host_path)} merge --ff-only FETCH_HEAD",
+            ]
+        )
+    container_commands = [remote_shell_prefix(remote_path)]
+    container_commands.extend(format_command(target) for target in targets or BUILD_TARGETS)
+    host_commands.append(container_shell_command(container, " && ".join(container_commands)))
+    return " && ".join(host_commands)
+
+
+def remote_verify_command(container: str, remote_path: str) -> str:
     encoded = base64.b64encode(REMOTE_ARTIFACT_VERIFIER.encode("utf-8")).decode("ascii")
-    return (
+    command = (
         f"cd {shlex.quote(remote_path)} "
         "&& python3 -c "
         + shlex.quote(f"import base64; exec(base64.b64decode('{encoded}').decode('utf-8'))")
     )
+    return container_shell_command(container, command)
 
 
-def remote_package_manifest_command(remote_path: str, prefixes: list[str] | None = None) -> str:
+def remote_package_manifest_command(
+    container: str,
+    remote_path: str,
+    prefixes: list[str] | None = None,
+) -> str:
     selected_prefixes = prefixes or list(PACKAGE_ZIP_EXPECTATIONS)
     script = f"""
 from pathlib import Path
@@ -410,25 +434,39 @@ for prefix in prefixes:
 print(json.dumps(result))
 """.strip()
     encoded = base64.b64encode(script.encode("utf-8")).decode("ascii")
-    return (
+    command = (
         f"cd {shlex.quote(remote_path)} "
         "&& python3 -c "
         + shlex.quote(f"import base64; exec(base64.b64decode('{encoded}').decode('utf-8'))")
     )
+    return container_shell_command(container, command)
 
 
-def run_remote_build(alias: str, remote_path: str, *, pull: bool, targets: list[list[str]] | None = None) -> None:
-    run(["ssh", alias, remote_build_command(remote_path, pull=pull, targets=targets)])
+def run_remote_build(
+    alias: str,
+    container: str,
+    host_path: str,
+    remote_path: str,
+    *,
+    pull: bool,
+    targets: list[list[str]] | None = None,
+) -> None:
+    run(["ssh", alias, remote_build_command(container, host_path, remote_path, pull=pull, targets=targets)])
 
 
-def run_remote_verify(alias: str, remote_path: str) -> None:
-    result = run(["ssh", alias, remote_verify_command(remote_path)])
+def run_remote_verify(alias: str, container: str, remote_path: str) -> None:
+    result = run(["ssh", alias, remote_verify_command(container, remote_path)])
     if VERIFY_MARKER not in result.stdout:
         raise VerificationError(f"missing verification marker: {VERIFY_MARKER!r}")
 
 
-def list_remote_package_zips(alias: str, remote_path: str, prefixes: list[str] | None = None) -> list[str]:
-    result = run(["ssh", alias, remote_package_manifest_command(remote_path, prefixes)])
+def list_remote_package_zips(
+    alias: str,
+    container: str,
+    remote_path: str,
+    prefixes: list[str] | None = None,
+) -> list[str]:
+    result = run(["ssh", alias, remote_package_manifest_command(container, remote_path, prefixes)])
     try:
         paths = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -438,17 +476,44 @@ def list_remote_package_zips(alias: str, remote_path: str, prefixes: list[str] |
     return paths
 
 
-def download_remote_safe_nro(alias: str, remote_path: str, destination: Path) -> None:
+def remote_artifact_path(remote_path: str, relative_path: str) -> str:
+    relative = PurePosixPath(relative_path)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise VerificationError(f"unsafe remote artifact path: {relative_path}")
+    return str(PurePosixPath(remote_path) / relative)
+
+
+def download_remote_file(alias: str, container: str, remote_path: str, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    partial = destination.with_name(f"{destination.name}.part")
+    command = [
+        "ssh",
+        alias,
+        container_shell_command(container, f"cat -- {shlex.quote(remote_path)}"),
+    ]
+    try:
+        with partial.open("wb") as output:
+            result = subprocess.run(command, cwd=ROOT, stdout=output, stderr=subprocess.PIPE)
+    except FileNotFoundError as exc:
+        raise VerificationError("executable not found: ssh") from exc
+    if result.returncode != 0:
+        partial.unlink(missing_ok=True)
+        stderr = result.stderr.decode(errors="replace").strip()
+        detail = f": {stderr}" if stderr else ""
+        raise VerificationError(f"remote artifact download failed with exit code {result.returncode}{detail}")
+    partial.replace(destination)
+
+
+def download_remote_safe_nro(alias: str, container: str, remote_path: str, destination: Path) -> None:
     remote_paths = [
-        path for path in list_remote_package_zips(alias, remote_path)
+        path for path in list_remote_package_zips(alias, container, remote_path)
         if Path(path).name.startswith(f"{SAFE_NRO_ZIP_PREFIX}-")
     ]
     if not remote_paths:
         raise VerificationError("remote safe-nro timestamped zip was not found")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    remote_zip = f"{alias}:{remote_path}/{remote_paths[0]}"
     downloaded = destination.parent / Path(remote_paths[0]).name
-    run(["scp", remote_zip, "."], cwd=destination.parent)
+    download_remote_file(alias, container, remote_artifact_path(remote_path, remote_paths[0]), downloaded)
     if downloaded != destination:
         shutil.copy2(downloaded, destination)
     verify_safe_nro_zip(destination)
@@ -501,16 +566,16 @@ def prepare_package_download_dir(destination_dir: Path) -> None:
 
 def download_remote_package_zips(
     alias: str,
+    container: str,
     remote_path: str,
     destination_dir: Path,
     prefixes: list[str] | None = None,
 ) -> None:
-    remote_paths = list_remote_package_zips(alias, remote_path, prefixes)
+    remote_paths = list_remote_package_zips(alias, container, remote_path, prefixes)
     prepare_package_download_dir(destination_dir)
     for remote_rel in remote_paths:
         local_zip = destination_dir / Path(remote_rel).name
-        remote_zip = f"{alias}:{remote_path}/{remote_rel}"
-        run(["scp", remote_zip, "."], cwd=destination_dir)
+        download_remote_file(alias, container, remote_artifact_path(remote_path, remote_rel), local_zip)
         prefix = package_prefix_for_zip(local_zip)
         verify_package_zip_by_prefix(local_zip, prefix)
         extract_root = extract_zip_to_named_dir(local_zip)
@@ -549,8 +614,14 @@ def run_local_verify() -> None:
     verify_artifacts(ROOT)
 
 
-def install_remote_safe_nro(alias: str, remote_path: str, download_path: Path, sdmc_root: Path) -> None:
-    download_remote_safe_nro(alias, remote_path, download_path)
+def install_remote_safe_nro(
+    alias: str,
+    container: str,
+    remote_path: str,
+    download_path: Path,
+    sdmc_root: Path,
+) -> None:
+    download_remote_safe_nro(alias, container, remote_path, download_path)
     install_safe_nro_zip(download_path, sdmc_root)
 
 
@@ -617,6 +688,8 @@ def parse_args() -> argparse.Namespace:
         help="Skip downloading timestamped remote package zips after remote verification.",
     )
     parser.add_argument("--ssh-alias", default=REMOTE_ALIAS)
+    parser.add_argument("--container", default=REMOTE_CONTAINER)
+    parser.add_argument("--host-path", default=REMOTE_HOST_PATH)
     parser.add_argument("--remote-path", default=REMOTE_PATH)
     return parser.parse_args()
 
@@ -646,9 +719,18 @@ def main() -> int:
         steps = [
             (
                 "remote devkitPro build",
-                lambda: run_remote_build(args.ssh_alias, args.remote_path, pull=not args.no_pull),
+                lambda: run_remote_build(
+                    args.ssh_alias,
+                    args.container,
+                    args.host_path,
+                    args.remote_path,
+                    pull=not args.no_pull,
+                ),
             ),
-            ("remote build artifacts", lambda: run_remote_verify(args.ssh_alias, args.remote_path)),
+            (
+                "remote build artifacts",
+                lambda: run_remote_verify(args.ssh_alias, args.container, args.remote_path),
+            ),
         ]
         if not args.skip_package_download:
             steps.append(
@@ -656,6 +738,7 @@ def main() -> int:
                     "download remote package zips",
                     lambda: download_remote_package_zips(
                         args.ssh_alias,
+                        args.container,
                         args.remote_path,
                         args.package_download_dir,
                     ),
@@ -667,6 +750,7 @@ def main() -> int:
                     "install safe-nro to emulator SD",
                     lambda: install_remote_safe_nro(
                         args.ssh_alias,
+                        args.container,
                         args.remote_path,
                         args.safe_nro_zip,
                         args.sdmc_root,

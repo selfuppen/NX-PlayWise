@@ -35,6 +35,8 @@ def parse_args() -> argparse.Namespace:
         help=f"Package zip download/extract directory. Default: {devkit.DEFAULT_PACKAGE_DOWNLOAD_DIR}",
     )
     parser.add_argument("--ssh-alias", default=devkit.REMOTE_ALIAS)
+    parser.add_argument("--container", default=devkit.REMOTE_CONTAINER)
+    parser.add_argument("--host-path", default=devkit.REMOTE_HOST_PATH)
     parser.add_argument("--remote-path", default=devkit.REMOTE_PATH)
     return parser.parse_args()
 
@@ -64,6 +66,8 @@ def main() -> int:
                 "remote grant/enforce package build",
                 lambda: devkit.run_remote_build(
                     args.ssh_alias,
+                    args.container,
+                    args.host_path,
                     args.remote_path,
                     pull=not args.no_pull,
                     targets=devkit.WRITE_MODE_BUILD_TARGETS,
@@ -73,6 +77,7 @@ def main() -> int:
                 "download and extract remote grant/enforce zips",
                 lambda: devkit.download_remote_package_zips(
                     args.ssh_alias,
+                    args.container,
                     args.remote_path,
                     args.package_download_dir,
                     prefixes=devkit.WRITE_MODE_PACKAGE_PREFIXES,

@@ -44,9 +44,37 @@ def test_prepare_package_download_dir_clears_contents() -> None:
         assert_equal(list(destination.iterdir()), [], "download dir emptied")
 
 
+def test_remote_build_runs_inside_container() -> None:
+    command = devkit.remote_build_command(
+        devkit.REMOTE_CONTAINER,
+        devkit.REMOTE_HOST_PATH,
+        devkit.REMOTE_PATH,
+        pull=True,
+        targets=[["make", "test-host"]],
+    )
+
+    assert_true(
+        command.startswith("git -C /home/ygq/nintendo/switch-play-time-control-local fetch origin master"),
+        "host git fetch",
+    )
+    assert_true("git -C /home/ygq/nintendo/switch-play-time-control-local merge --ff-only FETCH_HEAD" in command, "host merge")
+    assert_true("docker exec devkitpro-ssh-v1 sh -lc " in command, "docker exec")
+    assert_true("make test-host" in command, "build target")
+
+
+def test_remote_artifact_path_rejects_parent_traversal() -> None:
+    try:
+        devkit.remote_artifact_path(devkit.REMOTE_PATH, "../secret.zip")
+    except devkit.VerificationError:
+        return
+    raise AssertionError("parent traversal should be rejected")
+
+
 def main() -> int:
     test_default_package_download_dir()
     test_prepare_package_download_dir_clears_contents()
+    test_remote_build_runs_inside_container()
+    test_remote_artifact_path_rejects_parent_traversal()
     print("Devkit build helper tests passed")
     return 0
 

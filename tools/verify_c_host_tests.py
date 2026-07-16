@@ -14,6 +14,10 @@ MAKEFILE = ROOT / "Makefile"
 HOST_BUILD_DIR = ROOT / "build" / "host"
 HOST_TEST = HOST_BUILD_DIR / ("test_host_core_auto.exe" if sys.platform == "win32" else "test_host_core_auto")
 PASS_TEXT = "C host core tests passed"
+REMOTE_ALIAS = "renqi-nintendo-switch-dev"
+REMOTE_CONTAINER = "devkitpro-ssh-v1"
+REMOTE_HOST_PATH = "/home/ygq/nintendo/switch-play-time-control-local"
+REMOTE_PATH = "/ws/switch-play-time-control-local"
 
 
 class VerificationError(AssertionError):
@@ -122,14 +126,19 @@ def run_local_test() -> None:
         raise VerificationError(f"missing success marker in C host output: {PASS_TEXT!r}")
 
 
-def run_remote_test() -> None:
-    remote_command = (
-        "cd /ws/switch-play-time-control-local "
-        "&& git fetch origin master "
-        "&& git merge --ff-only FETCH_HEAD "
+def run_remote_test(alias: str, container: str, host_path: str, remote_path: str) -> None:
+    container_command = (
+        f"cd {shlex.quote(remote_path)} "
         "&& make test-host"
     )
-    result = run(["ssh", "249-nintendo-switch-dev", remote_command])
+    remote_command = " && ".join(
+        [
+            f"git -C {shlex.quote(host_path)} fetch origin master",
+            f"git -C {shlex.quote(host_path)} merge --ff-only FETCH_HEAD",
+            f"docker exec {shlex.quote(container)} sh -lc {shlex.quote(container_command)}",
+        ]
+    )
+    result = run(["ssh", alias, remote_command])
     if PASS_TEXT not in result.stdout:
         raise VerificationError(f"missing success marker in remote C host output: {PASS_TEXT!r}")
 
@@ -168,6 +177,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Compile and run locally for debugging when a C compiler is available.",
     )
+    parser.add_argument("--ssh-alias", default=REMOTE_ALIAS)
+    parser.add_argument("--container", default=REMOTE_CONTAINER)
+    parser.add_argument("--host-path", default=REMOTE_HOST_PATH)
+    parser.add_argument("--remote-path", default=REMOTE_PATH)
     return parser.parse_args()
 
 
@@ -182,7 +195,17 @@ def main() -> int:
             ("run C host core", run_local_test),
         ]
         if args.local
-        else [("remote C host core", run_remote_test)]
+        else [
+            (
+                "remote C host core",
+                lambda: run_remote_test(
+                    args.ssh_alias,
+                    args.container,
+                    args.host_path,
+                    args.remote_path,
+                ),
+            )
+        ]
     )
     passed = 0
     for index, (name, fn) in enumerate(steps):
