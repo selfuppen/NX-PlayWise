@@ -199,7 +199,7 @@ static void test_companion_request_builder_and_file_protocol(void)
     check_int(ptc_companion_submit_parent_unlock_start(&client, "1000-0109", 109, 20), PTC_COMPANION_OK, "submit unlock start");
     check_int(ptc_companion_submit_parent_unlock_end(&client, "1000-0110", 110), PTC_COMPANION_OK, "submit unlock end");
     check_int(ptc_companion_submit_probe_play_timer_write(&client, "1000-0111", 111), PTC_COMPANION_OK, "submit play write probe");
-    check_int(ptc_companion_submit_probe_play_timer_effect(&client, "1000-0112", 112, false), PTC_COMPANION_OK, "submit play effect probe");
+    check_int(ptc_companion_submit_probe_play_timer_effect(&client, "1000-0115", 115, false), PTC_COMPANION_OK, "submit play effect probe");
     check_int(ptc_companion_submit_probe_apply_today_limit(&client, "1000-0112", 112), PTC_COMPANION_OK, "submit probe apply today limit");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/inbox/pending/1000-0112.json", result, sizeof(result)), "probe apply request readable");
     check_true(strstr(result, "\"type\":\"probe_apply_today_limit\"") != NULL && strstr(result, "\"minutes\":1") != NULL && strstr(result, "\"start_timer\":true") != NULL, "probe apply request content");
@@ -612,7 +612,7 @@ static void test_grant_requires_play_timer_write_probe(void)
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/backups/last_pctl_backup.txt"), "unprobed grant avoids backup");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "unprobed grant avoids nonce");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0027.json", result, sizeof(result)), "unprobed grant result");
-    check_true(strstr(result, "\"reason\":\"pctl_write_not_verified\"") != NULL, "unprobed grant reason");
+    check_true(strstr(result, "\"reason\":\"pctl_effect_not_verified\"") != NULL, "unprobed grant reason");
 }
 
 static void test_probe_play_timer_write_updates_capability(void)
@@ -814,7 +814,7 @@ static void test_legacy_play_timer_capability_is_invalidated(void)
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process legacy capability grant");
     check_true(!pctl.applied, "legacy capability avoids pctl write");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0029.json", result, sizeof(result)), "legacy capability result");
-    check_true(strstr(result, "\"reason\":\"pctl_write_not_verified\"") != NULL, "legacy capability reason");
+    check_true(strstr(result, "\"reason\":\"pctl_effect_not_verified\"") != NULL, "legacy capability reason");
 }
 
 static void test_grant_flow_consumes_nonce_after_write(void)
