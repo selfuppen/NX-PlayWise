@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "../common/rules/rules.h"
 
@@ -14,5 +15,6 @@ int ptc_companion_set_weekly_template_request_json(char *out, size_t out_size, c
 int ptc_companion_set_bedtime_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at, const PtcBedtimeRule *bedtime);
 int ptc_companion_set_limit_action_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at, PtcLimitAction action);
 int ptc_companion_parent_unlock_start_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at, uint16_t duration_minutes);
+int ptc_companion_probe_play_timer_effect_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at, bool wait_for_expiry);
 
 #endif

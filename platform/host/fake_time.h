@@ -6,6 +6,7 @@
 typedef struct {
     PtcTimeProvider provider;
     PtcClockSnapshot snapshot;
+    uint64_t slept_ms;
 } PtcFakeTime;
 
 void ptc_fake_time_init(PtcFakeTime *fake, int64_t unix_seconds, uint16_t day_index, uint16_t minute_of_day);

@@ -94,6 +94,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%d,"
         "\"play_timer_enabled\":%d,\"restricted_now\":%d,\"bedtime_active\":%s,"
         "\"parent_unlock_active\":%s},\"capabilities\":{\"play_timer_write_verified\":%s,"
+        "\"play_timer_effect_verified\":%s,\"play_timer_effect_backend\":\"pctl-s-runtime-v1\","
         "\"raw_block_verified\":%s,\"suspend_verified\":%s}",
         state->day_index,
         state->limited_today,
@@ -106,6 +107,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         json_bool(state->bedtime_active),
         json_bool(state->parent_unlock_active),
         json_bool(state->play_timer_write_verified),
+        json_bool(state->play_timer_effect_verified),
         json_bool(state->raw_block_verified),
         json_bool(state->suspend_verified));
 }
@@ -123,6 +125,7 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->bedtime_active = false;
     state->parent_unlock_active = false;
     state->play_timer_write_verified = false;
+    state->play_timer_effect_verified = false;
     state->raw_block_verified = false;
     state->suspend_verified = false;
 }
@@ -157,6 +160,7 @@ PtcErrorCode ptc_result_validate(const char *text)
         return PTC_ERR_BAD_REQUEST;
     }
     if (!has_key(text, "capabilities") ||
+        !json_bool_present(text, "play_timer_effect_verified") ||
         !json_bool_present(text, "raw_block_verified") ||
         !json_bool_present(text, "suspend_verified")) {
         return PTC_ERR_BAD_REQUEST;

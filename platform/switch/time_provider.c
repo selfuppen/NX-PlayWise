@@ -23,8 +23,15 @@ static PtcClockSnapshot switch_now(PtcTimeProvider *provider)
     return snapshot;
 }
 
+static void switch_sleep_ms(PtcTimeProvider *provider, uint32_t milliseconds)
+{
+    (void)provider;
+    svcSleepThread((int64_t)milliseconds * 1000000LL);
+}
+
 static const PtcTimeProviderVTable SWITCH_TIME_PROVIDER_VTABLE = {
     switch_now,
+    switch_sleep_ms,
 };
 
 void ptc_switch_time_provider_init(PtcSwitchTimeProvider *provider)

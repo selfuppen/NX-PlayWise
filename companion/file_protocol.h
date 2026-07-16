@@ -40,6 +40,7 @@ PtcCompanionStatus ptc_companion_submit_set_limit_action(PtcCompanionFileClient 
 PtcCompanionStatus ptc_companion_submit_parent_unlock_start(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, uint16_t duration_minutes);
 PtcCompanionStatus ptc_companion_submit_parent_unlock_end(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_submit_probe_play_timer_write(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
+PtcCompanionStatus ptc_companion_submit_probe_play_timer_effect(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, bool wait_for_expiry);
 PtcCompanionStatus ptc_companion_submit_probe_apply_today_limit(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_submit_probe_raw_block(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_submit_probe_suspend(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);

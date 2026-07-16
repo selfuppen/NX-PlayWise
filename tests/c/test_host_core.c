@@ -199,6 +199,7 @@ static void test_companion_request_builder_and_file_protocol(void)
     check_int(ptc_companion_submit_parent_unlock_start(&client, "1000-0109", 109, 20), PTC_COMPANION_OK, "submit unlock start");
     check_int(ptc_companion_submit_parent_unlock_end(&client, "1000-0110", 110), PTC_COMPANION_OK, "submit unlock end");
     check_int(ptc_companion_submit_probe_play_timer_write(&client, "1000-0111", 111), PTC_COMPANION_OK, "submit play write probe");
+    check_int(ptc_companion_submit_probe_play_timer_effect(&client, "1000-0112", 112, false), PTC_COMPANION_OK, "submit play effect probe");
     check_int(ptc_companion_submit_probe_apply_today_limit(&client, "1000-0112", 112), PTC_COMPANION_OK, "submit probe apply today limit");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/inbox/pending/1000-0112.json", result, sizeof(result)), "probe apply request readable");
     check_true(strstr(result, "\"type\":\"probe_apply_today_limit\"") != NULL && strstr(result, "\"minutes\":1") != NULL && strstr(result, "\"start_timer\":true") != NULL, "probe apply request content");
@@ -493,7 +494,8 @@ static void write_capabilities(PtcMemStorage *mem, bool play_timer_write_verifie
     snprintf(
         caps,
         sizeof(caps),
-        "{\"version\":1,\"play_timer_write_verified\":%s,\"play_timer_write_backend\":\"pctl-s-v1\",\"raw_block_verified\":%s,\"suspend_verified\":%s}\n",
+        "{\"version\":1,\"play_timer_write_verified\":%s,\"play_timer_write_backend\":\"pctl-s-v1\",\"play_timer_effect_verified\":%s,\"play_timer_effect_backend\":\"pctl-s-runtime-v1\",\"raw_block_verified\":%s,\"suspend_verified\":%s}\n",
+        play_timer_write_verified ? "true" : "false",
         play_timer_write_verified ? "true" : "false",
         raw_block_verified ? "true" : "false",
         suspend_verified ? "true" : "false");
@@ -646,6 +648,54 @@ static void test_probe_play_timer_write_updates_capability(void)
     check_true(strstr(debug, "\"stage\":\"probe_play_timer_write\"") != NULL, "probe debug stage");
     check_true(strstr(debug, "\"before_raw_hex\"") != NULL, "probe debug before raw");
     check_true(strstr(debug, "\"after_slots\"") != NULL, "probe debug after slots");
+}
+
+static void test_probe_play_timer_effect_paths(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char result[8192];
+    char caps[2048];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 30;
+    pctl.status.play_timer_enabled = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/effect-fast.json", "{\"version\":1,\"request_id\":\"effect-fast\",\"type\":\"probe_play_timer_effect\",\"created_at\":1200,\"payload\":{\"wait_for_expiry\":false}}\n"), "write fast effect probe");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process fast effect probe");
+    check_true(pctl.restore_called, "effect probe restores settings");
+    check_true(!pctl.status.play_timer_enabled, "effect probe restores stopped timer");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/effect-fast.json", result, sizeof(result)), "effect result readable");
+    check_true(strstr(result, "\"verdict\":\"pass\"") != NULL, "effect result passes");
+    check_true(strstr(result, "\"raw_restored\":true") != NULL, "effect raw restored evidence");
+    check_true(strstr(result, "\"timer_restored\":true") != NULL, "effect timer restored evidence");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "effect capabilities readable");
+    check_true(strstr(caps, "\"play_timer_effect_verified\":true") != NULL, "effect capability persisted");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "effect probe consumes no nonce");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 30;
+    pctl.restore_error = PTC_ERR_PCTL_WRITE_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/effect-restore-fail.json", "{\"version\":1,\"request_id\":\"effect-restore-fail\",\"type\":\"probe_play_timer_effect\",\"created_at\":1201,\"payload\":{}}\n"), "write restore failure effect probe");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process restore failure effect probe");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/effect-restore-fail.json", result, sizeof(result)), "restore failure result readable");
+    check_true(strstr(result, "\"reason\":\"pctl_restore_failed\"") != NULL, "restore failure reason");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"), "restore failure creates disable flag");
 }
 
 static void test_probe_apply_today_limit_paths(void)
@@ -1175,6 +1225,7 @@ int main(void)
     test_grant_unrestricted_guard_rejects_without_nonce();
     test_grant_requires_play_timer_write_probe();
     test_probe_play_timer_write_updates_capability();
+    test_probe_play_timer_effect_paths();
     test_probe_apply_today_limit_paths();
     test_legacy_play_timer_capability_is_invalidated();
     test_grant_flow_consumes_nonce_after_write();

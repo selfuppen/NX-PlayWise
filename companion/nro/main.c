@@ -60,13 +60,15 @@ typedef enum {
     TEST_CASE_OBSERVE_REJECTION = 2,
     TEST_CASE_GRANT_BEFORE_PROBE = 3,
     TEST_CASE_PROBE_PLAY_WRITE = 4,
-    TEST_CASE_PROBE_APPLY_TODAY_LIMIT = 5,
-    TEST_CASE_PROBE_RAW_BLOCK = 6,
-    TEST_CASE_PROBE_SUSPEND = 7,
-    TEST_CASE_DISABLE_ON = 8,
-    TEST_CASE_DISABLE_OFF = 9,
-    TEST_CASE_ENFORCE_SNAPSHOT = 10,
-    TEST_CASE_COUNT = 11
+    TEST_CASE_PROBE_PLAY_TIMER_EFFECT = 5,
+    TEST_CASE_PROBE_PLAY_TIMER_EXPIRY = 6,
+    TEST_CASE_PROBE_APPLY_TODAY_LIMIT = 7,
+    TEST_CASE_PROBE_RAW_BLOCK = 8,
+    TEST_CASE_PROBE_SUSPEND = 9,
+    TEST_CASE_DISABLE_ON = 10,
+    TEST_CASE_DISABLE_OFF = 11,
+    TEST_CASE_ENFORCE_SNAPSHOT = 12,
+    TEST_CASE_COUNT = 13
 } TestCase;
 
 typedef struct {
@@ -112,6 +114,20 @@ static const TestModeGuide TEST_GUIDES[TEST_CASE_COUNT] = {
         "A requires YES, submits probe_play_timer_write.",
         "Auto-runs play_write_probe after result.",
         "Confirm the official parental-control page did not change."
+    },
+    {
+        "PCTL effect probe (fast)",
+        "Stage F automatic runtime effect verification.",
+        "After parent PIN, A submits the fast effect probe.",
+        "Auto-runs play_timer_effect_probe and displays PASS SYSTEM EFFECT.",
+        "Only investigate recovery guidance if the automatic result fails."
+    },
+    {
+        "PCTL expiry probe (optional)",
+        "Optional countdown-to-expiry confirmation.",
+        "A submits the 1 minute expiry probe.",
+        "Auto-runs the effect self-check and reports expiry observation.",
+        "Applet/test harnesses that do not count play time may be inconclusive."
     },
     {
         "Probe apply 1 min limit",
@@ -285,6 +301,9 @@ static PtcSelfCheckProfile test_case_profile(const UiState *ui)
         return PTC_SELF_CHECK_GRANT_BEFORE_PROBE_REJECT;
     case TEST_CASE_PROBE_PLAY_WRITE:
         return PTC_SELF_CHECK_PLAY_WRITE_PROBE;
+    case TEST_CASE_PROBE_PLAY_TIMER_EFFECT:
+    case TEST_CASE_PROBE_PLAY_TIMER_EXPIRY:
+        return PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE;
     case TEST_CASE_PROBE_APPLY_TODAY_LIMIT:
     case TEST_CASE_PROBE_RAW_BLOCK:
     case TEST_CASE_PROBE_SUSPEND:
@@ -304,6 +323,8 @@ static bool test_case_has_result_check(const UiState *ui)
     case TEST_CASE_OBSERVE_REJECTION:
     case TEST_CASE_GRANT_BEFORE_PROBE:
     case TEST_CASE_PROBE_PLAY_WRITE:
+    case TEST_CASE_PROBE_PLAY_TIMER_EFFECT:
+    case TEST_CASE_PROBE_PLAY_TIMER_EXPIRY:
     case TEST_CASE_PROBE_APPLY_TODAY_LIMIT:
     case TEST_CASE_PROBE_RAW_BLOCK:
     case TEST_CASE_PROBE_SUSPEND:
@@ -763,6 +784,16 @@ static void submit_test_noarg(UiState *ui, SubmitNoArgFn submit, const char *ok_
     }
 }
 
+static PtcCompanionStatus submit_effect_fast(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
+{
+    return ptc_companion_submit_probe_play_timer_effect(client, request_id, created_at, false);
+}
+
+static PtcCompanionStatus submit_effect_expiry(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
+{
+    return ptc_companion_submit_probe_play_timer_effect(client, request_id, created_at, true);
+}
+
 static void submit_test_offline_code(UiState *ui)
 {
     submit_offline_code(ui);
@@ -833,6 +864,12 @@ static void handle_test_mode_action(UiState *ui)
             "Probe play write",
             "Play write probe submitted.",
             PTC_SELF_CHECK_PLAY_WRITE_PROBE);
+        break;
+    case TEST_CASE_PROBE_PLAY_TIMER_EFFECT:
+        submit_test_noarg(ui, submit_effect_fast, "PCTL effect probe submitted.", PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE);
+        break;
+    case TEST_CASE_PROBE_PLAY_TIMER_EXPIRY:
+        submit_test_noarg(ui, submit_effect_expiry, "PCTL expiry probe submitted.", PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE);
         break;
     case TEST_CASE_PROBE_APPLY_TODAY_LIMIT:
         submit_test_danger_request(
@@ -954,7 +991,7 @@ static void draw_danger(const UiState *ui)
 
 static void draw_self_check(const UiState *ui)
 {
-    int count = (int)PTC_SELF_CHECK_ENFORCE_SNAPSHOT + 1;
+    int count = (int)PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE + 1;
     int i;
     printf("Self-check\n");
     printf("==========\n\n");
@@ -1110,9 +1147,9 @@ int main(int argc, char **argv)
             if (down & HidNpadButton_B) {
                 ui.view = UI_VIEW_PARENT;
             } else if (down & HidNpadButton_Up) {
-                ui.self_check_index = ui.self_check_index <= 0 ? (int)PTC_SELF_CHECK_ENFORCE_SNAPSHOT : ui.self_check_index - 1;
+                ui.self_check_index = ui.self_check_index <= 0 ? (int)PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE : ui.self_check_index - 1;
             } else if (down & HidNpadButton_Down) {
-                ui.self_check_index = ui.self_check_index >= (int)PTC_SELF_CHECK_ENFORCE_SNAPSHOT ? 0 : ui.self_check_index + 1;
+                ui.self_check_index = ui.self_check_index >= (int)PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE ? 0 : ui.self_check_index + 1;
             } else if (down & HidNpadButton_A) {
                 handle_self_check_action(&ui);
             } else if (down & HidNpadButton_X) {

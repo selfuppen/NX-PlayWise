@@ -25,6 +25,7 @@ REQUEST_TYPES_WITH_EMPTY_PAYLOAD = {
     "restore_today_policy",
     "parent_unlock_end",
     "probe_play_timer_write",
+    "probe_play_timer_effect",
     "probe_raw_block",
     "probe_suspend",
 }
@@ -136,6 +137,8 @@ def request_payload(request_type: str, data: dict[str, Any]) -> dict[str, Any]:
         return {"minutes": int(data["minutes"])}
     if request_type == "probe_apply_today_limit":
         return {"minutes": int(data.get("minutes") or 1), "start_timer": bool(data.get("start_timer", True))}
+    if request_type == "probe_play_timer_effect":
+        return {"wait_for_expiry": bool(data.get("wait_for_expiry", False))}
     if request_type == "set_weekly_template":
         return {"days": data["days"]}
     if request_type == "set_bedtime":
@@ -287,7 +290,7 @@ HTML = r"""<!doctype html>
       <option>status</option><option>offline_code</option><option>set_today_limit</option><option>add_today_minutes</option>
       <option>disable_today_limit</option><option>block_today</option><option>restore_today_policy</option>
       <option>set_bedtime</option><option>set_limit_action</option><option>parent_unlock_start</option><option>parent_unlock_end</option>
-      <option>probe_play_timer_write</option><option>probe_apply_today_limit</option><option>probe_raw_block</option><option>probe_suspend</option>
+      <option>probe_play_timer_write</option><option>probe_play_timer_effect</option><option>probe_apply_today_limit</option><option>probe_raw_block</option><option>probe_suspend</option>
     </select>
     <label>Payload JSON</label><textarea id="payload" rows="7">{}</textarea>
     <button onclick="submitRequest()">Submit request</button>
@@ -342,7 +345,7 @@ async function setFlag(enabled) { show(await api('/api/disable-flag', {root: roo
 function quick(type, payload) { document.getElementById('rtype').value = type; document.getElementById('payload').value = JSON.stringify(payload, null, 2); }
 function fillQuickPayload() {
   const type = document.getElementById('rtype').value;
-  const samples = {offline_code:{code:''}, set_today_limit:{minutes:45}, add_today_minutes:{minutes:15}, set_bedtime:{enabled:true,start_min:1260,end_min:480}, set_limit_action:{action:'remind'}, parent_unlock_start:{duration_minutes:15}, probe_apply_today_limit:{minutes:1,start_timer:true}};
+  const samples = {offline_code:{code:''}, set_today_limit:{minutes:45}, add_today_minutes:{minutes:15}, set_bedtime:{enabled:true,start_min:1260,end_min:480}, set_limit_action:{action:'remind'}, parent_unlock_start:{duration_minutes:15}, probe_play_timer_effect:{wait_for_expiry:false}, probe_apply_today_limit:{minutes:1,start_timer:true}};
   document.getElementById('payload').value = JSON.stringify(samples[type] || {}, null, 2);
 }
 async function probeApply() {

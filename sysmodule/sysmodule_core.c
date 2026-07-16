@@ -12,6 +12,7 @@
 #include "../common/token/token_v1.h"
 
 #define PTC_PLAY_TIMER_WRITE_BACKEND "pctl-s-v1"
+#define PTC_PLAY_TIMER_EFFECT_BACKEND "pctl-s-runtime-v1"
 
 typedef struct {
     char device_id[80];
@@ -413,6 +414,8 @@ static PtcCapabilities load_capabilities(PtcSysmodule *sysmodule)
     char text[1024];
     char backend[32];
     caps.play_timer_write_verified = false;
+    caps.play_timer_effect_verified = false;
+    caps.play_timer_effect_backend[0] = '\0';
     caps.raw_block_verified = false;
     caps.suspend_verified = false;
     join_path(path, sizeof(path), sysmodule->app_root, "capabilities.json");
@@ -421,6 +424,11 @@ static PtcCapabilities load_capabilities(PtcSysmodule *sysmodule)
         if (!json_string(text, "play_timer_write_backend", backend, sizeof(backend)) ||
             strcmp(backend, PTC_PLAY_TIMER_WRITE_BACKEND) != 0) {
             caps.play_timer_write_verified = false;
+        }
+        if (json_string(text, "play_timer_effect_backend", backend, sizeof(backend)) &&
+            strcmp(backend, PTC_PLAY_TIMER_EFFECT_BACKEND) == 0) {
+            (void)json_bool_value(text, "play_timer_effect_verified", &caps.play_timer_effect_verified);
+            snprintf(caps.play_timer_effect_backend, sizeof(caps.play_timer_effect_backend), "%s", backend);
         }
         (void)json_bool_value(text, "raw_block_verified", &caps.raw_block_verified);
         (void)json_bool_value(text, "suspend_verified", &caps.suspend_verified);
@@ -437,14 +445,18 @@ static bool save_capabilities(PtcSysmodule *sysmodule, const PtcCapabilities *ca
         text,
         sizeof(text),
         "{\"version\":1,\"play_timer_write_verified\":%s,"
-        "\"play_timer_write_backend\":\"%s\",\"raw_block_verified\":%s,"
+        "\"play_timer_write_backend\":\"%s\",\"play_timer_effect_verified\":%s,"
+        "\"play_timer_effect_backend\":\"%s\",\"raw_block_verified\":%s,"
         "\"suspend_verified\":%s,\"verified_at\":{\"play_timer_write\":%lld,"
-        "\"raw_block\":%lld,\"suspend\":%lld}}\n",
+        "\"play_timer_effect\":%lld,\"raw_block\":%lld,\"suspend\":%lld}}\n",
         caps->play_timer_write_verified ? "true" : "false",
         PTC_PLAY_TIMER_WRITE_BACKEND,
+        caps->play_timer_effect_verified ? "true" : "false",
+        PTC_PLAY_TIMER_EFFECT_BACKEND,
         caps->raw_block_verified ? "true" : "false",
         caps->suspend_verified ? "true" : "false",
         caps->play_timer_write_verified ? (long long)updated_at : 0LL,
+        caps->play_timer_effect_verified ? (long long)updated_at : 0LL,
         caps->raw_block_verified ? (long long)updated_at : 0LL,
         caps->suspend_verified ? (long long)updated_at : 0LL);
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
@@ -613,6 +625,7 @@ static void result_state_from_pctl(
     state->parent_unlock_active = eval.parent_unlock_active;
     state->restricted_now = (status->restricted_now || eval.restricted_now) ? 1 : 0;
     state->play_timer_write_verified = caps->play_timer_write_verified;
+    state->play_timer_effect_verified = caps->play_timer_effect_verified;
     state->raw_block_verified = caps->raw_block_verified;
     state->suspend_verified = caps->suspend_verified;
 }
@@ -622,6 +635,7 @@ static void result_state_default_with_caps(PtcResultState *state, uint16_t day_i
     ptc_result_state_default(state, day_index);
     if (caps) {
         state->play_timer_write_verified = caps->play_timer_write_verified;
+        state->play_timer_effect_verified = caps->play_timer_effect_verified;
         state->raw_block_verified = caps->raw_block_verified;
         state->suspend_verified = caps->suspend_verified;
     }
@@ -683,6 +697,10 @@ static PtcErrorCode apply_target(
     if (!caps || !caps->play_timer_write_verified) {
         append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_WRITE_NOT_VERIFIED, "play_timer_write");
         return PTC_ERR_PCTL_WRITE_NOT_VERIFIED;
+    }
+    if (!caps->play_timer_effect_verified) {
+        append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, "play_timer_effect");
+        return PTC_ERR_PCTL_EFFECT_NOT_VERIFIED;
     }
     err = backup_before_write(sysmodule, request, mode_name);
     if (err != PTC_ERR_OK) {
@@ -885,6 +903,8 @@ static PtcOperation request_operation(PtcRequestType type)
         return PTC_OPERATION_PROBE_PLAY_TIMER_WRITE;
     case PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT:
         return PTC_OPERATION_PROBE_APPLY_TODAY_LIMIT;
+    case PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT:
+        return PTC_OPERATION_PROBE_PLAY_TIMER_EFFECT;
     case PTC_REQUEST_OFFLINE_CODE:
         return PTC_OPERATION_GRANT_MINUTES;
     case PTC_REQUEST_STATUS:
@@ -1032,6 +1052,9 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (decision.error != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
     }
+    if (!decision.dry_run && !caps->play_timer_effect_verified) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, now.day_index, caps);
+    }
     if (decision.may_write_pctl) {
         err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode), PTC_PCTL_TARGET_LIMIT, token.minutes);
         if (err != PTC_ERR_OK) {
@@ -1052,6 +1075,300 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     }
     append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "");
     return false;
+}
+
+static bool effect_snapshot_equal(const PtcPctlSettingsSnapshot *a, const PtcPctlSettingsSnapshot *b)
+{
+    return a && b && a->size == b->size && a->size <= PTC_PCTL_OPAQUE_SETTINGS_SIZE &&
+        memcmp(a->data, b->data, a->size) == 0;
+}
+
+static void effect_wait(PtcSysmodule *sysmodule, uint32_t milliseconds)
+{
+    if (sysmodule->time_provider && sysmodule->time_provider->vtable && sysmodule->time_provider->vtable->sleep_ms) {
+        sysmodule->time_provider->vtable->sleep_ms(sysmodule->time_provider, milliseconds);
+    }
+}
+
+static void effect_status_json(char *out, size_t out_size, const PtcPctlStatus *status, PtcErrorCode error)
+{
+    status_json(out, out_size, status, error);
+}
+
+static bool write_effect_probe_result(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    const char *mode,
+    bool dry_run,
+    PtcErrorCode error,
+    const PtcCapabilities *caps,
+    PtcClockSnapshot now,
+    const char *verdict,
+    const char *failure_stage,
+    uint16_t target_minutes,
+    const PtcPctlStatus *before_status,
+    PtcErrorCode before_error,
+    const PtcPctlStatus *active_status,
+    PtcErrorCode active_error,
+    const PtcPctlStatus *restored_status,
+    PtcErrorCode restored_error,
+    bool raw_target_correct,
+    bool timer_enabled_seen,
+    bool remaining_seen,
+    bool expiry_observed,
+    bool raw_restored,
+    bool timer_restored)
+{
+    PtcResultState state;
+    char base[3072];
+    char json[8192];
+    char extra[5200];
+    char before_text[384];
+    char active_text[384];
+    char restored_text[384];
+    char *completed_at;
+    result_state_default_with_caps(&state, now.day_index, caps);
+    if (active_error == PTC_ERR_OK) {
+        state.limited_today = active_status->limited_today ? 1 : 0;
+        state.blocked_today = active_status->blocked_today ? 1 : 0;
+        state.unrestricted_today = active_status->unrestricted_today ? 1 : 0;
+        state.remaining_available = active_status->remaining_available;
+        state.remaining_minutes = active_status->remaining_available ? active_status->remaining_minutes : -1;
+        state.play_timer_enabled = active_status->play_timer_enabled ? 1 : 0;
+        state.restricted_now = active_status->restricted_now ? 1 : 0;
+    }
+    if (error == PTC_ERR_OK) {
+        (void)ptc_result_ok_json(base, sizeof(base), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
+    } else {
+        (void)ptc_result_error_json(base, sizeof(base), request->request_id, request->type_text, mode, dry_run, error, &state, now.unix_seconds);
+    }
+    effect_status_json(before_text, sizeof(before_text), before_status, before_error);
+    effect_status_json(active_text, sizeof(active_text), active_status, active_error);
+    effect_status_json(restored_text, sizeof(restored_text), restored_status, restored_error);
+    snprintf(
+        extra, sizeof(extra),
+        "{\"verdict\":\"%s\",\"failure_stage\":\"%s\",\"target_minutes\":%u,"
+        "\"before\":%s,\"active\":%s,\"restored\":%s,"
+        "\"checks\":{\"raw_target_correct\":%s,\"timer_enabled\":%s,"
+        "\"remaining_available\":%s,\"raw_restored\":%s,\"timer_restored\":%s},"
+        "\"ipc_result\":\"0x%08x\",\"expiry_observed\":%s}",
+        verdict ? verdict : "inconclusive",
+        failure_stage ? failure_stage : "none",
+        (unsigned int)target_minutes,
+        before_text,
+        active_text,
+        restored_text,
+        raw_target_correct ? "true" : "false",
+        timer_enabled_seen ? "true" : "false",
+        remaining_seen ? "true" : "false",
+        raw_restored ? "true" : "false",
+        timer_restored ? "true" : "false",
+        (unsigned int)last_pctl_ipc_result(sysmodule),
+        expiry_observed ? "true" : "false");
+    completed_at = strstr(base, ",\"completed_at\"");
+    if (!completed_at) {
+        return false;
+    }
+    snprintf(json, sizeof(json), "%.*s,\"pctl_effect_probe\":%s%s", (int)(completed_at - base), base, extra, completed_at);
+    return write_result(sysmodule, request->request_id, json);
+}
+
+static bool process_probe_play_timer_effect(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    const PtcRuntimeConfig *config,
+    bool disable_flag,
+    PtcCapabilities *caps,
+    PtcClockSnapshot now)
+{
+    PtcPolicyDecision decision = ptc_policy_decide(config->mode, disable_flag, PTC_OPERATION_PROBE_PLAY_TIMER_EFFECT, caps, false, config->allow_unlimited_to_limited);
+    PtcPctlSettingsSnapshot original;
+    PtcPctlSettingsSnapshot active_snapshot;
+    PtcPctlSettingsSnapshot restored_snapshot;
+    PtcPctlStatus before_status;
+    PtcPctlStatus active_status;
+    PtcPctlStatus restored_status;
+    PtcErrorCode before_error = PTC_ERR_PCTL_READ_FAILED;
+    PtcErrorCode active_error = PTC_ERR_PCTL_READ_FAILED;
+    PtcErrorCode restored_error = PTC_ERR_PCTL_READ_FAILED;
+    PtcErrorCode final_error = PTC_ERR_OK;
+    const char *failure_stage = "none";
+    const char *verdict = "pass";
+    uint16_t target_minutes = 5;
+    bool captured = false;
+    bool raw_target_correct = false;
+    bool timer_enabled_seen = false;
+    bool remaining_seen = false;
+    bool expiry_observed = false;
+    bool raw_restored = false;
+    bool timer_restored = false;
+    unsigned int i;
+    char disable_path[320];
+
+    memset(&original, 0, sizeof(original));
+    memset(&active_snapshot, 0, sizeof(active_snapshot));
+    memset(&restored_snapshot, 0, sizeof(restored_snapshot));
+    memset(&before_status, 0, sizeof(before_status));
+    memset(&active_status, 0, sizeof(active_status));
+    memset(&restored_status, 0, sizeof(restored_status));
+
+    if (decision.error != PTC_ERR_OK) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
+    }
+    if (decision.dry_run) {
+        return write_effect_probe_result(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_OK, caps, now,
+            "not_run", "observe", 0, &before_status, before_error, &active_status, active_error,
+            &restored_status, restored_error, false, false, false, false, false, false);
+    }
+
+    before_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &before_status);
+    append_event(sysmodule, request, "effect_before", before_error, "read_status");
+    if (before_error != PTC_ERR_OK) {
+        final_error = before_error;
+        failure_stage = "before_read";
+        verdict = "fail";
+        goto effect_done;
+    }
+    if (!sysmodule->pctl->vtable->snapshot_settings ||
+        sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &original) != PTC_ERR_OK) {
+        final_error = PTC_ERR_PCTL_BACKUP_FAILED;
+        failure_stage = "snapshot";
+        verdict = "fail";
+        goto effect_done;
+    }
+    captured = true;
+    final_error = backup_before_write(sysmodule, request, ptc_control_mode_name(config->mode));
+    if (final_error != PTC_ERR_OK) {
+        failure_stage = "backup";
+        verdict = "fail";
+        goto effect_done;
+    }
+    if (before_status.remaining_available && before_status.remaining_minutes == 5U) {
+        target_minutes = 10;
+    }
+    {
+        PtcPctlTarget target;
+        target.mode = PTC_PCTL_TARGET_LIMIT;
+        target.minutes = target_minutes;
+        target.weekday = ptc_weekday_from_day_index(now.day_index);
+        final_error = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &target);
+        append_event(sysmodule, request, final_error == PTC_ERR_OK ? "effect_verify" : "pctl_apply_failed", final_error, "apply_target");
+        if (final_error != PTC_ERR_OK) {
+            failure_stage = "write";
+            verdict = "fail";
+            goto effect_done;
+        }
+    }
+    final_error = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
+    append_event(sysmodule, request, final_error == PTC_ERR_OK ? "effect_verify" : "pctl_apply_failed", final_error, "start_timer");
+    if (final_error != PTC_ERR_OK) {
+        failure_stage = "start_timer";
+        verdict = "fail";
+        goto effect_done;
+    }
+    for (i = 0; i < 20U; ++i) {
+        active_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &active_status);
+        if (active_error == PTC_ERR_OK) {
+            timer_enabled_seen = active_status.play_timer_enabled;
+            remaining_seen = active_status.remaining_available &&
+                active_status.remaining_minutes <= target_minutes + 1U &&
+                active_status.remaining_minutes + 1U >= target_minutes;
+            if (remaining_seen && timer_enabled_seen) {
+                break;
+            }
+        }
+        effect_wait(sysmodule, 250);
+    }
+    if (active_error != PTC_ERR_OK || !remaining_seen || !timer_enabled_seen) {
+        final_error = active_error == PTC_ERR_OK ? PTC_ERR_PCTL_EFFECT_NOT_OBSERVED : active_error;
+        failure_stage = "runtime_status";
+        verdict = "fail";
+        goto effect_done;
+    }
+    if (sysmodule->pctl->vtable->snapshot_settings) {
+        (void)sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &active_snapshot);
+        raw_target_correct = !effect_snapshot_equal(&original, &active_snapshot);
+    }
+    if (!raw_target_correct) {
+        final_error = PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
+        failure_stage = "raw_target";
+        verdict = "fail";
+        goto effect_done;
+    }
+    if (request->wait_for_expiry) {
+        PtcPctlTarget expiry_target = { PTC_PCTL_TARGET_LIMIT, 1, ptc_weekday_from_day_index(now.day_index) };
+        final_error = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &expiry_target);
+        if (final_error == PTC_ERR_OK) {
+            final_error = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
+        }
+        for (i = 0; final_error == PTC_ERR_OK && i < 45U; ++i) {
+            active_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &active_status);
+            if (active_error != PTC_ERR_OK) {
+                final_error = active_error;
+                break;
+            }
+            if (active_status.restricted_now || (active_status.remaining_available && active_status.remaining_minutes == 0U)) {
+                expiry_observed = true;
+                break;
+            }
+            effect_wait(sysmodule, 2000);
+        }
+        if (!expiry_observed) {
+            final_error = final_error == PTC_ERR_OK ? PTC_ERR_PCTL_EFFECT_NOT_OBSERVED : final_error;
+            failure_stage = "expiry";
+            verdict = "inconclusive";
+        }
+    }
+effect_done:
+    if (captured && sysmodule->pctl->vtable->restore_settings) {
+        restored_error = sysmodule->pctl->vtable->restore_settings(sysmodule->pctl, &original);
+        if (restored_error == PTC_ERR_OK) {
+            PtcErrorCode timer_error = original.timer_enabled
+                ? sysmodule->pctl->vtable->start_timer(sysmodule->pctl)
+                : sysmodule->pctl->vtable->stop_timer(sysmodule->pctl);
+            if (timer_error != PTC_ERR_OK) {
+                restored_error = timer_error;
+            }
+        }
+        if (restored_error == PTC_ERR_OK && sysmodule->pctl->vtable->snapshot_settings) {
+            restored_error = sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &restored_snapshot);
+            raw_restored = effect_snapshot_equal(&original, &restored_snapshot);
+            timer_restored = restored_snapshot.timer_enabled == original.timer_enabled;
+        }
+        if (restored_error == PTC_ERR_OK) {
+            restored_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &restored_status);
+        }
+        append_event(sysmodule, request, restored_error == PTC_ERR_OK && raw_restored && timer_restored ? "effect_restore" : "effect_restore_failed", restored_error, "restore");
+        if (restored_error != PTC_ERR_OK || !raw_restored || !timer_restored) {
+            final_error = PTC_ERR_PCTL_RESTORE_FAILED;
+            failure_stage = "restore";
+            verdict = "fail";
+            caps->play_timer_write_verified = false;
+            caps->play_timer_effect_verified = false;
+            join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
+            (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, disable_path, "restore_failed\n");
+        }
+    }
+    if (final_error == PTC_ERR_OK && strcmp(verdict, "pass") == 0) {
+        caps->play_timer_write_verified = true;
+        caps->play_timer_effect_verified = true;
+        snprintf(caps->play_timer_effect_backend, sizeof(caps->play_timer_effect_backend), "%s", PTC_PLAY_TIMER_EFFECT_BACKEND);
+        if (!save_capabilities(sysmodule, caps, now.unix_seconds)) {
+            final_error = PTC_ERR_STORAGE_WRITE_FAILED;
+            failure_stage = "capability_persist";
+            verdict = "fail";
+        }
+    }
+    if (final_error == PTC_ERR_OK && strcmp(verdict, "pass") != 0) {
+        if (strcmp(verdict, "inconclusive") == 0) {
+            final_error = PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
+        }
+    }
+    append_event(sysmodule, request, final_error == PTC_ERR_OK ? "probe_ok" : "probe_failed", final_error, failure_stage);
+    return write_effect_probe_result(sysmodule, request, ptc_control_mode_name(config->mode), false, final_error, caps, now,
+        verdict, failure_stage, target_minutes, &before_status, before_error, &active_status, active_error,
+        &restored_status, restored_error, raw_target_correct, timer_enabled_seen, remaining_seen,
+        expiry_observed, raw_restored, timer_restored);
 }
 
 static bool process_probe(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, PtcCapabilities *caps, PtcClockSnapshot now)
@@ -1336,6 +1653,16 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
         append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_WRITE_NOT_VERIFIED, "play_timer_write");
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_WRITE_NOT_VERIFIED, now.day_index, caps);
     }
+    if (!decision.dry_run &&
+        (request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
+            request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
+            request->type == PTC_REQUEST_DISABLE_TODAY_LIMIT ||
+            request->type == PTC_REQUEST_BLOCK_TODAY ||
+            request->type == PTC_REQUEST_RESTORE_TODAY_POLICY) &&
+        !caps->play_timer_effect_verified) {
+        append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, "play_timer_effect");
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, now.day_index, caps);
+    }
     if (!decision.dry_run) {
         err = update_rules_for_request(sysmodule, request, &rules, &runtime_state, now);
         if (err != PTC_ERR_OK) {
@@ -1400,6 +1727,9 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
         break;
     case PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT:
         (void)process_probe_apply_today_limit(sysmodule, &request, &config, disable_flag, &caps, now);
+        break;
+    case PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT:
+        (void)process_probe_play_timer_effect(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
     case PTC_REQUEST_SET_TODAY_LIMIT:
     case PTC_REQUEST_ADD_TODAY_MINUTES:

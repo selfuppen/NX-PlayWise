@@ -16,6 +16,10 @@ typedef struct {
     PtcErrorCode read_error;
     PtcErrorCode backup_error;
     PtcErrorCode write_error;
+    PtcErrorCode restore_error;
+    bool runtime_effect_succeeds;
+    bool expiry_observed;
+    bool restore_called;
 } PtcPctlStub;
 
 void ptc_pctl_stub_init(PtcPctlStub *stub);

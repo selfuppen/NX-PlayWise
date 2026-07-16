@@ -35,4 +35,4 @@
 - 任何 PCTL 写入前必须备份。
 - 只有成功写入并持久化结果后才消费 nonce。
 - `common` 逻辑必须可在 host 环境测试。
-- raw block 和 suspend 必须由真机 probe 验证后才能放行。
+- play timer 业务写入必须同时通过 raw write 与 runtime effect 探针；raw block 和 suspend 必须由各自真机 probe 验证后才能放行。

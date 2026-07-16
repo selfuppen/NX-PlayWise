@@ -52,6 +52,10 @@ static PtcErrorCode stub_read_status(PtcPctl *pctl, PtcPctlStatus *out)
         return stub->read_error;
     }
     *out = stub->status;
+    if (stub->expiry_observed && stub->timer_started && stub->last_target.minutes == 1U) {
+        out->remaining_minutes = 0;
+        out->restricted_now = true;
+    }
     return PTC_ERR_OK;
 }
 
@@ -82,6 +86,9 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
     }
     stub->last_target = *target;
     stub->applied = true;
+    if (!stub->runtime_effect_succeeds) {
+        return PTC_ERR_OK;
+    }
     stub->status.limited_today = target->mode == PTC_PCTL_TARGET_LIMIT;
     stub->status.blocked_today = target->mode == PTC_PCTL_TARGET_BLOCKED;
     stub->status.unrestricted_today = target->mode == PTC_PCTL_TARGET_UNLIMITED;
@@ -130,6 +137,50 @@ static PtcErrorCode stub_probe_play_timer_write(PtcPctl *pctl, PtcProbeResult *o
     return out->verified ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
 }
 
+static void stub_encode_snapshot(const PtcPctlStub *stub, PtcPctlSettingsSnapshot *out)
+{
+    uint16_t *words = (uint16_t *)out->data;
+    unsigned int day;
+    uint16_t minutes = stub_minutes_for_status(&stub->status);
+    memset(out, 0, sizeof(*out));
+    for (day = 0; day < 7U; ++day) {
+        unsigned int base = day * 4U;
+        words[base] = stub->status.unrestricted_today ? 0U : 1U;
+        words[base + 1U] = stub->status.limited_today || stub->status.blocked_today ? 1U : 0U;
+        words[base + 2U] = minutes;
+        words[base + 3U] = 0U;
+    }
+    out->size = PTC_PCTL_OPAQUE_SETTINGS_SIZE;
+    out->timer_enabled = stub->status.play_timer_enabled;
+}
+
+static PtcErrorCode stub_snapshot_settings(PtcPctl *pctl, PtcPctlSettingsSnapshot *out)
+{
+    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    if (stub->read_error != PTC_ERR_OK) {
+        return stub->read_error;
+    }
+    stub_encode_snapshot(stub, out);
+    return PTC_ERR_OK;
+}
+
+static PtcErrorCode stub_restore_settings(PtcPctl *pctl, const PtcPctlSettingsSnapshot *snapshot)
+{
+    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    const uint16_t *words = (const uint16_t *)snapshot->data;
+    if (stub->restore_error != PTC_ERR_OK) {
+        return stub->restore_error;
+    }
+    stub->restore_called = true;
+    stub->status.unrestricted_today = words[1] == 0 && words[0] == 0;
+    stub->status.limited_today = words[1] != 0 && words[0] != 0;
+    stub->status.blocked_today = false;
+    stub->status.remaining_available = !stub->status.unrestricted_today;
+    stub->status.remaining_minutes = words[2];
+    stub->status.restricted_now = false;
+    return PTC_ERR_OK;
+}
+
 static PtcErrorCode stub_debug_snapshot(PtcPctl *pctl, PtcPctlDebugSnapshot *out)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
@@ -171,6 +222,8 @@ static const PtcPctlVTable PCTL_STUB_VTABLE = {
     stub_probe_raw_block,
     stub_probe_suspend,
     stub_probe_play_timer_write,
+    stub_snapshot_settings,
+    stub_restore_settings,
     stub_debug_snapshot,
     stub_last_ipc_result,
 };
@@ -184,6 +237,8 @@ void ptc_pctl_stub_init(PtcPctlStub *stub)
     stub->read_error = PTC_ERR_OK;
     stub->backup_error = PTC_ERR_OK;
     stub->write_error = PTC_ERR_OK;
+    stub->restore_error = PTC_ERR_OK;
+    stub->runtime_effect_succeeds = true;
 }
 
 PtcPctl *ptc_pctl_stub_as_pctl(PtcPctlStub *stub)

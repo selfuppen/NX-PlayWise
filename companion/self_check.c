@@ -329,6 +329,25 @@ static void check_capabilities_play_write(CheckContext *ctx)
     cJSON_Delete(root);
 }
 
+static void check_capabilities_play_effect(CheckContext *ctx)
+{
+    char text[2048];
+    cJSON *root;
+    if (!read_app_text(ctx, "capabilities.json", text, sizeof(text))) {
+        add_line(ctx, PTC_SELF_CHECK_FAIL, "capabilities.json readable");
+        return;
+    }
+    root = cJSON_Parse(text);
+    if (!root) {
+        add_line(ctx, PTC_SELF_CHECK_FAIL, "capabilities.json parses");
+        return;
+    }
+    add_line(ctx, json_bool_as_int(root, "play_timer_write_verified") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "play write capability persisted");
+    add_line(ctx, json_bool_as_int(root, "play_timer_effect_verified") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "play effect capability persisted");
+    expect_result_string(ctx, json_string_or(root, "play_timer_effect_backend", ""), "pctl-s-runtime-v1", "play effect backend persisted");
+    cJSON_Delete(root);
+}
+
 static void check_backup(CheckContext *ctx, bool require_hex)
 {
     char text[SELF_CHECK_TEXT_SIZE];
@@ -402,6 +421,28 @@ static void check_request_profile(CheckContext *ctx, PtcSelfCheckProfile profile
         check_backup(ctx, true);
         expect_event(ctx, events, ctx->request_id, "pctl_backup");
         expect_event(ctx, events, ctx->request_id, "probe_ok");
+        forbid_event(ctx, events, ctx->request_id, "nonce_consumed");
+        break;
+    case PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE:
+        expect_result_string(ctx, info.status, "ok", "result status is ok");
+        expect_result_string(ctx, info.type, "probe_play_timer_effect", "result type is effect probe");
+        expect_write_mode(ctx, info.mode);
+        expect_result_bool(ctx, info.dry_run, 0, "result dry_run is false");
+        check_capabilities_play_effect(ctx);
+        check_backup(ctx, true);
+        expect_event(ctx, events, ctx->request_id, "pctl_backup");
+        expect_event(ctx, events, ctx->request_id, "effect_before");
+        expect_event(ctx, events, ctx->request_id, "effect_restore");
+        {
+            cJSON *probe = cJSON_GetObjectItemCaseSensitive(info.root, "pctl_effect_probe");
+            add_line(ctx, cJSON_IsObject(probe) ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "effect probe evidence present");
+            expect_result_string(ctx, json_string_or(probe, "verdict", ""), "pass", "effect probe verdict is pass");
+            {
+                cJSON *checks = cJSON_GetObjectItemCaseSensitive(probe, "checks");
+                add_line(ctx, json_bool_as_int(checks, "raw_restored") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "effect raw restored");
+                add_line(ctx, json_bool_as_int(checks, "timer_restored") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "effect timer restored");
+            }
+        }
         forbid_event(ctx, events, ctx->request_id, "nonce_consumed");
         break;
     case PTC_SELF_CHECK_GRANT_SUCCESS:
@@ -483,6 +524,8 @@ const char *ptc_self_check_profile_name(PtcSelfCheckProfile profile)
         return "grant_rejection";
     case PTC_SELF_CHECK_ENFORCE_SNAPSHOT:
         return "enforce_snapshot";
+    case PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE:
+        return "play_timer_effect_probe";
     default:
         return "unknown";
     }

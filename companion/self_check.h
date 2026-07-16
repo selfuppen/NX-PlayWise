@@ -17,6 +17,7 @@ typedef enum {
     PTC_SELF_CHECK_GRANT_SUCCESS = 6,
     PTC_SELF_CHECK_GRANT_REJECTION = 7,
     PTC_SELF_CHECK_ENFORCE_SNAPSHOT = 8,
+    PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE = 9,
 } PtcSelfCheckProfile;
 
 typedef enum {

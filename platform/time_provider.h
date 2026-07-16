@@ -13,6 +13,7 @@ typedef struct PtcTimeProvider PtcTimeProvider;
 
 typedef struct {
     PtcClockSnapshot (*now)(PtcTimeProvider *time_provider);
+    void (*sleep_ms)(PtcTimeProvider *time_provider, uint32_t milliseconds);
 } PtcTimeProviderVTable;
 
 struct PtcTimeProvider {

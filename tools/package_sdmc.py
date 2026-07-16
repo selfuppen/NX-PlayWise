@@ -122,9 +122,11 @@ def create_package(
             "version": 1,
             "play_timer_write_verified": False,
             "play_timer_write_backend": "pctl-s-v1",
+            "play_timer_effect_verified": False,
+            "play_timer_effect_backend": "pctl-s-runtime-v1",
             "raw_block_verified": False,
             "suspend_verified": False,
-            "verified_at": {"play_timer_write": 0, "raw_block": 0, "suspend": 0},
+            "verified_at": {"play_timer_write": 0, "play_timer_effect": 0, "raw_block": 0, "suspend": 0},
         },
     )
 

@@ -20,6 +20,7 @@ typedef struct {
     PtcLimitAction limit_action;
     uint16_t duration_minutes;
     bool start_timer;
+    bool wait_for_expiry;
 } PtcRequest;
 
 PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out);

@@ -379,6 +379,47 @@ static PtcErrorCode switch_probe_play_timer_write(PtcPctl *pctl, PtcProbeResult 
     return PTC_ERR_OK;
 }
 
+static PtcErrorCode switch_snapshot_settings(PtcPctl *pctl, PtcPctlSettingsSnapshot *out)
+{
+    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    PtcSwitchSession session;
+    PtcSwitchPlayTimerSettings settings;
+    bool timer_enabled = false;
+    PtcErrorCode err = open_write_session(adapter, &session);
+    if (err != PTC_ERR_OK) {
+        return err;
+    }
+    err = get_play_timer_settings(adapter, &session.service, &settings);
+    if (err == PTC_ERR_OK) {
+        (void)dispatch_out(&session.service, PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED, &timer_enabled, sizeof(timer_enabled));
+        memset(out, 0, sizeof(*out));
+        memcpy(out->data, settings.words, sizeof(settings.words));
+        out->size = sizeof(settings.words);
+        out->timer_enabled = timer_enabled;
+    }
+    close_session(&session);
+    return err;
+}
+
+static PtcErrorCode switch_restore_settings(PtcPctl *pctl, const PtcPctlSettingsSnapshot *snapshot)
+{
+    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    PtcSwitchSession session;
+    PtcSwitchPlayTimerSettings settings;
+    PtcErrorCode err;
+    if (!snapshot || snapshot->size != sizeof(settings.words)) {
+        return PTC_ERR_PCTL_WRITE_FAILED;
+    }
+    memcpy(settings.words, snapshot->data, sizeof(settings.words));
+    err = open_write_session(adapter, &session);
+    if (err != PTC_ERR_OK) {
+        return err;
+    }
+    err = set_play_timer_settings(adapter, &session.service, &settings);
+    close_session(&session);
+    return err;
+}
+
 static PtcErrorCode switch_debug_snapshot(PtcPctl *pctl, PtcPctlDebugSnapshot *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
@@ -422,6 +463,8 @@ static const PtcPctlVTable SWITCH_PCTL_VTABLE = {
     switch_probe_raw_block,
     switch_probe_suspend,
     switch_probe_play_timer_write,
+    switch_snapshot_settings,
+    switch_restore_settings,
     switch_debug_snapshot,
     switch_last_ipc_result,
 };
