@@ -76,6 +76,7 @@ def test_replace_output() -> None:
         package_remote.replace_output(staging, output)
         require((output / "new.txt").is_file(), "new output must replace old output")
         require(not (output / "old.txt").exists(), "old output must be removed after success")
+        require(not staging.exists(), "successful replacement must consume staging")
 
 
 def test_download_failure_preserves_output() -> None:

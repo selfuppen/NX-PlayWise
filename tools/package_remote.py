@@ -165,28 +165,54 @@ def extract_package(path: Path) -> Path:
     return destination
 
 
+def remove_path(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path)
+    elif path.exists():
+        path.unlink()
+
+
+def clear_directory(path: Path) -> None:
+    for child in path.iterdir():
+        remove_path(child)
+
+
+def move_directory_contents(source: Path, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    for child in source.iterdir():
+        child.rename(destination / child.name)
+
+
+def copy_directory_contents(source: Path, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    for child in source.iterdir():
+        target = destination / child.name
+        if child.is_dir():
+            shutil.copytree(child, target)
+        else:
+            shutil.copy2(child, target)
+
+
 def replace_output(staging: Path, output: Path) -> None:
     output = output.resolve()
-    parent = output.parent
-    previous = parent / f".{output.name}.previous"
-    if previous.exists():
-        if previous.is_dir():
-            shutil.rmtree(previous)
-        else:
-            previous.unlink()
-    if output.exists():
-        output.rename(previous)
+    if output == output.parent or output == Path.home().resolve():
+        raise PackageError(f"refusing broad output directory: {output}")
+    backup = Path(tempfile.mkdtemp(prefix=f".{output.name}.backup-", dir=output.parent))
     try:
-        staging.rename(output)
-    except Exception:
-        if previous.exists() and not output.exists():
-            previous.rename(output)
-        raise
-    if previous.exists():
-        if previous.is_dir():
-            shutil.rmtree(previous)
+        if output.exists():
+            copy_directory_contents(output, backup)
+            clear_directory(output)
         else:
-            previous.unlink()
+            output.mkdir(parents=True)
+        move_directory_contents(staging, output)
+        staging.rmdir()
+    except Exception:
+        if output.exists():
+            clear_directory(output)
+        copy_directory_contents(backup, output)
+        raise
+    finally:
+        remove_path(backup)
 
 
 def download_packages(output: Path) -> None:
