@@ -3,8 +3,8 @@ version: '3.8'
 services:
   dev-ssh-v1.1:
   # image: hub.polarise.cn/ygq/ygq-dev-ssh:v1
-    image: devkitpro:v1.2
-    container_name: devkitpro-ssh-v1.2
+    image: devkitpro:v1
+    container_name: devkitpro-ssh-v1
     # ports:
       # - "59300:58788"
       # - "59301-59310:59301-59310"
