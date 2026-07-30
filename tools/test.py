@@ -75,7 +75,7 @@ def verify_protocol_smoke() -> None:
         config = read_json(app_root(sdmc_root) / "config.json")
         require(config["control_mode"] == "observe", "protocol init must default to observe")
         capabilities = read_json(app_root(sdmc_root) / "capabilities.json")
-        require(capabilities["play_timer_write_backend"] == "pctl-s-v1", "protocol init must use the current PCTL backend")
+        require(capabilities["play_timer_write_backend"] == "pctl-s-v2", "protocol init must use the current PCTL backend")
 
         code = run(
             [

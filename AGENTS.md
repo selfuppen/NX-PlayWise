@@ -9,6 +9,8 @@
 - `tests/`：主机侧测试脚本与 fixtures。`tests/mvp/` 覆盖离线加时令牌，`tests/observe/` 覆盖 observe 请求流。
 - `docs/`：架构、协议、测试与真实设备验证文档。开始开发前先读根目录 `README.md`。
 
+本机已拉取上游 libnx 源码到 `D:\workspace\codes\nintendo-switch\libnx`。涉及 PCTL service/session、公开命令签名或 libnx dispatch 行为时优先查阅该目录。当前上游 `nx/include/switch/services/pctl.h` 与 `nx/source/services/pctl.c` 不包含 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装，因此不得用 libnx 缺失的定义推断这些私有命令的参数单位或 0x44 raw layout；相关布局必须以真机 A/B 证据和仓库协议文档为准。
+
 ## 构建、测试与开发命令
 
 Windows 本地使用单一 Python 入口；C host、Companion NRO 和 package 的权威验证通过单一远程入口执行。

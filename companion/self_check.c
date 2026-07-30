@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "../common/protocol/result_builder.h"
+#include "../common/protocol/capability_backend.h"
 #include "../third_party/cjson/cJSON.h"
 
 #define SELF_CHECK_TEXT_SIZE 8192
@@ -325,7 +326,7 @@ static void check_capabilities_play_write(CheckContext *ctx)
         return;
     }
     add_line(ctx, json_bool_as_int(root, "play_timer_write_verified") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "play write capability persisted");
-    expect_result_string(ctx, json_string_or(root, "play_timer_write_backend", ""), "pctl-s-v1", "play write backend persisted");
+    expect_result_string(ctx, json_string_or(root, "play_timer_write_backend", ""), PTC_PLAY_TIMER_WRITE_BACKEND, "play write backend persisted");
     cJSON_Delete(root);
 }
 
@@ -344,7 +345,7 @@ static void check_capabilities_play_effect(CheckContext *ctx)
     }
     add_line(ctx, json_bool_as_int(root, "play_timer_write_verified") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "play write capability persisted");
     add_line(ctx, json_bool_as_int(root, "play_timer_effect_verified") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "play effect capability persisted");
-    expect_result_string(ctx, json_string_or(root, "play_timer_effect_backend", ""), "pctl-s-runtime-v1", "play effect backend persisted");
+    expect_result_string(ctx, json_string_or(root, "play_timer_effect_backend", ""), PTC_PLAY_TIMER_EFFECT_BACKEND, "play effect backend persisted");
     cJSON_Delete(root);
 }
 

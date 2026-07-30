@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "capability_backend.h"
+
 static const char *skip_ws(const char *p)
 {
     while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
@@ -91,23 +93,24 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         out + used,
         out_size > used ? out_size - used : 0,
         "\"state\":{\"day_index\":%u,\"limited_today\":%d,\"blocked_today\":%d,"
-        "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%d,"
+        "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%lld,"
         "\"play_timer_enabled\":%d,\"restricted_now\":%d,\"bedtime_active\":%s,"
         "\"parent_unlock_active\":%s},\"capabilities\":{\"play_timer_write_verified\":%s,"
-        "\"play_timer_effect_verified\":%s,\"play_timer_effect_backend\":\"pctl-s-runtime-v1\","
+        "\"play_timer_effect_verified\":%s,\"play_timer_effect_backend\":\"%s\","
         "\"raw_block_verified\":%s,\"suspend_verified\":%s}",
         state->day_index,
         state->limited_today,
         state->blocked_today,
         state->unrestricted_today,
         json_bool(state->remaining_available),
-        state->remaining_minutes,
+        (long long)state->remaining_minutes,
         state->play_timer_enabled,
         state->restricted_now,
         json_bool(state->bedtime_active),
         json_bool(state->parent_unlock_active),
         json_bool(state->play_timer_write_verified),
         json_bool(state->play_timer_effect_verified),
+        PTC_PLAY_TIMER_EFFECT_BACKEND,
         json_bool(state->raw_block_verified),
         json_bool(state->suspend_verified));
 }

@@ -20,7 +20,8 @@ THIRD_PARTY_SRCS := \
 PLATFORM_HOST_SRCS := \
 	platform/host/mem_storage.c \
 	platform/host/pctl_stub.c \
-	platform/host/fake_time.c
+	platform/host/fake_time.c \
+	platform/switch/play_timer_settings_layout.c
 
 ORCH_SRCS := \
 	sysmodule/sysmodule_core.c \

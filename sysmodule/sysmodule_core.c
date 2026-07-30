@@ -5,14 +5,12 @@
 #include <string.h>
 
 #include "../common/policy/control_policy.h"
+#include "../common/protocol/capability_backend.h"
 #include "../common/protocol/request_schema.h"
 #include "../common/protocol/result_builder.h"
 #include "../common/rules/rules.h"
 #include "../common/time/ptc_time.h"
 #include "../common/token/token_v1.h"
-
-#define PTC_PLAY_TIMER_WRITE_BACKEND "pctl-s-v1"
-#define PTC_PLAY_TIMER_EFFECT_BACKEND "pctl-s-runtime-v1"
 
 typedef struct {
     char device_id[80];
@@ -726,7 +724,7 @@ static void status_json(char *out, size_t out_size, const PtcPctlStatus *status,
         out,
         out_size,
         "{\"available\":%s,\"error\":\"%s\",\"limited_today\":%d,\"blocked_today\":%d,"
-        "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%d,"
+        "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%lld,"
         "\"play_timer_enabled\":%d,\"restricted_now\":%d}",
         error == PTC_ERR_OK ? "true" : "false",
         ptc_error_reason(error),
@@ -734,7 +732,7 @@ static void status_json(char *out, size_t out_size, const PtcPctlStatus *status,
         error == PTC_ERR_OK && status->blocked_today ? 1 : 0,
         error == PTC_ERR_OK && status->unrestricted_today ? 1 : 0,
         error == PTC_ERR_OK && status->remaining_available ? "true" : "false",
-        error == PTC_ERR_OK && status->remaining_available ? (int)status->remaining_minutes : -1,
+        error == PTC_ERR_OK && status->remaining_available ? (long long)status->remaining_minutes : -1LL,
         error == PTC_ERR_OK && status->play_timer_enabled ? 1 : 0,
         error == PTC_ERR_OK && status->restricted_now ? 1 : 0);
 }
@@ -1083,6 +1081,26 @@ static bool effect_snapshot_equal(const PtcPctlSettingsSnapshot *a, const PtcPct
         memcmp(a->data, b->data, a->size) == 0;
 }
 
+static void effect_snapshot_hex(char *out, size_t out_size, const PtcPctlSettingsSnapshot *snapshot)
+{
+    size_t used = 0;
+    size_t i;
+    if (!out || out_size == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (!snapshot || snapshot->size > PTC_PCTL_OPAQUE_SETTINGS_SIZE) {
+        return;
+    }
+    for (i = 0; i < snapshot->size && used + 3 < out_size; ++i) {
+        int written = snprintf(out + used, out_size - used, "%02x", (unsigned int)snapshot->data[i]);
+        if (written < 0 || (size_t)written >= out_size - used) {
+            break;
+        }
+        used += (size_t)written;
+    }
+}
+
 static void effect_wait(PtcSysmodule *sysmodule, uint32_t milliseconds)
 {
     if (sysmodule->time_provider && sysmodule->time_provider->vtable && sysmodule->time_provider->vtable->sleep_ms) {
@@ -1117,7 +1135,10 @@ static bool write_effect_probe_result(
     bool remaining_seen,
     bool expiry_observed,
     bool raw_restored,
-    bool timer_restored)
+    bool timer_restored,
+    const char *before_opaque_hex,
+    const char *active_opaque_hex,
+    const char *restored_opaque_hex)
 {
     PtcResultState state;
     char base[3072];
@@ -1149,6 +1170,7 @@ static bool write_effect_probe_result(
         extra, sizeof(extra),
         "{\"verdict\":\"%s\",\"failure_stage\":\"%s\",\"target_minutes\":%u,"
         "\"before\":%s,\"active\":%s,\"restored\":%s,"
+        "\"opaque_snapshots\":{\"before_hex\":\"%s\",\"active_hex\":\"%s\",\"restored_hex\":\"%s\"},"
         "\"checks\":{\"raw_target_correct\":%s,\"timer_enabled\":%s,"
         "\"remaining_available\":%s,\"raw_restored\":%s,\"timer_restored\":%s},"
         "\"ipc_result\":\"0x%08x\",\"expiry_observed\":%s}",
@@ -1158,6 +1180,9 @@ static bool write_effect_probe_result(
         before_text,
         active_text,
         restored_text,
+        before_opaque_hex ? before_opaque_hex : "",
+        active_opaque_hex ? active_opaque_hex : "",
+        restored_opaque_hex ? restored_opaque_hex : "",
         raw_target_correct ? "true" : "false",
         timer_enabled_seen ? "true" : "false",
         remaining_seen ? "true" : "false",
@@ -1204,6 +1229,9 @@ static bool process_probe_play_timer_effect(
     bool timer_restored = false;
     unsigned int i;
     char disable_path[320];
+    char before_opaque_hex[(PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U) + 1U];
+    char active_opaque_hex[(PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U) + 1U];
+    char restored_opaque_hex[(PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U) + 1U];
 
     memset(&original, 0, sizeof(original));
     memset(&active_snapshot, 0, sizeof(active_snapshot));
@@ -1211,6 +1239,9 @@ static bool process_probe_play_timer_effect(
     memset(&before_status, 0, sizeof(before_status));
     memset(&active_status, 0, sizeof(active_status));
     memset(&restored_status, 0, sizeof(restored_status));
+    before_opaque_hex[0] = '\0';
+    active_opaque_hex[0] = '\0';
+    restored_opaque_hex[0] = '\0';
 
     if (decision.error != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
@@ -1218,7 +1249,7 @@ static bool process_probe_play_timer_effect(
     if (decision.dry_run) {
         return write_effect_probe_result(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_OK, caps, now,
             "not_run", "observe", 0, &before_status, before_error, &active_status, active_error,
-            &restored_status, restored_error, false, false, false, false, false, false);
+            &restored_status, restored_error, false, false, false, false, false, false, "", "", "");
     }
 
     before_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &before_status);
@@ -1237,6 +1268,7 @@ static bool process_probe_play_timer_effect(
         goto effect_done;
     }
     captured = true;
+    effect_snapshot_hex(before_opaque_hex, sizeof(before_opaque_hex), &original);
     final_error = backup_before_write(sysmodule, request, ptc_control_mode_name(config->mode));
     if (final_error != PTC_ERR_OK) {
         failure_stage = "backup";
@@ -1266,6 +1298,21 @@ static bool process_probe_play_timer_effect(
         verdict = "fail";
         goto effect_done;
     }
+    if (!sysmodule->pctl->vtable->snapshot_settings ||
+        sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &active_snapshot) != PTC_ERR_OK) {
+        final_error = PTC_ERR_PCTL_READ_FAILED;
+        failure_stage = "raw_target";
+        verdict = "fail";
+        goto effect_done;
+    }
+    effect_snapshot_hex(active_opaque_hex, sizeof(active_opaque_hex), &active_snapshot);
+    raw_target_correct = !effect_snapshot_equal(&original, &active_snapshot);
+    if (!raw_target_correct) {
+        final_error = PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
+        failure_stage = "raw_target";
+        verdict = "fail";
+        goto effect_done;
+    }
     for (i = 0; i < 20U; ++i) {
         active_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &active_status);
         if (active_error == PTC_ERR_OK) {
@@ -1282,16 +1329,6 @@ static bool process_probe_play_timer_effect(
     if (active_error != PTC_ERR_OK || !remaining_seen || !timer_enabled_seen) {
         final_error = active_error == PTC_ERR_OK ? PTC_ERR_PCTL_EFFECT_NOT_OBSERVED : active_error;
         failure_stage = "runtime_status";
-        verdict = "fail";
-        goto effect_done;
-    }
-    if (sysmodule->pctl->vtable->snapshot_settings) {
-        (void)sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &active_snapshot);
-        raw_target_correct = !effect_snapshot_equal(&original, &active_snapshot);
-    }
-    if (!raw_target_correct) {
-        final_error = PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
-        failure_stage = "raw_target";
         verdict = "fail";
         goto effect_done;
     }
@@ -1334,6 +1371,7 @@ effect_done:
             restored_error = sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &restored_snapshot);
             raw_restored = effect_snapshot_equal(&original, &restored_snapshot);
             timer_restored = restored_snapshot.timer_enabled == original.timer_enabled;
+            effect_snapshot_hex(restored_opaque_hex, sizeof(restored_opaque_hex), &restored_snapshot);
         }
         if (restored_error == PTC_ERR_OK) {
             restored_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &restored_status);
@@ -1368,7 +1406,7 @@ effect_done:
     return write_effect_probe_result(sysmodule, request, ptc_control_mode_name(config->mode), false, final_error, caps, now,
         verdict, failure_stage, target_minutes, &before_status, before_error, &active_status, active_error,
         &restored_status, restored_error, raw_target_correct, timer_enabled_seen, remaining_seen,
-        expiry_observed, raw_restored, timer_restored);
+        expiry_observed, raw_restored, timer_restored, before_opaque_hex, active_opaque_hex, restored_opaque_hex);
 }
 
 static bool process_probe(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, PtcCapabilities *caps, PtcClockSnapshot now)

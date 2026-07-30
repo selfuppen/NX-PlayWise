@@ -13,7 +13,7 @@ typedef struct {
     int blocked_today;
     int unrestricted_today;
     bool remaining_available;
-    int remaining_minutes;
+    int64_t remaining_minutes;
     int play_timer_enabled;
     int restricted_now;
     bool bedtime_active;

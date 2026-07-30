@@ -21,6 +21,7 @@
 #include "../../platform/host/fake_time.h"
 #include "../../platform/host/mem_storage.h"
 #include "../../platform/host/pctl_stub.h"
+#include "../../platform/switch/play_timer_settings_layout.h"
 #include "../../sysmodule/sysmodule_core.h"
 
 static int failures = 0;
@@ -375,7 +376,7 @@ static void test_companion_self_check_play_write_probe(void)
     write_self_check_event(&mem, "sc-probe", "pctl_backup");
     write_self_check_event(&mem, "sc-probe", "probe_ok");
     write_self_check_event(&mem, "sc-probe", "result_ok");
-    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/capabilities.json", "{\"version\":1,\"play_timer_write_verified\":true,\"play_timer_write_backend\":\"pctl-s-v1\",\"raw_block_verified\":false,\"suspend_verified\":false}\n"), "write self-check caps");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/capabilities.json", "{\"version\":1,\"play_timer_write_verified\":true,\"play_timer_write_backend\":\"pctl-s-v2\",\"raw_block_verified\":false,\"suspend_verified\":false}\n"), "write self-check caps");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/backups/last_pctl_backup.txt", "play_timer_settings_hex=001122\n"), "write self-check backup");
 
     result = run_self_check_for_test(&mem, "sc-probe", PTC_SELF_CHECK_PLAY_WRITE_PROBE, report, sizeof(report));
@@ -387,12 +388,68 @@ static void test_companion_self_check_play_write_probe(void)
     write_self_check_done(&mem, "sc-probe-enforce");
     write_self_check_event(&mem, "sc-probe-enforce", "pctl_backup");
     write_self_check_event(&mem, "sc-probe-enforce", "probe_ok");
-    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/capabilities.json", "{\"version\":1,\"play_timer_write_verified\":true,\"play_timer_write_backend\":\"pctl-s-v1\",\"raw_block_verified\":false,\"suspend_verified\":false}\n"), "write self-check enforce caps");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/capabilities.json", "{\"version\":1,\"play_timer_write_verified\":true,\"play_timer_write_backend\":\"pctl-s-v2\",\"raw_block_verified\":false,\"suspend_verified\":false}\n"), "write self-check enforce caps");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/backups/last_pctl_backup.txt", "play_timer_settings_hex=001122\n"), "write self-check enforce backup");
 
     result = run_self_check_for_test(&mem, "sc-probe-enforce", PTC_SELF_CHECK_PLAY_WRITE_PROBE, report, sizeof(report));
     check_int(result.status, PTC_SELF_CHECK_PASS, "self-check play write probe accepts enforce mode");
     check_true(strstr(report, "PASS result mode is write-capable") != NULL, "self-check probe write-capable mode evidence");
+}
+
+static void test_play_timer_settings_layout(void)
+{
+    uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS] = {
+        0x0101U, 0x0001U, 0U, 0U, 0U, 0U, 0U,
+        0x0600U, 0x0100U, 0x0578U, 0U,
+        0x0600U, 0x0100U, 0x0578U, 0U,
+        0x0600U, 0x0100U, 0x0578U, 0U,
+        0x0600U, 0x0100U, 0x0578U, 0U,
+        0x0600U, 0x0100U, 0x0578U, 0U,
+        0x0600U, 0x0100U, 0x0578U, 0U,
+        0x0600U, 0x0100U, 0x0578U,
+    };
+    uint16_t before[PTC_PLAY_TIMER_SETTINGS_WORDS];
+    uint16_t minutes = 0;
+    char summary[320];
+    unsigned int i;
+
+    memcpy(before, words, sizeof(words));
+    check_true(ptc_play_timer_settings_valid(words, PTC_PLAY_TIMER_SETTINGS_WORDS), "real-device play timer layout accepted");
+    check_true(ptc_play_timer_settings_get_minutes(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4U, &minutes), "Thursday minutes readable");
+    check_int(minutes, 1400, "Thursday fixture minutes");
+    check_true(ptc_play_timer_settings_set_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4U, true, 5U), "Thursday limit writable");
+    check_int(words[25], 5, "Thursday minutes use word 25");
+    for (i = 0; i < PTC_PLAY_TIMER_SETTINGS_WORDS; ++i) {
+        if (i != 25U) {
+            check_int(words[i], before[i], "non-target play timer word preserved");
+        }
+    }
+    ptc_play_timer_settings_summary(summary, sizeof(summary), words, PTC_PLAY_TIMER_SETTINGS_WORDS);
+    check_true(strstr(summary, "d4:flag=1536,enabled=256,m=5") != NULL, "layout summary reports Thursday target");
+    memcpy(words, before, sizeof(words));
+    check_true(ptc_play_timer_settings_set_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4U, false, PTC_PLAY_TIMER_UNLIMITED), "Thursday unlimited writable");
+    check_int(words[23], 0, "Thursday unlimited clears configured flag");
+    check_int(words[24], 0, "Thursday unlimited clears restricted flag");
+    check_int(words[25], PTC_PLAY_TIMER_UNLIMITED, "Thursday unlimited sentinel");
+    memcpy(words, before, sizeof(words));
+    check_true(ptc_play_timer_settings_set_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4U, true, 0U), "Thursday block writable");
+    check_int(words[23], PTC_PLAY_TIMER_DAY_CONFIGURED, "Thursday block keeps configured flag");
+    check_int(words[24], PTC_PLAY_TIMER_DAY_RESTRICTED, "Thursday block keeps restricted flag");
+    check_int(words[25], 0, "Thursday block uses zero minutes");
+    memcpy(words, before, sizeof(words));
+    check_true(ptc_play_timer_settings_set_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 6U, true, 30U), "Saturday limit writable");
+    check_int(words[33], 30, "Saturday minutes use final word 33");
+    check_true(!ptc_play_timer_settings_set_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 7U, true, 30U), "out-of-range weekday rejected");
+    check_true(!ptc_play_timer_settings_get_minutes(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 7U, &minutes), "out-of-range weekday unreadable");
+    memcpy(words, before, sizeof(words));
+    words[7] = 1U;
+    check_true(!ptc_play_timer_settings_valid(words, PTC_PLAY_TIMER_SETTINGS_WORDS), "unexpected layout flag rejected");
+    memcpy(words, before, sizeof(words));
+    words[8] = 1U;
+    check_true(!ptc_play_timer_settings_valid(words, PTC_PLAY_TIMER_SETTINGS_WORDS), "unexpected layout enable value rejected");
+    memcpy(words, before, sizeof(words));
+    words[25] = 1500U;
+    check_true(!ptc_play_timer_settings_valid(words, PTC_PLAY_TIMER_SETTINGS_WORDS), "unexpected layout minutes rejected");
 }
 
 static void test_companion_self_check_play_timer_effect_probe(void)
@@ -424,7 +481,7 @@ static void test_companion_self_check_play_timer_effect_probe(void)
             &mem.storage,
             "app/capabilities.json",
             "{\"version\":1,\"play_timer_write_verified\":true,\"play_timer_effect_verified\":true,"
-            "\"play_timer_effect_backend\":\"pctl-s-runtime-v1\"}\n"),
+            "\"play_timer_effect_backend\":\"pctl-s-runtime-v2\"}\n"),
         "write effect self-check capabilities");
     check_true(
         mem.storage.vtable->write_text_atomic(
@@ -543,7 +600,7 @@ static void write_capabilities(PtcMemStorage *mem, bool play_timer_write_verifie
     snprintf(
         caps,
         sizeof(caps),
-        "{\"version\":1,\"play_timer_write_verified\":%s,\"play_timer_write_backend\":\"pctl-s-v1\",\"play_timer_effect_verified\":%s,\"play_timer_effect_backend\":\"pctl-s-runtime-v1\",\"raw_block_verified\":%s,\"suspend_verified\":%s}\n",
+        "{\"version\":1,\"play_timer_write_verified\":%s,\"play_timer_write_backend\":\"pctl-s-v2\",\"play_timer_effect_verified\":%s,\"play_timer_effect_backend\":\"pctl-s-runtime-v2\",\"raw_block_verified\":%s,\"suspend_verified\":%s}\n",
         play_timer_write_verified ? "true" : "false",
         play_timer_write_verified ? "true" : "false",
         raw_block_verified ? "true" : "false",
@@ -724,6 +781,8 @@ static void test_probe_play_timer_effect_paths(void)
     check_true(!pctl.status.play_timer_enabled, "effect probe restores stopped timer");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/effect-fast.json", result, sizeof(result)), "effect result readable");
     check_true(strstr(result, "\"verdict\":\"pass\"") != NULL, "effect result passes");
+    check_true(strstr(result, "\"opaque_snapshots\":{\"before_hex\":\"0101") != NULL, "effect result includes opaque snapshots");
+    check_true(strstr(result, "\"raw_target_correct\":true") != NULL, "effect target raw changed");
     check_true(strstr(result, "\"raw_restored\":true") != NULL, "effect raw restored evidence");
     check_true(strstr(result, "\"timer_restored\":true") != NULL, "effect timer restored evidence");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "effect capabilities readable");
@@ -855,7 +914,9 @@ static void test_legacy_play_timer_capability_is_invalidated(void)
         mem.storage.vtable->write_text_atomic(
             &mem.storage,
             "app/capabilities.json",
-            "{\"version\":1,\"play_timer_write_verified\":true,\"raw_block_verified\":false,\"suspend_verified\":false}\n"),
+            "{\"version\":1,\"play_timer_write_verified\":true,\"play_timer_write_backend\":\"pctl-s-v1\","
+            "\"play_timer_effect_verified\":true,\"play_timer_effect_backend\":\"pctl-s-runtime-v1\","
+            "\"raw_block_verified\":false,\"suspend_verified\":false}\n"),
         "write legacy capability");
     make_valid_code(code);
     (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0029", 1029, code);
@@ -1259,6 +1320,7 @@ int main(void)
 {
     test_token_v1();
     test_time_and_policy();
+    test_play_timer_settings_layout();
     test_companion_request_builder_and_file_protocol();
     test_companion_auth();
     test_result_validator();

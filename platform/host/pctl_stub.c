@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../switch/play_timer_settings_layout.h"
+
 static uint16_t stub_minutes_for_status(const PtcPctlStatus *status)
 {
     if (status->unrestricted_today) {
@@ -11,38 +13,27 @@ static uint16_t stub_minutes_for_status(const PtcPctlStatus *status)
     if (status->blocked_today) {
         return 0u;
     }
-    return status->remaining_minutes;
+    return status->remaining_minutes > UINT16_MAX
+        ? UINT16_MAX
+        : (uint16_t)status->remaining_minutes;
 }
 
 static void stub_raw_and_slots(const PtcPctlStatus *status, char *raw_hex, size_t raw_size, char *slots, size_t slots_size)
 {
+    uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS];
     uint16_t minutes = stub_minutes_for_status(status);
     unsigned int day;
-    size_t raw_used = 0;
-    size_t slots_used = 0;
-    raw_hex[0] = '\0';
-    slots[0] = '\0';
-    for (day = 0; day < 7U; ++day) {
-        unsigned int enabled = status->unrestricted_today ? 0U : 1U;
-        unsigned int limited = status->limited_today || status->blocked_today ? 1U : 0U;
-        int raw_written = snprintf(raw_hex + raw_used, raw_size - raw_used, "%04x%04x%04x%04x", enabled, limited, minutes, 0U);
-        int slot_written = snprintf(
-            slots + slots_used,
-            slots_size - slots_used,
-            "%sd%u:e%u,l%u,m%u,x0",
-            day == 0U ? "" : ";",
-            day,
-            enabled,
-            limited,
-            (unsigned int)minutes);
-        if (raw_written < 0 || slot_written < 0 ||
-            (size_t)raw_written >= raw_size - raw_used ||
-            (size_t)slot_written >= slots_size - slots_used) {
-            break;
-        }
-        raw_used += (size_t)raw_written;
-        slots_used += (size_t)slot_written;
+    memset(words, 0, sizeof(words));
+    words[0] = 0x0101U;
+    words[1] = 1U;
+    for (day = 0; day < PTC_PLAY_TIMER_DAY_COUNT; ++day) {
+        unsigned int base = PTC_PLAY_TIMER_HEADER_WORDS + (day * PTC_PLAY_TIMER_DAY_WORDS);
+        words[base + PTC_PLAY_TIMER_DAY_FLAG_WORD] = status->unrestricted_today ? 0U : PTC_PLAY_TIMER_DAY_CONFIGURED;
+        words[base + PTC_PLAY_TIMER_DAY_ENABLE_WORD] = status->limited_today || status->blocked_today ? PTC_PLAY_TIMER_DAY_RESTRICTED : 0U;
+        words[base + PTC_PLAY_TIMER_DAY_MINUTES_WORD] = minutes;
     }
+    ptc_play_timer_settings_hex(raw_hex, raw_size, words, PTC_PLAY_TIMER_SETTINGS_WORDS);
+    ptc_play_timer_settings_summary(slots, slots_size, words, PTC_PLAY_TIMER_SETTINGS_WORDS);
 }
 
 static PtcErrorCode stub_read_status(PtcPctl *pctl, PtcPctlStatus *out)
@@ -139,17 +130,20 @@ static PtcErrorCode stub_probe_play_timer_write(PtcPctl *pctl, PtcProbeResult *o
 
 static void stub_encode_snapshot(const PtcPctlStub *stub, PtcPctlSettingsSnapshot *out)
 {
-    uint16_t *words = (uint16_t *)out->data;
+    uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS];
     unsigned int day;
     uint16_t minutes = stub_minutes_for_status(&stub->status);
     memset(out, 0, sizeof(*out));
-    for (day = 0; day < 7U; ++day) {
-        unsigned int base = day * 4U;
-        words[base] = stub->status.unrestricted_today ? 0U : 1U;
-        words[base + 1U] = stub->status.limited_today || stub->status.blocked_today ? 1U : 0U;
-        words[base + 2U] = minutes;
-        words[base + 3U] = 0U;
+    memset(words, 0, sizeof(words));
+    words[0] = 0x0101U;
+    words[1] = 1U;
+    for (day = 0; day < PTC_PLAY_TIMER_DAY_COUNT; ++day) {
+        unsigned int base = PTC_PLAY_TIMER_HEADER_WORDS + (day * PTC_PLAY_TIMER_DAY_WORDS);
+        words[base + PTC_PLAY_TIMER_DAY_FLAG_WORD] = stub->status.unrestricted_today ? 0U : PTC_PLAY_TIMER_DAY_CONFIGURED;
+        words[base + PTC_PLAY_TIMER_DAY_ENABLE_WORD] = stub->status.limited_today || stub->status.blocked_today ? PTC_PLAY_TIMER_DAY_RESTRICTED : 0U;
+        words[base + PTC_PLAY_TIMER_DAY_MINUTES_WORD] = minutes;
     }
+    memcpy(out->data, words, sizeof(words));
     out->size = PTC_PCTL_OPAQUE_SETTINGS_SIZE;
     out->timer_enabled = stub->status.play_timer_enabled;
 }
@@ -167,16 +161,22 @@ static PtcErrorCode stub_snapshot_settings(PtcPctl *pctl, PtcPctlSettingsSnapsho
 static PtcErrorCode stub_restore_settings(PtcPctl *pctl, const PtcPctlSettingsSnapshot *snapshot)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
-    const uint16_t *words = (const uint16_t *)snapshot->data;
+    uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS];
+    uint16_t minutes = 0;
+    uint8_t weekday = stub->applied ? stub->last_target.weekday : 0U;
     if (stub->restore_error != PTC_ERR_OK) {
         return stub->restore_error;
     }
     stub->restore_called = true;
-    stub->status.unrestricted_today = words[1] == 0 && words[0] == 0;
-    stub->status.limited_today = words[1] != 0 && words[0] != 0;
-    stub->status.blocked_today = false;
+    memcpy(words, snapshot->data, sizeof(words));
+    if (!ptc_play_timer_settings_get_minutes(words, PTC_PLAY_TIMER_SETTINGS_WORDS, weekday, &minutes)) {
+        return PTC_ERR_PCTL_WRITE_FAILED;
+    }
+    stub->status.unrestricted_today = minutes == PTC_PLAY_TIMER_UNLIMITED;
+    stub->status.blocked_today = minutes == 0U;
+    stub->status.limited_today = !stub->status.unrestricted_today && !stub->status.blocked_today;
     stub->status.remaining_available = !stub->status.unrestricted_today;
-    stub->status.remaining_minutes = words[2];
+    stub->status.remaining_minutes = minutes;
     stub->status.restricted_now = false;
     return PTC_ERR_OK;
 }

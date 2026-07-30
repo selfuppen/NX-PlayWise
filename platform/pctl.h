@@ -19,7 +19,7 @@ typedef struct {
     bool blocked_today;
     bool unrestricted_today;
     bool remaining_available;
-    uint16_t remaining_minutes;
+    uint32_t remaining_minutes;
     bool play_timer_enabled;
     bool restricted_now;
 } PtcPctlStatus;

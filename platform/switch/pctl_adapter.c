@@ -4,6 +4,8 @@
 #include <string.h>
 #include <switch.h>
 
+#include "play_timer_settings_layout.h"
+
 #define PTC_PCTL_FACTORY_CREATE_SERVICE 1
 #define PTC_PCTL_CMD_INITIALIZE 1
 #define PTC_PCTL_CMD_IS_RESTRICTION_TEMPORARY_UNLOCKED 1006
@@ -17,10 +19,7 @@
 #define PTC_PCTL_CMD_GET_PLAY_TIMER_SETTINGS 145601
 #define PTC_PCTL_CMD_SET_PLAY_TIMER_SETTINGS_FOR_DEBUG 195101
 #define PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED 1458
-
-#define PTC_PLAY_TIMER_SETTINGS_WORDS 34
-#define PTC_PLAY_TIMER_DAY_STRIDE 4
-#define PTC_PLAY_TIMER_UNLIMITED 0xffff
+#define PTC_NANOSECONDS_PER_MINUTE 60000000000ULL
 
 typedef struct {
     u16 words[PTC_PLAY_TIMER_SETTINGS_WORDS];
@@ -142,39 +141,12 @@ static PtcErrorCode set_play_timer_settings(
 
 static void settings_hex(char *out, size_t out_size, const PtcSwitchPlayTimerSettings *settings)
 {
-    size_t used = 0;
-    size_t i;
-    for (i = 0; i < PTC_PLAY_TIMER_SETTINGS_WORDS && used + 5 < out_size; ++i) {
-        int written = snprintf(out + used, out_size - used, "%04x", settings->words[i]);
-        if (written < 0) {
-            break;
-        }
-        used += (size_t)written;
-    }
+    ptc_play_timer_settings_hex(out, out_size, settings->words, PTC_PLAY_TIMER_SETTINGS_WORDS);
 }
 
 static void settings_slots(char *out, size_t out_size, const PtcSwitchPlayTimerSettings *settings)
 {
-    size_t used = 0;
-    unsigned int day;
-    out[0] = '\0';
-    for (day = 0; day < 7U && used + 1 < out_size; ++day) {
-        unsigned int base = day * PTC_PLAY_TIMER_DAY_STRIDE;
-        int written = snprintf(
-            out + used,
-            out_size - used,
-            "%sd%u:e%u,l%u,m%u,x%u",
-            day == 0U ? "" : ";",
-            day,
-            (unsigned int)settings->words[base],
-            (unsigned int)settings->words[base + 1],
-            (unsigned int)settings->words[base + 2],
-            (unsigned int)settings->words[base + 3]);
-        if (written < 0 || (size_t)written >= out_size - used) {
-            break;
-        }
-        used += (size_t)written;
-    }
+    ptc_play_timer_settings_summary(out, out_size, settings->words, PTC_PLAY_TIMER_SETTINGS_WORDS);
 }
 
 static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
@@ -187,7 +159,7 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
     bool alarm_disabled = false;
     bool timer_enabled = false;
     bool restricted = false;
-    u32 remaining = 0;
+    u64 remaining_ns = 0;
     Service *service;
 
     err = open_read_session(adapter, &session);
@@ -211,9 +183,10 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
     } else {
         out->play_timer_enabled = enabled && !alarm_disabled;
     }
-    if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_GET_PLAY_TIMER_REMAINING_TIME, &remaining, sizeof(remaining)))) {
+    if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_GET_PLAY_TIMER_REMAINING_TIME, &remaining_ns, sizeof(remaining_ns)))) {
+        u64 remaining_minutes = remaining_ns / PTC_NANOSECONDS_PER_MINUTE;
         out->remaining_available = true;
-        out->remaining_minutes = (uint16_t)(remaining > 65535 ? 65535 : remaining);
+        out->remaining_minutes = remaining_minutes > UINT32_MAX ? UINT32_MAX : (uint32_t)remaining_minutes;
     }
     if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER, &restricted, sizeof(restricted)))) {
         out->restricted_now = restricted;
@@ -278,8 +251,7 @@ static PtcErrorCode switch_apply_target(PtcPctl *pctl, const PtcPctlTarget *targ
     PtcSwitchSession session;
     PtcSwitchPlayTimerSettings settings;
     PtcErrorCode err = open_write_session(adapter, &session);
-    unsigned int weekday;
-    unsigned int base;
+    uint16_t minutes;
     if (err != PTC_ERR_OK) {
         return err;
     }
@@ -288,18 +260,22 @@ static PtcErrorCode switch_apply_target(PtcPctl *pctl, const PtcPctlTarget *targ
         close_session(&session);
         return err;
     }
-    weekday = target->weekday % 7U;
-    base = weekday * PTC_PLAY_TIMER_DAY_STRIDE;
-    settings.words[base] = 1;
-    settings.words[base + 1] = target->mode == PTC_PCTL_TARGET_UNLIMITED ? 0 : 1;
     if (target->mode == PTC_PCTL_TARGET_UNLIMITED) {
-        settings.words[base + 2] = PTC_PLAY_TIMER_UNLIMITED;
+        minutes = PTC_PLAY_TIMER_UNLIMITED;
     } else if (target->mode == PTC_PCTL_TARGET_BLOCKED) {
-        settings.words[base + 2] = 0;
+        minutes = 0;
     } else {
-        settings.words[base + 2] = target->minutes;
+        minutes = target->minutes;
     }
-    settings.words[base + 3] = 0;
+    if (!ptc_play_timer_settings_set_day(
+            settings.words,
+            PTC_PLAY_TIMER_SETTINGS_WORDS,
+            target->weekday,
+            target->mode != PTC_PCTL_TARGET_UNLIMITED,
+            minutes)) {
+        close_session(&session);
+        return PTC_ERR_PCTL_WRITE_FAILED;
+    }
     err = set_play_timer_settings(adapter, &session.service, &settings);
     close_session(&session);
     return err;
