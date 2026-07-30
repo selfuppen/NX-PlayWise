@@ -601,6 +601,11 @@ static bool consume_nonce(PtcSysmodule *sysmodule, const PtcRequest *request, ui
     return ok;
 }
 
+static int64_t result_remaining_minutes(const PtcPctlStatus *status)
+{
+    return status->remaining_available ? (int64_t)status->remaining_minutes : -1;
+}
+
 static void result_state_from_pctl(
     PtcResultState *state,
     uint16_t day_index,
@@ -616,7 +621,7 @@ static void result_state_from_pctl(
     state->blocked_today = status->blocked_today ? 1 : 0;
     state->unrestricted_today = status->unrestricted_today ? 1 : 0;
     state->remaining_available = status->remaining_available;
-    state->remaining_minutes = status->remaining_available ? status->remaining_minutes : -1;
+    state->remaining_minutes = result_remaining_minutes(status);
     state->play_timer_enabled = status->play_timer_enabled ? 1 : 0;
     eval = ptc_rules_evaluate(rules, day_index, ptc_weekday_from_day_index(day_index), minute_of_day, parent_unlock_active);
     state->bedtime_active = eval.bedtime_active;
@@ -801,7 +806,7 @@ static bool write_probe_apply_result(
         state.blocked_today = after_status->blocked_today ? 1 : 0;
         state.unrestricted_today = after_status->unrestricted_today ? 1 : 0;
         state.remaining_available = after_status->remaining_available;
-        state.remaining_minutes = after_status->remaining_available ? after_status->remaining_minutes : -1;
+        state.remaining_minutes = result_remaining_minutes(after_status);
         state.play_timer_enabled = after_status->play_timer_enabled ? 1 : 0;
         state.restricted_now = after_status->restricted_now ? 1 : 0;
     }
@@ -1154,7 +1159,7 @@ static bool write_effect_probe_result(
         state.blocked_today = active_status->blocked_today ? 1 : 0;
         state.unrestricted_today = active_status->unrestricted_today ? 1 : 0;
         state.remaining_available = active_status->remaining_available;
-        state.remaining_minutes = active_status->remaining_available ? active_status->remaining_minutes : -1;
+        state.remaining_minutes = result_remaining_minutes(active_status);
         state.play_timer_enabled = active_status->play_timer_enabled ? 1 : 0;
         state.restricted_now = active_status->restricted_now ? 1 : 0;
     }
