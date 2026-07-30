@@ -31,7 +31,7 @@ ORCH_SRCS := \
 
 TEST_SRCS := tests/c/test_host_core.c
 
-.PHONY: all test-host test-python test companion-nro sysmodule-nsp package-safe-nro clean package-safe package-observe package-disabled package-grant package-enforce package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2
+.PHONY: all test-host test-python test companion-nro sysmodule-nsp packages package-safe-nro clean package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2
 
 all: test
 
@@ -45,8 +45,7 @@ test-host: $(HOST_TEST)
 	$(HOST_TEST)
 
 test-python:
-	python3 tests/mvp/test_token_v1.py
-	python3 tests/observe/test_observe_queue.py
+	python3 tools/test.py
 
 test: test-host test-python
 
@@ -63,11 +62,10 @@ sysmodule-nsp:
 	mkdir -p build/switch
 	cp sysmodule/pctc-sysmodule.nsp build/switch/exefs.nsp
 
-package-safe package-observe package-disabled package-grant package-enforce:
-	python3 tools/package_sdmc.py --mode $(subst package-,,$@) --out build/packages/$(subst package-,,$@)
-
 package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2: sysmodule-nsp companion-nro
 	python3 tools/package_sdmc.py --mode $(subst package-,,$(subst -boot2,,$@)) --out build/packages/$(subst package-,,$@) --zip build/packages/$(subst package-,,$@)-$(PACKAGE_TIMESTAMP).zip --sysmodule-exefs build/switch/exefs.nsp --nro build/switch/pctc.nro --boot2
+
+packages: package-safe-nro package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2
 
 clean:
 	rm -rf build

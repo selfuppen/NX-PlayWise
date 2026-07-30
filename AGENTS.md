@@ -11,23 +11,17 @@
 
 ## 构建、测试与开发命令
 
-当前已有 `Makefile`，但 Windows 本地通常只要求 Python 快速回归；C host、Companion NRO 和 package 的权威验证默认通过远程 devkitPro 容器执行。
+Windows 本地使用单一 Python 入口；C host、Companion NRO 和 package 的权威验证通过单一远程入口执行。
 
+- `python tools/test.py`：运行全部本地 Python、协议和安全打包回归。
+- `python tools/package_remote.py`：远程运行 C/Python 测试，构建并下载全部五类 package。
 - `python tools/make_fixtures.py`：重新生成确定性的令牌 fixture。
-- `python tests/mvp/test_token_v1.py`：运行 MVP 令牌编码、解码和 CLI 一致性测试。
-- `python tests/observe/test_observe_queue.py`：运行 observe 请求队列和 dry-run 行为测试。
 - `python tools/grant_code.py --minutes 30 --device kid-switch --secret replace-with-long-random-secret --day-index 2380 --nonce 4660`：生成离线加时代码示例。
 - `python tools/protocol_probe.py init --root <tmp-dir> --device <id> --secret <secret>`：初始化本地协议目录用于手工探测。
 
-远程宿主机通过 SSH 别名 `renqi-nintendo-switch-dev`（`ygq@5.78.109.249:22`）访问，宿主机项目路径为 `/home/ygq/nintendo/switch-play-time-control-local`。devkitPro 环境位于宿主机 Docker 容器 `devkitpro-ssh-v1`，同一仓库在容器内挂载为 `/ws/switch-play-time-control-local`，使用 `master` 分支开发。SSH 使用密码认证时由 OpenSSH 交互提示输入宿主机密码，不要把密码写入仓库、脚本或命令行参数。需要验证 C host、NRO 或 package 时，不要因为本机缺少 `make`、`gcc` 或 WSL 发行版就判定“无法执行”；应先在本地通过 Python 快速回归、提交并推送 `master`，再在宿主机仓库快进拉取，最后通过 `docker exec` 运行容器内构建测试：
+远程宿主机通过 SSH 别名 `renqi-nintendo-switch-dev`（`ygq@5.78.109.249:22`）访问，宿主机项目路径为 `/home/ygq/nintendo/switch-play-time-control-local`。devkitPro 容器为 `devkitpro-ssh-v1`，仓库挂载为 `/ws/switch-play-time-control-local`，使用 `master` 分支。密码只允许由 OpenSSH 交互读取。远程脚本使用一次 SSH 会话完成拉取、测试、构建、校验和下载，不要再维护手工 SSH 命令。
 
-- `ssh renqi-nintendo-switch-dev "git -C /home/ygq/nintendo/switch-play-time-control-local pull --ff-only origin master && docker exec devkitpro-ssh-v1 sh -lc 'cd /ws/switch-play-time-control-local && make'"`：登录宿主机并拉取最新 `master`，再在容器内编译并运行 C host 测试和 Python 回归。
-
-当前仓库已有 Makefile，远程完整验证应从宿主机通过 `docker exec` 在 devkitPro 容器内执行。非交互容器会话需要显式设置 devkitPro 环境变量：
-
-- `ssh renqi-nintendo-switch-dev "git -C /home/ygq/nintendo/switch-play-time-control-local pull --ff-only origin master && docker exec -e DEVKITPRO=/opt/devkitpro -e DEVKITARM=/opt/devkitpro/devkitARM -e DEVKITA64=/opt/devkitpro/devkitA64 -e PATH=/opt/devkitpro/devkitA64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin devkitpro-ssh-v1 sh -lc 'cd /ws/switch-play-time-control-local && make && make companion-nro && make package-safe package-observe package-safe-nro'"`：登录宿主机并拉取代码，再执行容器内 host 测试、Companion NRO 构建和当前 package 验证。
-
-如果本地存在未提交改动，远程不会看到这些改动；必须先提交并推送后再跑远程验证。除非用户明确只要求本地 Python 快速回归，否则涉及 C 代码、Makefile、NRO 或 package 的最终验证都应走上述 SSH 远程路径。
+如果本地存在未提交改动，远程不会看到这些改动；必须先提交并推送 `master` 后运行 `python tools/package_remote.py`。除非用户明确只要求本地 Python 快速回归，否则涉及 C、Makefile、NRO 或 package 的最终验证都必须走该入口。
 
 ## 编码风格与命名约定
 
@@ -57,4 +51,4 @@ Python 代码使用 4 空格缩进、类型注解和 `from __future__ import ann
 
 本仓库中文文档使用 UTF-8。PowerShell 默认编码或控制台显示可能把中文读成乱码；读取或写入 `AGENTS.md`、`docs/*.md` 等中文文档时，应显式使用 UTF-8，例如 `Get-Content <file> -Encoding utf8`，避免误判编码或把文档写坏。
 
-涉及远程编译或容器验证时，使用宿主机 `renqi-nintendo-switch-dev`、宿主机路径 `/home/ygq/nintendo/switch-play-time-control-local`、容器 `devkitpro-ssh-v1` 和容器路径 `/ws/switch-play-time-control-local`；不要假设远程已自动同步本地工作区，必须通过本地提交、推送，在宿主机仓库执行 `git pull --ff-only origin master`，再用 `docker exec` 在容器内测试。本机缺少 `make`、`gcc` 或可用 WSL 发行版不是跳过 C host 验证的理由；应改走远程 devkitPro 容器。
+涉及远程编译或容器验证时运行 `python tools/package_remote.py`；不要绕过其中的 `master` 快进、C/Python 测试、产物校验和下载。本机缺少 `make`、`gcc` 或 WSL 不是跳过验证的理由。

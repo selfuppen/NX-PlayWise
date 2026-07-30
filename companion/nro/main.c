@@ -22,10 +22,7 @@
 
 typedef enum {
     UI_VIEW_CHILD = 0,
-    UI_VIEW_PARENT = 1,
-    UI_VIEW_DANGER = 2,
-    UI_VIEW_SELF_CHECK = 3,
-    UI_VIEW_TEST_MODE = 4
+    UI_VIEW_PARENT = 1
 } UiView;
 
 typedef struct {
@@ -37,15 +34,11 @@ typedef struct {
     int elapsed_ms;
     int hidden_ticks;
     int parent_index;
-    int danger_index;
-    int self_check_index;
-    int test_index;
-    int test_status_profile_index;
-    int test_offline_profile_index;
     bool waiting;
     bool parent_unlocked;
     bool child_x_pending;
     bool self_check_after_result;
+    bool quick_device_test;
     PtcSelfCheckProfile self_check_after_profile;
     UiView view;
 } UiState;
@@ -53,125 +46,7 @@ typedef struct {
 typedef PtcCompanionStatus (*SubmitNoArgFn)(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 
 static void run_self_check_profile(UiState *ui, PtcSelfCheckProfile profile, bool prompt_request_id, const char *prefix_text);
-
-typedef enum {
-    TEST_CASE_STATUS = 0,
-    TEST_CASE_OFFLINE_CODE = 1,
-    TEST_CASE_OBSERVE_REJECTION = 2,
-    TEST_CASE_GRANT_BEFORE_PROBE = 3,
-    TEST_CASE_PROBE_PLAY_WRITE = 4,
-    TEST_CASE_PROBE_PLAY_TIMER_EFFECT = 5,
-    TEST_CASE_PROBE_PLAY_TIMER_EXPIRY = 6,
-    TEST_CASE_PROBE_APPLY_TODAY_LIMIT = 7,
-    TEST_CASE_PROBE_RAW_BLOCK = 8,
-    TEST_CASE_PROBE_SUSPEND = 9,
-    TEST_CASE_DISABLE_ON = 10,
-    TEST_CASE_DISABLE_OFF = 11,
-    TEST_CASE_ENFORCE_SNAPSHOT = 12,
-    TEST_CASE_COUNT = 13
-} TestCase;
-
-typedef struct {
-    const char *title;
-    const char *stage;
-    const char *action;
-    const char *check;
-    const char *manual;
-} TestModeGuide;
-
-static const TestModeGuide TEST_GUIDES[TEST_CASE_COUNT] = {
-    {
-        "Status",
-        "Stage B/C/D quick backend smoke test.",
-        "A submits status and waits for result.",
-        "X cycles generic/observe_success check.",
-        "In disabled mode use Self-check page for disabled_status evidence."
-    },
-    {
-        "Offline code",
-        "Stage D/F token flow.",
-        "A asks for code, submits request, waits for result.",
-        "X cycles observe_success/grant_success/grant_rejection.",
-        "For grant success, still confirm official PCTL state manually."
-    },
-    {
-        "Observe rejection check",
-        "Stage E rejection evidence for current request.",
-        "A runs observe_rejection self-check on Current request.",
-        "No new request is submitted.",
-        "Stop testing if the report shows any forbidden write/nonce event."
-    },
-    {
-        "Grant before probe check",
-        "Stage F pre-probe write guard.",
-        "A runs grant_before_probe_reject self-check.",
-        "No new request is submitted.",
-        "Use after submitting a valid code before play write probe passes."
-    },
-    {
-        "Probe play timer write",
-        "Stage F capability gate.",
-        "A requires YES, submits probe_play_timer_write.",
-        "Auto-runs play_write_probe after result.",
-        "Confirm the official parental-control page did not change."
-    },
-    {
-        "PCTL effect probe (fast)",
-        "Stage F automatic runtime effect verification.",
-        "After parent PIN, A submits the fast effect probe.",
-        "Auto-runs play_timer_effect_probe and displays PASS SYSTEM EFFECT.",
-        "Only investigate recovery guidance if the automatic result fails."
-    },
-    {
-        "PCTL expiry probe (optional)",
-        "Optional countdown-to-expiry confirmation.",
-        "A submits the 1 minute expiry probe.",
-        "Auto-runs the effect self-check and reports expiry observation.",
-        "Applet/test harnesses that do not count play time may be inconclusive."
-    },
-    {
-        "Probe apply 1 min limit",
-        "Stage F bottom-layer apply check.",
-        "A requires YES, writes today limit to 1 minute.",
-        "Auto-runs generic result/queue check only.",
-        "Open the official parental-control page and confirm 1 minute."
-    },
-    {
-        "Probe raw block",
-        "Late Stage F raw block probe.",
-        "A requires YES, submits probe_raw_block.",
-        "Auto-runs generic result/queue check only.",
-        "Do not treat this as capability acceptance without manual recovery notes."
-    },
-    {
-        "Probe suspend",
-        "Late Stage F suspend probe.",
-        "A requires YES, submits probe_suspend.",
-        "Auto-runs generic result/queue check only.",
-        "Confirm recovery path before using this case."
-    },
-    {
-        "Create disable.flag",
-        "Recovery / fail-open switch.",
-        "A requires YES and creates disable.flag.",
-        "No result or self-check is expected.",
-        "Wait one backend cycle before expecting writes to stop."
-    },
-    {
-        "Remove disable.flag",
-        "Resume staged testing.",
-        "A requires YES and removes disable.flag.",
-        "No result or self-check is expected.",
-        "Verify the intended control_mode before continuing."
-    },
-    {
-        "Enforce snapshot check",
-        "Stage F enforce background tick.",
-        "A runs enforce_snapshot self-check.",
-        "No request id is required.",
-        "Still confirm official PCTL state matches rules.json."
-    },
-};
+static PtcCompanionStatus submit_effect_fast(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 
 static int64_t unix_ms_now(void)
 {
@@ -268,71 +143,8 @@ static void begin_wait(UiState *ui, const char *message)
     ui->elapsed_ms = 0;
     ui->last_result[0] = '\0';
     ui->self_check_after_result = false;
+    ui->quick_device_test = false;
     snprintf(ui->message, sizeof(ui->message), "%s", message);
-}
-
-static PtcSelfCheckProfile test_status_profile(const UiState *ui)
-{
-    return ui->test_status_profile_index == 0 ? PTC_SELF_CHECK_GENERIC : PTC_SELF_CHECK_OBSERVE_SUCCESS;
-}
-
-static PtcSelfCheckProfile test_offline_profile(const UiState *ui)
-{
-    switch (ui->test_offline_profile_index) {
-    case 1:
-        return PTC_SELF_CHECK_GRANT_SUCCESS;
-    case 2:
-        return PTC_SELF_CHECK_GRANT_REJECTION;
-    default:
-        return PTC_SELF_CHECK_OBSERVE_SUCCESS;
-    }
-}
-
-static PtcSelfCheckProfile test_case_profile(const UiState *ui)
-{
-    switch ((TestCase)ui->test_index) {
-    case TEST_CASE_STATUS:
-        return test_status_profile(ui);
-    case TEST_CASE_OFFLINE_CODE:
-        return test_offline_profile(ui);
-    case TEST_CASE_OBSERVE_REJECTION:
-        return PTC_SELF_CHECK_OBSERVE_REJECTION;
-    case TEST_CASE_GRANT_BEFORE_PROBE:
-        return PTC_SELF_CHECK_GRANT_BEFORE_PROBE_REJECT;
-    case TEST_CASE_PROBE_PLAY_WRITE:
-        return PTC_SELF_CHECK_PLAY_WRITE_PROBE;
-    case TEST_CASE_PROBE_PLAY_TIMER_EFFECT:
-    case TEST_CASE_PROBE_PLAY_TIMER_EXPIRY:
-        return PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE;
-    case TEST_CASE_PROBE_APPLY_TODAY_LIMIT:
-    case TEST_CASE_PROBE_RAW_BLOCK:
-    case TEST_CASE_PROBE_SUSPEND:
-        return PTC_SELF_CHECK_GENERIC;
-    case TEST_CASE_ENFORCE_SNAPSHOT:
-        return PTC_SELF_CHECK_ENFORCE_SNAPSHOT;
-    default:
-        return PTC_SELF_CHECK_GENERIC;
-    }
-}
-
-static bool test_case_has_result_check(const UiState *ui)
-{
-    switch ((TestCase)ui->test_index) {
-    case TEST_CASE_STATUS:
-    case TEST_CASE_OFFLINE_CODE:
-    case TEST_CASE_OBSERVE_REJECTION:
-    case TEST_CASE_GRANT_BEFORE_PROBE:
-    case TEST_CASE_PROBE_PLAY_WRITE:
-    case TEST_CASE_PROBE_PLAY_TIMER_EFFECT:
-    case TEST_CASE_PROBE_PLAY_TIMER_EXPIRY:
-    case TEST_CASE_PROBE_APPLY_TODAY_LIMIT:
-    case TEST_CASE_PROBE_RAW_BLOCK:
-    case TEST_CASE_PROBE_SUSPEND:
-    case TEST_CASE_ENFORCE_SNAPSHOT:
-        return true;
-    default:
-        return false;
-    }
 }
 
 static void arm_self_check_after_result(UiState *ui, PtcSelfCheckProfile profile)
@@ -539,15 +351,6 @@ static void submit_limit_action(UiState *ui)
     set_message(ui, "Limit action failed", status);
 }
 
-static void submit_danger_request(UiState *ui, SubmitNoArgFn submit, const char *confirm, const char *ok_message)
-{
-    if (!confirm_yes(confirm)) {
-        snprintf(ui->message, sizeof(ui->message), "Danger action cancelled.");
-        return;
-    }
-    submit_noarg(ui, submit, ok_message, "Danger request failed");
-}
-
 static void poll_result(UiState *ui, bool force)
 {
     PtcCompanionStatus status;
@@ -587,6 +390,16 @@ static void poll_result(UiState *ui, bool force)
         }
     }
     ui->self_check_after_result = false;
+    if (ui->quick_device_test) {
+        PtcCompanionStatus disable_status = ptc_companion_set_disable_flag(&ui->client, true);
+        ui->quick_device_test = false;
+        snprintf(
+            ui->message,
+            sizeof(ui->message),
+            "Quick device test FAIL; control disabled: %s",
+            ptc_companion_status_name(disable_status));
+        return;
+    }
     set_message(ui, "Result", status);
 }
 
@@ -626,14 +439,6 @@ static void enter_parent_area(UiState *ui)
     snprintf(ui->message, sizeof(ui->message), "Parent area unlocked.");
 }
 
-static PtcSelfCheckProfile current_self_check_profile(const UiState *ui)
-{
-    if (ui->self_check_index < 0 || ui->self_check_index > (int)PTC_SELF_CHECK_ENFORCE_SNAPSHOT) {
-        return PTC_SELF_CHECK_GENERIC;
-    }
-    return (PtcSelfCheckProfile)ui->self_check_index;
-}
-
 static void run_self_check_profile(UiState *ui, PtcSelfCheckProfile profile, bool prompt_request_id, const char *prefix_text)
 {
     char request_id[PTC_COMPANION_REQUEST_ID_SIZE];
@@ -669,6 +474,20 @@ static void run_self_check_profile(UiState *ui, PtcSelfCheckProfile profile, boo
         append_text_truncated(ui->last_result, sizeof(ui->last_result), "\nSelf-check report\n");
         append_text_truncated(ui->last_result, sizeof(ui->last_result), report);
     }
+    if (ui->quick_device_test) {
+        ui->quick_device_test = false;
+        if (result.status == PTC_SELF_CHECK_PASS) {
+            snprintf(ui->message, sizeof(ui->message), "Quick device test PASS");
+        } else {
+            PtcCompanionStatus disable_status = ptc_companion_set_disable_flag(&ui->client, true);
+            snprintf(
+                ui->message,
+                sizeof(ui->message),
+                "Quick device test FAIL; control disabled: %s",
+                ptc_companion_status_name(disable_status));
+        }
+        return;
+    }
     snprintf(
         ui->message,
         sizeof(ui->message),
@@ -677,13 +496,9 @@ static void run_self_check_profile(UiState *ui, PtcSelfCheckProfile profile, boo
         ptc_self_check_status_name(result.status));
 }
 
-static void run_self_check(UiState *ui, bool prompt_request_id)
-{
-    run_self_check_profile(ui, current_self_check_profile(ui), prompt_request_id, NULL);
-}
-
 static void handle_parent_action(UiState *ui)
 {
+    PtcCompanionStatus status;
     switch (ui->parent_index) {
     case 0:
         submit_status(ui);
@@ -719,13 +534,38 @@ static void handle_parent_action(UiState *ui)
         submit_noarg(ui, ptc_companion_submit_parent_unlock_end, "Unlock end request submitted.", "Unlock end failed");
         break;
     case 11:
-        ui->view = UI_VIEW_TEST_MODE;
+        if (!confirm_yes("Quick device test")) {
+            snprintf(ui->message, sizeof(ui->message), "Quick device test cancelled.");
+            break;
+        }
+        submit_noarg(ui, submit_effect_fast, "Quick device test running...", "Quick device test submit failed");
+        if (ui->waiting) {
+            ui->quick_device_test = true;
+            arm_self_check_after_result(ui, PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE);
+        } else {
+            status = ptc_companion_set_disable_flag(&ui->client, true);
+            snprintf(
+                ui->message,
+                sizeof(ui->message),
+                "Quick device test FAIL; control disabled: %s",
+                ptc_companion_status_name(status));
+        }
         break;
     case 12:
-        ui->view = UI_VIEW_SELF_CHECK;
+        if (!confirm_yes("Emergency disable")) {
+            snprintf(ui->message, sizeof(ui->message), "Emergency disable cancelled.");
+            break;
+        }
+        status = ptc_companion_set_disable_flag(&ui->client, true);
+        set_message(ui, "Emergency disable", status);
         break;
     case 13:
-        ui->view = UI_VIEW_DANGER;
+        if (!confirm_yes("Resume control")) {
+            snprintf(ui->message, sizeof(ui->message), "Resume control cancelled.");
+            break;
+        }
+        status = ptc_companion_set_disable_flag(&ui->client, false);
+        set_message(ui, "Resume control", status);
         break;
     default:
         ui->parent_index = 0;
@@ -733,188 +573,9 @@ static void handle_parent_action(UiState *ui)
     }
 }
 
-static void handle_self_check_action(UiState *ui)
-{
-    run_self_check(ui, false);
-}
-
-static void handle_danger_action(UiState *ui)
-{
-    PtcCompanionStatus status;
-    switch (ui->danger_index) {
-    case 0:
-        submit_danger_request(ui, ptc_companion_submit_probe_play_timer_write, "Probe play write", "Play write probe submitted.");
-        break;
-    case 1:
-        submit_danger_request(ui, ptc_companion_submit_probe_apply_today_limit, "Probe apply 1 min limit", "Probe apply request submitted. Check official PCTL page.");
-        break;
-    case 2:
-        submit_danger_request(ui, ptc_companion_submit_probe_raw_block, "Probe raw block", "Raw block probe submitted.");
-        break;
-    case 3:
-        submit_danger_request(ui, ptc_companion_submit_probe_suspend, "Probe suspend", "Suspend probe submitted.");
-        break;
-    case 4:
-        if (!confirm_yes("Create disable.flag")) {
-            snprintf(ui->message, sizeof(ui->message), "Disable flag cancelled.");
-            break;
-        }
-        status = ptc_companion_set_disable_flag(&ui->client, true);
-        set_message(ui, "Create disable.flag", status);
-        break;
-    case 5:
-        if (!confirm_yes("Remove disable.flag")) {
-            snprintf(ui->message, sizeof(ui->message), "Disable flag removal cancelled.");
-            break;
-        }
-        status = ptc_companion_set_disable_flag(&ui->client, false);
-        set_message(ui, "Remove disable.flag", status);
-        break;
-    default:
-        ui->danger_index = 0;
-        break;
-    }
-}
-
-static void submit_test_noarg(UiState *ui, SubmitNoArgFn submit, const char *ok_message, PtcSelfCheckProfile profile)
-{
-    submit_noarg(ui, submit, ok_message, "Test request failed");
-    if (ui->waiting) {
-        arm_self_check_after_result(ui, profile);
-    }
-}
-
 static PtcCompanionStatus submit_effect_fast(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
 {
     return ptc_companion_submit_probe_play_timer_effect(client, request_id, created_at, false);
-}
-
-static PtcCompanionStatus submit_effect_expiry(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
-{
-    return ptc_companion_submit_probe_play_timer_effect(client, request_id, created_at, true);
-}
-
-static void submit_test_offline_code(UiState *ui)
-{
-    submit_offline_code(ui);
-    if (ui->waiting) {
-        arm_self_check_after_result(ui, test_offline_profile(ui));
-    }
-}
-
-static void submit_test_danger_request(UiState *ui, SubmitNoArgFn submit, const char *confirm, const char *ok_message, PtcSelfCheckProfile profile)
-{
-    submit_danger_request(ui, submit, confirm, ok_message);
-    if (ui->waiting) {
-        arm_self_check_after_result(ui, profile);
-    }
-}
-
-static void cycle_test_profile(UiState *ui)
-{
-    if ((TestCase)ui->test_index == TEST_CASE_STATUS) {
-        ui->test_status_profile_index = ui->test_status_profile_index == 0 ? 1 : 0;
-        snprintf(
-            ui->message,
-            sizeof(ui->message),
-            "Status check profile: %s",
-            ptc_self_check_profile_name(test_status_profile(ui)));
-        return;
-    }
-    if ((TestCase)ui->test_index == TEST_CASE_OFFLINE_CODE) {
-        ui->test_offline_profile_index = (ui->test_offline_profile_index + 1) % 3;
-        snprintf(
-            ui->message,
-            sizeof(ui->message),
-            "Offline code check profile: %s",
-            ptc_self_check_profile_name(test_offline_profile(ui)));
-        return;
-    }
-    snprintf(ui->message, sizeof(ui->message), "This test case has a fixed check profile.");
-}
-
-static void run_test_mode_check(UiState *ui)
-{
-    if (!test_case_has_result_check(ui)) {
-        snprintf(ui->message, sizeof(ui->message), "This test case has no self-check profile.");
-        return;
-    }
-    run_self_check_profile(ui, test_case_profile(ui), false, NULL);
-}
-
-static void handle_test_mode_action(UiState *ui)
-{
-    PtcCompanionStatus status;
-    switch ((TestCase)ui->test_index) {
-    case TEST_CASE_STATUS:
-        submit_test_noarg(ui, ptc_companion_submit_status, "Status request submitted.", test_status_profile(ui));
-        break;
-    case TEST_CASE_OFFLINE_CODE:
-        submit_test_offline_code(ui);
-        break;
-    case TEST_CASE_OBSERVE_REJECTION:
-    case TEST_CASE_GRANT_BEFORE_PROBE:
-    case TEST_CASE_ENFORCE_SNAPSHOT:
-        run_test_mode_check(ui);
-        break;
-    case TEST_CASE_PROBE_PLAY_WRITE:
-        submit_test_danger_request(
-            ui,
-            ptc_companion_submit_probe_play_timer_write,
-            "Probe play write",
-            "Play write probe submitted.",
-            PTC_SELF_CHECK_PLAY_WRITE_PROBE);
-        break;
-    case TEST_CASE_PROBE_PLAY_TIMER_EFFECT:
-        submit_test_noarg(ui, submit_effect_fast, "PCTL effect probe submitted.", PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE);
-        break;
-    case TEST_CASE_PROBE_PLAY_TIMER_EXPIRY:
-        submit_test_noarg(ui, submit_effect_expiry, "PCTL expiry probe submitted.", PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE);
-        break;
-    case TEST_CASE_PROBE_APPLY_TODAY_LIMIT:
-        submit_test_danger_request(
-            ui,
-            ptc_companion_submit_probe_apply_today_limit,
-            "Probe apply 1 min limit",
-            "Probe apply request submitted. Check official PCTL page.",
-            PTC_SELF_CHECK_GENERIC);
-        break;
-    case TEST_CASE_PROBE_RAW_BLOCK:
-        submit_test_danger_request(
-            ui,
-            ptc_companion_submit_probe_raw_block,
-            "Probe raw block",
-            "Raw block probe submitted.",
-            PTC_SELF_CHECK_GENERIC);
-        break;
-    case TEST_CASE_PROBE_SUSPEND:
-        submit_test_danger_request(
-            ui,
-            ptc_companion_submit_probe_suspend,
-            "Probe suspend",
-            "Suspend probe submitted.",
-            PTC_SELF_CHECK_GENERIC);
-        break;
-    case TEST_CASE_DISABLE_ON:
-        if (!confirm_yes("Create disable.flag")) {
-            snprintf(ui->message, sizeof(ui->message), "Disable flag cancelled.");
-            break;
-        }
-        status = ptc_companion_set_disable_flag(&ui->client, true);
-        set_message(ui, "Create disable.flag", status);
-        break;
-    case TEST_CASE_DISABLE_OFF:
-        if (!confirm_yes("Remove disable.flag")) {
-            snprintf(ui->message, sizeof(ui->message), "Disable flag removal cancelled.");
-            break;
-        }
-        status = ptc_companion_set_disable_flag(&ui->client, false);
-        set_message(ui, "Remove disable.flag", status);
-        break;
-    default:
-        ui->test_index = 0;
-        break;
-    }
 }
 
 static void draw_child(const UiState *ui)
@@ -948,9 +609,9 @@ static void draw_parent(const UiState *ui)
         "Set limit action",
         "Parent unlock start",
         "Parent unlock end",
-        "Test mode",
-        "Self-check",
-        "Verification / recovery",
+        "Quick device test",
+        "Emergency disable",
+        "Resume control",
     };
     int count = (int)(sizeof(ACTIONS) / sizeof(ACTIONS[0]));
     int i;
@@ -965,80 +626,11 @@ static void draw_parent(const UiState *ui)
     printf("Message: %s\n\n", ui->message);
 }
 
-static void draw_danger(const UiState *ui)
-{
-    static const char *ACTIONS[] = {
-        "probe_play_timer_write",
-        "probe_apply_today_limit",
-        "probe_raw_block",
-        "probe_suspend",
-        "create disable.flag",
-        "remove disable.flag",
-    };
-    int count = (int)(sizeof(ACTIONS) / sizeof(ACTIONS[0]));
-    int i;
-    printf("Verification / recovery\n");
-    printf("=======================\n\n");
-    printf("A requires typing YES. These actions can affect staged true-device tests.\n");
-    printf("Up/Down Select  A Run  B Back  Y Poll\n\n");
-    for (i = 0; i < count; ++i) {
-        printf("%c %s\n", i == ui->danger_index ? '>' : ' ', ACTIONS[i]);
-    }
-    printf("\nCurrent request: %s\n", ui->active_request_id[0] ? ui->active_request_id : "(none)");
-    printf("State: %s\n", ui->waiting ? "waiting" : "idle");
-    printf("Message: %s\n\n", ui->message);
-}
-
-static void draw_self_check(const UiState *ui)
-{
-    int count = (int)PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE + 1;
-    int i;
-    printf("Self-check\n");
-    printf("==========\n\n");
-    printf("A Current request  X Input request  B Back\n");
-    printf("Y Poll result before check\n\n");
-    for (i = 0; i < count; ++i) {
-        printf("%c %s\n", i == ui->self_check_index ? '>' : ' ', ptc_self_check_profile_name((PtcSelfCheckProfile)i));
-    }
-    printf("\nCurrent request: %s\n", ui->active_request_id[0] ? ui->active_request_id : "(none)");
-    printf("State: %s\n", ui->waiting ? "waiting" : "idle");
-    printf("Message: %s\n\n", ui->message);
-}
-
-static void draw_test_mode(const UiState *ui)
-{
-    const TestModeGuide *guide = &TEST_GUIDES[ui->test_index];
-    PtcSelfCheckProfile profile = test_case_profile(ui);
-    int i;
-    printf("Guided test mode\n");
-    printf("================\n\n");
-    printf("Up/Down Select  A Run  X Profile  Y Poll/check  B Back\n\n");
-    for (i = 0; i < TEST_CASE_COUNT; ++i) {
-        printf("%c %s\n", i == ui->test_index ? '>' : ' ', TEST_GUIDES[i].title);
-    }
-    printf("\nGuide:\n");
-    printf("Stage: %s\n", guide->stage);
-    printf("Action: %s\n", guide->action);
-    printf("Check: %s\n", guide->check);
-    printf("Manual: %s\n", guide->manual);
-    if (test_case_has_result_check(ui)) {
-        printf("Selected profile: %s\n", ptc_self_check_profile_name(profile));
-    }
-    printf("\nCurrent request: %s\n", ui->active_request_id[0] ? ui->active_request_id : "(none)");
-    printf("State: %s\n", ui->waiting ? "waiting" : "idle");
-    printf("Message: %s\n\n", ui->message);
-}
 
 static void draw(const UiState *ui)
 {
     consoleClear();
-    if (ui->view == UI_VIEW_TEST_MODE) {
-        draw_test_mode(ui);
-    } else if (ui->view == UI_VIEW_SELF_CHECK) {
-        draw_self_check(ui);
-    } else if (ui->view == UI_VIEW_DANGER) {
-        draw_danger(ui);
-    } else if (ui->view == UI_VIEW_PARENT) {
+    if (ui->view == UI_VIEW_PARENT) {
         draw_parent(ui);
     } else {
         draw_child(ui);
@@ -1093,13 +685,6 @@ int main(int argc, char **argv)
             }
         }
 
-        if ((down & HidNpadButton_Y) &&
-            ui.view == UI_VIEW_TEST_MODE &&
-            test_case_has_result_check(&ui) &&
-            (TestCase)ui.test_index != TEST_CASE_ENFORCE_SNAPSHOT) {
-            arm_self_check_after_result(&ui, test_case_profile(&ui));
-        }
-
         if (down & HidNpadButton_Y) {
             poll_result(&ui, true);
         }
@@ -1128,43 +713,6 @@ int main(int argc, char **argv)
                 ui.parent_index = ui.parent_index >= 13 ? 0 : ui.parent_index + 1;
             } else if (down & HidNpadButton_A) {
                 handle_parent_action(&ui);
-            }
-        } else if (ui.view == UI_VIEW_TEST_MODE) {
-            ui.child_x_pending = false;
-            if (down & HidNpadButton_B) {
-                ui.view = UI_VIEW_PARENT;
-            } else if (down & HidNpadButton_Up) {
-                ui.test_index = ui.test_index <= 0 ? TEST_CASE_COUNT - 1 : ui.test_index - 1;
-            } else if (down & HidNpadButton_Down) {
-                ui.test_index = ui.test_index >= TEST_CASE_COUNT - 1 ? 0 : ui.test_index + 1;
-            } else if (down & HidNpadButton_A) {
-                handle_test_mode_action(&ui);
-            } else if (down & HidNpadButton_X) {
-                cycle_test_profile(&ui);
-            }
-        } else if (ui.view == UI_VIEW_SELF_CHECK) {
-            ui.child_x_pending = false;
-            if (down & HidNpadButton_B) {
-                ui.view = UI_VIEW_PARENT;
-            } else if (down & HidNpadButton_Up) {
-                ui.self_check_index = ui.self_check_index <= 0 ? (int)PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE : ui.self_check_index - 1;
-            } else if (down & HidNpadButton_Down) {
-                ui.self_check_index = ui.self_check_index >= (int)PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE ? 0 : ui.self_check_index + 1;
-            } else if (down & HidNpadButton_A) {
-                handle_self_check_action(&ui);
-            } else if (down & HidNpadButton_X) {
-                run_self_check(&ui, true);
-            }
-        } else {
-            ui.child_x_pending = false;
-            if (down & HidNpadButton_B) {
-                ui.view = UI_VIEW_PARENT;
-            } else if (down & HidNpadButton_Up) {
-                ui.danger_index = ui.danger_index <= 0 ? 5 : ui.danger_index - 1;
-            } else if (down & HidNpadButton_Down) {
-                ui.danger_index = ui.danger_index >= 5 ? 0 : ui.danger_index + 1;
-            } else if (down & HidNpadButton_A) {
-                handle_danger_action(&ui);
             }
         }
 

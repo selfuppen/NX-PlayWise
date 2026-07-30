@@ -395,6 +395,55 @@ static void test_companion_self_check_play_write_probe(void)
     check_true(strstr(report, "PASS result mode is write-capable") != NULL, "self-check probe write-capable mode evidence");
 }
 
+static void test_companion_self_check_play_timer_effect_probe(void)
+{
+    PtcMemStorage mem;
+    PtcSelfCheckResult result;
+    char report[4096];
+
+    ptc_mem_storage_init(&mem);
+    check_true(
+        mem.storage.vtable->write_text_atomic(
+            &mem.storage,
+            "app/results/sc-effect.json",
+            "{\"version\":1,\"request_id\":\"sc-effect\",\"type\":\"probe_play_timer_effect\","
+            "\"status\":\"ok\",\"mode\":\"grant\",\"dry_run\":false,"
+            "\"state\":{\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+            "\"remaining_available\":true,\"remaining_minutes\":1,\"play_timer_enabled\":1,\"restricted_now\":0,"
+            "\"bedtime_active\":false,\"parent_unlock_active\":false},"
+            "\"capabilities\":{\"play_timer_effect_verified\":true,\"raw_block_verified\":false,\"suspend_verified\":false},"
+            "\"pctl_effect_probe\":{\"verdict\":\"pass\",\"checks\":{\"raw_restored\":true,\"timer_restored\":true}},"
+            "\"completed_at\":1783526401}\n"),
+        "write effect self-check result");
+    write_self_check_done(&mem, "sc-effect");
+    write_self_check_event(&mem, "sc-effect", "pctl_backup");
+    write_self_check_event(&mem, "sc-effect", "effect_before");
+    write_self_check_event(&mem, "sc-effect", "effect_restore");
+    check_true(
+        mem.storage.vtable->write_text_atomic(
+            &mem.storage,
+            "app/capabilities.json",
+            "{\"version\":1,\"play_timer_write_verified\":true,\"play_timer_effect_verified\":true,"
+            "\"play_timer_effect_backend\":\"pctl-s-runtime-v1\"}\n"),
+        "write effect self-check capabilities");
+    check_true(
+        mem.storage.vtable->write_text_atomic(
+            &mem.storage,
+            "app/backups/last_pctl_backup.txt",
+            "play_timer_settings_hex=001122\n"),
+        "write effect self-check backup");
+
+    result = run_self_check_for_test(
+        &mem,
+        "sc-effect",
+        PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE,
+        report,
+        sizeof(report));
+    check_int(result.status, PTC_SELF_CHECK_PASS, "effect self-check passes");
+    check_true(strstr(report, "PASS effect raw restored") != NULL, "effect self-check reports raw restore");
+    check_true(strstr(report, "SUMMARY PASS") != NULL, "effect self-check reports pass summary");
+}
+
 static void test_companion_self_check_missing_mismatch_and_pending_fail(void)
 {
     PtcMemStorage mem;
@@ -1217,6 +1266,7 @@ int main(void)
     test_companion_self_check_forbidden_event_fails();
     test_companion_self_check_disabled_status();
     test_companion_self_check_play_write_probe();
+    test_companion_self_check_play_timer_effect_probe();
     test_companion_self_check_missing_mismatch_and_pending_fail();
     test_companion_self_check_enforce_snapshot();
     test_companion_self_check_scans_large_event_log();
