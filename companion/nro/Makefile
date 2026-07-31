@@ -11,20 +11,26 @@ BUILD := build
 
 CC := $(DEVKITA64)/bin/aarch64-none-elf-gcc
 ELF2NRO := $(DEVKITPRO)/tools/bin/elf2nro
+PKG_CONFIG := $(DEVKITPRO)/portlibs/switch/bin/aarch64-none-elf-pkg-config
+FREETYPE_CFLAGS := $(shell $(PKG_CONFIG) --cflags freetype2)
+FREETYPE_LIBS := $(shell $(PKG_CONFIG) --static --libs freetype2)
 
 ARCH := -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS := -std=c99 -O2 -g -Wall -Wextra -Werror -ffunction-sections $(ARCH)
-CFLAGS += -D__SWITCH__ -I../.. -I$(DEVKITPRO)/libnx/include
+CFLAGS += -D__SWITCH__ -I../.. -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map
-LIBS := -L$(DEVKITPRO)/libnx/lib -lnx
+LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
 
 OBJS := \
 	$(BUILD)/main.o \
+	$(BUILD)/ui_graphics.o \
+	$(BUILD)/ui_state.o \
 	$(BUILD)/auth.o \
 	$(BUILD)/file_protocol.o \
 	$(BUILD)/request_client.o \
 	$(BUILD)/self_check.o \
 	$(BUILD)/sha256.o \
+	$(BUILD)/rules.o \
 	$(BUILD)/result_builder.o \
 	$(BUILD)/error_code.o \
 	$(BUILD)/cJSON.o \
@@ -40,6 +46,12 @@ $(BUILD):
 $(BUILD)/main.o: main.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_state.o: ui_state.c ui_graphics.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/file_protocol.o: ../file_protocol.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -53,6 +65,9 @@ $(BUILD)/self_check.o: ../self_check.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sha256.o: ../../common/crypto/sha256.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/rules.o: ../../common/rules/rules.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/result_builder.o: ../../common/protocol/result_builder.c | $(BUILD)

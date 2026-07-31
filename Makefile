@@ -2,6 +2,7 @@ HOST_CC ?= gcc
 HOST_CFLAGS ?= -std=c99 -Wall -Wextra -Werror -I.
 HOST_BUILD_DIR := build/host
 HOST_TEST := $(HOST_BUILD_DIR)/test_host_core
+HOST_UI_TEST := $(HOST_BUILD_DIR)/test_ui_state
 PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 
 COMMON_SRCS := \
@@ -31,6 +32,7 @@ ORCH_SRCS := \
 	companion/self_check.c
 
 TEST_SRCS := tests/c/test_host_core.c
+UI_TEST_SRCS := companion/nro/ui_state.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
 .PHONY: all test-host test-python test companion-nro sysmodule-nsp packages package-safe-nro clean package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2
 
@@ -42,8 +44,12 @@ $(HOST_BUILD_DIR):
 $(HOST_TEST): $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS) | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS)
 
-test-host: $(HOST_TEST)
+$(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_graphics.h | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(UI_TEST_SRCS)
+
+test-host: $(HOST_TEST) $(HOST_UI_TEST)
 	$(HOST_TEST)
+	$(HOST_UI_TEST)
 
 test-python:
 	python3 tools/test.py
