@@ -934,9 +934,28 @@ static PtcPctlTargetMode target_from_day_rule(PtcDayRule rule)
     return PTC_PCTL_TARGET_LIMIT;
 }
 
+/* Offline codes and add_today_minutes both stack onto the existing daily limit
+   instead of overwriting it. Base is today's effective LIMIT minutes; unlimited
+   or blocked days start from 0. The total is clamped to the single-day maximum so
+   even a large accumulation still writes successfully to PCTL. Sets today_override
+   in place and returns the resulting minutes. */
+static uint16_t accumulate_today_limit(PtcRules *rules, uint16_t day_index, uint8_t weekday, uint16_t add_minutes)
+{
+    PtcDayRule active = ptc_rules_today_rule(rules, day_index, weekday);
+    uint32_t base = (active.mode == PTC_RULE_MODE_LIMIT) ? active.minutes : 0u;
+    uint32_t total = base + add_minutes;
+    if (total > PTC_TOKEN_MAX_MINUTES) {
+        total = PTC_TOKEN_MAX_MINUTES;
+    }
+    rules->today_override.present = true;
+    rules->today_override.day_index = day_index;
+    rules->today_override.rule.mode = PTC_RULE_MODE_LIMIT;
+    rules->today_override.rule.minutes = (uint16_t)total;
+    return (uint16_t)total;
+}
+
 static PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest *request, PtcRules *rules, PtcRuntimeState *runtime_state, PtcClockSnapshot now)
 {
-    PtcDayRule active;
     switch (request->type) {
     case PTC_REQUEST_SET_TODAY_LIMIT:
         rules->today_override.present = true;
@@ -945,15 +964,7 @@ static PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcR
         rules->today_override.rule.minutes = request->minutes;
         return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
     case PTC_REQUEST_ADD_TODAY_MINUTES:
-        active = ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-        if (active.mode != PTC_RULE_MODE_LIMIT) {
-            active.mode = PTC_RULE_MODE_LIMIT;
-            active.minutes = 0;
-        }
-        rules->today_override.present = true;
-        rules->today_override.day_index = now.day_index;
-        rules->today_override.rule.mode = PTC_RULE_MODE_LIMIT;
-        rules->today_override.rule.minutes = (uint16_t)(active.minutes + request->minutes);
+        (void)accumulate_today_limit(rules, now.day_index, ptc_weekday_from_day_index(now.day_index), request->minutes);
         return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
         rules->today_override.present = true;
@@ -1059,10 +1070,23 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, now.day_index, caps);
     }
     if (decision.may_write_pctl) {
-        err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode), PTC_PCTL_TARGET_LIMIT, token.minutes);
+        uint16_t new_minutes;
+        (void)load_rules(sysmodule, &rules);
+        /* Stack the granted minutes onto today's existing limit rather than
+           overwriting it, matching the add_today_minutes token action. */
+        new_minutes = accumulate_today_limit(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index), token.minutes);
+        /* Apply to PCTL first (idempotent absolute write); persist the override
+           only after it succeeds. On failure the nonce is not consumed and the
+           same code may be re-entered, so persisting first would double-count. */
+        err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode), PTC_PCTL_TARGET_LIMIT, new_minutes);
         if (err != PTC_ERR_OK) {
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
         }
+        if (!save_rules(sysmodule, &rules)) {
+            append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "rules");
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+        }
+        append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "offline_code");
     }
     (void)load_rules(sysmodule, &rules);
     (void)load_state(sysmodule, &runtime_state);

@@ -990,6 +990,7 @@ static void test_grant_flow_consumes_nonce_after_write(void)
     char request[512];
     char ledger[4096];
     char debug[4096];
+    char rules[4096];
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
@@ -1004,16 +1005,86 @@ static void test_grant_flow_consumes_nonce_after_write(void)
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process one grant");
     check_true(pctl.applied, "pctl apply called");
     check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "grant target mode");
-    check_int(pctl.last_target.minutes, 30, "grant target minutes");
+    /* Offline code stacks 30 minutes onto today's default weekday limit (60). */
+    check_int(pctl.last_target.minutes, 90, "grant target minutes stack onto today limit");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/backups/last_pctl_backup.txt"), "backup persisted");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/ledger/used_nonces.jsonl", ledger, sizeof(ledger)), "ledger persisted");
     check_true(strstr(ledger, "\"day_index\":2380,\"nonce\":4660") != NULL, "nonce consumed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", rules, sizeof(rules)), "rules persisted");
+    check_true(strstr(rules, "\"today_override_present\":true") != NULL, "offline grant persists today override");
+    check_true(strstr(rules, "\"today_override_minutes\":90") != NULL, "offline grant persists stacked minutes");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/pctl_debug.jsonl", debug, sizeof(debug)), "grant pctl debug readable");
     check_true(strstr(debug, "\"stage\":\"apply_target\"") != NULL, "grant debug apply stage");
     check_true(strstr(debug, "\"target_mode\":\"limit\"") != NULL, "grant debug target mode");
-    check_true(strstr(debug, "\"target_minutes\":30") != NULL, "grant debug target minutes");
+    check_true(strstr(debug, "\"target_minutes\":90") != NULL, "grant debug target minutes");
     check_true(strstr(debug, "\"before_raw_hex\"") != NULL, "grant debug before raw");
     check_true(strstr(debug, "\"after_raw_hex\"") != NULL, "grant debug after raw");
+}
+
+static void test_grant_offline_code_stacks_on_existing_limit(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_TEXT_SIZE];
+    char request[512];
+    char rules[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+
+    /* Establish today's limit at 100 via a parent set_today_limit request. */
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0040.json", "{\"version\":1,\"request_id\":\"1000-0040\",\"type\":\"set_today_limit\",\"created_at\":1040,\"payload\":{\"minutes\":100}}\n"), "write set today 100");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process set today 100");
+    check_int(pctl.last_target.minutes, 100, "today limit set to 100");
+
+    /* Offline code adds 30 on top of the existing 100 -> 130, not overwrite to 30. */
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0041", 1041, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0041.json", request), "write offline stack request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process offline stack");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "offline stack target mode");
+    check_int(pctl.last_target.minutes, 130, "offline stack adds onto existing 100");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", rules, sizeof(rules)), "rules persisted after stack");
+    check_true(strstr(rules, "\"today_override_minutes\":130") != NULL, "stacked minutes persisted");
+}
+
+static void test_grant_offline_code_clamps_to_daily_maximum(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_TEXT_SIZE];
+    char request[512];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+
+    /* Push today's limit near the single-day maximum. */
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0042.json", "{\"version\":1,\"request_id\":\"1000-0042\",\"type\":\"set_today_limit\",\"created_at\":1042,\"payload\":{\"minutes\":1430}}\n"), "write set today 1430");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process set today 1430");
+    check_int(pctl.last_target.minutes, 1430, "today limit set to 1430");
+
+    /* 1430 + 30 = 1460 clamps to 1440 so the PCTL write still succeeds. */
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "1000-0043", 1043, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0043.json", request), "write offline clamp request");
+    pctl.applied = false;
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process offline clamp");
+    check_true(pctl.applied, "offline clamp still applies pctl");
+    check_int(pctl.last_target.minutes, 1440, "offline stack clamps to daily maximum");
 }
 
 static void test_enforce_tick_applies_once_and_respects_disable_flag(void)
@@ -1394,6 +1465,8 @@ int main(void)
     test_probe_apply_today_limit_paths();
     test_legacy_play_timer_capability_is_invalidated();
     test_grant_flow_consumes_nonce_after_write();
+    test_grant_offline_code_stacks_on_existing_limit();
+    test_grant_offline_code_clamps_to_daily_maximum();
     test_backup_failure_blocks_write();
     test_bad_request_schema_writes_error_result();
     test_observe_rule_request_is_dry_run();
