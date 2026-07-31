@@ -11,7 +11,7 @@
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
-#define COLOR(r, g, b) RGBA8_MAXALPHA((r), (g), (b))
+#define COLOR(r, g, b) ((uint32_t)RGBA8_MAXALPHA((r), (g), (b)))
 
 typedef struct {
     int x;
@@ -60,7 +60,7 @@ static const UiAction SAFETY_ACTIONS[] = {
     {"恢复控制", "移除 disable.flag 并恢复处理", COLOR(25, 132, 95)},
 };
 
-static uint32_t decode_utf8(const char **text)
+static uint32_t ui_decode_utf8(const char **text)
 {
     const unsigned char *s = (const unsigned char *)*text;
     if (s[0] < 0x80) {
@@ -185,7 +185,7 @@ static int measure_text(const char *text, int size)
         return 0;
     }
     while (*cursor) {
-        uint32_t codepoint = decode_utf8(&cursor);
+        uint32_t codepoint = ui_decode_utf8(&cursor);
         if (FT_Load_Char(g_ui.face, codepoint, FT_LOAD_DEFAULT) == 0) {
             width += (int)(g_ui.face->glyph->advance.x >> 6);
         }
@@ -201,7 +201,7 @@ static void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, co
         return;
     }
     while (*cursor) {
-        uint32_t codepoint = decode_utf8(&cursor);
+        uint32_t codepoint = ui_decode_utf8(&cursor);
         FT_GlyphSlot glyph;
         int row;
         if (FT_Load_Char(g_ui.face, codepoint, FT_LOAD_RENDER) != 0) {
@@ -249,7 +249,7 @@ static void fit_text(char *out, size_t out_size, const char *text, int size, int
     }
     while (*cursor) {
         const char *next = cursor;
-        uint32_t codepoint = decode_utf8(&next);
+        uint32_t codepoint = ui_decode_utf8(&next);
         int advance = 0;
         if (FT_Load_Char(g_ui.face, codepoint, FT_LOAD_DEFAULT) == 0) {
             advance = (int)(g_ui.face->glyph->advance.x >> 6);
