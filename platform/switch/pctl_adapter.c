@@ -4,6 +4,7 @@
 #include <string.h>
 #include <switch.h>
 
+#include "../../common/time/ptc_time.h"
 #include "play_timer_settings_layout.h"
 
 #define PTC_PCTL_FACTORY_CREATE_SERVICE 1
@@ -19,8 +20,6 @@
 #define PTC_PCTL_CMD_GET_PLAY_TIMER_SETTINGS 145601
 #define PTC_PCTL_CMD_SET_PLAY_TIMER_SETTINGS_FOR_DEBUG 195101
 #define PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED 1458
-#define PTC_NANOSECONDS_PER_MINUTE 60000000000ULL
-
 typedef struct {
     u16 words[PTC_PLAY_TIMER_SETTINGS_WORDS];
 } PtcSwitchPlayTimerSettings;
@@ -159,7 +158,7 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
     bool alarm_disabled = false;
     bool timer_enabled = false;
     bool restricted = false;
-    u64 remaining_ns = 0;
+    s64 remaining_ns = 0;
     Service *service;
 
     err = open_read_session(adapter, &session);
@@ -184,9 +183,8 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
         out->play_timer_enabled = enabled && !alarm_disabled;
     }
     if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_GET_PLAY_TIMER_REMAINING_TIME, &remaining_ns, sizeof(remaining_ns)))) {
-        u64 remaining_minutes = remaining_ns / PTC_NANOSECONDS_PER_MINUTE;
         out->remaining_available = true;
-        out->remaining_minutes = remaining_minutes > UINT32_MAX ? UINT32_MAX : (uint32_t)remaining_minutes;
+        out->remaining_minutes = ptc_nonnegative_minutes_from_nanoseconds(remaining_ns);
     }
     if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER, &restricted, sizeof(restricted)))) {
         out->restricted_now = restricted;

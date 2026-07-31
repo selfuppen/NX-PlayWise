@@ -97,3 +97,11 @@ bool ptc_bedtime_active(uint16_t minute_of_day, uint16_t start_min, uint16_t end
     }
     return minute_of_day >= start_min || minute_of_day < end_min;
 }
+
+uint32_t ptc_nonnegative_minutes_from_nanoseconds(int64_t nanoseconds)
+{
+    if (nanoseconds <= 0) {
+        return 0;
+    }
+    return (uint32_t)(nanoseconds / PTC_NANOSECONDS_PER_MINUTE);
+}

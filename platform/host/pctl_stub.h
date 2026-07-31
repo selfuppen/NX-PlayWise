@@ -18,6 +18,9 @@ typedef struct {
     PtcErrorCode write_error;
     PtcErrorCode restore_error;
     bool runtime_effect_succeeds;
+    bool model_elapsed_time;
+    uint16_t configured_minutes;
+    uint32_t played_minutes_today;
     bool expiry_observed;
     bool restore_called;
 } PtcPctlStub;

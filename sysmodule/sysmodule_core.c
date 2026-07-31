@@ -1097,7 +1097,7 @@ static void effect_snapshot_hex(char *out, size_t out_size, const PtcPctlSetting
     if (!snapshot || snapshot->size > PTC_PCTL_OPAQUE_SETTINGS_SIZE) {
         return;
     }
-    for (i = 0; i < snapshot->size && used + 3 < out_size; ++i) {
+    for (i = 0; i < snapshot->size && used + 3 <= out_size; ++i) {
         int written = snprintf(out + used, out_size - used, "%02x", (unsigned int)snapshot->data[i]);
         if (written < 0 || (size_t)written >= out_size - used) {
             break;
@@ -1224,9 +1224,11 @@ static bool process_probe_play_timer_effect(
     PtcErrorCode final_error = PTC_ERR_OK;
     const char *failure_stage = "none";
     const char *verdict = "pass";
-    uint16_t target_minutes = 5;
+    uint16_t target_minutes = 1440;
     bool captured = false;
     bool raw_target_correct = false;
+    bool target_decreases_remaining = false;
+    uint32_t expected_remaining_delta = 0;
     bool timer_enabled_seen = false;
     bool remaining_seen = false;
     bool expiry_observed = false;
@@ -1280,9 +1282,6 @@ static bool process_probe_play_timer_effect(
         verdict = "fail";
         goto effect_done;
     }
-    if (before_status.remaining_available && before_status.remaining_minutes == 5U) {
-        target_minutes = 10;
-    }
     {
         PtcPctlTarget target;
         target.mode = PTC_PCTL_TARGET_LIMIT;
@@ -1313,6 +1312,40 @@ static bool process_probe_play_timer_effect(
     effect_snapshot_hex(active_opaque_hex, sizeof(active_opaque_hex), &active_snapshot);
     raw_target_correct = !effect_snapshot_equal(&original, &active_snapshot);
     if (!raw_target_correct) {
+        PtcPctlTarget alternate_target = { PTC_PCTL_TARGET_LIMIT, 1430, ptc_weekday_from_day_index(now.day_index) };
+        if (before_status.remaining_available) {
+            if (before_status.remaining_minutes <= 1U) {
+                final_error = PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
+                failure_stage = "safe_target";
+                verdict = "inconclusive";
+                goto effect_done;
+            }
+            expected_remaining_delta = before_status.remaining_minutes > 10U
+                ? 10U
+                : before_status.remaining_minutes - 1U;
+            alternate_target.minutes = (uint16_t)(1440U - expected_remaining_delta);
+        } else {
+            expected_remaining_delta = 10U;
+        }
+        target_decreases_remaining = true;
+        target_minutes = alternate_target.minutes;
+        final_error = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &alternate_target);
+        append_event(sysmodule, request, final_error == PTC_ERR_OK ? "effect_verify" : "pctl_apply_failed", final_error, "apply_alternate_target");
+        if (final_error == PTC_ERR_OK) {
+            final_error = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
+            append_event(sysmodule, request, final_error == PTC_ERR_OK ? "effect_verify" : "pctl_apply_failed", final_error, "start_alternate_timer");
+        }
+        if (final_error != PTC_ERR_OK ||
+            sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &active_snapshot) != PTC_ERR_OK) {
+            final_error = final_error == PTC_ERR_OK ? PTC_ERR_PCTL_READ_FAILED : final_error;
+            failure_stage = "raw_target";
+            verdict = "fail";
+            goto effect_done;
+        }
+        effect_snapshot_hex(active_opaque_hex, sizeof(active_opaque_hex), &active_snapshot);
+        raw_target_correct = !effect_snapshot_equal(&original, &active_snapshot);
+    }
+    if (!raw_target_correct) {
         final_error = PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
         failure_stage = "raw_target";
         verdict = "fail";
@@ -1323,8 +1356,11 @@ static bool process_probe_play_timer_effect(
         if (active_error == PTC_ERR_OK) {
             timer_enabled_seen = active_status.play_timer_enabled;
             remaining_seen = active_status.remaining_available &&
-                active_status.remaining_minutes <= target_minutes + 1U &&
-                active_status.remaining_minutes + 1U >= target_minutes;
+                active_status.remaining_minutes <= target_minutes &&
+                (!before_status.remaining_available ||
+                    (target_decreases_remaining
+                        ? active_status.remaining_minutes + expected_remaining_delta <= before_status.remaining_minutes
+                        : active_status.remaining_minutes > before_status.remaining_minutes));
             if (remaining_seen && timer_enabled_seen) {
                 break;
             }

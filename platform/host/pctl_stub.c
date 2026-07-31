@@ -18,10 +18,16 @@ static uint16_t stub_minutes_for_status(const PtcPctlStatus *status)
         : (uint16_t)status->remaining_minutes;
 }
 
-static void stub_raw_and_slots(const PtcPctlStatus *status, char *raw_hex, size_t raw_size, char *slots, size_t slots_size)
+static uint16_t stub_configured_minutes(const PtcPctlStub *stub)
 {
+    return stub->model_elapsed_time ? stub->configured_minutes : stub_minutes_for_status(&stub->status);
+}
+
+static void stub_raw_and_slots(const PtcPctlStub *stub, char *raw_hex, size_t raw_size, char *slots, size_t slots_size)
+{
+    const PtcPctlStatus *status = &stub->status;
     uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS];
-    uint16_t minutes = stub_minutes_for_status(status);
+    uint16_t minutes = stub_configured_minutes(stub);
     unsigned int day;
     memset(words, 0, sizeof(words));
     words[0] = 0x0101U;
@@ -58,7 +64,7 @@ static PtcErrorCode stub_backup(PtcPctl *pctl, PtcPctlBackup *out)
     if (stub->backup_error != PTC_ERR_OK) {
         return stub->backup_error;
     }
-    stub_raw_and_slots(&stub->status, raw_hex, sizeof(raw_hex), slots, sizeof(slots));
+    stub_raw_and_slots(stub, raw_hex, sizeof(raw_hex), slots, sizeof(slots));
     snprintf(out->text, sizeof(out->text), "limited=%d blocked=%d unrestricted=%d remaining=%u play_timer_settings_hex=%s play_timer_slots=%s",
         stub->status.limited_today,
         stub->status.blocked_today,
@@ -84,7 +90,16 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
     stub->status.blocked_today = target->mode == PTC_PCTL_TARGET_BLOCKED;
     stub->status.unrestricted_today = target->mode == PTC_PCTL_TARGET_UNLIMITED;
     stub->status.remaining_available = target->mode == PTC_PCTL_TARGET_LIMIT;
-    stub->status.remaining_minutes = target->minutes;
+    if (stub->model_elapsed_time) {
+        stub->configured_minutes = target->minutes;
+        stub->status.remaining_minutes = target->minutes > stub->played_minutes_today
+            ? target->minutes - stub->played_minutes_today
+            : 0U;
+        stub->status.restricted_now = target->mode == PTC_PCTL_TARGET_LIMIT &&
+            target->minutes <= stub->played_minutes_today;
+    } else {
+        stub->status.remaining_minutes = target->minutes;
+    }
     return PTC_ERR_OK;
 }
 
@@ -92,7 +107,7 @@ static PtcErrorCode stub_start_timer(PtcPctl *pctl)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
     stub->timer_started = true;
-    stub->status.play_timer_enabled = true;
+    stub->status.play_timer_enabled = !stub->model_elapsed_time || stub->status.remaining_minutes > 0U;
     return PTC_ERR_OK;
 }
 
@@ -132,7 +147,7 @@ static void stub_encode_snapshot(const PtcPctlStub *stub, PtcPctlSettingsSnapsho
 {
     uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS];
     unsigned int day;
-    uint16_t minutes = stub_minutes_for_status(&stub->status);
+    uint16_t minutes = stub_configured_minutes(stub);
     memset(out, 0, sizeof(*out));
     memset(words, 0, sizeof(words));
     words[0] = 0x0101U;
@@ -176,8 +191,17 @@ static PtcErrorCode stub_restore_settings(PtcPctl *pctl, const PtcPctlSettingsSn
     stub->status.blocked_today = minutes == 0U;
     stub->status.limited_today = !stub->status.unrestricted_today && !stub->status.blocked_today;
     stub->status.remaining_available = !stub->status.unrestricted_today;
-    stub->status.remaining_minutes = minutes;
-    stub->status.restricted_now = false;
+    if (stub->model_elapsed_time) {
+        stub->configured_minutes = minutes;
+        stub->status.remaining_minutes = minutes > stub->played_minutes_today
+            ? minutes - stub->played_minutes_today
+            : 0U;
+        stub->status.restricted_now = !stub->status.unrestricted_today &&
+            minutes <= stub->played_minutes_today;
+    } else {
+        stub->status.remaining_minutes = minutes;
+        stub->status.restricted_now = false;
+    }
     return PTC_ERR_OK;
 }
 
@@ -194,7 +218,7 @@ static PtcErrorCode stub_debug_snapshot(PtcPctl *pctl, PtcPctlDebugSnapshot *out
     out->available = true;
     out->error = PTC_ERR_OK;
     out->ipc_result = 0;
-    stub_raw_and_slots(&stub->status, out->raw_hex, sizeof(out->raw_hex), out->decoded_slots, sizeof(out->decoded_slots));
+    stub_raw_and_slots(stub, out->raw_hex, sizeof(out->raw_hex), out->decoded_slots, sizeof(out->decoded_slots));
     return PTC_ERR_OK;
 }
 

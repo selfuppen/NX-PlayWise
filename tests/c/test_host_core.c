@@ -115,6 +115,14 @@ static void test_time_and_policy(void)
     check_int(ptc_weekday_from_day_index(0), 3, "2020-01-01 weekday");
     check_true(ptc_bedtime_active(30, 1260, 480), "cross-midnight bedtime active");
     check_true(!ptc_bedtime_active(720, 1260, 480), "midday bedtime inactive");
+    check_int(
+        ptc_nonnegative_minutes_from_nanoseconds(INT64_C(1366) * PTC_NANOSECONDS_PER_MINUTE),
+        1366,
+        "positive PCTL duration converts to minutes");
+    check_int(
+        ptc_nonnegative_minutes_from_nanoseconds(-INT64_C(29) * PTC_NANOSECONDS_PER_MINUTE),
+        0,
+        "expired PCTL duration clamps to zero");
     check_str(ptc_error_reason(PTC_ERR_BAD_SIGNATURE), "bad_signature", "error reason map");
 
     decision = ptc_policy_decide(PTC_CONTROL_OBSERVE, false, PTC_OPERATION_GRANT_MINUTES, &caps, false, false);
@@ -782,12 +790,57 @@ static void test_probe_play_timer_effect_paths(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/effect-fast.json", result, sizeof(result)), "effect result readable");
     check_true(strstr(result, "\"verdict\":\"pass\"") != NULL, "effect result passes");
     check_true(strstr(result, "\"opaque_snapshots\":{\"before_hex\":\"0101") != NULL, "effect result includes opaque snapshots");
+    check_true(strstr(result, "1e00\",\"active_hex\"") != NULL, "effect result includes complete 68-byte snapshot");
     check_true(strstr(result, "\"raw_target_correct\":true") != NULL, "effect target raw changed");
     check_true(strstr(result, "\"raw_restored\":true") != NULL, "effect raw restored evidence");
     check_true(strstr(result, "\"timer_restored\":true") != NULL, "effect timer restored evidence");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "effect capabilities readable");
     check_true(strstr(caps, "\"play_timer_effect_verified\":true") != NULL, "effect capability persisted");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "effect probe consumes no nonce");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 1366;
+    pctl.status.play_timer_enabled = true;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 1400;
+    pctl.played_minutes_today = 34;
+    ptc_fake_time_init(&fake_time, 1785429261, 2403, 34);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/effect-elapsed.json", "{\"version\":1,\"request_id\":\"effect-elapsed\",\"type\":\"probe_play_timer_effect\",\"created_at\":1785429261,\"payload\":{\"wait_for_expiry\":false}}\n"), "write elapsed-time effect probe");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process elapsed-time effect probe");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/effect-elapsed.json", result, sizeof(result)), "elapsed-time effect result readable");
+    check_true(strstr(result, "\"verdict\":\"pass\"") != NULL, "elapsed-time effect probe passes");
+    check_true(strstr(result, "\"target_minutes\":1440") != NULL, "elapsed-time effect probe uses safe maximum target");
+    check_true(strstr(result, "\"remaining_minutes\":1406") != NULL, "elapsed-time effect observes adjusted remaining time");
+    check_true(!pctl.status.restricted_now, "elapsed-time effect probe avoids expiry");
+    check_int(pctl.status.remaining_minutes, 1366, "elapsed-time effect restores remaining time");
+    check_int(pctl.configured_minutes, 1400, "elapsed-time effect restores configured limit");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 1406;
+    pctl.status.play_timer_enabled = true;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 1440;
+    pctl.played_minutes_today = 34;
+    ptc_fake_time_init(&fake_time, 1785429261, 2403, 34);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/effect-alternate.json", "{\"version\":1,\"request_id\":\"effect-alternate\",\"type\":\"probe_play_timer_effect\",\"created_at\":1785429261,\"payload\":{\"wait_for_expiry\":false}}\n"), "write alternate-target effect probe");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process alternate-target effect probe");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/effect-alternate.json", result, sizeof(result)), "alternate-target effect result readable");
+    check_true(strstr(result, "\"verdict\":\"pass\"") != NULL, "alternate-target effect probe passes");
+    check_true(strstr(result, "\"target_minutes\":1430") != NULL, "unchanged maximum uses safe alternate target");
+    check_int(pctl.configured_minutes, 1440, "alternate-target effect restores configured limit");
+    check_int(pctl.status.remaining_minutes, 1406, "alternate-target effect restores remaining time");
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
