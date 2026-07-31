@@ -58,6 +58,8 @@ static const UiAction SAFETY_ACTIONS[] = {
     {"快速设备测试", "验证写入、计时与自动恢复", COLOR(42, 105, 188)},
     {"紧急停用控制", "创建 disable.flag 进入安全状态", COLOR(194, 61, 61)},
     {"恢复控制", "移除 disable.flag 并恢复处理", COLOR(25, 132, 95)},
+    {"验证强制阻止", "真机探针验证 raw block 能力", COLOR(194, 61, 61)},
+    {"验证暂停软件", "真机探针验证 suspend 能力", COLOR(194, 61, 61)},
 };
 
 static uint32_t ui_decode_utf8(const char **text)
@@ -295,6 +297,35 @@ static void draw_key_hint(uint32_t *pixels, uint32_t stride, int x, int width, c
     draw_text(pixels, stride, x + width + 9, 695, label, 19, COLOR(77, 86, 99));
 }
 
+static UiRect to_uirect(PtcUiRect rect)
+{
+    UiRect out = {rect.x, rect.y, rect.w, rect.h};
+    return out;
+}
+
+static void draw_dialog_button(
+    uint32_t *pixels,
+    uint32_t stride,
+    PtcUiRect rect,
+    const char *label,
+    uint32_t background,
+    uint32_t foreground,
+    bool outline)
+{
+    UiRect box = to_uirect(rect);
+    fill_round_rect(pixels, stride, box, 8, background);
+    if (outline) {
+        draw_rect_outline(pixels, stride, box, 1, COLOR(203, 211, 222));
+    }
+    draw_text_center(pixels, stride, box, label, 21, foreground);
+}
+
+static void draw_overlay_actions(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, const char *confirm_label)
+{
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), confirm_label, COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  取消", COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+}
+
 static void describe_status(const PtcUiModel *model, char *today, size_t today_size, char *remaining, size_t remaining_size)
 {
     if (!model->status_loaded) {
@@ -368,8 +399,8 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_rect_outline(pixels, stride, (UiRect){54, 238, 760, 246}, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, 86, 286, "今天还想再玩一会儿？", 27, COLOR(28, 34, 43));
     draw_text(pixels, stride, 86, 322, "输入 16 位离线加时码，后台确认后会更新今日时间。", 21, COLOR(85, 94, 107));
-    fill_round_rect(pixels, stride, (UiRect){86, 354, 696, 92}, 8, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, (UiRect){86, 354, 696, 92}, "A  输入加时码", 31, COLOR(255, 255, 255));
+    fill_round_rect(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), 8, COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), "A  输入加时码", 31, COLOR(255, 255, 255));
 
     fill_round_rect(pixels, stride, (UiRect){836, 238, 390, 246}, 8, COLOR(250, 251, 253));
     draw_rect_outline(pixels, stride, (UiRect){836, 238, 390, 246}, 1, COLOR(219, 225, 233));
@@ -406,7 +437,7 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, PtcUiParentPage active)
     static const char *LABELS[] = {"今日管理", "时间计划", "安全工具"};
     int index;
     for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
-        UiRect tab = {54 + index * 214, 108, 194, 48};
+        UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
         uint32_t background = index == (int)active ? COLOR(28, 118, 188) : COLOR(235, 238, 243);
         uint32_t foreground = index == (int)active ? COLOR(255, 255, 255) : COLOR(66, 74, 86);
         fill_round_rect(pixels, stride, tab, 8, background);
@@ -451,6 +482,53 @@ static void draw_capabilities(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_text(pixels, stride, panel.x + 26, panel.y + 270, "高风险操作会再次要求确认", 18, COLOR(194, 61, 61));
 }
 
+static void draw_status_row(
+    uint32_t *pixels,
+    uint32_t stride,
+    UiRect panel,
+    int y,
+    const char *label,
+    const char *value,
+    uint32_t value_color)
+{
+    draw_text(pixels, stride, panel.x + 26, y, label, 19, COLOR(103, 111, 124));
+    draw_text(pixels, stride, panel.x + 172, y, value, 19, value_color);
+}
+
+static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect panel = {842, 176, 384, 324};
+    char today[32];
+    char remaining[32];
+    uint32_t today_color;
+    describe_status(model, today, sizeof(today), remaining, sizeof(remaining));
+    if (model->blocked_today == 1) {
+        today_color = COLOR(194, 61, 61);
+    } else if (model->unrestricted_today == 1) {
+        today_color = COLOR(25, 132, 95);
+    } else if (model->limited_today == 1) {
+        today_color = model->restricted_now == 1 ? COLOR(194, 61, 61) : COLOR(28, 118, 188);
+    } else {
+        today_color = COLOR(91, 100, 116);
+    }
+    fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
+    draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 43, "今日状态", 23, COLOR(28, 34, 43));
+    draw_status_row(pixels, stride, panel, panel.y + 88, "今日模式", today, today_color);
+    draw_status_row(pixels, stride, panel, panel.y + 126, "剩余时间", remaining,
+                    model->remaining_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
+    draw_status_row(pixels, stride, panel, panel.y + 164, "控制模式", model->mode[0] ? model->mode : "--", COLOR(28, 118, 188));
+    draw_status_row(pixels, stride, panel, panel.y + 202, "游玩计时器",
+                    model->play_timer_enabled == 1 ? "已开启" : "未确认",
+                    model->play_timer_enabled == 1 ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
+    draw_status_row(pixels, stride, panel, panel.y + 240, "就寝限制",
+                    model->bedtime_active ? "当前生效" : "未生效",
+                    model->bedtime_active ? COLOR(194, 61, 61) : COLOR(91, 100, 116));
+    draw_status_row(pixels, stride, panel, panel.y + 278, "临时解锁",
+                    model->parent_unlock_active ? "已开启" : "未开启",
+                    model->parent_unlock_active ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
+}
+
 static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const UiAction *actions;
@@ -460,12 +538,14 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     draw_tabs(pixels, stride, model->parent_page);
     actions = actions_for_page(model->parent_page, &action_count);
     for (index = 0; index < action_count; ++index) {
-        int column = index % 2;
-        int row = index / 2;
-        UiRect card = {54 + column * 385, 176 + row * 110, 365, 94};
+        UiRect card = to_uirect(ptc_ui_parent_card_rect(index));
         draw_action_card(pixels, stride, card, &actions[index], index == model->selected_index);
     }
-    draw_capabilities(pixels, stride, model);
+    if (model->parent_page == PTC_UI_PARENT_TODAY) {
+        draw_today_status(pixels, stride, model);
+    } else {
+        draw_capabilities(pixels, stride, model);
+    }
     draw_notice(pixels, stride, model, 522);
     draw_key_hint(pixels, stride, 54, 38, "A", "执行");
     draw_key_hint(pixels, stride, 180, 78, "方向键", "选择");
@@ -533,15 +613,17 @@ static void draw_dialog_shell(
 static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
+    UiRect value_box = to_uirect(ptc_ui_minutes_value_rect());
     char value[32];
     draw_dialog_shell(pixels, stride, model, &dialog, 720, 360);
     snprintf(value, sizeof(value), "%u 分钟", (unsigned int)model->draft_minutes);
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 170, dialog.y + 126, 380, 104}, 8, COLOR(244, 249, 255));
-    draw_rect_outline(pixels, stride, (UiRect){dialog.x + 170, dialog.y + 126, 380, 104}, 2, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 170, dialog.y + 126, 380, 104}, value, 37, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 244, 580, 34}, "↑↓ 调整 5 分钟     ←→ 调整 15 分钟", 20, COLOR(77, 86, 99));
-    draw_key_hint(pixels, stride, 410, 38, "A", "确认");
-    draw_key_hint(pixels, stride, 586, 38, "B", "取消");
+    fill_round_rect(pixels, stride, value_box, 8, COLOR(244, 249, 255));
+    draw_rect_outline(pixels, stride, value_box, 2, COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, value_box, value, 37, COLOR(28, 118, 188));
+    draw_dialog_button(pixels, stride, ptc_ui_minutes_dec_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_dialog_button(pixels, stride, ptc_ui_minutes_inc_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 244, 580, 34}, "↑↓ 调整 5 分钟     ←→ 或点 －＋ 调整 15 分钟", 20, COLOR(77, 86, 99));
+    draw_overlay_actions(pixels, stride, model, "A  确认");
 }
 
 static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -566,10 +648,12 @@ static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         }
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 119, card.width, 34}, minutes, 19, COLOR(77, 86, 99));
     }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 334, dialog.width - 160, 34},
-                     "←→ 选择日期     X 切换模式     ↑↓ 调整 15 分钟", 20, COLOR(77, 86, 99));
-    draw_key_hint(pixels, stride, 410, 38, "A", "保存计划");
-    draw_key_hint(pixels, stride, 626, 38, "B", "取消");
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 330, dialog.width - 160, 30},
+                     "←→ 选择日期     X 切换模式     ↑↓ 调整 15 分钟（也可点下方按钮）", 19, COLOR(77, 86, 99));
+    draw_dialog_button(pixels, stride, ptc_ui_weekly_mode_rect(), "切换模式", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_dialog_button(pixels, stride, ptc_ui_weekly_min_down_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_dialog_button(pixels, stride, ptc_ui_weekly_min_up_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_overlay_actions(pixels, stride, model, "A  保存计划");
 }
 
 static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -603,9 +687,10 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 5, end_rect.width, 38}, "结束", 18, COLOR(91, 100, 114));
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 39, end_rect.width, 40}, end, 28, COLOR(28, 118, 188));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 244, dialog.width - 160, 34},
-                     "←→ 选择项目     X 切换启用     ↑↓ 调整 15 分钟", 20, COLOR(77, 86, 99));
-    draw_key_hint(pixels, stride, 410, 38, "A", "保存设置");
-    draw_key_hint(pixels, stride, 626, 38, "B", "取消");
+                     "←→ 选择项目     X 切换启用     ↑↓ 或点按钮调整 15 分钟", 20, COLOR(77, 86, 99));
+    draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_down_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_up_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_overlay_actions(pixels, stride, model, "A  保存设置");
 }
 
 static void draw_limit_action_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -627,9 +712,8 @@ static void draw_limit_action_overlay(uint32_t *pixels, uint32_t stride, const P
         draw_text_center(pixels, stride, option, limit_action_label(ACTIONS[index]), 23,
                          selected ? COLOR(28, 118, 188) : COLOR(77, 86, 99));
     }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 244, dialog.width - 160, 34}, "←→ 选择限制方式", 20, COLOR(77, 86, 99));
-    draw_key_hint(pixels, stride, 410, 38, "A", "保存设置");
-    draw_key_hint(pixels, stride, 626, 38, "B", "取消");
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 244, dialog.width - 160, 34}, "←→ 或点选限制方式", 20, COLOR(77, 86, 99));
+    draw_overlay_actions(pixels, stride, model, "A  保存设置");
 }
 
 static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -637,15 +721,16 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     UiRect dialog;
     bool danger = model->operation == PTC_UI_OPERATION_BLOCK_TODAY ||
                   model->operation == PTC_UI_OPERATION_EMERGENCY_DISABLE ||
-                  model->operation == PTC_UI_OPERATION_QUICK_TEST;
+                  model->operation == PTC_UI_OPERATION_QUICK_TEST ||
+                  model->operation == PTC_UI_OPERATION_PROBE_RAW_BLOCK ||
+                  model->operation == PTC_UI_OPERATION_PROBE_SUSPEND;
     draw_dialog_shell(pixels, stride, model, &dialog, 760, 330);
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 130, 620, 74}, 8,
                     danger ? COLOR(255, 240, 240) : COLOR(240, 248, 244));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 130, 620, 74},
                      danger ? "请确认已了解这项操作的影响" : "确认执行这项操作", 22,
                      danger ? COLOR(194, 61, 61) : COLOR(25, 132, 95));
-    draw_key_hint(pixels, stride, 410, 38, "A", "确认执行");
-    draw_key_hint(pixels, stride, 636, 38, "B", "取消");
+    draw_overlay_actions(pixels, stride, model, "A  确认执行");
 }
 
 static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

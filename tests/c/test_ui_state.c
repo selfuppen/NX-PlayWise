@@ -36,10 +36,10 @@ static void test_navigation(void)
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, 1, 0);
     check_int(model.selected_index, 1, "move right");
-    ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 2, "odd grid uses final card");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_int(model.selected_index, 0, "odd grid wraps up");
+    check_int(model.selected_index, 4, "odd grid wraps up to final card");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 0, "odd grid wraps down from final card");
 
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.selected_index = 3;

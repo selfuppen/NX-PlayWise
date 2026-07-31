@@ -619,6 +619,14 @@ static void handle_parent_action(UiState *ui)
     case 2:
         open_confirm_overlay(ui, PTC_UI_OPERATION_RESUME_CONTROL, "恢复后台控制", "仅在确认设备状态正常后移除 disable.flag。");
         break;
+    case 3:
+        open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_RAW_BLOCK, "验证强制阻止能力",
+                             "探针会尝试真机 raw block 写入并回滚，需 grant/enforce 模式。适配层未实现时会返回失败，能力保持未验证。");
+        break;
+    case 4:
+        open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_SUSPEND, "验证暂停软件能力",
+                             "探针会尝试真机 suspend 写入并回滚，需 grant/enforce 模式。适配层未实现时会返回失败，能力保持未验证。");
+        break;
     default:
         break;
     }
@@ -659,6 +667,12 @@ static void confirm_operation(UiState *ui)
         } else {
             set_message(ui, "恢复控制失败", status);
         }
+        break;
+    case PTC_UI_OPERATION_PROBE_RAW_BLOCK:
+        submit_noarg(ui, ptc_companion_submit_probe_raw_block, "正在验证强制阻止能力…", "强制阻止验证提交失败");
+        break;
+    case PTC_UI_OPERATION_PROBE_SUSPEND:
+        submit_noarg(ui, ptc_companion_submit_probe_suspend, "正在验证暂停软件能力…", "暂停软件验证提交失败");
         break;
     default:
         break;
@@ -749,6 +763,106 @@ static PtcCompanionStatus submit_effect_fast(PtcCompanionFileClient *client, con
     return ptc_companion_submit_probe_play_timer_effect(client, request_id, created_at, false);
 }
 
+/*
+ * Touch dispatch. A tap resolves to the same control geometry the renderer used
+ * (ptc_ui_hit_test), then drives the exact action its button shortcut would, so
+ * pointer and pad stay in lock-step.
+ */
+static void handle_touch(UiState *ui, int x, int y)
+{
+    PtcUiHit hit = ptc_ui_hit_test(&ui->model, x, y);
+    switch (hit.kind) {
+    case PTC_UI_HIT_CHILD_SUBMIT_CODE:
+        if (ui->waiting) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "请等待当前操作完成后再提交加时码。");
+        } else {
+            submit_offline_code(ui);
+        }
+        break;
+    case PTC_UI_HIT_CHILD_REFRESH:
+        submit_status(ui);
+        break;
+    case PTC_UI_HIT_PARENT_TAB:
+        ui->model.parent_page = (PtcUiParentPage)hit.index;
+        ui->model.selected_index = 0;
+        break;
+    case PTC_UI_HIT_PARENT_CARD:
+        if (ui->waiting) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "请等待当前操作完成后再执行其他设置。");
+        } else {
+            ui->model.selected_index = hit.index;
+            handle_parent_action(ui);
+        }
+        break;
+    case PTC_UI_HIT_OVERLAY_CANCEL:
+        ptc_ui_cancel_overlay(&ui->model);
+        snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改。");
+        break;
+    case PTC_UI_HIT_OVERLAY_CONFIRM:
+        handle_overlay_input(ui, HidNpadButton_A);
+        break;
+    case PTC_UI_HIT_MINUTES_INC:
+        ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 15, ui->model.minimum_minutes, ui->model.maximum_minutes);
+        break;
+    case PTC_UI_HIT_MINUTES_DEC:
+        ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, -15, ui->model.minimum_minutes, ui->model.maximum_minutes);
+        break;
+    case PTC_UI_HIT_WEEKLY_DAY:
+        ui->model.editor_index = hit.index;
+        break;
+    case PTC_UI_HIT_WEEKLY_MODE:
+        ui->model.draft_week[ui->model.editor_index].mode =
+            ptc_ui_next_rule_mode(ui->model.draft_week[ui->model.editor_index].mode);
+        break;
+    case PTC_UI_HIT_WEEKLY_MIN_UP:
+        if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
+            ui->model.draft_week[ui->model.editor_index].minutes =
+                ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, 15, 15, 1440);
+        }
+        break;
+    case PTC_UI_HIT_WEEKLY_MIN_DOWN:
+        if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
+            ui->model.draft_week[ui->model.editor_index].minutes =
+                ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, -15, 15, 1440);
+        }
+        break;
+    case PTC_UI_HIT_BEDTIME_FIELD:
+        ui->model.editor_index = hit.index;
+        if (hit.index == 0) {
+            ui->model.draft_bedtime.enabled = !ui->model.draft_bedtime.enabled;
+        }
+        break;
+    case PTC_UI_HIT_BEDTIME_ADJ_UP:
+        if (ui->model.editor_index == 1) {
+            ui->model.draft_bedtime.start_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.start_min, 15);
+        } else if (ui->model.editor_index == 2) {
+            ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, 15);
+        }
+        break;
+    case PTC_UI_HIT_BEDTIME_ADJ_DOWN:
+        if (ui->model.editor_index == 1) {
+            ui->model.draft_bedtime.start_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.start_min, -15);
+        } else if (ui->model.editor_index == 2) {
+            ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, -15);
+        }
+        break;
+    case PTC_UI_HIT_LIMIT_ACTION_OPTION: {
+        static const PtcLimitAction OPTIONS[] = {
+            PTC_LIMIT_ACTION_REMIND,
+            PTC_LIMIT_ACTION_RAW_BLOCK,
+            PTC_LIMIT_ACTION_SUSPEND,
+        };
+        if (hit.index >= 0 && hit.index < 3) {
+            ui->model.draft_limit_action = OPTIONS[hit.index];
+        }
+        break;
+    }
+    case PTC_UI_HIT_NONE:
+    default:
+        break;
+    }
+}
+
 static void draw(UiState *ui)
 {
     ui->model.waiting = ui->waiting;
@@ -781,6 +895,8 @@ int main(int argc, char **argv)
     PtcFsStorage fs;
     UiState ui;
     PadState pad;
+    HidTouchScreenState touch;
+    bool touch_down = false;
     bool running = true;
     (void)argc;
     (void)argv;
@@ -791,6 +907,7 @@ int main(int argc, char **argv)
     }
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&pad);
+    hidInitializeTouchScreen();
     srand((unsigned int)time(NULL));
 
     memset(&ui, 0, sizeof(ui));
@@ -864,6 +981,15 @@ int main(int argc, char **argv)
                     handle_parent_action(&ui);
                 }
             }
+        }
+
+        if (hidGetTouchScreenStates(&touch, 1) && touch.count > 0) {
+            if (!touch_down) {
+                touch_down = true;
+                handle_touch(&ui, (int)touch.touches[0].x, (int)touch.touches[0].y);
+            }
+        } else {
+            touch_down = false;
         }
 
         poll_result(&ui, false);

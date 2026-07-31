@@ -66,7 +66,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_PLAN:
         return 5;
     case PTC_UI_PARENT_SAFETY:
-        return 3;
+        return 5;
     case PTC_UI_PARENT_TODAY:
     default:
         return 6;
@@ -262,4 +262,291 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     cJSON_Delete(root);
     return true;
+}
+
+/*
+ * Shared control geometry. These rects are the single source of truth for both
+ * the renderer (ui_graphics.c) and touch hit-testing (ptc_ui_hit_test), so a
+ * tap always lands on exactly the control that was drawn.
+ */
+
+#define PTC_UI_SCREEN_W 1280
+#define PTC_UI_SCREEN_H 720
+#define PTC_UI_DIALOG_BTN_W 150
+#define PTC_UI_DIALOG_BTN_H 52
+
+PtcUiRect ptc_ui_child_submit_rect(void)
+{
+    PtcUiRect rect = {86, 354, 696, 92};
+    return rect;
+}
+
+PtcUiRect ptc_ui_child_refresh_rect(void)
+{
+    /* "Y 刷新状态" line inside the status-detail card. */
+    PtcUiRect rect = {836, 430, 390, 54};
+    return rect;
+}
+
+PtcUiRect ptc_ui_parent_tab_rect(int index)
+{
+    PtcUiRect rect = {54 + index * 214, 108, 194, 48};
+    return rect;
+}
+
+PtcUiRect ptc_ui_parent_card_rect(int index)
+{
+    int column = index % 2;
+    int row = index / 2;
+    PtcUiRect rect = {54 + column * 385, 176 + row * 110, 365, 94};
+    return rect;
+}
+
+PtcUiRect ptc_ui_dialog_rect(int width, int height)
+{
+    PtcUiRect rect = {(PTC_UI_SCREEN_W - width) / 2, (PTC_UI_SCREEN_H - height) / 2 - 10, width, height};
+    return rect;
+}
+
+static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
+{
+    switch (overlay) {
+    case PTC_UI_OVERLAY_MINUTES:
+        *width = 720;
+        *height = 360;
+        break;
+    case PTC_UI_OVERLAY_WEEKLY:
+        *width = 1172;
+        *height = 470;
+        break;
+    case PTC_UI_OVERLAY_BEDTIME:
+        *width = 820;
+        *height = 410;
+        break;
+    case PTC_UI_OVERLAY_LIMIT_ACTION:
+        *width = 850;
+        *height = 360;
+        break;
+    case PTC_UI_OVERLAY_CONFIRM:
+    default:
+        *width = 760;
+        *height = 330;
+        break;
+    }
+}
+
+static PtcUiRect dialog_for(PtcUiOverlay overlay)
+{
+    int width = 0;
+    int height = 0;
+    dialog_dims(overlay, &width, &height);
+    return ptc_ui_dialog_rect(width, height);
+}
+
+PtcUiRect ptc_ui_minutes_value_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
+    PtcUiRect rect = {dialog.x + 170, dialog.y + 126, 380, 104};
+    return rect;
+}
+
+PtcUiRect ptc_ui_minutes_dec_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
+    PtcUiRect rect = {dialog.x + 46, dialog.y + 126, 104, 104};
+    return rect;
+}
+
+PtcUiRect ptc_ui_minutes_inc_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
+    PtcUiRect rect = {dialog.x + 570, dialog.y + 126, 104, 104};
+    return rect;
+}
+
+PtcUiRect ptc_ui_weekly_day_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
+    PtcUiRect rect = {dialog.x + 26 + index * 160, dialog.y + 122, 142, 190};
+    return rect;
+}
+
+PtcUiRect ptc_ui_bedtime_field_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
+    PtcUiRect rect = {dialog.x + 46 + index * 236, dialog.y + 124, 210, 92};
+    return rect;
+}
+
+PtcUiRect ptc_ui_limit_option_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_LIMIT_ACTION);
+    PtcUiRect rect = {dialog.x + 46 + index * 254, dialog.y + 132, 228, 94};
+    return rect;
+}
+
+static int dialog_button_top(PtcUiRect dialog)
+{
+    return dialog.y + dialog.h - PTC_UI_DIALOG_BTN_H - 24;
+}
+
+PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
+{
+    PtcUiRect dialog = dialog_for(overlay);
+    PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
+    return rect;
+}
+
+PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
+{
+    PtcUiRect dialog = dialog_for(overlay);
+    PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W * 2 - 16, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
+    return rect;
+}
+
+/* Left-aligned editor helper buttons for the weekly overlay. */
+PtcUiRect ptc_ui_weekly_mode_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
+    PtcUiRect rect = {dialog.x + 34, dialog_button_top(dialog), 150, PTC_UI_DIALOG_BTN_H};
+    return rect;
+}
+
+PtcUiRect ptc_ui_weekly_min_down_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
+    PtcUiRect rect = {dialog.x + 34 + 166, dialog_button_top(dialog), 96, PTC_UI_DIALOG_BTN_H};
+    return rect;
+}
+
+PtcUiRect ptc_ui_weekly_min_up_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
+    PtcUiRect rect = {dialog.x + 34 + 166 + 112, dialog_button_top(dialog), 96, PTC_UI_DIALOG_BTN_H};
+    return rect;
+}
+
+/* Left-aligned time steppers for the bedtime overlay. */
+PtcUiRect ptc_ui_bedtime_adj_down_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
+    PtcUiRect rect = {dialog.x + 34, dialog_button_top(dialog), 96, PTC_UI_DIALOG_BTN_H};
+    return rect;
+}
+
+PtcUiRect ptc_ui_bedtime_adj_up_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
+    PtcUiRect rect = {dialog.x + 34 + 112, dialog_button_top(dialog), 96, PTC_UI_DIALOG_BTN_H};
+    return rect;
+}
+
+bool ptc_ui_rect_contains(PtcUiRect rect, int x, int y)
+{
+    return x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
+}
+
+static PtcUiHit make_hit(PtcUiHitKind kind, int index)
+{
+    PtcUiHit hit;
+    hit.kind = kind;
+    hit.index = index;
+    return hit;
+}
+
+static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
+{
+    int i;
+    if (ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y)) {
+        return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
+    }
+    if (ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)) {
+        return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+    }
+    switch (model->overlay) {
+    case PTC_UI_OVERLAY_MINUTES:
+        if (ptc_ui_rect_contains(ptc_ui_minutes_dec_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_MINUTES_DEC, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_minutes_inc_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_MINUTES_INC, 0);
+        }
+        break;
+    case PTC_UI_OVERLAY_WEEKLY:
+        for (i = 0; i < 7; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_weekly_day_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_WEEKLY_DAY, i);
+            }
+        }
+        if (ptc_ui_rect_contains(ptc_ui_weekly_mode_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_WEEKLY_MODE, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_weekly_min_up_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_WEEKLY_MIN_UP, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_weekly_min_down_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_WEEKLY_MIN_DOWN, 0);
+        }
+        break;
+    case PTC_UI_OVERLAY_BEDTIME:
+        for (i = 0; i < 3; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_bedtime_field_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_BEDTIME_FIELD, i);
+            }
+        }
+        if (ptc_ui_rect_contains(ptc_ui_bedtime_adj_up_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_BEDTIME_ADJ_UP, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_bedtime_adj_down_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_BEDTIME_ADJ_DOWN, 0);
+        }
+        break;
+    case PTC_UI_OVERLAY_LIMIT_ACTION:
+        for (i = 0; i < 3; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_limit_option_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_LIMIT_ACTION_OPTION, i);
+            }
+        }
+        break;
+    case PTC_UI_OVERLAY_CONFIRM:
+    case PTC_UI_OVERLAY_NONE:
+    default:
+        break;
+    }
+    /* Overlay is modal: taps on empty space do nothing, never fall through. */
+    return make_hit(PTC_UI_HIT_NONE, 0);
+}
+
+PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
+{
+    int i;
+    int count;
+    if (!model) {
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->overlay != PTC_UI_OVERLAY_NONE) {
+        return hit_test_overlay(model, x, y);
+    }
+    if (model->view == PTC_UI_CHILD) {
+        if (ptc_ui_rect_contains(ptc_ui_child_submit_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_child_refresh_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
+        }
+        /* The parent area stays hidden; touch never exposes it. */
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    for (i = 0; i < PTC_UI_PARENT_PAGE_COUNT; ++i) {
+        if (ptc_ui_rect_contains(ptc_ui_parent_tab_rect(i), x, y)) {
+            return make_hit(PTC_UI_HIT_PARENT_TAB, i);
+        }
+    }
+    count = ptc_ui_parent_action_count(model->parent_page);
+    for (i = 0; i < count; ++i) {
+        if (ptc_ui_rect_contains(ptc_ui_parent_card_rect(i), x, y)) {
+            return make_hit(PTC_UI_HIT_PARENT_CARD, i);
+        }
+    }
+    return make_hit(PTC_UI_HIT_NONE, 0);
 }
