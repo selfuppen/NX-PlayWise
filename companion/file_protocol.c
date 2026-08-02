@@ -450,6 +450,22 @@ PtcCompanionStatus ptc_companion_format_result_summary(const char *result_json, 
             }
         }
     }
+    {
+        const cJSON *raw_block = cJSON_GetObjectItemCaseSensitive(root, "pctl_raw_block_probe");
+        if (cJSON_IsObject(raw_block)) {
+            const cJSON *checks = cJSON_GetObjectItemCaseSensitive(raw_block, "checks");
+            const char *verdict = json_string_or(raw_block, "verdict", "unknown");
+            if (!appendf(out, out_size, &used, "%s RAW BLOCK\n", strcmp(verdict, "pass") == 0 ? "PASS" : "FAIL") ||
+                !appendf(out, out_size, &used, "raw block verdict: %s stage: %s blocked: %s restored: %s\n",
+                    verdict,
+                    json_string_or(raw_block, "failure_stage", "unknown"),
+                    json_bool_text_or(checks, "blocked_observed", "false"),
+                    json_bool_text_or(checks, "raw_restored", "false"))) {
+                result = PTC_COMPANION_BAD_ARGUMENT;
+                goto done;
+            }
+        }
+    }
 
 done:
     cJSON_Delete(root);

@@ -99,6 +99,11 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
             target->minutes <= stub->played_minutes_today;
     } else {
         stub->status.remaining_minutes = target->minutes;
+        /* A blocked day allows no play time at all, so the device reports it as
+           restricted immediately rather than waiting for elapsed time. */
+        if (target->mode == PTC_PCTL_TARGET_BLOCKED) {
+            stub->status.restricted_now = true;
+        }
     }
     return PTC_ERR_OK;
 }
@@ -117,14 +122,6 @@ static PtcErrorCode stub_stop_timer(PtcPctl *pctl)
     stub->timer_stopped = true;
     stub->status.play_timer_enabled = false;
     return PTC_ERR_OK;
-}
-
-static PtcErrorCode stub_probe_raw_block(PtcPctl *pctl, PtcProbeResult *out)
-{
-    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
-    out->verified = stub->raw_probe_succeeds;
-    snprintf(out->detail, sizeof(out->detail), "%s", out->verified ? "stub raw block ok" : "stub raw block failed");
-    return out->verified ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
 }
 
 static PtcErrorCode stub_probe_suspend(PtcPctl *pctl, PtcProbeResult *out)
@@ -201,6 +198,9 @@ static PtcErrorCode stub_restore_settings(PtcPctl *pctl, const PtcPctlSettingsSn
     } else {
         stub->status.remaining_minutes = minutes;
         stub->status.restricted_now = false;
+        if (stub->status.blocked_today) {
+            stub->status.restricted_now = true;
+        }
     }
     return PTC_ERR_OK;
 }
@@ -243,7 +243,6 @@ static const PtcPctlVTable PCTL_STUB_VTABLE = {
     stub_apply_target,
     stub_start_timer,
     stub_stop_timer,
-    stub_probe_raw_block,
     stub_probe_suspend,
     stub_probe_play_timer_write,
     stub_snapshot_settings,

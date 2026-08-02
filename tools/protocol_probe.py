@@ -72,7 +72,9 @@ def init_sdmc(args: argparse.Namespace) -> int:
             "play_timer_effect_verified": False,
             "play_timer_effect_backend": "pctl-s-runtime-v2",
             "raw_block_verified": False,
+            "raw_block_backend": "pctl-s-rawblock-v1",
             "suspend_verified": False,
+            "suspend_backend": "pctl-s-suspend-v1",
             "verified_at": {"play_timer_write": None, "play_timer_effect": None, "raw_block": None, "suspend": None},
         },
     )

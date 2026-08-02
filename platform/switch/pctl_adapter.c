@@ -19,6 +19,7 @@
 #define PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER 1455
 #define PTC_PCTL_CMD_GET_PLAY_TIMER_SETTINGS 145601
 #define PTC_PCTL_CMD_SET_PLAY_TIMER_SETTINGS_FOR_DEBUG 195101
+#define PTC_PCTL_CMD_GET_PLAY_TIMER_EVENT_TO_REQUEST_SUSPENSION 1457
 #define PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED 1458
 typedef struct {
     u16 words[PTC_PLAY_TIMER_SETTINGS_WORDS];
@@ -51,6 +52,17 @@ static Result dispatch_out(Service *service, u32 request_id, void *out_data, u32
     SfDispatchParams params;
     memset(&params, 0, sizeof(params));
     return serviceDispatchImpl(service, request_id, NULL, 0, out_data, out_size, params);
+}
+
+/* Requests a copy handle out; caller owns the returned handle. */
+static Result dispatch_out_handle(Service *service, u32 request_id, Handle *out_handle)
+{
+    SfDispatchParams params;
+    memset(&params, 0, sizeof(params));
+    params.out_handle_attrs.attr0 = SfOutHandleAttr_HipcCopy;
+    params.out_handles = out_handle;
+    *out_handle = INVALID_HANDLE;
+    return serviceDispatchImpl(service, request_id, NULL, 0, NULL, 0, params);
 }
 
 static Result open_session(PtcSwitchPctl *adapter, const char *service_name, PtcSwitchSession *session)
@@ -307,20 +319,70 @@ static PtcErrorCode switch_stop_timer(PtcPctl *pctl)
     return map_result(adapter, rc, PTC_ERR_PCTL_WRITE_FAILED);
 }
 
-static PtcErrorCode switch_probe_raw_block(PtcPctl *pctl, PtcProbeResult *out)
-{
-    (void)pctl;
-    out->verified = false;
-    snprintf(out->detail, sizeof(out->detail), "raw block probe requires verified play timer write adapter");
-    return PTC_ERR_PCTL_WRITE_FAILED;
-}
-
+/*
+ * Suspend capability is verified read-only. The play timer suspension-request event
+ * (1457) is the surface Horizon uses to ask a running title to suspend, so a handle we
+ * can actually wait on is the evidence that the suspend limit action is deliverable.
+ * 1458 reports whether the alarm is disabled, which would silently swallow that request.
+ * No settings write happens here: the raw block probe covers the write path.
+ */
 static PtcErrorCode switch_probe_suspend(PtcPctl *pctl, PtcProbeResult *out)
 {
-    (void)pctl;
-    out->verified = false;
-    snprintf(out->detail, sizeof(out->detail), "suspend probe requires verified play timer write adapter");
-    return PTC_ERR_PCTL_WRITE_FAILED;
+    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    PtcSwitchSession session;
+    Handle suspension_event = INVALID_HANDLE;
+    bool alarm_disabled = false;
+    bool alarm_known;
+    Result rc;
+    PtcErrorCode err = open_write_session(adapter, &session);
+
+    if (err != PTC_ERR_OK) {
+        out->verified = false;
+        snprintf(out->detail, sizeof(out->detail), "pctl:s session open failed result=0x%x", adapter->last_result);
+        return err;
+    }
+    alarm_known = R_SUCCEEDED(dispatch_out(
+        &session.service,
+        PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED,
+        &alarm_disabled,
+        sizeof(alarm_disabled)));
+    rc = dispatch_out_handle(
+        &session.service,
+        PTC_PCTL_CMD_GET_PLAY_TIMER_EVENT_TO_REQUEST_SUSPENSION,
+        &suspension_event);
+    err = map_result(adapter, rc, PTC_ERR_PCTL_WRITE_FAILED);
+    if (err == PTC_ERR_OK && suspension_event == INVALID_HANDLE) {
+        err = PTC_ERR_PCTL_WRITE_FAILED;
+    }
+    if (suspension_event != INVALID_HANDLE) {
+        svcCloseHandle(suspension_event);
+    }
+    close_session(&session);
+    if (err != PTC_ERR_OK) {
+        out->verified = false;
+        snprintf(
+            out->detail,
+            sizeof(out->detail),
+            "suspension event unavailable result=0x%x alarm_disabled=%s",
+            adapter->last_result,
+            alarm_known ? (alarm_disabled ? "true" : "false") : "unknown");
+        return err;
+    }
+    if (alarm_disabled) {
+        /* The channel exists but the console would swallow the request, so this is a
+           configuration failure rather than an IPC failure: keep the successful IPC
+           result and say so in the detail instead of inventing an error code. */
+        out->verified = false;
+        snprintf(out->detail, sizeof(out->detail), "suspension event ok but play timer alarm is disabled");
+        return PTC_ERR_PCTL_WRITE_FAILED;
+    }
+    out->verified = true;
+    snprintf(
+        out->detail,
+        sizeof(out->detail),
+        "suspension event handle ok alarm_disabled=%s",
+        alarm_known ? "false" : "unknown");
+    return PTC_ERR_OK;
 }
 
 static PtcErrorCode switch_probe_play_timer_write(PtcPctl *pctl, PtcProbeResult *out)
@@ -434,7 +496,6 @@ static const PtcPctlVTable SWITCH_PCTL_VTABLE = {
     switch_apply_target,
     switch_start_timer,
     switch_stop_timer,
-    switch_probe_raw_block,
     switch_probe_suspend,
     switch_probe_play_timer_write,
     switch_snapshot_settings,

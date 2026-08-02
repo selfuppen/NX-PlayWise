@@ -81,6 +81,112 @@ static void test_overlay_confirmation(void)
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_NONE, "confirmation cannot be reused");
 }
 
+static void check_hit(PtcUiHit hit, PtcUiHitKind kind, int index, const char *label)
+{
+    if (hit.kind != kind || hit.index != index) {
+        fprintf(stderr, "FAIL %s: expected (%d,%d), got (%d,%d)\n", label, (int)kind, index, (int)hit.kind, hit.index);
+        ++failures;
+    }
+}
+
+static PtcUiHit hit_center(const PtcUiModel *model, PtcUiRect rect)
+{
+    return ptc_ui_hit_test(model, rect.x + rect.w / 2, rect.y + rect.h / 2);
+}
+
+static void test_page_action_counts(void)
+{
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 6, "today card count");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 5, "plan card count");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SAFETY), 5, "safety card count includes both probes");
+}
+
+static void test_hit_test_child(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_CHILD;
+    check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "child submit button");
+    check_hit(hit_center(&model, ptc_ui_child_refresh_rect()), PTC_UI_HIT_CHILD_REFRESH, 0, "child refresh area");
+    check_hit(ptc_ui_hit_test(&model, 8, 8), PTC_UI_HIT_NONE, 0, "child empty space");
+    /* The parent area stays hidden behind the button combo; touch must not reach it. */
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0, "child view hides parent cards");
+    check_hit(hit_center(&model, ptc_ui_parent_tab_rect(1)), PTC_UI_HIT_NONE, 0, "child view hides parent tabs");
+}
+
+static void test_hit_test_parent(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_TODAY;
+    check_hit(hit_center(&model, ptc_ui_parent_tab_rect(0)), PTC_UI_HIT_PARENT_TAB, 0, "first tab");
+    check_hit(hit_center(&model, ptc_ui_parent_tab_rect(2)), PTC_UI_HIT_PARENT_TAB, 2, "last tab");
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_PARENT_CARD, 0, "first card");
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "sixth card on today page");
+    check_hit(ptc_ui_hit_test(&model, 8, 640), PTC_UI_HIT_NONE, 0, "parent empty space");
+
+    model.parent_page = PTC_UI_PARENT_SAFETY;
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "suspend probe card is reachable");
+
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_NONE, 0, "card beyond page count is inert");
+}
+
+static void test_hit_test_overlays(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_TODAY;
+
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0, "confirm button");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0, "cancel button");
+    /* Overlays are modal: a tap over a card underneath must not fall through. */
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(1)), PTC_UI_HIT_NONE, 0, "overlay blocks card underneath");
+
+    model.overlay = PTC_UI_OVERLAY_MINUTES;
+    check_hit(hit_center(&model, ptc_ui_minutes_dec_rect()), PTC_UI_HIT_MINUTES_DEC, 0, "minutes decrement");
+    check_hit(hit_center(&model, ptc_ui_minutes_inc_rect()), PTC_UI_HIT_MINUTES_INC, 0, "minutes increment");
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0, "minutes confirm");
+
+    model.overlay = PTC_UI_OVERLAY_WEEKLY;
+    check_hit(hit_center(&model, ptc_ui_weekly_day_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 0, "weekly first day");
+    check_hit(hit_center(&model, ptc_ui_weekly_day_rect(6)), PTC_UI_HIT_WEEKLY_DAY, 6, "weekly last day");
+    check_hit(hit_center(&model, ptc_ui_weekly_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, 0, "weekly mode toggle");
+    check_hit(hit_center(&model, ptc_ui_weekly_min_up_rect()), PTC_UI_HIT_WEEKLY_MIN_UP, 0, "weekly minutes up");
+    check_hit(hit_center(&model, ptc_ui_weekly_min_down_rect()), PTC_UI_HIT_WEEKLY_MIN_DOWN, 0, "weekly minutes down");
+
+    model.overlay = PTC_UI_OVERLAY_BEDTIME;
+    check_hit(hit_center(&model, ptc_ui_bedtime_field_rect(0)), PTC_UI_HIT_BEDTIME_FIELD, 0, "bedtime enable field");
+    check_hit(hit_center(&model, ptc_ui_bedtime_field_rect(2)), PTC_UI_HIT_BEDTIME_FIELD, 2, "bedtime end field");
+    check_hit(hit_center(&model, ptc_ui_bedtime_adj_up_rect()), PTC_UI_HIT_BEDTIME_ADJ_UP, 0, "bedtime step up");
+    check_hit(hit_center(&model, ptc_ui_bedtime_adj_down_rect()), PTC_UI_HIT_BEDTIME_ADJ_DOWN, 0, "bedtime step down");
+
+    model.overlay = PTC_UI_OVERLAY_LIMIT_ACTION;
+    check_hit(hit_center(&model, ptc_ui_limit_option_rect(0)), PTC_UI_HIT_LIMIT_ACTION_OPTION, 0, "limit action remind");
+    check_hit(hit_center(&model, ptc_ui_limit_option_rect(2)), PTC_UI_HIT_LIMIT_ACTION_OPTION, 2, "limit action suspend");
+}
+
+static void test_probe_confirmation(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    model.operation = PTC_UI_OPERATION_PROBE_RAW_BLOCK;
+    check_int(
+        ptc_ui_take_confirmed_operation(&model),
+        PTC_UI_OPERATION_PROBE_RAW_BLOCK,
+        "raw block probe requires confirmation");
+    check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_NONE, "raw block probe consumed once");
+
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    model.operation = PTC_UI_OPERATION_PROBE_SUSPEND;
+    check_true(ptc_ui_cancel_overlay(&model), "suspend probe can be cancelled");
+    check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_NONE, "cancelled suspend probe does not run");
+}
+
 static void test_result_mapping(void)
 {
     PtcUiModel model;
@@ -115,8 +221,13 @@ static void test_result_mapping(void)
 int main(void)
 {
     test_navigation();
+    test_page_action_counts();
     test_editors();
     test_overlay_confirmation();
+    test_probe_confirmation();
+    test_hit_test_child();
+    test_hit_test_parent();
+    test_hit_test_overlays();
     test_result_mapping();
     if (failures != 0) {
         return 1;

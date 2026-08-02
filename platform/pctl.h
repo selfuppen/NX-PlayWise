@@ -61,7 +61,8 @@ typedef struct {
     PtcErrorCode (*apply_target)(PtcPctl *pctl, const PtcPctlTarget *target);
     PtcErrorCode (*start_timer)(PtcPctl *pctl);
     PtcErrorCode (*stop_timer)(PtcPctl *pctl);
-    PtcErrorCode (*probe_raw_block)(PtcPctl *pctl, PtcProbeResult *out);
+    /* Raw block has no probe entry: it is orchestrated by the sysmodule through
+       snapshot_settings/apply_target/restore_settings so it produces A/B evidence. */
     PtcErrorCode (*probe_suspend)(PtcPctl *pctl, PtcProbeResult *out);
     PtcErrorCode (*probe_play_timer_write)(PtcPctl *pctl, PtcProbeResult *out);
     PtcErrorCode (*snapshot_settings)(PtcPctl *pctl, PtcPctlSettingsSnapshot *out);

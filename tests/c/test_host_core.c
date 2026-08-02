@@ -604,11 +604,11 @@ static void write_default_files(PtcMemStorage *mem, const char *mode, bool allow
 
 static void write_capabilities(PtcMemStorage *mem, bool play_timer_write_verified, bool raw_block_verified, bool suspend_verified)
 {
-    char caps[256];
+    char caps[384];
     snprintf(
         caps,
         sizeof(caps),
-        "{\"version\":1,\"play_timer_write_verified\":%s,\"play_timer_write_backend\":\"pctl-s-v2\",\"play_timer_effect_verified\":%s,\"play_timer_effect_backend\":\"pctl-s-runtime-v2\",\"raw_block_verified\":%s,\"suspend_verified\":%s}\n",
+        "{\"version\":1,\"play_timer_write_verified\":%s,\"play_timer_write_backend\":\"pctl-s-v2\",\"play_timer_effect_verified\":%s,\"play_timer_effect_backend\":\"pctl-s-runtime-v2\",\"raw_block_verified\":%s,\"raw_block_backend\":\"pctl-s-rawblock-v1\",\"suspend_verified\":%s,\"suspend_backend\":\"pctl-s-suspend-v1\"}\n",
         play_timer_write_verified ? "true" : "false",
         play_timer_write_verified ? "true" : "false",
         raw_block_verified ? "true" : "false",
@@ -1240,21 +1240,147 @@ static void test_probe_raw_block_updates_capability(void)
     PtcFakeTime fake_time;
     PtcSysmodule sysmodule;
     char caps[1024];
+    char result[8192];
+    char backup[1024];
+    char events[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 60;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0007.json", "{\"version\":1,\"request_id\":\"1000-0007\",\"type\":\"probe_raw_block\",\"created_at\":1007,\"payload\":{}}\n"), "write probe request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process raw probe");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "capabilities persisted");
+    check_true(strstr(caps, "\"raw_block_verified\":true") != NULL, "raw capability true");
+    check_true(strstr(caps, "\"raw_block_backend\":\"pctl-s-rawblock-v1\"") != NULL, "raw capability backend");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0007.json", result, sizeof(result)), "probe result");
+    check_true(strstr(result, "\"raw_block_verified\":true") != NULL, "probe result capability");
+    check_true(strstr(result, "\"pctl_raw_block_probe\"") != NULL, "probe result evidence block");
+    check_true(strstr(result, "\"verdict\":\"pass\"") != NULL, "probe verdict pass");
+    check_true(strstr(result, "\"raw_target_written\":true") != NULL, "probe wrote raw target");
+    check_true(strstr(result, "\"blocked_observed\":true") != NULL, "probe observed block");
+    check_true(strstr(result, "\"raw_restored\":true") != NULL, "probe restored raw");
+    check_true(strstr(result, "\"timer_restored\":true") != NULL, "probe restored timer");
+    check_true(pctl.restore_called, "probe restored settings");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/last_pctl_backup.txt", backup, sizeof(backup)), "probe wrote backup");
+    check_true(strstr(backup, "play_timer_settings_hex=") != NULL, "backup has raw hex");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/events.jsonl", events, sizeof(events)), "probe events");
+    check_true(strstr(events, "raw_block_apply") != NULL, "probe apply event");
+    check_true(strstr(events, "raw_block_restore") != NULL, "probe restore event");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"), "passing probe leaves no disable flag");
+}
+
+static void test_probe_raw_block_requires_effect_capability(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
     char result[4096];
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
     pctl.status.unrestricted_today = false;
-    pctl.raw_probe_succeeds = true;
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
     write_default_files(&mem, "grant", true);
-    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0007.json", "{\"version\":1,\"request_id\":\"1000-0007\",\"type\":\"probe_raw_block\",\"created_at\":1007,\"payload\":{}}\n"), "write probe request");
-    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process raw probe");
-    check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "capabilities persisted");
-    check_true(strstr(caps, "\"raw_block_verified\":true") != NULL, "raw capability true");
-    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0007.json", result, sizeof(result)), "probe result");
-    check_true(strstr(result, "\"raw_block_verified\":true") != NULL, "probe result capability");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/probe-raw-gate.json", "{\"version\":1,\"request_id\":\"probe-raw-gate\",\"type\":\"probe_raw_block\",\"created_at\":1041,\"payload\":{}}\n"), "write gated raw probe");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process gated raw probe");
+    check_true(!pctl.applied, "gated raw probe avoids pctl write");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/probe-raw-gate.json", result, sizeof(result)), "gated raw probe result");
+    check_true(strstr(result, "\"reason\":\"pctl_write_not_verified\"") != NULL, "gated raw probe reason");
+}
+
+static void test_probe_raw_block_restore_failure_disables(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char caps[1024];
+    char result[8192];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 60;
+    pctl.restore_error = PTC_ERR_PCTL_WRITE_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/probe-raw-restore.json", "{\"version\":1,\"request_id\":\"probe-raw-restore\",\"type\":\"probe_raw_block\",\"created_at\":1042,\"payload\":{}}\n"), "write restore-fail raw probe");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process restore-fail raw probe");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/probe-raw-restore.json", result, sizeof(result)), "restore-fail raw probe result");
+    check_true(strstr(result, "\"reason\":\"pctl_restore_failed\"") != NULL, "restore-fail reason");
+    check_true(strstr(result, "\"failure_stage\":\"restore\"") != NULL, "restore-fail stage");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"), "restore failure creates disable flag");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "restore-fail capabilities");
+    check_true(strstr(caps, "\"raw_block_verified\":true") == NULL, "restore failure leaves raw capability unverified");
+}
+
+static void test_probe_raw_block_observe_is_dry_run(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char caps[1024];
+    char result[8192];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "observe", true);
+    write_capabilities(&mem, true, false, false);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/probe-raw-observe.json", "{\"version\":1,\"request_id\":\"probe-raw-observe\",\"type\":\"probe_raw_block\",\"created_at\":1043,\"payload\":{}}\n"), "write observe raw probe");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process observe raw probe");
+    check_true(!pctl.applied, "observe raw probe avoids pctl write");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/probe-raw-observe.json", result, sizeof(result)), "observe raw probe result");
+    check_true(strstr(result, "\"dry_run\":true") != NULL, "observe raw probe dry run");
+    check_true(strstr(result, "\"verdict\":\"not_run\"") != NULL, "observe raw probe verdict");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "observe raw probe capabilities");
+    check_true(strstr(caps, "\"raw_block_verified\":true") == NULL, "observe raw probe does not verify");
+}
+
+static void test_legacy_raw_block_capability_is_invalidated(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    /* A hand-edited or pre-backend capabilities file must not unlock block_today. */
+    check_true(
+        mem.storage.vtable->write_text_atomic(
+            &mem.storage,
+            "app/capabilities.json",
+            "{\"version\":1,\"play_timer_write_verified\":true,\"play_timer_write_backend\":\"pctl-s-v2\","
+            "\"play_timer_effect_verified\":true,\"play_timer_effect_backend\":\"pctl-s-runtime-v2\","
+            "\"raw_block_verified\":true,\"suspend_verified\":true}\n"),
+        "write backendless raw capability");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/legacy-raw.json", "{\"version\":1,\"request_id\":\"legacy-raw\",\"type\":\"block_today\",\"created_at\":1044,\"payload\":{}}\n"), "write legacy block today");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process legacy block today");
+    check_true(!pctl.applied, "backendless raw capability avoids pctl write");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/legacy-raw.json", result, sizeof(result)), "legacy raw result");
+    check_true(strstr(result, "\"reason\":\"raw_block_not_verified\"") != NULL, "legacy raw reason");
 }
 
 static void test_parent_unlock_state_and_expiry(void)
@@ -1360,6 +1486,36 @@ static void test_more_rule_requests_and_probe_suspend(void)
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process suspend probe");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", rules, sizeof(rules)), "suspend capability persisted");
     check_true(strstr(rules, "\"suspend_verified\":true") != NULL, "suspend capability true");
+    check_true(strstr(rules, "\"suspend_backend\":\"pctl-s-suspend-v1\"") != NULL, "suspend capability backend");
+}
+
+static void test_legacy_suspend_capability_is_invalidated(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    /* Backendless suspend_verified must not unlock the suspend limit action. */
+    check_true(
+        mem.storage.vtable->write_text_atomic(
+            &mem.storage,
+            "app/capabilities.json",
+            "{\"version\":1,\"play_timer_write_verified\":true,\"play_timer_write_backend\":\"pctl-s-v2\","
+            "\"play_timer_effect_verified\":true,\"play_timer_effect_backend\":\"pctl-s-runtime-v2\","
+            "\"raw_block_verified\":false,\"suspend_verified\":true}\n"),
+        "write backendless suspend capability");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/legacy-suspend.json", "{\"version\":1,\"request_id\":\"legacy-suspend\",\"type\":\"set_limit_action\",\"created_at\":1045,\"payload\":{\"action\":\"suspend\"}}\n"), "write legacy suspend action");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process legacy suspend action");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/legacy-suspend.json", result, sizeof(result)), "legacy suspend result");
+    check_true(strstr(result, "\"reason\":\"suspend_not_verified\"") != NULL, "legacy suspend reason");
 }
 
 static void test_failure_paths_do_not_consume_nonce(void)
@@ -1472,8 +1628,13 @@ int main(void)
     test_observe_rule_request_is_dry_run();
     test_grant_set_today_limit_persists_applies_and_logs();
     test_probe_raw_block_updates_capability();
+    test_probe_raw_block_requires_effect_capability();
+    test_probe_raw_block_restore_failure_disables();
+    test_probe_raw_block_observe_is_dry_run();
+    test_legacy_raw_block_capability_is_invalidated();
     test_parent_unlock_state_and_expiry();
     test_more_rule_requests_and_probe_suspend();
+    test_legacy_suspend_capability_is_invalidated();
     test_enforce_tick_applies_once_and_respects_disable_flag();
     test_failure_paths_do_not_consume_nonce();
     test_recover_processing();

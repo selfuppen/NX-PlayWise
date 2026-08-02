@@ -633,7 +633,7 @@ static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     int day;
     draw_dialog_shell(pixels, stride, model, &dialog, 1172, 470);
     for (day = 0; day < 7; ++day) {
-        UiRect card = {dialog.x + 26 + day * 160, dialog.y + 122, 142, 190};
+        UiRect card = to_uirect(ptc_ui_weekly_day_rect(day));
         uint32_t border = day == model->editor_index ? COLOR(28, 118, 188) : COLOR(219, 225, 233);
         char minutes[32];
         fill_round_rect(pixels, stride, card, 8, day == model->editor_index ? COLOR(244, 249, 255) : COLOR(250, 251, 253));
