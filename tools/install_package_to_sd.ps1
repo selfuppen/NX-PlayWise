@@ -13,7 +13,8 @@ $ErrorActionPreference = "Stop"
 $destinationRoot = "E:\"
 $ownedRelativePaths = @(
     "atmosphere\contents\4200000000BD2300",
-    "switch\play-time-control"
+    "switch\play-time-control",
+    "switch\.overlays\pctc.ovl"
 )
 
 function Get-FullDirectoryPath {
@@ -30,7 +31,27 @@ function Get-FullDirectoryPath {
     return $item.FullName.TrimEnd([System.IO.Path]::DirectorySeparatorChar)
 }
 
-function Test-InstalledFiles {
+function Test-InstalledFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceFile,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationFile
+    )
+
+    if (-not (Test-Path -LiteralPath $DestinationFile -PathType Leaf)) {
+        throw "Verification failed; destination file is missing: $DestinationFile"
+    }
+
+    $sourceHash = (Get-FileHash -LiteralPath $SourceFile -Algorithm SHA256).Hash
+    $destinationHash = (Get-FileHash -LiteralPath $DestinationFile -Algorithm SHA256).Hash
+    if ($sourceHash -ne $destinationHash) {
+        throw "Verification failed; file hash differs: $DestinationFile"
+    }
+}
+
+function Test-InstalledPath {
     param(
         [Parameter(Mandatory = $true)]
         [string]$SourcePath,
@@ -39,17 +60,23 @@ function Test-InstalledFiles {
         [string]$DestinationPath
     )
 
-    foreach ($sourceFile in Get-ChildItem -LiteralPath $SourcePath -File -Recurse) {
-        $relativePath = $sourceFile.FullName.Substring($SourcePath.Length).TrimStart("\")
-        $destinationFile = Join-Path $DestinationPath $relativePath
-        if (-not (Test-Path -LiteralPath $destinationFile -PathType Leaf)) {
-            throw "Verification failed; destination file is missing: $destinationFile"
-        }
+    $sourceItem = Get-Item -LiteralPath $SourcePath -ErrorAction Stop
+    if (-not $sourceItem.PSIsContainer) {
+        Test-InstalledFile -SourceFile $sourceItem.FullName -DestinationFile $DestinationPath
+        return
+    }
 
-        $sourceHash = (Get-FileHash -LiteralPath $sourceFile.FullName -Algorithm SHA256).Hash
-        $destinationHash = (Get-FileHash -LiteralPath $destinationFile -Algorithm SHA256).Hash
-        if ($sourceHash -ne $destinationHash) {
-            throw "Verification failed; file hash differs: $destinationFile"
+    foreach ($sourceFile in Get-ChildItem -LiteralPath $sourceItem.FullName -File -Recurse -Force) {
+        $relativePath = $sourceFile.FullName.Substring($sourceItem.FullName.Length).TrimStart("\")
+        $destinationFile = Join-Path $DestinationPath $relativePath
+        Test-InstalledFile -SourceFile $sourceFile.FullName -DestinationFile $destinationFile
+    }
+
+    foreach ($sourceDirectory in Get-ChildItem -LiteralPath $sourceItem.FullName -Directory -Recurse -Force) {
+        $relativePath = $sourceDirectory.FullName.Substring($sourceItem.FullName.Length).TrimStart("\")
+        $destinationDirectory = Join-Path $DestinationPath $relativePath
+        if (-not (Test-Path -LiteralPath $destinationDirectory -PathType Container)) {
+            throw "Verification failed; destination directory is missing: $destinationDirectory"
         }
     }
 }
@@ -66,13 +93,16 @@ if ($sourceRoot.StartsWith($destinationRoot, [System.StringComparison]::OrdinalI
 
 $sourceApp = Join-Path $sourceRoot "switch\play-time-control"
 $sourceSysmodule = Join-Path $sourceRoot "atmosphere\contents\4200000000BD2300"
+$sourceOverlay = Join-Path $sourceRoot "switch\.overlays\pctc.ovl"
 $availableRelativePaths = @()
+$hasPackageCore = $false
 
 if (Test-Path -LiteralPath $sourceApp -PathType Container) {
     if (-not (Test-Path -LiteralPath (Join-Path $sourceApp "config.json") -PathType Leaf)) {
         throw "Invalid package: switch\play-time-control\config.json is missing."
     }
     $availableRelativePaths += "switch\play-time-control"
+    $hasPackageCore = $true
 }
 
 if (Test-Path -LiteralPath $sourceSysmodule -PathType Container) {
@@ -80,9 +110,14 @@ if (Test-Path -LiteralPath $sourceSysmodule -PathType Container) {
         throw "Invalid package: atmosphere\contents\4200000000BD2300\exefs.nsp is missing."
     }
     $availableRelativePaths += "atmosphere\contents\4200000000BD2300"
+    $hasPackageCore = $true
 }
 
-if ($availableRelativePaths.Count -eq 0) {
+if (Test-Path -LiteralPath $sourceOverlay -PathType Leaf) {
+    $availableRelativePaths += "switch\.overlays\pctc.ovl"
+}
+
+if (-not $hasPackageCore) {
     throw "SourceFolder is not a play-time-control package directory."
 }
 
@@ -136,7 +171,7 @@ foreach ($relativePath in $availableRelativePaths) {
     if ($PSCmdlet.ShouldProcess($destinationPath, "Copy package from $sourcePath")) {
         New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
         Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Recurse -Force
-        Test-InstalledFiles -SourcePath $sourcePath -DestinationPath $destinationPath
+        Test-InstalledPath -SourcePath $sourcePath -DestinationPath $destinationPath
     }
 }
 
