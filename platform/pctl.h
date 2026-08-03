@@ -20,6 +20,8 @@ typedef struct {
     bool unrestricted_today;
     bool remaining_available;
     uint32_t remaining_minutes;
+    bool configured_minutes_available;
+    uint16_t configured_minutes;
     bool play_timer_enabled;
     bool restricted_now;
 } PtcPctlStatus;
@@ -56,7 +58,7 @@ typedef struct {
 } PtcPctlSettingsSnapshot;
 
 typedef struct {
-    PtcErrorCode (*read_status)(PtcPctl *pctl, PtcPctlStatus *out);
+    PtcErrorCode (*read_status)(PtcPctl *pctl, uint8_t weekday, PtcPctlStatus *out);
     PtcErrorCode (*backup)(PtcPctl *pctl, PtcPctlBackup *out);
     PtcErrorCode (*apply_target)(PtcPctl *pctl, const PtcPctlTarget *target);
     PtcErrorCode (*start_timer)(PtcPctl *pctl);

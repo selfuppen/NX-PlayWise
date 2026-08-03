@@ -13,9 +13,11 @@ typedef struct {
     bool unlock_observed;
     int error_code;
     int remaining_minutes;
+    int played_minutes;
     int play_timer_enabled;
     int restricted_now;
     bool remaining_available;
+    bool played_minutes_available;
     char status[8];
     char type[48];
     char mode[24];

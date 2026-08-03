@@ -289,12 +289,12 @@ static void draw_header(uint32_t *pixels, uint32_t stride, const char *title, co
     draw_text(pixels, stride, 126, 77, subtitle, 18, COLOR(97, 106, 120));
 }
 
-static void draw_key_hint(uint32_t *pixels, uint32_t stride, int x, int width, const char *key, const char *label)
+static void draw_footer_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect, const char *label)
 {
-    UiRect key_rect = {x, 671, width, 32};
-    fill_round_rect(pixels, stride, key_rect, 8, COLOR(235, 238, 243));
-    draw_text_center(pixels, stride, key_rect, key, 17, COLOR(39, 45, 55));
-    draw_text(pixels, stride, x + width + 9, 695, label, 19, COLOR(77, 86, 99));
+    UiRect box = to_uirect(rect);
+    fill_round_rect(pixels, stride, box, 8, COLOR(255, 255, 255));
+    draw_rect_outline(pixels, stride, box, 1, COLOR(203, 211, 222));
+    draw_text_center(pixels, stride, box, label, 19, COLOR(47, 57, 71));
 }
 
 static UiRect to_uirect(PtcUiRect rect)
@@ -388,12 +388,19 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
 {
     char today[32];
     char remaining[32];
+    char played[32];
     const char *mode = model->mode[0] ? model->mode : "--";
     describe_status(model, today, sizeof(today), remaining, sizeof(remaining));
+    if (model->played_minutes_available && model->played_minutes >= 0) {
+        snprintf(played, sizeof(played), "约 %d 分钟", model->played_minutes);
+    } else {
+        snprintf(played, sizeof(played), "暂不可用");
+    }
     draw_header(pixels, stride, "游玩时间", "查看今天的状态，使用家长提供的加时码");
-    draw_status_tile(pixels, stride, (UiRect){54, 118, 362, 92}, "今日状态", today, COLOR(216, 49, 54));
-    draw_status_tile(pixels, stride, (UiRect){438, 118, 362, 92}, "剩余时间", remaining, COLOR(25, 132, 95));
-    draw_status_tile(pixels, stride, (UiRect){822, 118, 404, 92}, "控制模式", mode, COLOR(28, 118, 188));
+    draw_status_tile(pixels, stride, (UiRect){54, 118, 278, 92}, "今日状态", today, COLOR(216, 49, 54));
+    draw_status_tile(pixels, stride, (UiRect){350, 118, 278, 92}, "剩余时间", remaining, COLOR(25, 132, 95));
+    draw_status_tile(pixels, stride, (UiRect){646, 118, 278, 92}, "已玩时间", played, COLOR(215, 139, 25));
+    draw_status_tile(pixels, stride, (UiRect){942, 118, 284, 92}, "控制模式", mode, COLOR(28, 118, 188));
 
     fill_round_rect(pixels, stride, (UiRect){54, 238, 760, 246}, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, (UiRect){54, 238, 760, 246}, 1, COLOR(219, 225, 233));
@@ -411,11 +418,9 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_text(pixels, stride, 866, 448, "Y  刷新状态", 20, COLOR(28, 118, 188));
 
     draw_notice(pixels, stride, model, 510);
-    draw_key_hint(pixels, stride, 54, 38, "A", "输入加时码");
-    draw_key_hint(pixels, stride, 258, 38, "Y", "刷新");
-    draw_key_hint(pixels, stride, 410, 94, "L+R+X", "家长区");
-    draw_key_hint(pixels, stride, 676, 38, "B", "退出");
-    draw_key_hint(pixels, stride, 818, 38, "+", "退出");
+    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0), "A  输入加时码");
+    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(1), "Y  刷新");
+    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(2), "B / +  退出");
 }
 
 static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
@@ -500,8 +505,14 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     UiRect panel = {842, 176, 384, 324};
     char today[32];
     char remaining[32];
+    char played[32];
     uint32_t today_color;
     describe_status(model, today, sizeof(today), remaining, sizeof(remaining));
+    if (model->played_minutes_available && model->played_minutes >= 0) {
+        snprintf(played, sizeof(played), "约 %d 分钟", model->played_minutes);
+    } else {
+        snprintf(played, sizeof(played), "暂不可用");
+    }
     if (model->blocked_today == 1) {
         today_color = COLOR(194, 61, 61);
     } else if (model->unrestricted_today == 1) {
@@ -514,14 +525,16 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, panel.x + 26, panel.y + 43, "今日状态", 23, COLOR(28, 34, 43));
-    draw_status_row(pixels, stride, panel, panel.y + 88, "今日模式", today, today_color);
-    draw_status_row(pixels, stride, panel, panel.y + 126, "剩余时间", remaining,
+    draw_status_row(pixels, stride, panel, panel.y + 74, "今日模式", today, today_color);
+    draw_status_row(pixels, stride, panel, panel.y + 108, "剩余时间", remaining,
                     model->remaining_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 164, "控制模式", model->mode[0] ? model->mode : "--", COLOR(28, 118, 188));
-    draw_status_row(pixels, stride, panel, panel.y + 202, "游玩计时器",
+    draw_status_row(pixels, stride, panel, panel.y + 142, "已玩时间", played,
+                    model->played_minutes_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
+    draw_status_row(pixels, stride, panel, panel.y + 176, "控制模式", model->mode[0] ? model->mode : "--", COLOR(28, 118, 188));
+    draw_status_row(pixels, stride, panel, panel.y + 210, "游玩计时器",
                     model->play_timer_enabled == 1 ? "已开启" : "未确认",
                     model->play_timer_enabled == 1 ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 240, "就寝限制",
+    draw_status_row(pixels, stride, panel, panel.y + 244, "就寝限制",
                     model->bedtime_active ? "当前生效" : "未生效",
                     model->bedtime_active ? COLOR(194, 61, 61) : COLOR(91, 100, 116));
     draw_status_row(pixels, stride, panel, panel.y + 278, "临时解锁",
@@ -547,11 +560,10 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
         draw_capabilities(pixels, stride, model);
     }
     draw_notice(pixels, stride, model, 522);
-    draw_key_hint(pixels, stride, 54, 38, "A", "执行");
-    draw_key_hint(pixels, stride, 180, 78, "方向键", "选择");
-    draw_key_hint(pixels, stride, 346, 52, "L/R", "切页");
-    draw_key_hint(pixels, stride, 516, 38, "Y", "刷新结果");
-    draw_key_hint(pixels, stride, 724, 38, "B", "返回孩子页");
+    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0), "L  上一页");
+    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1), "R  下一页");
+    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(2), "Y  刷新结果");
+    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(3), "B  返回孩子页");
 }
 
 static const char *rule_mode_label(PtcRuleMode mode)
@@ -622,7 +634,7 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     draw_text_center(pixels, stride, value_box, value, 37, COLOR(28, 118, 188));
     draw_dialog_button(pixels, stride, ptc_ui_minutes_dec_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_minutes_inc_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 244, 580, 34}, "↑↓ 调整 5 分钟     ←→ 或点 －＋ 调整 15 分钟", 20, COLOR(77, 86, 99));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 244, 580, 34}, "X 或点数值精确输入；方向键继续按 5 / 15 分钟调整", 20, COLOR(77, 86, 99));
     draw_overlay_actions(pixels, stride, model, "A  确认");
 }
 
@@ -649,10 +661,13 @@ static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 119, card.width, 34}, minutes, 19, COLOR(77, 86, 99));
     }
     draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 330, dialog.width - 160, 30},
-                     "←→ 选择日期     X 切换模式     ↑↓ 调整 15 分钟（也可点下方按钮）", 19, COLOR(77, 86, 99));
+                     "←→ 选择日期  X 切换模式  ↑↓ 调整 15 分钟  Y 精确输入", 19, COLOR(77, 86, 99));
     draw_dialog_button(pixels, stride, ptc_ui_weekly_mode_rect(), "切换模式", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_weekly_min_down_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_weekly_min_up_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    if (model->draft_week[model->editor_index].mode == PTC_RULE_MODE_LIMIT) {
+        draw_dialog_button(pixels, stride, ptc_ui_weekly_min_input_rect(), "输入分钟", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    }
     draw_overlay_actions(pixels, stride, model, "A  保存计划");
 }
 

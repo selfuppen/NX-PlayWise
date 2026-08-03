@@ -51,6 +51,7 @@ static void test_navigation(void)
 
 static void test_editors(void)
 {
+    uint16_t parsed = 0;
     check_int(ptc_ui_adjust_minutes(5, -15, 5, 120), 5, "minutes minimum");
     check_int(ptc_ui_adjust_minutes(115, 15, 5, 120), 120, "minutes maximum");
     check_int(ptc_ui_adjust_minute_of_day(0, -15), 1425, "clock wraps backward");
@@ -59,6 +60,10 @@ static void test_editors(void)
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_UNLIMITED), PTC_RULE_MODE_BLOCKED, "rule mode blocked");
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_BLOCKED), PTC_RULE_MODE_LIMIT, "rule mode wraps");
     check_int(ptc_ui_shift_limit_action(PTC_LIMIT_ACTION_REMIND, -1), PTC_LIMIT_ACTION_SUSPEND, "limit action wraps");
+    check_true(ptc_ui_parse_minutes("1", 1, 1440, &parsed) && parsed == 1, "exact minute minimum parses");
+    check_true(ptc_ui_parse_minutes("1440", 1, 1440, &parsed) && parsed == 1440, "exact minute maximum parses");
+    check_true(!ptc_ui_parse_minutes("0", 1, 1440, &parsed), "exact minute below range rejected");
+    check_true(!ptc_ui_parse_minutes("15m", 1, 120, &parsed), "exact minute non-digit rejected");
 }
 
 static void test_overlay_confirmation(void)
@@ -108,6 +113,9 @@ static void test_hit_test_child(void)
     model.view = PTC_UI_CHILD;
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "child submit button");
     check_hit(hit_center(&model, ptc_ui_child_refresh_rect()), PTC_UI_HIT_CHILD_REFRESH, 0, "child refresh area");
+    check_hit(hit_center(&model, ptc_ui_child_footer_rect(0)), PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "child footer submit");
+    check_hit(hit_center(&model, ptc_ui_child_footer_rect(1)), PTC_UI_HIT_CHILD_REFRESH, 0, "child footer refresh");
+    check_hit(hit_center(&model, ptc_ui_child_footer_rect(2)), PTC_UI_HIT_CHILD_EXIT, 0, "child footer exit");
     check_hit(ptc_ui_hit_test(&model, 8, 8), PTC_UI_HIT_NONE, 0, "child empty space");
     /* The parent area stays hidden behind the button combo; touch must not reach it. */
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0, "child view hides parent cards");
@@ -124,6 +132,10 @@ static void test_hit_test_parent(void)
     check_hit(hit_center(&model, ptc_ui_parent_tab_rect(2)), PTC_UI_HIT_PARENT_TAB, 2, "last tab");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_PARENT_CARD, 0, "first card");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "sixth card on today page");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(0)), PTC_UI_HIT_PARENT_PREV_PAGE, 0, "parent previous page footer");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(1)), PTC_UI_HIT_PARENT_NEXT_PAGE, 0, "parent next page footer");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(2)), PTC_UI_HIT_PARENT_REFRESH, 0, "parent refresh footer");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(3)), PTC_UI_HIT_PARENT_BACK, 0, "parent back footer");
     check_hit(ptc_ui_hit_test(&model, 8, 640), PTC_UI_HIT_NONE, 0, "parent empty space");
 
     model.parent_page = PTC_UI_PARENT_SAFETY;
@@ -149,14 +161,18 @@ static void test_hit_test_overlays(void)
     model.overlay = PTC_UI_OVERLAY_MINUTES;
     check_hit(hit_center(&model, ptc_ui_minutes_dec_rect()), PTC_UI_HIT_MINUTES_DEC, 0, "minutes decrement");
     check_hit(hit_center(&model, ptc_ui_minutes_inc_rect()), PTC_UI_HIT_MINUTES_INC, 0, "minutes increment");
+    check_hit(hit_center(&model, ptc_ui_minutes_value_rect()), PTC_UI_HIT_MINUTES_VALUE, 0, "minutes exact input");
     check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0, "minutes confirm");
 
     model.overlay = PTC_UI_OVERLAY_WEEKLY;
+    model.editor_index = 0;
+    model.draft_week[0].mode = PTC_RULE_MODE_LIMIT;
     check_hit(hit_center(&model, ptc_ui_weekly_day_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 0, "weekly first day");
     check_hit(hit_center(&model, ptc_ui_weekly_day_rect(6)), PTC_UI_HIT_WEEKLY_DAY, 6, "weekly last day");
     check_hit(hit_center(&model, ptc_ui_weekly_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, 0, "weekly mode toggle");
     check_hit(hit_center(&model, ptc_ui_weekly_min_up_rect()), PTC_UI_HIT_WEEKLY_MIN_UP, 0, "weekly minutes up");
     check_hit(hit_center(&model, ptc_ui_weekly_min_down_rect()), PTC_UI_HIT_WEEKLY_MIN_DOWN, 0, "weekly minutes down");
+    check_hit(hit_center(&model, ptc_ui_weekly_min_input_rect()), PTC_UI_HIT_WEEKLY_MIN_INPUT, 0, "weekly exact minutes");
 
     model.overlay = PTC_UI_OVERLAY_BEDTIME;
     check_hit(hit_center(&model, ptc_ui_bedtime_field_rect(0)), PTC_UI_HIT_BEDTIME_FIELD, 0, "bedtime enable field");
@@ -194,6 +210,7 @@ static void test_result_mapping(void)
         "{\"version\":1,\"request_id\":\"1-a\",\"type\":\"status\",\"status\":\"ok\","
         "\"mode\":\"observe\",\"dry_run\":true,\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,"
         "\"unrestricted_today\":0,\"remaining_available\":true,\"remaining_minutes\":42,"
+        "\"played_minutes_available\":true,\"played_minutes\":18,"
         "\"play_timer_enabled\":1,\"restricted_now\":0,\"bedtime_active\":false,"
         "\"parent_unlock_active\":true},\"capabilities\":{\"play_timer_write_verified\":true,"
         "\"play_timer_effect_verified\":true,\"raw_block_verified\":false,\"suspend_verified\":false},\"completed_at\":1}";
@@ -213,6 +230,8 @@ static void test_result_mapping(void)
     check_true(ptc_ui_apply_result_json(&model, success), "success result parses");
     check_true(model.status_loaded, "result status loaded");
     check_int(model.remaining_minutes, 42, "remaining minutes mapped");
+    check_int(model.played_minutes, 18, "played minutes mapped");
+    check_true(model.played_minutes_available, "played minutes availability mapped");
     check_true(model.parent_unlock_active, "unlock state mapped");
     check_true(model.play_timer_effect_verified, "capability mapped");
     check_true(strcmp(model.mode, "观察") == 0, "mode localized");

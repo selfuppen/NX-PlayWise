@@ -160,7 +160,7 @@ static void settings_slots(char *out, size_t out_size, const PtcSwitchPlayTimerS
     ptc_play_timer_settings_summary(out, out_size, settings->words, PTC_PLAY_TIMER_SETTINGS_WORDS);
 }
 
-static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
+static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStatus *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
     PtcSwitchSession session;
@@ -171,6 +171,9 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
     bool timer_enabled = false;
     bool restricted = false;
     s64 remaining_ns = 0;
+    PtcSwitchPlayTimerSettings timer_settings;
+    PtcSwitchSession settings_session;
+    uint16_t configured_minutes = 0;
     Service *service;
 
     err = open_read_session(adapter, &session);
@@ -205,6 +208,22 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, PtcPctlStatus *out)
     out->limited_today = enabled && !unlocked;
     out->blocked_today = false;
     close_session(&session);
+    /* The private settings command is available through pctl:s. Failure is a
+       soft degradation: ordinary status remains usable, only played time is unavailable. */
+    if (weekday < PTC_PLAY_TIMER_DAY_COUNT &&
+        open_write_session(adapter, &settings_session) == PTC_ERR_OK) {
+        if (get_play_timer_settings(adapter, &settings_session.service, &timer_settings) == PTC_ERR_OK &&
+            ptc_play_timer_settings_get_minutes(
+                timer_settings.words,
+                PTC_PLAY_TIMER_SETTINGS_WORDS,
+                weekday,
+                &configured_minutes) &&
+            configured_minutes <= PTC_PLAY_TIMER_MAX_LIMIT_MINUTES) {
+            out->configured_minutes_available = true;
+            out->configured_minutes = configured_minutes;
+        }
+        close_session(&settings_session);
+    }
     return PTC_ERR_OK;
 }
 

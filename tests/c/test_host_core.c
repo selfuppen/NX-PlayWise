@@ -110,36 +110,67 @@ static void test_overlay_input_and_shared_result_summary(void)
     unsigned int i;
     ptc_overlay_input_init(&input);
     check_int(input.cursor, 0, "overlay cursor starts at zero");
-    check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_LEFT), "overlay left consumed");
+    check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_LEFT, PTC_OVERLAY_BUTTON_LEFT, 0), "overlay left consumed");
     check_int(input.cursor, 7, "overlay left wraps within row");
-    check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_UP), "overlay up consumed");
+    check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_UP, PTC_OVERLAY_BUTTON_UP, 0), "overlay up consumed");
     check_int(input.cursor, 31, "overlay up wraps to final row");
+
     ptc_overlay_input_init(&input);
+    check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_RIGHT, PTC_OVERLAY_BUTTON_RIGHT, 0), "overlay repeat starts with immediate move");
+    check_int(input.cursor, 1, "overlay repeat immediate cursor");
+    check_true(ptc_overlay_input_handle(&input, 0, PTC_OVERLAY_BUTTON_RIGHT, PTC_OVERLAY_REPEAT_DELAY_MS - 1), "overlay held direction consumed before delay");
+    check_int(input.cursor, 1, "overlay repeat waits for initial delay");
+    check_true(ptc_overlay_input_handle(&input, 0, PTC_OVERLAY_BUTTON_RIGHT, 1), "overlay held direction reaches delay");
+    check_int(input.cursor, 2, "overlay repeat moves at initial delay");
+    check_true(ptc_overlay_input_handle(&input, 0, PTC_OVERLAY_BUTTON_RIGHT, PTC_OVERLAY_REPEAT_INTERVAL_MS - 1), "overlay held direction waits for interval");
+    check_int(input.cursor, 2, "overlay repeat waits between moves");
+    check_true(ptc_overlay_input_handle(&input, 0, PTC_OVERLAY_BUTTON_RIGHT, 1), "overlay held direction reaches interval");
+    check_int(input.cursor, 3, "overlay repeat moves at interval");
+    check_true(!ptc_overlay_input_handle(&input, 0, 0, PTC_OVERLAY_REPEAT_INTERVAL_MS * 2), "overlay release is not consumed");
+    check_int(input.cursor, 3, "overlay release stops repeat");
+    check_true(ptc_overlay_input_handle(
+        &input,
+        PTC_OVERLAY_BUTTON_LEFT | PTC_OVERLAY_BUTTON_RIGHT,
+        PTC_OVERLAY_BUTTON_LEFT | PTC_OVERLAY_BUTTON_RIGHT,
+        0), "overlay multiple directions consumed");
+    check_int(input.cursor, 3, "overlay multiple directions do not move");
+    check_true(!ptc_overlay_input_handle(&input, 0, PTC_OVERLAY_BUTTON_A, 1000), "overlay held action is not repeated");
+    check_int(input.length, 0, "overlay held action does not enter character");
+
+    ptc_overlay_input_init(&input);
+    check_true(!ptc_overlay_input_can_submit(&input), "overlay incomplete code cannot submit");
     for (i = 0; i < PTC_OVERLAY_CODE_SYMBOLS; ++i) {
-        check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_A), "overlay A enters character");
+        check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_A, PTC_OVERLAY_BUTTON_A, 0), "overlay A enters character");
         if (i + 1U < PTC_OVERLAY_CODE_SYMBOLS) {
-            (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_RIGHT);
+            (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_RIGHT, PTC_OVERLAY_BUTTON_RIGHT, 0);
         }
     }
     check_true(ptc_overlay_input_can_submit(&input), "overlay accepts exactly sixteen symbols");
     check_true(ptc_overlay_input_format(&input, formatted, sizeof(formatted)), "overlay code formats");
     check_str(formatted, "0123-4567-0123-4567", "overlay Crockford grouping");
-    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_X);
+    check_int(input.cursor, 7, "overlay focus reaches final entered key");
+    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_X, PTC_OVERLAY_BUTTON_X, 0);
     check_true(!ptc_overlay_input_can_submit(&input), "overlay delete disables submit");
-    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_Y);
+    check_int(input.cursor, 7, "overlay delete keeps keyboard focus");
+    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_Y, PTC_OVERLAY_BUTTON_Y, 0);
     check_int(input.length, 0, "overlay clear empties code");
+    check_int(input.cursor, 7, "overlay clear keeps keyboard focus");
     ptc_overlay_input_tick(&input, PTC_OVERLAY_REQUEST_TIMEOUT_MS, PTC_OVERLAY_REQUEST_TIMEOUT_MS);
     check_true(input.timed_out, "overlay input timeout fires");
 
     ptc_result_state_default(&state, 2380);
     state.remaining_available = true;
     state.remaining_minutes = 30;
+    state.played_minutes_available = true;
+    state.played_minutes = 60;
     state.play_timer_enabled = 1;
     state.restricted_now = 0;
     (void)ptc_result_ok_json(result, sizeof(result), "sum-1", "offline_code", "grant", false, &state, 1);
     check_true(ptc_companion_result_summary_parse(result, &summary), "shared result summary parses");
     check_true(summary.unlock_observed, "shared result summary recognizes unlock");
     check_int(summary.remaining_minutes, 30, "shared result summary remaining minutes");
+    check_int(summary.played_minutes, 60, "shared result summary played minutes");
+    check_true(summary.played_minutes_available, "shared result summary played availability");
     (void)ptc_result_ok_json(result, sizeof(result), "sum-2", "offline_code", "observe", true, &state, 1);
     check_true(ptc_companion_result_summary_parse(result, &summary), "observe summary parses");
     check_true(!summary.unlock_observed, "observe summary never claims unlock");
@@ -706,6 +737,48 @@ static void test_observe_status_flow(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0001.json", result, sizeof(result)), "status result written");
     check_true(strstr(result, "\"status\":\"ok\"") != NULL, "status ok result");
     check_true(strstr(result, "\"dry_run\":true") != NULL, "status dry run");
+}
+
+static void test_status_played_minutes(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char request[512];
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 30;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 90;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "observe", false);
+    (void)ptc_companion_status_request_json(request, sizeof(request), "status-played", 1000);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-played.json", request), "write played status request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process played status");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-played.json", result, sizeof(result)), "played status result written");
+    check_true(strstr(result, "\"played_minutes_available\":true,\"played_minutes\":60") != NULL, "played status computes configured minus remaining");
+
+    pctl.status.remaining_minutes = 100;
+    (void)ptc_companion_status_request_json(request, sizeof(request), "status-played-clamped", 1001);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-played-clamped.json", request), "write clamped played status request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process clamped played status");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-played-clamped.json", result, sizeof(result)), "clamped played status result written");
+    check_true(strstr(result, "\"played_minutes_available\":true,\"played_minutes\":0") != NULL, "played status clamps negative elapsed time");
+
+    pctl.status.limited_today = false;
+    pctl.status.unrestricted_today = true;
+    (void)ptc_companion_status_request_json(request, sizeof(request), "status-played-unavailable", 1002);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-played-unavailable.json", request), "write unavailable played status request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process unavailable played status");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-played-unavailable.json", result, sizeof(result)), "unavailable played status result written");
+    check_true(strstr(result, "\"played_minutes_available\":false,\"played_minutes\":-1") != NULL, "unlimited status leaves played time unavailable");
 }
 
 static void test_observe_offline_code_allows_unrestricted_dry_run(void)
@@ -1781,6 +1854,7 @@ int main(void)
     test_companion_self_check_enforce_snapshot();
     test_companion_self_check_scans_large_event_log();
     test_observe_status_flow();
+    test_status_played_minutes();
     test_observe_offline_code_allows_unrestricted_dry_run();
     test_grant_unrestricted_guard_rejects_without_nonce();
     test_grant_requires_play_timer_write_probe();

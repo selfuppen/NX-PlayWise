@@ -628,6 +628,16 @@ static int64_t result_remaining_minutes(const PtcPctlStatus *status)
     return status->remaining_available ? (int64_t)status->remaining_minutes : -1;
 }
 
+static int64_t result_played_minutes(const PtcPctlStatus *status)
+{
+    if (!status->limited_today || !status->configured_minutes_available || !status->remaining_available) {
+        return -1;
+    }
+    return status->configured_minutes > status->remaining_minutes
+        ? (int64_t)(status->configured_minutes - status->remaining_minutes)
+        : 0;
+}
+
 static void result_state_from_pctl(
     PtcResultState *state,
     uint16_t day_index,
@@ -644,6 +654,8 @@ static void result_state_from_pctl(
     state->unrestricted_today = status->unrestricted_today ? 1 : 0;
     state->remaining_available = status->remaining_available;
     state->remaining_minutes = result_remaining_minutes(status);
+    state->played_minutes = result_played_minutes(status);
+    state->played_minutes_available = state->played_minutes >= 0;
     state->play_timer_enabled = status->play_timer_enabled ? 1 : 0;
     eval = ptc_rules_evaluate(rules, day_index, ptc_weekday_from_day_index(day_index), minute_of_day, parent_unlock_active);
     state->bedtime_active = eval.bedtime_active;
@@ -775,7 +787,7 @@ static PtcErrorCode start_timer_and_wait_unrestricted(
         return err;
     }
     for (i = 0; i < 20U; ++i) {
-        err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, observed);
+        err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, target.weekday, observed);
         if (err == PTC_ERR_OK && observed->play_timer_enabled && !observed->restricted_now) {
             append_event(sysmodule, request, "effect_observed", PTC_ERR_OK, "offline_code");
             return PTC_ERR_OK;
@@ -1086,7 +1098,7 @@ static bool write_current_status_result(
     if (!load_state(sysmodule, &runtime_state)) {
         return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_BAD_REQUEST, now.day_index, caps);
     }
-    err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &pctl_status);
+    err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, mode, dry_run, err, now.day_index, caps);
     }
@@ -1126,7 +1138,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, err, now.day_index, caps);
     }
-    err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &pctl_status);
+    err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, err, now.day_index, caps);
     }
@@ -1167,7 +1179,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     }
     (void)load_rules(sysmodule, &rules);
     (void)load_state(sysmodule, &runtime_state);
-    (void)sysmodule->pctl->vtable->read_status(sysmodule->pctl, &pctl_status);
+    (void)sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     result_state_from_pctl(&state, now.day_index, &pctl_status, caps, &rules, runtime_state.parent_unlock_until > now.unix_seconds, now.minute_of_day);
     (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, ptc_control_mode_name(config->mode), decision.dry_run, &state, now.unix_seconds);
     if (write_result(sysmodule, request->request_id, json)) {
@@ -1369,7 +1381,7 @@ static bool process_probe_play_timer_effect(
             &restored_status, restored_error, false, false, false, false, false, false, "", "", "");
     }
 
-    before_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &before_status);
+    before_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &before_status);
     append_event(sysmodule, request, "effect_before", before_error, "read_status");
     if (before_error != PTC_ERR_OK) {
         final_error = before_error;
@@ -1462,7 +1474,7 @@ static bool process_probe_play_timer_effect(
         goto effect_done;
     }
     for (i = 0; i < 20U; ++i) {
-        active_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &active_status);
+        active_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &active_status);
         if (active_error == PTC_ERR_OK) {
             timer_enabled_seen = active_status.play_timer_enabled;
             remaining_seen = active_status.remaining_available &&
@@ -1490,7 +1502,7 @@ static bool process_probe_play_timer_effect(
             final_error = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
         }
         for (i = 0; final_error == PTC_ERR_OK && i < 45U; ++i) {
-            active_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &active_status);
+            active_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &active_status);
             if (active_error != PTC_ERR_OK) {
                 final_error = active_error;
                 break;
@@ -1525,7 +1537,7 @@ effect_done:
             effect_snapshot_hex(restored_opaque_hex, sizeof(restored_opaque_hex), &restored_snapshot);
         }
         if (restored_error == PTC_ERR_OK) {
-            restored_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &restored_status);
+            restored_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &restored_status);
         }
         append_event(sysmodule, request, restored_error == PTC_ERR_OK && raw_restored && timer_restored ? "effect_restore" : "effect_restore_failed", restored_error, "restore");
         if (restored_error != PTC_ERR_OK || !raw_restored || !timer_restored) {
@@ -1712,7 +1724,7 @@ static bool process_probe_raw_block(
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, now.day_index, caps);
     }
 
-    before_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &before_status);
+    before_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &before_status);
     append_event(sysmodule, request, "raw_block_before", before_error, "read_status");
     if (before_error != PTC_ERR_OK) {
         final_error = before_error;
@@ -1771,7 +1783,7 @@ static bool process_probe_raw_block(
         goto raw_block_done;
     }
     for (i = 0; i < 20U; ++i) {
-        active_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &active_status);
+        active_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &active_status);
         if (active_error == PTC_ERR_OK) {
             blocked_observed = active_status.restricted_now ||
                 (active_status.remaining_available && active_status.remaining_minutes == 0U);
@@ -1804,7 +1816,7 @@ raw_block_done:
             effect_snapshot_hex(restored_opaque_hex, sizeof(restored_opaque_hex), &restored_snapshot);
         }
         if (restored_error == PTC_ERR_OK) {
-            restored_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &restored_status);
+            restored_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &restored_status);
         }
         append_event(sysmodule, request, restored_error == PTC_ERR_OK && raw_restored && timer_restored ? "raw_block_restore" : "raw_block_restore_failed", restored_error, "restore");
         if (restored_error != PTC_ERR_OK || !raw_restored || !timer_restored) {
@@ -1914,7 +1926,7 @@ static bool process_probe_apply_today_limit(PtcSysmodule *sysmodule, const PtcRe
         return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), true, caps, now);
     }
 
-    before_status_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &before_status);
+    before_status_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, target.weekday, &before_status);
     take_pctl_debug_snapshot(sysmodule, &before_snapshot);
     append_pctl_debug(
         sysmodule,
@@ -2028,7 +2040,7 @@ static bool process_probe_apply_today_limit(PtcSysmodule *sysmodule, const PtcRe
     }
 
     if (write_attempted && write_error == PTC_ERR_OK) {
-        after_status_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &after_status);
+        after_status_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, target.weekday, &after_status);
         take_pctl_debug_snapshot(sysmodule, &after_status_snapshot);
         append_pctl_debug(
             sysmodule,
@@ -2087,7 +2099,7 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (!load_state(sysmodule, &runtime_state)) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_BAD_REQUEST, now.day_index, caps);
     }
-    err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, &pctl_status);
+    err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, err, now.day_index, caps);
     }

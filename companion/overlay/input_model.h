@@ -7,6 +7,8 @@
 #define PTC_OVERLAY_CODE_SYMBOLS 16
 #define PTC_OVERLAY_KEY_COUNT 32
 #define PTC_OVERLAY_REQUEST_TIMEOUT_MS 60000
+#define PTC_OVERLAY_REPEAT_DELAY_MS 350
+#define PTC_OVERLAY_REPEAT_INTERVAL_MS 90
 
 typedef enum {
     PTC_OVERLAY_BUTTON_UP = 1u << 0,
@@ -24,12 +26,19 @@ typedef struct {
     char symbols[PTC_OVERLAY_CODE_SYMBOLS + 1];
     unsigned int length;
     unsigned int cursor;
+    unsigned int repeat_direction;
+    int repeat_elapsed_ms;
     int elapsed_ms;
+    bool repeat_started;
     bool timed_out;
 } PtcOverlayInput;
 
 void ptc_overlay_input_init(PtcOverlayInput *input);
-bool ptc_overlay_input_handle(PtcOverlayInput *input, unsigned int buttons);
+bool ptc_overlay_input_handle(
+    PtcOverlayInput *input,
+    unsigned int buttons_down,
+    unsigned int buttons_held,
+    int elapsed_ms);
 void ptc_overlay_input_tick(PtcOverlayInput *input, int elapsed_ms, int timeout_ms);
 bool ptc_overlay_input_format(const PtcOverlayInput *input, char *out, size_t out_size);
 bool ptc_overlay_input_can_submit(const PtcOverlayInput *input);

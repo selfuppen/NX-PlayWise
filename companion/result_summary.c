@@ -48,6 +48,8 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
     out->remaining_available = bool_value(state, "remaining_available", false);
     out->remaining_minutes = number_value(state, "remaining_minutes", -1);
+    out->played_minutes_available = bool_value(state, "played_minutes_available", false);
+    out->played_minutes = number_value(state, "played_minutes", -1);
     out->play_timer_enabled = number_value(state, "play_timer_enabled", -1);
     out->restricted_now = number_value(state, "restricted_now", -1);
     error = cJSON_GetObjectItemCaseSensitive(root, "error");
@@ -67,10 +69,13 @@ bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summar
     if (!summary || !out || out_size == 0 || !summary->valid) {
         return false;
     }
-    written = snprintf(out, out_size, "%s%s  %s\n剩余：%d 分钟\n计时器：%s  限制：%s",
+    written = snprintf(out, out_size, "%s%s  %s\n剩余：%d 分钟  已玩：%s%d%s\n计时器：%s  限制：%s",
         summary->ok ? "成功" : "失败", summary->dry_run ? "（演练）" : "",
         summary->ok ? "" : (summary->reason[0] ? summary->reason : "后台拒绝"),
         summary->remaining_minutes,
+        summary->played_minutes_available ? "约 " : "",
+        summary->played_minutes_available ? summary->played_minutes : -1,
+        summary->played_minutes_available ? " 分钟" : "（不可用）",
         summary->play_timer_enabled == 1 ? "已启动" : "未确认",
         summary->restricted_now == 0 ? "已解除" : "仍受限");
     return written >= 0 && (size_t)written < out_size;

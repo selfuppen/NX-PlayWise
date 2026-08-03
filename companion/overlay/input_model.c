@@ -4,6 +4,11 @@
 #include <string.h>
 
 static const char CHARSET[] = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+static const unsigned int DIRECTION_BUTTONS =
+    PTC_OVERLAY_BUTTON_UP |
+    PTC_OVERLAY_BUTTON_DOWN |
+    PTC_OVERLAY_BUTTON_LEFT |
+    PTC_OVERLAY_BUTTON_RIGHT;
 
 const char *ptc_overlay_input_charset(void)
 {
@@ -27,47 +32,125 @@ static void move_cursor(PtcOverlayInput *input, int dx, int dy)
     input->cursor = (unsigned int)(row * 8 + col);
 }
 
-bool ptc_overlay_input_handle(PtcOverlayInput *input, unsigned int buttons)
+static bool is_single_direction(unsigned int buttons)
+{
+    return buttons != 0u && (buttons & (buttons - 1u)) == 0u;
+}
+
+static void reset_repeat(PtcOverlayInput *input)
+{
+    input->repeat_direction = 0u;
+    input->repeat_elapsed_ms = 0;
+    input->repeat_started = false;
+}
+
+static void move_in_direction(PtcOverlayInput *input, unsigned int direction)
+{
+    switch (direction) {
+    case PTC_OVERLAY_BUTTON_UP:
+        move_cursor(input, 0, -1);
+        break;
+    case PTC_OVERLAY_BUTTON_DOWN:
+        move_cursor(input, 0, 1);
+        break;
+    case PTC_OVERLAY_BUTTON_LEFT:
+        move_cursor(input, -1, 0);
+        break;
+    case PTC_OVERLAY_BUTTON_RIGHT:
+        move_cursor(input, 1, 0);
+        break;
+    default:
+        break;
+    }
+}
+
+static bool handle_direction_repeat(
+    PtcOverlayInput *input,
+    unsigned int buttons_down,
+    unsigned int buttons_held,
+    int elapsed_ms)
+{
+    unsigned int down = buttons_down & DIRECTION_BUTTONS;
+    unsigned int held = buttons_held & DIRECTION_BUTTONS;
+
+    if (down == 0u && held == 0u) {
+        reset_repeat(input);
+        return false;
+    }
+
+    /* Ambiguous diagonals/opposing directions are consumed without moving. */
+    if ((down != 0u && !is_single_direction(down)) ||
+        (held != 0u && !is_single_direction(held)) ||
+        (down != 0u && held != 0u && down != held)) {
+        reset_repeat(input);
+        return true;
+    }
+
+    if (down != 0u) {
+        move_in_direction(input, down);
+        input->repeat_direction = down;
+        input->repeat_elapsed_ms = 0;
+        input->repeat_started = false;
+        return true;
+    }
+
+    if (input->repeat_direction != held) {
+        input->repeat_direction = held;
+        input->repeat_elapsed_ms = 0;
+        input->repeat_started = false;
+        return true;
+    }
+
+    if (elapsed_ms > 0) {
+        input->repeat_elapsed_ms += elapsed_ms;
+    }
+    if (!input->repeat_started) {
+        if (input->repeat_elapsed_ms < PTC_OVERLAY_REPEAT_DELAY_MS) {
+            return true;
+        }
+        input->repeat_elapsed_ms -= PTC_OVERLAY_REPEAT_DELAY_MS;
+        input->repeat_started = true;
+        move_in_direction(input, held);
+    }
+    while (input->repeat_elapsed_ms >= PTC_OVERLAY_REPEAT_INTERVAL_MS) {
+        input->repeat_elapsed_ms -= PTC_OVERLAY_REPEAT_INTERVAL_MS;
+        move_in_direction(input, held);
+    }
+    return true;
+}
+
+bool ptc_overlay_input_handle(
+    PtcOverlayInput *input,
+    unsigned int buttons_down,
+    unsigned int buttons_held,
+    int elapsed_ms)
 {
     if (!input || input->timed_out) {
         return false;
     }
-    if (buttons & PTC_OVERLAY_BUTTON_UP) {
-        move_cursor(input, 0, -1);
+    if (handle_direction_repeat(input, buttons_down, buttons_held, elapsed_ms)) {
         return true;
     }
-    if (buttons & PTC_OVERLAY_BUTTON_DOWN) {
-        move_cursor(input, 0, 1);
-        return true;
-    }
-    if (buttons & PTC_OVERLAY_BUTTON_LEFT) {
-        move_cursor(input, -1, 0);
-        return true;
-    }
-    if (buttons & PTC_OVERLAY_BUTTON_RIGHT) {
-        move_cursor(input, 1, 0);
-        return true;
-    }
-    if (buttons & PTC_OVERLAY_BUTTON_X) {
+    if (buttons_down & PTC_OVERLAY_BUTTON_X) {
         if (input->length > 0) {
             --input->length;
             input->symbols[input->length] = '\0';
         }
         return true;
     }
-    if (buttons & PTC_OVERLAY_BUTTON_Y) {
+    if (buttons_down & PTC_OVERLAY_BUTTON_Y) {
         input->length = 0;
         input->symbols[0] = '\0';
         return true;
     }
-    if (buttons & PTC_OVERLAY_BUTTON_A) {
+    if (buttons_down & PTC_OVERLAY_BUTTON_A) {
         if (input->length < PTC_OVERLAY_CODE_SYMBOLS) {
             input->symbols[input->length++] = CHARSET[input->cursor];
             input->symbols[input->length] = '\0';
         }
         return true;
     }
-    return (buttons & (PTC_OVERLAY_BUTTON_B | PTC_OVERLAY_BUTTON_PLUS)) != 0;
+    return (buttons_down & (PTC_OVERLAY_BUTTON_B | PTC_OVERLAY_BUTTON_PLUS)) != 0;
 }
 
 void ptc_overlay_input_tick(PtcOverlayInput *input, int elapsed_ms, int timeout_ms)

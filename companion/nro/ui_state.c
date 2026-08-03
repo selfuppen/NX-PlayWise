@@ -1,6 +1,7 @@
 #include "ui_graphics.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../file_protocol.h"
@@ -136,6 +137,27 @@ uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint
     return (uint16_t)adjusted;
 }
 
+bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out)
+{
+    char *end = NULL;
+    unsigned long value;
+    const char *cursor;
+    if (!text || !text[0] || !out || minimum > maximum) {
+        return false;
+    }
+    for (cursor = text; *cursor; ++cursor) {
+        if (*cursor < '0' || *cursor > '9') {
+            return false;
+        }
+    }
+    value = strtoul(text, &end, 10);
+    if (!end || *end || value < minimum || value > maximum) {
+        return false;
+    }
+    *out = (uint16_t)value;
+    return true;
+}
+
 uint16_t ptc_ui_adjust_minute_of_day(uint16_t value, int delta)
 {
     int adjusted = ((int)value + delta) % 1440;
@@ -233,6 +255,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->unrestricted_today = json_int(state, "unrestricted_today", -1);
         model->remaining_available = summary.remaining_available;
         model->remaining_minutes = summary.remaining_minutes;
+        model->played_minutes_available = summary.played_minutes_available;
+        model->played_minutes = summary.played_minutes;
         model->play_timer_enabled = summary.play_timer_enabled;
         model->restricted_now = summary.restricted_now;
         model->bedtime_active = json_bool(state, "bedtime_active", false);
@@ -276,6 +300,30 @@ PtcUiRect ptc_ui_child_refresh_rect(void)
 {
     /* "Y 刷新状态" line inside the status-detail card. */
     PtcUiRect rect = {836, 430, 390, 54};
+    return rect;
+}
+
+PtcUiRect ptc_ui_child_footer_rect(int index)
+{
+    static const int widths[] = {250, 180, 180};
+    static const int xs[] = {54, 322, 520};
+    PtcUiRect rect = {0, 660, 0, 48};
+    if (index >= 0 && index < 3) {
+        rect.x = xs[index];
+        rect.w = widths[index];
+    }
+    return rect;
+}
+
+PtcUiRect ptc_ui_parent_footer_rect(int index)
+{
+    static const int widths[] = {170, 170, 220, 250};
+    static const int xs[] = {54, 242, 430, 668};
+    PtcUiRect rect = {0, 660, 0, 48};
+    if (index >= 0 && index < 4) {
+        rect.x = xs[index];
+        rect.w = widths[index];
+    }
     return rect;
 }
 
@@ -417,6 +465,13 @@ PtcUiRect ptc_ui_weekly_min_up_rect(void)
     return rect;
 }
 
+PtcUiRect ptc_ui_weekly_min_input_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
+    PtcUiRect rect = {dialog.x + 34 + 166 + 224, dialog_button_top(dialog), 150, PTC_UI_DIALOG_BTN_H};
+    return rect;
+}
+
 /* Left-aligned time steppers for the bedtime overlay. */
 PtcUiRect ptc_ui_bedtime_adj_down_rect(void)
 {
@@ -456,6 +511,9 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     }
     switch (model->overlay) {
     case PTC_UI_OVERLAY_MINUTES:
+        if (ptc_ui_rect_contains(ptc_ui_minutes_value_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_MINUTES_VALUE, 0);
+        }
         if (ptc_ui_rect_contains(ptc_ui_minutes_dec_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_MINUTES_DEC, 0);
         }
@@ -477,6 +535,10 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         if (ptc_ui_rect_contains(ptc_ui_weekly_min_down_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_WEEKLY_MIN_DOWN, 0);
+        }
+        if (model->draft_week[model->editor_index].mode == PTC_RULE_MODE_LIMIT &&
+            ptc_ui_rect_contains(ptc_ui_weekly_min_input_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, 0);
         }
         break;
     case PTC_UI_OVERLAY_BEDTIME:
@@ -525,6 +587,15 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_child_refresh_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
         }
+        if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(0), x, y)) {
+            return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(1), x, y)) {
+            return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(2), x, y)) {
+            return make_hit(PTC_UI_HIT_CHILD_EXIT, 0);
+        }
         /* The parent area stays hidden; touch never exposes it. */
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
@@ -532,6 +603,18 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_parent_tab_rect(i), x, y)) {
             return make_hit(PTC_UI_HIT_PARENT_TAB, i);
         }
+    }
+    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(0), x, y)) {
+        return make_hit(PTC_UI_HIT_PARENT_PREV_PAGE, 0);
+    }
+    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(1), x, y)) {
+        return make_hit(PTC_UI_HIT_PARENT_NEXT_PAGE, 0);
+    }
+    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(2), x, y)) {
+        return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
+    }
+    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(3), x, y)) {
+        return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
     count = ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {

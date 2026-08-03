@@ -94,6 +94,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         out_size > used ? out_size - used : 0,
         "\"state\":{\"day_index\":%u,\"limited_today\":%d,\"blocked_today\":%d,"
         "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%lld,"
+        "\"played_minutes_available\":%s,\"played_minutes\":%lld,"
         "\"play_timer_enabled\":%d,\"restricted_now\":%d,\"bedtime_active\":%s,"
         "\"parent_unlock_active\":%s},\"capabilities\":{\"play_timer_write_verified\":%s,"
         "\"play_timer_effect_verified\":%s,\"play_timer_effect_backend\":\"%s\","
@@ -104,6 +105,8 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         state->unrestricted_today,
         json_bool(state->remaining_available),
         (long long)state->remaining_minutes,
+        json_bool(state->played_minutes_available),
+        (long long)state->played_minutes,
         state->play_timer_enabled,
         state->restricted_now,
         json_bool(state->bedtime_active),
@@ -123,6 +126,8 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->unrestricted_today = -1;
     state->remaining_available = false;
     state->remaining_minutes = -1;
+    state->played_minutes_available = false;
+    state->played_minutes = -1;
     state->play_timer_enabled = -1;
     state->restricted_now = -1;
     state->bedtime_active = false;

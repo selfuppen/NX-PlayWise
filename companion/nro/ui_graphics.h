@@ -48,10 +48,12 @@ typedef struct {
     bool waiting;
     bool status_loaded;
     bool remaining_available;
+    bool played_minutes_available;
     int limited_today;
     int blocked_today;
     int unrestricted_today;
     int remaining_minutes;
+    int played_minutes;
     int play_timer_enabled;
     int restricted_now;
     bool bedtime_active;
@@ -89,16 +91,23 @@ typedef enum {
     PTC_UI_HIT_NONE = 0,
     PTC_UI_HIT_CHILD_SUBMIT_CODE,
     PTC_UI_HIT_CHILD_REFRESH,
+    PTC_UI_HIT_CHILD_EXIT,
+    PTC_UI_HIT_PARENT_PREV_PAGE,
+    PTC_UI_HIT_PARENT_NEXT_PAGE,
+    PTC_UI_HIT_PARENT_REFRESH,
+    PTC_UI_HIT_PARENT_BACK,
     PTC_UI_HIT_PARENT_TAB,
     PTC_UI_HIT_PARENT_CARD,
     PTC_UI_HIT_OVERLAY_CONFIRM,
     PTC_UI_HIT_OVERLAY_CANCEL,
     PTC_UI_HIT_MINUTES_DEC,
     PTC_UI_HIT_MINUTES_INC,
+    PTC_UI_HIT_MINUTES_VALUE,
     PTC_UI_HIT_WEEKLY_DAY,
     PTC_UI_HIT_WEEKLY_MODE,
     PTC_UI_HIT_WEEKLY_MIN_UP,
     PTC_UI_HIT_WEEKLY_MIN_DOWN,
+    PTC_UI_HIT_WEEKLY_MIN_INPUT,
     PTC_UI_HIT_BEDTIME_FIELD,
     PTC_UI_HIT_BEDTIME_ADJ_UP,
     PTC_UI_HIT_BEDTIME_ADJ_DOWN,
@@ -118,6 +127,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page);
 void ptc_ui_change_parent_page(PtcUiModel *model, int direction);
 void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertical);
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
+bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out);
 uint16_t ptc_ui_adjust_minute_of_day(uint16_t value, int delta);
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode);
 PtcLimitAction ptc_ui_shift_limit_action(PtcLimitAction action, int direction);
@@ -128,6 +138,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);
 /* Shared control geometry (single source of truth for drawing and touch). */
 PtcUiRect ptc_ui_child_submit_rect(void);
 PtcUiRect ptc_ui_child_refresh_rect(void);
+PtcUiRect ptc_ui_child_footer_rect(int index);
+PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
@@ -138,6 +150,7 @@ PtcUiRect ptc_ui_weekly_day_rect(int index);
 PtcUiRect ptc_ui_weekly_mode_rect(void);
 PtcUiRect ptc_ui_weekly_min_up_rect(void);
 PtcUiRect ptc_ui_weekly_min_down_rect(void);
+PtcUiRect ptc_ui_weekly_min_input_rect(void);
 PtcUiRect ptc_ui_bedtime_field_rect(int index);
 PtcUiRect ptc_ui_bedtime_adj_up_rect(void);
 PtcUiRect ptc_ui_bedtime_adj_down_rect(void);

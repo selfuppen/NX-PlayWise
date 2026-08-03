@@ -42,9 +42,10 @@ static void stub_raw_and_slots(const PtcPctlStub *stub, char *raw_hex, size_t ra
     ptc_play_timer_settings_summary(slots, slots_size, words, PTC_PLAY_TIMER_SETTINGS_WORDS);
 }
 
-static PtcErrorCode stub_read_status(PtcPctl *pctl, PtcPctlStatus *out)
+static PtcErrorCode stub_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStatus *out)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    (void)weekday;
     if (stub->read_error != PTC_ERR_OK || (stub->read_fails_after_apply && stub->applied)) {
         if (stub->read_error == PTC_ERR_OK) {
             return PTC_ERR_PCTL_READ_FAILED;
@@ -52,6 +53,10 @@ static PtcErrorCode stub_read_status(PtcPctl *pctl, PtcPctlStatus *out)
         return stub->read_error;
     }
     *out = stub->status;
+    if (stub->model_elapsed_time && out->limited_today) {
+        out->configured_minutes_available = true;
+        out->configured_minutes = stub->configured_minutes;
+    }
     if (stub->expiry_observed && stub->timer_started && stub->last_target.minutes == 1U) {
         out->remaining_minutes = 0;
         out->restricted_now = true;
@@ -93,6 +98,8 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
     stub->status.blocked_today = target->mode == PTC_PCTL_TARGET_BLOCKED;
     stub->status.unrestricted_today = target->mode == PTC_PCTL_TARGET_UNLIMITED;
     stub->status.remaining_available = target->mode == PTC_PCTL_TARGET_LIMIT;
+    stub->status.configured_minutes_available = target->mode == PTC_PCTL_TARGET_LIMIT;
+    stub->status.configured_minutes = target->minutes;
     if (stub->model_elapsed_time) {
         stub->configured_minutes = target->minutes;
         stub->status.remaining_minutes = target->minutes > stub->played_minutes_today
@@ -194,6 +201,8 @@ static PtcErrorCode stub_restore_settings(PtcPctl *pctl, const PtcPctlSettingsSn
     stub->status.blocked_today = minutes == 0U;
     stub->status.limited_today = !stub->status.unrestricted_today && !stub->status.blocked_today;
     stub->status.remaining_available = !stub->status.unrestricted_today;
+    stub->status.configured_minutes_available = stub->status.limited_today;
+    stub->status.configured_minutes = stub->status.limited_today ? minutes : 0U;
     if (stub->model_elapsed_time) {
         stub->configured_minutes = minutes;
         stub->status.remaining_minutes = minutes > stub->played_minutes_today
