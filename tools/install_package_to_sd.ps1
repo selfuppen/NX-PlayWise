@@ -4,13 +4,18 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$SourceFolder,
 
+    # SD card drive; accepts "E", "E:" or "E:\".
+    [ValidatePattern('^[A-Za-z](:\\?)?$')]
+    [string]$Drive = "E",
+
     [switch]$Apply
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$destinationRoot = "E:\"
+$destinationDriveLetter = $Drive.Substring(0, 1).ToUpperInvariant()
+$destinationRoot = "${destinationDriveLetter}:\"
 $ownedRelativePaths = @(
     "atmosphere\contents\4200000000BD2300",
     "switch\play-time-control",
@@ -82,13 +87,13 @@ function Test-InstalledPath {
 }
 
 $sourceRoot = Get-FullDirectoryPath -LiteralPath $SourceFolder
-$destinationDrive = Get-PSDrive -Name "E" -PSProvider FileSystem -ErrorAction Stop
+$destinationDrive = Get-PSDrive -Name $destinationDriveLetter -PSProvider FileSystem -ErrorAction Stop
 if ($destinationDrive.Root -ne $destinationRoot) {
-    throw "Drive E: does not resolve to the expected filesystem root $destinationRoot"
+    throw "Drive ${destinationDriveLetter}: does not resolve to the expected filesystem root $destinationRoot"
 }
 
 if ($sourceRoot.StartsWith($destinationRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "SourceFolder must not be on E:, because the old installation is removed before copying."
+    throw "SourceFolder must not be on ${destinationDriveLetter}:, because the old installation is removed before copying."
 }
 
 $sourceApp = Join-Path $sourceRoot "switch\play-time-control"
@@ -141,9 +146,9 @@ if (-not $Apply) {
 }
 
 if (-not $WhatIfPreference) {
-    $confirmation = Read-Host "Type E:\ to confirm removal of the old play-time-control installation"
+    $confirmation = Read-Host "Type $destinationRoot to confirm removal of the old play-time-control installation"
     if ($confirmation -cne $destinationRoot) {
-        throw "Confirmation did not match E:\; no files were changed."
+        throw "Confirmation did not match $destinationRoot; no files were changed."
     }
 }
 
