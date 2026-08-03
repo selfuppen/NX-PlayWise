@@ -12,6 +12,7 @@
 #include "../../common/policy/control_policy.h"
 #include "../../common/protocol/error_code.h"
 #include "../../common/protocol/result_builder.h"
+#include "../../common/protocol/request_schema.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/token/token_v1.h"
 #include "../../companion/auth.h"
@@ -21,6 +22,7 @@
 #include "../../companion/request_client.h"
 #include "../../companion/result_summary.h"
 #include "../../companion/self_check.h"
+#include "../../companion/transport_client.h"
 #include "../../platform/host/fake_time.h"
 #include "../../platform/host/mem_storage.h"
 #include "../../platform/host/pctl_stub.h"
@@ -239,6 +241,7 @@ static void test_companion_request_builder_and_file_protocol(void)
     PtcCompanionFileClient client;
     char request_id[PTC_COMPANION_REQUEST_ID_SIZE];
     char json[1024];
+    char path[240];
     char result[4096];
     char summary[2048];
     PtcResultState result_state;
@@ -316,6 +319,11 @@ static void test_companion_request_builder_and_file_protocol(void)
 
     check_int(ptc_companion_read_result(&client, request_id, 7999, 8000, result, sizeof(result)), PTC_COMPANION_PENDING, "missing result pending");
     check_int(ptc_companion_read_result(&client, request_id, 8000, 8000, result, sizeof(result)), PTC_COMPANION_TIMEOUT, "missing result timeout");
+    snprintf(path, sizeof(path), "app/inbox/done/%s.json", request_id);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, path, "{}"), "write done without result");
+    check_int(ptc_companion_read_result(&client, request_id, 0, 8000, result, sizeof(result)), PTC_COMPANION_WRITE_FAILED,
+        "done without result reports persistence failure");
+    check_true(mem.storage.vtable->remove_path(&mem.storage, path), "remove done without result");
 
     ptc_result_state_default(&result_state, 2380);
     (void)ptc_result_ok_json(result, sizeof(result), "other", "status", "observe", true, &result_state, 1783526401);
@@ -1365,6 +1373,11 @@ static void test_enforce_tick_applies_once_and_respects_disable_flag(void)
     check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0, "disabled enforce skipped");
     check_true(!pctl.applied, "disabled enforce avoids pctl");
     check_true(!pctl.timer_started, "disabled enforce avoids timer");
+    (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
+    check_true(mem.storage.vtable->remove_path(&mem.storage, "app/flags/disable.flag"), "remove disable flag");
+    (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
+    check_true(pctl.applied, "file scan detects disable removal without waiting for minute boundary");
+    check_true(pctl.timer_started, "disable removal triggers enforce reconciliation");
 }
 
 static void test_backup_failure_blocks_write(void)
@@ -1836,6 +1849,116 @@ static void test_recover_processing(void)
     check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/stuck.json"), "stuck moved to pending");
 }
 
+static void test_request_id_security_and_stem_match(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char result[4096];
+    check_true(ptc_request_id_is_valid("Abc_09-x"), "request id allowed characters");
+    check_true(!ptc_request_id_is_valid("../escape"), "request id traversal rejected");
+    check_true(!ptc_request_id_is_valid("bad.id"), "request id dot rejected");
+    check_true(!ptc_request_id_is_valid(""), "empty request id rejected");
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "observe", false);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/stem-good.json",
+        "{\"version\":1,\"request_id\":\"embedded-other\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}\n"), "write stem mismatch request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "stem mismatch archived");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/stem-good.json", result, sizeof(result)), "stem mismatch result uses safe stem");
+    check_true(strstr(result, "bad_request") != NULL, "stem mismatch bad request");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/results/embedded-other.json"), "stem mismatch cannot select result path");
+}
+
+static void test_backoff_daily_logs_and_retention(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    const int64_t now = 1783526401;
+    ptc_mem_storage_init(&mem);
+    ptc_mem_storage_set_now(&mem, now);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&fake_time, now, 2380, 0);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    check_int(ptc_sysmodule_note_scan_result(&sysmodule, false), 1000, "backoff 1s");
+    check_int(ptc_sysmodule_note_scan_result(&sysmodule, false), 2000, "backoff 2s");
+    check_int(ptc_sysmodule_note_scan_result(&sysmodule, false), 5000, "backoff 5s");
+    check_int(ptc_sysmodule_note_scan_result(&sysmodule, true), 500, "backoff resets");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/logs/2026-06-08/events.jsonl", "old"), "old dated log");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/logs/2026-06-09/events.jsonl", "keep"), "D-29 dated log");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/logs/unknown/file", "keep"), "unknown log dir");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/old.json", "{}"), "old result");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/done/future.json", "{}"), "future done");
+    ptc_mem_storage_set_mtime(&mem, "app/results/old.json", now - 31LL * 86400LL, true);
+    ptc_mem_storage_set_mtime(&mem, "app/inbox/done/future.json", now + 86400LL, true);
+    check_int(ptc_sysmodule_cleanup(&sysmodule), 1, "retention cleanup succeeds");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/logs/2026-06-08/events.jsonl"), "D-30 log deleted");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/logs/2026-06-09/events.jsonl"), "D-29 log retained");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/results/old.json"), "D-30 result deleted");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/done/future.json"), "future done retained");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/logs/unknown/file"), "unknown log retained");
+}
+
+typedef struct { bool available; int submit_count; int event_state; PtcCompanionStatus submit_status; } FakeIpc;
+static bool fake_ipc_connect(void *ctx) { return ((FakeIpc *)ctx)->available; }
+static PtcCompanionStatus fake_ipc_submit(void *ctx, const char *request_id, const char *json, void **token)
+{ (void)request_id; (void)json; ++((FakeIpc *)ctx)->submit_count; *token = ctx; return ((FakeIpc *)ctx)->submit_status; }
+static int fake_ipc_event(void *ctx, void *token) { (void)token; return ((FakeIpc *)ctx)->event_state; }
+static PtcCompanionStatus fake_ipc_result(void *ctx, const char *request_id, char *out, size_t size)
+{ (void)ctx; (void)request_id; (void)out; (void)size; return PTC_COMPANION_PENDING; }
+static void fake_ipc_close(void *ctx, void *token) { (void)ctx; (void)token; }
+static bool fake_ipc_notify(void *ctx) { return ((FakeIpc *)ctx)->available; }
+
+static void test_transport_fallback_does_not_resubmit(void)
+{
+    static const PtcCompanionIpcBackend BACKEND = {
+        fake_ipc_connect, fake_ipc_submit, fake_ipc_event, fake_ipc_result, fake_ipc_close, fake_ipc_notify,
+    };
+    PtcMemStorage mem;
+    PtcCompanionTransportClient client;
+    FakeIpc ipc = { true, 0, -1, PTC_COMPANION_OK };
+    char result[8192];
+    const char *json = "{\"version\":1,\"request_id\":\"ipc-fallback\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}\n";
+    ptc_mem_storage_init(&mem);
+    ptc_companion_transport_init(&client, "app", &mem.storage, &BACKEND, &ipc);
+    check_int(ptc_companion_transport_submit_json(&client, "ipc-fallback", json), PTC_COMPANION_OK, "IPC submit accepted");
+    check_int(ipc.submit_count, 1, "IPC submitted once");
+    check_int(ptc_companion_transport_poll(&client, 100, 5000, result, sizeof(result)), PTC_COMPANION_PENDING, "invalid Event falls back to SD");
+    check_int(ipc.submit_count, 1, "Event failure never resubmits");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/ipc-fallback.json"), "accepted IPC fallback does not create another request");
+    check_int(client.file_poll_delay_ms, 500, "file result polling backs off from 250ms");
+}
+
+static void test_transport_submit_failure_does_not_write_file(void)
+{
+    static const PtcCompanionIpcBackend BACKEND = {
+        fake_ipc_connect, fake_ipc_submit, fake_ipc_event, fake_ipc_result, fake_ipc_close, fake_ipc_notify,
+    };
+    PtcMemStorage mem;
+    PtcCompanionTransportClient client;
+    FakeIpc ipc = { true, 0, 0, PTC_COMPANION_BAD_ARGUMENT };
+    const char *json = "{\"version\":1,\"request_id\":\"ipc-conflict\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}\n";
+    ptc_mem_storage_init(&mem);
+    ptc_companion_transport_init(&client, "app", &mem.storage, &BACKEND, &ipc);
+    check_int(ptc_companion_transport_submit_json(&client, "ipc-conflict", json), PTC_COMPANION_BAD_ARGUMENT,
+        "IPC conflict is returned to caller");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/ipc-conflict.json"),
+        "IPC conflict never falls back to a file submit");
+
+    ipc.submit_status = PTC_COMPANION_PENDING;
+    check_int(ptc_companion_transport_submit_json(&client, "ipc-ambiguous", json), PTC_COMPANION_OK,
+        "ambiguous IPC submit switches to result fallback");
+    check_true(client.active == PTC_TRANSPORT_FILE && client.accepted_by_ipc,
+        "ambiguous IPC submit only polls its durable result");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/ipc-ambiguous.json"),
+        "ambiguous IPC submit is not repeated through the file queue");
+}
+
 int main(void)
 {
     test_token_v1();
@@ -1881,6 +2004,10 @@ int main(void)
     test_enforce_tick_applies_once_and_respects_disable_flag();
     test_failure_paths_do_not_consume_nonce();
     test_recover_processing();
+    test_request_id_security_and_stem_match();
+    test_backoff_daily_logs_and_retention();
+    test_transport_fallback_does_not_resubmit();
+    test_transport_submit_failure_does_not_write_file();
 
     if (failures != 0) {
         fprintf(stderr, "%d C host tests failed\n", failures);

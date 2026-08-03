@@ -141,6 +141,69 @@ static bool fs_list_json(PtcStorage *storage, const char *dir, char names[][128]
     return true;
 }
 
+static bool fs_metadata(PtcStorage *storage, const char *path, PtcStorageMetadata *out)
+{
+    struct stat info;
+    (void)storage;
+    if (!out || stat(path, &info) != 0) return false;
+    memset(out, 0, sizeof(*out));
+    out->type = S_ISREG(info.st_mode) ? PTC_STORAGE_ENTRY_FILE :
+        (S_ISDIR(info.st_mode) ? PTC_STORAGE_ENTRY_DIRECTORY : PTC_STORAGE_ENTRY_UNKNOWN);
+    out->modified_unix_seconds = (int64_t)info.st_mtime;
+    out->modified_time_valid = info.st_mtime > 0;
+    return true;
+}
+
+static bool fs_list_entries(PtcStorage *storage, const char *dir, PtcStorageEntry *entries, size_t max, size_t *count)
+{
+    DIR *handle;
+    struct dirent *entry;
+    size_t found = 0;
+    (void)storage;
+    if (!entries || !count) return false;
+    handle = opendir(dir);
+    if (!handle) { *count = 0; return false; }
+    while ((entry = readdir(handle)) != NULL && found < max) {
+        char path[352];
+        struct stat info;
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        snprintf(path, sizeof(path), "%s/%s", dir, entry->d_name);
+        memset(&entries[found], 0, sizeof(entries[found]));
+        if (strlen(entry->d_name) >= sizeof(entries[found].name)) continue;
+        memcpy(entries[found].name, entry->d_name, strlen(entry->d_name) + 1);
+        if (stat(path, &info) == 0) {
+            entries[found].type = S_ISREG(info.st_mode) ? PTC_STORAGE_ENTRY_FILE :
+                (S_ISDIR(info.st_mode) ? PTC_STORAGE_ENTRY_DIRECTORY : PTC_STORAGE_ENTRY_UNKNOWN);
+            entries[found].modified_unix_seconds = (int64_t)info.st_mtime;
+            entries[found].modified_time_valid = info.st_mtime > 0;
+        }
+        ++found;
+    }
+    closedir(handle);
+    *count = found;
+    return true;
+}
+
+static bool fs_remove_tree(PtcStorage *storage, const char *path)
+{
+    DIR *handle;
+    struct dirent *entry;
+    struct stat info;
+    (void)storage;
+    if (stat(path, &info) != 0) return false;
+    if (!S_ISDIR(info.st_mode)) return remove(path) == 0;
+    handle = opendir(path);
+    if (!handle) return false;
+    while ((entry = readdir(handle)) != NULL) {
+        char child[352];
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        snprintf(child, sizeof(child), "%s/%s", path, entry->d_name);
+        if (!fs_remove_tree(storage, child)) { closedir(handle); return false; }
+    }
+    closedir(handle);
+    return rmdir(path) == 0;
+}
+
 static const PtcStorageVTable FS_STORAGE_VTABLE = {
     fs_read_text,
     fs_write_text_atomic,
@@ -149,6 +212,9 @@ static const PtcStorageVTable FS_STORAGE_VTABLE = {
     fs_remove_path,
     fs_exists,
     fs_list_json,
+    fs_metadata,
+    fs_list_entries,
+    fs_remove_tree,
 };
 
 void ptc_fs_storage_init(PtcFsStorage *fs)

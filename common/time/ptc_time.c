@@ -1,5 +1,7 @@
 #include "ptc_time.h"
 
+#include <stdio.h>
+
 static bool is_leap_year(uint16_t year)
 {
     return (year % 4u == 0u && year % 100u != 0u) || (year % 400u == 0u);
@@ -80,6 +82,48 @@ bool ptc_day_index_from_date(uint16_t year, uint8_t month, uint8_t day, uint16_t
 
     *out = (uint16_t)days;
     return true;
+}
+
+bool ptc_date_from_day_index(uint16_t day_index, uint16_t *year, uint8_t *month, uint8_t *day)
+{
+    uint32_t remaining = day_index;
+    uint16_t y = 2020;
+    uint8_t m = 1;
+    uint16_t year_days;
+    uint8_t month_days;
+    if (!year || !month || !day) return false;
+    for (;;) {
+        year_days = is_leap_year(y) ? 366u : 365u;
+        if (remaining < year_days) break;
+        remaining -= year_days;
+        if (y == 65535u) return false;
+        ++y;
+    }
+    for (;;) {
+        month_days = days_in_month(y, m);
+        if (remaining < month_days) break;
+        remaining -= month_days;
+        if (m == 12u) return false;
+        ++m;
+    }
+    *year = y;
+    *month = m;
+    *day = (uint8_t)(remaining + 1u);
+    return true;
+}
+
+bool ptc_format_date_utc8(int64_t unix_seconds, char out[11])
+{
+    uint16_t year;
+    uint8_t month;
+    uint8_t day;
+    uint16_t day_index;
+    int written;
+    if (!out || unix_seconds < PTC_DAY_INDEX_EPOCH_UNIX - PTC_UTC8_OFFSET_SECONDS) return false;
+    day_index = ptc_day_index_from_unix_utc8(unix_seconds);
+    if (!ptc_date_from_day_index(day_index, &year, &month, &day)) return false;
+    written = snprintf(out, 11, "%04u-%02u-%02u", (unsigned int)year, (unsigned int)month, (unsigned int)day);
+    return written == 10;
 }
 
 uint8_t ptc_weekday_from_day_index(uint16_t day_index_since_2020)

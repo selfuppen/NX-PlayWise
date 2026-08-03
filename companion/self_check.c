@@ -2,10 +2,12 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../common/protocol/result_builder.h"
 #include "../common/protocol/capability_backend.h"
+#include "../common/time/ptc_time.h"
 #include "../third_party/cjson/cJSON.h"
 
 #define SELF_CHECK_TEXT_SIZE 8192
@@ -210,9 +212,31 @@ static void check_queue_state(CheckContext *ctx)
 
 static bool read_events(CheckContext *ctx, char *events, size_t events_size)
 {
-    if (!read_app_text(ctx, "logs/events.jsonl", events, events_size)) {
+    char relative[64];
+    char date[11];
+    snprintf(relative, sizeof(relative), "logs/events.jsonl");
+    if (ctx->storage && ctx->storage->vtable->list_entries) {
+        PtcStorageEntry entries[64];
+        size_t count = 0;
+        size_t i;
+        char logs_path[320];
+        char newest[11] = "";
+        join_path(logs_path, sizeof(logs_path), ctx->app_root, "logs");
+        if (ctx->storage->vtable->list_entries(ctx->storage, logs_path, entries, 64, &count)) {
+            for (i = 0; i < count; ++i) {
+                uint16_t day_index;
+                if (entries[i].type == PTC_STORAGE_ENTRY_DIRECTORY && strlen(entries[i].name) == 10 &&
+                    ptc_day_index_from_date((uint16_t)atoi(entries[i].name), (uint8_t)atoi(entries[i].name + 5),
+                        (uint8_t)atoi(entries[i].name + 8), &day_index) && strcmp(entries[i].name, newest) > 0) {
+                    memcpy(newest, entries[i].name, 11);
+                }
+            }
+        }
+        if (newest[0]) { snprintf(date, sizeof(date), "%s", newest); snprintf(relative, sizeof(relative), "logs/%s/events.jsonl", date); }
+    }
+    if (!read_app_text(ctx, relative, events, events_size)) {
         events[0] = '\0';
-        if (exists_app_path(ctx, "logs/events.jsonl")) {
+        if (exists_app_path(ctx, relative)) {
             add_line(ctx, PTC_SELF_CHECK_PASS, "events log readable");
             return false;
         }

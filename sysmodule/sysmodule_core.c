@@ -34,6 +34,50 @@ static void join_path(char *out, size_t out_size, const char *a, const char *b)
     snprintf(out, out_size, "%s/%s", a, b);
 }
 
+static bool daily_log_path(PtcSysmodule *sysmodule, const char *name, char *out, size_t out_size)
+{
+    char date[11];
+    PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    if (!ptc_format_date_utc8(now.unix_seconds, date)) return false;
+    return snprintf(out, out_size, "%s/logs/%s/%s", sysmodule->app_root, date, name) > 0;
+}
+
+static bool metadata_equal(const PtcStorageMetadata *a, const PtcStorageMetadata *b)
+{
+    return a->type == b->type && a->modified_time_valid == b->modified_time_valid &&
+        (!a->modified_time_valid || a->modified_unix_seconds == b->modified_unix_seconds);
+}
+
+static bool read_cached_text(PtcSysmodule *sysmodule, const char *relative, char *cache, size_t cache_size,
+    PtcStorageMetadata *cached_meta, bool *cache_valid, char *out, size_t out_size, bool missing_is_empty)
+{
+    char path[320];
+    PtcStorageMetadata current;
+    join_path(path, sizeof(path), sysmodule->app_root, relative);
+    if (!sysmodule->storage->vtable->metadata || !sysmodule->storage->vtable->metadata(sysmodule->storage, path, &current)) {
+        if (missing_is_empty) { cache[0] = '\0'; memset(cached_meta, 0, sizeof(*cached_meta)); *cache_valid = true; out[0] = '\0'; return true; }
+        *cache_valid = false;
+        return false;
+    }
+    if (*cache_valid && metadata_equal(cached_meta, &current)) {
+        snprintf(out, out_size, "%s", cache);
+        return true;
+    }
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, cache, cache_size)) { *cache_valid = false; return false; }
+    *cached_meta = current;
+    *cache_valid = true;
+    snprintf(out, out_size, "%s", cache);
+    return true;
+}
+
+static void invalidate_all_caches(PtcSysmodule *sysmodule)
+{
+    sysmodule->config_cache_valid = false;
+    sysmodule->rules_cache_valid = false;
+    sysmodule->state_cache_valid = false;
+    sysmodule->capabilities_cache_valid = false;
+}
+
 static const char *skip_ws(const char *p)
 {
     while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
@@ -248,7 +292,7 @@ static void append_event(PtcSysmodule *sysmodule, const PtcRequest *request, con
     char path[320];
     char line[512];
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
-    snprintf(path, sizeof(path), "%s/logs/events.jsonl", sysmodule->app_root);
+    if (!daily_log_path(sysmodule, "events.jsonl", path, sizeof(path))) return;
     snprintf(
         line,
         sizeof(line),
@@ -260,6 +304,11 @@ static void append_event(PtcSysmodule *sysmodule, const PtcRequest *request, con
         ptc_error_reason(error),
         detail ? detail : "");
     (void)sysmodule->storage->vtable->append_line(sysmodule->storage, path, line);
+#ifndef __SWITCH__
+    snprintf(path, sizeof(path), "%s/logs/events.jsonl", sysmodule->app_root);
+    (void)sysmodule->storage->vtable->append_line(sysmodule->storage, path, line);
+#endif
+    /* Keep the legacy root log readable for older desktop/self-check tooling during migration. */
 }
 
 static void json_safe_copy(char *out, size_t out_size, const char *value)
@@ -345,7 +394,7 @@ static void append_pctl_debug(
     json_safe_copy(before_slots, sizeof(before_slots), before_snapshot->decoded_slots);
     json_safe_copy(after_raw, sizeof(after_raw), after_snapshot->raw_hex);
     json_safe_copy(after_slots, sizeof(after_slots), after_snapshot->decoded_slots);
-    snprintf(path, sizeof(path), "%s/logs/pctl_debug.jsonl", sysmodule->app_root);
+    if (!daily_log_path(sysmodule, "pctl_debug.jsonl", path, sizeof(path))) return;
     snprintf(
         line,
         sizeof(line),
@@ -377,6 +426,10 @@ static void append_pctl_debug(
         after_raw,
         after_slots);
     (void)sysmodule->storage->vtable->append_line(sysmodule->storage, path, line);
+#ifndef __SWITCH__
+    snprintf(path, sizeof(path), "%s/logs/pctl_debug.jsonl", sysmodule->app_root);
+    (void)sysmodule->storage->vtable->append_line(sysmodule->storage, path, line);
+#endif
 }
 
 static bool load_config(PtcSysmodule *sysmodule, PtcRuntimeConfig *config)
@@ -386,7 +439,8 @@ static bool load_config(PtcSysmodule *sysmodule, PtcRuntimeConfig *config)
     char mode[24];
     int64_t version;
     join_path(path, sizeof(path), sysmodule->app_root, "config.json");
-    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
+    if (!read_cached_text(sysmodule, "config.json", sysmodule->config_cache_text, sizeof(sysmodule->config_cache_text),
+            &sysmodule->config_meta, &sysmodule->config_cache_valid, text, sizeof(text), false)) {
         return false;
     }
     if (!json_i64(text, "version", &version) || version != 1 ||
@@ -419,7 +473,8 @@ static PtcCapabilities load_capabilities(PtcSysmodule *sysmodule)
     caps.raw_block_verified = false;
     caps.suspend_verified = false;
     join_path(path, sizeof(path), sysmodule->app_root, "capabilities.json");
-    if (sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
+    if (read_cached_text(sysmodule, "capabilities.json", sysmodule->capabilities_cache_text, sizeof(sysmodule->capabilities_cache_text),
+            &sysmodule->capabilities_meta, &sysmodule->capabilities_cache_valid, text, sizeof(text), true) && text[0]) {
         (void)json_bool_value(text, "play_timer_write_verified", &caps.play_timer_write_verified);
         if (!json_string(text, "play_timer_write_backend", backend, sizeof(backend)) ||
             strcmp(backend, PTC_PLAY_TIMER_WRITE_BACKEND) != 0) {
@@ -468,7 +523,11 @@ static bool save_capabilities(PtcSysmodule *sysmodule, const PtcCapabilities *ca
         caps->play_timer_effect_verified ? (long long)updated_at : 0LL,
         caps->raw_block_verified ? (long long)updated_at : 0LL,
         caps->suspend_verified ? (long long)updated_at : 0LL);
-    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
+    if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
+    snprintf(sysmodule->capabilities_cache_text, sizeof(sysmodule->capabilities_cache_text), "%s", text);
+    sysmodule->capabilities_cache_valid = sysmodule->storage->vtable->metadata &&
+        sysmodule->storage->vtable->metadata(sysmodule->storage, path, &sysmodule->capabilities_meta);
+    return true;
 }
 
 static bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
@@ -480,7 +539,8 @@ static bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
     int64_t version;
     ptc_rules_default(rules);
     join_path(path, sizeof(path), sysmodule->app_root, "rules.json");
-    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
+    if (!read_cached_text(sysmodule, "rules.json", sysmodule->rules_cache_text, sizeof(sysmodule->rules_cache_text),
+            &sysmodule->rules_meta, &sysmodule->rules_cache_valid, text, sizeof(text), true) || text[0] == '\0') {
         return true;
     }
     if (!json_i64(text, "version", &version) || version != 1) {
@@ -537,7 +597,11 @@ static bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
         rules->bedtime.start_min,
         rules->bedtime.end_min,
         limit_action_name(rules->limit_action));
-    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
+    if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
+    snprintf(sysmodule->rules_cache_text, sizeof(sysmodule->rules_cache_text), "%s", text);
+    sysmodule->rules_cache_valid = sysmodule->storage->vtable->metadata &&
+        sysmodule->storage->vtable->metadata(sysmodule->storage, path, &sysmodule->rules_meta);
+    return true;
 }
 
 static bool restore_rules(PtcSysmodule *sysmodule, const PtcRules *rules, bool existed)
@@ -561,7 +625,8 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     state->last_enforced_mode = 0;
     state->last_enforced_minutes = 0;
     join_path(path, sizeof(path), sysmodule->app_root, "state.json");
-    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
+    if (!read_cached_text(sysmodule, "state.json", sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text),
+            &sysmodule->state_meta, &sysmodule->state_cache_valid, text, sizeof(text), true) || text[0] == '\0') {
         return true;
     }
     if (!json_i64(text, "version", &version) || version != 1) {
@@ -594,7 +659,27 @@ static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, in
         (unsigned int)state->last_enforced_mode,
         state->last_enforced_minutes,
         (long long)updated_at);
-    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
+    if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
+    snprintf(sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text), "%s", text);
+    sysmodule->state_cache_valid = sysmodule->storage->vtable->metadata &&
+        sysmodule->storage->vtable->metadata(sysmodule->storage, path, &sysmodule->state_meta);
+    return true;
+}
+
+bool ptc_sysmodule_refresh_caches(PtcSysmodule *sysmodule)
+{
+    PtcRuntimeConfig config;
+    PtcRules rules;
+    PtcRuntimeState state;
+    bool config_ok;
+    bool rules_ok;
+    bool state_ok;
+    if (!sysmodule) return false;
+    config_ok = load_config(sysmodule, &config);
+    (void)load_capabilities(sysmodule);
+    rules_ok = load_rules(sysmodule, &rules);
+    state_ok = load_state(sysmodule, &state);
+    return config_ok && rules_ok && state_ok;
 }
 
 static bool nonce_used(uint16_t day_index, uint32_t nonce, void *ctx)
@@ -681,6 +766,7 @@ static void result_state_default_with_caps(PtcResultState *state, uint16_t day_i
 static bool write_result(PtcSysmodule *sysmodule, const char *request_id, const char *json)
 {
     char path[320];
+    if (!ptc_request_id_is_valid(request_id)) return false;
     snprintf(path, sizeof(path), "%s/results/%s.json", sysmodule->app_root, request_id);
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, json);
 }
@@ -755,6 +841,17 @@ static PtcErrorCode apply_target(
     }
     append_event(sysmodule, request, err == PTC_ERR_OK ? "pctl_apply" : "pctl_apply_failed", err, pctl_target_mode_name(mode));
     return err;
+}
+
+static bool request_file_stem(const char *name, char *out, size_t out_size)
+{
+    size_t len;
+    if (!name || !out) return false;
+    len = strlen(name);
+    if (len <= 5 || strcmp(name + len - 5, ".json") != 0 || len - 5 >= out_size) return false;
+    memcpy(out, name, len - 5);
+    out[len - 5] = '\0';
+    return ptc_request_id_is_valid(out);
 }
 
 /* An offline grant is successful only after Horizon reports that the timer is
@@ -2156,7 +2253,7 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, caps, now);
 }
 
-static void process_request_text(PtcSysmodule *sysmodule, const char *request_text)
+static void process_request_text(PtcSysmodule *sysmodule, const char *request_text, const char *expected_request_id)
 {
     PtcRequest request;
     PtcRuntimeConfig config;
@@ -2167,11 +2264,19 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     char disable_path[320];
 
     parse_err = ptc_request_parse(request_text, &request);
+    if (parse_err == PTC_ERR_OK && expected_request_id && strcmp(request.request_id, expected_request_id) != 0) {
+        parse_err = PTC_ERR_BAD_REQUEST;
+    }
     if (parse_err != PTC_ERR_OK) {
         memset(&request, 0, sizeof(request));
         snprintf(request.request_id, sizeof(request.request_id), "unknown");
         snprintf(request.type_text, sizeof(request.type_text), "unknown");
-        (void)json_string(request_text, "request_id", request.request_id, sizeof(request.request_id));
+        if (expected_request_id && ptc_request_id_is_valid(expected_request_id)) {
+            snprintf(request.request_id, sizeof(request.request_id), "%s", expected_request_id);
+        } else {
+            (void)json_string(request_text, "request_id", request.request_id, sizeof(request.request_id));
+            if (!ptc_request_id_is_valid(request.request_id)) snprintf(request.request_id, sizeof(request.request_id), "unknown");
+        }
         (void)json_string(request_text, "type", request.type_text, sizeof(request.type_text));
         (void)finish_with_error(sysmodule, &request, "observe", true, parse_err, now.day_index, NULL);
         return;
@@ -2299,6 +2404,13 @@ void ptc_sysmodule_init(
     sysmodule->storage = storage;
     sysmodule->pctl = pctl;
     sysmodule->time_provider = time_provider;
+    sysmodule->scan_backoff_ms = 500;
+    sysmodule->minute_initialized = false;
+    sysmodule->cleanup_initialized = false;
+    sysmodule->disable_initialized = false;
+    sysmodule->disable_present = false;
+    invalidate_all_caches(sysmodule);
+    (void)ptc_sysmodule_refresh_caches(sysmodule);
 }
 
 int ptc_sysmodule_recover_processing(PtcSysmodule *sysmodule)
@@ -2342,6 +2454,8 @@ int ptc_sysmodule_process_all(PtcSysmodule *sysmodule)
         char processing[320];
         char done[320];
         char text[4096];
+        char request_id[80];
+        if (!request_file_stem(names[i], request_id, sizeof(request_id))) continue;
         if (!request_file_path(pending, sizeof(pending), sysmodule, "pending", names[i]) ||
             !request_file_path(processing, sizeof(processing), sysmodule, "processing", names[i]) ||
             !request_file_path(done, sizeof(done), sysmodule, "done", names[i])) {
@@ -2351,10 +2465,183 @@ int ptc_sysmodule_process_all(PtcSysmodule *sysmodule)
             continue;
         }
         if (sysmodule->storage->vtable->read_text(sysmodule->storage, processing, text, sizeof(text))) {
-            process_request_text(sysmodule, text);
+            process_request_text(sysmodule, text, request_id);
         }
         (void)sysmodule->storage->vtable->rename_path(sysmodule->storage, processing, done);
         ++processed;
     }
     return processed;
+}
+
+uint32_t ptc_sysmodule_note_scan_result(PtcSysmodule *sysmodule, bool found_work)
+{
+    if (!sysmodule) return 5000;
+    if (found_work) {
+        sysmodule->scan_backoff_ms = 500;
+    } else if (sysmodule->scan_backoff_ms < 1000) {
+        sysmodule->scan_backoff_ms = 1000;
+    } else if (sysmodule->scan_backoff_ms < 2000) {
+        sysmodule->scan_backoff_ms = 2000;
+    } else {
+        sysmodule->scan_backoff_ms = 5000;
+    }
+    return sysmodule->scan_backoff_ms;
+}
+
+uint32_t ptc_sysmodule_current_scan_interval(const PtcSysmodule *sysmodule)
+{
+    return sysmodule && sysmodule->scan_backoff_ms ? sysmodule->scan_backoff_ms : 500;
+}
+
+uint32_t ptc_sysmodule_next_wait_ms(PtcSysmodule *sysmodule)
+{
+    PtcClockSnapshot now;
+    int64_t shifted;
+    int64_t second_of_day;
+    uint32_t minute_ms;
+    uint64_t date_ms;
+    uint32_t wait_ms;
+    if (!sysmodule) return 500;
+    now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    shifted = now.unix_seconds + PTC_UTC8_OFFSET_SECONDS;
+    second_of_day = shifted % PTC_SECONDS_PER_DAY;
+    if (second_of_day < 0) second_of_day += PTC_SECONDS_PER_DAY;
+    minute_ms = (uint32_t)(60 - (second_of_day % 60)) * 1000u;
+    date_ms = (uint64_t)(PTC_SECONDS_PER_DAY - second_of_day) * 1000u;
+    wait_ms = ptc_sysmodule_current_scan_interval(sysmodule);
+    if (minute_ms < wait_ms) wait_ms = minute_ms;
+    if (date_ms < wait_ms) wait_ms = date_ms;
+    return wait_ms ? wait_ms : 1u;
+}
+
+static bool date_directory_day_index(const char *name, uint16_t *out)
+{
+    unsigned int year;
+    unsigned int month;
+    unsigned int day;
+    char tail;
+    if (!name || strlen(name) != 10 || sscanf(name, "%4u-%2u-%2u%c", &year, &month, &day, &tail) != 3) return false;
+    return ptc_day_index_from_date((uint16_t)year, (uint8_t)month, (uint8_t)day, out);
+}
+
+static bool cleanup_timestamped_json(PtcSysmodule *sysmodule, const char *relative_dir, uint16_t today)
+{
+    char dir[320];
+    PtcStorageEntry entries[256];
+    size_t count = 0;
+    size_t i;
+    bool ok = true;
+    snprintf(dir, sizeof(dir), "%s/%s", sysmodule->app_root, relative_dir);
+    if (!sysmodule->storage->vtable->list_entries(sysmodule->storage, dir, entries, 256, &count)) return true;
+    for (i = 0; i < count; ++i) {
+        char stem[80];
+        char path[512];
+        uint16_t file_day;
+        if (entries[i].type != PTC_STORAGE_ENTRY_FILE || !request_file_stem(entries[i].name, stem, sizeof(stem)) ||
+            !entries[i].modified_time_valid || entries[i].modified_unix_seconds < PTC_DAY_INDEX_EPOCH_UNIX - PTC_UTC8_OFFSET_SECONDS) continue;
+        file_day = ptc_day_index_from_unix_utc8(entries[i].modified_unix_seconds);
+        if (file_day > today || (uint16_t)(today - file_day) < 30u) continue;
+        if (strlen(dir) + 1u + strlen(entries[i].name) >= sizeof(path)) continue;
+        memcpy(path, dir, strlen(dir));
+        path[strlen(dir)] = '/';
+        memcpy(path + strlen(dir) + 1u, entries[i].name, strlen(entries[i].name) + 1u);
+        if (!sysmodule->storage->vtable->remove_path(sysmodule->storage, path)) ok = false;
+    }
+    return ok;
+}
+
+int ptc_sysmodule_cleanup(PtcSysmodule *sysmodule)
+{
+    char logs_dir[320];
+    PtcStorageEntry entries[256];
+    size_t count = 0;
+    size_t i;
+    bool ok = true;
+    PtcClockSnapshot now;
+    if (!sysmodule || !sysmodule->storage->vtable->list_entries || !sysmodule->storage->vtable->remove_tree) return 0;
+    now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    snprintf(logs_dir, sizeof(logs_dir), "%s/logs", sysmodule->app_root);
+    if (sysmodule->storage->vtable->list_entries(sysmodule->storage, logs_dir, entries, 256, &count)) {
+        for (i = 0; i < count; ++i) {
+            uint16_t day_index;
+            char path[512];
+            if (entries[i].type != PTC_STORAGE_ENTRY_DIRECTORY || !date_directory_day_index(entries[i].name, &day_index) ||
+                day_index > now.day_index || (uint16_t)(now.day_index - day_index) < 30u) continue;
+            if (strlen(logs_dir) + 1u + strlen(entries[i].name) >= sizeof(path)) continue;
+            memcpy(path, logs_dir, strlen(logs_dir));
+            path[strlen(logs_dir)] = '/';
+            memcpy(path + strlen(logs_dir) + 1u, entries[i].name, strlen(entries[i].name) + 1u);
+            if (!sysmodule->storage->vtable->remove_tree(sysmodule->storage, path)) ok = false;
+        }
+    }
+    if (!cleanup_timestamped_json(sysmodule, "results", now.day_index)) ok = false;
+    if (!cleanup_timestamped_json(sysmodule, "inbox/done", now.day_index)) ok = false;
+    if (!ok) append_event(sysmodule, NULL, "cleanup_failed", PTC_ERR_STORAGE_WRITE_FAILED, "retention");
+    sysmodule->last_cleanup_day_index = now.day_index;
+    sysmodule->cleanup_initialized = true;
+    return ok ? 1 : 0;
+}
+
+int ptc_sysmodule_rollover_legacy_logs(PtcSysmodule *sysmodule)
+{
+    static const char *NAMES[] = { "events.jsonl", "pctl_debug.jsonl", "sysmodule.log" };
+    char date[11];
+    PtcClockSnapshot now;
+    size_t i;
+    int moved = 0;
+    if (!sysmodule) return 0;
+    now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    if (!ptc_format_date_utc8(now.unix_seconds, date)) return 0;
+    for (i = 0; i < sizeof(NAMES) / sizeof(NAMES[0]); ++i) {
+        char from[320];
+        char to[352];
+        snprintf(from, sizeof(from), "%s/logs/%s", sysmodule->app_root, NAMES[i]);
+        if (!sysmodule->storage->vtable->exists(sysmodule->storage, from)) continue;
+        snprintf(to, sizeof(to), "%s/logs/%s/legacy-%lld-%s", sysmodule->app_root, date,
+            (long long)now.unix_seconds, NAMES[i]);
+        if (sysmodule->storage->vtable->rename_path(sysmodule->storage, from, to)) ++moved;
+    }
+    return moved;
+}
+
+int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
+{
+    char disable_path[320];
+    char reload_path[320];
+    PtcClockSnapshot now;
+    bool disable_changed;
+    bool disable_present;
+    bool minute_changed;
+    bool reload;
+    int processed;
+    int actions = 0;
+    if (!sysmodule) return 0;
+    now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    snprintf(disable_path, sizeof(disable_path), "%s/flags/disable.flag", sysmodule->app_root);
+    snprintf(reload_path, sizeof(reload_path), "%s/flags/reload.flag", sysmodule->app_root);
+    disable_present = sysmodule->storage->vtable->exists(sysmodule->storage, disable_path);
+    disable_changed = !sysmodule->disable_initialized || sysmodule->disable_present != disable_present;
+    reload = sysmodule->storage->vtable->exists(sysmodule->storage, reload_path);
+    if (reload) {
+        invalidate_all_caches(sysmodule);
+        (void)ptc_sysmodule_refresh_caches(sysmodule);
+    }
+    processed = ptc_sysmodule_process_all(sysmodule);
+    (void)ptc_sysmodule_note_scan_result(sysmodule, processed > 0 || storage_notified || reload || disable_changed);
+    actions += processed;
+    minute_changed = !sysmodule->minute_initialized || sysmodule->last_minute_day_index != now.day_index ||
+        sysmodule->last_minute_of_day != now.minute_of_day;
+    if (minute_changed || reload || storage_notified || disable_changed) {
+        actions += ptc_sysmodule_enforce_tick(sysmodule);
+        sysmodule->last_minute_day_index = now.day_index;
+        sysmodule->last_minute_of_day = now.minute_of_day;
+        sysmodule->minute_initialized = true;
+    }
+    sysmodule->disable_present = disable_present;
+    sysmodule->disable_initialized = true;
+    if (reload) (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, reload_path);
+    if (!sysmodule->cleanup_initialized || sysmodule->last_cleanup_day_index != now.day_index) {
+        actions += ptc_sysmodule_cleanup(sysmodule);
+    }
+    return actions;
 }

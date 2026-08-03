@@ -28,7 +28,7 @@ NO_ICON := 1
 NO_NACP := 1
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
-CFLAGS := -std=c99 -g -O2 -Wall -Wextra -Werror -ffunction-sections $(ARCH) $(DEFINES)
+CFLAGS := -std=gnu99 -g -O2 -Wall -Wextra -Werror -ffunction-sections $(ARCH) $(DEFINES)
 CFLAGS += $(INCLUDE) -D__SWITCH__
 ASFLAGS := -g $(ARCH)
 LDFLAGS = -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)

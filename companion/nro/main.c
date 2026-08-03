@@ -8,6 +8,8 @@
 
 #include "../../companion/auth.h"
 #include "../../companion/file_protocol.h"
+#include "../../companion/transport_client.h"
+#include "../../companion/switch_ipc_client.h"
 #include "../../companion/self_check.h"
 #include "../../platform/switch/fs_storage.h"
 #include "../../third_party/cjson/cJSON.h"
@@ -15,7 +17,7 @@
 
 #define APP_ROOT "sdmc:/switch/play-time-control"
 #define RULES_PATH APP_ROOT "/rules.json"
-#define RESULT_TEXT_SIZE 4096
+#define RESULT_TEXT_SIZE 8192
 #define REQUEST_TIMEOUT_MS 60000
 #define LOOP_SLEEP_NS 100000000LL
 #define LOOP_SLEEP_MS 100
@@ -25,6 +27,8 @@
 
 typedef struct {
     PtcCompanionFileClient client;
+    PtcCompanionTransportClient transport;
+    PtcSwitchIpcClient ipc;
     PtcCompanionAuth auth;
     PtcUiModel model;
     char active_request_id[PTC_COMPANION_REQUEST_ID_SIZE];
@@ -37,10 +41,6 @@ typedef struct {
     bool quick_device_test;
     PtcSelfCheckProfile self_check_after_profile;
 } UiState;
-
-typedef PtcCompanionStatus (*SubmitNoArgFn)(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
-
-static PtcCompanionStatus submit_effect_fast(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 
 static int64_t unix_ms_now(void)
 {
@@ -222,11 +222,11 @@ static void begin_wait(UiState *ui, const char *message)
     snprintf(ui->model.message, sizeof(ui->model.message), "%s", message);
 }
 
-static void submit_noarg(UiState *ui, SubmitNoArgFn submit, const char *ok_message, const char *fail_prefix)
+static void submit_transport_empty(UiState *ui, const char *type, const char *ok_message, const char *fail_prefix)
 {
     PtcCompanionStatus status;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
-    status = submit(&ui->client, ui->active_request_id, time(NULL));
+    status = ptc_companion_transport_submit_empty(&ui->transport, ui->active_request_id, time(NULL), type);
     if (status == PTC_COMPANION_OK) {
         begin_wait(ui, ok_message);
         return;
@@ -237,7 +237,11 @@ static void submit_noarg(UiState *ui, SubmitNoArgFn submit, const char *ok_messa
 
 static void submit_status(UiState *ui)
 {
-    submit_noarg(ui, ptc_companion_submit_status, "正在刷新今天的状态…", "刷新失败");
+    PtcCompanionStatus status;
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_status(&ui->transport, ui->active_request_id, time(NULL));
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "正在刷新今天的状态…");
+    else set_message(ui, "刷新失败", status);
 }
 
 static void submit_offline_code(UiState *ui)
@@ -249,7 +253,7 @@ static void submit_offline_code(UiState *ui)
         return;
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
-    status = ptc_companion_submit_offline_code(&ui->client, ui->active_request_id, time(NULL), code);
+    status = ptc_companion_transport_submit_offline_code(&ui->transport, ui->active_request_id, time(NULL), code);
     if (status == PTC_COMPANION_OK) {
         begin_wait(ui, "加时码已提交，正在等待后台确认…");
         return;
@@ -263,11 +267,11 @@ static void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minut
     PtcCompanionStatus status;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     if (operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) {
-        status = ptc_companion_submit_set_today_limit(&ui->client, ui->active_request_id, time(NULL), minutes);
+        status = ptc_companion_transport_submit_set_today_limit(&ui->transport, ui->active_request_id, time(NULL), minutes);
     } else if (operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES) {
-        status = ptc_companion_submit_add_today_minutes(&ui->client, ui->active_request_id, time(NULL), minutes);
+        status = ptc_companion_transport_submit_add_today_minutes(&ui->transport, ui->active_request_id, time(NULL), minutes);
     } else {
-        status = ptc_companion_submit_parent_unlock_start(&ui->client, ui->active_request_id, time(NULL), minutes);
+        status = ptc_companion_transport_submit_parent_unlock_start(&ui->transport, ui->active_request_id, time(NULL), minutes);
     }
     if (status == PTC_COMPANION_OK) {
         begin_wait(ui, "设置已提交，正在等待后台确认…");
@@ -281,8 +285,8 @@ static void submit_weekly(UiState *ui)
 {
     PtcCompanionStatus status;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
-    status = ptc_companion_submit_set_weekly_template(
-        &ui->client,
+    status = ptc_companion_transport_submit_set_weekly_template(
+        &ui->transport,
         ui->active_request_id,
         time(NULL),
         ui->model.draft_week);
@@ -298,8 +302,8 @@ static void submit_bedtime(UiState *ui)
 {
     PtcCompanionStatus status;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
-    status = ptc_companion_submit_set_bedtime(
-        &ui->client,
+    status = ptc_companion_transport_submit_set_bedtime(
+        &ui->transport,
         ui->active_request_id,
         time(NULL),
         &ui->model.draft_bedtime);
@@ -315,8 +319,8 @@ static void submit_limit_action(UiState *ui)
 {
     PtcCompanionStatus status;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
-    status = ptc_companion_submit_set_limit_action(
-        &ui->client,
+    status = ptc_companion_transport_submit_set_limit_action(
+        &ui->transport,
         ui->active_request_id,
         time(NULL),
         ui->model.draft_limit_action);
@@ -453,6 +457,7 @@ static void run_self_check_profile(UiState *ui, PtcSelfCheckProfile profile)
         snprintf(ui->model.message, sizeof(ui->model.message), "快速设备测试通过，设置已自动恢复。");
     } else {
         PtcCompanionStatus disable_status = ptc_companion_set_disable_flag(&ui->client, true);
+        (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
         snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
         snprintf(
             ui->model.message,
@@ -480,10 +485,9 @@ static void poll_result(UiState *ui, bool force)
     if (ui->waiting) {
         ui->elapsed_ms += LOOP_SLEEP_MS;
     }
-    status = ptc_companion_read_result(
-        &ui->client,
-        ui->active_request_id,
-        ui->elapsed_ms,
+    status = ptc_companion_transport_poll(
+        &ui->transport,
+        LOOP_SLEEP_MS,
         REQUEST_TIMEOUT_MS,
         ui->last_result,
         sizeof(ui->last_result));
@@ -507,6 +511,7 @@ static void poll_result(UiState *ui, bool force)
     ui->self_check_after_result = false;
     if (ui->quick_device_test) {
         PtcCompanionStatus disable_status = ptc_companion_set_disable_flag(&ui->client, true);
+        (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
         ui->quick_device_test = false;
         snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
         snprintf(
@@ -622,13 +627,13 @@ static void handle_parent_action(UiState *ui)
             open_minutes_overlay(ui, PTC_UI_OPERATION_ADD_TODAY_MINUTES, "临时加时", "在今天现有额度上增加时间。", 15, 1, 120);
             break;
         case 3:
-            submit_noarg(ui, ptc_companion_submit_disable_today_limit, "正在设置今日不限时…", "设置今日不限失败");
+            submit_transport_empty(ui, "disable_today_limit", "正在设置今日不限时…", "设置今日不限失败");
             break;
         case 4:
             open_confirm_overlay(ui, PTC_UI_OPERATION_BLOCK_TODAY, "确认今日禁玩", "这会把今天设置为不可游玩。");
             break;
         case 5:
-            submit_noarg(ui, ptc_companion_submit_restore_today_policy, "正在恢复每周计划…", "恢复计划失败");
+            submit_transport_empty(ui, "restore_today_policy", "正在恢复每周计划…", "恢复计划失败");
             break;
         default:
             break;
@@ -650,7 +655,7 @@ static void handle_parent_action(UiState *ui)
             open_minutes_overlay(ui, PTC_UI_OPERATION_PARENT_UNLOCK, "临时解锁", "选择暂停本地规则的时长。", 15, 1, 1440);
             break;
         case 4:
-            submit_noarg(ui, ptc_companion_submit_parent_unlock_end, "正在结束临时解锁…", "结束解锁失败");
+            submit_transport_empty(ui, "parent_unlock_end", "正在结束临时解锁…", "结束解锁失败");
             break;
         default:
             break;
@@ -686,20 +691,24 @@ static void confirm_operation(UiState *ui)
     PtcUiOperation operation = ptc_ui_take_confirmed_operation(&ui->model);
     switch (operation) {
     case PTC_UI_OPERATION_BLOCK_TODAY:
-        submit_noarg(ui, ptc_companion_submit_block_today, "正在设置今日禁玩…", "今日禁玩设置失败");
+        submit_transport_empty(ui, "block_today", "正在设置今日禁玩…", "今日禁玩设置失败");
         break;
     case PTC_UI_OPERATION_QUICK_TEST:
-        submit_noarg(ui, submit_effect_fast, "快速设备测试正在运行…", "快速设备测试提交失败");
+        make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+        status = ptc_companion_transport_submit_probe_play_timer_effect(&ui->transport, ui->active_request_id, time(NULL), false);
+        if (status == PTC_COMPANION_OK) begin_wait(ui, "快速设备测试正在运行…"); else set_message(ui, "快速设备测试提交失败", status);
         if (ui->waiting) {
             ui->quick_device_test = true;
             arm_self_check_after_result(ui, PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE);
         } else {
             status = ptc_companion_set_disable_flag(&ui->client, true);
+            (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
             snprintf(ui->model.message, sizeof(ui->model.message), "测试无法启动，已停用控制：%s", companion_status_zh(status));
         }
         break;
     case PTC_UI_OPERATION_EMERGENCY_DISABLE:
         status = ptc_companion_set_disable_flag(&ui->client, true);
+        (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
         if (status == PTC_COMPANION_OK) {
             snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
             snprintf(ui->model.message, sizeof(ui->model.message), "后台控制已紧急停用。");
@@ -709,6 +718,7 @@ static void confirm_operation(UiState *ui)
         break;
     case PTC_UI_OPERATION_RESUME_CONTROL:
         status = ptc_companion_set_disable_flag(&ui->client, false);
+        (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
         if (status == PTC_COMPANION_OK) {
             snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
             snprintf(ui->model.message, sizeof(ui->model.message), "后台控制已恢复。");
@@ -717,10 +727,10 @@ static void confirm_operation(UiState *ui)
         }
         break;
     case PTC_UI_OPERATION_PROBE_RAW_BLOCK:
-        submit_noarg(ui, ptc_companion_submit_probe_raw_block, "正在验证强制阻止能力…", "强制阻止验证提交失败");
+        submit_transport_empty(ui, "probe_raw_block", "正在验证强制阻止能力…", "强制阻止验证提交失败");
         break;
     case PTC_UI_OPERATION_PROBE_SUSPEND:
-        submit_noarg(ui, ptc_companion_submit_probe_suspend, "正在验证暂停软件能力…", "暂停软件验证提交失败");
+        submit_transport_empty(ui, "probe_suspend", "正在验证暂停软件能力…", "暂停软件验证提交失败");
         break;
     default:
         break;
@@ -808,11 +818,6 @@ static void handle_overlay_input(UiState *ui, u64 down)
     if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM && (down & HidNpadButton_A)) {
         confirm_operation(ui);
     }
-}
-
-static PtcCompanionStatus submit_effect_fast(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
-{
-    return ptc_companion_submit_probe_play_timer_effect(client, request_id, created_at, false);
 }
 
 /*
@@ -993,6 +998,8 @@ int main(int argc, char **argv)
     snprintf(ui.model.message, sizeof(ui.model.message), "正在读取今天的游玩状态…");
     ptc_fs_storage_init(&fs);
     ptc_companion_file_client_init(&ui.client, APP_ROOT, ptc_fs_storage_as_storage(&fs));
+    ptc_switch_ipc_client_init(&ui.ipc);
+    ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs), ptc_switch_ipc_backend(), &ui.ipc);
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     submit_status(&ui);
 
@@ -1074,5 +1081,6 @@ int main(int argc, char **argv)
     }
 
     ptc_ui_graphics_exit();
+    ptc_switch_ipc_client_exit(&ui.ipc);
     return 0;
 }

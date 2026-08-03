@@ -3,13 +3,17 @@
 
 #include <stdbool.h>
 
-#include "../file_protocol.h"
+#include "../transport_client.h"
+#include "../switch_ipc_client.h"
 #include "../result_summary.h"
 
 typedef struct {
-    PtcCompanionFileClient client;
+    PtcCompanionTransportClient transport;
+#ifdef __SWITCH__
+    PtcSwitchIpcClient ipc;
+#endif
     char request_id[PTC_COMPANION_REQUEST_ID_SIZE];
-    char result_json[4096];
+    char result_json[8192];
     PtcCompanionResultSummary summary;
     int elapsed_ms;
     bool waiting;

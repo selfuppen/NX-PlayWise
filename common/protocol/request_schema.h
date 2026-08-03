@@ -24,5 +24,6 @@ typedef struct {
 } PtcRequest;
 
 PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out);
+bool ptc_request_id_is_valid(const char *request_id);
 
 #endif

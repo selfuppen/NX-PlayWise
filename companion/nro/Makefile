@@ -16,7 +16,7 @@ FREETYPE_CFLAGS := $(shell $(PKG_CONFIG) --cflags freetype2)
 FREETYPE_LIBS := $(shell $(PKG_CONFIG) --static --libs freetype2)
 
 ARCH := -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE
-CFLAGS := -std=c99 -O2 -g -Wall -Wextra -Werror -ffunction-sections $(ARCH)
+CFLAGS := -std=gnu99 -O2 -g -Wall -Wextra -Werror -ffunction-sections $(ARCH)
 CFLAGS += -D__SWITCH__ -I../.. -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map
 LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
@@ -27,13 +27,17 @@ OBJS := \
 	$(BUILD)/ui_state.o \
 	$(BUILD)/auth.o \
 	$(BUILD)/file_protocol.o \
+	$(BUILD)/transport_client.o \
+	$(BUILD)/switch_ipc_client.o \
 	$(BUILD)/request_client.o \
 	$(BUILD)/result_summary.o \
 	$(BUILD)/self_check.o \
 	$(BUILD)/sha256.o \
 	$(BUILD)/rules.o \
+	$(BUILD)/ptc_time.o \
 	$(BUILD)/result_builder.o \
 	$(BUILD)/error_code.o \
+	$(BUILD)/request_schema.o \
 	$(BUILD)/cJSON.o \
 	$(BUILD)/fs_storage.o
 
@@ -62,6 +66,12 @@ $(BUILD)/auth.o: ../auth.c | $(BUILD)
 $(BUILD)/request_client.o: ../request_client.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/transport_client.o: ../transport_client.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/switch_ipc_client.o: ../switch_ipc_client.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/result_summary.o: ../result_summary.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -74,10 +84,16 @@ $(BUILD)/sha256.o: ../../common/crypto/sha256.c | $(BUILD)
 $(BUILD)/rules.o: ../../common/rules/rules.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/ptc_time.o: ../../common/time/ptc_time.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/result_builder.o: ../../common/protocol/result_builder.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/error_code.o: ../../common/protocol/error_code.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/request_schema.o: ../../common/protocol/request_schema.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/cJSON.o: ../../third_party/cjson/cJSON.c | $(BUILD)

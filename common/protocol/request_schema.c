@@ -6,6 +6,23 @@
 
 #include "schema_version.h"
 
+bool ptc_request_id_is_valid(const char *request_id)
+{
+    size_t len;
+    size_t i;
+    if (!request_id) return false;
+    len = strlen(request_id);
+    if (len == 0 || len >= 80) return false;
+    for (i = 0; i < len; ++i) {
+        unsigned char ch = (unsigned char)request_id[i];
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+              (ch >= '0' && ch <= '9') || ch == '-' || ch == '_')) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static const char *skip_ws(const char *p)
 {
     while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
@@ -293,6 +310,7 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         return PTC_ERR_UNSUPPORTED_VERSION;
     }
     if (!json_string(text, "request_id", out->request_id, sizeof(out->request_id)) ||
+        !ptc_request_id_is_valid(out->request_id) ||
         !json_string(text, "type", out->type_text, sizeof(out->type_text)) ||
         !json_i64(text, "created_at", &out->created_at) ||
         !find_key(text, "payload")) {

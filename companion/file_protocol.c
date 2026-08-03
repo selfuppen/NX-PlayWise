@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "../common/protocol/result_builder.h"
+#include "../common/protocol/request_schema.h"
 #include "../third_party/cjson/cJSON.h"
 #include "request_client.h"
 
@@ -66,7 +67,7 @@ static PtcCompanionStatus submit_json(PtcCompanionFileClient *client, const char
     char tmp_path[240];
     char final_path[240];
 
-    if (!client || !client->storage || !request_id || !json || request_id[0] == '\0') {
+    if (!client || !client->storage || !request_id || !json || !ptc_request_id_is_valid(request_id)) {
         return PTC_COMPANION_BAD_ARGUMENT;
     }
 
@@ -309,10 +310,18 @@ PtcCompanionStatus ptc_companion_read_result(
         return PTC_COMPANION_BAD_ARGUMENT;
     }
 
+    if (!ptc_request_id_is_valid(request_id)) return PTC_COMPANION_BAD_ARGUMENT;
     snprintf(result_name, sizeof(result_name), "results/%s.json", request_id);
     join_path(result_path, sizeof(result_path), client->app_root, result_name);
     if (!client->storage->vtable->read_text(client->storage, result_path, out, out_size)) {
+        char done_name[96];
+        char done_path[240];
         out[0] = '\0';
+        snprintf(done_name, sizeof(done_name), "inbox/done/%s.json", request_id);
+        join_path(done_path, sizeof(done_path), client->app_root, done_name);
+        if (client->storage->vtable->exists(client->storage, done_path)) {
+            return PTC_COMPANION_WRITE_FAILED;
+        }
         if (timeout_ms >= 0 && elapsed_ms >= timeout_ms) {
             return PTC_COMPANION_TIMEOUT;
         }

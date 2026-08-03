@@ -28,6 +28,7 @@ ORCH_SRCS := \
 	sysmodule/sysmodule_core.c \
 	companion/auth.c \
 	companion/file_protocol.c \
+	companion/transport_client.c \
 	companion/request_client.c \
 	companion/result_summary.c \
 	companion/overlay/input_model.c \
@@ -35,7 +36,7 @@ ORCH_SRCS := \
 	companion/self_check.c
 
 TEST_SRCS := tests/c/test_host_core.c
-UI_TEST_SRCS := companion/nro/ui_state.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
+UI_TEST_SRCS := companion/nro/ui_state.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
 .PHONY: all test-host test-python test companion-nro sysmodule-nsp packages package-safe-nro clean package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2
 

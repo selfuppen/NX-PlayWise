@@ -24,7 +24,7 @@
     "pctl",
     "pctl:s"
   ],
-  "service_host": [],
+  "service_host": ["pctc:u"],
   "kernel_capabilities": [
     {
       "type": "kernel_flags",
