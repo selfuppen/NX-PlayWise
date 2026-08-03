@@ -188,6 +188,26 @@ static bool minute_keyboard_input(const char *header, uint16_t minimum, uint16_t
     return R_SUCCEEDED(result) && ptc_ui_parse_minutes(text, minimum, maximum, out);
 }
 
+static bool short_code_keyboard_input(char out[9])
+{
+    SwkbdConfig keyboard;
+    Result result;
+    if (!out || R_FAILED(swkbdCreate(&keyboard, 0))) {
+        return false;
+    }
+    out[0] = '\0';
+    swkbdConfigMakePresetDefault(&keyboard);
+    swkbdConfigSetType(&keyboard, SwkbdType_NumPad);
+    swkbdConfigSetStringLenMin(&keyboard, 8);
+    swkbdConfigSetStringLenMax(&keyboard, 8);
+    swkbdConfigSetHeaderText(&keyboard, "输入离线加时短码");
+    swkbdConfigSetGuideText(&keyboard, "8 位数字；5–120 分钟档位码");
+    swkbdConfigSetOkButtonText(&keyboard, "确认");
+    result = swkbdShow(&keyboard, out, 9);
+    swkbdClose(&keyboard);
+    return R_SUCCEEDED(result) && strlen(out) == 8;
+}
+
 static void edit_overlay_minutes(UiState *ui)
 {
     uint16_t value;
@@ -246,9 +266,9 @@ static void submit_status(UiState *ui)
 
 static void submit_offline_code(UiState *ui)
 {
-    char code[80];
+    char code[9];
     PtcCompanionStatus status;
-    if (!keyboard_input("输入离线加时码", "格式：XXXX-XXXX-XXXX-XXXX", code, sizeof(code), false, true)) {
+    if (!short_code_keyboard_input(code)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消输入加时码。");
         return;
     }

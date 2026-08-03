@@ -20,6 +20,7 @@ static const PtcErrorInfo PTC_ERROR_TABLE[] = {
     {PTC_ERR_WRONG_DATE, "wrong_date", "授权码不是今天有效"},
     {PTC_ERR_USED_TOKEN, "used_token", "授权码已经使用过"},
     {PTC_ERR_MINUTES_EXCEED_LIMIT, "minutes_exceed_limit", "授权分钟数超过上限"},
+    {PTC_ERR_CODE_COOLDOWN, "code_cooldown", "短码错误次数过多，请稍后再试"},
     {PTC_ERR_DISABLED, "disabled", "后台当前已禁用"},
     {PTC_ERR_UNLIMITED_NOT_ALLOWED, "unlimited_not_allowed", "当前无限制状态不允许改为有限制"},
     {PTC_ERR_RAW_BLOCK_NOT_VERIFIED, "raw_block_not_verified", "禁玩能力尚未验证"},

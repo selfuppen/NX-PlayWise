@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static const char CHARSET[] = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+static const char CHARSET[] = "0123456789";
 static const unsigned int DIRECTION_BUTTONS =
     PTC_OVERLAY_BUTTON_UP |
     PTC_OVERLAY_BUTTON_DOWN |
@@ -25,11 +25,11 @@ void ptc_overlay_input_init(PtcOverlayInput *input)
 
 static void move_cursor(PtcOverlayInput *input, int dx, int dy)
 {
-    int row = (int)(input->cursor / 8u);
-    int col = (int)(input->cursor % 8u);
-    col = (col + dx + 8) % 8;
-    row = (row + dy + 4) % 4;
-    input->cursor = (unsigned int)(row * 8 + col);
+    int row = (int)(input->cursor / PTC_OVERLAY_KEY_COLUMNS);
+    int col = (int)(input->cursor % PTC_OVERLAY_KEY_COLUMNS);
+    col = (col + dx + PTC_OVERLAY_KEY_COLUMNS) % PTC_OVERLAY_KEY_COLUMNS;
+    row = (row + dy + PTC_OVERLAY_KEY_ROWS) % PTC_OVERLAY_KEY_ROWS;
+    input->cursor = (unsigned int)(row * PTC_OVERLAY_KEY_COLUMNS + col);
 }
 
 static bool is_single_direction(unsigned int buttons)
@@ -172,10 +172,6 @@ bool ptc_overlay_input_format(const PtcOverlayInput *input, char *out, size_t ou
         return false;
     }
     for (i = 0; i < input->length; ++i) {
-        if (i > 0 && i % 4u == 0) {
-            if (used + 1u >= out_size) return false;
-            out[used++] = '-';
-        }
         if (used + 1u >= out_size) return false;
         out[used++] = input->symbols[i];
     }

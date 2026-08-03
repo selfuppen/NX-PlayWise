@@ -13,9 +13,10 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 import zipfile
 
-from grant_code import day_index_for, today_utc8
+from grant_code import day_index_for, next_v2_nonce, today_utc8
 from ptc_request_queue import APP_DIR, AppPaths, create_layout, new_request_id, write_json_atomic, write_request
 from ptc_token_v1 import MAX_NONCE, TOKEN_ACTION_ADD_TODAY_MINUTES, TOKEN_VERSION, TokenPayload, encode_token
+from ptc_token_v2 import MAX_NONCE as V2_MAX_NONCE, encode_token as encode_token_v2, tier_for_minutes
 
 
 REQUEST_TYPES_WITH_EMPTY_PAYLOAD = {
@@ -191,6 +192,22 @@ def generate_offline_code(data: dict[str, Any]) -> dict[str, Any]:
         day_index = int(data["day_index"])
     else:
         day_index = day_index_for(datetime.strptime(target_date, "%Y-%m-%d").date() if target_date else today_utc8())
+    tier_minutes = data.get("tier_minutes")
+    if tier_minutes not in (None, ""):
+        tier_index = tier_for_minutes(int(tier_minutes))
+        nonce = int(data["nonce"]) if data.get("nonce") not in (None, "") else next_v2_nonce(
+            Path(data["v2_nonce_state"]) if data.get("v2_nonce_state") else Path.home() / ".ptc" / "token_v2_nonce_state.json",
+            str(data["device"]), day_index)
+        if not 0 <= nonce <= V2_MAX_NONCE:
+            raise ValueError("v2 nonce must be in range 0..511")
+        return {
+            "code": encode_token_v2(tier_index, nonce, str(data["device"]), str(data["secret"]), day_index),
+            "day_index": day_index,
+            "nonce": nonce,
+            "token_version": 2,
+            "tier_index": tier_index,
+            "minutes": int(tier_minutes),
+        }
     nonce = int(data["nonce"]) if data.get("nonce") not in (None, "") else int(time.time() * 1000) % (MAX_NONCE + 1)
     payload = TokenPayload(
         version=TOKEN_VERSION,
@@ -200,7 +217,7 @@ def generate_offline_code(data: dict[str, Any]) -> dict[str, Any]:
         nonce=nonce,
     )
     code = encode_token(payload, str(data["device"]), str(data["secret"]))
-    return {"code": code, "day_index": day_index, "nonce": nonce}
+    return {"code": code, "day_index": day_index, "nonce": nonce, "token_version": 1, "minutes": int(data["minutes"])}
 
 
 def inspect_package(zip_path: str | Path) -> dict[str, Any]:
@@ -301,6 +318,7 @@ HTML = r"""<!doctype html>
     <label>Device</label><input id="device" value="kid-switch">
     <label>Secret</label><input id="secret" value="replace-with-long-random-secret">
     <label>Minutes</label><input id="minutes" value="30">
+    <label>V2 tier minutes</label><input id="tierMinutes" placeholder="optional: 5-120">
     <label>Date</label><input id="date" placeholder="YYYY-MM-DD">
     <label>Nonce</label><input id="nonce" placeholder="optional">
     <button onclick="generateCode()">Generate</button>
@@ -360,7 +378,7 @@ async function submitRequest() {
   show(await api('/api/request', {root: rootPath(), type, ...payload}));
 }
 async function generateCode() {
-  generated = await api('/api/token', {device:device.value, secret:secret.value, minutes:minutes.value, date:date.value, nonce:nonce.value});
+  generated = await api('/api/token', {device:device.value, secret:secret.value, minutes:minutes.value, tier_minutes:tierMinutes.value, date:date.value, nonce:nonce.value});
   codeOut.textContent = JSON.stringify(generated, null, 2);
 }
 async function submitGenerated() {

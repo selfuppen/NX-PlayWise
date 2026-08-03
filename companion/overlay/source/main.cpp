@@ -44,7 +44,7 @@ public:
 
     tsl::elm::Element *createUI() override
     {
-        auto frame = new tsl::elm::OverlayFrame("PCTC", "offline grant code");
+        auto frame = new tsl::elm::OverlayFrame("PCTC", "8-digit grant code");
         frame->setContent(new tsl::elm::CustomDrawer([this](tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 w, s32 h) {
             (void)x; (void)y; (void)w; (void)h;
             draw_overlay(renderer);
@@ -140,13 +140,13 @@ public:
 
     static s32 code_slot_x(unsigned int index)
     {
-        return 90 + static_cast<s32>(index) * 17 + static_cast<s32>(index / 4u) * 10;
+        return 90 + static_cast<s32>(index) * 38;
     }
 
     void draw_overlay(tsl::gfx::Renderer *renderer)
     {
         char line[96];
-        renderer->drawString("Offline code", false, 90, 190, 30, renderer->a(0xFFFF));
+        renderer->drawString("5-120 minute tier code", false, 90, 190, 28, renderer->a(0xFFFF));
         for (unsigned int index = 0; index < PTC_OVERLAY_CODE_SYMBOLS; ++index) {
             const s32 slot_x = code_slot_x(index);
             const bool is_input_cursor = input_->length < PTC_OVERLAY_CODE_SYMBOLS && index == input_->length;
@@ -163,16 +163,16 @@ public:
                 27,
                 renderer->a(index < input_->length ? TEXT_COLOR : MUTED_COLOR));
         }
-        std::snprintf(line, sizeof(line), "Current: %c   Entered: %u/16", ptc_overlay_input_charset()[input_->cursor], input_->length);
+        std::snprintf(line, sizeof(line), "Current: %c   Entered: %u/8", ptc_overlay_input_charset()[input_->cursor], input_->length);
         renderer->drawString(line, false, 90, 300, 23, renderer->a(TEXT_COLOR));
 
         const char *charset = ptc_overlay_input_charset();
-        renderer->drawRect(76, 333, 326, 218, renderer->a(PANEL_COLOR));
-        draw_outline(renderer, 76, 333, 326, 218, 2, MUTED_COLOR);
+        renderer->drawRect(76, 333, 326, 118, renderer->a(PANEL_COLOR));
+        draw_outline(renderer, 76, 333, 326, 118, 2, MUTED_COLOR);
         for (unsigned int index = 0; index < PTC_OVERLAY_KEY_COUNT; ++index) {
             char symbol[2] = { charset[index], '\0' };
-            s32 key_x = 90 + static_cast<s32>(index % 8u) * 38;
-            s32 key_y = 390 + static_cast<s32>(index / 8u) * 42;
+            s32 key_x = 100 + static_cast<s32>(index % PTC_OVERLAY_KEY_COLUMNS) * 58;
+            s32 key_y = 380 + static_cast<s32>(index / PTC_OVERLAY_KEY_COLUMNS) * 48;
             const bool focused = index == input_->cursor;
             renderer->drawRect(key_x - 6, key_y - 28, 34, 38, renderer->a(focused ? FOCUS_COLOR : KEY_COLOR));
             draw_outline(renderer, key_x - 6, key_y - 28, 34, 38, focused ? 3 : 1, focused ? TEXT_COLOR : MUTED_COLOR);
@@ -180,10 +180,10 @@ public:
         }
 
         const bool can_submit = ptc_overlay_input_can_submit(input_);
-        renderer->drawString("A enter  X delete  Y clear  B close", false, 90, 575, 18, renderer->a(TEXT_COLOR));
-        renderer->drawRect(250, 586, 145, 42, renderer->a(can_submit ? FOCUS_COLOR : DISABLED_COLOR));
-        draw_outline(renderer, 250, 586, 145, 42, 2, can_submit ? TEXT_COLOR : MUTED_COLOR);
-        renderer->drawString("+  SUBMIT", false, 270, 617, 23, renderer->a(can_submit ? DARK_TEXT_COLOR : MUTED_COLOR));
+        renderer->drawString("A digit  X backspace  Y clear  B close", false, 90, 500, 18, renderer->a(TEXT_COLOR));
+        renderer->drawRect(250, 520, 145, 42, renderer->a(can_submit ? FOCUS_COLOR : DISABLED_COLOR));
+        draw_outline(renderer, 250, 520, 145, 42, 2, can_submit ? TEXT_COLOR : MUTED_COLOR);
+        renderer->drawString("+  SUBMIT", false, 270, 551, 23, renderer->a(can_submit ? DARK_TEXT_COLOR : MUTED_COLOR));
         if (bridge_->waiting) renderer->drawString("Waiting for sysmodule...", false, 90, 655, 22, renderer->a(0xFF0F));
         if (error_) {
             const char *reason = bridge_->summary.valid && bridge_->summary.dry_run

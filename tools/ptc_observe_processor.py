@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from ptc_request_queue import AppPaths, archive_done, list_pending, move_to_processing, read_json, write_json_atomic
-from ptc_token_v1 import TokenError, verify_token
+from ptc_token_v1 import TokenError, verify_token as verify_token_v1
+from ptc_token_v2 import verify_token as verify_token_v2
 
 
 ERRORS: dict[str, tuple[int, str]] = {
@@ -21,6 +22,7 @@ ERRORS: dict[str, tuple[int, str]] = {
     "wrong_date": (205, "授权码不是今天有效"),
     "used_token": (206, "授权码已经使用过"),
     "minutes_exceed_limit": (207, "授权分钟数超过上限"),
+    "code_cooldown": (208, "短码错误次数过多，请稍后再试"),
     "disabled": (300, "后台当前已禁用"),
     "config_invalid": (502, "配置文件无效"),
 }
@@ -85,7 +87,11 @@ class ObserveProcessor:
         code = str(payload.get("code") or "")
         used_nonces: set[tuple[int, int]] = set()
         try:
-            token = verify_token(
+            is_v2 = "-" not in code and (
+                len(code) == 8 or (code.isascii() and code.isdigit() and len(code) not in {0, 16})
+            )
+            verifier = verify_token_v2 if is_v2 else verify_token_v1
+            token = verifier(
                 code,
                 device_id=str(config["device_id"]),
                 secret=str(config["grant_secret"]),

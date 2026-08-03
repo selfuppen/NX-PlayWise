@@ -75,6 +75,17 @@ def test_token_generation_and_package_install() -> None:
         )
         assert_equal(token["code"], "241W-2AC0-04HM-7YW5", "generated code")
         assert_equal(token["day_index"], 2380, "generated day")
+        short_token = generate_offline_code(
+            {
+                "device": "test-device",
+                "secret": "test-secret",
+                "tier_minutes": 30,
+                "day_index": 2380,
+                "nonce": 7,
+            }
+        )
+        assert_equal(short_token["code"], "10514680", "generated v2 short code")
+        assert_equal(short_token["token_version"], 2, "generated v2 version")
 
         package_root = tmp / "pkg-root"
         zip_path = tmp / "observe.zip"

@@ -11,6 +11,7 @@ COMMON_SRCS := \
 	common/protocol/request_schema.c \
 	common/protocol/result_builder.c \
 	common/token/token_v1.c \
+	common/token/token_v2.c \
 	common/time/ptc_time.c \
 	common/rules/rules.c \
 	common/policy/control_policy.c

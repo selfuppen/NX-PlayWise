@@ -49,6 +49,7 @@ def app_root(sdmc_root: Path) -> Path:
 def run_python_regressions() -> None:
     for test in [
         "tests/mvp/test_token_v1.py",
+        "tests/mvp/test_token_v2.py",
         "tests/observe/test_observe_queue.py",
         "tests/frontend/test_ptc_frontend_server.py",
         "tests/devkit/test_package_remote.py",

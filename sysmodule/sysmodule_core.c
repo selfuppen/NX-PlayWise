@@ -11,6 +11,7 @@
 #include "../common/rules/rules.h"
 #include "../common/time/ptc_time.h"
 #include "../common/token/token_v1.h"
+#include "../common/token/token_v2.h"
 
 typedef struct {
     char device_id[80];
@@ -25,7 +26,12 @@ typedef struct {
     uint16_t last_enforced_day_index;
     PtcPctlTargetMode last_enforced_mode;
     uint16_t last_enforced_minutes;
+    uint16_t v2_failed_attempts;
+    int64_t v2_cooldown_until;
 } PtcRuntimeState;
+
+#define PTC_V2_FAILURE_LIMIT 5u
+#define PTC_V2_COOLDOWN_SECONDS 600
 
 static void effect_wait(PtcSysmodule *sysmodule, uint32_t milliseconds);
 
@@ -624,6 +630,8 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     state->last_enforced_day_index = 0;
     state->last_enforced_mode = 0;
     state->last_enforced_minutes = 0;
+    state->v2_failed_attempts = 0;
+    state->v2_cooldown_until = 0;
     join_path(path, sizeof(path), sysmodule->app_root, "state.json");
     if (!read_cached_text(sysmodule, "state.json", sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text),
             &sysmodule->state_meta, &sysmodule->state_cache_valid, text, sizeof(text), true) || text[0] == '\0') {
@@ -635,6 +643,8 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     (void)json_i64(text, "parent_unlock_until", &state->parent_unlock_until);
     (void)json_u16(text, "last_enforced_day_index", &state->last_enforced_day_index);
     (void)json_u16(text, "last_enforced_minutes", &state->last_enforced_minutes);
+    (void)json_u16(text, "v2_failed_attempts", &state->v2_failed_attempts);
+    (void)json_i64(text, "v2_cooldown_until", &state->v2_cooldown_until);
     {
         uint16_t mode = 0;
         if (json_u16(text, "last_enforced_mode", &mode)) {
@@ -653,11 +663,14 @@ static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, in
         text,
         sizeof(text),
         "{\"version\":1,\"parent_unlock_until\":%lld,\"last_enforced_day_index\":%u,"
-        "\"last_enforced_mode\":%u,\"last_enforced_minutes\":%u,\"updated_at\":%lld}\n",
+        "\"last_enforced_mode\":%u,\"last_enforced_minutes\":%u,"
+        "\"v2_failed_attempts\":%u,\"v2_cooldown_until\":%lld,\"updated_at\":%lld}\n",
         (long long)state->parent_unlock_until,
         state->last_enforced_day_index,
         (unsigned int)state->last_enforced_mode,
         state->last_enforced_minutes,
+        state->v2_failed_attempts,
+        (long long)state->v2_cooldown_until,
         (long long)updated_at);
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
     snprintf(sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text), "%s", text);
@@ -682,27 +695,52 @@ bool ptc_sysmodule_refresh_caches(PtcSysmodule *sysmodule)
     return config_ok && rules_ok && state_ok;
 }
 
-static bool nonce_used(uint16_t day_index, uint32_t nonce, void *ctx)
+static bool ledger_nonce_used(PtcSysmodule *sysmodule, uint16_t day_index, uint32_t nonce, unsigned int token_version)
 {
-    PtcSysmodule *sysmodule = (PtcSysmodule *)ctx;
     char path[320];
     char text[4096];
     char needle[96];
+    const char *line;
     join_path(path, sizeof(path), sysmodule->app_root, "ledger/used_nonces.jsonl");
     if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
         return false;
     }
     snprintf(needle, sizeof(needle), "\"day_index\":%u,\"nonce\":%lu", day_index, (unsigned long)nonce);
-    return strstr(text, needle) != NULL;
+    line = text;
+    while (line && *line) {
+        const char *end = strchr(line, '\n');
+        const char *match = strstr(line, needle);
+        if (match && (!end || match < end)) {
+            const char *version = strstr(line, "\"token_version\":");
+            if ((!version || (end && version >= end)) && token_version == 1u) return true;
+            if (version && (!end || version < end) && strtoul(version + strlen("\"token_version\":"), NULL, 10) == token_version) return true;
+        }
+        line = end ? end + 1 : NULL;
+    }
+    return false;
 }
 
-static bool consume_nonce(PtcSysmodule *sysmodule, const PtcRequest *request, uint16_t day_index, uint32_t nonce)
+static bool nonce_used_v1(uint16_t day_index, uint32_t nonce, void *ctx)
+{
+    return ledger_nonce_used((PtcSysmodule *)ctx, day_index, nonce, 1u);
+}
+
+static bool nonce_used_v2(uint16_t day_index, uint32_t nonce, void *ctx)
+{
+    return ledger_nonce_used((PtcSysmodule *)ctx, day_index, nonce, 2u);
+}
+
+static bool consume_nonce(PtcSysmodule *sysmodule, const PtcRequest *request, uint16_t day_index, uint32_t nonce, unsigned int token_version)
 {
     char path[320];
     char line[128];
     bool ok;
     join_path(path, sizeof(path), sysmodule->app_root, "ledger/used_nonces.jsonl");
-    snprintf(line, sizeof(line), "{\"day_index\":%u,\"nonce\":%lu}", day_index, (unsigned long)nonce);
+    if (token_version == 2u) {
+        snprintf(line, sizeof(line), "{\"day_index\":%u,\"nonce\":%lu,\"token_version\":2}", day_index, (unsigned long)nonce);
+    } else {
+        snprintf(line, sizeof(line), "{\"day_index\":%u,\"nonce\":%lu}", day_index, (unsigned long)nonce);
+    }
     ok = sysmodule->storage->vtable->append_line(sysmodule->storage, path, line);
     append_event(sysmodule, request, ok ? "nonce_consumed" : "nonce_failed", ok ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED, "");
     return ok;
@@ -1214,9 +1252,27 @@ static bool process_status(PtcSysmodule *sysmodule, const PtcRequest *request, c
     return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, caps, now);
 }
 
+static bool code_is_v2_candidate(const char *code)
+{
+    size_t length;
+    size_t index;
+    bool all_digits = true;
+    if (!code) return false;
+    length = strlen(code);
+    if (strchr(code, '-') != NULL) return false;
+    for (index = 0; index < length; ++index) {
+        if (code[index] < '0' || code[index] > '9') all_digits = false;
+    }
+    /* Exactly eight characters is an intended short-code entry even when a
+       non-digit typo makes it malformed. Other all-digit lengths are also
+       treated as malformed v2, except 16 symbols which is a valid v1 shape. */
+    return length == PTC_TOKEN_V2_TEXT_LEN || (length != 0u && length != PTC_TOKEN_SYMBOLS && all_digits);
+}
+
 static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
 {
-    PtcTokenPayload token;
+    PtcTokenPayload token_v1;
+    PtcTokenV2Payload token_v2;
     PtcPctlStatus pctl_status;
     PtcPolicyDecision decision;
     PtcRules rules;
@@ -1225,13 +1281,51 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     PtcResultState state;
     char json[2048];
     PtcErrorCode err;
+    uint16_t token_day_index = now.day_index;
+    uint32_t token_nonce = 0;
+    uint16_t token_minutes = 0;
+    unsigned int token_version = 1u;
+    bool is_v2 = code_is_v2_candidate(request->code);
     bool rules_existed = false;
     bool rules_persisted = false;
     decision = ptc_policy_decide(config->mode, disable_flag, PTC_OPERATION_GRANT_MINUTES, caps, false, config->allow_unlimited_to_limited);
     if (decision.error == PTC_ERR_DISABLED) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
     }
-    err = ptc_token_verify(request->code, config->device_id, config->grant_secret, now.day_index, config->max_add_minutes, nonce_used, sysmodule, &token);
+    if (is_v2) {
+        if (!load_state(sysmodule, &runtime_state)) {
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_STORAGE_READ_FAILED, now.day_index, caps);
+        }
+        if (runtime_state.v2_cooldown_until > now.unix_seconds) {
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_CODE_COOLDOWN, now.day_index, caps);
+        }
+        if (runtime_state.v2_cooldown_until != 0) {
+            runtime_state.v2_failed_attempts = 0;
+            runtime_state.v2_cooldown_until = 0;
+        }
+        err = ptc_token_v2_verify(request->code, config->device_id, config->grant_secret, now.day_index,
+            config->max_add_minutes, nonce_used_v2, sysmodule, &token_v2);
+        if (err == PTC_ERR_BAD_CODE || err == PTC_ERR_BAD_SIGNATURE) {
+            if (runtime_state.v2_failed_attempts < PTC_V2_FAILURE_LIMIT) ++runtime_state.v2_failed_attempts;
+            if (runtime_state.v2_failed_attempts >= PTC_V2_FAILURE_LIMIT) {
+                runtime_state.v2_cooldown_until = now.unix_seconds + PTC_V2_COOLDOWN_SECONDS;
+            }
+            if (!save_state(sysmodule, &runtime_state, now.unix_seconds)) err = PTC_ERR_STORAGE_WRITE_FAILED;
+        }
+        if (err == PTC_ERR_OK) {
+            token_minutes = token_v2.minutes;
+            token_nonce = token_v2.nonce;
+            token_version = 2u;
+        }
+    } else {
+        err = ptc_token_verify(request->code, config->device_id, config->grant_secret, now.day_index,
+            config->max_add_minutes, nonce_used_v1, sysmodule, &token_v1);
+        if (err == PTC_ERR_OK) {
+            token_day_index = token_v1.day_index_since_2020;
+            token_minutes = token_v1.minutes;
+            token_nonce = token_v1.nonce;
+        }
+    }
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, err, now.day_index, caps);
     }
@@ -1255,7 +1349,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         original_rules = rules;
         /* Stack the granted minutes onto today's existing limit rather than
            overwriting it, matching the add_today_minutes token action. */
-        new_minutes = accumulate_today_limit(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index), token.minutes);
+        new_minutes = accumulate_today_limit(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index), token_minutes);
         /* Apply to PCTL first (idempotent absolute write); persist the override
            only after it succeeds. On failure the nonce is not consumed and the
            same code may be re-entered, so persisting first would double-count. */
@@ -1281,8 +1375,19 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, ptc_control_mode_name(config->mode), decision.dry_run, &state, now.unix_seconds);
     if (write_result(sysmodule, request->request_id, json)) {
         append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
+        if (is_v2 && !decision.dry_run &&
+            (runtime_state.v2_failed_attempts != 0 || runtime_state.v2_cooldown_until != 0)) {
+            bool cleared;
+            runtime_state.v2_failed_attempts = 0;
+            runtime_state.v2_cooldown_until = 0;
+            cleared = save_state(sysmodule, &runtime_state, now.unix_seconds);
+            append_event(sysmodule, request,
+                cleared ? "v2_failures_cleared" : "result_write_failed",
+                cleared ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED,
+                "v2_cooldown");
+        }
         if (decision.consume_nonce_after_success) {
-            (void)consume_nonce(sysmodule, request, token.day_index_since_2020, token.nonce);
+            (void)consume_nonce(sysmodule, request, token_day_index, token_nonce, token_version);
         }
         return true;
     }

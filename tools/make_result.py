@@ -22,6 +22,7 @@ ERRORS: dict[str, tuple[int, str]] = {
     "wrong_date": (205, "授权码不是今天有效"),
     "used_token": (206, "授权码已经使用过"),
     "minutes_exceed_limit": (207, "授权分钟数超过上限"),
+    "code_cooldown": (208, "短码错误次数过多，请稍后再试"),
     "disabled": (300, "后台当前已禁用"),
     "unlimited_not_allowed": (301, "当前无限制状态不允许改为有限制"),
     "raw_block_not_verified": (302, "禁玩能力尚未验证"),

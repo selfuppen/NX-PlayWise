@@ -15,6 +15,7 @@
 #include "../../common/protocol/request_schema.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/token/token_v1.h"
+#include "../../common/token/token_v2.h"
 #include "../../companion/auth.h"
 #include "../../companion/file_protocol.h"
 #include "../../companion/overlay/bridge.h"
@@ -100,6 +101,37 @@ static void test_token_v1(void)
     check_int(ptc_token_verify(code, "test-device", "test-secret", 2380, 120, NULL, NULL, &decoded), PTC_ERR_MINUTES_EXCEED_LIMIT, "minutes exceed");
 }
 
+static void test_token_v2(void)
+{
+    PtcTokenV2Payload decoded;
+    char code[PTC_TOKEN_V2_TEXT_SIZE];
+    uint8_t tier;
+    unsigned int index;
+
+    for (index = 0; index < PTC_TOKEN_V2_TIER_COUNT; ++index) {
+        uint16_t minutes = (uint16_t)((index + 1u) * PTC_TOKEN_V2_TIER_MINUTES);
+        check_int(ptc_token_v2_tier_for_minutes(minutes, &tier), PTC_ERR_OK, "v2 minutes map to tier");
+        check_int(tier, index, "v2 tier index mapping");
+        check_int(ptc_token_v2_encode(tier, (uint16_t)index, "test-device", "test-secret", 2380, code), PTC_ERR_OK, "v2 encode tier");
+        check_int(strlen(code), PTC_TOKEN_V2_TEXT_LEN, "v2 code is eight digits");
+        check_int(ptc_token_v2_verify(code, "test-device", "test-secret", 2380, 120, NULL, NULL, &decoded), PTC_ERR_OK, "v2 verify tier");
+        check_int(decoded.tier_index, index, "v2 decoded tier");
+        check_int(decoded.minutes, minutes, "v2 decoded minutes");
+        check_int(decoded.nonce, index, "v2 decoded nonce");
+    }
+    check_int(ptc_token_v2_encode(5, 7, "test-device", "test-secret", 2380, code), PTC_ERR_OK, "v2 fixture encode");
+    check_str(code, "10514680", "v2 Python/C fixture parity");
+    check_int(ptc_token_v2_encode(0, 0, "test-device", "test-secret", 2380, code), PTC_ERR_OK, "v2 leading zero encode");
+    check_str(code, "00002848", "v2 leading zero preserved");
+    check_int(ptc_token_v2_decode(code, "other-device", "test-secret", 2380, &decoded), PTC_ERR_BAD_SIGNATURE, "v2 wrong device");
+    check_int(ptc_token_v2_decode(code, "test-device", "wrong-secret", 2380, &decoded), PTC_ERR_BAD_SIGNATURE, "v2 wrong secret");
+    check_int(ptc_token_v2_decode(code, "test-device", "test-secret", 2381, &decoded), PTC_ERR_BAD_SIGNATURE, "v2 wrong day");
+    check_int(ptc_token_v2_decode("1234567", "test-device", "test-secret", 2380, &decoded), PTC_ERR_BAD_CODE, "v2 wrong length");
+    check_int(ptc_token_v2_decode("67108864", "test-device", "test-secret", 2380, &decoded), PTC_ERR_BAD_CODE, "v2 over 26 bit range");
+    check_int(ptc_token_v2_decode("50331648", "test-device", "test-secret", 2380, &decoded), PTC_ERR_BAD_CODE, "v2 invalid tier bits");
+    check_int(ptc_token_v2_tier_for_minutes(6, &tier), PTC_ERR_BAD_CODE, "v2 rejects non-tier minutes");
+}
+
 static void test_overlay_input_and_shared_result_summary(void)
 {
     PtcOverlayInput input;
@@ -113,9 +145,9 @@ static void test_overlay_input_and_shared_result_summary(void)
     ptc_overlay_input_init(&input);
     check_int(input.cursor, 0, "overlay cursor starts at zero");
     check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_LEFT, PTC_OVERLAY_BUTTON_LEFT, 0), "overlay left consumed");
-    check_int(input.cursor, 7, "overlay left wraps within row");
+    check_int(input.cursor, 4, "overlay left wraps within row");
     check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_UP, PTC_OVERLAY_BUTTON_UP, 0), "overlay up consumed");
-    check_int(input.cursor, 31, "overlay up wraps to final row");
+    check_int(input.cursor, 9, "overlay up wraps to final row");
 
     ptc_overlay_input_init(&input);
     check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_RIGHT, PTC_OVERLAY_BUTTON_RIGHT, 0), "overlay repeat starts with immediate move");
@@ -143,20 +175,18 @@ static void test_overlay_input_and_shared_result_summary(void)
     check_true(!ptc_overlay_input_can_submit(&input), "overlay incomplete code cannot submit");
     for (i = 0; i < PTC_OVERLAY_CODE_SYMBOLS; ++i) {
         check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_A, PTC_OVERLAY_BUTTON_A, 0), "overlay A enters character");
-        if (i + 1U < PTC_OVERLAY_CODE_SYMBOLS) {
-            (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_RIGHT, PTC_OVERLAY_BUTTON_RIGHT, 0);
-        }
+        check_int(input.length, i + 1u, "overlay advances to next input slot after digit");
     }
-    check_true(ptc_overlay_input_can_submit(&input), "overlay accepts exactly sixteen symbols");
+    check_true(ptc_overlay_input_can_submit(&input), "overlay accepts exactly eight digits");
     check_true(ptc_overlay_input_format(&input, formatted, sizeof(formatted)), "overlay code formats");
-    check_str(formatted, "0123-4567-0123-4567", "overlay Crockford grouping");
-    check_int(input.cursor, 7, "overlay focus reaches final entered key");
+    check_str(formatted, "00000000", "overlay formats numeric short code with leading zeros");
+    check_int(input.cursor, 0, "overlay keypad focus remains on repeated digit");
     (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_X, PTC_OVERLAY_BUTTON_X, 0);
     check_true(!ptc_overlay_input_can_submit(&input), "overlay delete disables submit");
-    check_int(input.cursor, 7, "overlay delete keeps keyboard focus");
+    check_int(input.cursor, 0, "overlay delete keeps keyboard focus");
     (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_Y, PTC_OVERLAY_BUTTON_Y, 0);
     check_int(input.length, 0, "overlay clear empties code");
-    check_int(input.cursor, 7, "overlay clear keeps keyboard focus");
+    check_int(input.cursor, 0, "overlay clear keeps keyboard focus");
     ptc_overlay_input_tick(&input, PTC_OVERLAY_REQUEST_TIMEOUT_MS, PTC_OVERLAY_REQUEST_TIMEOUT_MS);
     check_true(input.timed_out, "overlay input timeout fires");
 
@@ -179,7 +209,7 @@ static void test_overlay_input_and_shared_result_summary(void)
 
     ptc_mem_storage_init(&mem);
     ptc_overlay_bridge_init(&bridge, "app", &mem.storage);
-    check_int(ptc_overlay_bridge_submit(&bridge, "0123-4567-89AB-CDEF", 1000, 0x12), PTC_COMPANION_OK, "overlay bridge submits queue request");
+    check_int(ptc_overlay_bridge_submit(&bridge, "01234567", 1000, 0x12), PTC_COMPANION_OK, "overlay bridge submits queue request");
     check_true(ptc_overlay_bridge_waiting(&bridge), "overlay bridge enters waiting state");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/1000000-0012.json"), "overlay bridge uses pending atomic protocol");
     check_int(ptc_overlay_bridge_poll(&bridge, PTC_OVERLAY_REQUEST_TIMEOUT_MS, PTC_OVERLAY_REQUEST_TIMEOUT_MS), PTC_COMPANION_TIMEOUT, "overlay bridge times out at sixty seconds");
@@ -724,6 +754,11 @@ static void make_valid_code(char *out)
     check_int(ptc_token_encode(&payload, "test-device", "test-secret", out), PTC_ERR_OK, "make test token");
 }
 
+static void make_valid_v2_code(char out[PTC_TOKEN_V2_TEXT_SIZE], uint16_t nonce)
+{
+    check_int(ptc_token_v2_encode(5, nonce, "test-device", "test-secret", 2380, out), PTC_ERR_OK, "make v2 test token");
+}
+
 static void test_observe_status_flow(void)
 {
     PtcMemStorage mem;
@@ -1160,6 +1195,174 @@ static void test_grant_flow_consumes_nonce_after_write(void)
     check_true(strstr(debug, "\"target_minutes\":90") != NULL, "grant debug target minutes");
     check_true(strstr(debug, "\"before_raw_hex\"") != NULL, "grant debug before raw");
     check_true(strstr(debug, "\"after_raw_hex\"") != NULL, "grant debug after raw");
+}
+
+static void test_v2_grant_replay_and_ledger_version(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    PtcTokenPayload v1_payload;
+    char code[PTC_TOKEN_V2_TEXT_SIZE];
+    char v1_code[PTC_TOKEN_TEXT_SIZE];
+    char request[512];
+    char ledger[4096];
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    make_valid_v2_code(code, 7);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "v2-grant", 1001, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/v2-grant.json", request), "write v2 grant request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process v2 grant");
+    check_true(pctl.applied, "v2 grant applies pctl");
+    check_int(pctl.last_target.minutes, 90, "v2 tier adds thirty minutes");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/ledger/used_nonces.jsonl", ledger, sizeof(ledger)), "v2 ledger readable");
+    check_true(strstr(ledger, "\"day_index\":2380,\"nonce\":7,\"token_version\":2") != NULL, "v2 ledger records token version");
+
+    v1_payload.version = 1;
+    v1_payload.action = PTC_TOKEN_ACTION_ADD_TODAY_MINUTES;
+    v1_payload.minutes = 5;
+    v1_payload.day_index_since_2020 = 2380;
+    v1_payload.nonce = 7;
+    check_int(ptc_token_encode(&v1_payload, "test-device", "test-secret", v1_code), PTC_ERR_OK, "make v1 token sharing v2 nonce");
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "v1-same-nonce", 1002, v1_code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/v1-same-nonce.json", request), "write v1 with same nonce");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "v1 nonce namespace stays separate");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/v1-same-nonce.json", result, sizeof(result)), "v1 same nonce result");
+    check_true(strstr(result, "\"status\":\"ok\"") != NULL, "v1 same numeric nonce is accepted");
+
+    pctl.applied = false;
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "v2-replay", 1003, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/v2-replay.json", request), "write v2 replay request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process v2 replay");
+    check_true(!pctl.applied, "v2 replay avoids pctl");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/v2-replay.json", result, sizeof(result)), "v2 replay result");
+    check_true(strstr(result, "\"reason\":\"used_token\"") != NULL, "v2 replay has stable reason");
+}
+
+static void test_v2_failure_paths_do_not_consume_nonce(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_V2_TEXT_SIZE];
+    char request[512];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.backup_error = PTC_ERR_PCTL_BACKUP_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    make_valid_v2_code(code, 20);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "v2-backup-fail", 1, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/v2-backup-fail.json", request), "write v2 backup failure");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process v2 backup failure");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "v2 backup failure avoids nonce");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    make_valid_v2_code(code, 21);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "v2-pctl-fail", 2, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/v2-pctl-fail.json", request), "write v2 pctl failure");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process v2 pctl failure");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "v2 pctl failure avoids nonce");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    make_valid_v2_code(code, 22);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "v2-result-fail", 3, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/v2-result-fail.json", request), "write v2 result failure");
+    mem.fail_write_path_contains = "results/";
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process v2 result failure");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "v2 result failure avoids nonce");
+}
+
+static void test_v2_cooldown_persists_and_resets(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_V2_TEXT_SIZE];
+    char bad_signature_code[PTC_TOKEN_V2_TEXT_SIZE];
+    char v1_code[PTC_TOKEN_TEXT_SIZE];
+    char request[512];
+    char path[160];
+    char state[1024];
+    char result[4096];
+    unsigned int index;
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    check_int(ptc_token_v2_encode(5, 40, "test-device", "wrong-secret", 2380, bad_signature_code), PTC_ERR_OK, "make bad signature v2 attempt");
+    for (index = 0; index < 5; ++index) {
+        char request_id[32];
+        snprintf(request_id, sizeof(request_id), "v2-bad-%u", index);
+        (void)ptc_companion_offline_code_request_json(request, sizeof(request), request_id, (int64_t)index,
+            index == 4u ? bad_signature_code : "67108864");
+        snprintf(path, sizeof(path), "app/inbox/pending/%s.json", request_id);
+        check_true(mem.storage.vtable->write_text_atomic(&mem.storage, path, request), "write bad v2 attempt");
+        check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process bad v2 attempt");
+    }
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", state, sizeof(state)), "v2 cooldown state readable");
+    check_true(strstr(state, "\"v2_failed_attempts\":5") != NULL, "v2 fifth failure persisted");
+    check_true(strstr(state, "\"v2_cooldown_until\":1783527001") != NULL, "v2 cooldown deadline persisted");
+
+    (void)ptc_companion_status_request_json(request, sizeof(request), "v2-cooldown-status", 10);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/v2-cooldown-status.json", request), "write status during cooldown");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "status unaffected by v2 cooldown");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/v2-cooldown-status.json", result, sizeof(result)), "cooldown status result");
+    check_true(strstr(result, "\"status\":\"ok\"") != NULL, "status succeeds during v2 cooldown");
+
+    make_valid_code(v1_code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "v1-during-v2-cooldown", 10, v1_code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/v1-during-v2-cooldown.json", request), "write v1 during v2 cooldown");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "v1 unaffected by v2 cooldown");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/v1-during-v2-cooldown.json", result, sizeof(result)), "v1 cooldown result");
+    check_true(strstr(result, "\"status\":\"ok\"") != NULL, "v1 succeeds during v2 cooldown");
+
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    make_valid_v2_code(code, 30);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "v2-still-cooling", 11, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/v2-still-cooling.json", request), "write v2 after restart");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "restart preserves v2 cooldown");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/v2-still-cooling.json", result, sizeof(result)), "cooldown rejection result");
+    check_true(strstr(result, "\"reason\":\"code_cooldown\"") != NULL, "v2 cooldown stable reason");
+
+    fake_time.snapshot.unix_seconds += 601;
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "v2-after-cooldown", 12, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/v2-after-cooldown.json", request), "write v2 after cooldown");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "v2 succeeds after cooldown");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", state, sizeof(state)), "v2 reset state readable");
+    check_true(strstr(state, "\"v2_failed_attempts\":0") != NULL, "successful v2 clears failure count");
+    check_true(strstr(state, "\"v2_cooldown_until\":0") != NULL, "successful v2 clears cooldown");
 }
 
 static void test_grant_requires_runtime_unlock_before_persisting(void)
@@ -1962,6 +2165,7 @@ static void test_transport_submit_failure_does_not_write_file(void)
 int main(void)
 {
     test_token_v1();
+    test_token_v2();
     test_overlay_input_and_shared_result_summary();
     test_time_and_policy();
     test_play_timer_settings_layout();
@@ -1986,6 +2190,9 @@ int main(void)
     test_probe_apply_today_limit_paths();
     test_legacy_play_timer_capability_is_invalidated();
     test_grant_flow_consumes_nonce_after_write();
+    test_v2_grant_replay_and_ledger_version();
+    test_v2_failure_paths_do_not_consume_nonce();
+    test_v2_cooldown_persists_and_resets();
     test_grant_requires_runtime_unlock_before_persisting();
     test_grant_offline_code_stacks_on_existing_limit();
     test_grant_offline_code_clamps_to_daily_maximum();
