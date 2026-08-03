@@ -8,18 +8,14 @@ from pathlib import Path, PurePosixPath
 import shlex
 import shutil
 import subprocess
-import sys
-import tarfile
-import tempfile
 import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REMOTE_ALIAS = "renqi-nintendo-switch-dev"
-REMOTE_CONTAINER = "devkitpro-ssh-v1"
-REMOTE_HOST_PATH = "/home/ygq/nintendo/switch-play-time-control-local"
-REMOTE_PATH = "/ws/switch-play-time-control-local"
-DEFAULT_OUTPUT = Path(r"D:\switch\play-time-controll\download") if os.name == "nt" else ROOT / "build" / "downloads" / "packages"
+DEFAULT_SSH_HOST = "127.0.0.1"
+DEFAULT_SSH_PORT = 1888
+DEFAULT_SSH_USER = "root"
+DEFAULT_CONTAINER_PATH = "/ws/switch-play-time-control-local"
 APP_CONFIG = "switch/play-time-control/config.json"
 CONTENT_ROOT = "atmosphere/contents/4200000000BD2300"
 PACKAGE_EXPECTATIONS = {
@@ -51,13 +47,6 @@ def safe_zip_members(package: zipfile.ZipFile) -> list[str]:
     return names
 
 
-def bundle_member_prefix(member: tarfile.TarInfo) -> str:
-    name = PurePosixPath(member.name)
-    if len(name.parts) != 1 or name.name != member.name or not member.isfile():
-        raise PackageError(f"unsafe remote bundle entry: {member.name}")
-    return package_prefix(Path(member.name))
-
-
 def verify_package_zip(path: Path, prefix: str | None = None) -> None:
     expected_prefix = prefix or package_prefix(path)
     expected_mode, expect_boot2 = PACKAGE_EXPECTATIONS[expected_prefix]
@@ -84,85 +73,52 @@ def latest_packages(package_dir: Path) -> dict[str, Path]:
     for prefix in PACKAGE_EXPECTATIONS:
         matches = sorted(package_dir.glob(f"{prefix}-*.zip"), key=lambda path: path.stat().st_mtime)
         if not matches:
-            raise PackageError(f"missing remote package: {prefix}-*.zip")
+            raise PackageError(f"missing generated package: {prefix}-*.zip")
         selected[prefix] = matches[-1]
     return selected
 
 
-def emit_bundle() -> int:
-    packages = latest_packages(ROOT / "build" / "packages")
-    for prefix, path in packages.items():
-        verify_package_zip(path, prefix)
-    with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as bundle:
-        for prefix in PACKAGE_EXPECTATIONS:
-            path = packages[prefix]
-            bundle.add(path, arcname=path.name, recursive=False)
-    return 0
-
-
-def remote_command() -> str:
-    env = (
-        "-e DEVKITPRO=/opt/devkitpro "
-        "-e DEVKITARM=/opt/devkitpro/devkitARM "
-        "-e DEVKITA64=/opt/devkitpro/devkitA64 "
-        "-e PATH=/opt/devkitpro/devkitA64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    )
+def container_command(container_path: str = DEFAULT_CONTAINER_PATH) -> str:
+    path = "/opt/devkitpro/devkitA64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     container_script = (
-        f"cd {shlex.quote(REMOTE_PATH)} "
-        "&& make test packages 1>&2 "
-        "&& python3 tools/package_remote.py --emit-bundle"
+        "export DEVKITPRO=/opt/devkitpro "
+        "DEVKITARM=/opt/devkitpro/devkitARM "
+        "DEVKITA64=/opt/devkitpro/devkitA64 "
+        f"PATH={shlex.quote(path)} "
+        f"&& cd {shlex.quote(container_path)} "
+        "&& make test packages"
     )
-    return " && ".join(
-        [
-            f"git -C {shlex.quote(REMOTE_HOST_PATH)} fetch origin master 1>&2",
-            f"git -C {shlex.quote(REMOTE_HOST_PATH)} merge --ff-only FETCH_HEAD 1>&2",
-            f"docker exec {env} {shlex.quote(REMOTE_CONTAINER)} sh -lc {shlex.quote(container_script)}",
-        ]
-    )
+    return f"sh -lc {shlex.quote(container_script)}"
 
 
-def receive_bundle(staging: Path) -> None:
-    process = subprocess.Popen(
-        ["ssh", REMOTE_ALIAS, remote_command()],
-        cwd=ROOT,
-        stdin=None,
-        stdout=subprocess.PIPE,
-    )
-    assert process.stdout is not None
-    seen: set[str] = set()
-    try:
-        with tarfile.open(fileobj=process.stdout, mode="r|") as bundle:
-            for member in bundle:
-                prefix = bundle_member_prefix(member)
-                if prefix in seen:
-                    raise PackageError(f"duplicate remote package: {prefix}")
-                source = bundle.extractfile(member)
-                if source is None:
-                    raise PackageError(f"cannot read remote package: {member.name}")
-                with (staging / member.name).open("wb") as destination:
-                    shutil.copyfileobj(source, destination)
-                seen.add(prefix)
-    except Exception:
-        process.kill()
-        process.wait()
-        raise
-    return_code = process.wait()
+def ssh_command(
+    host: str = DEFAULT_SSH_HOST,
+    port: int = DEFAULT_SSH_PORT,
+    user: str = DEFAULT_SSH_USER,
+    container_path: str = DEFAULT_CONTAINER_PATH,
+    identity: Path | None = None,
+) -> list[str]:
+    command = ["ssh", "-p", str(port), "-o", "ConnectTimeout=10"]
+    if host in {"127.0.0.1", "localhost", "::1"}:
+        # Local development containers can be recreated with a different host key.
+        command.extend(["-o", "StrictHostKeyChecking=no", "-o", f"UserKnownHostsFile={os.devnull}"])
+    if identity is not None:
+        command.extend(["-i", str(identity)])
+    command.extend([f"{user}@{host}", container_command(container_path)])
+    return command
+
+
+def run_container(
+    host: str = DEFAULT_SSH_HOST,
+    port: int = DEFAULT_SSH_PORT,
+    user: str = DEFAULT_SSH_USER,
+    container_path: str = DEFAULT_CONTAINER_PATH,
+    identity: Path | None = None,
+) -> None:
+    process = subprocess.run(ssh_command(host, port, user, container_path, identity), cwd=ROOT, stdin=None)
+    return_code = process.returncode
     if return_code != 0:
-        raise PackageError(f"remote package command failed with exit code {return_code}")
-    missing = set(PACKAGE_EXPECTATIONS) - seen
-    if missing:
-        raise PackageError(f"remote bundle missing: {', '.join(sorted(missing))}")
-
-
-def extract_package(path: Path) -> Path:
-    prefix = package_prefix(path)
-    destination = path.with_suffix("")
-    destination.mkdir()
-    with zipfile.ZipFile(path) as package:
-        safe_zip_members(package)
-        package.extractall(destination)
-    verify_package_zip(path, prefix)
-    return destination
+        raise PackageError(f"container package command failed with exit code {return_code}")
 
 
 def remove_path(path: Path) -> None:
@@ -172,82 +128,55 @@ def remove_path(path: Path) -> None:
         path.unlink()
 
 
-def clear_directory(path: Path) -> None:
-    for child in path.iterdir():
-        remove_path(child)
+def clean_package_results(package_dir: Path) -> None:
+    package_dir = package_dir.resolve()
+    expected_root = (ROOT / "build" / "packages").resolve()
+    if package_dir != expected_root:
+        raise PackageError(f"refusing to clean unexpected package directory: {package_dir}")
+    remove_path(package_dir)
+    package_dir.mkdir(parents=True)
 
 
-def move_directory_contents(source: Path, destination: Path) -> None:
-    destination.mkdir(parents=True, exist_ok=True)
-    for child in source.iterdir():
-        child.rename(destination / child.name)
-
-
-def copy_directory_contents(source: Path, destination: Path) -> None:
-    destination.mkdir(parents=True, exist_ok=True)
-    for child in source.iterdir():
-        target = destination / child.name
+def build_and_verify(
+    host: str = DEFAULT_SSH_HOST,
+    port: int = DEFAULT_SSH_PORT,
+    user: str = DEFAULT_SSH_USER,
+    container_path: str = DEFAULT_CONTAINER_PATH,
+    identity: Path | None = None,
+) -> None:
+    package_dir = ROOT / "build" / "packages"
+    clean_package_results(package_dir)
+    run_container(host, port, user, container_path, identity)
+    packages = latest_packages(package_dir)
+    for prefix, path in packages.items():
+        verify_package_zip(path, prefix)
+    for child in package_dir.iterdir():
         if child.is_dir():
-            shutil.copytree(child, target)
-        else:
-            shutil.copy2(child, target)
-
-
-def replace_output(staging: Path, output: Path) -> None:
-    output = output.resolve()
-    if output == output.parent or output == Path.home().resolve():
-        raise PackageError(f"refusing broad output directory: {output}")
-    backup = Path(tempfile.mkdtemp(prefix=f".{output.name}.backup-", dir=output.parent))
-    try:
-        if output.exists():
-            copy_directory_contents(output, backup)
-            clear_directory(output)
-        else:
-            output.mkdir(parents=True)
-        move_directory_contents(staging, output)
-        staging.rmdir()
-    except Exception:
-        if output.exists():
-            clear_directory(output)
-        copy_directory_contents(backup, output)
-        raise
-    finally:
-        remove_path(backup)
-
-
-def download_packages(output: Path) -> None:
-    output = output.resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=f".{output.name}.staging-", dir=output.parent))
-    try:
-        receive_bundle(staging)
-        for path in sorted(staging.glob("*.zip")):
-            verify_package_zip(path)
-            extract_package(path)
-        replace_output(staging, output)
-    except Exception:
-        if staging.exists():
-            shutil.rmtree(staging)
-        raise
+            remove_path(child)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Test, build, verify, and download all Switch packages remotely.")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help=f"Download directory. Default: {DEFAULT_OUTPUT}")
-    parser.add_argument("--emit-bundle", action="store_true", help=argparse.SUPPRESS)
+    parser = argparse.ArgumentParser(description="Clean, test, build, and verify all Switch packages in the local devkitPro container.")
+    parser.add_argument("--host", default=DEFAULT_SSH_HOST, help=f"Container SSH host. Default: {DEFAULT_SSH_HOST}")
+    parser.add_argument("--port", type=int, default=DEFAULT_SSH_PORT, help=f"Container SSH port. Default: {DEFAULT_SSH_PORT}")
+    parser.add_argument("--user", default=DEFAULT_SSH_USER, help=f"Container SSH user. Default: {DEFAULT_SSH_USER}")
+    parser.add_argument(
+        "--container-path",
+        default=DEFAULT_CONTAINER_PATH,
+        help=f"Mounted repository path in the container. Default: {DEFAULT_CONTAINER_PATH}",
+    )
+    parser.add_argument("--identity", type=Path, help="Optional SSH private key path.")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    if args.emit_bundle:
-        return emit_bundle()
     try:
-        download_packages(args.output)
-    except (OSError, PackageError, subprocess.SubprocessError, tarfile.TarError, zipfile.BadZipFile) as exc:
-        print(f"FAIL: remote packages: {exc}")
+        build_and_verify(args.host, args.port, args.user, args.container_path, args.identity)
+    except (OSError, PackageError, subprocess.SubprocessError, zipfile.BadZipFile) as exc:
+        print(f"FAIL: container packages: {exc}")
         return 1
-    print(f"PASS: remote packages -> {args.output.resolve()}")
+    print(f"PASS: container packages -> {ROOT / 'build' / 'packages'}")
     return 0
 
 

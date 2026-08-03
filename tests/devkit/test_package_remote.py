@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import io
 from pathlib import Path
 import sys
-import tarfile
 import tempfile
 import zipfile
 
@@ -30,12 +28,20 @@ def write_package(path: Path, mode: str, boot2: bool) -> None:
             package.writestr("atmosphere/contents/4200000000BD2300/flags/boot2.flag", b"")
 
 
-def test_remote_command() -> None:
-    command = package_remote.remote_command()
-    require("fetch origin master" in command, "remote command must fetch master")
-    require("merge --ff-only FETCH_HEAD" in command, "remote command must fast-forward")
-    require("make test packages" in command, "remote command must test and package")
-    require("--emit-bundle" in command, "remote command must stream one bundle")
+def test_container_command() -> None:
+    command = package_remote.container_command()
+    require("/ws/switch-play-time-control-local" in command, "container command must use the mounted repository")
+    require("make test packages" in command, "container command must test and package")
+    require("--emit-bundle" not in command, "container command must not stream a copied bundle")
+    require("git " not in command, "mounted local source must not require a git update")
+
+
+def test_ssh_command() -> None:
+    command = package_remote.ssh_command()
+    require(command[0] == "ssh", "build transport must use OpenSSH")
+    require("1888" in command, "default container SSH port must be 1888")
+    require("root@127.0.0.1" in command, "default container SSH target must be local root")
+    require(command[-1] == package_remote.container_command(), "SSH must execute the container build command")
 
 
 def test_zip_verification() -> None:
@@ -47,69 +53,21 @@ def test_zip_verification() -> None:
             package_remote.verify_package_zip(path, prefix)
 
 
-def test_unsafe_bundle_entry() -> None:
-    payload = io.BytesIO()
-    with tarfile.open(fileobj=payload, mode="w") as bundle:
-        data = b"bad"
-        member = tarfile.TarInfo("../bad.zip")
-        member.size = len(data)
-        bundle.addfile(member, io.BytesIO(data))
-    payload.seek(0)
-    with tarfile.open(fileobj=payload, mode="r|") as bundle:
-        member = next(iter(bundle))
+def test_clean_package_safety() -> None:
+    with tempfile.TemporaryDirectory(prefix="ptc-package-failure-") as tmp_dir:
         try:
-            package_remote.bundle_member_prefix(member)
+            package_remote.clean_package_results(Path(tmp_dir))
         except package_remote.PackageError:
             return
-    raise AssertionError("parent traversal must be rejected")
-
-
-def test_replace_output() -> None:
-    with tempfile.TemporaryDirectory(prefix="ptc-package-output-") as tmp_dir:
-        root = Path(tmp_dir)
-        output = root / "download"
-        output.mkdir()
-        (output / "old.txt").write_text("old", encoding="utf-8")
-        staging = root / "staging"
-        staging.mkdir()
-        (staging / "new.txt").write_text("new", encoding="utf-8")
-        package_remote.replace_output(staging, output)
-        require((output / "new.txt").is_file(), "new output must replace old output")
-        require(not (output / "old.txt").exists(), "old output must be removed after success")
-        require(not staging.exists(), "successful replacement must consume staging")
-
-
-def test_download_failure_preserves_output() -> None:
-    with tempfile.TemporaryDirectory(prefix="ptc-package-failure-") as tmp_dir:
-        output = Path(tmp_dir) / "download"
-        output.mkdir()
-        marker = output / "last-good.txt"
-        marker.write_text("keep", encoding="utf-8")
-        original_receive = package_remote.receive_bundle
-
-        def fail_receive(staging: Path) -> None:
-            raise package_remote.PackageError(f"simulated failure in {staging.name}")
-
-        package_remote.receive_bundle = fail_receive
-        try:
-            try:
-                package_remote.download_packages(output)
-            except package_remote.PackageError:
-                pass
-            else:
-                raise AssertionError("simulated download must fail")
-        finally:
-            package_remote.receive_bundle = original_receive
-        require(marker.read_text(encoding="utf-8") == "keep", "failed download must preserve last good output")
+    raise AssertionError("cleaning outside build/packages must be rejected")
 
 
 def main() -> int:
-    test_remote_command()
+    test_container_command()
+    test_ssh_command()
     test_zip_verification()
-    test_unsafe_bundle_entry()
-    test_replace_output()
-    test_download_failure_preserves_output()
-    print("Remote package helper tests passed")
+    test_clean_package_safety()
+    print("Container package helper tests passed")
     return 0
 
 

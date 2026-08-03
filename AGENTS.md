@@ -9,21 +9,21 @@
 - `tests/`：主机侧测试脚本与 fixtures。`tests/mvp/` 覆盖离线加时令牌，`tests/observe/` 覆盖 observe 请求流。
 - `docs/`：架构、协议、测试与真实设备验证文档。开始开发前先读根目录 `README.md`。
 
-本机已拉取上游 libnx 源码到 `D:\workspace\codes\nintendo-switch\libnx`。涉及 PCTL service/session、公开命令签名或 libnx dispatch 行为时优先查阅该目录。当前上游 `nx/include/switch/services/pctl.h` 与 `nx/source/services/pctl.c` 不包含 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装，因此不得用 libnx 缺失的定义推断这些私有命令的参数单位或 0x44 raw layout；相关布局必须以真机 A/B 证据和仓库协议文档为准。
+本机已拉取上游 libnx 源码到 `H:\workspace\codes\switch\libnx`。涉及 PCTL service/session、公开命令签名或 libnx dispatch 行为时优先查阅该目录。当前上游 `nx/include/switch/services/pctl.h` 与 `nx/source/services/pctl.c` 不包含 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装，因此不得用 libnx 缺失的定义推断这些私有命令的参数单位或 0x44 raw layout；相关布局必须以真机 A/B 证据和仓库协议文档为准。
 
 ## 构建、测试与开发命令
 
-Windows 本地使用单一 Python 入口；C host、Companion NRO 和 package 的权威验证通过单一远程入口执行。
+Windows 本地使用单一 Python 入口；C host、Companion NRO 和 package 的权威验证通过单一本地容器入口执行。
 
 - `python tools/test.py`：运行全部本地 Python、协议和安全打包回归。
-- `python tools/package_remote.py`：远程运行 C/Python 测试，构建并下载全部五类 package。
+- `python tools/package_remote.py`：在本地 devkitPro 容器运行 C/Python 测试，清理并重新生成、校验全部五类 package；产物直接位于挂载工作区的 `build/packages/`。
 - `python tools/make_fixtures.py`：重新生成确定性的令牌 fixture。
 - `python tools/grant_code.py --minutes 30 --device kid-switch --secret replace-with-long-random-secret --day-index 2380 --nonce 4660`：生成离线加时代码示例。
 - `python tools/protocol_probe.py init --root <tmp-dir> --device <id> --secret <secret>`：初始化本地协议目录用于手工探测。
 
-远程宿主机通过 SSH 别名 `renqi-nintendo-switch-dev`（`ygq@5.78.109.249:22`）访问，宿主机项目路径为 `/home/ygq/nintendo/switch-play-time-control-local`。devkitPro 容器为 `devkitpro-ssh-v1`，仓库挂载为 `/ws/switch-play-time-control-local`，使用 `master` 分支。密码只允许由 OpenSSH 交互读取。远程脚本使用一次 SSH 会话完成拉取、测试、构建、校验和下载，不要再维护手工 SSH 命令。
+本地 devkitPro 容器通过 `root@127.0.0.1:1888` 访问，仓库挂载为 `/ws/switch-play-time-control-local`。密码只允许由 OpenSSH 交互读取，也可使用已授权私钥。容器脚本使用一次 SSH 会话完成清理、测试和构建；zip 直接留在挂载工作区，不要再维护手工 SSH、`docker exec` 或复制回本地的构建命令。
 
-如果本地存在未提交改动，远程不会看到这些改动；必须先提交并推送 `master` 后运行 `python tools/package_remote.py`。除非用户明确只要求本地 Python 快速回归，否则涉及 C、Makefile、NRO 或 package 的最终验证都必须走该入口。
+容器直接读取挂载的当前工作区，因此未提交改动也会参与构建，不需要先提交或推送。除非用户明确只要求本地 Python 快速回归，否则涉及 C、Makefile、NRO 或 package 的最终验证都必须走该入口。
 
 ## 编码风格与命名约定
 
@@ -53,4 +53,4 @@ Python 代码使用 4 空格缩进、类型注解和 `from __future__ import ann
 
 本仓库中文文档使用 UTF-8。PowerShell 默认编码或控制台显示可能把中文读成乱码；读取或写入 `AGENTS.md`、`docs/*.md` 等中文文档时，应显式使用 UTF-8，例如 `Get-Content <file> -Encoding utf8`，避免误判编码或把文档写坏。
 
-涉及远程编译或容器验证时运行 `python tools/package_remote.py`；不要绕过其中的 `master` 快进、C/Python 测试、产物校验和下载。本机缺少 `make`、`gcc` 或 WSL 不是跳过验证的理由。
+涉及 C 编译或容器验证时运行 `python tools/package_remote.py`；不要绕过其中的旧产物清理、C/Python 测试和 zip 校验。本机缺少 `make`、`gcc` 或 WSL 不是跳过验证的理由。

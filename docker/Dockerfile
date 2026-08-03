@@ -1,5 +1,6 @@
-FROM devkitpro/devkita64:20260215
+# FROM devkitpro/devkita64:20260215
 # 上面👆是dockerhub的官方镜像
+FROM docker.jiaxin.site/devkitpro/devkita64:20260215
 
 # =============================
 # 1. 配置APT源 (Debian 12 - 阿里源)
