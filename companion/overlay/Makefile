@@ -13,8 +13,12 @@ TARGET := pctc
 BUILD := build
 SOURCES := source . .. ../.. ../../common/protocol ../../platform/switch ../../third_party/cjson
 INCLUDES := vendor/libtesla/include ../.. ../../common ../../platform ../../platform/switch
+APP_TITLE := PCTC
+APP_AUTHOR := switch-play-time-control
+APP_VERSION := 1.0.0
 NO_ICON := 1
-NO_NACP := 1
+
+export NROFLAGS += --nacp=$(TOPDIR)/$(TARGET).nacp
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS := -g -O2 -Wall -Wextra -Werror -ffunction-sections $(ARCH) $(DEFINES)
@@ -44,11 +48,11 @@ $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $@ -f $(CURDIR)/Makefile
 clean:
-	@rm -fr $(BUILD) $(TARGET).ovl $(TARGET).elf
+	@rm -fr $(BUILD) $(TARGET).ovl $(TARGET).nacp $(TARGET).elf
 else
 DEPENDS := $(OFILES:.o=.d)
 all: $(OUTPUT).ovl
-$(OUTPUT).ovl: $(OUTPUT).elf
+$(OUTPUT).ovl: $(OUTPUT).elf $(OUTPUT).nacp
 	@elf2nro $< $@ $(NROFLAGS)
 $(OUTPUT).elf: $(OFILES)
 %.cpp.o: %.cpp
