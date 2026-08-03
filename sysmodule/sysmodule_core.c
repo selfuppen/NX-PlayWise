@@ -27,6 +27,8 @@ typedef struct {
     uint16_t last_enforced_minutes;
 } PtcRuntimeState;
 
+static void effect_wait(PtcSysmodule *sysmodule, uint32_t milliseconds);
+
 static void join_path(char *out, size_t out_size, const char *a, const char *b)
 {
     snprintf(out, out_size, "%s/%s", a, b);
@@ -538,6 +540,17 @@ static bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
 }
 
+static bool restore_rules(PtcSysmodule *sysmodule, const PtcRules *rules, bool existed)
+{
+    char path[320];
+    if (existed) {
+        return save_rules(sysmodule, rules);
+    }
+    join_path(path, sizeof(path), sysmodule->app_root, "rules.json");
+    return !sysmodule->storage->vtable->exists(sysmodule->storage, path) ||
+        sysmodule->storage->vtable->remove_path(sysmodule->storage, path);
+}
+
 static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
 {
     char path[320];
@@ -730,6 +743,49 @@ static PtcErrorCode apply_target(
     }
     append_event(sysmodule, request, err == PTC_ERR_OK ? "pctl_apply" : "pctl_apply_failed", err, pctl_target_mode_name(mode));
     return err;
+}
+
+/* An offline grant is successful only after Horizon reports that the timer is
+   running and the active restriction is cleared. The target is absolute, so a
+   retry after any failure safely re-applies the same requested total. */
+static PtcErrorCode start_timer_and_wait_unrestricted(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    PtcClockSnapshot now,
+    const char *mode_name,
+    uint16_t minutes,
+    PtcPctlStatus *observed)
+{
+    PtcPctlTarget target;
+    PtcPctlDebugSnapshot before;
+    PtcPctlDebugSnapshot after;
+    PtcErrorCode err;
+    unsigned int i;
+    memset(observed, 0, sizeof(*observed));
+    target.mode = PTC_PCTL_TARGET_LIMIT;
+    target.minutes = minutes;
+    target.weekday = ptc_weekday_from_day_index(now.day_index);
+    take_pctl_debug_snapshot(sysmodule, &before);
+    err = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
+    take_pctl_debug_snapshot(sysmodule, &after);
+    append_pctl_debug(sysmodule, request, "start_timer", mode_name, &target, err,
+        last_pctl_ipc_result(sysmodule), &before, &after);
+    append_event(sysmodule, request, err == PTC_ERR_OK ? "pctl_start_timer" : "pctl_apply_failed", err, "start_timer");
+    if (err != PTC_ERR_OK) {
+        return err;
+    }
+    for (i = 0; i < 20U; ++i) {
+        err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, observed);
+        if (err == PTC_ERR_OK && observed->play_timer_enabled && !observed->restricted_now) {
+            append_event(sysmodule, request, "effect_observed", PTC_ERR_OK, "offline_code");
+            return PTC_ERR_OK;
+        }
+        if (i + 1U < 20U) {
+            effect_wait(sysmodule, 250U);
+        }
+    }
+    append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_EFFECT_NOT_OBSERVED, "offline_code");
+    return PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
 }
 
 static void status_json(char *out, size_t out_size, const PtcPctlStatus *status, PtcErrorCode error)
@@ -1055,10 +1111,13 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     PtcPctlStatus pctl_status;
     PtcPolicyDecision decision;
     PtcRules rules;
+    PtcRules original_rules;
     PtcRuntimeState runtime_state;
     PtcResultState state;
     char json[2048];
     PtcErrorCode err;
+    bool rules_existed = false;
+    bool rules_persisted = false;
     decision = ptc_policy_decide(config->mode, disable_flag, PTC_OPERATION_GRANT_MINUTES, caps, false, config->allow_unlimited_to_limited);
     if (decision.error == PTC_ERR_DISABLED) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
@@ -1080,7 +1139,11 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     }
     if (decision.may_write_pctl) {
         uint16_t new_minutes;
+        char rules_path[320];
+        join_path(rules_path, sizeof(rules_path), sysmodule->app_root, "rules.json");
+        rules_existed = sysmodule->storage->vtable->exists(sysmodule->storage, rules_path);
         (void)load_rules(sysmodule, &rules);
+        original_rules = rules;
         /* Stack the granted minutes onto today's existing limit rather than
            overwriting it, matching the add_today_minutes token action. */
         new_minutes = accumulate_today_limit(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index), token.minutes);
@@ -1091,10 +1154,15 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         if (err != PTC_ERR_OK) {
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
         }
+        err = start_timer_and_wait_unrestricted(sysmodule, request, now, ptc_control_mode_name(config->mode), new_minutes, &pctl_status);
+        if (err != PTC_ERR_OK) {
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
+        }
         if (!save_rules(sysmodule, &rules)) {
             append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "rules");
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
         }
+        rules_persisted = true;
         append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "offline_code");
     }
     (void)load_rules(sysmodule, &rules);
@@ -1110,6 +1178,15 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         return true;
     }
     append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "");
+    if (rules_persisted) {
+        bool restored = restore_rules(sysmodule, &original_rules, rules_existed);
+        append_event(
+            sysmodule,
+            request,
+            restored ? "state_rollback_ok" : "state_rollback_failed",
+            restored ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED,
+            "offline_code");
+    }
     return false;
 }
 

@@ -60,12 +60,15 @@ def verify_package_zip(path: Path, prefix: str | None = None) -> None:
     boot2 = f"{CONTENT_ROOT}/flags/boot2.flag"
     exefs = f"{CONTENT_ROOT}/exefs.nsp"
     nro = "switch/play-time-control/pctc.nro"
+    overlay = "switch/.overlays/pctc.ovl"
     if (boot2 in names) != expect_boot2:
         raise PackageError(f"{path.name}: unexpected boot2.flag state")
     if expect_boot2 and exefs not in names:
         raise PackageError(f"{path.name}: missing exefs.nsp")
     if nro not in names:
         raise PackageError(f"{path.name}: missing pctc.nro")
+    if expect_boot2 and overlay not in names:
+        raise PackageError(f"{path.name}: missing pctc.ovl")
 
 
 def latest_packages(package_dir: Path) -> dict[str, Path]:

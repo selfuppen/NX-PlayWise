@@ -16,7 +16,10 @@
 #include "../../common/token/token_v1.h"
 #include "../../companion/auth.h"
 #include "../../companion/file_protocol.h"
+#include "../../companion/overlay/bridge.h"
+#include "../../companion/overlay/input_model.h"
 #include "../../companion/request_client.h"
+#include "../../companion/result_summary.h"
 #include "../../companion/self_check.h"
 #include "../../platform/host/fake_time.h"
 #include "../../platform/host/mem_storage.h"
@@ -93,6 +96,61 @@ static void test_token_v1(void)
     check_int(ptc_token_encode(&payload, "test-device", "test-secret", code), PTC_ERR_OK, "over-limit token encode");
     check_str(code, "24B8-2AC0-04HN-MGYD", "over-limit fixture parity");
     check_int(ptc_token_verify(code, "test-device", "test-secret", 2380, 120, NULL, NULL, &decoded), PTC_ERR_MINUTES_EXCEED_LIMIT, "minutes exceed");
+}
+
+static void test_overlay_input_and_shared_result_summary(void)
+{
+    PtcOverlayInput input;
+    PtcOverlayBridge bridge;
+    PtcMemStorage mem;
+    PtcCompanionResultSummary summary;
+    char formatted[32];
+    char result[2048];
+    PtcResultState state;
+    unsigned int i;
+    ptc_overlay_input_init(&input);
+    check_int(input.cursor, 0, "overlay cursor starts at zero");
+    check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_LEFT), "overlay left consumed");
+    check_int(input.cursor, 7, "overlay left wraps within row");
+    check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_UP), "overlay up consumed");
+    check_int(input.cursor, 31, "overlay up wraps to final row");
+    ptc_overlay_input_init(&input);
+    for (i = 0; i < PTC_OVERLAY_CODE_SYMBOLS; ++i) {
+        check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_A), "overlay A enters character");
+        if (i + 1U < PTC_OVERLAY_CODE_SYMBOLS) {
+            (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_RIGHT);
+        }
+    }
+    check_true(ptc_overlay_input_can_submit(&input), "overlay accepts exactly sixteen symbols");
+    check_true(ptc_overlay_input_format(&input, formatted, sizeof(formatted)), "overlay code formats");
+    check_str(formatted, "0123-4567-0123-4567", "overlay Crockford grouping");
+    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_X);
+    check_true(!ptc_overlay_input_can_submit(&input), "overlay delete disables submit");
+    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_Y);
+    check_int(input.length, 0, "overlay clear empties code");
+    ptc_overlay_input_tick(&input, PTC_OVERLAY_REQUEST_TIMEOUT_MS, PTC_OVERLAY_REQUEST_TIMEOUT_MS);
+    check_true(input.timed_out, "overlay input timeout fires");
+
+    ptc_result_state_default(&state, 2380);
+    state.remaining_available = true;
+    state.remaining_minutes = 30;
+    state.play_timer_enabled = 1;
+    state.restricted_now = 0;
+    (void)ptc_result_ok_json(result, sizeof(result), "sum-1", "offline_code", "grant", false, &state, 1);
+    check_true(ptc_companion_result_summary_parse(result, &summary), "shared result summary parses");
+    check_true(summary.unlock_observed, "shared result summary recognizes unlock");
+    check_int(summary.remaining_minutes, 30, "shared result summary remaining minutes");
+    (void)ptc_result_ok_json(result, sizeof(result), "sum-2", "offline_code", "observe", true, &state, 1);
+    check_true(ptc_companion_result_summary_parse(result, &summary), "observe summary parses");
+    check_true(!summary.unlock_observed, "observe summary never claims unlock");
+
+    ptc_mem_storage_init(&mem);
+    ptc_overlay_bridge_init(&bridge, "app", &mem.storage);
+    check_int(ptc_overlay_bridge_submit(&bridge, "0123-4567-89AB-CDEF", 1000, 0x12), PTC_COMPANION_OK, "overlay bridge submits queue request");
+    check_true(ptc_overlay_bridge_waiting(&bridge), "overlay bridge enters waiting state");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/1000000-0012.json"), "overlay bridge uses pending atomic protocol");
+    check_int(ptc_overlay_bridge_poll(&bridge, PTC_OVERLAY_REQUEST_TIMEOUT_MS, PTC_OVERLAY_REQUEST_TIMEOUT_MS), PTC_COMPANION_TIMEOUT, "overlay bridge times out at sixty seconds");
+    check_true(!ptc_overlay_bridge_waiting(&bridge), "overlay bridge exits waiting after timeout");
 }
 
 static void test_time_and_policy(void)
@@ -1004,6 +1062,8 @@ static void test_grant_flow_consumes_nonce_after_write(void)
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0002.json", request), "write grant request");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process one grant");
     check_true(pctl.applied, "pctl apply called");
+    check_true(pctl.timer_started, "offline grant starts timer");
+    check_true(!pctl.status.restricted_now, "offline grant observes unrestricted runtime");
     check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "grant target mode");
     /* Offline code stacks 30 minutes onto today's default weekday limit (60). */
     check_int(pctl.last_target.minutes, 90, "grant target minutes stack onto today limit");
@@ -1019,6 +1079,112 @@ static void test_grant_flow_consumes_nonce_after_write(void)
     check_true(strstr(debug, "\"target_minutes\":90") != NULL, "grant debug target minutes");
     check_true(strstr(debug, "\"before_raw_hex\"") != NULL, "grant debug before raw");
     check_true(strstr(debug, "\"after_raw_hex\"") != NULL, "grant debug after raw");
+}
+
+static void test_grant_requires_runtime_unlock_before_persisting(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_TEXT_SIZE];
+    char request[512];
+    char result[4096];
+    char rules[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.restricted_now = true;
+    pctl.runtime_effect_succeeds = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "grant-effect-missing", 1001, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/grant-effect-missing.json", request), "write missing effect grant");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process missing effect grant");
+    check_true(pctl.timer_started, "missing effect path still starts timer");
+    check_int(fake_time.slept_ms, 4750, "missing effect path polls for five seconds");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/grant-effect-missing.json", result, sizeof(result)), "missing effect result");
+    check_true(strstr(result, "\"reason\":\"pctl_effect_not_observed\"") != NULL, "missing effect stable reason");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "missing effect avoids nonce");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/rules.json"), "missing effect avoids override persistence");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.start_timer_error = PTC_ERR_PCTL_WRITE_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "grant-start-fail", 1001, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/grant-start-fail.json", request), "write start failure grant");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process start failure grant");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/grant-start-fail.json", result, sizeof(result)), "start failure result");
+    check_true(strstr(result, "\"reason\":\"pctl_write_failed\"") != NULL, "start failure propagated");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "start failure avoids nonce");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/rules.json"), "start failure avoids override persistence");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.read_fails_after_apply = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "grant-read-fail", 1001, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/grant-read-fail.json", request), "write runtime read failure grant");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process runtime read failure grant");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/grant-read-fail.json", result, sizeof(result)), "runtime read failure result");
+    check_true(strstr(result, "\"reason\":\"pctl_effect_not_observed\"") != NULL, "runtime read failure maps to effect not observed");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "runtime read failure avoids nonce");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/rules.json"), "runtime read failure avoids override persistence");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.read_error = PTC_ERR_OK;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    check_true(
+        mem.storage.vtable->write_text_atomic(
+            &mem.storage,
+            "app/rules.json",
+            "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":75},{\"mode\":\"limit\",\"minutes\":75},"
+            "{\"mode\":\"limit\",\"minutes\":75},{\"mode\":\"limit\",\"minutes\":75},{\"mode\":\"limit\",\"minutes\":75},"
+            "{\"mode\":\"limit\",\"minutes\":75},{\"mode\":\"limit\",\"minutes\":75}],\"today_override_present\":false,"
+            "\"today_override_day_index\":0,\"today_override_mode\":\"limit\",\"today_override_minutes\":60,\"bedtime_enabled\":false,"
+            "\"bedtime_start_min\":1260,\"bedtime_end_min\":480,\"limit_action\":\"remind\"}\n"),
+        "write result failure baseline rules");
+    make_valid_code(code);
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "grant-result-fail", 1001, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/grant-result-fail.json", request), "write result failure grant");
+    mem.fail_write_path_contains = "results/";
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process result failure after observed unlock");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "result failure after unlock avoids nonce");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", rules, sizeof(rules)), "result failure rules remain readable");
+    check_true(strstr(rules, "\"today_override_present\":false") != NULL, "result failure restores original override state");
+    check_true(strstr(rules, "\"minutes\":75") != NULL, "result failure restores original weekly target");
+    mem.fail_write_path_contains = NULL;
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "grant-result-retry", 1002, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/grant-result-retry.json", request), "write retry after result failure");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "retry result failure grant");
+    check_int(pctl.last_target.minutes, 105, "retry reuses original absolute target");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", rules, sizeof(rules)), "retry rules readable");
+    check_true(strstr(rules, "\"today_override_minutes\":105") != NULL, "retry persists grant exactly once");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "retry consumes nonce after result succeeds");
 }
 
 static void test_grant_offline_code_stacks_on_existing_limit(void)
@@ -1562,6 +1728,7 @@ static void test_failure_paths_do_not_consume_nonce(void)
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/1000-0023.json", request), "write result fail grant");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process result fail grant");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "result failure avoids nonce");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/rules.json"), "result failure removes newly created rules");
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
@@ -1599,6 +1766,7 @@ static void test_recover_processing(void)
 int main(void)
 {
     test_token_v1();
+    test_overlay_input_and_shared_result_summary();
     test_time_and_policy();
     test_play_timer_settings_layout();
     test_companion_request_builder_and_file_protocol();
@@ -1621,6 +1789,7 @@ int main(void)
     test_probe_apply_today_limit_paths();
     test_legacy_play_timer_capability_is_invalidated();
     test_grant_flow_consumes_nonce_after_write();
+    test_grant_requires_runtime_unlock_before_persisting();
     test_grant_offline_code_stacks_on_existing_limit();
     test_grant_offline_code_clamps_to_daily_maximum();
     test_backup_failure_blocks_write();

@@ -192,14 +192,23 @@ static void test_result_mapping(void)
     PtcUiModel model;
     const char *success =
         "{\"version\":1,\"request_id\":\"1-a\",\"type\":\"status\",\"status\":\"ok\","
-        "\"mode\":\"observe\",\"dry_run\":true,\"state\":{\"limited_today\":1,\"blocked_today\":0,"
+        "\"mode\":\"observe\",\"dry_run\":true,\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,"
         "\"unrestricted_today\":0,\"remaining_available\":true,\"remaining_minutes\":42,"
         "\"play_timer_enabled\":1,\"restricted_now\":0,\"bedtime_active\":false,"
         "\"parent_unlock_active\":true},\"capabilities\":{\"play_timer_write_verified\":true,"
-        "\"play_timer_effect_verified\":true,\"raw_block_verified\":false,\"suspend_verified\":false}}";
+        "\"play_timer_effect_verified\":true,\"raw_block_verified\":false,\"suspend_verified\":false},\"completed_at\":1}";
     const char *failure =
-        "{\"type\":\"offline_code\",\"status\":\"error\",\"mode\":\"grant\","
-        "\"dry_run\":false,\"error\":{\"message\":\"授权码签名不匹配\"}}";
+        "{\"version\":1,\"request_id\":\"1-b\",\"type\":\"offline_code\",\"status\":\"error\",\"mode\":\"grant\","
+        "\"dry_run\":false,\"error\":{\"code\":203,\"reason\":\"bad_signature\",\"message\":\"授权码签名不匹配\"},"
+        "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,"
+        "\"remaining_available\":false,\"remaining_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1,"
+        "\"bedtime_active\":false,\"parent_unlock_active\":false},\"capabilities\":{\"play_timer_write_verified\":false,"
+        "\"play_timer_effect_verified\":false,\"raw_block_verified\":false,\"suspend_verified\":false},\"completed_at\":1}";
+    const char *future =
+        "{\"version\":1,\"request_id\":\"1-c\",\"type\":\"status\",\"status\":\"ok\",\"mode\":\"future\",\"dry_run\":true,"
+        "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,\"remaining_available\":false,"
+        "\"remaining_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1,\"bedtime_active\":false,\"parent_unlock_active\":false},"
+        "\"capabilities\":{\"play_timer_write_verified\":false,\"play_timer_effect_verified\":false,\"raw_block_verified\":false,\"suspend_verified\":false},\"completed_at\":1}";
     memset(&model, 0, sizeof(model));
     check_true(ptc_ui_apply_result_json(&model, success), "success result parses");
     check_true(model.status_loaded, "result status loaded");
@@ -210,8 +219,8 @@ static void test_result_mapping(void)
     check_true(ptc_ui_apply_result_json(&model, failure), "error result parses");
     check_true(strcmp(model.result_status, "error") == 0, "error status mapped");
     check_true(strstr(model.message, "签名") != NULL, "error message preserved");
-    check_int(model.remaining_minutes, 42, "error without state preserves dashboard");
-    check_true(ptc_ui_apply_result_json(&model, "{\"type\":\"status\",\"status\":\"ok\",\"mode\":\"future\"}"), "unknown mode result parses");
+    check_int(model.remaining_minutes, -1, "error result maps unknown state");
+    check_true(ptc_ui_apply_result_json(&model, future), "unknown mode result parses");
     check_true(strcmp(model.mode, "未知模式") == 0, "unknown mode stays localized");
     check_true(!ptc_ui_apply_result_json(&model, "{"), "bad result rejected");
     check_true(!ptc_ui_apply_result_json(&model, "[]"), "non-object result rejected");

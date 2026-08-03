@@ -45,7 +45,10 @@ static void stub_raw_and_slots(const PtcPctlStub *stub, char *raw_hex, size_t ra
 static PtcErrorCode stub_read_status(PtcPctl *pctl, PtcPctlStatus *out)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
-    if (stub->read_error != PTC_ERR_OK) {
+    if (stub->read_error != PTC_ERR_OK || (stub->read_fails_after_apply && stub->applied)) {
+        if (stub->read_error == PTC_ERR_OK) {
+            return PTC_ERR_PCTL_READ_FAILED;
+        }
         return stub->read_error;
     }
     *out = stub->status;
@@ -111,6 +114,9 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
 static PtcErrorCode stub_start_timer(PtcPctl *pctl)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    if (stub->start_timer_error != PTC_ERR_OK) {
+        return stub->start_timer_error;
+    }
     stub->timer_started = true;
     stub->status.play_timer_enabled = !stub->model_elapsed_time || stub->status.remaining_minutes > 0U;
     return PTC_ERR_OK;
@@ -260,6 +266,7 @@ void ptc_pctl_stub_init(PtcPctlStub *stub)
     stub->read_error = PTC_ERR_OK;
     stub->backup_error = PTC_ERR_OK;
     stub->write_error = PTC_ERR_OK;
+    stub->start_timer_error = PTC_ERR_OK;
     stub->restore_error = PTC_ERR_OK;
     stub->runtime_effect_succeeds = true;
 }

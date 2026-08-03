@@ -6,6 +6,7 @@
 
 #include "../common/rules/rules.h"
 #include "../platform/storage.h"
+#include "result_summary.h"
 
 #define PTC_COMPANION_REQUEST_ID_SIZE 32
 
@@ -53,6 +54,7 @@ PtcCompanionStatus ptc_companion_read_result(
     char *out,
     size_t out_size);
 PtcCompanionStatus ptc_companion_format_result_summary(const char *result_json, char *out, size_t out_size);
+PtcCompanionStatus ptc_companion_parse_result_summary(const char *result_json, PtcCompanionResultSummary *out);
 const char *ptc_companion_status_name(PtcCompanionStatus status);
 
 #endif

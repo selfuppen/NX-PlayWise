@@ -24,6 +24,7 @@ def write_package(path: Path, mode: str, boot2: bool) -> None:
         package.writestr("switch/play-time-control/config.json", f'{{"control_mode":"{mode}"}}')
         package.writestr("switch/play-time-control/pctc.nro", b"nro")
         if boot2:
+            package.writestr("switch/.overlays/pctc.ovl", b"ovl")
             package.writestr("atmosphere/contents/4200000000BD2300/exefs.nsp", b"nsp")
             package.writestr("atmosphere/contents/4200000000BD2300/flags/boot2.flag", b"")
 

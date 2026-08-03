@@ -1,0 +1,24 @@
+#ifndef PTC_OVERLAY_BRIDGE_H
+#define PTC_OVERLAY_BRIDGE_H
+
+#include <stdbool.h>
+
+#include "../file_protocol.h"
+#include "../result_summary.h"
+
+typedef struct {
+    PtcCompanionFileClient client;
+    char request_id[PTC_COMPANION_REQUEST_ID_SIZE];
+    char result_json[4096];
+    PtcCompanionResultSummary summary;
+    int elapsed_ms;
+    bool waiting;
+} PtcOverlayBridge;
+
+void ptc_overlay_bridge_init(PtcOverlayBridge *bridge, const char *app_root, PtcStorage *storage);
+PtcCompanionStatus ptc_overlay_bridge_submit(PtcOverlayBridge *bridge, const char *code, int64_t created_at, uint16_t random16);
+PtcCompanionStatus ptc_overlay_bridge_poll(PtcOverlayBridge *bridge, int elapsed_ms, int timeout_ms);
+bool ptc_overlay_bridge_waiting(const PtcOverlayBridge *bridge);
+const PtcCompanionResultSummary *ptc_overlay_bridge_summary(const PtcOverlayBridge *bridge);
+
+#endif

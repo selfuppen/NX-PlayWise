@@ -201,6 +201,7 @@ def verify_safe_package() -> None:
             names = package.namelist()
         require("switch/play-time-control/config.json" in names, "safe zip missing config.json")
         require(all(name.startswith("switch/") for name in names), "safe zip may only contain switch entries")
+        require("switch/.overlays/pctc.ovl" not in names, "safe package must not depend on Tesla")
 
         invalid_out = root / "invalid-boot2"
         invalid = run(

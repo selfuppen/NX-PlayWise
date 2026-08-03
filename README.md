@@ -22,6 +22,7 @@
 - Switch 平台层已有 `platform/switch/fs_storage.c`、`time_provider.c` 和保守 PCTL adapter；真实 PCTL adapter 支持安全读状态/备份、play timer 写入与效果探针，以及只读的 suspend 探针（`GetPlayTimerEventToRequestSuspension`）。
 - `sysmodule/sysmodule_core.c` 已提供 host-testable 队列编排、stuck processing 恢复、backup gate、grant nonce ledger、规则/状态/能力请求、raw block A/B 探针和 result 写入；`sysmodule/` 已提供可在 devkitPro 容器构建的 boot2 sysmodule skeleton。
 - `companion/request_client.c` 和 `companion/file_protocol.c` 已提供完整 v1 request JSON 构建、pending 写入、result schema 校验和 request_id 匹配；`companion/nro/` 已提供最小孩子主界面 NRO 骨架。
+- `companion/overlay/` 已提供 Tesla `pctc.ovl`：到时后使用手柄面板输入离线码，共用现有 request/result 队列，不访问 PCTL 或 secret；能否覆盖官方硬限制弹窗仍必须真机验收。
 - `python tools/test.py` 是本地 Python 测试唯一入口；`python tools/package_remote.py` 通过 `127.0.0.1:1888` 进入本地 devkitPro 容器，清理并重新生成当前挂载代码的全部 package，然后直接校验 `build/packages/` 中的 zip。
 - Companion 家长区提供一次快速真机测试，以及 `disable.flag` 紧急停用和恢复启用入口。
 

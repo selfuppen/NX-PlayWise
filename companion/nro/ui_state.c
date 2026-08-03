@@ -3,13 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../file_protocol.h"
 #include "../../third_party/cjson/cJSON.h"
-
-static const char *json_string(const cJSON *object, const char *name)
-{
-    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
-    return cJSON_IsString(item) && item->valuestring ? item->valuestring : NULL;
-}
 
 static int json_int(const cJSON *object, const char *name, int fallback)
 {
@@ -202,15 +197,15 @@ PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model)
 
 bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
 {
+    PtcCompanionResultSummary summary;
     cJSON *root;
     const cJSON *state;
     const cJSON *capabilities;
-    const cJSON *error;
     const char *status;
     const char *type;
     const char *mode;
     bool dry_run;
-    if (!model || !text) {
+    if (!model || !text || ptc_companion_parse_result_summary(text, &summary) != PTC_COMPANION_OK) {
         return false;
     }
     root = cJSON_Parse(text);
@@ -218,14 +213,14 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         cJSON_Delete(root);
         return false;
     }
-    status = json_string(root, "status");
-    type = json_string(root, "type");
-    mode = json_string(root, "mode");
+    status = summary.status;
+    type = summary.type;
+    mode = summary.mode;
     if (!status || (strcmp(status, "ok") != 0 && strcmp(status, "error") != 0)) {
         cJSON_Delete(root);
         return false;
     }
-    dry_run = json_bool(root, "dry_run", false);
+    dry_run = summary.dry_run;
     snprintf(model->result_status, sizeof(model->result_status), "%s", status ? status : "error");
     snprintf(model->result_type, sizeof(model->result_type), "%s", type ? type : "");
     snprintf(model->mode, sizeof(model->mode), "%s", localized_mode(mode));
@@ -236,10 +231,10 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->limited_today = json_int(state, "limited_today", -1);
         model->blocked_today = json_int(state, "blocked_today", -1);
         model->unrestricted_today = json_int(state, "unrestricted_today", -1);
-        model->remaining_available = json_bool(state, "remaining_available", false);
-        model->remaining_minutes = json_int(state, "remaining_minutes", -1);
-        model->play_timer_enabled = json_int(state, "play_timer_enabled", -1);
-        model->restricted_now = json_int(state, "restricted_now", -1);
+        model->remaining_available = summary.remaining_available;
+        model->remaining_minutes = summary.remaining_minutes;
+        model->play_timer_enabled = summary.play_timer_enabled;
+        model->restricted_now = summary.restricted_now;
         model->bedtime_active = json_bool(state, "bedtime_active", false);
         model->parent_unlock_active = json_bool(state, "parent_unlock_active", false);
     }
@@ -251,11 +246,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->suspend_verified = json_bool(capabilities, "suspend_verified", false);
     }
     if (status && strcmp(status, "error") == 0) {
-        const char *message = NULL;
-        error = cJSON_GetObjectItemCaseSensitive(root, "error");
-        if (cJSON_IsObject(error)) {
-            message = json_string(error, "message");
-        }
+        const char *message = summary.message[0] ? summary.message : NULL;
         snprintf(model->message, sizeof(model->message), "%s", message ? message : "后台拒绝了本次操作。");
     } else {
         snprintf(model->message, sizeof(model->message), "%s", request_success_message(type, dry_run));

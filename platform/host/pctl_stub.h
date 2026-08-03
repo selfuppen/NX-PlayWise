@@ -13,8 +13,10 @@ typedef struct {
     bool play_timer_write_probe_succeeds;
     bool suspend_probe_succeeds;
     PtcErrorCode read_error;
+    bool read_fails_after_apply;
     PtcErrorCode backup_error;
     PtcErrorCode write_error;
+    PtcErrorCode start_timer_error;
     PtcErrorCode restore_error;
     bool runtime_effect_succeeds;
     bool model_elapsed_time;

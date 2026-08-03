@@ -472,6 +472,13 @@ done:
     return result;
 }
 
+PtcCompanionStatus ptc_companion_parse_result_summary(const char *result_json, PtcCompanionResultSummary *out)
+{
+    return ptc_companion_result_summary_parse(result_json, out)
+        ? PTC_COMPANION_OK
+        : PTC_COMPANION_RESULT_INVALID;
+}
+
 const char *ptc_companion_status_name(PtcCompanionStatus status)
 {
     switch (status) {

@@ -52,6 +52,7 @@ def create_package(
     nro: Path | None,
     sysmodule_exefs: Path | None,
     toolbox: Path | None,
+    overlay: Path | None = None,
 ) -> None:
     if out.exists():
         shutil.rmtree(out)
@@ -135,6 +136,9 @@ def create_package(
     if nro is not None:
         copy_file(nro, app / nro.name)
 
+    if overlay is not None:
+        copy_file(overlay, out / "switch" / ".overlays" / overlay.name)
+
     if sysmodule_exefs is not None:
         copy_file(sysmodule_exefs, out / ATMOSPHERE_CONTENT_DIR / "exefs.nsp")
 
@@ -157,6 +161,7 @@ def main() -> int:
     parser.add_argument("--zip", dest="zip_path", help="Write a zip whose top-level entries are switch/ and optional atmosphere/.")
     parser.add_argument("--nro", type=Path, help="Optional companion NRO copied under switch/play-time-control/.")
     parser.add_argument("--sysmodule-exefs", type=Path, help="Optional sysmodule exefs.nsp copied under atmosphere/contents.")
+    parser.add_argument("--overlay", type=Path, help="Optional Tesla overlay copied under switch/.overlays.")
     parser.add_argument("--toolbox", type=Path, help="Optional Atmosphere toolbox.json copied beside exefs.nsp.")
     parser.add_argument("--boot2", action="store_true", help="Include boot2.flag; requires --sysmodule-exefs.")
     args = parser.parse_args()
@@ -165,6 +170,7 @@ def main() -> int:
         parser.error("--max-add-minutes must be positive")
     args.nro = require_file(parser, "--nro", args.nro)
     args.sysmodule_exefs = require_file(parser, "--sysmodule-exefs", args.sysmodule_exefs)
+    args.overlay = require_file(parser, "--overlay", args.overlay)
     args.toolbox = require_file(parser, "--toolbox", args.toolbox)
     if args.boot2 and args.sysmodule_exefs is None:
         parser.error("--boot2 requires --sysmodule-exefs so the package cannot enable an empty boot2 entry")
@@ -179,6 +185,7 @@ def main() -> int:
         max_add_minutes=args.max_add_minutes,
         nro=args.nro,
         sysmodule_exefs=args.sysmodule_exefs,
+        overlay=args.overlay,
         toolbox=args.toolbox,
     )
     if args.zip_path is not None:

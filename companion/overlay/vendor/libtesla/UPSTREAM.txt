@@ -1,0 +1,5 @@
+Repository: https://github.com/WerWolv/libtesla
+Commit: f766e9b607a05e9756843cbd62b3bfb98be1646c
+Files vendored: include/tesla.hpp, include/stb_truetype.h, LICENSE
+Local compatibility patch: tesla.hpp replaces its sole dynamic_cast with a
+List-parent static_cast so the overlay can honor -fno-rtti.
