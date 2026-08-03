@@ -288,3 +288,14 @@ autocode/biz/src/main/resources/rebel.xml
 # Node.js
 node_modules/
 **/node_modules/
+
+# Switch build and packaging artifacts
+/build/
+/companion/nro/build/
+/companion/nro/pctc.elf
+/companion/nro/pctc.nro
+/sysmodule/build/
+/sysmodule/pctc-sysmodule.elf
+/sysmodule/pctc-sysmodule.npdm
+/sysmodule/pctc-sysmodule.nso
+/sysmodule/pctc-sysmodule.nsp
