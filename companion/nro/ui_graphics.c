@@ -37,6 +37,8 @@ typedef struct {
 
 static UiRuntime g_ui;
 
+static UiRect to_uirect(PtcUiRect rect);
+
 static const UiAction TODAY_ACTIONS[] = {
     {"刷新状态", "读取今天的最新游玩状态", COLOR(42, 105, 188)},
     {"设置今日额度", "指定今天可玩的分钟数", COLOR(42, 105, 188)},
