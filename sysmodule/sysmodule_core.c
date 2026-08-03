@@ -33,6 +33,13 @@ typedef struct {
 #define PTC_V2_FAILURE_LIMIT 5u
 #define PTC_V2_COOLDOWN_SECONDS 600
 
+/* Retention shares a single PtcStorageEntry array across the log scan and both
+   cleanup_timestamped_json calls. One array is ~39 KiB; nesting two of them
+   (cleanup -> cleanup_timestamped_json) overflowed the 128 KiB main thread stack.
+   Capacity stays at 256 because list_entries has no offset/paging parameter, so a
+   smaller value would silently truncate retention. */
+#define PTC_CLEANUP_MAX_ENTRIES 256u
+
 static void effect_wait(PtcSysmodule *sysmodule, uint32_t milliseconds);
 
 static void join_path(char *out, size_t out_size, const char *a, const char *b)
@@ -2629,15 +2636,21 @@ static bool date_directory_day_index(const char *name, uint16_t *out)
     return ptc_day_index_from_date((uint16_t)year, (uint8_t)month, (uint8_t)day, out);
 }
 
-static bool cleanup_timestamped_json(PtcSysmodule *sysmodule, const char *relative_dir, uint16_t today)
+/* entries is supplied by the caller: a PtcStorageEntry[256] costs ~38 KiB, so a
+   nested copy here plus the caller's own array overflows the main thread stack. */
+static bool cleanup_timestamped_json(
+    PtcSysmodule *sysmodule,
+    const char *relative_dir,
+    uint16_t today,
+    PtcStorageEntry *entries,
+    size_t entry_capacity)
 {
     char dir[320];
-    PtcStorageEntry entries[256];
     size_t count = 0;
     size_t i;
     bool ok = true;
     snprintf(dir, sizeof(dir), "%s/%s", sysmodule->app_root, relative_dir);
-    if (!sysmodule->storage->vtable->list_entries(sysmodule->storage, dir, entries, 256, &count)) return true;
+    if (!sysmodule->storage->vtable->list_entries(sysmodule->storage, dir, entries, entry_capacity, &count)) return true;
     for (i = 0; i < count; ++i) {
         char stem[80];
         char path[512];
@@ -2658,7 +2671,9 @@ static bool cleanup_timestamped_json(PtcSysmodule *sysmodule, const char *relati
 int ptc_sysmodule_cleanup(PtcSysmodule *sysmodule)
 {
     char logs_dir[320];
-    PtcStorageEntry entries[256];
+    /* Reused across the log scan and both cleanup_timestamped_json calls so the
+       ~38 KiB entry array is only reserved once on the stack. */
+    PtcStorageEntry entries[PTC_CLEANUP_MAX_ENTRIES];
     size_t count = 0;
     size_t i;
     bool ok = true;
@@ -2666,7 +2681,7 @@ int ptc_sysmodule_cleanup(PtcSysmodule *sysmodule)
     if (!sysmodule || !sysmodule->storage->vtable->list_entries || !sysmodule->storage->vtable->remove_tree) return 0;
     now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     snprintf(logs_dir, sizeof(logs_dir), "%s/logs", sysmodule->app_root);
-    if (sysmodule->storage->vtable->list_entries(sysmodule->storage, logs_dir, entries, 256, &count)) {
+    if (sysmodule->storage->vtable->list_entries(sysmodule->storage, logs_dir, entries, PTC_CLEANUP_MAX_ENTRIES, &count)) {
         for (i = 0; i < count; ++i) {
             uint16_t day_index;
             char path[512];
@@ -2679,8 +2694,8 @@ int ptc_sysmodule_cleanup(PtcSysmodule *sysmodule)
             if (!sysmodule->storage->vtable->remove_tree(sysmodule->storage, path)) ok = false;
         }
     }
-    if (!cleanup_timestamped_json(sysmodule, "results", now.day_index)) ok = false;
-    if (!cleanup_timestamped_json(sysmodule, "inbox/done", now.day_index)) ok = false;
+    if (!cleanup_timestamped_json(sysmodule, "results", now.day_index, entries, PTC_CLEANUP_MAX_ENTRIES)) ok = false;
+    if (!cleanup_timestamped_json(sysmodule, "inbox/done", now.day_index, entries, PTC_CLEANUP_MAX_ENTRIES)) ok = false;
     if (!ok) append_event(sysmodule, NULL, "cleanup_failed", PTC_ERR_STORAGE_WRITE_FAILED, "retention");
     sysmodule->last_cleanup_day_index = now.day_index;
     sysmodule->cleanup_initialized = true;

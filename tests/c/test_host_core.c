@@ -2097,13 +2097,21 @@ static void test_backoff_daily_logs_and_retention(void)
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/logs/unknown/file", "keep"), "unknown log dir");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/results/old.json", "{}"), "old result");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/done/future.json", "{}"), "future done");
+    /* Retention reuses one entry array across the log scan and both dirs, so cover an
+       actual deletion in inbox/done: it reads the array after two prior populations. */
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/done/old.json", "{}"), "old done");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/done/keep.json", "{}"), "D-29 done");
     ptc_mem_storage_set_mtime(&mem, "app/results/old.json", now - 31LL * 86400LL, true);
     ptc_mem_storage_set_mtime(&mem, "app/inbox/done/future.json", now + 86400LL, true);
+    ptc_mem_storage_set_mtime(&mem, "app/inbox/done/old.json", now - 31LL * 86400LL, true);
+    ptc_mem_storage_set_mtime(&mem, "app/inbox/done/keep.json", now - 29LL * 86400LL, true);
     check_int(ptc_sysmodule_cleanup(&sysmodule), 1, "retention cleanup succeeds");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/logs/2026-06-08/events.jsonl"), "D-30 log deleted");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/logs/2026-06-09/events.jsonl"), "D-29 log retained");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/results/old.json"), "D-30 result deleted");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/done/future.json"), "future done retained");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/inbox/done/old.json"), "D-30 done deleted");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/done/keep.json"), "D-29 done retained");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/logs/unknown/file"), "unknown log retained");
 }
 

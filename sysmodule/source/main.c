@@ -73,12 +73,15 @@ static void append_boot_log(PtcSysmodule *sysmodule, const char *message)
 
 int main(int argc, char **argv)
 {
-    PtcFsStorage fs;
-    PtcSwitchPctl pctl;
-    PtcSwitchTimeProvider time_provider;
-    PtcSysmodule sysmodule;
+    /* Process-lifetime singletons kept in .bss, not on the stack: PtcIpcServer is
+       ~68 KiB (result_cache[8] of 8 KiB each) and PtcSysmodule ~10 KiB, which left
+       too little of the main thread stack for the retention and request paths. */
+    static PtcFsStorage fs;
+    static PtcSwitchPctl pctl;
+    static PtcSwitchTimeProvider time_provider;
+    static PtcSysmodule sysmodule;
+    static PtcIpcServer ipc_server;
     PtcStorage *storage;
-    PtcIpcServer ipc_server;
     bool ipc_available;
     int recovered;
     (void)argc;
