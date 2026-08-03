@@ -11,6 +11,16 @@
 
 本机已拉取上游 libnx 源码到 `H:\workspace\codes\switch\libnx`。涉及 PCTL service/session、公开命令签名或 libnx dispatch 行为时优先查阅该目录。当前上游 `nx/include/switch/services/pctl.h` 与 `nx/source/services/pctl.c` 不包含 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装，因此不得用 libnx 缺失的定义推断这些私有命令的参数单位或 0x44 raw layout；相关布局必须以真机 A/B 证据和仓库协议文档为准。
 
+本机已拉取上游 libtesla 源码到 `H:\workspace\codes\switch\libtesla`。涉及 Tesla overlay 生命周期、输入处理、绘制或 libtesla API 行为时优先查阅该目录。项目构建仍必须使用仓库内 `companion/overlay/vendor/libtesla/` 固定的版本，不得依赖工作区外的本机路径；同步 vendored 文件时同时更新 `companion/overlay/vendor/libtesla/UPSTREAM.txt` 中的上游 commit。
+
+## 上游源码与 GitHub 调研
+
+编码代理不得把搜索 GitHub 当作普通代码修改的默认步骤。调查顺序应为：当前仓库和协议文档、仓库内 vendored 固定版本、本机已拉取的对应上游源码，最后才是 GitHub。
+
+只有证据无法从本地获得时，或任务本身要求核对上游状态时，才必须查询 GitHub，例如：确认固定 commit、tag 或 release 的内容；调查已知 bug、安全公告、issue 或 PR；核对依赖的 breaking changes、迁移说明、许可证或 NOTICE；比较本地 vendored 修改与上游原版；或者用户明确要求调查 GitHub 仓库、issue、PR 或最新状态。
+
+查询 GitHub 时必须记录仓库、commit/tag 或 issue/PR 链接以及查询日期。不得将 `main`/`master` 当前代码直接视为项目 vendored commit 的行为，也不得因远端有更新就在未经请求和验证的情况下升级依赖。本地固定版本足以回答的问题不应联网搜索。
+
 ## 构建、测试与开发命令
 
 Windows 本地使用单一 Python 入口；C host、Companion NRO 和 package 的权威验证通过单一本地容器入口执行。
