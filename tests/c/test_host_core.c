@@ -1621,6 +1621,135 @@ static void test_enforce_tick_applies_once_and_respects_disable_flag(void)
     check_true(pctl.timer_started, "disable removal triggers enforce reconciliation");
 }
 
+static void write_limit_action_rules(PtcMemStorage *mem, const char *action)
+{
+    char rules[2048];
+    snprintf(
+        rules,
+        sizeof(rules),
+        "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60}],"
+        "\"today_override_present\":false,\"today_override_day_index\":0,\"today_override_mode\":\"limit\","
+        "\"today_override_minutes\":60,\"bedtime_enabled\":false,\"bedtime_start_min\":1260,"
+        "\"bedtime_end_min\":480,\"limit_action\":\"%s\"}\n",
+        action);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/rules.json", rules), "write limit action rules");
+}
+
+static void test_enforce_limit_actions_after_expiry(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char state[1024];
+    char events[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, true, false);
+    write_limit_action_rules(&mem, "raw_block");
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "expired raw block action applies");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_BLOCKED, "expired raw block uses blocked target");
+    check_int(pctl.last_target.minutes, 0, "expired raw block uses zero minutes");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", state, sizeof(state)), "raw block enforce state written");
+    check_true(strstr(state, "\"last_enforced_mode\":3,\"last_enforced_minutes\":0") != NULL, "raw block enforcement is deduplicated by effective target");
+    pctl.applied = false;
+    pctl.timer_started = false;
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0, "expired raw block target is not repeated");
+    check_true(!pctl.applied && !pctl.timer_started, "raw block effective target stays deduplicated");
+    pctl.status.limited_today = true;
+    pctl.status.blocked_today = false;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 60;
+    pctl.status.restricted_now = false;
+    write_limit_action_rules(&mem, "remind");
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "changing raw block action restores ordinary limit target");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "remind restores finite target after raw block");
+    check_int(pctl.last_target.minutes, 60, "remind restores configured minutes after raw block");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, false, true);
+    write_limit_action_rules(&mem, "suspend");
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "expired suspend action applies");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "suspend keeps finite play timer target");
+    check_int(pctl.last_target.minutes, 0, "suspend forces the verified expiry edge");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, false, false);
+    write_limit_action_rules(&mem, "remind");
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "expired reminder action reconciles ordinary target");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "reminder does not switch to blocked target");
+    check_int(pctl.last_target.minutes, 60, "reminder preserves configured minutes");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, false, false);
+    write_limit_action_rules(&mem, "raw_block");
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0, "unverified expired raw block is rejected");
+    check_true(!pctl.applied, "unverified expired raw block stays fail-open");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/events.jsonl", events, sizeof(events)), "unverified raw block event written");
+    check_true(strstr(events, "raw_block_not_verified") != NULL && strstr(events, "enforce_limit_action") != NULL,
+        "unverified raw block has stable event evidence");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 15;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, true, false);
+    write_limit_action_rules(&mem, "raw_block");
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "raw block action waits for expiry");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "pre-expiry raw block keeps daily limit");
+    check_int(pctl.last_target.minutes, 60, "pre-expiry raw block keeps configured minutes");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.read_error = PTC_ERR_PCTL_READ_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, true, true);
+    write_limit_action_rules(&mem, "raw_block");
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0, "enforce status read failure is fail-open");
+    check_true(!pctl.applied && !pctl.timer_started, "status read failure never writes PCTL");
+}
+
 static void test_backup_failure_blocks_write(void)
 {
     PtcMemStorage mem;
@@ -2346,6 +2475,7 @@ int main(void)
     test_more_rule_requests_and_probe_suspend();
     test_legacy_suspend_capability_is_invalidated();
     test_enforce_tick_applies_once_and_respects_disable_flag();
+    test_enforce_limit_actions_after_expiry();
     test_failure_paths_do_not_consume_nonce();
     test_recover_processing();
     test_request_id_security_and_stem_match();

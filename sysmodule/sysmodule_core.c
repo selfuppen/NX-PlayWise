@@ -2449,7 +2449,10 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     PtcRuntimeState runtime_state;
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     PtcDayRule active_rule;
+    PtcPctlStatus pctl_status;
     PtcPctlTargetMode target_mode;
+    uint16_t target_minutes;
+    bool limit_expired;
     char disable_path[320];
     PtcErrorCode err;
 
@@ -2466,13 +2469,49 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         return 0;
     }
     active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-    target_mode = target_from_day_rule(active_rule);
-    if (runtime_state.last_enforced_day_index == now.day_index &&
-        runtime_state.last_enforced_mode == target_mode &&
-        runtime_state.last_enforced_minutes == active_rule.minutes) {
+    if (sysmodule->pctl->vtable->read_status(
+            sysmodule->pctl,
+            ptc_weekday_from_day_index(now.day_index),
+            &pctl_status) != PTC_ERR_OK) {
+        append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_PCTL_READ_FAILED, "enforce_status");
         return 0;
     }
-    err = apply_target(sysmodule, NULL, &caps, now, ptc_control_mode_name(config.mode), target_mode, active_rule.minutes);
+    target_mode = target_from_day_rule(active_rule);
+    target_minutes = active_rule.minutes;
+    limit_expired = active_rule.mode == PTC_RULE_MODE_LIMIT &&
+        pctl_status.remaining_available && pctl_status.remaining_minutes == 0U;
+
+    /* limit_action is only consulted once a finite rule has reached zero. The
+       ordinary limit target remains in place for reminders; raw_block changes
+       the target to the verified blocked mode, while suspend uses a zero-minute
+       finite target so Horizon can deliver its own suspension request. */
+    if (limit_expired) {
+        if (rules.limit_action == PTC_LIMIT_ACTION_RAW_BLOCK) {
+            if (!caps.raw_block_verified) {
+                append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_RAW_BLOCK_NOT_VERIFIED, "enforce_limit_action");
+                return 0;
+            }
+            target_mode = PTC_PCTL_TARGET_BLOCKED;
+            target_minutes = 0;
+        } else if (rules.limit_action == PTC_LIMIT_ACTION_SUSPEND) {
+            if (!caps.suspend_verified) {
+                append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_SUSPEND_NOT_VERIFIED, "enforce_limit_action");
+                return 0;
+            }
+            target_mode = PTC_PCTL_TARGET_LIMIT;
+            target_minutes = 0;
+        }
+    }
+    if (target_mode == PTC_PCTL_TARGET_BLOCKED && !caps.raw_block_verified) {
+        append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_RAW_BLOCK_NOT_VERIFIED, "enforce_blocked_rule");
+        return 0;
+    }
+    if (runtime_state.last_enforced_day_index == now.day_index &&
+        runtime_state.last_enforced_mode == target_mode &&
+        runtime_state.last_enforced_minutes == target_minutes) {
+        return 0;
+    }
+    err = apply_target(sysmodule, NULL, &caps, now, ptc_control_mode_name(config.mode), target_mode, target_minutes);
     if (err != PTC_ERR_OK) {
         return 0;
     }
@@ -2482,7 +2521,7 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         PtcPctlDebugSnapshot after;
         uint32_t ipc_result;
         target.mode = target_mode;
-        target.minutes = active_rule.minutes;
+        target.minutes = target_minutes;
         target.weekday = ptc_weekday_from_day_index(now.day_index);
         take_pctl_debug_snapshot(sysmodule, &before);
         err = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
@@ -2496,7 +2535,7 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     }
     runtime_state.last_enforced_day_index = now.day_index;
     runtime_state.last_enforced_mode = target_mode;
-    runtime_state.last_enforced_minutes = active_rule.minutes;
+    runtime_state.last_enforced_minutes = target_minutes;
     if (!save_state(sysmodule, &runtime_state, now.unix_seconds)) {
         append_event(sysmodule, NULL, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "enforce_state");
         return 0;
