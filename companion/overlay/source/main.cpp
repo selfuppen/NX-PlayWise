@@ -14,7 +14,7 @@ extern "C" {
 
 namespace {
 
-constexpr char APP_ROOT[] = "sdmc:/switch/play-time-control";
+constexpr char APP_ROOT[] = "sdmc:/switch/playwise";
 constexpr tsl::Color PANEL_COLOR{ 0x1, 0x1, 0x1, 0xF };
 constexpr tsl::Color KEY_COLOR{ 0x3, 0x3, 0x3, 0xF };
 constexpr tsl::Color FOCUS_COLOR{ 0x0, 0xF, 0xD, 0xF };

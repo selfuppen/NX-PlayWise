@@ -16,7 +16,7 @@
 #include "../../common/time/ptc_time.h"
 #include "ui_graphics.h"
 
-#define APP_ROOT "sdmc:/switch/play-time-control"
+#define APP_ROOT "sdmc:/switch/playwise"
 #define RULES_PATH APP_ROOT "/rules.json"
 #define RESULT_TEXT_SIZE 8192
 #define REQUEST_TIMEOUT_MS 60000

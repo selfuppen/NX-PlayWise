@@ -48,8 +48,8 @@ def overlay_without_assets() -> bytes:
 
 def write_package(path: Path, mode: str, boot2: bool, overlay_data: bytes | None = None) -> None:
     with zipfile.ZipFile(path, "w") as package:
-        package.writestr("switch/play-time-control/config.json", f'{{"control_mode":"{mode}"}}')
-        package.writestr("switch/play-time-control/pctc.nro", valid_nro(with_icon=True))
+        package.writestr("switch/playwise/config.json", f'{{"control_mode":"{mode}"}}')
+        package.writestr("switch/playwise/pctc.nro", valid_nro(with_icon=True))
         if boot2:
             package.writestr("switch/.overlays/pctc.ovl", valid_nro(with_icon=False) if overlay_data is None else overlay_data)
             package.writestr("atmosphere/contents/4200000000BD2300/exefs.nsp", b"nsp")

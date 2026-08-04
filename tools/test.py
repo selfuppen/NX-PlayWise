@@ -10,7 +10,7 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_DIR = Path("switch") / "play-time-control"
+APP_DIR = Path("switch") / "playwise"
 CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 PYTHON = sys.executable
 
@@ -200,7 +200,7 @@ def verify_safe_package() -> None:
         require(not (out / CONTENT_DIR / "flags" / "boot2.flag").exists(), "safe package must not contain boot2.flag")
         with zipfile.ZipFile(zip_path) as package:
             names = package.namelist()
-        require("switch/play-time-control/config.json" in names, "safe zip missing config.json")
+        require("switch/playwise/config.json" in names, "safe zip missing config.json")
         require(all(name.startswith("switch/") for name in names), "safe zip may only contain switch entries")
         require("switch/.overlays/pctc.ovl" not in names, "safe package must not depend on Tesla")
 

@@ -17,7 +17,7 @@ DEFAULT_SSH_HOST = "127.0.0.1"
 DEFAULT_SSH_PORT = 1888
 DEFAULT_SSH_USER = "root"
 DEFAULT_CONTAINER_PATH = "/ws/playwise"
-APP_CONFIG = "switch/play-time-control/config.json"
+APP_CONFIG = "switch/playwise/config.json"
 CONTENT_ROOT = "atmosphere/contents/4200000000BD2300"
 NRO_HEADER_OFFSET = 0x10
 NRO_HEADER_SIZE_OFFSET = 0x18
@@ -98,13 +98,13 @@ def verify_package_zip(path: Path, prefix: str | None = None) -> None:
         if APP_CONFIG not in names:
             raise PackageError(f"{path.name}: missing {APP_CONFIG}")
         config = json.loads(package.read(APP_CONFIG).decode("utf-8"))
-        nro_data = package.read("switch/play-time-control/pctc.nro") if "switch/play-time-control/pctc.nro" in names else None
+        nro_data = package.read("switch/playwise/pctc.nro") if "switch/playwise/pctc.nro" in names else None
         overlay_data = package.read("switch/.overlays/pctc.ovl") if "switch/.overlays/pctc.ovl" in names else None
     if config.get("control_mode") != expected_mode:
         raise PackageError(f"{path.name}: expected control_mode={expected_mode}")
     boot2 = f"{CONTENT_ROOT}/flags/boot2.flag"
     exefs = f"{CONTENT_ROOT}/exefs.nsp"
-    nro = "switch/play-time-control/pctc.nro"
+    nro = "switch/playwise/pctc.nro"
     overlay = "switch/.overlays/pctc.ovl"
     if (boot2 in names) != expect_boot2:
         raise PackageError(f"{path.name}: unexpected boot2.flag state")

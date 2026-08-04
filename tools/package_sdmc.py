@@ -8,7 +8,7 @@ import shutil
 import zipfile
 
 
-APP_DIR = Path("switch") / "play-time-control"
+APP_DIR = Path("switch") / "playwise"
 ATMOSPHERE_CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 
 
@@ -153,14 +153,14 @@ def create_package(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Create staged SDMC packages for play-time-control.")
+    parser = argparse.ArgumentParser(description="Create staged SDMC packages for playwise.")
     parser.add_argument("--mode", choices=["safe", "observe", "disabled", "grant", "enforce"], default="safe")
     parser.add_argument("--out", required=True)
     parser.add_argument("--device-id", default="kid-switch")
     parser.add_argument("--grant-secret", default="replace-with-long-random-secret")
     parser.add_argument("--max-add-minutes", type=int, default=120)
     parser.add_argument("--zip", dest="zip_path", help="Write a zip whose top-level entries are switch/ and optional atmosphere/.")
-    parser.add_argument("--nro", type=Path, help="Optional companion NRO copied under switch/play-time-control/.")
+    parser.add_argument("--nro", type=Path, help="Optional companion NRO copied under switch/playwise/.")
     parser.add_argument("--sysmodule-exefs", type=Path, help="Optional sysmodule exefs.nsp copied under atmosphere/contents.")
     parser.add_argument("--overlay", type=Path, help="Optional Tesla overlay copied under switch/.overlays.")
     parser.add_argument("--toolbox", type=Path, help="Optional Atmosphere toolbox.json copied beside exefs.nsp.")

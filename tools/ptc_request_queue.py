@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 
-APP_DIR = Path("switch") / "play-time-control"
+APP_DIR = Path("switch") / "playwise"
 
 
 @dataclass(frozen=True)

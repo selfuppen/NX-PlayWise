@@ -18,7 +18,7 @@ $destinationDriveLetter = $Drive.Substring(0, 1).ToUpperInvariant()
 $destinationRoot = "${destinationDriveLetter}:\"
 $ownedRelativePaths = @(
     "atmosphere\contents\4200000000BD2300",
-    "switch\play-time-control",
+    "switch\playwise",
     "switch\.overlays\pctc.ovl"
 )
 
@@ -96,7 +96,7 @@ if ($sourceRoot.StartsWith($destinationRoot, [System.StringComparison]::OrdinalI
     throw "SourceFolder must not be on ${destinationDriveLetter}:, because the old installation is removed before copying."
 }
 
-$sourceApp = Join-Path $sourceRoot "switch\play-time-control"
+$sourceApp = Join-Path $sourceRoot "switch\playwise"
 $sourceSysmodule = Join-Path $sourceRoot "atmosphere\contents\4200000000BD2300"
 $sourceOverlay = Join-Path $sourceRoot "switch\.overlays\pctc.ovl"
 $availableRelativePaths = @()
@@ -104,9 +104,9 @@ $hasPackageCore = $false
 
 if (Test-Path -LiteralPath $sourceApp -PathType Container) {
     if (-not (Test-Path -LiteralPath (Join-Path $sourceApp "config.json") -PathType Leaf)) {
-        throw "Invalid package: switch\play-time-control\config.json is missing."
+        throw "Invalid package: switch\playwise\config.json is missing."
     }
-    $availableRelativePaths += "switch\play-time-control"
+    $availableRelativePaths += "switch\playwise"
     $hasPackageCore = $true
 }
 
@@ -123,7 +123,7 @@ if (Test-Path -LiteralPath $sourceOverlay -PathType Leaf) {
 }
 
 if (-not $hasPackageCore) {
-    throw "SourceFolder is not a play-time-control package directory."
+    throw "SourceFolder is not a playwise package directory."
 }
 
 Write-Host "Source package: $sourceRoot"
@@ -146,7 +146,7 @@ if (-not $Apply) {
 }
 
 if (-not $WhatIfPreference) {
-    $confirmation = Read-Host "Type $destinationRoot to confirm removal of the old play-time-control installation"
+    $confirmation = Read-Host "Type $destinationRoot to confirm removal of the old playwise installation"
     if ($confirmation -cne $destinationRoot) {
         throw "Confirmation did not match $destinationRoot; no files were changed."
     }

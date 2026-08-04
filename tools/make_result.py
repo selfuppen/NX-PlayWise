@@ -121,7 +121,7 @@ def result_for(args: argparse.Namespace, request: dict[str, Any], caps: dict[str
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Write a matching v1 result JSON for manual companion testing.")
-    parser.add_argument("--root", required=True, help="SD card root or host SDMC-like root containing switch/play-time-control.")
+    parser.add_argument("--root", required=True, help="SD card root or host SDMC-like root containing switch/playwise.")
     parser.add_argument("--request", help="Path to a request JSON file. Defaults to the newest pending request.")
     parser.add_argument("--request-id", help="Request id to read from inbox/pending or synthesize.")
     parser.add_argument("--type", default="status", help="Request type when --request-id has no pending file.")

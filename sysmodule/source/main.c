@@ -10,7 +10,7 @@
 #include "../sysmodule_core.h"
 #include "../ipc_server.h"
 
-#define PTC_APP_ROOT "sdmc:/switch/play-time-control"
+#define PTC_APP_ROOT "sdmc:/switch/playwise"
 #define PTC_INNER_HEAP_SIZE 0x80000
 #define PTC_STARTUP_DELAY_NS 15000000000LL
 
@@ -101,7 +101,7 @@ int main(int argc, char **argv)
         ptc_switch_time_provider_as_provider(&time_provider));
 
     (void)ptc_sysmodule_rollover_legacy_logs(&sysmodule);
-    append_boot_log(&sysmodule, "play-time-control sysmodule started");
+    append_boot_log(&sysmodule, "playwise sysmodule started");
     recovered = ptc_sysmodule_recover_processing(&sysmodule);
     if (recovered > 0) {
         append_boot_log(&sysmodule, "recovered processing requests");
