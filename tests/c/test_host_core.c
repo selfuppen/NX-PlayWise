@@ -226,7 +226,29 @@ static void test_overlay_input_and_shared_result_summary(void)
     check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/1000000-0012.json"), "overlay bridge uses pending atomic protocol");
     check_int(ptc_overlay_bridge_poll(&bridge, PTC_OVERLAY_REQUEST_TIMEOUT_MS, PTC_OVERLAY_REQUEST_TIMEOUT_MS), PTC_COMPANION_TIMEOUT, "overlay bridge times out at sixty seconds");
     check_int(ptc_overlay_bridge_last_status(&bridge), PTC_COMPANION_TIMEOUT, "overlay bridge preserves transport failure status");
+    check_str(ptc_overlay_bridge_error_message_zh(&bridge), "后台响应超时，请重试",
+        "overlay bridge maps timeout to Chinese feedback");
     check_true(!ptc_overlay_bridge_waiting(&bridge), "overlay bridge exits waiting after timeout");
+
+    bridge.last_status = PTC_COMPANION_WRITE_FAILED;
+    check_str(ptc_overlay_bridge_error_message_zh(&bridge), "请求写入失败，请检查 SD 卡",
+        "overlay bridge maps write failure to Chinese feedback");
+    bridge.last_status = PTC_COMPANION_RESULT_INVALID;
+    check_str(ptc_overlay_bridge_error_message_zh(&bridge), "后台返回的结果无效",
+        "overlay bridge maps invalid result to Chinese feedback");
+    bridge.last_status = PTC_COMPANION_BAD_ARGUMENT;
+    check_str(ptc_overlay_bridge_error_message_zh(&bridge), "请求被后台拒绝",
+        "overlay bridge maps rejected request to Chinese feedback");
+
+    memset(&bridge.summary, 0, sizeof(bridge.summary));
+    bridge.summary.valid = true;
+    bridge.summary.dry_run = true;
+    check_str(ptc_overlay_bridge_error_message_zh(&bridge), "当前为演练模式，未实际解锁",
+        "overlay bridge maps dry run to Chinese feedback");
+    bridge.summary.dry_run = false;
+    bridge.summary.error_code = PTC_ERR_USED_TOKEN;
+    check_str(ptc_overlay_bridge_error_message_zh(&bridge), "授权码已经使用过",
+        "overlay bridge maps structured error code to Chinese feedback");
 }
 
 static void test_time_and_policy(void)

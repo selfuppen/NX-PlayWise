@@ -36,5 +36,6 @@ const PtcCompanionResultSummary *ptc_overlay_bridge_summary(const PtcOverlayBrid
 PtcOverlayTransportState ptc_overlay_bridge_transport_state(const PtcOverlayBridge *bridge);
 const char *ptc_overlay_bridge_transport_label(const PtcOverlayBridge *bridge);
 PtcCompanionStatus ptc_overlay_bridge_last_status(const PtcOverlayBridge *bridge);
+const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge);
 
 #endif

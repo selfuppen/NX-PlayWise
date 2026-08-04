@@ -9,7 +9,6 @@
 extern "C" {
 #include "../bridge.h"
 #include "../input_model.h"
-#include "../../../common/protocol/error_code.h"
 #include "platform/switch/fs_storage.h"
 }
 
@@ -144,13 +143,6 @@ public:
         return 58 + static_cast<s32>(index) * 43;
     }
 
-    static const char *error_text(const PtcCompanionResultSummary &summary)
-    {
-        if (summary.message[0]) return summary.message;
-        if (summary.error_code > 0) return ptc_error_message_zh((PtcErrorCode)summary.error_code);
-        return "请求失败，请稍后重试";
-    }
-
     static const char *transport_stage(const PtcOverlayBridge *bridge)
     {
         if (bridge->waiting) {
@@ -159,19 +151,6 @@ public:
             return "正在等待后台处理…";
         }
         return "";
-    }
-
-    static const char *transport_error_text(PtcCompanionStatus status)
-    {
-        switch (status) {
-        case PTC_COMPANION_TIMEOUT: return "后台响应超时，请重试";
-        case PTC_COMPANION_WRITE_FAILED:
-        case PTC_COMPANION_RENAME_FAILED: return "请求写入失败，请检查 SD 卡";
-        case PTC_COMPANION_RESULT_INVALID:
-        case PTC_COMPANION_RESULT_MISMATCH: return "后台返回的结果无效";
-        case PTC_COMPANION_BAD_ARGUMENT: return "请求被后台拒绝";
-        default: return "无法连接后台服务，请重试";
-        }
     }
 
     void draw_overlay(tsl::gfx::Renderer *renderer)
@@ -223,10 +202,7 @@ public:
         const char *stage = transport_stage(bridge_);
         if (stage[0]) renderer->drawString(stage, false, 56, 615, 19, renderer->a(FOCUS_COLOR));
         if (error_) {
-            const char *message = bridge_->summary.valid && bridge_->summary.dry_run
-                ? "当前为演练模式，未实际解锁"
-                : (bridge_->summary.valid ? error_text(bridge_->summary)
-                    : transport_error_text(ptc_overlay_bridge_last_status(bridge_)));
+            const char *message = ptc_overlay_bridge_error_message_zh(bridge_);
             renderer->drawString(message, false, 56, 615, 18, renderer->a(0xF00F), 325);
             if (bridge_->summary.valid && bridge_->summary.error_code > 0) {
                 std::snprintf(line, sizeof(line), "错误码：%d   Y 重试", bridge_->summary.error_code);

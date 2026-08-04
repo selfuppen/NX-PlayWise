@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../../common/protocol/error_code.h"
+
 static void update_transport_state(PtcOverlayBridge *bridge)
 {
     PtcCompanionTransportKind active;
@@ -36,8 +38,10 @@ PtcCompanionStatus ptc_overlay_bridge_submit(PtcOverlayBridge *bridge, const cha
     if (!bridge || !code || code[0] == '\0') return PTC_COMPANION_BAD_ARGUMENT;
     memset(&bridge->summary, 0, sizeof(bridge->summary));
     bridge->last_status = PTC_COMPANION_PENDING;
-    if (ptc_companion_make_request_id(bridge->request_id, sizeof(bridge->request_id), created_at * 1000, random16) != PTC_COMPANION_OK)
+    if (ptc_companion_make_request_id(bridge->request_id, sizeof(bridge->request_id), created_at * 1000, random16) != PTC_COMPANION_OK) {
+        bridge->last_status = PTC_COMPANION_BAD_ARGUMENT;
         return PTC_COMPANION_BAD_ARGUMENT;
+    }
     status = ptc_companion_transport_submit_offline_code(&bridge->transport, bridge->request_id, created_at, code);
     bridge->last_status = status;
     update_transport_state(bridge);
@@ -90,4 +94,25 @@ const char *ptc_overlay_bridge_transport_label(const PtcOverlayBridge *bridge)
 PtcCompanionStatus ptc_overlay_bridge_last_status(const PtcOverlayBridge *bridge)
 {
     return bridge ? bridge->last_status : PTC_COMPANION_BAD_ARGUMENT;
+}
+
+const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge)
+{
+    if (!bridge) return "请求参数无效";
+    if (bridge->summary.valid) {
+        if (bridge->summary.dry_run) return "当前为演练模式，未实际解锁";
+        if (bridge->summary.message[0]) return bridge->summary.message;
+        if (bridge->summary.error_code > 0)
+            return ptc_error_message_zh((PtcErrorCode)bridge->summary.error_code);
+        return "请求失败，请稍后重试";
+    }
+    switch (bridge->last_status) {
+    case PTC_COMPANION_TIMEOUT: return "后台响应超时，请重试";
+    case PTC_COMPANION_WRITE_FAILED:
+    case PTC_COMPANION_RENAME_FAILED: return "请求写入失败，请检查 SD 卡";
+    case PTC_COMPANION_RESULT_INVALID:
+    case PTC_COMPANION_RESULT_MISMATCH: return "后台返回的结果无效";
+    case PTC_COMPANION_BAD_ARGUMENT: return "请求被后台拒绝";
+    default: return "无法连接后台服务，请重试";
+    }
 }
