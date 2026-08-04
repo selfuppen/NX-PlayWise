@@ -220,12 +220,22 @@ static PtcCompanionStatus transport_submit_minutes(PtcCompanionTransportClient *
     return ptc_companion_transport_submit_json(client, request_id, json);
 }
 
+static PtcCompanionStatus transport_submit_parent_unlock_start(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint16_t minutes)
+{
+    char json[512];
+    if (ptc_companion_parent_unlock_start_request_json(json, sizeof(json), request_id, created_at, minutes) >= (int)sizeof(json)) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
 PtcCompanionStatus ptc_companion_transport_submit_set_today_limit(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, uint16_t minutes)
 { return transport_submit_minutes(client, request_id, created_at, "set_today_limit", minutes); }
 PtcCompanionStatus ptc_companion_transport_submit_add_today_minutes(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, uint16_t minutes)
 { return transport_submit_minutes(client, request_id, created_at, "add_today_minutes", minutes); }
 PtcCompanionStatus ptc_companion_transport_submit_parent_unlock_start(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, uint16_t minutes)
-{ return transport_submit_minutes(client, request_id, created_at, "parent_unlock_start", minutes); }
+{ return transport_submit_parent_unlock_start(client, request_id, created_at, minutes); }
 
 PtcCompanionStatus ptc_companion_transport_submit_empty(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const char *type)
 {

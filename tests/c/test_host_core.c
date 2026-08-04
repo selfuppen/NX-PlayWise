@@ -366,6 +366,10 @@ static void test_companion_request_builder_and_file_protocol(void)
     check_int(ptc_companion_submit_set_bedtime(&client, "1000-0107", 107, &bedtime), PTC_COMPANION_OK, "submit bedtime");
     check_int(ptc_companion_submit_set_limit_action(&client, "1000-0108", 108, PTC_LIMIT_ACTION_RAW_BLOCK), PTC_COMPANION_OK, "submit limit action");
     check_int(ptc_companion_submit_parent_unlock_start(&client, "1000-0109", 109, 20), PTC_COMPANION_OK, "submit unlock start");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/inbox/pending/1000-0109.json", result, sizeof(result)), "unlock request readable");
+    check_true(strstr(result, "\"type\":\"parent_unlock_start\"") != NULL &&
+        strstr(result, "\"duration_minutes\":20") != NULL &&
+        strstr(result, "\"minutes\"") == NULL, "unlock request uses duration field");
     check_int(ptc_companion_submit_parent_unlock_end(&client, "1000-0110", 110), PTC_COMPANION_OK, "submit unlock end");
     check_int(ptc_companion_submit_probe_play_timer_write(&client, "1000-0111", 111), PTC_COMPANION_OK, "submit play write probe");
     check_int(ptc_companion_submit_probe_play_timer_effect(&client, "1000-0115", 115, false), PTC_COMPANION_OK, "submit play effect probe");
@@ -2383,10 +2387,23 @@ static void test_backoff_daily_logs_and_retention(void)
     check_true(mem.storage.vtable->exists(&mem.storage, "app/logs/unknown/file"), "unknown log retained");
 }
 
-typedef struct { bool available; int submit_count; int event_state; PtcCompanionStatus submit_status; } FakeIpc;
+typedef struct {
+    bool available;
+    int submit_count;
+    int event_state;
+    PtcCompanionStatus submit_status;
+    char submitted_json[1024];
+} FakeIpc;
 static bool fake_ipc_connect(void *ctx) { return ((FakeIpc *)ctx)->available; }
 static PtcCompanionStatus fake_ipc_submit(void *ctx, const char *request_id, const char *json, void **token)
-{ (void)request_id; (void)json; ++((FakeIpc *)ctx)->submit_count; *token = ctx; return ((FakeIpc *)ctx)->submit_status; }
+{
+    FakeIpc *ipc = (FakeIpc *)ctx;
+    (void)request_id;
+    ++ipc->submit_count;
+    snprintf(ipc->submitted_json, sizeof(ipc->submitted_json), "%s", json);
+    *token = ctx;
+    return ipc->submit_status;
+}
 static int fake_ipc_event(void *ctx, void *token) { (void)token; return ((FakeIpc *)ctx)->event_state; }
 static PtcCompanionStatus fake_ipc_result(void *ctx, const char *request_id, char *out, size_t size)
 { (void)ctx; (void)request_id; (void)out; (void)size; return PTC_COMPANION_PENDING; }
@@ -2411,6 +2428,28 @@ static void test_transport_fallback_does_not_resubmit(void)
     check_int(ipc.submit_count, 1, "Event failure never resubmits");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/ipc-fallback.json"), "accepted IPC fallback does not create another request");
     check_int(client.file_poll_delay_ms, 500, "file result polling backs off from 250ms");
+}
+
+static void test_transport_parent_unlock_uses_duration_field(void)
+{
+    static const PtcCompanionIpcBackend BACKEND = {
+        fake_ipc_connect, fake_ipc_submit, fake_ipc_event, fake_ipc_result, fake_ipc_close, fake_ipc_notify,
+    };
+    PtcMemStorage mem;
+    PtcCompanionTransportClient client;
+    FakeIpc ipc = { true, 0, 0, PTC_COMPANION_OK, {0} };
+    PtcRequest parsed;
+    ptc_mem_storage_init(&mem);
+    ptc_companion_transport_init(&client, "app", &mem.storage, &BACKEND, &ipc);
+    check_int(ptc_companion_transport_submit_parent_unlock_start(&client, "unlock-ipc", 123, 15),
+        PTC_COMPANION_OK, "transport unlock submit succeeds");
+    check_true(strstr(ipc.submitted_json, "\"duration_minutes\":15") != NULL,
+        "transport unlock uses duration field");
+    check_true(strstr(ipc.submitted_json, "\"minutes\"") == NULL,
+        "transport unlock omits generic minutes field");
+    check_int(ptc_request_parse(ipc.submitted_json, &parsed), PTC_ERR_OK,
+        "transport unlock request passes server schema");
+    check_int(parsed.duration_minutes, 15, "transport unlock duration parsed");
 }
 
 static void test_transport_state_labels(void)
@@ -2583,6 +2622,7 @@ int main(void)
     test_request_id_security_and_stem_match();
     test_backoff_daily_logs_and_retention();
     test_transport_fallback_does_not_resubmit();
+    test_transport_parent_unlock_uses_duration_field();
     test_transport_state_labels();
     test_companion_command_labels();
     test_transport_submit_failure_does_not_write_file();
