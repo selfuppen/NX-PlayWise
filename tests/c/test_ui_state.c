@@ -281,6 +281,12 @@ static void test_result_mapping(void)
         "\"remaining_available\":true,\"remaining_minutes\":42,\"play_timer_enabled\":1,\"restricted_now\":0,"
         "\"bedtime_active\":false,\"parent_unlock_active\":false},\"capabilities\":{\"play_timer_write_verified\":true,"
         "\"play_timer_effect_verified\":true,\"raw_block_verified\":true,\"suspend_verified\":false},\"completed_at\":1}";
+    const char *unlock_end =
+        "{\"version\":1,\"request_id\":\"1-ue\",\"type\":\"parent_unlock_end\",\"status\":\"ok\",\"mode\":\"grant\","
+        "\"dry_run\":false,\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":42,\"play_timer_enabled\":1,\"restricted_now\":0,"
+        "\"bedtime_active\":false,\"parent_unlock_active\":false},\"capabilities\":{\"play_timer_write_verified\":true,"
+        "\"play_timer_effect_verified\":true,\"raw_block_verified\":true,\"suspend_verified\":false},\"completed_at\":1}";
     const char *future =
         "{\"version\":1,\"request_id\":\"1-c\",\"type\":\"status\",\"status\":\"ok\",\"mode\":\"future\",\"dry_run\":true,"
         "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,\"remaining_available\":false,"
@@ -306,6 +312,9 @@ static void test_result_mapping(void)
     check_true(strcmp(model.mode, "观察") == 0, "mode localized");
     check_true(ptc_ui_apply_result_json(&model, bedtime_grant), "grant bedtime result parses");
     check_true(strstr(model.message, "不会自动执行") != NULL, "grant bedtime result explains automatic enforcement boundary");
+    check_int(model.played_minutes, 18, "management result preserves unavailable played minutes");
+    check_true(model.played_minutes_available, "management result preserves played availability");
+    check_true(model.parent_unlock_active, "unrelated management result preserves unlock state");
     check_true(ptc_ui_apply_result_json(&model, failure), "error result parses");
     check_true(strcmp(model.result_status, "error") == 0, "error status mapped");
     check_true(strstr(model.message, "签名") != NULL, "error message preserved");
@@ -320,6 +329,8 @@ static void test_result_mapping(void)
     check_true(strstr(model.feedback_detail, "306 pctl_effect_not_observed/runtime_status") != NULL,
         "quick failure exposes stable feedback identifiers");
     check_true(strstr(model.feedback_detail, "临时解锁") != NULL, "quick failure includes actionable hint");
+    check_true(ptc_ui_apply_result_json(&model, unlock_end), "unlock end result parses");
+    check_true(!model.parent_unlock_active, "unlock end clears unlock state");
     check_true(ptc_ui_apply_result_json(&model, future), "unknown mode result parses");
     check_true(model.feedback_detail[0] == '\0', "success clears prior feedback detail");
     check_true(strcmp(model.mode, "未知模式") == 0, "unknown mode stays localized");

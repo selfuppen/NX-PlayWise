@@ -300,6 +300,12 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
 
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
     if (strcmp(status, "ok") == 0 && cJSON_IsObject(state)) {
+        bool preserve_played_minutes = model->played_minutes_available &&
+            !summary.played_minutes_available;
+        bool is_parent_unlock_request = type &&
+            (strcmp(type, "parent_unlock_start") == 0 ||
+             strcmp(type, "parent_unlock_end") == 0);
+
         model->status_loaded = true;
         model->day_index = (uint16_t)json_int(state, "day_index", 0);
         model->limited_today = json_int(state, "limited_today", -1);
@@ -307,12 +313,21 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->unrestricted_today = json_int(state, "unrestricted_today", -1);
         model->remaining_available = summary.remaining_available;
         model->remaining_minutes = summary.remaining_minutes;
-        model->played_minutes_available = summary.played_minutes_available;
-        model->played_minutes = summary.played_minutes;
+        /* Management results may carry the compatibility fields as unavailable;
+         * retain the last status snapshot instead of displaying a false reset. */
+        if (!preserve_played_minutes) {
+            model->played_minutes_available = summary.played_minutes_available;
+            model->played_minutes = summary.played_minutes;
+        }
         model->play_timer_enabled = summary.play_timer_enabled;
         model->restricted_now = summary.restricted_now;
         model->bedtime_active = json_bool(state, "bedtime_active", false);
-        model->parent_unlock_active = json_bool(state, "parent_unlock_active", false);
+        /* Non-unlock operations can return a default false value when they do
+         * not reload the local unlock state. Do not clear a known active window. */
+        if (is_parent_unlock_request || !model->parent_unlock_active ||
+            json_bool(state, "parent_unlock_active", false)) {
+            model->parent_unlock_active = json_bool(state, "parent_unlock_active", false);
+        }
     }
     capabilities = cJSON_GetObjectItemCaseSensitive(root, "capabilities");
     if (strcmp(status, "ok") == 0 && cJSON_IsObject(capabilities)) {
