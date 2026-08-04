@@ -14,7 +14,7 @@ BUILD := build
 SOURCES := source . .. ../.. ../../common/protocol ../../platform/switch ../../third_party/cjson
 INCLUDES := vendor/libtesla/include ../.. ../../common ../../platform ../../platform/switch
 APP_TITLE := 任你玩
-APP_AUTHOR := switch-play-time-control
+APP_AUTHOR := selfuppen@qq.com
 APP_VERSION := 1.0.0
 NO_ICON := 1
 

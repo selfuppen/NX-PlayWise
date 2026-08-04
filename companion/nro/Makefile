@@ -9,7 +9,7 @@ endif
 TARGET := pctc
 BUILD := build
 APP_TITLE := 任你玩
-APP_AUTHOR := PlayWise
+APP_AUTHOR := selfuppen@qq.com
 APP_VERSION := 1.0.0
 APP_ICON := $(CURDIR)/icon.jpg
 
