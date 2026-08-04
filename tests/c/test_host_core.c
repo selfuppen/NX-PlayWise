@@ -2417,7 +2417,7 @@ static void test_transport_fallback_does_not_resubmit(void)
     };
     PtcMemStorage mem;
     PtcCompanionTransportClient client;
-    FakeIpc ipc = { true, 0, -1, PTC_COMPANION_OK };
+    FakeIpc ipc = { true, 0, -1, PTC_COMPANION_OK, {0} };
     char result[8192];
     const char *json = "{\"version\":1,\"request_id\":\"ipc-fallback\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}\n";
     ptc_mem_storage_init(&mem);
@@ -2460,7 +2460,7 @@ static void test_transport_state_labels(void)
     PtcMemStorage mem;
     PtcCompanionTransportClient client;
     PtcOverlayBridge bridge;
-    FakeIpc ipc = { true, 0, 0, PTC_COMPANION_OK };
+    FakeIpc ipc = { true, 0, 0, PTC_COMPANION_OK, {0} };
     const char *json = "{\"version\":1,\"request_id\":\"state-ipc\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}\n";
     ptc_mem_storage_init(&mem);
     ptc_companion_transport_init(&client, "app", &mem.storage, &BACKEND, &ipc);
@@ -2550,7 +2550,7 @@ static void test_transport_submit_failure_does_not_write_file(void)
     };
     PtcMemStorage mem;
     PtcCompanionTransportClient client;
-    FakeIpc ipc = { true, 0, 0, PTC_COMPANION_BAD_ARGUMENT };
+    FakeIpc ipc = { true, 0, 0, PTC_COMPANION_BAD_ARGUMENT, {0} };
     const char *json = "{\"version\":1,\"request_id\":\"ipc-conflict\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}\n";
     ptc_mem_storage_init(&mem);
     ptc_companion_transport_init(&client, "app", &mem.storage, &BACKEND, &ipc);
