@@ -221,7 +221,7 @@ static void test_overlay_input_and_shared_result_summary(void)
     ptc_mem_storage_init(&mem);
     ptc_overlay_bridge_init(&bridge, "app", &mem.storage);
     check_int(ptc_overlay_bridge_submit(&bridge, "01234567", 1000, 0x12), PTC_COMPANION_OK, "overlay bridge submits queue request");
-    check_int(ptc_overlay_bridge_transport_state(&bridge), PTC_OVERLAY_TRANSPORT_SD_QUEUE, "overlay bridge reports SD queue transport");
+    check_int(ptc_overlay_bridge_transport_state(&bridge), PTC_TRANSPORT_ROUTE_SD_QUEUE, "overlay bridge reports SD queue transport");
     check_true(ptc_overlay_bridge_waiting(&bridge), "overlay bridge enters waiting state");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/1000000-0012.json"), "overlay bridge uses pending atomic protocol");
     check_int(ptc_overlay_bridge_poll(&bridge, PTC_OVERLAY_REQUEST_TIMEOUT_MS, PTC_OVERLAY_REQUEST_TIMEOUT_MS), PTC_COMPANION_TIMEOUT, "overlay bridge times out at sixty seconds");
@@ -2196,29 +2196,79 @@ static void test_transport_state_labels(void)
         "transport state IPC submit succeeds");
     check_int(ptc_companion_transport_active(&client), PTC_TRANSPORT_IPC, "transport state reports IPC");
     check_true(ptc_companion_transport_accepted_by_ipc(&client), "transport state records IPC acceptance");
+    check_int(ptc_companion_transport_route(&client), PTC_TRANSPORT_ROUTE_IPC, "transport route reports IPC");
+    check_str(ptc_companion_transport_route_label_zh(ptc_companion_transport_route(&client)), "传输：IPC",
+        "shared transport route provides IPC label");
 
     memset(&bridge, 0, sizeof(bridge));
     ptc_companion_transport_init(&bridge.transport, "app", &mem.storage, &BACKEND, &ipc);
     check_int(ptc_overlay_bridge_submit(&bridge, "01234567", 2, 1), PTC_COMPANION_OK,
         "overlay bridge IPC submit succeeds");
-    check_int(ptc_overlay_bridge_transport_state(&bridge), PTC_OVERLAY_TRANSPORT_IPC,
+    check_int(ptc_overlay_bridge_transport_state(&bridge), PTC_TRANSPORT_ROUTE_IPC,
         "overlay bridge reports IPC transport");
     check_str(ptc_overlay_bridge_transport_label(&bridge), "传输：IPC", "overlay bridge provides IPC label");
     ipc.event_state = -1;
     check_int(ptc_overlay_bridge_poll(&bridge, 100, 5000), PTC_COMPANION_PENDING,
         "overlay bridge falls back to durable result polling");
-    check_int(ptc_overlay_bridge_transport_state(&bridge), PTC_OVERLAY_TRANSPORT_SD_RESULT_AFTER_IPC,
+    check_int(ptc_overlay_bridge_transport_state(&bridge), PTC_TRANSPORT_ROUTE_IPC_SD_RESULT,
         "overlay bridge reports IPC to SD result fallback");
-    check_true(strstr(ptc_overlay_bridge_transport_label(&bridge), "SD") != NULL,
-        "overlay bridge fallback label is UI safe");
+    check_str(ptc_overlay_bridge_transport_label(&bridge), "传输：IPC → SD 结果回读",
+        "overlay bridge provides IPC to SD result label");
     check_int(ipc.submit_count, 2, "overlay bridge fallback does not resubmit");
+    bridge.waiting = false;
+    check_int(ptc_overlay_bridge_transport_state(&bridge), PTC_TRANSPORT_ROUTE_IPC_SD_RESULT,
+        "overlay bridge preserves completed transport route");
 
     ipc.available = false;
     ptc_companion_transport_cancel(&client);
+    check_int(ptc_companion_transport_route(&client), PTC_TRANSPORT_ROUTE_IPC,
+        "cancel preserves the most recent transport route");
     check_int(ptc_companion_transport_submit_json(&client, "state-sd", json), PTC_COMPANION_OK,
         "transport state SD submit succeeds");
     check_int(ptc_companion_transport_active(&client), PTC_TRANSPORT_FILE, "transport state reports SD queue");
     check_true(!ptc_companion_transport_accepted_by_ipc(&client), "SD queue is not marked IPC accepted");
+    check_int(ptc_companion_transport_route(&client), PTC_TRANSPORT_ROUTE_SD_QUEUE, "transport route reports SD queue");
+    check_str(ptc_companion_transport_route_label_zh(ptc_companion_transport_route(&client)), "传输：SD 文件队列",
+        "shared transport route provides SD queue label");
+    check_str(ptc_companion_transport_route_label_zh(PTC_TRANSPORT_ROUTE_LOCAL_SD_FLAG), "执行方式：本地 SD 标志文件",
+        "shared transport route provides local SD flag label");
+    check_str(ptc_companion_transport_route_label_zh(PTC_TRANSPORT_ROUTE_NONE), "传输：未开始",
+        "shared transport route provides idle label");
+}
+
+static void test_companion_command_labels(void)
+{
+    static const struct {
+        const char *type;
+        const char *label;
+    } CASES[] = {
+        {"status", "刷新状态"},
+        {"offline_code", "提交今日加时"},
+        {"set_today_limit", "设置今日额度"},
+        {"add_today_minutes", "临时加时"},
+        {"disable_today_limit", "今日不限"},
+        {"block_today", "今日禁玩"},
+        {"restore_today_policy", "恢复周计划"},
+        {"set_weekly_template", "每周计划"},
+        {"set_bedtime", "就寝时间"},
+        {"set_limit_action", "限制方式"},
+        {"parent_unlock_start", "临时解锁"},
+        {"parent_unlock_end", "结束解锁"},
+        {"probe_play_timer_write", "验证计时器写入"},
+        {"probe_play_timer_effect", "快速设备测试"},
+        {"probe_apply_today_limit", "验证今日额度写入"},
+        {"probe_raw_block", "验证强制阻止"},
+        {"probe_suspend", "验证暂停软件"},
+    };
+    size_t index;
+    for (index = 0; index < sizeof(CASES) / sizeof(CASES[0]); ++index) {
+        check_str(ptc_companion_request_command_label_zh(CASES[index].type), CASES[index].label,
+            "request type has stable Chinese command label");
+    }
+    check_str(ptc_companion_request_command_label_zh("future_request"), "后台操作",
+        "unknown request type uses safe command label");
+    check_str(ptc_companion_request_command_label_zh(NULL), "后台操作",
+        "missing request type uses safe command label");
 }
 
 static void test_transport_submit_failure_does_not_write_file(void)
@@ -2299,6 +2349,7 @@ int main(void)
     test_backoff_daily_logs_and_retention();
     test_transport_fallback_does_not_resubmit();
     test_transport_state_labels();
+    test_companion_command_labels();
     test_transport_submit_failure_does_not_write_file();
 
     if (failures != 0) {

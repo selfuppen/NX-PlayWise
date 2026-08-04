@@ -146,7 +146,7 @@ public:
     static const char *transport_stage(const PtcOverlayBridge *bridge)
     {
         if (bridge->waiting) {
-            if (ptc_overlay_bridge_transport_state(bridge) == PTC_OVERLAY_TRANSPORT_SD_RESULT_AFTER_IPC)
+            if (ptc_overlay_bridge_transport_state(bridge) == PTC_TRANSPORT_ROUTE_IPC_SD_RESULT)
                 return "正在读取后台结果…";
             return "正在等待后台处理…";
         }
@@ -198,17 +198,28 @@ public:
         renderer->drawString("+ 提交", false, 280, 535, 21, renderer->a(can_submit ? DARK_TEXT_COLOR : MUTED_COLOR));
         renderer->drawRect(42, 560, 351, 99, renderer->a(PANEL_COLOR));
         draw_outline(renderer, 42, 560, 351, 99, 2, MUTED_COLOR);
-        renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, 56, 585, 16, renderer->a(MUTED_COLOR));
+        if (bridge_->request_id[0]) {
+            renderer->drawString(
+                bridge_->waiting ? "当前命令：提交今日加时" : "最近命令：提交今日加时",
+                false,
+                56,
+                582,
+                16,
+                renderer->a(TEXT_COLOR));
+        } else {
+            renderer->drawString("当前命令：未开始", false, 56, 582, 16, renderer->a(TEXT_COLOR));
+        }
+        renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, 56, 605, 15, renderer->a(MUTED_COLOR));
         const char *stage = transport_stage(bridge_);
-        if (stage[0]) renderer->drawString(stage, false, 56, 615, 19, renderer->a(FOCUS_COLOR));
+        if (stage[0]) renderer->drawString(stage, false, 56, 632, 17, renderer->a(FOCUS_COLOR));
         if (error_) {
             const char *message = ptc_overlay_bridge_error_message_zh(bridge_);
-            renderer->drawString(message, false, 56, 615, 18, renderer->a(0xF00F), 325);
+            renderer->drawString(message, false, 56, 632, 16, renderer->a(0xF00F), 325);
             if (bridge_->summary.valid && bridge_->summary.error_code > 0) {
                 std::snprintf(line, sizeof(line), "错误码：%d   Y 重试", bridge_->summary.error_code);
-                renderer->drawString(line, false, 56, 643, 16, renderer->a(0xF00F));
+                renderer->drawString(line, false, 56, 654, 14, renderer->a(0xF00F));
             } else {
-                renderer->drawString("Y 重试", false, 56, 643, 16, renderer->a(0xF00F));
+                renderer->drawString("Y 重试", false, 56, 654, 14, renderer->a(0xF00F));
             }
         }
         if (close_after_frames_ > 0) {
@@ -217,13 +228,13 @@ public:
             } else {
                 std::snprintf(line, sizeof(line), "加时成功，剩余 %d 分钟", bridge_->summary.remaining_minutes);
             }
-            renderer->drawString(line, false, 56, 615, 18, renderer->a(0x0F0F));
+            renderer->drawString(line, false, 56, 632, 16, renderer->a(0x0F0F));
             if (bridge_->summary.played_minutes_available) {
                 std::snprintf(line, sizeof(line), "已玩约 %d 分钟，即将关闭…", bridge_->summary.played_minutes);
             } else {
                 std::snprintf(line, sizeof(line), "已玩时间暂不可用，即将关闭…");
             }
-            renderer->drawString(line, false, 56, 643, 16, renderer->a(0x0F0F));
+            renderer->drawString(line, false, 56, 654, 14, renderer->a(0x0F0F));
         }
     }
 

@@ -7,13 +7,6 @@
 #include "../switch_ipc_client.h"
 #include "../result_summary.h"
 
-typedef enum {
-    PTC_OVERLAY_TRANSPORT_NONE = 0,
-    PTC_OVERLAY_TRANSPORT_IPC,
-    PTC_OVERLAY_TRANSPORT_SD_QUEUE,
-    PTC_OVERLAY_TRANSPORT_SD_RESULT_AFTER_IPC
-} PtcOverlayTransportState;
-
 typedef struct {
     PtcCompanionTransportClient transport;
 #ifdef __SWITCH__
@@ -24,7 +17,6 @@ typedef struct {
     PtcCompanionResultSummary summary;
     int elapsed_ms;
     bool waiting;
-    PtcOverlayTransportState transport_state;
     PtcCompanionStatus last_status;
 } PtcOverlayBridge;
 
@@ -33,7 +25,7 @@ PtcCompanionStatus ptc_overlay_bridge_submit(PtcOverlayBridge *bridge, const cha
 PtcCompanionStatus ptc_overlay_bridge_poll(PtcOverlayBridge *bridge, int elapsed_ms, int timeout_ms);
 bool ptc_overlay_bridge_waiting(const PtcOverlayBridge *bridge);
 const PtcCompanionResultSummary *ptc_overlay_bridge_summary(const PtcOverlayBridge *bridge);
-PtcOverlayTransportState ptc_overlay_bridge_transport_state(const PtcOverlayBridge *bridge);
+PtcCompanionTransportRoute ptc_overlay_bridge_transport_state(const PtcOverlayBridge *bridge);
 const char *ptc_overlay_bridge_transport_label(const PtcOverlayBridge *bridge);
 PtcCompanionStatus ptc_overlay_bridge_last_status(const PtcOverlayBridge *bridge);
 const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge);

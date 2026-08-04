@@ -214,6 +214,22 @@ static void test_probe_confirmation(void)
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_NONE, "cancelled suspend probe does not run");
 }
 
+static void test_execution_state(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    ptc_ui_set_execution(&model, NULL, NULL);
+    check_true(strcmp(model.command_name, "未开始") == 0, "execution state defaults command label");
+    check_true(strcmp(model.transport_label, "传输：未开始") == 0, "execution state defaults transport label");
+    ptc_ui_set_execution(&model, "刷新状态", "传输：IPC");
+    check_true(strcmp(model.command_name, "刷新状态") == 0, "execution state records request command");
+    check_true(strcmp(model.transport_label, "传输：IPC") == 0, "execution state records IPC route");
+    ptc_ui_set_execution(&model, "紧急停用控制", "执行方式：本地 SD 标志文件");
+    check_true(strcmp(model.command_name, "紧急停用控制") == 0, "local operation replaces request command");
+    check_true(strcmp(model.transport_label, "执行方式：本地 SD 标志文件") == 0,
+        "local operation replaces prior transport route");
+}
+
 static void test_result_mapping(void)
 {
     PtcUiModel model;
@@ -283,6 +299,7 @@ int main(void)
     test_editors();
     test_overlay_confirmation();
     test_probe_confirmation();
+    test_execution_state();
     test_hit_test_child();
     test_hit_test_error();
     test_hit_test_parent();

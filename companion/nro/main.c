@@ -120,6 +120,30 @@ static void set_auth_message(UiState *ui, const char *prefix, PtcAuthStatus stat
     snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
 }
 
+static void set_command_name(UiState *ui, const char *type)
+{
+    ptc_ui_set_execution(
+        &ui->model,
+        ptc_companion_request_command_label_zh(type),
+        ui->model.transport_label);
+}
+
+static void sync_transport_label(UiState *ui)
+{
+    ptc_ui_set_execution(
+        &ui->model,
+        ui->model.command_name,
+        ptc_companion_transport_route_label_zh(ptc_companion_transport_route(&ui->transport)));
+}
+
+static void set_local_sd_command(UiState *ui, const char *command_name)
+{
+    ptc_ui_set_execution(
+        &ui->model,
+        command_name,
+        ptc_companion_transport_route_label_zh(PTC_TRANSPORT_ROUTE_LOCAL_SD_FLAG));
+}
+
 static bool hidden_parent_combo_held(u64 buttons)
 {
     return (buttons & HidNpadButton_X) &&
@@ -237,7 +261,7 @@ static void edit_weekly_minutes(UiState *ui)
     }
 }
 
-static void begin_wait(UiState *ui, const char *message)
+static void begin_wait(UiState *ui, const char *type, const char *message)
 {
     ui->request_view = ui->model.view;
     ui->waiting = true;
@@ -247,6 +271,8 @@ static void begin_wait(UiState *ui, const char *message)
     ui->quick_device_test = false;
     ui->model.result_status[0] = '\0';
     ui->model.feedback_detail[0] = '\0';
+    set_command_name(ui, type);
+    sync_transport_label(ui);
     snprintf(ui->model.message, sizeof(ui->model.message), "%s", message);
 }
 
@@ -255,8 +281,10 @@ static void submit_transport_empty(UiState *ui, const char *type, const char *ok
     PtcCompanionStatus status;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_empty(&ui->transport, ui->active_request_id, time(NULL), type);
+    set_command_name(ui, type);
+    sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, ok_message);
+        begin_wait(ui, type, ok_message);
         return;
     }
     ui->waiting = false;
@@ -268,7 +296,9 @@ static void submit_status(UiState *ui)
     PtcCompanionStatus status;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_status(&ui->transport, ui->active_request_id, time(NULL));
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "正在刷新今天的状态…");
+    set_command_name(ui, "status");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "status", "正在刷新今天的状态…");
     else set_message(ui, "刷新失败", status);
 }
 
@@ -282,8 +312,10 @@ static void submit_offline_code(UiState *ui)
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_offline_code(&ui->transport, ui->active_request_id, time(NULL), code);
+    set_command_name(ui, "offline_code");
+    sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "加时码已提交，正在等待后台确认…");
+        begin_wait(ui, "offline_code", "加时码已提交，正在等待后台确认…");
         return;
     }
     ui->waiting = false;
@@ -293,16 +325,22 @@ static void submit_offline_code(UiState *ui)
 static void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minutes)
 {
     PtcCompanionStatus status;
+    const char *type;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     if (operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) {
+        type = "set_today_limit";
         status = ptc_companion_transport_submit_set_today_limit(&ui->transport, ui->active_request_id, time(NULL), minutes);
     } else if (operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES) {
+        type = "add_today_minutes";
         status = ptc_companion_transport_submit_add_today_minutes(&ui->transport, ui->active_request_id, time(NULL), minutes);
     } else {
+        type = "parent_unlock_start";
         status = ptc_companion_transport_submit_parent_unlock_start(&ui->transport, ui->active_request_id, time(NULL), minutes);
     }
+    set_command_name(ui, type);
+    sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "设置已提交，正在等待后台确认…");
+        begin_wait(ui, type, "设置已提交，正在等待后台确认…");
     } else {
         ui->waiting = false;
         set_message(ui, "设置提交失败", status);
@@ -318,8 +356,10 @@ static void submit_weekly(UiState *ui)
         ui->active_request_id,
         time(NULL),
         ui->model.draft_week);
+    set_command_name(ui, "set_weekly_template");
+    sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "每周计划已提交，正在等待后台确认…");
+        begin_wait(ui, "set_weekly_template", "每周计划已提交，正在等待后台确认…");
     } else {
         ui->waiting = false;
         set_message(ui, "每周计划提交失败", status);
@@ -335,8 +375,10 @@ static void submit_bedtime(UiState *ui)
         ui->active_request_id,
         time(NULL),
         &ui->model.draft_bedtime);
+    set_command_name(ui, "set_bedtime");
+    sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "就寝时间已提交，正在等待后台确认…");
+        begin_wait(ui, "set_bedtime", "就寝时间已提交，正在等待后台确认…");
     } else {
         ui->waiting = false;
         set_message(ui, "就寝时间提交失败", status);
@@ -352,8 +394,10 @@ static void submit_limit_action(UiState *ui)
         ui->active_request_id,
         time(NULL),
         ui->model.draft_limit_action);
+    set_command_name(ui, "set_limit_action");
+    sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "限制方式已提交，正在等待后台确认…");
+        begin_wait(ui, "set_limit_action", "限制方式已提交，正在等待后台确认…");
     } else {
         ui->waiting = false;
         set_message(ui, "限制方式提交失败", status);
@@ -531,6 +575,7 @@ static void poll_result(UiState *ui, bool force)
         REQUEST_TIMEOUT_MS,
         ui->last_result,
         sizeof(ui->last_result));
+    sync_transport_label(ui);
     if (status == PTC_COMPANION_PENDING) {
         snprintf(ui->model.message, sizeof(ui->model.message), "后台正在处理，请稍候…");
         return;
@@ -747,7 +792,9 @@ static void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_QUICK_TEST:
         make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
         status = ptc_companion_transport_submit_probe_play_timer_effect(&ui->transport, ui->active_request_id, time(NULL), false);
-        if (status == PTC_COMPANION_OK) begin_wait(ui, "快速设备测试正在运行…"); else set_message(ui, "快速设备测试提交失败", status);
+        set_command_name(ui, "probe_play_timer_effect");
+        sync_transport_label(ui);
+        if (status == PTC_COMPANION_OK) begin_wait(ui, "probe_play_timer_effect", "快速设备测试正在运行…"); else set_message(ui, "快速设备测试提交失败", status);
         if (ui->waiting) {
             ui->quick_device_test = true;
             arm_self_check_after_result(ui, PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE);
@@ -760,6 +807,7 @@ static void confirm_operation(UiState *ui)
         }
         break;
     case PTC_UI_OPERATION_EMERGENCY_DISABLE:
+        set_local_sd_command(ui, "紧急停用控制");
         status = ptc_companion_set_disable_flag(&ui->client, true);
         (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
         ui->model.feedback_detail[0] = '\0';
@@ -771,6 +819,7 @@ static void confirm_operation(UiState *ui)
         }
         break;
     case PTC_UI_OPERATION_RESUME_CONTROL:
+        set_local_sd_command(ui, "恢复控制");
         status = ptc_companion_set_disable_flag(&ui->client, false);
         (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
         ui->model.feedback_detail[0] = '\0';
@@ -1057,6 +1106,7 @@ int main(int argc, char **argv)
     ui.model.remaining_minutes = -1;
     ui.model.play_timer_enabled = -1;
     ui.model.restricted_now = -1;
+    ptc_ui_set_execution(&ui.model, NULL, NULL);
     snprintf(ui.model.message, sizeof(ui.model.message), "正在读取今天的游玩状态…");
     ptc_fs_storage_init(&fs);
     ptc_companion_file_client_init(&ui.client, APP_ROOT, ptc_fs_storage_as_storage(&fs));

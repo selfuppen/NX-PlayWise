@@ -65,6 +65,8 @@ typedef struct {
     bool suspend_verified;
     char mode[24];
     char request_id[80];
+    char command_name[64];
+    char transport_label[64];
     char message[192];
     char feedback_detail[192];
     char result_status[24];
@@ -138,6 +140,7 @@ PtcLimitAction ptc_ui_shift_limit_action(PtcLimitAction action, int direction);
 bool ptc_ui_cancel_overlay(PtcUiModel *model);
 PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model);
 bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);
+void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const char *transport_label);
 
 /* Shared control geometry (single source of truth for drawing and touch). */
 PtcUiRect ptc_ui_child_submit_rect(void);

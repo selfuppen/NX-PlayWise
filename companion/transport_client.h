@@ -13,6 +13,14 @@ typedef enum {
     PTC_TRANSPORT_FILE = 2,
 } PtcCompanionTransportKind;
 
+typedef enum {
+    PTC_TRANSPORT_ROUTE_NONE = 0,
+    PTC_TRANSPORT_ROUTE_IPC = 1,
+    PTC_TRANSPORT_ROUTE_SD_QUEUE = 2,
+    PTC_TRANSPORT_ROUTE_IPC_SD_RESULT = 3,
+    PTC_TRANSPORT_ROUTE_LOCAL_SD_FLAG = 4,
+} PtcCompanionTransportRoute;
+
 typedef struct {
     bool (*connect)(void *ctx);
     PtcCompanionStatus (*submit)(void *ctx, const char *request_id, const char *json, void **wait_token);
@@ -33,6 +41,7 @@ typedef struct {
     int next_file_poll_ms;
     int file_poll_delay_ms;
     bool accepted_by_ipc;
+    PtcCompanionTransportRoute route;
 } PtcCompanionTransportClient;
 
 void ptc_companion_transport_init(PtcCompanionTransportClient *client, const char *app_root, PtcStorage *storage,
@@ -45,6 +54,9 @@ void ptc_companion_transport_cancel(PtcCompanionTransportClient *client);
 bool ptc_companion_transport_notify_storage_changed(PtcCompanionTransportClient *client);
 PtcCompanionTransportKind ptc_companion_transport_active(const PtcCompanionTransportClient *client);
 bool ptc_companion_transport_accepted_by_ipc(const PtcCompanionTransportClient *client);
+PtcCompanionTransportRoute ptc_companion_transport_route(const PtcCompanionTransportClient *client);
+const char *ptc_companion_transport_route_label_zh(PtcCompanionTransportRoute route);
+const char *ptc_companion_request_command_label_zh(const char *type);
 PtcCompanionStatus ptc_companion_transport_submit_status(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_transport_submit_offline_code(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const char *code);
 PtcCompanionStatus ptc_companion_transport_submit_set_today_limit(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, uint16_t minutes);

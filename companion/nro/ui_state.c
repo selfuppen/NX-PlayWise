@@ -686,3 +686,31 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     }
     return make_hit(PTC_UI_HIT_NONE, 0);
 }
+void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const char *transport_label)
+{
+    char command_copy[sizeof(model->command_name)];
+    char transport_copy[sizeof(model->transport_label)];
+    if (!model) {
+        return;
+    }
+    snprintf(
+        command_copy,
+        sizeof(command_copy),
+        "%s",
+        command_name && command_name[0] ? command_name : "未开始");
+    snprintf(
+        transport_copy,
+        sizeof(transport_copy),
+        "%s",
+        transport_label && transport_label[0] ? transport_label : "传输：未开始");
+    snprintf(
+        model->command_name,
+        sizeof(model->command_name),
+        "%s",
+        command_copy);
+    snprintf(
+        model->transport_label,
+        sizeof(model->transport_label),
+        "%s",
+        transport_copy);
+}

@@ -60,6 +60,7 @@ PtcCompanionStatus ptc_companion_transport_submit_json(PtcCompanionTransportClie
     snprintf(client->active_request_id, sizeof(client->active_request_id), "%s", request_id);
     ipc_connected = client->ipc && client->ipc->connect && client->ipc->connect(client->ipc_ctx);
     if (ipc_connected) {
+        client->route = PTC_TRANSPORT_ROUTE_IPC;
         status = client->ipc->submit(client->ipc_ctx, request_id, json, &client->wait_token);
         if (status == PTC_COMPANION_OK) {
             client->active = PTC_TRANSPORT_IPC;
@@ -71,12 +72,14 @@ PtcCompanionStatus ptc_companion_transport_submit_json(PtcCompanionTransportClie
                this request's durable result so an in-flight request is never duplicated. */
             client->active = PTC_TRANSPORT_FILE;
             client->accepted_by_ipc = true;
+            client->route = PTC_TRANSPORT_ROUTE_IPC_SD_RESULT;
             client->file_poll_delay_ms = 250;
             client->next_file_poll_ms = 250;
             return PTC_COMPANION_OK;
         }
         return status;
     }
+    client->route = PTC_TRANSPORT_ROUTE_SD_QUEUE;
     status = file_submit_json(client, request_id, json);
     if (status == PTC_COMPANION_OK) {
         client->active = PTC_TRANSPORT_FILE;
@@ -111,6 +114,7 @@ PtcCompanionStatus ptc_companion_transport_poll(PtcCompanionTransportClient *cli
         }
         close_wait_token(client);
         client->active = PTC_TRANSPORT_FILE;
+        client->route = PTC_TRANSPORT_ROUTE_IPC_SD_RESULT;
         client->file_poll_delay_ms = 250;
         client->next_file_poll_ms = client->elapsed_ms;
     }
@@ -148,6 +152,51 @@ PtcCompanionTransportKind ptc_companion_transport_active(const PtcCompanionTrans
 bool ptc_companion_transport_accepted_by_ipc(const PtcCompanionTransportClient *client)
 {
     return client && client->accepted_by_ipc;
+}
+
+PtcCompanionTransportRoute ptc_companion_transport_route(const PtcCompanionTransportClient *client)
+{
+    return client ? client->route : PTC_TRANSPORT_ROUTE_NONE;
+}
+
+const char *ptc_companion_transport_route_label_zh(PtcCompanionTransportRoute route)
+{
+    switch (route) {
+    case PTC_TRANSPORT_ROUTE_IPC:
+        return "传输：IPC";
+    case PTC_TRANSPORT_ROUTE_SD_QUEUE:
+        return "传输：SD 文件队列";
+    case PTC_TRANSPORT_ROUTE_IPC_SD_RESULT:
+        return "传输：IPC → SD 结果回读";
+    case PTC_TRANSPORT_ROUTE_LOCAL_SD_FLAG:
+        return "执行方式：本地 SD 标志文件";
+    case PTC_TRANSPORT_ROUTE_NONE:
+    default:
+        return "传输：未开始";
+    }
+}
+
+const char *ptc_companion_request_command_label_zh(const char *type)
+{
+    if (!type) return "后台操作";
+    if (strcmp(type, "status") == 0) return "刷新状态";
+    if (strcmp(type, "offline_code") == 0) return "提交今日加时";
+    if (strcmp(type, "set_today_limit") == 0) return "设置今日额度";
+    if (strcmp(type, "add_today_minutes") == 0) return "临时加时";
+    if (strcmp(type, "disable_today_limit") == 0) return "今日不限";
+    if (strcmp(type, "block_today") == 0) return "今日禁玩";
+    if (strcmp(type, "restore_today_policy") == 0) return "恢复周计划";
+    if (strcmp(type, "set_weekly_template") == 0) return "每周计划";
+    if (strcmp(type, "set_bedtime") == 0) return "就寝时间";
+    if (strcmp(type, "set_limit_action") == 0) return "限制方式";
+    if (strcmp(type, "parent_unlock_start") == 0) return "临时解锁";
+    if (strcmp(type, "parent_unlock_end") == 0) return "结束解锁";
+    if (strcmp(type, "probe_play_timer_write") == 0) return "验证计时器写入";
+    if (strcmp(type, "probe_play_timer_effect") == 0) return "快速设备测试";
+    if (strcmp(type, "probe_apply_today_limit") == 0) return "验证今日额度写入";
+    if (strcmp(type, "probe_raw_block") == 0) return "验证强制阻止";
+    if (strcmp(type, "probe_suspend") == 0) return "验证暂停软件";
+    return "后台操作";
 }
 
 PtcCompanionStatus ptc_companion_transport_submit_status(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at)

@@ -368,10 +368,11 @@ static void draw_status_tile(
 
 static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, int y)
 {
-    UiRect rect = {54, y, 1172, model->feedback_detail[0] ? 112 : 78};
+    UiRect rect = {54, y, 1172, 128};
     uint32_t accent = COLOR(91, 100, 116);
     char fitted[190];
     char detail[190];
+    char execution[150];
     if (model->waiting) {
         accent = COLOR(215, 139, 25);
     } else if (strcmp(model->result_status, "ok") == 0) {
@@ -382,12 +383,20 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     fill_round_rect(pixels, stride, rect, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, rect, 1, COLOR(219, 225, 233));
     fill_rect(pixels, stride, (UiRect){rect.x, rect.y, 6, rect.height}, accent);
-    draw_text(pixels, stride, rect.x + 24, rect.y + 29, model->waiting ? "正在处理" : "最近反馈", 18, accent);
+    draw_text(pixels, stride, rect.x + 24, rect.y + 25, model->waiting ? "正在执行" : "最近执行", 18, accent);
+    snprintf(
+        execution,
+        sizeof(execution),
+        "命令：%s    %s",
+        model->command_name[0] ? model->command_name : "未开始",
+        model->transport_label[0] ? model->transport_label : "传输：未开始");
+    fit_text(fitted, sizeof(fitted), execution, 18, rect.width - 48);
+    draw_text(pixels, stride, rect.x + 24, rect.y + 50, fitted, 18, COLOR(77, 86, 99));
     fit_text(fitted, sizeof(fitted), model->message, 21, rect.width - 48);
-    draw_text(pixels, stride, rect.x + 24, rect.y + 59, fitted, 21, COLOR(45, 52, 62));
+    draw_text(pixels, stride, rect.x + 24, rect.y + 78, fitted, 20, COLOR(45, 52, 62));
     if (model->feedback_detail[0]) {
         fit_text(detail, sizeof(detail), model->feedback_detail, 17, rect.width - 48);
-        draw_text(pixels, stride, rect.x + 24, rect.y + 88, detail, 17, accent);
+        draw_text(pixels, stride, rect.x + 24, rect.y + 105, detail, 16, accent);
     }
 }
 
@@ -434,14 +443,27 @@ static void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
 {
     UiRect panel = {214, 148, 852, 444};
     char fitted[190];
+    char execution[150];
     draw_header(pixels, stride, "操作未完成", "请查看错误信息后重试或返回");
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     fill_round_rect(pixels, stride, (UiRect){254, 194, 64, 64}, 8, COLOR(194, 61, 61));
     draw_text_center(pixels, stride, (UiRect){254, 194, 64, 64}, "!", 34, COLOR(255, 255, 255));
     draw_text(pixels, stride, 342, 214, "加时码处理失败", 28, COLOR(28, 34, 43));
+    snprintf(
+        execution,
+        sizeof(execution),
+        "命令：%s    %s",
+        model->command_name[0] ? model->command_name : "未开始",
+        model->transport_label[0] ? model->transport_label : "传输：未开始");
+    fit_text(fitted, sizeof(fitted), execution, 18, 756);
+    draw_text(pixels, stride, 254, 286, fitted, 18, COLOR(91, 100, 114));
     fit_text(fitted, sizeof(fitted), model->message, 23, 756);
-    draw_text(pixels, stride, 254, 326, fitted, 23, COLOR(77, 86, 99));
+    draw_text(pixels, stride, 254, 342, fitted, 23, COLOR(77, 86, 99));
+    if (model->feedback_detail[0]) {
+        fit_text(fitted, sizeof(fitted), model->feedback_detail, 17, 756);
+        draw_text(pixels, stride, 254, 390, fitted, 17, COLOR(194, 61, 61));
+    }
 
     fill_round_rect(pixels, stride, to_uirect(ptc_ui_error_retry_rect()), 8, COLOR(28, 118, 188));
     draw_text_center(pixels, stride, to_uirect(ptc_ui_error_retry_rect()), "A  重新输入", 25, COLOR(255, 255, 255));
