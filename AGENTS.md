@@ -9,9 +9,9 @@
 - `tests/`：主机侧测试脚本与 fixtures。`tests/mvp/` 覆盖离线加时令牌，`tests/observe/` 覆盖 observe 请求流。
 - `docs/`：架构、协议、测试与真实设备验证文档。开始开发前先读根目录 `README.md`。
 
-本机已拉取上游 libnx 源码到 `H:\workspace\codes\switch\libnx`。涉及 PCTL service/session、公开命令签名或 libnx dispatch 行为时优先查阅该目录。当前上游 `nx/include/switch/services/pctl.h` 与 `nx/source/services/pctl.c` 不包含 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装，因此不得用 libnx 缺失的定义推断这些私有命令的参数单位或 0x44 raw layout；相关布局必须以真机 A/B 证据和仓库协议文档为准。
+本机已拉取上游 libnx 源码到仓库根目录相对路径 `../libnx`。涉及 PCTL service/session、公开命令签名或 libnx dispatch 行为时优先查阅该目录。当前上游 `nx/include/switch/services/pctl.h` 与 `nx/source/services/pctl.c` 不包含 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装，因此不得用 libnx 缺失的定义推断这些私有命令的参数单位或 0x44 raw layout；相关布局必须以真机 A/B 证据和仓库协议文档为准。
 
-本机已拉取上游 libtesla 源码到 `H:\workspace\codes\switch\libtesla`。涉及 Tesla overlay 生命周期、输入处理、绘制或 libtesla API 行为时优先查阅该目录。项目构建仍必须使用仓库内 `companion/overlay/vendor/libtesla/` 固定的版本，不得依赖工作区外的本机路径；同步 vendored 文件时同时更新 `companion/overlay/vendor/libtesla/UPSTREAM.txt` 中的上游 commit。
+本机已拉取上游 libtesla 源码到仓库根目录相对路径 `../libtesla`。涉及 Tesla overlay 生命周期、输入处理、绘制或 libtesla API 行为时优先查阅该目录。项目构建仍必须使用仓库内 `companion/overlay/vendor/libtesla/` 固定的版本，不得依赖工作区外的本机路径；同步 vendored 文件时同时更新 `companion/overlay/vendor/libtesla/UPSTREAM.txt` 中的上游 commit。
 
 ## 上游源码与 GitHub 调研
 
