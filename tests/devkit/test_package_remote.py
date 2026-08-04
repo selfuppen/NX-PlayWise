@@ -58,7 +58,7 @@ def write_package(path: Path, mode: str, boot2: bool, overlay_data: bytes | None
 
 def test_container_command() -> None:
     command = package_remote.container_command()
-    require("/ws/switch-play-time-control-local" in command, "container command must use the mounted repository")
+    require("/ws/playwise" in command, "container command must use the mounted repository")
     require("make test packages" in command, "container command must test and package")
     require("--emit-bundle" not in command, "container command must not stream a copied bundle")
     require("git " not in command, "mounted local source must not require a git update")

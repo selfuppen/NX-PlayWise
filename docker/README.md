@@ -22,8 +22,8 @@
 
 ```powershell
 ssh renqi-nintendo-switch-dev "docker ps --filter name=devkitpro-ssh-v1"
-ssh renqi-nintendo-switch-dev "git -C /home/ygq/nintendo/switch-play-time-control-local status --short --branch"
-ssh renqi-nintendo-switch-dev "docker exec devkitpro-ssh-v1 sh -lc 'cd /ws/switch-play-time-control-local && make test-host'"
+ssh renqi-nintendo-switch-dev "git -C /home/ygq/nintendo/playwise status --short --branch"
+ssh renqi-nintendo-switch-dev "docker exec devkitpro-ssh-v1 sh -lc 'cd /ws/playwise && make test-host'"
 ```
 
-宿主机仓库位于 `/home/ygq/nintendo/switch-play-time-control-local`，负责 Git 拉取；同一目录挂载到容器的 `/ws/switch-play-time-control-local`。远程编译必须通过 `docker exec devkitpro-ssh-v1 ...` 执行，不要在宿主机环境中直接运行项目的 `make`。
+宿主机仓库位于 `/home/ygq/nintendo/playwise`，负责 Git 拉取；同一目录挂载到容器的 `/ws/playwise`。远程编译必须通过 `docker exec devkitpro-ssh-v1 ...` 执行，不要在宿主机环境中直接运行项目的 `make`。

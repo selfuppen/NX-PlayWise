@@ -31,7 +31,7 @@ Windows 本地使用单一 Python 入口；C host、Companion NRO 和 package �
 - `python tools/grant_code.py --minutes 30 --device kid-switch --secret replace-with-long-random-secret --day-index 2380 --nonce 4660`：生成离线加时代码示例。
 - `python tools/protocol_probe.py init --root <tmp-dir> --device <id> --secret <secret>`：初始化本地协议目录用于手工探测。
 
-本地 devkitPro 容器通过 `root@127.0.0.1:1888` 访问，仓库挂载为 `/ws/switch-play-time-control-local`。密码只允许由 OpenSSH 交互读取，也可使用已授权私钥。容器脚本使用一次 SSH 会话完成清理、测试和构建；zip 直接留在挂载工作区，不要再维护手工 SSH、`docker exec` 或复制回本地的构建命令。
+本地 devkitPro 容器通过 `root@127.0.0.1:1888` 访问，仓库挂载为 `/ws/playwise`。密码只允许由 OpenSSH 交互读取，也可使用已授权私钥。容器脚本使用一次 SSH 会话完成清理、测试和构建；zip 直接留在挂载工作区，不要再维护手工 SSH、`docker exec` 或复制回本地的构建命令。
 
 容器直接读取挂载的当前工作区，因此未提交改动也会参与构建，不需要先提交或推送。除非用户明确只要求本地 Python 快速回归，否则涉及 C、Makefile、NRO 或 package 的最终验证都必须走该入口。
 
