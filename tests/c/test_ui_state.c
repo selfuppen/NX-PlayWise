@@ -275,6 +275,12 @@ static void test_result_mapping(void)
         "\"remaining_available\":false,\"remaining_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1,"
         "\"bedtime_active\":false,\"parent_unlock_active\":false},\"capabilities\":{\"play_timer_write_verified\":false,"
         "\"play_timer_effect_verified\":false,\"raw_block_verified\":false,\"suspend_verified\":false},\"completed_at\":1}";
+    const char *bedtime_grant =
+        "{\"version\":1,\"request_id\":\"1-bt\",\"type\":\"set_bedtime\",\"status\":\"ok\",\"mode\":\"grant\","
+        "\"dry_run\":false,\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":42,\"play_timer_enabled\":1,\"restricted_now\":0,"
+        "\"bedtime_active\":false,\"parent_unlock_active\":false},\"capabilities\":{\"play_timer_write_verified\":true,"
+        "\"play_timer_effect_verified\":true,\"raw_block_verified\":true,\"suspend_verified\":false},\"completed_at\":1}";
     const char *future =
         "{\"version\":1,\"request_id\":\"1-c\",\"type\":\"status\",\"status\":\"ok\",\"mode\":\"future\",\"dry_run\":true,"
         "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,\"remaining_available\":false,"
@@ -298,6 +304,8 @@ static void test_result_mapping(void)
     check_true(model.parent_unlock_active, "unlock state mapped");
     check_true(model.play_timer_effect_verified, "capability mapped");
     check_true(strcmp(model.mode, "观察") == 0, "mode localized");
+    check_true(ptc_ui_apply_result_json(&model, bedtime_grant), "grant bedtime result parses");
+    check_true(strstr(model.message, "不会自动执行") != NULL, "grant bedtime result explains automatic enforcement boundary");
     check_true(ptc_ui_apply_result_json(&model, failure), "error result parses");
     check_true(strcmp(model.result_status, "error") == 0, "error status mapped");
     check_true(strstr(model.message, "签名") != NULL, "error message preserved");

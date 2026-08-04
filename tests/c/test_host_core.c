@@ -1637,6 +1637,107 @@ static void write_limit_action_rules(PtcMemStorage *mem, const char *action)
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/rules.json", rules), "write limit action rules");
 }
 
+static void write_bedtime_rules(PtcMemStorage *mem, const char *action, uint16_t start_min, uint16_t end_min)
+{
+    char rules[2048];
+    snprintf(
+        rules,
+        sizeof(rules),
+        "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60}],"
+        "\"today_override_present\":false,\"today_override_day_index\":0,\"today_override_mode\":\"limit\","
+        "\"today_override_minutes\":60,\"bedtime_enabled\":true,\"bedtime_start_min\":%u,"
+        "\"bedtime_end_min\":%u,\"limit_action\":\"%s\"}\n",
+        start_min,
+        end_min,
+        action);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/rules.json", rules), "write bedtime rules");
+}
+
+static void test_enforce_bedtime_actions_and_restore(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char state[1024];
+    char events[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 30;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 1260);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, true, false);
+    write_bedtime_rules(&mem, "raw_block", 1260, 480);
+
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "active bedtime raw block applies before daily expiry");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_BLOCKED, "active bedtime uses blocked target");
+    check_int(pctl.last_target.minutes, 0, "active bedtime blocked target uses zero minutes");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", state, sizeof(state)), "bedtime enforce state written");
+    check_true(strstr(state, "\"last_enforced_bedtime_active\":true") != NULL, "bedtime enforcement marker persisted");
+
+    pctl.applied = false;
+    pctl.timer_started = false;
+    fake_time.snapshot.minute_of_day = 480;
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "bedtime end restores daily target despite blocked status");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "bedtime end restores limited day");
+    check_int(pctl.last_target.minutes, 60, "bedtime end restores configured daily minutes");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", state, sizeof(state)), "bedtime restore state written");
+    check_true(strstr(state, "\"last_enforced_bedtime_active\":false") != NULL, "bedtime marker clears after restore");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 30;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 30);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, false, false);
+    write_bedtime_rules(&mem, "raw_block", 1260, 480);
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0, "unverified bedtime raw block fails open");
+    check_true(!pctl.applied, "unverified bedtime raw block does not write pctl");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/logs/events.jsonl", events, sizeof(events)), "bedtime capability failure is logged");
+    check_true(strstr(events, "raw_block_not_verified") != NULL && strstr(events, "enforce_bedtime") != NULL,
+        "bedtime capability failure has stable evidence");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 30;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 1260);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, false, true);
+    write_bedtime_rules(&mem, "suspend", 1260, 480);
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "active bedtime suspend applies before daily expiry");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "bedtime suspend keeps finite target");
+    check_int(pctl.last_target.minutes, 0, "bedtime suspend forces expiry edge");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 30;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 1260);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, true, true);
+    write_bedtime_rules(&mem, "raw_block", 1260, 480);
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0, "grant mode does not run automatic bedtime enforcement");
+    check_true(!pctl.applied, "grant mode bedtime remains a stored rule");
+}
+
 static void test_enforce_limit_actions_after_expiry(void)
 {
     PtcMemStorage mem;
@@ -2476,6 +2577,7 @@ int main(void)
     test_legacy_suspend_capability_is_invalidated();
     test_enforce_tick_applies_once_and_respects_disable_flag();
     test_enforce_limit_actions_after_expiry();
+    test_enforce_bedtime_actions_and_restore();
     test_failure_paths_do_not_consume_nonce();
     test_recover_processing();
     test_request_id_security_and_stem_match();

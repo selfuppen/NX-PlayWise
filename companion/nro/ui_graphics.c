@@ -437,7 +437,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
         snprintf(line, sizeof(line), "限制方式：%s", limit_action);
         draw_text(pixels, stride, 866, 352, line, 19, COLOR(77, 86, 99));
     }
-    draw_text(pixels, stride, 866, 384, model->bedtime_active ? "就寝限制：当前生效" : "就寝限制：未生效", 19, COLOR(77, 86, 99));
+    draw_text(pixels, stride, 866, 384, model->bedtime_active ? "就寝时段：当前时段" : "就寝时段：未到时段", 19, COLOR(77, 86, 99));
     draw_text(pixels, stride, 866, 416, model->parent_unlock_active ? "临时解锁：已开启" : "临时解锁：未开启", 19, COLOR(77, 86, 99));
     draw_text(pixels, stride, 866, 448, "Y  刷新状态", 20, COLOR(28, 118, 188));
 
@@ -594,8 +594,8 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_status_row(pixels, stride, panel, panel.y + 222, "游玩计时器",
                     model->play_timer_enabled == 1 ? "已开启" : "未确认",
                     model->play_timer_enabled == 1 ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 252, "就寝限制",
-                    model->bedtime_active ? "当前生效" : "未生效",
+    draw_status_row(pixels, stride, panel, panel.y + 252, "就寝时段",
+                    model->bedtime_active ? "当前时段" : "未到时段",
                     model->bedtime_active ? COLOR(194, 61, 61) : COLOR(91, 100, 116));
     draw_status_row(pixels, stride, panel, panel.y + 282, "临时解锁",
                     model->parent_unlock_active ? "已开启" : "未开启",

@@ -60,6 +60,7 @@ def init_sdmc(args: argparse.Namespace) -> int:
             "last_enforced_day_index": 0,
             "last_enforced_mode": 0,
             "last_enforced_minutes": 0,
+            "last_enforced_bedtime_active": False,
             "updated_at": 0,
         },
     )

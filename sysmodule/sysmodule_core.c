@@ -26,6 +26,7 @@ typedef struct {
     uint16_t last_enforced_day_index;
     PtcPctlTargetMode last_enforced_mode;
     uint16_t last_enforced_minutes;
+    bool last_enforced_bedtime_active;
     uint16_t v2_failed_attempts;
     int64_t v2_cooldown_until;
 } PtcRuntimeState;
@@ -637,6 +638,7 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     state->last_enforced_day_index = 0;
     state->last_enforced_mode = 0;
     state->last_enforced_minutes = 0;
+    state->last_enforced_bedtime_active = false;
     state->v2_failed_attempts = 0;
     state->v2_cooldown_until = 0;
     join_path(path, sizeof(path), sysmodule->app_root, "state.json");
@@ -650,6 +652,7 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     (void)json_i64(text, "parent_unlock_until", &state->parent_unlock_until);
     (void)json_u16(text, "last_enforced_day_index", &state->last_enforced_day_index);
     (void)json_u16(text, "last_enforced_minutes", &state->last_enforced_minutes);
+    (void)json_bool_value(text, "last_enforced_bedtime_active", &state->last_enforced_bedtime_active);
     (void)json_u16(text, "v2_failed_attempts", &state->v2_failed_attempts);
     (void)json_i64(text, "v2_cooldown_until", &state->v2_cooldown_until);
     {
@@ -671,11 +674,13 @@ static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, in
         sizeof(text),
         "{\"version\":1,\"parent_unlock_until\":%lld,\"last_enforced_day_index\":%u,"
         "\"last_enforced_mode\":%u,\"last_enforced_minutes\":%u,"
+        "\"last_enforced_bedtime_active\":%s,"
         "\"v2_failed_attempts\":%u,\"v2_cooldown_until\":%lld,\"updated_at\":%lld}\n",
         (long long)state->parent_unlock_until,
         state->last_enforced_day_index,
         (unsigned int)state->last_enforced_mode,
         state->last_enforced_minutes,
+        state->last_enforced_bedtime_active ? "true" : "false",
         state->v2_failed_attempts,
         (long long)state->v2_cooldown_until,
         (long long)updated_at);
@@ -2448,10 +2453,12 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     PtcRules rules;
     PtcRuntimeState runtime_state;
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
-    PtcDayRule active_rule;
+    PtcRuleEvaluation evaluation;
     PtcPctlStatus pctl_status;
     PtcPctlTargetMode target_mode;
     uint16_t target_minutes;
+    bool bedtime_action_active;
+    bool leaving_bedtime_action;
     bool limit_expired;
     char disable_path[320];
     PtcErrorCode err;
@@ -2468,7 +2475,12 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         append_event(sysmodule, NULL, "result_error", PTC_ERR_RULES_INVALID, "enforce");
         return 0;
     }
-    active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+    evaluation = ptc_rules_evaluate(
+        &rules,
+        now.day_index,
+        ptc_weekday_from_day_index(now.day_index),
+        now.minute_of_day,
+        runtime_state.parent_unlock_until > now.unix_seconds);
     if (sysmodule->pctl->vtable->read_status(
             sysmodule->pctl,
             ptc_weekday_from_day_index(now.day_index),
@@ -2476,26 +2488,33 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_PCTL_READ_FAILED, "enforce_status");
         return 0;
     }
-    target_mode = target_from_day_rule(active_rule);
-    target_minutes = active_rule.minutes;
-    limit_expired = active_rule.mode == PTC_RULE_MODE_LIMIT &&
+    target_mode = target_from_day_rule(evaluation.active_rule);
+    target_minutes = evaluation.active_rule.minutes;
+    bedtime_action_active = evaluation.bedtime_active && !evaluation.parent_unlock_active &&
+        rules.limit_action != PTC_LIMIT_ACTION_REMIND;
+    leaving_bedtime_action = runtime_state.last_enforced_bedtime_active && !bedtime_action_active;
+    /* A bedtime raw-block/suspend target reports zero remaining time. On the
+       transition out of bedtime, restore the ordinary day target before using
+       a later status read to decide whether the daily allowance has expired. */
+    limit_expired = !leaving_bedtime_action && evaluation.active_rule.mode == PTC_RULE_MODE_LIMIT &&
         pctl_status.remaining_available && pctl_status.remaining_minutes == 0U;
 
-    /* limit_action is only consulted once a finite rule has reached zero. The
-       ordinary limit target remains in place for reminders; raw_block changes
-       the target to the verified blocked mode, while suspend uses a zero-minute
-       finite target so Horizon can deliver its own suspension request. */
-    if (limit_expired) {
+    /* limit_action is consulted when a finite rule reaches zero or an active
+       bedtime window requires enforcement. Reminders preserve the ordinary
+       day target; raw_block and suspend use their verified strong targets. */
+    if (bedtime_action_active || limit_expired) {
         if (rules.limit_action == PTC_LIMIT_ACTION_RAW_BLOCK) {
             if (!caps.raw_block_verified) {
-                append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_RAW_BLOCK_NOT_VERIFIED, "enforce_limit_action");
+                append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_RAW_BLOCK_NOT_VERIFIED,
+                    bedtime_action_active ? "enforce_bedtime" : "enforce_limit_action");
                 return 0;
             }
             target_mode = PTC_PCTL_TARGET_BLOCKED;
             target_minutes = 0;
         } else if (rules.limit_action == PTC_LIMIT_ACTION_SUSPEND) {
             if (!caps.suspend_verified) {
-                append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_SUSPEND_NOT_VERIFIED, "enforce_limit_action");
+                append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_SUSPEND_NOT_VERIFIED,
+                    bedtime_action_active ? "enforce_bedtime" : "enforce_limit_action");
                 return 0;
             }
             target_mode = PTC_PCTL_TARGET_LIMIT;
@@ -2508,7 +2527,8 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     }
     if (runtime_state.last_enforced_day_index == now.day_index &&
         runtime_state.last_enforced_mode == target_mode &&
-        runtime_state.last_enforced_minutes == target_minutes) {
+        runtime_state.last_enforced_minutes == target_minutes &&
+        runtime_state.last_enforced_bedtime_active == bedtime_action_active) {
         return 0;
     }
     err = apply_target(sysmodule, NULL, &caps, now, ptc_control_mode_name(config.mode), target_mode, target_minutes);
@@ -2536,6 +2556,7 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     runtime_state.last_enforced_day_index = now.day_index;
     runtime_state.last_enforced_mode = target_mode;
     runtime_state.last_enforced_minutes = target_minutes;
+    runtime_state.last_enforced_bedtime_active = bedtime_action_active;
     if (!save_state(sysmodule, &runtime_state, now.unix_seconds)) {
         append_event(sysmodule, NULL, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "enforce_state");
         return 0;

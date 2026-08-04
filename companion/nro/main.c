@@ -42,6 +42,8 @@ typedef struct {
     bool self_check_after_result;
     bool quick_device_test;
     PtcSelfCheckProfile self_check_after_profile;
+    PtcBedtimeRule active_bedtime_rule;
+    int64_t last_bedtime_minute;
 } UiState;
 
 static int64_t unix_ms_now(void)
@@ -489,6 +491,7 @@ static void load_rule_drafts(UiState *ui)
     ui->model.current_limit_action = rules.limit_action;
     ui->model.draft_limit_action = rules.limit_action;
     ui->model.current_limit_action_loaded = true;
+    ui->active_bedtime_rule = rules.bedtime;
     if (!ui->client.storage->vtable->read_text(ui->client.storage, RULES_PATH, text, sizeof(text))) {
         return;
     }
@@ -528,7 +531,22 @@ static void load_rule_drafts(UiState *ui)
     ui->model.current_limit_action = rules.limit_action;
     ui->model.draft_limit_action = rules.limit_action;
     ui->model.current_limit_action_loaded = true;
+    ui->active_bedtime_rule = rules.bedtime;
     cJSON_Delete(root);
+}
+
+static void refresh_bedtime_state(UiState *ui, bool force)
+{
+    int64_t now = (int64_t)time(NULL);
+    int64_t minute = now / 60;
+    if (!force && minute == ui->last_bedtime_minute) {
+        return;
+    }
+    ui->model.bedtime_active = ui->active_bedtime_rule.enabled && ptc_bedtime_active(
+        ptc_minute_of_day_from_unix_utc8(now),
+        ui->active_bedtime_rule.start_min,
+        ui->active_bedtime_rule.end_min);
+    ui->last_bedtime_minute = minute;
 }
 
 static void arm_self_check_after_result(UiState *ui, PtcSelfCheckProfile profile)
@@ -615,6 +633,7 @@ static void poll_result(UiState *ui, bool force)
             return;
         }
         load_rule_drafts(ui);
+        refresh_bedtime_state(ui, true);
         if (ui->request_view == PTC_UI_CHILD && strcmp(ui->model.result_status, "error") == 0) {
             ui->model.view = PTC_UI_ERROR;
         }
@@ -1209,7 +1228,9 @@ int main(int argc, char **argv)
     ptc_switch_ipc_client_init(&ui.ipc);
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs), ptc_switch_ipc_backend(), &ui.ipc);
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
+    ui.last_bedtime_minute = -1;
     load_rule_drafts(&ui);
+    refresh_bedtime_state(&ui, true);
     submit_status(&ui);
 
     while (appletMainLoop() && running) {
@@ -1294,6 +1315,7 @@ int main(int argc, char **argv)
         }
 
         poll_result(&ui, false);
+        refresh_bedtime_state(&ui, false);
         draw(&ui);
         svcSleepThread(LOOP_SLEEP_NS);
     }

@@ -60,7 +60,7 @@ static const char *localized_mode(const char *mode)
     return "未知模式";
 }
 
-static const char *request_success_message(const char *type, bool dry_run)
+static const char *request_success_message(const char *type, const char *mode, bool dry_run)
 {
     if (!type) {
         return "后台已完成本次操作。";
@@ -73,6 +73,9 @@ static const char *request_success_message(const char *type, bool dry_run)
     }
     if (strcmp(type, "probe_play_timer_effect") == 0) {
         return "设备快速测试已完成，正在检查恢复证据。";
+    }
+    if (strcmp(type, "set_bedtime") == 0 && mode && strcmp(mode, "grant") == 0) {
+        return "就寝规则已保存；Grant 模式不会自动执行限制。";
     }
     return dry_run ? "设置验证通过；观察模式不会修改系统设置。" : "设置已生效。";
 }
@@ -340,7 +343,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                 hint);
         }
     } else {
-        snprintf(model->message, sizeof(model->message), "%s", request_success_message(type, dry_run));
+        snprintf(model->message, sizeof(model->message), "%s", request_success_message(type, mode, dry_run));
     }
     cJSON_Delete(root);
     return true;
