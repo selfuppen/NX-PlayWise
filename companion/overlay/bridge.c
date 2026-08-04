@@ -78,10 +78,13 @@ const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge)
 {
     if (!bridge) return "请求参数无效";
     if (bridge->summary.valid) {
+        if (!bridge->summary.ok) {
+            if (bridge->summary.message[0]) return bridge->summary.message;
+            if (bridge->summary.error_code > 0)
+                return ptc_error_message_zh((PtcErrorCode)bridge->summary.error_code);
+            return "请求失败，请稍后重试";
+        }
         if (bridge->summary.dry_run) return "当前为演练模式，未实际解锁";
-        if (bridge->summary.message[0]) return bridge->summary.message;
-        if (bridge->summary.error_code > 0)
-            return ptc_error_message_zh((PtcErrorCode)bridge->summary.error_code);
         return "请求失败，请稍后重试";
     }
     switch (bridge->last_status) {

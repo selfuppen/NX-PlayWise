@@ -242,13 +242,16 @@ static void test_overlay_input_and_shared_result_summary(void)
 
     memset(&bridge.summary, 0, sizeof(bridge.summary));
     bridge.summary.valid = true;
+    bridge.summary.ok = true;
     bridge.summary.dry_run = true;
     check_str(ptc_overlay_bridge_error_message_zh(&bridge), "当前为演练模式，未实际解锁",
-        "overlay bridge maps dry run to Chinese feedback");
-    bridge.summary.dry_run = false;
-    bridge.summary.error_code = PTC_ERR_USED_TOKEN;
+        "overlay bridge maps successful dry run to Chinese feedback");
+    (void)ptc_result_error_json(result, sizeof(result), "sum-3", "offline_code", "grant", true,
+        PTC_ERR_USED_TOKEN, &state, 1);
+    check_true(ptc_companion_result_summary_parse(result, &bridge.summary),
+        "shared result summary parses dry-run structured error");
     check_str(ptc_overlay_bridge_error_message_zh(&bridge), "授权码已经使用过",
-        "overlay bridge maps structured error code to Chinese feedback");
+        "overlay bridge prioritizes structured error over dry run feedback");
 }
 
 static void test_time_and_policy(void)
