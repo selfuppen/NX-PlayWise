@@ -407,7 +407,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     fill_round_rect(pixels, stride, (UiRect){54, 238, 760, 246}, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, (UiRect){54, 238, 760, 246}, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, 86, 286, "今天还想再玩一会儿？", 27, COLOR(28, 34, 43));
-    draw_text(pixels, stride, 86, 322, "输入 16 位离线加时码，后台确认后会更新今日时间。", 21, COLOR(85, 94, 107));
+    draw_text(pixels, stride, 86, 322, "输入 8 位数字加时码，后台确认后会更新今日时间。", 21, COLOR(85, 94, 107));
     fill_round_rect(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), 8, COLOR(28, 118, 188));
     draw_text_center(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), "A  输入加时码", 31, COLOR(255, 255, 255));
 
@@ -423,6 +423,26 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0), "A  输入加时码");
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(1), "Y  刷新");
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(2), "B / +  退出");
+}
+
+static void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect panel = {214, 148, 852, 444};
+    char fitted[190];
+    draw_header(pixels, stride, "操作未完成", "请查看错误信息后重试或返回");
+    fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
+    draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
+    fill_round_rect(pixels, stride, (UiRect){254, 194, 64, 64}, 8, COLOR(194, 61, 61));
+    draw_text_center(pixels, stride, (UiRect){254, 194, 64, 64}, "!", 34, COLOR(255, 255, 255));
+    draw_text(pixels, stride, 342, 214, "加时码处理失败", 28, COLOR(28, 34, 43));
+    fit_text(fitted, sizeof(fitted), model->message, 23, 756);
+    draw_text(pixels, stride, 254, 326, fitted, 23, COLOR(77, 86, 99));
+
+    fill_round_rect(pixels, stride, to_uirect(ptc_ui_error_retry_rect()), 8, COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, to_uirect(ptc_ui_error_retry_rect()), "A  重新输入", 25, COLOR(255, 255, 255));
+    fill_round_rect(pixels, stride, to_uirect(ptc_ui_error_back_rect()), 8, COLOR(235, 238, 243));
+    draw_rect_outline(pixels, stride, to_uirect(ptc_ui_error_back_rect()), 1, COLOR(203, 211, 222));
+    draw_text_center(pixels, stride, to_uirect(ptc_ui_error_back_rect()), "B  返回主页", 25, COLOR(66, 74, 86));
 }
 
 static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
@@ -852,6 +872,8 @@ void ptc_ui_graphics_draw(const PtcUiModel *model)
     fill_rect(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, COLOR(244, 246, 249));
     if (model->view == PTC_UI_PARENT) {
         draw_parent(pixels, stride, model);
+    } else if (model->view == PTC_UI_ERROR) {
+        draw_error(pixels, stride, model);
     } else {
         draw_child(pixels, stride, model);
     }

@@ -37,6 +37,7 @@ typedef struct {
     int hidden_ticks;
     bool waiting;
     bool exit_requested;
+    PtcUiView request_view;
     bool self_check_after_result;
     bool quick_device_test;
     PtcSelfCheckProfile self_check_after_profile;
@@ -106,6 +107,9 @@ static void set_message(UiState *ui, const char *prefix, PtcCompanionStatus stat
 {
     snprintf(ui->model.message, sizeof(ui->model.message), "%s：%s", prefix, companion_status_zh(status));
     snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
+    if (ui->model.view == PTC_UI_CHILD) {
+        ui->model.view = PTC_UI_ERROR;
+    }
 }
 
 static void set_auth_message(UiState *ui, const char *prefix, PtcAuthStatus status)
@@ -233,6 +237,7 @@ static void edit_weekly_minutes(UiState *ui)
 
 static void begin_wait(UiState *ui, const char *message)
 {
+    ui->request_view = ui->model.view;
     ui->waiting = true;
     ui->elapsed_ms = 0;
     ui->last_result[0] = '\0';
@@ -519,8 +524,12 @@ static void poll_result(UiState *ui, bool force)
     if (status == PTC_COMPANION_OK) {
         if (!ptc_ui_apply_result_json(&ui->model, ui->last_result)) {
             set_message(ui, "读取结果失败", PTC_COMPANION_RESULT_INVALID);
+            if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
             ui->self_check_after_result = false;
             return;
+        }
+        if (ui->request_view == PTC_UI_CHILD && strcmp(ui->model.result_status, "error") == 0) {
+            ui->model.view = PTC_UI_ERROR;
         }
         if (ui->self_check_after_result) {
             ui->self_check_after_result = false;
@@ -542,6 +551,7 @@ static void poll_result(UiState *ui, bool force)
         return;
     }
     set_message(ui, "读取结果失败", status);
+    if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
 }
 
 static void enter_parent_area(UiState *ui)
@@ -862,6 +872,13 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_CHILD_EXIT:
         ui->exit_requested = true;
         break;
+    case PTC_UI_HIT_ERROR_RETRY:
+        ui->model.view = PTC_UI_CHILD;
+        submit_offline_code(ui);
+        break;
+    case PTC_UI_HIT_ERROR_BACK:
+        ui->model.view = PTC_UI_CHILD;
+        break;
     case PTC_UI_HIT_PARENT_PREV_PAGE:
         ptc_ui_change_parent_page(&ui->model, -1);
         break;
@@ -1054,6 +1071,13 @@ int main(int argc, char **argv)
                 }
             } else if (down & HidNpadButton_Y) {
                 submit_status(&ui);
+            }
+        } else if (ui.model.view == PTC_UI_ERROR) {
+            if (down & HidNpadButton_A) {
+                ui.model.view = PTC_UI_CHILD;
+                submit_offline_code(&ui);
+            } else if (down & (HidNpadButton_B | HidNpadButton_Plus)) {
+                ui.model.view = PTC_UI_CHILD;
             }
         } else {
             if (down & HidNpadButton_B) {

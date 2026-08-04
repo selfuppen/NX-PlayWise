@@ -122,6 +122,17 @@ static void test_hit_test_child(void)
     check_hit(hit_center(&model, ptc_ui_parent_tab_rect(1)), PTC_UI_HIT_NONE, 0, "child view hides parent tabs");
 }
 
+static void test_hit_test_error(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_ERROR;
+    check_hit(hit_center(&model, ptc_ui_error_retry_rect()), PTC_UI_HIT_ERROR_RETRY, 0, "error retry button");
+    check_hit(hit_center(&model, ptc_ui_error_back_rect()), PTC_UI_HIT_ERROR_BACK, 0, "error back button");
+    check_hit(ptc_ui_hit_test(&model, 8, 8), PTC_UI_HIT_NONE, 0, "error empty space");
+    check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "error page blocks child actions");
+}
+
 static void test_hit_test_parent(void)
 {
     PtcUiModel model;
@@ -238,7 +249,12 @@ static void test_result_mapping(void)
     check_true(ptc_ui_apply_result_json(&model, failure), "error result parses");
     check_true(strcmp(model.result_status, "error") == 0, "error status mapped");
     check_true(strstr(model.message, "签名") != NULL, "error message preserved");
-    check_int(model.remaining_minutes, -1, "error result maps unknown state");
+    check_true(model.status_loaded, "error preserves loaded state");
+    check_int(model.remaining_minutes, 42, "error preserves remaining minutes");
+    check_int(model.played_minutes, 18, "error preserves played minutes");
+    check_int(model.play_timer_enabled, 1, "error preserves timer state");
+    check_true(model.parent_unlock_active, "error preserves unlock state");
+    check_true(model.play_timer_effect_verified, "error preserves capability state");
     check_true(ptc_ui_apply_result_json(&model, future), "unknown mode result parses");
     check_true(strcmp(model.mode, "未知模式") == 0, "unknown mode stays localized");
     check_true(!ptc_ui_apply_result_json(&model, "{"), "bad result rejected");
@@ -254,6 +270,7 @@ int main(void)
     test_overlay_confirmation();
     test_probe_confirmation();
     test_hit_test_child();
+    test_hit_test_error();
     test_hit_test_parent();
     test_hit_test_overlays();
     test_result_mapping();

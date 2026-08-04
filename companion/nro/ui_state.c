@@ -248,7 +248,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     snprintf(model->mode, sizeof(model->mode), "%s", localized_mode(mode));
 
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
-    if (cJSON_IsObject(state)) {
+    if (strcmp(status, "ok") == 0 && cJSON_IsObject(state)) {
         model->status_loaded = true;
         model->limited_today = json_int(state, "limited_today", -1);
         model->blocked_today = json_int(state, "blocked_today", -1);
@@ -263,7 +263,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->parent_unlock_active = json_bool(state, "parent_unlock_active", false);
     }
     capabilities = cJSON_GetObjectItemCaseSensitive(root, "capabilities");
-    if (cJSON_IsObject(capabilities)) {
+    if (strcmp(status, "ok") == 0 && cJSON_IsObject(capabilities)) {
         model->play_timer_write_verified = json_bool(capabilities, "play_timer_write_verified", false);
         model->play_timer_effect_verified = json_bool(capabilities, "play_timer_effect_verified", false);
         model->raw_block_verified = json_bool(capabilities, "raw_block_verified", false);
@@ -312,6 +312,18 @@ PtcUiRect ptc_ui_child_footer_rect(int index)
         rect.x = xs[index];
         rect.w = widths[index];
     }
+    return rect;
+}
+
+PtcUiRect ptc_ui_error_retry_rect(void)
+{
+    PtcUiRect rect = {294, 478, 320, 76};
+    return rect;
+}
+
+PtcUiRect ptc_ui_error_back_rect(void)
+{
+    PtcUiRect rect = {666, 478, 320, 76};
     return rect;
 }
 
@@ -597,6 +609,15 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_CHILD_EXIT, 0);
         }
         /* The parent area stays hidden; touch never exposes it. */
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->view == PTC_UI_ERROR) {
+        if (ptc_ui_rect_contains(ptc_ui_error_retry_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_ERROR_RETRY, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_error_back_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_ERROR_BACK, 0);
+        }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     for (i = 0; i < PTC_UI_PARENT_PAGE_COUNT; ++i) {

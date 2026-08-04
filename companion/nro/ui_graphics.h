@@ -9,7 +9,8 @@
 
 typedef enum {
     PTC_UI_CHILD = 0,
-    PTC_UI_PARENT = 1
+    PTC_UI_PARENT = 1,
+    PTC_UI_ERROR = 2
 } PtcUiView;
 
 typedef enum {
@@ -92,6 +93,8 @@ typedef enum {
     PTC_UI_HIT_CHILD_SUBMIT_CODE,
     PTC_UI_HIT_CHILD_REFRESH,
     PTC_UI_HIT_CHILD_EXIT,
+    PTC_UI_HIT_ERROR_RETRY,
+    PTC_UI_HIT_ERROR_BACK,
     PTC_UI_HIT_PARENT_PREV_PAGE,
     PTC_UI_HIT_PARENT_NEXT_PAGE,
     PTC_UI_HIT_PARENT_REFRESH,
@@ -139,6 +142,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);
 PtcUiRect ptc_ui_child_submit_rect(void);
 PtcUiRect ptc_ui_child_refresh_rect(void);
 PtcUiRect ptc_ui_child_footer_rect(int index);
+PtcUiRect ptc_ui_error_retry_rect(void);
+PtcUiRect ptc_ui_error_back_rect(void);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
