@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from datetime import date
 from http.server import ThreadingHTTPServer
 import json
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 import threading
 from urllib.error import HTTPError
@@ -12,10 +13,11 @@ from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
+TOOLS = ROOT / "tools"
+STATIC_ROOT = TOOLS / "ptc_frontend"
+sys.path.insert(0, str(TOOLS))
 
-from grant_code import today_utc8  # noqa: E402
-from ptc_frontend_server import HTML, Handler, generate_offline_code  # noqa: E402
+from ptc_frontend_server import Handler, STATIC_ASSETS  # noqa: E402
 
 
 def assert_equal(actual, expected, label: str) -> None:
@@ -28,109 +30,91 @@ def assert_true(value, label: str) -> None:
         raise AssertionError(f"{label}: expected truthy value")
 
 
-def expect_value_error(data: dict, expected_text: str, label: str) -> None:
+def request(url: str, *, method: str = "GET") -> tuple[int, dict[str, str], bytes]:
+    req = Request(url, data=b"{}" if method == "POST" else None, method=method)
     try:
-        generate_offline_code(data)
-    except ValueError as exc:
-        assert_true(expected_text in str(exc), label)
-    else:
-        raise AssertionError(f"{label}: expected ValueError")
-
-
-def test_token_generation() -> None:
-    short_token = generate_offline_code(
-        {
-            "device": "test-device",
-            "secret": "test-secret",
-            "tier_minutes": 30,
-            "date": "2026-07-08",
-            "nonce": 7,
-        }
-    )
-    assert_equal(short_token["code"], "10514680", "generated v2 code")
-    assert_equal(short_token["date"], "2026-07-08", "generated date")
-    assert_equal(short_token["day_index"], 2380, "generated day")
-    assert_equal(short_token["minutes"], 30, "generated tier")
-    assert_equal(short_token["token_version"], 2, "generated token version")
-
-    default_date = generate_offline_code(
-        {
-            "device": "test-device",
-            "secret": "test-secret",
-            "tier_minutes": 5,
-            "nonce": 0,
-        }
-    )
-    assert_equal(default_date["date"], today_utc8().isoformat(), "default UTC+8 date")
-
-    expect_value_error({"secret": "x", "tier_minutes": 30}, "device", "missing device")
-    expect_value_error({"device": "x", "tier_minutes": 30}, "secret", "missing secret")
-    expect_value_error(
-        {"device": "x", "secret": "y", "tier_minutes": 7, "date": date.today().isoformat(), "nonce": 0},
-        "multiple of 5",
-        "invalid tier",
-    )
-
-
-def request_json(url: str, payload: dict) -> tuple[int, dict]:
-    request = Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"content-type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urlopen(request) as response:
-            return response.status, json.loads(response.read().decode("utf-8"))
+        with urlopen(req) as response:
+            return response.status, {key.lower(): value for key, value in response.headers.items()}, response.read()
     except HTTPError as exc:
-        return exc.code, json.loads(exc.read().decode("utf-8"))
+        return exc.code, {key.lower(): value for key, value in exc.headers.items()}, exc.read()
 
 
-def test_page_and_api_surface() -> None:
-    assert_true('type="date"' in HTML, "date picker is present")
-    assert_true("todayUtc8()" in HTML, "date defaults to UTC+8 today")
-    assert_true("生成 8 位数字加时码" in HTML, "v2 copy is present")
-    assert_true("Package install helper" not in HTML, "package controls removed")
-    assert_true("Payload JSON" not in HTML, "request controls removed")
-    assert_true("V2 tier minutes" not in HTML and ">Minutes<" not in HTML, "legacy minutes fields removed")
-    assert_true("/api/state" not in HTML and "/api/request" not in HTML, "legacy API calls removed")
+def test_static_assets_and_copy() -> None:
+    index = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+    app = (STATIC_ROOT / "app.js").read_text(encoding="utf-8")
+    token = (STATIC_ROOT / "token.js").read_text(encoding="utf-8")
+    storage = (STATIC_ROOT / "storage.js").read_text(encoding="utf-8")
+    worker = (STATIC_ROOT / "sw.js").read_text(encoding="utf-8")
+    manifest = json.loads((STATIC_ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
 
+    for path, (filename, _) in STATIC_ASSETS.items():
+        assert_true((STATIC_ROOT / filename).is_file(), f"asset for {path}")
+    assert_true("/api/token" not in index + app + worker, "removed token API is not referenced")
+    assert_true("https://" not in index + app + token + storage + worker, "no external HTTPS dependency")
+    assert_true("http://" not in index + app + token + storage + worker, "no external HTTP dependency")
+    assert_true("replace-with-long-random-secret" in index, "safe placeholder secret")
+    assert_true("生成 8 位数字加时码" in index, "v2 generation copy")
+    assert_true("used_token" not in index and "加时码已使用" in index, "collision recovery copy")
+    assert_true("cryptoApi.subtle" in token, "Web Crypto HMAC implementation")
+    assert_true("getRandomValues" in token and "Math.random" not in token, "cryptographic random nonce")
+    assert_true("10514680" in token, "fixed vector self-test")
+    assert_true("ptc.frontend.config.v1" in storage, "versioned config storage key")
+    assert_true("ptc.frontend.nonces.v1" in storage, "versioned nonce storage key")
+    assert_true("navigator.serviceWorker.register" in app, "service worker registration")
+    assert_true("caches.open" in worker and "localStorage" not in worker, "worker caches only assets")
+    assert_equal(manifest["display"], "standalone", "PWA display mode")
+    assert_equal(manifest["start_url"], "./", "portable PWA start URL")
+    assert_true("STATIC_URLS.has(url.href)" in worker, "worker caches only the static allowlist")
+    assert_true(any("maskable" in icon["purpose"] for icon in manifest["icons"]), "maskable icon")
+
+
+def test_http_surface() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base_url = f"http://127.0.0.1:{server.server_port}"
     try:
-        with urlopen(base_url + "/") as response:
-            page = response.read().decode("utf-8")
-            assert_equal(response.status, 200, "frontend status")
-            assert_true("Offline code" in page, "frontend body")
+        for path, (_, expected_type) in STATIC_ASSETS.items():
+            status, headers, body = request(base_url + path)
+            assert_equal(status, 200, f"GET {path}")
+            assert_true(body, f"body for {path}")
+            assert_equal(headers["content-type"], expected_type, f"MIME for {path}")
+            assert_equal(headers["x-content-type-options"], "nosniff", f"nosniff for {path}")
+            assert_equal(headers["referrer-policy"], "no-referrer", f"referrer policy for {path}")
+            assert_true("default-src 'self'" in headers["content-security-policy"], f"CSP for {path}")
 
-        status, token = request_json(
-            base_url + "/api/token",
-            {
-                "device": "test-device",
-                "secret": "test-secret",
-                "tier_minutes": 30,
-                "date": "2026-07-08",
-                "nonce": 7,
-            },
-        )
-        assert_equal(status, 200, "token API status")
-        assert_equal(token["code"], "10514680", "token API code")
+        status, _, body = request(base_url + "/styles.css", method="HEAD")
+        assert_equal(status, 200, "HEAD asset status")
+        assert_equal(body, b"", "HEAD has no body")
 
-        status, body = request_json(base_url + "/api/state", {})
-        assert_equal(status, 404, "removed API status")
-        assert_equal(body["error"], "not_found", "removed API body")
+        for path in ["/missing", "/../grant_code.py", "/%2e%2e/grant_code.py", "/api/token"]:
+            status, _, _ = request(base_url + path)
+            assert_equal(status, 404, f"GET rejects {path}")
+
+        status, _, _ = request(base_url + "/api/token", method="POST")
+        assert_equal(status, 404, "removed POST token API")
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
 
 
+def test_javascript_modules() -> None:
+    node = shutil.which("node")
+    if node is None:
+        return
+    runner = ROOT / "tests" / "frontend" / "test_ptc_frontend_modules.mjs"
+    result = subprocess.run([node, str(runner)], cwd=ROOT, text=True, capture_output=True)
+    if result.returncode != 0:
+        raise AssertionError(f"JavaScript frontend tests failed:\n{result.stdout}\n{result.stderr}")
+    assert_true("PTC frontend JavaScript tests passed" in result.stdout, "JavaScript test completion")
+
+
 def main() -> int:
-    test_token_generation()
-    test_page_and_api_surface()
-    print("PTC frontend server tests passed")
+    test_static_assets_and_copy()
+    test_http_surface()
+    test_javascript_modules()
+    print("PTC static frontend tests passed")
     return 0
 
 

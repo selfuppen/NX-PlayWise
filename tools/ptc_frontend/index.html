@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#126b5b">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'">
+  <title>游玩时间加时码</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div>
+      <p class="eyebrow">Play Time Control</p>
+      <strong>家长加时码</strong>
+    </div>
+    <span id="offlineBadge" class="badge" hidden>可离线使用</span>
+  </header>
+
+  <main>
+    <section class="tool" aria-labelledby="pageTitle">
+      <div class="intro">
+        <div>
+          <h1 id="pageTitle">生成今日加时码</h1>
+          <p>密钥只在当前设备的浏览器中使用，不会发送到服务器。</p>
+        </div>
+        <button id="install" class="secondary compact" type="button" hidden>安装到设备</button>
+      </div>
+
+      <div id="securityError" class="notice danger" role="alert" hidden></div>
+      <div id="selfTestError" class="notice danger" role="alert" hidden></div>
+
+      <form id="generator">
+        <div class="fields">
+          <label>
+            <span>Switch 设备 ID</span>
+            <input id="device" name="device" value="kid-switch" maxlength="79" autocomplete="off" required>
+          </label>
+
+          <label>
+            <span>加时密钥</span>
+            <span class="secret-field">
+              <input id="secret" name="secret" type="password" value="replace-with-long-random-secret" autocomplete="off" required>
+              <button id="toggleSecret" class="field-action" type="button" aria-pressed="false">显示</button>
+            </span>
+            <small>会明文保存在当前浏览器中，请仅在可信的家长设备上使用。</small>
+          </label>
+
+          <label>
+            <span>生效日期（UTC+8）</span>
+            <input id="date" name="date" type="date" required>
+          </label>
+
+          <label>
+            <span>加时时长</span>
+            <select id="tierMinutes" name="tier_minutes"></select>
+          </label>
+        </div>
+
+        <button id="generate" class="primary" type="submit">生成 8 位数字加时码</button>
+      </form>
+
+      <div id="error" class="notice danger" role="alert" hidden></div>
+
+      <section id="result" class="result" aria-live="polite" hidden>
+        <p class="result-label">请把下面的数字告诉孩子</p>
+        <p id="code" class="code"></p>
+        <p id="meta" class="meta"></p>
+        <button id="copy" class="secondary" type="button">复制加时码</button>
+        <p class="collision-note">若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。</p>
+      </section>
+
+      <details class="settings">
+        <summary>本机数据与安全说明</summary>
+        <p>此页面会保存设备 ID、密钥、常用时长，以及当前浏览器当天已经签发的随机编号。清除浏览器站点数据也会删除这些内容。</p>
+        <button id="clearConfig" class="danger-button" type="button">清除本机配置</button>
+      </details>
+    </section>
+  </main>
+
+  <footer>正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。</footer>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

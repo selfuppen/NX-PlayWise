@@ -1,0 +1,145 @@
+import {chooseUnusedNonce, dayIndexFor, encodeToken, runSelfTest, tierForMinutes, todayUtc8} from "./token.js";
+import {DEFAULT_CONFIG, clearFrontendState, loadConfig, rememberNonce, saveConfig, usedNoncesFor} from "./storage.js";
+
+const form = document.getElementById("generator");
+const deviceInput = document.getElementById("device");
+const secretInput = document.getElementById("secret");
+const dateInput = document.getElementById("date");
+const tierInput = document.getElementById("tierMinutes");
+const generateButton = document.getElementById("generate");
+const result = document.getElementById("result");
+const codeOutput = document.getElementById("code");
+const metaOutput = document.getElementById("meta");
+const errorOutput = document.getElementById("error");
+const securityError = document.getElementById("securityError");
+const selfTestError = document.getElementById("selfTestError");
+const copyButton = document.getElementById("copy");
+const installButton = document.getElementById("install");
+let installPrompt = null;
+
+for (let minutes = 5; minutes <= 120; minutes += 5) {
+  const option = document.createElement("option");
+  option.value = String(minutes);
+  option.textContent = `${minutes} 分钟`;
+  tierInput.append(option);
+}
+
+function showError(target, message) {
+  target.textContent = message;
+  target.hidden = false;
+}
+
+function resetToDefaults() {
+  deviceInput.value = DEFAULT_CONFIG.deviceId;
+  secretInput.value = DEFAULT_CONFIG.secret;
+  tierInput.value = String(DEFAULT_CONFIG.tierMinutes);
+  dateInput.value = todayUtc8();
+}
+
+function loadSavedForm() {
+  const config = loadConfig(localStorage);
+  deviceInput.value = config.deviceId;
+  secretInput.value = config.secret;
+  tierInput.value = String(config.tierMinutes);
+  dateInput.value = todayUtc8();
+}
+
+async function initialize() {
+  loadSavedForm();
+  if (!globalThis.isSecureContext || !globalThis.crypto?.subtle) {
+    showError(securityError, "当前页面无法使用 Web Crypto，请通过 HTTPS 或 localhost 打开。");
+    generateButton.disabled = true;
+    return;
+  }
+  try {
+    await runSelfTest();
+  } catch (error) {
+    showError(selfTestError, `加时码算法自检失败，已停止生成：${error instanceof Error ? error.message : String(error)}`);
+    generateButton.disabled = true;
+    return;
+  }
+  if ("serviceWorker" in navigator) {
+    try {
+      await navigator.serviceWorker.register("./sw.js", {scope: "./"});
+      document.getElementById("offlineBadge").hidden = false;
+    } catch (error) {
+      console.warn("Service worker registration failed", error);
+    }
+  }
+}
+
+form.addEventListener("submit", async event => {
+  event.preventDefault();
+  generateButton.disabled = true;
+  errorOutput.hidden = true;
+  result.hidden = true;
+  try {
+    const deviceId = deviceInput.value.trim();
+    const secret = secretInput.value;
+    const dateText = dateInput.value;
+    const tierMinutes = Number(tierInput.value);
+    if (!deviceId) throw new Error("设备 ID 不能为空");
+    if (!secret) throw new Error("加时密钥不能为空");
+    const tierIndex = tierForMinutes(tierMinutes);
+    const dayIndex = dayIndexFor(dateText);
+    const used = usedNoncesFor(localStorage, deviceId, dateText);
+    const nonce = chooseUnusedNonce(used);
+    const code = await encodeToken({deviceId, secret, dayIndex, tierIndex, nonce});
+
+    saveConfig(localStorage, {deviceId, secret, tierMinutes});
+    rememberNonce(localStorage, deviceId, dateText, nonce);
+    codeOutput.textContent = code;
+    metaOutput.textContent = `${dateText} · ${tierMinutes} 分钟 · v2`;
+    result.hidden = false;
+  } catch (error) {
+    showError(errorOutput, error instanceof Error ? error.message : String(error));
+  } finally {
+    if (selfTestError.hidden && securityError.hidden) generateButton.disabled = false;
+  }
+});
+
+document.getElementById("toggleSecret").addEventListener("click", event => {
+  const button = event.currentTarget;
+  const visible = secretInput.type === "text";
+  secretInput.type = visible ? "password" : "text";
+  button.textContent = visible ? "显示" : "隐藏";
+  button.setAttribute("aria-pressed", visible ? "false" : "true");
+});
+
+copyButton.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(codeOutput.textContent || "");
+    copyButton.textContent = "已复制";
+    setTimeout(() => { copyButton.textContent = "复制加时码"; }, 1500);
+  } catch {
+    showError(errorOutput, "复制失败，请长按或选中加时码手动复制");
+  }
+});
+
+document.getElementById("clearConfig").addEventListener("click", () => {
+  clearFrontendState(localStorage);
+  resetToDefaults();
+  result.hidden = true;
+  errorOutput.hidden = true;
+});
+
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  installPrompt = event;
+  installButton.hidden = false;
+});
+
+installButton.addEventListener("click", async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  installButton.hidden = true;
+});
+
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  installButton.hidden = true;
+});
+
+initialize();

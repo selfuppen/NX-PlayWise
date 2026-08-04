@@ -16,7 +16,7 @@
 
 ## 当前实现重点
 
-- Python v1 token 工具和 observe request queue 已可用；v2 8 位数字短码和按设备/日期递增 nonce 生成器已可用。
+- Python v1 token 工具和 observe request queue 已可用；v2 8 位数字短码、CLI 递增 nonce 生成器和可离线安装的家长端静态 PWA 已可用。
 - C common core 已包含 token v1/v2、错误映射、时间计算、规则基础、控制策略、result builder 和 result schema validator。
 - 平台抽象已包含 `StorageVTable`、`PctlVTable`、time provider、logger，以及 host doubles：`mem_storage`、`pctl_stub`、fake time。
 - Switch 平台层已有 `platform/switch/fs_storage.c`、`time_provider.c` 和保守 PCTL adapter；真实 PCTL adapter 支持安全读状态/备份、play timer 写入与效果探针，以及只读的 suspend 探针（`GetPlayTimerEventToRequestSuspension`）。

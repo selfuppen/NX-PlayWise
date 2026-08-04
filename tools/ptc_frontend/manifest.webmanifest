@@ -1,0 +1,15 @@
+{
+  "name": "家长加时码",
+  "short_name": "加时码",
+  "description": "在家长设备本地生成 Nintendo Switch 今日游玩时间加时码。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f6f4",
+  "theme_color": "#126b5b",
+  "icons": [
+    {"src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
+    {"src": "./icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable"}
+  ]
+}
