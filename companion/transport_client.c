@@ -140,6 +140,16 @@ bool ptc_companion_transport_notify_storage_changed(PtcCompanionTransportClient 
         client->ipc->notify_storage_changed && client->ipc->notify_storage_changed(client->ipc_ctx);
 }
 
+PtcCompanionTransportKind ptc_companion_transport_active(const PtcCompanionTransportClient *client)
+{
+    return client ? client->active : PTC_TRANSPORT_NONE;
+}
+
+bool ptc_companion_transport_accepted_by_ipc(const PtcCompanionTransportClient *client)
+{
+    return client && client->accepted_by_ipc;
+}
+
 PtcCompanionStatus ptc_companion_transport_submit_status(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at)
 {
     char json[512];

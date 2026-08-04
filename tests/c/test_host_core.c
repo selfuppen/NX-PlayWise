@@ -143,33 +143,44 @@ static void test_overlay_input_and_shared_result_summary(void)
     PtcResultState state;
     unsigned int i;
     ptc_overlay_input_init(&input);
-    check_int(input.cursor, 0, "overlay cursor starts at zero");
+    check_int(input.cursor, 1, "overlay cursor starts at one");
     check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_LEFT, PTC_OVERLAY_BUTTON_LEFT, 0), "overlay left consumed");
-    check_int(input.cursor, 4, "overlay left wraps within row");
+    check_int(input.cursor, 3, "overlay left wraps within top row");
     check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_UP, PTC_OVERLAY_BUTTON_UP, 0), "overlay up consumed");
-    check_int(input.cursor, 9, "overlay up wraps to final row");
+    check_int(input.cursor, 9, "overlay up skips blank bottom-right cell");
 
     ptc_overlay_input_init(&input);
     check_true(ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_RIGHT, PTC_OVERLAY_BUTTON_RIGHT, 0), "overlay repeat starts with immediate move");
-    check_int(input.cursor, 1, "overlay repeat immediate cursor");
+    check_int(input.cursor, 2, "overlay repeat immediate cursor");
     check_true(ptc_overlay_input_handle(&input, 0, PTC_OVERLAY_BUTTON_RIGHT, PTC_OVERLAY_REPEAT_DELAY_MS - 1), "overlay held direction consumed before delay");
-    check_int(input.cursor, 1, "overlay repeat waits for initial delay");
+    check_int(input.cursor, 2, "overlay repeat waits for initial delay");
     check_true(ptc_overlay_input_handle(&input, 0, PTC_OVERLAY_BUTTON_RIGHT, 1), "overlay held direction reaches delay");
-    check_int(input.cursor, 2, "overlay repeat moves at initial delay");
+    check_int(input.cursor, 3, "overlay repeat moves at initial delay");
     check_true(ptc_overlay_input_handle(&input, 0, PTC_OVERLAY_BUTTON_RIGHT, PTC_OVERLAY_REPEAT_INTERVAL_MS - 1), "overlay held direction waits for interval");
-    check_int(input.cursor, 2, "overlay repeat waits between moves");
+    check_int(input.cursor, 3, "overlay repeat waits between moves");
     check_true(ptc_overlay_input_handle(&input, 0, PTC_OVERLAY_BUTTON_RIGHT, 1), "overlay held direction reaches interval");
-    check_int(input.cursor, 3, "overlay repeat moves at interval");
+    check_int(input.cursor, 1, "overlay repeat moves at interval");
     check_true(!ptc_overlay_input_handle(&input, 0, 0, PTC_OVERLAY_REPEAT_INTERVAL_MS * 2), "overlay release is not consumed");
-    check_int(input.cursor, 3, "overlay release stops repeat");
+    check_int(input.cursor, 1, "overlay release stops repeat");
     check_true(ptc_overlay_input_handle(
         &input,
         PTC_OVERLAY_BUTTON_LEFT | PTC_OVERLAY_BUTTON_RIGHT,
         PTC_OVERLAY_BUTTON_LEFT | PTC_OVERLAY_BUTTON_RIGHT,
         0), "overlay multiple directions consumed");
-    check_int(input.cursor, 3, "overlay multiple directions do not move");
+    check_int(input.cursor, 1, "overlay multiple directions do not move");
     check_true(!ptc_overlay_input_handle(&input, 0, PTC_OVERLAY_BUTTON_A, 1000), "overlay held action is not repeated");
     check_int(input.length, 0, "overlay held action does not enter character");
+
+    ptc_overlay_input_init(&input);
+    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_RIGHT, PTC_OVERLAY_BUTTON_RIGHT, 0);
+    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_DOWN, PTC_OVERLAY_BUTTON_DOWN, 0);
+    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_DOWN, PTC_OVERLAY_BUTTON_DOWN, 0);
+    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_DOWN, PTC_OVERLAY_BUTTON_DOWN, 0);
+    check_int(input.cursor, 0, "overlay reaches centered zero key");
+    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_LEFT, PTC_OVERLAY_BUTTON_LEFT, 0);
+    check_int(input.cursor, 0, "overlay skips blank cell left of zero");
+    (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_RIGHT, PTC_OVERLAY_BUTTON_RIGHT, 0);
+    check_int(input.cursor, 0, "overlay skips blank cell right of zero");
 
     ptc_overlay_input_init(&input);
     check_true(!ptc_overlay_input_can_submit(&input), "overlay incomplete code cannot submit");
@@ -179,14 +190,14 @@ static void test_overlay_input_and_shared_result_summary(void)
     }
     check_true(ptc_overlay_input_can_submit(&input), "overlay accepts exactly eight digits");
     check_true(ptc_overlay_input_format(&input, formatted, sizeof(formatted)), "overlay code formats");
-    check_str(formatted, "00000000", "overlay formats numeric short code with leading zeros");
-    check_int(input.cursor, 0, "overlay keypad focus remains on repeated digit");
+    check_str(formatted, "11111111", "overlay formats numeric short code");
+    check_int(input.cursor, 1, "overlay keypad focus remains on repeated digit");
     (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_X, PTC_OVERLAY_BUTTON_X, 0);
     check_true(!ptc_overlay_input_can_submit(&input), "overlay delete disables submit");
-    check_int(input.cursor, 0, "overlay delete keeps keyboard focus");
+    check_int(input.cursor, 1, "overlay delete keeps keyboard focus");
     (void)ptc_overlay_input_handle(&input, PTC_OVERLAY_BUTTON_Y, PTC_OVERLAY_BUTTON_Y, 0);
     check_int(input.length, 0, "overlay clear empties code");
-    check_int(input.cursor, 0, "overlay clear keeps keyboard focus");
+    check_int(input.cursor, 1, "overlay clear keeps keyboard focus");
     ptc_overlay_input_tick(&input, PTC_OVERLAY_REQUEST_TIMEOUT_MS, PTC_OVERLAY_REQUEST_TIMEOUT_MS);
     check_true(input.timed_out, "overlay input timeout fires");
 
@@ -210,9 +221,11 @@ static void test_overlay_input_and_shared_result_summary(void)
     ptc_mem_storage_init(&mem);
     ptc_overlay_bridge_init(&bridge, "app", &mem.storage);
     check_int(ptc_overlay_bridge_submit(&bridge, "01234567", 1000, 0x12), PTC_COMPANION_OK, "overlay bridge submits queue request");
+    check_int(ptc_overlay_bridge_transport_state(&bridge), PTC_OVERLAY_TRANSPORT_SD_QUEUE, "overlay bridge reports SD queue transport");
     check_true(ptc_overlay_bridge_waiting(&bridge), "overlay bridge enters waiting state");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/1000000-0012.json"), "overlay bridge uses pending atomic protocol");
     check_int(ptc_overlay_bridge_poll(&bridge, PTC_OVERLAY_REQUEST_TIMEOUT_MS, PTC_OVERLAY_REQUEST_TIMEOUT_MS), PTC_COMPANION_TIMEOUT, "overlay bridge times out at sixty seconds");
+    check_int(ptc_overlay_bridge_last_status(&bridge), PTC_COMPANION_TIMEOUT, "overlay bridge preserves transport failure status");
     check_true(!ptc_overlay_bridge_waiting(&bridge), "overlay bridge exits waiting after timeout");
 }
 
@@ -2145,6 +2158,47 @@ static void test_transport_fallback_does_not_resubmit(void)
     check_int(client.file_poll_delay_ms, 500, "file result polling backs off from 250ms");
 }
 
+static void test_transport_state_labels(void)
+{
+    static const PtcCompanionIpcBackend BACKEND = {
+        fake_ipc_connect, fake_ipc_submit, fake_ipc_event, fake_ipc_result, fake_ipc_close, fake_ipc_notify,
+    };
+    PtcMemStorage mem;
+    PtcCompanionTransportClient client;
+    PtcOverlayBridge bridge;
+    FakeIpc ipc = { true, 0, 0, PTC_COMPANION_OK };
+    const char *json = "{\"version\":1,\"request_id\":\"state-ipc\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}\n";
+    ptc_mem_storage_init(&mem);
+    ptc_companion_transport_init(&client, "app", &mem.storage, &BACKEND, &ipc);
+    check_int(ptc_companion_transport_submit_json(&client, "state-ipc", json), PTC_COMPANION_OK,
+        "transport state IPC submit succeeds");
+    check_int(ptc_companion_transport_active(&client), PTC_TRANSPORT_IPC, "transport state reports IPC");
+    check_true(ptc_companion_transport_accepted_by_ipc(&client), "transport state records IPC acceptance");
+
+    memset(&bridge, 0, sizeof(bridge));
+    ptc_companion_transport_init(&bridge.transport, "app", &mem.storage, &BACKEND, &ipc);
+    check_int(ptc_overlay_bridge_submit(&bridge, "01234567", 2, 1), PTC_COMPANION_OK,
+        "overlay bridge IPC submit succeeds");
+    check_int(ptc_overlay_bridge_transport_state(&bridge), PTC_OVERLAY_TRANSPORT_IPC,
+        "overlay bridge reports IPC transport");
+    check_str(ptc_overlay_bridge_transport_label(&bridge), "传输：IPC", "overlay bridge provides IPC label");
+    ipc.event_state = -1;
+    check_int(ptc_overlay_bridge_poll(&bridge, 100, 5000), PTC_COMPANION_PENDING,
+        "overlay bridge falls back to durable result polling");
+    check_int(ptc_overlay_bridge_transport_state(&bridge), PTC_OVERLAY_TRANSPORT_SD_RESULT_AFTER_IPC,
+        "overlay bridge reports IPC to SD result fallback");
+    check_true(strstr(ptc_overlay_bridge_transport_label(&bridge), "SD") != NULL,
+        "overlay bridge fallback label is UI safe");
+    check_int(ipc.submit_count, 2, "overlay bridge fallback does not resubmit");
+
+    ipc.available = false;
+    ptc_companion_transport_cancel(&client);
+    check_int(ptc_companion_transport_submit_json(&client, "state-sd", json), PTC_COMPANION_OK,
+        "transport state SD submit succeeds");
+    check_int(ptc_companion_transport_active(&client), PTC_TRANSPORT_FILE, "transport state reports SD queue");
+    check_true(!ptc_companion_transport_accepted_by_ipc(&client), "SD queue is not marked IPC accepted");
+}
+
 static void test_transport_submit_failure_does_not_write_file(void)
 {
     static const PtcCompanionIpcBackend BACKEND = {
@@ -2222,6 +2276,7 @@ int main(void)
     test_request_id_security_and_stem_match();
     test_backoff_daily_logs_and_retention();
     test_transport_fallback_does_not_resubmit();
+    test_transport_state_labels();
     test_transport_submit_failure_does_not_write_file();
 
     if (failures != 0) {

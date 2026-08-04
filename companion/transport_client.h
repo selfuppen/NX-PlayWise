@@ -43,6 +43,8 @@ PtcCompanionStatus ptc_companion_transport_poll(PtcCompanionTransportClient *cli
     int timeout_ms, char *out, size_t out_size);
 void ptc_companion_transport_cancel(PtcCompanionTransportClient *client);
 bool ptc_companion_transport_notify_storage_changed(PtcCompanionTransportClient *client);
+PtcCompanionTransportKind ptc_companion_transport_active(const PtcCompanionTransportClient *client);
+bool ptc_companion_transport_accepted_by_ipc(const PtcCompanionTransportClient *client);
 PtcCompanionStatus ptc_companion_transport_submit_status(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_transport_submit_offline_code(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const char *code);
 PtcCompanionStatus ptc_companion_transport_submit_set_today_limit(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, uint16_t minutes);

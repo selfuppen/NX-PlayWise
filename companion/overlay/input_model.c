@@ -21,15 +21,28 @@ void ptc_overlay_input_init(PtcOverlayInput *input)
         return;
     }
     memset(input, 0, sizeof(*input));
+    input->cursor = 1;
 }
 
 static void move_cursor(PtcOverlayInput *input, int dx, int dy)
 {
-    int row = (int)(input->cursor / PTC_OVERLAY_KEY_COLUMNS);
-    int col = (int)(input->cursor % PTC_OVERLAY_KEY_COLUMNS);
-    col = (col + dx + PTC_OVERLAY_KEY_COLUMNS) % PTC_OVERLAY_KEY_COLUMNS;
-    row = (row + dy + PTC_OVERLAY_KEY_ROWS) % PTC_OVERLAY_KEY_ROWS;
-    input->cursor = (unsigned int)(row * PTC_OVERLAY_KEY_COLUMNS + col);
+    static const int GRID[PTC_OVERLAY_KEY_ROWS][PTC_OVERLAY_KEY_COLUMNS] = {
+        {1, 2, 3},
+        {4, 5, 6},
+        {7, 8, 9},
+        {-1, 0, -1},
+    };
+    int row = input->cursor == 0 ? 3 : ((int)input->cursor - 1) / PTC_OVERLAY_KEY_COLUMNS;
+    int col = input->cursor == 0 ? 1 : ((int)input->cursor - 1) % PTC_OVERLAY_KEY_COLUMNS;
+    int attempts;
+    for (attempts = 0; attempts < PTC_OVERLAY_KEY_ROWS * PTC_OVERLAY_KEY_COLUMNS; ++attempts) {
+        col = (col + dx + PTC_OVERLAY_KEY_COLUMNS) % PTC_OVERLAY_KEY_COLUMNS;
+        row = (row + dy + PTC_OVERLAY_KEY_ROWS) % PTC_OVERLAY_KEY_ROWS;
+        if (GRID[row][col] >= 0) {
+            input->cursor = (unsigned int)GRID[row][col];
+            return;
+        }
+    }
 }
 
 static bool is_single_direction(unsigned int buttons)

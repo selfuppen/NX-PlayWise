@@ -9,6 +9,7 @@
 extern "C" {
 #include "../bridge.h"
 #include "../input_model.h"
+#include "../../../common/protocol/error_code.h"
 #include "platform/switch/fs_storage.h"
 }
 
@@ -44,7 +45,7 @@ public:
 
     tsl::elm::Element *createUI() override
     {
-        auto frame = new tsl::elm::OverlayFrame("PCTC", "8-digit grant code");
+        auto frame = new tsl::elm::OverlayFrame("PCTC", "今日加时");
         frame->setContent(new tsl::elm::CustomDrawer([this](tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 w, s32 h) {
             (void)x; (void)y; (void)w; (void)h;
             draw_overlay(renderer);
@@ -140,68 +141,113 @@ public:
 
     static s32 code_slot_x(unsigned int index)
     {
-        return 90 + static_cast<s32>(index) * 38;
+        return 58 + static_cast<s32>(index) * 43;
+    }
+
+    static const char *error_text(const PtcCompanionResultSummary &summary)
+    {
+        if (summary.message[0]) return summary.message;
+        if (summary.error_code > 0) return ptc_error_message_zh((PtcErrorCode)summary.error_code);
+        return "请求失败，请稍后重试";
+    }
+
+    static const char *transport_stage(const PtcOverlayBridge *bridge)
+    {
+        if (bridge->waiting) {
+            if (ptc_overlay_bridge_transport_state(bridge) == PTC_OVERLAY_TRANSPORT_SD_RESULT_AFTER_IPC)
+                return "正在读取后台结果…";
+            return "正在等待后台处理…";
+        }
+        return "";
+    }
+
+    static const char *transport_error_text(PtcCompanionStatus status)
+    {
+        switch (status) {
+        case PTC_COMPANION_TIMEOUT: return "后台响应超时，请重试";
+        case PTC_COMPANION_WRITE_FAILED:
+        case PTC_COMPANION_RENAME_FAILED: return "请求写入失败，请检查 SD 卡";
+        case PTC_COMPANION_RESULT_INVALID:
+        case PTC_COMPANION_RESULT_MISMATCH: return "后台返回的结果无效";
+        case PTC_COMPANION_BAD_ARGUMENT: return "请求被后台拒绝";
+        default: return "无法连接后台服务，请重试";
+        }
     }
 
     void draw_overlay(tsl::gfx::Renderer *renderer)
     {
-        char line[96];
-        renderer->drawString("5-120 minute tier code", false, 90, 190, 28, renderer->a(0xFFFF));
+        char line[128];
+        renderer->drawString("输入今日加时码", false, 42, 125, 31, renderer->a(TEXT_COLOR));
+        renderer->drawString("请输入家长提供的 8 位数字码", false, 42, 158, 18, renderer->a(MUTED_COLOR));
         for (unsigned int index = 0; index < PTC_OVERLAY_CODE_SYMBOLS; ++index) {
             const s32 slot_x = code_slot_x(index);
             const bool is_input_cursor = input_->length < PTC_OVERLAY_CODE_SYMBOLS && index == input_->length;
             char symbol[2] = { index < input_->length ? input_->symbols[index] : '_', '\0' };
             if (is_input_cursor) {
-                draw_outline(renderer, slot_x - 3, 215, 18, 42, 2, FOCUS_COLOR);
-                renderer->drawRect(slot_x - 1, 258, 14, 3, renderer->a(FOCUS_COLOR));
+                draw_outline(renderer, slot_x - 5, 178, 31, 48, 3, FOCUS_COLOR);
             }
             renderer->drawString(
                 symbol,
                 false,
-                slot_x,
-                247,
-                27,
+                slot_x + 2,
+                214,
+                30,
                 renderer->a(index < input_->length ? TEXT_COLOR : MUTED_COLOR));
         }
-        std::snprintf(line, sizeof(line), "Current: %c   Entered: %u/8", ptc_overlay_input_charset()[input_->cursor], input_->length);
-        renderer->drawString(line, false, 90, 300, 23, renderer->a(TEXT_COLOR));
+        std::snprintf(line, sizeof(line), "已输入 %u/8 位   当前选择：%c", input_->length, ptc_overlay_input_charset()[input_->cursor]);
+        renderer->drawString(line, false, 42, 248, 19, renderer->a(TEXT_COLOR));
 
         const char *charset = ptc_overlay_input_charset();
-        renderer->drawRect(76, 333, 326, 118, renderer->a(PANEL_COLOR));
-        draw_outline(renderer, 76, 333, 326, 118, 2, MUTED_COLOR);
+        renderer->drawRect(55, 267, 338, 205, renderer->a(PANEL_COLOR));
+        draw_outline(renderer, 55, 267, 338, 205, 2, MUTED_COLOR);
         for (unsigned int index = 0; index < PTC_OVERLAY_KEY_COUNT; ++index) {
             char symbol[2] = { charset[index], '\0' };
-            s32 key_x = 100 + static_cast<s32>(index % PTC_OVERLAY_KEY_COLUMNS) * 58;
-            s32 key_y = 380 + static_cast<s32>(index / PTC_OVERLAY_KEY_COLUMNS) * 48;
+            unsigned int row = index == 0 ? 3u : (index - 1u) / 3u;
+            unsigned int col = index == 0 ? 1u : (index - 1u) % 3u;
+            s32 key_x = 112 + static_cast<s32>(col) * 112;
+            s32 key_y = 311 + static_cast<s32>(row) * 48;
             const bool focused = index == input_->cursor;
-            renderer->drawRect(key_x - 6, key_y - 28, 34, 38, renderer->a(focused ? FOCUS_COLOR : KEY_COLOR));
-            draw_outline(renderer, key_x - 6, key_y - 28, 34, 38, focused ? 3 : 1, focused ? TEXT_COLOR : MUTED_COLOR);
-            renderer->drawString(symbol, false, key_x, key_y, 28, renderer->a(focused ? DARK_TEXT_COLOR : TEXT_COLOR));
+            renderer->drawRect(key_x - 36, key_y - 32, 72, 42, renderer->a(focused ? FOCUS_COLOR : KEY_COLOR));
+            draw_outline(renderer, key_x - 36, key_y - 32, 72, 42, focused ? 3 : 1, focused ? TEXT_COLOR : MUTED_COLOR);
+            renderer->drawString(symbol, false, key_x - 9, key_y, 29, renderer->a(focused ? DARK_TEXT_COLOR : TEXT_COLOR));
         }
 
         const bool can_submit = ptc_overlay_input_can_submit(input_);
-        renderer->drawString("A digit  X backspace  Y clear  B close", false, 90, 500, 18, renderer->a(TEXT_COLOR));
-        renderer->drawRect(250, 520, 145, 42, renderer->a(can_submit ? FOCUS_COLOR : DISABLED_COLOR));
-        draw_outline(renderer, 250, 520, 145, 42, 2, can_submit ? TEXT_COLOR : MUTED_COLOR);
-        renderer->drawString("+  SUBMIT", false, 270, 551, 23, renderer->a(can_submit ? DARK_TEXT_COLOR : MUTED_COLOR));
-        if (bridge_->waiting) renderer->drawString("Waiting for sysmodule...", false, 90, 655, 22, renderer->a(0xFF0F));
+        renderer->drawString("A 输入  X 删除  Y 清空  B 关闭", false, 42, 495, 17, renderer->a(TEXT_COLOR));
+        renderer->drawRect(238, 505, 155, 42, renderer->a(can_submit ? FOCUS_COLOR : DISABLED_COLOR));
+        draw_outline(renderer, 238, 505, 155, 42, 2, can_submit ? TEXT_COLOR : MUTED_COLOR);
+        renderer->drawString("+ 提交", false, 280, 535, 21, renderer->a(can_submit ? DARK_TEXT_COLOR : MUTED_COLOR));
+        renderer->drawRect(42, 560, 351, 99, renderer->a(PANEL_COLOR));
+        draw_outline(renderer, 42, 560, 351, 99, 2, MUTED_COLOR);
+        renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, 56, 585, 16, renderer->a(MUTED_COLOR));
+        const char *stage = transport_stage(bridge_);
+        if (stage[0]) renderer->drawString(stage, false, 56, 615, 19, renderer->a(FOCUS_COLOR));
         if (error_) {
-            const char *reason = bridge_->summary.valid && bridge_->summary.dry_run
-                ? "observe_dry_run_no_unlock"
-                : (bridge_->summary.valid && bridge_->summary.reason[0]
-                    ? bridge_->summary.reason : "request_failed_or_timed_out");
-            renderer->drawString(reason, false, 90, 645, 19, renderer->a(0xF00F));
-            renderer->drawString("Still locked. Y to retry.", false, 90, 670, 20, renderer->a(0xF00F));
+            const char *message = bridge_->summary.valid && bridge_->summary.dry_run
+                ? "当前为演练模式，未实际解锁"
+                : (bridge_->summary.valid ? error_text(bridge_->summary)
+                    : transport_error_text(ptc_overlay_bridge_last_status(bridge_)));
+            renderer->drawString(message, false, 56, 615, 18, renderer->a(0xF00F), 325);
+            if (bridge_->summary.valid && bridge_->summary.error_code > 0) {
+                std::snprintf(line, sizeof(line), "错误码：%d   Y 重试", bridge_->summary.error_code);
+                renderer->drawString(line, false, 56, 643, 16, renderer->a(0xF00F));
+            } else {
+                renderer->drawString("Y 重试", false, 56, 643, 16, renderer->a(0xF00F));
+            }
         }
         if (close_after_frames_ > 0) {
             if (bridge_->summary.played_minutes_available) {
-                std::snprintf(line, sizeof(line), "Granted. %d remaining, about %d played.",
-                    bridge_->summary.remaining_minutes, bridge_->summary.played_minutes);
+                std::snprintf(line, sizeof(line), "加时成功，剩余 %d 分钟", bridge_->summary.remaining_minutes);
             } else {
-                std::snprintf(line, sizeof(line), "Granted. %d minutes remaining. Played unavailable.",
-                    bridge_->summary.remaining_minutes);
+                std::snprintf(line, sizeof(line), "加时成功，剩余 %d 分钟", bridge_->summary.remaining_minutes);
             }
-            renderer->drawString(line, false, 90, 655, 22, renderer->a(0x0F0F));
+            renderer->drawString(line, false, 56, 615, 18, renderer->a(0x0F0F));
+            if (bridge_->summary.played_minutes_available) {
+                std::snprintf(line, sizeof(line), "已玩约 %d 分钟，即将关闭…", bridge_->summary.played_minutes);
+            } else {
+                std::snprintf(line, sizeof(line), "已玩时间暂不可用，即将关闭…");
+            }
+            renderer->drawString(line, false, 56, 643, 16, renderer->a(0x0F0F));
         }
     }
 
