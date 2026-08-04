@@ -66,6 +66,7 @@ typedef struct {
     char mode[24];
     char request_id[80];
     char message[192];
+    char feedback_detail[192];
     char result_status[24];
     char result_type[48];
     PtcUiOverlay overlay;

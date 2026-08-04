@@ -237,6 +237,14 @@ static void test_result_mapping(void)
         "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,\"remaining_available\":false,"
         "\"remaining_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1,\"bedtime_active\":false,\"parent_unlock_active\":false},"
         "\"capabilities\":{\"play_timer_write_verified\":false,\"play_timer_effect_verified\":false,\"raw_block_verified\":false,\"suspend_verified\":false},\"completed_at\":1}";
+    const char *quick_failure =
+        "{\"version\":1,\"request_id\":\"1-d\",\"type\":\"probe_play_timer_effect\",\"status\":\"error\",\"mode\":\"grant\","
+        "\"dry_run\":false,\"error\":{\"code\":306,\"reason\":\"pctl_effect_not_observed\",\"message\":\"家长控制运行时未观察到生效\"},"
+        "\"state\":{\"day_index\":1,\"limited_today\":0,\"blocked_today\":0,\"unrestricted_today\":1,\"remaining_available\":true,"
+        "\"remaining_minutes\":1418,\"play_timer_enabled\":0,\"restricted_now\":0,\"bedtime_active\":false,\"parent_unlock_active\":false},"
+        "\"capabilities\":{\"play_timer_write_verified\":false,\"play_timer_effect_verified\":false,\"raw_block_verified\":false,\"suspend_verified\":false},"
+        "\"pctl_effect_probe\":{\"verdict\":\"fail\",\"failure_stage\":\"runtime_status\",\"checks\":{\"raw_target_correct\":true,"
+        "\"timer_enabled\":false,\"remaining_available\":true,\"raw_restored\":true,\"timer_restored\":true}},\"completed_at\":1}";
     memset(&model, 0, sizeof(model));
     check_true(ptc_ui_apply_result_json(&model, success), "success result parses");
     check_true(model.status_loaded, "result status loaded");
@@ -255,7 +263,13 @@ static void test_result_mapping(void)
     check_int(model.play_timer_enabled, 1, "error preserves timer state");
     check_true(model.parent_unlock_active, "error preserves unlock state");
     check_true(model.play_timer_effect_verified, "error preserves capability state");
+    check_true(ptc_ui_apply_result_json(&model, quick_failure), "quick failure result parses");
+    check_true(strstr(model.message, "运行时") != NULL, "quick failure keeps parent-readable reason");
+    check_true(strstr(model.feedback_detail, "306 pctl_effect_not_observed/runtime_status") != NULL,
+        "quick failure exposes stable feedback identifiers");
+    check_true(strstr(model.feedback_detail, "临时解锁") != NULL, "quick failure includes actionable hint");
     check_true(ptc_ui_apply_result_json(&model, future), "unknown mode result parses");
+    check_true(model.feedback_detail[0] == '\0', "success clears prior feedback detail");
     check_true(strcmp(model.mode, "未知模式") == 0, "unknown mode stays localized");
     check_true(!ptc_ui_apply_result_json(&model, "{"), "bad result rejected");
     check_true(!ptc_ui_apply_result_json(&model, "[]"), "non-object result rejected");

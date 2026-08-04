@@ -105,6 +105,7 @@ static const char *auth_status_zh(PtcAuthStatus status)
 
 static void set_message(UiState *ui, const char *prefix, PtcCompanionStatus status)
 {
+    ui->model.feedback_detail[0] = '\0';
     snprintf(ui->model.message, sizeof(ui->model.message), "%s：%s", prefix, companion_status_zh(status));
     snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
     if (ui->model.view == PTC_UI_CHILD) {
@@ -114,6 +115,7 @@ static void set_message(UiState *ui, const char *prefix, PtcCompanionStatus stat
 
 static void set_auth_message(UiState *ui, const char *prefix, PtcAuthStatus status)
 {
+    ui->model.feedback_detail[0] = '\0';
     snprintf(ui->model.message, sizeof(ui->model.message), "%s：%s", prefix, auth_status_zh(status));
     snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
 }
@@ -244,6 +246,7 @@ static void begin_wait(UiState *ui, const char *message)
     ui->self_check_after_result = false;
     ui->quick_device_test = false;
     ui->model.result_status[0] = '\0';
+    ui->model.feedback_detail[0] = '\0';
     snprintf(ui->model.message, sizeof(ui->model.message), "%s", message);
 }
 
@@ -484,11 +487,23 @@ static void run_self_check_profile(UiState *ui, PtcSelfCheckProfile profile)
         PtcCompanionStatus disable_status = ptc_companion_set_disable_flag(&ui->client, true);
         (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
         snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
-        snprintf(
-            ui->model.message,
-            sizeof(ui->model.message),
-            "快速设备测试未通过，已自动停用控制：%s",
-            companion_status_zh(disable_status));
+        if (!ui->model.message[0] || strcmp(ui->model.message, "设备快速测试已完成，正在检查恢复证据。") == 0) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "快速设备测试自检未通过。");
+        }
+        if (ui->model.feedback_detail[0]) {
+            size_t used = strlen(ui->model.feedback_detail);
+            snprintf(
+                ui->model.feedback_detail + used,
+                sizeof(ui->model.feedback_detail) - used,
+                "；已自动停用（%s）",
+                companion_status_zh(disable_status));
+        } else {
+            snprintf(
+                ui->model.feedback_detail,
+                sizeof(ui->model.feedback_detail),
+                "已自动停用（%s）；反馈时请提供本次测试时间",
+                companion_status_zh(disable_status));
+        }
     }
 }
 
@@ -546,7 +561,13 @@ static void poll_result(UiState *ui, bool force)
         snprintf(
             ui->model.message,
             sizeof(ui->model.message),
-            "快速设备测试失败，已自动停用控制：%s",
+            "快速设备测试未收到有效结果：%s",
+            companion_status_zh(status));
+        snprintf(
+            ui->model.feedback_detail,
+            sizeof(ui->model.feedback_detail),
+            "反馈码：transport/%s；已自动停用（%s）",
+            ptc_companion_status_name(status),
             companion_status_zh(disable_status));
         return;
     }
@@ -733,12 +754,15 @@ static void confirm_operation(UiState *ui)
         } else {
             status = ptc_companion_set_disable_flag(&ui->client, true);
             (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
+            snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
             snprintf(ui->model.message, sizeof(ui->model.message), "测试无法启动，已停用控制：%s", companion_status_zh(status));
+            snprintf(ui->model.feedback_detail, sizeof(ui->model.feedback_detail), "反馈码：submit/%s", ptc_companion_status_name(status));
         }
         break;
     case PTC_UI_OPERATION_EMERGENCY_DISABLE:
         status = ptc_companion_set_disable_flag(&ui->client, true);
         (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
+        ui->model.feedback_detail[0] = '\0';
         if (status == PTC_COMPANION_OK) {
             snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
             snprintf(ui->model.message, sizeof(ui->model.message), "后台控制已紧急停用。");
@@ -749,6 +773,7 @@ static void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_RESUME_CONTROL:
         status = ptc_companion_set_disable_flag(&ui->client, false);
         (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
+        ui->model.feedback_detail[0] = '\0';
         if (status == PTC_COMPANION_OK) {
             snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
             snprintf(ui->model.message, sizeof(ui->model.message), "后台控制已恢复。");

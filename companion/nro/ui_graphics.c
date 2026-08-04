@@ -368,9 +368,10 @@ static void draw_status_tile(
 
 static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, int y)
 {
-    UiRect rect = {54, y, 1172, 78};
+    UiRect rect = {54, y, 1172, model->feedback_detail[0] ? 112 : 78};
     uint32_t accent = COLOR(91, 100, 116);
     char fitted[190];
+    char detail[190];
     if (model->waiting) {
         accent = COLOR(215, 139, 25);
     } else if (strcmp(model->result_status, "ok") == 0) {
@@ -384,6 +385,10 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     draw_text(pixels, stride, rect.x + 24, rect.y + 29, model->waiting ? "正在处理" : "最近反馈", 18, accent);
     fit_text(fitted, sizeof(fitted), model->message, 21, rect.width - 48);
     draw_text(pixels, stride, rect.x + 24, rect.y + 59, fitted, 21, COLOR(45, 52, 62));
+    if (model->feedback_detail[0]) {
+        fit_text(detail, sizeof(detail), model->feedback_detail, 17, rect.width - 48);
+        draw_text(pixels, stride, rect.x + 24, rect.y + 88, detail, 17, accent);
+    }
 }
 
 static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

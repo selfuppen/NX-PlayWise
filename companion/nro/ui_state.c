@@ -19,6 +19,27 @@ static bool json_bool(const cJSON *object, const char *name, bool fallback)
     return cJSON_IsBool(item) ? cJSON_IsTrue(item) : fallback;
 }
 
+static const char *json_string(const cJSON *object, const char *name)
+{
+    const cJSON *item = object ? cJSON_GetObjectItemCaseSensitive(object, name) : NULL;
+    return cJSON_IsString(item) && item->valuestring ? item->valuestring : "";
+}
+
+static const char *effect_failure_hint(const cJSON *probe)
+{
+    const cJSON *checks;
+    const char *stage = json_string(probe, "failure_stage");
+    if (strcmp(stage, "runtime_status") != 0) {
+        return "";
+    }
+    checks = probe ? cJSON_GetObjectItemCaseSensitive(probe, "checks") : NULL;
+    if (json_bool(checks, "raw_target_correct", false) &&
+        !json_bool(checks, "timer_enabled", false)) {
+        return "；检查官方临时解锁/计时器设置";
+    }
+    return "；检查官方家长控制状态";
+}
+
 static const char *localized_mode(const char *mode)
 {
     if (!mode) {
@@ -223,6 +244,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     cJSON *root;
     const cJSON *state;
     const cJSON *capabilities;
+    const cJSON *probe;
     const char *status;
     const char *type;
     const char *mode;
@@ -246,6 +268,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     snprintf(model->result_status, sizeof(model->result_status), "%s", status ? status : "error");
     snprintf(model->result_type, sizeof(model->result_type), "%s", type ? type : "");
     snprintf(model->mode, sizeof(model->mode), "%s", localized_mode(mode));
+    model->feedback_detail[0] = '\0';
 
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
     if (strcmp(status, "ok") == 0 && cJSON_IsObject(state)) {
@@ -271,7 +294,25 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     if (status && strcmp(status, "error") == 0) {
         const char *message = summary.message[0] ? summary.message : NULL;
+        const char *failure_stage = "";
+        const char *hint = "";
+        probe = cJSON_GetObjectItemCaseSensitive(root, "pctl_effect_probe");
+        if (cJSON_IsObject(probe)) {
+            failure_stage = json_string(probe, "failure_stage");
+            hint = effect_failure_hint(probe);
+        }
         snprintf(model->message, sizeof(model->message), "%s", message ? message : "后台拒绝了本次操作。");
+        if (summary.error_code > 0) {
+            snprintf(
+                model->feedback_detail,
+                sizeof(model->feedback_detail),
+                "反馈码：%d %s%s%s%s",
+                summary.error_code,
+                summary.reason[0] ? summary.reason : "unknown",
+                failure_stage[0] ? "/" : "",
+                failure_stage,
+                hint);
+        }
     } else {
         snprintf(model->message, sizeof(model->message), "%s", request_success_message(type, dry_run));
     }
