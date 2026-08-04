@@ -44,7 +44,7 @@ public:
 
     tsl::elm::Element *createUI() override
     {
-        auto frame = new tsl::elm::OverlayFrame("PCTC", "今日加时");
+        auto frame = new tsl::elm::OverlayFrame("任你玩", "今日加时");
         frame->setContent(new tsl::elm::CustomDrawer([this](tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 w, s32 h) {
             (void)x; (void)y; (void)w; (void)h;
             draw_overlay(renderer);

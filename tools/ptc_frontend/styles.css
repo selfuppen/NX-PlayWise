@@ -37,6 +37,7 @@ main { width: min(100% - 28px, 760px); margin: 36px auto; }
 .intro { display: flex; align-items: start; justify-content: space-between; gap: 20px; margin-bottom: 28px; }
 .intro > div { min-width: 0; width: 100%; }
 h1 { margin: 0 0 8px; font-size: clamp(27px, 5vw, 36px); line-height: 1.16; }
+.slogan { margin: 0 0 5px !important; color: var(--accent) !important; font-weight: 750; letter-spacing: .02em; }
 .intro p { margin: 0; color: var(--muted); line-height: 1.6; }
 .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 label { display: grid; gap: 7px; color: #40504c; font-size: 14px; font-weight: 650; }

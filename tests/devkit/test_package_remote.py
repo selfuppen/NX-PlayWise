@@ -20,16 +20,20 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def valid_overlay() -> bytes:
+def valid_nro(*, with_icon: bool) -> bytes:
     nro_size = 0x80
-    nacp_offset = package_remote.NRO_ASSET_HEADER_SIZE
+    icon = b"JFIF" if with_icon else b""
+    icon_offset = package_remote.NRO_ASSET_HEADER_SIZE
+    nacp_offset = icon_offset + len(icon)
     data = bytearray(nro_size + nacp_offset + package_remote.NACP_SIZE)
     struct.pack_into("<I", data, package_remote.NRO_HEADER_OFFSET, package_remote.NRO_MAGIC)
     struct.pack_into("<I", data, package_remote.NRO_HEADER_SIZE_OFFSET, nro_size)
     struct.pack_into("<II", data, nro_size, package_remote.NRO_ASSET_MAGIC, 0)
+    struct.pack_into("<QQ", data, nro_size + 0x08, icon_offset, len(icon))
     struct.pack_into("<QQ", data, nro_size + 0x18, nacp_offset, package_remote.NACP_SIZE)
+    data[nro_size + icon_offset : nro_size + icon_offset + len(icon)] = icon
     nacp_start = nro_size + nacp_offset
-    data[nacp_start : nacp_start + 5] = b"PCTC\0"
+    data[nacp_start : nacp_start + len(package_remote.APP_TITLE)] = package_remote.APP_TITLE
     version_start = nacp_start + package_remote.NACP_DISPLAY_VERSION_OFFSET
     data[version_start : version_start + 6] = b"1.0.0\0"
     return bytes(data)
@@ -45,9 +49,9 @@ def overlay_without_assets() -> bytes:
 def write_package(path: Path, mode: str, boot2: bool, overlay_data: bytes | None = None) -> None:
     with zipfile.ZipFile(path, "w") as package:
         package.writestr("switch/play-time-control/config.json", f'{{"control_mode":"{mode}"}}')
-        package.writestr("switch/play-time-control/pctc.nro", b"nro")
+        package.writestr("switch/play-time-control/pctc.nro", valid_nro(with_icon=True))
         if boot2:
-            package.writestr("switch/.overlays/pctc.ovl", valid_overlay() if overlay_data is None else overlay_data)
+            package.writestr("switch/.overlays/pctc.ovl", valid_nro(with_icon=False) if overlay_data is None else overlay_data)
             package.writestr("atmosphere/contents/4200000000BD2300/exefs.nsp", b"nsp")
             package.writestr("atmosphere/contents/4200000000BD2300/flags/boot2.flag", b"")
 

@@ -1066,7 +1066,8 @@ static void run_console_fallback(void)
     consoleInit(NULL);
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&pad);
-    printf("游玩时间控制\n\n");
+    printf("任你玩 · PlayWise\n");
+    printf("Play Wise. Play More.\n\n");
     printf("图形界面初始化失败。\n");
     printf("请确认系统共享中文字体和 FreeType 运行环境可用。\n\n");
     printf("按 + 退出。\n");

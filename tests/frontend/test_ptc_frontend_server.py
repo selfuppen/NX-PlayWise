@@ -54,6 +54,8 @@ def test_static_assets_and_copy() -> None:
     assert_true("http://" not in index + app + token + storage + worker, "no external HTTP dependency")
     assert_true("replace-with-long-random-secret" in index, "safe placeholder secret")
     assert_true("生成 8 位数字加时码" in index, "v2 generation copy")
+    assert_true("任你玩" in index and "PlayWise" in index, "bilingual product name")
+    assert_true("Play Wise. Play More." in index, "brand slogan")
     assert_true("used_token" not in index and "加时码已使用" in index, "collision recovery copy")
     assert_true("cryptoApi.subtle" in token, "Web Crypto HMAC implementation")
     assert_true("getRandomValues" in token and "Math.random" not in token, "cryptographic random nonce")
@@ -64,6 +66,7 @@ def test_static_assets_and_copy() -> None:
     assert_true("caches.open" in worker and "localStorage" not in worker, "worker caches only assets")
     assert_equal(manifest["display"], "standalone", "PWA display mode")
     assert_equal(manifest["start_url"], "./", "portable PWA start URL")
+    assert_equal(manifest["name"], "任你玩 · PlayWise", "PWA product name")
     assert_true("STATIC_URLS.has(url.href)" in worker, "worker caches only the static allowlist")
     assert_true(any("maskable" in icon["purpose"] for icon in manifest["icons"]), "maskable icon")
 

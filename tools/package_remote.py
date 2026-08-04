@@ -28,7 +28,7 @@ NRO_ASSET_MAGIC = 0x54455341
 NACP_SIZE = 0x4000
 NACP_TITLE_SIZE = 0x200
 NACP_DISPLAY_VERSION_OFFSET = 0x3060
-OVERLAY_TITLE = b"PCTC"
+APP_TITLE = "任你玩".encode("utf-8")
 PACKAGE_EXPECTATIONS = {
     "safe-nro": ("observe", False),
     "disabled-boot2": ("disabled", True),
@@ -58,7 +58,7 @@ def safe_zip_members(package: zipfile.ZipFile) -> list[str]:
     return names
 
 
-def verify_overlay_nro(data: bytes, label: str) -> None:
+def verify_nro_asset(data: bytes, label: str, *, require_icon: bool) -> None:
     if len(data) < NRO_HEADER_END:
         raise PackageError(f"{label}: overlay is too small for an NRO header")
     magic = struct.unpack_from("<I", data, NRO_HEADER_OFFSET)[0]
@@ -71,7 +71,12 @@ def verify_overlay_nro(data: bytes, label: str) -> None:
     asset_magic, asset_version = struct.unpack_from("<II", data, nro_size)
     if asset_magic != NRO_ASSET_MAGIC or asset_version != 0:
         raise PackageError(f"{label}: invalid NRO asset header")
+    icon_offset, icon_size = struct.unpack_from("<QQ", data, nro_size + 0x08)
     nacp_offset, nacp_size = struct.unpack_from("<QQ", data, nro_size + 0x18)
+    if require_icon and icon_size == 0:
+        raise PackageError(f"{label}: missing icon asset")
+    if icon_size and nro_size + icon_offset + icon_size > len(data):
+        raise PackageError(f"{label}: invalid icon metadata bounds")
     if nacp_size != NACP_SIZE:
         raise PackageError(f"{label}: missing 0x4000-byte NACP metadata")
     nacp_start = nro_size + nacp_offset
@@ -79,8 +84,8 @@ def verify_overlay_nro(data: bytes, label: str) -> None:
     if nacp_offset < NRO_ASSET_HEADER_SIZE or nacp_end > len(data):
         raise PackageError(f"{label}: invalid NACP metadata bounds")
     title = data[nacp_start : nacp_start + NACP_TITLE_SIZE].split(b"\0", 1)[0]
-    if title != OVERLAY_TITLE:
-        raise PackageError(f"{label}: NACP title must be PCTC")
+    if title != APP_TITLE:
+        raise PackageError(f"{label}: NACP title must be 任你玩")
     if data[nacp_start + NACP_DISPLAY_VERSION_OFFSET] == 0:
         raise PackageError(f"{label}: NACP version must be non-empty")
 
@@ -93,6 +98,7 @@ def verify_package_zip(path: Path, prefix: str | None = None) -> None:
         if APP_CONFIG not in names:
             raise PackageError(f"{path.name}: missing {APP_CONFIG}")
         config = json.loads(package.read(APP_CONFIG).decode("utf-8"))
+        nro_data = package.read("switch/play-time-control/pctc.nro") if "switch/play-time-control/pctc.nro" in names else None
         overlay_data = package.read("switch/.overlays/pctc.ovl") if "switch/.overlays/pctc.ovl" in names else None
     if config.get("control_mode") != expected_mode:
         raise PackageError(f"{path.name}: expected control_mode={expected_mode}")
@@ -109,7 +115,9 @@ def verify_package_zip(path: Path, prefix: str | None = None) -> None:
     if expect_boot2 and overlay not in names:
         raise PackageError(f"{path.name}: missing pctc.ovl")
     if expect_boot2 and overlay_data is not None:
-        verify_overlay_nro(overlay_data, f"{path.name}: pctc.ovl")
+        verify_nro_asset(overlay_data, f"{path.name}: pctc.ovl", require_icon=False)
+    if nro_data is not None:
+        verify_nro_asset(nro_data, f"{path.name}: pctc.nro", require_icon=True)
 
 
 def latest_packages(package_dir: Path) -> dict[str, Path]:

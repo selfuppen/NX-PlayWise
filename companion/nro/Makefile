@@ -8,6 +8,10 @@ endif
 
 TARGET := pctc
 BUILD := build
+APP_TITLE := 任你玩
+APP_AUTHOR := PlayWise
+APP_VERSION := 1.0.0
+APP_ICON := $(CURDIR)/icon.jpg
 
 CC := $(DEVKITA64)/bin/aarch64-none-elf-gcc
 ELF2NRO := $(DEVKITPRO)/tools/bin/elf2nro
@@ -42,6 +46,8 @@ OBJS := \
 	$(BUILD)/fs_storage.o
 
 .PHONY: all clean
+
+NACP := $(TARGET).nacp
 
 all: $(TARGET).nro
 
@@ -105,8 +111,11 @@ $(BUILD)/fs_storage.o: ../../platform/switch/fs_storage.c | $(BUILD)
 $(TARGET).elf: $(OBJS)
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(TARGET).nro: $(TARGET).elf
-	$(ELF2NRO) $< $@
+$(NACP): $(MAKEFILE_LIST)
+	$(DEVKITPRO)/tools/bin/nacptool --create "$(APP_TITLE)" "$(APP_AUTHOR)" "$(APP_VERSION)" $@
+
+$(TARGET).nro: $(TARGET).elf $(NACP) $(APP_ICON)
+	$(ELF2NRO) $< $@ --icon=$(APP_ICON) --nacp=$(NACP)
 
 clean:
-	rm -rf $(BUILD) $(TARGET).elf $(TARGET).nro
+	rm -rf $(BUILD) $(TARGET).elf $(TARGET).nro $(NACP)
