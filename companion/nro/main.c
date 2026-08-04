@@ -13,6 +13,7 @@
 #include "../../companion/self_check.h"
 #include "../../platform/switch/fs_storage.h"
 #include "../../third_party/cjson/cJSON.h"
+#include "../../common/time/ptc_time.h"
 #include "ui_graphics.h"
 
 #define APP_ROOT "sdmc:/switch/play-time-control"
@@ -426,6 +427,19 @@ static PtcLimitAction parse_limit_action(const char *action)
     return PTC_LIMIT_ACTION_REMIND;
 }
 
+static const char *limit_action_label(PtcLimitAction action)
+{
+    switch (action) {
+    case PTC_LIMIT_ACTION_RAW_BLOCK:
+        return "强制阻止";
+    case PTC_LIMIT_ACTION_SUSPEND:
+        return "暂停软件";
+    case PTC_LIMIT_ACTION_REMIND:
+    default:
+        return "仅提醒";
+    }
+}
+
 static const char *rule_json_string(const cJSON *object, const char *name)
 {
     const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
@@ -454,6 +468,12 @@ static uint16_t valid_minute_of_day(int value, uint16_t fallback)
     return value >= 0 && value < 1440 ? (uint16_t)value : fallback;
 }
 
+static uint16_t current_minute_of_day_utc8(void)
+{
+    int64_t minute = ((int64_t)time(NULL) / 60 + 8 * 60) % 1440;
+    return (uint16_t)(minute < 0 ? minute + 1440 : minute);
+}
+
 static void load_rule_drafts(UiState *ui)
 {
     PtcRules rules;
@@ -466,17 +486,21 @@ static void load_rule_drafts(UiState *ui)
     ptc_rules_default(&rules);
     memcpy(ui->model.draft_week, rules.week, sizeof(rules.week));
     ui->model.draft_bedtime = rules.bedtime;
+    ui->model.current_limit_action = rules.limit_action;
     ui->model.draft_limit_action = rules.limit_action;
+    ui->model.current_limit_action_loaded = true;
     if (!ui->client.storage->vtable->read_text(ui->client.storage, RULES_PATH, text, sizeof(text))) {
         return;
     }
     root = cJSON_Parse(text);
     if (!cJSON_IsObject(root)) {
+        ui->model.current_limit_action_loaded = false;
         cJSON_Delete(root);
         return;
     }
     version = cJSON_GetObjectItemCaseSensitive(root, "version");
     if (!cJSON_IsNumber(version) || version->valueint != 1) {
+        ui->model.current_limit_action_loaded = false;
         cJSON_Delete(root);
         return;
     }
@@ -501,7 +525,9 @@ static void load_rule_drafts(UiState *ui)
     rules.limit_action = parse_limit_action(rule_json_string(root, "limit_action"));
     memcpy(ui->model.draft_week, rules.week, sizeof(rules.week));
     ui->model.draft_bedtime = rules.bedtime;
+    ui->model.current_limit_action = rules.limit_action;
     ui->model.draft_limit_action = rules.limit_action;
+    ui->model.current_limit_action_loaded = true;
     cJSON_Delete(root);
 }
 
@@ -588,6 +614,7 @@ static void poll_result(UiState *ui, bool force)
             ui->self_check_after_result = false;
             return;
         }
+        load_rule_drafts(ui);
         if (ui->request_view == PTC_UI_CHILD && strcmp(ui->model.result_status, "error") == 0) {
             ui->model.view = PTC_UI_ERROR;
         }
@@ -726,7 +753,18 @@ static void handle_parent_action(UiState *ui)
             submit_transport_empty(ui, "disable_today_limit", "正在设置今日不限时…", "设置今日不限失败");
             break;
         case 4:
-            open_confirm_overlay(ui, PTC_UI_OPERATION_BLOCK_TODAY, "确认今日禁玩", "这会把今天设置为不可游玩。");
+            {
+                char body[192];
+                if (ui->model.played_minutes_available) {
+                    snprintf(body, sizeof(body),
+                             "已用约 %d 分钟；设置为禁玩。页面可能立即受限。",
+                             ui->model.played_minutes);
+                } else {
+                    snprintf(body, sizeof(body),
+                             "已用时间暂不可用；设置为禁玩。页面可能立即受限。");
+                }
+                open_confirm_overlay(ui, PTC_UI_OPERATION_BLOCK_TODAY, "确认今日禁玩", body);
+            }
             break;
         case 5:
             submit_transport_empty(ui, "restore_today_policy", "正在恢复每周计划…", "恢复计划失败");
@@ -786,6 +824,18 @@ static void confirm_operation(UiState *ui)
     PtcCompanionStatus status;
     PtcUiOperation operation = ptc_ui_take_confirmed_operation(&ui->model);
     switch (operation) {
+    case PTC_UI_OPERATION_SET_TODAY_LIMIT:
+        submit_minutes(ui, operation, ui->model.draft_minutes);
+        break;
+    case PTC_UI_OPERATION_SAVE_WEEKLY:
+        submit_weekly(ui);
+        break;
+    case PTC_UI_OPERATION_SAVE_BEDTIME:
+        submit_bedtime(ui);
+        break;
+    case PTC_UI_OPERATION_SAVE_LIMIT_ACTION:
+        submit_limit_action(ui);
+        break;
     case PTC_UI_OPERATION_BLOCK_TODAY:
         submit_transport_empty(ui, "block_today", "正在设置今日禁玩…", "今日禁玩设置失败");
         break;
@@ -861,9 +911,18 @@ static void handle_overlay_input(UiState *ui, u64 down)
             edit_overlay_minutes(ui);
         } else if (down & HidNpadButton_A) {
             PtcUiOperation operation = ui->model.operation;
-            ui->model.overlay = PTC_UI_OVERLAY_NONE;
-            ui->model.operation = PTC_UI_OPERATION_NONE;
-            submit_minutes(ui, operation, ui->model.draft_minutes);
+            if (operation == PTC_UI_OPERATION_SET_TODAY_LIMIT &&
+                ptc_ui_limit_minutes_would_restrict(&ui->model, ui->model.draft_minutes)) {
+                char body[192];
+                snprintf(body, sizeof(body),
+                         "已用约 %d 分钟；设置 %u 分钟。页面可能立即受限。",
+                         ui->model.played_minutes, (unsigned int)ui->model.draft_minutes);
+                open_confirm_overlay(ui, operation, "额度低于已用时间", body);
+            } else {
+                ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                ui->model.operation = PTC_UI_OPERATION_NONE;
+                submit_minutes(ui, operation, ui->model.draft_minutes);
+            }
         }
         return;
     }
@@ -882,8 +941,24 @@ static void handle_overlay_input(UiState *ui, u64 down)
         } else if ((down & HidNpadButton_Y) && day->mode == PTC_RULE_MODE_LIMIT) {
             edit_weekly_minutes(ui);
         } else if (down & HidNpadButton_A) {
-            ui->model.overlay = PTC_UI_OVERLAY_NONE;
-            submit_weekly(ui);
+            uint8_t weekday = ptc_weekday_from_day_index(ui->model.day_index);
+            PtcDayRule today = ui->model.draft_week[weekday];
+            if (ptc_ui_day_rule_would_restrict(&ui->model, today)) {
+                char body[192];
+                if (today.mode == PTC_RULE_MODE_BLOCKED) {
+                    snprintf(body, sizeof(body),
+                             "已用时间%s；今天设为禁玩。页面可能立即受限。",
+                             ui->model.played_minutes_available ? "见今日状态" : "暂不可用");
+                } else {
+                    snprintf(body, sizeof(body),
+                             "已用约 %d 分钟；今天设置 %u 分钟。页面可能立即受限。",
+                             ui->model.played_minutes, (unsigned int)today.minutes);
+                }
+                open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY, "每周计划可能立即生效", body);
+            } else {
+                ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                submit_weekly(ui);
+            }
         }
         return;
     }
@@ -903,8 +978,18 @@ static void handle_overlay_input(UiState *ui, u64 down)
         } else if ((down & HidNpadButton_Down) && ui->model.editor_index == 2) {
             ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, -15);
         } else if (down & HidNpadButton_A) {
-            ui->model.overlay = PTC_UI_OVERLAY_NONE;
-            submit_bedtime(ui);
+            if (ptc_ui_bedtime_active_at(&ui->model.draft_bedtime, current_minute_of_day_utc8())) {
+                char body[192];
+                snprintf(body, sizeof(body),
+                         "已用时间%s；设置 %02u:%02u-%02u:%02u。页面可能立即受限。",
+                         ui->model.played_minutes_available ? "见今日状态" : "暂不可用",
+                         ui->model.draft_bedtime.start_min / 60, ui->model.draft_bedtime.start_min % 60,
+                         ui->model.draft_bedtime.end_min / 60, ui->model.draft_bedtime.end_min % 60);
+                open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_BEDTIME, "就寝限制当前生效", body);
+            } else {
+                ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                submit_bedtime(ui);
+            }
         }
         return;
     }
@@ -914,8 +999,18 @@ static void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & HidNpadButton_Right) {
             ui->model.draft_limit_action = ptc_ui_shift_limit_action(ui->model.draft_limit_action, 1);
         } else if (down & HidNpadButton_A) {
-            ui->model.overlay = PTC_UI_OVERLAY_NONE;
-            submit_limit_action(ui);
+            if (ui->model.draft_limit_action != PTC_LIMIT_ACTION_REMIND &&
+                ui->model.remaining_available && ui->model.remaining_minutes == 0) {
+                char body[192];
+                snprintf(body, sizeof(body),
+                         "已用时间%s；设置为%s。页面可能立即受限。",
+                         ui->model.played_minutes_available ? "见今日状态" : "暂不可用",
+                         limit_action_label(ui->model.draft_limit_action));
+                open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_LIMIT_ACTION, "限制方式可能立即生效", body);
+            } else {
+                ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                submit_limit_action(ui);
+            }
         }
         return;
     }
@@ -1114,6 +1209,7 @@ int main(int argc, char **argv)
     ptc_switch_ipc_client_init(&ui.ipc);
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs), ptc_switch_ipc_backend(), &ui.ipc);
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
+    load_rule_drafts(&ui);
     submit_status(&ui);
 
     while (appletMainLoop() && running) {
@@ -1139,6 +1235,8 @@ int main(int argc, char **argv)
         } else if (ui.model.view == PTC_UI_CHILD) {
             if (down & (HidNpadButton_Plus | HidNpadButton_B)) {
                 running = false;
+            } else if (down & HidNpadButton_Minus) {
+                enter_parent_area(&ui);
             } else if (down & HidNpadButton_A) {
                 if (ui.waiting) {
                     snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再提交加时码。");

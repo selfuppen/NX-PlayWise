@@ -51,7 +51,11 @@ static void test_navigation(void)
 
 static void test_editors(void)
 {
+    PtcUiModel model;
+    PtcDayRule rule;
+    PtcBedtimeRule bedtime;
     uint16_t parsed = 0;
+    memset(&model, 0, sizeof(model));
     check_int(ptc_ui_adjust_minutes(5, -15, 5, 120), 5, "minutes minimum");
     check_int(ptc_ui_adjust_minutes(115, 15, 5, 120), 120, "minutes maximum");
     check_int(ptc_ui_adjust_minute_of_day(0, -15), 1425, "clock wraps backward");
@@ -64,6 +68,29 @@ static void test_editors(void)
     check_true(ptc_ui_parse_minutes("1440", 1, 1440, &parsed) && parsed == 1440, "exact minute maximum parses");
     check_true(!ptc_ui_parse_minutes("0", 1, 1440, &parsed), "exact minute below range rejected");
     check_true(!ptc_ui_parse_minutes("15m", 1, 120, &parsed), "exact minute non-digit rejected");
+
+    model.played_minutes_available = true;
+    model.played_minutes = 45;
+    check_true(ptc_ui_limit_minutes_would_restrict(&model, 45), "equal limit would immediately restrict");
+    check_true(ptc_ui_limit_minutes_would_restrict(&model, 30), "lower limit would immediately restrict");
+    check_true(!ptc_ui_limit_minutes_would_restrict(&model, 60), "higher limit stays available");
+    model.played_minutes_available = false;
+    check_true(!ptc_ui_limit_minutes_would_restrict(&model, 30), "unknown played time does not claim restriction");
+
+    rule.mode = PTC_RULE_MODE_BLOCKED;
+    rule.minutes = 0;
+    check_true(ptc_ui_day_rule_would_restrict(&model, rule), "blocked weekly rule is risky");
+    model.played_minutes_available = true;
+    rule.mode = PTC_RULE_MODE_LIMIT;
+    rule.minutes = 40;
+    check_true(ptc_ui_day_rule_would_restrict(&model, rule), "weekly limit below played time is risky");
+
+    bedtime.enabled = true;
+    bedtime.start_min = 1260;
+    bedtime.end_min = 480;
+    check_true(ptc_ui_bedtime_active_at(&bedtime, 1320), "cross-midnight bedtime active before midnight");
+    check_true(ptc_ui_bedtime_active_at(&bedtime, 120), "cross-midnight bedtime active after midnight");
+    check_true(!ptc_ui_bedtime_active_at(&bedtime, 720), "cross-midnight bedtime inactive during day");
 }
 
 static void test_overlay_confirmation(void)
@@ -265,6 +292,7 @@ static void test_result_mapping(void)
     check_true(ptc_ui_apply_result_json(&model, success), "success result parses");
     check_true(model.status_loaded, "result status loaded");
     check_int(model.remaining_minutes, 42, "remaining minutes mapped");
+    check_int(model.day_index, 1, "day index mapped for today's weekly rule");
     check_int(model.played_minutes, 18, "played minutes mapped");
     check_true(model.played_minutes_available, "played minutes availability mapped");
     check_true(model.parent_unlock_active, "unlock state mapped");

@@ -216,6 +216,31 @@ PtcLimitAction ptc_ui_shift_limit_action(PtcLimitAction action, int direction)
     return (PtcLimitAction)value;
 }
 
+bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minutes)
+{
+    return model && model->played_minutes_available && model->played_minutes >= 0 &&
+        minutes <= (uint16_t)model->played_minutes;
+}
+
+bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule)
+{
+    if (rule.mode == PTC_RULE_MODE_BLOCKED) {
+        return true;
+    }
+    return rule.mode == PTC_RULE_MODE_LIMIT && ptc_ui_limit_minutes_would_restrict(model, rule.minutes);
+}
+
+bool ptc_ui_bedtime_active_at(const PtcBedtimeRule *bedtime, uint16_t minute_of_day)
+{
+    if (!bedtime || !bedtime->enabled || bedtime->start_min == bedtime->end_min) {
+        return false;
+    }
+    if (bedtime->start_min < bedtime->end_min) {
+        return minute_of_day >= bedtime->start_min && minute_of_day < bedtime->end_min;
+    }
+    return minute_of_day >= bedtime->start_min || minute_of_day < bedtime->end_min;
+}
+
 bool ptc_ui_cancel_overlay(PtcUiModel *model)
 {
     if (!model || model->overlay == PTC_UI_OVERLAY_NONE) {
@@ -273,6 +298,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
     if (strcmp(status, "ok") == 0 && cJSON_IsObject(state)) {
         model->status_loaded = true;
+        model->day_index = (uint16_t)json_int(state, "day_index", 0);
         model->limited_today = json_int(state, "limited_today", -1);
         model->blocked_today = json_int(state, "blocked_today", -1);
         model->unrestricted_today = json_int(state, "unrestricted_today", -1);
@@ -473,7 +499,7 @@ PtcUiRect ptc_ui_bedtime_field_rect(int index)
 PtcUiRect ptc_ui_limit_option_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_LIMIT_ACTION);
-    PtcUiRect rect = {dialog.x + 46 + index * 254, dialog.y + 132, 228, 94};
+    PtcUiRect rect = {dialog.x + 46 + index * 254, dialog.y + 142, 228, 84};
     return rect;
 }
 

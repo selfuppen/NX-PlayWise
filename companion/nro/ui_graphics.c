@@ -35,6 +35,8 @@ typedef struct {
     uint32_t accent;
 } UiAction;
 
+static const char *limit_action_label(PtcLimitAction action);
+
 static UiRuntime g_ui;
 
 static UiRect to_uirect(PtcUiRect rect);
@@ -406,6 +408,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char remaining[32];
     char played[32];
     const char *mode = model->mode[0] ? model->mode : "--";
+    const char *limit_action = model->current_limit_action_loaded ? limit_action_label(model->current_limit_action) : "暂不可用";
     describe_status(model, today, sizeof(today), remaining, sizeof(remaining));
     if (model->played_minutes_available && model->played_minutes >= 0) {
         snprintf(played, sizeof(played), "约 %d 分钟", model->played_minutes);
@@ -428,9 +431,14 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     fill_round_rect(pixels, stride, (UiRect){836, 238, 390, 246}, 8, COLOR(250, 251, 253));
     draw_rect_outline(pixels, stride, (UiRect){836, 238, 390, 246}, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, 866, 282, "状态详情", 24, COLOR(28, 34, 43));
-    draw_text(pixels, stride, 866, 324, model->play_timer_enabled == 1 ? "游玩计时器：已开启" : "游玩计时器：未确认", 20, COLOR(77, 86, 99));
-    draw_text(pixels, stride, 866, 362, model->bedtime_active ? "就寝限制：当前生效" : "就寝限制：未生效", 20, COLOR(77, 86, 99));
-    draw_text(pixels, stride, 866, 400, model->parent_unlock_active ? "临时解锁：已开启" : "临时解锁：未开启", 20, COLOR(77, 86, 99));
+    draw_text(pixels, stride, 866, 320, model->play_timer_enabled == 1 ? "游玩计时器：已开启" : "游玩计时器：未确认", 19, COLOR(77, 86, 99));
+    {
+        char line[64];
+        snprintf(line, sizeof(line), "限制方式：%s", limit_action);
+        draw_text(pixels, stride, 866, 352, line, 19, COLOR(77, 86, 99));
+    }
+    draw_text(pixels, stride, 866, 384, model->bedtime_active ? "就寝限制：当前生效" : "就寝限制：未生效", 19, COLOR(77, 86, 99));
+    draw_text(pixels, stride, 866, 416, model->parent_unlock_active ? "临时解锁：已开启" : "临时解锁：未开启", 19, COLOR(77, 86, 99));
     draw_text(pixels, stride, 866, 448, "Y  刷新状态", 20, COLOR(28, 118, 188));
 
     draw_notice(pixels, stride, model, 510);
@@ -574,19 +582,22 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, panel.x + 26, panel.y + 43, "今日状态", 23, COLOR(28, 34, 43));
-    draw_status_row(pixels, stride, panel, panel.y + 74, "今日模式", today, today_color);
-    draw_status_row(pixels, stride, panel, panel.y + 108, "剩余时间", remaining,
+    draw_status_row(pixels, stride, panel, panel.y + 72, "今日模式", today, today_color);
+    draw_status_row(pixels, stride, panel, panel.y + 102, "剩余时间", remaining,
                     model->remaining_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 142, "已玩时间", played,
+    draw_status_row(pixels, stride, panel, panel.y + 132, "已玩时间", played,
                     model->played_minutes_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 176, "控制模式", model->mode[0] ? model->mode : "--", COLOR(28, 118, 188));
-    draw_status_row(pixels, stride, panel, panel.y + 210, "游玩计时器",
+    draw_status_row(pixels, stride, panel, panel.y + 162, "控制模式", model->mode[0] ? model->mode : "--", COLOR(28, 118, 188));
+    draw_status_row(pixels, stride, panel, panel.y + 192, "限制方式",
+                    model->current_limit_action_loaded ? limit_action_label(model->current_limit_action) : "暂不可用",
+                    model->current_limit_action_loaded ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+    draw_status_row(pixels, stride, panel, panel.y + 222, "游玩计时器",
                     model->play_timer_enabled == 1 ? "已开启" : "未确认",
                     model->play_timer_enabled == 1 ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 244, "就寝限制",
+    draw_status_row(pixels, stride, panel, panel.y + 252, "就寝限制",
                     model->bedtime_active ? "当前生效" : "未生效",
                     model->bedtime_active ? COLOR(194, 61, 61) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 278, "临时解锁",
+    draw_status_row(pixels, stride, panel, panel.y + 282, "临时解锁",
                     model->parent_unlock_active ? "已开启" : "未开启",
                     model->parent_unlock_active ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
 }
@@ -767,8 +778,13 @@ static void draw_limit_action_overlay(uint32_t *pixels, uint32_t stride, const P
     UiRect dialog;
     int index;
     draw_dialog_shell(pixels, stride, model, &dialog, 850, 360);
+    if (model->current_limit_action_loaded) {
+        char current[64];
+        snprintf(current, sizeof(current), "当前限制方式：%s", limit_action_label(model->current_limit_action));
+        draw_text(pixels, stride, dialog.x + 46, dialog.y + 116, current, 18, COLOR(91, 100, 114));
+    }
     for (index = 0; index < 3; ++index) {
-        UiRect option = {dialog.x + 46 + index * 254, dialog.y + 132, 228, 94};
+        UiRect option = {dialog.x + 46 + index * 254, dialog.y + 142, 228, 84};
         bool selected = ACTIONS[index] == model->draft_limit_action;
         fill_round_rect(pixels, stride, option, 8, selected ? COLOR(244, 249, 255) : COLOR(250, 251, 253));
         draw_rect_outline(pixels, stride, option, selected ? 3 : 1,
@@ -784,6 +800,10 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
 {
     UiRect dialog;
     bool danger = model->operation == PTC_UI_OPERATION_BLOCK_TODAY ||
+                  model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT ||
+                  model->operation == PTC_UI_OPERATION_SAVE_WEEKLY ||
+                  model->operation == PTC_UI_OPERATION_SAVE_BEDTIME ||
+                  model->operation == PTC_UI_OPERATION_SAVE_LIMIT_ACTION ||
                   model->operation == PTC_UI_OPERATION_EMERGENCY_DISABLE ||
                   model->operation == PTC_UI_OPERATION_QUICK_TEST ||
                   model->operation == PTC_UI_OPERATION_PROBE_RAW_BLOCK ||

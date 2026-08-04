@@ -39,7 +39,10 @@ typedef enum {
     PTC_UI_OPERATION_EMERGENCY_DISABLE = 6,
     PTC_UI_OPERATION_RESUME_CONTROL = 7,
     PTC_UI_OPERATION_PROBE_RAW_BLOCK = 8,
-    PTC_UI_OPERATION_PROBE_SUSPEND = 9
+    PTC_UI_OPERATION_PROBE_SUSPEND = 9,
+    PTC_UI_OPERATION_SAVE_WEEKLY = 10,
+    PTC_UI_OPERATION_SAVE_BEDTIME = 11,
+    PTC_UI_OPERATION_SAVE_LIMIT_ACTION = 12
 } PtcUiOperation;
 
 typedef struct {
@@ -63,6 +66,7 @@ typedef struct {
     bool play_timer_effect_verified;
     bool raw_block_verified;
     bool suspend_verified;
+    uint16_t day_index;
     char mode[24];
     char request_id[80];
     char command_name[64];
@@ -78,7 +82,9 @@ typedef struct {
     uint16_t maximum_minutes;
     PtcDayRule draft_week[7];
     PtcBedtimeRule draft_bedtime;
+    PtcLimitAction current_limit_action;
     PtcLimitAction draft_limit_action;
+    bool current_limit_action_loaded;
     int editor_index;
     char overlay_title[64];
     char overlay_body[192];
@@ -137,6 +143,9 @@ bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, 
 uint16_t ptc_ui_adjust_minute_of_day(uint16_t value, int delta);
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode);
 PtcLimitAction ptc_ui_shift_limit_action(PtcLimitAction action, int direction);
+bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minutes);
+bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
+bool ptc_ui_bedtime_active_at(const PtcBedtimeRule *bedtime, uint16_t minute_of_day);
 bool ptc_ui_cancel_overlay(PtcUiModel *model);
 PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model);
 bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);
