@@ -35,11 +35,26 @@ bool ptc_play_timer_settings_get_minutes(
     uint8_t weekday,
     uint16_t *minutes)
 {
-    if (!minutes || weekday >= PTC_PLAY_TIMER_DAY_COUNT ||
+    bool restricted;
+    return ptc_play_timer_settings_get_day(words, word_count, weekday, &restricted, minutes);
+}
+
+bool ptc_play_timer_settings_get_day(
+    const uint16_t *words,
+    size_t word_count,
+    uint8_t weekday,
+    bool *restricted,
+    uint16_t *minutes)
+{
+    size_t base;
+    if (!restricted || !minutes || weekday >= PTC_PLAY_TIMER_DAY_COUNT ||
         !ptc_play_timer_settings_valid(words, word_count)) {
         return false;
     }
-    *minutes = words[day_base(weekday) + PTC_PLAY_TIMER_DAY_MINUTES_WORD];
+    base = day_base(weekday);
+    *restricted = words[base + PTC_PLAY_TIMER_DAY_FLAG_WORD] == PTC_PLAY_TIMER_DAY_CONFIGURED &&
+        words[base + PTC_PLAY_TIMER_DAY_ENABLE_WORD] == PTC_PLAY_TIMER_DAY_RESTRICTED;
+    *minutes = words[base + PTC_PLAY_TIMER_DAY_MINUTES_WORD];
     return true;
 }
 

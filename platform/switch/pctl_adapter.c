@@ -174,6 +174,8 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
     PtcSwitchPlayTimerSettings timer_settings;
     PtcSwitchSession settings_session;
     uint16_t configured_minutes = 0;
+    bool day_restricted = false;
+    bool day_settings_known = false;
     Service *service;
 
     err = open_read_session(adapter, &session);
@@ -204,25 +206,39 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
     if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER, &restricted, sizeof(restricted)))) {
         out->restricted_now = restricted;
     }
-    out->unrestricted_today = !enabled || unlocked;
-    out->limited_today = enabled && !unlocked;
-    out->blocked_today = false;
     close_session(&session);
     /* The private settings command is available through pctl:s. Failure is a
        soft degradation: ordinary status remains usable, only played time is unavailable. */
     if (weekday < PTC_PLAY_TIMER_DAY_COUNT &&
         open_write_session(adapter, &settings_session) == PTC_ERR_OK) {
         if (get_play_timer_settings(adapter, &settings_session.service, &timer_settings) == PTC_ERR_OK &&
-            ptc_play_timer_settings_get_minutes(
+            ptc_play_timer_settings_get_day(
                 timer_settings.words,
                 PTC_PLAY_TIMER_SETTINGS_WORDS,
                 weekday,
+                &day_restricted,
                 &configured_minutes) &&
-            configured_minutes <= PTC_PLAY_TIMER_MAX_LIMIT_MINUTES) {
-            out->configured_minutes_available = true;
-            out->configured_minutes = configured_minutes;
+            (configured_minutes <= PTC_PLAY_TIMER_MAX_LIMIT_MINUTES || configured_minutes == PTC_PLAY_TIMER_UNLIMITED)) {
+            day_settings_known = true;
         }
         close_session(&settings_session);
+    }
+    if (!enabled || unlocked) {
+        out->unrestricted_today = true;
+    } else if (day_settings_known && !day_restricted && configured_minutes == PTC_PLAY_TIMER_UNLIMITED) {
+        out->unrestricted_today = true;
+    } else if (day_settings_known && day_restricted && configured_minutes == 0U) {
+        out->blocked_today = true;
+    } else {
+        out->limited_today = true;
+    }
+    if (out->limited_today && day_settings_known) {
+        out->configured_minutes_available = true;
+        out->configured_minutes = configured_minutes;
+    }
+    if (out->unrestricted_today) {
+        out->remaining_available = false;
+        out->remaining_minutes = 0;
     }
     return PTC_ERR_OK;
 }

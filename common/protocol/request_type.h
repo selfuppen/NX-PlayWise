@@ -19,7 +19,8 @@ typedef enum {
     PTC_REQUEST_PROBE_SUSPEND = 14,
     PTC_REQUEST_PROBE_PLAY_TIMER_WRITE = 15,
     PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT = 16,
-    PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT = 17
+    PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT = 17,
+    PTC_REQUEST_PREPARE_DEVICE_TEST = 18
 } PtcRequestType;
 
 PtcRequestType ptc_request_type_from_string(const char *value);

@@ -16,7 +16,12 @@ typedef struct {
     bool read_fails_after_apply;
     PtcErrorCode backup_error;
     PtcErrorCode write_error;
+    unsigned int apply_target_calls;
+    unsigned int apply_target_fail_on_call;
     PtcErrorCode start_timer_error;
+    unsigned int start_timer_calls;
+    unsigned int start_timer_fail_on_call;
+    PtcErrorCode snapshot_error;
     PtcErrorCode restore_error;
     bool runtime_effect_succeeds;
     bool model_elapsed_time;

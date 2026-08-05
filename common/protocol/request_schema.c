@@ -249,6 +249,9 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "probe_play_timer_effect") == 0) {
         return PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT;
     }
+    if (strcmp(value, "prepare_device_test") == 0) {
+        return PTC_REQUEST_PREPARE_DEVICE_TEST;
+    }
     return PTC_REQUEST_UNKNOWN;
 }
 
@@ -289,6 +292,8 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "probe_apply_today_limit";
     case PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT:
         return "probe_play_timer_effect";
+    case PTC_REQUEST_PREPARE_DEVICE_TEST:
+        return "prepare_device_test";
     case PTC_REQUEST_UNKNOWN:
     default:
         return "unknown";
@@ -356,6 +361,7 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         out->wait_for_expiry = false;
         (void)json_bool_value(text, "wait_for_expiry", &out->wait_for_expiry);
         return PTC_ERR_OK;
+    case PTC_REQUEST_PREPARE_DEVICE_TEST:
     case PTC_REQUEST_STATUS:
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
     case PTC_REQUEST_BLOCK_TODAY:

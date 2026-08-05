@@ -300,6 +300,14 @@ static void test_result_mapping(void)
         "\"capabilities\":{\"play_timer_write_verified\":false,\"play_timer_effect_verified\":false,\"raw_block_verified\":false,\"suspend_verified\":false},"
         "\"pctl_effect_probe\":{\"verdict\":\"fail\",\"failure_stage\":\"runtime_status\",\"checks\":{\"raw_target_correct\":true,"
         "\"timer_enabled\":false,\"remaining_available\":true,\"raw_restored\":true,\"timer_restored\":true}},\"completed_at\":1}";
+    const char *device_ready =
+        "{\"version\":1,\"request_id\":\"1-ready\",\"type\":\"prepare_device_test\",\"status\":\"ok\",\"mode\":\"grant\","
+        "\"dry_run\":false,\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":30,\"played_minutes_available\":true,\"played_minutes\":60,"
+        "\"play_timer_enabled\":1,\"restricted_now\":0,\"bedtime_active\":false,\"parent_unlock_active\":false},"
+        "\"capabilities\":{\"play_timer_write_verified\":true,\"play_timer_effect_verified\":true,\"raw_block_verified\":false,"
+        "\"suspend_verified\":false},\"device_test\":{\"verdict\":\"pass\",\"failure_stage\":\"none\","
+        "\"ready_target_minutes\":90},\"completed_at\":1}";
     memset(&model, 0, sizeof(model));
     check_true(ptc_ui_apply_result_json(&model, success), "success result parses");
     check_true(model.status_loaded, "result status loaded");
@@ -329,6 +337,10 @@ static void test_result_mapping(void)
     check_true(strstr(model.feedback_detail, "306 pctl_effect_not_observed/runtime_status") != NULL,
         "quick failure exposes stable feedback identifiers");
     check_true(strstr(model.feedback_detail, "临时解锁") != NULL, "quick failure includes actionable hint");
+    check_true(ptc_ui_apply_result_json(&model, device_ready), "device-ready result parses");
+    check_int(model.remaining_minutes, 30, "device-ready remaining time mapped");
+    check_int(model.restricted_now, 0, "device-ready restriction cleared");
+    check_true(strstr(model.message, "检查完整证据") != NULL, "device-ready result waits for self-check");
     check_true(ptc_ui_apply_result_json(&model, unlock_end), "unlock end result parses");
     check_true(!model.parent_unlock_active, "unlock end clears unlock state");
     check_true(ptc_ui_apply_result_json(&model, future), "unknown mode result parses");

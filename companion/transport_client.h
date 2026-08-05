@@ -67,5 +67,6 @@ PtcCompanionStatus ptc_companion_transport_submit_set_weekly_template(PtcCompani
 PtcCompanionStatus ptc_companion_transport_submit_set_bedtime(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const PtcBedtimeRule *bedtime);
 PtcCompanionStatus ptc_companion_transport_submit_set_limit_action(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, PtcLimitAction action);
 PtcCompanionStatus ptc_companion_transport_submit_probe_play_timer_effect(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, bool wait_for_expiry);
+PtcCompanionStatus ptc_companion_transport_submit_prepare_device_test(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at);
 
 #endif

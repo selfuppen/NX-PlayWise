@@ -251,6 +251,11 @@ PtcCompanionStatus ptc_companion_submit_probe_play_timer_effect(PtcCompanionFile
     return submit_json(client, request_id, json);
 }
 
+PtcCompanionStatus ptc_companion_submit_prepare_device_test(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
+{
+    return submit_empty(client, request_id, created_at, "prepare_device_test");
+}
+
 PtcCompanionStatus ptc_companion_submit_probe_apply_today_limit(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
 {
     char json[512];

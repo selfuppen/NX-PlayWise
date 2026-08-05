@@ -19,7 +19,7 @@
 任你玩（PlayWise）面向 Nintendo Switch 自制系统环境，由常驻 sysmodule、Companion NRO、Tesla Overlay 和家长端离线 PWA 组成。家长可以设置本地时间规则，并签发当天有效、绑定设备且只能成功使用一次的 8 位数字加时码。
 
 > [!WARNING]
-> 项目会访问非公开 PCTL 命令和家长控制状态，只适合熟悉 Atmosphere、自制系统和 SD 卡恢复流程的用户。构建成功不能代替真机验证。首次使用必须从 `safe-nro` 或 `observe-boot2` 开始，确认恢复方式后再启用真实写入。
+> 项目会访问非公开 PCTL 命令和家长控制状态，只适合熟悉 Atmosphere、自制系统和 SD 卡恢复流程的用户。构建成功不能代替真机验证。首次设备或 HOS/Atmosphere 变化后必须按 `safe → disabled → observe → grant` 完整基线启用，确认恢复方式后再执行真实写入。
 
 ### 核心能力
 
@@ -76,7 +76,7 @@ python .\tools\package_remote.py
 
 ### 当前状态
 
-协议、队列、控制策略、PWA、IPC fallback、Companion、Overlay、sysmodule 和 package 已有 host 自动测试。play timer 写入及运行时效果已通过真机快速探针；`grant` 业务链路、`enforce` 长期行为、`raw_block`、`suspend` 以及 Overlay 能否覆盖官方硬限制弹窗仍需在目标 HOS、Atmosphere 和 nx-ovlloader 组合上按[测试指南](docs/测试指南.md)验收。
+协议、队列、控制策略、PWA、IPC fallback、Companion、Overlay、sysmodule 和 package 已有 host 自动测试。Companion 提供单请求“一键基础测试”，先验证解除当前限制和精确恢复，再留下有限测试额度；`grant` 真实加时、`enforce` 长期行为、`raw_block`、`suspend` 以及 Overlay 能否覆盖官方硬限制弹窗仍需在目标 HOS、Atmosphere 和 nx-ovlloader 组合上按[测试指南](docs/测试指南.md)验收。
 
 ### 文档
 
@@ -90,7 +90,7 @@ python .\tools\package_remote.py
 PlayWise is a local play-time control project for Nintendo Switch homebrew environments. It combines a resident sysmodule, a Companion NRO, a Tesla Overlay, and an offline parent-side PWA. Parents can manage local time rules and issue device-bound, single-use 8-digit extension codes valid for the current day.
 
 > [!WARNING]
-> This project accesses undocumented PCTL commands and parental-control state. It is intended for users familiar with Atmosphere, homebrew deployment, and SD-card recovery. A successful build is not hardware validation. Start with `safe-nro` or `observe-boot2` before enabling real writes.
+> This project accesses undocumented PCTL commands and parental-control state. It is intended for users familiar with Atmosphere, homebrew deployment, and SD-card recovery. A successful build is not hardware validation. On a new device or after relevant HOS/Atmosphere changes, run the full `safe → disabled → observe → grant` baseline before enabling normal writes.
 
 ### Features
 

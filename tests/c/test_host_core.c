@@ -346,6 +346,9 @@ static void test_companion_request_builder_and_file_protocol(void)
     (void)ptc_companion_parent_unlock_start_request_json(json, sizeof(json), request_id, 1783526400, 15);
     check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"parent_unlock_start\",\"created_at\":1783526400,\"payload\":{\"duration_minutes\":15}}\n", "unlock start request json");
 
+    (void)ptc_companion_prepare_device_test_request_json(json, sizeof(json), request_id, 1783526400);
+    check_str(json, "{\"version\":1,\"request_id\":\"1783526400123-a4f2\",\"type\":\"prepare_device_test\",\"created_at\":1783526400,\"payload\":{}}\n", "prepare device test request json");
+
     check_int(ptc_companion_submit_set_today_limit(&client, "1000-0101", 101, 45), PTC_COMPANION_OK, "submit set today");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/inbox/pending/1000-0101.json", result, sizeof(result)), "set today request readable");
     check_true(strstr(result, "\"type\":\"set_today_limit\"") != NULL && strstr(result, "\"minutes\":45") != NULL, "set today request content");
@@ -373,6 +376,7 @@ static void test_companion_request_builder_and_file_protocol(void)
     check_int(ptc_companion_submit_parent_unlock_end(&client, "1000-0110", 110), PTC_COMPANION_OK, "submit unlock end");
     check_int(ptc_companion_submit_probe_play_timer_write(&client, "1000-0111", 111), PTC_COMPANION_OK, "submit play write probe");
     check_int(ptc_companion_submit_probe_play_timer_effect(&client, "1000-0115", 115, false), PTC_COMPANION_OK, "submit play effect probe");
+    check_int(ptc_companion_submit_prepare_device_test(&client, "1000-0116", 116), PTC_COMPANION_OK, "submit prepare device test");
     check_int(ptc_companion_submit_probe_apply_today_limit(&client, "1000-0112", 112), PTC_COMPANION_OK, "submit probe apply today limit");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/inbox/pending/1000-0112.json", result, sizeof(result)), "probe apply request readable");
     check_true(strstr(result, "\"type\":\"probe_apply_today_limit\"") != NULL && strstr(result, "\"minutes\":1") != NULL && strstr(result, "\"start_timer\":true") != NULL, "probe apply request content");
@@ -587,6 +591,7 @@ static void test_play_timer_settings_layout(void)
     };
     uint16_t before[PTC_PLAY_TIMER_SETTINGS_WORDS];
     uint16_t minutes = 0;
+    bool restricted = false;
     char summary[320];
     unsigned int i;
 
@@ -594,6 +599,8 @@ static void test_play_timer_settings_layout(void)
     check_true(ptc_play_timer_settings_valid(words, PTC_PLAY_TIMER_SETTINGS_WORDS), "real-device play timer layout accepted");
     check_true(ptc_play_timer_settings_get_minutes(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4U, &minutes), "Thursday minutes readable");
     check_int(minutes, 1400, "Thursday fixture minutes");
+    check_true(ptc_play_timer_settings_get_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4U, &restricted, &minutes), "Thursday day mode readable");
+    check_true(restricted, "Thursday fixture is restricted");
     check_true(ptc_play_timer_settings_set_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4U, true, 5U), "Thursday limit writable");
     check_int(words[25], 5, "Thursday minutes use word 25");
     for (i = 0; i < PTC_PLAY_TIMER_SETTINGS_WORDS; ++i) {
@@ -608,6 +615,8 @@ static void test_play_timer_settings_layout(void)
     check_int(words[23], 0, "Thursday unlimited clears configured flag");
     check_int(words[24], 0, "Thursday unlimited clears restricted flag");
     check_int(words[25], PTC_PLAY_TIMER_UNLIMITED, "Thursday unlimited sentinel");
+    check_true(ptc_play_timer_settings_get_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4U, &restricted, &minutes), "Thursday unlimited mode readable");
+    check_true(!restricted && minutes == PTC_PLAY_TIMER_UNLIMITED, "Thursday unlimited mode decoded");
     memcpy(words, before, sizeof(words));
     check_true(ptc_play_timer_settings_set_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4U, true, 0U), "Thursday block writable");
     check_int(words[23], PTC_PLAY_TIMER_DAY_CONFIGURED, "Thursday block keeps configured flag");
@@ -1073,6 +1082,427 @@ static void test_probe_play_timer_effect_paths(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/effect-restore-fail.json", result, sizeof(result)), "restore failure result readable");
     check_true(strstr(result, "\"reason\":\"pctl_restore_failed\"") != NULL, "restore failure reason");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"), "restore failure creates disable flag");
+}
+
+static void test_prepare_device_test_paths(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    PtcSelfCheckResult self_check;
+    char result[8192];
+    char rules[4096];
+    char caps[2048];
+    char report[8192];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.play_timer_enabled = false;
+    pctl.status.restricted_now = true;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 60;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
+    pctl.played_minutes_today = 60;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-ready.json",
+        "{\"version\":1,\"request_id\":\"device-ready\",\"type\":\"prepare_device_test\",\"created_at\":1200,\"payload\":{}}\n"),
+        "write prepare device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process prepare device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-ready.json", result, sizeof(result)), "device test result readable");
+    check_true(strstr(result, "\"type\":\"prepare_device_test\"") != NULL, "device test result type");
+    check_true(strstr(result, "\"verdict\":\"pass\"") != NULL, "device test passes");
+    check_true(strstr(result, "\"restriction_cleared\":true") != NULL, "device test proves restriction release");
+    check_true(strstr(result, "\"raw_restored\":true") != NULL, "device test proves raw restore");
+    check_true(strstr(result, "\"timer_restored\":true") != NULL, "device test proves timer restore");
+    check_true(strstr(result, "\"ready_target_minutes\":90") != NULL, "device test chooses played plus headroom");
+    check_true(strstr(result, "\"ready_restricted_cleared\":true") != NULL, "device test final state is usable");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_LIMIT, "device test leaves limited target");
+    check_int(pctl.last_target.minutes, 90, "device test leaves calculated target");
+    check_int(pctl.status.remaining_minutes, 30, "device test leaves thirty minutes remaining");
+    check_true(!pctl.status.restricted_now, "device test leaves restriction cleared");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", rules, sizeof(rules)), "device test rules readable");
+    check_true(strstr(rules, "\"today_override_mode\":\"limit\"") != NULL &&
+        strstr(rules, "\"today_override_minutes\":90") != NULL, "device test persists ready override");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "device test capabilities readable");
+    check_true(strstr(caps, "\"play_timer_write_verified\":true") != NULL &&
+        strstr(caps, "\"play_timer_effect_verified\":true") != NULL, "device test persists capabilities");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "device test consumes no nonce");
+    self_check = run_self_check_for_test(&mem, "device-ready", PTC_SELF_CHECK_PREPARE_DEVICE_TEST, report, sizeof(report));
+    check_int(self_check.status, PTC_SELF_CHECK_PASS, "prepare device test self-check passes");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.restricted_now = true;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 1425;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 1425;
+    pctl.played_minutes_today = 1425;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-fallback.json",
+        "{\"version\":1,\"request_id\":\"device-fallback\",\"type\":\"prepare_device_test\",\"created_at\":1201,\"payload\":{}}\n"),
+        "write fallback device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process fallback device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-fallback.json", result, sizeof(result)), "fallback device result readable");
+    check_true(strstr(result, "\"verdict\":\"pass\"") != NULL &&
+        strstr(result, "\"ready_target_minutes\":1440") != NULL, "device test retries daily maximum");
+    check_int(pctl.status.remaining_minutes, 15, "fallback target leaves usable time");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.restricted_now = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "observe", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-observe.json",
+        "{\"version\":1,\"request_id\":\"device-observe\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write observe device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process observe device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-observe.json", result, sizeof(result)), "observe device result readable");
+    check_true(strstr(result, "\"dry_run\":true") != NULL && strstr(result, "\"verdict\":\"not_run\"") != NULL,
+        "observe device test is dry run");
+    check_true(!pctl.applied, "observe device test does not write pctl");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-already-ready.json",
+        "{\"version\":1,\"request_id\":\"device-already-ready\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write already-unrestricted device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process already-unrestricted device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-already-ready.json", result, sizeof(result)), "already-unrestricted result readable");
+    check_true(strstr(result, "\"verdict\":\"pass\"") != NULL &&
+        strstr(result, "\"ready_target_minutes\":1425") != NULL, "already-unrestricted device becomes test-ready");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "disabled", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-disabled.json",
+        "{\"version\":1,\"request_id\":\"device-disabled\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write disabled device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process disabled device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-disabled.json", result, sizeof(result)), "disabled device result readable");
+    check_true(strstr(result, "\"reason\":\"disabled\"") != NULL, "disabled mode rejects device test");
+    check_true(!pctl.applied, "disabled device test does not write pctl");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.read_error = PTC_ERR_PCTL_READ_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-before-read-fail.json",
+        "{\"version\":1,\"request_id\":\"device-before-read-fail\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write before-read failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process before-read failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-before-read-fail.json", result, sizeof(result)),
+        "before-read failure result readable");
+    check_true(strstr(result, "\"failure_stage\":\"before_read\"") != NULL,
+        "status read failure reports before_read");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.snapshot_error = PTC_ERR_PCTL_READ_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-snapshot-fail.json",
+        "{\"version\":1,\"request_id\":\"device-snapshot-fail\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write snapshot failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process snapshot failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-snapshot-fail.json", result, sizeof(result)),
+        "snapshot failure result readable");
+    check_true(strstr(result, "\"failure_stage\":\"snapshot\"") != NULL,
+        "snapshot failure reports snapshot");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.backup_error = PTC_ERR_PCTL_BACKUP_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-backup-fail.json",
+        "{\"version\":1,\"request_id\":\"device-backup-fail\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write backup failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process backup failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-backup-fail.json", result, sizeof(result)),
+        "backup failure result readable");
+    check_true(strstr(result, "\"failure_stage\":\"backup\"") != NULL,
+        "backup failure reports backup");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-release-write-fail.json",
+        "{\"version\":1,\"request_id\":\"device-release-write-fail\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write release-write failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process release-write failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-release-write-fail.json", result, sizeof(result)),
+        "release-write failure result readable");
+    check_true(strstr(result, "\"failure_stage\":\"release_write\"") != NULL,
+        "unlimited write failure reports release_write");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.restricted_now = true;
+    pctl.start_timer_error = PTC_ERR_PCTL_WRITE_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-release-start-fail.json",
+        "{\"version\":1,\"request_id\":\"device-release-start-fail\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write release start failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process release start failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-release-start-fail.json", result, sizeof(result)),
+        "release start failure result readable");
+    check_true(strstr(result, "\"failure_stage\":\"release_start\"") != NULL,
+        "release timer failure reports release_start");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.restricted_now = true;
+    pctl.runtime_effect_succeeds = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-release-status-fail.json",
+        "{\"version\":1,\"request_id\":\"device-release-status-fail\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write release status failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process release status failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-release-status-fail.json", result, sizeof(result)),
+        "release status failure result readable");
+    check_true(strstr(result, "\"failure_stage\":\"release_status\"") != NULL,
+        "release observation failure reports release_status");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.restricted_now = true;
+    pctl.start_timer_error = PTC_ERR_PCTL_WRITE_FAILED;
+    pctl.start_timer_fail_on_call = 2U;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-ready-start-fail.json",
+        "{\"version\":1,\"request_id\":\"device-ready-start-fail\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write ready start failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process ready start failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-ready-start-fail.json", result, sizeof(result)),
+        "ready start failure result readable");
+    check_true(strstr(result, "\"failure_stage\":\"ready_start\"") != NULL,
+        "ready timer failure reports ready_start");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.restricted_now = true;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 1440;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 1440;
+    pctl.played_minutes_today = 1440;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-ready-status-fail.json",
+        "{\"version\":1,\"request_id\":\"device-ready-status-fail\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write ready status failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process ready status failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-ready-status-fail.json", result, sizeof(result)),
+        "ready status failure result readable");
+    check_true(strstr(result, "\"failure_stage\":\"ready_status\"") != NULL,
+        "ready observation failure reports ready_status");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.restricted_now = true;
+    pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    pctl.apply_target_fail_on_call = 2U;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-ready-write-fail.json",
+        "{\"version\":1,\"request_id\":\"device-ready-write-fail\",\"type\":\"prepare_device_test\",\"created_at\":1202,\"payload\":{}}\n"),
+        "write ready-write failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process ready-write failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-ready-write-fail.json", result, sizeof(result)),
+        "ready-write failure result readable");
+    check_true(strstr(result, "\"failure_stage\":\"ready_write\"") != NULL,
+        "test-ready write failure reports ready_write");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.restricted_now = true;
+    pctl.restore_error = PTC_ERR_PCTL_WRITE_FAILED;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-restore-fail.json",
+        "{\"version\":1,\"request_id\":\"device-restore-fail\",\"type\":\"prepare_device_test\",\"created_at\":1203,\"payload\":{}}\n"),
+        "write restore failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process restore failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-restore-fail.json", result, sizeof(result)), "restore failure device result readable");
+    check_true(strstr(result, "\"reason\":\"pctl_restore_failed\"") != NULL, "device test restore failure reason");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"), "device test restore failure disables control");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.restricted_now = true;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 60;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
+    pctl.played_minutes_today = 60;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    mem.fail_write_path_contains = "rules.json";
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-rules-fail.json",
+        "{\"version\":1,\"request_id\":\"device-rules-fail\",\"type\":\"prepare_device_test\",\"created_at\":1204,\"payload\":{}}\n"),
+        "write rules failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process rules failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-rules-fail.json", result, sizeof(result)), "rules failure device result readable");
+    check_true(strstr(result, "\"reason\":\"storage_write_failed\"") != NULL &&
+        strstr(result, "\"failure_stage\":\"rules_persist\"") != NULL, "rules failure reports stable stage");
+    check_int(pctl.configured_minutes, 60, "rules failure restores original pctl target");
+    check_true(pctl.status.restricted_now, "rules failure restores original restriction");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/rules.json"), "rules failure leaves no partial rules");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.restricted_now = true;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 60;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
+    pctl.played_minutes_today = 60;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    mem.fail_write_path_contains = "results/device-result-fail.json";
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-result-fail.json",
+        "{\"version\":1,\"request_id\":\"device-result-fail\",\"type\":\"prepare_device_test\",\"created_at\":1204,\"payload\":{}}\n"),
+        "write result failure device test request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process result failure device test");
+    check_int(pctl.configured_minutes, 60, "result failure restores original pctl target");
+    check_true(pctl.status.restricted_now, "result failure restores original restriction");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/rules.json"), "result failure removes test-ready rules");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)), "result failure capabilities readable");
+    check_true(strstr(caps, "\"play_timer_write_verified\":false") != NULL, "result failure restores original capabilities");
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.restricted_now = true;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 60;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
+    pctl.played_minutes_today = 60;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/device-capability-fail.json",
+        "{\"version\":1,\"request_id\":\"device-capability-fail\",\"type\":\"prepare_device_test\",\"created_at\":1204,\"payload\":{}}\n"),
+        "write capability failure device test request");
+    mem.fail_write_path_contains = "capabilities.json";
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process capability failure device test");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/device-capability-fail.json", result, sizeof(result)),
+        "capability failure device result readable");
+    check_true(strstr(result, "\"failure_stage\":\"capability_persist\"") != NULL,
+        "capability failure reports capability_persist");
+    check_int(pctl.configured_minutes, 60, "capability failure restores original pctl target");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/rules.json"), "capability failure removes test-ready rules");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/capabilities.json", caps, sizeof(caps)),
+        "capability failure original capabilities readable");
+    check_true(strstr(caps, "\"play_timer_write_verified\":false") != NULL,
+        "capability failure leaves no false verification");
+}
+
+static void test_disable_today_limit_result_failure_rolls_back(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.restricted_now = true;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 60;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
+    pctl.played_minutes_today = 60;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    mem.fail_write_path_contains = "results/disable-result-fail.json";
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/disable-result-fail.json",
+        "{\"version\":1,\"request_id\":\"disable-result-fail\",\"type\":\"disable_today_limit\",\"created_at\":1205,\"payload\":{}}\n"),
+        "write disable result failure request");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process disable result failure");
+    check_int(pctl.configured_minutes, 60, "disable result failure restores configured limit");
+    check_true(pctl.status.restricted_now, "disable result failure restores restriction");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/rules.json"), "disable result failure removes persisted override");
 }
 
 static void test_probe_apply_today_limit_paths(void)
@@ -2167,6 +2597,11 @@ static void test_more_rule_requests_and_probe_suspend(void)
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process disable today");
     check_true(pctl.applied, "disable applies pctl");
     check_int(pctl.last_target.mode, PTC_PCTL_TARGET_UNLIMITED, "disable target unlimited");
+    check_true(pctl.timer_started, "disable restarts timer to commit runtime state");
+    check_true(pctl.status.unrestricted_today && !pctl.status.restricted_now, "disable confirms restriction cleared");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/1000-0013.json", result, sizeof(result)), "disable result readable");
+    check_true(strstr(result, "\"unrestricted_today\":1") != NULL && strstr(result, "\"restricted_now\":0") != NULL,
+        "disable result reports cleared restriction");
 
     pctl.applied = false;
     write_capabilities(&mem, true, true, false);
@@ -2528,6 +2963,7 @@ static void test_companion_command_labels(void)
         {"parent_unlock_end", "结束解锁"},
         {"probe_play_timer_write", "验证计时器写入"},
         {"probe_play_timer_effect", "快速设备测试"},
+        {"prepare_device_test", "一键基础测试"},
         {"probe_apply_today_limit", "验证今日额度写入"},
         {"probe_raw_block", "验证强制阻止"},
         {"probe_suspend", "验证暂停软件"},
@@ -2593,6 +3029,8 @@ int main(void)
     test_grant_requires_play_timer_write_probe();
     test_probe_play_timer_write_updates_capability();
     test_probe_play_timer_effect_paths();
+    test_prepare_device_test_paths();
+    test_disable_today_limit_result_failure_rolls_back();
     test_probe_apply_today_limit_paths();
     test_legacy_play_timer_capability_is_invalidated();
     test_grant_flow_consumes_nonce_after_write();

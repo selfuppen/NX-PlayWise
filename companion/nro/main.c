@@ -559,6 +559,7 @@ static void run_self_check_profile(UiState *ui, PtcSelfCheckProfile profile)
 {
     PtcSelfCheckResult result;
     char report[RESULT_TEXT_SIZE];
+    int ready_target_minutes = 0;
     result = ptc_self_check_run(
         ui->client.storage,
         APP_ROOT,
@@ -569,14 +570,27 @@ static void run_self_check_profile(UiState *ui, PtcSelfCheckProfile profile)
         sizeof(report));
     ui->quick_device_test = false;
     if (result.status == PTC_SELF_CHECK_PASS) {
+        cJSON *root = cJSON_Parse(ui->last_result);
+        if (root) {
+            cJSON *device_test = cJSON_GetObjectItemCaseSensitive(root, "device_test");
+            cJSON *target = cJSON_IsObject(device_test)
+                ? cJSON_GetObjectItemCaseSensitive(device_test, "ready_target_minutes")
+                : NULL;
+            if (cJSON_IsNumber(target)) {
+                ready_target_minutes = target->valueint;
+            }
+            cJSON_Delete(root);
+        }
         snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
-        snprintf(ui->model.message, sizeof(ui->model.message), "快速设备测试通过，设置已自动恢复。");
+        snprintf(ui->model.message, sizeof(ui->model.message),
+            "一键基础测试通过，限制已解除；今日测试额度 %d 分钟。", ready_target_minutes);
     } else {
         PtcCompanionStatus disable_status = ptc_companion_set_disable_flag(&ui->client, true);
         (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
         snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
-        if (!ui->model.message[0] || strcmp(ui->model.message, "设备快速测试已完成，正在检查恢复证据。") == 0) {
-            snprintf(ui->model.message, sizeof(ui->model.message), "快速设备测试自检未通过。");
+        if (profile == PTC_SELF_CHECK_PREPARE_DEVICE_TEST || !ui->model.message[0] ||
+            strcmp(ui->model.message, "设备快速测试已完成，正在检查恢复证据。") == 0) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "一键基础测试自检未通过。");
         }
         if (ui->model.feedback_detail[0]) {
             size_t used = strlen(ui->model.feedback_detail);
@@ -652,7 +666,7 @@ static void poll_result(UiState *ui, bool force)
         snprintf(
             ui->model.message,
             sizeof(ui->model.message),
-            "快速设备测试未收到有效结果：%s",
+            "一键基础测试未收到有效结果：%s",
             companion_status_zh(status));
         snprintf(
             ui->model.feedback_detail,
@@ -817,7 +831,8 @@ static void handle_parent_action(UiState *ui)
     }
     switch (index) {
     case 0:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_QUICK_TEST, "运行快速设备测试", "测试会短暂写入计时器并自动恢复；失败时将自动停用控制。");
+        open_confirm_overlay(ui, PTC_UI_OPERATION_QUICK_TEST, "运行一键基础测试",
+                             "先验证解除限制和完整恢复，再保留有限测试额度；结束后可恢复周计划。失败时自动停用。");
         break;
     case 1:
         open_confirm_overlay(ui, PTC_UI_OPERATION_EMERGENCY_DISABLE, "紧急停用控制", "创建 disable.flag 后，后台将停止执行控制操作。");
@@ -860,13 +875,13 @@ static void confirm_operation(UiState *ui)
         break;
     case PTC_UI_OPERATION_QUICK_TEST:
         make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
-        status = ptc_companion_transport_submit_probe_play_timer_effect(&ui->transport, ui->active_request_id, time(NULL), false);
-        set_command_name(ui, "probe_play_timer_effect");
+        status = ptc_companion_transport_submit_prepare_device_test(&ui->transport, ui->active_request_id, time(NULL));
+        set_command_name(ui, "prepare_device_test");
         sync_transport_label(ui);
-        if (status == PTC_COMPANION_OK) begin_wait(ui, "probe_play_timer_effect", "快速设备测试正在运行…"); else set_message(ui, "快速设备测试提交失败", status);
+        if (status == PTC_COMPANION_OK) begin_wait(ui, "prepare_device_test", "一键基础测试正在运行…"); else set_message(ui, "一键基础测试提交失败", status);
         if (ui->waiting) {
             ui->quick_device_test = true;
-            arm_self_check_after_result(ui, PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE);
+            arm_self_check_after_result(ui, PTC_SELF_CHECK_PREPARE_DEVICE_TEST);
         } else {
             status = ptc_companion_set_disable_flag(&ui->client, true);
             (void)ptc_companion_transport_notify_storage_changed(&ui->transport);

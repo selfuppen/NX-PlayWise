@@ -16,5 +16,6 @@ int ptc_companion_set_bedtime_request_json(char *out, size_t out_size, const cha
 int ptc_companion_set_limit_action_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at, PtcLimitAction action);
 int ptc_companion_parent_unlock_start_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at, uint16_t duration_minutes);
 int ptc_companion_probe_play_timer_effect_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at, bool wait_for_expiry);
+int ptc_companion_prepare_device_test_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at);
 
 #endif

@@ -386,6 +386,31 @@ static void check_backup(CheckContext *ctx, bool require_hex)
     }
 }
 
+static void check_device_test_rules(CheckContext *ctx, const cJSON *device_test)
+{
+    char text[SELF_CHECK_TEXT_SIZE];
+    cJSON *root;
+    long long target = json_number_or(device_test, "ready_target_minutes", -1);
+    if (!read_app_text(ctx, "rules.json", text, sizeof(text))) {
+        add_line(ctx, PTC_SELF_CHECK_FAIL, "device test rules readable");
+        return;
+    }
+    root = cJSON_Parse(text);
+    if (!root) {
+        add_line(ctx, PTC_SELF_CHECK_FAIL, "device test rules parse");
+        return;
+    }
+    add_line(ctx, json_bool_as_int(root, "today_override_present") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL,
+        "device test today override persisted");
+    expect_result_string(ctx, json_string_or(root, "today_override_mode", ""), "limit", "device test override is limited");
+    add_line(ctx,
+        target > 0 && json_number_or(root, "today_override_minutes", -1) == target
+            ? PTC_SELF_CHECK_PASS
+            : PTC_SELF_CHECK_FAIL,
+        "device test override matches ready target");
+    cJSON_Delete(root);
+}
+
 static void check_request_profile(CheckContext *ctx, PtcSelfCheckProfile profile)
 {
     ResultInfo info;
@@ -470,6 +495,40 @@ static void check_request_profile(CheckContext *ctx, PtcSelfCheckProfile profile
         }
         forbid_event(ctx, events, ctx->request_id, "nonce_consumed");
         break;
+    case PTC_SELF_CHECK_PREPARE_DEVICE_TEST:
+        expect_result_string(ctx, info.status, "ok", "result status is ok");
+        expect_result_string(ctx, info.type, "prepare_device_test", "result type is prepare_device_test");
+        expect_write_mode(ctx, info.mode);
+        expect_result_bool(ctx, info.dry_run, 0, "result dry_run is false");
+        check_capabilities_play_effect(ctx);
+        check_backup(ctx, true);
+        expect_event(ctx, events, ctx->request_id, "pctl_backup");
+        expect_event(ctx, events, ctx->request_id, "device_test_release");
+        expect_event(ctx, events, ctx->request_id, "device_test_restore");
+        expect_event(ctx, events, ctx->request_id, "device_test_ready");
+        expect_event(ctx, events, ctx->request_id, "probe_ok");
+        {
+            cJSON *device_test = cJSON_GetObjectItemCaseSensitive(info.root, "device_test");
+            cJSON *checks = cJSON_IsObject(device_test)
+                ? cJSON_GetObjectItemCaseSensitive(device_test, "checks")
+                : NULL;
+            cJSON *state = cJSON_GetObjectItemCaseSensitive(info.root, "state");
+            add_line(ctx, cJSON_IsObject(device_test) ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "device test evidence present");
+            expect_result_string(ctx, json_string_or(device_test, "verdict", ""), "pass", "device test verdict is pass");
+            add_line(ctx, json_bool_as_int(checks, "restriction_cleared") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "device test clears restriction");
+            add_line(ctx, json_bool_as_int(checks, "raw_restored") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "device test raw restored");
+            add_line(ctx, json_bool_as_int(checks, "timer_restored") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "device test timer restored");
+            add_line(ctx, json_bool_as_int(checks, "ready_limited") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "device test ready target is limited");
+            add_line(ctx, json_bool_as_int(checks, "ready_timer_enabled") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "device test ready timer enabled");
+            add_line(ctx, json_bool_as_int(checks, "ready_remaining") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "device test ready time remains");
+            add_line(ctx, json_bool_as_int(checks, "ready_restricted_cleared") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "device test final restriction cleared");
+            add_line(ctx, json_bool_as_int(checks, "rules_persisted") == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "device test rules persisted");
+            add_line(ctx, json_number_or(state, "limited_today", 0) == 1 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "result reports limited test-ready state");
+            add_line(ctx, json_number_or(state, "restricted_now", 1) == 0 ? PTC_SELF_CHECK_PASS : PTC_SELF_CHECK_FAIL, "result reports restriction cleared");
+            check_device_test_rules(ctx, device_test);
+        }
+        forbid_event(ctx, events, ctx->request_id, "nonce_consumed");
+        break;
     case PTC_SELF_CHECK_GRANT_SUCCESS:
         expect_result_string(ctx, info.status, "ok", "result status is ok");
         expect_result_string(ctx, info.type, "offline_code", "result type is offline_code");
@@ -551,6 +610,8 @@ const char *ptc_self_check_profile_name(PtcSelfCheckProfile profile)
         return "enforce_snapshot";
     case PTC_SELF_CHECK_PLAY_TIMER_EFFECT_PROBE:
         return "play_timer_effect_probe";
+    case PTC_SELF_CHECK_PREPARE_DEVICE_TEST:
+        return "prepare_device_test";
     default:
         return "unknown";
     }

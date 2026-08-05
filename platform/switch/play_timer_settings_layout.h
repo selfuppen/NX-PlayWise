@@ -23,6 +23,12 @@ bool ptc_play_timer_settings_get_minutes(
     size_t word_count,
     uint8_t weekday,
     uint16_t *minutes);
+bool ptc_play_timer_settings_get_day(
+    const uint16_t *words,
+    size_t word_count,
+    uint8_t weekday,
+    bool *restricted,
+    uint16_t *minutes);
 bool ptc_play_timer_settings_set_day(
     uint16_t *words,
     size_t word_count,

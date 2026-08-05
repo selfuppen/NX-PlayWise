@@ -86,7 +86,9 @@ static PtcErrorCode stub_backup(PtcPctl *pctl, PtcPctlBackup *out)
 static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
-    if (stub->write_error != PTC_ERR_OK) {
+    ++stub->apply_target_calls;
+    if (stub->write_error != PTC_ERR_OK &&
+        (stub->apply_target_fail_on_call == 0U || stub->apply_target_fail_on_call == stub->apply_target_calls)) {
         return stub->write_error;
     }
     stub->last_target = *target;
@@ -111,9 +113,7 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
         stub->status.remaining_minutes = target->minutes;
         /* A blocked day allows no play time at all, so the device reports it as
            restricted immediately rather than waiting for elapsed time. */
-        if (target->mode == PTC_PCTL_TARGET_BLOCKED) {
-            stub->status.restricted_now = true;
-        }
+        stub->status.restricted_now = target->mode == PTC_PCTL_TARGET_BLOCKED;
     }
     return PTC_ERR_OK;
 }
@@ -121,7 +121,9 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
 static PtcErrorCode stub_start_timer(PtcPctl *pctl)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
-    if (stub->start_timer_error != PTC_ERR_OK) {
+    ++stub->start_timer_calls;
+    if (stub->start_timer_error != PTC_ERR_OK &&
+        (stub->start_timer_fail_on_call == 0U || stub->start_timer_fail_on_call == stub->start_timer_calls)) {
         return stub->start_timer_error;
     }
     stub->timer_started = true;
@@ -176,6 +178,9 @@ static void stub_encode_snapshot(const PtcPctlStub *stub, PtcPctlSettingsSnapsho
 static PtcErrorCode stub_snapshot_settings(PtcPctl *pctl, PtcPctlSettingsSnapshot *out)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    if (stub->snapshot_error != PTC_ERR_OK) {
+        return stub->snapshot_error;
+    }
     if (stub->read_error != PTC_ERR_OK) {
         return stub->read_error;
     }

@@ -109,3 +109,8 @@ int ptc_companion_probe_play_timer_effect_request_json(char *out, size_t out_siz
         (long long)created_at,
         json_bool(wait_for_expiry));
 }
+
+int ptc_companion_prepare_device_test_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at)
+{
+    return ptc_companion_empty_payload_request_json(out, out_size, request_id, created_at, "prepare_device_test");
+}

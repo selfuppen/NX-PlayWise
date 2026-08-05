@@ -74,6 +74,9 @@ static const char *request_success_message(const char *type, const char *mode, b
     if (strcmp(type, "probe_play_timer_effect") == 0) {
         return "设备快速测试已完成，正在检查恢复证据。";
     }
+    if (strcmp(type, "prepare_device_test") == 0) {
+        return dry_run ? "一键基础测试已演练；观察模式未修改设置。" : "一键基础测试已完成，正在检查完整证据。";
+    }
     if (strcmp(type, "set_bedtime") == 0 && mode && strcmp(mode, "grant") == 0) {
         return "就寝规则已保存；Grant 模式不会自动执行限制。";
     }
@@ -341,6 +344,9 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         const char *failure_stage = "";
         const char *hint = "";
         probe = cJSON_GetObjectItemCaseSensitive(root, "pctl_effect_probe");
+        if (!cJSON_IsObject(probe)) {
+            probe = cJSON_GetObjectItemCaseSensitive(root, "device_test");
+        }
         if (cJSON_IsObject(probe)) {
             failure_stage = json_string(probe, "failure_stage");
             hint = effect_failure_hint(probe);

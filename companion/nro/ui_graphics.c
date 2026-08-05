@@ -59,7 +59,7 @@ static const UiAction PLAN_ACTIONS[] = {
 };
 
 static const UiAction SAFETY_ACTIONS[] = {
-    {"快速设备测试", "验证写入、计时与自动恢复", COLOR(42, 105, 188)},
+    {"一键基础测试", "解除限制、验证恢复并准备测试额度", COLOR(42, 105, 188)},
     {"紧急停用控制", "创建 disable.flag 进入安全状态", COLOR(194, 61, 61)},
     {"恢复控制", "移除 disable.flag 并恢复处理", COLOR(25, 132, 95)},
     {"验证强制阻止", "真机探针验证 raw block 能力", COLOR(194, 61, 61)},
