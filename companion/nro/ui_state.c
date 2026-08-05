@@ -170,6 +170,80 @@ uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint
     return (uint16_t)adjusted;
 }
 
+uint16_t ptc_ui_adjust_minute_of_day(uint16_t value, int delta)
+{
+    int adjusted = (int)value + delta;
+    adjusted = adjusted % 1440;
+    if (adjusted < 0) {
+        adjusted += 1440;
+    }
+    return (uint16_t)adjusted;
+}
+
+bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out)
+{
+    unsigned long value;
+    const char *p;
+    if (!text || !out || !text[0]) {
+        return false;
+    }
+    for (p = text; *p; ++p) {
+        if (*p < '0' || *p > '9') {
+            return false;
+        }
+    }
+    value = strtoul(text, NULL, 10);
+    if (value < minimum || value > maximum) {
+        return false;
+    }
+    *out = (uint16_t)value;
+    return true;
+}
+
+bool ptc_ui_parse_bedtime_time(const char *text, uint16_t *out_min)
+{
+    unsigned int h = 0;
+    unsigned int m = 0;
+    size_t len;
+    if (!text || !out_min) {
+        return false;
+    }
+    len = strlen(text);
+    /* Accept "HH:MM" or "HHMM" formats. */
+    if (len == 5 && text[2] == ':') {
+        if (sscanf(text, "%u:%u", &h, &m) != 2) {
+            return false;
+        }
+    } else if (len == 4) {
+        if (sscanf(text, "%2u%2u", &h, &m) != 2) {
+            return false;
+        }
+    } else {
+        return false;
+    }
+    if (h >= 24 || m >= 60) {
+        return false;
+    }
+    *out_min = (uint16_t)(h * 60 + m);
+    return true;
+}
+
+int ptc_ui_preview_remaining_minutes(const PtcUiModel *model)
+{
+    int remaining;
+    if (!model) {
+        return 0;
+    }
+    remaining = (int)model->draft_minutes;
+    if (model->played_minutes_available && model->played_minutes >= 0) {
+        remaining = (int)model->draft_minutes - model->played_minutes;
+        if (remaining < 0) {
+            remaining = 0;
+        }
+    }
+    return remaining;
+}
+
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode)
 {
     switch (mode) {
