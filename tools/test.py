@@ -53,6 +53,7 @@ def run_python_regressions() -> None:
         "tests/observe/test_observe_queue.py",
         "tests/frontend/test_ptc_frontend_server.py",
         "tests/devkit/test_package_remote.py",
+        "tests/devkit/test_install_script.py",
     ]:
         run([PYTHON, test])
 

@@ -8,7 +8,12 @@ param(
     [ValidatePattern('^[A-Za-z](:\\?)?$')]
     [string]$Drive = "E",
 
-    [switch]$Apply
+    [switch]$Apply,
+
+    # Clean / Full install switches (removes all existing PlayWise data before copying)
+    [switch]$Clean,
+
+    [switch]$Full
 )
 
 Set-StrictMode -Version Latest
@@ -16,10 +21,17 @@ $ErrorActionPreference = "Stop"
 
 $destinationDriveLetter = $Drive.Substring(0, 1).ToUpperInvariant()
 $destinationRoot = "${destinationDriveLetter}:\"
+$isFullInstall = $Clean.IsPresent -or $Full.IsPresent
+
 $ownedRelativePaths = @(
     "atmosphere\contents\4200000000BD2300",
     "switch\.overlays\pctc.ovl"
 )
+if ($isFullInstall) {
+    $pathsToRemove = @("switch\playwise") + $ownedRelativePaths
+} else {
+    $pathsToRemove = $ownedRelativePaths
+}
 
 function Write-Utf8NoBom {
     param(
@@ -137,14 +149,23 @@ if (-not $hasPackageCore) {
 
 Write-Host "Source package: $sourceRoot"
 Write-Host "Destination:    $destinationRoot"
+if ($isFullInstall) {
+    Write-Host "Install mode:   Full clean install (removes all existing PlayWise data and copies new package data)"
+} else {
+    Write-Host "Install mode:   Incremental update (preserves existing config and data)"
+}
 Write-Host ""
 Write-Host "Old paths to remove if present:"
-foreach ($relativePath in $ownedRelativePaths) {
+foreach ($relativePath in $pathsToRemove) {
     Write-Host "  $(Join-Path $destinationRoot $relativePath)"
 }
 Write-Host ""
 Write-Host "Package paths to copy:"
-Write-Host "  switch\playwise\pctc.nro (replace); JSON and runtime data are preserved"
+if ($isFullInstall) {
+    Write-Host "  switch\playwise (full clean install)"
+} else {
+    Write-Host "  switch\playwise\pctc.nro (replace); JSON and runtime data are preserved"
+}
 foreach ($relativePath in $availableRelativePaths) {
     Write-Host "  $relativePath"
 }
@@ -156,21 +177,25 @@ if (-not $Apply) {
 }
 
 if (-not $WhatIfPreference) {
-    $confirmation = Read-Host "Type $destinationRoot to confirm replacement of PlayWise binaries"
+    if ($isFullInstall) {
+        $confirmation = Read-Host "Type $destinationRoot to confirm FULL CLEAN installation of PlayWise (DELETES switch\playwise and all existing data)"
+    } else {
+        $confirmation = Read-Host "Type $destinationRoot to confirm replacement of PlayWise binaries"
+    }
     if ($confirmation -cne $destinationRoot) {
         throw "Confirmation did not match $destinationRoot; no files were changed."
     }
 }
 
-foreach ($relativePath in $ownedRelativePaths) {
+foreach ($relativePath in $pathsToRemove) {
     $oldPath = Join-Path $destinationRoot $relativePath
-    if ((Test-Path -LiteralPath $oldPath) -and $PSCmdlet.ShouldProcess($oldPath, "Remove old installation")) {
+    if ((Test-Path -LiteralPath $oldPath) -and $PSCmdlet.ShouldProcess($oldPath, "Remove old installation path")) {
         Remove-Item -LiteralPath $oldPath -Recurse -Force
     }
 }
 
 if (-not $WhatIfPreference) {
-    foreach ($relativePath in $ownedRelativePaths) {
+    foreach ($relativePath in $pathsToRemove) {
         $oldPath = Join-Path $destinationRoot $relativePath
         if (Test-Path -LiteralPath $oldPath) {
             throw "Old installation path still exists; copying was stopped: $oldPath"
@@ -179,37 +204,44 @@ if (-not $WhatIfPreference) {
 }
 
 $destinationApp = Join-Path $destinationRoot "switch\playwise"
-if ($PSCmdlet.ShouldProcess($destinationApp, "Install Companion and seed missing PlayWise data")) {
-    New-Item -ItemType Directory -Path $destinationApp -Force | Out-Null
-    foreach ($sourceDirectory in Get-ChildItem -LiteralPath $sourceApp -Directory -Recurse -Force) {
-        $relativePath = $sourceDirectory.FullName.Substring($sourceApp.Length).TrimStart("\")
-        New-Item -ItemType Directory -Path (Join-Path $destinationApp $relativePath) -Force | Out-Null
+if ($isFullInstall) {
+    if ($PSCmdlet.ShouldProcess($destinationApp, "Full clean install PlayWise package data")) {
+        Copy-Item -LiteralPath $sourceApp -Destination $destinationApp -Recurse -Force
+        Test-InstalledPath -SourcePath $sourceApp -DestinationPath $destinationApp
     }
-
-    $sourceNro = Join-Path $sourceApp "pctc.nro"
-    $destinationNro = Join-Path $destinationApp "pctc.nro"
-    Copy-Item -LiteralPath $sourceNro -Destination $destinationNro -Force
-    Test-InstalledFile -SourceFile $sourceNro -DestinationFile $destinationNro
-
-    foreach ($seedFile in Get-ChildItem -LiteralPath $sourceApp -File -Filter "*.json") {
-        $destinationSeed = Join-Path $destinationApp $seedFile.Name
-        if (-not (Test-Path -LiteralPath $destinationSeed -PathType Leaf)) {
-            Copy-Item -LiteralPath $seedFile.FullName -Destination $destinationSeed -Force
-            Test-InstalledFile -SourceFile $seedFile.FullName -DestinationFile $destinationSeed
+} else {
+    if ($PSCmdlet.ShouldProcess($destinationApp, "Install Companion and seed missing PlayWise data")) {
+        New-Item -ItemType Directory -Path $destinationApp -Force | Out-Null
+        foreach ($sourceDirectory in Get-ChildItem -LiteralPath $sourceApp -Directory -Recurse -Force) {
+            $relativePath = $sourceDirectory.FullName.Substring($sourceApp.Length).TrimStart("\")
+            New-Item -ItemType Directory -Path (Join-Path $destinationApp $relativePath) -Force | Out-Null
         }
-    }
 
-    $destinationConfig = Join-Path $destinationApp "config.json"
-    $configBackup = Join-Path $destinationApp "backups\config.pre-single-package.json"
-    if (Test-Path -LiteralPath $destinationConfig -PathType Leaf) {
-        if (-not (Test-Path -LiteralPath $configBackup -PathType Leaf)) {
-            New-Item -ItemType Directory -Path (Split-Path -Parent $configBackup) -Force | Out-Null
-            Copy-Item -LiteralPath $destinationConfig -Destination $configBackup -Force
+        $sourceNro = Join-Path $sourceApp "pctc.nro"
+        $destinationNro = Join-Path $destinationApp "pctc.nro"
+        Copy-Item -LiteralPath $sourceNro -Destination $destinationNro -Force
+        Test-InstalledFile -SourceFile $sourceNro -DestinationFile $destinationNro
+
+        foreach ($seedFile in Get-ChildItem -LiteralPath $sourceApp -File -Filter "*.json") {
+            $destinationSeed = Join-Path $destinationApp $seedFile.Name
+            if (-not (Test-Path -LiteralPath $destinationSeed -PathType Leaf)) {
+                Copy-Item -LiteralPath $seedFile.FullName -Destination $destinationSeed -Force
+                Test-InstalledFile -SourceFile $seedFile.FullName -DestinationFile $destinationSeed
+            }
         }
-        $config = Get-Content -LiteralPath $destinationConfig -Raw -Encoding utf8 | ConvertFrom-Json
-        $config.control_mode = "enforce"
-        $config.allow_unlimited_to_limited = $true
-        Write-Utf8NoBom -LiteralPath $destinationConfig -Text (($config | ConvertTo-Json -Depth 8) + "`n")
+
+        $destinationConfig = Join-Path $destinationApp "config.json"
+        $configBackup = Join-Path $destinationApp "backups\config.pre-single-package.json"
+        if (Test-Path -LiteralPath $destinationConfig -PathType Leaf) {
+            if (-not (Test-Path -LiteralPath $configBackup -PathType Leaf)) {
+                New-Item -ItemType Directory -Path (Split-Path -Parent $configBackup) -Force | Out-Null
+                Copy-Item -LiteralPath $destinationConfig -Destination $configBackup -Force
+            }
+            $config = Get-Content -LiteralPath $destinationConfig -Raw -Encoding utf8 | ConvertFrom-Json
+            $config.control_mode = "enforce"
+            $config.allow_unlimited_to_limited = $true
+            Write-Utf8NoBom -LiteralPath $destinationConfig -Text (($config | ConvertTo-Json -Depth 8) + "`n")
+        }
     }
 }
 
