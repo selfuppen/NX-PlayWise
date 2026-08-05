@@ -1105,12 +1105,30 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_BEDTIME_ADJ_UP:
         if (ui->model.editor_index == 1) {
-        };
-        if (hit.index >= 0 && hit.index < 3) {
-            ui->model.draft_limit_action = OPTIONS[hit.index];
+            ui->model.draft_bedtime.start_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.start_min, 15);
+        } else if (ui->model.editor_index == 2) {
+            ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, 15);
         }
         break;
-    }
+    case PTC_UI_HIT_BEDTIME_ADJ_DOWN:
+        if (ui->model.editor_index == 1) {
+            ui->model.draft_bedtime.start_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.start_min, -15);
+        } else if (ui->model.editor_index == 2) {
+            ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, -15);
+        }
+        break;
+    case PTC_UI_HIT_BEDTIME_INPUT:
+        edit_bedtime_minutes(ui);
+        break;
+    case PTC_UI_HIT_LIMIT_ACTION_OPTION:
+        if (hit.index == 0) {
+            ui->model.draft_limit_action = PTC_LIMIT_ACTION_REMIND;
+        } else if (hit.index == 1) {
+            ui->model.draft_limit_action = PTC_LIMIT_ACTION_RAW_BLOCK;
+        } else if (hit.index == 2) {
+            ui->model.draft_limit_action = PTC_LIMIT_ACTION_SUSPEND;
+        }
+        break;
     case PTC_UI_HIT_NONE:
     default:
         break;

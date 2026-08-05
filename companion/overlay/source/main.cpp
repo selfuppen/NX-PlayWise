@@ -126,10 +126,10 @@ public:
         keysHeld |= stick_keys;
 
         // 2. 触屏交互处理 (Touch Screen Support)
-        const u32 touch_count = touch.count;
-        if (touch_count > 0 && prev_touch_count_ == 0) {
-            s32 tx = static_cast<s32>(touch.touches[0].x);
-            s32 ty = static_cast<s32>(touch.touches[0].y);
+        bool touch_down = (touch.x != 0 || touch.y != 0);
+        if (touch_down && !prev_touch_down_) {
+            s32 tx = static_cast<s32>(touch.x);
+            s32 ty = static_cast<s32>(touch.y);
             s32 rel_x = tx > 400 ? (tx - 880) : tx;
             s32 rel_y = ty;
 
@@ -146,7 +146,7 @@ public:
                         input_->symbols[input_->length++] = charset[index];
                         input_->symbols[input_->length] = '\0';
                     }
-                    prev_touch_count_ = touch_count;
+                    prev_touch_down_ = touch_down;
                     return true;
                 }
             }
@@ -154,14 +154,14 @@ public:
             // 点击 [X] 退格 (第四行左侧)
             if (rel_x >= 24 && rel_x <= 24 + 80 && rel_y >= 338 && rel_y <= 338 + 40) {
                 (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_X, 0, 0);
-                prev_touch_count_ = touch_count;
+                prev_touch_down_ = touch_down;
                 return true;
             }
 
             // 点击 [Y] 清空 (第四行右侧)
             if (rel_x >= 296 && rel_x <= 296 + 80 && rel_y >= 338 && rel_y <= 338 + 40) {
                 (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_Y, 0, 0);
-                prev_touch_count_ = touch_count;
+                prev_touch_down_ = touch_down;
                 return true;
             }
 
@@ -181,18 +181,18 @@ public:
                         }
                     }
                 }
-                prev_touch_count_ = touch_count;
+                prev_touch_down_ = touch_down;
                 return true;
             }
 
             // 点击状态与命令栏 (y >= 445)
             if (rel_x >= 24 && rel_x <= 376 && rel_y >= 445 && rel_y <= 620) {
                 status_expanded_ = !status_expanded_;
-                prev_touch_count_ = touch_count;
+                prev_touch_down_ = touch_down;
                 return true;
             }
         }
-        prev_touch_count_ = touch_count;
+        prev_touch_down_ = touch_down;
 
         // 3. 物理按键处理 (Button Handler)
         if (keysDown & HidNpadButton_B) {
@@ -283,7 +283,16 @@ public:
             draw_outline(renderer, sx, slot_y, slot_w, slot_h, is_cursor ? 3 : 1, is_cursor ? FOCUS_BORDER : MUTED_COLOR);
 
             // 文本字符或未输入指示
-            char symbol[2] = { index < input_->length ? input_->symbols[index] : (is_cursor ? '_' : '·'), '\0' };
+            char symbol[8] = {0};
+            if (index < input_->length) {
+                symbol[0] = input_->symbols[index];
+                symbol[1] = '\0';
+            } else if (is_cursor) {
+                symbol[0] = '_';
+                symbol[1] = '\0';
+            } else {
+                std::snprintf(symbol, sizeof(symbol), "·");
+            }
             renderer->drawString(
                 symbol,
                 false,
@@ -419,7 +428,7 @@ private:
     int last_elapsed_ms_ = 0;
     bool error_ = false;
     bool status_expanded_ = false;
-    u32 prev_touch_count_ = 0;
+    bool prev_touch_down_ = false;
     u64 prev_stick_keys_ = 0;
 };
 

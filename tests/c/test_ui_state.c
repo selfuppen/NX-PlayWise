@@ -179,10 +179,13 @@ static void test_hit_test_overlays(void)
     check_hit(hit_center(&model, ptc_ui_weekly_min_input_rect()), PTC_UI_HIT_WEEKLY_MIN_INPUT, 0, "weekly exact minutes");
 
     model.overlay = PTC_UI_OVERLAY_BEDTIME;
+    model.editor_index = 1;
+    model.draft_bedtime.enabled = true;
     check_hit(hit_center(&model, ptc_ui_bedtime_field_rect(0)), PTC_UI_HIT_BEDTIME_FIELD, 0, "bedtime enable field");
     check_hit(hit_center(&model, ptc_ui_bedtime_field_rect(2)), PTC_UI_HIT_BEDTIME_FIELD, 2, "bedtime end field");
     check_hit(hit_center(&model, ptc_ui_bedtime_adj_up_rect()), PTC_UI_HIT_BEDTIME_ADJ_UP, 0, "bedtime step up");
     check_hit(hit_center(&model, ptc_ui_bedtime_adj_down_rect()), PTC_UI_HIT_BEDTIME_ADJ_DOWN, 0, "bedtime step down");
+    check_hit(hit_center(&model, ptc_ui_bedtime_input_rect()), PTC_UI_HIT_BEDTIME_INPUT, 0, "bedtime exact input");
 
     model.overlay = PTC_UI_OVERLAY_LIMIT_ACTION;
     check_hit(hit_center(&model, ptc_ui_limit_option_rect(0)), PTC_UI_HIT_LIMIT_ACTION_OPTION, 0, "limit action remind");

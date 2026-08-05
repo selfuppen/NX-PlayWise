@@ -741,6 +741,10 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_bedtime_adj_down_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_BEDTIME_ADJ_DOWN, 0);
         }
+        if (model->draft_bedtime.enabled && model->editor_index > 0 &&
+            ptc_ui_rect_contains(ptc_ui_bedtime_input_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_BEDTIME_INPUT, 0);
+        }
         break;
     case PTC_UI_OVERLAY_LIMIT_ACTION:
         for (i = 0; i < 3; ++i) {
