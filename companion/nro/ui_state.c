@@ -161,6 +161,9 @@ uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint
     if (adjusted < (int)minimum) {
         adjusted = minimum;
     }
+    if (adjusted > (int)maximum) {
+        adjusted = maximum;
+    }
     if (adjusted < 0) {
         adjusted += 1440;
     }

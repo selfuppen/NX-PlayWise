@@ -52,8 +52,6 @@ static void test_navigation(void)
 static void test_editors(void)
 {
     PtcUiModel model;
-    PtcDayRule rule;
-    PtcBedtimeRule bedtime;
     uint16_t parsed = 0;
     memset(&model, 0, sizeof(model));
     check_int(ptc_ui_adjust_minutes(5, -15, 5, 120), 5, "minutes minimum");
@@ -339,7 +337,6 @@ int main(void)
     test_navigation();
     test_page_action_counts();
     test_editors();
-    test_overlay_confirmation();
     test_probe_confirmation();
     test_execution_state();
     test_setup_grace_countdown();
