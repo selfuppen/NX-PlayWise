@@ -347,10 +347,11 @@ public:
         }
 
         // 快捷键指示
-        renderer->drawString("A:输入  X:退格  Y:清空  -:状态  B:关闭", false, 28, 452, 13, renderer->a(MUTED_COLOR));
+        renderer->drawString("摇杆/方向:选择  A:输入  X:退格  Y:清空", false, 28, 450, 12, renderer->a(MUTED_COLOR));
+        renderer->drawString("+:提交  -/L/R:状态  B:关闭", false, 28, 466, 12, renderer->a(MUTED_COLOR));
 
         // --- 5. Collapsible Status Panel (可折叠命令与状态栏) ---
-        const s32 status_y = 472;
+        const s32 status_y = 486;
         const s32 status_w = 352;
 
         if (!status_expanded_) {

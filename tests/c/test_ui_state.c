@@ -77,6 +77,77 @@ static void test_editors(void)
         "danger operation requires confirmation overlay");
     check_int(model.operation, PTC_UI_OPERATION_NONE, "confirmed operation is consumed once");
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_NONE, "confirmation cannot be reused");
+
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    model.operation = PTC_UI_OPERATION_DISABLE_TODAY_LIMIT;
+    check_int(
+        ptc_ui_take_confirmed_operation(&model),
+        PTC_UI_OPERATION_DISABLE_TODAY_LIMIT,
+        "release current restriction requires confirmation");
+}
+
+static void test_numpad(void)
+{
+    PtcUiModel model;
+    uint16_t value = 0;
+    int i;
+    memset(&model, 0, sizeof(model));
+    model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
+    ptc_ui_numpad_open(
+        &model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_MINUTES,
+        "输入额度", "输入范围", 4, 1, 1440, 60);
+    check_int(model.overlay, PTC_UI_OVERLAY_NUMPAD, "numpad opens as modal overlay");
+    check_true(model.numpad_text[0] == '\0', "numpad starts empty");
+    check_int(model.numpad_current, 60, "numpad preserves current value as guidance");
+
+    ptc_ui_numpad_move(&model, -1, 0);
+    check_int(model.numpad_cursor, 2, "numpad wraps left within row");
+    ptc_ui_numpad_move(&model, 0, -1);
+    check_int(model.numpad_cursor, 11, "numpad wraps up to bottom row");
+    ptc_ui_numpad_activate(&model);
+    check_true(model.numpad_text[0] == '\0', "numpad clear key activates without adding a digit");
+    model.numpad_cursor = 0;
+    ptc_ui_numpad_activate(&model);
+    model.numpad_cursor = 1;
+    ptc_ui_numpad_activate(&model);
+    check_true(strcmp(model.numpad_text, "12") == 0, "numpad appends selected digits");
+    ptc_ui_numpad_backspace(&model);
+    check_true(strcmp(model.numpad_text, "1") == 0, "numpad backspace removes one digit");
+    ptc_ui_numpad_clear(&model);
+    check_true(model.numpad_text[0] == '\0', "numpad clear removes all digits");
+
+    snprintf(model.numpad_text, sizeof(model.numpad_text), "1440");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 1440, "numpad accepts minute maximum");
+    snprintf(model.numpad_text, sizeof(model.numpad_text), "0");
+    check_true(!ptc_ui_numpad_validate(&model, &value), "numpad rejects minute below range");
+    check_true(model.numpad_error[0] != '\0', "numpad keeps validation feedback visible");
+
+    check_true(ptc_ui_cancel_overlay(&model), "nested numpad can be cancelled");
+    check_int(model.overlay, PTC_UI_OVERLAY_MINUTES, "numpad cancel returns to prior editor");
+    check_int(model.operation, PTC_UI_OPERATION_SET_TODAY_LIMIT, "numpad cancel preserves editor operation");
+
+    ptc_ui_numpad_open(
+        &model, PTC_UI_NUMPAD_BEDTIME, PTC_UI_OVERLAY_BEDTIME,
+        "输入时间", "HHMM", 4, 0, 1439, 1260);
+    snprintf(model.numpad_text, sizeof(model.numpad_text), "2130");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 1290, "numpad parses valid HHMM");
+    snprintf(model.numpad_text, sizeof(model.numpad_text), "2460");
+    check_true(!ptc_ui_numpad_validate(&model, &value), "numpad rejects invalid HHMM");
+    snprintf(model.numpad_text, sizeof(model.numpad_text), "930");
+    check_true(!ptc_ui_numpad_validate(&model, &value), "numpad requires four time digits");
+
+    ptc_ui_numpad_open(
+        &model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
+        "输入加时码", "8 位", 8, 0, 0, 0);
+    snprintf(model.numpad_text, sizeof(model.numpad_text), "1234567");
+    check_true(!ptc_ui_numpad_validate(&model, NULL), "numpad rejects short offline code");
+    snprintf(model.numpad_text, sizeof(model.numpad_text), "12345678");
+    check_true(ptc_ui_numpad_validate(&model, NULL), "numpad accepts eight-digit offline code");
+    for (i = 0; i < 3; ++i) {
+        model.numpad_cursor = i;
+        ptc_ui_numpad_activate(&model);
+    }
+    check_true(strcmp(model.numpad_text, "12345678") == 0, "numpad never exceeds configured maximum length");
 }
 
 static void check_hit(PtcUiHit hit, PtcUiHitKind kind, int index, const char *label)
@@ -190,6 +261,14 @@ static void test_hit_test_overlays(void)
     model.overlay = PTC_UI_OVERLAY_LIMIT_ACTION;
     check_hit(hit_center(&model, ptc_ui_limit_option_rect(0)), PTC_UI_HIT_LIMIT_ACTION_OPTION, 0, "limit action remind");
     check_hit(hit_center(&model, ptc_ui_limit_option_rect(2)), PTC_UI_HIT_LIMIT_ACTION_OPTION, 2, "limit action suspend");
+
+    model.overlay = PTC_UI_OVERLAY_NUMPAD;
+    check_hit(hit_center(&model, ptc_ui_numpad_key_rect(0)), PTC_UI_HIT_NUMPAD_KEY, 0, "numpad first digit");
+    check_hit(hit_center(&model, ptc_ui_numpad_key_rect(9)), PTC_UI_HIT_NUMPAD_KEY, 9, "numpad backspace key");
+    check_hit(hit_center(&model, ptc_ui_numpad_key_rect(11)), PTC_UI_HIT_NUMPAD_KEY, 11, "numpad clear key");
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0, "numpad confirm button");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0, "numpad cancel button");
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0, "numpad blocks parent card underneath");
 }
 
 static void test_probe_confirmation(void)
@@ -340,6 +419,7 @@ int main(void)
     test_navigation();
     test_page_action_counts();
     test_editors();
+    test_numpad();
     test_probe_confirmation();
     test_execution_state();
     test_setup_grace_countdown();

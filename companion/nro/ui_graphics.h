@@ -27,8 +27,16 @@ typedef enum {
     PTC_UI_OVERLAY_WEEKLY = 2,
     PTC_UI_OVERLAY_BEDTIME = 3,
     PTC_UI_OVERLAY_LIMIT_ACTION = 4,
-    PTC_UI_OVERLAY_CONFIRM = 5
+    PTC_UI_OVERLAY_CONFIRM = 5,
+    PTC_UI_OVERLAY_NUMPAD = 6
 } PtcUiOverlay;
+
+typedef enum {
+    PTC_UI_NUMPAD_NONE = 0,
+    PTC_UI_NUMPAD_OFFLINE_CODE = 1,
+    PTC_UI_NUMPAD_MINUTES = 2,
+    PTC_UI_NUMPAD_BEDTIME = 3
+} PtcUiNumpadPurpose;
 
 typedef enum {
     PTC_UI_OPERATION_NONE = 0,
@@ -45,7 +53,8 @@ typedef enum {
     PTC_UI_OPERATION_SAVE_BEDTIME = 11,
     PTC_UI_OPERATION_SAVE_LIMIT_ACTION = 12,
     PTC_UI_OPERATION_RETRY_SETUP_RELEASE = 13,
-    PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT = 14
+    PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT = 14,
+    PTC_UI_OPERATION_DISABLE_TODAY_LIMIT = 15
 } PtcUiOperation;
 
 typedef enum {
@@ -99,6 +108,17 @@ typedef struct {
     int editor_index;
     char overlay_title[64];
     char overlay_body[192];
+    PtcUiNumpadPurpose numpad_purpose;
+    PtcUiOverlay numpad_return_overlay;
+    char numpad_text[9];
+    int numpad_cursor;
+    uint8_t numpad_max_digits;
+    uint16_t numpad_minimum;
+    uint16_t numpad_maximum;
+    uint16_t numpad_current;
+    char numpad_title[64];
+    char numpad_guide[128];
+    char numpad_error[96];
     char safety_hint[192];
 } PtcUiModel;
 
@@ -136,7 +156,8 @@ typedef enum {
     PTC_UI_HIT_BEDTIME_ADJ_UP,
     PTC_UI_HIT_BEDTIME_ADJ_DOWN,
     PTC_UI_HIT_BEDTIME_INPUT,
-    PTC_UI_HIT_LIMIT_ACTION_OPTION
+    PTC_UI_HIT_LIMIT_ACTION_OPTION,
+    PTC_UI_HIT_NUMPAD_KEY
 } PtcUiHitKind;
 
 typedef struct {
@@ -154,6 +175,22 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
 bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out);
 bool ptc_ui_parse_bedtime_time(const char *text, uint16_t *out_min);
+void ptc_ui_numpad_open(
+    PtcUiModel *model,
+    PtcUiNumpadPurpose purpose,
+    PtcUiOverlay return_overlay,
+    const char *title,
+    const char *guide,
+    uint8_t max_digits,
+    uint16_t minimum,
+    uint16_t maximum,
+    uint16_t current);
+void ptc_ui_numpad_move(PtcUiModel *model, int horizontal, int vertical);
+void ptc_ui_numpad_activate(PtcUiModel *model);
+void ptc_ui_numpad_backspace(PtcUiModel *model);
+void ptc_ui_numpad_clear(PtcUiModel *model);
+bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value);
+void ptc_ui_numpad_finish(PtcUiModel *model);
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
 uint16_t ptc_ui_adjust_minute_of_day(uint16_t value, int delta);
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode);
@@ -192,6 +229,8 @@ PtcUiRect ptc_ui_bedtime_adj_up_rect(void);
 PtcUiRect ptc_ui_bedtime_adj_down_rect(void);
 PtcUiRect ptc_ui_bedtime_input_rect(void);
 PtcUiRect ptc_ui_limit_option_rect(int index);
+PtcUiRect ptc_ui_numpad_display_rect(void);
+PtcUiRect ptc_ui_numpad_key_rect(int index);
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay);
 bool ptc_ui_rect_contains(PtcUiRect rect, int x, int y);

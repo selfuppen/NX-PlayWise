@@ -80,6 +80,9 @@ static const char *request_success_message(const char *type, const char *mode, b
     if (strcmp(type, "restore_install_snapshot") == 0) {
         return "安装前家长控制状态已恢复，PlayWise 已停用。";
     }
+    if (strcmp(type, "disable_today_limit") == 0) {
+        return dry_run ? "解除操作验证通过；观察模式未修改系统设置。" : "当前限制已解除，今天保持不限时。";
+    }
     if (strcmp(type, "set_bedtime") == 0 && mode && strcmp(mode, "grant") == 0) {
         return "就寝规则已保存；Grant 模式不会自动执行限制。";
     }
@@ -276,6 +279,147 @@ bool ptc_ui_parse_bedtime_time(const char *text, uint16_t *out_min)
     return true;
 }
 
+void ptc_ui_numpad_open(
+    PtcUiModel *model,
+    PtcUiNumpadPurpose purpose,
+    PtcUiOverlay return_overlay,
+    const char *title,
+    const char *guide,
+    uint8_t max_digits,
+    uint16_t minimum,
+    uint16_t maximum,
+    uint16_t current)
+{
+    if (!model || purpose == PTC_UI_NUMPAD_NONE || max_digits == 0 || max_digits > 8) {
+        return;
+    }
+    model->overlay = PTC_UI_OVERLAY_NUMPAD;
+    model->numpad_purpose = purpose;
+    model->numpad_return_overlay = return_overlay;
+    model->numpad_text[0] = '\0';
+    model->numpad_cursor = 0;
+    model->numpad_max_digits = max_digits;
+    model->numpad_minimum = minimum;
+    model->numpad_maximum = maximum;
+    model->numpad_current = current;
+    model->numpad_error[0] = '\0';
+    snprintf(model->numpad_title, sizeof(model->numpad_title), "%s", title ? title : "数字输入");
+    snprintf(model->numpad_guide, sizeof(model->numpad_guide), "%s", guide ? guide : "使用方向键或摇杆选择数字");
+}
+
+void ptc_ui_numpad_move(PtcUiModel *model, int horizontal, int vertical)
+{
+    int row;
+    int column;
+    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+        return;
+    }
+    row = model->numpad_cursor / 3;
+    column = model->numpad_cursor % 3;
+    if (horizontal != 0) {
+        column = (column + (horizontal > 0 ? 1 : 2)) % 3;
+    }
+    if (vertical != 0) {
+        row = (row + (vertical > 0 ? 1 : 3)) % 4;
+    }
+    model->numpad_cursor = row * 3 + column;
+}
+
+void ptc_ui_numpad_backspace(PtcUiModel *model)
+{
+    size_t length;
+    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+        return;
+    }
+    length = strlen(model->numpad_text);
+    if (length > 0) {
+        model->numpad_text[length - 1] = '\0';
+    }
+    model->numpad_error[0] = '\0';
+}
+
+void ptc_ui_numpad_clear(PtcUiModel *model)
+{
+    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+        return;
+    }
+    model->numpad_text[0] = '\0';
+    model->numpad_error[0] = '\0';
+}
+
+void ptc_ui_numpad_activate(PtcUiModel *model)
+{
+    size_t length;
+    int digit;
+    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+        return;
+    }
+    if (model->numpad_cursor == 9) {
+        ptc_ui_numpad_backspace(model);
+        return;
+    }
+    if (model->numpad_cursor == 11) {
+        ptc_ui_numpad_clear(model);
+        return;
+    }
+    length = strlen(model->numpad_text);
+    if (length >= model->numpad_max_digits || length + 1 >= sizeof(model->numpad_text)) {
+        snprintf(model->numpad_error, sizeof(model->numpad_error), "最多输入 %u 位数字", (unsigned int)model->numpad_max_digits);
+        return;
+    }
+    digit = model->numpad_cursor == 10 ? 0 : model->numpad_cursor + 1;
+    model->numpad_text[length] = (char)('0' + digit);
+    model->numpad_text[length + 1] = '\0';
+    model->numpad_error[0] = '\0';
+}
+
+bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
+{
+    uint16_t value = 0;
+    size_t length;
+    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+        return false;
+    }
+    length = strlen(model->numpad_text);
+    if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
+        if (length != 8) {
+            snprintf(model->numpad_error, sizeof(model->numpad_error), "加时码必须为 8 位数字");
+            return false;
+        }
+        return true;
+    }
+    if (model->numpad_purpose == PTC_UI_NUMPAD_BEDTIME) {
+        if (length != 4 || !ptc_ui_parse_bedtime_time(model->numpad_text, &value)) {
+            snprintf(model->numpad_error, sizeof(model->numpad_error), "请输入有效的 4 位时间 HHMM");
+            return false;
+        }
+    } else if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
+        if (!ptc_ui_parse_minutes(model->numpad_text, model->numpad_minimum, model->numpad_maximum, &value)) {
+            snprintf(model->numpad_error, sizeof(model->numpad_error), "请输入 %u 到 %u 分钟",
+                     (unsigned int)model->numpad_minimum, (unsigned int)model->numpad_maximum);
+            return false;
+        }
+    } else {
+        return false;
+    }
+    if (out_value) {
+        *out_value = value;
+    }
+    model->numpad_error[0] = '\0';
+    return true;
+}
+
+void ptc_ui_numpad_finish(PtcUiModel *model)
+{
+    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+        return;
+    }
+    model->overlay = model->numpad_return_overlay;
+    model->numpad_purpose = PTC_UI_NUMPAD_NONE;
+    model->numpad_return_overlay = PTC_UI_OVERLAY_NONE;
+    model->numpad_error[0] = '\0';
+}
+
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model)
 {
     int remaining;
@@ -361,8 +505,12 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
     if (!model || model->overlay == PTC_UI_OVERLAY_NONE) {
         return false;
     }
-    model->overlay = PTC_UI_OVERLAY_NONE;
-    model->operation = PTC_UI_OPERATION_NONE;
+    if (model->overlay == PTC_UI_OVERLAY_NUMPAD) {
+        ptc_ui_numpad_finish(model);
+    } else {
+        model->overlay = PTC_UI_OVERLAY_NONE;
+        model->operation = PTC_UI_OPERATION_NONE;
+    }
     return true;
 }
 
@@ -514,7 +662,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
 
 #define PTC_UI_SCREEN_W 1280
 #define PTC_UI_SCREEN_H 720
-#define PTC_UI_DIALOG_BTN_W 150
+#define PTC_UI_DIALOG_BTN_W 210
 #define PTC_UI_DIALOG_BTN_H 52
 
 PtcUiRect ptc_ui_child_submit_rect(void)
@@ -605,6 +753,10 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 850;
         *height = 360;
         break;
+    case PTC_UI_OVERLAY_NUMPAD:
+        *width = 620;
+        *height = 610;
+        break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:
         *width = 760;
@@ -660,6 +812,26 @@ PtcUiRect ptc_ui_limit_option_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_LIMIT_ACTION);
     PtcUiRect rect = {dialog.x + 46 + index * 254, dialog.y + 142, 228, 84};
+    return rect;
+}
+
+PtcUiRect ptc_ui_numpad_display_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_NUMPAD);
+    PtcUiRect rect = {dialog.x + 70, dialog.y + 112, dialog.w - 140, 64};
+    return rect;
+}
+
+PtcUiRect ptc_ui_numpad_key_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_NUMPAD);
+    int row = index / 3;
+    int column = index % 3;
+    PtcUiRect rect = {dialog.x + 116 + column * 134, dialog.y + 214 + row * 66, 120, 54};
+    if (index < 0 || index >= 12) {
+        rect.w = 0;
+        rect.h = 0;
+    }
     return rect;
 }
 
@@ -808,6 +980,13 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         for (i = 0; i < 3; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_limit_option_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_LIMIT_ACTION_OPTION, i);
+            }
+        }
+        break;
+    case PTC_UI_OVERLAY_NUMPAD:
+        for (i = 0; i < 12; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_numpad_key_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_NUMPAD_KEY, i);
             }
         }
         break;

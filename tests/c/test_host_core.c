@@ -2212,7 +2212,7 @@ static void test_companion_command_labels(void)
         {"offline_code", "提交今日加时"},
         {"set_today_limit", "设置今日额度"},
         {"add_today_minutes", "临时加时"},
-        {"disable_today_limit", "今日不限"},
+        {"disable_today_limit", "解除当前限制"},
         {"block_today", "今日禁玩"},
         {"restore_today_policy", "恢复周计划"},
         {"set_weekly_template", "每周计划"},

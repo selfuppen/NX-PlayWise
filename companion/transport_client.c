@@ -183,7 +183,7 @@ const char *ptc_companion_request_command_label_zh(const char *type)
     if (strcmp(type, "offline_code") == 0) return "提交今日加时";
     if (strcmp(type, "set_today_limit") == 0) return "设置今日额度";
     if (strcmp(type, "add_today_minutes") == 0) return "临时加时";
-    if (strcmp(type, "disable_today_limit") == 0) return "今日不限";
+    if (strcmp(type, "disable_today_limit") == 0) return "解除当前限制";
     if (strcmp(type, "block_today") == 0) return "今日禁玩";
     if (strcmp(type, "restore_today_policy") == 0) return "恢复周计划";
     if (strcmp(type, "set_weekly_template") == 0) return "每周计划";

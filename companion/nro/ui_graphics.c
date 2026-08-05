@@ -46,7 +46,7 @@ static const UiAction TODAY_ACTIONS[] = {
     {"刷新状态", "读取今天的最新游玩状态", COLOR(42, 105, 188)},
     {"设置今日额度", "指定今天可玩的分钟数", COLOR(42, 105, 188)},
     {"临时加时", "在今天额度上增加分钟", COLOR(25, 132, 95)},
-    {"今日不限", "暂时取消今天的时间额度", COLOR(25, 132, 95)},
+    {"解除当前限制", "立即解除并将今天设为不限时", COLOR(25, 132, 95)},
     {"今日禁玩", "立即设置今天不可游玩", COLOR(194, 61, 61)},
     {"恢复周计划", "清除今天的临时调整", COLOR(91, 100, 116)},
 };
@@ -774,13 +774,15 @@ static void draw_dialog_shell(
     int height)
 {
     char body[190];
+    const char *title = model->overlay == PTC_UI_OVERLAY_NUMPAD ? model->numpad_title : model->overlay_title;
+    const char *description = model->overlay == PTC_UI_OVERLAY_NUMPAD ? model->numpad_guide : model->overlay_body;
     *dialog = (UiRect){(SCREEN_WIDTH - width) / 2, (SCREEN_HEIGHT - height) / 2 - 10, width, height};
     fill_rect(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, COLOR(226, 230, 236));
     fill_round_rect(pixels, stride, *dialog, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, *dialog, 2, COLOR(203, 211, 222));
-    draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, model->overlay_title, 29, COLOR(28, 34, 43));
-    if (model->overlay_body[0]) {
-        fit_text(body, sizeof(body), model->overlay_body, 20, dialog->width - 68);
+    draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, COLOR(28, 34, 43));
+    if (description[0]) {
+        fit_text(body, sizeof(body), description, 20, dialog->width - 68);
         draw_text(pixels, stride, dialog->x + 34, dialog->y + 88, body, 20, COLOR(91, 100, 114));
     }
 }
@@ -810,7 +812,7 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 234, 640, 30}, preview_line, 21, COLOR(25, 132, 95));
 
     draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 266, 580, 26}, "X 或点数值精确输入；方向键继续按 5 / 15 分钟调整", 18, COLOR(77, 86, 99));
-    draw_overlay_actions(pixels, stride, model, "A  确认提交并刷新");
+    draw_overlay_actions(pixels, stride, model, "A / +  提交并刷新");
 }
 
 static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -836,14 +838,14 @@ static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 119, card.width, 34}, minutes, 19, COLOR(77, 86, 99));
     }
     draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 330, dialog.width - 160, 30},
-                     "←→ 选择日期  X 切换模式  ↑↓ 调整 15 分钟  Y 精确输入", 19, COLOR(77, 86, 99));
-    draw_dialog_button(pixels, stride, ptc_ui_weekly_mode_rect(), "切换模式", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+                     "方向键/摇杆选择日期与额度  X 切换模式  Y 精确输入", 19, COLOR(77, 86, 99));
+    draw_dialog_button(pixels, stride, ptc_ui_weekly_mode_rect(), "X 切换模式", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_weekly_min_down_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_weekly_min_up_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     if (model->draft_week[model->editor_index].mode == PTC_RULE_MODE_LIMIT) {
-        draw_dialog_button(pixels, stride, ptc_ui_weekly_min_input_rect(), "输入分钟", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+        draw_dialog_button(pixels, stride, ptc_ui_weekly_min_input_rect(), "Y 输入分钟", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     }
-    draw_overlay_actions(pixels, stride, model, "A  保存计划");
+    draw_overlay_actions(pixels, stride, model, "A / +  保存并刷新");
 }
 
 static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -877,13 +879,13 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 5, end_rect.width, 38}, "结束", 18, COLOR(91, 100, 114));
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 39, end_rect.width, 40}, end, 28, COLOR(28, 118, 188));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 244, dialog.width - 160, 34},
-                     "←→ 选择项目   X 切换启用   Y/点手动输入   ↑↓/摇杆调整 15 分钟", 20, COLOR(77, 86, 99));
+                     "方向键/摇杆选择与调整  X 切换启用  Y 精确输入", 20, COLOR(77, 86, 99));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 282, dialog.width - 80, 26},
                      "说明：就寝时间与每日时长取最严规则；在就寝时段内加时不会突破锁定", 17, COLOR(120, 130, 145));
     draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_down_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_up_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_bedtime_input_rect(), "手动输入", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-    draw_overlay_actions(pixels, stride, model, "A  保存设置");
+    draw_overlay_actions(pixels, stride, model, "A / +  保存并刷新");
 }
 
 static void draw_limit_action_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -910,14 +912,64 @@ static void draw_limit_action_overlay(uint32_t *pixels, uint32_t stride, const P
         draw_text_center(pixels, stride, option, limit_action_label(ACTIONS[index]), 23,
                          selected ? COLOR(28, 118, 188) : COLOR(77, 86, 99));
     }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 244, dialog.width - 160, 34}, "←→ 或点选限制方式", 20, COLOR(77, 86, 99));
-    draw_overlay_actions(pixels, stride, model, "A  保存设置");
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 244, dialog.width - 160, 34}, "方向键/摇杆或触摸选择限制方式", 20, COLOR(77, 86, 99));
+    draw_overlay_actions(pixels, stride, model, "A / +  保存并刷新");
+}
+
+static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    static const char *KEY_LABELS[] = {
+        "1", "2", "3", "4", "5", "6", "7", "8", "9", "X 退格", "0", "Y 清空"
+    };
+    UiRect dialog;
+    UiRect display = to_uirect(ptc_ui_numpad_display_rect());
+    char shown[32];
+    char current[64];
+    int index;
+    draw_dialog_shell(pixels, stride, model, &dialog, 620, 610);
+    if (model->numpad_text[0]) {
+        snprintf(shown, sizeof(shown), "%s", model->numpad_text);
+    } else {
+        snprintf(shown, sizeof(shown), "%.*s", model->numpad_max_digits, "________");
+    }
+    fill_round_rect(pixels, stride, display, 8, COLOR(244, 249, 255));
+    draw_rect_outline(pixels, stride, display, 2, COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, display, shown, 32, COLOR(28, 118, 188));
+
+    if (model->numpad_purpose == PTC_UI_NUMPAD_BEDTIME) {
+        snprintf(current, sizeof(current), "当前值：%02u:%02u  ·  输入 4 位 HHMM",
+                 (unsigned int)(model->numpad_current / 60), (unsigned int)(model->numpad_current % 60));
+    } else if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
+        snprintf(current, sizeof(current), "当前值：%u 分钟  ·  范围 %u–%u",
+                 (unsigned int)model->numpad_current, (unsigned int)model->numpad_minimum,
+                 (unsigned int)model->numpad_maximum);
+    } else {
+        snprintf(current, sizeof(current), "请输入完整的 8 位加时码");
+    }
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 178, dialog.width - 80, 24}, current, 17, COLOR(91, 100, 114));
+    for (index = 0; index < 12; ++index) {
+        UiRect key = to_uirect(ptc_ui_numpad_key_rect(index));
+        bool selected = index == model->numpad_cursor;
+        fill_round_rect(pixels, stride, key, 8, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
+        draw_rect_outline(pixels, stride, key, selected ? 3 : 1,
+                          selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+        draw_text_center(pixels, stride, key, KEY_LABELS[index], index == 9 || index == 11 ? 17 : 26,
+                         selected ? COLOR(28, 118, 188) : COLOR(66, 74, 86));
+    }
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 35, dialog.y + 470, dialog.width - 70, 24},
+                     "方向键/摇杆选择  A 输入  X 退格  Y 清空  + 完成", 17, COLOR(77, 86, 99));
+    if (model->numpad_error[0]) {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 35, dialog.y + 500, dialog.width - 70, 24},
+                         model->numpad_error, 17, COLOR(194, 61, 61));
+    }
+    draw_overlay_actions(pixels, stride, model, "+  完成输入");
 }
 
 static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
     bool danger = model->operation == PTC_UI_OPERATION_BLOCK_TODAY ||
+                  model->operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT ||
                   model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT ||
                   model->operation == PTC_UI_OPERATION_SAVE_WEEKLY ||
                   model->operation == PTC_UI_OPERATION_SAVE_BEDTIME ||
@@ -933,7 +985,7 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 130, 620, 74},
                      danger ? "请确认已了解这项操作的影响" : "确认执行这项操作", 22,
                      danger ? COLOR(194, 61, 61) : COLOR(25, 132, 95));
-    draw_overlay_actions(pixels, stride, model, "A  确认执行");
+    draw_overlay_actions(pixels, stride, model, "A / +  确认执行");
 }
 
 static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -953,6 +1005,9 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         break;
     case PTC_UI_OVERLAY_CONFIRM:
         draw_confirm_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_NUMPAD:
+        draw_numpad_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_NONE:
     default:

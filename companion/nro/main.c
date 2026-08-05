@@ -24,6 +24,8 @@
 #define HIDDEN_HOLD_TICKS 20
 #define HIDDEN_LEFT_SHOULDER_MASK (HidNpadButton_L | HidNpadButton_ZL)
 #define HIDDEN_RIGHT_SHOULDER_MASK (HidNpadButton_R | HidNpadButton_ZR)
+#define STICK_DEADZONE 16000
+#define DIRECTION_BUTTON_MASK (HidNpadButton_Up | HidNpadButton_Down | HidNpadButton_Left | HidNpadButton_Right)
 
 typedef struct {
     PtcCompanionFileClient client;
@@ -151,6 +153,16 @@ static bool hidden_parent_combo_held(u64 buttons)
            (buttons & HIDDEN_RIGHT_SHOULDER_MASK);
 }
 
+static u64 stick_direction_buttons(HidAnalogStickState stick)
+{
+    u64 buttons = 0;
+    if (stick.x > STICK_DEADZONE) buttons |= HidNpadButton_Right;
+    if (stick.x < -STICK_DEADZONE) buttons |= HidNpadButton_Left;
+    if (stick.y > STICK_DEADZONE) buttons |= HidNpadButton_Up;
+    if (stick.y < -STICK_DEADZONE) buttons |= HidNpadButton_Down;
+    return buttons;
+}
+
 static bool switch_random(uint8_t *out, size_t out_size, void *ctx)
 {
     size_t index;
@@ -194,110 +206,42 @@ static bool keyboard_input(
     return R_SUCCEEDED(result) && out[0] != '\0';
 }
 
-static bool minute_keyboard_input(const char *header, uint16_t minimum, uint16_t maximum, uint16_t current, uint16_t *out)
-{
-    SwkbdConfig keyboard;
-    Result result;
-    char text[16];
-    char guide[80];
-    if (!out || R_FAILED(swkbdCreate(&keyboard, 0))) {
-        return false;
-    }
-    swkbdConfigMakePresetDefault(&keyboard);
-    swkbdConfigSetType(&keyboard, SwkbdType_NumPad);
-    swkbdConfigSetStringLenMin(&keyboard, 1);
-    swkbdConfigSetStringLenMax(&keyboard, 4);
-    snprintf(text, sizeof(text), "%u", (unsigned int)current);
-    snprintf(guide, sizeof(guide), "输入 %u 到 %u 分钟", (unsigned int)minimum, (unsigned int)maximum);
-    swkbdConfigSetInitialText(&keyboard, text);
-    swkbdConfigSetHeaderText(&keyboard, header);
-    swkbdConfigSetGuideText(&keyboard, guide);
-    swkbdConfigSetOkButtonText(&keyboard, "确认");
-    result = swkbdShow(&keyboard, text, sizeof(text));
-    swkbdClose(&keyboard);
-    return R_SUCCEEDED(result) && ptc_ui_parse_minutes(text, minimum, maximum, out);
-}
-
-static bool short_code_keyboard_input(char out[9])
-{
-    SwkbdConfig keyboard;
-    Result result;
-    if (!out || R_FAILED(swkbdCreate(&keyboard, 0))) {
-        return false;
-    }
-    out[0] = '\0';
-    swkbdConfigMakePresetDefault(&keyboard);
-    swkbdConfigSetType(&keyboard, SwkbdType_NumPad);
-    swkbdConfigSetStringLenMin(&keyboard, 8);
-    swkbdConfigSetStringLenMax(&keyboard, 8);
-    swkbdConfigSetHeaderText(&keyboard, "输入离线加时短码");
-    swkbdConfigSetGuideText(&keyboard, "8 位数字；5–120 分钟档位码");
-    swkbdConfigSetOkButtonText(&keyboard, "确认");
-    result = swkbdShow(&keyboard, out, 9);
-    swkbdClose(&keyboard);
-    return R_SUCCEEDED(result) && strlen(out) == 8;
-}
-
 static void edit_overlay_minutes(UiState *ui)
 {
-    uint16_t value;
-    if (minute_keyboard_input(
-            ui->model.overlay_title,
-            ui->model.minimum_minutes,
-            ui->model.maximum_minutes,
-            ui->model.draft_minutes,
-            &value)) {
-        ui->model.draft_minutes = value;
-    }
+    char guide[96];
+    snprintf(guide, sizeof(guide), "输入 %u 到 %u 分钟",
+             (unsigned int)ui->model.minimum_minutes, (unsigned int)ui->model.maximum_minutes);
+    ptc_ui_numpad_open(
+        &ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_MINUTES,
+        ui->model.overlay_title, guide, 4,
+        ui->model.minimum_minutes, ui->model.maximum_minutes, ui->model.draft_minutes);
 }
 
 static void edit_weekly_minutes(UiState *ui)
 {
     PtcDayRule *day = &ui->model.draft_week[ui->model.editor_index];
-    uint16_t value;
-    if (day->mode == PTC_RULE_MODE_LIMIT &&
-        minute_keyboard_input("输入每日额度", 1, 1440, day->minutes, &value)) {
-        day->minutes = value;
+    if (day->mode == PTC_RULE_MODE_LIMIT) {
+        ptc_ui_numpad_open(
+            &ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_WEEKLY,
+            "输入每日额度", "输入 1 到 1440 分钟", 4, 1, 1440, day->minutes);
     }
-}
-
-static bool bedtime_keyboard_input(const char *header, uint16_t current_min, uint16_t *out_min)
-{
-    SwkbdConfig keyboard;
-    Result result;
-    char text[16];
-    char guide[80];
-    if (!out_min || R_FAILED(swkbdCreate(&keyboard, 0))) {
-        return false;
-    }
-    swkbdConfigMakePresetDefault(&keyboard);
-    swkbdConfigSetType(&keyboard, SwkbdType_NumPad);
-    swkbdConfigSetStringLenMin(&keyboard, 1);
-    swkbdConfigSetStringLenMax(&keyboard, 5);
-    snprintf(text, sizeof(text), "%02u:%02u", (unsigned int)(current_min / 60), (unsigned int)(current_min % 60));
-    snprintf(guide, sizeof(guide), "输入时间 (如 21:30 或 2130)");
-    swkbdConfigSetInitialText(&keyboard, text);
-    swkbdConfigSetHeaderText(&keyboard, header);
-    swkbdConfigSetGuideText(&keyboard, guide);
-    swkbdConfigSetOkButtonText(&keyboard, "确认");
-    result = swkbdShow(&keyboard, text, sizeof(text));
-    swkbdClose(&keyboard);
-    return R_SUCCEEDED(result) && ptc_ui_parse_bedtime_time(text, out_min);
 }
 
 static void edit_bedtime_minutes(UiState *ui)
 {
-    uint16_t value;
     int target_index = ui->model.editor_index == 2 ? 2 : 1;
     uint16_t current_min = target_index == 1 ? ui->model.draft_bedtime.start_min : ui->model.draft_bedtime.end_min;
     const char *header = target_index == 1 ? "输入就寝开始时间" : "输入就寝结束时间";
-    if (bedtime_keyboard_input(header, current_min, &value)) {
-        if (target_index == 1) {
-            ui->model.draft_bedtime.start_min = value;
-        } else {
-            ui->model.draft_bedtime.end_min = value;
-        }
-    }
+    ptc_ui_numpad_open(
+        &ui->model, PTC_UI_NUMPAD_BEDTIME, PTC_UI_OVERLAY_BEDTIME,
+        header, "输入 4 位 24 小时时间，例如 2130", 4, 0, 1439, current_min);
+}
+
+static void open_offline_code_input(UiState *ui)
+{
+    ptc_ui_numpad_open(
+        &ui->model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
+        "输入离线加时短码", "8 位数字；5–120 分钟档位码", 8, 0, 0, 0);
 }
 
 static void begin_wait(UiState *ui, const char *type, const char *message)
@@ -339,14 +283,9 @@ static void submit_status(UiState *ui)
     else set_message(ui, "刷新失败", status);
 }
 
-static void submit_offline_code(UiState *ui)
+static void submit_offline_code(UiState *ui, const char *code)
 {
-    char code[9];
     PtcCompanionStatus status;
-    if (!short_code_keyboard_input(code)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "已取消输入加时码。");
-        return;
-    }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_offline_code(&ui->transport, ui->active_request_id, time(NULL), code);
     set_command_name(ui, "offline_code");
@@ -749,7 +688,8 @@ static void handle_parent_action(UiState *ui)
             open_minutes_overlay(ui, PTC_UI_OPERATION_ADD_TODAY_MINUTES, "临时加时", "在今天现有额度上增加时间。", 15, 1, 120);
             break;
         case 3:
-            submit_transport_empty(ui, "disable_today_limit", "正在设置今日不限时…", "设置今日不限失败");
+            open_confirm_overlay(ui, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, "解除当前限制",
+                                 "立即解除当前限制并将今天设为不限时；明天继续使用每周计划。");
             break;
         case 4:
             {
@@ -845,6 +785,9 @@ static void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_BLOCK_TODAY:
         submit_transport_empty(ui, "block_today", "正在设置今日禁玩…", "今日禁玩设置失败");
         break;
+    case PTC_UI_OPERATION_DISABLE_TODAY_LIMIT:
+        submit_transport_empty(ui, "disable_today_limit", "正在解除当前限制…", "解除当前限制失败");
+        break;
     case PTC_UI_OPERATION_COMPLETE_SETUP:
         submit_transport_empty(ui, "complete_setup", "正在完成首次设置…", "启用自动控制失败");
         break;
@@ -877,11 +820,62 @@ static void confirm_operation(UiState *ui)
     }
 }
 
+static void accept_numpad(UiState *ui)
+{
+    PtcUiNumpadPurpose purpose = ui->model.numpad_purpose;
+    PtcUiOverlay return_overlay = ui->model.numpad_return_overlay;
+    uint16_t value = 0;
+    char code[9];
+    if (!ptc_ui_numpad_validate(&ui->model, &value)) {
+        return;
+    }
+    if (purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
+        snprintf(code, sizeof(code), "%s", ui->model.numpad_text);
+        ptc_ui_numpad_finish(&ui->model);
+        submit_offline_code(ui, code);
+        return;
+    }
+    if (purpose == PTC_UI_NUMPAD_MINUTES) {
+        if (return_overlay == PTC_UI_OVERLAY_WEEKLY) {
+            ui->model.draft_week[ui->model.editor_index].minutes = value;
+        } else {
+            ui->model.draft_minutes = value;
+        }
+    } else if (purpose == PTC_UI_NUMPAD_BEDTIME) {
+        if (ui->model.editor_index == 2) {
+            ui->model.draft_bedtime.end_min = value;
+        } else {
+            ui->model.draft_bedtime.start_min = value;
+        }
+    }
+    ptc_ui_numpad_finish(&ui->model);
+}
+
 static void handle_overlay_input(UiState *ui, u64 down)
 {
     if (down & HidNpadButton_B) {
         ptc_ui_cancel_overlay(&ui->model);
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改。");
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_NUMPAD) {
+        if (down & HidNpadButton_Left) {
+            ptc_ui_numpad_move(&ui->model, -1, 0);
+        } else if (down & HidNpadButton_Right) {
+            ptc_ui_numpad_move(&ui->model, 1, 0);
+        } else if (down & HidNpadButton_Up) {
+            ptc_ui_numpad_move(&ui->model, 0, -1);
+        } else if (down & HidNpadButton_Down) {
+            ptc_ui_numpad_move(&ui->model, 0, 1);
+        } else if (down & HidNpadButton_X) {
+            ptc_ui_numpad_backspace(&ui->model);
+        } else if (down & HidNpadButton_Y) {
+            ptc_ui_numpad_clear(&ui->model);
+        } else if (down & HidNpadButton_A) {
+            ptc_ui_numpad_activate(&ui->model);
+        } else if (down & HidNpadButton_Plus) {
+            accept_numpad(ui);
+        }
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_MINUTES) {
@@ -895,7 +889,7 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, -15, ui->model.minimum_minutes, ui->model.maximum_minutes);
         } else if (down & HidNpadButton_X) {
             edit_overlay_minutes(ui);
-        } else if (down & HidNpadButton_A) {
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             PtcUiOperation operation = ui->model.operation;
             if (operation == PTC_UI_OPERATION_SET_TODAY_LIMIT &&
                 ptc_ui_limit_minutes_would_restrict(&ui->model, ui->model.draft_minutes)) {
@@ -926,7 +920,7 @@ static void handle_overlay_input(UiState *ui, u64 down)
             day->minutes = ptc_ui_adjust_minutes(day->minutes, -15, 1, 1440);
         } else if ((down & HidNpadButton_Y) && day->mode == PTC_RULE_MODE_LIMIT) {
             edit_weekly_minutes(ui);
-        } else if (down & HidNpadButton_A) {
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             uint8_t weekday = ptc_weekday_from_day_index(ui->model.day_index);
             PtcDayRule today = ui->model.draft_week[weekday];
             if (ptc_ui_day_rule_would_restrict(&ui->model, today)) {
@@ -963,7 +957,9 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, 15);
         } else if ((down & HidNpadButton_Down) && ui->model.editor_index == 2) {
             ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, -15);
-        } else if (down & HidNpadButton_A) {
+        } else if ((down & HidNpadButton_Y) && ui->model.draft_bedtime.enabled && ui->model.editor_index > 0) {
+            edit_bedtime_minutes(ui);
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             if (ptc_ui_bedtime_active_at(&ui->model.draft_bedtime, current_minute_of_day_utc8())) {
                 char body[192];
                 snprintf(body, sizeof(body),
@@ -984,7 +980,7 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ui->model.draft_limit_action = ptc_ui_shift_limit_action(ui->model.draft_limit_action, -1);
         } else if (down & HidNpadButton_Right) {
             ui->model.draft_limit_action = ptc_ui_shift_limit_action(ui->model.draft_limit_action, 1);
-        } else if (down & HidNpadButton_A) {
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             if (ui->model.draft_limit_action != PTC_LIMIT_ACTION_REMIND &&
                 ui->model.remaining_available && ui->model.remaining_minutes == 0) {
                 char body[192];
@@ -1000,7 +996,7 @@ static void handle_overlay_input(UiState *ui, u64 down)
         }
         return;
     }
-    if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM && (down & HidNpadButton_A)) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM && (down & (HidNpadButton_A | HidNpadButton_Plus))) {
         confirm_operation(ui);
     }
 }
@@ -1018,7 +1014,7 @@ static void handle_touch(UiState *ui, int x, int y)
         if (ui->waiting) {
             snprintf(ui->model.message, sizeof(ui->model.message), "请等待当前操作完成后再提交加时码。");
         } else {
-            submit_offline_code(ui);
+            open_offline_code_input(ui);
         }
         break;
     case PTC_UI_HIT_CHILD_REFRESH:
@@ -1029,7 +1025,7 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_ERROR_RETRY:
         ui->model.view = PTC_UI_CHILD;
-        submit_offline_code(ui);
+        open_offline_code_input(ui);
         break;
     case PTC_UI_HIT_ERROR_BACK:
         ui->model.view = PTC_UI_CHILD;
@@ -1065,7 +1061,7 @@ static void handle_touch(UiState *ui, int x, int y)
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改。");
         break;
     case PTC_UI_HIT_OVERLAY_CONFIRM:
-        handle_overlay_input(ui, HidNpadButton_A);
+        handle_overlay_input(ui, ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ? HidNpadButton_Plus : HidNpadButton_A);
         break;
     case PTC_UI_HIT_MINUTES_INC:
         ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 15, ui->model.minimum_minutes, ui->model.maximum_minutes);
@@ -1130,6 +1126,10 @@ static void handle_touch(UiState *ui, int x, int y)
             ui->model.draft_limit_action = PTC_LIMIT_ACTION_SUSPEND;
         }
         break;
+    case PTC_UI_HIT_NUMPAD_KEY:
+        ui->model.numpad_cursor = hit.index;
+        ptc_ui_numpad_activate(&ui->model);
+        break;
     case PTC_UI_HIT_NONE:
     default:
         break;
@@ -1169,9 +1169,11 @@ int main(int argc, char **argv)
     PtcFsStorage fs;
     UiState ui;
     PadState pad;
+    PadRepeater direction_repeater;
     HidTouchScreenState touch;
     bool touch_down = false;
     bool running = true;
+    u64 previous_stick_buttons = 0;
     (void)argc;
     (void)argv;
 
@@ -1181,6 +1183,7 @@ int main(int argc, char **argv)
     }
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&pad);
+    padRepeaterInitialize(&direction_repeater, 4, 1);
     hidInitializeTouchScreen();
     srand((unsigned int)time(NULL));
 
@@ -1206,10 +1209,17 @@ int main(int argc, char **argv)
     while (appletMainLoop() && running) {
         u64 down;
         u64 held;
+        u64 stick_buttons;
         bool parent_combo_held;
         padUpdate(&pad);
         down = padGetButtonsDown(&pad);
         held = padGetButtons(&pad);
+        stick_buttons = stick_direction_buttons(padGetStickPos(&pad, 0));
+        down |= stick_buttons & ~previous_stick_buttons;
+        previous_stick_buttons = stick_buttons;
+        held |= stick_buttons;
+        padRepeaterUpdate(&direction_repeater, held & DIRECTION_BUTTON_MASK);
+        down |= padRepeaterGetButtons(&direction_repeater);
         parent_combo_held = hidden_parent_combo_held(held);
 
         if ((ui.model.view == PTC_UI_CHILD || ui.model.view == PTC_UI_SETUP) &&
@@ -1233,7 +1243,7 @@ int main(int argc, char **argv)
                 if (ui.waiting) {
                     snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再提交加时码。");
                 } else {
-                    submit_offline_code(&ui);
+                    open_offline_code_input(&ui);
                 }
             } else if (down & HidNpadButton_Y) {
                 submit_status(&ui);
@@ -1249,7 +1259,7 @@ int main(int argc, char **argv)
         } else if (ui.model.view == PTC_UI_ERROR) {
             if (down & HidNpadButton_A) {
                 ui.model.view = PTC_UI_CHILD;
-                submit_offline_code(&ui);
+                open_offline_code_input(&ui);
             } else if (down & (HidNpadButton_B | HidNpadButton_Plus)) {
                 ui.model.view = PTC_UI_CHILD;
             }
