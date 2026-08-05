@@ -161,36 +161,6 @@ uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint
     if (adjusted < (int)minimum) {
         adjusted = minimum;
     }
-    if (adjusted > (int)maximum) {
-        adjusted = maximum;
-    }
-    return (uint16_t)adjusted;
-}
-
-bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out)
-{
-    char *end = NULL;
-    unsigned long value;
-    const char *cursor;
-    if (!text || !text[0] || !out || minimum > maximum) {
-        return false;
-    }
-    for (cursor = text; *cursor; ++cursor) {
-        if (*cursor < '0' || *cursor > '9') {
-            return false;
-        }
-    }
-    value = strtoul(text, &end, 10);
-    if (!end || *end || value < minimum || value > maximum) {
-        return false;
-    }
-    *out = (uint16_t)value;
-    return true;
-}
-
-uint16_t ptc_ui_adjust_minute_of_day(uint16_t value, int delta)
-{
-    int adjusted = ((int)value + delta) % 1440;
     if (adjusted < 0) {
         adjusted += 1440;
     }
@@ -618,6 +588,13 @@ PtcUiRect ptc_ui_bedtime_adj_up_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
     PtcUiRect rect = {dialog.x + 34 + 112, dialog_button_top(dialog), 96, PTC_UI_DIALOG_BTN_H};
+    return rect;
+}
+
+PtcUiRect ptc_ui_bedtime_input_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
+    PtcUiRect rect = {dialog.x + 34 + 224, dialog_button_top(dialog), 120, PTC_UI_DIALOG_BTN_H};
     return rect;
 }
 

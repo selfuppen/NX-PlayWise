@@ -397,12 +397,12 @@ public:
             }
 
             if (close_after_frames_ > 0) {
-                std::snprintf(line, sizeof(line), "加时成功，剩余 %d 分钟", bridge_->summary.remaining_minutes);
+                std::snprintf(line, sizeof(line), "加时成功！修改后还可玩 %d 分钟", bridge_->summary.remaining_minutes);
                 renderer->drawString(line, false, 36, status_y + 86, 15, renderer->a(SUCCESS_COLOR));
                 if (bridge_->summary.played_minutes_available) {
-                    std::snprintf(line, sizeof(line), "已玩约 %d 分钟，即将自动关闭…", bridge_->summary.played_minutes);
+                    std::snprintf(line, sizeof(line), "今日已玩约 %d 分钟，即刻刷新生效…", bridge_->summary.played_minutes);
                 } else {
-                    std::snprintf(line, sizeof(line), "即将自动关闭…");
+                    std::snprintf(line, sizeof(line), "状态已实时刷新，即将自动关闭…");
                 }
                 renderer->drawString(line, false, 36, status_y + 108, 13, renderer->a(SUCCESS_COLOR));
             }

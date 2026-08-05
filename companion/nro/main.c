@@ -261,6 +261,45 @@ static void edit_weekly_minutes(UiState *ui)
     }
 }
 
+static bool bedtime_keyboard_input(const char *header, uint16_t current_min, uint16_t *out_min)
+{
+    SwkbdConfig keyboard;
+    Result result;
+    char text[16];
+    char guide[80];
+    if (!out_min || R_FAILED(swkbdCreate(&keyboard, 0))) {
+        return false;
+    }
+    swkbdConfigMakePresetDefault(&keyboard);
+    swkbdConfigSetType(&keyboard, SwkbdType_NumPad);
+    swkbdConfigSetStringLenMin(&keyboard, 1);
+    swkbdConfigSetStringLenMax(&keyboard, 5);
+    snprintf(text, sizeof(text), "%02u:%02u", (unsigned int)(current_min / 60), (unsigned int)(current_min % 60));
+    snprintf(guide, sizeof(guide), "输入时间 (如 21:30 或 2130)");
+    swkbdConfigSetInitialText(&keyboard, text);
+    swkbdConfigSetHeaderText(&keyboard, header);
+    swkbdConfigSetGuideText(&keyboard, guide);
+    swkbdConfigSetOkButtonText(&keyboard, "确认");
+    result = swkbdShow(&keyboard, text, sizeof(text));
+    swkbdClose(&keyboard);
+    return R_SUCCEEDED(result) && ptc_ui_parse_bedtime_time(text, out_min);
+}
+
+static void edit_bedtime_minutes(UiState *ui)
+{
+    uint16_t value;
+    int target_index = ui->model.editor_index == 2 ? 2 : 1;
+    uint16_t current_min = target_index == 1 ? ui->model.draft_bedtime.start_min : ui->model.draft_bedtime.end_min;
+    const char *header = target_index == 1 ? "输入就寝开始时间" : "输入就寝结束时间";
+    if (bedtime_keyboard_input(header, current_min, &value)) {
+        if (target_index == 1) {
+            ui->model.draft_bedtime.start_min = value;
+        } else {
+            ui->model.draft_bedtime.end_min = value;
+        }
+    }
+}
+
 static void begin_wait(UiState *ui, const char *type, const char *message)
 {
     ui->request_view = ui->model.view;
@@ -1066,23 +1105,6 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_BEDTIME_ADJ_UP:
         if (ui->model.editor_index == 1) {
-            ui->model.draft_bedtime.start_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.start_min, 15);
-        } else if (ui->model.editor_index == 2) {
-            ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, 15);
-        }
-        break;
-    case PTC_UI_HIT_BEDTIME_ADJ_DOWN:
-        if (ui->model.editor_index == 1) {
-            ui->model.draft_bedtime.start_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.start_min, -15);
-        } else if (ui->model.editor_index == 2) {
-            ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, -15);
-        }
-        break;
-    case PTC_UI_HIT_LIMIT_ACTION_OPTION: {
-        static const PtcLimitAction OPTIONS[] = {
-            PTC_LIMIT_ACTION_REMIND,
-            PTC_LIMIT_ACTION_RAW_BLOCK,
-            PTC_LIMIT_ACTION_SUSPEND,
         };
         if (hit.index >= 0 && hit.index < 3) {
             ui->model.draft_limit_action = OPTIONS[hit.index];

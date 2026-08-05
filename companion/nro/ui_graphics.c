@@ -734,6 +734,10 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     UiRect dialog;
     UiRect value_box = to_uirect(ptc_ui_minutes_value_rect());
     char value[32];
+    char preview_line[128];
+    int preview_min = ptc_ui_preview_remaining_minutes(model);
+    int played_min = model->played_minutes_available ? model->played_minutes : -1;
+
     draw_dialog_shell(pixels, stride, model, &dialog, 720, 360);
     snprintf(value, sizeof(value), "%u 分钟", (unsigned int)model->draft_minutes);
     fill_round_rect(pixels, stride, value_box, 8, COLOR(244, 249, 255));
@@ -741,8 +745,16 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     draw_text_center(pixels, stride, value_box, value, 37, COLOR(28, 118, 188));
     draw_dialog_button(pixels, stride, ptc_ui_minutes_dec_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_minutes_inc_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 244, 580, 34}, "X 或点数值精确输入；方向键继续按 5 / 15 分钟调整", 20, COLOR(77, 86, 99));
-    draw_overlay_actions(pixels, stride, model, "A  确认");
+
+    if (played_min >= 0) {
+        snprintf(preview_line, sizeof(preview_line), "今日已玩 %d 分钟  │  修改后还可玩 %d 分钟", played_min, preview_min);
+    } else {
+        snprintf(preview_line, sizeof(preview_line), "修改后还可玩 %d 分钟", preview_min);
+    }
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 234, 640, 30}, preview_line, 21, COLOR(25, 132, 95));
+
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 266, 580, 26}, "X 或点数值精确输入；方向键继续按 5 / 15 分钟调整", 18, COLOR(77, 86, 99));
+    draw_overlay_actions(pixels, stride, model, "A  确认提交并刷新");
 }
 
 static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -809,9 +821,10 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 5, end_rect.width, 38}, "结束", 18, COLOR(91, 100, 114));
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 39, end_rect.width, 40}, end, 28, COLOR(28, 118, 188));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 244, dialog.width - 160, 34},
-                     "←→ 选择项目     X 切换启用     ↑↓ 或点按钮调整 15 分钟", 20, COLOR(77, 86, 99));
+                     "←→ 选择项目   X 切换启用   Y/点手动输入   ↑↓/摇杆调整 15 分钟", 20, COLOR(77, 86, 99));
     draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_down_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_up_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_dialog_button(pixels, stride, ptc_ui_bedtime_input_rect(), "手动输入", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_overlay_actions(pixels, stride, model, "A  保存设置");
 }
 
