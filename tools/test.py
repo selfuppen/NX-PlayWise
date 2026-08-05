@@ -74,9 +74,17 @@ def verify_protocol_smoke() -> None:
             ]
         )
         config = read_json(app_root(sdmc_root) / "config.json")
-        require(config["control_mode"] == "observe", "protocol init must default to observe")
+        require(config["control_mode"] == "enforce", "protocol init must default to enforce")
         capabilities = read_json(app_root(sdmc_root) / "capabilities.json")
-        require(capabilities["play_timer_write_backend"] == "pctl-s-v2", "protocol init must use the current PCTL backend")
+        require(set(capabilities) == {"version", "raw_block_verified", "raw_block_backend", "suspend_verified", "suspend_backend", "verified_at"},
+                "protocol init must expose only high-risk capabilities")
+        setup = read_json(app_root(sdmc_root) / "setup.json")
+        require(setup["phase"] == "pending", "protocol init must seed pending setup")
+        config["control_mode"] = "observe"
+        (app_root(sdmc_root) / "config.json").write_text(
+            json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
         code = run(
             [
@@ -162,21 +170,32 @@ def verify_protocol_smoke() -> None:
         require(status_result["dry_run"] is True, "status smoke result must be dry-run")
 
 
-def verify_safe_package() -> None:
+def verify_playwise_package() -> None:
     with tempfile.TemporaryDirectory(prefix="ptc-test-package-") as tmp_dir:
         root = Path(tmp_dir)
-        out = root / "safe"
-        zip_path = root / "safe.zip"
+        out = root / "playwise"
+        zip_path = root / "playwise.zip"
+        nro = root / "pctc.nro"
+        overlay = root / "pctc.ovl"
+        exefs = root / "exefs.nsp"
+        nro.write_bytes(b"nro")
+        overlay.write_bytes(b"ovl")
+        exefs.write_bytes(b"nsp")
         run(
             [
                 PYTHON,
                 "tools/package_sdmc.py",
-                "--mode",
-                "safe",
                 "--out",
                 str(out),
                 "--zip",
                 str(zip_path),
+                "--nro",
+                str(nro),
+                "--overlay",
+                str(overlay),
+                "--sysmodule-exefs",
+                str(exefs),
+                "--boot2",
             ]
         )
         package_app = out / APP_DIR
@@ -186,6 +205,7 @@ def verify_safe_package() -> None:
             "rules.json",
             "state.json",
             "capabilities.json",
+            "setup.json",
             "inbox/pending",
             "inbox/processing",
             "inbox/done",
@@ -195,22 +215,20 @@ def verify_safe_package() -> None:
             "backups",
             "flags",
         ]:
-            require((package_app / relative).exists(), f"safe package missing {relative}")
-        require(read_json(package_app / "config.json")["control_mode"] == "observe", "safe package must observe")
-        require(not (out / CONTENT_DIR / "flags" / "boot2.flag").exists(), "safe package must not contain boot2.flag")
+            require((package_app / relative).exists(), f"playwise package missing {relative}")
+        require(read_json(package_app / "config.json")["control_mode"] == "enforce", "package must default to enforce")
+        require(read_json(package_app / "setup.json")["phase"] == "pending", "package must seed pending setup")
+        require((out / CONTENT_DIR / "flags" / "boot2.flag").exists(), "package must contain boot2.flag")
         with zipfile.ZipFile(zip_path) as package:
             names = package.namelist()
-        require("switch/playwise/config.json" in names, "safe zip missing config.json")
-        require(all(name.startswith("switch/") for name in names), "safe zip may only contain switch entries")
-        require("switch/.overlays/pctc.ovl" not in names, "safe package must not depend on Tesla")
+        require("switch/playwise/config.json" in names, "playwise zip missing config.json")
+        require("switch/.overlays/pctc.ovl" in names, "playwise package must contain the overlay")
 
         invalid_out = root / "invalid-boot2"
         invalid = run(
             [
                 PYTHON,
                 "tools/package_sdmc.py",
-                "--mode",
-                "disabled",
                 "--out",
                 str(invalid_out),
                 "--boot2",
@@ -225,7 +243,7 @@ def main() -> int:
     checks = [
         ("Python regressions", run_python_regressions),
         ("protocol smoke", verify_protocol_smoke),
-        ("safe package", verify_safe_package),
+        ("playwise package", verify_playwise_package),
     ]
     for name, check in checks:
         try:

@@ -102,6 +102,7 @@ int main(int argc, char **argv)
 
     (void)ptc_sysmodule_rollover_legacy_logs(&sysmodule);
     append_boot_log(&sysmodule, "playwise sysmodule started");
+    (void)ptc_sysmodule_bootstrap_setup(&sysmodule);
     recovered = ptc_sysmodule_recover_processing(&sysmodule);
     if (recovered > 0) {
         append_boot_log(&sysmodule, "recovered processing requests");

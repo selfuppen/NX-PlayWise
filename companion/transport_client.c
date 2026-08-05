@@ -191,10 +191,9 @@ const char *ptc_companion_request_command_label_zh(const char *type)
     if (strcmp(type, "set_limit_action") == 0) return "限制方式";
     if (strcmp(type, "parent_unlock_start") == 0) return "临时解锁";
     if (strcmp(type, "parent_unlock_end") == 0) return "结束解锁";
-    if (strcmp(type, "probe_play_timer_write") == 0) return "验证计时器写入";
-    if (strcmp(type, "probe_play_timer_effect") == 0) return "快速设备测试";
-    if (strcmp(type, "prepare_device_test") == 0) return "一键基础测试";
-    if (strcmp(type, "probe_apply_today_limit") == 0) return "验证今日额度写入";
+    if (strcmp(type, "complete_setup") == 0) return "启用自动控制";
+    if (strcmp(type, "retry_setup_release") == 0) return "重试前置解限";
+    if (strcmp(type, "restore_install_snapshot") == 0) return "恢复安装前状态";
     if (strcmp(type, "probe_raw_block") == 0) return "验证强制阻止";
     if (strcmp(type, "probe_suspend") == 0) return "验证暂停软件";
     return "后台操作";
@@ -263,19 +262,5 @@ PtcCompanionStatus ptc_companion_transport_submit_set_limit_action(PtcCompanionT
 {
     char json[512];
     if (ptc_companion_set_limit_action_request_json(json, sizeof(json), request_id, created_at, action) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
-    return ptc_companion_transport_submit_json(client, request_id, json);
-}
-
-PtcCompanionStatus ptc_companion_transport_submit_probe_play_timer_effect(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, bool wait_for_expiry)
-{
-    char json[512];
-    if (ptc_companion_probe_play_timer_effect_request_json(json, sizeof(json), request_id, created_at, wait_for_expiry) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
-    return ptc_companion_transport_submit_json(client, request_id, json);
-}
-
-PtcCompanionStatus ptc_companion_transport_submit_prepare_device_test(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at)
-{
-    char json[512];
-    if (ptc_companion_prepare_device_test_request_json(json, sizeof(json), request_id, created_at) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
     return ptc_companion_transport_submit_json(client, request_id, json);
 }

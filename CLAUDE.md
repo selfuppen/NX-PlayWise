@@ -26,7 +26,7 @@
 Windows 本地使用单一 Python 入口；C host、Companion NRO 和 package 的权威验证通过单一本地容器入口执行。
 
 - `python tools/test.py`：运行全部本地 Python、协议和安全打包回归。
-- `python tools/package_remote.py`：在本地 devkitPro 容器运行 C/Python 测试，清理并重新生成、校验全部五类 package；产物直接位于挂载工作区的 `build/packages/`。
+- `python tools/package_remote.py`：在本地 devkitPro 容器运行 C/Python 测试，清理并重新生成、校验全部五类 package；产物直接位于挂载工作区的 `build/packages/`。（这个测试需要测试的时候，通知我手动运行）
 - `python tools/make_fixtures.py`：重新生成确定性的令牌 fixture。
 - `python tools/grant_code.py --minutes 30 --device kid-switch --secret replace-with-long-random-secret --day-index 2380 --nonce 4660`：生成离线加时代码示例。
 - `python tools/protocol_probe.py init --root <tmp-dir> --device <id> --secret <secret>`：初始化本地协议目录用于手工探测。
@@ -63,4 +63,4 @@ Python 代码使用 4 空格缩进、类型注解和 `from __future__ import ann
 
 本仓库中文文档使用 UTF-8。PowerShell 默认编码或控制台显示可能把中文读成乱码；读取或写入 `AGENTS.md`、`docs/*.md` 等中文文档时，应显式使用 UTF-8，例如 `Get-Content <file> -Encoding utf8`，避免误判编码或把文档写坏。
 
-涉及 C 编译或容器验证时运行 `python tools/package_remote.py`；不要绕过其中的旧产物清理、C/Python 测试和 zip 校验。本机缺少 `make`、`gcc` 或 WSL 不是跳过验证的理由。
+涉及 C 编译或容器验证时运行 `python tools/package_remote.py`；不要绕过其中的旧产物清理、C/Python 测试和 zip 校验。本机缺少 `make`、`gcc` 或 WSL 不是跳过验证的理由。（这个测试需要测试的时候，通知我手动运行）

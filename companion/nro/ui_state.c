@@ -71,11 +71,14 @@ static const char *request_success_message(const char *type, const char *mode, b
     if (strcmp(type, "offline_code") == 0) {
         return dry_run ? "加时码验证通过；当前为观察模式，未修改系统设置。" : "加时成功，今天的游玩时间已更新。";
     }
-    if (strcmp(type, "probe_play_timer_effect") == 0) {
-        return "设备快速测试已完成，正在检查恢复证据。";
+    if (strcmp(type, "complete_setup") == 0) {
+        return "首次设置已完成，自动控制将在宽限结束后启用。";
     }
-    if (strcmp(type, "prepare_device_test") == 0) {
-        return dry_run ? "一键基础测试已演练；观察模式未修改设置。" : "一键基础测试已完成，正在检查完整证据。";
+    if (strcmp(type, "retry_setup_release") == 0) {
+        return "当前限制已解除，可以继续完成首次设置。";
+    }
+    if (strcmp(type, "restore_install_snapshot") == 0) {
+        return "安装前家长控制状态已恢复，PlayWise 已停用。";
     }
     if (strcmp(type, "set_bedtime") == 0 && mode && strcmp(mode, "grant") == 0) {
         return "就寝规则已保存；Grant 模式不会自动执行限制。";
@@ -89,7 +92,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_PLAN:
         return 5;
     case PTC_UI_PARENT_SAFETY:
-        return 5;
+        return 6;
     case PTC_UI_PARENT_TODAY:
     default:
         return 6;
@@ -275,6 +278,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     cJSON *root;
     const cJSON *state;
     const cJSON *capabilities;
+    const cJSON *setup;
     const cJSON *probe;
     const char *status;
     const char *type;
@@ -334,19 +338,26 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     capabilities = cJSON_GetObjectItemCaseSensitive(root, "capabilities");
     if (strcmp(status, "ok") == 0 && cJSON_IsObject(capabilities)) {
-        model->play_timer_write_verified = json_bool(capabilities, "play_timer_write_verified", false);
-        model->play_timer_effect_verified = json_bool(capabilities, "play_timer_effect_verified", false);
         model->raw_block_verified = json_bool(capabilities, "raw_block_verified", false);
         model->suspend_verified = json_bool(capabilities, "suspend_verified", false);
+    }
+    setup = cJSON_GetObjectItemCaseSensitive(root, "setup");
+    if (strcmp(status, "ok") == 0 && cJSON_IsObject(setup)) {
+        snprintf(model->setup_phase, sizeof(model->setup_phase), "%s", json_string(setup, "phase"));
+        model->setup_restriction_cleared = json_bool(setup, "restriction_cleared", false);
+        model->setup_snapshot_available = json_bool(setup, "snapshot_available", false);
+        model->setup_activate_after = json_int(setup, "activate_after", 0);
+        if (strcmp(model->setup_phase, "active") != 0 && model->view != PTC_UI_PARENT) {
+            model->view = PTC_UI_SETUP;
+        } else if (strcmp(model->setup_phase, "active") == 0 && model->view == PTC_UI_SETUP) {
+            model->view = PTC_UI_CHILD;
+        }
     }
     if (status && strcmp(status, "error") == 0) {
         const char *message = summary.message[0] ? summary.message : NULL;
         const char *failure_stage = "";
         const char *hint = "";
-        probe = cJSON_GetObjectItemCaseSensitive(root, "pctl_effect_probe");
-        if (!cJSON_IsObject(probe)) {
-            probe = cJSON_GetObjectItemCaseSensitive(root, "device_test");
-        }
+        probe = cJSON_GetObjectItemCaseSensitive(root, "pctl_raw_block_probe");
         if (cJSON_IsObject(probe)) {
             failure_stage = json_string(probe, "failure_stage");
             hint = effect_failure_hint(probe);
@@ -700,6 +711,15 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_CHILD_EXIT, 0);
         }
         /* The parent area stays hidden; touch never exposes it. */
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->view == PTC_UI_SETUP) {
+        if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(1), x, y)) {
+            return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(2), x, y)) {
+            return make_hit(PTC_UI_HIT_CHILD_EXIT, 0);
+        }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->view == PTC_UI_ERROR) {

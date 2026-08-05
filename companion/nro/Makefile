@@ -35,7 +35,6 @@ OBJS := \
 	$(BUILD)/switch_ipc_client.o \
 	$(BUILD)/request_client.o \
 	$(BUILD)/result_summary.o \
-	$(BUILD)/self_check.o \
 	$(BUILD)/sha256.o \
 	$(BUILD)/rules.o \
 	$(BUILD)/ptc_time.o \
@@ -79,9 +78,6 @@ $(BUILD)/switch_ipc_client.o: ../switch_ipc_client.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/result_summary.o: ../result_summary.c | $(BUILD)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD)/self_check.o: ../self_check.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sha256.o: ../../common/crypto/sha256.c | $(BUILD)

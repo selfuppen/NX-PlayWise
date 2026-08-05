@@ -29,13 +29,7 @@ NACP_SIZE = 0x4000
 NACP_TITLE_SIZE = 0x200
 NACP_DISPLAY_VERSION_OFFSET = 0x3060
 APP_TITLE = "任你玩".encode("utf-8")
-PACKAGE_EXPECTATIONS = {
-    "safe-nro": ("observe", False),
-    "disabled-boot2": ("disabled", True),
-    "observe-boot2": ("observe", True),
-    "grant-boot2": ("grant", True),
-    "enforce-boot2": ("enforce", True),
-}
+PACKAGE_EXPECTATIONS = {"playwise": ("enforce", True)}
 
 
 class PackageError(RuntimeError):
@@ -208,7 +202,7 @@ def build_and_verify(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Clean, test, build, and verify all Switch packages in the local devkitPro container.")
+    parser = argparse.ArgumentParser(description="Clean, test, build, and verify the PlayWise Switch package in the local devkitPro container.")
     parser.add_argument("--host", default=DEFAULT_SSH_HOST, help=f"Container SSH host. Default: {DEFAULT_SSH_HOST}")
     parser.add_argument("--port", type=int, default=DEFAULT_SSH_PORT, help=f"Container SSH port. Default: {DEFAULT_SSH_PORT}")
     parser.add_argument("--user", default=DEFAULT_SSH_USER, help=f"Container SSH user. Default: {DEFAULT_SSH_USER}")

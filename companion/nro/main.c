@@ -10,7 +10,6 @@
 #include "../../companion/file_protocol.h"
 #include "../../companion/transport_client.h"
 #include "../../companion/switch_ipc_client.h"
-#include "../../companion/self_check.h"
 #include "../../platform/switch/fs_storage.h"
 #include "../../third_party/cjson/cJSON.h"
 #include "../../common/time/ptc_time.h"
@@ -39,9 +38,6 @@ typedef struct {
     bool waiting;
     bool exit_requested;
     PtcUiView request_view;
-    bool self_check_after_result;
-    bool quick_device_test;
-    PtcSelfCheckProfile self_check_after_profile;
     PtcBedtimeRule active_bedtime_rule;
     int64_t last_bedtime_minute;
 } UiState;
@@ -270,8 +266,6 @@ static void begin_wait(UiState *ui, const char *type, const char *message)
     ui->waiting = true;
     ui->elapsed_ms = 0;
     ui->last_result[0] = '\0';
-    ui->self_check_after_result = false;
-    ui->quick_device_test = false;
     ui->model.result_status[0] = '\0';
     ui->model.feedback_detail[0] = '\0';
     set_command_name(ui, type);
@@ -549,66 +543,6 @@ static void refresh_bedtime_state(UiState *ui, bool force)
     ui->last_bedtime_minute = minute;
 }
 
-static void arm_self_check_after_result(UiState *ui, PtcSelfCheckProfile profile)
-{
-    ui->self_check_after_result = true;
-    ui->self_check_after_profile = profile;
-}
-
-static void run_self_check_profile(UiState *ui, PtcSelfCheckProfile profile)
-{
-    PtcSelfCheckResult result;
-    char report[RESULT_TEXT_SIZE];
-    int ready_target_minutes = 0;
-    result = ptc_self_check_run(
-        ui->client.storage,
-        APP_ROOT,
-        ui->active_request_id,
-        profile,
-        NULL,
-        report,
-        sizeof(report));
-    ui->quick_device_test = false;
-    if (result.status == PTC_SELF_CHECK_PASS) {
-        cJSON *root = cJSON_Parse(ui->last_result);
-        if (root) {
-            cJSON *device_test = cJSON_GetObjectItemCaseSensitive(root, "device_test");
-            cJSON *target = cJSON_IsObject(device_test)
-                ? cJSON_GetObjectItemCaseSensitive(device_test, "ready_target_minutes")
-                : NULL;
-            if (cJSON_IsNumber(target)) {
-                ready_target_minutes = target->valueint;
-            }
-            cJSON_Delete(root);
-        }
-        snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
-        snprintf(ui->model.message, sizeof(ui->model.message),
-            "一键基础测试通过，限制已解除；今日测试额度 %d 分钟。", ready_target_minutes);
-    } else {
-        PtcCompanionStatus disable_status = ptc_companion_set_disable_flag(&ui->client, true);
-        (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
-        snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
-        if (profile == PTC_SELF_CHECK_PREPARE_DEVICE_TEST || !ui->model.message[0] ||
-            strcmp(ui->model.message, "设备快速测试已完成，正在检查恢复证据。") == 0) {
-            snprintf(ui->model.message, sizeof(ui->model.message), "一键基础测试自检未通过。");
-        }
-        if (ui->model.feedback_detail[0]) {
-            size_t used = strlen(ui->model.feedback_detail);
-            snprintf(
-                ui->model.feedback_detail + used,
-                sizeof(ui->model.feedback_detail) - used,
-                "；已自动停用（%s）",
-                companion_status_zh(disable_status));
-        } else {
-            snprintf(
-                ui->model.feedback_detail,
-                sizeof(ui->model.feedback_detail),
-                "已自动停用（%s）；反馈时请提供本次测试时间",
-                companion_status_zh(disable_status));
-        }
-    }
-}
-
 static void poll_result(UiState *ui, bool force)
 {
     PtcCompanionStatus status;
@@ -643,7 +577,6 @@ static void poll_result(UiState *ui, bool force)
         if (!ptc_ui_apply_result_json(&ui->model, ui->last_result)) {
             set_message(ui, "读取结果失败", PTC_COMPANION_RESULT_INVALID);
             if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
-            ui->self_check_after_result = false;
             return;
         }
         load_rule_drafts(ui);
@@ -651,29 +584,6 @@ static void poll_result(UiState *ui, bool force)
         if (ui->request_view == PTC_UI_CHILD && strcmp(ui->model.result_status, "error") == 0) {
             ui->model.view = PTC_UI_ERROR;
         }
-        if (ui->self_check_after_result) {
-            ui->self_check_after_result = false;
-            run_self_check_profile(ui, ui->self_check_after_profile);
-        }
-        return;
-    }
-    ui->self_check_after_result = false;
-    if (ui->quick_device_test) {
-        PtcCompanionStatus disable_status = ptc_companion_set_disable_flag(&ui->client, true);
-        (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
-        ui->quick_device_test = false;
-        snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
-        snprintf(
-            ui->model.message,
-            sizeof(ui->model.message),
-            "一键基础测试未收到有效结果：%s",
-            companion_status_zh(status));
-        snprintf(
-            ui->model.feedback_detail,
-            sizeof(ui->model.feedback_detail),
-            "反馈码：transport/%s；已自动停用（%s）",
-            ptc_companion_status_name(status),
-            companion_status_zh(disable_status));
         return;
     }
     set_message(ui, "读取结果失败", status);
@@ -711,7 +621,8 @@ static void enter_parent_area(UiState *ui)
         return;
     }
     ui->model.view = PTC_UI_PARENT;
-    ui->model.parent_page = PTC_UI_PARENT_TODAY;
+    ui->model.parent_page = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
+        ? PTC_UI_PARENT_SAFETY : PTC_UI_PARENT_TODAY;
     ui->model.selected_index = 0;
     snprintf(ui->model.message, sizeof(ui->model.message), "家长区已解锁。");
 }
@@ -831,20 +742,25 @@ static void handle_parent_action(UiState *ui)
     }
     switch (index) {
     case 0:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_QUICK_TEST, "运行一键基础测试",
-                             "先验证解除限制和完整恢复，再保留有限测试额度；结束后可恢复周计划。失败时自动停用。");
+        open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "启用自动控制",
+                             "确认 Companion 已可正常进入；完成后有 60 秒宽限，再按当前规则自动控制。");
         break;
     case 1:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_EMERGENCY_DISABLE, "紧急停用控制", "创建 disable.flag 后，后台将停止执行控制操作。");
+        open_confirm_overlay(ui, PTC_UI_OPERATION_RETRY_SETUP_RELEASE, "重试前置解限",
+                             "保留首次安装快照，再次尝试解除当前限制。");
         break;
     case 2:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_RESUME_CONTROL, "恢复后台控制", "仅在确认设备状态正常后移除 disable.flag。");
+        open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT, "恢复安装前状态",
+                             "精确恢复安装前家长控制设置和计时器状态，并停用 PlayWise。");
         break;
     case 3:
+        open_confirm_overlay(ui, PTC_UI_OPERATION_EMERGENCY_DISABLE, "紧急停用控制", "创建 disable.flag 后，后台将停止执行控制操作。");
+        break;
+    case 4:
         open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_RAW_BLOCK, "验证强制阻止能力",
                              "探针会尝试真机 raw block 写入并回滚，需 grant/enforce 模式。适配层未实现时会返回失败，能力保持未验证。");
         break;
-    case 4:
+    case 5:
         open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_SUSPEND, "验证暂停软件能力",
                              "探针会尝试真机 suspend 写入并回滚，需 grant/enforce 模式。适配层未实现时会返回失败，能力保持未验证。");
         break;
@@ -873,22 +789,14 @@ static void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_BLOCK_TODAY:
         submit_transport_empty(ui, "block_today", "正在设置今日禁玩…", "今日禁玩设置失败");
         break;
-    case PTC_UI_OPERATION_QUICK_TEST:
-        make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
-        status = ptc_companion_transport_submit_prepare_device_test(&ui->transport, ui->active_request_id, time(NULL));
-        set_command_name(ui, "prepare_device_test");
-        sync_transport_label(ui);
-        if (status == PTC_COMPANION_OK) begin_wait(ui, "prepare_device_test", "一键基础测试正在运行…"); else set_message(ui, "一键基础测试提交失败", status);
-        if (ui->waiting) {
-            ui->quick_device_test = true;
-            arm_self_check_after_result(ui, PTC_SELF_CHECK_PREPARE_DEVICE_TEST);
-        } else {
-            status = ptc_companion_set_disable_flag(&ui->client, true);
-            (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
-            snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
-            snprintf(ui->model.message, sizeof(ui->model.message), "测试无法启动，已停用控制：%s", companion_status_zh(status));
-            snprintf(ui->model.feedback_detail, sizeof(ui->model.feedback_detail), "反馈码：submit/%s", ptc_companion_status_name(status));
-        }
+    case PTC_UI_OPERATION_COMPLETE_SETUP:
+        submit_transport_empty(ui, "complete_setup", "正在完成首次设置…", "启用自动控制失败");
+        break;
+    case PTC_UI_OPERATION_RETRY_SETUP_RELEASE:
+        submit_transport_empty(ui, "retry_setup_release", "正在重试解除当前限制…", "重试前置解限失败");
+        break;
+    case PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT:
+        submit_transport_empty(ui, "restore_install_snapshot", "正在恢复安装前状态…", "恢复安装前状态失败");
         break;
     case PTC_UI_OPERATION_EMERGENCY_DISABLE:
         set_local_sd_command(ui, "紧急停用控制");
@@ -900,18 +808,6 @@ static void confirm_operation(UiState *ui)
             snprintf(ui->model.message, sizeof(ui->model.message), "后台控制已紧急停用。");
         } else {
             set_message(ui, "紧急停用失败", status);
-        }
-        break;
-    case PTC_UI_OPERATION_RESUME_CONTROL:
-        set_local_sd_command(ui, "恢复控制");
-        status = ptc_companion_set_disable_flag(&ui->client, false);
-        (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
-        ui->model.feedback_detail[0] = '\0';
-        if (status == PTC_COMPANION_OK) {
-            snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
-            snprintf(ui->model.message, sizeof(ui->model.message), "后台控制已恢复。");
-        } else {
-            set_message(ui, "恢复控制失败", status);
         }
         break;
     case PTC_UI_OPERATION_PROBE_RAW_BLOCK:
@@ -1092,8 +988,9 @@ static void handle_touch(UiState *ui, int x, int y)
         poll_result(ui, true);
         break;
     case PTC_UI_HIT_PARENT_BACK:
-        ui->model.view = PTC_UI_CHILD;
-        snprintf(ui->model.message, sizeof(ui->model.message), "已返回孩子页面。");
+        ui->model.view = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
+            ? PTC_UI_SETUP : PTC_UI_CHILD;
+        snprintf(ui->model.message, sizeof(ui->model.message), "已返回主页面。");
         break;
     case PTC_UI_HIT_PARENT_TAB:
         ui->model.parent_page = (PtcUiParentPage)hit.index;
@@ -1257,7 +1154,8 @@ int main(int argc, char **argv)
         held = padGetButtons(&pad);
         parent_combo_held = hidden_parent_combo_held(held);
 
-        if (ui.model.view == PTC_UI_CHILD && ui.model.overlay == PTC_UI_OVERLAY_NONE && parent_combo_held) {
+        if ((ui.model.view == PTC_UI_CHILD || ui.model.view == PTC_UI_SETUP) &&
+            ui.model.overlay == PTC_UI_OVERLAY_NONE && parent_combo_held) {
             ++ui.hidden_ticks;
             if (ui.hidden_ticks == HIDDEN_HOLD_TICKS) {
                 enter_parent_area(&ui);
@@ -1282,6 +1180,14 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_Y) {
                 submit_status(&ui);
             }
+        } else if (ui.model.view == PTC_UI_SETUP) {
+            if (down & (HidNpadButton_Plus | HidNpadButton_B)) {
+                running = false;
+            } else if (down & HidNpadButton_Minus) {
+                enter_parent_area(&ui);
+            } else if (down & HidNpadButton_Y) {
+                submit_status(&ui);
+            }
         } else if (ui.model.view == PTC_UI_ERROR) {
             if (down & HidNpadButton_A) {
                 ui.model.view = PTC_UI_CHILD;
@@ -1291,8 +1197,9 @@ int main(int argc, char **argv)
             }
         } else {
             if (down & HidNpadButton_B) {
-                ui.model.view = PTC_UI_CHILD;
-                snprintf(ui.model.message, sizeof(ui.model.message), "已返回孩子页面。");
+                ui.model.view = ui.model.setup_phase[0] && strcmp(ui.model.setup_phase, "active") != 0
+                    ? PTC_UI_SETUP : PTC_UI_CHILD;
+                snprintf(ui.model.message, sizeof(ui.model.message), "已返回主页面。");
             } else if (down & HidNpadButton_L) {
                 ptc_ui_change_parent_page(&ui.model, -1);
             } else if (down & HidNpadButton_R) {

@@ -33,13 +33,12 @@ ORCH_SRCS := \
 	companion/request_client.c \
 	companion/result_summary.c \
 	companion/overlay/input_model.c \
-	companion/overlay/bridge.c \
-	companion/self_check.c
+	companion/overlay/bridge.c
 
 TEST_SRCS := tests/c/test_host_core.c
 UI_TEST_SRCS := companion/nro/ui_state.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
-.PHONY: all test-host test-python test companion-nro sysmodule-nsp packages package-safe-nro clean package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2
+.PHONY: all test-host test-python test companion-nro companion-overlay sysmodule-nsp packages package-playwise clean
 
 all: test
 
@@ -71,18 +70,15 @@ companion-overlay:
 	mkdir -p build/switch
 	cp companion/overlay/pctc.ovl build/switch/pctc.ovl
 
-package-safe-nro: companion-nro
-	python3 tools/package_sdmc.py --mode safe --out build/packages/safe-nro --zip build/packages/safe-nro-$(PACKAGE_TIMESTAMP).zip --nro build/switch/pctc.nro
-
 sysmodule-nsp:
 	$(MAKE) -C sysmodule
 	mkdir -p build/switch
 	cp sysmodule/pctc-sysmodule.nsp build/switch/exefs.nsp
 
-package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2: sysmodule-nsp companion-nro companion-overlay
-	python3 tools/package_sdmc.py --mode $(subst package-,,$(subst -boot2,,$@)) --out build/packages/$(subst package-,,$@) --zip build/packages/$(subst package-,,$@)-$(PACKAGE_TIMESTAMP).zip --sysmodule-exefs build/switch/exefs.nsp --nro build/switch/pctc.nro --overlay build/switch/pctc.ovl --boot2
+package-playwise: sysmodule-nsp companion-nro companion-overlay
+	python3 tools/package_sdmc.py --out build/packages/playwise --zip build/packages/playwise-$(PACKAGE_TIMESTAMP).zip --sysmodule-exefs build/switch/exefs.nsp --nro build/switch/pctc.nro --overlay build/switch/pctc.ovl --boot2
 
-packages: package-safe-nro package-disabled-boot2 package-observe-boot2 package-grant-boot2 package-enforce-boot2
+packages: package-playwise
 
 clean:
 	rm -rf build

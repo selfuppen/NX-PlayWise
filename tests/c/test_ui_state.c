@@ -98,7 +98,7 @@ static void test_overlay_confirmation(void)
     PtcUiModel model;
     memset(&model, 0, sizeof(model));
     model.overlay = PTC_UI_OVERLAY_CONFIRM;
-    model.operation = PTC_UI_OPERATION_QUICK_TEST;
+    model.operation = PTC_UI_OPERATION_COMPLETE_SETUP;
     check_true(ptc_ui_cancel_overlay(&model), "confirmation can be cancelled");
     check_int(model.overlay, PTC_UI_OVERLAY_NONE, "cancel closes overlay");
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_NONE, "cancel does not confirm operation");
@@ -130,7 +130,7 @@ static void test_page_action_counts(void)
 {
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 6, "today card count");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 5, "plan card count");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SAFETY), 5, "safety card count includes both probes");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SAFETY), 6, "safety card count includes setup recovery and probes");
 }
 
 static void test_hit_test_child(void)
@@ -177,7 +177,7 @@ static void test_hit_test_parent(void)
     check_hit(ptc_ui_hit_test(&model, 8, 640), PTC_UI_HIT_NONE, 0, "parent empty space");
 
     model.parent_page = PTC_UI_PARENT_SAFETY;
-    check_hit(hit_center(&model, ptc_ui_parent_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "suspend probe card is reachable");
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "suspend probe card is reachable");
 
     model.parent_page = PTC_UI_PARENT_PLAN;
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_NONE, 0, "card beyond page count is inert");
@@ -262,52 +262,37 @@ static void test_result_mapping(void)
     PtcUiModel model;
     const char *success =
         "{\"version\":1,\"request_id\":\"1-a\",\"type\":\"status\",\"status\":\"ok\","
-        "\"mode\":\"observe\",\"dry_run\":true,\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,"
+        "\"mode\":\"enforce\",\"dry_run\":false,\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,"
         "\"unrestricted_today\":0,\"remaining_available\":true,\"remaining_minutes\":42,"
         "\"played_minutes_available\":true,\"played_minutes\":18,"
         "\"play_timer_enabled\":1,\"restricted_now\":0,\"bedtime_active\":false,"
-        "\"parent_unlock_active\":true},\"capabilities\":{\"play_timer_write_verified\":true,"
-        "\"play_timer_effect_verified\":true,\"raw_block_verified\":false,\"suspend_verified\":false},\"completed_at\":1}";
+        "\"parent_unlock_active\":true},\"capabilities\":{\"raw_block_verified\":false,\"suspend_verified\":false},"
+        "\"setup\":{\"phase\":\"released\",\"restriction_cleared\":true,\"snapshot_available\":true,"
+        "\"activate_after\":0,\"last_error\":\"\"},\"completed_at\":1}";
     const char *failure =
         "{\"version\":1,\"request_id\":\"1-b\",\"type\":\"offline_code\",\"status\":\"error\",\"mode\":\"grant\","
         "\"dry_run\":false,\"error\":{\"code\":203,\"reason\":\"bad_signature\",\"message\":\"授权码签名不匹配\"},"
         "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,"
         "\"remaining_available\":false,\"remaining_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1,"
-        "\"bedtime_active\":false,\"parent_unlock_active\":false},\"capabilities\":{\"play_timer_write_verified\":false,"
-        "\"play_timer_effect_verified\":false,\"raw_block_verified\":false,\"suspend_verified\":false},\"completed_at\":1}";
+        "\"bedtime_active\":false,\"parent_unlock_active\":false},\"capabilities\":{\"raw_block_verified\":false,"
+        "\"suspend_verified\":false},\"completed_at\":1}";
     const char *bedtime_grant =
         "{\"version\":1,\"request_id\":\"1-bt\",\"type\":\"set_bedtime\",\"status\":\"ok\",\"mode\":\"grant\","
         "\"dry_run\":false,\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
         "\"remaining_available\":true,\"remaining_minutes\":42,\"play_timer_enabled\":1,\"restricted_now\":0,"
-        "\"bedtime_active\":false,\"parent_unlock_active\":false},\"capabilities\":{\"play_timer_write_verified\":true,"
-        "\"play_timer_effect_verified\":true,\"raw_block_verified\":true,\"suspend_verified\":false},\"completed_at\":1}";
+        "\"bedtime_active\":false,\"parent_unlock_active\":false},\"capabilities\":{\"raw_block_verified\":true,"
+        "\"suspend_verified\":false},\"completed_at\":1}";
     const char *unlock_end =
         "{\"version\":1,\"request_id\":\"1-ue\",\"type\":\"parent_unlock_end\",\"status\":\"ok\",\"mode\":\"grant\","
         "\"dry_run\":false,\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
         "\"remaining_available\":true,\"remaining_minutes\":42,\"play_timer_enabled\":1,\"restricted_now\":0,"
-        "\"bedtime_active\":false,\"parent_unlock_active\":false},\"capabilities\":{\"play_timer_write_verified\":true,"
-        "\"play_timer_effect_verified\":true,\"raw_block_verified\":true,\"suspend_verified\":false},\"completed_at\":1}";
+        "\"bedtime_active\":false,\"parent_unlock_active\":false},\"capabilities\":{\"raw_block_verified\":true,"
+        "\"suspend_verified\":false},\"completed_at\":1}";
     const char *future =
         "{\"version\":1,\"request_id\":\"1-c\",\"type\":\"status\",\"status\":\"ok\",\"mode\":\"future\",\"dry_run\":true,"
         "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,\"remaining_available\":false,"
         "\"remaining_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1,\"bedtime_active\":false,\"parent_unlock_active\":false},"
-        "\"capabilities\":{\"play_timer_write_verified\":false,\"play_timer_effect_verified\":false,\"raw_block_verified\":false,\"suspend_verified\":false},\"completed_at\":1}";
-    const char *quick_failure =
-        "{\"version\":1,\"request_id\":\"1-d\",\"type\":\"probe_play_timer_effect\",\"status\":\"error\",\"mode\":\"grant\","
-        "\"dry_run\":false,\"error\":{\"code\":306,\"reason\":\"pctl_effect_not_observed\",\"message\":\"家长控制运行时未观察到生效\"},"
-        "\"state\":{\"day_index\":1,\"limited_today\":0,\"blocked_today\":0,\"unrestricted_today\":1,\"remaining_available\":true,"
-        "\"remaining_minutes\":1418,\"play_timer_enabled\":0,\"restricted_now\":0,\"bedtime_active\":false,\"parent_unlock_active\":false},"
-        "\"capabilities\":{\"play_timer_write_verified\":false,\"play_timer_effect_verified\":false,\"raw_block_verified\":false,\"suspend_verified\":false},"
-        "\"pctl_effect_probe\":{\"verdict\":\"fail\",\"failure_stage\":\"runtime_status\",\"checks\":{\"raw_target_correct\":true,"
-        "\"timer_enabled\":false,\"remaining_available\":true,\"raw_restored\":true,\"timer_restored\":true}},\"completed_at\":1}";
-    const char *device_ready =
-        "{\"version\":1,\"request_id\":\"1-ready\",\"type\":\"prepare_device_test\",\"status\":\"ok\",\"mode\":\"grant\","
-        "\"dry_run\":false,\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
-        "\"remaining_available\":true,\"remaining_minutes\":30,\"played_minutes_available\":true,\"played_minutes\":60,"
-        "\"play_timer_enabled\":1,\"restricted_now\":0,\"bedtime_active\":false,\"parent_unlock_active\":false},"
-        "\"capabilities\":{\"play_timer_write_verified\":true,\"play_timer_effect_verified\":true,\"raw_block_verified\":false,"
-        "\"suspend_verified\":false},\"device_test\":{\"verdict\":\"pass\",\"failure_stage\":\"none\","
-        "\"ready_target_minutes\":90},\"completed_at\":1}";
+        "\"capabilities\":{\"raw_block_verified\":false,\"suspend_verified\":false},\"completed_at\":1}";
     memset(&model, 0, sizeof(model));
     check_true(ptc_ui_apply_result_json(&model, success), "success result parses");
     check_true(model.status_loaded, "result status loaded");
@@ -316,8 +301,11 @@ static void test_result_mapping(void)
     check_int(model.played_minutes, 18, "played minutes mapped");
     check_true(model.played_minutes_available, "played minutes availability mapped");
     check_true(model.parent_unlock_active, "unlock state mapped");
-    check_true(model.play_timer_effect_verified, "capability mapped");
-    check_true(strcmp(model.mode, "观察") == 0, "mode localized");
+    check_true(strcmp(model.mode, "强制执行") == 0, "mode localized");
+    check_true(strcmp(model.setup_phase, "released") == 0, "setup phase mapped");
+    check_true(model.setup_restriction_cleared, "setup release mapped");
+    check_true(model.setup_snapshot_available, "setup snapshot mapped");
+    check_int(model.view, PTC_UI_SETUP, "released setup opens onboarding view");
     check_true(ptc_ui_apply_result_json(&model, bedtime_grant), "grant bedtime result parses");
     check_true(strstr(model.message, "不会自动执行") != NULL, "grant bedtime result explains automatic enforcement boundary");
     check_int(model.played_minutes, 18, "management result preserves unavailable played minutes");
@@ -331,16 +319,6 @@ static void test_result_mapping(void)
     check_int(model.played_minutes, 18, "error preserves played minutes");
     check_int(model.play_timer_enabled, 1, "error preserves timer state");
     check_true(model.parent_unlock_active, "error preserves unlock state");
-    check_true(model.play_timer_effect_verified, "error preserves capability state");
-    check_true(ptc_ui_apply_result_json(&model, quick_failure), "quick failure result parses");
-    check_true(strstr(model.message, "运行时") != NULL, "quick failure keeps parent-readable reason");
-    check_true(strstr(model.feedback_detail, "306 pctl_effect_not_observed/runtime_status") != NULL,
-        "quick failure exposes stable feedback identifiers");
-    check_true(strstr(model.feedback_detail, "临时解锁") != NULL, "quick failure includes actionable hint");
-    check_true(ptc_ui_apply_result_json(&model, device_ready), "device-ready result parses");
-    check_int(model.remaining_minutes, 30, "device-ready remaining time mapped");
-    check_int(model.restricted_now, 0, "device-ready restriction cleared");
-    check_true(strstr(model.message, "检查完整证据") != NULL, "device-ready result waits for self-check");
     check_true(ptc_ui_apply_result_json(&model, unlock_end), "unlock end result parses");
     check_true(!model.parent_unlock_active, "unlock end clears unlock state");
     check_true(ptc_ui_apply_result_json(&model, future), "unknown mode result parses");

@@ -13,7 +13,7 @@ TOOLS = ROOT / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from ptc_observe_processor import ObserveProcessor
-from ptc_request_queue import AppPaths, read_json, write_request
+from ptc_request_queue import AppPaths, read_json, write_json_atomic, write_request
 from ptc_token_v1 import TOKEN_ACTION_ADD_TODAY_MINUTES, TOKEN_VERSION, TokenPayload, encode_token
 
 
@@ -65,6 +65,9 @@ def main() -> int:
             capture_output=True,
         )
         paths = AppPaths(tmp)
+        config = read_json(paths.app_root / "config.json")
+        config["control_mode"] = "observe"
+        write_json_atomic(paths.app_root / "config.json", config)
 
         status_id = write_request(tmp, "status", request_id="1000-0001", created_at=1000)
         ObserveProcessor(tmp, current_day_index=2380).process_all()

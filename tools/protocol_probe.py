@@ -19,8 +19,8 @@ def init_sdmc(args: argparse.Namespace) -> int:
             "device_id": args.device,
             "grant_secret": args.secret,
             "max_add_minutes": args.max_add_minutes,
-            "control_mode": "observe",
-            "allow_unlimited_to_limited": False,
+            "control_mode": "enforce",
+            "allow_unlimited_to_limited": True,
             "default_request_timeout_ms": 60000,
         },
     )
@@ -68,15 +68,22 @@ def init_sdmc(args: argparse.Namespace) -> int:
         paths.app_root / "capabilities.json",
         {
             "version": 1,
-            "play_timer_write_verified": False,
-            "play_timer_write_backend": "pctl-s-v2",
-            "play_timer_effect_verified": False,
-            "play_timer_effect_backend": "pctl-s-runtime-v2",
             "raw_block_verified": False,
             "raw_block_backend": "pctl-s-rawblock-v1",
             "suspend_verified": False,
             "suspend_backend": "pctl-s-suspend-v1",
-            "verified_at": {"play_timer_write": None, "play_timer_effect": None, "raw_block": None, "suspend": None},
+            "verified_at": {"raw_block": None, "suspend": None},
+        },
+    )
+    write_json_atomic(
+        paths.app_root / "setup.json",
+        {
+            "version": 1,
+            "phase": "pending",
+            "restriction_cleared": False,
+            "snapshot_available": False,
+            "activate_after": 0,
+            "last_error": "",
         },
     )
     print(paths.app_root)

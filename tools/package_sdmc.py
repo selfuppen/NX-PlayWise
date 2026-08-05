@@ -9,7 +9,9 @@ import zipfile
 
 
 APP_DIR = Path("switch") / "playwise"
+TEMPLATE_DIR = Path("playwise-install") / "templates"
 ATMOSPHERE_CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
+INSTALL_SCRIPT = Path(__file__).with_name("install_package_to_sd.ps1")
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -43,7 +45,6 @@ def require_file(parser: argparse.ArgumentParser, option: str, path: Path | None
 
 def create_package(
     out: Path,
-    mode: str,
     *,
     include_boot2: bool,
     device_id: str,
@@ -57,6 +58,7 @@ def create_package(
     if out.exists():
         shutil.rmtree(out)
     app = out / APP_DIR
+    templates = out / TEMPLATE_DIR
     for directory in [
         app / "inbox" / "pending",
         app / "inbox" / "processing",
@@ -69,22 +71,21 @@ def create_package(
     ]:
         directory.mkdir(parents=True, exist_ok=True)
 
-    control_mode = "observe" if mode == "safe" else mode
     write_json(
-        app / "config.json",
+        templates / "config.json",
         {
             "version": 1,
             "device_id": device_id,
             "grant_secret": grant_secret,
             "max_add_minutes": max_add_minutes,
-            "control_mode": control_mode,
-            "allow_unlimited_to_limited": False,
+            "control_mode": "enforce",
+            "allow_unlimited_to_limited": True,
             "default_request_timeout_ms": 60000,
         },
     )
-    write_json(app / "auth.json", {"version": 1, "pin_hash": "", "pin_salt": "", "hash": "hmac-sha256", "updated_at": 0})
+    write_json(templates / "auth.json", {"version": 1, "pin_hash": "", "pin_salt": "", "hash": "hmac-sha256", "updated_at": 0})
     write_json(
-        app / "rules.json",
+        templates / "rules.json",
         {
             "version": 1,
             "week": [
@@ -107,7 +108,7 @@ def create_package(
         },
     )
     write_json(
-        app / "state.json",
+        templates / "state.json",
         {
             "version": 1,
             "parent_unlock_until": 0,
@@ -119,20 +120,36 @@ def create_package(
         },
     )
     write_json(
-        app / "capabilities.json",
+        templates / "capabilities.json",
         {
             "version": 1,
-            "play_timer_write_verified": False,
-            "play_timer_write_backend": "pctl-s-v2",
-            "play_timer_effect_verified": False,
-            "play_timer_effect_backend": "pctl-s-runtime-v2",
             "raw_block_verified": False,
             "raw_block_backend": "pctl-s-rawblock-v1",
             "suspend_verified": False,
             "suspend_backend": "pctl-s-suspend-v1",
-            "verified_at": {"play_timer_write": 0, "play_timer_effect": 0, "raw_block": 0, "suspend": 0},
+            "verified_at": {"raw_block": 0, "suspend": 0},
         },
     )
+    write_json(
+        templates / "setup.json",
+        {
+            "version": 1,
+            "phase": "pending",
+            "restriction_cleared": False,
+            "snapshot_available": False,
+            "activate_after": 0,
+            "last_error": "",
+        },
+    )
+
+    # Keep the installable seed beside the Companion binary.  The separate
+    # template directory is retained as the immutable source-of-truth for
+    # tooling, while the installer consumes these seed files without ever
+    # replacing runtime data on the SD card.
+    for template_file in sorted(templates.glob("*.json")):
+        copy_file(template_file, app / template_file.name)
+
+    copy_file(INSTALL_SCRIPT, out / "install-playwise.ps1")
 
     if nro is not None:
         copy_file(nro, app / nro.name)
@@ -153,8 +170,7 @@ def create_package(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Create staged SDMC packages for playwise.")
-    parser.add_argument("--mode", choices=["safe", "observe", "disabled", "grant", "enforce"], default="safe")
+    parser = argparse.ArgumentParser(description="Create the PlayWise SDMC package.")
     parser.add_argument("--out", required=True)
     parser.add_argument("--device-id", default="kid-switch")
     parser.add_argument("--grant-secret", default="replace-with-long-random-secret")
@@ -179,7 +195,6 @@ def main() -> int:
     out = Path(args.out)
     create_package(
         out,
-        args.mode,
         include_boot2=args.boot2,
         device_id=args.device_id,
         grant_secret=args.grant_secret,

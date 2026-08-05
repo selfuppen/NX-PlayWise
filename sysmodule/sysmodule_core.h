@@ -42,6 +42,7 @@ void ptc_sysmodule_init(
     PtcPctl *pctl,
     PtcTimeProvider *time_provider);
 int ptc_sysmodule_recover_processing(PtcSysmodule *sysmodule);
+int ptc_sysmodule_bootstrap_setup(PtcSysmodule *sysmodule);
 int ptc_sysmodule_process_all(PtcSysmodule *sysmodule);
 int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule);
 uint32_t ptc_sysmodule_note_scan_result(PtcSysmodule *sysmodule, bool found_work);

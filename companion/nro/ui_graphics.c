@@ -59,9 +59,10 @@ static const UiAction PLAN_ACTIONS[] = {
 };
 
 static const UiAction SAFETY_ACTIONS[] = {
-    {"一键基础测试", "解除限制、验证恢复并准备测试额度", COLOR(42, 105, 188)},
+    {"启用自动控制", "完成首次设置，60 秒后执行规则", COLOR(42, 105, 188)},
+    {"重试前置解限", "保留安装快照并再次解除当前限制", COLOR(25, 132, 95)},
+    {"恢复安装前状态", "恢复原始设置并停用 PlayWise", COLOR(194, 61, 61)},
     {"紧急停用控制", "创建 disable.flag 进入安全状态", COLOR(194, 61, 61)},
-    {"恢复控制", "移除 disable.flag 并恢复处理", COLOR(25, 132, 95)},
     {"验证强制阻止", "真机探针验证 raw block 能力", COLOR(194, 61, 61)},
     {"验证暂停软件", "真机探针验证 suspend 能力", COLOR(194, 61, 61)},
 };
@@ -447,6 +448,27 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(2), "B / +  退出");
 }
 
+static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect panel = {154, 132, 972, 430};
+    const char *phase = model->setup_phase[0] ? model->setup_phase : "pending";
+    char phase_line[160];
+    draw_header(pixels, stride, "首次设置", "后台已在自动控制前处理当前家长控制限制");
+    fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
+    draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
+    draw_text(pixels, stride, 204, 190, model->setup_restriction_cleared ? "当前限制已解除" : "正在等待解除当前限制", 31,
+        model->setup_restriction_cleared ? COLOR(25, 132, 95) : COLOR(215, 139, 25));
+    snprintf(phase_line, sizeof(phase_line), "引导阶段：%s    安装前快照：%s", phase,
+        model->setup_snapshot_available ? "已保存" : "不可用");
+    draw_text(pixels, stride, 204, 248, phase_line, 22, COLOR(77, 86, 99));
+    draw_text(pixels, stride, 204, 300, "确认 Companion 可以正常进入后，按 Minus 验证家长 PIN。", 23, COLOR(45, 52, 62));
+    draw_text(pixels, stride, 204, 344, "在安全工具中启用自动控制；规则会在 60 秒宽限后生效。", 23, COLOR(45, 52, 62));
+    draw_text(pixels, stride, 204, 400, model->message[0] ? model->message : "Y 可刷新后台状态。", 20, COLOR(91, 100, 116));
+    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0), "Minus  家长设置");
+    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(1), "Y  刷新");
+    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(2), "B / +  退出");
+}
+
 static void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect panel = {214, 148, 852, 444};
@@ -533,13 +555,10 @@ static void draw_capabilities(uint32_t *pixels, uint32_t stride, const PtcUiMode
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, panel.x + 26, panel.y + 43, "设备能力", 23, COLOR(28, 34, 43));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 88, model->play_timer_write_verified ? "写入验证      已通过" : "写入验证      未通过", 19,
-              model->play_timer_write_verified ? COLOR(25, 132, 95) : COLOR(194, 61, 61));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 130, model->play_timer_effect_verified ? "计时效果      已通过" : "计时效果      未通过", 19,
-              model->play_timer_effect_verified ? COLOR(25, 132, 95) : COLOR(194, 61, 61));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 172, model->raw_block_verified ? "强制阻止      已验证" : "强制阻止      未验证", 19,
+    draw_text(pixels, stride, panel.x + 26, panel.y + 88, "普通计时写入  事务恢复保护", 19, COLOR(25, 132, 95));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 130, model->raw_block_verified ? "强制阻止      已验证" : "强制阻止      未验证", 19,
               model->raw_block_verified ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 214, model->suspend_verified ? "暂停软件      已验证" : "暂停软件      未验证", 19,
+    draw_text(pixels, stride, panel.x + 26, panel.y + 172, model->suspend_verified ? "暂停软件      已验证" : "暂停软件      未验证", 19,
               model->suspend_verified ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
     draw_text(pixels, stride, panel.x + 26, panel.y + 270, "高风险操作会再次要求确认", 18, COLOR(194, 61, 61));
 }
@@ -805,7 +824,8 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
                   model->operation == PTC_UI_OPERATION_SAVE_BEDTIME ||
                   model->operation == PTC_UI_OPERATION_SAVE_LIMIT_ACTION ||
                   model->operation == PTC_UI_OPERATION_EMERGENCY_DISABLE ||
-                  model->operation == PTC_UI_OPERATION_QUICK_TEST ||
+                  model->operation == PTC_UI_OPERATION_COMPLETE_SETUP ||
+                  model->operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT ||
                   model->operation == PTC_UI_OPERATION_PROBE_RAW_BLOCK ||
                   model->operation == PTC_UI_OPERATION_PROBE_SUSPEND;
     draw_dialog_shell(pixels, stride, model, &dialog, 760, 330);
@@ -919,6 +939,8 @@ void ptc_ui_graphics_draw(const PtcUiModel *model)
     fill_rect(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, COLOR(244, 246, 249));
     if (model->view == PTC_UI_PARENT) {
         draw_parent(pixels, stride, model);
+    } else if (model->view == PTC_UI_SETUP) {
+        draw_setup(pixels, stride, model);
     } else if (model->view == PTC_UI_ERROR) {
         draw_error(pixels, stride, model);
     } else {

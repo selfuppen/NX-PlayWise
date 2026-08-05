@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../common/crypto/sha256.h"
 #include "../common/policy/control_policy.h"
 #include "../common/protocol/capability_backend.h"
 #include "../common/protocol/request_schema.h"
@@ -12,6 +13,13 @@
 #include "../common/time/ptc_time.h"
 #include "../common/token/token_v1.h"
 #include "../common/token/token_v2.h"
+
+/* IDs 15-18 remain reserved in the public protocol. These aliases keep the
+ * former handlers isolated and unreachable while preserving their local code. */
+#define PTC_REQUEST_PROBE_PLAY_TIMER_WRITE PTC_REQUEST_RESERVED_15
+#define PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT PTC_REQUEST_RESERVED_16
+#define PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT PTC_REQUEST_RESERVED_17
+#define PTC_REQUEST_PREPARE_DEVICE_TEST PTC_REQUEST_RESERVED_18
 
 typedef struct {
     char device_id[80];
@@ -31,6 +39,14 @@ typedef struct {
     int64_t v2_cooldown_until;
 } PtcRuntimeState;
 
+typedef struct {
+    char phase[16];
+    bool restriction_cleared;
+    bool snapshot_available;
+    int64_t activate_after;
+    char last_error[64];
+} PtcSetupState;
+
 #define PTC_V2_FAILURE_LIMIT 5u
 #define PTC_V2_COOLDOWN_SECONDS 600
 
@@ -42,6 +58,28 @@ typedef struct {
 #define PTC_CLEANUP_MAX_ENTRIES 256u
 
 static void effect_wait(PtcSysmodule *sysmodule, uint32_t milliseconds);
+static PtcErrorCode restore_snapshot_exact(
+    PtcSysmodule *sysmodule,
+    const PtcPctlSettingsSnapshot *original,
+    PtcPctlSettingsSnapshot *restored_snapshot,
+    PtcPctlStatus *restored_status,
+    uint8_t weekday,
+    bool *raw_restored,
+    bool *timer_restored);
+static PtcErrorCode start_timer_and_wait_target(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    PtcClockSnapshot now,
+    const char *mode_name,
+    PtcPctlTargetMode target_mode,
+    uint16_t minutes,
+    const char *event_detail,
+    PtcPctlStatus *observed,
+    bool *timer_started);
+static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
+static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
+static void write_disable_flag(PtcSysmodule *sysmodule, const char *reason);
+static void recovery_clear(PtcSysmodule *sysmodule);
 
 static void join_path(char *out, size_t out_size, const char *a, const char *b)
 {
@@ -184,6 +222,296 @@ static bool json_bool_value(const char *text, const char *key, bool *out)
         return true;
     }
     return false;
+}
+
+static void setup_state_default(PtcSetupState *setup)
+{
+    memset(setup, 0, sizeof(*setup));
+    snprintf(setup->phase, sizeof(setup->phase), "active");
+}
+
+static bool load_setup_state(PtcSysmodule *sysmodule, PtcSetupState *setup)
+{
+    char path[320];
+    char text[1024];
+    int64_t version;
+    setup_state_default(setup);
+    join_path(path, sizeof(path), sysmodule->app_root, "setup.json");
+    if (!sysmodule->storage->vtable->exists(sysmodule->storage, path)) {
+        return true;
+    }
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text)) ||
+        !json_i64(text, "version", &version) || version != 1 ||
+        !json_string(text, "phase", setup->phase, sizeof(setup->phase))) {
+        return false;
+    }
+    (void)json_bool_value(text, "restriction_cleared", &setup->restriction_cleared);
+    (void)json_bool_value(text, "snapshot_available", &setup->snapshot_available);
+    (void)json_i64(text, "activate_after", &setup->activate_after);
+    (void)json_string(text, "last_error", setup->last_error, sizeof(setup->last_error));
+    return strcmp(setup->phase, "pending") == 0 || strcmp(setup->phase, "released") == 0 ||
+        strcmp(setup->phase, "active") == 0 || strcmp(setup->phase, "failed") == 0 ||
+        strcmp(setup->phase, "restored") == 0;
+}
+
+static bool save_setup_state(PtcSysmodule *sysmodule, const PtcSetupState *setup)
+{
+    char path[320];
+    char text[512];
+    join_path(path, sizeof(path), sysmodule->app_root, "setup.json");
+    snprintf(text, sizeof(text),
+        "{\"version\":1,\"phase\":\"%s\",\"restriction_cleared\":%s,"
+        "\"snapshot_available\":%s,\"activate_after\":%lld,\"last_error\":\"%s\"}\n",
+        setup->phase,
+        setup->restriction_cleared ? "true" : "false",
+        setup->snapshot_available ? "true" : "false",
+        (long long)setup->activate_after,
+        setup->last_error);
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
+}
+
+static void bytes_hex(char *out, size_t out_size, const uint8_t *data, size_t size)
+{
+    static const char HEX[] = "0123456789abcdef";
+    size_t i;
+    if (!out || out_size < size * 2U + 1U) return;
+    for (i = 0; i < size; ++i) {
+        out[i * 2U] = HEX[(data[i] >> 4) & 0x0fU];
+        out[i * 2U + 1U] = HEX[data[i] & 0x0fU];
+    }
+    out[size * 2U] = '\0';
+}
+
+static int hex_digit(char ch)
+{
+    if (ch >= '0' && ch <= '9') return ch - '0';
+    if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+    if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+    return -1;
+}
+
+static bool hex_bytes(const char *text, uint8_t *out, size_t size)
+{
+    size_t i;
+    if (!text || strlen(text) != size * 2U) return false;
+    for (i = 0; i < size; ++i) {
+        int hi = hex_digit(text[i * 2U]);
+        int lo = hex_digit(text[i * 2U + 1U]);
+        if (hi < 0 || lo < 0) return false;
+        out[i] = (uint8_t)((hi << 4) | lo);
+    }
+    return true;
+}
+
+static void snapshot_sha256(char out[65], const PtcPctlSettingsSnapshot *snapshot)
+{
+    PtcSha256Ctx ctx;
+    uint8_t digest[PTC_SHA256_DIGEST_SIZE];
+    uint8_t timer = snapshot->timer_enabled ? 1U : 0U;
+    ptc_sha256_init(&ctx);
+    ptc_sha256_update(&ctx, snapshot->data, snapshot->size);
+    ptc_sha256_update(&ctx, &timer, 1U);
+    ptc_sha256_final(&ctx, digest);
+    bytes_hex(out, 65U, digest, sizeof(digest));
+}
+
+static bool save_install_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapshot *snapshot, int64_t captured_at)
+{
+    char path[320];
+    char settings_hex[(PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U) + 1U];
+    char digest[65];
+    char text[512];
+    join_path(path, sizeof(path), sysmodule->app_root, "backups/install_pctl_snapshot.json");
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, path)) return true;
+    if (!snapshot || snapshot->size != PTC_PCTL_OPAQUE_SETTINGS_SIZE) return false;
+    bytes_hex(settings_hex, sizeof(settings_hex), snapshot->data, snapshot->size);
+    snapshot_sha256(digest, snapshot);
+    snprintf(text, sizeof(text),
+        "{\"version\":1,\"captured_at\":%lld,\"size\":%u,\"timer_enabled\":%s,"
+        "\"settings_hex\":\"%s\",\"sha256\":\"%s\"}\n",
+        (long long)captured_at, (unsigned int)snapshot->size,
+        snapshot->timer_enabled ? "true" : "false", settings_hex, digest);
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
+}
+
+static bool load_install_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot)
+{
+    char path[320];
+    char text[1024];
+    char settings_hex[(PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U) + 1U];
+    char expected_digest[65];
+    char actual_digest[65];
+    int64_t version;
+    int64_t size;
+    bool timer_enabled;
+    join_path(path, sizeof(path), sysmodule->app_root, "backups/install_pctl_snapshot.json");
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text)) ||
+        !json_i64(text, "version", &version) || version != 1 ||
+        !json_i64(text, "size", &size) || size != PTC_PCTL_OPAQUE_SETTINGS_SIZE ||
+        !json_bool_value(text, "timer_enabled", &timer_enabled) ||
+        !json_string(text, "settings_hex", settings_hex, sizeof(settings_hex)) ||
+        !json_string(text, "sha256", expected_digest, sizeof(expected_digest))) {
+        return false;
+    }
+    memset(snapshot, 0, sizeof(*snapshot));
+    snapshot->size = (uint32_t)size;
+    snapshot->timer_enabled = timer_enabled;
+    if (!hex_bytes(settings_hex, snapshot->data, snapshot->size)) return false;
+    snapshot_sha256(actual_digest, snapshot);
+    return strcmp(actual_digest, expected_digest) == 0;
+}
+
+static bool save_snapshot_file(PtcSysmodule *sysmodule, const char *relative,
+    const PtcPctlSettingsSnapshot *snapshot, int64_t captured_at)
+{
+    char path[320];
+    char settings_hex[(PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U) + 1U];
+    char digest[65];
+    char text[512];
+    if (!snapshot || snapshot->size != PTC_PCTL_OPAQUE_SETTINGS_SIZE) return false;
+    join_path(path, sizeof(path), sysmodule->app_root, relative);
+    bytes_hex(settings_hex, sizeof(settings_hex), snapshot->data, snapshot->size);
+    snapshot_sha256(digest, snapshot);
+    snprintf(text, sizeof(text),
+        "{\"version\":1,\"captured_at\":%lld,\"size\":%u,\"timer_enabled\":%s,"
+        "\"settings_hex\":\"%s\",\"sha256\":\"%s\"}\n",
+        (long long)captured_at, (unsigned int)snapshot->size,
+        snapshot->timer_enabled ? "true" : "false", settings_hex, digest);
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
+}
+
+static bool load_snapshot_file(PtcSysmodule *sysmodule, const char *relative, PtcPctlSettingsSnapshot *snapshot)
+{
+    char path[320];
+    char text[1024];
+    char settings_hex[(PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U) + 1U];
+    char expected_digest[65];
+    char actual_digest[65];
+    int64_t version;
+    int64_t size;
+    bool timer_enabled;
+    join_path(path, sizeof(path), sysmodule->app_root, relative);
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text)) ||
+        !json_i64(text, "version", &version) || version != 1 ||
+        !json_i64(text, "size", &size) || size != PTC_PCTL_OPAQUE_SETTINGS_SIZE ||
+        !json_bool_value(text, "timer_enabled", &timer_enabled) ||
+        !json_string(text, "settings_hex", settings_hex, sizeof(settings_hex)) ||
+        !json_string(text, "sha256", expected_digest, sizeof(expected_digest))) return false;
+    memset(snapshot, 0, sizeof(*snapshot));
+    snapshot->size = (uint32_t)size;
+    snapshot->timer_enabled = timer_enabled;
+    if (!hex_bytes(settings_hex, snapshot->data, snapshot->size)) return false;
+    snapshot_sha256(actual_digest, snapshot);
+    return strcmp(actual_digest, expected_digest) == 0;
+}
+
+static bool recovery_path_exists(PtcSysmodule *sysmodule)
+{
+    char path[320];
+    join_path(path, sizeof(path), sysmodule->app_root, "recovery/active/meta.json");
+    return sysmodule->storage->vtable->exists(sysmodule->storage, path);
+}
+
+static bool backup_text_file(PtcSysmodule *sysmodule, const char *relative, const char *backup_relative, bool *existed)
+{
+    char source[320];
+    char backup[320];
+    char text[16384];
+    join_path(source, sizeof(source), sysmodule->app_root, relative);
+    join_path(backup, sizeof(backup), sysmodule->app_root, backup_relative);
+    *existed = sysmodule->storage->vtable->exists(sysmodule->storage, source);
+    if (!*existed) text[0] = '\0';
+    else if (!sysmodule->storage->vtable->read_text(sysmodule->storage, source, text, sizeof(text))) return false;
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, backup, text);
+}
+
+static bool restore_text_file(PtcSysmodule *sysmodule, const char *relative, const char *backup_relative, bool existed)
+{
+    char target[320];
+    char backup[320];
+    char text[16384];
+    join_path(target, sizeof(target), sysmodule->app_root, relative);
+    if (!existed) {
+        return !sysmodule->storage->vtable->exists(sysmodule->storage, target) ||
+            sysmodule->storage->vtable->remove_path(sysmodule->storage, target);
+    }
+    join_path(backup, sizeof(backup), sysmodule->app_root, backup_relative);
+    return sysmodule->storage->vtable->read_text(sysmodule->storage, backup, text, sizeof(text)) &&
+        sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, target, text);
+}
+
+static bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClockSnapshot now)
+{
+    PtcPctlSettingsSnapshot snapshot;
+    char meta_path[320];
+    char meta[512];
+    bool rules_existed;
+    bool state_existed;
+    bool ledger_existed;
+    if (recovery_path_exists(sysmodule)) return true;
+    if (!sysmodule->pctl->vtable->snapshot_settings ||
+        sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &snapshot) != PTC_ERR_OK ||
+        !save_snapshot_file(sysmodule, "recovery/active/pctl_snapshot.json", &snapshot, now.unix_seconds) ||
+        !backup_text_file(sysmodule, "rules.json", "recovery/active/rules.before", &rules_existed) ||
+        !backup_text_file(sysmodule, "state.json", "recovery/active/state.before", &state_existed) ||
+        !backup_text_file(sysmodule, "ledger/used_nonces.jsonl", "recovery/active/ledger.before", &ledger_existed)) {
+        recovery_clear(sysmodule);
+        return false;
+    }
+    join_path(meta_path, sizeof(meta_path), sysmodule->app_root, "recovery/active/meta.json");
+    snprintf(meta, sizeof(meta),
+        "{\"version\":1,\"request_id\":\"%s\",\"created_at\":%lld,"
+        "\"rules_existed\":%s,\"state_existed\":%s,\"ledger_existed\":%s}\n",
+        request && ptc_request_id_is_valid(request->request_id) ? request->request_id : "enforce",
+        (long long)now.unix_seconds,
+        rules_existed ? "true" : "false",
+        state_existed ? "true" : "false",
+        ledger_existed ? "true" : "false");
+    if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, meta_path, meta)) {
+        recovery_clear(sysmodule);
+        return false;
+    }
+    return true;
+}
+
+static void recovery_clear(PtcSysmodule *sysmodule)
+{
+    char path[320];
+    join_path(path, sizeof(path), sysmodule->app_root, "recovery/active");
+    if (sysmodule->storage->vtable->remove_tree) {
+        (void)sysmodule->storage->vtable->remove_tree(sysmodule->storage, path);
+    }
+}
+
+static bool recovery_rollback(PtcSysmodule *sysmodule)
+{
+    char meta_path[320];
+    char meta[1024];
+    PtcPctlSettingsSnapshot original;
+    PtcPctlSettingsSnapshot restored;
+    PtcPctlStatus status;
+    bool rules_existed;
+    bool state_existed;
+    bool ledger_existed;
+    bool raw_restored = false;
+    bool timer_restored = false;
+    PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    bool ok;
+    if (!recovery_path_exists(sysmodule)) return true;
+    join_path(meta_path, sizeof(meta_path), sysmodule->app_root, "recovery/active/meta.json");
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, meta_path, meta, sizeof(meta)) ||
+        !json_bool_value(meta, "rules_existed", &rules_existed) ||
+        !json_bool_value(meta, "state_existed", &state_existed) ||
+        !json_bool_value(meta, "ledger_existed", &ledger_existed) ||
+        !load_snapshot_file(sysmodule, "recovery/active/pctl_snapshot.json", &original)) return false;
+    ok = restore_snapshot_exact(sysmodule, &original, &restored, &status,
+        ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored) == PTC_ERR_OK;
+    ok = restore_text_file(sysmodule, "rules.json", "recovery/active/rules.before", rules_existed) && ok;
+    ok = restore_text_file(sysmodule, "state.json", "recovery/active/state.before", state_existed) && ok;
+    ok = restore_text_file(sysmodule, "ledger/used_nonces.jsonl", "recovery/active/ledger.before", ledger_existed) && ok;
+    invalidate_all_caches(sysmodule);
+    if (ok) recovery_clear(sysmodule);
+    return ok;
 }
 
 static const char *rule_mode_name(PtcRuleMode mode)
@@ -470,7 +798,7 @@ static bool load_config(PtcSysmodule *sysmodule, PtcRuntimeConfig *config)
     }
     config->mode = ptc_control_mode_from_string(mode);
     if (!json_bool_value(text, "allow_unlimited_to_limited", &config->allow_unlimited_to_limited)) {
-        config->allow_unlimited_to_limited = false;
+        config->allow_unlimited_to_limited = true;
     }
     return true;
 }
@@ -481,24 +809,14 @@ static PtcCapabilities load_capabilities(PtcSysmodule *sysmodule)
     char path[320];
     char text[1024];
     char backend[32];
-    caps.play_timer_write_verified = false;
-    caps.play_timer_effect_verified = false;
+    caps.play_timer_write_verified = true;
+    caps.play_timer_effect_verified = true;
     caps.play_timer_effect_backend[0] = '\0';
     caps.raw_block_verified = false;
     caps.suspend_verified = false;
     join_path(path, sizeof(path), sysmodule->app_root, "capabilities.json");
     if (read_cached_text(sysmodule, "capabilities.json", sysmodule->capabilities_cache_text, sizeof(sysmodule->capabilities_cache_text),
             &sysmodule->capabilities_meta, &sysmodule->capabilities_cache_valid, text, sizeof(text), true) && text[0]) {
-        (void)json_bool_value(text, "play_timer_write_verified", &caps.play_timer_write_verified);
-        if (!json_string(text, "play_timer_write_backend", backend, sizeof(backend)) ||
-            strcmp(backend, PTC_PLAY_TIMER_WRITE_BACKEND) != 0) {
-            caps.play_timer_write_verified = false;
-        }
-        if (json_string(text, "play_timer_effect_backend", backend, sizeof(backend)) &&
-            strcmp(backend, PTC_PLAY_TIMER_EFFECT_BACKEND) == 0) {
-            (void)json_bool_value(text, "play_timer_effect_verified", &caps.play_timer_effect_verified);
-            snprintf(caps.play_timer_effect_backend, sizeof(caps.play_timer_effect_backend), "%s", backend);
-        }
         if (json_string(text, "raw_block_backend", backend, sizeof(backend)) &&
             strcmp(backend, PTC_RAW_BLOCK_BACKEND) == 0) {
             (void)json_bool_value(text, "raw_block_verified", &caps.raw_block_verified);
@@ -519,22 +837,13 @@ static bool save_capabilities(PtcSysmodule *sysmodule, const PtcCapabilities *ca
     snprintf(
         text,
         sizeof(text),
-        "{\"version\":1,\"play_timer_write_verified\":%s,"
-        "\"play_timer_write_backend\":\"%s\",\"play_timer_effect_verified\":%s,"
-        "\"play_timer_effect_backend\":\"%s\",\"raw_block_verified\":%s,"
+        "{\"version\":1,\"raw_block_verified\":%s,"
         "\"raw_block_backend\":\"%s\",\"suspend_verified\":%s,"
-        "\"suspend_backend\":\"%s\",\"verified_at\":{\"play_timer_write\":%lld,"
-        "\"play_timer_effect\":%lld,\"raw_block\":%lld,\"suspend\":%lld}}\n",
-        caps->play_timer_write_verified ? "true" : "false",
-        PTC_PLAY_TIMER_WRITE_BACKEND,
-        caps->play_timer_effect_verified ? "true" : "false",
-        PTC_PLAY_TIMER_EFFECT_BACKEND,
+        "\"suspend_backend\":\"%s\",\"verified_at\":{\"raw_block\":%lld,\"suspend\":%lld}}\n",
         caps->raw_block_verified ? "true" : "false",
         PTC_RAW_BLOCK_BACKEND,
         caps->suspend_verified ? "true" : "false",
         PTC_SUSPEND_BACKEND,
-        caps->play_timer_write_verified ? (long long)updated_at : 0LL,
-        caps->play_timer_effect_verified ? (long long)updated_at : 0LL,
         caps->raw_block_verified ? (long long)updated_at : 0LL,
         caps->suspend_verified ? (long long)updated_at : 0LL);
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
@@ -833,6 +1142,27 @@ static bool write_result(PtcSysmodule *sysmodule, const char *request_id, const 
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, json);
 }
 
+static bool write_result_with_setup(PtcSysmodule *sysmodule, const char *request_id, const char *base)
+{
+    PtcSetupState setup;
+    char json[3072];
+    const char *completed_at;
+    if (!load_setup_state(sysmodule, &setup)) return false;
+    completed_at = strstr(base, "\"completed_at\"");
+    if (!completed_at) return false;
+    snprintf(json, sizeof(json),
+        "%.*s\"setup\":{\"phase\":\"%s\",\"restriction_cleared\":%s,"
+        "\"snapshot_available\":%s,\"activate_after\":%lld,\"last_error\":\"%s\"},%s",
+        (int)(completed_at - base), base,
+        setup.phase,
+        setup.restriction_cleared ? "true" : "false",
+        setup.snapshot_available ? "true" : "false",
+        (long long)setup.activate_after,
+        setup.last_error,
+        completed_at);
+    return write_result(sysmodule, request_id, json);
+}
+
 static bool request_file_path(char *out, size_t out_size, const PtcSysmodule *sysmodule, const char *queue, const char *name)
 {
     int written = snprintf(out, out_size, "%s/inbox/%s/%.127s", sysmodule->app_root, queue, name);
@@ -879,16 +1209,14 @@ static PtcErrorCode apply_target(
     PtcPctlDebugSnapshot before;
     PtcPctlDebugSnapshot after;
     PtcErrorCode err;
-    if (!caps || !caps->play_timer_write_verified) {
-        append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_WRITE_NOT_VERIFIED, "play_timer_write");
-        return PTC_ERR_PCTL_WRITE_NOT_VERIFIED;
-    }
-    if (!caps->play_timer_effect_verified) {
-        append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, "play_timer_effect");
-        return PTC_ERR_PCTL_EFFECT_NOT_VERIFIED;
+    (void)caps;
+    if (!recovery_begin(sysmodule, request, now)) {
+        append_event(sysmodule, request, "pctl_backup_failed", PTC_ERR_PCTL_BACKUP_FAILED, "recovery_transaction");
+        return PTC_ERR_PCTL_BACKUP_FAILED;
     }
     err = backup_before_write(sysmodule, request, mode_name);
     if (err != PTC_ERR_OK) {
+        recovery_clear(sysmodule);
         return err;
     }
     target.mode = mode;
@@ -902,6 +1230,10 @@ static PtcErrorCode apply_target(
         append_pctl_debug(sysmodule, request, "apply_target", mode_name, &target, err, ipc_result, &before, &after);
     }
     append_event(sysmodule, request, err == PTC_ERR_OK ? "pctl_apply" : "pctl_apply_failed", err, pctl_target_mode_name(mode));
+    if (err != PTC_ERR_OK && !recovery_rollback(sysmodule)) {
+        write_disable_flag(sysmodule, "transaction_restore_failed\n");
+        return PTC_ERR_RECOVERY_FAILED;
+    }
     return err;
 }
 
@@ -1107,6 +1439,10 @@ static bool finish_with_error(
 {
     char json[2048];
     PtcResultState state;
+    if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule)) {
+        write_disable_flag(sysmodule, "transaction_restore_failed\n");
+        error = PTC_ERR_RECOVERY_FAILED;
+    }
     result_state_default_with_caps(&state, day_index, caps);
     (void)ptc_result_error_json(
         json,
@@ -1266,7 +1602,7 @@ static bool write_current_status_result(
     result_state_from_pctl(&state, now.day_index, &pctl_status, caps, &rules, runtime_state.parent_unlock_until > now.unix_seconds, now.minute_of_day);
     (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
     append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
-    return write_result(sysmodule, request->request_id, json);
+    return write_result_with_setup(sysmodule, request->request_id, json);
 }
 
 static bool process_status(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
@@ -1302,7 +1638,6 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     PtcPctlStatus pctl_status;
     PtcPolicyDecision decision;
     PtcRules rules;
-    PtcRules original_rules;
     PtcRuntimeState runtime_state;
     PtcResultState state;
     char json[2048];
@@ -1312,8 +1647,6 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     uint16_t token_minutes = 0;
     unsigned int token_version = 1u;
     bool is_v2 = code_is_v2_candidate(request->code);
-    bool rules_existed = false;
-    bool rules_persisted = false;
     decision = ptc_policy_decide(config->mode, disable_flag, PTC_OPERATION_GRANT_MINUTES, caps, false, config->allow_unlimited_to_limited);
     if (decision.error == PTC_ERR_DISABLED) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
@@ -1363,16 +1696,9 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (decision.error != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
     }
-    if (!decision.dry_run && !caps->play_timer_effect_verified) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, now.day_index, caps);
-    }
     if (decision.may_write_pctl) {
         uint16_t new_minutes;
-        char rules_path[320];
-        join_path(rules_path, sizeof(rules_path), sysmodule->app_root, "rules.json");
-        rules_existed = sysmodule->storage->vtable->exists(sysmodule->storage, rules_path);
         (void)load_rules(sysmodule, &rules);
-        original_rules = rules;
         /* Stack the granted minutes onto today's existing limit rather than
            overwriting it, matching the add_today_minutes token action. */
         new_minutes = accumulate_today_limit(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index), token_minutes);
@@ -1385,13 +1711,21 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         }
         err = start_timer_and_wait_unrestricted(sysmodule, request, now, ptc_control_mode_name(config->mode), new_minutes, &pctl_status);
         if (err != PTC_ERR_OK) {
+            if (!recovery_rollback(sysmodule)) {
+                write_disable_flag(sysmodule, "transaction_restore_failed\n");
+                err = PTC_ERR_RECOVERY_FAILED;
+            }
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
         }
         if (!save_rules(sysmodule, &rules)) {
             append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "rules");
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+            err = PTC_ERR_STORAGE_WRITE_FAILED;
+            if (!recovery_rollback(sysmodule)) {
+                write_disable_flag(sysmodule, "transaction_restore_failed\n");
+                err = PTC_ERR_RECOVERY_FAILED;
+            }
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
         }
-        rules_persisted = true;
         append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "offline_code");
     }
     (void)load_rules(sysmodule, &rules);
@@ -1412,20 +1746,29 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                 cleared ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED,
                 "v2_cooldown");
         }
-        if (decision.consume_nonce_after_success) {
-            (void)consume_nonce(sysmodule, request, token_day_index, token_nonce, token_version);
+        if (decision.consume_nonce_after_success &&
+            !consume_nonce(sysmodule, request, token_day_index, token_nonce, token_version)) {
+            char result_path[320];
+            snprintf(result_path, sizeof(result_path), "%s/results/%s.json", sysmodule->app_root, request->request_id);
+            (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, result_path);
+            err = PTC_ERR_STORAGE_WRITE_FAILED;
+            if (!recovery_rollback(sysmodule)) {
+                write_disable_flag(sysmodule, "transaction_restore_failed\n");
+                err = PTC_ERR_RECOVERY_FAILED;
+            }
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                err, now.day_index, caps);
         }
+        recovery_clear(sysmodule);
         return true;
     }
     append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "");
-    if (rules_persisted) {
-        bool restored = restore_rules(sysmodule, &original_rules, rules_existed);
-        append_event(
-            sysmodule,
-            request,
+    if (recovery_path_exists(sysmodule)) {
+        bool restored = recovery_rollback(sysmodule);
+        append_event(sysmodule, request,
             restored ? "state_rollback_ok" : "state_rollback_failed",
-            restored ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED,
-            "offline_code");
+            restored ? PTC_ERR_OK : PTC_ERR_RECOVERY_FAILED, "offline_code");
+        if (!restored) write_disable_flag(sysmodule, "transaction_restore_failed\n");
     }
     return false;
 }
@@ -1568,6 +1911,251 @@ static PtcErrorCode restore_snapshot_exact(
     return err;
 }
 
+static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *request,
+    const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
+{
+    PtcSetupState setup;
+    if (disable_flag) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_DISABLED, now.day_index, caps);
+    }
+    if (!load_setup_state(sysmodule, &setup) || strcmp(setup.phase, "released") != 0 || !setup.restriction_cleared) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_SETUP_PENDING, now.day_index, caps);
+    }
+    setup.activate_after = now.unix_seconds + 60;
+    setup.last_error[0] = '\0';
+    if (!save_setup_state(sysmodule, &setup)) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+    }
+    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
+}
+
+static bool process_retry_setup_release(PtcSysmodule *sysmodule, const PtcRequest *request,
+    const PtcRuntimeConfig *config, const PtcCapabilities *caps, PtcClockSnapshot now)
+{
+    PtcSetupState setup;
+    char disable_path[320];
+    PtcErrorCode err;
+    if (!load_setup_state(sysmodule, &setup) ||
+        (strcmp(setup.phase, "pending") != 0 && strcmp(setup.phase, "failed") != 0)) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_BAD_REQUEST, now.day_index, caps);
+    }
+    snprintf(setup.phase, sizeof(setup.phase), "pending");
+    setup.restriction_cleared = false;
+    setup.activate_after = 0;
+    setup.last_error[0] = '\0';
+    if (!save_setup_state(sysmodule, &setup)) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+    }
+    join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
+    (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path);
+    err = release_setup_now(sysmodule, &setup, now);
+    if (err != PTC_ERR_OK) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            err, now.day_index, caps);
+    }
+    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
+}
+
+static bool process_restore_install_snapshot(PtcSysmodule *sysmodule, const PtcRequest *request,
+    const PtcRuntimeConfig *config, const PtcCapabilities *caps, PtcClockSnapshot now)
+{
+    PtcSetupState setup;
+    PtcErrorCode err;
+    if (!load_setup_state(sysmodule, &setup)) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_RECOVERY_UNAVAILABLE, now.day_index, caps);
+    }
+    err = restore_install_snapshot_now(sysmodule, &setup, now);
+    if (err != PTC_ERR_OK) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            err, now.day_index, caps);
+    }
+    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
+}
+
+static void write_disable_flag(PtcSysmodule *sysmodule, const char *reason)
+{
+    char path[320];
+    join_path(path, sizeof(path), sysmodule->app_root, "flags/disable.flag");
+    (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, reason ? reason : "disabled\n");
+}
+
+static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now)
+{
+    PtcPctlSettingsSnapshot original;
+    PtcPctlSettingsSnapshot restored;
+    PtcPctlStatus status;
+    bool raw_restored = false;
+    bool timer_restored = false;
+    PtcErrorCode err;
+    if (!load_install_snapshot(sysmodule, &original)) {
+        return PTC_ERR_RECOVERY_UNAVAILABLE;
+    }
+    err = restore_snapshot_exact(sysmodule, &original, &restored, &status,
+        ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored);
+    if (err != PTC_ERR_OK || !raw_restored || !timer_restored) {
+        snprintf(setup->phase, sizeof(setup->phase), "failed");
+        setup->restriction_cleared = false;
+        setup->snapshot_available = true;
+        setup->activate_after = 0;
+        snprintf(setup->last_error, sizeof(setup->last_error), "recovery_failed");
+        (void)save_setup_state(sysmodule, setup);
+        write_disable_flag(sysmodule, "recovery_failed\n");
+        return PTC_ERR_RECOVERY_FAILED;
+    }
+    snprintf(setup->phase, sizeof(setup->phase), "restored");
+    setup->restriction_cleared = false;
+    setup->snapshot_available = true;
+    setup->activate_after = 0;
+    setup->last_error[0] = '\0';
+    if (!save_setup_state(sysmodule, setup)) {
+        write_disable_flag(sysmodule, "recovery_state_failed\n");
+        return PTC_ERR_STORAGE_WRITE_FAILED;
+    }
+    write_disable_flag(sysmodule, "install_snapshot_restored\n");
+    return PTC_ERR_OK;
+}
+
+static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now)
+{
+    char snapshot_path[320];
+    PtcPctlSettingsSnapshot original;
+    PtcPctlSettingsSnapshot restored;
+    PtcPctlStatus before;
+    PtcPctlStatus released;
+    PtcPctlTarget target;
+    bool raw_restored = false;
+    bool timer_restored = false;
+    bool timer_started = false;
+    PtcErrorCode err;
+    memset(&original, 0, sizeof(original));
+    memset(&restored, 0, sizeof(restored));
+    memset(&before, 0, sizeof(before));
+    memset(&released, 0, sizeof(released));
+    join_path(snapshot_path, sizeof(snapshot_path), sysmodule->app_root, "backups/install_pctl_snapshot.json");
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, snapshot_path)) {
+        if (!load_install_snapshot(sysmodule, &original)) {
+            snprintf(setup->phase, sizeof(setup->phase), "failed");
+            setup->restriction_cleared = false;
+            setup->snapshot_available = false;
+            setup->activate_after = 0;
+            snprintf(setup->last_error, sizeof(setup->last_error), "recovery_unavailable");
+            (void)save_setup_state(sysmodule, setup);
+            write_disable_flag(sysmodule, "setup_snapshot_invalid\n");
+            return PTC_ERR_RECOVERY_UNAVAILABLE;
+        }
+    } else {
+        if (!sysmodule->pctl->vtable->snapshot_settings ||
+            sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &original) != PTC_ERR_OK ||
+            !save_install_snapshot(sysmodule, &original, now.unix_seconds)) {
+            snprintf(setup->phase, sizeof(setup->phase), "failed");
+            setup->restriction_cleared = false;
+            setup->snapshot_available = false;
+            setup->activate_after = 0;
+            snprintf(setup->last_error, sizeof(setup->last_error), "pctl_backup_failed");
+            (void)save_setup_state(sysmodule, setup);
+            write_disable_flag(sysmodule, "setup_snapshot_failed\n");
+            return PTC_ERR_PCTL_BACKUP_FAILED;
+        }
+    }
+    setup->snapshot_available = true;
+    err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &before);
+    if (err == PTC_ERR_OK && before.unrestricted_today && !before.restricted_now) {
+        snprintf(setup->phase, sizeof(setup->phase), "released");
+        setup->restriction_cleared = true;
+        setup->activate_after = 0;
+        setup->last_error[0] = '\0';
+        return save_setup_state(sysmodule, setup) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+    }
+    err = backup_before_write(sysmodule, NULL, "setup");
+    if (err == PTC_ERR_OK) {
+        target.mode = PTC_PCTL_TARGET_UNLIMITED;
+        target.minutes = 0;
+        target.weekday = ptc_weekday_from_day_index(now.day_index);
+        err = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &target);
+    }
+    if (err == PTC_ERR_OK) {
+        err = start_timer_and_wait_target(sysmodule, NULL, now, "setup", PTC_PCTL_TARGET_UNLIMITED,
+            0, "setup_release", &released, &timer_started);
+    }
+    if (err != PTC_ERR_OK) {
+        PtcErrorCode restore_error = restore_snapshot_exact(sysmodule, &original, &restored, &released,
+            ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored);
+        snprintf(setup->phase, sizeof(setup->phase), "failed");
+        setup->restriction_cleared = false;
+        setup->activate_after = 0;
+        snprintf(setup->last_error, sizeof(setup->last_error), "%s",
+            restore_error == PTC_ERR_OK ? ptc_error_reason(err) : "recovery_failed");
+        (void)save_setup_state(sysmodule, setup);
+        write_disable_flag(sysmodule, restore_error == PTC_ERR_OK ? "setup_release_failed\n" : "setup_restore_failed\n");
+        return restore_error == PTC_ERR_OK ? err : PTC_ERR_RECOVERY_FAILED;
+    }
+    snprintf(setup->phase, sizeof(setup->phase), "released");
+    setup->restriction_cleared = true;
+    setup->activate_after = 0;
+    setup->last_error[0] = '\0';
+    return save_setup_state(sysmodule, setup) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+}
+
+int ptc_sysmodule_bootstrap_setup(PtcSysmodule *sysmodule)
+{
+    char restore_flag[320];
+    char retry_flag[320];
+    char disable_path[320];
+    PtcSetupState setup;
+    PtcClockSnapshot now;
+    PtcErrorCode err = PTC_ERR_OK;
+    if (!sysmodule || !load_setup_state(sysmodule, &setup)) return -1;
+    now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    join_path(restore_flag, sizeof(restore_flag), sysmodule->app_root, "flags/restore_install_snapshot.flag");
+    join_path(retry_flag, sizeof(retry_flag), sysmodule->app_root, "flags/retry_setup_release.flag");
+    join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, restore_flag)) {
+        err = restore_install_snapshot_now(sysmodule, &setup, now);
+        (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, restore_flag);
+        if (err == PTC_ERR_OK) recovery_clear(sysmodule);
+        return err == PTC_ERR_OK ? 1 : -1;
+    }
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, retry_flag)) {
+        if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule)) {
+            write_disable_flag(sysmodule, "startup_recovery_failed\n");
+            (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, retry_flag);
+            return -1;
+        }
+        snprintf(setup.phase, sizeof(setup.phase), "pending");
+        setup.restriction_cleared = false;
+        setup.activate_after = 0;
+        setup.last_error[0] = '\0';
+        (void)save_setup_state(sysmodule, &setup);
+        (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, retry_flag);
+        (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path);
+    }
+    if (recovery_path_exists(sysmodule)) {
+        if (!recovery_rollback(sysmodule)) {
+            write_disable_flag(sysmodule, "startup_recovery_failed\n");
+            return -1;
+        }
+        write_disable_flag(sysmodule, "startup_transaction_restored\n");
+        return 1;
+    }
+    if (strcmp(setup.phase, "pending") == 0) {
+        err = release_setup_now(sysmodule, &setup, now);
+        return err == PTC_ERR_OK ? 1 : -1;
+    }
+    if (strcmp(setup.phase, "released") == 0 && setup.activate_after > 0 && now.unix_seconds >= setup.activate_after) {
+        snprintf(setup.phase, sizeof(setup.phase), "active");
+        setup.activate_after = 0;
+        setup.last_error[0] = '\0';
+        return save_setup_state(sysmodule, &setup) ? 1 : -1;
+    }
+    return 0;
+}
+
 static PtcErrorCode apply_probe_target(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
@@ -1678,7 +2266,7 @@ static bool write_effect_probe_result(
     return write_result(sysmodule, request->request_id, json);
 }
 
-static bool process_probe_play_timer_effect(
+static bool __attribute__((unused)) process_probe_play_timer_effect(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
     const PtcRuntimeConfig *config,
@@ -2042,7 +2630,7 @@ static bool write_device_test_result(
     return write_result(sysmodule, request->request_id, json);
 }
 
-static bool process_prepare_device_test(
+static bool __attribute__((unused)) process_prepare_device_test(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
     const PtcRuntimeConfig *config,
@@ -2443,13 +3031,8 @@ static bool process_probe_raw_block(
             "not_run", "observe", &before_status, before_error, &active_status, active_error,
             &restored_status, restored_error, false, false, false, false, "", "", "");
     }
-    /* Never rehearse a hard block before plain writes and their runtime effect are proven. */
-    if (!caps->play_timer_write_verified) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_WRITE_NOT_VERIFIED, now.day_index, caps);
-    }
-    if (!caps->play_timer_effect_verified) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, now.day_index, caps);
-    }
+    /* Plain play-timer writes are now treated as a recoverable baseline; this
+       probe only establishes the separate raw-block capability. */
 
     before_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &before_status);
     append_event(sysmodule, request, "raw_block_before", before_error, "read_status");
@@ -2612,7 +3195,7 @@ static bool process_probe(PtcSysmodule *sysmodule, const PtcRequest *request, co
     return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
 }
 
-static bool process_probe_apply_today_limit(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
+static bool __attribute__((unused)) process_probe_apply_today_limit(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
 {
     PtcPolicyDecision decision = ptc_policy_decide(config->mode, disable_flag, PTC_OPERATION_PROBE_APPLY_TODAY_LIMIT, caps, false, config->allow_unlimited_to_limited);
     PtcPctlTarget target;
@@ -2861,12 +3444,6 @@ static bool process_disable_today_limit(
     if (decision.dry_run) {
         return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), true, caps, now);
     }
-    if (!caps->play_timer_write_verified) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_WRITE_NOT_VERIFIED, now.day_index, caps);
-    }
-    if (!caps->play_timer_effect_verified) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, now.day_index, caps);
-    }
     if (!sysmodule->pctl->vtable->snapshot_settings ||
         sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &original_snapshot) != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_BACKUP_FAILED, now.day_index, caps);
@@ -2896,6 +3473,7 @@ static bool process_disable_today_limit(
     rules_persisted = true;
     append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "disable_today_limit");
     if (write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now)) {
+        recovery_clear(sysmodule);
         return true;
     }
     err = PTC_ERR_STORAGE_WRITE_FAILED;
@@ -2910,11 +3488,15 @@ disable_today_rollback:
             restore_error, "disable_today_limit");
     }
     if (rules_persisted) {
-        (void)restore_rules(sysmodule, &original_rules, rules_existed);
+        if (!restore_rules(sysmodule, &original_rules, rules_existed)) {
+            restore_error = PTC_ERR_STORAGE_WRITE_FAILED;
+        }
     }
     if (restore_error != PTC_ERR_OK) {
         err = PTC_ERR_PCTL_RESTORE_FAILED;
         disable_after_restore_failure(sysmodule, caps, now);
+    } else {
+        recovery_clear(sysmodule);
     }
     return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
 }
@@ -2922,6 +3504,7 @@ disable_today_rollback:
 static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
 {
     PtcPctlStatus pctl_status;
+    PtcPctlStatus observed_status;
     PtcPolicyDecision decision;
     PtcRules rules;
     PtcRuntimeState runtime_state;
@@ -2952,29 +3535,21 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (decision.error != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
     }
-    if (!decision.dry_run &&
-        (request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
-            request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
-            request->type == PTC_REQUEST_DISABLE_TODAY_LIMIT ||
-            request->type == PTC_REQUEST_BLOCK_TODAY ||
-            request->type == PTC_REQUEST_RESTORE_TODAY_POLICY) &&
-        !caps->play_timer_write_verified) {
-        append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_WRITE_NOT_VERIFIED, "play_timer_write");
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_WRITE_NOT_VERIFIED, now.day_index, caps);
-    }
-    if (!decision.dry_run &&
-        (request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
-            request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
-            request->type == PTC_REQUEST_DISABLE_TODAY_LIMIT ||
-            request->type == PTC_REQUEST_BLOCK_TODAY ||
-            request->type == PTC_REQUEST_RESTORE_TODAY_POLICY) &&
-        !caps->play_timer_effect_verified) {
-        append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, "play_timer_effect");
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, now.day_index, caps);
-    }
     if (!decision.dry_run) {
+        bool pctl_request = request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
+            request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
+            request->type == PTC_REQUEST_BLOCK_TODAY ||
+            request->type == PTC_REQUEST_RESTORE_TODAY_POLICY;
+        if (pctl_request && !recovery_begin(sysmodule, request, now)) {
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                PTC_ERR_PCTL_BACKUP_FAILED, now.day_index, caps);
+        }
         err = update_rules_for_request(sysmodule, request, &rules, &runtime_state, now);
         if (err != PTC_ERR_OK) {
+            if (pctl_request && recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule)) {
+                write_disable_flag(sysmodule, "transaction_restore_failed\n");
+                err = PTC_ERR_RECOVERY_FAILED;
+            }
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
         }
         append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "");
@@ -2988,9 +3563,24 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
             if (err != PTC_ERR_OK) {
                 return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
             }
+            err = start_timer_and_wait_target(sysmodule, request, now, ptc_control_mode_name(config->mode),
+                target_from_day_rule(active_rule), active_rule.minutes, "rule_request", &observed_status, NULL);
+            if (err != PTC_ERR_OK) {
+                if (!recovery_rollback(sysmodule)) {
+                    write_disable_flag(sysmodule, "transaction_restore_failed\n");
+                    err = PTC_ERR_RECOVERY_FAILED;
+                }
+                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
+            }
         }
     }
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, caps, now);
+    {
+        bool ok = write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, caps, now);
+        if (ok) recovery_clear(sysmodule);
+        else if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule))
+            write_disable_flag(sysmodule, "transaction_restore_failed\n");
+        return ok;
+    }
 }
 
 static void process_request_text(PtcSysmodule *sysmodule, const char *request_text, const char *expected_request_id)
@@ -3030,6 +3620,29 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     disable_flag = sysmodule->storage->vtable->exists(sysmodule->storage, disable_path);
     caps = load_capabilities(sysmodule);
 
+    /* Reserved probe IDs remain parseable for v1 clients, but can never
+       reach a PCTL handler or be masked by setup gating. */
+    if (request.type == PTC_REQUEST_PROBE_PLAY_TIMER_WRITE ||
+        request.type == PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT ||
+        request.type == PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT ||
+        request.type == PTC_REQUEST_PREPARE_DEVICE_TEST) {
+        (void)finish_with_error(sysmodule, &request, ptc_control_mode_name(config.mode), true,
+            PTC_ERR_UNKNOWN_REQUEST_TYPE, now.day_index, &caps);
+        return;
+    }
+
+    if (request.type != PTC_REQUEST_STATUS &&
+        request.type != PTC_REQUEST_COMPLETE_SETUP &&
+        request.type != PTC_REQUEST_RETRY_SETUP_RELEASE &&
+        request.type != PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT) {
+        PtcSetupState setup;
+        if (!load_setup_state(sysmodule, &setup) || strcmp(setup.phase, "active") != 0) {
+            (void)finish_with_error(sysmodule, &request, ptc_control_mode_name(config.mode), true,
+                PTC_ERR_SETUP_PENDING, now.day_index, &caps);
+            return;
+        }
+    }
+
     switch (request.type) {
     case PTC_REQUEST_STATUS:
         (void)process_status(sysmodule, &request, &config, disable_flag, &caps, now);
@@ -3037,21 +3650,27 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     case PTC_REQUEST_OFFLINE_CODE:
         (void)process_offline_code(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
+    case PTC_REQUEST_COMPLETE_SETUP:
+        (void)process_complete_setup(sysmodule, &request, &config, disable_flag, &caps, now);
+        break;
+    case PTC_REQUEST_RETRY_SETUP_RELEASE:
+        (void)process_retry_setup_release(sysmodule, &request, &config, &caps, now);
+        break;
+    case PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT:
+        (void)process_restore_install_snapshot(sysmodule, &request, &config, &caps, now);
+        break;
     case PTC_REQUEST_PROBE_RAW_BLOCK:
         (void)process_probe_raw_block(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
     case PTC_REQUEST_PROBE_SUSPEND:
-    case PTC_REQUEST_PROBE_PLAY_TIMER_WRITE:
         (void)process_probe(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
     case PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT:
-        (void)process_probe_apply_today_limit(sysmodule, &request, &config, disable_flag, &caps, now);
-        break;
     case PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT:
-        (void)process_probe_play_timer_effect(sysmodule, &request, &config, disable_flag, &caps, now);
-        break;
     case PTC_REQUEST_PREPARE_DEVICE_TEST:
-        (void)process_prepare_device_test(sysmodule, &request, &config, disable_flag, &caps, now);
+    case PTC_REQUEST_PROBE_PLAY_TIMER_WRITE:
+        (void)finish_with_error(sysmodule, &request, ptc_control_mode_name(config.mode), true,
+            PTC_ERR_UNKNOWN_REQUEST_TYPE, now.day_index, &caps);
         break;
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
         (void)process_disable_today_limit(sysmodule, &request, &config, disable_flag, &caps, now);
@@ -3083,15 +3702,20 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     PtcRuleEvaluation evaluation;
     PtcPctlStatus pctl_status;
+    PtcPctlStatus observed_status;
     PtcPctlTargetMode target_mode;
     uint16_t target_minutes;
     bool bedtime_action_active;
     bool leaving_bedtime_action;
     bool limit_expired;
     char disable_path[320];
+    PtcSetupState setup;
     PtcErrorCode err;
 
     if (!load_config(sysmodule, &config) || config.mode != PTC_CONTROL_ENFORCE) {
+        return 0;
+    }
+    if (!load_setup_state(sysmodule, &setup) || strcmp(setup.phase, "active") != 0) {
         return 0;
     }
     join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
@@ -3163,22 +3787,10 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     if (err != PTC_ERR_OK) {
         return 0;
     }
-    {
-        PtcPctlTarget target;
-        PtcPctlDebugSnapshot before;
-        PtcPctlDebugSnapshot after;
-        uint32_t ipc_result;
-        target.mode = target_mode;
-        target.minutes = target_minutes;
-        target.weekday = ptc_weekday_from_day_index(now.day_index);
-        take_pctl_debug_snapshot(sysmodule, &before);
-        err = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
-        ipc_result = last_pctl_ipc_result(sysmodule);
-        take_pctl_debug_snapshot(sysmodule, &after);
-        append_pctl_debug(sysmodule, NULL, "start_timer", ptc_control_mode_name(config.mode), &target, err, ipc_result, &before, &after);
-    }
-    append_event(sysmodule, NULL, err == PTC_ERR_OK ? "pctl_start_timer" : "pctl_apply_failed", err, "start_timer");
+    err = start_timer_and_wait_target(sysmodule, NULL, now, ptc_control_mode_name(config.mode),
+        target_mode, target_minutes, "enforce", &observed_status, NULL);
     if (err != PTC_ERR_OK) {
+        if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "enforce_restore_failed\n");
         return 0;
     }
     runtime_state.last_enforced_day_index = now.day_index;
@@ -3187,9 +3799,11 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     runtime_state.last_enforced_bedtime_active = bedtime_action_active;
     if (!save_state(sysmodule, &runtime_state, now.unix_seconds)) {
         append_event(sysmodule, NULL, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "enforce_state");
+        if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "enforce_restore_failed\n");
         return 0;
     }
     append_event(sysmodule, NULL, "state_persisted", PTC_ERR_OK, "enforce");
+    recovery_clear(sysmodule);
     return 1;
 }
 
@@ -3424,6 +4038,10 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     int processed;
     int actions = 0;
     if (!sysmodule) return 0;
+    {
+        int setup_actions = ptc_sysmodule_bootstrap_setup(sysmodule);
+        if (setup_actions > 0) actions += setup_actions;
+    }
     now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     snprintf(disable_path, sizeof(disable_path), "%s/flags/disable.flag", sysmodule->app_root);
     snprintf(reload_path, sizeof(reload_path), "%s/flags/reload.flag", sysmodule->app_root);

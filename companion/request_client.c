@@ -98,19 +98,3 @@ int ptc_companion_parent_unlock_start_request_json(char *out, size_t out_size, c
 {
     return snprintf(out, out_size, "{\"version\":1,\"request_id\":\"%s\",\"type\":\"parent_unlock_start\",\"created_at\":%lld,\"payload\":{\"duration_minutes\":%u}}\n", request_id, (long long)created_at, duration_minutes);
 }
-
-int ptc_companion_probe_play_timer_effect_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at, bool wait_for_expiry)
-{
-    return snprintf(
-        out,
-        out_size,
-        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"probe_play_timer_effect\",\"created_at\":%lld,\"payload\":{\"wait_for_expiry\":%s}}\n",
-        request_id,
-        (long long)created_at,
-        json_bool(wait_for_expiry));
-}
-
-int ptc_companion_prepare_device_test_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at)
-{
-    return ptc_companion_empty_payload_request_json(out, out_size, request_id, created_at, "prepare_device_test");
-}

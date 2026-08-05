@@ -80,10 +80,10 @@ def test_zip_verification() -> None:
             write_package(path, mode, boot2)
             package_remote.verify_package_zip(path, prefix)
 
-        invalid_path = root / "grant-boot2-20260730-120001.zip"
-        write_package(invalid_path, "grant", True, overlay_without_assets())
+        invalid_path = root / "playwise-20260730-120001.zip"
+        write_package(invalid_path, "enforce", True, overlay_without_assets())
         try:
-            package_remote.verify_package_zip(invalid_path, "grant-boot2")
+            package_remote.verify_package_zip(invalid_path, "playwise")
         except package_remote.PackageError as exc:
             require("missing NRO asset header" in str(exc), "missing NACP overlay must explain the failure")
         else:

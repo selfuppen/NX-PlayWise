@@ -240,17 +240,14 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "probe_suspend") == 0) {
         return PTC_REQUEST_PROBE_SUSPEND;
     }
-    if (strcmp(value, "probe_play_timer_write") == 0) {
-        return PTC_REQUEST_PROBE_PLAY_TIMER_WRITE;
+    if (strcmp(value, "complete_setup") == 0) {
+        return PTC_REQUEST_COMPLETE_SETUP;
     }
-    if (strcmp(value, "probe_apply_today_limit") == 0) {
-        return PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT;
+    if (strcmp(value, "retry_setup_release") == 0) {
+        return PTC_REQUEST_RETRY_SETUP_RELEASE;
     }
-    if (strcmp(value, "probe_play_timer_effect") == 0) {
-        return PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT;
-    }
-    if (strcmp(value, "prepare_device_test") == 0) {
-        return PTC_REQUEST_PREPARE_DEVICE_TEST;
+    if (strcmp(value, "restore_install_snapshot") == 0) {
+        return PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT;
     }
     return PTC_REQUEST_UNKNOWN;
 }
@@ -286,14 +283,12 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "probe_raw_block";
     case PTC_REQUEST_PROBE_SUSPEND:
         return "probe_suspend";
-    case PTC_REQUEST_PROBE_PLAY_TIMER_WRITE:
-        return "probe_play_timer_write";
-    case PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT:
-        return "probe_apply_today_limit";
-    case PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT:
-        return "probe_play_timer_effect";
-    case PTC_REQUEST_PREPARE_DEVICE_TEST:
-        return "prepare_device_test";
+    case PTC_REQUEST_COMPLETE_SETUP:
+        return "complete_setup";
+    case PTC_REQUEST_RETRY_SETUP_RELEASE:
+        return "retry_setup_release";
+    case PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT:
+        return "restore_install_snapshot";
     case PTC_REQUEST_UNKNOWN:
     default:
         return "unknown";
@@ -351,17 +346,9 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
             out->duration_minutes > 0
             ? PTC_ERR_OK
             : PTC_ERR_BAD_REQUEST;
-    case PTC_REQUEST_PROBE_APPLY_TODAY_LIMIT:
-        out->minutes = 1;
-        out->start_timer = true;
-        (void)json_u16(text, "minutes", &out->minutes);
-        (void)json_bool_value(text, "start_timer", &out->start_timer);
-        return out->minutes > 0 ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
-    case PTC_REQUEST_PROBE_PLAY_TIMER_EFFECT:
-        out->wait_for_expiry = false;
-        (void)json_bool_value(text, "wait_for_expiry", &out->wait_for_expiry);
-        return PTC_ERR_OK;
-    case PTC_REQUEST_PREPARE_DEVICE_TEST:
+    case PTC_REQUEST_COMPLETE_SETUP:
+    case PTC_REQUEST_RETRY_SETUP_RELEASE:
+    case PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT:
     case PTC_REQUEST_STATUS:
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
     case PTC_REQUEST_BLOCK_TODAY:
@@ -369,7 +356,6 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
     case PTC_REQUEST_PARENT_UNLOCK_END:
     case PTC_REQUEST_PROBE_RAW_BLOCK:
     case PTC_REQUEST_PROBE_SUSPEND:
-    case PTC_REQUEST_PROBE_PLAY_TIMER_WRITE:
         return PTC_ERR_OK;
     case PTC_REQUEST_UNKNOWN:
     default:

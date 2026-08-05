@@ -234,44 +234,6 @@ PtcCompanionStatus ptc_companion_submit_parent_unlock_end(PtcCompanionFileClient
     return submit_empty(client, request_id, created_at, "parent_unlock_end");
 }
 
-PtcCompanionStatus ptc_companion_submit_probe_play_timer_write(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
-{
-    return submit_empty(client, request_id, created_at, "probe_play_timer_write");
-}
-
-PtcCompanionStatus ptc_companion_submit_probe_play_timer_effect(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, bool wait_for_expiry)
-{
-    char json[512];
-    if (!request_id || request_id[0] == '\0') {
-        return PTC_COMPANION_BAD_ARGUMENT;
-    }
-    if (ptc_companion_probe_play_timer_effect_request_json(json, sizeof(json), request_id, created_at, wait_for_expiry) >= (int)sizeof(json)) {
-        return PTC_COMPANION_BAD_ARGUMENT;
-    }
-    return submit_json(client, request_id, json);
-}
-
-PtcCompanionStatus ptc_companion_submit_prepare_device_test(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
-{
-    return submit_empty(client, request_id, created_at, "prepare_device_test");
-}
-
-PtcCompanionStatus ptc_companion_submit_probe_apply_today_limit(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
-{
-    char json[512];
-    if (!request_id || request_id[0] == '\0') {
-        return PTC_COMPANION_BAD_ARGUMENT;
-    }
-    snprintf(
-        json,
-        sizeof(json),
-        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"probe_apply_today_limit\","
-        "\"created_at\":%lld,\"payload\":{\"minutes\":1,\"start_timer\":true}}\n",
-        request_id,
-        (long long)created_at);
-    return submit_json(client, request_id, json);
-}
-
 PtcCompanionStatus ptc_companion_submit_probe_raw_block(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
 {
     return submit_empty(client, request_id, created_at, "probe_raw_block");
@@ -441,28 +403,12 @@ PtcCompanionStatus ptc_companion_format_result_summary(const char *result_json, 
             out,
             out_size,
             &used,
-            "cap: play_write=%s effect=%s raw_block=%s suspend=%s\n",
-            json_bool_text_or(capabilities, "play_timer_write_verified", "false"),
-            json_bool_text_or(capabilities, "play_timer_effect_verified", "false"),
+            "cap: raw_block=%s suspend=%s\n",
             json_bool_text_or(capabilities, "raw_block_verified", "unknown"),
             json_bool_text_or(capabilities, "suspend_verified", "unknown")) ||
         !appendf(out, out_size, &used, "completed_at: %lld\n", json_number_or(root, "completed_at", -1))) {
         result = PTC_COMPANION_BAD_ARGUMENT;
         goto done;
-    }
-    {
-        const cJSON *effect = cJSON_GetObjectItemCaseSensitive(root, "pctl_effect_probe");
-        if (cJSON_IsObject(effect)) {
-            const char *verdict = json_string_or(effect, "verdict", "unknown");
-            if (!appendf(out, out_size, &used, "%s SYSTEM EFFECT\n", strcmp(verdict, "pass") == 0 ? "PASS" : "FAIL") ||
-                !appendf(out, out_size, &used, "effect verdict: %s stage: %s expiry: %s\n",
-                    verdict,
-                    json_string_or(effect, "failure_stage", "unknown"),
-                    json_bool_text_or(effect, "expiry_observed", "false"))) {
-                result = PTC_COMPANION_BAD_ARGUMENT;
-                goto done;
-            }
-        }
     }
     {
         const cJSON *raw_block = cJSON_GetObjectItemCaseSensitive(root, "pctl_raw_block_probe");

@@ -67,11 +67,8 @@ PtcPolicyDecision ptc_policy_decide(
         return out;
     }
 
-    if ((operation == PTC_OPERATION_GRANT_MINUTES || operation == PTC_OPERATION_SET_TODAY_LIMIT) &&
-        current_unlimited && !allow_unlimited_to_limited) {
-        out.error = PTC_ERR_UNLIMITED_NOT_ALLOWED;
-        return out;
-    }
+    (void)current_unlimited;
+    (void)allow_unlimited_to_limited;
 
     if (operation_is_write(operation)) {
         out.dry_run = false;

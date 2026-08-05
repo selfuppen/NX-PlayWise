@@ -10,7 +10,8 @@
 typedef enum {
     PTC_UI_CHILD = 0,
     PTC_UI_PARENT = 1,
-    PTC_UI_ERROR = 2
+    PTC_UI_ERROR = 2,
+    PTC_UI_SETUP = 3
 } PtcUiView;
 
 typedef enum {
@@ -35,14 +36,16 @@ typedef enum {
     PTC_UI_OPERATION_ADD_TODAY_MINUTES = 2,
     PTC_UI_OPERATION_PARENT_UNLOCK = 3,
     PTC_UI_OPERATION_BLOCK_TODAY = 4,
-    PTC_UI_OPERATION_QUICK_TEST = 5,
+    PTC_UI_OPERATION_COMPLETE_SETUP = 5,
     PTC_UI_OPERATION_EMERGENCY_DISABLE = 6,
     PTC_UI_OPERATION_RESUME_CONTROL = 7,
     PTC_UI_OPERATION_PROBE_RAW_BLOCK = 8,
     PTC_UI_OPERATION_PROBE_SUSPEND = 9,
     PTC_UI_OPERATION_SAVE_WEEKLY = 10,
     PTC_UI_OPERATION_SAVE_BEDTIME = 11,
-    PTC_UI_OPERATION_SAVE_LIMIT_ACTION = 12
+    PTC_UI_OPERATION_SAVE_LIMIT_ACTION = 12,
+    PTC_UI_OPERATION_RETRY_SETUP_RELEASE = 13,
+    PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT = 14
 } PtcUiOperation;
 
 typedef struct {
@@ -62,10 +65,12 @@ typedef struct {
     int restricted_now;
     bool bedtime_active;
     bool parent_unlock_active;
-    bool play_timer_write_verified;
-    bool play_timer_effect_verified;
     bool raw_block_verified;
     bool suspend_verified;
+    bool setup_restriction_cleared;
+    bool setup_snapshot_available;
+    int64_t setup_activate_after;
+    char setup_phase[16];
     uint16_t day_index;
     char mode[24];
     char request_id[80];
