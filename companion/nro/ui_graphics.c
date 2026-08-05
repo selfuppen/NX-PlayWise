@@ -822,6 +822,8 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 39, end_rect.width, 40}, end, 28, COLOR(28, 118, 188));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 244, dialog.width - 160, 34},
                      "←→ 选择项目   X 切换启用   Y/点手动输入   ↑↓/摇杆调整 15 分钟", 20, COLOR(77, 86, 99));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 282, dialog.width - 80, 26},
+                     "说明：就寝时间与每日时长取最严规则；在就寝时段内加时不会突破锁定", 17, COLOR(120, 130, 145));
     draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_down_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_up_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_bedtime_input_rect(), "手动输入", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
