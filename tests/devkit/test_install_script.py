@@ -44,7 +44,7 @@ def test_install_script_preview() -> None:
             "-SourceFolder",
             str(pkg),
             "-Drive",
-            "E",
+            ROOT.drive[0],
         ]
         res_inc = subprocess.run(cmd_inc, capture_output=True, text=True)
         require(res_inc.returncode == 0, f"Incremental preview failed: {res_inc.stderr}")

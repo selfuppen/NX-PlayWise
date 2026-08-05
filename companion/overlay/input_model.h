@@ -21,7 +21,10 @@ typedef enum {
     PTC_OVERLAY_BUTTON_B = 1u << 5,
     PTC_OVERLAY_BUTTON_X = 1u << 6,
     PTC_OVERLAY_BUTTON_Y = 1u << 7,
-    PTC_OVERLAY_BUTTON_PLUS = 1u << 8
+    PTC_OVERLAY_BUTTON_PLUS = 1u << 8,
+    PTC_OVERLAY_BUTTON_MINUS = 1u << 9,
+    PTC_OVERLAY_BUTTON_L = 1u << 10,
+    PTC_OVERLAY_BUTTON_R = 1u << 11
 } PtcOverlayButton;
 
 typedef struct {
