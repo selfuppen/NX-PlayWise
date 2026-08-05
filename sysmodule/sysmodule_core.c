@@ -1819,6 +1819,9 @@ static bool target_status_observed(PtcPctlTargetMode mode, const PtcPctlStatus *
     if (mode == PTC_PCTL_TARGET_BLOCKED) {
         return status->blocked_today && status->restricted_now;
     }
+    if (status->remaining_minutes == 0U) {
+        return (status->limited_today || status->blocked_today) && status->restricted_now;
+    }
     return status->limited_today && status->remaining_available && status->remaining_minutes > 0U &&
         status->play_timer_enabled && !status->restricted_now;
 }

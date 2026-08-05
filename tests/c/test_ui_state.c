@@ -37,9 +37,9 @@ static void test_navigation(void)
     ptc_ui_move_parent_selection(&model, 1, 0);
     check_int(model.selected_index, 1, "move right");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_int(model.selected_index, 4, "odd grid wraps up to final card");
+    check_int(model.selected_index, 5, "six-card grid wraps up in the same column");
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 0, "odd grid wraps down from final card");
+    check_int(model.selected_index, 1, "six-card grid wraps down in the same column");
 
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.selected_index = 3;

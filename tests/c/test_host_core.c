@@ -1174,7 +1174,10 @@ static void test_grant_requires_runtime_unlock_before_persisting(void)
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/grant-read-fail.json", request), "write runtime read failure grant");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process runtime read failure grant");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/grant-read-fail.json", result, sizeof(result)), "runtime read failure result");
-    check_true(strstr(result, "\"reason\":\"pctl_effect_not_observed\"") != NULL, "runtime read failure maps to effect not observed");
+    check_true(strstr(result, "\"reason\":\"recovery_failed\"") != NULL,
+        "runtime read failure that prevents restore confirmation enters recovery failure");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"),
+        "unconfirmed runtime recovery disables control");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "runtime read failure avoids nonce");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/rules.json"), "runtime read failure avoids override persistence");
 
@@ -1947,6 +1950,10 @@ static void test_failure_paths_do_not_consume_nonce(void)
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
     pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 30;
+    pctl.status.play_timer_enabled = true;
     pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);

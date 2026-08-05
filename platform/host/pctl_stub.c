@@ -96,8 +96,9 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
     if (!stub->runtime_effect_succeeds) {
         return PTC_ERR_OK;
     }
-    stub->status.limited_today = target->mode == PTC_PCTL_TARGET_LIMIT;
-    stub->status.blocked_today = target->mode == PTC_PCTL_TARGET_BLOCKED;
+    stub->status.limited_today = target->mode == PTC_PCTL_TARGET_LIMIT && target->minutes > 0U;
+    stub->status.blocked_today = target->mode == PTC_PCTL_TARGET_BLOCKED ||
+        (target->mode == PTC_PCTL_TARGET_LIMIT && target->minutes == 0U);
     stub->status.unrestricted_today = target->mode == PTC_PCTL_TARGET_UNLIMITED;
     stub->status.remaining_available = target->mode != PTC_PCTL_TARGET_UNLIMITED;
     stub->status.configured_minutes_available = target->mode == PTC_PCTL_TARGET_LIMIT;
@@ -113,7 +114,8 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
         stub->status.remaining_minutes = target->minutes;
         /* A blocked day allows no play time at all, so the device reports it as
            restricted immediately rather than waiting for elapsed time. */
-        stub->status.restricted_now = target->mode == PTC_PCTL_TARGET_BLOCKED;
+        stub->status.restricted_now = target->mode == PTC_PCTL_TARGET_BLOCKED ||
+            (target->mode == PTC_PCTL_TARGET_LIMIT && target->minutes == 0U);
     }
     return PTC_ERR_OK;
 }
