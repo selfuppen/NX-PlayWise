@@ -739,66 +739,9 @@ static void handle_parent_action(UiState *ui)
     int index = ui->model.selected_index;
     if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
         switch (index) {
-        case 0:
-            submit_status(ui);
-            break;
-        case 1:
-            open_minutes_overlay(ui, PTC_UI_OPERATION_SET_TODAY_LIMIT, "设置今日额度", "选择今天最多可玩的时间。", 60, 1, 1440);
-            break;
-        case 2:
-            open_minutes_overlay(ui, PTC_UI_OPERATION_ADD_TODAY_MINUTES, "临时加时", "在今天现有额度上增加时间。", 15, 1, 120);
-            break;
-        case 3:
-            submit_transport_empty(ui, "disable_today_limit", "正在设置今日不限时…", "设置今日不限失败");
-            break;
-        case 4:
-            {
-                char body[192];
-                if (ui->model.played_minutes_available) {
-                    snprintf(body, sizeof(body),
-                             "已用约 %d 分钟；设置为禁玩。页面可能立即受限。",
-                             ui->model.played_minutes);
-                } else {
-                    snprintf(body, sizeof(body),
-                             "已用时间暂不可用；设置为禁玩。页面可能立即受限。");
-                }
-                open_confirm_overlay(ui, PTC_UI_OPERATION_BLOCK_TODAY, "确认今日禁玩", body);
-            }
-            break;
-        case 5:
-            submit_transport_empty(ui, "restore_today_policy", "正在恢复每周计划…", "恢复计划失败");
-            break;
-        default:
-            break;
-        }
-        return;
-    }
-    if (ui->model.parent_page == PTC_UI_PARENT_PLAN) {
-        switch (index) {
-        case 0:
-            open_weekly_overlay(ui);
-            break;
-        case 1:
-            open_bedtime_overlay(ui);
-            break;
-        case 2:
-            open_limit_action_overlay(ui);
-            break;
-        case 3:
-            open_minutes_overlay(ui, PTC_UI_OPERATION_PARENT_UNLOCK, "临时解锁", "选择暂停本地规则的时长。", 15, 1, 1440);
-            break;
-        case 4:
-            submit_transport_empty(ui, "parent_unlock_end", "正在结束临时解锁…", "结束解锁失败");
-            break;
-        default:
-            break;
-        }
-        return;
-    }
-    switch (index) {
     case 0:
         open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "启用自动控制",
-                             "确认 Companion 已可正常进入；完成后有 60 秒宽限，再按当前规则自动控制。");
+                             "确认限制已解除；完成后有 60 秒宽限，再按当前规则自动控制。");
         break;
     case 1:
         open_confirm_overlay(ui, PTC_UI_OPERATION_RETRY_SETUP_RELEASE, "重试前置解限",
@@ -809,15 +752,16 @@ static void handle_parent_action(UiState *ui)
                              "精确恢复安装前家长控制设置和计时器状态，并停用 PlayWise。");
         break;
     case 3:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_EMERGENCY_DISABLE, "紧急停用控制", "创建 disable.flag 后，后台将停止执行控制操作。");
+        open_confirm_overlay(ui, PTC_UI_OPERATION_EMERGENCY_DISABLE, "紧急停用控制",
+                             "创建 disable.flag 后，后台将停止执行控制操作。");
         break;
     case 4:
         open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_RAW_BLOCK, "验证强制阻止能力",
-                             "探针会尝试真机 raw block 写入并回滚，需 grant/enforce 模式。适配层未实现时会返回失败，能力保持未验证。");
+                             "探针会尝试真机写入并回滚。适配层未实现时返回失败，能力保持未验证。");
         break;
     case 5:
         open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_SUSPEND, "验证暂停软件能力",
-                             "探针会尝试真机 suspend 写入并回滚，需 grant/enforce 模式。适配层未实现时会返回失败，能力保持未验证。");
+                             "探针会尝试真机写入并回滚。适配层未实现时返回失败，能力保持未验证。");
         break;
     default:
         break;

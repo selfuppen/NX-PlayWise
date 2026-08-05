@@ -48,6 +48,12 @@ typedef enum {
     PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT = 14
 } PtcUiOperation;
 
+typedef enum {
+    PTC_UI_ACTION_AVAILABLE = 0,
+    PTC_UI_ACTION_RECOMMENDED = 1,
+    PTC_UI_ACTION_DISABLED = 2
+} PtcUiActionState;
+
 typedef struct {
     PtcUiView view;
     PtcUiParentPage parent_page;
@@ -93,6 +99,7 @@ typedef struct {
     int editor_index;
     char overlay_title[64];
     char overlay_body[192];
+    char safety_hint[192];
 } PtcUiModel;
 
 typedef struct {
@@ -159,6 +166,8 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model);
 PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model);
 bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);
 void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const char *transport_label);
+PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int index);
+const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index);
 
 /* Shared control geometry (single source of truth for drawing and touch). */
 PtcUiRect ptc_ui_child_submit_rect(void);

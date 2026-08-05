@@ -86,6 +86,54 @@ static const char *request_success_message(const char *type, const char *mode, b
     return dry_run ? "设置验证通过；观察模式不会修改系统设置。" : "设置已生效。";
 }
 
+static const char *request_success_guidance(const char *type)
+{
+    if (!type) {
+        return "";
+    }
+    if (strcmp(type, "complete_setup") == 0) {
+        return "接下来：60 秒后自动启用规则控制，无需操作。";
+    }
+    if (strcmp(type, "retry_setup_release") == 0) {
+        return "接下来：确认限制已解除后，在安全工具选择【启用自动控制】。";
+    }
+    if (strcmp(type, "restore_install_snapshot") == 0) {
+        return "PlayWise 已停用。若要重新启用，清理 setup.json 并重启。";
+    }
+    if (strcmp(type, "probe_raw_block") == 0) {
+        return "强制阻止已验证。可在时间计划 → 限制方式中选择【强制阻止】。";
+    }
+    if (strcmp(type, "probe_suspend") == 0) {
+        return "暂停软件已验证。可在时间计划 → 限制方式中选择【暂停软件】。";
+    }
+    return "";
+}
+
+static void fill_error_guidance(char *out, size_t out_size, const char *type, int error_code, const char *reason)
+{
+    if (!type || !out || out_size == 0) {
+        return;
+    }
+    if (strcmp(type, "complete_setup") == 0) {
+        snprintf(out, out_size,
+                 "反馈码：%d %s。建议：确认限制已解除（phase=released），或尝试【重试前置解限】。",
+                 error_code, reason[0] ? reason : "unknown");
+    } else if (strcmp(type, "retry_setup_release") == 0) {
+        snprintf(out, out_size,
+                 "反馈码：%d %s。多次失败建议执行【恢复安装前状态】并重新安装。",
+                 error_code, reason[0] ? reason : "unknown");
+    } else if (strcmp(type, "restore_install_snapshot") == 0) {
+        snprintf(out, out_size,
+                 "反馈码：%d %s。恢复失败请保留日志，联系作者排查。",
+                 error_code, reason[0] ? reason : "unknown");
+    } else if (strcmp(type, "probe_raw_block") == 0 || strcmp(type, "probe_suspend") == 0) {
+        snprintf(out, out_size,
+                 "反馈码：%d %s。能力验证失败不影响普通控制。若持续失败，反馈此码给作者。",
+                 error_code, reason[0] ? reason : "unknown");
+    }
+    /* Other types: leave existing feedback_detail as-is (filled by caller). */
+}
+
 int ptc_ui_parent_action_count(PtcUiParentPage page)
 {
     switch (page) {
@@ -429,20 +477,30 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         }
         snprintf(model->message, sizeof(model->message), "%s", message ? message : "后台拒绝了本次操作。");
         if (summary.error_code > 0) {
-            snprintf(
-                model->feedback_detail,
-                sizeof(model->feedback_detail),
-                "反馈码：%d %s%s%s%s",
-                summary.error_code,
-                summary.reason[0] ? summary.reason : "unknown",
-                failure_stage[0] ? "/" : "",
-                failure_stage,
-                hint);
+            /* Try type-specific guidance first; fall back to generic detail. */
+            model->feedback_detail[0] = '\0';
+            fill_error_guidance(model->feedback_detail, sizeof(model->feedback_detail),
+                                type, summary.error_code, summary.reason);
+            if (!model->feedback_detail[0]) {
+                snprintf(
+                    model->feedback_detail,
+                    sizeof(model->feedback_detail),
+                    "反馈码：%d %s%s%s%s",
+                    summary.error_code,
+                    summary.reason[0] ? summary.reason : "unknown",
+                    failure_stage[0] ? "/" : "",
+                    failure_stage,
+                    hint);
+            }
         }
     } else if (setup_activated) {
         snprintf(model->message, sizeof(model->message), "自动控制已启用，首次设置完成。");
     } else {
+        const char *guidance = request_success_guidance(type);
         snprintf(model->message, sizeof(model->message), "%s", request_success_message(type, mode, dry_run));
+        if (guidance[0]) {
+            snprintf(model->feedback_detail, sizeof(model->feedback_detail), "%s", guidance);
+        }
     }
     cJSON_Delete(root);
     return true;
@@ -861,4 +919,103 @@ void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const cha
         sizeof(model->transport_label),
         "%s",
         transport_copy);
+}
+
+PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int index)
+{
+    bool is_released;
+    bool is_pending_or_failed;
+    bool is_active;
+    if (!model) {
+        return PTC_UI_ACTION_DISABLED;
+    }
+    is_released = strcmp(model->setup_phase, "released") == 0;
+    is_pending_or_failed = strcmp(model->setup_phase, "pending") == 0 ||
+                           strcmp(model->setup_phase, "failed") == 0;
+    is_active = strcmp(model->setup_phase, "active") == 0;
+    switch (index) {
+    case 0: /* 启用自动控制 */
+        if (is_released) {
+            return PTC_UI_ACTION_RECOMMENDED;
+        }
+        return PTC_UI_ACTION_DISABLED;
+    case 1: /* 重试前置解限 */
+        if (is_pending_or_failed) {
+            return is_released ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_RECOMMENDED;
+        }
+        return PTC_UI_ACTION_DISABLED;
+    case 2: /* 恢复安装前状态 */
+        return model->setup_snapshot_available ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_DISABLED;
+    case 3: /* 紧急停用控制 */
+        return PTC_UI_ACTION_AVAILABLE;
+    case 4: /* 验证强制阻止 */
+        if (!is_active) {
+            return PTC_UI_ACTION_DISABLED;
+        }
+        return model->raw_block_verified ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE;
+    case 5: /* 验证暂停软件 */
+        if (!is_active) {
+            return PTC_UI_ACTION_DISABLED;
+        }
+        return model->suspend_verified ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE;
+    default:
+        return PTC_UI_ACTION_DISABLED;
+    }
+}
+
+const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index)
+{
+    bool is_released;
+    bool is_pending_or_failed;
+    bool is_active;
+    if (!model) {
+        return "";
+    }
+    is_released = strcmp(model->setup_phase, "released") == 0;
+    is_pending_or_failed = strcmp(model->setup_phase, "pending") == 0 ||
+                           strcmp(model->setup_phase, "failed") == 0;
+    is_active = strcmp(model->setup_phase, "active") == 0;
+    switch (index) {
+    case 0:
+        if (is_released) {
+            return "限制已解除，建议现在启用自动控制。";
+        }
+        if (is_active) {
+            return "自动控制已启用，无需再次操作。";
+        }
+        if (is_pending_or_failed) {
+            return "需要先完成前置解限才能启用。";
+        }
+        return "当前阶段不支持此操作。";
+    case 1:
+        if (is_pending_or_failed) {
+            return "前置解限未完成或失败，建议重试。";
+        }
+        return "仅在 pending/failed 阶段可用。";
+    case 2:
+        if (!model->setup_snapshot_available) {
+            return "安装前快照不可用，无法恢复。";
+        }
+        return "精确恢复安装前的家长控制状态。";
+    case 3:
+        return "创建 disable.flag，后台立即停止控制操作。";
+    case 4:
+        if (!is_active) {
+            return "需要先完成首次设置（phase=active）。";
+        }
+        if (model->raw_block_verified) {
+            return "强制阻止能力已验证，无需再次探测。";
+        }
+        return "探针会尝试真机写入并回滚验证。";
+    case 5:
+        if (!is_active) {
+            return "需要先完成首次设置（phase=active）。";
+        }
+        if (model->suspend_verified) {
+            return "暂停软件能力已验证，无需再次探测。";
+        }
+        return "探针会尝试真机写入并回滚验证。";
+    default:
+        return "";
+    }
 }

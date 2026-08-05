@@ -60,12 +60,12 @@ static const UiAction PLAN_ACTIONS[] = {
 };
 
 static const UiAction SAFETY_ACTIONS[] = {
-    {"启用自动控制", "完成首次设置，60 秒后执行规则", COLOR(42, 105, 188)},
-    {"重试前置解限", "限 pending/failed 可用：保留快照并再次解除限制", COLOR(25, 132, 95)},
+    {"启用自动控制", "确认限制已解除后，启用规则自动控制", COLOR(42, 105, 188)},
+    {"重试前置解限", "仅 pending/failed 阶段可用", COLOR(25, 132, 95)},
     {"恢复安装前状态", "恢复原始设置并停用 PlayWise", COLOR(194, 61, 61)},
-    {"紧急停用控制", "创建 disable.flag 进入安全状态", COLOR(194, 61, 61)},
-    {"验证强制阻止", "真机探针验证 raw block 能力", COLOR(194, 61, 61)},
-    {"验证暂停软件", "真机探针验证 suspend 能力", COLOR(194, 61, 61)},
+    {"紧急停用控制", "立即停止后台控制操作", COLOR(194, 61, 61)},
+    {"验证强制阻止", "需 active 阶段，探针写入并回滚", COLOR(194, 61, 61)},
+    {"验证暂停软件", "需 active 阶段，探针写入并回滚", COLOR(194, 61, 61)},
 };
 
 static uint32_t ui_decode_utf8(const char **text)
@@ -563,32 +563,82 @@ static void draw_action_card(
     uint32_t stride,
     UiRect rect,
     const UiAction *action,
-    bool selected)
+    bool selected,
+    PtcUiActionState state)
 {
-    uint32_t background = selected ? COLOR(244, 249, 255) : COLOR(255, 255, 255);
-    uint32_t border = selected ? action->accent : COLOR(219, 225, 233);
+    bool disabled = state == PTC_UI_ACTION_DISABLED;
+    bool recommended = state == PTC_UI_ACTION_RECOMMENDED;
+    uint32_t background = disabled ? COLOR(244, 246, 249) :
+                          selected ? COLOR(244, 249, 255) : COLOR(255, 255, 255);
+    uint32_t border = disabled ? COLOR(230, 233, 238) :
+                      selected ? action->accent : COLOR(219, 225, 233);
+    uint32_t title_color = disabled ? COLOR(160, 168, 180) : COLOR(28, 34, 43);
+    uint32_t sub_color = disabled ? COLOR(180, 186, 196) : COLOR(91, 100, 114);
     fill_round_rect(pixels, stride, rect, 8, background);
-    draw_rect_outline(pixels, stride, rect, selected ? 3 : 1, border);
-    fill_round_rect(pixels, stride, (UiRect){rect.x + 20, rect.y + 25, 12, rect.height - 50}, 6, action->accent);
-    draw_text(pixels, stride, rect.x + 54, rect.y + 46, action->title, 24, COLOR(28, 34, 43));
-    draw_text(pixels, stride, rect.x + 54, rect.y + 78, action->subtitle, 18, COLOR(91, 100, 114));
-    if (selected) {
+    draw_rect_outline(pixels, stride, rect, selected && !disabled ? 3 : 1, border);
+    fill_round_rect(pixels, stride, (UiRect){rect.x + 20, rect.y + 25, 12, rect.height - 50}, 6,
+                    disabled ? COLOR(200, 206, 214) : action->accent);
+    draw_text(pixels, stride, rect.x + 54, rect.y + 46, action->title, 24, title_color);
+    draw_text(pixels, stride, rect.x + 54, rect.y + 78, action->subtitle, 18, sub_color);
+    if (recommended && !disabled) {
+        fill_round_rect(pixels, stride, (UiRect){rect.x + rect.width - 92, rect.y + 12, 72, 28}, 6, COLOR(25, 132, 95));
+        draw_text_center(pixels, stride, (UiRect){rect.x + rect.width - 92, rect.y + 12, 72, 28}, "建议", 17, COLOR(255, 255, 255));
+    }
+    if (selected && !disabled) {
         draw_text(pixels, stride, rect.x + rect.width - 74, rect.y + 64, "A", 23, action->accent);
     }
 }
 
-static void draw_capabilities(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect panel = {842, 176, 384, 324};
+    const char *phase_label;
+    uint32_t phase_color;
+    char hint[192];
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 43, "设备能力", 23, COLOR(28, 34, 43));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 88, "普通计时写入  事务恢复保护", 19, COLOR(25, 132, 95));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 130, model->raw_block_verified ? "强制阻止      已验证" : "强制阻止      未验证", 19,
+    draw_text(pixels, stride, panel.x + 26, panel.y + 43, "设备状态与引导", 23, COLOR(28, 34, 43));
+    /* Setup phase */
+    if (strcmp(model->setup_phase, "active") == 0) {
+        phase_label = "自动控制已启用";
+        phase_color = COLOR(25, 132, 95);
+    } else if (strcmp(model->setup_phase, "released") == 0) {
+        phase_label = "限制已解除，等待启用";
+        phase_color = COLOR(28, 118, 188);
+    } else if (strcmp(model->setup_phase, "pending") == 0) {
+        phase_label = "等待前置解限";
+        phase_color = COLOR(215, 139, 25);
+    } else if (strcmp(model->setup_phase, "failed") == 0) {
+        phase_label = "前置解限失败";
+        phase_color = COLOR(194, 61, 61);
+    } else if (strcmp(model->setup_phase, "restored") == 0) {
+        phase_label = "已恢复快照";
+        phase_color = COLOR(91, 100, 116);
+    } else {
+        phase_label = model->setup_phase[0] ? model->setup_phase : "--";
+        phase_color = COLOR(91, 100, 116);
+    }
+    draw_text(pixels, stride, panel.x + 26, panel.y + 82, "初始化阶段", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, panel.x + 172, panel.y + 82, phase_label, 18, phase_color);
+    draw_text(pixels, stride, panel.x + 26, panel.y + 112, "安装前快照", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, panel.x + 172, panel.y + 112,
+              model->setup_snapshot_available ? "已保存" : "不可用", 18,
+              model->setup_snapshot_available ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 142, "控制模式", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, panel.x + 172, panel.y + 142,
+              model->mode[0] ? model->mode : "--", 18, COLOR(28, 118, 188));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 172, "强制阻止", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, panel.x + 172, panel.y + 172,
+              model->raw_block_verified ? "已验证" : "未验证", 18,
               model->raw_block_verified ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 172, model->suspend_verified ? "暂停软件      已验证" : "暂停软件      未验证", 19,
+    draw_text(pixels, stride, panel.x + 26, panel.y + 202, "暂停软件", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, panel.x + 172, panel.y + 202,
+              model->suspend_verified ? "已验证" : "未验证", 18,
               model->suspend_verified ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 270, "高风险操作会再次要求确认", 18, COLOR(194, 61, 61));
+    /* Contextual hint for selected action */
+    snprintf(hint, sizeof(hint), "%s", model->safety_hint[0] ? model->safety_hint : "选择操作查看引导说明。");
+    draw_text(pixels, stride, panel.x + 26, panel.y + 262, hint, 17, COLOR(91, 100, 116));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 292, "高风险操作会再次要求确认", 18, COLOR(194, 61, 61));
 }
 
 static void draw_status_row(
@@ -659,12 +709,18 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     actions = actions_for_page(model->parent_page, &action_count);
     for (index = 0; index < action_count; ++index) {
         UiRect card = to_uirect(ptc_ui_parent_card_rect(index));
-        draw_action_card(pixels, stride, card, &actions[index], index == model->selected_index);
+        PtcUiActionState astate = PTC_UI_ACTION_AVAILABLE;
+        if (model->parent_page == PTC_UI_PARENT_SAFETY) {
+            astate = ptc_ui_safety_action_available(model, index);
+        }
+        draw_action_card(pixels, stride, card, &actions[index], index == model->selected_index, astate);
     }
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
         draw_today_status(pixels, stride, model);
+    } else if (model->parent_page == PTC_UI_PARENT_SAFETY) {
+        draw_safety_status(pixels, stride, model);
     } else {
-        draw_capabilities(pixels, stride, model);
+        draw_safety_status(pixels, stride, model);
     }
     draw_notice(pixels, stride, model, 522);
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0), "L  上一页");
