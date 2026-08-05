@@ -617,8 +617,8 @@ static void test_setup_release_and_activation(void)
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process complete setup request");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", setup, sizeof(setup)), "activation grace readable");
     check_true(strstr(setup, "\"phase\":\"released\"") != NULL &&
-        strstr(setup, "\"activate_after\":1783526461") != NULL, "complete setup stores sixty-second grace");
-    fake_time.snapshot.unix_seconds = 1783526461;
+        strstr(setup, "\"activate_after\":1783526406") != NULL, "complete setup stores five-second grace");
+    fake_time.snapshot.unix_seconds = 1783526406;
     check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), 1, "activation grace promotes setup");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", setup, sizeof(setup)), "active setup readable");
     check_true(strstr(setup, "\"phase\":\"active\"") != NULL, "setup enters active phase after grace");

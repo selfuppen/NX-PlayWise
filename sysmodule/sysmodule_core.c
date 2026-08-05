@@ -1926,7 +1926,7 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             PTC_ERR_SETUP_PENDING, now.day_index, caps);
     }
-    setup.activate_after = now.unix_seconds + 60;
+    setup.activate_after = now.unix_seconds + 5;
     setup.last_error[0] = '\0';
     if (!save_setup_state(sysmodule, &setup)) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,

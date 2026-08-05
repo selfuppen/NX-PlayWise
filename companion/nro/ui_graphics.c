@@ -458,8 +458,8 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     int64_t grace_remaining = ptc_ui_setup_grace_remaining(model, (int64_t)time(NULL));
     char phase_line[160];
     char countdown_line[80];
-    draw_header(pixels, stride, grace_remaining >= 0 ? "正在启用自动控制" : "首次设置",
-        grace_remaining >= 0 ? "检查已完成，宽限结束后将自动继续" : "后台已在自动控制前处理当前家长控制限制");
+    draw_header(pixels, stride, grace_remaining >= 0 ? "正在处理后台环境" : "首次设置",
+        grace_remaining >= 0 ? "正在配置底层限制策略，完成后将自动继续" : "后台已在自动控制前处理当前家长控制限制");
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, 204, 190,
@@ -472,9 +472,9 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_text(pixels, stride, 204, 248, phase_line, 22, COLOR(77, 86, 99));
     if (grace_remaining >= 0) {
         if (grace_remaining > 0) {
-            snprintf(countdown_line, sizeof(countdown_line), "%lld 秒后自动启用", (long long)grace_remaining);
+            snprintf(countdown_line, sizeof(countdown_line), "后台策略配置中 (剩余 %lld 秒)…", (long long)grace_remaining);
         } else {
-            snprintf(countdown_line, sizeof(countdown_line), "正在启用自动控制…");
+            snprintf(countdown_line, sizeof(countdown_line), "后台配置完成，正在启用自动控制…");
         }
         draw_text(pixels, stride, 204, 310, countdown_line, 34, COLOR(28, 118, 188));
         draw_text(pixels, stride, 204, 356, "无需操作；完成后将自动进入游玩时间页面。", 22, COLOR(45, 52, 62));

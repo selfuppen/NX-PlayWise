@@ -231,10 +231,10 @@ static void test_setup_grace_countdown(void)
     PtcUiModel model;
     memset(&model, 0, sizeof(model));
     snprintf(model.setup_phase, sizeof(model.setup_phase), "released");
-    model.setup_activate_after = 160;
-    check_int(ptc_ui_setup_grace_remaining(&model, 100), 60, "setup grace reports remaining seconds");
-    check_int(ptc_ui_setup_grace_remaining(&model, 160), 0, "setup grace reaches zero at deadline");
-    check_int(ptc_ui_setup_grace_remaining(&model, 170), 0, "setup grace stays at zero after deadline");
+    model.setup_activate_after = 105;
+    check_int(ptc_ui_setup_grace_remaining(&model, 100), 5, "setup grace reports remaining seconds");
+    check_int(ptc_ui_setup_grace_remaining(&model, 105), 0, "setup grace reaches zero at deadline");
+    check_int(ptc_ui_setup_grace_remaining(&model, 115), 0, "setup grace stays at zero after deadline");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
     check_int(ptc_ui_setup_grace_remaining(&model, 100), -1, "active setup has no countdown");
     check_int(ptc_ui_setup_grace_remaining(NULL, 100), -1, "missing setup model has no countdown");
@@ -283,7 +283,7 @@ static void test_result_mapping(void)
         "\"play_timer_enabled\":1,\"restricted_now\":0,\"bedtime_active\":false,\"parent_unlock_active\":false},"
         "\"capabilities\":{\"raw_block_verified\":false,\"suspend_verified\":false},"
         "\"setup\":{\"phase\":\"released\",\"restriction_cleared\":true,\"snapshot_available\":true,"
-        "\"activate_after\":160,\"last_error\":\"\"},\"completed_at\":100}";
+        "\"activate_after\":105,\"last_error\":\"\"},\"completed_at\":100}";
     const char *active_setup =
         "{\"version\":1,\"request_id\":\"1-active\",\"type\":\"status\",\"status\":\"ok\","
         "\"mode\":\"enforce\",\"dry_run\":false,\"state\":{\"day_index\":1,\"limited_today\":1,"
@@ -291,7 +291,7 @@ static void test_result_mapping(void)
         "\"play_timer_enabled\":1,\"restricted_now\":0,\"bedtime_active\":false,\"parent_unlock_active\":false},"
         "\"capabilities\":{\"raw_block_verified\":false,\"suspend_verified\":false},"
         "\"setup\":{\"phase\":\"active\",\"restriction_cleared\":true,\"snapshot_available\":true,"
-        "\"activate_after\":0,\"last_error\":\"\"},\"completed_at\":161}";
+        "\"activate_after\":0,\"last_error\":\"\"},\"completed_at\":106}";
     memset(&model, 0, sizeof(model));
     check_true(ptc_ui_apply_result_json(&model, success), "success result parses");
     check_true(model.status_loaded, "result status loaded");
@@ -326,7 +326,7 @@ static void test_result_mapping(void)
     model.view = PTC_UI_PARENT;
     check_true(ptc_ui_apply_result_json(&model, complete_setup), "complete setup result parses");
     check_int(model.view, PTC_UI_SETUP, "complete setup opens automatic countdown page");
-    check_int(model.setup_activate_after, 160, "complete setup maps activation deadline");
+    check_int(model.setup_activate_after, 105, "complete setup maps activation deadline");
     check_true(ptc_ui_apply_result_json(&model, active_setup), "active setup result parses");
     check_int(model.view, PTC_UI_CHILD, "active setup automatically opens child page");
     check_true(strstr(model.message, "自动控制已启用") != NULL, "active setup shows completion message");
