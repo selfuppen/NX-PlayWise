@@ -40,6 +40,7 @@ typedef struct {
     PtcUiView request_view;
     PtcBedtimeRule active_bedtime_rule;
     int64_t last_bedtime_minute;
+    int64_t last_setup_refresh_second;
 } UiState;
 
 static int64_t unix_ms_now(void)
@@ -588,6 +589,21 @@ static void poll_result(UiState *ui, bool force)
     }
     set_message(ui, "读取结果失败", status);
     if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
+}
+
+static void refresh_setup_activation(UiState *ui)
+{
+    int64_t now;
+    if (!ui || ui->waiting || ui->model.view != PTC_UI_SETUP) {
+        return;
+    }
+    now = (int64_t)time(NULL);
+    if (ptc_ui_setup_grace_remaining(&ui->model, now) != 0 ||
+        ui->last_setup_refresh_second == now) {
+        return;
+    }
+    ui->last_setup_refresh_second = now;
+    submit_status(ui);
 }
 
 static void enter_parent_area(UiState *ui)
@@ -1141,6 +1157,7 @@ int main(int argc, char **argv)
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs), ptc_switch_ipc_backend(), &ui.ipc);
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     ui.last_bedtime_minute = -1;
+    ui.last_setup_refresh_second = -1;
     load_rule_drafts(&ui);
     refresh_bedtime_state(&ui, true);
     submit_status(&ui);
@@ -1237,6 +1254,7 @@ int main(int argc, char **argv)
         }
 
         poll_result(&ui, false);
+        refresh_setup_activation(&ui);
         refresh_bedtime_state(&ui, false);
         draw(&ui);
         svcSleepThread(LOOP_SLEEP_NS);

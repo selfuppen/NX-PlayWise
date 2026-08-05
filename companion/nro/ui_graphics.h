@@ -151,6 +151,7 @@ PtcLimitAction ptc_ui_shift_limit_action(PtcLimitAction action, int direction);
 bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minutes);
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
 bool ptc_ui_bedtime_active_at(const PtcBedtimeRule *bedtime, uint16_t minute_of_day);
+int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now);
 bool ptc_ui_cancel_overlay(PtcUiModel *model);
 PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model);
 bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);

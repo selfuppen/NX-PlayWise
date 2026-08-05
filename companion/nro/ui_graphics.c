@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
@@ -440,7 +441,9 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     }
     draw_text(pixels, stride, 866, 384, model->bedtime_active ? "就寝时段：当前时段" : "就寝时段：未到时段", 19, COLOR(77, 86, 99));
     draw_text(pixels, stride, 866, 416, model->parent_unlock_active ? "临时解锁：已开启" : "临时解锁：未开启", 19, COLOR(77, 86, 99));
-    draw_text(pixels, stride, 866, 448, "Y  刷新状态", 20, COLOR(28, 118, 188));
+    draw_text(pixels, stride, 866, 448,
+        strcmp(model->setup_phase, "active") == 0 ? "自动控制：已启用" : "自动控制：状态未确认",
+        20, strcmp(model->setup_phase, "active") == 0 ? COLOR(25, 132, 95) : COLOR(215, 139, 25));
 
     draw_notice(pixels, stride, model, 510);
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0), "A  输入加时码");
@@ -452,17 +455,33 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
 {
     UiRect panel = {154, 132, 972, 430};
     const char *phase = model->setup_phase[0] ? model->setup_phase : "pending";
+    int64_t grace_remaining = ptc_ui_setup_grace_remaining(model, (int64_t)time(NULL));
     char phase_line[160];
-    draw_header(pixels, stride, "首次设置", "后台已在自动控制前处理当前家长控制限制");
+    char countdown_line[80];
+    draw_header(pixels, stride, grace_remaining >= 0 ? "正在启用自动控制" : "首次设置",
+        grace_remaining >= 0 ? "检查已完成，宽限结束后将自动继续" : "后台已在自动控制前处理当前家长控制限制");
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
-    draw_text(pixels, stride, 204, 190, model->setup_restriction_cleared ? "当前限制已解除" : "正在等待解除当前限制", 31,
+    draw_text(pixels, stride, 204, 190,
+        grace_remaining >= 0 ? "设备检查已通过" :
+        (model->setup_restriction_cleared ? "当前限制已解除" : "正在等待解除当前限制"), 31,
         model->setup_restriction_cleared ? COLOR(25, 132, 95) : COLOR(215, 139, 25));
-    snprintf(phase_line, sizeof(phase_line), "引导阶段：%s    安装前快照：%s", phase,
+    snprintf(phase_line, sizeof(phase_line), "当前阶段：%s    安装前快照：%s",
+        grace_remaining >= 0 ? "等待自动启用" : phase,
         model->setup_snapshot_available ? "已保存" : "不可用");
     draw_text(pixels, stride, 204, 248, phase_line, 22, COLOR(77, 86, 99));
-    draw_text(pixels, stride, 204, 300, "确认 Companion 可以正常进入后，按 Minus 验证家长 PIN。", 23, COLOR(45, 52, 62));
-    draw_text(pixels, stride, 204, 344, "在安全工具中启用自动控制；规则会在 60 秒宽限后生效。", 23, COLOR(45, 52, 62));
+    if (grace_remaining >= 0) {
+        if (grace_remaining > 0) {
+            snprintf(countdown_line, sizeof(countdown_line), "%lld 秒后自动启用", (long long)grace_remaining);
+        } else {
+            snprintf(countdown_line, sizeof(countdown_line), "正在启用自动控制…");
+        }
+        draw_text(pixels, stride, 204, 310, countdown_line, 34, COLOR(28, 118, 188));
+        draw_text(pixels, stride, 204, 356, "无需操作；完成后将自动进入游玩时间页面。", 22, COLOR(45, 52, 62));
+    } else {
+        draw_text(pixels, stride, 204, 300, "确认 Companion 可以正常进入后，按 Minus 验证家长 PIN。", 23, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 344, "在安全工具中启用自动控制；规则会在 60 秒宽限后生效。", 23, COLOR(45, 52, 62));
+    }
     draw_text(pixels, stride, 204, 400, model->message[0] ? model->message : "Y 可刷新后台状态。", 20, COLOR(91, 100, 116));
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0), "Minus  家长设置");
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(1), "Y  刷新");

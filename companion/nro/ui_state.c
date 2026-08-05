@@ -250,6 +250,17 @@ bool ptc_ui_bedtime_active_at(const PtcBedtimeRule *bedtime, uint16_t minute_of_
     return minute_of_day >= bedtime->start_min || minute_of_day < bedtime->end_min;
 }
 
+int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now)
+{
+    if (!model || strcmp(model->setup_phase, "released") != 0 || model->setup_activate_after <= 0) {
+        return -1;
+    }
+    if (now >= model->setup_activate_after) {
+        return 0;
+    }
+    return model->setup_activate_after - now;
+}
+
 bool ptc_ui_cancel_overlay(PtcUiModel *model)
 {
     if (!model || model->overlay == PTC_UI_OVERLAY_NONE) {
@@ -284,6 +295,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     const char *type;
     const char *mode;
     bool dry_run;
+    bool setup_activated = false;
     if (!model || !text || ptc_companion_parse_result_summary(text, &summary) != PTC_COMPANION_OK) {
         return false;
     }
@@ -343,15 +355,21 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     setup = cJSON_GetObjectItemCaseSensitive(root, "setup");
     if (strcmp(status, "ok") == 0 && cJSON_IsObject(setup)) {
+        bool setup_was_waiting = strcmp(model->setup_phase, "released") == 0 &&
+            model->setup_activate_after > 0;
         snprintf(model->setup_phase, sizeof(model->setup_phase), "%s", json_string(setup, "phase"));
         model->setup_restriction_cleared = json_bool(setup, "restriction_cleared", false);
         model->setup_snapshot_available = json_bool(setup, "snapshot_available", false);
         model->setup_activate_after = json_int(setup, "activate_after", 0);
-        if (strcmp(model->setup_phase, "active") != 0 && model->view != PTC_UI_PARENT) {
+        if (type && strcmp(type, "complete_setup") == 0 &&
+            strcmp(model->setup_phase, "released") == 0 && model->setup_activate_after > 0) {
+            model->view = PTC_UI_SETUP;
+        } else if (strcmp(model->setup_phase, "active") != 0 && model->view != PTC_UI_PARENT) {
             model->view = PTC_UI_SETUP;
         } else if (strcmp(model->setup_phase, "active") == 0 && model->view == PTC_UI_SETUP) {
             model->view = PTC_UI_CHILD;
         }
+        setup_activated = setup_was_waiting && strcmp(model->setup_phase, "active") == 0;
     }
     if (status && strcmp(status, "error") == 0) {
         const char *message = summary.message[0] ? summary.message : NULL;
@@ -374,6 +392,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                 failure_stage,
                 hint);
         }
+    } else if (setup_activated) {
+        snprintf(model->message, sizeof(model->message), "自动控制已启用，首次设置完成。");
     } else {
         snprintf(model->message, sizeof(model->message), "%s", request_success_message(type, mode, dry_run));
     }
