@@ -61,7 +61,7 @@ static const UiAction PLAN_ACTIONS[] = {
 
 static const UiAction SAFETY_ACTIONS[] = {
     {"启用自动控制", "完成首次设置，60 秒后执行规则", COLOR(42, 105, 188)},
-    {"重试前置解限", "保留安装快照并再次解除当前限制", COLOR(25, 132, 95)},
+    {"重试前置解限", "限 pending/failed 可用：保留快照并再次解除限制", COLOR(25, 132, 95)},
     {"恢复安装前状态", "恢复原始设置并停用 PlayWise", COLOR(194, 61, 61)},
     {"紧急停用控制", "创建 disable.flag 进入安全状态", COLOR(194, 61, 61)},
     {"验证强制阻止", "真机探针验证 raw block 能力", COLOR(194, 61, 61)},
@@ -478,6 +478,15 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
         }
         draw_text(pixels, stride, 204, 310, countdown_line, 34, COLOR(28, 118, 188));
         draw_text(pixels, stride, 204, 356, "无需操作；完成后将自动进入游玩时间页面。", 22, COLOR(45, 52, 62));
+    } else if (strcmp(phase, "pending") == 0) {
+        draw_text(pixels, stride, 204, 300, "当前处于待解除限制阶段，后台正在尝试前置解限。", 23, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 344, "请等待，若无响应可按 Minus 在安全工具尝试【重试前置解限】。", 23, COLOR(45, 52, 62));
+    } else if (strcmp(phase, "failed") == 0) {
+        draw_text(pixels, stride, 204, 300, "前置解限或验证失败，请按 Minus 进入安全工具查看。", 23, COLOR(194, 61, 61));
+        draw_text(pixels, stride, 204, 344, "请执行【重试前置解限】或【恢复安装前状态】。", 23, COLOR(45, 52, 62));
+    } else if (strcmp(phase, "restored") == 0) {
+        draw_text(pixels, stride, 204, 300, "已恢复至安装前状态。若要重新验证及启用控制，", 23, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 344, "请清理状态文件并重启主机以重新开始首次引导。", 23, COLOR(45, 52, 62));
     } else {
         draw_text(pixels, stride, 204, 300, "确认 Companion 可以正常进入后，按 Minus 验证家长 PIN。", 23, COLOR(45, 52, 62));
         draw_text(pixels, stride, 204, 344, "在安全工具中启用自动控制；规则会在 60 秒宽限后生效。", 23, COLOR(45, 52, 62));
