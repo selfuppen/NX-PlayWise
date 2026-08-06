@@ -156,7 +156,6 @@ static bool fs_metadata(PtcStorage *storage, const char *path, PtcStorageMetadat
     memset(out, 0, sizeof(*out));
     out->type = S_ISREG(info.st_mode) ? PTC_STORAGE_ENTRY_FILE :
         (S_ISDIR(info.st_mode) ? PTC_STORAGE_ENTRY_DIRECTORY : PTC_STORAGE_ENTRY_UNKNOWN);
-    out->size = (uint64_t)info.st_size;
     out->modified_unix_seconds = (int64_t)info.st_mtime;
     out->modified_time_valid = info.st_mtime > 0;
     return true;
