@@ -426,6 +426,18 @@ int ptc_ui_preview_remaining_minutes(const PtcUiModel *model)
     if (!model) {
         return 0;
     }
+
+    if (model->operation == PTC_UI_OPERATION_PARENT_UNLOCK) {
+        return (int)model->draft_minutes;
+    }
+
+    if (model->operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES) {
+        if (model->remaining_available && model->remaining_minutes >= 0) {
+            return model->remaining_minutes + (int)model->draft_minutes;
+        }
+        return (int)model->draft_minutes;
+    }
+
     remaining = (int)model->draft_minutes;
     if (model->played_minutes_available && model->played_minutes >= 0) {
         remaining = (int)model->draft_minutes - model->played_minutes;

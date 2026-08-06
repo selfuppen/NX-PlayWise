@@ -454,6 +454,32 @@ static void test_bedtime_conflict_detection(void)
     check_true(conflict.remind_bedtime_conflict, "remind_bedtime_conflict flag set");
 }
 
+static void test_preview_remaining_minutes(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+
+    model.played_minutes_available = true;
+    model.played_minutes = 45;
+
+    // 1. Set today limit
+    model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
+    model.draft_minutes = 90;
+    check_int(ptc_ui_preview_remaining_minutes(&model), 45, "preview remaining for set today limit (90 - 45)");
+
+    // 2. Parent unlock
+    model.operation = PTC_UI_OPERATION_PARENT_UNLOCK;
+    model.draft_minutes = 30;
+    check_int(ptc_ui_preview_remaining_minutes(&model), 30, "preview remaining for parent unlock ignores played minutes");
+
+    // 3. Add today minutes
+    model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
+    model.draft_minutes = 15;
+    model.remaining_available = true;
+    model.remaining_minutes = 20;
+    check_int(ptc_ui_preview_remaining_minutes(&model), 35, "preview remaining for add today minutes (20 + 15)");
+}
+
 int main(void)
 {
     test_navigation();
@@ -469,6 +495,7 @@ int main(void)
     test_hit_test_overlays();
     test_result_mapping();
     test_bedtime_conflict_detection();
+    test_preview_remaining_minutes();
     if (failures != 0) {
         return 1;
     }
