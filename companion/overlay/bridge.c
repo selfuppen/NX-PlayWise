@@ -103,8 +103,8 @@ const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge)
                 return ptc_error_message_zh((PtcErrorCode)bridge->summary.error_code);
             return "请求失败，请稍后重试";
         }
-        if (bridge->summary.dry_run) return "当前为演练模式，未实际解锁";
-        return "请求失败，请稍后重试";
+        if (bridge->summary.dry_run && strcmp(bridge->summary.mode, "enforce") != 0) return "当前为演练模式，未实际解锁";
+        return "请求成功";
     }
     switch (bridge->last_status) {
     case PTC_COMPANION_TIMEOUT: return "后台响应超时，请重试";

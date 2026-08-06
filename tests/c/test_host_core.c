@@ -1247,6 +1247,45 @@ static void test_grant_requires_runtime_unlock_before_persisting(void)
     check_true(mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "retry consumes nonce after result succeeds");
 }
 
+static void test_grant_played_exceeds_limit_succeeds(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_TEXT_SIZE];
+    char request[512];
+    char result[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    /* Simulate today's limit configured as 180 min, but played 210 min (overused/restricted) */
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 180;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.restricted_now = true;
+    pctl.runtime_effect_succeeds = true;
+
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+    write_capabilities(&mem, true, false, false);
+    make_valid_code(code); /* +30 min token */
+
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "grant-played-exceeds", 1001, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/grant-played-exceeds.json", request), "write played exceeds grant");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process played exceeds grant");
+    check_true(pctl.timer_started, "played exceeds grant starts timer");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/grant-played-exceeds.json", result, sizeof(result)), "played exceeds result");
+    check_true(strstr(result, "\"status\":\"ok\"") != NULL, "played exceeds grant succeeds without 306 error");
+    /* Since base was played_minutes (210) rather than limit (180), target is 210 + 30 = 240 */
+    check_int(pctl.last_target.minutes, 240, "played exceeds grant stacks onto played minutes");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"), "played exceeds grant consumes nonce");
+}
+
 static void test_grant_offline_code_stacks_on_existing_limit(void)
 {
     PtcMemStorage mem;
@@ -2376,6 +2415,7 @@ int main(void)
     test_companion_command_labels();
     test_transport_submit_failure_does_not_write_file();
     test_offline_code_hot_reloads_grant_secret();
+    test_grant_played_exceeds_limit_succeeds();
 
     if (failures != 0) {
         fprintf(stderr, "%d C host tests failed\n", failures);

@@ -66,11 +66,13 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
 bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summary, char *out, size_t out_size)
 {
     int written;
+    bool is_observe;
     if (!summary || !out || out_size == 0 || !summary->valid) {
         return false;
     }
+    is_observe = summary->dry_run && strcmp(summary->mode, "enforce") != 0;
     written = snprintf(out, out_size, "%s%s  %s\n剩余：%d 分钟  已玩：%s%d%s\n计时器：%s  限制：%s",
-        summary->ok ? "成功" : "失败", summary->dry_run ? "（演练）" : "",
+        summary->ok ? "成功" : "失败", is_observe ? "（演练）" : "",
         summary->ok ? "" : (summary->reason[0] ? summary->reason : "后台拒绝"),
         summary->remaining_minutes,
         summary->played_minutes_available ? "约 " : "",

@@ -1508,15 +1508,36 @@ static PtcPctlTargetMode target_from_day_rule(PtcDayRule rule)
     return PTC_PCTL_TARGET_LIMIT;
 }
 
+static uint16_t ptc_pctl_played_minutes(const PtcPctlStatus *status)
+{
+    if (!status || !status->configured_minutes_available || !status->limited_today) {
+        return 0U;
+    }
+    if (status->remaining_available && status->configured_minutes >= status->remaining_minutes) {
+        uint32_t played = (uint32_t)status->configured_minutes - status->remaining_minutes;
+        if (status->restricted_now && played < status->configured_minutes) {
+            return status->configured_minutes;
+        }
+        return (uint16_t)played;
+    }
+    if (status->restricted_now || status->remaining_minutes == 0U) {
+        return status->configured_minutes;
+    }
+    return 0U;
+}
+
 /* Offline codes and add_today_minutes both stack onto the existing daily limit
-   instead of overwriting it. Base is today's effective LIMIT minutes; unlimited
-   or blocked days start from 0. The total is clamped to the single-day maximum so
-   even a large accumulation still writes successfully to PCTL. Sets today_override
-   in place and returns the resulting minutes. */
-static uint16_t accumulate_today_limit(PtcRules *rules, uint16_t day_index, uint8_t weekday, uint16_t add_minutes)
+   instead of overwriting it. Base is max(today's effective LIMIT minutes, played_minutes);
+   unlimited or blocked days start from played_minutes (or 0 if played is 0). The total is
+   clamped to the single-day maximum so even a large accumulation still writes successfully to PCTL.
+   Sets today_override in place and returns the resulting minutes. */
+static uint16_t accumulate_today_limit(PtcRules *rules, uint16_t day_index, uint8_t weekday, uint16_t add_minutes, uint16_t played_minutes)
 {
     PtcDayRule active = ptc_rules_today_rule(rules, day_index, weekday);
     uint32_t base = (active.mode == PTC_RULE_MODE_LIMIT) ? active.minutes : 0u;
+    if (played_minutes > base) {
+        base = played_minutes;
+    }
     uint32_t total = base + add_minutes;
     if (total > PTC_TOKEN_MAX_MINUTES) {
         total = PTC_TOKEN_MAX_MINUTES;
@@ -1528,7 +1549,7 @@ static uint16_t accumulate_today_limit(PtcRules *rules, uint16_t day_index, uint
     return (uint16_t)total;
 }
 
-static PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest *request, PtcRules *rules, PtcRuntimeState *runtime_state, PtcClockSnapshot now)
+static PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest *request, PtcRules *rules, PtcRuntimeState *runtime_state, PtcClockSnapshot now, uint16_t played_minutes)
 {
     switch (request->type) {
     case PTC_REQUEST_SET_TODAY_LIMIT:
@@ -1538,7 +1559,7 @@ static PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcR
         rules->today_override.rule.minutes = request->minutes;
         return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
     case PTC_REQUEST_ADD_TODAY_MINUTES:
-        (void)accumulate_today_limit(rules, now.day_index, ptc_weekday_from_day_index(now.day_index), request->minutes);
+        (void)accumulate_today_limit(rules, now.day_index, ptc_weekday_from_day_index(now.day_index), request->minutes, played_minutes);
         return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
         rules->today_override.present = true;
@@ -1720,10 +1741,11 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     }
     if (decision.may_write_pctl) {
         uint16_t new_minutes;
+        uint16_t played_minutes = ptc_pctl_played_minutes(&pctl_status);
         (void)load_rules(sysmodule, &rules);
-        /* Stack the granted minutes onto today's existing limit rather than
+        /* Stack the granted minutes onto today's existing limit or played time rather than
            overwriting it, matching the add_today_minutes token action. */
-        new_minutes = accumulate_today_limit(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index), token_minutes);
+        new_minutes = accumulate_today_limit(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index), token_minutes, played_minutes);
         /* Apply to PCTL first (idempotent absolute write); persist the override
            only after it succeeds. On failure the nonce is not consumed and the
            same code may be re-entered, so persisting first would double-count. */
@@ -1841,11 +1863,14 @@ static bool target_status_observed(PtcPctlTargetMode mode, const PtcPctlStatus *
     if (mode == PTC_PCTL_TARGET_BLOCKED) {
         return status->blocked_today && status->restricted_now;
     }
+    if (status->restricted_now) {
+        return status->limited_today || status->blocked_today;
+    }
     if (status->remaining_minutes == 0U) {
-        return (status->limited_today || status->blocked_today) && status->restricted_now;
+        return status->limited_today || status->blocked_today;
     }
     return status->limited_today && status->remaining_available && status->remaining_minutes > 0U &&
-        status->play_timer_enabled && !status->restricted_now;
+        status->play_timer_enabled;
 }
 
 static PtcErrorCode start_timer_and_wait_target(
@@ -3569,7 +3594,8 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
                 PTC_ERR_PCTL_BACKUP_FAILED, now.day_index, caps);
         }
-        err = update_rules_for_request(sysmodule, request, &rules, &runtime_state, now);
+        uint16_t played_minutes = ptc_pctl_played_minutes(&pctl_status);
+        err = update_rules_for_request(sysmodule, request, &rules, &runtime_state, now, played_minutes);
         if (err != PTC_ERR_OK) {
             if (pctl_request && recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule)) {
                 write_disable_flag(sysmodule, "transaction_restore_failed\n");

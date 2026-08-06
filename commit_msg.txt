@@ -1,6 +1,5 @@
-feat(setup): 缩短自动控制激活宽限期并更新后台状态提示
+feat(sysmodule): 修复已游玩时间超限时加时触发 306 错误的问题
 
-- 将 sysmodule 中 complete_setup 的激活宽限期从 60 秒缩短至 5 秒
-- 在 Companion UI 中更新自动控制激活的倒计时文案，展示底层限制策略配置进度
-- 同步修改 C 单元测试断言中的宽限时间期望值
-- 批量更新相关文档以反映 5 秒倒计时逻辑
+- 加时累加基准调整为 max(规则限额, 已游玩时间)
+- 增加 test_grant_played_exceeds_limit_succeeds 自动化测试用例
+- 更新协议文档
