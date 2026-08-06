@@ -2,7 +2,7 @@ name: Deploy Parent Console to GitHub Pages
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "refactor/simplify-test"]
     paths:
       - 'tools/ptc_frontend/**'
       - '.github/workflows/deploy-pages.yml'
