@@ -82,6 +82,7 @@ typedef struct {
     bool parent_unlock_active;
     bool raw_block_verified;
     bool suspend_verified;
+    bool disable_flag_present;
     bool setup_restriction_cleared;
     bool setup_snapshot_available;
     int64_t setup_activate_after;
@@ -146,16 +147,19 @@ typedef enum {
     PTC_UI_HIT_OVERLAY_CANCEL,
     PTC_UI_HIT_MINUTES_DEC,
     PTC_UI_HIT_MINUTES_INC,
+    PTC_UI_HIT_MINUTES_DEC_LARGE,
+    PTC_UI_HIT_MINUTES_INC_LARGE,
     PTC_UI_HIT_MINUTES_VALUE,
     PTC_UI_HIT_WEEKLY_DAY,
     PTC_UI_HIT_WEEKLY_MODE,
     PTC_UI_HIT_WEEKLY_MIN_UP,
     PTC_UI_HIT_WEEKLY_MIN_DOWN,
+    PTC_UI_HIT_WEEKLY_MIN_DEC,
+    PTC_UI_HIT_WEEKLY_MIN_INC,
     PTC_UI_HIT_WEEKLY_MIN_INPUT,
     PTC_UI_HIT_BEDTIME_FIELD,
     PTC_UI_HIT_BEDTIME_ADJ_UP,
     PTC_UI_HIT_BEDTIME_ADJ_DOWN,
-    PTC_UI_HIT_BEDTIME_INPUT,
     PTC_UI_HIT_LIMIT_ACTION_OPTION,
     PTC_UI_HIT_NUMPAD_KEY
 } PtcUiHitKind;
@@ -219,15 +223,19 @@ PtcUiRect ptc_ui_dialog_rect(int width, int height);
 PtcUiRect ptc_ui_minutes_value_rect(void);
 PtcUiRect ptc_ui_minutes_dec_rect(void);
 PtcUiRect ptc_ui_minutes_inc_rect(void);
+PtcUiRect ptc_ui_minutes_dec_large_rect(void);
+PtcUiRect ptc_ui_minutes_inc_large_rect(void);
 PtcUiRect ptc_ui_weekly_day_rect(int index);
+PtcUiRect ptc_ui_weekly_day_minutes_rect(int index);
 PtcUiRect ptc_ui_weekly_mode_rect(void);
 PtcUiRect ptc_ui_weekly_min_up_rect(void);
 PtcUiRect ptc_ui_weekly_min_down_rect(void);
+PtcUiRect ptc_ui_weekly_min_dec_rect(void);
+PtcUiRect ptc_ui_weekly_min_inc_rect(void);
 PtcUiRect ptc_ui_weekly_min_input_rect(void);
 PtcUiRect ptc_ui_bedtime_field_rect(int index);
-PtcUiRect ptc_ui_bedtime_adj_up_rect(void);
-PtcUiRect ptc_ui_bedtime_adj_down_rect(void);
-PtcUiRect ptc_ui_bedtime_input_rect(void);
+PtcUiRect ptc_ui_bedtime_adj_up_rect(int index);
+PtcUiRect ptc_ui_bedtime_adj_down_rect(int index);
 PtcUiRect ptc_ui_limit_option_rect(int index);
 PtcUiRect ptc_ui_numpad_display_rect(void);
 PtcUiRect ptc_ui_numpad_key_rect(int index);

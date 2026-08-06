@@ -739,15 +739,15 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
     switch (overlay) {
     case PTC_UI_OVERLAY_MINUTES:
         *width = 720;
-        *height = 360;
+        *height = 460;
         break;
     case PTC_UI_OVERLAY_WEEKLY:
         *width = 1172;
-        *height = 470;
+        *height = 560;
         break;
     case PTC_UI_OVERLAY_BEDTIME:
         *width = 820;
-        *height = 410;
+        *height = 500;
         break;
     case PTC_UI_OVERLAY_LIMIT_ACTION:
         *width = 850;
@@ -776,21 +776,35 @@ static PtcUiRect dialog_for(PtcUiOverlay overlay)
 PtcUiRect ptc_ui_minutes_value_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
-    PtcUiRect rect = {dialog.x + 170, dialog.y + 126, 380, 104};
+    PtcUiRect rect = {dialog.x + 170, dialog.y + 160, 380, 104};
     return rect;
 }
 
 PtcUiRect ptc_ui_minutes_dec_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
-    PtcUiRect rect = {dialog.x + 46, dialog.y + 126, 104, 104};
+    PtcUiRect rect = {dialog.x + 46, dialog.y + 160, 104, 104};
     return rect;
 }
 
 PtcUiRect ptc_ui_minutes_inc_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
-    PtcUiRect rect = {dialog.x + 570, dialog.y + 126, 104, 104};
+    PtcUiRect rect = {dialog.x + 570, dialog.y + 160, 104, 104};
+    return rect;
+}
+
+PtcUiRect ptc_ui_minutes_inc_large_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
+    PtcUiRect rect = {dialog.x + 288, dialog.y + 118, 144, 34};
+    return rect;
+}
+
+PtcUiRect ptc_ui_minutes_dec_large_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
+    PtcUiRect rect = {dialog.x + 288, dialog.y + 272, 144, 34};
     return rect;
 }
 
@@ -804,7 +818,7 @@ PtcUiRect ptc_ui_weekly_day_rect(int index)
 PtcUiRect ptc_ui_bedtime_field_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
-    PtcUiRect rect = {dialog.x + 46 + index * 236, dialog.y + 124, 210, 92};
+    PtcUiRect rect = {dialog.x + 46 + index * 236, dialog.y + 154, 210, 92};
     return rect;
 }
 
@@ -812,6 +826,13 @@ PtcUiRect ptc_ui_limit_option_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_LIMIT_ACTION);
     PtcUiRect rect = {dialog.x + 46 + index * 254, dialog.y + 142, 228, 84};
+    return rect;
+}
+
+PtcUiRect ptc_ui_weekly_day_minutes_rect(int index)
+{
+    PtcUiRect card = ptc_ui_weekly_day_rect(index);
+    PtcUiRect rect = {card.x + 8, card.y + 112, card.w - 16, 56};
     return rect;
 }
 
@@ -865,43 +886,52 @@ PtcUiRect ptc_ui_weekly_mode_rect(void)
 PtcUiRect ptc_ui_weekly_min_down_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
-    PtcUiRect rect = {dialog.x + 34 + 166, dialog_button_top(dialog), 96, PTC_UI_DIALOG_BTN_H};
+    PtcUiRect rect = {dialog.x + 426, dialog.y + 464, 140, 32};
     return rect;
 }
 
 PtcUiRect ptc_ui_weekly_min_up_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
-    PtcUiRect rect = {dialog.x + 34 + 166 + 112, dialog_button_top(dialog), 96, PTC_UI_DIALOG_BTN_H};
+    PtcUiRect rect = {dialog.x + 426, dialog.y + 350, 140, 32};
     return rect;
 }
 
 PtcUiRect ptc_ui_weekly_min_input_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
-    PtcUiRect rect = {dialog.x + 34 + 166 + 224, dialog_button_top(dialog), 150, PTC_UI_DIALOG_BTN_H};
+    PtcUiRect rect = {dialog.x + 406, dialog.y + 390, 180, 66};
+    return rect;
+}
+
+PtcUiRect ptc_ui_weekly_min_dec_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
+    PtcUiRect rect = {dialog.x + 310, dialog.y + 390, 80, 66};
+    return rect;
+}
+
+PtcUiRect ptc_ui_weekly_min_inc_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
+    PtcUiRect rect = {dialog.x + 602, dialog.y + 390, 80, 66};
     return rect;
 }
 
 /* Left-aligned time steppers for the bedtime overlay. */
-PtcUiRect ptc_ui_bedtime_adj_down_rect(void)
+PtcUiRect ptc_ui_bedtime_adj_down_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
-    PtcUiRect rect = {dialog.x + 34, dialog_button_top(dialog), 96, PTC_UI_DIALOG_BTN_H};
+    PtcUiRect field = ptc_ui_bedtime_field_rect(index == 2 ? 2 : 1);
+    PtcUiRect rect = {field.x + 35, dialog.y + 280, 140, 34};
     return rect;
 }
 
-PtcUiRect ptc_ui_bedtime_adj_up_rect(void)
+PtcUiRect ptc_ui_bedtime_adj_up_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
-    PtcUiRect rect = {dialog.x + 34 + 112, dialog_button_top(dialog), 96, PTC_UI_DIALOG_BTN_H};
-    return rect;
-}
-
-PtcUiRect ptc_ui_bedtime_input_rect(void)
-{
-    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
-    PtcUiRect rect = {dialog.x + 34 + 224, dialog_button_top(dialog), 120, PTC_UI_DIALOG_BTN_H};
+    PtcUiRect field = ptc_ui_bedtime_field_rect(index == 2 ? 2 : 1);
+    PtcUiRect rect = {field.x + 35, dialog.y + 116, 140, 34};
     return rect;
 }
 
@@ -938,9 +968,19 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_minutes_inc_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_MINUTES_INC, 0);
         }
+        if (ptc_ui_rect_contains(ptc_ui_minutes_dec_large_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_MINUTES_DEC_LARGE, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_minutes_inc_large_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_MINUTES_INC_LARGE, 0);
+        }
         break;
     case PTC_UI_OVERLAY_WEEKLY:
         for (i = 0; i < 7; ++i) {
+            if (model->draft_week[i].mode == PTC_RULE_MODE_LIMIT &&
+                ptc_ui_rect_contains(ptc_ui_weekly_day_minutes_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, i);
+            }
             if (ptc_ui_rect_contains(ptc_ui_weekly_day_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_WEEKLY_DAY, i);
             }
@@ -954,9 +994,15 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_weekly_min_down_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_WEEKLY_MIN_DOWN, 0);
         }
+        if (ptc_ui_rect_contains(ptc_ui_weekly_min_dec_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_WEEKLY_MIN_DEC, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_weekly_min_inc_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_WEEKLY_MIN_INC, 0);
+        }
         if (model->draft_week[model->editor_index].mode == PTC_RULE_MODE_LIMIT &&
             ptc_ui_rect_contains(ptc_ui_weekly_min_input_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, 0);
+            return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, model->editor_index);
         }
         break;
     case PTC_UI_OVERLAY_BEDTIME:
@@ -965,15 +1011,13 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
                 return make_hit(PTC_UI_HIT_BEDTIME_FIELD, i);
             }
         }
-        if (ptc_ui_rect_contains(ptc_ui_bedtime_adj_up_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_BEDTIME_ADJ_UP, 0);
-        }
-        if (ptc_ui_rect_contains(ptc_ui_bedtime_adj_down_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_BEDTIME_ADJ_DOWN, 0);
-        }
-        if (model->draft_bedtime.enabled && model->editor_index > 0 &&
-            ptc_ui_rect_contains(ptc_ui_bedtime_input_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_BEDTIME_INPUT, 0);
+        for (i = 1; model->draft_bedtime.enabled && i <= 2; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_bedtime_adj_up_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_BEDTIME_ADJ_UP, i);
+            }
+            if (ptc_ui_rect_contains(ptc_ui_bedtime_adj_down_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_BEDTIME_ADJ_DOWN, i);
+            }
         }
         break;
     case PTC_UI_OVERLAY_LIMIT_ACTION:
@@ -1125,7 +1169,7 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
         return PTC_UI_ACTION_DISABLED;
     case 2: /* 恢复安装前状态 */
         return model->setup_snapshot_available ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_DISABLED;
-    case 3: /* 紧急停用控制 */
+    case 3: /* 紧急停用控制 / 解除紧急停用 */
         return PTC_UI_ACTION_AVAILABLE;
     case 4: /* 验证强制阻止 */
         if (!is_active) {
@@ -1177,7 +1221,9 @@ const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index)
         }
         return "精确恢复安装前的家长控制状态。";
     case 3:
-        return "创建 disable.flag，后台立即停止控制操作。";
+        return model->disable_flag_present
+            ? "删除 disable.flag，恢复后台正常控制。"
+            : "创建 disable.flag，后台立即停止控制操作。";
     case 4:
         if (!is_active) {
             return "需要先完成首次设置（phase=active）。";

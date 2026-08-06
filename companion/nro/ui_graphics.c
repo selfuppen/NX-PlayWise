@@ -68,6 +68,10 @@ static const UiAction SAFETY_ACTIONS[] = {
     {"验证暂停软件", "需 active 阶段，探针写入并回滚", COLOR(194, 61, 61)},
 };
 
+static const UiAction RESUME_CONTROL_ACTION = {
+    "解除紧急停用", "删除停用标记并恢复后台控制", COLOR(25, 132, 95)
+};
+
 static uint32_t ui_decode_utf8(const char **text)
 {
     const unsigned char *s = (const unsigned char *)*text;
@@ -713,7 +717,11 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
         if (model->parent_page == PTC_UI_PARENT_SAFETY) {
             astate = ptc_ui_safety_action_available(model, index);
         }
-        draw_action_card(pixels, stride, card, &actions[index], index == model->selected_index, astate);
+        const UiAction *action = &actions[index];
+        if (model->parent_page == PTC_UI_PARENT_SAFETY && index == 3 && model->disable_flag_present) {
+            action = &RESUME_CONTROL_ACTION;
+        }
+        draw_action_card(pixels, stride, card, action, index == model->selected_index, astate);
     }
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
         draw_today_status(pixels, stride, model);
@@ -774,6 +782,9 @@ static void draw_dialog_shell(
     int height)
 {
     char body[190];
+    char first_line[190];
+    const char *second_line = NULL;
+    const char *line_break;
     const char *title = model->overlay == PTC_UI_OVERLAY_NUMPAD ? model->numpad_title : model->overlay_title;
     const char *description = model->overlay == PTC_UI_OVERLAY_NUMPAD ? model->numpad_guide : model->overlay_body;
     *dialog = (UiRect){(SCREEN_WIDTH - width) / 2, (SCREEN_HEIGHT - height) / 2 - 10, width, height};
@@ -782,8 +793,22 @@ static void draw_dialog_shell(
     draw_rect_outline(pixels, stride, *dialog, 2, COLOR(203, 211, 222));
     draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, COLOR(28, 34, 43));
     if (description[0]) {
-        fit_text(body, sizeof(body), description, 20, dialog->width - 68);
+        line_break = strchr(description, '\n');
+        if (line_break) {
+            size_t first_length = (size_t)(line_break - description);
+            if (first_length >= sizeof(first_line)) first_length = sizeof(first_line) - 1;
+            memcpy(first_line, description, first_length);
+            first_line[first_length] = '\0';
+            second_line = line_break + 1;
+        } else {
+            snprintf(first_line, sizeof(first_line), "%s", description);
+        }
+        fit_text(body, sizeof(body), first_line, 20, dialog->width - 68);
         draw_text(pixels, stride, dialog->x + 34, dialog->y + 88, body, 20, COLOR(91, 100, 114));
+        if (second_line && second_line[0]) {
+            fit_text(body, sizeof(body), second_line, 18, dialog->width - 68);
+            draw_text(pixels, stride, dialog->x + 34, dialog->y + 116, body, 18, COLOR(91, 100, 114));
+        }
     }
 }
 
@@ -796,22 +821,24 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     int preview_min = ptc_ui_preview_remaining_minutes(model);
     int played_min = model->played_minutes_available ? model->played_minutes : -1;
 
-    draw_dialog_shell(pixels, stride, model, &dialog, 720, 360);
+    draw_dialog_shell(pixels, stride, model, &dialog, 720, 460);
     snprintf(value, sizeof(value), "%u 分钟", (unsigned int)model->draft_minutes);
     fill_round_rect(pixels, stride, value_box, 8, COLOR(244, 249, 255));
     draw_rect_outline(pixels, stride, value_box, 2, COLOR(28, 118, 188));
     draw_text_center(pixels, stride, value_box, value, 37, COLOR(28, 118, 188));
-    draw_dialog_button(pixels, stride, ptc_ui_minutes_dec_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-    draw_dialog_button(pixels, stride, ptc_ui_minutes_inc_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_dialog_button(pixels, stride, ptc_ui_minutes_dec_rect(), "－5", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_dialog_button(pixels, stride, ptc_ui_minutes_inc_rect(), "＋5", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_dialog_button(pixels, stride, ptc_ui_minutes_inc_large_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_dialog_button(pixels, stride, ptc_ui_minutes_dec_large_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
 
     if (played_min >= 0) {
         snprintf(preview_line, sizeof(preview_line), "今日已玩 %d 分钟  │  修改后还可玩 %d 分钟", played_min, preview_min);
     } else {
         snprintf(preview_line, sizeof(preview_line), "修改后还可玩 %d 分钟", preview_min);
     }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 234, 640, 30}, preview_line, 21, COLOR(25, 132, 95));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 320, 640, 30}, preview_line, 21, COLOR(25, 132, 95));
 
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 266, 580, 26}, "X 或点数值精确输入；方向键继续按 5 / 15 分钟调整", 18, COLOR(77, 86, 99));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 352, 580, 26}, "Y 或点数值手动输入；上下 ±15，左右 ±5", 18, COLOR(77, 86, 99));
     draw_overlay_actions(pixels, stride, model, "A / +  提交并刷新");
 }
 
@@ -820,7 +847,8 @@ static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
     UiRect dialog;
     int day;
-    draw_dialog_shell(pixels, stride, model, &dialog, 1172, 470);
+    char selected_minutes[32];
+    draw_dialog_shell(pixels, stride, model, &dialog, 1172, 560);
     for (day = 0; day < 7; ++day) {
         UiRect card = to_uirect(ptc_ui_weekly_day_rect(day));
         uint32_t border = day == model->editor_index ? COLOR(28, 118, 188) : COLOR(219, 225, 233);
@@ -837,13 +865,18 @@ static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         }
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 119, card.width, 34}, minutes, 19, COLOR(77, 86, 99));
     }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 330, dialog.width - 160, 30},
-                     "方向键/摇杆选择日期与额度  X 切换模式  Y 精确输入", 19, COLOR(77, 86, 99));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 320, dialog.width - 160, 30},
+                     "选择日期后：X 切换模式，Y 或点数值手动输入", 19, COLOR(77, 86, 99));
     draw_dialog_button(pixels, stride, ptc_ui_weekly_mode_rect(), "X 切换模式", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-    draw_dialog_button(pixels, stride, ptc_ui_weekly_min_down_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-    draw_dialog_button(pixels, stride, ptc_ui_weekly_min_up_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     if (model->draft_week[model->editor_index].mode == PTC_RULE_MODE_LIMIT) {
-        draw_dialog_button(pixels, stride, ptc_ui_weekly_min_input_rect(), "Y 输入分钟", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+        snprintf(selected_minutes, sizeof(selected_minutes), "%u 分钟",
+                 (unsigned int)model->draft_week[model->editor_index].minutes);
+        draw_dialog_button(pixels, stride, ptc_ui_weekly_min_up_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+        draw_dialog_button(pixels, stride, ptc_ui_weekly_min_down_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+        draw_dialog_button(pixels, stride, ptc_ui_weekly_min_dec_rect(), "－5", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+        draw_dialog_button(pixels, stride, ptc_ui_weekly_min_inc_rect(), "＋5", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+        draw_dialog_button(pixels, stride, ptc_ui_weekly_min_input_rect(), selected_minutes,
+                           COLOR(244, 249, 255), COLOR(28, 118, 188), true);
     }
     draw_overlay_actions(pixels, stride, model, "A / +  保存并刷新");
 }
@@ -856,12 +889,12 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     UiRect enabled = {0};
     UiRect start_rect = {0};
     UiRect end_rect = {0};
-    draw_dialog_shell(pixels, stride, model, &dialog, 820, 410);
+    draw_dialog_shell(pixels, stride, model, &dialog, 820, 500);
     format_clock(start, sizeof(start), model->draft_bedtime.start_min);
     format_clock(end, sizeof(end), model->draft_bedtime.end_min);
-    enabled = (UiRect){dialog.x + 46, dialog.y + 124, 210, 92};
-    start_rect = (UiRect){dialog.x + 282, dialog.y + 124, 210, 92};
-    end_rect = (UiRect){dialog.x + 518, dialog.y + 124, 210, 92};
+    enabled = (UiRect){dialog.x + 46, dialog.y + 154, 210, 92};
+    start_rect = (UiRect){dialog.x + 282, dialog.y + 154, 210, 92};
+    end_rect = (UiRect){dialog.x + 518, dialog.y + 154, 210, 92};
     fill_round_rect(pixels, stride, enabled, 8, model->draft_bedtime.enabled ? COLOR(230, 247, 239) : COLOR(244, 246, 249));
     draw_rect_outline(pixels, stride, enabled, model->editor_index == 0 ? 3 : 1,
                       model->editor_index == 0 ? COLOR(25, 132, 95) : COLOR(219, 225, 233));
@@ -878,13 +911,16 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
                       model->editor_index == 2 ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 5, end_rect.width, 38}, "结束", 18, COLOR(91, 100, 114));
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 39, end_rect.width, 40}, end, 28, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 244, dialog.width - 160, 34},
-                     "方向键/摇杆选择与调整  X 切换启用  Y 精确输入", 20, COLOR(77, 86, 99));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 282, dialog.width - 80, 26},
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 326, dialog.width - 160, 34},
+                     "Y 或点时间手动输入；选中时间后上下 ±15", 20, COLOR(77, 86, 99));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 362, dialog.width - 80, 26},
                      "说明：就寝时间与每日时长取最严规则；在就寝时段内加时不会突破锁定", 17, COLOR(120, 130, 145));
-    draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_down_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-    draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_up_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-    draw_dialog_button(pixels, stride, ptc_ui_bedtime_input_rect(), "手动输入", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    if (model->draft_bedtime.enabled) {
+        draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_up_rect(1), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+        draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_down_rect(1), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+        draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_up_rect(2), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+        draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_down_rect(2), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    }
     draw_overlay_actions(pixels, stride, model, "A / +  保存并刷新");
 }
 
@@ -975,14 +1011,15 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
                   model->operation == PTC_UI_OPERATION_SAVE_BEDTIME ||
                   model->operation == PTC_UI_OPERATION_SAVE_LIMIT_ACTION ||
                   model->operation == PTC_UI_OPERATION_EMERGENCY_DISABLE ||
+                  model->operation == PTC_UI_OPERATION_RESUME_CONTROL ||
                   model->operation == PTC_UI_OPERATION_COMPLETE_SETUP ||
                   model->operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT ||
                   model->operation == PTC_UI_OPERATION_PROBE_RAW_BLOCK ||
                   model->operation == PTC_UI_OPERATION_PROBE_SUSPEND;
     draw_dialog_shell(pixels, stride, model, &dialog, 760, 330);
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 130, 620, 74}, 8,
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 154, 620, 64}, 8,
                     danger ? COLOR(255, 240, 240) : COLOR(240, 248, 244));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 130, 620, 74},
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 154, 620, 64},
                      danger ? "请确认已了解这项操作的影响" : "确认执行这项操作", 22,
                      danger ? COLOR(194, 61, 61) : COLOR(25, 132, 95));
     draw_overlay_actions(pixels, stride, model, "A / +  确认执行");

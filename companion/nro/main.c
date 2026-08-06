@@ -153,6 +153,16 @@ static bool hidden_parent_combo_held(u64 buttons)
            (buttons & HIDDEN_RIGHT_SHOULDER_MASK);
 }
 
+static void refresh_disable_flag(UiState *ui)
+{
+    char path[160];
+    if (!ui || !ui->client.storage) {
+        return;
+    }
+    snprintf(path, sizeof(path), "%s/flags/disable.flag", APP_ROOT);
+    ui->model.disable_flag_present = ui->client.storage->vtable->exists(ui->client.storage, path);
+}
+
 static u64 stick_direction_buttons(HidAnalogStickState stick)
 {
     u64 buttons = 0;
@@ -559,6 +569,7 @@ static void poll_result(UiState *ui, bool force)
             return;
         }
         load_rule_drafts(ui);
+        refresh_disable_flag(ui);
         refresh_bedtime_state(ui, true);
         if (ui->request_view == PTC_UI_CHILD && strcmp(ui->model.result_status, "error") == 0) {
             ui->model.view = PTC_UI_ERROR;
@@ -614,6 +625,7 @@ static void enter_parent_area(UiState *ui)
         set_auth_message(ui, "验证失败", state);
         return;
     }
+    refresh_disable_flag(ui);
     ui->model.view = PTC_UI_PARENT;
     ui->model.parent_page = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
         ? PTC_UI_PARENT_SAFETY : PTC_UI_PARENT_TODAY;
@@ -738,27 +750,33 @@ static void handle_parent_action(UiState *ui)
     switch (index) {
     case 0:
         open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "启用自动控制",
-                             "确认限制已解除；完成后有 60 秒宽限，再按当前规则自动控制。");
+                             "功能：完成首次设置，宽限后按当前规则自动控制。\n适用：前置解限成功且 phase=released。");
         break;
     case 1:
         open_confirm_overlay(ui, PTC_UI_OPERATION_RETRY_SETUP_RELEASE, "重试前置解限",
-                             "保留首次安装快照，再次尝试解除当前限制。");
+                             "功能：保留安装快照并重新解除当前限制。\n适用：首次解限等待过久或失败（pending/failed）。");
         break;
     case 2:
         open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT, "恢复安装前状态",
-                             "精确恢复安装前家长控制设置和计时器状态，并停用 PlayWise。");
+                             "功能：恢复安装前官方设置与计时器，并停用 PlayWise。\n适用：卸载回退或多次恢复失败。");
         break;
     case 3:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_EMERGENCY_DISABLE, "紧急停用控制",
-                             "创建 disable.flag 后，后台将停止执行控制操作。");
+        refresh_disable_flag(ui);
+        if (ui->model.disable_flag_present) {
+            open_confirm_overlay(ui, PTC_UI_OPERATION_RESUME_CONTROL, "解除紧急停用",
+                                 "功能：删除 disable.flag，恢复后台正常控制。\n适用：故障已排除且确认当前规则配置安全。");
+        } else {
+            open_confirm_overlay(ui, PTC_UI_OPERATION_EMERGENCY_DISABLE, "紧急停用控制",
+                                 "功能：创建 disable.flag，立即停止正常控制写入。\n适用：异常限制、写入故障或需要保留现场。");
+        }
         break;
     case 4:
         open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_RAW_BLOCK, "验证强制阻止能力",
-                             "探针会尝试真机写入并回滚。适配层未实现时返回失败，能力保持未验证。");
+                             "功能：真机写入并回滚，验证强制阻止能力。\n适用：准备使用强制阻止前，仅需成功执行一次。");
         break;
     case 5:
         open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_SUSPEND, "验证暂停软件能力",
-                             "探针会尝试真机写入并回滚。适配层未实现时返回失败，能力保持未验证。");
+                             "功能：真机写入并回滚，验证暂停软件能力。\n适用：准备使用暂停软件前，仅需成功执行一次。");
         break;
     default:
         break;
@@ -803,10 +821,24 @@ static void confirm_operation(UiState *ui)
         (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
         ui->model.feedback_detail[0] = '\0';
         if (status == PTC_COMPANION_OK) {
+            ui->model.disable_flag_present = true;
             snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
             snprintf(ui->model.message, sizeof(ui->model.message), "后台控制已紧急停用。");
         } else {
             set_message(ui, "紧急停用失败", status);
+        }
+        break;
+    case PTC_UI_OPERATION_RESUME_CONTROL:
+        set_local_sd_command(ui, "解除紧急停用");
+        status = ptc_companion_set_disable_flag(&ui->client, false);
+        (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
+        ui->model.feedback_detail[0] = '\0';
+        if (status == PTC_COMPANION_OK) {
+            ui->model.disable_flag_present = false;
+            snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
+            snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用已解除，后台控制已恢复。");
+        } else {
+            set_message(ui, "解除紧急停用失败", status);
         }
         break;
     case PTC_UI_OPERATION_PROBE_RAW_BLOCK:
@@ -880,14 +912,14 @@ static void handle_overlay_input(UiState *ui, u64 down)
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_MINUTES) {
         if (down & HidNpadButton_Up) {
-            ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 5, ui->model.minimum_minutes, ui->model.maximum_minutes);
-        } else if (down & HidNpadButton_Down) {
-            ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, -5, ui->model.minimum_minutes, ui->model.maximum_minutes);
-        } else if (down & HidNpadButton_Right) {
             ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 15, ui->model.minimum_minutes, ui->model.maximum_minutes);
-        } else if (down & HidNpadButton_Left) {
+        } else if (down & HidNpadButton_Down) {
             ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, -15, ui->model.minimum_minutes, ui->model.maximum_minutes);
-        } else if (down & HidNpadButton_X) {
+        } else if (down & HidNpadButton_Right) {
+            ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 5, ui->model.minimum_minutes, ui->model.maximum_minutes);
+        } else if (down & HidNpadButton_Left) {
+            ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, -5, ui->model.minimum_minutes, ui->model.maximum_minutes);
+        } else if (down & HidNpadButton_Y) {
             edit_overlay_minutes(ui);
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             PtcUiOperation operation = ui->model.operation;
@@ -1037,6 +1069,7 @@ static void handle_touch(UiState *ui, int x, int y)
         ptc_ui_change_parent_page(&ui->model, 1);
         break;
     case PTC_UI_HIT_PARENT_REFRESH:
+        refresh_disable_flag(ui);
         poll_result(ui, true);
         break;
     case PTC_UI_HIT_PARENT_BACK:
@@ -1064,9 +1097,15 @@ static void handle_touch(UiState *ui, int x, int y)
         handle_overlay_input(ui, ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ? HidNpadButton_Plus : HidNpadButton_A);
         break;
     case PTC_UI_HIT_MINUTES_INC:
-        ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 15, ui->model.minimum_minutes, ui->model.maximum_minutes);
+        ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 5, ui->model.minimum_minutes, ui->model.maximum_minutes);
         break;
     case PTC_UI_HIT_MINUTES_DEC:
+        ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, -5, ui->model.minimum_minutes, ui->model.maximum_minutes);
+        break;
+    case PTC_UI_HIT_MINUTES_INC_LARGE:
+        ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 15, ui->model.minimum_minutes, ui->model.maximum_minutes);
+        break;
+    case PTC_UI_HIT_MINUTES_DEC_LARGE:
         ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, -15, ui->model.minimum_minutes, ui->model.maximum_minutes);
         break;
     case PTC_UI_HIT_MINUTES_VALUE:
@@ -1091,16 +1130,34 @@ static void handle_touch(UiState *ui, int x, int y)
                 ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, -15, 1, 1440);
         }
         break;
+    case PTC_UI_HIT_WEEKLY_MIN_DEC:
+        if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
+            ui->model.draft_week[ui->model.editor_index].minutes =
+                ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, -5, 1, 1440);
+        }
+        break;
+    case PTC_UI_HIT_WEEKLY_MIN_INC:
+        if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
+            ui->model.draft_week[ui->model.editor_index].minutes =
+                ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, 5, 1, 1440);
+        }
+        break;
     case PTC_UI_HIT_WEEKLY_MIN_INPUT:
+        if (hit.index >= 0 && hit.index < 7) {
+            ui->model.editor_index = hit.index;
+        }
         edit_weekly_minutes(ui);
         break;
     case PTC_UI_HIT_BEDTIME_FIELD:
         ui->model.editor_index = hit.index;
         if (hit.index == 0) {
             ui->model.draft_bedtime.enabled = !ui->model.draft_bedtime.enabled;
+        } else if (ui->model.draft_bedtime.enabled) {
+            edit_bedtime_minutes(ui);
         }
         break;
     case PTC_UI_HIT_BEDTIME_ADJ_UP:
+        ui->model.editor_index = hit.index == 2 ? 2 : 1;
         if (ui->model.editor_index == 1) {
             ui->model.draft_bedtime.start_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.start_min, 15);
         } else if (ui->model.editor_index == 2) {
@@ -1108,14 +1165,12 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_BEDTIME_ADJ_DOWN:
+        ui->model.editor_index = hit.index == 2 ? 2 : 1;
         if (ui->model.editor_index == 1) {
             ui->model.draft_bedtime.start_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.start_min, -15);
         } else if (ui->model.editor_index == 2) {
             ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, -15);
         }
-        break;
-    case PTC_UI_HIT_BEDTIME_INPUT:
-        edit_bedtime_minutes(ui);
         break;
     case PTC_UI_HIT_LIMIT_ACTION_OPTION:
         if (hit.index == 0) {
@@ -1197,6 +1252,7 @@ int main(int argc, char **argv)
     snprintf(ui.model.message, sizeof(ui.model.message), "正在读取今天的游玩状态…");
     ptc_fs_storage_init(&fs);
     ptc_companion_file_client_init(&ui.client, APP_ROOT, ptc_fs_storage_as_storage(&fs));
+    refresh_disable_flag(&ui);
     ptc_switch_ipc_client_init(&ui.ipc);
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs), ptc_switch_ipc_backend(), &ui.ipc);
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
@@ -1281,6 +1337,7 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_Down) {
                 ptc_ui_move_parent_selection(&ui.model, 0, 1);
             } else if (down & HidNpadButton_Y) {
+                refresh_disable_flag(&ui);
                 poll_result(&ui, true);
             } else if (down & HidNpadButton_A) {
                 if (ui.waiting) {

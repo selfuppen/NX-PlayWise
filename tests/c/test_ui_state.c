@@ -84,6 +84,13 @@ static void test_editors(void)
         ptc_ui_take_confirmed_operation(&model),
         PTC_UI_OPERATION_DISABLE_TODAY_LIMIT,
         "release current restriction requires confirmation");
+
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    model.operation = PTC_UI_OPERATION_RESUME_CONTROL;
+    check_int(
+        ptc_ui_take_confirmed_operation(&model),
+        PTC_UI_OPERATION_RESUME_CONTROL,
+        "resume control requires confirmation");
 }
 
 static void test_numpad(void)
@@ -236,6 +243,8 @@ static void test_hit_test_overlays(void)
     model.overlay = PTC_UI_OVERLAY_MINUTES;
     check_hit(hit_center(&model, ptc_ui_minutes_dec_rect()), PTC_UI_HIT_MINUTES_DEC, 0, "minutes decrement");
     check_hit(hit_center(&model, ptc_ui_minutes_inc_rect()), PTC_UI_HIT_MINUTES_INC, 0, "minutes increment");
+    check_hit(hit_center(&model, ptc_ui_minutes_dec_large_rect()), PTC_UI_HIT_MINUTES_DEC_LARGE, 0, "minutes large decrement");
+    check_hit(hit_center(&model, ptc_ui_minutes_inc_large_rect()), PTC_UI_HIT_MINUTES_INC_LARGE, 0, "minutes large increment");
     check_hit(hit_center(&model, ptc_ui_minutes_value_rect()), PTC_UI_HIT_MINUTES_VALUE, 0, "minutes exact input");
     check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0, "minutes confirm");
 
@@ -244,9 +253,12 @@ static void test_hit_test_overlays(void)
     model.draft_week[0].mode = PTC_RULE_MODE_LIMIT;
     check_hit(hit_center(&model, ptc_ui_weekly_day_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 0, "weekly first day");
     check_hit(hit_center(&model, ptc_ui_weekly_day_rect(6)), PTC_UI_HIT_WEEKLY_DAY, 6, "weekly last day");
+    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 0, "weekly displayed minutes open input");
     check_hit(hit_center(&model, ptc_ui_weekly_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, 0, "weekly mode toggle");
     check_hit(hit_center(&model, ptc_ui_weekly_min_up_rect()), PTC_UI_HIT_WEEKLY_MIN_UP, 0, "weekly minutes up");
     check_hit(hit_center(&model, ptc_ui_weekly_min_down_rect()), PTC_UI_HIT_WEEKLY_MIN_DOWN, 0, "weekly minutes down");
+    check_hit(hit_center(&model, ptc_ui_weekly_min_dec_rect()), PTC_UI_HIT_WEEKLY_MIN_DEC, 0, "weekly minutes small decrement");
+    check_hit(hit_center(&model, ptc_ui_weekly_min_inc_rect()), PTC_UI_HIT_WEEKLY_MIN_INC, 0, "weekly minutes small increment");
     check_hit(hit_center(&model, ptc_ui_weekly_min_input_rect()), PTC_UI_HIT_WEEKLY_MIN_INPUT, 0, "weekly exact minutes");
 
     model.overlay = PTC_UI_OVERLAY_BEDTIME;
@@ -254,9 +266,8 @@ static void test_hit_test_overlays(void)
     model.draft_bedtime.enabled = true;
     check_hit(hit_center(&model, ptc_ui_bedtime_field_rect(0)), PTC_UI_HIT_BEDTIME_FIELD, 0, "bedtime enable field");
     check_hit(hit_center(&model, ptc_ui_bedtime_field_rect(2)), PTC_UI_HIT_BEDTIME_FIELD, 2, "bedtime end field");
-    check_hit(hit_center(&model, ptc_ui_bedtime_adj_up_rect()), PTC_UI_HIT_BEDTIME_ADJ_UP, 0, "bedtime step up");
-    check_hit(hit_center(&model, ptc_ui_bedtime_adj_down_rect()), PTC_UI_HIT_BEDTIME_ADJ_DOWN, 0, "bedtime step down");
-    check_hit(hit_center(&model, ptc_ui_bedtime_input_rect()), PTC_UI_HIT_BEDTIME_INPUT, 0, "bedtime exact input");
+    check_hit(hit_center(&model, ptc_ui_bedtime_adj_up_rect(1)), PTC_UI_HIT_BEDTIME_ADJ_UP, 1, "bedtime start step up");
+    check_hit(hit_center(&model, ptc_ui_bedtime_adj_down_rect(2)), PTC_UI_HIT_BEDTIME_ADJ_DOWN, 2, "bedtime end step down");
 
     model.overlay = PTC_UI_OVERLAY_LIMIT_ACTION;
     check_hit(hit_center(&model, ptc_ui_limit_option_rect(0)), PTC_UI_HIT_LIMIT_ACTION_OPTION, 0, "limit action remind");
