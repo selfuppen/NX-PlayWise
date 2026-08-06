@@ -34,12 +34,19 @@ static uint16_t calculate_mac(
 
 PtcErrorCode ptc_token_v2_tier_for_minutes(uint16_t minutes, uint8_t *out_tier_index)
 {
-    if (!out_tier_index || minutes < PTC_TOKEN_V2_TIER_MINUTES ||
-        minutes > PTC_TOKEN_V2_MAX_MINUTES || minutes % PTC_TOKEN_V2_TIER_MINUTES != 0) {
+    if (!out_tier_index) {
         return PTC_ERR_BAD_CODE;
     }
-    *out_tier_index = (uint8_t)(minutes / PTC_TOKEN_V2_TIER_MINUTES - 1u);
-    return PTC_ERR_OK;
+    if (minutes >= 1 && minutes <= 4) {
+        *out_tier_index = (uint8_t)(23u + minutes);
+        return PTC_ERR_OK;
+    }
+    if (minutes >= PTC_TOKEN_V2_TIER_MINUTES && minutes <= PTC_TOKEN_V2_MAX_MINUTES &&
+        minutes % PTC_TOKEN_V2_TIER_MINUTES == 0) {
+        *out_tier_index = (uint8_t)(minutes / PTC_TOKEN_V2_TIER_MINUTES - 1u);
+        return PTC_ERR_OK;
+    }
+    return PTC_ERR_BAD_CODE;
 }
 
 PtcErrorCode ptc_token_v2_encode(
@@ -96,7 +103,11 @@ PtcErrorCode ptc_token_v2_decode(
     if (out->tier_index >= PTC_TOKEN_V2_TIER_COUNT) return PTC_ERR_BAD_CODE;
     expected_mac = calculate_mac(device_id, secret, current_day_index, out->tier_index, out->nonce);
     if (actual_mac != expected_mac) return PTC_ERR_BAD_SIGNATURE;
-    out->minutes = (uint16_t)((out->tier_index + 1u) * PTC_TOKEN_V2_TIER_MINUTES);
+    if (out->tier_index < 24) {
+        out->minutes = (uint16_t)((out->tier_index + 1u) * PTC_TOKEN_V2_TIER_MINUTES);
+    } else {
+        out->minutes = (uint16_t)(out->tier_index - 23u);
+    }
     return PTC_ERR_OK;
 }
 

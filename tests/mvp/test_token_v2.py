@@ -30,8 +30,8 @@ def main() -> int:
     secret = "test-secret"
     day_index = 2380
 
-    for tier_index in range(24):
-        minutes = (tier_index + 1) * 5
+    for tier_index in range(28):
+        minutes = tier_index - 23 if tier_index >= 24 else (tier_index + 1) * 5
         code = encode_token(tier_index, tier_index, device, secret, day_index)
         if len(code) != 8 or not code.isascii() or not code.isdigit():
             raise AssertionError(f"tier {tier_index} did not produce eight ASCII digits: {code!r}")
@@ -50,7 +50,7 @@ def main() -> int:
     assert_reason("bad_code", lambda: decode_token("1234567", device, secret, day_index))
     assert_reason("bad_code", lambda: decode_token("1234567A", device, secret, day_index))
     assert_reason("bad_code", lambda: decode_token(f"{MAX_VALUE + 1:08d}", device, secret, day_index))
-    assert_reason("bad_code", lambda: decode_token(f"{24 << 21:08d}", device, secret, day_index))
+    assert_reason("bad_code", lambda: decode_token(f"{28 << 21:08d}", device, secret, day_index))
     assert_reason("minutes_exceed_limit", lambda: verify_token(
         encode_token(23, 1, device, secret, day_index), device, secret, day_index, 60, set()))
     assert_reason("used_token", lambda: verify_token(

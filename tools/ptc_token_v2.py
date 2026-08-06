@@ -12,7 +12,7 @@ TOKEN_VERSION = 2
 TOKEN_DOMAIN = b"PTC2"
 TOKEN_LENGTH = 8
 TIER_MINUTES = 5
-TIER_COUNT = 24
+TIER_COUNT = 28
 MAX_MINUTES = 120
 MAX_NONCE = (1 << 9) - 1
 MAC_BITS = 12
@@ -33,15 +33,19 @@ class TokenV2Payload:
 
 
 def tier_for_minutes(minutes: int) -> int:
-    if not TIER_MINUTES <= minutes <= MAX_MINUTES or minutes % TIER_MINUTES:
-        raise TokenError("bad_code", "tier minutes must be a multiple of 5 from 5 through 120")
-    return minutes // TIER_MINUTES - 1
+    if 1 <= minutes <= 4:
+        return 23 + minutes
+    if TIER_MINUTES <= minutes <= MAX_MINUTES and minutes % TIER_MINUTES == 0:
+        return minutes // TIER_MINUTES - 1
+    raise TokenError("bad_code", "tier minutes must be 1-4 or a multiple of 5 from 5 through 120")
 
 
 def minutes_for_tier(tier_index: int) -> int:
-    if not 0 <= tier_index < TIER_COUNT:
-        raise TokenError("bad_code", "tier index out of range")
-    return (tier_index + 1) * TIER_MINUTES
+    if 0 <= tier_index < 24:
+        return (tier_index + 1) * TIER_MINUTES
+    if 24 <= tier_index <= 27:
+        return tier_index - 23
+    raise TokenError("bad_code", "tier index out of range")
 
 
 def calculate_mac(device_id: str, secret: str, day_index: int, tier_index: int, nonce: int) -> int:

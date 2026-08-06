@@ -33,6 +33,7 @@ static void test_navigation(void)
     ptc_ui_change_parent_page(&model, -1);
     check_int(model.parent_page, PTC_UI_PARENT_SAFETY, "parent page wraps");
 
+    model.parent_page = PTC_UI_PARENT_TODAY;
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, 1, 0);
     check_int(model.selected_index, 1, "move right");
@@ -40,6 +41,13 @@ static void test_navigation(void)
     check_int(model.selected_index, 5, "six-card grid wraps up in the same column");
     ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 1, "six-card grid wraps down in the same column");
+
+    model.parent_page = PTC_UI_PARENT_SAFETY;
+    model.selected_index = 5;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "seven-card grid uses final card");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 0, "seven-card grid wraps down");
 
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.selected_index = 3;
@@ -174,7 +182,7 @@ static void test_page_action_counts(void)
 {
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 6, "today card count");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 5, "plan card count");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SAFETY), 6, "safety card count includes setup recovery and probes");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SAFETY), 7, "safety card count includes setup recovery, probes and secret edit");
 }
 
 static void test_hit_test_child(void)

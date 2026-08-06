@@ -17,7 +17,11 @@ const copyButton = document.getElementById("copy");
 const installButton = document.getElementById("install");
 let installPrompt = null;
 
+const tierOptions = [1, 2, 3, 4];
 for (let minutes = 5; minutes <= 120; minutes += 5) {
+  tierOptions.push(minutes);
+}
+for (const minutes of tierOptions) {
   const option = document.createElement("option");
   option.value = String(minutes);
   option.textContent = `${minutes} 分钟`;

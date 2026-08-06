@@ -101,7 +101,7 @@ static void test_token_v2(void)
     unsigned int index;
 
     for (index = 0; index < PTC_TOKEN_V2_TIER_COUNT; ++index) {
-        uint16_t minutes = (uint16_t)((index + 1u) * PTC_TOKEN_V2_TIER_MINUTES);
+        uint16_t minutes = (index >= 24u) ? (uint16_t)(index - 23u) : (uint16_t)((index + 1u) * PTC_TOKEN_V2_TIER_MINUTES);
         check_int(ptc_token_v2_tier_for_minutes(minutes, &tier), PTC_ERR_OK, "v2 minutes map to tier");
         check_int(tier, index, "v2 tier index mapping");
         check_int(ptc_token_v2_encode(tier, (uint16_t)index, "test-device", "test-secret", 2380, code), PTC_ERR_OK, "v2 encode tier");
@@ -120,7 +120,7 @@ static void test_token_v2(void)
     check_int(ptc_token_v2_decode(code, "test-device", "test-secret", 2381, &decoded), PTC_ERR_BAD_SIGNATURE, "v2 wrong day");
     check_int(ptc_token_v2_decode("1234567", "test-device", "test-secret", 2380, &decoded), PTC_ERR_BAD_CODE, "v2 wrong length");
     check_int(ptc_token_v2_decode("67108864", "test-device", "test-secret", 2380, &decoded), PTC_ERR_BAD_CODE, "v2 over 26 bit range");
-    check_int(ptc_token_v2_decode("50331648", "test-device", "test-secret", 2380, &decoded), PTC_ERR_BAD_CODE, "v2 invalid tier bits");
+    check_int(ptc_token_v2_decode("58720256", "test-device", "test-secret", 2380, &decoded), PTC_ERR_BAD_CODE, "v2 invalid tier bits");
     check_int(ptc_token_v2_tier_for_minutes(6, &tier), PTC_ERR_BAD_CODE, "v2 rejects non-tier minutes");
 }
 

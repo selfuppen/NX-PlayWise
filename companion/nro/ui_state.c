@@ -143,7 +143,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_PLAN:
         return 5;
     case PTC_UI_PARENT_SAFETY:
-        return 6;
+        return 7;
     case PTC_UI_PARENT_TODAY:
     default:
         return 6;
@@ -1247,6 +1247,8 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
             return PTC_UI_ACTION_DISABLED;
         }
         return model->suspend_verified ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE;
+    case 6: /* 修改加时码密钥 */
+        return PTC_UI_ACTION_AVAILABLE;
     default:
         return PTC_UI_ACTION_DISABLED;
     }
@@ -1306,6 +1308,8 @@ const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index)
             return "暂停软件能力已验证，无需再次探测。";
         }
         return "探针会尝试真机写入并回滚验证。";
+    case 6:
+        return "修改离线加时码的 HMAC 计算密钥（默认为 replace-with-long-random-secret）。";
     default:
         return "";
     }

@@ -66,6 +66,7 @@ static const UiAction SAFETY_ACTIONS[] = {
     {"紧急停用控制", "立即停止后台控制操作", COLOR(194, 61, 61)},
     {"验证强制阻止", "需 active 阶段，探针写入并回滚", COLOR(194, 61, 61)},
     {"验证暂停软件", "需 active 阶段，探针写入并回滚", COLOR(194, 61, 61)},
+    {"修改加时码密钥", "设置离线加时码 HMAC 计算密钥", COLOR(42, 105, 188)},
 };
 
 static const UiAction RESUME_CONTROL_ACTION = {

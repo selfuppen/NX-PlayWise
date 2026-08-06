@@ -17,6 +17,7 @@
 
 #define APP_ROOT "sdmc:/switch/playwise"
 #define RULES_PATH APP_ROOT "/rules.json"
+#define CONFIG_PATH APP_ROOT "/config.json"
 #define RESULT_TEXT_SIZE 8192
 #define REQUEST_TIMEOUT_MS 60000
 #define LOOP_SLEEP_NS 100000000LL
@@ -685,6 +686,65 @@ static void open_limit_action_overlay(UiState *ui)
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "未验证的强控制方式仍会被后台安全门禁拒绝。");
 }
 
+static void edit_grant_secret(UiState *ui)
+{
+    char input_buf[128];
+    char config_text[4096];
+    cJSON *root;
+    char *out_json;
+    char *trimmed;
+    size_t len;
+    const char *new_secret;
+
+    if (!keyboard_input("修改加时码密钥", "输入 8 到 64 位加时码密钥 (留空恢复默认)", input_buf, sizeof(input_buf), false, false)) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改加时码密钥。");
+        return;
+    }
+
+    trimmed = input_buf;
+    while (*trimmed == ' ' || *trimmed == '\t' || *trimmed == '\r' || *trimmed == '\n') trimmed++;
+    len = strlen(trimmed);
+    while (len > 0 && (trimmed[len - 1] == ' ' || trimmed[len - 1] == '\t' || trimmed[len - 1] == '\r' || trimmed[len - 1] == '\n')) {
+        trimmed[--len] = '\0';
+    }
+
+    new_secret = (len == 0) ? "replace-with-long-random-secret" : trimmed;
+
+    if (!ui->client.storage->vtable->read_text(ui->client.storage, CONFIG_PATH, config_text, sizeof(config_text))) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "读取 config.json 失败。");
+        return;
+    }
+
+    root = cJSON_Parse(config_text);
+    if (!cJSON_IsObject(root)) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "解析 config.json 失败。");
+        cJSON_Delete(root);
+        return;
+    }
+
+    cJSON_DeleteItemFromObject(root, "grant_secret");
+    cJSON_AddStringToObject(root, "grant_secret", new_secret);
+
+    out_json = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+
+    if (!out_json) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "生成 config.json 失败。");
+        return;
+    }
+
+    if (ui->client.storage->vtable->write_text_atomic(ui->client.storage, CONFIG_PATH, out_json)) {
+        if (len == 0) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "加时码密钥已重置为默认值。");
+        } else {
+            snprintf(ui->model.message, sizeof(ui->model.message), "加时码密钥已成功更新。");
+        }
+    } else {
+        snprintf(ui->model.message, sizeof(ui->model.message), "写入 config.json 失败。");
+    }
+    free(out_json);
+}
+
 static void handle_parent_action(UiState *ui)
 {
     int index = ui->model.selected_index;
@@ -777,6 +837,9 @@ static void handle_parent_action(UiState *ui)
     case 5:
         open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_SUSPEND, "验证暂停软件能力",
                              "功能：真机写入并回滚，验证暂停软件能力。\n适用：准备使用暂停软件前，仅需成功执行一次。");
+        break;
+    case 6:
+        edit_grant_secret(ui);
         break;
     default:
         break;
