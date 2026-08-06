@@ -1331,6 +1331,40 @@ static void test_enforce_tick_applies_once_and_respects_disable_flag(void)
     check_true(pctl.timer_started, "disable removal triggers enforce reconciliation");
 }
 
+static void test_enforce_effect_pending_does_not_rollback(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char state[1024];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "enforce", true);
+    write_capabilities(&mem, true, false, false);
+    
+    // Simulate effect failure (effect not observed)
+    pctl.runtime_effect_succeeds = false;
+
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "enforce considers pending effect as success");
+    check_true(pctl.applied, "enforce applies pctl");
+    check_true(pctl.timer_started, "enforce starts timer");
+    
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", state, sizeof(state)), "enforce state persisted despite effect pending");
+    check_true(strstr(state, "\"last_enforced_day_index\":2380") != NULL, "enforce day persisted");
+    check_true(!pctl.restore_called, "enforce does not rollback on pending effect");
+
+    pctl.applied = false;
+    pctl.timer_started = false;
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0, "enforce skips unchanged target even if effect still pending");
+    check_true(!pctl.applied, "unchanged enforce avoids pctl");
+    check_true(!pctl.timer_started, "unchanged enforce avoids start timer");
+}
+
 static void write_limit_action_rules(PtcMemStorage *mem, const char *action)
 {
     char rules[2048];
@@ -2286,6 +2320,8 @@ int main(void)
     test_v2_failure_paths_do_not_consume_nonce();
     test_v2_cooldown_persists_and_resets();
     test_grant_requires_runtime_unlock_before_persisting();
+    test_enforce_tick_applies_once_and_respects_disable_flag();
+    test_enforce_effect_pending_does_not_rollback();
     test_grant_offline_code_stacks_on_existing_limit();
     test_grant_offline_code_clamps_to_daily_maximum();
     test_backup_failure_blocks_write();

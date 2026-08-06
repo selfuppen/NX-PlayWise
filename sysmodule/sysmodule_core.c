@@ -3793,8 +3793,15 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     err = start_timer_and_wait_target(sysmodule, NULL, now, ptc_control_mode_name(config.mode),
         target_mode, target_minutes, "enforce", &observed_status, NULL);
     if (err != PTC_ERR_OK) {
-        if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "enforce_restore_failed\n");
-        return 0;
+        if (err != PTC_ERR_PCTL_EFFECT_NOT_OBSERVED) {
+            if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "enforce_restore_failed\n");
+            return 0;
+        }
+        /* IPC层面写入和StartPlayTimer都成功，只是Horizon尚未在
+           GetPlayTimerRemainingTime中反映新设置。不回滚——保持已写入的
+           设置，更新last_enforced_*防止重复写入。Horizon会在内部
+           完成状态传播后自然生效。 */
+        append_event(sysmodule, NULL, "enforce_effect_pending", PTC_ERR_OK, "enforce");
     }
     runtime_state.last_enforced_day_index = now.day_index;
     runtime_state.last_enforced_mode = target_mode;
