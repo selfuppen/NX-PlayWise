@@ -378,8 +378,8 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
 {
     UiRect rect = {54, y, 1172, 128};
     uint32_t accent = COLOR(91, 100, 116);
-    char fitted[190];
-    char detail[190];
+    char fitted[192];
+    char detail[192];
     char execution[150];
     if (model->waiting) {
         accent = COLOR(215, 139, 25);
@@ -504,7 +504,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
 static void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect panel = {214, 148, 852, 444};
-    char fitted[190];
+    char fitted[192];
     char execution[150];
     draw_header(pixels, stride, "操作未完成", "请查看错误信息后重试或返回");
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
@@ -781,8 +781,8 @@ static void draw_dialog_shell(
     int width,
     int height)
 {
-    char body[190];
-    char first_line[190];
+    char body[192];
+    char first_line[192];
     const char *second_line = NULL;
     const char *line_break;
     const char *title = model->overlay == PTC_UI_OVERLAY_NUMPAD ? model->numpad_title : model->overlay_title;
