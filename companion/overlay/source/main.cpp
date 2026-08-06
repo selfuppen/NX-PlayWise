@@ -421,12 +421,15 @@ public:
             if (close_after_frames_ > 0) {
                 std::snprintf(line, sizeof(line), "加时成功！修改后还可玩 %d 分钟", bridge_->summary.remaining_minutes);
                 renderer->drawString(line, false, cx + 12, status_y + 78, 14, renderer->a(SUCCESS_COLOR));
-                if (bridge_->summary.played_minutes_available) {
+                if (bridge_->summary.bedtime_active) {
+                    renderer->drawString("⚠️ 提醒：若已到达或接近就寝时间，将优先执行就寝截止", false, cx + 12, status_y + 100, 12, renderer->a(FOCUS_BORDER));
+                } else if (bridge_->summary.played_minutes_available) {
                     std::snprintf(line, sizeof(line), "今日已玩约 %d 分钟，即刻刷新生效…", bridge_->summary.played_minutes);
+                    renderer->drawString(line, false, cx + 12, status_y + 100, 12, renderer->a(SUCCESS_COLOR));
                 } else {
                     std::snprintf(line, sizeof(line), "状态已实时刷新，即将自动关闭…");
+                    renderer->drawString(line, false, cx + 12, status_y + 100, 12, renderer->a(SUCCESS_COLOR));
                 }
-                renderer->drawString(line, false, cx + 12, status_y + 100, 12, renderer->a(SUCCESS_COLOR));
             }
         }
     }

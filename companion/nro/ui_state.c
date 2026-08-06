@@ -489,6 +489,60 @@ bool ptc_ui_bedtime_active_at(const PtcBedtimeRule *bedtime, uint16_t minute_of_
     return minute_of_day >= bedtime->start_min || minute_of_day < bedtime->end_min;
 }
 
+uint16_t ptc_ui_minutes_to_bedtime(uint16_t now_minute, const PtcBedtimeRule *bedtime)
+{
+    if (!bedtime || !bedtime->enabled || bedtime->start_min == bedtime->end_min) {
+        return 1440U;
+    }
+    if (ptc_ui_bedtime_active_at(bedtime, now_minute)) {
+        return 0U;
+    }
+    if (bedtime->start_min > now_minute) {
+        return (uint16_t)(bedtime->start_min - now_minute);
+    }
+    return (uint16_t)((1440U - now_minute) + bedtime->start_min);
+}
+
+bool ptc_ui_check_bedtime_conflict(const PtcUiModel *model, uint16_t target_minutes, PtcUiBedtimeConflict *out)
+{
+    uint16_t now_min;
+    if (!out) {
+        return false;
+    }
+    memset(out, 0, sizeof(*out));
+    if (!model) {
+        return false;
+    }
+    now_min = model->played_minutes_available && model->played_minutes >= 0
+        ? (uint16_t)(model->played_minutes % 1440)
+        : 720U;
+    out->minutes_to_bedtime = ptc_ui_minutes_to_bedtime(now_min, &model->draft_bedtime);
+
+    if (model->draft_bedtime.enabled) {
+        if (target_minutes > out->minutes_to_bedtime && out->minutes_to_bedtime < 1440U) {
+            out->conflict_detected = true;
+            out->quota_exceeds_bedtime = true;
+            snprintf(out->warning_text, sizeof(out->warning_text),
+                "⚠️ 冲突提醒：目标配额(%u分) 超过就寝倒计时(%u分)。到就寝时间(%02u:%02u)将优先截止限制！",
+                (unsigned int)target_minutes,
+                (unsigned int)out->minutes_to_bedtime,
+                (unsigned int)(model->draft_bedtime.start_min / 60U),
+                (unsigned int)(model->draft_bedtime.start_min % 60U));
+        }
+        if (model->current_limit_action_loaded && model->current_limit_action == PTC_LIMIT_ACTION_REMIND) {
+            out->conflict_detected = true;
+            out->remind_bedtime_conflict = true;
+            if (!out->quota_exceeds_bedtime) {
+                snprintf(out->warning_text, sizeof(out->warning_text),
+                    "⚠️ 提醒：当前控制动作仅为【提醒】，到了就寝时间(%02u:%02u)不会强行断网/锁屏。如需到点挂断请更改为【强行禁玩】。",
+                    (unsigned int)(model->draft_bedtime.start_min / 60U),
+                    (unsigned int)(model->draft_bedtime.start_min % 60U));
+            }
+        }
+    }
+    return out->conflict_detected;
+}
+
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now)
 {
     if (!model || strcmp(model->setup_phase, "released") != 0 || model->setup_activate_after <= 0) {

@@ -820,8 +820,10 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     char preview_line[128];
     int preview_min = ptc_ui_preview_remaining_minutes(model);
     int played_min = model->played_minutes_available ? model->played_minutes : -1;
+    PtcUiBedtimeConflict conflict;
+    bool has_conflict = ptc_ui_check_bedtime_conflict(model, model->draft_minutes, &conflict);
 
-    draw_dialog_shell(pixels, stride, model, &dialog, 720, 460);
+    draw_dialog_shell(pixels, stride, model, &dialog, 720, 480);
     snprintf(value, sizeof(value), "%u 分钟", (unsigned int)model->draft_minutes);
     fill_round_rect(pixels, stride, value_box, 8, COLOR(244, 249, 255));
     draw_rect_outline(pixels, stride, value_box, 2, COLOR(28, 118, 188));
@@ -836,9 +838,13 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     } else {
         snprintf(preview_line, sizeof(preview_line), "修改后还可玩 %d 分钟", preview_min);
     }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 320, 640, 30}, preview_line, 21, COLOR(25, 132, 95));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 310, 640, 30}, preview_line, 21, COLOR(25, 132, 95));
 
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 352, 580, 26}, "Y 或点数值手动输入；上下 ±15，左右 ±5", 18, COLOR(77, 86, 99));
+    if (has_conflict && conflict.quota_exceeds_bedtime) {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 20, dialog.y + 342, 680, 26}, conflict.warning_text, 16, COLOR(194, 61, 61));
+    } else {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 342, 580, 26}, "Y 或点数值手动输入；上下 ±15，左右 ±5", 18, COLOR(77, 86, 99));
+    }
     draw_overlay_actions(pixels, stride, model, "A / +  提交并刷新");
 }
 
@@ -889,7 +895,10 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     UiRect enabled = {0};
     UiRect start_rect = {0};
     UiRect end_rect = {0};
-    draw_dialog_shell(pixels, stride, model, &dialog, 820, 500);
+    PtcUiBedtimeConflict conflict;
+    bool has_conflict = ptc_ui_check_bedtime_conflict(model, model->draft_minutes, &conflict);
+
+    draw_dialog_shell(pixels, stride, model, &dialog, 820, 520);
     format_clock(start, sizeof(start), model->draft_bedtime.start_min);
     format_clock(end, sizeof(end), model->draft_bedtime.end_min);
     enabled = (UiRect){dialog.x + 46, dialog.y + 154, 210, 92};
@@ -911,10 +920,16 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
                       model->editor_index == 2 ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 5, end_rect.width, 38}, "结束", 18, COLOR(91, 100, 114));
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 39, end_rect.width, 40}, end, 28, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 326, dialog.width - 160, 34},
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 316, dialog.width - 160, 34},
                      "Y 或点时间手动输入；选中时间后上下 ±15", 20, COLOR(77, 86, 99));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 362, dialog.width - 80, 26},
-                     "说明：就寝时间与每日时长取最严规则；在就寝时段内加时不会突破锁定", 17, COLOR(120, 130, 145));
+
+    if (has_conflict && conflict.remind_bedtime_conflict) {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 20, dialog.y + 356, dialog.width - 40, 36},
+                         "⚠️ 提醒模式：到就寝时间仅提示，不强行关停；如需到点挂断请更改动作为【强行禁玩】", 16, COLOR(194, 61, 61));
+    } else {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 356, dialog.width - 80, 36},
+                         "说明：就寝时间与每日时长取较严规则；配额超出就寝时间时到点优先截止限制", 17, COLOR(120, 130, 145));
+    }
     if (model->draft_bedtime.enabled) {
         draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_up_rect(1), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
         draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_down_rect(1), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
@@ -933,20 +948,25 @@ static void draw_limit_action_overlay(uint32_t *pixels, uint32_t stride, const P
     };
     UiRect dialog;
     int index;
-    draw_dialog_shell(pixels, stride, model, &dialog, 850, 360);
+    draw_dialog_shell(pixels, stride, model, &dialog, 850, 380);
     if (model->current_limit_action_loaded) {
         char current[64];
         snprintf(current, sizeof(current), "当前限制方式：%s", limit_action_label(model->current_limit_action));
         draw_text(pixels, stride, dialog.x + 46, dialog.y + 116, current, 18, COLOR(91, 100, 114));
     }
     for (index = 0; index < 3; ++index) {
-        UiRect option = {dialog.x + 46 + index * 254, dialog.y + 142, 228, 84};
+        UiRect option = {dialog.x + 46 + index * 254, dialog.y + 142, 228, 96};
         bool selected = ACTIONS[index] == model->draft_limit_action;
         fill_round_rect(pixels, stride, option, 8, selected ? COLOR(244, 249, 255) : COLOR(250, 251, 253));
         draw_rect_outline(pixels, stride, option, selected ? 3 : 1,
                           selected ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
-        draw_text_center(pixels, stride, option, limit_action_label(ACTIONS[index]), 23,
+        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 16, option.width, 36}, limit_action_label(ACTIONS[index]), 22,
                          selected ? COLOR(28, 118, 188) : COLOR(77, 86, 99));
+        if (ACTIONS[index] == PTC_LIMIT_ACTION_REMIND) {
+            draw_text_center(pixels, stride, (UiRect){option.x, option.y + 54, option.width, 24}, "(就寝仅提示不关停)", 15, COLOR(120, 130, 145));
+        } else {
+            draw_text_center(pixels, stride, (UiRect){option.x, option.y + 54, option.width, 24}, "(到就寝点强行锁定)", 15, COLOR(25, 132, 95));
+        }
     }
     draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 244, dialog.width - 160, 34}, "方向键/摇杆或触摸选择限制方式", 20, COLOR(77, 86, 99));
     draw_overlay_actions(pixels, stride, model, "A / +  保存并刷新");

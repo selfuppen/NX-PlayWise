@@ -207,6 +207,17 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model);
 PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model);
 bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);
 void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const char *transport_label);
+typedef struct {
+    bool conflict_detected;
+    uint16_t minutes_to_bedtime;
+    bool quota_exceeds_bedtime;
+    bool remind_bedtime_conflict;
+    char warning_text[160];
+} PtcUiBedtimeConflict;
+
+bool ptc_ui_check_bedtime_conflict(const PtcUiModel *model, uint16_t target_minutes, PtcUiBedtimeConflict *out);
+uint16_t ptc_ui_minutes_to_bedtime(uint16_t now_minute, const PtcBedtimeRule *bedtime);
+
 PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int index);
 const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index);
 

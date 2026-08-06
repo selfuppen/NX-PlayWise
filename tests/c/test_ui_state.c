@@ -425,6 +425,35 @@ static void test_result_mapping(void)
     check_true(!ptc_ui_apply_result_json(&model, "{}"), "missing status rejected");
 }
 
+static void test_bedtime_conflict_detection(void)
+{
+    PtcUiModel model;
+    PtcUiBedtimeConflict conflict;
+    memset(&model, 0, sizeof(model));
+
+    model.draft_bedtime.enabled = true;
+    model.draft_bedtime.start_min = 1260;
+    model.draft_bedtime.end_min = 480;
+    model.played_minutes_available = true;
+    model.played_minutes = 1200;
+
+    check_int(ptc_ui_minutes_to_bedtime(1200, &model.draft_bedtime), 60, "minutes to bedtime calculation");
+
+    check_true(ptc_ui_check_bedtime_conflict(&model, 90, &conflict), "quota exceeding bedtime conflict detected");
+    check_true(conflict.quota_exceeds_bedtime, "quota_exceeds_bedtime flag set");
+    check_int(conflict.minutes_to_bedtime, 60, "conflict holds correct minutes to bedtime");
+
+    memset(&conflict, 0, sizeof(conflict));
+    model.current_limit_action_loaded = true;
+    model.current_limit_action = PTC_LIMIT_ACTION_RAW_BLOCK;
+    check_true(!ptc_ui_check_bedtime_conflict(&model, 30, &conflict), "no quota overflow when target fits bedtime");
+
+    memset(&conflict, 0, sizeof(conflict));
+    model.current_limit_action = PTC_LIMIT_ACTION_REMIND;
+    check_true(ptc_ui_check_bedtime_conflict(&model, 30, &conflict), "remind action bedtime conflict detected");
+    check_true(conflict.remind_bedtime_conflict, "remind_bedtime_conflict flag set");
+}
+
 int main(void)
 {
     test_navigation();
@@ -439,6 +468,7 @@ int main(void)
     test_hit_test_parent();
     test_hit_test_overlays();
     test_result_mapping();
+    test_bedtime_conflict_detection();
     if (failures != 0) {
         return 1;
     }
