@@ -23,7 +23,7 @@
 
 ### 核心能力
 
-- 5–120 分钟、5 分钟一档的 v2 离线加时码；密钥只保存在家长可信设备和 Switch 本地配置中。
+- 5–120 分钟、5 分钟一档的 v2 离线加时码；可通过在线[家长网页控制台](https://selfuppen.github.io/playwise/)（支持 PWA 离线使用）直接签发，密钥只保存在家长端浏览器和 Switch 本地配置中。
 - Companion NRO 提供孩子状态页、数字码输入和 PIN 保护的家长区。
 - Tesla Overlay 可在覆盖层提交同一请求，不读取 `grant_secret`、不直接访问 PCTL。
 - sysmodule 首次启动先保存安装前 PCTL snapshot 并解除当天当前限制，随后验证 token、管理 nonce、执行规则和恢复事务。
@@ -86,7 +86,7 @@ PlayWise is a local play-time control project for Nintendo Switch homebrew envir
 
 ### Features
 
-- v2 offline codes for 5–120 minutes in 5-minute tiers.
+- v2 offline codes for 5–120 minutes in 5-minute tiers, generated via the online [Parent Web Console](https://selfuppen.github.io/playwise/) (with offline PWA support).
 - A child status/code-entry UI and a PIN-protected parent area in the Companion NRO.
 - A Tesla Overlay that submits the same request without reading `grant_secret` or calling PCTL.
 - A resident sysmodule that releases the current restriction during setup, validates tokens, and wraps ordinary PCTL writes in persistent recovery transactions.
