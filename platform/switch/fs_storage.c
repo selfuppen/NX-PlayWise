@@ -6,6 +6,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 static void ensure_parent_dirs(const char *path)
 {
     char tmp[320];
@@ -76,6 +80,9 @@ static bool fs_write_text_atomic(PtcStorage *storage, const char *path, const ch
         remove(tmp_path);
         return false;
     }
+#ifdef __SWITCH__
+    fsdevCommitDevice("sdmc");
+#endif
     return true;
 }
 
