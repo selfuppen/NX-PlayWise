@@ -251,7 +251,7 @@ static void open_offline_code_input(UiState *ui)
 {
     ptc_ui_numpad_open(
         &ui->model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
-        "输入离线加时短码", "8 位数字；5–120 分钟档位码", 8, 0, 0, 0);
+        "输入离线加时短码", "8 位数字；领码加时前，记得向窗外远眺至少 5 分钟！", 8, 0, 0, 0);
 }
 
 static void begin_wait(UiState *ui, const char *type, const char *message)
@@ -979,8 +979,10 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ui->model.editor_index = ui->model.editor_index <= 0 ? 2 : ui->model.editor_index - 1;
         } else if (down & HidNpadButton_Right) {
             ui->model.editor_index = ui->model.editor_index >= 2 ? 0 : ui->model.editor_index + 1;
-        } else if ((down & HidNpadButton_X) && ui->model.editor_index == 0) {
+        } else if (down & HidNpadButton_X) {
             ui->model.draft_bedtime.enabled = !ui->model.draft_bedtime.enabled;
+        } else if ((down & (HidNpadButton_Up | HidNpadButton_Down | HidNpadButton_Y)) && !ui->model.draft_bedtime.enabled && ui->model.editor_index > 0) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "就寝限制未启用，请先按 X 键或点击【状态】启用。");
         } else if ((down & HidNpadButton_Up) && ui->model.editor_index == 1) {
             ui->model.draft_bedtime.start_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.start_min, 15);
         } else if ((down & HidNpadButton_Down) && ui->model.editor_index == 1) {
@@ -1154,11 +1156,15 @@ static void handle_touch(UiState *ui, int x, int y)
             ui->model.draft_bedtime.enabled = !ui->model.draft_bedtime.enabled;
         } else if (ui->model.draft_bedtime.enabled) {
             edit_bedtime_minutes(ui);
+        } else {
+            snprintf(ui->model.message, sizeof(ui->model.message), "就寝限制未启用，请先按 X 键或点击【状态】启用。");
         }
         break;
     case PTC_UI_HIT_BEDTIME_ADJ_UP:
         ui->model.editor_index = hit.index == 2 ? 2 : 1;
-        if (ui->model.editor_index == 1) {
+        if (!ui->model.draft_bedtime.enabled) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "就寝限制未启用，请先按 X 键或点击【状态】启用。");
+        } else if (ui->model.editor_index == 1) {
             ui->model.draft_bedtime.start_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.start_min, 15);
         } else if (ui->model.editor_index == 2) {
             ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, 15);
@@ -1166,7 +1172,9 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_BEDTIME_ADJ_DOWN:
         ui->model.editor_index = hit.index == 2 ? 2 : 1;
-        if (ui->model.editor_index == 1) {
+        if (!ui->model.draft_bedtime.enabled) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "就寝限制未启用，请先按 X 键或点击【状态】启用。");
+        } else if (ui->model.editor_index == 1) {
             ui->model.draft_bedtime.start_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.start_min, -15);
         } else if (ui->model.editor_index == 2) {
             ui->model.draft_bedtime.end_min = ptc_ui_adjust_minute_of_day(ui->model.draft_bedtime.end_min, -15);

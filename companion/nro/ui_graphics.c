@@ -429,8 +429,8 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
 
     fill_round_rect(pixels, stride, (UiRect){54, 238, 760, 246}, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, (UiRect){54, 238, 760, 246}, 1, COLOR(219, 225, 233));
-    draw_text(pixels, stride, 86, 286, "今天还想再玩一会儿？", 27, COLOR(28, 34, 43));
-    draw_text(pixels, stride, 86, 322, "输入 8 位数字加时码，后台确认后会更新今日时间。", 21, COLOR(85, 94, 107));
+    draw_text(pixels, stride, 86, 286, "自律小达人 · 加时奖励", 27, COLOR(28, 34, 43));
+    draw_text(pixels, stride, 86, 322, "遵守约定、合理安排时间。加时之前，记得向窗外远眺至少 5 分钟，让眼睛放松一下吧！", 19, COLOR(85, 94, 107));
     fill_round_rect(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), 8, COLOR(28, 118, 188));
     draw_text_center(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), "A  输入加时码", 31, COLOR(255, 255, 255));
 
@@ -493,7 +493,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
         draw_text(pixels, stride, 204, 344, "请清理状态文件并重启主机以重新开始首次引导。", 23, COLOR(45, 52, 62));
     } else {
         draw_text(pixels, stride, 204, 300, "确认 Companion 可以正常进入后，按 Minus 验证家长 PIN。", 23, COLOR(45, 52, 62));
-        draw_text(pixels, stride, 204, 344, "在安全工具中启用自动控制；规则会在 60 秒宽限后生效。", 23, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 344, "在安全工具中启用自动控制；规则会在 5 秒宽限后生效。", 23, COLOR(45, 52, 62));
     }
     draw_text(pixels, stride, 204, 400, model->message[0] ? model->message : "Y 可刷新后台状态。", 20, COLOR(91, 100, 116));
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0), "Minus  家长设置");
@@ -907,9 +907,10 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     fill_round_rect(pixels, stride, enabled, 8, model->draft_bedtime.enabled ? COLOR(230, 247, 239) : COLOR(244, 246, 249));
     draw_rect_outline(pixels, stride, enabled, model->editor_index == 0 ? 3 : 1,
                       model->editor_index == 0 ? COLOR(25, 132, 95) : COLOR(219, 225, 233));
-    draw_text_center(pixels, stride, (UiRect){enabled.x, enabled.y + 5, enabled.width, 38}, "状态", 18, COLOR(91, 100, 114));
-    draw_text_center(pixels, stride, (UiRect){enabled.x, enabled.y + 39, enabled.width, 40}, model->draft_bedtime.enabled ? "已启用" : "未启用", 25,
+    draw_text_center(pixels, stride, (UiRect){enabled.x, enabled.y + 5, enabled.width, 30}, "状态", 17, COLOR(91, 100, 114));
+    draw_text_center(pixels, stride, (UiRect){enabled.x, enabled.y + 32, enabled.width, 32}, model->draft_bedtime.enabled ? "已启用" : "未启用", 24,
                      model->draft_bedtime.enabled ? COLOR(25, 132, 95) : COLOR(91, 100, 114));
+    draw_text_center(pixels, stride, (UiRect){enabled.x, enabled.y + 64, enabled.width, 22}, "(X 切换状态)", 15, COLOR(120, 130, 145));
     fill_round_rect(pixels, stride, start_rect, 8, COLOR(244, 249, 255));
     draw_rect_outline(pixels, stride, start_rect, model->editor_index == 1 ? 3 : 1,
                       model->editor_index == 1 ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
@@ -920,8 +921,13 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
                       model->editor_index == 2 ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 5, end_rect.width, 38}, "结束", 18, COLOR(91, 100, 114));
     draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 39, end_rect.width, 40}, end, 28, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 316, dialog.width - 160, 34},
-                     "Y 或点时间手动输入；选中时间后上下 ±15", 20, COLOR(77, 86, 99));
+    if (model->draft_bedtime.enabled) {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 316, dialog.width - 160, 34},
+                         "X 切换启用状态；Y 或点时间手动输入；选中时间后上下 ±15", 19, COLOR(77, 86, 99));
+    } else {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 316, dialog.width - 80, 34},
+                         "就寝限制未启用（按 X 键或点击【状态】启用后方可调整时间）", 18, COLOR(194, 61, 61));
+    }
 
     if (has_conflict && conflict.remind_bedtime_conflict) {
         draw_text_center(pixels, stride, (UiRect){dialog.x + 20, dialog.y + 356, dialog.width - 40, 36},

@@ -95,7 +95,7 @@ static const char *request_success_guidance(const char *type)
         return "";
     }
     if (strcmp(type, "complete_setup") == 0) {
-        return "接下来：60 秒后自动启用规则控制，无需操作。";
+        return "接下来：5 秒后自动启用规则控制，无需操作。";
     }
     if (strcmp(type, "retry_setup_release") == 0) {
         return "接下来：确认限制已解除后，在安全工具选择【启用自动控制】。";
@@ -546,7 +546,7 @@ bool ptc_ui_check_bedtime_conflict(const PtcUiModel *model, uint16_t target_minu
             out->remind_bedtime_conflict = true;
             if (!out->quota_exceeds_bedtime) {
                 snprintf(out->warning_text, sizeof(out->warning_text),
-                    "⚠️ 提醒：当前控制动作仅为【提醒】，到了就寝时间(%02u:%02u)不会强行断网/锁屏。如需到点挂断请更改为【强行禁玩】。",
+                    "⚠️ 提醒：目前动作为【提醒】，到就寝时间(%02u:%02u)不会强行关停；如需强制关停请更改为【强行禁玩】。",
                     (unsigned int)(model->draft_bedtime.start_min / 60U),
                     (unsigned int)(model->draft_bedtime.start_min % 60U));
             }

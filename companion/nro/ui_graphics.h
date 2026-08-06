@@ -212,7 +212,7 @@ typedef struct {
     uint16_t minutes_to_bedtime;
     bool quota_exceeds_bedtime;
     bool remind_bedtime_conflict;
-    char warning_text[160];
+    char warning_text[256];
 } PtcUiBedtimeConflict;
 
 bool ptc_ui_check_bedtime_conflict(const PtcUiModel *model, uint16_t target_minutes, PtcUiBedtimeConflict *out);

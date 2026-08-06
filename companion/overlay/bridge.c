@@ -36,6 +36,25 @@ PtcCompanionStatus ptc_overlay_bridge_submit(PtcOverlayBridge *bridge, const cha
     return status;
 }
 
+PtcCompanionStatus ptc_overlay_bridge_submit_status(PtcOverlayBridge *bridge, int64_t created_at, uint16_t random16)
+{
+    PtcCompanionStatus status;
+    if (!bridge) return PTC_COMPANION_BAD_ARGUMENT;
+    memset(&bridge->summary, 0, sizeof(bridge->summary));
+    bridge->last_status = PTC_COMPANION_PENDING;
+    if (ptc_companion_make_request_id(bridge->request_id, sizeof(bridge->request_id), created_at * 1000, random16) != PTC_COMPANION_OK) {
+        bridge->last_status = PTC_COMPANION_BAD_ARGUMENT;
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    status = ptc_companion_transport_submit_status(&bridge->transport, bridge->request_id, created_at);
+    bridge->last_status = status;
+    if (status == PTC_COMPANION_OK) {
+        bridge->elapsed_ms = 0;
+        bridge->waiting = true;
+    }
+    return status;
+}
+
 PtcCompanionStatus ptc_overlay_bridge_poll(PtcOverlayBridge *bridge, int elapsed_ms, int timeout_ms)
 {
     PtcCompanionStatus status;
