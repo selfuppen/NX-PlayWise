@@ -1110,6 +1110,34 @@ static void test_v2_cooldown_persists_and_resets(void)
     check_true(strstr(state, "\"v2_cooldown_until\":0") != NULL, "successful v2 clears cooldown");
 }
 
+static void test_offline_code_hot_reloads_grant_secret(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_V2_TEXT_SIZE];
+    char request[512];
+    char result[4096];
+    const char *new_config = "{\"version\":1,\"device_id\":\"test-device\",\"grant_secret\":\"new-secret-1234\",\"max_add_minutes\":120,\"control_mode\":\"grant\",\"allow_unlimited_to_limited\":true}\n";
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    write_default_files(&mem, "grant", true);
+
+    check_int(ptc_token_v2_encode(5, 12, "test-device", "new-secret-1234", 2380, code), PTC_ERR_OK, "encode token with new secret");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/config.json", new_config), "update grant_secret in config.json");
+
+    (void)ptc_companion_offline_code_request_json(request, sizeof(request), "hot-reload-test", 1, code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/hot-reload-test.json", request), "submit offline code with new secret");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process offline code request");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/hot-reload-test.json", result, sizeof(result)), "read result");
+    check_true(strstr(result, "\"status\":\"ok\"") != NULL, "offline code succeeded via hot reloaded grant_secret");
+}
+
 static void test_grant_requires_runtime_unlock_before_persisting(void)
 {
     PtcMemStorage mem;
@@ -2347,6 +2375,7 @@ int main(void)
     test_transport_state_labels();
     test_companion_command_labels();
     test_transport_submit_failure_does_not_write_file();
+    test_offline_code_hot_reloads_grant_secret();
 
     if (failures != 0) {
         fprintf(stderr, "%d C host tests failed\n", failures);

@@ -1642,28 +1642,43 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     PtcResultState state;
     char json[2048];
     PtcErrorCode err;
+    PtcRuntimeConfig active_config;
     uint16_t token_day_index = now.day_index;
     uint32_t token_nonce = 0;
     uint16_t token_minutes = 0;
     unsigned int token_version = 1u;
     bool is_v2 = code_is_v2_candidate(request->code);
-    decision = ptc_policy_decide(config->mode, disable_flag, PTC_OPERATION_GRANT_MINUTES, caps, false, config->allow_unlimited_to_limited);
+
+    if (config) {
+        active_config = *config;
+    } else {
+        memset(&active_config, 0, sizeof(active_config));
+    }
+
+    decision = ptc_policy_decide(active_config.mode, disable_flag, PTC_OPERATION_GRANT_MINUTES, caps, false, active_config.allow_unlimited_to_limited);
     if (decision.error == PTC_ERR_DISABLED) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), decision.dry_run, decision.error, now.day_index, caps);
     }
     if (is_v2) {
         if (!load_state(sysmodule, &runtime_state)) {
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_STORAGE_READ_FAILED, now.day_index, caps);
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), true, PTC_ERR_STORAGE_READ_FAILED, now.day_index, caps);
         }
         if (runtime_state.v2_cooldown_until > now.unix_seconds) {
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_CODE_COOLDOWN, now.day_index, caps);
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), true, PTC_ERR_CODE_COOLDOWN, now.day_index, caps);
         }
         if (runtime_state.v2_cooldown_until != 0) {
             runtime_state.v2_failed_attempts = 0;
             runtime_state.v2_cooldown_until = 0;
         }
-        err = ptc_token_v2_verify(request->code, config->device_id, config->grant_secret, now.day_index,
-            config->max_add_minutes, nonce_used_v2, sysmodule, &token_v2);
+        err = ptc_token_v2_verify(request->code, active_config.device_id, active_config.grant_secret, now.day_index,
+            active_config.max_add_minutes, nonce_used_v2, sysmodule, &token_v2);
+        if (err == PTC_ERR_BAD_SIGNATURE) {
+            sysmodule->config_cache_valid = false;
+            if (load_config(sysmodule, &active_config)) {
+                err = ptc_token_v2_verify(request->code, active_config.device_id, active_config.grant_secret, now.day_index,
+                    active_config.max_add_minutes, nonce_used_v2, sysmodule, &token_v2);
+            }
+        }
         if (err == PTC_ERR_BAD_CODE || err == PTC_ERR_BAD_SIGNATURE) {
             if (runtime_state.v2_failed_attempts < PTC_V2_FAILURE_LIMIT) ++runtime_state.v2_failed_attempts;
             if (runtime_state.v2_failed_attempts >= PTC_V2_FAILURE_LIMIT) {
@@ -1677,8 +1692,15 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
             token_version = 2u;
         }
     } else {
-        err = ptc_token_verify(request->code, config->device_id, config->grant_secret, now.day_index,
-            config->max_add_minutes, nonce_used_v1, sysmodule, &token_v1);
+        err = ptc_token_verify(request->code, active_config.device_id, active_config.grant_secret, now.day_index,
+            active_config.max_add_minutes, nonce_used_v1, sysmodule, &token_v1);
+        if (err == PTC_ERR_BAD_SIGNATURE) {
+            sysmodule->config_cache_valid = false;
+            if (load_config(sysmodule, &active_config)) {
+                err = ptc_token_verify(request->code, active_config.device_id, active_config.grant_secret, now.day_index,
+                    active_config.max_add_minutes, nonce_used_v1, sysmodule, &token_v1);
+            }
+        }
         if (err == PTC_ERR_OK) {
             token_day_index = token_v1.day_index_since_2020;
             token_minutes = token_v1.minutes;
@@ -1686,15 +1708,15 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         }
     }
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), true, err, now.day_index, caps);
     }
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), true, err, now.day_index, caps);
     }
-    decision = ptc_policy_decide(config->mode, disable_flag, PTC_OPERATION_GRANT_MINUTES, caps, pctl_status.unrestricted_today, config->allow_unlimited_to_limited);
+    decision = ptc_policy_decide(active_config.mode, disable_flag, PTC_OPERATION_GRANT_MINUTES, caps, pctl_status.unrestricted_today, active_config.allow_unlimited_to_limited);
     if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), decision.dry_run, decision.error, now.day_index, caps);
     }
     if (decision.may_write_pctl) {
         uint16_t new_minutes;
@@ -1705,17 +1727,17 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         /* Apply to PCTL first (idempotent absolute write); persist the override
            only after it succeeds. On failure the nonce is not consumed and the
            same code may be re-entered, so persisting first would double-count. */
-        err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode), PTC_PCTL_TARGET_LIMIT, new_minutes);
+        err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(active_config.mode), PTC_PCTL_TARGET_LIMIT, new_minutes);
         if (err != PTC_ERR_OK) {
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), false, err, now.day_index, caps);
         }
-        err = start_timer_and_wait_unrestricted(sysmodule, request, now, ptc_control_mode_name(config->mode), new_minutes, &pctl_status);
+        err = start_timer_and_wait_unrestricted(sysmodule, request, now, ptc_control_mode_name(active_config.mode), new_minutes, &pctl_status);
         if (err != PTC_ERR_OK) {
             if (!recovery_rollback(sysmodule)) {
                 write_disable_flag(sysmodule, "transaction_restore_failed\n");
                 err = PTC_ERR_RECOVERY_FAILED;
             }
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), false, err, now.day_index, caps);
         }
         if (!save_rules(sysmodule, &rules)) {
             append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "rules");
@@ -1724,7 +1746,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                 write_disable_flag(sysmodule, "transaction_restore_failed\n");
                 err = PTC_ERR_RECOVERY_FAILED;
             }
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), false, err, now.day_index, caps);
         }
         append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "offline_code");
     }
@@ -1732,7 +1754,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     (void)load_state(sysmodule, &runtime_state);
     (void)sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     result_state_from_pctl(&state, now.day_index, &pctl_status, caps, &rules, runtime_state.parent_unlock_until > now.unix_seconds, now.minute_of_day);
-    (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, ptc_control_mode_name(config->mode), decision.dry_run, &state, now.unix_seconds);
+    (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, ptc_control_mode_name(active_config.mode), decision.dry_run, &state, now.unix_seconds);
     if (write_result(sysmodule, request->request_id, json)) {
         append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
         if (is_v2 && !decision.dry_run &&
