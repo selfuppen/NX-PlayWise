@@ -696,8 +696,8 @@ static void edit_grant_secret(UiState *ui)
     size_t len;
     const char *new_secret;
 
-    if (!keyboard_input("修改加时码密钥", "输入 8 到 64 位加时码密钥 (留空恢复默认)", input_buf, sizeof(input_buf), false, false)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改加时码密钥。");
+    if (!keyboard_input("重置验证密钥 (Secret)", "输入 8 到 64 位的防伪密钥 (留空恢复默认)", input_buf, sizeof(input_buf), false, false)) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "已取消重置验证密钥。");
         return;
     }
 
@@ -735,9 +735,9 @@ static void edit_grant_secret(UiState *ui)
 
     if (ui->client.storage->vtable->write_text_atomic(ui->client.storage, CONFIG_PATH, out_json)) {
         if (len == 0) {
-            snprintf(ui->model.message, sizeof(ui->model.message), "加时码密钥已重置为默认值。");
+            snprintf(ui->model.message, sizeof(ui->model.message), "验证密钥已重置为默认值。");
         } else {
-            snprintf(ui->model.message, sizeof(ui->model.message), "加时码密钥已成功更新。");
+            snprintf(ui->model.message, sizeof(ui->model.message), "验证密钥 (Secret) 已成功更新。");
         }
     } else {
         snprintf(ui->model.message, sizeof(ui->model.message), "写入 config.json 失败。");
@@ -831,14 +831,10 @@ static void handle_parent_action(UiState *ui)
         }
         break;
     case 4:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_RAW_BLOCK, "验证强制阻止能力",
-                             "功能：真机写入并回滚，验证强制阻止能力。\n适用：准备使用强制阻止前，仅需成功执行一次。");
+        ui->model.overlay = PTC_UI_OVERLAY_PROBE_SELECT;
+        ui->model.editor_index = 0;
         break;
     case 5:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_SUSPEND, "验证暂停软件能力",
-                             "功能：真机写入并回滚，验证暂停软件能力。\n适用：准备使用暂停软件前，仅需成功执行一次。");
-        break;
-    case 6:
         edit_grant_secret(ui);
         break;
     default:
@@ -1093,6 +1089,24 @@ static void handle_overlay_input(UiState *ui, u64 down)
         }
         return;
     }
+    if (ui->model.overlay == PTC_UI_OVERLAY_PROBE_SELECT) {
+        if (down & HidNpadButton_Left) {
+            ui->model.editor_index = 0;
+        } else if (down & HidNpadButton_Right) {
+            ui->model.editor_index = 1;
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+            int probe_index = ui->model.editor_index;
+            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            if (probe_index == 0) {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_RAW_BLOCK, "验证强制阻止能力",
+                                     "功能：真机写入并回滚，验证强制阻止能力。\n适用：准备使用强制阻止前，仅需成功执行一次。");
+            } else {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_PROBE_SUSPEND, "验证暂停软件能力",
+                                     "功能：真机写入并回滚，验证暂停软件能力。\n适用：准备使用暂停软件前，仅需成功执行一次。");
+            }
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM && (down & (HidNpadButton_A | HidNpadButton_Plus))) {
         confirm_operation(ui);
     }
@@ -1250,6 +1264,11 @@ static void handle_touch(UiState *ui, int x, int y)
             ui->model.draft_limit_action = PTC_LIMIT_ACTION_RAW_BLOCK;
         } else if (hit.index == 2) {
             ui->model.draft_limit_action = PTC_LIMIT_ACTION_SUSPEND;
+        }
+        break;
+    case PTC_UI_HIT_PROBE_OPTION:
+        if (hit.index == 0 || hit.index == 1) {
+            ui->model.editor_index = hit.index;
         }
         break;
     case PTC_UI_HIT_NUMPAD_KEY:

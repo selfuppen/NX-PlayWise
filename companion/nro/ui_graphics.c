@@ -64,9 +64,8 @@ static const UiAction SAFETY_ACTIONS[] = {
     {"重试前置解限", "仅 pending/failed 阶段可用", COLOR(25, 132, 95)},
     {"恢复安装前状态", "恢复原始设置并停用 PlayWise", COLOR(194, 61, 61)},
     {"紧急停用控制", "立即停止后台控制操作", COLOR(194, 61, 61)},
-    {"验证强制阻止", "需 active 阶段，探针写入并回滚", COLOR(194, 61, 61)},
-    {"验证暂停软件", "需 active 阶段，探针写入并回滚", COLOR(194, 61, 61)},
-    {"修改加时码密钥", "设置离线加时码 HMAC 计算密钥", COLOR(42, 105, 188)},
+    {"运行能力探针", "验证强制阻止或暂停软件能力 (需 active)", COLOR(194, 61, 61)},
+    {"重置验证密钥(Secret)", "防伪密钥，请勿在此输入8位加时码", COLOR(42, 105, 188)},
 };
 
 static const UiAction RESUME_CONTROL_ACTION = {
@@ -979,6 +978,27 @@ static void draw_limit_action_overlay(uint32_t *pixels, uint32_t stride, const P
     draw_overlay_actions(pixels, stride, model, "A / +  保存并刷新");
 }
 
+static void draw_probe_select_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    int index;
+    draw_dialog_shell(pixels, stride, model, &dialog, 800, 360);
+    for (index = 0; index < 2; ++index) {
+        UiRect option = to_uirect(ptc_ui_probe_option_rect(index));
+        bool selected = index == model->editor_index;
+        const char *title = index == 0 ? "验证强制阻止" : "验证暂停软件";
+        const char *desc = index == 0 ? "发送挂断信号退出游戏" : "后台冻结游戏进程";
+        fill_round_rect(pixels, stride, option, 8, selected ? COLOR(244, 249, 255) : COLOR(250, 251, 253));
+        draw_rect_outline(pixels, stride, option, selected ? 3 : 1,
+                          selected ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
+        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 16, option.width, 36}, title, 24,
+                         selected ? COLOR(28, 118, 188) : COLOR(77, 86, 99));
+        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 60, option.width, 24}, desc, 18, COLOR(120, 130, 145));
+    }
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 264, dialog.width - 160, 34}, "方向键选择探针，需要处在 active 阶段", 20, COLOR(77, 86, 99));
+    draw_overlay_actions(pixels, stride, model, "A / +  开始验证");
+}
+
 static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     static const char *KEY_LABELS[] = {
@@ -1066,6 +1086,9 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         break;
     case PTC_UI_OVERLAY_LIMIT_ACTION:
         draw_limit_action_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_PROBE_SELECT:
+        draw_probe_select_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_CONFIRM:
         draw_confirm_overlay(pixels, stride, model);

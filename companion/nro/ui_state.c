@@ -819,6 +819,10 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 850;
         *height = 360;
         break;
+    case PTC_UI_OVERLAY_PROBE_SELECT:
+        *width = 800;
+        *height = 360;
+        break;
     case PTC_UI_OVERLAY_NUMPAD:
         *width = 620;
         *height = 610;
@@ -892,6 +896,13 @@ PtcUiRect ptc_ui_limit_option_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_LIMIT_ACTION);
     PtcUiRect rect = {dialog.x + 46 + index * 254, dialog.y + 142, 228, 84};
+    return rect;
+}
+
+PtcUiRect ptc_ui_probe_option_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_PROBE_SELECT);
+    PtcUiRect rect = {dialog.x + 46 + index * 360, dialog.y + 142, 320, 110};
     return rect;
 }
 
@@ -1090,6 +1101,13 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         for (i = 0; i < 3; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_limit_option_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_LIMIT_ACTION_OPTION, i);
+            }
+        }
+        break;
+    case PTC_UI_OVERLAY_PROBE_SELECT:
+        for (i = 0; i < 2; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_probe_option_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_PROBE_OPTION, i);
             }
         }
         break;

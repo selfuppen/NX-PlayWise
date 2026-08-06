@@ -28,7 +28,8 @@ typedef enum {
     PTC_UI_OVERLAY_BEDTIME = 3,
     PTC_UI_OVERLAY_LIMIT_ACTION = 4,
     PTC_UI_OVERLAY_CONFIRM = 5,
-    PTC_UI_OVERLAY_NUMPAD = 6
+    PTC_UI_OVERLAY_NUMPAD = 6,
+    PTC_UI_OVERLAY_PROBE_SELECT = 7
 } PtcUiOverlay;
 
 typedef enum {
@@ -161,6 +162,7 @@ typedef enum {
     PTC_UI_HIT_BEDTIME_ADJ_UP,
     PTC_UI_HIT_BEDTIME_ADJ_DOWN,
     PTC_UI_HIT_LIMIT_ACTION_OPTION,
+    PTC_UI_HIT_PROBE_OPTION,
     PTC_UI_HIT_NUMPAD_KEY
 } PtcUiHitKind;
 
@@ -248,6 +250,7 @@ PtcUiRect ptc_ui_bedtime_field_rect(int index);
 PtcUiRect ptc_ui_bedtime_adj_up_rect(int index);
 PtcUiRect ptc_ui_bedtime_adj_down_rect(int index);
 PtcUiRect ptc_ui_limit_option_rect(int index);
+PtcUiRect ptc_ui_probe_option_rect(int index);
 PtcUiRect ptc_ui_numpad_display_rect(void);
 PtcUiRect ptc_ui_numpad_key_rect(int index);
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay);
