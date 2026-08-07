@@ -34,8 +34,15 @@ static const char *skip_ws(const char *p)
 static const char *find_key(const char *text, const char *key)
 {
     char pattern[64];
+    const char *match;
     snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-    return strstr(text, pattern);
+    match = text;
+    while ((match = strstr(match, pattern)) != NULL) {
+        const char *after = skip_ws(match + strlen(pattern));
+        if (*after == ':') return match;
+        match += strlen(pattern);
+    }
+    return NULL;
 }
 
 static bool json_string(const char *text, const char *key, char *out, size_t out_size)
@@ -95,16 +102,16 @@ static bool json_u16(const char *text, const char *key, uint16_t *out)
     return true;
 }
 
-static bool json_bool_value(const char *text, const char *key, bool *out)
+#ifdef PLAYWISE_DEVICE_LAB
+static bool json_bool_optional(const char *text, const char *key, bool default_value, bool *out)
 {
     const char *pos = find_key(text, key);
     if (!pos) {
-        return false;
+        *out = default_value;
+        return true;
     }
     pos = strchr(pos + strlen(key) + 2, ':');
-    if (!pos) {
-        return false;
-    }
+    if (!pos) return false;
     pos = skip_ws(pos + 1);
     if (strncmp(pos, "true", 4) == 0) {
         *out = true;
@@ -116,6 +123,7 @@ static bool json_bool_value(const char *text, const char *key, bool *out)
     }
     return false;
 }
+#endif
 
 static bool parse_rule_mode(const char *value, PtcRuleMode *out)
 {
@@ -125,27 +133,6 @@ static bool parse_rule_mode(const char *value, PtcRuleMode *out)
     }
     if (strcmp(value, "unlimited") == 0) {
         *out = PTC_RULE_MODE_UNLIMITED;
-        return true;
-    }
-    if (strcmp(value, "blocked") == 0) {
-        *out = PTC_RULE_MODE_BLOCKED;
-        return true;
-    }
-    return false;
-}
-
-static bool parse_limit_action(const char *value, PtcLimitAction *out)
-{
-    if (strcmp(value, "remind") == 0) {
-        *out = PTC_LIMIT_ACTION_REMIND;
-        return true;
-    }
-    if (strcmp(value, "raw_block") == 0) {
-        *out = PTC_LIMIT_ACTION_RAW_BLOCK;
-        return true;
-    }
-    if (strcmp(value, "suspend") == 0) {
-        *out = PTC_LIMIT_ACTION_SUSPEND;
         return true;
     }
     return false;
@@ -213,32 +200,11 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "disable_today_limit") == 0) {
         return PTC_REQUEST_DISABLE_TODAY_LIMIT;
     }
-    if (strcmp(value, "block_today") == 0) {
-        return PTC_REQUEST_BLOCK_TODAY;
-    }
     if (strcmp(value, "restore_today_policy") == 0) {
         return PTC_REQUEST_RESTORE_TODAY_POLICY;
     }
     if (strcmp(value, "set_weekly_template") == 0) {
         return PTC_REQUEST_SET_WEEKLY_TEMPLATE;
-    }
-    if (strcmp(value, "set_bedtime") == 0) {
-        return PTC_REQUEST_SET_BEDTIME;
-    }
-    if (strcmp(value, "set_limit_action") == 0) {
-        return PTC_REQUEST_SET_LIMIT_ACTION;
-    }
-    if (strcmp(value, "parent_unlock_start") == 0) {
-        return PTC_REQUEST_PARENT_UNLOCK_START;
-    }
-    if (strcmp(value, "parent_unlock_end") == 0) {
-        return PTC_REQUEST_PARENT_UNLOCK_END;
-    }
-    if (strcmp(value, "probe_raw_block") == 0) {
-        return PTC_REQUEST_PROBE_RAW_BLOCK;
-    }
-    if (strcmp(value, "probe_suspend") == 0) {
-        return PTC_REQUEST_PROBE_SUSPEND;
     }
     if (strcmp(value, "complete_setup") == 0) {
         return PTC_REQUEST_COMPLETE_SETUP;
@@ -249,6 +215,14 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "restore_install_snapshot") == 0) {
         return PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT;
     }
+#ifdef PLAYWISE_DEVICE_LAB
+    if (strcmp(value, "probe_raw_block") == 0) return PTC_REQUEST_REMOVED_13;
+    if (strcmp(value, "probe_suspend") == 0) return PTC_REQUEST_REMOVED_14;
+    if (strcmp(value, "probe_play_timer_write") == 0) return PTC_REQUEST_REMOVED_15;
+    if (strcmp(value, "probe_apply_today_limit") == 0) return PTC_REQUEST_REMOVED_16;
+    if (strcmp(value, "probe_play_timer_effect") == 0) return PTC_REQUEST_REMOVED_17;
+    if (strcmp(value, "prepare_device_test") == 0) return PTC_REQUEST_REMOVED_18;
+#endif
     return PTC_REQUEST_UNKNOWN;
 }
 
@@ -265,30 +239,30 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "add_today_minutes";
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
         return "disable_today_limit";
-    case PTC_REQUEST_BLOCK_TODAY:
-        return "block_today";
     case PTC_REQUEST_RESTORE_TODAY_POLICY:
         return "restore_today_policy";
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
         return "set_weekly_template";
-    case PTC_REQUEST_SET_BEDTIME:
-        return "set_bedtime";
-    case PTC_REQUEST_SET_LIMIT_ACTION:
-        return "set_limit_action";
-    case PTC_REQUEST_PARENT_UNLOCK_START:
-        return "parent_unlock_start";
-    case PTC_REQUEST_PARENT_UNLOCK_END:
-        return "parent_unlock_end";
-    case PTC_REQUEST_PROBE_RAW_BLOCK:
-        return "probe_raw_block";
-    case PTC_REQUEST_PROBE_SUSPEND:
-        return "probe_suspend";
     case PTC_REQUEST_COMPLETE_SETUP:
         return "complete_setup";
     case PTC_REQUEST_RETRY_SETUP_RELEASE:
         return "retry_setup_release";
     case PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT:
         return "restore_install_snapshot";
+#ifdef PLAYWISE_DEVICE_LAB
+    case PTC_REQUEST_REMOVED_13:
+        return "probe_raw_block";
+    case PTC_REQUEST_REMOVED_14:
+        return "probe_suspend";
+    case PTC_REQUEST_REMOVED_15:
+        return "probe_play_timer_write";
+    case PTC_REQUEST_REMOVED_16:
+        return "probe_apply_today_limit";
+    case PTC_REQUEST_REMOVED_17:
+        return "probe_play_timer_effect";
+    case PTC_REQUEST_REMOVED_18:
+        return "prepare_device_test";
+#endif
     case PTC_REQUEST_UNKNOWN:
     default:
         return "unknown";
@@ -298,7 +272,6 @@ const char *ptc_request_type_name(PtcRequestType type)
 PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
 {
     int64_t version;
-    char action[24];
     if (!text || !out || strchr(text, '{') == NULL || strchr(text, '}') == NULL) {
         return PTC_ERR_BAD_REQUEST;
     }
@@ -329,34 +302,28 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         return json_u16(text, "minutes", &out->minutes) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
         return parse_week_template(text, out->week) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
-    case PTC_REQUEST_SET_BEDTIME:
-        return json_bool_value(text, "enabled", &out->bedtime.enabled) &&
-            json_u16(text, "start_min", &out->bedtime.start_min) &&
-            json_u16(text, "end_min", &out->bedtime.end_min) &&
-            out->bedtime.start_min < 1440 && out->bedtime.end_min < 1440
-            ? PTC_ERR_OK
-            : PTC_ERR_BAD_REQUEST;
-    case PTC_REQUEST_SET_LIMIT_ACTION:
-        return json_string(text, "action", action, sizeof(action)) &&
-            parse_limit_action(action, &out->limit_action)
-            ? PTC_ERR_OK
-            : PTC_ERR_BAD_REQUEST;
-    case PTC_REQUEST_PARENT_UNLOCK_START:
-        return json_u16(text, "duration_minutes", &out->duration_minutes) &&
-            out->duration_minutes > 0
-            ? PTC_ERR_OK
-            : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_COMPLETE_SETUP:
     case PTC_REQUEST_RETRY_SETUP_RELEASE:
     case PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT:
     case PTC_REQUEST_STATUS:
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
-    case PTC_REQUEST_BLOCK_TODAY:
     case PTC_REQUEST_RESTORE_TODAY_POLICY:
-    case PTC_REQUEST_PARENT_UNLOCK_END:
-    case PTC_REQUEST_PROBE_RAW_BLOCK:
-    case PTC_REQUEST_PROBE_SUSPEND:
         return PTC_ERR_OK;
+#ifdef PLAYWISE_DEVICE_LAB
+    case PTC_REQUEST_REMOVED_13:
+    case PTC_REQUEST_REMOVED_14:
+    case PTC_REQUEST_REMOVED_15:
+    case PTC_REQUEST_REMOVED_18:
+        return PTC_ERR_OK;
+    case PTC_REQUEST_REMOVED_16:
+        out->minutes = 1;
+        (void)json_u16(text, "minutes", &out->minutes);
+        return json_bool_optional(text, "start_timer", false, &out->start_timer)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_REMOVED_17:
+        return json_bool_optional(text, "wait_for_expiry", false, &out->wait_for_expiry)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+#endif
     case PTC_REQUEST_UNKNOWN:
     default:
         return PTC_ERR_UNKNOWN_REQUEST_TYPE;

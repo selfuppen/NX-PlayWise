@@ -8,7 +8,7 @@
 #include "../platform/storage.h"
 #include "file_protocol.h"
 
-#define PTC_AUTH_PIN_MAX_LEN 32
+#define PTC_AUTH_PIN_MAX_LEN 6
 #define PTC_AUTH_SALT_LEN 16
 #define PTC_AUTH_SALT_HEX_LEN 32
 #define PTC_AUTH_HASH_HEX_LEN 64

@@ -18,12 +18,6 @@ typedef struct {
     int64_t played_minutes;
     int play_timer_enabled;
     int restricted_now;
-    bool bedtime_active;
-    bool parent_unlock_active;
-    bool play_timer_write_verified;
-    bool play_timer_effect_verified;
-    bool raw_block_verified;
-    bool suspend_verified;
 } PtcResultState;
 
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index);

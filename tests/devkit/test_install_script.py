@@ -22,7 +22,11 @@ def create_fake_package(root: Path) -> Path:
     app.mkdir(parents=True, exist_ok=True)
     (app / "config.json").write_text('{"version":1}', encoding="utf-8")
     (app / "setup.json").write_text('{"version":1}', encoding="utf-8")
+    (app / "build.json").write_text('{"profile":"release"}', encoding="utf-8")
     (app / "pctc.nro").write_bytes(b"dummy_nro")
+    install = pkg / "playwise-install"
+    install.mkdir(parents=True, exist_ok=True)
+    (install / "release-manifest.json").write_text('{"profile":"release"}', encoding="utf-8")
     return pkg
 
 
@@ -49,7 +53,7 @@ def test_install_script_preview() -> None:
         res_inc = subprocess.run(cmd_inc, capture_output=True, text=True)
         require(res_inc.returncode == 0, f"Incremental preview failed: {res_inc.stderr}")
         require("Install mode:   Incremental update" in res_inc.stdout, "Incremental mode title missing")
-        require("JSON and runtime data are preserved" in res_inc.stdout, "Incremental mode text missing")
+        require("credentials, PIN, rules and runtime data are preserved" in res_inc.stdout, "Incremental mode text missing")
 
         # 2. Clean mode preview
         cmd_clean = cmd_inc + ["-Clean"]

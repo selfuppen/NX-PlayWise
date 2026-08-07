@@ -118,6 +118,7 @@ if ($sourceRoot.StartsWith($destinationRoot, [System.StringComparison]::OrdinalI
 $sourceApp = Join-Path $sourceRoot "switch\playwise"
 $sourceSysmodule = Join-Path $sourceRoot "atmosphere\contents\4200000000BD2300"
 $sourceOverlay = Join-Path $sourceRoot "switch\.overlays\pctc.ovl"
+$sourceManifest = Join-Path $sourceRoot "playwise-install\release-manifest.json"
 $availableRelativePaths = @()
 $hasPackageCore = $false
 
@@ -127,6 +128,12 @@ if (Test-Path -LiteralPath $sourceApp -PathType Container) {
     }
     if (-not (Test-Path -LiteralPath (Join-Path $sourceApp "setup.json") -PathType Leaf)) {
         throw "Invalid package: switch\playwise\setup.json is missing."
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $sourceApp "build.json") -PathType Leaf)) {
+        throw "Invalid package: switch\playwise\build.json is missing."
+    }
+    if (-not (Test-Path -LiteralPath $sourceManifest -PathType Leaf)) {
+        throw "Invalid package: playwise-install\release-manifest.json is missing."
     }
     $hasPackageCore = $true
 }
@@ -164,7 +171,7 @@ Write-Host "Package paths to copy:"
 if ($isFullInstall) {
     Write-Host "  switch\playwise (full clean install)"
 } else {
-    Write-Host "  switch\playwise\pctc.nro (replace); JSON and runtime data are preserved"
+    Write-Host "  switch\playwise\pctc.nro and build.json (replace); credentials, PIN, rules and runtime data are preserved"
 }
 foreach ($relativePath in $availableRelativePaths) {
     Write-Host "  $relativePath"
@@ -222,7 +229,12 @@ if ($isFullInstall) {
         Copy-Item -LiteralPath $sourceNro -Destination $destinationNro -Force
         Test-InstalledFile -SourceFile $sourceNro -DestinationFile $destinationNro
 
-        foreach ($seedFile in Get-ChildItem -LiteralPath $sourceApp -File -Filter "*.json") {
+        $sourceBuild = Join-Path $sourceApp "build.json"
+        $destinationBuild = Join-Path $destinationApp "build.json"
+        Copy-Item -LiteralPath $sourceBuild -Destination $destinationBuild -Force
+        Test-InstalledFile -SourceFile $sourceBuild -DestinationFile $destinationBuild
+
+        foreach ($seedFile in Get-ChildItem -LiteralPath $sourceApp -File -Filter "*.json" | Where-Object { $_.Name -ne "build.json" }) {
             $destinationSeed = Join-Path $destinationApp $seedFile.Name
             if (-not (Test-Path -LiteralPath $destinationSeed -PathType Leaf)) {
                 Copy-Item -LiteralPath $seedFile.FullName -Destination $destinationSeed -Force
@@ -230,18 +242,6 @@ if ($isFullInstall) {
             }
         }
 
-        $destinationConfig = Join-Path $destinationApp "config.json"
-        $configBackup = Join-Path $destinationApp "backups\config.pre-single-package.json"
-        if (Test-Path -LiteralPath $destinationConfig -PathType Leaf) {
-            if (-not (Test-Path -LiteralPath $configBackup -PathType Leaf)) {
-                New-Item -ItemType Directory -Path (Split-Path -Parent $configBackup) -Force | Out-Null
-                Copy-Item -LiteralPath $destinationConfig -Destination $configBackup -Force
-            }
-            $config = Get-Content -LiteralPath $destinationConfig -Raw -Encoding utf8 | ConvertFrom-Json
-            $config.control_mode = "enforce"
-            $config.allow_unlimited_to_limited = $true
-            Write-Utf8NoBom -LiteralPath $destinationConfig -Text (($config | ConvertTo-Json -Depth 8) + "`n")
-        }
     }
 }
 

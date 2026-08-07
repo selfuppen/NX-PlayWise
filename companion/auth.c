@@ -76,7 +76,12 @@ static bool fixed_time_equal(const char *a, const char *b)
 static bool valid_pin(const char *pin)
 {
     size_t len = pin ? strlen(pin) : 0;
-    return len > 0 && len <= PTC_AUTH_PIN_MAX_LEN;
+    size_t i;
+    if (len != 6) return false;
+    for (i = 0; i < len; ++i) {
+        if (pin[i] < '0' || pin[i] > '9') return false;
+    }
+    return true;
 }
 
 static void pin_hash_hex(const char *pin, const uint8_t salt[PTC_AUTH_SALT_LEN], char out[PTC_AUTH_HASH_HEX_LEN + 1])

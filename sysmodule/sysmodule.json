@@ -6,7 +6,7 @@
   "main_thread_stack_size": "0x00040000",
   "main_thread_priority": 44,
   "default_cpu_id": 3,
-  "version": "0",
+  "version": "1",
   "is_retail": true,
   "pool_partition": 2,
   "is_64_bit": true,
@@ -21,6 +21,7 @@
   "service_access": [
     "fsp-srv",
     "time:u",
+    "set:sys",
     "pctl",
     "pctl:s"
   ],

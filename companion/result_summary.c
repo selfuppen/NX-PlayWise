@@ -42,9 +42,7 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     status = string_value(root, "status");
     snprintf(out->status, sizeof(out->status), "%s", status);
     snprintf(out->type, sizeof(out->type), "%s", string_value(root, "type"));
-    snprintf(out->mode, sizeof(out->mode), "%s", string_value(root, "mode"));
     out->ok = strcmp(status, "ok") == 0;
-    out->dry_run = bool_value(root, "dry_run", false);
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
     out->remaining_available = bool_value(state, "remaining_available", false);
     out->remaining_minutes = number_value(state, "remaining_minutes", -1);
@@ -56,7 +54,7 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->error_code = number_value(error, "code", 0);
     snprintf(out->reason, sizeof(out->reason), "%s", string_value(error, "reason"));
     snprintf(out->message, sizeof(out->message), "%s", string_value(error, "message"));
-    out->unlock_observed = out->ok && !out->dry_run && strcmp(out->type, "offline_code") == 0 &&
+    out->unlock_observed = out->ok && strcmp(out->type, "offline_code") == 0 &&
         out->play_timer_enabled == 1 && out->restricted_now == 0;
     out->valid = true;
     cJSON_Delete(root);
@@ -66,13 +64,11 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
 bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summary, char *out, size_t out_size)
 {
     int written;
-    bool is_observe;
     if (!summary || !out || out_size == 0 || !summary->valid) {
         return false;
     }
-    is_observe = summary->dry_run && strcmp(summary->mode, "enforce") != 0;
-    written = snprintf(out, out_size, "%s%s  %s\n剩余：%d 分钟  已玩：%s%d%s\n计时器：%s  限制：%s",
-        summary->ok ? "成功" : "失败", is_observe ? "（演练）" : "",
+    written = snprintf(out, out_size, "%s  %s\n剩余：%d 分钟  已玩：%s%d%s\n计时器：%s  限制：%s",
+        summary->ok ? "成功" : "失败",
         summary->ok ? "" : (summary->reason[0] ? summary->reason : "后台拒绝"),
         summary->remaining_minutes,
         summary->played_minutes_available ? "约 " : "",

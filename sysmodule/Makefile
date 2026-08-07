@@ -8,9 +8,10 @@ endif
 
 TOPDIR ?= $(CURDIR)
 include $(DEVKITPRO)/libnx/switch_rules
+include $(TOPDIR)/../common/version.mk
 
-TARGET := pctc-sysmodule
-BUILD := build
+TARGET ?= pctc-sysmodule
+BUILD ?= build
 SOURCES := \
 	source \
 	. \
@@ -22,8 +23,9 @@ SOURCES := \
 	../common/token \
 	../platform/switch
 DATA :=
-INCLUDES := . .. ../common ../common/crypto ../platform ../platform/switch
-CONFIG_JSON := sysmodule.json
+MANIFEST_INCLUDE ?= ../build/generated
+INCLUDES := . .. ../common ../common/crypto ../platform ../platform/switch $(MANIFEST_INCLUDE)
+CONFIG_JSON ?= sysmodule.json
 NO_ICON := 1
 NO_NACP := 1
 

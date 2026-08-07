@@ -33,15 +33,8 @@ PtcCompanionStatus ptc_companion_submit_offline_code(PtcCompanionFileClient *cli
 PtcCompanionStatus ptc_companion_submit_set_today_limit(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, uint16_t minutes);
 PtcCompanionStatus ptc_companion_submit_add_today_minutes(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, uint16_t minutes);
 PtcCompanionStatus ptc_companion_submit_disable_today_limit(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
-PtcCompanionStatus ptc_companion_submit_block_today(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_submit_restore_today_policy(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_submit_set_weekly_template(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, const PtcDayRule week[7]);
-PtcCompanionStatus ptc_companion_submit_set_bedtime(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, const PtcBedtimeRule *bedtime);
-PtcCompanionStatus ptc_companion_submit_set_limit_action(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, PtcLimitAction action);
-PtcCompanionStatus ptc_companion_submit_parent_unlock_start(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, uint16_t duration_minutes);
-PtcCompanionStatus ptc_companion_submit_parent_unlock_end(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
-PtcCompanionStatus ptc_companion_submit_probe_raw_block(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
-PtcCompanionStatus ptc_companion_submit_probe_suspend(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_set_disable_flag(PtcCompanionFileClient *client, bool enabled);
 PtcCompanionStatus ptc_companion_read_result(
     PtcCompanionFileClient *client,

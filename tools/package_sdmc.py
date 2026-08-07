@@ -12,6 +12,7 @@ APP_DIR = Path("switch") / "playwise"
 TEMPLATE_DIR = Path("playwise-install") / "templates"
 ATMOSPHERE_CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 INSTALL_SCRIPT = Path(__file__).with_name("install_package_to_sd.ps1")
+INSTALL_DIR = Path("playwise-install")
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -48,8 +49,8 @@ def create_package(
     *,
     include_boot2: bool,
     device_id: str,
-    grant_secret: str,
     max_add_minutes: int,
+    manifest: Path,
     nro: Path | None,
     sysmodule_exefs: Path | None,
     toolbox: Path | None,
@@ -65,9 +66,12 @@ def create_package(
         app / "inbox" / "done",
         app / "results",
         app / "logs",
+        app / "logs" / "undated",
         app / "ledger",
         app / "backups",
+        app / "recovery" / "active",
         app / "flags",
+        app / "support",
     ]:
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -76,10 +80,7 @@ def create_package(
         {
             "version": 1,
             "device_id": device_id,
-            "grant_secret": grant_secret,
             "max_add_minutes": max_add_minutes,
-            "control_mode": "enforce",
-            "allow_unlimited_to_limited": True,
             "default_request_timeout_ms": 60000,
         },
     )
@@ -101,40 +102,34 @@ def create_package(
             "today_override_day_index": 0,
             "today_override_mode": "limit",
             "today_override_minutes": 60,
-            "bedtime_enabled": False,
-            "bedtime_start_min": 1260,
-            "bedtime_end_min": 480,
-            "limit_action": "remind",
         },
     )
     write_json(
         templates / "state.json",
         {
             "version": 1,
-            "parent_unlock_until": 0,
             "last_enforced_day_index": 0,
             "last_enforced_mode": 0,
             "last_enforced_minutes": 0,
-            "last_enforced_bedtime_active": False,
+            "apply_status": "idle",
             "updated_at": 0,
         },
     )
     write_json(
-        templates / "capabilities.json",
+        templates / "compatibility.json",
         {
             "version": 1,
-            "raw_block_verified": False,
-            "raw_block_backend": "pctl-s-rawblock-v1",
-            "suspend_verified": False,
-            "suspend_backend": "pctl-s-suspend-v1",
-            "verified_at": {"raw_block": 0, "suspend": 0},
+            "status": "pending",
+            "accepted_fingerprint": None,
+            "accepted_at": 0,
         },
     )
     write_json(
         templates / "setup.json",
         {
             "version": 1,
-            "phase": "pending",
+            "phase": "unconfigured",
+            "compatibility_status": "pending",
             "restriction_cleared": False,
             "snapshot_available": False,
             "activate_after": 0,
@@ -149,7 +144,12 @@ def create_package(
     for template_file in sorted(templates.glob("*.json")):
         copy_file(template_file, app / template_file.name)
 
-    copy_file(INSTALL_SCRIPT, out / "install-playwise.ps1")
+    manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+    if manifest_data.get("profile") != "release":
+        raise ValueError("public package requires a release profile manifest")
+    write_json(app / "build.json", manifest_data)
+    copy_file(manifest, out / INSTALL_DIR / "release-manifest.json")
+    copy_file(INSTALL_SCRIPT, out / INSTALL_DIR / "install_package_to_sd.ps1")
 
     if nro is not None:
         copy_file(nro, app / nro.name)
@@ -173,8 +173,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Create the PlayWise SDMC package.")
     parser.add_argument("--out", required=True)
     parser.add_argument("--device-id", default="kid-switch")
-    parser.add_argument("--grant-secret", default="replace-with-long-random-secret")
     parser.add_argument("--max-add-minutes", type=int, default=120)
+    parser.add_argument("--manifest", type=Path, required=True, help="Generated release-manifest.json embedded by this build.")
     parser.add_argument("--zip", dest="zip_path", help="Write a zip whose top-level entries are switch/ and optional atmosphere/.")
     parser.add_argument("--nro", type=Path, help="Optional companion NRO copied under switch/playwise/.")
     parser.add_argument("--sysmodule-exefs", type=Path, help="Optional sysmodule exefs.nsp copied under atmosphere/contents.")
@@ -189,6 +189,7 @@ def main() -> int:
     args.sysmodule_exefs = require_file(parser, "--sysmodule-exefs", args.sysmodule_exefs)
     args.overlay = require_file(parser, "--overlay", args.overlay)
     args.toolbox = require_file(parser, "--toolbox", args.toolbox)
+    args.manifest = require_file(parser, "--manifest", args.manifest)
     if args.boot2 and args.sysmodule_exefs is None:
         parser.error("--boot2 requires --sysmodule-exefs so the package cannot enable an empty boot2 entry")
 
@@ -197,8 +198,8 @@ def main() -> int:
         out,
         include_boot2=args.boot2,
         device_id=args.device_id,
-        grant_secret=args.grant_secret,
         max_add_minutes=args.max_add_minutes,
+        manifest=args.manifest,
         nro=args.nro,
         sysmodule_exefs=args.sysmodule_exefs,
         overlay=args.overlay,

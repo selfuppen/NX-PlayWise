@@ -23,23 +23,29 @@ static const PtcErrorInfo PTC_ERROR_TABLE[] = {
     {PTC_ERR_CODE_COOLDOWN, "code_cooldown", "短码错误次数过多，请稍后再试"},
     {PTC_ERR_DISABLED, "disabled", "后台当前已禁用"},
     {PTC_ERR_UNLIMITED_NOT_ALLOWED, "unlimited_not_allowed", "当前无限制状态不允许改为有限制"},
+#ifdef PLAYWISE_DEVICE_LAB
     {PTC_ERR_RAW_BLOCK_NOT_VERIFIED, "raw_block_not_verified", "禁玩能力尚未验证"},
     {PTC_ERR_SUSPEND_NOT_VERIFIED, "suspend_not_verified", "暂停能力尚未验证"},
     {PTC_ERR_PCTL_WRITE_NOT_VERIFIED, "pctl_write_not_verified", "家长控制写入能力尚未验证"},
     {PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, "pctl_effect_not_verified", "家长控制运行时生效能力尚未验证"},
+#endif
     {PTC_ERR_PCTL_EFFECT_NOT_OBSERVED, "pctl_effect_not_observed", "家长控制运行时未观察到生效"},
     {PTC_ERR_PCTL_RESTORE_FAILED, "pctl_restore_failed", "家长控制原始设置恢复失败，已进入禁用保护"},
     {PTC_ERR_SETUP_PENDING, "setup_pending", "首次设置尚未完成"},
     {PTC_ERR_RECOVERY_UNAVAILABLE, "recovery_unavailable", "没有可用的安装前恢复快照"},
     {PTC_ERR_RECOVERY_FAILED, "recovery_failed", "恢复安装前家长控制状态失败"},
+    {PTC_ERR_COMPATIBILITY_CONFIRMATION_REQUIRED, "compatibility_confirmation_required", "当前环境尚未认证，需要家长确认"},
+    {PTC_ERR_PROTECTION_MODE, "protection_mode", "安全前置检查失败，已进入保护模式"},
     {PTC_ERR_PCTL_INIT_FAILED, "pctl_init_failed", "家长控制服务初始化失败"},
     {PTC_ERR_PCTL_READ_FAILED, "pctl_read_failed", "读取家长控制状态失败"},
     {PTC_ERR_PCTL_WRITE_FAILED, "pctl_write_failed", "写入家长控制设置失败"},
     {PTC_ERR_PCTL_BACKUP_FAILED, "pctl_backup_failed", "备份家长控制设置失败"},
+    {PTC_ERR_PCTL_LAYOUT_MISMATCH, "pctl_layout_mismatch", "家长控制设置布局不匹配"},
     {PTC_ERR_STORAGE_READ_FAILED, "storage_read_failed", "读取存储文件失败"},
     {PTC_ERR_STORAGE_WRITE_FAILED, "storage_write_failed", "写入存储文件失败"},
     {PTC_ERR_CONFIG_INVALID, "config_invalid", "配置文件无效"},
     {PTC_ERR_RULES_INVALID, "rules_invalid", "规则文件无效"},
+    {PTC_ERR_RELEASE_MANIFEST_INVALID, "release_manifest_invalid", "发布清单损坏或组件不一致"},
 };
 
 static const PtcErrorInfo *ptc_error_info(PtcErrorCode code)

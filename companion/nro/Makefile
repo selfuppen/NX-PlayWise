@@ -8,9 +8,10 @@ endif
 
 TARGET := pctc
 BUILD := build
+include ../../common/version.mk
 APP_TITLE := 任你玩
 APP_AUTHOR := selfuppen@qq.com
-APP_VERSION := 1.0.0
+APP_VERSION := $(PLAYWISE_VERSION)
 APP_ICON := $(CURDIR)/icon.jpg
 
 CC := $(DEVKITA64)/bin/aarch64-none-elf-gcc
@@ -21,7 +22,7 @@ FREETYPE_LIBS := $(shell $(PKG_CONFIG) --static --libs freetype2)
 
 ARCH := -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS := -std=gnu99 -O2 -g -Wall -Wextra -Werror -ffunction-sections $(ARCH)
-CFLAGS += -D__SWITCH__ -I../.. -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
+CFLAGS += -D__SWITCH__ -I../.. -I../../build/generated -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map
 LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
 
@@ -37,6 +38,7 @@ OBJS := \
 	$(BUILD)/result_summary.o \
 	$(BUILD)/sha256.o \
 	$(BUILD)/rules.o \
+	$(BUILD)/support_export.o \
 	$(BUILD)/ptc_time.o \
 	$(BUILD)/result_builder.o \
 	$(BUILD)/error_code.o \
@@ -84,6 +86,9 @@ $(BUILD)/sha256.o: ../../common/crypto/sha256.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/rules.o: ../../common/rules/rules.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/support_export.o: ../../common/support/support_export.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ptc_time.o: ../../common/time/ptc_time.c | $(BUILD)

@@ -4,42 +4,45 @@
   # 任你玩 · PlayWise
 
   **Play Wise. Play More.**
-
-  Nintendo Switch 本地游玩时间控制与离线加时方案。
-
-  [简体中文](#简体中文) | [English](#english)
-
-  [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 </div>
 
----
+PlayWise 是面向 Nintendo Switch 自制系统环境的本地游玩额度管理工具。公开 Release 由常驻 sysmodule、Companion NRO、Tesla Overlay 和家长端离线网页组成，提供状态查询、8 位加时码、今日额度、周计划和可恢复的自动应用。
 
-## 简体中文
+> [!IMPORTANT]
+> 稳定版承诺“额度管理、系统计时和到期提醒”，不承诺到期强制锁屏。`raw_block`、`suspend`、私有布局探针和故障注入只存在于独立 Device Lab，不进入公开包。
 
-任你玩（PlayWise）面向 Nintendo Switch 自制系统环境，由常驻 sysmodule、Companion NRO、Tesla Overlay 和家长端离线 PWA 组成。家长可以设置本地时间规则，并签发当天有效、绑定设备且只能成功使用一次的 8 位数字加时码。
+## 产品边界
 
-> [!WARNING]
-> 项目会访问非公开 PCTL 命令和家长控制状态，只适合熟悉 Atmosphere、自制系统和 SD 卡恢复流程的用户。构建成功不能代替真机验证。首次设备或 HOS/PCTL 行为变化后，必须验证前置解除、真实加时和安装快照恢复。
+项目采用三层结构：
 
-### 核心能力
+- 唯一公开 Release：简洁的日常额度管理界面；
+- Release 内建 Support：只读诊断、紧急停用、事务恢复和安装快照恢复；
+- 内部 Device Lab：危险探针和强制实验能力，使用独立 Title ID、IPC service 和 SD 根目录，不公开分发。
 
-- 1–4 分钟微调及 5–120 分钟（5 分钟一档）的 v2 离线加时码；可通过在线[家长网页控制台](https://selfuppen.github.io/playwise/)（支持 PWA 离线使用）直接签发，密钥只保存在家长端浏览器和 Switch 本地配置中。
-- Companion NRO 提供孩子状态页、数字码输入和 PIN 保护的家长区。
-- Tesla Overlay 可在覆盖层提交同一请求，不读取 `grant_secret`、不直接访问 PCTL。
-- sysmodule 首次启动先保存安装前 PCTL snapshot 并解除当天当前限制，随后验证 token、管理 nonce、执行规则和恢复事务。
-- Switch 客户端优先使用 `pctc:u` IPC，服务不可用时回退到原子化 SD 文件队列。
-- 单一完整 package 默认 `enforce`；`grant` 可作为运行时配置，`observe/disabled` 仅保留旧配置的非写兼容行为。
+Release 支持：
 
-```mermaid
-flowchart LR
-    A["家长端 PWA / CLI<br/>生成当天短码"] --> B["Companion NRO<br/>或 Tesla Overlay"]
-    B -->|"pctc:u 优先<br/>SD 队列回退"| C["常驻 sysmodule"]
-    C --> D["setup 前置解除、token 与规则"]
-    D --> E["恢复事务、调用并确认 PCTL"]
-    E --> F["持久化 result<br/>成功后消费 nonce"]
-```
+- 查询今日已玩、总额度和剩余时间；
+- 输入绑定设备、当天有效且仅成功使用一次的 8 位加时码；
+- 设置今日总额度、增加分钟、今日不限时、恢复周计划；
+- 配置星期日至星期六的限时或不限时计划；
+- 自动应用规则，并在 PCTL 状态传播期间显示“正在同步”；
+- 导出不含 secret、PIN、离线码和完整 nonce 的诊断信息。
 
-### 快速开始
+Release 不包含 bedtime、`limit_action`、家长临时解锁、禁玩日、旧请求 15–18、`capabilities.json` 或运行时控制模式。
+
+## 兼容与安全
+
+已声明的验证基线是 Nintendo Switch OLED、HOS 22.5.0；资格测试使用 Atmosphère 1.11.2。当前 `0.1.0` 最终产物仍需在该组合上重新完成资格验证，历史包结果不能继承。
+
+启动时先做只读预检：
+
+- 已验证组合进入等待家长确认；
+- 结构正常但环境未认证时显示“兼容性待确认”，家长可用 PIN 和长按确认；
+- snapshot、PCTL layout、旧事务、PCTL 只读初始化或 release manifest 失败时进入“保护模式”，Release 不允许绕过。
+
+首次确认后才保存安装快照、解除当前限制、等待 5 秒同步宽限并进入 Active/Enforce。普通写入先持久化恢复事务；写后最多确认 30 秒，未确认则回滚，无法证明恢复时进入保护并创建 `disable.flag`。该 flag 只阻止新的控制写入，状态查询、诊断导出和恢复仍可使用。
+
+## 构建与测试
 
 本地 Python、协议和安全打包回归：
 
@@ -47,77 +50,36 @@ flowchart LR
 python .\tools\test.py
 ```
 
-涉及 C、Makefile、NRO、sysmodule 或最终 package 时，通过本地 devkitPro 容器构建：
+涉及 C、Makefile、NRO、Overlay、sysmodule 或 package 时，使用唯一权威入口：
 
 ```powershell
 python .\tools\package_remote.py
 ```
 
-脚本会清理旧产物、运行 C/Python 测试，并在 `build/packages/` 只生成和校验 `playwise-<timestamp>.zip`。该包包含 sysmodule、Companion、Overlay 和 `boot2.flag`，初始配置为 `enforce`。
+成功后只生成：
 
-完整的配置、安装、加时和恢复流程见[使用指南](docs/使用指南.md)。
-
-### 安全边界
-
-- package 默认 `enforce` 并包含 `boot2.flag`；首次引导完成前阻止普通写入和 Enforce。
-- 所有普通 PCTL 写入都进入持久化恢复事务，写后确认运行时目标；失败立即回滚，无法证明恢复时创建 `disable.flag`。
-- `flags/retry_setup_release.flag` 与 `flags/restore_install_snapshot.flag` 的恢复优先级高于 `disable.flag`。
-- 无效 token、dry-run、写入失败或结果持久化失败不得消费 nonce。
-- `raw_block` 和 `suspend` 在各自真机探针通过前保持关闭。
-- 官方家长控制是整台主机级别；本项目 PIN 不能替代 Nintendo 官方 PIN 或 App。
-
-### 当前状态
-
-协议、队列、setup 状态机、崩溃恢复、控制策略、PWA、IPC fallback、Companion、Overlay、sysmodule 和单包布局已有自动测试。真机只保留单包端到端验收及按 PCTL、引导、输入、Enforce、raw block 或 suspend 改动范围触发的专项测试。
-
-### 文档
-
-- [使用指南](docs/使用指南.md)：构建、安装、配置、日常使用与恢复。
-- [开发指南](docs/开发指南.md)：架构边界、依赖规则、安全不变量与贡献要求。
-- [协议](docs/协议.md)：配置、token、请求/result、错误和 PCTL 证据契约。
-- [测试指南](docs/测试指南.md)：本地、容器、UI 和真机验收。
-
-## English
-
-PlayWise is a local play-time control project for Nintendo Switch homebrew environments. It combines a resident sysmodule, a Companion NRO, a Tesla Overlay, and an offline parent-side PWA. Parents can manage local time rules and issue device-bound, single-use 8-digit extension codes valid for the current day.
-
-> [!WARNING]
-> This project accesses undocumented PCTL commands and parental-control state. It is intended for users familiar with Atmosphere, homebrew deployment, and SD-card recovery. A successful build is not hardware validation. New devices or relevant HOS/PCTL changes require focused validation of setup release, a real grant, and installation-snapshot restore.
-
-### Features
-
-- v2 offline codes for 1–4 minutes and 5–120 minutes in 5-minute tiers, generated via the online [Parent Web Console](https://selfuppen.github.io/playwise/) (with offline PWA support).
-- A child status/code-entry UI and a PIN-protected parent area in the Companion NRO.
-- A Tesla Overlay that submits the same request without reading `grant_secret` or calling PCTL.
-- A resident sysmodule that releases the current restriction during setup, validates tokens, and wraps ordinary PCTL writes in persistent recovery transactions.
-- `pctc:u` IPC first, with an atomic SD-card queue fallback.
-- One complete Enforce package; raw block and suspend remain separately gated high-risk capabilities.
-
-### Quick start
-
-Run the local Python, protocol, and package-safety regression suite:
-
-```powershell
-python .\tools\test.py
+```text
+build/packages/playwise-0.1.0.zip
 ```
 
-For C, Makefile, NRO, sysmodule, or final-package changes, use the local devkitPro container entry point:
+包必须包含 sysmodule、Companion NRO、Overlay、`boot2.flag` 和一致的 release manifest。构建门禁会拒绝多个公开 Zip、LAB handler、旧模式、占位 secret、组件版本或 manifest 不一致。
 
-```powershell
-python .\tools\package_remote.py
+内部 Device Lab 只在 devkitPro 环境显式构建：
+
+```sh
+make device-lab-package
 ```
 
-It produces one verified `playwise-<timestamp>.zip` under `build/packages/`, containing the sysmodule, Companion, Overlay, and `boot2.flag`, with Enforce as the initial mode.
+该目标不属于 `make packages`，产物位于 `build/device-lab/`，默认不含 `boot2.flag`。
 
-The detailed guides are currently maintained in Chinese:
+## 文档
 
-- [User guide / 使用指南](docs/使用指南.md)
-- [Development guide / 开发指南](docs/开发指南.md)
-- [Protocol / 协议](docs/协议.md)
-- [Test guide / 测试指南](docs/测试指南.md)
-
-Setup captures an installation snapshot and releases the current restriction before normal control begins. Every ordinary PCTL write is recoverable and runtime-confirmed; raw block and suspend stay independently gated. The local Companion PIN is not the Nintendo parental-control PIN.
+- [使用指南](docs/使用指南.md)
+- [开发指南](docs/开发指南.md)
+- [协议](docs/协议.md)
+- [测试指南](docs/测试指南.md)
+- [PCTL 集成架构](docs/PCTL集成架构.md)
 
 ## License
 
-Licensed under [Apache License 2.0](LICENSE). This independent project is not affiliated with or endorsed by Nintendo, Atmosphere, libnx, Tesla Menu, or nx-ovlloader. Nintendo Switch is a Nintendo trademark.
+Apache License 2.0。本项目与 Nintendo、Atmosphère、libnx、Tesla Menu 或 nx-ovlloader 无隶属或背书关系。

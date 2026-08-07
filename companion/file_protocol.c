@@ -171,11 +171,6 @@ PtcCompanionStatus ptc_companion_submit_disable_today_limit(PtcCompanionFileClie
     return submit_empty(client, request_id, created_at, "disable_today_limit");
 }
 
-PtcCompanionStatus ptc_companion_submit_block_today(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
-{
-    return submit_empty(client, request_id, created_at, "block_today");
-}
-
 PtcCompanionStatus ptc_companion_submit_restore_today_policy(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
 {
     return submit_empty(client, request_id, created_at, "restore_today_policy");
@@ -193,56 +188,6 @@ PtcCompanionStatus ptc_companion_submit_set_weekly_template(PtcCompanionFileClie
     return submit_json(client, request_id, json);
 }
 
-PtcCompanionStatus ptc_companion_submit_set_bedtime(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, const PtcBedtimeRule *bedtime)
-{
-    char json[512];
-    if (!request_id || request_id[0] == '\0' || !bedtime) {
-        return PTC_COMPANION_BAD_ARGUMENT;
-    }
-    if (ptc_companion_set_bedtime_request_json(json, sizeof(json), request_id, created_at, bedtime) >= (int)sizeof(json)) {
-        return PTC_COMPANION_BAD_ARGUMENT;
-    }
-    return submit_json(client, request_id, json);
-}
-
-PtcCompanionStatus ptc_companion_submit_set_limit_action(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, PtcLimitAction action)
-{
-    char json[512];
-    if (!request_id || request_id[0] == '\0') {
-        return PTC_COMPANION_BAD_ARGUMENT;
-    }
-    if (ptc_companion_set_limit_action_request_json(json, sizeof(json), request_id, created_at, action) >= (int)sizeof(json)) {
-        return PTC_COMPANION_BAD_ARGUMENT;
-    }
-    return submit_json(client, request_id, json);
-}
-
-PtcCompanionStatus ptc_companion_submit_parent_unlock_start(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, uint16_t duration_minutes)
-{
-    char json[512];
-    if (!request_id || request_id[0] == '\0') {
-        return PTC_COMPANION_BAD_ARGUMENT;
-    }
-    if (ptc_companion_parent_unlock_start_request_json(json, sizeof(json), request_id, created_at, duration_minutes) >= (int)sizeof(json)) {
-        return PTC_COMPANION_BAD_ARGUMENT;
-    }
-    return submit_json(client, request_id, json);
-}
-
-PtcCompanionStatus ptc_companion_submit_parent_unlock_end(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
-{
-    return submit_empty(client, request_id, created_at, "parent_unlock_end");
-}
-
-PtcCompanionStatus ptc_companion_submit_probe_raw_block(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
-{
-    return submit_empty(client, request_id, created_at, "probe_raw_block");
-}
-
-PtcCompanionStatus ptc_companion_submit_probe_suspend(PtcCompanionFileClient *client, const char *request_id, int64_t created_at)
-{
-    return submit_empty(client, request_id, created_at, "probe_suspend");
-}
 
 PtcCompanionStatus ptc_companion_set_disable_flag(PtcCompanionFileClient *client, bool enabled)
 {
@@ -320,12 +265,9 @@ PtcCompanionStatus ptc_companion_format_result_summary(const char *result_json, 
     cJSON *root;
     const cJSON *error;
     const cJSON *state;
-    const cJSON *capabilities;
     const char *request_id;
     const char *type;
     const char *status;
-    const char *mode;
-    const char *dry_run;
     const char *reason;
     size_t used = 0;
     PtcCompanionStatus result = PTC_COMPANION_OK;
@@ -344,12 +286,9 @@ PtcCompanionStatus ptc_companion_format_result_summary(const char *result_json, 
     }
     error = cJSON_GetObjectItemCaseSensitive(root, "error");
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
-    capabilities = cJSON_GetObjectItemCaseSensitive(root, "capabilities");
     request_id = json_string_or(root, "request_id", "unknown");
     type = json_string_or(root, "type", "unknown");
     status = json_string_or(root, "status", "unknown");
-    mode = json_string_or(root, "mode", "unknown");
-    dry_run = json_bool_text_or(root, "dry_run", "unknown");
     reason = json_string_or(error, "reason", "");
 
     if (!appendf(out, out_size, &used, "Result summary\n")) {
@@ -358,8 +297,7 @@ PtcCompanionStatus ptc_companion_format_result_summary(const char *result_json, 
     }
     if (!appendf(out, out_size, &used, "status: %s\n", status) ||
         !appendf(out, out_size, &used, "request: %s\n", request_id) ||
-        !appendf(out, out_size, &used, "type: %s\n", type) ||
-        !appendf(out, out_size, &used, "mode: %s  dry_run: %s\n", mode, dry_run)) {
+        !appendf(out, out_size, &used, "type: %s\n", type)) {
         result = PTC_COMPANION_BAD_ARGUMENT;
         goto done;
     }
@@ -392,41 +330,10 @@ PtcCompanionStatus ptc_companion_format_result_summary(const char *result_json, 
             "timer: enabled=%lld restricted_now=%lld\n",
             json_number_or(state, "play_timer_enabled", -1),
             json_number_or(state, "restricted_now", -1)) ||
-        !appendf(
-            out,
-            out_size,
-            &used,
-            "state: bedtime=%s unlock=%s\n",
-            json_bool_text_or(state, "bedtime_active", "unknown"),
-            json_bool_text_or(state, "parent_unlock_active", "unknown")) ||
-        !appendf(
-            out,
-            out_size,
-            &used,
-            "cap: raw_block=%s suspend=%s\n",
-            json_bool_text_or(capabilities, "raw_block_verified", "unknown"),
-            json_bool_text_or(capabilities, "suspend_verified", "unknown")) ||
         !appendf(out, out_size, &used, "completed_at: %lld\n", json_number_or(root, "completed_at", -1))) {
         result = PTC_COMPANION_BAD_ARGUMENT;
         goto done;
     }
-    {
-        const cJSON *raw_block = cJSON_GetObjectItemCaseSensitive(root, "pctl_raw_block_probe");
-        if (cJSON_IsObject(raw_block)) {
-            const cJSON *checks = cJSON_GetObjectItemCaseSensitive(raw_block, "checks");
-            const char *verdict = json_string_or(raw_block, "verdict", "unknown");
-            if (!appendf(out, out_size, &used, "%s RAW BLOCK\n", strcmp(verdict, "pass") == 0 ? "PASS" : "FAIL") ||
-                !appendf(out, out_size, &used, "raw block verdict: %s stage: %s blocked: %s restored: %s\n",
-                    verdict,
-                    json_string_or(raw_block, "failure_stage", "unknown"),
-                    json_bool_text_or(checks, "blocked_observed", "false"),
-                    json_bool_text_or(checks, "raw_restored", "false"))) {
-                result = PTC_COMPANION_BAD_ARGUMENT;
-                goto done;
-            }
-        }
-    }
-
 done:
     cJSON_Delete(root);
     return result;

@@ -184,18 +184,11 @@ const char *ptc_companion_request_command_label_zh(const char *type)
     if (strcmp(type, "set_today_limit") == 0) return "设置今日额度";
     if (strcmp(type, "add_today_minutes") == 0) return "临时加时";
     if (strcmp(type, "disable_today_limit") == 0) return "解除当前限制";
-    if (strcmp(type, "block_today") == 0) return "今日禁玩";
     if (strcmp(type, "restore_today_policy") == 0) return "恢复周计划";
     if (strcmp(type, "set_weekly_template") == 0) return "每周计划";
-    if (strcmp(type, "set_bedtime") == 0) return "就寝时间";
-    if (strcmp(type, "set_limit_action") == 0) return "限制方式";
-    if (strcmp(type, "parent_unlock_start") == 0) return "临时解锁";
-    if (strcmp(type, "parent_unlock_end") == 0) return "结束解锁";
     if (strcmp(type, "complete_setup") == 0) return "启用自动控制";
     if (strcmp(type, "retry_setup_release") == 0) return "重试前置解限";
     if (strcmp(type, "restore_install_snapshot") == 0) return "恢复安装前状态";
-    if (strcmp(type, "probe_raw_block") == 0) return "验证强制阻止";
-    if (strcmp(type, "probe_suspend") == 0) return "验证暂停软件";
     return "后台操作";
 }
 
@@ -205,7 +198,6 @@ PtcCompanionStatus ptc_companion_transport_submit_status(PtcCompanionTransportCl
     if (ptc_companion_status_request_json(json, sizeof(json), request_id, created_at) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
     return ptc_companion_transport_submit_json(client, request_id, json);
 }
-
 PtcCompanionStatus ptc_companion_transport_submit_offline_code(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const char *code)
 {
     char json[640];
@@ -220,23 +212,10 @@ static PtcCompanionStatus transport_submit_minutes(PtcCompanionTransportClient *
     return ptc_companion_transport_submit_json(client, request_id, json);
 }
 
-static PtcCompanionStatus transport_submit_parent_unlock_start(PtcCompanionTransportClient *client,
-    const char *request_id, int64_t created_at, uint16_t minutes)
-{
-    char json[512];
-    if (ptc_companion_parent_unlock_start_request_json(json, sizeof(json), request_id, created_at, minutes) >= (int)sizeof(json)) {
-        return PTC_COMPANION_BAD_ARGUMENT;
-    }
-    return ptc_companion_transport_submit_json(client, request_id, json);
-}
-
 PtcCompanionStatus ptc_companion_transport_submit_set_today_limit(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, uint16_t minutes)
 { return transport_submit_minutes(client, request_id, created_at, "set_today_limit", minutes); }
 PtcCompanionStatus ptc_companion_transport_submit_add_today_minutes(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, uint16_t minutes)
 { return transport_submit_minutes(client, request_id, created_at, "add_today_minutes", minutes); }
-PtcCompanionStatus ptc_companion_transport_submit_parent_unlock_start(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, uint16_t minutes)
-{ return transport_submit_parent_unlock_start(client, request_id, created_at, minutes); }
-
 PtcCompanionStatus ptc_companion_transport_submit_empty(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const char *type)
 {
     char json[512];
@@ -248,19 +227,5 @@ PtcCompanionStatus ptc_companion_transport_submit_set_weekly_template(PtcCompani
 {
     char json[1024];
     if (ptc_companion_set_weekly_template_request_json(json, sizeof(json), request_id, created_at, week) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
-    return ptc_companion_transport_submit_json(client, request_id, json);
-}
-
-PtcCompanionStatus ptc_companion_transport_submit_set_bedtime(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const PtcBedtimeRule *bedtime)
-{
-    char json[512];
-    if (ptc_companion_set_bedtime_request_json(json, sizeof(json), request_id, created_at, bedtime) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
-    return ptc_companion_transport_submit_json(client, request_id, json);
-}
-
-PtcCompanionStatus ptc_companion_transport_submit_set_limit_action(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, PtcLimitAction action)
-{
-    char json[512];
-    if (ptc_companion_set_limit_action_request_json(json, sizeof(json), request_id, created_at, action) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
     return ptc_companion_transport_submit_json(client, request_id, json);
 }

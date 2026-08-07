@@ -1,34 +1,9 @@
 #include "control_policy.h"
 
-#include <string.h>
-
-PtcControlMode ptc_control_mode_from_string(const char *value)
-{
-    if (value && strcmp(value, "disabled") == 0) {
-        return PTC_CONTROL_DISABLED;
-    }
-    if (value && strcmp(value, "grant") == 0) {
-        return PTC_CONTROL_GRANT;
-    }
-    if (value && strcmp(value, "enforce") == 0) {
-        return PTC_CONTROL_ENFORCE;
-    }
-    return PTC_CONTROL_OBSERVE;
-}
-
 const char *ptc_control_mode_name(PtcControlMode mode)
 {
-    switch (mode) {
-    case PTC_CONTROL_DISABLED:
-        return "disabled";
-    case PTC_CONTROL_GRANT:
-        return "grant";
-    case PTC_CONTROL_ENFORCE:
-        return "enforce";
-    case PTC_CONTROL_OBSERVE:
-    default:
-        return "observe";
-    }
+    (void)mode;
+    return "release";
 }
 
 static bool operation_is_write(PtcOperation operation)
@@ -52,21 +27,23 @@ PtcPolicyDecision ptc_policy_decide(
     out.consume_nonce_after_success = false;
     out.error = PTC_ERR_OK;
 
-    if (disable_flag || mode == PTC_CONTROL_DISABLED) {
+    if (operation == PTC_OPERATION_STATUS) {
+        out.may_read_pctl = true;
+        return out;
+    }
+
+    if (disable_flag) {
         out.error = PTC_ERR_DISABLED;
         return out;
     }
 
     out.may_read_pctl = true;
-    if (operation == PTC_OPERATION_BLOCK_TODAY &&
-        (!capabilities || !capabilities->raw_block_verified)) {
-        out.error = PTC_ERR_RAW_BLOCK_NOT_VERIFIED;
-        return out;
-    }
-    if (mode == PTC_CONTROL_OBSERVE) {
-        return out;
-    }
-
+#ifdef PLAYWISE_DEVICE_LAB
+    (void)capabilities;
+#else
+    (void)capabilities;
+#endif
+    (void)mode;
     (void)current_unlimited;
     (void)allow_unlimited_to_limited;
 

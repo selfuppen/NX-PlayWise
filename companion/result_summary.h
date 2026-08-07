@@ -9,7 +9,6 @@
 typedef struct {
     bool valid;
     bool ok;
-    bool dry_run;
     bool unlock_observed;
     int error_code;
     int remaining_minutes;
@@ -20,7 +19,6 @@ typedef struct {
     bool played_minutes_available;
     char status[8];
     char type[48];
-    char mode[24];
     char reason[64];
     char message[160];
 } PtcCompanionResultSummary;

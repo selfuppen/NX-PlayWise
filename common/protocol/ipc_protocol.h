@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
-#define PTC_IPC_SERVICE_NAME "pctc:u"
+#include "../version.h"
+
+#define PTC_IPC_SERVICE_NAME PLAYWISE_IPC_SERVICE
 #define PTC_IPC_INTERFACE_VERSION 1u
 #define PTC_IPC_MAX_REQUEST_SIZE 4096u
 #define PTC_IPC_MAX_RESULT_SIZE 8192u

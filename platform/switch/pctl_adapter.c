@@ -361,7 +361,7 @@ static PtcErrorCode switch_stop_timer(PtcPctl *pctl)
  * 1458 reports whether the alarm is disabled, which would silently swallow that request.
  * No settings write happens here: the raw block probe covers the write path.
  */
-static PtcErrorCode switch_probe_suspend(PtcPctl *pctl, PtcProbeResult *out)
+static PtcErrorCode __attribute__((unused)) switch_probe_suspend(PtcPctl *pctl, PtcProbeResult *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
     PtcSwitchSession session;
@@ -420,7 +420,7 @@ static PtcErrorCode switch_probe_suspend(PtcPctl *pctl, PtcProbeResult *out)
     return PTC_ERR_OK;
 }
 
-static PtcErrorCode switch_probe_play_timer_write(PtcPctl *pctl, PtcProbeResult *out)
+static PtcErrorCode __attribute__((unused)) switch_probe_play_timer_write(PtcPctl *pctl, PtcProbeResult *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
     PtcSwitchSession session;
@@ -531,8 +531,8 @@ static const PtcPctlVTable SWITCH_PCTL_VTABLE = {
     switch_apply_target,
     switch_start_timer,
     switch_stop_timer,
-    switch_probe_suspend,
-    switch_probe_play_timer_write,
+    NULL,
+    NULL,
     switch_snapshot_settings,
     switch_restore_settings,
     switch_debug_snapshot,

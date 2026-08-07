@@ -36,8 +36,6 @@ typedef struct {
     uint32_t accent;
 } UiAction;
 
-static const char *limit_action_label(PtcLimitAction action);
-
 static UiRuntime g_ui;
 
 static UiRect to_uirect(PtcUiRect rect);
@@ -46,26 +44,27 @@ static const UiAction TODAY_ACTIONS[] = {
     {"刷新状态", "读取今天的最新游玩状态", COLOR(42, 105, 188)},
     {"设置今日额度", "指定今天可玩的分钟数", COLOR(42, 105, 188)},
     {"临时加时", "在今天额度上增加分钟", COLOR(25, 132, 95)},
-    {"解除当前限制", "立即解除并将今天设为不限时", COLOR(25, 132, 95)},
-    {"今日禁玩", "立即设置今天不可游玩", COLOR(194, 61, 61)},
+    {"今日不限时", "今天不设时间上限", COLOR(25, 132, 95)},
     {"恢复周计划", "清除今天的临时调整", COLOR(91, 100, 116)},
 };
 
 static const UiAction PLAN_ACTIONS[] = {
-    {"每周计划", "分别设置周日至周六", COLOR(42, 105, 188)},
-    {"就寝时间", "设置夜间不可游玩的时段", COLOR(48, 92, 151)},
-    {"限制方式", "提醒、阻止或暂停软件", COLOR(91, 100, 116)},
-    {"临时解锁", "短时间暂停本地规则", COLOR(25, 132, 95)},
-    {"结束解锁", "立即恢复本地规则", COLOR(194, 61, 61)},
+    {"每周计划", "每天选择限时或不限时", COLOR(42, 105, 188)},
 };
 
-static const UiAction SAFETY_ACTIONS[] = {
-    {"启用自动控制", "确认限制已解除后，启用规则自动控制", COLOR(42, 105, 188)},
-    {"重试前置解限", "仅 pending/failed 阶段可用", COLOR(25, 132, 95)},
-    {"恢复安装前状态", "恢复原始设置并停用 PlayWise", COLOR(194, 61, 61)},
+static const UiAction SECURITY_ACTIONS[] = {
+    {"修改设备名", "更改加时码绑定的设备名称", COLOR(42, 105, 188)},
+    {"导入家长网页", "生成只供家长使用的导入文件", COLOR(25, 132, 95)},
+    {"重置加时码密钥", "生成新的加时码信任关系", COLOR(194, 61, 61)},
+    {"修改家长 PIN", "设置新的 6 位数字 PIN", COLOR(42, 105, 188)},
+};
+
+static const UiAction SUPPORT_ACTIONS[] = {
+    {"确认接管系统控制", "预检、保存快照后启用额度管理", COLOR(42, 105, 188)},
+    {"重试修复", "重新检查并恢复安全前置条件", COLOR(25, 132, 95)},
     {"紧急停用控制", "立即停止后台控制操作", COLOR(194, 61, 61)},
-    {"运行能力探针", "验证强制阻止或暂停软件能力 (需 active)", COLOR(194, 61, 61)},
-    {"重置验证密钥(Secret)", "防伪密钥，请勿在此输入8位加时码", COLOR(42, 105, 188)},
+    {"恢复安装前状态", "恢复原始设置并停用 PlayWise", COLOR(194, 61, 61)},
+    {"导出诊断包", "生成不含密钥、PIN 和离线码的支持文件", COLOR(91, 100, 116)},
 };
 
 static const UiAction RESUME_CONTROL_ACTION = {
@@ -344,7 +343,7 @@ static void describe_status(const PtcUiModel *model, char *today, size_t today_s
         return;
     }
     if (model->blocked_today == 1) {
-        snprintf(today, today_size, "今日禁玩");
+        snprintf(today, today_size, "系统当前受限");
     } else if (model->unrestricted_today == 1) {
         snprintf(today, today_size, "不限时");
     } else if (model->limited_today == 1) {
@@ -413,8 +412,8 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char today[32];
     char remaining[32];
     char played[32];
-    const char *mode = model->mode[0] ? model->mode : "--";
-    const char *limit_action = model->current_limit_action_loaded ? limit_action_label(model->current_limit_action) : "暂不可用";
+    const char *mode = strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
+        (strcmp(model->setup_phase, "protection") == 0 ? "保护模式" : "兼容性待确认");
     describe_status(model, today, sizeof(today), remaining, sizeof(remaining));
     if (model->played_minutes_available && model->played_minutes >= 0) {
         snprintf(played, sizeof(played), "约 %d 分钟", model->played_minutes);
@@ -425,7 +424,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_status_tile(pixels, stride, (UiRect){54, 118, 278, 92}, "今日状态", today, COLOR(216, 49, 54));
     draw_status_tile(pixels, stride, (UiRect){350, 118, 278, 92}, "剩余时间", remaining, COLOR(25, 132, 95));
     draw_status_tile(pixels, stride, (UiRect){646, 118, 278, 92}, "已玩时间", played, COLOR(215, 139, 25));
-    draw_status_tile(pixels, stride, (UiRect){942, 118, 284, 92}, "控制模式", mode, COLOR(28, 118, 188));
+    draw_status_tile(pixels, stride, (UiRect){942, 118, 284, 92}, "运行状态", mode, COLOR(28, 118, 188));
 
     fill_round_rect(pixels, stride, (UiRect){54, 238, 760, 246}, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, (UiRect){54, 238, 760, 246}, 1, COLOR(219, 225, 233));
@@ -438,15 +437,10 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_rect_outline(pixels, stride, (UiRect){836, 238, 390, 246}, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, 866, 282, "状态详情", 24, COLOR(28, 34, 43));
     draw_text(pixels, stride, 866, 320, model->play_timer_enabled == 1 ? "游玩计时器：已开启" : "游玩计时器：未确认", 19, COLOR(77, 86, 99));
-    {
-        char line[64];
-        snprintf(line, sizeof(line), "限制方式：%s", limit_action);
-        draw_text(pixels, stride, 866, 352, line, 19, COLOR(77, 86, 99));
-    }
-    draw_text(pixels, stride, 866, 384, model->bedtime_active ? "就寝时段：当前时段" : "就寝时段：未到时段", 19, COLOR(77, 86, 99));
-    draw_text(pixels, stride, 866, 416, model->parent_unlock_active ? "临时解锁：已开启" : "临时解锁：未开启", 19, COLOR(77, 86, 99));
-    draw_text(pixels, stride, 866, 448,
-        strcmp(model->setup_phase, "active") == 0 ? "自动控制：已启用" : "自动控制：状态未确认",
+    draw_text(pixels, stride, 866, 352, "到期行为：系统提醒", 19, COLOR(77, 86, 99));
+    draw_text(pixels, stride, 866, 384, "不会强制锁屏或关闭游戏", 19, COLOR(77, 86, 99));
+    draw_text(pixels, stride, 866, 416,
+        strcmp(model->setup_phase, "active") == 0 ? "额度管理：已启用" : "额度管理：尚未启用",
         20, strcmp(model->setup_phase, "active") == 0 ? COLOR(25, 132, 95) : COLOR(215, 139, 25));
 
     draw_notice(pixels, stride, model, 510);
@@ -462,38 +456,38 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     int64_t grace_remaining = ptc_ui_setup_grace_remaining(model, (int64_t)time(NULL));
     char phase_line[160];
     char countdown_line[80];
-    draw_header(pixels, stride, grace_remaining >= 0 ? "正在处理后台环境" : "首次设置",
-        grace_remaining >= 0 ? "正在配置底层限制策略，完成后将自动继续" : "后台已在自动控制前处理当前家长控制限制");
+    draw_header(pixels, stride, grace_remaining >= 0 ? "正在同步" : "首次设置",
+        grace_remaining >= 0 ? "系统设置正在同步，通常稍后完成" : "完成家长设置后才会接管系统控制");
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, 204, 190,
-        grace_remaining >= 0 ? "设备检查已通过" :
-        (model->setup_restriction_cleared ? "当前限制已解除" : "正在等待解除当前限制"), 31,
+        grace_remaining >= 0 ? "环境检查已通过" :
+        (strcmp(phase, "protection") == 0 ? "保护模式" : "兼容性待确认"), 31,
         model->setup_restriction_cleared ? COLOR(25, 132, 95) : COLOR(215, 139, 25));
-    snprintf(phase_line, sizeof(phase_line), "当前阶段：%s    安装前快照：%s",
-        grace_remaining >= 0 ? "等待自动启用" : phase,
+    snprintf(phase_line, sizeof(phase_line), "当前状态：%s    安装前快照：%s",
+        grace_remaining >= 0 ? "正在同步" : (strcmp(phase, "protection") == 0 ? "保护模式" : "等待家长确认"),
         model->setup_snapshot_available ? "已保存" : "不可用");
     draw_text(pixels, stride, 204, 248, phase_line, 22, COLOR(77, 86, 99));
     if (grace_remaining >= 0) {
         if (grace_remaining > 0) {
-            snprintf(countdown_line, sizeof(countdown_line), "后台策略配置中 (剩余 %lld 秒)…", (long long)grace_remaining);
+            snprintf(countdown_line, sizeof(countdown_line), "系统设置同步中（约 %lld 秒）…", (long long)grace_remaining);
         } else {
-            snprintf(countdown_line, sizeof(countdown_line), "后台配置完成，正在启用自动控制…");
+            snprintf(countdown_line, sizeof(countdown_line), "同步完成，正在启用额度管理…");
         }
         draw_text(pixels, stride, 204, 310, countdown_line, 34, COLOR(28, 118, 188));
         draw_text(pixels, stride, 204, 356, "无需操作；完成后将自动进入游玩时间页面。", 22, COLOR(45, 52, 62));
     } else if (strcmp(phase, "pending") == 0) {
-        draw_text(pixels, stride, 204, 300, "当前处于待解除限制阶段，后台正在尝试前置解限。", 23, COLOR(45, 52, 62));
-        draw_text(pixels, stride, 204, 344, "请等待，若无响应可按 Minus 在安全工具尝试【重试前置解限】。", 23, COLOR(45, 52, 62));
-    } else if (strcmp(phase, "failed") == 0) {
-        draw_text(pixels, stride, 204, 300, "前置解限或验证失败，请按 Minus 进入安全工具查看。", 23, COLOR(194, 61, 61));
-        draw_text(pixels, stride, 204, 344, "请执行【重试前置解限】或【恢复安装前状态】。", 23, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 300, "系统设置正在同步，通常稍后完成。", 23, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 344, "如长时间无变化，可进入【支持与恢复】选择重试修复。", 23, COLOR(45, 52, 62));
+    } else if (strcmp(phase, "failed") == 0 || strcmp(phase, "protection") == 0) {
+        draw_text(pixels, stride, 204, 300, "已暂停新的控制修改，状态和恢复功能仍可使用。", 23, COLOR(215, 139, 25));
+        draw_text(pixels, stride, 204, 344, "请在【支持与恢复】查看当前唯一推荐操作。", 23, COLOR(45, 52, 62));
     } else if (strcmp(phase, "restored") == 0) {
         draw_text(pixels, stride, 204, 300, "已恢复至安装前状态。若要重新验证及启用控制，", 23, COLOR(45, 52, 62));
         draw_text(pixels, stride, 204, 344, "请清理状态文件并重启主机以重新开始首次引导。", 23, COLOR(45, 52, 62));
     } else {
-        draw_text(pixels, stride, 204, 300, "确认 Companion 可以正常进入后，按 Minus 验证家长 PIN。", 23, COLOR(45, 52, 62));
-        draw_text(pixels, stride, 204, 344, "在安全工具中启用自动控制；规则会在 5 秒宽限后生效。", 23, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 300, "1. 创建 6 位家长 PIN    2. 确认周计划与加时码设置", 23, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 344, "3. 在【支持与恢复】确认接管系统控制", 23, COLOR(45, 52, 62));
     }
     draw_text(pixels, stride, 204, 400, model->message[0] ? model->message : "Y 可刷新后台状态。", 20, COLOR(91, 100, 116));
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0), "Minus  家长设置");
@@ -540,9 +534,13 @@ static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
         *count = (int)(sizeof(PLAN_ACTIONS) / sizeof(PLAN_ACTIONS[0]));
         return PLAN_ACTIONS;
     }
-    if (page == PTC_UI_PARENT_SAFETY) {
-        *count = (int)(sizeof(SAFETY_ACTIONS) / sizeof(SAFETY_ACTIONS[0]));
-        return SAFETY_ACTIONS;
+    if (page == PTC_UI_PARENT_SECURITY) {
+        *count = (int)(sizeof(SECURITY_ACTIONS) / sizeof(SECURITY_ACTIONS[0]));
+        return SECURITY_ACTIONS;
+    }
+    if (page == PTC_UI_PARENT_SUPPORT) {
+        *count = (int)(sizeof(SUPPORT_ACTIONS) / sizeof(SUPPORT_ACTIONS[0]));
+        return SUPPORT_ACTIONS;
     }
     *count = (int)(sizeof(TODAY_ACTIONS) / sizeof(TODAY_ACTIONS[0]));
     return TODAY_ACTIONS;
@@ -550,7 +548,7 @@ static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
 
 static void draw_tabs(uint32_t *pixels, uint32_t stride, PtcUiParentPage active)
 {
-    static const char *LABELS[] = {"今日管理", "时间计划", "安全工具"};
+    static const char *LABELS[] = {"今日额度", "周计划", "加时码与安全", "支持与恢复"};
     int index;
     for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
         UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
@@ -601,19 +599,19 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
     char hint[192];
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 43, "设备状态与引导", 23, COLOR(28, 34, 43));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 43, "当前环境与恢复", 23, COLOR(28, 34, 43));
     /* Setup phase */
     if (strcmp(model->setup_phase, "active") == 0) {
-        phase_label = "自动控制已启用";
+        phase_label = "正常运行";
         phase_color = COLOR(25, 132, 95);
     } else if (strcmp(model->setup_phase, "released") == 0) {
-        phase_label = "限制已解除，等待启用";
+        phase_label = "正在同步";
         phase_color = COLOR(28, 118, 188);
     } else if (strcmp(model->setup_phase, "pending") == 0) {
-        phase_label = "等待前置解限";
+        phase_label = "正在同步";
         phase_color = COLOR(215, 139, 25);
     } else if (strcmp(model->setup_phase, "failed") == 0) {
-        phase_label = "前置解限失败";
+        phase_label = "保护模式";
         phase_color = COLOR(194, 61, 61);
     } else if (strcmp(model->setup_phase, "restored") == 0) {
         phase_label = "已恢复快照";
@@ -622,27 +620,18 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
         phase_label = model->setup_phase[0] ? model->setup_phase : "--";
         phase_color = COLOR(91, 100, 116);
     }
-    draw_text(pixels, stride, panel.x + 26, panel.y + 82, "初始化阶段", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 82, "运行状态", 18, COLOR(103, 111, 124));
     draw_text(pixels, stride, panel.x + 172, panel.y + 82, phase_label, 18, phase_color);
     draw_text(pixels, stride, panel.x + 26, panel.y + 112, "安装前快照", 18, COLOR(103, 111, 124));
     draw_text(pixels, stride, panel.x + 172, panel.y + 112,
               model->setup_snapshot_available ? "已保存" : "不可用", 18,
               model->setup_snapshot_available ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 142, "控制模式", 18, COLOR(103, 111, 124));
-    draw_text(pixels, stride, panel.x + 172, panel.y + 142,
-              model->mode[0] ? model->mode : "--", 18, COLOR(28, 118, 188));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 172, "强制阻止", 18, COLOR(103, 111, 124));
-    draw_text(pixels, stride, panel.x + 172, panel.y + 172,
-              model->raw_block_verified ? "已验证" : "未验证", 18,
-              model->raw_block_verified ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 202, "暂停软件", 18, COLOR(103, 111, 124));
-    draw_text(pixels, stride, panel.x + 172, panel.y + 202,
-              model->suspend_verified ? "已验证" : "未验证", 18,
-              model->suspend_verified ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 142, "到期行为", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, panel.x + 172, panel.y + 142, "系统提醒", 18, COLOR(28, 118, 188));
     /* Contextual hint for selected action */
     snprintf(hint, sizeof(hint), "%s", model->safety_hint[0] ? model->safety_hint : "选择操作查看引导说明。");
     draw_text(pixels, stride, panel.x + 26, panel.y + 262, hint, 17, COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 292, "高风险操作会再次要求确认", 18, COLOR(194, 61, 61));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 292, "状态和恢复在停用时仍可使用", 18, COLOR(91, 100, 116));
 }
 
 static void draw_status_row(
@@ -688,19 +677,13 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                     model->remaining_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
     draw_status_row(pixels, stride, panel, panel.y + 132, "已玩时间", played,
                     model->played_minutes_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 162, "控制模式", model->mode[0] ? model->mode : "--", COLOR(28, 118, 188));
-    draw_status_row(pixels, stride, panel, panel.y + 192, "限制方式",
-                    model->current_limit_action_loaded ? limit_action_label(model->current_limit_action) : "暂不可用",
-                    model->current_limit_action_loaded ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 222, "游玩计时器",
+    draw_status_row(pixels, stride, panel, panel.y + 162, "运行状态",
+                    strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
+                    (strcmp(model->setup_phase, "protection") == 0 ? "保护模式" : "兼容性待确认"),
+                    strcmp(model->setup_phase, "active") == 0 ? COLOR(25, 132, 95) : COLOR(215, 139, 25));
+    draw_status_row(pixels, stride, panel, panel.y + 192, "系统计时器",
                     model->play_timer_enabled == 1 ? "已开启" : "未确认",
                     model->play_timer_enabled == 1 ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 252, "就寝时段",
-                    model->bedtime_active ? "当前时段" : "未到时段",
-                    model->bedtime_active ? COLOR(194, 61, 61) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 282, "临时解锁",
-                    model->parent_unlock_active ? "已开启" : "未开启",
-                    model->parent_unlock_active ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
 }
 
 static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -714,18 +697,18 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     for (index = 0; index < action_count; ++index) {
         UiRect card = to_uirect(ptc_ui_parent_card_rect(index));
         PtcUiActionState astate = PTC_UI_ACTION_AVAILABLE;
-        if (model->parent_page == PTC_UI_PARENT_SAFETY) {
+        if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
             astate = ptc_ui_safety_action_available(model, index);
         }
         const UiAction *action = &actions[index];
-        if (model->parent_page == PTC_UI_PARENT_SAFETY && index == 3 && model->disable_flag_present) {
+        if (model->parent_page == PTC_UI_PARENT_SUPPORT && index == 2 && model->disable_flag_present) {
             action = &RESUME_CONTROL_ACTION;
         }
         draw_action_card(pixels, stride, card, action, index == model->selected_index, astate);
     }
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
         draw_today_status(pixels, stride, model);
-    } else if (model->parent_page == PTC_UI_PARENT_SAFETY) {
+    } else if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
         draw_safety_status(pixels, stride, model);
     } else {
         draw_safety_status(pixels, stride, model);
@@ -742,35 +725,10 @@ static const char *rule_mode_label(PtcRuleMode mode)
     switch (mode) {
     case PTC_RULE_MODE_UNLIMITED:
         return "不限时";
-    case PTC_RULE_MODE_BLOCKED:
-        return "禁玩";
     case PTC_RULE_MODE_LIMIT:
     default:
         return "限时";
     }
-}
-
-static const char *limit_action_label(PtcLimitAction action)
-{
-    switch (action) {
-    case PTC_LIMIT_ACTION_RAW_BLOCK:
-        return "强制阻止";
-    case PTC_LIMIT_ACTION_SUSPEND:
-        return "暂停软件";
-    case PTC_LIMIT_ACTION_REMIND:
-    default:
-        return "仅提醒";
-    }
-}
-
-static void format_clock(char *out, size_t out_size, uint16_t minute_of_day)
-{
-    snprintf(
-        out,
-        out_size,
-        "%02u:%02u",
-        (unsigned int)(minute_of_day / 60),
-        (unsigned int)(minute_of_day % 60));
 }
 
 static void draw_dialog_shell(
@@ -820,8 +778,6 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     char preview_line[128];
     int preview_min = ptc_ui_preview_remaining_minutes(model);
     int played_min = model->played_minutes_available ? model->played_minutes : -1;
-    PtcUiBedtimeConflict conflict;
-    bool has_conflict = ptc_ui_check_bedtime_conflict(model, model->draft_minutes, &conflict);
 
     draw_dialog_shell(pixels, stride, model, &dialog, 720, 480);
     snprintf(value, sizeof(value), "%u 分钟", (unsigned int)model->draft_minutes);
@@ -840,11 +796,7 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     }
     draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 310, 640, 30}, preview_line, 21, COLOR(25, 132, 95));
 
-    if (has_conflict && conflict.quota_exceeds_bedtime) {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 20, dialog.y + 342, 680, 26}, conflict.warning_text, 16, COLOR(194, 61, 61));
-    } else {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 342, 580, 26}, "Y 或点数值手动输入；上下 ±15，左右 ±5", 18, COLOR(77, 86, 99));
-    }
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 342, 580, 26}, "Y 或点数值手动输入；上下 ±15，左右 ±5", 18, COLOR(77, 86, 99));
     draw_overlay_actions(pixels, stride, model, "A / +  提交并刷新");
 }
 
@@ -863,7 +815,7 @@ static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         draw_rect_outline(pixels, stride, card, day == model->editor_index ? 3 : 1, border);
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 14, card.width, 34}, DAYS[day], 21, COLOR(28, 34, 43));
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 69, card.width, 34}, rule_mode_label(model->draft_week[day].mode), 22,
-                         model->draft_week[day].mode == PTC_RULE_MODE_BLOCKED ? COLOR(194, 61, 61) : COLOR(28, 118, 188));
+                         COLOR(28, 118, 188));
         if (model->draft_week[day].mode == PTC_RULE_MODE_LIMIT) {
             snprintf(minutes, sizeof(minutes), "%u 分钟", (unsigned int)model->draft_week[day].minutes);
         } else {
@@ -887,118 +839,6 @@ static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     draw_overlay_actions(pixels, stride, model, "A / +  保存并刷新");
 }
 
-static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
-{
-    UiRect dialog;
-    char start[16];
-    char end[16];
-    UiRect enabled = {0};
-    UiRect start_rect = {0};
-    UiRect end_rect = {0};
-    PtcUiBedtimeConflict conflict;
-    bool has_conflict = ptc_ui_check_bedtime_conflict(model, model->draft_minutes, &conflict);
-
-    draw_dialog_shell(pixels, stride, model, &dialog, 820, 520);
-    format_clock(start, sizeof(start), model->draft_bedtime.start_min);
-    format_clock(end, sizeof(end), model->draft_bedtime.end_min);
-    enabled = (UiRect){dialog.x + 46, dialog.y + 154, 210, 92};
-    start_rect = (UiRect){dialog.x + 282, dialog.y + 154, 210, 92};
-    end_rect = (UiRect){dialog.x + 518, dialog.y + 154, 210, 92};
-    fill_round_rect(pixels, stride, enabled, 8, model->draft_bedtime.enabled ? COLOR(230, 247, 239) : COLOR(244, 246, 249));
-    draw_rect_outline(pixels, stride, enabled, model->editor_index == 0 ? 3 : 1,
-                      model->editor_index == 0 ? COLOR(25, 132, 95) : COLOR(219, 225, 233));
-    draw_text_center(pixels, stride, (UiRect){enabled.x, enabled.y + 5, enabled.width, 30}, "状态", 17, COLOR(91, 100, 114));
-    draw_text_center(pixels, stride, (UiRect){enabled.x, enabled.y + 32, enabled.width, 32}, model->draft_bedtime.enabled ? "已启用" : "未启用", 24,
-                     model->draft_bedtime.enabled ? COLOR(25, 132, 95) : COLOR(91, 100, 114));
-    draw_text_center(pixels, stride, (UiRect){enabled.x, enabled.y + 64, enabled.width, 22}, "(X 切换状态)", 15, COLOR(120, 130, 145));
-    fill_round_rect(pixels, stride, start_rect, 8, COLOR(244, 249, 255));
-    draw_rect_outline(pixels, stride, start_rect, model->editor_index == 1 ? 3 : 1,
-                      model->editor_index == 1 ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
-    draw_text_center(pixels, stride, (UiRect){start_rect.x, start_rect.y + 5, start_rect.width, 38}, "开始", 18, COLOR(91, 100, 114));
-    draw_text_center(pixels, stride, (UiRect){start_rect.x, start_rect.y + 39, start_rect.width, 40}, start, 28, COLOR(28, 118, 188));
-    fill_round_rect(pixels, stride, end_rect, 8, COLOR(244, 249, 255));
-    draw_rect_outline(pixels, stride, end_rect, model->editor_index == 2 ? 3 : 1,
-                      model->editor_index == 2 ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
-    draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 5, end_rect.width, 38}, "结束", 18, COLOR(91, 100, 114));
-    draw_text_center(pixels, stride, (UiRect){end_rect.x, end_rect.y + 39, end_rect.width, 40}, end, 28, COLOR(28, 118, 188));
-    if (model->draft_bedtime.enabled) {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 316, dialog.width - 160, 34},
-                         "X 切换启用状态；Y 或点时间手动输入；选中时间后上下 ±15", 19, COLOR(77, 86, 99));
-    } else {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 316, dialog.width - 80, 34},
-                         "就寝限制未启用（按 X 键或点击【状态】启用后方可调整时间）", 18, COLOR(194, 61, 61));
-    }
-
-    if (has_conflict && conflict.remind_bedtime_conflict) {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 20, dialog.y + 356, dialog.width - 40, 36},
-                         "⚠️ 提醒模式：到就寝时间仅提示，不强行关停；如需到点挂断请更改动作为【强行禁玩】", 16, COLOR(194, 61, 61));
-    } else {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 356, dialog.width - 80, 36},
-                         "说明：就寝时间与每日时长取较严规则；配额超出就寝时间时到点优先截止限制", 17, COLOR(120, 130, 145));
-    }
-    if (model->draft_bedtime.enabled) {
-        draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_up_rect(1), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-        draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_down_rect(1), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-        draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_up_rect(2), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-        draw_dialog_button(pixels, stride, ptc_ui_bedtime_adj_down_rect(2), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-    }
-    draw_overlay_actions(pixels, stride, model, "A / +  保存并刷新");
-}
-
-static void draw_limit_action_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
-{
-    static const PtcLimitAction ACTIONS[] = {
-        PTC_LIMIT_ACTION_REMIND,
-        PTC_LIMIT_ACTION_RAW_BLOCK,
-        PTC_LIMIT_ACTION_SUSPEND,
-    };
-    UiRect dialog;
-    int index;
-    draw_dialog_shell(pixels, stride, model, &dialog, 850, 380);
-    if (model->current_limit_action_loaded) {
-        char current[64];
-        snprintf(current, sizeof(current), "当前限制方式：%s", limit_action_label(model->current_limit_action));
-        draw_text(pixels, stride, dialog.x + 46, dialog.y + 116, current, 18, COLOR(91, 100, 114));
-    }
-    for (index = 0; index < 3; ++index) {
-        UiRect option = {dialog.x + 46 + index * 254, dialog.y + 142, 228, 96};
-        bool selected = ACTIONS[index] == model->draft_limit_action;
-        fill_round_rect(pixels, stride, option, 8, selected ? COLOR(244, 249, 255) : COLOR(250, 251, 253));
-        draw_rect_outline(pixels, stride, option, selected ? 3 : 1,
-                          selected ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
-        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 16, option.width, 36}, limit_action_label(ACTIONS[index]), 22,
-                         selected ? COLOR(28, 118, 188) : COLOR(77, 86, 99));
-        if (ACTIONS[index] == PTC_LIMIT_ACTION_REMIND) {
-            draw_text_center(pixels, stride, (UiRect){option.x, option.y + 54, option.width, 24}, "(就寝仅提示不关停)", 15, COLOR(120, 130, 145));
-        } else {
-            draw_text_center(pixels, stride, (UiRect){option.x, option.y + 54, option.width, 24}, "(到就寝点强行锁定)", 15, COLOR(25, 132, 95));
-        }
-    }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 244, dialog.width - 160, 34}, "方向键/摇杆或触摸选择限制方式", 20, COLOR(77, 86, 99));
-    draw_overlay_actions(pixels, stride, model, "A / +  保存并刷新");
-}
-
-static void draw_probe_select_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
-{
-    UiRect dialog;
-    int index;
-    draw_dialog_shell(pixels, stride, model, &dialog, 800, 360);
-    for (index = 0; index < 2; ++index) {
-        UiRect option = to_uirect(ptc_ui_probe_option_rect(index));
-        bool selected = index == model->editor_index;
-        const char *title = index == 0 ? "验证强制阻止" : "验证暂停软件";
-        const char *desc = index == 0 ? "发送挂断信号退出游戏" : "后台冻结游戏进程";
-        fill_round_rect(pixels, stride, option, 8, selected ? COLOR(244, 249, 255) : COLOR(250, 251, 253));
-        draw_rect_outline(pixels, stride, option, selected ? 3 : 1,
-                          selected ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
-        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 16, option.width, 36}, title, 24,
-                         selected ? COLOR(28, 118, 188) : COLOR(77, 86, 99));
-        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 60, option.width, 24}, desc, 18, COLOR(120, 130, 145));
-    }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 80, dialog.y + 264, dialog.width - 160, 34}, "方向键选择探针，需要处在 active 阶段", 20, COLOR(77, 86, 99));
-    draw_overlay_actions(pixels, stride, model, "A / +  开始验证");
-}
-
 static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     static const char *KEY_LABELS[] = {
@@ -1019,10 +859,7 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     draw_rect_outline(pixels, stride, display, 2, COLOR(28, 118, 188));
     draw_text_center(pixels, stride, display, shown, 32, COLOR(28, 118, 188));
 
-    if (model->numpad_purpose == PTC_UI_NUMPAD_BEDTIME) {
-        snprintf(current, sizeof(current), "当前值：%02u:%02u  ·  输入 4 位 HHMM",
-                 (unsigned int)(model->numpad_current / 60), (unsigned int)(model->numpad_current % 60));
-    } else if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
+    if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
         snprintf(current, sizeof(current), "当前值：%u 分钟  ·  范围 %u–%u",
                  (unsigned int)model->numpad_current, (unsigned int)model->numpad_minimum,
                  (unsigned int)model->numpad_maximum);
@@ -1051,18 +888,13 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
 static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
-    bool danger = model->operation == PTC_UI_OPERATION_BLOCK_TODAY ||
-                  model->operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT ||
+    bool danger = model->operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT ||
                   model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT ||
                   model->operation == PTC_UI_OPERATION_SAVE_WEEKLY ||
-                  model->operation == PTC_UI_OPERATION_SAVE_BEDTIME ||
-                  model->operation == PTC_UI_OPERATION_SAVE_LIMIT_ACTION ||
                   model->operation == PTC_UI_OPERATION_EMERGENCY_DISABLE ||
                   model->operation == PTC_UI_OPERATION_RESUME_CONTROL ||
                   model->operation == PTC_UI_OPERATION_COMPLETE_SETUP ||
-                  model->operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT ||
-                  model->operation == PTC_UI_OPERATION_PROBE_RAW_BLOCK ||
-                  model->operation == PTC_UI_OPERATION_PROBE_SUSPEND;
+                  model->operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT;
     draw_dialog_shell(pixels, stride, model, &dialog, 760, 330);
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 154, 620, 64}, 8,
                     danger ? COLOR(255, 240, 240) : COLOR(240, 248, 244));
@@ -1080,15 +912,6 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         break;
     case PTC_UI_OVERLAY_WEEKLY:
         draw_weekly_overlay(pixels, stride, model);
-        break;
-    case PTC_UI_OVERLAY_BEDTIME:
-        draw_bedtime_overlay(pixels, stride, model);
-        break;
-    case PTC_UI_OVERLAY_LIMIT_ACTION:
-        draw_limit_action_overlay(pixels, stride, model);
-        break;
-    case PTC_UI_OVERLAY_PROBE_SELECT:
-        draw_probe_select_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_CONFIRM:
         draw_confirm_overlay(pixels, stride, model);

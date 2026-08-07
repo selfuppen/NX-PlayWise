@@ -25,8 +25,6 @@ ERRORS: dict[str, tuple[int, str]] = {
     "code_cooldown": (208, "短码错误次数过多，请稍后再试"),
     "disabled": (300, "后台当前已禁用"),
     "unlimited_not_allowed": (301, "当前无限制状态不允许改为有限制"),
-    "raw_block_not_verified": (302, "禁玩能力尚未验证"),
-    "suspend_not_verified": (303, "暂停能力尚未验证"),
     "pctl_init_failed": (400, "家长控制服务初始化失败"),
     "pctl_read_failed": (401, "读取家长控制状态失败"),
     "pctl_write_failed": (402, "写入家长控制设置失败"),
@@ -65,17 +63,6 @@ def request_from_args(args: argparse.Namespace, paths: AppPaths) -> dict[str, An
     return read_json(latest_request(paths))
 
 
-def capabilities(paths: AppPaths) -> dict[str, bool]:
-    path = paths.app_root / "capabilities.json"
-    if path.exists():
-        data = read_json(path)
-        return {
-            "raw_block_verified": bool(data.get("raw_block_verified", False)),
-            "suspend_verified": bool(data.get("suspend_verified", False)),
-        }
-    return {"raw_block_verified": False, "suspend_verified": False}
-
-
 def state(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "day_index": args.day_index,
@@ -86,12 +73,10 @@ def state(args: argparse.Namespace) -> dict[str, Any]:
         "remaining_minutes": args.remaining_minutes,
         "play_timer_enabled": args.play_timer_enabled,
         "restricted_now": args.restricted_now,
-        "bedtime_active": args.bedtime_active,
-        "parent_unlock_active": args.parent_unlock_active,
     }
 
 
-def result_for(args: argparse.Namespace, request: dict[str, Any], caps: dict[str, bool]) -> dict[str, Any]:
+def result_for(args: argparse.Namespace, request: dict[str, Any]) -> dict[str, Any]:
     request_id = str(request.get("request_id") or "")
     request_type = str(request.get("type") or args.type)
     result = {
@@ -99,10 +84,7 @@ def result_for(args: argparse.Namespace, request: dict[str, Any], caps: dict[str
         "request_id": request_id,
         "type": request_type,
         "status": args.status,
-        "mode": args.mode,
-        "dry_run": args.dry_run,
         "state": state(args),
-        "capabilities": caps,
         "completed_at": args.completed_at if args.completed_at is not None else int(time.time()),
     }
     if args.status == "error":
@@ -125,8 +107,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--type", default="status", help="Request type when --request-id has no pending file.")
     parser.add_argument("--status", choices=["ok", "error"], default="ok")
     parser.add_argument("--reason", choices=sorted(ERRORS), default="disabled", help="Error reason when --status error.")
-    parser.add_argument("--mode", default="observe", choices=["observe", "grant", "enforce", "disabled"])
-    parser.add_argument("--dry-run", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--day-index", type=parse_int, default=2380)
     parser.add_argument("--completed-at", type=parse_int)
     parser.add_argument("--minutes", type=parse_int, help="Include an offline_code applied.minutes block for ok results.")
@@ -136,8 +116,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--unrestricted-today", type=parse_int, default=-1)
     parser.add_argument("--play-timer-enabled", type=parse_int, default=-1)
     parser.add_argument("--restricted-now", type=parse_int, default=-1)
-    parser.add_argument("--bedtime-active", action="store_true")
-    parser.add_argument("--parent-unlock-active", action="store_true")
     return parser
 
 
@@ -148,7 +126,7 @@ def main() -> int:
     request_id = str(request.get("request_id") or "")
     if not request_id:
         raise SystemExit("request_id is required")
-    result = result_for(args, request, capabilities(paths))
+    result = result_for(args, request)
     output = paths.results / f"{request_id}.json"
     write_json_atomic(output, result)
     print(output)

@@ -8,14 +8,15 @@ endif
 
 TOPDIR ?= $(CURDIR)
 include $(DEVKITPRO)/libnx/switch_rules
+include $(TOPDIR)/../../common/version.mk
 
 TARGET := pctc
 BUILD := build
 SOURCES := source . .. ../.. ../../common/protocol ../../platform/switch ../../third_party/cjson
-INCLUDES := vendor/libtesla/include ../.. ../../common ../../platform ../../platform/switch
+INCLUDES := vendor/libtesla/include ../.. ../../common ../../platform ../../platform/switch ../../build/generated
 APP_TITLE := 任你玩
 APP_AUTHOR := selfuppen@qq.com
-APP_VERSION := 1.0.0
+APP_VERSION := $(PLAYWISE_VERSION)
 NO_ICON := 1
 
 export NROFLAGS += --nacp=$(TOPDIR)/$(TARGET).nacp

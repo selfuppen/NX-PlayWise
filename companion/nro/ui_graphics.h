@@ -17,45 +17,36 @@ typedef enum {
 typedef enum {
     PTC_UI_PARENT_TODAY = 0,
     PTC_UI_PARENT_PLAN = 1,
-    PTC_UI_PARENT_SAFETY = 2,
-    PTC_UI_PARENT_PAGE_COUNT = 3
+    PTC_UI_PARENT_SECURITY = 2,
+    PTC_UI_PARENT_SUPPORT = 3,
+    PTC_UI_PARENT_PAGE_COUNT = 4
 } PtcUiParentPage;
 
 typedef enum {
     PTC_UI_OVERLAY_NONE = 0,
     PTC_UI_OVERLAY_MINUTES = 1,
     PTC_UI_OVERLAY_WEEKLY = 2,
-    PTC_UI_OVERLAY_BEDTIME = 3,
-    PTC_UI_OVERLAY_LIMIT_ACTION = 4,
-    PTC_UI_OVERLAY_CONFIRM = 5,
-    PTC_UI_OVERLAY_NUMPAD = 6,
-    PTC_UI_OVERLAY_PROBE_SELECT = 7
+    PTC_UI_OVERLAY_CONFIRM = 3,
+    PTC_UI_OVERLAY_NUMPAD = 4
 } PtcUiOverlay;
 
 typedef enum {
     PTC_UI_NUMPAD_NONE = 0,
     PTC_UI_NUMPAD_OFFLINE_CODE = 1,
-    PTC_UI_NUMPAD_MINUTES = 2,
-    PTC_UI_NUMPAD_BEDTIME = 3
+    PTC_UI_NUMPAD_MINUTES = 2
 } PtcUiNumpadPurpose;
 
 typedef enum {
     PTC_UI_OPERATION_NONE = 0,
     PTC_UI_OPERATION_SET_TODAY_LIMIT = 1,
     PTC_UI_OPERATION_ADD_TODAY_MINUTES = 2,
-    PTC_UI_OPERATION_PARENT_UNLOCK = 3,
-    PTC_UI_OPERATION_BLOCK_TODAY = 4,
-    PTC_UI_OPERATION_COMPLETE_SETUP = 5,
-    PTC_UI_OPERATION_EMERGENCY_DISABLE = 6,
-    PTC_UI_OPERATION_RESUME_CONTROL = 7,
-    PTC_UI_OPERATION_PROBE_RAW_BLOCK = 8,
-    PTC_UI_OPERATION_PROBE_SUSPEND = 9,
-    PTC_UI_OPERATION_SAVE_WEEKLY = 10,
-    PTC_UI_OPERATION_SAVE_BEDTIME = 11,
-    PTC_UI_OPERATION_SAVE_LIMIT_ACTION = 12,
-    PTC_UI_OPERATION_RETRY_SETUP_RELEASE = 13,
-    PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT = 14,
-    PTC_UI_OPERATION_DISABLE_TODAY_LIMIT = 15
+    PTC_UI_OPERATION_COMPLETE_SETUP = 3,
+    PTC_UI_OPERATION_EMERGENCY_DISABLE = 4,
+    PTC_UI_OPERATION_RESUME_CONTROL = 5,
+    PTC_UI_OPERATION_SAVE_WEEKLY = 6,
+    PTC_UI_OPERATION_RETRY_SETUP_RELEASE = 7,
+    PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT = 8,
+    PTC_UI_OPERATION_DISABLE_TODAY_LIMIT = 9
 } PtcUiOperation;
 
 typedef enum {
@@ -79,15 +70,11 @@ typedef struct {
     int played_minutes;
     int play_timer_enabled;
     int restricted_now;
-    bool bedtime_active;
-    bool parent_unlock_active;
-    bool raw_block_verified;
-    bool suspend_verified;
     bool disable_flag_present;
     bool setup_restriction_cleared;
     bool setup_snapshot_available;
     int64_t setup_activate_after;
-    char setup_phase[16];
+    char setup_phase[32];
     uint16_t day_index;
     char mode[24];
     char request_id[80];
@@ -103,10 +90,6 @@ typedef struct {
     uint16_t minimum_minutes;
     uint16_t maximum_minutes;
     PtcDayRule draft_week[7];
-    PtcBedtimeRule draft_bedtime;
-    PtcLimitAction current_limit_action;
-    PtcLimitAction draft_limit_action;
-    bool current_limit_action_loaded;
     int editor_index;
     char overlay_title[64];
     char overlay_body[192];
@@ -158,11 +141,6 @@ typedef enum {
     PTC_UI_HIT_WEEKLY_MIN_DEC,
     PTC_UI_HIT_WEEKLY_MIN_INC,
     PTC_UI_HIT_WEEKLY_MIN_INPUT,
-    PTC_UI_HIT_BEDTIME_FIELD,
-    PTC_UI_HIT_BEDTIME_ADJ_UP,
-    PTC_UI_HIT_BEDTIME_ADJ_DOWN,
-    PTC_UI_HIT_LIMIT_ACTION_OPTION,
-    PTC_UI_HIT_PROBE_OPTION,
     PTC_UI_HIT_NUMPAD_KEY
 } PtcUiHitKind;
 
@@ -180,7 +158,6 @@ void ptc_ui_change_parent_page(PtcUiModel *model, int direction);
 void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertical);
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
 bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out);
-bool ptc_ui_parse_bedtime_time(const char *text, uint16_t *out_min);
 void ptc_ui_numpad_open(
     PtcUiModel *model,
     PtcUiNumpadPurpose purpose,
@@ -198,27 +175,14 @@ void ptc_ui_numpad_clear(PtcUiModel *model);
 bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value);
 void ptc_ui_numpad_finish(PtcUiModel *model);
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
-uint16_t ptc_ui_adjust_minute_of_day(uint16_t value, int delta);
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode);
-PtcLimitAction ptc_ui_shift_limit_action(PtcLimitAction action, int direction);
 bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minutes);
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
-bool ptc_ui_bedtime_active_at(const PtcBedtimeRule *bedtime, uint16_t minute_of_day);
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now);
 bool ptc_ui_cancel_overlay(PtcUiModel *model);
 PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model);
 bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);
 void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const char *transport_label);
-typedef struct {
-    bool conflict_detected;
-    uint16_t minutes_to_bedtime;
-    bool quota_exceeds_bedtime;
-    bool remind_bedtime_conflict;
-    char warning_text[256];
-} PtcUiBedtimeConflict;
-
-bool ptc_ui_check_bedtime_conflict(const PtcUiModel *model, uint16_t target_minutes, PtcUiBedtimeConflict *out);
-uint16_t ptc_ui_minutes_to_bedtime(uint16_t now_minute, const PtcBedtimeRule *bedtime);
 
 PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int index);
 const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index);
@@ -246,11 +210,6 @@ PtcUiRect ptc_ui_weekly_min_down_rect(void);
 PtcUiRect ptc_ui_weekly_min_dec_rect(void);
 PtcUiRect ptc_ui_weekly_min_inc_rect(void);
 PtcUiRect ptc_ui_weekly_min_input_rect(void);
-PtcUiRect ptc_ui_bedtime_field_rect(int index);
-PtcUiRect ptc_ui_bedtime_adj_up_rect(int index);
-PtcUiRect ptc_ui_bedtime_adj_down_rect(int index);
-PtcUiRect ptc_ui_limit_option_rect(int index);
-PtcUiRect ptc_ui_probe_option_rect(int index);
 PtcUiRect ptc_ui_numpad_display_rect(void);
 PtcUiRect ptc_ui_numpad_key_rect(int index);
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay);

@@ -1,4 +1,5 @@
 #include <switch.h>
+#include <string.h>
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -7,12 +8,16 @@
 #include "../../platform/switch/pctl_adapter.h"
 #include "../../platform/switch/time_provider.h"
 #include "../../common/time/ptc_time.h"
+#include "../../common/version.h"
 #include "../sysmodule_core.h"
 #include "../ipc_server.h"
+#include "release_manifest.h"
 
-#define PTC_APP_ROOT "sdmc:/switch/playwise"
+#define PTC_APP_ROOT PLAYWISE_SD_ROOT
 #define PTC_INNER_HEAP_SIZE 0x80000
 #define PTC_STARTUP_DELAY_NS 15000000000LL
+
+__attribute__((used)) static const char PLAYWISE_EMBEDDED_MANIFEST[] = PLAYWISE_RELEASE_MANIFEST_JSON;
 
 u32 __nx_applet_type = AppletType_None;
 u32 __nx_fs_num_sessions = 1;
@@ -63,12 +68,78 @@ static void append_boot_log(PtcSysmodule *sysmodule, const char *message)
     char log_path[320];
     char line[160];
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
-    if (!ptc_format_date_utc8(now.unix_seconds, date)) return;
-    snprintf(event_path, sizeof(event_path), PTC_APP_ROOT "/logs/%s/events.jsonl", date);
-    snprintf(log_path, sizeof(log_path), PTC_APP_ROOT "/logs/%s/sysmodule.log", date);
+    if (ptc_format_date_utc8(now.unix_seconds, date)) {
+        snprintf(event_path, sizeof(event_path), PTC_APP_ROOT "/logs/%s/events.jsonl", date);
+        snprintf(log_path, sizeof(log_path), PTC_APP_ROOT "/logs/%s/sysmodule.log", date);
+    } else {
+        snprintf(event_path, sizeof(event_path), PTC_APP_ROOT "/logs/undated/%s/events.jsonl", sysmodule->boot_id);
+        snprintf(log_path, sizeof(log_path), PTC_APP_ROOT "/logs/undated/%s/sysmodule.log", sysmodule->boot_id);
+    }
     snprintf(line, sizeof(line), "{\"ts\":%lld,\"event\":\"boot\",\"message\":\"%s\"}", (long long)now.unix_seconds, message);
     (void)sysmodule->storage->vtable->append_line(sysmodule->storage, event_path, line);
     (void)sysmodule->storage->vtable->append_line(sysmodule->storage, log_path, message);
+}
+
+static void ensure_credentials(PtcStorage *storage)
+{
+    static const char HEX[] = "0123456789abcdef";
+    uint8_t secret[32];
+    char secret_hex[65];
+    char json[128];
+    size_t i;
+    if (storage->vtable->exists(storage, PTC_APP_ROOT "/credentials.json")) return;
+    randomGet(secret, sizeof(secret));
+    for (i = 0; i < sizeof(secret); ++i) {
+        secret_hex[i * 2] = HEX[secret[i] >> 4];
+        secret_hex[i * 2 + 1] = HEX[secret[i] & 0x0f];
+    }
+    secret_hex[64] = '\0';
+    snprintf(json, sizeof(json), "{\"version\":1,\"grant_secret\":\"%s\"}\n", secret_hex);
+    (void)storage->vtable->write_text_atomic(storage, PTC_APP_ROOT "/credentials.json", json);
+}
+
+static const char *product_model_name(SetSysProductModel model)
+{
+    switch (model) {
+    case SetSysProductModel_Nx: return "erista";
+    case SetSysProductModel_Copper: return "erista-simulation";
+    case SetSysProductModel_Iowa: return "mariko";
+    case SetSysProductModel_Hoag: return "mariko-lite";
+    case SetSysProductModel_Calcio: return "mariko-simulation";
+    case SetSysProductModel_Aula: return "mariko-oled";
+    default: return "unknown";
+    }
+}
+
+static void write_environment_fingerprint(PtcStorage *storage)
+{
+    SetSysFirmwareVersion firmware;
+    SetSysFirmwareVersionDigest digest;
+    SetSysProductModel model = SetSysProductModel_Invalid;
+    char json[640];
+    bool read_ok = false;
+    memset(&firmware, 0, sizeof(firmware));
+    memset(&digest, 0, sizeof(digest));
+    if (R_SUCCEEDED(setsysInitialize())) {
+        read_ok = R_SUCCEEDED(setsysGetFirmwareVersion(&firmware)) &&
+            R_SUCCEEDED(setsysGetFirmwareVersionDigest(&digest)) &&
+            R_SUCCEEDED(setsysGetProductModel(&model));
+        setsysExit();
+    }
+    snprintf(
+        json,
+        sizeof(json),
+        "{\"version\":1,\"read_ok\":%s,\"hos\":\"%u.%u.%u\",\"firmware_hash\":\"%.64s\","
+        "\"firmware_digest\":\"%.64s\",\"model\":\"%s\",\"atmosphere\":%s}\n",
+        read_ok ? "true" : "false",
+        (unsigned int)firmware.major,
+        (unsigned int)firmware.minor,
+        (unsigned int)firmware.micro,
+        firmware.version_hash,
+        digest.digest,
+        product_model_name(model),
+        hosversionIsAtmosphere() ? "true" : "false");
+    (void)storage->vtable->write_text_atomic(storage, PTC_APP_ROOT "/environment.json", json);
 }
 
 int main(int argc, char **argv)
@@ -84,6 +155,7 @@ int main(int argc, char **argv)
     PtcStorage *storage;
     bool ipc_available;
     int recovered;
+    char boot_id[24];
     (void)argc;
     (void)argv;
 
@@ -93,12 +165,16 @@ int main(int argc, char **argv)
     ptc_switch_pctl_init(&pctl);
     ptc_switch_time_provider_init(&time_provider);
     storage = ptc_fs_storage_as_storage(&fs);
+    ensure_credentials(storage);
+    write_environment_fingerprint(storage);
     ptc_sysmodule_init(
         &sysmodule,
         PTC_APP_ROOT,
         storage,
         ptc_switch_pctl_as_pctl(&pctl),
         ptc_switch_time_provider_as_provider(&time_provider));
+    snprintf(boot_id, sizeof(boot_id), "%016llx", (unsigned long long)randomGet64());
+    ptc_sysmodule_set_boot_id(&sysmodule, boot_id);
 
     (void)ptc_sysmodule_rollover_legacy_logs(&sysmodule);
     append_boot_log(&sysmodule, "playwise sysmodule started");
@@ -110,7 +186,7 @@ int main(int argc, char **argv)
     (void)ptc_sysmodule_cleanup(&sysmodule);
     (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
     ipc_available = ptc_ipc_server_start(&ipc_server, &sysmodule);
-    if (!ipc_available) append_boot_log(&sysmodule, "pctc:u unavailable; using file transport only");
+    if (!ipc_available) append_boot_log(&sysmodule, PLAYWISE_IPC_SERVICE " unavailable; using file transport only");
 
     while (true) {
         bool notified;

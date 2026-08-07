@@ -5,7 +5,6 @@ import argparse
 import json
 from pathlib import Path
 
-from ptc_observe_processor import ObserveProcessor
 from ptc_request_queue import create_layout, write_json_atomic, write_request
 
 
@@ -17,13 +16,11 @@ def init_sdmc(args: argparse.Namespace) -> int:
         {
             "version": 1,
             "device_id": args.device,
-            "grant_secret": args.secret,
             "max_add_minutes": args.max_add_minutes,
-            "control_mode": "enforce",
-            "allow_unlimited_to_limited": True,
             "default_request_timeout_ms": 60000,
         },
     )
+    write_json_atomic(paths.app_root / "credentials.json", {"version": 1, "grant_secret": args.secret})
     write_json_atomic(
         paths.app_root / "auth.json",
         {
@@ -48,38 +45,34 @@ def init_sdmc(args: argparse.Namespace) -> int:
                 {"mode": "unlimited", "minutes": 120},
             ],
             "today_override": None,
-            "bedtime": {"enabled": False, "start_min": 1260, "end_min": 480},
-            "limit_action": "remind",
         },
     )
     write_json_atomic(
         paths.app_root / "state.json",
         {
             "version": 1,
-            "parent_unlock_until": 0,
             "last_enforced_day_index": 0,
             "last_enforced_mode": 0,
             "last_enforced_minutes": 0,
-            "last_enforced_bedtime_active": False,
+            "apply_status": "idle",
             "updated_at": 0,
         },
     )
     write_json_atomic(
-        paths.app_root / "capabilities.json",
+        paths.app_root / "compatibility.json",
         {
             "version": 1,
-            "raw_block_verified": False,
-            "raw_block_backend": "pctl-s-rawblock-v1",
-            "suspend_verified": False,
-            "suspend_backend": "pctl-s-suspend-v1",
-            "verified_at": {"raw_block": None, "suspend": None},
+            "status": "pending",
+            "accepted_fingerprint": None,
+            "accepted_at": 0,
         },
     )
     write_json_atomic(
         paths.app_root / "setup.json",
         {
             "version": 1,
-            "phase": "pending",
+            "phase": "unconfigured",
+            "compatibility_status": "pending",
             "restriction_cleared": False,
             "snapshot_available": False,
             "activate_after": 0,
@@ -121,17 +114,11 @@ def submit_raw(args: argparse.Namespace) -> int:
     return 0
 
 
-def process_observe(args: argparse.Namespace) -> int:
-    count = ObserveProcessor(Path(args.root), args.day_index).process_all()
-    print(f"processed={count}")
-    return 0
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Probe the v1 file protocol on a host SDMC-like directory.")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    init = sub.add_parser("init", help="Create a safe observe SDMC layout.")
+    init = sub.add_parser("init", help="Create a release-protocol SDMC layout without touching PCTL.")
     init.add_argument("--root", required=True)
     init.add_argument("--device", required=True)
     init.add_argument("--secret", required=True)
@@ -153,11 +140,6 @@ def build_parser() -> argparse.ArgumentParser:
     raw.add_argument("--text")
     raw.add_argument("--file")
     raw.set_defaults(func=submit_raw)
-
-    process = sub.add_parser("process-observe", help="Process pending requests in observe dry-run mode.")
-    process.add_argument("--root", required=True)
-    process.add_argument("--day-index", required=True, type=int)
-    process.set_defaults(func=process_observe)
 
     return parser
 

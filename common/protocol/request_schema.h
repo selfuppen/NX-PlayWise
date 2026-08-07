@@ -16,11 +16,10 @@ typedef struct {
     char code[80];
     uint16_t minutes;
     PtcDayRule week[7];
-    PtcBedtimeRule bedtime;
-    PtcLimitAction limit_action;
-    uint16_t duration_minutes;
+#ifdef PLAYWISE_DEVICE_LAB
     bool start_timer;
     bool wait_for_expiry;
+#endif
 } PtcRequest;
 
 PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out);

@@ -16,7 +16,6 @@ bool ptc_day_index_from_date(uint16_t year, uint8_t month, uint8_t day, uint16_t
 bool ptc_date_from_day_index(uint16_t day_index, uint16_t *year, uint8_t *month, uint8_t *day);
 bool ptc_format_date_utc8(int64_t unix_seconds, char out[11]);
 uint8_t ptc_weekday_from_day_index(uint16_t day_index_since_2020);
-bool ptc_bedtime_active(uint16_t minute_of_day, uint16_t start_min, uint16_t end_min);
 uint32_t ptc_nonnegative_minutes_from_nanoseconds(int64_t nanoseconds);
 
 #endif

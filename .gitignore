@@ -303,3 +303,12 @@ node_modules/
 /sysmodule/pctc-sysmodule.npdm
 /sysmodule/pctc-sysmodule.nso
 /sysmodule/pctc-sysmodule.nsp
+/sysmodule/build-device-lab/
+/sysmodule/pwtl-sysmodule.elf
+/sysmodule/pwtl-sysmodule.npdm
+/sysmodule/pwtl-sysmodule.nso
+/sysmodule/pwtl-sysmodule.nsp
+/device_lab/nro/build/
+/device_lab/nro/playwise-device-lab.elf
+/device_lab/nro/playwise-device-lab.nacp
+/device_lab/nro/playwise-device-lab.nro

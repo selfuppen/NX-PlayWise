@@ -4,8 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "capability_backend.h"
-
 static const char *skip_ws(const char *p)
 {
     while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
@@ -17,8 +15,17 @@ static const char *skip_ws(const char *p)
 static const char *find_key(const char *text, const char *key)
 {
     char pattern[64];
+    const char *match;
     snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-    return strstr(text, pattern);
+    match = text;
+    while ((match = strstr(match, pattern)) != NULL) {
+        const char *after = skip_ws(match + strlen(pattern));
+        if (*after == ':') {
+            return match;
+        }
+        match += strlen(pattern);
+    }
+    return NULL;
 }
 
 static bool has_key(const char *text, const char *key)
@@ -95,9 +102,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"state\":{\"day_index\":%u,\"limited_today\":%d,\"blocked_today\":%d,"
         "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%lld,"
         "\"played_minutes_available\":%s,\"played_minutes\":%lld,"
-        "\"play_timer_enabled\":%d,\"restricted_now\":%d,\"bedtime_active\":%s,"
-        "\"parent_unlock_active\":%s},\"capabilities\":{"
-        "\"raw_block_verified\":%s,\"suspend_verified\":%s}",
+        "\"play_timer_enabled\":%d,\"restricted_now\":%d}",
         state->day_index,
         state->limited_today,
         state->blocked_today,
@@ -107,11 +112,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         json_bool(state->played_minutes_available),
         (long long)state->played_minutes,
         state->play_timer_enabled,
-        state->restricted_now,
-        json_bool(state->bedtime_active),
-        json_bool(state->parent_unlock_active),
-        json_bool(state->raw_block_verified),
-        json_bool(state->suspend_verified));
+        state->restricted_now);
 }
 
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
@@ -126,12 +127,6 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->played_minutes = -1;
     state->play_timer_enabled = -1;
     state->restricted_now = -1;
-    state->bedtime_active = false;
-    state->parent_unlock_active = false;
-    state->play_timer_write_verified = false;
-    state->play_timer_effect_verified = false;
-    state->raw_block_verified = false;
-    state->suspend_verified = false;
 }
 
 PtcErrorCode ptc_result_validate(const char *text)
@@ -145,8 +140,6 @@ PtcErrorCode ptc_result_validate(const char *text)
         !has_key(text, "request_id") ||
         !has_key(text, "type") ||
         !has_key(text, "status") ||
-        !has_key(text, "mode") ||
-        !json_bool_present(text, "dry_run") ||
         !json_i64_present(text, "completed_at")) {
         return PTC_ERR_BAD_REQUEST;
     }
@@ -158,14 +151,7 @@ PtcErrorCode ptc_result_validate(const char *text)
         !json_bool_present(text, "remaining_available") ||
         !json_i64_present(text, "remaining_minutes") ||
         !json_i64_present(text, "play_timer_enabled") ||
-        !json_i64_present(text, "restricted_now") ||
-        !json_bool_present(text, "bedtime_active") ||
-        !json_bool_present(text, "parent_unlock_active")) {
-        return PTC_ERR_BAD_REQUEST;
-    }
-    if (!has_key(text, "capabilities") ||
-        !json_bool_present(text, "raw_block_verified") ||
-        !json_bool_present(text, "suspend_verified")) {
+        !json_i64_present(text, "restricted_now")) {
         return PTC_ERR_BAD_REQUEST;
     }
     ok_status = json_string_equals(text, "status", "ok");
@@ -196,12 +182,11 @@ int ptc_result_ok_json(
     int written = snprintf(
         out,
         out_size,
-        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"%s\",\"status\":\"ok\","
-        "\"mode\":\"%s\",\"dry_run\":%s,",
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"%s\",\"status\":\"ok\",",
         request_id,
-        request_type,
-        mode,
-        json_bool(dry_run));
+        request_type);
+    (void)mode;
+    (void)dry_run;
     if (written < 0 || (size_t)written >= out_size) {
         return -1;
     }
@@ -225,15 +210,15 @@ int ptc_result_error_json(
         out,
         out_size,
         "{\"version\":1,\"request_id\":\"%s\",\"type\":\"%s\",\"status\":\"error\","
-        "\"mode\":\"%s\",\"dry_run\":%s,\"error\":{\"code\":%d,\"reason\":\"%s\","
+        "\"error\":{\"code\":%d,\"reason\":\"%s\","
         "\"message\":\"%s\"},",
         request_id,
         request_type,
-        mode,
-        json_bool(dry_run),
         (int)error,
         ptc_error_reason(error),
         ptc_error_message_zh(error));
+    (void)mode;
+    (void)dry_run;
     if (written < 0 || (size_t)written >= out_size) {
         return -1;
     }

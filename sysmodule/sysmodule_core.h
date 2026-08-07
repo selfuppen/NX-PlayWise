@@ -21,6 +21,7 @@ typedef struct {
     bool cleanup_initialized;
     bool disable_initialized;
     bool disable_present;
+    char boot_id[24];
     char config_cache_text[4096];
     char rules_cache_text[4096];
     char state_cache_text[1024];
@@ -41,6 +42,7 @@ void ptc_sysmodule_init(
     PtcStorage *storage,
     PtcPctl *pctl,
     PtcTimeProvider *time_provider);
+void ptc_sysmodule_set_boot_id(PtcSysmodule *sysmodule, const char *boot_id);
 int ptc_sysmodule_recover_processing(PtcSysmodule *sysmodule);
 int ptc_sysmodule_bootstrap_setup(PtcSysmodule *sysmodule);
 int ptc_sysmodule_process_all(PtcSysmodule *sysmodule);

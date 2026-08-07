@@ -25,42 +25,13 @@ static const char *json_string(const cJSON *object, const char *name)
     return cJSON_IsString(item) && item->valuestring ? item->valuestring : "";
 }
 
-static const char *effect_failure_hint(const cJSON *probe)
-{
-    const cJSON *checks;
-    const char *stage = json_string(probe, "failure_stage");
-    if (strcmp(stage, "runtime_status") != 0) {
-        return "";
-    }
-    checks = probe ? cJSON_GetObjectItemCaseSensitive(probe, "checks") : NULL;
-    if (json_bool(checks, "raw_target_correct", false) &&
-        !json_bool(checks, "timer_enabled", false)) {
-        return "；检查官方临时解锁/计时器设置";
-    }
-    return "；检查官方家长控制状态";
-}
-
 static const char *localized_mode(const char *mode)
 {
-    if (!mode) {
-        return "--";
-    }
-    if (strcmp(mode, "observe") == 0) {
-        return "观察";
-    }
-    if (strcmp(mode, "grant") == 0) {
-        return "授权";
-    }
-    if (strcmp(mode, "enforce") == 0) {
-        return "强制执行";
-    }
-    if (strcmp(mode, "disabled") == 0) {
-        return "已停用";
-    }
-    return "未知模式";
+    (void)mode;
+    return "额度管理";
 }
 
-static const char *request_success_message(const char *type, const char *mode, bool dry_run)
+static const char *request_success_message(const char *type)
 {
     if (!type) {
         return "后台已完成本次操作。";
@@ -69,7 +40,7 @@ static const char *request_success_message(const char *type, const char *mode, b
         return "今天的游玩状态已刷新。";
     }
     if (strcmp(type, "offline_code") == 0) {
-        return dry_run ? "加时码验证通过；当前为观察模式，未修改系统设置。" : "加时成功，今天的游玩时间已更新。";
+        return "加时成功，今天的游玩时间已更新。";
     }
     if (strcmp(type, "complete_setup") == 0) {
         return "首次设置已完成，自动控制将在宽限结束后启用。";
@@ -81,12 +52,9 @@ static const char *request_success_message(const char *type, const char *mode, b
         return "安装前家长控制状态已恢复，PlayWise 已停用。";
     }
     if (strcmp(type, "disable_today_limit") == 0) {
-        return dry_run ? "解除操作验证通过；观察模式未修改系统设置。" : "当前限制已解除，今天保持不限时。";
+        return "当前限制已解除，今天保持不限时。";
     }
-    if (strcmp(type, "set_bedtime") == 0 && mode && strcmp(mode, "grant") == 0) {
-        return "就寝规则已保存；Grant 模式不会自动执行限制。";
-    }
-    return dry_run ? "设置验证通过；观察模式不会修改系统设置。" : "设置已生效。";
+    return "设置已生效。";
 }
 
 static const char *request_success_guidance(const char *type)
@@ -102,12 +70,6 @@ static const char *request_success_guidance(const char *type)
     }
     if (strcmp(type, "restore_install_snapshot") == 0) {
         return "PlayWise 已停用。若要重新启用，清理 setup.json 并重启。";
-    }
-    if (strcmp(type, "probe_raw_block") == 0) {
-        return "强制阻止已验证。可在时间计划 → 限制方式中选择【强制阻止】。";
-    }
-    if (strcmp(type, "probe_suspend") == 0) {
-        return "暂停软件已验证。可在时间计划 → 限制方式中选择【暂停软件】。";
     }
     return "";
 }
@@ -129,10 +91,6 @@ static void fill_error_guidance(char *out, size_t out_size, const char *type, in
         snprintf(out, out_size,
                  "反馈码：%d %s。恢复失败请保留日志，联系作者排查。",
                  error_code, reason[0] ? reason : "unknown");
-    } else if (strcmp(type, "probe_raw_block") == 0 || strcmp(type, "probe_suspend") == 0) {
-        snprintf(out, out_size,
-                 "反馈码：%d %s。能力验证失败不影响普通控制。若持续失败，反馈此码给作者。",
-                 error_code, reason[0] ? reason : "unknown");
     }
     /* Other types: leave existing feedback_detail as-is (filled by caller). */
 }
@@ -141,12 +99,14 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
 {
     switch (page) {
     case PTC_UI_PARENT_PLAN:
+        return 1;
+    case PTC_UI_PARENT_SECURITY:
+        return 4;
+    case PTC_UI_PARENT_SUPPORT:
         return 5;
-    case PTC_UI_PARENT_SAFETY:
-        return 7;
     case PTC_UI_PARENT_TODAY:
     default:
-        return 6;
+        return 5;
     }
 }
 
@@ -221,16 +181,6 @@ uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint
     return (uint16_t)adjusted;
 }
 
-uint16_t ptc_ui_adjust_minute_of_day(uint16_t value, int delta)
-{
-    int adjusted = (int)value + delta;
-    adjusted = adjusted % 1440;
-    if (adjusted < 0) {
-        adjusted += 1440;
-    }
-    return (uint16_t)adjusted;
-}
-
 bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out)
 {
     unsigned long value;
@@ -248,34 +198,6 @@ bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, 
         return false;
     }
     *out = (uint16_t)value;
-    return true;
-}
-
-bool ptc_ui_parse_bedtime_time(const char *text, uint16_t *out_min)
-{
-    unsigned int h = 0;
-    unsigned int m = 0;
-    size_t len;
-    if (!text || !out_min) {
-        return false;
-    }
-    len = strlen(text);
-    /* Accept "HH:MM" or "HHMM" formats. */
-    if (len == 5 && text[2] == ':') {
-        if (sscanf(text, "%u:%u", &h, &m) != 2) {
-            return false;
-        }
-    } else if (len == 4) {
-        if (sscanf(text, "%2u%2u", &h, &m) != 2) {
-            return false;
-        }
-    } else {
-        return false;
-    }
-    if (h >= 24 || m >= 60) {
-        return false;
-    }
-    *out_min = (uint16_t)(h * 60 + m);
     return true;
 }
 
@@ -388,12 +310,7 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
         }
         return true;
     }
-    if (model->numpad_purpose == PTC_UI_NUMPAD_BEDTIME) {
-        if (length != 4 || !ptc_ui_parse_bedtime_time(model->numpad_text, &value)) {
-            snprintf(model->numpad_error, sizeof(model->numpad_error), "请输入有效的 4 位时间 HHMM");
-            return false;
-        }
-    } else if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
+    if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
         if (!ptc_ui_parse_minutes(model->numpad_text, model->numpad_minimum, model->numpad_maximum, &value)) {
             snprintf(model->numpad_error, sizeof(model->numpad_error), "请输入 %u 到 %u 分钟",
                      (unsigned int)model->numpad_minimum, (unsigned int)model->numpad_maximum);
@@ -427,10 +344,6 @@ int ptc_ui_preview_remaining_minutes(const PtcUiModel *model)
         return 0;
     }
 
-    if (model->operation == PTC_UI_OPERATION_PARENT_UNLOCK) {
-        return (int)model->draft_minutes;
-    }
-
     if (model->operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES) {
         if (model->remaining_available && model->remaining_minutes >= 0) {
             return model->remaining_minutes + (int)model->draft_minutes;
@@ -454,26 +367,9 @@ PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode)
     case PTC_RULE_MODE_LIMIT:
         return PTC_RULE_MODE_UNLIMITED;
     case PTC_RULE_MODE_UNLIMITED:
-        return PTC_RULE_MODE_BLOCKED;
-    case PTC_RULE_MODE_BLOCKED:
     default:
         return PTC_RULE_MODE_LIMIT;
     }
-}
-
-PtcLimitAction ptc_ui_shift_limit_action(PtcLimitAction action, int direction)
-{
-    int value = (int)action;
-    if (value < PTC_LIMIT_ACTION_REMIND || value > PTC_LIMIT_ACTION_SUSPEND) {
-        value = PTC_LIMIT_ACTION_REMIND;
-    }
-    value += direction >= 0 ? 1 : -1;
-    if (value > PTC_LIMIT_ACTION_SUSPEND) {
-        value = PTC_LIMIT_ACTION_REMIND;
-    } else if (value < PTC_LIMIT_ACTION_REMIND) {
-        value = PTC_LIMIT_ACTION_SUSPEND;
-    }
-    return (PtcLimitAction)value;
 }
 
 bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minutes)
@@ -484,75 +380,7 @@ bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minut
 
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule)
 {
-    if (rule.mode == PTC_RULE_MODE_BLOCKED) {
-        return true;
-    }
     return rule.mode == PTC_RULE_MODE_LIMIT && ptc_ui_limit_minutes_would_restrict(model, rule.minutes);
-}
-
-bool ptc_ui_bedtime_active_at(const PtcBedtimeRule *bedtime, uint16_t minute_of_day)
-{
-    if (!bedtime || !bedtime->enabled || bedtime->start_min == bedtime->end_min) {
-        return false;
-    }
-    if (bedtime->start_min < bedtime->end_min) {
-        return minute_of_day >= bedtime->start_min && minute_of_day < bedtime->end_min;
-    }
-    return minute_of_day >= bedtime->start_min || minute_of_day < bedtime->end_min;
-}
-
-uint16_t ptc_ui_minutes_to_bedtime(uint16_t now_minute, const PtcBedtimeRule *bedtime)
-{
-    if (!bedtime || !bedtime->enabled || bedtime->start_min == bedtime->end_min) {
-        return 1440U;
-    }
-    if (ptc_ui_bedtime_active_at(bedtime, now_minute)) {
-        return 0U;
-    }
-    if (bedtime->start_min > now_minute) {
-        return (uint16_t)(bedtime->start_min - now_minute);
-    }
-    return (uint16_t)((1440U - now_minute) + bedtime->start_min);
-}
-
-bool ptc_ui_check_bedtime_conflict(const PtcUiModel *model, uint16_t target_minutes, PtcUiBedtimeConflict *out)
-{
-    uint16_t now_min;
-    if (!out) {
-        return false;
-    }
-    memset(out, 0, sizeof(*out));
-    if (!model) {
-        return false;
-    }
-    now_min = model->played_minutes_available && model->played_minutes >= 0
-        ? (uint16_t)(model->played_minutes % 1440)
-        : 720U;
-    out->minutes_to_bedtime = ptc_ui_minutes_to_bedtime(now_min, &model->draft_bedtime);
-
-    if (model->draft_bedtime.enabled) {
-        if (target_minutes > out->minutes_to_bedtime && out->minutes_to_bedtime < 1440U) {
-            out->conflict_detected = true;
-            out->quota_exceeds_bedtime = true;
-            snprintf(out->warning_text, sizeof(out->warning_text),
-                "⚠️ 冲突提醒：目标配额(%u分) 超过就寝倒计时(%u分)。到就寝时间(%02u:%02u)将优先截止限制！",
-                (unsigned int)target_minutes,
-                (unsigned int)out->minutes_to_bedtime,
-                (unsigned int)(model->draft_bedtime.start_min / 60U),
-                (unsigned int)(model->draft_bedtime.start_min % 60U));
-        }
-        if (model->current_limit_action_loaded && model->current_limit_action == PTC_LIMIT_ACTION_REMIND) {
-            out->conflict_detected = true;
-            out->remind_bedtime_conflict = true;
-            if (!out->quota_exceeds_bedtime) {
-                snprintf(out->warning_text, sizeof(out->warning_text),
-                    "⚠️ 提醒：目前动作为【提醒】，到就寝时间(%02u:%02u)不会强行关停；如需强制关停请更改为【强行禁玩】。",
-                    (unsigned int)(model->draft_bedtime.start_min / 60U),
-                    (unsigned int)(model->draft_bedtime.start_min % 60U));
-            }
-        }
-    }
-    return out->conflict_detected;
 }
 
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now)
@@ -597,13 +425,9 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     PtcCompanionResultSummary summary;
     cJSON *root;
     const cJSON *state;
-    const cJSON *capabilities;
     const cJSON *setup;
-    const cJSON *probe;
     const char *status;
     const char *type;
-    const char *mode;
-    bool dry_run;
     bool setup_activated = false;
     if (!model || !text || ptc_companion_parse_result_summary(text, &summary) != PTC_COMPANION_OK) {
         return false;
@@ -615,24 +439,19 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     status = summary.status;
     type = summary.type;
-    mode = summary.mode;
     if (!status || (strcmp(status, "ok") != 0 && strcmp(status, "error") != 0)) {
         cJSON_Delete(root);
         return false;
     }
-    dry_run = summary.dry_run;
     snprintf(model->result_status, sizeof(model->result_status), "%s", status ? status : "error");
     snprintf(model->result_type, sizeof(model->result_type), "%s", type ? type : "");
-    snprintf(model->mode, sizeof(model->mode), "%s", localized_mode(mode));
+    snprintf(model->mode, sizeof(model->mode), "%s", localized_mode("release"));
     model->feedback_detail[0] = '\0';
 
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
     if (strcmp(status, "ok") == 0 && cJSON_IsObject(state)) {
         bool preserve_played_minutes = model->played_minutes_available &&
             !summary.played_minutes_available;
-        bool is_parent_unlock_request = type &&
-            (strcmp(type, "parent_unlock_start") == 0 ||
-             strcmp(type, "parent_unlock_end") == 0);
 
         model->status_loaded = true;
         model->day_index = (uint16_t)json_int(state, "day_index", 0);
@@ -649,18 +468,6 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         }
         model->play_timer_enabled = summary.play_timer_enabled;
         model->restricted_now = summary.restricted_now;
-        model->bedtime_active = json_bool(state, "bedtime_active", false);
-        /* Non-unlock operations can return a default false value when they do
-         * not reload the local unlock state. Do not clear a known active window. */
-        if (is_parent_unlock_request || !model->parent_unlock_active ||
-            json_bool(state, "parent_unlock_active", false)) {
-            model->parent_unlock_active = json_bool(state, "parent_unlock_active", false);
-        }
-    }
-    capabilities = cJSON_GetObjectItemCaseSensitive(root, "capabilities");
-    if (strcmp(status, "ok") == 0 && cJSON_IsObject(capabilities)) {
-        model->raw_block_verified = json_bool(capabilities, "raw_block_verified", false);
-        model->suspend_verified = json_bool(capabilities, "suspend_verified", false);
     }
     setup = cJSON_GetObjectItemCaseSensitive(root, "setup");
     if (strcmp(status, "ok") == 0 && cJSON_IsObject(setup)) {
@@ -682,13 +489,6 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     if (status && strcmp(status, "error") == 0) {
         const char *message = summary.message[0] ? summary.message : NULL;
-        const char *failure_stage = "";
-        const char *hint = "";
-        probe = cJSON_GetObjectItemCaseSensitive(root, "pctl_raw_block_probe");
-        if (cJSON_IsObject(probe)) {
-            failure_stage = json_string(probe, "failure_stage");
-            hint = effect_failure_hint(probe);
-        }
         snprintf(model->message, sizeof(model->message), "%s", message ? message : "后台拒绝了本次操作。");
         if (summary.error_code > 0) {
             /* Try type-specific guidance first; fall back to generic detail. */
@@ -699,19 +499,16 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                 snprintf(
                     model->feedback_detail,
                     sizeof(model->feedback_detail),
-                    "反馈码：%d %s%s%s%s",
+                    "反馈码：%d %s",
                     summary.error_code,
-                    summary.reason[0] ? summary.reason : "unknown",
-                    failure_stage[0] ? "/" : "",
-                    failure_stage,
-                    hint);
+                    summary.reason[0] ? summary.reason : "unknown");
             }
         }
     } else if (setup_activated) {
         snprintf(model->message, sizeof(model->message), "自动控制已启用，首次设置完成。");
     } else {
         const char *guidance = request_success_guidance(type);
-        snprintf(model->message, sizeof(model->message), "%s", request_success_message(type, mode, dry_run));
+        snprintf(model->message, sizeof(model->message), "%s", request_success_message(type));
         if (guidance[0]) {
             snprintf(model->feedback_detail, sizeof(model->feedback_detail), "%s", guidance);
         }
@@ -811,18 +608,6 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 1172;
         *height = 560;
         break;
-    case PTC_UI_OVERLAY_BEDTIME:
-        *width = 820;
-        *height = 500;
-        break;
-    case PTC_UI_OVERLAY_LIMIT_ACTION:
-        *width = 850;
-        *height = 360;
-        break;
-    case PTC_UI_OVERLAY_PROBE_SELECT:
-        *width = 800;
-        *height = 360;
-        break;
     case PTC_UI_OVERLAY_NUMPAD:
         *width = 620;
         *height = 610;
@@ -882,27 +667,6 @@ PtcUiRect ptc_ui_weekly_day_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
     PtcUiRect rect = {dialog.x + 26 + index * 160, dialog.y + 122, 142, 190};
-    return rect;
-}
-
-PtcUiRect ptc_ui_bedtime_field_rect(int index)
-{
-    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
-    PtcUiRect rect = {dialog.x + 46 + index * 236, dialog.y + 154, 210, 92};
-    return rect;
-}
-
-PtcUiRect ptc_ui_limit_option_rect(int index)
-{
-    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_LIMIT_ACTION);
-    PtcUiRect rect = {dialog.x + 46 + index * 254, dialog.y + 142, 228, 84};
-    return rect;
-}
-
-PtcUiRect ptc_ui_probe_option_rect(int index)
-{
-    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_PROBE_SELECT);
-    PtcUiRect rect = {dialog.x + 46 + index * 360, dialog.y + 142, 320, 110};
     return rect;
 }
 
@@ -995,23 +759,6 @@ PtcUiRect ptc_ui_weekly_min_inc_rect(void)
     return rect;
 }
 
-/* Left-aligned time steppers for the bedtime overlay. */
-PtcUiRect ptc_ui_bedtime_adj_down_rect(int index)
-{
-    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
-    PtcUiRect field = ptc_ui_bedtime_field_rect(index == 2 ? 2 : 1);
-    PtcUiRect rect = {field.x + 35, dialog.y + 280, 140, 34};
-    return rect;
-}
-
-PtcUiRect ptc_ui_bedtime_adj_up_rect(int index)
-{
-    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_BEDTIME);
-    PtcUiRect field = ptc_ui_bedtime_field_rect(index == 2 ? 2 : 1);
-    PtcUiRect rect = {field.x + 35, dialog.y + 116, 140, 34};
-    return rect;
-}
-
 bool ptc_ui_rect_contains(PtcUiRect rect, int x, int y)
 {
     return x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
@@ -1080,35 +827,6 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         if (model->draft_week[model->editor_index].mode == PTC_RULE_MODE_LIMIT &&
             ptc_ui_rect_contains(ptc_ui_weekly_min_input_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, model->editor_index);
-        }
-        break;
-    case PTC_UI_OVERLAY_BEDTIME:
-        for (i = 0; i < 3; ++i) {
-            if (ptc_ui_rect_contains(ptc_ui_bedtime_field_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_BEDTIME_FIELD, i);
-            }
-        }
-        for (i = 1; model->draft_bedtime.enabled && i <= 2; ++i) {
-            if (ptc_ui_rect_contains(ptc_ui_bedtime_adj_up_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_BEDTIME_ADJ_UP, i);
-            }
-            if (ptc_ui_rect_contains(ptc_ui_bedtime_adj_down_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_BEDTIME_ADJ_DOWN, i);
-            }
-        }
-        break;
-    case PTC_UI_OVERLAY_LIMIT_ACTION:
-        for (i = 0; i < 3; ++i) {
-            if (ptc_ui_rect_contains(ptc_ui_limit_option_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_LIMIT_ACTION_OPTION, i);
-            }
-        }
-        break;
-    case PTC_UI_OVERLAY_PROBE_SELECT:
-        for (i = 0; i < 2; ++i) {
-            if (ptc_ui_rect_contains(ptc_ui_probe_option_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_PROBE_OPTION, i);
-            }
         }
         break;
     case PTC_UI_OVERLAY_NUMPAD:
@@ -1230,42 +948,20 @@ void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const cha
 
 PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int index)
 {
-    bool is_released;
-    bool is_pending_or_failed;
-    bool is_active;
     if (!model) {
         return PTC_UI_ACTION_DISABLED;
     }
-    is_released = strcmp(model->setup_phase, "released") == 0;
-    is_pending_or_failed = strcmp(model->setup_phase, "pending") == 0 ||
-                           strcmp(model->setup_phase, "failed") == 0;
-    is_active = strcmp(model->setup_phase, "active") == 0;
     switch (index) {
-    case 0: /* 启用自动控制 */
-        if (is_released) {
-            return PTC_UI_ACTION_RECOMMENDED;
-        }
-        return PTC_UI_ACTION_DISABLED;
-    case 1: /* 重试前置解限 */
-        if (is_pending_or_failed) {
-            return is_released ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_RECOMMENDED;
-        }
-        return PTC_UI_ACTION_DISABLED;
-    case 2: /* 恢复安装前状态 */
-        return model->setup_snapshot_available ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_DISABLED;
-    case 3: /* 紧急停用控制 / 解除紧急停用 */
+    case 0:
+        return strcmp(model->setup_phase, "active") == 0 ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_RECOMMENDED;
+    case 1:
+        return strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0 ||
+            strcmp(model->setup_phase, "pending") == 0 ? PTC_UI_ACTION_RECOMMENDED : PTC_UI_ACTION_DISABLED;
+    case 2:
         return PTC_UI_ACTION_AVAILABLE;
-    case 4: /* 验证强制阻止 */
-        if (!is_active) {
-            return PTC_UI_ACTION_DISABLED;
-        }
-        return model->raw_block_verified ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE;
-    case 5: /* 验证暂停软件 */
-        if (!is_active) {
-            return PTC_UI_ACTION_DISABLED;
-        }
-        return model->suspend_verified ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE;
-    case 6: /* 修改加时码密钥 */
+    case 3:
+        return model->setup_snapshot_available ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_DISABLED;
+    case 4:
         return PTC_UI_ACTION_AVAILABLE;
     default:
         return PTC_UI_ACTION_DISABLED;
@@ -1274,60 +970,22 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
 
 const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index)
 {
-    bool is_released;
-    bool is_pending_or_failed;
-    bool is_active;
     if (!model) {
         return "";
     }
-    is_released = strcmp(model->setup_phase, "released") == 0;
-    is_pending_or_failed = strcmp(model->setup_phase, "pending") == 0 ||
-                           strcmp(model->setup_phase, "failed") == 0;
-    is_active = strcmp(model->setup_phase, "active") == 0;
     switch (index) {
     case 0:
-        if (is_released) {
-            return "限制已解除，建议现在启用自动控制。";
-        }
-        if (is_active) {
-            return "自动控制已启用，无需再次操作。";
-        }
-        if (is_pending_or_failed) {
-            return "需要先完成前置解限才能启用。";
-        }
-        return "当前阶段不支持此操作。";
+        return strcmp(model->setup_phase, "active") == 0 ? "额度管理已启用。" : "预检通过后保存快照并接管系统控制。";
     case 1:
-        if (is_pending_or_failed) {
-            return "前置解限未完成或失败，建议重试。";
-        }
-        return "仅在 pending/failed 阶段可用。";
+        return "重新执行兼容、快照和恢复前置检查。";
     case 2:
-        if (!model->setup_snapshot_available) {
-            return "安装前快照不可用，无法恢复。";
-        }
-        return "精确恢复安装前的家长控制状态。";
-    case 3:
         return model->disable_flag_present
-            ? "删除 disable.flag，恢复后台正常控制。"
-            : "创建 disable.flag，后台立即停止控制操作。";
+            ? "解除停用后才允许新的控制写入；状态和恢复始终可用。"
+            : "只停止新的控制写入；状态、诊断和恢复仍可使用。";
+    case 3:
+        return model->setup_snapshot_available ? "精确恢复安装前状态。" : "安装前快照不可用。";
     case 4:
-        if (!is_active) {
-            return "需要先完成首次设置（phase=active）。";
-        }
-        if (model->raw_block_verified) {
-            return "强制阻止能力已验证，无需再次探测。";
-        }
-        return "探针会尝试真机写入并回滚验证。";
-    case 5:
-        if (!is_active) {
-            return "需要先完成首次设置（phase=active）。";
-        }
-        if (model->suspend_verified) {
-            return "暂停软件能力已验证，无需再次探测。";
-        }
-        return "探针会尝试真机写入并回滚验证。";
-    case 6:
-        return "修改离线加时码的 HMAC 计算密钥（默认为 replace-with-long-random-secret）。";
+        return "导出时自动排除 secret、PIN、离线码和完整 nonce。";
     default:
         return "";
     }
