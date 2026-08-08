@@ -1014,8 +1014,13 @@ static void setup_primary(UiState *ui)
         break;
     case PTC_UI_SETUP_TAKEOVER:
         if (!ui->waiting) {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "确认接管系统控制",
-                                 "先执行只读兼容预检；通过后保存安装快照并启用额度管理。");
+            if (ui->model.disable_flag_present && strcmp(ui->model.setup_phase, "restored") == 0) {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新接管",
+                                     "将重新执行只读兼容预检；仅预检通过后才解除紧急停用并重新启用额度管理。");
+            } else {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "确认接管系统控制",
+                                     "先执行只读兼容预检；通过后保存安装快照并启用额度管理。");
+            }
         }
         break;
     case PTC_UI_SETUP_ZONE:

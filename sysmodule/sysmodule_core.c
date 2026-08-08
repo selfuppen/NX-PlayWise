@@ -1977,24 +1977,41 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
     const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
 {
     PtcSetupState setup;
-    if (disable_flag) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_DISABLED, now.day_index, caps);
-    }
+    bool resuming_restored_setup;
+    char disable_path[320];
     if (!load_setup_state(sysmodule, &setup)) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             PTC_ERR_SETUP_PENDING, now.day_index, caps);
+    }
+    resuming_restored_setup = strcmp(setup.phase, "restored") == 0;
+    if (disable_flag && !resuming_restored_setup) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_DISABLED, now.day_index, caps);
     }
     if (strcmp(setup.phase, "unconfigured") == 0 || strcmp(setup.phase, "compatibility_pending") == 0 ||
         strcmp(setup.phase, "protection") == 0 || strcmp(setup.phase, "restored") == 0) {
         PtcErrorCode preflight_err = run_release_preflight(sysmodule, config, &setup, now);
         if (preflight_err != PTC_ERR_OK) {
-            snprintf(setup.phase, sizeof(setup.phase), "protection");
-            snprintf(setup.compatibility_status, sizeof(setup.compatibility_status), "protection");
+            /* A restored installation remains explicitly disabled until a later
+               confirmed attempt passes preflight; do not strand its wizard in
+               protection mode where complete_setup would again be rejected. */
+            if (!resuming_restored_setup) {
+                snprintf(setup.phase, sizeof(setup.phase), "protection");
+                snprintf(setup.compatibility_status, sizeof(setup.compatibility_status), "protection");
+            }
             snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(preflight_err));
             (void)save_setup_state(sysmodule, &setup);
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
                 preflight_err, now.day_index, caps);
+        }
+        if (resuming_restored_setup && disable_flag) {
+            /* The parent has explicitly reconfirmed takeover.  Clear the write
+               circuit breaker only after the read-only preflight has passed. */
+            join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
+            if (!sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path)) {
+                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                    PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+            }
         }
         snprintf(setup.phase, sizeof(setup.phase), "pending");
         if (!save_setup_state(sysmodule, &setup)) {
