@@ -41,11 +41,15 @@ PtcErrorCode ptc_token_v2_tier_for_minutes(uint16_t minutes, uint8_t *out_tier_i
         *out_tier_index = (uint8_t)(23u + minutes);
         return PTC_ERR_OK;
     }
-    if (minutes >= PTC_TOKEN_V2_TIER_MINUTES && minutes <= PTC_TOKEN_V2_MAX_MINUTES &&
+    if (minutes >= PTC_TOKEN_V2_TIER_MINUTES && minutes <= 120 &&
         minutes % PTC_TOKEN_V2_TIER_MINUTES == 0) {
         *out_tier_index = (uint8_t)(minutes / PTC_TOKEN_V2_TIER_MINUTES - 1u);
         return PTC_ERR_OK;
     }
+    if (minutes == 150) { *out_tier_index = 28; return PTC_ERR_OK; }
+    if (minutes == 180) { *out_tier_index = 29; return PTC_ERR_OK; }
+    if (minutes == 210) { *out_tier_index = 30; return PTC_ERR_OK; }
+    if (minutes == 240) { *out_tier_index = 31; return PTC_ERR_OK; }
     return PTC_ERR_BAD_CODE;
 }
 
@@ -105,8 +109,18 @@ PtcErrorCode ptc_token_v2_decode(
     if (actual_mac != expected_mac) return PTC_ERR_BAD_SIGNATURE;
     if (out->tier_index < 24) {
         out->minutes = (uint16_t)((out->tier_index + 1u) * PTC_TOKEN_V2_TIER_MINUTES);
-    } else {
+    } else if (out->tier_index <= 27) {
         out->minutes = (uint16_t)(out->tier_index - 23u);
+    } else if (out->tier_index == 28) {
+        out->minutes = 150;
+    } else if (out->tier_index == 29) {
+        out->minutes = 180;
+    } else if (out->tier_index == 30) {
+        out->minutes = 210;
+    } else if (out->tier_index == 31) {
+        out->minutes = 240;
+    } else {
+        return PTC_ERR_BAD_CODE;
     }
     return PTC_ERR_OK;
 }

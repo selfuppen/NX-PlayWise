@@ -28,8 +28,8 @@ def main() -> int:
             "expect": "ok",
         },
         {
-            "name": "over_limit_180min",
-            "minutes": 180,
+            "name": "over_limit_300min",
+            "minutes": 300,
             "day_index": 2380,
             "nonce": 4661,
             "expect": "minutes_exceed_limit",
@@ -49,7 +49,7 @@ def main() -> int:
         "version": 1,
         "device_id": device_id,
         "grant_secret": secret,
-        "max_add_minutes": 120,
+        "max_add_minutes": 240,
         "cases": cases,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)

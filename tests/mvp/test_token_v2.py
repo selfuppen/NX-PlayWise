@@ -30,12 +30,17 @@ def main() -> int:
     secret = "test-secret"
     day_index = 2380
 
-    for tier_index in range(28):
-        minutes = tier_index - 23 if tier_index >= 24 else (tier_index + 1) * 5
+    for tier_index in range(32):
+        if tier_index < 24:
+            minutes = (tier_index + 1) * 5
+        elif tier_index <= 27:
+            minutes = tier_index - 23
+        else:
+            minutes = {28: 150, 29: 180, 30: 210, 31: 240}[tier_index]
         code = encode_token(tier_index, tier_index, device, secret, day_index)
         if len(code) != 8 or not code.isascii() or not code.isdigit():
             raise AssertionError(f"tier {tier_index} did not produce eight ASCII digits: {code!r}")
-        payload = verify_token(code, device, secret, day_index, 120, set())
+        payload = verify_token(code, device, secret, day_index, 240, set())
         if payload.tier_index != tier_index or payload.minutes != minutes or payload.nonce != tier_index:
             raise AssertionError(f"tier {tier_index} round trip mismatch: {payload!r}")
         if tier_for_minutes(minutes) != tier_index:
@@ -50,11 +55,11 @@ def main() -> int:
     assert_reason("bad_code", lambda: decode_token("1234567", device, secret, day_index))
     assert_reason("bad_code", lambda: decode_token("1234567A", device, secret, day_index))
     assert_reason("bad_code", lambda: decode_token(f"{MAX_VALUE + 1:08d}", device, secret, day_index))
-    assert_reason("bad_code", lambda: decode_token(f"{28 << 21:08d}", device, secret, day_index))
+    assert_reason("bad_code", lambda: decode_token(f"{32 << 21:08d}", device, secret, day_index))
     assert_reason("minutes_exceed_limit", lambda: verify_token(
-        encode_token(23, 1, device, secret, day_index), device, secret, day_index, 60, set()))
+        encode_token(31, 1, device, secret, day_index), device, secret, day_index, 180, set()))
     assert_reason("used_token", lambda: verify_token(
-        leading_zero, device, secret, day_index, 120, {(day_index, 0)}))
+        leading_zero, device, secret, day_index, 240, {(day_index, 0)}))
 
     with tempfile.TemporaryDirectory(prefix="ptc-v2-nonce-") as tmp:
         state_path = Path(tmp) / "nonces.json"

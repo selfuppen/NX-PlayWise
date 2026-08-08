@@ -26,7 +26,8 @@ export function loadConfig(storage) {
   return {
     deviceId: typeof saved.deviceId === "string" && saved.deviceId ? saved.deviceId : DEFAULT_CONFIG.deviceId,
     secret: typeof saved.secret === "string" && saved.secret ? saved.secret : DEFAULT_CONFIG.secret,
-    tierMinutes: Number.isInteger(tierMinutes) && tierMinutes >= 5 && tierMinutes <= 120 && tierMinutes % 5 === 0
+    tierMinutes: Number.isInteger(tierMinutes) &&
+        ((tierMinutes >= 5 && tierMinutes <= 120 && tierMinutes % 5 === 0) || [150, 180, 210, 240].includes(tierMinutes))
       ? tierMinutes
       : DEFAULT_CONFIG.tierMinutes,
   };

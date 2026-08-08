@@ -1,7 +1,7 @@
 export const TOKEN_DOMAIN = "PTC2";
 export const TOKEN_LENGTH = 8;
 export const TIER_MINUTES = 5;
-export const TIER_COUNT = 28;
+export const TIER_COUNT = 32;
 export const MAX_NONCE = 511;
 export const MAC_BITS = 12;
 export const MAX_DAY_INDEX = 0xffff;
@@ -31,7 +31,11 @@ export function tierForMinutes(minutes) {
   if (value >= 5 && value <= 120 && value % TIER_MINUTES === 0) {
     return value / TIER_MINUTES - 1;
   }
-  throw new Error("加时时长必须是 1-4 分钟或 5 至 120 分钟之间的 5 分钟档位");
+  if (value === 150) return 28;
+  if (value === 180) return 29;
+  if (value === 210) return 30;
+  if (value === 240) return 31;
+  throw new Error("加时时长必须是 1-4 分钟、5 至 120 分钟（每 5 分钟一档）或 150/180/210/240 分钟");
 }
 
 function requireWebCrypto(cryptoApi) {

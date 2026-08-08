@@ -55,15 +55,22 @@ static void test_tokens(void)
 
     check_int(ptc_token_encode(&v1, "test-device", "test-secret", long_code), PTC_ERR_OK, "v1 token encode");
     check_true(strcmp(long_code, "241W-2AC0-04HM-7YW5") == 0, "v1 fixture parity");
-    check_int(ptc_token_verify(long_code, "test-device", "test-secret", 2380, 120, NULL, NULL, &decoded_v1),
+    check_int(ptc_token_verify(long_code, "test-device", "test-secret", 2380, 240, NULL, NULL, &decoded_v1),
         PTC_ERR_OK, "v1 token verify");
     check_int(decoded_v1.minutes, 30, "v1 token minutes");
     check_int(ptc_token_v2_encode(5, 7, "test-device", "test-secret", 2380, short_code),
         PTC_ERR_OK, "v2 token encode");
     check_true(strcmp(short_code, "10514680") == 0, "v2 eight-digit fixture parity");
-    check_int(ptc_token_v2_verify(short_code, "test-device", "test-secret", 2380, 120, NULL, NULL, &decoded_v2),
+    check_int(ptc_token_v2_verify(short_code, "test-device", "test-secret", 2380, 240, NULL, NULL, &decoded_v2),
         PTC_ERR_OK, "v2 token verify");
     check_int(decoded_v2.minutes, 30, "v2 token minutes");
+
+    uint8_t t31;
+    check_int(ptc_token_v2_tier_for_minutes(240, &t31), PTC_ERR_OK, "tier for 240 minutes");
+    check_int(t31, 31, "tier 31 index");
+    check_int(ptc_token_v2_encode(31, 7, "test-device", "test-secret", 2380, short_code), PTC_ERR_OK, "v2 tier 31 encode");
+    check_int(ptc_token_v2_verify(short_code, "test-device", "test-secret", 2380, 240, NULL, NULL, &decoded_v2), PTC_ERR_OK, "v2 tier 31 verify");
+    check_int(decoded_v2.minutes, 240, "v2 tier 31 decoded minutes");
 }
 
 static void test_release_request_contract(void)
@@ -189,7 +196,7 @@ static void seed_release_setup(PtcMemStorage *mem)
         "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
         "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}],\"today_override_present\":false}";
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/config.json",
-        "{\"version\":1,\"device_id\":\"kid-switch\",\"max_add_minutes\":120}"), "seed release config");
+        "{\"version\":1,\"device_id\":\"kid-switch\",\"max_add_minutes\":240}"), "seed release config");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/credentials.json",
         "{\"version\":1,\"grant_secret\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"}"),
         "seed generated credentials");

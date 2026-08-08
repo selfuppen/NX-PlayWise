@@ -122,7 +122,7 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--root", required=True)
     init.add_argument("--device", required=True)
     init.add_argument("--secret", required=True)
-    init.add_argument("--max-add-minutes", type=int, default=120)
+    init.add_argument("--max-add-minutes", type=int, default=240)
     init.set_defaults(func=init_sdmc)
 
     request = sub.add_parser("request", help="Write a pending request.")

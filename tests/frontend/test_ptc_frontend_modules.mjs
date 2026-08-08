@@ -44,7 +44,9 @@ assert.throws(() => dayIndexFor("2026-02-30"), /日期无效/);
 for (let minutes = 5; minutes <= 120; minutes += 5) {
   assert.equal(tierForMinutes(minutes), minutes / 5 - 1);
 }
-assert.throws(() => tierForMinutes(7), /5 至 120/);
+assert.equal(tierForMinutes(150), 28);
+assert.equal(tierForMinutes(240), 31);
+assert.throws(() => tierForMinutes(7), /150\/180\/210\/240/);
 
 assert.equal(DEMO_SECRET.length, 32);
 assert.equal(DEFAULT_CONFIG.secret, DEMO_SECRET);

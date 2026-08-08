@@ -42,6 +42,7 @@ const tierOptions = [1, 2, 3, 4];
 for (let minutes = 5; minutes <= 120; minutes += 5) {
   tierOptions.push(minutes);
 }
+tierOptions.push(150, 180, 210, 240);
 for (const minutes of tierOptions) {
   const option = document.createElement("option");
   option.value = String(minutes);
