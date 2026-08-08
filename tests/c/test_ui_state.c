@@ -111,8 +111,15 @@ static void test_time_previews(void)
 static void test_release_hit_targets(void)
 {
     PtcUiModel model;
+    PtcUiRect code_input;
+    PtcUiRect refresh;
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_CHILD;
+    code_input = ptc_ui_child_submit_rect();
+    refresh = ptc_ui_child_refresh_rect();
+    check_int(code_input.x, 86, "child code input aligns with reward card");
+    check_int(code_input.w, 696, "child code input uses the prominent field width");
+    check_int(refresh.y, 454, "child refresh stays below game-time summary");
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "child code button");
     model.disable_flag_present = true;
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "disabled child code button is not actionable");

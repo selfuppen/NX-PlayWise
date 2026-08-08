@@ -387,10 +387,11 @@ static void draw_disable_banner(uint32_t *pixels, uint32_t stride, const PtcUiMo
     draw_text_center(pixels, stride, banner, "紧急停用已开启 · 新的时间控制不会应用", 18, COLOR(170, 35, 48));
 }
 
-static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, int y)
+static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, int y, int height)
 {
-    UiRect rect = {54, y, 1172, 128};
+    UiRect rect = {54, y, 1172, height};
     uint32_t accent = COLOR(91, 100, 116);
+    bool compact = height < 128;
     char fitted[192];
     char detail[192];
     char execution[150];
@@ -404,21 +405,43 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     fill_round_rect(pixels, stride, rect, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, rect, 1, COLOR(219, 225, 233));
     fill_rect(pixels, stride, (UiRect){rect.x, rect.y, 6, rect.height}, accent);
-    draw_text(pixels, stride, rect.x + 24, rect.y + 25, model->waiting ? "正在执行" : "最近执行", 18, accent);
+    draw_text(pixels, stride, rect.x + 24, rect.y + (compact ? 22 : 25),
+              model->waiting ? "正在执行" : "最近执行", compact ? 17 : 18, accent);
     snprintf(
         execution,
         sizeof(execution),
         "命令：%s    %s",
         model->command_name[0] ? model->command_name : "未开始",
         model->transport_label[0] ? model->transport_label : "传输：未开始");
-    fit_text(fitted, sizeof(fitted), execution, 18, rect.width - 48);
-    draw_text(pixels, stride, rect.x + 24, rect.y + 50, fitted, 18, COLOR(77, 86, 99));
-    fit_text(fitted, sizeof(fitted), model->message, 21, rect.width - 48);
-    draw_text(pixels, stride, rect.x + 24, rect.y + 78, fitted, 20, COLOR(45, 52, 62));
+    fit_text(fitted, sizeof(fitted), execution, compact ? 17 : 18, rect.width - 48);
+    draw_text(pixels, stride, rect.x + 24, rect.y + (compact ? 45 : 50), fitted,
+              compact ? 17 : 18, COLOR(77, 86, 99));
+    fit_text(fitted, sizeof(fitted), model->message, compact ? 19 : 21, rect.width - 48);
+    draw_text(pixels, stride, rect.x + 24, rect.y + (compact ? 70 : 78), fitted,
+              compact ? 19 : 20, COLOR(45, 52, 62));
     if (model->feedback_detail[0]) {
-        fit_text(detail, sizeof(detail), model->feedback_detail, 17, rect.width - 48);
-        draw_text(pixels, stride, rect.x + 24, rect.y + 105, detail, 16, accent);
+        fit_text(detail, sizeof(detail), model->feedback_detail, compact ? 15 : 17, rect.width - 48);
+        draw_text(pixels, stride, rect.x + 24, rect.y + (compact ? 92 : 105), detail,
+                  compact ? 15 : 16, accent);
     }
+}
+
+static void draw_timer_status_tile(
+    uint32_t *pixels,
+    uint32_t stride,
+    UiRect rect,
+    const char *timer,
+    const char *mode,
+    uint32_t mode_accent)
+{
+    const int split_x = rect.x + 143;
+    fill_round_rect(pixels, stride, rect, 8, COLOR(255, 255, 255));
+    draw_rect_outline(pixels, stride, rect, 1, COLOR(219, 225, 233));
+    fill_rect(pixels, stride, (UiRect){split_x, rect.y + 18, 1, rect.height - 36}, COLOR(219, 225, 233));
+    draw_text(pixels, stride, rect.x + 16, rect.y + 34, "系统计时器", 15, COLOR(103, 111, 124));
+    draw_text(pixels, stride, rect.x + 16, rect.y + 68, timer, 21, COLOR(28, 34, 43));
+    draw_text(pixels, stride, split_x + 15, rect.y + 34, "运行状态", 15, COLOR(103, 111, 124));
+    draw_text(pixels, stride, split_x + 15, rect.y + 68, mode, 19, mode_accent);
 }
 
 static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -426,7 +449,6 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char today[32];
     char remaining[32];
     char played[32];
-    char freshness[64];
     char parent_hint[128];
     char fitted_hint[128];
     const char *mode = model->disable_flag_present ? "控制已停用" :
@@ -438,43 +460,47 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     } else {
         snprintf(played, sizeof(played), "暂不可用");
     }
-    format_status_age(model, freshness, sizeof(freshness));
-    draw_header(pixels, stride, "游玩时间", "查看今天的状态，使用家长提供的加时码");
+    draw_header(pixels, stride, "自律小达人 · 加时奖励", "遵守约定、合理安排时间");
     draw_disable_banner(pixels, stride, model);
     draw_status_tile(pixels, stride, (UiRect){54, 118, 278, 92}, "今日状态", today, COLOR(216, 49, 54));
     draw_status_tile(pixels, stride, (UiRect){350, 118, 278, 92}, "剩余时间", remaining, COLOR(25, 132, 95));
     draw_status_tile(pixels, stride, (UiRect){646, 118, 278, 92}, "已玩时间", played, COLOR(215, 139, 25));
-    draw_status_tile(pixels, stride, (UiRect){942, 118, 284, 92}, "运行状态", mode,
-                     model->disable_flag_present ? COLOR(194, 61, 61) : COLOR(28, 118, 188));
+    draw_timer_status_tile(pixels, stride, (UiRect){942, 118, 284, 92},
+                           model->play_timer_enabled == 1 ? "已开启" : "未确认", mode,
+                           model->disable_flag_present ? COLOR(194, 61, 61) : COLOR(28, 118, 188));
 
     fill_round_rect(pixels, stride, (UiRect){54, 238, 760, 246}, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, (UiRect){54, 238, 760, 246}, 1, COLOR(219, 225, 233));
-    draw_text(pixels, stride, 86, 286, "自律小达人 · 加时奖励", 27, COLOR(28, 34, 43));
-    draw_text(pixels, stride, 86, 326, "遵守约定、合理安排时间。加时之前，记得向窗外远眺", 23, COLOR(85, 94, 107));
-    draw_text(pixels, stride, 86, 360, "至少 5 分钟，让眼睛放松一下吧！", 23, COLOR(85, 94, 107));
+    draw_text(pixels, stride, 86, 275, "加时码", 18, COLOR(28, 118, 188));
     fill_round_rect(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), 8,
-                    model->disable_flag_present ? COLOR(203, 211, 222) : COLOR(28, 118, 188));
+                    model->disable_flag_present ? COLOR(244, 246, 249) : COLOR(244, 249, 255));
+    draw_rect_outline(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), 2,
+                      model->disable_flag_present ? COLOR(203, 211, 222) : COLOR(28, 118, 188));
     draw_text_center(pixels, stride, to_uirect(ptc_ui_child_submit_rect()),
-                     model->disable_flag_present ? "紧急停用中" : "A  输入加时码", 24, COLOR(255, 255, 255));
+                     model->disable_flag_present ? "紧急停用中" : "输入加时码", 34,
+                     model->disable_flag_present ? COLOR(91, 100, 116) : COLOR(28, 118, 188));
+    draw_text(pixels, stride, 86, 416,
+              model->disable_flag_present ? "加时码兑换暂不可用" :
+              "加时之前，记得向窗外远眺至少 5 分钟，让眼睛放松一下吧！",
+              18, COLOR(85, 94, 107));
+    draw_text(pixels, stride, 86, 455,
+              model->disable_flag_present ? "" : "按 A 或点击输入 · 仅支持 8 位数字码",
+              17, COLOR(103, 111, 124));
 
-    fill_round_rect(pixels, stride, (UiRect){836, 238, 390, 246}, 8, COLOR(250, 251, 253));
-    draw_rect_outline(pixels, stride, (UiRect){836, 238, 390, 246}, 1, COLOR(219, 225, 233));
-    draw_text(pixels, stride, 866, 282, "状态详情", 24, COLOR(28, 34, 43));
-    draw_text(pixels, stride, 1034, 282, freshness, 16, status_age_color(model));
-    draw_text(pixels, stride, 866, 320, model->play_timer_enabled == 1 ? "游玩计时器：已开启" : "游玩计时器：未确认", 19, COLOR(77, 86, 99));
-    draw_text(pixels, stride, 866, 352, "到期行为：系统提醒", 19, COLOR(77, 86, 99));
-    draw_text(pixels, stride, 866, 384, "不会强制锁屏或关闭游戏", 19, COLOR(77, 86, 99));
-    draw_text(pixels, stride, 866, 416,
-        model->disable_flag_present ? "紧急停用：已开启" :
-        (strcmp(model->setup_phase, "active") == 0 ? "额度管理：已启用" : "额度管理：尚未启用"),
-        20, model->disable_flag_present ? COLOR(194, 61, 61) :
-        (strcmp(model->setup_phase, "active") == 0 ? COLOR(25, 132, 95) : COLOR(215, 139, 25)));
+    fill_round_rect(pixels, stride, (UiRect){836, 238, 390, 274}, 8, COLOR(250, 251, 253));
+    draw_rect_outline(pixels, stride, (UiRect){836, 238, 390, 274}, 1, COLOR(219, 225, 233));
+    draw_text(pixels, stride, 866, 282, "游戏时间统计", 24, COLOR(28, 34, 43));
+    draw_text(pixels, stride, 866, 329, "游戏明细暂不可用", 22, COLOR(85, 94, 107));
+    draw_text(pixels, stride, 866, 362, "前 3 名游戏将在数据可用后显示", 17, COLOR(103, 111, 124));
+    fill_round_rect(pixels, stride, (UiRect){866, 384, 330, 50}, 7, COLOR(244, 248, 253));
+    draw_text(pixels, stride, 884, 416, "今日累计已玩", 17, COLOR(103, 111, 124));
+    draw_text(pixels, stride, 1034, 416, played, 20, COLOR(28, 118, 188));
     draw_dialog_button(pixels, stride, ptc_ui_child_refresh_rect(),
                        model->waiting ? "正在刷新状态…" : "Y  立即刷新状态",
                        model->waiting ? COLOR(215, 139, 25) : COLOR(28, 118, 188),
                        COLOR(255, 255, 255), false);
 
-    draw_notice(pixels, stride, model, 510);
+    draw_notice(pixels, stride, model, 530, 100);
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0),
                        model->disable_flag_present ? "紧急停用中" : "A  输入加时码");
     fill_round_rect(pixels, stride, to_uirect(ptc_ui_child_footer_rect(1)), 8, COLOR(255, 255, 255));
@@ -996,7 +1022,7 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     } else {
         draw_safety_status(pixels, stride, model);
     }
-    if (model->parent_page != PTC_UI_PARENT_PLAN) draw_notice(pixels, stride, model, 522);
+    if (model->parent_page != PTC_UI_PARENT_PLAN) draw_notice(pixels, stride, model, 522, 128);
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0), "L  上一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1), "R  下一页");
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
@@ -1181,7 +1207,7 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     if ((model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
          model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) && model->numpad_text[0]) {
         snprintf(shown, sizeof(shown), "%s 分钟", model->numpad_text);
-    } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
+    } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE && model->numpad_text[0]) {
         size_t len = strlen(model->numpad_text);
         size_t pos = 0;
         for (int i = 0; i < 8; ++i) {
@@ -1193,6 +1219,8 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             }
         }
         shown[pos] = '\0';
+    } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
+        snprintf(shown, sizeof(shown), "输入加时码");
     } else if (model->numpad_text[0]) {
         snprintf(shown, sizeof(shown), "%s", model->numpad_text);
     } else {

@@ -601,14 +601,15 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
 
 PtcUiRect ptc_ui_child_submit_rect(void)
 {
-    PtcUiRect rect = {254, 392, 360, 64};
+    /* Large code field in the child reward card. */
+    PtcUiRect rect = {86, 292, 696, 84};
     return rect;
 }
 
 PtcUiRect ptc_ui_child_refresh_rect(void)
 {
-    /* "Y 刷新状态" line inside the status-detail card. */
-    PtcUiRect rect = {836, 430, 390, 54};
+    /* Bottom action in the taller game-time-statistics card. */
+    PtcUiRect rect = {866, 454, 330, 42};
     return rect;
 }
 
