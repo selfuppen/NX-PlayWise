@@ -54,6 +54,18 @@ static const char *request_success_message(const char *type)
     if (strcmp(type, "disable_today_limit") == 0) {
         return "当前限制已解除，今天保持不限时。";
     }
+    if (strcmp(type, "set_today_limit") == 0) {
+        return "今日总额度已更新，当前状态已刷新。";
+    }
+    if (strcmp(type, "add_today_minutes") == 0) {
+        return "临时加时已生效，当前状态已刷新。";
+    }
+    if (strcmp(type, "restore_today_policy") == 0) {
+        return "今日临时设置已清除，已恢复周计划。";
+    }
+    if (strcmp(type, "set_weekly_template") == 0) {
+        return "周计划已保存；今天如无临时设置，将由后台同步。";
+    }
     return "设置已生效。";
 }
 
@@ -99,7 +111,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
 {
     switch (page) {
     case PTC_UI_PARENT_PLAN:
-        return 1;
+        return 0;
     case PTC_UI_PARENT_SECURITY:
         return 4;
     case PTC_UI_PARENT_SUPPORT:
@@ -310,7 +322,8 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
         }
         return true;
     }
-    if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
+    if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
+        model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
         if (!ptc_ui_parse_minutes(model->numpad_text, model->numpad_minimum, model->numpad_maximum, &value)) {
             snprintf(model->numpad_error, sizeof(model->numpad_error), "请输入 %u 到 %u 分钟",
                      (unsigned int)model->numpad_minimum, (unsigned int)model->numpad_maximum);
@@ -348,9 +361,12 @@ int ptc_ui_preview_remaining_minutes(const PtcUiModel *model)
         if (model->remaining_available && model->remaining_minutes >= 0) {
             return model->remaining_minutes + (int)model->draft_minutes;
         }
-        return (int)model->draft_minutes;
+        return -1;
     }
 
+    if (!model->played_minutes_available || model->played_minutes < 0) {
+        return -1;
+    }
     remaining = (int)model->draft_minutes;
     if (model->played_minutes_available && model->played_minutes >= 0) {
         remaining = (int)model->draft_minutes - model->played_minutes;
@@ -612,6 +628,22 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 620;
         *height = 610;
         break;
+    case PTC_UI_OVERLAY_CREDENTIAL:
+        *width = 900;
+        *height = 500;
+        break;
+    case PTC_UI_OVERLAY_GRANT_SETUP:
+        *width = 820;
+        *height = 430;
+        break;
+    case PTC_UI_OVERLAY_QR:
+        *width = 900;
+        *height = 610;
+        break;
+    case PTC_UI_OVERLAY_WEEKLY_LEAVE:
+        *width = 860;
+        *height = 350;
+        break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:
         *width = 760;
@@ -716,6 +748,67 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
     return rect;
 }
 
+PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay)
+{
+    PtcUiRect dialog = dialog_for(overlay);
+    PtcUiRect rect = {dialog.x + 24, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
+    return rect;
+}
+
+PtcUiRect ptc_ui_weekly_save_rect(void)
+{
+    PtcUiRect rect = {932, 540, 260, 58};
+    return rect;
+}
+
+PtcUiRect ptc_ui_weekly_discard_rect(void)
+{
+    PtcUiRect rect = {654, 540, 250, 58};
+    return rect;
+}
+
+PtcUiRect ptc_ui_credential_input_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_CREDENTIAL);
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 224, 600, 64};
+    return rect;
+}
+
+PtcUiRect ptc_ui_credential_random_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_CREDENTIAL);
+    PtcUiRect rect = {dialog.x + 662, dialog.y + 224, 196, 64};
+    return rect;
+}
+
+PtcUiRect ptc_ui_credential_reveal_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_CREDENTIAL);
+    PtcUiRect rect = {dialog.x + 662, dialog.y + 132, 196, 56};
+    return rect;
+}
+
+PtcUiRect ptc_ui_credential_demo_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_CREDENTIAL);
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 318, 270, 52};
+    return rect;
+}
+
+PtcUiRect ptc_ui_grant_qr_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
+    PtcUiRect rect = {dialog.x + 52, dialog.y + 190, 330, 92};
+    return rect;
+}
+
+PtcUiRect ptc_ui_grant_export_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
+    PtcUiRect rect = {dialog.x + 438, dialog.y + 190, 330, 92};
+    return rect;
+}
+
 /* Left-aligned editor helper buttons for the weekly overlay. */
 PtcUiRect ptc_ui_weekly_mode_rect(void)
 {
@@ -781,6 +874,10 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     if (ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
     }
+    if (model->overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE &&
+        ptc_ui_rect_contains(ptc_ui_discard_rect(model->overlay), x, y)) {
+        return make_hit(PTC_UI_HIT_OVERLAY_DISCARD, 0);
+    }
     switch (model->overlay) {
     case PTC_UI_OVERLAY_MINUTES:
         if (ptc_ui_rect_contains(ptc_ui_minutes_value_rect(), x, y)) {
@@ -835,6 +932,19 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
                 return make_hit(PTC_UI_HIT_NUMPAD_KEY, i);
             }
         }
+        break;
+    case PTC_UI_OVERLAY_CREDENTIAL:
+        if (ptc_ui_rect_contains(ptc_ui_credential_input_rect(), x, y)) return make_hit(PTC_UI_HIT_CREDENTIAL_INPUT, 0);
+        if (ptc_ui_rect_contains(ptc_ui_credential_random_rect(), x, y)) return make_hit(PTC_UI_HIT_CREDENTIAL_RANDOM, 0);
+        if (ptc_ui_rect_contains(ptc_ui_credential_reveal_rect(), x, y)) return make_hit(PTC_UI_HIT_CREDENTIAL_REVEAL, 0);
+        if (ptc_ui_rect_contains(ptc_ui_credential_demo_rect(), x, y)) return make_hit(PTC_UI_HIT_CREDENTIAL_DEMO, 0);
+        break;
+    case PTC_UI_OVERLAY_GRANT_SETUP:
+        if (ptc_ui_rect_contains(ptc_ui_grant_qr_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_QR, 0);
+        if (ptc_ui_rect_contains(ptc_ui_grant_export_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_EXPORT, 0);
+        break;
+    case PTC_UI_OVERLAY_QR:
+    case PTC_UI_OVERLAY_WEEKLY_LEAVE:
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     case PTC_UI_OVERLAY_NONE:
@@ -904,10 +1014,25 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_PARENT_NEXT_PAGE, 0);
     }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(2), x, y)) {
-        return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
+        return make_hit(model->parent_page == PTC_UI_PARENT_PLAN
+            ? PTC_UI_HIT_WEEKLY_SAVE : PTC_UI_HIT_PARENT_REFRESH, 0);
     }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(3), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
+    }
+    if (model->parent_page == PTC_UI_PARENT_PLAN) {
+        for (i = 0; i < 7; ++i) {
+            if (model->draft_week[i].mode == PTC_RULE_MODE_LIMIT &&
+                ptc_ui_rect_contains(ptc_ui_weekly_day_minutes_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, i);
+            }
+            if (ptc_ui_rect_contains(ptc_ui_weekly_day_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_WEEKLY_DAY, i);
+            }
+        }
+        if (ptc_ui_rect_contains(ptc_ui_weekly_mode_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MODE, 0);
+        if (ptc_ui_rect_contains(ptc_ui_weekly_save_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_SAVE, 0);
+        if (ptc_ui_rect_contains(ptc_ui_weekly_discard_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_DISCARD, 0);
     }
     count = ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {

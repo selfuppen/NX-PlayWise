@@ -1,4 +1,4 @@
-const CACHE_NAME = "ptc-frontend-v3";
+const CACHE_NAME = "ptc-frontend-v4";
 const STATIC_PATHS = [
   "./",
   "./index.html",
@@ -6,6 +6,7 @@ const STATIC_PATHS = [
   "./app.js",
   "./token.js",
   "./storage.js",
+  "./pairing.js",
   "./manifest.webmanifest",
   "./icon.svg",
   "./icon-maskable.svg",

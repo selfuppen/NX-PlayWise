@@ -6,6 +6,8 @@
 #include "../../common/protocol/request_schema.h"
 #include "../../common/protocol/result_builder.h"
 #include "../../common/support/support_export.h"
+#include "../../common/security/credential_policy.h"
+#include "../../third_party/qrcodegen/qrcodegen.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/token/token_v1.h"
 #include "../../common/token/token_v2.h"
@@ -257,6 +259,30 @@ static void test_play_timer_layout(void)
     check_true(!ptc_play_timer_settings_valid(words, PTC_PLAY_TIMER_SETTINGS_WORDS), "invalid PCTL layout rejected");
 }
 
+static void test_credential_policy(void)
+{
+    const uint8_t random_bytes[3] = {0xabU, 0xcdU, 0xefU};
+    char device_id[PTC_DEVICE_ID_MAX_LEN + 1];
+    char secret[PTC_GRANT_SECRET_MAX_LEN + 1];
+    char url[384];
+    uint8_t temp[qrcodegen_BUFFER_LEN_MAX];
+    uint8_t qr[qrcodegen_BUFFER_LEN_MAX];
+    memset(secret, 'a', 32U);
+    secret[32] = '\0';
+    check_true(ptc_device_id_valid("kid-switch"), "device ID accepts safe characters");
+    check_true(!ptc_device_id_valid("kid switch"), "device ID rejects whitespace");
+    check_true(ptc_grant_secret_valid(secret), "32-character secret accepted");
+    check_true(ptc_grant_secret_is_demo(PTC_DEMO_GRANT_SECRET), "public demo secret recognized");
+    check_true(ptc_random_device_id(random_bytes, device_id, sizeof(device_id)) &&
+        strcmp(device_id, "playwise-abcdef") == 0, "random device ID is readable");
+    check_true(ptc_build_pairing_url("kid-switch", secret, url, sizeof(url)) &&
+        strstr(url, PTC_PAIRING_BASE_URL "#device_id=kid-switch&grant_secret=") == url,
+        "pairing URL uses fragment fields");
+    check_true(qrcodegen_encodeText(url, temp, qr, qrcodegen_Ecc_MEDIUM,
+        qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO, true) &&
+        qrcodegen_getSize(qr) > 0, "pairing URL encodes as QR");
+}
+
 int main(void)
 {
     test_tokens();
@@ -266,6 +292,7 @@ int main(void)
     test_auth_and_queue();
     test_setup_preflight_and_recovery();
     test_play_timer_layout();
+    test_credential_policy();
     if (failures) {
         fprintf(stderr, "%d C host tests failed\n", failures);
         return 1;

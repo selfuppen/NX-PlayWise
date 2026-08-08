@@ -40,7 +40,7 @@ static void test_release_navigation(void)
     PtcUiModel model;
     memset(&model, 0, sizeof(model));
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 1, "weekly plan actions");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 4, "security actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 5, "support actions");
 
@@ -81,6 +81,26 @@ static void test_numeric_input(void)
     check_true(ptc_ui_numpad_validate(&model, NULL), "eight-digit code accepted");
 }
 
+static void test_time_previews(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
+    model.draft_minutes = 60;
+    model.played_minutes_available = true;
+    model.played_minutes = 20;
+    check_int(ptc_ui_preview_remaining_minutes(&model), 40, "set-limit preview subtracts played time");
+    model.played_minutes_available = false;
+    check_int(ptc_ui_preview_remaining_minutes(&model), -1, "unavailable played time is not guessed");
+    model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
+    model.remaining_available = true;
+    model.remaining_minutes = 25;
+    model.draft_minutes = 15;
+    check_int(ptc_ui_preview_remaining_minutes(&model), 40, "add preview stacks on remaining time");
+    model.remaining_available = false;
+    check_int(ptc_ui_preview_remaining_minutes(&model), -1, "unlimited add preview is unavailable");
+}
+
 static void test_release_hit_targets(void)
 {
     PtcUiModel model;
@@ -91,6 +111,12 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0, "parent controls hidden from child");
 
     model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.draft_week[0].mode = PTC_RULE_MODE_LIMIT;
+    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 0,
+              "weekly day minutes are directly editable");
+    check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
+              "weekly save is on the page");
     model.parent_page = PTC_UI_PARENT_SUPPORT;
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_PARENT_CARD, 0, "support environment card");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "support diagnostics card");
@@ -102,6 +128,15 @@ static void test_release_hit_targets(void)
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT,
         "recovery action confirmed once");
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_NONE, "confirmation cannot be reused");
+
+    model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
+    check_hit(hit_center(&model, ptc_ui_credential_random_rect()), PTC_UI_HIT_CREDENTIAL_RANDOM, 0,
+              "credential random button");
+    model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
+    check_hit(hit_center(&model, ptc_ui_grant_qr_rect()), PTC_UI_HIT_GRANT_QR, 0, "pairing QR button");
+    model.overlay = PTC_UI_OVERLAY_WEEKLY_LEAVE;
+    check_hit(hit_center(&model, ptc_ui_discard_rect(model.overlay)), PTC_UI_HIT_OVERLAY_DISCARD, 0,
+              "weekly leave discard button");
 }
 
 static void test_user_state_mapping(void)
@@ -145,6 +180,7 @@ int main(void)
 {
     test_release_navigation();
     test_numeric_input();
+    test_time_previews();
     test_release_hit_targets();
     test_user_state_mapping();
     if (failures) return 1;

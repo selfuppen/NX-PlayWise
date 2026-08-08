@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "../../common/rules/rules.h"
+#include "../../third_party/qrcodegen/qrcodegen.h"
 
 typedef enum {
     PTC_UI_CHILD = 0,
@@ -27,13 +28,18 @@ typedef enum {
     PTC_UI_OVERLAY_MINUTES = 1,
     PTC_UI_OVERLAY_WEEKLY = 2,
     PTC_UI_OVERLAY_CONFIRM = 3,
-    PTC_UI_OVERLAY_NUMPAD = 4
+    PTC_UI_OVERLAY_NUMPAD = 4,
+    PTC_UI_OVERLAY_CREDENTIAL = 5,
+    PTC_UI_OVERLAY_GRANT_SETUP = 6,
+    PTC_UI_OVERLAY_QR = 7,
+    PTC_UI_OVERLAY_WEEKLY_LEAVE = 8
 } PtcUiOverlay;
 
 typedef enum {
     PTC_UI_NUMPAD_NONE = 0,
     PTC_UI_NUMPAD_OFFLINE_CODE = 1,
-    PTC_UI_NUMPAD_MINUTES = 2
+    PTC_UI_NUMPAD_MINUTES = 2,
+    PTC_UI_NUMPAD_WEEKLY_MINUTES = 3
 } PtcUiNumpadPurpose;
 
 typedef enum {
@@ -46,7 +52,10 @@ typedef enum {
     PTC_UI_OPERATION_SAVE_WEEKLY = 6,
     PTC_UI_OPERATION_RETRY_SETUP_RELEASE = 7,
     PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT = 8,
-    PTC_UI_OPERATION_DISABLE_TODAY_LIMIT = 9
+    PTC_UI_OPERATION_DISABLE_TODAY_LIMIT = 9,
+    PTC_UI_OPERATION_RESTORE_TODAY_POLICY = 10,
+    PTC_UI_OPERATION_SAVE_CREDENTIAL = 11,
+    PTC_UI_OPERATION_SAVE_WEEKLY_LEAVE = 12
 } PtcUiOperation;
 
 typedef enum {
@@ -90,9 +99,13 @@ typedef struct {
     uint16_t minimum_minutes;
     uint16_t maximum_minutes;
     PtcDayRule draft_week[7];
+    PtcDayRule current_week[7];
+    bool weekly_dirty;
+    bool today_override_present;
+    PtcDayRule today_override_rule;
     int editor_index;
     char overlay_title[64];
-    char overlay_body[192];
+    char overlay_body[320];
     PtcUiNumpadPurpose numpad_purpose;
     PtcUiOverlay numpad_return_overlay;
     char numpad_text[9];
@@ -105,6 +118,14 @@ typedef struct {
     char numpad_guide[128];
     char numpad_error[96];
     char safety_hint[192];
+    int credential_kind;
+    bool credential_revealed;
+    bool credential_new_revealed;
+    bool demo_secret_enabled;
+    char credential_current[80];
+    char credential_new[80];
+    char pairing_url[384];
+    uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];
 } PtcUiModel;
 
 typedef struct {
@@ -141,7 +162,17 @@ typedef enum {
     PTC_UI_HIT_WEEKLY_MIN_DEC,
     PTC_UI_HIT_WEEKLY_MIN_INC,
     PTC_UI_HIT_WEEKLY_MIN_INPUT,
-    PTC_UI_HIT_NUMPAD_KEY
+    PTC_UI_HIT_NUMPAD_KEY,
+    PTC_UI_HIT_WEEKLY_SAVE,
+    PTC_UI_HIT_WEEKLY_DISCARD,
+    PTC_UI_HIT_OVERLAY_DISCARD,
+    PTC_UI_HIT_CREDENTIAL_INPUT,
+    PTC_UI_HIT_CREDENTIAL_RANDOM,
+    PTC_UI_HIT_CREDENTIAL_REVEAL,
+    PTC_UI_HIT_CREDENTIAL_SAVE,
+    PTC_UI_HIT_CREDENTIAL_DEMO,
+    PTC_UI_HIT_GRANT_QR,
+    PTC_UI_HIT_GRANT_EXPORT
 } PtcUiHitKind;
 
 typedef struct {
@@ -214,6 +245,15 @@ PtcUiRect ptc_ui_numpad_display_rect(void);
 PtcUiRect ptc_ui_numpad_key_rect(int index);
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay);
+PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay);
+PtcUiRect ptc_ui_weekly_save_rect(void);
+PtcUiRect ptc_ui_weekly_discard_rect(void);
+PtcUiRect ptc_ui_credential_input_rect(void);
+PtcUiRect ptc_ui_credential_random_rect(void);
+PtcUiRect ptc_ui_credential_reveal_rect(void);
+PtcUiRect ptc_ui_credential_demo_rect(void);
+PtcUiRect ptc_ui_grant_qr_rect(void);
+PtcUiRect ptc_ui_grant_export_rect(void);
 bool ptc_ui_rect_contains(PtcUiRect rect, int x, int y);
 PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y);
 

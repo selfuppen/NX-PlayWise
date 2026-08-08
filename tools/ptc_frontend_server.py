@@ -16,6 +16,7 @@ STATIC_ASSETS = {
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/token.js": ("token.js", "text/javascript; charset=utf-8"),
     "/storage.js": ("storage.js", "text/javascript; charset=utf-8"),
+    "/pairing.js": ("pairing.js", "text/javascript; charset=utf-8"),
     "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json; charset=utf-8"),
     "/icon.svg": ("icon.svg", "image/svg+xml"),

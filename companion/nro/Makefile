@@ -39,6 +39,8 @@ OBJS := \
 	$(BUILD)/sha256.o \
 	$(BUILD)/rules.o \
 	$(BUILD)/support_export.o \
+	$(BUILD)/credential_policy.o \
+	$(BUILD)/qrcodegen.o \
 	$(BUILD)/ptc_time.o \
 	$(BUILD)/result_builder.o \
 	$(BUILD)/error_code.o \
@@ -89,6 +91,12 @@ $(BUILD)/rules.o: ../../common/rules/rules.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/support_export.o: ../../common/support/support_export.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/credential_policy.o: ../../common/security/credential_policy.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/qrcodegen.o: ../../third_party/qrcodegen/qrcodegen.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ptc_time.o: ../../common/time/ptc_time.c | $(BUILD)

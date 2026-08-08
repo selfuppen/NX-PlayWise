@@ -16,10 +16,12 @@ COMMON_SRCS := \
 	common/time/ptc_time.c \
 	common/rules/rules.c \
 	common/support/support_export.c \
+	common/security/credential_policy.c \
 	common/policy/control_policy.c
 
 THIRD_PARTY_SRCS := \
-	third_party/cjson/cJSON.c
+	third_party/cjson/cJSON.c \
+	third_party/qrcodegen/qrcodegen.c
 
 PLATFORM_HOST_SRCS := \
 	platform/host/mem_storage.c \

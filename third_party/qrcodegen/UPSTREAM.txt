@@ -1,0 +1,7 @@
+Project Nayuki QR Code generator library
+Repository: https://github.com/nayuki/QR-Code-generator
+Tag: v1.8.0
+Commit: 720f62bddb7226106071d4728c292cb1df519ceb
+Files: c/qrcodegen.c, c/qrcodegen.h
+License: MIT (license notice retained in source files)
+Queried: 2026-08-08

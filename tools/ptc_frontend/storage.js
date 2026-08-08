@@ -1,9 +1,12 @@
+import {DEMO_SECRET} from "./pairing.js";
+
 export const CONFIG_KEY = "ptc.frontend.config.v1";
 export const NONCES_KEY = "ptc.frontend.nonces.v1";
+export const DEMO_ACK_KEY = "ptc.frontend.demo-ack.v1";
 
 export const DEFAULT_CONFIG = Object.freeze({
   deviceId: "kid-switch",
-  secret: "replace-with-long-random-secret",
+  secret: DEMO_SECRET,
   tierMinutes: 30,
 });
 
@@ -64,4 +67,13 @@ export function rememberNonce(storage, deviceId, dateText, nonce) {
 export function clearFrontendState(storage) {
   storage.removeItem(CONFIG_KEY);
   storage.removeItem(NONCES_KEY);
+  storage.removeItem(DEMO_ACK_KEY);
+}
+
+export function demoRiskAcknowledged(storage) {
+  return storage.getItem(DEMO_ACK_KEY) === "yes";
+}
+
+export function acknowledgeDemoRisk(storage) {
+  storage.setItem(DEMO_ACK_KEY, "yes");
 }

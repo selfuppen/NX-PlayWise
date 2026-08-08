@@ -11,6 +11,7 @@ import {
 } from "../../tools/ptc_frontend/token.js";
 import {
   CONFIG_KEY,
+  DEMO_ACK_KEY,
   DEFAULT_CONFIG,
   NONCES_KEY,
   clearFrontendState,
@@ -19,6 +20,14 @@ import {
   saveConfig,
   usedNoncesFor,
 } from "../../tools/ptc_frontend/storage.js";
+import {
+  DEMO_SECRET,
+  isDemoSecret,
+  maskedSecret,
+  pairingFromFragment,
+  pairingFromImportText,
+  validatePairing,
+} from "../../tools/ptc_frontend/pairing.js";
 
 class MemoryStorage {
   constructor() { this.values = new Map(); }
@@ -36,6 +45,23 @@ for (let minutes = 5; minutes <= 120; minutes += 5) {
   assert.equal(tierForMinutes(minutes), minutes / 5 - 1);
 }
 assert.throws(() => tierForMinutes(7), /5 至 120/);
+
+assert.equal(DEMO_SECRET.length, 32);
+assert.equal(DEFAULT_CONFIG.secret, DEMO_SECRET);
+assert.equal(isDemoSecret(DEMO_SECRET), true);
+assert.equal(maskedSecret(DEMO_SECRET).startsWith("play"), true);
+assert.deepEqual(
+  pairingFromFragment(`#device_id=kid-switch&grant_secret=${DEMO_SECRET}`),
+  {deviceId: "kid-switch", secret: DEMO_SECRET},
+);
+assert.throws(() => pairingFromFragment("#device_id=kid-switch"), /参数不完整/);
+assert.deepEqual(
+  pairingFromImportText(JSON.stringify({version: 1, device_id: "family_switch", grant_secret: "a".repeat(64)})),
+  {deviceId: "family_switch", secret: "a".repeat(64)},
+);
+assert.throws(() => pairingFromImportText("{"), /有效的 JSON/);
+assert.throws(() => validatePairing({deviceId: "bad space", secret: "a".repeat(32)}), /设备 ID/);
+assert.throws(() => validatePairing({deviceId: "ok", secret: "short"}), /32–64/);
 
 assert.equal(await encodeToken({
   deviceId: "test-device",
@@ -85,6 +111,7 @@ assert.ok(storage.getItem(NONCES_KEY));
 clearFrontendState(storage);
 assert.equal(storage.getItem(CONFIG_KEY), null);
 assert.equal(storage.getItem(NONCES_KEY), null);
+assert.equal(storage.getItem(DEMO_ACK_KEY), null);
 assert.deepEqual(loadConfig(storage), DEFAULT_CONFIG);
 
 console.log("PTC frontend JavaScript tests passed");

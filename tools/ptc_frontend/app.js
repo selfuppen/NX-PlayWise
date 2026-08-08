@@ -1,5 +1,21 @@
 import {chooseUnusedNonce, dayIndexFor, encodeToken, runSelfTest, tierForMinutes, todayUtc8} from "./token.js";
-import {DEFAULT_CONFIG, clearFrontendState, loadConfig, rememberNonce, saveConfig, usedNoncesFor} from "./storage.js";
+import {
+  DEFAULT_CONFIG,
+  acknowledgeDemoRisk,
+  clearFrontendState,
+  demoRiskAcknowledged,
+  loadConfig,
+  rememberNonce,
+  saveConfig,
+  usedNoncesFor,
+} from "./storage.js";
+import {
+  isDemoSecret,
+  maskedSecret,
+  pairingFromFragment,
+  pairingFromImportText,
+  validatePairing,
+} from "./pairing.js";
 
 const form = document.getElementById("generator");
 const deviceInput = document.getElementById("device");
@@ -15,6 +31,11 @@ const securityError = document.getElementById("securityError");
 const selfTestError = document.getElementById("selfTestError");
 const copyButton = document.getElementById("copy");
 const installButton = document.getElementById("install");
+const demoWarning = document.getElementById("demoWarning");
+const importError = document.getElementById("importError");
+const importFile = document.getElementById("importFile");
+const pairingDialog = document.getElementById("pairingDialog");
+const demoDialog = document.getElementById("demoDialog");
 let installPrompt = null;
 
 const tierOptions = [1, 2, 3, 4];
@@ -33,11 +54,55 @@ function showError(target, message) {
   target.hidden = false;
 }
 
+function clearError(target) {
+  target.textContent = "";
+  target.hidden = true;
+}
+
+function syncDemoWarning() {
+  demoWarning.hidden = !isDemoSecret(secretInput.value);
+}
+
+function dialogDecision(dialog) {
+  return new Promise(resolve => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), {once: true});
+    dialog.showModal();
+  });
+}
+
+async function confirmPairing(pairing, source) {
+  document.getElementById("pairingSource").textContent = source;
+  document.getElementById("pairingDevice").textContent = pairing.deviceId;
+  document.getElementById("pairingSecret").textContent = maskedSecret(pairing.secret);
+  const current = loadConfig(localStorage);
+  document.getElementById("pairingReplace").hidden =
+    current.deviceId === pairing.deviceId && current.secret === pairing.secret;
+  if (!await dialogDecision(pairingDialog)) return false;
+  deviceInput.value = pairing.deviceId;
+  secretInput.value = pairing.secret;
+  saveConfig(localStorage, {
+    deviceId: pairing.deviceId,
+    secret: pairing.secret,
+    tierMinutes: Number(tierInput.value),
+  });
+  syncDemoWarning();
+  form.scrollIntoView({behavior: "smooth", block: "start"});
+  return true;
+}
+
+async function acceptDemoRiskIfNeeded(secret) {
+  if (!isDemoSecret(secret) || demoRiskAcknowledged(localStorage)) return true;
+  if (!await dialogDecision(demoDialog)) return false;
+  acknowledgeDemoRisk(localStorage);
+  return true;
+}
+
 function resetToDefaults() {
   deviceInput.value = DEFAULT_CONFIG.deviceId;
   secretInput.value = DEFAULT_CONFIG.secret;
   tierInput.value = String(DEFAULT_CONFIG.tierMinutes);
   dateInput.value = todayUtc8();
+  syncDemoWarning();
 }
 
 function loadSavedForm() {
@@ -46,10 +111,21 @@ function loadSavedForm() {
   secretInput.value = config.secret;
   tierInput.value = String(config.tierMinutes);
   dateInput.value = todayUtc8();
+  syncDemoWarning();
 }
 
 async function initialize() {
   loadSavedForm();
+  let fragmentPairing = null;
+  try {
+    fragmentPairing = pairingFromFragment(globalThis.location.hash);
+  } catch (error) {
+    showError(importError, error instanceof Error ? error.message : String(error));
+  } finally {
+    if (globalThis.location.hash) {
+      globalThis.history.replaceState(null, "", `${globalThis.location.pathname}${globalThis.location.search}`);
+    }
+  }
   if (!globalThis.isSecureContext || !globalThis.crypto?.subtle) {
     showError(securityError, "当前页面无法使用 Web Crypto，请通过 HTTPS 或 localhost 打开。");
     generateButton.disabled = true;
@@ -70,6 +146,9 @@ async function initialize() {
       console.warn("Service worker registration failed", error);
     }
   }
+  if (fragmentPairing) {
+    await confirmPairing(fragmentPairing, "检测到 Switch 二维码中的设备配置，请确认后导入。");
+  }
 }
 
 form.addEventListener("submit", async event => {
@@ -82,8 +161,8 @@ form.addEventListener("submit", async event => {
     const secret = secretInput.value;
     const dateText = dateInput.value;
     const tierMinutes = Number(tierInput.value);
-    if (!deviceId) throw new Error("设备 ID 不能为空");
-    if (!secret) throw new Error("加时密钥不能为空");
+    validatePairing({deviceId, secret});
+    if (!await acceptDemoRiskIfNeeded(secret)) return;
     const tierIndex = tierForMinutes(tierMinutes);
     const dayIndex = dayIndexFor(dateText);
     const used = usedNoncesFor(localStorage, deviceId, dateText);
@@ -108,6 +187,23 @@ document.getElementById("toggleSecret").addEventListener("click", event => {
   secretInput.type = visible ? "password" : "text";
   button.textContent = visible ? "显示" : "隐藏";
   button.setAttribute("aria-pressed", visible ? "false" : "true");
+});
+
+secretInput.addEventListener("input", syncDemoWarning);
+
+importFile.addEventListener("change", async () => {
+  clearError(importError);
+  const [file] = importFile.files || [];
+  if (!file) return;
+  try {
+    if (file.size > 16384) throw new Error("配置文件过大，预期为小于 16 KiB 的 parent-import.json");
+    const pairing = pairingFromImportText(await file.text());
+    await confirmPairing(pairing, `来自文件：${file.name}`);
+  } catch (error) {
+    showError(importError, error instanceof Error ? error.message : String(error));
+  } finally {
+    importFile.value = "";
+  }
 });
 
 copyButton.addEventListener("click", async () => {
