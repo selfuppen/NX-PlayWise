@@ -17,6 +17,19 @@ typedef enum {
 } PtcUiView;
 
 typedef enum {
+    PTC_UI_SETUP_SHORTCUT = 1,
+    PTC_UI_SETUP_PIN = 2,
+    PTC_UI_SETUP_TAKEOVER = 3,
+    PTC_UI_SETUP_ZONE = 4
+} PtcUiSetupStep;
+
+typedef enum {
+    PTC_UI_SHORTCUT_PRESET_LR = 0,
+    PTC_UI_SHORTCUT_PRESET_ZLZR = 1,
+    PTC_UI_SHORTCUT_PRESET_COUNT = 2
+} PtcUiShortcutPreset;
+
+typedef enum {
     PTC_UI_PARENT_TODAY = 0,
     PTC_UI_PARENT_PLAN = 1,
     PTC_UI_PARENT_SECURITY = 2,
@@ -82,6 +95,7 @@ typedef struct {
     int play_timer_enabled;
     int restricted_now;
     bool disable_flag_present;
+    int error_code;
     bool setup_restriction_cleared;
     bool setup_snapshot_available;
     int64_t setup_activate_after;
@@ -95,6 +109,14 @@ typedef struct {
     char feedback_detail[192];
     char result_status[24];
     char result_type[48];
+    int setup_step;
+    int setup_shortcut_index;
+    int setup_zone_index;
+    uint64_t custom_shortcut_mask;
+    uint64_t captured_shortcut_mask;
+    bool shortcut_capture_active;
+    bool show_parent_shortcut_hint;
+    char custom_shortcut_label[96];
     PtcUiOverlay overlay;
     PtcUiOperation operation;
     uint16_t draft_minutes;
@@ -150,6 +172,13 @@ typedef enum {
     PTC_UI_HIT_CHILD_EXIT,
     PTC_UI_HIT_ERROR_RETRY,
     PTC_UI_HIT_ERROR_BACK,
+    PTC_UI_HIT_SETUP_SHORTCUT_CARD,
+    PTC_UI_HIT_SETUP_SHORTCUT_CAPTURE,
+    PTC_UI_HIT_SETUP_PRIMARY,
+    PTC_UI_HIT_SETUP_BACK,
+    PTC_UI_HIT_SETUP_PIN,
+    PTC_UI_HIT_SETUP_CHILD_ZONE,
+    PTC_UI_HIT_SETUP_PARENT_ZONE,
     PTC_UI_HIT_PARENT_PREV_PAGE,
     PTC_UI_HIT_PARENT_NEXT_PAGE,
     PTC_UI_HIT_PARENT_REFRESH,
@@ -197,6 +226,7 @@ void ptc_ui_graphics_exit(void);
 void ptc_ui_graphics_draw(const PtcUiModel *model);
 
 int ptc_ui_parent_action_count(PtcUiParentPage page);
+const char *ptc_ui_shortcut_common_label(int index);
 void ptc_ui_change_parent_page(PtcUiModel *model, int direction);
 void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertical);
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
@@ -239,6 +269,12 @@ PtcUiRect ptc_ui_child_refresh_rect(void);
 PtcUiRect ptc_ui_child_footer_rect(int index);
 PtcUiRect ptc_ui_error_retry_rect(void);
 PtcUiRect ptc_ui_error_back_rect(void);
+PtcUiRect ptc_ui_setup_shortcut_card_rect(int index);
+PtcUiRect ptc_ui_setup_shortcut_capture_rect(void);
+PtcUiRect ptc_ui_setup_primary_rect(void);
+PtcUiRect ptc_ui_setup_back_rect(void);
+PtcUiRect ptc_ui_setup_pin_rect(void);
+PtcUiRect ptc_ui_setup_zone_rect(int index);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_refresh_rect(void);
 PtcUiRect ptc_ui_parent_tab_rect(int index);

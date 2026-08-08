@@ -41,7 +41,7 @@ static void test_release_navigation(void)
     memset(&model, 0, sizeof(model));
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 4, "security actions");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 5, "security actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 5, "support actions");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
@@ -135,6 +135,20 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "support diagnostics card");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_NONE, 0, "removed probe card is absent");
 
+    model.view = PTC_UI_SETUP;
+    model.setup_step = PTC_UI_SETUP_SHORTCUT;
+    check_hit(hit_center(&model, ptc_ui_setup_shortcut_card_rect(0)), PTC_UI_HIT_SETUP_SHORTCUT_CARD, 0,
+              "setup shortcut preset card");
+    check_hit(hit_center(&model, ptc_ui_setup_shortcut_capture_rect()), PTC_UI_HIT_SETUP_SHORTCUT_CAPTURE, 0,
+              "setup manual shortcut capture");
+    model.setup_step = PTC_UI_SETUP_PIN;
+    check_hit(hit_center(&model, ptc_ui_setup_pin_rect()), PTC_UI_HIT_SETUP_PIN, 0, "setup PIN guide");
+    model.setup_step = PTC_UI_SETUP_ZONE;
+    check_hit(hit_center(&model, ptc_ui_setup_zone_rect(0)), PTC_UI_HIT_SETUP_CHILD_ZONE, 0,
+              "setup child zone choice");
+    check_hit(hit_center(&model, ptc_ui_setup_zone_rect(1)), PTC_UI_HIT_SETUP_PARENT_ZONE, 1,
+              "setup parent zone choice");
+
     model.overlay = PTC_UI_OVERLAY_CONFIRM;
     model.operation = PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT;
     check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0, "recovery confirmation");
@@ -183,6 +197,13 @@ static void test_user_state_mapping(void)
         "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,"
         "\"remaining_available\":false,\"remaining_minutes\":-1,\"played_minutes_available\":false,"
         "\"played_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1},\"completed_at\":107}";
+    const char *effect_not_observed =
+        "{\"version\":1,\"request_id\":\"grant-error\",\"type\":\"offline_code\",\"status\":\"error\","
+        "\"error\":{\"code\":306,\"reason\":\"pctl_effect_not_observed\","
+        "\"message\":\"家长控制运行时未观察到生效\"},"
+        "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,"
+        "\"remaining_available\":false,\"remaining_minutes\":-1,\"played_minutes_available\":false,"
+        "\"played_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1},\"completed_at\":108}";
 
     memset(&model, 0, sizeof(model));
     check_true(ptc_ui_apply_result_json(&model, pending), "syncing result parses");
@@ -198,6 +219,11 @@ static void test_user_state_mapping(void)
     check_int((int)ptc_ui_status_age_seconds(&model, 999), 0, "status age never goes negative");
     check_true(ptc_ui_apply_result_json(&model, protection), "protection result parses");
     check_true(strstr(model.message, "保护模式") != NULL, "protection guidance is visible");
+    check_true(ptc_ui_apply_result_json(&model, effect_not_observed), "306 result parses");
+    check_int(model.error_code, 306, "306 error code is retained");
+    check_true(strstr(model.feedback_detail, "手动") != NULL &&
+               strstr(model.feedback_detail, "重新检测") != NULL,
+               "306 provides manual control guidance");
 }
 
 int main(void)

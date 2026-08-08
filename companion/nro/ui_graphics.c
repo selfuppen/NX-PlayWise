@@ -58,6 +58,7 @@ static const UiAction SECURITY_ACTIONS[] = {
     {"管理加时码密钥", "查看、生成或切换演示密钥", COLOR(194, 61, 61)},
     {"生成加时码", "显示配对二维码或导出配置", COLOR(25, 132, 95)},
     {"管理 PlayWise PIN", "本应用独立 PIN，区别于 Nintendo 家长管理 PIN", COLOR(42, 105, 188)},
+    {"孩子区快捷键说明", "显示或隐藏进入家长区的操作提示", COLOR(42, 105, 188)},
 };
 
 static const UiAction SUPPORT_ACTIONS[] = {
@@ -423,6 +424,8 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char remaining[32];
     char played[32];
     char freshness[64];
+    char parent_hint[128];
+    char fitted_hint[128];
     const char *mode = model->disable_flag_present ? "控制已停用" :
         (strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
         (strcmp(model->setup_phase, "protection") == 0 ? "保护模式" : "兼容性待确认"));
@@ -471,53 +474,143 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_notice(pixels, stride, model, 510);
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0),
                        model->disable_flag_present ? "紧急停用中" : "A  输入加时码");
+    fill_round_rect(pixels, stride, to_uirect(ptc_ui_child_footer_rect(1)), 8, COLOR(255, 255, 255));
+    draw_rect_outline(pixels, stride, to_uirect(ptc_ui_child_footer_rect(1)), 1, COLOR(203, 211, 222));
+    if (model->show_parent_shortcut_hint) {
+        snprintf(parent_hint, sizeof(parent_hint), "Minus - / %s  家长区", model->custom_shortcut_label);
+    } else {
+        snprintf(parent_hint, sizeof(parent_hint), "家长区快捷键提示已关闭");
+    }
+    fit_text(fitted_hint, sizeof(fitted_hint), parent_hint, 16, ptc_ui_child_footer_rect(1).w - 16);
+    draw_text_center(pixels, stride, to_uirect(ptc_ui_child_footer_rect(1)), fitted_hint, 16, COLOR(47, 57, 71));
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(2), "B / +  退出");
 }
 
 static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect panel = {154, 132, 972, 430};
+    UiRect panel = {54, 120, 1172, 500};
+    UiRect fixed_card = {204, 190, 872, 68};
     const char *phase = model->setup_phase[0] ? model->setup_phase : "pending";
     int64_t grace_remaining = ptc_ui_setup_grace_remaining(model, (int64_t)time(NULL));
-    char phase_line[160];
+    char title[64];
+    char phase_line[192];
     char countdown_line[80];
-    draw_header(pixels, stride, grace_remaining >= 0 ? "正在同步" : "首次设置",
-        grace_remaining >= 0 ? "系统设置正在同步，通常稍后完成" : "完成家长设置后才会接管系统控制");
+    char fitted[220];
+    int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_SHORTCUT;
+    snprintf(title, sizeof(title), "首次设置 · %d/4", step);
+    draw_header(pixels, stride, grace_remaining >= 0 ? "正在同步" : title,
+        grace_remaining >= 0 ? "系统设置正在同步，完成后继续选择进入的区域" : "按步骤完成 PlayWise 的家长设置");
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
-    draw_text(pixels, stride, 204, 190,
-        grace_remaining >= 0 ? "环境检查已通过" :
-        (strcmp(phase, "protection") == 0 ? "保护模式" : "兼容性待确认"), 31,
-        model->setup_restriction_cleared ? COLOR(25, 132, 95) : COLOR(215, 139, 25));
-    snprintf(phase_line, sizeof(phase_line), "当前状态：%s    安装前快照：%s",
-        grace_remaining >= 0 ? "正在同步" : (strcmp(phase, "protection") == 0 ? "保护模式" : "等待家长确认"),
-        model->setup_snapshot_available ? "已保存" : "不可用");
-    draw_text(pixels, stride, 204, 248, phase_line, 22, COLOR(77, 86, 99));
     if (grace_remaining >= 0) {
+        draw_text(pixels, stride, 204, 190, "环境检查已通过", 31, COLOR(25, 132, 95));
+        snprintf(phase_line, sizeof(phase_line), "当前状态：正在同步    安装前快照：%s",
+                 model->setup_snapshot_available ? "已保存" : "不可用");
+        draw_text(pixels, stride, 204, 248, phase_line, 22, COLOR(77, 86, 99));
         if (grace_remaining > 0) {
             snprintf(countdown_line, sizeof(countdown_line), "系统设置同步中（约 %lld 秒）…", (long long)grace_remaining);
         } else {
             snprintf(countdown_line, sizeof(countdown_line), "同步完成，正在启用额度管理…");
         }
         draw_text(pixels, stride, 204, 310, countdown_line, 34, COLOR(28, 118, 188));
-        draw_text(pixels, stride, 204, 356, "无需操作；完成后将自动进入游玩时间页面。", 22, COLOR(45, 52, 62));
-    } else if (strcmp(phase, "pending") == 0) {
-        draw_text(pixels, stride, 204, 300, "系统设置正在同步，通常稍后完成。", 23, COLOR(45, 52, 62));
-        draw_text(pixels, stride, 204, 344, "如长时间无变化，可进入【支持与恢复】选择重试修复。", 23, COLOR(45, 52, 62));
-    } else if (strcmp(phase, "failed") == 0 || strcmp(phase, "protection") == 0) {
-        draw_text(pixels, stride, 204, 300, "已暂停新的控制修改，状态和恢复功能仍可使用。", 23, COLOR(215, 139, 25));
-        draw_text(pixels, stride, 204, 344, "请在【支持与恢复】查看当前唯一推荐操作。", 23, COLOR(45, 52, 62));
-    } else if (strcmp(phase, "restored") == 0) {
-        draw_text(pixels, stride, 204, 300, "已恢复至安装前状态。若要重新验证及启用控制，", 23, COLOR(45, 52, 62));
-        draw_text(pixels, stride, 204, 344, "请清理状态文件并重启主机以重新开始首次引导。", 23, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 356, "无需操作；同步完成后会进入第 4 步选择孩子区或家长区。", 22, COLOR(45, 52, 62));
     } else {
-        draw_text(pixels, stride, 204, 300, "1. 创建 1–64 位数字 PlayWise PIN    2. 确认周计划与加时码设置", 23, COLOR(45, 52, 62));
-        draw_text(pixels, stride, 204, 344, "3. 在【支持与恢复】确认接管系统控制", 23, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 154, "1 快捷键", 18, step == PTC_UI_SETUP_SHORTCUT ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 450, 154, "2 PIN", 18, step == PTC_UI_SETUP_PIN ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 660, 154, "3 接管", 18, step == PTC_UI_SETUP_TAKEOVER ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 870, 154, "4 进入区域", 18, step == PTC_UI_SETUP_ZONE ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        if (step == PTC_UI_SETUP_SHORTCUT) {
+            draw_text(pixels, stride, 204, 188, "固定家长区快捷键", 24, COLOR(28, 34, 43));
+            fill_round_rect(pixels, stride, fixed_card, 8, COLOR(244, 249, 255));
+            draw_rect_outline(pixels, stride, fixed_card, 2, COLOR(28, 118, 188));
+            draw_text(pixels, stride, 232, 232, "−", 32, COLOR(28, 118, 188));
+            draw_text(pixels, stride, 292, 220, "Minus  -", 24, COLOR(28, 34, 43));
+            draw_text(pixels, stride, 292, 246, "左 Joy-Con 下方；此入口始终保留", 18, COLOR(77, 86, 99));
+            draw_text(pixels, stride, 204, 286, "选择一组自定义组合（与 Minus - 同时有效）", 21, COLOR(45, 52, 62));
+            for (int index = 0; index < PTC_UI_SHORTCUT_PRESET_COUNT; ++index) {
+                UiRect card = to_uirect(ptc_ui_setup_shortcut_card_rect(index));
+                bool selected = index == model->setup_shortcut_index;
+                fill_round_rect(pixels, stride, card, 8, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
+                draw_rect_outline(pixels, stride, card, selected ? 3 : 1,
+                                  selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 14, card.width, 30},
+                                 ptc_ui_shortcut_common_label(index), 23,
+                                 selected ? COLOR(28, 118, 188) : COLOR(45, 52, 62));
+                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 47, card.width, 22},
+                                 selected ? "当前选择" : "常用组合", 16, COLOR(91, 100, 116));
+            }
+            draw_dialog_button(pixels, stride, ptc_ui_setup_shortcut_capture_rect(),
+                               model->shortcut_capture_active ? "正在录入：按住组合，A 确认" : "X / 点击  手动按键录入",
+                               model->shortcut_capture_active ? COLOR(255, 247, 229) : COLOR(235, 238, 243),
+                               model->shortcut_capture_active ? COLOR(170, 109, 18) : COLOR(28, 118, 188), true);
+            draw_text(pixels, stride, 650, 500, "当前自定义：", 18, COLOR(91, 100, 116));
+            draw_text(pixels, stride, 780, 500, model->custom_shortcut_label, 21, COLOR(28, 118, 188));
+        } else if (step == PTC_UI_SETUP_PIN) {
+            draw_text(pixels, stride, 204, 220, "设置 PlayWise PIN", 30, COLOR(28, 34, 43));
+            draw_text(pixels, stride, 204, 262, "这是进入家长区、修改规则和安全设置时使用的本应用 PIN。", 21, COLOR(77, 86, 99));
+            draw_text(pixels, stride, 204, 294, "请输入 1–64 位纯数字，系统会引导你再次输入确认。", 21, COLOR(77, 86, 99));
+            draw_dialog_button(pixels, stride, ptc_ui_setup_pin_rect(), "A / 点击  设置或确认 PIN",
+                               COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+            draw_text(pixels, stride, 204, 420, "PIN 少于 4 位时只提示弱保护风险，不会阻止保存。", 20, COLOR(215, 139, 25));
+        } else if (step == PTC_UI_SETUP_TAKEOVER) {
+            draw_text(pixels, stride, 204, 218, "确认接管系统控制", 30, COLOR(28, 34, 43));
+            snprintf(phase_line, sizeof(phase_line), "当前状态：%s    安装前快照：%s",
+                     strcmp(phase, "protection") == 0 ? "保护模式" :
+                     (strcmp(phase, "failed") == 0 ? "检查失败" : "等待家长确认"),
+                     model->setup_snapshot_available ? "已保存" : "待保存");
+            draw_text(pixels, stride, 204, 266, phase_line, 21, COLOR(77, 86, 99));
+            draw_text(pixels, stride, 204, 324, "确认后会先执行只读兼容预检，再保存安装前快照并启用额度管理。", 21, COLOR(45, 52, 62));
+            draw_text(pixels, stride, 204, 360, "接管成功后会保留同步宽限，系统控制不会立即跳变。", 21, COLOR(45, 52, 62));
+            draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "A / 点击  确认接管",
+                               COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+        } else {
+            draw_text(pixels, stride, 204, 214, "初始化完成，选择进入区域", 30, COLOR(28, 34, 43));
+            draw_text(pixels, stride, 204, 254, "之后可在两个区域之间切换；进入家长区会受 PIN 保护。", 21, COLOR(77, 86, 99));
+            for (int index = 0; index < 2; ++index) {
+                UiRect card = to_uirect(ptc_ui_setup_zone_rect(index));
+                bool selected = index == model->setup_zone_index;
+                fill_round_rect(pixels, stride, card, 8, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
+                draw_rect_outline(pixels, stride, card, selected ? 3 : 1,
+                                  selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 26, card.width, 34},
+                                 index == 0 ? "孩子区" : "家长区", 27,
+                                 selected ? COLOR(28, 118, 188) : COLOR(45, 52, 62));
+                if (index == 0) {
+                    draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 86, card.width - 36, 26},
+                                     model->show_parent_shortcut_hint ? "进入家长区：Minus - 或自定义组合" : "家长区提示已关闭", 17, COLOR(77, 86, 99));
+                    draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 122, card.width - 36, 25},
+                                     "家长区需要输入 PlayWise PIN", 17, COLOR(91, 100, 116));
+                } else {
+                    draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 86, card.width - 36, 26},
+                                     "返回孩子区：B", 19, COLOR(77, 86, 99));
+                    draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 122, card.width - 36, 25},
+                                     "当前入口：Minus - 和自定义组合", 17, COLOR(91, 100, 116));
+                }
+            }
+        }
+        if (model->message[0]) {
+            fit_text(fitted, sizeof(fitted), model->message, 18, 1160);
+            draw_text(pixels, stride, 64, 530, fitted, 18, COLOR(91, 100, 116));
+        }
+        if (model->feedback_detail[0]) {
+            fit_text(fitted, sizeof(fitted), model->feedback_detail, 17, 1160);
+            draw_text(pixels, stride, 64, 552, fitted, 17, COLOR(194, 61, 61));
+        }
     }
-    draw_text(pixels, stride, 204, 400, model->message[0] ? model->message : "Y 可刷新后台状态。", 20, COLOR(91, 100, 116));
-    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0), "Minus  家长设置");
-    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(1), "Y  刷新");
-    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(2), "B / +  退出");
+    if (grace_remaining < 0) {
+        draw_dialog_button(pixels, stride, ptc_ui_setup_back_rect(), "B  返回上一步",
+                           COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+        if (step == PTC_UI_SETUP_SHORTCUT) {
+            draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "+  下一步",
+                               COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+        } else if (step == PTC_UI_SETUP_ZONE) {
+            draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "A  进入所选区域",
+                               COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+        } else if (step == PTC_UI_SETUP_PIN) {
+            draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "A  设置并继续",
+                               COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+        }
+    }
 }
 
 static void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -547,7 +640,8 @@ static void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     }
 
     fill_round_rect(pixels, stride, to_uirect(ptc_ui_error_retry_rect()), 8, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, to_uirect(ptc_ui_error_retry_rect()), "A  重新输入", 25, COLOR(255, 255, 255));
+    draw_text_center(pixels, stride, to_uirect(ptc_ui_error_retry_rect()),
+                    model->error_code == 306 ? "A  重新检测" : "A  重新输入", 25, COLOR(255, 255, 255));
     fill_round_rect(pixels, stride, to_uirect(ptc_ui_error_back_rect()), 8, COLOR(235, 238, 243));
     draw_rect_outline(pixels, stride, to_uirect(ptc_ui_error_back_rect()), 1, COLOR(203, 211, 222));
     draw_text_center(pixels, stride, to_uirect(ptc_ui_error_back_rect()), "B  返回主页", 25, COLOR(66, 74, 86));
@@ -736,9 +830,14 @@ static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     draw_text(pixels, stride, panel.x + 26, panel.y + 202, "PlayWise 管理 PIN", 19, COLOR(28, 118, 188));
     draw_text(pixels, stride, panel.x + 26, panel.y + 232, "仅保护本应用家长区", 17, COLOR(91, 100, 116));
     draw_text(pixels, stride, panel.x + 26, panel.y + 258, "不是 Nintendo 系统家长管理 PIN", 17, COLOR(91, 100, 116));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 294, "进入家长区", 19, COLOR(28, 118, 188));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 324, "Minus - 或", 17, COLOR(91, 100, 116));
+    draw_text(pixels, stride, panel.x + 126, panel.y + 324, model->custom_shortcut_label, 17, COLOR(28, 118, 188));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 350,
+              model->show_parent_shortcut_hint ? "孩子区提示：已显示" : "孩子区提示：已关闭", 17, COLOR(91, 100, 116));
     if (model->demo_secret_enabled) {
-        fill_round_rect(pixels, stride, (UiRect){panel.x + 20, panel.y + 278, panel.width - 40, 34}, 6, COLOR(255, 235, 238));
-        draw_text_center(pixels, stride, (UiRect){panel.x + 20, panel.y + 278, panel.width - 40, 34},
+        fill_round_rect(pixels, stride, (UiRect){panel.x + 20, panel.y + 400, panel.width - 40, 34}, 6, COLOR(255, 235, 238));
+        draw_text_center(pixels, stride, (UiRect){panel.x + 20, panel.y + 400, panel.width - 40, 34},
                          "公共演示密钥已启用", 18, COLOR(194, 61, 61));
     }
 }

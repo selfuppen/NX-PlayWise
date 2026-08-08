@@ -25,6 +25,15 @@ static const char *json_string(const cJSON *object, const char *name)
     return cJSON_IsString(item) && item->valuestring ? item->valuestring : "";
 }
 
+const char *ptc_ui_shortcut_common_label(int index)
+{
+    static const char *labels[] = {"L + R", "ZL + ZR"};
+    if (index < 0 || index >= PTC_UI_SHORTCUT_PRESET_COUNT) {
+        return "未选择";
+    }
+    return labels[index];
+}
+
 static const char *localized_mode(const char *mode)
 {
     (void)mode;
@@ -91,6 +100,11 @@ static void fill_error_guidance(char *out, size_t out_size, const char *type, in
     if (!type || !out || out_size == 0) {
         return;
     }
+    if (error_code == 306) {
+        snprintf(out, out_size,
+                 "反馈码：306。可能未手动开启主机家长控制；系统设置→家长控制→开启，返回后选择“重新检测”。");
+        return;
+    }
     if (strcmp(type, "complete_setup") == 0) {
         snprintf(out, out_size,
                  "反馈码：%d %s。建议：确认限制已解除（phase=released），或尝试【重试前置解限】。",
@@ -113,7 +127,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_PLAN:
         return 0;
     case PTC_UI_PARENT_SECURITY:
-        return 4;
+        return 5;
     case PTC_UI_PARENT_SUPPORT:
         return 5;
     case PTC_UI_PARENT_TODAY:
@@ -501,6 +515,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     snprintf(model->result_type, sizeof(model->result_type), "%s", type ? type : "");
     snprintf(model->mode, sizeof(model->mode), "%s", localized_mode("release"));
     model->feedback_detail[0] = '\0';
+    model->error_code = 0;
 
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
     if (strcmp(status, "ok") == 0 && cJSON_IsObject(state)) {
@@ -536,7 +551,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
             model->view = PTC_UI_SETUP;
         } else if (strcmp(model->setup_phase, "active") != 0 && model->view != PTC_UI_PARENT) {
             model->view = PTC_UI_SETUP;
-        } else if (strcmp(model->setup_phase, "active") == 0 && model->view == PTC_UI_SETUP) {
+        } else if (strcmp(model->setup_phase, "active") == 0 && model->view == PTC_UI_SETUP &&
+                   model->setup_step == 0) {
             model->view = PTC_UI_CHILD;
         }
         setup_activated = setup_was_waiting && strcmp(model->setup_phase, "active") == 0;
@@ -545,6 +561,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         const char *message = summary.message[0] ? summary.message : NULL;
         snprintf(model->message, sizeof(model->message), "%s", message ? message : "后台拒绝了本次操作。");
         if (summary.error_code > 0) {
+            model->error_code = summary.error_code;
             /* Try type-specific guidance first; fall back to generic detail. */
             model->feedback_detail[0] = '\0';
             fill_error_guidance(model->feedback_detail, sizeof(model->feedback_detail),
@@ -616,6 +633,52 @@ PtcUiRect ptc_ui_error_retry_rect(void)
 PtcUiRect ptc_ui_error_back_rect(void)
 {
     PtcUiRect rect = {666, 478, 320, 76};
+    return rect;
+}
+
+PtcUiRect ptc_ui_setup_shortcut_card_rect(int index)
+{
+    int column = index % 2;
+    int row = index / 2;
+    PtcUiRect rect = {204 + column * 430, 270 + row * 94, 390, 78};
+    if (index < 0 || index >= PTC_UI_SHORTCUT_PRESET_COUNT) {
+        rect.w = 0;
+        rect.h = 0;
+    }
+    return rect;
+}
+
+PtcUiRect ptc_ui_setup_shortcut_capture_rect(void)
+{
+    PtcUiRect rect = {204, 468, 390, 58};
+    return rect;
+}
+
+PtcUiRect ptc_ui_setup_primary_rect(void)
+{
+    PtcUiRect rect = {896, 570, 330, 62};
+    return rect;
+}
+
+PtcUiRect ptc_ui_setup_back_rect(void)
+{
+    PtcUiRect rect = {54, 570, 230, 62};
+    return rect;
+}
+
+PtcUiRect ptc_ui_setup_pin_rect(void)
+{
+    PtcUiRect rect = {204, 300, 520, 78};
+    return rect;
+}
+
+PtcUiRect ptc_ui_setup_zone_rect(int index)
+{
+    PtcUiRect rect = {204 + index * 448, 286, 400, 190};
+    if (index < 0 || index > 1) {
+        rect.w = 0;
+        rect.h = 0;
+    }
     return rect;
 }
 
@@ -1072,11 +1135,32 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->view == PTC_UI_SETUP) {
-        if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(1), x, y)) {
-            return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
+        int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_SHORTCUT;
+        if (ptc_ui_rect_contains(ptc_ui_setup_back_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_SETUP_BACK, 0);
         }
-        if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(2), x, y)) {
-            return make_hit(PTC_UI_HIT_CHILD_EXIT, 0);
+        if (step == PTC_UI_SETUP_SHORTCUT) {
+            for (i = 0; i < PTC_UI_SHORTCUT_PRESET_COUNT; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_setup_shortcut_card_rect(i), x, y)) {
+                    return make_hit(PTC_UI_HIT_SETUP_SHORTCUT_CARD, i);
+                }
+            }
+            if (ptc_ui_rect_contains(ptc_ui_setup_shortcut_capture_rect(), x, y)) {
+                return make_hit(PTC_UI_HIT_SETUP_SHORTCUT_CAPTURE, 0);
+            }
+        } else if (step == PTC_UI_SETUP_PIN &&
+                   ptc_ui_rect_contains(ptc_ui_setup_pin_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_SETUP_PIN, 0);
+        } else if (step == PTC_UI_SETUP_ZONE) {
+            if (ptc_ui_rect_contains(ptc_ui_setup_zone_rect(0), x, y)) {
+                return make_hit(PTC_UI_HIT_SETUP_CHILD_ZONE, 0);
+            }
+            if (ptc_ui_rect_contains(ptc_ui_setup_zone_rect(1), x, y)) {
+                return make_hit(PTC_UI_HIT_SETUP_PARENT_ZONE, 1);
+            }
+        }
+        if (ptc_ui_rect_contains(ptc_ui_setup_primary_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_SETUP_PRIMARY, 0);
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
@@ -1179,6 +1263,8 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
         return model->setup_snapshot_available ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_DISABLED;
     case 4:
         return PTC_UI_ACTION_AVAILABLE;
+    case 5:
+        return PTC_UI_ACTION_AVAILABLE;
     default:
         return PTC_UI_ACTION_DISABLED;
     }
@@ -1202,6 +1288,8 @@ const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index)
         return model->setup_snapshot_available ? "精确恢复安装前状态。" : "安装前快照不可用。";
     case 4:
         return "导出时自动排除 secret、PIN、离线码和完整 nonce。";
+    case 5:
+        return "控制孩子区是否显示进入家长区的快捷键说明。";
     default:
         return "";
     }
