@@ -56,8 +56,8 @@ static const UiAction TODAY_ACTIONS[] = {
 static const UiAction SECURITY_ACTIONS[] = {
     {"管理设备名", "查看、输入或随机生成设备名称", COLOR(42, 105, 188)},
     {"管理加时码密钥", "查看、生成或切换演示密钥", COLOR(194, 61, 61)},
-    {"生成加时码", "显示配对二维码或导出配置", COLOR(25, 132, 95)},
-    {"管理 PlayWise PIN", "本应用独立 PIN，区别于 Nintendo 家长管理 PIN", COLOR(42, 105, 188)},
+    {"加时码生成", "显示配对二维码或导出配置", COLOR(25, 132, 95)},
+    {"管理 任你玩 PIN", "本应用独立 PIN，区别于 Nintendo 家长管理 PIN", COLOR(42, 105, 188)},
     {"孩子区快捷键说明", "显示或隐藏进入家长区的操作提示", COLOR(42, 105, 188)},
 };
 
@@ -65,7 +65,7 @@ static const UiAction SUPPORT_ACTIONS[] = {
     {"确认接管系统控制", "预检、保存快照后启用额度管理", COLOR(42, 105, 188)},
     {"重试修复", "重新检查并恢复安全前置条件", COLOR(25, 132, 95)},
     {"紧急停用控制", "立即停止后台控制操作", COLOR(194, 61, 61)},
-    {"恢复安装前状态", "恢复原始设置并停用 PlayWise", COLOR(194, 61, 61)},
+    {"恢复安装前状态", "恢复原始设置并停用 任你玩", COLOR(194, 61, 61)},
     {"导出诊断包", "生成不含密钥、PIN 和离线码的支持文件", COLOR(91, 100, 116)},
 };
 
@@ -279,6 +279,9 @@ static void fit_text(char *out, size_t out_size, const char *text, int size, int
     if (copy_size >= out_size) {
         copy_size = out_size - 1;
         while (copy_size > 0 && ((unsigned char)source[copy_size] & 0xc0) == 0x80) {
+            --copy_size;
+        }
+        if (copy_size > 0 && ((unsigned char)source[copy_size] & 0x80) != 0) {
             --copy_size;
         }
         truncated = true;
@@ -499,7 +502,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_SHORTCUT;
     snprintf(title, sizeof(title), "首次设置 · %d/4", step);
     draw_header(pixels, stride, grace_remaining >= 0 ? "正在同步" : title,
-        grace_remaining >= 0 ? "系统设置正在同步，完成后继续选择进入的区域" : "按步骤完成 PlayWise 的家长设置");
+        grace_remaining >= 0 ? "系统设置正在同步，完成后继续选择进入的区域" : "按步骤完成 任你玩 的家长设置");
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     if (grace_remaining >= 0) {
@@ -546,7 +549,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             draw_text(pixels, stride, 650, 500, "当前自定义：", 18, COLOR(91, 100, 116));
             draw_text(pixels, stride, 780, 500, model->custom_shortcut_label, 21, COLOR(28, 118, 188));
         } else if (step == PTC_UI_SETUP_PIN) {
-            draw_text(pixels, stride, 204, 220, "设置 PlayWise PIN", 30, COLOR(28, 34, 43));
+            draw_text(pixels, stride, 204, 220, "设置 任你玩 PIN", 30, COLOR(28, 34, 43));
             draw_text(pixels, stride, 204, 262, "这是进入家长区、修改规则和安全设置时使用的本应用 PIN。", 21, COLOR(77, 86, 99));
             draw_text(pixels, stride, 204, 294, "请输入 1–64 位纯数字，系统会引导你再次输入确认。", 21, COLOR(77, 86, 99));
             draw_dialog_button(pixels, stride, ptc_ui_setup_pin_rect(), "A / 点击  设置或确认 PIN",
@@ -579,7 +582,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                     draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 86, card.width - 36, 26},
                                      model->show_parent_shortcut_hint ? "进入家长区：Minus - 或自定义组合" : "家长区提示已关闭", 17, COLOR(77, 86, 99));
                     draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 122, card.width - 36, 25},
-                                     "家长区需要输入 PlayWise PIN", 17, COLOR(91, 100, 116));
+                                     "家长区需要输入 任你玩 PIN", 17, COLOR(91, 100, 116));
                 } else {
                     draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 86, card.width - 36, 26},
                                      "返回孩子区：B", 19, COLOR(77, 86, 99));
@@ -820,14 +823,14 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
 static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect panel = {842, 176, 384, 324};
+    UiRect panel = {842, 176, 384, 440};
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, panel.x + 26, panel.y + 43, "加时码如何生成", 23, COLOR(28, 34, 43));
     draw_text(pixels, stride, panel.x + 26, panel.y + 82, "1. 用手机扫描 Switch 二维码", 18, COLOR(77, 86, 99));
     draw_text(pixels, stride, panel.x + 26, panel.y + 116, "2. 在网页确认设备并选择时长", 18, COLOR(77, 86, 99));
     draw_text(pixels, stride, panel.x + 26, panel.y + 150, "3. 将网页生成的 8 位码交给孩子", 18, COLOR(77, 86, 99));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 202, "PlayWise 管理 PIN", 19, COLOR(28, 118, 188));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 202, "任你玩 管理 PIN", 19, COLOR(28, 118, 188));
     draw_text(pixels, stride, panel.x + 26, panel.y + 232, "仅保护本应用家长区", 17, COLOR(91, 100, 116));
     draw_text(pixels, stride, panel.x + 26, panel.y + 258, "不是 Nintendo 系统家长管理 PIN", 17, COLOR(91, 100, 116));
     draw_text(pixels, stride, panel.x + 26, panel.y + 294, "进入家长区", 19, COLOR(28, 118, 188));
@@ -874,13 +877,13 @@ static void format_status_age(const PtcUiModel *model, char *out, size_t out_siz
     }
     age = ptc_ui_status_age_seconds(model, (int64_t)time(NULL));
     if (age < 0) {
-        snprintf(out, out_size, "尚未同步");
+        snprintf(out, out_size, "尚未刷新");
     } else if (age == 0) {
-        snprintf(out, out_size, "刚刚同步");
+        snprintf(out, out_size, "刚刚刷新");
     } else if (age < 60) {
-        snprintf(out, out_size, "上次同步：%lld 秒前", (long long)age);
+        snprintf(out, out_size, "上次刷新：%lld 秒前", (long long)age);
     } else {
-        snprintf(out, out_size, "上次同步：%lld 分钟前", (long long)(age / 60));
+        snprintf(out, out_size, "上次刷新：%lld 分钟前", (long long)(age / 60));
     }
 }
 
@@ -898,7 +901,6 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
     int day;
     char minutes[32];
     char today_hint[240];
-    char fitted_hint[240];
     uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
     draw_text(pixels, stride, 54, 184, "直接调整每一天，完成后统一保存", 20, COLOR(77, 86, 99));
     for (day = 0; day < 7; ++day) {
@@ -920,23 +922,24 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
     if (model->today_override_present) {
         char active_remaining[32];
         char weekly_remaining[32];
+        char line1[120];
         format_rule_remaining_label(model, model->today_override_rule, active_remaining, sizeof(active_remaining));
         format_rule_remaining_label(model, model->current_week[weekday], weekly_remaining, sizeof(weekly_remaining));
-        snprintf(today_hint, sizeof(today_hint),
-                 "当前有效剩余：%s；恢复周计划后：%s。保存计划不会清除今日临时设置，可到“今日额度”恢复。",
-                 active_remaining, weekly_remaining);
+        snprintf(line1, sizeof(line1), "当前有效剩余：%s  ·  恢复周计划后：%s", active_remaining, weekly_remaining);
+        draw_text(pixels, stride, 64, 416, line1, 18, COLOR(215, 139, 25));
+        draw_text(pixels, stride, 64, 444, "提示：保存计划不会清除今日临时设置，可到“今日额度”恢复原计划。", 17, COLOR(91, 100, 116));
     } else if (model->draft_week[weekday].mode == PTC_RULE_MODE_LIMIT) {
         int remaining = model->played_minutes_available
             ? (int)model->draft_week[weekday].minutes - model->played_minutes : -1;
         if (remaining < 0 && model->played_minutes_available) remaining = 0;
         if (remaining >= 0) snprintf(today_hint, sizeof(today_hint), "今天已玩约 %d 分钟；保存后还可玩约 %d 分钟。", model->played_minutes, remaining);
         else snprintf(today_hint, sizeof(today_hint), "今天的实际剩余将在计划保存并同步后刷新。");
+        draw_text(pixels, stride, 64, 424, today_hint, 18, COLOR(25, 132, 95));
     } else {
-        snprintf(today_hint, sizeof(today_hint), "今天保存后为不限时；系统将在后台同步。");
+        snprintf(today_hint, sizeof(today_hint), "今天保存后为不限时；系统将在后台自动刷新同步。");
+        draw_text(pixels, stride, 64, 424, today_hint, 18, COLOR(25, 132, 95));
     }
-    fit_text(fitted_hint, sizeof(fitted_hint), today_hint, 19, 1160);
-    draw_text(pixels, stride, 64, 424, fitted_hint, 19, model->today_override_present ? COLOR(215, 139, 25) : COLOR(25, 132, 95));
-    draw_text(pixels, stride, 64, 464, "左右选择日期 · X 切换限时/不限时 · 上下 ±15 · Y 手工输入", 18, COLOR(77, 86, 99));
+    draw_text(pixels, stride, 64, 478, "左右选择日期 · X 切换限时/不限时 · 上下 ±15 · Y 手工输入", 17, COLOR(77, 86, 99));
     draw_dialog_button(pixels, stride, ptc_ui_weekly_mode_rect(), "切换模式",
                        COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_weekly_discard_rect(), "放弃修改", COLOR(235, 238, 243), COLOR(66, 74, 86), true);
@@ -1178,6 +1181,18 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     if ((model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
          model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) && model->numpad_text[0]) {
         snprintf(shown, sizeof(shown), "%s 分钟", model->numpad_text);
+    } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
+        size_t len = strlen(model->numpad_text);
+        size_t pos = 0;
+        for (int i = 0; i < 8; ++i) {
+            if (i > 0) shown[pos++] = ' ';
+            if (i < (int)len) {
+                shown[pos++] = model->numpad_text[i];
+            } else {
+                shown[pos++] = '_';
+            }
+        }
+        shown[pos] = '\0';
     } else if (model->numpad_text[0]) {
         snprintf(shown, sizeof(shown), "%s", model->numpad_text);
     } else {
@@ -1204,6 +1219,10 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
                 entered_minutes = model->numpad_current;
             }
             format_duration(entered_minutes, duration, sizeof(duration));
+        } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
+            unsigned int len = (unsigned int)strlen(model->numpad_text);
+            snprintf(current, sizeof(current), "请输入 8 位加时码  ·  当前已输入 %u/8 位", len);
+            duration[0] = '\0';
         } else {
             snprintf(current, sizeof(current), "请输入完整的 8 位加时码");
             duration[0] = '\0';
@@ -1378,10 +1397,12 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
             }
         }
     }
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 180, "手机扫码后将打开", 19, COLOR(91, 100, 114));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 218, "任你玩 · PlayWise", 24, COLOR(28, 118, 188));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 270, "网页会立即清除地址栏中的密钥参数，", 17, COLOR(77, 86, 99));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 300, "确认设备后只保存在当前家长浏览器。", 17, COLOR(77, 86, 99));
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 160, "请使用手机微信/相机扫描", 21, COLOR(28, 34, 43));
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 196, "任你玩 网页加时控制", 22, COLOR(28, 118, 188));
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 248, "网页会自动绑定当前设备，", 17, COLOR(77, 86, 99));
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 276, "建议拍照或收藏网页地址，", 18, COLOR(25, 132, 95));
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 304, "方便后续随时生成加时码！", 18, COLOR(25, 132, 95));
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 350, "另外也支持在主界面选择【本机生成加时码】。", 15, COLOR(91, 100, 114));
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  关闭二维码",
                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
 }

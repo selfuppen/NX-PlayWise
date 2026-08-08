@@ -284,8 +284,8 @@ public:
         char line[128];
 
         // --- 0. Top Prominent Status Banner (醒目展示今日已玩与修改后/当前可玩时长) ---
-        const s32 top_banner_y = cy + 10;
-        const s32 top_banner_h = 50;
+        const s32 top_banner_y = cy + 4;
+        const s32 top_banner_h = 48;
         renderer->drawRect(cx, top_banner_y, cw, top_banner_h, renderer->a(CARD_COLOR));
         draw_outline(renderer, cx, top_banner_y, cw, top_banner_h, 1, FOCUS_BORDER);
 
@@ -306,12 +306,12 @@ public:
         }
 
         // --- 1. Header Prompt & Guidance (自律约定与护眼提醒) ---
-        renderer->drawString("自律约定 · 兑换加时奖励", false, cx + 5, cy + 72, 17, renderer->a(TEXT_COLOR));
-        renderer->drawString("提示：加时前记得向窗外远眺 5 分钟！", false, cx + 5, cy + 92, 12, renderer->a(FOCUS_BORDER));
+        renderer->drawString("自律约定 · 兑换加时奖励", false, cx + 5, cy + 78, 17, renderer->a(TEXT_COLOR));
+        renderer->drawString("提示：加时前记得向窗外远眺 5 分钟！", false, cx + 5, cy + 96, 12, renderer->a(FOCUS_BORDER));
 
         // --- 2. Code Display Slots (8位卡片槽 - 增大更醒目) ---
         const s32 slot_start_x = cx + 8;
-        const s32 slot_y = cy + 108;
+        const s32 slot_y = cy + 112;
         const s32 slot_w = 34;
         const s32 slot_h = 44;
         const s32 slot_gap = 4;

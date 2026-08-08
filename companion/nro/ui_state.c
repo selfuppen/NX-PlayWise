@@ -58,7 +58,7 @@ static const char *request_success_message(const char *type)
         return "当前限制已解除，可以继续完成首次设置。";
     }
     if (strcmp(type, "restore_install_snapshot") == 0) {
-        return "安装前家长控制状态已恢复，PlayWise 已停用。";
+        return "安装前家长控制状态已恢复，任你玩 已停用。";
     }
     if (strcmp(type, "disable_today_limit") == 0) {
         return "当前限制已解除，今天保持不限时。";
@@ -90,7 +90,7 @@ static const char *request_success_guidance(const char *type)
         return "接下来：确认限制已解除后，在安全工具选择【启用自动控制】。";
     }
     if (strcmp(type, "restore_install_snapshot") == 0) {
-        return "PlayWise 已停用。解除停用后选择【启用自动控制】即可重新完成设置。";
+        return "任你玩 已停用。解除停用后选择【启用自动控制】即可重新完成设置。";
     }
     return "";
 }
