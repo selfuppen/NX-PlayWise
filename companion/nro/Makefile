@@ -40,6 +40,7 @@ OBJS := \
 	$(BUILD)/rules.o \
 	$(BUILD)/support_export.o \
 	$(BUILD)/credential_policy.o \
+	$(BUILD)/token_v2.o \
 	$(BUILD)/qrcodegen.o \
 	$(BUILD)/ptc_time.o \
 	$(BUILD)/result_builder.o \
@@ -94,6 +95,9 @@ $(BUILD)/support_export.o: ../../common/support/support_export.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/credential_policy.o: ../../common/security/credential_policy.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/token_v2.o: ../../common/token/token_v2.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/qrcodegen.o: ../../third_party/qrcodegen/qrcodegen.c | $(BUILD)

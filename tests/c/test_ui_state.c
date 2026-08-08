@@ -107,6 +107,9 @@ static void test_release_hit_targets(void)
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_CHILD;
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "child code button");
+    model.disable_flag_present = true;
+    check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "disabled child code button is not actionable");
+    model.disable_flag_present = false;
     check_hit(hit_center(&model, ptc_ui_child_refresh_rect()), PTC_UI_HIT_CHILD_REFRESH, 0, "child refresh button");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0, "parent controls hidden from child");
 
@@ -134,6 +137,9 @@ static void test_release_hit_targets(void)
               "credential random button");
     model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
     check_hit(hit_center(&model, ptc_ui_grant_qr_rect()), PTC_UI_HIT_GRANT_QR, 0, "pairing QR button");
+    check_hit(hit_center(&model, ptc_ui_grant_generate_rect()), PTC_UI_HIT_GRANT_GENERATE, 0, "local code generator button");
+    check_hit(hit_center(&model, ptc_ui_grant_edit_url_rect()), PTC_UI_HIT_GRANT_EDIT_URL, 0, "pairing URL edit button");
+    check_hit(hit_center(&model, ptc_ui_grant_reset_url_rect()), PTC_UI_HIT_GRANT_RESET_URL, 0, "pairing URL reset button");
     model.overlay = PTC_UI_OVERLAY_WEEKLY_LEAVE;
     check_hit(hit_center(&model, ptc_ui_discard_rect(model.overlay)), PTC_UI_HIT_OVERLAY_DISCARD, 0,
               "weekly leave discard button");

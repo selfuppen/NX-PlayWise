@@ -372,6 +372,15 @@ static void draw_status_tile(
     draw_text(pixels, stride, rect.x + 47, rect.y + 69, value, 26, COLOR(28, 34, 43));
 }
 
+static void draw_disable_banner(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect banner = {790, 42, 436, 38};
+    if (!model->disable_flag_present) return;
+    fill_round_rect(pixels, stride, banner, 7, COLOR(255, 232, 235));
+    draw_rect_outline(pixels, stride, banner, 1, COLOR(194, 61, 61));
+    draw_text_center(pixels, stride, banner, "紧急停用已开启 · 新的时间控制不会应用", 18, COLOR(170, 35, 48));
+}
+
 static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, int y)
 {
     UiRect rect = {54, y, 1172, 128};
@@ -411,8 +420,9 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char today[32];
     char remaining[32];
     char played[32];
-    const char *mode = strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
-        (strcmp(model->setup_phase, "protection") == 0 ? "保护模式" : "兼容性待确认");
+    const char *mode = model->disable_flag_present ? "控制已停用" :
+        (strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
+        (strcmp(model->setup_phase, "protection") == 0 ? "保护模式" : "兼容性待确认"));
     describe_status(model, today, sizeof(today), remaining, sizeof(remaining));
     if (model->played_minutes_available && model->played_minutes >= 0) {
         snprintf(played, sizeof(played), "约 %d 分钟", model->played_minutes);
@@ -420,17 +430,22 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
         snprintf(played, sizeof(played), "暂不可用");
     }
     draw_header(pixels, stride, "游玩时间", "查看今天的状态，使用家长提供的加时码");
+    draw_disable_banner(pixels, stride, model);
     draw_status_tile(pixels, stride, (UiRect){54, 118, 278, 92}, "今日状态", today, COLOR(216, 49, 54));
     draw_status_tile(pixels, stride, (UiRect){350, 118, 278, 92}, "剩余时间", remaining, COLOR(25, 132, 95));
     draw_status_tile(pixels, stride, (UiRect){646, 118, 278, 92}, "已玩时间", played, COLOR(215, 139, 25));
-    draw_status_tile(pixels, stride, (UiRect){942, 118, 284, 92}, "运行状态", mode, COLOR(28, 118, 188));
+    draw_status_tile(pixels, stride, (UiRect){942, 118, 284, 92}, "运行状态", mode,
+                     model->disable_flag_present ? COLOR(194, 61, 61) : COLOR(28, 118, 188));
 
     fill_round_rect(pixels, stride, (UiRect){54, 238, 760, 246}, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, (UiRect){54, 238, 760, 246}, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, 86, 286, "自律小达人 · 加时奖励", 27, COLOR(28, 34, 43));
-    draw_text(pixels, stride, 86, 322, "遵守约定、合理安排时间。加时之前，记得向窗外远眺至少 5 分钟，让眼睛放松一下吧！", 19, COLOR(85, 94, 107));
-    fill_round_rect(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), 8, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), "A  输入加时码", 31, COLOR(255, 255, 255));
+    draw_text(pixels, stride, 86, 326, "遵守约定、合理安排时间。加时之前，记得向窗外远眺", 23, COLOR(85, 94, 107));
+    draw_text(pixels, stride, 86, 360, "至少 5 分钟，让眼睛放松一下吧！", 23, COLOR(85, 94, 107));
+    fill_round_rect(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), 8,
+                    model->disable_flag_present ? COLOR(203, 211, 222) : COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, to_uirect(ptc_ui_child_submit_rect()),
+                     model->disable_flag_present ? "紧急停用中" : "A  输入加时码", 24, COLOR(255, 255, 255));
 
     fill_round_rect(pixels, stride, (UiRect){836, 238, 390, 246}, 8, COLOR(250, 251, 253));
     draw_rect_outline(pixels, stride, (UiRect){836, 238, 390, 246}, 1, COLOR(219, 225, 233));
@@ -439,11 +454,14 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_text(pixels, stride, 866, 352, "到期行为：系统提醒", 19, COLOR(77, 86, 99));
     draw_text(pixels, stride, 866, 384, "不会强制锁屏或关闭游戏", 19, COLOR(77, 86, 99));
     draw_text(pixels, stride, 866, 416,
-        strcmp(model->setup_phase, "active") == 0 ? "额度管理：已启用" : "额度管理：尚未启用",
-        20, strcmp(model->setup_phase, "active") == 0 ? COLOR(25, 132, 95) : COLOR(215, 139, 25));
+        model->disable_flag_present ? "紧急停用：已开启" :
+        (strcmp(model->setup_phase, "active") == 0 ? "额度管理：已启用" : "额度管理：尚未启用"),
+        20, model->disable_flag_present ? COLOR(194, 61, 61) :
+        (strcmp(model->setup_phase, "active") == 0 ? COLOR(25, 132, 95) : COLOR(215, 139, 25)));
 
     draw_notice(pixels, stride, model, 510);
-    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0), "A  输入加时码");
+    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0),
+                       model->disable_flag_present ? "紧急停用中" : "A  输入加时码");
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(1), "Y  刷新");
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(2), "B / +  退出");
 }
@@ -485,7 +503,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
         draw_text(pixels, stride, 204, 300, "已恢复至安装前状态。若要重新验证及启用控制，", 23, COLOR(45, 52, 62));
         draw_text(pixels, stride, 204, 344, "请清理状态文件并重启主机以重新开始首次引导。", 23, COLOR(45, 52, 62));
     } else {
-        draw_text(pixels, stride, 204, 300, "1. 创建 6 位 PlayWise PIN    2. 确认周计划与加时码设置", 23, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 300, "1. 创建 1–64 位数字 PlayWise PIN    2. 确认周计划与加时码设置", 23, COLOR(45, 52, 62));
         draw_text(pixels, stride, 204, 344, "3. 在【支持与恢复】确认接管系统控制", 23, COLOR(45, 52, 62));
     }
     draw_text(pixels, stride, 204, 400, model->message[0] ? model->message : "Y 可刷新后台状态。", 20, COLOR(91, 100, 116));
@@ -627,6 +645,11 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
               model->setup_snapshot_available ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
     draw_text(pixels, stride, panel.x + 26, panel.y + 142, "到期行为", 18, COLOR(103, 111, 124));
     draw_text(pixels, stride, panel.x + 172, panel.y + 142, "系统提醒", 18, COLOR(28, 118, 188));
+    if (model->disable_flag_present) {
+        fill_round_rect(pixels, stride, (UiRect){panel.x + 20, panel.y + 166, panel.width - 40, 68}, 7, COLOR(255, 232, 235));
+        draw_text(pixels, stride, panel.x + 36, panel.y + 194, "紧急停用已开启", 22, COLOR(170, 35, 48));
+        draw_text(pixels, stride, panel.x + 36, panel.y + 220, "普通控制写入已阻止", 17, COLOR(170, 35, 48));
+    }
     /* Contextual hint for selected action */
     snprintf(hint, sizeof(hint), "%s", model->safety_hint[0] ? model->safety_hint : "选择操作查看引导说明。");
     draw_text(pixels, stride, panel.x + 26, panel.y + 262, hint, 17, COLOR(91, 100, 116));
@@ -677,9 +700,11 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_status_row(pixels, stride, panel, panel.y + 132, "已玩时间", played,
                     model->played_minutes_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
     draw_status_row(pixels, stride, panel, panel.y + 162, "运行状态",
-                    strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
-                    (strcmp(model->setup_phase, "protection") == 0 ? "保护模式" : "兼容性待确认"),
-                    strcmp(model->setup_phase, "active") == 0 ? COLOR(25, 132, 95) : COLOR(215, 139, 25));
+                    model->disable_flag_present ? "控制已停用" :
+                    (strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
+                    (strcmp(model->setup_phase, "protection") == 0 ? "保护模式" : "兼容性待确认")),
+                    model->disable_flag_present ? COLOR(194, 61, 61) :
+                    (strcmp(model->setup_phase, "active") == 0 ? COLOR(25, 132, 95) : COLOR(215, 139, 25)));
     draw_status_row(pixels, stride, panel, panel.y + 192, "系统计时器",
                     model->play_timer_enabled == 1 ? "已开启" : "未确认",
                     model->play_timer_enabled == 1 ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
@@ -745,8 +770,9 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
                        COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_weekly_discard_rect(), "放弃修改", COLOR(235, 238, 243), COLOR(66, 74, 86), true);
     draw_dialog_button(pixels, stride, ptc_ui_weekly_save_rect(),
-                       model->weekly_dirty ? "保存计划" : "计划未修改",
-                       model->weekly_dirty ? COLOR(28, 118, 188) : COLOR(203, 211, 222), COLOR(255, 255, 255), false);
+                       model->disable_flag_present ? "紧急停用中" : (model->weekly_dirty ? "保存计划" : "计划未修改"),
+                       model->weekly_dirty && !model->disable_flag_present ? COLOR(28, 118, 188) : COLOR(203, 211, 222),
+                       COLOR(255, 255, 255), false);
 }
 
 static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -755,10 +781,13 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     int action_count;
     int index;
     draw_header(pixels, stride, "家长时间管理", "本地规则与设备安全设置");
+    draw_disable_banner(pixels, stride, model);
     if (model->demo_secret_enabled) {
-        fill_round_rect(pixels, stride, (UiRect){900, 42, 326, 36}, 7, COLOR(255, 235, 238));
-        draw_text_center(pixels, stride, (UiRect){900, 42, 326, 36},
-                         "公共演示密钥已启用 · 低安全模式", 17, COLOR(194, 61, 61));
+        UiRect warning = model->disable_flag_present ? (UiRect){526, 42, 246, 38} : (UiRect){900, 42, 326, 36};
+        fill_round_rect(pixels, stride, warning, 7, COLOR(255, 235, 238));
+        draw_text_center(pixels, stride, warning,
+                         model->disable_flag_present ? "公共演示密钥已启用" : "公共演示密钥已启用 · 低安全模式",
+                         17, COLOR(194, 61, 61));
     }
     draw_tabs(pixels, stride, model->parent_page);
     actions = actions_for_page(model->parent_page, &action_count);
@@ -767,6 +796,8 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
         PtcUiActionState astate = PTC_UI_ACTION_AVAILABLE;
         if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
             astate = ptc_ui_safety_action_available(model, index);
+        } else if (model->disable_flag_present && model->parent_page == PTC_UI_PARENT_TODAY && index > 0) {
+            astate = PTC_UI_ACTION_DISABLED;
         }
         const UiAction *action = &actions[index];
         if (model->parent_page == PTC_UI_PARENT_SUPPORT && index == 2 && model->disable_flag_present) {
@@ -789,7 +820,9 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0), "L  上一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1), "R  下一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(2),
-                       model->parent_page == PTC_UI_PARENT_PLAN ? "A  保存计划" : "Y  刷新结果");
+                       model->parent_page == PTC_UI_PARENT_PLAN
+                           ? (model->disable_flag_present ? "紧急停用中" : "A  保存计划")
+                           : "Y  刷新结果");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(3), "B  返回孩子页");
 }
 
@@ -867,7 +900,7 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     draw_dialog_button(pixels, stride, ptc_ui_minutes_inc_large_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_minutes_dec_large_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
 
-    if (ptc_date_from_day_index(model->day_index, &year, &month, &day)) {
+    if (model->status_loaded && ptc_date_from_day_index(model->day_index, &year, &month, &day)) {
         snprintf(date_line, sizeof(date_line), "影响日期：%u 年 %u 月 %u 日（今天）", year, month, day);
     } else {
         snprintf(date_line, sizeof(date_line), "影响日期：今天");
@@ -1052,15 +1085,45 @@ static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const Ptc
 static void draw_grant_setup_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
-    draw_dialog_shell(pixels, stride, model, &dialog, 820, 430);
-    draw_text(pixels, stride, dialog.x + 50, dialog.y + 140,
-              "二维码：手机扫描后确认设备，即可进入网页生成 8 位加时码。", 18, COLOR(77, 86, 99));
-    draw_text(pixels, stride, dialog.x + 50, dialog.y + 170,
-              "导出：将 SD 卡中的 parent-import.json 导入同一网页。", 18, COLOR(77, 86, 99));
-    draw_dialog_button(pixels, stride, ptc_ui_grant_qr_rect(), "A  显示配对二维码",
+    char minutes[96];
+    char date[40];
+    char base[160];
+    uint16_t year;
+    uint8_t month;
+    uint8_t day;
+    draw_dialog_shell(pixels, stride, model, &dialog, 900, 570);
+    if (ptc_date_from_day_index(model->day_index, &year, &month, &day)) {
+        snprintf(date, sizeof(date), "%u-%02u-%02u（今天）",
+                 (unsigned int)year, (unsigned int)month, (unsigned int)day);
+    } else {
+        snprintf(date, sizeof(date), "设备日期待刷新");
+    }
+    snprintf(minutes, sizeof(minutes), "‹   %u 分钟   ›    左右切换合法档位（上限 %u 分钟）",
+             (unsigned int)model->grant_minutes, (unsigned int)model->grant_max_minutes);
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 112, 816, 34}, date, 19, COLOR(77, 86, 99));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 150, 816, 44}, minutes, 25, COLOR(28, 118, 188));
+    if (model->grant_has_code) {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 194, 816, 54},
+                         model->grant_code, 42, COLOR(7, 93, 76));
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 232, 816, 26},
+                         "当天有效 · 成功兑换后仅可使用一次", 17, COLOR(91, 100, 114));
+    } else {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 198, 816, 42},
+                         "选择时长后在本机生成，不会预先消费 nonce", 19, COLOR(91, 100, 114));
+    }
+    draw_dialog_button(pixels, stride, ptc_ui_grant_generate_rect(),
+                       model->grant_has_code ? "X  再生成一个" : "X  本机生成加时码",
+                       COLOR(7, 93, 76), COLOR(255, 255, 255), false);
+    draw_dialog_button(pixels, stride, ptc_ui_grant_qr_rect(), "A  配对二维码",
                        COLOR(28, 118, 188), COLOR(255, 255, 255), false);
-    draw_dialog_button(pixels, stride, ptc_ui_grant_export_rect(), "Y  导出配置文件",
+    draw_dialog_button(pixels, stride, ptc_ui_grant_export_rect(), "Y  导出配置",
                        COLOR(25, 132, 95), COLOR(255, 255, 255), false);
+    draw_dialog_button(pixels, stride, ptc_ui_grant_edit_url_rect(), "R  编辑跳转地址",
+                       COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_dialog_button(pixels, stride, ptc_ui_grant_reset_url_rect(), "ZR  恢复官方地址",
+                       COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+    fit_text(base, sizeof(base), model->pairing_base_url, 16, 510);
+    draw_text(pixels, stride, dialog.x + 320, dialog.y + 467, base, 16, COLOR(91, 100, 114));
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  关闭",
                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
 }

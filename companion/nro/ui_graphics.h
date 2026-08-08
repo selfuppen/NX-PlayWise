@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "../../common/rules/rules.h"
+#include "../../common/security/credential_policy.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
 
 typedef enum {
@@ -124,7 +125,13 @@ typedef struct {
     bool demo_secret_enabled;
     char credential_current[80];
     char credential_new[80];
-    char pairing_url[384];
+    char pairing_base_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
+    char pairing_url[768];
+    uint16_t grant_minutes;
+    uint16_t grant_max_minutes;
+    uint16_t grant_day_index;
+    bool grant_has_code;
+    char grant_code[9];
     uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];
 } PtcUiModel;
 
@@ -172,7 +179,10 @@ typedef enum {
     PTC_UI_HIT_CREDENTIAL_SAVE,
     PTC_UI_HIT_CREDENTIAL_DEMO,
     PTC_UI_HIT_GRANT_QR,
-    PTC_UI_HIT_GRANT_EXPORT
+    PTC_UI_HIT_GRANT_EXPORT,
+    PTC_UI_HIT_GRANT_GENERATE,
+    PTC_UI_HIT_GRANT_EDIT_URL,
+    PTC_UI_HIT_GRANT_RESET_URL
 } PtcUiHitKind;
 
 typedef struct {
@@ -254,6 +264,9 @@ PtcUiRect ptc_ui_credential_reveal_rect(void);
 PtcUiRect ptc_ui_credential_demo_rect(void);
 PtcUiRect ptc_ui_grant_qr_rect(void);
 PtcUiRect ptc_ui_grant_export_rect(void);
+PtcUiRect ptc_ui_grant_generate_rect(void);
+PtcUiRect ptc_ui_grant_edit_url_rect(void);
+PtcUiRect ptc_ui_grant_reset_url_rect(void);
 bool ptc_ui_rect_contains(PtcUiRect rect, int x, int y);
 PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y);
 

@@ -16,6 +16,7 @@
 #include "../../common/support/support_export.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/security/credential_policy.h"
+#include "../../common/token/token_v2.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
 #include "ui_graphics.h"
 
@@ -23,6 +24,8 @@
 #define RULES_PATH APP_ROOT "/rules.json"
 #define CONFIG_PATH APP_ROOT "/config.json"
 #define CREDENTIALS_PATH APP_ROOT "/credentials.json"
+#define ISSUED_NONCES_PATH APP_ROOT "/grant-issued.json"
+#define LEDGER_PATH APP_ROOT "/ledger/used_nonces.jsonl"
 #define RESULT_TEXT_SIZE 8192
 #define REQUEST_TIMEOUT_MS 60000
 #define LOOP_SLEEP_NS 100000000LL
@@ -115,6 +118,8 @@ static const char *auth_status_zh(PtcAuthStatus status)
         return "PIN 设置文件无效";
     case PTC_AUTH_DENIED:
         return "PIN 不正确";
+    case PTC_AUTH_COOLDOWN:
+        return "PIN 错误次数过多，暂时锁定";
     default:
         return "未知认证错误";
     }
@@ -201,6 +206,7 @@ static bool keyboard_input(
     char *out,
     size_t out_size,
     bool password,
+    bool numeric,
     bool download_code)
 {
     SwkbdConfig keyboard;
@@ -220,6 +226,9 @@ static bool keyboard_input(
     } else {
         swkbdConfigMakePresetDefault(&keyboard);
     }
+    if (numeric) swkbdConfigSetType(&keyboard, SwkbdType_NumPad);
+    swkbdConfigSetStringLenMin(&keyboard, 1);
+    swkbdConfigSetStringLenMax(&keyboard, (u32)(out_size - 1));
     swkbdConfigSetHeaderText(&keyboard, header);
     swkbdConfigSetGuideText(&keyboard, guide);
     swkbdConfigSetOkButtonText(&keyboard, "确认");
@@ -251,6 +260,11 @@ static void edit_weekly_minutes(UiState *ui)
 
 static void open_offline_code_input(UiState *ui)
 {
+    if (ui->model.disable_flag_present) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "紧急停用已开启，当前不能兑换加时码；状态和恢复仍可使用。");
+        return;
+    }
     ptc_ui_numpad_open(
         &ui->model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
         "输入离线加时短码", "8 位数字；领码加时前，记得向窗外远眺至少 5 分钟！", 8, 0, 0, 0);
@@ -314,6 +328,10 @@ static void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minut
 {
     PtcCompanionStatus status;
     const char *type;
+    if (ui->model.disable_flag_present) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用已开启，额度修改不可用。");
+        return;
+    }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     if (operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) {
         type = "set_today_limit";
@@ -339,6 +357,10 @@ static void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minut
 static void submit_weekly(UiState *ui)
 {
     PtcCompanionStatus status;
+    if (ui->model.disable_flag_present) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用已开启，周计划暂不能保存。");
+        return;
+    }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_set_weekly_template(
         &ui->transport,
@@ -547,8 +569,8 @@ static void enter_parent_area(UiState *ui)
     char pin_confirm[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus state = ptc_companion_auth_state(&ui->auth);
     if (state == PTC_AUTH_EMPTY) {
-        if (!keyboard_input("设置 6 位 PlayWise PIN", "请输入 6 位数字", pin, sizeof(pin), true, false) ||
-            !keyboard_input("确认 PlayWise PIN", "请再次输入相同的 6 位数字", pin_confirm, sizeof(pin_confirm), true, false) ||
+        if (!keyboard_input("设置 PlayWise PIN", "请输入 1–64 位数字；长度由家长决定", pin, sizeof(pin), true, true, false) ||
+            !keyboard_input("确认 PlayWise PIN", "请再次输入相同的数字 PIN", pin_confirm, sizeof(pin_confirm), true, true, false) ||
             strcmp(pin, pin_confirm) != 0) {
             snprintf(ui->model.message, sizeof(ui->model.message), "PIN 设置已取消，或两次输入不一致。");
             return;
@@ -562,11 +584,18 @@ static void enter_parent_area(UiState *ui)
         set_auth_message(ui, "无法进入家长区", state);
         return;
     }
-    if (!keyboard_input("PlayWise PIN", "输入本应用独立管理 PIN", pin, sizeof(pin), true, false)) {
+    if (!keyboard_input("PlayWise PIN", "输入本应用独立管理 PIN", pin, sizeof(pin), true, true, false)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消进入家长区。");
         return;
     }
-    state = ptc_companion_auth_verify_pin(&ui->auth, pin);
+    {
+        int64_t retry_after = 0;
+        state = ptc_companion_auth_verify_pin(&ui->auth, pin, (int64_t)time(NULL), &retry_after);
+        if (state == PTC_AUTH_COOLDOWN && retry_after > 0) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "验证失败：请等待 %lld 秒后再试。", (long long)retry_after);
+            return;
+        }
+    }
     if (state != PTC_AUTH_OK) {
         set_auth_message(ui, "验证失败", state);
         return;
@@ -577,7 +606,8 @@ static void enter_parent_area(UiState *ui)
     ui->model.parent_page = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
         ? PTC_UI_PARENT_SUPPORT : PTC_UI_PARENT_TODAY;
     ui->model.selected_index = 0;
-    snprintf(ui->model.message, sizeof(ui->model.message), "家长区已解锁。");
+    snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+             strlen(pin) < 4U ? "家长区已解锁；当前 PIN 少于 4 位，很容易被猜到，建议尽快修改。" : "家长区已解锁。");
 }
 
 static void open_minutes_overlay(
@@ -642,6 +672,136 @@ static bool read_pairing_values(UiState *ui, char *device_id, size_t device_size
     return true;
 }
 
+static bool read_pairing_config(UiState *ui, char *base_url, size_t base_size, uint16_t *max_add_minutes)
+{
+    char text[4096];
+    cJSON *root;
+    const cJSON *base;
+    const cJSON *maximum;
+    if (!ui || !base_url || base_size == 0U || !max_add_minutes ||
+        !ui->client.storage->vtable->read_text(ui->client.storage, CONFIG_PATH, text, sizeof(text))) return false;
+    root = cJSON_Parse(text);
+    if (!cJSON_IsObject(root)) {
+        cJSON_Delete(root);
+        return false;
+    }
+    base = cJSON_GetObjectItemCaseSensitive(root, "pairing_base_url");
+    maximum = cJSON_GetObjectItemCaseSensitive(root, "max_add_minutes");
+    snprintf(base_url, base_size, "%s",
+             cJSON_IsString(base) && base->valuestring && ptc_pairing_base_url_valid(base->valuestring)
+                 ? base->valuestring : PTC_PAIRING_BASE_URL);
+    *max_add_minutes = cJSON_IsNumber(maximum) && maximum->valueint >= 1
+        ? (uint16_t)maximum->valueint : PTC_TOKEN_V2_MAX_MINUTES;
+    if (*max_add_minutes > PTC_TOKEN_V2_MAX_MINUTES) *max_add_minutes = PTC_TOKEN_V2_MAX_MINUTES;
+    cJSON_Delete(root);
+    return true;
+}
+
+static bool save_pairing_base_url(UiState *ui, const char *base_url)
+{
+    char text[4096];
+    cJSON *root;
+    char *rendered;
+    bool ok;
+    if (!ptc_pairing_base_url_valid(base_url) ||
+        !ui->client.storage->vtable->read_text(ui->client.storage, CONFIG_PATH, text, sizeof(text))) return false;
+    root = cJSON_Parse(text);
+    if (!cJSON_IsObject(root)) {
+        cJSON_Delete(root);
+        return false;
+    }
+    cJSON_DeleteItemFromObject(root, "pairing_base_url");
+    cJSON_AddStringToObject(root, "pairing_base_url", base_url);
+    rendered = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    ok = rendered && ui->client.storage->vtable->write_text_atomic(ui->client.storage, CONFIG_PATH, rendered);
+    free(rendered);
+    return ok;
+}
+
+static uint16_t legal_grant_minutes(uint16_t requested, uint16_t maximum)
+{
+    uint8_t tier;
+    if (maximum > PTC_TOKEN_V2_MAX_MINUTES) maximum = PTC_TOKEN_V2_MAX_MINUTES;
+    if (requested > maximum) requested = maximum;
+    while (requested > 1U && ptc_token_v2_tier_for_minutes(requested, &tier) != PTC_ERR_OK) --requested;
+    return requested > 0U ? requested : 1U;
+}
+
+static void adjust_grant_minutes(UiState *ui, int direction)
+{
+    int next = ui->model.grant_minutes;
+    do {
+        next += direction > 0 ? 1 : -1;
+        if (next < 1) next = ui->model.grant_max_minutes;
+        if (next > ui->model.grant_max_minutes) next = 1;
+    } while (next != ui->model.grant_minutes &&
+             ptc_token_v2_tier_for_minutes((uint16_t)next, &(uint8_t){0}) != PTC_ERR_OK);
+    ui->model.grant_minutes = (uint16_t)next;
+    ui->model.grant_has_code = false;
+}
+
+static void load_consumed_nonces(uint16_t day_index, bool used[PTC_TOKEN_V2_MAX_NONCE + 1U])
+{
+    FILE *file = fopen(LEDGER_PATH, "r");
+    char line[256];
+    if (!file) return;
+    while (fgets(line, sizeof(line), file)) {
+        unsigned int day;
+        unsigned int nonce;
+        if (sscanf(line, "{\"day_index\":%u,\"nonce\":%u,\"token_version\":2", &day, &nonce) == 2 &&
+            day == day_index && nonce <= PTC_TOKEN_V2_MAX_NONCE) used[nonce] = true;
+    }
+    fclose(file);
+}
+
+static bool load_issued_nonces(UiState *ui, uint16_t day_index, bool issued[PTC_TOKEN_V2_MAX_NONCE + 1U])
+{
+    char text[8192];
+    cJSON *root;
+    const cJSON *stored_day;
+    const cJSON *nonces;
+    const cJSON *item;
+    if (!ui->client.storage->vtable->exists(ui->client.storage, ISSUED_NONCES_PATH)) return true;
+    if (!ui->client.storage->vtable->read_text(ui->client.storage, ISSUED_NONCES_PATH, text, sizeof(text))) return false;
+    root = cJSON_Parse(text);
+    stored_day = cJSON_GetObjectItemCaseSensitive(root, "day_index");
+    nonces = cJSON_GetObjectItemCaseSensitive(root, "nonces");
+    if (!cJSON_IsObject(root) || !cJSON_IsNumber(stored_day) || !cJSON_IsArray(nonces)) {
+        cJSON_Delete(root);
+        return false;
+    }
+    if (stored_day->valueint == day_index) {
+        cJSON_ArrayForEach(item, nonces) {
+            if (cJSON_IsNumber(item) && item->valueint >= 0 &&
+                (unsigned int)item->valueint <= PTC_TOKEN_V2_MAX_NONCE) {
+                issued[item->valueint] = true;
+            }
+        }
+    }
+    cJSON_Delete(root);
+    return true;
+}
+
+static bool save_issued_nonces(UiState *ui, uint16_t day_index, const bool issued[PTC_TOKEN_V2_MAX_NONCE + 1U])
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON *nonces = cJSON_AddArrayToObject(root, "nonces");
+    char *rendered;
+    bool ok;
+    unsigned int nonce;
+    cJSON_AddNumberToObject(root, "version", 1);
+    cJSON_AddNumberToObject(root, "day_index", day_index);
+    for (nonce = 0; nonce <= PTC_TOKEN_V2_MAX_NONCE; ++nonce) {
+        if (issued[nonce]) cJSON_AddItemToArray(nonces, cJSON_CreateNumber(nonce));
+    }
+    rendered = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    ok = rendered && ui->client.storage->vtable->write_text_atomic(ui->client.storage, ISSUED_NONCES_PATH, rendered);
+    free(rendered);
+    return ok;
+}
+
 static void refresh_security_state(UiState *ui)
 {
     char secret[PTC_GRANT_SECRET_MAX_LEN + 1];
@@ -653,12 +813,17 @@ static bool verify_sensitive_pin(UiState *ui, const char *action)
 {
     char pin[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus status;
-    if (!keyboard_input("验证 PlayWise 管理 PIN", action, pin, sizeof(pin), true, false)) {
+    int64_t retry_after = 0;
+    if (!keyboard_input("验证 PlayWise 管理 PIN", action, pin, sizeof(pin), true, true, false)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消敏感操作。");
         return false;
     }
-    status = ptc_companion_auth_verify_pin(&ui->auth, pin);
+    status = ptc_companion_auth_verify_pin(&ui->auth, pin, (int64_t)time(NULL), &retry_after);
     if (status != PTC_AUTH_OK) {
+        if (status == PTC_AUTH_COOLDOWN && retry_after > 0) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "验证失败：请等待 %lld 秒后再试。", (long long)retry_after);
+            return false;
+        }
         set_auth_message(ui, "验证失败", status);
         return false;
     }
@@ -726,7 +891,7 @@ static void edit_credential_input(UiState *ui)
     const char *guide = ui->model.credential_kind == 1
         ? "1–32 位：字母、数字、-、_"
         : "建议随机生成；手工输入 32–64 个非空白 ASCII 字符";
-    if (!keyboard_input(header, guide, value, sizeof(value), ui->model.credential_kind == 2, false)) return;
+    if (!keyboard_input(header, guide, value, sizeof(value), ui->model.credential_kind == 2, false, false)) return;
     snprintf(ui->model.credential_new, sizeof(ui->model.credential_new), "%s", value);
 }
 
@@ -772,23 +937,128 @@ static void change_parent_pin(UiState *ui)
     char pin[PTC_AUTH_PIN_MAX_LEN + 1];
     char confirm[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus status;
-    if (!keyboard_input("修改 6 位 PlayWise PIN", "请输入新的 6 位数字", pin, sizeof(pin), true, false) ||
-        !keyboard_input("确认新 PIN", "请再次输入相同的 6 位数字", confirm, sizeof(confirm), true, false) ||
+    if (!keyboard_input("修改 PlayWise PIN", "请输入新的 1–64 位数字", pin, sizeof(pin), true, true, false) ||
+        !keyboard_input("确认新 PIN", "请再次输入相同的数字 PIN", confirm, sizeof(confirm), true, true, false) ||
         strcmp(pin, confirm) != 0) {
         snprintf(ui->model.message, sizeof(ui->model.message), "PIN 修改已取消，或两次输入不一致。");
         return;
     }
     status = ptc_companion_auth_set_pin(&ui->auth, pin, time(NULL), switch_random, NULL);
-    if (status == PTC_AUTH_OK) snprintf(ui->model.message, sizeof(ui->model.message), "PlayWise PIN 已更新。");
+    if (status == PTC_AUTH_OK) snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+        strlen(pin) < 4U ? "PlayWise PIN 已更新；当前 PIN 少于 4 位，冷却也无法提供可靠保护。" : "PlayWise PIN 已更新。");
     else set_auth_message(ui, "PIN 修改失败", status);
 }
 
 static void open_grant_setup(UiState *ui)
 {
+    uint16_t maximum = PTC_TOKEN_V2_MAX_MINUTES;
+    if (!read_pairing_config(ui, ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), &maximum)) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "读取本机生成器配置失败。");
+        return;
+    }
     ui->model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
+    ui->model.grant_max_minutes = maximum;
+    ui->model.grant_minutes = legal_grant_minutes(20U, maximum);
+    ui->model.grant_has_code = false;
+    ui->model.grant_code[0] = '\0';
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "生成加时码");
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "将当前设备安全配对到任你玩 · PlayWise 家长网页。");
+             "本机生成今天有效的一次性 8 位码，也可继续使用网页配对。");
+}
+
+static void edit_pairing_base_url(UiState *ui)
+{
+    char value[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
+    if (!verify_sensitive_pin(ui, "修改二维码跳转地址前，请再次输入本应用 PIN")) return;
+    if (!keyboard_input("二维码跳转地址", "仅使用可信 HTTPS；局域网调试可用 localhost 或私有 IP",
+                        value, sizeof(value), false, false, false)) return;
+    if (!ptc_pairing_base_url_valid(value)) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "地址无效：最长 256 字符，不得含账号、控制字符或 #；HTTP 仅限本机和私有网络。");
+        return;
+    }
+    if (!save_pairing_base_url(ui, value)) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "保存二维码跳转地址失败。");
+        return;
+    }
+    snprintf(ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), "%s", value);
+    snprintf(ui->model.message, sizeof(ui->model.message), "二维码跳转地址已更新；自定义站点可读取配对密钥，请仅使用可信站点。");
+}
+
+static void reset_pairing_base_url(UiState *ui)
+{
+    if (!verify_sensitive_pin(ui, "恢复官方二维码地址前，请再次输入本应用 PIN")) return;
+    if (!save_pairing_base_url(ui, PTC_PAIRING_BASE_URL)) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "恢复官方二维码地址失败。");
+        return;
+    }
+    snprintf(ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
+    snprintf(ui->model.message, sizeof(ui->model.message), "已恢复官方二维码跳转地址。");
+}
+
+static void generate_local_grant_code(UiState *ui)
+{
+    bool consumed[PTC_TOKEN_V2_MAX_NONCE + 1U] = {false};
+    bool issued[PTC_TOKEN_V2_MAX_NONCE + 1U] = {false};
+    char device[PTC_DEVICE_ID_MAX_LEN + 1];
+    char secret[PTC_GRANT_SECRET_MAX_LEN + 1];
+    uint16_t start;
+    uint16_t nonce = 0;
+    uint8_t tier;
+    unsigned int offset;
+    bool found = false;
+    if (!ui->model.status_loaded) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "无法确认设备日期，请先关闭弹层并刷新设备状态。");
+        return;
+    }
+    if (!verify_sensitive_pin(ui, "本机生成加时码前，请再次输入本应用 PIN")) return;
+    if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret)) ||
+        ptc_token_v2_tier_for_minutes(ui->model.grant_minutes, &tier) != PTC_ERR_OK) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "生成参数或设备配对信息无效。");
+        return;
+    }
+    load_consumed_nonces(ui->model.day_index, consumed);
+    if (!load_issued_nonces(ui, ui->model.day_index, issued)) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "读取本机已签发记录失败。");
+        return;
+    }
+    randomGet(&start, sizeof(start));
+    start &= PTC_TOKEN_V2_MAX_NONCE;
+    for (offset = 0; offset <= PTC_TOKEN_V2_MAX_NONCE; ++offset) {
+        nonce = (uint16_t)((start + offset) & PTC_TOKEN_V2_MAX_NONCE);
+        if (!consumed[nonce] && !issued[nonce]) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        if (!verify_sensitive_pin(ui, "当天签发编号已用尽；再次验证将只清除未兑换签发记录")) return;
+        memset(issued, 0, sizeof(issued));
+        for (nonce = 0; nonce <= PTC_TOKEN_V2_MAX_NONCE; ++nonce) {
+            if (!consumed[nonce]) {
+                found = true;
+                break;
+            }
+        }
+    }
+    if (!found) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "今天的 512 个加时码编号均已消费，无法继续生成。");
+        return;
+    }
+    if (ptc_token_v2_encode(tier, nonce, device, secret, ui->model.day_index, ui->model.grant_code) != PTC_ERR_OK) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "本机生成加时码失败。");
+        return;
+    }
+    issued[nonce] = true;
+    if (!save_issued_nonces(ui, ui->model.day_index, issued)) {
+        ui->model.grant_code[0] = '\0';
+        snprintf(ui->model.message, sizeof(ui->model.message), "保存已签发记录失败，本次加时码未显示。");
+        return;
+    }
+    ui->model.grant_day_index = ui->model.day_index;
+    ui->model.grant_has_code = true;
+    snprintf(ui->model.message, sizeof(ui->model.message), "已在本机生成今天有效的 %u 分钟加时码。",
+             (unsigned int)ui->model.grant_minutes);
 }
 
 static void show_pairing_qr(UiState *ui)
@@ -796,9 +1066,12 @@ static void show_pairing_qr(UiState *ui)
     char device[PTC_DEVICE_ID_MAX_LEN + 1];
     char secret[PTC_GRANT_SECRET_MAX_LEN + 1];
     uint8_t temp[qrcodegen_BUFFER_LEN_MAX];
+    uint16_t maximum;
     if (!verify_sensitive_pin(ui, "显示包含加时码密钥的二维码前，请再次输入本应用 PIN")) return;
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret)) ||
-        !ptc_build_pairing_url(device, secret, ui->model.pairing_url, sizeof(ui->model.pairing_url)) ||
+        !read_pairing_config(ui, ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), &maximum) ||
+        !ptc_build_pairing_url_with_base(ui->model.pairing_base_url, device, secret,
+                                        ui->model.pairing_url, sizeof(ui->model.pairing_url)) ||
         !qrcodegen_encodeText(ui->model.pairing_url, temp, ui->model.qr_code,
             qrcodegen_Ecc_MEDIUM, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX,
             qrcodegen_Mask_AUTO, true)) {
@@ -947,6 +1220,11 @@ static void handle_today_action_ready(UiState *ui, int index)
 static void handle_parent_action(UiState *ui)
 {
     int index = ui->model.selected_index;
+    if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY && index > 0) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "紧急停用已开启，此项控制写入不可用；请到支持与恢复解除停用。");
+        return;
+    }
     if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
         if (index == 0) {
             submit_status(ui);
@@ -1202,6 +1480,11 @@ static void handle_overlay_input(UiState *ui, u64 down)
         if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
         else if (down & HidNpadButton_A) show_pairing_qr(ui);
         else if (down & HidNpadButton_Y) export_parent_import(ui);
+        else if (down & HidNpadButton_X) generate_local_grant_code(ui);
+        else if (down & HidNpadButton_R) edit_pairing_base_url(ui);
+        else if (down & HidNpadButton_ZR) reset_pairing_base_url(ui);
+        else if (down & HidNpadButton_Left) adjust_grant_minutes(ui, -1);
+        else if (down & HidNpadButton_Right) adjust_grant_minutes(ui, 1);
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_QR) {
@@ -1457,6 +1740,15 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_GRANT_EXPORT:
         handle_overlay_input(ui, HidNpadButton_Y);
+        break;
+    case PTC_UI_HIT_GRANT_GENERATE:
+        handle_overlay_input(ui, HidNpadButton_X);
+        break;
+    case PTC_UI_HIT_GRANT_EDIT_URL:
+        handle_overlay_input(ui, HidNpadButton_R);
+        break;
+    case PTC_UI_HIT_GRANT_RESET_URL:
+        handle_overlay_input(ui, HidNpadButton_ZR);
         break;
     case PTC_UI_HIT_NUMPAD_KEY:
         ui->model.numpad_cursor = hit.index;

@@ -95,6 +95,22 @@
         <p>此页面会保存设备 ID、密钥、常用时长，以及当前浏览器当天已经签发的随机编号。清除浏览器站点数据也会删除这些内容。</p>
         <button id="clearConfig" class="danger-button" type="button">清除本机配置</button>
       </details>
+
+      <details class="settings troubleshooting">
+        <summary>常见排错指南</summary>
+        <h3>无法配对或扫码后没有导入</h3>
+        <p>确认二维码来自当前 Switch，并使用可信的 HTTPS 页面。自定义地址必须实现相同的 <code>#device_id</code> 与 <code>grant_secret</code> 配对参数；页面应在读取后立即清除地址栏参数。也可改用 <code>parent-import.json</code> 导入。</p>
+        <h3>加时码无效或提示已使用</h3>
+        <p>确认设备 ID、密钥、生效日期和 Switch 当前日期一致。修改密钥后，旧页面配置和此前生成的码都会失效；提示已使用时请重新生成一个。</p>
+        <h3>日期不正确</h3>
+        <p>加时码按 UTC+8 的当天生效。先校准家长设备与 Switch 的系统日期，再刷新状态并重新生成；不要继续尝试为错误日期生成的码。</p>
+        <h3>设备没有响应</h3>
+        <p>在 Switch 孩子区或家长区刷新状态，等待正在同步的操作完成。仍无响应时导出诊断信息，并检查 SD 卡中的 PlayWise 文件是否可读。</p>
+        <h3>紧急停用已开启</h3>
+        <p>紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。</p>
+        <h3>进一步诊断</h3>
+        <p>诊断导出只包含白名单状态，不包含密钥、PIN、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。</p>
+      </details>
     </section>
   </main>
 

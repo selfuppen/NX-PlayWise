@@ -144,15 +144,32 @@ static void test_auth_and_queue(void)
     uint8_t seed = 0x21;
     char request_id[PTC_COMPANION_REQUEST_ID_SIZE];
     char text[1024];
+    char long_pin[PTC_AUTH_PIN_MAX_LEN + 2];
+    int64_t retry_after = 0;
+    int attempt;
 
     ptc_mem_storage_init(&mem);
     ptc_companion_auth_init(&auth, "app", &mem.storage);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/auth.json",
         "{\"version\":1,\"pin_hash\":\"\",\"pin_salt\":\"\",\"hash\":\"hmac-sha256\",\"updated_at\":0}"),
         "seed empty auth");
-    check_int(ptc_companion_auth_set_pin(&auth, "12345", 1, fixed_random, &seed), PTC_AUTH_BAD_ARGUMENT, "five-digit PIN rejected");
-    check_int(ptc_companion_auth_set_pin(&auth, "123456", 1, fixed_random, &seed), PTC_AUTH_OK, "six-digit PIN accepted");
-    check_int(ptc_companion_auth_verify_pin(&auth, "123456"), PTC_AUTH_OK, "PIN verifies");
+    check_int(ptc_companion_auth_set_pin(&auth, "7", 1, fixed_random, &seed), PTC_AUTH_OK, "one-digit PIN accepted");
+    check_int(ptc_companion_auth_verify_pin(&auth, "7", 100, &retry_after), PTC_AUTH_OK, "variable-length PIN verifies");
+    check_int(ptc_companion_auth_set_pin(&auth, "12a", 1, fixed_random, &seed), PTC_AUTH_BAD_ARGUMENT, "non-digit PIN rejected");
+    memset(long_pin, '8', PTC_AUTH_PIN_MAX_LEN);
+    long_pin[PTC_AUTH_PIN_MAX_LEN] = '\0';
+    check_int(ptc_companion_auth_set_pin(&auth, long_pin, 2, fixed_random, &seed), PTC_AUTH_OK, "64-digit PIN accepted");
+    long_pin[PTC_AUTH_PIN_MAX_LEN] = '8';
+    long_pin[PTC_AUTH_PIN_MAX_LEN + 1] = '\0';
+    check_int(ptc_companion_auth_set_pin(&auth, long_pin, 2, fixed_random, &seed), PTC_AUTH_BAD_ARGUMENT, "65-digit PIN rejected");
+    check_int(ptc_companion_auth_set_pin(&auth, "123456", 3, fixed_random, &seed), PTC_AUTH_OK, "six-digit PIN remains compatible");
+    for (attempt = 0; attempt < PTC_AUTH_FAILURE_LIMIT - 1; ++attempt) {
+        check_int(ptc_companion_auth_verify_pin(&auth, "000000", 100, &retry_after), PTC_AUTH_DENIED, "wrong PIN counted");
+    }
+    check_int(ptc_companion_auth_verify_pin(&auth, "000000", 100, &retry_after), PTC_AUTH_COOLDOWN, "fifth failure starts cooldown");
+    check_int(retry_after, 30, "initial PIN cooldown is 30 seconds");
+    check_int(ptc_companion_auth_verify_pin(&auth, "123456", 110, &retry_after), PTC_AUTH_COOLDOWN, "correct PIN waits for cooldown");
+    check_int(ptc_companion_auth_verify_pin(&auth, "123456", 130, &retry_after), PTC_AUTH_OK, "successful PIN clears cooldown");
 
     ptc_companion_file_client_init(&client, "app", &mem.storage);
     check_int(ptc_companion_make_request_id(request_id, sizeof(request_id), 1000, 0x12), PTC_COMPANION_OK, "request id created");
@@ -184,7 +201,7 @@ static void seed_release_setup(PtcMemStorage *mem)
         "{\"version\":1,\"phase\":\"unconfigured\",\"compatibility_status\":\"pending\",\"restriction_cleared\":false,"
         "\"snapshot_available\":false,\"activate_after\":0,\"last_error\":\"\"}"), "seed setup");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/build.json",
-        "{\"playwise_version\":\"0.1.0\",\"profile\":\"release\",\"release_id\":\"playwise-0.1.0+test\"}"), "seed build manifest");
+        "{\"playwise_version\":\"0.1.1\",\"profile\":\"release\",\"release_id\":\"playwise-0.1.1+test\"}"), "seed build manifest");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/environment.json",
         "{\"read_ok\":true,\"hos\":\"22.5.0\",\"firmware_hash\":\"test-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true}"),
         "seed verified environment");
@@ -264,7 +281,7 @@ static void test_credential_policy(void)
     const uint8_t random_bytes[3] = {0xabU, 0xcdU, 0xefU};
     char device_id[PTC_DEVICE_ID_MAX_LEN + 1];
     char secret[PTC_GRANT_SECRET_MAX_LEN + 1];
-    char url[384];
+    char url[768];
     uint8_t temp[qrcodegen_BUFFER_LEN_MAX];
     uint8_t qr[qrcodegen_BUFFER_LEN_MAX];
     memset(secret, 'a', 32U);
@@ -278,6 +295,16 @@ static void test_credential_policy(void)
     check_true(ptc_build_pairing_url("kid-switch", secret, url, sizeof(url)) &&
         strstr(url, PTC_PAIRING_BASE_URL "#device_id=kid-switch&grant_secret=") == url,
         "pairing URL uses fragment fields");
+    check_true(ptc_pairing_base_url_valid("https://parent.example/playwise?source=switch"), "custom HTTPS pairing base accepted");
+    check_true(ptc_pairing_base_url_valid("http://192.168.1.8:8080/playwise"), "private HTTP pairing base accepted");
+    check_true(!ptc_pairing_base_url_valid("http://example.com/playwise"), "public HTTP pairing base rejected");
+    check_true(!ptc_pairing_base_url_valid("https://user:pass@example.com/playwise"), "pairing URL userinfo rejected");
+    check_true(!ptc_pairing_base_url_valid("https://example.com/playwise#old"), "existing fragment rejected");
+    check_true(!ptc_pairing_base_url_valid("https://:443/playwise"), "empty pairing host rejected");
+    check_true(!ptc_pairing_base_url_valid("https://example.com:bad/playwise"), "invalid pairing port rejected");
+    check_true(ptc_build_pairing_url_with_base("https://parent.example/app?source=switch", "kid-switch", secret, url, sizeof(url)) &&
+        strstr(url, "https://parent.example/app?source=switch#device_id=kid-switch&grant_secret=") == url,
+        "custom pairing URL preserves path and query before fragment");
     check_true(qrcodegen_encodeText(url, temp, qr, qrcodegen_Ecc_MEDIUM,
         qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO, true) &&
         qrcodegen_getSize(qr) > 0, "pairing URL encodes as QR");

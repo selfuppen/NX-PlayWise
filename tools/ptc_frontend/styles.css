@@ -81,6 +81,8 @@ dialog::backdrop { background: rgba(20, 30, 28, .55); }
 .settings { margin-top: 26px; border-top: 1px solid var(--border); padding-top: 20px; color: var(--muted); font-size: 14px; }
 .settings summary { cursor: pointer; color: #354943; font-weight: 700; }
 .settings p { line-height: 1.65; }
+.troubleshooting h3 { margin: 18px 0 4px; color: #263d37; font-size: 15px; }
+.troubleshooting code { overflow-wrap: anywhere; }
 .danger-button { border: 1px solid #d49ca4; background: #fff; color: var(--danger); }
 footer { width: min(100% - 28px, 760px); margin: 0 auto 30px; color: var(--muted); font-size: 12px; line-height: 1.6; text-align: center; }
 

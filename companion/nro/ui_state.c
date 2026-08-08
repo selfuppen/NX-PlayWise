@@ -546,7 +546,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
 
 PtcUiRect ptc_ui_child_submit_rect(void)
 {
-    PtcUiRect rect = {86, 354, 696, 92};
+    PtcUiRect rect = {254, 392, 360, 64};
     return rect;
 }
 
@@ -633,8 +633,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 500;
         break;
     case PTC_UI_OVERLAY_GRANT_SETUP:
-        *width = 820;
-        *height = 430;
+        *width = 900;
+        *height = 570;
         break;
     case PTC_UI_OVERLAY_QR:
         *width = 900;
@@ -798,14 +798,35 @@ PtcUiRect ptc_ui_credential_demo_rect(void)
 PtcUiRect ptc_ui_grant_qr_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
-    PtcUiRect rect = {dialog.x + 52, dialog.y + 190, 330, 92};
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 360, 250, 58};
     return rect;
 }
 
 PtcUiRect ptc_ui_grant_export_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
-    PtcUiRect rect = {dialog.x + 438, dialog.y + 190, 330, 92};
+    PtcUiRect rect = {dialog.x + 310, dialog.y + 360, 250, 58};
+    return rect;
+}
+
+PtcUiRect ptc_ui_grant_generate_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 245, 786, 82};
+    return rect;
+}
+
+PtcUiRect ptc_ui_grant_edit_url_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
+    PtcUiRect rect = {dialog.x + 578, dialog.y + 360, 250, 58};
+    return rect;
+}
+
+PtcUiRect ptc_ui_grant_reset_url_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 438, 250, 48};
     return rect;
 }
 
@@ -942,6 +963,9 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     case PTC_UI_OVERLAY_GRANT_SETUP:
         if (ptc_ui_rect_contains(ptc_ui_grant_qr_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_QR, 0);
         if (ptc_ui_rect_contains(ptc_ui_grant_export_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_EXPORT, 0);
+        if (ptc_ui_rect_contains(ptc_ui_grant_generate_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_GENERATE, 0);
+        if (ptc_ui_rect_contains(ptc_ui_grant_edit_url_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_EDIT_URL, 0);
+        if (ptc_ui_rect_contains(ptc_ui_grant_reset_url_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_RESET_URL, 0);
         break;
     case PTC_UI_OVERLAY_QR:
     case PTC_UI_OVERLAY_WEEKLY_LEAVE:
@@ -966,7 +990,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         return hit_test_overlay(model, x, y);
     }
     if (model->view == PTC_UI_CHILD) {
-        if (ptc_ui_rect_contains(ptc_ui_child_submit_rect(), x, y)) {
+        if (!model->disable_flag_present && ptc_ui_rect_contains(ptc_ui_child_submit_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
         }
         if (ptc_ui_rect_contains(ptc_ui_child_refresh_rect(), x, y)) {

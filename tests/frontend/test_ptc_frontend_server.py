@@ -58,6 +58,7 @@ def test_static_assets_and_copy() -> None:
     assert_true("history.replaceState" in app, "fragment is cleared after parsing")
     assert_true("importFile" in index + app, "configuration file import")
     assert_true("生成 8 位数字加时码" in index, "v2 generation copy")
+    assert_true("常见排错指南" in index and "紧急停用已开启" in index, "PWA troubleshooting guide")
     assert_true("任你玩" in index and "PlayWise" in index, "bilingual product name")
     assert_true("Play Wise. Play More." in index, "brand slogan")
     assert_true("used_token" not in index and "加时码已使用" in index, "collision recovery copy")

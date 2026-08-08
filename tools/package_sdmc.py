@@ -82,9 +82,10 @@ def create_package(
             "device_id": device_id,
             "max_add_minutes": max_add_minutes,
             "default_request_timeout_ms": 60000,
+            "pairing_base_url": "https://selfuppen.github.io/playwise/",
         },
     )
-    write_json(templates / "auth.json", {"version": 1, "pin_hash": "", "pin_salt": "", "hash": "hmac-sha256", "updated_at": 0})
+    write_json(templates / "auth.json", {"version": 1, "pin_hash": "", "pin_salt": "", "hash": "hmac-sha256", "updated_at": 0, "failed_attempts": 0, "cooldown_until": 0})
     write_json(
         templates / "rules.json",
         {
