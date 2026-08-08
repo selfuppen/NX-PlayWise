@@ -305,9 +305,8 @@ public:
             renderer->drawString("提交后刷新", false, cx + 100, top_banner_y + 47, 15, renderer->a(MUTED_COLOR));
         }
 
-        // --- 1. Header Prompt & Guidance (自律约定与护眼提醒) ---
-        renderer->drawString("自律约定 · 兑换加时奖励", false, cx + 5, cy + 78, 17, renderer->a(TEXT_COLOR));
-        renderer->drawString("提示：加时前记得向窗外远眺 5 分钟！", false, cx + 5, cy + 96, 12, renderer->a(FOCUS_BORDER));
+        // --- 1. Header Prompt & Guidance (护眼提醒) ---
+        renderer->drawString("提示：加时前记得向窗外远眺 5 分钟！", false, cx + 5, cy + 86, 15, renderer->a(FOCUS_BORDER));
 
         // --- 2. Code Display Slots (8位卡片槽 - 增大更醒目) ---
         const s32 slot_start_x = cx + 8;

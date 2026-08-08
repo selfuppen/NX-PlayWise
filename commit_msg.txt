@@ -1,5 +1,0 @@
-feat(sysmodule): 修复已游玩时间超限时加时触发 306 错误的问题
-
-- 加时累加基准调整为 max(规则限额, 已游玩时间)
-- 增加 test_grant_played_exceeds_limit_succeeds 自动化测试用例
-- 更新协议文档
