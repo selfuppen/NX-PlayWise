@@ -760,8 +760,8 @@ static void draw_action_card(
     draw_text(pixels, stride, rect.x + 54, rect.y + 46, action->title, 24, title_color);
     draw_text(pixels, stride, rect.x + 54, rect.y + 78, action->subtitle, 18, sub_color);
     if (recommended && !disabled) {
-        fill_round_rect(pixels, stride, (UiRect){rect.x + rect.width - 92, rect.y + 12, 72, 28}, 6, COLOR(25, 132, 95));
-        draw_text_center(pixels, stride, (UiRect){rect.x + rect.width - 92, rect.y + 12, 72, 28}, "建议", 17, COLOR(255, 255, 255));
+        fill_round_rect(pixels, stride, (UiRect){rect.x + rect.width - 110, rect.y + 12, 90, 28}, 6, COLOR(25, 132, 95));
+        draw_text_center(pixels, stride, (UiRect){rect.x + rect.width - 110, rect.y + 12, 90, 28}, "强烈建议", 17, COLOR(255, 255, 255));
     }
     if (selected && !disabled) {
         draw_text(pixels, stride, rect.x + rect.width - 74, rect.y + 64, "A", 23, action->accent);
@@ -1344,7 +1344,7 @@ static void masked_value(const char *value, bool revealed, char *out, size_t out
         return;
     }
     length = value ? strlen(value) : 0U;
-    snprintf(out, out_size, "%s", length ? "••••••••••••••••••••••••" : "--");
+    snprintf(out, out_size, "%s", length ? "************************" : "--");
 }
 
 static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
