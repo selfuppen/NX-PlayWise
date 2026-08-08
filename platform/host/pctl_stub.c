@@ -53,6 +53,10 @@ static PtcErrorCode stub_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStat
         return stub->read_error;
     }
     *out = stub->status;
+    if (stub->model_elapsed_time) {
+        out->played_minutes_available = true;
+        out->played_minutes = stub->played_minutes_today;
+    }
     if (stub->model_elapsed_time && out->limited_today) {
         out->configured_minutes_available = true;
         out->configured_minutes = stub->configured_minutes;
@@ -105,6 +109,8 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
     stub->status.configured_minutes = target->minutes;
     if (stub->model_elapsed_time) {
         stub->configured_minutes = target->minutes;
+        stub->status.played_minutes_available = true;
+        stub->status.played_minutes = stub->played_minutes_today;
         stub->status.remaining_minutes = target->minutes > stub->played_minutes_today
             ? target->minutes - stub->played_minutes_today
             : 0U;
@@ -212,6 +218,8 @@ static PtcErrorCode stub_restore_settings(PtcPctl *pctl, const PtcPctlSettingsSn
     stub->status.configured_minutes = stub->status.limited_today ? minutes : 0U;
     if (stub->model_elapsed_time) {
         stub->configured_minutes = minutes;
+        stub->status.played_minutes_available = true;
+        stub->status.played_minutes = stub->played_minutes_today;
         stub->status.remaining_minutes = minutes > stub->played_minutes_today
             ? minutes - stub->played_minutes_today
             : 0U;

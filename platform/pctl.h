@@ -20,6 +20,8 @@ typedef struct {
     bool unrestricted_today;
     bool remaining_available;
     uint32_t remaining_minutes;
+    bool played_minutes_available;
+    uint32_t played_minutes;
     bool configured_minutes_available;
     uint16_t configured_minutes;
     bool play_timer_enabled;

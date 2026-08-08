@@ -63,7 +63,9 @@ flowchart LR
 
 ## 私有命令证据
 
-当前本机 libnx 源码不提供 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装。不得用“libnx 没有定义”推断参数单位或 0x44 raw 布局。
+当前本机 libnx 源码不提供 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSpentTimeForTest (1952)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装。不得用“libnx 没有定义”推断参数单位或 0x44 raw 布局。
+
+`1454` 返回剩余时长；`1952` 返回独立的 `nn::TimeSpanType` 已用时。适配层优先使用 `1952`，因此不限时日也可以报告当前已玩分钟；若 1952 在当前 HOS 或 service session 上失败，限时日回退到“配置总分钟 − 1454 剩余分钟”，不限时日保持“已玩暂不可用”。1952 的名称包含 `ForTest`，是否在目标 HOS 上持续累计、跨 service session 可读以及 UTC+8 换日重置，必须通过真机 A/B 记录确认，不能仅凭命令名推断。
 
 私有行为只能依据：
 

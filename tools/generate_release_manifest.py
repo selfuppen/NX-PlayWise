@@ -9,7 +9,7 @@ import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.1.2"
+VERSION = "0.1.2-alpha"
 LIBTESLA_UPSTREAM = ROOT / "companion" / "overlay" / "vendor" / "libtesla" / "UPSTREAM.txt"
 
 

@@ -201,7 +201,7 @@ static void seed_release_setup(PtcMemStorage *mem)
         "{\"version\":1,\"phase\":\"unconfigured\",\"compatibility_status\":\"pending\",\"restriction_cleared\":false,"
         "\"snapshot_available\":false,\"activate_after\":0,\"last_error\":\"\"}"), "seed setup");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/build.json",
-        "{\"playwise_version\":\"0.1.2\",\"profile\":\"release\",\"release_id\":\"playwise-0.1.2+test\"}"), "seed build manifest");
+        "{\"playwise_version\":\"0.1.2-alpha\",\"profile\":\"release\",\"release_id\":\"playwise-0.1.2-alpha+test\"}"), "seed build manifest");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/environment.json",
         "{\"read_ok\":true,\"hos\":\"22.5.0\",\"firmware_hash\":\"test-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true}"),
         "seed verified environment");
@@ -285,6 +285,65 @@ static void test_setup_preflight_and_recovery(void)
         strstr(text, "\"phase\":\"active\""), "re-enabled setup becomes active");
 }
 
+static void test_played_time_status(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char text[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.model_elapsed_time = true;
+    pctl.played_minutes_today = 37;
+    pctl.status.unrestricted_today = true;
+    pctl.status.play_timer_enabled = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-unlimited-played.json",
+        "{\"version\":1,\"request_id\":\"status-unlimited-played\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
+        "queue unlimited status with direct spent time");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unlimited status with direct spent time processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-unlimited-played.json", text, sizeof(text)) &&
+        strstr(text, "\"unrestricted_today\":1") &&
+        strstr(text, "\"remaining_available\":false") &&
+        strstr(text, "\"played_minutes_available\":true") &&
+        strstr(text, "\"played_minutes\":37"),
+        "unlimited status exposes direct spent time");
+
+    pctl.model_elapsed_time = false;
+    pctl.status.played_minutes_available = false;
+    pctl.status.unrestricted_today = true;
+    pctl.status.limited_today = false;
+    pctl.status.remaining_available = false;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-unlimited-unknown.json",
+        "{\"version\":1,\"request_id\":\"status-unlimited-unknown\",\"type\":\"status\",\"created_at\":2,\"payload\":{}}"),
+        "queue unlimited status without direct spent time");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unlimited status without direct spent time processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-unlimited-unknown.json", text, sizeof(text)) &&
+        strstr(text, "\"played_minutes_available\":false") &&
+        strstr(text, "\"played_minutes\":-1"),
+        "unlimited status degrades when direct spent time is unavailable");
+
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 30;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 60;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-limited-fallback.json",
+        "{\"version\":1,\"request_id\":\"status-limited-fallback\",\"type\":\"status\",\"created_at\":3,\"payload\":{}}"),
+        "queue limited status for remaining-time fallback");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "limited status fallback processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-limited-fallback.json", text, sizeof(text)) &&
+        strstr(text, "\"played_minutes_available\":true") &&
+        strstr(text, "\"played_minutes\":30"),
+        "limited status retains configured-minus-remaining fallback");
+}
+
 static void test_play_timer_layout(void)
 {
     uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS] = {
@@ -347,6 +406,7 @@ int main(void)
     test_support_redaction();
     test_auth_and_queue();
     test_setup_preflight_and_recovery();
+    test_played_time_status();
     test_play_timer_layout();
     test_credential_policy();
     if (failures) {

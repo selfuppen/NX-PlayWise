@@ -1056,6 +1056,9 @@ static int64_t result_remaining_minutes(const PtcPctlStatus *status)
 
 static int64_t result_played_minutes(const PtcPctlStatus *status)
 {
+    if (status->played_minutes_available) {
+        return (int64_t)status->played_minutes;
+    }
     if (!status->limited_today || !status->configured_minutes_available || !status->remaining_available) {
         return -1;
     }
@@ -1448,7 +1451,13 @@ static PtcPctlTargetMode target_from_day_rule(PtcDayRule rule)
 
 static uint16_t ptc_pctl_played_minutes(const PtcPctlStatus *status)
 {
-    if (!status || !status->configured_minutes_available || !status->limited_today) {
+    if (!status) {
+        return 0U;
+    }
+    if (status->played_minutes_available) {
+        return status->played_minutes > UINT16_MAX ? UINT16_MAX : (uint16_t)status->played_minutes;
+    }
+    if (!status->configured_minutes_available || !status->limited_today) {
         return 0U;
     }
     if (status->remaining_available && status->configured_minutes >= status->remaining_minutes) {

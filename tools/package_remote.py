@@ -22,7 +22,7 @@ APP_BUILD = "switch/playwise/build.json"
 RELEASE_MANIFEST = "playwise-install/release-manifest.json"
 CONTENT_ROOT = "atmosphere/contents/4200000000BD2300"
 DEVICE_LAB_CONTENT_ROOT = "atmosphere/contents/4200000000BD23F0"
-DEVICE_LAB_PACKAGE = "playwise-device-lab-0.1.2.zip"
+DEVICE_LAB_PACKAGE = "playwise-device-lab-0.1.2-alpha.zip"
 NRO_HEADER_OFFSET = 0x10
 NRO_HEADER_SIZE_OFFSET = 0x18
 NRO_HEADER_END = 0x80
@@ -33,7 +33,7 @@ NACP_SIZE = 0x4000
 NACP_TITLE_SIZE = 0x200
 NACP_DISPLAY_VERSION_OFFSET = 0x3060
 APP_TITLE = "任你玩".encode("utf-8")
-PLAYWISE_VERSION = "0.1.2"
+PLAYWISE_VERSION = "0.1.2-alpha"
 PACKAGE_EXPECTATIONS = {"playwise": True}
 RELEASE_COMPONENTS = (
     f"{CONTENT_ROOT}/exefs.nsp",
