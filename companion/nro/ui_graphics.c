@@ -56,7 +56,7 @@ static const UiAction TODAY_ACTIONS[] = {
 static const UiAction SECURITY_ACTIONS[] = {
     {"管理设备名", "查看、输入或随机生成设备名称", COLOR(42, 105, 188)},
     {"管理加时码密钥", "查看、生成或切换演示密钥", COLOR(194, 61, 61)},
-    {"加时码生成", "显示配对二维码或导出配置", COLOR(25, 132, 95)},
+    {"加时码生成", "优先用手机扫码，也可在本机生成 8 位码", COLOR(25, 132, 95)},
     {"管理 任你玩 PIN", "本应用独立 PIN，区别于 Nintendo 家长管理 PIN", COLOR(42, 105, 188)},
     {"孩子区快捷键说明", "显示或隐藏进入家长区的操作提示", COLOR(42, 105, 188)},
 };
@@ -148,6 +148,24 @@ static void fill_rect(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t c
         for (x = x_start; x < x_end; ++x) {
             row[x] = color;
         }
+    }
+}
+
+static void draw_horizontal_triangle(
+    uint32_t *pixels,
+    uint32_t stride,
+    int x,
+    int center_y,
+    int size,
+    bool points_right,
+    uint32_t color)
+{
+    int column;
+    for (column = 0; column < size; ++column) {
+        int progress = points_right ? size - column - 1 : column;
+        int half_height = 1 + progress * (size / 2) / (size - 1);
+        fill_rect(pixels, stride,
+                  (UiRect){x + column, center_y - half_height, 1, half_height * 2 + 1}, color);
     }
 }
 
@@ -518,7 +536,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
 static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect panel = {54, 120, 1172, 500};
-    UiRect fixed_card = {204, 190, 872, 68};
+    UiRect fixed_card = {204, 188, 872, 68};
     const char *phase = model->setup_phase[0] ? model->setup_phase : "pending";
     int64_t grace_remaining = ptc_ui_setup_grace_remaining(model, (int64_t)time(NULL));
     char title[64];
@@ -549,31 +567,32 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
         draw_text(pixels, stride, 660, 154, "3 接管", 18, step == PTC_UI_SETUP_TAKEOVER ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
         draw_text(pixels, stride, 870, 154, "4 进入区域", 18, step == PTC_UI_SETUP_ZONE ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
         if (step == PTC_UI_SETUP_SHORTCUT) {
-            draw_text(pixels, stride, 204, 188, "固定家长区快捷键", 24, COLOR(28, 34, 43));
             fill_round_rect(pixels, stride, fixed_card, 8, COLOR(244, 249, 255));
             draw_rect_outline(pixels, stride, fixed_card, 2, COLOR(28, 118, 188));
-            draw_text(pixels, stride, 232, 232, "−", 32, COLOR(28, 118, 188));
-            draw_text(pixels, stride, 292, 220, "Minus  -", 24, COLOR(28, 34, 43));
-            draw_text(pixels, stride, 292, 246, "左 Joy-Con 下方；此入口始终保留", 18, COLOR(77, 86, 99));
-            draw_text(pixels, stride, 204, 286, "选择一组自定义组合（与 Minus - 同时有效）", 21, COLOR(45, 52, 62));
+            draw_text(pixels, stride, 232, 218, "固定入口", 18, COLOR(91, 100, 116));
+            draw_text(pixels, stride, 350, 226, "Minus -", 26, COLOR(28, 118, 188));
+            draw_text(pixels, stride, 510, 222, "左 Joy-Con 下方 · 始终有效", 19, COLOR(77, 86, 99));
+            draw_text(pixels, stride, 204, 288, "再选择一个自定义入口", 22, COLOR(28, 34, 43));
+            draw_text(pixels, stride, 480, 288, "与 Minus - 同时有效", 17, COLOR(91, 100, 116));
             for (int index = 0; index < PTC_UI_SHORTCUT_PRESET_COUNT; ++index) {
                 UiRect card = to_uirect(ptc_ui_setup_shortcut_card_rect(index));
                 bool selected = index == model->setup_shortcut_index;
                 fill_round_rect(pixels, stride, card, 8, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
                 draw_rect_outline(pixels, stride, card, selected ? 3 : 1,
                                   selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
-                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 14, card.width, 30},
+                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 12, card.width, 34},
                                  ptc_ui_shortcut_common_label(index), 23,
                                  selected ? COLOR(28, 118, 188) : COLOR(45, 52, 62));
-                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 47, card.width, 22},
+                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 53, card.width, 22},
                                  selected ? "当前选择" : "常用组合", 16, COLOR(91, 100, 116));
             }
             draw_dialog_button(pixels, stride, ptc_ui_setup_shortcut_capture_rect(),
-                               model->shortcut_capture_active ? "正在录入：按住组合，A 确认" : "X / 点击  手动按键录入",
+                               model->shortcut_capture_active ? "按住组合，A 确认" : "X / 点击  手动录入",
                                model->shortcut_capture_active ? COLOR(255, 247, 229) : COLOR(235, 238, 243),
                                model->shortcut_capture_active ? COLOR(170, 109, 18) : COLOR(28, 118, 188), true);
-            draw_text(pixels, stride, 650, 500, "当前自定义：", 18, COLOR(91, 100, 116));
-            draw_text(pixels, stride, 780, 500, model->custom_shortcut_label, 21, COLOR(28, 118, 188));
+            fill_round_rect(pixels, stride, (UiRect){204, 424, 872, 62}, 8, COLOR(247, 249, 252));
+            draw_text(pixels, stride, 232, 462, "当前生效：Minus -  或", 18, COLOR(91, 100, 116));
+            draw_text(pixels, stride, 472, 462, model->custom_shortcut_label, 22, COLOR(28, 118, 188));
         } else if (step == PTC_UI_SETUP_PIN) {
             draw_text(pixels, stride, 204, 220, "设置 任你玩 PIN", 30, COLOR(28, 34, 43));
             draw_text(pixels, stride, 204, 262, "这是进入家长区、修改规则和安全设置时使用的本应用 PIN。", 21, COLOR(77, 86, 99));
@@ -642,7 +661,8 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "+  下一步",
                                COLOR(28, 118, 188), COLOR(255, 255, 255), false);
         } else if (step == PTC_UI_SETUP_ZONE) {
-            draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "A  进入所选区域",
+            draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
+                               model->setup_zone_index == 1 ? "A  确认进入家长区" : "A  确认进入孩子区",
                                COLOR(28, 118, 188), COLOR(255, 255, 255), false);
         } else if (step == PTC_UI_SETUP_PIN) {
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "A  设置并继续",
@@ -1366,9 +1386,13 @@ static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const Ptc
 static void draw_grant_setup_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
-    char minutes[96];
+    UiRect qr_button = to_uirect(ptc_ui_grant_qr_rect());
+    char minutes[64];
     char date[40];
     char base[160];
+    char generate_label[64];
+    int minutes_width;
+    int minutes_x;
     uint16_t year;
     uint8_t month;
     uint8_t day;
@@ -1379,34 +1403,56 @@ static void draw_grant_setup_overlay(uint32_t *pixels, uint32_t stride, const Pt
     } else {
         snprintf(date, sizeof(date), "设备日期待刷新");
     }
-    snprintf(minutes, sizeof(minutes), "‹   %u 分钟   ›    左右切换合法档位（上限 %u 分钟）",
-             (unsigned int)model->grant_minutes, (unsigned int)model->grant_max_minutes);
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 112, 816, 34}, date, 19, COLOR(77, 86, 99));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 150, 816, 44}, minutes, 25, COLOR(28, 118, 188));
-    if (model->grant_has_code) {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 194, 816, 54},
-                         model->grant_code, 42, COLOR(7, 93, 76));
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 232, 816, 26},
-                         "当天有效 · 成功兑换后仅可使用一次", 17, COLOR(91, 100, 114));
+
+    fill_round_rect(pixels, stride, qr_button, 8, COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, (UiRect){qr_button.x, qr_button.y + 8, qr_button.width, 40},
+                     "A  扫二维码生成加时码", 27, COLOR(255, 255, 255));
+    draw_text_center(pixels, stride, (UiRect){qr_button.x, qr_button.y + 48, qr_button.width, 28},
+                     "用手机扫描后，可收藏打开的网页地址", 17, COLOR(223, 239, 252));
+
+    draw_dialog_button(pixels, stride, ptc_ui_grant_local_toggle_rect(),
+                       model->grant_local_expanded ? "X  收起本机生成" : "X  在本机生成 8 位码",
+                       model->grant_local_expanded ? COLOR(230, 244, 238) : COLOR(244, 246, 249),
+                       model->grant_local_expanded ? COLOR(7, 93, 76) : COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_grant_more_toggle_rect(),
+                       model->grant_more_expanded ? "Y  收起更多设置" : "Y  更多设置",
+                       COLOR(244, 246, 249), COLOR(66, 74, 86), true);
+
+    if (model->grant_local_expanded) {
+        snprintf(minutes, sizeof(minutes), "%u 分钟    上限 %u 分钟",
+                 (unsigned int)model->grant_minutes, (unsigned int)model->grant_max_minutes);
+        draw_text(pixels, stride, dialog.x + 52, dialog.y + 378, date, 17, COLOR(91, 100, 114));
+        if (model->grant_has_code) {
+            draw_text(pixels, stride, dialog.x + 520, dialog.y + 378,
+                      "成功兑换后仅可使用一次", 15, COLOR(91, 100, 114));
+        }
+        minutes_width = measure_text(minutes, 22);
+        minutes_x = dialog.x + (dialog.width - minutes_width) / 2;
+        draw_horizontal_triangle(pixels, stride, minutes_x - 34, dialog.y + 393, 15, false, COLOR(28, 118, 188));
+        draw_text(pixels, stride, minutes_x, dialog.y + 401, minutes, 22, COLOR(28, 118, 188));
+        draw_horizontal_triangle(pixels, stride, minutes_x + minutes_width + 19, dialog.y + 393, 15, true, COLOR(28, 118, 188));
+        if (model->grant_has_code) {
+            snprintf(generate_label, sizeof(generate_label), "+  %s · 再生成一个", model->grant_code);
+        } else {
+            snprintf(generate_label, sizeof(generate_label), "+  生成今天有效的 8 位码");
+        }
+        draw_dialog_button(pixels, stride, ptc_ui_grant_generate_rect(), generate_label,
+                           COLOR(7, 93, 76), COLOR(255, 255, 255), false);
+    } else if (model->grant_more_expanded) {
+        draw_dialog_button(pixels, stride, ptc_ui_grant_export_rect(), "+  导出配置",
+                           COLOR(25, 132, 95), COLOR(255, 255, 255), false);
+        draw_dialog_button(pixels, stride, ptc_ui_grant_edit_url_rect(), "R  编辑跳转地址",
+                           COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+        draw_dialog_button(pixels, stride, ptc_ui_grant_reset_url_rect(), "ZR  恢复官方地址",
+                           COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+        fit_text(base, sizeof(base), model->pairing_base_url, 16, 780);
+        draw_text(pixels, stride, dialog.x + 52, dialog.y + 458, base, 16, COLOR(91, 100, 114));
     } else {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 198, 816, 42},
-                         "选择时长后在本机生成，不会预先消费 nonce", 19, COLOR(91, 100, 114));
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 374, 816, 54},
+                         "二维码是推荐方式；本机生成和地址设置按需展开", 17, COLOR(91, 100, 114));
     }
-    draw_dialog_button(pixels, stride, ptc_ui_grant_generate_rect(),
-                       model->grant_has_code ? "X  再生成一个" : "X  本机生成加时码",
-                       COLOR(7, 93, 76), COLOR(255, 255, 255), false);
-    draw_dialog_button(pixels, stride, ptc_ui_grant_qr_rect(), "A  配对二维码",
-                       COLOR(28, 118, 188), COLOR(255, 255, 255), false);
-    draw_dialog_button(pixels, stride, ptc_ui_grant_export_rect(), "Y  导出配置",
-                       COLOR(25, 132, 95), COLOR(255, 255, 255), false);
-    draw_dialog_button(pixels, stride, ptc_ui_grant_edit_url_rect(), "R  编辑跳转地址",
-                       COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-    draw_dialog_button(pixels, stride, ptc_ui_grant_reset_url_rect(), "ZR  恢复官方地址",
-                       COLOR(235, 238, 243), COLOR(66, 74, 86), true);
-    fit_text(base, sizeof(base), model->pairing_base_url, 16, 510);
-    draw_text(pixels, stride, dialog.x + 320, dialog.y + 467, base, 16, COLOR(91, 100, 114));
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  关闭",
-                       COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
 }
 
 static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1435,20 +1481,18 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         }
     }
     
-    // Main functionality: QR code scan & save guidance
     draw_text(pixels, stride, dialog.x + 510, dialog.y + 150, "使用微信/相机扫码", 26, COLOR(28, 34, 43));
     draw_text(pixels, stride, dialog.x + 510, dialog.y + 194, "获取【任你玩】网页加时工具", 20, COLOR(28, 118, 188));
-    
+
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 510, dialog.y + 240, 330, 96}, 8, COLOR(240, 248, 245));
     draw_rect_outline(pixels, stride, (UiRect){dialog.x + 510, dialog.y + 240, 330, 96}, 2, COLOR(210, 235, 225));
-    draw_text(pixels, stride, dialog.x + 526, dialog.y + 258, "💡 强烈建议", 18, COLOR(25, 132, 95));
-    draw_text(pixels, stride, dialog.x + 526, dialog.y + 286, "请将扫出的网页加入收藏夹，", 18, COLOR(45, 60, 55));
-    draw_text(pixels, stride, dialog.x + 526, dialog.y + 312, "或直接拍下此码保存到相册。", 18, COLOR(45, 60, 55));
+    draw_text(pixels, stride, dialog.x + 526, dialog.y + 266, "建议收藏扫码后打开的网页地址", 17, COLOR(25, 132, 95));
+    draw_text(pixels, stride, dialog.x + 526, dialog.y + 298, "拍照保存时，请妥善保护相册。", 17, COLOR(45, 60, 55));
+    draw_text(pixels, stride, dialog.x + 526, dialog.y + 324, "二维码包含生成加时码的权限。", 16, COLOR(170, 65, 65));
 
-    // Secondary function
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 355, "网页会自动绑定本机，后续随时均可加时。", 15, COLOR(120, 130, 140));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 380, "不便扫码时，可在主界面选择【本机生成】", 15, COLOR(120, 130, 140));
-    
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 370, "网页会自动绑定本机，后续可随时生成加时码。", 15, COLOR(120, 130, 140));
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 396, "不便扫码时，可返回展开“在本机生成 8 位码”。", 15, COLOR(120, 130, 140));
+
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  关闭二维码",
                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
 }

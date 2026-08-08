@@ -154,6 +154,8 @@ typedef struct {
     uint16_t grant_max_minutes;
     uint16_t grant_day_index;
     bool grant_has_code;
+    bool grant_local_expanded;
+    bool grant_more_expanded;
     char grant_code[9];
     uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];
 } PtcUiModel;
@@ -210,6 +212,8 @@ typedef enum {
     PTC_UI_HIT_CREDENTIAL_SAVE,
     PTC_UI_HIT_CREDENTIAL_DEMO,
     PTC_UI_HIT_GRANT_QR,
+    PTC_UI_HIT_GRANT_LOCAL_TOGGLE,
+    PTC_UI_HIT_GRANT_MORE_TOGGLE,
     PTC_UI_HIT_GRANT_EXPORT,
     PTC_UI_HIT_GRANT_GENERATE,
     PTC_UI_HIT_GRANT_EDIT_URL,
@@ -306,6 +310,8 @@ PtcUiRect ptc_ui_credential_random_rect(void);
 PtcUiRect ptc_ui_credential_reveal_rect(void);
 PtcUiRect ptc_ui_credential_demo_rect(void);
 PtcUiRect ptc_ui_grant_qr_rect(void);
+PtcUiRect ptc_ui_grant_local_toggle_rect(void);
+PtcUiRect ptc_ui_grant_more_toggle_rect(void);
 PtcUiRect ptc_ui_grant_export_rect(void);
 PtcUiRect ptc_ui_grant_generate_rect(void);
 PtcUiRect ptc_ui_grant_edit_url_rect(void);

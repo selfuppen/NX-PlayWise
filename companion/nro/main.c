@@ -358,7 +358,7 @@ static void load_ui_preferences(UiState *ui)
     ui->model.show_parent_shortcut_hint = true;
     ui->model.setup_step = 0;
     ui->model.setup_shortcut_index = PTC_UI_SHORTCUT_PRESET_LR;
-    ui->model.setup_zone_index = 0;
+    ui->model.setup_zone_index = 1;
     if (!ui->client.storage->vtable->read_text(ui->client.storage, CONFIG_PATH, text, sizeof(text))) {
         refresh_custom_shortcut_label(ui);
         return;
@@ -745,6 +745,7 @@ static void poll_result(UiState *ui, bool force)
         }
         if (strcmp(ui->model.result_type, "complete_setup") == 0 &&
             strcmp(ui->model.result_status, "ok") == 0) {
+            ui->model.setup_zone_index = 1;
             (void)save_setup_step(ui, PTC_UI_SETUP_ZONE);
         }
         sync_setup_wizard(ui);
@@ -1048,10 +1049,10 @@ static void handle_setup_input(UiState *ui, u64 down, u64 held)
         return;
     }
     if (ui->model.setup_step == PTC_UI_SETUP_SHORTCUT) {
-        if (down & HidNpadButton_Up) {
+        if (down & HidNpadButton_Left) {
             ui->model.setup_shortcut_index = ui->model.setup_shortcut_index <= 0
                 ? PTC_UI_SHORTCUT_PRESET_COUNT - 1 : ui->model.setup_shortcut_index - 1;
-        } else if (down & HidNpadButton_Down) {
+        } else if (down & HidNpadButton_Right) {
             ui->model.setup_shortcut_index = (ui->model.setup_shortcut_index + 1) % PTC_UI_SHORTCUT_PRESET_COUNT;
         } else if (down & HidNpadButton_A) {
             select_setup_shortcut(ui, ui->model.setup_shortcut_index);
@@ -1421,10 +1422,34 @@ static void open_grant_setup(UiState *ui)
     ui->model.grant_max_minutes = maximum;
     ui->model.grant_minutes = legal_grant_minutes(20U, maximum);
     ui->model.grant_has_code = false;
+    ui->model.grant_local_expanded = false;
+    ui->model.grant_more_expanded = false;
     ui->model.grant_code[0] = '\0';
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "加时码生成");
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
              "请优先按 A 打开二维码用手机扫码加时；也可选择本机生成 8 位码。");
+}
+
+static void toggle_local_grant_panel(UiState *ui)
+{
+    if (!ui) {
+        return;
+    }
+    ui->model.grant_local_expanded = !ui->model.grant_local_expanded;
+    if (ui->model.grant_local_expanded) {
+        ui->model.grant_more_expanded = false;
+    }
+}
+
+static void toggle_grant_more_panel(UiState *ui)
+{
+    if (!ui) {
+        return;
+    }
+    ui->model.grant_more_expanded = !ui->model.grant_more_expanded;
+    if (ui->model.grant_more_expanded) {
+        ui->model.grant_local_expanded = false;
+    }
 }
 
 static void edit_pairing_base_url(UiState *ui)
@@ -1994,12 +2019,14 @@ static void handle_overlay_input(UiState *ui, u64 down)
     if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_SETUP) {
         if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
         else if (down & HidNpadButton_A) show_pairing_qr(ui);
-        else if (down & HidNpadButton_Y) export_parent_import(ui);
-        else if (down & HidNpadButton_X) generate_local_grant_code(ui);
-        else if (down & HidNpadButton_R) edit_pairing_base_url(ui);
-        else if (down & HidNpadButton_ZR) reset_pairing_base_url(ui);
-        else if (down & HidNpadButton_Left) adjust_grant_minutes(ui, -1);
-        else if (down & HidNpadButton_Right) adjust_grant_minutes(ui, 1);
+        else if (down & HidNpadButton_X) toggle_local_grant_panel(ui);
+        else if (down & HidNpadButton_Y) toggle_grant_more_panel(ui);
+        else if ((down & HidNpadButton_Plus) && ui->model.grant_local_expanded) generate_local_grant_code(ui);
+        else if ((down & HidNpadButton_Plus) && ui->model.grant_more_expanded) export_parent_import(ui);
+        else if ((down & HidNpadButton_R) && ui->model.grant_more_expanded) edit_pairing_base_url(ui);
+        else if ((down & HidNpadButton_ZR) && ui->model.grant_more_expanded) reset_pairing_base_url(ui);
+        else if ((down & HidNpadButton_Left) && ui->model.grant_local_expanded) adjust_grant_minutes(ui, -1);
+        else if ((down & HidNpadButton_Right) && ui->model.grant_local_expanded) adjust_grant_minutes(ui, 1);
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_QR) {
@@ -2160,11 +2187,9 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_SETUP_CHILD_ZONE:
         ui->model.setup_zone_index = 0;
-        setup_primary(ui);
         break;
     case PTC_UI_HIT_SETUP_PARENT_ZONE:
         ui->model.setup_zone_index = 1;
-        setup_primary(ui);
         break;
     case PTC_UI_HIT_PARENT_PREV_PAGE:
         request_parent_navigation(ui,
@@ -2283,11 +2308,17 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_GRANT_QR:
         handle_overlay_input(ui, HidNpadButton_A);
         break;
+    case PTC_UI_HIT_GRANT_LOCAL_TOGGLE:
+        toggle_local_grant_panel(ui);
+        break;
+    case PTC_UI_HIT_GRANT_MORE_TOGGLE:
+        toggle_grant_more_panel(ui);
+        break;
     case PTC_UI_HIT_GRANT_EXPORT:
-        handle_overlay_input(ui, HidNpadButton_Y);
+        export_parent_import(ui);
         break;
     case PTC_UI_HIT_GRANT_GENERATE:
-        handle_overlay_input(ui, HidNpadButton_X);
+        generate_local_grant_code(ui);
         break;
     case PTC_UI_HIT_GRANT_EDIT_URL:
         handle_overlay_input(ui, HidNpadButton_R);

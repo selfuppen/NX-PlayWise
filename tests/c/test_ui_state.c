@@ -35,6 +35,12 @@ static PtcUiHit hit_center(const PtcUiModel *model, PtcUiRect rect)
     return ptc_ui_hit_test(model, rect.x + rect.w / 2, rect.y + rect.h / 2);
 }
 
+static bool rects_overlap(PtcUiRect left, PtcUiRect right)
+{
+    return left.x < right.x + right.w && left.x + left.w > right.x &&
+           left.y < right.y + right.h && left.y + left.h > right.y;
+}
+
 static void test_release_navigation(void)
 {
     PtcUiModel model;
@@ -148,6 +154,10 @@ static void test_release_hit_targets(void)
               "setup shortcut preset card");
     check_hit(hit_center(&model, ptc_ui_setup_shortcut_capture_rect()), PTC_UI_HIT_SETUP_SHORTCUT_CAPTURE, 0,
               "setup manual shortcut capture");
+    check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(0), ptc_ui_setup_shortcut_card_rect(1)),
+               "setup shortcut presets do not overlap");
+    check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(1), ptc_ui_setup_shortcut_capture_rect()),
+               "setup manual shortcut card does not overlap presets");
     model.setup_step = PTC_UI_SETUP_PIN;
     check_hit(hit_center(&model, ptc_ui_setup_pin_rect()), PTC_UI_HIT_SETUP_PIN, 0, "setup PIN guide");
     model.setup_step = PTC_UI_SETUP_ZONE;
@@ -155,6 +165,8 @@ static void test_release_hit_targets(void)
               "setup child zone choice");
     check_hit(hit_center(&model, ptc_ui_setup_zone_rect(1)), PTC_UI_HIT_SETUP_PARENT_ZONE, 1,
               "setup parent zone choice");
+    check_hit(hit_center(&model, ptc_ui_setup_primary_rect()), PTC_UI_HIT_SETUP_PRIMARY, 0,
+              "setup zone confirmation remains a separate action");
 
     model.overlay = PTC_UI_OVERLAY_CONFIRM;
     model.operation = PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT;
@@ -173,7 +185,19 @@ static void test_release_hit_targets(void)
               "credential random button");
     model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
     check_hit(hit_center(&model, ptc_ui_grant_qr_rect()), PTC_UI_HIT_GRANT_QR, 0, "pairing QR button");
+    check_hit(hit_center(&model, ptc_ui_grant_local_toggle_rect()), PTC_UI_HIT_GRANT_LOCAL_TOGGLE, 0,
+              "local generator expansion button");
+    check_hit(hit_center(&model, ptc_ui_grant_more_toggle_rect()), PTC_UI_HIT_GRANT_MORE_TOGGLE, 0,
+              "grant more-settings expansion button");
+    check_hit(hit_center(&model, ptc_ui_grant_generate_rect()), PTC_UI_HIT_NONE, 0,
+              "collapsed local generator hides its action");
+    model.grant_local_expanded = true;
     check_hit(hit_center(&model, ptc_ui_grant_generate_rect()), PTC_UI_HIT_GRANT_GENERATE, 0, "local code generator button");
+    model.grant_local_expanded = false;
+    check_hit(hit_center(&model, ptc_ui_grant_export_rect()), PTC_UI_HIT_NONE, 0,
+              "collapsed more settings hide export");
+    model.grant_more_expanded = true;
+    check_hit(hit_center(&model, ptc_ui_grant_export_rect()), PTC_UI_HIT_GRANT_EXPORT, 0, "parent config export button");
     check_hit(hit_center(&model, ptc_ui_grant_edit_url_rect()), PTC_UI_HIT_GRANT_EDIT_URL, 0, "pairing URL edit button");
     check_hit(hit_center(&model, ptc_ui_grant_reset_url_rect()), PTC_UI_HIT_GRANT_RESET_URL, 0, "pairing URL reset button");
     model.overlay = PTC_UI_OVERLAY_WEEKLY_LEAVE;

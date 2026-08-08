@@ -639,9 +639,7 @@ PtcUiRect ptc_ui_error_back_rect(void)
 
 PtcUiRect ptc_ui_setup_shortcut_card_rect(int index)
 {
-    int column = index % 2;
-    int row = index / 2;
-    PtcUiRect rect = {204 + column * 430, 270 + row * 94, 390, 78};
+    PtcUiRect rect = {204 + index * 286, 310, 260, 92};
     if (index < 0 || index >= PTC_UI_SHORTCUT_PRESET_COUNT) {
         rect.w = 0;
         rect.h = 0;
@@ -651,7 +649,7 @@ PtcUiRect ptc_ui_setup_shortcut_card_rect(int index)
 
 PtcUiRect ptc_ui_setup_shortcut_capture_rect(void)
 {
-    PtcUiRect rect = {204, 468, 390, 58};
+    PtcUiRect rect = {776, 310, 300, 92};
     return rect;
 }
 
@@ -917,35 +915,49 @@ PtcUiRect ptc_ui_credential_demo_rect(void)
 PtcUiRect ptc_ui_grant_qr_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
-    PtcUiRect rect = {dialog.x + 42, dialog.y + 360, 250, 58};
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 128, 816, 92};
+    return rect;
+}
+
+PtcUiRect ptc_ui_grant_local_toggle_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 234, 816, 56};
+    return rect;
+}
+
+PtcUiRect ptc_ui_grant_more_toggle_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 304, 816, 50};
     return rect;
 }
 
 PtcUiRect ptc_ui_grant_export_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
-    PtcUiRect rect = {dialog.x + 310, dialog.y + 360, 250, 58};
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 374, 250, 54};
     return rect;
 }
 
 PtcUiRect ptc_ui_grant_generate_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
-    PtcUiRect rect = {dialog.x + 42, dialog.y + 245, 786, 82};
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 404, 816, 54};
     return rect;
 }
 
 PtcUiRect ptc_ui_grant_edit_url_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
-    PtcUiRect rect = {dialog.x + 578, dialog.y + 360, 250, 58};
+    PtcUiRect rect = {dialog.x + 310, dialog.y + 374, 250, 54};
     return rect;
 }
 
 PtcUiRect ptc_ui_grant_reset_url_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
-    PtcUiRect rect = {dialog.x + 42, dialog.y + 438, 250, 48};
+    PtcUiRect rect = {dialog.x + 578, dialog.y + 374, 280, 54};
     return rect;
 }
 
@@ -1089,10 +1101,15 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         break;
     case PTC_UI_OVERLAY_GRANT_SETUP:
         if (ptc_ui_rect_contains(ptc_ui_grant_qr_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_QR, 0);
-        if (ptc_ui_rect_contains(ptc_ui_grant_export_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_EXPORT, 0);
-        if (ptc_ui_rect_contains(ptc_ui_grant_generate_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_GENERATE, 0);
-        if (ptc_ui_rect_contains(ptc_ui_grant_edit_url_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_EDIT_URL, 0);
-        if (ptc_ui_rect_contains(ptc_ui_grant_reset_url_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_RESET_URL, 0);
+        if (ptc_ui_rect_contains(ptc_ui_grant_local_toggle_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_LOCAL_TOGGLE, 0);
+        if (ptc_ui_rect_contains(ptc_ui_grant_more_toggle_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_MORE_TOGGLE, 0);
+        if (model->grant_local_expanded &&
+            ptc_ui_rect_contains(ptc_ui_grant_generate_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_GENERATE, 0);
+        if (model->grant_more_expanded) {
+            if (ptc_ui_rect_contains(ptc_ui_grant_export_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_EXPORT, 0);
+            if (ptc_ui_rect_contains(ptc_ui_grant_edit_url_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_EDIT_URL, 0);
+            if (ptc_ui_rect_contains(ptc_ui_grant_reset_url_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_RESET_URL, 0);
+        }
         break;
     case PTC_UI_OVERLAY_QR:
     case PTC_UI_OVERLAY_WEEKLY_LEAVE:
