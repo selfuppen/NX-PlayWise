@@ -73,6 +73,13 @@ static void test_numeric_input(void)
     snprintf(model.numpad_text, sizeof(model.numpad_text), "0");
     check_true(!ptc_ui_numpad_validate(&model, &value), "zero-minute limit rejected");
 
+    ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
+        "修改周一的额度", "输入 1 到 1440 分钟", 4, 1, 1440, 60);
+    ptc_ui_numpad_adjust(&model, 15);
+    check_true(strcmp(model.numpad_text, "75") == 0, "weekly quick increase updates input");
+    ptc_ui_numpad_adjust(&model, -100);
+    check_true(strcmp(model.numpad_text, "1") == 0, "weekly quick adjustment clamps to minimum");
+
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
         "输入加时码", "8 位数字", 8, 0, 0, 0);
     snprintf(model.numpad_text, sizeof(model.numpad_text), "1051468");
@@ -114,6 +121,9 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0, "parent controls hidden from child");
 
     model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_TODAY;
+    check_hit(hit_center(&model, ptc_ui_parent_refresh_rect()), PTC_UI_HIT_PARENT_REFRESH, 0,
+              "parent refresh is prominent on the page");
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.draft_week[0].mode = PTC_RULE_MODE_LIMIT;
     check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 0,
@@ -131,6 +141,11 @@ static void test_release_hit_targets(void)
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT,
         "recovery action confirmed once");
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_NONE, "confirmation cannot be reused");
+
+    model.overlay = PTC_UI_OVERLAY_NUMPAD;
+    model.numpad_purpose = PTC_UI_NUMPAD_WEEKLY_MINUTES;
+    check_hit(hit_center(&model, ptc_ui_numpad_quick_rect(2)), PTC_UI_HIT_NUMPAD_QUICK, 2,
+              "numpad quick increase button");
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     check_hit(hit_center(&model, ptc_ui_credential_random_rect()), PTC_UI_HIT_CREDENTIAL_RANDOM, 0,
@@ -178,6 +193,9 @@ static void test_user_state_mapping(void)
     check_int(model.view, PTC_UI_CHILD, "active result opens child home");
     check_true(strcmp(model.mode, "额度管理") == 0, "release product language is stable");
     check_int(model.remaining_minutes, 40, "remaining minutes mapped");
+    ptc_ui_mark_status_updated(&model, 1000);
+    check_int((int)ptc_ui_status_age_seconds(&model, 1030), 30, "status age is measured from last refresh");
+    check_int((int)ptc_ui_status_age_seconds(&model, 999), 0, "status age never goes negative");
     check_true(ptc_ui_apply_result_json(&model, protection), "protection result parses");
     check_true(strstr(model.message, "保护模式") != NULL, "protection guidance is visible");
 }

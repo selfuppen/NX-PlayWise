@@ -42,6 +42,8 @@ static UiRuntime g_ui;
 
 static UiRect to_uirect(PtcUiRect rect);
 static const char *rule_mode_label(PtcRuleMode mode);
+static void format_status_age(const PtcUiModel *model, char *out, size_t out_size);
+static uint32_t status_age_color(const PtcUiModel *model);
 
 static const UiAction TODAY_ACTIONS[] = {
     {"刷新状态", "读取今天的最新游玩状态", COLOR(42, 105, 188)},
@@ -420,6 +422,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char today[32];
     char remaining[32];
     char played[32];
+    char freshness[64];
     const char *mode = model->disable_flag_present ? "控制已停用" :
         (strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
         (strcmp(model->setup_phase, "protection") == 0 ? "保护模式" : "兼容性待确认"));
@@ -429,6 +432,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     } else {
         snprintf(played, sizeof(played), "暂不可用");
     }
+    format_status_age(model, freshness, sizeof(freshness));
     draw_header(pixels, stride, "游玩时间", "查看今天的状态，使用家长提供的加时码");
     draw_disable_banner(pixels, stride, model);
     draw_status_tile(pixels, stride, (UiRect){54, 118, 278, 92}, "今日状态", today, COLOR(216, 49, 54));
@@ -450,6 +454,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     fill_round_rect(pixels, stride, (UiRect){836, 238, 390, 246}, 8, COLOR(250, 251, 253));
     draw_rect_outline(pixels, stride, (UiRect){836, 238, 390, 246}, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, 866, 282, "状态详情", 24, COLOR(28, 34, 43));
+    draw_text(pixels, stride, 1034, 282, freshness, 16, status_age_color(model));
     draw_text(pixels, stride, 866, 320, model->play_timer_enabled == 1 ? "游玩计时器：已开启" : "游玩计时器：未确认", 19, COLOR(77, 86, 99));
     draw_text(pixels, stride, 866, 352, "到期行为：系统提醒", 19, COLOR(77, 86, 99));
     draw_text(pixels, stride, 866, 384, "不会强制锁屏或关闭游戏", 19, COLOR(77, 86, 99));
@@ -458,11 +463,14 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
         (strcmp(model->setup_phase, "active") == 0 ? "额度管理：已启用" : "额度管理：尚未启用"),
         20, model->disable_flag_present ? COLOR(194, 61, 61) :
         (strcmp(model->setup_phase, "active") == 0 ? COLOR(25, 132, 95) : COLOR(215, 139, 25)));
+    draw_dialog_button(pixels, stride, ptc_ui_child_refresh_rect(),
+                       model->waiting ? "正在刷新状态…" : "Y  立即刷新状态",
+                       model->waiting ? COLOR(215, 139, 25) : COLOR(28, 118, 188),
+                       COLOR(255, 255, 255), false);
 
     draw_notice(pixels, stride, model, 510);
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(0),
                        model->disable_flag_present ? "紧急停用中" : "A  输入加时码");
-    draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(1), "Y  刷新");
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(2), "B / +  退出");
 }
 
@@ -675,6 +683,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     char today[32];
     char remaining[32];
     char played[32];
+    char freshness[64];
     uint32_t today_color;
     describe_status(model, today, sizeof(today), remaining, sizeof(remaining));
     if (model->played_minutes_available && model->played_minutes >= 0) {
@@ -682,6 +691,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     } else {
         snprintf(played, sizeof(played), "暂不可用");
     }
+    format_status_age(model, freshness, sizeof(freshness));
     if (model->blocked_today == 1) {
         today_color = COLOR(194, 61, 61);
     } else if (model->unrestricted_today == 1) {
@@ -708,6 +718,10 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_status_row(pixels, stride, panel, panel.y + 192, "系统计时器",
                     model->play_timer_enabled == 1 ? "已开启" : "未确认",
                     model->play_timer_enabled == 1 ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
+    fill_round_rect(pixels, stride, (UiRect){panel.x + 20, panel.y + 224, panel.width - 40, 42}, 7,
+                    model->waiting ? COLOR(255, 247, 229) : COLOR(244, 248, 253));
+    draw_text_center(pixels, stride, (UiRect){panel.x + 20, panel.y + 224, panel.width - 40, 42},
+                     freshness, 17, model->waiting ? COLOR(170, 109, 18) : status_age_color(model));
 }
 
 static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -729,12 +743,63 @@ static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     }
 }
 
+static void format_duration(int minutes, char *out, size_t out_size)
+{
+    if (minutes < 0) {
+        snprintf(out, out_size, "暂不可用");
+        return;
+    }
+    snprintf(out, out_size, "%d 小时 %d 分钟", minutes / 60, minutes % 60);
+}
+
+static void format_rule_remaining_label(const PtcUiModel *model, PtcDayRule rule, char *out, size_t out_size)
+{
+    int remaining;
+    if (rule.mode == PTC_RULE_MODE_UNLIMITED) {
+        snprintf(out, out_size, "不限时");
+    } else if (!model->played_minutes_available || model->played_minutes < 0) {
+        snprintf(out, out_size, "暂不可用");
+    } else {
+        remaining = (int)rule.minutes - model->played_minutes;
+        if (remaining < 0) remaining = 0;
+        snprintf(out, out_size, "%d 分钟", remaining);
+    }
+}
+
+static void format_status_age(const PtcUiModel *model, char *out, size_t out_size)
+{
+    int64_t age;
+    if (model->waiting) {
+        snprintf(out, out_size, "正在刷新状态…");
+        return;
+    }
+    age = ptc_ui_status_age_seconds(model, (int64_t)time(NULL));
+    if (age < 0) {
+        snprintf(out, out_size, "尚未同步");
+    } else if (age == 0) {
+        snprintf(out, out_size, "刚刚同步");
+    } else if (age < 60) {
+        snprintf(out, out_size, "上次同步：%lld 秒前", (long long)age);
+    } else {
+        snprintf(out, out_size, "上次同步：%lld 分钟前", (long long)(age / 60));
+    }
+}
+
+static uint32_t status_age_color(const PtcUiModel *model)
+{
+    int64_t age = ptc_ui_status_age_seconds(model, (int64_t)time(NULL));
+    if (model->waiting) return COLOR(215, 139, 25);
+    if (age >= 30) return COLOR(194, 61, 61);
+    return COLOR(91, 100, 116);
+}
+
 static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
     int day;
     char minutes[32];
-    char today_hint[160];
+    char today_hint[240];
+    char fitted_hint[240];
     uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
     draw_text(pixels, stride, 54, 184, "直接调整每一天，完成后统一保存", 20, COLOR(77, 86, 99));
     for (day = 0; day < 7; ++day) {
@@ -754,7 +819,13 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 125, card.width, 34}, minutes, 19, COLOR(77, 86, 99));
     }
     if (model->today_override_present) {
-        snprintf(today_hint, sizeof(today_hint), "今天仍使用临时设置；保存计划不会清除。可到“今日额度”恢复周计划。");
+        char active_remaining[32];
+        char weekly_remaining[32];
+        format_rule_remaining_label(model, model->today_override_rule, active_remaining, sizeof(active_remaining));
+        format_rule_remaining_label(model, model->current_week[weekday], weekly_remaining, sizeof(weekly_remaining));
+        snprintf(today_hint, sizeof(today_hint),
+                 "当前有效剩余：%s；恢复周计划后：%s。保存计划不会清除今日临时设置，可到“今日额度”恢复。",
+                 active_remaining, weekly_remaining);
     } else if (model->draft_week[weekday].mode == PTC_RULE_MODE_LIMIT) {
         int remaining = model->played_minutes_available
             ? (int)model->draft_week[weekday].minutes - model->played_minutes : -1;
@@ -764,7 +835,8 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
     } else {
         snprintf(today_hint, sizeof(today_hint), "今天保存后为不限时；系统将在后台同步。");
     }
-    draw_text(pixels, stride, 64, 424, today_hint, 19, model->today_override_present ? COLOR(215, 139, 25) : COLOR(25, 132, 95));
+    fit_text(fitted_hint, sizeof(fitted_hint), today_hint, 19, 1160);
+    draw_text(pixels, stride, 64, 424, fitted_hint, 19, model->today_override_present ? COLOR(215, 139, 25) : COLOR(25, 132, 95));
     draw_text(pixels, stride, 64, 464, "左右选择日期 · X 切换限时/不限时 · 上下 ±15 · Y 手工输入", 18, COLOR(77, 86, 99));
     draw_dialog_button(pixels, stride, ptc_ui_weekly_mode_rect(), "切换模式",
                        COLOR(235, 238, 243), COLOR(28, 118, 188), true);
@@ -790,6 +862,12 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                          17, COLOR(194, 61, 61));
     }
     draw_tabs(pixels, stride, model->parent_page);
+    if (model->parent_page != PTC_UI_PARENT_PLAN) {
+        draw_dialog_button(pixels, stride, ptc_ui_parent_refresh_rect(),
+                           model->waiting ? "正在刷新状态…" : "Y  立即刷新状态",
+                           model->waiting ? COLOR(215, 139, 25) : COLOR(28, 118, 188),
+                           COLOR(255, 255, 255), false);
+    }
     actions = actions_for_page(model->parent_page, &action_count);
     for (index = 0; index < action_count; ++index) {
         UiRect card = to_uirect(ptc_ui_parent_card_rect(index));
@@ -819,10 +897,10 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     if (model->parent_page != PTC_UI_PARENT_PLAN) draw_notice(pixels, stride, model, 522);
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0), "L  上一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1), "R  下一页");
-    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(2),
-                       model->parent_page == PTC_UI_PARENT_PLAN
-                           ? (model->disable_flag_present ? "紧急停用中" : "A  保存计划")
-                           : "Y  刷新结果");
+    if (model->parent_page == PTC_UI_PARENT_PLAN) {
+        draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(2),
+                           model->disable_flag_present ? "紧急停用中" : "A  保存计划");
+    }
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(3), "B  返回孩子页");
 }
 
@@ -881,53 +959,67 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     UiRect dialog;
     UiRect value_box = to_uirect(ptc_ui_minutes_value_rect());
     char value[32];
+    char duration[64];
     char preview_line[128];
-    char current_line[128];
+    char played_line[64];
+    char remaining_line[64];
     char date_line[64];
+    char freshness[64];
     uint16_t year = 0;
     uint8_t month = 0;
     uint8_t day = 0;
     int preview_min = ptc_ui_preview_remaining_minutes(model);
     int played_min = model->played_minutes_available ? model->played_minutes : -1;
 
-    draw_dialog_shell(pixels, stride, model, &dialog, 720, 480);
+    draw_dialog_shell(pixels, stride, model, &dialog, 720, 560);
     snprintf(value, sizeof(value), "%u 分钟", (unsigned int)model->draft_minutes);
+    format_duration(model->draft_minutes, duration, sizeof(duration));
     fill_round_rect(pixels, stride, value_box, 8, COLOR(244, 249, 255));
     draw_rect_outline(pixels, stride, value_box, 2, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, value_box, value, 37, COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, value_box, value, 39, COLOR(28, 118, 188));
     draw_dialog_button(pixels, stride, ptc_ui_minutes_dec_rect(), "－5", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_minutes_inc_rect(), "＋5", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_minutes_inc_large_rect(), "＋15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_minutes_dec_large_rect(), "－15", COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 242, 640, 26}, duration, 19,
+                     COLOR(28, 118, 188));
 
     if (model->status_loaded && ptc_date_from_day_index(model->day_index, &year, &month, &day)) {
         snprintf(date_line, sizeof(date_line), "影响日期：%u 年 %u 月 %u 日（今天）", year, month, day);
     } else {
         snprintf(date_line, sizeof(date_line), "影响日期：今天");
     }
-    if (model->unrestricted_today == 1) {
-        snprintf(current_line, sizeof(current_line), "当前已玩：%s  │  当前剩余：不限时",
-                 played_min >= 0 ? "系统可用" : "暂不可用");
-    } else if (model->remaining_available && model->remaining_minutes >= 0) {
-        if (played_min >= 0) {
-            snprintf(current_line, sizeof(current_line), "当前已玩：约 %d 分钟  │  当前剩余：%d 分钟",
-                     played_min, model->remaining_minutes);
-        } else {
-            snprintf(current_line, sizeof(current_line), "当前已玩：暂不可用  │  当前剩余：%d 分钟", model->remaining_minutes);
-        }
+    if (played_min >= 0) {
+        snprintf(played_line, sizeof(played_line), "当前已玩：约 %d 分钟", played_min);
     } else {
-        snprintf(current_line, sizeof(current_line), "当前已玩：暂不可用  │  当前剩余：暂不可用");
+        snprintf(played_line, sizeof(played_line), "当前已玩：暂不可用");
+    }
+    if (model->unrestricted_today == 1) {
+        snprintf(remaining_line, sizeof(remaining_line), "当前剩余：不限时");
+    } else if (model->remaining_available && model->remaining_minutes >= 0) {
+        snprintf(remaining_line, sizeof(remaining_line), "当前剩余：%d 分钟", model->remaining_minutes);
+    } else {
+        snprintf(remaining_line, sizeof(remaining_line), "当前剩余：暂不可用");
     }
     if (preview_min >= 0) {
-        snprintf(preview_line, sizeof(preview_line), "调整后还可玩：约 %d 分钟", preview_min);
+        snprintf(preview_line, sizeof(preview_line), "调整后剩余：约 %d 分钟", preview_min);
+    } else if (model->operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES) {
+        snprintf(preview_line, sizeof(preview_line), "调整后剩余将在刷新生效后确认");
     } else {
-        snprintf(preview_line, sizeof(preview_line), "调整后：今日总额度 %u 分钟；实际剩余将在生效后刷新", (unsigned int)model->draft_minutes);
+        snprintf(preview_line, sizeof(preview_line), "调整后总额度：%u 分钟；实际剩余将在刷新后确认", (unsigned int)model->draft_minutes);
     }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 292, 640, 25}, date_line, 18, COLOR(77, 86, 99));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 320, 640, 25}, current_line, 18, COLOR(77, 86, 99));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 349, 640, 28}, preview_line, 19, COLOR(25, 132, 95));
-
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 382, 580, 24}, "Y 或点数值手动输入；上下 ±15，左右 ±5", 17, COLOR(77, 86, 99));
+    format_status_age(model, freshness, sizeof(freshness));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 316, 640, 24}, date_line, 17, COLOR(77, 86, 99));
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 44, dialog.y + 344, 304, 38}, 7, COLOR(248, 250, 253));
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 372, dialog.y + 344, 304, 38}, 7, COLOR(248, 250, 253));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 44, dialog.y + 344, 304, 38}, played_line, 17, COLOR(77, 86, 99));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 372, dialog.y + 344, 304, 38}, remaining_line, 17,
+                     model->unrestricted_today == 1 ? COLOR(25, 132, 95) : COLOR(77, 86, 99));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 390, 640, 30}, preview_line, 20, COLOR(25, 132, 95));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 423, 640, 22}, freshness, 16,
+                     status_age_color(model));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 50, dialog.y + 448, 620, 22},
+                     "本次修改只影响今天 · Y 或点击数值手动输入", 16, COLOR(77, 86, 99));
     draw_overlay_actions(pixels, stride, model, "A / +  提交并刷新");
 }
 
@@ -975,42 +1067,76 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     static const char *KEY_LABELS[] = {
         "1", "2", "3", "4", "5", "6", "7", "8", "9", "X 退格", "0", "Y 清空"
     };
+    static const char *QUICK_LABELS[] = {"－15", "－5", "＋5", "＋15"};
     UiRect dialog;
     UiRect display = to_uirect(ptc_ui_numpad_display_rect());
     char shown[32];
     char current[64];
+    char duration[64];
+    uint16_t entered_minutes = 0;
     int index;
-    draw_dialog_shell(pixels, stride, model, &dialog, 620, 610);
-    if (model->numpad_text[0]) {
+    draw_dialog_shell(pixels, stride, model, &dialog, 620, 700);
+    if ((model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
+         model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) && model->numpad_text[0]) {
+        snprintf(shown, sizeof(shown), "%s 分钟", model->numpad_text);
+    } else if (model->numpad_text[0]) {
         snprintf(shown, sizeof(shown), "%s", model->numpad_text);
     } else {
         snprintf(shown, sizeof(shown), "%.*s", model->numpad_max_digits, "________");
     }
     fill_round_rect(pixels, stride, display, 8, COLOR(244, 249, 255));
     draw_rect_outline(pixels, stride, display, 2, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, display, shown, 32, COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, display, shown, 30, COLOR(28, 118, 188));
 
     if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
         snprintf(current, sizeof(current), "当前值：%u 分钟  ·  范围 %u–%u",
                  (unsigned int)model->numpad_current, (unsigned int)model->numpad_minimum,
                  (unsigned int)model->numpad_maximum);
+        if (!ptc_ui_parse_minutes(model->numpad_text, model->numpad_minimum, model->numpad_maximum, &entered_minutes)) {
+            entered_minutes = model->numpad_current;
+        }
+        format_duration(entered_minutes, duration, sizeof(duration));
     } else {
-        snprintf(current, sizeof(current), "请输入完整的 8 位加时码");
+        if (model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
+            snprintf(current, sizeof(current), "当前值：%u 分钟  ·  范围 %u–%u",
+                     (unsigned int)model->numpad_current, (unsigned int)model->numpad_minimum,
+                     (unsigned int)model->numpad_maximum);
+            if (!ptc_ui_parse_minutes(model->numpad_text, model->numpad_minimum, model->numpad_maximum, &entered_minutes)) {
+                entered_minutes = model->numpad_current;
+            }
+            format_duration(entered_minutes, duration, sizeof(duration));
+        } else {
+            snprintf(current, sizeof(current), "请输入完整的 8 位加时码");
+            duration[0] = '\0';
+        }
     }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 178, dialog.width - 80, 24}, current, 17, COLOR(91, 100, 114));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 218, dialog.width - 80, 22}, current, 16, COLOR(91, 100, 114));
+    if (duration[0]) {
+        char duration_line[80];
+        snprintf(duration_line, sizeof(duration_line), "换算：%s", duration);
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 244, dialog.width - 80, 22},
+                         duration_line, 17, COLOR(28, 118, 188));
+    }
+    if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
+        model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
+        for (index = 0; index < 4; ++index) {
+            draw_dialog_button(pixels, stride, ptc_ui_numpad_quick_rect(index), QUICK_LABELS[index],
+                               COLOR(235, 238, 243), COLOR(28, 118, 188), true);
+        }
+    }
     for (index = 0; index < 12; ++index) {
         UiRect key = to_uirect(ptc_ui_numpad_key_rect(index));
         bool selected = index == model->numpad_cursor;
         fill_round_rect(pixels, stride, key, 8, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
         draw_rect_outline(pixels, stride, key, selected ? 3 : 1,
                           selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
-        draw_text_center(pixels, stride, key, KEY_LABELS[index], index == 9 || index == 11 ? 17 : 26,
+        draw_text_center(pixels, stride, key, KEY_LABELS[index], index == 9 || index == 11 ? 18 : 30,
                          selected ? COLOR(28, 118, 188) : COLOR(66, 74, 86));
     }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 35, dialog.y + 470, dialog.width - 70, 24},
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 35, dialog.y + 548, dialog.width - 70, 24},
                      "方向键/摇杆选择  A 输入  X 退格  Y 清空  + 完成", 17, COLOR(77, 86, 99));
     if (model->numpad_error[0]) {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 35, dialog.y + 500, dialog.width - 70, 24},
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 35, dialog.y + 576, dialog.width - 70, 24},
                          model->numpad_error, 17, COLOR(194, 61, 61));
     }
     draw_overlay_actions(pixels, stride, model, "+  完成输入");

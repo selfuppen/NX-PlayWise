@@ -34,7 +34,7 @@ Release 不包含 bedtime、`limit_action`、家长临时解锁、禁玩日、�
 
 ## 兼容与安全
 
-已声明的验证基线是 Nintendo Switch OLED、HOS 22.5.0；资格测试使用 Atmosphère 1.11.2。当前 `0.1.1` 最终产物仍需在该组合上重新完成资格验证，历史包结果不能继承。
+已声明的验证基线是 Nintendo Switch OLED、HOS 22.5.0；资格测试使用 Atmosphère 1.11.2。当前 `0.1.2` 最终产物仍需在该组合上重新完成资格验证，历史包结果不能继承。
 
 启动时先做只读预检：
 
@@ -61,7 +61,7 @@ python .\tools\package_remote.py
 成功后只生成：
 
 ```text
-build/packages/playwise-0.1.1.zip
+build/packages/playwise-0.1.2.zip
 ```
 
 包必须包含 sysmodule、Companion NRO、Overlay、`boot2.flag` 和一致的 release manifest。构建门禁会拒绝多个公开 Zip、LAB handler、旧模式、占位 secret、组件版本或 manifest 不一致。

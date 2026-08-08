@@ -108,8 +108,8 @@ def verify_playwise_package() -> None:
         nro.write_bytes(b"nro")
         overlay.write_bytes(b"ovl")
         exefs.write_bytes(b"nsp")
-        manifest.write_text(json.dumps({"schema_version": 1, "playwise_version": "0.1.1", "commit": "a" * 40,
-            "release_id": "playwise-0.1.1+aaaaaaaaaaaa", "profile": "release", "protocol_version": 1,
+        manifest.write_text(json.dumps({"schema_version": 1, "playwise_version": "0.1.2", "commit": "a" * 40,
+            "release_id": "playwise-0.1.2+aaaaaaaaaaaa", "profile": "release", "protocol_version": 1,
             "recovery_version": 1, "pctl_layout_version": 1, "build": {}, "verified_environment": {}}), encoding="utf-8")
         run(
             [

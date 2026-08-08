@@ -201,7 +201,7 @@ static void seed_release_setup(PtcMemStorage *mem)
         "{\"version\":1,\"phase\":\"unconfigured\",\"compatibility_status\":\"pending\",\"restriction_cleared\":false,"
         "\"snapshot_available\":false,\"activate_after\":0,\"last_error\":\"\"}"), "seed setup");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/build.json",
-        "{\"playwise_version\":\"0.1.1\",\"profile\":\"release\",\"release_id\":\"playwise-0.1.1+test\"}"), "seed build manifest");
+        "{\"playwise_version\":\"0.1.2\",\"profile\":\"release\",\"release_id\":\"playwise-0.1.2+test\"}"), "seed build manifest");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/environment.json",
         "{\"read_ok\":true,\"hos\":\"22.5.0\",\"firmware_hash\":\"test-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true}"),
         "seed verified environment");

@@ -35,7 +35,7 @@ def valid_nro(*, with_icon: bool, embedded_manifest: bytes = b"") -> bytes:
     nacp_start = nro_size + nacp_offset
     data[nacp_start : nacp_start + len(package_remote.APP_TITLE)] = package_remote.APP_TITLE
     version_start = nacp_start + package_remote.NACP_DISPLAY_VERSION_OFFSET
-    data[version_start : version_start + 6] = b"0.1.1\0"
+    data[version_start : version_start + 6] = b"0.1.2\0"
     return bytes(data) + embedded_manifest
 
 
@@ -53,8 +53,8 @@ def write_package(
     *,
     component_marker: bytes = b"",
 ) -> None:
-    manifest = ('{"schema_version":1,"playwise_version":"0.1.1","commit":"' + "a" * 40 +
-        '","release_id":"playwise-0.1.1+aaaaaaaaaaaa","profile":"release","protocol_version":1,'
+    manifest = ('{"schema_version":1,"playwise_version":"0.1.2","commit":"' + "a" * 40 +
+        '","release_id":"playwise-0.1.2+aaaaaaaaaaaa","profile":"release","protocol_version":1,'
         '"recovery_version":1,"pctl_layout_version":1,"build":{},"verified_environment":{}}')
     with zipfile.ZipFile(path, "w") as package:
         package.writestr("switch/playwise/config.json", '{"version":1,"device_id":"kid-switch"}')

@@ -71,6 +71,7 @@ typedef struct {
     int selected_index;
     bool waiting;
     bool status_loaded;
+    int64_t status_updated_at;
     bool remaining_available;
     bool played_minutes_available;
     int limited_today;
@@ -170,6 +171,7 @@ typedef enum {
     PTC_UI_HIT_WEEKLY_MIN_INC,
     PTC_UI_HIT_WEEKLY_MIN_INPUT,
     PTC_UI_HIT_NUMPAD_KEY,
+    PTC_UI_HIT_NUMPAD_QUICK,
     PTC_UI_HIT_WEEKLY_SAVE,
     PTC_UI_HIT_WEEKLY_DISCARD,
     PTC_UI_HIT_OVERLAY_DISCARD,
@@ -213,9 +215,12 @@ void ptc_ui_numpad_move(PtcUiModel *model, int horizontal, int vertical);
 void ptc_ui_numpad_activate(PtcUiModel *model);
 void ptc_ui_numpad_backspace(PtcUiModel *model);
 void ptc_ui_numpad_clear(PtcUiModel *model);
+void ptc_ui_numpad_adjust(PtcUiModel *model, int delta);
 bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value);
 void ptc_ui_numpad_finish(PtcUiModel *model);
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
+void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
+int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode);
 bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minutes);
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
@@ -235,6 +240,7 @@ PtcUiRect ptc_ui_child_footer_rect(int index);
 PtcUiRect ptc_ui_error_retry_rect(void);
 PtcUiRect ptc_ui_error_back_rect(void);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
+PtcUiRect ptc_ui_parent_refresh_rect(void);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
@@ -253,6 +259,7 @@ PtcUiRect ptc_ui_weekly_min_inc_rect(void);
 PtcUiRect ptc_ui_weekly_min_input_rect(void);
 PtcUiRect ptc_ui_numpad_display_rect(void);
 PtcUiRect ptc_ui_numpad_key_rect(int index);
+PtcUiRect ptc_ui_numpad_quick_rect(int index);
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay);

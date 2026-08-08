@@ -281,6 +281,25 @@ void ptc_ui_numpad_clear(PtcUiModel *model)
     model->numpad_error[0] = '\0';
 }
 
+void ptc_ui_numpad_adjust(PtcUiModel *model, int delta)
+{
+    uint16_t value;
+    if (!model || (model->numpad_purpose != PTC_UI_NUMPAD_MINUTES &&
+                   model->numpad_purpose != PTC_UI_NUMPAD_WEEKLY_MINUTES)) {
+        return;
+    }
+    value = model->numpad_current;
+    if (model->numpad_text[0] && ptc_ui_parse_minutes(
+            model->numpad_text, model->numpad_minimum, model->numpad_maximum, &value)) {
+        /* A quick adjustment commits any complete value already typed. */
+    }
+    value = ptc_ui_adjust_minutes(
+        value, delta, model->numpad_minimum, model->numpad_maximum);
+    model->numpad_current = value;
+    snprintf(model->numpad_text, sizeof(model->numpad_text), "%u", (unsigned int)value);
+    model->numpad_error[0] = '\0';
+}
+
 void ptc_ui_numpad_activate(PtcUiModel *model)
 {
     size_t length;
@@ -375,6 +394,25 @@ int ptc_ui_preview_remaining_minutes(const PtcUiModel *model)
         }
     }
     return remaining;
+}
+
+void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now)
+{
+    if (!model) {
+        return;
+    }
+    model->status_updated_at = now > 0 ? now : 0;
+}
+
+int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now)
+{
+    if (!model || !model->status_loaded || model->status_updated_at <= 0) {
+        return -1;
+    }
+    if (now <= model->status_updated_at) {
+        return 0;
+    }
+    return now - model->status_updated_at;
 }
 
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode)
@@ -593,6 +631,12 @@ PtcUiRect ptc_ui_parent_footer_rect(int index)
     return rect;
 }
 
+PtcUiRect ptc_ui_parent_refresh_rect(void)
+{
+    PtcUiRect rect = {1010, 108, 216, 48};
+    return rect;
+}
+
 PtcUiRect ptc_ui_parent_tab_rect(int index)
 {
     PtcUiRect rect = {54 + index * 214, 108, 194, 48};
@@ -618,7 +662,7 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
     switch (overlay) {
     case PTC_UI_OVERLAY_MINUTES:
         *width = 720;
-        *height = 460;
+        *height = 560;
         break;
     case PTC_UI_OVERLAY_WEEKLY:
         *width = 1172;
@@ -626,7 +670,7 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         break;
     case PTC_UI_OVERLAY_NUMPAD:
         *width = 620;
-        *height = 610;
+        *height = 700;
         break;
     case PTC_UI_OVERLAY_CREDENTIAL:
         *width = 900;
@@ -663,35 +707,35 @@ static PtcUiRect dialog_for(PtcUiOverlay overlay)
 PtcUiRect ptc_ui_minutes_value_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
-    PtcUiRect rect = {dialog.x + 170, dialog.y + 160, 380, 104};
+    PtcUiRect rect = {dialog.x + 174, dialog.y + 140, 372, 96};
     return rect;
 }
 
 PtcUiRect ptc_ui_minutes_dec_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
-    PtcUiRect rect = {dialog.x + 46, dialog.y + 160, 104, 104};
+    PtcUiRect rect = {dialog.x + 36, dialog.y + 140, 112, 96};
     return rect;
 }
 
 PtcUiRect ptc_ui_minutes_inc_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
-    PtcUiRect rect = {dialog.x + 570, dialog.y + 160, 104, 104};
+    PtcUiRect rect = {dialog.x + 572, dialog.y + 140, 112, 96};
     return rect;
 }
 
 PtcUiRect ptc_ui_minutes_inc_large_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
-    PtcUiRect rect = {dialog.x + 288, dialog.y + 118, 144, 34};
+    PtcUiRect rect = {dialog.x + 378, dialog.y + 260, 156, 42};
     return rect;
 }
 
 PtcUiRect ptc_ui_minutes_dec_large_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTES);
-    PtcUiRect rect = {dialog.x + 288, dialog.y + 272, 144, 34};
+    PtcUiRect rect = {dialog.x + 186, dialog.y + 260, 156, 42};
     return rect;
 }
 
@@ -712,7 +756,7 @@ PtcUiRect ptc_ui_weekly_day_minutes_rect(int index)
 PtcUiRect ptc_ui_numpad_display_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_NUMPAD);
-    PtcUiRect rect = {dialog.x + 70, dialog.y + 112, dialog.w - 140, 64};
+    PtcUiRect rect = {dialog.x + 70, dialog.y + 140, dialog.w - 140, 70};
     return rect;
 }
 
@@ -721,8 +765,19 @@ PtcUiRect ptc_ui_numpad_key_rect(int index)
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_NUMPAD);
     int row = index / 3;
     int column = index % 3;
-    PtcUiRect rect = {dialog.x + 116 + column * 134, dialog.y + 214 + row * 66, 120, 54};
+    PtcUiRect rect = {dialog.x + 116 + column * 134, dialog.y + 324 + row * 54, 120, 46};
     if (index < 0 || index >= 12) {
+        rect.w = 0;
+        rect.h = 0;
+    }
+    return rect;
+}
+
+PtcUiRect ptc_ui_numpad_quick_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_NUMPAD);
+    PtcUiRect rect = {dialog.x + 32 + index * 140, dialog.y + 274, 124, 40};
+    if (index < 0 || index >= 4) {
         rect.w = 0;
         rect.h = 0;
     }
@@ -948,6 +1003,14 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         break;
     case PTC_UI_OVERLAY_NUMPAD:
+        if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
+            model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
+            for (i = 0; i < 4; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_numpad_quick_rect(i), x, y)) {
+                    return make_hit(PTC_UI_HIT_NUMPAD_QUICK, i);
+                }
+            }
+        }
         for (i = 0; i < 12; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_numpad_key_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_NUMPAD_KEY, i);
@@ -1030,6 +1093,10 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_parent_tab_rect(i), x, y)) {
             return make_hit(PTC_UI_HIT_PARENT_TAB, i);
         }
+    }
+    if (model->parent_page != PTC_UI_PARENT_PLAN &&
+        ptc_ui_rect_contains(ptc_ui_parent_refresh_rect(), x, y)) {
+        return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
     }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(0), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_PREV_PAGE, 0);

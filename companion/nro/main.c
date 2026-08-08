@@ -250,11 +250,16 @@ static void edit_overlay_minutes(UiState *ui)
 
 static void edit_weekly_minutes(UiState *ui)
 {
+    static const char *WEEKDAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
     PtcDayRule *day = &ui->model.draft_week[ui->model.editor_index];
     if (day->mode == PTC_RULE_MODE_LIMIT) {
+        char title[64];
+        char guide[128];
+        snprintf(title, sizeof(title), "修改%s的额度", WEEKDAYS[ui->model.editor_index]);
+        snprintf(guide, sizeof(guide), "输入 1 到 1440 分钟\n将影响%s的每日额度", WEEKDAYS[ui->model.editor_index]);
         ptc_ui_numpad_open(
             &ui->model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
-            "输入每日额度", "输入 1 到 1440 分钟", 4, 1, 1440, day->minutes);
+            title, guide, 4, 1, 1440, day->minutes);
     }
 }
 
@@ -301,12 +306,24 @@ static void submit_transport_empty(UiState *ui, const char *type, const char *ok
 static void submit_status(UiState *ui)
 {
     PtcCompanionStatus status;
+    if (!ui || ui->waiting) {
+        return;
+    }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_status(&ui->transport, ui->active_request_id, time(NULL));
     set_command_name(ui, "status");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) begin_wait(ui, "status", "正在刷新今天的状态…");
     else set_message(ui, "刷新失败", status);
+}
+
+static void enter_child_area(UiState *ui)
+{
+    if (!ui) {
+        return;
+    }
+    ui->model.view = PTC_UI_CHILD;
+    submit_status(ui);
 }
 
 static void submit_offline_code(UiState *ui, const char *code)
@@ -507,6 +524,9 @@ static void poll_result(UiState *ui, bool force)
             return;
         }
         load_rule_drafts(ui);
+        if (ui->model.status_loaded) {
+            ptc_ui_mark_status_updated(&ui->model, (int64_t)time(NULL));
+        }
         if (preserve_weekly_draft &&
             !(strcmp(ui->model.result_type, "set_weekly_template") == 0 &&
               strcmp(ui->model.result_status, "ok") == 0)) {
@@ -608,6 +628,9 @@ static void enter_parent_area(UiState *ui)
     ui->model.selected_index = 0;
     snprintf(ui->model.message, sizeof(ui->model.message), "%s",
              strlen(pin) < 4U ? "家长区已解锁；当前 PIN 少于 4 位，很容易被猜到，建议尽快修改。" : "家长区已解锁。");
+    if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
+        submit_status(ui);
+    }
 }
 
 static void open_minutes_overlay(
@@ -1160,6 +1183,46 @@ static void format_today_label(uint16_t day_index, char *out, size_t out_size)
     }
 }
 
+static PtcDayRule effective_today_rule(const UiState *ui)
+{
+    uint8_t weekday = ptc_weekday_from_day_index(ui->model.day_index);
+    if (ui->model.today_override_present) {
+        return ui->model.today_override_rule;
+    }
+    return ui->model.current_week[weekday];
+}
+
+static void format_rule_remaining(const PtcUiModel *model, PtcDayRule rule, char *out, size_t out_size)
+{
+    int remaining;
+    if (rule.mode == PTC_RULE_MODE_UNLIMITED) {
+        snprintf(out, out_size, "不限时");
+        return;
+    }
+    if (!model->played_minutes_available || model->played_minutes < 0) {
+        snprintf(out, out_size, "暂不可用");
+        return;
+    }
+    remaining = (int)rule.minutes - model->played_minutes;
+    if (remaining < 0) remaining = 0;
+    snprintf(out, out_size, "%d 分钟", remaining);
+}
+
+static uint16_t current_today_limit_value(const UiState *ui)
+{
+    PtcDayRule rule = effective_today_rule(ui);
+    int total;
+    if (rule.mode == PTC_RULE_MODE_LIMIT && rule.minutes >= 1 && rule.minutes <= 1440) {
+        return rule.minutes;
+    }
+    if (ui->model.remaining_available && ui->model.remaining_minutes >= 0 &&
+        ui->model.played_minutes_available && ui->model.played_minutes >= 0) {
+        total = ui->model.remaining_minutes + ui->model.played_minutes;
+        if (total >= 1 && total <= 1440) return (uint16_t)total;
+    }
+    return 60;
+}
+
 static void handle_today_action_ready(UiState *ui, int index)
 {
     char date[64];
@@ -1178,7 +1241,7 @@ static void handle_today_action_ready(UiState *ui, int index)
             ui->model.unrestricted_today == 1
                 ? "今天当前为不限时。设置额度后将恢复限时。"
                 : "设置今天的总额度；页面会显示调整前后的可玩时间。",
-            60, 1, 1440);
+            current_today_limit_value(ui), 1, 1440);
         break;
     case 2:
         if (ui->model.unrestricted_today == 1) {
@@ -1195,20 +1258,16 @@ static void handle_today_action_ready(UiState *ui, int index)
         open_confirm_overlay(ui, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, "将今天设为不限时", body);
         break;
     case 4: {
+        PtcDayRule current = effective_today_rule(ui);
         uint8_t weekday = ptc_weekday_from_day_index(ui->model.day_index);
-        PtcDayRule rule = ui->model.current_week[weekday];
-        int remaining = ui->model.played_minutes_available && rule.mode == PTC_RULE_MODE_LIMIT
-            ? (int)rule.minutes - ui->model.played_minutes : -1;
-        if (remaining < 0 && ui->model.played_minutes_available) remaining = 0;
-        if (rule.mode == PTC_RULE_MODE_UNLIMITED) {
-            snprintf(body, sizeof(body), "%s：将清除今日临时额度或不限时状态。\n恢复后采用周计划：不限时。", date);
-        } else if (remaining >= 0) {
-            snprintf(body, sizeof(body), "%s：已玩约 %d 分钟。\n恢复周计划额度 %u 分钟后，还可玩约 %d 分钟。",
-                     date, ui->model.played_minutes, (unsigned int)rule.minutes, remaining);
-        } else {
-            snprintf(body, sizeof(body), "%s：将清除今日临时设置。\n恢复周计划额度 %u 分钟；实际剩余将在生效后刷新。",
-                     date, (unsigned int)rule.minutes);
-        }
+        PtcDayRule weekly = ui->model.current_week[weekday];
+        char current_remaining[32];
+        char weekly_remaining[32];
+        format_rule_remaining(&ui->model, current, current_remaining, sizeof(current_remaining));
+        format_rule_remaining(&ui->model, weekly, weekly_remaining, sizeof(weekly_remaining));
+        snprintf(body, sizeof(body),
+                 "%s\n当前生效剩余：%s\n恢复周计划后：%s\n将清除今天的临时额度或不限时状态。",
+                 date, current_remaining, weekly_remaining);
         open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, "恢复周计划", body);
         break;
     }
@@ -1406,12 +1465,18 @@ static void apply_pending_navigation(UiState *ui)
         ui->model.view = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
             ? PTC_UI_SETUP : PTC_UI_CHILD;
         snprintf(ui->model.message, sizeof(ui->model.message), "已返回主页面。");
+        if (ui->model.view == PTC_UI_CHILD) {
+            submit_status(ui);
+        }
     } else if (ui->pending_parent_page >= 0) {
         if (ui->pending_parent_page == PTC_UI_PARENT_PLAN) {
             open_weekly_page(ui);
         } else {
             ui->model.parent_page = (PtcUiParentPage)ui->pending_parent_page;
             ui->model.selected_index = 0;
+            if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
+                submit_status(ui);
+            }
         }
     }
     ui->pending_parent_page = -1;
@@ -1509,6 +1574,14 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ptc_ui_numpad_backspace(&ui->model);
         } else if (down & HidNpadButton_Y) {
             ptc_ui_numpad_clear(&ui->model);
+        } else if (down & HidNpadButton_ZL) {
+            ptc_ui_numpad_adjust(&ui->model, -15);
+        } else if (down & HidNpadButton_L) {
+            ptc_ui_numpad_adjust(&ui->model, -5);
+        } else if (down & HidNpadButton_R) {
+            ptc_ui_numpad_adjust(&ui->model, 5);
+        } else if (down & HidNpadButton_ZR) {
+            ptc_ui_numpad_adjust(&ui->model, 15);
         } else if (down & HidNpadButton_A) {
             ptc_ui_numpad_activate(&ui->model);
         } else if (down & HidNpadButton_Plus) {
@@ -1619,7 +1692,7 @@ static void handle_touch(UiState *ui, int x, int y)
         open_offline_code_input(ui);
         break;
     case PTC_UI_HIT_ERROR_BACK:
-        ui->model.view = PTC_UI_CHILD;
+        enter_child_area(ui);
         break;
     case PTC_UI_HIT_PARENT_PREV_PAGE:
         request_parent_navigation(ui,
@@ -1754,6 +1827,12 @@ static void handle_touch(UiState *ui, int x, int y)
         ui->model.numpad_cursor = hit.index;
         ptc_ui_numpad_activate(&ui->model);
         break;
+    case PTC_UI_HIT_NUMPAD_QUICK:
+        if (hit.index >= 0 && hit.index < 4) {
+            static const int DELTAS[] = {-15, -5, 5, 15};
+            ptc_ui_numpad_adjust(&ui->model, DELTAS[hit.index]);
+        }
+        break;
     case PTC_UI_HIT_NONE:
     default:
         break;
@@ -1886,7 +1965,7 @@ int main(int argc, char **argv)
                 ui.model.view = PTC_UI_CHILD;
                 open_offline_code_input(&ui);
             } else if (down & (HidNpadButton_B | HidNpadButton_Plus)) {
-                ui.model.view = PTC_UI_CHILD;
+                enter_child_area(&ui);
             }
         } else {
             if (ui.model.parent_page == PTC_UI_PARENT_PLAN) {

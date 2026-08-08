@@ -285,22 +285,24 @@ public:
 
         // --- 0. Top Prominent Status Banner (醒目展示今日已玩与修改后/当前可玩时长) ---
         const s32 top_banner_y = cy + 10;
-        const s32 top_banner_h = 44;
+        const s32 top_banner_h = 50;
         renderer->drawRect(cx, top_banner_y, cw, top_banner_h, renderer->a(CARD_COLOR));
         draw_outline(renderer, cx, top_banner_y, cw, top_banner_h, 1, FOCUS_BORDER);
 
+        renderer->drawString("今日已玩", false, cx + 10, top_banner_y + 22, 12, renderer->a(MUTED_COLOR));
         if (bridge_->summary.played_minutes_available) {
-            std::snprintf(line, sizeof(line), "今日已玩：%d 分钟", bridge_->summary.played_minutes);
+            std::snprintf(line, sizeof(line), "%d 分钟", bridge_->summary.played_minutes);
         } else {
-            std::snprintf(line, sizeof(line), "今日已玩：-- 分钟");
+            std::snprintf(line, sizeof(line), "-- 分钟");
         }
-        renderer->drawString(line, false, cx + 10, top_banner_y + 28, 15, renderer->a(TEXT_COLOR));
+        renderer->drawString(line, false, cx + 82, top_banner_y + 25, 17, renderer->a(TEXT_COLOR));
 
+        renderer->drawString("修改后可玩", false, cx + 10, top_banner_y + 45, 12, renderer->a(MUTED_COLOR));
         if (close_after_frames_ > 0 || (bridge_->summary.valid && bridge_->summary.remaining_available)) {
-            std::snprintf(line, sizeof(line), "修改后可玩：%d 分钟", bridge_->summary.remaining_minutes);
-            renderer->drawString(line, false, cx + 155, top_banner_y + 28, 15, renderer->a(SUCCESS_COLOR));
+            std::snprintf(line, sizeof(line), "%d 分钟", bridge_->summary.remaining_minutes);
+            renderer->drawString(line, false, cx + 100, top_banner_y + 47, 18, renderer->a(SUCCESS_COLOR));
         } else {
-            renderer->drawString("加时后按 + 提交", false, cx + 165, top_banner_y + 28, 14, renderer->a(MUTED_COLOR));
+            renderer->drawString("提交后刷新", false, cx + 100, top_banner_y + 47, 15, renderer->a(MUTED_COLOR));
         }
 
         // --- 1. Header Prompt & Guidance (自律约定与护眼提醒) ---
@@ -450,14 +452,15 @@ public:
             }
 
             if (close_after_frames_ > 0) {
-                std::snprintf(line, sizeof(line), "加时成功！修改后还可玩 %d 分钟", bridge_->summary.remaining_minutes);
-                renderer->drawString(line, false, cx + 12, status_y + 78, 14, renderer->a(SUCCESS_COLOR));
+                renderer->drawString("加时成功！", false, cx + 12, status_y + 82, 18, renderer->a(SUCCESS_COLOR));
+                std::snprintf(line, sizeof(line), "修改后可玩 %d 分钟", bridge_->summary.remaining_minutes);
+                renderer->drawString(line, false, cx + 12, status_y + 105, 17, renderer->a(SUCCESS_COLOR));
                 if (bridge_->summary.played_minutes_available) {
                     std::snprintf(line, sizeof(line), "今日已玩约 %d 分钟，即刻刷新生效…", bridge_->summary.played_minutes);
-                    renderer->drawString(line, false, cx + 12, status_y + 100, 12, renderer->a(SUCCESS_COLOR));
+                    renderer->drawString(line, false, cx + 12, status_y + 128, 14, renderer->a(SUCCESS_COLOR));
                 } else {
                     std::snprintf(line, sizeof(line), "状态已实时刷新，即将自动关闭…");
-                    renderer->drawString(line, false, cx + 12, status_y + 100, 12, renderer->a(SUCCESS_COLOR));
+                    renderer->drawString(line, false, cx + 12, status_y + 128, 14, renderer->a(SUCCESS_COLOR));
                 }
             }
         }
