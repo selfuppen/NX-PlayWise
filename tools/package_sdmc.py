@@ -174,7 +174,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Create the PlayWise SDMC package.")
     parser.add_argument("--out", required=True)
     parser.add_argument("--device-id", default="kid-switch")
-    parser.add_argument("--max-add-minutes", type=int, default=120)
+    parser.add_argument("--max-add-minutes", type=int, default=240)
     parser.add_argument("--manifest", type=Path, required=True, help="Generated release-manifest.json embedded by this build.")
     parser.add_argument("--zip", dest="zip_path", help="Write a zip whose top-level entries are switch/ and optional atmosphere/.")
     parser.add_argument("--nro", type=Path, help="Optional companion NRO copied under switch/playwise/.")

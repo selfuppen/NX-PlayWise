@@ -12,8 +12,8 @@ TOKEN_VERSION = 2
 TOKEN_DOMAIN = b"PTC2"
 TOKEN_LENGTH = 8
 TIER_MINUTES = 5
-TIER_COUNT = 28
-MAX_MINUTES = 120
+TIER_COUNT = 32
+MAX_MINUTES = 240
 MAX_NONCE = (1 << 9) - 1
 MAC_BITS = 12
 MAX_VALUE = (1 << 26) - 1
@@ -35,9 +35,17 @@ class TokenV2Payload:
 def tier_for_minutes(minutes: int) -> int:
     if 1 <= minutes <= 4:
         return 23 + minutes
-    if TIER_MINUTES <= minutes <= MAX_MINUTES and minutes % TIER_MINUTES == 0:
+    if TIER_MINUTES <= minutes <= 120 and minutes % TIER_MINUTES == 0:
         return minutes // TIER_MINUTES - 1
-    raise TokenError("bad_code", "tier minutes must be 1-4 or a multiple of 5 from 5 through 120")
+    if minutes == 150:
+        return 28
+    if minutes == 180:
+        return 29
+    if minutes == 210:
+        return 30
+    if minutes == 240:
+        return 31
+    raise TokenError("bad_code", "tier minutes must be 1-4, a multiple of 5 from 5 through 120, or 150/180/210/240")
 
 
 def minutes_for_tier(tier_index: int) -> int:
@@ -45,6 +53,14 @@ def minutes_for_tier(tier_index: int) -> int:
         return (tier_index + 1) * TIER_MINUTES
     if 24 <= tier_index <= 27:
         return tier_index - 23
+    if tier_index == 28:
+        return 150
+    if tier_index == 29:
+        return 180
+    if tier_index == 30:
+        return 210
+    if tier_index == 31:
+        return 240
     raise TokenError("bad_code", "tier index out of range")
 
 

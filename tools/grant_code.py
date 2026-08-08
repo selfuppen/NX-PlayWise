@@ -66,7 +66,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Generate a v1 or v2 offline play-time grant code.")
     amount = parser.add_mutually_exclusive_group(required=True)
     amount.add_argument("--minutes", type=int, help="Minutes to add today (v1, arbitrary 1-1440).")
-    amount.add_argument("--tier-minutes", type=int, help="v2 tier: a multiple of 5 from 5 through 120.")
+    amount.add_argument("--tier-minutes", type=int, help="v2 tier: 1-4, a multiple of 5 up to 120, or 150/180/210/240.")
     parser.add_argument("--device", required=True, help="Device ID configured on the Switch.")
     parser.add_argument("--secret", required=True, help="Grant secret configured on the Switch.")
     day = parser.add_mutually_exclusive_group()

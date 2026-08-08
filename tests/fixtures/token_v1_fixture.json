@@ -2,7 +2,7 @@
   "version": 1,
   "device_id": "test-device",
   "grant_secret": "test-secret",
-  "max_add_minutes": 120,
+  "max_add_minutes": 240,
   "cases": [
     {
       "name": "valid_30min",
@@ -13,12 +13,12 @@
       "code": "241W-2AC0-04HM-7YW5"
     },
     {
-      "name": "over_limit_180min",
-      "minutes": 180,
+      "name": "over_limit_300min",
+      "minutes": 300,
       "day_index": 2380,
       "nonce": 4661,
       "expect": "minutes_exceed_limit",
-      "code": "24B8-2AC0-04HN-MGYD"
+      "code": "24JR-2AC0-04HN-9ATN"
     }
   ]
 }

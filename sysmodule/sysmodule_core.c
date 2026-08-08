@@ -778,7 +778,7 @@ static bool load_config(PtcSysmodule *sysmodule, PtcRuntimeConfig *config)
         }
     }
     if (!json_u16(text, "max_add_minutes", &config->max_add_minutes)) {
-        config->max_add_minutes = 120;
+        config->max_add_minutes = 240;
     }
     config->mode = PTC_CONTROL_ENFORCE;
     config->allow_unlimited_to_limited = true;
