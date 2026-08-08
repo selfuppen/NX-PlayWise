@@ -214,6 +214,7 @@ static void test_setup_preflight_and_recovery(void)
     PtcFakeTime fake_time;
     PtcSysmodule sysmodule;
     char text[4096];
+    char install_snapshot[4096];
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
@@ -234,6 +235,8 @@ static void test_setup_preflight_and_recovery(void)
         strstr(text, "\"phase\":\"released\"") && strstr(text, "\"compatibility_status\":\"verified\"") &&
         strstr(text, "\"activate_after\":1783526406"), "preflight records verified environment and grace");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/backups/install_pctl_snapshot.json"), "installation snapshot persisted");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/install_pctl_snapshot.json",
+        install_snapshot, sizeof(install_snapshot)), "installation snapshot readable");
     check_true(pctl.status.unrestricted_today, "setup releases current restriction");
 
     fake_time.snapshot.unix_seconds = 1783526406;
@@ -254,6 +257,32 @@ static void test_setup_preflight_and_recovery(void)
         "queue restore under disable");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "restore remains available under disable");
     check_true(pctl.status.limited_today && pctl.status.remaining_minutes == 30, "installation snapshot restored exactly");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
+        strstr(text, "\"phase\":\"restored\""), "snapshot restore records restored phase");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-disabled.json",
+        "{\"version\":1,\"request_id\":\"setup-disabled\",\"type\":\"complete_setup\",\"created_at\":4,\"payload\":{}}"),
+        "queue restored setup while disabled");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "restored setup request processed while disabled");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-disabled.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"disabled\""), "restored setup remains blocked until emergency disable is cleared");
+
+    check_true(mem.storage.vtable->remove_path(&mem.storage, "app/flags/disable.flag"), "clear restore disable flag");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-restored.json",
+        "{\"version\":1,\"request_id\":\"setup-restored\",\"type\":\"complete_setup\",\"created_at\":5,\"payload\":{}}"),
+        "queue setup after snapshot restore");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "setup restarts after snapshot restore");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-restored.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"phase\":\"released\""),
+        "restored setup returns to release grace");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/install_pctl_snapshot.json", text, sizeof(text)) &&
+        strcmp(text, install_snapshot) == 0, "re-enable preserves the original installation snapshot");
+    check_true(pctl.status.unrestricted_today, "re-enabled setup releases the restored restriction");
+
+    fake_time.snapshot.unix_seconds += 5;
+    check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), 1, "re-enabled setup grace activates control");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
+        strstr(text, "\"phase\":\"active\""), "re-enabled setup becomes active");
 }
 
 static void test_play_timer_layout(void)

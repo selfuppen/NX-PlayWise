@@ -1977,7 +1977,7 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
             PTC_ERR_SETUP_PENDING, now.day_index, caps);
     }
     if (strcmp(setup.phase, "unconfigured") == 0 || strcmp(setup.phase, "compatibility_pending") == 0 ||
-        strcmp(setup.phase, "protection") == 0) {
+        strcmp(setup.phase, "protection") == 0 || strcmp(setup.phase, "restored") == 0) {
         PtcErrorCode preflight_err = run_release_preflight(sysmodule, config, &setup, now);
         if (preflight_err != PTC_ERR_OK) {
             snprintf(setup.phase, sizeof(setup.phase), "protection");

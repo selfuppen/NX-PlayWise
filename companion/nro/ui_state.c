@@ -81,7 +81,7 @@ static const char *request_success_guidance(const char *type)
         return "接下来：确认限制已解除后，在安全工具选择【启用自动控制】。";
     }
     if (strcmp(type, "restore_install_snapshot") == 0) {
-        return "PlayWise 已停用。若要重新启用，清理 setup.json 并重启。";
+        return "PlayWise 已停用。解除停用后选择【启用自动控制】即可重新完成设置。";
     }
     return "";
 }
