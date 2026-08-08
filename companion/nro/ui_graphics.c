@@ -1053,8 +1053,6 @@ static void draw_dialog_shell(
 {
     char body[320];
     char first_line[320];
-    const char *second_line = NULL;
-    const char *line_break;
     const char *title = model->overlay == PTC_UI_OVERLAY_NUMPAD ? model->numpad_title : model->overlay_title;
     const char *description = model->overlay == PTC_UI_OVERLAY_NUMPAD ? model->numpad_guide : model->overlay_body;
     *dialog = (UiRect){(SCREEN_WIDTH - width) / 2, (SCREEN_HEIGHT - height) / 2 - 10, width, height};
@@ -1063,21 +1061,23 @@ static void draw_dialog_shell(
     draw_rect_outline(pixels, stride, *dialog, 2, COLOR(203, 211, 222));
     draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, COLOR(28, 34, 43));
     if (description[0]) {
-        line_break = strchr(description, '\n');
-        if (line_break) {
-            size_t first_length = (size_t)(line_break - description);
-            if (first_length >= sizeof(first_line)) first_length = sizeof(first_line) - 1;
-            memcpy(first_line, description, first_length);
-            first_line[first_length] = '\0';
-            second_line = line_break + 1;
-        } else {
-            snprintf(first_line, sizeof(first_line), "%s", description);
-        }
-        fit_text(body, sizeof(body), first_line, 20, dialog->width - 68);
-        draw_text(pixels, stride, dialog->x + 34, dialog->y + 88, body, 20, COLOR(91, 100, 114));
-        if (second_line && second_line[0]) {
-            fit_text(body, sizeof(body), second_line, 18, dialog->width - 68);
-            draw_text(pixels, stride, dialog->x + 34, dialog->y + 116, body, 18, COLOR(91, 100, 114));
+        const char *current = description;
+        int line_y = dialog->y + 88;
+        int is_first = 1;
+        while (current && *current) {
+            const char *next = strchr(current, '\n');
+            size_t len = next ? (size_t)(next - current) : strlen(current);
+            if (len >= sizeof(first_line)) len = sizeof(first_line) - 1;
+            memcpy(first_line, current, len);
+            first_line[len] = '\0';
+
+            int font_size = is_first ? 20 : 18;
+            fit_text(body, sizeof(body), first_line, font_size, dialog->width - 68);
+            draw_text(pixels, stride, dialog->x + 34, line_y, body, font_size, COLOR(91, 100, 114));
+
+            line_y += font_size + 8;
+            is_first = 0;
+            current = next ? next + 1 : NULL;
         }
     }
 }
@@ -1425,12 +1425,21 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
             }
         }
     }
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 160, "请使用手机微信/相机扫描", 21, COLOR(28, 34, 43));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 196, "任你玩 网页加时控制", 22, COLOR(28, 118, 188));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 248, "网页会自动绑定当前设备，", 17, COLOR(77, 86, 99));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 276, "建议拍照或收藏网页地址，", 18, COLOR(25, 132, 95));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 304, "方便后续随时生成加时码！", 18, COLOR(25, 132, 95));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 350, "另外也支持在主界面选择【本机生成加时码】。", 15, COLOR(91, 100, 114));
+    
+    // Main functionality: QR code scan & save guidance
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 150, "使用微信/相机扫码", 26, COLOR(28, 34, 43));
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 194, "获取【任你玩】网页加时工具", 20, COLOR(28, 118, 188));
+    
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 510, dialog.y + 240, 330, 96}, 8, COLOR(240, 248, 245));
+    draw_rect_outline(pixels, stride, (UiRect){dialog.x + 510, dialog.y + 240, 330, 96}, 2, COLOR(210, 235, 225));
+    draw_text(pixels, stride, dialog.x + 526, dialog.y + 258, "💡 强烈建议", 18, COLOR(25, 132, 95));
+    draw_text(pixels, stride, dialog.x + 526, dialog.y + 286, "请将扫出的网页加入收藏夹，", 18, COLOR(45, 60, 55));
+    draw_text(pixels, stride, dialog.x + 526, dialog.y + 312, "或直接拍下此码保存到相册。", 18, COLOR(45, 60, 55));
+
+    // Secondary function
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 355, "网页会自动绑定本机，后续随时均可加时。", 15, COLOR(120, 130, 140));
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 380, "不便扫码时，可在主界面选择【本机生成】", 15, COLOR(120, 130, 140));
+    
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  关闭二维码",
                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
 }
