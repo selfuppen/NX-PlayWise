@@ -1,6 +1,6 @@
 {
-  "name": "任你玩 · PlayWise",
-  "short_name": "任你玩",
+  "name": "任我玩 · PlayWise",
+  "short_name": "任我玩",
   "description": "在家长设备本地生成 Nintendo Switch 今日游玩时间加时码。",
   "lang": "zh-CN",
   "start_url": "./",

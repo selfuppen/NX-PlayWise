@@ -57,7 +57,7 @@ static const UiAction SECURITY_ACTIONS[] = {
     {"管理设备名", "查看、输入或随机生成设备名称", COLOR(42, 105, 188)},
     {"管理加时码密钥", "查看、生成或切换演示密钥", COLOR(194, 61, 61)},
     {"加时码生成", "手机扫码或在本机生成 8 位码", COLOR(25, 132, 95)},
-    {"修改任你玩PIN", "验证当前 PIN 后设置新 PIN", COLOR(42, 105, 188)},
+    {"修改任我玩PIN", "验证当前 PIN 后设置新 PIN", COLOR(42, 105, 188)},
     {"家长区快捷键管理", "选择组合并管理孩子区提示", COLOR(42, 105, 188)},
 };
 
@@ -65,7 +65,7 @@ static const UiAction SUPPORT_ACTIONS[] = {
     {"确认接管系统控制", "预检、保存快照后启用额度管理", COLOR(42, 105, 188)},
     {"重试修复", "重新检查并恢复安全前置条件", COLOR(25, 132, 95)},
     {"紧急停用控制", "立即停止后台控制操作", COLOR(194, 61, 61)},
-    {"恢复安装前状态", "恢复原始设置并停用 任你玩", COLOR(194, 61, 61)},
+    {"恢复安装前状态", "恢复原始设置并停用 任我玩", COLOR(194, 61, 61)},
     {"导出诊断包", "生成不含密钥、PIN 和离线码的支持文件", COLOR(91, 100, 116)},
 };
 
@@ -545,7 +545,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_SHORTCUT;
     snprintf(title, sizeof(title), "首次设置 · %d/4", step);
     draw_header(pixels, stride, grace_remaining >= 0 ? "正在同步" : title,
-        grace_remaining >= 0 ? "系统设置正在同步，完成后继续选择进入的区域" : "按步骤完成 任你玩 的家长设置");
+        grace_remaining >= 0 ? "系统设置正在同步，完成后继续选择进入的区域" : "按步骤完成 任我玩 的家长设置");
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     if (grace_remaining >= 0) {
@@ -593,7 +593,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                 draw_text(pixels, stride, 420, 554, fitted, 18, COLOR(28, 118, 188));
             }
         } else if (step == PTC_UI_SETUP_PIN) {
-            draw_text(pixels, stride, 204, 220, "设置 任你玩 PIN", 30, COLOR(28, 34, 43));
+            draw_text(pixels, stride, 204, 220, "设置 任我玩 PIN", 30, COLOR(28, 34, 43));
             draw_text(pixels, stride, 204, 262, "这是进入家长区、修改规则和安全设置时使用的本应用 PIN。", 21, COLOR(77, 86, 99));
             draw_text(pixels, stride, 204, 294, "请输入 1–64 位纯数字，系统会引导你再次输入确认。", 21, COLOR(77, 86, 99));
             draw_dialog_button(pixels, stride, ptc_ui_setup_pin_rect(), "A / 点击  设置或确认 PIN",
@@ -636,7 +636,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                                      model->show_parent_shortcut_hint && model->custom_shortcut_enabled
                                         ? model->custom_shortcut_label : "家长区快捷提示未显示", 17, COLOR(77, 86, 99));
                     draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 122, card.width - 36, 25},
-                                     "家长区需要输入 任你玩 PIN", 17, COLOR(91, 100, 116));
+                                     "家长区需要输入 任我玩 PIN", 17, COLOR(91, 100, 116));
                 } else {
                     draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 86, card.width - 36, 26},
                                      "返回孩子区：B", 19, COLOR(77, 86, 99));
@@ -1517,7 +1517,7 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
                            COLOR(244, 246, 249), COLOR(66, 74, 86), true);
     }
     draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 324, dialog.width - 84, 34},
-                     model->grant_has_code ? model->grant_code : "生成前会再次验证 任你玩 PIN",
+                     model->grant_has_code ? model->grant_code : "生成前会再次验证 任我玩 PIN",
                      model->grant_has_code ? 30 : 18,
                      model->grant_has_code ? COLOR(7, 93, 76) : COLOR(91, 100, 114));
     if (model->grant_has_code) {
@@ -1558,7 +1558,7 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     }
     
     draw_text(pixels, stride, dialog.x + 510, dialog.y + 150, "使用微信/相机扫码", 26, COLOR(28, 34, 43));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 194, "获取【任你玩】网页加时工具", 20, COLOR(28, 118, 188));
+    draw_text(pixels, stride, dialog.x + 510, dialog.y + 194, "获取【任我玩】网页加时工具", 20, COLOR(28, 118, 188));
 
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 510, dialog.y + 240, 330, 96}, 8, COLOR(240, 248, 245));
     draw_rect_outline(pixels, stride, (UiRect){dialog.x + 510, dialog.y + 240, 330, 96}, 2, COLOR(210, 235, 225));

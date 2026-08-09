@@ -120,7 +120,7 @@ static const char *auth_status_zh(PtcAuthStatus status)
     case PTC_AUTH_OK:
         return "成功";
     case PTC_AUTH_EMPTY:
-        return "尚未设置 任你玩 PIN";
+        return "尚未设置 任我玩 PIN";
     case PTC_AUTH_BAD_ARGUMENT:
         return "PIN 参数无效";
     case PTC_AUTH_READ_FAILED:
@@ -882,8 +882,8 @@ static void enter_parent_area(UiState *ui)
     char pin_confirm[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus state = ptc_companion_auth_state(&ui->auth);
     if (state == PTC_AUTH_EMPTY) {
-        if (!keyboard_input("设置 任你玩 PIN", "请输入 1–64 位数字；长度由家长决定", pin, sizeof(pin), true, true, false) ||
-            !keyboard_input("确认 任你玩 PIN", "请再次输入相同的数字 PIN", pin_confirm, sizeof(pin_confirm), true, true, false) ||
+        if (!keyboard_input("设置 任我玩 PIN", "请输入 1–64 位数字；长度由家长决定", pin, sizeof(pin), true, true, false) ||
+            !keyboard_input("确认 任我玩 PIN", "请再次输入相同的数字 PIN", pin_confirm, sizeof(pin_confirm), true, true, false) ||
             strcmp(pin, pin_confirm) != 0) {
             snprintf(ui->model.message, sizeof(ui->model.message), "PIN 设置已取消，或两次输入不一致。");
             return;
@@ -897,7 +897,7 @@ static void enter_parent_area(UiState *ui)
         set_auth_message(ui, "无法进入家长区", state);
         return;
     }
-    if (!keyboard_input("任你玩 PIN", "输入本应用独立管理 PIN", pin, sizeof(pin), true, true, false)) {
+    if (!keyboard_input("任我玩 PIN", "输入本应用独立管理 PIN", pin, sizeof(pin), true, true, false)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消进入家长区。");
         return;
     }
@@ -1020,17 +1020,17 @@ static void setup_pin(UiState *ui)
     if (state == PTC_AUTH_OK) {
         if (save_setup_step(ui, PTC_UI_SETUP_TAKEOVER)) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     "当前 任你玩 PIN 已存在，可以继续确认接管系统控制。");
+                     "当前 任我玩 PIN 已存在，可以继续确认接管系统控制。");
         }
         return;
     }
     if (state != PTC_AUTH_EMPTY) {
-        set_auth_message(ui, "无法设置 任你玩 PIN", state);
+        set_auth_message(ui, "无法设置 任我玩 PIN", state);
         return;
     }
-    if (!keyboard_input("设置 任你玩 PIN", "请输入 1–64 位数字；短 PIN 仅提示风险，不会阻止保存",
+    if (!keyboard_input("设置 任我玩 PIN", "请输入 1–64 位数字；短 PIN 仅提示风险，不会阻止保存",
                         pin, sizeof(pin), true, true, false) ||
-        !keyboard_input("确认 任你玩 PIN", "请再次输入相同的数字 PIN",
+        !keyboard_input("确认 任我玩 PIN", "请再次输入相同的数字 PIN",
                         pin_confirm, sizeof(pin_confirm), true, true, false) ||
         strcmp(pin, pin_confirm) != 0) {
         snprintf(ui->model.message, sizeof(ui->model.message), "PIN 设置已取消，或两次输入不一致。");
@@ -1393,7 +1393,7 @@ static bool verify_sensitive_pin(UiState *ui, const char *action)
     char pin[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus status;
     int64_t retry_after = 0;
-    if (!keyboard_input("验证 任你玩 管理 PIN", action, pin, sizeof(pin), true, true, false)) {
+    if (!keyboard_input("验证 任我玩 管理 PIN", action, pin, sizeof(pin), true, true, false)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消敏感操作。");
         return false;
     }
@@ -1516,7 +1516,7 @@ static void change_parent_pin(UiState *ui)
     char pin[PTC_AUTH_PIN_MAX_LEN + 1];
     char confirm[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus status;
-    if (!verify_sensitive_pin(ui, "修改 PIN 前，请先输入当前任你玩 PIN")) return;
+    if (!verify_sensitive_pin(ui, "修改 PIN 前，请先输入当前任我玩 PIN")) return;
     if (!keyboard_input("修改 PlayWise PIN", "请输入新的 1–64 位数字", pin, sizeof(pin), true, true, false) ||
         !keyboard_input("确认新 PIN", "请再次输入相同的数字 PIN", confirm, sizeof(confirm), true, true, false) ||
         strcmp(pin, confirm) != 0) {
@@ -2590,7 +2590,7 @@ static void run_console_fallback(void)
     consoleInit(NULL);
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&pad);
-    printf("任你玩\n");
+    printf("任我玩\n");
     printf("Play Wise. Play More.\n\n");
     printf("图形界面初始化失败。\n");
     printf("请确认系统共享中文字体和 FreeType 运行环境可用。\n\n");

@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="tools/ptc_frontend/playwise_logo.svg" alt="任你玩 PlayWise" width="180">
+  <img src="tools/ptc_frontend/playwise_logo.svg" alt="任我玩 PlayWise" width="180">
 
-  # 任你玩 · PlayWise
+  # 任我玩 · PlayWise
 
   **Play Wise. Play More.**
 </div>

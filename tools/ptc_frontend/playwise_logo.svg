@@ -25,6 +25,6 @@
   <circle cx="400" cy="275" r="60" class="navy-stroke" stroke-width="24"/>
   <path d="M 400 230 L 400 275 L 435 275" class="navy-stroke" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M 345 405 Q 400 455 455 405" class="navy-stroke" stroke-width="20" stroke-linecap="round"/>
-  <text x="400" y="640" text-anchor="middle" class="cn-text">任你玩</text>
+  <text x="400" y="640" text-anchor="middle" class="cn-text">任我玩</text>
   <text x="400" y="740" text-anchor="middle" class="en-text">PlayWise</text>
 </svg>

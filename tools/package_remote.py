@@ -32,7 +32,7 @@ NRO_ASSET_MAGIC = 0x54455341
 NACP_SIZE = 0x4000
 NACP_TITLE_SIZE = 0x200
 NACP_DISPLAY_VERSION_OFFSET = 0x3060
-APP_TITLE = "任你玩".encode("utf-8")
+APP_TITLE = "任我玩".encode("utf-8")
 PLAYWISE_VERSION = "0.1.2-alpha"
 PACKAGE_EXPECTATIONS = {"playwise": True}
 RELEASE_COMPONENTS = (
@@ -104,7 +104,7 @@ def verify_nro_asset(data: bytes, label: str, *, require_icon: bool) -> None:
         raise PackageError(f"{label}: invalid NACP metadata bounds")
     title = data[nacp_start : nacp_start + NACP_TITLE_SIZE].split(b"\0", 1)[0]
     if title != APP_TITLE:
-        raise PackageError(f"{label}: NACP title must be 任你玩")
+        raise PackageError(f"{label}: NACP title must be 任我玩")
     display_version = data[nacp_start + NACP_DISPLAY_VERSION_OFFSET : nacp_start + NACP_DISPLAY_VERSION_OFFSET + 16].split(b"\0", 1)[0]
     if display_version.decode("ascii", errors="replace") != PLAYWISE_VERSION:
         raise PackageError(f"{label}: NACP version must be {PLAYWISE_VERSION}")

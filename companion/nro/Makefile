@@ -9,7 +9,7 @@ endif
 TARGET := pctc
 BUILD := build
 include ../../common/version.mk
-APP_TITLE := 任你玩
+APP_TITLE := 任我玩
 APP_AUTHOR := selfuppen@qq.com
 APP_VERSION := $(PLAYWISE_VERSION)
 APP_ICON := $(CURDIR)/icon.jpg
