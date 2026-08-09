@@ -65,6 +65,12 @@ static void test_release_navigation(void)
 
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_LIMIT), PTC_RULE_MODE_UNLIMITED, "limit toggles to unlimited");
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_UNLIMITED), PTC_RULE_MODE_LIMIT, "unlimited toggles to limit");
+    check_int(ptc_ui_weekday_for_display_slot(0), 1, "weekly display starts on Monday");
+    check_int(ptc_ui_weekday_for_display_slot(5), 6, "Saturday is the first weekend slot");
+    check_int(ptc_ui_weekday_for_display_slot(6), 0, "weekly display ends on Sunday");
+    check_int(PTC_UI_SHORTCUT_PRESET_COUNT, 14, "all common shortcut combinations are listed");
+    check_true(strstr(ptc_ui_shortcut_common_label(5), "Plus") != NULL, "plus shortcut preset is visible");
+    check_true(strstr(ptc_ui_shortcut_common_label(13), "Minus") != NULL, "minus shortcut preset is visible");
 }
 
 static void test_numeric_input(void)
@@ -105,6 +111,9 @@ static void test_time_previews(void)
     check_int(ptc_ui_preview_remaining_minutes(&model), 40, "set-limit preview subtracts played time");
     model.played_minutes_available = false;
     check_int(ptc_ui_preview_remaining_minutes(&model), -1, "unavailable played time is not guessed");
+    model.played_minutes_available = true;
+    model.played_minutes = 60;
+    check_true(ptc_ui_limit_minutes_would_restrict(&model, 60), "equal played and limit requires immediate restriction warning");
     model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
     model.remaining_available = true;
     model.remaining_minutes = 25;
@@ -138,9 +147,13 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_parent_refresh_rect()), PTC_UI_HIT_PARENT_REFRESH, 0,
               "parent refresh is prominent on the page");
     model.parent_page = PTC_UI_PARENT_PLAN;
-    model.draft_week[0].mode = PTC_RULE_MODE_LIMIT;
-    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 0,
-              "weekly day minutes are directly editable");
+    model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
+    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
+              "leftmost weekly day edits Monday without changing protocol order");
+    check_hit(hit_center(&model, ptc_ui_parent_refresh_rect()), PTC_UI_HIT_PARENT_REFRESH, 0,
+              "weekly refresh button is actionable");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(2)), PTC_UI_HIT_PARENT_BACK, 0,
+              "parent back action occupies the third footer slot");
     check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
               "weekly save is on the page");
     model.parent_page = PTC_UI_PARENT_SUPPORT;
@@ -158,6 +171,8 @@ static void test_release_hit_targets(void)
                "setup shortcut presets do not overlap");
     check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(1), ptc_ui_setup_shortcut_capture_rect()),
                "setup manual shortcut card does not overlap presets");
+    check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(6), ptc_ui_setup_shortcut_card_rect(13)),
+               "two shortcut preset columns do not overlap");
     model.setup_step = PTC_UI_SETUP_PIN;
     check_hit(hit_center(&model, ptc_ui_setup_pin_rect()), PTC_UI_HIT_SETUP_PIN, 0, "setup PIN guide");
     model.setup_step = PTC_UI_SETUP_ZONE;
@@ -189,17 +204,22 @@ static void test_release_hit_targets(void)
               "local generator expansion button");
     check_hit(hit_center(&model, ptc_ui_grant_more_toggle_rect()), PTC_UI_HIT_GRANT_MORE_TOGGLE, 0,
               "grant more-settings expansion button");
-    check_hit(hit_center(&model, ptc_ui_grant_generate_rect()), PTC_UI_HIT_NONE, 0,
-              "collapsed local generator hides its action");
-    model.grant_local_expanded = true;
-    check_hit(hit_center(&model, ptc_ui_grant_generate_rect()), PTC_UI_HIT_GRANT_GENERATE, 0, "local code generator button");
-    model.grant_local_expanded = false;
     check_hit(hit_center(&model, ptc_ui_grant_export_rect()), PTC_UI_HIT_NONE, 0,
               "collapsed more settings hide export");
     model.grant_more_expanded = true;
     check_hit(hit_center(&model, ptc_ui_grant_export_rect()), PTC_UI_HIT_GRANT_EXPORT, 0, "parent config export button");
     check_hit(hit_center(&model, ptc_ui_grant_edit_url_rect()), PTC_UI_HIT_GRANT_EDIT_URL, 0, "pairing URL edit button");
     check_hit(hit_center(&model, ptc_ui_grant_reset_url_rect()), PTC_UI_HIT_GRANT_RESET_URL, 0, "pairing URL reset button");
+    model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
+    check_hit(hit_center(&model, ptc_ui_grant_adjust_rect(3)), PTC_UI_HIT_GRANT_ADJUST, 3,
+              "local generator exposes the plus-fifteen shortcut");
+    check_hit(hit_center(&model, ptc_ui_grant_generate_rect()), PTC_UI_HIT_GRANT_GENERATE, 0,
+              "local generator has a dedicated generate action");
+    model.overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
+    check_hit(hit_center(&model, ptc_ui_shortcut_option_rect(13)), PTC_UI_HIT_SHORTCUT_OPTION, 13,
+              "shortcut manager exposes all common combinations");
+    check_hit(hit_center(&model, ptc_ui_shortcut_hint_rect()), PTC_UI_HIT_SHORTCUT_HINT, 0,
+              "shortcut manager exposes the child hint switch");
     model.overlay = PTC_UI_OVERLAY_WEEKLY_LEAVE;
     check_hit(hit_center(&model, ptc_ui_discard_rect(model.overlay)), PTC_UI_HIT_OVERLAY_DISCARD, 0,
               "weekly leave discard button");

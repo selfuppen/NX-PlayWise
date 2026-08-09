@@ -27,11 +27,20 @@ static const char *json_string(const cJSON *object, const char *name)
 
 const char *ptc_ui_shortcut_common_label(int index)
 {
-    static const char *labels[] = {"L + R", "ZL + ZR"};
+    static const char *labels[] = {
+        "L + R", "L + R + 上", "L + R + 下", "L + R + 左", "L + R + 右", "L + R + Plus +", "L + R + Minus -",
+        "ZL + ZR", "ZL + ZR + 上", "ZL + ZR + 下", "ZL + ZR + 左", "ZL + ZR + 右", "ZL + ZR + Plus +", "ZL + ZR + Minus -"
+    };
     if (index < 0 || index >= PTC_UI_SHORTCUT_PRESET_COUNT) {
         return "未选择";
     }
     return labels[index];
+}
+
+int ptc_ui_weekday_for_display_slot(int slot)
+{
+    static const int ORDER[] = {1, 2, 3, 4, 5, 6, 0};
+    return slot >= 0 && slot < 7 ? ORDER[slot] : 0;
 }
 
 static const char *localized_mode(const char *mode)
@@ -639,7 +648,9 @@ PtcUiRect ptc_ui_error_back_rect(void)
 
 PtcUiRect ptc_ui_setup_shortcut_card_rect(int index)
 {
-    PtcUiRect rect = {204 + index * 286, 310, 260, 92};
+    int column = index / 7;
+    int row = index % 7;
+    PtcUiRect rect = {204 + column * 438, 278 + row * 34, 410, 29};
     if (index < 0 || index >= PTC_UI_SHORTCUT_PRESET_COUNT) {
         rect.w = 0;
         rect.h = 0;
@@ -649,7 +660,7 @@ PtcUiRect ptc_ui_setup_shortcut_card_rect(int index)
 
 PtcUiRect ptc_ui_setup_shortcut_capture_rect(void)
 {
-    PtcUiRect rect = {776, 310, 300, 92};
+    PtcUiRect rect = {692, 526, 384, 42};
     return rect;
 }
 
@@ -746,6 +757,14 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 900;
         *height = 610;
         break;
+    case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
+        *width = 1120;
+        *height = 650;
+        break;
+    case PTC_UI_OVERLAY_GRANT_LOCAL:
+        *width = 820;
+        *height = 570;
+        break;
     case PTC_UI_OVERLAY_WEEKLY_LEAVE:
         *width = 860;
         *height = 350;
@@ -753,7 +772,7 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
     case PTC_UI_OVERLAY_CONFIRM:
     default:
         *width = 760;
-        *height = 330;
+        *height = 420;
         break;
     }
 }
@@ -942,8 +961,8 @@ PtcUiRect ptc_ui_grant_export_rect(void)
 
 PtcUiRect ptc_ui_grant_generate_rect(void)
 {
-    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
-    PtcUiRect rect = {dialog.x + 42, dialog.y + 404, 816, 54};
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_LOCAL);
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 382, dialog.w - 84, 60};
     return rect;
 }
 
@@ -958,6 +977,51 @@ PtcUiRect ptc_ui_grant_reset_url_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_SETUP);
     PtcUiRect rect = {dialog.x + 578, dialog.y + 374, 280, 54};
+    return rect;
+}
+
+PtcUiRect ptc_ui_shortcut_option_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_SHORTCUT_MANAGER);
+    int column = index / 7;
+    int row = index % 7;
+    PtcUiRect rect = {dialog.x + 36 + column * 524, dialog.y + 128 + row * 40, 500, 34};
+    if (index < 0 || index >= PTC_UI_SHORTCUT_PRESET_COUNT) {
+        rect.w = 0;
+        rect.h = 0;
+    }
+    return rect;
+}
+
+PtcUiRect ptc_ui_shortcut_capture_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_SHORTCUT_MANAGER);
+    PtcUiRect rect = {dialog.x + 36, dialog.y + 430, 318, 46};
+    return rect;
+}
+
+PtcUiRect ptc_ui_shortcut_disable_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_SHORTCUT_MANAGER);
+    PtcUiRect rect = {dialog.x + 370, dialog.y + 430, 318, 46};
+    return rect;
+}
+
+PtcUiRect ptc_ui_shortcut_hint_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_SHORTCUT_MANAGER);
+    PtcUiRect rect = {dialog.x + 704, dialog.y + 430, 380, 46};
+    return rect;
+}
+
+PtcUiRect ptc_ui_grant_adjust_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_LOCAL);
+    PtcUiRect rect = {dialog.x + 42 + index * 122, dialog.y + 250, 108, 54};
+    if (index < 0 || index >= 6) {
+        rect.w = 0;
+        rect.h = 0;
+    }
     return rect;
 }
 
@@ -1050,12 +1114,13 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         break;
     case PTC_UI_OVERLAY_WEEKLY:
         for (i = 0; i < 7; ++i) {
-            if (model->draft_week[i].mode == PTC_RULE_MODE_LIMIT &&
+            int weekday = ptc_ui_weekday_for_display_slot(i);
+            if (model->draft_week[weekday].mode == PTC_RULE_MODE_LIMIT &&
                 ptc_ui_rect_contains(ptc_ui_weekly_day_minutes_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, i);
+                return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, weekday);
             }
             if (ptc_ui_rect_contains(ptc_ui_weekly_day_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_WEEKLY_DAY, i);
+                return make_hit(PTC_UI_HIT_WEEKLY_DAY, weekday);
             }
         }
         if (ptc_ui_rect_contains(ptc_ui_weekly_mode_rect(), x, y)) {
@@ -1110,6 +1175,26 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             if (ptc_ui_rect_contains(ptc_ui_grant_edit_url_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_EDIT_URL, 0);
             if (ptc_ui_rect_contains(ptc_ui_grant_reset_url_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_RESET_URL, 0);
         }
+        break;
+    case PTC_UI_OVERLAY_GRANT_LOCAL:
+        for (i = 0; i < 6; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_grant_adjust_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_GRANT_ADJUST, i);
+            }
+        }
+        if (ptc_ui_rect_contains(ptc_ui_grant_generate_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_GRANT_GENERATE, 0);
+        }
+        break;
+    case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
+        for (i = 0; i < PTC_UI_SHORTCUT_PRESET_COUNT; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_shortcut_option_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_SHORTCUT_OPTION, i);
+            }
+        }
+        if (ptc_ui_rect_contains(ptc_ui_shortcut_capture_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_CAPTURE, 0);
+        if (ptc_ui_rect_contains(ptc_ui_shortcut_disable_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_DISABLE, 0);
+        if (ptc_ui_rect_contains(ptc_ui_shortcut_hint_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_HINT, 0);
         break;
     case PTC_UI_OVERLAY_QR:
     case PTC_UI_OVERLAY_WEEKLY_LEAVE:
@@ -1196,8 +1281,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_PARENT_TAB, i);
         }
     }
-    if (model->parent_page != PTC_UI_PARENT_PLAN &&
-        ptc_ui_rect_contains(ptc_ui_parent_refresh_rect(), x, y)) {
+    if (ptc_ui_rect_contains(ptc_ui_parent_refresh_rect(), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
     }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(0), x, y)) {
@@ -1207,20 +1291,17 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_PARENT_NEXT_PAGE, 0);
     }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(2), x, y)) {
-        return make_hit(model->parent_page == PTC_UI_PARENT_PLAN
-            ? PTC_UI_HIT_WEEKLY_SAVE : PTC_UI_HIT_PARENT_REFRESH, 0);
-    }
-    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(3), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
         for (i = 0; i < 7; ++i) {
-            if (model->draft_week[i].mode == PTC_RULE_MODE_LIMIT &&
+            int weekday = ptc_ui_weekday_for_display_slot(i);
+            if (model->draft_week[weekday].mode == PTC_RULE_MODE_LIMIT &&
                 ptc_ui_rect_contains(ptc_ui_weekly_day_minutes_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, i);
+                return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, weekday);
             }
             if (ptc_ui_rect_contains(ptc_ui_weekly_day_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_WEEKLY_DAY, i);
+                return make_hit(PTC_UI_HIT_WEEKLY_DAY, weekday);
             }
         }
         if (ptc_ui_rect_contains(ptc_ui_weekly_mode_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MODE, 0);

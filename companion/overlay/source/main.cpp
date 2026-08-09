@@ -285,7 +285,7 @@ public:
 
         // --- 0. Top Prominent Status Banner (醒目展示今日已玩与修改后/当前可玩时长) ---
         const s32 top_banner_y = cy + 4;
-        const s32 top_banner_h = 48;
+        const s32 top_banner_h = 76;
         renderer->drawRect(cx, top_banner_y, cw, top_banner_h, renderer->a(CARD_COLOR));
         draw_outline(renderer, cx, top_banner_y, cw, top_banner_h, 1, FOCUS_BORDER);
 
@@ -297,20 +297,20 @@ public:
         }
         renderer->drawString(line, false, cx + 82, top_banner_y + 25, 17, renderer->a(TEXT_COLOR));
 
-        renderer->drawString("修改后可玩", false, cx + 10, top_banner_y + 45, 12, renderer->a(MUTED_COLOR));
+        renderer->drawString("修改后可玩", false, cx + 10, top_banner_y + 53, 12, renderer->a(MUTED_COLOR));
         if (close_after_frames_ > 0 || (bridge_->summary.valid && bridge_->summary.remaining_available)) {
             std::snprintf(line, sizeof(line), "%d 分钟", bridge_->summary.remaining_minutes);
-            renderer->drawString(line, false, cx + 100, top_banner_y + 47, 18, renderer->a(SUCCESS_COLOR));
+            renderer->drawString(line, false, cx + 100, top_banner_y + 57, 18, renderer->a(SUCCESS_COLOR));
         } else {
-            renderer->drawString("提交后刷新", false, cx + 100, top_banner_y + 47, 15, renderer->a(MUTED_COLOR));
+            renderer->drawString("提交后刷新", false, cx + 100, top_banner_y + 57, 15, renderer->a(MUTED_COLOR));
         }
 
         // --- 1. Header Prompt & Guidance (护眼提醒) ---
-        renderer->drawString("提示：加时前记得向窗外远眺 5 分钟！", false, cx + 5, cy + 86, 15, renderer->a(FOCUS_BORDER));
+        renderer->drawString("提示：加时前记得向窗外远眺 5 分钟！", false, cx + 5, cy + 110, 15, renderer->a(FOCUS_BORDER));
 
         // --- 2. Code Display Slots (8位卡片槽 - 增大更醒目) ---
         const s32 slot_start_x = cx + 8;
-        const s32 slot_y = cy + 112;
+        const s32 slot_y = cy + 132;
         const s32 slot_w = 34;
         const s32 slot_h = 44;
         const s32 slot_gap = 4;
@@ -344,11 +344,11 @@ public:
         }
 
         std::snprintf(line, sizeof(line), "已输入 %u/8 位   当前高亮数字：%c", input_->length, ptc_overlay_input_charset()[input_->cursor]);
-        renderer->drawString(line, false, cx + 5, cy + 166, 13, renderer->a(MUTED_COLOR));
+        renderer->drawString(line, false, cx + 5, cy + 208, 13, renderer->a(MUTED_COLOR));
 
         // --- 3. Keypad 3x4 Grid (软键盘放大) ---
         const char *charset = ptc_overlay_input_charset();
-        const s32 panel_y = cy + 184;
+        const s32 panel_y = cy + 228;
         const s32 panel_h = 192;
         renderer->drawRect(cx, panel_y, cw, panel_h, renderer->a(PANEL_COLOR));
         draw_outline(renderer, cx, panel_y, cw, panel_h, 1, MUTED_COLOR);
@@ -381,7 +381,7 @@ public:
 
         // --- 4. Control & Submit Bar (操作与提交栏) ---
         const bool can_submit = ptc_overlay_input_can_submit(input_);
-        const s32 submit_y = cy + 386;
+        const s32 submit_y = cy + 430;
         const s32 submit_h = 40;
 
         // 提交加时大按钮
@@ -395,7 +395,7 @@ public:
         }
 
         // --- 5. Collapsible Status Panel (可折叠命令与状态栏) ---
-        const s32 status_y = cy + 434;
+        const s32 status_y = cy + 478;
         const s32 status_w = cw;
 
         if (!status_expanded_) {

@@ -25,8 +25,7 @@ typedef enum {
 
 typedef enum {
     PTC_UI_SHORTCUT_PRESET_LR = 0,
-    PTC_UI_SHORTCUT_PRESET_ZLZR = 1,
-    PTC_UI_SHORTCUT_PRESET_COUNT = 2
+    PTC_UI_SHORTCUT_PRESET_COUNT = 14
 } PtcUiShortcutPreset;
 
 typedef enum {
@@ -46,7 +45,9 @@ typedef enum {
     PTC_UI_OVERLAY_CREDENTIAL = 5,
     PTC_UI_OVERLAY_GRANT_SETUP = 6,
     PTC_UI_OVERLAY_QR = 7,
-    PTC_UI_OVERLAY_WEEKLY_LEAVE = 8
+    PTC_UI_OVERLAY_WEEKLY_LEAVE = 8,
+    PTC_UI_OVERLAY_SHORTCUT_MANAGER = 9,
+    PTC_UI_OVERLAY_GRANT_LOCAL = 10
 } PtcUiOverlay;
 
 typedef enum {
@@ -113,10 +114,15 @@ typedef struct {
     int setup_shortcut_index;
     int setup_zone_index;
     uint64_t custom_shortcut_mask;
+    bool custom_shortcut_enabled;
+    uint64_t shortcut_draft_mask;
+    bool shortcut_draft_enabled;
+    bool shortcut_draft_show_hint;
     uint64_t captured_shortcut_mask;
     bool shortcut_capture_active;
     bool show_parent_shortcut_hint;
     char custom_shortcut_label[96];
+    char shortcut_draft_label[96];
     PtcUiOverlay overlay;
     PtcUiOperation operation;
     uint16_t draft_minutes;
@@ -130,6 +136,7 @@ typedef struct {
     int editor_index;
     char overlay_title[64];
     char overlay_body[320];
+    bool confirm_hold_required;
     PtcUiNumpadPurpose numpad_purpose;
     PtcUiOverlay numpad_return_overlay;
     char numpad_text[9];
@@ -217,7 +224,12 @@ typedef enum {
     PTC_UI_HIT_GRANT_EXPORT,
     PTC_UI_HIT_GRANT_GENERATE,
     PTC_UI_HIT_GRANT_EDIT_URL,
-    PTC_UI_HIT_GRANT_RESET_URL
+    PTC_UI_HIT_GRANT_RESET_URL,
+    PTC_UI_HIT_SHORTCUT_OPTION,
+    PTC_UI_HIT_SHORTCUT_CAPTURE,
+    PTC_UI_HIT_SHORTCUT_DISABLE,
+    PTC_UI_HIT_SHORTCUT_HINT,
+    PTC_UI_HIT_GRANT_ADJUST
 } PtcUiHitKind;
 
 typedef struct {
@@ -231,6 +243,7 @@ void ptc_ui_graphics_draw(const PtcUiModel *model);
 
 int ptc_ui_parent_action_count(PtcUiParentPage page);
 const char *ptc_ui_shortcut_common_label(int index);
+int ptc_ui_weekday_for_display_slot(int slot);
 void ptc_ui_change_parent_page(PtcUiModel *model, int direction);
 void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertical);
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
@@ -316,6 +329,11 @@ PtcUiRect ptc_ui_grant_export_rect(void);
 PtcUiRect ptc_ui_grant_generate_rect(void);
 PtcUiRect ptc_ui_grant_edit_url_rect(void);
 PtcUiRect ptc_ui_grant_reset_url_rect(void);
+PtcUiRect ptc_ui_shortcut_option_rect(int index);
+PtcUiRect ptc_ui_shortcut_capture_rect(void);
+PtcUiRect ptc_ui_shortcut_disable_rect(void);
+PtcUiRect ptc_ui_shortcut_hint_rect(void);
+PtcUiRect ptc_ui_grant_adjust_rect(int index);
 bool ptc_ui_rect_contains(PtcUiRect rect, int x, int y);
 PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y);
 
