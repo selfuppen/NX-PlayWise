@@ -59,6 +59,7 @@ const char *ptc_companion_transport_route_label_zh(PtcCompanionTransportRoute ro
 const char *ptc_companion_request_command_label_zh(const char *type);
 PtcCompanionStatus ptc_companion_transport_submit_status(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_transport_submit_offline_code(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const char *code);
+PtcCompanionStatus ptc_companion_transport_submit_preview_offline_code(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const char *code);
 PtcCompanionStatus ptc_companion_transport_submit_set_today_limit(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, uint16_t minutes);
 PtcCompanionStatus ptc_companion_transport_submit_add_today_minutes(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, uint16_t minutes);
 PtcCompanionStatus ptc_companion_transport_submit_empty(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const char *type);

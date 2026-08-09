@@ -479,9 +479,12 @@ int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now)
 
 bool ptc_ui_cancel_overlay(PtcUiModel *model)
 {
+    bool clear_pending_code;
     if (!model || model->overlay == PTC_UI_OVERLAY_NONE) {
         return false;
     }
+    clear_pending_code = model->operation == PTC_UI_OPERATION_REDEEM_OFFLINE_CODE ||
+        model->overlay == PTC_UI_OVERLAY_CODE_RESULT;
     if (model->overlay == PTC_UI_OVERLAY_NUMPAD) {
         ptc_ui_numpad_finish(model);
     } else if (model->overlay == PTC_UI_OVERLAY_CONFIRM &&
@@ -508,6 +511,7 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
         model->confirm_return_body[0] = '\0';
         model->operation = PTC_UI_OPERATION_NONE;
     }
+    if (clear_pending_code) model->pending_code[0] = '\0';
     return true;
 }
 
@@ -575,6 +579,15 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         }
         model->play_timer_enabled = summary.play_timer_enabled;
         model->restricted_now = summary.restricted_now;
+    }
+    if (strcmp(status, "ok") == 0 && type && strcmp(type, "preview_offline_code") == 0 &&
+        summary.preview_available) {
+        model->code_grant_minutes = summary.grant_minutes;
+        model->code_preview_after_available = summary.remaining_after_available;
+        model->code_preview_after_minutes = summary.remaining_after_minutes;
+        model->code_effective_add_minutes = summary.effective_add_minutes;
+        model->code_preview_capped = summary.preview_capped;
+        model->code_preview_converts_unlimited = summary.converts_unlimited_to_limited;
     }
     setup = cJSON_GetObjectItemCaseSensitive(root, "setup");
     if (strcmp(status, "ok") == 0 && cJSON_IsObject(setup)) {
@@ -801,6 +814,14 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
     case PTC_UI_OVERLAY_CREDENTIAL_LEAVE:
         *width = 720;
         *height = 300;
+        break;
+    case PTC_UI_OVERLAY_CODE_RESULT:
+        *width = 760;
+        *height = 420;
+        break;
+    case PTC_UI_OVERLAY_AUTH_ERROR:
+        *width = 720;
+        *height = 340;
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:
@@ -1344,6 +1365,8 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     case PTC_UI_OVERLAY_QR:
     case PTC_UI_OVERLAY_WEEKLY_LEAVE:
     case PTC_UI_OVERLAY_CREDENTIAL_LEAVE:
+    case PTC_UI_OVERLAY_CODE_RESULT:
+    case PTC_UI_OVERLAY_AUTH_ERROR:
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     case PTC_UI_OVERLAY_NONE:

@@ -203,6 +203,12 @@ static void test_candidate_navigation(void)
     check_true(strcmp(model.overlay_title, "管理设备名") == 0 &&
                strcmp(model.overlay_body, "草稿说明") == 0,
                "cancelled confirmation restores the editor copy");
+
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    model.operation = PTC_UI_OPERATION_REDEEM_OFFLINE_CODE;
+    snprintf(model.pending_code, sizeof(model.pending_code), "10514680");
+    check_true(ptc_ui_cancel_overlay(&model), "code confirmation can be cancelled");
+    check_true(model.pending_code[0] == '\0', "cancelled code confirmation forgets the full code");
 }
 
 static void test_release_hit_targets(void)
@@ -333,6 +339,14 @@ static void test_release_hit_targets(void)
               "credential leave has a continue-editing button");
     check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
               "credential leave has no invisible cancel target");
+    model.overlay = PTC_UI_OVERLAY_CODE_RESULT;
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "code result has a completion target");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "code result can return to the child area");
+    model.overlay = PTC_UI_OVERLAY_AUTH_ERROR;
+    check_true(!rects_overlap(ptc_ui_confirm_rect(model.overlay), ptc_ui_cancel_rect(model.overlay)),
+               "PIN error retry and cancel targets do not overlap");
 }
 
 static void test_user_state_mapping(void)
@@ -365,6 +379,14 @@ static void test_user_state_mapping(void)
         "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,"
         "\"remaining_available\":false,\"remaining_minutes\":-1,\"played_minutes_available\":false,"
         "\"played_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1},\"completed_at\":108}";
+    const char *preview =
+        "{\"version\":1,\"request_id\":\"preview\",\"type\":\"preview_offline_code\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":20,\"played_minutes_available\":true,"
+        "\"played_minutes\":40,\"play_timer_enabled\":1,\"restricted_now\":0},"
+        "\"preview\":{\"grant_minutes\":30,\"remaining_after_available\":true,"
+        "\"remaining_after_minutes\":50,\"effective_add_minutes\":30,\"capped\":false,"
+        "\"converts_unlimited_to_limited\":false},\"completed_at\":109}";
 
     memset(&model, 0, sizeof(model));
     check_true(ptc_ui_apply_result_json(&model, pending), "syncing result parses");
@@ -385,6 +407,10 @@ static void test_user_state_mapping(void)
     check_true(strstr(model.feedback_detail, "手动") != NULL &&
                strstr(model.feedback_detail, "重新检测") != NULL,
                "306 provides manual control guidance");
+    check_true(ptc_ui_apply_result_json(&model, preview), "offline-code preview parses");
+    check_int(model.code_grant_minutes, 30, "preview grant minutes mapped");
+    check_true(model.code_preview_after_available && model.code_preview_after_minutes == 50,
+               "preview post-redemption remainder mapped");
 }
 
 int main(void)

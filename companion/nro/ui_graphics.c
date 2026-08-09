@@ -1015,7 +1015,6 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
     static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
     int slot;
     char minutes[32];
-    char today_hint[240];
     char freshness[64];
     uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
     format_status_age(model, freshness, sizeof(freshness));
@@ -1042,27 +1041,33 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
         }
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 125, card.width, 34}, minutes, 19, COLOR(77, 86, 99));
     }
-    if (model->today_override_present) {
-        char active_remaining[32];
-        char weekly_remaining[32];
-        char line1[120];
-        format_rule_remaining_label(model, model->today_override_rule, active_remaining, sizeof(active_remaining));
-        format_rule_remaining_label(model, model->current_week[weekday], weekly_remaining, sizeof(weekly_remaining));
-        snprintf(line1, sizeof(line1), "当前有效剩余：%s  ·  恢复周计划后：%s", active_remaining, weekly_remaining);
-        draw_text(pixels, stride, 64, 416, line1, 18, COLOR(215, 139, 25));
-        draw_text(pixels, stride, 64, 444, "提示：保存计划不会清除今日临时设置，可到“今日额度”恢复原计划。", 17, COLOR(91, 100, 116));
-    } else if (model->draft_week[weekday].mode == PTC_RULE_MODE_LIMIT) {
-        int remaining = model->played_minutes_available
-            ? (int)model->draft_week[weekday].minutes - model->played_minutes : -1;
-        if (remaining < 0 && model->played_minutes_available) remaining = 0;
-        if (remaining >= 0) snprintf(today_hint, sizeof(today_hint), "今天已玩约 %d 分钟；保存后还可玩约 %d 分钟。", model->played_minutes, remaining);
-        else snprintf(today_hint, sizeof(today_hint), "今天的实际剩余将在计划保存并同步后刷新。");
-        draw_text(pixels, stride, 64, 424, today_hint, 18, COLOR(25, 132, 95));
-    } else {
-        snprintf(today_hint, sizeof(today_hint), "今天保存后为不限时；系统将在后台自动刷新同步。");
-        draw_text(pixels, stride, 64, 424, today_hint, 18, COLOR(25, 132, 95));
+    {
+        char current_value[48];
+        char after_value[48];
+        int current_minutes = model->remaining_available ? model->remaining_minutes : -1;
+        if (model->unrestricted_today == 1) snprintf(current_value, sizeof(current_value), "不限时");
+        else format_duration(current_minutes, current_value, sizeof(current_value));
+        format_rule_remaining_label(model, model->draft_week[weekday], after_value, sizeof(after_value));
+        draw_time_state_card(pixels, stride, (UiRect){64, 392, 300, 76},
+                             model->today_override_present ? "当前有效剩余" : "当前还能玩",
+                             current_value,
+                             time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
+                                               model->unrestricted_today == 1, current_minutes));
+        draw_text_center(pixels, stride, (UiRect){364, 410, 52, 38}, "→", 27, COLOR(91, 100, 114));
+        draw_time_state_card(pixels, stride, (UiRect){416, 392, 330, 76},
+                             model->today_override_present ? "保存并在之后恢复后预计" : "保存后预计还能玩",
+                             after_value,
+                             time_state_accent(model->draft_week[weekday].mode == PTC_RULE_MODE_UNLIMITED ||
+                                               model->played_minutes_available,
+                                               model->draft_week[weekday].mode == PTC_RULE_MODE_UNLIMITED,
+                                               model->draft_week[weekday].mode == PTC_RULE_MODE_LIMIT && model->played_minutes_available
+                                                  ? (int)model->draft_week[weekday].minutes - model->played_minutes : -1));
     }
-    draw_text(pixels, stride, 64, 478, "方向键选择 · A 确定 · B 返回 · Y 刷新", 17, COLOR(77, 86, 99));
+    draw_text(pixels, stride, 64, 486,
+              model->today_override_present
+                ? "保存不会清除今天的临时设置 · 方向键选择 · A 确定 · Y 刷新"
+                : "方向键选择 · A 确定 · B 返回 · Y 刷新",
+              17, model->today_override_present ? COLOR(215, 139, 25) : COLOR(77, 86, 99));
     draw_candidate_button(pixels, stride, ptc_ui_weekly_mode_rect(), "X  切换模式",
                           COLOR(244, 246, 249), COLOR(28, 118, 188), model->selected_index == 1, false);
     draw_candidate_button(pixels, stride, ptc_ui_weekly_discard_rect(), "ZL  放弃修改",
@@ -1295,6 +1300,7 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     char current[64];
     char duration[64];
     uint16_t entered_minutes = 0;
+    bool weekly_today_preview = false;
     int index;
     draw_dialog_shell(pixels, stride, model, &dialog, 620, 700);
     if ((model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
@@ -1340,6 +1346,7 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
                 entered_minutes = model->numpad_current;
             }
             format_duration(entered_minutes, duration, sizeof(duration));
+            weekly_today_preview = model->editor_index == ptc_weekday_from_day_index(model->day_index);
         } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
             unsigned int len = (unsigned int)strlen(model->numpad_text);
             snprintf(current, sizeof(current), "请输入 8 位加时码  ·  当前已输入 %u/8 位", len);
@@ -1350,7 +1357,32 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         }
     }
     draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 218, dialog.width - 80, 22}, current, 16, COLOR(91, 100, 114));
-    if (duration[0]) {
+    if (weekly_today_preview) {
+        char current_value[48];
+        char after_value[48];
+        char left[96];
+        char right[112];
+        int after_minutes = model->played_minutes_available
+            ? (int)entered_minutes - model->played_minutes : -1;
+        if (after_minutes < 0 && model->played_minutes_available) after_minutes = 0;
+        if (model->unrestricted_today == 1) snprintf(current_value, sizeof(current_value), "不限时");
+        else format_duration(model->remaining_available ? model->remaining_minutes : -1,
+                             current_value, sizeof(current_value));
+        format_duration(after_minutes, after_value, sizeof(after_value));
+        snprintf(left, sizeof(left), "%s：%s",
+                 model->today_override_present ? "当前有效剩余" : "当前还能玩", current_value);
+        snprintf(right, sizeof(right), "%s：%s",
+                 model->today_override_present ? "之后恢复预计" : "保存后预计", after_value);
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 32, dialog.y + 242, 266, 32}, 6, COLOR(248, 250, 253));
+        draw_rect_outline(pixels, stride, (UiRect){dialog.x + 32, dialog.y + 242, 266, 32}, 1,
+                          time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
+                                            model->unrestricted_today == 1, model->remaining_minutes));
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 36, dialog.y + 244, 258, 28}, left, 14, COLOR(66, 74, 86));
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 322, dialog.y + 242, 266, 32}, 6, COLOR(248, 250, 253));
+        draw_rect_outline(pixels, stride, (UiRect){dialog.x + 322, dialog.y + 242, 266, 32}, 1,
+                          time_state_accent(model->played_minutes_available, false, after_minutes));
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 326, dialog.y + 244, 258, 28}, right, 14, COLOR(66, 74, 86));
+    } else if (duration[0]) {
         char duration_line[80];
         snprintf(duration_line, sizeof(duration_line), "换算：%s", duration);
         draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 244, dialog.width - 80, 22},
@@ -1388,15 +1420,21 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     PtcUiModel shell_model;
     bool restore = model->operation == PTC_UI_OPERATION_RESTORE_TODAY_POLICY;
     bool limit_change = model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT;
+    bool code_preview = model->operation == PTC_UI_OPERATION_REDEEM_OFFLINE_CODE;
     bool danger = model->operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT ||
                   model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT ||
                   model->operation == PTC_UI_OPERATION_SAVE_WEEKLY ||
                   model->operation == PTC_UI_OPERATION_EMERGENCY_DISABLE ||
                   model->operation == PTC_UI_OPERATION_RESUME_CONTROL ||
                   model->operation == PTC_UI_OPERATION_COMPLETE_SETUP ||
-                  model->operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT;
+                  model->operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT ||
+                  code_preview;
     shell_model = *model;
-    if (restore) {
+    if (code_preview) {
+        snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
+                 "本次增加 %d 分钟；今天有效，成功兑换后只能使用一次。",
+                 model->code_grant_minutes);
+    } else if (restore) {
         snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
                  "将清除今天的临时额度或不限时状态。");
     } else if (limit_change) {
@@ -1404,7 +1442,24 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
                  "请核对今天的实时状态和修改结果。");
     }
     draw_dialog_shell(pixels, stride, &shell_model, &dialog, 760, 420);
-    if (restore) {
+    if (code_preview) {
+        char current_value[48];
+        char after_value[48];
+        if (model->unrestricted_today == 1) snprintf(current_value, sizeof(current_value), "不限时");
+        else format_duration(model->remaining_available ? model->remaining_minutes : -1,
+                             current_value, sizeof(current_value));
+        format_duration(model->code_preview_after_available ? model->code_preview_after_minutes : -1,
+                        after_value, sizeof(after_value));
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 142, 300, 92},
+                             "当前还能玩", current_value,
+                             time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
+                                               model->unrestricted_today == 1, model->remaining_minutes));
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 354, dialog.y + 166, 52, 42}, "→", 28, COLOR(91, 100, 114));
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 406, dialog.y + 142, 300, 92},
+                             "兑换后预计还能玩", after_value,
+                             time_state_accent(model->code_preview_after_available, false,
+                                               model->code_preview_after_minutes));
+    } else if (restore) {
         uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
         PtcDayRule current = model->today_override_present ? model->today_override_rule : model->current_week[weekday];
         PtcDayRule after = model->current_week[weekday];
@@ -1457,14 +1512,33 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
         draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 264, 652, 34},
                          "新额度不高于已玩时间，保存后会马上限制儿童使用", 20, COLOR(194, 61, 61));
     }
-    if (restore || limit_change) {
+    if (restore || limit_change || code_preview) {
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54}, 8,
                         model->confirm_hold_required ? COLOR(255, 232, 235) : COLOR(255, 247, 229));
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54},
-                         model->confirm_hold_required
-                            ? (model->played_minutes_available ? "操作后可能立即限制游玩，请长按 A 确认" : "无法取得今天已玩时间，不能判断是否立即限制")
-                            : (limit_change && model->unrestricted_today == 1 ? "不限时将改为限时，请确认状态变化" : "请确认状态变化"),
-                         19, model->confirm_hold_required ? COLOR(194, 61, 61) : COLOR(170, 109, 18));
+        if (code_preview) {
+            char warning[160];
+            if (model->code_preview_converts_unlimited) {
+                snprintf(warning, sizeof(warning), "当前不限时，兑换后将改为限时%s",
+                         model->confirm_hold_required ? "；请长按 A 确认" : "");
+            } else if (!model->code_preview_after_available) {
+                snprintf(warning, sizeof(warning), "实时状态未知；请长按 A 确认");
+            } else if (model->code_preview_after_minutes == 0) {
+                snprintf(warning, sizeof(warning), "兑换后预计没有可玩时间；请长按 A 确认");
+            } else if (model->code_preview_capped) {
+                snprintf(warning, sizeof(warning), "受每日 1440 分钟上限影响，实际增加 %d 分钟",
+                         model->code_effective_add_minutes);
+            } else {
+                snprintf(warning, sizeof(warning), "确认后才会生效并消费这枚一次性加时码");
+            }
+            draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54},
+                             warning, 18, model->confirm_hold_required ? COLOR(194, 61, 61) : COLOR(170, 109, 18));
+        } else {
+            draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54},
+                             model->confirm_hold_required
+                                ? (model->played_minutes_available ? "操作后可能立即限制游玩，请长按 A 确认" : "无法取得今天已玩时间，不能判断是否立即限制")
+                                : (limit_change && model->unrestricted_today == 1 ? "不限时将改为限时，请确认状态变化" : "请确认状态变化"),
+                             19, model->confirm_hold_required ? COLOR(194, 61, 61) : COLOR(170, 109, 18));
+        }
     } else if (!model->confirm_hold_required || !model->played_minutes_available) {
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 230, 620, 72}, 8,
                         danger ? COLOR(255, 240, 240) : COLOR(240, 248, 244));
@@ -1566,6 +1640,87 @@ static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const Ptc
                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
     draw_text(pixels, stride, dialog.x + 42, dialog.y + 406,
               "方向键选择 · A 确定 · X 手工输入 · + 保存", 16, COLOR(77, 86, 99));
+}
+
+static void draw_code_result_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    PtcUiModel shell_model = *model;
+    char before_value[48];
+    char after_value[48];
+    if (model->code_result_pending) {
+        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "加时结果确认中");
+        snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
+                 "已恢复上次确认的兑换请求，正在读取最终结果；请勿重复输入这枚加时码。");
+    } else if (model->code_result_failed) {
+        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "兑换未成功");
+        snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
+                 "后台已确认本次兑换失败，加时码没有被消费，可以重新输入。");
+    } else {
+        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "加时成功");
+        snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
+                 "已增加 %d 分钟。该加时码已经使用，不能再次使用。", model->code_grant_minutes);
+    }
+    draw_dialog_shell(pixels, stride, &shell_model, &dialog, 760, 420);
+    if (model->code_before_unlimited) snprintf(before_value, sizeof(before_value), "不限时");
+    else format_duration(model->code_before_remaining_available ? model->code_before_remaining_minutes : -1,
+                         before_value, sizeof(before_value));
+    if (model->code_result_pending) {
+        format_duration(model->code_preview_after_available ? model->code_preview_after_minutes : -1,
+                        after_value, sizeof(after_value));
+    } else if (model->unrestricted_today == 1) snprintf(after_value, sizeof(after_value), "不限时");
+    else format_duration(model->remaining_available ? model->remaining_minutes : -1,
+                         after_value, sizeof(after_value));
+    draw_time_state_card(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 142, 300, 92},
+                         "兑换前", before_value,
+                         time_state_accent(model->code_before_unlimited || model->code_before_remaining_available,
+                                           model->code_before_unlimited, model->code_before_remaining_minutes));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 354, dialog.y + 166, 52, 42}, "→", 28, COLOR(91, 100, 114));
+    draw_time_state_card(pixels, stride, (UiRect){dialog.x + 406, dialog.y + 142, 300, 92},
+                         model->code_result_pending ? "预览兑换后" : "实际兑换后", after_value,
+                         time_state_accent(model->code_result_pending ? model->code_preview_after_available :
+                                           (model->unrestricted_today == 1 || model->remaining_available),
+                                           model->code_result_pending ? false : model->unrestricted_today == 1,
+                                           model->code_result_pending ? model->code_preview_after_minutes : model->remaining_minutes));
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54}, 8,
+                    model->code_result_failed ? COLOR(255, 235, 238) : COLOR(235, 249, 242));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54},
+                     model->code_result_pending ? "结果确认期间可关闭；下次打开会继续确认" :
+                     (model->code_result_failed ? "失败结果已确认；关闭后可重新输入" : "兑换结果已确认并保存"),
+                     19, model->code_result_failed ? COLOR(194, 61, 61) : COLOR(25, 132, 95));
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回孩子区",
+                       COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "A  完成",
+                       COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+}
+
+static void draw_auth_error_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    PtcUiModel shell_model = *model;
+    char retry_label[64];
+    snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "%s",
+             model->auth_error_title[0] ? model->auth_error_title : "PIN 验证未通过");
+    snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body), "%s",
+             model->auth_error_message[0] ? model->auth_error_message : "PIN 不正确，请重试。");
+    draw_dialog_shell(pixels, stride, &shell_model, &dialog, 720, 340);
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 44, dialog.y + 142, dialog.width - 88, 72}, 8,
+                    COLOR(255, 235, 238));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 58, dialog.y + 142, dialog.width - 116, 72},
+                     model->auth_cooldown_seconds > 0
+                        ? "错误次数过多，倒计时结束后才能重试"
+                        : "错误 PIN 不会保留；重新输入时键盘为空",
+                     18, COLOR(194, 61, 61));
+    if (model->auth_cooldown_seconds > 0) {
+        snprintf(retry_label, sizeof(retry_label), "请等待 %d 秒", model->auth_cooldown_seconds);
+    } else {
+        snprintf(retry_label, sizeof(retry_label), "A  重新输入");
+    }
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  取消",
+                       COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), retry_label,
+                       model->auth_cooldown_seconds > 0 ? COLOR(220, 224, 230) : COLOR(28, 118, 188),
+                       model->auth_cooldown_seconds > 0 ? COLOR(120, 128, 140) : COLOR(255, 255, 255), false);
 }
 
 static void draw_grant_setup_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1866,6 +2021,12 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         break;
     case PTC_UI_OVERLAY_CREDENTIAL_LEAVE:
         draw_credential_leave_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_CODE_RESULT:
+        draw_code_result_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_AUTH_ERROR:
+        draw_auth_error_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_NONE:
     default:

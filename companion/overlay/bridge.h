@@ -21,7 +21,13 @@ typedef struct {
 } PtcOverlayBridge;
 
 void ptc_overlay_bridge_init(PtcOverlayBridge *bridge, const char *app_root, PtcStorage *storage);
-PtcCompanionStatus ptc_overlay_bridge_submit(PtcOverlayBridge *bridge, const char *code, int64_t created_at, uint16_t random16);
+PtcCompanionStatus ptc_overlay_bridge_submit(
+    PtcOverlayBridge *bridge,
+    const char *code,
+    int64_t created_at,
+    uint16_t random16,
+    const PtcCompanionResultSummary *preview);
+PtcCompanionStatus ptc_overlay_bridge_preview(PtcOverlayBridge *bridge, const char *code, int64_t created_at, uint16_t random16);
 PtcCompanionStatus ptc_overlay_bridge_submit_status(PtcOverlayBridge *bridge, int64_t created_at, uint16_t random16);
 PtcCompanionStatus ptc_overlay_bridge_poll(PtcOverlayBridge *bridge, int elapsed_ms, int timeout_ms);
 bool ptc_overlay_bridge_waiting(const PtcOverlayBridge *bridge);
@@ -32,5 +38,6 @@ PtcCompanionStatus ptc_overlay_bridge_last_status(const PtcOverlayBridge *bridge
 const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge);
 bool ptc_overlay_bridge_status_succeeded(const PtcOverlayBridge *bridge);
 bool ptc_overlay_bridge_offline_code_succeeded(const PtcOverlayBridge *bridge);
+bool ptc_overlay_bridge_preview_succeeded(const PtcOverlayBridge *bridge);
 
 #endif

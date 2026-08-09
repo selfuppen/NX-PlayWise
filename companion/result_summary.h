@@ -17,6 +17,13 @@ typedef struct {
     int restricted_now;
     bool remaining_available;
     bool played_minutes_available;
+    bool preview_available;
+    int grant_minutes;
+    bool remaining_after_available;
+    int remaining_after_minutes;
+    int effective_add_minutes;
+    bool preview_capped;
+    bool converts_unlimited_to_limited;
     char status[8];
     char type[48];
     char reason[64];

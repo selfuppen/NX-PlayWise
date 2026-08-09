@@ -17,21 +17,50 @@ void ptc_overlay_bridge_init(PtcOverlayBridge *bridge, const char *app_root, Ptc
 #endif
 }
 
-PtcCompanionStatus ptc_overlay_bridge_submit(PtcOverlayBridge *bridge, const char *code, int64_t created_at, uint16_t random16)
+PtcCompanionStatus ptc_overlay_bridge_submit(
+    PtcOverlayBridge *bridge,
+    const char *code,
+    int64_t created_at,
+    uint16_t random16,
+    const PtcCompanionResultSummary *preview)
 {
     PtcCompanionStatus status;
-    if (!bridge || !code || code[0] == '\0') return PTC_COMPANION_BAD_ARGUMENT;
+    PtcPendingRedemption pending;
+    if (!bridge || !code || code[0] == '\0' || !preview || !preview->preview_available) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
     memset(&bridge->summary, 0, sizeof(bridge->summary));
     bridge->last_status = PTC_COMPANION_PENDING;
     if (ptc_companion_make_request_id(bridge->request_id, sizeof(bridge->request_id), created_at * 1000, random16) != PTC_COMPANION_OK) {
         bridge->last_status = PTC_COMPANION_BAD_ARGUMENT;
         return PTC_COMPANION_BAD_ARGUMENT;
     }
+    memset(&pending, 0, sizeof(pending));
+    snprintf(pending.request_id, sizeof(pending.request_id), "%s", bridge->request_id);
+    pending.confirmed_at = created_at;
+    pending.grant_minutes = preview->grant_minutes;
+    pending.before_remaining_available = preview->remaining_available;
+    pending.before_remaining_minutes = preview->remaining_minutes;
+    pending.before_unlimited = preview->converts_unlimited_to_limited;
+    pending.after_remaining_available = preview->remaining_after_available;
+    pending.after_remaining_minutes = preview->remaining_after_minutes;
+    pending.effective_add_minutes = preview->effective_add_minutes;
+    pending.capped = preview->preview_capped;
+    pending.converts_unlimited_to_limited = preview->converts_unlimited_to_limited;
+    status = ptc_companion_pending_redemption_save(&bridge->transport.file, &pending);
+    if (status != PTC_COMPANION_OK) {
+        bridge->last_status = status;
+        return status;
+    }
     status = ptc_companion_transport_submit_offline_code(&bridge->transport, bridge->request_id, created_at, code);
     bridge->last_status = status;
     if (status == PTC_COMPANION_OK) {
+        pending.submitted = true;
+        (void)ptc_companion_pending_redemption_save(&bridge->transport.file, &pending);
         bridge->elapsed_ms = 0;
         bridge->waiting = true;
+    } else {
+        (void)ptc_companion_pending_redemption_clear(&bridge->transport.file);
     }
     return status;
 }
@@ -116,6 +145,26 @@ const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge)
     }
 }
 
+PtcCompanionStatus ptc_overlay_bridge_preview(PtcOverlayBridge *bridge, const char *code, int64_t created_at, uint16_t random16)
+{
+    PtcCompanionStatus status;
+    if (!bridge || !code || code[0] == '\0') return PTC_COMPANION_BAD_ARGUMENT;
+    memset(&bridge->summary, 0, sizeof(bridge->summary));
+    bridge->last_status = PTC_COMPANION_PENDING;
+    if (ptc_companion_make_request_id(bridge->request_id, sizeof(bridge->request_id), created_at * 1000, random16) != PTC_COMPANION_OK) {
+        bridge->last_status = PTC_COMPANION_BAD_ARGUMENT;
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    status = ptc_companion_transport_submit_preview_offline_code(
+        &bridge->transport, bridge->request_id, created_at, code);
+    bridge->last_status = status;
+    if (status == PTC_COMPANION_OK) {
+        bridge->elapsed_ms = 0;
+        bridge->waiting = true;
+    }
+    return status;
+}
+
 bool ptc_overlay_bridge_status_succeeded(const PtcOverlayBridge *bridge)
 {
     return bridge && bridge->summary.valid && bridge->summary.ok &&
@@ -125,5 +174,11 @@ bool ptc_overlay_bridge_status_succeeded(const PtcOverlayBridge *bridge)
 bool ptc_overlay_bridge_offline_code_succeeded(const PtcOverlayBridge *bridge)
 {
     return bridge && bridge->summary.valid && bridge->summary.ok &&
-        bridge->summary.unlock_observed && strcmp(bridge->summary.type, "offline_code") == 0;
+        strcmp(bridge->summary.type, "offline_code") == 0;
+}
+
+bool ptc_overlay_bridge_preview_succeeded(const PtcOverlayBridge *bridge)
+{
+    return bridge && bridge->summary.valid && bridge->summary.ok &&
+        bridge->summary.preview_available && strcmp(bridge->summary.type, "preview_offline_code") == 0;
 }

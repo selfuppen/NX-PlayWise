@@ -53,6 +53,7 @@ static unsigned int to_overlay_buttons(u64 keys)
 enum class OverlayRequestKind {
     None,
     Status,
+    PreviewOfflineCode,
     OfflineCode,
 };
 
@@ -82,7 +83,9 @@ public:
     tsl::elm::Element *createUI() override
     {
         auto frame = new PlayWiseOverlayFrame("自律约定", "兑换加时奖励");
-        (void)begin_status_refresh();
+        if (!restore_pending_redemption()) {
+            (void)begin_status_refresh();
+        }
         frame->setContent(new tsl::elm::CustomDrawer([this](tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 w, s32 h) {
             draw_overlay(renderer, x, y, w, h);
         }));
@@ -91,10 +94,8 @@ public:
 
     void update() override
     {
-        if (close_after_frames_ > 0) {
-            --close_after_frames_;
-            if (close_after_frames_ == 0) tsl::Overlay::get()->close();
-            return;
+        if (recovery_active_) {
+            poll_pending_redemption();
         }
         if (!bridge_->waiting) return;
         const u64 elapsed_ns = armTicksToNs(armGetSystemTick() - request_started_tick_);
@@ -113,22 +114,82 @@ public:
                 last_refresh_tick_ = armGetSystemTick();
                 has_status_snapshot_ = true;
                 error_ = false;
+            } else if (ptc_overlay_bridge_preview_succeeded(bridge_)) {
+                displayed_summary_ = bridge_->summary;
+                last_refresh_tick_ = armGetSystemTick();
+                has_status_snapshot_ = true;
+                error_ = false;
+                const bool after_zero = bridge_->summary.remaining_after_available &&
+                    bridge_->summary.remaining_after_minutes == 0;
+                const bool material_change = preview_recheck_ &&
+                    (previous_after_available_ != bridge_->summary.remaining_after_available ||
+                     previous_after_zero_ != after_zero ||
+                     previous_capped_ != bridge_->summary.preview_capped ||
+                     previous_converts_unlimited_ != bridge_->summary.converts_unlimited_to_limited);
+                preview_summary_ = bridge_->summary;
+                preview_recheck_ = false;
+                if (!material_change && active_request_kind_ == OverlayRequestKind::PreviewOfflineCode &&
+                    awaiting_confirm_recheck_) {
+                    awaiting_confirm_recheck_ = false;
+                    redemption_before_ = bridge_->summary;
+                    (void)begin_actual_code_submit();
+                } else {
+                    awaiting_confirm_recheck_ = false;
+                    preview_changed_ = material_change;
+                    preview_ready_ = true;
+                }
             } else if (ptc_overlay_bridge_offline_code_succeeded(bridge_)) {
                 displayed_summary_ = bridge_->summary;
                 last_refresh_tick_ = armGetSystemTick();
                 has_status_snapshot_ = true;
                 error_ = false;
-                close_after_frames_ = 90;
+                success_visible_ = true;
+                result_pending_ = false;
+                result_failed_ = false;
+                preview_ready_ = false;
+                pending_code_[0] = '\0';
+                ptc_overlay_input_init(input_);
+                status_expanded_ = true;
+            } else if (active_request_kind_ == OverlayRequestKind::OfflineCode &&
+                       bridge_->summary.valid && strcmp(bridge_->summary.type, "offline_code") == 0) {
+                displayed_summary_ = bridge_->summary;
+                error_ = false;
+                success_visible_ = true;
+                result_pending_ = false;
+                result_failed_ = true;
+                preview_ready_ = false;
+                pending_code_[0] = '\0';
+                ptc_overlay_input_init(input_);
                 status_expanded_ = true;
             } else {
                 error_ = true;
+                preview_ready_ = false;
+                awaiting_confirm_recheck_ = false;
+                preview_recheck_ = false;
+                pending_code_[0] = '\0';
+                ptc_overlay_input_init(input_);
                 status_expanded_ = true;
             }
+        } else if (active_request_kind_ == OverlayRequestKind::OfflineCode) {
+            ptc_companion_transport_cancel(&bridge_->transport);
+            recovery_active_ = true;
+            result_pending_ = true;
+            result_failed_ = false;
+            success_visible_ = true;
+            error_ = false;
+            preview_ready_ = false;
+            pending_code_[0] = '\0';
+            ptc_overlay_input_init(input_);
         } else {
             error_ = true;
+            preview_ready_ = false;
+            awaiting_confirm_recheck_ = false;
+            preview_recheck_ = false;
+            pending_code_[0] = '\0';
+            ptc_overlay_input_init(input_);
             status_expanded_ = true;
         }
-        active_request_kind_ = OverlayRequestKind::None;
+        if (!bridge_->waiting) active_request_kind_ = OverlayRequestKind::None;
     }
 
     bool handleInput(
@@ -148,9 +209,66 @@ public:
                 : static_cast<int>(elapsed_ms);
         }
         last_input_tick_ = now;
-        if (close_after_frames_ > 0) return true;
         if (bridge_->waiting) {
             prev_touch_down_ = touch.x != 0 || touch.y != 0;
+            return true;
+        }
+
+        if (success_visible_) {
+            const bool touch_down = touch.x != 0 || touch.y != 0;
+            if ((touch_down && !prev_touch_down_) ||
+                (keysDown & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus))) {
+                const bool terminal = !result_pending_;
+                success_visible_ = false;
+                status_expanded_ = false;
+                ptc_overlay_input_init(input_);
+                if (terminal) {
+                    (void)ptc_companion_pending_redemption_clear(&bridge_->transport.file);
+                    std::memset(&pending_redemption_, 0, sizeof(pending_redemption_));
+                    result_failed_ = false;
+                }
+            }
+            prev_touch_down_ = touch_down;
+            return true;
+        }
+
+        if (preview_ready_) {
+            const bool touch_down = touch.x != 0 || touch.y != 0;
+            bool touch_confirm = false;
+            bool touch_cancel = false;
+            if (touch_down && !prev_touch_down_) {
+                const s32 rel_x = touch.x > 400 ? static_cast<s32>(touch.x) - 880 : static_cast<s32>(touch.x);
+                const s32 rel_y = static_cast<s32>(touch.y);
+                touch_cancel = rel_x >= PTC_OVERLAY_CONTENT_X && rel_x < PTC_OVERLAY_CONTENT_X + 145 &&
+                    rel_y >= PTC_OVERLAY_CONTENT_Y + 500 && rel_y < PTC_OVERLAY_CONTENT_Y + 550;
+                touch_confirm = rel_x >= PTC_OVERLAY_CONTENT_X + 170 && rel_x < PTC_OVERLAY_CONTENT_X + 330 &&
+                    rel_y >= PTC_OVERLAY_CONTENT_Y + 500 && rel_y < PTC_OVERLAY_CONTENT_Y + 550;
+            }
+            const bool dangerous = !preview_summary_.remaining_after_available ||
+                preview_summary_.remaining_after_minutes == 0 ||
+                preview_summary_.converts_unlimited_to_limited;
+            if ((keysDown & HidNpadButton_B) || touch_cancel) {
+                preview_ready_ = false;
+                preview_changed_ = false;
+                pending_code_[0] = '\0';
+                confirm_hold_ms_ = 0;
+                ptc_overlay_input_init(input_);
+            } else if (touch_confirm && dangerous) {
+                touch_hold_warning_ = true;
+            } else if ((!dangerous && ((keysDown & (HidNpadButton_A | HidNpadButton_Plus)) || touch_confirm))) {
+                touch_hold_warning_ = false;
+                (void)begin_preview_request(true);
+            } else if (dangerous && (keysHeld & HidNpadButton_A)) {
+                confirm_hold_ms_ += input_elapsed_ms > 0 ? input_elapsed_ms : 0;
+                if (confirm_hold_ms_ >= 1000) {
+                    confirm_hold_ms_ = 0;
+                    touch_hold_warning_ = false;
+                    (void)begin_preview_request(true);
+                }
+            } else {
+                confirm_hold_ms_ = 0;
+            }
+            prev_touch_down_ = touch_down;
             return true;
         }
 
@@ -216,7 +334,7 @@ public:
 
             // 点击 [+] 提交按钮
             if (ptc_overlay_rect_contains(ptc_overlay_submit_rect(cx, cy, PTC_OVERLAY_CONTENT_W), rel_x, rel_y)) {
-                (void)begin_code_submit();
+                (void)begin_code_preview();
                 prev_touch_down_ = touch_down;
                 return true;
             }
@@ -244,13 +362,21 @@ public:
         }
 
         if (keysDown & HidNpadButton_Plus) {
-            (void)begin_code_submit();
+            (void)begin_code_preview();
             return true;
         }
 
         if (keysDown & HidNpadButton_Y) {
             if (error_) {
-                (void)retry_last_request();
+                if (last_request_kind_ == OverlayRequestKind::OfflineCode ||
+                    last_request_kind_ == OverlayRequestKind::PreviewOfflineCode) {
+                    error_ = false;
+                    status_expanded_ = false;
+                    pending_code_[0] = '\0';
+                    ptc_overlay_input_init(input_);
+                } else {
+                    (void)retry_last_request();
+                }
             } else {
                 (void)begin_status_refresh();
             }
@@ -289,6 +415,87 @@ public:
         return "";
     }
 
+    void apply_pending_preview()
+    {
+        preview_summary_ = {};
+        preview_summary_.valid = true;
+        preview_summary_.ok = true;
+        preview_summary_.preview_available = true;
+        preview_summary_.grant_minutes = pending_redemption_.grant_minutes;
+        preview_summary_.remaining_available = pending_redemption_.before_remaining_available;
+        preview_summary_.remaining_minutes = pending_redemption_.before_remaining_minutes;
+        preview_summary_.remaining_after_available = pending_redemption_.after_remaining_available;
+        preview_summary_.remaining_after_minutes = pending_redemption_.after_remaining_minutes;
+        preview_summary_.effective_add_minutes = pending_redemption_.effective_add_minutes;
+        preview_summary_.preview_capped = pending_redemption_.capped;
+        preview_summary_.converts_unlimited_to_limited = pending_redemption_.converts_unlimited_to_limited;
+        redemption_before_ = preview_summary_;
+    }
+
+    bool restore_pending_redemption()
+    {
+        bool found = false;
+        PtcCompanionStatus status = ptc_companion_pending_redemption_load(
+            &bridge_->transport.file, &pending_redemption_, &found);
+        if (status != PTC_COMPANION_OK) {
+            if (!found) return false;
+            std::memset(&bridge_->summary, 0, sizeof(bridge_->summary));
+            bridge_->summary.valid = true;
+            std::snprintf(bridge_->summary.message, sizeof(bridge_->summary.message),
+                          "上次加时恢复信息无法读取，请勿重复输入该码");
+            error_ = true;
+            status_expanded_ = true;
+            last_request_kind_ = OverlayRequestKind::OfflineCode;
+            return true;
+        }
+        if (!found) return false;
+        if (!ptc_companion_pending_redemption_has_submission(&bridge_->transport.file, &pending_redemption_)) {
+            (void)ptc_companion_pending_redemption_clear(&bridge_->transport.file);
+            std::memset(&bridge_->summary, 0, sizeof(bridge_->summary));
+            bridge_->summary.valid = true;
+            std::snprintf(bridge_->summary.message, sizeof(bridge_->summary.message),
+                          "上次确认在提交前中断；加时码未消费，请重新输入");
+            error_ = true;
+            status_expanded_ = true;
+            last_request_kind_ = OverlayRequestKind::OfflineCode;
+            return true;
+        }
+        apply_pending_preview();
+        recovery_active_ = true;
+        result_pending_ = true;
+        result_failed_ = false;
+        success_visible_ = true;
+        active_request_kind_ = OverlayRequestKind::OfflineCode;
+        last_request_kind_ = OverlayRequestKind::OfflineCode;
+        poll_pending_redemption();
+        return true;
+    }
+
+    void poll_pending_redemption()
+    {
+        const u64 now = armGetSystemTick();
+        if (recovery_last_poll_tick_ != 0 &&
+            armTicksToNs(now - recovery_last_poll_tick_) < 250000000ULL) return;
+        recovery_last_poll_tick_ = now;
+        PtcCompanionStatus status = ptc_companion_read_result(
+            &bridge_->transport.file, pending_redemption_.request_id, 0, -1,
+            bridge_->result_json, sizeof(bridge_->result_json));
+        if (status != PTC_COMPANION_OK) return;
+        if (ptc_companion_parse_result_summary(bridge_->result_json, &bridge_->summary) != PTC_COMPANION_OK ||
+            std::strcmp(bridge_->summary.type, "offline_code") != 0) return;
+        recovery_active_ = false;
+        result_pending_ = false;
+        result_failed_ = !bridge_->summary.ok;
+        displayed_summary_ = bridge_->summary;
+        apply_pending_preview();
+        success_visible_ = true;
+        error_ = false;
+        status_expanded_ = true;
+        active_request_kind_ = OverlayRequestKind::None;
+        pending_code_[0] = '\0';
+        ptc_overlay_input_init(input_);
+    }
+
     bool begin_status_refresh()
     {
         if (!bridge_ || bridge_->waiting) return false;
@@ -308,19 +515,74 @@ public:
         return true;
     }
 
-    bool begin_code_submit()
+    bool begin_code_preview()
     {
         char code[32];
+        if (recovery_active_) {
+            result_pending_ = true;
+            success_visible_ = true;
+            return false;
+        }
         if (!bridge_ || bridge_->waiting || !ptc_overlay_input_can_submit(input_) ||
             !ptc_overlay_input_format(input_, code, sizeof(code))) return false;
-        PtcCompanionStatus status = ptc_overlay_bridge_submit(
-            bridge_, code, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_);
+        std::snprintf(pending_code_, sizeof(pending_code_), "%.8s", code);
+        return begin_preview_request(false);
+    }
+
+    bool begin_preview_request(bool recheck)
+    {
+        if (!bridge_ || bridge_->waiting || pending_code_[0] == '\0') return false;
+        if (recheck) {
+            previous_after_available_ = preview_summary_.remaining_after_available;
+            previous_after_zero_ = preview_summary_.remaining_after_available &&
+                preview_summary_.remaining_after_minutes == 0;
+            previous_capped_ = preview_summary_.preview_capped;
+            previous_converts_unlimited_ = preview_summary_.converts_unlimited_to_limited;
+            preview_recheck_ = true;
+            awaiting_confirm_recheck_ = true;
+            preview_ready_ = false;
+        }
+        PtcCompanionStatus status = ptc_overlay_bridge_preview(
+            bridge_, pending_code_, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_);
         if (status != PTC_COMPANION_OK) {
+            error_ = true;
+            status_expanded_ = true;
+            last_request_kind_ = OverlayRequestKind::PreviewOfflineCode;
+            return false;
+        }
+        active_request_kind_ = OverlayRequestKind::PreviewOfflineCode;
+        last_request_kind_ = OverlayRequestKind::PreviewOfflineCode;
+        request_started_tick_ = armGetSystemTick();
+        last_elapsed_ms_ = 0;
+        error_ = false;
+        status_expanded_ = true;
+        return true;
+    }
+
+    bool begin_actual_code_submit()
+    {
+        if (!bridge_ || bridge_->waiting || pending_code_[0] == '\0') return false;
+        PtcCompanionStatus status = ptc_overlay_bridge_submit(
+            bridge_, pending_code_, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_,
+            &redemption_before_);
+        if (status != PTC_COMPANION_OK) {
+            pending_code_[0] = '\0';
+            ptc_overlay_input_init(input_);
+            std::memset(&bridge_->summary, 0, sizeof(bridge_->summary));
+            bridge_->summary.valid = true;
+            std::snprintf(bridge_->summary.type, sizeof(bridge_->summary.type), "offline_code");
+            std::snprintf(bridge_->summary.message, sizeof(bridge_->summary.message),
+                          "提交失败；加时码未消费，请重新输入");
             error_ = true;
             status_expanded_ = true;
             last_request_kind_ = OverlayRequestKind::OfflineCode;
             return false;
         }
+        bool marker_found = false;
+        (void)ptc_companion_pending_redemption_load(
+            &bridge_->transport.file, &pending_redemption_, &marker_found);
+        (void)marker_found;
+        apply_pending_preview();
         active_request_kind_ = OverlayRequestKind::OfflineCode;
         last_request_kind_ = OverlayRequestKind::OfflineCode;
         request_started_tick_ = armGetSystemTick();
@@ -333,7 +595,8 @@ public:
     bool retry_last_request()
     {
         error_ = false;
-        if (last_request_kind_ == OverlayRequestKind::OfflineCode) return begin_code_submit();
+        if (last_request_kind_ == OverlayRequestKind::OfflineCode ||
+            last_request_kind_ == OverlayRequestKind::PreviewOfflineCode) return false;
         return begin_status_refresh();
     }
 
@@ -342,6 +605,7 @@ public:
         OverlayRequestKind kind = active_request_kind_ != OverlayRequestKind::None
             ? active_request_kind_ : last_request_kind_;
         if (kind == OverlayRequestKind::Status) return "刷新今日状态";
+        if (kind == OverlayRequestKind::PreviewOfflineCode) return "预览今日加时";
         if (kind == OverlayRequestKind::OfflineCode) return "提交今日加时";
         return "未开始";
     }
@@ -375,12 +639,114 @@ public:
 
     bool status_needs_detail() const
     {
-        return error_ || close_after_frames_ > 0;
+        return error_ || success_visible_;
+    }
+
+    void draw_code_preview(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw)
+    {
+        char line[128];
+        renderer->drawRect(cx, cy + 18, cw, 540, renderer->a(PANEL_COLOR));
+        draw_outline(renderer, cx, cy + 18, cw, 540, 2, FOCUS_BORDER);
+        renderer->drawString(preview_changed_ ? "状态已变化，请再次确认" : "确认兑换加时码",
+                             false, cx + 14, cy + 52, 18, renderer->a(TEXT_COLOR));
+        std::snprintf(line, sizeof(line), "本次增加 %d 分钟", preview_summary_.grant_minutes);
+        renderer->drawString(line, false, cx + 14, cy + 84, 15, renderer->a(FOCUS_BORDER));
+        renderer->drawString("今天有效，成功兑换后只能使用一次", false,
+                             cx + 14, cy + 110, 12, renderer->a(MUTED_COLOR));
+
+        renderer->drawRect(cx + 12, cy + 142, cw - 24, 86, renderer->a(CARD_COLOR));
+        renderer->drawString("当前还能玩", false, cx + 24, cy + 168, 12, renderer->a(MUTED_COLOR));
+        if (preview_summary_.converts_unlimited_to_limited) {
+            renderer->drawString("不限时", false, cx + 155, cy + 171, 19, renderer->a(SUCCESS_COLOR));
+        } else if (preview_summary_.remaining_available) {
+            std::snprintf(line, sizeof(line), "%d 分钟", preview_summary_.remaining_minutes);
+            renderer->drawString(line, false, cx + 155, cy + 171, 19, renderer->a(SUCCESS_COLOR));
+        } else {
+            renderer->drawString("暂不可用", false, cx + 155, cy + 171, 16, renderer->a(MUTED_COLOR));
+        }
+
+        renderer->drawRect(cx + 12, cy + 244, cw - 24, 86, renderer->a(CARD_COLOR));
+        renderer->drawString("兑换后预计", false, cx + 24, cy + 270, 12, renderer->a(MUTED_COLOR));
+        if (preview_summary_.remaining_after_available) {
+            std::snprintf(line, sizeof(line), "%d 分钟", preview_summary_.remaining_after_minutes);
+            renderer->drawString(line, false, cx + 155, cy + 273, 19,
+                                 renderer->a(preview_summary_.remaining_after_minutes == 0 ? ERROR_COLOR : SUCCESS_COLOR));
+        } else {
+            renderer->drawString("暂不可用", false, cx + 155, cy + 273, 16, renderer->a(ERROR_COLOR));
+        }
+
+        if (preview_summary_.converts_unlimited_to_limited) {
+            renderer->drawString("警告：兑换后将从不限时改为限时", false, cx + 16, cy + 366, 13, renderer->a(ERROR_COLOR));
+        } else if (preview_summary_.preview_capped) {
+            std::snprintf(line, sizeof(line), "受每日上限影响，实际增加 %d 分钟", preview_summary_.effective_add_minutes);
+            renderer->drawString(line, false, cx + 16, cy + 366, 13, renderer->a(ERROR_COLOR));
+        } else {
+            renderer->drawString("确认前不会消费这枚加时码", false, cx + 16, cy + 366, 13, renderer->a(MUTED_COLOR));
+        }
+        const bool dangerous = !preview_summary_.remaining_after_available ||
+            preview_summary_.remaining_after_minutes == 0 ||
+            preview_summary_.converts_unlimited_to_limited;
+        renderer->drawString(touch_hold_warning_ ? "请使用手柄长按 A 确认" :
+                             (dangerous ? "长按 A 1 秒确认；B 取消" : "A / + 确认；B 取消"),
+                             false, cx + 16, cy + 414, 13,
+                             renderer->a(dangerous ? ERROR_COLOR : FOCUS_BORDER));
+        renderer->drawRect(cx, cy + 500, 145, 50, renderer->a(CARD_COLOR));
+        draw_outline(renderer, cx, cy + 500, 145, 50, 1, MUTED_COLOR);
+        renderer->drawString("B 取消", false, cx + 45, cy + 530, 14, renderer->a(TEXT_COLOR));
+        renderer->drawRect(cx + 170, cy + 500, 160, 50, renderer->a(FOCUS_BG));
+        draw_outline(renderer, cx + 170, cy + 500, 160, 50, 2, FOCUS_BORDER);
+        renderer->drawString(dangerous ? "长按 A 确认" : "A 确认", false,
+                             cx + 202, cy + 530, 14, renderer->a(TEXT_COLOR));
+    }
+
+    void draw_code_success(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw)
+    {
+        char line[128];
+        renderer->drawRect(cx, cy + 36, cw, 460, renderer->a(PANEL_COLOR));
+        const tsl::Color accent = result_failed_ ? ERROR_COLOR : SUCCESS_COLOR;
+        draw_outline(renderer, cx, cy + 36, cw, 460, 2, accent);
+        renderer->drawString(result_pending_ ? "加时结果确认中" : (result_failed_ ? "兑换未成功" : "加时成功"),
+                             false, cx + 14, cy + 74, 22, renderer->a(accent));
+        std::snprintf(line, sizeof(line), result_pending_ ? "预计增加 %d 分钟" :
+                      (result_failed_ ? "原计划增加 %d 分钟" : "已增加 %d 分钟"),
+                      preview_summary_.grant_minutes);
+        renderer->drawString(line, false, cx + 14, cy + 108, 15, renderer->a(TEXT_COLOR));
+        renderer->drawString(result_pending_ ? "正在核对最终结果，请勿重复输入这枚加时码" :
+                             (result_failed_ ? "后台已确认失败；该码未消费，可重新输入" :
+                              "该加时码已经使用，不能再次使用"),
+                             false, cx + 14, cy + 136, 12, renderer->a(MUTED_COLOR));
+        renderer->drawString("兑换前", false, cx + 18, cy + 190, 12, renderer->a(MUTED_COLOR));
+        if (redemption_before_.converts_unlimited_to_limited) std::snprintf(line, sizeof(line), "不限时");
+        else if (redemption_before_.remaining_available) std::snprintf(line, sizeof(line), "%d 分钟", redemption_before_.remaining_minutes);
+        else std::snprintf(line, sizeof(line), "暂不可用");
+        renderer->drawString(line, false, cx + 130, cy + 193, 18, renderer->a(TEXT_COLOR));
+        renderer->drawString(result_pending_ ? "预览兑换后" : "实际兑换后", false, cx + 18, cy + 254, 12, renderer->a(MUTED_COLOR));
+        const PtcCompanionResultSummary &after = result_pending_ ? preview_summary_ : displayed_summary_;
+        if (result_pending_ ? after.remaining_after_available : after.remaining_available) {
+            std::snprintf(line, sizeof(line), "%d 分钟",
+                          result_pending_ ? after.remaining_after_minutes : after.remaining_minutes);
+        }
+        else std::snprintf(line, sizeof(line), "暂不可用");
+        renderer->drawString(line, false, cx + 130, cy + 257, 18, renderer->a(accent));
+        renderer->drawString(result_pending_ ? "可关闭界面；下次打开会继续确认" :
+                             (result_failed_ ? "失败结果已确认" : "结果已确认并保存"),
+                             false, cx + 18, cy + 324, 14, renderer->a(accent));
+        renderer->drawRect(cx + 30, cy + 392, cw - 60, 56, renderer->a(FOCUS_BG));
+        draw_outline(renderer, cx + 30, cy + 392, cw - 60, 56, 2, FOCUS_BORDER);
+        renderer->drawString("A / B  返回空白输入页", false, cx + 82, cy + 426, 14, renderer->a(TEXT_COLOR));
     }
 
     void draw_overlay(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw, s32 ch)
     {
         (void)ch;
+        if (success_visible_) {
+            draw_code_success(renderer, cx, cy, cw);
+            return;
+        }
+        if (preview_ready_) {
+            draw_code_preview(renderer, cx, cy, cw);
+            return;
+        }
         char line[128];
         char age[32];
         const PtcCompanionResultSummary &summary = displayed_summary_;
@@ -400,7 +766,7 @@ public:
         }
         renderer->drawString(line, false, cx + 78, top_banner_y + 23, 16, renderer->a(TEXT_COLOR));
 
-        renderer->drawString(close_after_frames_ > 0 ? "修改后可玩" : "当前还剩可玩", false,
+        renderer->drawString(success_visible_ ? "修改后可玩" : "当前还剩可玩", false,
                              cx + 10, top_banner_y + 51, 11, renderer->a(MUTED_COLOR));
         if (summary.valid && summary.remaining_available) {
             std::snprintf(line, sizeof(line), "%d 分钟", summary.remaining_minutes);
@@ -527,8 +893,13 @@ public:
             } else if (bridge_->waiting) {
                 renderer->drawString("[-] 正在处理加时…（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
             } else if (error_) {
-                renderer->drawString("[-] 请求失败（按 - 展开，Y 重试）", false, cx + 12, status_y + 21, 12, renderer->a(ERROR_COLOR));
-            } else if (close_after_frames_ > 0) {
+                renderer->drawString(
+                    (last_request_kind_ == OverlayRequestKind::OfflineCode ||
+                     last_request_kind_ == OverlayRequestKind::PreviewOfflineCode)
+                        ? "[-] 请求失败（按 - 展开，请重新输入）"
+                        : "[-] 请求失败（按 - 展开，Y 重试）",
+                    false, cx + 12, status_y + 21, 12, renderer->a(ERROR_COLOR));
+            } else if (success_visible_) {
                 renderer->drawString("[-] 加时成功！（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(SUCCESS_COLOR));
             } else if (has_status_snapshot_) {
                 renderer->drawString("[-] 状态已刷新（按 - 展开）", false, cx + 12, status_y + 21, 12,
@@ -555,13 +926,17 @@ public:
             if (error_) {
                 const char *message = ptc_overlay_bridge_error_message_zh(bridge_);
                 renderer->drawString(message, false, cx + 12, status_y + 72, 12, renderer->a(ERROR_COLOR), 290);
+                const bool code_error = last_request_kind_ == OverlayRequestKind::OfflineCode ||
+                    last_request_kind_ == OverlayRequestKind::PreviewOfflineCode;
                 if (bridge_->summary.valid && bridge_->summary.error_code > 0) {
-                    std::snprintf(line, sizeof(line), "错误码：%d · 按 Y 重试", bridge_->summary.error_code);
+                    std::snprintf(line, sizeof(line), code_error ? "错误码：%d · 请重新输入" :
+                                  "错误码：%d · 按 Y 重试", bridge_->summary.error_code);
                     renderer->drawString(line, false, cx + 12, status_y + 108, 11, renderer->a(ERROR_COLOR));
                 } else {
-                    renderer->drawString("按 Y 重试", false, cx + 12, status_y + 108, 11, renderer->a(ERROR_COLOR));
+                    renderer->drawString(code_error ? "请重新输入；Y 返回输入" : "按 Y 重试",
+                                         false, cx + 12, status_y + 108, 11, renderer->a(ERROR_COLOR));
                 }
-            } else if (close_after_frames_ > 0) {
+            } else if (success_visible_) {
                 renderer->drawString("加时成功！", false, cx + 12, status_y + 74, 16, renderer->a(SUCCESS_COLOR));
                 std::snprintf(line, sizeof(line), "修改后可玩 %d 分钟", summary.remaining_minutes);
                 renderer->drawString(line, false, cx + 12, status_y + 96, 15, renderer->a(SUCCESS_COLOR));
@@ -581,9 +956,10 @@ private:
     PtcOverlayBridge *bridge_;
     PtcOverlayInput *input_;
     PtcCompanionResultSummary displayed_summary_{};
+    PtcCompanionResultSummary preview_summary_{};
+    PtcCompanionResultSummary redemption_before_{};
     OverlayRequestKind active_request_kind_ = OverlayRequestKind::None;
     OverlayRequestKind last_request_kind_ = OverlayRequestKind::None;
-    unsigned int close_after_frames_ = 0;
     unsigned int request_nonce_ = 0;
     u64 request_started_tick_ = 0;
     u64 last_input_tick_ = 0;
@@ -592,6 +968,23 @@ private:
     bool error_ = false;
     bool has_status_snapshot_ = false;
     bool status_expanded_ = false;
+    bool preview_ready_ = false;
+    bool preview_changed_ = false;
+    bool preview_recheck_ = false;
+    bool awaiting_confirm_recheck_ = false;
+    bool previous_after_available_ = false;
+    bool previous_after_zero_ = false;
+    bool previous_capped_ = false;
+    bool previous_converts_unlimited_ = false;
+    bool success_visible_ = false;
+    bool result_pending_ = false;
+    bool result_failed_ = false;
+    bool recovery_active_ = false;
+    bool touch_hold_warning_ = false;
+    int confirm_hold_ms_ = 0;
+    char pending_code_[9]{};
+    PtcPendingRedemption pending_redemption_{};
+    u64 recovery_last_poll_tick_ = 0;
     bool prev_touch_down_ = false;
     u64 prev_stick_keys_ = 0;
 };

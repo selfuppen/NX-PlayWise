@@ -43,6 +43,20 @@
 
 __attribute__((used)) static const char PLAYWISE_EMBEDDED_MANIFEST[] = PLAYWISE_RELEASE_MANIFEST_JSON;
 
+typedef enum {
+    AUTH_RETRY_NONE = 0,
+    AUTH_RETRY_ENTER_PARENT,
+    AUTH_RETRY_SETUP_PIN,
+    AUTH_RETRY_SAVE_CREDENTIAL,
+    AUTH_RETRY_CHANGE_PIN,
+    AUTH_RETRY_EDIT_URL,
+    AUTH_RETRY_RESET_URL,
+    AUTH_RETRY_GENERATE_CODE,
+    AUTH_RETRY_SHOW_QR,
+    AUTH_RETRY_EXPORT_CONFIG,
+    AUTH_RETRY_REVEAL_CREDENTIAL
+} AuthRetryAction;
+
 typedef struct {
     PtcCompanionFileClient client;
     PtcCompanionTransportClient transport;
@@ -65,6 +79,16 @@ typedef struct {
     int pending_today_action;
     int pending_parent_page;
     bool pending_leave_parent;
+    bool code_preview_recheck;
+    bool code_previous_after_available;
+    bool code_previous_after_zero;
+    bool code_previous_capped;
+    bool code_previous_converts_unlimited;
+    PtcPendingRedemption pending_redemption;
+    bool recovering_redemption;
+    AuthRetryAction auth_retry_action;
+    PtcUiOverlay auth_return_overlay;
+    int64_t auth_cooldown_until;
 } UiState;
 
 static void handle_parent_action(UiState *ui);
@@ -75,6 +99,8 @@ static void apply_pending_navigation(UiState *ui);
 static void handle_setup_input(UiState *ui, u64 down, u64 held);
 static void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
 static void retry_error(UiState *ui);
+static void dispatch_auth_retry(UiState *ui, AuthRetryAction action);
+static void show_pending_redemption(UiState *ui);
 
 static int64_t unix_ms_now(void)
 {
@@ -148,11 +174,36 @@ static void set_message(UiState *ui, const char *prefix, PtcCompanionStatus stat
     }
 }
 
-static void set_auth_message(UiState *ui, const char *prefix, PtcAuthStatus status)
+static void show_auth_error(UiState *ui, const char *title, const char *message, int64_t retry_after)
 {
-    ui->model.feedback_detail[0] = '\0';
-    snprintf(ui->model.message, sizeof(ui->model.message), "%s：%s", prefix, auth_status_zh(status));
+    if (!ui) return;
+    ui->auth_return_overlay = ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR
+        ? ui->auth_return_overlay : ui->model.overlay;
+    ui->model.overlay = PTC_UI_OVERLAY_AUTH_ERROR;
+    ui->auth_cooldown_until = retry_after > 0 ? (int64_t)time(NULL) + retry_after : 0;
+    ui->model.auth_cooldown_seconds = retry_after > 0 ? (int)retry_after : 0;
+    snprintf(ui->model.auth_error_title, sizeof(ui->model.auth_error_title), "%s",
+             title ? title : "PIN 验证未通过");
+    snprintf(ui->model.auth_error_message, sizeof(ui->model.auth_error_message), "%s",
+             message ? message : "PIN 不正确，请重试。");
+    snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->model.auth_error_message);
     snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
+}
+
+static void close_auth_error(UiState *ui, bool cancelled)
+{
+    if (!ui) return;
+    ui->model.overlay = ui->auth_return_overlay;
+    ui->auth_return_overlay = PTC_UI_OVERLAY_NONE;
+    ui->auth_cooldown_until = 0;
+    ui->model.auth_cooldown_seconds = 0;
+    ui->model.auth_error_title[0] = '\0';
+    ui->model.auth_error_message[0] = '\0';
+    if (cancelled) {
+        ui->auth_retry_action = AUTH_RETRY_NONE;
+        snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 验证。");
+        ui->model.result_status[0] = '\0';
+    }
 }
 
 static void set_command_name(UiState *ui, const char *type)
@@ -512,6 +563,10 @@ static void edit_weekly_minutes(UiState *ui)
 
 static void open_offline_code_input(UiState *ui)
 {
+    if (ui->recovering_redemption) {
+        show_pending_redemption(ui);
+        return;
+    }
     if (ui->model.disable_flag_present) {
         snprintf(ui->model.message, sizeof(ui->model.message),
                  "紧急停用已开启，当前不能兑换加时码；状态和恢复仍可使用。");
@@ -576,16 +631,160 @@ static void enter_child_area(UiState *ui)
 static void submit_offline_code(UiState *ui, const char *code)
 {
     PtcCompanionStatus status;
+    PtcPendingRedemption pending;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    memset(&pending, 0, sizeof(pending));
+    snprintf(pending.request_id, sizeof(pending.request_id), "%s", ui->active_request_id);
+    pending.confirmed_at = (int64_t)time(NULL);
+    pending.grant_minutes = ui->model.code_grant_minutes;
+    pending.before_remaining_available = ui->model.code_before_remaining_available;
+    pending.before_remaining_minutes = ui->model.code_before_remaining_minutes;
+    pending.before_unlimited = ui->model.code_before_unlimited;
+    pending.after_remaining_available = ui->model.code_preview_after_available;
+    pending.after_remaining_minutes = ui->model.code_preview_after_minutes;
+    pending.effective_add_minutes = ui->model.code_effective_add_minutes;
+    pending.capped = ui->model.code_preview_capped;
+    pending.converts_unlimited_to_limited = ui->model.code_preview_converts_unlimited;
+    status = ptc_companion_pending_redemption_save(&ui->client, &pending);
+    if (status != PTC_COMPANION_OK) {
+        ui->waiting = false;
+        ui->model.pending_code[0] = '\0';
+        set_message(ui, "无法保存兑换恢复信息；加时码未提交，仍可使用", status);
+        return;
+    }
     status = ptc_companion_transport_submit_offline_code(&ui->transport, ui->active_request_id, time(NULL), code);
     set_command_name(ui, "offline_code");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
+        pending.submitted = true;
+        (void)ptc_companion_pending_redemption_save(&ui->client, &pending);
+        ui->pending_redemption = pending;
         begin_wait(ui, "offline_code", "加时码已提交，正在等待后台确认…");
         return;
     }
+    (void)ptc_companion_pending_redemption_clear(&ui->client);
+    ui->model.pending_code[0] = '\0';
     ui->waiting = false;
-    set_message(ui, "加时码提交失败", status);
+    set_message(ui, "加时码提交失败；该码未消费，仍可使用", status);
+}
+
+static void apply_pending_redemption_preview(UiState *ui, const PtcPendingRedemption *pending)
+{
+    ui->model.code_grant_minutes = pending->grant_minutes;
+    ui->model.code_before_remaining_available = pending->before_remaining_available;
+    ui->model.code_before_remaining_minutes = pending->before_remaining_minutes;
+    ui->model.code_before_unlimited = pending->before_unlimited;
+    ui->model.code_preview_after_available = pending->after_remaining_available;
+    ui->model.code_preview_after_minutes = pending->after_remaining_minutes;
+    ui->model.code_effective_add_minutes = pending->effective_add_minutes;
+    ui->model.code_preview_capped = pending->capped;
+    ui->model.code_preview_converts_unlimited = pending->converts_unlimited_to_limited;
+}
+
+static void show_pending_redemption(UiState *ui)
+{
+    apply_pending_redemption_preview(ui, &ui->pending_redemption);
+    ui->model.view = PTC_UI_CHILD;
+    ui->model.overlay = PTC_UI_OVERLAY_CODE_RESULT;
+    ui->model.code_result_pending = true;
+    ui->model.code_result_failed = false;
+    snprintf(ui->model.message, sizeof(ui->model.message),
+             "已恢复上次确认的加时请求，结果确认中；请勿重复输入这枚加时码。");
+    snprintf(ui->model.result_status, sizeof(ui->model.result_status), "pending");
+    snprintf(ui->active_request_id, sizeof(ui->active_request_id), "%s", ui->pending_redemption.request_id);
+    set_command_name(ui, "offline_code");
+}
+
+static void poll_pending_redemption(UiState *ui)
+{
+    PtcCompanionStatus status;
+    if (!ui || !ui->recovering_redemption) return;
+    status = ptc_companion_read_result(
+        &ui->client, ui->pending_redemption.request_id, 0, -1,
+        ui->last_result, sizeof(ui->last_result));
+    if (status != PTC_COMPANION_OK) {
+        if (status == PTC_COMPANION_RESULT_INVALID || status == PTC_COMPANION_RESULT_MISMATCH) {
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                     "兑换结果正在确认，已读取到的结果尚不能安全核对；请勿重复输入这枚加时码。");
+        }
+        return;
+    }
+    if (!ptc_ui_apply_result_json(&ui->model, ui->last_result) ||
+        strcmp(ui->model.result_type, "offline_code") != 0) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "兑换结果正在确认，后台返回内容尚不能安全核对；请勿重复输入这枚加时码。");
+        return;
+    }
+    ui->recovering_redemption = false;
+    apply_pending_redemption_preview(ui, &ui->pending_redemption);
+    ui->model.view = PTC_UI_CHILD;
+    ui->model.overlay = PTC_UI_OVERLAY_CODE_RESULT;
+    ui->model.code_result_pending = false;
+    ui->model.code_result_failed = strcmp(ui->model.result_status, "ok") != 0;
+    if (ui->model.code_result_failed) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "后台已确认兑换未成功，加时码没有被消费，可以重新输入。");
+    } else {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "已恢复并确认上次兑换成功；这枚加时码已经使用，不能再次使用。");
+    }
+}
+
+static bool restore_pending_redemption(UiState *ui)
+{
+    PtcCompanionStatus status;
+    bool found = false;
+    status = ptc_companion_pending_redemption_load(&ui->client, &ui->pending_redemption, &found);
+    if (status != PTC_COMPANION_OK) {
+        ui->model.view = PTC_UI_ERROR;
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "上次加时的恢复信息无法读取。为避免重复兑换，请暂勿再次输入该码。");
+        return found;
+    }
+    if (!found) return false;
+    if (!ptc_companion_pending_redemption_has_submission(&ui->client, &ui->pending_redemption)) {
+        (void)ptc_companion_pending_redemption_clear(&ui->client);
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "上次确认在提交前中断，加时码未消费；请重新输入。");
+        return true;
+    }
+    ui->recovering_redemption = true;
+    show_pending_redemption(ui);
+    poll_pending_redemption(ui);
+    return true;
+}
+
+static void submit_preview_offline_code(UiState *ui, const char *code)
+{
+    PtcCompanionStatus status;
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_preview_offline_code(
+        &ui->transport, ui->active_request_id, time(NULL), code);
+    set_command_name(ui, "preview_offline_code");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) {
+        begin_wait(ui, "preview_offline_code", "正在验证加时码并计算生效预览…");
+        return;
+    }
+    ui->waiting = false;
+    set_message(ui, "加时码预览失败", status);
+}
+
+static bool code_error_stays_in_input(int error_code)
+{
+    return error_code >= PTC_ERR_BAD_CODE && error_code <= PTC_ERR_CODE_COOLDOWN;
+}
+
+static void open_code_preview_confirm(UiState *ui, bool refreshed)
+{
+    const char *body = refreshed
+        ? "实时状态发生了重要变化，已重新计算预览。\n确认后才会生效并消费这枚加时码。"
+        : "请核对当前状态和兑换后的预计结果。\n确认前不会消费这枚加时码。";
+    open_confirm_overlay(ui, PTC_UI_OPERATION_REDEEM_OFFLINE_CODE,
+                         refreshed ? "状态已变化，请再次确认" : "确认兑换加时码", body);
+    ui->model.confirm_hold_required = !ui->model.code_preview_after_available ||
+        ui->model.code_preview_after_minutes == 0 ||
+        ui->model.code_preview_converts_unlimited;
 }
 
 static void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minutes)
@@ -815,6 +1014,60 @@ static void poll_result(UiState *ui, bool force)
             update_weekly_dirty(ui);
         }
         refresh_disable_flag(ui);
+        if (strcmp(ui->model.result_type, "preview_offline_code") == 0) {
+            if (strcmp(ui->model.result_status, "ok") == 0) {
+                bool after_zero = ui->model.code_preview_after_available &&
+                    ui->model.code_preview_after_minutes == 0;
+                bool material_change = ui->code_preview_recheck &&
+                    (ui->code_previous_after_available != ui->model.code_preview_after_available ||
+                     ui->code_previous_after_zero != after_zero ||
+                     ui->code_previous_capped != ui->model.code_preview_capped ||
+                     ui->code_previous_converts_unlimited != ui->model.code_preview_converts_unlimited);
+                if (ui->code_preview_recheck && !material_change) {
+                    ui->code_preview_recheck = false;
+                    ui->model.code_before_remaining_available = ui->model.remaining_available;
+                    ui->model.code_before_remaining_minutes = ui->model.remaining_minutes;
+                    ui->model.code_before_unlimited = ui->model.unrestricted_today == 1;
+                    submit_offline_code(ui, ui->model.pending_code);
+                } else {
+                    ui->code_preview_recheck = false;
+                    open_code_preview_confirm(ui, material_change);
+                }
+            } else {
+                ui->code_preview_recheck = false;
+                ui->model.pending_code[0] = '\0';
+                if (code_error_stays_in_input(ui->model.error_code)) {
+                    char error[96];
+                    snprintf(error, sizeof(error), "%.95s", ui->model.message);
+                    open_offline_code_input(ui);
+                    snprintf(ui->model.numpad_error, sizeof(ui->model.numpad_error), "%s", error);
+                } else {
+                    ui->model.view = PTC_UI_ERROR;
+                }
+            }
+        } else if (strcmp(ui->model.result_type, "offline_code") == 0) {
+            ui->model.pending_code[0] = '\0';
+            ui->model.code_result_pending = false;
+            ui->model.code_result_failed = strcmp(ui->model.result_status, "ok") != 0;
+            if (strcmp(ui->model.result_status, "ok") == 0) {
+                ui->model.overlay = PTC_UI_OVERLAY_CODE_RESULT;
+                ui->model.operation = PTC_UI_OPERATION_NONE;
+            } else if (code_error_stays_in_input(ui->model.error_code)) {
+                char error[96];
+                snprintf(error, sizeof(error), "%.95s", ui->model.message);
+                open_offline_code_input(ui);
+                snprintf(ui->model.numpad_error, sizeof(ui->model.numpad_error), "%s", error);
+                (void)ptc_companion_pending_redemption_clear(&ui->client);
+            } else {
+                char original[192];
+                snprintf(original, sizeof(original), "%s", ui->model.message);
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                         "兑换未成功，加时码仍可使用。");
+                snprintf(ui->model.feedback_detail, sizeof(ui->model.feedback_detail), "%s", original);
+                ui->model.view = PTC_UI_ERROR;
+                (void)ptc_companion_pending_redemption_clear(&ui->client);
+            }
+        }
         if (ui->pending_today_action >= 0 && strcmp(ui->model.result_type, "status") == 0) {
             int action = ui->pending_today_action;
             ui->pending_today_action = -1;
@@ -825,7 +1078,9 @@ static void poll_result(UiState *ui, bool force)
                          "无法刷新当前状态，已取消本次时间调整。请重试。");
             }
         }
-        if (ui->request_view == PTC_UI_CHILD && strcmp(ui->model.result_status, "error") == 0) {
+        if (ui->request_view == PTC_UI_CHILD && strcmp(ui->model.result_status, "error") == 0 &&
+            strcmp(ui->model.result_type, "preview_offline_code") != 0 &&
+            strcmp(ui->model.result_type, "offline_code") != 0) {
             ui->model.view = PTC_UI_ERROR;
         }
         if (ui->pending_parent_page >= 0 || ui->pending_leave_parent) {
@@ -848,6 +1103,13 @@ static void poll_result(UiState *ui, bool force)
     if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL ||
         ui->model.overlay == PTC_UI_OVERLAY_GRANT_SETUP) {
         ui->model.grant_status_refresh_failed = true;
+    }
+    if (ui->pending_redemption.request_id[0] != '\0' &&
+        strcmp(ui->pending_redemption.request_id, ui->active_request_id) == 0) {
+        ptc_companion_transport_cancel(&ui->transport);
+        ui->recovering_redemption = true;
+        show_pending_redemption(ui);
+        return;
     }
     set_message(ui, "读取结果失败", status);
     if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
@@ -890,23 +1152,29 @@ static void enter_parent_area(UiState *ui)
     char pin[PTC_AUTH_PIN_MAX_LEN + 1];
     char pin_confirm[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus state = ptc_companion_auth_state(&ui->auth);
+    ui->auth_retry_action = AUTH_RETRY_ENTER_PARENT;
     if (state == PTC_AUTH_EMPTY) {
         if (!keyboard_input("设置 任我玩 PIN", "请输入 1–64 位数字；长度由家长决定", pin, sizeof(pin), true, true, false) ||
-            !keyboard_input("确认 任我玩 PIN", "请再次输入相同的数字 PIN", pin_confirm, sizeof(pin_confirm), true, true, false) ||
-            strcmp(pin, pin_confirm) != 0) {
-            snprintf(ui->model.message, sizeof(ui->model.message), "PIN 设置已取消，或两次输入不一致。");
+            !keyboard_input("确认 任我玩 PIN", "请再次输入相同的数字 PIN", pin_confirm, sizeof(pin_confirm), true, true, false)) {
+            ui->auth_retry_action = AUTH_RETRY_NONE;
+            snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 设置。");
+            return;
+        }
+        if (strcmp(pin, pin_confirm) != 0) {
+            show_auth_error(ui, "两次 PIN 不一致", "两次输入的 PIN 不一致，已全部清空，请重新设置。", 0);
             return;
         }
         state = ptc_companion_auth_set_pin(&ui->auth, pin, time(NULL), switch_random, NULL);
         if (state != PTC_AUTH_OK) {
-            set_auth_message(ui, "PIN 设置失败", state);
+            show_auth_error(ui, "PIN 设置失败", auth_status_zh(state), 0);
             return;
         }
     } else if (state != PTC_AUTH_OK) {
-        set_auth_message(ui, "无法进入家长区", state);
+        show_auth_error(ui, "无法进入家长区", auth_status_zh(state), 0);
         return;
     }
     if (!keyboard_input("任我玩 PIN", "输入本应用独立管理 PIN", pin, sizeof(pin), true, true, false)) {
+        ui->auth_retry_action = AUTH_RETRY_NONE;
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消进入家长区。");
         return;
     }
@@ -914,14 +1182,16 @@ static void enter_parent_area(UiState *ui)
         int64_t retry_after = 0;
         state = ptc_companion_auth_verify_pin(&ui->auth, pin, (int64_t)time(NULL), &retry_after);
         if (state == PTC_AUTH_COOLDOWN && retry_after > 0) {
-            snprintf(ui->model.message, sizeof(ui->model.message), "验证失败：请等待 %lld 秒后再试。", (long long)retry_after);
+            show_auth_error(ui, "PIN 暂时锁定", "PIN 错误次数过多，请等待倒计时结束后重试。", retry_after);
             return;
         }
     }
     if (state != PTC_AUTH_OK) {
-        set_auth_message(ui, "验证失败", state);
+        show_auth_error(ui, "PIN 验证未通过",
+                        state == PTC_AUTH_DENIED ? "PIN 不正确，请重试。" : auth_status_zh(state), 0);
         return;
     }
+    ui->auth_retry_action = AUTH_RETRY_NONE;
     enter_parent_area_unlocked(ui);
     if (strlen(pin) < 4U) {
         snprintf(ui->model.message, sizeof(ui->model.message),
@@ -1025,6 +1295,7 @@ static void setup_pin(UiState *ui)
     if (!ui) {
         return;
     }
+    ui->auth_retry_action = AUTH_RETRY_SETUP_PIN;
     state = ptc_companion_auth_state(&ui->auth);
     if (state == PTC_AUTH_OK) {
         if (save_setup_step(ui, PTC_UI_SETUP_TAKEOVER)) {
@@ -1034,22 +1305,27 @@ static void setup_pin(UiState *ui)
         return;
     }
     if (state != PTC_AUTH_EMPTY) {
-        set_auth_message(ui, "无法设置 任我玩 PIN", state);
+        show_auth_error(ui, "无法设置 任我玩 PIN", auth_status_zh(state), 0);
         return;
     }
     if (!keyboard_input("设置 任我玩 PIN", "请输入 1–64 位数字；短 PIN 仅提示风险，不会阻止保存",
                         pin, sizeof(pin), true, true, false) ||
         !keyboard_input("确认 任我玩 PIN", "请再次输入相同的数字 PIN",
-                        pin_confirm, sizeof(pin_confirm), true, true, false) ||
-        strcmp(pin, pin_confirm) != 0) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "PIN 设置已取消，或两次输入不一致。");
+                        pin_confirm, sizeof(pin_confirm), true, true, false)) {
+        ui->auth_retry_action = AUTH_RETRY_NONE;
+        snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 设置。");
+        return;
+    }
+    if (strcmp(pin, pin_confirm) != 0) {
+        show_auth_error(ui, "两次 PIN 不一致", "两次输入的 PIN 不一致，已全部清空，请重新设置。", 0);
         return;
     }
     state = ptc_companion_auth_set_pin(&ui->auth, pin, time(NULL), switch_random, NULL);
     if (state != PTC_AUTH_OK) {
-        set_auth_message(ui, "PIN 设置失败", state);
+        show_auth_error(ui, "PIN 设置失败", auth_status_zh(state), 0);
         return;
     }
+    ui->auth_retry_action = AUTH_RETRY_NONE;
     if (save_setup_step(ui, PTC_UI_SETUP_TAKEOVER)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                  strlen(pin) < 4U
@@ -1410,18 +1686,21 @@ static bool verify_sensitive_pin(UiState *ui, const char *action)
     PtcAuthStatus status;
     int64_t retry_after = 0;
     if (!keyboard_input("验证 任我玩 管理 PIN", action, pin, sizeof(pin), true, true, false)) {
+        ui->auth_retry_action = AUTH_RETRY_NONE;
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消敏感操作。");
         return false;
     }
     status = ptc_companion_auth_verify_pin(&ui->auth, pin, (int64_t)time(NULL), &retry_after);
     if (status != PTC_AUTH_OK) {
         if (status == PTC_AUTH_COOLDOWN && retry_after > 0) {
-            snprintf(ui->model.message, sizeof(ui->model.message), "验证失败：请等待 %lld 秒后再试。", (long long)retry_after);
+            show_auth_error(ui, "PIN 暂时锁定", "PIN 错误次数过多，请等待倒计时结束后重试。", retry_after);
             return false;
         }
-        set_auth_message(ui, "验证失败", status);
+        show_auth_error(ui, "PIN 验证未通过",
+                        status == PTC_AUTH_DENIED ? "PIN 不正确，请重试。" : auth_status_zh(status), 0);
         return false;
     }
+    ui->auth_retry_action = AUTH_RETRY_NONE;
     return true;
 }
 
@@ -1519,6 +1798,7 @@ static void request_save_credential(UiState *ui)
         snprintf(ui->model.message, sizeof(ui->model.message), "新值与当前值相同，无需保存。");
         return;
     }
+    ui->auth_retry_action = AUTH_RETRY_SAVE_CREDENTIAL;
     if (!verify_sensitive_pin(ui, "保存设备配对信息前，请再次输入本应用 PIN")) return;
     if (ui->model.credential_kind == 2 && ptc_grant_secret_is_demo(ui->model.credential_new)) {
         open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_CREDENTIAL, "启用公共演示密钥",
@@ -1533,17 +1813,25 @@ static void change_parent_pin(UiState *ui)
     char pin[PTC_AUTH_PIN_MAX_LEN + 1];
     char confirm[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus status;
+    ui->auth_retry_action = AUTH_RETRY_CHANGE_PIN;
     if (!verify_sensitive_pin(ui, "修改 PIN 前，请先输入当前任我玩 PIN")) return;
     if (!keyboard_input("修改 PlayWise PIN", "请输入新的 1–64 位数字", pin, sizeof(pin), true, true, false) ||
-        !keyboard_input("确认新 PIN", "请再次输入相同的数字 PIN", confirm, sizeof(confirm), true, true, false) ||
-        strcmp(pin, confirm) != 0) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "PIN 修改已取消，或两次输入不一致。");
+        !keyboard_input("确认新 PIN", "请再次输入相同的数字 PIN", confirm, sizeof(confirm), true, true, false)) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 修改。");
+        return;
+    }
+    if (strcmp(pin, confirm) != 0) {
+        ui->auth_retry_action = AUTH_RETRY_CHANGE_PIN;
+        show_auth_error(ui, "两次 PIN 不一致", "两次输入的新 PIN 不一致，已全部清空，请重新开始。", 0);
         return;
     }
     status = ptc_companion_auth_set_pin(&ui->auth, pin, time(NULL), switch_random, NULL);
     if (status == PTC_AUTH_OK) snprintf(ui->model.message, sizeof(ui->model.message), "%s",
         strlen(pin) < 4U ? "PlayWise PIN 已更新；当前 PIN 少于 4 位，冷却也无法提供可靠保护。" : "PlayWise PIN 已更新。");
-    else set_auth_message(ui, "PIN 修改失败", status);
+    else {
+        ui->auth_retry_action = AUTH_RETRY_CHANGE_PIN;
+        show_auth_error(ui, "PIN 修改失败", auth_status_zh(status), 0);
+    }
 }
 
 static void open_grant_setup(UiState *ui)
@@ -1605,6 +1893,7 @@ static void toggle_grant_more_panel(UiState *ui)
 static void edit_pairing_base_url(UiState *ui)
 {
     char value[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
+    ui->auth_retry_action = AUTH_RETRY_EDIT_URL;
     if (!verify_sensitive_pin(ui, "修改二维码跳转地址前，请再次输入本应用 PIN")) return;
     if (!keyboard_input("二维码跳转地址", "仅使用可信 HTTPS；局域网调试可用 localhost 或私有 IP",
                         value, sizeof(value), false, false, false)) return;
@@ -1623,6 +1912,7 @@ static void edit_pairing_base_url(UiState *ui)
 
 static void reset_pairing_base_url(UiState *ui)
 {
+    ui->auth_retry_action = AUTH_RETRY_RESET_URL;
     if (!verify_sensitive_pin(ui, "恢复官方二维码地址前，请再次输入本应用 PIN")) return;
     if (!save_pairing_base_url(ui, PTC_PAIRING_BASE_URL)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "恢复官方二维码地址失败。");
@@ -1647,6 +1937,7 @@ static void generate_local_grant_code(UiState *ui)
         snprintf(ui->model.message, sizeof(ui->model.message), "无法确认设备日期，请先关闭弹层并刷新设备状态。");
         return;
     }
+    ui->auth_retry_action = AUTH_RETRY_GENERATE_CODE;
     if (!verify_sensitive_pin(ui, "本机生成加时码前，请再次输入本应用 PIN")) return;
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret)) ||
         ptc_token_v2_tier_for_minutes(ui->model.grant_minutes, &tier) != PTC_ERR_OK) {
@@ -1695,6 +1986,7 @@ static void show_pairing_qr(UiState *ui)
     char secret[PTC_GRANT_SECRET_MAX_LEN + 1];
     uint8_t temp[qrcodegen_BUFFER_LEN_MAX];
     uint16_t maximum;
+    ui->auth_retry_action = AUTH_RETRY_SHOW_QR;
     if (!verify_sensitive_pin(ui, "显示包含加时码密钥的二维码前，请再次输入本应用 PIN")) return;
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret)) ||
         !read_pairing_config(ui, ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), &maximum) ||
@@ -1719,6 +2011,7 @@ static void export_parent_import(UiState *ui)
     cJSON *root;
     char *json;
     bool ok;
+    ui->auth_retry_action = AUTH_RETRY_EXPORT_CONFIG;
     if (!verify_sensitive_pin(ui, "导出包含加时码密钥的配置前，请再次输入本应用 PIN")) return;
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret))) {
         snprintf(ui->model.message, sizeof(ui->model.message), "读取家长网页导入信息失败。");
@@ -1737,6 +2030,40 @@ static void export_parent_import(UiState *ui)
     snprintf(ui->model.message, sizeof(ui->model.message), "%s",
              ok ? "已导出到 sdmc:/switch/playwise/parent-import.json；把文件导入家长网页。文件包含密钥，请妥善保管。"
                 : "生成家长网页导入文件失败。");
+}
+
+static void reveal_current_credential(UiState *ui)
+{
+    if (!ui) return;
+    if (ui->model.credential_kind == 1 || ui->model.credential_revealed) {
+        ui->model.credential_revealed = !ui->model.credential_revealed;
+        ui->model.credential_new_revealed = ui->model.credential_revealed;
+        return;
+    }
+    ui->auth_retry_action = AUTH_RETRY_REVEAL_CREDENTIAL;
+    if (!verify_sensitive_pin(ui, "显示当前加时码密钥前，请再次输入本应用 PIN")) return;
+    ui->model.credential_revealed = true;
+    ui->model.credential_new_revealed = true;
+}
+
+static void dispatch_auth_retry(UiState *ui, AuthRetryAction action)
+{
+    if (!ui) return;
+    switch (action) {
+    case AUTH_RETRY_ENTER_PARENT: enter_parent_area(ui); break;
+    case AUTH_RETRY_SETUP_PIN: setup_pin(ui); break;
+    case AUTH_RETRY_SAVE_CREDENTIAL: request_save_credential(ui); break;
+    case AUTH_RETRY_CHANGE_PIN: change_parent_pin(ui); break;
+    case AUTH_RETRY_EDIT_URL: edit_pairing_base_url(ui); break;
+    case AUTH_RETRY_RESET_URL: reset_pairing_base_url(ui); break;
+    case AUTH_RETRY_GENERATE_CODE: generate_local_grant_code(ui); break;
+    case AUTH_RETRY_SHOW_QR: show_pairing_qr(ui); break;
+    case AUTH_RETRY_EXPORT_CONFIG: export_parent_import(ui); break;
+    case AUTH_RETRY_REVEAL_CREDENTIAL: reveal_current_credential(ui); break;
+    case AUTH_RETRY_NONE:
+    default:
+        break;
+    }
 }
 
 static void export_diagnostics(UiState *ui)
@@ -1965,6 +2292,15 @@ static void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_RESTORE_TODAY_POLICY:
         submit_transport_empty(ui, "restore_today_policy", "正在恢复周计划…", "恢复计划失败");
         break;
+    case PTC_UI_OPERATION_REDEEM_OFFLINE_CODE:
+        ui->code_previous_after_available = ui->model.code_preview_after_available;
+        ui->code_previous_after_zero = ui->model.code_preview_after_available &&
+            ui->model.code_preview_after_minutes == 0;
+        ui->code_previous_capped = ui->model.code_preview_capped;
+        ui->code_previous_converts_unlimited = ui->model.code_preview_converts_unlimited;
+        ui->code_preview_recheck = true;
+        submit_preview_offline_code(ui, ui->model.pending_code);
+        break;
     case PTC_UI_OPERATION_SAVE_CREDENTIAL:
         if (!commit_credential(ui)) snprintf(ui->model.message, sizeof(ui->model.message), "保存加时码密钥失败。");
         break;
@@ -2018,8 +2354,10 @@ static void accept_numpad(UiState *ui)
     }
     if (purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
         snprintf(code, sizeof(code), "%s", ui->model.numpad_text);
+        snprintf(ui->model.pending_code, sizeof(ui->model.pending_code), "%s", code);
         ptc_ui_numpad_finish(&ui->model);
-        submit_offline_code(ui, code);
+        ui->code_preview_recheck = false;
+        submit_preview_offline_code(ui, code);
         return;
     }
     if (purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
@@ -2064,6 +2402,8 @@ static void save_weekly_from_page(UiState *ui)
                      (unsigned int)after.minutes);
         }
         open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY, "周计划将影响今天", body);
+        ui->model.confirm_hold_required = !ui->model.played_minutes_available ||
+            ptc_ui_day_rule_would_restrict(&ui->model, after);
     } else {
         submit_weekly(ui);
     }
@@ -2116,8 +2456,39 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
     apply_pending_navigation(ui);
 }
 
+static void close_code_result(UiState *ui)
+{
+    bool terminal;
+    if (!ui || ui->model.overlay != PTC_UI_OVERLAY_CODE_RESULT) return;
+    terminal = !ui->model.code_result_pending;
+    ptc_ui_cancel_overlay(&ui->model);
+    if (terminal) {
+        if (ptc_companion_pending_redemption_clear(&ui->client) != PTC_COMPANION_OK) {
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                     "兑换结果已显示，但恢复标记暂未清除；下次打开可能再次显示同一结果。");
+        }
+        memset(&ui->pending_redemption, 0, sizeof(ui->pending_redemption));
+        ui->model.code_result_failed = false;
+    } else {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "加时结果仍在确认中；可继续使用其他页面，下次打开也会继续确认。");
+    }
+}
+
 static void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR) {
+        if (down & HidNpadButton_B) {
+            close_auth_error(ui, true);
+        } else if ((down & (HidNpadButton_A | HidNpadButton_Plus)) &&
+                   ui->model.auth_cooldown_seconds <= 0) {
+            AuthRetryAction action = ui->auth_retry_action;
+            close_auth_error(ui, false);
+            ui->auth_retry_action = AUTH_RETRY_NONE;
+            dispatch_auth_retry(ui, action);
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER) {
         if (ui->model.shortcut_capture_active) {
             update_setup_shortcut_capture(ui, down, down | ui->model.captured_shortcut_mask);
@@ -2202,11 +2573,7 @@ static void handle_overlay_input(UiState *ui, u64 down)
             edit_credential_input(ui);
         } else if (down & HidNpadButton_ZR) {
             ui->model.overlay_selection = PTC_UI_CREDENTIAL_REVEAL;
-            if (ui->model.credential_kind == 1 || ui->model.credential_revealed ||
-                verify_sensitive_pin(ui, "显示当前加时码密钥前，请再次输入本应用 PIN")) {
-                ui->model.credential_revealed = !ui->model.credential_revealed;
-                ui->model.credential_new_revealed = ui->model.credential_revealed;
-            }
+            reveal_current_credential(ui);
         } else if (down & HidNpadButton_Y) {
             ui->model.overlay_selection = PTC_UI_CREDENTIAL_RANDOM;
             randomize_credential(ui);
@@ -2313,6 +2680,12 @@ static void handle_overlay_input(UiState *ui, u64 down)
         if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) ptc_ui_cancel_overlay(&ui->model);
         return;
     }
+    if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
+        if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
+            close_code_result(ui);
+        }
+        return;
+    }
     if (down & HidNpadButton_B) {
         ptc_ui_cancel_overlay(&ui->model);
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改。");
@@ -2411,12 +2784,14 @@ static void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             uint8_t weekday = ptc_weekday_from_day_index(ui->model.day_index);
             PtcDayRule today = ui->model.draft_week[weekday];
-            if (ptc_ui_day_rule_would_restrict(&ui->model, today)) {
+            if (!ui->model.today_override_present &&
+                (!ui->model.played_minutes_available || ptc_ui_day_rule_would_restrict(&ui->model, today))) {
                 char body[192];
                 snprintf(body, sizeof(body),
                          "已用约 %d 分钟；今天设置 %u 分钟。页面可能立即受限。",
                          ui->model.played_minutes, (unsigned int)today.minutes);
                 open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY, "每周计划可能立即生效", body);
+                ui->model.confirm_hold_required = true;
             } else {
                 ui->model.overlay = PTC_UI_OVERLAY_NONE;
                 submit_weekly(ui);
@@ -2513,19 +2888,27 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
-        if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL ||
+        if (ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR) {
+            handle_overlay_input(ui, HidNpadButton_B);
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL ||
             ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL ||
             ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
             if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
                 ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_BACK;
             }
             handle_overlay_input(ui, HidNpadButton_B);
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
+            close_code_result(ui);
         } else {
             ptc_ui_cancel_overlay(&ui->model);
             snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改。");
         }
         break;
     case PTC_UI_HIT_OVERLAY_CONFIRM:
+        if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
+            close_code_result(ui);
+            break;
+        }
         if (ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL) {
             ui->model.overlay_selection = PTC_UI_CREDENTIAL_SAVE;
         } else if (ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
@@ -2714,6 +3097,10 @@ static void handle_touch(UiState *ui, int x, int y)
 
 static void draw(UiState *ui)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && ui->auth_cooldown_until > 0) {
+        int64_t remaining = ui->auth_cooldown_until - (int64_t)time(NULL);
+        ui->model.auth_cooldown_seconds = remaining > 0 ? (int)remaining : 0;
+    }
     ui->model.waiting = ui->waiting;
     snprintf(ui->model.request_id, sizeof(ui->model.request_id), "%s", ui->active_request_id);
     ptc_ui_graphics_draw(&ui->model);
@@ -2796,7 +3183,9 @@ int main(int argc, char **argv)
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     ui.last_setup_refresh_second = -1;
     load_rule_drafts(&ui);
-    submit_status(&ui);
+    if (!restore_pending_redemption(&ui)) {
+        submit_status(&ui);
+    }
 
     while (appletMainLoop() && running) {
         u64 down;
@@ -3006,6 +3395,7 @@ int main(int argc, char **argv)
             running = false;
         }
 
+        poll_pending_redemption(&ui);
         poll_result(&ui, false);
         refresh_setup_activation(&ui);
         draw(&ui);

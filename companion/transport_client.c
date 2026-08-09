@@ -180,6 +180,7 @@ const char *ptc_companion_request_command_label_zh(const char *type)
 {
     if (!type) return "后台操作";
     if (strcmp(type, "status") == 0) return "刷新状态";
+    if (strcmp(type, "preview_offline_code") == 0) return "预览今日加时";
     if (strcmp(type, "offline_code") == 0) return "提交今日加时";
     if (strcmp(type, "set_today_limit") == 0) return "设置今日额度";
     if (strcmp(type, "add_today_minutes") == 0) return "临时加时";
@@ -227,5 +228,12 @@ PtcCompanionStatus ptc_companion_transport_submit_set_weekly_template(PtcCompani
 {
     char json[1024];
     if (ptc_companion_set_weekly_template_request_json(json, sizeof(json), request_id, created_at, week) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_preview_offline_code(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const char *code)
+{
+    char json[640];
+    if (ptc_companion_preview_offline_code_request_json(json, sizeof(json), request_id, created_at, code) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
     return ptc_companion_transport_submit_json(client, request_id, json);
 }

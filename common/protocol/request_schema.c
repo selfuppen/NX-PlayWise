@@ -188,6 +188,9 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "offline_code") == 0) {
         return PTC_REQUEST_OFFLINE_CODE;
     }
+    if (strcmp(value, "preview_offline_code") == 0) {
+        return PTC_REQUEST_PREVIEW_OFFLINE_CODE;
+    }
     if (strcmp(value, "status") == 0) {
         return PTC_REQUEST_STATUS;
     }
@@ -231,6 +234,8 @@ const char *ptc_request_type_name(PtcRequestType type)
     switch (type) {
     case PTC_REQUEST_OFFLINE_CODE:
         return "offline_code";
+    case PTC_REQUEST_PREVIEW_OFFLINE_CODE:
+        return "preview_offline_code";
     case PTC_REQUEST_STATUS:
         return "status";
     case PTC_REQUEST_SET_TODAY_LIMIT:
@@ -296,6 +301,7 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
 
     switch (out->type) {
     case PTC_REQUEST_OFFLINE_CODE:
+    case PTC_REQUEST_PREVIEW_OFFLINE_CODE:
         return json_string(text, "code", out->code, sizeof(out->code)) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_TODAY_LIMIT:
     case PTC_REQUEST_ADD_TODAY_MINUTES:

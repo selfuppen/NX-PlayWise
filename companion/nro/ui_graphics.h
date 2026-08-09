@@ -48,7 +48,9 @@ typedef enum {
     PTC_UI_OVERLAY_WEEKLY_LEAVE = 8,
     PTC_UI_OVERLAY_SHORTCUT_MANAGER = 9,
     PTC_UI_OVERLAY_GRANT_LOCAL = 10,
-    PTC_UI_OVERLAY_CREDENTIAL_LEAVE = 11
+    PTC_UI_OVERLAY_CREDENTIAL_LEAVE = 11,
+    PTC_UI_OVERLAY_CODE_RESULT = 12,
+    PTC_UI_OVERLAY_AUTH_ERROR = 13
 } PtcUiOverlay;
 
 typedef enum {
@@ -95,7 +97,8 @@ typedef enum {
     PTC_UI_OPERATION_DISABLE_TODAY_LIMIT = 9,
     PTC_UI_OPERATION_RESTORE_TODAY_POLICY = 10,
     PTC_UI_OPERATION_SAVE_CREDENTIAL = 11,
-    PTC_UI_OPERATION_SAVE_WEEKLY_LEAVE = 12
+    PTC_UI_OPERATION_SAVE_WEEKLY_LEAVE = 12,
+    PTC_UI_OPERATION_REDEEM_OFFLINE_CODE = 13
 } PtcUiOperation;
 
 typedef enum {
@@ -179,6 +182,21 @@ typedef struct {
     char numpad_guide[128];
     char numpad_error[96];
     char safety_hint[192];
+    char auth_error_title[64];
+    char auth_error_message[192];
+    int auth_cooldown_seconds;
+    char pending_code[9];
+    int code_grant_minutes;
+    bool code_preview_after_available;
+    int code_preview_after_minutes;
+    int code_effective_add_minutes;
+    bool code_preview_capped;
+    bool code_preview_converts_unlimited;
+    bool code_before_remaining_available;
+    int code_before_remaining_minutes;
+    bool code_before_unlimited;
+    bool code_result_pending;
+    bool code_result_failed;
     int credential_kind;
     bool credential_revealed;
     bool credential_new_revealed;

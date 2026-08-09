@@ -20,6 +20,15 @@ typedef struct {
     int restricted_now;
 } PtcResultState;
 
+typedef struct {
+    uint16_t grant_minutes;
+    bool remaining_after_available;
+    int64_t remaining_after_minutes;
+    uint16_t effective_add_minutes;
+    bool capped;
+    bool converts_unlimited_to_limited;
+} PtcOfflineCodePreview;
+
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index);
 PtcErrorCode ptc_result_validate(const char *text);
 int ptc_result_ok_json(
@@ -30,6 +39,14 @@ int ptc_result_ok_json(
     const char *mode,
     bool dry_run,
     const PtcResultState *state,
+    int64_t completed_at);
+int ptc_result_preview_ok_json(
+    char *out,
+    size_t out_size,
+    const char *request_id,
+    const char *request_type,
+    const PtcResultState *state,
+    const PtcOfflineCodePreview *preview,
     int64_t completed_at);
 int ptc_result_error_json(
     char *out,

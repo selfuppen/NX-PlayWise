@@ -23,7 +23,8 @@ typedef enum {
     PTC_REQUEST_REMOVED_18 = 18,
     PTC_REQUEST_COMPLETE_SETUP = 19,
     PTC_REQUEST_RETRY_SETUP_RELEASE = 20,
-    PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT = 21
+    PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT = 21,
+    PTC_REQUEST_PREVIEW_OFFLINE_CODE = 22
 } PtcRequestType;
 
 PtcRequestType ptc_request_type_from_string(const char *value);

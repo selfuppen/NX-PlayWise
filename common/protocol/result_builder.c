@@ -166,6 +166,16 @@ PtcErrorCode ptc_result_validate(const char *text)
             !has_key(text, "message"))) {
         return PTC_ERR_BAD_REQUEST;
     }
+    if (ok_status && json_string_equals(text, "type", "preview_offline_code") &&
+        (!has_key(text, "preview") ||
+            !json_i64_present(text, "grant_minutes") ||
+            !json_bool_present(text, "remaining_after_available") ||
+            !json_i64_present(text, "remaining_after_minutes") ||
+            !json_i64_present(text, "effective_add_minutes") ||
+            !json_bool_present(text, "capped") ||
+            !json_bool_present(text, "converts_unlimited_to_limited"))) {
+        return PTC_ERR_BAD_REQUEST;
+    }
     return PTC_ERR_OK;
 }
 
@@ -193,6 +203,43 @@ int ptc_result_ok_json(
     append_state(out, out_size, state);
     written = (int)snprintf(out + strlen(out), out_size - strlen(out), ",\"completed_at\":%lld}\n", (long long)completed_at);
     return written < 0 ? -1 : 0;
+}
+
+int ptc_result_preview_ok_json(
+    char *out,
+    size_t out_size,
+    const char *request_id,
+    const char *request_type,
+    const PtcResultState *state,
+    const PtcOfflineCodePreview *preview,
+    int64_t completed_at)
+{
+    int written;
+    size_t used;
+    if (!out || !request_id || !request_type || !state || !preview) return -1;
+    written = snprintf(
+        out,
+        out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"%s\",\"status\":\"ok\",",
+        request_id,
+        request_type);
+    if (written < 0 || (size_t)written >= out_size) return -1;
+    append_state(out, out_size, state);
+    used = strlen(out);
+    written = snprintf(
+        out + used,
+        out_size - used,
+        ",\"preview\":{\"grant_minutes\":%u,\"remaining_after_available\":%s,"
+        "\"remaining_after_minutes\":%lld,\"effective_add_minutes\":%u,"
+        "\"capped\":%s,\"converts_unlimited_to_limited\":%s},\"completed_at\":%lld}\n",
+        preview->grant_minutes,
+        json_bool(preview->remaining_after_available),
+        (long long)preview->remaining_after_minutes,
+        preview->effective_add_minutes,
+        json_bool(preview->capped),
+        json_bool(preview->converts_unlimited_to_limited),
+        (long long)completed_at);
+    return written < 0 || (size_t)written >= out_size - used ? -1 : 0;
 }
 
 int ptc_result_error_json(

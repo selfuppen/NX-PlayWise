@@ -97,6 +97,7 @@ static void test_release_request_contract(void)
     };
     static const char *const release_requests[] = {
         "{\"version\":1,\"request_id\":\"status-1\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}",
+        "{\"version\":1,\"request_id\":\"preview-1\",\"type\":\"preview_offline_code\",\"created_at\":1,\"payload\":{\"code\":\"10514680\"}}",
         "{\"version\":1,\"request_id\":\"code-1\",\"type\":\"offline_code\",\"created_at\":1,\"payload\":{\"code\":\"10514680\"}}",
         "{\"version\":1,\"request_id\":\"limit-1\",\"type\":\"set_today_limit\",\"created_at\":1,\"payload\":{\"minutes\":60}}",
         "{\"version\":1,\"request_id\":\"add-1\",\"type\":\"add_today_minutes\",\"created_at\":1,\"payload\":{\"minutes\":15}}",
@@ -215,10 +216,58 @@ static void test_overlay_result_classification(void)
     check_true(!ptc_overlay_bridge_offline_code_succeeded(&bridge), "status refresh is not treated as code redemption");
 
     snprintf(bridge.summary.type, sizeof(bridge.summary.type), "offline_code");
-    check_true(!ptc_overlay_bridge_offline_code_succeeded(&bridge), "code redemption requires observed unlock");
-    bridge.summary.unlock_observed = true;
-    check_true(ptc_overlay_bridge_offline_code_succeeded(&bridge), "observed code redemption is accepted");
+    check_true(ptc_overlay_bridge_offline_code_succeeded(&bridge), "successful code result is accepted even at zero remaining");
     check_true(!ptc_overlay_bridge_status_succeeded(&bridge), "code redemption is not treated as status refresh");
+
+    snprintf(bridge.summary.type, sizeof(bridge.summary.type), "preview_offline_code");
+    bridge.summary.preview_available = true;
+    check_true(ptc_overlay_bridge_preview_succeeded(&bridge), "preview result is classified separately");
+    check_true(!ptc_overlay_bridge_offline_code_succeeded(&bridge), "preview never counts as redemption");
+}
+
+static void test_pending_redemption_recovery_marker(void)
+{
+    PtcMemStorage mem;
+    PtcCompanionFileClient client;
+    PtcPendingRedemption pending;
+    PtcPendingRedemption loaded;
+    bool found = false;
+    char text[1024];
+    ptc_mem_storage_init(&mem);
+    ptc_companion_file_client_init(&client, "app", &mem.storage);
+    memset(&pending, 0, sizeof(pending));
+    snprintf(pending.request_id, sizeof(pending.request_id), "redeem-recovery-1");
+    pending.confirmed_at = 100;
+    pending.grant_minutes = 30;
+    pending.before_remaining_available = true;
+    pending.before_remaining_minutes = 20;
+    pending.after_remaining_available = true;
+    pending.after_remaining_minutes = 50;
+    pending.effective_add_minutes = 30;
+    check_int(ptc_companion_pending_redemption_save(&client, &pending), PTC_COMPANION_OK,
+              "prepared redemption marker persisted");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/pending-redemption.json", text, sizeof(text)) &&
+               strstr(text, "10514680") == NULL && strstr(text, "\"request_id\":\"redeem-recovery-1\"") != NULL,
+               "redemption marker stores request identity without the code");
+    check_int(ptc_companion_pending_redemption_load(&client, &loaded, &found), PTC_COMPANION_OK,
+              "redemption marker reloads");
+    check_true(found && loaded.grant_minutes == 30 && loaded.after_remaining_minutes == 50,
+               "redemption preview snapshot survives restart");
+    check_true(!ptc_companion_pending_redemption_has_submission(&client, &loaded),
+               "prepared marker alone is not mistaken for submission");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/processing/redeem-recovery-1.json", "{}"),
+               "seed durable request evidence");
+    check_true(ptc_companion_pending_redemption_has_submission(&client, &loaded),
+               "durable queue evidence recovers an interrupted acceptance reply");
+    pending.submitted = true;
+    check_int(ptc_companion_pending_redemption_save(&client, &pending), PTC_COMPANION_OK,
+              "accepted redemption marker persisted");
+    check_int(ptc_companion_pending_redemption_clear(&client), PTC_COMPANION_OK,
+              "handled redemption marker cleared");
+    found = true;
+    check_int(ptc_companion_pending_redemption_load(&client, &loaded, &found), PTC_COMPANION_OK,
+              "missing marker is a normal state");
+    check_true(!found, "handled redemption is not recovered again");
 }
 
 static void test_overlay_layout_geometry(void)
@@ -439,6 +488,75 @@ static void test_played_time_status(void)
         "limited status retains configured-minus-remaining fallback");
 }
 
+static void test_offline_code_preview_is_non_consuming(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_V2_TEXT_SIZE];
+    char request[512];
+    char result[4096];
+    uint8_t tier = 0;
+    unsigned int apply_calls;
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.model_elapsed_time = true;
+    pctl.played_minutes_today = 20;
+    pctl.status.limited_today = true;
+    pctl.status.unrestricted_today = false;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 40;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 60;
+    pctl.status.play_timer_enabled = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"active\",\"compatibility_status\":\"verified\",\"restriction_cleared\":true,"
+        "\"snapshot_available\":true,\"activate_after\":0,\"last_error\":\"\"}"), "seed active setup for preview");
+    check_int(ptc_token_v2_tier_for_minutes(30, &tier), PTC_ERR_OK, "preview token tier selected");
+    check_int(ptc_token_v2_encode(tier, 7, "kid-switch",
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", 2380, code),
+        PTC_ERR_OK, "preview token encoded");
+
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"preview-code\",\"type\":\"preview_offline_code\","
+        "\"created_at\":1,\"payload\":{\"code\":\"%s\"}}", code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/preview-code.json", request), "queue code preview");
+    apply_calls = pctl.apply_target_calls;
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "code preview processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/preview-code.json", result, sizeof(result)) &&
+        strstr(result, "\"type\":\"preview_offline_code\"") &&
+        strstr(result, "\"grant_minutes\":30") &&
+        strstr(result, "\"remaining_after_minutes\":70"), "preview exposes current and estimated state");
+    check_int((int)pctl.apply_target_calls, (int)apply_calls, "preview performs no PCTL write");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"),
+        "preview does not consume nonce");
+
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"redeem-code\",\"type\":\"offline_code\","
+        "\"created_at\":2,\"payload\":{\"code\":\"%s\"}}", code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/redeem-code.json", request), "queue confirmed redemption");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "confirmed code processed");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"),
+        "confirmed successful redemption consumes nonce");
+    check_true(pctl.apply_target_calls > apply_calls, "confirmed redemption writes PCTL");
+
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"preview-used\",\"type\":\"preview_offline_code\","
+        "\"created_at\":3,\"payload\":{\"code\":\"%s\"}}", code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/preview-used.json", request), "queue used-code preview");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "used code preview processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/preview-used.json", result, sizeof(result)) &&
+        strstr(result, "\"reason\":\"used_token\""), "used code is rejected before confirmation");
+}
+
 static void test_play_timer_layout(void)
 {
     uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS] = {
@@ -501,9 +619,11 @@ int main(void)
     test_support_redaction();
     test_auth_and_queue();
     test_overlay_result_classification();
+    test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();
     test_setup_preflight_and_recovery();
     test_played_time_status();
+    test_offline_code_preview_is_non_consuming();
     test_play_timer_layout();
     test_credential_policy();
     if (failures) {

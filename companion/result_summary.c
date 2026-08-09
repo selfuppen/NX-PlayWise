@@ -29,6 +29,7 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     cJSON *root;
     const cJSON *state;
     const cJSON *error;
+    const cJSON *preview;
     const char *status;
     if (!out || !result_json || ptc_result_validate(result_json) != PTC_ERR_OK) {
         return false;
@@ -50,6 +51,14 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->played_minutes = number_value(state, "played_minutes", -1);
     out->play_timer_enabled = number_value(state, "play_timer_enabled", -1);
     out->restricted_now = number_value(state, "restricted_now", -1);
+    preview = cJSON_GetObjectItemCaseSensitive(root, "preview");
+    out->preview_available = cJSON_IsObject(preview);
+    out->grant_minutes = number_value(preview, "grant_minutes", 0);
+    out->remaining_after_available = bool_value(preview, "remaining_after_available", false);
+    out->remaining_after_minutes = number_value(preview, "remaining_after_minutes", -1);
+    out->effective_add_minutes = number_value(preview, "effective_add_minutes", 0);
+    out->preview_capped = bool_value(preview, "capped", false);
+    out->converts_unlimited_to_limited = bool_value(preview, "converts_unlimited_to_limited", false);
     error = cJSON_GetObjectItemCaseSensitive(root, "error");
     out->error_code = number_value(error, "code", 0);
     snprintf(out->reason, sizeof(out->reason), "%s", string_value(error, "reason"));

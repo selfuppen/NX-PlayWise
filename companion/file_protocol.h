@@ -26,6 +26,21 @@ typedef struct {
     PtcStorage *storage;
 } PtcCompanionFileClient;
 
+typedef struct {
+    char request_id[PTC_COMPANION_REQUEST_ID_SIZE];
+    int64_t confirmed_at;
+    bool submitted;
+    int grant_minutes;
+    bool before_remaining_available;
+    int before_remaining_minutes;
+    bool before_unlimited;
+    bool after_remaining_available;
+    int after_remaining_minutes;
+    int effective_add_minutes;
+    bool capped;
+    bool converts_unlimited_to_limited;
+} PtcPendingRedemption;
+
 void ptc_companion_file_client_init(PtcCompanionFileClient *client, const char *app_root, PtcStorage *storage);
 PtcCompanionStatus ptc_companion_make_request_id(char *out, size_t out_size, int64_t unix_ms, uint16_t random16);
 PtcCompanionStatus ptc_companion_submit_status(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
@@ -36,6 +51,17 @@ PtcCompanionStatus ptc_companion_submit_disable_today_limit(PtcCompanionFileClie
 PtcCompanionStatus ptc_companion_submit_restore_today_policy(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_submit_set_weekly_template(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, const PtcDayRule week[7]);
 PtcCompanionStatus ptc_companion_set_disable_flag(PtcCompanionFileClient *client, bool enabled);
+PtcCompanionStatus ptc_companion_pending_redemption_save(
+    PtcCompanionFileClient *client,
+    const PtcPendingRedemption *pending);
+PtcCompanionStatus ptc_companion_pending_redemption_load(
+    PtcCompanionFileClient *client,
+    PtcPendingRedemption *out,
+    bool *found);
+PtcCompanionStatus ptc_companion_pending_redemption_clear(PtcCompanionFileClient *client);
+bool ptc_companion_pending_redemption_has_submission(
+    PtcCompanionFileClient *client,
+    const PtcPendingRedemption *pending);
 PtcCompanionStatus ptc_companion_read_result(
     PtcCompanionFileClient *client,
     const char *request_id,

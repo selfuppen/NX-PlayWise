@@ -86,6 +86,27 @@ static PtcCompanionStatus submit_json(PtcCompanionFileClient *client, const char
     return PTC_COMPANION_OK;
 }
 
+static void pending_redemption_path(const PtcCompanionFileClient *client, char *out, size_t out_size)
+{
+    snprintf(out, out_size, "%s/pending-redemption.json", client->app_root);
+}
+
+static bool json_bool_required(const cJSON *object, const char *key, bool *out)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, key);
+    if (!cJSON_IsBool(item) || !out) return false;
+    *out = cJSON_IsTrue(item);
+    return true;
+}
+
+static bool json_int_required(const cJSON *object, const char *key, int *out)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, key);
+    if (!cJSON_IsNumber(item) || !out) return false;
+    *out = item->valueint;
+    return true;
+}
+
 void ptc_companion_file_client_init(PtcCompanionFileClient *client, const char *app_root, PtcStorage *storage)
 {
     if (!client) {
@@ -203,6 +224,129 @@ PtcCompanionStatus ptc_companion_set_disable_flag(PtcCompanionFileClient *client
         return PTC_COMPANION_OK;
     }
     return client->storage->vtable->remove_path(client->storage, flag_path) ? PTC_COMPANION_OK : PTC_COMPANION_WRITE_FAILED;
+}
+
+PtcCompanionStatus ptc_companion_pending_redemption_save(
+    PtcCompanionFileClient *client,
+    const PtcPendingRedemption *pending)
+{
+    char path[192];
+    char text[1024];
+    int written;
+    if (!client || !client->storage || !pending ||
+        !ptc_request_id_is_valid(pending->request_id) || pending->confirmed_at < 0 ||
+        pending->grant_minutes < 0 || pending->grant_minutes > 1440 ||
+        pending->before_remaining_minutes < -1 || pending->after_remaining_minutes < -1 ||
+        pending->effective_add_minutes < 0 || pending->effective_add_minutes > 1440) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    written = snprintf(
+        text, sizeof(text),
+        "{\"version\":1,\"request_id\":\"%s\",\"confirmed_at\":%lld,\"submitted\":%s,"
+        "\"preview\":{\"grant_minutes\":%d,\"before_remaining_available\":%s,"
+        "\"before_remaining_minutes\":%d,\"before_unlimited\":%s,"
+        "\"after_remaining_available\":%s,\"after_remaining_minutes\":%d,"
+        "\"effective_add_minutes\":%d,\"capped\":%s,"
+        "\"converts_unlimited_to_limited\":%s}}\n",
+        pending->request_id,
+        (long long)pending->confirmed_at,
+        pending->submitted ? "true" : "false",
+        pending->grant_minutes,
+        pending->before_remaining_available ? "true" : "false",
+        pending->before_remaining_minutes,
+        pending->before_unlimited ? "true" : "false",
+        pending->after_remaining_available ? "true" : "false",
+        pending->after_remaining_minutes,
+        pending->effective_add_minutes,
+        pending->capped ? "true" : "false",
+        pending->converts_unlimited_to_limited ? "true" : "false");
+    if (written < 0 || (size_t)written >= sizeof(text)) return PTC_COMPANION_BAD_ARGUMENT;
+    pending_redemption_path(client, path, sizeof(path));
+    return client->storage->vtable->write_text_atomic(client->storage, path, text)
+        ? PTC_COMPANION_OK : PTC_COMPANION_WRITE_FAILED;
+}
+
+PtcCompanionStatus ptc_companion_pending_redemption_load(
+    PtcCompanionFileClient *client,
+    PtcPendingRedemption *out,
+    bool *found)
+{
+    char path[192];
+    char text[1024];
+    cJSON *root;
+    const cJSON *version;
+    const cJSON *request_id;
+    const cJSON *confirmed_at;
+    const cJSON *preview;
+    if (!client || !client->storage || !out || !found) return PTC_COMPANION_BAD_ARGUMENT;
+    memset(out, 0, sizeof(*out));
+    *found = false;
+    pending_redemption_path(client, path, sizeof(path));
+    if (!client->storage->vtable->exists(client->storage, path)) return PTC_COMPANION_OK;
+    *found = true;
+    if (!client->storage->vtable->read_text(client->storage, path, text, sizeof(text))) {
+        return PTC_COMPANION_WRITE_FAILED;
+    }
+    root = cJSON_Parse(text);
+    if (!cJSON_IsObject(root)) {
+        cJSON_Delete(root);
+        return PTC_COMPANION_RESULT_INVALID;
+    }
+    version = cJSON_GetObjectItemCaseSensitive(root, "version");
+    request_id = cJSON_GetObjectItemCaseSensitive(root, "request_id");
+    confirmed_at = cJSON_GetObjectItemCaseSensitive(root, "confirmed_at");
+    preview = cJSON_GetObjectItemCaseSensitive(root, "preview");
+    if (!cJSON_IsNumber(version) || version->valueint != 1 ||
+        !cJSON_IsString(request_id) || !request_id->valuestring ||
+        !ptc_request_id_is_valid(request_id->valuestring) ||
+        !cJSON_IsNumber(confirmed_at) || confirmed_at->valuedouble < 0 ||
+        !cJSON_IsObject(preview) ||
+        !json_bool_required(root, "submitted", &out->submitted) ||
+        !json_int_required(preview, "grant_minutes", &out->grant_minutes) ||
+        !json_bool_required(preview, "before_remaining_available", &out->before_remaining_available) ||
+        !json_int_required(preview, "before_remaining_minutes", &out->before_remaining_minutes) ||
+        !json_bool_required(preview, "before_unlimited", &out->before_unlimited) ||
+        !json_bool_required(preview, "after_remaining_available", &out->after_remaining_available) ||
+        !json_int_required(preview, "after_remaining_minutes", &out->after_remaining_minutes) ||
+        !json_int_required(preview, "effective_add_minutes", &out->effective_add_minutes) ||
+        !json_bool_required(preview, "capped", &out->capped) ||
+        !json_bool_required(preview, "converts_unlimited_to_limited", &out->converts_unlimited_to_limited) ||
+        out->grant_minutes < 0 || out->grant_minutes > 1440 ||
+        out->before_remaining_minutes < -1 || out->after_remaining_minutes < -1 ||
+        out->effective_add_minutes < 0 || out->effective_add_minutes > 1440) {
+        cJSON_Delete(root);
+        return PTC_COMPANION_RESULT_INVALID;
+    }
+    snprintf(out->request_id, sizeof(out->request_id), "%s", request_id->valuestring);
+    out->confirmed_at = (int64_t)confirmed_at->valuedouble;
+    cJSON_Delete(root);
+    return PTC_COMPANION_OK;
+}
+
+PtcCompanionStatus ptc_companion_pending_redemption_clear(PtcCompanionFileClient *client)
+{
+    char path[192];
+    if (!client || !client->storage) return PTC_COMPANION_BAD_ARGUMENT;
+    pending_redemption_path(client, path, sizeof(path));
+    if (!client->storage->vtable->exists(client->storage, path)) return PTC_COMPANION_OK;
+    return client->storage->vtable->remove_path(client->storage, path)
+        ? PTC_COMPANION_OK : PTC_COMPANION_WRITE_FAILED;
+}
+
+bool ptc_companion_pending_redemption_has_submission(
+    PtcCompanionFileClient *client,
+    const PtcPendingRedemption *pending)
+{
+    static const char *DIRS[] = {"results", "inbox/pending", "inbox/processing", "inbox/done"};
+    char path[256];
+    size_t index;
+    if (!client || !client->storage || !pending || !ptc_request_id_is_valid(pending->request_id)) return false;
+    if (pending->submitted) return true;
+    for (index = 0; index < sizeof(DIRS) / sizeof(DIRS[0]); ++index) {
+        snprintf(path, sizeof(path), "%s/%s/%s.json", client->app_root, DIRS[index], pending->request_id);
+        if (client->storage->vtable->exists(client->storage, path)) return true;
+    }
+    return false;
 }
 
 PtcCompanionStatus ptc_companion_read_result(
