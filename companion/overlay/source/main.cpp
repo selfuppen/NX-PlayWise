@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "release_manifest.h"
+#include "../layout.h"
 
 extern "C" {
 #include "../bridge.h"
@@ -55,20 +56,24 @@ enum class OverlayRequestKind {
     OfflineCode,
 };
 
-constexpr s32 TOP_BANNER_Y = 0;
-constexpr s32 TOP_BANNER_H = 72;
-constexpr s32 REFRESH_X = 220;
-constexpr s32 REFRESH_Y = 6;
-constexpr s32 REFRESH_W = 88;
-constexpr s32 REFRESH_H = 28;
-constexpr s32 SLOT_Y = 104;
-constexpr s32 KEYPAD_Y = 176;
-constexpr s32 KEY_ROW_STEP = 38;
-constexpr s32 KEY_HEIGHT = 34;
-constexpr s32 SUBMIT_Y = 342;
-constexpr s32 SUBMIT_H = 36;
-constexpr s32 STATUS_Y = 384;
-constexpr s32 STATUS_EXPANDED_H = 136;
+class PlayWiseOverlayFrame final : public tsl::elm::OverlayFrame {
+public:
+    PlayWiseOverlayFrame(const std::string &title, const std::string &subtitle)
+        : tsl::elm::OverlayFrame(title, subtitle) {}
+
+    void layout(u16 parent_x, u16 parent_y, u16 parent_width, u16 parent_height) override
+    {
+        setBoundaries(parent_x, parent_y, parent_width, parent_height);
+        if (m_contentElement != nullptr) {
+            m_contentElement->setBoundaries(
+                parent_x + PTC_OVERLAY_CONTENT_X,
+                parent_y + PTC_OVERLAY_CONTENT_Y,
+                parent_width - 85,
+                parent_height - 73 - PTC_OVERLAY_CONTENT_Y);
+            m_contentElement->invalidate();
+        }
+    }
+};
 
 class PctcGui final : public tsl::Gui {
 public:
@@ -76,7 +81,7 @@ public:
 
     tsl::elm::Element *createUI() override
     {
-        auto frame = new tsl::elm::OverlayFrame("自律约定", "兑换加时奖励");
+        auto frame = new PlayWiseOverlayFrame("自律约定", "兑换加时奖励");
         (void)begin_status_refresh();
         frame->setContent(new tsl::elm::CustomDrawer([this](tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 w, s32 h) {
             draw_overlay(renderer, x, y, w, h);
@@ -171,13 +176,11 @@ public:
             s32 rel_x = tx > 400 ? (tx - 880) : tx;
             s32 rel_y = ty;
 
-            constexpr s32 cx = 35;
-            constexpr s32 cy = 125;
-            constexpr s32 panel_y = cy + KEYPAD_Y;
+            constexpr s32 cx = PTC_OVERLAY_CONTENT_X;
+            constexpr s32 cy = PTC_OVERLAY_CONTENT_Y;
 
             // 顶部刷新按钮；等待期间由前面的忙碌分支禁用。
-            if (rel_x >= cx + REFRESH_X && rel_x <= cx + REFRESH_X + REFRESH_W &&
-                rel_y >= cy + REFRESH_Y && rel_y <= cy + REFRESH_Y + REFRESH_H) {
+            if (ptc_overlay_rect_contains(ptc_overlay_refresh_rect(cx, cy), rel_x, rel_y)) {
                 (void)begin_status_refresh();
                 prev_touch_down_ = touch_down;
                 return true;
@@ -186,11 +189,7 @@ public:
             // 点击小键盘按键
             const char *charset = ptc_overlay_input_charset();
             for (unsigned int index = 0; index < PTC_OVERLAY_KEY_COUNT; ++index) {
-                unsigned int row = index == 0 ? 3u : (index - 1u) / 3u;
-                unsigned int col = index == 0 ? 1u : (index - 1u) % 3u;
-                s32 kx = cx + 12 + static_cast<s32>(col) * 102;
-                s32 ky = panel_y + 6 + static_cast<s32>(row) * KEY_ROW_STEP;
-                if (rel_x >= kx && rel_x <= kx + 90 && rel_y >= ky && rel_y <= ky + KEY_HEIGHT) {
+                if (ptc_overlay_rect_contains(ptc_overlay_key_rect(cx, cy, index), rel_x, rel_y)) {
                     input_->cursor = index;
                     if (input_->length < PTC_OVERLAY_CODE_SYMBOLS) {
                         input_->symbols[input_->length++] = charset[index];
@@ -202,33 +201,30 @@ public:
             }
 
             // 点击 [X] 退格 (第四行左侧)
-            s32 x_btn_x = cx + 12;
-            s32 btn_y = panel_y + 6 + 3 * KEY_ROW_STEP;
-            if (rel_x >= x_btn_x && rel_x <= x_btn_x + 90 && rel_y >= btn_y && rel_y <= btn_y + KEY_HEIGHT) {
+            if (ptc_overlay_rect_contains(ptc_overlay_backspace_rect(cx, cy), rel_x, rel_y)) {
                 (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_X, 0, 0);
                 prev_touch_down_ = touch_down;
                 return true;
             }
 
             // 点击清空（物理 Y 保留给状态刷新）。
-            s32 y_btn_x = cx + 216;
-            if (rel_x >= y_btn_x && rel_x <= y_btn_x + 90 && rel_y >= btn_y && rel_y <= btn_y + KEY_HEIGHT) {
+            if (ptc_overlay_rect_contains(ptc_overlay_clear_rect(cx, cy), rel_x, rel_y)) {
                 (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_Y, 0, 0);
                 prev_touch_down_ = touch_down;
                 return true;
             }
 
             // 点击 [+] 提交按钮
-            s32 submit_y = cy + SUBMIT_Y;
-            if (rel_x >= cx && rel_x <= cx + 315 && rel_y >= submit_y && rel_y <= submit_y + SUBMIT_H) {
+            if (ptc_overlay_rect_contains(ptc_overlay_submit_rect(cx, cy, PTC_OVERLAY_CONTENT_W), rel_x, rel_y)) {
                 (void)begin_code_submit();
                 prev_touch_down_ = touch_down;
                 return true;
             }
 
             // 点击状态与命令栏
-            s32 status_y = cy + STATUS_Y;
-            if (rel_x >= cx && rel_x <= cx + 315 && rel_y >= status_y && rel_y <= status_y + STATUS_EXPANDED_H) {
+            if (ptc_overlay_rect_contains(
+                    ptc_overlay_status_rect(cx, cy, PTC_OVERLAY_CONTENT_W, status_expanded_, status_needs_detail()),
+                    rel_x, rel_y)) {
                 status_expanded_ = !status_expanded_;
                 prev_touch_down_ = touch_down;
                 return true;
@@ -377,6 +373,11 @@ public:
         return armTicksToNs(armGetSystemTick() - last_refresh_tick_) >= 30000000000ULL;
     }
 
+    bool status_needs_detail() const
+    {
+        return error_ || close_after_frames_ > 0;
+    }
+
     void draw_overlay(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw, s32 ch)
     {
         (void)ch;
@@ -386,8 +387,8 @@ public:
         format_refresh_age(age, sizeof(age));
 
         // --- 0. Top Prominent Status Banner (醒目展示今日已玩与修改后/当前可玩时长) ---
-        const s32 top_banner_y = cy + TOP_BANNER_Y;
-        const s32 top_banner_h = TOP_BANNER_H;
+        const s32 top_banner_y = cy + PTC_OVERLAY_TOP_BANNER_Y;
+        const s32 top_banner_h = PTC_OVERLAY_TOP_BANNER_H;
         renderer->drawRect(cx, top_banner_y, cw, top_banner_h, renderer->a(CARD_COLOR));
         draw_outline(renderer, cx, top_banner_y, cw, top_banner_h, 1, FOCUS_BORDER);
 
@@ -409,24 +410,28 @@ public:
         }
 
         const bool busy = bridge_->waiting;
-        renderer->drawRect(cx + REFRESH_X, cy + REFRESH_Y, REFRESH_W, REFRESH_H,
+        renderer->drawRect(cx + PTC_OVERLAY_REFRESH_X, cy + PTC_OVERLAY_REFRESH_Y,
+                           PTC_OVERLAY_REFRESH_W, PTC_OVERLAY_REFRESH_H,
                            renderer->a(busy ? DISABLED_COLOR : FOCUS_BG));
-        draw_outline(renderer, cx + REFRESH_X, cy + REFRESH_Y, REFRESH_W, REFRESH_H, 1,
+        draw_outline(renderer, cx + PTC_OVERLAY_REFRESH_X, cy + PTC_OVERLAY_REFRESH_Y,
+                     PTC_OVERLAY_REFRESH_W, PTC_OVERLAY_REFRESH_H, 1,
                      busy ? MUTED_COLOR : FOCUS_BORDER);
-        renderer->drawString(busy ? "刷新中" : "Y  刷新", false, cx + REFRESH_X + 18,
-                             cy + REFRESH_Y + 20, 12, renderer->a(busy ? MUTED_COLOR : TEXT_COLOR));
-        renderer->drawString(status_is_stale() ? "数据可能已过期" : age, false, cx + REFRESH_X,
+        renderer->drawString(busy ? "刷新中" : "Y  刷新", false, cx + PTC_OVERLAY_REFRESH_X + 18,
+                             cy + PTC_OVERLAY_REFRESH_Y + 20, 12, renderer->a(busy ? MUTED_COLOR : TEXT_COLOR));
+        renderer->drawString(status_is_stale() ? "数据可能已过期" : age, false, cx + PTC_OVERLAY_REFRESH_X,
                              top_banner_y + 64, 11, renderer->a(status_is_stale() ? ERROR_COLOR : MUTED_COLOR));
 
         // --- 1. Header Prompt & Guidance (护眼提醒) ---
         renderer->drawString("提示：加时前记得向窗外远眺 5 分钟！", false, cx + 5, cy + 94, 14, renderer->a(FOCUS_BORDER));
 
         // --- 2. Code Display Slots (8位卡片槽 - 增大更醒目) ---
-        const s32 slot_start_x = cx + 8;
-        const s32 slot_y = cy + SLOT_Y;
-        const s32 slot_w = 34;
-        const s32 slot_h = 38;
-        const s32 slot_gap = 4;
+        const s32 slot_y = cy + PTC_OVERLAY_SLOT_Y;
+        const s32 slot_w = PTC_OVERLAY_SLOT_W;
+        const s32 slot_h = PTC_OVERLAY_SLOT_H;
+        const s32 slot_gap = PTC_OVERLAY_SLOT_GAP;
+        const s32 slot_group_w = PTC_OVERLAY_CODE_SYMBOLS * slot_w +
+            (PTC_OVERLAY_CODE_SYMBOLS - 1) * slot_gap;
+        const s32 slot_start_x = cx + (cw - slot_group_w) / 2;
 
         for (unsigned int index = 0; index < PTC_OVERLAY_CODE_SYMBOLS; ++index) {
             const s32 sx = slot_start_x + static_cast<s32>(index) * (slot_w + slot_gap);
@@ -447,22 +452,21 @@ public:
             } else {
                 std::snprintf(symbol, sizeof(symbol), "·");
             }
-            renderer->drawString(
-                symbol,
-                false,
-                sx + (index < input_->length ? 8 : (is_cursor ? 8 : 10)),
-                slot_y + 28,
-                23,
+            const auto symbol_size = renderer->drawString(
+                symbol, false, 0, 0, 30, tsl::style::color::ColorTransparent);
+            renderer->drawString(symbol, false,
+                sx + (slot_w - static_cast<s32>(symbol_size.first)) / 2,
+                slot_y + 36, 30,
                 renderer->a(index < input_->length ? TEXT_COLOR : (is_cursor ? FOCUS_BORDER : MUTED_COLOR)));
         }
 
         std::snprintf(line, sizeof(line), "已输入 %u/8 位   当前高亮数字：%c", input_->length, ptc_overlay_input_charset()[input_->cursor]);
-        renderer->drawString(line, false, cx + 5, cy + 164, 12, renderer->a(MUTED_COLOR));
+        renderer->drawString(line, false, cx + 5, cy + 180, 14, renderer->a(MUTED_COLOR));
 
         // --- 3. Keypad 3x4 Grid (软键盘放大) ---
         const char *charset = ptc_overlay_input_charset();
-        const s32 panel_y = cy + KEYPAD_Y;
-        const s32 panel_h = 160;
+        const s32 panel_y = cy + PTC_OVERLAY_KEYPAD_Y;
+        const s32 panel_h = PTC_OVERLAY_KEYPAD_H;
         renderer->drawRect(cx, panel_y, cw, panel_h, renderer->a(PANEL_COLOR));
         draw_outline(renderer, cx, panel_y, cw, panel_h, 1, MUTED_COLOR);
 
@@ -472,30 +476,33 @@ public:
             unsigned int row = index == 0 ? 3u : (index - 1u) / 3u;
             unsigned int col = index == 0 ? 1u : (index - 1u) % 3u;
             s32 key_x = cx + 12 + static_cast<s32>(col) * 102;
-            s32 key_y = panel_y + 6 + static_cast<s32>(row) * KEY_ROW_STEP;
+            s32 key_y = panel_y + 6 + static_cast<s32>(row) * PTC_OVERLAY_KEY_ROW_STEP;
             const bool focused = (index == input_->cursor);
 
-            renderer->drawRect(key_x, key_y, 90, KEY_HEIGHT, renderer->a(focused ? FOCUS_BG : KEY_COLOR));
-            draw_outline(renderer, key_x, key_y, 90, KEY_HEIGHT, focused ? 3 : 1, focused ? FOCUS_BORDER : MUTED_COLOR);
-            renderer->drawString(symbol, false, key_x + 37, key_y + 25, 21, renderer->a(focused ? FOCUS_BORDER : TEXT_COLOR));
+            renderer->drawRect(key_x, key_y, 90, PTC_OVERLAY_KEY_H, renderer->a(focused ? FOCUS_BG : KEY_COLOR));
+            draw_outline(renderer, key_x, key_y, 90, PTC_OVERLAY_KEY_H, focused ? 3 : 1, focused ? FOCUS_BORDER : MUTED_COLOR);
+            const auto key_text_size = renderer->drawString(
+                symbol, false, 0, 0, 24, tsl::style::color::ColorTransparent);
+            renderer->drawString(symbol, false, key_x + (90 - static_cast<s32>(key_text_size.first)) / 2,
+                                 key_y + 27, 24, renderer->a(focused ? FOCUS_BORDER : TEXT_COLOR));
         }
 
         // 第四行辅助按键 [X] 退格 和 [Y] 清空
         s32 x_btn_x = cx + 12;
-        s32 btn_y = panel_y + 6 + 3 * KEY_ROW_STEP;
-        renderer->drawRect(x_btn_x, btn_y, 90, KEY_HEIGHT, renderer->a(KEY_COLOR));
-        draw_outline(renderer, x_btn_x, btn_y, 90, KEY_HEIGHT, 1, MUTED_COLOR);
+        s32 btn_y = panel_y + 6 + 3 * PTC_OVERLAY_KEY_ROW_STEP;
+        renderer->drawRect(x_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, renderer->a(KEY_COLOR));
+        draw_outline(renderer, x_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, 1, MUTED_COLOR);
         renderer->drawString("X 退格", false, x_btn_x + 22, btn_y + 23, 12, renderer->a(MUTED_COLOR));
 
         s32 y_btn_x = cx + 216;
-        renderer->drawRect(y_btn_x, btn_y, 90, KEY_HEIGHT, renderer->a(KEY_COLOR));
-        draw_outline(renderer, y_btn_x, btn_y, 90, KEY_HEIGHT, 1, MUTED_COLOR);
+        renderer->drawRect(y_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, renderer->a(KEY_COLOR));
+        draw_outline(renderer, y_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, 1, MUTED_COLOR);
         renderer->drawString("点按清空", false, y_btn_x + 17, btn_y + 23, 12, renderer->a(MUTED_COLOR));
 
         // --- 4. Control & Submit Bar (操作与提交栏) ---
         const bool can_submit = ptc_overlay_input_can_submit(input_);
-        const s32 submit_y = cy + SUBMIT_Y;
-        const s32 submit_h = SUBMIT_H;
+        const s32 submit_y = cy + PTC_OVERLAY_SUBMIT_Y;
+        const s32 submit_h = PTC_OVERLAY_SUBMIT_H;
 
         // 提交加时大按钮
         renderer->drawRect(cx, submit_y, cw, submit_h, renderer->a(can_submit ? FOCUS_BG : DISABLED_COLOR));
@@ -508,12 +515,12 @@ public:
         }
 
         // --- 5. Collapsible Status Panel (可折叠命令与状态栏) ---
-        const s32 status_y = cy + STATUS_Y;
+        const s32 status_y = cy + PTC_OVERLAY_STATUS_Y;
         const s32 status_w = cw;
 
         if (!status_expanded_) {
-            renderer->drawRect(cx, status_y, status_w, 32, renderer->a(PANEL_COLOR));
-            draw_outline(renderer, cx, status_y, status_w, 32, 1, MUTED_COLOR);
+            renderer->drawRect(cx, status_y, status_w, PTC_OVERLAY_STATUS_COLLAPSED_H, renderer->a(PANEL_COLOR));
+            draw_outline(renderer, cx, status_y, status_w, PTC_OVERLAY_STATUS_COLLAPSED_H, 1, MUTED_COLOR);
 
             if (bridge_->waiting && active_request_kind_ == OverlayRequestKind::Status) {
                 renderer->drawString("[-] 正在刷新状态…（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
@@ -524,14 +531,14 @@ public:
             } else if (close_after_frames_ > 0) {
                 renderer->drawString("[-] 加时成功！（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(SUCCESS_COLOR));
             } else if (has_status_snapshot_) {
-                std::snprintf(line, sizeof(line), "[-] 状态已刷新 · %s（按 - 展开）", age);
-                renderer->drawString(line, false, cx + 12, status_y + 21, 12,
-                                     renderer->a(status_is_stale() ? ERROR_COLOR : MUTED_COLOR));
+                renderer->drawString("[-] 状态已刷新（按 - 展开）", false, cx + 12, status_y + 21, 12,
+                                     renderer->a(MUTED_COLOR));
             } else {
                 renderer->drawString("[-] 命令与状态（点击或按 - / L / R）", false, cx + 12, status_y + 21, 12, renderer->a(MUTED_COLOR));
             }
         } else {
-            const s32 expanded_h = STATUS_EXPANDED_H;
+            const s32 expanded_h = status_needs_detail()
+                ? PTC_OVERLAY_STATUS_DETAIL_H : PTC_OVERLAY_STATUS_NORMAL_H;
             renderer->drawRect(cx, status_y, status_w, expanded_h, renderer->a(PANEL_COLOR));
             draw_outline(renderer, cx, status_y, status_w, expanded_h, 2, FOCUS_BORDER);
 
@@ -566,11 +573,6 @@ public:
                 }
             } else if (!bridge_->waiting && has_status_snapshot_) {
                 renderer->drawString("状态刷新完成", false, cx + 12, status_y + 74, 15, renderer->a(SUCCESS_COLOR));
-                std::snprintf(line, sizeof(line), "当前还剩可玩：%s", summary.remaining_available ? "见顶部" : "暂不可用");
-                renderer->drawString(line, false, cx + 12, status_y + 96, 12, renderer->a(TEXT_COLOR));
-                std::snprintf(line, sizeof(line), "更新时间：%s", status_is_stale() ? "数据可能已过期" : age);
-                renderer->drawString(line, false, cx + 12, status_y + 116, 11,
-                                     renderer->a(status_is_stale() ? ERROR_COLOR : MUTED_COLOR));
             }
         }
     }

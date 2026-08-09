@@ -12,7 +12,7 @@ include ../../common/version.mk
 APP_TITLE := 任我玩
 APP_AUTHOR := selfuppen@qq.com
 APP_VERSION := $(PLAYWISE_VERSION)
-APP_ICON := $(CURDIR)/icon.jpg
+APP_ICON := $(CURDIR)/icon.png
 
 CC := $(DEVKITA64)/bin/aarch64-none-elf-gcc
 ELF2NRO := $(DEVKITPRO)/tools/bin/elf2nro

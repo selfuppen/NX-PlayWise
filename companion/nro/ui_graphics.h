@@ -272,6 +272,7 @@ int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode);
 bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minutes);
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
+bool ptc_ui_setup_takeover_complete(const PtcUiModel *model);
 void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction);
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now);
 bool ptc_ui_cancel_overlay(PtcUiModel *model);

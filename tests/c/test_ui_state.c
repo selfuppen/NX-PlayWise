@@ -175,6 +175,14 @@ static void test_release_hit_targets(void)
                "two shortcut preset columns do not overlap");
     model.setup_step = PTC_UI_SETUP_PIN;
     check_hit(hit_center(&model, ptc_ui_setup_pin_rect()), PTC_UI_HIT_SETUP_PIN, 0, "setup PIN guide");
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
+    check_true(!ptc_ui_setup_takeover_complete(&model), "pending takeover still requires confirmation");
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "restored");
+    check_true(!ptc_ui_setup_takeover_complete(&model), "restored takeover still requires safe preflight");
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "released");
+    check_true(ptc_ui_setup_takeover_complete(&model), "released takeover advances without resubmitting");
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
+    check_true(ptc_ui_setup_takeover_complete(&model), "active takeover advances without error 308");
     model.setup_step = PTC_UI_SETUP_ZONE;
     check_hit(hit_center(&model, ptc_ui_setup_zone_rect(0)), PTC_UI_HIT_SETUP_CHILD_ZONE, 0,
               "setup child zone choice");

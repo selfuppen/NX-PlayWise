@@ -601,24 +601,35 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             draw_text(pixels, stride, 204, 420, "PIN 少于 4 位时只提示弱保护风险，不会阻止保存。", 20, COLOR(215, 139, 25));
         } else if (step == PTC_UI_SETUP_TAKEOVER) {
             bool resuming_restored_setup = model->disable_flag_present && strcmp(phase, "restored") == 0;
+            bool takeover_complete = ptc_ui_setup_takeover_complete(model);
             draw_text(pixels, stride, 204, 218,
-                      resuming_restored_setup ? "解除停用并重新接管" : "确认接管系统控制",
-                      30, COLOR(28, 34, 43));
+                      takeover_complete ? "系统控制接管已完成" :
+                      (resuming_restored_setup ? "解除停用并重新接管" : "确认接管系统控制"),
+                      30, takeover_complete ? COLOR(25, 132, 95) : COLOR(28, 34, 43));
             snprintf(phase_line, sizeof(phase_line), "当前状态：%s    安装前快照：%s",
-                     strcmp(phase, "protection") == 0 ? "保护模式" :
+                     takeover_complete ? (strcmp(phase, "active") == 0 ? "正常运行" : "正在同步") :
+                     (strcmp(phase, "protection") == 0 ? "保护模式" :
                      (strcmp(phase, "failed") == 0 ? "检查失败" :
-                      (resuming_restored_setup ? "已恢复并停用" : "等待家长确认")),
+                      (resuming_restored_setup ? "已恢复并停用" : "等待家长确认"))),
                      model->setup_snapshot_available ? "已保存" : "待保存");
             draw_text(pixels, stride, 204, 266, phase_line, 21, COLOR(77, 86, 99));
             draw_text(pixels, stride, 204, 324,
-                      resuming_restored_setup
-                          ? "确认后会重新执行只读兼容预检；通过后才解除紧急停用并重新接管。"
-                          : "确认后会先执行只读兼容预检，再保存安装前快照并启用额度管理。",
+                      takeover_complete
+                          ? "此步骤已经完成；继续不会重复写入系统设置或重新开始同步宽限。"
+                          : resuming_restored_setup
+                           ? "确认后会重新执行只读兼容预检；通过后才解除紧急停用并重新接管。"
+                           : "确认后会先执行只读兼容预检，再保存安装前快照并启用额度管理。",
                       21, COLOR(45, 52, 62));
-            draw_text(pixels, stride, 204, 360, "接管成功后会保留同步宽限，系统控制不会立即跳变。", 21, COLOR(45, 52, 62));
+            draw_text(pixels, stride, 204, 360,
+                      takeover_complete
+                          ? "按 A 或点击继续，返回第 4 步选择孩子区或家长区。"
+                          : "接管成功后会保留同步宽限，系统控制不会立即跳变。",
+                      21, COLOR(45, 52, 62));
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
-                               resuming_restored_setup ? "A / 点击  解除停用并重新接管" : "A / 点击  确认接管",
-                               COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+                               takeover_complete ? "A / 点击  继续到第 4 步" :
+                               (resuming_restored_setup ? "A / 点击  解除停用并重新接管" : "A / 点击  确认接管"),
+                               takeover_complete ? COLOR(25, 132, 95) : COLOR(28, 118, 188),
+                               COLOR(255, 255, 255), false);
         } else {
             draw_text(pixels, stride, 204, 214, "初始化完成，选择进入区域", 30, COLOR(28, 34, 43));
             draw_text(pixels, stride, 204, 254, "之后可在两个区域之间切换；进入家长区会受 PIN 保护。", 21, COLOR(77, 86, 99));

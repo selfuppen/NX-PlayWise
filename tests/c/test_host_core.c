@@ -14,6 +14,8 @@
 #include "../../companion/auth.h"
 #include "../../companion/file_protocol.h"
 #include "../../companion/overlay/bridge.h"
+#include "../../companion/overlay/input_model.h"
+#include "../../companion/overlay/layout.h"
 #include "../../platform/host/fake_time.h"
 #include "../../platform/host/mem_storage.h"
 #include "../../platform/host/pctl_stub.h"
@@ -207,6 +209,41 @@ static void test_overlay_result_classification(void)
     check_true(!ptc_overlay_bridge_status_succeeded(&bridge), "code redemption is not treated as status refresh");
 }
 
+static void test_overlay_layout_geometry(void)
+{
+    PtcOverlayRect submit = ptc_overlay_submit_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
+    PtcOverlayRect collapsed = ptc_overlay_status_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, false, false);
+    PtcOverlayRect normal = ptc_overlay_status_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, true, false);
+    PtcOverlayRect detail = ptc_overlay_status_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, true, true);
+    int slot_group_width = PTC_OVERLAY_CODE_SYMBOLS * PTC_OVERLAY_SLOT_W +
+        (PTC_OVERLAY_CODE_SYMBOLS - 1) * PTC_OVERLAY_SLOT_GAP;
+    int slot_left = PTC_OVERLAY_CONTENT_X + (PTC_OVERLAY_CONTENT_W - slot_group_width) / 2;
+
+    check_int(PTC_OVERLAY_CONTENT_Y, 90, "overlay content reclaims title whitespace");
+    check_int(slot_group_width, 348, "overlay enlarged code slots fit as one group");
+    check_int(slot_left - PTC_OVERLAY_CONTENT_X, 7, "overlay code slots are centered on the left");
+    check_int(PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W - (slot_left + slot_group_width), 8,
+        "overlay code slots are centered on the right");
+    check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H, 242,
+        "overlay enlarged code slots end above input count");
+    check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_KEYPAD_Y, 282,
+        "overlay keypad leaves room below input count");
+    check_true(ptc_overlay_rect_contains(submit, submit.x + submit.w - 1, submit.y + submit.h - 1),
+        "overlay submit touch covers its visible right and bottom edges");
+    check_true(!ptc_overlay_rect_contains(submit, submit.x + submit.w, submit.y),
+        "overlay submit touch stops at its visible edge");
+    check_true(!ptc_overlay_rect_contains(collapsed, collapsed.x + 1, collapsed.y + collapsed.h),
+        "collapsed status has no invisible touch area");
+    check_int(normal.h, PTC_OVERLAY_STATUS_NORMAL_H, "normal status drops duplicate detail rows");
+    check_int(detail.y + detail.h, 626, "expanded error and success details stay above the footer");
+    check_true(detail.y + detail.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
+        "expanded overlay status remains inside content bounds");
+}
+
 static void seed_release_setup(PtcMemStorage *mem)
 {
     const char *rules =
@@ -240,6 +277,7 @@ static void test_setup_preflight_and_recovery(void)
     PtcSysmodule sysmodule;
     char text[4096];
     char install_snapshot[4096];
+    unsigned int apply_calls_after_activation;
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
@@ -268,6 +306,19 @@ static void test_setup_preflight_and_recovery(void)
     check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), 1, "setup grace activates control");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
         strstr(text, "\"phase\":\"active\""), "setup becomes active");
+
+    apply_calls_after_activation = pctl.apply_target_calls;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-active-repeat.json",
+        "{\"version\":1,\"request_id\":\"setup-active-repeat\",\"type\":\"complete_setup\",\"created_at\":2,\"payload\":{}}"),
+        "queue repeated setup completion after activation");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "active setup completion is idempotent");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-active-repeat.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"phase\":\"active\"") &&
+        strstr(text, "\"activate_after\":0"), "active setup retry returns current state without restarting grace");
+    check_int((int)pctl.apply_target_calls, (int)apply_calls_after_activation,
+        "active setup retry performs no PCTL target write");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/install_pctl_snapshot.json", text, sizeof(text)) &&
+        strcmp(text, install_snapshot) == 0, "active setup retry preserves installation snapshot");
 
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/flags/disable.flag", "emergency\n"), "write disable flag");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-disabled.json",
@@ -438,6 +489,7 @@ int main(void)
     test_support_redaction();
     test_auth_and_queue();
     test_overlay_result_classification();
+    test_overlay_layout_geometry();
     test_setup_preflight_and_recovery();
     test_played_time_status();
     test_play_timer_layout();

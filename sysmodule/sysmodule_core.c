@@ -1983,6 +1983,12 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             PTC_ERR_SETUP_PENDING, now.day_index, caps);
     }
+    /* A completed takeover is idempotent: stale clients may resubmit after
+       navigating back, but must never repeat the snapshot or PCTL writes. */
+    if (strcmp(setup.phase, "active") == 0) {
+        return write_current_status_result(
+            sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
+    }
     resuming_restored_setup = strcmp(setup.phase, "restored") == 0;
     if (disable_flag && !resuming_restored_setup) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,

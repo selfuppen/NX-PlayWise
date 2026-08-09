@@ -1100,7 +1100,13 @@ static void setup_primary(UiState *ui)
         setup_pin(ui);
         break;
     case PTC_UI_SETUP_TAKEOVER:
-        if (!ui->waiting) {
+        if (ptc_ui_setup_takeover_complete(&ui->model)) {
+            ui->model.setup_zone_index = 1;
+            if (save_setup_step(ui, PTC_UI_SETUP_ZONE)) {
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                         "系统控制接管已完成，请选择要进入的区域。");
+            }
+        } else if (!ui->waiting) {
             if (ui->model.disable_flag_present && strcmp(ui->model.setup_phase, "restored") == 0) {
                 open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新接管",
                                      "将重新执行只读兼容预检；仅预检通过后才解除紧急停用并重新启用额度管理。");
@@ -1712,7 +1718,7 @@ static void export_parent_import(UiState *ui)
     free(json);
     ui->model.overlay = PTC_UI_OVERLAY_NONE;
     snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-             ok ? "已导出到 sdmc:/switch/playwise/parent-import.json；把文件导入家长网页。文件包含密钥，请仅交给家长。"
+             ok ? "已导出到 sdmc:/switch/playwise/parent-import.json；把文件导入家长网页。文件包含密钥，请妥善保管。"
                 : "生成家长网页导入文件失败。");
 }
 

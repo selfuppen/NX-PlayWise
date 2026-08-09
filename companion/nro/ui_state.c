@@ -460,6 +460,12 @@ bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule)
     return rule.mode == PTC_RULE_MODE_LIMIT && ptc_ui_limit_minutes_would_restrict(model, rule.minutes);
 }
 
+bool ptc_ui_setup_takeover_complete(const PtcUiModel *model)
+{
+    return model &&
+        (strcmp(model->setup_phase, "released") == 0 || strcmp(model->setup_phase, "active") == 0);
+}
+
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now)
 {
     if (!model || strcmp(model->setup_phase, "released") != 0 || model->setup_activate_after <= 0) {
