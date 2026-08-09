@@ -19,6 +19,7 @@ typedef struct {
     uint16_t last_cleanup_day_index;
     bool minute_initialized;
     bool cleanup_initialized;
+    bool startup_recovery_checked;
     bool disable_initialized;
     bool disable_present;
     char boot_id[24];

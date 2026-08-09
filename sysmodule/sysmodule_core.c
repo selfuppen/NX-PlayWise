@@ -2082,7 +2082,7 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
     const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
 {
     PtcSetupState setup;
-    bool resuming_restored_setup;
+    bool resuming_disabled_setup;
     char disable_path[320];
     if (!load_setup_state(sysmodule, &setup)) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
@@ -2090,23 +2090,24 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
     }
     /* A completed takeover is idempotent: stale clients may resubmit after
        navigating back, but must never repeat the snapshot or PCTL writes. */
-    if (strcmp(setup.phase, "active") == 0) {
+    if (strcmp(setup.phase, "active") == 0 && !disable_flag) {
         return write_current_status_result(
             sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
     }
-    resuming_restored_setup = strcmp(setup.phase, "restored") == 0;
-    if (disable_flag && !resuming_restored_setup) {
+    resuming_disabled_setup = disable_flag &&
+        (strcmp(setup.phase, "restored") == 0 || strcmp(setup.phase, "active") == 0);
+    if (disable_flag && !resuming_disabled_setup) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             PTC_ERR_DISABLED, now.day_index, caps);
     }
     if (strcmp(setup.phase, "unconfigured") == 0 || strcmp(setup.phase, "compatibility_pending") == 0 ||
-        strcmp(setup.phase, "protection") == 0 || strcmp(setup.phase, "restored") == 0) {
+        strcmp(setup.phase, "protection") == 0 || strcmp(setup.phase, "restored") == 0 ||
+        resuming_disabled_setup) {
         PtcErrorCode preflight_err = run_release_preflight(sysmodule, config, &setup, now);
         if (preflight_err != PTC_ERR_OK) {
-            /* A restored installation remains explicitly disabled until a later
-               confirmed attempt passes preflight; do not strand its wizard in
-               protection mode where complete_setup would again be rejected. */
-            if (!resuming_restored_setup) {
+            /* A disabled active/restored installation remains retryable until a
+               later parent-confirmed attempt passes the read-only preflight. */
+            if (!resuming_disabled_setup) {
                 snprintf(setup.phase, sizeof(setup.phase), "protection");
                 snprintf(setup.compatibility_status, sizeof(setup.compatibility_status), "protection");
             }
@@ -2115,7 +2116,7 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
                 preflight_err, now.day_index, caps);
         }
-        if (resuming_restored_setup && disable_flag) {
+        if (resuming_disabled_setup) {
             /* The parent has explicitly reconfirmed takeover.  Clear the write
                circuit breaker only after the read-only preflight has passed. */
             join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
@@ -2394,7 +2395,10 @@ int ptc_sysmodule_bootstrap_setup(PtcSysmodule *sysmodule)
     PtcSetupState setup;
     PtcClockSnapshot now;
     PtcErrorCode err = PTC_ERR_OK;
+    bool check_startup_recovery;
     if (!sysmodule || !load_setup_state(sysmodule, &setup)) return -1;
+    check_startup_recovery = !sysmodule->startup_recovery_checked;
+    sysmodule->startup_recovery_checked = true;
     now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     join_path(restore_flag, sizeof(restore_flag), sysmodule->app_root, "flags/restore_install_snapshot.flag");
     join_path(retry_flag, sizeof(retry_flag), sysmodule->app_root, "flags/retry_setup_release.flag");
@@ -2419,7 +2423,9 @@ int ptc_sysmodule_bootstrap_setup(PtcSysmodule *sysmodule)
         (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, retry_flag);
         (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path);
     }
-    if (recovery_path_exists(sysmodule)) {
+    /* recovery/active is treated as abandoned only once per sysmodule boot.
+       Later scheduler ticks may see a live Enforce confirmation transaction. */
+    if (check_startup_recovery && recovery_path_exists(sysmodule)) {
         if (!recovery_rollback(sysmodule)) {
             write_disable_flag(sysmodule, "startup_recovery_failed\n");
             return -1;
@@ -4085,6 +4091,7 @@ void ptc_sysmodule_init(
     sysmodule->scan_backoff_ms = 500;
     sysmodule->minute_initialized = false;
     sysmodule->cleanup_initialized = false;
+    sysmodule->startup_recovery_checked = false;
     sysmodule->disable_initialized = false;
     sysmodule->disable_present = false;
     snprintf(sysmodule->boot_id, sizeof(sysmodule->boot_id), "host-boot");

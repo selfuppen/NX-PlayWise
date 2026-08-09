@@ -2246,8 +2246,13 @@ static void handle_parent_action(UiState *ui)
     }
     switch (index) {
     case 0:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "确认接管系统控制",
-                             "先执行只读兼容预检；通过后保存安装快照并启用额度管理。");
+        if (ui->model.disable_flag_present) {
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新接管",
+                                 "重新执行只读兼容预检；仅预检通过后才解除停用并恢复额度管理。");
+        } else {
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "确认接管系统控制",
+                                 "先执行只读兼容预检；通过后保存安装快照并启用额度管理。");
+        }
         break;
     case 1:
         open_confirm_overlay(ui, PTC_UI_OPERATION_RETRY_SETUP_RELEASE, "重试修复",
@@ -2256,8 +2261,8 @@ static void handle_parent_action(UiState *ui)
     case 2:
         refresh_disable_flag(ui);
         if (ui->model.disable_flag_present) {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_RESUME_CONTROL, "解除紧急停用",
-                                 "功能：删除 disable.flag，恢复后台正常控制。\n适用：故障已排除且确认当前规则配置安全。");
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新接管",
+                                 "功能：重新执行只读安全预检，通过后解除 disable.flag 并恢复控制。\n适用：故障已排除且确认当前规则配置安全。");
         } else {
             open_confirm_overlay(ui, PTC_UI_OPERATION_EMERGENCY_DISABLE, "紧急停用控制",
                                  "功能：创建 disable.flag，立即停止正常控制写入。\n适用：异常限制、写入故障或需要保留现场。");

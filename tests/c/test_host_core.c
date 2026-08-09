@@ -381,6 +381,22 @@ static void test_setup_preflight_and_recovery(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/install_pctl_snapshot.json", text, sizeof(text)) &&
         strcmp(text, install_snapshot) == 0, "active setup retry preserves installation snapshot");
 
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/flags/disable.flag", "startup_transaction_restored\n"),
+        "write automatic disable flag while active");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-active-disabled.json",
+        "{\"version\":1,\"request_id\":\"setup-active-disabled\",\"type\":\"complete_setup\",\"created_at\":2,\"payload\":{}}"),
+        "queue safe takeover while active and disabled");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "active disabled takeover is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-active-disabled.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"phase\":\"released\""),
+        "active disabled takeover reruns preflight and release");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"),
+        "active disabled takeover clears flag only after preflight");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/install_pctl_snapshot.json", text, sizeof(text)) &&
+        strcmp(text, install_snapshot) == 0, "active disabled takeover preserves installation snapshot");
+    fake_time.snapshot.unix_seconds += 5;
+    check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), 1, "active disabled takeover returns to active");
+
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/flags/disable.flag", "emergency\n"), "write disable flag");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-disabled.json",
         "{\"version\":1,\"request_id\":\"status-disabled\",\"type\":\"status\",\"created_at\":2,\"payload\":{}}"),
@@ -427,6 +443,55 @@ static void test_setup_preflight_and_recovery(void)
     check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), 1, "re-enabled setup grace activates control");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
         strstr(text, "\"phase\":\"active\""), "re-enabled setup becomes active");
+}
+
+static void test_live_enforce_recovery_is_not_startup_recovery(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    PtcSysmodule restarted;
+    char text[2048];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+    check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), 0, "initial bootstrap completes startup recovery scan");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"active\",\"compatibility_status\":\"verified\",\"restriction_cleared\":true,"
+        "\"snapshot_available\":true,\"activate_after\":0,\"last_error\":\"\"}"), "seed active setup");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/compatibility.json",
+        "{\"version\":1,\"status\":\"verified\",\"environment\":{\"hos\":\"22.5.0\","
+        "\"firmware_hash\":\"test-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true},"
+        "\"release_id\":\"playwise-0.1.2-alpha+test\",\"accepted_at\":1783526401}"),
+        "seed accepted runtime fingerprint");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/state.json",
+        "{\"version\":1,\"last_enforced_day_index\":0,\"last_enforced_mode\":0,\"last_enforced_minutes\":0,"
+        "\"apply_status\":\"idle\",\"apply_pending_confirmation\":false,\"apply_confirmation_deadline\":0,"
+        "\"pending_mode\":0,\"pending_minutes\":0,\"updated_at\":0}"), "seed enforce state");
+    pctl.runtime_effect_succeeds = false;
+
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "unobserved enforce enters pending confirmation");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/recovery/active/meta.json"),
+        "pending enforce keeps live recovery transaction");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
+        strstr(text, "\"apply_pending_confirmation\":true"), "pending enforce state is persisted");
+
+    (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"),
+        "scheduler does not classify live recovery as startup recovery");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/recovery/active/meta.json"),
+        "scheduler preserves live recovery through confirmation window");
+
+    ptc_sysmodule_init(&restarted, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    check_int(ptc_sysmodule_bootstrap_setup(&restarted), 1, "new sysmodule instance restores abandoned transaction");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"),
+        "real restart creates startup transaction disable flag");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/recovery/active/meta.json"),
+        "real restart clears restored transaction");
 }
 
 static void test_played_time_status(void)
@@ -622,6 +687,7 @@ int main(void)
     test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();
     test_setup_preflight_and_recovery();
+    test_live_enforce_recovery_is_not_startup_recovery();
     test_played_time_status();
     test_offline_code_preview_is_non_consuming();
     test_play_timer_layout();

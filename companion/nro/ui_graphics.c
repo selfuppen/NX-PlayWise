@@ -70,7 +70,7 @@ static const UiAction SUPPORT_ACTIONS[] = {
 };
 
 static const UiAction RESUME_CONTROL_ACTION = {
-    "解除紧急停用", "删除停用标记并恢复后台控制", COLOR(25, 132, 95)
+    "解除停用并重新接管", "安全预检通过后恢复后台控制", COLOR(25, 132, 95)
 };
 
 static uint32_t ui_decode_utf8(const char **text)
@@ -1108,7 +1108,8 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
             astate = PTC_UI_ACTION_DISABLED;
         }
         const UiAction *action = &actions[index];
-        if (model->parent_page == PTC_UI_PARENT_SUPPORT && index == 2 && model->disable_flag_present) {
+        if (model->parent_page == PTC_UI_PARENT_SUPPORT && model->disable_flag_present &&
+            (index == 0 || index == 2)) {
             action = &RESUME_CONTROL_ACTION;
         }
         draw_action_card(pixels, stride, card, action, index == model->selected_index, astate);

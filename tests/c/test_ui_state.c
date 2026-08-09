@@ -274,6 +274,11 @@ static void test_release_hit_targets(void)
     check_true(ptc_ui_setup_takeover_complete(&model), "released takeover advances without resubmitting");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
     check_true(ptc_ui_setup_takeover_complete(&model), "active takeover advances without error 308");
+    model.disable_flag_present = true;
+    check_true(!ptc_ui_setup_takeover_complete(&model), "disabled active takeover requires safe preflight");
+    check_int(ptc_ui_safety_action_available(&model, 0), PTC_UI_ACTION_RECOMMENDED,
+              "disabled active takeover action is recommended");
+    model.disable_flag_present = false;
     model.setup_step = PTC_UI_SETUP_ZONE;
     check_hit(hit_center(&model, ptc_ui_setup_zone_rect(0)), PTC_UI_HIT_SETUP_CHILD_ZONE, 0,
               "setup child zone choice");

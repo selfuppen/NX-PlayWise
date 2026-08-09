@@ -463,7 +463,8 @@ bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule)
 bool ptc_ui_setup_takeover_complete(const PtcUiModel *model)
 {
     return model &&
-        (strcmp(model->setup_phase, "released") == 0 || strcmp(model->setup_phase, "active") == 0);
+        (strcmp(model->setup_phase, "released") == 0 ||
+         (strcmp(model->setup_phase, "active") == 0 && !model->disable_flag_present));
 }
 
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now)
@@ -1521,7 +1522,8 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
     }
     switch (index) {
     case 0:
-        return strcmp(model->setup_phase, "active") == 0 ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_RECOMMENDED;
+        return strcmp(model->setup_phase, "active") == 0 && !model->disable_flag_present
+            ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_RECOMMENDED;
     case 1:
         return strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0 ||
             strcmp(model->setup_phase, "pending") == 0 ? PTC_UI_ACTION_RECOMMENDED : PTC_UI_ACTION_DISABLED;
