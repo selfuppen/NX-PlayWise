@@ -1,6 +1,7 @@
 #ifndef PTC_TOKEN_V2_H
 #define PTC_TOKEN_V2_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -23,6 +24,11 @@ typedef struct {
 } PtcTokenV2Payload;
 
 PtcErrorCode ptc_token_v2_tier_for_minutes(uint16_t minutes, uint8_t *out_tier_index);
+bool ptc_token_v2_find_available_nonce(
+    const bool consumed[PTC_TOKEN_V2_MAX_NONCE + 1U],
+    const bool issued[PTC_TOKEN_V2_MAX_NONCE + 1U],
+    uint16_t start,
+    uint16_t *out_nonce);
 PtcErrorCode ptc_token_v2_encode(
     uint8_t tier_index,
     uint16_t nonce,

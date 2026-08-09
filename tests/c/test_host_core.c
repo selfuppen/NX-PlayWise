@@ -55,6 +55,9 @@ static void test_tokens(void)
     PtcTokenV2Payload decoded_v2;
     char long_code[PTC_TOKEN_TEXT_SIZE];
     char short_code[PTC_TOKEN_V2_TEXT_SIZE];
+    bool consumed[PTC_TOKEN_V2_MAX_NONCE + 1U] = {false};
+    bool issued[PTC_TOKEN_V2_MAX_NONCE + 1U] = {false};
+    uint16_t selected_nonce = 0;
 
     check_int(ptc_token_encode(&v1, "test-device", "test-secret", long_code), PTC_ERR_OK, "v1 token encode");
     check_true(strcmp(long_code, "241W-2AC0-04HM-7YW5") == 0, "v1 fixture parity");
@@ -74,6 +77,15 @@ static void test_tokens(void)
     check_int(ptc_token_v2_encode(31, 7, "test-device", "test-secret", 2380, short_code), PTC_ERR_OK, "v2 tier 31 encode");
     check_int(ptc_token_v2_verify(short_code, "test-device", "test-secret", 2380, 240, NULL, NULL, &decoded_v2), PTC_ERR_OK, "v2 tier 31 verify");
     check_int(decoded_v2.minutes, 240, "v2 tier 31 decoded minutes");
+
+    consumed[7] = true;
+    issued[8] = true;
+    check_true(ptc_token_v2_find_available_nonce(consumed, issued, 7, &selected_nonce),
+               "nonce selection finds an unused issued slot");
+    check_int(selected_nonce, 9, "nonce selection skips consumed and already-issued values");
+    memset(consumed, 1, sizeof(consumed));
+    check_true(!ptc_token_v2_find_available_nonce(consumed, issued, 0, &selected_nonce),
+               "nonce selection refuses generation after all 512 values are unavailable");
 }
 
 static void test_release_request_contract(void)

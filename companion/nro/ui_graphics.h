@@ -47,8 +47,33 @@ typedef enum {
     PTC_UI_OVERLAY_QR = 7,
     PTC_UI_OVERLAY_WEEKLY_LEAVE = 8,
     PTC_UI_OVERLAY_SHORTCUT_MANAGER = 9,
-    PTC_UI_OVERLAY_GRANT_LOCAL = 10
+    PTC_UI_OVERLAY_GRANT_LOCAL = 10,
+    PTC_UI_OVERLAY_CREDENTIAL_LEAVE = 11
 } PtcUiOverlay;
+
+typedef enum {
+    PTC_UI_CREDENTIAL_INPUT = 0,
+    PTC_UI_CREDENTIAL_RANDOM = 1,
+    PTC_UI_CREDENTIAL_REVEAL = 2,
+    PTC_UI_CREDENTIAL_DEMO = 3,
+    PTC_UI_CREDENTIAL_SAVE = 4
+} PtcUiCredentialSelection;
+
+typedef enum {
+    PTC_UI_GRANT_SETUP_QR = 0,
+    PTC_UI_GRANT_SETUP_LOCAL = 1,
+    PTC_UI_GRANT_SETUP_MORE = 2,
+    PTC_UI_GRANT_SETUP_EXPORT = 3,
+    PTC_UI_GRANT_SETUP_EDIT_URL = 4,
+    PTC_UI_GRANT_SETUP_RESET_URL = 5
+} PtcUiGrantSetupSelection;
+
+typedef enum {
+    PTC_UI_GRANT_LOCAL_ADJUST_FIRST = 0,
+    PTC_UI_GRANT_LOCAL_ADJUST_LAST = 5,
+    PTC_UI_GRANT_LOCAL_GENERATE = 6,
+    PTC_UI_GRANT_LOCAL_BACK = 7
+} PtcUiGrantLocalSelection;
 
 typedef enum {
     PTC_UI_NUMPAD_NONE = 0,
@@ -124,7 +149,11 @@ typedef struct {
     char custom_shortcut_label[96];
     char shortcut_draft_label[96];
     PtcUiOverlay overlay;
+    PtcUiOverlay confirm_return_overlay;
+    char confirm_return_title[64];
+    char confirm_return_body[320];
     PtcUiOperation operation;
+    int overlay_selection;
     uint16_t draft_minutes;
     uint16_t minimum_minutes;
     uint16_t maximum_minutes;
@@ -162,6 +191,13 @@ typedef struct {
     uint16_t grant_max_minutes;
     uint16_t grant_day_index;
     bool grant_has_code;
+    uint16_t grant_issued_minutes;
+    bool grant_estimate_available;
+    int grant_estimate_minutes;
+    bool grant_estimate_capped;
+    bool grant_estimate_unrestricted;
+    int64_t grant_estimated_at;
+    bool grant_status_refresh_failed;
     bool grant_local_expanded;
     bool grant_more_expanded;
     char grant_code[9];
@@ -274,6 +310,9 @@ bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minut
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
 bool ptc_ui_setup_takeover_complete(const PtcUiModel *model);
 void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction);
+void ptc_ui_move_weekly_focus(PtcUiModel *model, int horizontal, int vertical);
+void ptc_ui_move_overlay_selection(PtcUiModel *model, int horizontal, int vertical);
+int ptc_ui_grant_estimate_remaining(const PtcUiModel *model, uint16_t grant_minutes, bool *capped);
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now);
 bool ptc_ui_cancel_overlay(PtcUiModel *model);
 PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model);

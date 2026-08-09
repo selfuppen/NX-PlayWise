@@ -793,6 +793,11 @@ static void poll_result(UiState *ui, bool force)
             if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
             return;
         }
+        if (strcmp(ui->model.result_type, "status") == 0 &&
+            (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL ||
+             ui->model.overlay == PTC_UI_OVERLAY_GRANT_SETUP)) {
+            ui->model.grant_status_refresh_failed = strcmp(ui->model.result_status, "ok") != 0;
+        }
         if (strcmp(ui->model.result_type, "complete_setup") == 0 &&
             strcmp(ui->model.result_status, "ok") == 0) {
             ui->model.setup_zone_index = 1;
@@ -839,6 +844,10 @@ static void poll_result(UiState *ui, bool force)
     if (ui->pending_parent_page >= 0 || ui->pending_leave_parent) {
         ui->pending_parent_page = -1;
         ui->pending_leave_parent = false;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL ||
+        ui->model.overlay == PTC_UI_OVERLAY_GRANT_SETUP) {
+        ui->model.grant_status_refresh_failed = true;
     }
     set_message(ui, "读取结果失败", status);
     if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
@@ -1186,6 +1195,9 @@ static void open_minutes_overlay(
 
 static void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body)
 {
+    ui->model.confirm_return_overlay = ui->model.overlay;
+    snprintf(ui->model.confirm_return_title, sizeof(ui->model.confirm_return_title), "%s", ui->model.overlay_title);
+    snprintf(ui->model.confirm_return_body, sizeof(ui->model.confirm_return_body), "%s", ui->model.overlay_body);
     ui->model.overlay = PTC_UI_OVERLAY_CONFIRM;
     ui->model.operation = operation;
     ui->model.confirm_hold_required = false;
@@ -1297,7 +1309,6 @@ static void adjust_grant_minutes(UiState *ui, int direction)
     } while (next != ui->model.grant_minutes &&
              ptc_token_v2_tier_for_minutes((uint16_t)next, &(uint8_t){0}) != PTC_ERR_OK);
     ui->model.grant_minutes = (uint16_t)next;
-    ui->model.grant_has_code = false;
 }
 
 static void adjust_grant_minutes_delta(UiState *ui, int delta)
@@ -1323,7 +1334,6 @@ static void adjust_grant_minutes_delta(UiState *ui, int delta)
         }
     }
     ui->model.grant_minutes = (uint16_t)best;
-    ui->model.grant_has_code = false;
 }
 
 static void load_consumed_nonces(uint16_t day_index, bool used[PTC_TOKEN_V2_MAX_NONCE + 1U])
@@ -1463,6 +1473,7 @@ static void open_credential_manager(UiState *ui, int kind)
     snprintf(ui->model.credential_current, sizeof(ui->model.credential_current), "%s", kind == 1 ? device : secret);
     snprintf(ui->model.credential_new, sizeof(ui->model.credential_new), "%s", kind == 1 ? device : secret);
     ui->model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
+    ui->model.overlay_selection = PTC_UI_CREDENTIAL_INPUT;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", kind == 1 ? "管理设备名" : "管理加时码密钥");
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
              kind == 1 ? "当前值只读；可手工输入或随机生成新设备名。" :
@@ -1543,15 +1554,23 @@ static void open_grant_setup(UiState *ui)
         return;
     }
     ui->model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
+    ui->model.overlay_selection = PTC_UI_GRANT_SETUP_QR;
     ui->model.grant_max_minutes = maximum;
     ui->model.grant_minutes = legal_grant_minutes(20U, maximum);
     ui->model.grant_has_code = false;
+    ui->model.grant_issued_minutes = 0;
+    ui->model.grant_estimate_available = false;
+    ui->model.grant_estimate_minutes = 0;
+    ui->model.grant_estimate_capped = false;
+    ui->model.grant_estimate_unrestricted = false;
+    ui->model.grant_estimated_at = 0;
+    ui->model.grant_status_refresh_failed = false;
     ui->model.grant_local_expanded = false;
     ui->model.grant_more_expanded = false;
     ui->model.grant_code[0] = '\0';
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "加时码生成");
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "请优先按 A 打开二维码用手机扫码加时；也可选择本机生成 8 位码。");
+             "方向键选择，按 A 执行；也可使用按钮标出的快捷键。");
 }
 
 static void toggle_local_grant_panel(UiState *ui)
@@ -1561,9 +1580,13 @@ static void toggle_local_grant_panel(UiState *ui)
     }
     ui->model.grant_more_expanded = false;
     ui->model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
+    ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
+    ui->model.grant_status_refresh_failed = false;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "本机生成 8 位加时码");
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
              "选择今天要增加的时间；快捷键会自动吸附到协议支持的合法档位。");
+    submit_status(ui);
+    if (!ui->waiting) ui->model.grant_status_refresh_failed = true;
 }
 
 static void toggle_grant_more_panel(UiState *ui)
@@ -1574,6 +1597,8 @@ static void toggle_grant_more_panel(UiState *ui)
     ui->model.grant_more_expanded = !ui->model.grant_more_expanded;
     if (ui->model.grant_more_expanded) {
         ui->model.grant_local_expanded = false;
+    } else if (ui->model.overlay_selection > PTC_UI_GRANT_SETUP_MORE) {
+        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_MORE;
     }
 }
 
@@ -1613,10 +1638,10 @@ static void generate_local_grant_code(UiState *ui)
     bool issued[PTC_TOKEN_V2_MAX_NONCE + 1U] = {false};
     char device[PTC_DEVICE_ID_MAX_LEN + 1];
     char secret[PTC_GRANT_SECRET_MAX_LEN + 1];
+    char next_code[9];
     uint16_t start;
     uint16_t nonce = 0;
     uint8_t tier;
-    unsigned int offset;
     bool found = false;
     if (!ui->model.status_loaded) {
         snprintf(ui->model.message, sizeof(ui->model.message), "无法确认设备日期，请先关闭弹层并刷新设备状态。");
@@ -1634,40 +1659,32 @@ static void generate_local_grant_code(UiState *ui)
         return;
     }
     randomGet(&start, sizeof(start));
-    start &= PTC_TOKEN_V2_MAX_NONCE;
-    for (offset = 0; offset <= PTC_TOKEN_V2_MAX_NONCE; ++offset) {
-        nonce = (uint16_t)((start + offset) & PTC_TOKEN_V2_MAX_NONCE);
-        if (!consumed[nonce] && !issued[nonce]) {
-            found = true;
-            break;
-        }
-    }
+    found = ptc_token_v2_find_available_nonce(consumed, issued, start, &nonce);
     if (!found) {
-        if (!verify_sensitive_pin(ui, "当天签发编号已用尽；再次验证将只清除未兑换签发记录")) return;
-        memset(issued, 0, sizeof(issued));
-        for (nonce = 0; nonce <= PTC_TOKEN_V2_MAX_NONCE; ++nonce) {
-            if (!consumed[nonce]) {
-                found = true;
-                break;
-            }
-        }
-    }
-    if (!found) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "今天的 512 个加时码编号均已消费，无法继续生成。");
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "今日生成的加时码已达 512 枚上限，请明日再试；此前生成的代码不受影响。");
         return;
     }
-    if (ptc_token_v2_encode(tier, nonce, device, secret, ui->model.day_index, ui->model.grant_code) != PTC_ERR_OK) {
+    if (ptc_token_v2_encode(tier, nonce, device, secret, ui->model.day_index, next_code) != PTC_ERR_OK) {
         snprintf(ui->model.message, sizeof(ui->model.message), "本机生成加时码失败。");
         return;
     }
     issued[nonce] = true;
     if (!save_issued_nonces(ui, ui->model.day_index, issued)) {
-        ui->model.grant_code[0] = '\0';
-        snprintf(ui->model.message, sizeof(ui->model.message), "保存已签发记录失败，本次加时码未显示。");
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "保存已签发记录失败，本次未生成新码；此前显示的代码仍然有效。");
         return;
     }
+    snprintf(ui->model.grant_code, sizeof(ui->model.grant_code), "%s", next_code);
     ui->model.grant_day_index = ui->model.day_index;
     ui->model.grant_has_code = true;
+    ui->model.grant_issued_minutes = ui->model.grant_minutes;
+    ui->model.grant_estimate_minutes = ptc_ui_grant_estimate_remaining(
+        &ui->model, ui->model.grant_minutes, &ui->model.grant_estimate_capped);
+    ui->model.grant_estimate_available = ui->model.grant_estimate_minutes >= 0;
+    ui->model.grant_estimate_unrestricted = ui->model.unrestricted_today == 1;
+    ui->model.grant_estimated_at = (int64_t)time(NULL);
+    ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
     snprintf(ui->model.message, sizeof(ui->model.message), "已在本机生成今天有效的 %u 分钟加时码。",
              (unsigned int)ui->model.grant_minutes);
 }
@@ -1857,6 +1874,10 @@ static void handle_today_action_ready(UiState *ui, int index)
                  "%s\n当前生效剩余：%s\n恢复周计划后：%s\n将清除今天的临时额度或不限时状态。",
                  date, current_remaining, weekly_remaining);
         open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, "恢复周计划", body);
+        if (weekly.mode == PTC_RULE_MODE_LIMIT) {
+            ui->model.confirm_hold_required = !ui->model.played_minutes_available ||
+                ui->model.played_minutes < 0 || (int)weekly.minutes - ui->model.played_minutes <= 0;
+        }
         break;
     }
     default:
@@ -2163,34 +2184,99 @@ static void handle_overlay_input(UiState *ui, u64 down)
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL) {
         if (down & HidNpadButton_B) {
-            ptc_ui_cancel_overlay(&ui->model);
+            if (strcmp(ui->model.credential_current, ui->model.credential_new) != 0) {
+                ui->model.overlay = PTC_UI_OVERLAY_CREDENTIAL_LEAVE;
+                ui->model.overlay_selection = 1;
+                snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "放弃配对信息修改？");
+                snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                         "手工输入和随机生成只修改草稿，尚未保存。");
+            } else {
+                ptc_ui_cancel_overlay(&ui->model);
+            }
+        } else if (down & (HidNpadButton_Up | HidNpadButton_Left)) {
+            ptc_ui_move_overlay_selection(&ui->model, -1, 0);
+        } else if (down & (HidNpadButton_Down | HidNpadButton_Right)) {
+            ptc_ui_move_overlay_selection(&ui->model, 1, 0);
         } else if (down & HidNpadButton_X) {
+            ui->model.overlay_selection = PTC_UI_CREDENTIAL_INPUT;
+            edit_credential_input(ui);
+        } else if (down & HidNpadButton_ZR) {
+            ui->model.overlay_selection = PTC_UI_CREDENTIAL_REVEAL;
             if (ui->model.credential_kind == 1 || ui->model.credential_revealed ||
                 verify_sensitive_pin(ui, "显示当前加时码密钥前，请再次输入本应用 PIN")) {
                 ui->model.credential_revealed = !ui->model.credential_revealed;
                 ui->model.credential_new_revealed = ui->model.credential_revealed;
             }
         } else if (down & HidNpadButton_Y) {
+            ui->model.overlay_selection = PTC_UI_CREDENTIAL_RANDOM;
             randomize_credential(ui);
         } else if ((down & HidNpadButton_R) && ui->model.credential_kind == 2) {
+            ui->model.overlay_selection = PTC_UI_CREDENTIAL_DEMO;
             if (ptc_grant_secret_is_demo(ui->model.credential_current)) randomize_credential(ui);
             else snprintf(ui->model.credential_new, sizeof(ui->model.credential_new), "%s", PTC_DEMO_GRANT_SECRET);
             ui->model.credential_new_revealed = true;
         } else if (down & HidNpadButton_A) {
-            edit_credential_input(ui);
+            if (ui->model.overlay_selection == PTC_UI_CREDENTIAL_RANDOM) randomize_credential(ui);
+            else if (ui->model.overlay_selection == PTC_UI_CREDENTIAL_REVEAL && ui->model.credential_kind == 2) {
+                handle_overlay_input(ui, HidNpadButton_ZR);
+            } else if (ui->model.overlay_selection == PTC_UI_CREDENTIAL_DEMO && ui->model.credential_kind == 2) {
+                handle_overlay_input(ui, HidNpadButton_R);
+            } else if (ui->model.overlay_selection == PTC_UI_CREDENTIAL_SAVE) request_save_credential(ui);
+            else edit_credential_input(ui);
         } else if (down & HidNpadButton_Plus) {
+            ui->model.overlay_selection = PTC_UI_CREDENTIAL_SAVE;
             request_save_credential(ui);
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
+        if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+            ui->model.overlay_selection = ui->model.overlay_selection == 0 ? 1 : 0;
+        } else if (down & (HidNpadButton_B | HidNpadButton_A)) {
+            if ((down & HidNpadButton_A) && ui->model.overlay_selection == 0) {
+                ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                snprintf(ui->model.message, sizeof(ui->model.message), "已放弃未保存的配对信息修改。");
+            } else {
+                ptc_ui_cancel_overlay(&ui->model);
+            }
+        } else if (down & HidNpadButton_X) {
+            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            snprintf(ui->model.message, sizeof(ui->model.message), "已放弃未保存的配对信息修改。");
         }
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_SETUP) {
         if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
-        else if (down & HidNpadButton_A) show_pairing_qr(ui);
-        else if (down & HidNpadButton_X) toggle_local_grant_panel(ui);
-        else if (down & HidNpadButton_Y) toggle_grant_more_panel(ui);
-        else if ((down & HidNpadButton_Plus) && ui->model.grant_more_expanded) export_parent_import(ui);
-        else if ((down & HidNpadButton_R) && ui->model.grant_more_expanded) edit_pairing_base_url(ui);
-        else if ((down & HidNpadButton_ZR) && ui->model.grant_more_expanded) reset_pairing_base_url(ui);
+        else if (down & (HidNpadButton_Up | HidNpadButton_Left)) ptc_ui_move_overlay_selection(&ui->model, -1, 0);
+        else if (down & (HidNpadButton_Down | HidNpadButton_Right)) ptc_ui_move_overlay_selection(&ui->model, 1, 0);
+        else if (down & HidNpadButton_Y) {
+            ui->model.overlay_selection = PTC_UI_GRANT_SETUP_QR;
+            show_pairing_qr(ui);
+        }
+        else if (down & HidNpadButton_X) {
+            ui->model.overlay_selection = PTC_UI_GRANT_SETUP_LOCAL;
+            toggle_local_grant_panel(ui);
+        }
+        else if (down & HidNpadButton_A) {
+            if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_QR) show_pairing_qr(ui);
+            else if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_LOCAL) toggle_local_grant_panel(ui);
+            else if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_MORE) toggle_grant_more_panel(ui);
+            else if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_EXPORT && ui->model.grant_more_expanded) export_parent_import(ui);
+            else if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_EDIT_URL && ui->model.grant_more_expanded) edit_pairing_base_url(ui);
+            else if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_RESET_URL && ui->model.grant_more_expanded) reset_pairing_base_url(ui);
+        }
+        else if ((down & HidNpadButton_Plus) && ui->model.grant_more_expanded) {
+            ui->model.overlay_selection = PTC_UI_GRANT_SETUP_EXPORT;
+            export_parent_import(ui);
+        }
+        else if ((down & HidNpadButton_R) && ui->model.grant_more_expanded) {
+            ui->model.overlay_selection = PTC_UI_GRANT_SETUP_EDIT_URL;
+            edit_pairing_base_url(ui);
+        }
+        else if ((down & HidNpadButton_ZR) && ui->model.grant_more_expanded) {
+            ui->model.overlay_selection = PTC_UI_GRANT_SETUP_RESET_URL;
+            reset_pairing_base_url(ui);
+        }
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
@@ -2198,14 +2284,29 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ui->model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "加时码生成");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     "请优先按 A 打开二维码用手机扫码加时；也可进入本机生成页面。");
-        } else if (down & HidNpadButton_Left) adjust_grant_minutes(ui, -1);
-        else if (down & HidNpadButton_Right) adjust_grant_minutes(ui, 1);
-        else if (down & HidNpadButton_L) adjust_grant_minutes_delta(ui, -15);
-        else if (down & HidNpadButton_R) adjust_grant_minutes_delta(ui, 15);
-        else if (down & HidNpadButton_ZL) adjust_grant_minutes_delta(ui, -30);
-        else if (down & HidNpadButton_ZR) adjust_grant_minutes_delta(ui, 30);
-        else if (down & (HidNpadButton_A | HidNpadButton_Plus)) generate_local_grant_code(ui);
+                     "方向键选择，按 A 执行；Y 扫二维码，X 进入本机生成。");
+        } else if (down & HidNpadButton_Left) ptc_ui_move_overlay_selection(&ui->model, -1, 0);
+        else if (down & HidNpadButton_Right) ptc_ui_move_overlay_selection(&ui->model, 1, 0);
+        else if (down & HidNpadButton_Up) ptc_ui_move_overlay_selection(&ui->model, 0, -1);
+        else if (down & HidNpadButton_Down) ptc_ui_move_overlay_selection(&ui->model, 0, 1);
+        else if (down & HidNpadButton_L) { ui->model.overlay_selection = 2; adjust_grant_minutes_delta(ui, -15); }
+        else if (down & HidNpadButton_R) { ui->model.overlay_selection = 3; adjust_grant_minutes_delta(ui, 15); }
+        else if (down & HidNpadButton_ZL) { ui->model.overlay_selection = 4; adjust_grant_minutes_delta(ui, -30); }
+        else if (down & HidNpadButton_ZR) { ui->model.overlay_selection = 5; adjust_grant_minutes_delta(ui, 30); }
+        else if (down & HidNpadButton_Plus) {
+            ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
+            generate_local_grant_code(ui);
+        } else if (down & HidNpadButton_A) {
+            int selection = ui->model.overlay_selection;
+            if (selection == 0) adjust_grant_minutes(ui, -1);
+            else if (selection == 1) adjust_grant_minutes(ui, 1);
+            else if (selection == 2) adjust_grant_minutes_delta(ui, -15);
+            else if (selection == 3) adjust_grant_minutes_delta(ui, 15);
+            else if (selection == 4) adjust_grant_minutes_delta(ui, -30);
+            else if (selection == 5) adjust_grant_minutes_delta(ui, 30);
+            else if (selection == PTC_UI_GRANT_LOCAL_BACK) handle_overlay_input(ui, HidNpadButton_B);
+            else generate_local_grant_code(ui);
+        }
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_QR) {
@@ -2276,6 +2377,7 @@ static void handle_overlay_input(UiState *ui, u64 down)
                                  "今天当前为不限时；设置 %u 分钟后将恢复限时。\n当前已玩不可用，暂时无法估算修改后剩余。",
                                  (unsigned int)ui->model.draft_minutes);
                         open_confirm_overlay(ui, operation, "不限时将改为限时", body);
+                        ui->model.confirm_hold_required = true;
                     }
                 } else {
                     snprintf(body, sizeof(body),
@@ -2411,7 +2513,12 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
-        if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
+        if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL ||
+            ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL ||
+            ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
+            if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
+                ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_BACK;
+            }
             handle_overlay_input(ui, HidNpadButton_B);
         } else {
             ptc_ui_cancel_overlay(&ui->model);
@@ -2419,6 +2526,11 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_CONFIRM:
+        if (ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL) {
+            ui->model.overlay_selection = PTC_UI_CREDENTIAL_SAVE;
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
+            ui->model.overlay_selection = 1;
+        }
         if (ui->model.confirm_hold_required) {
             snprintf(ui->model.message, sizeof(ui->model.message), "为避免误操作，请使用手柄长按 A 确认。");
         } else {
@@ -2430,6 +2542,9 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_DISCARD:
+        if (ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
+            ui->model.overlay_selection = 0;
+        }
         handle_overlay_input(ui, HidNpadButton_X);
         break;
     case PTC_UI_HIT_MINUTES_INC:
@@ -2449,14 +2564,23 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_WEEKLY_DAY:
         ui->model.editor_index = hit.index;
+        ui->model.selected_index = 0;
         if (ui->model.draft_week[hit.index].mode == PTC_RULE_MODE_LIMIT) {
             edit_weekly_minutes(ui);
+        } else {
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                     "该日为不限时，没有可编辑的分钟数；请选择“切换模式”改为限时。");
         }
         break;
     case PTC_UI_HIT_WEEKLY_MODE:
+        ui->model.selected_index = 1;
         ui->model.draft_week[ui->model.editor_index].mode =
             ptc_ui_next_rule_mode(ui->model.draft_week[ui->model.editor_index].mode);
         update_weekly_dirty(ui);
+        if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "已恢复此前的每日限额：%u 分钟。",
+                     (unsigned int)ui->model.draft_week[ui->model.editor_index].minutes);
+        }
         break;
     case PTC_UI_HIT_WEEKLY_MIN_UP:
         if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
@@ -2490,47 +2614,65 @@ static void handle_touch(UiState *ui, int x, int y)
         if (hit.index >= 0 && hit.index < 7) {
             ui->model.editor_index = hit.index;
         }
+        ui->model.selected_index = 0;
         edit_weekly_minutes(ui);
         break;
     case PTC_UI_HIT_WEEKLY_SAVE:
+        ui->model.selected_index = 3;
         save_weekly_from_page(ui);
         break;
     case PTC_UI_HIT_WEEKLY_DISCARD:
-        memcpy(ui->model.draft_week, ui->model.current_week, sizeof(ui->model.draft_week));
-        ui->model.weekly_dirty = false;
-        snprintf(ui->model.message, sizeof(ui->model.message), "已放弃未保存的周计划修改。");
+        ui->model.selected_index = 2;
+        if (ui->model.weekly_dirty) {
+            memcpy(ui->model.draft_week, ui->model.current_week, sizeof(ui->model.draft_week));
+            ui->model.weekly_dirty = false;
+            snprintf(ui->model.message, sizeof(ui->model.message), "已放弃未保存的周计划修改。");
+        } else {
+            snprintf(ui->model.message, sizeof(ui->model.message), "周计划没有修改。");
+        }
         break;
     case PTC_UI_HIT_CREDENTIAL_INPUT:
-        handle_overlay_input(ui, HidNpadButton_A);
+        ui->model.overlay_selection = PTC_UI_CREDENTIAL_INPUT;
+        handle_overlay_input(ui, HidNpadButton_X);
         break;
     case PTC_UI_HIT_CREDENTIAL_RANDOM:
+        ui->model.overlay_selection = PTC_UI_CREDENTIAL_RANDOM;
         handle_overlay_input(ui, HidNpadButton_Y);
         break;
     case PTC_UI_HIT_CREDENTIAL_REVEAL:
-        handle_overlay_input(ui, HidNpadButton_X);
+        ui->model.overlay_selection = PTC_UI_CREDENTIAL_REVEAL;
+        handle_overlay_input(ui, HidNpadButton_ZR);
         break;
     case PTC_UI_HIT_CREDENTIAL_DEMO:
+        ui->model.overlay_selection = PTC_UI_CREDENTIAL_DEMO;
         handle_overlay_input(ui, HidNpadButton_R);
         break;
     case PTC_UI_HIT_GRANT_QR:
-        handle_overlay_input(ui, HidNpadButton_A);
+        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_QR;
+        handle_overlay_input(ui, HidNpadButton_Y);
         break;
     case PTC_UI_HIT_GRANT_LOCAL_TOGGLE:
+        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_LOCAL;
         toggle_local_grant_panel(ui);
         break;
     case PTC_UI_HIT_GRANT_MORE_TOGGLE:
+        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_MORE;
         toggle_grant_more_panel(ui);
         break;
     case PTC_UI_HIT_GRANT_EXPORT:
+        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_EXPORT;
         export_parent_import(ui);
         break;
     case PTC_UI_HIT_GRANT_GENERATE:
+        ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
         generate_local_grant_code(ui);
         break;
     case PTC_UI_HIT_GRANT_EDIT_URL:
+        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_EDIT_URL;
         handle_overlay_input(ui, HidNpadButton_R);
         break;
     case PTC_UI_HIT_GRANT_RESET_URL:
+        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_RESET_URL;
         handle_overlay_input(ui, HidNpadButton_ZR);
         break;
     case PTC_UI_HIT_SHORTCUT_OPTION:
@@ -2546,6 +2688,7 @@ static void handle_touch(UiState *ui, int x, int y)
         ui->model.shortcut_draft_show_hint = !ui->model.shortcut_draft_show_hint;
         break;
     case PTC_UI_HIT_GRANT_ADJUST:
+        ui->model.overlay_selection = hit.index;
         if (hit.index == 0) adjust_grant_minutes(ui, -1);
         else if (hit.index == 1) adjust_grant_minutes(ui, 1);
         else if (hit.index == 2) adjust_grant_minutes_delta(ui, -15);
@@ -2768,28 +2911,59 @@ int main(int argc, char **argv)
                 } else if (down & HidNpadButton_R) {
                     request_parent_navigation(&ui, PTC_UI_PARENT_SECURITY, false);
                 } else if (down & HidNpadButton_Left) {
-                    ui.model.editor_index = ui.model.editor_index <= 0 ? 6 : ui.model.editor_index - 1;
-                    ui.model.selected_index = 0;
+                    ptc_ui_move_weekly_focus(&ui.model, -1, 0);
                 } else if (down & HidNpadButton_Right) {
-                    ui.model.editor_index = ui.model.editor_index >= 6 ? 0 : ui.model.editor_index + 1;
-                    ui.model.selected_index = 0;
+                    ptc_ui_move_weekly_focus(&ui.model, 1, 0);
                 } else if (down & HidNpadButton_X) {
+                    ui.model.selected_index = 1;
                     day->mode = ptc_ui_next_rule_mode(day->mode);
                     update_weekly_dirty(&ui);
+                    if (day->mode == PTC_RULE_MODE_LIMIT) {
+                        snprintf(ui.model.message, sizeof(ui.model.message),
+                                 "已恢复此前的每日限额：%u 分钟。", (unsigned int)day->minutes);
+                    }
                 } else if (down & HidNpadButton_Up) {
-                    ui.model.selected_index = 0;
+                    ptc_ui_move_weekly_focus(&ui.model, 0, -1);
                 } else if (down & HidNpadButton_Down) {
-                    ui.model.selected_index = 1;
+                    ptc_ui_move_weekly_focus(&ui.model, 0, 1);
                 } else if (down & HidNpadButton_Y) {
                     request_parent_navigation(&ui, PTC_UI_PARENT_PLAN, false);
                 } else if (down & HidNpadButton_A) {
-                    if (ui.model.selected_index == 1) save_weekly_from_page(&ui);
-                    else if (day->mode == PTC_RULE_MODE_LIMIT) edit_weekly_minutes(&ui);
+                    if (ui.model.selected_index == 1) {
+                        day->mode = ptc_ui_next_rule_mode(day->mode);
+                        update_weekly_dirty(&ui);
+                        if (day->mode == PTC_RULE_MODE_LIMIT) {
+                            snprintf(ui.model.message, sizeof(ui.model.message),
+                                     "已恢复此前的每日限额：%u 分钟。", (unsigned int)day->minutes);
+                        }
+                    } else if (ui.model.selected_index == 2) {
+                        if (ui.model.weekly_dirty) {
+                            memcpy(ui.model.draft_week, ui.model.current_week, sizeof(ui.model.draft_week));
+                            ui.model.weekly_dirty = false;
+                            snprintf(ui.model.message, sizeof(ui.model.message), "已放弃未保存的周计划修改。");
+                        } else {
+                            snprintf(ui.model.message, sizeof(ui.model.message), "周计划没有修改。");
+                        }
+                    } else if (ui.model.selected_index == 3) {
+                        save_weekly_from_page(&ui);
+                    } else if (day->mode == PTC_RULE_MODE_LIMIT) {
+                        edit_weekly_minutes(&ui);
+                    } else {
+                        snprintf(ui.model.message, sizeof(ui.model.message),
+                                 "该日为不限时，没有可编辑的分钟数；请选择“切换模式”改为限时。");
+                    }
                 } else if (down & HidNpadButton_Plus) {
+                    ui.model.selected_index = 3;
                     save_weekly_from_page(&ui);
                 } else if (down & HidNpadButton_ZL) {
-                    memcpy(ui.model.draft_week, ui.model.current_week, sizeof(ui.model.draft_week));
-                    ui.model.weekly_dirty = false;
+                    ui.model.selected_index = 2;
+                    if (ui.model.weekly_dirty) {
+                        memcpy(ui.model.draft_week, ui.model.current_week, sizeof(ui.model.draft_week));
+                        ui.model.weekly_dirty = false;
+                        snprintf(ui.model.message, sizeof(ui.model.message), "已放弃未保存的周计划修改。");
+                    } else {
+                        snprintf(ui.model.message, sizeof(ui.model.message), "周计划没有修改。");
+                    }
                 }
             } else if (down & HidNpadButton_B) {
                 request_parent_navigation(&ui, -1, true);

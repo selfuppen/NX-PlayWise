@@ -484,8 +484,28 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
     }
     if (model->overlay == PTC_UI_OVERLAY_NUMPAD) {
         ptc_ui_numpad_finish(model);
+    } else if (model->overlay == PTC_UI_OVERLAY_CONFIRM &&
+               model->confirm_return_overlay != PTC_UI_OVERLAY_NONE) {
+        model->overlay = model->confirm_return_overlay;
+        model->confirm_return_overlay = PTC_UI_OVERLAY_NONE;
+        snprintf(model->overlay_title, sizeof(model->overlay_title), "%s", model->confirm_return_title);
+        snprintf(model->overlay_body, sizeof(model->overlay_body), "%s", model->confirm_return_body);
+        model->confirm_return_title[0] = '\0';
+        model->confirm_return_body[0] = '\0';
+        model->operation = PTC_UI_OPERATION_NONE;
+    } else if (model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
+        model->overlay = PTC_UI_OVERLAY_CREDENTIAL;
+        snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
+                 model->credential_kind == 1 ? "管理设备名" : "管理加时码密钥");
+        snprintf(model->overlay_body, sizeof(model->overlay_body), "%s",
+                 model->credential_kind == 1
+                    ? "当前值只读；可手工输入或随机生成新设备名。"
+                    : "当前密钥默认遮挡；建议使用随机生成的 64 位十六进制密钥。");
     } else {
         model->overlay = PTC_UI_OVERLAY_NONE;
+        model->confirm_return_overlay = PTC_UI_OVERLAY_NONE;
+        model->confirm_return_title[0] = '\0';
+        model->confirm_return_body[0] = '\0';
         model->operation = PTC_UI_OPERATION_NONE;
     }
     return true;
@@ -499,6 +519,9 @@ PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model)
     }
     operation = model->operation;
     model->overlay = PTC_UI_OVERLAY_NONE;
+    model->confirm_return_overlay = PTC_UI_OVERLAY_NONE;
+    model->confirm_return_title[0] = '\0';
+    model->confirm_return_body[0] = '\0';
     model->operation = PTC_UI_OPERATION_NONE;
     return operation;
 }
@@ -768,12 +791,16 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 650;
         break;
     case PTC_UI_OVERLAY_GRANT_LOCAL:
-        *width = 820;
-        *height = 570;
+        *width = 920;
+        *height = 650;
         break;
     case PTC_UI_OVERLAY_WEEKLY_LEAVE:
         *width = 860;
         *height = 350;
+        break;
+    case PTC_UI_OVERLAY_CREDENTIAL_LEAVE:
+        *width = 720;
+        *height = 300;
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:
@@ -968,7 +995,7 @@ PtcUiRect ptc_ui_grant_export_rect(void)
 PtcUiRect ptc_ui_grant_generate_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_LOCAL);
-    PtcUiRect rect = {dialog.x + 42, dialog.y + 382, dialog.w - 84, 60};
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 492, dialog.w - 84, 60};
     return rect;
 }
 
@@ -993,6 +1020,103 @@ void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction)
     }
     model->weekly_leave_selection =
         (model->weekly_leave_selection + (direction > 0 ? 1 : 2)) % 3;
+}
+
+void ptc_ui_move_weekly_focus(PtcUiModel *model, int horizontal, int vertical)
+{
+    if (!model) return;
+    if (model->selected_index < 0 || model->selected_index > 3) model->selected_index = 0;
+    if (model->selected_index == 0) {
+        if (horizontal < 0) model->editor_index = model->editor_index <= 0 ? 6 : model->editor_index - 1;
+        else if (horizontal > 0) model->editor_index = model->editor_index >= 6 ? 0 : model->editor_index + 1;
+        else if (vertical > 0) model->selected_index = 1;
+        return;
+    }
+    if (vertical < 0) {
+        model->selected_index = 0;
+    } else if (horizontal < 0 && model->selected_index > 1) {
+        --model->selected_index;
+    } else if (horizontal > 0 && model->selected_index < 3) {
+        ++model->selected_index;
+    }
+}
+
+static int credential_selection_step(const PtcUiModel *model, int current, int direction)
+{
+    static const int DEVICE_ITEMS[] = {
+        PTC_UI_CREDENTIAL_INPUT, PTC_UI_CREDENTIAL_RANDOM, PTC_UI_CREDENTIAL_SAVE
+    };
+    static const int SECRET_ITEMS[] = {
+        PTC_UI_CREDENTIAL_INPUT, PTC_UI_CREDENTIAL_RANDOM, PTC_UI_CREDENTIAL_REVEAL,
+        PTC_UI_CREDENTIAL_DEMO, PTC_UI_CREDENTIAL_SAVE
+    };
+    const int *items = model->credential_kind == 2 ? SECRET_ITEMS : DEVICE_ITEMS;
+    int count = model->credential_kind == 2 ? 5 : 3;
+    int index;
+    for (index = 0; index < count; ++index) {
+        if (items[index] == current) break;
+    }
+    if (index >= count) index = 0;
+    if (direction < 0 && index > 0) --index;
+    if (direction > 0 && index + 1 < count) ++index;
+    return items[index];
+}
+
+void ptc_ui_move_overlay_selection(PtcUiModel *model, int horizontal, int vertical)
+{
+    int direction;
+    if (!model) return;
+    direction = horizontal != 0 ? horizontal : vertical;
+    if (direction == 0) return;
+    if (model->overlay == PTC_UI_OVERLAY_CREDENTIAL) {
+        model->overlay_selection = credential_selection_step(model, model->overlay_selection, direction);
+    } else if (model->overlay == PTC_UI_OVERLAY_GRANT_SETUP) {
+        int maximum = model->grant_more_expanded ? PTC_UI_GRANT_SETUP_RESET_URL : PTC_UI_GRANT_SETUP_MORE;
+        if (model->overlay_selection < PTC_UI_GRANT_SETUP_QR || model->overlay_selection > maximum) {
+            model->overlay_selection = PTC_UI_GRANT_SETUP_QR;
+        } else if (direction < 0 && model->overlay_selection > PTC_UI_GRANT_SETUP_QR) {
+            --model->overlay_selection;
+        } else if (direction > 0 && model->overlay_selection < maximum) {
+            ++model->overlay_selection;
+        }
+    } else if (model->overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
+        int selection = model->overlay_selection;
+        if (selection < PTC_UI_GRANT_LOCAL_ADJUST_FIRST || selection > PTC_UI_GRANT_LOCAL_BACK) {
+            selection = PTC_UI_GRANT_LOCAL_GENERATE;
+        }
+        if (selection <= PTC_UI_GRANT_LOCAL_ADJUST_LAST) {
+            if (horizontal < 0 && selection > PTC_UI_GRANT_LOCAL_ADJUST_FIRST) --selection;
+            else if (horizontal > 0 && selection < PTC_UI_GRANT_LOCAL_ADJUST_LAST) ++selection;
+            else if (vertical > 0) selection = PTC_UI_GRANT_LOCAL_GENERATE;
+        } else if (selection == PTC_UI_GRANT_LOCAL_GENERATE) {
+            if (vertical < 0) selection = PTC_UI_GRANT_LOCAL_ADJUST_FIRST;
+            else if (vertical > 0) selection = PTC_UI_GRANT_LOCAL_BACK;
+        } else if (vertical < 0) {
+            selection = PTC_UI_GRANT_LOCAL_GENERATE;
+        }
+        model->overlay_selection = selection;
+    }
+}
+
+int ptc_ui_grant_estimate_remaining(const PtcUiModel *model, uint16_t grant_minutes, bool *capped)
+{
+    int maximum_remaining;
+    int estimate;
+    if (capped) *capped = false;
+    if (!model || model->grant_status_refresh_failed || !model->played_minutes_available ||
+        model->played_minutes < 0) {
+        return -1;
+    }
+    if (model->unrestricted_today == 1) return (int)grant_minutes;
+    if (!model->remaining_available || model->remaining_minutes < 0) return -1;
+    maximum_remaining = 1440 - model->played_minutes;
+    if (maximum_remaining < 0) maximum_remaining = 0;
+    estimate = model->remaining_minutes + (int)grant_minutes;
+    if (estimate > maximum_remaining) {
+        estimate = maximum_remaining;
+        if (capped) *capped = true;
+    }
+    return estimate;
 }
 
 PtcUiRect ptc_ui_shortcut_option_rect(int index)
@@ -1032,7 +1156,7 @@ PtcUiRect ptc_ui_shortcut_hint_rect(void)
 PtcUiRect ptc_ui_grant_adjust_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_LOCAL);
-    PtcUiRect rect = {dialog.x + 42 + index * 122, dialog.y + 250, 108, 54};
+    PtcUiRect rect = {dialog.x + 42 + index * 139, dialog.y + 294, 126, 50};
     if (index < 0 || index >= 6) {
         rect.w = 0;
         rect.h = 0;
@@ -1102,10 +1226,12 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     if (ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
     }
-    if (ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)) {
+    if (model->overlay != PTC_UI_OVERLAY_CREDENTIAL_LEAVE &&
+        ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
     }
-    if (model->overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE &&
+    if ((model->overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE ||
+         model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) &&
         ptc_ui_rect_contains(ptc_ui_discard_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_DISCARD, 0);
     }
@@ -1176,8 +1302,12 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     case PTC_UI_OVERLAY_CREDENTIAL:
         if (ptc_ui_rect_contains(ptc_ui_credential_input_rect(), x, y)) return make_hit(PTC_UI_HIT_CREDENTIAL_INPUT, 0);
         if (ptc_ui_rect_contains(ptc_ui_credential_random_rect(), x, y)) return make_hit(PTC_UI_HIT_CREDENTIAL_RANDOM, 0);
-        if (ptc_ui_rect_contains(ptc_ui_credential_reveal_rect(), x, y)) return make_hit(PTC_UI_HIT_CREDENTIAL_REVEAL, 0);
-        if (ptc_ui_rect_contains(ptc_ui_credential_demo_rect(), x, y)) return make_hit(PTC_UI_HIT_CREDENTIAL_DEMO, 0);
+        if (model->credential_kind == 2 && ptc_ui_rect_contains(ptc_ui_credential_reveal_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_CREDENTIAL_REVEAL, 0);
+        }
+        if (model->credential_kind == 2 && ptc_ui_rect_contains(ptc_ui_credential_demo_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_CREDENTIAL_DEMO, 0);
+        }
         break;
     case PTC_UI_OVERLAY_GRANT_SETUP:
         if (ptc_ui_rect_contains(ptc_ui_grant_qr_rect(), x, y)) return make_hit(PTC_UI_HIT_GRANT_QR, 0);
@@ -1213,6 +1343,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         break;
     case PTC_UI_OVERLAY_QR:
     case PTC_UI_OVERLAY_WEEKLY_LEAVE:
+    case PTC_UI_OVERLAY_CREDENTIAL_LEAVE:
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     case PTC_UI_OVERLAY_NONE:

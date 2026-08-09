@@ -103,6 +103,7 @@ static void test_numeric_input(void)
 static void test_time_previews(void)
 {
     PtcUiModel model;
+    bool capped = false;
     memset(&model, 0, sizeof(model));
     model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
     model.draft_minutes = 60;
@@ -121,6 +122,87 @@ static void test_time_previews(void)
     check_int(ptc_ui_preview_remaining_minutes(&model), 40, "add preview stacks on remaining time");
     model.remaining_available = false;
     check_int(ptc_ui_preview_remaining_minutes(&model), -1, "unlimited add preview is unavailable");
+
+    memset(&model, 0, sizeof(model));
+    model.status_loaded = true;
+    model.played_minutes_available = true;
+    model.played_minutes = 20;
+    model.remaining_available = true;
+    model.remaining_minutes = 40;
+    check_int(ptc_ui_grant_estimate_remaining(&model, 30, &capped), 70,
+              "local grant estimate adds to current remaining");
+    check_true(!capped, "ordinary local grant estimate is not capped");
+    model.played_minutes = 1430;
+    model.remaining_minutes = 10;
+    check_int(ptc_ui_grant_estimate_remaining(&model, 30, &capped), 10,
+              "local grant estimate respects the daily maximum");
+    check_true(capped, "daily maximum truncation is reported");
+    model.unrestricted_today = 1;
+    check_int(ptc_ui_grant_estimate_remaining(&model, 30, &capped), 30,
+              "unlimited day becomes a grant-sized limited remainder");
+    model.grant_status_refresh_failed = true;
+    check_int(ptc_ui_grant_estimate_remaining(&model, 30, &capped), -1,
+              "failed refresh is never presented as a live estimate");
+}
+
+static void test_candidate_navigation(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.editor_index = 0;
+    model.selected_index = 0;
+    ptc_ui_move_weekly_focus(&model, -1, 0);
+    check_int(model.editor_index, 6, "weekly dates wrap at the start of the week");
+    ptc_ui_move_weekly_focus(&model, 0, 1);
+    check_int(model.selected_index, 1, "weekly focus moves from date to mode");
+    ptc_ui_move_weekly_focus(&model, -1, 0);
+    check_int(model.selected_index, 1, "weekly button focus stops at the left edge");
+    ptc_ui_move_weekly_focus(&model, 1, 0);
+    ptc_ui_move_weekly_focus(&model, 1, 0);
+    ptc_ui_move_weekly_focus(&model, 1, 0);
+    check_int(model.selected_index, 3, "weekly button focus stops at save");
+
+    model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
+    model.credential_kind = 1;
+    model.overlay_selection = PTC_UI_CREDENTIAL_INPUT;
+    ptc_ui_move_overlay_selection(&model, 0, 1);
+    check_int(model.overlay_selection, PTC_UI_CREDENTIAL_RANDOM,
+              "device credential moves to random generation");
+    ptc_ui_move_overlay_selection(&model, 0, 1);
+    check_int(model.overlay_selection, PTC_UI_CREDENTIAL_SAVE,
+              "device credential skips secret-only actions");
+
+    model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
+    model.grant_more_expanded = false;
+    model.overlay_selection = PTC_UI_GRANT_SETUP_MORE;
+    ptc_ui_move_overlay_selection(&model, 0, 1);
+    check_int(model.overlay_selection, PTC_UI_GRANT_SETUP_MORE,
+              "collapsed grant setup stops at more settings");
+    model.grant_more_expanded = true;
+    ptc_ui_move_overlay_selection(&model, 0, 1);
+    check_int(model.overlay_selection, PTC_UI_GRANT_SETUP_EXPORT,
+              "expanded grant setup exposes export");
+
+    model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
+    model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
+    ptc_ui_move_overlay_selection(&model, 0, -1);
+    check_int(model.overlay_selection, PTC_UI_GRANT_LOCAL_ADJUST_FIRST,
+              "local generator moves from generate to adjustment row");
+    ptc_ui_move_overlay_selection(&model, 0, 1);
+    ptc_ui_move_overlay_selection(&model, 0, 1);
+    check_int(model.overlay_selection, PTC_UI_GRANT_LOCAL_BACK,
+              "local generator can focus the return button");
+
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    model.confirm_return_overlay = PTC_UI_OVERLAY_CREDENTIAL;
+    snprintf(model.confirm_return_title, sizeof(model.confirm_return_title), "管理设备名");
+    snprintf(model.confirm_return_body, sizeof(model.confirm_return_body), "草稿说明");
+    check_true(ptc_ui_cancel_overlay(&model), "credential confirmation can be cancelled");
+    check_int(model.overlay, PTC_UI_OVERLAY_CREDENTIAL,
+              "cancelled credential confirmation returns to the draft");
+    check_true(strcmp(model.overlay_title, "管理设备名") == 0 &&
+               strcmp(model.overlay_body, "草稿说明") == 0,
+               "cancelled confirmation restores the editor copy");
 }
 
 static void test_release_hit_targets(void)
@@ -150,6 +232,9 @@ static void test_release_hit_targets(void)
     model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
     check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
               "leftmost weekly day edits Monday without changing protocol order");
+    model.draft_week[1].mode = PTC_RULE_MODE_UNLIMITED;
+    check_hit(hit_center(&model, ptc_ui_weekly_day_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
+              "unlimited weekly day remains selectable for an explanatory message");
     check_hit(hit_center(&model, ptc_ui_parent_refresh_rect()), PTC_UI_HIT_PARENT_REFRESH, 0,
               "weekly refresh button is actionable");
     check_hit(hit_center(&model, ptc_ui_parent_footer_rect(2)), PTC_UI_HIT_PARENT_BACK, 0,
@@ -204,8 +289,11 @@ static void test_release_hit_targets(void)
               "numpad quick increase button");
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
+    model.credential_kind = 1;
     check_hit(hit_center(&model, ptc_ui_credential_random_rect()), PTC_UI_HIT_CREDENTIAL_RANDOM, 0,
               "credential random button");
+    check_hit(hit_center(&model, ptc_ui_credential_reveal_rect()), PTC_UI_HIT_NONE, 0,
+              "device-name editor has no invisible secret reveal target");
     model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
     check_hit(hit_center(&model, ptc_ui_grant_qr_rect()), PTC_UI_HIT_GRANT_QR, 0, "pairing QR button");
     check_hit(hit_center(&model, ptc_ui_grant_local_toggle_rect()), PTC_UI_HIT_GRANT_LOCAL_TOGGLE, 0,
@@ -238,6 +326,13 @@ static void test_release_hit_targets(void)
     check_int(model.weekly_leave_selection, 2, "weekly leave selection moves left with wrapping");
     check_hit(hit_center(&model, ptc_ui_discard_rect(model.overlay)), PTC_UI_HIT_OVERLAY_DISCARD, 0,
               "weekly leave discard button");
+    model.overlay = PTC_UI_OVERLAY_CREDENTIAL_LEAVE;
+    check_hit(hit_center(&model, ptc_ui_discard_rect(model.overlay)), PTC_UI_HIT_OVERLAY_DISCARD, 0,
+              "credential leave has a separate discard button");
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "credential leave has a continue-editing button");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
+              "credential leave has no invisible cancel target");
 }
 
 static void test_user_state_mapping(void)
@@ -297,6 +392,7 @@ int main(void)
     test_release_navigation();
     test_numeric_input();
     test_time_previews();
+    test_candidate_navigation();
     test_release_hit_targets();
     test_user_state_mapping();
     if (failures) return 1;

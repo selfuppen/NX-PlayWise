@@ -53,6 +53,25 @@ PtcErrorCode ptc_token_v2_tier_for_minutes(uint16_t minutes, uint8_t *out_tier_i
     return PTC_ERR_BAD_CODE;
 }
 
+bool ptc_token_v2_find_available_nonce(
+    const bool consumed[PTC_TOKEN_V2_MAX_NONCE + 1U],
+    const bool issued[PTC_TOKEN_V2_MAX_NONCE + 1U],
+    uint16_t start,
+    uint16_t *out_nonce)
+{
+    unsigned int offset;
+    if (!consumed || !issued || !out_nonce) return false;
+    start &= PTC_TOKEN_V2_MAX_NONCE;
+    for (offset = 0; offset <= PTC_TOKEN_V2_MAX_NONCE; ++offset) {
+        uint16_t nonce = (uint16_t)((start + offset) & PTC_TOKEN_V2_MAX_NONCE);
+        if (!consumed[nonce] && !issued[nonce]) {
+            *out_nonce = nonce;
+            return true;
+        }
+    }
+    return false;
+}
+
 PtcErrorCode ptc_token_v2_encode(
     uint8_t tier_index,
     uint16_t nonce,
