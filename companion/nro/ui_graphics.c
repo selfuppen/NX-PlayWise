@@ -56,9 +56,9 @@ static const UiAction TODAY_ACTIONS[] = {
 static const UiAction SECURITY_ACTIONS[] = {
     {"管理设备名", "查看、输入或随机生成设备名称", COLOR(42, 105, 188)},
     {"管理加时码密钥", "查看、生成或切换演示密钥", COLOR(194, 61, 61)},
-    {"加时码生成", "优先用手机扫码，也可在本机生成 8 位码", COLOR(25, 132, 95)},
-    {"管理 任你玩 PIN", "本应用独立 PIN，区别于 Nintendo 家长管理 PIN", COLOR(42, 105, 188)},
-    {"家长区快捷键管理", "选择、录制或关闭自定义组合并管理孩子区提示", COLOR(42, 105, 188)},
+    {"加时码生成", "手机扫码或在本机生成 8 位码", COLOR(25, 132, 95)},
+    {"修改任你玩PIN", "验证当前 PIN 后设置新 PIN", COLOR(42, 105, 188)},
+    {"家长区快捷键管理", "选择组合并管理孩子区提示", COLOR(42, 105, 188)},
 };
 
 static const UiAction SUPPORT_ACTIONS[] = {
@@ -878,22 +878,21 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
 static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect panel = {842, 176, 384, 440};
+    UiRect panel = {842, 176, 384, 324};
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, panel.x + 26, panel.y + 43, "加时码如何生成", 23, COLOR(28, 34, 43));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 82, "1. 用手机扫描 Switch 二维码", 18, COLOR(77, 86, 99));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 116, "2. 在网页确认设备并选择时长", 18, COLOR(77, 86, 99));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 150, "3. 将网页生成的 8 位码交给孩子", 18, COLOR(77, 86, 99));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 212, "也可以直接在本机生成", 19, COLOR(28, 118, 188));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 246, "进入“加时码生成”后选择", 17, COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 274, "“在本机生成 8 位码”。", 17, COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 326, "生成结果仅当天有效；", 17, COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 354, "成功兑换后只能使用一次。", 17, COLOR(91, 100, 116));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 78, "1. 手机扫描 Switch 二维码", 17, COLOR(77, 86, 99));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 108, "2. 网页选择加时时长", 17, COLOR(77, 86, 99));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 138, "3. 将生成的 8 位码交给孩子", 17, COLOR(77, 86, 99));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 184, "也可以在本机生成", 18, COLOR(28, 118, 188));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 212, "打开“加时码生成”，选择", 16, COLOR(91, 100, 116));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 238, "“在本机生成 8 位码”。", 16, COLOR(91, 100, 116));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 274, "当天有效，兑换成功后仅用一次。", 16, COLOR(91, 100, 116));
     if (model->demo_secret_enabled) {
-        fill_round_rect(pixels, stride, (UiRect){panel.x + 20, panel.y + 400, panel.width - 40, 34}, 6, COLOR(255, 235, 238));
-        draw_text_center(pixels, stride, (UiRect){panel.x + 20, panel.y + 400, panel.width - 40, 34},
-                         "公共演示密钥已启用", 18, COLOR(194, 61, 61));
+        fill_round_rect(pixels, stride, (UiRect){panel.x + 20, panel.y + 286, panel.width - 40, 30}, 6, COLOR(255, 235, 238));
+        draw_text_center(pixels, stride, (UiRect){panel.x + 20, panel.y + 286, panel.width - 40, 30},
+                         "公共演示密钥已启用", 16, COLOR(194, 61, 61));
     }
 }
 
@@ -1000,9 +999,9 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
         draw_text(pixels, stride, 64, 424, today_hint, 18, COLOR(25, 132, 95));
     }
     draw_text(pixels, stride, 64, 478, "左右选择日期 · A 编辑时间 · X 切换模式 · Y 刷新 · ↓ 选择保存按钮", 17, COLOR(77, 86, 99));
-    draw_dialog_button(pixels, stride, ptc_ui_weekly_mode_rect(), "切换模式",
+    draw_dialog_button(pixels, stride, ptc_ui_weekly_mode_rect(), "X  切换模式",
                        COLOR(235, 238, 243), COLOR(28, 118, 188), true);
-    draw_dialog_button(pixels, stride, ptc_ui_weekly_discard_rect(), "放弃修改", COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_weekly_discard_rect(), "ZL  放弃修改", COLOR(235, 238, 243), COLOR(66, 74, 86), true);
     draw_dialog_button(pixels, stride, ptc_ui_weekly_save_rect(),
                        model->disable_flag_present ? "紧急停用中" : (model->weekly_dirty ? "A  保存计划" : "A  计划未修改"),
                        model->weekly_dirty && !model->disable_flag_present ? COLOR(28, 118, 188) : COLOR(203, 211, 222),
@@ -1329,12 +1328,12 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
                   model->operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT;
     draw_dialog_shell(pixels, stride, model, &dialog, 760, 420);
     if (model->confirm_hold_required && model->played_minutes_available) {
-        snprintf(comparison, sizeof(comparison), "当前已玩 %d 分钟  ＞＝  新额度 %u 分钟",
-                 model->played_minutes, (unsigned int)model->draft_minutes);
+        snprintf(comparison, sizeof(comparison), "已玩 %d 分钟       还剩 0 分钟",
+                 model->played_minutes);
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 218, 652, 92}, 8, COLOR(255, 232, 235));
         draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 226, 652, 34}, comparison, 25, COLOR(194, 61, 61));
         draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 264, 652, 34},
-                         "保存后会马上限制儿童使用", 26, COLOR(194, 61, 61));
+                         "新额度不高于已玩时间，保存后会马上限制儿童使用", 20, COLOR(194, 61, 61));
     } else {
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 230, 620, 72}, 8,
                         danger ? COLOR(255, 240, 240) : COLOR(240, 248, 244));
@@ -1370,7 +1369,19 @@ static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const Ptc
     masked_value(model->credential_new, model->credential_kind == 1 || model->credential_new_revealed, next, sizeof(next));
     draw_text(pixels, stride, dialog.x + 42, dialog.y + 122, "当前值", 17, COLOR(91, 100, 114));
     fill_round_rect(pixels, stride, current_box, 7, COLOR(244, 246, 249));
-    draw_text(pixels, stride, current_box.x + 16, current_box.y + 36, current, 18, COLOR(45, 52, 62));
+    if (model->credential_kind == 2 && model->credential_revealed) {
+        if (strlen(current) > 32U) {
+            char first[33];
+            memcpy(first, current, 32U);
+            first[32] = '\0';
+            draw_text(pixels, stride, current_box.x + 16, current_box.y + 23, first, 14, COLOR(45, 52, 62));
+            draw_text(pixels, stride, current_box.x + 16, current_box.y + 44, current + 32, 14, COLOR(45, 52, 62));
+        } else {
+            draw_text(pixels, stride, current_box.x + 16, current_box.y + 36, current, 14, COLOR(45, 52, 62));
+        }
+    } else {
+        draw_text(pixels, stride, current_box.x + 16, current_box.y + 36, current, 18, COLOR(45, 52, 62));
+    }
     if (model->credential_kind == 2) {
         draw_dialog_button(pixels, stride, ptc_ui_credential_reveal_rect(),
                            model->credential_revealed ? "X  隐藏当前密钥" : "X  显示当前密钥",
@@ -1379,7 +1390,19 @@ static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const Ptc
     draw_text(pixels, stride, dialog.x + 42, dialog.y + 215, "新值", 17, COLOR(91, 100, 114));
     fill_round_rect(pixels, stride, input_box, 7, COLOR(244, 249, 255));
     draw_rect_outline(pixels, stride, input_box, 2, COLOR(28, 118, 188));
-    draw_text(pixels, stride, input_box.x + 16, input_box.y + 40, next, 18, COLOR(28, 34, 43));
+    if (model->credential_kind == 2 && model->credential_new_revealed) {
+        if (strlen(next) > 32U) {
+            char first[33];
+            memcpy(first, next, 32U);
+            first[32] = '\0';
+            draw_text(pixels, stride, input_box.x + 16, input_box.y + 25, first, 14, COLOR(28, 34, 43));
+            draw_text(pixels, stride, input_box.x + 16, input_box.y + 48, next + 32, 14, COLOR(28, 34, 43));
+        } else {
+            draw_text(pixels, stride, input_box.x + 16, input_box.y + 40, next, 14, COLOR(28, 34, 43));
+        }
+    } else {
+        draw_text(pixels, stride, input_box.x + 16, input_box.y + 40, next, 18, COLOR(28, 34, 43));
+    }
     draw_dialog_button(pixels, stride, ptc_ui_credential_random_rect(), "Y  随机生成",
                        COLOR(235, 238, 243), COLOR(28, 118, 188), true);
     if (model->credential_kind == 2) {
@@ -1390,7 +1413,7 @@ static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const Ptc
         draw_text(pixels, stride, dialog.x + 332, dialog.y + 350,
                   "建议使用随机生成；手工密钥至少 32 个字符。", 17, COLOR(91, 100, 114));
     }
-    draw_overlay_actions(pixels, stride, model, "A  手工输入    +  验证 PIN 并保存");
+    draw_overlay_actions(pixels, stride, model, "A  手工输入    +  保存");
 }
 
 static void draw_grant_setup_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1557,14 +1580,23 @@ static void draw_weekly_leave_overlay(uint32_t *pixels, uint32_t stride, const P
     draw_dialog_shell(pixels, stride, model, &dialog, 860, 350);
     draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 150, dialog.width - 80, 34},
                      "周计划还有未保存的修改", 22, COLOR(215, 139, 25));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 190, dialog.width - 80, 24},
+                     "左右选择 · A 确认 · 也可直接使用按钮快捷键", 17, COLOR(91, 100, 114));
     draw_dialog_button(pixels, stride, ptc_ui_discard_rect(model->overlay),
-                       refreshing ? "放弃并刷新" : "放弃并离开",
+                       refreshing ? "X  放弃并刷新" : "X  放弃并离开",
                        COLOR(255, 235, 238), COLOR(194, 61, 61), true);
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "继续编辑",
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  继续编辑",
                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay),
-                       refreshing ? "保存并刷新" : "保存并离开",
+                       refreshing ? "+  保存并刷新" : "+  保存并离开",
                        COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+    if (model->weekly_leave_selection == 0) {
+        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_discard_rect(model->overlay)), 3, COLOR(194, 61, 61));
+    } else if (model->weekly_leave_selection == 1) {
+        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_cancel_rect(model->overlay)), 3, COLOR(28, 118, 188));
+    } else {
+        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_confirm_rect(model->overlay)), 3, COLOR(255, 255, 255));
+    }
 }
 
 static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

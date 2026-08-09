@@ -1516,6 +1516,7 @@ static void change_parent_pin(UiState *ui)
     char pin[PTC_AUTH_PIN_MAX_LEN + 1];
     char confirm[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus status;
+    if (!verify_sensitive_pin(ui, "修改 PIN 前，请先输入当前任你玩 PIN")) return;
     if (!keyboard_input("修改 PlayWise PIN", "请输入新的 1–64 位数字", pin, sizeof(pin), true, true, false) ||
         !keyboard_input("确认新 PIN", "请再次输入相同的数字 PIN", confirm, sizeof(confirm), true, true, false) ||
         strcmp(pin, confirm) != 0) {
@@ -2071,6 +2072,7 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
         ui->pending_parent_page = target_page;
         ui->pending_leave_parent = leave_parent;
         ui->model.overlay = PTC_UI_OVERLAY_WEEKLY_LEAVE;
+        ui->model.weekly_leave_selection = 1;
         if (!leave_parent && target_page == PTC_UI_PARENT_PLAN) {
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "刷新周计划？");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
@@ -2124,19 +2126,31 @@ static void handle_overlay_input(UiState *ui, u64 down)
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE) {
-        if (down & HidNpadButton_B) {
+        if (down & HidNpadButton_Left) {
+            ptc_ui_weekly_leave_move(&ui->model, -1);
+        } else if (down & HidNpadButton_Right) {
+            ptc_ui_weekly_leave_move(&ui->model, 1);
+        } else if (down & HidNpadButton_B) {
             ptc_ui_cancel_overlay(&ui->model);
         } else if (down & HidNpadButton_X) {
             memcpy(ui->model.draft_week, ui->model.current_week, sizeof(ui->model.draft_week));
             ui->model.weekly_dirty = false;
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
             apply_pending_navigation(ui);
-        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+        } else if (down & HidNpadButton_Plus) {
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
             submit_weekly(ui);
             if (!ui->waiting) {
                 ui->pending_parent_page = -1;
                 ui->pending_leave_parent = false;
+            }
+        } else if (down & HidNpadButton_A) {
+            if (ui->model.weekly_leave_selection == 0) {
+                handle_overlay_input(ui, HidNpadButton_X);
+            } else if (ui->model.weekly_leave_selection == 1) {
+                handle_overlay_input(ui, HidNpadButton_B);
+            } else {
+                handle_overlay_input(ui, HidNpadButton_Plus);
             }
         }
         return;
@@ -2243,10 +2257,20 @@ static void handle_overlay_input(UiState *ui, u64 down)
                  ptc_ui_limit_minutes_would_restrict(&ui->model, ui->model.draft_minutes))) {
                 char body[192];
                 if (ui->model.unrestricted_today == 1) {
-                    snprintf(body, sizeof(body),
-                             "今天当前为不限时；设置 %u 分钟后将恢复限时。\n实际剩余将在设置生效后刷新。",
-                             (unsigned int)ui->model.draft_minutes);
-                    open_confirm_overlay(ui, operation, "不限时将改为限时", body);
+                    if (ui->model.played_minutes_available && ui->model.played_minutes >= 0) {
+                        int preview = (int)ui->model.draft_minutes - ui->model.played_minutes;
+                        if (preview < 0) preview = 0;
+                        snprintf(body, sizeof(body),
+                                 "当前已玩 %d 分钟；新额度 %u 分钟。\n修改后还剩 %d 分钟可玩。",
+                                 ui->model.played_minutes, (unsigned int)ui->model.draft_minutes, preview);
+                        open_confirm_overlay(ui, operation, "不限时将改为限时", body);
+                        ui->model.confirm_hold_required = preview == 0;
+                    } else {
+                        snprintf(body, sizeof(body),
+                                 "今天当前为不限时；设置 %u 分钟后将恢复限时。\n当前已玩不可用，暂时无法估算修改后剩余。",
+                                 (unsigned int)ui->model.draft_minutes);
+                        open_confirm_overlay(ui, operation, "不限时将改为限时", body);
+                    }
                 } else {
                     snprintf(body, sizeof(body),
                              "今天已玩约 %d 分钟；设置总额度 %u 分钟。\n调整后可能立即没有可玩时间。",
@@ -2394,7 +2418,8 @@ static void handle_touch(UiState *ui, int x, int y)
         } else {
             handle_overlay_input(ui,
                 ui->model.overlay == PTC_UI_OVERLAY_NUMPAD || ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL ||
-                ui->model.overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER
+                ui->model.overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER ||
+                ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE
                     ? HidNpadButton_Plus : HidNpadButton_A);
         }
         break;

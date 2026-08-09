@@ -980,6 +980,15 @@ PtcUiRect ptc_ui_grant_reset_url_rect(void)
     return rect;
 }
 
+void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction)
+{
+    if (!model || direction == 0) {
+        return;
+    }
+    model->weekly_leave_selection =
+        (model->weekly_leave_selection + (direction > 0 ? 1 : 2)) % 3;
+}
+
 PtcUiRect ptc_ui_shortcut_option_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_SHORTCUT_MANAGER);

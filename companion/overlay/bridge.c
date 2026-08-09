@@ -115,3 +115,15 @@ const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge)
     default: return "无法连接后台服务，请重试";
     }
 }
+
+bool ptc_overlay_bridge_status_succeeded(const PtcOverlayBridge *bridge)
+{
+    return bridge && bridge->summary.valid && bridge->summary.ok &&
+        strcmp(bridge->summary.type, "status") == 0;
+}
+
+bool ptc_overlay_bridge_offline_code_succeeded(const PtcOverlayBridge *bridge)
+{
+    return bridge && bridge->summary.valid && bridge->summary.ok &&
+        bridge->summary.unlock_observed && strcmp(bridge->summary.type, "offline_code") == 0;
+}

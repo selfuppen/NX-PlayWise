@@ -131,6 +131,7 @@ typedef struct {
     PtcDayRule draft_week[7];
     PtcDayRule current_week[7];
     bool weekly_dirty;
+    int weekly_leave_selection;
     bool today_override_present;
     PtcDayRule today_override_rule;
     int editor_index;
@@ -271,6 +272,7 @@ int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode);
 bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minutes);
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
+void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction);
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now);
 bool ptc_ui_cancel_overlay(PtcUiModel *model);
 PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model);

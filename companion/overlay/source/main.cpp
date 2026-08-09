@@ -49,6 +49,27 @@ static unsigned int to_overlay_buttons(u64 keys)
     return result;
 }
 
+enum class OverlayRequestKind {
+    None,
+    Status,
+    OfflineCode,
+};
+
+constexpr s32 TOP_BANNER_Y = 0;
+constexpr s32 TOP_BANNER_H = 72;
+constexpr s32 REFRESH_X = 220;
+constexpr s32 REFRESH_Y = 6;
+constexpr s32 REFRESH_W = 88;
+constexpr s32 REFRESH_H = 28;
+constexpr s32 SLOT_Y = 104;
+constexpr s32 KEYPAD_Y = 176;
+constexpr s32 KEY_ROW_STEP = 38;
+constexpr s32 KEY_HEIGHT = 34;
+constexpr s32 SUBMIT_Y = 342;
+constexpr s32 SUBMIT_H = 36;
+constexpr s32 STATUS_Y = 384;
+constexpr s32 STATUS_EXPANDED_H = 136;
+
 class PctcGui final : public tsl::Gui {
 public:
     PctcGui(PtcOverlayBridge *bridge, PtcOverlayInput *input) : bridge_(bridge), input_(input) {}
@@ -56,13 +77,7 @@ public:
     tsl::elm::Element *createUI() override
     {
         auto frame = new tsl::elm::OverlayFrame("自律约定", "兑换加时奖励");
-        if (bridge_ && !bridge_->waiting) {
-            PtcCompanionStatus status = ptc_overlay_bridge_submit_status(bridge_, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_);
-            if (status == PTC_COMPANION_OK) {
-                request_started_tick_ = armGetSystemTick();
-                last_elapsed_ms_ = 0;
-            }
-        }
+        (void)begin_status_refresh();
         frame->setContent(new tsl::elm::CustomDrawer([this](tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 w, s32 h) {
             draw_overlay(renderer, x, y, w, h);
         }));
@@ -88,7 +103,16 @@ public:
             bridge_, elapsed_delta_ms, PTC_OVERLAY_REQUEST_TIMEOUT_MS);
         if (status == PTC_COMPANION_PENDING) return;
         if (status == PTC_COMPANION_OK) {
-            if (bridge_->summary.unlock_observed) {
+            if (ptc_overlay_bridge_status_succeeded(bridge_)) {
+                displayed_summary_ = bridge_->summary;
+                last_refresh_tick_ = armGetSystemTick();
+                has_status_snapshot_ = true;
+                error_ = false;
+            } else if (ptc_overlay_bridge_offline_code_succeeded(bridge_)) {
+                displayed_summary_ = bridge_->summary;
+                last_refresh_tick_ = armGetSystemTick();
+                has_status_snapshot_ = true;
+                error_ = false;
                 close_after_frames_ = 90;
                 status_expanded_ = true;
             } else {
@@ -99,6 +123,7 @@ public:
             error_ = true;
             status_expanded_ = true;
         }
+        active_request_kind_ = OverlayRequestKind::None;
     }
 
     bool handleInput(
@@ -119,7 +144,10 @@ public:
         }
         last_input_tick_ = now;
         if (close_after_frames_ > 0) return true;
-        if (bridge_->waiting) return true;
+        if (bridge_->waiting) {
+            prev_touch_down_ = touch.x != 0 || touch.y != 0;
+            return true;
+        }
 
         // 1. 摇杆死区处理 (Analog Stick Support)
         constexpr s32 STICK_DEADZONE = 16000;
@@ -145,7 +173,15 @@ public:
 
             constexpr s32 cx = 35;
             constexpr s32 cy = 125;
-            constexpr s32 panel_y = cy + 184;
+            constexpr s32 panel_y = cy + KEYPAD_Y;
+
+            // 顶部刷新按钮；等待期间由前面的忙碌分支禁用。
+            if (rel_x >= cx + REFRESH_X && rel_x <= cx + REFRESH_X + REFRESH_W &&
+                rel_y >= cy + REFRESH_Y && rel_y <= cy + REFRESH_Y + REFRESH_H) {
+                (void)begin_status_refresh();
+                prev_touch_down_ = touch_down;
+                return true;
+            }
 
             // 点击小键盘按键
             const char *charset = ptc_overlay_input_charset();
@@ -153,8 +189,8 @@ public:
                 unsigned int row = index == 0 ? 3u : (index - 1u) / 3u;
                 unsigned int col = index == 0 ? 1u : (index - 1u) % 3u;
                 s32 kx = cx + 12 + static_cast<s32>(col) * 102;
-                s32 ky = panel_y + 8 + static_cast<s32>(row) * 45;
-                if (rel_x >= kx && rel_x <= kx + 90 && rel_y >= ky && rel_y <= ky + 40) {
+                s32 ky = panel_y + 6 + static_cast<s32>(row) * KEY_ROW_STEP;
+                if (rel_x >= kx && rel_x <= kx + 90 && rel_y >= ky && rel_y <= ky + KEY_HEIGHT) {
                     input_->cursor = index;
                     if (input_->length < PTC_OVERLAY_CODE_SYMBOLS) {
                         input_->symbols[input_->length++] = charset[index];
@@ -167,45 +203,32 @@ public:
 
             // 点击 [X] 退格 (第四行左侧)
             s32 x_btn_x = cx + 12;
-            s32 btn_y = panel_y + 8 + 3 * 45;
-            if (rel_x >= x_btn_x && rel_x <= x_btn_x + 90 && rel_y >= btn_y && rel_y <= btn_y + 40) {
+            s32 btn_y = panel_y + 6 + 3 * KEY_ROW_STEP;
+            if (rel_x >= x_btn_x && rel_x <= x_btn_x + 90 && rel_y >= btn_y && rel_y <= btn_y + KEY_HEIGHT) {
                 (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_X, 0, 0);
                 prev_touch_down_ = touch_down;
                 return true;
             }
 
-            // 点击 [Y] 清空 (第四行右侧)
+            // 点击清空（物理 Y 保留给状态刷新）。
             s32 y_btn_x = cx + 216;
-            if (rel_x >= y_btn_x && rel_x <= y_btn_x + 90 && rel_y >= btn_y && rel_y <= btn_y + 40) {
+            if (rel_x >= y_btn_x && rel_x <= y_btn_x + 90 && rel_y >= btn_y && rel_y <= btn_y + KEY_HEIGHT) {
                 (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_Y, 0, 0);
                 prev_touch_down_ = touch_down;
                 return true;
             }
 
             // 点击 [+] 提交按钮
-            s32 submit_y = cy + 386;
-            if (rel_x >= cx && rel_x <= cx + 315 && rel_y >= submit_y && rel_y <= submit_y + 40) {
-                if (ptc_overlay_input_can_submit(input_)) {
-                    char code[32];
-                    if (ptc_overlay_input_format(input_, code, sizeof(code))) {
-                        PtcCompanionStatus status = ptc_overlay_bridge_submit(bridge_, code, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_);
-                        if (status == PTC_COMPANION_OK) {
-                            request_started_tick_ = armGetSystemTick();
-                            last_elapsed_ms_ = 0;
-                            status_expanded_ = true;
-                        } else {
-                            error_ = true;
-                            status_expanded_ = true;
-                        }
-                    }
-                }
+            s32 submit_y = cy + SUBMIT_Y;
+            if (rel_x >= cx && rel_x <= cx + 315 && rel_y >= submit_y && rel_y <= submit_y + SUBMIT_H) {
+                (void)begin_code_submit();
                 prev_touch_down_ = touch_down;
                 return true;
             }
 
             // 点击状态与命令栏
-            s32 status_y = cy + 434;
-            if (rel_x >= cx && rel_x <= cx + 315 && rel_y >= status_y && rel_y <= status_y + 160) {
+            s32 status_y = cy + STATUS_Y;
+            if (rel_x >= cx && rel_x <= cx + 315 && rel_y >= status_y && rel_y <= status_y + STATUS_EXPANDED_H) {
                 status_expanded_ = !status_expanded_;
                 prev_touch_down_ = touch_down;
                 return true;
@@ -225,24 +248,16 @@ public:
         }
 
         if (keysDown & HidNpadButton_Plus) {
-            char code[32];
-            if (ptc_overlay_input_can_submit(input_) && ptc_overlay_input_format(input_, code, sizeof(code))) {
-                PtcCompanionStatus status = ptc_overlay_bridge_submit(bridge_, code, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_);
-                if (status == PTC_COMPANION_OK) {
-                    request_started_tick_ = armGetSystemTick();
-                    last_elapsed_ms_ = 0;
-                    status_expanded_ = true;
-                } else {
-                    error_ = true;
-                    status_expanded_ = true;
-                }
-            }
+            (void)begin_code_submit();
             return true;
         }
 
-        if (error_ && (keysDown & HidNpadButton_Y)) {
-            error_ = false;
-            (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_Y, 0, 0);
+        if (keysDown & HidNpadButton_Y) {
+            if (error_) {
+                (void)retry_last_request();
+            } else {
+                (void)begin_status_refresh();
+            }
             return true;
         }
 
@@ -278,41 +293,139 @@ public:
         return "";
     }
 
+    bool begin_status_refresh()
+    {
+        if (!bridge_ || bridge_->waiting) return false;
+        PtcCompanionStatus status = ptc_overlay_bridge_submit_status(
+            bridge_, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_);
+        if (status != PTC_COMPANION_OK) {
+            error_ = true;
+            status_expanded_ = true;
+            last_request_kind_ = OverlayRequestKind::Status;
+            return false;
+        }
+        active_request_kind_ = OverlayRequestKind::Status;
+        last_request_kind_ = OverlayRequestKind::Status;
+        request_started_tick_ = armGetSystemTick();
+        last_elapsed_ms_ = 0;
+        error_ = false;
+        return true;
+    }
+
+    bool begin_code_submit()
+    {
+        char code[32];
+        if (!bridge_ || bridge_->waiting || !ptc_overlay_input_can_submit(input_) ||
+            !ptc_overlay_input_format(input_, code, sizeof(code))) return false;
+        PtcCompanionStatus status = ptc_overlay_bridge_submit(
+            bridge_, code, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_);
+        if (status != PTC_COMPANION_OK) {
+            error_ = true;
+            status_expanded_ = true;
+            last_request_kind_ = OverlayRequestKind::OfflineCode;
+            return false;
+        }
+        active_request_kind_ = OverlayRequestKind::OfflineCode;
+        last_request_kind_ = OverlayRequestKind::OfflineCode;
+        request_started_tick_ = armGetSystemTick();
+        last_elapsed_ms_ = 0;
+        error_ = false;
+        status_expanded_ = true;
+        return true;
+    }
+
+    bool retry_last_request()
+    {
+        error_ = false;
+        if (last_request_kind_ == OverlayRequestKind::OfflineCode) return begin_code_submit();
+        return begin_status_refresh();
+    }
+
+    const char *request_label() const
+    {
+        OverlayRequestKind kind = active_request_kind_ != OverlayRequestKind::None
+            ? active_request_kind_ : last_request_kind_;
+        if (kind == OverlayRequestKind::Status) return "刷新今日状态";
+        if (kind == OverlayRequestKind::OfflineCode) return "提交今日加时";
+        return "未开始";
+    }
+
+    void format_refresh_age(char *out, size_t out_size) const
+    {
+        if (!out || out_size == 0) return;
+        if (active_request_kind_ == OverlayRequestKind::Status && bridge_->waiting) {
+            std::snprintf(out, out_size, "刷新中");
+            return;
+        }
+        if (!has_status_snapshot_ || last_refresh_tick_ == 0) {
+            std::snprintf(out, out_size, "尚未刷新");
+            return;
+        }
+        const u64 age_seconds = armTicksToNs(armGetSystemTick() - last_refresh_tick_) / 1000000000ULL;
+        if (age_seconds < 2) {
+            std::snprintf(out, out_size, "刚刚刷新");
+        } else if (age_seconds < 60) {
+            std::snprintf(out, out_size, "%llu 秒前", static_cast<unsigned long long>(age_seconds));
+        } else {
+            std::snprintf(out, out_size, "%llu 分钟前", static_cast<unsigned long long>(age_seconds / 60));
+        }
+    }
+
+    bool status_is_stale() const
+    {
+        if (!has_status_snapshot_ || last_refresh_tick_ == 0) return false;
+        return armTicksToNs(armGetSystemTick() - last_refresh_tick_) >= 30000000000ULL;
+    }
+
     void draw_overlay(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw, s32 ch)
     {
         (void)ch;
         char line[128];
+        char age[32];
+        const PtcCompanionResultSummary &summary = displayed_summary_;
+        format_refresh_age(age, sizeof(age));
 
         // --- 0. Top Prominent Status Banner (醒目展示今日已玩与修改后/当前可玩时长) ---
-        const s32 top_banner_y = cy + 4;
-        const s32 top_banner_h = 76;
+        const s32 top_banner_y = cy + TOP_BANNER_Y;
+        const s32 top_banner_h = TOP_BANNER_H;
         renderer->drawRect(cx, top_banner_y, cw, top_banner_h, renderer->a(CARD_COLOR));
         draw_outline(renderer, cx, top_banner_y, cw, top_banner_h, 1, FOCUS_BORDER);
 
-        renderer->drawString("今日已玩", false, cx + 10, top_banner_y + 22, 12, renderer->a(MUTED_COLOR));
-        if (bridge_->summary.played_minutes_available) {
-            std::snprintf(line, sizeof(line), "%d 分钟", bridge_->summary.played_minutes);
+        renderer->drawString("今日已玩", false, cx + 10, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
+        if (summary.valid && summary.played_minutes_available) {
+            std::snprintf(line, sizeof(line), "%d 分钟", summary.played_minutes);
         } else {
             std::snprintf(line, sizeof(line), "-- 分钟");
         }
-        renderer->drawString(line, false, cx + 82, top_banner_y + 25, 17, renderer->a(TEXT_COLOR));
+        renderer->drawString(line, false, cx + 78, top_banner_y + 23, 16, renderer->a(TEXT_COLOR));
 
-        renderer->drawString("修改后可玩", false, cx + 10, top_banner_y + 53, 12, renderer->a(MUTED_COLOR));
-        if (close_after_frames_ > 0 || (bridge_->summary.valid && bridge_->summary.remaining_available)) {
-            std::snprintf(line, sizeof(line), "%d 分钟", bridge_->summary.remaining_minutes);
-            renderer->drawString(line, false, cx + 100, top_banner_y + 57, 18, renderer->a(SUCCESS_COLOR));
+        renderer->drawString(close_after_frames_ > 0 ? "修改后可玩" : "当前还剩可玩", false,
+                             cx + 10, top_banner_y + 51, 11, renderer->a(MUTED_COLOR));
+        if (summary.valid && summary.remaining_available) {
+            std::snprintf(line, sizeof(line), "%d 分钟", summary.remaining_minutes);
+            renderer->drawString(line, false, cx + 116, top_banner_y + 54, 16, renderer->a(SUCCESS_COLOR));
         } else {
-            renderer->drawString("提交后刷新", false, cx + 100, top_banner_y + 57, 15, renderer->a(MUTED_COLOR));
+            renderer->drawString("暂不可用", false, cx + 116, top_banner_y + 54, 14, renderer->a(MUTED_COLOR));
         }
 
+        const bool busy = bridge_->waiting;
+        renderer->drawRect(cx + REFRESH_X, cy + REFRESH_Y, REFRESH_W, REFRESH_H,
+                           renderer->a(busy ? DISABLED_COLOR : FOCUS_BG));
+        draw_outline(renderer, cx + REFRESH_X, cy + REFRESH_Y, REFRESH_W, REFRESH_H, 1,
+                     busy ? MUTED_COLOR : FOCUS_BORDER);
+        renderer->drawString(busy ? "刷新中" : "Y  刷新", false, cx + REFRESH_X + 18,
+                             cy + REFRESH_Y + 20, 12, renderer->a(busy ? MUTED_COLOR : TEXT_COLOR));
+        renderer->drawString(status_is_stale() ? "数据可能已过期" : age, false, cx + REFRESH_X,
+                             top_banner_y + 64, 11, renderer->a(status_is_stale() ? ERROR_COLOR : MUTED_COLOR));
+
         // --- 1. Header Prompt & Guidance (护眼提醒) ---
-        renderer->drawString("提示：加时前记得向窗外远眺 5 分钟！", false, cx + 5, cy + 110, 15, renderer->a(FOCUS_BORDER));
+        renderer->drawString("提示：加时前记得向窗外远眺 5 分钟！", false, cx + 5, cy + 94, 14, renderer->a(FOCUS_BORDER));
 
         // --- 2. Code Display Slots (8位卡片槽 - 增大更醒目) ---
         const s32 slot_start_x = cx + 8;
-        const s32 slot_y = cy + 132;
+        const s32 slot_y = cy + SLOT_Y;
         const s32 slot_w = 34;
-        const s32 slot_h = 44;
+        const s32 slot_h = 38;
         const s32 slot_gap = 4;
 
         for (unsigned int index = 0; index < PTC_OVERLAY_CODE_SYMBOLS; ++index) {
@@ -338,18 +451,18 @@ public:
                 symbol,
                 false,
                 sx + (index < input_->length ? 8 : (is_cursor ? 8 : 10)),
-                slot_y + 32,
-                26,
+                slot_y + 28,
+                23,
                 renderer->a(index < input_->length ? TEXT_COLOR : (is_cursor ? FOCUS_BORDER : MUTED_COLOR)));
         }
 
         std::snprintf(line, sizeof(line), "已输入 %u/8 位   当前高亮数字：%c", input_->length, ptc_overlay_input_charset()[input_->cursor]);
-        renderer->drawString(line, false, cx + 5, cy + 208, 13, renderer->a(MUTED_COLOR));
+        renderer->drawString(line, false, cx + 5, cy + 164, 12, renderer->a(MUTED_COLOR));
 
         // --- 3. Keypad 3x4 Grid (软键盘放大) ---
         const char *charset = ptc_overlay_input_charset();
-        const s32 panel_y = cy + 228;
-        const s32 panel_h = 192;
+        const s32 panel_y = cy + KEYPAD_Y;
+        const s32 panel_h = 160;
         renderer->drawRect(cx, panel_y, cw, panel_h, renderer->a(PANEL_COLOR));
         draw_outline(renderer, cx, panel_y, cw, panel_h, 1, MUTED_COLOR);
 
@@ -359,108 +472,105 @@ public:
             unsigned int row = index == 0 ? 3u : (index - 1u) / 3u;
             unsigned int col = index == 0 ? 1u : (index - 1u) % 3u;
             s32 key_x = cx + 12 + static_cast<s32>(col) * 102;
-            s32 key_y = panel_y + 8 + static_cast<s32>(row) * 45;
+            s32 key_y = panel_y + 6 + static_cast<s32>(row) * KEY_ROW_STEP;
             const bool focused = (index == input_->cursor);
 
-            renderer->drawRect(key_x, key_y, 90, 40, renderer->a(focused ? FOCUS_BG : KEY_COLOR));
-            draw_outline(renderer, key_x, key_y, 90, 40, focused ? 3 : 1, focused ? FOCUS_BORDER : MUTED_COLOR);
-            renderer->drawString(symbol, false, key_x + 36, key_y + 30, 24, renderer->a(focused ? FOCUS_BORDER : TEXT_COLOR));
+            renderer->drawRect(key_x, key_y, 90, KEY_HEIGHT, renderer->a(focused ? FOCUS_BG : KEY_COLOR));
+            draw_outline(renderer, key_x, key_y, 90, KEY_HEIGHT, focused ? 3 : 1, focused ? FOCUS_BORDER : MUTED_COLOR);
+            renderer->drawString(symbol, false, key_x + 37, key_y + 25, 21, renderer->a(focused ? FOCUS_BORDER : TEXT_COLOR));
         }
 
         // 第四行辅助按键 [X] 退格 和 [Y] 清空
         s32 x_btn_x = cx + 12;
-        s32 btn_y = panel_y + 8 + 3 * 45;
-        renderer->drawRect(x_btn_x, btn_y, 90, 40, renderer->a(KEY_COLOR));
-        draw_outline(renderer, x_btn_x, btn_y, 90, 40, 1, MUTED_COLOR);
-        renderer->drawString("X 退格", false, x_btn_x + 22, btn_y + 26, 13, renderer->a(MUTED_COLOR));
+        s32 btn_y = panel_y + 6 + 3 * KEY_ROW_STEP;
+        renderer->drawRect(x_btn_x, btn_y, 90, KEY_HEIGHT, renderer->a(KEY_COLOR));
+        draw_outline(renderer, x_btn_x, btn_y, 90, KEY_HEIGHT, 1, MUTED_COLOR);
+        renderer->drawString("X 退格", false, x_btn_x + 22, btn_y + 23, 12, renderer->a(MUTED_COLOR));
 
         s32 y_btn_x = cx + 216;
-        renderer->drawRect(y_btn_x, btn_y, 90, 40, renderer->a(KEY_COLOR));
-        draw_outline(renderer, y_btn_x, btn_y, 90, 40, 1, MUTED_COLOR);
-        renderer->drawString("Y 清空", false, y_btn_x + 22, btn_y + 26, 13, renderer->a(MUTED_COLOR));
+        renderer->drawRect(y_btn_x, btn_y, 90, KEY_HEIGHT, renderer->a(KEY_COLOR));
+        draw_outline(renderer, y_btn_x, btn_y, 90, KEY_HEIGHT, 1, MUTED_COLOR);
+        renderer->drawString("点按清空", false, y_btn_x + 17, btn_y + 23, 12, renderer->a(MUTED_COLOR));
 
         // --- 4. Control & Submit Bar (操作与提交栏) ---
         const bool can_submit = ptc_overlay_input_can_submit(input_);
-        const s32 submit_y = cy + 430;
-        const s32 submit_h = 40;
+        const s32 submit_y = cy + SUBMIT_Y;
+        const s32 submit_h = SUBMIT_H;
 
         // 提交加时大按钮
         renderer->drawRect(cx, submit_y, cw, submit_h, renderer->a(can_submit ? FOCUS_BG : DISABLED_COLOR));
         draw_outline(renderer, cx, submit_y, cw, submit_h, can_submit ? 3 : 1, can_submit ? FOCUS_BORDER : MUTED_COLOR);
 
         if (can_submit) {
-            renderer->drawString("+ 提交加时奖励 (点击或按 + 键)", false, cx + 45, submit_y + 27, 15, renderer->a(TEXT_COLOR));
+            renderer->drawString("+ 提交加时奖励（点击或按 +）", false, cx + 50, submit_y + 24, 14, renderer->a(TEXT_COLOR));
         } else {
-            renderer->drawString("+ 提交加时 (需输满 8 位数字)", false, cx + 55, submit_y + 27, 14, renderer->a(MUTED_COLOR));
+            renderer->drawString("+ 提交加时（需输满 8 位数字）", false, cx + 58, submit_y + 24, 13, renderer->a(MUTED_COLOR));
         }
 
         // --- 5. Collapsible Status Panel (可折叠命令与状态栏) ---
-        const s32 status_y = cy + 478;
+        const s32 status_y = cy + STATUS_Y;
         const s32 status_w = cw;
 
         if (!status_expanded_) {
-            // 折叠状态 (Collapsed - 薄条形式)
-            renderer->drawRect(cx, status_y, status_w, 34, renderer->a(PANEL_COLOR));
-            draw_outline(renderer, cx, status_y, status_w, 34, 1, MUTED_COLOR);
+            renderer->drawRect(cx, status_y, status_w, 32, renderer->a(PANEL_COLOR));
+            draw_outline(renderer, cx, status_y, status_w, 32, 1, MUTED_COLOR);
 
-            if (bridge_->waiting) {
-                renderer->drawString("[-] 状态：正在处理加时… (按 - 展开 ∨)", false, cx + 12, status_y + 22, 13, renderer->a(FOCUS_BORDER));
+            if (bridge_->waiting && active_request_kind_ == OverlayRequestKind::Status) {
+                renderer->drawString("[-] 正在刷新状态…（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
+            } else if (bridge_->waiting) {
+                renderer->drawString("[-] 正在处理加时…（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
             } else if (error_) {
-                renderer->drawString("[-] 状态：加时错误 (按 - 展开 ∨)", false, cx + 12, status_y + 22, 13, renderer->a(ERROR_COLOR));
+                renderer->drawString("[-] 请求失败（按 - 展开，Y 重试）", false, cx + 12, status_y + 21, 12, renderer->a(ERROR_COLOR));
             } else if (close_after_frames_ > 0) {
-                renderer->drawString("[-] 状态：加时成功！ (按 - 展开 ∨)", false, cx + 12, status_y + 22, 13, renderer->a(SUCCESS_COLOR));
+                renderer->drawString("[-] 加时成功！（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(SUCCESS_COLOR));
+            } else if (has_status_snapshot_) {
+                std::snprintf(line, sizeof(line), "[-] 状态已刷新 · %s（按 - 展开）", age);
+                renderer->drawString(line, false, cx + 12, status_y + 21, 12,
+                                     renderer->a(status_is_stale() ? ERROR_COLOR : MUTED_COLOR));
             } else {
-                renderer->drawString("[-] 命令与状态 (点击或按 - / L / R 展开 ∨)", false, cx + 12, status_y + 22, 13, renderer->a(MUTED_COLOR));
+                renderer->drawString("[-] 命令与状态（点击或按 - / L / R）", false, cx + 12, status_y + 21, 12, renderer->a(MUTED_COLOR));
             }
         } else {
-            // 展开状态 (Expanded - 详细卡片)
-            const s32 expanded_h = 160;
+            const s32 expanded_h = STATUS_EXPANDED_H;
             renderer->drawRect(cx, status_y, status_w, expanded_h, renderer->a(PANEL_COLOR));
             draw_outline(renderer, cx, status_y, status_w, expanded_h, 2, FOCUS_BORDER);
 
-            renderer->drawString("[-] 命令与状态详情 (点击或按 - 收起 ∧)", false, cx + 12, status_y + 20, 13, renderer->a(FOCUS_BORDER));
-
-            if (bridge_->request_id[0]) {
-                renderer->drawString(
-                    bridge_->waiting ? "当前命令：提交今日加时" : "最近命令：提交今日加时",
-                    false,
-                    cx + 12,
-                    status_y + 40,
-                    13,
-                    renderer->a(TEXT_COLOR));
-            } else {
-                renderer->drawString("当前命令：未开始", false, cx + 12, status_y + 40, 13, renderer->a(TEXT_COLOR));
-            }
-
-            renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 58, 12, renderer->a(MUTED_COLOR));
+            renderer->drawString("[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
+            std::snprintf(line, sizeof(line), "%s命令：%s", bridge_->waiting ? "当前" : "最近", request_label());
+            renderer->drawString(line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
+            renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(MUTED_COLOR));
 
             const char *stage = transport_stage(bridge_);
             if (stage[0]) {
-                renderer->drawString(stage, false, cx + 12, status_y + 78, 13, renderer->a(FOCUS_BORDER));
+                renderer->drawString(stage, false, cx + 12, status_y + 72, 12, renderer->a(FOCUS_BORDER));
             }
 
             if (error_) {
                 const char *message = ptc_overlay_bridge_error_message_zh(bridge_);
-                renderer->drawString(message, false, cx + 12, status_y + 78, 13, renderer->a(ERROR_COLOR), 290);
+                renderer->drawString(message, false, cx + 12, status_y + 72, 12, renderer->a(ERROR_COLOR), 290);
                 if (bridge_->summary.valid && bridge_->summary.error_code > 0) {
-                    std::snprintf(line, sizeof(line), "错误码：%d   (按 Y 重试)", bridge_->summary.error_code);
-                    renderer->drawString(line, false, cx + 12, status_y + 120, 12, renderer->a(ERROR_COLOR));
+                    std::snprintf(line, sizeof(line), "错误码：%d · 按 Y 重试", bridge_->summary.error_code);
+                    renderer->drawString(line, false, cx + 12, status_y + 108, 11, renderer->a(ERROR_COLOR));
                 } else {
-                    renderer->drawString("按 Y 重试", false, cx + 12, status_y + 120, 12, renderer->a(ERROR_COLOR));
+                    renderer->drawString("按 Y 重试", false, cx + 12, status_y + 108, 11, renderer->a(ERROR_COLOR));
                 }
-            }
-
-            if (close_after_frames_ > 0) {
-                renderer->drawString("加时成功！", false, cx + 12, status_y + 82, 18, renderer->a(SUCCESS_COLOR));
-                std::snprintf(line, sizeof(line), "修改后可玩 %d 分钟", bridge_->summary.remaining_minutes);
-                renderer->drawString(line, false, cx + 12, status_y + 105, 17, renderer->a(SUCCESS_COLOR));
-                if (bridge_->summary.played_minutes_available) {
-                    std::snprintf(line, sizeof(line), "今日已玩约 %d 分钟，即刻刷新生效…", bridge_->summary.played_minutes);
-                    renderer->drawString(line, false, cx + 12, status_y + 128, 14, renderer->a(SUCCESS_COLOR));
+            } else if (close_after_frames_ > 0) {
+                renderer->drawString("加时成功！", false, cx + 12, status_y + 74, 16, renderer->a(SUCCESS_COLOR));
+                std::snprintf(line, sizeof(line), "修改后可玩 %d 分钟", summary.remaining_minutes);
+                renderer->drawString(line, false, cx + 12, status_y + 96, 15, renderer->a(SUCCESS_COLOR));
+                if (summary.played_minutes_available) {
+                    std::snprintf(line, sizeof(line), "今日已玩约 %d 分钟，即将自动关闭…", summary.played_minutes);
+                    renderer->drawString(line, false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));
                 } else {
-                    std::snprintf(line, sizeof(line), "状态已实时刷新，即将自动关闭…");
-                    renderer->drawString(line, false, cx + 12, status_y + 128, 14, renderer->a(SUCCESS_COLOR));
+                    renderer->drawString("状态已刷新，即将自动关闭…", false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));
                 }
+            } else if (!bridge_->waiting && has_status_snapshot_) {
+                renderer->drawString("状态刷新完成", false, cx + 12, status_y + 74, 15, renderer->a(SUCCESS_COLOR));
+                std::snprintf(line, sizeof(line), "当前还剩可玩：%s", summary.remaining_available ? "见顶部" : "暂不可用");
+                renderer->drawString(line, false, cx + 12, status_y + 96, 12, renderer->a(TEXT_COLOR));
+                std::snprintf(line, sizeof(line), "更新时间：%s", status_is_stale() ? "数据可能已过期" : age);
+                renderer->drawString(line, false, cx + 12, status_y + 116, 11,
+                                     renderer->a(status_is_stale() ? ERROR_COLOR : MUTED_COLOR));
             }
         }
     }
@@ -468,12 +578,17 @@ public:
 private:
     PtcOverlayBridge *bridge_;
     PtcOverlayInput *input_;
+    PtcCompanionResultSummary displayed_summary_{};
+    OverlayRequestKind active_request_kind_ = OverlayRequestKind::None;
+    OverlayRequestKind last_request_kind_ = OverlayRequestKind::None;
     unsigned int close_after_frames_ = 0;
     unsigned int request_nonce_ = 0;
     u64 request_started_tick_ = 0;
     u64 last_input_tick_ = 0;
+    u64 last_refresh_tick_ = 0;
     int last_elapsed_ms_ = 0;
     bool error_ = false;
+    bool has_status_snapshot_ = false;
     bool status_expanded_ = false;
     bool prev_touch_down_ = false;
     u64 prev_stick_keys_ = 0;

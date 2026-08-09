@@ -13,6 +13,7 @@
 #include "../../common/token/token_v2.h"
 #include "../../companion/auth.h"
 #include "../../companion/file_protocol.h"
+#include "../../companion/overlay/bridge.h"
 #include "../../platform/host/fake_time.h"
 #include "../../platform/host/mem_storage.h"
 #include "../../platform/host/pctl_stub.h"
@@ -187,6 +188,23 @@ static void test_auth_and_queue(void)
         strstr(text, "\"type\":\"status\"") != NULL, "queued request has release type");
     check_int(ptc_companion_set_disable_flag(&client, true), PTC_COMPANION_OK, "emergency disable enabled");
     check_int(ptc_companion_set_disable_flag(&client, false), PTC_COMPANION_OK, "emergency disable cleared");
+}
+
+static void test_overlay_result_classification(void)
+{
+    PtcOverlayBridge bridge;
+    memset(&bridge, 0, sizeof(bridge));
+    bridge.summary.valid = true;
+    bridge.summary.ok = true;
+    snprintf(bridge.summary.type, sizeof(bridge.summary.type), "status");
+    check_true(ptc_overlay_bridge_status_succeeded(&bridge), "overlay accepts a successful status refresh");
+    check_true(!ptc_overlay_bridge_offline_code_succeeded(&bridge), "status refresh is not treated as code redemption");
+
+    snprintf(bridge.summary.type, sizeof(bridge.summary.type), "offline_code");
+    check_true(!ptc_overlay_bridge_offline_code_succeeded(&bridge), "code redemption requires observed unlock");
+    bridge.summary.unlock_observed = true;
+    check_true(ptc_overlay_bridge_offline_code_succeeded(&bridge), "observed code redemption is accepted");
+    check_true(!ptc_overlay_bridge_status_succeeded(&bridge), "code redemption is not treated as status refresh");
 }
 
 static void seed_release_setup(PtcMemStorage *mem)
@@ -419,6 +437,7 @@ int main(void)
     test_policy_and_disable_flag();
     test_support_redaction();
     test_auth_and_queue();
+    test_overlay_result_classification();
     test_setup_preflight_and_recovery();
     test_played_time_status();
     test_play_timer_layout();

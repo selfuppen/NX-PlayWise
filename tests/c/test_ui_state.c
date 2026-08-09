@@ -221,6 +221,13 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_shortcut_hint_rect()), PTC_UI_HIT_SHORTCUT_HINT, 0,
               "shortcut manager exposes the child hint switch");
     model.overlay = PTC_UI_OVERLAY_WEEKLY_LEAVE;
+    model.weekly_leave_selection = 1;
+    ptc_ui_weekly_leave_move(&model, 1);
+    check_int(model.weekly_leave_selection, 2, "weekly leave selection moves right to save");
+    ptc_ui_weekly_leave_move(&model, 1);
+    check_int(model.weekly_leave_selection, 0, "weekly leave selection wraps to discard");
+    ptc_ui_weekly_leave_move(&model, -1);
+    check_int(model.weekly_leave_selection, 2, "weekly leave selection moves left with wrapping");
     check_hit(hit_center(&model, ptc_ui_discard_rect(model.overlay)), PTC_UI_HIT_OVERLAY_DISCARD, 0,
               "weekly leave discard button");
 }
