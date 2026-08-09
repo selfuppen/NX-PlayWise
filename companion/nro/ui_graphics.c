@@ -67,6 +67,7 @@ static const UiAction SUPPORT_ACTIONS[] = {
     {"紧急停用控制", "立即停止后台控制操作", COLOR(194, 61, 61)},
     {"恢复安装前状态", "恢复原始设置并停用 任我玩", COLOR(194, 61, 61)},
     {"导出诊断包", "生成不含密钥、PIN 和离线码的支持文件", COLOR(91, 100, 116)},
+    {"软件信息", "查看版本、项目仓库和家长网页", COLOR(42, 105, 188)},
 };
 
 static const UiAction RESUME_CONTROL_ACTION = {
@@ -1987,6 +1988,27 @@ static void draw_credential_leave_overlay(uint32_t *pixels, uint32_t stride, con
                           model->overlay_selection == 1, false);
 }
 
+static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    UiRect details;
+    draw_dialog_shell(pixels, stride, model, &dialog, 960, 480);
+    details = (UiRect){dialog.x + 34, dialog.y + 126, dialog.width - 68, 224};
+    fill_round_rect(pixels, stride, details, 8, COLOR(248, 250, 253));
+    draw_rect_outline(pixels, stride, details, 1, COLOR(219, 225, 233));
+    draw_text(pixels, stride, details.x + 24, details.y + 42, "软件名称", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, details.x + 180, details.y + 42, "PlayWise（任我玩）", 20, COLOR(28, 34, 43));
+    draw_text(pixels, stride, details.x + 24, details.y + 84, "当前版本", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, details.x + 180, details.y + 84, model->software_version, 20, COLOR(28, 118, 188));
+    draw_text(pixels, stride, details.x + 24, details.y + 126, "项目仓库", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, details.x + 180, details.y + 126, model->repository_url, 18, COLOR(28, 118, 188));
+    draw_text(pixels, stride, details.x + 24, details.y + 168, "家长网页", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, details.x + 180, details.y + 168, model->pwa_url, 18, COLOR(25, 132, 95));
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "A  关闭",
+                       COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 438, "也可按 B 返回", 16, COLOR(91, 100, 114));
+}
+
 static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     switch (model->overlay) {
@@ -2028,6 +2050,9 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         break;
     case PTC_UI_OVERLAY_AUTH_ERROR:
         draw_auth_error_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_SOFTWARE_INFO:
+        draw_software_info_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_NONE:
     default:

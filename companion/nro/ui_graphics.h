@@ -50,7 +50,8 @@ typedef enum {
     PTC_UI_OVERLAY_GRANT_LOCAL = 10,
     PTC_UI_OVERLAY_CREDENTIAL_LEAVE = 11,
     PTC_UI_OVERLAY_CODE_RESULT = 12,
-    PTC_UI_OVERLAY_AUTH_ERROR = 13
+    PTC_UI_OVERLAY_AUTH_ERROR = 13,
+    PTC_UI_OVERLAY_SOFTWARE_INFO = 14
 } PtcUiOverlay;
 
 typedef enum {
@@ -219,6 +220,9 @@ typedef struct {
     bool grant_local_expanded;
     bool grant_more_expanded;
     char grant_code[9];
+    char software_version[32];
+    char repository_url[128];
+    char pwa_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];
 } PtcUiModel;
 

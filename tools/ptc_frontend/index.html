@@ -26,7 +26,7 @@
         <div>
           <h1 id="pageTitle">生成今日加时码</h1>
           <p class="slogan">Play Wise. Play More.</p>
-          <p>密钥只在当前设备的浏览器中使用，不会发送到服务器。</p>
+          <p>加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。</p>
         </div>
         <button id="install" class="secondary compact" type="button" hidden>安装到设备</button>
       </div>
@@ -114,7 +114,14 @@
     </section>
   </main>
 
-  <footer>正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。</footer>
+  <footer>
+    <p>正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。</p>
+    <nav aria-label="项目链接">
+      <a href="https://github.com/selfuppen" target="_blank" rel="noopener noreferrer">作者 GitHub</a>
+      <span aria-hidden="true">·</span>
+      <a href="https://github.com/selfuppen/NX-PlayWise" target="_blank" rel="noopener noreferrer">项目源码</a>
+    </nav>
+  </footer>
 
   <dialog id="pairingDialog" aria-labelledby="pairingDialogTitle">
     <form method="dialog" class="dialog-card">

@@ -48,7 +48,7 @@ static void test_release_navigation(void)
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 5, "security actions");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 5, "support actions");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support actions include software information");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
     ptc_ui_change_parent_page(&model, -1);
@@ -250,7 +250,7 @@ static void test_release_hit_targets(void)
     model.parent_page = PTC_UI_PARENT_SUPPORT;
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_PARENT_CARD, 0, "support environment card");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "support diagnostics card");
-    check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_NONE, 0, "removed probe card is absent");
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "support software information card");
 
     model.view = PTC_UI_SETUP;
     model.setup_step = PTC_UI_SETUP_SHORTCUT;
@@ -293,6 +293,14 @@ static void test_release_hit_targets(void)
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT,
         "recovery action confirmed once");
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_NONE, "confirmation cannot be reused");
+
+    model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "software information close button");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
+              "software information has no invisible secondary button");
+    check_true(ptc_ui_cancel_overlay(&model), "software information closes with the shared modal path");
+    check_int(model.overlay, PTC_UI_OVERLAY_NONE, "software information close returns to support");
 
     model.overlay = PTC_UI_OVERLAY_NUMPAD;
     model.numpad_purpose = PTC_UI_NUMPAD_WEEKLY_MINUTES;

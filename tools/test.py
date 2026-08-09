@@ -8,11 +8,14 @@ import sys
 import tempfile
 import zipfile
 
+from playwise_version import read_playwise_version
+
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = Path("switch") / "playwise"
 CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 PYTHON = sys.executable
+PLAYWISE_VERSION = read_playwise_version(ROOT)
 
 
 class CheckError(AssertionError):
@@ -51,6 +54,7 @@ def run_python_regressions() -> None:
         "tests/mvp/test_token_v1.py",
         "tests/mvp/test_token_v2.py",
         "tests/frontend/test_ptc_frontend_server.py",
+        "tests/devkit/test_playwise_version.py",
         "tests/devkit/test_package_remote.py",
         "tests/devkit/test_install_script.py",
     ]:
@@ -108,8 +112,8 @@ def verify_playwise_package() -> None:
         nro.write_bytes(b"nro")
         overlay.write_bytes(b"ovl")
         exefs.write_bytes(b"nsp")
-        manifest.write_text(json.dumps({"schema_version": 1, "playwise_version": "0.1.2-alpha", "commit": "a" * 40,
-            "release_id": "playwise-0.1.2-alpha+aaaaaaaaaaaa", "profile": "release", "protocol_version": 1,
+        manifest.write_text(json.dumps({"schema_version": 1, "playwise_version": PLAYWISE_VERSION, "commit": "a" * 40,
+            "release_id": f"playwise-{PLAYWISE_VERSION}+aaaaaaaaaaaa", "profile": "release", "protocol_version": 1,
             "recovery_version": 1, "pctl_layout_version": 1, "build": {}, "verified_environment": {}}), encoding="utf-8")
         run(
             [

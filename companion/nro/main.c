@@ -17,6 +17,7 @@
 #include "../../common/time/ptc_time.h"
 #include "../../common/security/credential_policy.h"
 #include "../../common/token/token_v2.h"
+#include "../../common/version.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
 #include "ui_graphics.h"
 
@@ -2275,6 +2276,14 @@ static void handle_parent_action(UiState *ui)
     case 4:
         export_diagnostics(ui);
         break;
+    case 5:
+        ui->model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "软件信息");
+        snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "NX-PlayWise 是项目名称，软件继续使用 PlayWise 品牌。");
+        snprintf(ui->model.software_version, sizeof(ui->model.software_version), "%s", PLAYWISE_BUILD_VERSION);
+        snprintf(ui->model.repository_url, sizeof(ui->model.repository_url), "%s", PLAYWISE_REPOSITORY_URL);
+        snprintf(ui->model.pwa_url, sizeof(ui->model.pwa_url), "%s", PTC_PAIRING_BASE_URL);
+        break;
     default:
         break;
     }
@@ -2482,6 +2491,12 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
+        if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
+            ptc_ui_cancel_overlay(&ui->model);
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR) {
         if (down & HidNpadButton_B) {
             close_auth_error(ui, true);

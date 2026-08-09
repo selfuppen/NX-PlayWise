@@ -37,7 +37,7 @@ def valid_nro(*, with_icon: bool, embedded_manifest: bytes = b"") -> bytes:
     version_start = nacp_start + package_remote.NACP_DISPLAY_VERSION_OFFSET
     display_version = package_remote.PLAYWISE_VERSION.encode("ascii") + b"\0"
     data[version_start : version_start + len(display_version)] = display_version
-    return bytes(data) + embedded_manifest
+    return bytes(data) + embedded_manifest + b"".join(package_remote.NRO_INFORMATION_MARKERS)
 
 
 def overlay_without_assets() -> bytes:
@@ -54,8 +54,9 @@ def write_package(
     *,
     component_marker: bytes = b"",
 ) -> None:
-    manifest = ('{"schema_version":1,"playwise_version":"0.1.2-alpha","commit":"' + "a" * 40 +
-        '","release_id":"playwise-0.1.2-alpha+aaaaaaaaaaaa","profile":"release","protocol_version":1,'
+    version = package_remote.PLAYWISE_VERSION
+    manifest = (f'{{"schema_version":1,"playwise_version":"{version}","commit":"' + "a" * 40 +
+        f'","release_id":"playwise-{version}+aaaaaaaaaaaa","profile":"release","protocol_version":1,'
         '"recovery_version":1,"pctl_layout_version":1,"build":{},"verified_environment":{}}')
     with zipfile.ZipFile(path, "w") as package:
         package.writestr("switch/playwise/config.json", '{"version":1,"device_id":"kid-switch"}')

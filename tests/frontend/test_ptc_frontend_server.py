@@ -51,8 +51,13 @@ def test_static_assets_and_copy() -> None:
     for path, (filename, _) in STATIC_ASSETS.items():
         assert_true((STATIC_ROOT / filename).is_file(), f"asset for {path}")
     assert_true("/api/token" not in index + app + worker, "removed token API is not referenced")
-    assert_true("https://" not in index + app + token + storage + pairing + worker, "no external HTTPS dependency")
-    assert_true("http://" not in index + app + token + storage + pairing + worker, "no external HTTP dependency")
+    runtime = app + token + storage + pairing + worker
+    assert_true("https://" not in runtime, "no external HTTPS runtime dependency")
+    assert_true("http://" not in index + runtime, "no external HTTP dependency")
+    assert_equal(index.count("https://"), 2, "only the two approved HTTPS links")
+    assert_true('href="https://github.com/selfuppen"' in index, "author GitHub link")
+    assert_true('href="https://github.com/selfuppen/NX-PlayWise"' in index, "project source link")
+    assert_equal(index.count('target="_blank" rel="noopener noreferrer"'), 2, "external link isolation")
     assert_true("playwise-public-demo-secret-0001" in index, "public demo secret is explicit")
     assert_true("device_id" in app + pairing and "grant_secret" in app + pairing, "fragment pairing fields")
     assert_true("history.replaceState" in app, "fragment is cleared after parsing")
@@ -61,6 +66,7 @@ def test_static_assets_and_copy() -> None:
     assert_true("常见排错指南" in index and "紧急停用已开启" in index, "PWA troubleshooting guide")
     assert_true("任我玩" in index and "PlayWise" in index, "bilingual product name")
     assert_true("Play Wise. Play More." in index, "brand slogan")
+    assert_true("本项目不会把生成输入提交给业务后端" in index, "bounded local-generation privacy copy")
     assert_true("used_token" not in index and "加时码已使用" in index, "collision recovery copy")
     assert_true("cryptoApi.subtle" in token, "Web Crypto HMAC implementation")
     assert_true("getRandomValues" in token and "Math.random" not in token, "cryptographic random nonce")

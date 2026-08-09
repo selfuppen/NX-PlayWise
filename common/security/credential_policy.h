@@ -9,7 +9,7 @@
 #define PTC_GRANT_SECRET_MIN_LEN 32
 #define PTC_GRANT_SECRET_MAX_LEN 64
 #define PTC_DEMO_GRANT_SECRET "playwise-public-demo-secret-0001"
-#define PTC_PAIRING_BASE_URL "https://selfuppen.github.io/playwise/"
+#define PTC_PAIRING_BASE_URL "https://selfuppen.github.io/NX-PlayWise/"
 #define PTC_PAIRING_BASE_URL_MAX_LEN 256
 
 bool ptc_device_id_valid(const char *value);

@@ -7,9 +7,11 @@ import os
 from pathlib import Path
 import subprocess
 
+from playwise_version import read_playwise_version
+
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.1.2-alpha"
+VERSION = read_playwise_version(ROOT)
 LIBTESLA_UPSTREAM = ROOT / "companion" / "overlay" / "vendor" / "libtesla" / "UPSTREAM.txt"
 
 

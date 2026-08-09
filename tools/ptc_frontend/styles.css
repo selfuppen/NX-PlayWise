@@ -85,6 +85,9 @@ dialog::backdrop { background: rgba(20, 30, 28, .55); }
 .troubleshooting code { overflow-wrap: anywhere; }
 .danger-button { border: 1px solid #d49ca4; background: #fff; color: var(--danger); }
 footer { width: min(100% - 28px, 760px); margin: 0 auto 30px; color: var(--muted); font-size: 12px; line-height: 1.6; text-align: center; }
+footer p { margin: 0; }
+footer nav { display: flex; justify-content: center; gap: 8px; margin-top: 6px; }
+footer a { color: var(--accent-dark); font-weight: 700; }
 
 @media (max-width: 620px) {
   .site-header { padding: 15px 18px; }

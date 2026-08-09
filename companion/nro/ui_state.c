@@ -138,7 +138,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_SECURITY:
         return 5;
     case PTC_UI_PARENT_SUPPORT:
-        return 5;
+        return 6;
     case PTC_UI_PARENT_TODAY:
     default:
         return 5;
@@ -824,6 +824,10 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 720;
         *height = 340;
         break;
+    case PTC_UI_OVERLAY_SOFTWARE_INFO:
+        *width = 960;
+        *height = 480;
+        break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:
         *width = 760;
@@ -1245,6 +1249,11 @@ static PtcUiHit make_hit(PtcUiHitKind kind, int index)
 static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
 {
     int i;
+    if (model->overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
+        return ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y)
+            ? make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0)
+            : make_hit(PTC_UI_HIT_NONE, 0);
+    }
     if (ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
     }
@@ -1368,6 +1377,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     case PTC_UI_OVERLAY_CREDENTIAL_LEAVE:
     case PTC_UI_OVERLAY_CODE_RESULT:
     case PTC_UI_OVERLAY_AUTH_ERROR:
+    case PTC_UI_OVERLAY_SOFTWARE_INFO:
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     case PTC_UI_OVERLAY_NONE:
@@ -1559,7 +1569,7 @@ const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index)
     case 4:
         return "导出时自动排除 secret、PIN、离线码和完整 nonce。";
     case 5:
-        return "控制孩子区是否显示进入家长区的快捷键说明。";
+        return "查看 PlayWise 版本、项目仓库和家长网页地址。";
     default:
         return "";
     }
