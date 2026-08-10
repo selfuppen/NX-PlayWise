@@ -609,7 +609,7 @@ static void open_offline_code_input(UiState *ui)
     }
     ptc_ui_numpad_open(
         &ui->model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
-        "输入加时码", "加时之前，记得向窗外远眺至少 5 分钟，\n让眼睛放松一下吧！", 8, 0, 0, 0);
+        "A 输入加时码", "加时之前，记得向窗外远眺至少 5 分钟，\n让眼睛放松一下吧！", 8, 0, 0, 0);
 }
 
 static void begin_wait(UiState *ui, const char *type, const char *message)

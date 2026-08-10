@@ -8,14 +8,14 @@
 
 NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · PlayWise”。它是在 Nintendo Switch 自制系统环境中运行的本地游玩额度管理工具，包含常驻 sysmodule、Companion NRO、Overlay 和家长端 PWA。
 
-项目当前处于 `0.1.3-alpha` 开发验证阶段，尚未公开发布。
+当前公开版本为 `0.1.3`，已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成资格验证。
 
 - 项目仓库：[selfuppen/NX-PlayWise](https://github.com/selfuppen/NX-PlayWise)
 - 家长端 PWA：[公开演示网页](https://selfuppen.github.io/NX-PlayWise/)
 - 安装与使用：[使用指南](docs/使用指南.md)
 
 > [!IMPORTANT]
-> PlayWise 当前提供额度管理、系统计时和到期提醒，不承诺到期强制锁屏。
+> PlayWise 利用系统家长控制功能完成游玩额度管理、系统计时和到期提醒。
 
 ## 可以做什么
 
@@ -43,7 +43,7 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 ## 推荐环境
 
-目标验证基线是 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2。当前 `0.1.3-alpha` 候选版本尚未完成该组合的最终真机资格验证。
+`0.1.3` 已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成资格验证（2026-08-10）。
 
 推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理 PlayWise Overlay。也可参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境；使用交流 QQ 群为 `1051287661`。这些外部项目不包含在 PlayWise 安装包中。
 

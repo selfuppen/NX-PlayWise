@@ -78,8 +78,8 @@ def make_manifest(profile: str) -> dict:
             "model": "Nintendo Switch OLED",
             "hos": "22.5.0",
             "atmosphere": "1.11.2",
-            "qualification_date": "2026-08-07",
-            "result": "requires-requalification-for-final-artifact",
+            "qualification_date": "2026-08-10",
+            "result": "verified",
         },
     }
 
