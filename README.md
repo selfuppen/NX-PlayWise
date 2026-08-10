@@ -6,18 +6,21 @@
   **Play Wise. Play More.**
 </div>
 
-NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · PlayWise”。它是在 Nintendo Switch 自制系统环境中运行的本地游玩额度管理工具，包含常驻 sysmodule、Companion NRO、Overlay 和家长端 PWA。
+NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · PlayWise”。它是面向 Nintendo Switch 自定义固件（CFW）用户的本地游玩时间控制工具：家长可以直接在主机上设置今日额度和每周计划，**不强制使用手机 App、不需要 Nintendo Account，也不需要 Switch 连接互联网**。项目包含常驻 sysmodule、Companion NRO、Overlay，以及可选的家长端 PWA。
 
-**核心加时流程可在无网络环境中完成：家长生成指定分钟数的 8 位加时码并交给孩子，孩子在 Switch 上兑换后即可获得相应的游玩时间。生成、传递和兑换代码均不需要 Switch 连接互联网，也不依赖业务后端。**
+**离线加时是 PlayWise 的核心功能：家长为指定分钟数生成当天有效的 8 位加时码，通过电话、消息或当面告知等方式交给孩子；孩子在 Switch 上兑换后即可获得相应的游玩时间。代码在本机生成和验证，不经过 PlayWise 服务器，即使没有 Wi-Fi 或互联网也能使用。**
+
+> [!WARNING]
+> **仅支持已安装自定义固件的 Nintendo Switch，推荐 Atmosphère；未破解的原厂零售主机无法使用。** PlayWise 通过 sysmodule 调用受限的 Horizon PCTL 系统家长控制服务，因此必须运行在允许 Homebrew 和自定义系统组件的环境中。
+
+> [!NOTE]
+> PlayWise 不会破解账号、绕过在线验证，也不提供 Nintendo 官方家长控制 PIN 的重置、删除或官方手机 App 解绑功能。它只把本项目支持的游玩额度、系统计时、到期提醒和离线加时功能放到主机本地管理；“PlayWise PIN”仅用于保护本项目的家长区，不是 Nintendo 官方 PIN。
 
 当前公开版本为 `0.1.3`，已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成资格验证。
 
 - 项目仓库：[selfuppen/NX-PlayWise](https://github.com/selfuppen/NX-PlayWise)
 - 家长端 PWA：[公开演示网页](https://selfuppen.github.io/NX-PlayWise/)
 - 安装与使用：[使用指南](docs/使用指南.md)
-
-> [!IMPORTANT]
-> PlayWise 利用系统家长控制功能完成游玩额度管理、系统计时和到期提醒。
 
 ## 可以做什么
 
@@ -26,7 +29,7 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 - 由家长为指定分钟数生成当天有效的 8 位加时码；
 - 在完全离线、无 Wi-Fi 的环境中，把加时码直接告诉孩子；
 - 孩子在 Companion NRO 或游戏内 Overlay 中兑换代码，获得相应的游玩时间；
-- 通过二维码或配置文件将 Switch 配对到家长端 PWA；
+- 可选：通过二维码或配置文件将 Switch 配对到家长端 PWA，在可信的手机或电脑上本地生成加时码；
 - 在异常时导出诊断、紧急停用控制或恢复安装前状态。
 
 ## 快速开始
