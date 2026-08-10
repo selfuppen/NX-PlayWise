@@ -2040,6 +2040,23 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 438, "也可按 B 返回", 16, COLOR(91, 100, 114));
 }
 
+static void draw_diagnostic_result_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    UiRect details;
+    draw_dialog_shell(pixels, stride, model, &dialog, 960, 420);
+    details = (UiRect){dialog.x + 34, dialog.y + 126, dialog.width - 68, 160};
+    fill_round_rect(pixels, stride, details, 8, COLOR(248, 250, 253));
+    draw_rect_outline(pixels, stride, details, 1, COLOR(219, 225, 233));
+    draw_text(pixels, stride, details.x + 24, details.y + 42, "已生成到", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, details.x + 140, details.y + 42, model->diagnostic_path, 18, COLOR(28, 34, 43));
+    draw_text(pixels, stride, details.x + 24, details.y + 90, "使用方式", 18, COLOR(103, 111, 124));
+    draw_text(pixels, stride, details.x + 140, details.y + 90, "请将该文件提交到项目的 GitHub Issue 中进行反馈", 18, COLOR(25, 132, 95));
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "A  关闭",
+                       COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 378, "也可按 B 返回", 16, COLOR(91, 100, 114));
+}
+
 static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     switch (model->overlay) {
@@ -2084,6 +2101,9 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         break;
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
         draw_software_info_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_DIAGNOSTIC_RESULT:
+        draw_diagnostic_result_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_NONE:
     default:

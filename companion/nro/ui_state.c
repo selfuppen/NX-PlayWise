@@ -848,6 +848,10 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 960;
         *height = 480;
         break;
+    case PTC_UI_OVERLAY_DIAGNOSTIC_RESULT:
+        *width = 960;
+        *height = 420;
+        break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:
         *width = 760;
@@ -1269,7 +1273,8 @@ static PtcUiHit make_hit(PtcUiHitKind kind, int index)
 static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
 {
     int i;
-    if (model->overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
+    if (model->overlay == PTC_UI_OVERLAY_SOFTWARE_INFO ||
+        model->overlay == PTC_UI_OVERLAY_DIAGNOSTIC_RESULT) {
         return ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0)
             : make_hit(PTC_UI_HIT_NONE, 0);
@@ -1398,6 +1403,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     case PTC_UI_OVERLAY_CODE_RESULT:
     case PTC_UI_OVERLAY_AUTH_ERROR:
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
+    case PTC_UI_OVERLAY_DIAGNOSTIC_RESULT:
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     case PTC_UI_OVERLAY_NONE:

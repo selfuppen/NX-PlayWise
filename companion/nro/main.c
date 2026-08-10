@@ -2141,7 +2141,8 @@ static void export_diagnostics(UiState *ui)
     cJSON_Delete(bundle);
     snprintf(output_path, sizeof(output_path), APP_ROOT "/support/diagnostic-%lld.json", (long long)time(NULL));
     if (rendered && ui->client.storage->vtable->write_text_atomic(ui->client.storage, output_path, rendered)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "脱敏诊断包已生成到 support 目录。");
+        snprintf(ui->model.diagnostic_path, sizeof(ui->model.diagnostic_path), "sdmc:/switch/playwise/support/diagnostic-%lld.json", (long long)time(NULL));
+        ui->model.overlay = PTC_UI_OVERLAY_DIAGNOSTIC_RESULT;
     } else {
         snprintf(ui->model.message, sizeof(ui->model.message), "生成诊断包失败。");
     }
@@ -2547,7 +2548,8 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
-    if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO ||
+        ui->model.overlay == PTC_UI_OVERLAY_DIAGNOSTIC_RESULT) {
         if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
             ptc_ui_cancel_overlay(&ui->model);
         }
