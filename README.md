@@ -37,7 +37,7 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 ## 家长端 PWA
 
-家长端网页在浏览器本地生成加时码，不会把设备 ID、密钥或代码提交给业务后端。公开演示网页托管在 GitHub Pages，中国大陆网络环境下可能无法访问或加载不稳定，可能需要使用能够访问 GitHub Pages 的网络环境（俗称“翻墙”）。
+家长端网页在浏览器本地生成加时码，不会把设备 ID、密钥或代码提交给业务后端。公开演示网页托管在 GitHub Pages，中国大陆网络环境下可能无法访问或加载不稳定，可能需要使用能够访问 GitHub Pages 的网络环境。
 
 无法稳定访问时，可以在电脑上本地运行 PWA，再导入 Switch 导出的 `parent-import.json`；需要手机扫码使用时，则应把完整前端部署到可信的 HTTPS 静态站点。具体操作见[使用指南的家长端 PWA 章节](docs/使用指南.md#家长端-pwa)。
 
@@ -45,7 +45,9 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 `0.1.3` 已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成资格验证（2026-08-10）。
 
-推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理 PlayWise Overlay。也可参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境；使用交流 QQ 群为 `1051287661`。这些外部项目不包含在 PlayWise 安装包中。
+推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理 PlayWise Overlay。也可参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境(使用交流 QQ 群为 `1051287661`)。
+
+这些外部项目不包含在 PlayWise 安装包中, 跟项目本身没有任何直接关系。
 
 ## 更多文档
 
