@@ -45,7 +45,7 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 `0.1.3` 已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成资格验证（2026-08-10）。
 
-推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理 PlayWise Overlay。也可参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境(使用交流 QQ 群为 `1051287661`)。
+推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理 PlayWise Overlay。也可参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境(整合包和大气层使用交流QQ群：switch大气层超频折腾群 ，群号：`1051287661`)。
 
 这些外部项目不包含在 PlayWise 安装包中, 跟项目本身没有任何直接关系。
 
