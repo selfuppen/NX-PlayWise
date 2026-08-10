@@ -5,10 +5,10 @@ PCTL 是 Nintendo Switch 的系统家长控制服务。PlayWise 标准分发构�
 ## 隔离边界
 
 ```text
-Companion / Overlay
+主机应用 / 游戏内浮窗
         │ Release request
         ▼
-Sysmodule 安全状态机
+后台服务（sysmodule）安全状态机
         │ transaction + confirmation
         ▼
 PCTL adapter

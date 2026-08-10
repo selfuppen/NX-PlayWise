@@ -6,20 +6,20 @@
   **Play Wise. Play More.**
 </div>
 
-NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · PlayWise”。它是面向 Nintendo Switch 自定义固件（CFW）用户的本地游玩时间控制工具：家长可以直接在主机上设置今日额度和每周计划，**不强制使用手机 App、不需要 Nintendo Account，也不需要 Switch 连接互联网**。项目包含常驻 sysmodule、Companion NRO、Overlay，以及可选的家长端 PWA。
+NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · PlayWise”。它是面向 Nintendo Switch 自定义固件（CFW）用户的本地游玩时间控制工具：家长可以直接在主机上设置今日额度和每周计划，**不强制使用手机 App、不需要 Nintendo Account，也不需要 Switch 连接互联网**。项目包含常驻后台服务、从 Homebrew Menu 打开的主机应用、游戏内浮窗，以及可选的家长网页。
 
 **离线加时是 PlayWise 的核心功能：家长为指定分钟数生成当天有效的 8 位加时码，通过电话、消息或当面告知等方式交给孩子；孩子在 Switch 上兑换后即可获得相应的游玩时间。代码在本机生成和验证，不经过 PlayWise 服务器，即使没有 Wi-Fi 或互联网也能使用。**
 
 > [!WARNING]
-> **仅支持已安装自定义固件的 Nintendo Switch，推荐 Atmosphère；未破解的原厂零售主机无法使用。** PlayWise 通过 sysmodule 调用受限的 Horizon PCTL 系统家长控制服务，因此必须运行在允许 Homebrew 和自定义系统组件的环境中。
+> **仅支持已安装自定义固件的 Nintendo Switch，推荐 Atmosphère；未破解的原厂零售主机无法使用。** PlayWise 通过常驻后台服务（sysmodule）调用受限的 Horizon PCTL 系统家长控制服务，因此必须运行在允许 Homebrew 和自定义系统组件的环境中。
 
 > [!NOTE]
 > PlayWise 不会破解账号、绕过在线验证，也不提供 Nintendo 官方家长控制 PIN 的重置、删除或官方手机 App 解绑功能。它只把本项目支持的游玩额度、系统计时、到期提醒和离线加时功能放到主机本地管理；“PlayWise PIN”仅用于保护本项目的家长区，不是 Nintendo 官方 PIN。
 
-当前公开版本为 `0.1.3`，已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成资格验证。
+当前公开版本为 `0.1.4`，已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成资格验证。
 
 - 项目仓库：[selfuppen/NX-PlayWise](https://github.com/selfuppen/NX-PlayWise)
-- 家长端 PWA：[公开演示网页](https://selfuppen.github.io/NX-PlayWise/)
+- 家长网页：[公开演示网页](https://selfuppen.github.io/NX-PlayWise/)
 - 安装与使用：[使用指南](docs/使用指南.md)
 
 ## 可以做什么
@@ -28,8 +28,8 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 - 设置今日额度和每周计划；
 - 由家长为指定分钟数生成当天有效的 8 位加时码；
 - 在完全离线、无 Wi-Fi 的环境中，把加时码直接告诉孩子；
-- 孩子在 Companion NRO 或游戏内 Overlay 中兑换代码，获得相应的游玩时间；
-- 可选：通过二维码或配置文件将 Switch 配对到家长端 PWA，在可信的手机或电脑上本地生成加时码；
+- 孩子在主机应用或游戏内浮窗中兑换代码，获得相应的游玩时间；
+- 可选：通过二维码或配置文件将 Switch 配对到家长网页，在可信的手机或电脑上本地生成加时码；
 - 在异常时导出诊断、紧急停用控制或恢复安装前状态。
 
 ## 快速开始
@@ -38,21 +38,21 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 2. 下载 PlayWise 安装包，把内容安装到 SD 卡根目录。
 3. 从 Homebrew Menu 打开“任我玩”，完成首次设置。
 4. 在家长区设置今日额度或周计划；需要临时加时时，由家长生成指定分钟数的 8 位码并告诉孩子。
-5. 孩子无需联网，在 Companion NRO 或 Overlay 中输入代码，确认后即可获得相应的游玩时间。
+5. 孩子无需联网，在主机应用或游戏内浮窗中输入代码，确认后即可获得相应的游玩时间。
 
 完整步骤、升级方法和截图位置见[使用指南](docs/使用指南.md)。
 
-## 家长端 PWA
+## 家长网页
 
 家长端网页在浏览器本地生成加时码，不会把设备 ID、密钥或代码提交给业务后端。完成配对并准备好单文件离线版、本地页面或离线缓存后，生成代码不需要访问互联网；孩子在 Switch 上兑换时同样不需要联网。公开演示网页托管在 GitHub Pages，中国大陆网络环境下可能无法访问或加载不稳定，可能需要使用能够访问 GitHub Pages 的网络环境。
 
-无法稳定访问时，可下载 `playwise-offline.html` 单文件离线版，在电脑或支持本地 HTML 的手机浏览器中直接打开，再导入 Switch 导出的 `parent-import.json`；不需要 Python、前端工具或本地服务器。需要手机扫码自动配对或安装 PWA 时，仍应使用公开页面或把完整前端部署到可信的 HTTPS 静态站点。具体操作见[使用指南的家长端 PWA 章节](docs/使用指南.md#家长端-pwa)。
+无法稳定访问时，可下载 `playwise-offline.html` 单文件离线版，在电脑或支持本地 HTML 的手机浏览器中直接打开，再导入 Switch 导出的 `parent-import.json`；不需要 Python、前端工具或本地服务器。需要手机扫码自动配对或把网页安装到桌面时，仍应使用公开页面或把完整网页部署到可信的 HTTPS 静态站点。具体操作见[使用指南的家长网页章节](docs/使用指南.md#家长网页)。
 
 ## 推荐环境
 
-`0.1.3` 已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成资格验证（2026-08-10）。
+`0.1.4` 已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成资格验证（2026-08-10）。
 
-推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理 PlayWise Overlay。也可参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境(整合包和大气层使用交流QQ群：switch大气层超频折腾群 ，群号：`1051287661`)。
+推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理 PlayWise 游戏内浮窗。也可参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境(整合包和大气层使用交流QQ群：switch大气层超频折腾群 ，群号：`1051287661`)。
 
 这些外部项目不包含在 PlayWise 安装包中, 跟项目本身没有任何直接关系。
 

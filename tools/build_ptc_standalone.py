@@ -95,13 +95,13 @@ def render_standalone() -> str:
     page = replace_once(
         page,
         "可扫描 Switch 显示的二维码，或导入 SD 卡中的 <code>sdmc:/switch/playwise/parent-import.json</code>。",
-        "请导入 SD 卡中的 <code>sdmc:/switch/playwise/parent-import.json</code>；二维码自动配对请使用 HTTPS PWA。",
+        "请导入 SD 卡中的 <code>sdmc:/switch/playwise/parent-import.json</code>；二维码自动配对请使用 HTTPS 家长网页。",
         "standalone pairing help",
     )
     page = replace_once(
         page,
         "正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。",
-        "这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS PWA。",
+        "这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS 家长网页。",
         "standalone footer",
     )
     return page.rstrip() + "\n"

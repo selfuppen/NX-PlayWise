@@ -324,7 +324,7 @@ static void seed_release_setup(PtcMemStorage *mem)
         "{\"version\":1,\"phase\":\"unconfigured\",\"compatibility_status\":\"pending\",\"restriction_cleared\":false,"
         "\"snapshot_available\":false,\"activate_after\":0,\"last_error\":\"\"}"), "seed setup");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/build.json",
-        "{\"playwise_version\":\"0.1.3\",\"profile\":\"release\",\"release_id\":\"playwise-0.1.3+test\"}"), "seed build manifest");
+        "{\"playwise_version\":\"0.1.4\",\"profile\":\"release\",\"release_id\":\"playwise-0.1.4+test\"}"), "seed build manifest");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/environment.json",
         "{\"read_ok\":true,\"hos\":\"22.5.0\",\"firmware_hash\":\"test-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true}"),
         "seed verified environment");
@@ -466,7 +466,7 @@ static void test_live_enforce_recovery_is_not_startup_recovery(void)
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/compatibility.json",
         "{\"version\":1,\"status\":\"verified\",\"environment\":{\"hos\":\"22.5.0\","
         "\"firmware_hash\":\"test-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true},"
-        "\"release_id\":\"playwise-0.1.3+test\",\"accepted_at\":1783526401}"),
+        "\"release_id\":\"playwise-0.1.4+test\",\"accepted_at\":1783526401}"),
         "seed accepted runtime fingerprint");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/state.json",
         "{\"version\":1,\"last_enforced_day_index\":0,\"last_enforced_mode\":0,\"last_enforced_minutes\":0,"

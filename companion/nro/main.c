@@ -1929,7 +1929,7 @@ static void edit_pairing_base_url(UiState *ui)
     char value[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     ui->auth_retry_action = AUTH_RETRY_EDIT_URL;
     if (!verify_sensitive_pin(ui, "修改二维码跳转地址前，请再次输入本应用 PIN")) return;
-    if (!keyboard_input("二维码跳转地址", "填写官方或可信自部署 PWA；自定义页面可读取加时码密钥",
+    if (!keyboard_input("二维码跳转地址", "填写官方或可信的家长网页；自定义页面可读取加时码密钥",
                         value, sizeof(value), false, false, false)) return;
     if (!ptc_pairing_base_url_valid(value)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
@@ -1942,7 +1942,7 @@ static void edit_pairing_base_url(UiState *ui)
     }
     snprintf(ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), "%s", value);
     snprintf(ui->model.message, sizeof(ui->model.message),
-             "二维码跳转地址已更新；页面须支持二维码配对和导入配置文件，请仅使用可信 PWA。");
+             "二维码跳转地址已更新；页面须支持二维码配对和导入配置文件，请仅使用可信的家长网页。");
 }
 
 static void apply_default_pairing_base_url(UiState *ui)
@@ -2045,7 +2045,7 @@ static void show_pairing_qr(UiState *ui)
     ui->model.overlay = PTC_UI_OVERLAY_QR;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "手机/电脑生成加时码");
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "可扫描二维码自动配对，也可手动打开当前 PWA 并导入配置文件。");
+             "可扫描二维码自动配对，也可手动打开当前家长网页并导入配置文件。");
 }
 
 static void export_parent_import(UiState *ui)

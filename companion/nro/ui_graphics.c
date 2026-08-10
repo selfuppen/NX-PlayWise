@@ -2044,7 +2044,7 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     next_y = draw_wrapped_text(pixels, stride, dialog.x + 488, dialog.y + 292,
                                model->pairing_base_url, 14, 570, 21, 5, COLOR(28, 118, 188));
     draw_text(pixels, stride, dialog.x + 470, next_y + 6,
-              "默认使用官方 PWA，也可填写项目前端的可信自部署地址。", 14, COLOR(91, 100, 114));
+              "默认使用官方家长网页，也可填写可信的自部署地址。", 14, COLOR(91, 100, 114));
     draw_text(pixels, stride, dialog.x + 470, next_y + 32,
               "4. 点击“导入配置文件”，选择该文件", 15, COLOR(45, 52, 62));
     draw_text(pixels, stride, dialog.x + 470, next_y + 58,
