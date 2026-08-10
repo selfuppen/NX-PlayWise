@@ -48,6 +48,11 @@ static inline bool ptc_overlay_rect_contains(PtcOverlayRect rect, int x, int y)
     return x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
 }
 
+static inline bool ptc_overlay_remaining_refresh_pending(bool waiting, bool offline_code_request)
+{
+    return waiting && offline_code_request;
+}
+
 static inline PtcOverlayRect ptc_overlay_refresh_rect(int origin_x, int origin_y)
 {
     return ptc_overlay_rect(origin_x + PTC_OVERLAY_REFRESH_X, origin_y + PTC_OVERLAY_REFRESH_Y,

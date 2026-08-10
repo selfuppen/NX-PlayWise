@@ -64,6 +64,13 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 - [测试指南](docs/测试指南.md)
 - [PCTL 集成架构](docs/PCTL集成架构.md)
 
+## 致谢
+
+PlayWise 的实现思路参考并感谢以下项目：
+
+- [gmaitxqqq/switch-pctltcp-remoteandlocal](https://github.com/gmaitxqqq/switch-pctltcp-remoteandlocal)
+- [tailiang2008/NX-Pctl-Manager](https://github.com/tailiang2008/NX-Pctl-Manager)
+
 ## License
 
 Apache License 2.0。本项目与 Nintendo、Atmosphère、libnx 或 Ultrahand Overlay 无隶属或背书关系。

@@ -48,5 +48,6 @@ void ptc_overlay_input_tick(PtcOverlayInput *input, int elapsed_ms, int timeout_
 bool ptc_overlay_input_format(const PtcOverlayInput *input, char *out, size_t out_size);
 bool ptc_overlay_input_can_submit(const PtcOverlayInput *input);
 const char *ptc_overlay_input_charset(void);
+bool ptc_overlay_request_action_enabled(bool waiting);
 
 #endif

@@ -225,6 +225,14 @@ static void test_overlay_result_classification(void)
     check_true(!ptc_overlay_bridge_offline_code_succeeded(&bridge), "preview never counts as redemption");
 }
 
+static void test_overlay_request_action_gate(void)
+{
+    check_true(ptc_overlay_request_action_enabled(false),
+               "overlay enables request actions while idle");
+    check_true(!ptc_overlay_request_action_enabled(true),
+               "overlay blocks overlapping requests while preserving local input");
+}
+
 static void test_pending_redemption_recovery_marker(void)
 {
     PtcMemStorage mem;
@@ -303,6 +311,12 @@ static void test_overlay_layout_geometry(void)
     check_int(detail.y + detail.h, 626, "expanded error and success details stay above the footer");
     check_true(detail.y + detail.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
         "expanded overlay status remains inside content bounds");
+    check_true(ptc_overlay_remaining_refresh_pending(true, true),
+        "submitted overlay code uses a pending remaining-time presentation");
+    check_true(!ptc_overlay_remaining_refresh_pending(true, false),
+        "ordinary status refresh preserves the last remaining-time snapshot");
+    check_true(!ptc_overlay_remaining_refresh_pending(false, true),
+        "completed code result leaves the pending remaining-time presentation");
 }
 
 static void seed_release_setup(PtcMemStorage *mem)
@@ -684,6 +698,7 @@ int main(void)
     test_support_redaction();
     test_auth_and_queue();
     test_overlay_result_classification();
+    test_overlay_request_action_gate();
     test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();
     test_setup_preflight_and_recovery();

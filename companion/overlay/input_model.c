@@ -15,6 +15,11 @@ const char *ptc_overlay_input_charset(void)
     return CHARSET;
 }
 
+bool ptc_overlay_request_action_enabled(bool waiting)
+{
+    return !waiting;
+}
+
 void ptc_overlay_input_init(PtcOverlayInput *input)
 {
     if (!input) {

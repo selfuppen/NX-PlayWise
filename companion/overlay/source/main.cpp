@@ -31,6 +31,7 @@ constexpr tsl::Color MUTED_COLOR{ 0x8, 0x8, 0x9, 0xFF };
 constexpr tsl::Color DISABLED_COLOR{ 0x2, 0x2, 0x2, 0xFF };
 constexpr tsl::Color SUCCESS_COLOR{ 0x2, 0xE, 0x6, 0xFF };
 constexpr tsl::Color ERROR_COLOR{ 0xF, 0x3, 0x3, 0xFF };
+constexpr tsl::Color WAITING_COLOR{ 0xF, 0xA, 0x2, 0xFF };
 
 static unsigned int to_overlay_buttons(u64 keys)
 {
@@ -209,10 +210,7 @@ public:
                 : static_cast<int>(elapsed_ms);
         }
         last_input_tick_ = now;
-        if (bridge_->waiting) {
-            prev_touch_down_ = touch.x != 0 || touch.y != 0;
-            return true;
-        }
+        const bool request_actions_enabled = ptc_overlay_request_action_enabled(bridge_->waiting);
 
         if (success_visible_) {
             const bool touch_down = touch.x != 0 || touch.y != 0;
@@ -297,9 +295,9 @@ public:
             constexpr s32 cx = PTC_OVERLAY_CONTENT_X;
             constexpr s32 cy = PTC_OVERLAY_CONTENT_Y;
 
-            // 顶部刷新按钮；等待期间由前面的忙碌分支禁用。
+            // 顶部刷新按钮；后台忙碌时只禁用新的请求，本地编辑仍可继续。
             if (ptc_overlay_rect_contains(ptc_overlay_refresh_rect(cx, cy), rel_x, rel_y)) {
-                (void)begin_status_refresh();
+                if (request_actions_enabled) (void)begin_status_refresh();
                 prev_touch_down_ = touch_down;
                 return true;
             }
@@ -334,7 +332,7 @@ public:
 
             // 点击 [+] 提交按钮
             if (ptc_overlay_rect_contains(ptc_overlay_submit_rect(cx, cy, PTC_OVERLAY_CONTENT_W), rel_x, rel_y)) {
-                (void)begin_code_preview();
+                if (request_actions_enabled) (void)begin_code_preview();
                 prev_touch_down_ = touch_down;
                 return true;
             }
@@ -362,7 +360,7 @@ public:
         }
 
         if (keysDown & HidNpadButton_Plus) {
-            (void)begin_code_preview();
+            if (request_actions_enabled) (void)begin_code_preview();
             return true;
         }
 
@@ -378,7 +376,7 @@ public:
                     (void)retry_last_request();
                 }
             } else {
-                (void)begin_status_refresh();
+                if (request_actions_enabled) (void)begin_status_refresh();
             }
             return true;
         }
@@ -751,12 +749,16 @@ public:
         char age[32];
         const PtcCompanionResultSummary &summary = displayed_summary_;
         format_refresh_age(age, sizeof(age));
+        const bool remaining_refresh_pending = ptc_overlay_remaining_refresh_pending(
+            bridge_->waiting, active_request_kind_ == OverlayRequestKind::OfflineCode);
 
         // --- 0. Top Prominent Status Banner (醒目展示今日已玩与修改后/当前可玩时长) ---
         const s32 top_banner_y = cy + PTC_OVERLAY_TOP_BANNER_Y;
         const s32 top_banner_h = PTC_OVERLAY_TOP_BANNER_H;
         renderer->drawRect(cx, top_banner_y, cw, top_banner_h, renderer->a(CARD_COLOR));
-        draw_outline(renderer, cx, top_banner_y, cw, top_banner_h, 1, FOCUS_BORDER);
+        draw_outline(renderer, cx, top_banner_y, cw, top_banner_h,
+                     remaining_refresh_pending ? 2 : 1,
+                     remaining_refresh_pending ? WAITING_COLOR : FOCUS_BORDER);
 
         renderer->drawString("今日已玩", false, cx + 10, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
         if (summary.valid && summary.played_minutes_available) {
@@ -768,7 +770,10 @@ public:
 
         renderer->drawString(success_visible_ ? "修改后可玩" : "当前还剩可玩", false,
                              cx + 10, top_banner_y + 51, 11, renderer->a(MUTED_COLOR));
-        if (summary.valid && summary.remaining_available) {
+        if (remaining_refresh_pending) {
+            renderer->drawString("正在刷新…", false, cx + 116, top_banner_y + 54, 14,
+                                 renderer->a(WAITING_COLOR));
+        } else if (summary.valid && summary.remaining_available) {
             std::snprintf(line, sizeof(line), "%d 分钟", summary.remaining_minutes);
             renderer->drawString(line, false, cx + 116, top_banner_y + 54, 16, renderer->a(SUCCESS_COLOR));
         } else {
@@ -781,11 +786,17 @@ public:
                            renderer->a(busy ? DISABLED_COLOR : FOCUS_BG));
         draw_outline(renderer, cx + PTC_OVERLAY_REFRESH_X, cy + PTC_OVERLAY_REFRESH_Y,
                      PTC_OVERLAY_REFRESH_W, PTC_OVERLAY_REFRESH_H, 1,
-                     busy ? MUTED_COLOR : FOCUS_BORDER);
-        renderer->drawString(busy ? "刷新中" : "Y  刷新", false, cx + PTC_OVERLAY_REFRESH_X + 18,
-                             cy + PTC_OVERLAY_REFRESH_Y + 20, 12, renderer->a(busy ? MUTED_COLOR : TEXT_COLOR));
-        renderer->drawString(status_is_stale() ? "数据可能已过期" : age, false, cx + PTC_OVERLAY_REFRESH_X,
-                             top_banner_y + 64, 11, renderer->a(status_is_stale() ? ERROR_COLOR : MUTED_COLOR));
+                     remaining_refresh_pending ? WAITING_COLOR : (busy ? MUTED_COLOR : FOCUS_BORDER));
+        renderer->drawString(remaining_refresh_pending ? "确认中" : (busy ? "刷新中" : "Y  刷新"),
+                             false, cx + PTC_OVERLAY_REFRESH_X + 18,
+                             cy + PTC_OVERLAY_REFRESH_Y + 20, 12,
+                             renderer->a(remaining_refresh_pending ? WAITING_COLOR :
+                                         (busy ? MUTED_COLOR : TEXT_COLOR)));
+        renderer->drawString(remaining_refresh_pending ? "提交后等待结果" :
+                             (status_is_stale() ? "数据可能已过期" : age),
+                             false, cx + PTC_OVERLAY_REFRESH_X, top_banner_y + 64, 11,
+                             renderer->a(remaining_refresh_pending ? WAITING_COLOR :
+                                         (status_is_stale() ? ERROR_COLOR : MUTED_COLOR)));
 
         // --- 1. Header Prompt & Guidance (护眼提醒) ---
         renderer->drawString("提示：加时前记得向窗外远眺 5 分钟！", false, cx + 5, cy + 94, 14, renderer->a(FOCUS_BORDER));
@@ -866,7 +877,8 @@ public:
         renderer->drawString("点按清空", false, y_btn_x + 17, btn_y + 23, 12, renderer->a(MUTED_COLOR));
 
         // --- 4. Control & Submit Bar (操作与提交栏) ---
-        const bool can_submit = ptc_overlay_input_can_submit(input_);
+        const bool can_submit = ptc_overlay_request_action_enabled(bridge_->waiting) &&
+            ptc_overlay_input_can_submit(input_);
         const s32 submit_y = cy + PTC_OVERLAY_SUBMIT_Y;
         const s32 submit_h = PTC_OVERLAY_SUBMIT_H;
 
@@ -876,6 +888,9 @@ public:
 
         if (can_submit) {
             renderer->drawString("+ 提交加时奖励（点击或按 +）", false, cx + 50, submit_y + 24, 14, renderer->a(TEXT_COLOR));
+        } else if (bridge_->waiting) {
+            renderer->drawString("后台处理中，可继续编辑输入", false, cx + 66, submit_y + 24, 13,
+                                 renderer->a(MUTED_COLOR));
         } else {
             renderer->drawString("+ 提交加时（需输满 8 位数字）", false, cx + 58, submit_y + 24, 13, renderer->a(MUTED_COLOR));
         }
