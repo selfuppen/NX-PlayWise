@@ -102,6 +102,7 @@ static void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const ch
 static void retry_error(UiState *ui);
 static void dispatch_auth_retry(UiState *ui, AuthRetryAction action);
 static void show_pending_redemption(UiState *ui);
+static void show_grant_manager(UiState *ui, int selection);
 
 static int64_t unix_ms_now(void)
 {
@@ -1027,8 +1028,7 @@ static void poll_result(UiState *ui, bool force)
             return;
         }
         if (strcmp(ui->model.result_type, "status") == 0 &&
-            (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL ||
-             ui->model.overlay == PTC_UI_OVERLAY_GRANT_SETUP)) {
+            ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
             ui->model.grant_status_refresh_failed = strcmp(ui->model.result_status, "ok") != 0;
         }
         if (strcmp(ui->model.result_type, "complete_setup") == 0 &&
@@ -1134,8 +1134,7 @@ static void poll_result(UiState *ui, bool force)
         ui->pending_parent_page = -1;
         ui->pending_leave_parent = false;
     }
-    if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL ||
-        ui->model.overlay == PTC_UI_OVERLAY_GRANT_SETUP) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
         ui->model.grant_status_refresh_failed = true;
     }
     if (ui->pending_redemption.request_id[0] != '\0' &&
@@ -1772,7 +1771,8 @@ static bool commit_credential(UiState *ui)
     free(rendered);
     if (!ok) return false;
     snprintf(ui->model.credential_current, sizeof(ui->model.credential_current), "%s", ui->model.credential_new);
-    ui->model.overlay = PTC_UI_OVERLAY_NONE;
+    show_grant_manager(ui, ui->model.credential_kind == 1
+        ? PTC_UI_GRANT_MANAGER_DEVICE : PTC_UI_GRANT_MANAGER_SECRET);
     refresh_security_state(ui);
     if (ui->model.credential_kind == 1) {
         snprintf(ui->model.message, sizeof(ui->model.message),
@@ -1799,7 +1799,8 @@ static void open_credential_manager(UiState *ui, int kind)
     snprintf(ui->model.credential_new, sizeof(ui->model.credential_new), "%s", kind == 1 ? device : secret);
     ui->model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     ui->model.overlay_selection = PTC_UI_CREDENTIAL_INPUT;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", kind == 1 ? "管理设备名" : "管理加时码密钥");
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
+             kind == 1 ? "管理加时码设备名" : "管理加时码密钥");
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
              kind == 1 ? "当前值只读；可手工输入或随机生成新设备名。" :
                          "当前密钥默认遮挡；建议使用随机生成的 64 位十六进制密钥。");
@@ -1880,15 +1881,28 @@ static void change_parent_pin(UiState *ui)
     }
 }
 
-static void open_grant_setup(UiState *ui)
+static void show_grant_manager(UiState *ui, int selection)
+{
+    ui->model.overlay = PTC_UI_OVERLAY_GRANT_MANAGER;
+    ui->model.overlay_selection = selection >= 0 && selection < PTC_UI_GRANT_MANAGER_COUNT ? selection : 0;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "加时码生成管理");
+    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+             "管理生成加时码所需的设备信息、导出配置和二维码网页地址。");
+}
+
+static void open_grant_manager(UiState *ui)
+{
+    ui->model.message[0] = '\0';
+    show_grant_manager(ui, PTC_UI_GRANT_MANAGER_DEVICE);
+}
+
+static void open_local_grant(UiState *ui)
 {
     uint16_t maximum = PTC_TOKEN_V2_MAX_MINUTES;
     if (!read_pairing_config(ui, ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), &maximum)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "读取本机生成器配置失败。");
         return;
     }
-    ui->model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
-    ui->model.overlay_selection = PTC_UI_GRANT_SETUP_QR;
     ui->model.grant_max_minutes = maximum;
     ui->model.grant_minutes = legal_grant_minutes(20U, maximum);
     ui->model.grant_has_code = false;
@@ -1899,20 +1913,7 @@ static void open_grant_setup(UiState *ui)
     ui->model.grant_estimate_unrestricted = false;
     ui->model.grant_estimated_at = 0;
     ui->model.grant_status_refresh_failed = false;
-    ui->model.grant_local_expanded = false;
-    ui->model.grant_more_expanded = false;
     ui->model.grant_code[0] = '\0';
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "加时码生成");
-    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "方向键选择，按 A 执行；也可使用按钮标出的快捷键。");
-}
-
-static void toggle_local_grant_panel(UiState *ui)
-{
-    if (!ui) {
-        return;
-    }
-    ui->model.grant_more_expanded = false;
     ui->model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
     ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
     ui->model.grant_status_refresh_failed = false;
@@ -1923,25 +1924,12 @@ static void toggle_local_grant_panel(UiState *ui)
     if (!ui->waiting) ui->model.grant_status_refresh_failed = true;
 }
 
-static void toggle_grant_more_panel(UiState *ui)
-{
-    if (!ui) {
-        return;
-    }
-    ui->model.grant_more_expanded = !ui->model.grant_more_expanded;
-    if (ui->model.grant_more_expanded) {
-        ui->model.grant_local_expanded = false;
-    } else if (ui->model.overlay_selection > PTC_UI_GRANT_SETUP_MORE) {
-        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_MORE;
-    }
-}
-
 static void edit_pairing_base_url(UiState *ui)
 {
     char value[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     ui->auth_retry_action = AUTH_RETRY_EDIT_URL;
     if (!verify_sensitive_pin(ui, "修改二维码跳转地址前，请再次输入本应用 PIN")) return;
-    if (!keyboard_input("二维码跳转地址", "仅使用可信 HTTPS；局域网调试可用 localhost 或私有 IP",
+    if (!keyboard_input("二维码跳转地址", "填写官方或可信自部署 PWA；自定义页面可读取加时码密钥",
                         value, sizeof(value), false, false, false)) return;
     if (!ptc_pairing_base_url_valid(value)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
@@ -1953,19 +1941,29 @@ static void edit_pairing_base_url(UiState *ui)
         return;
     }
     snprintf(ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), "%s", value);
-    snprintf(ui->model.message, sizeof(ui->model.message), "二维码跳转地址已更新；自定义站点可读取配对密钥，请仅使用可信站点。");
+    snprintf(ui->model.message, sizeof(ui->model.message),
+             "二维码跳转地址已更新；页面须支持二维码配对和导入配置文件，请仅使用可信 PWA。");
 }
 
-static void reset_pairing_base_url(UiState *ui)
+static void apply_default_pairing_base_url(UiState *ui)
 {
-    ui->auth_retry_action = AUTH_RETRY_RESET_URL;
-    if (!verify_sensitive_pin(ui, "恢复官方二维码地址前，请再次输入本应用 PIN")) return;
     if (!save_pairing_base_url(ui, PTC_PAIRING_BASE_URL)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "恢复官方二维码地址失败。");
-        return;
+    } else {
+        snprintf(ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
+        snprintf(ui->model.message, sizeof(ui->model.message), "已恢复二维码跳转默认地址。");
     }
-    snprintf(ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
-    snprintf(ui->model.message, sizeof(ui->model.message), "已恢复官方二维码跳转地址。");
+    show_grant_manager(ui, PTC_UI_GRANT_MANAGER_RESET_URL);
+}
+
+static void request_reset_pairing_base_url(UiState *ui)
+{
+    char body[320];
+    ui->auth_retry_action = AUTH_RETRY_RESET_URL;
+    if (!verify_sensitive_pin(ui, "恢复二维码跳转默认地址前，请再次输入本应用 PIN")) return;
+    snprintf(body, sizeof(body), "将当前二维码跳转地址恢复为默认地址：\n%s", PTC_PAIRING_BASE_URL);
+    open_confirm_overlay(ui, PTC_UI_OPERATION_RESET_PAIRING_URL,
+                         "恢复二维码跳转默认地址", body);
 }
 
 static void generate_local_grant_code(UiState *ui)
@@ -2045,9 +2043,9 @@ static void show_pairing_qr(UiState *ui)
         return;
     }
     ui->model.overlay = PTC_UI_OVERLAY_QR;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "扫描二维码生成加时码");
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "手机/电脑生成加时码");
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "二维码包含设备名和密钥，只允许家长扫描；关闭后即不再显示。");
+             "可扫描二维码自动配对，也可手动打开当前 PWA 并导入配置文件。");
 }
 
 static void export_parent_import(UiState *ui)
@@ -2072,7 +2070,7 @@ static void export_parent_import(UiState *ui)
     ok = json && ui->client.storage->vtable->write_text_atomic(
         ui->client.storage, APP_ROOT "/parent-import.json", json);
     free(json);
-    ui->model.overlay = PTC_UI_OVERLAY_NONE;
+    show_grant_manager(ui, PTC_UI_GRANT_MANAGER_EXPORT);
     snprintf(ui->model.message, sizeof(ui->model.message), "%s",
              ok ? "已导出到 sdmc:/switch/playwise/parent-import.json；把文件导入家长网页。文件包含密钥，请妥善保管。"
                 : "生成家长网页导入文件失败。");
@@ -2101,7 +2099,7 @@ static void dispatch_auth_retry(UiState *ui, AuthRetryAction action)
     case AUTH_RETRY_SAVE_CREDENTIAL: request_save_credential(ui); break;
     case AUTH_RETRY_CHANGE_PIN: change_parent_pin(ui); break;
     case AUTH_RETRY_EDIT_URL: edit_pairing_base_url(ui); break;
-    case AUTH_RETRY_RESET_URL: reset_pairing_base_url(ui); break;
+    case AUTH_RETRY_RESET_URL: request_reset_pairing_base_url(ui); break;
     case AUTH_RETRY_GENERATE_CODE: generate_local_grant_code(ui); break;
     case AUTH_RETRY_SHOW_QR: show_pairing_qr(ui); break;
     case AUTH_RETRY_EXPORT_CONFIG: export_parent_import(ui); break;
@@ -2119,9 +2117,17 @@ static void export_diagnostics(UiState *ui)
     char text[4096];
     char output_path[192];
     char *rendered;
+    int64_t exported_at;
     size_t i;
     bool rejected_sensitive_file = false;
-    if (!bundle) return;
+    ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_EXPORTING;
+    ui->model.diagnostic_path[0] = '\0';
+    snprintf(ui->model.message, sizeof(ui->model.message), "正在导出诊断包…");
+    if (!bundle) {
+        ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_ERROR;
+        snprintf(ui->model.message, sizeof(ui->model.message), "生成诊断包失败。");
+        return;
+    }
     cJSON_AddNumberToObject(bundle, "version", 1);
     cJSON_AddStringToObject(bundle, "redaction", "credentials-auth-codes-and-nonces-omitted");
     for (i = 0; i < ptc_support_export_file_count(); ++i) {
@@ -2139,11 +2145,15 @@ static void export_diagnostics(UiState *ui)
     if (rejected_sensitive_file) cJSON_AddStringToObject(bundle, "redaction_warning", "sensitive-source-file-omitted");
     rendered = cJSON_PrintUnformatted(bundle);
     cJSON_Delete(bundle);
-    snprintf(output_path, sizeof(output_path), APP_ROOT "/support/diagnostic-%lld.json", (long long)time(NULL));
+    exported_at = (int64_t)time(NULL);
+    snprintf(output_path, sizeof(output_path), APP_ROOT "/support/diagnostic-%lld.json", (long long)exported_at);
     if (rendered && ui->client.storage->vtable->write_text_atomic(ui->client.storage, output_path, rendered)) {
-        snprintf(ui->model.diagnostic_path, sizeof(ui->model.diagnostic_path), "sdmc:/switch/playwise/support/diagnostic-%lld.json", (long long)time(NULL));
-        ui->model.overlay = PTC_UI_OVERLAY_DIAGNOSTIC_RESULT;
+        snprintf(ui->model.diagnostic_path, sizeof(ui->model.diagnostic_path),
+                 "sdmc:/switch/playwise/support/diagnostic-%lld.json", (long long)exported_at);
+        ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_SUCCESS;
+        snprintf(ui->model.message, sizeof(ui->model.message), "诊断包导出成功。");
     } else {
+        ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_ERROR;
         snprintf(ui->model.message, sizeof(ui->model.message), "生成诊断包失败。");
     }
     free(rendered);
@@ -2282,9 +2292,9 @@ static void handle_parent_action(UiState *ui)
     }
     if (ui->model.parent_page == PTC_UI_PARENT_SECURITY) {
         switch (index) {
-        case 0: open_credential_manager(ui, 1); break;
-        case 1: open_credential_manager(ui, 2); break;
-        case 2: open_grant_setup(ui); break;
+        case 0: open_local_grant(ui); break;
+        case 1: show_pairing_qr(ui); break;
+        case 2: open_grant_manager(ui); break;
         case 3: change_parent_pin(ui); break;
         case 4: open_shortcut_manager(ui); break;
         default: break;
@@ -2363,6 +2373,9 @@ static void confirm_operation(UiState *ui)
         break;
     case PTC_UI_OPERATION_SAVE_CREDENTIAL:
         if (!commit_credential(ui)) snprintf(ui->model.message, sizeof(ui->model.message), "保存加时码密钥失败。");
+        break;
+    case PTC_UI_OPERATION_RESET_PAIRING_URL:
+        apply_default_pairing_base_url(ui);
         break;
     case PTC_UI_OPERATION_COMPLETE_SETUP:
         submit_transport_empty(ui, "complete_setup", "正在完成首次设置…", "启用自动控制失败");
@@ -2501,6 +2514,11 @@ static void apply_pending_navigation(UiState *ui)
 
 static void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
 {
+    if (ui->model.parent_page == PTC_UI_PARENT_SUPPORT &&
+        (leave_parent || target_page != PTC_UI_PARENT_SUPPORT)) {
+        ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_IDLE;
+        ui->model.diagnostic_path[0] = '\0';
+    }
     if (ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.weekly_dirty) {
         ui->pending_parent_page = target_page;
         ui->pending_leave_parent = leave_parent;
@@ -2548,8 +2566,7 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
-    if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO ||
-        ui->model.overlay == PTC_UI_OVERLAY_DIAGNOSTIC_RESULT) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
         if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
             ptc_ui_cancel_overlay(&ui->model);
         }
@@ -2644,7 +2661,8 @@ static void handle_overlay_input(UiState *ui, u64 down)
                 snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                          "手工输入和随机生成只修改草稿，尚未保存。");
             } else {
-                ptc_ui_cancel_overlay(&ui->model);
+                show_grant_manager(ui, ui->model.credential_kind == 1
+                    ? PTC_UI_GRANT_MANAGER_DEVICE : PTC_UI_GRANT_MANAGER_SECRET);
             }
         } else if (down & (HidNpadButton_Up | HidNpadButton_Left)) {
             ptc_ui_move_overlay_selection(&ui->model, -1, 0);
@@ -2683,57 +2701,37 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ui->model.overlay_selection = ui->model.overlay_selection == 0 ? 1 : 0;
         } else if (down & (HidNpadButton_B | HidNpadButton_A)) {
             if ((down & HidNpadButton_A) && ui->model.overlay_selection == 0) {
-                ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                show_grant_manager(ui, ui->model.credential_kind == 1
+                    ? PTC_UI_GRANT_MANAGER_DEVICE : PTC_UI_GRANT_MANAGER_SECRET);
                 snprintf(ui->model.message, sizeof(ui->model.message), "已放弃未保存的配对信息修改。");
             } else {
                 ptc_ui_cancel_overlay(&ui->model);
             }
         } else if (down & HidNpadButton_X) {
-            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            show_grant_manager(ui, ui->model.credential_kind == 1
+                ? PTC_UI_GRANT_MANAGER_DEVICE : PTC_UI_GRANT_MANAGER_SECRET);
             snprintf(ui->model.message, sizeof(ui->model.message), "已放弃未保存的配对信息修改。");
         }
         return;
     }
-    if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_SETUP) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_MANAGER) {
         if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
-        else if (down & (HidNpadButton_Up | HidNpadButton_Left)) ptc_ui_move_overlay_selection(&ui->model, -1, 0);
-        else if (down & (HidNpadButton_Down | HidNpadButton_Right)) ptc_ui_move_overlay_selection(&ui->model, 1, 0);
-        else if (down & HidNpadButton_Y) {
-            ui->model.overlay_selection = PTC_UI_GRANT_SETUP_QR;
-            show_pairing_qr(ui);
-        }
-        else if (down & HidNpadButton_X) {
-            ui->model.overlay_selection = PTC_UI_GRANT_SETUP_LOCAL;
-            toggle_local_grant_panel(ui);
-        }
+        else if (down & HidNpadButton_Left) ptc_ui_move_overlay_selection(&ui->model, -1, 0);
+        else if (down & HidNpadButton_Right) ptc_ui_move_overlay_selection(&ui->model, 1, 0);
+        else if (down & HidNpadButton_Up) ptc_ui_move_overlay_selection(&ui->model, 0, -1);
+        else if (down & HidNpadButton_Down) ptc_ui_move_overlay_selection(&ui->model, 0, 1);
         else if (down & HidNpadButton_A) {
-            if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_QR) show_pairing_qr(ui);
-            else if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_LOCAL) toggle_local_grant_panel(ui);
-            else if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_MORE) toggle_grant_more_panel(ui);
-            else if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_EXPORT && ui->model.grant_more_expanded) export_parent_import(ui);
-            else if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_EDIT_URL && ui->model.grant_more_expanded) edit_pairing_base_url(ui);
-            else if (ui->model.overlay_selection == PTC_UI_GRANT_SETUP_RESET_URL && ui->model.grant_more_expanded) reset_pairing_base_url(ui);
-        }
-        else if ((down & HidNpadButton_Plus) && ui->model.grant_more_expanded) {
-            ui->model.overlay_selection = PTC_UI_GRANT_SETUP_EXPORT;
-            export_parent_import(ui);
-        }
-        else if ((down & HidNpadButton_R) && ui->model.grant_more_expanded) {
-            ui->model.overlay_selection = PTC_UI_GRANT_SETUP_EDIT_URL;
-            edit_pairing_base_url(ui);
-        }
-        else if ((down & HidNpadButton_ZR) && ui->model.grant_more_expanded) {
-            ui->model.overlay_selection = PTC_UI_GRANT_SETUP_RESET_URL;
-            reset_pairing_base_url(ui);
+            if (ui->model.overlay_selection == PTC_UI_GRANT_MANAGER_DEVICE) open_credential_manager(ui, 1);
+            else if (ui->model.overlay_selection == PTC_UI_GRANT_MANAGER_SECRET) open_credential_manager(ui, 2);
+            else if (ui->model.overlay_selection == PTC_UI_GRANT_MANAGER_EXPORT) export_parent_import(ui);
+            else if (ui->model.overlay_selection == PTC_UI_GRANT_MANAGER_EDIT_URL) edit_pairing_base_url(ui);
+            else if (ui->model.overlay_selection == PTC_UI_GRANT_MANAGER_RESET_URL) request_reset_pairing_base_url(ui);
         }
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
         if (down & HidNpadButton_B) {
-            ui->model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "加时码生成");
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     "方向键选择，按 A 执行；Y 扫二维码，X 进入本机生成。");
+            ptc_ui_cancel_overlay(&ui->model);
         } else if (down & HidNpadButton_Left) ptc_ui_move_overlay_selection(&ui->model, -1, 0);
         else if (down & HidNpadButton_Right) ptc_ui_move_overlay_selection(&ui->model, 1, 0);
         else if (down & HidNpadButton_Up) ptc_ui_move_overlay_selection(&ui->model, 0, -1);
@@ -2759,7 +2757,7 @@ static void handle_overlay_input(UiState *ui, u64 down)
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_QR) {
-        if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) ptc_ui_cancel_overlay(&ui->model);
+        if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
@@ -3124,33 +3122,13 @@ static void handle_touch(UiState *ui, int x, int y)
         ui->model.overlay_selection = PTC_UI_CREDENTIAL_DEMO;
         handle_overlay_input(ui, HidNpadButton_R);
         break;
-    case PTC_UI_HIT_GRANT_QR:
-        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_QR;
-        handle_overlay_input(ui, HidNpadButton_Y);
-        break;
-    case PTC_UI_HIT_GRANT_LOCAL_TOGGLE:
-        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_LOCAL;
-        toggle_local_grant_panel(ui);
-        break;
-    case PTC_UI_HIT_GRANT_MORE_TOGGLE:
-        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_MORE;
-        toggle_grant_more_panel(ui);
-        break;
-    case PTC_UI_HIT_GRANT_EXPORT:
-        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_EXPORT;
-        export_parent_import(ui);
+    case PTC_UI_HIT_GRANT_MANAGER_CARD:
+        ui->model.overlay_selection = hit.index;
+        handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_GRANT_GENERATE:
         ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
         generate_local_grant_code(ui);
-        break;
-    case PTC_UI_HIT_GRANT_EDIT_URL:
-        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_EDIT_URL;
-        handle_overlay_input(ui, HidNpadButton_R);
-        break;
-    case PTC_UI_HIT_GRANT_RESET_URL:
-        ui->model.overlay_selection = PTC_UI_GRANT_SETUP_RESET_URL;
-        handle_overlay_input(ui, HidNpadButton_ZR);
         break;
     case PTC_UI_HIT_SHORTCUT_OPTION:
         select_setup_shortcut(ui, hit.index);

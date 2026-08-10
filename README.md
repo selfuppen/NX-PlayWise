@@ -35,7 +35,7 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 ## 使用家长端 PWA
 
-在 Switch 的“加时码与安全 → 加时码生成”中验证 PlayWise PIN，然后用可信的家长设备扫描二维码；也可把 `sdmc:/switch/playwise/parent-import.json` 导入[公开演示网页](https://selfuppen.github.io/NX-PlayWise/)。网页绑定设备后，选择 UTC+8 生效日期和分钟数，即可生成交给孩子输入的 8 位加时码。建议收藏配对后打开的页面地址，并妥善保护包含配对权限的二维码或导入文件。
+在 Switch 的“加时码与安全”中可选择“立即生成加时码”，直接在本机生成 8 位码；也可选择“手机/电脑生成加时码”，验证 PlayWise PIN 后用可信的家长设备扫描二维码。无法扫码时，先到“加时码生成管理”导出 `sdmc:/switch/playwise/parent-import.json`，再在当前二维码跳转 PWA 中选择“导入配置文件”。网页绑定设备后，选择 UTC+8 生效日期和分钟数，即可生成交给孩子输入的 8 位加时码。请妥善保护包含配对权限的二维码或导入文件。
 
 加时码使用浏览器 Web Crypto 在本地生成，本项目不会把设备 ID、密钥、日期或生成出的代码提交给业务后端。设备 ID、密钥、常用时长和 nonce 历史会以明文保存在 `selfuppen.github.io` origin 的 `localStorage`，因此只应在可信的家长设备上使用。页面首次加载或更新需要联网获取静态资源；缓存完成后可以离线生成。更多安全说明见[使用指南](docs/使用指南.md)。
 

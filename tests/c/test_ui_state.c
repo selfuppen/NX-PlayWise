@@ -208,16 +208,17 @@ static void test_candidate_navigation(void)
     check_int(model.overlay_selection, PTC_UI_CREDENTIAL_SAVE,
               "device credential skips secret-only actions");
 
-    model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
-    model.grant_more_expanded = false;
-    model.overlay_selection = PTC_UI_GRANT_SETUP_MORE;
+    model.overlay = PTC_UI_OVERLAY_GRANT_MANAGER;
+    model.overlay_selection = PTC_UI_GRANT_MANAGER_DEVICE;
+    ptc_ui_move_overlay_selection(&model, 1, 0);
+    check_int(model.overlay_selection, PTC_UI_GRANT_MANAGER_SECRET,
+              "grant manager moves across a card row");
     ptc_ui_move_overlay_selection(&model, 0, 1);
-    check_int(model.overlay_selection, PTC_UI_GRANT_SETUP_MORE,
-              "collapsed grant setup stops at more settings");
-    model.grant_more_expanded = true;
+    check_int(model.overlay_selection, PTC_UI_GRANT_MANAGER_EDIT_URL,
+              "grant manager moves down in the same column");
     ptc_ui_move_overlay_selection(&model, 0, 1);
-    check_int(model.overlay_selection, PTC_UI_GRANT_SETUP_EXPORT,
-              "expanded grant setup exposes export");
+    check_int(model.overlay_selection, PTC_UI_GRANT_MANAGER_RESET_URL,
+              "grant manager falls back to the final card in an incomplete row");
 
     model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
     model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
@@ -360,18 +361,16 @@ static void test_release_hit_targets(void)
               "credential random button");
     check_hit(hit_center(&model, ptc_ui_credential_reveal_rect()), PTC_UI_HIT_NONE, 0,
               "device-name editor has no invisible secret reveal target");
-    model.overlay = PTC_UI_OVERLAY_GRANT_SETUP;
-    check_hit(hit_center(&model, ptc_ui_grant_qr_rect()), PTC_UI_HIT_GRANT_QR, 0, "pairing QR button");
-    check_hit(hit_center(&model, ptc_ui_grant_local_toggle_rect()), PTC_UI_HIT_GRANT_LOCAL_TOGGLE, 0,
-              "local generator expansion button");
-    check_hit(hit_center(&model, ptc_ui_grant_more_toggle_rect()), PTC_UI_HIT_GRANT_MORE_TOGGLE, 0,
-              "grant more-settings expansion button");
-    check_hit(hit_center(&model, ptc_ui_grant_export_rect()), PTC_UI_HIT_NONE, 0,
-              "collapsed more settings hide export");
-    model.grant_more_expanded = true;
-    check_hit(hit_center(&model, ptc_ui_grant_export_rect()), PTC_UI_HIT_GRANT_EXPORT, 0, "parent config export button");
-    check_hit(hit_center(&model, ptc_ui_grant_edit_url_rect()), PTC_UI_HIT_GRANT_EDIT_URL, 0, "pairing URL edit button");
-    check_hit(hit_center(&model, ptc_ui_grant_reset_url_rect()), PTC_UI_HIT_GRANT_RESET_URL, 0, "pairing URL reset button");
+    model.overlay = PTC_UI_OVERLAY_GRANT_MANAGER;
+    check_hit(hit_center(&model, ptc_ui_grant_manager_card_rect(PTC_UI_GRANT_MANAGER_DEVICE)),
+              PTC_UI_HIT_GRANT_MANAGER_CARD, PTC_UI_GRANT_MANAGER_DEVICE,
+              "grant manager exposes device-name management");
+    check_hit(hit_center(&model, ptc_ui_grant_manager_card_rect(PTC_UI_GRANT_MANAGER_EXPORT)),
+              PTC_UI_HIT_GRANT_MANAGER_CARD, PTC_UI_GRANT_MANAGER_EXPORT,
+              "grant manager exposes parent config export");
+    check_hit(hit_center(&model, ptc_ui_grant_manager_card_rect(PTC_UI_GRANT_MANAGER_RESET_URL)),
+              PTC_UI_HIT_GRANT_MANAGER_CARD, PTC_UI_GRANT_MANAGER_RESET_URL,
+              "grant manager exposes default URL restore");
     model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
     check_hit(hit_center(&model, ptc_ui_grant_adjust_rect(3)), PTC_UI_HIT_GRANT_ADJUST, 3,
               "local generator exposes the plus-fifteen shortcut");

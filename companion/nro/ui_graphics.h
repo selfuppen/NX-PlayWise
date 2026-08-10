@@ -43,7 +43,7 @@ typedef enum {
     PTC_UI_OVERLAY_CONFIRM = 3,
     PTC_UI_OVERLAY_NUMPAD = 4,
     PTC_UI_OVERLAY_CREDENTIAL = 5,
-    PTC_UI_OVERLAY_GRANT_SETUP = 6,
+    PTC_UI_OVERLAY_GRANT_MANAGER = 6,
     PTC_UI_OVERLAY_QR = 7,
     PTC_UI_OVERLAY_WEEKLY_LEAVE = 8,
     PTC_UI_OVERLAY_SHORTCUT_MANAGER = 9,
@@ -51,8 +51,7 @@ typedef enum {
     PTC_UI_OVERLAY_CREDENTIAL_LEAVE = 11,
     PTC_UI_OVERLAY_CODE_RESULT = 12,
     PTC_UI_OVERLAY_AUTH_ERROR = 13,
-    PTC_UI_OVERLAY_SOFTWARE_INFO = 14,
-    PTC_UI_OVERLAY_DIAGNOSTIC_RESULT = 15
+    PTC_UI_OVERLAY_SOFTWARE_INFO = 14
 } PtcUiOverlay;
 
 typedef enum {
@@ -64,13 +63,20 @@ typedef enum {
 } PtcUiCredentialSelection;
 
 typedef enum {
-    PTC_UI_GRANT_SETUP_QR = 0,
-    PTC_UI_GRANT_SETUP_LOCAL = 1,
-    PTC_UI_GRANT_SETUP_MORE = 2,
-    PTC_UI_GRANT_SETUP_EXPORT = 3,
-    PTC_UI_GRANT_SETUP_EDIT_URL = 4,
-    PTC_UI_GRANT_SETUP_RESET_URL = 5
-} PtcUiGrantSetupSelection;
+    PTC_UI_GRANT_MANAGER_DEVICE = 0,
+    PTC_UI_GRANT_MANAGER_SECRET = 1,
+    PTC_UI_GRANT_MANAGER_EXPORT = 2,
+    PTC_UI_GRANT_MANAGER_EDIT_URL = 3,
+    PTC_UI_GRANT_MANAGER_RESET_URL = 4,
+    PTC_UI_GRANT_MANAGER_COUNT = 5
+} PtcUiGrantManagerSelection;
+
+typedef enum {
+    PTC_UI_DIAGNOSTIC_IDLE = 0,
+    PTC_UI_DIAGNOSTIC_EXPORTING = 1,
+    PTC_UI_DIAGNOSTIC_SUCCESS = 2,
+    PTC_UI_DIAGNOSTIC_ERROR = 3
+} PtcUiDiagnosticStatus;
 
 typedef enum {
     PTC_UI_GRANT_LOCAL_ADJUST_FIRST = 0,
@@ -100,7 +106,8 @@ typedef enum {
     PTC_UI_OPERATION_RESTORE_TODAY_POLICY = 10,
     PTC_UI_OPERATION_SAVE_CREDENTIAL = 11,
     PTC_UI_OPERATION_SAVE_WEEKLY_LEAVE = 12,
-    PTC_UI_OPERATION_REDEEM_OFFLINE_CODE = 13
+    PTC_UI_OPERATION_REDEEM_OFFLINE_CODE = 13,
+    PTC_UI_OPERATION_RESET_PAIRING_URL = 14
 } PtcUiOperation;
 
 typedef enum {
@@ -218,14 +225,13 @@ typedef struct {
     bool grant_estimate_unrestricted;
     int64_t grant_estimated_at;
     bool grant_status_refresh_failed;
-    bool grant_local_expanded;
-    bool grant_more_expanded;
     char grant_code[9];
     char software_version[32];
     char repository_url[128];
     char pwa_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];
-    char diagnostic_path[128];
+    PtcUiDiagnosticStatus diagnostic_status;
+    char diagnostic_path[192];
 } PtcUiModel;
 
 typedef struct {
@@ -279,13 +285,8 @@ typedef enum {
     PTC_UI_HIT_CREDENTIAL_REVEAL,
     PTC_UI_HIT_CREDENTIAL_SAVE,
     PTC_UI_HIT_CREDENTIAL_DEMO,
-    PTC_UI_HIT_GRANT_QR,
-    PTC_UI_HIT_GRANT_LOCAL_TOGGLE,
-    PTC_UI_HIT_GRANT_MORE_TOGGLE,
-    PTC_UI_HIT_GRANT_EXPORT,
+    PTC_UI_HIT_GRANT_MANAGER_CARD,
     PTC_UI_HIT_GRANT_GENERATE,
-    PTC_UI_HIT_GRANT_EDIT_URL,
-    PTC_UI_HIT_GRANT_RESET_URL,
     PTC_UI_HIT_SHORTCUT_OPTION,
     PTC_UI_HIT_SHORTCUT_CAPTURE,
     PTC_UI_HIT_SHORTCUT_DISABLE,
@@ -390,13 +391,8 @@ PtcUiRect ptc_ui_credential_input_rect(void);
 PtcUiRect ptc_ui_credential_random_rect(void);
 PtcUiRect ptc_ui_credential_reveal_rect(void);
 PtcUiRect ptc_ui_credential_demo_rect(void);
-PtcUiRect ptc_ui_grant_qr_rect(void);
-PtcUiRect ptc_ui_grant_local_toggle_rect(void);
-PtcUiRect ptc_ui_grant_more_toggle_rect(void);
-PtcUiRect ptc_ui_grant_export_rect(void);
+PtcUiRect ptc_ui_grant_manager_card_rect(int index);
 PtcUiRect ptc_ui_grant_generate_rect(void);
-PtcUiRect ptc_ui_grant_edit_url_rect(void);
-PtcUiRect ptc_ui_grant_reset_url_rect(void);
 PtcUiRect ptc_ui_shortcut_option_rect(int index);
 PtcUiRect ptc_ui_shortcut_capture_rect(void);
 PtcUiRect ptc_ui_shortcut_disable_rect(void);

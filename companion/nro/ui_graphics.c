@@ -54,11 +54,19 @@ static const UiAction TODAY_ACTIONS[] = {
 };
 
 static const UiAction SECURITY_ACTIONS[] = {
-    {"管理设备名", "查看、输入或随机生成设备名称", COLOR(42, 105, 188)},
-    {"管理加时码密钥", "查看、生成或切换演示密钥", COLOR(194, 61, 61)},
-    {"加时码生成", "手机扫码或在本机生成 8 位码", COLOR(25, 132, 95)},
+    {"立即生成加时码", "在本机生成 8 位加时码", COLOR(25, 132, 95)},
+    {"手机/电脑生成加时码", "扫描二维码，在手机或电脑上生成", COLOR(42, 105, 188)},
+    {"加时码生成管理", "管理设备名、密钥、导出配置和二维码地址", COLOR(91, 100, 116)},
     {"修改任我玩PIN", "验证当前 PIN 后设置新 PIN", COLOR(42, 105, 188)},
     {"家长区快捷键管理", "选择组合并管理孩子区提示", COLOR(42, 105, 188)},
+};
+
+static const UiAction GRANT_MANAGER_ACTIONS[] = {
+    {"管理加时码设备名", "查看、输入或随机生成设备名", COLOR(42, 105, 188)},
+    {"管理加时码密钥", "查看、输入或随机生成签名密钥", COLOR(194, 61, 61)},
+    {"导出手机/电脑配置", "导出供手机或电脑使用的配置文件", COLOR(25, 132, 95)},
+    {"编辑二维码跳转地址", "修改扫码后打开的网页地址", COLOR(42, 105, 188)},
+    {"恢复二维码跳转默认地址", "恢复项目提供的默认网页地址", COLOR(91, 100, 116)},
 };
 
 static const UiAction SUPPORT_ACTIONS[] = {
@@ -351,6 +359,53 @@ static void draw_dialog_button(
         draw_rect_outline(pixels, stride, box, 1, COLOR(203, 211, 222));
     }
     draw_text_center(pixels, stride, box, label, 21, foreground);
+}
+
+static int draw_wrapped_text(
+    uint32_t *pixels,
+    uint32_t stride,
+    int x,
+    int baseline,
+    const char *text,
+    int size,
+    int max_width,
+    int line_height,
+    int max_lines,
+    uint32_t color)
+{
+    const char *cursor = text ? text : "";
+    int line = 0;
+    while (*cursor && line < max_lines) {
+        const char *end = cursor;
+        int width = 0;
+        char buffer[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
+        while (*end) {
+            const char *next = end;
+            uint32_t codepoint = ui_decode_utf8(&next);
+            int advance = 0;
+            if (set_font_size(size) && FT_Load_Char(g_ui.face, codepoint, FT_LOAD_DEFAULT) == 0) {
+                advance = (int)(g_ui.face->glyph->advance.x >> 6);
+            }
+            if (end > cursor && width + advance > max_width) break;
+            width += advance;
+            end = next;
+        }
+        if (end == cursor) {
+            const char *next = cursor;
+            (void)ui_decode_utf8(&next);
+            end = next;
+        }
+        {
+            size_t bytes = (size_t)(end - cursor);
+            if (bytes >= sizeof(buffer)) bytes = sizeof(buffer) - 1;
+            memcpy(buffer, cursor, bytes);
+            buffer[bytes] = '\0';
+        }
+        draw_text(pixels, stride, x, baseline + line * line_height, buffer, size, color);
+        cursor = end;
+        ++line;
+    }
+    return baseline + line * line_height;
 }
 
 static void draw_candidate_button(
@@ -783,6 +838,8 @@ static void draw_action_card(
 {
     bool disabled = state == PTC_UI_ACTION_DISABLED;
     bool recommended = state == PTC_UI_ACTION_RECOMMENDED;
+    int title_size = 24;
+    int subtitle_size = 18;
     uint32_t background = disabled ? COLOR(244, 246, 249) :
                           selected ? COLOR(244, 249, 255) : COLOR(255, 255, 255);
     uint32_t border = disabled ? COLOR(230, 233, 238) :
@@ -793,8 +850,10 @@ static void draw_action_card(
     draw_rect_outline(pixels, stride, rect, selected && !disabled ? 3 : 1, border);
     fill_round_rect(pixels, stride, (UiRect){rect.x + 20, rect.y + 25, 12, rect.height - 50}, 6,
                     disabled ? COLOR(200, 206, 214) : action->accent);
-    draw_text(pixels, stride, rect.x + 54, rect.y + 46, action->title, 24, title_color);
-    draw_text(pixels, stride, rect.x + 54, rect.y + 78, action->subtitle, 18, sub_color);
+    while (title_size > 18 && measure_text(action->title, title_size) > rect.width - 112) --title_size;
+    while (subtitle_size > 14 && measure_text(action->subtitle, subtitle_size) > rect.width - 80) --subtitle_size;
+    draw_text(pixels, stride, rect.x + 54, rect.y + 46, action->title, title_size, title_color);
+    draw_text(pixels, stride, rect.x + 54, rect.y + 78, action->subtitle, subtitle_size, sub_color);
     if (recommended && !disabled) {
         fill_round_rect(pixels, stride, (UiRect){rect.x + rect.width - 110, rect.y + 12, 90, 28}, 6, COLOR(25, 132, 95));
         draw_text_center(pixels, stride, (UiRect){rect.x + rect.width - 110, rect.y + 12, 90, 28}, "强烈建议", 17, COLOR(255, 255, 255));
@@ -918,12 +977,12 @@ static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, panel.x + 26, panel.y + 43, "加时码如何生成", 23, COLOR(28, 34, 43));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 78, "1. 手机扫描 Switch 二维码", 17, COLOR(77, 86, 99));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 108, "2. 网页选择加时时长", 17, COLOR(77, 86, 99));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 138, "3. 将生成的 8 位码交给孩子", 17, COLOR(77, 86, 99));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 184, "也可以在本机生成", 18, COLOR(28, 118, 188));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 212, "打开“加时码生成”，选择", 16, COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 238, "“在本机生成 8 位码”。", 16, COLOR(91, 100, 116));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 78, "本机：直接生成 8 位加时码", 17, COLOR(25, 132, 95));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 108, "手机/电脑：扫码或导入配置", 17, COLOR(28, 118, 188));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 138, "管理：设备名、密钥和网页地址", 17, COLOR(77, 86, 99));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 184, "两种生成方式都需要家长 PIN", 17, COLOR(91, 100, 116));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 216, "配置文件和二维码包含加时权限，", 16, COLOR(170, 65, 65));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 242, "请勿发送给他人。", 16, COLOR(170, 65, 65));
     draw_text(pixels, stride, panel.x + 26, panel.y + 274, "当天有效，兑换成功后仅用一次。", 16, COLOR(91, 100, 116));
     if (model->demo_secret_enabled) {
         fill_round_rect(pixels, stride, (UiRect){panel.x + 20, panel.y + 286, panel.width - 40, 30}, 6, COLOR(255, 235, 238));
@@ -945,6 +1004,37 @@ static void format_duration(int minutes, char *out, size_t out_size)
     } else {
         snprintf(out, out_size, "%d 小时 %d 分钟", minutes / 60, minutes % 60);
     }
+}
+
+static void draw_diagnostic_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect rect = {54, 522, 1172, 128};
+    uint32_t accent = model->diagnostic_status == PTC_UI_DIAGNOSTIC_SUCCESS
+        ? COLOR(25, 132, 95)
+        : (model->diagnostic_status == PTC_UI_DIAGNOSTIC_ERROR
+            ? COLOR(194, 61, 61) : COLOR(215, 139, 25));
+    char line[320];
+    fill_round_rect(pixels, stride, rect, 8, COLOR(255, 255, 255));
+    draw_rect_outline(pixels, stride, rect, 1, COLOR(219, 225, 233));
+    fill_rect(pixels, stride, (UiRect){rect.x, rect.y, 6, rect.height}, accent);
+    if (model->diagnostic_status == PTC_UI_DIAGNOSTIC_EXPORTING) {
+        draw_text(pixels, stride, rect.x + 24, rect.y + 36, "正在导出诊断包…", 21, accent);
+        draw_text(pixels, stride, rect.x + 24, rect.y + 76,
+                  "诊断包会排除密钥、PIN、离线码和完整 nonce。", 17, COLOR(77, 86, 99));
+        return;
+    }
+    if (model->diagnostic_status == PTC_UI_DIAGNOSTIC_ERROR) {
+        draw_text(pixels, stride, rect.x + 24, rect.y + 36, "诊断包导出失败。", 21, accent);
+        draw_text(pixels, stride, rect.x + 24, rect.y + 76,
+                  "请确认 SD 卡可写后重试。", 17, COLOR(77, 86, 99));
+        return;
+    }
+    snprintf(line, sizeof(line), "诊断包导出成功：%s", model->diagnostic_path);
+    draw_text(pixels, stride, rect.x + 24, rect.y + 32, line, 17, COLOR(28, 34, 43));
+    draw_text(pixels, stride, rect.x + 24, rect.y + 66,
+              "如遇到问题，提交 GitHub Issue 时请附上此文件。", 17, COLOR(45, 52, 62));
+    draw_text(pixels, stride, rect.x + 24, rect.y + 100,
+              "GitHub 地址：https://github.com/selfuppen/NX-PlayWise/issues", 17, accent);
 }
 
 static uint32_t time_state_accent(bool available, bool unlimited, int minutes)
@@ -1148,7 +1238,12 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     } else {
         draw_safety_status(pixels, stride, model);
     }
-    if (model->parent_page != PTC_UI_PARENT_PLAN) draw_notice(pixels, stride, model, 522, 128);
+    if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
+        model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
+        draw_diagnostic_notice(pixels, stride, model);
+    } else if (model->parent_page != PTC_UI_PARENT_PLAN) {
+        draw_notice(pixels, stride, model, 522, 128);
+    }
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0), "L  上一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1), "R  下一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(2), "B  返回孩子页");
@@ -1753,57 +1848,27 @@ static void draw_auth_error_overlay(uint32_t *pixels, uint32_t stride, const Ptc
                        model->auth_cooldown_seconds > 0 ? COLOR(120, 128, 140) : COLOR(255, 255, 255), false);
 }
 
-static void draw_grant_setup_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+static void draw_grant_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
-    UiRect qr_button = to_uirect(ptc_ui_grant_qr_rect());
-    char base[160];
-    draw_dialog_shell(pixels, stride, model, &dialog, 900, 570);
-
-    fill_round_rect(pixels, stride, qr_button, 8,
-                    model->overlay_selection == PTC_UI_GRANT_SETUP_QR ? COLOR(230, 242, 255) : COLOR(28, 118, 188));
-    draw_rect_outline(pixels, stride, qr_button,
-                      model->overlay_selection == PTC_UI_GRANT_SETUP_QR ? 3 : 1,
-                      model->overlay_selection == PTC_UI_GRANT_SETUP_QR ? COLOR(28, 118, 188) : COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, (UiRect){qr_button.x, qr_button.y + 8, qr_button.width, 40},
-                     "Y  扫二维码生成加时码", 27,
-                     model->overlay_selection == PTC_UI_GRANT_SETUP_QR ? COLOR(28, 118, 188) : COLOR(255, 255, 255));
-    draw_text_center(pixels, stride, (UiRect){qr_button.x, qr_button.y + 48, qr_button.width, 28},
-                     "用手机扫描后，可收藏打开的网页地址", 17,
-                     model->overlay_selection == PTC_UI_GRANT_SETUP_QR ? COLOR(77, 86, 99) : COLOR(223, 239, 252));
-    if (model->overlay_selection == PTC_UI_GRANT_SETUP_QR) {
-        draw_text(pixels, stride, qr_button.x + qr_button.width - 34, qr_button.y + 26, "A", 16, COLOR(28, 118, 188));
+    char fitted[192];
+    int index;
+    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
+    for (index = 0; index < PTC_UI_GRANT_MANAGER_COUNT; ++index) {
+        draw_action_card(
+            pixels,
+            stride,
+            to_uirect(ptc_ui_grant_manager_card_rect(index)),
+            &GRANT_MANAGER_ACTIONS[index],
+            model->overlay_selection == index,
+            PTC_UI_ACTION_AVAILABLE);
     }
-
-    draw_candidate_button(pixels, stride, ptc_ui_grant_local_toggle_rect(),
-                          "X  进入本机生成 8 位码",
-                          COLOR(244, 246, 249), COLOR(7, 93, 76),
-                          model->overlay_selection == PTC_UI_GRANT_SETUP_LOCAL, false);
-    draw_candidate_button(pixels, stride, ptc_ui_grant_more_toggle_rect(),
-                          model->grant_more_expanded ? "收起更多设置" : "更多设置",
-                          COLOR(244, 246, 249), COLOR(66, 74, 86),
-                          model->overlay_selection == PTC_UI_GRANT_SETUP_MORE, false);
-
-    if (model->grant_more_expanded) {
-        draw_candidate_button(pixels, stride, ptc_ui_grant_export_rect(), "+  导出配置",
-                              COLOR(25, 132, 95), COLOR(255, 255, 255),
-                              model->overlay_selection == PTC_UI_GRANT_SETUP_EXPORT, false);
-        draw_candidate_button(pixels, stride, ptc_ui_grant_edit_url_rect(), "R  编辑跳转地址",
-                              COLOR(244, 246, 249), COLOR(28, 118, 188),
-                              model->overlay_selection == PTC_UI_GRANT_SETUP_EDIT_URL, false);
-        draw_candidate_button(pixels, stride, ptc_ui_grant_reset_url_rect(), "ZR  恢复官方地址",
-                              COLOR(244, 246, 249), COLOR(66, 74, 86),
-                              model->overlay_selection == PTC_UI_GRANT_SETUP_RESET_URL, false);
-        fit_text(base, sizeof(base), model->pairing_base_url, 16, 780);
-        draw_text(pixels, stride, dialog.x + 52, dialog.y + 446, base, 16, COLOR(91, 100, 114));
-    } else {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 374, 816, 54},
-                         "二维码是推荐方式；本机生成会进入独立时间选择页面", 17, COLOR(91, 100, 114));
-    }
-    draw_text(pixels, stride, dialog.x + 42, dialog.y + 474,
-              "方向键选择 · A 确定 · Y 二维码 · X 本机生成 · B 返回", 16, COLOR(77, 86, 99));
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  关闭",
-                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+    fit_text(fitted, sizeof(fitted), model->message, 16, dialog.width - 330);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 506,
+              fitted[0] ? fitted : "方向键选择 · A 确定 · B 返回加时码与安全", 16,
+              fitted[0] ? COLOR(25, 132, 95) : COLOR(77, 86, 99));
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
+                       COLOR(235, 238, 243), COLOR(66, 74, 86), true);
 }
 
 static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1938,17 +2003,19 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
 {
     UiRect dialog;
     int size = qrcodegen_getSize(model->qr_code);
-    int scale = size > 0 ? 420 / (size + 8) : 1;
+    int scale = size > 0 ? 350 / (size + 8) : 1;
     int total;
     int origin_x;
     int origin_y;
+    int next_y;
     int x;
     int y;
     if (scale < 2) scale = 2;
     total = (size + 8) * scale;
-    draw_dialog_shell(pixels, stride, model, &dialog, 900, 610);
-    origin_x = dialog.x + 42;
-    origin_y = dialog.y + 126;
+    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 142, "方法一：扫描二维码", 23, COLOR(28, 34, 43));
+    origin_x = dialog.x + 34;
+    origin_y = dialog.y + 164;
     fill_rect(pixels, stride, (UiRect){origin_x, origin_y, total, total}, COLOR(255, 255, 255));
     for (y = 0; y < size; ++y) {
         for (x = 0; x < size; ++x) {
@@ -1960,19 +2027,33 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         }
     }
     
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 150, "使用微信/相机扫码", 26, COLOR(28, 34, 43));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 194, "获取【任我玩】网页加时工具", 20, COLOR(28, 118, 188));
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 540,
+              "手机或电脑扫码后，网页会自动导入本机配置。", 15, COLOR(28, 118, 188));
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 565,
+              "二维码包含加时码密钥，请仅由家长使用。", 15, COLOR(170, 65, 65));
 
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 510, dialog.y + 240, 330, 96}, 8, COLOR(240, 248, 245));
-    draw_rect_outline(pixels, stride, (UiRect){dialog.x + 510, dialog.y + 240, 330, 96}, 2, COLOR(210, 235, 225));
-    draw_text(pixels, stride, dialog.x + 526, dialog.y + 266, "建议收藏扫码后打开的网页地址", 17, COLOR(25, 132, 95));
-    draw_text(pixels, stride, dialog.x + 526, dialog.y + 298, "拍照保存时，请妥善保护相册。", 17, COLOR(45, 60, 55));
-    draw_text(pixels, stride, dialog.x + 526, dialog.y + 324, "二维码包含生成加时码的权限。", 16, COLOR(170, 65, 65));
+    draw_text(pixels, stride, dialog.x + 470, dialog.y + 142, "方法二：手动导入配置", 23, COLOR(28, 34, 43));
+    draw_text(pixels, stride, dialog.x + 470, dialog.y + 178,
+              "1. 返回“加时码生成管理”，选择“导出手机/电脑配置”", 15, COLOR(45, 52, 62));
+    draw_text(pixels, stride, dialog.x + 470, dialog.y + 208,
+              "2. 将配置文件传到手机或电脑：", 15, COLOR(45, 52, 62));
+    draw_text(pixels, stride, dialog.x + 488, dialog.y + 234,
+              "sdmc:/switch/playwise/parent-import.json", 15, COLOR(28, 118, 188));
+    draw_text(pixels, stride, dialog.x + 470, dialog.y + 266,
+              "3. 打开当前二维码跳转地址：", 15, COLOR(45, 52, 62));
+    next_y = draw_wrapped_text(pixels, stride, dialog.x + 488, dialog.y + 292,
+                               model->pairing_base_url, 14, 570, 21, 5, COLOR(28, 118, 188));
+    draw_text(pixels, stride, dialog.x + 470, next_y + 6,
+              "默认使用官方 PWA，也可填写项目前端的可信自部署地址。", 14, COLOR(91, 100, 114));
+    draw_text(pixels, stride, dialog.x + 470, next_y + 32,
+              "4. 点击“导入配置文件”，选择该文件", 15, COLOR(45, 52, 62));
+    draw_text(pixels, stride, dialog.x + 470, next_y + 58,
+              "5. 核对设备名后，点击“导入此设备”", 15, COLOR(45, 52, 62));
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 470, next_y + 74, 610, 48}, 7, COLOR(255, 235, 238));
+    draw_text(pixels, stride, dialog.x + 486, next_y + 104,
+              "配置文件包含加时码密钥，请勿发送给他人。", 15, COLOR(170, 35, 48));
 
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 370, "网页会自动绑定本机，后续可随时生成加时码。", 15, COLOR(120, 130, 140));
-    draw_text(pixels, stride, dialog.x + 510, dialog.y + 396, "不便扫码时，可返回展开“在本机生成 8 位码”。", 15, COLOR(120, 130, 140));
-
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  关闭二维码",
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
 }
 
@@ -2040,23 +2121,6 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 438, "也可按 B 返回", 16, COLOR(91, 100, 114));
 }
 
-static void draw_diagnostic_result_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
-{
-    UiRect dialog;
-    UiRect details;
-    draw_dialog_shell(pixels, stride, model, &dialog, 960, 420);
-    details = (UiRect){dialog.x + 34, dialog.y + 126, dialog.width - 68, 160};
-    fill_round_rect(pixels, stride, details, 8, COLOR(248, 250, 253));
-    draw_rect_outline(pixels, stride, details, 1, COLOR(219, 225, 233));
-    draw_text(pixels, stride, details.x + 24, details.y + 42, "已生成到", 18, COLOR(103, 111, 124));
-    draw_text(pixels, stride, details.x + 140, details.y + 42, model->diagnostic_path, 18, COLOR(28, 34, 43));
-    draw_text(pixels, stride, details.x + 24, details.y + 90, "使用方式", 18, COLOR(103, 111, 124));
-    draw_text(pixels, stride, details.x + 140, details.y + 90, "请将该文件提交到项目的 GitHub Issue 中进行反馈", 18, COLOR(25, 132, 95));
-    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "A  关闭",
-                       COLOR(28, 118, 188), COLOR(255, 255, 255), false);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 378, "也可按 B 返回", 16, COLOR(91, 100, 114));
-}
-
 static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     switch (model->overlay) {
@@ -2075,8 +2139,8 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
     case PTC_UI_OVERLAY_CREDENTIAL:
         draw_credential_overlay(pixels, stride, model);
         break;
-    case PTC_UI_OVERLAY_GRANT_SETUP:
-        draw_grant_setup_overlay(pixels, stride, model);
+    case PTC_UI_OVERLAY_GRANT_MANAGER:
+        draw_grant_manager_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
         draw_shortcut_manager_overlay(pixels, stride, model);
@@ -2101,9 +2165,6 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         break;
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
         draw_software_info_overlay(pixels, stride, model);
-        break;
-    case PTC_UI_OVERLAY_DIAGNOSTIC_RESULT:
-        draw_diagnostic_result_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_NONE:
     default:
