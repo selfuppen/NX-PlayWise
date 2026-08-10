@@ -294,6 +294,7 @@ node_modules/
 /companion/nro/build/
 /companion/nro/pctc.elf
 /companion/nro/pctc.nro
+/companion/nro/pctc.nacp
 /companion/overlay/build/
 /companion/overlay/pctc.elf
 /companion/overlay/pctc.nacp
