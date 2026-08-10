@@ -1019,30 +1019,41 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
     char freshness[64];
     uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
     format_status_age(model, freshness, sizeof(freshness));
-    draw_text(pixels, stride, 54, 184, "周一到周日 · 点按整张卡片或选中后按 A 编辑", 20, COLOR(77, 86, 99));
+    draw_text(pixels, stride, 54, 184,
+              model->disable_flag_present
+                ? "周一到周日 · 紧急停用中，仅可查看和放弃已有草稿"
+                : "周一到周日 · 点按整张卡片或选中后按 A 编辑",
+              20, model->disable_flag_present ? COLOR(194, 61, 61) : COLOR(77, 86, 99));
     draw_text(pixels, stride, 864, 184, freshness, 17, status_age_color(model));
     for (slot = 0; slot < 7; ++slot) {
         int day = ptc_ui_weekday_for_display_slot(slot);
         bool selected = day == model->editor_index && model->selected_index == 0;
         bool today = day == weekday;
+        bool selected_today = selected && today;
         UiRect card = to_uirect(ptc_ui_weekly_day_rect(slot));
         uint32_t background = day == 0 ? COLOR(255, 245, 245) : (day == 6 ? COLOR(255, 249, 238) : COLOR(255, 255, 255));
         uint32_t border = today ? COLOR(25, 132, 95) : (selected ? COLOR(28, 118, 188) : (day == 0 ? COLOR(218, 118, 118) : (day == 6 ? COLOR(220, 161, 65) : COLOR(219, 225, 233))));
-        if (selected) background = COLOR(244, 249, 255);
+        uint32_t primary_text = selected_today ? COLOR(255, 255, 255) : COLOR(28, 34, 43);
+        uint32_t rule_text = selected_today ? COLOR(255, 255, 255) :
+            (model->disable_flag_present ? COLOR(145, 154, 168) : COLOR(28, 118, 188));
+        uint32_t detail_text = selected_today ? COLOR(224, 239, 255) :
+            (model->disable_flag_present ? COLOR(145, 154, 168) : COLOR(77, 86, 99));
+        if (selected) background = selected_today ? COLOR(28, 118, 188) : COLOR(244, 249, 255);
         fill_round_rect(pixels, stride, card, 8, background);
         draw_rect_outline(pixels, stride, card, today ? 4 : (selected ? 3 : 1), border);
-        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 14, card.width, 34}, DAYS[day], 21, COLOR(28, 34, 43));
-        if (today) draw_text_center(pixels, stride, (UiRect){card.x, card.y + 45, card.width, 24}, "今天 · 当前", 16, COLOR(25, 132, 95));
+        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 14, card.width, 34}, DAYS[day], 21, primary_text);
+        if (today) draw_text_center(pixels, stride, (UiRect){card.x, card.y + 45, card.width, 24}, "今天 · 当前", 16,
+                                    selected_today ? COLOR(220, 255, 241) : COLOR(25, 132, 95));
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 75, card.width, 34},
-                         rule_mode_label(model->draft_week[day].mode), 22, COLOR(28, 118, 188));
+                         rule_mode_label(model->draft_week[day].mode), 22, rule_text);
         if (model->draft_week[day].mode == PTC_RULE_MODE_LIMIT) {
             snprintf(minutes, sizeof(minutes), "%u 分钟", (unsigned int)model->draft_week[day].minutes);
         } else {
             snprintf(minutes, sizeof(minutes), "无需分钟");
         }
-        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 125, card.width, 34}, minutes, 19, COLOR(77, 86, 99));
+        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 125, card.width, 34}, minutes, 19, detail_text);
     }
-    {
+    if (ptc_ui_weekly_today_changed(model)) {
         char current_value[48];
         char after_value[48];
         int current_minutes = model->remaining_available ? model->remaining_minutes : -1;
@@ -1056,7 +1067,7 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
                                                model->unrestricted_today == 1, current_minutes));
         draw_text_center(pixels, stride, (UiRect){364, 410, 52, 38}, "→", 27, COLOR(91, 100, 114));
         draw_time_state_card(pixels, stride, (UiRect){416, 392, 330, 76},
-                             model->today_override_present ? "保存并在之后恢复后预计" : "保存后预计还能玩",
+                             model->today_override_present ? "保存并在之后恢复周计划后预计" : "保存后预计还能玩",
                              after_value,
                              time_state_accent(model->draft_week[weekday].mode == PTC_RULE_MODE_UNLIMITED ||
                                                model->played_minutes_available,
@@ -1064,13 +1075,24 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
                                                model->draft_week[weekday].mode == PTC_RULE_MODE_LIMIT && model->played_minutes_available
                                                   ? (int)model->draft_week[weekday].minutes - model->played_minutes : -1));
     }
-    draw_text(pixels, stride, 64, 486,
-              model->today_override_present
-                ? "保存不会清除今天的临时设置 · 方向键选择 · A 确定 · Y 刷新"
-                : "方向键选择 · A 确定 · B 返回 · Y 刷新",
-              17, model->today_override_present ? COLOR(215, 139, 25) : COLOR(77, 86, 99));
+    if (model->disable_flag_present) {
+        draw_text(pixels, stride, 64, model->today_override_present ? 474 : 486,
+                  "紧急停用中，周计划暂时只读；解除停用后才能修改和保存",
+                  17, COLOR(194, 61, 61));
+        if (model->today_override_present) {
+            draw_text(pixels, stride, 64, 500, "保存周计划不会清除今天的临时设置",
+                      17, COLOR(215, 139, 25));
+        }
+    } else {
+        draw_text(pixels, stride, 64, 486,
+                  model->today_override_present
+                    ? "保存周计划不会清除今天的临时设置 · 方向键选择 · A 确定 · Y 刷新"
+                    : "方向键选择 · A 确定 · B 返回 · Y 刷新",
+                  17, model->today_override_present ? COLOR(215, 139, 25) : COLOR(77, 86, 99));
+    }
     draw_candidate_button(pixels, stride, ptc_ui_weekly_mode_rect(), "X  切换模式",
-                          COLOR(244, 246, 249), COLOR(28, 118, 188), model->selected_index == 1, false);
+                          COLOR(244, 246, 249), COLOR(28, 118, 188), model->selected_index == 1,
+                          model->disable_flag_present);
     draw_candidate_button(pixels, stride, ptc_ui_weekly_discard_rect(), "ZL  放弃修改",
                           COLOR(244, 246, 249), COLOR(66, 74, 86), model->selected_index == 2,
                           !model->weekly_dirty);
@@ -1341,6 +1363,8 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         format_duration(entered_minutes, duration, sizeof(duration));
     } else {
         if (model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
+            uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
+            PtcDayRule entered_rule;
             snprintf(current, sizeof(current), "当前值：%u 分钟  ·  范围 %u–%u",
                      (unsigned int)model->numpad_current, (unsigned int)model->numpad_minimum,
                      (unsigned int)model->numpad_maximum);
@@ -1348,7 +1372,10 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
                 entered_minutes = model->numpad_current;
             }
             format_duration(entered_minutes, duration, sizeof(duration));
-            weekly_today_preview = model->editor_index == ptc_weekday_from_day_index(model->day_index);
+            entered_rule = model->draft_week[model->editor_index];
+            entered_rule.minutes = entered_minutes;
+            weekly_today_preview = model->editor_index == weekday &&
+                ptc_ui_day_rule_effectively_changed(model->current_week[weekday], entered_rule);
         } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
             unsigned int len = (unsigned int)strlen(model->numpad_text);
             snprintf(current, sizeof(current), "请输入 8 位加时码  ·  当前已输入 %u/8 位", len);
@@ -1374,7 +1401,7 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         snprintf(left, sizeof(left), "%s：%s",
                  model->today_override_present ? "当前有效剩余" : "当前还能玩", current_value);
         snprintf(right, sizeof(right), "%s：%s",
-                 model->today_override_present ? "之后恢复预计" : "保存后预计", after_value);
+                 model->today_override_present ? "保存并在之后恢复周计划后预计" : "保存后预计还能玩", after_value);
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 32, dialog.y + 242, 266, 32}, 6, COLOR(248, 250, 253));
         draw_rect_outline(pixels, stride, (UiRect){dialog.x + 32, dialog.y + 242, 266, 32}, 1,
                           time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
@@ -1383,7 +1410,8 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 322, dialog.y + 242, 266, 32}, 6, COLOR(248, 250, 253));
         draw_rect_outline(pixels, stride, (UiRect){dialog.x + 322, dialog.y + 242, 266, 32}, 1,
                           time_state_accent(model->played_minutes_available, false, after_minutes));
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 326, dialog.y + 244, 258, 28}, right, 14, COLOR(66, 74, 86));
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 326, dialog.y + 244, 258, 28}, right,
+                         model->today_override_present ? 12 : 14, COLOR(66, 74, 86));
     } else if (duration[0]) {
         char duration_line[80];
         snprintf(duration_line, sizeof(duration_line), "换算：%s", duration);
@@ -1952,6 +1980,7 @@ static void draw_weekly_leave_overlay(uint32_t *pixels, uint32_t stride, const P
 {
     UiRect dialog;
     bool refreshing = strcmp(model->overlay_title, "刷新周计划？") == 0;
+    bool disabled = model->disable_flag_present;
     draw_dialog_shell(pixels, stride, model, &dialog, 860, 350);
     draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 150, dialog.width - 80, 34},
                      "周计划还有未保存的修改", 22, COLOR(215, 139, 25));
@@ -1960,10 +1989,12 @@ static void draw_weekly_leave_overlay(uint32_t *pixels, uint32_t stride, const P
     draw_dialog_button(pixels, stride, ptc_ui_discard_rect(model->overlay),
                        refreshing ? "X  放弃并刷新" : "X  放弃并离开",
                        COLOR(255, 235, 238), COLOR(194, 61, 61), true);
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  继续编辑",
-                       COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), disabled ? "B  返回" : "B  继续编辑",
+                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay),
-                       refreshing ? "+  保存并刷新" : "+  保存并离开",
+                       disabled
+                         ? (refreshing ? "+  保留草稿并刷新" : "+  保留草稿并离开")
+                         : (refreshing ? "+  保存并刷新" : "+  保存并离开"),
                        COLOR(28, 118, 188), COLOR(255, 255, 255), false);
     if (model->weekly_leave_selection == 0) {
         draw_rect_outline(pixels, stride, to_uirect(ptc_ui_discard_rect(model->overlay)), 3, COLOR(194, 61, 61));

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "../file_protocol.h"
+#include "../../common/time/ptc_time.h"
 #include "../../third_party/cjson/cJSON.h"
 
 static int json_int(const cJSON *object, const char *name, int fallback)
@@ -447,6 +448,25 @@ PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode)
     default:
         return PTC_RULE_MODE_LIMIT;
     }
+}
+
+bool ptc_ui_day_rule_effectively_changed(PtcDayRule before, PtcDayRule after)
+{
+    if (before.mode != after.mode) {
+        return true;
+    }
+    return before.mode == PTC_RULE_MODE_LIMIT && before.minutes != after.minutes;
+}
+
+bool ptc_ui_weekly_today_changed(const PtcUiModel *model)
+{
+    uint8_t weekday;
+    if (!model) {
+        return false;
+    }
+    weekday = ptc_weekday_from_day_index(model->day_index);
+    return ptc_ui_day_rule_effectively_changed(
+        model->current_week[weekday], model->draft_week[weekday]);
 }
 
 bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minutes)
@@ -1476,7 +1496,8 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
         for (i = 0; i < 7; ++i) {
             int weekday = ptc_ui_weekday_for_display_slot(i);
-            if (model->draft_week[weekday].mode == PTC_RULE_MODE_LIMIT &&
+            if (!model->disable_flag_present &&
+                model->draft_week[weekday].mode == PTC_RULE_MODE_LIMIT &&
                 ptc_ui_rect_contains(ptc_ui_weekly_day_minutes_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_WEEKLY_MIN_INPUT, weekday);
             }
@@ -1484,8 +1505,8 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
                 return make_hit(PTC_UI_HIT_WEEKLY_DAY, weekday);
             }
         }
-        if (ptc_ui_rect_contains(ptc_ui_weekly_mode_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MODE, 0);
-        if (ptc_ui_rect_contains(ptc_ui_weekly_save_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_SAVE, 0);
+        if (!model->disable_flag_present && ptc_ui_rect_contains(ptc_ui_weekly_mode_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MODE, 0);
+        if (!model->disable_flag_present && ptc_ui_rect_contains(ptc_ui_weekly_save_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_SAVE, 0);
         if (ptc_ui_rect_contains(ptc_ui_weekly_discard_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_DISCARD, 0);
     }
     count = ptc_ui_parent_action_count(model->parent_page);

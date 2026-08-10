@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "../../companion/nro/ui_graphics.h"
+#include "../../common/time/ptc_time.h"
 
 static int failures;
 
@@ -86,7 +87,7 @@ static void test_numeric_input(void)
     check_true(!ptc_ui_numpad_validate(&model, &value), "zero-minute limit rejected");
 
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
-        "修改周一的额度", "输入 1 到 1440 分钟", 4, 1, 1440, 60);
+        "设置周一的周计划额度", "输入 1 到 1440 分钟", 4, 1, 1440, 60);
     ptc_ui_numpad_adjust(&model, 15);
     check_true(strcmp(model.numpad_text, "75") == 0, "weekly quick increase updates input");
     ptc_ui_numpad_adjust(&model, -100);
@@ -103,6 +104,9 @@ static void test_numeric_input(void)
 static void test_time_previews(void)
 {
     PtcUiModel model;
+    PtcDayRule before;
+    PtcDayRule after;
+    uint8_t weekday;
     bool capped = false;
     memset(&model, 0, sizeof(model));
     model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
@@ -143,6 +147,38 @@ static void test_time_previews(void)
     model.grant_status_refresh_failed = true;
     check_int(ptc_ui_grant_estimate_remaining(&model, 30, &capped), -1,
               "failed refresh is never presented as a live estimate");
+
+    before.mode = PTC_RULE_MODE_LIMIT;
+    before.minutes = 60;
+    after = before;
+    check_true(!ptc_ui_day_rule_effectively_changed(before, after),
+               "unchanged limit does not affect today's weekly quota");
+    after.minutes = 90;
+    check_true(ptc_ui_day_rule_effectively_changed(before, after),
+               "changed limited minutes affect today's weekly quota");
+    before.mode = PTC_RULE_MODE_UNLIMITED;
+    before.minutes = 60;
+    after.mode = PTC_RULE_MODE_UNLIMITED;
+    after.minutes = 120;
+    check_true(!ptc_ui_day_rule_effectively_changed(before, after),
+               "retained minutes do not matter while both rules are unlimited");
+    after.mode = PTC_RULE_MODE_LIMIT;
+    check_true(ptc_ui_day_rule_effectively_changed(before, after),
+               "weekly mode changes affect today's quota");
+
+    memset(&model, 0, sizeof(model));
+    weekday = ptc_weekday_from_day_index(model.day_index);
+    model.current_week[weekday].mode = PTC_RULE_MODE_LIMIT;
+    model.current_week[weekday].minutes = 60;
+    model.draft_week[weekday] = model.current_week[weekday];
+    check_true(!ptc_ui_weekly_today_changed(&model),
+               "today comparison stays hidden before a real draft change");
+    model.draft_week[(weekday + 1) % 7].mode = PTC_RULE_MODE_UNLIMITED;
+    check_true(!ptc_ui_weekly_today_changed(&model),
+               "another weekday change does not show today's comparison");
+    model.draft_week[weekday].minutes = 75;
+    check_true(ptc_ui_weekly_today_changed(&model),
+               "today comparison appears for a changed current weekday limit");
 }
 
 static void test_candidate_navigation(void)
@@ -247,6 +283,17 @@ static void test_release_hit_targets(void)
               "parent back action occupies the third footer slot");
     check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
               "weekly save is on the page");
+    model.disable_flag_present = true;
+    model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
+    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
+              "disabled weekly minutes only focus the read-only day");
+    check_hit(hit_center(&model, ptc_ui_weekly_mode_rect()), PTC_UI_HIT_NONE, 0,
+              "disabled weekly mode switch is not actionable");
+    check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_NONE, 0,
+              "disabled weekly save is not actionable");
+    check_hit(hit_center(&model, ptc_ui_weekly_discard_rect()), PTC_UI_HIT_WEEKLY_DISCARD, 0,
+              "disabled weekly page still allows discarding a draft");
+    model.disable_flag_present = false;
     model.parent_page = PTC_UI_PARENT_SUPPORT;
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_PARENT_CARD, 0, "support environment card");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "support diagnostics card");

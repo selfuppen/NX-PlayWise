@@ -249,11 +249,40 @@ static bool custom_parent_combo_held(const UiState *ui, u64 buttons)
 static void refresh_disable_flag(UiState *ui)
 {
     char path[160];
+    bool was_disabled;
     if (!ui || !ui->client.storage) {
         return;
     }
+    was_disabled = ui->model.disable_flag_present;
     snprintf(path, sizeof(path), "%s/flags/disable.flag", APP_ROOT);
     ui->model.disable_flag_present = ui->client.storage->vtable->exists(ui->client.storage, path);
+    if (ui->model.disable_flag_present &&
+        ui->model.overlay == PTC_UI_OVERLAY_NUMPAD &&
+        ui->model.numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
+        ptc_ui_numpad_finish(&ui->model);
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "检测到紧急停用，本次未确认的分钟输入已取消；此前周计划草稿仍然保留。");
+    }
+    if (!was_disabled && ui->model.disable_flag_present &&
+        ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE) {
+        ui->model.weekly_leave_selection = 2;
+    }
+}
+
+static bool weekly_editing_blocked(UiState *ui)
+{
+    bool cancelling_weekly_input = ui &&
+        ui->model.overlay == PTC_UI_OVERLAY_NUMPAD &&
+        ui->model.numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES;
+    refresh_disable_flag(ui);
+    if (!ui->model.disable_flag_present) {
+        return false;
+    }
+    if (!cancelling_weekly_input) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "紧急停用中，周计划暂时只读；解除停用后才能修改和保存。");
+    }
+    return true;
 }
 
 static u64 stick_direction_buttons(HidAnalogStickState stick)
@@ -550,12 +579,16 @@ static void edit_overlay_minutes(UiState *ui)
 static void edit_weekly_minutes(UiState *ui)
 {
     static const char *WEEKDAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
-    PtcDayRule *day = &ui->model.draft_week[ui->model.editor_index];
+    PtcDayRule *day;
+    if (weekly_editing_blocked(ui)) {
+        return;
+    }
+    day = &ui->model.draft_week[ui->model.editor_index];
     if (day->mode == PTC_RULE_MODE_LIMIT) {
         char title[64];
         char guide[128];
-        snprintf(title, sizeof(title), "修改%s的额度", WEEKDAYS[ui->model.editor_index]);
-        snprintf(guide, sizeof(guide), "输入 1 到 1440 分钟\n将影响%s的每日额度", WEEKDAYS[ui->model.editor_index]);
+        snprintf(title, sizeof(title), "设置%s的周计划额度", WEEKDAYS[ui->model.editor_index]);
+        snprintf(guide, sizeof(guide), "输入 1 到 1440 分钟\n仅修改%s的周计划模板", WEEKDAYS[ui->model.editor_index]);
         ptc_ui_numpad_open(
             &ui->model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
             title, guide, 4, 1, 1440, day->minutes);
@@ -1484,8 +1517,20 @@ static void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const ch
 
 static void open_weekly_page(UiState *ui)
 {
+    PtcDayRule saved_draft[7];
+    int saved_editor = ui->model.editor_index;
+    bool preserve_draft = ui->model.weekly_dirty;
+    if (preserve_draft) {
+        memcpy(saved_draft, ui->model.draft_week, sizeof(saved_draft));
+    }
     load_rule_drafts(ui);
-    ui->model.editor_index = ptc_weekday_from_day_index(ui->model.day_index);
+    if (preserve_draft) {
+        memcpy(ui->model.draft_week, saved_draft, sizeof(saved_draft));
+        update_weekly_dirty(ui);
+        ui->model.editor_index = saved_editor;
+    } else {
+        ui->model.editor_index = ptc_weekday_from_day_index(ui->model.day_index);
+    }
     ui->model.parent_page = PTC_UI_PARENT_PLAN;
     ui->model.selected_index = 0;
     submit_status(ui);
@@ -2363,6 +2408,9 @@ static void accept_numpad(UiState *ui)
     PtcUiNumpadPurpose purpose = ui->model.numpad_purpose;
     uint16_t value = 0;
     char code[9];
+    if (purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES && weekly_editing_blocked(ui)) {
+        return;
+    }
     if (!ptc_ui_numpad_validate(&ui->model, &value)) {
         return;
     }
@@ -2395,6 +2443,9 @@ static void save_weekly_from_page(UiState *ui)
     PtcDayRule before;
     PtcDayRule after;
     char body[192];
+    if (weekly_editing_blocked(ui)) {
+        return;
+    }
     if (!ui->model.weekly_dirty) {
         snprintf(ui->model.message, sizeof(ui->model.message), "周计划没有修改。");
         return;
@@ -2403,7 +2454,7 @@ static void save_weekly_from_page(UiState *ui)
     before = ui->model.current_week[weekday];
     after = ui->model.draft_week[weekday];
     if (!ui->model.today_override_present &&
-        (before.mode != after.mode || before.minutes != after.minutes)) {
+        ptc_ui_day_rule_effectively_changed(before, after)) {
         if (after.mode == PTC_RULE_MODE_UNLIMITED) {
             snprintf(body, sizeof(body), "今天对应的周计划将改为不限时。\n保存后由后台同步；当前已玩和剩余会在刷新后更新。");
         } else if (ui->model.played_minutes_available) {
@@ -2453,15 +2504,20 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
         ui->pending_parent_page = target_page;
         ui->pending_leave_parent = leave_parent;
         ui->model.overlay = PTC_UI_OVERLAY_WEEKLY_LEAVE;
-        ui->model.weekly_leave_selection = 1;
+        refresh_disable_flag(ui);
+        ui->model.weekly_leave_selection = ui->model.disable_flag_present ? 2 : 1;
         if (!leave_parent && target_page == PTC_UI_PARENT_PLAN) {
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "刷新周计划？");
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     "刷新会重新读取后台规则；请选择先保存、放弃草稿并刷新，或返回编辑。");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
+                     ui->model.disable_flag_present
+                       ? "紧急停用期间不能保存；请选择保留草稿并刷新、放弃草稿并刷新，或返回。"
+                       : "刷新会重新读取后台规则；请选择先保存、放弃草稿并刷新，或返回编辑。");
         } else {
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "离开周计划？");
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     "请选择保存修改、放弃修改，或返回继续编辑。");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
+                     ui->model.disable_flag_present
+                       ? "紧急停用期间不能保存；请选择保留草稿并离开、放弃草稿并离开，或返回。"
+                       : "请选择保存修改、放弃修改，或返回继续编辑。");
         }
         return;
     }
@@ -2557,10 +2613,14 @@ static void handle_overlay_input(UiState *ui, u64 down)
             apply_pending_navigation(ui);
         } else if (down & HidNpadButton_Plus) {
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
-            submit_weekly(ui);
-            if (!ui->waiting) {
-                ui->pending_parent_page = -1;
-                ui->pending_leave_parent = false;
+            if (ui->model.disable_flag_present) {
+                apply_pending_navigation(ui);
+            } else {
+                submit_weekly(ui);
+                if (!ui->waiting) {
+                    ui->pending_parent_page = -1;
+                    ui->pending_leave_parent = false;
+                }
             }
         } else if (down & HidNpadButton_A) {
             if (ui->model.weekly_leave_selection == 0) {
@@ -2793,6 +2853,10 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ui->model.editor_index = ui->model.editor_index <= 0 ? 6 : ui->model.editor_index - 1;
         } else if (down & HidNpadButton_Right) {
             ui->model.editor_index = ui->model.editor_index >= 6 ? 0 : ui->model.editor_index + 1;
+        } else if ((down & (HidNpadButton_X | HidNpadButton_Up | HidNpadButton_Down |
+                           HidNpadButton_Y | HidNpadButton_A | HidNpadButton_Plus)) &&
+                   weekly_editing_blocked(ui)) {
+            return;
         } else if (down & HidNpadButton_X) {
             day->mode = ptc_ui_next_rule_mode(day->mode);
         } else if ((down & HidNpadButton_Up) && day->mode == PTC_RULE_MODE_LIMIT) {
@@ -2968,7 +3032,9 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_WEEKLY_DAY:
         ui->model.editor_index = hit.index;
         ui->model.selected_index = 0;
-        if (ui->model.draft_week[hit.index].mode == PTC_RULE_MODE_LIMIT) {
+        if (weekly_editing_blocked(ui)) {
+            break;
+        } else if (ui->model.draft_week[hit.index].mode == PTC_RULE_MODE_LIMIT) {
             edit_weekly_minutes(ui);
         } else {
             snprintf(ui->model.message, sizeof(ui->model.message),
@@ -2977,6 +3043,7 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_WEEKLY_MODE:
         ui->model.selected_index = 1;
+        if (weekly_editing_blocked(ui)) break;
         ui->model.draft_week[ui->model.editor_index].mode =
             ptc_ui_next_rule_mode(ui->model.draft_week[ui->model.editor_index].mode);
         update_weekly_dirty(ui);
@@ -2986,6 +3053,7 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_WEEKLY_MIN_UP:
+        if (weekly_editing_blocked(ui)) break;
         if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
             ui->model.draft_week[ui->model.editor_index].minutes =
                 ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, 15, 1, 1440);
@@ -2993,6 +3061,7 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_WEEKLY_MIN_DOWN:
+        if (weekly_editing_blocked(ui)) break;
         if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
             ui->model.draft_week[ui->model.editor_index].minutes =
                 ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, -15, 1, 1440);
@@ -3000,6 +3069,7 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_WEEKLY_MIN_DEC:
+        if (weekly_editing_blocked(ui)) break;
         if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
             ui->model.draft_week[ui->model.editor_index].minutes =
                 ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, -5, 1, 1440);
@@ -3007,6 +3077,7 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_WEEKLY_MIN_INC:
+        if (weekly_editing_blocked(ui)) break;
         if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
             ui->model.draft_week[ui->model.editor_index].minutes =
                 ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, 5, 1, 1440);
@@ -3018,6 +3089,7 @@ static void handle_touch(UiState *ui, int x, int y)
             ui->model.editor_index = hit.index;
         }
         ui->model.selected_index = 0;
+        if (weekly_editing_blocked(ui)) break;
         edit_weekly_minutes(ui);
         break;
     case PTC_UI_HIT_WEEKLY_SAVE:
@@ -3325,9 +3397,11 @@ int main(int argc, char **argv)
                     ptc_ui_move_weekly_focus(&ui.model, 1, 0);
                 } else if (down & HidNpadButton_X) {
                     ui.model.selected_index = 1;
-                    day->mode = ptc_ui_next_rule_mode(day->mode);
-                    update_weekly_dirty(&ui);
-                    if (day->mode == PTC_RULE_MODE_LIMIT) {
+                    if (!weekly_editing_blocked(&ui)) {
+                        day->mode = ptc_ui_next_rule_mode(day->mode);
+                        update_weekly_dirty(&ui);
+                    }
+                    if (!ui.model.disable_flag_present && day->mode == PTC_RULE_MODE_LIMIT) {
                         snprintf(ui.model.message, sizeof(ui.model.message),
                                  "已恢复此前的每日限额：%u 分钟。", (unsigned int)day->minutes);
                     }
@@ -3338,20 +3412,22 @@ int main(int argc, char **argv)
                 } else if (down & HidNpadButton_Y) {
                     request_parent_navigation(&ui, PTC_UI_PARENT_PLAN, false);
                 } else if (down & HidNpadButton_A) {
-                    if (ui.model.selected_index == 1) {
-                        day->mode = ptc_ui_next_rule_mode(day->mode);
-                        update_weekly_dirty(&ui);
-                        if (day->mode == PTC_RULE_MODE_LIMIT) {
-                            snprintf(ui.model.message, sizeof(ui.model.message),
-                                     "已恢复此前的每日限额：%u 分钟。", (unsigned int)day->minutes);
-                        }
-                    } else if (ui.model.selected_index == 2) {
+                    if (ui.model.selected_index == 2) {
                         if (ui.model.weekly_dirty) {
                             memcpy(ui.model.draft_week, ui.model.current_week, sizeof(ui.model.draft_week));
                             ui.model.weekly_dirty = false;
                             snprintf(ui.model.message, sizeof(ui.model.message), "已放弃未保存的周计划修改。");
                         } else {
                             snprintf(ui.model.message, sizeof(ui.model.message), "周计划没有修改。");
+                        }
+                    } else if (weekly_editing_blocked(&ui)) {
+                        /* Focus remains movable while emergency stop makes the editor read-only. */
+                    } else if (ui.model.selected_index == 1) {
+                        day->mode = ptc_ui_next_rule_mode(day->mode);
+                        update_weekly_dirty(&ui);
+                        if (day->mode == PTC_RULE_MODE_LIMIT) {
+                            snprintf(ui.model.message, sizeof(ui.model.message),
+                                     "已恢复此前的每日限额：%u 分钟。", (unsigned int)day->minutes);
                         }
                     } else if (ui.model.selected_index == 3) {
                         save_weekly_from_page(&ui);
@@ -3363,7 +3439,9 @@ int main(int argc, char **argv)
                     }
                 } else if (down & HidNpadButton_Plus) {
                     ui.model.selected_index = 3;
-                    save_weekly_from_page(&ui);
+                    if (!weekly_editing_blocked(&ui)) {
+                        save_weekly_from_page(&ui);
+                    }
                 } else if (down & HidNpadButton_ZL) {
                     ui.model.selected_index = 2;
                     if (ui.model.weekly_dirty) {
