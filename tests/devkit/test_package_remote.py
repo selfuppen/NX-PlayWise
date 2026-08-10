@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import struct
 import sys
@@ -53,7 +54,7 @@ def write_package(
     overlay_data: bytes | None = None,
     *,
     component_marker: bytes = b"",
-) -> None:
+) -> dict:
     version = package_remote.PLAYWISE_VERSION
     manifest = (f'{{"schema_version":1,"playwise_version":"{version}","commit":"' + "a" * 40 +
         f'","release_id":"playwise-{version}+aaaaaaaaaaaa","profile":"release","protocol_version":1,'
@@ -61,13 +62,13 @@ def write_package(
     with zipfile.ZipFile(path, "w") as package:
         package.writestr("switch/playwise/config.json", '{"version":1,"device_id":"kid-switch"}')
         package.writestr("switch/playwise/build.json", manifest)
-        package.writestr("playwise-install/release-manifest.json", manifest)
         embedded = manifest.encode()
         package.writestr("switch/playwise/pctc.nro", valid_nro(with_icon=True, embedded_manifest=embedded + component_marker))
         if boot2:
             package.writestr("switch/.overlays/pctc.ovl", valid_nro(with_icon=False, embedded_manifest=embedded) if overlay_data is None else overlay_data)
             package.writestr("atmosphere/contents/4200000000BD2300/exefs.nsp", embedded)
             package.writestr("atmosphere/contents/4200000000BD2300/flags/boot2.flag", b"")
+    return json.loads(manifest)
 
 
 def test_container_command() -> None:
@@ -93,22 +94,22 @@ def test_zip_verification() -> None:
         root = Path(tmp_dir)
         for prefix, boot2 in package_remote.PACKAGE_EXPECTATIONS.items():
             path = root / f"{prefix}-20260730-120000.zip"
-            write_package(path, boot2)
-            package_remote.verify_package_zip(path, prefix)
+            manifest = write_package(path, boot2)
+            package_remote.verify_package_zip(path, prefix, expected_manifest=manifest)
 
         invalid_path = root / "playwise-20260730-120001.zip"
-        write_package(invalid_path, True, overlay_without_assets())
+        invalid_manifest = write_package(invalid_path, True, overlay_without_assets())
         try:
-            package_remote.verify_package_zip(invalid_path, "playwise")
+            package_remote.verify_package_zip(invalid_path, "playwise", expected_manifest=invalid_manifest)
         except package_remote.PackageError as exc:
             require("missing NRO asset header" in str(exc), "missing NACP overlay must explain the failure")
         else:
             raise AssertionError("overlay without NACP metadata must be rejected")
 
         contaminated_path = root / "playwise-20260730-120002.zip"
-        write_package(contaminated_path, True, component_marker=b"probe_suspend")
+        contaminated_manifest = write_package(contaminated_path, True, component_marker=b"probe_suspend")
         try:
-            package_remote.verify_package_zip(contaminated_path, "playwise")
+            package_remote.verify_package_zip(contaminated_path, "playwise", expected_manifest=contaminated_manifest)
         except package_remote.PackageError as exc:
             require("forbidden Release marker probe_suspend" in str(exc), "binary contamination must identify the marker")
         else:

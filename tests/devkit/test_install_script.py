@@ -24,9 +24,6 @@ def create_fake_package(root: Path) -> Path:
     (app / "setup.json").write_text('{"version":1}', encoding="utf-8")
     (app / "build.json").write_text('{"profile":"release"}', encoding="utf-8")
     (app / "pctc.nro").write_bytes(b"dummy_nro")
-    install = pkg / "playwise-install"
-    install.mkdir(parents=True, exist_ok=True)
-    (install / "release-manifest.json").write_text('{"profile":"release"}', encoding="utf-8")
     return pkg
 
 

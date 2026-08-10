@@ -21,9 +21,9 @@ DEFAULT_SSH_USER = "root"
 DEFAULT_CONTAINER_PATH = "/ws/playwise"
 APP_CONFIG = "switch/playwise/config.json"
 APP_BUILD = "switch/playwise/build.json"
-RELEASE_MANIFEST = "playwise-install/release-manifest.json"
 CONTENT_ROOT = "atmosphere/contents/4200000000BD2300"
 DEVICE_LAB_CONTENT_ROOT = "atmosphere/contents/4200000000BD23F0"
+PACKAGE_ROOTS = ("switch/", "atmosphere/")
 NRO_HEADER_OFFSET = 0x10
 NRO_HEADER_SIZE_OFFSET = 0x18
 NRO_HEADER_END = 0x80
@@ -117,18 +117,26 @@ def verify_nro_asset(data: bytes, label: str, *, require_icon: bool) -> None:
         raise PackageError(f"{label}: NACP version must be {PLAYWISE_VERSION}")
 
 
-def verify_package_zip(path: Path, prefix: str | None = None) -> None:
+def verify_package_zip(
+    path: Path,
+    prefix: str | None = None,
+    *,
+    expected_manifest: dict | None = None,
+) -> None:
     expected_prefix = prefix or package_prefix(path)
     expect_boot2 = PACKAGE_EXPECTATIONS[expected_prefix]
     with zipfile.ZipFile(path) as package:
         names = safe_zip_members(package)
+        unexpected = [name for name in names if not name.startswith(PACKAGE_ROOTS)]
+        if unexpected:
+            raise PackageError(f"{path.name}: package contains non-runtime entries: {', '.join(unexpected)}")
         if APP_CONFIG not in names:
             raise PackageError(f"{path.name}: missing {APP_CONFIG}")
         config = json.loads(package.read(APP_CONFIG).decode("utf-8"))
-        if APP_BUILD not in names or RELEASE_MANIFEST not in names:
-            raise PackageError(f"{path.name}: missing build/release manifest assets")
+        if APP_BUILD not in names:
+            raise PackageError(f"{path.name}: missing {APP_BUILD}")
         build = json.loads(package.read(APP_BUILD).decode("utf-8"))
-        manifest = json.loads(package.read(RELEASE_MANIFEST).decode("utf-8"))
+        manifest = build if expected_manifest is None else expected_manifest
         component_data = {name: package.read(name) for name in RELEASE_COMPONENTS if name in names}
         nro_data = component_data.get("switch/playwise/pctc.nro")
         overlay_data = component_data.get("switch/.overlays/pctc.ovl")
@@ -137,8 +145,10 @@ def verify_package_zip(path: Path, prefix: str | None = None) -> None:
         raise PackageError(f"{path.name}: config contains removed secret or mode fields")
     if "switch/playwise/credentials.json" in names or "switch/playwise/capabilities.json" in names:
         raise PackageError(f"{path.name}: release must not seed credentials or capabilities")
-    if build != manifest or manifest.get("profile") != "release":
-        raise PackageError(f"{path.name}: manifest copies differ or are not release profile")
+    if expected_manifest is not None and build != expected_manifest:
+        raise PackageError(f"{path.name}: package build.json differs from the generated release manifest")
+    if manifest.get("profile") != "release":
+        raise PackageError(f"{path.name}: build manifest is not a release profile")
     if manifest.get("playwise_version") != PLAYWISE_VERSION:
         raise PackageError(f"{path.name}: manifest version must be {PLAYWISE_VERSION}")
     for member_name, data in package_payloads.items():
@@ -215,9 +225,11 @@ def verify_flat_sysmodule(path: Path, manifest: dict, *, release: bool) -> None:
                 raise PackageError(f"{path.name}: sysmodule contains forbidden secret marker {marker.decode('ascii')}")
 
 
-def verify_packaged_artifacts(path: Path) -> dict:
+def verify_packaged_artifacts(path: Path, manifest: dict) -> None:
     with zipfile.ZipFile(path) as package:
-        manifest = json.loads(package.read(RELEASE_MANIFEST).decode("utf-8"))
+        package_manifest = json.loads(package.read(APP_BUILD).decode("utf-8"))
+        if package_manifest != manifest:
+            raise PackageError(f"{path.name}: package build.json differs from the generated release manifest")
         expected = {
             f"{CONTENT_ROOT}/exefs.nsp": ROOT / "build" / "switch" / "exefs.nsp",
             "switch/playwise/pctc.nro": ROOT / "build" / "switch" / "pctc.nro",
@@ -226,7 +238,6 @@ def verify_packaged_artifacts(path: Path) -> dict:
         for member_name, artifact in expected.items():
             if package.read(member_name) != artifact.read_bytes():
                 raise PackageError(f"{path.name}: packaged {member_name} differs from the verified build artifact")
-    return manifest
 
 
 def latest_packages(package_dir: Path) -> dict[str, Path]:
@@ -313,10 +324,14 @@ def build_and_verify(
     clean_package_results(package_dir)
     remove_path(device_lab_dir)
     run_container(host, port, user, container_path, identity)
+    manifest_path = ROOT / "build" / "generated" / "release-manifest.json"
+    if not manifest_path.is_file():
+        raise PackageError(f"missing generated release manifest: {manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     packages = latest_packages(package_dir)
     for prefix, path in packages.items():
-        verify_package_zip(path, prefix)
-        manifest = verify_packaged_artifacts(path)
+        verify_package_zip(path, prefix, expected_manifest=manifest)
+        verify_packaged_artifacts(path, manifest)
         verify_flat_sysmodule(ROOT / "build" / "switch" / "pctc-sysmodule.bin", manifest, release=True)
     for child in package_dir.iterdir():
         if child.is_dir():

@@ -83,7 +83,7 @@ python tools/package_remote.py
 build/packages/playwise-0.1.3-alpha.zip
 ```
 
-候选包必须包含 sysmodule、Companion NRO、Overlay、`boot2.flag` 和一致的 release manifest。构建门禁会拒绝多个候选 Zip、LAB handler、运行时控制模式、占位 secret、组件版本或 manifest 不一致。
+候选包必须包含 sysmodule、Companion NRO、Overlay、`boot2.flag` 和运行时 `build.json`。构建门禁使用外部生成的 release manifest 校验包内 `build.json`、组件嵌入信息和版本一致性，并拒绝多个候选 Zip、LAB handler、运行时控制模式、占位 secret 或 manifest 不一致。
 
 内部 Device Lab 只在 devkitPro 环境显式构建：
 

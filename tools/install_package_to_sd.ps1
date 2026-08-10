@@ -118,7 +118,6 @@ if ($sourceRoot.StartsWith($destinationRoot, [System.StringComparison]::OrdinalI
 $sourceApp = Join-Path $sourceRoot "switch\playwise"
 $sourceSysmodule = Join-Path $sourceRoot "atmosphere\contents\4200000000BD2300"
 $sourceOverlay = Join-Path $sourceRoot "switch\.overlays\pctc.ovl"
-$sourceManifest = Join-Path $sourceRoot "playwise-install\release-manifest.json"
 $availableRelativePaths = @()
 $hasPackageCore = $false
 
@@ -131,9 +130,6 @@ if (Test-Path -LiteralPath $sourceApp -PathType Container) {
     }
     if (-not (Test-Path -LiteralPath (Join-Path $sourceApp "build.json") -PathType Leaf)) {
         throw "Invalid package: switch\playwise\build.json is missing."
-    }
-    if (-not (Test-Path -LiteralPath $sourceManifest -PathType Leaf)) {
-        throw "Invalid package: playwise-install\release-manifest.json is missing."
     }
     $hasPackageCore = $true
 }

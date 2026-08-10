@@ -9,10 +9,7 @@ import zipfile
 
 
 APP_DIR = Path("switch") / "playwise"
-TEMPLATE_DIR = Path("playwise-install") / "templates"
 ATMOSPHERE_CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
-INSTALL_SCRIPT = Path(__file__).with_name("install_package_to_sd.ps1")
-INSTALL_DIR = Path("playwise-install")
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -59,7 +56,6 @@ def create_package(
     if out.exists():
         shutil.rmtree(out)
     app = out / APP_DIR
-    templates = out / TEMPLATE_DIR
     for directory in [
         app / "inbox" / "pending",
         app / "inbox" / "processing",
@@ -76,7 +72,7 @@ def create_package(
         directory.mkdir(parents=True, exist_ok=True)
 
     write_json(
-        templates / "config.json",
+        app / "config.json",
         {
             "version": 1,
             "device_id": device_id,
@@ -85,9 +81,9 @@ def create_package(
             "pairing_base_url": "https://selfuppen.github.io/NX-PlayWise/",
         },
     )
-    write_json(templates / "auth.json", {"version": 1, "pin_hash": "", "pin_salt": "", "hash": "hmac-sha256", "updated_at": 0, "failed_attempts": 0, "cooldown_until": 0})
+    write_json(app / "auth.json", {"version": 1, "pin_hash": "", "pin_salt": "", "hash": "hmac-sha256", "updated_at": 0, "failed_attempts": 0, "cooldown_until": 0})
     write_json(
-        templates / "rules.json",
+        app / "rules.json",
         {
             "version": 1,
             "week": [
@@ -106,7 +102,7 @@ def create_package(
         },
     )
     write_json(
-        templates / "state.json",
+        app / "state.json",
         {
             "version": 1,
             "last_enforced_day_index": 0,
@@ -117,7 +113,7 @@ def create_package(
         },
     )
     write_json(
-        templates / "compatibility.json",
+        app / "compatibility.json",
         {
             "version": 1,
             "status": "pending",
@@ -126,7 +122,7 @@ def create_package(
         },
     )
     write_json(
-        templates / "setup.json",
+        app / "setup.json",
         {
             "version": 1,
             "phase": "unconfigured",
@@ -138,19 +134,10 @@ def create_package(
         },
     )
 
-    # Keep the installable seed beside the Companion binary.  The separate
-    # template directory is retained as the immutable source-of-truth for
-    # tooling, while the installer consumes these seed files without ever
-    # replacing runtime data on the SD card.
-    for template_file in sorted(templates.glob("*.json")):
-        copy_file(template_file, app / template_file.name)
-
     manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
     if manifest_data.get("profile") != "release":
         raise ValueError("public package requires a release profile manifest")
     write_json(app / "build.json", manifest_data)
-    copy_file(manifest, out / INSTALL_DIR / "release-manifest.json")
-    copy_file(INSTALL_SCRIPT, out / INSTALL_DIR / "install_package_to_sd.ps1")
 
     if nro is not None:
         copy_file(nro, app / nro.name)

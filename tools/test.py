@@ -115,6 +115,7 @@ def verify_playwise_package() -> None:
         manifest.write_text(json.dumps({"schema_version": 1, "playwise_version": PLAYWISE_VERSION, "commit": "a" * 40,
             "release_id": f"playwise-{PLAYWISE_VERSION}+aaaaaaaaaaaa", "profile": "release", "protocol_version": 1,
             "recovery_version": 1, "pctl_layout_version": 1, "build": {}, "verified_environment": {}}), encoding="utf-8")
+        expected_manifest = read_json(manifest)
         run(
             [
                 PYTHON,
@@ -157,11 +158,12 @@ def verify_playwise_package() -> None:
         require("grant_secret" not in config and "control_mode" not in config, "release config must contain neither secrets nor legacy modes")
         require(not (package_app / "credentials.json").exists(), "package must generate credentials on the device")
         require(read_json(package_app / "setup.json")["phase"] == "unconfigured", "package must not take control before setup")
+        require(read_json(package_app / "build.json") == expected_manifest, "package build manifest must match the generated manifest")
         require((out / CONTENT_DIR / "flags" / "boot2.flag").exists(), "package must contain boot2.flag")
         with zipfile.ZipFile(zip_path) as package:
             names = package.namelist()
         require("switch/playwise/config.json" in names, "playwise zip missing config.json")
-        require("playwise-install/release-manifest.json" in names, "playwise zip missing release manifest")
+        require(not any(name.startswith("playwise-install/") for name in names), "playwise zip must not contain installer-only files")
         require("switch/.overlays/pctc.ovl" in names, "playwise package must contain the overlay")
 
         invalid_out = root / "invalid-boot2"
