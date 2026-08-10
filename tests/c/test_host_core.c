@@ -356,10 +356,13 @@ static void test_setup_preflight_and_recovery(void)
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 150;
+    pctl.played_minutes_today = 30;
     pctl.status.unrestricted_today = false;
     pctl.status.limited_today = true;
     pctl.status.remaining_available = true;
-    pctl.status.remaining_minutes = 30;
+    pctl.status.remaining_minutes = 120;
     pctl.status.play_timer_enabled = true;
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
@@ -376,11 +379,19 @@ static void test_setup_preflight_and_recovery(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/install_pctl_snapshot.json",
         install_snapshot, sizeof(install_snapshot)), "installation snapshot readable");
     check_true(pctl.status.unrestricted_today, "setup releases current restriction");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", text, sizeof(text)) &&
+        strstr(text, "\"today_override_present\":true") &&
+        strstr(text, "\"today_override_day_index\":2380") &&
+        strstr(text, "\"today_override_minutes\":150"),
+        "fresh takeover persists the existing daily total instead of the default rule");
 
     fake_time.snapshot.unix_seconds = 1783526406;
     check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), 1, "setup grace activates control");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
         strstr(text, "\"phase\":\"active\""), "setup becomes active");
+    check_true(pctl.status.limited_today && pctl.status.remaining_minutes == 120 && !pctl.status.restricted_now,
+        "handover keeps the original two-hour remaining allowance after activation");
+    check_int(pctl.last_target.minutes, 150, "handover writes the daily total rather than remaining minutes");
 
     apply_calls_after_activation = pctl.apply_target_calls;
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-active-repeat.json",
@@ -423,7 +434,7 @@ static void test_setup_preflight_and_recovery(void)
         "{\"version\":1,\"request_id\":\"restore-snapshot\",\"type\":\"restore_install_snapshot\",\"created_at\":3,\"payload\":{}}"),
         "queue restore under disable");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "restore remains available under disable");
-    check_true(pctl.status.limited_today && pctl.status.remaining_minutes == 30, "installation snapshot restored exactly");
+    check_true(pctl.status.limited_today && pctl.status.remaining_minutes == 120, "installation snapshot restored exactly");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
         strstr(text, "\"phase\":\"restored\""), "snapshot restore records restored phase");
 
@@ -457,6 +468,37 @@ static void test_setup_preflight_and_recovery(void)
     check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), 1, "re-enabled setup grace activates control");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
         strstr(text, "\"phase\":\"active\""), "re-enabled setup becomes active");
+}
+
+static void test_setup_refuses_unknown_handover_total(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char text[2048];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 120;
+    pctl.status.play_timer_enabled = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-unknown-total.json",
+        "{\"version\":1,\"request_id\":\"setup-unknown-total\",\"type\":\"complete_setup\",\"created_at\":1,\"payload\":{}}"),
+        "queue setup with an unconvertible current allowance");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unknown handover setup is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-unknown-total.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"handover_state_unavailable\""),
+        "unknown total reports a dedicated no-takeover error");
+    check_int((int)pctl.apply_target_calls, 0, "unknown total leaves the current PCTL allowance untouched");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
+        strstr(text, "\"phase\":\"protection\""), "unknown total enters retryable protection mode");
 }
 
 static void test_live_enforce_recovery_is_not_startup_recovery(void)
@@ -702,6 +744,7 @@ int main(void)
     test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();
     test_setup_preflight_and_recovery();
+    test_setup_refuses_unknown_handover_total();
     test_live_enforce_recovery_is_not_startup_recovery();
     test_played_time_status();
     test_offline_code_preview_is_non_consuming();

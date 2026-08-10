@@ -36,6 +36,7 @@ static const PtcErrorInfo PTC_ERROR_TABLE[] = {
     {PTC_ERR_RECOVERY_FAILED, "recovery_failed", "恢复安装前家长控制状态失败"},
     {PTC_ERR_COMPATIBILITY_CONFIRMATION_REQUIRED, "compatibility_confirmation_required", "当前环境尚未认证，需要家长确认"},
     {PTC_ERR_PROTECTION_MODE, "protection_mode", "安全前置检查失败，已进入保护模式"},
+    {PTC_ERR_HANDOVER_STATE_UNAVAILABLE, "handover_state_unavailable", "无法安全读取当前今日额度，未接管系统家长控制"},
     {PTC_ERR_PCTL_INIT_FAILED, "pctl_init_failed", "家长控制服务初始化失败"},
     {PTC_ERR_PCTL_READ_FAILED, "pctl_read_failed", "读取家长控制状态失败"},
     {PTC_ERR_PCTL_WRITE_FAILED, "pctl_write_failed", "写入家长控制设置失败"},

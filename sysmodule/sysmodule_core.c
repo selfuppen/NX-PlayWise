@@ -50,6 +50,12 @@ typedef struct {
     bool restriction_cleared;
     bool snapshot_available;
     int64_t activate_after;
+    bool handover_today_pending;
+    uint16_t handover_day_index;
+    bool handover_unlimited;
+    uint16_t handover_minutes;
+    bool handover_remaining_available;
+    uint16_t handover_remaining_minutes;
     char last_error[64];
 } PtcSetupState;
 
@@ -86,6 +92,7 @@ static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *se
 static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
 static void write_disable_flag(PtcSysmodule *sysmodule, const char *reason);
 static void recovery_clear(PtcSysmodule *sysmodule);
+static bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules);
 
 static void join_path(char *out, size_t out_size, const char *a, const char *b)
 {
@@ -261,6 +268,12 @@ static bool load_setup_state(PtcSysmodule *sysmodule, PtcSetupState *setup)
     }
     (void)json_bool_value(text, "snapshot_available", &setup->snapshot_available);
     (void)json_i64(text, "activate_after", &setup->activate_after);
+    (void)json_bool_value(text, "handover_today_pending", &setup->handover_today_pending);
+    (void)json_u16(text, "handover_day_index", &setup->handover_day_index);
+    (void)json_bool_value(text, "handover_unlimited", &setup->handover_unlimited);
+    (void)json_u16(text, "handover_minutes", &setup->handover_minutes);
+    (void)json_bool_value(text, "handover_remaining_available", &setup->handover_remaining_available);
+    (void)json_u16(text, "handover_remaining_minutes", &setup->handover_remaining_minutes);
     (void)json_string(text, "last_error", setup->last_error, sizeof(setup->last_error));
     return strcmp(setup->phase, "unconfigured") == 0 || strcmp(setup->phase, "compatibility_pending") == 0 ||
         strcmp(setup->phase, "protection") == 0 || strcmp(setup->phase, "pending") == 0 || strcmp(setup->phase, "released") == 0 ||
@@ -275,12 +288,20 @@ static bool save_setup_state(PtcSysmodule *sysmodule, const PtcSetupState *setup
     join_path(path, sizeof(path), sysmodule->app_root, "setup.json");
     snprintf(text, sizeof(text),
         "{\"version\":1,\"phase\":\"%s\",\"compatibility_status\":\"%s\",\"restriction_cleared\":%s,"
-        "\"snapshot_available\":%s,\"activate_after\":%lld,\"last_error\":\"%s\"}\n",
+        "\"snapshot_available\":%s,\"activate_after\":%lld,\"handover_today_pending\":%s,"
+        "\"handover_day_index\":%u,\"handover_unlimited\":%s,\"handover_minutes\":%u,"
+        "\"handover_remaining_available\":%s,\"handover_remaining_minutes\":%u,\"last_error\":\"%s\"}\n",
         setup->phase,
         setup->compatibility_status,
         setup->restriction_cleared ? "true" : "false",
         setup->snapshot_available ? "true" : "false",
         (long long)setup->activate_after,
+        setup->handover_today_pending ? "true" : "false",
+        (unsigned int)setup->handover_day_index,
+        setup->handover_unlimited ? "true" : "false",
+        (unsigned int)setup->handover_minutes,
+        setup->handover_remaining_available ? "true" : "false",
+        (unsigned int)setup->handover_remaining_minutes,
         setup->last_error);
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
 }
@@ -2000,11 +2021,82 @@ static PtcErrorCode restore_snapshot_exact(
     return err;
 }
 
+/* A fresh takeover must not silently replace an in-progress Nintendo allowance
+   with PlayWise's weekly defaults.  PCTL targets are daily totals, so retain the
+   observed configured total when possible; only derive it from spent + remaining
+   when both values are available. */
+static PtcErrorCode capture_handover_today(PtcSetupState *setup, const PtcPctlStatus *status, PtcClockSnapshot now)
+{
+    uint32_t total;
+    if (setup->handover_today_pending) {
+        return PTC_ERR_OK;
+    }
+    setup->handover_day_index = now.day_index;
+    setup->handover_unlimited = false;
+    setup->handover_minutes = 0;
+    setup->handover_remaining_available = false;
+    setup->handover_remaining_minutes = 0;
+    if (status->unrestricted_today && !status->restricted_now) {
+        setup->handover_today_pending = true;
+        setup->handover_unlimited = true;
+        return PTC_ERR_OK;
+    }
+    if (!status->limited_today && !status->blocked_today) {
+        return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
+    }
+    if (status->blocked_today) {
+        setup->handover_today_pending = true;
+        setup->handover_remaining_available = status->remaining_available;
+        setup->handover_remaining_minutes = 0;
+        return PTC_ERR_OK;
+    }
+    if (!status->remaining_available) {
+        return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
+    }
+    if (status->configured_minutes_available && status->configured_minutes <= PTC_TOKEN_MAX_MINUTES) {
+        total = status->configured_minutes;
+    } else if (status->played_minutes_available &&
+               status->played_minutes <= PTC_TOKEN_MAX_MINUTES &&
+               status->remaining_minutes <= PTC_TOKEN_MAX_MINUTES &&
+               status->played_minutes + status->remaining_minutes <= PTC_TOKEN_MAX_MINUTES) {
+        total = status->played_minutes + status->remaining_minutes;
+    } else {
+        return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
+    }
+    setup->handover_today_pending = true;
+    setup->handover_minutes = (uint16_t)total;
+    setup->handover_remaining_available = true;
+    setup->handover_remaining_minutes = status->remaining_minutes > UINT16_MAX
+        ? UINT16_MAX : (uint16_t)status->remaining_minutes;
+    return PTC_ERR_OK;
+}
+
+static PtcErrorCode persist_handover_today_rule(
+    PtcSysmodule *sysmodule,
+    const PtcSetupState *setup,
+    PtcClockSnapshot now)
+{
+    PtcRules rules;
+    if (!setup->handover_today_pending || setup->handover_day_index != now.day_index) {
+        return PTC_ERR_OK;
+    }
+    if (!load_rules(sysmodule, &rules)) {
+        return PTC_ERR_RULES_INVALID;
+    }
+    rules.today_override.present = true;
+    rules.today_override.day_index = now.day_index;
+    rules.today_override.rule.mode = setup->handover_unlimited
+        ? PTC_RULE_MODE_UNLIMITED : PTC_RULE_MODE_LIMIT;
+    rules.today_override.rule.minutes = setup->handover_unlimited ? 0U : setup->handover_minutes;
+    return save_rules(sysmodule, &rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+}
+
 static PtcErrorCode run_release_preflight(
     PtcSysmodule *sysmodule,
     const PtcRuntimeConfig *config,
     PtcSetupState *setup,
-    PtcClockSnapshot now)
+    PtcClockSnapshot now,
+    bool capture_handover)
 {
     char path[320];
     char text[4096];
@@ -2044,6 +2136,10 @@ static PtcErrorCode run_release_preflight(
     err = sysmodule->pctl->vtable->read_status(
         sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &status);
     if (err != PTC_ERR_OK) return err;
+    if (capture_handover) {
+        err = capture_handover_today(setup, &status, now);
+        if (err != PTC_ERR_OK) return err;
+    }
 
     join_path(path, sizeof(path), sysmodule->app_root, "environment.json");
     if (sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
@@ -2103,7 +2199,10 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
     if (strcmp(setup.phase, "unconfigured") == 0 || strcmp(setup.phase, "compatibility_pending") == 0 ||
         strcmp(setup.phase, "protection") == 0 || strcmp(setup.phase, "restored") == 0 ||
         resuming_disabled_setup) {
-        PtcErrorCode preflight_err = run_release_preflight(sysmodule, config, &setup, now);
+        bool capture_handover = !setup.handover_today_pending &&
+            (strcmp(setup.phase, "unconfigured") == 0 || strcmp(setup.phase, "compatibility_pending") == 0 ||
+             strcmp(setup.phase, "protection") == 0);
+        PtcErrorCode preflight_err = run_release_preflight(sysmodule, config, &setup, now, capture_handover);
         if (preflight_err != PTC_ERR_OK) {
             /* A disabled active/restored installation remains retryable until a
                later parent-confirmed attempt passes the read-only preflight. */
@@ -2111,6 +2210,15 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
                 snprintf(setup.phase, sizeof(setup.phase), "protection");
                 snprintf(setup.compatibility_status, sizeof(setup.compatibility_status), "protection");
             }
+            snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(preflight_err));
+            (void)save_setup_state(sysmodule, &setup);
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                preflight_err, now.day_index, caps);
+        }
+        preflight_err = persist_handover_today_rule(sysmodule, &setup, now);
+        if (preflight_err != PTC_ERR_OK) {
+            snprintf(setup.phase, sizeof(setup.phase), "protection");
+            snprintf(setup.compatibility_status, sizeof(setup.compatibility_status), "protection");
             snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(preflight_err));
             (void)save_setup_state(sysmodule, &setup);
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
@@ -2164,7 +2272,7 @@ static bool process_retry_setup_release(PtcSysmodule *sysmodule, const PtcReques
             PTC_ERR_BAD_REQUEST, now.day_index, caps);
     }
     if (strcmp(setup.phase, "protection") == 0) {
-        err = run_release_preflight(sysmodule, config, &setup, now);
+        err = run_release_preflight(sysmodule, config, &setup, now, !setup.handover_today_pending);
         if (err != PTC_ERR_OK) {
             snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(err));
             (void)save_setup_state(sysmodule, &setup);
@@ -2331,6 +2439,93 @@ static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *se
     return save_setup_state(sysmodule, setup) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
 }
 
+static bool handover_remaining_matches(const PtcSetupState *setup, const PtcPctlStatus *status)
+{
+    uint16_t observed;
+    uint16_t expected;
+    if (setup->handover_unlimited) {
+        return status->unrestricted_today && !status->restricted_now;
+    }
+    if (!setup->handover_remaining_available) {
+        return setup->handover_minutes == 0U && status->restricted_now;
+    }
+    if (!status->remaining_available) {
+        return false;
+    }
+    observed = status->remaining_minutes > UINT16_MAX ? UINT16_MAX : (uint16_t)status->remaining_minutes;
+    expected = setup->handover_remaining_minutes;
+    /* 1454 is rounded down to minutes, so the five-second setup grace may make
+       a successful handover differ by one displayed minute. */
+    return observed >= expected ? observed - expected <= 1 : expected - observed <= 1;
+}
+
+static PtcErrorCode activate_handover_today(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now)
+{
+    PtcRules rules;
+    PtcRuntimeState runtime_state;
+    PtcPctlStatus observed;
+    PtcDayRule rule;
+    PtcCapabilities caps;
+    PtcErrorCode err;
+    if (!setup->handover_today_pending) {
+        return PTC_ERR_OK;
+    }
+    if (setup->handover_day_index != now.day_index) {
+        /* The captured allowance belongs to yesterday. Never carry it into a
+           new day; the ordinary weekly plan takes over instead. */
+        setup->handover_today_pending = false;
+        return save_setup_state(sysmodule, setup) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+    }
+    if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
+        err = PTC_ERR_RULES_INVALID;
+        goto restore_original;
+    }
+    rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+    if (!rules.today_override.present || rules.today_override.day_index != now.day_index ||
+        (setup->handover_unlimited ? rule.mode != PTC_RULE_MODE_UNLIMITED :
+         rule.mode != PTC_RULE_MODE_LIMIT || rule.minutes != setup->handover_minutes)) {
+        err = PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
+        goto restore_original;
+    }
+    caps = load_capabilities(sysmodule);
+    err = apply_target(sysmodule, NULL, &caps, now, "setup_handover",
+        target_from_day_rule(rule), rule.minutes);
+    if (err != PTC_ERR_OK) {
+        goto restore_original;
+    }
+    err = start_timer_and_wait_target(sysmodule, NULL, now, "setup_handover",
+        target_from_day_rule(rule), rule.minutes, "setup_handover", &observed, NULL);
+    if (err != PTC_ERR_OK || !handover_remaining_matches(setup, &observed)) {
+        if (err == PTC_ERR_OK) err = PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
+        goto restore_original;
+    }
+    runtime_state.last_enforced_day_index = now.day_index;
+    runtime_state.last_enforced_mode = target_from_day_rule(rule);
+    runtime_state.last_enforced_minutes = rule.minutes;
+    if (!save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+        err = PTC_ERR_STORAGE_WRITE_FAILED;
+        goto restore_original;
+    }
+    setup->handover_today_pending = false;
+    if (!save_setup_state(sysmodule, setup)) {
+        err = PTC_ERR_STORAGE_WRITE_FAILED;
+        goto restore_original;
+    }
+    append_event(sysmodule, NULL, "handover_preserved", PTC_ERR_OK, "today_allowance");
+    recovery_clear(sysmodule);
+    return PTC_ERR_OK;
+
+restore_original:
+    append_event(sysmodule, NULL, "handover_restore", err, "today_allowance");
+    setup->handover_today_pending = false;
+    if (restore_install_snapshot_now(sysmodule, setup, now) == PTC_ERR_OK) {
+        recovery_clear(sysmodule);
+        return err;
+    }
+    write_disable_flag(sysmodule, "handover_restore_failed\n");
+    return PTC_ERR_RECOVERY_FAILED;
+}
+
 static PtcErrorCode __attribute__((unused)) validate_runtime_fingerprint(PtcSysmodule *sysmodule)
 {
     char path[320];
@@ -2447,6 +2642,10 @@ int ptc_sysmodule_bootstrap_setup(PtcSysmodule *sysmodule)
 #endif
     }
     if (strcmp(setup.phase, "released") == 0 && setup.activate_after > 0 && now.unix_seconds >= setup.activate_after) {
+        err = activate_handover_today(sysmodule, &setup, now);
+        if (err != PTC_ERR_OK) {
+            return -1;
+        }
         snprintf(setup.phase, sizeof(setup.phase), "active");
         setup.activate_after = 0;
         setup.last_error[0] = '\0';

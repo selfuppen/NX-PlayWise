@@ -115,6 +115,11 @@ static void fill_error_guidance(char *out, size_t out_size, const char *type, in
                  "反馈码：306。可能未手动开启主机家长控制；系统设置→家长控制→开启，返回后选择“重新检测”。");
         return;
     }
+    if (error_code == 313) {
+        snprintf(out, out_size,
+                 "反馈码：313。任我玩未改写今天的系统额度；请保留当前设置，稍后重新检测或明天再接管。");
+        return;
+    }
     if (strcmp(type, "complete_setup") == 0) {
         snprintf(out, out_size,
                  "反馈码：%d %s。建议：确认限制已解除（phase=released），或尝试【重试前置解限】。",
