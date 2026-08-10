@@ -43,7 +43,9 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 ## Overlay 与推荐运行环境
 
-PlayWise Overlay 是游戏内的快速入口：打开后可查看今天已玩、总额度和剩余时间，也可输入、预览并兑换 8 位加时码。周计划、今日额度、配对密钥、PIN、诊断和恢复等完整管理功能仍在 Companion NRO 中完成。Overlay 只向 PlayWise sysmodule 提交请求，不直接访问或修改 PCTL。
+Companion NRO 是日常使用的主入口：孩子可在其中输入加时码，家长验证 PlayWise PIN 后可进入家长区完成周计划、今日额度、配对密钥、诊断和恢复等完整管理。
+
+PlayWise Overlay 则是游戏内和受限状态下的加时入口：打开后可查看今天已玩、总额度和剩余时间，也可输入、预览并兑换 8 位加时码。设置两个看似重复的加时码入口，最重要的原因是家长控制限制生效时 Companion NRO 可能无法打开，此时仍可通过 Overlay 紧急输入加时码、恢复可玩时间。Overlay 只向 PlayWise sysmodule 提交请求，不直接访问或修改 PCTL，也不替代 Companion NRO 的完整管理功能。
 
 推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理和打开 PlayWise Overlay，并参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境；相关使用交流 QQ 群为 `1051287661`。Ultrahand Overlay 和大气层整合包是外部项目，不包含在 PlayWise 安装包中。PlayWise 的 Overlay 组件只安装 `sdmc:/switch/.overlays/pctc.ovl`，不会写入或修改 Overlay 管理器的全局配置。
 
