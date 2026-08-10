@@ -181,12 +181,12 @@ if (-not $Apply) {
 
 if (-not $WhatIfPreference) {
     if ($isFullInstall) {
-        $confirmation = Read-Host "Type $destinationRoot to confirm FULL CLEAN installation of PlayWise (DELETES switch\playwise and all existing data)"
+        $confirmation = Read-Host "Type $destinationDriveLetter to confirm FULL CLEAN installation of PlayWise (DELETES switch\playwise and all existing data)"
     } else {
-        $confirmation = Read-Host "Type $destinationRoot to confirm replacement of PlayWise binaries"
+        $confirmation = Read-Host "Type $destinationDriveLetter to confirm replacement of PlayWise binaries"
     }
-    if ($confirmation -cne $destinationRoot) {
-        throw "Confirmation did not match $destinationRoot; no files were changed."
+    if ($confirmation -cne $destinationDriveLetter) {
+        throw "Confirmation did not match drive letter $destinationDriveLetter; no files were changed."
     }
 }
 

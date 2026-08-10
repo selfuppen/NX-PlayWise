@@ -66,8 +66,21 @@ def test_install_script_preview() -> None:
         require("Install mode:   Full clean install" in res_full.stdout, "Full mode title missing")
 
 
+def test_install_script_confirmation_uses_drive_letter_only() -> None:
+    script = INSTALL_SCRIPT.read_text(encoding="utf-8")
+    require(
+        'Read-Host "Type $destinationDriveLetter to confirm' in script,
+        "confirmation prompt must request only the drive letter",
+    )
+    require(
+        'if ($confirmation -cne $destinationDriveLetter)' in script,
+        "confirmation must compare against only the drive letter",
+    )
+
+
 def main() -> int:
     test_install_script_preview()
+    test_install_script_confirmation_uses_drive_letter_only()
     print("Install script tests passed")
     return 0
 
