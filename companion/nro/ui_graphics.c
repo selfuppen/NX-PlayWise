@@ -2013,7 +2013,7 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     if (scale < 2) scale = 2;
     total = (size + 8) * scale;
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 142, "可选方法二：联网扫码", 23, COLOR(28, 34, 43));
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 142, "推荐方案一：联网扫码", 23, COLOR(7, 93, 76));
     origin_x = dialog.x + 34;
     origin_y = dialog.y + 164;
     fill_rect(pixels, stride, (UiRect){origin_x, origin_y, total, total}, COLOR(255, 255, 255));
@@ -2034,7 +2034,7 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     draw_text(pixels, stride, dialog.x + 34, next_y + 4,
               "二维码包含加时码密钥，请仅由家长使用。", 14, COLOR(170, 65, 65));
 
-    draw_text(pixels, stride, dialog.x + 470, dialog.y + 142, "推荐方法一：单文件离线版", 23, COLOR(7, 93, 76));
+    draw_text(pixels, stride, dialog.x + 470, dialog.y + 142, "备用方案二：单文件离线版", 23, COLOR(28, 34, 43));
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 178,
               "1. 解压完整交付包，取得 playwise-offline.html", 15, COLOR(45, 52, 62));
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 208,
