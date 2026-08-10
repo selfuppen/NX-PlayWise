@@ -8,6 +8,8 @@
 
 NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · PlayWise”。它是在 Nintendo Switch 自制系统环境中运行的本地游玩额度管理工具，包含常驻 sysmodule、Companion NRO、Overlay 和家长端 PWA。
 
+**核心加时流程可在无网络环境中完成：家长生成指定分钟数的 8 位加时码并交给孩子，孩子在 Switch 上兑换后即可获得相应的游玩时间。生成、传递和兑换代码均不需要 Switch 连接互联网，也不依赖业务后端。**
+
 当前公开版本为 `0.1.3`，已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成资格验证。
 
 - 项目仓库：[selfuppen/NX-PlayWise](https://github.com/selfuppen/NX-PlayWise)
@@ -21,8 +23,9 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 - 查看今天已玩、总额度和剩余时间；
 - 设置今日额度和每周计划；
-- 由家长生成当天有效的 8 位加时码；
-- 在 Companion NRO 或游戏内 Overlay 中兑换加时码；
+- 由家长为指定分钟数生成当天有效的 8 位加时码；
+- 在完全离线、无 Wi-Fi 的环境中，把加时码直接告诉孩子；
+- 孩子在 Companion NRO 或游戏内 Overlay 中兑换代码，获得相应的游玩时间；
 - 通过二维码或配置文件将 Switch 配对到家长端 PWA；
 - 在异常时导出诊断、紧急停用控制或恢复安装前状态。
 
@@ -31,15 +34,16 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 1. 准备已安装 Atmosphère 和 Homebrew Menu 的 Switch；如需游戏内入口，另行安装 Ultrahand Overlay。
 2. 下载 PlayWise 安装包，把内容安装到 SD 卡根目录。
 3. 从 Homebrew Menu 打开“任我玩”，完成首次设置。
-4. 在家长区设置今日额度或周计划；需要临时加时时，生成 8 位码并在 NRO 或 Overlay 中兑换。
+4. 在家长区设置今日额度或周计划；需要临时加时时，由家长生成指定分钟数的 8 位码并告诉孩子。
+5. 孩子无需联网，在 Companion NRO 或 Overlay 中输入代码，确认后即可获得相应的游玩时间。
 
 完整步骤、升级方法和截图位置见[使用指南](docs/使用指南.md)。
 
 ## 家长端 PWA
 
-家长端网页在浏览器本地生成加时码，不会把设备 ID、密钥或代码提交给业务后端。公开演示网页托管在 GitHub Pages，中国大陆网络环境下可能无法访问或加载不稳定，可能需要使用能够访问 GitHub Pages 的网络环境。
+家长端网页在浏览器本地生成加时码，不会把设备 ID、密钥或代码提交给业务后端。完成配对并准备好单文件离线版、本地页面或离线缓存后，生成代码不需要访问互联网；孩子在 Switch 上兑换时同样不需要联网。公开演示网页托管在 GitHub Pages，中国大陆网络环境下可能无法访问或加载不稳定，可能需要使用能够访问 GitHub Pages 的网络环境。
 
-无法稳定访问时，可以在电脑上本地运行 PWA，再导入 Switch 导出的 `parent-import.json`；需要手机扫码使用时，则应把完整前端部署到可信的 HTTPS 静态站点。具体操作见[使用指南的家长端 PWA 章节](docs/使用指南.md#家长端-pwa)。
+无法稳定访问时，可下载 `playwise-offline.html` 单文件离线版，在电脑或支持本地 HTML 的手机浏览器中直接打开，再导入 Switch 导出的 `parent-import.json`；不需要 Python、前端工具或本地服务器。需要手机扫码自动配对或安装 PWA 时，仍应使用公开页面或把完整前端部署到可信的 HTTPS 静态站点。具体操作见[使用指南的家长端 PWA 章节](docs/使用指南.md#家长端-pwa)。
 
 ## 推荐环境
 

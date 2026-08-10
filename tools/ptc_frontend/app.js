@@ -36,7 +36,33 @@ const importError = document.getElementById("importError");
 const importFile = document.getElementById("importFile");
 const pairingDialog = document.getElementById("pairingDialog");
 const demoDialog = document.getElementById("demoDialog");
+const compatibilityWarning = document.getElementById("compatibilityWarning");
+const standaloneMode = document.documentElement.dataset.standalone === "true";
 let installPrompt = null;
+
+function createMemoryStorage() {
+  const values = new Map();
+  return {
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, String(value)); },
+    removeItem(key) { values.delete(key); },
+  };
+}
+
+function selectStorage() {
+  try {
+    const storage = globalThis.localStorage;
+    const probeKey = "ptc.frontend.storage-probe";
+    storage.setItem(probeKey, "ok");
+    storage.removeItem(probeKey);
+    return {storage, persistent: true};
+  } catch {
+    return {storage: createMemoryStorage(), persistent: false};
+  }
+}
+
+const selectedStorage = selectStorage();
+const frontendStorage = selectedStorage.storage;
 
 const tierOptions = [1, 2, 3, 4];
 for (let minutes = 5; minutes <= 120; minutes += 5) {
@@ -60,6 +86,13 @@ function clearError(target) {
   target.hidden = true;
 }
 
+function addCompatibilityWarning(message) {
+  const item = document.createElement("p");
+  item.textContent = message;
+  compatibilityWarning.append(item);
+  compatibilityWarning.hidden = false;
+}
+
 function syncDemoWarning() {
   demoWarning.hidden = !isDemoSecret(secretInput.value);
 }
@@ -75,13 +108,13 @@ async function confirmPairing(pairing, source) {
   document.getElementById("pairingSource").textContent = source;
   document.getElementById("pairingDevice").textContent = pairing.deviceId;
   document.getElementById("pairingSecret").textContent = maskedSecret(pairing.secret);
-  const current = loadConfig(localStorage);
+  const current = loadConfig(frontendStorage);
   document.getElementById("pairingReplace").hidden =
     current.deviceId === pairing.deviceId && current.secret === pairing.secret;
   if (!await dialogDecision(pairingDialog)) return false;
   deviceInput.value = pairing.deviceId;
   secretInput.value = pairing.secret;
-  saveConfig(localStorage, {
+  saveConfig(frontendStorage, {
     deviceId: pairing.deviceId,
     secret: pairing.secret,
     tierMinutes: Number(tierInput.value),
@@ -92,9 +125,9 @@ async function confirmPairing(pairing, source) {
 }
 
 async function acceptDemoRiskIfNeeded(secret) {
-  if (!isDemoSecret(secret) || demoRiskAcknowledged(localStorage)) return true;
+  if (!isDemoSecret(secret) || demoRiskAcknowledged(frontendStorage)) return true;
   if (!await dialogDecision(demoDialog)) return false;
-  acknowledgeDemoRisk(localStorage);
+  acknowledgeDemoRisk(frontendStorage);
   return true;
 }
 
@@ -107,7 +140,7 @@ function resetToDefaults() {
 }
 
 function loadSavedForm() {
-  const config = loadConfig(localStorage);
+  const config = loadConfig(frontendStorage);
   deviceInput.value = config.deviceId;
   secretInput.value = config.secret;
   tierInput.value = String(config.tierMinutes);
@@ -127,10 +160,25 @@ async function initialize() {
       globalThis.history.replaceState(null, "", `${globalThis.location.pathname}${globalThis.location.search}`);
     }
   }
-  if (!globalThis.isSecureContext || !globalThis.crypto?.subtle) {
+  if (typeof TextEncoder !== "function" || typeof DataView !== "function") {
+    showError(securityError, "当前浏览器缺少生成加时码所需的基础能力，请升级浏览器。");
+    generateButton.disabled = true;
+    return;
+  }
+  const hasSecureRandom = typeof globalThis.crypto?.getRandomValues === "function";
+  if (!standaloneMode && (!globalThis.isSecureContext || !globalThis.crypto?.subtle || !hasSecureRandom)) {
     showError(securityError, "当前页面无法使用 Web Crypto，请通过 HTTPS 或 localhost 打开。");
     generateButton.disabled = true;
     return;
+  }
+  if (standaloneMode && !globalThis.crypto?.subtle) {
+    addCompatibilityWarning("当前浏览器无法使用 Web Crypto，已启用内置 HMAC-SHA256 兼容实现；加时码协议和校验结果不变。");
+  }
+  if (standaloneMode && !hasSecureRandom) {
+    addCompatibilityWarning("当前浏览器无法使用安全随机源，将从当天尚未签发的编号中顺序选择；若 Switch 提示代码已使用，请重新生成。");
+  }
+  if (!selectedStorage.persistent) {
+    addCompatibilityWarning("当前打开方式不允许持久保存配置；关闭页面后需要重新导入，且旧代码发生编号碰撞时请重新生成。");
   }
   try {
     await runSelfTest();
@@ -139,7 +187,7 @@ async function initialize() {
     generateButton.disabled = true;
     return;
   }
-  if ("serviceWorker" in navigator) {
+  if (!standaloneMode && "serviceWorker" in navigator) {
     try {
       await navigator.serviceWorker.register("./sw.js", {scope: "./"});
       document.getElementById("offlineBadge").hidden = false;
@@ -166,12 +214,12 @@ form.addEventListener("submit", async event => {
     if (!await acceptDemoRiskIfNeeded(secret)) return;
     const tierIndex = tierForMinutes(tierMinutes);
     const dayIndex = dayIndexFor(dateText);
-    const used = usedNoncesFor(localStorage, deviceId, dateText);
+    const used = usedNoncesFor(frontendStorage, deviceId, dateText);
     const nonce = chooseUnusedNonce(used);
     const code = await encodeToken({deviceId, secret, dayIndex, tierIndex, nonce});
 
-    saveConfig(localStorage, {deviceId, secret, tierMinutes});
-    rememberNonce(localStorage, deviceId, dateText, nonce);
+    saveConfig(frontendStorage, {deviceId, secret, tierMinutes});
+    rememberNonce(frontendStorage, deviceId, dateText, nonce);
     codeOutput.textContent = code;
     metaOutput.textContent = `${dateText} · ${tierMinutes} 分钟 · v2`;
     result.hidden = false;
@@ -218,7 +266,7 @@ copyButton.addEventListener("click", async () => {
 });
 
 document.getElementById("clearConfig").addEventListener("click", () => {
-  clearFrontendState(localStorage);
+  clearFrontendState(frontendStorage);
   resetToDefaults();
   result.hidden = true;
   errorOutput.hidden = true;

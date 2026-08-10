@@ -5,6 +5,7 @@ on:
     branches: ["main"]
     paths:
       - 'tools/ptc_frontend/**'
+      - 'tools/build_ptc_standalone.py'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
@@ -29,6 +30,9 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
+      - name: Verify single-file offline build
+        run: python tools/build_ptc_standalone.py --check
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

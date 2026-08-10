@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {webcrypto} from "node:crypto";
+import {readFileSync} from "node:fs";
 import {
   MAX_NONCE,
   chooseUnusedNonce,
@@ -37,6 +38,7 @@ class MemoryStorage {
 }
 
 assert.equal(await runSelfTest(webcrypto), true);
+assert.equal(await runSelfTest({}), true);
 assert.equal(dayIndexFor("2026-07-08"), 2380);
 assert.equal(todayUtc8(Date.UTC(2026, 6, 7, 16, 0, 0)), "2026-07-08");
 assert.throws(() => dayIndexFor("2026-02-30"), /日期无效/);
@@ -61,6 +63,10 @@ assert.deepEqual(
   pairingFromImportText(JSON.stringify({version: 1, device_id: "family_switch", grant_secret: "a".repeat(64)})),
   {deviceId: "family_switch", secret: "a".repeat(64)},
 );
+assert.deepEqual(
+  pairingFromImportText(readFileSync(new URL("../fixtures/parent_import_fixture.json", import.meta.url), "utf8")),
+  {deviceId: "browser-test", secret: "a".repeat(64)},
+);
 assert.throws(() => pairingFromImportText("{"), /有效的 JSON/);
 assert.throws(() => validatePairing({deviceId: "bad space", secret: "a".repeat(32)}), /设备 ID/);
 assert.throws(() => validatePairing({deviceId: "ok", secret: "short"}), /32–64/);
@@ -72,6 +78,25 @@ assert.equal(await encodeToken({
   tierIndex: 0,
   nonce: 0,
 }, webcrypto), "00002848");
+assert.equal(await encodeToken({
+  deviceId: "test-device",
+  secret: "test-secret",
+  dayIndex: 2380,
+  tierIndex: 0,
+  nonce: 0,
+}, {}), "00002848");
+for (let tierIndex = 0; tierIndex < 32; tierIndex += 1) {
+  for (const nonce of [0, tierIndex, MAX_NONCE]) {
+    const input = {
+      deviceId: "browser-test",
+      secret: "a".repeat(64),
+      dayIndex: 2380,
+      tierIndex,
+      nonce,
+    };
+    assert.equal(await encodeToken(input, {}), await encodeToken(input, webcrypto));
+  }
+}
 assert.rejects(() => encodeToken({
   deviceId: "test-device",
   secret: "test-secret",
@@ -96,6 +121,8 @@ const deterministicCrypto = {
   },
 };
 assert.equal(chooseUnusedNonce(new Set([5]), deterministicCrypto), 9);
+const fallbackNonce = chooseUnusedNonce(new Set([0, 1, 2]), {});
+assert.equal(Number.isInteger(fallbackNonce) && fallbackNonce >= 3 && fallbackNonce <= MAX_NONCE, true);
 assert.throws(() => chooseUnusedNonce(new Set(Array.from({length: 512}, (_, index) => index)), webcrypto), /512/);
 
 const storage = new MemoryStorage();

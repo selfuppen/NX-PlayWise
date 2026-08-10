@@ -1,4 +1,4 @@
-const CACHE_NAME = "ptc-frontend-v5";
+const CACHE_NAME = "ptc-frontend-v6";
 const STATIC_PATHS = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const STATIC_PATHS = [
   "./manifest.webmanifest",
   "./icon.svg",
   "./icon-maskable.svg",
+  "./playwise-offline.html",
 ];
 const STATIC_URLS = new Set(STATIC_PATHS.map(path => new URL(path, self.location.href).href));
 

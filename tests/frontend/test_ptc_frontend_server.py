@@ -18,6 +18,7 @@ STATIC_ROOT = TOOLS / "ptc_frontend"
 sys.path.insert(0, str(TOOLS))
 
 from ptc_frontend_server import Handler, STATIC_ASSETS  # noqa: E402
+from build_ptc_standalone import render_standalone  # noqa: E402
 
 
 def assert_equal(actual, expected, label: str) -> None:
@@ -47,6 +48,7 @@ def test_static_assets_and_copy() -> None:
     pairing = (STATIC_ROOT / "pairing.js").read_text(encoding="utf-8")
     worker = (STATIC_ROOT / "sw.js").read_text(encoding="utf-8")
     manifest = json.loads((STATIC_ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
+    standalone = (STATIC_ROOT / "playwise-offline.html").read_text(encoding="utf-8")
 
     for path, (filename, _) in STATIC_ASSETS.items():
         assert_true((STATIC_ROOT / filename).is_file(), f"asset for {path}")
@@ -70,16 +72,26 @@ def test_static_assets_and_copy() -> None:
     assert_true("used_token" not in index and "加时码已使用" in index, "collision recovery copy")
     assert_true("cryptoApi.subtle" in token, "Web Crypto HMAC implementation")
     assert_true("getRandomValues" in token and "Math.random" not in token, "cryptographic random nonce")
+    assert_true("hmacSha256" in token, "standalone HMAC fallback")
     assert_true("10514680" in token, "fixed vector self-test")
     assert_true("ptc.frontend.config.v1" in storage, "versioned config storage key")
     assert_true("ptc.frontend.nonces.v1" in storage, "versioned nonce storage key")
     assert_true("navigator.serviceWorker.register" in app, "service worker registration")
     assert_true("caches.open" in worker and "localStorage" not in worker, "worker caches only assets")
+    assert_true('"./playwise-offline.html"' in worker, "offline download is available from the PWA cache")
     assert_equal(manifest["display"], "standalone", "PWA display mode")
     assert_equal(manifest["start_url"], "./", "portable PWA start URL")
     assert_equal(manifest["name"], "任我玩 · PlayWise", "PWA product name")
     assert_true("STATIC_URLS.has(url.href)" in worker, "worker caches only the static allowlist")
     assert_true(any("maskable" in icon["purpose"] for icon in manifest["icons"]), "maskable icon")
+    assert_equal(standalone, render_standalone(), "committed standalone artifact")
+    assert_true('data-standalone="true"' in standalone, "standalone runtime marker")
+    assert_true("单文件离线版" in standalone and "parent-import.json" in standalone, "standalone guidance")
+    assert_true("connect-src 'none'" in standalone, "standalone blocks network requests")
+    assert_true("script-src 'sha256-" in standalone and "style-src 'sha256-" in standalone, "hashed inline CSP")
+    for external_asset in ["./app.js", "./token.js", "./storage.js", "./pairing.js", "./styles.css", "./sw.js", "./manifest.webmanifest"]:
+        assert_true(external_asset not in standalone, f"standalone omits {external_asset}")
+    assert_true('<script src=' not in standalone and 'type="module"' not in standalone, "standalone script is inline classic JS")
 
 
 def test_http_surface() -> None:

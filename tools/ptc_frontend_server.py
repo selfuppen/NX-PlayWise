@@ -21,6 +21,7 @@ STATIC_ASSETS = {
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json; charset=utf-8"),
     "/icon.svg": ("icon.svg", "image/svg+xml"),
     "/icon-maskable.svg": ("icon-maskable.svg", "image/svg+xml"),
+    "/playwise-offline.html": ("playwise-offline.html", "text/html; charset=utf-8"),
 }
 
 

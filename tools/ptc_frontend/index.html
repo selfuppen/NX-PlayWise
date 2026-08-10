@@ -28,11 +28,15 @@
           <p class="slogan">Play Wise. Play More.</p>
           <p>加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。</p>
         </div>
-        <button id="install" class="secondary compact" type="button" hidden>安装到设备</button>
+        <div class="intro-actions">
+          <a id="downloadStandalone" class="secondary compact" href="./playwise-offline.html" download>下载单文件离线版</a>
+          <button id="install" class="secondary compact" type="button" hidden>安装到设备</button>
+        </div>
       </div>
 
       <div id="securityError" class="notice danger" role="alert" hidden></div>
       <div id="selfTestError" class="notice danger" role="alert" hidden></div>
+      <div id="compatibilityWarning" class="notice warning" role="status" hidden></div>
       <div id="demoWarning" class="notice danger" role="alert" hidden>
         <strong>当前使用公开演示密钥。</strong>
         任何人都知道此密钥，且可生成多个加时码，最高可把当天额度累计到 1440 分钟。它只适用于已在 Switch 上主动开启演示模式的设备。
