@@ -1,6 +1,6 @@
 # PCTL 集成架构
 
-PCTL 是 Nintendo Switch 的系统家长控制服务。PlayWise Release 只管理游玩额度、系统计时和提醒；它不把私有强制锁屏能力作为产品承诺。
+PCTL 是 Nintendo Switch 的系统家长控制服务。PlayWise 标准分发构建只管理游玩额度、系统计时和提醒；它不把私有强制锁屏能力作为产品承诺。
 
 ## 隔离边界
 
@@ -32,9 +32,9 @@ Horizon PCTL
 3. 能确认是否运行于 Atmosphère；
 4. PCTL service 可初始化并读取状态；
 5. settings snapshot 长度、hash 和 layout 符合当前协议；
-6. 没有无法恢复的旧事务。
+6. 没有无法恢复的启动遗留事务。
 
-命中 OLED/HOS 22.5.0 基线记为 `verified`；其他结构正常组合记为 `accepted_unknown`，需要家长确认。snapshot、layout、旧事务、PCTL 读取或 manifest 失败进入只读 `protection`，Release 不允许绕过。
+命中 OLED/HOS 22.5.0 基线记为 `verified`；其他结构正常组合记为 `accepted_unknown`，需要家长确认。snapshot、layout、启动遗留事务、PCTL 读取或 manifest 失败进入只读 `protection`，标准分发构建不允许绕过。
 
 家长最终确认后才：
 
@@ -71,7 +71,7 @@ flowchart LR
 
 - 仓库协议和固定 layout adapter；
 - host 端已知向量与失败注入；
-- 最终构建产物在明确记录的机型/HOS 上进行 A/B 真机验证。
+- 当前候选构建产物在明确记录的机型/HOS 上进行 A/B 真机验证。
 
 版本或 firmware digest 变化时，即使结构预检通过，也只能由家长接受为未知兼容；它不自动成为新的已验证基线。
 
@@ -84,6 +84,6 @@ flowchart LR
 - SD 根目录 `sdmc:/switch/playwise-device-lab`；
 - NRO 持续显示危险水印；
 - package 默认无 `boot2.flag`；
-- 不由公开 `make packages` 构建。
+- 不由标准分发目标 `make packages` 构建。
 
-LAB 可绕过 Release 的兼容认证，但每个探针本身仍必须 snapshot、执行、确认并恢复；恢复无法证明时同样写入 LAB 根目录下的 `disable.flag`。任何 LAB 证据都不能自动升级为公开 Release 资格结果。
+LAB 可绕过标准分发构建的兼容认证，但每个探针本身仍必须 snapshot、执行、确认并恢复；恢复无法证明时同样写入 LAB 根目录下的 `disable.flag`。任何 LAB 证据都不能直接作为标准分发构建的资格结果。

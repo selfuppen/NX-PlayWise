@@ -1918,7 +1918,7 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
                          issued_detail, 16, COLOR(7, 93, 76));
     }
     draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 420, dialog.width - 84, 24},
-                     "此前生成的当日代码可能仍可兑换；调整时长不会使旧码失效。", 16, COLOR(194, 61, 61));
+                     "同日签发的其他代码可能仍可兑换；调整时长不会使已签发代码失效。", 16, COLOR(194, 61, 61));
     snprintf(issued_detail, sizeof(issued_detail), "%s  ·  %s",
              date, estimate_capped ? "预计时间受每日 24 小时上限限制" : "仅在代码成功兑换后生效");
     draw_text_center(pixels, stride, (UiRect){dialog.x + 42, dialog.y + 448, dialog.width - 84, 24},

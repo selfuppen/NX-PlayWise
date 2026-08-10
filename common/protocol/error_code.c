@@ -45,7 +45,7 @@ static const PtcErrorInfo PTC_ERROR_TABLE[] = {
     {PTC_ERR_STORAGE_WRITE_FAILED, "storage_write_failed", "写入存储文件失败"},
     {PTC_ERR_CONFIG_INVALID, "config_invalid", "配置文件无效"},
     {PTC_ERR_RULES_INVALID, "rules_invalid", "规则文件无效"},
-    {PTC_ERR_RELEASE_MANIFEST_INVALID, "release_manifest_invalid", "发布清单损坏或组件不一致"},
+    {PTC_ERR_RELEASE_MANIFEST_INVALID, "release_manifest_invalid", "构建清单损坏或组件不一致"},
 };
 
 static const PtcErrorInfo *ptc_error_info(PtcErrorCode code)

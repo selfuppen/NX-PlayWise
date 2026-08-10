@@ -1776,10 +1776,10 @@ static bool commit_credential(UiState *ui)
     refresh_security_state(ui);
     if (ui->model.credential_kind == 1) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "设备名已更新；旧设备名生成的加时码不可用，请重新生成配对二维码。");
+                 "设备名已更新；使用更新前设备名签发的加时码不可用，请重新生成配对二维码。");
     } else {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "加时码密钥已更新；旧网页配置和此前生成的加时码已失效，请重新配对。");
+                 "加时码密钥已更新；当前网页配对和使用原密钥签发的加时码已失效，请重新配对。");
     }
     return true;
 }
@@ -2325,7 +2325,7 @@ static void handle_parent_action(UiState *ui)
     case 5:
         ui->model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
         snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "软件信息");
-        snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "NX-PlayWise 是项目名称，软件继续使用 PlayWise 品牌。");
+        snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "NX-PlayWise 是项目名称，产品品牌为 PlayWise。");
         snprintf(ui->model.software_version, sizeof(ui->model.software_version), "%s", PLAYWISE_BUILD_VERSION);
         snprintf(ui->model.repository_url, sizeof(ui->model.repository_url), "%s", PLAYWISE_REPOSITORY_URL);
         snprintf(ui->model.pwa_url, sizeof(ui->model.pwa_url), "%s", PTC_PAIRING_BASE_URL);
