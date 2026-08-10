@@ -125,11 +125,39 @@ def test_clean_package_safety() -> None:
     raise AssertionError("cleaning outside build/packages must be rejected")
 
 
+def test_public_package_selection() -> None:
+    with tempfile.TemporaryDirectory(prefix="ptc-public-packages-") as tmp_dir:
+        root = Path(tmp_dir)
+        standard = root / package_remote.STANDARD_PACKAGE
+        complete = root / package_remote.COMPLETE_PACKAGE
+        standard.write_bytes(b"standard")
+        complete.write_bytes(b"complete")
+        selected = package_remote.latest_packages(root)
+        require(selected == {"playwise": standard, "complete": complete}, "public outputs must be selected by exact versioned names")
+        extra = root / "unexpected.zip"
+        extra.write_bytes(b"extra")
+        try:
+            package_remote.latest_packages(root)
+        except package_remote.PackageError as exc:
+            require("exactly the standard and complete public zips" in str(exc), "extra public Zip must explain the output contract")
+        else:
+            raise AssertionError("an extra public Zip must be rejected")
+        extra.unlink()
+        complete.unlink()
+        try:
+            package_remote.latest_packages(root)
+        except package_remote.PackageError as exc:
+            require(package_remote.COMPLETE_PACKAGE in str(exc), "missing complete package must identify its exact name")
+        else:
+            raise AssertionError("a missing complete package must be rejected")
+
+
 def main() -> int:
     test_container_command()
     test_ssh_command()
     test_zip_verification()
     test_clean_package_safety()
+    test_public_package_selection()
     print("Container package helper tests passed")
     return 0
 

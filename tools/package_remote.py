@@ -35,6 +35,9 @@ NACP_TITLE_SIZE = 0x200
 NACP_DISPLAY_VERSION_OFFSET = 0x3060
 APP_TITLE = "任我玩".encode("utf-8")
 PLAYWISE_VERSION = read_playwise_version(ROOT)
+STANDARD_PACKAGE = f"playwise-{PLAYWISE_VERSION}.zip"
+COMPLETE_PACKAGE = f"playwise-complete-{PLAYWISE_VERSION}.zip"
+OFFLINE_HTML = ROOT / "tools" / "ptc_frontend" / "playwise-offline.html"
 DEVICE_LAB_PACKAGE = f"playwise-device-lab-{PLAYWISE_VERSION}.zip"
 PACKAGE_EXPECTATIONS = {"playwise": True}
 RELEASE_COMPONENTS = (
@@ -209,6 +212,23 @@ def verify_device_lab_zip(path: Path) -> None:
             raise PackageError(f"{path.name}: {nro_path} does not embed the Device Lab manifest")
 
 
+def verify_complete_package(path: Path, standard_package: Path, offline_html: Path = OFFLINE_HTML) -> None:
+    expected = {standard_package.name, "playwise-offline.html"}
+    with zipfile.ZipFile(path) as package:
+        names = safe_zip_members(package)
+        if len(names) != len(set(names)):
+            raise PackageError(f"{path.name}: complete package contains duplicate entries")
+        if set(names) != expected:
+            details = ", ".join(sorted(names)) or "<empty>"
+            raise PackageError(f"{path.name}: complete package must contain only {', '.join(sorted(expected))}; got {details}")
+        embedded_standard = package.read(standard_package.name)
+        embedded_html = package.read("playwise-offline.html")
+    if embedded_standard != standard_package.read_bytes():
+        raise PackageError(f"{path.name}: embedded standard package differs from {standard_package.name}")
+    if embedded_html != offline_html.read_bytes():
+        raise PackageError(f"{path.name}: embedded playwise-offline.html differs from the generated standalone page")
+
+
 def verify_flat_sysmodule(path: Path, manifest: dict, *, release: bool) -> None:
     if not path.is_file():
         raise PackageError(f"missing uncompressed sysmodule verification image: {path}")
@@ -241,15 +261,16 @@ def verify_packaged_artifacts(path: Path, manifest: dict) -> None:
 
 
 def latest_packages(package_dir: Path) -> dict[str, Path]:
-    selected: dict[str, Path] = {}
-    for prefix in PACKAGE_EXPECTATIONS:
-        matches = sorted(package_dir.glob(f"{prefix}-*.zip"), key=lambda path: path.stat().st_mtime)
-        if not matches:
-            raise PackageError(f"missing generated package: {prefix}-*.zip")
-        selected[prefix] = matches[-1]
-    if len(list(package_dir.glob("*.zip"))) != 1:
-        raise PackageError("release build must produce exactly one public zip")
-    return selected
+    standard = package_dir / STANDARD_PACKAGE
+    complete = package_dir / COMPLETE_PACKAGE
+    missing = [path.name for path in (standard, complete) if not path.is_file()]
+    if missing:
+        raise PackageError(f"missing generated package: {', '.join(missing)}")
+    zip_names = {path.name for path in package_dir.glob("*.zip")}
+    expected = {STANDARD_PACKAGE, COMPLETE_PACKAGE}
+    if zip_names != expected:
+        raise PackageError("release build must produce exactly the standard and complete public zips")
+    return {"playwise": standard, "complete": complete}
 
 
 def container_command(container_path: str = DEFAULT_CONTAINER_PATH) -> str:
@@ -329,10 +350,11 @@ def build_and_verify(
         raise PackageError(f"missing generated release manifest: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     packages = latest_packages(package_dir)
-    for prefix, path in packages.items():
-        verify_package_zip(path, prefix, expected_manifest=manifest)
-        verify_packaged_artifacts(path, manifest)
-        verify_flat_sysmodule(ROOT / "build" / "switch" / "pctc-sysmodule.bin", manifest, release=True)
+    standard_package = packages["playwise"]
+    verify_package_zip(standard_package, "playwise", expected_manifest=manifest)
+    verify_packaged_artifacts(standard_package, manifest)
+    verify_complete_package(packages["complete"], standard_package)
+    verify_flat_sysmodule(ROOT / "build" / "switch" / "pctc-sysmodule.bin", manifest, release=True)
     for child in package_dir.iterdir():
         if child.is_dir():
             remove_path(child)

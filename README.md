@@ -19,7 +19,7 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 当前版本是已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成测试，其它系统版本未充分测试，有风险请周知。
 
 - 项目仓库：[selfuppen/NX-PlayWise](https://github.com/selfuppen/NX-PlayWise)
-- 家长网页：[公开演示网页](https://selfuppen.github.io/NX-PlayWise/)
+- 家长网页：优先使用完整交付包中的 `playwise-offline.html`；网络可访问时也可使用[公开演示网页](https://selfuppen.github.io/NX-PlayWise/)
 - 安装与使用：[使用指南](docs/使用指南.md)
 
 ## 可以做什么
@@ -35,7 +35,7 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 ## 快速开始
 
 1. 准备已安装 Atmosphère 和 Homebrew Menu 的 Switch；如需游戏内入口，另行安装 Ultrahand Overlay。
-2. 下载 PlayWise 安装包，把内容安装到 SD 卡根目录。
+2. 首次使用优先下载 `playwise-complete-<版本>.zip` 完整交付包；其中的 `playwise-<版本>.zip` 用于安装 Switch 端，`playwise-offline.html` 用于家长手机或电脑。
 3. 从 Homebrew Menu 打开“任我玩”，完成首次设置。
 4. 在家长区设置今日额度或周计划；需要临时加时时，由家长生成指定分钟数的 8 位码并告诉孩子。
 5. 孩子无需联网，在主机应用或游戏内浮窗中输入代码，确认后即可获得相应的游玩时间。
@@ -44,9 +44,9 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 ## 家长网页
 
-家长端网页在浏览器本地生成加时码，不会把设备 ID、密钥或代码提交给业务后端。完成配对并准备好单文件离线版、本地页面或离线缓存后，生成代码不需要访问互联网；孩子在 Switch 上兑换时同样不需要联网。公开演示网页托管在 GitHub Pages，中国大陆网络环境下可能无法访问或加载不稳定，可能需要使用能够访问 GitHub Pages 的网络环境。
+家长端网页在浏览器本地生成加时码，不会把设备 ID、密钥或代码提交给业务后端。普通用户优先使用完整交付包内的 `playwise-offline.html`：无需安装应用、Python、前端工具或本地服务器，准备完成后日常生成不需要访问互联网；孩子在 Switch 上兑换时同样不需要联网。
 
-无法稳定访问时，可下载 `playwise-offline.html` 单文件离线版，在电脑或支持本地 HTML 的手机浏览器中直接打开，再导入 Switch 导出的 `parent-import.json`；不需要 Python、前端工具或本地服务器。需要手机扫码自动配对或把网页安装到桌面时，仍应使用公开页面或把完整网页部署到可信的 HTTPS 静态站点。具体操作见[使用指南的家长网页章节](docs/使用指南.md#家长网页)。
+公开演示网页托管在 GitHub Pages，中国大陆网络环境下可能无法访问或加载不稳定，因此只作为网络可访问时的便捷方式。需要手机扫码自动配对或把网页安装到桌面时，可使用公开页面或把完整网页部署到可信的 HTTPS 静态站点。具体操作见[使用指南的家长网页章节](docs/使用指南.md#家长网页)。
 
 ## 推荐环境
 

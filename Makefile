@@ -42,7 +42,7 @@ ORCH_SRCS := \
 TEST_SRCS := tests/c/test_host_core.c
 UI_TEST_SRCS := companion/nro/ui_state.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
-.PHONY: all manifest device-lab-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp packages package-playwise device-lab-sysmodule device-lab-nro device-lab-package clean
+.PHONY: all manifest device-lab-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-package clean
 
 all: test
 
@@ -91,7 +91,11 @@ sysmodule-nsp: manifest
 package-playwise: sysmodule-nsp companion-nro companion-overlay
 	python3 tools/package_sdmc.py --out build/packages/playwise --zip build/packages/playwise-$(PLAYWISE_VERSION).zip --manifest build/generated/release-manifest.json --sysmodule-exefs build/switch/exefs.nsp --nro build/switch/pctc.nro --overlay build/switch/pctc.ovl --boot2
 
-packages: package-playwise
+package-complete: package-playwise
+	python3 tools/build_ptc_standalone.py --check
+	python3 tools/package_delivery.py --standard-package build/packages/playwise-$(PLAYWISE_VERSION).zip --offline-html tools/ptc_frontend/playwise-offline.html --output build/packages/playwise-complete-$(PLAYWISE_VERSION).zip
+
+packages: package-complete
 
 # Internal-only target. It is deliberately not a dependency of `packages` and
 # its package omits boot2.flag so an operator must opt in on the device.

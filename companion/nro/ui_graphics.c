@@ -55,7 +55,7 @@ static const UiAction TODAY_ACTIONS[] = {
 
 static const UiAction SECURITY_ACTIONS[] = {
     {"立即生成加时码", "在本机生成 8 位加时码", COLOR(25, 132, 95)},
-    {"手机/电脑生成加时码", "扫描二维码，在手机或电脑上生成", COLOR(42, 105, 188)},
+    {"手机/电脑生成加时码", "优先使用完整交付包中的离线网页", COLOR(42, 105, 188)},
     {"加时码生成管理", "管理设备名、密钥、导出配置和二维码地址", COLOR(91, 100, 116)},
     {"修改任我玩PIN", "验证当前 PIN 后设置新 PIN", COLOR(42, 105, 188)},
     {"家长区快捷键管理", "选择组合并管理孩子区提示", COLOR(42, 105, 188)},
@@ -2013,7 +2013,7 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     if (scale < 2) scale = 2;
     total = (size + 8) * scale;
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 142, "方法一：扫描二维码", 23, COLOR(28, 34, 43));
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 142, "可选方法二：联网扫码", 23, COLOR(28, 34, 43));
     origin_x = dialog.x + 34;
     origin_y = dialog.y + 164;
     fill_rect(pixels, stride, (UiRect){origin_x, origin_y, total, total}, COLOR(255, 255, 255));
@@ -2027,28 +2027,33 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         }
     }
     
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 540,
-              "手机或电脑扫码后，网页会自动导入本机配置。", 15, COLOR(28, 118, 188));
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 565,
-              "二维码包含加时码密钥，请仅由家长使用。", 15, COLOR(170, 65, 65));
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 530,
+              "仅在网页可访问时扫码；地址：", 14, COLOR(91, 100, 114));
+    next_y = draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 552,
+                               model->pairing_base_url, 13, 400, 19, 3, COLOR(28, 118, 188));
+    draw_text(pixels, stride, dialog.x + 34, next_y + 4,
+              "二维码包含加时码密钥，请仅由家长使用。", 14, COLOR(170, 65, 65));
 
-    draw_text(pixels, stride, dialog.x + 470, dialog.y + 142, "方法二：手动导入配置", 23, COLOR(28, 34, 43));
+    draw_text(pixels, stride, dialog.x + 470, dialog.y + 142, "推荐方法一：单文件离线版", 23, COLOR(7, 93, 76));
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 178,
-              "1. 返回“加时码生成管理”，选择“导出手机/电脑配置”", 15, COLOR(45, 52, 62));
+              "1. 解压完整交付包，取得 playwise-offline.html", 15, COLOR(45, 52, 62));
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 208,
-              "2. 将配置文件传到手机或电脑：", 15, COLOR(45, 52, 62));
+              "2. 返回“加时码生成管理”，导出手机/电脑配置", 15, COLOR(45, 52, 62));
     draw_text(pixels, stride, dialog.x + 488, dialog.y + 234,
               "sdmc:/switch/playwise/parent-import.json", 15, COLOR(28, 118, 188));
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 266,
-              "3. 打开当前二维码跳转地址：", 15, COLOR(45, 52, 62));
-    next_y = draw_wrapped_text(pixels, stride, dialog.x + 488, dialog.y + 292,
-                               model->pairing_base_url, 14, 570, 21, 5, COLOR(28, 118, 188));
+              "3. 将 HTML 和配置文件传到可信的手机或电脑", 15, COLOR(45, 52, 62));
+    draw_text(pixels, stride, dialog.x + 470, dialog.y + 298,
+              "4. 用系统浏览器打开 HTML，再点击“导入配置文件”", 15, COLOR(45, 52, 62));
+    draw_text(pixels, stride, dialog.x + 470, dialog.y + 330,
+              "5. 选择 parent-import.json，再点击“导入此设备”", 15, COLOR(45, 52, 62));
+    next_y = dialog.y + 362;
     draw_text(pixels, stride, dialog.x + 470, next_y + 6,
-              "默认使用官方家长网页，也可填写可信的自部署地址。", 14, COLOR(91, 100, 114));
+              "日常生成无需网络，也无需安装应用或本地服务器。", 14, COLOR(7, 93, 76));
     draw_text(pixels, stride, dialog.x + 470, next_y + 32,
-              "4. 点击“导入配置文件”，选择该文件", 15, COLOR(45, 52, 62));
+              "手机请先保存文件，再交给系统浏览器打开；", 14, COLOR(91, 100, 114));
     draw_text(pixels, stride, dialog.x + 470, next_y + 58,
-              "5. 核对设备名后，点击“导入此设备”", 15, COLOR(45, 52, 62));
+              "不要使用聊天软件或网盘的内置预览器。", 14, COLOR(91, 100, 114));
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 470, next_y + 74, 610, 48}, 7, COLOR(255, 235, 238));
     draw_text(pixels, stride, dialog.x + 486, next_y + 104,
               "配置文件包含加时码密钥，请勿发送给他人。", 15, COLOR(170, 35, 48));
