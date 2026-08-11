@@ -301,6 +301,14 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "support diagnostics card");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "support software information card");
 
+    model.parent_page = PTC_UI_PARENT_HOLIDAY;
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(0)), PTC_UI_HIT_PARENT_CARD, 0, "holiday global switch card");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(1)), PTC_UI_HIT_PARENT_CARD, 1, "holiday statutory mode card");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(2)), PTC_UI_HIT_PARENT_CARD, 2, "holiday statutory quota card");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3, "holiday makeup mode card");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "holiday makeup quota card");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "holiday save card");
+
     model.view = PTC_UI_SETUP;
     model.setup_step = PTC_UI_SETUP_SHORTCUT;
     check_hit(hit_center(&model, ptc_ui_setup_shortcut_card_rect(0)), PTC_UI_HIT_SETUP_SHORTCUT_CARD, 0,

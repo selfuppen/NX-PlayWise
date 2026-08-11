@@ -804,6 +804,19 @@ PtcUiRect ptc_ui_parent_card_rect(int index)
     return rect;
 }
 
+PtcUiRect ptc_ui_holiday_card_rect(int index)
+{
+    switch (index) {
+    case 0: return (PtcUiRect){54, 172, 1172, 72};
+    case 1: return (PtcUiRect){74, 318, 534, 58};
+    case 2: return (PtcUiRect){74, 388, 534, 132};
+    case 3: return (PtcUiRect){672, 318, 534, 58};
+    case 4: return (PtcUiRect){672, 388, 534, 132};
+    case 5: return (PtcUiRect){652, 548, 574, 58};
+    default: return (PtcUiRect){54, 172, 1172, 72};
+    }
+}
+
 PtcUiRect ptc_ui_dialog_rect(int width, int height)
 {
     PtcUiRect rect = {(PTC_UI_SCREEN_W - width) / 2, (PTC_UI_SCREEN_H - height) / 2 - 10, width, height};
@@ -1504,7 +1517,10 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     }
     count = ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {
-        if (ptc_ui_rect_contains(ptc_ui_parent_card_rect(i), x, y)) {
+        PtcUiRect card_rect = (model->parent_page == PTC_UI_PARENT_HOLIDAY)
+            ? ptc_ui_holiday_card_rect(i)
+            : ptc_ui_parent_card_rect(i);
+        if (ptc_ui_rect_contains(card_rect, x, y)) {
             return make_hit(PTC_UI_HIT_PARENT_CARD, i);
         }
     }

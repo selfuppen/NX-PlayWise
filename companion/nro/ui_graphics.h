@@ -378,6 +378,7 @@ PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_refresh_rect(void);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
+PtcUiRect ptc_ui_holiday_card_rect(int index);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
 PtcUiRect ptc_ui_minutes_value_rect(void);
 PtcUiRect ptc_ui_minutes_dec_rect(void);
