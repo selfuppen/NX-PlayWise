@@ -10,7 +10,11 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from playwise_version import read_playwise_version  # noqa: E402
+from playwise_version import (  # noqa: E402
+    read_playwise_version,
+    validate_playwise_version,
+    write_playwise_version,
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -48,10 +52,29 @@ def test_mismatch_fails() -> None:
             raise AssertionError("mismatched version pair must fail")
 
 
+def test_write_version_pair() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-version-") as tmp_dir:
+        root = Path(tmp_dir)
+        write_version_pair(root, "0.1.4", "0.1.4")
+        write_playwise_version("1.0.0", root)
+        require(read_playwise_version(root) == "1.0.0", "writer must update both version sources")
+
+
+def test_invalid_version_fails() -> None:
+    for version in ("v1.0.0", "1.0", "01.0.0", "1.0.0 bad"):
+        try:
+            validate_playwise_version(version)
+        except ValueError:
+            continue
+        raise AssertionError(f"invalid version must fail: {version}")
+
+
 def main() -> int:
     require(bool(read_playwise_version(ROOT)), "repository version pair must load")
     test_matching_versions()
     test_mismatch_fails()
+    test_write_version_pair()
+    test_invalid_version_fails()
     print("PlayWise version source tests passed")
     return 0
 
