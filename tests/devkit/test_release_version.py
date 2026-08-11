@@ -12,7 +12,7 @@ TOOLS = ROOT / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from playwise_version import read_playwise_version  # noqa: E402
-from release_version import release  # noqa: E402
+from release_version import next_alpha_version, release  # noqa: E402
 
 
 def git(root: Path, *args: str) -> str:
@@ -46,10 +46,37 @@ def test_release_creates_commit_and_annotated_tag() -> None:
         root = Path(tmp_dir)
         make_repository(root)
         require(release("1.0.0", root=root, verify=False) == "v1.0.0", "release must return tag")
-        require(read_playwise_version(root) == "1.0.0", "release must update the version pair")
+        require(read_playwise_version(root) == "1.0.1-alpha", "release must advance to the next alpha")
         require(git(root, "tag", "--list", "v1.0.0") == "v1.0.0", "release tag must exist")
         require(git(root, "cat-file", "-t", "v1.0.0") == "tag", "release tag must be annotated")
+        require(
+            git(root, "rev-list", "-n", "1", "v1.0.0") == git(root, "rev-parse", "HEAD^"),
+            "release tag must remain on the stable version commit",
+        )
+        require(
+            git(root, "log", "-1", "--pretty=%s") == "chore(release): start 1.0.1-alpha",
+            "branch head must be the next alpha commit",
+        )
         require(not git(root, "status", "--porcelain"), "release must leave a clean worktree")
+
+
+def test_next_alpha_version() -> None:
+    require(next_alpha_version("1.0.0") == "1.0.1-alpha", "stable release must bump patch")
+    require(next_alpha_version("2.3.9-beta.2") == "2.3.10-alpha", "prerelease must bump patch")
+
+
+def test_current_version_tags_head_without_empty_release_commit() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-release-") as tmp_dir:
+        root = Path(tmp_dir)
+        make_repository(root)
+        stable_commit = git(root, "rev-parse", "HEAD")
+        release("0.1.4", root=root, verify=False)
+        require(
+            git(root, "rev-list", "-n", "1", "v0.1.4") == stable_commit,
+            "unchanged current version must tag the existing commit",
+        )
+        require(git(root, "rev-list", "--count", "HEAD") == "2", "only the alpha commit must be added")
+        require(read_playwise_version(root) == "0.1.5-alpha", "current release must advance to alpha")
 
 
 def test_existing_tag_is_not_moved() -> None:
@@ -69,7 +96,9 @@ def test_existing_tag_is_not_moved() -> None:
 
 
 def main() -> int:
+    test_next_alpha_version()
     test_release_creates_commit_and_annotated_tag()
+    test_current_version_tags_head_without_empty_release_commit()
     test_existing_tag_is_not_moved()
     print("Release version script tests passed")
     return 0
