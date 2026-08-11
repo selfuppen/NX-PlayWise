@@ -16,6 +16,9 @@ typedef struct {
     char code[80];
     uint16_t minutes;
     PtcDayRule week[7];
+    bool holiday_enabled;
+    PtcDayRule holiday_rule;
+    PtcDayRule makeup_workday_rule;
 #ifdef PLAYWISE_DEVICE_LAB
     bool start_timer;
     bool wait_for_expiry;

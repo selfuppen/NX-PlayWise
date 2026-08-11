@@ -18,6 +18,9 @@ typedef struct {
     int64_t played_minutes;
     int play_timer_enabled;
     int restricted_now;
+    const char *rule_source;
+    bool calendar_covered;
+    bool calendar_update_warning;
 } PtcResultState;
 
 typedef struct {

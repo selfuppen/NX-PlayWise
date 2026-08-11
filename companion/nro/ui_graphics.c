@@ -53,6 +53,15 @@ static const UiAction TODAY_ACTIONS[] = {
     {"恢复周计划", "清除今日临时设置，恢复本周规则", COLOR(91, 100, 116)},
 };
 
+static const UiAction HOLIDAY_ACTIONS[] = {
+    {"国家节假日规则", "开启或关闭自动日历规则", COLOR(42, 105, 188)},
+    {"法定休假日模式", "在限时与不限时之间切换", COLOR(25, 132, 95)},
+    {"法定休假日额度", "设置休息日可玩分钟数", COLOR(25, 132, 95)},
+    {"调休工作日模式", "在限时与不限时之间切换", COLOR(215, 139, 25)},
+    {"调休工作日额度", "设置补班日可玩分钟数", COLOR(215, 139, 25)},
+    {"保存国家节假日设置", "立即重算今天并由后台确认", COLOR(42, 105, 188)}
+};
+
 static const UiAction SECURITY_ACTIONS[] = {
     {"立即生成加时码", "在本机生成 8 位加时码", COLOR(25, 132, 95)},
     {"手机/电脑生成加时码", "优先使用完整交付包中的离线网页", COLOR(42, 105, 188)},
@@ -549,6 +558,8 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char played[32];
     char parent_hint[128];
     char fitted_hint[128];
+    char rule_line[160];
+    const char *rule_label = "周计划";
     const char *mode = model->disable_flag_present ? "控制已停用" :
         (strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
         (strcmp(model->setup_phase, "protection") == 0 ? "保护模式" : "兼容性待确认"));
@@ -566,6 +577,13 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_timer_status_tile(pixels, stride, (UiRect){942, 118, 284, 92},
                            model->play_timer_enabled == 1 ? "已开启" : "未确认", mode,
                            model->disable_flag_present ? COLOR(194, 61, 61) : COLOR(28, 118, 188));
+    if (strcmp(model->rule_source, "today_override") == 0) rule_label = "今日临时设置";
+    else if (strcmp(model->rule_source, "statutory_holiday") == 0) rule_label = "国家法定休假日";
+    else if (strcmp(model->rule_source, "makeup_workday") == 0) rule_label = "国家调休工作日";
+    snprintf(rule_line, sizeof(rule_line), "当前按%s执行%s", rule_label,
+             model->calendar_update_warning ? " · 节假日日历需要更新" : "");
+    draw_text_center(pixels, stride, (UiRect){54, 212, 1172, 22}, rule_line, 17,
+                     model->calendar_update_warning ? COLOR(194, 61, 61) : COLOR(77, 86, 99));
 
     fill_round_rect(pixels, stride, (UiRect){54, 238, 760, 246}, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, (UiRect){54, 238, 760, 246}, 1, COLOR(219, 225, 233));
@@ -802,6 +820,10 @@ static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
         *count = 0;
         return NULL;
     }
+    if (page == PTC_UI_PARENT_HOLIDAY) {
+        *count = (int)(sizeof(HOLIDAY_ACTIONS) / sizeof(HOLIDAY_ACTIONS[0]));
+        return HOLIDAY_ACTIONS;
+    }
     if (page == PTC_UI_PARENT_SECURITY) {
         *count = (int)(sizeof(SECURITY_ACTIONS) / sizeof(SECURITY_ACTIONS[0]));
         return SECURITY_ACTIONS;
@@ -816,14 +838,14 @@ static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
 
 static void draw_tabs(uint32_t *pixels, uint32_t stride, PtcUiParentPage active)
 {
-    static const char *LABELS[] = {"今日额度", "周计划", "加时码与安全", "支持与恢复"};
+    static const char *LABELS[] = {"今日额度", "周计划", "国家节假日", "加时码与安全", "支持与恢复"};
     int index;
     for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
         UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
         uint32_t background = index == (int)active ? COLOR(28, 118, 188) : COLOR(235, 238, 243);
         uint32_t foreground = index == (int)active ? COLOR(255, 255, 255) : COLOR(66, 74, 86);
         fill_round_rect(pixels, stride, tab, 8, background);
-        draw_text_center(pixels, stride, tab, LABELS[index], 21, foreground);
+        draw_text_center(pixels, stride, tab, LABELS[index], 18, foreground);
     }
     draw_text(pixels, stride, 1038, 140, "L / R 切换", 19, COLOR(97, 106, 120));
 }
@@ -1192,6 +1214,34 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
                           !model->weekly_dirty || model->disable_flag_present);
 }
 
+static void draw_holiday_status(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect info = {824, 176, 402, 324};
+    char line[160];
+    fill_round_rect(pixels, stride, info, 8, COLOR(255, 255, 255));
+    draw_rect_outline(pixels, stride, info, 1, COLOR(219, 225, 233));
+    draw_text(pixels, stride, 850, 214, "当前设置", 24, COLOR(28, 34, 43));
+    snprintf(line, sizeof(line), "自动规则：%s", model->draft_holiday_enabled ? "已开启" : "已关闭");
+    draw_text(pixels, stride, 850, 258, line, 20, COLOR(66, 74, 86));
+    if (model->draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
+        snprintf(line, sizeof(line), "法定休假：不限时");
+    } else {
+        snprintf(line, sizeof(line), "法定休假：限时 · %u 分钟", model->draft_holiday_rule.minutes);
+    }
+    draw_text(pixels, stride, 850, 300, line, 20, COLOR(66, 74, 86));
+    if (model->draft_makeup_workday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
+        snprintf(line, sizeof(line), "调休工作：不限时");
+    } else {
+        snprintf(line, sizeof(line), "调休工作：限时 · %u 分钟", model->draft_makeup_workday_rule.minutes);
+    }
+    draw_text(pixels, stride, 850, 342, line, 20, COLOR(66, 74, 86));
+    snprintf(line, sizeof(line), "今天来源：%s", model->rule_source[0] ? model->rule_source : "尚未刷新");
+    draw_text(pixels, stride, 850, 400, line, 18, COLOR(28, 118, 188));
+    draw_text(pixels, stride, 850, 440,
+              model->calendar_update_warning ? "日历即将或已经过期，请更新" : "内置日历：2026 · v1",
+              18, model->calendar_update_warning ? COLOR(194, 61, 61) : COLOR(25, 132, 95));
+}
+
 static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const UiAction *actions;
@@ -1219,6 +1269,10 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
             astate = ptc_ui_safety_action_available(model, index);
         } else if (model->disable_flag_present && model->parent_page == PTC_UI_PARENT_TODAY && index > 0) {
             astate = PTC_UI_ACTION_DISABLED;
+        } else if (model->disable_flag_present && model->parent_page == PTC_UI_PARENT_HOLIDAY) {
+            astate = PTC_UI_ACTION_DISABLED;
+        } else if (model->parent_page == PTC_UI_PARENT_HOLIDAY && index == 5 && !model->holiday_dirty) {
+            astate = PTC_UI_ACTION_DISABLED;
         }
         const UiAction *action = &actions[index];
         if (model->parent_page == PTC_UI_PARENT_SUPPORT && model->disable_flag_present &&
@@ -1229,6 +1283,8 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
         draw_weekly_page(pixels, stride, model);
+    } else if (model->parent_page == PTC_UI_PARENT_HOLIDAY) {
+        draw_holiday_status(pixels, stride, model);
     } else if (model->parent_page == PTC_UI_PARENT_TODAY) {
         draw_today_status(pixels, stride, model);
     } else if (model->parent_page == PTC_UI_PARENT_SECURITY) {
@@ -1241,7 +1297,7 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
         model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
         draw_diagnostic_notice(pixels, stride, model);
-    } else if (model->parent_page != PTC_UI_PARENT_PLAN) {
+    } else if (model->parent_page != PTC_UI_PARENT_PLAN && model->parent_page != PTC_UI_PARENT_HOLIDAY) {
         draw_notice(pixels, stride, model, 522, 128);
     }
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0), "L  上一页");
@@ -1423,7 +1479,9 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     int index;
     draw_dialog_shell(pixels, stride, model, &dialog, 620, 700);
     if ((model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
-         model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) && model->numpad_text[0]) {
+         model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES ||
+         model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
+         model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES) && model->numpad_text[0]) {
         snprintf(shown, sizeof(shown), "%s 分钟", model->numpad_text);
     } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE && model->numpad_text[0]) {
         size_t len = strlen(model->numpad_text);
@@ -1471,6 +1529,15 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             entered_rule.minutes = entered_minutes;
             weekly_today_preview = model->editor_index == weekday &&
                 ptc_ui_day_rule_effectively_changed(model->current_week[weekday], entered_rule);
+        } else if (model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
+                   model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES) {
+            snprintf(current, sizeof(current), "当前值：%u 分钟 · 范围 %u–%u",
+                     (unsigned int)model->numpad_current, (unsigned int)model->numpad_minimum,
+                     (unsigned int)model->numpad_maximum);
+            if (!ptc_ui_parse_minutes(model->numpad_text, model->numpad_minimum, model->numpad_maximum, &entered_minutes)) {
+                entered_minutes = model->numpad_current;
+            }
+            format_duration(entered_minutes, duration, sizeof(duration));
         } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
             unsigned int len = (unsigned int)strlen(model->numpad_text);
             snprintf(current, sizeof(current), "请输入 8 位加时码  ·  当前已输入 %u/8 位", len);
@@ -1514,7 +1581,9 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
                          duration_line, 17, COLOR(28, 118, 188));
     }
     if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
-        model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
+        model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES ||
+        model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
+        model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES) {
         for (index = 0; index < 4; ++index) {
             draw_dialog_button(pixels, stride, ptc_ui_numpad_quick_rect(index), QUICK_LABELS[index],
                                COLOR(235, 238, 243), COLOR(28, 118, 188), true);

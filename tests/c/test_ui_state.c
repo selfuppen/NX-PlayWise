@@ -48,6 +48,7 @@ static void test_release_navigation(void)
     memset(&model, 0, sizeof(model));
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 6, "holiday policy exposes six direct actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 5, "security actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support actions include software information");
 
@@ -415,14 +416,16 @@ static void test_user_state_mapping(void)
         "{\"version\":1,\"request_id\":\"setup\",\"type\":\"complete_setup\",\"status\":\"ok\","
         "\"state\":{\"day_index\":1,\"limited_today\":0,\"blocked_today\":0,\"unrestricted_today\":1,"
         "\"remaining_available\":false,\"remaining_minutes\":-1,\"played_minutes_available\":true,"
-        "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0},"
+        "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0,"
+        "\"rule_source\":\"statutory_holiday\",\"calendar_covered\":true,\"calendar_update_warning\":false},"
         "\"setup\":{\"phase\":\"released\",\"restriction_cleared\":true,\"snapshot_available\":true,"
         "\"activate_after\":105,\"compatibility_status\":\"verified\"},\"completed_at\":100}";
     const char *active =
         "{\"version\":1,\"request_id\":\"status\",\"type\":\"status\",\"status\":\"ok\","
         "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
         "\"remaining_available\":true,\"remaining_minutes\":40,\"played_minutes_available\":true,"
-        "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0},"
+        "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0,"
+        "\"rule_source\":\"statutory_holiday\",\"calendar_covered\":true,\"calendar_update_warning\":false},"
         "\"setup\":{\"phase\":\"active\",\"restriction_cleared\":true,\"snapshot_available\":true,"
         "\"activate_after\":0,\"compatibility_status\":\"verified\"},\"completed_at\":106}";
     const char *protection =
@@ -456,6 +459,8 @@ static void test_user_state_mapping(void)
     check_int(model.view, PTC_UI_CHILD, "active result opens child home");
     check_true(strcmp(model.mode, "额度管理") == 0, "release product language is stable");
     check_int(model.remaining_minutes, 40, "remaining minutes mapped");
+    check_true(strcmp(model.rule_source, "statutory_holiday") == 0 && model.calendar_covered,
+        "effective holiday source and coverage map to the UI model");
     ptc_ui_mark_status_updated(&model, 1000);
     check_int((int)ptc_ui_status_age_seconds(&model, 1030), 30, "status age is measured from last refresh");
     check_int((int)ptc_ui_status_age_seconds(&model, 999), 0, "status age never goes negative");

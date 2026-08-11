@@ -50,6 +50,8 @@ PtcCompanionStatus ptc_companion_submit_add_today_minutes(PtcCompanionFileClient
 PtcCompanionStatus ptc_companion_submit_disable_today_limit(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_submit_restore_today_policy(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
 PtcCompanionStatus ptc_companion_submit_set_weekly_template(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, const PtcDayRule week[7]);
+PtcCompanionStatus ptc_companion_submit_set_holiday_policy(PtcCompanionFileClient *client, const char *request_id,
+    int64_t created_at, bool enabled, PtcDayRule holiday_rule, PtcDayRule makeup_workday_rule);
 PtcCompanionStatus ptc_companion_set_disable_flag(PtcCompanionFileClient *client, bool enabled);
 PtcCompanionStatus ptc_companion_pending_redemption_save(
     PtcCompanionFileClient *client,

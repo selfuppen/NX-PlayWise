@@ -60,3 +60,15 @@ int ptc_companion_set_weekly_template_request_json(char *out, size_t out_size, c
     written = snprintf(out + used, out_size - used, "]}}\n");
     return written < 0 ? written : (int)(used + written);
 }
+
+int ptc_companion_set_holiday_policy_request_json(char *out, size_t out_size, const char *request_id,
+    int64_t created_at, bool enabled, PtcDayRule holiday_rule, PtcDayRule makeup_workday_rule)
+{
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"set_holiday_policy\",\"created_at\":%lld,"
+        "\"payload\":{\"enabled\":%s,\"holiday_rule\":{\"mode\":\"%s\",\"minutes\":%u},"
+        "\"makeup_workday_rule\":{\"mode\":\"%s\",\"minutes\":%u}}}\n",
+        request_id, (long long)created_at, enabled ? "true" : "false",
+        rule_mode_name(holiday_rule.mode), holiday_rule.minutes,
+        rule_mode_name(makeup_workday_rule.mode), makeup_workday_rule.minutes);
+}

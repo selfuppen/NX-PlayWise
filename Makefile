@@ -15,6 +15,7 @@ COMMON_SRCS := \
 	common/token/token_v2.c \
 	common/time/ptc_time.c \
 	common/rules/rules.c \
+	common/rules/holiday_calendar.c \
 	common/support/support_export.c \
 	common/security/credential_policy.c \
 	common/policy/control_policy.c
@@ -40,7 +41,7 @@ ORCH_SRCS := \
 	companion/overlay/bridge.c
 
 TEST_SRCS := tests/c/test_host_core.c
-UI_TEST_SRCS := companion/nro/ui_state.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
+UI_TEST_SRCS := companion/nro/ui_state.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
 .PHONY: all manifest device-lab-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-package clean
 

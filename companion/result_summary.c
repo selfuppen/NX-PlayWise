@@ -51,6 +51,9 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->played_minutes = number_value(state, "played_minutes", -1);
     out->play_timer_enabled = number_value(state, "play_timer_enabled", -1);
     out->restricted_now = number_value(state, "restricted_now", -1);
+    out->calendar_covered = bool_value(state, "calendar_covered", false);
+    out->calendar_update_warning = bool_value(state, "calendar_update_warning", false);
+    snprintf(out->rule_source, sizeof(out->rule_source), "%s", string_value(state, "rule_source"));
     preview = cJSON_GetObjectItemCaseSensitive(root, "preview");
     out->preview_available = cJSON_IsObject(preview);
     out->grant_minutes = number_value(preview, "grant_minutes", 0);

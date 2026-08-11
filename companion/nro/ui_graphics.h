@@ -31,9 +31,10 @@ typedef enum {
 typedef enum {
     PTC_UI_PARENT_TODAY = 0,
     PTC_UI_PARENT_PLAN = 1,
-    PTC_UI_PARENT_SECURITY = 2,
-    PTC_UI_PARENT_SUPPORT = 3,
-    PTC_UI_PARENT_PAGE_COUNT = 4
+    PTC_UI_PARENT_HOLIDAY = 2,
+    PTC_UI_PARENT_SECURITY = 3,
+    PTC_UI_PARENT_SUPPORT = 4,
+    PTC_UI_PARENT_PAGE_COUNT = 5
 } PtcUiParentPage;
 
 typedef enum {
@@ -89,7 +90,9 @@ typedef enum {
     PTC_UI_NUMPAD_NONE = 0,
     PTC_UI_NUMPAD_OFFLINE_CODE = 1,
     PTC_UI_NUMPAD_MINUTES = 2,
-    PTC_UI_NUMPAD_WEEKLY_MINUTES = 3
+    PTC_UI_NUMPAD_WEEKLY_MINUTES = 3,
+    PTC_UI_NUMPAD_HOLIDAY_MINUTES = 4,
+    PTC_UI_NUMPAD_MAKEUP_MINUTES = 5
 } PtcUiNumpadPurpose;
 
 typedef enum {
@@ -175,6 +178,16 @@ typedef struct {
     int weekly_leave_selection;
     bool today_override_present;
     PtcDayRule today_override_rule;
+    bool holiday_enabled;
+    bool draft_holiday_enabled;
+    PtcDayRule holiday_rule;
+    PtcDayRule draft_holiday_rule;
+    PtcDayRule makeup_workday_rule;
+    PtcDayRule draft_makeup_workday_rule;
+    bool holiday_dirty;
+    bool calendar_covered;
+    bool calendar_update_warning;
+    char rule_source[32];
     int editor_index;
     char overlay_title[64];
     char overlay_body[320];

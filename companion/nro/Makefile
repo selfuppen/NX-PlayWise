@@ -38,6 +38,7 @@ OBJS := \
 	$(BUILD)/result_summary.o \
 	$(BUILD)/sha256.o \
 	$(BUILD)/rules.o \
+	$(BUILD)/holiday_calendar.o \
 	$(BUILD)/support_export.o \
 	$(BUILD)/credential_policy.o \
 	$(BUILD)/token_v2.o \
@@ -89,6 +90,9 @@ $(BUILD)/sha256.o: ../../common/crypto/sha256.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/rules.o: ../../common/rules/rules.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/holiday_calendar.o: ../../common/rules/holiday_calendar.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/support_export.o: ../../common/support/support_export.c | $(BUILD)

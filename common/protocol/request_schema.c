@@ -102,6 +102,24 @@ static bool json_u16(const char *text, const char *key, uint16_t *out)
     return true;
 }
 
+static bool json_bool_required(const char *text, const char *key, bool *out)
+{
+    const char *pos = find_key(text, key);
+    if (!pos) return false;
+    pos = strchr(pos + strlen(key) + 2, ':');
+    if (!pos) return false;
+    pos = skip_ws(pos + 1);
+    if (strncmp(pos, "true", 4) == 0) {
+        *out = true;
+        return true;
+    }
+    if (strncmp(pos, "false", 5) == 0) {
+        *out = false;
+        return true;
+    }
+    return false;
+}
+
 #ifdef PLAYWISE_DEVICE_LAB
 static bool json_bool_optional(const char *text, const char *key, bool default_value, bool *out)
 {
@@ -180,6 +198,26 @@ static bool parse_week_template(const char *text, PtcDayRule week[7])
     return true;
 }
 
+static bool parse_named_rule(const char *text, const char *key, PtcDayRule *rule)
+{
+    const char *pos = find_key(text, key);
+    const char *start;
+    const char *end;
+    char item[192];
+    char mode[24];
+    size_t len;
+    if (!pos || !rule) return false;
+    start = strchr(pos, '{');
+    if (!start || !(end = strchr(start, '}'))) return false;
+    len = (size_t)(end - start + 1);
+    if (len >= sizeof(item)) return false;
+    memcpy(item, start, len);
+    item[len] = '\0';
+    if (!json_string(item, "mode", mode, sizeof(mode)) || !parse_rule_mode(mode, &rule->mode)) return false;
+    if (!json_u16(item, "minutes", &rule->minutes)) rule->minutes = 0;
+    return rule->mode == PTC_RULE_MODE_UNLIMITED || (rule->minutes >= 1 && rule->minutes <= 1440);
+}
+
 PtcRequestType ptc_request_type_from_string(const char *value)
 {
     if (!value) {
@@ -208,6 +246,9 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     }
     if (strcmp(value, "set_weekly_template") == 0) {
         return PTC_REQUEST_SET_WEEKLY_TEMPLATE;
+    }
+    if (strcmp(value, "set_holiday_policy") == 0) {
+        return PTC_REQUEST_SET_HOLIDAY_POLICY;
     }
     if (strcmp(value, "complete_setup") == 0) {
         return PTC_REQUEST_COMPLETE_SETUP;
@@ -248,6 +289,8 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "restore_today_policy";
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
         return "set_weekly_template";
+    case PTC_REQUEST_SET_HOLIDAY_POLICY:
+        return "set_holiday_policy";
     case PTC_REQUEST_COMPLETE_SETUP:
         return "complete_setup";
     case PTC_REQUEST_RETRY_SETUP_RELEASE:
@@ -308,6 +351,11 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         return json_u16(text, "minutes", &out->minutes) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
         return parse_week_template(text, out->week) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_SET_HOLIDAY_POLICY:
+        return json_bool_required(text, "enabled", &out->holiday_enabled) &&
+            parse_named_rule(text, "holiday_rule", &out->holiday_rule) &&
+            parse_named_rule(text, "makeup_workday_rule", &out->makeup_workday_rule)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_COMPLETE_SETUP:
     case PTC_REQUEST_RETRY_SETUP_RELEASE:
     case PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT:

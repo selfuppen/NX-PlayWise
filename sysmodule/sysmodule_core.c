@@ -9,6 +9,7 @@
 #include "../common/protocol/request_schema.h"
 #include "../common/protocol/result_builder.h"
 #include "../common/rules/rules.h"
+#include "../common/rules/holiday_calendar.h"
 #include "../common/time/ptc_time.h"
 #include "../common/token/token_v1.h"
 #include "../common/token/token_v2.h"
@@ -881,6 +882,15 @@ static bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
         }
         (void)json_u16(text, "today_override_minutes", &rules->today_override.rule.minutes);
     }
+    (void)json_bool_value(text, "holiday_enabled", &rules->holiday_enabled);
+    if (json_string(text, "holiday_mode", mode, sizeof(mode))) {
+        (void)parse_rule_mode(mode, &rules->holiday_rule.mode);
+    }
+    (void)json_u16(text, "holiday_minutes", &rules->holiday_rule.minutes);
+    if (json_string(text, "makeup_workday_mode", mode, sizeof(mode))) {
+        (void)parse_rule_mode(mode, &rules->makeup_workday_rule.mode);
+    }
+    (void)json_u16(text, "makeup_workday_minutes", &rules->makeup_workday_rule.minutes);
     return true;
 }
 
@@ -907,11 +917,18 @@ static bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
         text + used,
         sizeof(text) - used,
         "],\"today_override_present\":%s,\"today_override_day_index\":%u,"
-        "\"today_override_mode\":\"%s\",\"today_override_minutes\":%u}\n",
+        "\"today_override_mode\":\"%s\",\"today_override_minutes\":%u,"
+        "\"holiday_enabled\":%s,\"holiday_mode\":\"%s\",\"holiday_minutes\":%u,"
+        "\"makeup_workday_mode\":\"%s\",\"makeup_workday_minutes\":%u}\n",
         rules->today_override.present ? "true" : "false",
         rules->today_override.day_index,
         rule_mode_name(rules->today_override.rule.mode),
-        rules->today_override.rule.minutes);
+        rules->today_override.rule.minutes,
+        rules->holiday_enabled ? "true" : "false",
+        rule_mode_name(rules->holiday_rule.mode),
+        rules->holiday_rule.minutes,
+        rule_mode_name(rules->makeup_workday_rule.mode),
+        rules->makeup_workday_rule.minutes);
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
     snprintf(sysmodule->rules_cache_text, sizeof(sysmodule->rules_cache_text), "%s", text);
     sysmodule->rules_cache_valid = sysmodule->storage->vtable->metadata &&
@@ -1457,6 +1474,7 @@ static PtcOperation request_operation(PtcRequestType type)
     case PTC_REQUEST_STATUS:
         return PTC_OPERATION_STATUS;
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
+    case PTC_REQUEST_SET_HOLIDAY_POLICY:
         return PTC_OPERATION_RULE_UPDATE;
     default:
         return PTC_OPERATION_STATUS;
@@ -1543,6 +1561,11 @@ static PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcR
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
         memcpy(rules->week, request->week, sizeof(rules->week));
         return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+    case PTC_REQUEST_SET_HOLIDAY_POLICY:
+        rules->holiday_enabled = request->holiday_enabled;
+        rules->holiday_rule = request->holiday_rule;
+        rules->makeup_workday_rule = request->makeup_workday_rule;
+        return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
     default:
         return PTC_ERR_OK;
     }
@@ -1562,6 +1585,11 @@ static bool write_current_status_result(
     PtcResultState state;
     char json[2048];
     PtcErrorCode err;
+    PtcEffectiveRule effective;
+    const PtcHolidayCalendarInfo *calendar_info;
+    uint16_t year = 0;
+    uint8_t month = 0;
+    uint8_t day = 0;
     if (!load_rules(sysmodule, &rules)) {
         return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_RULES_INVALID, now.day_index, caps);
     }
@@ -1573,6 +1601,15 @@ static bool write_current_status_result(
         return finish_with_error(sysmodule, request, mode, dry_run, err, now.day_index, caps);
     }
     result_state_from_pctl(&state, now.day_index, &pctl_status, caps);
+    effective = ptc_rules_resolve(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+    state.rule_source = ptc_rule_source_name(effective.source);
+    state.calendar_covered = effective.calendar_covered;
+    calendar_info = ptc_holiday_calendar_info();
+    if (ptc_date_from_day_index(now.day_index, &year, &month, &day)) {
+        state.calendar_update_warning = rules.holiday_enabled &&
+            (year > calendar_info->last_year ||
+                (year == calendar_info->last_year && month == 12 && day >= 2));
+    }
     (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
     append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
     return write_result_with_setup(sysmodule, request->request_id, json);
@@ -4031,7 +4068,8 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (!decision.dry_run) {
         bool pctl_request = request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
             request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
-            request->type == PTC_REQUEST_RESTORE_TODAY_POLICY;
+            request->type == PTC_REQUEST_RESTORE_TODAY_POLICY ||
+            request->type == PTC_REQUEST_SET_HOLIDAY_POLICY;
         if (pctl_request && !recovery_begin(sysmodule, request, now)) {
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
                 PTC_ERR_PCTL_BACKUP_FAILED, now.day_index, caps);
@@ -4049,7 +4087,8 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
         if (request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
             request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
             request->type == PTC_REQUEST_DISABLE_TODAY_LIMIT ||
-            request->type == PTC_REQUEST_RESTORE_TODAY_POLICY) {
+            request->type == PTC_REQUEST_RESTORE_TODAY_POLICY ||
+            request->type == PTC_REQUEST_SET_HOLIDAY_POLICY) {
             active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
             err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode), target_from_day_rule(active_rule), active_rule.minutes);
             if (err != PTC_ERR_OK) {
@@ -4150,6 +4189,7 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     case PTC_REQUEST_ADD_TODAY_MINUTES:
     case PTC_REQUEST_RESTORE_TODAY_POLICY:
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
+    case PTC_REQUEST_SET_HOLIDAY_POLICY:
         (void)process_rule_request(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
 #ifdef PLAYWISE_DEVICE_LAB

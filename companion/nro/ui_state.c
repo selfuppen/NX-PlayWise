@@ -85,6 +85,9 @@ static const char *request_success_message(const char *type)
     if (strcmp(type, "set_weekly_template") == 0) {
         return "周计划已保存；今天如无临时设置，将由后台同步。";
     }
+    if (strcmp(type, "set_holiday_policy") == 0) {
+        return "国家节假日设置已保存，今天的规则已重新计算。";
+    }
     return "设置已生效。";
 }
 
@@ -141,6 +144,8 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     switch (page) {
     case PTC_UI_PARENT_PLAN:
         return 0;
+    case PTC_UI_PARENT_HOLIDAY:
+        return 6;
     case PTC_UI_PARENT_SECURITY:
         return 5;
     case PTC_UI_PARENT_SUPPORT:
@@ -314,7 +319,9 @@ void ptc_ui_numpad_adjust(PtcUiModel *model, int delta)
 {
     uint16_t value;
     if (!model || (model->numpad_purpose != PTC_UI_NUMPAD_MINUTES &&
-                   model->numpad_purpose != PTC_UI_NUMPAD_WEEKLY_MINUTES)) {
+                   model->numpad_purpose != PTC_UI_NUMPAD_WEEKLY_MINUTES &&
+                   model->numpad_purpose != PTC_UI_NUMPAD_HOLIDAY_MINUTES &&
+                   model->numpad_purpose != PTC_UI_NUMPAD_MAKEUP_MINUTES)) {
         return;
     }
     value = model->numpad_current;
@@ -371,7 +378,9 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
         return true;
     }
     if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
-        model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
+        model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES ||
+        model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
+        model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES) {
         if (!ptc_ui_parse_minutes(model->numpad_text, model->numpad_minimum, model->numpad_maximum, &value)) {
             snprintf(model->numpad_error, sizeof(model->numpad_error), "请输入 %u 到 %u 分钟",
                      (unsigned int)model->numpad_minimum, (unsigned int)model->numpad_maximum);
@@ -605,6 +614,9 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         }
         model->play_timer_enabled = summary.play_timer_enabled;
         model->restricted_now = summary.restricted_now;
+        model->calendar_covered = summary.calendar_covered;
+        model->calendar_update_warning = summary.calendar_update_warning;
+        snprintf(model->rule_source, sizeof(model->rule_source), "%s", summary.rule_source);
     }
     if (strcmp(status, "ok") == 0 && type && strcmp(type, "preview_offline_code") == 0 &&
         summary.preview_available) {
@@ -780,7 +792,7 @@ PtcUiRect ptc_ui_parent_refresh_rect(void)
 
 PtcUiRect ptc_ui_parent_tab_rect(int index)
 {
-    PtcUiRect rect = {54 + index * 214, 108, 194, 48};
+    PtcUiRect rect = {54 + index * 174, 108, 158, 48};
     return rect;
 }
 
@@ -1321,7 +1333,9 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         break;
     case PTC_UI_OVERLAY_NUMPAD:
         if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
-            model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
+            model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES ||
+            model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
+            model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES) {
             for (i = 0; i < 4; ++i) {
                 if (ptc_ui_rect_contains(ptc_ui_numpad_quick_rect(i), x, y)) {
                     return make_hit(PTC_UI_HIT_NUMPAD_QUICK, i);

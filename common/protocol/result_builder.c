@@ -102,7 +102,8 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"state\":{\"day_index\":%u,\"limited_today\":%d,\"blocked_today\":%d,"
         "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%lld,"
         "\"played_minutes_available\":%s,\"played_minutes\":%lld,"
-        "\"play_timer_enabled\":%d,\"restricted_now\":%d}",
+        "\"play_timer_enabled\":%d,\"restricted_now\":%d,"
+        "\"rule_source\":\"%s\",\"calendar_covered\":%s,\"calendar_update_warning\":%s}",
         state->day_index,
         state->limited_today,
         state->blocked_today,
@@ -112,7 +113,10 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         json_bool(state->played_minutes_available),
         (long long)state->played_minutes,
         state->play_timer_enabled,
-        state->restricted_now);
+        state->restricted_now,
+        state->rule_source ? state->rule_source : "weekly",
+        json_bool(state->calendar_covered),
+        json_bool(state->calendar_update_warning));
 }
 
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
@@ -127,6 +131,9 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->played_minutes = -1;
     state->play_timer_enabled = -1;
     state->restricted_now = -1;
+    state->rule_source = "weekly";
+    state->calendar_covered = false;
+    state->calendar_update_warning = false;
 }
 
 PtcErrorCode ptc_result_validate(const char *text)

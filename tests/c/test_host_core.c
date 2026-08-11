@@ -10,6 +10,7 @@
 #include "../../common/security/credential_policy.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
 #include "../../common/time/ptc_time.h"
+#include "../../common/rules/holiday_calendar.h"
 #include "../../common/token/token_v1.h"
 #include "../../common/token/token_v2.h"
 #include "../../companion/auth.h"
@@ -127,6 +128,60 @@ static void test_release_request_contract(void)
         "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
         "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}", &request),
         PTC_ERR_BAD_REQUEST, "blocked weekly rule is rejected");
+}
+
+static void test_holiday_calendar_and_priority(void)
+{
+    PtcRules rules;
+    PtcEffectiveRule effective;
+    PtcRequest request;
+    uint16_t holiday = 0;
+    uint16_t makeup = 0;
+    uint16_t ordinary = 0;
+    bool covered = false;
+    check_true(ptc_day_index_from_date(2026, 10, 1, &holiday), "2026 National Day index converts");
+    check_true(ptc_day_index_from_date(2026, 10, 10, &makeup), "2026 makeup day index converts");
+    check_true(ptc_day_index_from_date(2026, 8, 11, &ordinary), "2026 ordinary day index converts");
+    check_int(ptc_holiday_calendar_classify(holiday, &covered), PTC_CALENDAR_DAY_STATUTORY_HOLIDAY,
+        "National Day is classified as a statutory holiday");
+    check_true(covered, "2026 is covered by the embedded calendar");
+    check_int(ptc_holiday_calendar_classify(makeup, &covered), PTC_CALENDAR_DAY_MAKEUP_WORKDAY,
+        "National Day makeup Saturday is classified as a workday");
+    check_int(ptc_holiday_calendar_classify(ordinary, &covered), PTC_CALENDAR_DAY_ORDINARY,
+        "ordinary covered date stays ordinary");
+
+    ptc_rules_default(&rules);
+    rules.holiday_enabled = true;
+    rules.holiday_rule.mode = PTC_RULE_MODE_LIMIT;
+    rules.holiday_rule.minutes = 180;
+    rules.makeup_workday_rule.mode = PTC_RULE_MODE_LIMIT;
+    rules.makeup_workday_rule.minutes = 45;
+    effective = ptc_rules_resolve(&rules, holiday, ptc_weekday_from_day_index(holiday));
+    check_int(effective.source, PTC_RULE_SOURCE_STATUTORY_HOLIDAY, "holiday rule overrides weekly plan");
+    check_int(effective.rule.minutes, 180, "holiday quota is selected");
+    effective = ptc_rules_resolve(&rules, makeup, ptc_weekday_from_day_index(makeup));
+    check_int(effective.source, PTC_RULE_SOURCE_MAKEUP_WORKDAY, "makeup workday overrides weekend plan");
+    check_int(effective.rule.minutes, 45, "makeup workday quota is selected");
+    rules.today_override.present = true;
+    rules.today_override.day_index = holiday;
+    rules.today_override.rule.mode = PTC_RULE_MODE_LIMIT;
+    rules.today_override.rule.minutes = 90;
+    effective = ptc_rules_resolve(&rules, holiday, ptc_weekday_from_day_index(holiday));
+    check_int(effective.source, PTC_RULE_SOURCE_TODAY_OVERRIDE, "today override remains highest priority");
+    check_int(effective.rule.minutes, 90, "today override quota is preserved");
+
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"holiday-1\",\"type\":\"set_holiday_policy\",\"created_at\":1,"
+        "\"payload\":{\"enabled\":true,\"holiday_rule\":{\"mode\":\"unlimited\",\"minutes\":0},"
+        "\"makeup_workday_rule\":{\"mode\":\"limit\",\"minutes\":60}}}", &request),
+        PTC_ERR_OK, "holiday policy request parses");
+    check_true(request.holiday_enabled && request.makeup_workday_rule.minutes == 60,
+        "holiday request fields map into the request model");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"holiday-bad\",\"type\":\"set_holiday_policy\",\"created_at\":1,"
+        "\"payload\":{\"enabled\":true,\"holiday_rule\":{\"mode\":\"limit\",\"minutes\":0},"
+        "\"makeup_workday_rule\":{\"mode\":\"limit\",\"minutes\":60}}}", &request),
+        PTC_ERR_BAD_REQUEST, "zero-minute limited holiday rule is rejected");
 }
 
 static void test_policy_and_disable_flag(void)
@@ -408,6 +463,22 @@ static void test_setup_preflight_and_recovery(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/install_pctl_snapshot.json", text, sizeof(text)) &&
         strcmp(text, install_snapshot) == 0, "active setup retry preserves installation snapshot");
 
+    apply_calls_after_activation = pctl.apply_target_calls;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/holiday-policy.json",
+        "{\"version\":1,\"request_id\":\"holiday-policy\",\"type\":\"set_holiday_policy\",\"created_at\":2,"
+        "\"payload\":{\"enabled\":true,\"holiday_rule\":{\"mode\":\"unlimited\",\"minutes\":0},"
+        "\"makeup_workday_rule\":{\"mode\":\"limit\",\"minutes\":45}}}"),
+        "queue holiday policy update");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "holiday policy update is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", text, sizeof(text)) &&
+        strstr(text, "\"holiday_enabled\":true") && strstr(text, "\"makeup_workday_minutes\":45"),
+        "holiday policy persists without clearing today's override");
+    check_true(pctl.apply_target_calls > apply_calls_after_activation,
+        "holiday policy update immediately reapplies today's effective rule");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/holiday-policy.json", text, sizeof(text)) &&
+        strstr(text, "\"rule_source\":\"today_override\""),
+        "holiday update reports the preserved manual override as the effective source");
+
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/flags/disable.flag", "startup_transaction_restored\n"),
         "write automatic disable flag while active");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-active-disabled.json",
@@ -425,6 +496,14 @@ static void test_setup_preflight_and_recovery(void)
     check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), 1, "active disabled takeover returns to active");
 
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/flags/disable.flag", "emergency\n"), "write disable flag");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/holiday-disabled.json",
+        "{\"version\":1,\"request_id\":\"holiday-disabled\",\"type\":\"set_holiday_policy\",\"created_at\":2,"
+        "\"payload\":{\"enabled\":false,\"holiday_rule\":{\"mode\":\"limit\",\"minutes\":120},"
+        "\"makeup_workday_rule\":{\"mode\":\"limit\",\"minutes\":60}}}"),
+        "queue holiday policy while disabled");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "disabled holiday policy request is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/holiday-disabled.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"disabled\""), "disable flag rejects holiday policy writes");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-disabled.json",
         "{\"version\":1,\"request_id\":\"status-disabled\",\"type\":\"status\",\"created_at\":2,\"payload\":{}}"),
         "queue status under disable");
@@ -738,6 +817,7 @@ int main(void)
 {
     test_tokens();
     test_release_request_contract();
+    test_holiday_calendar_and_priority();
     test_policy_and_disable_flag();
     test_support_redaction();
     test_auth_and_queue();

@@ -24,6 +24,9 @@ typedef struct {
     int effective_add_minutes;
     bool preview_capped;
     bool converts_unlimited_to_limited;
+    bool calendar_covered;
+    bool calendar_update_warning;
+    char rule_source[32];
     char status[8];
     char type[48];
     char reason[64];

@@ -226,6 +226,18 @@ PtcCompanionStatus ptc_companion_set_disable_flag(PtcCompanionFileClient *client
     return client->storage->vtable->remove_path(client->storage, flag_path) ? PTC_COMPANION_OK : PTC_COMPANION_WRITE_FAILED;
 }
 
+PtcCompanionStatus ptc_companion_submit_set_holiday_policy(PtcCompanionFileClient *client, const char *request_id,
+    int64_t created_at, bool enabled, PtcDayRule holiday_rule, PtcDayRule makeup_workday_rule)
+{
+    char json[768];
+    if (!request_id || request_id[0] == '\0') return PTC_COMPANION_BAD_ARGUMENT;
+    if (ptc_companion_set_holiday_policy_request_json(json, sizeof(json), request_id, created_at,
+            enabled, holiday_rule, makeup_workday_rule) >= (int)sizeof(json)) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    return submit_json(client, request_id, json);
+}
+
 PtcCompanionStatus ptc_companion_pending_redemption_save(
     PtcCompanionFileClient *client,
     const PtcPendingRedemption *pending)

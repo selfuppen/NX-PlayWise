@@ -64,5 +64,7 @@ PtcCompanionStatus ptc_companion_transport_submit_set_today_limit(PtcCompanionTr
 PtcCompanionStatus ptc_companion_transport_submit_add_today_minutes(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, uint16_t minutes);
 PtcCompanionStatus ptc_companion_transport_submit_empty(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const char *type);
 PtcCompanionStatus ptc_companion_transport_submit_set_weekly_template(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const PtcDayRule week[7]);
+PtcCompanionStatus ptc_companion_transport_submit_set_holiday_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, bool enabled, PtcDayRule holiday_rule, PtcDayRule makeup_workday_rule);
 
 #endif

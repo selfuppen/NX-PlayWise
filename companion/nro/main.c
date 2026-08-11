@@ -96,6 +96,7 @@ static void handle_parent_action(UiState *ui);
 static void handle_today_action_ready(UiState *ui, int index);
 static void refresh_security_state(UiState *ui);
 static void update_weekly_dirty(UiState *ui);
+static void update_holiday_dirty(UiState *ui);
 static void apply_pending_navigation(UiState *ui);
 static void handle_setup_input(UiState *ui, u64 down, u64 held);
 static void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
@@ -875,6 +876,29 @@ static void submit_weekly(UiState *ui)
     }
 }
 
+static void submit_holiday_policy(UiState *ui)
+{
+    PtcCompanionStatus status;
+    if (ui->model.disable_flag_present) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，国家节假日设置暂时只读。");
+        return;
+    }
+    if (!ui->model.holiday_dirty) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "国家节假日设置没有修改。");
+        return;
+    }
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_set_holiday_policy(&ui->transport, ui->active_request_id, time(NULL),
+        ui->model.draft_holiday_enabled, ui->model.draft_holiday_rule, ui->model.draft_makeup_workday_rule);
+    set_command_name(ui, "set_holiday_policy");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) {
+        begin_wait(ui, "set_holiday_policy", "国家节假日设置已提交，正在等待后台确认…");
+    } else {
+        set_message(ui, "国家节假日设置提交失败", status);
+    }
+}
+
 static PtcRuleMode parse_rule_mode(const char *mode)
 {
     if (mode && strcmp(mode, "unlimited") == 0) {
@@ -922,6 +946,12 @@ static void load_rule_drafts(UiState *ui)
     memcpy(ui->model.draft_week, rules.week, sizeof(rules.week));
     memcpy(ui->model.current_week, rules.week, sizeof(rules.week));
     ui->model.today_override_present = false;
+    ui->model.holiday_enabled = rules.holiday_enabled;
+    ui->model.draft_holiday_enabled = rules.holiday_enabled;
+    ui->model.holiday_rule = rules.holiday_rule;
+    ui->model.draft_holiday_rule = rules.holiday_rule;
+    ui->model.makeup_workday_rule = rules.makeup_workday_rule;
+    ui->model.draft_makeup_workday_rule = rules.makeup_workday_rule;
     if (!ui->client.storage->vtable->read_text(ui->client.storage, RULES_PATH, text, sizeof(text))) {
         return;
     }
@@ -954,9 +984,22 @@ static void load_rule_drafts(UiState *ui)
         ui->model.today_override_rule.minutes = clamp_rule_minutes(
             cJSON_IsNumber(override_minutes) ? override_minutes->valueint : 60);
     }
+    rules.holiday_enabled = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "holiday_enabled"));
+    rules.holiday_rule.mode = parse_rule_mode(rule_json_string(root, "holiday_mode"));
+    rules.holiday_rule.minutes = clamp_rule_minutes(rule_json_int(root, "holiday_minutes", rules.holiday_rule.minutes));
+    rules.makeup_workday_rule.mode = parse_rule_mode(rule_json_string(root, "makeup_workday_mode"));
+    rules.makeup_workday_rule.minutes = clamp_rule_minutes(
+        rule_json_int(root, "makeup_workday_minutes", rules.makeup_workday_rule.minutes));
     memcpy(ui->model.draft_week, rules.week, sizeof(rules.week));
     memcpy(ui->model.current_week, rules.week, sizeof(rules.week));
     ui->model.weekly_dirty = false;
+    ui->model.holiday_enabled = rules.holiday_enabled;
+    ui->model.draft_holiday_enabled = rules.holiday_enabled;
+    ui->model.holiday_rule = rules.holiday_rule;
+    ui->model.draft_holiday_rule = rules.holiday_rule;
+    ui->model.makeup_workday_rule = rules.makeup_workday_rule;
+    ui->model.draft_makeup_workday_rule = rules.makeup_workday_rule;
+    ui->model.holiday_dirty = false;
     cJSON_Delete(root);
 }
 
@@ -988,6 +1031,10 @@ static void poll_result(UiState *ui, bool force)
     PtcCompanionStatus status;
     PtcDayRule saved_draft[7];
     bool preserve_weekly_draft;
+    bool preserve_holiday_draft;
+    bool saved_holiday_enabled;
+    PtcDayRule saved_holiday_rule;
+    PtcDayRule saved_makeup_rule;
     if (!ui->waiting) {
         if (force) {
             submit_status(ui);
@@ -1020,6 +1067,10 @@ static void poll_result(UiState *ui, bool force)
         if (preserve_weekly_draft) {
             memcpy(saved_draft, ui->model.draft_week, sizeof(saved_draft));
         }
+        preserve_holiday_draft = ui->model.holiday_dirty;
+        saved_holiday_enabled = ui->model.draft_holiday_enabled;
+        saved_holiday_rule = ui->model.draft_holiday_rule;
+        saved_makeup_rule = ui->model.draft_makeup_workday_rule;
         if (!ptc_ui_apply_result_json(&ui->model, ui->last_result)) {
             ui->pending_parent_page = -1;
             ui->pending_leave_parent = false;
@@ -1046,6 +1097,14 @@ static void poll_result(UiState *ui, bool force)
               strcmp(ui->model.result_status, "ok") == 0)) {
             memcpy(ui->model.draft_week, saved_draft, sizeof(saved_draft));
             update_weekly_dirty(ui);
+        }
+        if (preserve_holiday_draft &&
+            !(strcmp(ui->model.result_type, "set_holiday_policy") == 0 &&
+              strcmp(ui->model.result_status, "ok") == 0)) {
+            ui->model.draft_holiday_enabled = saved_holiday_enabled;
+            ui->model.draft_holiday_rule = saved_holiday_rule;
+            ui->model.draft_makeup_workday_rule = saved_makeup_rule;
+            update_holiday_dirty(ui);
         }
         refresh_disable_flag(ui);
         if (strcmp(ui->model.result_type, "preview_offline_code") == 0) {
@@ -2290,6 +2349,51 @@ static void handle_parent_action(UiState *ui)
     if (ui->model.parent_page == PTC_UI_PARENT_PLAN) {
         return;
     }
+    if (ui->model.parent_page == PTC_UI_PARENT_HOLIDAY) {
+        if (ui->model.disable_flag_present) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，国家节假日设置暂时只读。");
+            return;
+        }
+        switch (index) {
+        case 0:
+            ui->model.draft_holiday_enabled = !ui->model.draft_holiday_enabled;
+            update_holiday_dirty(ui);
+            break;
+        case 1:
+            ui->model.draft_holiday_rule.mode = ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_LIMIT
+                ? PTC_RULE_MODE_UNLIMITED : PTC_RULE_MODE_LIMIT;
+            update_holiday_dirty(ui);
+            break;
+        case 2:
+            if (ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
+                snprintf(ui->model.message, sizeof(ui->model.message), "请先把法定休假日切换为限时模式。");
+            } else {
+                ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_HOLIDAY_MINUTES, PTC_UI_OVERLAY_NONE,
+                    "设置法定休假日额度", "输入 1 到 1440 分钟", 4, 1, 1440, ui->model.draft_holiday_rule.minutes);
+            }
+            break;
+        case 3:
+            ui->model.draft_makeup_workday_rule.mode = ui->model.draft_makeup_workday_rule.mode == PTC_RULE_MODE_LIMIT
+                ? PTC_RULE_MODE_UNLIMITED : PTC_RULE_MODE_LIMIT;
+            update_holiday_dirty(ui);
+            break;
+        case 4:
+            if (ui->model.draft_makeup_workday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
+                snprintf(ui->model.message, sizeof(ui->model.message), "请先把调休工作日切换为限时模式。");
+            } else {
+                ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MAKEUP_MINUTES, PTC_UI_OVERLAY_NONE,
+                    "设置调休工作日额度", "输入 1 到 1440 分钟", 4, 1, 1440,
+                    ui->model.draft_makeup_workday_rule.minutes);
+            }
+            break;
+        case 5:
+            submit_holiday_policy(ui);
+            break;
+        default:
+            break;
+        }
+        return;
+    }
     if (ui->model.parent_page == PTC_UI_PARENT_SECURITY) {
         switch (index) {
         case 0: open_local_grant(ui); break;
@@ -2439,6 +2543,12 @@ static void accept_numpad(UiState *ui)
     if (purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
         ui->model.draft_week[ui->model.editor_index].minutes = value;
         ui->model.weekly_dirty = memcmp(ui->model.draft_week, ui->model.current_week, sizeof(ui->model.draft_week)) != 0;
+    } else if (purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES) {
+        ui->model.draft_holiday_rule.minutes = value;
+        update_holiday_dirty(ui);
+    } else if (purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES) {
+        ui->model.draft_makeup_workday_rule.minutes = value;
+        update_holiday_dirty(ui);
     } else if (purpose == PTC_UI_NUMPAD_MINUTES) {
         ui->model.draft_minutes = value;
     }
@@ -2449,6 +2559,13 @@ static void update_weekly_dirty(UiState *ui)
 {
     ui->model.weekly_dirty = memcmp(
         ui->model.draft_week, ui->model.current_week, sizeof(ui->model.draft_week)) != 0;
+}
+
+static void update_holiday_dirty(UiState *ui)
+{
+    ui->model.holiday_dirty = ui->model.draft_holiday_enabled != ui->model.holiday_enabled ||
+        memcmp(&ui->model.draft_holiday_rule, &ui->model.holiday_rule, sizeof(PtcDayRule)) != 0 ||
+        memcmp(&ui->model.draft_makeup_workday_rule, &ui->model.makeup_workday_rule, sizeof(PtcDayRule)) != 0;
 }
 
 static void save_weekly_from_page(UiState *ui)
@@ -3370,7 +3487,7 @@ int main(int argc, char **argv)
                 } else if (down & HidNpadButton_L) {
                     request_parent_navigation(&ui, PTC_UI_PARENT_TODAY, false);
                 } else if (down & HidNpadButton_R) {
-                    request_parent_navigation(&ui, PTC_UI_PARENT_SECURITY, false);
+                    request_parent_navigation(&ui, PTC_UI_PARENT_HOLIDAY, false);
                 } else if (down & HidNpadButton_Left) {
                     ptc_ui_move_weekly_focus(&ui.model, -1, 0);
                 } else if (down & HidNpadButton_Right) {

@@ -187,6 +187,7 @@ const char *ptc_companion_request_command_label_zh(const char *type)
     if (strcmp(type, "disable_today_limit") == 0) return "解除当前限制";
     if (strcmp(type, "restore_today_policy") == 0) return "恢复周计划";
     if (strcmp(type, "set_weekly_template") == 0) return "每周计划";
+    if (strcmp(type, "set_holiday_policy") == 0) return "国家节假日设置";
     if (strcmp(type, "complete_setup") == 0) return "启用自动控制";
     if (strcmp(type, "retry_setup_release") == 0) return "重试前置解限";
     if (strcmp(type, "restore_install_snapshot") == 0) return "恢复安装前状态";
@@ -228,6 +229,15 @@ PtcCompanionStatus ptc_companion_transport_submit_set_weekly_template(PtcCompani
 {
     char json[1024];
     if (ptc_companion_set_weekly_template_request_json(json, sizeof(json), request_id, created_at, week) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_set_holiday_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, bool enabled, PtcDayRule holiday_rule, PtcDayRule makeup_workday_rule)
+{
+    char json[768];
+    if (ptc_companion_set_holiday_policy_request_json(json, sizeof(json), request_id, created_at,
+            enabled, holiday_rule, makeup_workday_rule) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
     return ptc_companion_transport_submit_json(client, request_id, json);
 }
 
