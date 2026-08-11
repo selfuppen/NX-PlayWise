@@ -1,7 +1,7 @@
 #ifndef PLAYWISE_VERSION_H
 #define PLAYWISE_VERSION_H
 
-#define PLAYWISE_VERSION "1.0.0"
+#define PLAYWISE_VERSION "1.0.1-alpha"
 #define PLAYWISE_REPOSITORY_URL "https://github.com/selfuppen/NX-PlayWise"
 #define PLAYWISE_RELEASE_TITLE_ID "4200000000BD2300"
 #define PLAYWISE_RELEASE_IPC_SERVICE "pctc:u"
