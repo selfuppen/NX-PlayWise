@@ -56,7 +56,9 @@ typedef enum {
     PTC_UI_OVERLAY_SOFTWARE_INFO = 14,
     PTC_UI_OVERLAY_HOLIDAY_CALENDAR = 15,
     PTC_UI_OVERLAY_HOLIDAY_LEAVE = 16,
-    PTC_UI_OVERLAY_SUPPORT_EVENT = 17
+    PTC_UI_OVERLAY_SUPPORT_EVENT = 17,
+    PTC_UI_OVERLAY_WEEKLY_BULK = 18,
+    PTC_UI_OVERLAY_ALBUM_MANAGER = 19
 } PtcUiOverlay;
 
 typedef enum {
@@ -208,6 +210,8 @@ typedef struct {
     PtcDayRule draft_week[7];
     PtcDayRule current_week[7];
     bool weekly_dirty;
+    int weekly_grid_slot;
+    int weekly_last_day_slot;
     int weekly_leave_selection;
     bool today_override_present;
     PtcDayRule today_override_rule;
@@ -333,6 +337,10 @@ typedef enum {
     PTC_UI_HIT_NUMPAD_QUICK,
     PTC_UI_HIT_WEEKLY_SAVE,
     PTC_UI_HIT_WEEKLY_DISCARD,
+    PTC_UI_HIT_WEEKLY_BULK,
+    PTC_UI_HIT_WEEKLY_BULK_TARGET,
+    PTC_UI_HIT_ALBUM_ACTION,
+    PTC_UI_HIT_ALBUM_REFRESH,
     PTC_UI_HIT_OVERLAY_DISCARD,
     PTC_UI_HIT_SUPPORT_EVENT,
     PTC_UI_HIT_CREDENTIAL_INPUT,
@@ -398,6 +406,7 @@ bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
 bool ptc_ui_setup_takeover_complete(const PtcUiModel *model);
 void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction);
 void ptc_ui_move_weekly_focus(PtcUiModel *model, int horizontal, int vertical);
+bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend);
 void ptc_ui_move_overlay_selection(PtcUiModel *model, int horizontal, int vertical);
 int ptc_ui_grant_estimate_remaining(const PtcUiModel *model, uint16_t grant_minutes, bool *capped);
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now);
@@ -437,6 +446,7 @@ PtcUiRect ptc_ui_minutes_dec_large_rect(void);
 PtcUiRect ptc_ui_minutes_inc_large_rect(void);
 PtcUiRect ptc_ui_weekly_day_rect(int index);
 PtcUiRect ptc_ui_weekly_day_minutes_rect(int index);
+PtcUiRect ptc_ui_weekly_bulk_rect(void);
 PtcUiRect ptc_ui_weekly_mode_rect(void);
 PtcUiRect ptc_ui_weekly_page_mode_rect(void);
 PtcUiRect ptc_ui_weekly_min_up_rect(void);
@@ -452,6 +462,9 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_weekly_save_rect(void);
 PtcUiRect ptc_ui_weekly_discard_rect(void);
+PtcUiRect ptc_ui_weekly_bulk_target_rect(int index);
+PtcUiRect ptc_ui_album_action_rect(int index);
+PtcUiRect ptc_ui_album_refresh_rect(void);
 PtcUiRect ptc_ui_credential_input_rect(void);
 PtcUiRect ptc_ui_credential_random_rect(void);
 PtcUiRect ptc_ui_credential_reveal_rect(void);

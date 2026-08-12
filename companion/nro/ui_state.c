@@ -104,7 +104,7 @@ static const char *request_success_message(const char *type)
         return "周计划已保存。如果今天没有单独设置，今天也会按新计划执行。";
     }
     if (strcmp(type, "set_holiday_policy") == 0) {
-        return "国家节假日设置已保存，今天的规则已重新计算。";
+        return "国家节假日设置已保存。";
     }
     return "设置已生效。";
 }
@@ -858,7 +858,14 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         snprintf(model->message, sizeof(model->message), "自动控制已启用，首次设置完成。");
     } else {
         const char *guidance = request_success_guidance(type);
-        snprintf(model->message, sizeof(model->message), "%s", request_success_message(type));
+        if (type && strcmp(type, "set_holiday_policy") == 0) {
+            snprintf(model->message, sizeof(model->message), "%s",
+                     model->draft_holiday_enabled
+                       ? "国家节假日设置已保存，后台已重新计算今天的规则。"
+                       : "国家节假日预设已保存但未启用；今天继续按临时设置或周计划执行。");
+        } else {
+            snprintf(model->message, sizeof(model->message), "%s", request_success_message(type));
+        }
         if (guidance[0]) {
             snprintf(model->feedback_detail, sizeof(model->feedback_detail), "%s", guidance);
         }
@@ -1004,14 +1011,14 @@ PtcUiRect ptc_ui_parent_card_rect(int index)
 PtcUiRect ptc_ui_holiday_card_rect(int index)
 {
     switch (index) {
-    case 0: return (PtcUiRect){54, 172, 790, 64};
-    case 1: return (PtcUiRect){74, 288, 534, 48};
-    case 2: return (PtcUiRect){74, 344, 534, 96};
-    case 3: return (PtcUiRect){672, 288, 534, 48};
-    case 4: return (PtcUiRect){672, 344, 534, 96};
-    case 5: return (PtcUiRect){868, 172, 358, 64};
-    case 6: return (PtcUiRect){54, 452, 1172, 58};
-    default: return (PtcUiRect){54, 172, 790, 64};
+    case 0: return (PtcUiRect){54, 176, 365, 72};
+    case 5: return (PtcUiRect){449, 176, 365, 72};
+    case 1: return (PtcUiRect){54, 260, 365, 72};
+    case 3: return (PtcUiRect){449, 260, 365, 72};
+    case 2: return (PtcUiRect){54, 344, 365, 72};
+    case 4: return (PtcUiRect){449, 344, 365, 72};
+    case 6: return (PtcUiRect){54, 428, 760, 72};
+    default: return (PtcUiRect){54, 176, 365, 72};
     }
 }
 
@@ -1094,6 +1101,14 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 960;
         *height = 560;
         break;
+    case PTC_UI_OVERLAY_WEEKLY_BULK:
+        *width = 760;
+        *height = 380;
+        break;
+    case PTC_UI_OVERLAY_ALBUM_MANAGER:
+        *width = 980;
+        *height = 560;
+        break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:
         *width = 760;
@@ -1147,16 +1162,23 @@ PtcUiRect ptc_ui_minutes_dec_large_rect(void)
 
 PtcUiRect ptc_ui_weekly_day_rect(int index)
 {
-    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY);
-    PtcUiRect rect = {dialog.x + 26 + index * 160, dialog.y + 122, 142, 190};
+    int column = index % 2;
+    int row = index / 2;
+    PtcUiRect rect = {54 + column * 395, 176 + row * 84, 365, 72};
+    if (index < 0 || index >= 7) rect = (PtcUiRect){0, 0, 0, 0};
     return rect;
 }
 
 PtcUiRect ptc_ui_weekly_day_minutes_rect(int index)
 {
     PtcUiRect card = ptc_ui_weekly_day_rect(index);
-    PtcUiRect rect = {card.x + 8, card.y + 112, card.w - 16, 56};
+    PtcUiRect rect = {card.x + 150, card.y + 8, card.w - 164, card.h - 16};
     return rect;
+}
+
+PtcUiRect ptc_ui_weekly_bulk_rect(void)
+{
+    return (PtcUiRect){449, 428, 365, 72};
 }
 
 PtcUiRect ptc_ui_numpad_display_rect(void)
@@ -1218,13 +1240,13 @@ PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay)
 
 PtcUiRect ptc_ui_weekly_save_rect(void)
 {
-    PtcUiRect rect = {932, 474, 260, 36};
+    PtcUiRect rect = {1090, 448, 112, 40};
     return rect;
 }
 
 PtcUiRect ptc_ui_weekly_discard_rect(void)
 {
-    PtcUiRect rect = {654, 474, 250, 36};
+    PtcUiRect rect = {964, 448, 112, 40};
     return rect;
 }
 
@@ -1287,21 +1309,54 @@ void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction)
 
 void ptc_ui_move_weekly_focus(PtcUiModel *model, int horizontal, int vertical)
 {
+    int slot;
     if (!model) return;
     if (model->selected_index < 0 || model->selected_index > 3) model->selected_index = 0;
-    if (model->selected_index == 0) {
-        if (horizontal < 0) model->editor_index = model->editor_index <= 0 ? 6 : model->editor_index - 1;
-        else if (horizontal > 0) model->editor_index = model->editor_index >= 6 ? 0 : model->editor_index + 1;
-        else if (vertical > 0) model->selected_index = 1;
+    if (model->selected_index != 0) {
+        if (vertical < 0) {
+            model->selected_index = 0;
+        } else if (horizontal < 0 && model->selected_index > 1) {
+            --model->selected_index;
+        } else if (horizontal > 0 && model->selected_index < 3) {
+            ++model->selected_index;
+        }
         return;
     }
-    if (vertical < 0) {
-        model->selected_index = 0;
-    } else if (horizontal < 0 && model->selected_index > 1) {
-        --model->selected_index;
-    } else if (horizontal > 0 && model->selected_index < 3) {
-        ++model->selected_index;
+    slot = model->weekly_grid_slot;
+    if (slot < 0 || slot > 7) slot = 0;
+    if (horizontal < 0 && slot % 2 == 1) --slot;
+    else if (horizontal > 0 && slot % 2 == 0) ++slot;
+    else if (vertical < 0 && slot >= 2) slot -= 2;
+    else if (vertical > 0 && slot < 6) slot += 2;
+    else if (vertical > 0) {
+        model->selected_index = 1;
+        return;
     }
+    model->weekly_grid_slot = slot;
+    if (slot < 7) {
+        model->weekly_last_day_slot = slot;
+        model->editor_index = ptc_ui_weekday_for_display_slot(slot);
+    }
+}
+
+bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend)
+{
+    PtcDayRule source;
+    PtcDayRule before[7];
+    int slot;
+    if (!model || model->disable_flag_present) return false;
+    slot = model->weekly_last_day_slot;
+    if (slot < 0 || slot >= 7) slot = 0;
+    source = model->draft_week[ptc_ui_weekday_for_display_slot(slot)];
+    memcpy(before, model->draft_week, sizeof(before));
+    if (weekend) {
+        model->draft_week[6] = source;
+        model->draft_week[0] = source;
+    } else {
+        for (int day = 1; day <= 5; ++day) model->draft_week[day] = source;
+    }
+    model->weekly_dirty = memcmp(model->draft_week, model->current_week, sizeof(model->draft_week)) != 0;
+    return memcmp(before, model->draft_week, sizeof(before)) != 0;
 }
 
 static int credential_selection_step(const PtcUiModel *model, int current, int direction)
@@ -1499,7 +1554,9 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0)
             : make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y)) {
+    if (model->overlay != PTC_UI_OVERLAY_WEEKLY_BULK &&
+        model->overlay != PTC_UI_OVERLAY_ALBUM_MANAGER &&
+        ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
     }
     if (model->overlay != PTC_UI_OVERLAY_CREDENTIAL_LEAVE &&
@@ -1513,6 +1570,23 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_OVERLAY_DISCARD, 0);
     }
     switch (model->overlay) {
+    case PTC_UI_OVERLAY_WEEKLY_BULK:
+        for (i = 0; i < 2; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_weekly_bulk_target_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_WEEKLY_BULK_TARGET, i);
+            }
+        }
+        break;
+    case PTC_UI_OVERLAY_ALBUM_MANAGER:
+        if (ptc_ui_rect_contains(ptc_ui_album_refresh_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_ALBUM_REFRESH, 0);
+        }
+        for (i = 0; i < 2; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_album_action_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_ALBUM_ACTION, i);
+            }
+        }
+        break;
     case PTC_UI_OVERLAY_MINUTES:
         if (ptc_ui_rect_contains(ptc_ui_minutes_value_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_MINUTES_VALUE, 0);
@@ -1739,6 +1813,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         if (!model->disable_flag_present && ptc_ui_rect_contains(ptc_ui_weekly_page_mode_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MODE, 0);
         if (!model->disable_flag_present && ptc_ui_rect_contains(ptc_ui_weekly_save_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_SAVE, 0);
         if (ptc_ui_rect_contains(ptc_ui_weekly_discard_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_DISCARD, 0);
+        if (ptc_ui_rect_contains(ptc_ui_weekly_bulk_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_BULK, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
         for (i = 0; i < model->recent_event_count; ++i) {
@@ -1821,8 +1896,28 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
 
 PtcUiRect ptc_ui_weekly_page_mode_rect(void)
 {
-    PtcUiRect rect = {88, 474, 260, 36};
+    PtcUiRect rect = {852, 448, 98, 40};
     return rect;
+}
+
+PtcUiRect ptc_ui_weekly_bulk_target_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY_BULK);
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){dialog.x + 40 + index * 360, dialog.y + 158, 340, 132};
+}
+
+PtcUiRect ptc_ui_album_action_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_ALBUM_MANAGER);
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){dialog.x + 38 + index * 450, dialog.y + 178, 420, 224};
+}
+
+PtcUiRect ptc_ui_album_refresh_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_ALBUM_MANAGER);
+    return (PtcUiRect){dialog.x + dialog.w - 226, dialog.y + 92, 188, 46};
 }
 
 bool ptc_ui_safety_action_visible(const PtcUiModel *model, int index)

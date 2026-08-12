@@ -10,6 +10,12 @@ typedef struct {
     int h;
 } PtcOverlayRect;
 
+typedef enum {
+    PTC_OVERLAY_PREVIEW_NEUTRAL = 0,
+    PTC_OVERLAY_PREVIEW_WARNING = 1,
+    PTC_OVERLAY_PREVIEW_DANGER = 2
+} PtcOverlayPreviewVisualLevel;
+
 enum {
     PTC_OVERLAY_CONTENT_X = 35,
     PTC_OVERLAY_CONTENT_Y = 90,
@@ -51,6 +57,21 @@ static inline bool ptc_overlay_rect_contains(PtcOverlayRect rect, int x, int y)
 static inline bool ptc_overlay_remaining_refresh_pending(bool waiting, bool offline_code_request)
 {
     return waiting && offline_code_request;
+}
+
+static inline PtcOverlayPreviewVisualLevel ptc_overlay_preview_visual_level(
+    bool remaining_after_available,
+    int remaining_after_minutes,
+    bool capped,
+    bool converts_unlimited_to_limited)
+{
+    if (!remaining_after_available || remaining_after_minutes == 0 || converts_unlimited_to_limited) {
+        return PTC_OVERLAY_PREVIEW_DANGER;
+    }
+    if (capped) {
+        return PTC_OVERLAY_PREVIEW_WARNING;
+    }
+    return PTC_OVERLAY_PREVIEW_NEUTRAL;
 }
 
 static inline PtcOverlayRect ptc_overlay_refresh_rect(int origin_x, int origin_y)

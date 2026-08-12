@@ -20,18 +20,22 @@ namespace {
 [[gnu::used]] constexpr char PLAYWISE_EMBEDDED_MANIFEST[] = PLAYWISE_RELEASE_MANIFEST_JSON;
 
 constexpr char APP_ROOT[] = "sdmc:/switch/playwise";
-constexpr tsl::Color PANEL_COLOR{ 0x1, 0x1, 0x2, 0xEE };
-constexpr tsl::Color CARD_COLOR{ 0x2, 0x2, 0x3, 0xFF };
-constexpr tsl::Color KEY_COLOR{ 0x2, 0x2, 0x3, 0xFF };
-constexpr tsl::Color FOCUS_BG{ 0x0, 0x9, 0xC, 0xFF };
-constexpr tsl::Color FOCUS_BORDER{ 0x0, 0xF, 0xF, 0xFF };
-constexpr tsl::Color TEXT_COLOR{ 0xF, 0xF, 0xF, 0xFF };
-constexpr tsl::Color DARK_TEXT_COLOR{ 0x0, 0x1, 0x1, 0xFF };
-constexpr tsl::Color MUTED_COLOR{ 0x8, 0x8, 0x9, 0xFF };
-constexpr tsl::Color DISABLED_COLOR{ 0x2, 0x2, 0x2, 0xFF };
-constexpr tsl::Color SUCCESS_COLOR{ 0x2, 0xE, 0x6, 0xFF };
-constexpr tsl::Color ERROR_COLOR{ 0xF, 0x3, 0x3, 0xFF };
-constexpr tsl::Color WAITING_COLOR{ 0xF, 0xA, 0x2, 0xFF };
+constexpr tsl::Color PANEL_COLOR{ 0x1, 0x1, 0x1, 0xE };
+constexpr tsl::Color CARD_COLOR{ 0x2, 0x2, 0x2, 0xF };
+constexpr tsl::Color KEY_COLOR{ 0x2, 0x2, 0x3, 0xF };
+constexpr tsl::Color FOCUS_BG{ 0x0, 0x5, 0x6, 0xF };
+constexpr tsl::Color FOCUS_BORDER{ 0x0, 0xD, 0xC, 0xF };
+constexpr tsl::Color TEXT_COLOR{ 0xF, 0xF, 0xF, 0xF };
+constexpr tsl::Color DARK_TEXT_COLOR{ 0x0, 0x1, 0x1, 0xF };
+constexpr tsl::Color MUTED_COLOR{ 0x8, 0x9, 0xA, 0xF };
+constexpr tsl::Color DISABLED_COLOR{ 0x2, 0x2, 0x2, 0xF };
+constexpr tsl::Color SUCCESS_COLOR{ 0x1, 0xD, 0x7, 0xF };
+constexpr tsl::Color ERROR_COLOR{ 0xF, 0x3, 0x4, 0xF };
+constexpr tsl::Color WAITING_COLOR{ 0xF, 0x9, 0x1, 0xF };
+constexpr tsl::Color DANGER_BG{ 0x3, 0x1, 0x1, 0xF };
+constexpr tsl::Color WARNING_BG{ 0x3, 0x2, 0x1, 0xF };
+constexpr tsl::Color BACKSPACE_BORDER{ 0xC, 0x7, 0x2, 0xF };
+constexpr tsl::Color CLEAR_BORDER{ 0xC, 0x3, 0x3, 0xF };
 
 static unsigned int to_overlay_buttons(u64 keys)
 {
@@ -673,17 +677,30 @@ public:
             renderer->drawString("暂不可用", false, cx + 155, cy + 273, 16, renderer->a(ERROR_COLOR));
         }
 
+        const PtcOverlayPreviewVisualLevel preview_level = ptc_overlay_preview_visual_level(
+            preview_summary_.remaining_after_available,
+            preview_summary_.remaining_after_minutes,
+            preview_summary_.preview_capped,
+            preview_summary_.converts_unlimited_to_limited);
+        const bool dangerous = preview_level == PTC_OVERLAY_PREVIEW_DANGER;
+        if (preview_level != PTC_OVERLAY_PREVIEW_NEUTRAL) {
+            const tsl::Color alert_bg = dangerous ? DANGER_BG : WARNING_BG;
+            const tsl::Color alert_accent = dangerous ? ERROR_COLOR : WAITING_COLOR;
+            renderer->drawRect(cx + 12, cy + 342, cw - 24, 50, renderer->a(alert_bg));
+            draw_outline(renderer, cx + 12, cy + 342, cw - 24, 50, 2, alert_accent);
+        }
         if (preview_summary_.converts_unlimited_to_limited) {
-            renderer->drawString("警告：兑换后将从不限时改为限时", false, cx + 16, cy + 366, 13, renderer->a(ERROR_COLOR));
+            renderer->drawString("警告：兑换后将从不限时改为限时", false, cx + 22, cy + 372, 13, renderer->a(ERROR_COLOR));
+        } else if (!preview_summary_.remaining_after_available) {
+            renderer->drawString("警告：暂时无法确认兑换后的可玩时间", false, cx + 22, cy + 372, 13, renderer->a(ERROR_COLOR));
+        } else if (preview_summary_.remaining_after_minutes == 0) {
+            renderer->drawString("警告：兑换后预计没有可玩时间", false, cx + 22, cy + 372, 13, renderer->a(ERROR_COLOR));
         } else if (preview_summary_.preview_capped) {
             std::snprintf(line, sizeof(line), "受每日上限影响，实际增加 %d 分钟", preview_summary_.effective_add_minutes);
-            renderer->drawString(line, false, cx + 16, cy + 366, 13, renderer->a(ERROR_COLOR));
+            renderer->drawString(line, false, cx + 22, cy + 372, 13, renderer->a(WAITING_COLOR));
         } else {
             renderer->drawString("确认前不会消费这枚加时码", false, cx + 16, cy + 366, 13, renderer->a(MUTED_COLOR));
         }
-        const bool dangerous = !preview_summary_.remaining_after_available ||
-            preview_summary_.remaining_after_minutes == 0 ||
-            preview_summary_.converts_unlimited_to_limited;
         renderer->drawString(touch_hold_warning_ ? "请使用手柄长按 A 确认" :
                              (dangerous ? "长按 A 1 秒确认；B 取消" : "A / + 确认；B 取消"),
                              false, cx + 16, cy + 414, 13,
@@ -769,15 +786,19 @@ public:
         renderer->drawString(line, false, cx + 78, top_banner_y + 23, 16, renderer->a(TEXT_COLOR));
 
         renderer->drawString(success_visible_ ? "修改后可玩" : "当前还剩可玩", false,
-                             cx + 10, top_banner_y + 51, 11, renderer->a(MUTED_COLOR));
+                              cx + 10, top_banner_y + 51, 11, renderer->a(MUTED_COLOR));
+        const tsl::Color remaining_accent = remaining_refresh_pending ? WAITING_COLOR :
+            (summary.valid && summary.remaining_available ? SUCCESS_COLOR : MUTED_COLOR);
+        renderer->drawRect(cx + 108, top_banner_y + 34, 104, 34, renderer->a(KEY_COLOR));
+        renderer->drawRect(cx + 108, top_banner_y + 66, 104, 2, renderer->a(remaining_accent));
         if (remaining_refresh_pending) {
-            renderer->drawString("正在刷新…", false, cx + 116, top_banner_y + 54, 14,
+            renderer->drawString("正在刷新…", false, cx + 116, top_banner_y + 58, 14,
                                  renderer->a(WAITING_COLOR));
         } else if (summary.valid && summary.remaining_available) {
             std::snprintf(line, sizeof(line), "%d 分钟", summary.remaining_minutes);
-            renderer->drawString(line, false, cx + 116, top_banner_y + 54, 16, renderer->a(SUCCESS_COLOR));
+            renderer->drawString(line, false, cx + 114, top_banner_y + 62, 22, renderer->a(SUCCESS_COLOR));
         } else {
-            renderer->drawString("暂不可用", false, cx + 116, top_banner_y + 54, 14, renderer->a(MUTED_COLOR));
+            renderer->drawString("暂不可用", false, cx + 116, top_banner_y + 58, 14, renderer->a(MUTED_COLOR));
         }
 
         const bool busy = bridge_->waiting;
@@ -815,7 +836,7 @@ public:
             const bool is_cursor = (input_->length < PTC_OVERLAY_CODE_SYMBOLS) && (index == input_->length);
 
             // 卡片背景与边框
-            renderer->drawRect(sx, slot_y, slot_w, slot_h, renderer->a(CARD_COLOR));
+            renderer->drawRect(sx, slot_y, slot_w, slot_h, renderer->a(is_cursor ? FOCUS_BG : CARD_COLOR));
             draw_outline(renderer, sx, slot_y, slot_w, slot_h, is_cursor ? 3 : 1, is_cursor ? FOCUS_BORDER : MUTED_COLOR);
 
             // 文本字符或未输入指示
@@ -868,13 +889,13 @@ public:
         s32 x_btn_x = cx + 12;
         s32 btn_y = panel_y + 6 + 3 * PTC_OVERLAY_KEY_ROW_STEP;
         renderer->drawRect(x_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, renderer->a(KEY_COLOR));
-        draw_outline(renderer, x_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, 1, MUTED_COLOR);
-        renderer->drawString("X 退格", false, x_btn_x + 22, btn_y + 23, 12, renderer->a(MUTED_COLOR));
+        draw_outline(renderer, x_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, 1, BACKSPACE_BORDER);
+        renderer->drawString("X 退格", false, x_btn_x + 22, btn_y + 23, 12, renderer->a(BACKSPACE_BORDER));
 
         s32 y_btn_x = cx + 216;
         renderer->drawRect(y_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, renderer->a(KEY_COLOR));
-        draw_outline(renderer, y_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, 1, MUTED_COLOR);
-        renderer->drawString("点按清空", false, y_btn_x + 17, btn_y + 23, 12, renderer->a(MUTED_COLOR));
+        draw_outline(renderer, y_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, 1, CLEAR_BORDER);
+        renderer->drawString("点按清空", false, y_btn_x + 17, btn_y + 23, 12, renderer->a(CLEAR_BORDER));
 
         // --- 4. Control & Submit Bar (操作与提交栏) ---
         const bool can_submit = ptc_overlay_request_action_enabled(bridge_->waiting) &&

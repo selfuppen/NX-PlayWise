@@ -1662,6 +1662,13 @@ static void open_weekly_page(UiState *ui)
     }
     ui->model.parent_page = PTC_UI_PARENT_PLAN;
     ui->model.selected_index = 0;
+    for (int slot = 0; slot < 7; ++slot) {
+        if (ptc_ui_weekday_for_display_slot(slot) == ui->model.editor_index) {
+            ui->model.weekly_grid_slot = slot;
+            ui->model.weekly_last_day_slot = slot;
+            break;
+        }
+    }
     submit_status(ui);
     snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新周计划；选择日期后按 A 或点按卡片编辑。");
 }
@@ -2525,30 +2532,10 @@ static void handle_parent_action(UiState *ui)
         case 4: open_shortcut_manager(ui); break;
         case 5:
             refresh_album_restriction(ui);
-            if (ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION, "限制通过相册启动程序？",
-                    "当前状态：未开启\n目标状态：已开启\n影响：相册图标不再直接启动程序。\n操作：之后需在相册图标按住 R+X，再按 A。\n撤销：可随时在此关闭并恢复原配置。\n保存后需重启主机生效。");
-            } else if (ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY, "恢复原来的启动方式？",
-                    "当前状态：已开启\n目标状态：未开启\n影响：相册图标将恢复原来的打开方式。\n撤销：之后仍可重新开启这项限制。\n保存后需重启主机生效。");
-            } else if (ui->model.album_backup_valid) {
-                char body[320];
-                snprintf(body, sizeof(body),
-                    "当前状态：需要处理\n目标状态：恢复可信备份\n检测详情：%.120s\n继续会放弃之后的外部修改，并使用原始备份强制恢复。\n请先确认这些外部修改不再需要。",
-                    ui->model.album_restriction_detail[0] ? ui->model.album_restriction_detail : "配置与记录不一致");
-                open_confirm_overlay(ui, PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, "检测到外部改动", body);
-                ui->model.confirm_hold_required = true;
-            } else {
-                if (ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_UNKNOWN) {
-                    snprintf(ui->model.message, sizeof(ui->model.message),
-                             "状态读取失败，本次未修改配置。请重新检测。详情：%.48s",
-                             ui->model.album_restriction_detail[0] ? ui->model.album_restriction_detail : "未提供");
-                } else {
-                    snprintf(ui->model.message, sizeof(ui->model.message),
-                             "状态异常且无可用备份，已拒绝修改。请人工恢复。详情：%.48s",
-                             ui->model.album_restriction_detail[0] ? ui->model.album_restriction_detail : "未提供");
-                }
-            }
+            ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
+            ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "限制通过相册启动程序");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "先查看当前状态，再选择开启限制或恢复原来的启动方式。");
             break;
         default: break;
         }
@@ -2607,6 +2594,7 @@ static void handle_parent_action(UiState *ui)
 static void confirm_operation(UiState *ui)
 {
     PtcCompanionStatus status;
+    PtcUiOverlay return_overlay = ui->model.confirm_return_overlay;
     PtcUiOperation operation = ptc_ui_take_confirmed_operation(&ui->model);
     switch (operation) {
     case PTC_UI_OPERATION_EXPORT_DIAGNOSTICS:
@@ -2622,6 +2610,12 @@ static void confirm_operation(UiState *ui)
                 operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, error, sizeof(error));
         refresh_album_restriction(ui);
         refresh_recovery_state(ui);
+        if (return_overlay == PTC_UI_OVERLAY_ALBUM_MANAGER) {
+            ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
+            ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "限制通过相册启动程序");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "状态已重新检测；配置变更需重启主机后生效。");
+        }
         if (ok) {
             snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                      operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION
@@ -2914,6 +2908,49 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_BULK) {
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+            ui->model.overlay_selection = 1 - ui->model.overlay_selection;
+        } else if (down & HidNpadButton_A) {
+            bool changed = ptc_ui_apply_weekly_bulk(&ui->model, ui->model.overlay_selection == 1);
+            bool weekend = ui->model.overlay_selection == 1;
+            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                     changed ? (weekend ? "已把来源规则复制到周末草稿；请确认后保存。" : "已把来源规则复制到工作日草稿；请确认后保存。")
+                             : "目标日期已经使用相同草稿规则，没有产生修改。");
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_ALBUM_MANAGER) {
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & HidNpadButton_Y) {
+            refresh_album_restriction(ui);
+            refresh_recovery_state(ui);
+            snprintf(ui->model.message, sizeof(ui->model.message), "相册入口状态已重新检测。");
+        } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+            ui->model.overlay_selection = 1 - ui->model.overlay_selection;
+        } else if (down & HidNpadButton_A) {
+            if (ui->model.overlay_selection == 0 && ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION, "限制通过相册启动程序？",
+                    "当前状态：未开启\n目标状态：已开启\n将先保存可信备份；重启后需在相册图标按住 R+X，再按 A。\n可随时回到此处恢复原配置。");
+            } else if (ui->model.overlay_selection == 1 && ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY, "恢复原来的启动方式？",
+                    "将按可信备份恢复原配置。卸载或删除 PlayWise 数据前必须完成恢复；保存后需重启主机生效。");
+            } else if (ui->model.overlay_selection == 1 && ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY && ui->model.album_backup_valid) {
+                char body[320];
+                snprintf(body, sizeof(body), "检测到外部修改：%.120s\n继续会放弃这些修改并强制恢复可信备份。请先确认外部修改不再需要。",
+                         ui->model.album_restriction_detail[0] ? ui->model.album_restriction_detail : "配置与记录不一致");
+                open_confirm_overlay(ui, PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, "强制恢复可信备份？", body);
+                ui->model.confirm_hold_required = true;
+            } else {
+                snprintf(ui->model.message, sizeof(ui->model.message), "当前状态不允许执行这项操作，请重新检测。");
+            }
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_CALENDAR) {
         int pages = (int)((ptc_holiday_calendar_arrangement_count(ptc_holiday_calendar_info()->last_year) + 3u) / 4u);
         if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) ptc_ui_cancel_overlay(&ui->model);
@@ -3465,6 +3502,13 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_WEEKLY_DAY:
         ui->model.editor_index = hit.index;
+        for (int slot = 0; slot < 7; ++slot) {
+            if (ptc_ui_weekday_for_display_slot(slot) == hit.index) {
+                ui->model.weekly_grid_slot = slot;
+                ui->model.weekly_last_day_slot = slot;
+                break;
+            }
+        }
         ui->model.selected_index = 0;
         if (weekly_editing_blocked(ui)) {
             break;
@@ -3474,6 +3518,29 @@ static void handle_touch(UiState *ui, int x, int y)
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "该日为不限时，没有可编辑的分钟数；请选择“切换模式”改为限时。");
         }
+        break;
+    case PTC_UI_HIT_WEEKLY_BULK:
+        ui->model.weekly_grid_slot = 7;
+        ui->model.selected_index = 0;
+        if (weekly_editing_blocked(ui)) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，批量操作暂不可用。");
+        } else {
+            ui->model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
+            ui->model.overlay_selection = 0;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "批量快捷操作");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "把最后选中日期的完整草稿规则复制到一组日期。");
+        }
+        break;
+    case PTC_UI_HIT_WEEKLY_BULK_TARGET:
+        ui->model.overlay_selection = hit.index;
+        handle_overlay_input(ui, HidNpadButton_A);
+        break;
+    case PTC_UI_HIT_ALBUM_ACTION:
+        ui->model.overlay_selection = hit.index;
+        handle_overlay_input(ui, HidNpadButton_A);
+        break;
+    case PTC_UI_HIT_ALBUM_REFRESH:
+        handle_overlay_input(ui, HidNpadButton_Y);
         break;
     case PTC_UI_HIT_WEEKLY_MODE:
         ui->model.selected_index = 1;
@@ -3521,6 +3588,13 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_WEEKLY_MIN_INPUT:
         if (hit.index >= 0 && hit.index < 7) {
             ui->model.editor_index = hit.index;
+            for (int slot = 0; slot < 7; ++slot) {
+                if (ptc_ui_weekday_for_display_slot(slot) == hit.index) {
+                    ui->model.weekly_grid_slot = slot;
+                    ui->model.weekly_last_day_slot = slot;
+                    break;
+                }
+            }
         }
         ui->model.selected_index = 0;
         if (weekly_editing_blocked(ui)) break;
@@ -3851,7 +3925,16 @@ int main(int argc, char **argv)
                 } else if (down & HidNpadButton_Y) {
                     request_parent_navigation(&ui, PTC_UI_PARENT_PLAN, false);
                 } else if (down & HidNpadButton_A) {
-                    if (ui.model.selected_index == 2) {
+                    if (ui.model.selected_index == 0 && ui.model.weekly_grid_slot == 7) {
+                        if (weekly_editing_blocked(&ui)) {
+                            snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，批量操作暂不可用。");
+                        } else {
+                            ui.model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
+                            ui.model.overlay_selection = 0;
+                            snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "批量快捷操作");
+                            snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body), "把最后选中日期的完整草稿规则复制到一组日期。");
+                        }
+                    } else if (ui.model.selected_index == 2) {
                         if (ui.model.weekly_dirty) {
                             memcpy(ui.model.draft_week, ui.model.current_week, sizeof(ui.model.draft_week));
                             ui.model.weekly_dirty = false;

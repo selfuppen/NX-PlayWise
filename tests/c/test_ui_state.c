@@ -232,6 +232,27 @@ static void test_time_previews(void)
     model.draft_week[weekday].minutes = 75;
     check_true(ptc_ui_weekly_today_changed(&model),
                "today comparison appears for a changed current weekday limit");
+
+    memset(&model, 0, sizeof(model));
+    for (int day = 0; day < 7; ++day) {
+        model.current_week[day].mode = PTC_RULE_MODE_LIMIT;
+        model.current_week[day].minutes = 60;
+        model.draft_week[day] = model.current_week[day];
+    }
+    model.weekly_last_day_slot = 0;
+    model.draft_week[1].minutes = 90;
+    check_true(ptc_ui_apply_weekly_bulk(&model, false), "bulk apply changes workday drafts");
+    for (int day = 1; day <= 5; ++day) {
+        check_int(model.draft_week[day].minutes, 90, "bulk apply copies source to every workday");
+    }
+    check_int(model.draft_week[0].minutes, 60, "workday bulk leaves Sunday unchanged");
+    check_int(model.draft_week[6].minutes, 60, "workday bulk leaves Saturday unchanged");
+    model.draft_week[1].mode = PTC_RULE_MODE_UNLIMITED;
+    check_true(ptc_ui_apply_weekly_bulk(&model, true), "bulk apply changes weekend drafts");
+    check_int(model.draft_week[0].mode, PTC_RULE_MODE_UNLIMITED, "weekend bulk copies source to Sunday");
+    check_int(model.draft_week[6].mode, PTC_RULE_MODE_UNLIMITED, "weekend bulk copies source to Saturday");
+    model.disable_flag_present = true;
+    check_true(!ptc_ui_apply_weekly_bulk(&model, false), "emergency stop rejects bulk draft changes");
 }
 
 static void test_candidate_navigation(void)
@@ -240,8 +261,12 @@ static void test_candidate_navigation(void)
     memset(&model, 0, sizeof(model));
     model.editor_index = 0;
     model.selected_index = 0;
+    model.weekly_grid_slot = 6;
+    model.weekly_last_day_slot = 6;
     ptc_ui_move_weekly_focus(&model, -1, 0);
-    check_int(model.editor_index, 6, "weekly dates wrap at the start of the week");
+    check_int(model.weekly_grid_slot, 6, "weekly grid stops at the left edge");
+    ptc_ui_move_weekly_focus(&model, 1, 0);
+    check_int(model.weekly_grid_slot, 7, "weekly grid reaches the bulk action slot");
     ptc_ui_move_weekly_focus(&model, 0, 1);
     check_int(model.selected_index, 1, "weekly focus moves from date to mode");
     ptc_ui_move_weekly_focus(&model, -1, 0);
@@ -346,6 +371,14 @@ static void test_release_hit_targets(void)
               "parent back action occupies the third footer slot");
     check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
               "weekly save is on the page");
+    check_hit(hit_center(&model, ptc_ui_weekly_bulk_rect()), PTC_UI_HIT_WEEKLY_BULK, 0,
+              "weekly bulk action occupies slot seven");
+    for (int slot = 0; slot < 7; ++slot) {
+        PtcUiRect card = ptc_ui_weekly_day_rect(slot);
+        check_true(card.w == 365 && card.h == 72, "weekly day cards use the compact grid size");
+        check_true(card.x == 54 + (slot % 2) * 395 && card.y == 176 + (slot / 2) * 84,
+                   "weekly day cards use the two-column grid coordinates");
+    }
     check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, 0,
               "weekly page mode switch uses page geometry");
     check_true(ptc_ui_weekly_page_mode_rect().y != ptc_ui_weekly_mode_rect().y,
@@ -358,6 +391,8 @@ static void test_release_hit_targets(void)
                    "weekly discard does not overlap recent execution");
         check_true(!rects_overlap(ptc_ui_weekly_save_rect(), notice),
                    "weekly save does not overlap recent execution");
+        check_true(!rects_overlap(ptc_ui_weekly_bulk_rect(), notice),
+                   "weekly bulk card does not overlap recent execution");
         check_true(!rects_overlap(notice, ptc_ui_parent_footer_rect(3)),
                    "full recent execution card does not overlap parent footer");
     }
@@ -408,10 +443,29 @@ static void test_release_hit_targets(void)
                    "holiday rule and calendar viewer share a row without overlap");
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(1), ptc_ui_holiday_card_rect(2)),
                    "holiday mode and quota do not overlap");
-        check_true(ptc_ui_holiday_card_rect(6).w == 1172,
-                   "holiday save action spans the whole content width");
+        check_true(ptc_ui_holiday_card_rect(6).x == 54 && ptc_ui_holiday_card_rect(6).w == 760,
+                   "holiday save action spans the left control column");
+        for (int index = 0; index < 7; ++index) {
+            PtcUiRect card = ptc_ui_holiday_card_rect(index);
+            check_true(card.x >= 54 && card.x + card.w <= 814,
+                       "holiday controls stay in the 760px left column");
+        }
     }
 
+    model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
+    check_hit(hit_center(&model, ptc_ui_weekly_bulk_target_rect(0)), PTC_UI_HIT_WEEKLY_BULK_TARGET, 0,
+              "weekly bulk workday target is touchable");
+    check_hit(hit_center(&model, ptc_ui_weekly_bulk_target_rect(1)), PTC_UI_HIT_WEEKLY_BULK_TARGET, 1,
+              "weekly bulk weekend target is touchable");
+    model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
+    check_hit(hit_center(&model, ptc_ui_album_action_rect(0)), PTC_UI_HIT_ALBUM_ACTION, 0,
+              "album enable action is touchable inside the manager");
+    check_hit(hit_center(&model, ptc_ui_album_action_rect(1)), PTC_UI_HIT_ALBUM_ACTION, 1,
+              "album restore action is touchable inside the manager");
+    check_hit(hit_center(&model, ptc_ui_album_refresh_rect()), PTC_UI_HIT_ALBUM_REFRESH, 0,
+              "album manager refresh is touchable");
+
+    model.overlay = PTC_UI_OVERLAY_NONE;
     model.view = PTC_UI_SETUP;
     model.setup_step = PTC_UI_SETUP_SHORTCUT;
     check_hit(hit_center(&model, ptc_ui_setup_shortcut_card_rect(0)), PTC_UI_HIT_SETUP_SHORTCUT_CARD, 0,
@@ -573,6 +627,11 @@ static void test_user_state_mapping(void)
         "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
         "\"remaining_available\":true,\"remaining_minutes\":40,\"played_minutes_available\":true,"
         "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0},\"completed_at\":110}";
+    const char *holiday_saved =
+        "{\"version\":1,\"request_id\":\"holiday-ok\",\"type\":\"set_holiday_policy\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":40,\"played_minutes_available\":true,"
+        "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0,\"rule_source\":\"weekly\"},\"completed_at\":111}";
 
     memset(&model, 0, sizeof(model));
     check_true(ptc_ui_apply_result_json(&model, pending), "syncing result parses");
@@ -613,6 +672,14 @@ static void test_user_state_mapping(void)
     check_true(ptc_ui_apply_result_json(&model, weekly_saved), "weekly success result parses");
     check_true(strstr(model.message, "今天没有单独设置") != NULL && strstr(model.message, "后台") == NULL,
                "weekly success message uses parent-facing language");
+    model.draft_holiday_enabled = false;
+    check_true(ptc_ui_apply_result_json(&model, holiday_saved), "disabled holiday success result parses");
+    check_true(strstr(model.message, "未启用") != NULL && strstr(model.message, "重新计算") == NULL,
+               "disabled holiday save does not claim that today's rule changed");
+    model.draft_holiday_enabled = true;
+    check_true(ptc_ui_apply_result_json(&model, holiday_saved), "enabled holiday success result parses");
+    check_true(strstr(model.message, "重新计算") != NULL,
+               "enabled holiday save explains the immediate recalculation");
 }
 
 int main(void)

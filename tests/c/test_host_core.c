@@ -383,6 +383,18 @@ static void test_overlay_layout_geometry(void)
         "ordinary status refresh preserves the last remaining-time snapshot");
     check_true(!ptc_overlay_remaining_refresh_pending(false, true),
         "completed code result leaves the pending remaining-time presentation");
+    check_int(ptc_overlay_preview_visual_level(true, 30, false, false),
+        PTC_OVERLAY_PREVIEW_NEUTRAL, "ordinary overlay preview uses neutral styling");
+    check_int(ptc_overlay_preview_visual_level(true, 30, true, false),
+        PTC_OVERLAY_PREVIEW_WARNING, "capped overlay preview uses warning styling");
+    check_int(ptc_overlay_preview_visual_level(false, 0, false, false),
+        PTC_OVERLAY_PREVIEW_DANGER, "unknown overlay preview result uses danger styling");
+    check_int(ptc_overlay_preview_visual_level(true, 0, false, false),
+        PTC_OVERLAY_PREVIEW_DANGER, "zero overlay preview result uses danger styling");
+    check_int(ptc_overlay_preview_visual_level(true, 30, false, true),
+        PTC_OVERLAY_PREVIEW_DANGER, "unlimited conversion uses danger styling");
+    check_int(ptc_overlay_preview_visual_level(true, 0, true, false),
+        PTC_OVERLAY_PREVIEW_DANGER, "danger styling takes priority over a capped warning");
 }
 
 static void seed_release_setup(PtcMemStorage *mem)
