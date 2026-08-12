@@ -82,8 +82,10 @@ static void test_release_navigation(void)
     check_int(ptc_ui_weekday_for_display_slot(5), 6, "Saturday is the first weekend slot");
     check_int(ptc_ui_weekday_for_display_slot(6), 0, "weekly display ends on Sunday");
     check_int(PTC_UI_SHORTCUT_PRESET_COUNT, 14, "all common shortcut combinations are listed");
-    check_true(strstr(ptc_ui_shortcut_common_label(5), "Plus") != NULL, "plus shortcut preset is visible");
-    check_true(strstr(ptc_ui_shortcut_common_label(13), "Minus") != NULL, "minus shortcut preset is visible");
+    check_true(strcmp(ptc_ui_shortcut_common_label(5), "L + R + Plus(＋)") == 0,
+               "plus shortcut preset does not end in an ambiguous separator");
+    check_true(strcmp(ptc_ui_shortcut_common_label(13), "ZL + ZR + Minus(－)") == 0,
+               "minus shortcut preset uses an unambiguous button name");
 }
 
 static void test_numeric_input(void)
@@ -277,6 +279,13 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "disabled child code button is not actionable");
     model.disable_flag_present = false;
     check_hit(hit_center(&model, ptc_ui_child_refresh_rect()), PTC_UI_HIT_CHILD_REFRESH, 0, "child refresh button");
+    model.show_parent_shortcut_hint = true;
+    model.custom_shortcut_enabled = true;
+    check_hit(hit_center(&model, ptc_ui_child_footer_rect(1)), PTC_UI_HIT_CHILD_PARENT, 0,
+              "visible child parent shortcut enters parent area");
+    model.show_parent_shortcut_hint = false;
+    check_hit(hit_center(&model, ptc_ui_child_footer_rect(1)), PTC_UI_HIT_NONE, 0,
+              "hidden child parent shortcut is not a refresh target");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0, "parent controls hidden from child");
 
     model.view = PTC_UI_PARENT;

@@ -29,8 +29,8 @@ static const char *json_string(const cJSON *object, const char *name)
 const char *ptc_ui_shortcut_common_label(int index)
 {
     static const char *labels[] = {
-        "L + R", "L + R + 上", "L + R + 下", "L + R + 左", "L + R + 右", "L + R + Plus +", "L + R + Minus -",
-        "ZL + ZR", "ZL + ZR + 上", "ZL + ZR + 下", "ZL + ZR + 左", "ZL + ZR + 右", "ZL + ZR + Plus +", "ZL + ZR + Minus -"
+        "L + R", "L + R + 上", "L + R + 下", "L + R + 左", "L + R + 右", "L + R + Plus(＋)", "L + R + Minus(－)",
+        "ZL + ZR", "ZL + ZR + 上", "ZL + ZR + 下", "ZL + ZR + 左", "ZL + ZR + 右", "ZL + ZR + Plus(＋)", "ZL + ZR + Minus(－)"
     };
     if (index < 0 || index >= PTC_UI_SHORTCUT_PRESET_COUNT) {
         return "未选择";
@@ -1452,7 +1452,10 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
         }
         if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(1), x, y)) {
-            return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
+            if (model->show_parent_shortcut_hint && model->custom_shortcut_enabled) {
+                return make_hit(PTC_UI_HIT_CHILD_PARENT, 0);
+            }
+            return make_hit(PTC_UI_HIT_NONE, 0);
         }
         if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(2), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_EXIT, 0);

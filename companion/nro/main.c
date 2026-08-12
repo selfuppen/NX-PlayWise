@@ -420,8 +420,8 @@ static void format_shortcut_label(u64 mask, char *out, size_t out_size)
         {HidNpadButton_Right, "右"},
         {HidNpadButton_X, "X"},
         {HidNpadButton_Y, "Y"},
-        {HidNpadButton_Plus, "Plus +"},
-        {HidNpadButton_Minus, "Minus -"}
+        {HidNpadButton_Plus, "Plus(＋)"},
+        {HidNpadButton_Minus, "Minus(－)"}
     };
     bool first = true;
     size_t index;
@@ -3113,6 +3113,9 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_CHILD_REFRESH:
         submit_status(ui);
         break;
+    case PTC_UI_HIT_CHILD_PARENT:
+        enter_parent_area(ui);
+        break;
     case PTC_UI_HIT_CHILD_EXIT:
         ui->exit_requested = true;
         break;
@@ -3480,6 +3483,12 @@ int main(int argc, char **argv)
             ui.model.overlay == PTC_UI_OVERLAY_NONE && custom_parent_combo_held(&ui, held);
 
         if (custom_combo_held) {
+            /* Plus is an exit shortcut only when it is used on its own.  As
+             * soon as it participates in the configured parent combination,
+             * do not let releasing it turn the attempted unlock into an exit. */
+            if (ui.model.custom_shortcut_mask & HidNpadButton_Plus) {
+                ui.plus_exit_pending = false;
+            }
             if (!ui.custom_shortcut_latched) {
                 ++ui.custom_shortcut_ticks;
                 if (ui.custom_shortcut_ticks >= CUSTOM_SHORTCUT_HOLD_TICKS) {
