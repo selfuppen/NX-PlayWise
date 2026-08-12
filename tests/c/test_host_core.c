@@ -486,8 +486,11 @@ static void test_setup_preflight_and_recovery(void)
     check_true(pctl.apply_target_calls > apply_calls_after_activation,
         "holiday policy update immediately reapplies today's effective rule");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/holiday-policy.json", text, sizeof(text)) &&
-        strstr(text, "\"rule_source\":\"today_override\""),
-        "holiday update reports the preserved manual override as the effective source");
+        strstr(text, "\"rule_source\":\"today_override\"") &&
+        strstr(text, "\"recovery_active\":false"),
+        "holiday update reports the effective source without a committed recovery transaction");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/recovery/active/meta.json"),
+        "holiday update clears its committed recovery transaction");
 
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/flags/disable.flag", "startup_transaction_restored\n"),
         "write automatic disable flag while active");
@@ -626,6 +629,14 @@ static void test_live_enforce_recovery_is_not_startup_recovery(void)
         "pending enforce keeps live recovery transaction");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
         strstr(text, "\"apply_pending_confirmation\":true"), "pending enforce state is persisted");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-live-recovery.json",
+        "{\"version\":1,\"request_id\":\"status-live-recovery\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
+        "queue status while enforce recovery is live");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "status reads the live enforce recovery");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-live-recovery.json", text, sizeof(text)) &&
+        strstr(text, "\"recovery_active\":true"),
+        "unrelated live recovery remains visible in status results");
 
     (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"),

@@ -103,6 +103,7 @@ static void update_holiday_dirty(UiState *ui);
 static void apply_pending_navigation(UiState *ui);
 static void handle_setup_input(UiState *ui, u64 down, u64 held);
 static void refresh_album_restriction(UiState *ui);
+static void refresh_recovery_state(UiState *ui);
 static void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
 static void discard_holiday_draft(UiState *ui);
 static void retry_error(UiState *ui);
@@ -1540,6 +1541,7 @@ static void setup_primary(UiState *ui)
                 break;
             }
             snprintf(ui->model.message, sizeof(ui->model.message), "相册入口配置已保存，重启主机后生效。");
+            refresh_recovery_state(ui);
         } else {
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "已暂时跳过相册入口限制，可稍后在加时码与安全中开启。");
@@ -2619,6 +2621,7 @@ static void confirm_operation(UiState *ui)
             : ptc_album_restriction_restore(ui->client.storage,
                 operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, error, sizeof(error));
         refresh_album_restriction(ui);
+        refresh_recovery_state(ui);
         if (ok) {
             snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                      operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION
@@ -2822,6 +2825,16 @@ static void apply_pending_navigation(UiState *ui)
     }
     ui->pending_parent_page = -1;
     ui->pending_leave_parent = false;
+}
+
+static void refresh_recovery_state(UiState *ui)
+{
+    char path[192];
+    if (!ui || !ui->client.storage) {
+        return;
+    }
+    snprintf(path, sizeof(path), "%s/recovery/active/meta.json", APP_ROOT);
+    ui->model.recovery_active = ui->client.storage->vtable->exists(ui->client.storage, path);
 }
 
 static void discard_holiday_draft(UiState *ui)

@@ -1172,7 +1172,11 @@ static bool write_result(PtcSysmodule *sysmodule, const char *request_id, const 
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, json);
 }
 
-static bool write_result_with_setup(PtcSysmodule *sysmodule, const char *request_id, const char *base)
+static bool write_result_with_setup(
+    PtcSysmodule *sysmodule,
+    const char *request_id,
+    const char *base,
+    bool commits_recovery)
 {
     PtcSetupState setup;
     PtcRuntimeState runtime_state;
@@ -1203,8 +1207,14 @@ static bool write_result_with_setup(PtcSysmodule *sysmodule, const char *request
         (void)json_string(text, "model", model, sizeof(model));
         (void)json_bool_value(text, "atmosphere", &atmosphere);
     }
-    join_path(path, sizeof(path), sysmodule->app_root, "recovery/active");
+    join_path(path, sizeof(path), sysmodule->app_root, "recovery/active/meta.json");
     recovery_active = sysmodule->storage->vtable->exists(sysmodule->storage, path);
+    if (recovery_active && commits_recovery) {
+        /* The result is the commit record for this transaction. Keep the
+           recovery files until that record is durable, but do not expose the
+           about-to-be-cleared transaction as pending work to the client. */
+        recovery_active = false;
+    }
     join_path(path, sizeof(path), sysmodule->app_root, "support/recent-events.jsonl");
     if (sysmodule->storage->vtable->read_text(sysmodule->storage, path, recent, sizeof(recent))) {
         char *cursor = recent;
@@ -1669,7 +1679,8 @@ static bool write_current_status_result(
     const char *mode,
     bool dry_run,
     const PtcCapabilities *caps,
-    PtcClockSnapshot now)
+    PtcClockSnapshot now,
+    bool commits_recovery)
 {
     PtcPctlStatus pctl_status;
     PtcRules rules;
@@ -1704,7 +1715,7 @@ static bool write_current_status_result(
     }
     (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
     append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
-    return write_result_with_setup(sysmodule, request->request_id, json);
+    return write_result_with_setup(sysmodule, request->request_id, json, commits_recovery);
 }
 
 static bool process_status(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
@@ -1713,7 +1724,7 @@ static bool process_status(PtcSysmodule *sysmodule, const PtcRequest *request, c
     if (decision.error != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, decision.error, now.day_index, caps);
     }
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, caps, now);
+    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, caps, now, false);
 }
 
 static bool code_is_v2_candidate(const char *code)
@@ -2317,7 +2328,7 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
        navigating back, but must never repeat the snapshot or PCTL writes. */
     if (strcmp(setup.phase, "active") == 0 && !disable_flag) {
         return write_current_status_result(
-            sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
+            sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
     }
     resuming_disabled_setup = disable_flag &&
         (strcmp(setup.phase, "restored") == 0 || strcmp(setup.phase, "active") == 0);
@@ -2385,7 +2396,7 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
     }
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
+    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
 }
 
 static bool process_retry_setup_release(PtcSysmodule *sysmodule, const PtcRequest *request,
@@ -2424,7 +2435,7 @@ static bool process_retry_setup_release(PtcSysmodule *sysmodule, const PtcReques
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             err, now.day_index, caps);
     }
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
+    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
 }
 
 static bool process_restore_install_snapshot(PtcSysmodule *sysmodule, const PtcRequest *request,
@@ -2441,7 +2452,7 @@ static bool process_restore_install_snapshot(PtcSysmodule *sysmodule, const PtcR
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             err, now.day_index, caps);
     }
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
+    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
 }
 
 static void write_disable_flag(PtcSysmodule *sysmodule, const char *reason)
@@ -3796,7 +3807,7 @@ static bool __attribute__((unused)) process_probe(PtcSysmodule *sysmodule, const
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
     }
     if (decision.dry_run) {
-        return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), true, caps, now);
+        return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), true, caps, now, false);
     }
     err = backup_before_write(sysmodule, request, ptc_control_mode_name(config->mode));
     if (err != PTC_ERR_OK) {
@@ -3820,7 +3831,7 @@ static bool __attribute__((unused)) process_probe(PtcSysmodule *sysmodule, const
     if (!save_capabilities(sysmodule, caps, now.unix_seconds)) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
     }
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now);
+    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
 }
 
 static bool __attribute__((unused)) process_probe_apply_today_limit(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
@@ -3861,7 +3872,7 @@ static bool __attribute__((unused)) process_probe_apply_today_limit(PtcSysmodule
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
     }
     if (decision.dry_run) {
-        return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), true, caps, now);
+        return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), true, caps, now, false);
     }
 
     before_status_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl, target.weekday, &before_status);
@@ -4072,7 +4083,7 @@ static bool process_disable_today_limit(
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
     }
     if (decision.dry_run) {
-        return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), true, caps, now);
+        return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), true, caps, now, false);
     }
     if (!sysmodule->pctl->vtable->snapshot_settings ||
         sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &original_snapshot) != PTC_ERR_OK) {
@@ -4102,7 +4113,7 @@ static bool process_disable_today_limit(
     }
     rules_persisted = true;
     append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "disable_today_limit");
-    if (write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now)) {
+    if (write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, true)) {
         recovery_clear(sysmodule);
         return true;
     }
@@ -4140,6 +4151,10 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     PtcRuntimeState runtime_state;
     PtcErrorCode err;
     PtcDayRule active_rule;
+    bool pctl_request = request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
+        request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
+        request->type == PTC_REQUEST_RESTORE_TODAY_POLICY ||
+        request->type == PTC_REQUEST_SET_HOLIDAY_POLICY;
     if (disable_flag) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_DISABLED, now.day_index, caps);
     }
@@ -4158,10 +4173,6 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
     }
     if (!decision.dry_run) {
-        bool pctl_request = request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
-            request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
-            request->type == PTC_REQUEST_RESTORE_TODAY_POLICY ||
-            request->type == PTC_REQUEST_SET_HOLIDAY_POLICY;
         if (pctl_request && !recovery_begin(sysmodule, request, now)) {
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
                 PTC_ERR_PCTL_BACKUP_FAILED, now.day_index, caps);
@@ -4198,7 +4209,8 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
         }
     }
     {
-        bool ok = write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, caps, now);
+        bool ok = write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode),
+            decision.dry_run, caps, now, !decision.dry_run && pctl_request && recovery_path_exists(sysmodule));
         if (ok) recovery_clear(sysmodule);
         else if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule))
             write_disable_flag(sysmodule, "transaction_restore_failed\n");
