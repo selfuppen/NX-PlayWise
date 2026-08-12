@@ -9,6 +9,10 @@
 
 typedef struct {
     uint16_t day_index;
+    bool restriction_enabled_available;
+    bool restriction_enabled;
+    bool temporary_unlocked_available;
+    bool temporary_unlocked;
     int limited_today;
     int blocked_today;
     int unrestricted_today;

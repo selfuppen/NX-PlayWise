@@ -99,12 +99,18 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
     (void)snprintf(
         out + used,
         out_size > used ? out_size - used : 0,
-        "\"state\":{\"day_index\":%u,\"limited_today\":%d,\"blocked_today\":%d,"
+        "\"state\":{\"day_index\":%u,\"restriction_enabled_available\":%s,\"restriction_enabled\":%s,"
+        "\"temporary_unlocked_available\":%s,\"temporary_unlocked\":%s,"
+        "\"limited_today\":%d,\"blocked_today\":%d,"
         "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%lld,"
         "\"played_minutes_available\":%s,\"played_minutes\":%lld,"
         "\"play_timer_enabled\":%d,\"restricted_now\":%d,"
         "\"rule_source\":\"%s\",\"calendar_covered\":%s,\"calendar_update_warning\":%s}",
         state->day_index,
+        json_bool(state->restriction_enabled_available),
+        json_bool(state->restriction_enabled),
+        json_bool(state->temporary_unlocked_available),
+        json_bool(state->temporary_unlocked),
         state->limited_today,
         state->blocked_today,
         state->unrestricted_today,
@@ -122,6 +128,10 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
 {
     state->day_index = day_index;
+    state->restriction_enabled_available = false;
+    state->restriction_enabled = false;
+    state->temporary_unlocked_available = false;
+    state->temporary_unlocked = false;
     state->limited_today = -1;
     state->blocked_today = -1;
     state->unrestricted_today = -1;

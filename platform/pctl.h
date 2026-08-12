@@ -15,6 +15,10 @@ typedef enum {
 } PtcPctlTargetMode;
 
 typedef struct {
+    bool restriction_enabled_available;
+    bool restriction_enabled;
+    bool temporary_unlocked_available;
+    bool temporary_unlocked;
     bool limited_today;
     bool blocked_today;
     bool unrestricted_today;

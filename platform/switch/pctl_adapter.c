@@ -187,15 +187,20 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
     }
     service = &session.service;
     memset(out, 0, sizeof(*out));
+    Result restriction_rc = dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTION_ENABLED, &enabled, sizeof(enabled));
     err = map_result(
         adapter,
-        dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTION_ENABLED, &enabled, sizeof(enabled)),
+        restriction_rc,
         PTC_ERR_PCTL_READ_FAILED);
     if (err != PTC_ERR_OK) {
         close_session(&session);
         return err;
     }
-    (void)dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTION_TEMPORARY_UNLOCKED, &unlocked, sizeof(unlocked));
+    out->restriction_enabled_available = R_SUCCEEDED(restriction_rc);
+    out->restriction_enabled = enabled;
+    Result unlocked_rc = dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTION_TEMPORARY_UNLOCKED, &unlocked, sizeof(unlocked));
+    out->temporary_unlocked_available = R_SUCCEEDED(unlocked_rc);
+    out->temporary_unlocked = unlocked;
     (void)dispatch_out(service, PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED, &alarm_disabled, sizeof(alarm_disabled));
     if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED, &timer_enabled, sizeof(timer_enabled)))) {
         out->play_timer_enabled = timer_enabled;

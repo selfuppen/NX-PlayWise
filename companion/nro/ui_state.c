@@ -169,7 +169,7 @@ void ptc_ui_change_parent_page(PtcUiModel *model, int direction)
         page = 0;
     }
     model->parent_page = (PtcUiParentPage)page;
-    model->selected_index = 0;
+    if (!model->parent_footer_focused) model->selected_index = 0;
 }
 
 void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertical)
@@ -181,6 +181,13 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     int column;
     int target;
     if (!model) {
+        return;
+    }
+    if (model->parent_footer_focused) {
+        if (vertical < 0) {
+            model->parent_footer_focused = false;
+            model->selected_index = model->parent_content_selection;
+        }
         return;
     }
     count = ptc_ui_parent_action_count(model->parent_page);
@@ -197,11 +204,16 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         static const int right[7] = {0, 3, 4, 3, 4, 6, 6};
         static const int up[7]    = {0, 0, 1, 0, 3, 2, 4};
         static const int down[7]  = {1, 2, 5, 4, 6, 5, 6};
+        int previous = index;
         if (horizontal < 0) index = left[index];
         else if (horizontal > 0) index = right[index];
         else if (vertical < 0) index = up[index];
         else if (vertical > 0) index = down[index];
         model->selected_index = index;
+        if (vertical > 0 && previous == down[previous]) {
+            model->parent_content_selection = previous;
+            model->parent_footer_focused = true;
+        }
         return;
     }
     column = index % 2;
@@ -210,7 +222,9 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     } else if (horizontal > 0 && column == 0 && index + 1 < count) {
         ++index;
     }
-    if (vertical != 0) {
+    {
+        int previous_row = index / 2;
+        if (vertical != 0) {
         row = index / 2;
         column = index % 2;
         row_count = (count + 1) / 2;
@@ -219,9 +233,14 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         if (target >= count) {
             target = row * 2;
         }
-        index = target;
+            index = target;
+        }
+        model->selected_index = index;
+        if (vertical > 0 && previous_row == row_count - 1) {
+            model->parent_content_selection = index;
+            model->parent_footer_focused = true;
+        }
     }
-    model->selected_index = index;
 }
 
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum)
@@ -612,6 +631,10 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
             !summary.played_minutes_available;
 
         model->status_loaded = true;
+        model->restriction_enabled_available = json_bool(state, "restriction_enabled_available", false);
+        model->restriction_enabled = json_bool(state, "restriction_enabled", false);
+        model->temporary_unlocked_available = json_bool(state, "temporary_unlocked_available", false);
+        model->temporary_unlocked = json_bool(state, "temporary_unlocked", false);
         model->day_index = (uint16_t)json_int(state, "day_index", 0);
         model->limited_today = json_int(state, "limited_today", -1);
         model->blocked_today = json_int(state, "blocked_today", -1);
@@ -644,6 +667,12 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         bool setup_was_waiting = strcmp(model->setup_phase, "released") == 0 &&
             model->setup_activate_after > 0;
         snprintf(model->setup_phase, sizeof(model->setup_phase), "%s", json_string(setup, "phase"));
+        snprintf(model->compatibility_status, sizeof(model->compatibility_status), "%s",
+                 json_string(setup, "compatibility_status"));
+        snprintf(model->apply_status, sizeof(model->apply_status), "%s", json_string(setup, "apply_status"));
+        model->apply_pending_confirmation = json_bool(setup, "apply_pending_confirmation", false);
+        model->recovery_active = json_bool(setup, "recovery_active", false);
+        snprintf(model->disable_reason, sizeof(model->disable_reason), "%s", json_string(setup, "disable_reason"));
         model->setup_restriction_cleared = json_bool(setup, "restriction_cleared", false);
         model->setup_snapshot_available = json_bool(setup, "snapshot_available", false);
         model->setup_activate_after = json_int(setup, "activate_after", 0);
@@ -657,6 +686,35 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
             model->view = PTC_UI_CHILD;
         }
         setup_activated = setup_was_waiting && strcmp(model->setup_phase, "active") == 0;
+    }
+    {
+        cJSON *environment = cJSON_GetObjectItemCaseSensitive(root, "environment");
+        if (strcmp(status, "ok") == 0 && cJSON_IsObject(environment)) {
+            model->environment_available = json_bool(environment, "available", false);
+            snprintf(model->environment_hos, sizeof(model->environment_hos), "%s", json_string(environment, "hos"));
+            snprintf(model->environment_model, sizeof(model->environment_model), "%s", json_string(environment, "model"));
+            model->environment_atmosphere = json_bool(environment, "atmosphere", false);
+        }
+    }
+    {
+        cJSON *events = cJSON_GetObjectItemCaseSensitive(root, "recent_events");
+        if (strcmp(status, "ok") == 0 && cJSON_IsArray(events)) {
+            int total = cJSON_GetArraySize(events);
+            int start = total > 3 ? total - 3 : 0;
+            model->recent_event_count = 0;
+            for (int event_index = start; event_index < total; ++event_index) {
+                cJSON *item = cJSON_GetArrayItem(events, event_index);
+                const char *event_name = cJSON_IsObject(item) ? json_string(item, "event") : "";
+                const char *error_name = cJSON_IsObject(item) ? json_string(item, "error") : "";
+                int64_t timestamp = cJSON_IsObject(item) ? json_int(item, "ts", 0) : 0;
+                if (!event_name[0]) continue;
+                snprintf(model->recent_events[model->recent_event_count],
+                         sizeof(model->recent_events[model->recent_event_count]),
+                         "%s · %s · %lld", event_name, error_name[0] ? error_name : "ok",
+                         (long long)timestamp);
+                ++model->recent_event_count;
+            }
+        }
     }
     if (status && strcmp(status, "error") == 0) {
         const char *message = summary.message[0] ? summary.message : NULL;
@@ -786,7 +844,7 @@ PtcUiRect ptc_ui_setup_zone_rect(int index)
 
 PtcUiRect ptc_ui_parent_footer_rect(int index)
 {
-    static const int widths[] = {170, 170, 220, 250};
+    static const int widths[] = {170, 170, 220, 558};
     static const int xs[] = {54, 242, 430, 668};
     PtcUiRect rect = {0, 660, 0, 48};
     if (index >= 0 && index < 4) {
@@ -1507,9 +1565,6 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_PARENT_TAB, i);
         }
     }
-    if (ptc_ui_rect_contains(ptc_ui_parent_refresh_rect(), x, y)) {
-        return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
-    }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(0), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_PREV_PAGE, 0);
     }
@@ -1518,6 +1573,9 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(2), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
+    }
+    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(3), x, y)) {
+        return make_hit(PTC_UI_HIT_PARENT_STATUS, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
         for (i = 0; i < 7; ++i) {
@@ -1540,7 +1598,8 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         PtcUiRect card_rect = (model->parent_page == PTC_UI_PARENT_HOLIDAY)
             ? ptc_ui_holiday_card_rect(i)
             : ptc_ui_parent_card_rect(i);
-        if (ptc_ui_rect_contains(card_rect, x, y)) {
+        if ((model->parent_page != PTC_UI_PARENT_SUPPORT || ptc_ui_safety_action_visible(model, i)) &&
+            ptc_ui_rect_contains(card_rect, x, y)) {
             return make_hit(PTC_UI_HIT_PARENT_CARD, i);
         }
     }
@@ -1597,6 +1656,30 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
         return PTC_UI_ACTION_AVAILABLE;
     default:
         return PTC_UI_ACTION_DISABLED;
+    }
+}
+
+bool ptc_ui_safety_action_visible(const PtcUiModel *model, int index)
+{
+    if (!model) return false;
+    switch (index) {
+    case 0:
+        return model->disable_flag_present ||
+            (strcmp(model->setup_phase, "active") != 0 && strcmp(model->setup_phase, "protection") != 0 &&
+             strcmp(model->setup_phase, "failed") != 0);
+    case 1:
+        return strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0 ||
+            strcmp(model->setup_phase, "pending") == 0;
+    case 2:
+        return !model->disable_flag_present && strcmp(model->setup_phase, "protection") != 0 &&
+            strcmp(model->setup_phase, "restored") != 0;
+    case 3:
+        return model->setup_snapshot_available;
+    case 4:
+    case 5:
+        return true;
+    default:
+        return false;
     }
 }
 

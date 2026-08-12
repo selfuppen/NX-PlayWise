@@ -30,7 +30,7 @@
 #define ISSUED_NONCES_PATH APP_ROOT "/grant-issued.json"
 #define LEDGER_PATH APP_ROOT "/ledger/used_nonces.jsonl"
 #define RESULT_TEXT_SIZE 8192
-#define REQUEST_TIMEOUT_MS 60000
+#define REQUEST_TIMEOUT_MS 30000
 #define LOOP_SLEEP_NS 100000000LL
 #define LOOP_SLEEP_MS 100
 #define HIDDEN_HOLD_TICKS 20
@@ -93,6 +93,8 @@ typedef struct {
     PtcUiOverlay auth_return_overlay;
     int64_t auth_cooldown_until;
 } UiState;
+
+static void request_parent_navigation(UiState *ui, int target_page, bool leave_parent);
 
 static void handle_parent_action(UiState *ui);
 static void handle_today_action_ready(UiState *ui, int index);
@@ -662,6 +664,32 @@ static void submit_status(UiState *ui)
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) begin_wait(ui, "status", "正在刷新今天的状态…");
     else set_message(ui, "刷新失败", status);
+}
+
+static bool parent_status_needs_support(const PtcUiModel *model)
+{
+    int64_t age = ptc_ui_status_age_seconds(model, (int64_t)time(NULL));
+    return strcmp(model->setup_phase, "protection") == 0 ||
+        strcmp(model->setup_phase, "failed") == 0 || model->recovery_active ||
+        model->disable_flag_present ||
+        (model->temporary_unlocked_available && model->temporary_unlocked) ||
+        model->error_code != 0 || age > 120;
+}
+
+static void activate_parent_status(UiState *ui)
+{
+    if (parent_status_needs_support(&ui->model)) {
+        if (ui->model.parent_page != PTC_UI_PARENT_SUPPORT) {
+            request_parent_navigation(ui, PTC_UI_PARENT_SUPPORT, false);
+            ui->model.parent_footer_focused = true;
+        } else {
+            ui->model.parent_footer_focused = false;
+            ui->model.selected_index = 0;
+        }
+    } else {
+        refresh_disable_flag(ui);
+        submit_status(ui);
+    }
 }
 
 static void enter_child_area(UiState *ui)
@@ -2517,12 +2545,8 @@ static void handle_parent_action(UiState *ui)
         export_diagnostics(ui);
         break;
     case 5:
-        ui->model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
-        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "软件信息");
-        snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "NX-PlayWise 是项目名称，产品品牌为 PlayWise。");
-        snprintf(ui->model.software_version, sizeof(ui->model.software_version), "%s", PLAYWISE_BUILD_VERSION);
-        snprintf(ui->model.repository_url, sizeof(ui->model.repository_url), "%s", PLAYWISE_REPOSITORY_URL);
-        snprintf(ui->model.pwa_url, sizeof(ui->model.pwa_url), "%s", PTC_PAIRING_BASE_URL);
+        refresh_disable_flag(ui);
+        submit_status(ui);
         break;
     default:
         break;
@@ -3188,6 +3212,10 @@ static void handle_touch(UiState *ui, int x, int y)
             poll_result(ui, true);
         }
         break;
+    case PTC_UI_HIT_PARENT_STATUS:
+        ui->model.parent_footer_focused = true;
+        activate_parent_status(ui);
+        break;
     case PTC_UI_HIT_PARENT_BACK:
         request_parent_navigation(ui, -1, true);
         break;
@@ -3595,7 +3623,25 @@ int main(int argc, char **argv)
                 enter_child_area(&ui);
             }
         } else {
-            if (ui.model.parent_page == PTC_UI_PARENT_PLAN) {
+            if (ui.model.parent_footer_focused) {
+                if (down & HidNpadButton_B) {
+                    request_parent_navigation(&ui, -1, true);
+                } else if (down & HidNpadButton_L) {
+                    request_parent_navigation(&ui,
+                        (ui.model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
+                } else if (down & HidNpadButton_R) {
+                    request_parent_navigation(&ui,
+                        (ui.model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
+                } else if (down & HidNpadButton_Up) {
+                    ui.model.parent_footer_focused = false;
+                    ui.model.selected_index = ui.model.parent_content_selection;
+                } else if (down & HidNpadButton_Y) {
+                    refresh_disable_flag(&ui);
+                    submit_status(&ui);
+                } else if (down & HidNpadButton_A) {
+                    activate_parent_status(&ui);
+                }
+            } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN) {
                 PtcDayRule *day = &ui.model.draft_week[ui.model.editor_index];
                 if (ui.waiting) {
                     if (down) {
@@ -3625,7 +3671,12 @@ int main(int argc, char **argv)
                 } else if (down & HidNpadButton_Up) {
                     ptc_ui_move_weekly_focus(&ui.model, 0, -1);
                 } else if (down & HidNpadButton_Down) {
-                    ptc_ui_move_weekly_focus(&ui.model, 0, 1);
+                    if (ui.model.selected_index == 2 || ui.model.selected_index == 3) {
+                        ui.model.parent_content_selection = ui.model.selected_index;
+                        ui.model.parent_footer_focused = true;
+                    } else {
+                        ptc_ui_move_weekly_focus(&ui.model, 0, 1);
+                    }
                 } else if (down & HidNpadButton_Y) {
                     request_parent_navigation(&ui, PTC_UI_PARENT_PLAN, false);
                 } else if (down & HidNpadButton_A) {
@@ -3691,6 +3742,8 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_A) {
                 if (ui.waiting) {
                     snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再执行其他设置。");
+                } else if (ui.model.parent_footer_focused) {
+                    activate_parent_status(&ui);
                 } else {
                     handle_parent_action(&ui);
                 }

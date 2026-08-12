@@ -131,6 +131,10 @@ typedef struct {
     bool waiting;
     bool status_loaded;
     int64_t status_updated_at;
+    bool restriction_enabled_available;
+    bool restriction_enabled;
+    bool temporary_unlocked_available;
+    bool temporary_unlocked;
     bool remaining_available;
     bool played_minutes_available;
     int limited_today;
@@ -141,11 +145,24 @@ typedef struct {
     int play_timer_enabled;
     int restricted_now;
     bool disable_flag_present;
+    bool recovery_active;
+    bool apply_pending_confirmation;
+    bool parent_footer_focused;
+    int parent_content_selection;
     int error_code;
     bool setup_restriction_cleared;
     bool setup_snapshot_available;
     int64_t setup_activate_after;
     char setup_phase[32];
+    char compatibility_status[32];
+    char apply_status[48];
+    char disable_reason[48];
+    char environment_hos[32];
+    char environment_model[32];
+    bool environment_available;
+    bool environment_atmosphere;
+    int recent_event_count;
+    char recent_events[3][128];
     uint16_t day_index;
     char mode[24];
     char request_id[80];
@@ -282,6 +299,7 @@ typedef enum {
     PTC_UI_HIT_PARENT_PREV_PAGE,
     PTC_UI_HIT_PARENT_NEXT_PAGE,
     PTC_UI_HIT_PARENT_REFRESH,
+    PTC_UI_HIT_PARENT_STATUS,
     PTC_UI_HIT_PARENT_BACK,
     PTC_UI_HIT_PARENT_TAB,
     PTC_UI_HIT_PARENT_CARD,
@@ -371,6 +389,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);
 void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const char *transport_label);
 
 PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int index);
+bool ptc_ui_safety_action_visible(const PtcUiModel *model, int index);
 const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index);
 
 /* Shared control geometry (single source of truth for drawing and touch). */

@@ -651,6 +651,36 @@ static void append_event(PtcSysmodule *sysmodule, const PtcRequest *request, con
     snprintf(path, sizeof(path), "%s/logs/events.jsonl", sysmodule->app_root);
     (void)sysmodule->storage->vtable->append_line(sysmodule->storage, path, line);
 #endif
+    /* A small, independently disposable summary feeds Support without parsing arbitrary logs. */
+    if (strcmp(event, "result_error") == 0 || strcmp(event, "pctl_apply_failed") == 0 ||
+        strcmp(event, "effect_restore") == 0 || strcmp(event, "effect_restore_failed") == 0 ||
+        strcmp(event, "handover_preserved") == 0 || strcmp(event, "handover_restore") == 0 ||
+        (strcmp(event, "result_ok") == 0 && request && strcmp(request->type_text, "status") != 0)) {
+        char old[4096] = "";
+        char summary_path[320];
+        char output[4096] = "";
+        const char *lines[20];
+        size_t count = 0;
+        char *cursor;
+        join_path(summary_path, sizeof(summary_path), sysmodule->app_root, "support/recent-events.jsonl");
+        (void)sysmodule->storage->vtable->read_text(sysmodule->storage, summary_path, old, sizeof(old));
+        cursor = old;
+        while (*cursor) {
+            char *newline = strchr(cursor, '\n');
+            if (count == 20) { memmove(lines, lines + 1, 19 * sizeof(lines[0])); count = 19; }
+            lines[count++] = cursor;
+            if (!newline) break;
+            *newline = '\0';
+            cursor = newline + 1;
+        }
+        if (count == 20) { memmove(lines, lines + 1, 19 * sizeof(lines[0])); count = 19; }
+        for (size_t i = 0; i < count; ++i) {
+            if (lines[i][0]) { strncat(output, lines[i], sizeof(output) - strlen(output) - 1); strncat(output, "\n", sizeof(output) - strlen(output) - 1); }
+        }
+        strncat(output, line, sizeof(output) - strlen(output) - 1);
+        strncat(output, "\n", sizeof(output) - strlen(output) - 1);
+        (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, summary_path, output);
+    }
     /* Keep the legacy root log readable for older desktop/self-check tooling during migration. */
 }
 
@@ -1112,6 +1142,10 @@ static void result_state_from_pctl(
     const PtcCapabilities *caps)
 {
     ptc_result_state_default(state, day_index);
+    state->restriction_enabled_available = status->restriction_enabled_available;
+    state->restriction_enabled = status->restriction_enabled;
+    state->temporary_unlocked_available = status->temporary_unlocked_available;
+    state->temporary_unlocked = status->temporary_unlocked;
     state->limited_today = status->limited_today ? 1 : 0;
     state->blocked_today = status->blocked_today ? 1 : 0;
     state->unrestricted_today = status->unrestricted_today ? 1 : 0;
@@ -1141,14 +1175,63 @@ static bool write_result(PtcSysmodule *sysmodule, const char *request_id, const 
 static bool write_result_with_setup(PtcSysmodule *sysmodule, const char *request_id, const char *base)
 {
     PtcSetupState setup;
-    char json[3072];
+    PtcRuntimeState runtime_state;
+    char json[6144];
+    char path[320];
+    char text[1024];
+    char disable_reason[48] = "";
+    char hos[32] = "";
+    char model[32] = "";
+    bool atmosphere = false;
+    bool environment_available = false;
+    bool recovery_active;
+    char recent[4096] = "";
+    char recent_json[4096] = "";
     const char *completed_at;
-    if (!load_setup_state(sysmodule, &setup)) return false;
+    if (!load_setup_state(sysmodule, &setup) || !load_state(sysmodule, &runtime_state)) return false;
+    join_path(path, sizeof(path), sysmodule->app_root, "flags/disable.flag");
+    if (sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
+        size_t length = strcspn(text, "\r\n");
+        if (length >= sizeof(disable_reason)) length = sizeof(disable_reason) - 1;
+        memcpy(disable_reason, text, length);
+        disable_reason[length] = '\0';
+    }
+    join_path(path, sizeof(path), sysmodule->app_root, "environment.json");
+    if (sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
+        (void)json_bool_value(text, "read_ok", &environment_available);
+        (void)json_string(text, "hos", hos, sizeof(hos));
+        (void)json_string(text, "model", model, sizeof(model));
+        (void)json_bool_value(text, "atmosphere", &atmosphere);
+    }
+    join_path(path, sizeof(path), sysmodule->app_root, "recovery/active");
+    recovery_active = sysmodule->storage->vtable->exists(sysmodule->storage, path);
+    join_path(path, sizeof(path), sysmodule->app_root, "support/recent-events.jsonl");
+    if (sysmodule->storage->vtable->read_text(sysmodule->storage, path, recent, sizeof(recent))) {
+        char *cursor = recent;
+        bool first = true;
+        snprintf(recent_json, sizeof(recent_json), "[");
+        while (*cursor) {
+            char *newline = strchr(cursor, '\n');
+            if (newline) *newline = '\0';
+            if (*cursor) {
+                strncat(recent_json, first ? "" : ",", sizeof(recent_json) - strlen(recent_json) - 1);
+                strncat(recent_json, cursor, sizeof(recent_json) - strlen(recent_json) - 1);
+                first = false;
+            }
+            if (!newline) break;
+            cursor = newline + 1;
+        }
+        strncat(recent_json, "]", sizeof(recent_json) - strlen(recent_json) - 1);
+    } else snprintf(recent_json, sizeof(recent_json), "[]");
     completed_at = strstr(base, "\"completed_at\"");
     if (!completed_at) return false;
     snprintf(json, sizeof(json),
         "%.*s\"setup\":{\"phase\":\"%s\",\"compatibility_status\":\"%s\",\"restriction_cleared\":%s,"
-        "\"snapshot_available\":%s,\"activate_after\":%lld,\"last_error\":\"%s\"},%s",
+        "\"snapshot_available\":%s,\"activate_after\":%lld,\"last_error\":\"%s\","
+        "\"apply_status\":\"%s\",\"apply_pending_confirmation\":%s,\"recovery_active\":%s,"
+        "\"disable_reason\":\"%s\"},"
+        "\"environment\":{\"available\":%s,\"hos\":\"%s\",\"model\":\"%s\",\"atmosphere\":%s},"
+        "\"recent_events\":%s,%s",
         (int)(completed_at - base), base,
         setup.phase,
         setup.compatibility_status,
@@ -1156,6 +1239,15 @@ static bool write_result_with_setup(PtcSysmodule *sysmodule, const char *request
         setup.snapshot_available ? "true" : "false",
         (long long)setup.activate_after,
         setup.last_error,
+        runtime_state.apply_pending_confirmation ? "applied_pending_confirmation" : "idle",
+        runtime_state.apply_pending_confirmation ? "true" : "false",
+        recovery_active ? "true" : "false",
+        disable_reason,
+        environment_available ? "true" : "false",
+        hos,
+        model,
+        atmosphere ? "true" : "false",
+        recent_json,
         completed_at);
     return write_result(sysmodule, request_id, json);
 }

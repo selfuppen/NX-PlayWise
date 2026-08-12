@@ -664,6 +664,10 @@ static void test_played_time_status(void)
         "queue unlimited status with direct spent time");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unlimited status with direct spent time processed");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-unlimited-played.json", text, sizeof(text)) &&
+        strstr(text, "\"restriction_enabled_available\":true") &&
+        strstr(text, "\"restriction_enabled\":true") &&
+        strstr(text, "\"temporary_unlocked_available\":true") &&
+        strstr(text, "\"temporary_unlocked\":false") &&
         strstr(text, "\"unrestricted_today\":1") &&
         strstr(text, "\"remaining_available\":false") &&
         strstr(text, "\"played_minutes_available\":true") &&

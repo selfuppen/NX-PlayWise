@@ -290,8 +290,10 @@ static void test_release_hit_targets(void)
 
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
-    check_hit(hit_center(&model, ptc_ui_parent_refresh_rect()), PTC_UI_HIT_PARENT_REFRESH, 0,
-              "parent refresh is prominent on the page");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(3)), PTC_UI_HIT_PARENT_STATUS, 0,
+              "parent global status occupies the fourth footer slot");
+    check_true(!rects_overlap(ptc_ui_parent_footer_rect(2), ptc_ui_parent_footer_rect(3)),
+               "parent status does not overlap the back action");
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
     check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
@@ -299,8 +301,8 @@ static void test_release_hit_targets(void)
     model.draft_week[1].mode = PTC_RULE_MODE_UNLIMITED;
     check_hit(hit_center(&model, ptc_ui_weekly_day_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
               "unlimited weekly day remains selectable for an explanatory message");
-    check_hit(hit_center(&model, ptc_ui_parent_refresh_rect()), PTC_UI_HIT_PARENT_REFRESH, 0,
-              "weekly refresh button is actionable");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(3)), PTC_UI_HIT_PARENT_STATUS, 0,
+              "weekly page shares the global status target");
     check_hit(hit_center(&model, ptc_ui_parent_footer_rect(2)), PTC_UI_HIT_PARENT_BACK, 0,
               "parent back action occupies the third footer slot");
     check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
@@ -490,6 +492,8 @@ static void test_user_state_mapping(void)
     check_int(model.remaining_minutes, 40, "remaining minutes mapped");
     check_true(strcmp(model.rule_source, "statutory_holiday") == 0 && model.calendar_covered,
         "effective holiday source and coverage map to the UI model");
+    check_true(strcmp(model.compatibility_status, "verified") == 0,
+        "compatibility status maps to the UI model");
     ptc_ui_mark_status_updated(&model, 1000);
     check_int((int)ptc_ui_status_age_seconds(&model, 1030), 30, "status age is measured from last refresh");
     check_int((int)ptc_ui_status_age_seconds(&model, 999), 0, "status age never goes negative");

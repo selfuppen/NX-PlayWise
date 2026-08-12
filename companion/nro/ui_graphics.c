@@ -89,7 +89,7 @@ static const UiAction SUPPORT_ACTIONS[] = {
     {"紧急停用控制", "立即停止后台控制操作", COLOR(194, 61, 61)},
     {"恢复安装前状态", "恢复原始设置并停用 任我玩", COLOR(194, 61, 61)},
     {"导出诊断包", "生成不含密钥、PIN 和离线码的支持文件", COLOR(91, 100, 116)},
-    {"软件信息", "查看版本、项目仓库和家长网页", COLOR(42, 105, 188)},
+    {"重新检测当前状态", "纯只读刷新计时、兼容性与恢复状态", COLOR(42, 105, 188)},
 };
 
 static const UiAction RESUME_CONTROL_ACTION = {
@@ -350,6 +350,79 @@ static void draw_footer_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect
     fill_round_rect(pixels, stride, box, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, box, 1, COLOR(203, 211, 222));
     draw_text_center(pixels, stride, box, label, 19, COLOR(47, 57, 71));
+}
+
+static bool parent_status_is_exception(const PtcUiModel *model)
+{
+    int64_t age = ptc_ui_status_age_seconds(model, (int64_t)time(NULL));
+    return strcmp(model->setup_phase, "protection") == 0 ||
+        strcmp(model->setup_phase, "failed") == 0 || model->recovery_active ||
+        model->disable_flag_present ||
+        (model->temporary_unlocked_available && model->temporary_unlocked) ||
+        model->error_code != 0 || age > 120;
+}
+
+static void format_parent_status_summary(const PtcUiModel *model, char *out, size_t out_size)
+{
+    int64_t age = ptc_ui_status_age_seconds(model, (int64_t)time(NULL));
+    char remaining[64];
+    char freshness[40];
+    if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
+        snprintf(out, out_size, "! 保护模式 · 需要处理");
+        return;
+    }
+    if (model->recovery_active) {
+        snprintf(out, out_size, "! 恢复事务待处理 · 查看详情");
+        return;
+    }
+    if (model->disable_flag_present) {
+        snprintf(out, out_size, "! 紧急停用 · 控制写入已停止");
+        return;
+    }
+    if (model->temporary_unlocked_available && model->temporary_unlocked) {
+        snprintf(out, out_size, "! 系统限制已临时解除");
+        return;
+    }
+    if (model->apply_pending_confirmation) {
+        snprintf(out, out_size, "… 设置等待确认生效");
+        return;
+    }
+    if (model->waiting) {
+        snprintf(out, out_size, "… 正在检测当前状态");
+        return;
+    }
+    if (!model->status_loaded || age > 120 || model->error_code != 0) {
+        if (age < 0) snprintf(out, out_size, "? 状态待确认 · 尚无可靠读数");
+        else if (age < 3600) snprintf(out, out_size, "? 状态待确认 · 上次成功于 %lld 分钟前", (long long)(age / 60));
+        else if (age < 86400) snprintf(out, out_size, "? 状态待确认 · 上次成功于 %lld 小时前", (long long)(age / 3600));
+        else snprintf(out, out_size, "? 状态待确认 · 上次成功超过一天");
+        return;
+    }
+    if (model->restricted_now == 1 || model->blocked_today == 1 ||
+        (model->remaining_available && model->remaining_minutes <= 0)) {
+        snprintf(out, out_size, "! 已到限制 · 今日时间已用完 · 刚刚同步");
+        return;
+    }
+    if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "今日不限时");
+    else if (model->remaining_available) snprintf(remaining, sizeof(remaining), "今日剩余 %d 分钟", model->remaining_minutes);
+    else snprintf(remaining, sizeof(remaining), "剩余时间不可用");
+    if (age <= 30) snprintf(freshness, sizeof(freshness), "刚刚同步");
+    else if (age < 60) snprintf(freshness, sizeof(freshness), "%lld 秒前", (long long)age);
+    else snprintf(freshness, sizeof(freshness), "%lld 分钟前", (long long)(age / 60));
+    snprintf(out, out_size, "控制正常 · %s · %s", remaining, freshness);
+}
+
+static void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect box = to_uirect(ptc_ui_parent_footer_rect(3));
+    char text[160];
+    uint32_t color = parent_status_is_exception(model) ? COLOR(194, 61, 61) : COLOR(28, 118, 188);
+    format_parent_status_summary(model, text, sizeof(text));
+    fill_round_rect(pixels, stride, box, 8, COLOR(255, 255, 255));
+    draw_rect_outline(pixels, stride, box, model->parent_footer_focused ? 3 : 1,
+                      model->parent_footer_focused ? color : COLOR(203, 211, 222));
+    fit_text(text, sizeof(text), text, 17, box.width - 32);
+    draw_text_center(pixels, stride, box, text, 17, color);
 }
 
 static UiRect to_uirect(PtcUiRect rect)
@@ -911,10 +984,12 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
     UiRect panel = {842, 176, 384, 324};
     const char *phase_label;
     uint32_t phase_color;
-    char hint[192];
+    char timing[96];
+    char environment[96];
+    char troubleshoot[128];
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 43, "当前环境与恢复", 23, COLOR(28, 34, 43));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 36, "状态详情", 23, COLOR(28, 34, 43));
     /* Setup phase */
     if (strcmp(model->setup_phase, "active") == 0) {
         phase_label = "正常运行";
@@ -935,23 +1010,59 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
         phase_label = model->setup_phase[0] ? model->setup_phase : "--";
         phase_color = COLOR(91, 100, 116);
     }
-    draw_text(pixels, stride, panel.x + 26, panel.y + 82, "运行状态", 18, COLOR(103, 111, 124));
-    draw_text(pixels, stride, panel.x + 172, panel.y + 82, phase_label, 18, phase_color);
-    draw_text(pixels, stride, panel.x + 26, panel.y + 112, "安装前快照", 18, COLOR(103, 111, 124));
-    draw_text(pixels, stride, panel.x + 172, panel.y + 112,
-              model->setup_snapshot_available ? "已保存" : "不可用", 18,
-              model->setup_snapshot_available ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 142, "到期行为", 18, COLOR(103, 111, 124));
-    draw_text(pixels, stride, panel.x + 172, panel.y + 142, "系统提醒", 18, COLOR(28, 118, 188));
-    if (model->disable_flag_present) {
-        fill_round_rect(pixels, stride, (UiRect){panel.x + 20, panel.y + 166, panel.width - 40, 68}, 7, COLOR(255, 232, 235));
-        draw_text(pixels, stride, panel.x + 36, panel.y + 194, "紧急停用已开启", 22, COLOR(170, 35, 48));
-        draw_text(pixels, stride, panel.x + 36, panel.y + 220, "普通控制写入已阻止", 17, COLOR(170, 35, 48));
+    draw_text(pixels, stride, panel.x + 26, panel.y + 66, "控制状态", 17, COLOR(103, 111, 124));
+    draw_text(pixels, stride, panel.x + 144, panel.y + 66, phase_label, 18, phase_color);
+    draw_text(pixels, stride, panel.x + 26, panel.y + 91, "系统限制", 17, COLOR(103, 111, 124));
+    draw_text(pixels, stride, panel.x + 144, panel.y + 91,
+              !model->restriction_enabled_available ? "暂不可用" :
+              (!model->restriction_enabled ? "未启用" :
+              (model->temporary_unlocked ? "已临时解除" : "已启用")), 18,
+              (!model->restriction_enabled_available || !model->restriction_enabled || model->temporary_unlocked)
+                  ? COLOR(194, 61, 61) : COLOR(25, 132, 95));
+
+    if (model->unrestricted_today == 1) snprintf(timing, sizeof(timing), "不限时");
+    else if (model->remaining_available) snprintf(timing, sizeof(timing), "已玩 %s · 剩余 %d 分钟",
+        model->played_minutes_available ? "可读" : "不可用", model->remaining_minutes);
+    else snprintf(timing, sizeof(timing), "剩余时间暂不可用");
+    draw_text(pixels, stride, panel.x + 26, panel.y + 126, "今日计时", 17, COLOR(103, 111, 124));
+    fit_text(timing, sizeof(timing), timing, 17, panel.width - 52);
+    draw_text(pixels, stride, panel.x + 26, panel.y + 151, timing, 17, COLOR(28, 34, 43));
+
+    if (model->environment_available) snprintf(environment, sizeof(environment), "HOS %s · %s · Atmosphère %s",
+        model->environment_hos[0] ? model->environment_hos : "未知",
+        model->environment_model[0] ? model->environment_model : "机型未知",
+        model->environment_atmosphere ? "是" : "否");
+    else snprintf(environment, sizeof(environment), "运行环境暂不可用");
+    draw_text(pixels, stride, panel.x + 26, panel.y + 186, "运行环境与软件信息", 17, COLOR(103, 111, 124));
+    fit_text(environment, sizeof(environment), environment, 17, panel.width - 52);
+    draw_text(pixels, stride, panel.x + 26, panel.y + 211, environment, 17, COLOR(28, 34, 43));
+
+    if (model->disable_flag_present) snprintf(troubleshoot, sizeof(troubleshoot), "紧急停用：%s",
+        model->disable_reason[0] ? model->disable_reason : "旧版本未记录原因");
+    else if (model->recovery_active) snprintf(troubleshoot, sizeof(troubleshoot), "存在待处理恢复事务");
+    else if (model->error_code) snprintf(troubleshoot, sizeof(troubleshoot), "最近错误：%d", model->error_code);
+    else snprintf(troubleshoot, sizeof(troubleshoot), "未发现需要处理的故障");
+    draw_text(pixels, stride, panel.x + 26, panel.y + 246, "排障摘要", 17, COLOR(103, 111, 124));
+    fit_text(troubleshoot, sizeof(troubleshoot), troubleshoot, 17, panel.width - 52);
+    draw_text(pixels, stride, panel.x + 26, panel.y + 271, troubleshoot, 17,
+              (model->disable_flag_present || model->recovery_active || model->error_code)
+                  ? COLOR(194, 61, 61) : COLOR(25, 132, 95));
+    if (model->recent_event_count > 0) {
+        for (int event_index = 0; event_index < model->recent_event_count; ++event_index) {
+            char latest[128];
+            int source_index = model->recent_event_count - 1 - event_index;
+            snprintf(latest, sizeof(latest), "%s%s",
+                     event_index == 0 ? "最近事件：" : "             ",
+                     model->recent_events[source_index]);
+            fit_text(latest, sizeof(latest), latest, 13, panel.width - 52);
+            draw_text(pixels, stride, panel.x + 26, panel.y + 281 + event_index * 18,
+                      latest, 13, COLOR(91, 100, 116));
+        }
+    } else {
+        draw_text(pixels, stride, panel.x + 26, panel.y + 299,
+                  model->compatibility_status[0] ? model->compatibility_status : "兼容性状态待确认",
+                  15, COLOR(91, 100, 116));
     }
-    /* Contextual hint for selected action */
-    snprintf(hint, sizeof(hint), "%s", model->safety_hint[0] ? model->safety_hint : "选择操作查看引导说明。");
-    draw_text(pixels, stride, panel.x + 26, panel.y + 262, hint, 17, COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 292, "状态和恢复在停用时仍可使用", 18, COLOR(91, 100, 116));
 }
 
 static void draw_status_row(
@@ -1424,16 +1535,13 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                          17, COLOR(194, 61, 61));
     }
     draw_tabs(pixels, stride, model->parent_page);
-    draw_dialog_button(pixels, stride, ptc_ui_parent_refresh_rect(),
-                       model->waiting ? "正在刷新状态…" : "Y  立即刷新状态",
-                       model->waiting ? COLOR(215, 139, 25) : COLOR(28, 118, 188),
-                       COLOR(255, 255, 255), false);
     if (model->parent_page != PTC_UI_PARENT_PLAN && model->parent_page != PTC_UI_PARENT_HOLIDAY) {
         actions = actions_for_page(model->parent_page, &action_count);
         for (index = 0; index < action_count; ++index) {
             UiRect card = to_uirect(ptc_ui_parent_card_rect(index));
             PtcUiActionState astate = PTC_UI_ACTION_AVAILABLE;
             if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
+                if (!ptc_ui_safety_action_visible(model, index)) continue;
                 astate = ptc_ui_safety_action_available(model, index);
             } else if (model->disable_flag_present && model->parent_page == PTC_UI_PARENT_TODAY && index > 0) {
                 astate = PTC_UI_ACTION_DISABLED;
@@ -1474,6 +1582,7 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0), "L  上一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1), "R  下一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(2), "B  返回孩子页");
+    draw_parent_status_footer(pixels, stride, model);
 }
 
 static const char *rule_mode_label(PtcRuleMode mode)
