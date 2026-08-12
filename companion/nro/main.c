@@ -1126,6 +1126,7 @@ static void poll_result(UiState *ui, bool force)
             strcmp(ui->model.result_status, "ok") == 0) {
             ui->model.setup_zone_index = 1;
             ui->model.setup_album_enable = false;
+            refresh_album_restriction(ui);
             (void)save_setup_step(ui, PTC_UI_SETUP_ALBUM);
         }
         sync_setup_wizard(ui);
@@ -1537,12 +1538,18 @@ static void setup_primary(UiState *ui)
     case PTC_UI_SETUP_ALBUM:
         if (ui->model.setup_album_enable) {
             char error[160] = {0};
-            if (!ptc_album_restriction_enable(ui->client.storage, error, sizeof(error))) {
+            PtcAlbumRestrictionStatus status;
+            if (ptc_album_restriction_get_status(ui->client.storage, &status) &&
+                status.state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                         "已有相同的外部入口配置，已保留原配置；PlayWise 不会伪造恢复备份。");
+            } else if (!ptc_album_restriction_enable(ui->client.storage, error, sizeof(error))) {
                 snprintf(ui->model.message, sizeof(ui->model.message), "%s；可关闭开关暂时跳过。", error);
                 break;
+            } else {
+                snprintf(ui->model.message, sizeof(ui->model.message), "自制程序菜单入口保护已保存，重启主机后生效。");
+                refresh_recovery_state(ui);
             }
-            snprintf(ui->model.message, sizeof(ui->model.message), "自制程序菜单入口保护已保存，重启主机后生效。");
-            refresh_recovery_state(ui);
         } else {
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "已暂时跳过自制程序菜单入口保护，可稍后在加时码与安全中开启。");
@@ -2952,6 +2959,9 @@ static void handle_overlay_input(UiState *ui, u64 down)
                          ui->model.album_restriction_detail[0] ? ui->model.album_restriction_detail : "配置与记录不一致");
                 open_confirm_overlay(ui, PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, "强制恢复可信备份？", body);
                 ui->model.confirm_hold_required = true;
+            } else if (ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                         "入口已由外部配置且可以使用；PlayWise 没有原始备份，因此不会重复开启或自动恢复。");
             } else {
                 snprintf(ui->model.message, sizeof(ui->model.message), "当前状态不允许执行这项操作，请重新检测。");
             }

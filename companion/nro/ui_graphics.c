@@ -1,4 +1,5 @@
 #include "ui_graphics.h"
+#include "../album_restriction.h"
 
 #include <switch.h>
 
@@ -1645,33 +1646,42 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 action = &RESUME_CONTROL_ACTION;
             }
             if (model->parent_page == PTC_UI_PARENT_SECURITY && index == 5) {
+                const char *detail = "重新检查后才能修改";
                 dynamic_action = *action;
-                dynamic_action.subtitle = "";
+                if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
+                    detail = "自制程序菜单入口保护未开启";
+                } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
+                    detail = "需按住 X，再按 A 进入自制程序菜单";
+                } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
+                    detail = "检测到 PlayWise 事务异常，请查看详情";
+                } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
+                    detail = "入口已可用，但不是由 PlayWise 配置";
+                }
+                /* Use the card's single subtitle row; a second row at the same y overlaps it. */
+                dynamic_action.subtitle = detail;
                 action = &dynamic_action;
             }
             draw_action_card(pixels, stride, card, action, index == model->selected_index, astate,
                              model->parent_page == PTC_UI_PARENT_SECURITY && index == 5 ? 100 : 0);
             if (model->parent_page == PTC_UI_PARENT_SECURITY && index == 5) {
                 const char *state_label = "状态未知";
-                const char *detail = "重新检查后才能修改";
                 uint32_t state_color = COLOR(194, 61, 61);
                 if (model->album_restriction_state == 0) {
                     state_label = "未开启";
-                    detail = "自制程序菜单入口保护未开启";
                     state_color = COLOR(91, 100, 116);
                 } else if (model->album_restriction_state == 1) {
                     state_label = "已开启";
-                    detail = "需按住 X，再按 A 进入自制程序菜单";
                     state_color = COLOR(25, 132, 95);
                 } else if (model->album_restriction_state == 2) {
                     state_label = "需要处理";
-                    detail = "检测到外部修改，请查看详情";
                     state_color = COLOR(215, 139, 25);
+                } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
+                    state_label = "外部配置";
+                    state_color = COLOR(28, 118, 188);
                 }
                 UiRect badge = {card.x + card.width - 104, card.y + 10, 88, 28};
                 fill_round_rect(pixels, stride, badge, 6, COLOR(244, 246, 249));
                 draw_text_center(pixels, stride, badge, state_label, 13, state_color);
-                draw_text(pixels, stride, card.x + 54, card.y + 79, detail, 14, COLOR(91, 100, 114));
             }
         }
     }
@@ -2733,12 +2743,14 @@ static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const 
     UiRect dialog;
     const char *state = model->album_restriction_state == 0 ? "未开启" :
                         model->album_restriction_state == 1 ? "已开启" :
-                        model->album_restriction_state == 2 ? "需要处理" : "状态未知";
+                        model->album_restriction_state == 2 ? "需要处理" :
+                        model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL ? "外部已配置" : "状态未知";
     draw_dialog_shell(pixels, stride, model, &dialog, 980, 560);
     draw_text(pixels, stride, dialog.x + 38, dialog.y + 126, "当前状态", 17, COLOR(91, 100, 114));
     draw_text(pixels, stride, dialog.x + 136, dialog.y + 126, state, 19,
               model->album_restriction_state == 1 ? COLOR(25, 132, 95) :
-              model->album_restriction_state == 2 ? COLOR(215, 139, 25) : COLOR(91, 100, 114));
+              model->album_restriction_state == 2 ? COLOR(215, 139, 25) :
+              model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL ? COLOR(28, 118, 188) : COLOR(91, 100, 114));
     draw_candidate_button(pixels, stride, ptc_ui_album_refresh_rect(), "Y  重新检测",
                           COLOR(244, 246, 249), COLOR(28, 118, 188), false, false);
     for (int index = 0; index < 2; ++index) {
@@ -2752,12 +2764,15 @@ static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const 
         draw_rect_outline(pixels, stride, card, enabled && selected ? 3 : 1,
                           enabled && selected ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
         draw_text(pixels, stride, card.x + 24, card.y + 42,
-                  index == 0 ? "开启自制程序菜单入口保护" :
+                  index == 0 ? (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL
+                                  ? "无需重复开启" : "开启自制程序菜单入口保护") :
                   (model->album_restriction_state == 2 && model->album_backup_valid ? "强制恢复可信备份" : "恢复原来的启动方式"),
                   21, enabled ? COLOR(28, 34, 43) : COLOR(145, 153, 165));
         draw_wrapped_text(pixels, stride, card.x + 24, card.y + 84,
                           index == 0
-                            ? "先完整备份相关配置；重启后，在桌面‘手柄设置’图标上按住 X，再按 A，进入自制程序菜单（hbmenu）。"
+                            ? (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL
+                                ? "当前磁盘配置已经提供相同入口。PlayWise 从未修改它，因此不会伪造安装前备份或声称可以恢复。"
+                                : "先完整备份相关配置；重启后，在桌面‘手柄设置’图标上按住 X，再按 A，进入自制程序菜单（hbmenu）。")
                             : "按可信备份恢复原配置。卸载或删除 PlayWise 数据前必须完成恢复；外部修改不会被静默覆盖。",
                           16, card.width - 48, 25, 5, enabled ? COLOR(91, 100, 114) : COLOR(165, 172, 182));
         draw_text(pixels, stride, card.x + 24, card.y + 194,

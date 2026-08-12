@@ -178,9 +178,19 @@ bool ptc_album_restriction_get_status(PtcStorage *storage, PtcAlbumRestrictionSt
         target = (char *)malloc(PTC_ALBUM_CONFIG_MAX_BYTES + 1u);
         if (target && ptc_album_restriction_transform_ini(current, target, PTC_ALBUM_CONFIG_MAX_BYTES + 1u) &&
             strcmp(current, target) == 0 && !package_exists) {
-            status->state = backup_valid ? PTC_ALBUM_RESTRICTION_CONFIGURED : PTC_ALBUM_RESTRICTION_ANOMALY;
-            status->restart_required = backup_valid;
-            snprintf(status->detail, sizeof(status->detail), "%s", backup_valid ? "已配置，重启主机后生效" : "疑似已受限，但缺少可信备份");
+            if (strcmp(phase, "configured\n") == 0 && backup_valid) {
+                status->state = PTC_ALBUM_RESTRICTION_CONFIGURED;
+                status->restart_required = true;
+                snprintf(status->detail, sizeof(status->detail), "已由 PlayWise 配置，重启主机后生效");
+            } else if (!phase[0] && !backup_valid) {
+                /* Matching bytes alone do not prove that PlayWise performed the change. */
+                status->state = PTC_ALBUM_RESTRICTION_EXTERNAL;
+                snprintf(status->detail, sizeof(status->detail),
+                         "入口已由外部配置；PlayWise 未修改它，也没有可恢复的原始备份");
+            } else {
+                status->state = PTC_ALBUM_RESTRICTION_ANOMALY;
+                snprintf(status->detail, sizeof(status->detail), "PlayWise 事务记录与可信备份不一致");
+            }
         } else {
             status->state = active_configured ? PTC_ALBUM_RESTRICTION_ANOMALY : PTC_ALBUM_RESTRICTION_OFF;
             snprintf(status->detail, sizeof(status->detail), "%s", status->state == PTC_ALBUM_RESTRICTION_OFF ? "未配置" : "配置与事务记录不一致");
@@ -202,6 +212,15 @@ bool ptc_album_restriction_enable(PtcStorage *storage, char *error, size_t error
     bool override_existed, package_existed;
     bool ok = false;
     if (!storage) return false;
+    {
+        PtcAlbumRestrictionStatus status;
+        if (ptc_album_restriction_get_status(storage, &status) &&
+            status.state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
+            set_error(error, error_size,
+                      "入口已由外部配置，PlayWise 不会把现有结果伪装成可恢复的原始备份");
+            return false;
+        }
+    }
     original_override = read_alloc(storage, PTC_ALBUM_OVERRIDE_PATH, &override_existed);
     if (override_existed && !original_override) { set_error(error, error_size, "override_config.ini 过大或无法读取"); goto done; }
     original_package = read_alloc(storage, PTC_ALBUM_PACKAGE_PATH, &package_existed);

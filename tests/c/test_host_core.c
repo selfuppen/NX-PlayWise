@@ -887,6 +887,21 @@ static void test_album_restriction_transaction(void)
                "completed restore reports off while retaining a valid backup");
 
     ptc_mem_storage_init(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, transformed),
+               "seed externally configured album entry");
+    check_true(ptc_album_restriction_get_status(&mem.storage, &status) &&
+               status.state == PTC_ALBUM_RESTRICTION_EXTERNAL && !status.backup_valid,
+               "matching external config without a PlayWise transaction is not an anomaly");
+    check_true(!ptc_album_restriction_enable(&mem.storage, error, sizeof(error)) &&
+               !mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_BACKUP_ROOT "/current.meta"),
+               "external config is not adopted using a false pre-change backup");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+                   PTC_ALBUM_BACKUP_ROOT "/active", "configured\n") &&
+               ptc_album_restriction_get_status(&mem.storage, &status) &&
+               status.state == PTC_ALBUM_RESTRICTION_ANOMALY,
+               "configured PlayWise transaction with a missing backup remains anomalous");
+
+    ptc_mem_storage_init(&mem);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, original),
                "seed rollback config");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_PACKAGE_PATH, "package"),
