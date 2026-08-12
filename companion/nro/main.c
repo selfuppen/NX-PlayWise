@@ -1521,7 +1521,7 @@ static void setup_primary(UiState *ui)
             ui->model.setup_album_enable = false;
             if (save_setup_step(ui, PTC_UI_SETUP_ALBUM)) {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         "系统控制接管已完成，可选择是否限制相册入口。");
+                         "系统控制接管已完成，可选择是否开启自制程序菜单入口保护。");
             }
         } else if (!ui->waiting) {
             if (ui->model.disable_flag_present && strcmp(ui->model.setup_phase, "restored") == 0) {
@@ -1540,11 +1540,11 @@ static void setup_primary(UiState *ui)
                 snprintf(ui->model.message, sizeof(ui->model.message), "%s；可关闭开关暂时跳过。", error);
                 break;
             }
-            snprintf(ui->model.message, sizeof(ui->model.message), "相册入口配置已保存，重启主机后生效。");
+            snprintf(ui->model.message, sizeof(ui->model.message), "自制程序菜单入口保护已保存，重启主机后生效。");
             refresh_recovery_state(ui);
         } else {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     "已暂时跳过相册入口限制，可稍后在加时码与安全中开启。");
+                     "已暂时跳过自制程序菜单入口保护，可稍后在加时码与安全中开启。");
         }
         ui->model.setup_zone_index = 1;
         (void)save_setup_step(ui, PTC_UI_SETUP_ZONE);
@@ -1593,7 +1593,7 @@ static void handle_setup_input(UiState *ui, u64 down, u64 held)
             ui->model.setup_album_enable = !ui->model.setup_album_enable;
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "当前选择：%s；按 A 或 + 后才保存并继续。",
-                     ui->model.setup_album_enable ? "启用相册入口限制" : "暂时跳过");
+                     ui->model.setup_album_enable ? "开启自制程序菜单入口保护" : "暂时跳过");
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             setup_primary(ui);
         }
@@ -2519,7 +2519,7 @@ static void handle_parent_action(UiState *ui)
             refresh_album_restriction(ui);
             ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "限制通过相册启动程序");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单入口保护");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "先查看当前状态，再选择开启限制或恢复原来的启动方式。");
             break;
         default: break;
@@ -2598,14 +2598,14 @@ static void confirm_operation(UiState *ui)
         if (return_overlay == PTC_UI_OVERLAY_ALBUM_MANAGER) {
             ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "限制通过相册启动程序");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单入口保护");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "状态已重新检测；配置变更需重启主机后生效。");
         }
         if (ok) {
             snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                      operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION
-                       ? "已开启限制。重启主机后，从相册图标启动程序需按住 R+X，再按 A。"
-                       : "已恢复原来的相册启动方式，请重启主机后确认。");
+                       ? "已开启保护。重启后，在桌面‘手柄设置’图标上按住 X，再按 A，进入自制程序菜单（hbmenu）。"
+                       : "已恢复原来的自制程序菜单入口方式，请重启主机后确认。");
         } else {
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "设置没有更改：%s", error[0] ? error : "请稍后重试");
@@ -2914,13 +2914,13 @@ static void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & HidNpadButton_Y) {
             refresh_album_restriction(ui);
             refresh_recovery_state(ui);
-            snprintf(ui->model.message, sizeof(ui->model.message), "相册入口状态已重新检测。");
+            snprintf(ui->model.message, sizeof(ui->model.message), "自制程序菜单入口保护状态已重新检测。");
         } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
             ui->model.overlay_selection = 1 - ui->model.overlay_selection;
         } else if (down & HidNpadButton_A) {
             if (ui->model.overlay_selection == 0 && ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION, "限制通过相册启动程序？",
-                    "当前状态：未开启\n目标状态：已开启\n将先保存可信备份；重启后需在相册图标按住 R+X，再按 A。\n可随时回到此处恢复原配置。");
+                open_confirm_overlay(ui, PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION, "开启自制程序菜单入口保护？",
+                    "当前状态：未开启\n目标状态：已开启\n将先保存可信备份；重启后，在桌面‘手柄设置’图标上按住 X，再按 A，进入自制程序菜单（hbmenu）。\n可随时回到此处恢复原配置。");
             } else if (ui->model.overlay_selection == 1 && ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
                 open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY, "恢复原来的启动方式？",
                     "将按可信备份恢复原配置。卸载或删除 PlayWise 数据前必须完成恢复；保存后需重启主机生效。");
@@ -3350,7 +3350,7 @@ static void handle_touch(UiState *ui, int x, int y)
         ui->model.setup_album_enable = !ui->model.setup_album_enable;
         snprintf(ui->model.message, sizeof(ui->model.message),
                  "当前选择：%s；按 A 或 + 后才保存并继续。",
-                 ui->model.setup_album_enable ? "启用相册入口限制" : "暂时跳过");
+                 ui->model.setup_album_enable ? "开启自制程序菜单入口保护" : "暂时跳过");
         break;
     case PTC_UI_HIT_SETUP_CHILD_ZONE:
         ui->model.setup_zone_index = 0;

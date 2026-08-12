@@ -16,7 +16,7 @@ static const char TARGET_SECTION[] =
     "[hbl_config]\n"
     "override_any_app=false\n"
     "program_id_0=0100000000001003\n"
-    "override_key_0=!R+X\n"
+    "override_key_0=X\n"
     "override_address_space=39_bit\n";
 
 typedef struct {
@@ -220,7 +220,7 @@ bool ptc_album_restriction_enable(PtcStorage *storage, char *error, size_t error
              checksum(original_override ? original_override : ""), checksum(original_package ? original_package : ""));
     if (!storage->vtable->write_text_atomic(storage, META_PATH, meta) ||
         !storage->vtable->write_text_atomic(storage, ACTIVE_PATH, "enabling\n")) {
-        set_error(error, error_size, "无法持久化相册限制事务"); goto done;
+        set_error(error, error_size, "无法持久化自制程序菜单入口保护事务"); goto done;
     }
     if (!storage->vtable->write_text_atomic(storage, PTC_ALBUM_OVERRIDE_PATH, updated)) {
         set_error(error, error_size, "写入 override_config.ini 失败"); goto rollback;
@@ -229,7 +229,7 @@ bool ptc_album_restriction_enable(PtcStorage *storage, char *error, size_t error
         set_error(error, error_size, "删除 Photo Album package.ini 失败"); goto rollback;
     }
     if (!storage->vtable->write_text_atomic(storage, ACTIVE_PATH, "configured\n")) {
-        set_error(error, error_size, "无法提交相册限制事务"); goto rollback;
+        set_error(error, error_size, "无法提交自制程序菜单入口保护事务"); goto rollback;
     }
     ok = true;
     goto done;

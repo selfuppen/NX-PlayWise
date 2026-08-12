@@ -862,9 +862,11 @@ static void test_album_restriction_transaction(void)
     check_true(ptc_album_restriction_transform_ini(original, transformed, sizeof(transformed)),
                "album INI transforms safely");
     check_true(strstr(transformed, "[other]\r\nkeep=yes") != NULL &&
-               strstr(transformed, "override_key_0=!R+X") != NULL &&
+               strstr(transformed, "program_id_0=0100000000001003") != NULL &&
+               strstr(transformed, "override_key_0=X") != NULL &&
+               strstr(transformed, "override_key_0=!R+X") == NULL &&
                strstr(transformed, "override_any_app=true") == NULL,
-               "album INI preserves unrelated sections and replaces hbl config");
+               "controller INI preserves unrelated sections and replaces hbl config with a supported key");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, original),
                "seed Atmosphere override config");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_PACKAGE_PATH, "[package]\nname=Album\n"),

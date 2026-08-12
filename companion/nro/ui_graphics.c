@@ -70,7 +70,7 @@ static const UiAction SECURITY_ACTIONS[] = {
     {"加时码生成管理", "管理设备名、密钥、导出配置和二维码地址", COLOR(91, 100, 116)},
     {"修改任我玩PIN", "验证当前 PIN 后设置新 PIN", COLOR(42, 105, 188)},
     {"家长区快捷键管理", "选择组合并管理孩子区提示", COLOR(42, 105, 188)},
-    {"限制通过相册启动程序", "更改从相册图标启动程序的方式", COLOR(194, 61, 61)},
+    {"自制程序菜单入口保护", "通过桌面‘手柄设置’图标进入", COLOR(194, 61, 61)},
 };
 
 static const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -729,12 +729,12 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             snprintf(countdown_line, sizeof(countdown_line), "同步完成，正在启用额度管理…");
         }
         draw_text(pixels, stride, 204, 310, countdown_line, 34, COLOR(28, 118, 188));
-        draw_text(pixels, stride, 204, 356, "无需操作；同步完成后会进入第 4 步选择是否限制相册入口。", 22, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 356, "无需操作；同步完成后会进入第 4 步选择是否开启入口保护。", 22, COLOR(45, 52, 62));
     } else {
         draw_text(pixels, stride, 150, 154, "1 快捷键", 17, step == PTC_UI_SETUP_SHORTCUT ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
         draw_text(pixels, stride, 350, 154, "2 PIN", 17, step == PTC_UI_SETUP_PIN ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
         draw_text(pixels, stride, 520, 154, "3 接管", 17, step == PTC_UI_SETUP_TAKEOVER ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 690, 154, "4 相册限制", 17, step == PTC_UI_SETUP_ALBUM ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 690, 154, "4 入口保护", 17, step == PTC_UI_SETUP_ALBUM ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
         draw_text(pixels, stride, 920, 154, "5 进入区域", 17, step == PTC_UI_SETUP_ZONE ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
         if (step == PTC_UI_SETUP_SHORTCUT) {
             UiRect compact_fixed = {204, 184, 872, 54};
@@ -793,7 +793,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                       21, COLOR(45, 52, 62));
             draw_text(pixels, stride, 204, 360,
                       takeover_complete
-                          ? "按 A 或点击继续，进入第 4 步选择是否限制相册入口。"
+                          ? "按 A 或点击继续，进入第 4 步选择是否开启自制程序菜单入口保护。"
                           : "接管成功后会保留同步宽限，系统控制不会立即跳变。",
                       21, COLOR(45, 52, 62));
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
@@ -805,16 +805,17 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             UiRect card = {204, 204, 872, 250};
             fill_round_rect(pixels, stride, card, 8, COLOR(248, 250, 253));
             draw_rect_outline(pixels, stride, card, 1, COLOR(219, 225, 233));
-            draw_text(pixels, stride, 236, 248, "限制相册入口（可跳过）", 28, COLOR(28, 34, 43));
-            draw_text(pixels, stride, 236, 292, "启用后需在相册图标按住 R+X，再按 A 才能进入 hbmenu。", 20, COLOR(77, 86, 99));
-            draw_text(pixels, stride, 236, 328, "会备份 Atmosphère 与 More Menu 原配置；修改后需重启主机生效。", 19, COLOR(77, 86, 99));
-            draw_text(pixels, stride, 236, 370, "卸载或删除 PlayWise 数据前必须先在家长区关闭此限制。", 18, COLOR(194, 61, 61));
+            draw_text(pixels, stride, 236, 248, "自制程序菜单入口保护（可跳过）", 28, COLOR(28, 34, 43));
+            draw_text(pixels, stride, 236, 292, "通过桌面‘手柄设置’图标进入。", 20, COLOR(77, 86, 99));
+            draw_text(pixels, stride, 236, 324, "按住 X，再按 A，进入自制程序菜单（hbmenu）。", 20, COLOR(77, 86, 99));
+            draw_text(pixels, stride, 236, 356, "会备份 Atmosphère 与 More Menu 原配置；修改后需重启主机生效。", 19, COLOR(77, 86, 99));
+            draw_text(pixels, stride, 236, 388, "卸载或删除 PlayWise 数据前必须先在家长区关闭此保护。", 18, COLOR(194, 61, 61));
             draw_toggle_switch(pixels, stride, (UiRect){900, 232, 96, 42}, model->setup_album_enable, true, false,
                                "启用", "跳过");
-            draw_text(pixels, stride, 236, 410,
-                      model->setup_album_enable ? "当前选择：启用相册入口限制" : "当前选择：暂时跳过",
+            draw_text(pixels, stride, 236, 420,
+                      model->setup_album_enable ? "当前选择：开启自制程序菜单入口保护" : "当前选择：暂时跳过",
                       18, model->setup_album_enable ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-            draw_text(pixels, stride, 236, 438, "左右 / X / 触摸开关切换 · A / + 保存并继续", 17, COLOR(28, 118, 188));
+            draw_text(pixels, stride, 236, 448, "左右 / X / 触摸开关切换 · A / + 保存并继续", 17, COLOR(28, 118, 188));
         } else {
             draw_text(pixels, stride, 204, 214, "初始化完成，选择进入区域", 30, COLOR(28, 34, 43));
             draw_text(pixels, stride, 204, 254, "之后可在两个区域之间切换；进入家长区会受 PIN 保护。", 21, COLOR(77, 86, 99));
@@ -1643,11 +1644,11 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 uint32_t state_color = COLOR(194, 61, 61);
                 if (model->album_restriction_state == 0) {
                     state_label = "未开启";
-                    detail = "相册图标按原来的方式打开";
+                    detail = "自制程序菜单入口保护未开启";
                     state_color = COLOR(91, 100, 116);
                 } else if (model->album_restriction_state == 1) {
                     state_label = "已开启";
-                    detail = "启动程序需按住 R+X，再按 A";
+                    detail = "需按住 X，再按 A 进入自制程序菜单";
                     state_color = COLOR(25, 132, 95);
                 } else if (model->album_restriction_state == 2) {
                     state_label = "需要处理";
@@ -2652,12 +2653,12 @@ static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const 
         draw_rect_outline(pixels, stride, card, enabled && selected ? 3 : 1,
                           enabled && selected ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
         draw_text(pixels, stride, card.x + 24, card.y + 42,
-                  index == 0 ? "开启相册入口限制" :
+                  index == 0 ? "开启自制程序菜单入口保护" :
                   (model->album_restriction_state == 2 && model->album_backup_valid ? "强制恢复可信备份" : "恢复原来的启动方式"),
                   21, enabled ? COLOR(28, 34, 43) : COLOR(145, 153, 165));
         draw_wrapped_text(pixels, stride, card.x + 24, card.y + 84,
                           index == 0
-                            ? "先完整备份相关配置；重启后需在相册图标按住 R+X，再按 A。"
+                            ? "先完整备份相关配置；重启后，在桌面‘手柄设置’图标上按住 X，再按 A，进入自制程序菜单（hbmenu）。"
                             : "按可信备份恢复原配置。卸载或删除 PlayWise 数据前必须完成恢复；外部修改不会被静默覆盖。",
                           16, card.width - 48, 25, 5, enabled ? COLOR(91, 100, 114) : COLOR(165, 172, 182));
         draw_text(pixels, stride, card.x + 24, card.y + 194,
