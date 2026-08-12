@@ -14,6 +14,24 @@ static int json_int(const cJSON *object, const char *name, int fallback)
     return cJSON_IsNumber(item) ? item->valueint : fallback;
 }
 
+static int64_t json_int64(const cJSON *object, const char *name, int64_t fallback)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
+    return cJSON_IsNumber(item) ? (int64_t)item->valuedouble : fallback;
+}
+
+static const char *event_label(const char *event)
+{
+    if (strcmp(event, "result_ok") == 0) return "操作已完成";
+    if (strcmp(event, "result_error") == 0) return "操作未完成";
+    if (strcmp(event, "pctl_apply_failed") == 0) return "系统设置未生效";
+    if (strcmp(event, "effect_restore") == 0) return "设置已恢复";
+    if (strcmp(event, "effect_restore_failed") == 0) return "设置恢复失败";
+    if (strcmp(event, "handover_preserved") == 0) return "已保留今天的额度";
+    if (strcmp(event, "handover_restore") == 0) return "已恢复接管前额度";
+    return event && event[0] ? event : "未知事件";
+}
+
 static bool json_bool(const cJSON *object, const char *name, bool fallback)
 {
     const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
@@ -83,7 +101,7 @@ static const char *request_success_message(const char *type)
         return "今日临时设置已清除，已恢复周计划。";
     }
     if (strcmp(type, "set_weekly_template") == 0) {
-        return "周计划已保存；今天如无临时设置，将由后台同步。";
+        return "周计划已保存。如果今天没有单独设置，今天也会按新计划执行。";
     }
     if (strcmp(type, "set_holiday_policy") == 0) {
         return "国家节假日设置已保存，今天的规则已重新计算。";
@@ -196,14 +214,17 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     index = model->selected_index;
-    if (index < 0 || index >= count) {
+    if (index < 0 ||
+        (model->parent_page == PTC_UI_PARENT_SUPPORT
+            ? index >= count + model->recent_event_count
+            : index >= count)) {
         index = 0;
     }
     if (model->parent_page == PTC_UI_PARENT_HOLIDAY) {
-        static const int left[7]  = {0, 1, 2, 1, 2, 5, 5};
-        static const int right[7] = {0, 3, 4, 3, 4, 6, 6};
-        static const int up[7]    = {0, 0, 1, 0, 3, 2, 4};
-        static const int down[7]  = {1, 2, 5, 4, 6, 5, 6};
+        static const int left[7]  = {0, 1, 2, 1, 2, 0, 6};
+        static const int right[7] = {5, 3, 4, 3, 4, 5, 6};
+        static const int up[7]    = {0, 0, 1, 5, 3, 5, 2};
+        static const int down[7]  = {1, 2, 6, 4, 6, 3, 6};
         int previous = index;
         if (horizontal < 0) index = left[index];
         else if (horizontal > 0) index = right[index];
@@ -214,6 +235,32 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             model->parent_content_selection = previous;
             model->parent_footer_focused = true;
         }
+        return;
+    }
+    if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
+        int event_count = model->recent_event_count;
+        int max_index = 5 + event_count;
+        if (index > max_index) index = 0;
+        if (index >= 6) {
+            if (vertical < 0) index = index == 6 ? 4 : index - 1;
+            else if (vertical > 0 && index < max_index) ++index;
+            else if (vertical > 0) {
+                model->parent_content_selection = index;
+                model->parent_footer_focused = true;
+            }
+        } else {
+            int previous = index;
+            if (horizontal < 0 && index % 2 == 1) --index;
+            else if (horizontal > 0 && index % 2 == 0) ++index;
+            else if (vertical < 0 && index >= 2) index -= 2;
+            else if (vertical > 0 && index < 4) index += 2;
+            else if (vertical > 0 && event_count > 0) index = 6;
+            else if (vertical > 0) {
+                model->parent_content_selection = previous;
+                model->parent_footer_focused = true;
+            }
+        }
+        model->selected_index = index;
         return;
     }
     column = index % 2;
@@ -761,7 +808,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     {
         cJSON *events = cJSON_GetObjectItemCaseSensitive(root, "recent_events");
-        if (strcmp(status, "ok") == 0 && cJSON_IsArray(events)) {
+        model->recent_events_available = strcmp(status, "ok") == 0 && cJSON_IsArray(events);
+        if (model->recent_events_available) {
             int total = cJSON_GetArraySize(events);
             int start = total > 3 ? total - 3 : 0;
             model->recent_event_count = 0;
@@ -769,12 +817,21 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                 cJSON *item = cJSON_GetArrayItem(events, event_index);
                 const char *event_name = cJSON_IsObject(item) ? json_string(item, "event") : "";
                 const char *error_name = cJSON_IsObject(item) ? json_string(item, "error") : "";
-                int64_t timestamp = cJSON_IsObject(item) ? json_int(item, "ts", 0) : 0;
+                const char *event_type = cJSON_IsObject(item) ? json_string(item, "type") : "";
+                const char *event_detail = cJSON_IsObject(item) ? json_string(item, "detail") : "";
+                const char *request_id = cJSON_IsObject(item) ? json_string(item, "request_id") : "";
+                int64_t timestamp = cJSON_IsObject(item) ? json_int64(item, "ts", 0) : 0;
                 if (!event_name[0]) continue;
+                int target = model->recent_event_count;
+                snprintf(model->recent_event_names[target], sizeof(model->recent_event_names[target]), "%s", event_name);
+                snprintf(model->recent_event_types[target], sizeof(model->recent_event_types[target]), "%s", event_type);
+                snprintf(model->recent_event_errors[target], sizeof(model->recent_event_errors[target]), "%s", error_name);
+                snprintf(model->recent_event_details[target], sizeof(model->recent_event_details[target]), "%s", event_detail);
+                snprintf(model->recent_event_request_ids[target], sizeof(model->recent_event_request_ids[target]), "%s", request_id);
+                model->recent_event_timestamps[target] = timestamp;
                 snprintf(model->recent_events[model->recent_event_count],
                          sizeof(model->recent_events[model->recent_event_count]),
-                         "%s · %s · %lld", event_name, error_name[0] ? error_name : "ok",
-                         (long long)timestamp);
+                         "%s · %s", event_label(event_name), error_name[0] ? error_name : "成功");
                 ++model->recent_event_count;
             }
         }
@@ -947,15 +1004,21 @@ PtcUiRect ptc_ui_parent_card_rect(int index)
 PtcUiRect ptc_ui_holiday_card_rect(int index)
 {
     switch (index) {
-    case 0: return (PtcUiRect){54, 172, 1172, 64};
+    case 0: return (PtcUiRect){54, 172, 790, 64};
     case 1: return (PtcUiRect){74, 288, 534, 48};
     case 2: return (PtcUiRect){74, 344, 534, 96};
     case 3: return (PtcUiRect){672, 288, 534, 48};
     case 4: return (PtcUiRect){672, 344, 534, 96};
-    case 5: return (PtcUiRect){54, 452, 574, 58};
-    case 6: return (PtcUiRect){652, 452, 574, 58};
-    default: return (PtcUiRect){54, 172, 1172, 64};
+    case 5: return (PtcUiRect){868, 172, 358, 64};
+    case 6: return (PtcUiRect){54, 452, 1172, 58};
+    default: return (PtcUiRect){54, 172, 790, 64};
     }
+}
+
+PtcUiRect ptc_ui_support_event_rect(int index)
+{
+    if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){868, 427 + index * 22, 332, 20};
 }
 
 PtcUiRect ptc_ui_dialog_rect(int width, int height)
@@ -1022,6 +1085,14 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
     case PTC_UI_OVERLAY_HOLIDAY_CALENDAR:
         *width = 1040;
         *height = 600;
+        break;
+    case PTC_UI_OVERLAY_HOLIDAY_LEAVE:
+        *width = 720;
+        *height = 320;
+        break;
+    case PTC_UI_OVERLAY_SUPPORT_EVENT:
+        *width = 960;
+        *height = 560;
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:
@@ -1436,6 +1507,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
     }
     if ((model->overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE ||
+         model->overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
          model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) &&
         ptc_ui_rect_contains(ptc_ui_discard_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_DISCARD, 0);
@@ -1549,6 +1621,8 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     case PTC_UI_OVERLAY_CODE_RESULT:
     case PTC_UI_OVERLAY_AUTH_ERROR:
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
+    case PTC_UI_OVERLAY_HOLIDAY_LEAVE:
+    case PTC_UI_OVERLAY_SUPPORT_EVENT:
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     case PTC_UI_OVERLAY_NONE:
@@ -1665,6 +1739,13 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         if (!model->disable_flag_present && ptc_ui_rect_contains(ptc_ui_weekly_page_mode_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MODE, 0);
         if (!model->disable_flag_present && ptc_ui_rect_contains(ptc_ui_weekly_save_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_SAVE, 0);
         if (ptc_ui_rect_contains(ptc_ui_weekly_discard_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_DISCARD, 0);
+    }
+    if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
+        for (i = 0; i < model->recent_event_count; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_support_event_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_SUPPORT_EVENT, model->recent_event_count - 1 - i);
+            }
+        }
     }
     count = ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {

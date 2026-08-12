@@ -104,10 +104,12 @@ static void apply_pending_navigation(UiState *ui);
 static void handle_setup_input(UiState *ui, u64 down, u64 held);
 static void refresh_album_restriction(UiState *ui);
 static void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
+static void discard_holiday_draft(UiState *ui);
 static void retry_error(UiState *ui);
 static void dispatch_auth_retry(UiState *ui, AuthRetryAction action);
 static void show_pending_redemption(UiState *ui);
 static void show_grant_manager(UiState *ui, int selection);
+static void export_diagnostics(UiState *ui);
 
 static int64_t unix_ms_now(void)
 {
@@ -905,7 +907,7 @@ static void submit_weekly(UiState *ui)
     set_command_name(ui, "set_weekly_template");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "set_weekly_template", "每周计划已提交，正在等待后台确认…");
+        begin_wait(ui, "set_weekly_template", "正在保存周计划…");
     } else {
         ui->waiting = false;
         set_message(ui, "每周计划提交失败", status);
@@ -929,7 +931,7 @@ static void submit_holiday_policy(UiState *ui)
     set_command_name(ui, "set_holiday_policy");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "set_holiday_policy", "国家节假日设置已提交，正在等待后台确认…");
+        begin_wait(ui, "set_holiday_policy", "正在保存国家节假日设置…");
     } else {
         set_message(ui, "国家节假日设置提交失败", status);
     }
@@ -1630,6 +1632,12 @@ static void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const ch
     ui->model.overlay = PTC_UI_OVERLAY_CONFIRM;
     ui->model.operation = operation;
     ui->model.confirm_hold_required = false;
+    ui->model.overlay_selection = 1;
+    if (operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
+        operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||
+        operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY) {
+        ui->model.overlay_selection = 0;
+    }
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", title);
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", body);
 }
@@ -2474,11 +2482,30 @@ static void handle_parent_action(UiState *ui)
                     ui->model.draft_makeup_workday_rule.minutes);
             }
             break;
-        case 5:
+        case 5: {
+            char holiday_rule[48];
+            char makeup_rule[48];
+            if (ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
+                snprintf(holiday_rule, sizeof(holiday_rule), "不限时");
+            } else {
+                snprintf(holiday_rule, sizeof(holiday_rule), "%u 分钟",
+                         (unsigned int)ui->model.draft_holiday_rule.minutes);
+            }
+            if (ui->model.draft_makeup_workday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
+                snprintf(makeup_rule, sizeof(makeup_rule), "不限时");
+            } else {
+                snprintf(makeup_rule, sizeof(makeup_rule), "%u 分钟",
+                         (unsigned int)ui->model.draft_makeup_workday_rule.minutes);
+            }
             ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_CALENDAR;
             ui->model.holiday_calendar_page = 0;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "内置节假日安排");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                     "当前%s · 法定休假：%s · 调休工作日：%s",
+                     ui->model.draft_holiday_enabled ? "已开启" : "未开启",
+                     holiday_rule, makeup_rule);
             break;
+        }
         case 6:
             submit_holiday_policy(ui);
             break;
@@ -2497,20 +2524,28 @@ static void handle_parent_action(UiState *ui)
         case 5:
             refresh_album_restriction(ui);
             if (ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION, "启用相册入口限制？",
-                    "将备份 Atmosphère 与 More Menu 配置，并把 hbmenu 入口改为在相册图标按住 R+X 后按 A。保存后需重启主机生效。");
+                open_confirm_overlay(ui, PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION, "限制通过相册启动程序？",
+                    "当前状态：未开启\n目标状态：已开启\n影响：相册图标不再直接启动程序。\n操作：之后需在相册图标按住 R+X，再按 A。\n撤销：可随时在此关闭并恢复原配置。\n保存后需重启主机生效。");
             } else if (ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY, "恢复原来的相册入口？",
-                    "将按可信备份精确恢复两个原文件。保存后需重启主机生效；恢复备份仍会保留。");
+                open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY, "恢复原来的启动方式？",
+                    "当前状态：已开启\n目标状态：未开启\n影响：相册图标将恢复原来的打开方式。\n撤销：之后仍可重新开启这项限制。\n保存后需重启主机生效。");
             } else if (ui->model.album_backup_valid) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, "检测到外部改动",
-                    "配置与事务记录不一致。继续会使用可信原始备份强制恢复；请确认可以放弃后续外部修改。");
+                char body[320];
+                snprintf(body, sizeof(body),
+                    "当前状态：需要处理\n目标状态：恢复可信备份\n检测详情：%.120s\n继续会放弃之后的外部修改，并使用原始备份强制恢复。\n请先确认这些外部修改不再需要。",
+                    ui->model.album_restriction_detail[0] ? ui->model.album_restriction_detail : "配置与记录不一致");
+                open_confirm_overlay(ui, PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, "检测到外部改动", body);
                 ui->model.confirm_hold_required = true;
             } else {
-                snprintf(ui->model.message, sizeof(ui->model.message),
-                         ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_UNKNOWN
-                           ? "相册入口状态读取失败，请重新进入页面检测；本次未修改配置。"
-                           : "相册入口状态异常且备份不可用；已拒绝自动修改。请保留现场并人工恢复。");
+                if (ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_UNKNOWN) {
+                    snprintf(ui->model.message, sizeof(ui->model.message),
+                             "状态读取失败，本次未修改配置。请重新检测。详情：%.48s",
+                             ui->model.album_restriction_detail[0] ? ui->model.album_restriction_detail : "未提供");
+                } else {
+                    snprintf(ui->model.message, sizeof(ui->model.message),
+                             "状态异常且无可用备份，已拒绝修改。请人工恢复。详情：%.48s",
+                             ui->model.album_restriction_detail[0] ? ui->model.album_restriction_detail : "未提供");
+                }
             }
             break;
         default: break;
@@ -2551,7 +2586,8 @@ static void handle_parent_action(UiState *ui)
                              "恢复原始家长控制设置与计时器，并停止新的控制写入。");
         break;
     case 4:
-        export_diagnostics(ui);
+        open_confirm_overlay(ui, PTC_UI_OPERATION_EXPORT_DIAGNOSTICS, "导出诊断包？",
+            "诊断文件可能包含设备标识和文件路径信息，请只发送给可信的支持人员。\nPIN、加时码密钥和可复用授权材料不会导出。");
         break;
     case 5:
         ui->model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
@@ -2571,6 +2607,9 @@ static void confirm_operation(UiState *ui)
     PtcCompanionStatus status;
     PtcUiOperation operation = ptc_ui_take_confirmed_operation(&ui->model);
     switch (operation) {
+    case PTC_UI_OPERATION_EXPORT_DIAGNOSTICS:
+        export_diagnostics(ui);
+        break;
     case PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION:
     case PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY:
     case PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY: {
@@ -2580,8 +2619,15 @@ static void confirm_operation(UiState *ui)
             : ptc_album_restriction_restore(ui->client.storage,
                 operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, error, sizeof(error));
         refresh_album_restriction(ui);
-        snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-                 ok ? "相册入口配置已保存，请重启主机后确认生效。" : error);
+        if (ok) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                     operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION
+                       ? "已开启限制。重启主机后，从相册图标启动程序需按住 R+X，再按 A。"
+                       : "已恢复原来的相册启动方式，请重启主机后确认。");
+        } else {
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                     "设置没有更改：%s", error[0] ? error : "请稍后重试");
+        }
         break;
     }
     case PTC_UI_OPERATION_SET_TODAY_LIMIT:
@@ -2734,14 +2780,14 @@ static void save_weekly_from_page(UiState *ui)
     if (!ui->model.today_override_present &&
         ptc_ui_day_rule_effectively_changed(before, after)) {
         if (after.mode == PTC_RULE_MODE_UNLIMITED) {
-            snprintf(body, sizeof(body), "今天对应的周计划将改为不限时。\n保存后由后台同步；当前已玩和剩余会在刷新后更新。");
+            snprintf(body, sizeof(body), "今天对应的周计划将改为不限时。\n保存后，如果今天没有单独设置，今天也会按新计划执行。");
         } else if (ui->model.played_minutes_available) {
             int remaining = (int)after.minutes - ui->model.played_minutes;
             if (remaining < 0) remaining = 0;
-            snprintf(body, sizeof(body), "今天已玩约 %d 分钟；新额度 %u 分钟。\n保存并同步后还可玩约 %d 分钟。",
+            snprintf(body, sizeof(body), "今天已玩约 %d 分钟；新额度 %u 分钟。\n保存后预计还可玩约 %d 分钟。",
                      ui->model.played_minutes, (unsigned int)after.minutes, remaining);
         } else {
-            snprintf(body, sizeof(body), "今天的新额度为 %u 分钟。\n当前已玩暂不可用；实际剩余将在同步后刷新。",
+            snprintf(body, sizeof(body), "今天的新额度为 %u 分钟。\n当前已玩暂不可用；保存后请刷新查看实际剩余。",
                      (unsigned int)after.minutes);
         }
         open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY, "周计划将影响今天", body);
@@ -2778,8 +2824,21 @@ static void apply_pending_navigation(UiState *ui)
     ui->pending_leave_parent = false;
 }
 
+static void discard_holiday_draft(UiState *ui)
+{
+    ui->model.draft_holiday_enabled = ui->model.holiday_enabled;
+    ui->model.draft_holiday_rule = ui->model.holiday_rule;
+    ui->model.draft_makeup_workday_rule = ui->model.makeup_workday_rule;
+    update_holiday_dirty(ui);
+}
+
 static void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
 {
+    if (ui->waiting) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "请等待当前设置保存完成后再离开页面。");
+        return;
+    }
     if (ui->model.parent_page == PTC_UI_PARENT_SUPPORT &&
         (leave_parent || target_page != PTC_UI_PARENT_SUPPORT)) {
         ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_IDLE;
@@ -2796,7 +2855,7 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
                      ui->model.disable_flag_present
                        ? "紧急停用期间不能保存；请选择保留草稿并刷新、放弃草稿并刷新，或返回。"
-                       : "刷新会重新读取后台规则；请选择先保存、放弃草稿并刷新，或返回编辑。");
+                       : "刷新会读取已保存的周计划；请选择先保存、放弃草稿并刷新，或返回编辑。");
         } else {
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "离开周计划？");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
@@ -2804,6 +2863,16 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
                        ? "紧急停用期间不能保存；请选择保留草稿并离开、放弃草稿并离开，或返回。"
                        : "请选择保存修改、放弃修改，或返回继续编辑。");
         }
+        return;
+    }
+    if (ui->model.parent_page == PTC_UI_PARENT_HOLIDAY && ui->model.holiday_dirty) {
+        ui->pending_parent_page = target_page;
+        ui->pending_leave_parent = leave_parent;
+        ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_LEAVE;
+        ui->model.holiday_leave_selection = 1;
+        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "离开国家节假日设置？");
+        snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                 "这里还有尚未保存的更改。继续编辑可以保留内容；放弃更改后再离开。");
         return;
     }
     ui->pending_parent_page = target_page;
@@ -2842,6 +2911,26 @@ static void handle_overlay_input(UiState *ui, u64 down)
     if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
         if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
             ptc_ui_cancel_overlay(&ui->model);
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_SUPPORT_EVENT) {
+        if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
+            ptc_ui_cancel_overlay(&ui->model);
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE) {
+        if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+            ui->model.holiday_leave_selection = 1 - ui->model.holiday_leave_selection;
+        } else if (down & (HidNpadButton_B | HidNpadButton_A)) {
+            ptc_ui_cancel_overlay(&ui->model);
+            ui->pending_parent_page = -1;
+            ui->pending_leave_parent = false;
+        } else if (down & HidNpadButton_X) {
+            discard_holiday_draft(ui);
+            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            apply_pending_navigation(ui);
         }
         return;
     }
@@ -3156,8 +3245,18 @@ static void handle_overlay_input(UiState *ui, u64 down)
         }
         return;
     }
-    if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM && (down & (HidNpadButton_A | HidNpadButton_Plus))) {
-        confirm_operation(ui);
+    if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM) {
+        bool album_change = ui->model.operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
+                            ui->model.operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||
+                            ui->model.operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY;
+        if (album_change && (down & (HidNpadButton_Left | HidNpadButton_Right))) {
+            ui->model.overlay_selection = 1 - ui->model.overlay_selection;
+        } else if (album_change && (down & HidNpadButton_A) && ui->model.overlay_selection == 0) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if ((down & (HidNpadButton_A | HidNpadButton_Plus)) &&
+                   (!album_change || ui->model.overlay_selection == 1)) {
+            confirm_operation(ui);
+        }
     }
 }
 
@@ -3257,6 +3356,16 @@ static void handle_touch(UiState *ui, int x, int y)
             handle_parent_action(ui);
         }
         break;
+    case PTC_UI_HIT_SUPPORT_EVENT:
+        if (hit.index >= 0 && hit.index < ui->model.recent_event_count) {
+            ui->model.selected_index = 6 + (ui->model.recent_event_count - 1 - hit.index);
+            ui->model.overlay = PTC_UI_OVERLAY_SUPPORT_EVENT;
+            ui->model.overlay_selection = hit.index;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "最近事件详情");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                     "家长区已通过 PIN 验证；这里显示完整诊断字段，但不会显示 PIN、密钥或可复用授权材料。");
+        }
+        break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
         if (ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR) {
             handle_overlay_input(ui, HidNpadButton_B);
@@ -3269,6 +3378,14 @@ static void handle_touch(UiState *ui, int x, int y)
             handle_overlay_input(ui, HidNpadButton_B);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
             close_code_result(ui);
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM &&
+                   (ui->model.operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
+                    ui->model.operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||
+                    ui->model.operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY)) {
+            ui->model.overlay_selection = 0;
+            handle_overlay_input(ui, HidNpadButton_A);
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE) {
+            handle_overlay_input(ui, HidNpadButton_B);
         } else {
             ptc_ui_cancel_overlay(&ui->model);
             snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改。");
@@ -3278,6 +3395,20 @@ static void handle_touch(UiState *ui, int x, int y)
         if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
             close_code_result(ui);
             break;
+        }
+        if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE) {
+            handle_overlay_input(ui, HidNpadButton_A);
+            break;
+        }
+        if (ui->model.overlay == PTC_UI_OVERLAY_SUPPORT_EVENT) {
+            handle_overlay_input(ui, HidNpadButton_A);
+            break;
+        }
+        if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM &&
+            (ui->model.operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
+             ui->model.operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||
+             ui->model.operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY)) {
+            ui->model.overlay_selection = 1;
         }
         if (ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL) {
             ui->model.overlay_selection = PTC_UI_CREDENTIAL_SAVE;
@@ -3295,6 +3426,10 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_DISCARD:
+        if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE) {
+            handle_overlay_input(ui, HidNpadButton_X);
+            break;
+        }
         if (ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
             ui->model.overlay_selection = 0;
         }
@@ -3600,7 +3735,10 @@ int main(int argc, char **argv)
                 if (down & HidNpadButton_B) {
                     ui.danger_confirm_ticks = 0;
                     handle_overlay_input(&ui, down);
-                } else if (held & HidNpadButton_A) {
+                } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+                    ui.danger_confirm_ticks = 0;
+                    handle_overlay_input(&ui, down);
+                } else if ((held & HidNpadButton_A) && ui.model.overlay_selection == 1) {
                     ++ui.danger_confirm_ticks;
                     if (ui.danger_confirm_ticks >= DANGER_CONFIRM_HOLD_TICKS) {
                         ui.danger_confirm_ticks = 0;
@@ -3740,6 +3878,11 @@ int main(int argc, char **argv)
                         snprintf(ui.model.message, sizeof(ui.model.message), "周计划没有修改。");
                     }
                 }
+            } else if (ui.waiting && ui.model.parent_page == PTC_UI_PARENT_HOLIDAY) {
+                if (down) {
+                    snprintf(ui.model.message, sizeof(ui.model.message),
+                             "请等待国家节假日设置保存完成后再继续编辑。");
+                }
             } else if (down & HidNpadButton_B) {
                 request_parent_navigation(&ui, -1, true);
             } else if (down & HidNpadButton_L) {
@@ -3764,6 +3907,16 @@ int main(int argc, char **argv)
                     snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再执行其他设置。");
                 } else if (ui.model.parent_footer_focused) {
                     activate_parent_status(&ui);
+                } else if (ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.model.selected_index >= 6) {
+                    int visible_index = ui.model.selected_index - 6;
+                    int event_index = ui.model.recent_event_count - 1 - visible_index;
+                    if (event_index >= 0 && event_index < ui.model.recent_event_count) {
+                        ui.model.overlay = PTC_UI_OVERLAY_SUPPORT_EVENT;
+                        ui.model.overlay_selection = event_index;
+                        snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "最近事件详情");
+                        snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body),
+                                 "家长区已通过 PIN 验证；这里显示完整诊断字段，但不会显示 PIN、密钥或可复用授权材料。");
+                    }
                 } else {
                     handle_parent_action(&ui);
                 }

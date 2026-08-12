@@ -95,15 +95,25 @@ static void test_release_navigation(void)
     check_int(model.selected_index, 4, "five-card selection wraps upward");
 
     model.parent_page = PTC_UI_PARENT_HOLIDAY;
-    model.selected_index = 1;
+    model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 5, "holiday header moves right to calendar viewer");
+    ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 3, "holiday navigation follows visual row to the right");
     ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 4, "holiday navigation follows visual column downward");
     ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 6, "holiday right column reaches save");
-    ptc_ui_move_parent_selection(&model, -1, 0);
-    check_int(model.selected_index, 5, "holiday bottom actions move left to calendar viewer");
+
+    model.parent_page = PTC_UI_PARENT_SUPPORT;
+    model.recent_event_count = 3;
+    model.selected_index = 4;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "support actions move down to newest recent event");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 7, "support recent events move vertically without overlap");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 6, "support recent event navigation returns upward");
 
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_LIMIT), PTC_RULE_MODE_UNLIMITED, "limit toggles to unlimited");
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_UNLIMITED), PTC_RULE_MODE_LIMIT, "unlimited toggles to limit");
@@ -363,6 +373,7 @@ static void test_release_hit_targets(void)
               "disabled weekly page still allows discarding a draft");
     model.disable_flag_present = false;
     model.parent_page = PTC_UI_PARENT_SUPPORT;
+    model.recent_event_count = 3;
     snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
     check_true(ptc_ui_safety_action_visible(&model, 0) && ptc_ui_safety_action_visible(&model, 1),
                "support setup and repair cards stay visible while active");
@@ -372,6 +383,10 @@ static void test_release_hit_targets(void)
               "active support repair card is disabled");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "support diagnostics card");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "support software information card");
+    check_hit(hit_center(&model, ptc_ui_support_event_rect(0)), PTC_UI_HIT_SUPPORT_EVENT, 2,
+              "newest support event is independently actionable");
+    check_true(!rects_overlap(ptc_ui_support_event_rect(0), ptc_ui_support_event_rect(1)),
+               "support event rows do not overlap");
 
     model.parent_page = PTC_UI_PARENT_HOLIDAY;
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(0)), PTC_UI_HIT_PARENT_CARD, 0, "holiday global switch card");
@@ -389,10 +404,12 @@ static void test_release_hit_targets(void)
         }
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(0), ptc_ui_holiday_card_rect(1)),
                    "holiday header does not overlap rule controls");
+        check_true(!rects_overlap(ptc_ui_holiday_card_rect(0), ptc_ui_holiday_card_rect(5)),
+                   "holiday rule and calendar viewer share a row without overlap");
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(1), ptc_ui_holiday_card_rect(2)),
                    "holiday mode and quota do not overlap");
-        check_true(!rects_overlap(ptc_ui_holiday_card_rect(2), ptc_ui_holiday_card_rect(5)),
-                   "holiday quota and bottom action do not overlap");
+        check_true(ptc_ui_holiday_card_rect(6).w == 1172,
+                   "holiday save action spans the whole content width");
     }
 
     model.view = PTC_UI_SETUP;
@@ -526,7 +543,10 @@ static void test_user_state_mapping(void)
         "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0,"
         "\"rule_source\":\"statutory_holiday\",\"calendar_covered\":true,\"calendar_update_warning\":false},"
         "\"setup\":{\"phase\":\"active\",\"restriction_cleared\":true,\"snapshot_available\":true,"
-        "\"activate_after\":0,\"compatibility_status\":\"verified\"},\"completed_at\":106}";
+        "\"activate_after\":0,\"compatibility_status\":\"verified\"},"
+        "\"environment\":{\"available\":true,\"hos\":\"22.5.0\",\"model\":\"mariko-oled\",\"atmosphere\":true},"
+        "\"recent_events\":[{\"ts\":4294967296,\"request_id\":\"weekly-1\",\"type\":\"set_weekly_template\","
+        "\"event\":\"result_ok\",\"error\":\"\",\"detail\":\"rules\"}],\"completed_at\":106}";
     const char *protection =
         "{\"version\":1,\"request_id\":\"status-error\",\"type\":\"status\",\"status\":\"error\","
         "\"error\":{\"code\":312,\"reason\":\"protection_mode\",\"message\":\"已进入保护模式\"},"
@@ -548,6 +568,11 @@ static void test_user_state_mapping(void)
         "\"preview\":{\"grant_minutes\":30,\"remaining_after_available\":true,"
         "\"remaining_after_minutes\":50,\"effective_add_minutes\":30,\"capped\":false,"
         "\"converts_unlimited_to_limited\":false},\"completed_at\":109}";
+    const char *weekly_saved =
+        "{\"version\":1,\"request_id\":\"weekly-ok\",\"type\":\"set_weekly_template\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":40,\"played_minutes_available\":true,"
+        "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0},\"completed_at\":110}";
 
     memset(&model, 0, sizeof(model));
     check_true(ptc_ui_apply_result_json(&model, pending), "syncing result parses");
@@ -562,6 +587,15 @@ static void test_user_state_mapping(void)
         "effective holiday source and coverage map to the UI model");
     check_true(strcmp(model.compatibility_status, "verified") == 0,
         "compatibility status maps to the UI model");
+    check_true(model.environment_available && strcmp(model.environment_hos, "22.5.0") == 0 &&
+               strcmp(model.environment_model, "mariko-oled") == 0 && model.environment_atmosphere,
+               "support environment fields map independently for multiline display");
+    check_true(model.recent_events_available && model.recent_event_count == 1 &&
+               strstr(model.recent_events[0], "操作已完成") != NULL &&
+               strcmp(model.recent_event_types[0], "set_weekly_template") == 0 &&
+               strcmp(model.recent_event_request_ids[0], "weekly-1") == 0 &&
+               model.recent_event_timestamps[0] == INT64_C(4294967296),
+               "recent event keeps readable summary and complete diagnostic detail");
     ptc_ui_mark_status_updated(&model, 1000);
     check_int((int)ptc_ui_status_age_seconds(&model, 1030), 30, "status age is measured from last refresh");
     check_int((int)ptc_ui_status_age_seconds(&model, 999), 0, "status age never goes negative");
@@ -576,6 +610,9 @@ static void test_user_state_mapping(void)
     check_int(model.code_grant_minutes, 30, "preview grant minutes mapped");
     check_true(model.code_preview_after_available && model.code_preview_after_minutes == 50,
                "preview post-redemption remainder mapped");
+    check_true(ptc_ui_apply_result_json(&model, weekly_saved), "weekly success result parses");
+    check_true(strstr(model.message, "今天没有单独设置") != NULL && strstr(model.message, "后台") == NULL,
+               "weekly success message uses parent-facing language");
 }
 
 int main(void)

@@ -54,7 +54,9 @@ typedef enum {
     PTC_UI_OVERLAY_CODE_RESULT = 12,
     PTC_UI_OVERLAY_AUTH_ERROR = 13,
     PTC_UI_OVERLAY_SOFTWARE_INFO = 14,
-    PTC_UI_OVERLAY_HOLIDAY_CALENDAR = 15
+    PTC_UI_OVERLAY_HOLIDAY_CALENDAR = 15,
+    PTC_UI_OVERLAY_HOLIDAY_LEAVE = 16,
+    PTC_UI_OVERLAY_SUPPORT_EVENT = 17
 } PtcUiOverlay;
 
 typedef enum {
@@ -115,7 +117,8 @@ typedef enum {
     PTC_UI_OPERATION_RESET_PAIRING_URL = 14,
     PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION = 15,
     PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY = 16,
-    PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY = 17
+    PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY = 17,
+    PTC_UI_OPERATION_EXPORT_DIAGNOSTICS = 18
 } PtcUiOperation;
 
 typedef enum {
@@ -161,8 +164,15 @@ typedef struct {
     char environment_model[32];
     bool environment_available;
     bool environment_atmosphere;
+    bool recent_events_available;
     int recent_event_count;
     char recent_events[3][128];
+    char recent_event_names[3][48];
+    char recent_event_types[3][48];
+    char recent_event_errors[3][48];
+    char recent_event_details[3][96];
+    char recent_event_request_ids[3][80];
+    int64_t recent_event_timestamps[3];
     uint16_t day_index;
     char mode[24];
     char request_id[80];
@@ -208,6 +218,7 @@ typedef struct {
     PtcDayRule makeup_workday_rule;
     PtcDayRule draft_makeup_workday_rule;
     bool holiday_dirty;
+    int holiday_leave_selection;
     bool calendar_covered;
     bool calendar_update_warning;
     int holiday_calendar_page;
@@ -323,6 +334,7 @@ typedef enum {
     PTC_UI_HIT_WEEKLY_SAVE,
     PTC_UI_HIT_WEEKLY_DISCARD,
     PTC_UI_HIT_OVERLAY_DISCARD,
+    PTC_UI_HIT_SUPPORT_EVENT,
     PTC_UI_HIT_CREDENTIAL_INPUT,
     PTC_UI_HIT_CREDENTIAL_RANDOM,
     PTC_UI_HIT_CREDENTIAL_REVEAL,
@@ -416,6 +428,7 @@ PtcUiRect ptc_ui_parent_refresh_rect(void);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_holiday_card_rect(int index);
+PtcUiRect ptc_ui_support_event_rect(int index);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
 PtcUiRect ptc_ui_minutes_value_rect(void);
 PtcUiRect ptc_ui_minutes_dec_rect(void);
