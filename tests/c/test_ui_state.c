@@ -48,8 +48,8 @@ static void test_release_navigation(void)
     memset(&model, 0, sizeof(model));
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 6, "holiday policy exposes six direct actions");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 5, "security actions");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 7, "holiday policy exposes settings, calendar and save actions");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 6, "security actions include album restriction");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support actions include software information");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
@@ -64,6 +64,17 @@ static void test_release_navigation(void)
     check_int(model.selected_index, 1, "selection moves right");
     ptc_ui_move_parent_selection(&model, 0, -1);
     check_int(model.selected_index, 4, "five-card selection wraps upward");
+
+    model.parent_page = PTC_UI_PARENT_HOLIDAY;
+    model.selected_index = 1;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 3, "holiday navigation follows visual row to the right");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 4, "holiday navigation follows visual column downward");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "holiday right column reaches save");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 5, "holiday bottom actions move left to calendar viewer");
 
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_LIMIT), PTC_RULE_MODE_UNLIMITED, "limit toggles to unlimited");
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_UNLIMITED), PTC_RULE_MODE_LIMIT, "unlimited toggles to limit");
@@ -307,7 +318,8 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(2)), PTC_UI_HIT_PARENT_CARD, 2, "holiday statutory quota card");
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3, "holiday makeup mode card");
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "holiday makeup quota card");
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "holiday save card");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "holiday calendar viewer card");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(6)), PTC_UI_HIT_PARENT_CARD, 6, "holiday save card");
 
     model.view = PTC_UI_SETUP;
     model.setup_step = PTC_UI_SETUP_SHORTCUT;

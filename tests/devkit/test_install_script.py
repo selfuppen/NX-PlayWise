@@ -57,7 +57,7 @@ def test_install_script_preview() -> None:
         res_clean = subprocess.run(cmd_clean, capture_output=True, text=True)
         require(res_clean.returncode == 0, f"Clean preview failed: {res_clean.stderr}")
         require("Install mode:   Full clean install" in res_clean.stdout, "Clean mode title missing")
-        require("switch\\playwise (full clean install)" in res_clean.stdout, "Clean mode text missing")
+        require("backups\\album_restriction is preserved" in res_clean.stdout, "Clean mode backup preservation text missing")
 
         # 3. Full mode preview
         cmd_full = cmd_inc + ["-Full"]
@@ -71,6 +71,10 @@ def test_install_script_confirmation_uses_drive_letter_only() -> None:
     require(
         'Read-Host "Type $destinationDriveLetter to confirm' in script,
         "confirmation prompt must request only the drive letter",
+    )
+    require(
+        '$backupChild.Name -ne "album_restriction"' in script,
+        "clean/full installs must exempt album restriction recovery backups",
     )
     require(
         'if ($confirmation -cne $destinationDriveLetter)' in script,

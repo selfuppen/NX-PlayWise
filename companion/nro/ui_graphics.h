@@ -20,7 +20,8 @@ typedef enum {
     PTC_UI_SETUP_SHORTCUT = 1,
     PTC_UI_SETUP_PIN = 2,
     PTC_UI_SETUP_TAKEOVER = 3,
-    PTC_UI_SETUP_ZONE = 4
+    PTC_UI_SETUP_ALBUM = 4,
+    PTC_UI_SETUP_ZONE = 5
 } PtcUiSetupStep;
 
 typedef enum {
@@ -52,7 +53,8 @@ typedef enum {
     PTC_UI_OVERLAY_CREDENTIAL_LEAVE = 11,
     PTC_UI_OVERLAY_CODE_RESULT = 12,
     PTC_UI_OVERLAY_AUTH_ERROR = 13,
-    PTC_UI_OVERLAY_SOFTWARE_INFO = 14
+    PTC_UI_OVERLAY_SOFTWARE_INFO = 14,
+    PTC_UI_OVERLAY_HOLIDAY_CALENDAR = 15
 } PtcUiOverlay;
 
 typedef enum {
@@ -110,7 +112,10 @@ typedef enum {
     PTC_UI_OPERATION_SAVE_CREDENTIAL = 11,
     PTC_UI_OPERATION_SAVE_WEEKLY_LEAVE = 12,
     PTC_UI_OPERATION_REDEEM_OFFLINE_CODE = 13,
-    PTC_UI_OPERATION_RESET_PAIRING_URL = 14
+    PTC_UI_OPERATION_RESET_PAIRING_URL = 14,
+    PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION = 15,
+    PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY = 16,
+    PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY = 17
 } PtcUiOperation;
 
 typedef enum {
@@ -153,6 +158,7 @@ typedef struct {
     int setup_step;
     int setup_shortcut_index;
     int setup_zone_index;
+    bool setup_album_enable;
     uint64_t custom_shortcut_mask;
     bool custom_shortcut_enabled;
     uint64_t shortcut_draft_mask;
@@ -187,6 +193,10 @@ typedef struct {
     bool holiday_dirty;
     bool calendar_covered;
     bool calendar_update_warning;
+    int holiday_calendar_page;
+    int album_restriction_state;
+    bool album_backup_valid;
+    char album_restriction_detail[160];
     char rule_source[32];
     int editor_index;
     char overlay_title[64];

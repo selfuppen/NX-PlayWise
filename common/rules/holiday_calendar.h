@@ -2,6 +2,7 @@
 #define PTC_HOLIDAY_CALENDAR_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 typedef enum {
@@ -18,7 +19,20 @@ typedef struct {
     const char *source_url;
 } PtcHolidayCalendarInfo;
 
+typedef struct {
+    uint16_t year;
+    const char *holiday_id;
+    const char *display_name;
+    uint8_t start_month;
+    uint8_t start_day;
+    uint8_t end_month;
+    uint8_t end_day;
+    const char *makeup_workdays;
+} PtcHolidayArrangement;
+
 PtcCalendarDayType ptc_holiday_calendar_classify(uint16_t day_index, bool *covered);
 const PtcHolidayCalendarInfo *ptc_holiday_calendar_info(void);
+size_t ptc_holiday_calendar_arrangement_count(uint16_t year);
+const PtcHolidayArrangement *ptc_holiday_calendar_arrangement(uint16_t year, size_t index);
 
 #endif

@@ -11,6 +11,7 @@
 #include <time.h>
 
 #include "../../common/time/ptc_time.h"
+#include "../../common/rules/holiday_calendar.h"
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
@@ -44,6 +45,8 @@ static UiRect to_uirect(PtcUiRect rect);
 static const char *rule_mode_label(PtcRuleMode mode);
 static void format_status_age(const PtcUiModel *model, char *out, size_t out_size);
 static uint32_t status_age_color(const PtcUiModel *model);
+static void draw_toggle_switch(uint32_t *pixels, uint32_t stride, UiRect rect, bool is_on,
+                               bool selected, bool disabled, const char *on_label, const char *off_label);
 
 static const UiAction TODAY_ACTIONS[] = {
     {"刷新状态", "读取今天的最新游玩状态", COLOR(42, 105, 188)},
@@ -59,6 +62,7 @@ static const UiAction HOLIDAY_ACTIONS[] = {
     {"法定休假日额度", "设置休息日可玩分钟数", COLOR(25, 132, 95)},
     {"调休工作日模式", "在限时与不限时之间切换", COLOR(215, 139, 25)},
     {"调休工作日额度", "设置补班日可玩分钟数", COLOR(215, 139, 25)},
+    {"查看当前节假日安排", "查看内置年份、放假日期和调休工作日", COLOR(91, 100, 116)},
     {"保存国家节假日设置", "立即重算今天并由后台确认", COLOR(42, 105, 188)}
 };
 
@@ -68,6 +72,7 @@ static const UiAction SECURITY_ACTIONS[] = {
     {"加时码生成管理", "管理设备名、密钥、导出配置和二维码地址", COLOR(91, 100, 116)},
     {"修改任我玩PIN", "验证当前 PIN 后设置新 PIN", COLOR(42, 105, 188)},
     {"家长区快捷键管理", "选择组合并管理孩子区提示", COLOR(42, 105, 188)},
+    {"限制相册入口", "启用后需在相册图标按住 R+X，再按 A", COLOR(194, 61, 61)},
 };
 
 static const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -641,7 +646,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char countdown_line[80];
     char fitted[220];
     int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_SHORTCUT;
-    snprintf(title, sizeof(title), "首次设置 · %d/4", step);
+    snprintf(title, sizeof(title), "首次设置 · %d/5", step);
     draw_header(pixels, stride, grace_remaining >= 0 ? "正在同步" : title,
         grace_remaining >= 0 ? "系统设置正在同步，完成后继续选择进入的区域" : "按步骤完成 任我玩 的家长设置");
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
@@ -657,12 +662,13 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             snprintf(countdown_line, sizeof(countdown_line), "同步完成，正在启用额度管理…");
         }
         draw_text(pixels, stride, 204, 310, countdown_line, 34, COLOR(28, 118, 188));
-        draw_text(pixels, stride, 204, 356, "无需操作；同步完成后会进入第 4 步选择孩子区或家长区。", 22, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 356, "无需操作；同步完成后会进入第 4 步选择是否限制相册入口。", 22, COLOR(45, 52, 62));
     } else {
-        draw_text(pixels, stride, 204, 154, "1 快捷键", 18, step == PTC_UI_SETUP_SHORTCUT ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 450, 154, "2 PIN", 18, step == PTC_UI_SETUP_PIN ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 660, 154, "3 接管", 18, step == PTC_UI_SETUP_TAKEOVER ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 870, 154, "4 进入区域", 18, step == PTC_UI_SETUP_ZONE ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 150, 154, "1 快捷键", 17, step == PTC_UI_SETUP_SHORTCUT ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 350, 154, "2 PIN", 17, step == PTC_UI_SETUP_PIN ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 520, 154, "3 接管", 17, step == PTC_UI_SETUP_TAKEOVER ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 690, 154, "4 相册限制", 17, step == PTC_UI_SETUP_ALBUM ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 920, 154, "5 进入区域", 17, step == PTC_UI_SETUP_ZONE ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
         if (step == PTC_UI_SETUP_SHORTCUT) {
             UiRect compact_fixed = {204, 184, 872, 54};
             fill_round_rect(pixels, stride, compact_fixed, 8, COLOR(244, 249, 255));
@@ -720,7 +726,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                       21, COLOR(45, 52, 62));
             draw_text(pixels, stride, 204, 360,
                       takeover_complete
-                          ? "按 A 或点击继续，返回第 4 步选择孩子区或家长区。"
+                          ? "按 A 或点击继续，进入第 4 步选择是否限制相册入口。"
                           : "接管成功后会保留同步宽限，系统控制不会立即跳变。",
                       21, COLOR(45, 52, 62));
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
@@ -728,6 +734,17 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                                (resuming_restored_setup ? "A / 点击  解除停用并重新接管" : "A / 点击  确认接管"),
                                takeover_complete ? COLOR(25, 132, 95) : COLOR(28, 118, 188),
                                COLOR(255, 255, 255), false);
+        } else if (step == PTC_UI_SETUP_ALBUM) {
+            UiRect card = {204, 204, 872, 250};
+            fill_round_rect(pixels, stride, card, 8, COLOR(248, 250, 253));
+            draw_rect_outline(pixels, stride, card, 1, COLOR(219, 225, 233));
+            draw_text(pixels, stride, 236, 248, "限制相册入口（可跳过）", 28, COLOR(28, 34, 43));
+            draw_text(pixels, stride, 236, 292, "启用后需在相册图标按住 R+X，再按 A 才能进入 hbmenu。", 20, COLOR(77, 86, 99));
+            draw_text(pixels, stride, 236, 328, "会备份 Atmosphère 与 More Menu 原配置；修改后需重启主机生效。", 19, COLOR(77, 86, 99));
+            draw_text(pixels, stride, 236, 370, "卸载或删除 PlayWise 数据前必须先在家长区关闭此限制。", 18, COLOR(194, 61, 61));
+            draw_toggle_switch(pixels, stride, (UiRect){900, 232, 96, 42}, model->setup_album_enable, true, false,
+                               "启用", "跳过");
+            draw_text(pixels, stride, 236, 422, "左右 / X 切换 · A / + 确认并继续", 18, COLOR(28, 118, 188));
         } else {
             draw_text(pixels, stride, 204, 214, "初始化完成，选择进入区域", 30, COLOR(28, 34, 43));
             draw_text(pixels, stride, 204, 254, "之后可在两个区域之间切换；进入家长区会受 PIN 保护。", 21, COLOR(77, 86, 99));
@@ -775,6 +792,10 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                                COLOR(28, 118, 188), COLOR(255, 255, 255), false);
         } else if (step == PTC_UI_SETUP_PIN) {
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "A  设置并继续",
+                               COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+        } else if (step == PTC_UI_SETUP_ALBUM) {
+            draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
+                               model->setup_album_enable ? "A  启用并继续" : "A  暂时跳过并继续",
                                COLOR(28, 118, 188), COLOR(255, 255, 255), false);
         }
     }
@@ -1279,9 +1300,13 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     uint32_t cal_bg = model->calendar_update_warning ? COLOR(255, 235, 238) : COLOR(235, 248, 242);
     uint32_t cal_fg = model->calendar_update_warning ? COLOR(194, 61, 61) : COLOR(25, 132, 95);
     fill_round_rect(pixels, stride, cal_badge, 6, cal_bg);
-    draw_text_center(pixels, stride, cal_badge,
-                     model->calendar_update_warning ? "内置日历即将或已经过期" : "内置日历：2026 · v1",
-                     15, cal_fg);
+    {
+        const PtcHolidayCalendarInfo *info = ptc_holiday_calendar_info();
+        char badge[96];
+        snprintf(badge, sizeof(badge), model->calendar_update_warning ? "内置日历即将或已经过期" : "内置日历：%u · v%u",
+                 (unsigned int)info->last_year, (unsigned int)info->version);
+        draw_text_center(pixels, stride, cal_badge, badge, 15, cal_fg);
+    }
 
     /* Global Toggle Switch */
     draw_toggle_switch(pixels, stride, (UiRect){top_card.x + top_card.width - 100, top_card.y + 18, 80, 36},
@@ -1361,14 +1386,17 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_text_center(pixels, stride, btn4, "A / 点按  修改额度", 15, sel4 ? COLOR(255, 255, 255) : COLOR(28, 118, 188));
     }
 
-    /* Bottom Bar: Status Note & Save Button (Action 5) */
+    /* Bottom actions remain readable even when policy writes are disabled. */
     snprintf(line, sizeof(line), "今天生效来源：%s%s",
              model->rule_source[0] ? model->rule_source : "尚未刷新",
              model->holiday_dirty ? "  · * 有未保存的修改" : "");
-    draw_text(pixels, stride, 54, 582, line, 16, model->holiday_dirty ? COLOR(215, 139, 25) : COLOR(91, 100, 114));
+    (void)line;
+
+    draw_candidate_button(pixels, stride, ptc_ui_holiday_card_rect(5), "查看当前节假日安排",
+                          COLOR(244, 246, 249), COLOR(28, 118, 188), model->selected_index == 5, false);
 
     /* Save Button (Action 5) */
-    bool sel5 = (model->selected_index == 5);
+    bool sel5 = (model->selected_index == 6);
     bool save_disabled = disabled || !model->holiday_dirty;
     uint32_t save_bg = save_disabled ? COLOR(244, 246, 249) : (sel5 ? COLOR(20, 90, 160) : COLOR(28, 118, 188));
     uint32_t save_fg = save_disabled ? COLOR(160, 168, 180) : COLOR(255, 255, 255);
@@ -1416,6 +1444,12 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 action = &RESUME_CONTROL_ACTION;
             }
             draw_action_card(pixels, stride, card, action, index == model->selected_index, astate);
+            if (model->parent_page == PTC_UI_PARENT_SECURITY && index == 5) {
+                draw_toggle_switch(pixels, stride,
+                                   (UiRect){card.x + card.width - 92, card.y + 50, 76, 34},
+                                   model->album_restriction_state == 1, index == model->selected_index,
+                                   model->album_restriction_state == 2, NULL, NULL);
+            }
         }
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
@@ -2332,6 +2366,36 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 438, "也可按 B 返回", 16, COLOR(91, 100, 114));
 }
 
+static void draw_holiday_calendar_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    const PtcHolidayCalendarInfo *info = ptc_holiday_calendar_info();
+    size_t count = ptc_holiday_calendar_arrangement_count(info->last_year);
+    const int per_page = 4;
+    int pages = (int)((count + per_page - 1) / per_page);
+    int page = model->holiday_calendar_page;
+    char line[192];
+    draw_dialog_shell(pixels, stride, model, &dialog, 1040, 600);
+    if (page < 0 || page >= pages) page = 0;
+    for (int row = 0; row < per_page; ++row) {
+        size_t index = (size_t)(page * per_page + row);
+        const PtcHolidayArrangement *entry = ptc_holiday_calendar_arrangement(info->last_year, index);
+        UiRect card = {dialog.x + 34, dialog.y + 118 + row * 88, dialog.width - 68, 76};
+        if (!entry) break;
+        fill_round_rect(pixels, stride, card, 7, COLOR(248, 250, 253));
+        draw_rect_outline(pixels, stride, card, 1, COLOR(219, 225, 233));
+        draw_text(pixels, stride, card.x + 20, card.y + 30, entry->display_name, 21, COLOR(28, 34, 43));
+        snprintf(line, sizeof(line), "放假：%u月%u日—%u月%u日    调休上班：%s",
+                 entry->start_month, entry->start_day, entry->end_month, entry->end_day, entry->makeup_workdays);
+        draw_text(pixels, stride, card.x + 150, card.y + 30, line, 18, COLOR(77, 86, 99));
+    }
+    snprintf(line, sizeof(line), "%u 年 · v%u · 发布于 %s · 来源：www.gov.cn    第 %d/%d 页",
+             info->last_year, info->version, info->published_date, page + 1, pages);
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 30, dialog.y + 490, dialog.width - 60, 30}, line, 16, COLOR(91, 100, 114));
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "L/R 翻页 · A/B 关闭",
+                       COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+}
+
 static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     switch (model->overlay) {
@@ -2376,6 +2440,9 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         break;
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
         draw_software_info_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_HOLIDAY_CALENDAR:
+        draw_holiday_calendar_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_NONE:
     default:

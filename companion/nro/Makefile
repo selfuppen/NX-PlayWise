@@ -28,6 +28,7 @@ LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
 
 OBJS := \
 	$(BUILD)/main.o \
+	$(BUILD)/album_restriction.o \
 	$(BUILD)/ui_graphics.o \
 	$(BUILD)/ui_state.o \
 	$(BUILD)/auth.o \
@@ -60,6 +61,9 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 $(BUILD)/main.o: main.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/album_restriction.o: ../album_restriction.c ../album_restriction.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h | $(BUILD)

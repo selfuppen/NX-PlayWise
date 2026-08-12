@@ -59,6 +59,17 @@ static const PtcHolidayCalendarInfo PTC_CALENDAR_INFO = {
     "https://www.gov.cn/yaowen/liebiao/202511/content_7047099.htm"
 };
 
+/* Display data shares this authoritative module with the classifier so UI and policy cannot drift. */
+static const PtcHolidayArrangement PTC_2026_ARRANGEMENTS[] = {
+    {2026, "new_year", "元旦", 1, 1, 1, 3, "1月4日"},
+    {2026, "spring_festival", "春节", 2, 15, 2, 23, "2月14日、2月28日"},
+    {2026, "qingming", "清明节", 4, 4, 4, 6, "无"},
+    {2026, "labour_day", "劳动节", 5, 1, 5, 5, "5月9日"},
+    {2026, "dragon_boat", "端午节", 6, 19, 6, 21, "无"},
+    {2026, "mid_autumn", "中秋节", 9, 25, 9, 27, "9月20日"},
+    {2026, "national_day", "国庆节", 10, 1, 10, 7, "10月10日"}
+};
+
 PtcCalendarDayType ptc_holiday_calendar_classify(uint16_t day_index, bool *covered)
 {
     uint16_t year;
@@ -81,4 +92,15 @@ PtcCalendarDayType ptc_holiday_calendar_classify(uint16_t day_index, bool *cover
 const PtcHolidayCalendarInfo *ptc_holiday_calendar_info(void)
 {
     return &PTC_CALENDAR_INFO;
+}
+
+size_t ptc_holiday_calendar_arrangement_count(uint16_t year)
+{
+    return year == 2026 ? sizeof(PTC_2026_ARRANGEMENTS) / sizeof(PTC_2026_ARRANGEMENTS[0]) : 0;
+}
+
+const PtcHolidayArrangement *ptc_holiday_calendar_arrangement(uint16_t year, size_t index)
+{
+    if (year != 2026 || index >= ptc_holiday_calendar_arrangement_count(year)) return NULL;
+    return &PTC_2026_ARRANGEMENTS[index];
 }

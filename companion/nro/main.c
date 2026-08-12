@@ -8,6 +8,7 @@
 #include <time.h>
 
 #include "../../companion/auth.h"
+#include "../../companion/album_restriction.h"
 #include "../../companion/file_protocol.h"
 #include "../../companion/transport_client.h"
 #include "../../companion/switch_ipc_client.h"
@@ -15,6 +16,7 @@
 #include "../../third_party/cjson/cJSON.h"
 #include "../../common/support/support_export.h"
 #include "../../common/time/ptc_time.h"
+#include "../../common/rules/holiday_calendar.h"
 #include "../../common/security/credential_policy.h"
 #include "../../common/token/token_v2.h"
 #include "../../common/version.h"
@@ -99,6 +101,7 @@ static void update_weekly_dirty(UiState *ui);
 static void update_holiday_dirty(UiState *ui);
 static void apply_pending_navigation(UiState *ui);
 static void handle_setup_input(UiState *ui, u64 down, u64 held);
+static void refresh_album_restriction(UiState *ui);
 static void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
 static void retry_error(UiState *ui);
 static void dispatch_auth_retry(UiState *ui, AuthRetryAction action);
@@ -500,6 +503,10 @@ static void load_ui_preferences(UiState *ui)
     item = cJSON_GetObjectItemCaseSensitive(root, "setup_wizard_step");
     if (cJSON_IsNumber(item) && item->valueint >= 0 && item->valueint <= PTC_UI_SETUP_ZONE) {
         ui->model.setup_step = item->valueint;
+        if (item->valueint == 4) {
+            cJSON *wizard_version = cJSON_GetObjectItemCaseSensitive(root, "setup_wizard_version");
+            if (!cJSON_IsNumber(wizard_version) || wizard_version->valueint < 2) ui->model.setup_step = PTC_UI_SETUP_ZONE;
+        }
     }
     for (int index = 0; index < PTC_UI_SHORTCUT_PRESET_COUNT; ++index) {
         if (ui->model.custom_shortcut_mask == shortcut_preset_mask(index)) {
@@ -544,6 +551,8 @@ static bool save_ui_preferences(UiState *ui)
     cJSON_AddBoolToObject(root, "show_parent_shortcut_hint", ui->model.show_parent_shortcut_hint);
     cJSON_DeleteItemFromObject(root, "setup_wizard_step");
     cJSON_AddNumberToObject(root, "setup_wizard_step", ui->model.setup_step);
+    cJSON_DeleteItemFromObject(root, "setup_wizard_version");
+    cJSON_AddNumberToObject(root, "setup_wizard_version", 2);
     rendered = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     ok = rendered && ui->client.storage->vtable->write_text_atomic(ui->client.storage, CONFIG_PATH, rendered);
@@ -1085,7 +1094,8 @@ static void poll_result(UiState *ui, bool force)
         if (strcmp(ui->model.result_type, "complete_setup") == 0 &&
             strcmp(ui->model.result_status, "ok") == 0) {
             ui->model.setup_zone_index = 1;
-            (void)save_setup_step(ui, PTC_UI_SETUP_ZONE);
+            ui->model.setup_album_enable = false;
+            (void)save_setup_step(ui, PTC_UI_SETUP_ALBUM);
         }
         sync_setup_wizard(ui);
         load_rule_drafts(ui);
@@ -1478,10 +1488,10 @@ static void setup_primary(UiState *ui)
         break;
     case PTC_UI_SETUP_TAKEOVER:
         if (ptc_ui_setup_takeover_complete(&ui->model)) {
-            ui->model.setup_zone_index = 1;
-            if (save_setup_step(ui, PTC_UI_SETUP_ZONE)) {
+            ui->model.setup_album_enable = false;
+            if (save_setup_step(ui, PTC_UI_SETUP_ALBUM)) {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         "系统控制接管已完成，请选择要进入的区域。");
+                         "系统控制接管已完成，可选择是否限制相册入口。");
             }
         } else if (!ui->waiting) {
             if (ui->model.disable_flag_present && strcmp(ui->model.setup_phase, "restored") == 0) {
@@ -1492,6 +1502,21 @@ static void setup_primary(UiState *ui)
                                      "先执行只读兼容预检；通过后保存安装快照并启用额度管理。");
             }
         }
+        break;
+    case PTC_UI_SETUP_ALBUM:
+        if (ui->model.setup_album_enable) {
+            char error[160] = {0};
+            if (!ptc_album_restriction_enable(ui->client.storage, error, sizeof(error))) {
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s；可关闭开关暂时跳过。", error);
+                break;
+            }
+            snprintf(ui->model.message, sizeof(ui->model.message), "相册入口配置已保存，重启主机后生效。");
+        } else {
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                     "已暂时跳过相册入口限制，可稍后在加时码与安全中开启。");
+        }
+        ui->model.setup_zone_index = 1;
+        (void)save_setup_step(ui, PTC_UI_SETUP_ZONE);
         break;
     case PTC_UI_SETUP_ZONE:
         finish_setup(ui);
@@ -1530,6 +1555,12 @@ static void handle_setup_input(UiState *ui, u64 down, u64 held)
         } else if (down & HidNpadButton_X) {
             begin_setup_shortcut_capture(ui);
         } else if (down & HidNpadButton_Plus) {
+            setup_primary(ui);
+        }
+    } else if (ui->model.setup_step == PTC_UI_SETUP_ALBUM) {
+        if (down & (HidNpadButton_Left | HidNpadButton_Right | HidNpadButton_X)) {
+            ui->model.setup_album_enable = !ui->model.setup_album_enable;
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             setup_primary(ui);
         }
     } else if (ui->model.setup_step == PTC_UI_SETUP_ZONE) {
@@ -2350,7 +2381,7 @@ static void handle_parent_action(UiState *ui)
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_HOLIDAY) {
-        if (ui->model.disable_flag_present) {
+        if (ui->model.disable_flag_present && index != 5) {
             snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，国家节假日设置暂时只读。");
             return;
         }
@@ -2387,6 +2418,11 @@ static void handle_parent_action(UiState *ui)
             }
             break;
         case 5:
+            ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_CALENDAR;
+            ui->model.holiday_calendar_page = 0;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "内置节假日安排");
+            break;
+        case 6:
             submit_holiday_policy(ui);
             break;
         default:
@@ -2401,6 +2437,23 @@ static void handle_parent_action(UiState *ui)
         case 2: open_grant_manager(ui); break;
         case 3: change_parent_pin(ui); break;
         case 4: open_shortcut_manager(ui); break;
+        case 5:
+            refresh_album_restriction(ui);
+            if (ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION, "启用相册入口限制？",
+                    "将备份 Atmosphère 与 More Menu 配置，并把 hbmenu 入口改为在相册图标按住 R+X 后按 A。保存后需重启主机生效。");
+            } else if (ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY, "恢复原来的相册入口？",
+                    "将按可信备份精确恢复两个原文件。保存后需重启主机生效；恢复备份仍会保留。");
+            } else if (ui->model.album_backup_valid) {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, "检测到外部改动",
+                    "配置与事务记录不一致。继续会使用可信原始备份强制恢复；请确认可以放弃后续外部修改。");
+                ui->model.confirm_hold_required = true;
+            } else {
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                         "相册入口状态异常且备份不可用；已拒绝自动修改。请保留现场并人工恢复。");
+            }
+            break;
         default: break;
         }
         return;
@@ -2454,6 +2507,19 @@ static void confirm_operation(UiState *ui)
     PtcCompanionStatus status;
     PtcUiOperation operation = ptc_ui_take_confirmed_operation(&ui->model);
     switch (operation) {
+    case PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION:
+    case PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY:
+    case PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY: {
+        char error[160] = {0};
+        bool ok = operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION
+            ? ptc_album_restriction_enable(ui->client.storage, error, sizeof(error))
+            : ptc_album_restriction_restore(ui->client.storage,
+                operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, error, sizeof(error));
+        refresh_album_restriction(ui);
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                 ok ? "相册入口配置已保存，请重启主机后确认生效。" : error);
+        break;
+    }
     case PTC_UI_OPERATION_SET_TODAY_LIMIT:
         submit_minutes(ui, operation, ui->model.draft_minutes);
         break;
@@ -2568,6 +2634,15 @@ static void update_holiday_dirty(UiState *ui)
         memcmp(&ui->model.draft_makeup_workday_rule, &ui->model.makeup_workday_rule, sizeof(PtcDayRule)) != 0;
 }
 
+static void refresh_album_restriction(UiState *ui)
+{
+    PtcAlbumRestrictionStatus status;
+    if (!ui || !ptc_album_restriction_get_status(ui->client.storage, &status)) return;
+    ui->model.album_restriction_state = (int)status.state;
+    ui->model.album_backup_valid = status.backup_valid;
+    snprintf(ui->model.album_restriction_detail, sizeof(ui->model.album_restriction_detail), "%s", status.detail);
+}
+
 static void save_weekly_from_page(UiState *ui)
 {
     uint8_t weekday;
@@ -2622,6 +2697,8 @@ static void apply_pending_navigation(UiState *ui)
             ui->model.selected_index = 0;
             if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
                 submit_status(ui);
+            } else if (ui->model.parent_page == PTC_UI_PARENT_SECURITY) {
+                refresh_album_restriction(ui);
             }
         }
     }
@@ -2683,6 +2760,13 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_CALENDAR) {
+        int pages = (int)((ptc_holiday_calendar_arrangement_count(ptc_holiday_calendar_info()->last_year) + 3u) / 4u);
+        if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) ptc_ui_cancel_overlay(&ui->model);
+        else if ((down & (HidNpadButton_Left | HidNpadButton_L)) && ui->model.holiday_calendar_page > 0) --ui->model.holiday_calendar_page;
+        else if ((down & (HidNpadButton_Right | HidNpadButton_R)) && ui->model.holiday_calendar_page + 1 < pages) ++ui->model.holiday_calendar_page;
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
         if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
             ptc_ui_cancel_overlay(&ui->model);

@@ -145,9 +145,9 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_PLAN:
         return 0;
     case PTC_UI_PARENT_HOLIDAY:
-        return 6;
+        return 7;
     case PTC_UI_PARENT_SECURITY:
-        return 5;
+        return 6;
     case PTC_UI_PARENT_SUPPORT:
         return 6;
     case PTC_UI_PARENT_TODAY:
@@ -191,6 +191,18 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     index = model->selected_index;
     if (index < 0 || index >= count) {
         index = 0;
+    }
+    if (model->parent_page == PTC_UI_PARENT_HOLIDAY) {
+        static const int left[7]  = {0, 1, 2, 1, 2, 5, 5};
+        static const int right[7] = {0, 3, 4, 3, 4, 6, 6};
+        static const int up[7]    = {0, 0, 1, 0, 3, 2, 4};
+        static const int down[7]  = {1, 2, 5, 4, 6, 5, 6};
+        if (horizontal < 0) index = left[index];
+        else if (horizontal > 0) index = right[index];
+        else if (vertical < 0) index = up[index];
+        else if (vertical > 0) index = down[index];
+        model->selected_index = index;
+        return;
     }
     column = index % 2;
     if (horizontal < 0 && column > 0) {
@@ -812,7 +824,8 @@ PtcUiRect ptc_ui_holiday_card_rect(int index)
     case 2: return (PtcUiRect){74, 388, 534, 132};
     case 3: return (PtcUiRect){672, 318, 534, 58};
     case 4: return (PtcUiRect){672, 388, 534, 132};
-    case 5: return (PtcUiRect){652, 548, 574, 58};
+    case 5: return (PtcUiRect){54, 548, 574, 58};
+    case 6: return (PtcUiRect){652, 548, 574, 58};
     default: return (PtcUiRect){54, 172, 1172, 72};
     }
 }
@@ -877,6 +890,10 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
         *width = 960;
         *height = 480;
+        break;
+    case PTC_UI_OVERLAY_HOLIDAY_CALENDAR:
+        *width = 1040;
+        *height = 600;
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:

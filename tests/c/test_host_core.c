@@ -14,6 +14,7 @@
 #include "../../common/token/token_v1.h"
 #include "../../common/token/token_v2.h"
 #include "../../companion/auth.h"
+#include "../../companion/album_restriction.h"
 #include "../../companion/file_protocol.h"
 #include "../../companion/overlay/bridge.h"
 #include "../../companion/overlay/input_model.h"
@@ -149,6 +150,15 @@ static void test_holiday_calendar_and_priority(void)
         "National Day makeup Saturday is classified as a workday");
     check_int(ptc_holiday_calendar_classify(ordinary, &covered), PTC_CALENDAR_DAY_ORDINARY,
         "ordinary covered date stays ordinary");
+    check_int((long)ptc_holiday_calendar_arrangement_count(2026), 7,
+        "calendar exposes seven authoritative 2026 holiday groups");
+    check_true(ptc_holiday_calendar_arrangement(2026, 1) != NULL &&
+        strcmp(ptc_holiday_calendar_arrangement(2026, 1)->display_name, "春节") == 0 &&
+        strcmp(ptc_holiday_calendar_arrangement(2026, 1)->makeup_workdays, "2月14日、2月28日") == 0,
+        "calendar arrangement carries display name and related makeup days");
+    check_true(ptc_holiday_calendar_arrangement_count(2027) == 0 &&
+        ptc_holiday_calendar_arrangement(2027, 0) == NULL,
+        "uncovered year does not invent official arrangements");
 
     ptc_rules_default(&rules);
     rules.holiday_enabled = true;
@@ -813,6 +823,63 @@ static void test_credential_policy(void)
         qrcodegen_getSize(qr) > 0, "pairing URL encodes as QR");
 }
 
+static void test_album_restriction_transaction(void)
+{
+    PtcMemStorage mem;
+    PtcAlbumRestrictionStatus status;
+    char transformed[1024];
+    char restored[1024];
+    char error[160];
+    const char *original = "[default_config]\r\nvalue=true\r\n[hbl_config]\r\noverride_any_app=true\r\n[other]\r\nkeep=yes\r\n";
+    ptc_mem_storage_init(&mem);
+    check_true(ptc_album_restriction_transform_ini(original, transformed, sizeof(transformed)),
+               "album INI transforms safely");
+    check_true(strstr(transformed, "[other]\r\nkeep=yes") != NULL &&
+               strstr(transformed, "override_key_0=!R+X") != NULL &&
+               strstr(transformed, "override_any_app=true") == NULL,
+               "album INI preserves unrelated sections and replaces hbl config");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, original),
+               "seed Atmosphere override config");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_PACKAGE_PATH, "[package]\nname=Album\n"),
+               "seed More Menu package");
+    check_true(ptc_album_restriction_enable(&mem.storage, error, sizeof(error)), "album restriction enables transactionally");
+    check_true(!mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_PACKAGE_PATH), "album package removed after backup");
+    check_true(ptc_album_restriction_get_status(&mem.storage, &status) &&
+               status.state == PTC_ALBUM_RESTRICTION_CONFIGURED && status.backup_valid,
+               "configured album restriction is detected with valid backup");
+    check_true(ptc_album_restriction_restore(&mem.storage, false, error, sizeof(error)), "album restriction restores backup");
+    check_true(mem.storage.vtable->read_text(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, restored, sizeof(restored)) &&
+               strcmp(restored, original) == 0 && mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_PACKAGE_PATH),
+               "album restore is byte exact and restores removed package");
+    check_true(ptc_album_restriction_get_status(&mem.storage, &status) &&
+               status.state == PTC_ALBUM_RESTRICTION_OFF && status.backup_valid,
+               "completed restore reports off while retaining a valid backup");
+
+    ptc_mem_storage_init(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, original),
+               "seed rollback config");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_PACKAGE_PATH, "package"),
+               "seed rollback package");
+    mem.fail_remove_path_contains = "Photo Album/package.ini";
+    check_true(!ptc_album_restriction_enable(&mem.storage, error, sizeof(error)), "delete failure rejects album restriction");
+    mem.fail_remove_path_contains = NULL;
+    check_true(mem.storage.vtable->read_text(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, restored, sizeof(restored)) &&
+               strcmp(restored, original) == 0 && mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_PACKAGE_PATH),
+               "delete failure rolls both files back");
+
+    ptc_mem_storage_init(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, original) &&
+               ptc_album_restriction_enable(&mem.storage, error, sizeof(error)), "seed configured conflict case");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, "[external]\nkeep=me\n"),
+               "simulate external override edit");
+    check_true(!ptc_album_restriction_restore(&mem.storage, false, error, sizeof(error)),
+               "ordinary restore refuses external edits");
+    check_true(ptc_album_restriction_restore(&mem.storage, true, error, sizeof(error)) &&
+               mem.storage.vtable->exists(&mem.storage,
+                   PTC_ALBUM_BACKUP_ROOT "/conflict.override_config.ini"),
+               "forced restore first preserves an external-edit rescue copy");
+}
+
 int main(void)
 {
     test_tokens();
@@ -832,6 +899,7 @@ int main(void)
     test_offline_code_preview_is_non_consuming();
     test_play_timer_layout();
     test_credential_policy();
+    test_album_restriction_transaction();
     if (failures) {
         fprintf(stderr, "%d C host tests failed\n", failures);
         return 1;

@@ -31,6 +31,7 @@ PLATFORM_HOST_SRCS := \
 	platform/switch/play_timer_settings_layout.c
 
 ORCH_SRCS := \
+	companion/album_restriction.c \
 	sysmodule/sysmodule_core.c \
 	companion/auth.c \
 	companion/file_protocol.c \
