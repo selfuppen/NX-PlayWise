@@ -78,7 +78,7 @@ static void test_release_navigation(void)
     memset(&model, 0, sizeof(model));
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 5, "holiday policy exposes global, rule, calendar and save cards");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 7, "holiday policy exposes rules, actions and calendar entry");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 6, "security actions include album restriction");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support actions include software information");
 
@@ -102,7 +102,7 @@ static void test_release_navigation(void)
     ptc_ui_move_parent_selection(&model, 1, 0);
     check_int(model.selected_index, 2, "holiday navigation moves across rule cards");
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 4, "holiday right rule reaches save");
+    check_int(model.selected_index, 6, "holiday right rule reaches calendar entry");
 
     model.parent_page = PTC_UI_PARENT_SUPPORT;
     model.recent_event_count = 3;
@@ -172,15 +172,21 @@ static void test_time_previews(void)
     model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
     model.draft_minutes = 60;
     model.played_minutes_available = true;
+    model.remaining_available = true;
     model.played_minutes = 20;
-    check_int(ptc_ui_today_limit_start_value(&model, 180), 20,
-              "today-limit editor starts from played time");
-    model.played_minutes = 0;
-    check_int(ptc_ui_today_limit_start_value(&model, 180), 1,
-              "zero played time starts from the minimum valid quota");
-    model.played_minutes = 2000;
-    check_int(ptc_ui_today_limit_start_value(&model, 180), 1440,
-              "played time is clamped to the daily maximum");
+    model.remaining_minutes = 40;
+    check_int(ptc_ui_today_limit_start_value(&model, 180), 180,
+              "today-limit editor starts from the effective total quota");
+    check_int(ptc_ui_today_limit_start_value(&model, 0), 60,
+              "missing rule rebuilds the total quota from played and remaining");
+    model.played_minutes = 10;
+    model.remaining_minutes = 0;
+    check_int(ptc_ui_today_limit_start_value(&model, 0), 10,
+              "rebuilt exhausted quota keeps the played total rather than inventing 60 minutes");
+    model.played_minutes = 1400;
+    model.remaining_minutes = 100;
+    check_int(ptc_ui_today_limit_start_value(&model, 0), 1440,
+              "rebuilt total quota is clamped to the daily maximum");
     model.played_minutes_available = false;
     check_int(ptc_ui_today_limit_start_value(&model, 180), 180,
               "unavailable played time preserves the effective quota fallback");
@@ -378,10 +384,12 @@ static void test_release_hit_targets(void)
 
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
-    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(3)), PTC_UI_HIT_PARENT_STATUS, 0,
-              "parent global status occupies the fourth footer slot");
-    check_true(!rects_overlap(ptc_ui_parent_footer_rect(2), ptc_ui_parent_footer_rect(3)),
-               "parent status does not overlap the back action");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(3)), PTC_UI_HIT_PARENT_REFRESH, 0,
+              "parent global refresh occupies the fourth footer slot");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_PARENT_STATUS, 0,
+              "parent global status occupies the fifth footer slot");
+    check_true(!rects_overlap(ptc_ui_parent_footer_rect(3), ptc_ui_parent_footer_rect(4)),
+               "parent status does not overlap global refresh");
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
     check_hit(hit_center(&model, ptc_ui_weekly_day_mode_rect(0)), PTC_UI_HIT_WEEKLY_MODE, 1,
@@ -393,7 +401,7 @@ static void test_release_hit_targets(void)
               "unlimited weekly quota remains semantic for an explanatory message");
     check_hit(hit_center(&model, ptc_ui_weekly_day_header_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
               "weekly header only selects the day");
-    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(3)), PTC_UI_HIT_PARENT_STATUS, 0,
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_PARENT_STATUS, 0,
               "weekly page shares the global status target");
     check_hit(hit_center(&model, ptc_ui_parent_footer_rect(2)), PTC_UI_HIT_PARENT_BACK, 0,
               "parent back action occupies the third footer slot");
@@ -461,11 +469,14 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_holiday_minutes_rect(0)), PTC_UI_HIT_HOLIDAY_MINUTES, 0, "holiday statutory quota target");
     check_hit(hit_center(&model, ptc_ui_holiday_mode_rect(1)), PTC_UI_HIT_HOLIDAY_MODE, 1, "holiday makeup mode target");
     check_hit(hit_center(&model, ptc_ui_holiday_minutes_rect(1)), PTC_UI_HIT_HOLIDAY_MINUTES, 1, "holiday makeup quota target");
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3, "holiday calendar viewer card");
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "holiday save card");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3, "holiday mode action");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "holiday discard action");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "holiday save action");
+    check_hit(hit_center(&model, ptc_ui_holiday_calendar_rect()), PTC_UI_HIT_HOLIDAY_CALENDAR, 0,
+              "holiday calendar viewer is in the status column");
     {
         PtcUiRect notice = {54, 522, 1172, 128};
-        for (int index = 0; index < 5; ++index) {
+        for (int index = 0; index < 6; ++index) {
             check_true(!rects_overlap(ptc_ui_holiday_card_rect(index), notice),
                        "holiday control does not overlap recent execution");
         }
@@ -473,9 +484,10 @@ static void test_release_hit_targets(void)
                    "holiday header does not overlap rule controls");
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(1), ptc_ui_holiday_card_rect(2)),
                    "holiday rule cards sit side by side without overlap");
-        check_true(ptc_ui_holiday_card_rect(4).x == 310 && ptc_ui_holiday_card_rect(4).w == 504,
-                   "holiday save action uses the wider bottom slot");
-        for (int index = 0; index < 5; ++index) {
+        check_true(ptc_ui_holiday_card_rect(3).w == 240 && ptc_ui_holiday_card_rect(4).w == 240 &&
+                   ptc_ui_holiday_card_rect(5).w == 248,
+                   "holiday bottom actions share the left control width");
+        for (int index = 0; index < 6; ++index) {
             PtcUiRect card = ptc_ui_holiday_card_rect(index);
             check_true(card.x >= 54 && card.x + card.w <= 814,
                        "holiday controls stay in the 760px left column");
@@ -555,6 +567,11 @@ static void test_release_hit_targets(void)
     model.numpad_purpose = PTC_UI_NUMPAD_WEEKLY_MINUTES;
     check_hit(hit_center(&model, ptc_ui_numpad_quick_rect(2)), PTC_UI_HIT_NUMPAD_QUICK, 2,
               "numpad quick increase button");
+    model.overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
+    check_hit(hit_center(&model, ptc_ui_minute_editor_key_rect(10)), PTC_UI_HIT_NUMPAD_KEY, 10,
+              "compact minute editor zero key is touchable");
+    check_hit(hit_center(&model, ptc_ui_minute_editor_quick_rect(0)), PTC_UI_HIT_NUMPAD_QUICK, 0,
+              "compact minute editor quick adjustment is touchable");
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     model.credential_kind = 1;

@@ -175,7 +175,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_PLAN:
         return 0;
     case PTC_UI_PARENT_HOLIDAY:
-        return 5;
+        return 7;
     case PTC_UI_PARENT_SECURITY:
         return 6;
     case PTC_UI_PARENT_SUPPORT:
@@ -214,6 +214,11 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     if (model->parent_footer_focused) {
+        if (horizontal < 0 && model->parent_footer_selection > 0) {
+            --model->parent_footer_selection;
+        } else if (horizontal > 0 && model->parent_footer_selection < 1) {
+            ++model->parent_footer_selection;
+        }
         if (vertical < 0) {
             model->parent_footer_focused = false;
             model->selected_index = model->parent_content_selection;
@@ -233,19 +238,21 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         index = 0;
     }
     if (model->parent_page == PTC_UI_PARENT_HOLIDAY) {
-        static const int left[5]  = {0, 1, 1, 3, 3};
-        static const int right[5] = {0, 2, 2, 4, 4};
-        static const int up[5]    = {0, 0, 0, 1, 2};
-        static const int down[5]  = {1, 3, 4, 3, 4};
+        static const int left[7]  = {0, 1, 1, 3, 3, 4, 2};
+        static const int right[7] = {0, 2, 2, 4, 5, 5, 6};
+        static const int up[7]    = {0, 0, 0, 1, 1, 2, 0};
+        static const int down[7]  = {1, 3, 6, 3, 4, 5, 6};
         int previous = index;
         if (horizontal < 0) index = left[index];
         else if (horizontal > 0) index = right[index];
         else if (vertical < 0) index = up[index];
         else if (vertical > 0) index = down[index];
         model->selected_index = index;
+        if (index == 1 || index == 2) model->holiday_last_rule = index - 1;
         if (vertical > 0 && previous == down[previous]) {
             model->parent_content_selection = previous;
             model->parent_footer_focused = true;
+            model->parent_footer_selection = 1;
         }
         return;
     }
@@ -259,6 +266,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             else if (vertical > 0) {
                 model->parent_content_selection = index;
                 model->parent_footer_focused = true;
+                model->parent_footer_selection = 1;
             }
         } else {
             int previous = index;
@@ -270,6 +278,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             else if (vertical > 0) {
                 model->parent_content_selection = previous;
                 model->parent_footer_focused = true;
+                model->parent_footer_selection = 1;
             }
         }
         model->selected_index = index;
@@ -298,6 +307,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         if (vertical > 0 && previous_row == row_count - 1) {
             model->parent_content_selection = index;
             model->parent_footer_focused = true;
+            model->parent_footer_selection = 1;
         }
     }
 }
@@ -360,6 +370,12 @@ void ptc_ui_numpad_open(
     model->numpad_minimum = minimum;
     model->numpad_maximum = maximum;
     model->numpad_current = current;
+    model->numpad_replace_on_input = purpose == PTC_UI_NUMPAD_MINUTES ||
+        purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES;
+    if (model->numpad_replace_on_input) {
+        snprintf(model->numpad_text, sizeof(model->numpad_text), "%u", (unsigned int)current);
+        model->overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
+    }
     model->numpad_error[0] = '\0';
     snprintf(model->numpad_title, sizeof(model->numpad_title), "%s", title ? title : "数字输入");
     snprintf(model->numpad_guide, sizeof(model->numpad_guide), "%s", guide ? guide : "使用方向键或摇杆选择数字");
@@ -369,7 +385,8 @@ void ptc_ui_numpad_move(PtcUiModel *model, int horizontal, int vertical)
 {
     int row;
     int column;
-    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+    if (!model || (model->overlay != PTC_UI_OVERLAY_NUMPAD &&
+                   model->overlay != PTC_UI_OVERLAY_MINUTE_EDITOR)) {
         return;
     }
     row = model->numpad_cursor / 3;
@@ -386,7 +403,13 @@ void ptc_ui_numpad_move(PtcUiModel *model, int horizontal, int vertical)
 void ptc_ui_numpad_backspace(PtcUiModel *model)
 {
     size_t length;
-    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+    if (!model || (model->overlay != PTC_UI_OVERLAY_NUMPAD &&
+                   model->overlay != PTC_UI_OVERLAY_MINUTE_EDITOR)) {
+        return;
+    }
+    if (model->numpad_replace_on_input) {
+        model->numpad_text[0] = '\0';
+        model->numpad_replace_on_input = false;
         return;
     }
     length = strlen(model->numpad_text);
@@ -398,10 +421,12 @@ void ptc_ui_numpad_backspace(PtcUiModel *model)
 
 void ptc_ui_numpad_clear(PtcUiModel *model)
 {
-    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+    if (!model || (model->overlay != PTC_UI_OVERLAY_NUMPAD &&
+                   model->overlay != PTC_UI_OVERLAY_MINUTE_EDITOR)) {
         return;
     }
     model->numpad_text[0] = '\0';
+    model->numpad_replace_on_input = false;
     model->numpad_error[0] = '\0';
 }
 
@@ -423,6 +448,7 @@ void ptc_ui_numpad_adjust(PtcUiModel *model, int delta)
         value, delta, model->numpad_minimum, model->numpad_maximum);
     model->numpad_current = value;
     snprintf(model->numpad_text, sizeof(model->numpad_text), "%u", (unsigned int)value);
+    model->numpad_replace_on_input = false;
     model->numpad_error[0] = '\0';
 }
 
@@ -430,7 +456,8 @@ void ptc_ui_numpad_activate(PtcUiModel *model)
 {
     size_t length;
     int digit;
-    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+    if (!model || (model->overlay != PTC_UI_OVERLAY_NUMPAD &&
+                   model->overlay != PTC_UI_OVERLAY_MINUTE_EDITOR)) {
         return;
     }
     if (model->numpad_cursor == 9) {
@@ -440,6 +467,10 @@ void ptc_ui_numpad_activate(PtcUiModel *model)
     if (model->numpad_cursor == 11) {
         ptc_ui_numpad_clear(model);
         return;
+    }
+    if (model->numpad_replace_on_input) {
+        model->numpad_text[0] = '\0';
+        model->numpad_replace_on_input = false;
     }
     length = strlen(model->numpad_text);
     if (length >= model->numpad_max_digits || length + 1 >= sizeof(model->numpad_text)) {
@@ -456,7 +487,8 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
 {
     uint16_t value = 0;
     size_t length;
-    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+    if (!model || (model->overlay != PTC_UI_OVERLAY_NUMPAD &&
+                   model->overlay != PTC_UI_OVERLAY_MINUTE_EDITOR)) {
         return false;
     }
     length = strlen(model->numpad_text);
@@ -488,11 +520,13 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
 
 void ptc_ui_numpad_finish(PtcUiModel *model)
 {
-    if (!model || model->overlay != PTC_UI_OVERLAY_NUMPAD) {
+    if (!model || (model->overlay != PTC_UI_OVERLAY_NUMPAD &&
+                   model->overlay != PTC_UI_OVERLAY_MINUTE_EDITOR)) {
         return;
     }
     model->overlay = model->numpad_return_overlay;
     model->numpad_purpose = PTC_UI_NUMPAD_NONE;
+    model->numpad_replace_on_input = false;
     model->numpad_return_overlay = PTC_UI_OVERLAY_NONE;
     model->numpad_error[0] = '\0';
 }
@@ -673,7 +707,8 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
     }
     clear_pending_code = model->operation == PTC_UI_OPERATION_REDEEM_OFFLINE_CODE ||
         model->overlay == PTC_UI_OVERLAY_CODE_RESULT;
-    if (model->overlay == PTC_UI_OVERLAY_NUMPAD) {
+    if (model->overlay == PTC_UI_OVERLAY_NUMPAD ||
+        model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
         ptc_ui_numpad_finish(model);
     } else if (model->overlay == PTC_UI_OVERLAY_CONFIRM &&
                model->confirm_return_overlay != PTC_UI_OVERLAY_NONE) {
@@ -990,10 +1025,10 @@ PtcUiRect ptc_ui_setup_zone_rect(int index)
 
 PtcUiRect ptc_ui_parent_footer_rect(int index)
 {
-    static const int widths[] = {170, 170, 220, 558};
-    static const int xs[] = {54, 242, 430, 668};
+    static const int widths[] = {150, 150, 190, 150, 342};
+    static const int xs[] = {54, 216, 378, 580, 742};
     PtcUiRect rect = {0, 660, 0, 48};
-    if (index >= 0 && index < 4) {
+    if (index >= 0 && index < 5) {
         rect.x = xs[index];
         rect.w = widths[index];
     }
@@ -1027,9 +1062,22 @@ PtcUiRect ptc_ui_holiday_card_rect(int index)
     case 1: return (PtcUiRect){54, 260, 368, 168};
     case 2: return (PtcUiRect){446, 260, 368, 168};
     case 3: return (PtcUiRect){54, 440, 240, 60};
-    case 4: return (PtcUiRect){310, 440, 504, 60};
+    case 4: return (PtcUiRect){310, 440, 240, 60};
+    case 5: return (PtcUiRect){566, 440, 248, 60};
     default: return (PtcUiRect){0, 0, 0, 0};
     }
+}
+
+PtcUiRect ptc_ui_holiday_calendar_rect(void)
+{
+    return (PtcUiRect){862, 346, 336, 54};
+}
+
+PtcUiRect ptc_ui_holiday_page_action_rect(int index)
+{
+    PtcUiRect rect = {280 + index * 250, 576, 230, 50};
+    if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
+    return rect;
 }
 
 PtcUiRect ptc_ui_holiday_enable_rect(void)
@@ -1053,14 +1101,18 @@ PtcUiRect ptc_ui_holiday_minutes_rect(int index)
 
 uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback)
 {
-    int played;
-    if (!model || !model->played_minutes_available || model->played_minutes < 0) {
-        return fallback >= 1 && fallback <= 1440 ? fallback : 60;
+    int total;
+    if (fallback >= 1 && fallback <= 1440) {
+        return fallback;
     }
-    played = model->played_minutes;
-    if (played < 1) played = 1;
-    if (played > 1440) played = 1440;
-    return (uint16_t)played;
+    if (!model || !model->played_minutes_available || !model->remaining_available ||
+        model->played_minutes < 0 || model->remaining_minutes < 0) {
+        return 60;
+    }
+    total = model->played_minutes + model->remaining_minutes;
+    if (total < 1) total = 1;
+    if (total > 1440) total = 1440;
+    return (uint16_t)total;
 }
 
 PtcUiRect ptc_ui_support_event_rect(int index)
@@ -1133,6 +1185,10 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
     case PTC_UI_OVERLAY_HOLIDAY_CALENDAR:
         *width = 1040;
         *height = 600;
+        break;
+    case PTC_UI_OVERLAY_MINUTE_EDITOR:
+        *width = 920;
+        *height = 620;
         break;
     case PTC_UI_OVERLAY_HOLIDAY_LEAVE:
         *width = 720;
@@ -1386,6 +1442,24 @@ void ptc_ui_move_weekly_focus(PtcUiModel *model, int horizontal, int vertical)
     model->editor_index = ptc_ui_weekday_for_display_slot(slot);
 }
 
+PtcUiRect ptc_ui_minute_editor_key_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
+    int row = index / 3;
+    int column = index % 3;
+    PtcUiRect rect = {dialog.x + 420 + column * 142, dialog.y + 214 + row * 66, 128, 54};
+    if (index < 0 || index >= 12) return (PtcUiRect){0, 0, 0, 0};
+    return rect;
+}
+
+PtcUiRect ptc_ui_minute_editor_quick_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
+    PtcUiRect rect = {dialog.x + 408 + index * 116, dialog.y + 154, 104, 44};
+    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    return rect;
+}
+
 bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend)
 {
     PtcDayRule source;
@@ -1596,6 +1670,14 @@ static PtcUiHit make_hit(PtcUiHitKind kind, int index)
 static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
 {
     int i;
+    if (model->overlay == PTC_UI_OVERLAY_HOLIDAY_CALENDAR) {
+        for (i = 0; i < 3; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_holiday_page_action_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_HOLIDAY_PAGE_ACTION, i);
+            }
+        }
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
     if (model->overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
         return ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0)
@@ -1617,6 +1699,18 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_OVERLAY_DISCARD, 0);
     }
     switch (model->overlay) {
+    case PTC_UI_OVERLAY_MINUTE_EDITOR:
+        for (i = 0; i < 4; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_minute_editor_quick_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_NUMPAD_QUICK, i);
+            }
+        }
+        for (i = 0; i < 12; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_minute_editor_key_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_NUMPAD_KEY, i);
+            }
+        }
+        break;
     case PTC_UI_OVERLAY_WEEKLY_BULK:
         for (i = 0; i < 2; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_weekly_bulk_target_rect(i), x, y)) {
@@ -1843,6 +1937,9 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(3), x, y)) {
+        return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
+    }
+    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(4), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_STATUS, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
@@ -1876,7 +1973,10 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
                 return make_hit(PTC_UI_HIT_HOLIDAY_MINUTES, i);
             }
         }
-        for (i = 0; i < 5; ++i) {
+        if (ptc_ui_rect_contains(ptc_ui_holiday_calendar_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_HOLIDAY_CALENDAR, 0);
+        }
+        for (i = 0; i < 6; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_holiday_card_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_PARENT_CARD, i);
             }

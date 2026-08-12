@@ -266,7 +266,8 @@ static void refresh_disable_flag(UiState *ui)
     snprintf(path, sizeof(path), "%s/flags/disable.flag", APP_ROOT);
     ui->model.disable_flag_present = ui->client.storage->vtable->exists(ui->client.storage, path);
     if (ui->model.disable_flag_present &&
-        ui->model.overlay == PTC_UI_OVERLAY_NUMPAD &&
+        (ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ||
+         ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) &&
         ui->model.numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
         ptc_ui_numpad_finish(&ui->model);
         snprintf(ui->model.message, sizeof(ui->model.message),
@@ -281,7 +282,8 @@ static void refresh_disable_flag(UiState *ui)
 static bool weekly_editing_blocked(UiState *ui)
 {
     bool cancelling_weekly_input = ui &&
-        ui->model.overlay == PTC_UI_OVERLAY_NUMPAD &&
+        (ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ||
+         ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) &&
         ui->model.numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES;
     refresh_disable_flag(ui);
     if (!ui->model.disable_flag_present) {
@@ -670,12 +672,10 @@ static void submit_status(UiState *ui)
 
 static bool parent_status_needs_support(const PtcUiModel *model)
 {
-    int64_t age = ptc_ui_status_age_seconds(model, (int64_t)time(NULL));
     return strcmp(model->setup_phase, "protection") == 0 ||
         strcmp(model->setup_phase, "failed") == 0 || model->recovery_active ||
         model->disable_flag_present ||
-        (model->temporary_unlocked_available && model->temporary_unlocked) ||
-        model->error_code != 0 || age > 120;
+        (model->temporary_unlocked_available && model->temporary_unlocked);
 }
 
 static void activate_parent_status(UiState *ui)
@@ -684,6 +684,7 @@ static void activate_parent_status(UiState *ui)
         if (ui->model.parent_page != PTC_UI_PARENT_SUPPORT) {
             request_parent_navigation(ui, PTC_UI_PARENT_SUPPORT, false);
             ui->model.parent_footer_focused = true;
+            ui->model.parent_footer_selection = 1;
         } else {
             ui->model.parent_footer_focused = false;
             ui->model.selected_index = 0;
@@ -2364,11 +2365,17 @@ static void format_rule_remaining(const PtcUiModel *model, PtcDayRule rule, char
 static uint16_t current_today_limit_value(const UiState *ui)
 {
     PtcDayRule rule = effective_today_rule(ui);
-    uint16_t fallback = 60;
-    if (rule.mode == PTC_RULE_MODE_LIMIT && rule.minutes >= 1 && rule.minutes <= 1440) {
-        fallback = rule.minutes;
+    if (ui->model.unrestricted_today == 1) {
+        return 60;
     }
-    return ptc_ui_today_limit_start_value(&ui->model, fallback);
+    if (rule.mode == PTC_RULE_MODE_LIMIT && rule.minutes >= 1 && rule.minutes <= 1440) {
+        return ptc_ui_today_limit_start_value(&ui->model, rule.minutes);
+    }
+    if (ui->model.played_minutes_available && ui->model.remaining_available &&
+        ui->model.played_minutes >= 0 && ui->model.remaining_minutes >= 0) {
+        return ptc_ui_today_limit_start_value(&ui->model, 0);
+    }
+    return 60;
 }
 
 static void handle_today_action_ready(UiState *ui, int index)
@@ -2385,11 +2392,13 @@ static void handle_today_action_ready(UiState *ui, int index)
     else snprintf(remaining, sizeof(remaining), "暂不可用");
     switch (index) {
     case 1:
-        open_minutes_overlay(ui, PTC_UI_OPERATION_SET_TODAY_LIMIT, "设置今日额度",
+        ui->model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
+        ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
+            "设置今日额度",
             ui->model.unrestricted_today == 1
-                ? "今天当前为不限时。设置额度后将恢复限时。"
-                : "设置今天的总额度；页面会显示调整前后的可玩时间。",
-            current_today_limit_value(ui), 1, 1440);
+                ? "今天当前为不限时；输入总额度后将恢复限时。"
+                : "输入今天的总额度；左侧会显示调整前后的可玩时间。",
+            4, 1, 1440, current_today_limit_value(ui));
         break;
     case 2:
         if (ui->model.unrestricted_today == 1) {
@@ -2450,7 +2459,7 @@ static void handle_parent_action(UiState *ui)
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_HOLIDAY) {
-        if (ui->model.disable_flag_present && index != 3) {
+        if (ui->model.disable_flag_present && index != 4 && index != 6) {
             snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，国家节假日设置暂时只读。");
             return;
         }
@@ -2460,6 +2469,7 @@ static void handle_parent_action(UiState *ui)
             update_holiday_dirty(ui);
             break;
         case 1:
+            ui->model.holiday_last_rule = 0;
             if (ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
                 snprintf(ui->model.message, sizeof(ui->model.message), "当前为不限时模式，请先切换为限时模式。");
             } else {
@@ -2468,6 +2478,7 @@ static void handle_parent_action(UiState *ui)
             }
             break;
         case 2:
+            ui->model.holiday_last_rule = 1;
             if (ui->model.draft_makeup_workday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
                 snprintf(ui->model.message, sizeof(ui->model.message), "当前为不限时模式，请先切换为限时模式。");
             } else {
@@ -2477,6 +2488,16 @@ static void handle_parent_action(UiState *ui)
             }
             break;
         case 3: {
+            PtcDayRule *rule = ui->model.holiday_last_rule == 1
+                ? &ui->model.draft_makeup_workday_rule : &ui->model.draft_holiday_rule;
+            rule->mode = ptc_ui_next_rule_mode(rule->mode);
+            update_holiday_dirty(ui);
+            break;
+        }
+        case 4:
+            discard_holiday_draft(ui);
+            break;
+        case 6: {
             char holiday_rule[48];
             char makeup_rule[48];
             if (ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
@@ -2493,6 +2514,7 @@ static void handle_parent_action(UiState *ui)
             }
             ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_CALENDAR;
             ui->model.holiday_calendar_page = 0;
+            ui->model.overlay_selection = 2;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "内置节假日安排");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      "当前%s · 法定休假：%s · 调休工作日：%s",
@@ -2500,7 +2522,7 @@ static void handle_parent_action(UiState *ui)
                      holiday_rule, makeup_rule);
             break;
         }
-        case 4:
+        case 5:
             submit_holiday_policy(ui);
             break;
         default:
@@ -2938,9 +2960,24 @@ static void handle_overlay_input(UiState *ui, u64 down)
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_CALENDAR) {
         int pages = (int)((ptc_holiday_calendar_arrangement_count(ptc_holiday_calendar_info()->last_year) + 3u) / 4u);
-        if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) ptc_ui_cancel_overlay(&ui->model);
-        else if ((down & (HidNpadButton_Left | HidNpadButton_L)) && ui->model.holiday_calendar_page > 0) --ui->model.holiday_calendar_page;
-        else if ((down & (HidNpadButton_Right | HidNpadButton_R)) && ui->model.holiday_calendar_page + 1 < pages) ++ui->model.holiday_calendar_page;
+        if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
+        else if ((down & HidNpadButton_L) && ui->model.holiday_calendar_page > 0) --ui->model.holiday_calendar_page;
+        else if ((down & HidNpadButton_R) && ui->model.holiday_calendar_page + 1 < pages) ++ui->model.holiday_calendar_page;
+        else if (down & HidNpadButton_Left) {
+            do {
+                ui->model.overlay_selection = (ui->model.overlay_selection + 2) % 3;
+            } while ((ui->model.overlay_selection == 0 && ui->model.holiday_calendar_page == 0) ||
+                     (ui->model.overlay_selection == 1 && ui->model.holiday_calendar_page + 1 >= pages));
+        } else if (down & HidNpadButton_Right) {
+            do {
+                ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 3;
+            } while ((ui->model.overlay_selection == 0 && ui->model.holiday_calendar_page == 0) ||
+                     (ui->model.overlay_selection == 1 && ui->model.holiday_calendar_page + 1 >= pages));
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+            if (ui->model.overlay_selection == 0 && ui->model.holiday_calendar_page > 0) --ui->model.holiday_calendar_page;
+            else if (ui->model.overlay_selection == 1 && ui->model.holiday_calendar_page + 1 < pages) ++ui->model.holiday_calendar_page;
+            else if (ui->model.overlay_selection == 2) ptc_ui_cancel_overlay(&ui->model);
+        }
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
@@ -3168,7 +3205,8 @@ static void handle_overlay_input(UiState *ui, u64 down)
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改。");
         return;
     }
-    if (ui->model.overlay == PTC_UI_OVERLAY_NUMPAD) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ||
+        ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
         if (down & HidNpadButton_Left) {
             ptc_ui_numpad_move(&ui->model, -1, 0);
         } else if (down & HidNpadButton_Right) {
@@ -3192,7 +3230,27 @@ static void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & HidNpadButton_A) {
             ptc_ui_numpad_activate(&ui->model);
         } else if (down & HidNpadButton_Plus) {
+            PtcUiNumpadPurpose purpose = ui->model.numpad_purpose;
+            PtcUiOperation operation = ui->model.operation;
+            uint16_t value = 0;
+            if (!ptc_ui_numpad_validate(&ui->model, &value)) return;
             accept_numpad(ui);
+            if (purpose == PTC_UI_NUMPAD_MINUTES) {
+                if (operation == PTC_UI_OPERATION_SET_TODAY_LIMIT &&
+                    (ui->model.unrestricted_today == 1 ||
+                     ptc_ui_limit_minutes_would_restrict(&ui->model, value))) {
+                    char body[192];
+                    snprintf(body, sizeof(body), "今天已玩约 %d 分钟；设置总额度 %u 分钟。",
+                             ui->model.played_minutes, (unsigned int)value);
+                    open_confirm_overlay(ui, operation,
+                        ui->model.unrestricted_today == 1 ? "不限时将改为限时" : "新额度不高于已玩时间", body);
+                    ui->model.confirm_hold_required = !ui->model.played_minutes_available ||
+                        ptc_ui_limit_minutes_would_restrict(&ui->model, value);
+                } else {
+                    ui->model.operation = PTC_UI_OPERATION_NONE;
+                    submit_minutes(ui, operation, value);
+                }
+            }
         }
         return;
     }
@@ -3366,15 +3424,14 @@ static void handle_touch(UiState *ui, int x, int y)
         request_parent_navigation(ui, (ui->model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
         break;
     case PTC_UI_HIT_PARENT_REFRESH:
+        ui->model.parent_footer_focused = true;
+        ui->model.parent_footer_selection = 0;
         refresh_disable_flag(ui);
-        if (ui->model.parent_page == PTC_UI_PARENT_PLAN) {
-            request_parent_navigation(ui, PTC_UI_PARENT_PLAN, false);
-        } else {
-            poll_result(ui, true);
-        }
+        submit_status(ui);
         break;
     case PTC_UI_HIT_PARENT_STATUS:
         ui->model.parent_footer_focused = true;
+        ui->model.parent_footer_selection = 1;
         activate_parent_status(ui);
         break;
     case PTC_UI_HIT_PARENT_BACK:
@@ -3392,6 +3449,14 @@ static void handle_touch(UiState *ui, int x, int y)
                 handle_parent_action(ui);
             }
         }
+        break;
+    case PTC_UI_HIT_HOLIDAY_CALENDAR:
+        ui->model.selected_index = 6;
+        handle_parent_action(ui);
+        break;
+    case PTC_UI_HIT_HOLIDAY_PAGE_ACTION:
+        ui->model.overlay_selection = hit.index;
+        handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_SUPPORT_EVENT:
         if (hit.index >= 0 && hit.index < ui->model.recent_event_count) {
@@ -3441,6 +3506,10 @@ static void handle_touch(UiState *ui, int x, int y)
             handle_overlay_input(ui, HidNpadButton_A);
             break;
         }
+        if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_CALENDAR) {
+            handle_overlay_input(ui, HidNpadButton_A);
+            break;
+        }
         if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM &&
             (ui->model.operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
              ui->model.operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||
@@ -3456,7 +3525,9 @@ static void handle_touch(UiState *ui, int x, int y)
             snprintf(ui->model.message, sizeof(ui->model.message), "为避免误操作，请使用手柄长按 A 确认。");
         } else {
             handle_overlay_input(ui,
-                ui->model.overlay == PTC_UI_OVERLAY_NUMPAD || ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL ||
+                ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ||
+                ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR ||
+                ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL ||
                 ui->model.overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER ||
                 ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE
                     ? HidNpadButton_Plus : HidNpadButton_A);
@@ -3604,6 +3675,7 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_HOLIDAY_MODE:
         ui->model.selected_index = hit.index + 1;
+        ui->model.holiday_last_rule = hit.index;
         if (ui->model.disable_flag_present) {
             snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，规则暂时只读。");
         } else if (hit.index == 0) {
@@ -3616,6 +3688,7 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_HOLIDAY_MINUTES:
         ui->model.selected_index = hit.index + 1;
+        ui->model.holiday_last_rule = hit.index;
         if (ui->model.disable_flag_present) {
             snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，规则暂时只读。");
         } else {
@@ -3902,11 +3975,16 @@ int main(int argc, char **argv)
                 } else if (down & HidNpadButton_Up) {
                     ui.model.parent_footer_focused = false;
                     ui.model.selected_index = ui.model.parent_content_selection;
+                } else if (down & HidNpadButton_Left) {
+                    ui.model.parent_footer_selection = 0;
+                } else if (down & HidNpadButton_Right) {
+                    ui.model.parent_footer_selection = 1;
                 } else if (down & HidNpadButton_Y) {
                     refresh_disable_flag(&ui);
                     submit_status(&ui);
                 } else if (down & HidNpadButton_A) {
-                    activate_parent_status(&ui);
+                    if (ui.model.parent_footer_selection == 0) submit_status(&ui);
+                    else activate_parent_status(&ui);
                 }
             } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN) {
                 PtcDayRule *day = &ui.model.draft_week[ui.model.editor_index];
@@ -3940,18 +4018,13 @@ int main(int argc, char **argv)
                     if (ui.model.selected_index != 0) {
                         ui.model.parent_content_selection = ui.model.selected_index;
                         ui.model.parent_footer_focused = true;
+                        ui.model.parent_footer_selection = 1;
                     } else {
                         ptc_ui_move_weekly_focus(&ui.model, 0, 1);
                     }
                 } else if (down & HidNpadButton_Y) {
-                    if (weekly_editing_blocked(&ui)) {
-                        snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，批量操作暂不可用。");
-                    } else {
-                        ui.model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
-                        ui.model.overlay_selection = 0;
-                        snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "批量快捷操作");
-                        snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body), "把最后选中日期的完整草稿规则复制到一组日期。");
-                    }
+                    refresh_disable_flag(&ui);
+                    submit_status(&ui);
                 } else if (down & HidNpadButton_A) {
                     if (ui.model.selected_index == 2) {
                         if (weekly_editing_blocked(&ui)) {
@@ -4025,21 +4098,26 @@ int main(int argc, char **argv)
                 ptc_ui_move_parent_selection(&ui.model, 0, 1);
             } else if (down & HidNpadButton_Y) {
                 refresh_disable_flag(&ui);
-                poll_result(&ui, true);
-            } else if (down & HidNpadButton_X && ui.model.parent_page == PTC_UI_PARENT_HOLIDAY &&
-                       (ui.model.selected_index == 1 || ui.model.selected_index == 2)) {
+                submit_status(&ui);
+            } else if (down & HidNpadButton_X && ui.model.parent_page == PTC_UI_PARENT_HOLIDAY) {
                 if (ui.model.disable_flag_present) {
                     snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，规则暂时只读。");
-                } else if (ui.model.selected_index == 1) {
+                } else if (ui.model.selected_index == 1 ||
+                           (ui.model.selected_index != 2 && ui.model.holiday_last_rule == 0)) {
+                    ui.model.holiday_last_rule = 0;
                     ui.model.draft_holiday_rule.mode = ptc_ui_next_rule_mode(ui.model.draft_holiday_rule.mode);
                     update_holiday_dirty(&ui);
                 } else {
+                    ui.model.holiday_last_rule = 1;
                     ui.model.draft_makeup_workday_rule.mode = ptc_ui_next_rule_mode(ui.model.draft_makeup_workday_rule.mode);
                     update_holiday_dirty(&ui);
                 }
             } else if (down & HidNpadButton_Plus && ui.model.parent_page == PTC_UI_PARENT_HOLIDAY) {
-                ui.model.selected_index = 4;
+                ui.model.selected_index = 5;
                 submit_holiday_policy(&ui);
+            } else if (down & HidNpadButton_ZL && ui.model.parent_page == PTC_UI_PARENT_HOLIDAY) {
+                ui.model.selected_index = 4;
+                discard_holiday_draft(&ui);
             } else if (down & HidNpadButton_A) {
                 if (ui.waiting) {
                     snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再执行其他设置。");

@@ -871,31 +871,27 @@ public:
         // 绘制数字键 0-9
         for (unsigned int index = 0; index < PTC_OVERLAY_KEY_COUNT; ++index) {
             char symbol[2] = { charset[index], '\0' };
-            unsigned int row = index == 0 ? 3u : (index - 1u) / 3u;
-            unsigned int col = index == 0 ? 1u : (index - 1u) % 3u;
-            s32 key_x = cx + 12 + static_cast<s32>(col) * 102;
-            s32 key_y = panel_y + 6 + static_cast<s32>(row) * PTC_OVERLAY_KEY_ROW_STEP;
+            const PtcOverlayRect key = ptc_overlay_key_rect(cx, cy, index);
             const bool focused = (index == input_->cursor);
 
-            renderer->drawRect(key_x, key_y, 90, PTC_OVERLAY_KEY_H, renderer->a(focused ? FOCUS_BG : KEY_COLOR));
-            draw_outline(renderer, key_x, key_y, 90, PTC_OVERLAY_KEY_H, focused ? 3 : 1, focused ? FOCUS_BORDER : MUTED_COLOR);
+            renderer->drawRect(key.x, key.y, key.w, key.h, renderer->a(focused ? FOCUS_BG : KEY_COLOR));
+            draw_outline(renderer, key.x, key.y, key.w, key.h, focused ? 3 : 1, focused ? FOCUS_BORDER : MUTED_COLOR);
             const auto key_text_size = renderer->drawString(
                 symbol, false, 0, 0, 24, tsl::style::color::ColorTransparent);
-            renderer->drawString(symbol, false, key_x + (90 - static_cast<s32>(key_text_size.first)) / 2,
-                                 key_y + 27, 24, renderer->a(focused ? FOCUS_BORDER : TEXT_COLOR));
+            renderer->drawString(symbol, false, key.x + (key.w - static_cast<s32>(key_text_size.first)) / 2,
+                                 key.y + 30, 24, renderer->a(focused ? FOCUS_BORDER : TEXT_COLOR));
         }
 
         // 第四行辅助按键 [X] 退格 和 [Y] 清空
-        s32 x_btn_x = cx + 12;
-        s32 btn_y = panel_y + 6 + 3 * PTC_OVERLAY_KEY_ROW_STEP;
-        renderer->drawRect(x_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, renderer->a(KEY_COLOR));
-        draw_outline(renderer, x_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, 1, BACKSPACE_BORDER);
-        renderer->drawString("X 退格", false, x_btn_x + 22, btn_y + 23, 12, renderer->a(BACKSPACE_BORDER));
+        const PtcOverlayRect backspace = ptc_overlay_backspace_rect(cx, cy);
+        renderer->drawRect(backspace.x, backspace.y, backspace.w, backspace.h, renderer->a(KEY_COLOR));
+        draw_outline(renderer, backspace.x, backspace.y, backspace.w, backspace.h, 1, BACKSPACE_BORDER);
+        renderer->drawString("X 退格", false, backspace.x + 28, backspace.y + 26, 12, renderer->a(BACKSPACE_BORDER));
 
-        s32 y_btn_x = cx + 216;
-        renderer->drawRect(y_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, renderer->a(KEY_COLOR));
-        draw_outline(renderer, y_btn_x, btn_y, 90, PTC_OVERLAY_KEY_H, 1, CLEAR_BORDER);
-        renderer->drawString("点按清空", false, y_btn_x + 17, btn_y + 23, 12, renderer->a(CLEAR_BORDER));
+        const PtcOverlayRect clear = ptc_overlay_clear_rect(cx, cy);
+        renderer->drawRect(clear.x, clear.y, clear.w, clear.h, renderer->a(KEY_COLOR));
+        draw_outline(renderer, clear.x, clear.y, clear.w, clear.h, 1, CLEAR_BORDER);
+        renderer->drawString("点按清空", false, clear.x + 23, clear.y + 26, 12, renderer->a(CLEAR_BORDER));
 
         // --- 4. Control & Submit Bar (操作与提交栏) ---
         const bool can_submit = ptc_overlay_request_action_enabled(bridge_->waiting) &&

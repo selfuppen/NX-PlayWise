@@ -32,12 +32,13 @@ enum {
     PTC_OVERLAY_SLOT_H = 48,
     PTC_OVERLAY_SLOT_GAP = 4,
     PTC_OVERLAY_KEYPAD_Y = 192,
-    PTC_OVERLAY_KEYPAD_H = 160,
-    PTC_OVERLAY_KEY_ROW_STEP = 38,
-    PTC_OVERLAY_KEY_H = 34,
-    PTC_OVERLAY_SUBMIT_Y = 358,
+    PTC_OVERLAY_KEYPAD_H = 180,
+    PTC_OVERLAY_KEY_ROW_STEP = 44,
+    PTC_OVERLAY_KEY_W = 105,
+    PTC_OVERLAY_KEY_H = 40,
+    PTC_OVERLAY_SUBMIT_Y = 378,
     PTC_OVERLAY_SUBMIT_H = 36,
-    PTC_OVERLAY_STATUS_Y = 400,
+    PTC_OVERLAY_STATUS_Y = 420,
     PTC_OVERLAY_STATUS_COLLAPSED_H = 32,
     PTC_OVERLAY_STATUS_NORMAL_H = 92,
     PTC_OVERLAY_STATUS_DETAIL_H = 136
@@ -84,22 +85,22 @@ static inline PtcOverlayRect ptc_overlay_key_rect(int origin_x, int origin_y, un
 {
     unsigned int row = index == 0 ? 3u : (index - 1u) / 3u;
     unsigned int col = index == 0 ? 1u : (index - 1u) % 3u;
-    return ptc_overlay_rect(origin_x + 12 + (int)col * 102,
-                            origin_y + PTC_OVERLAY_KEYPAD_Y + 6 + (int)row * PTC_OVERLAY_KEY_ROW_STEP,
-                            90, PTC_OVERLAY_KEY_H);
+    return ptc_overlay_rect(origin_x + 12 + (int)col * 117,
+                            origin_y + PTC_OVERLAY_KEYPAD_Y + 4 + (int)row * PTC_OVERLAY_KEY_ROW_STEP,
+                            PTC_OVERLAY_KEY_W, PTC_OVERLAY_KEY_H);
 }
 
 static inline PtcOverlayRect ptc_overlay_backspace_rect(int origin_x, int origin_y)
 {
     return ptc_overlay_rect(origin_x + 12,
-                            origin_y + PTC_OVERLAY_KEYPAD_Y + 6 + 3 * PTC_OVERLAY_KEY_ROW_STEP,
-                            90, PTC_OVERLAY_KEY_H);
+                            origin_y + PTC_OVERLAY_KEYPAD_Y + 4 + 3 * PTC_OVERLAY_KEY_ROW_STEP,
+                            PTC_OVERLAY_KEY_W, PTC_OVERLAY_KEY_H);
 }
 
 static inline PtcOverlayRect ptc_overlay_clear_rect(int origin_x, int origin_y)
 {
     PtcOverlayRect rect = ptc_overlay_backspace_rect(origin_x, origin_y);
-    rect.x = origin_x + 216;
+    rect.x = origin_x + 246;
     return rect;
 }
 

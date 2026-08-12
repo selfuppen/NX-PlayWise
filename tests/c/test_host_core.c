@@ -367,6 +367,8 @@ static void test_overlay_layout_geometry(void)
         "overlay enlarged code slots end above input count");
     check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_KEYPAD_Y, 282,
         "overlay keypad leaves room below input count");
+    check_int(ptc_overlay_key_rect(0, 0, 1).w, 105, "overlay keypad keys are wider");
+    check_int(ptc_overlay_key_rect(0, 0, 1).h, 40, "overlay keypad keys are taller");
     check_true(ptc_overlay_rect_contains(submit, submit.x + submit.w - 1, submit.y + submit.h - 1),
         "overlay submit touch covers its visible right and bottom edges");
     check_true(!ptc_overlay_rect_contains(submit, submit.x + submit.w, submit.y),
@@ -374,7 +376,7 @@ static void test_overlay_layout_geometry(void)
     check_true(!ptc_overlay_rect_contains(collapsed, collapsed.x + 1, collapsed.y + collapsed.h),
         "collapsed status has no invisible touch area");
     check_int(normal.h, PTC_OVERLAY_STATUS_NORMAL_H, "normal status drops duplicate detail rows");
-    check_int(detail.y + detail.h, 626, "expanded error and success details stay above the footer");
+    check_int(detail.y + detail.h, 646, "expanded error and success details fill the content area");
     check_true(detail.y + detail.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
         "expanded overlay status remains inside content bounds");
     check_true(ptc_overlay_remaining_refresh_pending(true, true),

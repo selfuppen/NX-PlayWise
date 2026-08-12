@@ -58,7 +58,8 @@ typedef enum {
     PTC_UI_OVERLAY_HOLIDAY_LEAVE = 16,
     PTC_UI_OVERLAY_SUPPORT_EVENT = 17,
     PTC_UI_OVERLAY_WEEKLY_BULK = 18,
-    PTC_UI_OVERLAY_ALBUM_MANAGER = 19
+    PTC_UI_OVERLAY_ALBUM_MANAGER = 19,
+    PTC_UI_OVERLAY_MINUTE_EDITOR = 20
 } PtcUiOverlay;
 
 typedef enum {
@@ -153,6 +154,7 @@ typedef struct {
     bool recovery_active;
     bool apply_pending_confirmation;
     bool parent_footer_focused;
+    int parent_footer_selection;
     int parent_content_selection;
     int error_code;
     bool setup_restriction_cleared;
@@ -226,6 +228,7 @@ typedef struct {
     bool calendar_covered;
     bool calendar_update_warning;
     int holiday_calendar_page;
+    int holiday_last_rule;
     int album_restriction_state;
     bool album_backup_valid;
     char album_restriction_detail[160];
@@ -242,6 +245,7 @@ typedef struct {
     uint16_t numpad_minimum;
     uint16_t numpad_maximum;
     uint16_t numpad_current;
+    bool numpad_replace_on_input;
     char numpad_title[64];
     char numpad_guide[128];
     char numpad_error[96];
@@ -331,6 +335,8 @@ typedef enum {
     PTC_UI_HIT_HOLIDAY_ENABLE,
     PTC_UI_HIT_HOLIDAY_MODE,
     PTC_UI_HIT_HOLIDAY_MINUTES,
+    PTC_UI_HIT_HOLIDAY_CALENDAR,
+    PTC_UI_HIT_HOLIDAY_PAGE_ACTION,
     PTC_UI_HIT_WEEKLY_MIN_UP,
     PTC_UI_HIT_WEEKLY_MIN_DOWN,
     PTC_UI_HIT_WEEKLY_MIN_DEC,
@@ -448,6 +454,8 @@ PtcUiRect ptc_ui_holiday_card_rect(int index);
 PtcUiRect ptc_ui_holiday_enable_rect(void);
 PtcUiRect ptc_ui_holiday_mode_rect(int index);
 PtcUiRect ptc_ui_holiday_minutes_rect(int index);
+PtcUiRect ptc_ui_holiday_calendar_rect(void);
+PtcUiRect ptc_ui_holiday_page_action_rect(int index);
 PtcUiRect ptc_ui_support_event_rect(int index);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
 PtcUiRect ptc_ui_minutes_value_rect(void);
@@ -470,6 +478,8 @@ PtcUiRect ptc_ui_weekly_min_input_rect(void);
 PtcUiRect ptc_ui_numpad_display_rect(void);
 PtcUiRect ptc_ui_numpad_key_rect(int index);
 PtcUiRect ptc_ui_numpad_quick_rect(int index);
+PtcUiRect ptc_ui_minute_editor_key_rect(int index);
+PtcUiRect ptc_ui_minute_editor_quick_rect(int index);
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay);
