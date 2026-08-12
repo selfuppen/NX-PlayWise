@@ -58,10 +58,8 @@ static const UiAction TODAY_ACTIONS[] = {
 
 static const UiAction HOLIDAY_ACTIONS[] = {
     {"国家节假日规则", "开启或关闭自动日历规则", COLOR(42, 105, 188)},
-    {"法定休假日模式", "在限时与不限时之间切换", COLOR(25, 132, 95)},
-    {"法定休假日额度", "设置休息日可玩分钟数", COLOR(25, 132, 95)},
-    {"调休工作日模式", "在限时与不限时之间切换", COLOR(215, 139, 25)},
-    {"调休工作日额度", "设置补班日可玩分钟数", COLOR(215, 139, 25)},
+    {"法定休假", "切换模式或设置休息日额度", COLOR(25, 132, 95)},
+    {"调休工作日", "切换模式或设置补班日额度", COLOR(215, 139, 25)},
     {"查看当前节假日安排", "查看内置年份、放假日期和调休工作日", COLOR(91, 100, 116)},
     {"保存全部节假日设置", "保存后立即按新设置重新计算今天", COLOR(42, 105, 188)}
 };
@@ -1244,47 +1242,41 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
     char freshness[64];
     uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
     format_status_age(model, freshness, sizeof(freshness));
+    draw_text(pixels, stride, 54, 202, "周一到周日 · 点按模式或额度区直接修改", 16, COLOR(91, 100, 114));
     for (slot = 0; slot < 7; ++slot) {
         int day = ptc_ui_weekday_for_display_slot(slot);
         bool selected = slot == model->weekly_grid_slot && model->selected_index == 0;
         bool today = day == weekday;
-        bool selected_today = selected && today;
         UiRect card = to_uirect(ptc_ui_weekly_day_rect(slot));
+        UiRect header = to_uirect(ptc_ui_weekly_day_header_rect(slot));
+        UiRect mode = to_uirect(ptc_ui_weekly_day_mode_rect(slot));
+        UiRect minutes = to_uirect(ptc_ui_weekly_day_minutes_rect(slot));
         uint32_t background = day == 0 ? COLOR(255, 245, 245) : (day == 6 ? COLOR(255, 249, 238) : COLOR(255, 255, 255));
         uint32_t border = today ? COLOR(25, 132, 95) : (selected ? COLOR(28, 118, 188) : (day == 0 ? COLOR(218, 118, 118) : (day == 6 ? COLOR(220, 161, 65) : COLOR(219, 225, 233))));
-        uint32_t primary_text = selected_today ? COLOR(255, 255, 255) : COLOR(28, 34, 43);
-        uint32_t rule_text = selected_today ? COLOR(255, 255, 255) :
-            (model->disable_flag_present ? COLOR(145, 154, 168) : COLOR(28, 118, 188));
-        uint32_t detail_text = selected_today ? COLOR(224, 239, 255) :
-            (model->disable_flag_present ? COLOR(145, 154, 168) : COLOR(77, 86, 99));
-        if (selected) background = selected_today ? COLOR(28, 118, 188) : COLOR(244, 249, 255);
+        bool limited = model->draft_week[day].mode == PTC_RULE_MODE_LIMIT;
+        if (selected) background = COLOR(244, 249, 255);
         fill_round_rect(pixels, stride, card, 8, background);
         draw_rect_outline(pixels, stride, card, today ? 4 : (selected ? 3 : 1), border);
-        draw_text(pixels, stride, card.x + 18, card.y + 31, DAYS[day], 20, primary_text);
-        if (today) draw_text(pixels, stride, card.x + 18, card.y + 56, "今天 · 当前", 14,
-                             selected_today ? COLOR(220, 255, 241) : COLOR(25, 132, 95));
-        if (model->draft_week[day].mode == PTC_RULE_MODE_LIMIT) {
-            snprintf(detail, sizeof(detail), "限时  ·  %u 分钟", (unsigned int)model->draft_week[day].minutes);
+        draw_text_center(pixels, stride, header, DAYS[day], 19, COLOR(28, 34, 43));
+        if (today) draw_text_center(pixels, stride, (UiRect){header.x, header.y + 23, header.width, 17}, "今天", 12, COLOR(25, 132, 95));
+        fill_round_rect(pixels, stride, (UiRect){mode.x + 6, mode.y + 8, mode.width - 12, 34}, 17,
+                        model->disable_flag_present ? COLOR(220, 224, 230) :
+                        (limited ? COLOR(42, 105, 188) : COLOR(25, 132, 95)));
+        draw_text_center(pixels, stride, (UiRect){mode.x + 6, mode.y + 8, mode.width - 12, 34},
+                         limited ? "限时" : "不限时", 15,
+                         model->disable_flag_present ? COLOR(145, 154, 168) : COLOR(255, 255, 255));
+        if (limited) {
+            snprintf(detail, sizeof(detail), "%u", (unsigned int)model->draft_week[day].minutes);
+            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 16, minutes.width, 40}, detail, 28,
+                             model->disable_flag_present ? COLOR(145, 154, 168) : COLOR(28, 118, 188));
+            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 55, minutes.width, 24}, "分钟", 14, COLOR(91, 100, 114));
+            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 79, minutes.width, 20}, "A / 点按", 12,
+                             model->disable_flag_present ? COLOR(145, 154, 168) : COLOR(91, 100, 114));
         } else {
-            snprintf(detail, sizeof(detail), "不限时");
+            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 29, minutes.width, 36}, "不限时间", 18,
+                             model->disable_flag_present ? COLOR(145, 154, 168) : COLOR(25, 132, 95));
+            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 72, minutes.width, 20}, "点按看提示", 11, COLOR(145, 154, 168));
         }
-        draw_text(pixels, stride, card.x + 154, card.y + 43, detail, 19,
-                  model->draft_week[day].mode == PTC_RULE_MODE_LIMIT ? rule_text : detail_text);
-    }
-    {
-        UiRect bulk = to_uirect(ptc_ui_weekly_bulk_rect());
-        bool selected = model->weekly_grid_slot == 7 && model->selected_index == 0;
-        int source_day = ptc_ui_weekday_for_display_slot(
-            model->weekly_last_day_slot >= 0 && model->weekly_last_day_slot < 7 ? model->weekly_last_day_slot : 0);
-        fill_round_rect(pixels, stride, bulk, 8, model->disable_flag_present ? COLOR(244, 246, 249) :
-                        (selected ? COLOR(244, 249, 255) : COLOR(255, 255, 255)));
-        draw_rect_outline(pixels, stride, bulk, selected ? 3 : 1,
-                          selected ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
-        draw_text(pixels, stride, bulk.x + 18, bulk.y + 30, "批量快捷操作", 20,
-                  model->disable_flag_present ? COLOR(150, 158, 170) : COLOR(28, 34, 43));
-        snprintf(detail, sizeof(detail), "复制%s到工作日或周末", DAYS[source_day]);
-        draw_text(pixels, stride, bulk.x + 18, bulk.y + 56, detail, 14, COLOR(91, 100, 114));
-        draw_text(pixels, stride, bulk.x + bulk.width - 38, bulk.y + 44, "A", 18, COLOR(28, 118, 188));
     }
     {
         UiRect panel = {838, 176, 388, 324};
@@ -1334,16 +1326,19 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
             draw_text(pixels, stride, panel.x + 22, panel.y + 266, "紧急停用中，当前只读", 15, COLOR(194, 61, 61));
         }
     }
-    draw_candidate_button(pixels, stride, ptc_ui_weekly_page_mode_rect(), "X  模式",
-                          COLOR(244, 246, 249), COLOR(28, 118, 188), model->selected_index == 1,
+    draw_candidate_button(pixels, stride, ptc_ui_weekly_page_mode_rect(), "X  切换模式",
+                           COLOR(244, 246, 249), COLOR(28, 118, 188), model->selected_index == 1,
+                           model->disable_flag_present);
+    draw_candidate_button(pixels, stride, ptc_ui_weekly_bulk_rect(), "Y  批量设置",
+                          COLOR(244, 246, 249), COLOR(28, 118, 188), model->selected_index == 2,
                           model->disable_flag_present);
     draw_candidate_button(pixels, stride, ptc_ui_weekly_discard_rect(), "ZL  放弃",
-                          COLOR(244, 246, 249), COLOR(66, 74, 86), model->selected_index == 2,
-                          !model->weekly_dirty);
+                           COLOR(244, 246, 249), COLOR(66, 74, 86), model->selected_index == 3,
+                           !model->weekly_dirty);
     draw_candidate_button(pixels, stride, ptc_ui_weekly_save_rect(),
-                          model->disable_flag_present ? "只读" : (model->weekly_dirty ? "+  保存" : "+  未修改"),
-                          COLOR(28, 118, 188), COLOR(255, 255, 255), model->selected_index == 3,
-                          !model->weekly_dirty || model->disable_flag_present);
+                           model->disable_flag_present ? "只读" : (model->weekly_dirty ? "+  保存" : "+  未修改"),
+                           COLOR(28, 118, 188), COLOR(255, 255, 255), model->selected_index == 4,
+                           !model->weekly_dirty || model->disable_flag_present);
     draw_notice(pixels, stride, model, 522, 128);
 }
 
@@ -1521,40 +1516,67 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_text_center(pixels, stride, save_button, save_text, 20, save_fg);
     draw_notice(pixels, stride, model, 522, 128);
 #endif
-    UiRect panel = {842, 176, 384, 324};
+    UiRect panel = {838, 176, 384, 324};
+    UiRect top_card = to_uirect(ptc_ui_holiday_card_rect(0));
+    const char *titles[] = {"法定休假", "调休工作日"};
+    const char *descriptions[] = {"主要法定节假日的休假日期", "节假日调休产生的补班日期"};
+    const uint32_t accents[] = {COLOR(25, 132, 95), COLOR(215, 139, 25)};
     char line[160];
+    char minutes_str[64];
     bool disabled = model->disable_flag_present;
-    for (int index = 0; index < 7; ++index) {
-        UiRect card = to_uirect(ptc_ui_holiday_card_rect(index));
-        bool selected = model->selected_index == index;
-        bool save = index == 6;
-        bool action_disabled = disabled || model->waiting || (save && !model->holiday_dirty);
-        uint32_t fill = save && !action_disabled ? COLOR(28, 118, 188) :
-                        (selected ? COLOR(244, 249, 255) : COLOR(255, 255, 255));
-        uint32_t fg = save && !action_disabled ? COLOR(255, 255, 255) : COLOR(28, 34, 43);
-        const char *title = HOLIDAY_ACTIONS[index].title;
-        char value[80] = {0};
-        if (index == 0) snprintf(value, sizeof(value), "%s%s", model->draft_holiday_enabled ? "已开启" : "未开启",
-                                 model->draft_holiday_enabled ? "" : " · 可编辑预设");
-        else if (index == 1) snprintf(value, sizeof(value), "%s", rule_mode_label(model->draft_holiday_rule.mode));
-        else if (index == 2) {
-            if (model->draft_holiday_rule.mode == PTC_RULE_MODE_LIMIT) snprintf(value, sizeof(value), "%u 分钟", (unsigned int)model->draft_holiday_rule.minutes);
-            else snprintf(value, sizeof(value), "不限时");
-        } else if (index == 3) snprintf(value, sizeof(value), "%s", rule_mode_label(model->draft_makeup_workday_rule.mode));
-        else if (index == 4) {
-            if (model->draft_makeup_workday_rule.mode == PTC_RULE_MODE_LIMIT) snprintf(value, sizeof(value), "%u 分钟", (unsigned int)model->draft_makeup_workday_rule.minutes);
-            else snprintf(value, sizeof(value), "不限时");
-        } else if (index == 6) title = disabled ? "紧急停用中，设置只读" :
-                                      (model->waiting ? "正在保存…" : (model->holiday_dirty ? "+  保存全部节假日设置" : "+  设置未修改"));
-        fill_round_rect(pixels, stride, card, 8, action_disabled ? COLOR(244, 246, 249) : fill);
+    bool top_selected = model->selected_index == 0;
+    fill_round_rect(pixels, stride, top_card, 10,
+                    disabled ? COLOR(244, 246, 249) : (top_selected ? COLOR(244, 249, 255) : COLOR(255, 255, 255)));
+    draw_rect_outline(pixels, stride, top_card, top_selected ? 3 : 1,
+                      top_selected ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
+    draw_text(pixels, stride, top_card.x + 18, top_card.y + 28, "国家节假日规则", 20, COLOR(28, 34, 43));
+    draw_text(pixels, stride, top_card.x + 18, top_card.y + 54, "开启后自动应用法定休假与调休工作日规则", 14, COLOR(91, 100, 114));
+    {
+        const PtcHolidayCalendarInfo *info = ptc_holiday_calendar_info();
+        snprintf(line, sizeof(line), "内置日历：%u · v%u", (unsigned int)info->last_year, (unsigned int)info->version);
+        draw_text(pixels, stride, top_card.x + 498, top_card.y + 31, line, 14,
+                  model->calendar_update_warning ? COLOR(194, 61, 61) : COLOR(25, 132, 95));
+    }
+    draw_toggle_switch(pixels, stride, to_uirect(ptc_ui_holiday_enable_rect()), model->draft_holiday_enabled,
+                       top_selected, disabled, NULL, NULL);
+
+    for (int index = 0; index < 2; ++index) {
+        PtcDayRule rule = index == 0 ? model->draft_holiday_rule : model->draft_makeup_workday_rule;
+        UiRect card = to_uirect(ptc_ui_holiday_card_rect(index + 1));
+        UiRect mode = to_uirect(ptc_ui_holiday_mode_rect(index));
+        UiRect minutes = to_uirect(ptc_ui_holiday_minutes_rect(index));
+        bool selected = model->selected_index == index + 1;
+        bool limited = rule.mode == PTC_RULE_MODE_LIMIT;
+        fill_round_rect(pixels, stride, card, 10,
+                        disabled ? COLOR(244, 246, 249) : (selected ? COLOR(244, 249, 255) : COLOR(255, 255, 255)));
         draw_rect_outline(pixels, stride, card, selected ? 3 : 1,
                           selected ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
-        draw_text(pixels, stride, card.x + 18, card.y + 31, title, save ? 19 : 18,
-                  action_disabled ? COLOR(145, 153, 165) : fg);
-        if (value[0]) draw_text(pixels, stride, card.x + 18, card.y + 57, value, 15,
-                                model->draft_holiday_enabled ? COLOR(28, 118, 188) : COLOR(91, 100, 114));
-        if (selected && !action_disabled) draw_text(pixels, stride, card.x + card.width - 34, card.y + 44, "A", 17, fg);
+        draw_text(pixels, stride, card.x + 16, card.y + 30, titles[index], 19, accents[index]);
+        draw_text(pixels, stride, card.x + 16, card.y + 57, descriptions[index], 12, COLOR(91, 100, 114));
+        fill_round_rect(pixels, stride, mode, 18,
+                        disabled ? COLOR(220, 224, 230) : (limited ? COLOR(42, 105, 188) : COLOR(25, 132, 95)));
+        draw_text_center(pixels, stride, mode, limited ? "限时" : "不限时", 14,
+                         disabled ? COLOR(145, 154, 168) : COLOR(255, 255, 255));
+        fill_round_rect(pixels, stride, minutes, 8, disabled || !limited ? COLOR(238, 241, 245) : COLOR(248, 250, 252));
+        if (limited) {
+            snprintf(minutes_str, sizeof(minutes_str), "%u 分钟（%u小时%u分）", (unsigned int)rule.minutes,
+                     (unsigned int)rule.minutes / 60, (unsigned int)rule.minutes % 60);
+            draw_text(pixels, stride, minutes.x + 14, minutes.y + 32, minutes_str, 21,
+                      disabled ? COLOR(145, 154, 168) : accents[index]);
+            draw_text(pixels, stride, minutes.x + 14, minutes.y + 61, "A / 点按修改额度", 13,
+                      disabled ? COLOR(145, 154, 168) : COLOR(91, 100, 114));
+        } else {
+            draw_text(pixels, stride, minutes.x + 14, minutes.y + 32, "不限时间", 21, COLOR(145, 154, 168));
+            draw_text(pixels, stride, minutes.x + 14, minutes.y + 61, "点按后提示先切换为限时", 13, COLOR(160, 168, 180));
+        }
     }
+    draw_candidate_button(pixels, stride, ptc_ui_holiday_card_rect(3), "查看当前节假日安排",
+                          COLOR(244, 246, 249), COLOR(28, 118, 188), model->selected_index == 3, false);
+    draw_candidate_button(pixels, stride, ptc_ui_holiday_card_rect(4),
+                          disabled ? "紧急停用中，设置只读" : (model->waiting ? "正在保存…" :
+                          (model->holiday_dirty ? "+  保存全部节假日设置" : "+  设置未修改")),
+                          COLOR(28, 118, 188), COLOR(255, 255, 255), model->selected_index == 4,
+                          disabled || model->waiting || !model->holiday_dirty);
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, panel.x + 24, panel.y + 38, "节假日状态", 22, COLOR(28, 34, 43));

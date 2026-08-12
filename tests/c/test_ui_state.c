@@ -78,7 +78,7 @@ static void test_release_navigation(void)
     memset(&model, 0, sizeof(model));
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 7, "holiday policy exposes settings, calendar and save actions");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 5, "holiday policy exposes global, rule, calendar and save cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 6, "security actions include album restriction");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support actions include software information");
 
@@ -97,14 +97,12 @@ static void test_release_navigation(void)
 
     model.parent_page = PTC_UI_PARENT_HOLIDAY;
     model.selected_index = 0;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 1, "holiday header moves down to statutory rule");
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 5, "holiday header moves right to calendar viewer");
+    check_int(model.selected_index, 2, "holiday navigation moves across rule cards");
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 3, "holiday navigation follows visual row to the right");
-    ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 4, "holiday navigation follows visual column downward");
-    ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 6, "holiday right column reaches save");
+    check_int(model.selected_index, 4, "holiday right rule reaches save");
 
     model.parent_page = PTC_UI_PARENT_SUPPORT;
     model.recent_event_count = 3;
@@ -287,12 +285,12 @@ static void test_candidate_navigation(void)
     memset(&model, 0, sizeof(model));
     model.editor_index = 0;
     model.selected_index = 0;
-    model.weekly_grid_slot = 6;
+    model.weekly_grid_slot = 0;
     model.weekly_last_day_slot = 6;
     ptc_ui_move_weekly_focus(&model, -1, 0);
-    check_int(model.weekly_grid_slot, 6, "weekly grid stops at the left edge");
+    check_int(model.weekly_grid_slot, 0, "weekly grid stops at the left edge");
     ptc_ui_move_weekly_focus(&model, 1, 0);
-    check_int(model.weekly_grid_slot, 7, "weekly grid reaches the bulk action slot");
+    check_int(model.weekly_grid_slot, 1, "weekly grid moves to the next day");
     ptc_ui_move_weekly_focus(&model, 0, 1);
     check_int(model.selected_index, 1, "weekly focus moves from date to mode");
     ptc_ui_move_weekly_focus(&model, -1, 0);
@@ -300,7 +298,7 @@ static void test_candidate_navigation(void)
     ptc_ui_move_weekly_focus(&model, 1, 0);
     ptc_ui_move_weekly_focus(&model, 1, 0);
     ptc_ui_move_weekly_focus(&model, 1, 0);
-    check_int(model.selected_index, 3, "weekly button focus stops at save");
+    check_int(model.selected_index, 4, "weekly button focus stops at save");
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     model.credential_kind = 1;
@@ -386,11 +384,15 @@ static void test_release_hit_targets(void)
                "parent status does not overlap the back action");
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
+    check_hit(hit_center(&model, ptc_ui_weekly_day_mode_rect(0)), PTC_UI_HIT_WEEKLY_MODE, 1,
+              "weekly mode pill toggles Monday directly");
     check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
               "leftmost weekly day edits Monday without changing protocol order");
     model.draft_week[1].mode = PTC_RULE_MODE_UNLIMITED;
-    check_hit(hit_center(&model, ptc_ui_weekly_day_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
-              "unlimited weekly day remains selectable for an explanatory message");
+    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
+              "unlimited weekly quota remains semantic for an explanatory message");
+    check_hit(hit_center(&model, ptc_ui_weekly_day_header_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
+              "weekly header only selects the day");
     check_hit(hit_center(&model, ptc_ui_parent_footer_rect(3)), PTC_UI_HIT_PARENT_STATUS, 0,
               "weekly page shares the global status target");
     check_hit(hit_center(&model, ptc_ui_parent_footer_rect(2)), PTC_UI_HIT_PARENT_BACK, 0,
@@ -401,9 +403,13 @@ static void test_release_hit_targets(void)
               "weekly bulk action occupies slot seven");
     for (int slot = 0; slot < 7; ++slot) {
         PtcUiRect card = ptc_ui_weekly_day_rect(slot);
-        check_true(card.w == 365 && card.h == 72, "weekly day cards use the compact grid size");
-        check_true(card.x == 54 + (slot % 2) * 395 && card.y == 176 + (slot / 2) * 84,
-                   "weekly day cards use the two-column grid coordinates");
+        check_true(card.w == 96 && card.h == 200, "weekly day cards use the seven-column size");
+        check_true(card.x == 54 + slot * 108 && card.y == 218,
+                   "weekly day cards use the horizontal Monday-to-Sunday coordinates");
+        check_true(ptc_ui_weekly_day_header_rect(slot).h == 42 &&
+                   ptc_ui_weekly_day_mode_rect(slot).h == 50 &&
+                   ptc_ui_weekly_day_minutes_rect(slot).h == 108,
+                   "weekly subregions exactly partition the card height");
     }
     check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, 0,
               "weekly page mode switch uses page geometry");
@@ -424,12 +430,12 @@ static void test_release_hit_targets(void)
     }
     model.disable_flag_present = true;
     model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
-    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
-              "disabled weekly minutes only focus the read-only day");
-    check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_NONE, 0,
-              "disabled weekly mode switch is not actionable");
-    check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_NONE, 0,
-              "disabled weekly save is not actionable");
+    check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_MIN_INPUT, 1,
+              "disabled weekly minutes remain semantic for read-only feedback");
+    check_hit(hit_center(&model, ptc_ui_weekly_day_mode_rect(0)), PTC_UI_HIT_WEEKLY_MODE, 1,
+              "disabled weekly mode remains semantic for read-only feedback");
+    check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
+              "disabled weekly save reaches submission guard feedback");
     check_hit(hit_center(&model, ptc_ui_weekly_discard_rect()), PTC_UI_HIT_WEEKLY_DISCARD, 0,
               "disabled weekly page still allows discarding a draft");
     model.disable_flag_present = false;
@@ -450,28 +456,26 @@ static void test_release_hit_targets(void)
                "support event rows do not overlap");
 
     model.parent_page = PTC_UI_PARENT_HOLIDAY;
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(0)), PTC_UI_HIT_PARENT_CARD, 0, "holiday global switch card");
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(1)), PTC_UI_HIT_PARENT_CARD, 1, "holiday statutory mode card");
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(2)), PTC_UI_HIT_PARENT_CARD, 2, "holiday statutory quota card");
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3, "holiday makeup mode card");
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "holiday makeup quota card");
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "holiday calendar viewer card");
-    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(6)), PTC_UI_HIT_PARENT_CARD, 6, "holiday save card");
+    check_hit(hit_center(&model, ptc_ui_holiday_enable_rect()), PTC_UI_HIT_HOLIDAY_ENABLE, 0, "holiday global switch target");
+    check_hit(hit_center(&model, ptc_ui_holiday_mode_rect(0)), PTC_UI_HIT_HOLIDAY_MODE, 0, "holiday statutory mode target");
+    check_hit(hit_center(&model, ptc_ui_holiday_minutes_rect(0)), PTC_UI_HIT_HOLIDAY_MINUTES, 0, "holiday statutory quota target");
+    check_hit(hit_center(&model, ptc_ui_holiday_mode_rect(1)), PTC_UI_HIT_HOLIDAY_MODE, 1, "holiday makeup mode target");
+    check_hit(hit_center(&model, ptc_ui_holiday_minutes_rect(1)), PTC_UI_HIT_HOLIDAY_MINUTES, 1, "holiday makeup quota target");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3, "holiday calendar viewer card");
+    check_hit(hit_center(&model, ptc_ui_holiday_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "holiday save card");
     {
         PtcUiRect notice = {54, 522, 1172, 128};
-        for (int index = 0; index < 7; ++index) {
+        for (int index = 0; index < 5; ++index) {
             check_true(!rects_overlap(ptc_ui_holiday_card_rect(index), notice),
                        "holiday control does not overlap recent execution");
         }
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(0), ptc_ui_holiday_card_rect(1)),
                    "holiday header does not overlap rule controls");
-        check_true(!rects_overlap(ptc_ui_holiday_card_rect(0), ptc_ui_holiday_card_rect(5)),
-                   "holiday rule and calendar viewer share a row without overlap");
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(1), ptc_ui_holiday_card_rect(2)),
-                   "holiday mode and quota do not overlap");
-        check_true(ptc_ui_holiday_card_rect(6).x == 54 && ptc_ui_holiday_card_rect(6).w == 760,
-                   "holiday save action spans the left control column");
-        for (int index = 0; index < 7; ++index) {
+                   "holiday rule cards sit side by side without overlap");
+        check_true(ptc_ui_holiday_card_rect(4).x == 310 && ptc_ui_holiday_card_rect(4).w == 504,
+                   "holiday save action uses the wider bottom slot");
+        for (int index = 0; index < 5; ++index) {
             PtcUiRect card = ptc_ui_holiday_card_rect(index);
             check_true(card.x >= 54 && card.x + card.w <= 814,
                        "holiday controls stay in the 760px left column");

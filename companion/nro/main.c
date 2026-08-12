@@ -2450,7 +2450,7 @@ static void handle_parent_action(UiState *ui)
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_HOLIDAY) {
-        if (ui->model.disable_flag_present && index != 5) {
+        if (ui->model.disable_flag_present && index != 3) {
             snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，国家节假日设置暂时只读。");
             return;
         }
@@ -2460,33 +2460,23 @@ static void handle_parent_action(UiState *ui)
             update_holiday_dirty(ui);
             break;
         case 1:
-            ui->model.draft_holiday_rule.mode = ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_LIMIT
-                ? PTC_RULE_MODE_UNLIMITED : PTC_RULE_MODE_LIMIT;
-            update_holiday_dirty(ui);
-            break;
-        case 2:
             if (ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(ui->model.message, sizeof(ui->model.message), "请先把法定休假日切换为限时模式。");
+                snprintf(ui->model.message, sizeof(ui->model.message), "当前为不限时模式，请先切换为限时模式。");
             } else {
                 ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_HOLIDAY_MINUTES, PTC_UI_OVERLAY_NONE,
                     "设置法定休假日额度", "输入 1 到 1440 分钟", 4, 1, 1440, ui->model.draft_holiday_rule.minutes);
             }
             break;
-        case 3:
-            ui->model.draft_makeup_workday_rule.mode = ui->model.draft_makeup_workday_rule.mode == PTC_RULE_MODE_LIMIT
-                ? PTC_RULE_MODE_UNLIMITED : PTC_RULE_MODE_LIMIT;
-            update_holiday_dirty(ui);
-            break;
-        case 4:
+        case 2:
             if (ui->model.draft_makeup_workday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(ui->model.message, sizeof(ui->model.message), "请先把调休工作日切换为限时模式。");
+                snprintf(ui->model.message, sizeof(ui->model.message), "当前为不限时模式，请先切换为限时模式。");
             } else {
                 ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MAKEUP_MINUTES, PTC_UI_OVERLAY_NONE,
                     "设置调休工作日额度", "输入 1 到 1440 分钟", 4, 1, 1440,
                     ui->model.draft_makeup_workday_rule.minutes);
             }
             break;
-        case 5: {
+        case 3: {
             char holiday_rule[48];
             char makeup_rule[48];
             if (ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
@@ -2510,7 +2500,7 @@ static void handle_parent_action(UiState *ui)
                      holiday_rule, makeup_rule);
             break;
         }
-        case 6:
+        case 4:
             submit_holiday_policy(ui);
             break;
         default:
@@ -3398,7 +3388,9 @@ static void handle_touch(UiState *ui, int x, int y)
             snprintf(ui->model.message, sizeof(ui->model.message), "请等待当前操作完成后再执行其他设置。");
         } else {
             ui->model.selected_index = hit.index;
-            handle_parent_action(ui);
+            if (ui->model.parent_page != PTC_UI_PARENT_HOLIDAY || hit.index >= 3) {
+                handle_parent_action(ui);
+            }
         }
         break;
     case PTC_UI_HIT_SUPPORT_EVENT:
@@ -3505,18 +3497,9 @@ static void handle_touch(UiState *ui, int x, int y)
             }
         }
         ui->model.selected_index = 0;
-        if (weekly_editing_blocked(ui)) {
-            break;
-        } else if (ui->model.draft_week[hit.index].mode == PTC_RULE_MODE_LIMIT) {
-            edit_weekly_minutes(ui);
-        } else {
-            snprintf(ui->model.message, sizeof(ui->model.message),
-                     "该日为不限时，没有可编辑的分钟数；请选择“切换模式”改为限时。");
-        }
         break;
     case PTC_UI_HIT_WEEKLY_BULK:
-        ui->model.weekly_grid_slot = 7;
-        ui->model.selected_index = 0;
+        ui->model.selected_index = 2;
         if (weekly_editing_blocked(ui)) {
             snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，批量操作暂不可用。");
         } else {
@@ -3538,7 +3521,17 @@ static void handle_touch(UiState *ui, int x, int y)
         handle_overlay_input(ui, HidNpadButton_Y);
         break;
     case PTC_UI_HIT_WEEKLY_MODE:
-        ui->model.selected_index = 1;
+        if (hit.index >= 0 && hit.index < 7) {
+            ui->model.editor_index = hit.index;
+            for (int slot = 0; slot < 7; ++slot) {
+                if (ptc_ui_weekday_for_display_slot(slot) == hit.index) {
+                    ui->model.weekly_grid_slot = slot;
+                    ui->model.weekly_last_day_slot = slot;
+                    break;
+                }
+            }
+        }
+        ui->model.selected_index = 0;
         if (weekly_editing_blocked(ui)) break;
         ui->model.draft_week[ui->model.editor_index].mode =
             ptc_ui_next_rule_mode(ui->model.draft_week[ui->model.editor_index].mode);
@@ -3593,14 +3586,48 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         ui->model.selected_index = 0;
         if (weekly_editing_blocked(ui)) break;
-        edit_weekly_minutes(ui);
+        if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
+            edit_weekly_minutes(ui);
+        } else {
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                     "当前为不限时模式，请先切换为限时模式。");
+        }
+        break;
+    case PTC_UI_HIT_HOLIDAY_ENABLE:
+        ui->model.selected_index = 0;
+        if (ui->model.disable_flag_present) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，规则暂时只读。");
+        } else {
+            ui->model.draft_holiday_enabled = !ui->model.draft_holiday_enabled;
+            update_holiday_dirty(ui);
+        }
+        break;
+    case PTC_UI_HIT_HOLIDAY_MODE:
+        ui->model.selected_index = hit.index + 1;
+        if (ui->model.disable_flag_present) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，规则暂时只读。");
+        } else if (hit.index == 0) {
+            ui->model.draft_holiday_rule.mode = ptc_ui_next_rule_mode(ui->model.draft_holiday_rule.mode);
+            update_holiday_dirty(ui);
+        } else if (hit.index == 1) {
+            ui->model.draft_makeup_workday_rule.mode = ptc_ui_next_rule_mode(ui->model.draft_makeup_workday_rule.mode);
+            update_holiday_dirty(ui);
+        }
+        break;
+    case PTC_UI_HIT_HOLIDAY_MINUTES:
+        ui->model.selected_index = hit.index + 1;
+        if (ui->model.disable_flag_present) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，规则暂时只读。");
+        } else {
+            handle_parent_action(ui);
+        }
         break;
     case PTC_UI_HIT_WEEKLY_SAVE:
-        ui->model.selected_index = 3;
+        ui->model.selected_index = 4;
         save_weekly_from_page(ui);
         break;
     case PTC_UI_HIT_WEEKLY_DISCARD:
-        ui->model.selected_index = 2;
+        ui->model.selected_index = 3;
         if (ui->model.weekly_dirty) {
             memcpy(ui->model.draft_week, ui->model.current_week, sizeof(ui->model.draft_week));
             ui->model.weekly_dirty = false;
@@ -3899,7 +3926,6 @@ int main(int argc, char **argv)
                 } else if (down & HidNpadButton_Right) {
                     ptc_ui_move_weekly_focus(&ui.model, 1, 0);
                 } else if (down & HidNpadButton_X) {
-                    ui.model.selected_index = 1;
                     if (!weekly_editing_blocked(&ui)) {
                         day->mode = ptc_ui_next_rule_mode(day->mode);
                         update_weekly_dirty(&ui);
@@ -3911,16 +3937,23 @@ int main(int argc, char **argv)
                 } else if (down & HidNpadButton_Up) {
                     ptc_ui_move_weekly_focus(&ui.model, 0, -1);
                 } else if (down & HidNpadButton_Down) {
-                    if (ui.model.selected_index == 2 || ui.model.selected_index == 3) {
+                    if (ui.model.selected_index != 0) {
                         ui.model.parent_content_selection = ui.model.selected_index;
                         ui.model.parent_footer_focused = true;
                     } else {
                         ptc_ui_move_weekly_focus(&ui.model, 0, 1);
                     }
                 } else if (down & HidNpadButton_Y) {
-                    request_parent_navigation(&ui, PTC_UI_PARENT_PLAN, false);
+                    if (weekly_editing_blocked(&ui)) {
+                        snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，批量操作暂不可用。");
+                    } else {
+                        ui.model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
+                        ui.model.overlay_selection = 0;
+                        snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "批量快捷操作");
+                        snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body), "把最后选中日期的完整草稿规则复制到一组日期。");
+                    }
                 } else if (down & HidNpadButton_A) {
-                    if (ui.model.selected_index == 0 && ui.model.weekly_grid_slot == 7) {
+                    if (ui.model.selected_index == 2) {
                         if (weekly_editing_blocked(&ui)) {
                             snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，批量操作暂不可用。");
                         } else {
@@ -3929,7 +3962,7 @@ int main(int argc, char **argv)
                             snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "批量快捷操作");
                             snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body), "把最后选中日期的完整草稿规则复制到一组日期。");
                         }
-                    } else if (ui.model.selected_index == 2) {
+                    } else if (ui.model.selected_index == 3) {
                         if (ui.model.weekly_dirty) {
                             memcpy(ui.model.draft_week, ui.model.current_week, sizeof(ui.model.draft_week));
                             ui.model.weekly_dirty = false;
@@ -3946,7 +3979,7 @@ int main(int argc, char **argv)
                             snprintf(ui.model.message, sizeof(ui.model.message),
                                      "已恢复此前的每日限额：%u 分钟。", (unsigned int)day->minutes);
                         }
-                    } else if (ui.model.selected_index == 3) {
+                    } else if (ui.model.selected_index == 4) {
                         save_weekly_from_page(&ui);
                     } else if (day->mode == PTC_RULE_MODE_LIMIT) {
                         edit_weekly_minutes(&ui);
@@ -3955,12 +3988,12 @@ int main(int argc, char **argv)
                                  "该日为不限时，没有可编辑的分钟数；请选择“切换模式”改为限时。");
                     }
                 } else if (down & HidNpadButton_Plus) {
-                    ui.model.selected_index = 3;
+                    ui.model.selected_index = 4;
                     if (!weekly_editing_blocked(&ui)) {
                         save_weekly_from_page(&ui);
                     }
                 } else if (down & HidNpadButton_ZL) {
-                    ui.model.selected_index = 2;
+                    ui.model.selected_index = 3;
                     if (ui.model.weekly_dirty) {
                         memcpy(ui.model.draft_week, ui.model.current_week, sizeof(ui.model.draft_week));
                         ui.model.weekly_dirty = false;
@@ -3993,6 +4026,20 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_Y) {
                 refresh_disable_flag(&ui);
                 poll_result(&ui, true);
+            } else if (down & HidNpadButton_X && ui.model.parent_page == PTC_UI_PARENT_HOLIDAY &&
+                       (ui.model.selected_index == 1 || ui.model.selected_index == 2)) {
+                if (ui.model.disable_flag_present) {
+                    snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，规则暂时只读。");
+                } else if (ui.model.selected_index == 1) {
+                    ui.model.draft_holiday_rule.mode = ptc_ui_next_rule_mode(ui.model.draft_holiday_rule.mode);
+                    update_holiday_dirty(&ui);
+                } else {
+                    ui.model.draft_makeup_workday_rule.mode = ptc_ui_next_rule_mode(ui.model.draft_makeup_workday_rule.mode);
+                    update_holiday_dirty(&ui);
+                }
+            } else if (down & HidNpadButton_Plus && ui.model.parent_page == PTC_UI_PARENT_HOLIDAY) {
+                ui.model.selected_index = 4;
+                submit_holiday_policy(&ui);
             } else if (down & HidNpadButton_A) {
                 if (ui.waiting) {
                     snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再执行其他设置。");

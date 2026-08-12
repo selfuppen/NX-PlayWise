@@ -328,6 +328,9 @@ typedef enum {
     PTC_UI_HIT_MINUTES_VALUE,
     PTC_UI_HIT_WEEKLY_DAY,
     PTC_UI_HIT_WEEKLY_MODE,
+    PTC_UI_HIT_HOLIDAY_ENABLE,
+    PTC_UI_HIT_HOLIDAY_MODE,
+    PTC_UI_HIT_HOLIDAY_MINUTES,
     PTC_UI_HIT_WEEKLY_MIN_UP,
     PTC_UI_HIT_WEEKLY_MIN_DOWN,
     PTC_UI_HIT_WEEKLY_MIN_DEC,
@@ -442,6 +445,9 @@ PtcUiRect ptc_ui_parent_refresh_rect(void);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_holiday_card_rect(int index);
+PtcUiRect ptc_ui_holiday_enable_rect(void);
+PtcUiRect ptc_ui_holiday_mode_rect(int index);
+PtcUiRect ptc_ui_holiday_minutes_rect(int index);
 PtcUiRect ptc_ui_support_event_rect(int index);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
 PtcUiRect ptc_ui_minutes_value_rect(void);
@@ -450,6 +456,8 @@ PtcUiRect ptc_ui_minutes_inc_rect(void);
 PtcUiRect ptc_ui_minutes_dec_large_rect(void);
 PtcUiRect ptc_ui_minutes_inc_large_rect(void);
 PtcUiRect ptc_ui_weekly_day_rect(int index);
+PtcUiRect ptc_ui_weekly_day_header_rect(int index);
+PtcUiRect ptc_ui_weekly_day_mode_rect(int index);
 PtcUiRect ptc_ui_weekly_day_minutes_rect(int index);
 PtcUiRect ptc_ui_weekly_bulk_rect(void);
 PtcUiRect ptc_ui_weekly_mode_rect(void);
