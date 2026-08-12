@@ -294,6 +294,7 @@ typedef enum {
     PTC_UI_HIT_SETUP_PRIMARY,
     PTC_UI_HIT_SETUP_BACK,
     PTC_UI_HIT_SETUP_PIN,
+    PTC_UI_HIT_SETUP_ALBUM_TOGGLE,
     PTC_UI_HIT_SETUP_CHILD_ZONE,
     PTC_UI_HIT_SETUP_PARENT_ZONE,
     PTC_UI_HIT_PARENT_PREV_PAGE,
@@ -372,6 +373,11 @@ void ptc_ui_numpad_finish(PtcUiModel *model);
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
+void ptc_ui_format_parent_status_summary(
+    const PtcUiModel *model,
+    int64_t now,
+    char *out,
+    size_t out_size);
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode);
 bool ptc_ui_day_rule_effectively_changed(PtcDayRule before, PtcDayRule after);
 bool ptc_ui_weekly_today_changed(const PtcUiModel *model);
@@ -403,6 +409,7 @@ PtcUiRect ptc_ui_setup_shortcut_capture_rect(void);
 PtcUiRect ptc_ui_setup_primary_rect(void);
 PtcUiRect ptc_ui_setup_back_rect(void);
 PtcUiRect ptc_ui_setup_pin_rect(void);
+PtcUiRect ptc_ui_setup_album_toggle_rect(void);
 PtcUiRect ptc_ui_setup_zone_rect(int index);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_refresh_rect(void);
@@ -418,6 +425,7 @@ PtcUiRect ptc_ui_minutes_inc_large_rect(void);
 PtcUiRect ptc_ui_weekly_day_rect(int index);
 PtcUiRect ptc_ui_weekly_day_minutes_rect(int index);
 PtcUiRect ptc_ui_weekly_mode_rect(void);
+PtcUiRect ptc_ui_weekly_page_mode_rect(void);
 PtcUiRect ptc_ui_weekly_min_up_rect(void);
 PtcUiRect ptc_ui_weekly_min_down_rect(void);
 PtcUiRect ptc_ui_weekly_min_dec_rect(void);

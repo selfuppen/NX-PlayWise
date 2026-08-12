@@ -73,7 +73,6 @@ typedef struct {
     int custom_shortcut_ticks;
     bool custom_shortcut_latched;
     bool minus_pending;
-    bool plus_exit_pending;
     int danger_confirm_ticks;
     bool waiting;
     bool exit_requested;
@@ -1588,6 +1587,9 @@ static void handle_setup_input(UiState *ui, u64 down, u64 held)
     } else if (ui->model.setup_step == PTC_UI_SETUP_ALBUM) {
         if (down & (HidNpadButton_Left | HidNpadButton_Right | HidNpadButton_X)) {
             ui->model.setup_album_enable = !ui->model.setup_album_enable;
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                     "当前选择：%s；按 A 或 + 后才保存并继续。",
+                     ui->model.setup_album_enable ? "启用相册入口限制" : "暂时跳过");
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             setup_primary(ui);
         }
@@ -2506,11 +2508,18 @@ static void handle_parent_action(UiState *ui)
                 ui->model.confirm_hold_required = true;
             } else {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         "相册入口状态异常且备份不可用；已拒绝自动修改。请保留现场并人工恢复。");
+                         ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_UNKNOWN
+                           ? "相册入口状态读取失败，请重新进入页面检测；本次未修改配置。"
+                           : "相册入口状态异常且备份不可用；已拒绝自动修改。请保留现场并人工恢复。");
             }
             break;
         default: break;
         }
+        return;
+    }
+    if (ptc_ui_safety_action_available(&ui->model, index) == PTC_UI_ACTION_DISABLED) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                 ptc_ui_safety_action_hint(&ui->model, index));
         return;
     }
     switch (index) {
@@ -2545,8 +2554,12 @@ static void handle_parent_action(UiState *ui)
         export_diagnostics(ui);
         break;
     case 5:
-        refresh_disable_flag(ui);
-        submit_status(ui);
+        ui->model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "软件信息");
+        ui->model.overlay_body[0] = '\0';
+        snprintf(ui->model.software_version, sizeof(ui->model.software_version), "%s", PLAYWISE_VERSION);
+        snprintf(ui->model.repository_url, sizeof(ui->model.repository_url), "%s", PLAYWISE_REPOSITORY_URL);
+        snprintf(ui->model.pwa_url, sizeof(ui->model.pwa_url), "%s", PTC_PAIRING_BASE_URL);
         break;
     default:
         break;
@@ -2688,7 +2701,15 @@ static void update_holiday_dirty(UiState *ui)
 static void refresh_album_restriction(UiState *ui)
 {
     PtcAlbumRestrictionStatus status;
-    if (!ui || !ptc_album_restriction_get_status(ui->client.storage, &status)) return;
+    if (!ui) return;
+    if (!ptc_album_restriction_get_status(ui->client.storage, &status)) {
+        ui->model.album_restriction_state = PTC_ALBUM_RESTRICTION_UNKNOWN;
+        ui->model.album_backup_valid = false;
+        snprintf(ui->model.album_restriction_detail,
+                 sizeof(ui->model.album_restriction_detail),
+                 "状态读取失败，请重新检测");
+        return;
+    }
     ui->model.album_restriction_state = (int)status.state;
     ui->model.album_backup_valid = status.backup_valid;
     snprintf(ui->model.album_restriction_detail, sizeof(ui->model.album_restriction_detail), "%s", status.detail);
@@ -3191,6 +3212,12 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_SETUP_PIN:
         setup_pin(ui);
         break;
+    case PTC_UI_HIT_SETUP_ALBUM_TOGGLE:
+        ui->model.setup_album_enable = !ui->model.setup_album_enable;
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "当前选择：%s；按 A 或 + 后才保存并继续。",
+                 ui->model.setup_album_enable ? "启用相册入口限制" : "暂时跳过");
+        break;
     case PTC_UI_HIT_SETUP_CHILD_ZONE:
         ui->model.setup_zone_index = 0;
         break;
@@ -3542,14 +3569,12 @@ int main(int argc, char **argv)
              * soon as it participates in the configured parent combination,
              * do not let releasing it turn the attempted unlock into an exit. */
             if (ui.model.custom_shortcut_mask & HidNpadButton_Plus) {
-                ui.plus_exit_pending = false;
             }
             if (!ui.custom_shortcut_latched) {
                 ++ui.custom_shortcut_ticks;
                 if (ui.custom_shortcut_ticks >= CUSTOM_SHORTCUT_HOLD_TICKS) {
                     ui.custom_shortcut_latched = true;
                     ui.minus_pending = false;
-                    ui.plus_exit_pending = false;
                     enter_parent_area(&ui);
                 }
             }
@@ -3591,16 +3616,11 @@ int main(int argc, char **argv)
         } else if (ui.model.view == PTC_UI_CHILD) {
             if (down & HidNpadButton_B) {
                 running = false;
-            } else if (down & HidNpadButton_Plus) {
-                ui.plus_exit_pending = true;
             } else if (down & HidNpadButton_Minus) {
                 ui.minus_pending = true;
             } else if (ui.minus_pending && !(held & HidNpadButton_Minus)) {
                 ui.minus_pending = false;
                 enter_parent_area(&ui);
-            } else if (ui.plus_exit_pending && !(held & HidNpadButton_Plus)) {
-                ui.plus_exit_pending = false;
-                running = false;
             } else if (down & HidNpadButton_A) {
                 if (ui.waiting) {
                     snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再提交加时码。");

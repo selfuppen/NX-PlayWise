@@ -484,6 +484,69 @@ int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now)
     return now - model->status_updated_at;
 }
 
+void ptc_ui_format_parent_status_summary(
+    const PtcUiModel *model,
+    int64_t now,
+    char *out,
+    size_t out_size)
+{
+    int64_t age;
+    char remaining[64];
+    char freshness[40];
+    if (!out || out_size == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (!model) {
+        snprintf(out, out_size, "? 状态待确认 · 尚无可靠读数");
+        return;
+    }
+    age = ptc_ui_status_age_seconds(model, now);
+    if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
+        snprintf(out, out_size, "! 保护模式 · 需要处理");
+        return;
+    }
+    if (model->recovery_active) {
+        snprintf(out, out_size, "! 恢复事务待处理 · 查看详情");
+        return;
+    }
+    if (model->disable_flag_present) {
+        snprintf(out, out_size, "! 紧急停用 · 控制写入已停止");
+        return;
+    }
+    if (model->temporary_unlocked_available && model->temporary_unlocked) {
+        snprintf(out, out_size, "! 系统限制已临时解除");
+        return;
+    }
+    if (model->apply_pending_confirmation) {
+        snprintf(out, out_size, "… 设置等待确认生效");
+        return;
+    }
+    if (model->waiting) {
+        snprintf(out, out_size, "… 正在检测当前状态");
+        return;
+    }
+    if (!model->status_loaded || age > 120 || model->error_code != 0) {
+        if (age < 0) snprintf(out, out_size, "? 状态待确认 · 尚无可靠读数");
+        else if (age < 3600) snprintf(out, out_size, "? 状态待确认 · 上次成功于 %lld 分钟前", (long long)(age / 60));
+        else if (age < 86400) snprintf(out, out_size, "? 状态待确认 · 上次成功于 %lld 小时前", (long long)(age / 3600));
+        else snprintf(out, out_size, "? 状态待确认 · 上次成功超过一天");
+        return;
+    }
+    if (model->restricted_now == 1 || model->blocked_today == 1 ||
+        (model->remaining_available && model->remaining_minutes <= 0)) {
+        snprintf(out, out_size, "! 已到限制 · 今日时间已用完 · 刚刚同步");
+        return;
+    }
+    if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "今日不限时");
+    else if (model->remaining_available) snprintf(remaining, sizeof(remaining), "今日剩余 %d 分钟", model->remaining_minutes);
+    else snprintf(remaining, sizeof(remaining), "剩余时间不可用");
+    if (age <= 30) snprintf(freshness, sizeof(freshness), "刚刚同步");
+    else if (age < 60) snprintf(freshness, sizeof(freshness), "%lld 秒前", (long long)age);
+    else snprintf(freshness, sizeof(freshness), "%lld 分钟前", (long long)(age / 60));
+    snprintf(out, out_size, "控制正常 · %s · %s", remaining, freshness);
+}
+
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode)
 {
     switch (mode) {
@@ -832,6 +895,13 @@ PtcUiRect ptc_ui_setup_pin_rect(void)
     return rect;
 }
 
+PtcUiRect ptc_ui_setup_album_toggle_rect(void)
+{
+    /* Enlarge the painted switch target without making the explanation clickable. */
+    PtcUiRect rect = {852, 210, 176, 86};
+    return rect;
+}
+
 PtcUiRect ptc_ui_setup_zone_rect(int index)
 {
     PtcUiRect rect = {204 + index * 448, 286, 400, 190};
@@ -877,14 +947,14 @@ PtcUiRect ptc_ui_parent_card_rect(int index)
 PtcUiRect ptc_ui_holiday_card_rect(int index)
 {
     switch (index) {
-    case 0: return (PtcUiRect){54, 172, 1172, 72};
-    case 1: return (PtcUiRect){74, 318, 534, 58};
-    case 2: return (PtcUiRect){74, 388, 534, 132};
-    case 3: return (PtcUiRect){672, 318, 534, 58};
-    case 4: return (PtcUiRect){672, 388, 534, 132};
-    case 5: return (PtcUiRect){54, 548, 574, 58};
-    case 6: return (PtcUiRect){652, 548, 574, 58};
-    default: return (PtcUiRect){54, 172, 1172, 72};
+    case 0: return (PtcUiRect){54, 172, 1172, 64};
+    case 1: return (PtcUiRect){74, 288, 534, 48};
+    case 2: return (PtcUiRect){74, 344, 534, 96};
+    case 3: return (PtcUiRect){672, 288, 534, 48};
+    case 4: return (PtcUiRect){672, 344, 534, 96};
+    case 5: return (PtcUiRect){54, 452, 574, 58};
+    case 6: return (PtcUiRect){652, 452, 574, 58};
+    default: return (PtcUiRect){54, 172, 1172, 64};
     }
 }
 
@@ -1077,13 +1147,13 @@ PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay)
 
 PtcUiRect ptc_ui_weekly_save_rect(void)
 {
-    PtcUiRect rect = {932, 540, 260, 58};
+    PtcUiRect rect = {932, 474, 260, 36};
     return rect;
 }
 
 PtcUiRect ptc_ui_weekly_discard_rect(void)
 {
-    PtcUiRect rect = {654, 540, 250, 58};
+    PtcUiRect rect = {654, 474, 250, 36};
     return rect;
 }
 
@@ -1538,6 +1608,9 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         } else if (step == PTC_UI_SETUP_PIN &&
                    ptc_ui_rect_contains(ptc_ui_setup_pin_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_SETUP_PIN, 0);
+        } else if (step == PTC_UI_SETUP_ALBUM &&
+                   ptc_ui_rect_contains(ptc_ui_setup_album_toggle_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_SETUP_ALBUM_TOGGLE, 0);
         } else if (step == PTC_UI_SETUP_ZONE) {
             if (ptc_ui_rect_contains(ptc_ui_setup_zone_rect(0), x, y)) {
                 return make_hit(PTC_UI_HIT_SETUP_CHILD_ZONE, 0);
@@ -1589,7 +1662,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
                 return make_hit(PTC_UI_HIT_WEEKLY_DAY, weekday);
             }
         }
-        if (!model->disable_flag_present && ptc_ui_rect_contains(ptc_ui_weekly_mode_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MODE, 0);
+        if (!model->disable_flag_present && ptc_ui_rect_contains(ptc_ui_weekly_page_mode_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_MODE, 0);
         if (!model->disable_flag_present && ptc_ui_rect_contains(ptc_ui_weekly_save_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_SAVE, 0);
         if (ptc_ui_rect_contains(ptc_ui_weekly_discard_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_DISCARD, 0);
     }
@@ -1598,7 +1671,9 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         PtcUiRect card_rect = (model->parent_page == PTC_UI_PARENT_HOLIDAY)
             ? ptc_ui_holiday_card_rect(i)
             : ptc_ui_parent_card_rect(i);
-        if ((model->parent_page != PTC_UI_PARENT_SUPPORT || ptc_ui_safety_action_visible(model, i)) &&
+        if ((model->parent_page != PTC_UI_PARENT_SUPPORT ||
+             (ptc_ui_safety_action_visible(model, i) &&
+              ptc_ui_safety_action_available(model, i) != PTC_UI_ACTION_DISABLED)) &&
             ptc_ui_rect_contains(card_rect, x, y)) {
             return make_hit(PTC_UI_HIT_PARENT_CARD, i);
         }
@@ -1641,13 +1716,17 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
     }
     switch (index) {
     case 0:
-        return strcmp(model->setup_phase, "active") == 0 && !model->disable_flag_present
-            ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_RECOMMENDED;
+        return model->disable_flag_present ||
+            (strcmp(model->setup_phase, "active") != 0 && strcmp(model->setup_phase, "protection") != 0 &&
+             strcmp(model->setup_phase, "failed") != 0)
+            ? PTC_UI_ACTION_RECOMMENDED : PTC_UI_ACTION_DISABLED;
     case 1:
         return strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0 ||
             strcmp(model->setup_phase, "pending") == 0 ? PTC_UI_ACTION_RECOMMENDED : PTC_UI_ACTION_DISABLED;
     case 2:
-        return PTC_UI_ACTION_AVAILABLE;
+        return !model->disable_flag_present && strcmp(model->setup_phase, "protection") != 0 &&
+            strcmp(model->setup_phase, "restored") != 0
+            ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_DISABLED;
     case 3:
         return model->setup_snapshot_available ? PTC_UI_ACTION_AVAILABLE : PTC_UI_ACTION_DISABLED;
     case 4:
@@ -1659,28 +1738,16 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
     }
 }
 
+PtcUiRect ptc_ui_weekly_page_mode_rect(void)
+{
+    PtcUiRect rect = {88, 474, 260, 36};
+    return rect;
+}
+
 bool ptc_ui_safety_action_visible(const PtcUiModel *model, int index)
 {
     if (!model) return false;
-    switch (index) {
-    case 0:
-        return model->disable_flag_present ||
-            (strcmp(model->setup_phase, "active") != 0 && strcmp(model->setup_phase, "protection") != 0 &&
-             strcmp(model->setup_phase, "failed") != 0);
-    case 1:
-        return strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0 ||
-            strcmp(model->setup_phase, "pending") == 0;
-    case 2:
-        return !model->disable_flag_present && strcmp(model->setup_phase, "protection") != 0 &&
-            strcmp(model->setup_phase, "restored") != 0;
-    case 3:
-        return model->setup_snapshot_available;
-    case 4:
-    case 5:
-        return true;
-    default:
-        return false;
-    }
+    return index >= 0 && index < 6;
 }
 
 const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index)
@@ -1692,7 +1759,9 @@ const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index)
     case 0:
         return strcmp(model->setup_phase, "active") == 0 ? "额度管理已启用。" : "预检通过后保存快照并接管系统控制。";
     case 1:
-        return "重新执行兼容、快照和恢复前置检查。";
+        return strcmp(model->setup_phase, "active") == 0
+            ? "当前运行正常，无需执行修复。"
+            : "重新执行兼容、快照和恢复前置检查。";
     case 2:
         return model->disable_flag_present
             ? "解除停用后才允许新的控制写入；状态和恢复始终可用。"

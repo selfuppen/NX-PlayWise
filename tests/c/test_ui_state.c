@@ -42,6 +42,35 @@ static bool rects_overlap(PtcUiRect left, PtcUiRect right)
            left.y < right.y + right.h && left.y + left.h > right.y;
 }
 
+static void test_parent_status_summary(void)
+{
+    PtcUiModel model;
+    char summary[160];
+    memset(&model, 0, sizeof(model));
+
+    ptc_ui_format_parent_status_summary(&model, 1000, summary, sizeof(summary));
+    check_true(summary[0] != '\0' && strstr(summary, "尚无可靠读数") != NULL,
+               "parent footer shows a placeholder before the first status result");
+
+    model.status_loaded = true;
+    model.status_updated_at = 1000;
+    model.remaining_available = true;
+    model.remaining_minutes = 42;
+    ptc_ui_format_parent_status_summary(&model, 1010, summary, sizeof(summary));
+    check_true(strstr(summary, "控制正常") != NULL && strstr(summary, "42 分钟") != NULL,
+               "parent footer shows the current remaining time");
+
+    model.remaining_minutes = 0;
+    ptc_ui_format_parent_status_summary(&model, 1010, summary, sizeof(summary));
+    check_true(strstr(summary, "已到限制") != NULL,
+               "parent footer shows the exhausted-time state");
+
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "protection");
+    ptc_ui_format_parent_status_summary(&model, 1010, summary, sizeof(summary));
+    check_true(strstr(summary, "保护模式") != NULL,
+               "parent footer prioritizes protection state guidance");
+}
+
 static void test_release_navigation(void)
 {
     PtcUiModel model;
@@ -307,11 +336,26 @@ static void test_release_hit_targets(void)
               "parent back action occupies the third footer slot");
     check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
               "weekly save is on the page");
+    check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, 0,
+              "weekly page mode switch uses page geometry");
+    check_true(ptc_ui_weekly_page_mode_rect().y != ptc_ui_weekly_mode_rect().y,
+               "weekly page mode geometry does not move the legacy editor overlay");
+    {
+        PtcUiRect notice = {54, 522, 1172, 128};
+        check_true(!rects_overlap(ptc_ui_weekly_page_mode_rect(), notice),
+                   "weekly mode does not overlap recent execution");
+        check_true(!rects_overlap(ptc_ui_weekly_discard_rect(), notice),
+                   "weekly discard does not overlap recent execution");
+        check_true(!rects_overlap(ptc_ui_weekly_save_rect(), notice),
+                   "weekly save does not overlap recent execution");
+        check_true(!rects_overlap(notice, ptc_ui_parent_footer_rect(3)),
+                   "full recent execution card does not overlap parent footer");
+    }
     model.disable_flag_present = true;
     model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
     check_hit(hit_center(&model, ptc_ui_weekly_day_minutes_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
               "disabled weekly minutes only focus the read-only day");
-    check_hit(hit_center(&model, ptc_ui_weekly_mode_rect()), PTC_UI_HIT_NONE, 0,
+    check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_NONE, 0,
               "disabled weekly mode switch is not actionable");
     check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_NONE, 0,
               "disabled weekly save is not actionable");
@@ -319,7 +363,13 @@ static void test_release_hit_targets(void)
               "disabled weekly page still allows discarding a draft");
     model.disable_flag_present = false;
     model.parent_page = PTC_UI_PARENT_SUPPORT;
-    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_PARENT_CARD, 0, "support environment card");
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
+    check_true(ptc_ui_safety_action_visible(&model, 0) && ptc_ui_safety_action_visible(&model, 1),
+               "support setup and repair cards stay visible while active");
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0,
+              "active support takeover card is disabled");
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(1)), PTC_UI_HIT_NONE, 0,
+              "active support repair card is disabled");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "support diagnostics card");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "support software information card");
 
@@ -331,6 +381,19 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "holiday makeup quota card");
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "holiday calendar viewer card");
     check_hit(hit_center(&model, ptc_ui_holiday_card_rect(6)), PTC_UI_HIT_PARENT_CARD, 6, "holiday save card");
+    {
+        PtcUiRect notice = {54, 522, 1172, 128};
+        for (int index = 0; index < 7; ++index) {
+            check_true(!rects_overlap(ptc_ui_holiday_card_rect(index), notice),
+                       "holiday control does not overlap recent execution");
+        }
+        check_true(!rects_overlap(ptc_ui_holiday_card_rect(0), ptc_ui_holiday_card_rect(1)),
+                   "holiday header does not overlap rule controls");
+        check_true(!rects_overlap(ptc_ui_holiday_card_rect(1), ptc_ui_holiday_card_rect(2)),
+                   "holiday mode and quota do not overlap");
+        check_true(!rects_overlap(ptc_ui_holiday_card_rect(2), ptc_ui_holiday_card_rect(5)),
+                   "holiday quota and bottom action do not overlap");
+    }
 
     model.view = PTC_UI_SETUP;
     model.setup_step = PTC_UI_SETUP_SHORTCUT;
@@ -346,6 +409,11 @@ static void test_release_hit_targets(void)
                "two shortcut preset columns do not overlap");
     model.setup_step = PTC_UI_SETUP_PIN;
     check_hit(hit_center(&model, ptc_ui_setup_pin_rect()), PTC_UI_HIT_SETUP_PIN, 0, "setup PIN guide");
+    model.setup_step = PTC_UI_SETUP_ALBUM;
+    check_hit(hit_center(&model, ptc_ui_setup_album_toggle_rect()), PTC_UI_HIT_SETUP_ALBUM_TOGGLE, 0,
+              "setup album switch has a touch target");
+    check_hit(ptc_ui_hit_test(&model, 300, 300), PTC_UI_HIT_NONE, 0,
+              "setup album explanation does not toggle the choice");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
     check_true(!ptc_ui_setup_takeover_complete(&model), "pending takeover still requires confirmation");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "restored");
@@ -512,6 +580,7 @@ static void test_user_state_mapping(void)
 
 int main(void)
 {
+    test_parent_status_summary();
     test_release_navigation();
     test_numeric_input();
     test_time_previews();
