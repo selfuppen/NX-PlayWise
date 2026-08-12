@@ -56,6 +56,18 @@ const char *ptc_ui_shortcut_common_label(int index)
     return labels[index];
 }
 
+void ptc_ui_format_custom_shortcut_hint(
+    const char *shortcut_label,
+    char *out,
+    size_t out_size)
+{
+    if (!out || out_size == 0) {
+        return;
+    }
+    snprintf(out, out_size, "长按约 400ms：%s 进入家长区",
+             shortcut_label && shortcut_label[0] ? shortcut_label : "自定义组合");
+}
+
 int ptc_ui_weekday_for_display_slot(int slot)
 {
     static const int ORDER[] = {1, 2, 3, 4, 5, 6, 0};
@@ -1020,6 +1032,18 @@ PtcUiRect ptc_ui_holiday_card_rect(int index)
     case 6: return (PtcUiRect){54, 428, 760, 72};
     default: return (PtcUiRect){54, 176, 365, 72};
     }
+}
+
+uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback)
+{
+    int played;
+    if (!model || !model->played_minutes_available || model->played_minutes < 0) {
+        return fallback >= 1 && fallback <= 1440 ? fallback : 60;
+    }
+    played = model->played_minutes;
+    if (played < 1) played = 1;
+    if (played > 1440) played = 1440;
+    return (uint16_t)played;
 }
 
 PtcUiRect ptc_ui_support_event_rect(int index)

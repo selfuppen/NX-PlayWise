@@ -1416,7 +1416,7 @@ static void open_shortcut_manager(UiState *ui)
     ui->model.overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "家长区快捷键管理");
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "选择常见组合或录制其他组合；所有修改按 + 确认后才生效。");
+             "自定义组合需长按约 400ms；固定 Minus 松开即可进入，无需长按。所有修改按 + 确认后才生效。");
 }
 
 static void setup_pin(UiState *ui)
@@ -2364,16 +2364,11 @@ static void format_rule_remaining(const PtcUiModel *model, PtcDayRule rule, char
 static uint16_t current_today_limit_value(const UiState *ui)
 {
     PtcDayRule rule = effective_today_rule(ui);
-    int total;
+    uint16_t fallback = 60;
     if (rule.mode == PTC_RULE_MODE_LIMIT && rule.minutes >= 1 && rule.minutes <= 1440) {
-        return rule.minutes;
+        fallback = rule.minutes;
     }
-    if (ui->model.remaining_available && ui->model.remaining_minutes >= 0 &&
-        ui->model.played_minutes_available && ui->model.played_minutes >= 0) {
-        total = ui->model.remaining_minutes + ui->model.played_minutes;
-        if (total >= 1 && total <= 1440) return (uint16_t)total;
-    }
-    return 60;
+    return ptc_ui_today_limit_start_value(&ui->model, fallback);
 }
 
 static void handle_today_action_ready(UiState *ui, int index)

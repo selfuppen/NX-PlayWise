@@ -368,10 +368,15 @@ void ptc_ui_graphics_draw(const PtcUiModel *model);
 
 int ptc_ui_parent_action_count(PtcUiParentPage page);
 const char *ptc_ui_shortcut_common_label(int index);
+void ptc_ui_format_custom_shortcut_hint(
+    const char *shortcut_label,
+    char *out,
+    size_t out_size);
 int ptc_ui_weekday_for_display_slot(int slot);
 void ptc_ui_change_parent_page(PtcUiModel *model, int direction);
 void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertical);
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
+uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback);
 bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out);
 void ptc_ui_numpad_open(
     PtcUiModel *model,

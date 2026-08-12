@@ -74,6 +74,7 @@ static void test_parent_status_summary(void)
 static void test_release_navigation(void)
 {
     PtcUiModel model;
+    char shortcut_hint[160];
     memset(&model, 0, sizeof(model));
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
@@ -125,6 +126,14 @@ static void test_release_navigation(void)
                "plus shortcut preset does not end in an ambiguous separator");
     check_true(strcmp(ptc_ui_shortcut_common_label(13), "ZL + ZR + Minus(－)") == 0,
                "minus shortcut preset uses an unambiguous button name");
+    ptc_ui_format_custom_shortcut_hint(ptc_ui_shortcut_common_label(5), shortcut_hint, sizeof(shortcut_hint));
+    check_true(strstr(shortcut_hint, "长按约 400ms") != NULL &&
+               strstr(shortcut_hint, "L + R + Plus(＋)") != NULL &&
+               strstr(shortcut_hint, "进入家长区") != NULL,
+               "custom shortcut hint explains the hold duration without changing the label");
+    ptc_ui_format_custom_shortcut_hint(ptc_ui_shortcut_common_label(13), shortcut_hint, sizeof(shortcut_hint));
+    check_true(strstr(shortcut_hint, "ZL + ZR + Minus(－)") != NULL,
+               "minus shortcut hint remains unambiguous");
 }
 
 static void test_numeric_input(void)
@@ -166,12 +175,29 @@ static void test_time_previews(void)
     model.draft_minutes = 60;
     model.played_minutes_available = true;
     model.played_minutes = 20;
+    check_int(ptc_ui_today_limit_start_value(&model, 180), 20,
+              "today-limit editor starts from played time");
+    model.played_minutes = 0;
+    check_int(ptc_ui_today_limit_start_value(&model, 180), 1,
+              "zero played time starts from the minimum valid quota");
+    model.played_minutes = 2000;
+    check_int(ptc_ui_today_limit_start_value(&model, 180), 1440,
+              "played time is clamped to the daily maximum");
+    model.played_minutes_available = false;
+    check_int(ptc_ui_today_limit_start_value(&model, 180), 180,
+              "unavailable played time preserves the effective quota fallback");
+    check_int(ptc_ui_today_limit_start_value(&model, 0), 60,
+              "invalid unavailable-state fallback uses the safe default");
+    model.played_minutes_available = true;
+    model.played_minutes = 20;
     check_int(ptc_ui_preview_remaining_minutes(&model), 40, "set-limit preview subtracts played time");
     model.played_minutes_available = false;
     check_int(ptc_ui_preview_remaining_minutes(&model), -1, "unavailable played time is not guessed");
     model.played_minutes_available = true;
     model.played_minutes = 60;
     check_true(ptc_ui_limit_minutes_would_restrict(&model, 60), "equal played and limit requires immediate restriction warning");
+    check_true(ptc_ui_limit_minutes_would_restrict(&model, 30),
+               "a quota below played time remains selectable and requires the restriction warning");
     model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
     model.remaining_available = true;
     model.remaining_minutes = 25;

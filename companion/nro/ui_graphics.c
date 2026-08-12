@@ -696,7 +696,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     fill_round_rect(pixels, stride, to_uirect(ptc_ui_child_footer_rect(1)), 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, to_uirect(ptc_ui_child_footer_rect(1)), 1, COLOR(203, 211, 222));
     if (model->show_parent_shortcut_hint && model->custom_shortcut_enabled) {
-        snprintf(parent_hint, sizeof(parent_hint), "%s  家长区", model->custom_shortcut_label);
+        ptc_ui_format_custom_shortcut_hint(model->custom_shortcut_label, parent_hint, sizeof(parent_hint));
     } else {
         snprintf(parent_hint, sizeof(parent_hint), "状态会在后台自动同步");
     }
@@ -742,8 +742,8 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             UiRect compact_fixed = {204, 184, 872, 54};
             fill_round_rect(pixels, stride, compact_fixed, 8, COLOR(244, 249, 255));
             draw_rect_outline(pixels, stride, compact_fixed, 2, COLOR(28, 118, 188));
-            draw_text(pixels, stride, 232, 218, "固定入口  Minus -  始终有效", 20, COLOR(28, 118, 188));
-            draw_text(pixels, stride, 204, 264, "选择一个常见组合；按 A 只加入草稿，按 + 确认后才生效", 18, COLOR(77, 86, 99));
+            draw_text(pixels, stride, 232, 218, "固定入口 Minus：松开即可进入，无需长按", 20, COLOR(28, 118, 188));
+            draw_text(pixels, stride, 204, 264, "自定义组合需长按约 400ms；按 A 加入草稿，按 + 确认后生效", 18, COLOR(77, 86, 99));
             for (int index = 0; index < PTC_UI_SHORTCUT_PRESET_COUNT; ++index) {
                 UiRect card = to_uirect(ptc_ui_setup_shortcut_card_rect(index));
                 bool selected = index == model->setup_shortcut_index;
@@ -759,7 +759,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                                model->shortcut_capture_active ? COLOR(255, 247, 229) : COLOR(235, 238, 243),
                                model->shortcut_capture_active ? COLOR(170, 109, 18) : COLOR(28, 118, 188), true);
             draw_text(pixels, stride, 204, 554,
-                      model->shortcut_draft_enabled ? "待确认自定义组合：" : "待确认状态：仅保留 Minus -",
+                      model->shortcut_draft_enabled ? "待确认自定义组合（需长按）：" : "待确认状态：仅保留 Minus（松开进入）",
                       17, COLOR(91, 100, 116));
             if (model->shortcut_draft_enabled) {
                 fit_text(fitted, sizeof(fitted), model->shortcut_draft_label, 18, 250);
@@ -830,16 +830,21 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                                  index == 0 ? "孩子区" : "家长区", 27,
                                  selected ? COLOR(28, 118, 188) : COLOR(45, 52, 62));
                 if (index == 0) {
+                    char shortcut_hint[160];
+                    char fitted_shortcut_hint[160];
+                    ptc_ui_format_custom_shortcut_hint(model->custom_shortcut_label,
+                                                       shortcut_hint, sizeof(shortcut_hint));
+                    fit_text(fitted_shortcut_hint, sizeof(fitted_shortcut_hint), shortcut_hint, 17, card.width - 36);
                     draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 86, card.width - 36, 26},
                                      model->show_parent_shortcut_hint && model->custom_shortcut_enabled
-                                        ? model->custom_shortcut_label : "家长区快捷提示未显示", 17, COLOR(77, 86, 99));
+                                        ? fitted_shortcut_hint : "家长区快捷提示未显示", 17, COLOR(77, 86, 99));
                     draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 122, card.width - 36, 25},
                                      "家长区需要输入 任我玩 PIN", 17, COLOR(91, 100, 116));
                 } else {
                     draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 86, card.width - 36, 26},
-                                     "返回孩子区：B", 19, COLOR(77, 86, 99));
+                                     "固定 Minus：松开进入，无需长按", 18, COLOR(77, 86, 99));
                     draw_text_center(pixels, stride, (UiRect){card.x + 18, card.y + 122, card.width - 36, 25},
-                                     model->custom_shortcut_enabled ? "当前入口：Minus - 和自定义组合" : "当前入口：仅 Minus -", 17, COLOR(91, 100, 116));
+                                     model->custom_shortcut_enabled ? "自定义组合：长按约 400ms" : "未启用自定义组合", 17, COLOR(91, 100, 116));
                 }
             }
         }
@@ -2284,6 +2289,7 @@ static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, con
 {
     UiRect dialog;
     char status[192];
+    char shortcut_hint[160];
     int index;
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
     for (index = 0; index < PTC_UI_SHORTCUT_PRESET_COUNT; ++index) {
@@ -2307,9 +2313,9 @@ static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, con
     draw_dialog_button(pixels, stride, ptc_ui_shortcut_hint_rect(),
                        model->shortcut_draft_show_hint ? "Y  孩子区提示：显示" : "Y  孩子区提示：隐藏",
                        COLOR(244, 246, 249), COLOR(66, 74, 86), true);
-    snprintf(status, sizeof(status), "%s    当前草稿：%s",
-             model->shortcut_draft_enabled ? "自定义入口：启用" : "自定义入口：关闭（仅 Minus -）",
-             model->shortcut_draft_enabled ? model->shortcut_draft_label : "无");
+    ptc_ui_format_custom_shortcut_hint(model->shortcut_draft_label, shortcut_hint, sizeof(shortcut_hint));
+    snprintf(status, sizeof(status), "%s",
+             model->shortcut_draft_enabled ? shortcut_hint : "自定义入口已关闭；固定 Minus 松开即可进入，无需长按");
     draw_text(pixels, stride, dialog.x + 40, dialog.y + 516, status, 18,
               model->shortcut_draft_enabled ? COLOR(25, 132, 95) : COLOR(194, 61, 61));
     draw_overlay_actions(pixels, stride, model, "+  确认保存");
