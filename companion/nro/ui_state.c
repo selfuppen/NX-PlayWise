@@ -47,8 +47,8 @@ static const char *json_string(const cJSON *object, const char *name)
 const char *ptc_ui_shortcut_common_label(int index)
 {
     static const char *labels[] = {
-        "L + R", "L + R + 上", "L + R + 下", "L + R + 左", "L + R + 右", "L + R + Plus(＋)", "L + R + Minus(－)",
-        "ZL + ZR", "ZL + ZR + 上", "ZL + ZR + 下", "ZL + ZR + 左", "ZL + ZR + 右", "ZL + ZR + Plus(＋)", "ZL + ZR + Minus(－)"
+        "L + R", "L + R + 上", "L + R + 下", "L + R + 左", "L + R + 右", "L + R + Plus(+)", "L + R + Minus(-)",
+        "ZL + ZR", "ZL + ZR + 上", "ZL + ZR + 下", "ZL + ZR + 左", "ZL + ZR + 右", "ZL + ZR + Plus(+)", "ZL + ZR + Minus(-)"
     };
     if (index < 0 || index >= PTC_UI_SHORTCUT_PRESET_COUNT) {
         return "未选择";
