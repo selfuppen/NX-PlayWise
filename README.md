@@ -42,6 +42,30 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 完整步骤、升级方法和截图位置见[使用指南](docs/使用指南.md)。
 
+## 离线操作演示
+
+安装配置后，日常生成、传递和兑换加时码均可在无网络环境中进行。
+
+### 小孩操作
+
+**浮窗兑换加时码** - 已经被限制时，利用 Tesla 插件兑换加时码：
+
+![游戏内浮窗兑换加时码确认示意](docs/images/usage/10-2-overlay-verified-confirm.jpg)
+   
+**小孩区** - 没到时间时，兑换加时码：
+
+![小孩区浅色主题](docs/images/usage/02-launch-playwise-light.jpg)
+
+### 家长操作
+
+**家长生成加时码网页** - 存储在本地的 HTML 文件，无需联网，手机电脑都支持：
+
+![家长网页-生成加时码](docs/images/usage/11-parent-pwa.jpg)
+
+**家长区** - 应用里的控制设置：
+
+![家长区首页](docs/images/usage/04-parent-home.jpg)
+
 ## 家长网页
 
 家长端网页在浏览器本地生成加时码，不会把设备 ID、密钥或代码提交给业务后端。普通用户优先使用完整交付包内的 `playwise-offline.html`：无需安装应用、Python、前端工具或本地服务器，准备完成后日常生成不需要访问互联网；孩子在 Switch 上兑换时同样不需要联网。
