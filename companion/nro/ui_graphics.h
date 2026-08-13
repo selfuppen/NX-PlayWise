@@ -20,9 +20,10 @@ typedef enum {
 typedef enum {
     PTC_UI_SETUP_SHORTCUT = 1,
     PTC_UI_SETUP_PIN = 2,
-    PTC_UI_SETUP_TAKEOVER = 3,
-    PTC_UI_SETUP_ALBUM = 4,
-    PTC_UI_SETUP_ZONE = 5
+    PTC_UI_SETUP_ALBUM = 3,
+    PTC_UI_SETUP_THEME = 4,
+    PTC_UI_SETUP_TAKEOVER = 5,
+    PTC_UI_SETUP_ZONE = 6
 } PtcUiSetupStep;
 
 typedef enum {
@@ -190,6 +191,7 @@ typedef struct {
     char result_type[48];
     int setup_step;
     int setup_shortcut_index;
+    int setup_theme_index;
     int setup_zone_index;
     bool setup_album_enable;
     uint64_t custom_shortcut_mask;
@@ -198,7 +200,6 @@ typedef struct {
     bool shortcut_draft_enabled;
     bool shortcut_draft_show_hint;
     uint64_t captured_shortcut_mask;
-    bool shortcut_capture_active;
     bool show_parent_shortcut_hint;
     char custom_shortcut_label[96];
     char shortcut_draft_label[96];
@@ -311,11 +312,11 @@ typedef enum {
     PTC_UI_HIT_ERROR_RETRY,
     PTC_UI_HIT_ERROR_BACK,
     PTC_UI_HIT_SETUP_SHORTCUT_CARD,
-    PTC_UI_HIT_SETUP_SHORTCUT_CAPTURE,
     PTC_UI_HIT_SETUP_PRIMARY,
     PTC_UI_HIT_SETUP_BACK,
     PTC_UI_HIT_SETUP_PIN,
     PTC_UI_HIT_SETUP_ALBUM_TOGGLE,
+    PTC_UI_HIT_SETUP_THEME_OPTION,
     PTC_UI_HIT_SETUP_CHILD_ZONE,
     PTC_UI_HIT_SETUP_PARENT_ZONE,
     PTC_UI_HIT_PARENT_PREV_PAGE,
@@ -362,7 +363,6 @@ typedef enum {
     PTC_UI_HIT_GRANT_MANAGER_CARD,
     PTC_UI_HIT_GRANT_GENERATE,
     PTC_UI_HIT_SHORTCUT_OPTION,
-    PTC_UI_HIT_SHORTCUT_CAPTURE,
     PTC_UI_HIT_SHORTCUT_DISABLE,
     PTC_UI_HIT_SHORTCUT_HINT,
     PTC_UI_HIT_GRANT_ADJUST,
@@ -374,6 +374,11 @@ typedef struct {
     int index;
 } PtcUiHit;
 
+typedef struct {
+    int held_samples;
+    bool latched;
+} PtcUiShortcutHoldState;
+
 bool ptc_ui_graphics_init(void);
 void ptc_ui_graphics_exit(void);
 void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme);
@@ -384,6 +389,15 @@ void ptc_ui_format_custom_shortcut_hint(
     const char *shortcut_label,
     char *out,
     size_t out_size);
+bool ptc_ui_shortcut_mask_held(uint64_t configured_mask, uint64_t buttons);
+bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held, int required_samples);
+int ptc_ui_migrate_setup_step(int step, int wizard_version);
+PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model);
+void ptc_ui_format_restore_today_basis(const PtcUiModel *model, char *out, size_t out_size);
+void ptc_ui_format_weekly_save_result(const PtcUiModel *model, char *message, size_t message_size,
+                                      char *detail, size_t detail_size);
+void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, size_t message_size,
+                                       char *detail, size_t detail_size);
 int ptc_ui_weekday_for_display_slot(int slot);
 void ptc_ui_change_parent_page(PtcUiModel *model, int direction);
 void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertical);
@@ -444,12 +458,14 @@ PtcUiRect ptc_ui_child_footer_rect(int index);
 PtcUiRect ptc_ui_error_retry_rect(void);
 PtcUiRect ptc_ui_error_back_rect(void);
 PtcUiRect ptc_ui_setup_shortcut_card_rect(int index);
-PtcUiRect ptc_ui_setup_shortcut_capture_rect(void);
 PtcUiRect ptc_ui_setup_primary_rect(void);
 PtcUiRect ptc_ui_setup_back_rect(void);
 PtcUiRect ptc_ui_setup_pin_rect(void);
 PtcUiRect ptc_ui_setup_album_toggle_rect(void);
+PtcUiRect ptc_ui_setup_theme_rect(int index);
 PtcUiRect ptc_ui_setup_zone_rect(int index);
+PtcUiRect ptc_ui_notice_status_icon_rect(int y);
+PtcUiRect ptc_ui_notice_command_text_rect(int y, int height);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_refresh_rect(void);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
@@ -500,7 +516,6 @@ PtcUiRect ptc_ui_credential_demo_rect(void);
 PtcUiRect ptc_ui_grant_manager_card_rect(int index);
 PtcUiRect ptc_ui_grant_generate_rect(void);
 PtcUiRect ptc_ui_shortcut_option_rect(int index);
-PtcUiRect ptc_ui_shortcut_capture_rect(void);
 PtcUiRect ptc_ui_shortcut_disable_rect(void);
 PtcUiRect ptc_ui_shortcut_hint_rect(void);
 PtcUiRect ptc_ui_grant_adjust_rect(int index);

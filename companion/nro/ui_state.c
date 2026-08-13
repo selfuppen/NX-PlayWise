@@ -56,6 +56,197 @@ const char *ptc_ui_shortcut_common_label(int index)
     return labels[index];
 }
 
+bool ptc_ui_shortcut_mask_held(uint64_t configured_mask, uint64_t buttons)
+{
+    return configured_mask != 0 && (buttons & configured_mask) == configured_mask;
+}
+
+bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held, int required_samples)
+{
+    if (!state || required_samples <= 0) return false;
+    if (!combo_held) {
+        state->held_samples = 0;
+        state->latched = false;
+        return false;
+    }
+    if (state->latched) return false;
+    if (state->held_samples < required_samples) ++state->held_samples;
+    if (state->held_samples < required_samples) return false;
+    state->latched = true;
+    return true;
+}
+
+int ptc_ui_migrate_setup_step(int step, int wizard_version)
+{
+    if (step <= 0) return 0;
+    if (wizard_version >= 3) return step <= PTC_UI_SETUP_ZONE ? step : PTC_UI_SETUP_SHORTCUT;
+    if (wizard_version == 2) {
+        if (step <= 2) return step;
+        /* v2 had takeover before entry protection and no theme page. */
+        if (step == 3) return PTC_UI_SETUP_ALBUM;
+        return PTC_UI_SETUP_THEME;
+    }
+    /* The legacy four-step flow used 4 for its final zone page. */
+    if (step >= 4) return PTC_UI_SETUP_THEME;
+    return step;
+}
+
+static const char *effective_rule_label(PtcRuleSource source)
+{
+    switch (source) {
+    case PTC_RULE_SOURCE_STATUTORY_HOLIDAY: return "国家法定休假日";
+    case PTC_RULE_SOURCE_MAKEUP_WORKDAY: return "国家调休工作日";
+    case PTC_RULE_SOURCE_TODAY_OVERRIDE: return "今日临时设置";
+    case PTC_RULE_SOURCE_WEEKLY:
+    default: return "周计划";
+    }
+}
+
+static void format_rule_basis(PtcDayRule rule, int played_minutes, bool played_available,
+                              char *out, size_t out_size)
+{
+    int remaining;
+    if (!out || out_size == 0) return;
+    if (rule.mode == PTC_RULE_MODE_UNLIMITED) {
+        snprintf(out, out_size, "不限时");
+    } else if (!played_available || played_minutes < 0) {
+        snprintf(out, out_size, "额度 %u 分钟；已玩时间不可用，暂不能估算剩余",
+                 (unsigned int)rule.minutes);
+    } else {
+        remaining = (int)rule.minutes - played_minutes;
+        if (remaining < 0) remaining = 0;
+        snprintf(out, out_size, "额度 %u − 已玩 %d = 预计剩余 %d 分钟",
+                 (unsigned int)rule.minutes, played_minutes, remaining);
+    }
+}
+
+static PtcDayRule active_rule_for_source(const PtcUiModel *model)
+{
+    uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
+    if (strcmp(model->rule_source, "today_override") == 0) return model->today_override_rule;
+    if (strcmp(model->rule_source, "statutory_holiday") == 0) return model->holiday_rule;
+    if (strcmp(model->rule_source, "makeup_workday") == 0) return model->makeup_workday_rule;
+    return model->draft_week[weekday];
+}
+
+PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model)
+{
+    PtcRules rules;
+    PtcEffectiveRule empty;
+    memset(&empty, 0, sizeof(empty));
+    empty.source = PTC_RULE_SOURCE_WEEKLY;
+    empty.rule.mode = PTC_RULE_MODE_LIMIT;
+    empty.rule.minutes = 60;
+    if (!model) return empty;
+    ptc_rules_default(&rules);
+    memcpy(rules.week, model->current_week, sizeof(rules.week));
+    rules.today_override.present = false;
+    rules.holiday_enabled = model->holiday_enabled;
+    rules.holiday_rule = model->holiday_rule;
+    rules.makeup_workday_rule = model->makeup_workday_rule;
+    return ptc_rules_resolve(&rules, model->day_index, ptc_weekday_from_day_index(model->day_index));
+}
+
+void ptc_ui_format_restore_today_basis(const PtcUiModel *model, char *out, size_t out_size)
+{
+    PtcEffectiveRule after;
+    char current[112];
+    char restored[112];
+    if (!out || out_size == 0) return;
+    if (!model) {
+        snprintf(out, out_size, "当前状态不可用，恢复后请刷新确认。");
+        return;
+    }
+    after = ptc_ui_rule_after_today_restore(model);
+    format_rule_basis(model->today_override_rule, model->played_minutes, model->played_minutes_available,
+                      current, sizeof(current));
+    format_rule_basis(after.rule, model->played_minutes, model->played_minutes_available,
+                      restored, sizeof(restored));
+    snprintf(out, out_size, "当前临时设置：%s\n清除后按%s：%s",
+             current, effective_rule_label(after.source), restored);
+}
+
+void ptc_ui_format_weekly_save_result(const PtcUiModel *model, char *message, size_t message_size,
+                                      char *detail, size_t detail_size)
+{
+    uint8_t weekday;
+    char basis[112];
+    char current_basis[112];
+    const char *current_source;
+    bool today_changed;
+    if (!model || !message || message_size == 0 || !detail || detail_size == 0) return;
+    weekday = ptc_weekday_from_day_index(model->day_index);
+    today_changed = ptc_ui_day_rule_effectively_changed(model->current_week[weekday], model->draft_week[weekday]);
+    format_rule_basis(model->draft_week[weekday], model->played_minutes, model->played_minutes_available,
+                      basis, sizeof(basis));
+    current_source = effective_rule_label(
+        strcmp(model->rule_source, "today_override") == 0 ? PTC_RULE_SOURCE_TODAY_OVERRIDE :
+        strcmp(model->rule_source, "statutory_holiday") == 0 ? PTC_RULE_SOURCE_STATUTORY_HOLIDAY :
+        strcmp(model->rule_source, "makeup_workday") == 0 ? PTC_RULE_SOURCE_MAKEUP_WORKDAY : PTC_RULE_SOURCE_WEEKLY);
+    format_rule_basis(active_rule_for_source(model), model->played_minutes, model->played_minutes_available,
+                      current_basis, sizeof(current_basis));
+    if (!today_changed) {
+        snprintf(message, message_size, "周计划已保存；本次只修改其他日期，今天不受影响。");
+        snprintf(detail, detail_size, "今天继续按%s执行：%s。", current_source, current_basis);
+    } else if (strcmp(model->rule_source, "today_override") == 0) {
+        snprintf(message, message_size, "周计划已保存；今天仍按临时设置执行，当前不变。");
+        snprintf(detail, detail_size, "当前按今日临时设置：%s；恢复周计划生效后：%s。",
+                 current_basis, basis);
+    } else if (strcmp(model->rule_source, "statutory_holiday") == 0 ||
+               strcmp(model->rule_source, "makeup_workday") == 0) {
+        snprintf(message, message_size, "周计划已保存；今天由%s覆盖，当前不变。",
+                 strcmp(model->rule_source, "statutory_holiday") == 0 ? "国家法定休假日" : "国家调休工作日");
+        snprintf(detail, detail_size, "当前按%s：%s；今天对应的周计划已更新为：%s。",
+                 current_source, current_basis, basis);
+    } else {
+        snprintf(message, message_size, "周计划已保存并影响今天。");
+        snprintf(detail, detail_size, "今天按新周计划执行：%s。", basis);
+    }
+}
+
+void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, size_t message_size,
+                                       char *detail, size_t detail_size)
+{
+    const char *source;
+    PtcDayRule active;
+    char basis[112];
+    uint8_t weekday;
+    if (!model || !message || message_size == 0 || !detail || detail_size == 0) return;
+    weekday = ptc_weekday_from_day_index(model->day_index);
+    if (strcmp(model->rule_source, "today_override") == 0) {
+        format_rule_basis(model->today_override_rule, model->played_minutes,
+                          model->played_minutes_available, basis, sizeof(basis));
+        snprintf(message, message_size, "国家节假日设置已保存；今天仍按临时设置执行，当前不变。");
+        snprintf(detail, detail_size, "当前按今日临时设置：%s；清除后会按节假日优先级重新计算。", basis);
+        return;
+    }
+    if (strcmp(model->rule_source, "statutory_holiday") == 0) {
+        source = "国家法定休假日";
+        active = model->draft_holiday_rule;
+    } else if (strcmp(model->rule_source, "makeup_workday") == 0) {
+        source = "国家调休工作日";
+        active = model->draft_makeup_workday_rule;
+    } else {
+        source = "周计划";
+        active = model->draft_week[weekday];
+    }
+    format_rule_basis(active, model->played_minutes, model->played_minutes_available, basis, sizeof(basis));
+    if (!model->draft_holiday_enabled) {
+        snprintf(message, message_size, "国家节假日预设已保存但未启用；今天不受影响。");
+        snprintf(detail, detail_size, "今天继续按%s执行：%s。", source, basis);
+    } else if (!model->calendar_covered) {
+        snprintf(message, message_size, "国家节假日设置已保存；内置日历未覆盖今天，今天不受影响。");
+        snprintf(detail, detail_size, "今天回退周计划：%s。", basis);
+    } else if (strcmp(model->rule_source, "statutory_holiday") == 0 ||
+               strcmp(model->rule_source, "makeup_workday") == 0) {
+        snprintf(message, message_size, "国家节假日设置已保存并影响今天。");
+        snprintf(detail, detail_size, "今天按%s执行：%s。", source, basis);
+    } else {
+        snprintf(message, message_size, "国家节假日设置已保存；今天是普通日期，不受影响。");
+        snprintf(detail, detail_size, "今天继续按周计划执行：%s。", basis);
+    }
+}
+
 void ptc_ui_format_custom_shortcut_hint(
     const char *shortcut_label,
     char *out,
@@ -927,15 +1118,16 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         snprintf(model->message, sizeof(model->message), "自动控制已启用，首次设置完成。");
     } else {
         const char *guidance = request_success_guidance(type);
-        if (type && strcmp(type, "set_holiday_policy") == 0) {
-            snprintf(model->message, sizeof(model->message), "%s",
-                     model->draft_holiday_enabled
-                       ? "国家节假日设置已保存，后台已重新计算今天的规则。"
-                       : "国家节假日预设已保存但未启用；今天继续按临时设置或周计划执行。");
+        if (type && strcmp(type, "set_weekly_template") == 0) {
+            ptc_ui_format_weekly_save_result(model, model->message, sizeof(model->message),
+                                             model->feedback_detail, sizeof(model->feedback_detail));
+        } else if (type && strcmp(type, "set_holiday_policy") == 0) {
+            ptc_ui_format_holiday_save_result(model, model->message, sizeof(model->message),
+                                              model->feedback_detail, sizeof(model->feedback_detail));
         } else {
             snprintf(model->message, sizeof(model->message), "%s", request_success_message(type));
         }
-        if (guidance[0]) {
+        if (guidance[0] && !model->feedback_detail[0]) {
             snprintf(model->feedback_detail, sizeof(model->feedback_detail), "%s", guidance);
         }
     }
@@ -1004,12 +1196,6 @@ PtcUiRect ptc_ui_setup_shortcut_card_rect(int index)
     return rect;
 }
 
-PtcUiRect ptc_ui_setup_shortcut_capture_rect(void)
-{
-    PtcUiRect rect = {692, 526, 384, 42};
-    return rect;
-}
-
 PtcUiRect ptc_ui_setup_primary_rect(void)
 {
     PtcUiRect rect = {896, 570, 330, 62};
@@ -1033,6 +1219,24 @@ PtcUiRect ptc_ui_setup_album_toggle_rect(void)
     /* Enlarge the painted switch target without making the explanation clickable. */
     PtcUiRect rect = {852, 210, 176, 86};
     return rect;
+}
+
+PtcUiRect ptc_ui_setup_theme_rect(int index)
+{
+    PtcUiRect rect = {204 + index * 292, 270, 268, 132};
+    if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
+    return rect;
+}
+
+PtcUiRect ptc_ui_notice_status_icon_rect(int y)
+{
+    return (PtcUiRect){74, y + 9, 20, 20};
+}
+
+PtcUiRect ptc_ui_notice_command_text_rect(int y, int height)
+{
+    bool compact = height < 128;
+    return (PtcUiRect){78, y + (compact ? 38 : 43), 1124, compact ? 20 : 22};
 }
 
 PtcUiRect ptc_ui_setup_zone_rect(int index)
@@ -1606,24 +1810,17 @@ PtcUiRect ptc_ui_shortcut_option_rect(int index)
     return rect;
 }
 
-PtcUiRect ptc_ui_shortcut_capture_rect(void)
-{
-    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_SHORTCUT_MANAGER);
-    PtcUiRect rect = {dialog.x + 36, dialog.y + 430, 318, 46};
-    return rect;
-}
-
 PtcUiRect ptc_ui_shortcut_disable_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_SHORTCUT_MANAGER);
-    PtcUiRect rect = {dialog.x + 370, dialog.y + 430, 318, 46};
+    PtcUiRect rect = {dialog.x + 120, dialog.y + 430, 400, 46};
     return rect;
 }
 
 PtcUiRect ptc_ui_shortcut_hint_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_SHORTCUT_MANAGER);
-    PtcUiRect rect = {dialog.x + 704, dialog.y + 430, 380, 46};
+    PtcUiRect rect = {dialog.x + 600, dialog.y + 430, 400, 46};
     return rect;
 }
 
@@ -1853,7 +2050,6 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
                 return make_hit(PTC_UI_HIT_SHORTCUT_OPTION, i);
             }
         }
-        if (ptc_ui_rect_contains(ptc_ui_shortcut_capture_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_CAPTURE, 0);
         if (ptc_ui_rect_contains(ptc_ui_shortcut_disable_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_DISABLE, 0);
         if (ptc_ui_rect_contains(ptc_ui_shortcut_hint_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_HINT, 0);
         break;
@@ -1925,15 +2121,18 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
                     return make_hit(PTC_UI_HIT_SETUP_SHORTCUT_CARD, i);
                 }
             }
-            if (ptc_ui_rect_contains(ptc_ui_setup_shortcut_capture_rect(), x, y)) {
-                return make_hit(PTC_UI_HIT_SETUP_SHORTCUT_CAPTURE, 0);
-            }
         } else if (step == PTC_UI_SETUP_PIN &&
                    ptc_ui_rect_contains(ptc_ui_setup_pin_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_SETUP_PIN, 0);
         } else if (step == PTC_UI_SETUP_ALBUM &&
                    ptc_ui_rect_contains(ptc_ui_setup_album_toggle_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_SETUP_ALBUM_TOGGLE, 0);
+        } else if (step == PTC_UI_SETUP_THEME) {
+            for (i = 0; i < 3; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_setup_theme_rect(i), x, y)) {
+                    return make_hit(PTC_UI_HIT_SETUP_THEME_OPTION, i);
+                }
+            }
         } else if (step == PTC_UI_SETUP_ZONE) {
             if (ptc_ui_rect_contains(ptc_ui_setup_zone_rect(0), x, y)) {
                 return make_hit(PTC_UI_HIT_SETUP_CHILD_ZONE, 0);

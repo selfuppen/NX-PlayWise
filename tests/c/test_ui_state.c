@@ -160,6 +160,100 @@ static void test_release_navigation(void)
                "minus shortcut hint remains unambiguous");
 }
 
+static void test_shortcut_hold_and_setup_migration(void)
+{
+    PtcUiShortcutHoldState hold = {0};
+    uint64_t lr_right = UINT64_C(0x10) | UINT64_C(0x40) | UINT64_C(0x4000);
+    check_true(ptc_ui_shortcut_mask_held(lr_right, lr_right), "L+R+right chord matches all configured buttons");
+    check_true(!ptc_ui_shortcut_mask_held(lr_right, lr_right & ~UINT64_C(0x4000)),
+               "incomplete L+R+right chord does not match");
+    check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4), "first shortcut sample waits");
+    check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4), "second shortcut sample waits");
+    check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4), "third shortcut sample waits");
+    check_true(ptc_ui_shortcut_hold_update(&hold, true, 4), "fourth 100ms sample triggers shortcut");
+    check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4), "held shortcut triggers only once");
+    check_true(!ptc_ui_shortcut_hold_update(&hold, false, 4), "release resets shortcut latch");
+    check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4) &&
+               !ptc_ui_shortcut_hold_update(&hold, true, 4) &&
+               !ptc_ui_shortcut_hold_update(&hold, false, 4),
+               "early release never triggers shortcut");
+    check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4) &&
+               !ptc_ui_shortcut_hold_update(&hold, true, 4) &&
+               !ptc_ui_shortcut_hold_update(&hold, true, 4) &&
+               ptc_ui_shortcut_hold_update(&hold, true, 4),
+               "shortcut can trigger again after complete release");
+
+    check_int(ptc_ui_migrate_setup_step(0, 2), 0, "completed v2 wizard remains complete");
+    check_int(ptc_ui_migrate_setup_step(1, 2), PTC_UI_SETUP_SHORTCUT, "v2 shortcut step keeps meaning");
+    check_int(ptc_ui_migrate_setup_step(2, 2), PTC_UI_SETUP_PIN, "v2 PIN step keeps meaning");
+    check_int(ptc_ui_migrate_setup_step(3, 2), PTC_UI_SETUP_ALBUM, "v2 takeover resumes after takeover");
+    check_int(ptc_ui_migrate_setup_step(4, 2), PTC_UI_SETUP_THEME, "v2 entry protection continues to theme");
+    check_int(ptc_ui_migrate_setup_step(5, 2), PTC_UI_SETUP_THEME, "v2 zone receives new theme step");
+    check_int(ptc_ui_migrate_setup_step(6, 3), PTC_UI_SETUP_ZONE, "v3 zone step is stable");
+}
+
+static void test_rule_result_guidance(void)
+{
+    PtcUiModel model;
+    char message[192];
+    char detail[192];
+    PtcEffectiveRule restored;
+    memset(&model, 0, sizeof(model));
+    model.day_index = 1;
+    model.played_minutes_available = true;
+    model.played_minutes = 20;
+    for (int day = 0; day < 7; ++day) {
+        model.current_week[day].mode = PTC_RULE_MODE_LIMIT;
+        model.current_week[day].minutes = 60;
+        model.draft_week[day] = model.current_week[day];
+    }
+    model.draft_week[ptc_weekday_from_day_index(model.day_index)].minutes = 90;
+    snprintf(model.rule_source, sizeof(model.rule_source), "today_override");
+    ptc_ui_format_weekly_save_result(&model, message, sizeof(message), detail, sizeof(detail));
+    check_true(strstr(message, "当前不变") != NULL && strstr(detail, "恢复周计划生效后") != NULL &&
+               strstr(detail, "90") != NULL && strstr(detail, "20") != NULL && strstr(detail, "70") != NULL,
+               "weekly override result states conclusion and calculation basis");
+    snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
+    ptc_ui_format_weekly_save_result(&model, message, sizeof(message), detail, sizeof(detail));
+    check_true(strstr(message, "影响今天") != NULL && strstr(detail, "额度 90") != NULL,
+               "weekly result states immediate effect without an override");
+    model.draft_week[ptc_weekday_from_day_index(model.day_index)] =
+        model.current_week[ptc_weekday_from_day_index(model.day_index)];
+    model.draft_week[3].minutes = 120;
+    ptc_ui_format_weekly_save_result(&model, message, sizeof(message), detail, sizeof(detail));
+    check_true(strstr(message, "其他日期") != NULL && strstr(message, "今天不受影响") != NULL,
+               "weekly result identifies edits to other dates");
+
+    model.today_override_present = true;
+    model.today_override_rule.mode = PTC_RULE_MODE_LIMIT;
+    model.today_override_rule.minutes = 45;
+    model.holiday_enabled = true;
+    model.holiday_rule.mode = PTC_RULE_MODE_LIMIT;
+    model.holiday_rule.minutes = 120;
+    model.calendar_covered = true;
+    restored = ptc_ui_rule_after_today_restore(&model);
+    check_int(restored.source, PTC_RULE_SOURCE_WEEKLY, "ordinary restore falls back to weekly plan");
+    ptc_ui_format_restore_today_basis(&model, detail, sizeof(detail));
+    check_true(strstr(detail, "当前临时设置") != NULL && strstr(detail, "额度 45") != NULL &&
+               strstr(detail, "周计划") != NULL && strstr(detail, "额度 60") != NULL,
+               "restore confirmation exposes current and restored calculation basis");
+
+    model.draft_holiday_enabled = false;
+    model.today_override_present = false;
+    snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
+    ptc_ui_format_holiday_save_result(&model, message, sizeof(message), detail, sizeof(detail));
+    check_true(strstr(message, "未启用") != NULL && strstr(message, "不受影响") != NULL,
+               "disabled holiday save gives a direct conclusion");
+    model.draft_holiday_enabled = true;
+    model.calendar_covered = true;
+    model.draft_holiday_rule = model.holiday_rule;
+    snprintf(model.rule_source, sizeof(model.rule_source), "statutory_holiday");
+    ptc_ui_format_holiday_save_result(&model, message, sizeof(message), detail, sizeof(detail));
+    check_true(strstr(message, "影响今天") != NULL && strstr(detail, "国家法定休假日") != NULL &&
+               strstr(detail, "额度 120") != NULL,
+               "active holiday save gives source and calculation basis");
+}
+
 static void test_numeric_input(void)
 {
     PtcUiModel model;
@@ -372,6 +466,12 @@ static void test_theme_resolution(void)
         option = ptc_ui_theme_option_rect(2);
         check_hit(hit_center(&model, option), PTC_UI_HIT_THEME_OPTION, 2,
                   "dark theme option has a matching touch target");
+    }
+    {
+        PtcUiRect icon = ptc_ui_notice_status_icon_rect(530);
+        PtcUiRect command = ptc_ui_notice_command_text_rect(530, 100);
+        check_true(!rects_overlap(icon, command), "compact notice icon does not overlap command text");
+        check_int(icon.w, 20, "notice status icon is compact");
     }
 }
 
@@ -610,12 +710,10 @@ static void test_release_hit_targets(void)
     model.setup_step = PTC_UI_SETUP_SHORTCUT;
     check_hit(hit_center(&model, ptc_ui_setup_shortcut_card_rect(0)), PTC_UI_HIT_SETUP_SHORTCUT_CARD, 0,
               "setup shortcut preset card");
-    check_hit(hit_center(&model, ptc_ui_setup_shortcut_capture_rect()), PTC_UI_HIT_SETUP_SHORTCUT_CAPTURE, 0,
-              "setup manual shortcut capture");
+    check_hit(ptc_ui_hit_test(&model, 900, 540), PTC_UI_HIT_NONE, 0,
+              "hidden setup shortcut capture area is inert");
     check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(0), ptc_ui_setup_shortcut_card_rect(1)),
                "setup shortcut presets do not overlap");
-    check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(1), ptc_ui_setup_shortcut_capture_rect()),
-               "setup manual shortcut card does not overlap presets");
     check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(6), ptc_ui_setup_shortcut_card_rect(13)),
                "two shortcut preset columns do not overlap");
     model.setup_step = PTC_UI_SETUP_PIN;
@@ -625,6 +723,9 @@ static void test_release_hit_targets(void)
               "setup album switch has a touch target");
     check_hit(ptc_ui_hit_test(&model, 300, 300), PTC_UI_HIT_NONE, 0,
               "setup album explanation does not toggle the choice");
+    model.setup_step = PTC_UI_SETUP_THEME;
+    check_hit(hit_center(&model, ptc_ui_setup_theme_rect(2)), PTC_UI_HIT_SETUP_THEME_OPTION, 2,
+              "setup dark theme option has a matching touch target");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
     check_true(!ptc_ui_setup_takeover_complete(&model), "pending takeover still requires confirmation");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "restored");
@@ -780,7 +881,8 @@ static void test_user_state_mapping(void)
         "{\"version\":1,\"request_id\":\"holiday-ok\",\"type\":\"set_holiday_policy\",\"status\":\"ok\","
         "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
         "\"remaining_available\":true,\"remaining_minutes\":40,\"played_minutes_available\":true,"
-        "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0,\"rule_source\":\"weekly\"},\"completed_at\":111}";
+        "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0,\"rule_source\":\"weekly\","
+        "\"calendar_covered\":true},\"completed_at\":111}";
 
     memset(&model, 0, sizeof(model));
     check_true(ptc_ui_apply_result_json(&model, pending), "syncing result parses");
@@ -819,16 +921,18 @@ static void test_user_state_mapping(void)
     check_true(model.code_preview_after_available && model.code_preview_after_minutes == 50,
                "preview post-redemption remainder mapped");
     check_true(ptc_ui_apply_result_json(&model, weekly_saved), "weekly success result parses");
-    check_true(strstr(model.message, "今天没有单独设置") != NULL && strstr(model.message, "后台") == NULL,
-               "weekly success message uses parent-facing language");
+    check_true(strstr(model.message, "周计划已保存") != NULL && strstr(model.message, "后台") == NULL &&
+               model.feedback_detail[0] != '\0',
+               "weekly success message gives a parent-facing conclusion and basis");
     model.draft_holiday_enabled = false;
     check_true(ptc_ui_apply_result_json(&model, holiday_saved), "disabled holiday success result parses");
     check_true(strstr(model.message, "未启用") != NULL && strstr(model.message, "重新计算") == NULL,
                "disabled holiday save does not claim that today's rule changed");
     model.draft_holiday_enabled = true;
     check_true(ptc_ui_apply_result_json(&model, holiday_saved), "enabled holiday success result parses");
-    check_true(strstr(model.message, "重新计算") != NULL,
-               "enabled holiday save explains the immediate recalculation");
+    check_true(strstr(model.message, "普通日期") != NULL && strstr(model.message, "不受影响") != NULL &&
+               strstr(model.feedback_detail, "周计划") != NULL,
+               "enabled ordinary-date holiday save gives the direct result and basis");
 }
 
 int main(void)
@@ -836,6 +940,8 @@ int main(void)
     test_theme_resolution();
     test_parent_status_summary();
     test_release_navigation();
+    test_shortcut_hold_and_setup_migration();
+    test_rule_result_guidance();
     test_numeric_input();
     test_time_previews();
     test_candidate_navigation();

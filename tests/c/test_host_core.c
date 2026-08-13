@@ -259,6 +259,18 @@ static void test_auth_and_queue(void)
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/auth.json",
         "{\"version\":1,\"pin_hash\":\"\",\"pin_salt\":\"\",\"hash\":\"hmac-sha256\",\"updated_at\":0}"),
         "seed empty auth");
+    check_int(ptc_companion_auth_state(&auth), PTC_AUTH_EMPTY, "fresh install starts with empty PIN state");
+    check_int(ptc_companion_auth_set_pin(&auth, "110", 1, fixed_random, &seed), PTC_AUTH_OK,
+              "onboarding default PIN can be created through the hashed auth path");
+    check_int(ptc_companion_auth_verify_pin(&auth, "110", 2, &retry_after), PTC_AUTH_OK,
+              "onboarding default PIN verifies without storing plaintext");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/auth.json", text, sizeof(text)) &&
+               strstr(text, "\"110\"") == NULL && strstr(text, "pin_hash") != NULL,
+               "default PIN plaintext is absent from auth storage");
+    mem.fail_write_path_contains = "auth.json";
+    check_int(ptc_companion_auth_set_pin(&auth, "110", 3, fixed_random, &seed), PTC_AUTH_WRITE_FAILED,
+              "default PIN creation reports storage failure");
+    mem.fail_write_path_contains = NULL;
     check_int(ptc_companion_auth_set_pin(&auth, "7", 1, fixed_random, &seed), PTC_AUTH_OK, "one-digit PIN accepted");
     check_int(ptc_companion_auth_verify_pin(&auth, "7", 100, &retry_after), PTC_AUTH_OK, "variable-length PIN verifies");
     check_int(ptc_companion_auth_set_pin(&auth, "12a", 1, fixed_random, &seed), PTC_AUTH_BAD_ARGUMENT, "non-digit PIN rejected");

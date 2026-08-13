@@ -38,7 +38,7 @@
 #define HIDDEN_RIGHT_SHOULDER_MASK (HidNpadButton_R | HidNpadButton_ZR)
 #define CUSTOM_SHORTCUT_HOLD_TICKS 4
 #define DANGER_CONFIRM_HOLD_TICKS 10
-#define CUSTOM_SHORTCUT_CAPTURE_MASK (HidNpadButton_X | HidNpadButton_Y | HidNpadButton_Plus | HidNpadButton_Minus | \
+#define CUSTOM_SHORTCUT_VALID_MASK (HidNpadButton_X | HidNpadButton_Y | HidNpadButton_Plus | HidNpadButton_Minus | \
     HidNpadButton_L | HidNpadButton_ZL | HidNpadButton_R | HidNpadButton_ZR | \
     HidNpadButton_Up | HidNpadButton_Down | HidNpadButton_Left | HidNpadButton_Right)
 #define STICK_DEADZONE 16000
@@ -49,6 +49,7 @@ __attribute__((used)) static const char PLAYWISE_EMBEDDED_MANIFEST[] = PLAYWISE_
 typedef enum {
     AUTH_RETRY_NONE = 0,
     AUTH_RETRY_ENTER_PARENT,
+    AUTH_RETRY_DEFAULT_SETUP_PIN,
     AUTH_RETRY_SETUP_PIN,
     AUTH_RETRY_SAVE_CREDENTIAL,
     AUTH_RETRY_CHANGE_PIN,
@@ -74,8 +75,7 @@ typedef struct {
     char last_result[RESULT_TEXT_SIZE];
     int elapsed_ms;
     int hidden_ticks;
-    int custom_shortcut_ticks;
-    bool custom_shortcut_latched;
+    PtcUiShortcutHoldState custom_shortcut_hold;
     bool minus_pending;
     int danger_confirm_ticks;
     bool waiting;
@@ -116,6 +116,8 @@ static void show_pending_redemption(UiState *ui);
 static void show_grant_manager(UiState *ui, int selection);
 static void export_diagnostics(UiState *ui);
 static bool save_ui_preferences(UiState *ui);
+static bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference);
+static bool ensure_default_setup_pin(UiState *ui);
 
 static int64_t unix_ms_now(void)
 {
@@ -257,7 +259,7 @@ static bool custom_parent_combo_held(const UiState *ui, u64 buttons)
     if (!ui || !ui->model.custom_shortcut_enabled || ui->model.custom_shortcut_mask == 0) {
         return false;
     }
-    return (buttons & ui->model.custom_shortcut_mask) == ui->model.custom_shortcut_mask;
+    return ptc_ui_shortcut_mask_held(ui->model.custom_shortcut_mask, buttons);
 }
 
 static void refresh_disable_flag(UiState *ui)
@@ -381,7 +383,7 @@ static u64 shortcut_preset_mask(int index)
 
 static bool shortcut_mask_valid(u64 mask)
 {
-    return mask != 0 && (mask & ~((u64)CUSTOM_SHORTCUT_CAPTURE_MASK)) == 0;
+    return mask != 0 && (mask & ~((u64)CUSTOM_SHORTCUT_VALID_MASK)) == 0;
 }
 
 static bool parse_shortcut_mask(const char *text, u64 *out)
@@ -482,6 +484,7 @@ static void load_ui_preferences(UiState *ui)
     ui->model.show_parent_shortcut_hint = true;
     ui->model.setup_step = 0;
     ui->model.setup_shortcut_index = PTC_UI_SHORTCUT_PRESET_LR;
+    ui->model.setup_theme_index = PTC_UI_THEME_SYSTEM;
     ui->model.setup_zone_index = 1;
     ui->theme_preference = PTC_UI_THEME_SYSTEM;
     ui->system_theme = PTC_UI_SYSTEM_THEME_UNAVAILABLE;
@@ -523,12 +526,10 @@ static void load_ui_preferences(UiState *ui)
     }
     ui->theme_view = ptc_ui_theme_make_view(ui->theme_preference, ui->system_theme);
     item = cJSON_GetObjectItemCaseSensitive(root, "setup_wizard_step");
-    if (cJSON_IsNumber(item) && item->valueint >= 0 && item->valueint <= PTC_UI_SETUP_ZONE) {
-        ui->model.setup_step = item->valueint;
-        if (item->valueint == 4) {
-            cJSON *wizard_version = cJSON_GetObjectItemCaseSensitive(root, "setup_wizard_version");
-            if (!cJSON_IsNumber(wizard_version) || wizard_version->valueint < 2) ui->model.setup_step = PTC_UI_SETUP_ZONE;
-        }
+    if (cJSON_IsNumber(item)) {
+        cJSON *wizard_version = cJSON_GetObjectItemCaseSensitive(root, "setup_wizard_version");
+        ui->model.setup_step = ptc_ui_migrate_setup_step(
+            item->valueint, cJSON_IsNumber(wizard_version) ? wizard_version->valueint : 1);
     }
     for (int index = 0; index < PTC_UI_SHORTCUT_PRESET_COUNT; ++index) {
         if (ui->model.custom_shortcut_mask == shortcut_preset_mask(index)) {
@@ -576,7 +577,7 @@ static bool save_ui_preferences(UiState *ui)
     cJSON_DeleteItemFromObject(root, "setup_wizard_step");
     cJSON_AddNumberToObject(root, "setup_wizard_step", ui->model.setup_step);
     cJSON_DeleteItemFromObject(root, "setup_wizard_version");
-    cJSON_AddNumberToObject(root, "setup_wizard_version", 2);
+    cJSON_AddNumberToObject(root, "setup_wizard_version", 3);
     rendered = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     ok = rendered && ui->client.storage->vtable->write_text_atomic(ui->client.storage, CONFIG_PATH, rendered);
@@ -1143,9 +1144,7 @@ static void poll_result(UiState *ui, bool force)
         if (strcmp(ui->model.result_type, "complete_setup") == 0 &&
             strcmp(ui->model.result_status, "ok") == 0) {
             ui->model.setup_zone_index = 1;
-            ui->model.setup_album_enable = false;
-            refresh_album_restriction(ui);
-            (void)save_setup_step(ui, PTC_UI_SETUP_ALBUM);
+            (void)save_setup_step(ui, PTC_UI_SETUP_ZONE);
         }
         sync_setup_wizard(ui);
         load_rule_drafts(ui);
@@ -1364,47 +1363,6 @@ static void select_setup_shortcut(UiState *ui, int index)
              ui->model.shortcut_draft_label);
 }
 
-static void begin_setup_shortcut_capture(UiState *ui)
-{
-    if (!ui) {
-        return;
-    }
-    ui->model.shortcut_capture_active = true;
-    ui->model.captured_shortcut_mask = 0;
-    snprintf(ui->model.message, sizeof(ui->model.message),
-             "请同时按住要绑定的按键；A 录入草稿，B 取消。Minus - 始终保留。");
-}
-
-static void update_setup_shortcut_capture(UiState *ui, u64 down, u64 held)
-{
-    u64 captured;
-    if (!ui || !ui->model.shortcut_capture_active) {
-        return;
-    }
-    captured = held & (u64)CUSTOM_SHORTCUT_CAPTURE_MASK;
-    if (captured != 0) {
-        ui->model.captured_shortcut_mask = captured;
-    }
-    if (down & HidNpadButton_B) {
-        ui->model.shortcut_capture_active = false;
-        ui->model.captured_shortcut_mask = 0;
-        snprintf(ui->model.message, sizeof(ui->model.message), "已取消手动录入。");
-        return;
-    }
-    if (down & HidNpadButton_A) {
-        if (!shortcut_mask_valid(ui->model.captured_shortcut_mask)) {
-            snprintf(ui->model.message, sizeof(ui->model.message), "请先按住至少一个可绑定的按键。");
-            return;
-        }
-        ui->model.shortcut_draft_mask = ui->model.captured_shortcut_mask;
-        ui->model.shortcut_draft_enabled = true;
-        ui->model.shortcut_capture_active = false;
-        refresh_shortcut_draft_label(ui);
-        snprintf(ui->model.message, sizeof(ui->model.message), "已录入待确认组合：%s。请按 + 保存。",
-                 ui->model.shortcut_draft_label);
-    }
-}
-
 static bool commit_shortcut_preferences(UiState *ui)
 {
     u64 old_mask;
@@ -1450,10 +1408,26 @@ static void setup_pin(UiState *ui)
     ui->auth_retry_action = AUTH_RETRY_SETUP_PIN;
     state = ptc_companion_auth_state(&ui->auth);
     if (state == PTC_AUTH_OK) {
-        if (save_setup_step(ui, PTC_UI_SETUP_TAKEOVER)) {
-            snprintf(ui->model.message, sizeof(ui->model.message),
-                     "当前 任我玩 PIN 已存在，可以继续确认接管系统控制。");
+        if (!keyboard_input("修改默认 PIN", "输入新的 1–64 位数字；保留 110 可按 B 取消",
+                            pin, sizeof(pin), true, true, false) ||
+            !keyboard_input("确认新 PIN", "请再次输入相同的数字 PIN",
+                            pin_confirm, sizeof(pin_confirm), true, true, false)) {
+            ui->auth_retry_action = AUTH_RETRY_NONE;
+            snprintf(ui->model.message, sizeof(ui->model.message), "已保留当前 PIN。");
+            return;
         }
+        if (strcmp(pin, pin_confirm) != 0) {
+            show_auth_error(ui, "两次 PIN 不一致", "两次输入的新 PIN 不一致，已全部清空，请重新设置。", 0);
+            return;
+        }
+        state = ptc_companion_auth_set_pin(&ui->auth, pin, time(NULL), switch_random, NULL);
+        if (state != PTC_AUTH_OK) {
+            show_auth_error(ui, "PIN 修改失败", auth_status_zh(state), 0);
+            return;
+        }
+        ui->auth_retry_action = AUTH_RETRY_NONE;
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                 strlen(pin) < 4U ? "PIN 已修改；当前仍属于弱保护，建议使用更长 PIN。" : "PIN 已修改。");
         return;
     }
     if (state != PTC_AUTH_EMPTY) {
@@ -1478,12 +1452,38 @@ static void setup_pin(UiState *ui)
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_NONE;
-    if (save_setup_step(ui, PTC_UI_SETUP_TAKEOVER)) {
+    if (save_setup_step(ui, PTC_UI_SETUP_ALBUM)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                  strlen(pin) < 4U
-                     ? "PIN 已保存；当前 PIN 少于 4 位，容易被猜到，但不会阻止继续设置。"
-                     : "PIN 已保存；下一步确认接管系统控制。");
+                     ? "PIN 已保存；当前 PIN 少于 4 位，容易被猜到，建议修改。"
+                     : "PIN 已保存；下一步设置入口保护。");
     }
+}
+
+static bool ensure_default_setup_pin(UiState *ui)
+{
+    PtcAuthStatus state;
+    if (!ui) return false;
+    state = ptc_companion_auth_state(&ui->auth);
+    if (state == PTC_AUTH_OK) {
+        ui->auth_retry_action = AUTH_RETRY_NONE;
+        return true;
+    }
+    if (state != PTC_AUTH_EMPTY) {
+        ui->auth_retry_action = AUTH_RETRY_DEFAULT_SETUP_PIN;
+        show_auth_error(ui, "无法创建默认 PIN", auth_status_zh(state), 0);
+        return false;
+    }
+    state = ptc_companion_auth_set_pin(&ui->auth, "110", time(NULL), switch_random, NULL);
+    if (state != PTC_AUTH_OK) {
+        ui->auth_retry_action = AUTH_RETRY_DEFAULT_SETUP_PIN;
+        show_auth_error(ui, "默认 PIN 设置失败", auth_status_zh(state), 0);
+        return false;
+    }
+    ui->auth_retry_action = AUTH_RETRY_NONE;
+    snprintf(ui->model.message, sizeof(ui->model.message),
+             "已创建默认 PIN 110；这是弱保护，建议在此修改。");
+    return true;
 }
 
 static void finish_setup(UiState *ui)
@@ -1518,7 +1518,7 @@ static void setup_previous(UiState *ui)
 
 static void setup_primary(UiState *ui)
 {
-    if (!ui || ui->model.shortcut_capture_active) {
+    if (!ui) {
         return;
     }
     switch (ui->model.setup_step) {
@@ -1531,27 +1531,10 @@ static void setup_primary(UiState *ui)
                  ui->model.custom_shortcut_enabled
                     ? "快捷键已确认启用；固定 Minus - 仍然有效。"
                     : "未启用自定义组合；当前只保留固定 Minus -。");
-        (void)save_setup_step(ui, PTC_UI_SETUP_PIN);
+        if (save_setup_step(ui, PTC_UI_SETUP_PIN)) (void)ensure_default_setup_pin(ui);
         break;
     case PTC_UI_SETUP_PIN:
-        setup_pin(ui);
-        break;
-    case PTC_UI_SETUP_TAKEOVER:
-        if (ptc_ui_setup_takeover_complete(&ui->model)) {
-            ui->model.setup_album_enable = false;
-            if (save_setup_step(ui, PTC_UI_SETUP_ALBUM)) {
-                snprintf(ui->model.message, sizeof(ui->model.message),
-                         "系统控制接管已完成，可选择是否开启自制程序菜单入口保护。");
-            }
-        } else if (!ui->waiting) {
-            if (ui->model.disable_flag_present && strcmp(ui->model.setup_phase, "restored") == 0) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新接管",
-                                     "将重新执行只读兼容预检；仅预检通过后才解除紧急停用并重新启用额度管理。");
-            } else {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "确认接管系统控制",
-                                     "先执行只读兼容预检；通过后保存安装快照并启用额度管理。");
-            }
-        }
+        if (ensure_default_setup_pin(ui)) (void)save_setup_step(ui, PTC_UI_SETUP_ALBUM);
         break;
     case PTC_UI_SETUP_ALBUM:
         if (ui->model.setup_album_enable) {
@@ -1572,8 +1555,32 @@ static void setup_primary(UiState *ui)
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "已暂时跳过自制程序菜单入口保护，可稍后在加时码与安全中开启。");
         }
-        ui->model.setup_zone_index = 1;
-        (void)save_setup_step(ui, PTC_UI_SETUP_ZONE);
+        ui->model.setup_theme_index = (int)ui->theme_preference;
+        (void)save_setup_step(ui, PTC_UI_SETUP_THEME);
+        break;
+    case PTC_UI_SETUP_THEME:
+        if (apply_theme_preference(ui, (PtcUiThemePreference)ui->model.setup_theme_index)) {
+            (void)save_setup_step(ui, PTC_UI_SETUP_TAKEOVER);
+            snprintf(ui->model.message, sizeof(ui->model.message), "外观主题已保存；下一步确认接管系统控制。");
+        } else {
+            snprintf(ui->model.message, sizeof(ui->model.message), "主题设置未保存，已恢复原外观；请确认 SD 卡可写。");
+        }
+        break;
+    case PTC_UI_SETUP_TAKEOVER:
+        if (ptc_ui_setup_takeover_complete(&ui->model)) {
+            ui->model.setup_zone_index = 1;
+            if (save_setup_step(ui, PTC_UI_SETUP_ZONE)) {
+                snprintf(ui->model.message, sizeof(ui->model.message), "系统控制接管已完成；请选择进入区域。");
+            }
+        } else if (!ui->waiting) {
+            if (ui->model.disable_flag_present && strcmp(ui->model.setup_phase, "restored") == 0) {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新接管",
+                                     "将重新执行只读兼容预检；仅预检通过后才解除紧急停用并重新启用额度管理。");
+            } else {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "确认接管系统控制",
+                                     "先执行只读兼容预检；通过后保存安装快照并启用额度管理。");
+            }
+        }
         break;
     case PTC_UI_SETUP_ZONE:
         finish_setup(ui);
@@ -1585,14 +1592,8 @@ static void setup_primary(UiState *ui)
 
 static void handle_setup_input(UiState *ui, u64 down, u64 held)
 {
+    (void)held;
     if (!ui || ui->model.view != PTC_UI_SETUP || ui->waiting) {
-        if (ui && ui->model.shortcut_capture_active) {
-            update_setup_shortcut_capture(ui, down, held);
-        }
-        return;
-    }
-    if (ui->model.shortcut_capture_active) {
-        update_setup_shortcut_capture(ui, down, held);
         return;
     }
     if (down & HidNpadButton_B) {
@@ -1609,8 +1610,6 @@ static void handle_setup_input(UiState *ui, u64 down, u64 held)
             ui->model.setup_shortcut_index = (ui->model.setup_shortcut_index + 7) % PTC_UI_SHORTCUT_PRESET_COUNT;
         } else if (down & HidNpadButton_A) {
             select_setup_shortcut(ui, ui->model.setup_shortcut_index);
-        } else if (down & HidNpadButton_X) {
-            begin_setup_shortcut_capture(ui);
         } else if (down & HidNpadButton_Plus) {
             setup_primary(ui);
         }
@@ -1620,6 +1619,14 @@ static void handle_setup_input(UiState *ui, u64 down, u64 held)
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "当前选择：%s；按 A 或 + 后才保存并继续。",
                      ui->model.setup_album_enable ? "开启自制程序菜单入口保护" : "暂时跳过");
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+            setup_primary(ui);
+        }
+    } else if (ui->model.setup_step == PTC_UI_SETUP_THEME) {
+        if (down & HidNpadButton_Left) {
+            ui->model.setup_theme_index = ui->model.setup_theme_index <= 0 ? 2 : ui->model.setup_theme_index - 1;
+        } else if (down & HidNpadButton_Right) {
+            ui->model.setup_theme_index = (ui->model.setup_theme_index + 1) % 3;
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             setup_primary(ui);
         }
@@ -2258,6 +2265,7 @@ static void dispatch_auth_retry(UiState *ui, AuthRetryAction action)
     if (!ui) return;
     switch (action) {
     case AUTH_RETRY_ENTER_PARENT: enter_parent_area(ui); break;
+    case AUTH_RETRY_DEFAULT_SETUP_PIN: (void)ensure_default_setup_pin(ui); break;
     case AUTH_RETRY_SETUP_PIN: setup_pin(ui); break;
     case AUTH_RETRY_SAVE_CREDENTIAL: request_save_credential(ui); break;
     case AUTH_RETRY_CHANGE_PIN: change_parent_pin(ui); break;
@@ -2371,22 +2379,6 @@ static PtcDayRule effective_today_rule(const UiState *ui)
     return ui->model.current_week[weekday];
 }
 
-static void format_rule_remaining(const PtcUiModel *model, PtcDayRule rule, char *out, size_t out_size)
-{
-    int remaining;
-    if (rule.mode == PTC_RULE_MODE_UNLIMITED) {
-        snprintf(out, out_size, "不限时");
-        return;
-    }
-    if (!model->played_minutes_available || model->played_minutes < 0) {
-        snprintf(out, out_size, "暂不可用");
-        return;
-    }
-    remaining = (int)rule.minutes - model->played_minutes;
-    if (remaining < 0) remaining = 0;
-    snprintf(out, out_size, "%d 分钟", remaining);
-}
-
 static uint16_t current_today_limit_value(const UiState *ui)
 {
     PtcDayRule rule = effective_today_rule(ui);
@@ -2483,20 +2475,14 @@ static void handle_today_action_ready(UiState *ui, int index)
         open_confirm_overlay(ui, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, "将今天设为不限时", body);
         break;
     case 4: {
-        PtcDayRule current = effective_today_rule(ui);
-        uint8_t weekday = ptc_weekday_from_day_index(ui->model.day_index);
-        PtcDayRule weekly = ui->model.current_week[weekday];
-        char current_remaining[32];
-        char weekly_remaining[32];
-        format_rule_remaining(&ui->model, current, current_remaining, sizeof(current_remaining));
-        format_rule_remaining(&ui->model, weekly, weekly_remaining, sizeof(weekly_remaining));
-        snprintf(body, sizeof(body),
-                 "%s\n当前生效剩余：%s\n恢复周计划后：%s\n将清除今天的临时额度或不限时状态。",
-                 date, current_remaining, weekly_remaining);
+        PtcEffectiveRule restored = ptc_ui_rule_after_today_restore(&ui->model);
+        char basis[256];
+        ptc_ui_format_restore_today_basis(&ui->model, basis, sizeof(basis));
+        snprintf(body, sizeof(body), "%s\n%s", date, basis);
         open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, "恢复周计划", body);
-        if (weekly.mode == PTC_RULE_MODE_LIMIT) {
+        if (restored.rule.mode == PTC_RULE_MODE_LIMIT) {
             ui->model.confirm_hold_required = !ui->model.played_minutes_available ||
-                ui->model.played_minutes < 0 || (int)weekly.minutes - ui->model.played_minutes <= 0;
+                ui->model.played_minutes < 0 || (int)restored.rule.minutes - ui->model.played_minutes <= 0;
         }
         break;
     }
@@ -2859,14 +2845,14 @@ static void save_weekly_from_page(UiState *ui)
     if (!ui->model.today_override_present &&
         ptc_ui_day_rule_effectively_changed(before, after)) {
         if (after.mode == PTC_RULE_MODE_UNLIMITED) {
-            snprintf(body, sizeof(body), "今天对应的周计划将改为不限时。\n保存后，如果今天没有单独设置，今天也会按新计划执行。");
+            snprintf(body, sizeof(body), "今天对应的周计划将改为不限时。\n保存后今天生效，今天将不限时。");
         } else if (ui->model.played_minutes_available) {
             int remaining = (int)after.minutes - ui->model.played_minutes;
             if (remaining < 0) remaining = 0;
-            snprintf(body, sizeof(body), "今天已玩约 %d 分钟；新额度 %u 分钟。\n保存后预计还可玩约 %d 分钟。",
+            snprintf(body, sizeof(body), "今天已玩约 %d 分钟；新额度 %u 分钟。\n保存后今天生效，预计还可玩约 %d 分钟。",
                      ui->model.played_minutes, (unsigned int)after.minutes, remaining);
         } else {
-            snprintf(body, sizeof(body), "今天的新额度为 %u 分钟。\n当前已玩暂不可用；保存后请刷新查看实际剩余。",
+            snprintf(body, sizeof(body), "今天的新额度为 %u 分钟。\n保存后今天生效；当前已玩不可用，请刷新查看实际剩余。",
                      (unsigned int)after.minutes);
         }
         open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY, "周计划将影响今天", body);
@@ -3116,9 +3102,7 @@ static void handle_overlay_input(UiState *ui, u64 down)
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER) {
-        if (ui->model.shortcut_capture_active) {
-            update_setup_shortcut_capture(ui, down, down | ui->model.captured_shortcut_mask);
-        } else if (down & HidNpadButton_B) {
+        if (down & HidNpadButton_B) {
             ptc_ui_cancel_overlay(&ui->model);
             refresh_custom_shortcut_label(ui);
         } else if (down & HidNpadButton_Up) {
@@ -3130,8 +3114,6 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ui->model.setup_shortcut_index = (ui->model.setup_shortcut_index + 7) % PTC_UI_SHORTCUT_PRESET_COUNT;
         } else if (down & HidNpadButton_A) {
             select_setup_shortcut(ui, ui->model.setup_shortcut_index);
-        } else if (down & HidNpadButton_X) {
-            begin_setup_shortcut_capture(ui);
         } else if (down & HidNpadButton_Y) {
             ui->model.shortcut_draft_show_hint = !ui->model.shortcut_draft_show_hint;
         } else if (down & HidNpadButton_ZL) {
@@ -3489,9 +3471,6 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_SETUP_SHORTCUT_CARD:
         select_setup_shortcut(ui, hit.index);
         break;
-    case PTC_UI_HIT_SETUP_SHORTCUT_CAPTURE:
-        begin_setup_shortcut_capture(ui);
-        break;
     case PTC_UI_HIT_SETUP_PRIMARY:
         setup_primary(ui);
         break;
@@ -3833,9 +3812,6 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_SHORTCUT_OPTION:
         select_setup_shortcut(ui, hit.index);
         break;
-    case PTC_UI_HIT_SHORTCUT_CAPTURE:
-        begin_setup_shortcut_capture(ui);
-        break;
     case PTC_UI_HIT_SHORTCUT_DISABLE:
         ui->model.shortcut_draft_enabled = false;
         break;
@@ -3845,6 +3821,10 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_THEME_OPTION:
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);
+        break;
+    case PTC_UI_HIT_SETUP_THEME_OPTION:
+        ui->model.setup_theme_index = hit.index;
+        setup_primary(ui);
         break;
     case PTC_UI_HIT_GRANT_ADJUST:
         ui->model.overlay_selection = hit.index;
@@ -3972,6 +3952,8 @@ int main(int argc, char **argv)
         u64 stick_buttons;
         bool parent_combo_held;
         bool custom_combo_held;
+        bool custom_combo_triggered;
+        bool custom_combo_candidate;
         if (ui.theme_refresh_pending) refresh_theme(&ui);
         padUpdate(&pad);
         down = padGetButtonsDown(&pad);
@@ -3983,26 +3965,17 @@ int main(int argc, char **argv)
         padRepeaterUpdate(&direction_repeater, held & DIRECTION_BUTTON_MASK);
         down |= padRepeaterGetButtons(&direction_repeater);
         parent_combo_held = hidden_parent_combo_held(held);
-        custom_combo_held = ui.model.view == PTC_UI_CHILD &&
-            ui.model.overlay == PTC_UI_OVERLAY_NONE && custom_parent_combo_held(&ui, held);
+        custom_combo_held = custom_parent_combo_held(&ui, held);
+        custom_combo_candidate = ui.model.view == PTC_UI_CHILD &&
+            ui.model.overlay == PTC_UI_OVERLAY_NONE && ui.model.custom_shortcut_enabled &&
+            (held & ui.model.custom_shortcut_mask) != 0;
 
-        if (custom_combo_held) {
-            /* Plus is an exit shortcut only when it is used on its own.  As
-             * soon as it participates in the configured parent combination,
-             * do not let releasing it turn the attempted unlock into an exit. */
-            if (ui.model.custom_shortcut_mask & HidNpadButton_Plus) {
-            }
-            if (!ui.custom_shortcut_latched) {
-                ++ui.custom_shortcut_ticks;
-                if (ui.custom_shortcut_ticks >= CUSTOM_SHORTCUT_HOLD_TICKS) {
-                    ui.custom_shortcut_latched = true;
-                    ui.minus_pending = false;
-                    enter_parent_area(&ui);
-                }
-            }
-        } else {
-            ui.custom_shortcut_ticks = 0;
-            ui.custom_shortcut_latched = false;
+        custom_combo_triggered = ptc_ui_shortcut_hold_update(
+            &ui.custom_shortcut_hold, custom_combo_held, CUSTOM_SHORTCUT_HOLD_TICKS);
+        if (custom_combo_triggered && ui.model.view == PTC_UI_CHILD &&
+            ui.model.overlay == PTC_UI_OVERLAY_NONE) {
+            ui.minus_pending = false;
+            enter_parent_area(&ui);
         }
 
         if ((ui.model.view == PTC_UI_CHILD || ui.model.view == PTC_UI_SETUP) &&
@@ -4016,9 +3989,7 @@ int main(int argc, char **argv)
         }
 
         if (ui.model.overlay != PTC_UI_OVERLAY_NONE) {
-            if (ui.model.shortcut_capture_active) {
-                update_setup_shortcut_capture(&ui, down, held);
-            } else if (ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required) {
+            if (ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required) {
                 if (down & HidNpadButton_B) {
                     ui.danger_confirm_ticks = 0;
                     handle_overlay_input(&ui, down);
@@ -4039,10 +4010,16 @@ int main(int argc, char **argv)
                 handle_overlay_input(&ui, down);
             }
         } else if (ui.model.view == PTC_UI_CHILD) {
-            if (down & HidNpadButton_B) {
-                running = false;
-            } else if (down & HidNpadButton_Minus) {
+            if (down & HidNpadButton_Minus) {
+                /* Preserve the fixed Minus-on-release entrance even when Minus
+                 * is also one member of the configured custom chord. */
                 ui.minus_pending = true;
+            }
+            if (custom_combo_candidate) {
+                /* Do not let buttons from an in-progress custom chord reach
+                 * ordinary child-area actions before its hold decision. */
+            } else if (down & HidNpadButton_B) {
+                running = false;
             } else if (ui.minus_pending && !(held & HidNpadButton_Minus)) {
                 ui.minus_pending = false;
                 enter_parent_area(&ui);

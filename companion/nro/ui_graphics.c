@@ -337,19 +337,19 @@ static void draw_status_symbol(
     uint32_t color,
     int kind)
 {
-    draw_rect_outline(pixels, stride, (UiRect){x, y, 28, 28}, 2, color);
+    draw_rect_outline(pixels, stride, (UiRect){x, y, 20, 20}, 2, color);
     if (kind == 1) {
-        draw_line(pixels, stride, x + 6, y + 15, x + 12, y + 21, 3, color);
-        draw_line(pixels, stride, x + 12, y + 21, x + 23, y + 7, 3, color);
+        draw_line(pixels, stride, x + 4, y + 11, x + 8, y + 15, 2, color);
+        draw_line(pixels, stride, x + 8, y + 15, x + 16, y + 5, 2, color);
     } else if (kind == 2) {
-        fill_rect(pixels, stride, (UiRect){x + 12, y + 6, 4, 12}, color);
-        fill_rect(pixels, stride, (UiRect){x + 12, y + 21, 4, 4}, color);
+        fill_rect(pixels, stride, (UiRect){x + 8, y + 4, 4, 9}, color);
+        fill_rect(pixels, stride, (UiRect){x + 8, y + 15, 4, 3}, color);
     } else if (kind == 3) {
-        draw_line(pixels, stride, x + 7, y + 7, x + 21, y + 21, 3, color);
-        draw_line(pixels, stride, x + 21, y + 7, x + 7, y + 21, 3, color);
+        draw_line(pixels, stride, x + 5, y + 5, x + 15, y + 15, 2, color);
+        draw_line(pixels, stride, x + 15, y + 5, x + 5, y + 15, 2, color);
     } else {
-        fill_rect(pixels, stride, (UiRect){x + 12, y + 6, 4, 4}, color);
-        fill_rect(pixels, stride, (UiRect){x + 12, y + 12, 4, 11}, color);
+        fill_rect(pixels, stride, (UiRect){x + 8, y + 4, 4, 3}, color);
+        fill_rect(pixels, stride, (UiRect){x + 8, y + 9, 4, 8}, color);
     }
 }
 
@@ -717,10 +717,10 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     fill_round_rect(pixels, stride, rect, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, rect, 1, COLOR(219, 225, 233));
     fill_rect(pixels, stride, (UiRect){rect.x, rect.y, 6, rect.height}, accent);
-    draw_status_symbol(pixels, stride, rect.x + 20, rect.y + 8, accent,
+    draw_status_symbol(pixels, stride, rect.x + 20, rect.y + 9, accent,
                        model->waiting ? 2 : (strcmp(model->result_status, "ok") == 0 ? 1 :
                        (strcmp(model->result_status, "error") == 0 ? 3 : 0)));
-    draw_text(pixels, stride, rect.x + 62, rect.y + (compact ? 22 : 25),
+    draw_text(pixels, stride, rect.x + 48, rect.y + (compact ? 22 : 25),
               model->waiting ? "正在执行" : "最近执行", compact ? 17 : 18, accent);
     snprintf(
         execution,
@@ -729,14 +729,14 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
         model->command_name[0] ? model->command_name : "未开始",
         model->transport_label[0] ? model->transport_label : "传输：未开始");
     fit_text(fitted, sizeof(fitted), execution, compact ? 17 : 18, rect.width - 48);
-    draw_text(pixels, stride, rect.x + 24, rect.y + (compact ? 45 : 50), fitted,
+    draw_text(pixels, stride, rect.x + 24, rect.y + (compact ? 58 : 64), fitted,
               compact ? 17 : 18, COLOR(77, 86, 99));
     fit_text(fitted, sizeof(fitted), model->message, compact ? 19 : 21, rect.width - 48);
-    draw_text(pixels, stride, rect.x + 24, rect.y + (compact ? 70 : 78), fitted,
+    draw_text(pixels, stride, rect.x + 24, rect.y + (compact ? 82 : 91), fitted,
               compact ? 19 : 20, COLOR(45, 52, 62));
     if (model->feedback_detail[0]) {
         fit_text(detail, sizeof(detail), model->feedback_detail, compact ? 15 : 17, rect.width - 48);
-        draw_text(pixels, stride, rect.x + 24, rect.y + (compact ? 92 : 105), detail,
+        draw_text(pixels, stride, rect.x + 24, rect.y + (compact ? 98 : 112), detail,
                   compact ? 15 : 16, accent);
     }
 }
@@ -849,7 +849,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char countdown_line[80];
     char fitted[220];
     int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_SHORTCUT;
-    snprintf(title, sizeof(title), "首次设置 · %d/5", step);
+    snprintf(title, sizeof(title), "首次设置 · %d/6", step);
     draw_header(pixels, stride, grace_remaining >= 0 ? "正在同步" : title,
         grace_remaining >= 0 ? "系统设置正在同步，完成后继续选择进入的区域" : "按步骤完成 任我玩 的家长设置");
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
@@ -865,13 +865,14 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             snprintf(countdown_line, sizeof(countdown_line), "同步完成，正在启用额度管理…");
         }
         draw_text(pixels, stride, 204, 310, countdown_line, 34, COLOR(28, 118, 188));
-        draw_text(pixels, stride, 204, 356, "无需操作；同步完成后会进入第 4 步选择是否开启入口保护。", 22, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 356, "无需操作；同步完成后会进入第 6 步选择区域。", 22, COLOR(45, 52, 62));
     } else {
-        draw_text(pixels, stride, 150, 154, "1 快捷键", 17, step == PTC_UI_SETUP_SHORTCUT ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 350, 154, "2 PIN", 17, step == PTC_UI_SETUP_PIN ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 520, 154, "3 接管", 17, step == PTC_UI_SETUP_TAKEOVER ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 690, 154, "4 入口保护", 17, step == PTC_UI_SETUP_ALBUM ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 920, 154, "5 进入区域", 17, step == PTC_UI_SETUP_ZONE ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 104, 154, "1 快捷键", 16, step == PTC_UI_SETUP_SHORTCUT ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 286, 154, "2 PIN", 16, step == PTC_UI_SETUP_PIN ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 424, 154, "3 入口保护", 16, step == PTC_UI_SETUP_ALBUM ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 626, 154, "4 外观主题", 16, step == PTC_UI_SETUP_THEME ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 824, 154, "5 接管", 16, step == PTC_UI_SETUP_TAKEOVER ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 974, 154, "6 进入区域", 16, step == PTC_UI_SETUP_ZONE ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
         if (step == PTC_UI_SETUP_SHORTCUT) {
             UiRect compact_fixed = {204, 184, 872, 54};
             fill_round_rect(pixels, stride, compact_fixed, 8, COLOR(244, 249, 255));
@@ -888,10 +889,6 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                                  ptc_ui_shortcut_common_label(index), 16,
                                  selected ? COLOR(28, 118, 188) : COLOR(45, 52, 62));
             }
-            draw_dialog_button(pixels, stride, ptc_ui_setup_shortcut_capture_rect(),
-                               model->shortcut_capture_active ? "按住组合 · A 录入 · B 取消" : "X / 点击  录制其他组合",
-                               model->shortcut_capture_active ? COLOR(255, 247, 229) : COLOR(235, 238, 243),
-                               model->shortcut_capture_active ? COLOR(170, 109, 18) : COLOR(28, 118, 188), true);
             draw_text(pixels, stride, 204, 554,
                       model->shortcut_draft_enabled ? "待确认自定义组合（需长按）：" : "待确认状态：仅保留 Minus（松开进入）",
                       17, COLOR(91, 100, 116));
@@ -900,12 +897,12 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                 draw_text(pixels, stride, 420, 554, fitted, 18, COLOR(28, 118, 188));
             }
         } else if (step == PTC_UI_SETUP_PIN) {
-            draw_text(pixels, stride, 204, 220, "设置 任我玩 PIN", 30, COLOR(28, 34, 43));
-            draw_text(pixels, stride, 204, 262, "这是进入家长区、修改规则和安全设置时使用的本应用 PIN。", 21, COLOR(77, 86, 99));
-            draw_text(pixels, stride, 204, 294, "请输入 1–64 位纯数字，系统会引导你再次输入确认。", 21, COLOR(77, 86, 99));
-            draw_dialog_button(pixels, stride, ptc_ui_setup_pin_rect(), "A / 点击  设置或确认 PIN",
+            draw_text(pixels, stride, 204, 220, "任我玩 PIN 已设置", 30, COLOR(28, 34, 43));
+            draw_text(pixels, stride, 204, 262, "全新安装默认 PIN：110", 24, COLOR(215, 139, 25));
+            draw_text(pixels, stride, 204, 294, "默认值属于弱保护；可继续使用，也可现在修改为 1–64 位数字。", 20, COLOR(77, 86, 99));
+            draw_dialog_button(pixels, stride, ptc_ui_setup_pin_rect(), "A / 点击  修改 PIN",
                                COLOR(28, 118, 188), COLOR(255, 255, 255), false);
-            draw_text(pixels, stride, 204, 420, "PIN 少于 4 位时只提示弱保护风险，不会阻止保存。", 20, COLOR(215, 139, 25));
+            draw_text(pixels, stride, 204, 420, "选择“继续使用”不会保存 PIN 明文；认证文件只保存随机盐和哈希。", 19, COLOR(91, 100, 116));
         } else if (step == PTC_UI_SETUP_TAKEOVER) {
             bool resuming_restored_setup = model->disable_flag_present && strcmp(phase, "restored") == 0;
             bool takeover_complete = ptc_ui_setup_takeover_complete(model);
@@ -929,11 +926,11 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                       21, COLOR(45, 52, 62));
             draw_text(pixels, stride, 204, 360,
                       takeover_complete
-                          ? "按 A 或点击继续，进入第 4 步选择是否开启自制程序菜单入口保护。"
+                          ? "按 A 或点击继续，进入第 6 步选择区域。"
                           : "接管成功后会保留同步宽限，系统控制不会立即跳变。",
                       21, COLOR(45, 52, 62));
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
-                               takeover_complete ? "A / 点击  继续到第 4 步" :
+                               takeover_complete ? "A / 点击  继续到第 6 步" :
                                (resuming_restored_setup ? "A / 点击  解除停用并重新接管" : "A / 点击  确认接管"),
                                takeover_complete ? COLOR(25, 132, 95) : COLOR(28, 118, 188),
                                COLOR(255, 255, 255), false);
@@ -952,6 +949,23 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                       model->setup_album_enable ? "当前选择：开启自制程序菜单入口保护" : "当前选择：暂时跳过",
                       18, model->setup_album_enable ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
             draw_text(pixels, stride, 236, 448, "左右 / X / 触摸开关切换 · A / + 保存并继续", 17, COLOR(28, 118, 188));
+        } else if (step == PTC_UI_SETUP_THEME) {
+            static const char *LABELS[] = {"跟随系统", "浅色", "暗色"};
+            static const char *DETAILS[] = {"随 Switch 设置", "经典浅色外观", "OLED Hybrid"};
+            draw_text(pixels, stride, 204, 220, "选择外观主题", 30, COLOR(28, 34, 43));
+            draw_text(pixels, stride, 204, 252, "默认跟随系统；只改变主机应用外观，不影响计时和后台控制。", 18, COLOR(77, 86, 99));
+            for (int index = 0; index < 3; ++index) {
+                UiRect option = to_uirect(ptc_ui_setup_theme_rect(index));
+                bool selected = index == model->setup_theme_index;
+                fill_round_rect(pixels, stride, option, 8, selected ? COLOR(230, 242, 255) : COLOR(248, 250, 252));
+                draw_rect_outline(pixels, stride, option, selected ? 3 : 1,
+                                  selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+                draw_text_center(pixels, stride, (UiRect){option.x, option.y + 22, option.width, 36},
+                                 LABELS[index], 23, COLOR(28, 34, 43));
+                draw_text_center(pixels, stride, (UiRect){option.x, option.y + 70, option.width, 28},
+                                 DETAILS[index], 16, COLOR(91, 100, 114));
+            }
+            draw_text(pixels, stride, 204, 448, "左右选择 · A / + 保存并继续", 18, COLOR(28, 118, 188));
         } else {
             draw_text(pixels, stride, 204, 214, "初始化完成，选择进入区域", 30, COLOR(28, 34, 43));
             draw_text(pixels, stride, 204, 254, "之后可在两个区域之间切换；进入家长区会受 PIN 保护。", 21, COLOR(77, 86, 99));
@@ -1003,11 +1017,14 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                                model->setup_zone_index == 1 ? "A  确认进入家长区" : "A  确认进入孩子区",
                                COLOR(28, 118, 188), COLOR(255, 255, 255), false);
         } else if (step == PTC_UI_SETUP_PIN) {
-            draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "A  设置并继续",
+            draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "A  继续使用当前 PIN",
                                COLOR(28, 118, 188), COLOR(255, 255, 255), false);
         } else if (step == PTC_UI_SETUP_ALBUM) {
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
                                model->setup_album_enable ? "A  启用并继续" : "A  暂时跳过并继续",
+                               COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+        } else if (step == PTC_UI_SETUP_THEME) {
+            draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "A  保存主题并继续",
                                COLOR(28, 118, 188), COLOR(255, 255, 255), false);
         }
     }
@@ -1437,7 +1454,7 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
                                                model->unrestricted_today == 1, current_minutes));
         draw_text_center(pixels, stride, (UiRect){panel.x + 180, panel.y + 126, 28, 38}, "→", 24, COLOR(91, 100, 114));
         draw_time_state_card(pixels, stride, (UiRect){panel.x + 208, panel.y + 104, 160, 86},
-                             model->today_override_present ? "恢复周计划后" : "保存后预计",
+                             model->today_override_present ? "恢复周计划生效后" : "保存后今天生效",
                              after_value,
                              time_state_accent(model->draft_week[weekday].mode == PTC_RULE_MODE_UNLIMITED ||
                                                model->played_minutes_available,
@@ -1446,7 +1463,7 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
                                                   ? (int)model->draft_week[weekday].minutes - model->played_minutes : -1));
         draw_wrapped_text(pixels, stride, panel.x + 22, panel.y + 218,
                           model->today_override_present
-                            ? "保存不会清除今天的临时设置；预计值将在恢复周计划后使用。"
+                            ? "今天当前不变；预计值将在恢复周计划生效后使用。"
                             : "保存后会由后台按新计划重新计算今天。",
                           14, panel.width - 44, 20, 3, model->today_override_present ? COLOR(215, 139, 25) : COLOR(91, 100, 114));
         } else {
@@ -2099,7 +2116,7 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         snprintf(left, sizeof(left), "%s：%s",
                  model->today_override_present ? "当前有效剩余" : "当前还能玩", current_value);
         snprintf(right, sizeof(right), "%s：%s",
-                 model->today_override_present ? "保存并在之后恢复周计划后预计" : "保存后预计还能玩", after_value);
+                 model->today_override_present ? "恢复周计划生效后预计" : "保存后今天预计还能玩", after_value);
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 32, dialog.y + 242, 266, 32}, 6, COLOR(248, 250, 253));
         draw_rect_outline(pixels, stride, (UiRect){dialog.x + 32, dialog.y + 242, 266, 32}, 1,
                           time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
@@ -2168,8 +2185,7 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
                  "本次增加 %d 分钟；今天有效，成功兑换后只能使用一次。",
                  model->code_grant_minutes);
     } else if (restore) {
-        snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
-                 "将清除今天的临时额度或不限时状态。");
+        ptc_ui_format_restore_today_basis(model, shell_model.overlay_body, sizeof(shell_model.overlay_body));
     } else if (limit_change) {
         snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
                  "请核对今天的实时状态和修改结果。");
@@ -2193,9 +2209,9 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
                              time_state_accent(model->code_preview_after_available, false,
                                                model->code_preview_after_minutes));
     } else if (restore) {
-        uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
-        PtcDayRule current = model->today_override_present ? model->today_override_rule : model->current_week[weekday];
-        PtcDayRule after = model->current_week[weekday];
+        PtcEffectiveRule restored = ptc_ui_rule_after_today_restore(model);
+        PtcDayRule current = model->today_override_present ? model->today_override_rule : restored.rule;
+        PtcDayRule after = restored.rule;
         char current_value[48];
         char after_value[48];
         int current_minutes = current.mode == PTC_RULE_MODE_LIMIT && model->played_minutes_available
@@ -2642,9 +2658,6 @@ static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, con
         if (chosen) draw_text(pixels, stride, option.x + option.width - 74, option.y + 23,
                               "待保存", 15, COLOR(25, 132, 95));
     }
-    draw_dialog_button(pixels, stride, ptc_ui_shortcut_capture_rect(),
-                       model->shortcut_capture_active ? "按住组合 · A 录入 · B 取消" : "X  录制其他组合",
-                       COLOR(244, 246, 249), COLOR(28, 118, 188), true);
     draw_dialog_button(pixels, stride, ptc_ui_shortcut_disable_rect(),
                        "ZL  关闭自定义快捷键", COLOR(255, 244, 244), COLOR(194, 61, 61), true);
     draw_dialog_button(pixels, stride, ptc_ui_shortcut_hint_rect(),
