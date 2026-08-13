@@ -16,7 +16,13 @@
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
-#define COLOR(r, g, b) ((uint32_t)RGBA8_MAXALPHA((r), (g), (b)))
+#define COLOR(r, g, b) (((uint32_t)(r) << 16) | ((uint32_t)(g) << 8) | (uint32_t)(b))
+
+typedef enum {
+    UI_COLOR_FILL = 0,
+    UI_COLOR_BORDER,
+    UI_COLOR_TEXT
+} UiColorRole;
 
 typedef struct {
     int x;
@@ -41,6 +47,14 @@ typedef struct {
 } UiAction;
 
 static UiRuntime g_ui;
+static const PtcUiPalette *g_palette;
+static PtcUiResolvedTheme g_resolved_theme = PTC_UI_RESOLVED_LIGHT;
+static PtcUiThemeView g_theme = {
+    PTC_UI_THEME_SYSTEM,
+    PTC_UI_RESOLVED_LIGHT,
+    NULL,
+    false
+};
 
 static UiRect to_uirect(PtcUiRect rect);
 static const char *rule_mode_label(PtcRuleMode mode);
@@ -48,6 +62,61 @@ static void format_status_age(const PtcUiModel *model, char *out, size_t out_siz
 static uint32_t status_age_color(const PtcUiModel *model);
 static void draw_toggle_switch(uint32_t *pixels, uint32_t stride, UiRect rect, bool is_on,
                                bool selected, bool disabled, const char *on_label, const char *off_label);
+
+static uint32_t pack_rgb(uint32_t rgb)
+{
+    return RGBA8_MAXALPHA((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff);
+}
+
+static bool color_is(uint32_t color, unsigned int red, unsigned int green, unsigned int blue)
+{
+    return color == COLOR(red, green, blue);
+}
+
+static uint32_t resolve_color(uint32_t source, UiColorRole role)
+{
+    unsigned int red;
+    unsigned int green;
+    unsigned int blue;
+    if (g_resolved_theme == PTC_UI_RESOLVED_LIGHT || !g_palette) return pack_rgb(source);
+    red = (source >> 16) & 0xff;
+    green = (source >> 8) & 0xff;
+    blue = source & 0xff;
+    /* Pale light-theme tints remain raised surfaces; only their text/border
+     * carries status color in dark mode. */
+    if (role == UI_COLOR_FILL && red >= 225 && green >= 225 && blue >= 225) {
+        return pack_rgb(red >= 252 && green >= 252 && blue >= 252
+            ? g_palette->surface : g_palette->surface_raised);
+    }
+    if (color_is(source, 28, 118, 188) || color_is(source, 42, 105, 188) ||
+        color_is(source, 20, 90, 160) || color_is(source, 230, 242, 255)) {
+        return pack_rgb(role == UI_COLOR_BORDER ? g_palette->focus : g_palette->accent);
+    }
+    if (color_is(source, 25, 132, 95) || color_is(source, 7, 93, 76) ||
+        color_is(source, 235, 248, 242) || color_is(source, 235, 249, 242) ||
+        color_is(source, 240, 248, 244)) return pack_rgb(g_palette->success);
+    if (color_is(source, 215, 139, 25) || color_is(source, 220, 161, 65) ||
+        color_is(source, 170, 109, 18) || color_is(source, 255, 244, 230) ||
+        color_is(source, 255, 247, 229) || color_is(source, 255, 249, 238)) return pack_rgb(g_palette->warning);
+    if (color_is(source, 194, 61, 61) || color_is(source, 216, 49, 54) ||
+        color_is(source, 170, 35, 48) || color_is(source, 170, 65, 65) ||
+        color_is(source, 218, 118, 118) || color_is(source, 255, 232, 235) ||
+        color_is(source, 255, 235, 238) || color_is(source, 255, 240, 240) ||
+        color_is(source, 255, 244, 244) || color_is(source, 255, 245, 245)) return pack_rgb(g_palette->danger);
+    if (role == UI_COLOR_TEXT) {
+        if (red >= 245 && green >= 245 && blue >= 245) return pack_rgb(g_palette->on_accent);
+        if (red <= 70 && green <= 80 && blue <= 95) return pack_rgb(g_palette->text_primary);
+        if (red <= 128 && green <= 136 && blue <= 150) return pack_rgb(g_palette->text_secondary);
+        return pack_rgb(g_palette->text_disabled);
+    }
+    if (role == UI_COLOR_BORDER) {
+        if (red >= 245 && green >= 245 && blue >= 245) return pack_rgb(g_palette->focus);
+        if (red < 150 && green < 160 && blue < 180) return pack_rgb(g_palette->border_control);
+        return pack_rgb(g_palette->border_decorative);
+    }
+    if (red >= 252 && green >= 252 && blue >= 252) return pack_rgb(g_palette->surface);
+    return pack_rgb(g_palette->surface_raised);
+}
 
 static const UiAction TODAY_ACTIONS[] = {
     {"刷新状态", "读取今天的最新游玩状态", COLOR(42, 105, 188)},
@@ -72,6 +141,7 @@ static const UiAction SECURITY_ACTIONS[] = {
     {"修改任我玩PIN", "验证当前 PIN 后设置新 PIN", COLOR(42, 105, 188)},
     {"家长区快捷键管理", "选择组合并管理孩子区提示", COLOR(42, 105, 188)},
     {"自制程序菜单入口保护", "通过桌面‘手柄设置’图标进入", COLOR(194, 61, 61)},
+    {"外观主题", "跟随系统、浅色或暗色", COLOR(42, 105, 188)},
 };
 
 static const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -151,13 +221,13 @@ static void blend_pixel(uint32_t *pixels, uint32_t stride, int x, int y, uint32_
     destination_red = *destination & 0xff;
     destination_green = (*destination >> 8) & 0xff;
     destination_blue = (*destination >> 16) & 0xff;
-    *destination = COLOR(
+    *destination = RGBA8_MAXALPHA(
         (red * alpha + destination_red * (255 - alpha)) / 255,
         (green * alpha + destination_green * (255 - alpha)) / 255,
         (blue * alpha + destination_blue * (255 - alpha)) / 255);
 }
 
-static void fill_rect(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t color)
+static void fill_rect_packed(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t color)
 {
     int x_start = rect.x < 0 ? 0 : rect.x;
     int y_start = rect.y < 0 ? 0 : rect.y;
@@ -171,6 +241,11 @@ static void fill_rect(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t c
             row[x] = color;
         }
     }
+}
+
+static void fill_rect(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t color)
+{
+    fill_rect_packed(pixels, stride, rect, resolve_color(color, UI_COLOR_FILL));
 }
 
 static void draw_horizontal_triangle(
@@ -194,6 +269,7 @@ static void draw_horizontal_triangle(
 static void fill_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, uint32_t color)
 {
     int radius_squared = radius * radius;
+    uint32_t resolved = resolve_color(color, UI_COLOR_FILL);
     int y;
     for (y = rect.y; y < rect.y + rect.height; ++y) {
         int x;
@@ -211,7 +287,7 @@ static void fill_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect, int 
                 dy = y - (rect.y + rect.height - radius - 1);
             }
             if (dx == 0 || dy == 0 || dx * dx + dy * dy <= radius_squared) {
-                set_pixel(pixels, stride, x, y, color);
+                set_pixel(pixels, stride, x, y, resolved);
             }
         }
     }
@@ -219,10 +295,62 @@ static void fill_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect, int 
 
 static void draw_rect_outline(uint32_t *pixels, uint32_t stride, UiRect rect, int width, uint32_t color)
 {
-    fill_rect(pixels, stride, (UiRect){rect.x, rect.y, rect.width, width}, color);
-    fill_rect(pixels, stride, (UiRect){rect.x, rect.y + rect.height - width, rect.width, width}, color);
-    fill_rect(pixels, stride, (UiRect){rect.x, rect.y, width, rect.height}, color);
-    fill_rect(pixels, stride, (UiRect){rect.x + rect.width - width, rect.y, width, rect.height}, color);
+    uint32_t resolved = resolve_color(color, UI_COLOR_BORDER);
+    fill_rect_packed(pixels, stride, (UiRect){rect.x, rect.y, rect.width, width}, resolved);
+    fill_rect_packed(pixels, stride, (UiRect){rect.x, rect.y + rect.height - width, rect.width, width}, resolved);
+    fill_rect_packed(pixels, stride, (UiRect){rect.x, rect.y, width, rect.height}, resolved);
+    fill_rect_packed(pixels, stride, (UiRect){rect.x + rect.width - width, rect.y, width, rect.height}, resolved);
+}
+
+static void draw_line(
+    uint32_t *pixels,
+    uint32_t stride,
+    int x0,
+    int y0,
+    int x1,
+    int y1,
+    int width,
+    uint32_t color)
+{
+    int dx = x1 > x0 ? x1 - x0 : x0 - x1;
+    int sx = x0 < x1 ? 1 : -1;
+    int dy = y1 > y0 ? y0 - y1 : y1 - y0;
+    int sy = y0 < y1 ? 1 : -1;
+    int error = dx + dy;
+    uint32_t resolved = resolve_color(color, UI_COLOR_BORDER);
+    for (;;) {
+        fill_rect_packed(pixels, stride, (UiRect){x0 - width / 2, y0 - width / 2, width, width}, resolved);
+        if (x0 == x1 && y0 == y1) break;
+        {
+            int twice = error * 2;
+            if (twice >= dy) { error += dy; x0 += sx; }
+            if (twice <= dx) { error += dx; y0 += sy; }
+        }
+    }
+}
+
+static void draw_status_symbol(
+    uint32_t *pixels,
+    uint32_t stride,
+    int x,
+    int y,
+    uint32_t color,
+    int kind)
+{
+    draw_rect_outline(pixels, stride, (UiRect){x, y, 28, 28}, 2, color);
+    if (kind == 1) {
+        draw_line(pixels, stride, x + 6, y + 15, x + 12, y + 21, 3, color);
+        draw_line(pixels, stride, x + 12, y + 21, x + 23, y + 7, 3, color);
+    } else if (kind == 2) {
+        fill_rect(pixels, stride, (UiRect){x + 12, y + 6, 4, 12}, color);
+        fill_rect(pixels, stride, (UiRect){x + 12, y + 21, 4, 4}, color);
+    } else if (kind == 3) {
+        draw_line(pixels, stride, x + 7, y + 7, x + 21, y + 21, 3, color);
+        draw_line(pixels, stride, x + 21, y + 7, x + 7, y + 21, 3, color);
+    } else {
+        fill_rect(pixels, stride, (UiRect){x + 12, y + 6, 4, 4}, color);
+        fill_rect(pixels, stride, (UiRect){x + 12, y + 12, 4, 11}, color);
+    }
 }
 
 static bool set_font_size(int size)
@@ -250,6 +378,7 @@ static void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, co
 {
     const char *cursor = text;
     int pen_x = x;
+    uint32_t resolved = resolve_color(color, UI_COLOR_TEXT);
     if (!text || !set_font_size(size)) {
         return;
     }
@@ -270,7 +399,7 @@ static void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, co
                     stride,
                     pen_x + glyph->bitmap_left + column,
                     baseline - glyph->bitmap_top + row,
-                    color,
+                    resolved,
                     alpha);
             }
         }
@@ -566,6 +695,7 @@ static void draw_disable_banner(uint32_t *pixels, uint32_t stride, const PtcUiMo
     if (!model->disable_flag_present) return;
     fill_round_rect(pixels, stride, banner, 7, COLOR(255, 232, 235));
     draw_rect_outline(pixels, stride, banner, 1, COLOR(194, 61, 61));
+    draw_status_symbol(pixels, stride, banner.x + 8, banner.y + 5, COLOR(194, 61, 61), 3);
     draw_text_center(pixels, stride, banner, "紧急停用已开启 · 新的时间控制不会应用", 18, COLOR(170, 35, 48));
 }
 
@@ -587,7 +717,10 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     fill_round_rect(pixels, stride, rect, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, rect, 1, COLOR(219, 225, 233));
     fill_rect(pixels, stride, (UiRect){rect.x, rect.y, 6, rect.height}, accent);
-    draw_text(pixels, stride, rect.x + 24, rect.y + (compact ? 22 : 25),
+    draw_status_symbol(pixels, stride, rect.x + 20, rect.y + 18, accent,
+                       model->waiting ? 2 : (strcmp(model->result_status, "ok") == 0 ? 1 :
+                       (strcmp(model->result_status, "error") == 0 ? 3 : 0)));
+    draw_text(pixels, stride, rect.x + 62, rect.y + (compact ? 22 : 25),
               model->waiting ? "正在执行" : "最近执行", compact ? 17 : 18, accent);
     snprintf(
         execution,
@@ -1101,22 +1234,15 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
 static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect panel = {842, 176, 384, 324};
+    UiRect panel = {842, 176, 384, 220};
+    (void)model;
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, panel.x + 26, panel.y + 43, "加时码如何生成", 23, COLOR(28, 34, 43));
     draw_text(pixels, stride, panel.x + 26, panel.y + 78, "本机：直接生成 8 位加时码", 17, COLOR(25, 132, 95));
     draw_text(pixels, stride, panel.x + 26, panel.y + 108, "手机/电脑：扫码或直接打开网页", 17, COLOR(28, 118, 188));
     draw_text(pixels, stride, panel.x + 26, panel.y + 138, "管理：设备名、密钥和网页地址", 17, COLOR(77, 86, 99));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 184, "两种生成方式都需要家长 PIN", 17, COLOR(91, 100, 116));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 216, "配置文件和二维码包含加时权限，", 16, COLOR(170, 65, 65));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 242, "请勿发送给他人。", 16, COLOR(170, 65, 65));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 274, "当天有效，兑换成功后仅用一次。", 16, COLOR(91, 100, 116));
-    if (model->demo_secret_enabled) {
-        fill_round_rect(pixels, stride, (UiRect){panel.x + 20, panel.y + 286, panel.width - 40, 30}, 6, COLOR(255, 235, 238));
-        draw_text_center(pixels, stride, (UiRect){panel.x + 20, panel.y + 286, panel.width - 40, 30},
-                         "公共演示密钥已启用", 16, COLOR(194, 61, 61));
-    }
+    draw_text(pixels, stride, panel.x + 26, panel.y + 174, "配置和二维码包含加时权限，请勿外传。", 15, COLOR(170, 65, 65));
 }
 
 static void format_duration(int minutes, char *out, size_t out_size)
@@ -1661,6 +1787,11 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 dynamic_action.subtitle = detail;
                 action = &dynamic_action;
             }
+            if (model->parent_page == PTC_UI_PARENT_SECURITY && index == 6) {
+                dynamic_action = *action;
+                dynamic_action.subtitle = ptc_ui_theme_preference_label(g_theme.preference);
+                action = &dynamic_action;
+            }
             draw_action_card(pixels, stride, card, action, index == model->selected_index, astate,
                              model->parent_page == PTC_UI_PARENT_SECURITY && index == 5 ? 100 : 0);
             if (model->parent_page == PTC_UI_PARENT_SECURITY && index == 5) {
@@ -1737,7 +1868,9 @@ static void draw_dialog_shell(
     const char *title = numeric ? model->numpad_title : model->overlay_title;
     const char *description = numeric ? model->numpad_guide : model->overlay_body;
     *dialog = (UiRect){(SCREEN_WIDTH - width) / 2, (SCREEN_HEIGHT - height) / 2 - 10, width, height};
-    fill_rect(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, COLOR(226, 230, 236));
+    fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT},
+                     pack_rgb(g_resolved_theme == PTC_UI_RESOLVED_DARK
+                         ? g_palette->page_bg : 0xE2E6EC));
     fill_round_rect(pixels, stride, *dialog, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, *dialog, 2, COLOR(203, 211, 222));
     draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, COLOR(28, 34, 43));
@@ -2557,13 +2690,14 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 142, "推荐方案一：联网扫码", 23, COLOR(7, 93, 76));
     origin_x = dialog.x + 34;
     origin_y = dialog.y + 164;
-    fill_rect(pixels, stride, (UiRect){origin_x, origin_y, total, total}, COLOR(255, 255, 255));
+    /* QR polarity is functional and intentionally bypasses the active theme. */
+    fill_rect_packed(pixels, stride, (UiRect){origin_x, origin_y, total, total}, pack_rgb(0xFFFFFF));
     for (y = 0; y < size; ++y) {
         for (x = 0; x < size; ++x) {
             if (qrcodegen_getModule(model->qr_code, x, y)) {
-                fill_rect(pixels, stride,
-                          (UiRect){origin_x + (x + 4) * scale, origin_y + (y + 4) * scale, scale, scale},
-                          COLOR(0, 0, 0));
+                fill_rect_packed(pixels, stride,
+                                 (UiRect){origin_x + (x + 4) * scale, origin_y + (y + 4) * scale, scale, scale},
+                                 pack_rgb(0x000000));
             }
         }
     }
@@ -2787,6 +2921,30 @@ static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const 
                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
 }
 
+static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    static const char *LABELS[] = {"跟随系统", "浅色", "暗色"};
+    static const char *DETAILS[] = {"随 Switch 设置", "保留经典外观", "OLED Hybrid"};
+    UiRect dialog;
+    int index;
+    draw_dialog_shell(pixels, stride, model, &dialog, 820, 360);
+    for (index = 0; index < 3; ++index) {
+        UiRect option = to_uirect(ptc_ui_theme_option_rect(index));
+        bool selected = index == model->overlay_selection;
+        fill_round_rect(pixels, stride, option, 8, selected ? COLOR(230, 242, 255) : COLOR(248, 250, 252));
+        draw_rect_outline(pixels, stride, option, selected ? 3 : 1,
+                          selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 14, option.width, 34},
+                         LABELS[index], 22, COLOR(28, 34, 43));
+        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 52, option.width, 26},
+                         DETAILS[index], 15, COLOR(91, 100, 114));
+    }
+    draw_text(pixels, stride, dialog.x + 40, dialog.y + 294,
+              !g_theme.system_theme_available && model->overlay_selection == PTC_UI_THEME_SYSTEM
+                  ? "系统主题暂不可用，将安全回退为浅色。" : "方向键选择 · A 立即应用并保存 · B 取消",
+              16, !g_theme.system_theme_available ? COLOR(215, 139, 25) : COLOR(91, 100, 114));
+}
+
 static void draw_holiday_leave_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
@@ -2890,6 +3048,9 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
     case PTC_UI_OVERLAY_ALBUM_MANAGER:
         draw_album_manager_overlay(pixels, stride, model);
         break;
+    case PTC_UI_OVERLAY_THEME:
+        draw_theme_overlay(pixels, stride, model);
+        break;
     case PTC_UI_OVERLAY_NONE:
     default:
         break;
@@ -2958,20 +3119,23 @@ void ptc_ui_graphics_exit(void)
     memset(&g_ui, 0, sizeof(g_ui));
 }
 
-void ptc_ui_graphics_draw(const PtcUiModel *model)
+void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
 {
     uint32_t stride_bytes = 0;
     uint32_t *pixels;
     uint32_t stride;
-    if (!model || !g_ui.framebuffer_ready) {
+    if (!model || !theme || !theme->palette || !g_ui.framebuffer_ready) {
         return;
     }
+    g_palette = theme->palette;
+    g_resolved_theme = theme->resolved;
+    g_theme = *theme;
     pixels = (uint32_t *)framebufferBegin(&g_ui.framebuffer, &stride_bytes);
     if (!pixels) {
         return;
     }
     stride = stride_bytes / sizeof(uint32_t);
-    fill_rect(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, COLOR(244, 246, 249));
+    fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, pack_rgb(g_palette->page_bg));
     if (model->view == PTC_UI_PARENT) {
         draw_parent(pixels, stride, model);
     } else if (model->view == PTC_UI_SETUP) {

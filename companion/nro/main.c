@@ -66,6 +66,10 @@ typedef struct {
     PtcSwitchIpcClient ipc;
     PtcCompanionAuth auth;
     PtcUiModel model;
+    PtcUiThemePreference theme_preference;
+    PtcUiSystemTheme system_theme;
+    PtcUiThemeView theme_view;
+    volatile bool theme_refresh_pending;
     char active_request_id[PTC_COMPANION_REQUEST_ID_SIZE];
     char last_result[RESULT_TEXT_SIZE];
     int elapsed_ms;
@@ -111,6 +115,7 @@ static void dispatch_auth_retry(UiState *ui, AuthRetryAction action);
 static void show_pending_redemption(UiState *ui);
 static void show_grant_manager(UiState *ui, int selection);
 static void export_diagnostics(UiState *ui);
+static bool save_ui_preferences(UiState *ui);
 
 static int64_t unix_ms_now(void)
 {
@@ -478,6 +483,9 @@ static void load_ui_preferences(UiState *ui)
     ui->model.setup_step = 0;
     ui->model.setup_shortcut_index = PTC_UI_SHORTCUT_PRESET_LR;
     ui->model.setup_zone_index = 1;
+    ui->theme_preference = PTC_UI_THEME_SYSTEM;
+    ui->system_theme = PTC_UI_SYSTEM_THEME_UNAVAILABLE;
+    ui->theme_view = ptc_ui_theme_make_view(ui->theme_preference, ui->system_theme);
     ui->model.shortcut_draft_mask = ui->model.custom_shortcut_mask;
     ui->model.shortcut_draft_enabled = false;
     ui->model.shortcut_draft_show_hint = true;
@@ -506,6 +514,14 @@ static void load_ui_preferences(UiState *ui)
     if (cJSON_IsBool(item)) {
         ui->model.show_parent_shortcut_hint = cJSON_IsTrue(item);
     }
+    item = cJSON_GetObjectItemCaseSensitive(root, "theme");
+    if (cJSON_IsString(item)) {
+        PtcUiThemePreference preference;
+        if (ptc_ui_theme_parse_preference(item->valuestring, &preference)) {
+            ui->theme_preference = preference;
+        }
+    }
+    ui->theme_view = ptc_ui_theme_make_view(ui->theme_preference, ui->system_theme);
     item = cJSON_GetObjectItemCaseSensitive(root, "setup_wizard_step");
     if (cJSON_IsNumber(item) && item->valueint >= 0 && item->valueint <= PTC_UI_SETUP_ZONE) {
         ui->model.setup_step = item->valueint;
@@ -555,6 +571,8 @@ static bool save_ui_preferences(UiState *ui)
     cJSON_AddBoolToObject(root, "custom_shortcut_enabled", ui->model.custom_shortcut_enabled);
     cJSON_DeleteItemFromObject(root, "show_parent_shortcut_hint");
     cJSON_AddBoolToObject(root, "show_parent_shortcut_hint", ui->model.show_parent_shortcut_hint);
+    cJSON_DeleteItemFromObject(root, "theme");
+    cJSON_AddStringToObject(root, "theme", ptc_ui_theme_preference_name(ui->theme_preference));
     cJSON_DeleteItemFromObject(root, "setup_wizard_step");
     cJSON_AddNumberToObject(root, "setup_wizard_step", ui->model.setup_step);
     cJSON_DeleteItemFromObject(root, "setup_wizard_version");
@@ -2385,6 +2403,49 @@ static uint16_t current_today_limit_value(const UiState *ui)
     return 60;
 }
 
+static PtcUiSystemTheme read_system_theme(void)
+{
+    ColorSetId color_set;
+    Result result = setsysInitialize();
+    if (R_FAILED(result)) return PTC_UI_SYSTEM_THEME_UNAVAILABLE;
+    result = setsysGetColorSetId(&color_set);
+    setsysExit();
+    if (R_FAILED(result)) return PTC_UI_SYSTEM_THEME_UNAVAILABLE;
+    if (color_set == ColorSetId_Light) return PTC_UI_SYSTEM_THEME_LIGHT;
+    if (color_set == ColorSetId_Dark) return PTC_UI_SYSTEM_THEME_DARK;
+    return PTC_UI_SYSTEM_THEME_UNAVAILABLE;
+}
+
+static void refresh_theme(UiState *ui)
+{
+    if (!ui) return;
+    ui->system_theme = read_system_theme();
+    ui->theme_view = ptc_ui_theme_make_view(ui->theme_preference, ui->system_theme);
+    ui->theme_refresh_pending = false;
+}
+
+static void applet_hook(AppletHookType hook, void *param)
+{
+    UiState *ui = (UiState *)param;
+    if (ui && (hook == AppletHookType_OnResume ||
+               (hook == AppletHookType_OnFocusState && appletGetFocusState() == AppletFocusState_InFocus))) {
+        ui->theme_refresh_pending = true;
+    }
+}
+
+static bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference)
+{
+    PtcUiThemePreference previous;
+    if (!ui) return false;
+    previous = ui->theme_preference;
+    ui->theme_preference = preference;
+    ui->theme_view = ptc_ui_theme_make_view(preference, ui->system_theme);
+    if (save_ui_preferences(ui)) return true;
+    ui->theme_preference = previous;
+    ui->theme_view = ptc_ui_theme_make_view(previous, ui->system_theme);
+    return false;
+}
+
 static void handle_today_action_ready(UiState *ui, int index)
 {
     char date[64];
@@ -2550,6 +2611,13 @@ static void handle_parent_action(UiState *ui)
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单入口保护");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "先查看当前状态，再选择开启限制或恢复原来的启动方式。");
+            break;
+        case 6:
+            ui->model.overlay = PTC_UI_OVERLAY_THEME;
+            ui->model.overlay_selection = (int)ui->theme_preference;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "外观主题");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                     "仅改变任我玩主机应用的绘制外观；计时、请求和后台控制不会重启或改变。");
             break;
         default: break;
         }
@@ -2922,6 +2990,25 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_THEME) {
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & HidNpadButton_Left) {
+            ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 2 : ui->model.overlay_selection - 1;
+        } else if (down & HidNpadButton_Right) {
+            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 3;
+        } else if (down & HidNpadButton_A) {
+            PtcUiThemePreference preference = (PtcUiThemePreference)ui->model.overlay_selection;
+            if (apply_theme_preference(ui, preference)) {
+                ptc_ui_cancel_overlay(&ui->model);
+                snprintf(ui->model.message, sizeof(ui->model.message), "外观主题已切换为%s。",
+                         ptc_ui_theme_preference_label(preference));
+            } else {
+                snprintf(ui->model.message, sizeof(ui->model.message), "主题设置未保存，已恢复原外观；请确认 SD 卡可写。");
+            }
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_BULK) {
         if (down & HidNpadButton_B) {
             ptc_ui_cancel_overlay(&ui->model);
@@ -3755,6 +3842,10 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_SHORTCUT_HINT:
         ui->model.shortcut_draft_show_hint = !ui->model.shortcut_draft_show_hint;
         break;
+    case PTC_UI_HIT_THEME_OPTION:
+        ui->model.overlay_selection = hit.index;
+        handle_overlay_input(ui, HidNpadButton_A);
+        break;
     case PTC_UI_HIT_GRANT_ADJUST:
         ui->model.overlay_selection = hit.index;
         if (hit.index == 0) adjust_grant_minutes(ui, -1);
@@ -3788,7 +3879,7 @@ static void draw(UiState *ui)
     }
     ui->model.waiting = ui->waiting;
     snprintf(ui->model.request_id, sizeof(ui->model.request_id), "%s", ui->active_request_id);
-    ptc_ui_graphics_draw(&ui->model);
+    ptc_ui_graphics_draw(&ui->model, &ui->theme_view);
 }
 
 static void retry_error(UiState *ui)
@@ -3835,6 +3926,7 @@ int main(int argc, char **argv)
     HidTouchScreenState touch;
     bool touch_down = false;
     bool running = true;
+    AppletHookCookie hook_cookie;
     u64 previous_stick_buttons = 0;
     (void)argc;
     (void)argv;
@@ -3862,6 +3954,8 @@ int main(int argc, char **argv)
     ptc_fs_storage_init(&fs);
     ptc_companion_file_client_init(&ui.client, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     load_ui_preferences(&ui);
+    refresh_theme(&ui);
+    appletHook(&hook_cookie, applet_hook, &ui);
     refresh_disable_flag(&ui);
     ptc_switch_ipc_client_init(&ui.ipc);
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs), ptc_switch_ipc_backend(), &ui.ipc);
@@ -3878,6 +3972,7 @@ int main(int argc, char **argv)
         u64 stick_buttons;
         bool parent_combo_held;
         bool custom_combo_held;
+        if (ui.theme_refresh_pending) refresh_theme(&ui);
         padUpdate(&pad);
         down = padGetButtonsDown(&pad);
         held = padGetButtons(&pad);
@@ -4169,6 +4264,7 @@ int main(int argc, char **argv)
         svcSleepThread(LOOP_SLEEP_NS);
     }
 
+    appletUnhook(&hook_cookie);
     ptc_ui_graphics_exit();
     ptc_switch_ipc_client_exit(&ui.ipc);
     return 0;

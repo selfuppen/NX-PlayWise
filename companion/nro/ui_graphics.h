@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "../../common/rules/rules.h"
+#include "ui_theme.h"
 #include "../../common/security/credential_policy.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
 
@@ -59,7 +60,8 @@ typedef enum {
     PTC_UI_OVERLAY_SUPPORT_EVENT = 17,
     PTC_UI_OVERLAY_WEEKLY_BULK = 18,
     PTC_UI_OVERLAY_ALBUM_MANAGER = 19,
-    PTC_UI_OVERLAY_MINUTE_EDITOR = 20
+    PTC_UI_OVERLAY_MINUTE_EDITOR = 20,
+    PTC_UI_OVERLAY_THEME = 21
 } PtcUiOverlay;
 
 typedef enum {
@@ -363,7 +365,8 @@ typedef enum {
     PTC_UI_HIT_SHORTCUT_CAPTURE,
     PTC_UI_HIT_SHORTCUT_DISABLE,
     PTC_UI_HIT_SHORTCUT_HINT,
-    PTC_UI_HIT_GRANT_ADJUST
+    PTC_UI_HIT_GRANT_ADJUST,
+    PTC_UI_HIT_THEME_OPTION
 } PtcUiHitKind;
 
 typedef struct {
@@ -373,7 +376,7 @@ typedef struct {
 
 bool ptc_ui_graphics_init(void);
 void ptc_ui_graphics_exit(void);
-void ptc_ui_graphics_draw(const PtcUiModel *model);
+void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme);
 
 int ptc_ui_parent_action_count(PtcUiParentPage page);
 const char *ptc_ui_shortcut_common_label(int index);
@@ -488,6 +491,7 @@ PtcUiRect ptc_ui_weekly_discard_rect(void);
 PtcUiRect ptc_ui_weekly_bulk_target_rect(int index);
 PtcUiRect ptc_ui_album_action_rect(int index);
 PtcUiRect ptc_ui_album_refresh_rect(void);
+PtcUiRect ptc_ui_theme_option_rect(int index);
 PtcUiRect ptc_ui_credential_input_rect(void);
 PtcUiRect ptc_ui_credential_random_rect(void);
 PtcUiRect ptc_ui_credential_reveal_rect(void);

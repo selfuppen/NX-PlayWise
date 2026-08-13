@@ -30,6 +30,7 @@ OBJS := \
 	$(BUILD)/main.o \
 	$(BUILD)/album_restriction.o \
 	$(BUILD)/ui_graphics.o \
+	$(BUILD)/ui_theme.o \
 	$(BUILD)/ui_state.o \
 	$(BUILD)/auth.o \
 	$(BUILD)/file_protocol.o \
@@ -66,7 +67,10 @@ $(BUILD)/main.o: main.c | $(BUILD)
 $(BUILD)/album_restriction.o: ../album_restriction.c ../album_restriction.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h | $(BUILD)
+$(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h ui_theme.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_theme.o: ui_theme.c ui_theme.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_state.o: ui_state.c ui_graphics.h | $(BUILD)

@@ -177,7 +177,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_HOLIDAY:
         return 7;
     case PTC_UI_PARENT_SECURITY:
-        return 6;
+        return 7;
     case PTC_UI_PARENT_SUPPORT:
         return 6;
     case PTC_UI_PARENT_TODAY:
@@ -1049,6 +1049,7 @@ PtcUiRect ptc_ui_parent_tab_rect(int index)
 
 PtcUiRect ptc_ui_parent_card_rect(int index)
 {
+    if (index == 6) return (PtcUiRect){842, 408, 384, 94};
     int column = index % 2;
     int row = index / 2;
     PtcUiRect rect = {54 + column * 385, 176 + row * 110, 365, 94};
@@ -1205,6 +1206,10 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
     case PTC_UI_OVERLAY_ALBUM_MANAGER:
         *width = 980;
         *height = 560;
+        break;
+    case PTC_UI_OVERLAY_THEME:
+        *width = 820;
+        *height = 360;
         break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:
@@ -1830,6 +1835,13 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_shortcut_disable_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_DISABLE, 0);
         if (ptc_ui_rect_contains(ptc_ui_shortcut_hint_rect(), x, y)) return make_hit(PTC_UI_HIT_SHORTCUT_HINT, 0);
         break;
+    case PTC_UI_OVERLAY_THEME:
+        for (i = 0; i < 3; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_theme_option_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_THEME_OPTION, i);
+            }
+        }
+        break;
     case PTC_UI_OVERLAY_QR:
     case PTC_UI_OVERLAY_WEEKLY_LEAVE:
     case PTC_UI_OVERLAY_CREDENTIAL_LEAVE:
@@ -2084,6 +2096,13 @@ PtcUiRect ptc_ui_album_refresh_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_ALBUM_MANAGER);
     return (PtcUiRect){dialog.x + dialog.w - 226, dialog.y + 92, 188, 46};
+}
+
+PtcUiRect ptc_ui_theme_option_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_THEME);
+    if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){dialog.x + 40 + index * 250, dialog.y + 154, 230, 100};
 }
 
 bool ptc_ui_safety_action_visible(const PtcUiModel *model, int index)

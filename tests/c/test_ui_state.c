@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "../../companion/nro/ui_graphics.h"
 #include "../../common/time/ptc_time.h"
@@ -79,7 +80,7 @@ static void test_release_navigation(void)
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 7, "holiday policy exposes rules, actions and calendar entry");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 6, "security actions include album restriction");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 7, "security actions include album restriction and appearance");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support actions include software information");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
@@ -283,6 +284,59 @@ static void test_time_previews(void)
     check_int(model.draft_week[6].mode, PTC_RULE_MODE_UNLIMITED, "weekend bulk copies source to Saturday");
     model.disable_flag_present = true;
     check_true(!ptc_ui_apply_weekly_bulk(&model, false), "emergency stop rejects bulk draft changes");
+}
+
+static double channel_luminance(unsigned int channel)
+{
+    double value = channel / 255.0;
+    return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4);
+}
+
+static double contrast_ratio(uint32_t left, uint32_t right)
+{
+    double l1 = 0.2126 * channel_luminance((left >> 16) & 0xff) +
+                0.7152 * channel_luminance((left >> 8) & 0xff) +
+                0.0722 * channel_luminance(left & 0xff);
+    double l2 = 0.2126 * channel_luminance((right >> 16) & 0xff) +
+                0.7152 * channel_luminance((right >> 8) & 0xff) +
+                0.0722 * channel_luminance(right & 0xff);
+    if (l2 > l1) { double swap = l1; l1 = l2; l2 = swap; }
+    return (l1 + 0.05) / (l2 + 0.05);
+}
+
+static void test_theme_resolution(void)
+{
+    PtcUiThemePreference preference = PTC_UI_THEME_DARK;
+    PtcUiThemeView view;
+    const PtcUiPalette *dark;
+    check_true(ptc_ui_theme_parse_preference("system", &preference) && preference == PTC_UI_THEME_SYSTEM,
+               "system theme preference parses");
+    check_true(ptc_ui_theme_parse_preference("dark", &preference) && preference == PTC_UI_THEME_DARK,
+               "dark theme preference parses");
+    check_true(!ptc_ui_theme_parse_preference("auto", &preference), "invalid theme preference is rejected");
+    view = ptc_ui_theme_make_view(PTC_UI_THEME_SYSTEM, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
+    check_int(view.resolved, PTC_UI_RESOLVED_LIGHT, "unavailable system theme falls back to light");
+    check_true(!view.system_theme_available, "unavailable system theme is observable");
+    view = ptc_ui_theme_make_view(PTC_UI_THEME_SYSTEM, PTC_UI_SYSTEM_THEME_DARK);
+    check_int(view.resolved, PTC_UI_RESOLVED_DARK, "system dark theme resolves to dark");
+    dark = view.palette;
+    check_true(dark && dark->page_bg == 0x000000 && dark->surface == 0x14191E &&
+               dark->accent == 0x6EA8FE && dark->focus == 0xA9C8FF,
+               "OLED Hybrid palette is stable");
+    check_true(contrast_ratio(dark->text_primary, dark->surface) >= 4.5 &&
+               contrast_ratio(dark->text_secondary, dark->surface) >= 4.5 &&
+               contrast_ratio(dark->border_control, dark->surface) >= 3.0 &&
+               contrast_ratio(dark->focus, dark->surface) >= 3.0,
+               "dark palette meets text and control contrast thresholds");
+    {
+        PtcUiModel model;
+        PtcUiRect option;
+        memset(&model, 0, sizeof(model));
+        model.overlay = PTC_UI_OVERLAY_THEME;
+        option = ptc_ui_theme_option_rect(2);
+        check_hit(hit_center(&model, option), PTC_UI_HIT_THEME_OPTION, 2,
+                  "dark theme option has a matching touch target");
+    }
 }
 
 static void test_candidate_navigation(void)
@@ -731,6 +785,7 @@ static void test_user_state_mapping(void)
 
 int main(void)
 {
+    test_theme_resolution();
     test_parent_status_summary();
     test_release_navigation();
     test_numeric_input();

@@ -42,7 +42,7 @@ ORCH_SRCS := \
 	companion/overlay/bridge.c
 
 TEST_SRCS := tests/c/test_host_core.c
-UI_TEST_SRCS := companion/nro/ui_state.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
+UI_TEST_SRCS := companion/nro/ui_state.c companion/nro/ui_theme.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
 .PHONY: all manifest device-lab-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-package clean
 
@@ -63,7 +63,7 @@ $(HOST_TEST): $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SR
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS)
 
 $(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_graphics.h | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(UI_TEST_SRCS)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(UI_TEST_SRCS) -lm
 
 test-host: $(HOST_TEST) $(HOST_UI_TEST)
 	$(HOST_TEST)
