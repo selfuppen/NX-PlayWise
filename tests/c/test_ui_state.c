@@ -105,14 +105,28 @@ static void test_release_navigation(void)
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 7, "holiday policy exposes rules, actions and calendar entry");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SECURITY), 7, "security actions include album restriction and appearance");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support actions include software information");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 3, "grant page only exposes grant actions");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 5, "settings page exposes preferences, security and support");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
     ptc_ui_change_parent_page(&model, -1);
-    check_int(model.parent_page, PTC_UI_PARENT_SUPPORT, "page wraps to support");
+    check_int(model.parent_page, PTC_UI_PARENT_SETTINGS, "page wraps to settings");
+    check_int(model.settings_page, PTC_UI_SETTINGS_ROOT, "top-level navigation opens settings root");
     ptc_ui_change_parent_page(&model, 1);
     check_int(model.parent_page, PTC_UI_PARENT_TODAY, "page wraps to today");
+
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
+    check_true(ptc_ui_settings_status_label(&model) == NULL &&
+               ptc_ui_settings_support_state(&model) == PTC_UI_ACTION_AVAILABLE,
+               "healthy settings do not show a persistent badge");
+    model.disable_flag_present = true;
+    check_true(strcmp(ptc_ui_settings_status_label(&model), "需处理") == 0 &&
+               ptc_ui_settings_support_state(&model) == PTC_UI_ACTION_RECOMMENDED,
+               "disabled control recommends support with attention badge");
+    model.disable_flag_present = false;
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
+    check_true(strcmp(ptc_ui_settings_status_label(&model), "待完成") == 0,
+               "unfinished takeover shows completion badge");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
     model.selected_index = 0;
@@ -130,7 +144,8 @@ static void test_release_navigation(void)
     ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 6, "holiday right rule reaches calendar entry");
 
-    model.parent_page = PTC_UI_PARENT_SUPPORT;
+    model.parent_page = PTC_UI_PARENT_SETTINGS;
+    model.settings_page = PTC_UI_SETTINGS_SUPPORT;
     model.recent_event_count = 3;
     model.selected_index = 4;
     ptc_ui_move_parent_selection(&model, 0, 1);
@@ -250,8 +265,9 @@ static void test_rule_result_guidance(void)
     model.today_override_present = false;
     snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
     ptc_ui_format_holiday_save_result(&model, message, sizeof(message), detail, sizeof(detail));
-    check_true(strstr(message, "未启用") != NULL && strstr(message, "不受影响") != NULL,
-               "disabled holiday save gives a direct conclusion");
+    check_true(strstr(message, "未启用") != NULL && strstr(message, "不受影响") != NULL &&
+               strstr(detail, "总开关") != NULL && strstr(detail, "额度") == NULL && strstr(detail, "分钟") == NULL,
+               "disabled holiday save gives a direct conclusion without calculation detail");
     model.draft_holiday_enabled = true;
     model.calendar_covered = true;
     model.draft_holiday_rule = model.holiday_rule;
@@ -260,6 +276,15 @@ static void test_rule_result_guidance(void)
     check_true(strstr(message, "影响今天") != NULL && strstr(detail, "国家法定休假日") != NULL &&
                strstr(detail, "额度 120") != NULL,
                "active holiday save gives source and calculation basis");
+
+    model.today_override_present = true;
+    model.today_override_rule.mode = PTC_RULE_MODE_LIMIT;
+    model.today_override_rule.minutes = 45;
+    snprintf(model.rule_source, sizeof(model.rule_source), "today_override");
+    ptc_ui_format_holiday_save_result(&model, message, sizeof(message), detail, sizeof(detail));
+    check_true(strstr(message, "当前不变") != NULL && strstr(detail, "临时设置优先") != NULL &&
+               strstr(detail, "额度") == NULL && strstr(detail, "分钟") == NULL,
+               "holiday override result omits unchanged calculation detail");
 }
 
 static void test_numeric_input(void)
@@ -662,7 +687,8 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_weekly_discard_rect()), PTC_UI_HIT_WEEKLY_DISCARD, 0,
               "disabled weekly page still allows discarding a draft");
     model.disable_flag_present = false;
-    model.parent_page = PTC_UI_PARENT_SUPPORT;
+    model.parent_page = PTC_UI_PARENT_SETTINGS;
+    model.settings_page = PTC_UI_SETTINGS_SUPPORT;
     model.recent_event_count = 3;
     snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
     check_true(ptc_ui_safety_action_visible(&model, 0) && ptc_ui_safety_action_visible(&model, 1),

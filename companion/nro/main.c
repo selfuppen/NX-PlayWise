@@ -700,14 +700,10 @@ static bool parent_status_needs_support(const PtcUiModel *model)
 static void activate_parent_status(UiState *ui)
 {
     if (parent_status_needs_support(&ui->model)) {
-        if (ui->model.parent_page != PTC_UI_PARENT_SUPPORT) {
-            request_parent_navigation(ui, PTC_UI_PARENT_SUPPORT, false);
-            ui->model.parent_footer_focused = true;
-            ui->model.parent_footer_selection = 1;
-        } else {
-            ui->model.parent_footer_focused = false;
-            ui->model.selected_index = 0;
-        }
+        ui->model.parent_page = PTC_UI_PARENT_SETTINGS;
+        ui->model.settings_page = PTC_UI_SETTINGS_SUPPORT;
+        ui->model.parent_footer_focused = false;
+        ui->model.selected_index = 0;
     } else {
         refresh_disable_flag(ui);
         submit_status(ui);
@@ -1290,7 +1286,9 @@ static void enter_parent_area_unlocked(UiState *ui)
     refresh_security_state(ui);
     ui->model.view = PTC_UI_PARENT;
     ui->model.parent_page = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
-        ? PTC_UI_PARENT_SUPPORT : PTC_UI_PARENT_TODAY;
+        ? PTC_UI_PARENT_SETTINGS : PTC_UI_PARENT_TODAY;
+    ui->model.settings_page = ui->model.parent_page == PTC_UI_PARENT_SETTINGS && parent_status_needs_support(&ui->model)
+        ? PTC_UI_SETTINGS_SUPPORT : PTC_UI_SETTINGS_ROOT;
     ui->model.selected_index = 0;
     snprintf(ui->model.message, sizeof(ui->model.message), "家长区已解锁。进入孩子区请按 B。");
     if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
@@ -1553,7 +1551,7 @@ static void setup_primary(UiState *ui)
             }
         } else {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     "已暂时跳过自制程序菜单入口保护，可稍后在加时码与安全中开启。");
+                     "已暂时跳过自制程序菜单入口保护，可稍后在设置中开启。");
         }
         ui->model.setup_theme_index = (int)ui->theme_preference;
         (void)save_setup_step(ui, PTC_UI_SETUP_THEME);
@@ -2568,31 +2566,43 @@ static void handle_parent_action(UiState *ui)
         }
         return;
     }
-    if (ui->model.parent_page == PTC_UI_PARENT_SECURITY) {
+    if (ui->model.parent_page == PTC_UI_PARENT_GRANT) {
         switch (index) {
         case 0: open_local_grant(ui); break;
         case 1: show_pairing_qr(ui); break;
         case 2: open_grant_manager(ui); break;
-        case 3: change_parent_pin(ui); break;
-        case 4: open_shortcut_manager(ui); break;
-        case 5:
-            refresh_album_restriction(ui);
-            ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
-            ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单入口保护");
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "先查看当前状态，再选择开启限制或恢复原来的启动方式。");
-            break;
-        case 6:
+        default: break;
+        }
+        return;
+    }
+    if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS && ui->model.settings_page == PTC_UI_SETTINGS_ROOT) {
+        switch (index) {
+        case 0:
             ui->model.overlay = PTC_UI_OVERLAY_THEME;
             ui->model.overlay_selection = (int)ui->theme_preference;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "外观主题");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      "仅改变任我玩主机应用的绘制外观；计时、请求和后台控制不会重启或改变。");
             break;
+        case 1: change_parent_pin(ui); break;
+        case 2: open_shortcut_manager(ui); break;
+        case 3:
+            refresh_album_restriction(ui);
+            ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
+            ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单入口保护");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "先查看当前状态，再选择开启限制或恢复原来的启动方式。");
+            break;
+        case 4:
+            ui->model.settings_page = PTC_UI_SETTINGS_SUPPORT;
+            ui->model.selected_index = 0;
+            ui->model.parent_footer_focused = false;
+            break;
         default: break;
         }
         return;
     }
+    if (ui->model.parent_page != PTC_UI_PARENT_SETTINGS || ui->model.settings_page != PTC_UI_SETTINGS_SUPPORT) return;
     if (ptc_ui_safety_action_available(&ui->model, index) == PTC_UI_ACTION_DISABLED) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                  ptc_ui_safety_action_hint(&ui->model, index));
@@ -2864,7 +2874,8 @@ static void apply_pending_navigation(UiState *ui)
             ui->model.selected_index = 0;
             if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
                 submit_status(ui);
-            } else if (ui->model.parent_page == PTC_UI_PARENT_SECURITY) {
+            } else if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS) {
+                ui->model.settings_page = PTC_UI_SETTINGS_ROOT;
                 refresh_album_restriction(ui);
             }
         }
@@ -2898,8 +2909,17 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
                  "请等待当前设置保存完成后再离开页面。");
         return;
     }
-    if (ui->model.parent_page == PTC_UI_PARENT_SUPPORT &&
-        (leave_parent || target_page != PTC_UI_PARENT_SUPPORT)) {
+    if (leave_parent && ui->model.parent_page == PTC_UI_PARENT_SETTINGS &&
+        ui->model.settings_page == PTC_UI_SETTINGS_SUPPORT) {
+        ui->model.settings_page = PTC_UI_SETTINGS_ROOT;
+        ui->model.selected_index = 4;
+        ui->model.parent_footer_focused = false;
+        ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_IDLE;
+        ui->model.diagnostic_path[0] = '\0';
+        return;
+    }
+    if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS && ui->model.settings_page == PTC_UI_SETTINGS_SUPPORT &&
+        (leave_parent || target_page != PTC_UI_PARENT_SETTINGS)) {
         ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_IDLE;
         ui->model.diagnostic_path[0] = '\0';
     }
@@ -4045,10 +4065,12 @@ int main(int argc, char **argv)
             if (ui.model.parent_footer_focused) {
                 if (down & HidNpadButton_B) {
                     request_parent_navigation(&ui, -1, true);
-                } else if (down & HidNpadButton_L) {
+                } else if (down & HidNpadButton_L &&
+                           !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page == PTC_UI_SETTINGS_SUPPORT)) {
                     request_parent_navigation(&ui,
                         (ui.model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
-                } else if (down & HidNpadButton_R) {
+                } else if (down & HidNpadButton_R &&
+                           !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page == PTC_UI_SETTINGS_SUPPORT)) {
                     request_parent_navigation(&ui,
                         (ui.model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
                 } else if (down & HidNpadButton_Up) {
@@ -4161,10 +4183,12 @@ int main(int argc, char **argv)
                 }
             } else if (down & HidNpadButton_B) {
                 request_parent_navigation(&ui, -1, true);
-            } else if (down & HidNpadButton_L) {
+            } else if (down & HidNpadButton_L &&
+                       !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page == PTC_UI_SETTINGS_SUPPORT)) {
                 request_parent_navigation(&ui,
                     (ui.model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
-            } else if (down & HidNpadButton_R) {
+            } else if (down & HidNpadButton_R &&
+                       !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page == PTC_UI_SETTINGS_SUPPORT)) {
                 request_parent_navigation(&ui,
                     (ui.model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
             } else if (down & HidNpadButton_Left) {
@@ -4202,7 +4226,8 @@ int main(int argc, char **argv)
                     snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再执行其他设置。");
                 } else if (ui.model.parent_footer_focused) {
                     activate_parent_status(&ui);
-                } else if (ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.model.selected_index >= 6) {
+                } else if (ui.model.parent_page == PTC_UI_PARENT_SETTINGS &&
+                           ui.model.settings_page == PTC_UI_SETTINGS_SUPPORT && ui.model.selected_index >= 6) {
                     int visible_index = ui.model.selected_index - 6;
                     int event_index = ui.model.recent_event_count - 1 - visible_index;
                     if (event_index >= 0 && event_index < ui.model.recent_event_count) {

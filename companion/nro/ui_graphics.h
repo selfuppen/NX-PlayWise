@@ -35,10 +35,15 @@ typedef enum {
     PTC_UI_PARENT_TODAY = 0,
     PTC_UI_PARENT_PLAN = 1,
     PTC_UI_PARENT_HOLIDAY = 2,
-    PTC_UI_PARENT_SECURITY = 3,
-    PTC_UI_PARENT_SUPPORT = 4,
+    PTC_UI_PARENT_GRANT = 3,
+    PTC_UI_PARENT_SETTINGS = 4,
     PTC_UI_PARENT_PAGE_COUNT = 5
 } PtcUiParentPage;
+
+typedef enum {
+    PTC_UI_SETTINGS_ROOT = 0,
+    PTC_UI_SETTINGS_SUPPORT = 1
+} PtcUiSettingsPage;
 
 typedef enum {
     PTC_UI_OVERLAY_NONE = 0,
@@ -136,6 +141,7 @@ typedef enum {
 typedef struct {
     PtcUiView view;
     PtcUiParentPage parent_page;
+    PtcUiSettingsPage settings_page;
     int selected_index;
     bool waiting;
     bool status_loaded;
@@ -403,6 +409,8 @@ void ptc_ui_graphics_exit(void);
 void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme);
 
 int ptc_ui_parent_action_count(PtcUiParentPage page);
+const char *ptc_ui_settings_status_label(const PtcUiModel *model);
+PtcUiActionState ptc_ui_settings_support_state(const PtcUiModel *model);
 const char *ptc_ui_shortcut_common_label(int index);
 void ptc_ui_format_custom_shortcut_hint(
     const char *shortcut_label,

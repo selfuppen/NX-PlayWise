@@ -134,14 +134,18 @@ static const UiAction HOLIDAY_ACTIONS[] = {
     {"保存全部节假日设置", "保存后立即按新设置重新计算今天", COLOR(42, 105, 188)}
 };
 
-static const UiAction SECURITY_ACTIONS[] = {
+static const UiAction GRANT_ACTIONS[] = {
     {"立即生成加时码", "在本机生成 8 位加时码", COLOR(25, 132, 95)},
     {"手机/电脑生成加时码", "优先使用完整交付包中的离线网页", COLOR(42, 105, 188)},
     {"加时码生成管理", "管理设备名、密钥、导出配置和二维码地址", COLOR(91, 100, 116)},
+};
+
+static const UiAction SETTINGS_ACTIONS[] = {
+    {"外观主题", "跟随系统、浅色或暗色", COLOR(42, 105, 188)},
     {"修改任我玩PIN", "验证当前 PIN 后设置新 PIN", COLOR(42, 105, 188)},
     {"家长区快捷键管理", "选择组合并管理孩子区提示", COLOR(42, 105, 188)},
     {"自制程序菜单入口保护", "通过桌面‘手柄设置’图标进入", COLOR(194, 61, 61)},
-    {"外观主题", "跟随系统、浅色或暗色", COLOR(42, 105, 188)},
+    {"支持与恢复", "兼容状态、诊断和恢复操作", COLOR(91, 100, 116)},
 };
 
 static const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -1084,30 +1088,43 @@ static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
         *count = (int)(sizeof(HOLIDAY_ACTIONS) / sizeof(HOLIDAY_ACTIONS[0]));
         return HOLIDAY_ACTIONS;
     }
-    if (page == PTC_UI_PARENT_SECURITY) {
-        *count = (int)(sizeof(SECURITY_ACTIONS) / sizeof(SECURITY_ACTIONS[0]));
-        return SECURITY_ACTIONS;
+    if (page == PTC_UI_PARENT_GRANT) {
+        *count = (int)(sizeof(GRANT_ACTIONS) / sizeof(GRANT_ACTIONS[0]));
+        return GRANT_ACTIONS;
     }
-    if (page == PTC_UI_PARENT_SUPPORT) {
-        *count = (int)(sizeof(SUPPORT_ACTIONS) / sizeof(SUPPORT_ACTIONS[0]));
-        return SUPPORT_ACTIONS;
+    if (page == PTC_UI_PARENT_SETTINGS) {
+        *count = (int)(sizeof(SETTINGS_ACTIONS) / sizeof(SETTINGS_ACTIONS[0]));
+        return SETTINGS_ACTIONS;
     }
     *count = (int)(sizeof(TODAY_ACTIONS) / sizeof(TODAY_ACTIONS[0]));
     return TODAY_ACTIONS;
 }
 
-static void draw_tabs(uint32_t *pixels, uint32_t stride, PtcUiParentPage active)
+static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    static const char *LABELS[] = {"今日额度", "周计划", "国家节假日", "加时码与安全", "支持与恢复"};
+    static const char *LABELS[] = {"今日额度", "周计划", "国家节假日", "加时码", "设置"};
     int index;
     for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
         UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
-        uint32_t background = index == (int)active ? COLOR(28, 118, 188) : COLOR(235, 238, 243);
-        uint32_t foreground = index == (int)active ? COLOR(255, 255, 255) : COLOR(66, 74, 86);
+        uint32_t background = index == (int)model->parent_page ? COLOR(28, 118, 188) : COLOR(235, 238, 243);
+        uint32_t foreground = index == (int)model->parent_page ? COLOR(255, 255, 255) : COLOR(66, 74, 86);
         fill_round_rect(pixels, stride, tab, 8, background);
         draw_text_center(pixels, stride, tab, LABELS[index], 18, foreground);
     }
-    draw_text(pixels, stride, 1038, 140, "L / R 切换", 19, COLOR(97, 106, 120));
+    if (!(model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT)) {
+        draw_text(pixels, stride, 1038, 140, "L / R 切换", 19, COLOR(97, 106, 120));
+    }
+}
+
+static void draw_settings_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    const char *label = ptc_ui_settings_status_label(model);
+    uint32_t color = label && strcmp(label, "需处理") == 0 ? COLOR(194, 61, 61) : COLOR(215, 139, 25);
+    UiRect badge;
+    if (!label) return;
+    badge = (UiRect){54 + PTC_UI_PARENT_SETTINGS * 174 + 96, 113, 56, 24};
+    fill_round_rect(pixels, stride, badge, 6, color);
+    draw_text_center(pixels, stride, badge, label, 11, COLOR(255, 255, 255));
 }
 
 static void draw_action_card(
@@ -1783,7 +1800,11 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     const UiAction *actions;
     int action_count;
     int index;
-    draw_header(pixels, stride, "家长时间管理", "本地规则与设备安全设置");
+    draw_header(pixels, stride,
+                model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT
+                    ? "支持与恢复" : "家长时间管理",
+                model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT
+                    ? "兼容状态、诊断与安全恢复" : "本地规则与设备安全设置");
     draw_disable_banner(pixels, stride, model);
     if (model->demo_secret_enabled) {
         UiRect warning = model->disable_flag_present ? (UiRect){526, 42, 246, 38} : (UiRect){900, 42, 326, 36};
@@ -1792,24 +1813,33 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                          model->disable_flag_present ? "公共演示密钥已启用" : "公共演示密钥已启用  |  低安全模式",
                          17, COLOR(194, 61, 61));
     }
-    draw_tabs(pixels, stride, model->parent_page);
+    draw_tabs(pixels, stride, model);
     if (model->parent_page != PTC_UI_PARENT_PLAN && model->parent_page != PTC_UI_PARENT_HOLIDAY) {
-        actions = actions_for_page(model->parent_page, &action_count);
+        if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
+            actions = SUPPORT_ACTIONS;
+            action_count = (int)(sizeof(SUPPORT_ACTIONS) / sizeof(SUPPORT_ACTIONS[0]));
+        } else {
+            actions = actions_for_page(model->parent_page, &action_count);
+        }
         for (index = 0; index < action_count; ++index) {
             UiRect card = to_uirect(ptc_ui_parent_card_rect(index));
             PtcUiActionState astate = PTC_UI_ACTION_AVAILABLE;
-            if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
+            if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
                 if (!ptc_ui_safety_action_visible(model, index)) continue;
                 astate = ptc_ui_safety_action_available(model, index);
             } else if (model->disable_flag_present && model->parent_page == PTC_UI_PARENT_TODAY && index > 0) {
                 astate = PTC_UI_ACTION_DISABLED;
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT &&
+                       index == 4) {
+                astate = ptc_ui_settings_support_state(model);
             }
             const UiAction *action = &actions[index];
             UiAction dynamic_action;
-            if (model->parent_page == PTC_UI_PARENT_SUPPORT && model->disable_flag_present && index == 0) {
+            if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT &&
+                model->disable_flag_present && index == 0) {
                 action = &RESUME_CONTROL_ACTION;
             }
-            if (model->parent_page == PTC_UI_PARENT_SECURITY && index == 5) {
+            if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT && index == 3) {
                 const char *detail = "重新检查后才能修改";
                 dynamic_action = *action;
                 if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
@@ -1825,14 +1855,14 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 dynamic_action.subtitle = detail;
                 action = &dynamic_action;
             }
-            if (model->parent_page == PTC_UI_PARENT_SECURITY && index == 6) {
+            if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT && index == 0) {
                 dynamic_action = *action;
                 dynamic_action.subtitle = ptc_ui_theme_preference_label(g_theme.preference);
                 action = &dynamic_action;
             }
             draw_action_card(pixels, stride, card, action, index == model->selected_index, astate,
-                             model->parent_page == PTC_UI_PARENT_SECURITY && index == 5 ? 100 : 0);
-            if (model->parent_page == PTC_UI_PARENT_SECURITY && index == 5) {
+                             model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT && index == 3 ? 100 : 0);
+            if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT && index == 3) {
                 const char *state_label = "状态未知";
                 uint32_t state_color = COLOR(194, 61, 61);
                 if (model->album_restriction_state == 0) {
@@ -1852,6 +1882,15 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 fill_round_rect(pixels, stride, badge, 6, COLOR(244, 246, 249));
                 draw_text_center(pixels, stride, badge, state_label, 13, state_color);
             }
+            if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT && index == 4) {
+                const char *label = ptc_ui_settings_status_label(model);
+                if (label) {
+                    UiRect badge = {card.x + card.width - 210, card.y + 12, 88, 28};
+                    uint32_t color = strcmp(label, "需处理") == 0 ? COLOR(194, 61, 61) : COLOR(215, 139, 25);
+                    fill_round_rect(pixels, stride, badge, 6, COLOR(244, 246, 249));
+                    draw_text_center(pixels, stride, badge, label, 13, color);
+                }
+            }
         }
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
@@ -1860,22 +1899,24 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
         draw_holiday_page(pixels, stride, model);
     } else if (model->parent_page == PTC_UI_PARENT_TODAY) {
         draw_today_status(pixels, stride, model);
-    } else if (model->parent_page == PTC_UI_PARENT_SECURITY) {
+    } else if (model->parent_page == PTC_UI_PARENT_GRANT) {
         draw_grant_help(pixels, stride, model);
-    } else if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
-        draw_safety_status(pixels, stride, model);
-    } else {
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
         draw_safety_status(pixels, stride, model);
     }
-    if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT &&
         model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
         draw_diagnostic_notice(pixels, stride, model);
     } else if (model->parent_page != PTC_UI_PARENT_PLAN && model->parent_page != PTC_UI_PARENT_HOLIDAY) {
         draw_notice(pixels, stride, model, 522, 128);
     }
-    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0), "L  上一页");
-    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1), "R  下一页");
-    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(2), "B  返回孩子页");
+    draw_settings_badge(pixels, stride, model);
+    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0),
+                       model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT ? "" : "L  上一页");
+    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1),
+                       model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT ? "" : "R  下一页");
+    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(2),
+                       model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT ? "B  返回设置" : "B  返回孩子页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(3), "Y  刷新");
     if (model->parent_footer_focused && model->parent_footer_selection == 0) {
         draw_rect_outline(pixels, stride, to_uirect(ptc_ui_parent_footer_rect(3)), 3, COLOR(28, 118, 188));
@@ -2642,7 +2683,7 @@ static void draw_grant_manager_overlay(uint32_t *pixels, uint32_t stride, const 
     }
     fit_text(fitted, sizeof(fitted), model->message, 16, dialog.width - 330);
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 506,
-              fitted[0] ? fitted : "方向键选择  |  A 确定  |  B 返回加时码与安全", 16,
+              fitted[0] ? fitted : "方向键选择  |  A 确定  |  B 返回加时码", 16,
               fitted[0] ? COLOR(25, 132, 95) : COLOR(77, 86, 99));
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);

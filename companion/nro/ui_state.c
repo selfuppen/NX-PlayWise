@@ -235,12 +235,13 @@ void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, s
     char basis[112];
     uint8_t weekday;
     if (!model || !message || message_size == 0 || !detail || detail_size == 0) return;
+    detail[0] = '\0';
     weekday = ptc_weekday_from_day_index(model->day_index);
     if (strcmp(model->rule_source, "today_override") == 0) {
         format_rule_basis(model->today_override_rule, model->played_minutes,
                           model->played_minutes_available, basis, sizeof(basis));
         snprintf(message, message_size, "国家节假日设置已保存；今天仍按临时设置执行，当前不变。");
-        snprintf(detail, detail_size, "当前按今日临时设置：%s；清除后会按节假日优先级重新计算。", basis);
+        snprintf(detail, detail_size, "原因：今日临时设置优先于国家节假日规则。");
         return;
     }
     if (strcmp(model->rule_source, "statutory_holiday") == 0) {
@@ -256,17 +257,17 @@ void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, s
     format_rule_basis(active, model->played_minutes, model->played_minutes_available, basis, sizeof(basis));
     if (!model->draft_holiday_enabled) {
         snprintf(message, message_size, "国家节假日预设已保存但未启用；今天不受影响。");
-        snprintf(detail, detail_size, "今天继续按%s执行：%s。", source, basis);
+        snprintf(detail, detail_size, "原因：国家节假日总开关未开启。");
     } else if (!model->calendar_covered) {
         snprintf(message, message_size, "国家节假日设置已保存；内置日历未覆盖今天，今天不受影响。");
-        snprintf(detail, detail_size, "今天回退周计划：%s。", basis);
+        snprintf(detail, detail_size, "原因：今天不在内置日历覆盖范围内，继续使用周计划。");
     } else if (strcmp(model->rule_source, "statutory_holiday") == 0 ||
                strcmp(model->rule_source, "makeup_workday") == 0) {
         snprintf(message, message_size, "国家节假日设置已保存并影响今天。");
         snprintf(detail, detail_size, "今天按%s执行：%s。", source, basis);
     } else {
         snprintf(message, message_size, "国家节假日设置已保存；今天是普通日期，不受影响。");
-        snprintf(detail, detail_size, "今天继续按周计划执行：%s。", basis);
+        snprintf(detail, detail_size, "原因：今天未命中国家节假日安排，继续使用周计划。");
     }
 }
 
@@ -390,14 +391,30 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
         return 0;
     case PTC_UI_PARENT_HOLIDAY:
         return 7;
-    case PTC_UI_PARENT_SECURITY:
-        return 7;
-    case PTC_UI_PARENT_SUPPORT:
-        return 6;
+    case PTC_UI_PARENT_GRANT:
+        return 3;
+    case PTC_UI_PARENT_SETTINGS:
+        return 5;
     case PTC_UI_PARENT_TODAY:
     default:
         return 5;
     }
+}
+
+const char *ptc_ui_settings_status_label(const PtcUiModel *model)
+{
+    if (!model) return NULL;
+    if (model->disable_flag_present || model->recovery_active ||
+        strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
+        return "需处理";
+    }
+    if (model->setup_phase[0] && strcmp(model->setup_phase, "active") != 0) return "待完成";
+    return NULL;
+}
+
+PtcUiActionState ptc_ui_settings_support_state(const PtcUiModel *model)
+{
+    return ptc_ui_settings_status_label(model) ? PTC_UI_ACTION_RECOMMENDED : PTC_UI_ACTION_AVAILABLE;
 }
 
 void ptc_ui_change_parent_page(PtcUiModel *model, int direction)
@@ -413,6 +430,7 @@ void ptc_ui_change_parent_page(PtcUiModel *model, int direction)
         page = 0;
     }
     model->parent_page = (PtcUiParentPage)page;
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS) model->settings_page = PTC_UI_SETTINGS_ROOT;
     if (!model->parent_footer_focused) model->selected_index = 0;
 }
 
@@ -446,7 +464,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     }
     index = model->selected_index;
     if (index < 0 ||
-        (model->parent_page == PTC_UI_PARENT_SUPPORT
+        (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT
             ? index >= count + model->recent_event_count
             : index >= count)) {
         index = 0;
@@ -470,7 +488,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         }
         return;
     }
-    if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
         int event_count = model->recent_event_count;
         int max_index = 5 + event_count;
         if (index > max_index) index = 0;
@@ -2208,16 +2226,18 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    for (i = 0; i < PTC_UI_PARENT_PAGE_COUNT; ++i) {
-        if (ptc_ui_rect_contains(ptc_ui_parent_tab_rect(i), x, y)) {
-            return make_hit(PTC_UI_HIT_PARENT_TAB, i);
+    if (!(model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT)) {
+        for (i = 0; i < PTC_UI_PARENT_PAGE_COUNT; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_parent_tab_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_PARENT_TAB, i);
+            }
         }
-    }
-    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(0), x, y)) {
-        return make_hit(PTC_UI_HIT_PARENT_PREV_PAGE, 0);
-    }
-    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(1), x, y)) {
-        return make_hit(PTC_UI_HIT_PARENT_NEXT_PAGE, 0);
+        if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(0), x, y)) {
+            return make_hit(PTC_UI_HIT_PARENT_PREV_PAGE, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(1), x, y)) {
+            return make_hit(PTC_UI_HIT_PARENT_NEXT_PAGE, 0);
+        }
     }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(2), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
@@ -2269,17 +2289,18 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
         for (i = 0; i < model->recent_event_count; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_support_event_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_SUPPORT_EVENT, model->recent_event_count - 1 - i);
             }
         }
     }
-    count = ptc_ui_parent_action_count(model->parent_page);
+    count = model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT
+        ? 6 : ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {
         PtcUiRect card_rect = ptc_ui_parent_card_rect(i);
-        if ((model->parent_page != PTC_UI_PARENT_SUPPORT ||
+        if ((model->parent_page != PTC_UI_PARENT_SETTINGS || model->settings_page != PTC_UI_SETTINGS_SUPPORT ||
              (ptc_ui_safety_action_visible(model, i) &&
               ptc_ui_safety_action_available(model, i) != PTC_UI_ACTION_DISABLED)) &&
             ptc_ui_rect_contains(card_rect, x, y)) {
