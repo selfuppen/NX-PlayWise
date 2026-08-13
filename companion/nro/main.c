@@ -577,7 +577,7 @@ static bool save_ui_preferences(UiState *ui)
     cJSON_DeleteItemFromObject(root, "setup_wizard_step");
     cJSON_AddNumberToObject(root, "setup_wizard_step", ui->model.setup_step);
     cJSON_DeleteItemFromObject(root, "setup_wizard_version");
-    cJSON_AddNumberToObject(root, "setup_wizard_version", 3);
+    cJSON_AddNumberToObject(root, "setup_wizard_version", 4);
     rendered = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     ok = rendered && ui->client.storage->vtable->write_text_atomic(ui->client.storage, CONFIG_PATH, rendered);
@@ -1450,11 +1450,11 @@ static void setup_pin(UiState *ui)
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_NONE;
-    if (save_setup_step(ui, PTC_UI_SETUP_ALBUM)) {
+    if (save_setup_step(ui, PTC_UI_SETUP_THEME)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                  strlen(pin) < 4U
                      ? "PIN 已保存；当前 PIN 少于 4 位，容易被猜到，建议修改。"
-                     : "PIN 已保存；下一步设置入口保护。");
+                     : "PIN 已保存；下一步选择外观主题。");
     }
 }
 
@@ -1532,29 +1532,10 @@ static void setup_primary(UiState *ui)
         if (save_setup_step(ui, PTC_UI_SETUP_PIN)) (void)ensure_default_setup_pin(ui);
         break;
     case PTC_UI_SETUP_PIN:
-        if (ensure_default_setup_pin(ui)) (void)save_setup_step(ui, PTC_UI_SETUP_ALBUM);
-        break;
-    case PTC_UI_SETUP_ALBUM:
-        if (ui->model.setup_album_enable) {
-            char error[160] = {0};
-            PtcAlbumRestrictionStatus status;
-            if (ptc_album_restriction_get_status(ui->client.storage, &status) &&
-                status.state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
-                snprintf(ui->model.message, sizeof(ui->model.message),
-                         "已有相同的外部入口配置，已保留原配置；PlayWise 不会伪造恢复备份。");
-            } else if (!ptc_album_restriction_enable(ui->client.storage, error, sizeof(error))) {
-                snprintf(ui->model.message, sizeof(ui->model.message), "%s；可关闭开关暂时跳过。", error);
-                break;
-            } else {
-                snprintf(ui->model.message, sizeof(ui->model.message), "自制程序菜单入口保护已保存，重启主机后生效。");
-                refresh_recovery_state(ui);
-            }
-        } else {
-            snprintf(ui->model.message, sizeof(ui->model.message),
-                     "已暂时跳过自制程序菜单入口保护，可稍后在设置中开启。");
+        if (ensure_default_setup_pin(ui)) {
+            ui->model.setup_theme_index = (int)ui->theme_preference;
+            (void)save_setup_step(ui, PTC_UI_SETUP_THEME);
         }
-        ui->model.setup_theme_index = (int)ui->theme_preference;
-        (void)save_setup_step(ui, PTC_UI_SETUP_THEME);
         break;
     case PTC_UI_SETUP_THEME:
         if (apply_theme_preference(ui, (PtcUiThemePreference)ui->model.setup_theme_index)) {
@@ -1609,15 +1590,6 @@ static void handle_setup_input(UiState *ui, u64 down, u64 held)
         } else if (down & HidNpadButton_A) {
             select_setup_shortcut(ui, ui->model.setup_shortcut_index);
         } else if (down & HidNpadButton_Plus) {
-            setup_primary(ui);
-        }
-    } else if (ui->model.setup_step == PTC_UI_SETUP_ALBUM) {
-        if (down & (HidNpadButton_Left | HidNpadButton_Right | HidNpadButton_X)) {
-            ui->model.setup_album_enable = !ui->model.setup_album_enable;
-            snprintf(ui->model.message, sizeof(ui->model.message),
-                     "当前选择：%s；按 A 或 + 后才保存并继续。",
-                     ui->model.setup_album_enable ? "开启自制程序菜单入口保护" : "暂时跳过");
-        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             setup_primary(ui);
         }
     } else if (ui->model.setup_step == PTC_UI_SETUP_THEME) {
@@ -2587,11 +2559,10 @@ static void handle_parent_action(UiState *ui)
         case 1: change_parent_pin(ui); break;
         case 2: open_shortcut_manager(ui); break;
         case 3:
+            ui->model.settings_page = PTC_UI_SETTINGS_ADVANCED;
+            ui->model.selected_index = 0;
+            ui->model.parent_footer_focused = false;
             refresh_album_restriction(ui);
-            ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
-            ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单入口保护");
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "先查看当前状态，再选择开启限制或恢复原来的启动方式。");
             break;
         case 4:
             ui->model.settings_page = PTC_UI_SETTINGS_SUPPORT;
@@ -2599,6 +2570,18 @@ static void handle_parent_action(UiState *ui)
             ui->model.parent_footer_focused = false;
             break;
         default: break;
+        }
+        return;
+    }
+    if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS &&
+        ui->model.settings_page == PTC_UI_SETTINGS_ADVANCED) {
+        if (index == 0) {
+            refresh_album_restriction(ui);
+            ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
+            ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单高级入口");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                     "此功能只改变 hbmenu 启动方式，不提供防篡改保护。");
         }
         return;
     }
@@ -2675,7 +2658,7 @@ static void confirm_operation(UiState *ui)
         if (return_overlay == PTC_UI_OVERLAY_ALBUM_MANAGER) {
             ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单入口保护");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单高级入口");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "状态已重新检测；配置变更需重启主机后生效。");
         }
         if (ok) {
@@ -2910,9 +2893,10 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
         return;
     }
     if (leave_parent && ui->model.parent_page == PTC_UI_PARENT_SETTINGS &&
-        ui->model.settings_page == PTC_UI_SETTINGS_SUPPORT) {
+        ui->model.settings_page != PTC_UI_SETTINGS_ROOT) {
+        bool returning_from_support = ui->model.settings_page == PTC_UI_SETTINGS_SUPPORT;
         ui->model.settings_page = PTC_UI_SETTINGS_ROOT;
-        ui->model.selected_index = 4;
+        ui->model.selected_index = returning_from_support ? 4 : 3;
         ui->model.parent_footer_focused = false;
         ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_IDLE;
         ui->model.diagnostic_path[0] = '\0';
@@ -3020,13 +3004,13 @@ static void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & HidNpadButton_Y) {
             refresh_album_restriction(ui);
             refresh_recovery_state(ui);
-            snprintf(ui->model.message, sizeof(ui->model.message), "自制程序菜单入口保护状态已重新检测。");
+            snprintf(ui->model.message, sizeof(ui->model.message), "自制程序菜单高级入口状态已重新检测。");
         } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
             ui->model.overlay_selection = 1 - ui->model.overlay_selection;
         } else if (down & HidNpadButton_A) {
             if (ui->model.overlay_selection == 0 && ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION, "开启自制程序菜单入口保护？",
-                    "当前状态：未开启\n目标状态：已开启\n将先保存可信备份；重启后，在桌面‘手柄设置’图标上按住 X，再按 A，进入自制程序菜单（hbmenu）。\n可随时回到此处恢复原配置。");
+                open_confirm_overlay(ui, PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION, "配置自制程序菜单高级入口？",
+                    "当前状态：未配置\n目标状态：高级入口可用\n此功能只改变 hbmenu 启动方式，不提供防篡改保护。将就地备份原文件；重启后，在桌面‘手柄设置’图标上按住 X，再按 A 进入 hbmenu。\n可回到此处恢复原配置。");
             } else if (ui->model.overlay_selection == 1 && ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
                 open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY, "恢复原来的启动方式？",
                     "将按可信备份恢复原配置。卸载或删除 PlayWise 数据前必须完成恢复；保存后需重启主机生效。");
@@ -3484,12 +3468,6 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_SETUP_PIN:
         setup_pin(ui);
-        break;
-    case PTC_UI_HIT_SETUP_ALBUM_TOGGLE:
-        ui->model.setup_album_enable = !ui->model.setup_album_enable;
-        snprintf(ui->model.message, sizeof(ui->model.message),
-                 "当前选择：%s；按 A 或 + 后才保存并继续。",
-                 ui->model.setup_album_enable ? "开启自制程序菜单入口保护" : "暂时跳过");
         break;
     case PTC_UI_HIT_SETUP_CHILD_ZONE:
         ui->model.setup_zone_index = 0;
@@ -4066,11 +4044,11 @@ int main(int argc, char **argv)
                 if (down & HidNpadButton_B) {
                     request_parent_navigation(&ui, -1, true);
                 } else if (down & HidNpadButton_L &&
-                           !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page == PTC_UI_SETTINGS_SUPPORT)) {
+                           !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page != PTC_UI_SETTINGS_ROOT)) {
                     request_parent_navigation(&ui,
                         (ui.model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
                 } else if (down & HidNpadButton_R &&
-                           !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page == PTC_UI_SETTINGS_SUPPORT)) {
+                           !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page != PTC_UI_SETTINGS_ROOT)) {
                     request_parent_navigation(&ui,
                         (ui.model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
                 } else if (down & HidNpadButton_Up) {
@@ -4184,11 +4162,11 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_B) {
                 request_parent_navigation(&ui, -1, true);
             } else if (down & HidNpadButton_L &&
-                       !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page == PTC_UI_SETTINGS_SUPPORT)) {
+                       !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page != PTC_UI_SETTINGS_ROOT)) {
                 request_parent_navigation(&ui,
                     (ui.model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
             } else if (down & HidNpadButton_R &&
-                       !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page == PTC_UI_SETTINGS_SUPPORT)) {
+                       !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page != PTC_UI_SETTINGS_ROOT)) {
                 request_parent_navigation(&ui,
                     (ui.model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
             } else if (down & HidNpadButton_Left) {

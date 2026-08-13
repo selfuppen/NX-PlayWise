@@ -8,7 +8,11 @@
 
 #define PTC_ALBUM_OVERRIDE_PATH "sdmc:/atmosphere/config/override_config.ini"
 #define PTC_ALBUM_PACKAGE_PATH "sdmc:/switch/.packages/More Menu/Photo Album/package.ini"
-#define PTC_ALBUM_BACKUP_ROOT "sdmc:/switch/playwise/backups/album_restriction"
+#define PTC_ALBUM_OVERRIDE_BACKUP_PATH PTC_ALBUM_OVERRIDE_PATH ".playwise.bak"
+#define PTC_ALBUM_PACKAGE_BACKUP_PATH PTC_ALBUM_PACKAGE_PATH ".playwise.bak"
+#define PTC_ALBUM_STATE_PATH PTC_ALBUM_OVERRIDE_PATH ".playwise.state"
+#define PTC_ALBUM_OVERRIDE_CONFLICT_PATH PTC_ALBUM_OVERRIDE_PATH ".playwise.conflict"
+#define PTC_ALBUM_PACKAGE_CONFLICT_PATH PTC_ALBUM_PACKAGE_PATH ".playwise.conflict"
 #define PTC_ALBUM_CONFIG_MAX_BYTES (64u * 1024u)
 
 typedef enum {

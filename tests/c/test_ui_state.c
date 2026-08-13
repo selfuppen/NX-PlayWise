@@ -206,13 +206,10 @@ static void test_shortcut_hold_and_setup_migration(void)
     check_true(!ptc_ui_confirm_hold_update(&confirm_hold, false, 3), "release resets confirm hold");
     check_int(ptc_ui_confirm_hold_progress(&confirm_hold, 3), 0, "released confirm hold clears progress");
 
-    check_int(ptc_ui_migrate_setup_step(0, 2), 0, "completed v2 wizard remains complete");
-    check_int(ptc_ui_migrate_setup_step(1, 2), PTC_UI_SETUP_SHORTCUT, "v2 shortcut step keeps meaning");
-    check_int(ptc_ui_migrate_setup_step(2, 2), PTC_UI_SETUP_PIN, "v2 PIN step keeps meaning");
-    check_int(ptc_ui_migrate_setup_step(3, 2), PTC_UI_SETUP_ALBUM, "v2 takeover resumes after takeover");
-    check_int(ptc_ui_migrate_setup_step(4, 2), PTC_UI_SETUP_THEME, "v2 entry protection continues to theme");
-    check_int(ptc_ui_migrate_setup_step(5, 2), PTC_UI_SETUP_THEME, "v2 zone receives new theme step");
-    check_int(ptc_ui_migrate_setup_step(6, 3), PTC_UI_SETUP_ZONE, "v3 zone step is stable");
+    check_int(ptc_ui_migrate_setup_step(0, 3), 0, "completed older wizard remains complete");
+    check_int(ptc_ui_migrate_setup_step(3, 3), PTC_UI_SETUP_SHORTCUT, "unfinished older wizard restarts safely");
+    check_int(ptc_ui_migrate_setup_step(3, 4), PTC_UI_SETUP_THEME, "v4 theme step is stable");
+    check_int(ptc_ui_migrate_setup_step(5, 4), PTC_UI_SETUP_ZONE, "v4 zone step is stable");
 }
 
 static void test_rule_result_guidance(void)
@@ -704,6 +701,13 @@ static void test_release_hit_targets(void)
     check_true(!rects_overlap(ptc_ui_support_event_rect(0), ptc_ui_support_event_rect(1)),
                "support event rows do not overlap");
 
+    model.settings_page = PTC_UI_SETTINGS_ADVANCED;
+    model.recent_event_count = 0;
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_PARENT_CARD, 0,
+              "advanced settings exposes the hbmenu entry card");
+    check_hit(hit_center(&model, ptc_ui_parent_tab_rect(0)), PTC_UI_HIT_NONE, 0,
+              "advanced settings hides top-level tab touch navigation");
+
     model.parent_page = PTC_UI_PARENT_HOLIDAY;
     check_hit(hit_center(&model, ptc_ui_holiday_enable_rect()), PTC_UI_HIT_HOLIDAY_ENABLE, 0, "holiday global switch target");
     check_hit(hit_center(&model, ptc_ui_holiday_mode_rect(0)), PTC_UI_HIT_HOLIDAY_MODE, 0, "holiday statutory mode target");
@@ -768,11 +772,6 @@ static void test_release_hit_targets(void)
                "two shortcut preset columns do not overlap");
     model.setup_step = PTC_UI_SETUP_PIN;
     check_hit(hit_center(&model, ptc_ui_setup_pin_rect()), PTC_UI_HIT_SETUP_PIN, 0, "setup PIN guide");
-    model.setup_step = PTC_UI_SETUP_ALBUM;
-    check_hit(hit_center(&model, ptc_ui_setup_album_toggle_rect()), PTC_UI_HIT_SETUP_ALBUM_TOGGLE, 0,
-              "setup album switch has a touch target");
-    check_hit(ptc_ui_hit_test(&model, 300, 300), PTC_UI_HIT_NONE, 0,
-              "setup album explanation does not toggle the choice");
     model.setup_step = PTC_UI_SETUP_THEME;
     check_hit(hit_center(&model, ptc_ui_setup_theme_rect(2)), PTC_UI_HIT_SETUP_THEME_OPTION, 2,
               "setup dark theme option has a matching touch target");

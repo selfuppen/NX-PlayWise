@@ -102,16 +102,8 @@ uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int re
 int ptc_ui_migrate_setup_step(int step, int wizard_version)
 {
     if (step <= 0) return 0;
-    if (wizard_version >= 3) return step <= PTC_UI_SETUP_ZONE ? step : PTC_UI_SETUP_SHORTCUT;
-    if (wizard_version == 2) {
-        if (step <= 2) return step;
-        /* v2 had takeover before entry protection and no theme page. */
-        if (step == 3) return PTC_UI_SETUP_ALBUM;
-        return PTC_UI_SETUP_THEME;
-    }
-    /* The legacy four-step flow used 4 for its final zone page. */
-    if (step >= 4) return PTC_UI_SETUP_THEME;
-    return step;
+    if (wizard_version >= 4) return step <= PTC_UI_SETUP_ZONE ? step : PTC_UI_SETUP_SHORTCUT;
+    return PTC_UI_SETUP_SHORTCUT;
 }
 
 static const char *effective_rule_label(PtcRuleSource source)
@@ -457,7 +449,8 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         }
         return;
     }
-    count = ptc_ui_parent_action_count(model->parent_page);
+    count = model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED
+        ? 1 : ptc_ui_parent_action_count(model->parent_page);
     if (count <= 0) {
         model->selected_index = 0;
         return;
@@ -1252,13 +1245,6 @@ PtcUiRect ptc_ui_setup_back_rect(void)
 PtcUiRect ptc_ui_setup_pin_rect(void)
 {
     PtcUiRect rect = {204, 300, 520, 78};
-    return rect;
-}
-
-PtcUiRect ptc_ui_setup_album_toggle_rect(void)
-{
-    /* Enlarge the painted switch target without making the explanation clickable. */
-    PtcUiRect rect = {852, 210, 176, 86};
     return rect;
 }
 
@@ -2195,9 +2181,6 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         } else if (step == PTC_UI_SETUP_PIN &&
                    ptc_ui_rect_contains(ptc_ui_setup_pin_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_SETUP_PIN, 0);
-        } else if (step == PTC_UI_SETUP_ALBUM &&
-                   ptc_ui_rect_contains(ptc_ui_setup_album_toggle_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_SETUP_ALBUM_TOGGLE, 0);
         } else if (step == PTC_UI_SETUP_THEME) {
             for (i = 0; i < 3; ++i) {
                 if (ptc_ui_rect_contains(ptc_ui_setup_theme_rect(i), x, y)) {
@@ -2226,7 +2209,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (!(model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT)) {
+    if (!(model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page != PTC_UI_SETTINGS_ROOT)) {
         for (i = 0; i < PTC_UI_PARENT_PAGE_COUNT; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_parent_tab_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_PARENT_TAB, i);
@@ -2296,8 +2279,10 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
             }
         }
     }
-    count = model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT
-        ? 6 : ptc_ui_parent_action_count(model->parent_page);
+    count = model->parent_page == PTC_UI_PARENT_SETTINGS
+        ? (model->settings_page == PTC_UI_SETTINGS_SUPPORT ? 6 :
+           model->settings_page == PTC_UI_SETTINGS_ADVANCED ? 1 : ptc_ui_parent_action_count(model->parent_page))
+        : ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {
         PtcUiRect card_rect = ptc_ui_parent_card_rect(i);
         if ((model->parent_page != PTC_UI_PARENT_SETTINGS || model->settings_page != PTC_UI_SETTINGS_SUPPORT ||

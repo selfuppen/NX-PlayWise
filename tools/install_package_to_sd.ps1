@@ -153,7 +153,7 @@ if (-not $hasPackageCore) {
 Write-Host "Source package: $sourceRoot"
 Write-Host "Destination:    $destinationRoot"
 if ($isFullInstall) {
-    Write-Host "Install mode:   Full clean install (preserves album restriction recovery backups)"
+    Write-Host "Install mode:   Full clean install"
 } else {
     Write-Host "Install mode:   Incremental update (preserves existing config and data)"
 }
@@ -165,7 +165,7 @@ foreach ($relativePath in $pathsToRemove) {
 Write-Host ""
 Write-Host "Package paths to copy:"
 if ($isFullInstall) {
-    Write-Host "  switch\playwise (full clean install; backups\album_restriction is preserved)"
+    Write-Host "  switch\playwise (full clean install)"
 } else {
     Write-Host "  switch\playwise\pctc.nro and build.json (replace); credentials, PIN, rules and runtime data are preserved"
 }
@@ -193,32 +193,14 @@ if (-not $WhatIfPreference) {
 foreach ($relativePath in $pathsToRemove) {
     $oldPath = Join-Path $destinationRoot $relativePath
     if ((Test-Path -LiteralPath $oldPath) -and $PSCmdlet.ShouldProcess($oldPath, "Remove old installation path")) {
-        if ($isFullInstall -and $relativePath -eq "switch\playwise") {
-            $protectedBackup = Join-Path $oldPath "backups\album_restriction"
-            foreach ($child in Get-ChildItem -LiteralPath $oldPath -Force) {
-                if ($child.Name -eq "backups") {
-                    foreach ($backupChild in Get-ChildItem -LiteralPath $child.FullName -Force) {
-                        if ($backupChild.Name -ne "album_restriction") {
-                            Remove-Item -LiteralPath $backupChild.FullName -Recurse -Force
-                        }
-                    }
-                } else {
-                    Remove-Item -LiteralPath $child.FullName -Recurse -Force
-                }
-            }
-            if (Test-Path -LiteralPath $protectedBackup) {
-                Write-Host "Preserved recovery backup: $protectedBackup"
-            }
-        } else {
-            Remove-Item -LiteralPath $oldPath -Recurse -Force
-        }
+        Remove-Item -LiteralPath $oldPath -Recurse -Force
     }
 }
 
 if (-not $WhatIfPreference) {
     foreach ($relativePath in $pathsToRemove) {
         $oldPath = Join-Path $destinationRoot $relativePath
-        if ((Test-Path -LiteralPath $oldPath) -and -not ($isFullInstall -and $relativePath -eq "switch\playwise")) {
+        if (Test-Path -LiteralPath $oldPath) {
             throw "Old installation path still exists; copying was stopped: $oldPath"
         }
     }

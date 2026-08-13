@@ -24,6 +24,7 @@ typedef struct {
     bool fail_renames;
     bool fail_removes;
     const char *fail_write_path_contains;
+    const char *fail_rename_path_contains;
     const char *fail_remove_path_contains;
     int64_t now_unix_seconds;
 } PtcMemStorage;

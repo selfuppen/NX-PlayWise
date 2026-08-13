@@ -144,8 +144,12 @@ static const UiAction SETTINGS_ACTIONS[] = {
     {"外观主题", "跟随系统、浅色或暗色", COLOR(42, 105, 188)},
     {"修改任我玩PIN", "验证当前 PIN 后设置新 PIN", COLOR(42, 105, 188)},
     {"家长区快捷键管理", "选择组合并管理孩子区提示", COLOR(42, 105, 188)},
-    {"自制程序菜单入口保护", "通过桌面‘手柄设置’图标进入", COLOR(194, 61, 61)},
+    {"高级设置", "高级启动方式与兼容性选项", COLOR(91, 100, 116)},
     {"支持与恢复", "兼容状态、诊断和恢复操作", COLOR(91, 100, 116)},
+};
+
+static const UiAction ADVANCED_ACTIONS[] = {
+    {"自制程序菜单高级入口", "改变 hbmenu 启动方式，不提供防篡改保护", COLOR(194, 61, 61)},
 };
 
 static const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -879,14 +883,13 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             snprintf(countdown_line, sizeof(countdown_line), "同步完成，正在启用额度管理...");
         }
         draw_text(pixels, stride, 204, 310, countdown_line, 34, COLOR(28, 118, 188));
-        draw_text(pixels, stride, 204, 356, "无需操作；同步完成后会进入第 6 步选择区域。", 22, COLOR(45, 52, 62));
+        draw_text(pixels, stride, 204, 356, "无需操作；同步完成后会进入第 5 步选择区域。", 22, COLOR(45, 52, 62));
     } else {
         draw_text(pixels, stride, 104, 154, "1 快捷键", 16, step == PTC_UI_SETUP_SHORTCUT ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
         draw_text(pixels, stride, 286, 154, "2 PIN", 16, step == PTC_UI_SETUP_PIN ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 424, 154, "3 入口保护", 16, step == PTC_UI_SETUP_ALBUM ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 626, 154, "4 外观主题", 16, step == PTC_UI_SETUP_THEME ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 824, 154, "5 接管", 16, step == PTC_UI_SETUP_TAKEOVER ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
-        draw_text(pixels, stride, 974, 154, "6 进入区域", 16, step == PTC_UI_SETUP_ZONE ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 452, 154, "3 外观主题", 16, step == PTC_UI_SETUP_THEME ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 708, 154, "4 接管", 16, step == PTC_UI_SETUP_TAKEOVER ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
+        draw_text(pixels, stride, 912, 154, "5 进入区域", 16, step == PTC_UI_SETUP_ZONE ? COLOR(28, 118, 188) : COLOR(91, 100, 116));
         if (step == PTC_UI_SETUP_SHORTCUT) {
             UiRect compact_fixed = {204, 184, 872, 54};
             fill_round_rect(pixels, stride, compact_fixed, 8, COLOR(244, 249, 255));
@@ -940,29 +943,14 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                       21, COLOR(45, 52, 62));
             draw_text(pixels, stride, 204, 360,
                       takeover_complete
-                          ? "按 A 或点击继续，进入第 6 步选择区域。"
+                          ? "按 A 或点击继续，进入第 5 步选择区域。"
                           : "接管成功后会保留同步宽限，系统控制不会立即跳变。",
                       21, COLOR(45, 52, 62));
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
-                               takeover_complete ? "A / 点击  继续到第 6 步" :
+                               takeover_complete ? "A / 点击  继续到第 5 步" :
                                (resuming_restored_setup ? "A / 点击  解除停用并重新接管" : "A / 点击  确认接管"),
                                takeover_complete ? COLOR(25, 132, 95) : COLOR(28, 118, 188),
                                COLOR(255, 255, 255), false);
-        } else if (step == PTC_UI_SETUP_ALBUM) {
-            UiRect card = {204, 204, 872, 250};
-            fill_round_rect(pixels, stride, card, 8, COLOR(248, 250, 253));
-            draw_rect_outline(pixels, stride, card, 1, COLOR(219, 225, 233));
-            draw_text(pixels, stride, 236, 248, "自制程序菜单入口保护（可跳过）", 28, COLOR(28, 34, 43));
-            draw_text(pixels, stride, 236, 292, "通过桌面‘手柄设置’图标进入。", 20, COLOR(77, 86, 99));
-            draw_text(pixels, stride, 236, 324, "按住 X，再按 A，进入自制程序菜单（hbmenu）。", 20, COLOR(77, 86, 99));
-            draw_text(pixels, stride, 236, 356, "会备份 Atmosphère 与 More Menu 原配置；修改后需重启主机生效。", 19, COLOR(77, 86, 99));
-            draw_text(pixels, stride, 236, 388, "卸载或删除 PlayWise 数据前必须先在家长区关闭此保护。", 18, COLOR(194, 61, 61));
-            draw_toggle_switch(pixels, stride, (UiRect){900, 232, 96, 42}, model->setup_album_enable, true, false,
-                               "启用", "跳过");
-            draw_text(pixels, stride, 236, 420,
-                      model->setup_album_enable ? "当前选择：开启自制程序菜单入口保护" : "当前选择：暂时跳过",
-                      18, model->setup_album_enable ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
-            draw_text(pixels, stride, 236, 448, "左右 / X / 触摸开关切换  |  A / + 保存并继续", 17, COLOR(28, 118, 188));
         } else if (step == PTC_UI_SETUP_THEME) {
             static const char *LABELS[] = {"跟随系统", "浅色", "暗色"};
             static const char *DETAILS[] = {"随 Switch 设置", "经典浅色外观", "OLED Hybrid"};
@@ -1032,10 +1020,6 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                                COLOR(28, 118, 188), COLOR(255, 255, 255), false);
         } else if (step == PTC_UI_SETUP_PIN) {
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "A  继续使用当前 PIN",
-                               COLOR(28, 118, 188), COLOR(255, 255, 255), false);
-        } else if (step == PTC_UI_SETUP_ALBUM) {
-            draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
-                               model->setup_album_enable ? "A  启用并继续" : "A  暂时跳过并继续",
                                COLOR(28, 118, 188), COLOR(255, 255, 255), false);
         } else if (step == PTC_UI_SETUP_THEME) {
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(), "A  保存主题并继续",
@@ -1111,7 +1095,7 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         fill_round_rect(pixels, stride, tab, 8, background);
         draw_text_center(pixels, stride, tab, LABELS[index], 18, foreground);
     }
-    if (!(model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT)) {
+    if (!(model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page != PTC_UI_SETTINGS_ROOT)) {
         draw_text(pixels, stride, 1038, 140, "L / R 切换", 19, COLOR(97, 106, 120));
     }
 }
@@ -1802,9 +1786,13 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     int index;
     draw_header(pixels, stride,
                 model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT
-                    ? "支持与恢复" : "家长时间管理",
+                    ? "支持与恢复" :
+                model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED
+                    ? "高级设置" : "家长时间管理",
                 model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT
-                    ? "兼容状态、诊断与安全恢复" : "本地规则与设备安全设置");
+                    ? "兼容状态、诊断与安全恢复" :
+                model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED
+                    ? "高级启动方式与兼容性选项" : "本地规则与设备安全设置");
     draw_disable_banner(pixels, stride, model);
     if (model->demo_secret_enabled) {
         UiRect warning = model->disable_flag_present ? (UiRect){526, 42, 246, 38} : (UiRect){900, 42, 326, 36};
@@ -1818,6 +1806,9 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
         if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
             actions = SUPPORT_ACTIONS;
             action_count = (int)(sizeof(SUPPORT_ACTIONS) / sizeof(SUPPORT_ACTIONS[0]));
+        } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED) {
+            actions = ADVANCED_ACTIONS;
+            action_count = (int)(sizeof(ADVANCED_ACTIONS) / sizeof(ADVANCED_ACTIONS[0]));
         } else {
             actions = actions_for_page(model->parent_page, &action_count);
         }
@@ -1839,11 +1830,11 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 model->disable_flag_present && index == 0) {
                 action = &RESUME_CONTROL_ACTION;
             }
-            if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT && index == 3) {
+            if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED && index == 0) {
                 const char *detail = "重新检查后才能修改";
                 dynamic_action = *action;
                 if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
-                    detail = "自制程序菜单入口保护未开启";
+                    detail = "自制程序菜单高级入口未配置";
                 } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
                     detail = "需按住 X，再按 A 进入自制程序菜单";
                 } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
@@ -1861,8 +1852,8 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 action = &dynamic_action;
             }
             draw_action_card(pixels, stride, card, action, index == model->selected_index, astate,
-                             model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT && index == 3 ? 100 : 0);
-            if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT && index == 3) {
+                             model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED && index == 0 ? 100 : 0);
+            if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED && index == 0) {
                 const char *state_label = "状态未知";
                 uint32_t state_color = COLOR(194, 61, 61);
                 if (model->album_restriction_state == 0) {
@@ -1912,11 +1903,11 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     }
     draw_settings_badge(pixels, stride, model);
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0),
-                       model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT ? "" : "L  上一页");
+                       model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page != PTC_UI_SETTINGS_ROOT ? "" : "L  上一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1),
-                       model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT ? "" : "R  下一页");
+                       model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page != PTC_UI_SETTINGS_ROOT ? "" : "R  下一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(2),
-                       model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT ? "B  返回设置" : "B  返回孩子页");
+                       model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page != PTC_UI_SETTINGS_ROOT ? "B  返回设置" : "B  返回孩子页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(3), "Y  刷新");
     if (model->parent_footer_focused && model->parent_footer_selection == 0) {
         draw_rect_outline(pixels, stride, to_uirect(ptc_ui_parent_footer_rect(3)), 3, COLOR(28, 118, 188));
@@ -3062,7 +3053,7 @@ static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const 
                           enabled && selected ? COLOR(28, 118, 188) : COLOR(219, 225, 233));
         draw_text(pixels, stride, card.x + 24, card.y + 42,
                   index == 0 ? (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL
-                                  ? "无需重复开启" : "开启自制程序菜单入口保护") :
+                                  ? "无需重复配置" : "配置自制程序菜单高级入口") :
                   (model->album_restriction_state == 2 && model->album_backup_valid ? "强制恢复可信备份" : "恢复原来的启动方式"),
                   21, enabled ? COLOR(28, 34, 43) : COLOR(145, 153, 165));
         draw_wrapped_text(pixels, stride, card.x + 24, card.y + 84,

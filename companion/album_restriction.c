@@ -1,16 +1,8 @@
 #include "album_restriction.h"
 
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define META_PATH PTC_ALBUM_BACKUP_ROOT "/current.meta"
-#define OVERRIDE_BACKUP_PATH PTC_ALBUM_BACKUP_ROOT "/override_config.ini.bak"
-#define PACKAGE_BACKUP_PATH PTC_ALBUM_BACKUP_ROOT "/package.ini.bak"
-#define ACTIVE_PATH PTC_ALBUM_BACKUP_ROOT "/active"
-#define CONFLICT_OVERRIDE_PATH PTC_ALBUM_BACKUP_ROOT "/conflict.override_config.ini"
-#define CONFLICT_PACKAGE_PATH PTC_ALBUM_BACKUP_ROOT "/conflict.package.ini"
 
 static const char TARGET_SECTION[] =
     "[hbl_config]\n"
@@ -20,16 +12,18 @@ static const char TARGET_SECTION[] =
     "override_address_space=39_bit\n";
 
 typedef struct {
+    char phase[32];
     bool override_existed;
     bool package_existed;
     unsigned long override_hash;
     unsigned long package_hash;
-} BackupMeta;
+    unsigned long target_hash;
+} TransactionState;
 
 static unsigned long checksum(const char *text)
 {
     unsigned long value = 2166136261u;
-    const unsigned char *p = (const unsigned char *)text;
+    const unsigned char *p = (const unsigned char *)(text ? text : "");
     while (*p) {
         value ^= *p++;
         value *= 16777619u;
@@ -45,8 +39,9 @@ static void set_error(char *error, size_t error_size, const char *message)
 static char *read_alloc(PtcStorage *storage, const char *path, bool *existed)
 {
     char *buffer;
-    if (existed) *existed = storage->vtable->exists(storage, path);
-    if (existed && !*existed) return NULL;
+    bool present = storage->vtable->exists(storage, path);
+    if (existed) *existed = present;
+    if (!present) return NULL;
     buffer = (char *)malloc(PTC_ALBUM_CONFIG_MAX_BYTES + 1u);
     if (!buffer) return NULL;
     if (!storage->vtable->read_text(storage, path, buffer, PTC_ALBUM_CONFIG_MAX_BYTES + 1u)) {
@@ -56,49 +51,62 @@ static char *read_alloc(PtcStorage *storage, const char *path, bool *existed)
     return buffer;
 }
 
-static bool parse_meta(const char *text, BackupMeta *meta)
+static bool parse_state(const char *text, TransactionState *state)
 {
     int oe, pe;
-    unsigned long oh, ph;
-    if (!text || !meta || sscanf(text, "version=1\noverride_existed=%d\npackage_existed=%d\noverride_hash=%lu\npackage_hash=%lu",
-                                  &oe, &pe, &oh, &ph) != 4) return false;
+    if (!text || !state ||
+        sscanf(text,
+               "version=1\nphase=%31[^\n]\noverride_existed=%d\npackage_existed=%d\noverride_hash=%lu\npackage_hash=%lu\ntarget_hash=%lu",
+               state->phase, &oe, &pe, &state->override_hash, &state->package_hash,
+               &state->target_hash) != 6) return false;
     if ((oe != 0 && oe != 1) || (pe != 0 && pe != 1)) return false;
-    meta->override_existed = oe != 0;
-    meta->package_existed = pe != 0;
-    meta->override_hash = oh;
-    meta->package_hash = ph;
-    return true;
+    state->override_existed = oe != 0;
+    state->package_existed = pe != 0;
+    return strcmp(state->phase, "enabling") == 0 || strcmp(state->phase, "configured") == 0 ||
+           strcmp(state->phase, "restoring") == 0 || strcmp(state->phase, "rollback_required") == 0;
 }
 
-static bool load_backup(PtcStorage *storage, BackupMeta *meta, char **override_text, char **package_text)
+static bool load_state(PtcStorage *storage, TransactionState *state)
 {
-    char meta_text[256];
+    char text[320];
+    return storage->vtable->read_text(storage, PTC_ALBUM_STATE_PATH, text, sizeof(text)) &&
+           parse_state(text, state);
+}
+
+static bool save_state(PtcStorage *storage, const TransactionState *state, const char *phase)
+{
+    char text[320];
+    snprintf(text, sizeof(text),
+             "version=1\nphase=%s\noverride_existed=%d\npackage_existed=%d\noverride_hash=%lu\npackage_hash=%lu\ntarget_hash=%lu\n",
+             phase, state->override_existed ? 1 : 0, state->package_existed ? 1 : 0,
+             state->override_hash, state->package_hash, state->target_hash);
+    return storage->vtable->write_text_atomic(storage, PTC_ALBUM_STATE_PATH, text);
+}
+
+static bool validate_backups(PtcStorage *storage, const TransactionState *state)
+{
     bool exists;
-    *override_text = NULL;
-    *package_text = NULL;
-    if (!storage->vtable->read_text(storage, META_PATH, meta_text, sizeof(meta_text)) || !parse_meta(meta_text, meta)) return false;
-    if (meta->override_existed) {
-        *override_text = read_alloc(storage, OVERRIDE_BACKUP_PATH, &exists);
-        if (!exists || !*override_text || checksum(*override_text) != meta->override_hash) goto fail;
-    }
-    if (meta->package_existed) {
-        *package_text = read_alloc(storage, PACKAGE_BACKUP_PATH, &exists);
-        if (!exists || !*package_text || checksum(*package_text) != meta->package_hash) goto fail;
-    }
+    char *text;
+    if (state->override_existed) {
+        text = read_alloc(storage, PTC_ALBUM_OVERRIDE_BACKUP_PATH, &exists);
+        if (!exists || !text || checksum(text) != state->override_hash) { free(text); return false; }
+        free(text);
+    } else if (storage->vtable->exists(storage, PTC_ALBUM_OVERRIDE_BACKUP_PATH)) return false;
+    if (state->package_existed) {
+        text = read_alloc(storage, PTC_ALBUM_PACKAGE_BACKUP_PATH, &exists);
+        if (!exists || !text || checksum(text) != state->package_hash) { free(text); return false; }
+        free(text);
+    } else if (storage->vtable->exists(storage, PTC_ALBUM_PACKAGE_BACKUP_PATH)) return false;
     return true;
-fail:
-    free(*override_text);
-    free(*package_text);
-    *override_text = NULL;
-    *package_text = NULL;
-    return false;
 }
 
-static bool restore_one(PtcStorage *storage, const char *path, bool existed, const char *text)
+static bool artifacts_exist(PtcStorage *storage)
 {
-    if (existed) return text && storage->vtable->write_text_atomic(storage, path, text);
-    if (!storage->vtable->exists(storage, path)) return true;
-    return storage->vtable->remove_path(storage, path);
+    return storage->vtable->exists(storage, PTC_ALBUM_STATE_PATH) ||
+           storage->vtable->exists(storage, PTC_ALBUM_OVERRIDE_BACKUP_PATH) ||
+           storage->vtable->exists(storage, PTC_ALBUM_PACKAGE_BACKUP_PATH) ||
+           storage->vtable->exists(storage, PTC_ALBUM_OVERRIDE_CONFLICT_PATH) ||
+           storage->vtable->exists(storage, PTC_ALBUM_PACKAGE_CONFLICT_PATH);
 }
 
 bool ptc_album_restriction_transform_ini(const char *input, char *output, size_t output_size)
@@ -106,13 +114,11 @@ bool ptc_album_restriction_transform_ini(const char *input, char *output, size_t
     const char *cursor = input ? input : "";
     size_t used = 0;
     bool skipping = false;
-    const bool bom = (unsigned char)cursor[0] == 0xef && (unsigned char)cursor[1] == 0xbb && (unsigned char)cursor[2] == 0xbf;
+    const bool bom = (unsigned char)cursor[0] == 0xef && (unsigned char)cursor[1] == 0xbb &&
+                     (unsigned char)cursor[2] == 0xbf;
     const char *newline = strstr(cursor, "\r\n") ? "\r\n" : "\n";
     if (!output || output_size < sizeof(TARGET_SECTION) + 4u) return false;
-    if (bom) {
-        if (output_size < 4) return false;
-        memcpy(output, cursor, 3); used = 3; cursor += 3;
-    }
+    if (bom) { memcpy(output, cursor, 3); used = 3; cursor += 3; }
     while (*cursor) {
         const char *end = strchr(cursor, '\n');
         size_t line_len = end ? (size_t)(end - cursor + 1) : strlen(cursor);
@@ -155,150 +161,197 @@ bool ptc_album_restriction_transform_ini(const char *input, char *output, size_t
 
 bool ptc_album_restriction_get_status(PtcStorage *storage, PtcAlbumRestrictionStatus *status)
 {
+    TransactionState state;
     char *current = NULL;
     char *target = NULL;
-    char *backup_override = NULL;
-    char *backup_package = NULL;
-    BackupMeta meta;
     bool current_exists;
     bool package_exists;
-    bool backup_valid;
-    char phase[32] = {0};
-    bool active_configured;
+    bool state_exists;
+    bool state_valid;
+    bool target_active = false;
     if (!storage || !status) return false;
     memset(status, 0, sizeof(*status));
     current = read_alloc(storage, PTC_ALBUM_OVERRIDE_PATH, &current_exists);
     package_exists = storage->vtable->exists(storage, PTC_ALBUM_PACKAGE_PATH);
-    (void)storage->vtable->read_text(storage, ACTIVE_PATH, phase, sizeof(phase));
-    active_configured = strcmp(phase, "configured\n") == 0 || strcmp(phase, "enabling\n") == 0 ||
-                        strcmp(phase, "restoring\n") == 0 || strcmp(phase, "rollback_required\n") == 0;
-    backup_valid = load_backup(storage, &meta, &backup_override, &backup_package);
-    status->backup_valid = backup_valid;
-    if (current_exists && current) {
+    if (current_exists && !current) {
+        status->state = PTC_ALBUM_RESTRICTION_UNKNOWN;
+        snprintf(status->detail, sizeof(status->detail), "无法完整读取当前配置");
+        return true;
+    }
+    if (current) {
         target = (char *)malloc(PTC_ALBUM_CONFIG_MAX_BYTES + 1u);
-        if (target && ptc_album_restriction_transform_ini(current, target, PTC_ALBUM_CONFIG_MAX_BYTES + 1u) &&
-            strcmp(current, target) == 0 && !package_exists) {
-            if (strcmp(phase, "configured\n") == 0 && backup_valid) {
-                status->state = PTC_ALBUM_RESTRICTION_CONFIGURED;
-                status->restart_required = true;
-                snprintf(status->detail, sizeof(status->detail), "已由 PlayWise 配置，重启主机后生效");
-            } else if (!phase[0] && !backup_valid) {
-                /* Matching bytes alone do not prove that PlayWise performed the change. */
-                status->state = PTC_ALBUM_RESTRICTION_EXTERNAL;
-                snprintf(status->detail, sizeof(status->detail),
-                         "入口已由外部配置；PlayWise 未修改它，也没有可恢复的原始备份");
-            } else {
-                status->state = PTC_ALBUM_RESTRICTION_ANOMALY;
-                snprintf(status->detail, sizeof(status->detail), "PlayWise 事务记录与可信备份不一致");
-            }
+        target_active = target && ptc_album_restriction_transform_ini(current, target,
+                         PTC_ALBUM_CONFIG_MAX_BYTES + 1u) && strcmp(current, target) == 0 && !package_exists;
+    }
+    state_exists = storage->vtable->exists(storage, PTC_ALBUM_STATE_PATH);
+    state_valid = state_exists && load_state(storage, &state);
+    if (!state_exists && !storage->vtable->exists(storage, PTC_ALBUM_OVERRIDE_BACKUP_PATH) &&
+        !storage->vtable->exists(storage, PTC_ALBUM_PACKAGE_BACKUP_PATH)) {
+        status->state = target_active ? PTC_ALBUM_RESTRICTION_EXTERNAL : PTC_ALBUM_RESTRICTION_OFF;
+        snprintf(status->detail, sizeof(status->detail), "%s",
+                 target_active ? "入口已由外部配置；PlayWise 未修改它，也不能恢复原启动方式" : "未配置");
+    } else if (state_valid) {
+        status->backup_valid = validate_backups(storage, &state);
+        if (strcmp(state.phase, "configured") == 0 && status->backup_valid && target_active &&
+            checksum(current) == state.target_hash) {
+            status->state = PTC_ALBUM_RESTRICTION_CONFIGURED;
+            status->restart_required = true;
+            snprintf(status->detail, sizeof(status->detail), "已由 PlayWise 配置，重启主机后生效");
         } else {
-            status->state = active_configured ? PTC_ALBUM_RESTRICTION_ANOMALY : PTC_ALBUM_RESTRICTION_OFF;
-            snprintf(status->detail, sizeof(status->detail), "%s", status->state == PTC_ALBUM_RESTRICTION_OFF ? "未配置" : "配置与事务记录不一致");
+            status->state = PTC_ALBUM_RESTRICTION_ANOMALY;
+            snprintf(status->detail, sizeof(status->detail), "相邻备份、事务状态或当前配置不一致");
         }
     } else {
-        status->state = active_configured ? PTC_ALBUM_RESTRICTION_ANOMALY : PTC_ALBUM_RESTRICTION_OFF;
-        snprintf(status->detail, sizeof(status->detail), "%s", current_exists ? "无法完整读取配置" : "未配置");
+        status->state = PTC_ALBUM_RESTRICTION_ANOMALY;
+        snprintf(status->detail, sizeof(status->detail), "检测到无法验证的 PlayWise 恢复文件");
     }
-    free(current); free(target); free(backup_override); free(backup_package);
+    free(current); free(target);
     return true;
+}
+
+static bool rollback_enable(PtcStorage *storage, const TransactionState *state)
+{
+    bool ok = true;
+    if (storage->vtable->exists(storage, PTC_ALBUM_OVERRIDE_BACKUP_PATH)) {
+        if (storage->vtable->exists(storage, PTC_ALBUM_OVERRIDE_PATH) &&
+            !storage->vtable->remove_path(storage, PTC_ALBUM_OVERRIDE_PATH)) ok = false;
+        if (ok && !storage->vtable->rename_path(storage, PTC_ALBUM_OVERRIDE_BACKUP_PATH,
+                                                PTC_ALBUM_OVERRIDE_PATH)) ok = false;
+    } else if (!state->override_existed && storage->vtable->exists(storage, PTC_ALBUM_OVERRIDE_PATH) &&
+               !storage->vtable->remove_path(storage, PTC_ALBUM_OVERRIDE_PATH)) {
+        ok = false;
+    }
+    if (state->package_existed && storage->vtable->exists(storage, PTC_ALBUM_PACKAGE_BACKUP_PATH) &&
+        !storage->vtable->rename_path(storage, PTC_ALBUM_PACKAGE_BACKUP_PATH,
+                                     PTC_ALBUM_PACKAGE_PATH)) ok = false;
+    if (ok) {
+        if (storage->vtable->exists(storage, PTC_ALBUM_STATE_PATH) &&
+            !storage->vtable->remove_path(storage, PTC_ALBUM_STATE_PATH)) ok = false;
+    }
+    if (!ok) (void)save_state(storage, state, "rollback_required");
+    return ok;
 }
 
 bool ptc_album_restriction_enable(PtcStorage *storage, char *error, size_t error_size)
 {
+    TransactionState state;
+    PtcAlbumRestrictionStatus status;
     char *original_override = NULL;
     char *original_package = NULL;
     char *updated = NULL;
-    char meta[256];
     bool override_existed, package_existed;
-    bool ok = false;
     if (!storage) return false;
-    {
-        PtcAlbumRestrictionStatus status;
-        if (ptc_album_restriction_get_status(storage, &status) &&
-            status.state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
-            set_error(error, error_size,
-                      "入口已由外部配置，PlayWise 不会把现有结果伪装成可恢复的原始备份");
-            return false;
-        }
+    if (ptc_album_restriction_get_status(storage, &status) && status.state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
+        set_error(error, error_size, "入口已由外部配置，PlayWise 不会把当前结果伪装成原始备份");
+        return false;
+    }
+    if (artifacts_exist(storage)) {
+        set_error(error, error_size, "检测到已有 PlayWise 备份、事务或冲突文件，已拒绝覆盖");
+        return false;
     }
     original_override = read_alloc(storage, PTC_ALBUM_OVERRIDE_PATH, &override_existed);
-    if (override_existed && !original_override) { set_error(error, error_size, "override_config.ini 过大或无法读取"); goto done; }
     original_package = read_alloc(storage, PTC_ALBUM_PACKAGE_PATH, &package_existed);
-    if (package_existed && !original_package) { set_error(error, error_size, "package.ini 过大或无法读取"); goto done; }
+    if ((override_existed && !original_override) || (package_existed && !original_package)) {
+        set_error(error, error_size, "原配置过大或无法完整读取"); goto done;
+    }
     updated = (char *)malloc(PTC_ALBUM_CONFIG_MAX_BYTES + 1u);
     if (!updated || !ptc_album_restriction_transform_ini(original_override ? original_override : "", updated,
                                                            PTC_ALBUM_CONFIG_MAX_BYTES + 1u)) {
         set_error(error, error_size, "override_config.ini 格式异常或超过安全上限"); goto done;
     }
-    if ((override_existed && !storage->vtable->write_text_atomic(storage, OVERRIDE_BACKUP_PATH, original_override)) ||
-        (package_existed && !storage->vtable->write_text_atomic(storage, PACKAGE_BACKUP_PATH, original_package))) {
-        set_error(error, error_size, "无法保存完整原始备份"); goto done;
+    memset(&state, 0, sizeof(state));
+    state.override_existed = override_existed;
+    state.package_existed = package_existed;
+    state.override_hash = checksum(original_override);
+    state.package_hash = checksum(original_package);
+    state.target_hash = checksum(updated);
+    if (!save_state(storage, &state, "enabling")) {
+        set_error(error, error_size, "无法创建相邻事务状态"); goto done;
     }
-    snprintf(meta, sizeof(meta), "version=1\noverride_existed=%d\npackage_existed=%d\noverride_hash=%lu\npackage_hash=%lu\n",
-             override_existed ? 1 : 0, package_existed ? 1 : 0,
-             checksum(original_override ? original_override : ""), checksum(original_package ? original_package : ""));
-    if (!storage->vtable->write_text_atomic(storage, META_PATH, meta) ||
-        !storage->vtable->write_text_atomic(storage, ACTIVE_PATH, "enabling\n")) {
-        set_error(error, error_size, "无法持久化自制程序菜单入口保护事务"); goto done;
+    if (override_existed && !storage->vtable->rename_path(storage, PTC_ALBUM_OVERRIDE_PATH,
+                                                          PTC_ALBUM_OVERRIDE_BACKUP_PATH)) {
+        set_error(error, error_size, "无法就地备份 override_config.ini"); goto rollback;
+    }
+    if (package_existed && !storage->vtable->rename_path(storage, PTC_ALBUM_PACKAGE_PATH,
+                                                         PTC_ALBUM_PACKAGE_BACKUP_PATH)) {
+        set_error(error, error_size, "无法就地备份并移除 Photo Album package.ini"); goto rollback;
     }
     if (!storage->vtable->write_text_atomic(storage, PTC_ALBUM_OVERRIDE_PATH, updated)) {
         set_error(error, error_size, "写入 override_config.ini 失败"); goto rollback;
     }
-    if (package_existed && !storage->vtable->remove_path(storage, PTC_ALBUM_PACKAGE_PATH)) {
-        set_error(error, error_size, "删除 Photo Album package.ini 失败"); goto rollback;
+    if (!save_state(storage, &state, "configured")) {
+        set_error(error, error_size, "无法提交高级入口事务"); goto rollback;
     }
-    if (!storage->vtable->write_text_atomic(storage, ACTIVE_PATH, "configured\n")) {
-        set_error(error, error_size, "无法提交自制程序菜单入口保护事务"); goto rollback;
-    }
-    ok = true;
-    goto done;
+    free(original_override); free(original_package); free(updated);
+    return true;
 rollback:
-    (void)restore_one(storage, PTC_ALBUM_OVERRIDE_PATH, override_existed, original_override);
-    (void)restore_one(storage, PTC_ALBUM_PACKAGE_PATH, package_existed, original_package);
-    (void)storage->vtable->write_text_atomic(storage, ACTIVE_PATH, "rollback_required\n");
+    if (!rollback_enable(storage, &state))
+        set_error(error, error_size, "操作失败且未能完整回滚；恢复文件已保留");
 done:
     free(original_override); free(original_package); free(updated);
-    return ok;
+    return false;
+}
+
+static bool rescue_current(PtcStorage *storage, bool *override_rescued, bool *package_rescued)
+{
+    *override_rescued = false;
+    *package_rescued = false;
+    if (storage->vtable->exists(storage, PTC_ALBUM_OVERRIDE_CONFLICT_PATH) ||
+        storage->vtable->exists(storage, PTC_ALBUM_PACKAGE_CONFLICT_PATH)) return false;
+    if (storage->vtable->exists(storage, PTC_ALBUM_OVERRIDE_PATH)) {
+        if (!storage->vtable->rename_path(storage, PTC_ALBUM_OVERRIDE_PATH,
+                                          PTC_ALBUM_OVERRIDE_CONFLICT_PATH)) return false;
+        *override_rescued = true;
+    }
+    if (storage->vtable->exists(storage, PTC_ALBUM_PACKAGE_PATH)) {
+        if (!storage->vtable->rename_path(storage, PTC_ALBUM_PACKAGE_PATH,
+                                          PTC_ALBUM_PACKAGE_CONFLICT_PATH)) {
+            if (*override_rescued) (void)storage->vtable->rename_path(
+                storage, PTC_ALBUM_OVERRIDE_CONFLICT_PATH, PTC_ALBUM_OVERRIDE_PATH);
+            *override_rescued = false;
+            return false;
+        }
+        *package_rescued = true;
+    }
+    return true;
 }
 
 bool ptc_album_restriction_restore(PtcStorage *storage, bool force, char *error, size_t error_size)
 {
-    BackupMeta meta;
-    char *override_text = NULL;
-    char *package_text = NULL;
+    TransactionState state;
     PtcAlbumRestrictionStatus status;
-    bool ok;
-    if (!storage || !load_backup(storage, &meta, &override_text, &package_text)) {
-        set_error(error, error_size, "备份缺失或校验失败，已拒绝自动恢复"); return false;
+    bool override_rescued = false, package_rescued = false;
+    bool ok = true;
+    if (!storage || !load_state(storage, &state) || !validate_backups(storage, &state)) {
+        set_error(error, error_size, "相邻备份缺失或校验失败，已拒绝恢复"); return false;
     }
     (void)ptc_album_restriction_get_status(storage, &status);
     if (!force && status.state != PTC_ALBUM_RESTRICTION_CONFIGURED) {
-        free(override_text); free(package_text);
         set_error(error, error_size, "检测到外部改动，需由家长确认强制恢复"); return false;
     }
-    if (force && status.state == PTC_ALBUM_RESTRICTION_ANOMALY) {
-        bool current_exists;
-        char *current_override = read_alloc(storage, PTC_ALBUM_OVERRIDE_PATH, &current_exists);
-        bool current_package_exists;
-        char *current_package = read_alloc(storage, PTC_ALBUM_PACKAGE_PATH, &current_package_exists);
-        bool rescued = (!current_exists || (current_override && storage->vtable->write_text_atomic(
-                            storage, CONFLICT_OVERRIDE_PATH, current_override))) &&
-                       (!current_package_exists || (current_package && storage->vtable->write_text_atomic(
-                            storage, CONFLICT_PACKAGE_PATH, current_package)));
-        free(current_override);
-        free(current_package);
-        if (!rescued) {
-            free(override_text); free(package_text);
-            set_error(error, error_size, "无法保存外部改动救援副本，已拒绝强制恢复"); return false;
-        }
+    if (force && status.state == PTC_ALBUM_RESTRICTION_ANOMALY &&
+        !rescue_current(storage, &override_rescued, &package_rescued)) {
+        set_error(error, error_size, "冲突副本已存在或无法保存，已拒绝强制恢复"); return false;
     }
-    if (!storage->vtable->write_text_atomic(storage, ACTIVE_PATH, "restoring\n")) {
-        free(override_text); free(package_text); set_error(error, error_size, "无法持久化恢复事务"); return false;
+    if (!save_state(storage, &state, "restoring")) {
+        set_error(error, error_size, "无法持久化恢复事务"); return false;
     }
-    ok = restore_one(storage, PTC_ALBUM_OVERRIDE_PATH, meta.override_existed, override_text) &&
-         restore_one(storage, PTC_ALBUM_PACKAGE_PATH, meta.package_existed, package_text);
-    if (ok) (void)storage->vtable->write_text_atomic(storage, ACTIVE_PATH, "restored\n");
-    else set_error(error, error_size, "恢复未完整完成，备份已保留");
-    free(override_text); free(package_text);
+    if (state.package_existed && storage->vtable->exists(storage, PTC_ALBUM_PACKAGE_PATH)) {
+        (void)save_state(storage, &state, "rollback_required");
+        set_error(error, error_size, "Photo Album 原路径被外部文件占用，已拒绝部分恢复");
+        return false;
+    }
+    if (!force && storage->vtable->exists(storage, PTC_ALBUM_OVERRIDE_PATH) &&
+        !storage->vtable->remove_path(storage, PTC_ALBUM_OVERRIDE_PATH)) ok = false;
+    if (state.override_existed && !storage->vtable->rename_path(storage,
+        PTC_ALBUM_OVERRIDE_BACKUP_PATH, PTC_ALBUM_OVERRIDE_PATH)) ok = false;
+    if (state.package_existed && !storage->vtable->rename_path(storage,
+        PTC_ALBUM_PACKAGE_BACKUP_PATH, PTC_ALBUM_PACKAGE_PATH)) ok = false;
+    if (ok && !storage->vtable->remove_path(storage, PTC_ALBUM_STATE_PATH)) ok = false;
+    if (!ok) {
+        (void)save_state(storage, &state, "rollback_required");
+        set_error(error, error_size, "恢复未完整完成，相邻恢复文件已保留");
+    }
+    (void)override_rescued; (void)package_rescued;
     return ok;
 }

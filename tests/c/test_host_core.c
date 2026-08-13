@@ -903,7 +903,11 @@ static void test_album_restriction_transaction(void)
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_PACKAGE_PATH, "[package]\nname=Album\n"),
                "seed More Menu package");
     check_true(ptc_album_restriction_enable(&mem.storage, error, sizeof(error)), "album restriction enables transactionally");
-    check_true(!mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_PACKAGE_PATH), "album package removed after backup");
+    check_true(!mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_PACKAGE_PATH) &&
+               mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_PACKAGE_BACKUP_PATH) &&
+               mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_OVERRIDE_BACKUP_PATH) &&
+               mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_STATE_PATH),
+               "album files are backed up beside their originals");
     check_true(ptc_album_restriction_get_status(&mem.storage, &status) &&
                status.state == PTC_ALBUM_RESTRICTION_CONFIGURED && status.backup_valid,
                "configured album restriction is detected with valid backup");
@@ -912,8 +916,11 @@ static void test_album_restriction_transaction(void)
                strcmp(restored, original) == 0 && mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_PACKAGE_PATH),
                "album restore is byte exact and restores removed package");
     check_true(ptc_album_restriction_get_status(&mem.storage, &status) &&
-               status.state == PTC_ALBUM_RESTRICTION_OFF && status.backup_valid,
-               "completed restore reports off while retaining a valid backup");
+               status.state == PTC_ALBUM_RESTRICTION_OFF &&
+               !mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_STATE_PATH) &&
+               !mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_OVERRIDE_BACKUP_PATH) &&
+               !mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_PACKAGE_BACKUP_PATH),
+               "completed restore consumes adjacent recovery files and reports off");
 
     ptc_mem_storage_init(&mem);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, transformed),
@@ -922,10 +929,10 @@ static void test_album_restriction_transaction(void)
                status.state == PTC_ALBUM_RESTRICTION_EXTERNAL && !status.backup_valid,
                "matching external config without a PlayWise transaction is not an anomaly");
     check_true(!ptc_album_restriction_enable(&mem.storage, error, sizeof(error)) &&
-               !mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_BACKUP_ROOT "/current.meta"),
+               !mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_STATE_PATH),
                "external config is not adopted using a false pre-change backup");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
-                   PTC_ALBUM_BACKUP_ROOT "/active", "configured\n") &&
+                   PTC_ALBUM_STATE_PATH, "invalid\n") &&
                ptc_album_restriction_get_status(&mem.storage, &status) &&
                status.state == PTC_ALBUM_RESTRICTION_ANOMALY,
                "configured PlayWise transaction with a missing backup remains anomalous");
@@ -935,12 +942,13 @@ static void test_album_restriction_transaction(void)
                "seed rollback config");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_PACKAGE_PATH, "package"),
                "seed rollback package");
-    mem.fail_remove_path_contains = "Photo Album/package.ini";
-    check_true(!ptc_album_restriction_enable(&mem.storage, error, sizeof(error)), "delete failure rejects album restriction");
-    mem.fail_remove_path_contains = NULL;
+    mem.fail_rename_path_contains = "Photo Album/package.ini";
+    check_true(!ptc_album_restriction_enable(&mem.storage, error, sizeof(error)), "package backup failure rejects album restriction");
+    mem.fail_rename_path_contains = NULL;
     check_true(mem.storage.vtable->read_text(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, restored, sizeof(restored)) &&
-               strcmp(restored, original) == 0 && mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_PACKAGE_PATH),
-               "delete failure rolls both files back");
+               strcmp(restored, original) == 0 && mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_PACKAGE_PATH) &&
+               !mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_STATE_PATH),
+               "package backup failure rolls both files back");
 
     ptc_mem_storage_init(&mem);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, original) &&
@@ -950,9 +958,52 @@ static void test_album_restriction_transaction(void)
     check_true(!ptc_album_restriction_restore(&mem.storage, false, error, sizeof(error)),
                "ordinary restore refuses external edits");
     check_true(ptc_album_restriction_restore(&mem.storage, true, error, sizeof(error)) &&
-               mem.storage.vtable->exists(&mem.storage,
-                   PTC_ALBUM_BACKUP_ROOT "/conflict.override_config.ini"),
+               mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_OVERRIDE_CONFLICT_PATH),
                "forced restore first preserves an external-edit rescue copy");
+
+    ptc_mem_storage_init(&mem);
+    check_true(ptc_album_restriction_enable(&mem.storage, error, sizeof(error)),
+               "album entry supports both original files being absent");
+    check_true(!mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_OVERRIDE_BACKUP_PATH) &&
+               !mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_PACKAGE_BACKUP_PATH) &&
+               ptc_album_restriction_restore(&mem.storage, false, error, sizeof(error)) &&
+               !mem.storage.vtable->exists(&mem.storage, PTC_ALBUM_OVERRIDE_PATH),
+               "restore removes a PlayWise-created override when no original existed");
+
+    ptc_mem_storage_init(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, original) &&
+               mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_BACKUP_PATH, "occupied") &&
+               !ptc_album_restriction_enable(&mem.storage, error, sizeof(error)),
+               "enable never overwrites an existing adjacent backup");
+
+    ptc_mem_storage_init(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, original),
+               "seed first-rename rollback case");
+    mem.fail_rename_path_contains = "override_config.ini";
+    check_true(!ptc_album_restriction_enable(&mem.storage, error, sizeof(error)),
+               "first backup rename failure rejects enable");
+    mem.fail_rename_path_contains = NULL;
+    check_true(mem.storage.vtable->read_text(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, restored, sizeof(restored)) &&
+               strcmp(restored, original) == 0,
+               "first backup rename failure leaves the original in place");
+
+    ptc_mem_storage_init(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, original) &&
+               ptc_album_restriction_enable(&mem.storage, error, sizeof(error)),
+               "seed corrupt backup case");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_BACKUP_PATH, "corrupt") &&
+               ptc_album_restriction_get_status(&mem.storage, &status) &&
+               status.state == PTC_ALBUM_RESTRICTION_ANOMALY &&
+               !ptc_album_restriction_restore(&mem.storage, true, error, sizeof(error)),
+               "corrupt adjacent backup blocks all restoration");
+
+    ptc_mem_storage_init(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, original) &&
+               ptc_album_restriction_enable(&mem.storage, error, sizeof(error)) &&
+               mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_PATH, "[external]\n") &&
+               mem.storage.vtable->write_text_atomic(&mem.storage, PTC_ALBUM_OVERRIDE_CONFLICT_PATH, "occupied") &&
+               !ptc_album_restriction_restore(&mem.storage, true, error, sizeof(error)),
+               "forced restore never overwrites an existing conflict rescue file");
 }
 
 int main(void)

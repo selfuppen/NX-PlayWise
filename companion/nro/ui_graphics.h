@@ -20,10 +20,9 @@ typedef enum {
 typedef enum {
     PTC_UI_SETUP_SHORTCUT = 1,
     PTC_UI_SETUP_PIN = 2,
-    PTC_UI_SETUP_ALBUM = 3,
-    PTC_UI_SETUP_THEME = 4,
-    PTC_UI_SETUP_TAKEOVER = 5,
-    PTC_UI_SETUP_ZONE = 6
+    PTC_UI_SETUP_THEME = 3,
+    PTC_UI_SETUP_TAKEOVER = 4,
+    PTC_UI_SETUP_ZONE = 5
 } PtcUiSetupStep;
 
 typedef enum {
@@ -42,7 +41,8 @@ typedef enum {
 
 typedef enum {
     PTC_UI_SETTINGS_ROOT = 0,
-    PTC_UI_SETTINGS_SUPPORT = 1
+    PTC_UI_SETTINGS_ADVANCED = 1,
+    PTC_UI_SETTINGS_SUPPORT = 2
 } PtcUiSettingsPage;
 
 typedef enum {
@@ -199,7 +199,6 @@ typedef struct {
     int setup_shortcut_index;
     int setup_theme_index;
     int setup_zone_index;
-    bool setup_album_enable;
     uint64_t custom_shortcut_mask;
     bool custom_shortcut_enabled;
     uint64_t shortcut_draft_mask;
@@ -322,7 +321,6 @@ typedef enum {
     PTC_UI_HIT_SETUP_PRIMARY,
     PTC_UI_HIT_SETUP_BACK,
     PTC_UI_HIT_SETUP_PIN,
-    PTC_UI_HIT_SETUP_ALBUM_TOGGLE,
     PTC_UI_HIT_SETUP_THEME_OPTION,
     PTC_UI_HIT_SETUP_CHILD_ZONE,
     PTC_UI_HIT_SETUP_PARENT_ZONE,
@@ -491,7 +489,6 @@ PtcUiRect ptc_ui_setup_shortcut_card_rect(int index);
 PtcUiRect ptc_ui_setup_primary_rect(void);
 PtcUiRect ptc_ui_setup_back_rect(void);
 PtcUiRect ptc_ui_setup_pin_rect(void);
-PtcUiRect ptc_ui_setup_album_toggle_rect(void);
 PtcUiRect ptc_ui_setup_theme_rect(int index);
 PtcUiRect ptc_ui_setup_zone_rect(int index);
 PtcUiRect ptc_ui_notice_status_icon_rect(int y);

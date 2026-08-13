@@ -93,7 +93,9 @@ static bool mem_rename_path(PtcStorage *storage, const char *from, const char *t
 {
     PtcMemStorage *mem = (PtcMemStorage *)storage->ctx;
     int idx;
-    if (mem->fail_renames) {
+    if (mem->fail_renames ||
+        (mem->fail_rename_path_contains &&
+         (strstr(from, mem->fail_rename_path_contains) || strstr(to, mem->fail_rename_path_contains)))) {
         return false;
     }
     idx = find_file(mem, from);
