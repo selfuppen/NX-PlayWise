@@ -371,7 +371,9 @@ void ptc_ui_numpad_open(
     model->numpad_maximum = maximum;
     model->numpad_current = current;
     model->numpad_replace_on_input = purpose == PTC_UI_NUMPAD_MINUTES ||
-        purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES;
+        purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES ||
+        purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
+        purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES;
     if (model->numpad_replace_on_input) {
         snprintf(model->numpad_text, sizeof(model->numpad_text), "%u", (unsigned int)current);
         model->overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
@@ -638,6 +640,26 @@ void ptc_ui_format_parent_status_summary(
     else if (age < 60) snprintf(freshness, sizeof(freshness), "%lld 秒前", (long long)age);
     else snprintf(freshness, sizeof(freshness), "%lld 分钟前", (long long)(age / 60));
     snprintf(out, out_size, "控制正常 · %s · %s", remaining, freshness);
+}
+
+void ptc_ui_format_holiday_priority_summary(const PtcUiModel *model, char *out, size_t out_size)
+{
+    if (!out || out_size == 0) return;
+    if (!model) {
+        snprintf(out, out_size, "当前原因：状态尚未刷新");
+    } else if (model->today_override_present) {
+        snprintf(out, out_size, "当前原因：今日临时设置覆盖其他规则");
+    } else if (!model->holiday_enabled) {
+        snprintf(out, out_size, "当前原因：节假日预设未开启，回退周计划");
+    } else if (!model->calendar_covered) {
+        snprintf(out, out_size, "当前原因：内置日历未覆盖，回退周计划");
+    } else if (strcmp(model->rule_source, "statutory_holiday") == 0) {
+        snprintf(out, out_size, "当前原因：法定休假日命中节假日规则");
+    } else if (strcmp(model->rule_source, "makeup_workday") == 0) {
+        snprintf(out, out_size, "当前原因：调休工作日命中节假日规则");
+    } else {
+        snprintf(out, out_size, "当前原因：普通日期，回退周计划");
+    }
 }
 
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode)
@@ -1025,8 +1047,8 @@ PtcUiRect ptc_ui_setup_zone_rect(int index)
 
 PtcUiRect ptc_ui_parent_footer_rect(int index)
 {
-    static const int widths[] = {150, 150, 190, 150, 342};
-    static const int xs[] = {54, 216, 378, 580, 742};
+    static const int widths[] = {130, 130, 170, 130, 564};
+    static const int xs[] = {54, 196, 338, 520, 662};
     PtcUiRect rect = {0, 660, 0, 48};
     if (index >= 0 && index < 5) {
         rect.x = xs[index];
@@ -1452,7 +1474,7 @@ PtcUiRect ptc_ui_minute_editor_key_rect(int index)
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
     int row = index / 3;
     int column = index % 3;
-    PtcUiRect rect = {dialog.x + 420 + column * 142, dialog.y + 214 + row * 66, 128, 54};
+    PtcUiRect rect = {dialog.x + 34 + column * 138, dialog.y + 214 + row * 66, 126, 54};
     if (index < 0 || index >= 12) return (PtcUiRect){0, 0, 0, 0};
     return rect;
 }
@@ -1460,7 +1482,7 @@ PtcUiRect ptc_ui_minute_editor_key_rect(int index)
 PtcUiRect ptc_ui_minute_editor_quick_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
-    PtcUiRect rect = {dialog.x + 408 + index * 116, dialog.y + 154, 104, 44};
+    PtcUiRect rect = {dialog.x + 34 + index * 108, dialog.y + 154, 100, 44};
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
     return rect;
 }

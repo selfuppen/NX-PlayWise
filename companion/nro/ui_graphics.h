@@ -415,6 +415,7 @@ void ptc_ui_format_parent_status_summary(
     int64_t now,
     char *out,
     size_t out_size);
+void ptc_ui_format_holiday_priority_summary(const PtcUiModel *model, char *out, size_t out_size);
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode);
 bool ptc_ui_day_rule_effectively_changed(PtcDayRule before, PtcDayRule after);
 bool ptc_ui_weekly_today_changed(const PtcUiModel *model);

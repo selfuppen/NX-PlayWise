@@ -70,6 +70,31 @@ static void test_parent_status_summary(void)
     ptc_ui_format_parent_status_summary(&model, 1010, summary, sizeof(summary));
     check_true(strstr(summary, "保护模式") != NULL,
                "parent footer prioritizes protection state guidance");
+
+    memset(&model, 0, sizeof(model));
+    model.today_override_present = true;
+    ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
+    check_true(strstr(summary, "今日临时设置覆盖") != NULL,
+               "holiday priority summary identifies the highest-priority override");
+    model.today_override_present = false;
+    model.holiday_enabled = false;
+    ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
+    check_true(strstr(summary, "预设未开启") != NULL && strstr(summary, "回退周计划") != NULL,
+               "holiday priority summary explains the disabled fallback");
+    model.holiday_enabled = true;
+    model.calendar_covered = false;
+    ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
+    check_true(strstr(summary, "日历未覆盖") != NULL,
+               "holiday priority summary explains uncovered years");
+    model.calendar_covered = true;
+    snprintf(model.rule_source, sizeof(model.rule_source), "statutory_holiday");
+    ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
+    check_true(strstr(summary, "法定休假日命中") != NULL,
+               "holiday priority summary identifies an active statutory holiday");
+    snprintf(model.rule_source, sizeof(model.rule_source), "week");
+    ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
+    check_true(strstr(summary, "普通日期") != NULL,
+               "holiday priority summary identifies ordinary-date fallback");
 }
 
 static void test_release_navigation(void)
@@ -153,6 +178,17 @@ static void test_numeric_input(void)
     check_true(strcmp(model.numpad_text, "75") == 0, "weekly quick increase updates input");
     ptc_ui_numpad_adjust(&model, -100);
     check_true(strcmp(model.numpad_text, "1") == 0, "weekly quick adjustment clamps to minimum");
+
+    ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_HOLIDAY_MINUTES, PTC_UI_OVERLAY_NONE,
+        "设置法定休假日额度", "输入 1 到 1440 分钟", 4, 1, 1440, 120);
+    check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR,
+              "statutory holiday quota uses the compact minute editor");
+    check_true(model.numpad_replace_on_input && strcmp(model.numpad_text, "120") == 0,
+               "holiday editor preselects the complete current value");
+    ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MAKEUP_MINUTES, PTC_UI_OVERLAY_NONE,
+        "设置调休工作日额度", "输入 1 到 1440 分钟", 4, 1, 1440, 60);
+    check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR,
+              "makeup workday quota uses the compact minute editor");
 
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
         "输入加时码", "8 位数字", 8, 0, 0, 0);
@@ -444,6 +480,14 @@ static void test_release_hit_targets(void)
               "parent global status occupies the fifth footer slot");
     check_true(!rects_overlap(ptc_ui_parent_footer_rect(3), ptc_ui_parent_footer_rect(4)),
                "parent status does not overlap global refresh");
+    check_int(ptc_ui_parent_footer_rect(0).w, 130, "parent previous-page footer is narrower");
+    check_int(ptc_ui_parent_footer_rect(1).w, 130, "parent next-page footer is narrower");
+    check_int(ptc_ui_parent_footer_rect(2).w, 170, "parent child-page footer preserves its longer label");
+    check_int(ptc_ui_parent_footer_rect(3).w, 130, "parent refresh footer is narrower");
+    check_int(ptc_ui_parent_footer_rect(4).x, 662, "parent status footer starts after the action buttons");
+    check_int(ptc_ui_parent_footer_rect(4).w, 564, "parent status footer receives the freed width");
+    check_int(ptc_ui_parent_footer_rect(4).x + ptc_ui_parent_footer_rect(4).w, 1226,
+              "parent status footer aligns with the main content border");
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
     check_hit(hit_center(&model, ptc_ui_weekly_day_mode_rect(0)), PTC_UI_HIT_WEEKLY_MODE, 1,
@@ -626,6 +670,10 @@ static void test_release_hit_targets(void)
               "compact minute editor zero key is touchable");
     check_hit(hit_center(&model, ptc_ui_minute_editor_quick_rect(0)), PTC_UI_HIT_NUMPAD_QUICK, 0,
               "compact minute editor quick adjustment is touchable");
+    check_true(ptc_ui_minute_editor_key_rect(2).x + ptc_ui_minute_editor_key_rect(2).w < 716,
+               "compact minute editor keypad stays left of the right-side information panel");
+    check_true(ptc_ui_minute_editor_quick_rect(3).x + ptc_ui_minute_editor_quick_rect(3).w < 716,
+               "compact minute editor quick actions stay left of the information panel");
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     model.credential_kind = 1;

@@ -30,9 +30,17 @@ typedef struct {
     const char *makeup_workdays;
 } PtcHolidayArrangement;
 
+typedef struct {
+    PtcCalendarDayType type;
+    uint16_t day_index;
+    const PtcHolidayArrangement *arrangement;
+} PtcHolidayCalendarMatch;
+
 PtcCalendarDayType ptc_holiday_calendar_classify(uint16_t day_index, bool *covered);
 const PtcHolidayCalendarInfo *ptc_holiday_calendar_info(void);
 size_t ptc_holiday_calendar_arrangement_count(uint16_t year);
 const PtcHolidayArrangement *ptc_holiday_calendar_arrangement(uint16_t year, size_t index);
+bool ptc_holiday_calendar_find(PtcCalendarDayType type, uint16_t from_day_index,
+                               PtcHolidayCalendarMatch *out);
 
 #endif

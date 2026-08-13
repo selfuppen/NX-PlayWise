@@ -138,11 +138,16 @@ static void test_holiday_calendar_and_priority(void)
     PtcRequest request;
     uint16_t holiday = 0;
     uint16_t makeup = 0;
+    uint16_t next_makeup = 0;
     uint16_t ordinary = 0;
+    uint16_t uncovered = 0;
     bool covered = false;
+    PtcHolidayCalendarMatch match;
     check_true(ptc_day_index_from_date(2026, 10, 1, &holiday), "2026 National Day index converts");
     check_true(ptc_day_index_from_date(2026, 10, 10, &makeup), "2026 makeup day index converts");
+    check_true(ptc_day_index_from_date(2026, 9, 20, &next_makeup), "2026 next makeup day index converts");
     check_true(ptc_day_index_from_date(2026, 8, 11, &ordinary), "2026 ordinary day index converts");
+    check_true(ptc_day_index_from_date(2025, 12, 31, &uncovered), "2025 uncovered day index converts");
     check_int(ptc_holiday_calendar_classify(holiday, &covered), PTC_CALENDAR_DAY_STATUTORY_HOLIDAY,
         "National Day is classified as a statutory holiday");
     check_true(covered, "2026 is covered by the embedded calendar");
@@ -159,6 +164,18 @@ static void test_holiday_calendar_and_priority(void)
     check_true(ptc_holiday_calendar_arrangement_count(2027) == 0 &&
         ptc_holiday_calendar_arrangement(2027, 0) == NULL,
         "uncovered year does not invent official arrangements");
+    check_true(ptc_holiday_calendar_find(PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, holiday, &match) &&
+        match.day_index == holiday && match.arrangement != NULL &&
+        strcmp(match.arrangement->display_name, "国庆节") == 0,
+        "calendar query returns today's statutory holiday and authoritative name");
+    check_true(ptc_holiday_calendar_find(PTC_CALENDAR_DAY_MAKEUP_WORKDAY, ordinary, &match) &&
+        match.day_index == next_makeup && match.arrangement != NULL &&
+        strcmp(match.arrangement->display_name, "中秋节") == 0,
+        "calendar query returns the next makeup workday and related holiday name");
+    check_true(!ptc_holiday_calendar_find(PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, (uint16_t)(makeup + 1u), &match),
+        "calendar query does not invent a holiday after the last embedded arrangement");
+    check_true(!ptc_holiday_calendar_find(PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, uncovered, &match),
+        "calendar query does not cross from an uncovered year into embedded arrangements");
 
     ptc_rules_default(&rules);
     rules.holiday_enabled = true;

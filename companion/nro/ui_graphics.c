@@ -717,7 +717,7 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     fill_round_rect(pixels, stride, rect, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, rect, 1, COLOR(219, 225, 233));
     fill_rect(pixels, stride, (UiRect){rect.x, rect.y, 6, rect.height}, accent);
-    draw_status_symbol(pixels, stride, rect.x + 20, rect.y + 18, accent,
+    draw_status_symbol(pixels, stride, rect.x + 20, rect.y + 8, accent,
                        model->waiting ? 2 : (strcmp(model->result_status, "ok") == 0 ? 1 :
                        (strcmp(model->result_status, "error") == 0 ? 3 : 0)));
     draw_text(pixels, stride, rect.x + 62, rect.y + (compact ? 22 : 25),
@@ -1657,6 +1657,7 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     const char *descriptions[] = {"主要法定节假日的休假日期", "节假日调休产生的补班日期"};
     const uint32_t accents[] = {COLOR(25, 132, 95), COLOR(215, 139, 25)};
     char line[160];
+    char priority_summary[160];
     char minutes_str[64];
     bool disabled = model->disable_flag_present;
     bool top_selected = model->selected_index == 0;
@@ -1718,8 +1719,9 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, panel.x + 24, panel.y + 38, "节假日状态", 22, COLOR(28, 34, 43));
-    snprintf(line, sizeof(line), "已保存：%s   草稿：%s",
-             model->holiday_enabled ? "已开启" : "未开启", model->draft_holiday_enabled ? "已开启" : "未开启");
+    snprintf(line, sizeof(line), "已保存：%s   草稿：%s%s",
+             model->holiday_enabled ? "已开启" : "未开启", model->draft_holiday_enabled ? "已开启" : "未开启",
+             model->holiday_dirty ? " · 未保存" : "");
     draw_text(pixels, stride, panel.x + 24, panel.y + 78, line, 16, COLOR(91, 100, 114));
     snprintf(line, sizeof(line), "今天生效来源：%s", rule_source_label(model->rule_source));
     draw_text(pixels, stride, panel.x + 24, panel.y + 110, line, 16, COLOR(28, 118, 188));
@@ -1731,12 +1733,21 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     }
     draw_candidate_button(pixels, stride, ptc_ui_holiday_calendar_rect(), "查看当前节假日安排",
                            COLOR(244, 249, 255), COLOR(28, 118, 188), model->selected_index == 6, false);
-    draw_wrapped_text(pixels, stride, panel.x + 24, panel.y + 244,
-                      !model->draft_holiday_enabled
-                        ? "当前草稿未开启。保存只会更新预设；今天继续按后台返回的临时设置或周计划执行。"
-                        : "保存后后台会按新设置重新计算今天；今日临时设置仍保持最高优先级。",
-                      14, panel.width - 48, 20, 3, model->draft_holiday_enabled ? COLOR(91, 100, 114) : COLOR(215, 139, 25));
-    if (model->holiday_dirty) draw_text(pixels, stride, panel.x + 24, panel.y + 286, "有未保存的修改", 15, COLOR(215, 139, 25));
+    ptc_ui_format_holiday_priority_summary(model, priority_summary, sizeof(priority_summary));
+    fit_text(line, sizeof(line), priority_summary, 13, panel.width - 48);
+    draw_text(pixels, stride, panel.x + 24, panel.y + 244, line, 13, COLOR(28, 118, 188));
+    draw_text(pixels, stride, panel.x + 24, panel.y + 268, "1  今日临时设置：存在时优先", 12,
+              model->today_override_present ? COLOR(25, 132, 95) : COLOR(91, 100, 114));
+    draw_text(pixels, stride, panel.x + 24, panel.y + 288, "2  国家节假日：开启且日期命中", 12,
+              !model->today_override_present && model->holiday_enabled &&
+              (strcmp(model->rule_source, "statutory_holiday") == 0 ||
+               strcmp(model->rule_source, "makeup_workday") == 0)
+                ? COLOR(25, 132, 95) : COLOR(91, 100, 114));
+    snprintf(priority_summary, sizeof(priority_summary), "3  周计划：关闭、普通日或未覆盖时回退");
+    fit_text(line, sizeof(line), priority_summary, 12, panel.width - 48);
+    draw_text(pixels, stride, panel.x + 24, panel.y + 308, line, 12,
+              !model->today_override_present && strcmp(model->rule_source, "week") == 0
+                ? COLOR(25, 132, 95) : COLOR(91, 100, 114));
     draw_notice(pixels, stride, model, 522, 128);
 }
 
@@ -2286,8 +2297,14 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
     char remaining[48];
     char after[48];
     char freshness[64];
+    char holiday_line[160];
+    char holiday_detail[160];
+    char holiday_date[64];
+    char fitted[160];
     int after_minutes = -1;
     bool weekly = model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES;
+    bool holiday = model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
+                   model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES;
     if (!ptc_ui_parse_minutes(model->numpad_text, model->numpad_minimum, model->numpad_maximum, &entered)) {
         entered = model->numpad_current;
     }
@@ -2312,20 +2329,81 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
     format_duration(after_minutes, after, sizeof(after));
     format_status_age(model, freshness, sizeof(freshness));
 
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 146, 350, 98}, 8, COLOR(244, 249, 255));
-    draw_rect_outline(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 146, 350, 98}, 2, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 46, dialog.y + 154, 326, 48}, value, 34, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 46, dialog.y + 204, 326, 26}, duration, 17, COLOR(91, 100, 114));
-    draw_time_state_card(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 264, 350, 74}, "今天已玩", played,
-                         model->played_minutes_available ? COLOR(28, 118, 188) : COLOR(215, 139, 25));
-    draw_time_state_card(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 350, 350, 74}, "当前还能玩", remaining,
-                         time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
-                                           model->unrestricted_today == 1, model->remaining_minutes));
-    draw_time_state_card(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 436, 350, 74},
-                         weekly ? "保存后预计还能玩" : "修改后预计还能玩", after,
-                         time_state_accent(after_minutes >= 0, false, after_minutes));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 518, 350, 28}, freshness, 15,
-                     status_age_color(model));
+    /* The compact editor keeps the keypad on the left and puts the decision-relevant summary on the right. */
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 146, 350, 98}, 8, COLOR(244, 249, 255));
+    draw_rect_outline(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 146, 350, 98}, 2, COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 548, dialog.y + 154, 326, 48}, value, 34, COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 548, dialog.y + 204, 326, 26}, duration, 17, COLOR(91, 100, 114));
+    if (holiday) {
+        PtcCalendarDayType type = model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES
+            ? PTC_CALENDAR_DAY_STATUTORY_HOLIDAY : PTC_CALENDAR_DAY_MAKEUP_WORKDAY;
+        PtcHolidayCalendarMatch match;
+        bool today_match = model->status_loaded && ptc_holiday_calendar_find(type, model->day_index, &match) &&
+                           match.day_index == model->day_index;
+        bool found = today_match || (model->status_loaded && model->day_index < UINT16_MAX &&
+                     ptc_holiday_calendar_find(type, (uint16_t)(model->day_index + 1u), &match));
+        uint16_t year = 0;
+        uint8_t month = 0;
+        uint8_t day = 0;
+        const char *kind = type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY ? "法定休假日" : "调休工作日";
+        snprintf(holiday_line, sizeof(holiday_line), "规则类型：%s", kind);
+        if (found && ptc_date_from_day_index(match.day_index, &year, &month, &day)) {
+            snprintf(holiday_date, sizeof(holiday_date), "%u-%02u-%02u", year, month, day);
+            if (today_match) {
+                if (!model->draft_holiday_enabled) {
+                    snprintf(holiday_detail, sizeof(holiday_detail), "今日日期命中：%s（预设未开启）",
+                             match.arrangement ? match.arrangement->display_name : kind);
+                } else if (!model->holiday_enabled) {
+                    snprintf(holiday_detail, sizeof(holiday_detail), "今日日期命中：%s（保存后启用）",
+                             match.arrangement ? match.arrangement->display_name : kind);
+                } else if (model->today_override_present) {
+                    snprintf(holiday_detail, sizeof(holiday_detail), "今日日期命中：%s（被临时设置覆盖）",
+                             match.arrangement ? match.arrangement->display_name : kind);
+                } else {
+                    snprintf(holiday_detail, sizeof(holiday_detail), "今日正在适用：%s",
+                             match.arrangement ? match.arrangement->display_name : kind);
+                }
+            } else {
+                snprintf(holiday_detail, sizeof(holiday_detail), "下一次安排：%s · %s",
+                         match.arrangement ? match.arrangement->display_name : kind, holiday_date);
+            }
+        } else {
+            snprintf(holiday_detail, sizeof(holiday_detail), "内置日历未覆盖或暂无后续安排");
+        }
+        draw_text(pixels, stride, dialog.x + 548, dialog.y + 276, holiday_line, 17, COLOR(28, 34, 43));
+        fit_text(fitted, sizeof(fitted), holiday_detail, 15, 326);
+        draw_text(pixels, stride, dialog.x + 548, dialog.y + 310, fitted, 15,
+                  today_match ? COLOR(25, 132, 95) : COLOR(77, 86, 99));
+        draw_text(pixels, stride, dialog.x + 548, dialog.y + 344,
+                  model->draft_holiday_enabled ? "当前预设：已开启" : "当前预设：未开启", 16,
+                  model->draft_holiday_enabled ? COLOR(25, 132, 95) : COLOR(215, 139, 25));
+        draw_text(pixels, stride, dialog.x + 548, dialog.y + 378,
+                  model->today_override_present ? "今天临时设置优先，当前额度可能未生效" : "节假日规则命中后优先于周计划",
+                  15, model->today_override_present ? COLOR(215, 139, 25) : COLOR(91, 100, 114));
+    } else {
+        static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+        uint8_t today_weekday = ptc_weekday_from_day_index(model->day_index);
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 264, 350, 74}, "今天已玩", played,
+                             model->played_minutes_available ? COLOR(28, 118, 188) : COLOR(215, 139, 25));
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 350, 350, 74}, "当前还能玩", remaining,
+                             time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
+                                               model->unrestricted_today == 1, model->remaining_minutes));
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 436, 350, 74},
+                             weekly && model->editor_index != today_weekday ? "所选星期草稿额度" :
+                             (weekly ? "保存后预计还能玩" : "修改后预计还能玩"),
+                             weekly && model->editor_index != today_weekday ? value : after,
+                             time_state_accent(weekly && model->editor_index != today_weekday ? true : after_minutes >= 0,
+                                               false,
+                                               weekly && model->editor_index != today_weekday ? (int)entered : after_minutes));
+        if (weekly && model->editor_index != today_weekday) {
+            snprintf(freshness, sizeof(freshness), "%s · 今天不受本次修改影响", DAYS[model->editor_index]);
+            draw_text_center(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 518, 350, 28}, freshness,
+                             15, COLOR(91, 100, 114));
+        } else {
+            draw_text_center(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 518, 350, 28}, freshness, 15,
+                             status_age_color(model));
+        }
+    }
 
     for (int index = 0; index < 4; ++index) {
         draw_dialog_button(pixels, stride, ptc_ui_minute_editor_quick_rect(index), QUICK_LABELS[index],
@@ -2341,7 +2419,7 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
                          selected ? COLOR(28, 118, 188) : COLOR(66, 74, 86));
     }
     if (model->numpad_error[0]) {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 408, dialog.y + 488, 452, 28},
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 488, 450, 28},
                          model->numpad_error, 16, COLOR(194, 61, 61));
     }
     draw_overlay_actions(pixels, stride, model, "+  完成输入");
