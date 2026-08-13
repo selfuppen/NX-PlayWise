@@ -240,6 +240,7 @@ typedef struct {
     char overlay_title[64];
     char overlay_body[320];
     bool confirm_hold_required;
+    uint16_t confirm_hold_progress;
     PtcUiNumpadPurpose numpad_purpose;
     PtcUiOverlay numpad_return_overlay;
     char numpad_text[9];
@@ -379,6 +380,24 @@ typedef struct {
     bool latched;
 } PtcUiShortcutHoldState;
 
+typedef struct {
+    int held_samples;
+    bool completed;
+} PtcUiConfirmHoldState;
+
+typedef struct {
+    PtcDayRule rule;
+    int count;
+} PtcUiWeeklyBulkRuleCount;
+
+typedef struct {
+    int target_count;
+    int changed_count;
+    int unchanged_count;
+    int rule_group_count;
+    PtcUiWeeklyBulkRuleCount rule_groups[5];
+} PtcUiWeeklyBulkStats;
+
 bool ptc_ui_graphics_init(void);
 void ptc_ui_graphics_exit(void);
 void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme);
@@ -391,6 +410,8 @@ void ptc_ui_format_custom_shortcut_hint(
     size_t out_size);
 bool ptc_ui_shortcut_mask_held(uint64_t configured_mask, uint64_t buttons);
 bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held, int required_samples);
+bool ptc_ui_confirm_hold_update(PtcUiConfirmHoldState *state, bool held, int required_samples);
+uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int required_samples);
 int ptc_ui_migrate_setup_step(int step, int wizard_version);
 PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model);
 void ptc_ui_format_restore_today_basis(const PtcUiModel *model, char *out, size_t out_size);
@@ -439,6 +460,7 @@ bool ptc_ui_setup_takeover_complete(const PtcUiModel *model);
 void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction);
 void ptc_ui_move_weekly_focus(PtcUiModel *model, int horizontal, int vertical);
 bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend);
+void ptc_ui_weekly_bulk_stats(const PtcUiModel *model, bool weekend, PtcUiWeeklyBulkStats *stats);
 void ptc_ui_move_overlay_selection(PtcUiModel *model, int horizontal, int vertical);
 int ptc_ui_grant_estimate_remaining(const PtcUiModel *model, uint16_t grant_minutes, bool *capped);
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now);

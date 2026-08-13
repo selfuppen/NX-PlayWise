@@ -76,6 +76,29 @@ bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held,
     return true;
 }
 
+bool ptc_ui_confirm_hold_update(PtcUiConfirmHoldState *state, bool held, int required_samples)
+{
+    if (!state || required_samples <= 0) return false;
+    if (!held) {
+        state->held_samples = 0;
+        state->completed = false;
+        return false;
+    }
+    if (state->completed) return false;
+    if (state->held_samples < required_samples) ++state->held_samples;
+    if (state->held_samples < required_samples) return false;
+    state->completed = true;
+    return true;
+}
+
+uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int required_samples)
+{
+    int progress;
+    if (!state || required_samples <= 0 || state->held_samples <= 0) return 0;
+    progress = state->held_samples * 1000 / required_samples;
+    return (uint16_t)(progress > 1000 ? 1000 : progress);
+}
+
 int ptc_ui_migrate_setup_step(int step, int wizard_version)
 {
     if (step <= 0) return 0;
@@ -115,7 +138,7 @@ static void format_rule_basis(PtcDayRule rule, int played_minutes, bool played_a
     } else {
         remaining = (int)rule.minutes - played_minutes;
         if (remaining < 0) remaining = 0;
-        snprintf(out, out_size, "额度 %u − 已玩 %d = 预计剩余 %d 分钟",
+        snprintf(out, out_size, "额度 %u 分钟 - 已玩 %d 分钟 = 预计剩余 %d 分钟",
                  (unsigned int)rule.minutes, played_minutes, remaining);
     }
 }
@@ -336,7 +359,7 @@ static void fill_error_guidance(char *out, size_t out_size, const char *type, in
     }
     if (error_code == 306) {
         snprintf(out, out_size,
-                 "反馈码：306。可能未手动开启主机家长控制；系统设置→家长控制→开启，返回后选择“重新检测”。");
+                 "反馈码：306。可能未手动开启主机家长控制；系统设置到家长控制到开启，返回后选择“重新检测”。");
         return;
     }
     if (error_code == 313) {
@@ -784,20 +807,20 @@ void ptc_ui_format_parent_status_summary(
     }
     out[0] = '\0';
     if (!model) {
-        snprintf(out, out_size, "? 状态待确认 · 尚无可靠读数");
+        snprintf(out, out_size, "? 状态待确认  |  尚无可靠读数");
         return;
     }
     age = ptc_ui_status_age_seconds(model, now);
     if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
-        snprintf(out, out_size, "! 保护模式 · 需要处理");
+        snprintf(out, out_size, "! 保护模式  |  需要处理");
         return;
     }
     if (model->recovery_active) {
-        snprintf(out, out_size, "! 恢复事务待处理 · 查看详情");
+        snprintf(out, out_size, "! 恢复事务待处理  |  查看详情");
         return;
     }
     if (model->disable_flag_present) {
-        snprintf(out, out_size, "! 紧急停用 · 控制写入已停止");
+        snprintf(out, out_size, "! 紧急停用  |  控制写入已停止");
         return;
     }
     if (model->temporary_unlocked_available && model->temporary_unlocked) {
@@ -805,23 +828,23 @@ void ptc_ui_format_parent_status_summary(
         return;
     }
     if (model->apply_pending_confirmation) {
-        snprintf(out, out_size, "… 设置等待确认生效");
+        snprintf(out, out_size, "... 设置等待确认生效");
         return;
     }
     if (model->waiting) {
-        snprintf(out, out_size, "… 正在检测当前状态");
+        snprintf(out, out_size, "... 正在检测当前状态");
         return;
     }
     if (!model->status_loaded || age > 120 || model->error_code != 0) {
-        if (age < 0) snprintf(out, out_size, "? 状态待确认 · 尚无可靠读数");
-        else if (age < 3600) snprintf(out, out_size, "? 状态待确认 · 上次成功于 %lld 分钟前", (long long)(age / 60));
-        else if (age < 86400) snprintf(out, out_size, "? 状态待确认 · 上次成功于 %lld 小时前", (long long)(age / 3600));
-        else snprintf(out, out_size, "? 状态待确认 · 上次成功超过一天");
+        if (age < 0) snprintf(out, out_size, "? 状态待确认  |  尚无可靠读数");
+        else if (age < 3600) snprintf(out, out_size, "? 状态待确认  |  上次成功于 %lld 分钟前", (long long)(age / 60));
+        else if (age < 86400) snprintf(out, out_size, "? 状态待确认  |  上次成功于 %lld 小时前", (long long)(age / 3600));
+        else snprintf(out, out_size, "? 状态待确认  |  上次成功超过一天");
         return;
     }
     if (model->restricted_now == 1 || model->blocked_today == 1 ||
         (model->remaining_available && model->remaining_minutes <= 0)) {
-        snprintf(out, out_size, "! 已到限制 · 今日时间已用完 · 刚刚同步");
+        snprintf(out, out_size, "! 已到限制  |  今日时间已用完  |  刚刚同步");
         return;
     }
     if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "今日不限时");
@@ -830,7 +853,7 @@ void ptc_ui_format_parent_status_summary(
     if (age <= 30) snprintf(freshness, sizeof(freshness), "刚刚同步");
     else if (age < 60) snprintf(freshness, sizeof(freshness), "%lld 秒前", (long long)age);
     else snprintf(freshness, sizeof(freshness), "%lld 分钟前", (long long)(age / 60));
-    snprintf(out, out_size, "控制正常 · %s · %s", remaining, freshness);
+    snprintf(out, out_size, "控制正常  |  %s  |  %s", remaining, freshness);
 }
 
 void ptc_ui_format_holiday_priority_summary(const PtcUiModel *model, char *out, size_t out_size)
@@ -1091,7 +1114,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                 model->recent_event_timestamps[target] = timestamp;
                 snprintf(model->recent_events[model->recent_event_count],
                          sizeof(model->recent_events[model->recent_event_count]),
-                         "%s · %s", event_label(event_name), error_name[0] ? error_name : "成功");
+                         "%s  |  %s", event_label(event_name), error_name[0] ? error_name : "成功");
                 ++model->recent_event_count;
             }
         }
@@ -1162,8 +1185,8 @@ PtcUiRect ptc_ui_child_refresh_rect(void)
 
 PtcUiRect ptc_ui_child_footer_rect(int index)
 {
-    static const int widths[] = {250, 180, 180};
-    static const int xs[] = {54, 322, 520};
+    static const int widths[] = {250, 500, 180};
+    static const int xs[] = {54, 322, 840};
     PtcUiRect rect = {0, 660, 0, 48};
     if (index >= 0 && index < 3) {
         rect.x = xs[index];
@@ -1426,8 +1449,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 560;
         break;
     case PTC_UI_OVERLAY_WEEKLY_BULK:
-        *width = 760;
-        *height = 380;
+        *width = 1040;
+        *height = 560;
         break;
     case PTC_UI_OVERLAY_ALBUM_MANAGER:
         *width = 980;
@@ -1711,6 +1734,37 @@ bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend)
     return memcmp(before, model->draft_week, sizeof(before)) != 0;
 }
 
+void ptc_ui_weekly_bulk_stats(const PtcUiModel *model, bool weekend, PtcUiWeeklyBulkStats *stats)
+{
+    int slot;
+    PtcDayRule source;
+    if (!stats) return;
+    memset(stats, 0, sizeof(*stats));
+    if (!model) return;
+    slot = model->weekly_last_day_slot;
+    if (slot < 0 || slot >= 7) slot = 0;
+    source = model->draft_week[ptc_ui_weekday_for_display_slot(slot)];
+    for (int day = 0; day < 7; ++day) {
+        bool included = weekend ? (day == 0 || day == 6) : (day >= 1 && day <= 5);
+        int group = -1;
+        if (!included) continue;
+        ++stats->target_count;
+        if (ptc_ui_day_rule_effectively_changed(model->draft_week[day], source)) ++stats->changed_count;
+        else ++stats->unchanged_count;
+        for (int index = 0; index < stats->rule_group_count; ++index) {
+            if (!ptc_ui_day_rule_effectively_changed(stats->rule_groups[index].rule, model->draft_week[day])) {
+                group = index;
+                break;
+            }
+        }
+        if (group < 0 && stats->rule_group_count < 5) {
+            group = stats->rule_group_count++;
+            stats->rule_groups[group].rule = model->draft_week[day];
+        }
+        if (group >= 0) ++stats->rule_groups[group].count;
+    }
+}
+
 static int credential_selection_step(const PtcUiModel *model, int current, int direction)
 {
     static const int DEVICE_ITEMS[] = {
@@ -1907,8 +1961,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0)
             : make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (model->overlay != PTC_UI_OVERLAY_WEEKLY_BULK &&
-        model->overlay != PTC_UI_OVERLAY_ALBUM_MANAGER &&
+    if (model->overlay != PTC_UI_OVERLAY_ALBUM_MANAGER &&
         ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
     }
@@ -2303,7 +2356,7 @@ PtcUiRect ptc_ui_weekly_bulk_target_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_WEEKLY_BULK);
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){dialog.x + 40 + index * 360, dialog.y + 158, 340, 132};
+    return (PtcUiRect){dialog.x + 40, dialog.y + 184 + index * 102, 410, 88};
 }
 
 PtcUiRect ptc_ui_album_action_rect(int index)

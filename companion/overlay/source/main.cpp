@@ -411,8 +411,8 @@ public:
     {
         if (bridge->waiting) {
             if (ptc_overlay_bridge_transport_state(bridge) == PTC_TRANSPORT_ROUTE_IPC_SD_RESULT)
-                return "正在读取后台结果…";
-            return "正在等待后台处理…";
+                return "正在读取后台结果...";
+            return "正在等待后台处理...";
         }
         return "";
     }
@@ -792,7 +792,7 @@ public:
         renderer->drawRect(cx + 108, top_banner_y + 34, 104, 34, renderer->a(KEY_COLOR));
         renderer->drawRect(cx + 108, top_banner_y + 66, 104, 2, renderer->a(remaining_accent));
         if (remaining_refresh_pending) {
-            renderer->drawString("正在刷新…", false, cx + 116, top_banner_y + 58, 14,
+            renderer->drawString("正在刷新...", false, cx + 116, top_banner_y + 58, 14,
                                  renderer->a(WAITING_COLOR));
         } else if (summary.valid && summary.remaining_available) {
             std::snprintf(line, sizeof(line), "%d 分钟", summary.remaining_minutes);
@@ -848,7 +848,7 @@ public:
                 symbol[0] = '_';
                 symbol[1] = '\0';
             } else {
-                std::snprintf(symbol, sizeof(symbol), "·");
+                std::snprintf(symbol, sizeof(symbol), " | ");
             }
             const auto symbol_size = renderer->drawString(
                 symbol, false, 0, 0, 30, tsl::style::color::ColorTransparent);
@@ -921,9 +921,9 @@ public:
             draw_outline(renderer, cx, status_y, status_w, PTC_OVERLAY_STATUS_COLLAPSED_H, 1, MUTED_COLOR);
 
             if (bridge_->waiting && active_request_kind_ == OverlayRequestKind::Status) {
-                renderer->drawString("[-] 正在刷新状态…（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
+                renderer->drawString("[-] 正在刷新状态...（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
             } else if (bridge_->waiting) {
-                renderer->drawString("[-] 正在处理加时…（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
+                renderer->drawString("[-] 正在处理加时...（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
             } else if (error_) {
                 renderer->drawString(
                     (last_request_kind_ == OverlayRequestKind::OfflineCode ||
@@ -961,8 +961,8 @@ public:
                 const bool code_error = last_request_kind_ == OverlayRequestKind::OfflineCode ||
                     last_request_kind_ == OverlayRequestKind::PreviewOfflineCode;
                 if (bridge_->summary.valid && bridge_->summary.error_code > 0) {
-                    std::snprintf(line, sizeof(line), code_error ? "错误码：%d · 请重新输入" :
-                                  "错误码：%d · 按 Y 重试", bridge_->summary.error_code);
+                    std::snprintf(line, sizeof(line), code_error ? "错误码：%d  |  请重新输入" :
+                                  "错误码：%d  |  按 Y 重试", bridge_->summary.error_code);
                     renderer->drawString(line, false, cx + 12, status_y + 108, 11, renderer->a(ERROR_COLOR));
                 } else {
                     renderer->drawString(code_error ? "请重新输入；Y 返回输入" : "按 Y 重试",
@@ -973,10 +973,10 @@ public:
                 std::snprintf(line, sizeof(line), "修改后可玩 %d 分钟", summary.remaining_minutes);
                 renderer->drawString(line, false, cx + 12, status_y + 96, 15, renderer->a(SUCCESS_COLOR));
                 if (summary.played_minutes_available) {
-                    std::snprintf(line, sizeof(line), "今日已玩约 %d 分钟，即将自动关闭…", summary.played_minutes);
+                    std::snprintf(line, sizeof(line), "今日已玩约 %d 分钟，即将自动关闭...", summary.played_minutes);
                     renderer->drawString(line, false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));
                 } else {
-                    renderer->drawString("状态已刷新，即将自动关闭…", false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));
+                    renderer->drawString("状态已刷新，即将自动关闭...", false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));
                 }
             } else if (!bridge_->waiting && has_status_snapshot_) {
                 renderer->drawString("状态刷新完成", false, cx + 12, status_y + 74, 15, renderer->a(SUCCESS_COLOR));

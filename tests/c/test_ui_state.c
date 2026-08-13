@@ -146,23 +146,24 @@ static void test_release_navigation(void)
     check_int(ptc_ui_weekday_for_display_slot(5), 6, "Saturday is the first weekend slot");
     check_int(ptc_ui_weekday_for_display_slot(6), 0, "weekly display ends on Sunday");
     check_int(PTC_UI_SHORTCUT_PRESET_COUNT, 14, "all common shortcut combinations are listed");
-    check_true(strcmp(ptc_ui_shortcut_common_label(5), "L + R + Plus(＋)") == 0,
+    check_true(strcmp(ptc_ui_shortcut_common_label(5), "L + R + Plus(+)") == 0,
                "plus shortcut preset does not end in an ambiguous separator");
-    check_true(strcmp(ptc_ui_shortcut_common_label(13), "ZL + ZR + Minus(－)") == 0,
+    check_true(strcmp(ptc_ui_shortcut_common_label(13), "ZL + ZR + Minus(-)") == 0,
                "minus shortcut preset uses an unambiguous button name");
     ptc_ui_format_custom_shortcut_hint(ptc_ui_shortcut_common_label(5), shortcut_hint, sizeof(shortcut_hint));
     check_true(strstr(shortcut_hint, "长按约 400ms") != NULL &&
-               strstr(shortcut_hint, "L + R + Plus(＋)") != NULL &&
+               strstr(shortcut_hint, "L + R + Plus(+)") != NULL &&
                strstr(shortcut_hint, "进入家长区") != NULL,
                "custom shortcut hint explains the hold duration without changing the label");
     ptc_ui_format_custom_shortcut_hint(ptc_ui_shortcut_common_label(13), shortcut_hint, sizeof(shortcut_hint));
-    check_true(strstr(shortcut_hint, "ZL + ZR + Minus(－)") != NULL,
+    check_true(strstr(shortcut_hint, "ZL + ZR + Minus(-)") != NULL,
                "minus shortcut hint remains unambiguous");
 }
 
 static void test_shortcut_hold_and_setup_migration(void)
 {
     PtcUiShortcutHoldState hold = {0};
+    PtcUiConfirmHoldState confirm_hold = {0};
     uint64_t lr_right = UINT64_C(0x10) | UINT64_C(0x40) | UINT64_C(0x4000);
     check_true(ptc_ui_shortcut_mask_held(lr_right, lr_right), "L+R+right chord matches all configured buttons");
     check_true(!ptc_ui_shortcut_mask_held(lr_right, lr_right & ~UINT64_C(0x4000)),
@@ -182,6 +183,13 @@ static void test_shortcut_hold_and_setup_migration(void)
                !ptc_ui_shortcut_hold_update(&hold, true, 4) &&
                ptc_ui_shortcut_hold_update(&hold, true, 4),
                "shortcut can trigger again after complete release");
+    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, true, 3), "confirm hold starts without completing");
+    check_int(ptc_ui_confirm_hold_progress(&confirm_hold, 3), 333, "confirm hold exposes deterministic progress");
+    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, true, 3), "confirm hold waits for threshold");
+    check_true(ptc_ui_confirm_hold_update(&confirm_hold, true, 3), "confirm hold completes at threshold");
+    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, true, 3), "completed hold submits only once");
+    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, false, 3), "release resets confirm hold");
+    check_int(ptc_ui_confirm_hold_progress(&confirm_hold, 3), 0, "released confirm hold clears progress");
 
     check_int(ptc_ui_migrate_setup_step(0, 2), 0, "completed v2 wizard remains complete");
     check_int(ptc_ui_migrate_setup_step(1, 2), PTC_UI_SETUP_SHORTCUT, "v2 shortcut step keeps meaning");
@@ -402,6 +410,15 @@ static void test_time_previews(void)
     }
     model.weekly_last_day_slot = 0;
     model.draft_week[1].minutes = 90;
+    {
+        PtcUiWeeklyBulkStats stats;
+        ptc_ui_weekly_bulk_stats(&model, false, &stats);
+        check_int(stats.target_count, 5, "bulk preview counts all workday targets");
+        check_int(stats.changed_count, 4, "bulk preview counts rules that source will overwrite");
+        check_int(stats.unchanged_count, 1, "bulk preview counts matching source rules");
+        check_int(stats.rule_group_count, 2, "bulk preview groups existing values before applying");
+        check_int(model.draft_week[2].minutes, 60, "bulk preview does not mutate drafts");
+    }
     check_true(ptc_ui_apply_weekly_bulk(&model, false), "bulk apply changes workday drafts");
     for (int day = 1; day <= 5; ++day) {
         check_int(model.draft_week[day].minutes, 90, "bulk apply copies source to every workday");
@@ -697,6 +714,13 @@ static void test_release_hit_targets(void)
               "weekly bulk workday target is touchable");
     check_hit(hit_center(&model, ptc_ui_weekly_bulk_target_rect(1)), PTC_UI_HIT_WEEKLY_BULK_TARGET, 1,
               "weekly bulk weekend target is touchable");
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "weekly bulk has a separate apply action");
+    check_true(!rects_overlap(ptc_ui_weekly_bulk_target_rect(0), ptc_ui_weekly_bulk_target_rect(1)),
+               "weekly bulk target cards do not overlap");
+    check_true(!rects_overlap(ptc_ui_weekly_bulk_target_rect(1), ptc_ui_cancel_rect(model.overlay)) &&
+               !rects_overlap(ptc_ui_weekly_bulk_target_rect(1), ptc_ui_confirm_rect(model.overlay)),
+               "weekly bulk content does not overlap its actions");
     model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
     check_hit(hit_center(&model, ptc_ui_album_action_rect(0)), PTC_UI_HIT_ALBUM_ACTION, 0,
               "album enable action is touchable inside the manager");

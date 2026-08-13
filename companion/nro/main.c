@@ -76,8 +76,8 @@ typedef struct {
     int elapsed_ms;
     int hidden_ticks;
     PtcUiShortcutHoldState custom_shortcut_hold;
+    PtcUiConfirmHoldState confirm_hold;
     bool minus_pending;
-    int danger_confirm_ticks;
     bool waiting;
     bool exit_requested;
     PtcUiView request_view;
@@ -433,8 +433,8 @@ static void format_shortcut_label(u64 mask, char *out, size_t out_size)
         {HidNpadButton_Right, "右"},
         {HidNpadButton_X, "X"},
         {HidNpadButton_Y, "Y"},
-        {HidNpadButton_Plus, "Plus(＋)"},
-        {HidNpadButton_Minus, "Minus(－)"}
+        {HidNpadButton_Plus, "Plus(+)"},
+        {HidNpadButton_Minus, "Minus(-)"}
     };
     bool first = true;
     size_t index;
@@ -685,7 +685,7 @@ static void submit_status(UiState *ui)
     status = ptc_companion_transport_submit_status(&ui->transport, ui->active_request_id, time(NULL));
     set_command_name(ui, "status");
     sync_transport_label(ui);
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "status", "正在刷新今天的状态…");
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "status", "正在刷新今天的状态...");
     else set_message(ui, "刷新失败", status);
 }
 
@@ -754,7 +754,7 @@ static void submit_offline_code(UiState *ui, const char *code)
         pending.submitted = true;
         (void)ptc_companion_pending_redemption_save(&ui->client, &pending);
         ui->pending_redemption = pending;
-        begin_wait(ui, "offline_code", "加时码已提交，正在等待后台确认…");
+        begin_wait(ui, "offline_code", "加时码已提交，正在等待后台确认...");
         return;
     }
     (void)ptc_companion_pending_redemption_clear(&ui->client);
@@ -858,7 +858,7 @@ static void submit_preview_offline_code(UiState *ui, const char *code)
     set_command_name(ui, "preview_offline_code");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "preview_offline_code", "正在验证加时码并计算生效预览…");
+        begin_wait(ui, "preview_offline_code", "正在验证加时码并计算生效预览...");
         return;
     }
     ui->waiting = false;
@@ -905,7 +905,7 @@ static void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minut
     set_command_name(ui, type);
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, type, "设置已提交，正在等待后台确认…");
+        begin_wait(ui, type, "设置已提交，正在等待后台确认...");
     } else {
         ui->waiting = false;
         set_message(ui, "设置提交失败", status);
@@ -928,7 +928,7 @@ static void submit_weekly(UiState *ui)
     set_command_name(ui, "set_weekly_template");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "set_weekly_template", "正在保存周计划…");
+        begin_wait(ui, "set_weekly_template", "正在保存周计划...");
     } else {
         ui->waiting = false;
         set_message(ui, "每周计划提交失败", status);
@@ -952,7 +952,7 @@ static void submit_holiday_policy(UiState *ui)
     set_command_name(ui, "set_holiday_policy");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "set_holiday_policy", "正在保存国家节假日设置…");
+        begin_wait(ui, "set_holiday_policy", "正在保存国家节假日设置...");
     } else {
         set_message(ui, "国家节假日设置提交失败", status);
     }
@@ -1117,7 +1117,7 @@ static void poll_result(UiState *ui, bool force)
         sizeof(ui->last_result));
     sync_transport_label(ui);
     if (status == PTC_COMPANION_PENDING) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "后台正在处理，请稍候…");
+        snprintf(ui->model.message, sizeof(ui->model.message), "后台正在处理，请稍候...");
         return;
     }
     ui->waiting = false;
@@ -1305,7 +1305,7 @@ static void enter_parent_area(UiState *ui)
     PtcAuthStatus state = ptc_companion_auth_state(&ui->auth);
     ui->auth_retry_action = AUTH_RETRY_ENTER_PARENT;
     if (state == PTC_AUTH_EMPTY) {
-        if (!keyboard_input("设置 任我玩 PIN", "请输入 1–64 位数字；长度由家长决定", pin, sizeof(pin), true, true, false) ||
+        if (!keyboard_input("设置 任我玩 PIN", "请输入 1到64 位数字；长度由家长决定", pin, sizeof(pin), true, true, false) ||
             !keyboard_input("确认 任我玩 PIN", "请再次输入相同的数字 PIN", pin_confirm, sizeof(pin_confirm), true, true, false)) {
             ui->auth_retry_action = AUTH_RETRY_NONE;
             snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 设置。");
@@ -1408,7 +1408,7 @@ static void setup_pin(UiState *ui)
     ui->auth_retry_action = AUTH_RETRY_SETUP_PIN;
     state = ptc_companion_auth_state(&ui->auth);
     if (state == PTC_AUTH_OK) {
-        if (!keyboard_input("修改默认 PIN", "输入新的 1–64 位数字；保留 110 可按 B 取消",
+        if (!keyboard_input("修改默认 PIN", "输入新的 1到64 位数字；保留 110 可按 B 取消",
                             pin, sizeof(pin), true, true, false) ||
             !keyboard_input("确认新 PIN", "请再次输入相同的数字 PIN",
                             pin_confirm, sizeof(pin_confirm), true, true, false)) {
@@ -1434,7 +1434,7 @@ static void setup_pin(UiState *ui)
         show_auth_error(ui, "无法设置 任我玩 PIN", auth_status_zh(state), 0);
         return;
     }
-    if (!keyboard_input("设置 任我玩 PIN", "请输入 1–64 位数字；短 PIN 仅提示风险，不会阻止保存",
+    if (!keyboard_input("设置 任我玩 PIN", "请输入 1到64 位数字；短 PIN 仅提示风险，不会阻止保存",
                         pin, sizeof(pin), true, true, false) ||
         !keyboard_input("确认 任我玩 PIN", "请再次输入相同的数字 PIN",
                         pin_confirm, sizeof(pin_confirm), true, true, false)) {
@@ -1639,24 +1639,6 @@ static void handle_setup_input(UiState *ui, u64 down, u64 held)
     } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
         setup_primary(ui);
     }
-}
-
-static void open_minutes_overlay(
-    UiState *ui,
-    PtcUiOperation operation,
-    const char *title,
-    const char *body,
-    uint16_t value,
-    uint16_t minimum,
-    uint16_t maximum)
-{
-    ui->model.overlay = PTC_UI_OVERLAY_MINUTES;
-    ui->model.operation = operation;
-    ui->model.draft_minutes = value;
-    ui->model.minimum_minutes = minimum;
-    ui->model.maximum_minutes = maximum;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", title);
-    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", body);
 }
 
 static void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body)
@@ -1981,8 +1963,8 @@ static void edit_credential_input(UiState *ui)
     char value[80];
     const char *header = ui->model.credential_kind == 1 ? "输入新设备名" : "输入新加时码密钥";
     const char *guide = ui->model.credential_kind == 1
-        ? "1–32 位：字母、数字、-、_"
-        : "建议随机生成；手工输入 32–64 个非空白 ASCII 字符";
+        ? "1到32 位：字母、数字、-、_"
+        : "建议随机生成；手工输入 32到64 个非空白 ASCII 字符";
     if (!keyboard_input(header, guide, value, sizeof(value), ui->model.credential_kind == 2, false, false)) return;
     snprintf(ui->model.credential_new, sizeof(ui->model.credential_new), "%s", value);
 }
@@ -2007,8 +1989,8 @@ static void request_save_credential(UiState *ui)
     if (!valid) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                  ui->model.credential_kind == 1
-                    ? "设备名必须为 1–32 位，只能包含字母、数字、- 和 _。"
-                    : "密钥必须为 32–64 个非空白可打印 ASCII 字符；建议使用随机生成。");
+                    ? "设备名必须为 1到32 位，只能包含字母、数字、- 和 _。"
+                    : "密钥必须为 32到64 个非空白可打印 ASCII 字符；建议使用随机生成。");
         return;
     }
     if (strcmp(ui->model.credential_current, ui->model.credential_new) == 0) {
@@ -2032,7 +2014,7 @@ static void change_parent_pin(UiState *ui)
     PtcAuthStatus status;
     ui->auth_retry_action = AUTH_RETRY_CHANGE_PIN;
     if (!verify_sensitive_pin(ui, "修改 PIN 前，请先输入当前任我玩 PIN")) return;
-    if (!keyboard_input("修改 PlayWise PIN", "请输入新的 1–64 位数字", pin, sizeof(pin), true, true, false) ||
+    if (!keyboard_input("修改 PlayWise PIN", "请输入新的 1到64 位数字", pin, sizeof(pin), true, true, false) ||
         !keyboard_input("确认新 PIN", "请再次输入相同的数字 PIN", confirm, sizeof(confirm), true, true, false)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 修改。");
         return;
@@ -2294,7 +2276,7 @@ static void export_diagnostics(UiState *ui)
     bool rejected_sensitive_file = false;
     ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_EXPORTING;
     ui->model.diagnostic_path[0] = '\0';
-    snprintf(ui->model.message, sizeof(ui->model.message), "正在导出诊断包…");
+    snprintf(ui->model.message, sizeof(ui->model.message), "正在导出诊断包...");
     if (!bundle) {
         ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_ERROR;
         snprintf(ui->model.message, sizeof(ui->model.message), "生成诊断包失败。");
@@ -2465,8 +2447,10 @@ static void handle_today_action_ready(UiState *ui, int index)
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "今天已不限时，无需加时；如需恢复限时，请使用“设置今日额度”。");
         } else {
-            open_minutes_overlay(ui, PTC_UI_OPERATION_ADD_TODAY_MINUTES, "临时加时",
-                "在今天现有额度上增加时间；当前状态和调整后剩余如下。", 15, 1, 120);
+            ui->model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
+            ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
+                "临时加时", "输入要增加的分钟数；右侧显示加时前后的可玩时间。",
+                3, 1, 120, 15);
         }
         break;
     case 3:
@@ -2505,7 +2489,7 @@ static void handle_parent_action(UiState *ui)
         } else {
             ui->pending_today_action = index;
             submit_status(ui);
-            snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新当前已玩和剩余时间…");
+            snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新当前已玩和剩余时间...");
         }
         return;
     }
@@ -2571,7 +2555,7 @@ static void handle_parent_action(UiState *ui)
             ui->model.overlay_selection = 2;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "内置节假日安排");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     "当前%s · 法定休假：%s · 调休工作日：%s",
+                     "当前%s  |  法定休假：%s  |  调休工作日：%s",
                      ui->model.draft_holiday_enabled ? "已开启" : "未开启",
                      holiday_rule, makeup_rule);
             break;
@@ -2702,10 +2686,10 @@ static void confirm_operation(UiState *ui)
         submit_weekly(ui);
         break;
     case PTC_UI_OPERATION_DISABLE_TODAY_LIMIT:
-        submit_transport_empty(ui, "disable_today_limit", "正在解除当前限制…", "解除当前限制失败");
+        submit_transport_empty(ui, "disable_today_limit", "正在解除当前限制...", "解除当前限制失败");
         break;
     case PTC_UI_OPERATION_RESTORE_TODAY_POLICY:
-        submit_transport_empty(ui, "restore_today_policy", "正在恢复周计划…", "恢复计划失败");
+        submit_transport_empty(ui, "restore_today_policy", "正在恢复周计划...", "恢复计划失败");
         break;
     case PTC_UI_OPERATION_REDEEM_OFFLINE_CODE:
         ui->code_previous_after_available = ui->model.code_preview_after_available;
@@ -2723,13 +2707,13 @@ static void confirm_operation(UiState *ui)
         apply_default_pairing_base_url(ui);
         break;
     case PTC_UI_OPERATION_COMPLETE_SETUP:
-        submit_transport_empty(ui, "complete_setup", "正在完成首次设置…", "启用自动控制失败");
+        submit_transport_empty(ui, "complete_setup", "正在完成首次设置...", "启用自动控制失败");
         break;
     case PTC_UI_OPERATION_RETRY_SETUP_RELEASE:
-        submit_transport_empty(ui, "retry_setup_release", "正在重试解除当前限制…", "重试前置解限失败");
+        submit_transport_empty(ui, "retry_setup_release", "正在重试解除当前限制...", "重试前置解限失败");
         break;
     case PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT:
-        submit_transport_empty(ui, "restore_install_snapshot", "正在恢复安装前状态…", "恢复安装前状态失败");
+        submit_transport_empty(ui, "restore_install_snapshot", "正在恢复安装前状态...", "恢复安装前状态失败");
         break;
     case PTC_UI_OPERATION_EMERGENCY_DISABLE:
         set_local_sd_command(ui, "紧急停用控制");
@@ -3000,7 +2984,7 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ptc_ui_cancel_overlay(&ui->model);
         } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
             ui->model.overlay_selection = 1 - ui->model.overlay_selection;
-        } else if (down & HidNpadButton_A) {
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             bool changed = ptc_ui_apply_weekly_bulk(&ui->model, ui->model.overlay_selection == 1);
             bool weekend = ui->model.overlay_selection == 1;
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
@@ -3323,7 +3307,8 @@ static void handle_overlay_input(UiState *ui, u64 down)
                              ui->model.played_minutes, (unsigned int)value);
                     open_confirm_overlay(ui, operation,
                         ui->model.unrestricted_today == 1 ? "不限时将改为限时" : "新额度不高于已玩时间", body);
-                    ui->model.confirm_hold_required = !ui->model.played_minutes_available ||
+                    ui->model.confirm_hold_required = ui->model.unrestricted_today == 1 ||
+                        !ui->model.played_minutes_available ||
                         ptc_ui_limit_minutes_would_restrict(&ui->model, value);
                 } else {
                     ui->model.operation = PTC_UI_OPERATION_NONE;
@@ -3358,7 +3343,7 @@ static void handle_overlay_input(UiState *ui, u64 down)
                                  "当前已玩 %d 分钟；新额度 %u 分钟。\n修改后还剩 %d 分钟可玩。",
                                  ui->model.played_minutes, (unsigned int)ui->model.draft_minutes, preview);
                         open_confirm_overlay(ui, operation, "不限时将改为限时", body);
-                        ui->model.confirm_hold_required = preview == 0;
+                        ui->model.confirm_hold_required = true;
                     } else {
                         snprintf(body, sizeof(body),
                                  "今天当前为不限时；设置 %u 分钟后将恢复限时。\n当前已玩不可用，暂时无法估算修改后剩余。",
@@ -3598,7 +3583,8 @@ static void handle_touch(UiState *ui, int x, int y)
             ui->model.overlay_selection = 1;
         }
         if (ui->model.confirm_hold_required) {
-            snprintf(ui->model.message, sizeof(ui->model.message), "为避免误操作，请使用手柄长按 A 确认。");
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                     "为避免误操作，请长按手柄 A 或持续按住触摸确认按钮。");
         } else {
             handle_overlay_input(ui,
                 ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ||
@@ -3658,7 +3644,6 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_WEEKLY_BULK_TARGET:
         ui->model.overlay_selection = hit.index;
-        handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_ALBUM_ACTION:
         ui->model.overlay_selection = hit.index;
@@ -3930,7 +3915,7 @@ int main(int argc, char **argv)
     ui.model.play_timer_enabled = -1;
     ui.model.restricted_now = -1;
     ptc_ui_set_execution(&ui.model, NULL, NULL);
-    snprintf(ui.model.message, sizeof(ui.model.message), "正在读取今天的游玩状态…");
+    snprintf(ui.model.message, sizeof(ui.model.message), "正在读取今天的游玩状态...");
     ptc_fs_storage_init(&fs);
     ptc_companion_file_client_init(&ui.client, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     load_ui_preferences(&ui);
@@ -3954,6 +3939,9 @@ int main(int argc, char **argv)
         bool custom_combo_held;
         bool custom_combo_triggered;
         bool custom_combo_candidate;
+        bool touch_active;
+        int touch_x = -1;
+        int touch_y = -1;
         if (ui.theme_refresh_pending) refresh_theme(&ui);
         padUpdate(&pad);
         down = padGetButtonsDown(&pad);
@@ -3962,6 +3950,11 @@ int main(int argc, char **argv)
         down |= stick_buttons & ~previous_stick_buttons;
         previous_stick_buttons = stick_buttons;
         held |= stick_buttons;
+        touch_active = hidGetTouchScreenStates(&touch, 1) && touch.count > 0;
+        if (touch_active) {
+            touch_x = (int)touch.touches[0].x;
+            touch_y = (int)touch.touches[0].y;
+        }
         padRepeaterUpdate(&direction_repeater, held & DIRECTION_BUTTON_MASK);
         down |= padRepeaterGetButtons(&direction_repeater);
         parent_combo_held = hidden_parent_combo_held(held);
@@ -3990,23 +3983,27 @@ int main(int argc, char **argv)
 
         if (ui.model.overlay != PTC_UI_OVERLAY_NONE) {
             if (ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required) {
+                bool pad_confirm_held = (held & HidNpadButton_A) && ui.model.overlay_selection == 1;
+                bool touch_confirm_held = touch_active &&
+                    ptc_ui_rect_contains(ptc_ui_confirm_rect(ui.model.overlay), touch_x, touch_y);
+                if (touch_confirm_held) touch_down = true;
                 if (down & HidNpadButton_B) {
-                    ui.danger_confirm_ticks = 0;
+                    ptc_ui_confirm_hold_update(&ui.confirm_hold, false, DANGER_CONFIRM_HOLD_TICKS);
                     handle_overlay_input(&ui, down);
                 } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
-                    ui.danger_confirm_ticks = 0;
+                    ptc_ui_confirm_hold_update(&ui.confirm_hold, false, DANGER_CONFIRM_HOLD_TICKS);
                     handle_overlay_input(&ui, down);
-                } else if ((held & HidNpadButton_A) && ui.model.overlay_selection == 1) {
-                    ++ui.danger_confirm_ticks;
-                    if (ui.danger_confirm_ticks >= DANGER_CONFIRM_HOLD_TICKS) {
-                        ui.danger_confirm_ticks = 0;
+                } else {
+                    if (ptc_ui_confirm_hold_update(&ui.confirm_hold,
+                            pad_confirm_held || touch_confirm_held, DANGER_CONFIRM_HOLD_TICKS)) {
                         confirm_operation(&ui);
                     }
-                } else {
-                    ui.danger_confirm_ticks = 0;
                 }
+                ui.model.confirm_hold_progress = ptc_ui_confirm_hold_progress(
+                    &ui.confirm_hold, DANGER_CONFIRM_HOLD_TICKS);
             } else {
-                ui.danger_confirm_ticks = 0;
+                ptc_ui_confirm_hold_update(&ui.confirm_hold, false, DANGER_CONFIRM_HOLD_TICKS);
+                ui.model.confirm_hold_progress = 0;
                 handle_overlay_input(&ui, down);
             }
         } else if (ui.model.view == PTC_UI_CHILD) {
@@ -4221,10 +4218,13 @@ int main(int argc, char **argv)
             }
         }
 
-        if (hidGetTouchScreenStates(&touch, 1) && touch.count > 0) {
+        if (touch_active) {
             if (!touch_down) {
                 touch_down = true;
-                handle_touch(&ui, (int)touch.touches[0].x, (int)touch.touches[0].y);
+                if (!(ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required &&
+                      ptc_ui_rect_contains(ptc_ui_confirm_rect(ui.model.overlay), touch_x, touch_y))) {
+                    handle_touch(&ui, touch_x, touch_y);
+                }
             }
         } else {
             touch_down = false;
