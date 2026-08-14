@@ -463,6 +463,7 @@ bool ptc_ui_weekly_today_changed(const PtcUiModel *model);
 bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minutes);
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
 bool ptc_ui_setup_takeover_complete(const PtcUiModel *model);
+bool ptc_ui_runtime_fingerprint_reconfirmation_needed(const PtcUiModel *model);
 void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction);
 void ptc_ui_move_weekly_focus(PtcUiModel *model, int horizontal, int vertical);
 bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend);

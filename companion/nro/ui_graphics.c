@@ -173,6 +173,10 @@ static const UiAction RESUME_CONTROL_ACTION = {
     "解除停用并重新接管", "安全预检通过后恢复后台控制", COLOR(25, 132, 95)
 };
 
+static const UiAction RECONFIRM_ENVIRONMENT_ACTION = {
+    "重新检测并接管", "系统环境变化，确认兼容后恢复控制", COLOR(215, 139, 25)
+};
+
 static uint32_t ui_decode_utf8(const char **text)
 {
     const unsigned char *s = (const unsigned char *)*text;
@@ -922,10 +926,12 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             draw_text(pixels, stride, 204, 420, "选择“继续使用”不会保存 PIN 明文；认证文件只保存随机盐和哈希。", 19, COLOR(91, 100, 116));
         } else if (step == PTC_UI_SETUP_TAKEOVER) {
             bool resuming_restored_setup = model->disable_flag_present && strcmp(phase, "restored") == 0;
+            bool reconfirming_environment = ptc_ui_runtime_fingerprint_reconfirmation_needed(model);
             bool takeover_complete = ptc_ui_setup_takeover_complete(model);
             draw_text(pixels, stride, 204, 218,
                       takeover_complete ? "系统控制接管已完成" :
-                      (resuming_restored_setup ? "解除停用并重新接管" : "确认接管系统控制"),
+                      (reconfirming_environment ? "系统环境已变化" :
+                       (resuming_restored_setup ? "解除停用并重新接管" : "确认接管系统控制")),
                       30, takeover_complete ? COLOR(25, 132, 95) : COLOR(28, 34, 43));
             snprintf(phase_line, sizeof(phase_line), "当前状态：%s    安装前快照：%s",
                      takeover_complete ? (strcmp(phase, "active") == 0 ? "正常运行" : "正在同步") :
@@ -937,6 +943,8 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             draw_text(pixels, stride, 204, 324,
                       takeover_complete
                           ? "此步骤已经完成；继续不会重复写入系统设置或重新开始同步宽限。"
+                          : reconfirming_environment
+                           ? "系统版本或运行环境与上次确认时不同，需要家长重新确认兼容性。"
                           : resuming_restored_setup
                            ? "确认后会重新执行只读兼容预检；通过后才解除紧急停用并重新接管。"
                            : "确认后会先执行只读兼容预检，再保存安装前快照并启用额度管理。",
@@ -944,11 +952,14 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             draw_text(pixels, stride, 204, 360,
                       takeover_complete
                           ? "按 A 或点击继续，进入第 5 步选择区域。"
+                          : reconfirming_environment
+                           ? "确认后先只读检测；通过后保留现有配置并恢复控制。"
                           : "接管成功后会保留同步宽限，系统控制不会立即跳变。",
                       21, COLOR(45, 52, 62));
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
                                takeover_complete ? "A / 点击  继续到第 5 步" :
-                               (resuming_restored_setup ? "A / 点击  解除停用并重新接管" : "A / 点击  确认接管"),
+                               (reconfirming_environment ? "A / 点击  重新检测并接管" :
+                                (resuming_restored_setup ? "A / 点击  解除停用并重新接管" : "A / 点击  确认接管")),
                                takeover_complete ? COLOR(25, 132, 95) : COLOR(28, 118, 188),
                                COLOR(255, 255, 255), false);
         } else if (step == PTC_UI_SETUP_THEME) {
@@ -1828,7 +1839,8 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
             UiAction dynamic_action;
             if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT &&
                 model->disable_flag_present && index == 0) {
-                action = &RESUME_CONTROL_ACTION;
+                action = ptc_ui_runtime_fingerprint_reconfirmation_needed(model)
+                    ? &RECONFIRM_ENVIRONMENT_ACTION : &RESUME_CONTROL_ACTION;
             }
             if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED && index == 0) {
                 const char *detail = "重新检查后才能修改";

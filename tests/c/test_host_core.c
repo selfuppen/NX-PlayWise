@@ -1006,6 +1006,82 @@ static void test_album_restriction_transaction(void)
                "forced restore never overwrites an existing conflict rescue file");
 }
 
+static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char text[4096];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.unrestricted_today = true;
+    pctl.status.play_timer_enabled = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"active\",\"compatibility_status\":\"verified\",\"restriction_cleared\":true,"
+        "\"snapshot_available\":true,\"activate_after\":0,\"last_error\":\"\"}"),
+        "seed active setup before runtime change");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/compatibility.json",
+        "{\"version\":1,\"status\":\"accepted_unknown\",\"environment\":{\"hos\":\"20.5.0\","
+        "\"firmware_hash\":\"old-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true},"
+        "\"release_id\":\"playwise-" PLAYWISE_VERSION "+test\",\"accepted_at\":1}"),
+        "seed old accepted runtime fingerprint");
+
+    check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), -1, "runtime change enters protection");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/flags/disable.flag", text, sizeof(text)) &&
+        strstr(text, "runtime_fingerprint_changed"), "runtime change records a specific disable reason");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
+        strstr(text, "\"phase\":\"protection\""), "runtime change records protection phase");
+
+    pctl.read_error = PTC_ERR_PCTL_READ_FAILED;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/reconfirm-runtime-failed.json",
+        "{\"version\":1,\"request_id\":\"reconfirm-runtime-failed\",\"type\":\"complete_setup\","
+        "\"created_at\":2,\"payload\":{}}"), "queue failed runtime recheck");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "failed runtime recheck request is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/reconfirm-runtime-failed.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"pctl_backup_failed\""), "failed runtime recheck reports preflight error");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"),
+        "failed runtime recheck keeps control disabled");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
+        strstr(text, "\"phase\":\"protection\""), "failed runtime recheck remains retryable");
+
+    pctl.read_error = PTC_ERR_OK;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/reconfirm-runtime.json",
+        "{\"version\":1,\"request_id\":\"reconfirm-runtime\",\"type\":\"complete_setup\","
+        "\"created_at\":2,\"payload\":{}}"), "queue parent-confirmed runtime recheck");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "runtime recheck request is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/reconfirm-runtime.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"phase\":\"released\""),
+        "successful runtime recheck resumes takeover grace");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"),
+        "successful runtime recheck clears its disable flag");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/compatibility.json", text, sizeof(text)) &&
+        strstr(text, "\"hos\":\"22.5.0\"") && strstr(text, "\"status\":\"verified\""),
+        "successful runtime recheck records the current fingerprint");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", text, sizeof(text)) &&
+        strstr(text, "\"today_override_present\":false"),
+        "runtime reconfirmation preserves the configured rules without recapturing today");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"protection\",\"compatibility_status\":\"protection\","
+        "\"restriction_cleared\":false,\"snapshot_available\":true,\"activate_after\":0,"
+        "\"last_error\":\"recovery_failed\"}"), "seed unrelated protection state");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/flags/disable.flag",
+        "transaction_restore_failed\n"), "seed unrelated disable reason");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/reconfirm-refused.json",
+        "{\"version\":1,\"request_id\":\"reconfirm-refused\",\"type\":\"complete_setup\","
+        "\"created_at\":3,\"payload\":{}}"), "queue unsafe protection takeover");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unsafe protection takeover is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/reconfirm-refused.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"disabled\""), "unrelated protection reason remains blocked");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"),
+        "unrelated protection reason remains disabled");
+}
+
 int main(void)
 {
     test_tokens();
@@ -1020,6 +1096,7 @@ int main(void)
     test_overlay_layout_geometry();
     test_setup_preflight_and_recovery();
     test_setup_refuses_unknown_handover_total();
+    test_runtime_fingerprint_change_can_be_reconfirmed();
     test_live_enforce_recovery_is_not_startup_recovery();
     test_played_time_status();
     test_offline_code_preview_is_non_consuming();

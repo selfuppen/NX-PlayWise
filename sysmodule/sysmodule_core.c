@@ -2319,6 +2319,7 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
 {
     PtcSetupState setup;
     bool resuming_disabled_setup;
+    bool reconfirming_runtime_fingerprint = false;
     char disable_path[320];
     if (!load_setup_state(sysmodule, &setup)) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
@@ -2330,8 +2331,18 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
         return write_current_status_result(
             sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
     }
+    if (disable_flag && strcmp(setup.phase, "protection") == 0) {
+        char reason[64];
+        join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
+        if (sysmodule->storage->vtable->read_text(sysmodule->storage, disable_path, reason, sizeof(reason))) {
+            size_t length = strcspn(reason, "\r\n");
+            reason[length] = '\0';
+            reconfirming_runtime_fingerprint = strcmp(reason, "runtime_fingerprint_changed") == 0;
+        }
+    }
     resuming_disabled_setup = disable_flag &&
-        (strcmp(setup.phase, "restored") == 0 || strcmp(setup.phase, "active") == 0);
+        (strcmp(setup.phase, "restored") == 0 || strcmp(setup.phase, "active") == 0 ||
+         reconfirming_runtime_fingerprint);
     if (disable_flag && !resuming_disabled_setup) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             PTC_ERR_DISABLED, now.day_index, caps);
@@ -2341,7 +2352,7 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
         resuming_disabled_setup) {
         bool capture_handover = !setup.handover_today_pending &&
             (strcmp(setup.phase, "unconfigured") == 0 || strcmp(setup.phase, "compatibility_pending") == 0 ||
-             strcmp(setup.phase, "protection") == 0);
+             (strcmp(setup.phase, "protection") == 0 && !reconfirming_runtime_fingerprint));
         PtcErrorCode preflight_err = run_release_preflight(sysmodule, config, &setup, now, capture_handover);
         if (preflight_err != PTC_ERR_OK) {
             /* A disabled active/restored installation remains retryable until a

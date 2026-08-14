@@ -787,6 +787,13 @@ static void test_release_hit_targets(void)
     check_true(!ptc_ui_setup_takeover_complete(&model), "disabled active takeover requires safe preflight");
     check_int(ptc_ui_safety_action_available(&model, 0), PTC_UI_ACTION_RECOMMENDED,
               "disabled active takeover action is recommended");
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "protection");
+    snprintf(model.disable_reason, sizeof(model.disable_reason), "runtime_fingerprint_changed");
+    check_true(ptc_ui_runtime_fingerprint_reconfirmation_needed(&model),
+               "runtime fingerprint protection offers parent reconfirmation");
+    snprintf(model.disable_reason, sizeof(model.disable_reason), "transaction_restore_failed");
+    check_true(!ptc_ui_runtime_fingerprint_reconfirmation_needed(&model),
+               "unrelated protection reason does not use runtime reconfirmation copy");
     model.disable_flag_present = false;
     model.setup_step = PTC_UI_SETUP_ZONE;
     check_hit(hit_center(&model, ptc_ui_setup_zone_rect(0)), PTC_UI_HIT_SETUP_CHILD_ZONE, 0,

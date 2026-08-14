@@ -1552,7 +1552,10 @@ static void setup_primary(UiState *ui)
                 snprintf(ui->model.message, sizeof(ui->model.message), "系统控制接管已完成；请选择进入区域。");
             }
         } else if (!ui->waiting) {
-            if (ui->model.disable_flag_present && strcmp(ui->model.setup_phase, "restored") == 0) {
+            if (ptc_ui_runtime_fingerprint_reconfirmation_needed(&ui->model)) {
+                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "系统环境已变化，重新检测并接管",
+                                     "系统版本或运行环境与上次确认时不同。将执行只读兼容预检；通过后保留现有配置并恢复额度管理。");
+            } else if (ui->model.disable_flag_present && strcmp(ui->model.setup_phase, "restored") == 0) {
                 open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新接管",
                                      "将重新执行只读兼容预检；仅预检通过后才解除紧急停用并重新启用额度管理。");
             } else {
@@ -2593,7 +2596,10 @@ static void handle_parent_action(UiState *ui)
     }
     switch (index) {
     case 0:
-        if (ui->model.disable_flag_present) {
+        if (ptc_ui_runtime_fingerprint_reconfirmation_needed(&ui->model)) {
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "系统环境已变化，重新检测并接管",
+                                 "系统版本或运行环境与上次确认时不同。将执行只读兼容预检；通过后保留现有配置并恢复额度管理。");
+        } else if (ui->model.disable_flag_present) {
             open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新接管",
                                  "重新执行只读兼容预检；仅预检通过后才解除停用并恢复额度管理。");
         } else {

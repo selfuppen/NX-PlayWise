@@ -935,6 +935,13 @@ bool ptc_ui_setup_takeover_complete(const PtcUiModel *model)
          (strcmp(model->setup_phase, "active") == 0 && !model->disable_flag_present));
 }
 
+bool ptc_ui_runtime_fingerprint_reconfirmation_needed(const PtcUiModel *model)
+{
+    return model && model->disable_flag_present &&
+        strcmp(model->setup_phase, "protection") == 0 &&
+        strcmp(model->disable_reason, "runtime_fingerprint_changed") == 0;
+}
+
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now)
 {
     if (!model || strcmp(model->setup_phase, "released") != 0 || model->setup_activate_after <= 0) {
@@ -2330,7 +2337,7 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
     }
     switch (index) {
     case 0:
-        return model->disable_flag_present ||
+        return ptc_ui_runtime_fingerprint_reconfirmation_needed(model) || model->disable_flag_present ||
             (strcmp(model->setup_phase, "active") != 0 && strcmp(model->setup_phase, "protection") != 0 &&
              strcmp(model->setup_phase, "failed") != 0)
             ? PTC_UI_ACTION_RECOMMENDED : PTC_UI_ACTION_DISABLED;
