@@ -920,6 +920,13 @@ static void test_user_state_mapping(void)
         "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,"
         "\"remaining_available\":false,\"remaining_minutes\":-1,\"played_minutes_available\":false,"
         "\"played_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1},\"completed_at\":108}";
+    const char *release_manifest_invalid =
+        "{\"version\":1,\"request_id\":\"setup-error\",\"type\":\"complete_setup\",\"status\":\"error\","
+        "\"error\":{\"code\":504,\"reason\":\"release_manifest_invalid\","
+        "\"message\":\"构建清单损坏或组件不一致\"},"
+        "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,"
+        "\"remaining_available\":false,\"remaining_minutes\":-1,\"played_minutes_available\":false,"
+        "\"played_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1},\"completed_at\":109}";
     const char *preview =
         "{\"version\":1,\"request_id\":\"preview\",\"type\":\"preview_offline_code\",\"status\":\"ok\","
         "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
@@ -972,6 +979,12 @@ static void test_user_state_mapping(void)
     check_true(strstr(model.feedback_detail, "手动") != NULL &&
                strstr(model.feedback_detail, "重新检测") != NULL,
                "306 provides manual control guidance");
+    check_true(ptc_ui_apply_result_json(&model, release_manifest_invalid), "504 result parses");
+    check_int(model.error_code, 504, "504 error code is retained");
+    check_true(strstr(model.feedback_detail, "完整重启主机") != NULL &&
+               strstr(model.feedback_detail, "Issue") != NULL &&
+               strstr(model.feedback_detail, "感谢反馈") != NULL,
+               "504 provides restart and issue-report guidance");
     check_true(ptc_ui_apply_result_json(&model, preview), "offline-code preview parses");
     check_int(model.code_grant_minutes, 30, "preview grant minutes mapped");
     check_true(model.code_preview_after_available && model.code_preview_after_minutes == 50,

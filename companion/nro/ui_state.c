@@ -350,6 +350,11 @@ static void fill_error_guidance(char *out, size_t out_size, const char *type, in
     if (!type || !out || out_size == 0) {
         return;
     }
+    if (error_code == 504) {
+        snprintf(out, out_size,
+                 "反馈码：504。请完整重启主机后再试；若仍有问题，请到 GitHub 项目 Issue 页反馈。感谢反馈。");
+        return;
+    }
     if (error_code == 306) {
         snprintf(out, out_size,
                  "反馈码：306。可能未手动开启主机家长控制；系统设置到家长控制到开启，返回后选择“重新检测”。");
