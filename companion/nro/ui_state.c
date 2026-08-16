@@ -768,6 +768,108 @@ void ptc_ui_numpad_finish(PtcUiModel *model)
     model->numpad_error[0] = '\0';
 }
 
+void ptc_ui_pin_open(PtcUiModel *model, const char *title, const char *guide)
+{
+    if (!model) return;
+    model->overlay = PTC_UI_OVERLAY_PIN;
+    model->pin_text[0] = '\0';
+    model->pin_error[0] = '\0';
+    model->pin_keyboard_mode = false;
+    model->pin_focus = 1;
+    snprintf(model->pin_title, sizeof(model->pin_title), "%s", title ? title : "任我玩 PIN");
+    snprintf(model->pin_guide, sizeof(model->pin_guide), "%s", guide ? guide : "摇杆方向输入；X=0，Y=9");
+}
+
+bool ptc_ui_pin_append(PtcUiModel *model, int digit)
+{
+    size_t length;
+    if (!model || model->overlay != PTC_UI_OVERLAY_PIN || digit < 0 || digit > 9) return false;
+    length = strlen(model->pin_text);
+    if (length >= PTC_UI_PIN_MAX_DIGITS) {
+        snprintf(model->pin_error, sizeof(model->pin_error), "最多输入 %u 位数字", PTC_UI_PIN_MAX_DIGITS);
+        return false;
+    }
+    model->pin_text[length] = (char)('0' + digit);
+    model->pin_text[length + 1] = '\0';
+    model->pin_error[0] = '\0';
+    return true;
+}
+
+bool ptc_ui_pin_backspace(PtcUiModel *model)
+{
+    size_t length;
+    if (!model || model->overlay != PTC_UI_OVERLAY_PIN) return false;
+    length = strlen(model->pin_text);
+    if (length == 0) return false;
+    model->pin_text[length - 1] = '\0';
+    model->pin_error[0] = '\0';
+    return true;
+}
+
+bool ptc_ui_pin_validate(PtcUiModel *model)
+{
+    size_t length;
+    if (!model || model->overlay != PTC_UI_OVERLAY_PIN) return false;
+    length = strlen(model->pin_text);
+    if (length == 0 || length > PTC_UI_PIN_MAX_DIGITS) {
+        snprintf(model->pin_error, sizeof(model->pin_error), "请输入 1 到 %u 位数字", PTC_UI_PIN_MAX_DIGITS);
+        return false;
+    }
+    model->pin_error[0] = '\0';
+    return true;
+}
+
+void ptc_ui_pin_finish(PtcUiModel *model)
+{
+    if (!model || model->overlay != PTC_UI_OVERLAY_PIN) return;
+    model->overlay = PTC_UI_OVERLAY_NONE;
+    model->pin_text[0] = '\0';
+    model->pin_error[0] = '\0';
+    model->pin_keyboard_mode = false;
+    model->pin_focus = 0;
+}
+
+int ptc_ui_pin_digit_from_vector(int x, int y, int deadzone)
+{
+    int ax = x < 0 ? -x : x;
+    int ay = y < 0 ? -y : y;
+    long long radius;
+    if (deadzone < 0) deadzone = 0;
+    radius = (long long)x * x + (long long)y * y;
+    if (radius < (long long)deadzone * deadzone) return -1;
+    if ((long long)ax * 1000 < (long long)ay * 414) return y > 0 ? 1 : 5;
+    if ((long long)ay * 1000 < (long long)ax * 414) return x > 0 ? 3 : 7;
+    if (x > 0 && y > 0) return 2;
+    if (x > 0 && y < 0) return 4;
+    if (x < 0 && y < 0) return 6;
+    if (x < 0 && y > 0) return 8;
+    return y > 0 ? 1 : 5;
+}
+
+int ptc_ui_pin_digit_from_button(int direction)
+{
+    switch (direction) {
+    case 0: return 1;
+    case 1: return 3;
+    case 2: return 5;
+    case 3: return 7;
+    default: return -1;
+    }
+}
+
+void ptc_ui_pin_format_mask(const PtcUiModel *model, char *out, size_t out_size)
+{
+    size_t length;
+    size_t i;
+    if (!out || out_size == 0) return;
+    out[0] = '\0';
+    if (!model) return;
+    length = strlen(model->pin_text);
+    if (length > PTC_UI_PIN_MAX_DIGITS) length = PTC_UI_PIN_MAX_DIGITS;
+    for (i = 0; i < length && i + 1 < out_size; ++i) out[i] = '*';
+    out[i < out_size ? i : out_size - 1] = '\0';
+}
+
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model)
 {
     int remaining;
@@ -971,7 +1073,9 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
     }
     clear_pending_code = model->operation == PTC_UI_OPERATION_REDEEM_OFFLINE_CODE ||
         model->overlay == PTC_UI_OVERLAY_CODE_RESULT;
-    if (model->overlay == PTC_UI_OVERLAY_NUMPAD ||
+    if (model->overlay == PTC_UI_OVERLAY_PIN) {
+        ptc_ui_pin_finish(model);
+    } else if (model->overlay == PTC_UI_OVERLAY_NUMPAD ||
         model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
         ptc_ui_numpad_finish(model);
     } else if (model->overlay == PTC_UI_OVERLAY_CONFIRM &&
@@ -1485,6 +1589,10 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 820;
         *height = 360;
         break;
+    case PTC_UI_OVERLAY_PIN:
+        *width = 1040;
+        *height = 620;
+        break;
     case PTC_UI_OVERLAY_CONFIRM:
     default:
         *width = 760;
@@ -1596,6 +1704,48 @@ PtcUiRect ptc_ui_numpad_quick_rect(int index)
         rect.h = 0;
     }
     return rect;
+}
+
+PtcUiRect ptc_ui_pin_dialog_rect(void)
+{
+    return dialog_for(PTC_UI_OVERLAY_PIN);
+}
+
+PtcUiRect ptc_ui_pin_key_rect(int digit)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_PIN);
+    int row;
+    int column;
+    PtcUiRect rect;
+    if (digit < 0 || digit > 9) return (PtcUiRect){0, 0, 0, 0};
+    row = digit == 0 ? 3 : (digit - 1) / 3;
+    column = digit == 0 ? 1 : (digit - 1) % 3;
+    rect = (PtcUiRect){dialog.x + 590 + column * 112, dialog.y + 220 + row * 58, 100, 52};
+    return rect;
+}
+
+PtcUiRect ptc_ui_pin_backspace_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_PIN);
+    return (PtcUiRect){dialog.x + 590, dialog.y + 458, 210, 48};
+}
+
+PtcUiRect ptc_ui_pin_confirm_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_PIN);
+    return (PtcUiRect){dialog.x + 814, dialog.y + 458, 190, 48};
+}
+
+PtcUiRect ptc_ui_pin_cancel_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_PIN);
+    return (PtcUiRect){dialog.x + 590, dialog.y + 516, 190, 48};
+}
+
+PtcUiRect ptc_ui_pin_keyboard_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_PIN);
+    return (PtcUiRect){dialog.x + 794, dialog.y + 516, 210, 48};
 }
 
 static int dialog_button_top(PtcUiRect dialog)
@@ -2011,6 +2161,25 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             if (ptc_ui_rect_contains(ptc_ui_minute_editor_key_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_NUMPAD_KEY, i);
             }
+        }
+        break;
+    case PTC_UI_OVERLAY_PIN:
+        for (i = 0; i < 10; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_pin_key_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_PIN_KEY, i);
+            }
+        }
+        if (ptc_ui_rect_contains(ptc_ui_pin_backspace_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_PIN_BACKSPACE, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_pin_confirm_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_PIN_CONFIRM, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_pin_cancel_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_PIN_CANCEL, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_pin_keyboard_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_PIN_KEYBOARD, 0);
         }
         break;
     case PTC_UI_OVERLAY_WEEKLY_BULK:

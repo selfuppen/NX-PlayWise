@@ -1947,8 +1947,9 @@ static void draw_dialog_shell(
     int height)
 {
     bool numeric = model->overlay == PTC_UI_OVERLAY_NUMPAD || model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR;
-    const char *title = numeric ? model->numpad_title : model->overlay_title;
-    const char *description = numeric ? model->numpad_guide : model->overlay_body;
+    bool pin = model->overlay == PTC_UI_OVERLAY_PIN;
+    const char *title = numeric ? model->numpad_title : (pin ? model->pin_title : model->overlay_title);
+    const char *description = numeric ? model->numpad_guide : (pin ? model->pin_guide : model->overlay_body);
     *dialog = (UiRect){(SCREEN_WIDTH - width) / 2, (SCREEN_HEIGHT - height) / 2 - 10, width, height};
     fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT},
                      pack_rgb(g_resolved_theme == PTC_UI_RESOLVED_DARK
@@ -2212,6 +2213,64 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
                          model->numpad_error, 17, COLOR(194, 61, 61));
     }
     draw_overlay_actions(pixels, stride, model, "+  完成输入");
+}
+
+static void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    static const char *MAP[9] = {"8", "1", "2", "7", "摇杆", "3", "6", "5", "4"};
+    static const int MAP_DIGITS[9] = {8, 1, 2, 7, -1, 3, 6, 5, 4};
+    UiRect dialog = to_uirect(ptc_ui_pin_dialog_rect());
+    UiRect display = {dialog.x + 40, dialog.y + 112, dialog.width - 80, 70};
+    char mask[PTC_UI_PIN_MAX_DIGITS + 1];
+    char count[64];
+    int row;
+    int column;
+    ptc_ui_pin_format_mask(model, mask, sizeof(mask));
+    draw_dialog_shell(pixels, stride, model, &dialog, 1040, 620);
+    fill_round_rect(pixels, stride, display, 8, COLOR(244, 249, 255));
+    draw_rect_outline(pixels, stride, display, 2, COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, display, mask[0] ? mask : "输入内容只显示为圆点", mask[0] ? 26 : 18,
+                     mask[0] ? COLOR(28, 118, 188) : COLOR(91, 100, 114));
+    snprintf(count, sizeof(count), "已输入 %u 位", (unsigned int)strlen(model->pin_text));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 188, 480, 24}, count, 17, COLOR(91, 100, 114));
+
+    draw_text(pixels, stride, dialog.x + 40, dialog.y + 222, "摇杆方向映射", 20, COLOR(28, 34, 43));
+    for (row = 0; row < 3; ++row) {
+        for (column = 0; column < 3; ++column) {
+            UiRect cell = {dialog.x + 62 + column * 132, dialog.y + 254 + row * 58, 116, 48};
+            bool selected = model->pin_focus == MAP_DIGITS[row * 3 + column];
+            fill_round_rect(pixels, stride, cell, 7, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
+            draw_rect_outline(pixels, stride, cell, selected ? 2 : 1,
+                              selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+            draw_text_center(pixels, stride, cell, MAP[row * 3 + column], row == 1 && column == 1 ? 15 : 23,
+                             selected ? COLOR(28, 118, 188) : COLOR(66, 74, 86));
+        }
+    }
+    draw_text(pixels, stride, dialog.x + 40, dialog.y + 452, "X = 0    Y = 9", 18, COLOR(77, 86, 99));
+    draw_text(pixels, stride, dialog.x + 40, dialog.y + 484, "左右摇杆均可输入；十字键支持上、右、下、左", 16, COLOR(77, 86, 99));
+
+    draw_text(pixels, stride, dialog.x + 590, dialog.y + 188, "触摸数字键盘", 20, COLOR(28, 34, 43));
+    for (row = 0; row < 10; ++row) {
+        UiRect key = to_uirect(ptc_ui_pin_key_rect(row));
+        bool selected = model->pin_focus == row;
+        char label[4];
+        snprintf(label, sizeof(label), "%d", row);
+        fill_round_rect(pixels, stride, key, 7, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
+        draw_rect_outline(pixels, stride, key, selected ? 2 : 1,
+                          selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+        draw_text_center(pixels, stride, key, label, 24, selected ? COLOR(28, 118, 188) : COLOR(66, 74, 86));
+    }
+    draw_dialog_button(pixels, stride, ptc_ui_pin_backspace_rect(), "ZL  退格",
+                       COLOR(255, 244, 230), COLOR(180, 103, 15), true);
+    draw_dialog_button(pixels, stride, ptc_ui_pin_confirm_rect(), "+  确认",
+                       COLOR(28, 118, 188), COLOR(255, 255, 255), false);
+    draw_dialog_button(pixels, stride, ptc_ui_pin_cancel_rect(), "B  取消",
+                       COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_pin_keyboard_rect(), "长按 + 传统键盘",
+                       COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+    draw_text(pixels, stride, dialog.x + 590, dialog.y + 594,
+              model->pin_error[0] ? model->pin_error : "短按 + 确认；长按 + 约 1 秒切换传统键盘",
+              16, model->pin_error[0] ? COLOR(194, 61, 61) : COLOR(91, 100, 114));
 }
 
 static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -2654,7 +2713,7 @@ static void draw_auth_error_overlay(uint32_t *pixels, uint32_t stride, const Ptc
     draw_text_center(pixels, stride, (UiRect){dialog.x + 58, dialog.y + 142, dialog.width - 116, 72},
                      model->auth_cooldown_seconds > 0
                         ? "错误次数过多，倒计时结束后才能重试"
-                        : "错误 PIN 不会保留；重新输入时键盘为空",
+                        : "错误 PIN 不会保留；重新输入时输入框为空",
                      18, COLOR(194, 61, 61));
     if (model->auth_cooldown_seconds > 0) {
         snprintf(retry_label, sizeof(retry_label), "请等待 %d 秒", model->auth_cooldown_seconds);
@@ -3165,6 +3224,9 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         break;
     case PTC_UI_OVERLAY_NUMPAD:
         draw_numpad_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_PIN:
+        draw_pin_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_MINUTE_EDITOR:
         draw_minute_editor_overlay(pixels, stride, model);

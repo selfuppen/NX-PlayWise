@@ -67,8 +67,11 @@ typedef enum {
     PTC_UI_OVERLAY_WEEKLY_BULK = 18,
     PTC_UI_OVERLAY_ALBUM_MANAGER = 19,
     PTC_UI_OVERLAY_MINUTE_EDITOR = 20,
-    PTC_UI_OVERLAY_THEME = 21
+    PTC_UI_OVERLAY_THEME = 21,
+    PTC_UI_OVERLAY_PIN = 22
 } PtcUiOverlay;
+
+#define PTC_UI_PIN_MAX_DIGITS 64
 
 typedef enum {
     PTC_UI_CREDENTIAL_INPUT = 0,
@@ -258,6 +261,12 @@ typedef struct {
     char numpad_title[64];
     char numpad_guide[128];
     char numpad_error[96];
+    char pin_text[PTC_UI_PIN_MAX_DIGITS + 1];
+    char pin_title[64];
+    char pin_guide[192];
+    char pin_error[96];
+    bool pin_keyboard_mode;
+    int pin_focus;
     char safety_hint[192];
     char auth_error_title[64];
     char auth_error_message[192];
@@ -371,7 +380,12 @@ typedef enum {
     PTC_UI_HIT_SHORTCUT_DISABLE,
     PTC_UI_HIT_SHORTCUT_HINT,
     PTC_UI_HIT_GRANT_ADJUST,
-    PTC_UI_HIT_THEME_OPTION
+    PTC_UI_HIT_THEME_OPTION,
+    PTC_UI_HIT_PIN_KEY,
+    PTC_UI_HIT_PIN_BACKSPACE,
+    PTC_UI_HIT_PIN_CONFIRM,
+    PTC_UI_HIT_PIN_CANCEL,
+    PTC_UI_HIT_PIN_KEYBOARD
 } PtcUiHitKind;
 
 typedef struct {
@@ -431,6 +445,14 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
 uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback);
 bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out);
+void ptc_ui_pin_open(PtcUiModel *model, const char *title, const char *guide);
+bool ptc_ui_pin_append(PtcUiModel *model, int digit);
+bool ptc_ui_pin_backspace(PtcUiModel *model);
+bool ptc_ui_pin_validate(PtcUiModel *model);
+void ptc_ui_pin_finish(PtcUiModel *model);
+int ptc_ui_pin_digit_from_vector(int x, int y, int deadzone);
+int ptc_ui_pin_digit_from_button(int direction);
+void ptc_ui_pin_format_mask(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_numpad_open(
     PtcUiModel *model,
     PtcUiNumpadPurpose purpose,
@@ -526,6 +548,12 @@ PtcUiRect ptc_ui_weekly_min_input_rect(void);
 PtcUiRect ptc_ui_numpad_display_rect(void);
 PtcUiRect ptc_ui_numpad_key_rect(int index);
 PtcUiRect ptc_ui_numpad_quick_rect(int index);
+PtcUiRect ptc_ui_pin_dialog_rect(void);
+PtcUiRect ptc_ui_pin_key_rect(int digit);
+PtcUiRect ptc_ui_pin_backspace_rect(void);
+PtcUiRect ptc_ui_pin_confirm_rect(void);
+PtcUiRect ptc_ui_pin_cancel_rect(void);
+PtcUiRect ptc_ui_pin_keyboard_rect(void);
 PtcUiRect ptc_ui_minute_editor_key_rect(int index);
 PtcUiRect ptc_ui_minute_editor_quick_rect(int index);
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay);

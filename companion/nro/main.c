@@ -98,6 +98,9 @@ typedef struct {
     int64_t auth_cooldown_until;
 } UiState;
 
+static PadState *g_active_pad;
+static void draw(UiState *ui);
+
 static void request_parent_navigation(UiState *ui, int target_page, bool leave_parent);
 
 static void handle_parent_action(UiState *ui);
@@ -321,21 +324,22 @@ static bool switch_random(uint8_t *out, size_t out_size, void *ctx)
     return true;
 }
 
-static bool keyboard_input(
+static bool keyboard_input_initial(
     const char *header,
     const char *guide,
     char *out,
     size_t out_size,
     bool password,
     bool numeric,
-    bool download_code)
+    bool download_code,
+    const char *initial)
 {
     SwkbdConfig keyboard;
     Result result;
     if (!out || out_size == 0) {
         return false;
     }
-    out[0] = '\0';
+    if (!initial) out[0] = '\0';
     result = swkbdCreate(&keyboard, 0);
     if (R_FAILED(result)) {
         return false;
@@ -352,10 +356,161 @@ static bool keyboard_input(
     swkbdConfigSetStringLenMax(&keyboard, (u32)(out_size - 1));
     swkbdConfigSetHeaderText(&keyboard, header);
     swkbdConfigSetGuideText(&keyboard, guide);
+    if (initial && initial[0]) swkbdConfigSetInitialText(&keyboard, initial);
     swkbdConfigSetOkButtonText(&keyboard, "确认");
     result = swkbdShow(&keyboard, out, out_size);
     swkbdClose(&keyboard);
     return R_SUCCEEDED(result) && out[0] != '\0';
+}
+
+static bool keyboard_input(
+    const char *header,
+    const char *guide,
+    char *out,
+    size_t out_size,
+    bool password,
+    bool numeric,
+    bool download_code)
+{
+    return keyboard_input_initial(header, guide, out, out_size, password, numeric, download_code, NULL);
+}
+
+static bool pin_keyboard_fallback(UiState *ui)
+{
+    char value[PTC_UI_PIN_MAX_DIGITS + 1];
+    if (!ui) return false;
+    snprintf(value, sizeof(value), "%s", ui->model.pin_text);
+    ui->model.pin_keyboard_mode = true;
+    if (keyboard_input_initial(ui->model.pin_title, ui->model.pin_guide,
+                                value, sizeof(value), true, true, false,
+                                ui->model.pin_text)) {
+        snprintf(ui->model.pin_text, sizeof(ui->model.pin_text), "%s", value);
+        ui->model.pin_error[0] = '\0';
+        ui->model.pin_keyboard_mode = false;
+        return true;
+    }
+    ui->model.pin_keyboard_mode = false;
+    return false;
+}
+
+static bool pin_input(UiState *ui, const char *title, const char *guide,
+                      char *out, size_t out_size)
+{
+    int left_latched = -1;
+    int right_latched = -1;
+    int plus_samples = 0;
+    bool plus_was_held = false;
+    bool plus_keyboard = false;
+    bool touch_was_active = false;
+    bool touch_plus_was_held = false;
+    int touch_x = -1;
+    int touch_y = -1;
+    if (!ui || !out || out_size == 0 || !g_active_pad) return false;
+    out[0] = '\0';
+    ptc_ui_pin_open(&ui->model, title, guide);
+    while (appletMainLoop() && !ui->exit_requested) {
+        u64 buttons_down;
+        u64 buttons_held;
+        HidAnalogStickState left;
+        HidAnalogStickState right;
+        bool touch_active;
+        HidTouchScreenState touch;
+        int left_digit;
+        int right_digit;
+        int digit;
+        padUpdate(g_active_pad);
+        buttons_down = padGetButtonsDown(g_active_pad);
+        buttons_held = padGetButtons(g_active_pad);
+        left = padGetStickPos(g_active_pad, 0);
+        right = padGetStickPos(g_active_pad, 1);
+        left_digit = ptc_ui_pin_digit_from_vector(left.x, left.y, STICK_DEADZONE);
+        right_digit = ptc_ui_pin_digit_from_vector(right.x, right.y, STICK_DEADZONE);
+        if (left_digit < 0) left_latched = -1;
+        if (right_digit < 0) right_latched = -1;
+        if (left_digit >= 0 && left_latched < 0) {
+            ptc_ui_pin_append(&ui->model, left_digit);
+            left_latched = left_digit;
+        } else if (left_digit < 0 && right_digit >= 0 && right_latched < 0) {
+            ptc_ui_pin_append(&ui->model, right_digit);
+            right_latched = right_digit;
+        }
+        digit = -1;
+        if (buttons_down & HidNpadButton_Up) digit = ptc_ui_pin_digit_from_button(0);
+        else if (buttons_down & HidNpadButton_Right) digit = ptc_ui_pin_digit_from_button(1);
+        else if (buttons_down & HidNpadButton_Down) digit = ptc_ui_pin_digit_from_button(2);
+        else if (buttons_down & HidNpadButton_Left) digit = ptc_ui_pin_digit_from_button(3);
+        if (digit >= 0) ptc_ui_pin_append(&ui->model, digit);
+        if (buttons_down & HidNpadButton_X) ptc_ui_pin_append(&ui->model, 0);
+        if (buttons_down & HidNpadButton_Y) ptc_ui_pin_append(&ui->model, 9);
+        if (buttons_down & HidNpadButton_ZL) ptc_ui_pin_backspace(&ui->model);
+        if (buttons_down & HidNpadButton_B) {
+            ptc_ui_pin_finish(&ui->model);
+            return false;
+        }
+
+        if (buttons_held & HidNpadButton_Plus) {
+            if (!plus_was_held) plus_samples = 0;
+            if (plus_samples < 10) ++plus_samples;
+            if (plus_samples >= 10 && !plus_keyboard) {
+                plus_keyboard = true;
+                (void)pin_keyboard_fallback(ui);
+            }
+        } else {
+            if (plus_was_held && !plus_keyboard) {
+                if (ptc_ui_pin_validate(&ui->model)) {
+                    snprintf(out, out_size, "%s", ui->model.pin_text);
+                    ptc_ui_pin_finish(&ui->model);
+                    return true;
+                }
+            }
+            plus_samples = 0;
+            plus_keyboard = false;
+        }
+        plus_was_held = (buttons_held & HidNpadButton_Plus) != 0;
+
+        touch_active = hidGetTouchScreenStates(&touch, 1) && touch.count > 0;
+        if (touch_active) {
+            touch_x = (int)touch.touches[0].x;
+            touch_y = (int)touch.touches[0].y;
+            if (ptc_ui_rect_contains(ptc_ui_pin_confirm_rect(), touch_x, touch_y)) {
+                if (!touch_plus_was_held) plus_samples = 0;
+                if (plus_samples < 10) ++plus_samples;
+                if (plus_samples >= 10 && !plus_keyboard) {
+                    plus_keyboard = true;
+                    (void)pin_keyboard_fallback(ui);
+                }
+                touch_plus_was_held = true;
+            } else if (!touch_was_active) {
+                PtcUiHit hit = ptc_ui_hit_test(&ui->model, touch_x, touch_y);
+                if (hit.kind == PTC_UI_HIT_PIN_KEY) ptc_ui_pin_append(&ui->model, hit.index);
+                else if (hit.kind == PTC_UI_HIT_PIN_BACKSPACE) ptc_ui_pin_backspace(&ui->model);
+                else if (hit.kind == PTC_UI_HIT_PIN_CONFIRM && ptc_ui_pin_validate(&ui->model)) {
+                    snprintf(out, out_size, "%s", ui->model.pin_text);
+                    ptc_ui_pin_finish(&ui->model);
+                    return true;
+                } else if (hit.kind == PTC_UI_HIT_PIN_CANCEL) {
+                    ptc_ui_pin_finish(&ui->model);
+                    return false;
+                } else if (hit.kind == PTC_UI_HIT_PIN_KEYBOARD) {
+                    (void)pin_keyboard_fallback(ui);
+                }
+            }
+        } else if (touch_plus_was_held) {
+            if (!plus_keyboard && ptc_ui_pin_validate(&ui->model)) {
+                snprintf(out, out_size, "%s", ui->model.pin_text);
+                ptc_ui_pin_finish(&ui->model);
+                return true;
+            }
+            plus_samples = 0;
+            plus_keyboard = false;
+            touch_plus_was_held = false;
+        }
+        touch_was_active = touch_active;
+        draw(ui);
+        svcSleepThread(LOOP_SLEEP_NS);
+    }
+    ptc_ui_pin_finish(&ui->model);
+    return false;
 }
 
 static u64 shortcut_preset_mask(int index)
@@ -1304,8 +1459,8 @@ static void enter_parent_area(UiState *ui)
     PtcAuthStatus state = ptc_companion_auth_state(&ui->auth);
     ui->auth_retry_action = AUTH_RETRY_ENTER_PARENT;
     if (state == PTC_AUTH_EMPTY) {
-        if (!keyboard_input("设置 任我玩 PIN", "请输入 1到64 位数字；长度由家长决定", pin, sizeof(pin), true, true, false) ||
-            !keyboard_input("确认 任我玩 PIN", "请再次输入相同的数字 PIN", pin_confirm, sizeof(pin_confirm), true, true, false)) {
+        if (!pin_input(ui, "设置 任我玩 PIN", "摇杆方向输入；X=0，Y=9；输入内容只显示为圆点。", pin, sizeof(pin)) ||
+            !pin_input(ui, "确认 任我玩 PIN", "请再次输入相同的 PIN；输入内容只显示为圆点。", pin_confirm, sizeof(pin_confirm))) {
             ui->auth_retry_action = AUTH_RETRY_NONE;
             snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 设置。");
             return;
@@ -1323,7 +1478,7 @@ static void enter_parent_area(UiState *ui)
         show_auth_error(ui, "无法进入家长区", auth_status_zh(state), 0);
         return;
     }
-    if (!keyboard_input("任我玩 PIN", "输入本应用独立管理 PIN", pin, sizeof(pin), true, true, false)) {
+    if (!pin_input(ui, "任我玩 PIN", "摇杆方向输入；X=0，Y=9；输入内容只显示为圆点。", pin, sizeof(pin))) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消进入家长区。");
         return;
@@ -1407,10 +1562,10 @@ static void setup_pin(UiState *ui)
     ui->auth_retry_action = AUTH_RETRY_SETUP_PIN;
     state = ptc_companion_auth_state(&ui->auth);
     if (state == PTC_AUTH_OK) {
-        if (!keyboard_input("修改默认 PIN", "输入新的 1到64 位数字；保留 110 可按 B 取消",
-                            pin, sizeof(pin), true, true, false) ||
-            !keyboard_input("确认新 PIN", "请再次输入相同的数字 PIN",
-                            pin_confirm, sizeof(pin_confirm), true, true, false)) {
+        if (!pin_input(ui, "修改默认 PIN", "输入新的 1到64 位数字；保留当前 PIN 可按 B 取消。",
+                       pin, sizeof(pin)) ||
+            !pin_input(ui, "确认新 PIN", "请再次输入相同的 PIN；输入内容只显示为圆点。",
+                       pin_confirm, sizeof(pin_confirm))) {
             ui->auth_retry_action = AUTH_RETRY_NONE;
             snprintf(ui->model.message, sizeof(ui->model.message), "已保留当前 PIN。");
             return;
@@ -1433,10 +1588,10 @@ static void setup_pin(UiState *ui)
         show_auth_error(ui, "无法设置 任我玩 PIN", auth_status_zh(state), 0);
         return;
     }
-    if (!keyboard_input("设置 任我玩 PIN", "请输入 1到64 位数字；短 PIN 仅提示风险，不会阻止保存",
-                        pin, sizeof(pin), true, true, false) ||
-        !keyboard_input("确认 任我玩 PIN", "请再次输入相同的数字 PIN",
-                        pin_confirm, sizeof(pin_confirm), true, true, false)) {
+    if (!pin_input(ui, "设置 任我玩 PIN", "输入 1到64 位数字；短 PIN 仅提示风险，不会阻止保存。",
+                   pin, sizeof(pin)) ||
+        !pin_input(ui, "确认 任我玩 PIN", "请再次输入相同的 PIN；输入内容只显示为圆点。",
+                   pin_confirm, sizeof(pin_confirm))) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 设置。");
         return;
@@ -1856,7 +2011,7 @@ static bool verify_sensitive_pin(UiState *ui, const char *action)
     char pin[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus status;
     int64_t retry_after = 0;
-    if (!keyboard_input("验证 任我玩 管理 PIN", action, pin, sizeof(pin), true, true, false)) {
+    if (!pin_input(ui, "验证 任我玩 管理 PIN", action, pin, sizeof(pin))) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消敏感操作。");
         return false;
@@ -1988,8 +2143,8 @@ static void change_parent_pin(UiState *ui)
     PtcAuthStatus status;
     ui->auth_retry_action = AUTH_RETRY_CHANGE_PIN;
     if (!verify_sensitive_pin(ui, "修改 PIN 前，请先输入当前任我玩 PIN")) return;
-    if (!keyboard_input("修改 PlayWise PIN", "请输入新的 1到64 位数字", pin, sizeof(pin), true, true, false) ||
-        !keyboard_input("确认新 PIN", "请再次输入相同的数字 PIN", confirm, sizeof(confirm), true, true, false)) {
+    if (!pin_input(ui, "修改 PlayWise PIN", "请输入新的 1到64 位数字。", pin, sizeof(pin)) ||
+        !pin_input(ui, "确认新 PIN", "请再次输入相同的 PIN；输入内容只显示为圆点。", confirm, sizeof(confirm))) {
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 修改。");
         return;
     }
@@ -3872,6 +4027,7 @@ static void run_console_fallback(void)
     consoleInit(NULL);
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&pad);
+    g_active_pad = &pad;
     printf("任我玩\n");
     printf("Play Wise. Play More.\n\n");
     printf("图形界面初始化失败。\n");

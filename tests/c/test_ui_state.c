@@ -322,6 +322,49 @@ static void test_numeric_input(void)
     check_true(ptc_ui_numpad_validate(&model, NULL), "eight-digit code accepted");
 }
 
+static void test_pin_input(void)
+{
+    PtcUiModel model;
+    char mask[PTC_UI_PIN_MAX_DIGITS + 1];
+    memset(&model, 0, sizeof(model));
+    check_int(ptc_ui_pin_digit_from_vector(0, 20000, 16000), 1, "stick up maps to one");
+    check_int(ptc_ui_pin_digit_from_vector(20000, 20000, 16000), 2, "stick upper-right maps to two");
+    check_int(ptc_ui_pin_digit_from_vector(20000, 0, 16000), 3, "stick right maps to three");
+    check_int(ptc_ui_pin_digit_from_vector(0, 0, 16000), -1, "stick deadzone produces no digit");
+    check_int(ptc_ui_pin_digit_from_button(0), 1, "dpad up maps to one");
+    check_int(ptc_ui_pin_digit_from_button(1), 3, "dpad right maps to three");
+    check_int(ptc_ui_pin_digit_from_button(2), 5, "dpad down maps to five");
+    check_int(ptc_ui_pin_digit_from_button(3), 7, "dpad left maps to seven");
+
+    ptc_ui_pin_open(&model, "PIN", "guide");
+    check_true(ptc_ui_pin_append(&model, 8) && ptc_ui_pin_append(&model, 0) &&
+               ptc_ui_pin_append(&model, 9), "pin accepts joystick and button digits");
+    ptc_ui_pin_format_mask(&model, mask, sizeof(mask));
+    check_true(strcmp(mask, "***") == 0 && strcmp(model.pin_text, "809") == 0,
+               "pin display masks entered digits");
+    check_true(ptc_ui_pin_backspace(&model) && strcmp(model.pin_text, "80") == 0,
+               "pin backspace removes one digit");
+    check_true(ptc_ui_pin_validate(&model), "non-empty pin validates");
+    model.pin_text[0] = '\0';
+    check_true(!ptc_ui_pin_validate(&model) && model.pin_error[0] != '\0',
+               "empty pin is rejected with an error");
+    memset(model.pin_text, '1', PTC_UI_PIN_MAX_DIGITS);
+    model.pin_text[PTC_UI_PIN_MAX_DIGITS] = '\0';
+    check_true(ptc_ui_pin_append(&model, 1) == false, "pin rejects input past 64 digits");
+    check_true(ptc_ui_hit_test(&model, 0, 0).kind == PTC_UI_HIT_NONE,
+               "finished pin model does not expose stale touch hit");
+    ptc_ui_pin_open(&model, "PIN", "guide");
+    check_true(ptc_ui_hit_test(&model,
+                               ptc_ui_pin_key_rect(4).x + 4,
+                               ptc_ui_pin_key_rect(4).y + 4).kind == PTC_UI_HIT_PIN_KEY,
+               "pin keypad hit test reaches digit four");
+    check_true(ptc_ui_hit_test(&model,
+                               ptc_ui_pin_backspace_rect().x + 4,
+                               ptc_ui_pin_backspace_rect().y + 4).kind == PTC_UI_HIT_PIN_BACKSPACE,
+               "pin backspace hit test reaches visible control");
+    ptc_ui_pin_finish(&model);
+}
+
 static void test_time_previews(void)
 {
     PtcUiModel model;
@@ -1035,6 +1078,7 @@ int main(void)
     test_shortcut_hold_and_setup_migration();
     test_rule_result_guidance();
     test_numeric_input();
+    test_pin_input();
     test_time_previews();
     test_candidate_navigation();
     test_release_hit_targets();
