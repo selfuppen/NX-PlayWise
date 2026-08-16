@@ -21,7 +21,6 @@
 #define PTC_PCTL_CMD_SET_PLAY_TIMER_SETTINGS_FOR_DEBUG 195101
 #define PTC_PCTL_CMD_GET_PLAY_TIMER_EVENT_TO_REQUEST_SUSPENSION 1457
 #define PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED 1458
-#define PTC_PCTL_CMD_GET_PLAY_TIMER_SPENT_TIME_FOR_TEST 1952
 typedef struct {
     u16 words[PTC_PLAY_TIMER_SETTINGS_WORDS];
 } PtcSwitchPlayTimerSettings;
@@ -172,8 +171,6 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
     bool timer_enabled = false;
     bool restricted = false;
     s64 remaining_ns = 0;
-    s64 spent_ns = 0;
-    bool spent_time_available = false;
     PtcSwitchPlayTimerSettings timer_settings;
     PtcSwitchSession settings_session;
     uint16_t configured_minutes = 0;
@@ -211,15 +208,8 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
         out->remaining_available = true;
         out->remaining_minutes = ptc_nonnegative_minutes_from_nanoseconds(remaining_ns);
     }
-    /* 1952 is debug-named, but is a read-only direct spent-time value. Keep it
-       separate from 1454 because an unlimited day has no meaningful remaining
-       duration from which played time can be derived. */
-    if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_GET_PLAY_TIMER_SPENT_TIME_FOR_TEST, &spent_ns, sizeof(spent_ns))) &&
-        spent_ns >= 0) {
-        out->played_minutes_available = true;
-        out->played_minutes = ptc_nonnegative_minutes_from_nanoseconds(spent_ns);
-        spent_time_available = true;
-    }
+    /* Do not use private command 1952 here: device observations show that it can
+       track wall time since Play Timer start instead of foreground game time. */
     if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER, &restricted, sizeof(restricted)))) {
         out->restricted_now = restricted;
     }
@@ -228,15 +218,6 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
        soft degradation: ordinary status remains usable, only played time is unavailable. */
     if (weekday < PTC_PLAY_TIMER_DAY_COUNT &&
         open_write_session(adapter, &settings_session) == PTC_ERR_OK) {
-        if (!spent_time_available &&
-            R_SUCCEEDED(dispatch_out(
-                &settings_session.service,
-                PTC_PCTL_CMD_GET_PLAY_TIMER_SPENT_TIME_FOR_TEST,
-                &spent_ns,
-                sizeof(spent_ns))) && spent_ns >= 0) {
-            out->played_minutes_available = true;
-            out->played_minutes = ptc_nonnegative_minutes_from_nanoseconds(spent_ns);
-        }
         if (get_play_timer_settings(adapter, &settings_session.service, &timer_settings) == PTC_ERR_OK &&
             ptc_play_timer_settings_get_day(
                 timer_settings.words,

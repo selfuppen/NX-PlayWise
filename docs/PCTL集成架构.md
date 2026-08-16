@@ -45,7 +45,7 @@ Horizon PCTL
 
 ## 普通写入事务
 
-设置今日额度、加时、今日不限时、恢复周计划和 Enforce 共用恢复框架：
+设置今日总额度、加时、今日不限时、恢复周计划和 Enforce 共用恢复框架：
 
 ```mermaid
 flowchart LR
@@ -65,7 +65,7 @@ flowchart LR
 
 当前本机 libnx 源码不提供 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSpentTimeForTest (1952)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装。不得用“libnx 没有定义”推断参数单位或 0x44 raw 布局。
 
-`1454` 返回剩余时长；`1952` 返回独立的 `nn::TimeSpanType` 已用时。适配层优先使用 `1952`，因此不限时日也可以报告当前已玩分钟；若 1952 在当前 HOS 或 service session 上失败，限时日回退到“配置总分钟 − 1454 剩余分钟”，不限时日保持“已玩暂不可用”。1952 的名称包含 `ForTest`，是否在目标 HOS 上持续累计、跨 service session 可读以及 UTC+8 换日重置，必须通过真机 A/B 记录确认，不能仅凭命令名推断。
+`1454` 返回剩余时长。虽然 `1952` 名称和返回形态看起来像已用时，但当前没有真机 A/B 证据证明它只在游戏前台运行时累计；已有设备现象显示它可能接近 Play Timer 启动后的墙钟时长。因此 Switch 适配层不读取 `1952`，避免把家长控制计时器时长冒充实际游戏时间。限时日仅使用“配置总分钟 − 1454 剩余分钟”作为可解释的已玩估算；不限时日返回“已玩暂不可用”。若未来要重新启用 `1952`，必须先记录启用控制、停留 HOME、运行游戏、关闭控制和跨 service session 的 A/B 结果。
 
 私有行为只能依据：
 

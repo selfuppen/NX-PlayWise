@@ -120,7 +120,7 @@ static uint32_t resolve_color(uint32_t source, UiColorRole role)
 
 static const UiAction TODAY_ACTIONS[] = {
     {"刷新状态", "读取今天的最新游玩状态", COLOR(42, 105, 188)},
-    {"设置今日额度", "指定今天可玩的分钟数", COLOR(42, 105, 188)},
+    {"设置今日总额度", "指定今天全天可玩的分钟数", COLOR(42, 105, 188)},
     {"临时加时", "在今天额度上增加分钟", COLOR(25, 132, 95)},
     {"今日不限时", "今天不设时间上限", COLOR(25, 132, 95)},
     {"恢复周计划", "清除今日临时设置，恢复本周规则", COLOR(91, 100, 116)},
@@ -689,7 +689,9 @@ static void describe_status(const PtcUiModel *model, char *today, size_t today_s
     } else {
         snprintf(today, today_size, "状态未知");
     }
-    if (model->remaining_available && model->remaining_minutes >= 0) {
+    if (model->unrestricted_today == 1) {
+        snprintf(remaining, remaining_size, "不限时");
+    } else if (model->remaining_available && model->remaining_minutes >= 0) {
         snprintf(remaining, remaining_size, "%d 分钟", model->remaining_minutes);
     } else {
         snprintf(remaining, remaining_size, "暂不可用");
@@ -802,7 +804,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_header(pixels, stride, "自律小达人  |  加时奖励", "遵守约定、合理安排时间");
     draw_disable_banner(pixels, stride, model);
     draw_status_tile(pixels, stride, (UiRect){54, 118, 278, 92}, "今日状态", today, COLOR(216, 49, 54));
-    draw_status_tile(pixels, stride, (UiRect){350, 118, 278, 92}, "剩余时间", remaining, COLOR(25, 132, 95));
+    draw_status_tile(pixels, stride, (UiRect){350, 118, 278, 92}, "今天还可玩", remaining, COLOR(25, 132, 95));
     draw_status_tile(pixels, stride, (UiRect){646, 118, 278, 92}, "已玩时间", played, COLOR(215, 139, 25));
     draw_timer_status_tile(pixels, stride, (UiRect){942, 118, 284, 92},
                            model->play_timer_enabled == 1 ? "已开启" : "未确认", mode,
@@ -1097,7 +1099,7 @@ static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
 
 static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    static const char *LABELS[] = {"今日额度", "周计划", "国家节假日", "加时码", "设置"};
+    static const char *LABELS[] = {"今日总额度", "周计划", "国家节假日", "加时码", "设置"};
     int index;
     for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
         UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
@@ -1252,7 +1254,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, panel.x + 26, panel.y + 43, "今日状态", 23, COLOR(28, 34, 43));
     draw_status_row(pixels, stride, panel, panel.y + 72, "今日模式", today, today_color);
-    draw_status_row(pixels, stride, panel, panel.y + 102, "剩余时间", remaining,
+    draw_status_row(pixels, stride, panel, panel.y + 102, "今天还可玩", remaining,
                     model->remaining_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
     draw_status_row(pixels, stride, panel, panel.y + 132, "已玩时间", played,
                     model->played_minutes_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
@@ -1470,7 +1472,7 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
         else format_duration(current_minutes, current_value, sizeof(current_value));
         format_rule_remaining_label(model, model->draft_week[weekday], after_value, sizeof(after_value));
         draw_time_state_card(pixels, stride, (UiRect){panel.x + 20, panel.y + 104, 160, 86},
-                             model->today_override_present ? "当前有效剩余" : "当前还能玩",
+                             "今天还可玩",
                              current_value,
                              time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
                                                model->unrestricted_today == 1, current_minutes));
@@ -2004,18 +2006,18 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
         snprintf(played_line, sizeof(played_line), "当前已玩：暂不可用");
     }
     if (model->unrestricted_today == 1) {
-        snprintf(remaining_line, sizeof(remaining_line), "当前剩余：不限时");
+        snprintf(remaining_line, sizeof(remaining_line), "今天还可玩：不限时");
     } else if (model->remaining_available && model->remaining_minutes >= 0) {
-        snprintf(remaining_line, sizeof(remaining_line), "当前剩余：%d 分钟", model->remaining_minutes);
+        snprintf(remaining_line, sizeof(remaining_line), "今天还可玩：%d 分钟", model->remaining_minutes);
     } else {
-        snprintf(remaining_line, sizeof(remaining_line), "当前剩余：暂不可用");
+        snprintf(remaining_line, sizeof(remaining_line), "今天还可玩：暂不可用");
     }
     if (preview_min >= 0) {
-        snprintf(preview_line, sizeof(preview_line), "调整后剩余：约 %d 分钟", preview_min);
+        snprintf(preview_line, sizeof(preview_line), "修改后预计还可玩：约 %d 分钟", preview_min);
     } else if (model->operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES) {
-        snprintf(preview_line, sizeof(preview_line), "调整后剩余将在刷新生效后确认");
+        snprintf(preview_line, sizeof(preview_line), "修改后预计还可玩：暂不可用；生效后刷新确认");
     } else {
-        snprintf(preview_line, sizeof(preview_line), "调整后总额度：%u 分钟；实际剩余将在刷新后确认", (unsigned int)model->draft_minutes);
+        snprintf(preview_line, sizeof(preview_line), "今日总额度将改为 %u 分钟；实际剩余将在刷新后确认", (unsigned int)model->draft_minutes);
     }
     format_status_age(model, freshness, sizeof(freshness));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 316, 640, 24}, date_line, 17, COLOR(77, 86, 99));
@@ -2169,9 +2171,9 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
                              current_value, sizeof(current_value));
         format_duration(after_minutes, after_value, sizeof(after_value));
         snprintf(left, sizeof(left), "%s：%s",
-                 model->today_override_present ? "当前有效剩余" : "当前还能玩", current_value);
+                 "今天还可玩", current_value);
         snprintf(right, sizeof(right), "%s：%s",
-                 model->today_override_present ? "恢复周计划生效后预计" : "保存后今天预计还能玩", after_value);
+                 model->today_override_present ? "恢复后预计还可玩" : "保存后预计还可玩", after_value);
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 32, dialog.y + 242, 266, 32}, 6, COLOR(248, 250, 253));
         draw_rect_outline(pixels, stride, (UiRect){dialog.x + 32, dialog.y + 242, 266, 32}, 1,
                           time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
@@ -2313,12 +2315,12 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
         format_duration(model->code_preview_after_available ? model->code_preview_after_minutes : -1,
                         after_value, sizeof(after_value));
         draw_time_state_card(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 142, 300, 92},
-                             "当前还能玩", current_value,
+                             "今天还可玩", current_value,
                              time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
                                                model->unrestricted_today == 1, model->remaining_minutes));
         draw_text_center(pixels, stride, (UiRect){dialog.x + 354, dialog.y + 166, 52, 42}, "到", 28, COLOR(91, 100, 114));
         draw_time_state_card(pixels, stride, (UiRect){dialog.x + 406, dialog.y + 142, 300, 92},
-                             "兑换后预计还能玩", after_value,
+                             "兑换后预计还可玩", after_value,
                              time_state_accent(model->code_preview_after_available, false,
                                                model->code_preview_after_minutes));
     } else if (restore) {
@@ -2338,7 +2340,7 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
         if (after.mode == PTC_RULE_MODE_UNLIMITED) snprintf(after_value, sizeof(after_value), "不限时");
         else format_duration(after_minutes, after_value, sizeof(after_value));
         draw_time_state_card(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 142, 300, 92},
-                             "当前还能玩", current_value,
+                             "今天还可玩", current_value,
                              time_state_accent(current.mode == PTC_RULE_MODE_UNLIMITED || current_minutes >= 0,
                                                current.mode == PTC_RULE_MODE_UNLIMITED, current_minutes));
         draw_text_center(pixels, stride, (UiRect){dialog.x + 354, dialog.y + 166, 52, 42}, "到", 28, COLOR(91, 100, 114));
@@ -2360,11 +2362,11 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
                              "今天已玩", played_value,
                              model->played_minutes_available ? COLOR(28, 118, 188) : COLOR(215, 139, 25));
         draw_time_state_card(pixels, stride, (UiRect){dialog.x + 273, dialog.y + 142, 214, 92},
-                             "当前还能玩", current_value,
+                             "今天还可玩", current_value,
                              time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
                                                model->unrestricted_today == 1, model->remaining_minutes));
         draw_time_state_card(pixels, stride, (UiRect){dialog.x + 512, dialog.y + 142, 214, 92},
-                             "修改后还能玩", after_value,
+                             "修改后预计还可玩", after_value,
                              time_state_accent(after_minutes >= 0, false, after_minutes));
     } else if (model->confirm_hold_required && model->played_minutes_available) {
         snprintf(comparison, sizeof(comparison), "已玩 %d 分钟       还剩 0 分钟",
@@ -2514,12 +2516,12 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
         uint8_t today_weekday = ptc_weekday_from_day_index(model->day_index);
         draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 264, 350, 74}, "今天已玩", played,
                              model->played_minutes_available ? COLOR(28, 118, 188) : COLOR(215, 139, 25));
-        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 350, 350, 74}, "当前还能玩", remaining,
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 350, 350, 74}, "今天还可玩", remaining,
                              time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
                                                model->unrestricted_today == 1, model->remaining_minutes));
         draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 436, 350, 74},
                              weekly && model->editor_index != today_weekday ? "所选星期草稿额度" :
-                             (weekly ? "保存后预计还能玩" : "修改后预计还能玩"),
+                             (weekly ? "保存后预计还可玩" : "修改后预计还可玩"),
                              weekly && model->editor_index != today_weekday ? value : after,
                              time_state_accent(weekly && model->editor_index != today_weekday ? true : after_minutes >= 0,
                                                false,
@@ -2825,11 +2827,11 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
                          "今天已玩", played,
                          status_available && model->played_minutes_available ? COLOR(28, 118, 188) : COLOR(215, 139, 25));
     draw_time_state_card(pixels, stride, (UiRect){dialog.x + 335, dialog.y + 112, 250, 84},
-                         "当前还能玩", remaining,
+                         "今天还可玩", remaining,
                          time_state_accent(status_available && (model->unrestricted_today == 1 || model->remaining_available),
                                            model->unrestricted_today == 1, model->remaining_minutes));
     draw_time_state_card(pixels, stride, (UiRect){dialog.x + 628, dialog.y + 112, 250, 84},
-                         "兑换后预计还能玩", estimate,
+                         "兑换后预计还可玩", estimate,
                          time_state_accent(estimate_minutes >= 0, false, estimate_minutes));
     if (model->grant_status_refresh_failed) snprintf(freshness, sizeof(freshness), "刷新失败，实时状态暂不可用");
     else format_status_age(model, freshness, sizeof(freshness));

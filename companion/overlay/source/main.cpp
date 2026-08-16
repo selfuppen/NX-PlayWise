@@ -657,7 +657,7 @@ public:
                              cx + 14, cy + 110, 12, renderer->a(MUTED_COLOR));
 
         renderer->drawRect(cx + 12, cy + 142, cw - 24, 86, renderer->a(CARD_COLOR));
-        renderer->drawString("当前还能玩", false, cx + 24, cy + 168, 12, renderer->a(MUTED_COLOR));
+        renderer->drawString("今天还可玩", false, cx + 24, cy + 168, 12, renderer->a(MUTED_COLOR));
         if (preview_summary_.converts_unlimited_to_limited) {
             renderer->drawString("不限时", false, cx + 155, cy + 171, 19, renderer->a(SUCCESS_COLOR));
         } else if (preview_summary_.remaining_available) {
@@ -668,7 +668,7 @@ public:
         }
 
         renderer->drawRect(cx + 12, cy + 244, cw - 24, 86, renderer->a(CARD_COLOR));
-        renderer->drawString("兑换后预计", false, cx + 24, cy + 270, 12, renderer->a(MUTED_COLOR));
+        renderer->drawString("兑换后预计还可玩", false, cx + 24, cy + 270, 12, renderer->a(MUTED_COLOR));
         if (preview_summary_.remaining_after_available) {
             std::snprintf(line, sizeof(line), "%d 分钟", preview_summary_.remaining_after_minutes);
             renderer->drawString(line, false, cx + 155, cy + 273, 19,
@@ -785,15 +785,18 @@ public:
         }
         renderer->drawString(line, false, cx + 78, top_banner_y + 23, 16, renderer->a(TEXT_COLOR));
 
-        renderer->drawString(success_visible_ ? "修改后可玩" : "当前还剩可玩", false,
+        renderer->drawString(success_visible_ ? "修改后还可玩" : "今天还可玩", false,
                               cx + 10, top_banner_y + 51, 11, renderer->a(MUTED_COLOR));
+        const bool unlimited_today = summary.valid && summary.unrestricted_today == 1;
         const tsl::Color remaining_accent = remaining_refresh_pending ? WAITING_COLOR :
-            (summary.valid && summary.remaining_available ? SUCCESS_COLOR : MUTED_COLOR);
+            (summary.valid && (summary.remaining_available || unlimited_today) ? SUCCESS_COLOR : MUTED_COLOR);
         renderer->drawRect(cx + 108, top_banner_y + 34, 104, 34, renderer->a(KEY_COLOR));
         renderer->drawRect(cx + 108, top_banner_y + 66, 104, 2, renderer->a(remaining_accent));
         if (remaining_refresh_pending) {
             renderer->drawString("正在刷新...", false, cx + 116, top_banner_y + 58, 14,
                                  renderer->a(WAITING_COLOR));
+        } else if (unlimited_today) {
+            renderer->drawString("不限时", false, cx + 126, top_banner_y + 62, 22, renderer->a(SUCCESS_COLOR));
         } else if (summary.valid && summary.remaining_available) {
             std::snprintf(line, sizeof(line), "%d 分钟", summary.remaining_minutes);
             renderer->drawString(line, false, cx + 114, top_banner_y + 62, 22, renderer->a(SUCCESS_COLOR));
@@ -970,7 +973,7 @@ public:
                 }
             } else if (success_visible_) {
                 renderer->drawString("加时成功！", false, cx + 12, status_y + 74, 16, renderer->a(SUCCESS_COLOR));
-                std::snprintf(line, sizeof(line), "修改后可玩 %d 分钟", summary.remaining_minutes);
+                std::snprintf(line, sizeof(line), "修改后还可玩 %d 分钟", summary.remaining_minutes);
                 renderer->drawString(line, false, cx + 12, status_y + 96, 15, renderer->a(SUCCESS_COLOR));
                 if (summary.played_minutes_available) {
                     std::snprintf(line, sizeof(line), "今日已玩约 %d 分钟，即将自动关闭...", summary.played_minutes);

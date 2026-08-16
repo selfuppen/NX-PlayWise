@@ -51,6 +51,7 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->played_minutes = number_value(state, "played_minutes", -1);
     out->play_timer_enabled = number_value(state, "play_timer_enabled", -1);
     out->restricted_now = number_value(state, "restricted_now", -1);
+    out->unrestricted_today = number_value(state, "unrestricted_today", -1);
     out->calendar_covered = bool_value(state, "calendar_covered", false);
     out->calendar_update_warning = bool_value(state, "calendar_update_warning", false);
     snprintf(out->rule_source, sizeof(out->rule_source), "%s", string_value(state, "rule_source"));
@@ -76,13 +77,21 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
 bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summary, char *out, size_t out_size)
 {
     int written;
+    char remaining[32];
     if (!summary || !out || out_size == 0 || !summary->valid) {
         return false;
     }
-    written = snprintf(out, out_size, "%s  %s\n剩余：%d 分钟  已玩：%s%d%s\n计时器：%s  限制：%s",
+    if (summary->unrestricted_today == 1) {
+        snprintf(remaining, sizeof(remaining), "不限时");
+    } else if (summary->remaining_available && summary->remaining_minutes >= 0) {
+        snprintf(remaining, sizeof(remaining), "%d 分钟", summary->remaining_minutes);
+    } else {
+        snprintf(remaining, sizeof(remaining), "暂不可用");
+    }
+    written = snprintf(out, out_size, "%s  %s\n今天还可玩：%s  已玩：%s%d%s\n计时器：%s  限制：%s",
         summary->ok ? "成功" : "失败",
         summary->ok ? "" : (summary->reason[0] ? summary->reason : "后台拒绝"),
-        summary->remaining_minutes,
+        remaining,
         summary->played_minutes_available ? "约 " : "",
         summary->played_minutes_available ? summary->played_minutes : -1,
         summary->played_minutes_available ? " 分钟" : "（不可用）",

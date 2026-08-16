@@ -15,6 +15,7 @@ typedef struct {
     int played_minutes;
     int play_timer_enabled;
     int restricted_now;
+    int unrestricted_today;
     bool remaining_available;
     bool played_minutes_available;
     bool preview_available;
