@@ -19,8 +19,24 @@ DEFAULT_SSH_HOST = "127.0.0.1"
 DEFAULT_SSH_PORT = 1888
 DEFAULT_SSH_USER = "root"
 DEFAULT_CONTAINER_PATH = "/ws/playwise"
-APP_CONFIG = "switch/playwise/config.json"
+APP_DEFAULTS = "switch/playwise/defaults"
 APP_BUILD = "switch/playwise/build.json"
+APP_DEFAULT_FILES = tuple(f"{APP_DEFAULTS}/{name}" for name in (
+    "config.json",
+    "auth.json",
+    "rules.json",
+    "state.json",
+    "compatibility.json",
+    "setup.json",
+))
+APP_MUTABLE_SEEDS = tuple(f"switch/playwise/{name}" for name in (
+    "config.json",
+    "auth.json",
+    "rules.json",
+    "state.json",
+    "compatibility.json",
+    "setup.json",
+))
 CONTENT_ROOT = "atmosphere/contents/4200000000BD2300"
 DEVICE_LAB_CONTENT_ROOT = "atmosphere/contents/4200000000BD23F0"
 PACKAGE_ROOTS = ("switch/", "atmosphere/")
@@ -133,9 +149,15 @@ def verify_package_zip(
         unexpected = [name for name in names if not name.startswith(PACKAGE_ROOTS)]
         if unexpected:
             raise PackageError(f"{path.name}: package contains non-runtime entries: {', '.join(unexpected)}")
-        if APP_CONFIG not in names:
-            raise PackageError(f"{path.name}: missing {APP_CONFIG}")
-        config = json.loads(package.read(APP_CONFIG).decode("utf-8"))
+        missing_defaults = [name for name in APP_DEFAULT_FILES if name not in names]
+        if missing_defaults:
+            raise PackageError(f"{path.name}: missing install defaults: {', '.join(missing_defaults)}")
+        forbidden_mutable = [name for name in APP_MUTABLE_SEEDS if name in names]
+        if forbidden_mutable:
+            raise PackageError(f"{path.name}: package must not overwrite runtime data: {', '.join(forbidden_mutable)}")
+        config = json.loads(package.read(f"{APP_DEFAULTS}/config.json").decode("utf-8"))
+        for default_name in APP_DEFAULT_FILES[1:]:
+            json.loads(package.read(default_name).decode("utf-8"))
         if APP_BUILD not in names:
             raise PackageError(f"{path.name}: missing {APP_BUILD}")
         build = json.loads(package.read(APP_BUILD).decode("utf-8"))

@@ -21,6 +21,7 @@ SOURCES := \
 	../common/rules \
 	../common/time \
 	../common/token \
+	../platform \
 	../platform/switch
 DATA :=
 MANIFEST_INCLUDE ?= ../build/generated

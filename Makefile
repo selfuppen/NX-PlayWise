@@ -25,6 +25,7 @@ THIRD_PARTY_SRCS := \
 	third_party/qrcodegen/qrcodegen.c
 
 PLATFORM_HOST_SRCS := \
+	platform/install_defaults.c \
 	platform/host/mem_storage.c \
 	platform/host/pctl_stub.c \
 	platform/host/fake_time.c \

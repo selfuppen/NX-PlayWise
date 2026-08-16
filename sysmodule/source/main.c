@@ -7,6 +7,7 @@
 #include "../../platform/switch/fs_storage.h"
 #include "../../platform/switch/pctl_adapter.h"
 #include "../../platform/switch/time_provider.h"
+#include "../../platform/install_defaults.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/version.h"
 #include "../sysmodule_core.h"
@@ -165,6 +166,14 @@ int main(int argc, char **argv)
     ptc_switch_pctl_init(&pctl);
     ptc_switch_time_provider_init(&time_provider);
     storage = ptc_fs_storage_as_storage(&fs);
+#ifndef PLAYWISE_DEVICE_LAB
+    /* Package defaults live outside mutable paths so an archive overlay cannot
+       replace user data. Do not start the control loop until missing live data
+       has been materialized successfully. */
+    while (!ptc_install_materialize_defaults(storage, PTC_APP_ROOT)) {
+        svcSleepThread(1000000000LL);
+    }
+#endif
     ensure_credentials(storage);
     write_environment_fingerprint(storage);
     ptc_sysmodule_init(

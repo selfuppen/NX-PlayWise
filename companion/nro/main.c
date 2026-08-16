@@ -13,6 +13,7 @@
 #include "../../companion/transport_client.h"
 #include "../../companion/switch_ipc_client.h"
 #include "../../platform/switch/fs_storage.h"
+#include "../../platform/install_defaults.h"
 #include "../../third_party/cjson/cJSON.h"
 #include "../../common/support/support_export.h"
 #include "../../common/time/ptc_time.h"
@@ -3895,6 +3896,7 @@ int main(int argc, char **argv)
     HidTouchScreenState touch;
     bool touch_down = false;
     bool running = true;
+    bool install_defaults_ready;
     AppletHookCookie hook_cookie;
     u64 previous_stick_buttons = 0;
     (void)argc;
@@ -3921,6 +3923,7 @@ int main(int argc, char **argv)
     ptc_ui_set_execution(&ui.model, NULL, NULL);
     snprintf(ui.model.message, sizeof(ui.model.message), "正在读取今天的游玩状态...");
     ptc_fs_storage_init(&fs);
+    install_defaults_ready = ptc_install_materialize_defaults(ptc_fs_storage_as_storage(&fs), APP_ROOT);
     ptc_companion_file_client_init(&ui.client, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     load_ui_preferences(&ui);
     refresh_theme(&ui);
@@ -3931,7 +3934,10 @@ int main(int argc, char **argv)
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     ui.last_setup_refresh_second = -1;
     load_rule_drafts(&ui);
-    if (!restore_pending_redemption(&ui)) {
+    if (!install_defaults_ready) {
+        snprintf(ui.model.message, sizeof(ui.model.message),
+                 "安装数据初始化失败，请重新覆盖安装包并确认 SD 卡可写。");
+    } else if (!restore_pending_redemption(&ui)) {
         submit_status(&ui);
     }
 

@@ -22,6 +22,7 @@
 #include "../../platform/host/fake_time.h"
 #include "../../platform/host/mem_storage.h"
 #include "../../platform/host/pctl_stub.h"
+#include "../../platform/install_defaults.h"
 #include "../../platform/switch/play_timer_settings_layout.h"
 #include "../../sysmodule/sysmodule_core.h"
 
@@ -240,6 +241,62 @@ static void test_support_redaction(void)
     check_true(!ptc_support_export_text_safe("{\"pin_hash\":\"hash\"}"), "support rejects PIN material");
     check_true(!ptc_support_export_text_safe("{\"nonce\":4660}"), "support rejects complete nonce fields");
     check_true(!ptc_support_export_text_safe("{\"offline_code\":\"10514680\"}"), "support rejects offline codes");
+}
+
+static void test_install_defaults_preserve_runtime_data(void)
+{
+    static const char *const names[] = {
+        "config.json", "auth.json", "rules.json", "state.json", "compatibility.json", "setup.json"
+    };
+    static const char *const defaults[] = {
+        "{\"version\":1,\"device_id\":\"kid-switch\"}",
+        "{\"version\":1,\"pin_hash\":\"\"}",
+        "{\"version\":1,\"week\":[]}",
+        "{\"version\":1,\"apply_status\":\"idle\"}",
+        "{\"version\":1,\"status\":\"pending\"}",
+        "{\"version\":1,\"phase\":\"unconfigured\"}",
+    };
+    PtcMemStorage mem;
+    char path[160];
+    char text[1024];
+    size_t index;
+
+    ptc_mem_storage_init(&mem);
+    for (index = 0; index < sizeof(names) / sizeof(names[0]); ++index) {
+        snprintf(path, sizeof(path), "app/defaults/%s", names[index]);
+        check_true(mem.storage.vtable->write_text_atomic(&mem.storage, path, defaults[index]),
+            "seed immutable install default");
+    }
+    check_true(ptc_install_materialize_defaults(&mem.storage, "app"),
+        "fresh install materializes all runtime defaults");
+    for (index = 0; index < sizeof(names) / sizeof(names[0]); ++index) {
+        snprintf(path, sizeof(path), "app/%s", names[index]);
+        check_true(mem.storage.vtable->read_text(&mem.storage, path, text, sizeof(text)) &&
+            strcmp(text, defaults[index]) == 0, "materialized default matches immutable template");
+    }
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/config.json", "not-json"),
+        "seed malformed existing config");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/defaults/config.json", "replacement"),
+        "change immutable config template");
+    check_true(ptc_install_materialize_defaults(&mem.storage, "app"),
+        "repeat initialization succeeds with existing runtime data");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/config.json", text, sizeof(text)) &&
+        strcmp(text, "not-json") == 0, "existing malformed config is never overwritten");
+
+    check_true(mem.storage.vtable->remove_path(&mem.storage, "app/auth.json"),
+        "remove one runtime file for partial initialization");
+    mem.fail_write_path_contains = "app/auth.json";
+    check_true(!ptc_install_materialize_defaults(&mem.storage, "app"),
+        "partial initialization reports an atomic write failure");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/auth.json"),
+        "failed materialization does not create the missing runtime file");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/config.json", text, sizeof(text)) &&
+        strcmp(text, "not-json") == 0, "failed materialization preserves existing runtime files");
+    mem.fail_write_path_contains = NULL;
+    check_true(ptc_install_materialize_defaults(&mem.storage, "app") &&
+        mem.storage.vtable->exists(&mem.storage, "app/auth.json"),
+        "partial initialization can be retried safely");
 }
 
 static void test_auth_and_queue(void)
@@ -1173,6 +1230,7 @@ int main(void)
     test_holiday_calendar_and_priority();
     test_policy_and_disable_flag();
     test_support_redaction();
+    test_install_defaults_preserve_runtime_data();
     test_auth_and_queue();
     test_overlay_result_classification();
     test_overlay_request_action_gate();

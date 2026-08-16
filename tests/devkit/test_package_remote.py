@@ -60,7 +60,12 @@ def write_package(
         f'","release_id":"playwise-{version}+aaaaaaaaaaaa","profile":"release","protocol_version":1,'
         '"recovery_version":1,"pctl_layout_version":1,"build":{},"verified_environment":{}}')
     with zipfile.ZipFile(path, "w") as package:
-        package.writestr("switch/playwise/config.json", '{"version":1,"device_id":"kid-switch"}')
+        package.writestr("switch/playwise/defaults/config.json", '{"version":1,"device_id":"kid-switch"}')
+        package.writestr("switch/playwise/defaults/auth.json", '{"version":1,"pin_hash":"","pin_salt":"","hash":"hmac-sha256","updated_at":0,"failed_attempts":0,"cooldown_until":0}')
+        package.writestr("switch/playwise/defaults/rules.json", '{"version":1,"week":[]}')
+        package.writestr("switch/playwise/defaults/state.json", '{"version":1}')
+        package.writestr("switch/playwise/defaults/compatibility.json", '{"version":1}')
+        package.writestr("switch/playwise/defaults/setup.json", '{"version":1,"phase":"unconfigured"}')
         package.writestr("switch/playwise/build.json", manifest)
         embedded = manifest.encode()
         package.writestr("switch/playwise/pctc.nro", valid_nro(with_icon=True, embedded_manifest=embedded + component_marker))
@@ -114,6 +119,17 @@ def test_zip_verification() -> None:
             require("forbidden Release marker probe_suspend" in str(exc), "binary contamination must identify the marker")
         else:
             raise AssertionError("a Release binary containing a Device Lab handler marker must be rejected")
+
+        mutable_path = root / "playwise-20260730-120003.zip"
+        mutable_manifest = write_package(mutable_path, True)
+        with zipfile.ZipFile(mutable_path, "a") as package:
+            package.writestr("switch/playwise/auth.json", "{}")
+        try:
+            package_remote.verify_package_zip(mutable_path, "playwise", expected_manifest=mutable_manifest)
+        except package_remote.PackageError as exc:
+            require("must not overwrite runtime data" in str(exc), "runtime seed rejection must explain data preservation")
+        else:
+            raise AssertionError("a package containing a live mutable seed must be rejected")
 
 
 def test_clean_package_safety() -> None:

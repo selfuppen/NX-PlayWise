@@ -9,6 +9,7 @@ import zipfile
 
 
 APP_DIR = Path("switch") / "playwise"
+DEFAULTS_DIR = APP_DIR / "defaults"
 ATMOSPHERE_CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
 
 
@@ -57,6 +58,7 @@ def create_package(
         shutil.rmtree(out)
     app = out / APP_DIR
     for directory in [
+        out / DEFAULTS_DIR,
         app / "inbox" / "pending",
         app / "inbox" / "processing",
         app / "inbox" / "done",
@@ -72,7 +74,7 @@ def create_package(
         directory.mkdir(parents=True, exist_ok=True)
 
     write_json(
-        app / "config.json",
+        out / DEFAULTS_DIR / "config.json",
         {
             "version": 1,
             "device_id": device_id,
@@ -81,9 +83,9 @@ def create_package(
             "pairing_base_url": "https://selfuppen.github.io/NX-PlayWise/",
         },
     )
-    write_json(app / "auth.json", {"version": 1, "pin_hash": "", "pin_salt": "", "hash": "hmac-sha256", "updated_at": 0, "failed_attempts": 0, "cooldown_until": 0})
+    write_json(out / DEFAULTS_DIR / "auth.json", {"version": 1, "pin_hash": "", "pin_salt": "", "hash": "hmac-sha256", "updated_at": 0, "failed_attempts": 0, "cooldown_until": 0})
     write_json(
-        app / "rules.json",
+        out / DEFAULTS_DIR / "rules.json",
         {
             "version": 1,
             "week": [
@@ -102,7 +104,7 @@ def create_package(
         },
     )
     write_json(
-        app / "state.json",
+        out / DEFAULTS_DIR / "state.json",
         {
             "version": 1,
             "last_enforced_day_index": 0,
@@ -113,7 +115,7 @@ def create_package(
         },
     )
     write_json(
-        app / "compatibility.json",
+        out / DEFAULTS_DIR / "compatibility.json",
         {
             "version": 1,
             "status": "pending",
@@ -122,7 +124,7 @@ def create_package(
         },
     )
     write_json(
-        app / "setup.json",
+        out / DEFAULTS_DIR / "setup.json",
         {
             "version": 1,
             "phase": "unconfigured",

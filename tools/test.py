@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -140,12 +141,12 @@ def verify_playwise_package() -> None:
         )
         package_app = out / APP_DIR
         for relative in [
-            "config.json",
-            "auth.json",
-            "rules.json",
-            "state.json",
-            "compatibility.json",
-            "setup.json",
+            "defaults/config.json",
+            "defaults/auth.json",
+            "defaults/rules.json",
+            "defaults/state.json",
+            "defaults/compatibility.json",
+            "defaults/setup.json",
             "inbox/pending",
             "inbox/processing",
             "inbox/done",
@@ -157,17 +158,59 @@ def verify_playwise_package() -> None:
             "support",
         ]:
             require((package_app / relative).exists(), f"playwise package missing {relative}")
-        config = read_json(package_app / "config.json")
+        config = read_json(package_app / "defaults" / "config.json")
         require("grant_secret" not in config and "control_mode" not in config, "release config must contain neither secrets nor legacy modes")
         require(not (package_app / "credentials.json").exists(), "package must generate credentials on the device")
-        require(read_json(package_app / "setup.json")["phase"] == "unconfigured", "package must not take control before setup")
+        require(read_json(package_app / "defaults" / "setup.json")["phase"] == "unconfigured", "package must not take control before setup")
         require(read_json(package_app / "build.json") == expected_manifest, "package build manifest must match the generated manifest")
         require((out / CONTENT_DIR / "flags" / "boot2.flag").exists(), "package must contain boot2.flag")
         with zipfile.ZipFile(zip_path) as package:
             names = package.namelist()
-        require("switch/playwise/config.json" in names, "playwise zip missing config.json")
+        require("switch/playwise/defaults/config.json" in names, "playwise zip missing config defaults")
+        require(not any(name in names for name in (
+            "switch/playwise/config.json",
+            "switch/playwise/auth.json",
+            "switch/playwise/rules.json",
+            "switch/playwise/state.json",
+            "switch/playwise/compatibility.json",
+            "switch/playwise/setup.json",
+        )), "playwise zip must not overwrite live runtime data")
         require(not any(name.startswith("playwise-install/") for name in names), "playwise zip must not contain installer-only files")
         require("switch/.overlays/pctc.ovl" in names, "playwise package must contain the overlay")
+
+        installed = root / "installed"
+        (installed / APP_DIR).mkdir(parents=True)
+        preserved = {
+            "config.json": b'{"device_id":"existing"}',
+            "auth.json": b'{"pin_hash":"existing"}',
+            "rules.json": b'{"week":["existing"]}',
+            "state.json": b'{"updated_at":123}',
+            "compatibility.json": b'{"release_id":"old"}',
+            "setup.json": b'{"phase":"active"}',
+            "credentials.json": b'{"grant_secret":"private"}',
+            "ledger/used_nonces.jsonl": b"existing-ledger\n",
+            "logs/old.log": b"existing-log\n",
+            "backups/install_pctl_snapshot.json": b"existing-backup",
+        }
+        for relative, data in preserved.items():
+            path = installed / APP_DIR / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        old_nro = installed / APP_DIR / "pctc.nro"
+        old_build = installed / APP_DIR / "build.json"
+        old_nro.write_bytes(b"old-nro")
+        old_build.write_bytes(b"old-build")
+        shutil.copytree(out, installed, dirs_exist_ok=True)
+        for relative, data in preserved.items():
+            require((installed / APP_DIR / relative).read_bytes() == data,
+                    f"direct overlay must preserve {relative}")
+        require((installed / APP_DIR / "pctc.nro").read_bytes() == b"nro", "direct overlay must replace the Companion binary")
+        require(read_json(installed / APP_DIR / "build.json") == expected_manifest,
+                "direct overlay must replace build.json")
+        require((installed / CONTENT_DIR / "exefs.nsp").read_bytes() == b"nsp",
+                "direct overlay must replace the sysmodule binary")
+        require((installed / "switch" / ".overlays" / "pctc.ovl").read_bytes() == b"ovl",
+                "direct overlay must replace the Overlay binary")
 
         invalid_out = root / "invalid-boot2"
         invalid = run(

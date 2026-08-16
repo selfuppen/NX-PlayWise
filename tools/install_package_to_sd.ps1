@@ -122,11 +122,16 @@ $availableRelativePaths = @()
 $hasPackageCore = $false
 
 if (Test-Path -LiteralPath $sourceApp -PathType Container) {
-    if (-not (Test-Path -LiteralPath (Join-Path $sourceApp "config.json") -PathType Leaf)) {
-        throw "Invalid package: switch\playwise\config.json is missing."
-    }
-    if (-not (Test-Path -LiteralPath (Join-Path $sourceApp "setup.json") -PathType Leaf)) {
-        throw "Invalid package: switch\playwise\setup.json is missing."
+    $defaultFiles = @("config.json", "auth.json", "rules.json", "state.json", "compatibility.json", "setup.json")
+    foreach ($defaultFile in $defaultFiles) {
+        $defaultPath = Join-Path $sourceApp (Join-Path "defaults" $defaultFile)
+        if (-not (Test-Path -LiteralPath $defaultPath -PathType Leaf)) {
+            throw "Invalid package: switch\playwise\defaults\$defaultFile is missing."
+        }
+        $mutableSeed = Join-Path $sourceApp $defaultFile
+        if (Test-Path -LiteralPath $mutableSeed) {
+            throw "Invalid package: switch\playwise\$defaultFile would overwrite runtime data."
+        }
     }
     if (-not (Test-Path -LiteralPath (Join-Path $sourceApp "build.json") -PathType Leaf)) {
         throw "Invalid package: switch\playwise\build.json is missing."
@@ -167,7 +172,7 @@ Write-Host "Package paths to copy:"
 if ($isFullInstall) {
     Write-Host "  switch\playwise (full clean install)"
 } else {
-    Write-Host "  switch\playwise\pctc.nro and build.json (replace); credentials, PIN, rules and runtime data are preserved"
+    Write-Host "  switch\playwise package assets (merge/replace); credentials, PIN, rules and runtime data are preserved"
 }
 foreach ($relativePath in $availableRelativePaths) {
     Write-Host "  $relativePath"
@@ -216,31 +221,19 @@ if ($isFullInstall) {
         Test-InstalledPath -SourcePath $sourceApp -DestinationPath $destinationApp
     }
 } else {
-    if ($PSCmdlet.ShouldProcess($destinationApp, "Install Companion and seed missing PlayWise data")) {
+    if ($PSCmdlet.ShouldProcess($destinationApp, "Merge overwrite-safe PlayWise package assets")) {
         New-Item -ItemType Directory -Path $destinationApp -Force | Out-Null
         foreach ($sourceDirectory in Get-ChildItem -LiteralPath $sourceApp -Directory -Recurse -Force) {
             $relativePath = $sourceDirectory.FullName.Substring($sourceApp.Length).TrimStart("\")
             New-Item -ItemType Directory -Path (Join-Path $destinationApp $relativePath) -Force | Out-Null
         }
 
-        $sourceNro = Join-Path $sourceApp "pctc.nro"
-        $destinationNro = Join-Path $destinationApp "pctc.nro"
-        Copy-Item -LiteralPath $sourceNro -Destination $destinationNro -Force
-        Test-InstalledFile -SourceFile $sourceNro -DestinationFile $destinationNro
-
-        $sourceBuild = Join-Path $sourceApp "build.json"
-        $destinationBuild = Join-Path $destinationApp "build.json"
-        Copy-Item -LiteralPath $sourceBuild -Destination $destinationBuild -Force
-        Test-InstalledFile -SourceFile $sourceBuild -DestinationFile $destinationBuild
-
-        foreach ($seedFile in Get-ChildItem -LiteralPath $sourceApp -File -Filter "*.json" | Where-Object { $_.Name -ne "build.json" }) {
-            $destinationSeed = Join-Path $destinationApp $seedFile.Name
-            if (-not (Test-Path -LiteralPath $destinationSeed -PathType Leaf)) {
-                Copy-Item -LiteralPath $seedFile.FullName -Destination $destinationSeed -Force
-                Test-InstalledFile -SourceFile $seedFile.FullName -DestinationFile $destinationSeed
-            }
+        foreach ($sourceFile in Get-ChildItem -LiteralPath $sourceApp -File -Recurse -Force) {
+            $relativePath = $sourceFile.FullName.Substring($sourceApp.Length).TrimStart("\")
+            $destinationFile = Join-Path $destinationApp $relativePath
+            Copy-Item -LiteralPath $sourceFile.FullName -Destination $destinationFile -Force
+            Test-InstalledFile -SourceFile $sourceFile.FullName -DestinationFile $destinationFile
         }
-
     }
 }
 

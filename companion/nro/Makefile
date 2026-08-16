@@ -50,6 +50,7 @@ OBJS := \
 	$(BUILD)/error_code.o \
 	$(BUILD)/request_schema.o \
 	$(BUILD)/cJSON.o \
+	$(BUILD)/install_defaults.o \
 	$(BUILD)/fs_storage.o
 
 .PHONY: all clean
@@ -128,6 +129,9 @@ $(BUILD)/request_schema.o: ../../common/protocol/request_schema.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/cJSON.o: ../../third_party/cjson/cJSON.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/install_defaults.o: ../../platform/install_defaults.c ../../platform/install_defaults.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/fs_storage.o: ../../platform/switch/fs_storage.c | $(BUILD)
