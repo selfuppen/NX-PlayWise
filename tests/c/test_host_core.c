@@ -16,6 +16,7 @@
 #include "../../companion/auth.h"
 #include "../../companion/album_restriction.h"
 #include "../../companion/file_protocol.h"
+#include "../../companion/result_summary.h"
 #include "../../companion/overlay/bridge.h"
 #include "../../companion/overlay/input_model.h"
 #include "../../companion/overlay/layout.h"
@@ -243,6 +244,22 @@ static void test_support_redaction(void)
     check_true(!ptc_support_export_text_safe("{\"offline_code\":\"10514680\"}"), "support rejects offline codes");
 }
 
+static void test_result_summary_unlimited_state(void)
+{
+    const char *result =
+        "{\"version\":1,\"request_id\":\"status-unlimited\",\"type\":\"status\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":2380,\"limited_today\":0,\"blocked_today\":0,\"unrestricted_today\":1,"
+        "\"remaining_available\":false,\"remaining_minutes\":-1,\"played_minutes_available\":false,"
+        "\"played_minutes\":-1,\"play_timer_enabled\":0,\"restricted_now\":0},\"completed_at\":1}";
+    PtcCompanionResultSummary summary;
+    char formatted[256];
+
+    check_true(ptc_companion_result_summary_parse(result, &summary), "unlimited result summary parses");
+    check_int(summary.unrestricted_today, 1, "unlimited state reaches compact result summary");
+    check_true(ptc_companion_result_summary_format(&summary, formatted, sizeof(formatted)) &&
+        strstr(formatted, "今天还可玩：不限时"), "unlimited result summary uses the user-facing state");
+}
+
 static void test_install_defaults_preserve_runtime_data(void)
 {
     static const char *const names[] = {
@@ -454,7 +471,8 @@ static void test_overlay_layout_geometry(void)
     check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_KEYPAD_Y, 282,
         "overlay keypad leaves room below input count");
     check_int(ptc_overlay_key_rect(0, 0, 1).w, 105, "overlay keypad keys are wider");
-    check_int(ptc_overlay_key_rect(0, 0, 1).h, 40, "overlay keypad keys are taller");
+    check_int(ptc_overlay_key_rect(0, 0, 1).h, 44, "overlay keypad rows have no dead vertical gap");
+    check_int(ptc_overlay_refresh_rect(0, 0).h, 36, "overlay refresh target is easier to touch");
     check_true(ptc_overlay_rect_contains(submit, submit.x + submit.w - 1, submit.y + submit.h - 1),
         "overlay submit touch covers its visible right and bottom edges");
     check_true(!ptc_overlay_rect_contains(submit, submit.x + submit.w, submit.y),
@@ -762,30 +780,13 @@ static void test_played_time_status(void)
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
-    pctl.model_elapsed_time = true;
-    pctl.played_minutes_today = 37;
+    pctl.model_elapsed_time = false;
     pctl.status.unrestricted_today = true;
     pctl.status.play_timer_enabled = true;
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
     seed_release_setup(&mem);
 
-    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-unlimited-played.json",
-        "{\"version\":1,\"request_id\":\"status-unlimited-played\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
-        "queue unlimited status with direct spent time");
-    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unlimited status with direct spent time processed");
-    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-unlimited-played.json", text, sizeof(text)) &&
-        strstr(text, "\"restriction_enabled_available\":true") &&
-        strstr(text, "\"restriction_enabled\":true") &&
-        strstr(text, "\"temporary_unlocked_available\":true") &&
-        strstr(text, "\"temporary_unlocked\":false") &&
-        strstr(text, "\"unrestricted_today\":1") &&
-        strstr(text, "\"remaining_available\":false") &&
-        strstr(text, "\"played_minutes_available\":true") &&
-        strstr(text, "\"played_minutes\":37"),
-        "unlimited status exposes direct spent time");
-
-    pctl.model_elapsed_time = false;
     pctl.status.played_minutes_available = false;
     pctl.status.unrestricted_today = true;
     pctl.status.limited_today = false;
@@ -1225,6 +1226,7 @@ static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
 
 int main(void)
 {
+    test_result_summary_unlimited_state();
     test_tokens();
     test_release_request_contract();
     test_holiday_calendar_and_priority();

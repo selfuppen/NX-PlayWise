@@ -186,7 +186,7 @@ static void test_shortcut_hold_and_setup_migration(void)
     check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4), "first shortcut sample waits");
     check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4), "second shortcut sample waits");
     check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4), "third shortcut sample waits");
-    check_true(ptc_ui_shortcut_hold_update(&hold, true, 4), "fourth 100ms sample triggers shortcut");
+    check_true(ptc_ui_shortcut_hold_update(&hold, true, 4), "fourth configured sample triggers shortcut");
     check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4), "held shortcut triggers only once");
     check_true(!ptc_ui_shortcut_hold_update(&hold, false, 4), "release resets shortcut latch");
     check_true(!ptc_ui_shortcut_hold_update(&hold, true, 4) &&
@@ -740,7 +740,13 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "support diagnostics card");
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "support software information card");
     check_hit(hit_center(&model, ptc_ui_support_event_rect(0)), PTC_UI_HIT_SUPPORT_EVENT, 2,
-              "newest support event is independently actionable");
+               "newest support event is independently actionable");
+    {
+        PtcUiRect event = ptc_ui_support_event_rect(0);
+        check_hit(ptc_ui_hit_test(&model, event.x + event.w / 2, event.y + event.h),
+                  PTC_UI_HIT_SUPPORT_EVENT, 2,
+                  "support event touch target fills the visual row gap");
+    }
     check_true(!rects_overlap(ptc_ui_support_event_rect(0), ptc_ui_support_event_rect(1)),
                "support event rows do not overlap");
 
@@ -754,6 +760,12 @@ static void test_release_hit_targets(void)
     model.parent_page = PTC_UI_PARENT_HOLIDAY;
     check_hit(hit_center(&model, ptc_ui_holiday_enable_rect()), PTC_UI_HIT_HOLIDAY_ENABLE, 0, "holiday global switch target");
     check_hit(hit_center(&model, ptc_ui_holiday_mode_rect(0)), PTC_UI_HIT_HOLIDAY_MODE, 0, "holiday statutory mode target");
+    {
+        PtcUiRect mode = ptc_ui_holiday_mode_rect(0);
+        check_hit(ptc_ui_hit_test(&model, mode.x - 3, mode.y + mode.h / 2),
+                  PTC_UI_HIT_HOLIDAY_MODE, 0,
+                  "holiday mode has a small edge-touch allowance");
+    }
     check_hit(hit_center(&model, ptc_ui_holiday_minutes_rect(0)), PTC_UI_HIT_HOLIDAY_MINUTES, 0, "holiday statutory quota target");
     check_hit(hit_center(&model, ptc_ui_holiday_mode_rect(1)), PTC_UI_HIT_HOLIDAY_MODE, 1, "holiday makeup mode target");
     check_hit(hit_center(&model, ptc_ui_holiday_minutes_rect(1)), PTC_UI_HIT_HOLIDAY_MINUTES, 1, "holiday makeup quota target");
@@ -806,7 +818,13 @@ static void test_release_hit_targets(void)
     model.view = PTC_UI_SETUP;
     model.setup_step = PTC_UI_SETUP_SHORTCUT;
     check_hit(hit_center(&model, ptc_ui_setup_shortcut_card_rect(0)), PTC_UI_HIT_SETUP_SHORTCUT_CARD, 0,
-              "setup shortcut preset card");
+               "setup shortcut preset card");
+    {
+        PtcUiRect preset = ptc_ui_setup_shortcut_card_rect(0);
+        check_hit(ptc_ui_hit_test(&model, preset.x + preset.w / 2, preset.y + preset.h + 2),
+                  PTC_UI_HIT_SETUP_SHORTCUT_CARD, 0,
+                  "setup shortcut touch target fills the row gap");
+    }
     check_hit(ptc_ui_hit_test(&model, 900, 540), PTC_UI_HIT_NONE, 0,
               "hidden setup shortcut capture area is inert");
     check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(0), ptc_ui_setup_shortcut_card_rect(1)),

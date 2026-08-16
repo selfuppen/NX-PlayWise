@@ -970,9 +970,9 @@ void ptc_ui_format_parent_status_summary(
         snprintf(out, out_size, "! 已到限制  |  今日时间已用完  |  刚刚同步");
         return;
     }
-    if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "今日不限时");
-    else if (model->remaining_available) snprintf(remaining, sizeof(remaining), "今日剩余 %d 分钟", model->remaining_minutes);
-    else snprintf(remaining, sizeof(remaining), "剩余时间不可用");
+    if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "今天还可玩：不限时");
+    else if (model->remaining_available) snprintf(remaining, sizeof(remaining), "今天还可玩 %d 分钟", model->remaining_minutes);
+    else snprintf(remaining, sizeof(remaining), "今天还可玩：暂不可用");
     if (age <= 30) snprintf(freshness, sizeof(freshness), "刚刚同步");
     else if (age < 60) snprintf(freshness, sizeof(freshness), "%lld 秒前", (long long)age);
     else snprintf(freshness, sizeof(freshness), "%lld 分钟前", (long long)(age / 60));
@@ -2112,6 +2112,21 @@ bool ptc_ui_rect_contains(PtcUiRect rect, int x, int y)
     return x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
 }
 
+static bool rect_contains_row_cell(PtcUiRect rect, int cell_height, int x, int y)
+{
+    if (cell_height > rect.h) rect.h = cell_height;
+    return ptc_ui_rect_contains(rect, x, y);
+}
+
+static bool rect_contains_with_padding(PtcUiRect rect, int padding, int x, int y)
+{
+    rect.x -= padding;
+    rect.y -= padding;
+    rect.w += padding * 2;
+    rect.h += padding * 2;
+    return ptc_ui_rect_contains(rect, x, y);
+}
+
 static PtcUiHit make_hit(PtcUiHitKind kind, int index)
 {
     PtcUiHit hit;
@@ -2293,7 +2308,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         break;
     case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
         for (i = 0; i < PTC_UI_SHORTCUT_PRESET_COUNT; ++i) {
-            if (ptc_ui_rect_contains(ptc_ui_shortcut_option_rect(i), x, y)) {
+            if (rect_contains_row_cell(ptc_ui_shortcut_option_rect(i), 40, x, y)) {
                 return make_hit(PTC_UI_HIT_SHORTCUT_OPTION, i);
             }
         }
@@ -2364,7 +2379,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         }
         if (step == PTC_UI_SETUP_SHORTCUT) {
             for (i = 0; i < PTC_UI_SHORTCUT_PRESET_COUNT; ++i) {
-                if (ptc_ui_rect_contains(ptc_ui_setup_shortcut_card_rect(i), x, y)) {
+                if (rect_contains_row_cell(ptc_ui_setup_shortcut_card_rect(i), 34, x, y)) {
                     return make_hit(PTC_UI_HIT_SETUP_SHORTCUT_CARD, i);
                 }
             }
@@ -2441,11 +2456,11 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_HOLIDAY) {
-        if (ptc_ui_rect_contains(ptc_ui_holiday_enable_rect(), x, y)) {
+        if (rect_contains_with_padding(ptc_ui_holiday_enable_rect(), 4, x, y)) {
             return make_hit(PTC_UI_HIT_HOLIDAY_ENABLE, 0);
         }
         for (i = 0; i < 2; ++i) {
-            if (ptc_ui_rect_contains(ptc_ui_holiday_mode_rect(i), x, y)) {
+            if (rect_contains_with_padding(ptc_ui_holiday_mode_rect(i), 4, x, y)) {
                 return make_hit(PTC_UI_HIT_HOLIDAY_MODE, i);
             }
             if (ptc_ui_rect_contains(ptc_ui_holiday_minutes_rect(i), x, y)) {
@@ -2464,7 +2479,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     }
     if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
         for (i = 0; i < model->recent_event_count; ++i) {
-            if (ptc_ui_rect_contains(ptc_ui_support_event_rect(i), x, y)) {
+            if (rect_contains_row_cell(ptc_ui_support_event_rect(i), 22, x, y)) {
                 return make_hit(PTC_UI_HIT_SUPPORT_EVENT, model->recent_event_count - 1 - i);
             }
         }

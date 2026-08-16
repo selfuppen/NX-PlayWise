@@ -32,13 +32,19 @@
 #define LEDGER_PATH APP_ROOT "/ledger/used_nonces.jsonl"
 #define RESULT_TEXT_SIZE 8192
 #define REQUEST_TIMEOUT_MS 30000
-#define LOOP_SLEEP_NS 100000000LL
-#define LOOP_SLEEP_MS 100
-#define HIDDEN_HOLD_TICKS 20
+#define INPUT_LOOP_SLEEP_NS 20000000LL
+#define INPUT_LOOP_MS 20
+#define DRAW_INTERVAL_MS 40
+#define BACKGROUND_POLL_INTERVAL_MS 100
+#define INPUT_SAMPLES_FOR_MS(milliseconds) (((milliseconds) + INPUT_LOOP_MS - 1) / INPUT_LOOP_MS)
+#define HIDDEN_HOLD_TICKS INPUT_SAMPLES_FOR_MS(2000)
 #define HIDDEN_LEFT_SHOULDER_MASK (HidNpadButton_L | HidNpadButton_ZL)
 #define HIDDEN_RIGHT_SHOULDER_MASK (HidNpadButton_R | HidNpadButton_ZR)
-#define CUSTOM_SHORTCUT_HOLD_TICKS 4
-#define DANGER_CONFIRM_HOLD_TICKS 10
+#define CUSTOM_SHORTCUT_HOLD_TICKS INPUT_SAMPLES_FOR_MS(400)
+#define DANGER_CONFIRM_HOLD_TICKS INPUT_SAMPLES_FOR_MS(1000)
+#define PIN_KEYBOARD_HOLD_TICKS INPUT_SAMPLES_FOR_MS(1000)
+#define DIRECTION_REPEAT_INITIAL_TICKS INPUT_SAMPLES_FOR_MS(400)
+#define DIRECTION_REPEAT_TICKS INPUT_SAMPLES_FOR_MS(100)
 #define CUSTOM_SHORTCUT_VALID_MASK (HidNpadButton_X | HidNpadButton_Y | HidNpadButton_Plus | HidNpadButton_Minus | \
     HidNpadButton_L | HidNpadButton_ZL | HidNpadButton_R | HidNpadButton_ZR | \
     HidNpadButton_Up | HidNpadButton_Down | HidNpadButton_Left | HidNpadButton_Right)
@@ -405,6 +411,7 @@ static bool pin_input(UiState *ui, const char *title, const char *guide,
     bool touch_plus_was_held = false;
     int touch_x = -1;
     int touch_y = -1;
+    int draw_elapsed_ms = DRAW_INTERVAL_MS;
     if (!ui || !out || out_size == 0 || !g_active_pad) return false;
     out[0] = '\0';
     ptc_ui_pin_open(&ui->model, title, guide);
@@ -450,8 +457,8 @@ static bool pin_input(UiState *ui, const char *title, const char *guide,
 
         if (buttons_held & HidNpadButton_Plus) {
             if (!plus_was_held) plus_samples = 0;
-            if (plus_samples < 10) ++plus_samples;
-            if (plus_samples >= 10 && !plus_keyboard) {
+            if (plus_samples < PIN_KEYBOARD_HOLD_TICKS) ++plus_samples;
+            if (plus_samples >= PIN_KEYBOARD_HOLD_TICKS && !plus_keyboard) {
                 plus_keyboard = true;
                 (void)pin_keyboard_fallback(ui);
             }
@@ -474,25 +481,33 @@ static bool pin_input(UiState *ui, const char *title, const char *guide,
             touch_y = (int)touch.touches[0].y;
             if (ptc_ui_rect_contains(ptc_ui_pin_confirm_rect(), touch_x, touch_y)) {
                 if (!touch_plus_was_held) plus_samples = 0;
-                if (plus_samples < 10) ++plus_samples;
-                if (plus_samples >= 10 && !plus_keyboard) {
+                if (plus_samples < PIN_KEYBOARD_HOLD_TICKS) ++plus_samples;
+                if (plus_samples >= PIN_KEYBOARD_HOLD_TICKS && !plus_keyboard) {
                     plus_keyboard = true;
                     (void)pin_keyboard_fallback(ui);
                 }
                 touch_plus_was_held = true;
-            } else if (!touch_was_active) {
-                PtcUiHit hit = ptc_ui_hit_test(&ui->model, touch_x, touch_y);
-                if (hit.kind == PTC_UI_HIT_PIN_KEY) ptc_ui_pin_append(&ui->model, hit.index);
-                else if (hit.kind == PTC_UI_HIT_PIN_BACKSPACE) ptc_ui_pin_backspace(&ui->model);
-                else if (hit.kind == PTC_UI_HIT_PIN_CONFIRM && ptc_ui_pin_validate(&ui->model)) {
-                    snprintf(out, out_size, "%s", ui->model.pin_text);
-                    ptc_ui_pin_finish(&ui->model);
-                    return true;
-                } else if (hit.kind == PTC_UI_HIT_PIN_CANCEL) {
-                    ptc_ui_pin_finish(&ui->model);
-                    return false;
-                } else if (hit.kind == PTC_UI_HIT_PIN_KEYBOARD) {
-                    (void)pin_keyboard_fallback(ui);
+            } else {
+                if (touch_plus_was_held) {
+                    /* Sliding away cancels the confirm hold instead of turning
+                     * the later release into an unintended short confirm. */
+                    plus_samples = 0;
+                    plus_keyboard = false;
+                    touch_plus_was_held = false;
+                } else if (!touch_was_active) {
+                    PtcUiHit hit = ptc_ui_hit_test(&ui->model, touch_x, touch_y);
+                    if (hit.kind == PTC_UI_HIT_PIN_KEY) ptc_ui_pin_append(&ui->model, hit.index);
+                    else if (hit.kind == PTC_UI_HIT_PIN_BACKSPACE) ptc_ui_pin_backspace(&ui->model);
+                    else if (hit.kind == PTC_UI_HIT_PIN_CONFIRM && ptc_ui_pin_validate(&ui->model)) {
+                        snprintf(out, out_size, "%s", ui->model.pin_text);
+                        ptc_ui_pin_finish(&ui->model);
+                        return true;
+                    } else if (hit.kind == PTC_UI_HIT_PIN_CANCEL) {
+                        ptc_ui_pin_finish(&ui->model);
+                        return false;
+                    } else if (hit.kind == PTC_UI_HIT_PIN_KEYBOARD) {
+                        (void)pin_keyboard_fallback(ui);
+                    }
                 }
             }
         } else if (touch_plus_was_held) {
@@ -506,8 +521,12 @@ static bool pin_input(UiState *ui, const char *title, const char *guide,
             touch_plus_was_held = false;
         }
         touch_was_active = touch_active;
-        draw(ui);
-        svcSleepThread(LOOP_SLEEP_NS);
+        draw_elapsed_ms += INPUT_LOOP_MS;
+        if (draw_elapsed_ms >= DRAW_INTERVAL_MS) {
+            draw(ui);
+            draw_elapsed_ms = 0;
+        }
+        svcSleepThread(INPUT_LOOP_SLEEP_NS);
     }
     ptc_ui_pin_finish(&ui->model);
     return false;
@@ -1259,11 +1278,11 @@ static void poll_result(UiState *ui, bool force)
         return;
     }
     if (ui->waiting) {
-        ui->elapsed_ms += LOOP_SLEEP_MS;
+        ui->elapsed_ms += BACKGROUND_POLL_INTERVAL_MS;
     }
     status = ptc_companion_transport_poll(
         &ui->transport,
-        LOOP_SLEEP_MS,
+        BACKGROUND_POLL_INTERVAL_MS,
         REQUEST_TIMEOUT_MS,
         ui->last_result,
         sizeof(ui->last_result));
@@ -2565,7 +2584,7 @@ static void handle_today_action_ready(UiState *ui, int index)
     case 1:
         ui->model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
         ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
-            "设置今日额度",
+            "设置今日总额度",
             ui->model.unrestricted_today == 1
                 ? "今天当前为不限时；输入总额度后将恢复限时。"
                 : "输入今天的总额度；左侧会显示调整前后的可玩时间。",
@@ -2574,7 +2593,7 @@ static void handle_today_action_ready(UiState *ui, int index)
     case 2:
         if (ui->model.unrestricted_today == 1) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     "今天已不限时，无需加时；如需恢复限时，请使用“设置今日额度”。");
+                     "今天已不限时，无需加时；如需恢复限时，请使用“设置今日总额度”。");
         } else {
             ui->model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
             ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
@@ -2583,7 +2602,7 @@ static void handle_today_action_ready(UiState *ui, int index)
         }
         break;
     case 3:
-        snprintf(body, sizeof(body), "%s：当前已玩 %s，当前剩余 %s。\n设置后今天不限时；明天继续使用每周计划。",
+        snprintf(body, sizeof(body), "%s：当前已玩 %s，今天还可玩 %s。\n设置后今天不限时；明天继续使用每周计划。",
                  date, played, remaining);
         open_confirm_overlay(ui, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, "将今天设为不限时", body);
         break;
@@ -2618,7 +2637,7 @@ static void handle_parent_action(UiState *ui)
         } else {
             ui->pending_today_action = index;
             submit_status(ui);
-            snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新当前已玩和剩余时间...");
+            snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新今天已玩和今天还可玩...");
         }
         return;
     }
@@ -4055,6 +4074,8 @@ int main(int argc, char **argv)
     bool install_defaults_ready;
     AppletHookCookie hook_cookie;
     u64 previous_stick_buttons = 0;
+    int draw_elapsed_ms = DRAW_INTERVAL_MS;
+    int background_poll_elapsed_ms = BACKGROUND_POLL_INTERVAL_MS;
     (void)argc;
     (void)argv;
 
@@ -4064,7 +4085,8 @@ int main(int argc, char **argv)
     }
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&pad);
-    padRepeaterInitialize(&direction_repeater, 4, 1);
+    padRepeaterInitialize(&direction_repeater,
+        DIRECTION_REPEAT_INITIAL_TICKS, DIRECTION_REPEAT_TICKS);
     hidInitializeTouchScreen();
     srand((unsigned int)time(NULL));
 
@@ -4405,11 +4427,19 @@ int main(int argc, char **argv)
             running = false;
         }
 
-        poll_pending_redemption(&ui);
-        poll_result(&ui, false);
-        refresh_setup_activation(&ui);
-        draw(&ui);
-        svcSleepThread(LOOP_SLEEP_NS);
+        background_poll_elapsed_ms += INPUT_LOOP_MS;
+        if (background_poll_elapsed_ms >= BACKGROUND_POLL_INTERVAL_MS) {
+            poll_pending_redemption(&ui);
+            poll_result(&ui, false);
+            refresh_setup_activation(&ui);
+            background_poll_elapsed_ms = 0;
+        }
+        draw_elapsed_ms += INPUT_LOOP_MS;
+        if (draw_elapsed_ms >= DRAW_INTERVAL_MS) {
+            draw(&ui);
+            draw_elapsed_ms = 0;
+        }
+        svcSleepThread(INPUT_LOOP_SLEEP_NS);
     }
 
     appletUnhook(&hook_cookie);
