@@ -43,6 +43,10 @@ typedef struct {
     uint16_t pending_minutes;
     uint16_t v2_failed_attempts;
     int64_t v2_cooldown_until;
+    uint16_t expiry_effect_day_index;
+    uint16_t expiry_effect_minutes;
+    int64_t expiry_effect_pending_since;
+    bool expiry_effect_failed;
 } PtcRuntimeState;
 
 typedef struct {
@@ -62,6 +66,7 @@ typedef struct {
 
 #define PTC_V2_FAILURE_LIMIT 5u
 #define PTC_V2_COOLDOWN_SECONDS 600
+#define PTC_EXPIRY_EFFECT_GRACE_SECONDS 90
 
 /* Retention shares a single PtcStorageEntry array across the log scan and both
    cleanup_timestamped_json calls. One array is ~39 KiB; nesting two of them
@@ -89,6 +94,13 @@ static PtcErrorCode start_timer_and_wait_target(
     const char *event_detail,
     PtcPctlStatus *observed,
     bool *timer_started);
+static bool observe_expiry_effect(
+    PtcRuntimeState *state,
+    const PtcPctlStatus *status,
+    PtcClockSnapshot now,
+    PtcDayRule active_rule,
+    bool *changed,
+    bool *new_failure);
 static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
 static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
 static void write_disable_flag(PtcSysmodule *sysmodule, const char *reason);
@@ -991,6 +1003,10 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     state->pending_minutes = 0;
     state->v2_failed_attempts = 0;
     state->v2_cooldown_until = 0;
+    state->expiry_effect_day_index = 0;
+    state->expiry_effect_minutes = 0;
+    state->expiry_effect_pending_since = 0;
+    state->expiry_effect_failed = false;
     join_path(path, sizeof(path), sysmodule->app_root, "state.json");
     if (!read_cached_text(sysmodule, "state.json", sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text),
             &sysmodule->state_meta, &sysmodule->state_cache_valid, text, sizeof(text), true) || text[0] == '\0') {
@@ -1010,6 +1026,10 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     }
     (void)json_u16(text, "v2_failed_attempts", &state->v2_failed_attempts);
     (void)json_i64(text, "v2_cooldown_until", &state->v2_cooldown_until);
+    (void)json_u16(text, "expiry_effect_day_index", &state->expiry_effect_day_index);
+    (void)json_u16(text, "expiry_effect_minutes", &state->expiry_effect_minutes);
+    (void)json_i64(text, "expiry_effect_pending_since", &state->expiry_effect_pending_since);
+    (void)json_bool_value(text, "expiry_effect_failed", &state->expiry_effect_failed);
     {
         uint16_t mode = 0;
         if (json_u16(text, "last_enforced_mode", &mode)) {
@@ -1022,7 +1042,7 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
 static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t updated_at)
 {
     char path[320];
-    char text[512];
+    char text[768];
     snprintf(path, sizeof(path), "%s/state.json", sysmodule->app_root);
     snprintf(
         text,
@@ -1031,7 +1051,9 @@ static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, in
         "\"last_enforced_mode\":%u,\"last_enforced_minutes\":%u,"
         "\"apply_status\":\"%s\",\"apply_pending_confirmation\":%s,"
         "\"apply_confirmation_deadline\":%lld,\"pending_mode\":%u,\"pending_minutes\":%u,"
-        "\"v2_failed_attempts\":%u,\"v2_cooldown_until\":%lld,\"updated_at\":%lld}\n",
+        "\"v2_failed_attempts\":%u,\"v2_cooldown_until\":%lld,"
+        "\"expiry_effect_day_index\":%u,\"expiry_effect_minutes\":%u,"
+        "\"expiry_effect_pending_since\":%lld,\"expiry_effect_failed\":%s,\"updated_at\":%lld}\n",
         state->last_enforced_day_index,
         (unsigned int)state->last_enforced_mode,
         state->last_enforced_minutes,
@@ -1042,6 +1064,10 @@ static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, in
         state->pending_minutes,
         state->v2_failed_attempts,
         (long long)state->v2_cooldown_until,
+        state->expiry_effect_day_index,
+        state->expiry_effect_minutes,
+        (long long)state->expiry_effect_pending_since,
+        state->expiry_effect_failed ? "true" : "false",
         (long long)updated_at);
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
     snprintf(sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text), "%s", text);
@@ -1689,6 +1715,9 @@ static bool write_current_status_result(
     char json[2048];
     PtcErrorCode err;
     PtcEffectiveRule effective;
+    bool expiry_changed = false;
+    bool expiry_new_failure = false;
+    bool expiry_failed;
     const PtcHolidayCalendarInfo *calendar_info;
     uint16_t year = 0;
     uint8_t month = 0;
@@ -1712,6 +1741,22 @@ static bool write_current_status_result(
         state.calendar_update_warning = rules.holiday_enabled &&
             (year > calendar_info->last_year ||
                 (year == calendar_info->last_year && month == 12 && day >= 2));
+    }
+    expiry_failed = observe_expiry_effect(&runtime_state, &pctl_status, now, effective.rule,
+        &expiry_changed, &expiry_new_failure);
+    if (expiry_changed && !save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+        return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+    }
+    if (expiry_new_failure) {
+        append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_EFFECT_NOT_OBSERVED,
+            "expiry_effect_not_observed");
+    }
+    if (expiry_failed) {
+        (void)ptc_result_error_json(json, sizeof(json), request->request_id, request->type_text,
+            mode, dry_run, PTC_ERR_PCTL_EFFECT_NOT_OBSERVED, &state, now.unix_seconds);
+        append_event(sysmodule, request, "result_error", PTC_ERR_PCTL_EFFECT_NOT_OBSERVED,
+            "expiry_effect_not_observed");
+        return write_result_with_setup(sysmodule, request->request_id, json, commits_recovery);
     }
     (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
     append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
@@ -2066,11 +2111,59 @@ static bool target_status_observed(PtcPctlTargetMode mode, const PtcPctlStatus *
     if (status->restricted_now) {
         return status->limited_today || status->blocked_today;
     }
-    if (status->remaining_minutes == 0U) {
-        return status->limited_today || status->blocked_today;
-    }
+    /* Exhausted allowance and an enforced restriction are different Horizon
+       states. Zero remaining must not hide a missing suspend/restriction effect. */
+    if (status->remaining_available && status->remaining_minutes == 0U) return false;
     return status->limited_today && status->remaining_available && status->remaining_minutes > 0U &&
         status->play_timer_enabled;
+}
+
+static bool observe_expiry_effect(
+    PtcRuntimeState *state,
+    const PtcPctlStatus *status,
+    PtcClockSnapshot now,
+    PtcDayRule active_rule,
+    bool *changed,
+    bool *new_failure)
+{
+    bool missing;
+    bool overrun;
+    if (changed) *changed = false;
+    if (new_failure) *new_failure = false;
+    missing = active_rule.mode == PTC_RULE_MODE_LIMIT &&
+        status->restriction_enabled_available && status->restriction_enabled &&
+        status->temporary_unlocked_available && !status->temporary_unlocked &&
+        status->limited_today && status->remaining_available && status->remaining_minutes == 0U &&
+        !status->restricted_now;
+    if (!missing) {
+        if (state->expiry_effect_day_index != 0U || state->expiry_effect_minutes != 0U ||
+            state->expiry_effect_pending_since != 0 || state->expiry_effect_failed) {
+            state->expiry_effect_day_index = 0;
+            state->expiry_effect_minutes = 0;
+            state->expiry_effect_pending_since = 0;
+            state->expiry_effect_failed = false;
+            if (changed) *changed = true;
+        }
+        return false;
+    }
+    if (state->expiry_effect_day_index != now.day_index ||
+        state->expiry_effect_minutes != active_rule.minutes ||
+        state->expiry_effect_pending_since <= 0 ||
+        state->expiry_effect_pending_since > now.unix_seconds) {
+        state->expiry_effect_day_index = now.day_index;
+        state->expiry_effect_minutes = active_rule.minutes;
+        state->expiry_effect_pending_since = now.unix_seconds;
+        state->expiry_effect_failed = false;
+        if (changed) *changed = true;
+    }
+    overrun = status->played_minutes_available && status->played_minutes > active_rule.minutes;
+    if (!state->expiry_effect_failed &&
+        (overrun || now.unix_seconds - state->expiry_effect_pending_since >= PTC_EXPIRY_EFFECT_GRACE_SECONDS)) {
+        state->expiry_effect_failed = true;
+        if (changed) *changed = true;
+        if (new_failure) *new_failure = true;
+    }
+    return state->expiry_effect_failed;
 }
 
 static PtcErrorCode start_timer_and_wait_target(
@@ -4346,6 +4439,8 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     char disable_path[320];
     PtcSetupState setup;
     PtcErrorCode err;
+    bool expiry_changed = false;
+    bool expiry_new_failure = false;
 
     if (!load_config(sysmodule, &config) || config.mode != PTC_CONTROL_ENFORCE) {
         return 0;
@@ -4394,6 +4489,22 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     if (runtime_state.last_enforced_day_index == now.day_index &&
         runtime_state.last_enforced_mode == target_mode &&
         runtime_state.last_enforced_minutes == target_minutes) {
+        err = sysmodule->pctl->vtable->read_status(
+            sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &observed_status);
+        if (err == PTC_ERR_OK) {
+            (void)observe_expiry_effect(&runtime_state, &observed_status, now, active_rule,
+                &expiry_changed, &expiry_new_failure);
+            if (expiry_changed && !save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+                append_event(sysmodule, NULL, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED,
+                    "expiry_effect_state");
+                return 0;
+            }
+            if (expiry_new_failure) {
+                append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_PCTL_EFFECT_NOT_OBSERVED,
+                    "expiry_effect_not_observed");
+                return 1;
+            }
+        }
         return 0;
     }
     err = apply_target(sysmodule, NULL, &caps, now, ptc_control_mode_name(config.mode), target_mode, target_minutes);

@@ -356,6 +356,11 @@ static void fill_error_guidance(char *out, size_t out_size, const char *type, in
         return;
     }
     if (error_code == 306) {
+        if (strcmp(type, "status") == 0) {
+            snprintf(out, out_size,
+                     "反馈码：306。今日时间已用完，但系统没有执行限制；请进入支持与恢复导出诊断信息。");
+            return;
+        }
         snprintf(out, out_size,
                  "反馈码：306。可能未手动开启主机家长控制；系统设置到家长控制到开启，返回后选择“重新检测”。");
         return;
@@ -1020,6 +1025,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     const cJSON *setup;
     const char *status;
     const char *type;
+    bool status_context;
     bool setup_activated = false;
     if (!model || !text || ptc_companion_parse_result_summary(text, &summary) != PTC_COMPANION_OK) {
         return false;
@@ -1040,9 +1046,12 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     snprintf(model->mode, sizeof(model->mode), "%s", localized_mode("release"));
     model->feedback_detail[0] = '\0';
     model->error_code = 0;
+    status_context = strcmp(status, "ok") == 0 ||
+        (strcmp(status, "error") == 0 && summary.error_code == 306 &&
+            type && strcmp(type, "status") == 0);
 
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
-    if (strcmp(status, "ok") == 0 && cJSON_IsObject(state)) {
+    if (status_context && cJSON_IsObject(state)) {
         bool preserve_played_minutes = model->played_minutes_available &&
             !summary.played_minutes_available;
 
@@ -1079,7 +1088,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->code_preview_converts_unlimited = summary.converts_unlimited_to_limited;
     }
     setup = cJSON_GetObjectItemCaseSensitive(root, "setup");
-    if (strcmp(status, "ok") == 0 && cJSON_IsObject(setup)) {
+    if (status_context && cJSON_IsObject(setup)) {
         bool setup_was_waiting = strcmp(model->setup_phase, "released") == 0 &&
             model->setup_activate_after > 0;
         snprintf(model->setup_phase, sizeof(model->setup_phase), "%s", json_string(setup, "phase"));
@@ -1105,7 +1114,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     {
         cJSON *environment = cJSON_GetObjectItemCaseSensitive(root, "environment");
-        if (strcmp(status, "ok") == 0 && cJSON_IsObject(environment)) {
+        if (status_context && cJSON_IsObject(environment)) {
             model->environment_available = json_bool(environment, "available", false);
             snprintf(model->environment_hos, sizeof(model->environment_hos), "%s", json_string(environment, "hos"));
             snprintf(model->environment_model, sizeof(model->environment_model), "%s", json_string(environment, "model"));
@@ -1114,7 +1123,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     {
         cJSON *events = cJSON_GetObjectItemCaseSensitive(root, "recent_events");
-        model->recent_events_available = strcmp(status, "ok") == 0 && cJSON_IsArray(events);
+        model->recent_events_available = status_context && cJSON_IsArray(events);
         if (model->recent_events_available) {
             int total = cJSON_GetArraySize(events);
             int start = total > 3 ? total - 3 : 0;

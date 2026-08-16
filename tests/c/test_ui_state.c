@@ -920,6 +920,21 @@ static void test_user_state_mapping(void)
         "\"state\":{\"day_index\":1,\"limited_today\":-1,\"blocked_today\":-1,\"unrestricted_today\":-1,"
         "\"remaining_available\":false,\"remaining_minutes\":-1,\"played_minutes_available\":false,"
         "\"played_minutes\":-1,\"play_timer_enabled\":-1,\"restricted_now\":-1},\"completed_at\":108}";
+    const char *expiry_not_observed =
+        "{\"version\":1,\"request_id\":\"status-expiry\",\"type\":\"status\",\"status\":\"error\","
+        "\"error\":{\"code\":306,\"reason\":\"pctl_effect_not_observed\","
+        "\"message\":\"家长控制运行时未观察到生效\"},"
+        "\"state\":{\"day_index\":1,\"restriction_enabled_available\":true,\"restriction_enabled\":true,"
+        "\"temporary_unlocked_available\":true,\"temporary_unlocked\":false,"
+        "\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":0,\"played_minutes_available\":true,"
+        "\"played_minutes\":61,\"play_timer_enabled\":1,\"restricted_now\":0,"
+        "\"rule_source\":\"weekly\",\"calendar_covered\":true,\"calendar_update_warning\":false},"
+        "\"setup\":{\"phase\":\"active\",\"restriction_cleared\":true,\"snapshot_available\":true,"
+        "\"activate_after\":0,\"compatibility_status\":\"verified\",\"apply_status\":\"idle\","
+        "\"apply_pending_confirmation\":false,\"recovery_active\":false,\"disable_reason\":\"\"},"
+        "\"environment\":{\"available\":true,\"hos\":\"22.5.0\",\"model\":\"mariko-oled\","
+        "\"atmosphere\":true},\"recent_events\":[],\"completed_at\":108}";
     const char *release_manifest_invalid =
         "{\"version\":1,\"request_id\":\"setup-error\",\"type\":\"complete_setup\",\"status\":\"error\","
         "\"error\":{\"code\":504,\"reason\":\"release_manifest_invalid\","
@@ -979,6 +994,14 @@ static void test_user_state_mapping(void)
     check_true(strstr(model.feedback_detail, "手动") != NULL &&
                strstr(model.feedback_detail, "重新检测") != NULL,
                "306 provides manual control guidance");
+    check_true(ptc_ui_apply_result_json(&model, expiry_not_observed), "expiry 306 status parses");
+    check_int(model.error_code, 306, "expiry 306 error code is retained");
+    check_true(model.status_loaded && model.remaining_available && model.remaining_minutes == 0 &&
+               model.played_minutes == 61 && model.restricted_now == 0,
+               "expiry 306 retains its real runtime state for diagnostics");
+    check_true(strstr(model.feedback_detail, "时间已用完") != NULL &&
+               strstr(model.feedback_detail, "导出诊断") != NULL,
+               "expiry 306 explains the observed failure and support action");
     check_true(ptc_ui_apply_result_json(&model, release_manifest_invalid), "504 result parses");
     check_int(model.error_code, 504, "504 error code is retained");
     check_true(strstr(model.feedback_detail, "完整重启主机") != NULL &&
