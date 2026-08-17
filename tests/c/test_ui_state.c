@@ -291,24 +291,82 @@ static void test_numeric_input(void)
     memset(&model, 0, sizeof(model));
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_MINUTES,
         "输入额度", "1 到 1440 分钟", 4, 1, 1440, 60);
-    snprintf(model.numpad_text, sizeof(model.numpad_text), "1440");
-    check_true(ptc_ui_numpad_validate(&model, &value) && value == 1440, "daily maximum accepted");
-    snprintf(model.numpad_text, sizeof(model.numpad_text), "0");
-    check_true(!ptc_ui_numpad_validate(&model, &value), "zero-minute limit rejected");
+    check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR, "quota opens the shared duration editor");
+    check_true(strcmp(model.duration_hours_text, "1") == 0 &&
+               strcmp(model.duration_minutes_text, "0") == 0 &&
+               model.duration_field == PTC_UI_DURATION_MINUTES,
+               "duration editor splits the initial total and focuses minutes");
+    snprintf(model.duration_hours_text, sizeof(model.duration_hours_text), "24");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "0");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 1440, "24 hours is the daily maximum");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "1");
+    check_true(!ptc_ui_numpad_validate(&model, &value), "24 hours and one minute exceeds the daily maximum");
+    snprintf(model.duration_hours_text, sizeof(model.duration_hours_text), "0");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "60");
+    check_true(!ptc_ui_numpad_validate(&model, &value), "minute component rejects 60");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "0");
+    check_true(!ptc_ui_numpad_validate(&model, &value), "zero duration is rejected");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "1");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 1, "one minute is accepted");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "59");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 59, "zero hours and 59 minutes is accepted");
+    snprintf(model.duration_hours_text, sizeof(model.duration_hours_text), "1");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "0");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 60, "one hour converts to 60 minutes");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "59");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 119, "one hour 59 converts to 119 minutes");
+    snprintf(model.duration_hours_text, sizeof(model.duration_hours_text), "2");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "1");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 121, "ordinary quota accepts 121 minutes");
+    snprintf(model.duration_hours_text, sizeof(model.duration_hours_text), "23");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "59");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 1439, "23 hours 59 converts to 1439 minutes");
+
+    ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
+        "临时加时", "1 到 120 分钟", 3, 1, 120, 15);
+    snprintf(model.duration_hours_text, sizeof(model.duration_hours_text), "2");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "0");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 120, "two hours is the add-time maximum");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "1");
+    check_true(!ptc_ui_numpad_validate(&model, &value), "two hours and one minute exceeds add-time maximum");
+
+    ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
+        "输入额度", "1 到 1440 分钟", 4, 1, 1440, 60);
+    model.numpad_cursor = 4;
+    ptc_ui_numpad_activate(&model);
+    check_true(strcmp(model.duration_minutes_text, "5") == 0,
+               "first digit replaces the focused minute component");
+    ptc_ui_duration_toggle_field(&model);
+    model.numpad_cursor = 1;
+    ptc_ui_numpad_activate(&model);
+    check_true(strcmp(model.duration_hours_text, "2") == 0 &&
+               ptc_ui_duration_value(&model, &value) && value == 125,
+               "field toggle lets the keypad replace hours independently");
+    ptc_ui_numpad_backspace(&model);
+    check_true(model.duration_hours_text[0] == '\0' && !ptc_ui_duration_value(&model, &value),
+               "backspace clears the preselected active component");
+    ptc_ui_duration_select_field(&model, PTC_UI_DURATION_MINUTES);
+    ptc_ui_numpad_clear(&model);
+    check_true(model.duration_minutes_text[0] == '\0', "clear only clears the active component");
 
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
         "设置周一的周计划额度", "输入 1 到 1440 分钟", 4, 1, 1440, 60);
     ptc_ui_numpad_adjust(&model, 15);
-    check_true(strcmp(model.numpad_text, "75") == 0, "weekly quick increase updates input");
+    check_true(strcmp(model.duration_hours_text, "1") == 0 &&
+               strcmp(model.duration_minutes_text, "15") == 0,
+               "weekly quick increase updates both duration components");
     ptc_ui_numpad_adjust(&model, -100);
-    check_true(strcmp(model.numpad_text, "1") == 0, "weekly quick adjustment clamps to minimum");
+    check_true(strcmp(model.duration_hours_text, "0") == 0 &&
+               strcmp(model.duration_minutes_text, "1") == 0,
+               "weekly quick adjustment clamps to minimum");
 
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_HOLIDAY_MINUTES, PTC_UI_OVERLAY_NONE,
         "设置法定休假日额度", "输入 1 到 1440 分钟", 4, 1, 1440, 120);
     check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR,
               "statutory holiday quota uses the compact minute editor");
-    check_true(model.numpad_replace_on_input && strcmp(model.numpad_text, "120") == 0,
-               "holiday editor preselects the complete current value");
+    check_true(model.duration_hours_replace_on_input && model.duration_minutes_replace_on_input &&
+               strcmp(model.duration_hours_text, "2") == 0 && strcmp(model.duration_minutes_text, "0") == 0,
+               "holiday editor preselects both current duration components");
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MAKEUP_MINUTES, PTC_UI_OVERLAY_NONE,
         "设置调休工作日额度", "输入 1 到 1440 分钟", 4, 1, 1440, 60);
     check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR,
@@ -379,21 +437,21 @@ static void test_time_previews(void)
     model.remaining_available = true;
     model.played_minutes = 20;
     model.remaining_minutes = 40;
-    check_int(ptc_ui_today_limit_start_value(&model, 180), 180,
-              "today-limit editor starts from the effective total quota");
-    check_int(ptc_ui_today_limit_start_value(&model, 0), 60,
-              "missing rule rebuilds the total quota from played and remaining");
+    check_int(ptc_ui_today_limit_start_value(&model, 180), 20,
+              "today-limit editor starts from current played time");
+    model.played_minutes = 0;
+    check_int(ptc_ui_today_limit_start_value(&model, 180), 1,
+              "zero played time is clamped to the minimum quota");
     model.played_minutes = 10;
     model.remaining_minutes = 0;
     check_int(ptc_ui_today_limit_start_value(&model, 0), 10,
-              "rebuilt exhausted quota keeps the played total rather than inventing 60 minutes");
-    model.played_minutes = 1400;
-    model.remaining_minutes = 100;
+              "played time remains the default after the current quota is exhausted");
+    model.played_minutes = 1500;
     check_int(ptc_ui_today_limit_start_value(&model, 0), 1440,
-              "rebuilt total quota is clamped to the daily maximum");
+              "played-time default is clamped to the daily maximum");
     model.played_minutes_available = false;
     check_int(ptc_ui_today_limit_start_value(&model, 180), 180,
-              "unavailable played time preserves the effective quota fallback");
+              "unavailable played time falls back to the effective quota");
     check_int(ptc_ui_today_limit_start_value(&model, 0), 60,
               "invalid unavailable-state fallback uses the safe default");
     model.played_minutes_available = true;
@@ -879,11 +937,14 @@ static void test_release_hit_targets(void)
     check_true(ptc_ui_cancel_overlay(&model), "software information closes with the shared modal path");
     check_int(model.overlay, PTC_UI_OVERLAY_NONE, "software information close returns to support");
 
-    model.overlay = PTC_UI_OVERLAY_NUMPAD;
-    model.numpad_purpose = PTC_UI_NUMPAD_WEEKLY_MINUTES;
-    check_hit(hit_center(&model, ptc_ui_numpad_quick_rect(2)), PTC_UI_HIT_NUMPAD_QUICK, 2,
-              "numpad quick increase button");
     model.overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
+    model.numpad_purpose = PTC_UI_NUMPAD_WEEKLY_MINUTES;
+    check_hit(hit_center(&model, ptc_ui_minute_editor_field_rect(PTC_UI_DURATION_HOURS)),
+              PTC_UI_HIT_DURATION_FIELD, PTC_UI_DURATION_HOURS,
+              "duration hour field is touchable");
+    check_hit(hit_center(&model, ptc_ui_minute_editor_field_rect(PTC_UI_DURATION_MINUTES)),
+              PTC_UI_HIT_DURATION_FIELD, PTC_UI_DURATION_MINUTES,
+              "duration minute field is touchable");
     check_hit(hit_center(&model, ptc_ui_minute_editor_key_rect(10)), PTC_UI_HIT_NUMPAD_KEY, 10,
               "compact minute editor zero key is touchable");
     check_hit(hit_center(&model, ptc_ui_minute_editor_quick_rect(0)), PTC_UI_HIT_NUMPAD_QUICK, 0,

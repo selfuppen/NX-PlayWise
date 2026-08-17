@@ -114,6 +114,11 @@ typedef enum {
 } PtcUiNumpadPurpose;
 
 typedef enum {
+    PTC_UI_DURATION_HOURS = 0,
+    PTC_UI_DURATION_MINUTES = 1
+} PtcUiDurationField;
+
+typedef enum {
     PTC_UI_OPERATION_NONE = 0,
     PTC_UI_OPERATION_SET_TODAY_LIMIT = 1,
     PTC_UI_OPERATION_ADD_TODAY_MINUTES = 2,
@@ -258,6 +263,11 @@ typedef struct {
     uint16_t numpad_maximum;
     uint16_t numpad_current;
     bool numpad_replace_on_input;
+    char duration_hours_text[6];
+    char duration_minutes_text[6];
+    PtcUiDurationField duration_field;
+    bool duration_hours_replace_on_input;
+    bool duration_minutes_replace_on_input;
     char numpad_title[64];
     char numpad_guide[128];
     char numpad_error[96];
@@ -361,6 +371,7 @@ typedef enum {
     PTC_UI_HIT_WEEKLY_MIN_INPUT,
     PTC_UI_HIT_NUMPAD_KEY,
     PTC_UI_HIT_NUMPAD_QUICK,
+    PTC_UI_HIT_DURATION_FIELD,
     PTC_UI_HIT_WEEKLY_SAVE,
     PTC_UI_HIT_WEEKLY_DISCARD,
     PTC_UI_HIT_WEEKLY_BULK,
@@ -445,6 +456,9 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
 uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback);
 bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out);
+bool ptc_ui_duration_value(const PtcUiModel *model, uint16_t *out_value);
+void ptc_ui_duration_select_field(PtcUiModel *model, PtcUiDurationField field);
+void ptc_ui_duration_toggle_field(PtcUiModel *model);
 void ptc_ui_pin_open(PtcUiModel *model, const char *title, const char *guide);
 bool ptc_ui_pin_append(PtcUiModel *model, int digit);
 bool ptc_ui_pin_backspace(PtcUiModel *model);
@@ -556,6 +570,7 @@ PtcUiRect ptc_ui_pin_cancel_rect(void);
 PtcUiRect ptc_ui_pin_keyboard_rect(void);
 PtcUiRect ptc_ui_minute_editor_key_rect(int index);
 PtcUiRect ptc_ui_minute_editor_quick_rect(int index);
+PtcUiRect ptc_ui_minute_editor_field_rect(PtcUiDurationField field);
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay);

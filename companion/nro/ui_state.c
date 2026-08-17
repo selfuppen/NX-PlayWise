@@ -582,6 +582,69 @@ bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, 
     return true;
 }
 
+static bool duration_purpose(PtcUiNumpadPurpose purpose)
+{
+    return purpose == PTC_UI_NUMPAD_MINUTES ||
+        purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES ||
+        purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
+        purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES;
+}
+
+static bool parse_duration_component(const char *text, unsigned int maximum, unsigned int *out)
+{
+    const char *p;
+    unsigned long value;
+    if (!text || !text[0] || !out) return false;
+    for (p = text; *p; ++p) {
+        if (*p < '0' || *p > '9') return false;
+    }
+    value = strtoul(text, NULL, 10);
+    if (value > maximum) return false;
+    *out = (unsigned int)value;
+    return true;
+}
+
+bool ptc_ui_duration_value(const PtcUiModel *model, uint16_t *out_value)
+{
+    unsigned int hours;
+    unsigned int minutes;
+    unsigned int total;
+    if (!model || !out_value || !duration_purpose(model->numpad_purpose) ||
+        !parse_duration_component(model->duration_hours_text, 24, &hours) ||
+        !parse_duration_component(model->duration_minutes_text, 59, &minutes)) {
+        return false;
+    }
+    total = hours * 60U + minutes;
+    if (total < model->numpad_minimum || total > model->numpad_maximum) return false;
+    *out_value = (uint16_t)total;
+    return true;
+}
+
+static void set_duration_value(PtcUiModel *model, uint16_t value)
+{
+    if (!model) return;
+    snprintf(model->duration_hours_text, sizeof(model->duration_hours_text), "%u",
+             (unsigned int)(value / 60U));
+    snprintf(model->duration_minutes_text, sizeof(model->duration_minutes_text), "%u",
+             (unsigned int)(value % 60U));
+    model->numpad_current = value;
+}
+
+void ptc_ui_duration_select_field(PtcUiModel *model, PtcUiDurationField field)
+{
+    if (!model || !duration_purpose(model->numpad_purpose) ||
+        (field != PTC_UI_DURATION_HOURS && field != PTC_UI_DURATION_MINUTES)) return;
+    model->duration_field = field;
+    model->numpad_error[0] = '\0';
+}
+
+void ptc_ui_duration_toggle_field(PtcUiModel *model)
+{
+    if (!model || !duration_purpose(model->numpad_purpose)) return;
+    ptc_ui_duration_select_field(model, model->duration_field == PTC_UI_DURATION_HOURS
+        ? PTC_UI_DURATION_MINUTES : PTC_UI_DURATION_HOURS);
+}
+
 void ptc_ui_numpad_open(
     PtcUiModel *model,
     PtcUiNumpadPurpose purpose,
@@ -605,12 +668,12 @@ void ptc_ui_numpad_open(
     model->numpad_minimum = minimum;
     model->numpad_maximum = maximum;
     model->numpad_current = current;
-    model->numpad_replace_on_input = purpose == PTC_UI_NUMPAD_MINUTES ||
-        purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES ||
-        purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
-        purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES;
-    if (model->numpad_replace_on_input) {
-        snprintf(model->numpad_text, sizeof(model->numpad_text), "%u", (unsigned int)current);
+    model->numpad_replace_on_input = false;
+    if (duration_purpose(purpose)) {
+        set_duration_value(model, current);
+        model->duration_field = PTC_UI_DURATION_MINUTES;
+        model->duration_hours_replace_on_input = true;
+        model->duration_minutes_replace_on_input = true;
         model->overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
     }
     model->numpad_error[0] = '\0';
@@ -639,58 +702,77 @@ void ptc_ui_numpad_move(PtcUiModel *model, int horizontal, int vertical)
 
 void ptc_ui_numpad_backspace(PtcUiModel *model)
 {
+    char *text;
+    bool *replace;
     size_t length;
     if (!model || (model->overlay != PTC_UI_OVERLAY_NUMPAD &&
                    model->overlay != PTC_UI_OVERLAY_MINUTE_EDITOR)) {
         return;
     }
-    if (model->numpad_replace_on_input) {
-        model->numpad_text[0] = '\0';
-        model->numpad_replace_on_input = false;
+    if (duration_purpose(model->numpad_purpose)) {
+        text = model->duration_field == PTC_UI_DURATION_HOURS
+            ? model->duration_hours_text : model->duration_minutes_text;
+        replace = model->duration_field == PTC_UI_DURATION_HOURS
+            ? &model->duration_hours_replace_on_input : &model->duration_minutes_replace_on_input;
+    } else {
+        text = model->numpad_text;
+        replace = &model->numpad_replace_on_input;
+    }
+    if (*replace) {
+        text[0] = '\0';
+        *replace = false;
         return;
     }
-    length = strlen(model->numpad_text);
+    length = strlen(text);
     if (length > 0) {
-        model->numpad_text[length - 1] = '\0';
+        text[length - 1] = '\0';
     }
     model->numpad_error[0] = '\0';
 }
 
 void ptc_ui_numpad_clear(PtcUiModel *model)
 {
+    char *text;
     if (!model || (model->overlay != PTC_UI_OVERLAY_NUMPAD &&
                    model->overlay != PTC_UI_OVERLAY_MINUTE_EDITOR)) {
         return;
     }
-    model->numpad_text[0] = '\0';
-    model->numpad_replace_on_input = false;
+    if (duration_purpose(model->numpad_purpose)) {
+        text = model->duration_field == PTC_UI_DURATION_HOURS
+            ? model->duration_hours_text : model->duration_minutes_text;
+        text[0] = '\0';
+        if (model->duration_field == PTC_UI_DURATION_HOURS) model->duration_hours_replace_on_input = false;
+        else model->duration_minutes_replace_on_input = false;
+    } else {
+        model->numpad_text[0] = '\0';
+        model->numpad_replace_on_input = false;
+    }
     model->numpad_error[0] = '\0';
 }
 
 void ptc_ui_numpad_adjust(PtcUiModel *model, int delta)
 {
     uint16_t value;
-    if (!model || (model->numpad_purpose != PTC_UI_NUMPAD_MINUTES &&
-                   model->numpad_purpose != PTC_UI_NUMPAD_WEEKLY_MINUTES &&
-                   model->numpad_purpose != PTC_UI_NUMPAD_HOLIDAY_MINUTES &&
-                   model->numpad_purpose != PTC_UI_NUMPAD_MAKEUP_MINUTES)) {
+    if (!model || !duration_purpose(model->numpad_purpose)) {
         return;
     }
     value = model->numpad_current;
-    if (model->numpad_text[0] && ptc_ui_parse_minutes(
-            model->numpad_text, model->numpad_minimum, model->numpad_maximum, &value)) {
+    if (ptc_ui_duration_value(model, &value)) {
         /* A quick adjustment commits any complete value already typed. */
     }
     value = ptc_ui_adjust_minutes(
         value, delta, model->numpad_minimum, model->numpad_maximum);
-    model->numpad_current = value;
-    snprintf(model->numpad_text, sizeof(model->numpad_text), "%u", (unsigned int)value);
-    model->numpad_replace_on_input = false;
+    set_duration_value(model, value);
+    model->duration_hours_replace_on_input = false;
+    model->duration_minutes_replace_on_input = false;
     model->numpad_error[0] = '\0';
 }
 
 void ptc_ui_numpad_activate(PtcUiModel *model)
 {
+    char *text;
+    bool *replace;
+    size_t capacity;
     size_t length;
     int digit;
     if (!model || (model->overlay != PTC_UI_OVERLAY_NUMPAD &&
@@ -705,18 +787,33 @@ void ptc_ui_numpad_activate(PtcUiModel *model)
         ptc_ui_numpad_clear(model);
         return;
     }
-    if (model->numpad_replace_on_input) {
-        model->numpad_text[0] = '\0';
-        model->numpad_replace_on_input = false;
+    if (duration_purpose(model->numpad_purpose)) {
+        text = model->duration_field == PTC_UI_DURATION_HOURS
+            ? model->duration_hours_text : model->duration_minutes_text;
+        replace = model->duration_field == PTC_UI_DURATION_HOURS
+            ? &model->duration_hours_replace_on_input : &model->duration_minutes_replace_on_input;
+        capacity = model->duration_field == PTC_UI_DURATION_HOURS
+            ? sizeof(model->duration_hours_text) : sizeof(model->duration_minutes_text);
+    } else {
+        text = model->numpad_text;
+        replace = &model->numpad_replace_on_input;
+        capacity = sizeof(model->numpad_text);
     }
-    length = strlen(model->numpad_text);
-    if (length >= model->numpad_max_digits || length + 1 >= sizeof(model->numpad_text)) {
-        snprintf(model->numpad_error, sizeof(model->numpad_error), "最多输入 %u 位数字", (unsigned int)model->numpad_max_digits);
+    if (*replace) {
+        text[0] = '\0';
+        *replace = false;
+    }
+    length = strlen(text);
+    if ((duration_purpose(model->numpad_purpose) && length >= 2U) ||
+        length + 1 >= capacity ||
+        (!duration_purpose(model->numpad_purpose) && length >= model->numpad_max_digits)) {
+        snprintf(model->numpad_error, sizeof(model->numpad_error), "当前输入项最多输入 %u 位数字",
+                 duration_purpose(model->numpad_purpose) ? 2U : (unsigned int)model->numpad_max_digits);
         return;
     }
     digit = model->numpad_cursor == 10 ? 0 : model->numpad_cursor + 1;
-    model->numpad_text[length] = (char)('0' + digit);
-    model->numpad_text[length + 1] = '\0';
+    text[length] = (char)('0' + digit);
+    text[length + 1] = '\0';
     model->numpad_error[0] = '\0';
 }
 
@@ -736,12 +833,9 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
         }
         return true;
     }
-    if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
-        model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES ||
-        model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
-        model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES) {
-        if (!ptc_ui_parse_minutes(model->numpad_text, model->numpad_minimum, model->numpad_maximum, &value)) {
-            snprintf(model->numpad_error, sizeof(model->numpad_error), "请输入 %u 到 %u 分钟",
+    if (duration_purpose(model->numpad_purpose)) {
+        if (!ptc_ui_duration_value(model, &value)) {
+            snprintf(model->numpad_error, sizeof(model->numpad_error), "请输入完整时长，总计范围为 %u 到 %u 分钟",
                      (unsigned int)model->numpad_minimum, (unsigned int)model->numpad_maximum);
             return false;
         }
@@ -764,6 +858,10 @@ void ptc_ui_numpad_finish(PtcUiModel *model)
     model->overlay = model->numpad_return_overlay;
     model->numpad_purpose = PTC_UI_NUMPAD_NONE;
     model->numpad_replace_on_input = false;
+    model->duration_hours_text[0] = '\0';
+    model->duration_minutes_text[0] = '\0';
+    model->duration_hours_replace_on_input = false;
+    model->duration_minutes_replace_on_input = false;
     model->numpad_return_overlay = PTC_UI_OVERLAY_NONE;
     model->numpad_error[0] = '\0';
 }
@@ -1480,18 +1578,15 @@ PtcUiRect ptc_ui_holiday_minutes_rect(int index)
 
 uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback)
 {
-    int total;
-    if (fallback >= 1 && fallback <= 1440) {
-        return fallback;
+    int played;
+    if (model && model->played_minutes_available && model->played_minutes >= 0) {
+        played = model->played_minutes;
+        if (played < 1) played = 1;
+        if (played > 1440) played = 1440;
+        return (uint16_t)played;
     }
-    if (!model || !model->played_minutes_available || !model->remaining_available ||
-        model->played_minutes < 0 || model->remaining_minutes < 0) {
-        return 60;
-    }
-    total = model->played_minutes + model->remaining_minutes;
-    if (total < 1) total = 1;
-    if (total > 1440) total = 1440;
-    return (uint16_t)total;
+    if (fallback >= 1 && fallback <= 1440) return fallback;
+    return 60;
 }
 
 PtcUiRect ptc_ui_support_event_rect(int index)
@@ -1889,6 +1984,14 @@ PtcUiRect ptc_ui_minute_editor_quick_rect(int index)
     return rect;
 }
 
+PtcUiRect ptc_ui_minute_editor_field_rect(PtcUiDurationField field)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
+    if (field == PTC_UI_DURATION_HOURS) return (PtcUiRect){dialog.x + 536, dialog.y + 146, 166, 68};
+    if (field == PTC_UI_DURATION_MINUTES) return (PtcUiRect){dialog.x + 720, dialog.y + 146, 166, 68};
+    return (PtcUiRect){0, 0, 0, 0};
+}
+
 bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend)
 {
     PtcDayRule source;
@@ -2167,6 +2270,11 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     }
     switch (model->overlay) {
     case PTC_UI_OVERLAY_MINUTE_EDITOR:
+        for (i = 0; i < 2; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_minute_editor_field_rect((PtcUiDurationField)i), x, y)) {
+                return make_hit(PTC_UI_HIT_DURATION_FIELD, i);
+            }
+        }
         for (i = 0; i < 4; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_minute_editor_quick_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_NUMPAD_QUICK, i);

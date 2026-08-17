@@ -779,7 +779,7 @@ static bool save_setup_step(UiState *ui, int step)
 static void edit_overlay_minutes(UiState *ui)
 {
     char guide[96];
-    snprintf(guide, sizeof(guide), "输入 %u 到 %u 分钟",
+    snprintf(guide, sizeof(guide), "分别输入小时和分钟，总计范围 %u 到 %u 分钟",
              (unsigned int)ui->model.minimum_minutes, (unsigned int)ui->model.maximum_minutes);
     ptc_ui_numpad_open(
         &ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_MINUTES,
@@ -799,7 +799,7 @@ static void edit_weekly_minutes(UiState *ui)
         char title[64];
         char guide[128];
         snprintf(title, sizeof(title), "设置%s的周计划额度", WEEKDAYS[ui->model.editor_index]);
-        snprintf(guide, sizeof(guide), "输入 1 到 1440 分钟\n仅修改%s的周计划模板", WEEKDAYS[ui->model.editor_index]);
+        snprintf(guide, sizeof(guide), "分别输入小时和分钟，总计 1 到 1440 分钟\n仅修改%s的周计划模板", WEEKDAYS[ui->model.editor_index]);
         ptc_ui_numpad_open(
             &ui->model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
             title, guide, 4, 1, 1440, day->minutes);
@@ -2506,23 +2506,24 @@ static PtcDayRule effective_today_rule(const UiState *ui)
     if (ui->model.today_override_present) {
         return ui->model.today_override_rule;
     }
+    if (strcmp(ui->model.rule_source, "statutory_holiday") == 0) {
+        return ui->model.holiday_rule;
+    }
+    if (strcmp(ui->model.rule_source, "makeup_workday") == 0) {
+        return ui->model.makeup_workday_rule;
+    }
     return ui->model.current_week[weekday];
 }
 
 static uint16_t current_today_limit_value(const UiState *ui)
 {
     PtcDayRule rule = effective_today_rule(ui);
-    if (ui->model.unrestricted_today == 1) {
-        return 60;
+    uint16_t fallback = 0;
+    if (ui->model.unrestricted_today != 1 && rule.mode == PTC_RULE_MODE_LIMIT &&
+        rule.minutes >= 1 && rule.minutes <= 1440) {
+        fallback = rule.minutes;
     }
-    if (rule.mode == PTC_RULE_MODE_LIMIT && rule.minutes >= 1 && rule.minutes <= 1440) {
-        return ptc_ui_today_limit_start_value(&ui->model, rule.minutes);
-    }
-    if (ui->model.played_minutes_available && ui->model.remaining_available &&
-        ui->model.played_minutes >= 0 && ui->model.remaining_minutes >= 0) {
-        return ptc_ui_today_limit_start_value(&ui->model, 0);
-    }
-    return 60;
+    return ptc_ui_today_limit_start_value(&ui->model, fallback);
 }
 
 static PtcUiSystemTheme read_system_theme(void)
@@ -2586,8 +2587,8 @@ static void handle_today_action_ready(UiState *ui, int index)
         ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
             "设置今日总额度",
             ui->model.unrestricted_today == 1
-                ? "今天当前为不限时；输入总额度后将恢复限时。"
-                : "输入今天的总额度；左侧会显示调整前后的可玩时间。",
+                ? "今天当前为不限时；输入小时和分钟后将恢复限时。"
+                : "分别输入小时和分钟；右侧显示调整前后的可玩时间。",
             4, 1, 1440, current_today_limit_value(ui));
         break;
     case 2:
@@ -2597,7 +2598,7 @@ static void handle_today_action_ready(UiState *ui, int index)
         } else {
             ui->model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
             ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
-                "临时加时", "输入要增加的分钟数；右侧显示加时前后的可玩时间。",
+                "临时加时", "分别输入要增加的小时和分钟；右侧显示加时前后的可玩时间。",
                 3, 1, 120, 15);
         }
         break;
@@ -2660,7 +2661,7 @@ static void handle_parent_action(UiState *ui)
                 snprintf(ui->model.message, sizeof(ui->model.message), "当前为不限时模式，请先切换为限时模式。");
             } else {
                 ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_HOLIDAY_MINUTES, PTC_UI_OVERLAY_NONE,
-                    "设置法定休假日额度", "输入 1 到 1440 分钟", 4, 1, 1440, ui->model.draft_holiday_rule.minutes);
+                    "设置法定休假日额度", "分别输入小时和分钟，总计 1 到 1440 分钟", 4, 1, 1440, ui->model.draft_holiday_rule.minutes);
             }
             break;
         case 2:
@@ -2669,7 +2670,7 @@ static void handle_parent_action(UiState *ui)
                 snprintf(ui->model.message, sizeof(ui->model.message), "当前为不限时模式，请先切换为限时模式。");
             } else {
                 ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MAKEUP_MINUTES, PTC_UI_OVERLAY_NONE,
-                    "设置调休工作日额度", "输入 1 到 1440 分钟", 4, 1, 1440,
+                    "设置调休工作日额度", "分别输入小时和分钟，总计 1 到 1440 分钟", 4, 1, 1440,
                     ui->model.draft_makeup_workday_rule.minutes);
             }
             break;
@@ -3455,7 +3456,9 @@ static void handle_overlay_input(UiState *ui, u64 down)
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ||
         ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
-        if (down & HidNpadButton_Left) {
+        if (ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR && (down & HidNpadButton_Minus)) {
+            ptc_ui_duration_toggle_field(&ui->model);
+        } else if (down & HidNpadButton_Left) {
             ptc_ui_numpad_move(&ui->model, -1, 0);
         } else if (down & HidNpadButton_Right) {
             ptc_ui_numpad_move(&ui->model, 1, 0);
@@ -4008,6 +4011,9 @@ static void handle_touch(UiState *ui, int x, int y)
             static const int DELTAS[] = {-15, -5, 5, 15};
             ptc_ui_numpad_adjust(&ui->model, DELTAS[hit.index]);
         }
+        break;
+    case PTC_UI_HIT_DURATION_FIELD:
+        ptc_ui_duration_select_field(&ui->model, (PtcUiDurationField)hit.index);
         break;
     case PTC_UI_HIT_NONE:
     default:

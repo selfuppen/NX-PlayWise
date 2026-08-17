@@ -2423,7 +2423,9 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
     UiRect dialog;
     uint16_t entered = model->numpad_current;
     char value[48];
-    char duration[64];
+    char hours_value[32];
+    char minutes_value[32];
+    char total_value[48];
     char played[48];
     char remaining[48];
     char after[48];
@@ -2436,21 +2438,28 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
     bool weekly = model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES;
     bool holiday = model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
                    model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES;
-    if (!ptc_ui_parse_minutes(model->numpad_text, model->numpad_minimum, model->numpad_maximum, &entered)) {
-        entered = model->numpad_current;
-    }
+    bool entered_valid = ptc_ui_duration_value(model, &entered);
     draw_dialog_shell(pixels, stride, model, &dialog, 920, 620);
-    snprintf(value, sizeof(value), "%u 分钟", (unsigned int)entered);
-    format_duration(entered, duration, sizeof(duration));
+    if (entered_valid) {
+        snprintf(value, sizeof(value), "%u 分钟", (unsigned int)entered);
+        snprintf(total_value, sizeof(total_value), "总计 %u 分钟", (unsigned int)entered);
+    } else {
+        snprintf(value, sizeof(value), "暂不可用");
+        snprintf(total_value, sizeof(total_value), "总计 -- 分钟");
+    }
+    snprintf(hours_value, sizeof(hours_value), "%s 小时",
+             model->duration_hours_text[0] ? model->duration_hours_text : "--");
+    snprintf(minutes_value, sizeof(minutes_value), "%s 分钟",
+             model->duration_minutes_text[0] ? model->duration_minutes_text : "--");
     format_duration(model->played_minutes_available ? model->played_minutes : -1, played, sizeof(played));
     if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "不限时");
     else format_duration(model->remaining_available ? model->remaining_minutes : -1, remaining, sizeof(remaining));
     if (weekly) {
         uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
-        if (model->editor_index == weekday && model->played_minutes_available) {
+        if (entered_valid && model->editor_index == weekday && model->played_minutes_available) {
             after_minutes = (int)entered - model->played_minutes;
         }
-    } else if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES && model->played_minutes_available) {
+    } else if (entered_valid && model->numpad_purpose == PTC_UI_NUMPAD_MINUTES && model->played_minutes_available) {
         after_minutes = model->operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES && model->remaining_available
             ? model->remaining_minutes + entered : (int)entered - model->played_minutes;
     }
@@ -2460,11 +2469,19 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
     format_duration(after_minutes, after, sizeof(after));
     format_status_age(model, freshness, sizeof(freshness));
 
-    /* The compact editor keeps the keypad on the left and puts the decision-relevant summary on the right. */
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 146, 350, 98}, 8, COLOR(244, 249, 255));
-    draw_rect_outline(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 146, 350, 98}, 2, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 548, dialog.y + 154, 326, 48}, value, 34, COLOR(28, 118, 188));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 548, dialog.y + 204, 326, 26}, duration, 17, COLOR(91, 100, 114));
+    /* The compact editor keeps the keypad on the left and puts the two-part duration on the right. */
+    for (int field = 0; field < 2; ++field) {
+        UiRect rect = to_uirect(ptc_ui_minute_editor_field_rect((PtcUiDurationField)field));
+        bool selected = model->duration_field == (PtcUiDurationField)field;
+        fill_round_rect(pixels, stride, rect, 8, selected ? COLOR(230, 242, 255) : COLOR(244, 249, 255));
+        draw_rect_outline(pixels, stride, rect, selected ? 3 : 1,
+                          selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+        draw_text_center(pixels, stride, rect,
+                         field == PTC_UI_DURATION_HOURS ? hours_value : minutes_value,
+                         25, selected ? COLOR(28, 118, 188) : COLOR(66, 74, 86));
+    }
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 218, 350, 28},
+                     total_value, 19, entered_valid ? COLOR(28, 118, 188) : COLOR(194, 61, 61));
     if (holiday) {
         PtcCalendarDayType type = model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES
             ? PTC_CALENDAR_DAY_STATUTORY_HOLIDAY : PTC_CALENDAR_DAY_MAKEUP_WORKDAY;
@@ -2523,9 +2540,9 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
                              weekly && model->editor_index != today_weekday ? "所选星期草稿额度" :
                              (weekly ? "保存后预计还可玩" : "修改后预计还可玩"),
                              weekly && model->editor_index != today_weekday ? value : after,
-                             time_state_accent(weekly && model->editor_index != today_weekday ? true : after_minutes >= 0,
+                             time_state_accent(weekly && model->editor_index != today_weekday ? entered_valid : after_minutes >= 0,
                                                false,
-                                               weekly && model->editor_index != today_weekday ? (int)entered : after_minutes));
+                                               weekly && model->editor_index != today_weekday && entered_valid ? (int)entered : after_minutes));
         if (weekly && model->editor_index != today_weekday) {
             snprintf(freshness, sizeof(freshness), "%s  |  今天不受本次修改影响", DAYS[model->editor_index]);
             draw_text_center(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 518, 350, 28}, freshness,
@@ -2553,6 +2570,8 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
         draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 488, 450, 28},
                          model->numpad_error, 16, COLOR(194, 61, 61));
     }
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 518, 450, 24},
+                     "Minus 切换小时/分钟", 15, COLOR(77, 86, 99));
     draw_overlay_actions(pixels, stride, model, "+  完成输入");
 }
 
