@@ -409,18 +409,26 @@ static bool pin_input(UiState *ui, const char *title, const char *guide,
     bool plus_keyboard = false;
     bool touch_was_active = false;
     bool touch_plus_was_held = false;
+    bool ignore_touch_until_release = false;
     int touch_x = -1;
     int touch_y = -1;
     int draw_elapsed_ms = DRAW_INTERVAL_MS;
+    HidTouchScreenState initial_touch;
     if (!ui || !out || out_size == 0 || !g_active_pad) return false;
     out[0] = '\0';
     ptc_ui_pin_open(&ui->model, title, guide);
+    /* A touch that opened this PIN flow belongs to the previous page.  Do not
+     * reinterpret it as a PIN digit, cancel, confirm, or keyboard action. */
+    ignore_touch_until_release =
+        hidGetTouchScreenStates(&initial_touch, 1) && initial_touch.count > 0;
+    touch_was_active = ignore_touch_until_release;
     while (appletMainLoop() && !ui->exit_requested) {
         u64 buttons_down;
         u64 buttons_held;
         HidAnalogStickState left;
         HidAnalogStickState right;
         bool touch_active;
+        bool touch_allowed;
         HidTouchScreenState touch;
         int left_digit;
         int right_digit;
@@ -476,7 +484,10 @@ static bool pin_input(UiState *ui, const char *title, const char *guide,
         plus_was_held = (buttons_held & HidNpadButton_Plus) != 0;
 
         touch_active = hidGetTouchScreenStates(&touch, 1) && touch.count > 0;
-        if (touch_active) {
+        touch_allowed = ptc_ui_touch_after_entry_allowed(&ignore_touch_until_release, touch_active);
+        if (!touch_allowed) {
+            if (!touch_active) touch_was_active = false;
+        } else if (touch_active) {
             touch_x = (int)touch.touches[0].x;
             touch_y = (int)touch.touches[0].y;
             if (ptc_ui_rect_contains(ptc_ui_pin_confirm_rect(), touch_x, touch_y)) {
@@ -520,7 +531,7 @@ static bool pin_input(UiState *ui, const char *title, const char *guide,
             plus_keyboard = false;
             touch_plus_was_held = false;
         }
-        touch_was_active = touch_active;
+        if (touch_allowed) touch_was_active = touch_active;
         draw_elapsed_ms += INPUT_LOOP_MS;
         if (draw_elapsed_ms >= DRAW_INTERVAL_MS) {
             draw(ui);
@@ -4091,6 +4102,9 @@ int main(int argc, char **argv)
     }
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&pad);
+    /* PIN entry reuses the application's active pad while it runs its modal
+     * input loop.  Keep the graphical path registered just like fallback. */
+    g_active_pad = &pad;
     padRepeaterInitialize(&direction_repeater,
         DIRECTION_REPEAT_INITIAL_TICKS, DIRECTION_REPEAT_TICKS);
     hidInitializeTouchScreen();

@@ -1124,6 +1124,19 @@ static void draw_settings_badge(uint32_t *pixels, uint32_t stride, const PtcUiMo
     draw_text_center(pixels, stride, badge, label, 11, COLOR(255, 255, 255));
 }
 
+static void draw_advanced_hierarchy(uint32_t *pixels, uint32_t stride)
+{
+    UiRect bar = to_uirect(ptc_ui_advanced_hierarchy_rect());
+    UiRect badge = {bar.x + 218, bar.y + 14, 84, 28};
+    fill_round_rect(pixels, stride, bar, 8, COLOR(244, 249, 255));
+    draw_rect_outline(pixels, stride, bar, 1, COLOR(184, 211, 239));
+    draw_text(pixels, stride, bar.x + 18, bar.y + 36, "设置 / 高级设置", 20, COLOR(28, 118, 188));
+    fill_round_rect(pixels, stride, badge, 6, COLOR(28, 118, 188));
+    draw_text_center(pixels, stride, badge, "二级页面", 13, COLOR(255, 255, 255));
+    draw_dialog_button(pixels, stride, ptc_ui_advanced_back_rect(), "B  返回设置",
+                       COLOR(255, 255, 255), COLOR(47, 57, 71), true);
+}
+
 static void draw_action_card(
     uint32_t *pixels,
     uint32_t stride,
@@ -1815,6 +1828,10 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                          17, COLOR(194, 61, 61));
     }
     draw_tabs(pixels, stride, model);
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
+        model->settings_page == PTC_UI_SETTINGS_ADVANCED) {
+        draw_advanced_hierarchy(pixels, stride);
+    }
     if (model->parent_page != PTC_UI_PARENT_PLAN && model->parent_page != PTC_UI_PARENT_HOLIDAY) {
         if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
             actions = SUPPORT_ACTIONS;
@@ -1826,7 +1843,10 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
             actions = actions_for_page(model->parent_page, &action_count);
         }
         for (index = 0; index < action_count; ++index) {
-            UiRect card = to_uirect(ptc_ui_parent_card_rect(index));
+            UiRect card = to_uirect(
+                model->parent_page == PTC_UI_PARENT_SETTINGS &&
+                model->settings_page == PTC_UI_SETTINGS_ADVANCED && index == 0
+                    ? ptc_ui_advanced_card_rect() : ptc_ui_parent_card_rect(index));
             PtcUiActionState astate = PTC_UI_ACTION_AVAILABLE;
             if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
                 if (!ptc_ui_safety_action_visible(model, index)) continue;

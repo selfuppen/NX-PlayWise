@@ -91,6 +91,16 @@ bool ptc_ui_confirm_hold_update(PtcUiConfirmHoldState *state, bool held, int req
     return true;
 }
 
+bool ptc_ui_touch_after_entry_allowed(bool *ignore_until_release, bool touch_active)
+{
+    if (!ignore_until_release) return false;
+    if (*ignore_until_release) {
+        if (!touch_active) *ignore_until_release = false;
+        return false;
+    }
+    return true;
+}
+
 uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int required_samples)
 {
     int progress;
@@ -1532,6 +1542,21 @@ PtcUiRect ptc_ui_parent_card_rect(int index)
     return rect;
 }
 
+PtcUiRect ptc_ui_advanced_hierarchy_rect(void)
+{
+    return (PtcUiRect){54, 172, 1172, 56};
+}
+
+PtcUiRect ptc_ui_advanced_back_rect(void)
+{
+    return (PtcUiRect){1038, 180, 170, 40};
+}
+
+PtcUiRect ptc_ui_advanced_card_rect(void)
+{
+    return (PtcUiRect){54, 246, 365, 94};
+}
+
 PtcUiRect ptc_ui_holiday_card_rect(int index)
 {
     switch (index) {
@@ -1583,6 +1608,7 @@ uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallba
         played = model->played_minutes;
         if (played < 1) played = 1;
         if (played > 1440) played = 1440;
+        if (fallback >= 1 && fallback <= 1440 && fallback > played) return fallback;
         return (uint16_t)played;
     }
     if (fallback >= 1 && fallback <= 1440) return fallback;
@@ -2535,6 +2561,11 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_PARENT_NEXT_PAGE, 0);
         }
     }
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
+        model->settings_page == PTC_UI_SETTINGS_ADVANCED &&
+        ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
+        return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
+    }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(2), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
@@ -2597,7 +2628,9 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
            model->settings_page == PTC_UI_SETTINGS_ADVANCED ? 1 : ptc_ui_parent_action_count(model->parent_page))
         : ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {
-        PtcUiRect card_rect = ptc_ui_parent_card_rect(i);
+        PtcUiRect card_rect = model->parent_page == PTC_UI_PARENT_SETTINGS &&
+            model->settings_page == PTC_UI_SETTINGS_ADVANCED && i == 0
+                ? ptc_ui_advanced_card_rect() : ptc_ui_parent_card_rect(i);
         if ((model->parent_page != PTC_UI_PARENT_SETTINGS || model->settings_page != PTC_UI_SETTINGS_SUPPORT ||
              (ptc_ui_safety_action_visible(model, i) &&
               ptc_ui_safety_action_available(model, i) != PTC_UI_ACTION_DISABLED)) &&

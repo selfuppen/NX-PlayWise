@@ -204,6 +204,16 @@ static void test_shortcut_hold_and_setup_migration(void)
     check_true(ptc_ui_confirm_hold_update(&confirm_hold, true, 3), "confirm hold completes at threshold");
     check_true(!ptc_ui_confirm_hold_update(&confirm_hold, true, 3), "completed hold submits only once");
     check_true(!ptc_ui_confirm_hold_update(&confirm_hold, false, 3), "release resets confirm hold");
+    {
+        bool ignore_touch_until_release = true;
+        check_true(!ptc_ui_touch_after_entry_allowed(&ignore_touch_until_release, true),
+                   "touch held while opening PIN is ignored");
+        check_true(!ptc_ui_touch_after_entry_allowed(&ignore_touch_until_release, false) &&
+                   !ignore_touch_until_release,
+                   "opening touch must be fully released before PIN accepts touch");
+        check_true(ptc_ui_touch_after_entry_allowed(&ignore_touch_until_release, true),
+                   "a new touch after release is accepted by PIN");
+    }
     check_int(ptc_ui_confirm_hold_progress(&confirm_hold, 3), 0, "released confirm hold clears progress");
 
     check_int(ptc_ui_migrate_setup_step(0, 3), 0, "completed older wizard remains complete");
@@ -437,11 +447,14 @@ static void test_time_previews(void)
     model.remaining_available = true;
     model.played_minutes = 20;
     model.remaining_minutes = 40;
-    check_int(ptc_ui_today_limit_start_value(&model, 180), 20,
-              "today-limit editor starts from current played time");
+    check_int(ptc_ui_today_limit_start_value(&model, 180), 180,
+              "today-limit editor keeps a larger reliable current quota");
     model.played_minutes = 0;
-    check_int(ptc_ui_today_limit_start_value(&model, 180), 1,
-              "zero played time is clamped to the minimum quota");
+    check_int(ptc_ui_today_limit_start_value(&model, 180), 180,
+              "zero played time does not reduce a reliable current quota");
+    model.played_minutes = 200;
+    check_int(ptc_ui_today_limit_start_value(&model, 180), 200,
+              "played time wins when it exceeds the current quota");
     model.played_minutes = 10;
     model.remaining_minutes = 0;
     check_int(ptc_ui_today_limit_start_value(&model, 0), 10,
@@ -810,8 +823,16 @@ static void test_release_hit_targets(void)
 
     model.settings_page = PTC_UI_SETTINGS_ADVANCED;
     model.recent_event_count = 0;
-    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_PARENT_CARD, 0,
+    check_hit(hit_center(&model, ptc_ui_advanced_card_rect()), PTC_UI_HIT_PARENT_CARD, 0,
               "advanced settings exposes the hbmenu entry card");
+    check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_PARENT_BACK, 0,
+              "advanced hierarchy bar exposes a touch return to settings");
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0,
+              "advanced action no longer uses the area reserved for hierarchy context");
+    check_true(!rects_overlap(ptc_ui_advanced_hierarchy_rect(), ptc_ui_advanced_card_rect()),
+               "advanced hierarchy bar does not overlap the action card");
+    check_true(!rects_overlap(ptc_ui_advanced_card_rect(), (PtcUiRect){54, 522, 1172, 128}),
+               "advanced action card does not overlap recent execution");
     check_hit(hit_center(&model, ptc_ui_parent_tab_rect(0)), PTC_UI_HIT_NONE, 0,
               "advanced settings hides top-level tab touch navigation");
 
