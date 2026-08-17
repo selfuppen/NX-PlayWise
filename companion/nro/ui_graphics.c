@@ -2239,14 +2239,11 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
 
 static void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    static const char *MAP[9] = {"8", "1", "2", "7", "摇杆", "3", "6", "5", "4"};
-    static const int MAP_DIGITS[9] = {8, 1, 2, 7, -1, 3, 6, 5, 4};
     UiRect dialog = to_uirect(ptc_ui_pin_dialog_rect());
-    UiRect display = {dialog.x + 40, dialog.y + 112, dialog.width - 80, 70};
+    UiRect display = {dialog.x + 40, dialog.y + 112, 480, 70};
     char mask[PTC_UI_PIN_MAX_DIGITS + 1];
     char count[64];
     int row;
-    int column;
     ptc_ui_pin_format_mask(model, mask, sizeof(mask));
     draw_dialog_shell(pixels, stride, model, &dialog, 1040, 620);
     fill_round_rect(pixels, stride, display, 8, COLOR(244, 249, 255));
@@ -2257,21 +2254,66 @@ static void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel
     draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 188, 480, 24}, count, 17, COLOR(91, 100, 114));
 
     draw_text(pixels, stride, dialog.x + 40, dialog.y + 222, "摇杆方向映射", 20, COLOR(28, 34, 43));
-    for (row = 0; row < 3; ++row) {
-        for (column = 0; column < 3; ++column) {
-            UiRect cell = {dialog.x + 62 + column * 132, dialog.y + 254 + row * 58, 116, 48};
-            bool selected = model->pin_focus == MAP_DIGITS[row * 3 + column];
-            fill_round_rect(pixels, stride, cell, 7, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
-            draw_rect_outline(pixels, stride, cell, selected ? 2 : 1,
-                              selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
-            draw_text_center(pixels, stride, cell, MAP[row * 3 + column], row == 1 && column == 1 ? 15 : 23,
-                             selected ? COLOR(28, 118, 188) : COLOR(66, 74, 86));
+    {
+        int i;
+        int cx = dialog.x + 180;
+        int cy = dialog.y + 338;
+        fill_round_rect(pixels, stride, (UiRect){cx - 24, cy - 24, 48, 48}, 24, COLOR(230, 242, 255));
+        draw_rect_outline(pixels, stride, (UiRect){cx - 24, cy - 24, 48, 48}, 2, COLOR(28, 118, 188));
+        draw_text_center(pixels, stride, (UiRect){cx - 24, cy - 24, 48, 48}, "摇杆", 13, COLOR(28, 118, 188));
+        
+        for (i = 1; i <= 8; ++i) {
+            int dx = 0, dy = 0;
+            int d = 60;
+            bool selected = model->pin_focus == i;
+            UiRect cell;
+            char label[4];
+            switch (i) {
+            case 1: dx = 0; dy = -d; break;
+            case 2: dx = d; dy = -d; break;
+            case 3: dx = d; dy = 0; break;
+            case 4: dx = d; dy = d; break;
+            case 5: dx = 0; dy = d; break;
+            case 6: dx = -d; dy = d; break;
+            case 7: dx = -d; dy = 0; break;
+            case 8: dx = -d; dy = -d; break;
+            }
+            cell = (UiRect){cx + dx - 20, cy + dy - 20, 40, 40};
+            fill_round_rect(pixels, stride, cell, 20, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
+            draw_rect_outline(pixels, stride, cell, selected ? 2 : 1, selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+            snprintf(label, sizeof(label), "%d", i);
+            draw_text_center(pixels, stride, cell, label, 20, selected ? COLOR(28, 118, 188) : COLOR(66, 74, 86));
+        }
+        
+        int bcx = dialog.x + 400;
+        int bcy = cy;
+        for (i = 0; i < 4; ++i) {
+            int dx = 0, dy = 0;
+            int d = 34;
+            bool selected = false;
+            const char *label = "";
+            const char *sub = "";
+            UiRect cell;
+            switch (i) {
+            case 0: dx = 0; dy = -d; selected = model->pin_focus == 0; label = "0"; sub = "X"; break;
+            case 1: dx = d; dy = 0; label = "A"; break;
+            case 2: dx = 0; dy = d; label = "B"; break;
+            case 3: dx = -d; dy = 0; selected = model->pin_focus == 9; label = "9"; sub = "Y"; break;
+            }
+            cell = (UiRect){bcx + dx - 18, bcy + dy - 18, 36, 36};
+            fill_round_rect(pixels, stride, cell, 18, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
+            draw_rect_outline(pixels, stride, cell, selected ? 2 : 1, selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+            if (label[0] >= '0' && label[0] <= '9') {
+                draw_text_center(pixels, stride, cell, label, 20, selected ? COLOR(28, 118, 188) : COLOR(66, 74, 86));
+                draw_text_center(pixels, stride, (UiRect){cell.x, cell.y - 18, 36, 18}, sub, 12, COLOR(91, 100, 114));
+            } else {
+                draw_text_center(pixels, stride, cell, label, 16, COLOR(160, 168, 180));
+            }
         }
     }
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 452, "X = 0    Y = 9", 18, COLOR(77, 86, 99));
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 484, "左右摇杆均可输入；十字键支持上、右、下、左", 16, COLOR(77, 86, 99));
+    draw_text(pixels, stride, dialog.x + 40, dialog.y + 452, "左右摇杆均可输入；十字键支持上、右、下、左", 16, COLOR(77, 86, 99));
 
-    draw_text(pixels, stride, dialog.x + 590, dialog.y + 188, "触摸数字键盘", 20, COLOR(28, 34, 43));
+    draw_text(pixels, stride, dialog.x + 590, dialog.y + 212, "触摸数字键盘", 20, COLOR(28, 34, 43));
     for (row = 0; row < 10; ++row) {
         UiRect key = to_uirect(ptc_ui_pin_key_rect(row));
         bool selected = model->pin_focus == row;
