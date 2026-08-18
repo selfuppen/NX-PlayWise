@@ -100,7 +100,7 @@ static bool backend_connect(void *ctx)
     PtcSwitchIpcClient *client = (PtcSwitchIpcClient *)ctx;
     Result rc;
     u32 version = 0;
-    if (!client) return false;
+    if (!client || !client->sm_initialized) return false;
     if (!client->initialized) {
         rc = smGetService(&client->service, PTC_IPC_SERVICE_NAME);
         if (R_FAILED(rc)) {
@@ -212,7 +212,32 @@ static const PtcCompanionIpcBackend BACKEND = {
     backend_connect, backend_submit, backend_event_status, backend_get_result, backend_close_wait, backend_notify,
 };
 
-void ptc_switch_ipc_client_init(PtcSwitchIpcClient *client) { if (client) memset(client, 0, sizeof(*client)); }
-void ptc_switch_ipc_client_exit(PtcSwitchIpcClient *client) { if (client && client->initialized) serviceClose(&client->service); }
+void ptc_switch_ipc_client_init(PtcSwitchIpcClient *client)
+{
+    Result rc;
+    if (!client) return;
+    memset(client, 0, sizeof(*client));
+    /* libtesla only lends initServices() an SM session. Retain our own
+       reference because the pctc:u connection is opened later by the UI. */
+    rc = smInitialize();
+    if (R_FAILED(rc)) {
+        log_ipc_failure("smInitialize", rc, 0);
+        return;
+    }
+    client->sm_initialized = true;
+}
+
+void ptc_switch_ipc_client_exit(PtcSwitchIpcClient *client)
+{
+    if (!client) return;
+    if (client->initialized) {
+        serviceClose(&client->service);
+        client->initialized = false;
+    }
+    if (client->sm_initialized) {
+        smExit();
+        client->sm_initialized = false;
+    }
+}
 const PtcCompanionIpcBackend *ptc_switch_ipc_backend(void) { return &BACKEND; }
 #endif

@@ -1034,7 +1034,11 @@ public:
         ptc_overlay_input_init(&input_);
     }
 
-    void exitServices() override { fsdevUnmountDevice("sdmc"); }
+    void exitServices() override
+    {
+        ptc_overlay_bridge_exit(&bridge_);
+        fsdevUnmountDevice("sdmc");
+    }
 
     std::unique_ptr<tsl::Gui> loadInitialGui() override { return initially<PctcGui>(&bridge_, &input_); }
 

@@ -9,6 +9,7 @@
 typedef struct {
     Service service;
     bool initialized;
+    bool sm_initialized;
 } PtcSwitchIpcClient;
 
 void ptc_switch_ipc_client_init(PtcSwitchIpcClient *client);

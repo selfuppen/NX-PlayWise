@@ -21,6 +21,7 @@ typedef struct {
 } PtcOverlayBridge;
 
 void ptc_overlay_bridge_init(PtcOverlayBridge *bridge, const char *app_root, PtcStorage *storage);
+void ptc_overlay_bridge_exit(PtcOverlayBridge *bridge);
 PtcCompanionStatus ptc_overlay_bridge_submit(
     PtcOverlayBridge *bridge,
     const char *code,

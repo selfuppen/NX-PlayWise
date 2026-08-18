@@ -17,6 +17,16 @@ void ptc_overlay_bridge_init(PtcOverlayBridge *bridge, const char *app_root, Ptc
 #endif
 }
 
+void ptc_overlay_bridge_exit(PtcOverlayBridge *bridge)
+{
+    if (!bridge) return;
+    ptc_companion_transport_cancel(&bridge->transport);
+#ifdef __SWITCH__
+    ptc_switch_ipc_client_exit(&bridge->ipc);
+#endif
+    bridge->waiting = false;
+}
+
 PtcCompanionStatus ptc_overlay_bridge_submit(
     PtcOverlayBridge *bridge,
     const char *code,
