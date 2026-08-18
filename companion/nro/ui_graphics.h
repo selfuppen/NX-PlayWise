@@ -498,6 +498,13 @@ PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode);
 bool ptc_ui_day_rule_effectively_changed(PtcDayRule before, PtcDayRule after);
 bool ptc_ui_weekly_today_changed(const PtcUiModel *model);
 bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minutes);
+bool ptc_ui_today_limit_requires_hold(const PtcUiModel *model, uint16_t minutes);
+void ptc_ui_format_today_limit_confirmation(
+    const PtcUiModel *model,
+    char *risk,
+    size_t risk_size,
+    char *recovery,
+    size_t recovery_size);
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
 bool ptc_ui_setup_takeover_complete(const PtcUiModel *model);
 bool ptc_ui_runtime_fingerprint_reconfirmation_needed(const PtcUiModel *model);

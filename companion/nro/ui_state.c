@@ -1143,6 +1143,40 @@ bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minut
         minutes <= (uint16_t)model->played_minutes;
 }
 
+bool ptc_ui_today_limit_requires_hold(const PtcUiModel *model, uint16_t minutes)
+{
+    return model && (model->unrestricted_today == 1 ||
+        !model->played_minutes_available || model->played_minutes < 0 ||
+        ptc_ui_limit_minutes_would_restrict(model, minutes));
+}
+
+void ptc_ui_format_today_limit_confirmation(
+    const PtcUiModel *model,
+    char *risk,
+    size_t risk_size,
+    char *recovery,
+    size_t recovery_size)
+{
+    if (risk && risk_size > 0) {
+        if (!model || !model->played_minutes_available || model->played_minutes < 0) {
+            snprintf(risk, risk_size,
+                     "风险：无法取得今天已玩时间，设置后可能立即进入时间限制");
+        } else if (ptc_ui_limit_minutes_would_restrict(model, model->draft_minutes)) {
+            snprintf(risk, risk_size,
+                     "风险：新额度不高于已玩时间，设置后会立即进入时间限制");
+        } else if (model->unrestricted_today == 1) {
+            snprintf(risk, risk_size,
+                     "提示：今天将从不限时改为限时，请确认修改后剩余时间");
+        } else {
+            snprintf(risk, risk_size, "提示：请确认今天的实时状态和修改结果");
+        }
+    }
+    if (recovery && recovery_size > 0) {
+        snprintf(recovery, recovery_size,
+                 "解除：选择“今日不限时”“临时加时”，或兑换加时码");
+    }
+}
+
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule)
 {
     return rule.mode == PTC_RULE_MODE_LIMIT && ptc_ui_limit_minutes_would_restrict(model, rule.minutes);
@@ -1391,6 +1425,18 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         } else if (type && strcmp(type, "set_holiday_policy") == 0) {
             ptc_ui_format_holiday_save_result(model, model->message, sizeof(model->message),
                                               model->feedback_detail, sizeof(model->feedback_detail));
+        } else if (type && strcmp(type, "set_today_limit") == 0 &&
+                   (model->restricted_now == 1 || model->blocked_today == 1)) {
+            snprintf(model->message, sizeof(model->message),
+                     "今日总额度已更新，当前已进入时间限制。");
+            snprintf(model->feedback_detail, sizeof(model->feedback_detail),
+                     "解除：选择“今日不限时”“临时加时”，或兑换加时码。");
+        } else if (type && strcmp(type, "set_today_limit") == 0 &&
+                   model->remaining_available && model->remaining_minutes <= 0) {
+            snprintf(model->message, sizeof(model->message),
+                     "今日总额度已更新，额度已用完，系统限制可能即将生效。");
+            snprintf(model->feedback_detail, sizeof(model->feedback_detail),
+                     "解除：选择“今日不限时”“临时加时”，或兑换加时码。");
         } else {
             snprintf(model->message, sizeof(model->message), "%s", request_success_message(type));
         }

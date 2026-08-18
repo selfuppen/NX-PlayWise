@@ -2496,6 +2496,14 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
             }
             draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54},
                              warning, 18, model->confirm_hold_required ? COLOR(194, 61, 61) : COLOR(170, 109, 18));
+        } else if (limit_change) {
+            char risk[160];
+            char recovery[128];
+            ptc_ui_format_today_limit_confirmation(model, risk, sizeof(risk), recovery, sizeof(recovery));
+            draw_text_center(pixels, stride, (UiRect){dialog.x + 64, dialog.y + 254, 632, 24},
+                             risk, 15, model->confirm_hold_required ? COLOR(194, 61, 61) : COLOR(170, 109, 18));
+            draw_text_center(pixels, stride, (UiRect){dialog.x + 64, dialog.y + 280, 632, 22},
+                             recovery, 15, COLOR(77, 86, 99));
         } else {
             draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54},
                              model->confirm_hold_required

@@ -438,6 +438,8 @@ static void test_time_previews(void)
     PtcUiModel model;
     PtcDayRule before;
     PtcDayRule after;
+    char risk[160];
+    char recovery[128];
     uint8_t weekday;
     bool capped = false;
     memset(&model, 0, sizeof(model));
@@ -466,8 +468,18 @@ static void test_time_previews(void)
     check_int(ptc_ui_today_limit_start_value(&model, 180), 180,
               "unavailable played time falls back to the effective quota");
     check_int(ptc_ui_today_limit_start_value(&model, 0), 60,
-              "invalid unavailable-state fallback uses the safe default");
+              "invalid unavailable-state fallback uses the documented default");
+    model.unrestricted_today = 1;
+    check_true(ptc_ui_today_limit_requires_hold(&model, 60),
+               "unknown played time requires hold confirmation");
+    ptc_ui_format_today_limit_confirmation(&model, risk, sizeof(risk), recovery, sizeof(recovery));
+    check_true(strstr(risk, "无法取得今天已玩时间") != NULL &&
+               strstr(risk, "可能立即进入时间限制") != NULL &&
+               strstr(recovery, "今日不限时") != NULL && strstr(recovery, "临时加时") != NULL &&
+               strstr(recovery, "加时码") != NULL,
+               "unknown played time explains the risk and all supported release paths");
     model.played_minutes_available = true;
+    model.unrestricted_today = 0;
     model.played_minutes = 20;
     check_int(ptc_ui_preview_remaining_minutes(&model), 40, "set-limit preview subtracts played time");
     model.played_minutes_available = false;
@@ -475,8 +487,23 @@ static void test_time_previews(void)
     model.played_minutes_available = true;
     model.played_minutes = 60;
     check_true(ptc_ui_limit_minutes_would_restrict(&model, 60), "equal played and limit requires immediate restriction warning");
+    check_true(ptc_ui_today_limit_requires_hold(&model, 60),
+               "quota exhaustion requires hold confirmation");
+    ptc_ui_format_today_limit_confirmation(&model, risk, sizeof(risk), recovery, sizeof(recovery));
+    check_true(strstr(risk, "新额度不高于已玩时间") != NULL &&
+               strstr(risk, "会立即进入时间限制") != NULL,
+               "known exhausted quota explains the immediate restriction risk");
     check_true(ptc_ui_limit_minutes_would_restrict(&model, 30),
                "a quota below played time remains selectable and requires the restriction warning");
+    model.played_minutes = 20;
+    model.unrestricted_today = 1;
+    model.draft_minutes = 60;
+    check_true(ptc_ui_today_limit_requires_hold(&model, 60),
+               "unlimited-to-limited change requires hold even with a positive estimate");
+    ptc_ui_format_today_limit_confirmation(&model, risk, sizeof(risk), recovery, sizeof(recovery));
+    check_true(strstr(risk, "从不限时改为限时") != NULL &&
+               strstr(risk, "立即进入时间限制") == NULL,
+               "positive unlimited-to-limited estimate uses the non-exhausted warning");
     model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
     model.remaining_available = true;
     model.remaining_minutes = 25;
@@ -1116,6 +1143,21 @@ static void test_user_state_mapping(void)
         "\"remaining_available\":true,\"remaining_minutes\":40,\"played_minutes_available\":true,"
         "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0,\"rule_source\":\"weekly\","
         "\"calendar_covered\":true},\"completed_at\":111}";
+    const char *limit_restricted =
+        "{\"version\":1,\"request_id\":\"limit-restricted\",\"type\":\"set_today_limit\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":0,\"played_minutes_available\":true,"
+        "\"played_minutes\":60,\"play_timer_enabled\":1,\"restricted_now\":1},\"completed_at\":112}";
+    const char *limit_exhausted =
+        "{\"version\":1,\"request_id\":\"limit-exhausted\",\"type\":\"set_today_limit\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":0,\"played_minutes_available\":true,"
+        "\"played_minutes\":60,\"play_timer_enabled\":1,\"restricted_now\":0},\"completed_at\":113}";
+    const char *limit_safe =
+        "{\"version\":1,\"request_id\":\"limit-safe\",\"type\":\"set_today_limit\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":1,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":40,\"played_minutes_available\":true,"
+        "\"played_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0},\"completed_at\":114}";
 
     memset(&model, 0, sizeof(model));
     check_true(ptc_ui_apply_result_json(&model, pending), "syncing result parses");
@@ -1180,6 +1222,20 @@ static void test_user_state_mapping(void)
     check_true(strstr(model.message, "普通日期") != NULL && strstr(model.message, "不受影响") != NULL &&
                strstr(model.feedback_detail, "周计划") != NULL,
                "enabled ordinary-date holiday save gives the direct result and basis");
+    check_true(ptc_ui_apply_result_json(&model, limit_restricted), "restricted today-limit result parses");
+    check_true(strstr(model.message, "当前已进入时间限制") != NULL &&
+               strstr(model.feedback_detail, "今日不限时") != NULL &&
+               strstr(model.feedback_detail, "临时加时") != NULL &&
+               strstr(model.feedback_detail, "加时码") != NULL,
+               "restricted today-limit result explains every supported release path");
+    check_true(ptc_ui_apply_result_json(&model, limit_exhausted), "exhausted today-limit result parses");
+    check_true(strstr(model.message, "可能即将生效") != NULL &&
+               strstr(model.message, "已进入时间限制") == NULL &&
+               model.feedback_detail[0] != '\0',
+               "zero remaining without restriction avoids claiming the restriction was observed");
+    check_true(ptc_ui_apply_result_json(&model, limit_safe), "safe today-limit result parses");
+    check_true(strstr(model.message, "当前状态已刷新") != NULL && model.feedback_detail[0] == '\0',
+               "today-limit result with remaining time keeps the ordinary success message");
 }
 
 int main(void)

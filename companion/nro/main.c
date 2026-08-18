@@ -2606,9 +2606,11 @@ static void handle_today_action_ready(UiState *ui, int index)
         ui->model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
         ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
             "设置今日总额度",
-            ui->model.unrestricted_today == 1
-                ? "今天当前为不限时；输入小时和分钟后将恢复限时。"
-                : "分别输入小时和分钟；右侧显示调整前后的可玩时间。",
+            !ui->model.played_minutes_available || ui->model.played_minutes < 0
+                ? "全天总额度包含今天已玩时间；当前已玩未知，设置后可能立即限制。"
+                : (ui->model.unrestricted_today == 1
+                    ? "全天总额度包含今天已玩时间；保存后今天将从不限时改为限时。"
+                    : "全天总额度包含今天已玩时间；右侧显示调整前后的可玩时间。"),
             4, 1, 1440, current_today_limit_value(ui));
         break;
     case 2:
@@ -3508,16 +3510,21 @@ static void handle_overlay_input(UiState *ui, u64 down)
             accept_numpad(ui);
             if (purpose == PTC_UI_NUMPAD_MINUTES) {
                 if (operation == PTC_UI_OPERATION_SET_TODAY_LIMIT &&
-                    (ui->model.unrestricted_today == 1 ||
-                     ptc_ui_limit_minutes_would_restrict(&ui->model, value))) {
+                    ptc_ui_today_limit_requires_hold(&ui->model, value)) {
                     char body[192];
-                    snprintf(body, sizeof(body), "今天已玩约 %d 分钟；设置总额度 %u 分钟。",
-                             ui->model.played_minutes, (unsigned int)value);
-                    open_confirm_overlay(ui, operation,
-                        ui->model.unrestricted_today == 1 ? "不限时将改为限时" : "新额度不高于已玩时间", body);
-                    ui->model.confirm_hold_required = ui->model.unrestricted_today == 1 ||
-                        !ui->model.played_minutes_available ||
-                        ptc_ui_limit_minutes_would_restrict(&ui->model, value);
+                    const char *title;
+                    if (!ui->model.played_minutes_available || ui->model.played_minutes < 0) {
+                        title = "无法确认是否立即限制";
+                        snprintf(body, sizeof(body),
+                                 "当前已玩时间不可用；设置总额度 %u 分钟。", (unsigned int)value);
+                    } else {
+                        title = ui->model.unrestricted_today == 1
+                            ? "不限时将改为限时" : "新额度不高于已玩时间";
+                        snprintf(body, sizeof(body), "今天已玩约 %d 分钟；设置总额度 %u 分钟。",
+                                 ui->model.played_minutes, (unsigned int)value);
+                    }
+                    open_confirm_overlay(ui, operation, title, body);
+                    ui->model.confirm_hold_required = true;
                 } else {
                     ui->model.operation = PTC_UI_OPERATION_NONE;
                     submit_minutes(ui, operation, value);
@@ -3540,8 +3547,7 @@ static void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             PtcUiOperation operation = ui->model.operation;
             if (operation == PTC_UI_OPERATION_SET_TODAY_LIMIT &&
-                (ui->model.unrestricted_today == 1 ||
-                 ptc_ui_limit_minutes_would_restrict(&ui->model, ui->model.draft_minutes))) {
+                ptc_ui_today_limit_requires_hold(&ui->model, ui->model.draft_minutes)) {
                 char body[192];
                 if (ui->model.unrestricted_today == 1) {
                     if (ui->model.played_minutes_available && ui->model.played_minutes >= 0) {
@@ -3559,6 +3565,12 @@ static void handle_overlay_input(UiState *ui, u64 down)
                         open_confirm_overlay(ui, operation, "不限时将改为限时", body);
                         ui->model.confirm_hold_required = true;
                     }
+                } else if (!ui->model.played_minutes_available || ui->model.played_minutes < 0) {
+                    snprintf(body, sizeof(body),
+                             "当前已玩时间不可用；设置总额度 %u 分钟。\n暂时无法估算修改后剩余。",
+                             (unsigned int)ui->model.draft_minutes);
+                    open_confirm_overlay(ui, operation, "无法确认是否立即限制", body);
+                    ui->model.confirm_hold_required = true;
                 } else {
                     snprintf(body, sizeof(body),
                              "今天已玩约 %d 分钟；设置总额度 %u 分钟。\n调整后可能立即没有可玩时间。",
