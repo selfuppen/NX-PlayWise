@@ -12,7 +12,7 @@ include $(TOPDIR)/../../common/version.mk
 
 TARGET := pctc
 BUILD := build
-SOURCES := source . .. ../.. ../../common/protocol ../../platform/switch ../../third_party/cjson
+SOURCES := source . .. ../.. ../../common/protocol ../../common/time ../../platform/switch ../../third_party/cjson
 INCLUDES := vendor/libtesla/include ../.. ../../common ../../platform ../../platform/switch ../../build/generated
 APP_TITLE := 任我玩
 APP_AUTHOR := selfuppen@qq.com
@@ -23,7 +23,7 @@ export NROFLAGS += --nacp=$(TOPDIR)/$(TARGET).nacp
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS := -g -O2 -Wall -Wextra -Werror -ffunction-sections $(ARCH) $(DEFINES)
-CFLAGS += $(INCLUDE) -D__SWITCH__
+CFLAGS += $(INCLUDE) -D__SWITCH__ -DPTC_IPC_CLIENT_OVERLAY
 CXXFLAGS := $(filter-out -Werror,$(CFLAGS)) -std=c++20 -fno-exceptions -fno-rtti \
 	-Wno-missing-field-initializers -Wno-unused-parameter -Wno-ignored-qualifiers
 CXXFLAGS += -Wno-type-limits
@@ -37,7 +37,7 @@ export TOPDIR := $(CURDIR)
 export VPATH := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir))
 export DEPSDIR := $(CURDIR)/$(BUILD)
 CPPFILES := main.cpp
-CFILES := input_model.c bridge.c file_protocol.c transport_client.c switch_ipc_client.c request_client.c result_summary.c request_schema.c result_builder.c error_code.c fs_storage.c cJSON.c
+CFILES := input_model.c bridge.c file_protocol.c transport_client.c switch_ipc_client.c request_client.c result_summary.c request_schema.c result_builder.c error_code.c ptc_time.c fs_storage.c cJSON.c
 export LD := $(CXX)
 export OFILES_SRC := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o)
 export OFILES := $(OFILES_SRC)

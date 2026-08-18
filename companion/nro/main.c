@@ -2041,10 +2041,19 @@ static bool verify_sensitive_pin(UiState *ui, const char *action)
     char pin[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus status;
     int64_t retry_after = 0;
+    const PtcUiOverlay return_overlay = ui ? ui->model.overlay : PTC_UI_OVERLAY_NONE;
     if (!pin_input(ui, "验证 任我玩 管理 PIN", action, pin, sizeof(pin))) {
+        if (ui && return_overlay != PTC_UI_OVERLAY_NONE && ui->model.overlay == PTC_UI_OVERLAY_NONE) {
+            ui->model.overlay = return_overlay;
+        }
         ui->auth_retry_action = AUTH_RETRY_NONE;
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消敏感操作。");
         return false;
+    }
+    /* pin_input owns the PIN dialog and closes it on return. Sensitive actions
+     * must continue in the dialog that initiated authentication. */
+    if (return_overlay != PTC_UI_OVERLAY_NONE && ui->model.overlay == PTC_UI_OVERLAY_NONE) {
+        ui->model.overlay = return_overlay;
     }
     status = ptc_companion_auth_verify_pin(&ui->auth, pin, (int64_t)time(NULL), &retry_after);
     if (status != PTC_AUTH_OK) {

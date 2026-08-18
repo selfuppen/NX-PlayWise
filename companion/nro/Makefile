@@ -22,7 +22,7 @@ FREETYPE_LIBS := $(shell $(PKG_CONFIG) --static --libs freetype2)
 
 ARCH := -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS := -std=gnu99 -O2 -g -Wall -Wextra -Werror -ffunction-sections $(ARCH)
-CFLAGS += -D__SWITCH__ -I../.. -I../../build/generated -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
+CFLAGS += -D__SWITCH__ -DPTC_IPC_CLIENT_NRO -I../.. -I../../build/generated -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map
 LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
 

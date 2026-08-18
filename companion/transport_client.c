@@ -73,8 +73,8 @@ PtcCompanionStatus ptc_companion_transport_submit_json(PtcCompanionTransportClie
             client->active = PTC_TRANSPORT_FILE;
             client->accepted_by_ipc = true;
             client->route = PTC_TRANSPORT_ROUTE_IPC_SD_RESULT;
-            client->file_poll_delay_ms = 250;
-            client->next_file_poll_ms = 250;
+            client->file_poll_delay_ms = 100;
+            client->next_file_poll_ms = 100;
             return PTC_COMPANION_OK;
         }
         return status;
@@ -83,8 +83,8 @@ PtcCompanionStatus ptc_companion_transport_submit_json(PtcCompanionTransportClie
     status = file_submit_json(client, request_id, json);
     if (status == PTC_COMPANION_OK) {
         client->active = PTC_TRANSPORT_FILE;
-        client->file_poll_delay_ms = 250;
-        client->next_file_poll_ms = 250;
+        client->file_poll_delay_ms = 100;
+        client->next_file_poll_ms = 100;
     }
     return status;
 }
@@ -115,15 +115,16 @@ PtcCompanionStatus ptc_companion_transport_poll(PtcCompanionTransportClient *cli
         close_wait_token(client);
         client->active = PTC_TRANSPORT_FILE;
         client->route = PTC_TRANSPORT_ROUTE_IPC_SD_RESULT;
-        client->file_poll_delay_ms = 250;
+        client->file_poll_delay_ms = 100;
         client->next_file_poll_ms = client->elapsed_ms;
     }
     if (client->elapsed_ms < client->next_file_poll_ms) return PTC_COMPANION_PENDING;
     status = ptc_companion_read_result(&client->file, client->active_request_id, client->elapsed_ms, timeout_ms, out, out_size);
     if (status == PTC_COMPANION_PENDING) {
+        /* SDMC result checks are cheap; keep the fallback responsive instead
+         * of adding up to seconds of exponential backoff to every refresh. */
+        client->file_poll_delay_ms = 100;
         client->next_file_poll_ms = client->elapsed_ms + client->file_poll_delay_ms;
-        if (client->file_poll_delay_ms < 500) client->file_poll_delay_ms = 500;
-        else client->file_poll_delay_ms = 1000;
     }
     return status;
 }

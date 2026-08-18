@@ -8,23 +8,121 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <time.h>
 
 #include "../common/protocol/ipc_protocol.h"
+#include "../common/time/ptc_time.h"
+
+#if defined(PTC_IPC_CLIENT_OVERLAY)
+#define PTC_IPC_CLIENT_NAME "overlay"
+#elif defined(PTC_IPC_CLIENT_NRO)
+#define PTC_IPC_CLIENT_NAME "nro"
+#else
+#define PTC_IPC_CLIENT_NAME "unknown"
+#endif
+
+static bool g_ipc_failure_logged;
+static char g_ipc_failure_stage[32];
+static Result g_ipc_failure_result;
+static u32 g_ipc_failure_version;
+static u64 g_ipc_log_boot_id;
+
+static bool ipc_diagnostic_path(char *out, size_t out_size, int64_t now)
+{
+    char date[11];
+    char directory[192];
+    int written;
+    if (!out || out_size == 0) return false;
+    (void)mkdir(PLAYWISE_SD_ROOT "/logs", 0777);
+    if (ptc_format_date_utc8(now, date)) {
+        written = snprintf(directory, sizeof(directory), PLAYWISE_SD_ROOT "/logs/%s", date);
+    } else {
+        (void)mkdir(PLAYWISE_SD_ROOT "/logs/undated", 0777);
+        if (g_ipc_log_boot_id == 0) g_ipc_log_boot_id = randomGet64();
+        written = snprintf(directory, sizeof(directory), PLAYWISE_SD_ROOT "/logs/undated/%016llx",
+            (unsigned long long)g_ipc_log_boot_id);
+    }
+    if (written <= 0 || (size_t)written >= sizeof(directory)) return false;
+    (void)mkdir(directory, 0777);
+    written = snprintf(out, out_size, "%s/ipc-client.log", directory);
+    return written > 0 && (size_t)written < out_size;
+}
+
+static bool append_ipc_diagnostic(const char *stage, Result rc, u32 version)
+{
+    char path[224];
+    int64_t now = (int64_t)time(NULL);
+    FILE *file;
+    int written;
+    if (!ipc_diagnostic_path(path, sizeof(path), now)) return false;
+    file = fopen(path, "ab");
+    if (!file) return false;
+    written = fprintf(file,
+        "ts=%lld client=%s stage=%s rc=0x%08X module=%u description=%u version=%u expected=%u\n",
+        (long long)now,
+        PTC_IPC_CLIENT_NAME,
+        stage,
+        (unsigned int)rc,
+        (unsigned int)R_MODULE(rc),
+        (unsigned int)R_DESCRIPTION(rc),
+        (unsigned int)version,
+        (unsigned int)PTC_IPC_INTERFACE_VERSION);
+    return fclose(file) == 0 && written > 0;
+}
+
+static void log_ipc_failure(const char *stage, Result rc, u32 version)
+{
+    if (g_ipc_failure_logged && g_ipc_failure_result == rc &&
+        g_ipc_failure_version == version && strcmp(g_ipc_failure_stage, stage) == 0) {
+        return;
+    }
+    if (!append_ipc_diagnostic(stage, rc, version)) return;
+    snprintf(g_ipc_failure_stage, sizeof(g_ipc_failure_stage), "%s", stage);
+    g_ipc_failure_result = rc;
+    g_ipc_failure_version = version;
+    g_ipc_failure_logged = true;
+}
+
+static void log_ipc_recovered(u32 version)
+{
+    if (!g_ipc_failure_logged) return;
+    if (append_ipc_diagnostic("connected", 0, version)) {
+        g_ipc_failure_logged = false;
+        g_ipc_failure_stage[0] = '\0';
+        g_ipc_failure_result = 0;
+        g_ipc_failure_version = 0;
+    }
+}
 
 static bool backend_connect(void *ctx)
 {
     PtcSwitchIpcClient *client = (PtcSwitchIpcClient *)ctx;
+    Result rc;
     u32 version = 0;
     if (!client) return false;
     if (!client->initialized) {
-        if (R_FAILED(smGetService(&client->service, PTC_IPC_SERVICE_NAME))) return false;
+        rc = smGetService(&client->service, PTC_IPC_SERVICE_NAME);
+        if (R_FAILED(rc)) {
+            log_ipc_failure("smGetService", rc, 0);
+            return false;
+        }
         client->initialized = true;
     }
-    if (R_FAILED(serviceDispatchOut(&client->service, PTC_IPC_CMD_GET_VERSION, version)) || version != PTC_IPC_INTERFACE_VERSION) {
+    rc = serviceDispatchOut(&client->service, PTC_IPC_CMD_GET_VERSION, version);
+    if (R_FAILED(rc)) {
+        log_ipc_failure("get_version_dispatch", rc, version);
         serviceClose(&client->service);
         client->initialized = false;
         return false;
     }
+    if (version != PTC_IPC_INTERFACE_VERSION) {
+        log_ipc_failure("version_mismatch", 0, version);
+        serviceClose(&client->service);
+        client->initialized = false;
+        return false;
+    }
+    log_ipc_recovered(version);
     return true;
 }
 
