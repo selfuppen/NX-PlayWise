@@ -10,7 +10,7 @@ TOPDIR ?= $(CURDIR)
 include $(DEVKITPRO)/libnx/switch_rules
 include $(TOPDIR)/../../common/version.mk
 
-TARGET := pctc
+TARGET := playwise
 BUILD := build
 SOURCES := source . .. ../.. ../../common/protocol ../../common/time ../../platform/switch ../../third_party/cjson
 INCLUDES := vendor/libtesla/include ../.. ../../common ../../platform ../../platform/switch ../../build/generated
@@ -49,7 +49,7 @@ $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $@ -f $(CURDIR)/Makefile
 clean:
-	@rm -fr $(BUILD) $(TARGET).ovl $(TARGET).nacp $(TARGET).elf
+	@rm -fr $(BUILD) $(TARGET).ovl $(TARGET).nacp $(TARGET).elf pctc.ovl pctc.nacp pctc.elf
 else
 DEPENDS := $(OFILES:.o=.d)
 all: $(OUTPUT).ovl

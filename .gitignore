@@ -296,6 +296,9 @@ node_modules/
 /companion/nro/pctc.nro
 /companion/nro/pctc.nacp
 /companion/overlay/build/
+/companion/overlay/playwise.elf
+/companion/overlay/playwise.nacp
+/companion/overlay/playwise.ovl
 /companion/overlay/pctc.elf
 /companion/overlay/pctc.nacp
 /companion/overlay/pctc.ovl

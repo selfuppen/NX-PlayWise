@@ -70,7 +70,7 @@ def write_package(
         embedded = manifest.encode()
         package.writestr("switch/playwise/pctc.nro", valid_nro(with_icon=True, embedded_manifest=embedded + component_marker))
         if boot2:
-            package.writestr("switch/.overlays/pctc.ovl", valid_nro(with_icon=False, embedded_manifest=embedded) if overlay_data is None else overlay_data)
+            package.writestr("switch/.overlays/playwise.ovl", valid_nro(with_icon=False, embedded_manifest=embedded) if overlay_data is None else overlay_data)
             package.writestr("atmosphere/contents/4200000000BD2300/exefs.nsp", embedded)
             package.writestr("atmosphere/contents/4200000000BD2300/flags/boot2.flag", b"")
     return json.loads(manifest)

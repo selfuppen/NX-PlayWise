@@ -25,12 +25,13 @@ $isFullInstall = $Clean.IsPresent -or $Full.IsPresent
 
 $ownedRelativePaths = @(
     "atmosphere\contents\4200000000BD2300",
-    "switch\.overlays\pctc.ovl"
+    "switch\.overlays\playwise.ovl"
 )
+$legacyOverlayRelativePaths = @("switch\.overlays\pctc.ovl")
 if ($isFullInstall) {
-    $pathsToRemove = @("switch\playwise") + $ownedRelativePaths
+    $pathsToRemove = @("switch\playwise") + $ownedRelativePaths + $legacyOverlayRelativePaths
 } else {
-    $pathsToRemove = $ownedRelativePaths
+    $pathsToRemove = $ownedRelativePaths + $legacyOverlayRelativePaths
 }
 
 function Write-Utf8NoBom {
@@ -117,7 +118,7 @@ if ($sourceRoot.StartsWith($destinationRoot, [System.StringComparison]::OrdinalI
 
 $sourceApp = Join-Path $sourceRoot "switch\playwise"
 $sourceSysmodule = Join-Path $sourceRoot "atmosphere\contents\4200000000BD2300"
-$sourceOverlay = Join-Path $sourceRoot "switch\.overlays\pctc.ovl"
+$sourceOverlay = Join-Path $sourceRoot "switch\.overlays\playwise.ovl"
 $availableRelativePaths = @()
 $hasPackageCore = $false
 
@@ -148,7 +149,7 @@ if (Test-Path -LiteralPath $sourceSysmodule -PathType Container) {
 }
 
 if (Test-Path -LiteralPath $sourceOverlay -PathType Leaf) {
-    $availableRelativePaths += "switch\.overlays\pctc.ovl"
+    $availableRelativePaths += "switch\.overlays\playwise.ovl"
 }
 
 if (-not $hasPackageCore) {

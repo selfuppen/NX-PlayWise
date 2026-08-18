@@ -110,7 +110,7 @@ def verify_playwise_package() -> None:
         out = root / "playwise"
         zip_path = root / "playwise.zip"
         nro = root / "pctc.nro"
-        overlay = root / "pctc.ovl"
+        overlay = root / "playwise.ovl"
         exefs = root / "exefs.nsp"
         manifest = root / "release-manifest.json"
         nro.write_bytes(b"nro")
@@ -176,7 +176,7 @@ def verify_playwise_package() -> None:
             "switch/playwise/setup.json",
         )), "playwise zip must not overwrite live runtime data")
         require(not any(name.startswith("playwise-install/") for name in names), "playwise zip must not contain installer-only files")
-        require("switch/.overlays/pctc.ovl" in names, "playwise package must contain the overlay")
+        require("switch/.overlays/playwise.ovl" in names, "playwise package must contain the overlay")
 
         installed = root / "installed"
         (installed / APP_DIR).mkdir(parents=True)
@@ -209,7 +209,7 @@ def verify_playwise_package() -> None:
                 "direct overlay must replace build.json")
         require((installed / CONTENT_DIR / "exefs.nsp").read_bytes() == b"nsp",
                 "direct overlay must replace the sysmodule binary")
-        require((installed / "switch" / ".overlays" / "pctc.ovl").read_bytes() == b"ovl",
+        require((installed / "switch" / ".overlays" / "playwise.ovl").read_bytes() == b"ovl",
                 "direct overlay must replace the Overlay binary")
 
         invalid_out = root / "invalid-boot2"

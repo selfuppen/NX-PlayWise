@@ -83,7 +83,7 @@ companion-nro: manifest
 companion-overlay: manifest
 	$(MAKE) -C companion/overlay
 	mkdir -p build/switch
-	cp companion/overlay/pctc.ovl build/switch/pctc.ovl
+	cp companion/overlay/playwise.ovl build/switch/playwise.ovl
 
 sysmodule-nsp: manifest
 	$(MAKE) -C sysmodule
@@ -92,7 +92,7 @@ sysmodule-nsp: manifest
 	$(DEVKITA64)/bin/aarch64-none-elf-objcopy -O binary sysmodule/pctc-sysmodule.elf build/switch/pctc-sysmodule.bin
 
 package-playwise: sysmodule-nsp companion-nro companion-overlay
-	python3 tools/package_sdmc.py --out build/packages/playwise --zip build/packages/playwise-$(PLAYWISE_VERSION).zip --manifest build/generated/release-manifest.json --sysmodule-exefs build/switch/exefs.nsp --nro build/switch/pctc.nro --overlay build/switch/pctc.ovl --boot2
+	python3 tools/package_sdmc.py --out build/packages/playwise --zip build/packages/playwise-$(PLAYWISE_VERSION).zip --manifest build/generated/release-manifest.json --sysmodule-exefs build/switch/exefs.nsp --nro build/switch/pctc.nro --overlay build/switch/playwise.ovl --boot2
 
 package-complete: package-playwise
 	python3 tools/build_ptc_standalone.py --check

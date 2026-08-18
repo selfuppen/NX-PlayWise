@@ -59,7 +59,7 @@ PACKAGE_EXPECTATIONS = {"playwise": True}
 RELEASE_COMPONENTS = (
     f"{CONTENT_ROOT}/exefs.nsp",
     "switch/playwise/pctc.nro",
-    "switch/.overlays/pctc.ovl",
+    "switch/.overlays/playwise.ovl",
 )
 SCANNABLE_RELEASE_COMPONENTS = RELEASE_COMPONENTS[1:]
 FORBIDDEN_RELEASE_MARKERS = (
@@ -164,7 +164,7 @@ def verify_package_zip(
         manifest = build if expected_manifest is None else expected_manifest
         component_data = {name: package.read(name) for name in RELEASE_COMPONENTS if name in names}
         nro_data = component_data.get("switch/playwise/pctc.nro")
-        overlay_data = component_data.get("switch/.overlays/pctc.ovl")
+        overlay_data = component_data.get("switch/.overlays/playwise.ovl")
         package_payloads = {name: package.read(name) for name in names if not name.endswith("/")}
     if any(key in config for key in ("grant_secret", "control_mode", "allow_unlimited_to_limited")):
         raise PackageError(f"{path.name}: config contains removed secret or mode fields")
@@ -183,7 +183,7 @@ def verify_package_zip(
     boot2 = f"{CONTENT_ROOT}/flags/boot2.flag"
     exefs = f"{CONTENT_ROOT}/exefs.nsp"
     nro = "switch/playwise/pctc.nro"
-    overlay = "switch/.overlays/pctc.ovl"
+    overlay = "switch/.overlays/playwise.ovl"
     if (boot2 in names) != expect_boot2:
         raise PackageError(f"{path.name}: unexpected boot2.flag state")
     if expect_boot2 and exefs not in names:
@@ -191,9 +191,9 @@ def verify_package_zip(
     if nro not in names:
         raise PackageError(f"{path.name}: missing pctc.nro")
     if expect_boot2 and overlay not in names:
-        raise PackageError(f"{path.name}: missing pctc.ovl")
+        raise PackageError(f"{path.name}: missing playwise.ovl")
     if expect_boot2 and overlay_data is not None:
-        verify_nro_asset(overlay_data, f"{path.name}: pctc.ovl", require_icon=False)
+        verify_nro_asset(overlay_data, f"{path.name}: playwise.ovl", require_icon=False)
     if nro_data is not None:
         verify_nro_asset(nro_data, f"{path.name}: pctc.nro", require_icon=True)
         for marker in NRO_INFORMATION_MARKERS:
@@ -275,7 +275,7 @@ def verify_packaged_artifacts(path: Path, manifest: dict) -> None:
         expected = {
             f"{CONTENT_ROOT}/exefs.nsp": ROOT / "build" / "switch" / "exefs.nsp",
             "switch/playwise/pctc.nro": ROOT / "build" / "switch" / "pctc.nro",
-            "switch/.overlays/pctc.ovl": ROOT / "build" / "switch" / "pctc.ovl",
+            "switch/.overlays/playwise.ovl": ROOT / "build" / "switch" / "playwise.ovl",
         }
         for member_name, artifact in expected.items():
             if package.read(member_name) != artifact.read_bytes():
