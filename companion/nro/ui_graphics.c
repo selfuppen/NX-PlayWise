@@ -314,6 +314,31 @@ static void draw_rect_outline(uint32_t *pixels, uint32_t stride, UiRect rect, in
     fill_rect_packed(pixels, stride, (UiRect){rect.x + rect.width - width, rect.y, width, rect.height}, resolved);
 }
 
+static void draw_circle_outline(
+    uint32_t *pixels,
+    uint32_t stride,
+    int center_x,
+    int center_y,
+    int radius,
+    int width,
+    uint32_t color)
+{
+    int outer_squared = radius * radius;
+    int inner_radius = radius - width;
+    int inner_squared = inner_radius > 0 ? inner_radius * inner_radius : 0;
+    uint32_t resolved = resolve_color(color, UI_COLOR_BORDER);
+    int y;
+    for (y = -radius; y <= radius; ++y) {
+        int x;
+        for (x = -radius; x <= radius; ++x) {
+            int distance_squared = x * x + y * y;
+            if (distance_squared <= outer_squared && distance_squared >= inner_squared) {
+                set_pixel(pixels, stride, center_x + x, center_y + y, resolved);
+            }
+        }
+    }
+}
+
 static void draw_line(
     uint32_t *pixels,
     uint32_t stride,
@@ -2258,56 +2283,55 @@ static void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel
         int i;
         int cx = dialog.x + 180;
         int cy = dialog.y + 338;
-        fill_round_rect(pixels, stride, (UiRect){cx - 24, cy - 24, 48, 48}, 24, COLOR(230, 242, 255));
-        draw_rect_outline(pixels, stride, (UiRect){cx - 24, cy - 24, 48, 48}, 2, COLOR(28, 118, 188));
-        draw_text_center(pixels, stride, (UiRect){cx - 24, cy - 24, 48, 48}, "摇杆", 13, COLOR(28, 118, 188));
+        fill_round_rect(pixels, stride, (UiRect){cx - 48, cy - 48, 96, 96}, 48, COLOR(250, 251, 253));
+        draw_circle_outline(pixels, stride, cx, cy, 48, 2, COLOR(28, 118, 188));
+        draw_circle_outline(pixels, stride, cx, cy, 36, 2, COLOR(203, 211, 222));
+        draw_text_center(pixels, stride, (UiRect){cx - 32, cy - 18, 64, 36}, "摇杆", 13, COLOR(28, 118, 188));
         
         for (i = 1; i <= 8; ++i) {
             int dx = 0, dy = 0;
-            int d = 60;
-            bool selected = model->pin_focus == i;
             UiRect cell;
             char label[4];
             switch (i) {
-            case 1: dx = 0; dy = -d; break;
-            case 2: dx = d; dy = -d; break;
-            case 3: dx = d; dy = 0; break;
-            case 4: dx = d; dy = d; break;
-            case 5: dx = 0; dy = d; break;
-            case 6: dx = -d; dy = d; break;
-            case 7: dx = -d; dy = 0; break;
-            case 8: dx = -d; dy = -d; break;
+            case 1: dx = 0; dy = -78; break;
+            case 2: dx = 62; dy = -62; break;
+            case 3: dx = 78; dy = 0; break;
+            case 4: dx = 62; dy = 62; break;
+            case 5: dx = 0; dy = 78; break;
+            case 6: dx = -62; dy = 62; break;
+            case 7: dx = -78; dy = 0; break;
+            case 8: dx = -62; dy = -62; break;
             }
-            cell = (UiRect){cx + dx - 20, cy + dy - 20, 40, 40};
-            fill_round_rect(pixels, stride, cell, 20, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
-            draw_rect_outline(pixels, stride, cell, selected ? 2 : 1, selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+            cell = (UiRect){cx + dx - 18, cy + dy - 18, 36, 36};
             snprintf(label, sizeof(label), "%d", i);
-            draw_text_center(pixels, stride, cell, label, 20, selected ? COLOR(28, 118, 188) : COLOR(66, 74, 86));
+            draw_text_center(pixels, stride, cell, label, 22, COLOR(28, 118, 188));
         }
         
-        int bcx = dialog.x + 400;
+        int bcx = dialog.x + 410;
         int bcy = cy;
         for (i = 0; i < 4; ++i) {
             int dx = 0, dy = 0;
-            int d = 34;
-            bool selected = false;
-            const char *label = "";
-            const char *sub = "";
+            int d = 48;
+            int digit = -1;
+            const char *button = "";
             UiRect cell;
             switch (i) {
-            case 0: dx = 0; dy = -d; selected = model->pin_focus == 0; label = "0"; sub = "X"; break;
-            case 1: dx = d; dy = 0; label = "A"; break;
-            case 2: dx = 0; dy = d; label = "B"; break;
-            case 3: dx = -d; dy = 0; selected = model->pin_focus == 9; label = "9"; sub = "Y"; break;
+            case 0: dx = 0; dy = -d; digit = 0; button = "X"; break;
+            case 1: dx = d; dy = 0; break;
+            case 2: dx = 0; dy = d; break;
+            case 3: dx = -d; dy = 0; digit = 9; button = "Y"; break;
             }
-            cell = (UiRect){bcx + dx - 18, bcy + dy - 18, 36, 36};
-            fill_round_rect(pixels, stride, cell, 18, selected ? COLOR(230, 242, 255) : COLOR(250, 251, 253));
-            draw_rect_outline(pixels, stride, cell, selected ? 2 : 1, selected ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
-            if (label[0] >= '0' && label[0] <= '9') {
-                draw_text_center(pixels, stride, cell, label, 20, selected ? COLOR(28, 118, 188) : COLOR(66, 74, 86));
-                draw_text_center(pixels, stride, (UiRect){cell.x, cell.y - 18, 36, 18}, sub, 12, COLOR(91, 100, 114));
-            } else {
-                draw_text_center(pixels, stride, cell, label, 16, COLOR(160, 168, 180));
+            cell = (UiRect){bcx + dx - 26, bcy + dy - 26, 52, 52};
+            fill_round_rect(pixels, stride, cell, 26, COLOR(250, 251, 253));
+            draw_circle_outline(pixels, stride, bcx + dx, bcy + dy, 26, 2,
+                                digit >= 0 ? COLOR(28, 118, 188) : COLOR(203, 211, 222));
+            if (digit >= 0) {
+                char digit_label[4];
+                snprintf(digit_label, sizeof(digit_label), "%d", digit);
+                draw_text_center(pixels, stride, (UiRect){cell.x, cell.y + 3, cell.width, 21},
+                                 button, 12, COLOR(91, 100, 114));
+                draw_text_center(pixels, stride, (UiRect){cell.x, cell.y + 19, cell.width, 28},
+                                 digit_label, 20, COLOR(28, 118, 188));
             }
         }
     }
