@@ -804,12 +804,12 @@ static void test_release_hit_targets(void)
     snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
     check_true(ptc_ui_safety_action_visible(&model, 0) && ptc_ui_safety_action_visible(&model, 1),
                "support setup and repair cards stay visible while active");
-    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0,
+    check_hit(hit_center(&model, ptc_ui_support_card_rect(0)), PTC_UI_HIT_NONE, 0,
               "active support takeover card is disabled");
-    check_hit(hit_center(&model, ptc_ui_parent_card_rect(1)), PTC_UI_HIT_NONE, 0,
+    check_hit(hit_center(&model, ptc_ui_support_card_rect(1)), PTC_UI_HIT_NONE, 0,
               "active support repair card is disabled");
-    check_hit(hit_center(&model, ptc_ui_parent_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "support diagnostics card");
-    check_hit(hit_center(&model, ptc_ui_parent_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "support software information card");
+    check_hit(hit_center(&model, ptc_ui_support_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4, "support diagnostics card");
+    check_hit(hit_center(&model, ptc_ui_support_card_rect(5)), PTC_UI_HIT_PARENT_CARD, 5, "support software information card");
     check_hit(hit_center(&model, ptc_ui_support_event_rect(0)), PTC_UI_HIT_SUPPORT_EVENT, 2,
                "newest support event is independently actionable");
     {
@@ -820,6 +820,18 @@ static void test_release_hit_targets(void)
     }
     check_true(!rects_overlap(ptc_ui_support_event_rect(0), ptc_ui_support_event_rect(1)),
                "support event rows do not overlap");
+    check_hit(hit_center(&model, ptc_ui_support_back_rect()), PTC_UI_HIT_PARENT_BACK, 0,
+              "support hierarchy bar exposes a touch return to settings");
+    check_hit(hit_center(&model, ptc_ui_support_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4,
+              "support cards use the secondary-page layout");
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0,
+              "support actions no longer use the area reserved for hierarchy context");
+    check_true(!rects_overlap(ptc_ui_support_hierarchy_rect(), ptc_ui_support_card_rect(0)),
+               "support hierarchy bar does not overlap the action cards");
+    check_true(!rects_overlap(ptc_ui_support_card_rect(4), (PtcUiRect){54, 522, 1172, 128}),
+               "support action cards do not overlap recent execution");
+    check_hit(hit_center(&model, ptc_ui_parent_tab_rect(0)), PTC_UI_HIT_NONE, 0,
+              "support page hides top-level tab touch navigation");
 
     model.settings_page = PTC_UI_SETTINGS_ADVANCED;
     model.recent_event_count = 0;

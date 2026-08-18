@@ -1557,6 +1557,26 @@ PtcUiRect ptc_ui_advanced_card_rect(void)
     return (PtcUiRect){54, 246, 365, 94};
 }
 
+PtcUiRect ptc_ui_support_hierarchy_rect(void)
+{
+    return (PtcUiRect){54, 172, 760, 56};
+}
+
+PtcUiRect ptc_ui_support_back_rect(void)
+{
+    return (PtcUiRect){644, 180, 152, 40};
+}
+
+PtcUiRect ptc_ui_support_card_rect(int index)
+{
+    int column;
+    int row;
+    if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
+    column = index % 2;
+    row = index / 2;
+    return (PtcUiRect){54 + column * 385, 240 + row * 88, 365, 82};
+}
+
 PtcUiRect ptc_ui_holiday_card_rect(int index)
 {
     switch (index) {
@@ -2562,8 +2582,10 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         }
     }
     if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
-        model->settings_page == PTC_UI_SETTINGS_ADVANCED &&
-        ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
+        ((model->settings_page == PTC_UI_SETTINGS_ADVANCED &&
+          ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) ||
+         (model->settings_page == PTC_UI_SETTINGS_SUPPORT &&
+          ptc_ui_rect_contains(ptc_ui_support_back_rect(), x, y)))) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(2), x, y)) {
@@ -2628,9 +2650,12 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
            model->settings_page == PTC_UI_SETTINGS_ADVANCED ? 1 : ptc_ui_parent_action_count(model->parent_page))
         : ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {
-        PtcUiRect card_rect = model->parent_page == PTC_UI_PARENT_SETTINGS &&
-            model->settings_page == PTC_UI_SETTINGS_ADVANCED && i == 0
-                ? ptc_ui_advanced_card_rect() : ptc_ui_parent_card_rect(i);
+        PtcUiRect card_rect = model->parent_page == PTC_UI_PARENT_SETTINGS
+            ? (model->settings_page == PTC_UI_SETTINGS_ADVANCED && i == 0
+                ? ptc_ui_advanced_card_rect()
+                : (model->settings_page == PTC_UI_SETTINGS_SUPPORT
+                    ? ptc_ui_support_card_rect(i) : ptc_ui_parent_card_rect(i)))
+            : ptc_ui_parent_card_rect(i);
         if ((model->parent_page != PTC_UI_PARENT_SETTINGS || model->settings_page != PTC_UI_SETTINGS_SUPPORT ||
              (ptc_ui_safety_action_visible(model, i) &&
               ptc_ui_safety_action_available(model, i) != PTC_UI_ACTION_DISABLED)) &&

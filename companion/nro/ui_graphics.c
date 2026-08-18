@@ -1149,16 +1149,21 @@ static void draw_settings_badge(uint32_t *pixels, uint32_t stride, const PtcUiMo
     draw_text_center(pixels, stride, badge, label, 11, COLOR(255, 255, 255));
 }
 
-static void draw_advanced_hierarchy(uint32_t *pixels, uint32_t stride)
+static void draw_settings_hierarchy(
+    uint32_t *pixels,
+    uint32_t stride,
+    PtcUiRect hierarchy_rect,
+    PtcUiRect back_rect,
+    const char *title)
 {
-    UiRect bar = to_uirect(ptc_ui_advanced_hierarchy_rect());
+    UiRect bar = to_uirect(hierarchy_rect);
     UiRect badge = {bar.x + 218, bar.y + 14, 84, 28};
     fill_round_rect(pixels, stride, bar, 8, COLOR(244, 249, 255));
     draw_rect_outline(pixels, stride, bar, 1, COLOR(184, 211, 239));
-    draw_text(pixels, stride, bar.x + 18, bar.y + 36, "设置 / 高级设置", 20, COLOR(28, 118, 188));
+    draw_text(pixels, stride, bar.x + 18, bar.y + 36, title, 20, COLOR(28, 118, 188));
     fill_round_rect(pixels, stride, badge, 6, COLOR(28, 118, 188));
     draw_text_center(pixels, stride, badge, "二级页面", 13, COLOR(255, 255, 255));
-    draw_dialog_button(pixels, stride, ptc_ui_advanced_back_rect(), "B  返回设置",
+    draw_dialog_button(pixels, stride, back_rect, "B  返回设置",
                        COLOR(255, 255, 255), COLOR(47, 57, 71), true);
 }
 
@@ -1175,6 +1180,7 @@ static void draw_action_card(
     bool recommended = state == PTC_UI_ACTION_RECOMMENDED;
     int title_size = 24;
     int subtitle_size = 18;
+    int compact = rect.height < 90;
     uint32_t background = disabled ? COLOR(244, 246, 249) :
                           selected ? COLOR(244, 249, 255) : COLOR(255, 255, 255);
     uint32_t border = disabled ? COLOR(230, 233, 238) :
@@ -1183,15 +1189,16 @@ static void draw_action_card(
     uint32_t sub_color = disabled ? COLOR(180, 186, 196) : COLOR(91, 100, 114);
     fill_round_rect(pixels, stride, rect, 8, background);
     draw_rect_outline(pixels, stride, rect, selected && !disabled ? 3 : 1, border);
-    fill_round_rect(pixels, stride, (UiRect){rect.x + 20, rect.y + 25, 12, rect.height - 50}, 6,
+    fill_round_rect(pixels, stride, (UiRect){rect.x + 20, rect.y + (compact ? 20 : 25), 12,
+                    rect.height - (compact ? 40 : 50)}, 6,
                     disabled ? COLOR(200, 206, 214) : action->accent);
     while (title_size > 18 && measure_text(action->title, title_size) > rect.width - 112 - reserved_right) --title_size;
     while (subtitle_size > 14 && measure_text(action->subtitle, subtitle_size) > rect.width - 80 - reserved_right) --subtitle_size;
-    draw_text(pixels, stride, rect.x + 54, rect.y + 46, action->title, title_size, title_color);
+    draw_text(pixels, stride, rect.x + 54, rect.y + (compact ? 38 : 46), action->title, title_size, title_color);
     {
         char subtitle[192];
         fit_text(subtitle, sizeof(subtitle), action->subtitle, subtitle_size, rect.width - 80 - reserved_right);
-        draw_text(pixels, stride, rect.x + 54, rect.y + 78, subtitle, subtitle_size, sub_color);
+        draw_text(pixels, stride, rect.x + 54, rect.y + (compact ? 66 : 78), subtitle, subtitle_size, sub_color);
     }
     if (recommended && !disabled) {
         fill_round_rect(pixels, stride, (UiRect){rect.x + rect.width - 110, rect.y + 12, 90, 28}, 6, COLOR(25, 132, 95));
@@ -1855,7 +1862,12 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     draw_tabs(pixels, stride, model);
     if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
         model->settings_page == PTC_UI_SETTINGS_ADVANCED) {
-        draw_advanced_hierarchy(pixels, stride);
+        draw_settings_hierarchy(pixels, stride, ptc_ui_advanced_hierarchy_rect(),
+                                ptc_ui_advanced_back_rect(), "设置 / 高级设置");
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
+               model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
+        draw_settings_hierarchy(pixels, stride, ptc_ui_support_hierarchy_rect(),
+                                ptc_ui_support_back_rect(), "设置 / 支持与恢复");
     }
     if (model->parent_page != PTC_UI_PARENT_PLAN && model->parent_page != PTC_UI_PARENT_HOLIDAY) {
         if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
@@ -1868,10 +1880,12 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
             actions = actions_for_page(model->parent_page, &action_count);
         }
         for (index = 0; index < action_count; ++index) {
-            UiRect card = to_uirect(
-                model->parent_page == PTC_UI_PARENT_SETTINGS &&
-                model->settings_page == PTC_UI_SETTINGS_ADVANCED && index == 0
-                    ? ptc_ui_advanced_card_rect() : ptc_ui_parent_card_rect(index));
+            UiRect card = to_uirect(model->parent_page == PTC_UI_PARENT_SETTINGS
+                ? (model->settings_page == PTC_UI_SETTINGS_ADVANCED && index == 0
+                    ? ptc_ui_advanced_card_rect()
+                    : (model->settings_page == PTC_UI_SETTINGS_SUPPORT
+                        ? ptc_ui_support_card_rect(index) : ptc_ui_parent_card_rect(index)))
+                : ptc_ui_parent_card_rect(index));
             PtcUiActionState astate = PTC_UI_ACTION_AVAILABLE;
             if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
                 if (!ptc_ui_safety_action_visible(model, index)) continue;
