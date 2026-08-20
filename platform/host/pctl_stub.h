@@ -25,6 +25,7 @@ typedef struct {
     PtcErrorCode restore_error;
     bool runtime_effect_succeeds;
     bool model_elapsed_time;
+    bool hide_restricted_now;
     uint16_t configured_minutes;
     uint32_t played_minutes_today;
     bool expiry_observed;

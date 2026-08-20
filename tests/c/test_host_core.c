@@ -1101,7 +1101,7 @@ static void test_daily_enforce_does_not_start_play_timer(void)
         "passive settings confirmation persists the new day as enforced");
 }
 
-static void test_expiry_without_restriction_is_reported(void)
+static void test_restore_exhausted_weekly_limit_accepts_transient_restriction(void)
 {
     PtcMemStorage mem;
     PtcPctlStub pctl;
@@ -1112,12 +1112,15 @@ static void test_expiry_without_restriction_is_reported(void)
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
     pctl.model_elapsed_time = true;
-    pctl.configured_minutes = 60;
-    pctl.played_minutes_today = 61;
+    pctl.configured_minutes = 770;
+    pctl.played_minutes_today = 745;
+    pctl.hide_restricted_now = true;
     pctl.status.unrestricted_today = false;
     pctl.status.limited_today = true;
     pctl.status.remaining_available = true;
-    pctl.status.remaining_minutes = 0;
+    pctl.status.remaining_minutes = 25;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 770;
     pctl.status.play_timer_enabled = true;
     pctl.status.restricted_now = false;
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
@@ -1126,63 +1129,37 @@ static void test_expiry_without_restriction_is_reported(void)
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
         "{\"version\":1,\"phase\":\"active\",\"compatibility_status\":\"verified\",\"restriction_cleared\":true,"
         "\"snapshot_available\":true,\"activate_after\":0,\"last_error\":\"\"}"),
-        "seed active setup for expiry observation");
+        "seed active setup before restoring an exhausted weekly limit");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/rules.json",
         "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
         "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
         "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60}],"
         "\"today_override_present\":true,\"today_override_day_index\":2380,"
-        "\"today_override_mode\":\"limit\",\"today_override_minutes\":60}"),
-        "seed expired effective rule");
+        "\"today_override_mode\":\"limit\",\"today_override_minutes\":770}"),
+        "seed a weekly rule covered by today's 770-minute override");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/state.json",
-        "{\"version\":1,\"last_enforced_day_index\":2380,\"last_enforced_mode\":1,\"last_enforced_minutes\":60,"
+        "{\"version\":1,\"last_enforced_day_index\":2380,\"last_enforced_mode\":1,\"last_enforced_minutes\":770,"
         "\"apply_status\":\"idle\",\"apply_pending_confirmation\":false,\"apply_confirmation_deadline\":0,"
         "\"pending_mode\":0,\"pending_minutes\":0,\"updated_at\":0}"),
-        "seed enforced state before expiry anomaly");
+        "seed enforced state before restoring the weekly rule");
 
-    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1,
-        "played-time overrun immediately confirms a missing expiry effect");
-    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
-        strstr(text, "\"expiry_effect_failed\":true"),
-        "missing expiry effect is persisted");
-    check_true(mem.storage.vtable->read_text(&mem.storage, "app/support/recent-events.jsonl", text, sizeof(text)) &&
-        strstr(text, "\"error\":\"pctl_effect_not_observed\"") &&
-        strstr(text, "\"detail\":\"expiry_effect_not_observed\""),
-        "missing expiry effect is recorded for support");
-
-    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-expiry-failed.json",
-        "{\"version\":1,\"request_id\":\"status-expiry-failed\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
-        "queue status for confirmed expiry failure");
-    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "confirmed expiry failure status is processed");
-    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-expiry-failed.json", text, sizeof(text)) &&
-        strstr(text, "\"status\":\"error\"") && strstr(text, "\"code\":306") &&
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/restore-exhausted.json",
+        "{\"version\":1,\"request_id\":\"restore-exhausted\",\"type\":\"restore_today_policy\","
+        "\"created_at\":1,\"payload\":{}}"),
+        "queue weekly restore after played time exceeds its allowance");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1,
+        "exhausted weekly restore is processed despite transient 1455=false");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/restore-exhausted.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"rule_source\":\"weekly\"") &&
         strstr(text, "\"remaining_minutes\":0") && strstr(text, "\"restricted_now\":0"),
-        "status reports 306 with the real exhausted but unrestricted state");
-
-    pctl.status.restricted_now = true;
-    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-expiry-recovered.json",
-        "{\"version\":1,\"request_id\":\"status-expiry-recovered\",\"type\":\"status\",\"created_at\":2,\"payload\":{}}"),
-        "queue status after the restriction effect appears");
-    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "recovered expiry status is processed");
-    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-expiry-recovered.json", text, sizeof(text)) &&
-        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"restricted_now\":1"),
-        "observed restriction clears the expiry failure");
-    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
-        strstr(text, "\"expiry_effect_failed\":false"),
-        "recovered restriction clears persisted expiry markers");
-
-    pctl.status.restricted_now = false;
-    pctl.played_minutes_today = 60;
-    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0,
-        "zero remaining at the exact minute starts a grace window");
-    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
-        strstr(text, "\"expiry_effect_pending_since\":1783526401") &&
-        strstr(text, "\"expiry_effect_failed\":false"),
-        "rounding grace is persisted without an early failure");
-    fake_time.snapshot.unix_seconds += 89;
-    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0, "expiry grace remains quiet before 90 seconds");
-    fake_time.snapshot.unix_seconds += 1;
-    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "expiry grace confirms failure at 90 seconds");
+        "exact 60-minute settings readback commits without a false 306");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", text, sizeof(text)) &&
+        strstr(text, "\"today_override_present\":false"),
+        "successful restore permanently clears today's override");
+    check_int(pctl.configured_minutes, 60,
+        "successful restore keeps the weekly target instead of rolling back to 770 minutes");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/recovery/active/meta.json"),
+        "successful exhausted restore clears its recovery transaction");
 }
 
 static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
@@ -1281,7 +1258,7 @@ int main(void)
     test_daily_enforce_does_not_start_play_timer();
     test_live_enforce_recovery_is_not_startup_recovery();
     test_played_time_status();
-    test_expiry_without_restriction_is_reported();
+    test_restore_exhausted_weekly_limit_accepts_transient_restriction();
     test_offline_code_preview_is_non_consuming();
     test_play_timer_layout();
     test_credential_policy();

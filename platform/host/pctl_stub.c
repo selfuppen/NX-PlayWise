@@ -65,6 +65,9 @@ static PtcErrorCode stub_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStat
         out->remaining_minutes = 0;
         out->restricted_now = true;
     }
+    if (stub->hide_restricted_now) {
+        out->restricted_now = false;
+    }
     return PTC_ERR_OK;
 }
 
