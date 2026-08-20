@@ -167,15 +167,13 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
     PtcErrorCode err;
     bool enabled = false;
     bool unlocked = false;
-    bool alarm_disabled = false;
     bool timer_enabled = false;
     bool restricted = false;
     s64 remaining_ns = 0;
     PtcSwitchPlayTimerSettings timer_settings;
     PtcSwitchSession settings_session;
     uint16_t configured_minutes = 0;
-    bool day_restricted = false;
-    bool day_settings_known = false;
+    PtcPlayTimerDayMode day_mode = PTC_PLAY_TIMER_DAY_MODE_UNKNOWN;
     Service *service;
 
     err = open_read_session(adapter, &session);
@@ -198,11 +196,10 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
     Result unlocked_rc = dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTION_TEMPORARY_UNLOCKED, &unlocked, sizeof(unlocked));
     out->temporary_unlocked_available = R_SUCCEEDED(unlocked_rc);
     out->temporary_unlocked = unlocked;
-    (void)dispatch_out(service, PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED, &alarm_disabled, sizeof(alarm_disabled));
-    if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED, &timer_enabled, sizeof(timer_enabled)))) {
+    Result timer_rc = dispatch_out(service, PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED, &timer_enabled, sizeof(timer_enabled));
+    out->play_timer_enabled_available = R_SUCCEEDED(timer_rc);
+    if (out->play_timer_enabled_available) {
         out->play_timer_enabled = timer_enabled;
-    } else {
-        out->play_timer_enabled = enabled && !alarm_disabled;
     }
     if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_GET_PLAY_TIMER_REMAINING_TIME, &remaining_ns, sizeof(remaining_ns)))) {
         out->remaining_available = true;
@@ -210,36 +207,37 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
     }
     /* Do not use private command 1952 here: device observations show that it can
        track wall time since Play Timer start instead of foreground game time. */
-    if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER, &restricted, sizeof(restricted)))) {
+    Result restricted_rc = dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER, &restricted, sizeof(restricted));
+    out->restricted_now_available = R_SUCCEEDED(restricted_rc);
+    if (out->restricted_now_available) {
         out->restricted_now = restricted;
     }
     close_session(&session);
     /* The private settings command is available through pctl:s. Failure is a
-       soft degradation: ordinary status remains usable, only played time is unavailable. */
+       soft degradation: runtime flags remain usable, while the configured
+       daily policy and its derived played estimate stay unknown. */
     if (weekday < PTC_PLAY_TIMER_DAY_COUNT &&
         open_write_session(adapter, &settings_session) == PTC_ERR_OK) {
-        if (get_play_timer_settings(adapter, &settings_session.service, &timer_settings) == PTC_ERR_OK &&
-            ptc_play_timer_settings_get_day(
+        if (get_play_timer_settings(adapter, &settings_session.service, &timer_settings) == PTC_ERR_OK) {
+            /* The configured daily policy is independent from the transient
+               restriction switch and Nintendo's temporary-unlock state. */
+            (void)ptc_play_timer_settings_get_mode(
                 timer_settings.words,
                 PTC_PLAY_TIMER_SETTINGS_WORDS,
                 weekday,
-                &day_restricted,
-                &configured_minutes) &&
-            (configured_minutes <= PTC_PLAY_TIMER_MAX_LIMIT_MINUTES || configured_minutes == PTC_PLAY_TIMER_UNLIMITED)) {
-            day_settings_known = true;
+                &day_mode,
+                &configured_minutes);
         }
         close_session(&settings_session);
     }
-    if (!enabled || unlocked) {
+    if (day_mode == PTC_PLAY_TIMER_DAY_MODE_UNLIMITED) {
         out->unrestricted_today = true;
-    } else if (day_settings_known && !day_restricted && configured_minutes == PTC_PLAY_TIMER_UNLIMITED) {
-        out->unrestricted_today = true;
-    } else if (day_settings_known && day_restricted && configured_minutes == 0U) {
+    } else if (day_mode == PTC_PLAY_TIMER_DAY_MODE_BLOCKED) {
         out->blocked_today = true;
-    } else {
+    } else if (day_mode == PTC_PLAY_TIMER_DAY_MODE_LIMIT) {
         out->limited_today = true;
     }
-    if (out->limited_today && day_settings_known) {
+    if (out->limited_today) {
         out->configured_minutes_available = true;
         out->configured_minutes = configured_minutes;
     }

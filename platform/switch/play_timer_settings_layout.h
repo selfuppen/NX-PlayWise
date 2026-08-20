@@ -17,6 +17,13 @@
 #define PTC_PLAY_TIMER_MAX_LIMIT_MINUTES 1440U
 #define PTC_PLAY_TIMER_UNLIMITED 0xffffU
 
+typedef enum {
+    PTC_PLAY_TIMER_DAY_MODE_UNKNOWN = 0,
+    PTC_PLAY_TIMER_DAY_MODE_LIMIT = 1,
+    PTC_PLAY_TIMER_DAY_MODE_UNLIMITED = 2,
+    PTC_PLAY_TIMER_DAY_MODE_BLOCKED = 3
+} PtcPlayTimerDayMode;
+
 bool ptc_play_timer_settings_valid(const uint16_t *words, size_t word_count);
 bool ptc_play_timer_settings_get_minutes(
     const uint16_t *words,
@@ -28,6 +35,12 @@ bool ptc_play_timer_settings_get_day(
     size_t word_count,
     uint8_t weekday,
     bool *restricted,
+    uint16_t *minutes);
+bool ptc_play_timer_settings_get_mode(
+    const uint16_t *words,
+    size_t word_count,
+    uint8_t weekday,
+    PtcPlayTimerDayMode *mode,
     uint16_t *minutes);
 bool ptc_play_timer_settings_set_day(
     uint16_t *words,

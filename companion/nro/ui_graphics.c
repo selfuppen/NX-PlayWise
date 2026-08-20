@@ -701,27 +701,8 @@ static void format_event_time(int64_t timestamp, bool full, char *out, size_t ou
 
 static void describe_status(const PtcUiModel *model, char *today, size_t today_size, char *remaining, size_t remaining_size)
 {
-    if (!model->status_loaded) {
-        snprintf(today, today_size, "等待刷新");
-        snprintf(remaining, remaining_size, "--");
-        return;
-    }
-    if (model->blocked_today == 1) {
-        snprintf(today, today_size, "系统当前受限");
-    } else if (model->unrestricted_today == 1) {
-        snprintf(today, today_size, "不限时");
-    } else if (model->limited_today == 1) {
-        snprintf(today, today_size, model->restricted_now == 1 ? "已到限制" : "限时中");
-    } else {
-        snprintf(today, today_size, "状态未知");
-    }
-    if (model->unrestricted_today == 1) {
-        snprintf(remaining, remaining_size, "不限时");
-    } else if (model->remaining_available && model->remaining_minutes >= 0) {
-        snprintf(remaining, remaining_size, "%d 分钟", model->remaining_minutes);
-    } else {
-        snprintf(remaining, remaining_size, "暂不可用");
-    }
+    ptc_ui_format_today_mode(model, today, today_size);
+    ptc_ui_format_quota_remaining(model, remaining, remaining_size);
 }
 
 static void draw_status_tile(
@@ -805,7 +786,7 @@ static void draw_timer_status_tile(
     fill_rect(pixels, stride, (UiRect){split_x, rect.y + 18, 1, rect.height - 36}, COLOR(219, 225, 233));
     draw_text(pixels, stride, rect.x + 16, rect.y + 34, "系统计时器", 15, COLOR(103, 111, 124));
     draw_text(pixels, stride, rect.x + 16, rect.y + 68, timer, 21, COLOR(28, 34, 43));
-    draw_text(pixels, stride, split_x + 15, rect.y + 34, "运行状态", 15, COLOR(103, 111, 124));
+    draw_text(pixels, stride, split_x + 15, rect.y + 34, "PlayWise 状态", 15, COLOR(103, 111, 124));
     draw_text(pixels, stride, split_x + 15, rect.y + 68, mode, 19, mode_accent);
 }
 
@@ -814,6 +795,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char today[32];
     char remaining[32];
     char played[32];
+    char timer[32];
     char parent_hint[128];
     char fitted_hint[128];
     char rule_line[160];
@@ -822,6 +804,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
         (strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
         (strcmp(model->setup_phase, "protection") == 0 ? "保护模式" : "兼容性待确认"));
     describe_status(model, today, sizeof(today), remaining, sizeof(remaining));
+    ptc_ui_format_timer_status(model, timer, sizeof(timer));
     if (model->played_minutes_available && model->played_minutes >= 0) {
         snprintf(played, sizeof(played), "约 %d 分钟", model->played_minutes);
     } else {
@@ -829,17 +812,20 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     }
     draw_header(pixels, stride, "自律小达人  |  加时奖励", "遵守约定、合理安排时间");
     draw_disable_banner(pixels, stride, model);
-    draw_status_tile(pixels, stride, (UiRect){54, 118, 278, 92}, "今日状态", today, COLOR(216, 49, 54));
-    draw_status_tile(pixels, stride, (UiRect){350, 118, 278, 92}, "今天还可玩", remaining, COLOR(25, 132, 95));
+    draw_status_tile(pixels, stride, (UiRect){54, 118, 278, 92}, "今日规则", today, COLOR(216, 49, 54));
+    draw_status_tile(pixels, stride, (UiRect){350, 118, 278, 92}, "额度剩余", remaining, COLOR(25, 132, 95));
     draw_status_tile(pixels, stride, (UiRect){646, 118, 278, 92}, "额度已耗（估算）", played, COLOR(215, 139, 25));
     draw_timer_status_tile(pixels, stride, (UiRect){942, 118, 284, 92},
-                           model->play_timer_enabled == 1 ? "已开启" : "未确认", mode,
+                           timer, mode,
                            model->disable_flag_present ? COLOR(194, 61, 61) : COLOR(28, 118, 188));
     if (strcmp(model->rule_source, "today_override") == 0) rule_label = "今日临时设置";
     else if (strcmp(model->rule_source, "statutory_holiday") == 0) rule_label = "国家法定休假日";
     else if (strcmp(model->rule_source, "makeup_workday") == 0) rule_label = "国家调休工作日";
     snprintf(rule_line, sizeof(rule_line), "当前按%s执行%s", rule_label,
              model->calendar_update_warning ? "  |  节假日日历需要更新" : "");
+    if (model->temporary_unlocked_available && model->temporary_unlocked) {
+        snprintf(rule_line, sizeof(rule_line), "当前按%s执行  |  临时解除中，锁屏后恢复限制", rule_label);
+    }
     draw_text_center(pixels, stride, (UiRect){54, 212, 1172, 22}, rule_line, 17,
                      model->calendar_update_warning ? COLOR(194, 61, 61) : COLOR(77, 86, 99));
 
@@ -1279,8 +1265,12 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     char remaining[32];
     char played[32];
     char freshness[64];
+    char timer[32];
     uint32_t today_color;
+    bool runtime_notice = (model->temporary_unlocked_available && model->temporary_unlocked) ||
+        (model->restriction_enabled_available && !model->restriction_enabled);
     describe_status(model, today, sizeof(today), remaining, sizeof(remaining));
+    ptc_ui_format_timer_status(model, timer, sizeof(timer));
     if (model->played_minutes_available && model->played_minutes >= 0) {
         snprintf(played, sizeof(played), "约 %d 分钟", model->played_minutes);
     } else {
@@ -1292,31 +1282,42 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     } else if (model->unrestricted_today == 1) {
         today_color = COLOR(25, 132, 95);
     } else if (model->limited_today == 1) {
-        today_color = model->restricted_now == 1 ? COLOR(194, 61, 61) : COLOR(28, 118, 188);
+        today_color = model->restricted_now == 1 ||
+            (model->remaining_available && model->remaining_minutes <= 0)
+            ? COLOR(194, 61, 61) : COLOR(28, 118, 188);
     } else {
         today_color = COLOR(91, 100, 116);
     }
     fill_round_rect(pixels, stride, panel, 8, COLOR(255, 255, 255));
     draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, panel.x + 26, panel.y + 43, "今日状态", 23, COLOR(28, 34, 43));
-    draw_status_row(pixels, stride, panel, panel.y + 72, "今日模式", today, today_color);
-    draw_status_row(pixels, stride, panel, panel.y + 102, "今天还可玩", remaining,
-                    model->remaining_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
+    draw_status_row(pixels, stride, panel, panel.y + 72, "今日规则", today, today_color);
+    draw_status_row(pixels, stride, panel, panel.y + 102, "额度剩余", remaining,
+                    model->remaining_available && model->remaining_minutes <= 0
+                        ? COLOR(194, 61, 61) :
+                    (model->remaining_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116)));
     draw_status_row(pixels, stride, panel, panel.y + 132, "额度已耗（估算）", played,
                     model->played_minutes_available ? COLOR(28, 34, 43) : COLOR(91, 100, 116));
-    draw_status_row(pixels, stride, panel, panel.y + 162, "运行状态",
+    draw_status_row(pixels, stride, panel, panel.y + 162, "PlayWise 状态",
                     model->disable_flag_present ? "控制已停用" :
                     (strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
                     (strcmp(model->setup_phase, "protection") == 0 ? "保护模式" : "兼容性待确认")),
                     model->disable_flag_present ? COLOR(194, 61, 61) :
                     (strcmp(model->setup_phase, "active") == 0 ? COLOR(25, 132, 95) : COLOR(215, 139, 25)));
     draw_status_row(pixels, stride, panel, panel.y + 192, "系统计时器",
-                    model->play_timer_enabled == 1 ? "已开启" : "未确认",
-                    model->play_timer_enabled == 1 ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
+                    timer,
+                    model->play_timer_enabled == 1 ? COLOR(25, 132, 95) :
+                    (model->play_timer_enabled == 0 ? COLOR(28, 118, 188) : COLOR(91, 100, 116)));
+    if (model->temporary_unlocked_available && model->temporary_unlocked) {
+        snprintf(freshness, sizeof(freshness), "临时解除中 | 锁屏后恢复限制");
+    } else if (model->restriction_enabled_available && !model->restriction_enabled) {
+        snprintf(freshness, sizeof(freshness), "Nintendo 家长控制未启用");
+    }
     fill_round_rect(pixels, stride, (UiRect){panel.x + 20, panel.y + 224, panel.width - 40, 42}, 7,
-                    model->waiting ? COLOR(255, 247, 229) : COLOR(244, 248, 253));
+                    model->waiting || runtime_notice ? COLOR(255, 247, 229) : COLOR(244, 248, 253));
     draw_text_center(pixels, stride, (UiRect){panel.x + 20, panel.y + 224, panel.width - 40, 42},
-                     freshness, 17, model->waiting ? COLOR(170, 109, 18) : status_age_color(model));
+                     freshness, 17,
+                     model->waiting || runtime_notice ? COLOR(170, 109, 18) : status_age_color(model));
 }
 
 static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

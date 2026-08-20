@@ -257,7 +257,8 @@ static void test_result_summary_unlimited_state(void)
     check_true(ptc_companion_result_summary_parse(result, &summary), "unlimited result summary parses");
     check_int(summary.unrestricted_today, 1, "unlimited state reaches compact result summary");
     check_true(ptc_companion_result_summary_format(&summary, formatted, sizeof(formatted)) &&
-        strstr(formatted, "今天还可玩：不限时"), "unlimited result summary uses the user-facing state");
+        strstr(formatted, "额度剩余：不限时") && strstr(formatted, "计时器：未启动"),
+        "unlimited result summary distinguishes quota and a confirmed stopped timer");
 }
 
 static void test_install_defaults_preserve_runtime_data(void)
@@ -816,6 +817,31 @@ static void test_played_time_status(void)
         strstr(text, "\"played_minutes_available\":true") &&
         strstr(text, "\"played_minutes\":30"),
         "limited status retains configured-minus-remaining fallback");
+
+    pctl.status.temporary_unlocked = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.play_timer_enabled = false;
+    pctl.status.restricted_now = false;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-temporary-unlock.json",
+        "{\"version\":1,\"request_id\":\"status-temporary-unlock\",\"type\":\"status\",\"created_at\":4,\"payload\":{}}"),
+        "queue status while Nintendo restrictions are temporarily unlocked");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "temporary-unlock status processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-temporary-unlock.json", text, sizeof(text)) &&
+        strstr(text, "\"temporary_unlocked\":true") &&
+        strstr(text, "\"limited_today\":1") && strstr(text, "\"unrestricted_today\":0") &&
+        strstr(text, "\"remaining_available\":true") && strstr(text, "\"remaining_minutes\":0") &&
+        strstr(text, "\"play_timer_enabled\":0"),
+        "temporary unlock preserves the daily policy, quota and confirmed stopped timer");
+
+    pctl.status.play_timer_enabled_available = false;
+    pctl.status.restricted_now_available = false;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/status-runtime-unknown.json",
+        "{\"version\":1,\"request_id\":\"status-runtime-unknown\",\"type\":\"status\",\"created_at\":5,\"payload\":{}}"),
+        "queue status with unavailable runtime queries");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unavailable runtime status processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-runtime-unknown.json", text, sizeof(text)) &&
+        strstr(text, "\"play_timer_enabled\":-1") && strstr(text, "\"restricted_now\":-1"),
+        "unavailable runtime queries remain unknown instead of becoming false");
 }
 
 static void test_offline_code_preview_is_non_consuming(void)
@@ -900,9 +926,27 @@ static void test_play_timer_layout(void)
         0x0600U, 0x0100U, 60U
     };
     uint16_t minutes = 0;
+    PtcPlayTimerDayMode mode = PTC_PLAY_TIMER_DAY_MODE_UNKNOWN;
     check_true(ptc_play_timer_settings_valid(words, PTC_PLAY_TIMER_SETTINGS_WORDS), "0x44 PCTL layout accepted");
     check_true(ptc_play_timer_settings_get_minutes(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4, &minutes), "weekday minutes readable");
     check_int(minutes, 60, "weekday minutes preserve units");
+    check_true(ptc_play_timer_settings_get_mode(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4, &mode, &minutes) &&
+        mode == PTC_PLAY_TIMER_DAY_MODE_LIMIT && minutes == 60,
+        "daily mode is derived from the configured settings independently of runtime overrides");
+    check_true(ptc_play_timer_settings_set_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4, false,
+        PTC_PLAY_TIMER_UNLIMITED) &&
+        ptc_play_timer_settings_get_mode(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4, &mode, &minutes) &&
+        mode == PTC_PLAY_TIMER_DAY_MODE_UNLIMITED,
+        "configured unlimited day is classified explicitly");
+    check_true(ptc_play_timer_settings_set_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4, true, 0U) &&
+        ptc_play_timer_settings_get_mode(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4, &mode, &minutes) &&
+        mode == PTC_PLAY_TIMER_DAY_MODE_BLOCKED,
+        "configured blocked day is classified explicitly");
+    words[23] = 0U;
+    words[24] = 0U;
+    words[25] = 60U;
+    check_true(!ptc_play_timer_settings_get_mode(words, PTC_PLAY_TIMER_SETTINGS_WORDS, 4, &mode, &minutes),
+        "ambiguous disabled-day layout is not guessed as unlimited");
     words[25] = 1500;
     check_true(!ptc_play_timer_settings_valid(words, PTC_PLAY_TIMER_SETTINGS_WORDS), "invalid PCTL layout rejected");
 }

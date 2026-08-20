@@ -47,6 +47,9 @@ static void test_parent_status_summary(void)
 {
     PtcUiModel model;
     char summary[160];
+    char today[32];
+    char remaining[32];
+    char timer[32];
     memset(&model, 0, sizeof(model));
 
     ptc_ui_format_parent_status_summary(&model, 1000, summary, sizeof(summary));
@@ -65,6 +68,28 @@ static void test_parent_status_summary(void)
     ptc_ui_format_parent_status_summary(&model, 1010, summary, sizeof(summary));
     check_true(strstr(summary, "已到限制") != NULL,
                "parent footer shows the exhausted-time state");
+
+    model.limited_today = 1;
+    model.temporary_unlocked_available = true;
+    model.temporary_unlocked = true;
+    model.play_timer_enabled = 0;
+    ptc_ui_format_today_mode(&model, today, sizeof(today));
+    ptc_ui_format_quota_remaining(&model, remaining, sizeof(remaining));
+    ptc_ui_format_timer_status(&model, timer, sizeof(timer));
+    ptc_ui_format_parent_status_summary(&model, 1010, summary, sizeof(summary));
+    check_true(strstr(today, "限时") != NULL && strstr(today, "额度用完") != NULL &&
+               strcmp(remaining, "0 分钟") == 0,
+               "temporary unlock preserves the configured limited policy and exhausted quota");
+    check_true(strcmp(timer, "未计时") == 0 && strstr(summary, "临时解除") != NULL &&
+               strstr(summary, "锁屏后恢复") != NULL,
+               "temporary unlock explains the confirmed timer state and relock behavior");
+
+    model.temporary_unlocked = false;
+    model.restriction_enabled_available = true;
+    model.restriction_enabled = false;
+    ptc_ui_format_parent_status_summary(&model, 1010, summary, sizeof(summary));
+    check_true(strstr(summary, "家长控制未启用") != NULL,
+               "disabled Nintendo parental controls are distinct from temporary unlock");
 
     snprintf(model.setup_phase, sizeof(model.setup_phase), "protection");
     ptc_ui_format_parent_status_summary(&model, 1010, summary, sizeof(summary));

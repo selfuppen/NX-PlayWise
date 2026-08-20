@@ -488,6 +488,9 @@ void ptc_ui_numpad_finish(PtcUiModel *model);
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
+void ptc_ui_format_today_mode(const PtcUiModel *model, char *out, size_t out_size);
+void ptc_ui_format_quota_remaining(const PtcUiModel *model, char *out, size_t out_size);
+void ptc_ui_format_timer_status(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_parent_status_summary(
     const PtcUiModel *model,
     int64_t now,

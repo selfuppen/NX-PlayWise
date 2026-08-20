@@ -290,6 +290,8 @@ void ptc_pctl_stub_init(PtcPctlStub *stub)
     stub->status.restriction_enabled_available = true;
     stub->status.restriction_enabled = true;
     stub->status.temporary_unlocked_available = true;
+    stub->status.play_timer_enabled_available = true;
+    stub->status.restricted_now_available = true;
     stub->pctl.vtable = &PCTL_STUB_VTABLE;
     stub->pctl.ctx = stub;
     stub->status.unrestricted_today = true;

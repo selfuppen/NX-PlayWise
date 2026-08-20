@@ -58,6 +58,31 @@ bool ptc_play_timer_settings_get_day(
     return true;
 }
 
+bool ptc_play_timer_settings_get_mode(
+    const uint16_t *words,
+    size_t word_count,
+    uint8_t weekday,
+    PtcPlayTimerDayMode *mode,
+    uint16_t *minutes)
+{
+    bool restricted;
+    if (!mode || !minutes ||
+        !ptc_play_timer_settings_get_day(words, word_count, weekday, &restricted, minutes)) {
+        return false;
+    }
+    *mode = PTC_PLAY_TIMER_DAY_MODE_UNKNOWN;
+    if (restricted && *minutes == 0U) {
+        *mode = PTC_PLAY_TIMER_DAY_MODE_BLOCKED;
+    } else if (restricted && *minutes <= PTC_PLAY_TIMER_MAX_LIMIT_MINUTES) {
+        *mode = PTC_PLAY_TIMER_DAY_MODE_LIMIT;
+    } else if (!restricted && *minutes == PTC_PLAY_TIMER_UNLIMITED) {
+        *mode = PTC_PLAY_TIMER_DAY_MODE_UNLIMITED;
+    } else {
+        return false;
+    }
+    return true;
+}
+
 bool ptc_play_timer_settings_set_day(
     uint16_t *words,
     size_t word_count,
