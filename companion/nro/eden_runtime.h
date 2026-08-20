@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 
+#include "../../companion/transport_client.h"
 #include "../../platform/host/pctl_stub.h"
 #include "../../platform/storage.h"
 #include "../../platform/time_provider.h"
@@ -28,6 +29,7 @@ typedef struct {
    make that call succeed without a packaged defaults/ directory. */
 bool ptc_eden_runtime_init(PtcEdenRuntime *runtime, PtcStorage *storage);
 void ptc_eden_runtime_tick(PtcEdenRuntime *runtime);
+const PtcCompanionIpcBackend *ptc_eden_runtime_ipc_backend(void);
 
 #endif
 

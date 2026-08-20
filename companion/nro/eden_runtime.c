@@ -39,6 +39,72 @@ static const PtcTimeProviderVTable EDEN_TIME_VTABLE = {
     eden_sleep_ms,
 };
 
+static bool eden_ipc_connect(void *ctx)
+{
+    PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
+    return runtime && runtime->initialized;
+}
+
+static PtcCompanionStatus eden_ipc_submit(
+    void *ctx, const char *request_id, const char *json, void **wait_token)
+{
+    PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
+    char result_path[320];
+    if (!runtime || !runtime->initialized || !request_id || !json || !wait_token) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    ptc_sysmodule_process_request_direct(&runtime->sysmodule, json, request_id);
+    snprintf(result_path, sizeof(result_path), "%s/results/%s.json", PLAYWISE_EDEN_SD_ROOT, request_id);
+    if (!runtime->sysmodule.storage->vtable->exists(runtime->sysmodule.storage, result_path)) {
+        return PTC_COMPANION_PENDING;
+    }
+    *wait_token = runtime;
+    return PTC_COMPANION_OK;
+}
+
+static int eden_ipc_event_status(void *ctx, void *wait_token)
+{
+    PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
+    return runtime && runtime->initialized && wait_token == runtime ? 1 : -1;
+}
+
+static PtcCompanionStatus eden_ipc_get_result(
+    void *ctx, const char *request_id, char *out, size_t out_size)
+{
+    PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
+    char path[320];
+    if (!runtime || !runtime->initialized || !request_id || !out || out_size == 0) {
+        return PTC_COMPANION_BAD_ARGUMENT;
+    }
+    snprintf(path, sizeof(path), "%s/results/%s.json", PLAYWISE_EDEN_SD_ROOT, request_id);
+    return runtime->sysmodule.storage->vtable->read_text(
+        runtime->sysmodule.storage, path, out, out_size)
+        ? PTC_COMPANION_OK : PTC_COMPANION_PENDING;
+}
+
+static void eden_ipc_close_wait(void *ctx, void *wait_token)
+{
+    (void)ctx;
+    (void)wait_token;
+}
+
+static bool eden_ipc_notify_storage_changed(void *ctx)
+{
+    PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
+    if (!runtime || !runtime->initialized) return false;
+    (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, true);
+    return true;
+}
+
+static const PtcCompanionIpcBackend EDEN_IPC_BACKEND = {
+    eden_ipc_connect,
+    eden_ipc_submit,
+    eden_ipc_event_status,
+    eden_ipc_get_result,
+    eden_ipc_close_wait,
+    eden_ipc_notify_storage_changed,
+};
+
 static bool ensure_directory(const char *path)
 {
     return mkdir(path, 0777) == 0 || errno == EEXIST;
@@ -138,7 +204,6 @@ bool ptc_eden_runtime_init(PtcEdenRuntime *runtime, PtcStorage *storage)
     snprintf(boot_id, sizeof(boot_id), "eden-%08llx",
         (unsigned long long)(randomGet64() & 0xffffffffULL));
     ptc_sysmodule_set_boot_id(&runtime->sysmodule, boot_id);
-    (void)ptc_sysmodule_recover_processing(&runtime->sysmodule);
     (void)ptc_sysmodule_bootstrap_setup(&runtime->sysmodule);
     (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, false);
     runtime->initialized = true;
@@ -150,6 +215,11 @@ void ptc_eden_runtime_tick(PtcEdenRuntime *runtime)
     if (runtime && runtime->initialized) {
         (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, false);
     }
+}
+
+const PtcCompanionIpcBackend *ptc_eden_runtime_ipc_backend(void)
+{
+    return &EDEN_IPC_BACKEND;
 }
 
 #endif

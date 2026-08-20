@@ -4169,7 +4169,12 @@ int main(int argc, char **argv)
     appletHook(&hook_cookie, applet_hook, &ui);
     refresh_disable_flag(&ui);
 #ifdef PLAYWISE_EDEN
-    ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs), NULL, NULL);
+    /* Eden exposes the embedded core through the existing IPC abstraction.
+       Its Windows-backed SD implementation cannot reliably claim queue files
+       with cross-directory rename, so requests complete synchronously and
+       still persist their normal result JSON before returning to the UI. */
+    ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs),
+        ptc_eden_runtime_ipc_backend(), &eden_runtime);
 #else
     ptc_switch_ipc_client_init(&ui.ipc);
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs), ptc_switch_ipc_backend(), &ui.ipc);

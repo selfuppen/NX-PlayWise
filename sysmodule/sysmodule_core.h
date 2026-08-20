@@ -55,5 +55,11 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
 int ptc_sysmodule_cleanup(PtcSysmodule *sysmodule);
 int ptc_sysmodule_rollover_legacy_logs(PtcSysmodule *sysmodule);
 bool ptc_sysmodule_refresh_caches(PtcSysmodule *sysmodule);
+#ifdef PLAYWISE_EDEN
+/* Emulator-only synchronous bridge. Eden's host-backed SD filesystem cannot
+   reliably rename open queue files across directories. */
+void ptc_sysmodule_process_request_direct(PtcSysmodule *sysmodule,
+    const char *request_text, const char *expected_request_id);
+#endif
 
 #endif

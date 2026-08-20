@@ -4428,6 +4428,15 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     }
 }
 
+#ifdef PLAYWISE_EDEN
+void ptc_sysmodule_process_request_direct(PtcSysmodule *sysmodule,
+    const char *request_text, const char *expected_request_id)
+{
+    if (!sysmodule || !request_text) return;
+    process_request_text(sysmodule, request_text, expected_request_id);
+}
+#endif
+
 int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
 {
     PtcRuntimeConfig config;
@@ -4804,7 +4813,15 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
         invalidate_all_caches(sysmodule);
         (void)ptc_sysmodule_refresh_caches(sysmodule);
     }
+#ifdef PLAYWISE_EDEN
+    /* Eden's Windows-backed SD implementation can copy pending files to the
+       processing directory while failing to remove the source. Requests use
+       the synchronous in-process bridge instead, so never rescan those stale
+       queue artifacts in the emulator profile. */
+    processed = 0;
+#else
     processed = ptc_sysmodule_process_all(sysmodule);
+#endif
     (void)ptc_sysmodule_note_scan_result(sysmodule, processed > 0 || storage_notified || reload || disable_changed);
     actions += processed;
     minute_changed = !sysmodule->minute_initialized || sysmodule->last_minute_day_index != now.day_index ||
