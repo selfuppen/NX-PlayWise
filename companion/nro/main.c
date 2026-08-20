@@ -2616,10 +2616,10 @@ static void handle_today_action_ready(UiState *ui, int index)
         ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
             "设置今日总额度",
             !ui->model.played_minutes_available || ui->model.played_minutes < 0
-                ? "全天总额度包含今天已玩时间；当前已玩未知，设置后可能立即限制。"
+                ? "全天总额度包含今日额度消耗；当前消耗估算未知，设置后可能立即限制。"
                 : (ui->model.unrestricted_today == 1
-                    ? "全天总额度包含今天已玩时间；保存后今天将从不限时改为限时。"
-                    : "全天总额度包含今天已玩时间；右侧显示调整前后的可玩时间。"),
+                    ? "全天总额度包含今日额度消耗；保存后今天将从不限时改为限时。"
+                    : "全天总额度包含今日额度消耗；右侧显示调整前后的可玩时间。"),
             4, 1, 1440, current_today_limit_value(ui));
         break;
     case 2:
@@ -2634,7 +2634,7 @@ static void handle_today_action_ready(UiState *ui, int index)
         }
         break;
     case 3:
-        snprintf(body, sizeof(body), "%s：当前已玩 %s，今天还可玩 %s。\n设置后今天不限时；明天继续使用每周计划。",
+        snprintf(body, sizeof(body), "%s：额度已耗（估算）%s，今天还可玩 %s。\n设置后今天不限时；明天继续使用每周计划。",
                  date, played, remaining);
         open_confirm_overlay(ui, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, "将今天设为不限时", body);
         break;
@@ -2669,7 +2669,7 @@ static void handle_parent_action(UiState *ui)
         } else {
             ui->pending_today_action = index;
             submit_status(ui);
-            snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新今天已玩和今天还可玩...");
+            snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新额度消耗估算和今天还可玩...");
         }
         return;
     }
@@ -3039,10 +3039,10 @@ static void save_weekly_from_page(UiState *ui)
         } else if (ui->model.played_minutes_available) {
             int remaining = (int)after.minutes - ui->model.played_minutes;
             if (remaining < 0) remaining = 0;
-            snprintf(body, sizeof(body), "今天已玩约 %d 分钟；新额度 %u 分钟。\n保存后今天生效，预计还可玩约 %d 分钟。",
+            snprintf(body, sizeof(body), "额度已耗约 %d 分钟（估算）；新额度 %u 分钟。\n保存后今天生效，预计还可玩约 %d 分钟。",
                      ui->model.played_minutes, (unsigned int)after.minutes, remaining);
         } else {
-            snprintf(body, sizeof(body), "今天的新额度为 %u 分钟。\n保存后今天生效；当前已玩不可用，请刷新查看实际剩余。",
+            snprintf(body, sizeof(body), "今天的新额度为 %u 分钟。\n保存后今天生效；额度消耗估算不可用，请刷新查看实际剩余。",
                      (unsigned int)after.minutes);
         }
         open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY, "周计划将影响今天", body);
@@ -3525,11 +3525,11 @@ static void handle_overlay_input(UiState *ui, u64 down)
                     if (!ui->model.played_minutes_available || ui->model.played_minutes < 0) {
                         title = "无法确认是否立即限制";
                         snprintf(body, sizeof(body),
-                                 "当前已玩时间不可用；设置总额度 %u 分钟。", (unsigned int)value);
+                                 "额度消耗估算不可用；设置总额度 %u 分钟。", (unsigned int)value);
                     } else {
                         title = ui->model.unrestricted_today == 1
-                            ? "不限时将改为限时" : "新额度不高于已玩时间";
-                        snprintf(body, sizeof(body), "今天已玩约 %d 分钟；设置总额度 %u 分钟。",
+                            ? "不限时将改为限时" : "新额度不高于额度消耗估算";
+                        snprintf(body, sizeof(body), "额度已耗约 %d 分钟（估算）；设置总额度 %u 分钟。",
                                  ui->model.played_minutes, (unsigned int)value);
                     }
                     open_confirm_overlay(ui, operation, title, body);
@@ -3563,28 +3563,28 @@ static void handle_overlay_input(UiState *ui, u64 down)
                         int preview = (int)ui->model.draft_minutes - ui->model.played_minutes;
                         if (preview < 0) preview = 0;
                         snprintf(body, sizeof(body),
-                                 "当前已玩 %d 分钟；新额度 %u 分钟。\n修改后还剩 %d 分钟可玩。",
+                                 "额度已耗 %d 分钟（估算）；新额度 %u 分钟。\n修改后还剩 %d 分钟可玩。",
                                  ui->model.played_minutes, (unsigned int)ui->model.draft_minutes, preview);
                         open_confirm_overlay(ui, operation, "不限时将改为限时", body);
                         ui->model.confirm_hold_required = true;
                     } else {
                         snprintf(body, sizeof(body),
-                                 "今天当前为不限时；设置 %u 分钟后将恢复限时。\n当前已玩不可用，暂时无法估算修改后剩余。",
+                                 "今天当前为不限时；设置 %u 分钟后将恢复限时。\n额度消耗估算不可用，暂时无法估算修改后剩余。",
                                  (unsigned int)ui->model.draft_minutes);
                         open_confirm_overlay(ui, operation, "不限时将改为限时", body);
                         ui->model.confirm_hold_required = true;
                     }
                 } else if (!ui->model.played_minutes_available || ui->model.played_minutes < 0) {
                     snprintf(body, sizeof(body),
-                             "当前已玩时间不可用；设置总额度 %u 分钟。\n暂时无法估算修改后剩余。",
+                             "额度消耗估算不可用；设置总额度 %u 分钟。\n暂时无法估算修改后剩余。",
                              (unsigned int)ui->model.draft_minutes);
                     open_confirm_overlay(ui, operation, "无法确认是否立即限制", body);
                     ui->model.confirm_hold_required = true;
                 } else {
                     snprintf(body, sizeof(body),
-                             "今天已玩约 %d 分钟；设置总额度 %u 分钟。\n调整后可能立即没有可玩时间。",
+                             "额度已耗约 %d 分钟（估算）；设置总额度 %u 分钟。\n调整后可能立即没有可玩时间。",
                              ui->model.played_minutes, (unsigned int)ui->model.draft_minutes);
-                    open_confirm_overlay(ui, operation, "新额度不高于已玩时间", body);
+                    open_confirm_overlay(ui, operation, "新额度不高于额度消耗估算", body);
                     ui->model.confirm_hold_required = true;
                 }
             } else {

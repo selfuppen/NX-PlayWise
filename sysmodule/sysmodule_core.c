@@ -2118,6 +2118,26 @@ static bool target_status_observed(PtcPctlTargetMode mode, const PtcPctlStatus *
         status->play_timer_enabled;
 }
 
+/* Daily rule synchronization only proves that the configured target was
+   written. Starting private command 1451 here is unsafe: device evidence shows
+   that a timer started by the sysmodule can consume 1454 while the console is
+   on HOME or asleep. Horizon remains responsible for the actual play-timer
+   lifecycle when an application starts, suspends, resumes, or exits. */
+static bool target_settings_observed(
+    PtcPctlTargetMode mode,
+    uint16_t minutes,
+    const PtcPctlStatus *status)
+{
+    if (mode == PTC_PCTL_TARGET_UNLIMITED) {
+        return status->unrestricted_today && !status->restricted_now;
+    }
+    if (mode == PTC_PCTL_TARGET_BLOCKED) {
+        return status->blocked_today;
+    }
+    return status->limited_today && status->configured_minutes_available &&
+        status->configured_minutes == minutes;
+}
+
 static bool observe_expiry_effect(
     PtcRuntimeState *state,
     const PtcPctlStatus *status,
@@ -4473,7 +4493,8 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         PtcPctlStatus pending_status;
         PtcErrorCode pending_err = sysmodule->pctl->vtable->read_status(
             sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pending_status);
-        if (pending_err == PTC_ERR_OK && target_status_observed(runtime_state.pending_mode, &pending_status)) {
+        if (pending_err == PTC_ERR_OK && target_settings_observed(
+                runtime_state.pending_mode, runtime_state.pending_minutes, &pending_status)) {
             runtime_state.apply_pending_confirmation = false;
             runtime_state.apply_confirmation_deadline = 0;
             runtime_state.pending_mode = 0;
@@ -4523,8 +4544,24 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     if (err != PTC_ERR_OK) {
         return 0;
     }
-    err = start_timer_and_wait_target(sysmodule, NULL, now, ptc_control_mode_name(config.mode),
-        target_mode, target_minutes, "enforce", &observed_status, NULL);
+    {
+        unsigned int i;
+        for (i = 0; i < 20U; ++i) {
+            err = sysmodule->pctl->vtable->read_status(
+                sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &observed_status);
+            if (err == PTC_ERR_OK && target_settings_observed(target_mode, target_minutes, &observed_status)) {
+                append_event(sysmodule, NULL, "effect_observed", PTC_ERR_OK, "enforce_settings");
+                break;
+            }
+            if (i + 1U < 20U) {
+                effect_wait(sysmodule, 250U);
+            }
+        }
+        if (err == PTC_ERR_OK && !target_settings_observed(target_mode, target_minutes, &observed_status)) {
+            err = PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
+            append_event(sysmodule, NULL, "pctl_apply_failed", err, "enforce_settings");
+        }
+    }
     if (err != PTC_ERR_OK) {
         if (err != PTC_ERR_PCTL_EFFECT_NOT_OBSERVED) {
             if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "enforce_restore_failed\n");

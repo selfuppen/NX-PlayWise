@@ -743,6 +743,8 @@ static void test_live_enforce_recovery_is_not_startup_recovery(void)
     pctl.runtime_effect_succeeds = false;
 
     check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "unobserved enforce enters pending confirmation");
+    check_int((long)pctl.start_timer_calls, 0,
+        "daily enforce never starts the private play timer while confirming settings");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/recovery/active/meta.json"),
         "pending enforce keeps live recovery transaction");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
@@ -1064,6 +1066,41 @@ static void test_album_restriction_transaction(void)
                "forced restore never overwrites an existing conflict rescue file");
 }
 
+static void test_daily_enforce_does_not_start_play_timer(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char text[2048];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 1);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"active\",\"compatibility_status\":\"verified\",\"restriction_cleared\":true,"
+        "\"snapshot_available\":true,\"activate_after\":0,\"last_error\":\"\"}"),
+        "seed active setup for passive daily enforce");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/state.json",
+        "{\"version\":1,\"last_enforced_day_index\":2379,\"last_enforced_mode\":1,\"last_enforced_minutes\":60,"
+        "\"apply_status\":\"idle\",\"apply_pending_confirmation\":false,\"apply_confirmation_deadline\":0,"
+        "\"pending_mode\":0,\"pending_minutes\":0,\"updated_at\":0}"),
+        "seed previous-day enforce state");
+
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1,
+        "new day synchronizes its configured rule");
+    check_int((long)pctl.apply_target_calls, 1,
+        "new day writes the configured PCTL target once");
+    check_int((long)pctl.start_timer_calls, 0,
+        "new day does not start a wall-clock timer without application lifecycle evidence");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
+        strstr(text, "\"last_enforced_day_index\":2380") &&
+        strstr(text, "\"apply_pending_confirmation\":false"),
+        "passive settings confirmation persists the new day as enforced");
+}
+
 static void test_expiry_without_restriction_is_reported(void)
 {
     PtcMemStorage mem;
@@ -1241,6 +1278,7 @@ int main(void)
     test_setup_preflight_and_recovery();
     test_setup_refuses_unknown_handover_total();
     test_runtime_fingerprint_change_can_be_reconfirmed();
+    test_daily_enforce_does_not_start_play_timer();
     test_live_enforce_recovery_is_not_startup_recovery();
     test_played_time_status();
     test_expiry_without_restriction_is_reported();

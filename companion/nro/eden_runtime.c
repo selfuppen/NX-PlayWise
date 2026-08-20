@@ -190,7 +190,7 @@ bool ptc_eden_runtime_init(PtcEdenRuntime *runtime, PtcStorage *storage)
     if (!runtime || !storage || !seed_files(storage)) return false;
     memset(runtime, 0, sizeof(*runtime));
     ptc_pctl_stub_init(&runtime->pctl);
-    /* Model elapsed play time so 今日已玩 / 还可玩 are not trivially zero and the
+    /* Model allowance consumption so 额度已耗（估算）/还可玩 are not trivially zero and the
        expiry path can be exercised without waiting a real day. */
     runtime->pctl.model_elapsed_time = true;
     runtime->pctl.played_minutes_today = 30;

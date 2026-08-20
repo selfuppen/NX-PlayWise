@@ -473,7 +473,7 @@ static void test_time_previews(void)
     check_true(ptc_ui_today_limit_requires_hold(&model, 60),
                "unknown played time requires hold confirmation");
     ptc_ui_format_today_limit_confirmation(&model, risk, sizeof(risk), recovery, sizeof(recovery));
-    check_true(strstr(risk, "无法取得今天已玩时间") != NULL &&
+    check_true(strstr(risk, "无法取得额度消耗估算") != NULL &&
                strstr(risk, "可能立即进入时间限制") != NULL &&
                strstr(recovery, "今日不限时") != NULL && strstr(recovery, "临时加时") != NULL &&
                strstr(recovery, "加时码") != NULL,
@@ -490,7 +490,7 @@ static void test_time_previews(void)
     check_true(ptc_ui_today_limit_requires_hold(&model, 60),
                "quota exhaustion requires hold confirmation");
     ptc_ui_format_today_limit_confirmation(&model, risk, sizeof(risk), recovery, sizeof(recovery));
-    check_true(strstr(risk, "新额度不高于已玩时间") != NULL &&
+    check_true(strstr(risk, "新额度不高于额度消耗估算") != NULL &&
                strstr(risk, "会立即进入时间限制") != NULL,
                "known exhausted quota explains the immediate restriction risk");
     check_true(ptc_ui_limit_minutes_would_restrict(&model, 30),

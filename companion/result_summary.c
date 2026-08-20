@@ -88,7 +88,7 @@ bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summar
     } else {
         snprintf(remaining, sizeof(remaining), "暂不可用");
     }
-    written = snprintf(out, out_size, "%s  %s\n今天还可玩：%s  已玩：%s%d%s\n计时器：%s  限制：%s",
+    written = snprintf(out, out_size, "%s  %s\n今天还可玩：%s  额度已耗：%s%d%s\n计时器：%s  限制：%s",
         summary->ok ? "成功" : "失败",
         summary->ok ? "" : (summary->reason[0] ? summary->reason : "后台拒绝"),
         remaining,

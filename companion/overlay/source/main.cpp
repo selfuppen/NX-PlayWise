@@ -769,7 +769,7 @@ public:
         const bool remaining_refresh_pending = ptc_overlay_remaining_refresh_pending(
             bridge_->waiting, active_request_kind_ == OverlayRequestKind::OfflineCode);
 
-        // --- 0. Top Prominent Status Banner (醒目展示今日已玩与修改后/当前可玩时长) ---
+        // --- 0. Top Prominent Status Banner (醒目展示额度消耗估算与修改后/当前可玩时长) ---
         const s32 top_banner_y = cy + PTC_OVERLAY_TOP_BANNER_Y;
         const s32 top_banner_h = PTC_OVERLAY_TOP_BANNER_H;
         renderer->drawRect(cx, top_banner_y, cw, top_banner_h, renderer->a(CARD_COLOR));
@@ -777,7 +777,7 @@ public:
                      remaining_refresh_pending ? 2 : 1,
                      remaining_refresh_pending ? WAITING_COLOR : FOCUS_BORDER);
 
-        renderer->drawString("今日已玩", false, cx + 10, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
+        renderer->drawString("额度已耗（估算）", false, cx + 10, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
         if (summary.valid && summary.played_minutes_available) {
             std::snprintf(line, sizeof(line), "%d 分钟", summary.played_minutes);
         } else {
@@ -976,7 +976,7 @@ public:
                 std::snprintf(line, sizeof(line), "修改后还可玩 %d 分钟", summary.remaining_minutes);
                 renderer->drawString(line, false, cx + 12, status_y + 96, 15, renderer->a(SUCCESS_COLOR));
                 if (summary.played_minutes_available) {
-                    std::snprintf(line, sizeof(line), "今日已玩约 %d 分钟，即将自动关闭...", summary.played_minutes);
+                    std::snprintf(line, sizeof(line), "额度已耗约 %d 分钟（估算），即将自动关闭...", summary.played_minutes);
                     renderer->drawString(line, false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));
                 } else {
                     renderer->drawString("状态已刷新，即将自动关闭...", false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));

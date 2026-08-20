@@ -135,12 +135,12 @@ static void format_rule_basis(PtcDayRule rule, int played_minutes, bool played_a
     if (rule.mode == PTC_RULE_MODE_UNLIMITED) {
         snprintf(out, out_size, "不限时");
     } else if (!played_available || played_minutes < 0) {
-        snprintf(out, out_size, "额度 %u 分钟；已玩时间不可用，暂不能估算剩余",
+        snprintf(out, out_size, "额度 %u 分钟；额度消耗估算不可用，暂不能估算剩余",
                  (unsigned int)rule.minutes);
     } else {
         remaining = (int)rule.minutes - played_minutes;
         if (remaining < 0) remaining = 0;
-        snprintf(out, out_size, "额度 %u 分钟 - 已玩 %d 分钟 = 预计剩余 %d 分钟",
+        snprintf(out, out_size, "额度 %u 分钟 - 已耗 %d 分钟 = 预计剩余 %d 分钟",
                  (unsigned int)rule.minutes, played_minutes, remaining);
     }
 }
@@ -1160,10 +1160,10 @@ void ptc_ui_format_today_limit_confirmation(
     if (risk && risk_size > 0) {
         if (!model || !model->played_minutes_available || model->played_minutes < 0) {
             snprintf(risk, risk_size,
-                     "风险：无法取得今天已玩时间，设置后可能立即进入时间限制");
+                     "风险：无法取得额度消耗估算，设置后可能立即进入时间限制");
         } else if (ptc_ui_limit_minutes_would_restrict(model, model->draft_minutes)) {
             snprintf(risk, risk_size,
-                     "风险：新额度不高于已玩时间，设置后会立即进入时间限制");
+                     "风险：新额度不高于额度消耗估算，设置后会立即进入时间限制");
         } else if (model->unrestricted_today == 1) {
             snprintf(risk, risk_size,
                      "提示：今天将从不限时改为限时，请确认修改后剩余时间");
