@@ -13,6 +13,7 @@
 
 #include "../../common/time/ptc_time.h"
 #include "../../common/rules/holiday_calendar.h"
+#include "../../common/version.h"
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
@@ -3048,7 +3049,7 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 208,
               "2. 返回“加时码生成管理”，导出手机/电脑配置", 15, COLOR(45, 52, 62));
     draw_text(pixels, stride, dialog.x + 488, dialog.y + 234,
-              "sdmc:/switch/playwise/parent-import.json", 15, COLOR(28, 118, 188));
+              PLAYWISE_SD_ROOT "/parent-import.json", 15, COLOR(28, 118, 188));
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 266,
               "3. 将 HTML 和配置文件传到可信的手机或电脑", 15, COLOR(45, 52, 62));
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 298,
@@ -3505,5 +3506,11 @@ void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
     if (model->overlay != PTC_UI_OVERLAY_NONE) {
         draw_overlay(pixels, stride, model);
     }
+#ifdef PLAYWISE_EDEN
+    /* Permanent badge: no screenshot from the simulated build may be mistaken
+       for real-device PCTL evidence. */
+    fill_rect_packed(pixels, stride, (UiRect){1080, 12, 184, 28}, pack_rgb(COLOR(176, 42, 55)));
+    draw_text(pixels, stride, 1094, 18, "EDEN TEST", 16, COLOR(255, 255, 255));
+#endif
     framebufferEnd(&g_ui.framebuffer);
 }

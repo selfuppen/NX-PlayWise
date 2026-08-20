@@ -21,7 +21,7 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def valid_nro(*, with_icon: bool, embedded_manifest: bytes = b"") -> bytes:
+def valid_nro(*, with_icon: bool, embedded_manifest: bytes = b"", title: bytes | None = None) -> bytes:
     nro_size = 0x80
     icon = b"JFIF" if with_icon else b""
     icon_offset = package_remote.NRO_ASSET_HEADER_SIZE
@@ -34,7 +34,8 @@ def valid_nro(*, with_icon: bool, embedded_manifest: bytes = b"") -> bytes:
     struct.pack_into("<QQ", data, nro_size + 0x18, nacp_offset, package_remote.NACP_SIZE)
     data[nro_size + icon_offset : nro_size + icon_offset + len(icon)] = icon
     nacp_start = nro_size + nacp_offset
-    data[nacp_start : nacp_start + len(package_remote.APP_TITLE)] = package_remote.APP_TITLE
+    app_title = package_remote.APP_TITLE if title is None else title
+    data[nacp_start : nacp_start + len(app_title)] = app_title
     version_start = nacp_start + package_remote.NACP_DISPLAY_VERSION_OFFSET
     display_version = package_remote.PLAYWISE_VERSION.encode("ascii") + b"\0"
     data[version_start : version_start + len(display_version)] = display_version
@@ -84,6 +85,10 @@ def test_container_command() -> None:
     require("make clean" in command, "authoritative build must remove stale intermediates first")
     require("--emit-bundle" not in command, "container command must not stream a copied bundle")
     require("git " not in command, "mounted local source must not require a git update")
+    require("eden-test-nro" not in command, "the default build must not spend time on the emulator NRO")
+    eden_command = package_remote.container_command(with_eden=True)
+    require("eden-test-nro" in eden_command, "--with-eden must build the isolated Eden NRO target")
+    require("device-lab-package" in eden_command, "--with-eden must keep the standard targets")
 
 
 def test_ssh_command() -> None:
@@ -92,6 +97,9 @@ def test_ssh_command() -> None:
     require("1888" in command, "default container SSH port must be 1888")
     require("root@127.0.0.1" in command, "default container SSH target must be local root")
     require(command[-1] == package_remote.container_command(), "SSH must execute the container build command")
+    eden_command = package_remote.ssh_command(with_eden=True)
+    require(eden_command[-1] == package_remote.container_command(with_eden=True),
+            "--with-eden must reach the container through the same SSH transport")
 
 
 def test_zip_verification() -> None:
@@ -120,6 +128,16 @@ def test_zip_verification() -> None:
         else:
             raise AssertionError("a Release binary containing a Device Lab handler marker must be rejected")
 
+        eden_path = root / "playwise-20260730-120004.zip"
+        eden_manifest = write_package(eden_path, True, component_marker=b"playwise-eden")
+        try:
+            package_remote.verify_package_zip(eden_path, "playwise", expected_manifest=eden_manifest)
+        except package_remote.PackageError as exc:
+            require("forbidden Eden marker playwise-eden" in str(exc),
+                    "Eden marker rejection must explain the isolation boundary")
+        else:
+            raise AssertionError("a Release binary containing Eden markers must be rejected")
+
         mutable_path = root / "playwise-20260730-120003.zip"
         mutable_manifest = write_package(mutable_path, True)
         with zipfile.ZipFile(mutable_path, "a") as package:
@@ -130,6 +148,62 @@ def test_zip_verification() -> None:
             require("must not overwrite runtime data" in str(exc), "runtime seed rejection must explain data preservation")
         else:
             raise AssertionError("a package containing a live mutable seed must be rejected")
+
+
+def test_eden_nro_verification() -> None:
+    version = package_remote.PLAYWISE_VERSION
+    manifest = {
+        "schema_version": 1,
+        "playwise_version": version,
+        "commit": "a" * 40,
+        "release_id": f"playwise-{version}+aaaaaaaaaaaa",
+        "profile": "eden-test",
+        "protocol_version": 1,
+        "recovery_version": 1,
+        "pctl_layout_version": 1,
+        "build": {},
+        "verified_environment": {},
+    }
+    embedded = json.dumps(manifest, ensure_ascii=True, separators=(",", ":")).encode("ascii")
+    markers = b"EDEN TEST" + b"playwise-eden" + b"playwise-eden-test-secret-00000001"
+    with tempfile.TemporaryDirectory(prefix="ptc-eden-nro-") as tmp_dir:
+        root = Path(tmp_dir)
+        good = root / package_remote.EDEN_NRO
+        good.write_bytes(valid_nro(
+            with_icon=True,
+            embedded_manifest=embedded + markers,
+            title=package_remote.EDEN_APP_TITLE,
+        ))
+        package_remote.verify_eden_nro(good, manifest)
+
+        try:
+            package_remote.verify_eden_nro(good, dict(manifest, profile="release"))
+        except package_remote.PackageError as exc:
+            require("invalid Eden manifest profile" in str(exc), "a Release manifest must not describe the Eden NRO")
+        else:
+            raise AssertionError("verifying the Eden NRO against a Release manifest must be rejected")
+
+        unbadged = root / "unbadged.nro"
+        unbadged.write_bytes(valid_nro(
+            with_icon=True,
+            embedded_manifest=embedded,
+            title=package_remote.EDEN_APP_TITLE,
+        ))
+        try:
+            package_remote.verify_eden_nro(unbadged, manifest)
+        except package_remote.PackageError as exc:
+            require("missing Eden marker" in str(exc), "an unbadged Eden NRO must name the missing marker")
+        else:
+            raise AssertionError("an Eden NRO without its on-screen badge must be rejected")
+
+        mistitled = root / "mistitled.nro"
+        mistitled.write_bytes(valid_nro(with_icon=True, embedded_manifest=embedded + markers))
+        try:
+            package_remote.verify_eden_nro(mistitled, manifest)
+        except package_remote.PackageError as exc:
+            require("NACP title must be" in str(exc), "an Eden NRO wearing the Release title must be rejected")
+        else:
+            raise AssertionError("an Eden NRO with the Release NACP title must be rejected")
 
 
 def test_clean_package_safety() -> None:
@@ -172,6 +246,7 @@ def main() -> int:
     test_container_command()
     test_ssh_command()
     test_zip_verification()
+    test_eden_nro_verification()
     test_clean_package_safety()
     test_public_package_selection()
     print("Container package helper tests passed")

@@ -6,12 +6,15 @@ ifeq ($(strip $(DEVKITA64)),)
 $(error DEVKITA64 is not set. Source devkitPro environment before building the Companion NRO)
 endif
 
-TARGET := pctc
-BUILD := build
+TARGET ?= pctc
+BUILD ?= build
+MANIFEST_INCLUDE ?= ../../build/generated
+DEFINES ?=
+EDEN_BUILD ?= 0
 include ../../common/version.mk
-APP_TITLE := 任我玩
-APP_AUTHOR := selfuppen@qq.com
-APP_VERSION := $(PLAYWISE_VERSION)
+APP_TITLE ?= 任我玩
+APP_AUTHOR ?= selfuppen@qq.com
+APP_VERSION ?= $(PLAYWISE_VERSION)
 APP_ICON := $(CURDIR)/icon.png
 
 CC := $(DEVKITA64)/bin/aarch64-none-elf-gcc
@@ -22,7 +25,7 @@ FREETYPE_LIBS := $(shell $(PKG_CONFIG) --static --libs freetype2)
 
 ARCH := -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS := -std=gnu99 -O2 -g -Wall -Wextra -Werror -ffunction-sections $(ARCH)
-CFLAGS += -D__SWITCH__ -DPTC_IPC_CLIENT_NRO -I../.. -I../../build/generated -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
+CFLAGS += -D__SWITCH__ -DPTC_IPC_CLIENT_NRO $(DEFINES) -I../.. -I$(MANIFEST_INCLUDE) -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map
 LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
 
@@ -52,6 +55,19 @@ OBJS := \
 	$(BUILD)/cJSON.o \
 	$(BUILD)/install_defaults.o \
 	$(BUILD)/fs_storage.o
+
+# Emulator-only build: run the control core in-process against the simulated
+# PCTL adapter, and drop the pctc:u client the emulator cannot reach.
+ifeq ($(EDEN_BUILD),1)
+OBJS := $(filter-out $(BUILD)/switch_ipc_client.o,$(OBJS))
+OBJS += \
+	$(BUILD)/eden_runtime.o \
+	$(BUILD)/pctl_stub.o \
+	$(BUILD)/sysmodule_core.o \
+	$(BUILD)/play_timer_settings_layout.o \
+	$(BUILD)/token_v1.o \
+	$(BUILD)/control_policy.o
+endif
 
 .PHONY: all clean
 
@@ -135,6 +151,24 @@ $(BUILD)/install_defaults.o: ../../platform/install_defaults.c ../../platform/in
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/fs_storage.o: ../../platform/switch/fs_storage.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/eden_runtime.o: eden_runtime.c eden_runtime.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/pctl_stub.o: ../../platform/host/pctl_stub.c ../../platform/host/pctl_stub.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sysmodule_core.o: ../../sysmodule/sysmodule_core.c ../../sysmodule/sysmodule_core.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/play_timer_settings_layout.o: ../../platform/switch/play_timer_settings_layout.c ../../platform/switch/play_timer_settings_layout.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/token_v1.o: ../../common/token/token_v1.c ../../common/token/token_v1.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/control_policy.o: ../../common/policy/control_policy.c ../../common/policy/control_policy.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(TARGET).elf: $(OBJS)

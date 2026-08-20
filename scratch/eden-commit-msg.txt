@@ -1,0 +1,10 @@
+feat(eden): 新增 eden-test NRO，支持在模拟器用单个文件验证完整流程
+
+- 新增 eden-test profile 与 companion/nro/eden_runtime，在 NRO 进程内运行 sysmodule_core 与模拟 PCTL，并自举隔离的 sdmc:/switch/playwise-eden 数据根目录
+- 自举时补齐模拟器缺失的 build.json、credentials.json 和六个运行文件，修复只加载 NRO 时 PIN 报“无法读取 PIN 设置”以及首次设置卡在接管步骤的问题
+- companion/nro/Makefile 参数化 TARGET/BUILD/DEFINES/MANIFEST_INCLUDE，新增显式 make eden-test-nro 目标，产物只落在 build/eden-test/，不进入 packages 与 Device Lab
+- package_remote 无条件扫描并拒绝混入标准分发与 Device Lab 二进制的 Eden marker，新增按需的 --with-eden 构建校验，并补 test_package_remote.py 对应用例
+- NRO 持续显示 EDEN TEST 角标并固定传输标签，避免模拟器截图被当成真机 PCTL 证据
+- 三处重复的 SD 根目录展示字面量改为从 APP_ROOT 推导，使其在非 release profile 下不再显示错误路径
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>

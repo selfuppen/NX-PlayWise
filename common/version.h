@@ -11,7 +11,16 @@
 #define PLAYWISE_DEVICE_LAB_IPC_SERVICE "pwtl:u"
 #define PLAYWISE_DEVICE_LAB_SD_ROOT "sdmc:/switch/playwise-device-lab"
 
-#ifdef PLAYWISE_DEVICE_LAB
+/* Emulator-only quick test build. It has no sysmodule and no Title ID because it
+   runs the control core inside the NRO process against a simulated PCTL. */
+#define PLAYWISE_EDEN_SD_ROOT "sdmc:/switch/playwise-eden"
+
+#ifdef PLAYWISE_EDEN
+#define PLAYWISE_PROFILE_NAME "eden-test"
+#define PLAYWISE_TITLE_ID "nro-only"
+#define PLAYWISE_IPC_SERVICE "disabled"
+#define PLAYWISE_SD_ROOT PLAYWISE_EDEN_SD_ROOT
+#elif defined(PLAYWISE_DEVICE_LAB)
 #define PLAYWISE_PROFILE_NAME "device-lab"
 #define PLAYWISE_TITLE_ID PLAYWISE_DEVICE_LAB_TITLE_ID
 #define PLAYWISE_IPC_SERVICE PLAYWISE_DEVICE_LAB_IPC_SERVICE

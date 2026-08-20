@@ -2873,7 +2873,10 @@ int ptc_sysmodule_bootstrap_setup(PtcSysmodule *sysmodule)
         return 1;
     }
     if (strcmp(setup.phase, "active") == 0 || strcmp(setup.phase, "released") == 0) {
-#ifndef PLAYWISE_DEVICE_LAB
+        /* The emulator has no real set:sys fingerprint to re-confirm, so keep the
+           gate out of the simulated build instead of letting it park every boot
+           in protection with disable.flag. */
+#if !defined(PLAYWISE_DEVICE_LAB) && !defined(PLAYWISE_EDEN)
         PtcErrorCode gate_err = validate_runtime_fingerprint(sysmodule);
         if (gate_err != PTC_ERR_OK) {
             snprintf(setup.phase, sizeof(setup.phase), "protection");

@@ -50,11 +50,13 @@ NACP_SIZE = 0x4000
 NACP_TITLE_SIZE = 0x200
 NACP_DISPLAY_VERSION_OFFSET = 0x3060
 APP_TITLE = "任我玩".encode("utf-8")
+EDEN_APP_TITLE = b"PlayWise Eden Test"
 PLAYWISE_VERSION = read_playwise_version(ROOT)
 STANDARD_PACKAGE = f"playwise-{PLAYWISE_VERSION}.zip"
 COMPLETE_PACKAGE = f"playwise-complete-{PLAYWISE_VERSION}.zip"
 OFFLINE_HTML = ROOT / "tools" / "ptc_frontend" / "playwise-offline.html"
 DEVICE_LAB_PACKAGE = f"playwise-device-lab-{PLAYWISE_VERSION}.zip"
+EDEN_NRO = "pctc-eden.nro"
 PACKAGE_EXPECTATIONS = {"playwise": True}
 RELEASE_COMPONENTS = (
     f"{CONTENT_ROOT}/exefs.nsp",
@@ -76,6 +78,14 @@ FORBIDDEN_RELEASE_MARKERS = (
     b'"grant"',
 )
 FORBIDDEN_SECRET_MARKERS = (b"replace-with-long-random-secret",)
+# The emulator build shares its sources with Release, so scan every public
+# artifact for its profile, app root and fixed test secret.
+FORBIDDEN_EDEN_MARKERS = (
+    b"PLAYWISE_EDEN",
+    b"eden-test",
+    b"playwise-eden",
+    b"playwise-eden-test-secret-00000001",
+)
 NRO_INFORMATION_MARKERS = (
     "软件信息".encode("utf-8"),
     b"https://github.com/selfuppen/NX-PlayWise",
@@ -103,7 +113,13 @@ def safe_zip_members(package: zipfile.ZipFile) -> list[str]:
     return names
 
 
-def verify_nro_asset(data: bytes, label: str, *, require_icon: bool) -> None:
+def verify_nro_asset(
+    data: bytes,
+    label: str,
+    *,
+    require_icon: bool,
+    expected_title: bytes = APP_TITLE,
+) -> None:
     if len(data) < NRO_HEADER_END:
         raise PackageError(f"{label}: overlay is too small for an NRO header")
     magic = struct.unpack_from("<I", data, NRO_HEADER_OFFSET)[0]
@@ -129,11 +145,27 @@ def verify_nro_asset(data: bytes, label: str, *, require_icon: bool) -> None:
     if nacp_offset < NRO_ASSET_HEADER_SIZE or nacp_end > len(data):
         raise PackageError(f"{label}: invalid NACP metadata bounds")
     title = data[nacp_start : nacp_start + NACP_TITLE_SIZE].split(b"\0", 1)[0]
-    if title != APP_TITLE:
-        raise PackageError(f"{label}: NACP title must be 任我玩")
+    if title != expected_title:
+        raise PackageError(f"{label}: NACP title must be {expected_title.decode('utf-8')}")
     display_version = data[nacp_start + NACP_DISPLAY_VERSION_OFFSET : nacp_start + NACP_DISPLAY_VERSION_OFFSET + 16].split(b"\0", 1)[0]
     if display_version.decode("ascii", errors="replace") != PLAYWISE_VERSION:
         raise PackageError(f"{label}: NACP version must be {PLAYWISE_VERSION}")
+
+
+def verify_eden_nro(path: Path, manifest: dict) -> None:
+    """Verify the emulator-only NRO is present, self-identifying and isolated."""
+    if manifest.get("profile") != "eden-test" or manifest.get("playwise_version") != PLAYWISE_VERSION:
+        raise PackageError("invalid Eden manifest profile or version")
+    if not path.is_file():
+        raise PackageError(f"missing Eden NRO: {path}")
+    data = path.read_bytes()
+    verify_nro_asset(data, path.name, require_icon=True, expected_title=EDEN_APP_TITLE)
+    embedded = json.dumps(manifest, ensure_ascii=True, separators=(",", ":")).encode("ascii")
+    if embedded not in data:
+        raise PackageError(f"{path.name}: does not embed the Eden manifest")
+    for marker in (b"EDEN TEST", b"playwise-eden", b"playwise-eden-test-secret-00000001"):
+        if marker not in data:
+            raise PackageError(f"{path.name}: missing Eden marker {marker.decode('ascii')}")
 
 
 def verify_package_zip(
@@ -180,6 +212,9 @@ def verify_package_zip(
         for marker in FORBIDDEN_SECRET_MARKERS:
             if marker in data:
                 raise PackageError(f"{path.name}: {member_name} contains forbidden secret marker {marker.decode('ascii')}")
+        for marker in FORBIDDEN_EDEN_MARKERS:
+            if marker in data:
+                raise PackageError(f"{path.name}: {member_name} contains forbidden Eden marker {marker.decode('ascii')}")
     boot2 = f"{CONTENT_ROOT}/flags/boot2.flag"
     exefs = f"{CONTENT_ROOT}/exefs.nsp"
     nro = "switch/playwise/pctc.nro"
@@ -265,6 +300,9 @@ def verify_flat_sysmodule(path: Path, manifest: dict, *, release: bool) -> None:
         for marker in FORBIDDEN_SECRET_MARKERS:
             if marker in data:
                 raise PackageError(f"{path.name}: sysmodule contains forbidden secret marker {marker.decode('ascii')}")
+    for marker in FORBIDDEN_EDEN_MARKERS:
+        if marker in data:
+            raise PackageError(f"{path.name}: sysmodule contains forbidden Eden marker {marker.decode('ascii')}")
 
 
 def verify_packaged_artifacts(path: Path, manifest: dict) -> None:
@@ -295,8 +333,12 @@ def latest_packages(package_dir: Path) -> dict[str, Path]:
     return {"playwise": standard, "complete": complete}
 
 
-def container_command(container_path: str = DEFAULT_CONTAINER_PATH) -> str:
+def container_command(container_path: str = DEFAULT_CONTAINER_PATH, *, with_eden: bool = False) -> str:
     path = "/opt/devkitpro/devkitA64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    # The emulator NRO is opt-in so the default run keeps its exact artifact set.
+    targets = "make test packages device-lab-package"
+    if with_eden:
+        targets += " eden-test-nro"
     container_script = (
         "export DEVKITPRO=/opt/devkitpro "
         "DEVKITARM=/opt/devkitpro/devkitARM "
@@ -304,7 +346,7 @@ def container_command(container_path: str = DEFAULT_CONTAINER_PATH) -> str:
         f"PATH={shlex.quote(path)} "
         f"&& cd {shlex.quote(container_path)} "
         "&& make clean "
-        "&& make test packages device-lab-package"
+        f"&& {targets}"
     )
     return f"sh -lc {shlex.quote(container_script)}"
 
@@ -315,6 +357,8 @@ def ssh_command(
     user: str = DEFAULT_SSH_USER,
     container_path: str = DEFAULT_CONTAINER_PATH,
     identity: Path | None = None,
+    *,
+    with_eden: bool = False,
 ) -> list[str]:
     command = ["ssh", "-p", str(port), "-o", "ConnectTimeout=10"]
     if host in {"127.0.0.1", "localhost", "::1"}:
@@ -322,7 +366,7 @@ def ssh_command(
         command.extend(["-o", "StrictHostKeyChecking=no", "-o", f"UserKnownHostsFile={os.devnull}"])
     if identity is not None:
         command.extend(["-i", str(identity)])
-    command.extend([f"{user}@{host}", container_command(container_path)])
+    command.extend([f"{user}@{host}", container_command(container_path, with_eden=with_eden)])
     return command
 
 
@@ -332,8 +376,14 @@ def run_container(
     user: str = DEFAULT_SSH_USER,
     container_path: str = DEFAULT_CONTAINER_PATH,
     identity: Path | None = None,
+    *,
+    with_eden: bool = False,
 ) -> None:
-    process = subprocess.run(ssh_command(host, port, user, container_path, identity), cwd=ROOT, stdin=None)
+    process = subprocess.run(
+        ssh_command(host, port, user, container_path, identity, with_eden=with_eden),
+        cwd=ROOT,
+        stdin=None,
+    )
     return_code = process.returncode
     if return_code != 0:
         raise PackageError(f"container package command failed with exit code {return_code}")
@@ -361,12 +411,16 @@ def build_and_verify(
     user: str = DEFAULT_SSH_USER,
     container_path: str = DEFAULT_CONTAINER_PATH,
     identity: Path | None = None,
+    *,
+    with_eden: bool = False,
 ) -> None:
     package_dir = ROOT / "build" / "packages"
     device_lab_dir = ROOT / "build" / "device-lab"
+    eden_dir = ROOT / "build" / "eden-test"
     clean_package_results(package_dir)
     remove_path(device_lab_dir)
-    run_container(host, port, user, container_path, identity)
+    remove_path(eden_dir)
+    run_container(host, port, user, container_path, identity, with_eden=with_eden)
     manifest_path = ROOT / "build" / "generated" / "release-manifest.json"
     if not manifest_path.is_file():
         raise PackageError(f"missing generated release manifest: {manifest_path}")
@@ -385,6 +439,12 @@ def build_and_verify(
     with zipfile.ZipFile(device_lab_package) as package:
         lab_manifest = json.loads(package.read("switch/playwise-device-lab/build.json").decode("utf-8"))
     verify_flat_sysmodule(device_lab_dir / "switch" / "pwtl-sysmodule.bin", lab_manifest, release=False)
+    if with_eden:
+        eden_manifest_path = eden_dir / "generated" / "release-manifest.json"
+        if not eden_manifest_path.is_file():
+            raise PackageError(f"missing generated Eden manifest: {eden_manifest_path}")
+        eden_manifest = json.loads(eden_manifest_path.read_text(encoding="utf-8"))
+        verify_eden_nro(eden_dir / EDEN_NRO, eden_manifest)
 
 
 def parse_args() -> argparse.Namespace:
@@ -398,13 +458,25 @@ def parse_args() -> argparse.Namespace:
         help=f"Mounted repository path in the container. Default: {DEFAULT_CONTAINER_PATH}",
     )
     parser.add_argument("--identity", type=Path, help="Optional SSH private key path.")
+    parser.add_argument(
+        "--with-eden",
+        action="store_true",
+        help="Also build and verify the emulator-only Eden NRO in build/eden-test/.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     try:
-        build_and_verify(args.host, args.port, args.user, args.container_path, args.identity)
+        build_and_verify(
+            args.host,
+            args.port,
+            args.user,
+            args.container_path,
+            args.identity,
+            with_eden=args.with_eden,
+        )
     except (OSError, PackageError, subprocess.SubprocessError, zipfile.BadZipFile) as exc:
         print(f"FAIL: container packages: {exc}")
         return 1

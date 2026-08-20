@@ -45,7 +45,7 @@ ORCH_SRCS := \
 TEST_SRCS := tests/c/test_host_core.c
 UI_TEST_SRCS := companion/nro/ui_state.c companion/nro/ui_theme.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
-.PHONY: all manifest device-lab-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-package clean
+.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-package clean
 
 all: test
 
@@ -56,6 +56,10 @@ manifest:
 device-lab-manifest:
 	mkdir -p build/device-lab/generated
 	python3 tools/generate_release_manifest.py --profile device-lab --json build/device-lab/generated/release-manifest.json --header build/device-lab/generated/release_manifest.h
+
+eden-test-manifest:
+	mkdir -p build/eden-test/generated
+	python3 tools/generate_release_manifest.py --profile eden-test --json build/eden-test/generated/release-manifest.json --header build/eden-test/generated/release_manifest.h
 
 $(HOST_BUILD_DIR):
 	mkdir -p $(HOST_BUILD_DIR)
@@ -84,6 +88,13 @@ companion-overlay: manifest
 	$(MAKE) -C companion/overlay
 	mkdir -p build/switch
 	cp companion/overlay/playwise.ovl build/switch/playwise.ovl
+
+# Emulator-only NRO. It embeds the production core with a simulated PCTL adapter
+# and its own app root, and is deliberately excluded from every package target.
+eden-test-nro: eden-test-manifest
+	$(MAKE) -C companion/nro TARGET=pctc-eden BUILD=build-eden APP_TITLE="PlayWise Eden Test" APP_AUTHOR="PlayWise internal" MANIFEST_INCLUDE=../../build/eden-test/generated DEFINES=-DPLAYWISE_EDEN EDEN_BUILD=1
+	mkdir -p build/eden-test
+	cp companion/nro/pctc-eden.nro build/eden-test/pctc-eden.nro
 
 sysmodule-nsp: manifest
 	$(MAKE) -C sysmodule
@@ -119,6 +130,7 @@ device-lab-package: device-lab-sysmodule device-lab-nro
 clean:
 	rm -rf build
 	$(MAKE) -C companion/nro clean || true
+	rm -rf companion/nro/build-eden companion/nro/pctc-eden.elf companion/nro/pctc-eden.nro companion/nro/pctc-eden.nacp
 	$(MAKE) -C companion/overlay clean || true
 	$(MAKE) -C sysmodule clean || true
 	$(MAKE) -C device_lab/nro clean || true

@@ -23,8 +23,11 @@
 #include "../../common/version.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
 #include "ui_graphics.h"
+#ifdef PLAYWISE_EDEN
+#include "eden_runtime.h"
+#endif
 
-#define APP_ROOT "sdmc:/switch/playwise"
+#define APP_ROOT PLAYWISE_SD_ROOT
 #define RULES_PATH APP_ROOT "/rules.json"
 #define CONFIG_PATH APP_ROOT "/config.json"
 #define CREDENTIALS_PATH APP_ROOT "/credentials.json"
@@ -243,10 +246,16 @@ static void set_command_name(UiState *ui, const char *type)
 
 static void sync_transport_label(UiState *ui)
 {
+#ifdef PLAYWISE_EDEN
+    /* The emulator build never talks to pctc:u, so name the in-process core
+       instead of a transport route it does not use. */
+    ptc_ui_set_execution(&ui->model, ui->model.command_name, "传输：Eden 模拟后台");
+#else
     ptc_ui_set_execution(
         &ui->model,
         ui->model.command_name,
         ptc_companion_transport_route_label_zh(ptc_companion_transport_route(&ui->transport)));
+#endif
 }
 
 static void set_local_sd_command(UiState *ui, const char *command_name)
@@ -2392,7 +2401,7 @@ static void export_parent_import(UiState *ui)
     free(json);
     show_grant_manager(ui, PTC_UI_GRANT_MANAGER_EXPORT);
     snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-             ok ? "已导出到 sdmc:/switch/playwise/parent-import.json；把文件导入家长网页。文件包含密钥，请妥善保管。"
+             ok ? "已导出到 " APP_ROOT "/parent-import.json；把文件导入家长网页。文件包含密钥，请妥善保管。"
                 : "生成家长网页导入文件失败。");
 }
 
@@ -2497,7 +2506,7 @@ static void export_diagnostics(UiState *ui)
     snprintf(output_path, sizeof(output_path), APP_ROOT "/support/diagnostic-%lld.json", (long long)exported_at);
     if (rendered && ui->client.storage->vtable->write_text_atomic(ui->client.storage, output_path, rendered)) {
         snprintf(ui->model.diagnostic_path, sizeof(ui->model.diagnostic_path),
-                 "sdmc:/switch/playwise/support/diagnostic-%lld.json", (long long)exported_at);
+                 APP_ROOT "/support/diagnostic-%lld.json", (long long)exported_at);
         ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_SUCCESS;
         snprintf(ui->model.message, sizeof(ui->model.message), "诊断包导出成功。");
     } else {
@@ -4110,6 +4119,11 @@ int main(int argc, char **argv)
     bool touch_down = false;
     bool running = true;
     bool install_defaults_ready;
+#ifdef PLAYWISE_EDEN
+    /* PtcSysmodule alone is ~10 KiB, far too much for the main thread stack. */
+    static PtcEdenRuntime eden_runtime;
+    bool eden_runtime_ready;
+#endif
     AppletHookCookie hook_cookie;
     u64 previous_stick_buttons = 0;
     int draw_elapsed_ms = DRAW_INTERVAL_MS;
@@ -4142,18 +4156,32 @@ int main(int argc, char **argv)
     ptc_ui_set_execution(&ui.model, NULL, NULL);
     snprintf(ui.model.message, sizeof(ui.model.message), "正在读取今天的游玩状态...");
     ptc_fs_storage_init(&fs);
+#ifdef PLAYWISE_EDEN
+    /* Seeds the live root files, so the materialization below finds them all
+       present and succeeds without a packaged defaults/ directory. Keep this
+       call ahead of it. */
+    eden_runtime_ready = ptc_eden_runtime_init(&eden_runtime, ptc_fs_storage_as_storage(&fs));
+#endif
     install_defaults_ready = ptc_install_materialize_defaults(ptc_fs_storage_as_storage(&fs), APP_ROOT);
     ptc_companion_file_client_init(&ui.client, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     load_ui_preferences(&ui);
     refresh_theme(&ui);
     appletHook(&hook_cookie, applet_hook, &ui);
     refresh_disable_flag(&ui);
+#ifdef PLAYWISE_EDEN
+    ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs), NULL, NULL);
+#else
     ptc_switch_ipc_client_init(&ui.ipc);
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs), ptc_switch_ipc_backend(), &ui.ipc);
+#endif
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     ui.last_setup_refresh_second = -1;
     load_rule_drafts(&ui);
-    if (!install_defaults_ready) {
+    if (!install_defaults_ready
+#ifdef PLAYWISE_EDEN
+        || !eden_runtime_ready
+#endif
+    ) {
         snprintf(ui.model.message, sizeof(ui.model.message),
                  "安装数据初始化失败，请重新覆盖安装包并确认 SD 卡可写。");
     } else if (!restore_pending_redemption(&ui)) {
@@ -4470,6 +4498,9 @@ int main(int argc, char **argv)
 
         background_poll_elapsed_ms += INPUT_LOOP_MS;
         if (background_poll_elapsed_ms >= BACKGROUND_POLL_INTERVAL_MS) {
+#ifdef PLAYWISE_EDEN
+            ptc_eden_runtime_tick(&eden_runtime);
+#endif
             poll_pending_redemption(&ui);
             poll_result(&ui, false);
             refresh_setup_activation(&ui);
@@ -4485,6 +4516,8 @@ int main(int argc, char **argv)
 
     appletUnhook(&hook_cookie);
     ptc_ui_graphics_exit();
+#ifndef PLAYWISE_EDEN
     ptc_switch_ipc_client_exit(&ui.ipc);
+#endif
     return 0;
 }

@@ -295,6 +295,10 @@ node_modules/
 /companion/nro/pctc.elf
 /companion/nro/pctc.nro
 /companion/nro/pctc.nacp
+/companion/nro/build-eden/
+/companion/nro/pctc-eden.elf
+/companion/nro/pctc-eden.nro
+/companion/nro/pctc-eden.nacp
 /companion/overlay/build/
 /companion/overlay/playwise.elf
 /companion/overlay/playwise.nacp

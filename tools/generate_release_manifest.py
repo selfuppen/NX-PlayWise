@@ -109,7 +109,7 @@ def write_header(path: Path, data: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate PlayWise build manifest assets.")
-    parser.add_argument("--profile", choices=("release", "device-lab"), default="release")
+    parser.add_argument("--profile", choices=("release", "device-lab", "eden-test"), default="release")
     parser.add_argument("--json", type=Path, required=True)
     parser.add_argument("--header", type=Path, required=True)
     args = parser.parse_args()
