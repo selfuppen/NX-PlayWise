@@ -292,6 +292,7 @@ node_modules/
 # Switch build and packaging artifacts
 /build/
 /companion/nro/build/
+/companion/nro/build-eden/
 /companion/nro/pctc.elf
 /companion/nro/pctc.nro
 /companion/nro/pctc.nacp
