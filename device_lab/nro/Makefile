@@ -33,7 +33,10 @@ $(BUILD):
 $(BUILD)/main.o: main.c $(MANIFEST_HEADER) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGET).elf: $(BUILD)/main.o
+$(BUILD)/boot_flags.o: ../boot_flags.c ../boot_flags.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TARGET).elf: $(BUILD)/main.o $(BUILD)/boot_flags.o
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(NACP): $(MAKEFILE_LIST)

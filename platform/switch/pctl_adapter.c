@@ -21,6 +21,9 @@
 #define PTC_PCTL_CMD_SET_PLAY_TIMER_SETTINGS_FOR_DEBUG 195101
 #define PTC_PCTL_CMD_GET_PLAY_TIMER_EVENT_TO_REQUEST_SUSPENSION 1457
 #define PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED 1458
+#ifdef PLAYWISE_DEVICE_LAB
+#define PTC_PCTL_CMD_GET_PLAY_TIMER_SPENT_TIME_FOR_TEST 1952
+#endif
 typedef struct {
     u16 words[PTC_PLAY_TIMER_SETTINGS_WORDS];
 } PtcSwitchPlayTimerSettings;
@@ -530,30 +533,179 @@ static uint32_t switch_last_ipc_result(PtcPctl *pctl)
     return adapter->last_result;
 }
 
+#ifdef PLAYWISE_DEVICE_LAB
+static PtcErrorCode switch_forensic_sample(PtcPctl *pctl, PtcPctlForensicSample *out)
+{
+    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    PtcSwitchSession session;
+    PtcSwitchPlayTimerSettings settings;
+    PtcErrorCode err;
+    memset(out, 0, sizeof(*out));
+    out->monotonic_ns = armTicksToNs(armGetSystemTick());
+    err = open_write_session(adapter, &session);
+    if (err != PTC_ERR_OK) return err;
+    out->timer_enabled_result = dispatch_out(&session.service,
+        PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED, &out->timer_enabled, sizeof(out->timer_enabled));
+    out->remaining_result = dispatch_out(&session.service,
+        PTC_PCTL_CMD_GET_PLAY_TIMER_REMAINING_TIME, &out->remaining_ns, sizeof(out->remaining_ns));
+    out->restricted_result = dispatch_out(&session.service,
+        PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER, &out->restricted, sizeof(out->restricted));
+    out->spent_result = dispatch_out(&session.service,
+        PTC_PCTL_CMD_GET_PLAY_TIMER_SPENT_TIME_FOR_TEST, &out->spent_ns, sizeof(out->spent_ns));
+    memset(&settings, 0, sizeof(settings));
+    out->settings_result = dispatch_out(&session.service,
+        PTC_PCTL_CMD_GET_PLAY_TIMER_SETTINGS, &settings, sizeof(settings));
+    if (R_SUCCEEDED(out->settings_result)) memcpy(out->settings, &settings, sizeof(out->settings));
+    close_session(&session);
+    adapter->last_result = out->settings_result;
+    return PTC_ERR_OK;
+}
+
+static PtcErrorCode switch_public_parity(PtcPctl *pctl, PtcPctlPublicParity *out)
+{
+    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    PtcSwitchSession raw;
+    PctlRestrictionSettings raw_settings;
+    PctlRestrictionSettings libnx_settings;
+    Handle raw_event = INVALID_HANDLE;
+    Event libnx_event;
+    bool libnx_event_loaded = false;
+    Result init_rc;
+    PtcErrorCode err;
+    memset(out, 0, sizeof(*out));
+    memset(&raw_settings, 0, sizeof(raw_settings));
+    memset(&libnx_settings, 0, sizeof(libnx_settings));
+    memset(&libnx_event, 0, sizeof(libnx_event));
+    err = open_write_session(adapter, &raw);
+    if (err != PTC_ERR_OK) return err;
+    out->raw_temporary_unlocked_result = dispatch_out(&raw.service,
+        PTC_PCTL_CMD_IS_RESTRICTION_TEMPORARY_UNLOCKED,
+        &out->raw_temporary_unlocked, sizeof(out->raw_temporary_unlocked));
+    out->raw_restriction_enabled_result = dispatch_out(&raw.service,
+        PTC_PCTL_CMD_IS_RESTRICTION_ENABLED,
+        &out->raw_restriction_enabled, sizeof(out->raw_restriction_enabled));
+    out->raw_current_settings_result = dispatch_out(&raw.service,
+        PTC_PCTL_CMD_GET_CURRENT_SETTINGS, &raw_settings, sizeof(raw_settings));
+    out->raw_suspend_event_result = dispatch_out_handle(&raw.service,
+        PTC_PCTL_CMD_GET_PLAY_TIMER_EVENT_TO_REQUEST_SUSPENSION, &raw_event);
+    out->raw_suspend_event_valid = R_SUCCEEDED(out->raw_suspend_event_result) && raw_event != INVALID_HANDLE;
+    if (raw_event != INVALID_HANDLE) svcCloseHandle(raw_event);
+    out->raw_alarm_disabled_result = dispatch_out(&raw.service,
+        PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED,
+        &out->raw_alarm_disabled, sizeof(out->raw_alarm_disabled));
+    close_session(&raw);
+
+    init_rc = pctlInitialize();
+    if (R_SUCCEEDED(init_rc)) {
+        out->libnx_temporary_unlocked_result = pctlIsRestrictionTemporaryUnlocked(
+            &out->libnx_temporary_unlocked);
+        out->libnx_restriction_enabled_result = pctlIsRestrictionEnabled(
+            &out->libnx_restriction_enabled);
+        out->libnx_current_settings_result = pctlGetCurrentSettings(&libnx_settings);
+        out->libnx_suspend_event_result = pctlGetPlayTimerEventToRequestSuspension(&libnx_event);
+        libnx_event_loaded = R_SUCCEEDED(out->libnx_suspend_event_result);
+        out->libnx_suspend_event_valid = libnx_event_loaded && libnx_event.revent != INVALID_HANDLE;
+        out->libnx_alarm_disabled_result = pctlIsPlayTimerAlarmDisabled(&out->libnx_alarm_disabled);
+        if (libnx_event_loaded) eventClose(&libnx_event);
+        pctlExit();
+    } else {
+        out->libnx_temporary_unlocked_result = init_rc;
+        out->libnx_restriction_enabled_result = init_rc;
+        out->libnx_current_settings_result = init_rc;
+        out->libnx_suspend_event_result = init_rc;
+        out->libnx_alarm_disabled_result = init_rc;
+    }
+    out->current_settings_equal = R_SUCCEEDED(out->raw_current_settings_result) &&
+        R_SUCCEEDED(out->libnx_current_settings_result) &&
+        memcmp(&raw_settings, &libnx_settings, sizeof(raw_settings)) == 0;
+    adapter->last_result = init_rc;
+    return PTC_ERR_OK;
+}
+
+static PtcErrorCode switch_arm_suspend_event(PtcPctl *pctl)
+{
+    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    PtcSwitchSession session;
+    Result rc;
+    PtcErrorCode err = open_write_session(adapter, &session);
+    if (err != PTC_ERR_OK) return err;
+    if (adapter->suspend_event != INVALID_HANDLE) {
+        svcCloseHandle(adapter->suspend_event);
+        adapter->suspend_event = INVALID_HANDLE;
+    }
+    rc = dispatch_out_handle(&session.service,
+        PTC_PCTL_CMD_GET_PLAY_TIMER_EVENT_TO_REQUEST_SUSPENSION, &adapter->suspend_event);
+    close_session(&session);
+    if (R_FAILED(rc) || adapter->suspend_event == INVALID_HANDLE) {
+        if (adapter->suspend_event != INVALID_HANDLE) svcCloseHandle(adapter->suspend_event);
+        adapter->suspend_event = INVALID_HANDLE;
+        return map_result(adapter, rc, PTC_ERR_PCTL_READ_FAILED);
+    }
+    return map_result(adapter, rc, PTC_ERR_OK);
+}
+
+static bool switch_suspend_event_signaled(PtcPctl *pctl, bool *known)
+{
+    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    s32 index = -1;
+    Result rc;
+    if (known) *known = adapter->suspend_event != INVALID_HANDLE;
+    if (adapter->suspend_event == INVALID_HANDLE) return false;
+    rc = svcWaitSynchronization(&index, &adapter->suspend_event, 1, 0);
+    return R_SUCCEEDED(rc) && index == 0;
+}
+#endif
+
 static const PtcPctlVTable SWITCH_PCTL_VTABLE = {
     switch_read_status,
     switch_backup,
     switch_apply_target,
     switch_start_timer,
     switch_stop_timer,
+#ifdef PLAYWISE_DEVICE_LAB
+    switch_probe_suspend,
+    switch_probe_play_timer_write,
+#else
     NULL,
     NULL,
+#endif
     switch_snapshot_settings,
     switch_restore_settings,
     switch_debug_snapshot,
     switch_last_ipc_result,
+#ifdef PLAYWISE_DEVICE_LAB
+    switch_forensic_sample,
+    switch_public_parity,
+    switch_arm_suspend_event,
+    switch_suspend_event_signaled,
+#else
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+#endif
 };
 
 void ptc_switch_pctl_init(PtcSwitchPctl *adapter)
 {
     memset(adapter, 0, sizeof(*adapter));
+#ifdef PLAYWISE_DEVICE_LAB
+    adapter->suspend_event = INVALID_HANDLE;
+#endif
     adapter->pctl.vtable = &SWITCH_PCTL_VTABLE;
     adapter->pctl.ctx = adapter;
 }
 
 void ptc_switch_pctl_exit(PtcSwitchPctl *adapter)
 {
+#ifdef PLAYWISE_DEVICE_LAB
+    if (adapter && adapter->suspend_event != INVALID_HANDLE) {
+        svcCloseHandle(adapter->suspend_event);
+        adapter->suspend_event = INVALID_HANDLE;
+    }
+#else
     (void)adapter;
+#endif
 }
 
 PtcPctl *ptc_switch_pctl_as_pctl(PtcSwitchPctl *adapter)

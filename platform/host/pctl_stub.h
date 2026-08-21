@@ -30,6 +30,11 @@ typedef struct {
     uint32_t played_minutes_today;
     bool expiry_observed;
     bool restore_called;
+    int64_t forensic_remaining_ns;
+    int64_t forensic_spent_ns;
+    uint64_t forensic_monotonic_ns;
+    bool suspend_event_armed;
+    bool suspend_event_signaled;
 } PtcPctlStub;
 
 void ptc_pctl_stub_init(PtcPctlStub *stub);

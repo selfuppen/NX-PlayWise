@@ -270,6 +270,54 @@ static uint32_t stub_last_ipc_result(PtcPctl *pctl)
     return 0;
 }
 
+static PtcErrorCode stub_forensic_sample(PtcPctl *pctl, PtcPctlForensicSample *out)
+{
+    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    PtcPctlSettingsSnapshot snapshot;
+    if (stub->read_error != PTC_ERR_OK) return stub->read_error;
+    memset(out, 0, sizeof(*out));
+    out->monotonic_ns = stub->forensic_monotonic_ns;
+    out->timer_enabled = stub->status.play_timer_enabled;
+    out->remaining_ns = stub->forensic_remaining_ns != 0
+        ? stub->forensic_remaining_ns
+        : (int64_t)stub->status.remaining_minutes * 60LL * 1000000000LL;
+    out->restricted = stub->status.restricted_now;
+    out->spent_ns = stub->forensic_spent_ns != 0
+        ? stub->forensic_spent_ns
+        : (int64_t)stub->played_minutes_today * 60LL * 1000000000LL;
+    stub_encode_snapshot(stub, &snapshot);
+    memcpy(out->settings, snapshot.data, sizeof(out->settings));
+    return PTC_ERR_OK;
+}
+
+static PtcErrorCode stub_public_parity(PtcPctl *pctl, PtcPctlPublicParity *out)
+{
+    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    memset(out, 0, sizeof(*out));
+    out->raw_temporary_unlocked = stub->status.temporary_unlocked;
+    out->libnx_temporary_unlocked = stub->status.temporary_unlocked;
+    out->raw_restriction_enabled = stub->status.restriction_enabled;
+    out->libnx_restriction_enabled = stub->status.restriction_enabled;
+    out->current_settings_equal = true;
+    out->raw_suspend_event_valid = true;
+    out->libnx_suspend_event_valid = true;
+    return PTC_ERR_OK;
+}
+
+static PtcErrorCode stub_arm_suspend_event(PtcPctl *pctl)
+{
+    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    stub->suspend_event_armed = true;
+    return PTC_ERR_OK;
+}
+
+static bool stub_suspend_event_signaled(PtcPctl *pctl, bool *known)
+{
+    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    if (known) *known = stub->suspend_event_armed;
+    return stub->suspend_event_armed && stub->suspend_event_signaled;
+}
+
 static const PtcPctlVTable PCTL_STUB_VTABLE = {
     stub_read_status,
     stub_backup,
@@ -282,6 +330,10 @@ static const PtcPctlVTable PCTL_STUB_VTABLE = {
     stub_restore_settings,
     stub_debug_snapshot,
     stub_last_ipc_result,
+    stub_forensic_sample,
+    stub_public_parity,
+    stub_arm_suspend_event,
+    stub_suspend_event_signaled,
 };
 
 void ptc_pctl_stub_init(PtcPctlStub *stub)

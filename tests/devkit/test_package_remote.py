@@ -21,7 +21,8 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def valid_nro(*, with_icon: bool, embedded_manifest: bytes = b"", title: bytes | None = None) -> bytes:
+def valid_nro(*, with_icon: bool, embedded_manifest: bytes = b"", title: bytes | None = None,
+              display_version: str | None = None) -> bytes:
     nro_size = 0x80
     icon = b"JFIF" if with_icon else b""
     icon_offset = package_remote.NRO_ASSET_HEADER_SIZE
@@ -37,8 +38,8 @@ def valid_nro(*, with_icon: bool, embedded_manifest: bytes = b"", title: bytes |
     app_title = package_remote.APP_TITLE if title is None else title
     data[nacp_start : nacp_start + len(app_title)] = app_title
     version_start = nacp_start + package_remote.NACP_DISPLAY_VERSION_OFFSET
-    display_version = package_remote.PLAYWISE_VERSION.encode("ascii") + b"\0"
-    data[version_start : version_start + len(display_version)] = display_version
+    version_bytes = (package_remote.PLAYWISE_VERSION if display_version is None else display_version).encode("ascii") + b"\0"
+    data[version_start : version_start + len(version_bytes)] = version_bytes
     return bytes(data) + embedded_manifest + b"".join(package_remote.NRO_INFORMATION_MARKERS)
 
 
@@ -206,6 +207,59 @@ def test_eden_nro_verification() -> None:
             raise AssertionError("an Eden NRO with the Release NACP title must be rejected")
 
 
+def test_device_lab_zip_verification() -> None:
+    manifest = {
+        "schema_version": 1,
+        "playwise_version": package_remote.PLAYWISE_VERSION,
+        "commit": "b" * 40,
+        "release_id": f"playwise-{package_remote.PLAYWISE_VERSION}+bbbbbbbbbbbb",
+        "profile": "device-lab",
+        "protocol_version": 1,
+        "recovery_version": 1,
+        "pctl_layout_version": 1,
+        "build": {},
+        "verified_environment": {},
+    }
+    embedded = json.dumps(manifest, ensure_ascii=True, separators=(",", ":")).encode("ascii")
+    with tempfile.TemporaryDirectory(prefix="ptc-device-lab-package-") as tmp_dir:
+        root = Path(tmp_dir)
+        good = root / package_remote.DEVICE_LAB_PACKAGE
+        with zipfile.ZipFile(good, "w") as package:
+            package.writestr("switch/playwise-device-lab/build.json", json.dumps(manifest))
+            package.writestr("switch/playwise-device-lab/playwise-device-lab.nro",
+                valid_nro(with_icon=False, embedded_manifest=embedded,
+                    title=package_remote.DEVICE_LAB_NRO_TITLE,
+                    display_version=f"{package_remote.PLAYWISE_VERSION}-lab"))
+            package.writestr("switch/.overlays/playwise-device-lab.ovl",
+                valid_nro(with_icon=False, embedded_manifest=embedded,
+                    title=package_remote.DEVICE_LAB_OVERLAY_TITLE,
+                    display_version=f"{package_remote.PLAYWISE_VERSION}-lab"))
+            package.writestr(f"{package_remote.DEVICE_LAB_CONTENT_ROOT}/exefs.nsp", embedded)
+            package.writestr("DEVICE-LAB.txt", "internal")
+        package_remote.verify_device_lab_zip(good)
+
+        missing_overlay = root / "missing-overlay.zip"
+        with zipfile.ZipFile(good) as source, zipfile.ZipFile(missing_overlay, "w") as destination:
+            for name in source.namelist():
+                if name != "switch/.overlays/playwise-device-lab.ovl":
+                    destination.writestr(name, source.read(name))
+        try:
+            package_remote.verify_device_lab_zip(missing_overlay)
+        except package_remote.PackageError as exc:
+            require("playwise-device-lab.ovl" in str(exc), "missing Lab Overlay must be identified")
+        else:
+            raise AssertionError("Device Lab package without its dedicated Overlay must be rejected")
+
+        with zipfile.ZipFile(good, "a") as package:
+            package.writestr(f"{package_remote.DEVICE_LAB_CONTENT_ROOT}/flags/boot2.flag", b"")
+        try:
+            package_remote.verify_device_lab_zip(good)
+        except package_remote.PackageError as exc:
+            require("must not enable boot2.flag" in str(exc), "Lab package boot flag rejection must be explicit")
+        else:
+            raise AssertionError("Device Lab package must remain opt-in")
+
+
 def test_clean_package_safety() -> None:
     with tempfile.TemporaryDirectory(prefix="ptc-package-failure-") as tmp_dir:
         try:
@@ -247,6 +301,7 @@ def main() -> int:
     test_ssh_command()
     test_zip_verification()
     test_eden_nro_verification()
+    test_device_lab_zip_verification()
     test_clean_package_safety()
     test_public_package_selection()
     print("Container package helper tests passed")

@@ -51,6 +51,8 @@ NACP_TITLE_SIZE = 0x200
 NACP_DISPLAY_VERSION_OFFSET = 0x3060
 APP_TITLE = "任我玩".encode("utf-8")
 EDEN_APP_TITLE = b"PlayWise Eden Test"
+DEVICE_LAB_NRO_TITLE = b"PlayWise DEVICE LAB"
+DEVICE_LAB_OVERLAY_TITLE = b"PlayWise Device Lab"
 PLAYWISE_VERSION = read_playwise_version(ROOT)
 STANDARD_PACKAGE = f"playwise-{PLAYWISE_VERSION}.zip"
 COMPLETE_PACKAGE = f"playwise-complete-{PLAYWISE_VERSION}.zip"
@@ -76,6 +78,11 @@ FORBIDDEN_RELEASE_MARKERS = (
     b"control_mode",
     b'"observe"',
     b'"grant"',
+    b"lab_session_start",
+    b"lab_phase_start",
+    b"lab_session_restore",
+    b"restriction_effect",
+    b"GetPlayTimerSpentTimeForTest",
 )
 FORBIDDEN_SECRET_MARKERS = (b"replace-with-long-random-secret",)
 # The emulator build shares its sources with Release, so scan every public
@@ -119,6 +126,7 @@ def verify_nro_asset(
     *,
     require_icon: bool,
     expected_title: bytes = APP_TITLE,
+    expected_version: str = PLAYWISE_VERSION,
 ) -> None:
     if len(data) < NRO_HEADER_END:
         raise PackageError(f"{label}: overlay is too small for an NRO header")
@@ -148,8 +156,8 @@ def verify_nro_asset(
     if title != expected_title:
         raise PackageError(f"{label}: NACP title must be {expected_title.decode('utf-8')}")
     display_version = data[nacp_start + NACP_DISPLAY_VERSION_OFFSET : nacp_start + NACP_DISPLAY_VERSION_OFFSET + 16].split(b"\0", 1)[0]
-    if display_version.decode("ascii", errors="replace") != PLAYWISE_VERSION:
-        raise PackageError(f"{label}: NACP version must be {PLAYWISE_VERSION}")
+    if display_version.decode("ascii", errors="replace") != expected_version:
+        raise PackageError(f"{label}: NACP version must be {expected_version}")
 
 
 def verify_eden_nro(path: Path, manifest: dict) -> None:
@@ -255,7 +263,8 @@ def verify_device_lab_zip(path: Path) -> None:
         build_path = "switch/playwise-device-lab/build.json"
         exefs_path = f"{DEVICE_LAB_CONTENT_ROOT}/exefs.nsp"
         nro_path = "switch/playwise-device-lab/playwise-device-lab.nro"
-        required = {build_path, exefs_path, nro_path, "DEVICE-LAB.txt"}
+        overlay_path = "switch/.overlays/playwise-device-lab.ovl"
+        required = {build_path, exefs_path, nro_path, overlay_path, "DEVICE-LAB.txt"}
         missing = sorted(required.difference(names))
         if missing:
             raise PackageError(f"{path.name}: missing Device Lab entries: {', '.join(missing)}")
@@ -267,6 +276,13 @@ def verify_device_lab_zip(path: Path) -> None:
         embedded = json.dumps(manifest, ensure_ascii=True, separators=(",", ":")).encode("ascii")
         if embedded not in package.read(nro_path):
             raise PackageError(f"{path.name}: {nro_path} does not embed the Device Lab manifest")
+        if embedded not in package.read(overlay_path):
+            raise PackageError(f"{path.name}: {overlay_path} does not embed the Device Lab manifest")
+        lab_version = f"{PLAYWISE_VERSION}-lab"
+        verify_nro_asset(package.read(nro_path), f"{path.name}: playwise-device-lab.nro", require_icon=False,
+            expected_title=DEVICE_LAB_NRO_TITLE, expected_version=lab_version)
+        verify_nro_asset(package.read(overlay_path), f"{path.name}: playwise-device-lab.ovl", require_icon=False,
+            expected_title=DEVICE_LAB_OVERLAY_TITLE, expected_version=lab_version)
 
 
 def verify_complete_package(path: Path, standard_package: Path, offline_html: Path = OFFLINE_HTML) -> None:

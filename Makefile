@@ -4,6 +4,7 @@ include common/version.mk
 HOST_BUILD_DIR := build/host
 HOST_TEST := $(HOST_BUILD_DIR)/test_host_core
 HOST_UI_TEST := $(HOST_BUILD_DIR)/test_ui_state
+HOST_LAB_TEST := $(HOST_BUILD_DIR)/test_device_lab
 PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 
 COMMON_SRCS := \
@@ -45,7 +46,7 @@ ORCH_SRCS := \
 TEST_SRCS := tests/c/test_host_core.c
 UI_TEST_SRCS := companion/nro/ui_state.c companion/nro/ui_theme.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
-.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-package clean
+.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean
 
 all: test
 
@@ -70,9 +71,13 @@ $(HOST_TEST): $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SR
 $(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_graphics.h | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(UI_TEST_SRCS) -lm
 
-test-host: $(HOST_TEST) $(HOST_UI_TEST)
+$(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/error_code.c common/protocol/request_schema.c common/protocol/result_builder.c common/time/ptc_time.c platform/host/mem_storage.c platform/host/pctl_stub.c platform/host/fake_time.c platform/switch/play_timer_settings_layout.c sysmodule/lab_session.c device_lab/boot_flags.c tests/c/test_device_lab.c | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_DEVICE_LAB -o $@ $^
+
+test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST)
 	$(HOST_TEST)
 	$(HOST_UI_TEST)
+	$(HOST_LAB_TEST)
 
 test-python:
 	python3 tools/test.py
@@ -124,8 +129,13 @@ device-lab-nro: device-lab-manifest
 	mkdir -p build/device-lab/switch
 	cp device_lab/nro/playwise-device-lab.nro build/device-lab/switch/playwise-device-lab.nro
 
-device-lab-package: device-lab-sysmodule device-lab-nro
-	python3 tools/package_device_lab.py --out build/device-lab/package --zip build/device-lab/playwise-device-lab-$(PLAYWISE_VERSION).zip --manifest build/device-lab/generated/release-manifest.json --sysmodule-exefs build/device-lab/switch/exefs.nsp --nro build/device-lab/switch/playwise-device-lab.nro
+device-lab-overlay: device-lab-manifest
+	$(MAKE) -C device_lab/overlay
+	mkdir -p build/device-lab/switch
+	cp device_lab/overlay/playwise-device-lab.ovl build/device-lab/switch/playwise-device-lab.ovl
+
+device-lab-package: device-lab-sysmodule device-lab-nro device-lab-overlay
+	python3 tools/package_device_lab.py --out build/device-lab/package --zip build/device-lab/playwise-device-lab-$(PLAYWISE_VERSION).zip --manifest build/device-lab/generated/release-manifest.json --sysmodule-exefs build/device-lab/switch/exefs.nsp --nro build/device-lab/switch/playwise-device-lab.nro --overlay build/device-lab/switch/playwise-device-lab.ovl
 
 clean:
 	rm -rf build
@@ -134,3 +144,4 @@ clean:
 	$(MAKE) -C companion/overlay clean || true
 	$(MAKE) -C sysmodule clean || true
 	$(MAKE) -C device_lab/nro clean || true
+	$(MAKE) -C device_lab/overlay clean || true

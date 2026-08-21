@@ -1,4 +1,5 @@
 #include "sysmodule_core.h"
+#include "lab_session.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -3877,10 +3878,14 @@ static bool __attribute__((unused)) process_probe(PtcSysmodule *sysmodule, const
     }
     take_pctl_debug_snapshot(sysmodule, &before);
     if (request->type == PTC_REQUEST_PROBE_PLAY_TIMER_WRITE) {
-        err = sysmodule->pctl->vtable->probe_play_timer_write(sysmodule->pctl, &probe);
+        err = sysmodule->pctl->vtable->probe_play_timer_write
+            ? sysmodule->pctl->vtable->probe_play_timer_write(sysmodule->pctl, &probe)
+            : PTC_ERR_PCTL_WRITE_FAILED;
         caps->play_timer_write_verified = err == PTC_ERR_OK && probe.verified;
     } else {
-        err = sysmodule->pctl->vtable->probe_suspend(sysmodule->pctl, &probe);
+        err = sysmodule->pctl->vtable->probe_suspend
+            ? sysmodule->pctl->vtable->probe_suspend(sysmodule->pctl, &probe)
+            : PTC_ERR_PCTL_READ_FAILED;
         caps->suspend_verified = err == PTC_ERR_OK && probe.verified;
     }
     ipc_result = last_pctl_ipc_result(sysmodule);
@@ -4330,6 +4335,15 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     }
 
     switch (request.type) {
+#ifdef PLAYWISE_DEVICE_LAB
+    case PTC_REQUEST_LAB_SESSION_START:
+    case PTC_REQUEST_LAB_PHASE_START:
+    case PTC_REQUEST_LAB_SESSION_STATUS:
+    case PTC_REQUEST_LAB_OBSERVATION:
+    case PTC_REQUEST_LAB_SESSION_RESTORE:
+        (void)ptc_lab_process_request(sysmodule, &request);
+        break;
+#endif
     case PTC_REQUEST_STATUS:
         (void)process_status(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
@@ -4640,6 +4654,9 @@ uint32_t ptc_sysmodule_next_wait_ms(PtcSysmodule *sysmodule)
     wait_ms = ptc_sysmodule_current_scan_interval(sysmodule);
     if (minute_ms < wait_ms) wait_ms = minute_ms;
     if (date_ms < wait_ms) wait_ms = date_ms;
+#ifdef PLAYWISE_DEVICE_LAB
+    wait_ms = ptc_lab_next_wait_ms(sysmodule, wait_ms);
+#endif
     return wait_ms ? wait_ms : 1u;
 }
 
@@ -4753,6 +4770,9 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     int processed;
     int actions = 0;
     if (!sysmodule) return 0;
+#ifdef PLAYWISE_DEVICE_LAB
+    actions += ptc_lab_scheduler_tick(sysmodule);
+#endif
     {
         int setup_actions = ptc_sysmodule_bootstrap_setup(sysmodule);
         if (setup_actions > 0) actions += setup_actions;

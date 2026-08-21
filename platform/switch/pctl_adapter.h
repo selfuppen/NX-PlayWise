@@ -8,6 +8,9 @@
 typedef struct {
     PtcPctl pctl;
     Result last_result;
+#ifdef PLAYWISE_DEVICE_LAB
+    Handle suspend_event;
+#endif
 } PtcSwitchPctl;
 
 void ptc_switch_pctl_init(PtcSwitchPctl *adapter);

@@ -24,7 +24,7 @@ def copy_required(source: Path, destination: Path) -> None:
     shutil.copy2(source, destination)
 
 
-def create_package(out: Path, manifest_path: Path, sysmodule_exefs: Path, nro: Path) -> None:
+def create_package(out: Path, manifest_path: Path, sysmodule_exefs: Path, nro: Path, overlay: Path) -> None:
     if out.exists():
         shutil.rmtree(out)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -40,6 +40,8 @@ def create_package(out: Path, manifest_path: Path, sysmodule_exefs: Path, nro: P
         "backups",
         "recovery/active",
         "flags",
+        "lab",
+        "reports",
     ):
         (out / APP_ROOT / relative).mkdir(parents=True, exist_ok=True)
     write_json(out / APP_ROOT / "build.json", manifest)
@@ -71,6 +73,7 @@ def create_package(out: Path, manifest_path: Path, sysmodule_exefs: Path, nro: P
         },
     )
     copy_required(nro, out / APP_ROOT / "playwise-device-lab.nro")
+    copy_required(overlay, out / "switch" / ".overlays" / "playwise-device-lab.ovl")
     copy_required(sysmodule_exefs, out / "atmosphere" / "contents" / TITLE_ID / "exefs.nsp")
     warning = out / "DEVICE-LAB.txt"
     warning.write_text(
@@ -96,8 +99,9 @@ def main() -> int:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--sysmodule-exefs", type=Path, required=True)
     parser.add_argument("--nro", type=Path, required=True)
+    parser.add_argument("--overlay", type=Path, required=True)
     args = parser.parse_args()
-    create_package(args.out, args.manifest, args.sysmodule_exefs, args.nro)
+    create_package(args.out, args.manifest, args.sysmodule_exefs, args.nro, args.overlay)
     write_zip(args.out, args.zip_path)
     print(args.zip_path)
     return 0
