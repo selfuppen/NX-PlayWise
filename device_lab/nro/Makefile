@@ -15,11 +15,14 @@ APP_AUTHOR := PlayWise internal
 APP_VERSION := $(PLAYWISE_VERSION)-lab
 CC := $(DEVKITA64)/bin/aarch64-none-elf-gcc
 ELF2NRO := $(DEVKITPRO)/tools/bin/elf2nro
+PKG_CONFIG := $(DEVKITPRO)/portlibs/switch/bin/aarch64-none-elf-pkg-config
+FREETYPE_CFLAGS := $(shell $(PKG_CONFIG) --cflags freetype2)
+FREETYPE_LIBS := $(shell $(PKG_CONFIG) --static --libs freetype2)
 ARCH := -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS := -std=gnu99 -O2 -g -Wall -Wextra -Werror -ffunction-sections $(ARCH)
-CFLAGS += -D__SWITCH__ -DPLAYWISE_DEVICE_LAB -I../.. -I../../build/device-lab/generated -I$(DEVKITPRO)/libnx/include
+CFLAGS += -D__SWITCH__ -DPLAYWISE_DEVICE_LAB -I../.. -I../../build/device-lab/generated -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map
-LIBS := -L$(DEVKITPRO)/libnx/lib -lnx
+LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
 NACP := $(TARGET).nacp
 MANIFEST_HEADER := ../../build/device-lab/generated/release_manifest.h
 
@@ -33,10 +36,16 @@ $(BUILD):
 $(BUILD)/main.o: main.c $(MANIFEST_HEADER) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h ../ui_model.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_model.o: ../ui_model.c ../ui_model.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/boot_flags.o: ../boot_flags.c ../boot_flags.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGET).elf: $(BUILD)/main.o $(BUILD)/boot_flags.o
+$(TARGET).elf: $(BUILD)/main.o $(BUILD)/ui_graphics.o $(BUILD)/ui_model.o $(BUILD)/boot_flags.o
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(NACP): $(MAKEFILE_LIST)

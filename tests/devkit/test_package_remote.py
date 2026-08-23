@@ -227,15 +227,15 @@ def test_device_lab_zip_verification() -> None:
         with zipfile.ZipFile(good, "w") as package:
             package.writestr("switch/playwise-device-lab/build.json", json.dumps(manifest))
             package.writestr("switch/playwise-device-lab/playwise-device-lab.nro",
-                valid_nro(with_icon=False, embedded_manifest=embedded,
+                valid_nro(with_icon=False, embedded_manifest=embedded + package_remote.DEVICE_LAB_NRO_UI_MARKER,
                     title=package_remote.DEVICE_LAB_NRO_TITLE,
                     display_version=f"{package_remote.PLAYWISE_VERSION}-lab"))
             package.writestr("switch/.overlays/playwise-device-lab.ovl",
-                valid_nro(with_icon=False, embedded_manifest=embedded,
+                valid_nro(with_icon=False, embedded_manifest=embedded + package_remote.DEVICE_LAB_OVERLAY_UI_MARKER,
                     title=package_remote.DEVICE_LAB_OVERLAY_TITLE,
                     display_version=f"{package_remote.PLAYWISE_VERSION}-lab"))
             package.writestr(f"{package_remote.DEVICE_LAB_CONTENT_ROOT}/exefs.nsp", embedded)
-            package.writestr("DEVICE-LAB.txt", "internal")
+            package.writestr("DEVICE-LAB.txt", "任我玩 DEVICE LAB - 内部取证工具")
         package_remote.verify_device_lab_zip(good)
 
         missing_overlay = root / "missing-overlay.zip"

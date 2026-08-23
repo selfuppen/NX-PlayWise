@@ -53,6 +53,9 @@ APP_TITLE = "任我玩".encode("utf-8")
 EDEN_APP_TITLE = b"PlayWise Eden Test"
 DEVICE_LAB_NRO_TITLE = b"PlayWise DEVICE LAB"
 DEVICE_LAB_OVERLAY_TITLE = b"PlayWise Device Lab"
+DEVICE_LAB_NRO_UI_MARKER = "准备启用实验后台".encode("utf-8")
+DEVICE_LAB_OVERLAY_UI_MARKER = "第 %d / 6 阶段".encode("utf-8")
+DEVICE_LAB_WARNING_MARKER = "内部取证工具".encode("utf-8")
 PLAYWISE_VERSION = read_playwise_version(ROOT)
 STANDARD_PACKAGE = f"playwise-{PLAYWISE_VERSION}.zip"
 COMPLETE_PACKAGE = f"playwise-complete-{PLAYWISE_VERSION}.zip"
@@ -274,10 +277,18 @@ def verify_device_lab_zip(path: Path) -> None:
         if manifest.get("profile") != "device-lab" or manifest.get("playwise_version") != PLAYWISE_VERSION:
             raise PackageError(f"{path.name}: invalid Device Lab manifest profile or version")
         embedded = json.dumps(manifest, ensure_ascii=True, separators=(",", ":")).encode("ascii")
-        if embedded not in package.read(nro_path):
+        nro_data = package.read(nro_path)
+        overlay_data = package.read(overlay_path)
+        if embedded not in nro_data:
             raise PackageError(f"{path.name}: {nro_path} does not embed the Device Lab manifest")
-        if embedded not in package.read(overlay_path):
+        if embedded not in overlay_data:
             raise PackageError(f"{path.name}: {overlay_path} does not embed the Device Lab manifest")
+        if DEVICE_LAB_NRO_UI_MARKER not in nro_data:
+            raise PackageError(f"{path.name}: {nro_path} does not contain the Chinese guided UI")
+        if DEVICE_LAB_OVERLAY_UI_MARKER not in overlay_data:
+            raise PackageError(f"{path.name}: {overlay_path} does not contain the Chinese guided UI")
+        if DEVICE_LAB_WARNING_MARKER not in package.read("DEVICE-LAB.txt"):
+            raise PackageError(f"{path.name}: DEVICE-LAB.txt is not localized")
         lab_version = f"{PLAYWISE_VERSION}-lab"
         verify_nro_asset(package.read(nro_path), f"{path.name}: playwise-device-lab.nro", require_icon=False,
             expected_title=DEVICE_LAB_NRO_TITLE, expected_version=lab_version)

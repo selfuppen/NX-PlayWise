@@ -119,6 +119,64 @@ static bool journal_material_exists(const PtcLabBootFlagPaths *paths)
     return temporary_journal_path(paths, temporary, sizeof(temporary)) && exists(temporary);
 }
 
+bool ptc_lab_boot_flags_inspect(const PtcLabBootFlagPaths *paths, PtcLabBootStatus *status)
+{
+    char temporary[512];
+    Journal current;
+    Journal pending;
+    Journal selected;
+    bool current_valid;
+    bool pending_valid;
+    bool selected_valid = false;
+    if (!paths || !status || !paths->standard_flag || !paths->standard_backup ||
+        !paths->lab_flag || !paths->journal ||
+        !temporary_journal_path(paths, temporary, sizeof(temporary))) return false;
+    memset(status, 0, sizeof(*status));
+    status->standard_flag_present = exists(paths->standard_flag);
+    status->standard_backup_present = exists(paths->standard_backup);
+    status->lab_flag_present = exists(paths->lab_flag);
+    status->journal_present = exists(paths->journal);
+    status->pending_journal_present = exists(temporary);
+    current_valid = status->journal_present && read_journal_path(paths->journal, &current);
+    pending_valid = status->pending_journal_present && read_journal_path(temporary, &pending);
+    if (pending_valid && (!current_valid ||
+            (current.standard_was_enabled == pending.standard_was_enabled &&
+             journal_phase_order(pending.phase) >= journal_phase_order(current.phase)))) {
+        selected = pending;
+        selected_valid = true;
+    } else if (current_valid && (!status->pending_journal_present || !pending_valid)) {
+        selected = current;
+        selected_valid = true;
+    }
+    if (!status->journal_present && !status->pending_journal_present) {
+        status->state = status->standard_backup_present || status->lab_flag_present
+            ? PTC_LAB_BOOT_CONFLICT : PTC_LAB_BOOT_NORMAL;
+        return true;
+    }
+    if (!selected_valid) {
+        status->state = PTC_LAB_BOOT_CONFLICT;
+        return true;
+    }
+    status->standard_was_enabled = selected.standard_was_enabled;
+    snprintf(status->journal_phase, sizeof(status->journal_phase), "%s", selected.phase);
+    if (strcmp(selected.phase, "lab_enabled") == 0 && empty_file(paths->lab_flag) &&
+        ((selected.standard_was_enabled && !status->standard_flag_present && status->standard_backup_present) ||
+         (!selected.standard_was_enabled && !status->standard_flag_present && !status->standard_backup_present))) {
+        status->state = PTC_LAB_BOOT_ENABLED;
+    } else if (strcmp(selected.phase, "restored") == 0 && !status->lab_flag_present &&
+        !status->standard_backup_present &&
+        (selected.standard_was_enabled ? status->standard_flag_present : !status->standard_flag_present)) {
+        status->state = PTC_LAB_BOOT_RESTORED;
+    } else if (strcmp(selected.phase, "prepared") == 0 ||
+        strcmp(selected.phase, "standard_disabled") == 0 ||
+        strcmp(selected.phase, "lab_disabled") == 0) {
+        status->state = PTC_LAB_BOOT_RECOVERY_REQUIRED;
+    } else {
+        status->state = PTC_LAB_BOOT_CONFLICT;
+    }
+    return true;
+}
+
 static bool write_journal(const PtcLabBootFlagPaths *paths, const Journal *journal)
 {
     char temporary[512];
@@ -169,34 +227,34 @@ PtcLabBootFlagResult ptc_lab_boot_flags_enable(const PtcLabBootFlagPaths *paths,
     Journal journal;
     bool standard;
     if (!paths || !paths->standard_flag || !paths->standard_backup || !paths->lab_flag || !paths->journal) {
-        set_message(message, message_size, "Invalid flag paths.");
+        set_message(message, message_size, "启动标志路径无效，未执行任何更改。");
         return PTC_LAB_FLAG_IO_ERROR;
     }
     if (journal_material_exists(paths)) {
         if (!recover_journal(paths, &journal)) {
-            set_message(message, message_size, "Journal unreadable. Choose Restore normal package.");
+            set_message(message, message_size, "事务记录无法读取，请选择“恢复正常后台”。");
             return PTC_LAB_FLAG_RECOVERY_REQUIRED;
         }
         if (strcmp(journal.phase, "lab_enabled") == 0 && empty_file(paths->lab_flag) &&
             ((journal.standard_was_enabled && !exists(paths->standard_flag) && exists(paths->standard_backup)) ||
              (!journal.standard_was_enabled && !exists(paths->standard_flag) && !exists(paths->standard_backup)))) {
-            set_message(message, message_size, "Lab already enabled. Reboot the console.");
+            set_message(message, message_size, "实验后台已启用，请重启主机后打开 Device Lab 浮窗。");
             return PTC_LAB_FLAG_ALREADY_DONE;
         }
         if (strcmp(journal.phase, "restored") == 0 && !exists(paths->lab_flag) && !exists(paths->standard_backup) &&
             (journal.standard_was_enabled ? exists(paths->standard_flag) : !exists(paths->standard_flag))) {
             if (remove(paths->journal) != 0) {
-                set_message(message, message_size, "Could not rotate completed journal; nothing changed.");
+                set_message(message, message_size, "无法归档已完成的事务记录，未执行新的更改。");
                 return PTC_LAB_FLAG_IO_ERROR;
             }
             commit_sd();
         } else {
-            set_message(message, message_size, "Interrupted/conflicting switch. Choose Restore normal package.");
+            set_message(message, message_size, "检测到中断或冲突，请选择“恢复正常后台”。");
             return PTC_LAB_FLAG_RECOVERY_REQUIRED;
         }
     }
     if (exists(paths->standard_backup) || exists(paths->lab_flag)) {
-        set_message(message, message_size, "Unknown flag or backup exists; nothing was overwritten.");
+        set_message(message, message_size, "发现未知启动标志或备份，为避免覆盖已停止操作。");
         return PTC_LAB_FLAG_CONFLICT;
     }
     memset(&journal, 0, sizeof(journal));
@@ -204,25 +262,25 @@ PtcLabBootFlagResult ptc_lab_boot_flags_enable(const PtcLabBootFlagPaths *paths,
     journal.standard_was_enabled = standard;
     snprintf(journal.phase, sizeof(journal.phase), "prepared");
     if (!write_journal(paths, &journal)) {
-        set_message(message, message_size, "Could not create transaction journal.");
+        set_message(message, message_size, "无法创建事务记录，未更改启动状态。");
         return PTC_LAB_FLAG_IO_ERROR;
     }
     if (standard && rename(paths->standard_flag, paths->standard_backup) != 0) {
-        set_message(message, message_size, "Could not preserve standard flag. Restore is required.");
+        set_message(message, message_size, "无法安全备份正常后台启动标志，请立即执行恢复。");
         return PTC_LAB_FLAG_RECOVERY_REQUIRED;
     }
     if (standard) commit_sd();
     snprintf(journal.phase, sizeof(journal.phase), "standard_disabled");
     if (!write_journal(paths, &journal) || !create_empty_atomic(paths->lab_flag)) {
-        set_message(message, message_size, "Lab flag creation interrupted. Choose Restore normal package.");
+        set_message(message, message_size, "创建实验后台启动标志时中断，请选择“恢复正常后台”。");
         return PTC_LAB_FLAG_RECOVERY_REQUIRED;
     }
     snprintf(journal.phase, sizeof(journal.phase), "lab_enabled");
     if (!write_journal(paths, &journal)) {
-        set_message(message, message_size, "Lab flag exists but journal finalization failed. Restore required.");
+        set_message(message, message_size, "实验后台标志已创建，但事务记录未完成，请立即恢复。");
         return PTC_LAB_FLAG_RECOVERY_REQUIRED;
     }
-    set_message(message, message_size, "Lab enabled safely. Reboot, then open the Device Lab Overlay.");
+    set_message(message, message_size, "实验后台已安全启用。请重启主机，再打开 Device Lab 浮窗。");
     return PTC_LAB_FLAG_OK;
 }
 
@@ -231,53 +289,53 @@ PtcLabBootFlagResult ptc_lab_boot_flags_restore(const PtcLabBootFlagPaths *paths
 {
     Journal journal;
     if (!paths || !journal_material_exists(paths) || !recover_journal(paths, &journal)) {
-        set_message(message, message_size, "No trustworthy journal; no flags were changed.");
+        set_message(message, message_size, "没有可信的事务记录，未更改任何启动标志。");
         return PTC_LAB_FLAG_CONFLICT;
     }
     if (strcmp(journal.phase, "restored") == 0) {
         bool exact = !exists(paths->lab_flag) && !exists(paths->standard_backup) &&
             (journal.standard_was_enabled ? exists(paths->standard_flag) : !exists(paths->standard_flag));
-        set_message(message, message_size, exact ? "Normal package already restored." :
-            "Flags changed after restore; nothing was overwritten.");
+        set_message(message, message_size, exact ? "正常后台已经恢复。" :
+            "恢复后启动标志又发生变化，为避免覆盖已停止操作。");
         return exact ? PTC_LAB_FLAG_ALREADY_DONE : PTC_LAB_FLAG_CONFLICT;
     }
     if (exists(paths->lab_flag)) {
         if (!empty_file(paths->lab_flag)) {
-            set_message(message, message_size, "Lab flag externally modified; nothing was removed.");
+            set_message(message, message_size, "实验后台启动标志被外部修改，未删除该文件。");
             return PTC_LAB_FLAG_CONFLICT;
         }
         if (remove(paths->lab_flag) != 0) {
-            set_message(message, message_size, "Could not remove Lab boot flag.");
+            set_message(message, message_size, "无法删除实验后台启动标志，请重试恢复。");
             return PTC_LAB_FLAG_IO_ERROR;
         }
         commit_sd();
     }
     snprintf(journal.phase, sizeof(journal.phase), "lab_disabled");
     if (!write_journal(paths, &journal)) {
-        set_message(message, message_size, "Lab disabled; journal update failed. Retry restore.");
+        set_message(message, message_size, "实验后台已停用，但事务记录更新失败，请重试恢复。");
         return PTC_LAB_FLAG_RECOVERY_REQUIRED;
     }
     if (journal.standard_was_enabled) {
         if (exists(paths->standard_flag) && exists(paths->standard_backup)) {
-            set_message(message, message_size, "Standard flag and backup both exist; nothing overwritten.");
+            set_message(message, message_size, "正常后台标志和备份同时存在，为避免覆盖已停止操作。");
             return PTC_LAB_FLAG_CONFLICT;
         }
         if (!exists(paths->standard_flag)) {
             if (!exists(paths->standard_backup) || rename(paths->standard_backup, paths->standard_flag) != 0) {
-                set_message(message, message_size, "Standard flag restore incomplete. Retry restore.");
+                set_message(message, message_size, "正常后台启动标志尚未恢复完整，请再次重试。");
                 return PTC_LAB_FLAG_RECOVERY_REQUIRED;
             }
             commit_sd();
         }
     } else if (exists(paths->standard_flag) || exists(paths->standard_backup)) {
-        set_message(message, message_size, "Unexpected standard flag/backup; nothing overwritten.");
+        set_message(message, message_size, "发现意外的正常后台标志或备份，未覆盖任何文件。");
         return PTC_LAB_FLAG_CONFLICT;
     }
     snprintf(journal.phase, sizeof(journal.phase), "restored");
     if (!write_journal(paths, &journal)) {
-        set_message(message, message_size, "Flags restored; journal finalization failed.");
+        set_message(message, message_size, "启动标志已恢复，但事务记录收尾失败，请再次检查。");
         return PTC_LAB_FLAG_RECOVERY_REQUIRED;
     }
-    set_message(message, message_size, "Normal package restored exactly. Reboot the console.");
+    set_message(message, message_size, "正常后台已精确恢复。请重启主机完成切换。");
     return PTC_LAB_FLAG_OK;
 }

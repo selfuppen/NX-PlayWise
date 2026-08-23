@@ -77,8 +77,9 @@ def create_package(out: Path, manifest_path: Path, sysmodule_exefs: Path, nro: P
     copy_required(sysmodule_exefs, out / "atmosphere" / "contents" / TITLE_ID / "exefs.nsp")
     warning = out / "DEVICE-LAB.txt"
     warning.write_text(
-        "PLAYWISE DEVICE LAB - INTERNAL / DANGEROUS\n"
-        "This profile is not a public release and intentionally omits boot2.flag.\n",
+        "任我玩 DEVICE LAB - 内部取证工具 / 危险操作\n"
+        "此配置不是公开发行版，并且有意不包含 boot2.flag。\n"
+        "请从 Device Lab NRO 启用实验后台，完成取证和精确恢复后再切回正常后台。\n",
         encoding="utf-8",
         newline="\n",
     )

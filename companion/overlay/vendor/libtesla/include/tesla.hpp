@@ -1101,6 +1101,12 @@ namespace tsl {
                 u8 *fontBuffer = reinterpret_cast<u8*>(stdFontData.address);
                 stbtt_InitFont(&this->m_stdFont, fontBuffer, stbtt_GetFontOffsetForIndex(fontBuffer, 0));
 
+#ifdef TESLA_FORCE_CHINESE_SIMPLIFIED_FONT
+                this->m_hasLocalFont = true;
+                TSL_R_TRY(plGetSharedFontByType(&localFontData, PlSharedFontType_ChineseSimplified));
+                fontBuffer = reinterpret_cast<u8*>(localFontData.address);
+                stbtt_InitFont(&this->m_localFont, fontBuffer, stbtt_GetFontOffsetForIndex(fontBuffer, 0));
+#else
                 u64 languageCode;
                 if (R_SUCCEEDED(setGetSystemLanguage(&languageCode))) {
                     // Check if need localization font
@@ -1129,6 +1135,7 @@ namespace tsl {
                         stbtt_InitFont(&this->m_localFont, fontBuffer, stbtt_GetFontOffsetForIndex(fontBuffer, 0));
                     }
                 }
+#endif
 
                 // Nintendo's extended font containing a bunch of icons
                 TSL_R_TRY(plGetSharedFontByType(&extFontData, PlSharedFontType_NintendoExt));

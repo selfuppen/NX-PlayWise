@@ -12,7 +12,7 @@ include $(TOPDIR)/../../common/version.mk
 
 TARGET := playwise-device-lab
 BUILD := build
-SOURCES := source ../../companion ../../common/protocol ../../common/time ../../common/rules ../../platform/switch ../../third_party/cjson
+SOURCES := source .. ../../companion ../../common/protocol ../../common/time ../../common/rules ../../platform/switch ../../third_party/cjson
 INCLUDES := ../../companion/overlay/vendor/libtesla/include ../.. ../../common ../../platform ../../platform/switch ../../build/device-lab/generated
 APP_TITLE := PlayWise Device Lab
 APP_AUTHOR := PlayWise internal
@@ -24,7 +24,7 @@ export NROFLAGS += --nacp=$(TOPDIR)/$(TARGET).nacp
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS := -g -O2 -Wall -Wextra -Werror -ffunction-sections $(ARCH) $(DEFINES)
 CFLAGS += $(INCLUDE) -D__SWITCH__ -DPLAYWISE_DEVICE_LAB -DPTC_IPC_CLIENT_OVERLAY
-CXXFLAGS := $(filter-out -Werror,$(CFLAGS)) -std=c++20 -fno-exceptions -fno-rtti \
+CXXFLAGS := $(filter-out -Werror,$(CFLAGS)) -std=c++20 -fno-exceptions -fno-rtti -DTESLA_FORCE_CHINESE_SIMPLIFIED_FONT \
 	-Wno-missing-field-initializers -Wno-unused-parameter -Wno-ignored-qualifiers
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 LIBS := -lnx
@@ -36,7 +36,7 @@ export TOPDIR := $(CURDIR)
 export VPATH := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir))
 export DEPSDIR := $(CURDIR)/$(BUILD)
 CPPFILES := main.cpp
-CFILES := file_protocol.c transport_client.c switch_ipc_client.c request_client.c request_schema.c result_builder.c error_code.c ptc_time.c rules.c fs_storage.c cJSON.c
+CFILES := ui_model.c file_protocol.c transport_client.c switch_ipc_client.c request_client.c request_schema.c result_builder.c error_code.c ptc_time.c rules.c fs_storage.c cJSON.c
 export LD := $(CXX)
 export OFILES_SRC := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o)
 export OFILES := $(OFILES_SRC)

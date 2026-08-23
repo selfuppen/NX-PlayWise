@@ -9,6 +9,7 @@
 
 #include "../../common/protocol/request_schema.h"
 #include "../../device_lab/boot_flags.h"
+#include "../../device_lab/ui_model.h"
 #include "../../platform/host/fake_time.h"
 #include "../../platform/host/mem_storage.h"
 #include "../../platform/host/pctl_stub.h"
@@ -150,6 +151,7 @@ static void test_boot_flags(void)
     char root[] = "/tmp/playwise-lab-flags-XXXXXX";
     char standard[512], backup[512], lab[512], journal[512], journal_tmp[520], message[256];
     PtcLabBootFlagPaths paths;
+    PtcLabBootStatus status;
     check(mkdtemp(root) != NULL, "temporary boot flag root created");
     snprintf(standard, sizeof(standard), "%s/standard.flag", root);
     snprintf(backup, sizeof(backup), "%s/standard.backup", root);
@@ -158,14 +160,22 @@ static void test_boot_flags(void)
     snprintf(journal_tmp, sizeof(journal_tmp), "%s.tmp", journal);
     paths.standard_flag = standard; paths.standard_backup = backup; paths.lab_flag = lab; paths.journal = journal;
     check(touch_empty(standard), "standard flag fixture created");
+    check(ptc_lab_boot_flags_inspect(&paths, &status) && status.state == PTC_LAB_BOOT_NORMAL,
+        "untouched flags are presented as ready for Lab preparation");
     check(ptc_lab_boot_flags_enable(&paths, message, sizeof(message)) == PTC_LAB_FLAG_OK,
         "standard-enabled state switches transactionally");
+    check(strstr(message, "实验后台") != NULL, "boot transaction success message is Chinese");
+    check(ptc_lab_boot_flags_inspect(&paths, &status) && status.state == PTC_LAB_BOOT_ENABLED &&
+            status.standard_was_enabled,
+        "enabled transaction has a read-only UI status");
     check(access(standard, F_OK) != 0 && access(backup, F_OK) == 0 && access(lab, F_OK) == 0,
         "enable preserves standard flag in unique backup");
     check(ptc_lab_boot_flags_enable(&paths, message, sizeof(message)) == PTC_LAB_FLAG_ALREADY_DONE,
         "repeated enable is idempotent");
     check(ptc_lab_boot_flags_restore(&paths, message, sizeof(message)) == PTC_LAB_FLAG_OK,
         "restore returns exact original flag state");
+    check(ptc_lab_boot_flags_inspect(&paths, &status) && status.state == PTC_LAB_BOOT_RESTORED,
+        "completed restore has a read-only UI status");
     check(access(standard, F_OK) == 0 && access(backup, F_OK) != 0 && access(lab, F_OK) != 0,
         "normal package flag is restored exactly");
     check(ptc_lab_boot_flags_restore(&paths, message, sizeof(message)) == PTC_LAB_FLAG_ALREADY_DONE,
@@ -184,6 +194,8 @@ static void test_boot_flags(void)
     check(touch_empty(backup), "conflict backup fixture created");
     check(ptc_lab_boot_flags_enable(&paths, message, sizeof(message)) == PTC_LAB_FLAG_CONFLICT,
         "unknown backup conflict is never overwritten");
+    check(ptc_lab_boot_flags_inspect(&paths, &status) && status.state == PTC_LAB_BOOT_CONFLICT,
+        "unknown backup is presented as a blocking conflict");
     (void)remove(backup);
 
     check(touch_empty(backup), "interrupted transaction backup fixture created");
@@ -235,11 +247,59 @@ static void test_boot_flags(void)
     (void)rmdir(root);
 }
 
+static void test_ui_model(void)
+{
+    static const char *const valid =
+        "{\"version\":1,\"run_id\":\"run-1\",\"state\":\"ready\",\"next_phase\":3,"
+        "\"active_phase\":\"\",\"deadline\":0,\"restored\":false,"
+        "\"restore_verdict\":\"pending\"}";
+    static const char *const error =
+        "{\"version\":1,\"status\":\"error\",\"error\":{\"code\":307,"
+        "\"reason\":\"pctl_restore_failed\"}}";
+    PtcLabSessionView session;
+    PtcLabBootStatus boot;
+    int code = 0;
+    char reason[64];
+    memset(&boot, 0, sizeof(boot));
+    check(ptc_lab_session_parse(valid, &session) && session.next_phase == 3 &&
+            strcmp(session.state, "ready") == 0,
+        "UI parser accepts the persisted Lab session schema");
+    check(!ptc_lab_session_parse("{\"state\":\"ready\"}", &session),
+        "UI parser rejects a damaged session instead of treating it as new");
+    check(ptc_lab_result_error(error, &code, reason, sizeof(reason)) && code == 307 &&
+            strcmp(reason, "pctl_restore_failed") == 0,
+        "UI extracts a durable backend error code and reason");
+    boot.state = PTC_LAB_BOOT_ENABLED;
+    check(ptc_lab_nro_stage(&boot, false, PTC_LAB_SESSION_MISSING, NULL) == PTC_LAB_NRO_REBOOT_TO_LAB,
+        "enabled Lab without service recommends reboot");
+    check(ptc_lab_nro_stage(&boot, true, PTC_LAB_SESSION_MISSING, NULL) == PTC_LAB_NRO_START_OVERLAY,
+        "running Lab without session recommends opening the Overlay");
+    check(ptc_lab_nro_stage(&boot, true, PTC_LAB_SESSION_INVALID, NULL) == PTC_LAB_NRO_SESSION_INVALID,
+        "damaged session blocks all new evidence actions");
+    memset(&session, 0, sizeof(session));
+    snprintf(session.state, sizeof(session.state), "complete");
+    snprintf(session.restore_verdict, sizeof(session.restore_verdict), "exact_restore_proved");
+    session.restored = true;
+    check(ptc_lab_nro_stage(&boot, true, PTC_LAB_SESSION_VALID, &session) == PTC_LAB_NRO_RESTORE_NORMAL,
+        "exact restore proof recommends switching back to the normal package");
+    boot.state = PTC_LAB_BOOT_RESTORED;
+    check(ptc_lab_nro_stage(&boot, true, PTC_LAB_SESSION_VALID, &session) == PTC_LAB_NRO_REBOOT_TO_NORMAL &&
+            ptc_lab_nro_stage(&boot, false, PTC_LAB_SESSION_VALID, &session) == PTC_LAB_NRO_PREPARE,
+        "restored flags require one reboot before another Lab cycle is offered");
+    check(strstr(ptc_lab_phase_title_zh(4), "待机") != NULL &&
+            strstr(ptc_lab_transport_error_zh(2), "超时") != NULL,
+        "phase and transport guidance are localized in Chinese");
+    check(ptc_lab_nro_hit_test(72, 402) == 0 && ptc_lab_nro_hit_test(831, 473) == 0 &&
+            ptc_lab_nro_hit_test(832, 473) == -1,
+        "NRO touch targets match their visible action cards");
+}
+
 int main(void)
 {
     test_protocol();
     test_session_timing_order_restart_and_restore_failure();
     test_boot_flags();
+    test_ui_model();
     if (failures) { fprintf(stderr, "%d Device Lab test(s) failed\n", failures); return 1; }
     printf("PASS: Device Lab protocol, state machine, recovery, and boot flags\n");
     return 0;

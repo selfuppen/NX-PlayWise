@@ -5,7 +5,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SWITCH_UI_ROOTS = [ROOT / "companion" / "nro", ROOT / "companion" / "overlay" / "source"]
+SWITCH_UI_ROOTS = [
+    ROOT / "companion" / "nro",
+    ROOT / "companion" / "overlay" / "source",
+    ROOT / "device_lab",
+]
 SOURCE_SUFFIXES = {".c", ".cpp", ".h", ".hpp"}
 FORBIDDEN = {
     "−": "use ASCII '-'",

@@ -3,3 +3,6 @@ Commit: f766e9b607a05e9756843cbd62b3bfb98be1646c
 Files vendored: include/tesla.hpp, include/stb_truetype.h, LICENSE
 Local compatibility patch: tesla.hpp replaces its sole dynamic_cast with a
 List-parent static_cast so the overlay can honor -fno-rtti.
+Local Device Lab patch: defining TESLA_FORCE_CHINESE_SIMPLIFIED_FONT makes the
+internal forensic overlay load Nintendo's Simplified Chinese shared font even
+when the console language is not Chinese. Normal overlay builds do not define it.
