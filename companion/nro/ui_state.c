@@ -1024,6 +1024,53 @@ int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now)
     return now - model->status_updated_at;
 }
 
+void ptc_ui_format_today_mode(const PtcUiModel *model, char *out, size_t out_size)
+{
+    if (!out || out_size == 0) return;
+    if (!model || !model->status_loaded) {
+        snprintf(out, out_size, "等待刷新");
+    } else if (model->blocked_today == 1) {
+        snprintf(out, out_size, "禁止游玩");
+    } else if (model->unrestricted_today == 1) {
+        snprintf(out, out_size, "不限时");
+    } else if (model->limited_today == 1) {
+        snprintf(out, out_size,
+                 model->remaining_available && model->remaining_minutes <= 0
+                     ? "限时 | 额度用完"
+                     : "限时");
+    } else {
+        snprintf(out, out_size, "状态未知");
+    }
+}
+
+void ptc_ui_format_quota_remaining(const PtcUiModel *model, char *out, size_t out_size)
+{
+    if (!out || out_size == 0) return;
+    if (!model || !model->status_loaded) {
+        snprintf(out, out_size, "--");
+    } else if (model->unrestricted_today == 1) {
+        snprintf(out, out_size, "不限时");
+    } else if (model->remaining_available && model->remaining_minutes >= 0) {
+        snprintf(out, out_size, "%d 分钟", model->remaining_minutes);
+    } else {
+        snprintf(out, out_size, "暂不可用");
+    }
+}
+
+void ptc_ui_format_timer_status(const PtcUiModel *model, char *out, size_t out_size)
+{
+    if (!out || out_size == 0) return;
+    if (!model || model->play_timer_enabled < 0) {
+        snprintf(out, out_size, "未确认");
+    } else if (model->play_timer_enabled == 1) {
+        snprintf(out, out_size, "已计时");
+    } else if (model->unrestricted_today == 1) {
+        snprintf(out, out_size, "无需计时");
+    } else {
+        snprintf(out, out_size, "未计时");
+    }
+}
+
 void ptc_ui_format_parent_status_summary(
     const PtcUiModel *model,
     int64_t now,
@@ -1054,8 +1101,12 @@ void ptc_ui_format_parent_status_summary(
         snprintf(out, out_size, "! 紧急停用  |  控制写入已停止");
         return;
     }
+    if (model->restriction_enabled_available && !model->restriction_enabled) {
+        snprintf(out, out_size, "! Nintendo 家长控制未启用");
+        return;
+    }
     if (model->temporary_unlocked_available && model->temporary_unlocked) {
-        snprintf(out, out_size, "! 系统限制已临时解除");
+        snprintf(out, out_size, "! 系统限制临时解除  |  锁屏后恢复今日限制");
         return;
     }
     if (model->apply_pending_confirmation) {

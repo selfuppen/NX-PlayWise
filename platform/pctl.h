@@ -28,7 +28,9 @@ typedef struct {
     uint32_t played_minutes;
     bool configured_minutes_available;
     uint16_t configured_minutes;
+    bool play_timer_enabled_available;
     bool play_timer_enabled;
+    bool restricted_now_available;
     bool restricted_now;
 } PtcPctlStatus;
 

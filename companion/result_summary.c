@@ -78,6 +78,8 @@ bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summar
 {
     int written;
     char remaining[32];
+    const char *timer;
+    const char *restriction;
     if (!summary || !out || out_size == 0 || !summary->valid) {
         return false;
     }
@@ -88,14 +90,18 @@ bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summar
     } else {
         snprintf(remaining, sizeof(remaining), "暂不可用");
     }
-    written = snprintf(out, out_size, "%s  %s\n今天还可玩：%s  额度已耗：%s%d%s\n计时器：%s  限制：%s",
+    timer = summary->play_timer_enabled == 1 ? "已启动" :
+        (summary->play_timer_enabled == 0 ? "未启动" : "未确认");
+    restriction = summary->restricted_now == 1 ? "已触发" :
+        (summary->restricted_now == 0 ? "未触发" : "未确认");
+    written = snprintf(out, out_size, "%s  %s\n额度剩余：%s  额度已耗：%s%d%s\n计时器：%s  当前限制：%s",
         summary->ok ? "成功" : "失败",
         summary->ok ? "" : (summary->reason[0] ? summary->reason : "后台拒绝"),
         remaining,
         summary->played_minutes_available ? "约 " : "",
         summary->played_minutes_available ? summary->played_minutes : -1,
         summary->played_minutes_available ? " 分钟" : "（不可用）",
-        summary->play_timer_enabled == 1 ? "已启动" : "未确认",
-        summary->restricted_now == 0 ? "已解除" : "仍受限");
+        timer,
+        restriction);
     return written >= 0 && (size_t)written < out_size;
 }

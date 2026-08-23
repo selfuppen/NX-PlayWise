@@ -1135,6 +1135,11 @@ static int64_t result_played_minutes(const PtcPctlStatus *status)
         : 0;
 }
 
+static int result_observed_bool(bool available, bool value)
+{
+    return available ? (value ? 1 : 0) : -1;
+}
+
 static void result_state_from_pctl(
     PtcResultState *state,
     uint16_t day_index,
@@ -1153,8 +1158,10 @@ static void result_state_from_pctl(
     state->remaining_minutes = result_remaining_minutes(status);
     state->played_minutes = result_played_minutes(status);
     state->played_minutes_available = state->played_minutes >= 0;
-    state->play_timer_enabled = status->play_timer_enabled ? 1 : 0;
-    state->restricted_now = status->restricted_now ? 1 : 0;
+    state->play_timer_enabled = result_observed_bool(
+        status->play_timer_enabled_available, status->play_timer_enabled);
+    state->restricted_now = result_observed_bool(
+        status->restricted_now_available, status->restricted_now);
     (void)caps;
 }
 
@@ -1406,8 +1413,12 @@ static void status_json(char *out, size_t out_size, const PtcPctlStatus *status,
         error == PTC_ERR_OK && status->unrestricted_today ? 1 : 0,
         error == PTC_ERR_OK && status->remaining_available ? "true" : "false",
         error == PTC_ERR_OK && status->remaining_available ? (long long)status->remaining_minutes : -1LL,
-        error == PTC_ERR_OK && status->play_timer_enabled ? 1 : 0,
-        error == PTC_ERR_OK && status->restricted_now ? 1 : 0);
+        error == PTC_ERR_OK
+            ? result_observed_bool(status->play_timer_enabled_available, status->play_timer_enabled)
+            : -1,
+        error == PTC_ERR_OK
+            ? result_observed_bool(status->restricted_now_available, status->restricted_now)
+            : -1);
 }
 
 static const char *probe_apply_hint(PtcErrorCode error, bool raw_changed, bool start_timer_requested)
@@ -1475,8 +1486,10 @@ static bool write_probe_apply_result(
         state.unrestricted_today = after_status->unrestricted_today ? 1 : 0;
         state.remaining_available = after_status->remaining_available;
         state.remaining_minutes = result_remaining_minutes(after_status);
-        state.play_timer_enabled = after_status->play_timer_enabled ? 1 : 0;
-        state.restricted_now = after_status->restricted_now ? 1 : 0;
+        state.play_timer_enabled = result_observed_bool(
+            after_status->play_timer_enabled_available, after_status->play_timer_enabled);
+        state.restricted_now = result_observed_bool(
+            after_status->restricted_now_available, after_status->restricted_now);
     }
 
     if (error == PTC_ERR_OK) {
@@ -2061,7 +2074,7 @@ static bool target_status_observed(
     const PtcPctlStatus *status)
 {
     if (mode == PTC_PCTL_TARGET_UNLIMITED) {
-        return status->unrestricted_today && !status->restricted_now;
+        return status->unrestricted_today && status->restricted_now_available && !status->restricted_now;
     }
     if (mode == PTC_PCTL_TARGET_BLOCKED) {
         return status->blocked_today;
@@ -2076,7 +2089,7 @@ static bool target_status_observed(
        exhausted 1454 value therefore proves the requested target without
        requiring restricted_now to remain latched. */
     return status->restricted_now || status->remaining_minutes == 0U ||
-        (status->remaining_minutes > 0U && status->play_timer_enabled);
+        (status->remaining_minutes > 0U && status->play_timer_enabled_available && status->play_timer_enabled);
 }
 
 /* Daily rule synchronization only proves that the configured target was
@@ -2090,7 +2103,7 @@ static bool target_settings_observed(
     const PtcPctlStatus *status)
 {
     if (mode == PTC_PCTL_TARGET_UNLIMITED) {
-        return status->unrestricted_today && !status->restricted_now;
+        return status->unrestricted_today;
     }
     if (mode == PTC_PCTL_TARGET_BLOCKED) {
         return status->blocked_today;
@@ -2202,7 +2215,7 @@ static PtcErrorCode capture_handover_today(PtcSetupState *setup, const PtcPctlSt
     setup->handover_minutes = 0;
     setup->handover_remaining_available = false;
     setup->handover_remaining_minutes = 0;
-    if (status->unrestricted_today && !status->restricted_now) {
+    if (status->unrestricted_today && status->restricted_now_available && !status->restricted_now) {
         setup->handover_today_pending = true;
         setup->handover_unlimited = true;
         return PTC_ERR_OK;
@@ -2579,7 +2592,8 @@ static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *se
     }
     setup->snapshot_available = true;
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &before);
-    if (err == PTC_ERR_OK && before.unrestricted_today && !before.restricted_now) {
+    if (err == PTC_ERR_OK && before.unrestricted_today &&
+        before.restricted_now_available && !before.restricted_now) {
         snprintf(setup->phase, sizeof(setup->phase), "released");
         setup->restriction_cleared = true;
         setup->activate_after = 0;
@@ -2621,10 +2635,10 @@ static bool handover_remaining_matches(const PtcSetupState *setup, const PtcPctl
     uint16_t observed;
     uint16_t expected;
     if (setup->handover_unlimited) {
-        return status->unrestricted_today && !status->restricted_now;
+        return status->unrestricted_today && status->restricted_now_available && !status->restricted_now;
     }
     if (!setup->handover_remaining_available) {
-        return setup->handover_minutes == 0U && status->restricted_now;
+        return setup->handover_minutes == 0U && status->restricted_now_available && status->restricted_now;
     }
     if (!status->remaining_available) {
         return false;
@@ -2902,8 +2916,10 @@ static bool write_effect_probe_result(
         state.unrestricted_today = active_status->unrestricted_today ? 1 : 0;
         state.remaining_available = active_status->remaining_available;
         state.remaining_minutes = result_remaining_minutes(active_status);
-        state.play_timer_enabled = active_status->play_timer_enabled ? 1 : 0;
-        state.restricted_now = active_status->restricted_now ? 1 : 0;
+        state.play_timer_enabled = result_observed_bool(
+            active_status->play_timer_enabled_available, active_status->play_timer_enabled);
+        state.restricted_now = result_observed_bool(
+            active_status->restricted_now_available, active_status->restricted_now);
     }
     if (error == PTC_ERR_OK) {
         (void)ptc_result_ok_json(base, sizeof(base), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
@@ -3264,8 +3280,10 @@ static bool write_device_test_result(
         state.remaining_minutes = result_remaining_minutes(reported);
         state.played_minutes = result_played_minutes(reported);
         state.played_minutes_available = state.played_minutes >= 0;
-        state.play_timer_enabled = reported->play_timer_enabled ? 1 : 0;
-        state.restricted_now = reported->restricted_now ? 1 : 0;
+        state.play_timer_enabled = result_observed_bool(
+            reported->play_timer_enabled_available, reported->play_timer_enabled);
+        state.restricted_now = result_observed_bool(
+            reported->restricted_now_available, reported->restricted_now);
     }
     if (error == PTC_ERR_OK) {
         (void)ptc_result_ok_json(base, sizeof(base), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
@@ -3296,9 +3314,11 @@ static bool write_device_test_result(
         raw_restored ? "true" : "false",
         timer_restored ? "true" : "false",
         ready_error == PTC_ERR_OK && ready_status->limited_today ? "true" : "false",
-        ready_error == PTC_ERR_OK && ready_status->play_timer_enabled ? "true" : "false",
+        ready_error == PTC_ERR_OK && ready_status->play_timer_enabled_available &&
+            ready_status->play_timer_enabled ? "true" : "false",
         ready_error == PTC_ERR_OK && ready_status->remaining_available && ready_status->remaining_minutes > 0U ? "true" : "false",
-        ready_error == PTC_ERR_OK && !ready_status->restricted_now ? "true" : "false",
+        ready_error == PTC_ERR_OK && ready_status->restricted_now_available &&
+            !ready_status->restricted_now ? "true" : "false",
         rules_persisted ? "true" : "false",
         (unsigned int)last_pctl_ipc_result(sysmodule));
     completed_at = strstr(base, ",\"completed_at\"");
@@ -3613,8 +3633,10 @@ static bool write_raw_block_probe_result(
         state.unrestricted_today = reported->unrestricted_today ? 1 : 0;
         state.remaining_available = reported->remaining_available;
         state.remaining_minutes = result_remaining_minutes(reported);
-        state.play_timer_enabled = reported->play_timer_enabled ? 1 : 0;
-        state.restricted_now = reported->restricted_now ? 1 : 0;
+        state.play_timer_enabled = result_observed_bool(
+            reported->play_timer_enabled_available, reported->play_timer_enabled);
+        state.restricted_now = result_observed_bool(
+            reported->restricted_now_available, reported->restricted_now);
     }
     if (error == PTC_ERR_OK) {
         (void)ptc_result_ok_json(base, sizeof(base), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
