@@ -79,13 +79,17 @@ flowchart LR
 
 ## Device Lab
 
-`raw_block`、`suspend`、危险 capability probe 和故障注入位于独立 Device Lab：
+`raw_block`、`suspend`、危险 capability probe、引导式生命周期取证和故障注入位于独立 Device Lab：
 
 - Title ID `4200000000BD23F0`；
 - IPC `pwtl:u`；
 - SD 根目录 `sdmc:/switch/playwise-device-lab`；
-- NRO 持续显示危险水印；
+- NRO 只提供“启用 Lab / 恢复正常包 / 查看上次报告”三个事务化入口；专用 Overlay 持续显示危险水印；
 - package 默认无 `boot2.flag`；
 - 不由标准分发目标 `make packages` 构建。
 
-LAB 可绕过标准分发构建的兼容认证，但每个探针本身仍必须 snapshot、执行、确认并恢复；恢复无法证明时同样写入 LAB 根目录下的 `disable.flag`。任何 LAB 证据都不能直接作为标准分发构建的资格结果。
+NRO 在启用时记录标准与 Lab `boot2.flag` 的原状态：若标准后台原本启用，将其原子改名为唯一旁路备份，再创建 Lab flag；恢复时先请求 Lab sysmodule 恢复并证明会话前 PCTL 状态，证明成功或尚未创建会话后，才删除由该事务创建的空 Lab flag，并按 journal 精确恢复标准 flag 原本存在或不存在的状态。已有备份、未知 Lab flag、journal 损坏或外部并发修改都不会被覆盖，而是进入恢复提示。因此标准与 Lab sysmodule 不会同时竞争 PCTL；完整流程开始和结束各重启一次。该事务不修改标准二进制、配置、规则、凭据、日志或业务备份。
+
+专用 Overlay 通过 `pwtl:u` 和 Lab SD 根目录提交固定状态机请求。普通阶段异步采样 75 秒；真实限制阶段只在用户对“无未保存进度的非关键游戏”长按确认后执行，sysmodule 写入 0 分钟并启动 timer，同时设定独立的 15 秒恢复期限。Overlay、进程或主机中断后，持久化阶段仍可继续；限制期限已过时后台优先恢复。恢复必须同时证明完整 `0x44` 和 timer 与会话前一致，否则写入 Lab `disable.flag` 并拒绝后续写入，只保留立即恢复能力。
+
+报告把命令可调用性、wire shape 与产品语义分开。`1006/1031/1035/1457/1458` 保存 raw/libnx 对照；`1451–1455`、`145601/195101`、Lab-only `1952` 保存原始值和 Result；限制阶段还记录 `1457` 事件及 `1458` alarm 证据。`1952` 不进入 Release adapter 的状态读取路径。任何 Lab 证据都不能直接作为标准分发构建的资格结果。

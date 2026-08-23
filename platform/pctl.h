@@ -65,6 +65,44 @@ typedef struct {
     bool timer_enabled;
 } PtcPctlSettingsSnapshot;
 
+/* Device Lab keeps the private command wire values separate from release
+   status. Release adapters leave the corresponding vtable entries NULL. */
+typedef struct {
+    uint64_t monotonic_ns;
+    uint32_t timer_enabled_result;
+    bool timer_enabled;
+    uint32_t remaining_result;
+    int64_t remaining_ns;
+    uint32_t restricted_result;
+    bool restricted;
+    uint32_t spent_result;
+    int64_t spent_ns;
+    uint32_t settings_result;
+    uint8_t settings[PTC_PCTL_OPAQUE_SETTINGS_SIZE];
+} PtcPctlForensicSample;
+
+typedef struct {
+    uint32_t raw_temporary_unlocked_result;
+    uint32_t libnx_temporary_unlocked_result;
+    bool raw_temporary_unlocked;
+    bool libnx_temporary_unlocked;
+    uint32_t raw_restriction_enabled_result;
+    uint32_t libnx_restriction_enabled_result;
+    bool raw_restriction_enabled;
+    bool libnx_restriction_enabled;
+    uint32_t raw_current_settings_result;
+    uint32_t libnx_current_settings_result;
+    bool current_settings_equal;
+    uint32_t raw_suspend_event_result;
+    uint32_t libnx_suspend_event_result;
+    bool raw_suspend_event_valid;
+    bool libnx_suspend_event_valid;
+    uint32_t raw_alarm_disabled_result;
+    uint32_t libnx_alarm_disabled_result;
+    bool raw_alarm_disabled;
+    bool libnx_alarm_disabled;
+} PtcPctlPublicParity;
+
 typedef struct {
     PtcErrorCode (*read_status)(PtcPctl *pctl, uint8_t weekday, PtcPctlStatus *out);
     PtcErrorCode (*backup)(PtcPctl *pctl, PtcPctlBackup *out);
@@ -79,6 +117,10 @@ typedef struct {
     PtcErrorCode (*restore_settings)(PtcPctl *pctl, const PtcPctlSettingsSnapshot *snapshot);
     PtcErrorCode (*debug_snapshot)(PtcPctl *pctl, PtcPctlDebugSnapshot *out);
     uint32_t (*last_ipc_result)(PtcPctl *pctl);
+    PtcErrorCode (*forensic_sample)(PtcPctl *pctl, PtcPctlForensicSample *out);
+    PtcErrorCode (*public_parity)(PtcPctl *pctl, PtcPctlPublicParity *out);
+    PtcErrorCode (*arm_suspend_event)(PtcPctl *pctl);
+    bool (*suspend_event_signaled)(PtcPctl *pctl, bool *known);
 } PtcPctlVTable;
 
 struct PtcPctl {

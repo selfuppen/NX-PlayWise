@@ -121,6 +121,26 @@ static bool json_bool_required(const char *text, const char *key, bool *out)
 }
 
 #ifdef PLAYWISE_DEVICE_LAB
+static bool lab_phase_is_valid(const char *value)
+{
+    static const char *const VALUES[] = {
+        "home_stopped", "home_started", "game_foreground",
+        "game_suspended", "sleep_wake", "restriction_effect"
+    };
+    size_t i;
+    for (i = 0; i < sizeof(VALUES) / sizeof(VALUES[0]); ++i) {
+        if (strcmp(value, VALUES[i]) == 0) return true;
+    }
+    return false;
+}
+
+static bool lab_observation_is_valid(const char *value)
+{
+    return strcmp(value, "restriction_visible") == 0 ||
+        strcmp(value, "no_visible_restriction") == 0 ||
+        strcmp(value, "unsure") == 0;
+}
+
 static bool json_bool_optional(const char *text, const char *key, bool default_value, bool *out)
 {
     const char *pos = find_key(text, key);
@@ -266,6 +286,11 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "probe_apply_today_limit") == 0) return PTC_REQUEST_REMOVED_16;
     if (strcmp(value, "probe_play_timer_effect") == 0) return PTC_REQUEST_REMOVED_17;
     if (strcmp(value, "prepare_device_test") == 0) return PTC_REQUEST_REMOVED_18;
+    if (strcmp(value, "lab_session_start") == 0) return PTC_REQUEST_LAB_SESSION_START;
+    if (strcmp(value, "lab_phase_start") == 0) return PTC_REQUEST_LAB_PHASE_START;
+    if (strcmp(value, "lab_session_status") == 0) return PTC_REQUEST_LAB_SESSION_STATUS;
+    if (strcmp(value, "lab_observation") == 0) return PTC_REQUEST_LAB_OBSERVATION;
+    if (strcmp(value, "lab_session_restore") == 0) return PTC_REQUEST_LAB_SESSION_RESTORE;
 #endif
     return PTC_REQUEST_UNKNOWN;
 }
@@ -310,6 +335,16 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "probe_play_timer_effect";
     case PTC_REQUEST_REMOVED_18:
         return "prepare_device_test";
+    case PTC_REQUEST_LAB_SESSION_START:
+        return "lab_session_start";
+    case PTC_REQUEST_LAB_PHASE_START:
+        return "lab_phase_start";
+    case PTC_REQUEST_LAB_SESSION_STATUS:
+        return "lab_session_status";
+    case PTC_REQUEST_LAB_OBSERVATION:
+        return "lab_observation";
+    case PTC_REQUEST_LAB_SESSION_RESTORE:
+        return "lab_session_restore";
 #endif
     case PTC_REQUEST_UNKNOWN:
     default:
@@ -377,6 +412,16 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
     case PTC_REQUEST_REMOVED_17:
         return json_bool_optional(text, "wait_for_expiry", false, &out->wait_for_expiry)
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_LAB_SESSION_START:
+    case PTC_REQUEST_LAB_SESSION_STATUS:
+    case PTC_REQUEST_LAB_SESSION_RESTORE:
+        return PTC_ERR_OK;
+    case PTC_REQUEST_LAB_PHASE_START:
+        return json_string(text, "phase", out->phase, sizeof(out->phase)) && lab_phase_is_valid(out->phase)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_LAB_OBSERVATION:
+        return json_string(text, "observation", out->observation, sizeof(out->observation)) &&
+            lab_observation_is_valid(out->observation) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
 #endif
     case PTC_REQUEST_UNKNOWN:
     default:

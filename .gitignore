@@ -321,3 +321,7 @@ node_modules/
 /device_lab/nro/playwise-device-lab.elf
 /device_lab/nro/playwise-device-lab.nacp
 /device_lab/nro/playwise-device-lab.nro
+/device_lab/overlay/build/
+/device_lab/overlay/playwise-device-lab.elf
+/device_lab/overlay/playwise-device-lab.nacp
+/device_lab/overlay/playwise-device-lab.ovl
