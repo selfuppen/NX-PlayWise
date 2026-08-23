@@ -91,6 +91,7 @@ static PtcErrorCode start_timer_and_wait_target(
     PtcPctlStatus *observed,
     bool *timer_started);
 static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
+static PtcErrorCode direct_handover_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
 static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
 static void write_disable_flag(PtcSysmodule *sysmodule, const char *reason);
 static void recovery_clear(PtcSysmodule *sysmodule);
@@ -2360,6 +2361,7 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
     PtcSetupState setup;
     bool resuming_disabled_setup;
     bool reconfirming_runtime_fingerprint = false;
+    bool retrying_failed_release = false;
     char disable_path[320];
     if (!load_setup_state(sysmodule, &setup)) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
@@ -2371,24 +2373,28 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
         return write_current_status_result(
             sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
     }
-    if (disable_flag && strcmp(setup.phase, "protection") == 0) {
+    if (disable_flag) {
         char reason[64];
         join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
         if (sysmodule->storage->vtable->read_text(sysmodule->storage, disable_path, reason, sizeof(reason))) {
             size_t length = strcspn(reason, "\r\n");
             reason[length] = '\0';
-            reconfirming_runtime_fingerprint = strcmp(reason, "runtime_fingerprint_changed") == 0;
+            reconfirming_runtime_fingerprint = strcmp(setup.phase, "protection") == 0 &&
+                strcmp(reason, "runtime_fingerprint_changed") == 0;
+            retrying_failed_release = setup.handover_today_pending &&
+                strcmp(reason, "setup_release_failed") == 0;
         }
     }
     resuming_disabled_setup = disable_flag &&
         (strcmp(setup.phase, "restored") == 0 || strcmp(setup.phase, "active") == 0 ||
-         reconfirming_runtime_fingerprint);
+         reconfirming_runtime_fingerprint || retrying_failed_release);
     if (disable_flag && !resuming_disabled_setup) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             PTC_ERR_DISABLED, now.day_index, caps);
     }
     if (strcmp(setup.phase, "unconfigured") == 0 || strcmp(setup.phase, "compatibility_pending") == 0 ||
         strcmp(setup.phase, "protection") == 0 || strcmp(setup.phase, "restored") == 0 ||
+        (strcmp(setup.phase, "pending") == 0 && setup.handover_today_pending) ||
         resuming_disabled_setup) {
         bool capture_handover = !setup.handover_today_pending &&
             (strcmp(setup.phase, "unconfigured") == 0 || strcmp(setup.phase, "compatibility_pending") == 0 ||
@@ -2415,19 +2421,26 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
                 preflight_err, now.day_index, caps);
         }
-        if (resuming_disabled_setup) {
-            /* The parent has explicitly reconfirmed takeover.  Clear the write
-               circuit breaker only after the read-only preflight has passed. */
-            join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
-            if (!sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path)) {
-                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                    PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
-            }
-        }
         snprintf(setup.phase, sizeof(setup.phase), "pending");
         if (!save_setup_state(sysmodule, &setup)) {
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
                 PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+        }
+        if (setup.handover_today_pending) {
+            PtcErrorCode handover_err = direct_handover_now(sysmodule, &setup, now);
+            if (handover_err != PTC_ERR_OK) {
+                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                    handover_err, now.day_index, caps);
+            }
+            if (disable_flag) {
+                join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
+                if (!sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path)) {
+                    return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                        PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+                }
+            }
+            return write_current_status_result(
+                sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
         }
         {
             PtcErrorCode release_err = release_setup_now(sysmodule, &setup, now);
@@ -2447,6 +2460,13 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
     }
+    if (disable_flag) {
+        join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
+        if (!sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path)) {
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+        }
+    }
     return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
 }
 
@@ -2462,14 +2482,19 @@ static bool process_retry_setup_release(PtcSysmodule *sysmodule, const PtcReques
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             PTC_ERR_BAD_REQUEST, now.day_index, caps);
     }
-    if (strcmp(setup.phase, "protection") == 0) {
-        err = run_release_preflight(sysmodule, config, &setup, now, !setup.handover_today_pending);
-        if (err != PTC_ERR_OK) {
-            snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(err));
-            (void)save_setup_state(sysmodule, &setup);
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                err, now.day_index, caps);
-        }
+    err = run_release_preflight(sysmodule, config, &setup, now, !setup.handover_today_pending);
+    if (err != PTC_ERR_OK) {
+        snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(err));
+        (void)save_setup_state(sysmodule, &setup);
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            err, now.day_index, caps);
+    }
+    err = persist_handover_today_rule(sysmodule, &setup, now);
+    if (err != PTC_ERR_OK) {
+        snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(err));
+        (void)save_setup_state(sysmodule, &setup);
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            err, now.day_index, caps);
     }
     snprintf(setup.phase, sizeof(setup.phase), "pending");
     setup.restriction_cleared = false;
@@ -2479,12 +2504,18 @@ static bool process_retry_setup_release(PtcSysmodule *sysmodule, const PtcReques
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
     }
-    join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
-    (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path);
-    err = release_setup_now(sysmodule, &setup, now);
+    err = setup.handover_today_pending
+        ? direct_handover_now(sysmodule, &setup, now)
+        : release_setup_now(sysmodule, &setup, now);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
             err, now.day_index, caps);
+    }
+    join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, disable_path) &&
+        !sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path)) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
     }
     return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
 }
@@ -2649,6 +2680,102 @@ static bool handover_remaining_matches(const PtcSetupState *setup, const PtcPctl
     /* 1454 is rounded down to minutes, so the five-second setup grace may make
        a successful handover differ by one displayed minute. */
     return observed >= expected ? observed - expected <= 1 : expected - observed <= 1;
+}
+
+/* A fresh install already has the policy and remaining allowance that must be
+   preserved.  Taking it over in place avoids a transient unlimited write and,
+   importantly, avoids starting private timer command 1451 while on HOME. */
+static PtcErrorCode direct_handover_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now)
+{
+    char snapshot_path[320];
+    PtcPctlSettingsSnapshot installed;
+    PtcPctlSettingsSnapshot current;
+    PtcPctlStatus status;
+    PtcRuntimeState runtime_state;
+    PtcRules rules;
+    PtcDayRule rule;
+    PtcPctlTargetMode target_mode;
+    bool snapshot_exists;
+    bool state_matches;
+    PtcErrorCode err;
+
+    if (!setup->handover_today_pending || setup->handover_day_index != now.day_index) {
+        return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
+    }
+    if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
+        return PTC_ERR_RULES_INVALID;
+    }
+    rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+    if (!rules.today_override.present || rules.today_override.day_index != now.day_index ||
+        (setup->handover_unlimited ? rule.mode != PTC_RULE_MODE_UNLIMITED :
+         rule.mode != PTC_RULE_MODE_LIMIT || rule.minutes != setup->handover_minutes)) {
+        return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
+    }
+
+    memset(&installed, 0, sizeof(installed));
+    memset(&current, 0, sizeof(current));
+    join_path(snapshot_path, sizeof(snapshot_path), sysmodule->app_root, "backups/install_pctl_snapshot.json");
+    snapshot_exists = sysmodule->storage->vtable->exists(sysmodule->storage, snapshot_path);
+    if (!sysmodule->pctl->vtable->snapshot_settings ||
+        sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &current) != PTC_ERR_OK ||
+        current.size != PTC_PCTL_OPAQUE_SETTINGS_SIZE) {
+        return PTC_ERR_PCTL_BACKUP_FAILED;
+    }
+    if (snapshot_exists) {
+        if (!load_install_snapshot(sysmodule, &installed)) {
+            return PTC_ERR_RECOVERY_UNAVAILABLE;
+        }
+        if (!effect_snapshot_equal(&installed, &current) || installed.timer_enabled != current.timer_enabled) {
+            return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
+        }
+    } else {
+        if (!save_install_snapshot(sysmodule, &current, now.unix_seconds)) {
+            return PTC_ERR_STORAGE_WRITE_FAILED;
+        }
+        append_event(sysmodule, NULL, "pctl_backup", PTC_ERR_OK, "direct_handover");
+    }
+    setup->snapshot_available = true;
+
+    err = sysmodule->pctl->vtable->read_status(
+        sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &status);
+    if (err != PTC_ERR_OK) {
+        return err;
+    }
+    if (!status.restriction_enabled_available || !status.restriction_enabled) {
+        return PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
+    }
+    target_mode = target_from_day_rule(rule);
+    if (!target_settings_observed(target_mode, rule.minutes, &status)) {
+        return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
+    }
+    if (setup->handover_unlimited) {
+        state_matches = status.unrestricted_today;
+    } else if (setup->handover_minutes == 0U) {
+        state_matches = status.blocked_today &&
+            (!status.remaining_available || status.remaining_minutes == 0U);
+    } else {
+        state_matches = handover_remaining_matches(setup, &status);
+    }
+    if (!state_matches) {
+        return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
+    }
+
+    runtime_state.last_enforced_day_index = now.day_index;
+    runtime_state.last_enforced_mode = target_mode;
+    runtime_state.last_enforced_minutes = rule.minutes;
+    if (!save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+        return PTC_ERR_STORAGE_WRITE_FAILED;
+    }
+    snprintf(setup->phase, sizeof(setup->phase), "active");
+    setup->restriction_cleared = false;
+    setup->activate_after = 0;
+    setup->handover_today_pending = false;
+    setup->last_error[0] = '\0';
+    if (!save_setup_state(sysmodule, setup)) {
+        return PTC_ERR_STORAGE_WRITE_FAILED;
+    }
+    append_event(sysmodule, NULL, "handover_preserved", PTC_ERR_OK, "direct_takeover");
+    return PTC_ERR_OK;
 }
 
 static PtcErrorCode activate_handover_today(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now)

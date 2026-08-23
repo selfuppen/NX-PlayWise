@@ -309,10 +309,10 @@ static const char *request_success_message(const char *type)
         return "加时成功，今天的游玩时间已更新。";
     }
     if (strcmp(type, "complete_setup") == 0) {
-        return "首次设置已完成，自动控制将在宽限结束后启用。";
+        return "首次设置已完成，已保留当前额度并接管控制。";
     }
     if (strcmp(type, "retry_setup_release") == 0) {
-        return "当前限制已解除，可以继续完成首次设置。";
+        return "接管状态已重新验证。";
     }
     if (strcmp(type, "restore_install_snapshot") == 0) {
         return "安装前家长控制状态已恢复，任我玩 已停用。";
@@ -344,10 +344,10 @@ static const char *request_success_guidance(const char *type)
         return "";
     }
     if (strcmp(type, "complete_setup") == 0) {
-        return "接下来：5 秒后自动启用规则控制，无需操作。";
+        return "接下来：进入第 5 步选择家长区或孩子区。";
     }
     if (strcmp(type, "retry_setup_release") == 0) {
-        return "接下来：确认限制已解除后，在安全工具选择【启用自动控制】。";
+        return "接下来：刷新状态；显示正常运行即已完成接管。";
     }
     if (strcmp(type, "restore_install_snapshot") == 0) {
         return "任我玩 已停用。解除停用后选择【启用自动控制】即可重新完成设置。";
@@ -382,11 +382,11 @@ static void fill_error_guidance(char *out, size_t out_size, const char *type, in
     }
     if (strcmp(type, "complete_setup") == 0) {
         snprintf(out, out_size,
-                 "反馈码：%d %s。建议：确认限制已解除（phase=released），或尝试【重试前置解限】。",
+                 "反馈码：%d %s。建议：保留当前系统设置并重新检测；不要手工删除停用标记。",
                  error_code, reason[0] ? reason : "unknown");
     } else if (strcmp(type, "retry_setup_release") == 0) {
         snprintf(out, out_size,
-                 "反馈码：%d %s。多次失败建议执行【恢复安装前状态】并重新安装。",
+                 "反馈码：%d %s。当前状态无法安全接管；可稍后重试或恢复安装前状态。",
                  error_code, reason[0] ? reason : "unknown");
     } else if (strcmp(type, "restore_install_snapshot") == 0) {
         snprintf(out, out_size,

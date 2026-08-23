@@ -135,16 +135,27 @@ static bool touch_empty(const char *path)
     return file && fclose(file) == 0;
 }
 
+static bool write_journal_fixture(const char *path, const char *phase, bool standard_was_enabled)
+{
+    FILE *file = fopen(path, "wb");
+    bool ok;
+    if (!file) return false;
+    ok = fprintf(file, "{\"version\":1,\"phase\":\"%s\",\"standard_was_enabled\":%s}\n",
+        phase, standard_was_enabled ? "true" : "false") > 0;
+    return fclose(file) == 0 && ok;
+}
+
 static void test_boot_flags(void)
 {
     char root[] = "/tmp/playwise-lab-flags-XXXXXX";
-    char standard[512], backup[512], lab[512], journal[512], message[256];
+    char standard[512], backup[512], lab[512], journal[512], journal_tmp[520], message[256];
     PtcLabBootFlagPaths paths;
     check(mkdtemp(root) != NULL, "temporary boot flag root created");
     snprintf(standard, sizeof(standard), "%s/standard.flag", root);
     snprintf(backup, sizeof(backup), "%s/standard.backup", root);
     snprintf(lab, sizeof(lab), "%s/lab.flag", root);
     snprintf(journal, sizeof(journal), "%s/journal.json", root);
+    snprintf(journal_tmp, sizeof(journal_tmp), "%s.tmp", journal);
     paths.standard_flag = standard; paths.standard_backup = backup; paths.lab_flag = lab; paths.journal = journal;
     check(touch_empty(standard), "standard flag fixture created");
     check(ptc_lab_boot_flags_enable(&paths, message, sizeof(message)) == PTC_LAB_FLAG_OK,
@@ -186,6 +197,40 @@ static void test_boot_flags(void)
         "interrupted enable routes to recovery without overwriting flags");
     check(ptc_lab_boot_flags_restore(&paths, message, sizeof(message)) == PTC_LAB_FLAG_OK && access(standard, F_OK) == 0,
         "interrupted transaction restores the preserved standard flag");
+    (void)remove(standard); (void)remove(journal);
+
+    check(write_journal_fixture(journal, "prepared", false),
+        "field-reported prepared journal without a standard flag is reproducible");
+    check(ptc_lab_boot_flags_restore(&paths, message, sizeof(message)) == PTC_LAB_FLAG_OK &&
+            access(standard, F_OK) != 0 && access(lab, F_OK) != 0,
+        "field-reported prepared journal restores without changing boot flags");
+    (void)remove(journal);
+
+    check(write_journal_fixture(journal, "prepared", false) &&
+            write_journal_fixture(journal_tmp, "standard_disabled", false),
+        "Switch no-overwrite interruption keeps old and complete pending journals");
+    check(ptc_lab_boot_flags_restore(&paths, message, sizeof(message)) == PTC_LAB_FLAG_OK &&
+            access(journal_tmp, F_OK) != 0,
+        "restore promotes a complete pending journal before continuing");
+    (void)remove(journal);
+
+    check(touch_empty(backup) && write_journal_fixture(journal_tmp, "standard_disabled", true),
+        "power loss after old journal removal leaves a recoverable pending generation");
+    check(ptc_lab_boot_flags_restore(&paths, message, sizeof(message)) == PTC_LAB_FLAG_OK &&
+            access(standard, F_OK) == 0 && access(backup, F_OK) != 0 && access(journal_tmp, F_OK) != 0,
+        "pending-only journal restores the preserved standard flag exactly");
+    (void)remove(standard); (void)remove(journal);
+
+    check(touch_empty(backup) && write_journal_fixture(journal, "prepared", true),
+        "prior journal remains available beside a torn pending generation");
+    {
+        FILE *file = fopen(journal_tmp, "wb");
+        check(file != NULL && fprintf(file, "{\"version\":1") > 0 && fclose(file) == 0,
+            "torn pending journal fixture created");
+    }
+    check(ptc_lab_boot_flags_restore(&paths, message, sizeof(message)) == PTC_LAB_FLAG_OK &&
+            access(standard, F_OK) == 0 && access(journal_tmp, F_OK) != 0,
+        "torn pending journal falls back to the prior trustworthy generation");
     (void)remove(standard); (void)remove(journal);
     (void)rmdir(root);
 }

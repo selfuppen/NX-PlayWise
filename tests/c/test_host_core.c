@@ -559,12 +559,16 @@ static void test_setup_preflight_and_recovery(void)
         "queue setup completion");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "complete setup processed");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
-        strstr(text, "\"phase\":\"released\"") && strstr(text, "\"compatibility_status\":\"verified\"") &&
-        strstr(text, "\"activate_after\":1783526406"), "preflight records verified environment and grace");
+        strstr(text, "\"phase\":\"active\"") && strstr(text, "\"compatibility_status\":\"verified\"") &&
+        strstr(text, "\"restriction_cleared\":false") && strstr(text, "\"activate_after\":0"),
+        "preflight directly adopts the verified current allowance");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/backups/install_pctl_snapshot.json"), "installation snapshot persisted");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/backups/install_pctl_snapshot.json",
         install_snapshot, sizeof(install_snapshot)), "installation snapshot readable");
-    check_true(pctl.status.unrestricted_today, "setup releases current restriction");
+    check_true(pctl.status.limited_today && pctl.status.remaining_minutes == 120 && !pctl.status.restricted_now,
+        "setup leaves the current allowance unchanged");
+    check_int((int)pctl.apply_target_calls, 0, "direct takeover performs no PCTL settings write");
+    check_int((int)pctl.start_timer_calls, 0, "direct takeover does not start the private play timer");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", text, sizeof(text)) &&
         strstr(text, "\"today_override_present\":true") &&
         strstr(text, "\"today_override_day_index\":2380") &&
@@ -572,12 +576,12 @@ static void test_setup_preflight_and_recovery(void)
         "fresh takeover persists the existing daily total instead of the default rule");
 
     fake_time.snapshot.unix_seconds = 1783526406;
-    check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), 1, "setup grace activates control");
+    check_int(ptc_sysmodule_bootstrap_setup(&sysmodule), 0, "direct takeover needs no delayed activation");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
-        strstr(text, "\"phase\":\"active\""), "setup becomes active");
-    check_true(pctl.status.limited_today && pctl.status.remaining_minutes == 120 && !pctl.status.restricted_now,
-        "handover keeps the original two-hour remaining allowance after activation");
-    check_int(pctl.last_target.minutes, 150, "handover writes the daily total rather than remaining minutes");
+        strstr(text, "\"phase\":\"active\""), "setup remains active");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
+        strstr(text, "\"last_enforced_mode\":1") && strstr(text, "\"last_enforced_minutes\":150"),
+        "direct takeover records the adopted daily total without rewriting it");
 
     apply_calls_after_activation = pctl.apply_target_calls;
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-active-repeat.json",
@@ -842,6 +846,91 @@ static void test_played_time_status(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/status-runtime-unknown.json", text, sizeof(text)) &&
         strstr(text, "\"play_timer_enabled\":-1") && strstr(text, "\"restricted_now\":-1"),
         "unavailable runtime queries remain unknown instead of becoming false");
+}
+
+static void test_setup_direct_takeover_recovers_exhausted_failed_release(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char text[4096];
+    unsigned int apply_calls;
+    unsigned int start_calls;
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 31;
+    pctl.played_minutes_today = 31;
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.play_timer_enabled = false;
+    pctl.status.restricted_now_available = false;
+    pctl.status.restricted_now = false;
+    ptc_fake_time_init(&fake_time, 1787304750, 2424, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-expired.json",
+        "{\"version\":1,\"request_id\":\"setup-expired\",\"type\":\"complete_setup\",\"created_at\":1,\"payload\":{}}"),
+        "queue exhausted allowance takeover");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "exhausted allowance takeover is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-expired.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"phase\":\"active\"") &&
+        strstr(text, "\"remaining_minutes\":0"),
+        "exhausted allowance becomes active without requiring 1455");
+    check_int((int)pctl.apply_target_calls, 0, "exhausted direct takeover does not rewrite PCTL");
+    check_int((int)pctl.start_timer_calls, 0, "exhausted direct takeover does not start 1451");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"failed\",\"compatibility_status\":\"accepted_unknown\","
+        "\"restriction_cleared\":false,\"snapshot_available\":true,\"activate_after\":0,"
+        "\"handover_today_pending\":true,\"handover_day_index\":2424,\"handover_unlimited\":false,"
+        "\"handover_minutes\":31,\"handover_remaining_available\":true,\"handover_remaining_minutes\":0,"
+        "\"last_error\":\"pctl_effect_not_observed\"}"),
+        "reproduce the field setup_release_failed state");
+    check_true(mem.storage.vtable->write_text_atomic(
+        &mem.storage, "app/flags/disable.flag", "setup_release_failed\n"),
+        "reproduce the field setup release circuit breaker");
+    apply_calls = pctl.apply_target_calls;
+    start_calls = pctl.start_timer_calls;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-expired-retry.json",
+        "{\"version\":1,\"request_id\":\"setup-expired-retry\",\"type\":\"complete_setup\",\"created_at\":2,\"payload\":{}}"),
+        "queue direct retry from setup_release_failed");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "failed release retry is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-expired-retry.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"phase\":\"active\""),
+        "failed release retry directly resumes active control instead of returning 300");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"),
+        "successful direct retry clears setup_release_failed only after verification");
+    check_int((int)pctl.apply_target_calls, (int)apply_calls, "failed release retry performs no PCTL write");
+    check_int((int)pctl.start_timer_calls, (int)start_calls, "failed release retry performs no timer start");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"failed\",\"compatibility_status\":\"accepted_unknown\","
+        "\"restriction_cleared\":false,\"snapshot_available\":true,\"activate_after\":0,"
+        "\"handover_today_pending\":true,\"handover_day_index\":2424,\"handover_unlimited\":false,"
+        "\"handover_minutes\":31,\"handover_remaining_available\":true,\"handover_remaining_minutes\":0,"
+        "\"last_error\":\"pctl_effect_not_observed\"}"),
+        "seed another failed release before a concurrent allowance change");
+    check_true(mem.storage.vtable->write_text_atomic(
+        &mem.storage, "app/flags/disable.flag", "setup_release_failed\n"),
+        "restore the failed release circuit breaker");
+    pctl.status.remaining_minutes = 3;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-expired-changed.json",
+        "{\"version\":1,\"request_id\":\"setup-expired-changed\",\"type\":\"complete_setup\",\"created_at\":3,\"payload\":{}}"),
+        "queue retry after the observed allowance changed");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "changed allowance retry is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-expired-changed.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"handover_state_unavailable\""),
+        "changed allowance is refused instead of being overwritten");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/flags/disable.flag"),
+        "failed direct verification keeps the circuit breaker in place");
+    check_int((int)pctl.apply_target_calls, (int)apply_calls, "changed allowance refusal performs no PCTL write");
+    check_int((int)pctl.start_timer_calls, (int)start_calls, "changed allowance refusal performs no timer start");
 }
 
 static void test_offline_code_preview_is_non_consuming(void)
@@ -1297,6 +1386,7 @@ int main(void)
     test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();
     test_setup_preflight_and_recovery();
+    test_setup_direct_takeover_recovers_exhausted_failed_release();
     test_setup_refuses_unknown_handover_total();
     test_runtime_fingerprint_change_can_be_reconfirmed();
     test_daily_enforce_does_not_start_play_timer();

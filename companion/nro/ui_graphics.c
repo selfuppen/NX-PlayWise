@@ -956,7 +956,7 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             draw_text(pixels, stride, 204, 266, phase_line, 21, COLOR(77, 86, 99));
             draw_text(pixels, stride, 204, 324,
                       takeover_complete
-                          ? "此步骤已经完成；继续不会重复写入系统设置或重新开始同步宽限。"
+                          ? "此步骤已经完成；继续不会重复保存快照或写入系统设置。"
                           : reconfirming_environment
                            ? "系统版本或运行环境与上次确认时不同，需要家长重新确认兼容性。"
                           : resuming_restored_setup
@@ -968,7 +968,9 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                           ? "按 A 或点击继续，进入第 5 步选择区域。"
                           : reconfirming_environment
                            ? "确认后先只读检测；通过后保留现有配置并恢复控制。"
-                          : "接管成功后会保留同步宽限，系统控制不会立即跳变。",
+                           : resuming_restored_setup
+                            ? "恢复接管会保留现有配置，并按安全恢复流程重新同步。"
+                            : "首次接管会原样保留今天的总额度和剩余时间，不会先临时解限。",
                       21, COLOR(45, 52, 62));
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
                                takeover_complete ? "A / 点击  继续到第 5 步" :
