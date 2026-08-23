@@ -93,6 +93,7 @@ static const char *json_bool(bool value)
 static void append_state(char *out, size_t out_size, const PtcResultState *state)
 {
     size_t used = 0;
+    unsigned int i;
     while (out[used] != '\0' && used < out_size) {
         ++used;
     }
@@ -105,7 +106,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%lld,"
         "\"played_minutes_available\":%s,\"played_minutes\":%lld,"
         "\"play_timer_enabled\":%d,\"restricted_now\":%d,"
-        "\"rule_source\":\"%s\",\"calendar_covered\":%s,\"calendar_update_warning\":%s}",
+        "\"rule_source\":\"%s\",\"calendar_covered\":%s,\"calendar_update_warning\":%s,",
         state->day_index,
         json_bool(state->restriction_enabled_available),
         json_bool(state->restriction_enabled),
@@ -123,10 +124,39 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         state->rule_source ? state->rule_source : "weekly",
         json_bool(state->calendar_covered),
         json_bool(state->calendar_update_warning));
+    used = strlen(out);
+    (void)snprintf(out + used, out_size > used ? out_size - used : 0, "\"forecast\":[");
+    for (i = 0; i < PTC_RESULT_FORECAST_DAYS; ++i) {
+        used = strlen(out);
+        (void)snprintf(out + used, out_size > used ? out_size - used : 0,
+            "%s{\"day_index\":%u,\"mode\":%d,\"minutes\":%u,\"rule_source\":\"%s\",\"calendar_covered\":%s}",
+            i == 0 ? "" : ",",
+            state->forecast[i].day_index,
+            state->forecast[i].mode,
+            state->forecast[i].minutes,
+            state->forecast[i].rule_source ? state->forecast[i].rule_source : "weekly",
+            json_bool(state->forecast[i].calendar_covered));
+    }
+    used = strlen(out);
+    (void)snprintf(out + used, out_size > used ? out_size - used : 0,
+        "],\"autonomy\":{\"daily_buffer_minutes\":%u,\"claimed_today\":%s,"
+        "\"available\":%s,\"reason\":\"%s\"},"
+        "\"usage_summary\":{\"available\":%s,\"known_days_7\":%u,"
+        "\"consumed_minutes_7\":%lu,\"known_days_30\":%u,\"consumed_minutes_30\":%lu}}",
+        state->daily_buffer_minutes,
+        json_bool(state->daily_buffer_claimed),
+        json_bool(state->daily_buffer_available),
+        state->daily_buffer_reason ? state->daily_buffer_reason : "disabled",
+        json_bool(state->usage_summary_available),
+        state->usage_known_days_7,
+        (unsigned long)state->usage_consumed_minutes_7,
+        state->usage_known_days_30,
+        (unsigned long)state->usage_consumed_minutes_30);
 }
 
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
 {
+    unsigned int i;
     state->day_index = day_index;
     state->restriction_enabled_available = false;
     state->restriction_enabled = false;
@@ -144,6 +174,22 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->rule_source = "weekly";
     state->calendar_covered = false;
     state->calendar_update_warning = false;
+    for (i = 0; i < PTC_RESULT_FORECAST_DAYS; ++i) {
+        state->forecast[i].day_index = (uint16_t)(day_index + i);
+        state->forecast[i].mode = 1;
+        state->forecast[i].minutes = 0;
+        state->forecast[i].rule_source = "weekly";
+        state->forecast[i].calendar_covered = false;
+    }
+    state->daily_buffer_minutes = 0;
+    state->daily_buffer_claimed = false;
+    state->daily_buffer_available = false;
+    state->daily_buffer_reason = "disabled";
+    state->usage_summary_available = false;
+    state->usage_known_days_7 = 0;
+    state->usage_consumed_minutes_7 = 0;
+    state->usage_known_days_30 = 0;
+    state->usage_consumed_minutes_30 = 0;
 }
 
 PtcErrorCode ptc_result_validate(const char *text)

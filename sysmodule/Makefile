@@ -21,6 +21,7 @@ SOURCES := \
 	../common/rules \
 	../common/time \
 	../common/token \
+	../common/usage \
 	../platform \
 	../platform/switch
 DATA :=

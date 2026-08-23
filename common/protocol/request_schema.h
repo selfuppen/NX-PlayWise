@@ -19,6 +19,8 @@ typedef struct {
     bool holiday_enabled;
     PtcDayRule holiday_rule;
     PtcDayRule makeup_workday_rule;
+    PtcScheduledOverride scheduled_override;
+    PtcAutonomyPolicy autonomy_policy;
 #ifdef PLAYWISE_DEVICE_LAB
     bool start_timer;
     bool wait_for_expiry;

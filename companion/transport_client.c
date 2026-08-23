@@ -184,6 +184,10 @@ const char *ptc_companion_request_command_label_zh(const char *type)
     if (strcmp(type, "preview_offline_code") == 0) return "预览今日加时";
     if (strcmp(type, "offline_code") == 0) return "提交今日加时";
     if (strcmp(type, "clear_redemption_history") == 0) return "清空加时码使用记录";
+    if (strcmp(type, "set_scheduled_override") == 0) return "设置临时日期计划";
+    if (strcmp(type, "set_autonomy_policy") == 0) return "设置今日自主缓冲";
+    if (strcmp(type, "claim_daily_buffer") == 0) return "领取今日自主缓冲";
+    if (strcmp(type, "clear_activity_history") == 0) return "清空家庭活动记录";
     if (strcmp(type, "set_today_limit") == 0) return "设置今日总额度";
     if (strcmp(type, "add_today_minutes") == 0) return "临时加时";
     if (strcmp(type, "disable_today_limit") == 0) return "解除当前限制";
@@ -247,5 +251,25 @@ PtcCompanionStatus ptc_companion_transport_submit_preview_offline_code(PtcCompan
 {
     char json[640];
     if (ptc_companion_preview_offline_code_request_json(json, sizeof(json), request_id, created_at, code) >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_set_scheduled_override(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcScheduledOverride *scheduled_override)
+{
+    char json[768];
+    int written = ptc_companion_set_scheduled_override_request_json(
+        json, sizeof(json), request_id, created_at, scheduled_override);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_set_autonomy_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcAutonomyPolicy *policy)
+{
+    char json[512];
+    int written = ptc_companion_set_autonomy_policy_request_json(
+        json, sizeof(json), request_id, created_at, policy);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
     return ptc_companion_transport_submit_json(client, request_id, json);
 }

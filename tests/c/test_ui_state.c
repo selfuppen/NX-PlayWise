@@ -1331,6 +1331,7 @@ static void test_redemption_history_state(void)
     check_int(model.redemption_history_page, 0, "history previous-page movement stops at the first page");
 
     memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_GRANT;
     check_hit(hit_center(&model, ptc_ui_parent_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3,
         "fourth grant card opens redemption history");
@@ -1352,6 +1353,103 @@ static void test_redemption_history_state(void)
         "history paging, back and clear touch targets do not overlap");
 }
 
+static void test_balanced_feature_state(void)
+{
+    PtcUiModel model;
+    PtcActivityHistoryRecord record;
+    char text[32768];
+    char line[PTC_ACTIVITY_HISTORY_LINE_SIZE];
+    size_t used = 0;
+    int index;
+    const char *status =
+        "{\"version\":1,\"request_id\":\"balanced-status\",\"type\":\"status\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,"
+        "\"unrestricted_today\":0,\"remaining_available\":true,\"remaining_minutes\":40,"
+        "\"played_minutes_available\":true,\"played_minutes\":20,\"play_timer_enabled\":1,"
+        "\"restricted_now\":0,\"rule_source\":\"scheduled_override\",\"calendar_covered\":true,"
+        "\"forecast\":["
+        "{\"day_index\":2380,\"mode\":1,\"minutes\":60,\"rule_source\":\"scheduled_override\",\"calendar_covered\":true},"
+        "{\"day_index\":2381,\"mode\":2,\"minutes\":0,\"rule_source\":\"scheduled_override\",\"calendar_covered\":true},"
+        "{\"day_index\":2382,\"mode\":1,\"minutes\":45,\"rule_source\":\"makeup_workday\",\"calendar_covered\":true},"
+        "{\"day_index\":2383,\"mode\":1,\"minutes\":60,\"rule_source\":\"weekly\",\"calendar_covered\":true},"
+        "{\"day_index\":2384,\"mode\":1,\"minutes\":60,\"rule_source\":\"weekly\",\"calendar_covered\":true},"
+        "{\"day_index\":2385,\"mode\":1,\"minutes\":60,\"rule_source\":\"weekly\",\"calendar_covered\":true},"
+        "{\"day_index\":2386,\"mode\":2,\"minutes\":0,\"rule_source\":\"weekly\",\"calendar_covered\":true}],"
+        "\"autonomy\":{\"daily_buffer_minutes\":10,\"claimed_today\":false,"
+        "\"available\":true,\"reason\":\"available\"},"
+        "\"usage_summary\":{\"available\":true,\"known_days_7\":5,"
+        "\"consumed_minutes_7\":210,\"known_days_30\":18,\"consumed_minutes_30\":720}},"
+        "\"completed_at\":1000}";
+
+    memset(&model, 0, sizeof(model));
+    check_true(ptc_ui_apply_result_json(&model, status),
+        "balanced status with forecast, autonomy and usage parses");
+    check_true(model.forecast_available && model.forecast[0].day_index == 2380 &&
+        strcmp(model.forecast[0].rule_source, "scheduled_override") == 0 &&
+        model.forecast[1].mode == 2,
+        "UI preserves today/tomorrow forecast and rule source");
+    check_true(model.daily_buffer_minutes == 10 && !model.daily_buffer_claimed &&
+        model.daily_buffer_available && strcmp(model.daily_buffer_reason, "available") == 0,
+        "UI exposes the available daily buffer without claiming it");
+    check_true(model.usage_summary_available && model.usage_known_days_7 == 5 &&
+        model.usage_consumed_minutes_7 == 210 && model.usage_known_days_30 == 18 &&
+        model.usage_consumed_minutes_30 == 720,
+        "UI preserves reliable-day counts for 7/30-day quota estimates");
+
+    model.view = PTC_UI_CHILD;
+    check_hit(hit_center(&model, ptc_ui_child_buffer_rect()), PTC_UI_HIT_CHILD_BUFFER, 0,
+        "available child buffer is touchable");
+    model.daily_buffer_available = false;
+    check_hit(hit_center(&model, ptc_ui_child_buffer_rect()), PTC_UI_HIT_NONE, 0,
+        "unavailable child buffer cannot be claimed by touch");
+
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_SETTINGS;
+    model.settings_page = PTC_UI_SETTINGS_ADVANCED;
+    for (index = 0; index < 4; ++index) {
+        check_hit(hit_center(&model, ptc_ui_advanced_feature_rect(index)),
+            PTC_UI_HIT_PARENT_CARD, index, "all balanced advanced cards are touchable");
+    }
+    model.overlay = PTC_UI_OVERLAY_SCHEDULED;
+    check_hit(hit_center(&model, ptc_ui_scheduled_field_rect(2)),
+        PTC_UI_HIT_SCHEDULED_FIELD, 2, "scheduled duration field is touchable");
+    model.overlay = PTC_UI_OVERLAY_AUTONOMY;
+    check_hit(hit_center(&model, ptc_ui_autonomy_option_rect(3)),
+        PTC_UI_HIT_AUTONOMY_OPTION, 3, "fifteen-minute autonomy option is touchable");
+
+    memset(&model, 0, sizeof(model));
+    memset(&record, 0, sizeof(record));
+    record.day_index = 2380;
+    snprintf(record.action, sizeof(record.action), "scheduled_update");
+    record.minutes = 60;
+    record.effective_minutes = 60;
+    text[0] = '\0';
+    for (index = 0; index < 201; ++index) {
+        size_t length;
+        record.occurred_at = 1000 + index;
+        check_true(ptc_activity_history_format_line(line, sizeof(line), &record),
+            "UI activity fixture formats");
+        length = strlen(line);
+        check_true(used + length + 2u <= sizeof(text), "UI activity fixture fits");
+        memcpy(text + used, line, length);
+        used += length;
+        text[used++] = '\n';
+        text[used] = '\0';
+    }
+    check_true(ptc_ui_apply_activity_history_text(&model, text) &&
+        model.activity_history_count == 200 && model.activity_history[0].occurred_at == 1001 &&
+        model.activity_history[199].occurred_at == 1200,
+        "UI retains the newest two hundred family activity rows");
+    check_int(ptc_ui_activity_history_page_count(&model), 25,
+        "two hundred family activity rows use twenty-five pages");
+    model.view = PTC_UI_PARENT;
+    model.overlay = PTC_UI_OVERLAY_ACTIVITY_HISTORY;
+    check_hit(hit_center(&model, ptc_ui_redemption_history_next_rect()),
+        PTC_UI_HIT_HISTORY_NEXT, 0, "family activity next-page button is touchable");
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)),
+        PTC_UI_HIT_OVERLAY_CONFIRM, 0, "family activity clear button is touchable");
+}
+
 int main(void)
 {
     test_theme_resolution();
@@ -1366,6 +1464,7 @@ int main(void)
     test_release_hit_targets();
     test_user_state_mapping();
     test_redemption_history_state();
+    test_balanced_feature_state();
     if (failures) return 1;
     puts("PTC release UI state tests passed");
     return 0;

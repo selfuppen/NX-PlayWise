@@ -5,6 +5,7 @@
 #include "../../common/version.h"
 #include "../../common/policy/control_policy.h"
 #include "../../common/protocol/request_schema.h"
+#include "../../common/protocol/activity_history.h"
 #include "../../common/protocol/redemption_history.h"
 #include "../../common/protocol/result_builder.h"
 #include "../../common/support/support_export.h"
@@ -12,6 +13,7 @@
 #include "../../third_party/qrcodegen/qrcodegen.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/rules/holiday_calendar.h"
+#include "../../common/usage/daily_summary.h"
 #include "../../common/token/token_v1.h"
 #include "../../common/token/token_v2.h"
 #include "../../companion/auth.h"
@@ -26,6 +28,7 @@
 #include "../../platform/host/pctl_stub.h"
 #include "../../platform/install_defaults.h"
 #include "../../platform/switch/play_timer_settings_layout.h"
+#include "../../platform/switch/usage_stats_adapter.h"
 #include "../../sysmodule/sysmodule_core.h"
 
 static int failures;
@@ -122,6 +125,10 @@ static void test_release_request_contract(void)
         "{\"version\":1,\"request_id\":\"setup-1\",\"type\":\"complete_setup\",\"created_at\":1,\"payload\":{}}",
         "{\"version\":1,\"request_id\":\"retry-1\",\"type\":\"retry_setup_release\",\"created_at\":1,\"payload\":{}}",
         "{\"version\":1,\"request_id\":\"snapshot-1\",\"type\":\"restore_install_snapshot\",\"created_at\":1,\"payload\":{}}"
+        ,"{\"version\":1,\"request_id\":\"schedule-1\",\"type\":\"set_scheduled_override\",\"created_at\":1,\"payload\":{\"enabled\":true,\"start_day_index\":2380,\"end_day_index\":2381,\"rule\":{\"mode\":\"limit\",\"minutes\":90}}}"
+        ,"{\"version\":1,\"request_id\":\"autonomy-1\",\"type\":\"set_autonomy_policy\",\"created_at\":1,\"payload\":{\"daily_buffer_minutes\":10}}"
+        ,"{\"version\":1,\"request_id\":\"buffer-1\",\"type\":\"claim_daily_buffer\",\"created_at\":1,\"payload\":{}}"
+        ,"{\"version\":1,\"request_id\":\"activity-1\",\"type\":\"clear_activity_history\",\"created_at\":1,\"payload\":{}}"
     };
     PtcRequest request;
     char json[320];
@@ -222,6 +229,113 @@ static void test_holiday_calendar_and_priority(void)
         "\"payload\":{\"enabled\":true,\"holiday_rule\":{\"mode\":\"limit\",\"minutes\":0},"
         "\"makeup_workday_rule\":{\"mode\":\"limit\",\"minutes\":60}}}", &request),
         PTC_ERR_BAD_REQUEST, "zero-minute limited holiday rule is rejected");
+
+    rules.today_override.present = false;
+    rules.scheduled_override.enabled = true;
+    rules.scheduled_override.start_day_index = holiday;
+    rules.scheduled_override.end_day_index = (uint16_t)(holiday + 1u);
+    rules.scheduled_override.rule.mode = PTC_RULE_MODE_LIMIT;
+    rules.scheduled_override.rule.minutes = 75;
+    effective = ptc_rules_resolve(&rules, holiday, ptc_weekday_from_day_index(holiday));
+    check_int(effective.source, PTC_RULE_SOURCE_SCHEDULED_OVERRIDE,
+        "scheduled override has priority over a holiday");
+    check_int(effective.rule.minutes, 75, "scheduled override begins inclusively");
+    effective = ptc_rules_resolve(&rules, (uint16_t)(holiday + 1u),
+        ptc_weekday_from_day_index((uint16_t)(holiday + 1u)));
+    check_int(effective.source, PTC_RULE_SOURCE_SCHEDULED_OVERRIDE,
+        "scheduled override ends inclusively");
+    effective = ptc_rules_resolve(&rules, (uint16_t)(holiday + 2u),
+        ptc_weekday_from_day_index((uint16_t)(holiday + 2u)));
+    check_true(effective.source != PTC_RULE_SOURCE_SCHEDULED_OVERRIDE,
+        "scheduled override stops after its inclusive end");
+    rules.today_override.present = true;
+    rules.today_override.day_index = holiday;
+    rules.today_override.rule.minutes = 35;
+    effective = ptc_rules_resolve(&rules, holiday, ptc_weekday_from_day_index(holiday));
+    check_int(effective.source, PTC_RULE_SOURCE_TODAY_OVERRIDE,
+        "today override has priority over scheduled override");
+
+    rules.scheduled_override.start_day_index = 100;
+    rules.scheduled_override.end_day_index = 100;
+    check_true(ptc_scheduled_override_is_valid(&rules.scheduled_override),
+        "one-day scheduled override is valid");
+    rules.scheduled_override.end_day_index = 465;
+    check_true(ptc_scheduled_override_is_valid(&rules.scheduled_override),
+        "366-day scheduled override is valid");
+    rules.scheduled_override.end_day_index = 466;
+    check_true(!ptc_scheduled_override_is_valid(&rules.scheduled_override),
+        "367-day scheduled override is rejected");
+    rules.scheduled_override.start_day_index = 465;
+    rules.scheduled_override.end_day_index = 100;
+    check_true(!ptc_scheduled_override_is_valid(&rules.scheduled_override),
+        "reversed scheduled override is rejected");
+
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"schedule-366\",\"type\":\"set_scheduled_override\","
+        "\"created_at\":1,\"payload\":{\"enabled\":true,\"start_day_index\":100,"
+        "\"end_day_index\":465,\"rule\":{\"mode\":\"unlimited\",\"minutes\":0}}}", &request),
+        PTC_ERR_OK, "366-day scheduled request parses");
+    check_int(request.type, 30, "scheduled request keeps protocol id 30");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"schedule-367\",\"type\":\"set_scheduled_override\","
+        "\"created_at\":1,\"payload\":{\"enabled\":true,\"start_day_index\":100,"
+        "\"end_day_index\":466,\"rule\":{\"mode\":\"limit\",\"minutes\":60}}}", &request),
+        PTC_ERR_BAD_REQUEST, "367-day scheduled request is rejected");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"autonomy-valid\",\"type\":\"set_autonomy_policy\","
+        "\"created_at\":1,\"payload\":{\"daily_buffer_minutes\":15}}", &request),
+        PTC_ERR_OK, "supported autonomy interval parses");
+    check_int(request.type, 31, "autonomy request keeps protocol id 31");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"autonomy-invalid\",\"type\":\"set_autonomy_policy\","
+        "\"created_at\":1,\"payload\":{\"daily_buffer_minutes\":6}}", &request),
+        PTC_ERR_BAD_REQUEST, "unsupported autonomy interval is rejected");
+    check_int(ptc_request_type_from_string("claim_daily_buffer"), 32,
+        "buffer claim keeps protocol id 32");
+    check_int(ptc_request_type_from_string("clear_activity_history"), 33,
+        "activity clear keeps protocol id 33");
+}
+
+static void test_daily_summary_and_read_only_stats_boundary(void)
+{
+    PtcDailySummaryRecord records[7];
+    PtcDailySummaryRecord parsed;
+    PtcDailySummaryAggregate aggregate;
+    PtcSwitchUsageStats adapter;
+    PtcUsageStatsSnapshot snapshot;
+    char line[PTC_DAILY_SUMMARY_LINE_SIZE];
+
+    memset(records, 0, sizeof(records));
+    records[0] = (PtcDailySummaryRecord){2380, 1000, "weekly", true, 60, true, 40, true, 20, 0};
+    records[1] = (PtcDailySummaryRecord){2374, 900, "weekly", true, 60, true, 30, true, 30, 0};
+    records[2] = (PtcDailySummaryRecord){2373, 800, "weekly", true, 60, true, 20, true, 40, 0};
+    records[3] = (PtcDailySummaryRecord){2380, 1100, "today_override", true, 75, true, 35, true, 40, 15};
+    records[4] = (PtcDailySummaryRecord){2381, 1200, "weekly", true, 60, true, 60, true, 0, 0};
+    records[5] = (PtcDailySummaryRecord){2379, 950, "weekly", true, 60, false, 0, false, 0, 0};
+    records[6] = (PtcDailySummaryRecord){2380, 1050, "weekly", true, 60, true, 30, true, 30, 0};
+
+    check_true(ptc_daily_summary_format_line(line, sizeof(line), &records[3]),
+        "daily summary with reliable remaining time formats");
+    check_true(ptc_daily_summary_parse_line(line, &parsed) && parsed.remaining_available &&
+        parsed.remaining_minutes == 35 && parsed.granted_minutes == 15,
+        "daily summary preserves remaining time and grants");
+    ptc_daily_summary_aggregate(records, 7, 2380, &aggregate);
+    check_int(aggregate.known_days_7, 2,
+        "seven-day summary counts known unique days without interpolation");
+    check_int(aggregate.consumed_minutes_7, 70,
+        "newest duplicate wins despite event order and clock rollback");
+    check_int(aggregate.known_days_30, 3,
+        "thirty-day summary excludes unknown and future days");
+    check_int(aggregate.consumed_minutes_30, 110,
+        "thirty-day summary totals only trustworthy unique rows");
+
+    ptc_switch_usage_stats_init(&adapter);
+    memset(&snapshot, 0xff, sizeof(snapshot));
+    check_int(ptc_switch_usage_stats_as_stats(&adapter)->vtable->read_day(
+        ptc_switch_usage_stats_as_stats(&adapter), 2380, &snapshot),
+        PTC_USAGE_STATS_UNAVAILABLE, "per-game adapter stays unavailable before Device Lab evidence");
+    check_true(snapshot.local_device_scope && snapshot.day_index == 2380 && snapshot.title_count == 0,
+        "unavailable statistics retain explicit local-device scope without guessing titles");
 }
 
 static void test_policy_and_disable_flag(void)
@@ -539,6 +653,224 @@ static void seed_release_setup(PtcMemStorage *mem)
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/environment.json",
         "{\"read_ok\":true,\"hos\":\"22.5.0\",\"firmware_hash\":\"test-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true}"),
         "seed verified environment");
+}
+
+static void seed_active_buffer_fixture(PtcMemStorage *mem, PtcPctlStub *pctl,
+    PtcFakeTime *fake_time, PtcSysmodule *sysmodule, uint16_t weekly_minutes,
+    uint16_t buffer_minutes, bool limited_today)
+{
+    char rules[2048];
+    ptc_mem_storage_init(mem);
+    ptc_pctl_stub_init(pctl);
+    pctl->model_elapsed_time = true;
+    pctl->configured_minutes = weekly_minutes;
+    pctl->played_minutes_today = 20;
+    pctl->status.limited_today = limited_today;
+    pctl->status.unrestricted_today = !limited_today;
+    pctl->status.remaining_available = limited_today;
+    pctl->status.remaining_minutes = limited_today && weekly_minutes > 20u
+        ? weekly_minutes - 20u : 0u;
+    pctl->status.configured_minutes_available = limited_today;
+    pctl->status.configured_minutes = limited_today ? weekly_minutes : 0u;
+    pctl->status.play_timer_enabled = true;
+    ptc_fake_time_init(fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(sysmodule, "app", &mem->storage, &pctl->pctl, &fake_time->provider);
+    seed_release_setup(mem);
+    snprintf(rules, sizeof(rules),
+        "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":%u},"
+        "{\"mode\":\"limit\",\"minutes\":%u},{\"mode\":\"limit\",\"minutes\":%u},"
+        "{\"mode\":\"limit\",\"minutes\":%u},{\"mode\":\"limit\",\"minutes\":%u},"
+        "{\"mode\":\"limit\",\"minutes\":%u},{\"mode\":\"limit\",\"minutes\":%u}],"
+        "\"today_override_present\":false,\"scheduled_override_enabled\":false,"
+        "\"daily_buffer_minutes\":%u}",
+        weekly_minutes, weekly_minutes, weekly_minutes, weekly_minutes,
+        weekly_minutes, weekly_minutes, weekly_minutes, buffer_minutes);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/rules.json", rules),
+        "seed autonomy rules");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"active\",\"compatibility_status\":\"verified\","
+        "\"restriction_cleared\":true,\"snapshot_available\":true,\"activate_after\":0,"
+        "\"last_error\":\"\"}"), "seed active setup for autonomy");
+}
+
+static void test_daily_buffer_transactions(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char text[32768];
+    unsigned int apply_calls;
+
+    seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 10, true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-ok.json",
+        "{\"version\":1,\"request_id\":\"buffer-ok\",\"type\":\"claim_daily_buffer\","
+        "\"created_at\":1,\"payload\":{}}"), "queue daily buffer claim");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "daily buffer claim is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-ok.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"claimed_today\":true") &&
+        strstr(text, "\"forecast\":["), "buffer result contains claim state and forecast");
+    check_int(pctl.last_target.minutes, 70, "buffer extends the active limit");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
+        strstr(text, "\"buffer_claimed\":true") && strstr(text, "\"buffer_claim_day_index\":2380") &&
+        strstr(text, "\"buffer_claimed_minutes\":10"), "successful buffer persists daily eligibility");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/activity/history.jsonl", text, sizeof(text)) &&
+        count_lines(text) == 1 && strstr(text, "\"action\":\"daily_buffer\"") &&
+        strstr(text, "\"effective_minutes\":10"), "successful buffer creates a redacted family activity row");
+
+    apply_calls = pctl.apply_target_calls;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-repeat.json",
+        "{\"version\":1,\"request_id\":\"buffer-repeat\",\"type\":\"claim_daily_buffer\","
+        "\"created_at\":2,\"payload\":{}}"), "queue repeated buffer claim");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "repeated buffer claim is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-repeat.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"daily_buffer_already_claimed\""),
+        "second claim on the same day is rejected");
+    check_int(pctl.apply_target_calls, apply_calls, "repeated claim performs no PCTL write");
+
+    fake_time.snapshot.day_index = 2381;
+    fake_time.snapshot.unix_seconds += 86400;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-next.json",
+        "{\"version\":1,\"request_id\":\"buffer-next\",\"type\":\"claim_daily_buffer\","
+        "\"created_at\":3,\"payload\":{}}"), "queue next-day buffer claim");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "next-day buffer claim is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-next.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\""), "daily eligibility resets on the next day");
+
+    seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 1440, 15, true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-cap.json",
+        "{\"version\":1,\"request_id\":\"buffer-cap\",\"type\":\"claim_daily_buffer\","
+        "\"created_at\":4,\"payload\":{}}"), "queue capped buffer claim");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "capped buffer claim is processed");
+    check_int(pctl.last_target.minutes, 1440, "buffer target is capped at 1440 minutes");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
+        strstr(text, "\"buffer_claimed\":true") && strstr(text, "\"buffer_claim_day_index\":2380") &&
+        strstr(text, "\"buffer_claimed_minutes\":0"),
+        "zero-effective capped claim still persists the claimed day");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-cap-repeat.json",
+        "{\"version\":1,\"request_id\":\"buffer-cap-repeat\",\"type\":\"claim_daily_buffer\","
+        "\"created_at\":5,\"payload\":{}}"), "queue repeated capped claim");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "repeated capped claim is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-cap-repeat.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"daily_buffer_already_claimed\""),
+        "a capped claim cannot be repeated to bypass once-per-day semantics");
+
+    seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 0, true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-disabled.json",
+        "{\"version\":1,\"request_id\":\"buffer-disabled\",\"type\":\"claim_daily_buffer\","
+        "\"created_at\":6,\"payload\":{}}"), "queue disabled buffer claim");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "disabled buffer claim is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-disabled.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"autonomy_disabled\""), "disabled policy rejects a claim");
+
+    seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 10, false);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-unlimited.json",
+        "{\"version\":1,\"request_id\":\"buffer-unlimited\",\"type\":\"claim_daily_buffer\","
+        "\"created_at\":7,\"payload\":{}}"), "queue unlimited-day buffer claim");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unlimited-day buffer claim is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-unlimited.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"daily_buffer_limited_only\""),
+        "unlimited day rejects a buffer claim");
+}
+
+static void test_daily_buffer_failure_rollbacks(void)
+{
+    static const struct {
+        const char *request_id;
+        const char *fail_path;
+        bool fail_pctl;
+    } CASES[] = {
+        {"buffer-pctl-fail", NULL, true},
+        {"buffer-state-fail", "app/state.json", false},
+        {"buffer-activity-fail", "activity/history.jsonl", false},
+        {"buffer-result-fail", "results/buffer-result-fail.json", false},
+    };
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char request[320];
+    char text[4096];
+    size_t index;
+
+    for (index = 0; index < sizeof(CASES) / sizeof(CASES[0]); ++index) {
+        seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 10, true);
+        snprintf(request, sizeof(request),
+            "{\"version\":1,\"request_id\":\"%s\",\"type\":\"claim_daily_buffer\","
+            "\"created_at\":1,\"payload\":{}}", CASES[index].request_id);
+        snprintf(text, sizeof(text), "app/inbox/pending/%s.json", CASES[index].request_id);
+        check_true(mem.storage.vtable->write_text_atomic(&mem.storage, text, request),
+            "queue buffer failure injection");
+        if (CASES[index].fail_pctl) pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+        mem.fail_write_path_contains_once = CASES[index].fail_path;
+        check_int(ptc_sysmodule_process_all(&sysmodule), 1, "buffer failure injection is processed");
+        mem.fail_write_path_contains_once = NULL;
+        pctl.write_error = PTC_ERR_OK;
+        check_true(!mem.storage.vtable->exists(&mem.storage, "app/state.json"),
+            "failed buffer does not consume the claimed-day state");
+        check_true(!mem.storage.vtable->exists(&mem.storage, "app/activity/history.jsonl"),
+            "failed buffer leaves no family activity row");
+        check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", text, sizeof(text)) &&
+            strstr(text, "\"today_override_present\":false"),
+            "failed buffer restores the previous rules");
+        check_true(pctl.restore_called, "failed buffer restores the PCTL snapshot");
+    }
+}
+
+static void test_activity_history_retention_and_clear_rollback(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    PtcActivityHistoryRecord record;
+    char line[PTC_ACTIVITY_HISTORY_LINE_SIZE];
+    char history[32768];
+    char before[32768];
+    size_t used = 0;
+    int index;
+
+    seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 0, true);
+    memset(&record, 0, sizeof(record));
+    record.day_index = 2380;
+    snprintf(record.action, sizeof(record.action), "today_add");
+    record.minutes = 5;
+    record.effective_minutes = 5;
+    history[0] = '\0';
+    for (index = 0; index < 200; ++index) {
+        size_t length;
+        record.occurred_at = 1000 + index;
+        check_true(ptc_activity_history_format_line(line, sizeof(line), &record),
+            "activity retention fixture formats");
+        length = strlen(line);
+        check_true(used + length + 2u <= sizeof(history), "activity retention fixture fits");
+        memcpy(history + used, line, length);
+        used += length;
+        history[used++] = '\n';
+        history[used] = '\0';
+    }
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/activity/history.jsonl", history), "seed two hundred activity rows");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/activity-cap.json",
+        "{\"version\":1,\"request_id\":\"activity-cap\",\"type\":\"set_autonomy_policy\","
+        "\"created_at\":1,\"payload\":{\"daily_buffer_minutes\":10}}"),
+        "queue activity that exceeds retention");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "activity retention update is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/activity/history.jsonl", history, sizeof(history)) &&
+        count_lines(history) == 200 && strstr(history, "\"occurred_at\":1000,") == NULL &&
+        strstr(history, "\"occurred_at\":1001,") != NULL &&
+        strstr(history, "\"action\":\"autonomy_update\""),
+        "activity history keeps the newest two hundred rows");
+    snprintf(before, sizeof(before), "%s", history);
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/activity-clear-fail.json",
+        "{\"version\":1,\"request_id\":\"activity-clear-fail\",\"type\":\"clear_activity_history\","
+        "\"created_at\":2,\"payload\":{}}"), "queue activity clear with result failure");
+    mem.fail_write_path_contains = "results/activity-clear-fail.json";
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "failed activity clear is processed");
+    mem.fail_write_path_contains = NULL;
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/activity/history.jsonl", history, sizeof(history)) &&
+        strcmp(history, before) == 0, "unconfirmed activity clear restores every row");
 }
 
 static void test_setup_preflight_and_recovery(void)
@@ -959,6 +1291,7 @@ static void test_offline_code_preview_is_non_consuming(void)
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
     pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
     pctl.played_minutes_today = 20;
     pctl.status.limited_today = true;
     pctl.status.unrestricted_today = false;
@@ -988,7 +1321,9 @@ static void test_offline_code_preview_is_non_consuming(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/preview-code.json", result, sizeof(result)) &&
         strstr(result, "\"type\":\"preview_offline_code\"") &&
         strstr(result, "\"grant_minutes\":30") &&
-        strstr(result, "\"remaining_after_minutes\":70"), "preview exposes current and estimated state");
+        strstr(result, "\"remaining_after_minutes\":70") &&
+        strstr(result, "\"forecast\":[{\"day_index\":2380,\"mode\":1,\"minutes\":60"),
+        "preview exposes current, estimated and future rule state");
     check_int((int)pctl.apply_target_calls, (int)apply_calls, "preview performs no PCTL write");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"),
         "preview does not consume nonce");
@@ -1048,8 +1383,10 @@ static void test_redemption_history_transaction_and_clear(void)
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
     pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
     pctl.played_minutes_today = 20;
     pctl.status.limited_today = true;
+    pctl.status.unrestricted_today = false;
     pctl.status.remaining_available = true;
     pctl.status.remaining_minutes = 40;
     pctl.status.configured_minutes_available = true;
@@ -1100,6 +1437,27 @@ static void test_redemption_history_transaction_and_clear(void)
     check_true(mem.storage.vtable->read_text(
             &mem.storage, "app/ledger/used_nonces.jsonl", ledger_before, sizeof(ledger_before)),
         "retry consumes the nonce once");
+
+    check_int(ptc_token_v2_encode(tier, 10, "kid-switch",
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", 2380, code),
+        PTC_ERR_OK, "activity failure token encoded");
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"activity-write-fail\",\"type\":\"offline_code\","
+        "\"created_at\":2,\"payload\":{\"code\":\"%s\"}}", code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/activity-write-fail.json", request),
+        "queue redemption with failed family activity write");
+    mem.fail_write_path_contains_once = "activity/history.jsonl";
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "failed family activity write is processed");
+    mem.fail_write_path_contains_once = NULL;
+    check_true(mem.storage.vtable->read_text(
+            &mem.storage, "app/ledger/used_nonces.jsonl", text, sizeof(text)) &&
+        strcmp(text, ledger_before) == 0,
+        "family activity failure does not consume the offline-code nonce");
+    check_true(mem.storage.vtable->read_text(
+            &mem.storage, "app/ledger/redemption-history.jsonl", text, sizeof(text)) &&
+        strcmp(text, history_before) == 0,
+        "family activity failure rolls the redemption audit row back");
 
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
         "app/inbox/pending/clear-history.json",
@@ -1161,12 +1519,17 @@ static void test_redemption_history_transaction_and_clear(void)
     check_true(mem.storage.vtable->write_text_atomic(
         &mem.storage, "app/ledger/redemption-history.jsonl", large_history),
         "seed one hundred redemption-history rows");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+            "app/ledger/redemption-history.jsonl", large_history, sizeof(large_history)) &&
+        count_lines(large_history) == 100,
+        "one hundred seeded redemption-history rows are readable");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/rules.json",
         "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":1435},{\"mode\":\"limit\",\"minutes\":1435},"
         "{\"mode\":\"limit\",\"minutes\":1435},{\"mode\":\"limit\",\"minutes\":1435},"
         "{\"mode\":\"limit\",\"minutes\":1435},{\"mode\":\"limit\",\"minutes\":1435},"
         "{\"mode\":\"limit\",\"minutes\":1435}],\"today_override_present\":false}"),
         "seed near-cap weekly rule");
+    fake_time.snapshot.unix_seconds = 1783526401;
     check_int(ptc_token_v2_encode(tier, 9, "kid-switch",
         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", 2380, code),
         PTC_ERR_OK, "capped history token encoded");
@@ -1178,13 +1541,18 @@ static void test_redemption_history_transaction_and_clear(void)
         "queue redemption against full history");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "full redemption history accepts a new success");
     check_true(mem.storage.vtable->read_text(&mem.storage,
-            "app/ledger/redemption-history.jsonl", large_history, sizeof(large_history)) &&
-        count_lines(large_history) == 100 &&
-        strstr(large_history, "\"redeemed_at\":1000,") == NULL &&
-        strstr(large_history, "\"redeemed_at\":1001,") != NULL &&
-        strstr(large_history, "\"redeemed_at\":1783526401,") != NULL &&
-        strstr(large_history, "\"effective_add_minutes\":5,") != NULL,
-        "full history drops only the oldest row and records the effective capped credit");
+            "app/results/history-cap.json", result, sizeof(result)) && strstr(result, "\"status\":\"ok\""),
+        "full redemption history request commits successfully");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/ledger/redemption-history.jsonl", large_history, sizeof(large_history)),
+        "full redemption history remains readable");
+    check_int(count_lines(large_history), 100, "full redemption history stays capped at one hundred rows");
+    check_true(strstr(large_history, "\"redeemed_at\":1000,") == NULL,
+        "full redemption history drops the oldest row");
+    check_true(strstr(large_history, "\"redeemed_at\":1001,") != NULL,
+        "full redemption history keeps the next-oldest row");
+    check_true(strstr(large_history, "\"effective_add_minutes\":5,") != NULL,
+        "full redemption history records the effective capped credit");
 }
 
 static void test_play_timer_layout(void)
@@ -1562,6 +1930,7 @@ int main(void)
     test_tokens();
     test_release_request_contract();
     test_holiday_calendar_and_priority();
+    test_daily_summary_and_read_only_stats_boundary();
     test_policy_and_disable_flag();
     test_support_redaction();
     test_install_defaults_preserve_runtime_data();
@@ -1571,6 +1940,9 @@ int main(void)
     test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();
     test_setup_preflight_and_recovery();
+    test_daily_buffer_transactions();
+    test_daily_buffer_failure_rollbacks();
+    test_activity_history_retention_and_clear_rollback();
     test_setup_direct_takeover_recovers_exhausted_failed_release();
     test_setup_refuses_unknown_handover_total();
     test_runtime_fingerprint_change_can_be_reconfirmed();

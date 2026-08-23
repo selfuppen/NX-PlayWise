@@ -273,6 +273,18 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "clear_redemption_history") == 0) {
         return PTC_REQUEST_CLEAR_REDEMPTION_HISTORY;
     }
+    if (strcmp(value, "set_scheduled_override") == 0) {
+        return PTC_REQUEST_SET_SCHEDULED_OVERRIDE;
+    }
+    if (strcmp(value, "set_autonomy_policy") == 0) {
+        return PTC_REQUEST_SET_AUTONOMY_POLICY;
+    }
+    if (strcmp(value, "claim_daily_buffer") == 0) {
+        return PTC_REQUEST_CLAIM_DAILY_BUFFER;
+    }
+    if (strcmp(value, "clear_activity_history") == 0) {
+        return PTC_REQUEST_CLEAR_ACTIVITY_HISTORY;
+    }
     if (strcmp(value, "complete_setup") == 0) {
         return PTC_REQUEST_COMPLETE_SETUP;
     }
@@ -321,6 +333,14 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "set_holiday_policy";
     case PTC_REQUEST_CLEAR_REDEMPTION_HISTORY:
         return "clear_redemption_history";
+    case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
+        return "set_scheduled_override";
+    case PTC_REQUEST_SET_AUTONOMY_POLICY:
+        return "set_autonomy_policy";
+    case PTC_REQUEST_CLAIM_DAILY_BUFFER:
+        return "claim_daily_buffer";
+    case PTC_REQUEST_CLEAR_ACTIVITY_HISTORY:
+        return "clear_activity_history";
     case PTC_REQUEST_COMPLETE_SETUP:
         return "complete_setup";
     case PTC_REQUEST_RETRY_SETUP_RELEASE:
@@ -396,6 +416,26 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
             parse_named_rule(text, "holiday_rule", &out->holiday_rule) &&
             parse_named_rule(text, "makeup_workday_rule", &out->makeup_workday_rule)
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
+        if (!json_bool_required(text, "enabled", &out->scheduled_override.enabled)) {
+            return PTC_ERR_BAD_REQUEST;
+        }
+        if (!out->scheduled_override.enabled) {
+            out->scheduled_override.start_day_index = 0;
+            out->scheduled_override.end_day_index = 0;
+            out->scheduled_override.rule.mode = PTC_RULE_MODE_LIMIT;
+            out->scheduled_override.rule.minutes = 60;
+            return PTC_ERR_OK;
+        }
+        return json_u16(text, "start_day_index", &out->scheduled_override.start_day_index) &&
+            json_u16(text, "end_day_index", &out->scheduled_override.end_day_index) &&
+            parse_named_rule(text, "rule", &out->scheduled_override.rule) &&
+            ptc_scheduled_override_is_valid(&out->scheduled_override)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_SET_AUTONOMY_POLICY:
+        return json_u16(text, "daily_buffer_minutes", &out->autonomy_policy.daily_buffer_minutes) &&
+            ptc_autonomy_policy_is_valid(&out->autonomy_policy)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_COMPLETE_SETUP:
     case PTC_REQUEST_RETRY_SETUP_RELEASE:
     case PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT:
@@ -403,6 +443,8 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
     case PTC_REQUEST_RESTORE_TODAY_POLICY:
     case PTC_REQUEST_CLEAR_REDEMPTION_HISTORY:
+    case PTC_REQUEST_CLAIM_DAILY_BUFFER:
+    case PTC_REQUEST_CLEAR_ACTIVITY_HISTORY:
         return PTC_ERR_OK;
 #ifdef PLAYWISE_DEVICE_LAB
     case PTC_REQUEST_REMOVED_13:

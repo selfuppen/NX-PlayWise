@@ -72,3 +72,32 @@ int ptc_companion_set_holiday_policy_request_json(char *out, size_t out_size, co
         rule_mode_name(holiday_rule.mode), holiday_rule.minutes,
         rule_mode_name(makeup_workday_rule.mode), makeup_workday_rule.minutes);
 }
+
+int ptc_companion_set_scheduled_override_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, const PtcScheduledOverride *scheduled_override)
+{
+    if (!scheduled_override) return -1;
+    if (!scheduled_override->enabled) {
+        return snprintf(out, out_size,
+            "{\"version\":1,\"request_id\":\"%s\",\"type\":\"set_scheduled_override\","
+            "\"created_at\":%lld,\"payload\":{\"enabled\":false}}\n",
+            request_id, (long long)created_at);
+    }
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"set_scheduled_override\","
+        "\"created_at\":%lld,\"payload\":{\"enabled\":true,\"start_day_index\":%u,"
+        "\"end_day_index\":%u,\"rule\":{\"mode\":\"%s\",\"minutes\":%u}}}\n",
+        request_id, (long long)created_at, scheduled_override->start_day_index,
+        scheduled_override->end_day_index, rule_mode_name(scheduled_override->rule.mode),
+        scheduled_override->rule.minutes);
+}
+
+int ptc_companion_set_autonomy_policy_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, const PtcAutonomyPolicy *policy)
+{
+    if (!policy) return -1;
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"set_autonomy_policy\","
+        "\"created_at\":%lld,\"payload\":{\"daily_buffer_minutes\":%u}}\n",
+        request_id, (long long)created_at, policy->daily_buffer_minutes);
+}

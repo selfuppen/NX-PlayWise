@@ -7,6 +7,16 @@
 
 #include "error_code.h"
 
+#define PTC_RESULT_FORECAST_DAYS 7u
+
+typedef struct {
+    uint16_t day_index;
+    int mode;
+    uint16_t minutes;
+    const char *rule_source;
+    bool calendar_covered;
+} PtcResultForecastDay;
+
 typedef struct {
     uint16_t day_index;
     bool restriction_enabled_available;
@@ -25,6 +35,16 @@ typedef struct {
     const char *rule_source;
     bool calendar_covered;
     bool calendar_update_warning;
+    PtcResultForecastDay forecast[PTC_RESULT_FORECAST_DAYS];
+    uint16_t daily_buffer_minutes;
+    bool daily_buffer_claimed;
+    bool daily_buffer_available;
+    const char *daily_buffer_reason;
+    bool usage_summary_available;
+    uint16_t usage_known_days_7;
+    uint32_t usage_consumed_minutes_7;
+    uint16_t usage_known_days_30;
+    uint32_t usage_consumed_minutes_30;
 } PtcResultState;
 
 typedef struct {

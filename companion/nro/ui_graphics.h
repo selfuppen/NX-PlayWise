@@ -6,6 +6,8 @@
 #include <stdint.h>
 
 #include "../../common/protocol/redemption_history.h"
+#include "../../common/protocol/activity_history.h"
+#include "../../common/protocol/result_builder.h"
 #include "../../common/rules/rules.h"
 #include "ui_theme.h"
 #include "../../common/security/credential_policy.h"
@@ -70,7 +72,10 @@ typedef enum {
     PTC_UI_OVERLAY_MINUTE_EDITOR = 20,
     PTC_UI_OVERLAY_THEME = 21,
     PTC_UI_OVERLAY_PIN = 22,
-    PTC_UI_OVERLAY_REDEMPTION_HISTORY = 23
+    PTC_UI_OVERLAY_REDEMPTION_HISTORY = 23,
+    PTC_UI_OVERLAY_SCHEDULED = 24,
+    PTC_UI_OVERLAY_AUTONOMY = 25,
+    PTC_UI_OVERLAY_ACTIVITY_HISTORY = 26
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -140,7 +145,10 @@ typedef enum {
     PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY = 16,
     PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY = 17,
     PTC_UI_OPERATION_EXPORT_DIAGNOSTICS = 18,
-    PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY = 19
+    PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY = 19,
+    PTC_UI_OPERATION_SAVE_SCHEDULED = 20,
+    PTC_UI_OPERATION_SAVE_AUTONOMY = 21,
+    PTC_UI_OPERATION_CLEAR_ACTIVITY_HISTORY = 22
 } PtcUiOperation;
 
 typedef enum {
@@ -201,6 +209,26 @@ typedef struct {
     int redemption_history_count;
     int redemption_history_page;
     PtcRedemptionHistoryRecord redemption_history[PTC_REDEMPTION_HISTORY_MAX_RECORDS];
+    bool activity_history_available;
+    int activity_history_count;
+    int activity_history_page;
+    PtcActivityHistoryRecord activity_history[PTC_ACTIVITY_HISTORY_MAX_RECORDS];
+    PtcResultForecastDay forecast[PTC_RESULT_FORECAST_DAYS];
+    char forecast_rule_sources[PTC_RESULT_FORECAST_DAYS][32];
+    bool forecast_available;
+    uint16_t daily_buffer_minutes;
+    bool daily_buffer_claimed;
+    bool daily_buffer_available;
+    char daily_buffer_reason[32];
+    PtcScheduledOverride scheduled_override;
+    PtcScheduledOverride draft_scheduled_override;
+    PtcAutonomyPolicy autonomy_policy;
+    PtcAutonomyPolicy draft_autonomy_policy;
+    bool usage_summary_available;
+    uint16_t usage_known_days_7;
+    uint32_t usage_consumed_minutes_7;
+    uint16_t usage_known_days_30;
+    uint32_t usage_consumed_minutes_30;
     uint16_t day_index;
     char mode[24];
     char request_id[80];
@@ -339,6 +367,7 @@ typedef enum {
     PTC_UI_HIT_NONE = 0,
     PTC_UI_HIT_CHILD_SUBMIT_CODE,
     PTC_UI_HIT_CHILD_REFRESH,
+    PTC_UI_HIT_CHILD_BUFFER,
     PTC_UI_HIT_CHILD_PARENT,
     PTC_UI_HIT_CHILD_EXIT,
     PTC_UI_HIT_ERROR_RETRY,
@@ -405,7 +434,9 @@ typedef enum {
     PTC_UI_HIT_PIN_CANCEL,
     PTC_UI_HIT_PIN_KEYBOARD,
     PTC_UI_HIT_HISTORY_PREV,
-    PTC_UI_HIT_HISTORY_NEXT
+    PTC_UI_HIT_HISTORY_NEXT,
+    PTC_UI_HIT_SCHEDULED_FIELD,
+    PTC_UI_HIT_AUTONOMY_OPTION
 } PtcUiHitKind;
 
 typedef struct {
@@ -531,8 +562,11 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model);
 PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model);
 bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);
 bool ptc_ui_apply_redemption_history_text(PtcUiModel *model, const char *text);
+bool ptc_ui_apply_activity_history_text(PtcUiModel *model, const char *text);
 int ptc_ui_redemption_history_page_count(const PtcUiModel *model);
 void ptc_ui_change_redemption_history_page(PtcUiModel *model, int direction);
+int ptc_ui_activity_history_page_count(const PtcUiModel *model);
+void ptc_ui_change_activity_history_page(PtcUiModel *model, int direction);
 void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const char *transport_label);
 
 PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int index);
@@ -542,6 +576,7 @@ const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index);
 /* Shared control geometry (single source of truth for drawing and touch). */
 PtcUiRect ptc_ui_child_submit_rect(void);
 PtcUiRect ptc_ui_child_refresh_rect(void);
+PtcUiRect ptc_ui_child_buffer_rect(void);
 PtcUiRect ptc_ui_child_footer_rect(int index);
 PtcUiRect ptc_ui_error_retry_rect(void);
 PtcUiRect ptc_ui_error_back_rect(void);
@@ -560,6 +595,7 @@ PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_advanced_hierarchy_rect(void);
 PtcUiRect ptc_ui_advanced_back_rect(void);
 PtcUiRect ptc_ui_advanced_card_rect(void);
+PtcUiRect ptc_ui_advanced_feature_rect(int index);
 PtcUiRect ptc_ui_support_hierarchy_rect(void);
 PtcUiRect ptc_ui_support_back_rect(void);
 PtcUiRect ptc_ui_support_card_rect(int index);
@@ -572,6 +608,8 @@ PtcUiRect ptc_ui_holiday_page_action_rect(int index);
 PtcUiRect ptc_ui_support_event_rect(int index);
 PtcUiRect ptc_ui_redemption_history_prev_rect(void);
 PtcUiRect ptc_ui_redemption_history_next_rect(void);
+PtcUiRect ptc_ui_scheduled_field_rect(int index);
+PtcUiRect ptc_ui_autonomy_option_rect(int index);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
 PtcUiRect ptc_ui_minutes_value_rect(void);
 PtcUiRect ptc_ui_minutes_dec_rect(void);

@@ -7,12 +7,14 @@
 
 #include "../common/crypto/sha256.h"
 #include "../common/policy/control_policy.h"
+#include "../common/protocol/activity_history.h"
 #include "../common/protocol/request_schema.h"
 #include "../common/protocol/redemption_history.h"
 #include "../common/protocol/result_builder.h"
 #include "../common/rules/rules.h"
 #include "../common/rules/holiday_calendar.h"
 #include "../common/time/ptc_time.h"
+#include "../common/usage/daily_summary.h"
 #include "../common/token/token_v1.h"
 #include "../common/token/token_v2.h"
 #include "../common/version.h"
@@ -45,6 +47,11 @@ typedef struct {
     uint16_t pending_minutes;
     uint16_t v2_failed_attempts;
     int64_t v2_cooldown_until;
+    bool buffer_claimed;
+    uint16_t buffer_claim_day_index;
+    uint16_t buffer_claimed_minutes;
+    uint16_t summary_day_index;
+    uint16_t summary_grant_minutes;
 } PtcRuntimeState;
 
 typedef struct {
@@ -456,7 +463,7 @@ static bool backup_text_file(PtcSysmodule *sysmodule, const char *relative, cons
 {
     char source[320];
     char backup[320];
-    char text[PTC_REDEMPTION_HISTORY_FILE_SIZE];
+    char text[PTC_ACTIVITY_HISTORY_FILE_SIZE];
     join_path(source, sizeof(source), sysmodule->app_root, relative);
     join_path(backup, sizeof(backup), sysmodule->app_root, backup_relative);
     *existed = sysmodule->storage->vtable->exists(sysmodule->storage, source);
@@ -469,7 +476,7 @@ static bool restore_text_file(PtcSysmodule *sysmodule, const char *relative, con
 {
     char target[320];
     char backup[320];
-    char text[PTC_REDEMPTION_HISTORY_FILE_SIZE];
+    char text[PTC_ACTIVITY_HISTORY_FILE_SIZE];
     join_path(target, sizeof(target), sysmodule->app_root, relative);
     if (!existed) {
         return !sysmodule->storage->vtable->exists(sysmodule->storage, target) ||
@@ -489,6 +496,7 @@ static bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, P
     bool state_existed;
     bool ledger_existed;
     bool redemption_history_existed;
+    bool activity_history_existed;
     if (recovery_path_exists(sysmodule)) return true;
     if (!sysmodule->pctl->vtable->snapshot_settings ||
         sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &snapshot) != PTC_ERR_OK ||
@@ -497,7 +505,9 @@ static bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, P
         !backup_text_file(sysmodule, "state.json", "recovery/active/state.before", &state_existed) ||
         !backup_text_file(sysmodule, "ledger/used_nonces.jsonl", "recovery/active/ledger.before", &ledger_existed) ||
         !backup_text_file(sysmodule, "ledger/redemption-history.jsonl",
-            "recovery/active/redemption-history.before", &redemption_history_existed)) {
+            "recovery/active/redemption-history.before", &redemption_history_existed) ||
+        !backup_text_file(sysmodule, "activity/history.jsonl",
+            "recovery/active/activity-history.before", &activity_history_existed)) {
         recovery_clear(sysmodule);
         return false;
     }
@@ -505,13 +515,14 @@ static bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, P
     snprintf(meta, sizeof(meta),
         "{\"version\":1,\"request_id\":\"%s\",\"created_at\":%lld,"
         "\"rules_existed\":%s,\"state_existed\":%s,\"ledger_existed\":%s,"
-        "\"redemption_history_existed\":%s}\n",
+        "\"redemption_history_existed\":%s,\"activity_history_existed\":%s}\n",
         request && ptc_request_id_is_valid(request->request_id) ? request->request_id : "enforce",
         (long long)now.unix_seconds,
         rules_existed ? "true" : "false",
         state_existed ? "true" : "false",
         ledger_existed ? "true" : "false",
-        redemption_history_existed ? "true" : "false");
+        redemption_history_existed ? "true" : "false",
+        activity_history_existed ? "true" : "false");
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, meta_path, meta)) {
         recovery_clear(sysmodule);
         return false;
@@ -540,6 +551,8 @@ static bool recovery_rollback(PtcSysmodule *sysmodule)
     bool ledger_existed;
     bool redemption_history_existed = false;
     bool redemption_history_tracked;
+    bool activity_history_existed = false;
+    bool activity_history_tracked;
     bool raw_restored = false;
     bool timer_restored = false;
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
@@ -553,6 +566,8 @@ static bool recovery_rollback(PtcSysmodule *sysmodule)
         !load_snapshot_file(sysmodule, "recovery/active/pctl_snapshot.json", &original)) return false;
     redemption_history_tracked = json_bool_value(
         meta, "redemption_history_existed", &redemption_history_existed);
+    activity_history_tracked = json_bool_value(
+        meta, "activity_history_existed", &activity_history_existed);
     ok = restore_snapshot_exact(sysmodule, &original, &restored, &status,
         ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored) == PTC_ERR_OK;
     ok = restore_text_file(sysmodule, "rules.json", "recovery/active/rules.before", rules_existed) && ok;
@@ -561,6 +576,10 @@ static bool recovery_rollback(PtcSysmodule *sysmodule)
     if (redemption_history_tracked) {
         ok = restore_text_file(sysmodule, "ledger/redemption-history.jsonl",
             "recovery/active/redemption-history.before", redemption_history_existed) && ok;
+    }
+    if (activity_history_tracked) {
+        ok = restore_text_file(sysmodule, "activity/history.jsonl",
+            "recovery/active/activity-history.before", activity_history_existed) && ok;
     }
     invalidate_all_caches(sysmodule);
     if (ok) recovery_clear(sysmodule);
@@ -928,6 +947,17 @@ static bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
         }
         (void)json_u16(text, "today_override_minutes", &rules->today_override.rule.minutes);
     }
+    if (json_bool_value(text, "scheduled_override_enabled", &rules->scheduled_override.enabled)) {
+        (void)json_u16(text, "scheduled_override_start_day_index", &rules->scheduled_override.start_day_index);
+        (void)json_u16(text, "scheduled_override_end_day_index", &rules->scheduled_override.end_day_index);
+        if (json_string(text, "scheduled_override_mode", mode, sizeof(mode))) {
+            (void)parse_rule_mode(mode, &rules->scheduled_override.rule.mode);
+        }
+        (void)json_u16(text, "scheduled_override_minutes", &rules->scheduled_override.rule.minutes);
+        if (!ptc_scheduled_override_is_valid(&rules->scheduled_override)) return false;
+    }
+    if (json_u16(text, "daily_buffer_minutes", &rules->autonomy_policy.daily_buffer_minutes) &&
+        !ptc_autonomy_policy_is_valid(&rules->autonomy_policy)) return false;
     (void)json_bool_value(text, "holiday_enabled", &rules->holiday_enabled);
     if (json_string(text, "holiday_mode", mode, sizeof(mode))) {
         (void)parse_rule_mode(mode, &rules->holiday_rule.mode);
@@ -964,12 +994,21 @@ static bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
         sizeof(text) - used,
         "],\"today_override_present\":%s,\"today_override_day_index\":%u,"
         "\"today_override_mode\":\"%s\",\"today_override_minutes\":%u,"
+        "\"scheduled_override_enabled\":%s,\"scheduled_override_start_day_index\":%u,"
+        "\"scheduled_override_end_day_index\":%u,\"scheduled_override_mode\":\"%s\","
+        "\"scheduled_override_minutes\":%u,\"daily_buffer_minutes\":%u,"
         "\"holiday_enabled\":%s,\"holiday_mode\":\"%s\",\"holiday_minutes\":%u,"
         "\"makeup_workday_mode\":\"%s\",\"makeup_workday_minutes\":%u}\n",
         rules->today_override.present ? "true" : "false",
         rules->today_override.day_index,
         rule_mode_name(rules->today_override.rule.mode),
         rules->today_override.rule.minutes,
+        rules->scheduled_override.enabled ? "true" : "false",
+        rules->scheduled_override.start_day_index,
+        rules->scheduled_override.end_day_index,
+        rule_mode_name(rules->scheduled_override.rule.mode),
+        rules->scheduled_override.rule.minutes,
+        rules->autonomy_policy.daily_buffer_minutes,
         rules->holiday_enabled ? "true" : "false",
         rule_mode_name(rules->holiday_rule.mode),
         rules->holiday_rule.minutes,
@@ -1007,6 +1046,11 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     state->pending_minutes = 0;
     state->v2_failed_attempts = 0;
     state->v2_cooldown_until = 0;
+    state->buffer_claimed = false;
+    state->buffer_claim_day_index = 0;
+    state->buffer_claimed_minutes = 0;
+    state->summary_day_index = 0;
+    state->summary_grant_minutes = 0;
     join_path(path, sizeof(path), sysmodule->app_root, "state.json");
     if (!read_cached_text(sysmodule, "state.json", sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text),
             &sysmodule->state_meta, &sysmodule->state_cache_valid, text, sizeof(text), true) || text[0] == '\0') {
@@ -1026,6 +1070,11 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     }
     (void)json_u16(text, "v2_failed_attempts", &state->v2_failed_attempts);
     (void)json_i64(text, "v2_cooldown_until", &state->v2_cooldown_until);
+    (void)json_bool_value(text, "buffer_claimed", &state->buffer_claimed);
+    (void)json_u16(text, "buffer_claim_day_index", &state->buffer_claim_day_index);
+    (void)json_u16(text, "buffer_claimed_minutes", &state->buffer_claimed_minutes);
+    (void)json_u16(text, "summary_day_index", &state->summary_day_index);
+    (void)json_u16(text, "summary_grant_minutes", &state->summary_grant_minutes);
     {
         uint16_t mode = 0;
         if (json_u16(text, "last_enforced_mode", &mode)) {
@@ -1038,7 +1087,7 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
 static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t updated_at)
 {
     char path[320];
-    char text[768];
+    char text[1024];
     snprintf(path, sizeof(path), "%s/state.json", sysmodule->app_root);
     snprintf(
         text,
@@ -1047,7 +1096,9 @@ static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, in
         "\"last_enforced_mode\":%u,\"last_enforced_minutes\":%u,"
         "\"apply_status\":\"%s\",\"apply_pending_confirmation\":%s,"
         "\"apply_confirmation_deadline\":%lld,\"pending_mode\":%u,\"pending_minutes\":%u,"
-        "\"v2_failed_attempts\":%u,\"v2_cooldown_until\":%lld,\"updated_at\":%lld}\n",
+        "\"v2_failed_attempts\":%u,\"v2_cooldown_until\":%lld,"
+        "\"buffer_claimed\":%s,\"buffer_claim_day_index\":%u,\"buffer_claimed_minutes\":%u,"
+        "\"summary_day_index\":%u,\"summary_grant_minutes\":%u,\"updated_at\":%lld}\n",
         state->last_enforced_day_index,
         (unsigned int)state->last_enforced_mode,
         state->last_enforced_minutes,
@@ -1058,6 +1109,11 @@ static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, in
         state->pending_minutes,
         state->v2_failed_attempts,
         (long long)state->v2_cooldown_until,
+        state->buffer_claimed ? "true" : "false",
+        state->buffer_claim_day_index,
+        state->buffer_claimed_minutes,
+        state->summary_day_index,
+        state->summary_grant_minutes,
         (long long)updated_at);
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
     snprintf(sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text), "%s", text);
@@ -1201,6 +1257,154 @@ static bool clear_redemption_history(PtcSysmodule *sysmodule)
     char path[320];
     join_path(path, sizeof(path), sysmodule->app_root, "ledger/redemption-history.jsonl");
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, "");
+}
+
+static bool save_activity_history(PtcSysmodule *sysmodule, const PtcActivityHistoryRecord *record)
+{
+    char path[320];
+    char existing[PTC_ACTIVITY_HISTORY_FILE_SIZE];
+    char output[PTC_ACTIVITY_HISTORY_FILE_SIZE];
+    char new_line[PTC_ACTIVITY_HISTORY_LINE_SIZE];
+    char *lines[PTC_ACTIVITY_HISTORY_MAX_RECORDS];
+    char *cursor;
+    size_t count = 0;
+    size_t used = 0;
+    size_t index;
+    join_path(path, sizeof(path), sysmodule->app_root, "activity/history.jsonl");
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, path)) {
+        if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, existing, sizeof(existing))) return false;
+    } else existing[0] = '\0';
+    cursor = existing;
+    while (*cursor) {
+        char *newline = strchr(cursor, '\n');
+        size_t length = newline ? (size_t)(newline - cursor) : strlen(cursor);
+        PtcActivityHistoryRecord parsed;
+        if (length == 0) { cursor = newline ? newline + 1 : cursor + length; continue; }
+        if (length >= PTC_ACTIVITY_HISTORY_LINE_SIZE) return false;
+        if (newline) *newline = '\0';
+        if (!ptc_activity_history_parse_line(cursor, &parsed)) return false;
+        if (count == PTC_ACTIVITY_HISTORY_MAX_RECORDS) {
+            memmove(lines, lines + 1, (PTC_ACTIVITY_HISTORY_MAX_RECORDS - 1u) * sizeof(lines[0]));
+            count = PTC_ACTIVITY_HISTORY_MAX_RECORDS - 1u;
+        }
+        lines[count++] = cursor;
+        if (!newline) break;
+        cursor = newline + 1;
+    }
+    if (!ptc_activity_history_format_line(new_line, sizeof(new_line), record)) return false;
+    if (count == PTC_ACTIVITY_HISTORY_MAX_RECORDS) {
+        memmove(lines, lines + 1, (PTC_ACTIVITY_HISTORY_MAX_RECORDS - 1u) * sizeof(lines[0]));
+        count = PTC_ACTIVITY_HISTORY_MAX_RECORDS - 1u;
+    }
+    for (index = 0; index < count; ++index) {
+        size_t length = strlen(lines[index]);
+        if (used + length + 1u >= sizeof(output)) return false;
+        memcpy(output + used, lines[index], length);
+        used += length;
+        output[used++] = '\n';
+    }
+    {
+        size_t length = strlen(new_line);
+        if (used + length + 2u > sizeof(output)) return false;
+        memcpy(output + used, new_line, length);
+        used += length;
+        output[used++] = '\n';
+        output[used] = '\0';
+    }
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, output);
+}
+
+static bool clear_activity_history(PtcSysmodule *sysmodule)
+{
+    char path[320];
+    join_path(path, sizeof(path), sysmodule->app_root, "activity/history.jsonl");
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, "");
+}
+
+#ifndef PLAYWISE_DEVICE_LAB
+static bool save_daily_summary(PtcSysmodule *sysmodule, const PtcDailySummaryRecord *record)
+{
+    char path[320];
+    char existing[PTC_DAILY_SUMMARY_FILE_SIZE];
+    char output[PTC_DAILY_SUMMARY_FILE_SIZE];
+    char formatted[PTC_DAILY_SUMMARY_LINE_SIZE];
+    PtcDailySummaryRecord records[PTC_DAILY_SUMMARY_MAX_RECORDS];
+    char *cursor;
+    size_t count = 0;
+    size_t used = 0;
+    size_t index;
+    bool replaced = false;
+    join_path(path, sizeof(path), sysmodule->app_root, "stats/daily-summaries.jsonl");
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, path)) {
+        if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, existing, sizeof(existing))) return false;
+    } else existing[0] = '\0';
+    cursor = existing;
+    while (*cursor) {
+        char *newline = strchr(cursor, '\n');
+        size_t length = newline ? (size_t)(newline - cursor) : strlen(cursor);
+        char line[PTC_DAILY_SUMMARY_LINE_SIZE];
+        if (length == 0) { cursor = newline ? newline + 1 : cursor + length; continue; }
+        if (length >= sizeof(line)) return false;
+        memcpy(line, cursor, length);
+        line[length] = '\0';
+        if (!ptc_daily_summary_parse_line(line, &records[count])) return false;
+        if (records[count].day_index == record->day_index) {
+            if (record->captured_at >= records[count].captured_at) records[count] = *record;
+            replaced = true;
+        }
+        if (++count == PTC_DAILY_SUMMARY_MAX_RECORDS) break;
+        if (!newline) break;
+        cursor = newline + 1;
+    }
+    if (!replaced) {
+        if (count == PTC_DAILY_SUMMARY_MAX_RECORDS) {
+            size_t oldest = 0;
+            for (index = 1; index < count; ++index) {
+                if (records[index].day_index < records[oldest].day_index) oldest = index;
+            }
+            if (record->day_index <= records[oldest].day_index) return true;
+            if (oldest + 1u < count) {
+                memmove(records + oldest, records + oldest + 1u,
+                    (count - oldest - 1u) * sizeof(records[0]));
+            }
+            count = PTC_DAILY_SUMMARY_MAX_RECORDS - 1u;
+        }
+        records[count++] = *record;
+    }
+    for (index = 0; index < count; ++index) {
+        size_t length;
+        if (!ptc_daily_summary_format_line(formatted, sizeof(formatted), &records[index])) return false;
+        length = strlen(formatted);
+        if (used + length + 2u > sizeof(output)) return false;
+        memcpy(output + used, formatted, length);
+        used += length;
+        output[used++] = '\n';
+    }
+    output[used] = '\0';
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, output);
+}
+#endif
+
+static bool load_daily_summary_aggregate(PtcSysmodule *sysmodule, uint16_t today,
+    PtcDailySummaryAggregate *aggregate)
+{
+    char path[320];
+    char text[PTC_DAILY_SUMMARY_FILE_SIZE];
+    PtcDailySummaryRecord records[PTC_DAILY_SUMMARY_MAX_RECORDS];
+    char *cursor;
+    size_t count = 0;
+    join_path(path, sizeof(path), sysmodule->app_root, "stats/daily-summaries.jsonl");
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) return false;
+    cursor = text;
+    while (*cursor && count < PTC_DAILY_SUMMARY_MAX_RECORDS) {
+        char *newline = strchr(cursor, '\n');
+        if (newline) *newline = '\0';
+        if (*cursor && !ptc_daily_summary_parse_line(cursor, &records[count++])) return false;
+        if (!newline) break;
+        cursor = newline + 1;
+    }
+    ptc_daily_summary_aggregate(records, count, today, aggregate);
+    return true;
 }
 
 static int64_t result_remaining_minutes(const PtcPctlStatus *status)
@@ -1638,7 +1842,7 @@ static bool finish_with_error(
     uint16_t day_index,
     const PtcCapabilities *caps)
 {
-    char json[2048];
+    char json[4096];
     PtcResultState state;
     if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule)) {
         write_disable_flag(sysmodule, "transaction_restore_failed\n");
@@ -1676,7 +1880,11 @@ static PtcOperation request_operation(PtcRequestType type)
         return PTC_OPERATION_STATUS;
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
     case PTC_REQUEST_SET_HOLIDAY_POLICY:
+    case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
+    case PTC_REQUEST_SET_AUTONOMY_POLICY:
         return PTC_OPERATION_RULE_UPDATE;
+    case PTC_REQUEST_CLAIM_DAILY_BUFFER:
+        return PTC_OPERATION_GRANT_MINUTES;
     default:
         return PTC_OPERATION_STATUS;
     }
@@ -1767,8 +1975,83 @@ static PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcR
         rules->holiday_rule = request->holiday_rule;
         rules->makeup_workday_rule = request->makeup_workday_rule;
         return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+    case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
+        rules->scheduled_override = request->scheduled_override;
+        return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+    case PTC_REQUEST_SET_AUTONOMY_POLICY:
+        rules->autonomy_policy = request->autonomy_policy;
+        return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
     default:
         return PTC_ERR_OK;
+    }
+}
+
+static const char *activity_action_for_request(PtcRequestType type)
+{
+    switch (type) {
+    case PTC_REQUEST_SET_TODAY_LIMIT: return "today_limit";
+    case PTC_REQUEST_ADD_TODAY_MINUTES: return "today_add";
+    case PTC_REQUEST_DISABLE_TODAY_LIMIT: return "today_unlimited";
+    case PTC_REQUEST_RESTORE_TODAY_POLICY: return "today_restore";
+    case PTC_REQUEST_SET_WEEKLY_TEMPLATE: return "weekly_update";
+    case PTC_REQUEST_SET_HOLIDAY_POLICY: return "holiday_update";
+    case PTC_REQUEST_SET_SCHEDULED_OVERRIDE: return "scheduled_update";
+    case PTC_REQUEST_SET_AUTONOMY_POLICY: return "autonomy_update";
+    case PTC_REQUEST_OFFLINE_CODE: return "offline_grant";
+    case PTC_REQUEST_CLAIM_DAILY_BUFFER: return "daily_buffer";
+    default: return NULL;
+    }
+}
+
+static bool record_activity(PtcSysmodule *sysmodule, const PtcRequest *request,
+    PtcClockSnapshot now, uint16_t minutes, uint16_t effective_minutes)
+{
+    PtcActivityHistoryRecord record;
+    const char *action = activity_action_for_request(request ? request->type : PTC_REQUEST_UNKNOWN);
+    if (!action) return true;
+    memset(&record, 0, sizeof(record));
+    record.occurred_at = now.unix_seconds;
+    record.day_index = now.day_index;
+    snprintf(record.action, sizeof(record.action), "%s", action);
+    record.minutes = minutes;
+    record.effective_minutes = effective_minutes;
+    return save_activity_history(sysmodule, &record);
+}
+
+static void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
+    const PtcRules *rules, const PtcRuntimeState *runtime_state,
+    const PtcPctlStatus *pctl_status, PtcClockSnapshot now)
+{
+    unsigned int i;
+    PtcDailySummaryAggregate aggregate;
+    for (i = 0; i < PTC_RESULT_FORECAST_DAYS; ++i) {
+        uint16_t forecast_day = (uint16_t)(now.day_index + i);
+        PtcEffectiveRule forecast = ptc_rules_resolve(
+            rules, forecast_day, ptc_weekday_from_day_index(forecast_day));
+        state->forecast[i].day_index = forecast_day;
+        state->forecast[i].mode = forecast.rule.mode == PTC_RULE_MODE_UNLIMITED ? 2 : 1;
+        state->forecast[i].minutes = forecast.rule.minutes;
+        state->forecast[i].rule_source = ptc_rule_source_name(forecast.source);
+        state->forecast[i].calendar_covered = forecast.calendar_covered;
+    }
+    state->daily_buffer_minutes = rules->autonomy_policy.daily_buffer_minutes;
+    state->daily_buffer_claimed = runtime_state->buffer_claimed &&
+        runtime_state->buffer_claim_day_index == now.day_index;
+    state->daily_buffer_available = false;
+    if (state->daily_buffer_minutes == 0) state->daily_buffer_reason = "disabled";
+    else if (state->daily_buffer_claimed) state->daily_buffer_reason = "already_claimed";
+    else if (!pctl_status->limited_today || pctl_status->unrestricted_today) {
+        state->daily_buffer_reason = "today_unlimited";
+    } else {
+        state->daily_buffer_available = true;
+        state->daily_buffer_reason = "available";
+    }
+    if (load_daily_summary_aggregate(sysmodule, now.day_index, &aggregate)) {
+        state->usage_summary_available = aggregate.known_days_30 > 0;
+        state->usage_known_days_7 = aggregate.known_days_7;
+        state->usage_consumed_minutes_7 = aggregate.consumed_minutes_7;
+        state->usage_known_days_30 = aggregate.known_days_30;
+        state->usage_consumed_minutes_30 = aggregate.consumed_minutes_30;
     }
 }
 
@@ -1785,7 +2068,7 @@ static bool write_current_status_result(
     PtcRules rules;
     PtcRuntimeState runtime_state;
     PtcResultState state;
-    char json[2048];
+    char json[4096];
     PtcErrorCode err;
     PtcEffectiveRule effective;
     const PtcHolidayCalendarInfo *calendar_info;
@@ -1812,6 +2095,7 @@ static bool write_current_status_result(
             (year > calendar_info->last_year ||
                 (year == calendar_info->last_year && month == 12 && day >= 2));
     }
+    fill_extended_result_state(sysmodule, &state, &rules, &runtime_state, &pctl_status, now);
     (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
     append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
     return write_result_with_setup(sysmodule, request->request_id, json, commits_recovery);
@@ -1825,6 +2109,41 @@ static bool process_status(PtcSysmodule *sysmodule, const PtcRequest *request, c
     }
     return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, caps, now, false);
 }
+
+#ifndef PLAYWISE_DEVICE_LAB
+static int usage_summary_tick(PtcSysmodule *sysmodule, PtcClockSnapshot now)
+{
+    PtcSetupState setup;
+    PtcRules rules;
+    PtcRuntimeState runtime_state;
+    PtcPctlStatus pctl_status;
+    PtcEffectiveRule effective;
+    PtcDailySummaryRecord record;
+    int64_t consumed;
+    if (!load_setup_state(sysmodule, &setup) || strcmp(setup.phase, "active") != 0 ||
+        !load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state) ||
+        sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+            ptc_weekday_from_day_index(now.day_index), &pctl_status) != PTC_ERR_OK) return 0;
+    memset(&record, 0, sizeof(record));
+    effective = ptc_rules_resolve(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+    record.day_index = now.day_index;
+    record.captured_at = now.unix_seconds;
+    snprintf(record.rule_source, sizeof(record.rule_source), "%s", ptc_rule_source_name(effective.source));
+    record.limited = pctl_status.limited_today;
+    record.configured_minutes = pctl_status.configured_minutes_available
+        ? pctl_status.configured_minutes : (effective.rule.mode == PTC_RULE_MODE_LIMIT ? effective.rule.minutes : 0u);
+    record.remaining_available = pctl_status.remaining_available &&
+        pctl_status.remaining_minutes <= 1440u;
+    record.remaining_minutes = record.remaining_available
+        ? (uint16_t)pctl_status.remaining_minutes : 0u;
+    consumed = result_played_minutes(&pctl_status);
+    record.consumed_available = consumed >= 0;
+    record.consumed_minutes = consumed >= 0 && consumed <= 1440 ? (uint16_t)consumed : 0u;
+    record.granted_minutes = runtime_state.summary_day_index == now.day_index
+        ? runtime_state.summary_grant_minutes : 0u;
+    return save_daily_summary(sysmodule, &record) ? 1 : 0;
+}
+#endif
 
 static bool process_clear_redemption_history(
     PtcSysmodule *sysmodule,
@@ -1861,6 +2180,129 @@ static bool process_clear_redemption_history(
         restored ? "state_rollback_ok" : "state_rollback_failed",
         restored ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED,
         "redemption_history_clear");
+    return false;
+}
+
+static bool process_clear_activity_history(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    const PtcRuntimeConfig *config,
+    const PtcCapabilities *caps,
+    PtcClockSnapshot now)
+{
+    char path[320];
+    char previous[PTC_ACTIVITY_HISTORY_FILE_SIZE];
+    bool existed;
+    bool restored;
+    join_path(path, sizeof(path), sysmodule->app_root, "activity/history.jsonl");
+    existed = sysmodule->storage->vtable->exists(sysmodule->storage, path);
+    if (existed && !sysmodule->storage->vtable->read_text(
+            sysmodule->storage, path, previous, sizeof(previous))) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_STORAGE_READ_FAILED, now.day_index, caps);
+    }
+    if (!clear_activity_history(sysmodule)) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+    }
+    append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "activity_history_cleared");
+    if (write_current_status_result(
+            sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false)) return true;
+    restored = existed
+        ? sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, previous)
+        : (!sysmodule->storage->vtable->exists(sysmodule->storage, path) ||
+           sysmodule->storage->vtable->remove_path(sysmodule->storage, path));
+    append_event(sysmodule, request, restored ? "state_rollback_ok" : "state_rollback_failed",
+        restored ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED, "activity_history_clear");
+    return false;
+}
+
+static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest *request,
+    const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
+{
+    PtcRules rules;
+    PtcRuntimeState runtime_state;
+    PtcPctlStatus pctl_status;
+    PtcPctlStatus observed_status;
+    PtcErrorCode err;
+    uint16_t grant;
+    uint16_t played;
+    uint16_t base;
+    uint16_t target;
+    uint16_t effective;
+    if (disable_flag) return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode),
+        true, PTC_ERR_DISABLED, now.day_index, caps);
+    if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true,
+            PTC_ERR_RULES_INVALID, now.day_index, caps);
+    }
+    grant = rules.autonomy_policy.daily_buffer_minutes;
+    if (grant == 0u) return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode),
+        true, PTC_ERR_AUTONOMY_DISABLED, now.day_index, caps);
+    if (runtime_state.buffer_claimed && runtime_state.buffer_claim_day_index == now.day_index) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode),
+            true, PTC_ERR_DAILY_BUFFER_ALREADY_CLAIMED, now.day_index, caps);
+    }
+    err = sysmodule->pctl->vtable->read_status(
+        sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
+    if (err != PTC_ERR_OK) return finish_with_error(sysmodule, request,
+        ptc_control_mode_name(config->mode), true, err, now.day_index, caps);
+    if (!pctl_status.limited_today || pctl_status.unrestricted_today) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode),
+            true, PTC_ERR_DAILY_BUFFER_LIMITED_ONLY, now.day_index, caps);
+    }
+    if (!recovery_begin(sysmodule, request, now)) return finish_with_error(sysmodule, request,
+        ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_BACKUP_FAILED, now.day_index, caps);
+    played = ptc_pctl_played_minutes(&pctl_status);
+    {
+        PtcDayRule active = ptc_rules_today_rule(&rules, now.day_index,
+            ptc_weekday_from_day_index(now.day_index));
+        base = active.mode == PTC_RULE_MODE_LIMIT ? active.minutes : 0u;
+        if (played > base) base = played;
+    }
+    target = accumulate_today_limit(&rules, now.day_index,
+        ptc_weekday_from_day_index(now.day_index), grant, played);
+    effective = target >= base ? (uint16_t)(target - base) : 0u;
+    err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode),
+        PTC_PCTL_TARGET_LIMIT, target);
+    if (err == PTC_ERR_OK) err = start_timer_and_wait_unrestricted(sysmodule, request, now,
+        ptc_control_mode_name(config->mode), target, &observed_status);
+    if (err != PTC_ERR_OK || !save_rules(sysmodule, &rules)) {
+        if (err == PTC_ERR_OK) err = PTC_ERR_STORAGE_WRITE_FAILED;
+        if (!recovery_rollback(sysmodule)) {
+            write_disable_flag(sysmodule, "transaction_restore_failed\n");
+            err = PTC_ERR_RECOVERY_FAILED;
+        }
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            err, now.day_index, caps);
+    }
+    runtime_state.buffer_claimed = true;
+    runtime_state.buffer_claim_day_index = now.day_index;
+    runtime_state.buffer_claimed_minutes = effective;
+    if (runtime_state.summary_day_index != now.day_index) {
+        runtime_state.summary_day_index = now.day_index;
+        runtime_state.summary_grant_minutes = 0u;
+    }
+    runtime_state.summary_grant_minutes = (uint16_t)(
+        runtime_state.summary_grant_minutes + effective > 1440u ? 1440u :
+        runtime_state.summary_grant_minutes + effective);
+    if (!save_state(sysmodule, &runtime_state, now.unix_seconds) ||
+        !record_activity(sysmodule, request, now, grant, effective)) {
+        err = PTC_ERR_STORAGE_WRITE_FAILED;
+        if (!recovery_rollback(sysmodule)) {
+            write_disable_flag(sysmodule, "transaction_restore_failed\n");
+            err = PTC_ERR_RECOVERY_FAILED;
+        }
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            err, now.day_index, caps);
+    }
+    append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "daily_buffer");
+    if (write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode),
+            false, caps, now, true)) {
+        recovery_clear(sysmodule);
+        return true;
+    }
+    if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "transaction_restore_failed\n");
     return false;
 }
 
@@ -2025,6 +2467,7 @@ static bool process_preview_offline_code(
         ? ((int64_t)target_minutes > played_minutes ? (int64_t)target_minutes - played_minutes : 0)
         : -1;
     result_state_from_pctl(&state, now.day_index, &pctl_status, caps);
+    fill_extended_result_state(sysmodule, &state, &rules, &runtime_state, &pctl_status, now);
     if (ptc_result_preview_ok_json(json, sizeof(json), request->request_id, request->type_text,
             &state, &preview, now.unix_seconds) != 0) {
         append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "preview_json");
@@ -2116,6 +2559,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     (void)load_state(sysmodule, &runtime_state);
     (void)sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     result_state_from_pctl(&state, now.day_index, &pctl_status, caps);
+    fill_extended_result_state(sysmodule, &state, &rules, &runtime_state, &pctl_status, now);
     (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, ptc_control_mode_name(active_config.mode), decision.dry_run, &state, now.unix_seconds);
     if (write_result(sysmodule, request->request_id, json)) {
         if (verified.is_v2 && !decision.dry_run &&
@@ -2144,6 +2588,29 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                 (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, result_path);
                 append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED,
                     "redemption_history");
+                err = PTC_ERR_STORAGE_WRITE_FAILED;
+                if (!recovery_rollback(sysmodule)) {
+                    write_disable_flag(sysmodule, "transaction_restore_failed\n");
+                    err = PTC_ERR_RECOVERY_FAILED;
+                }
+                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                    err, now.day_index, caps);
+            }
+        }
+        if (decision.consume_nonce_after_success) {
+            if (runtime_state.summary_day_index != now.day_index) {
+                runtime_state.summary_day_index = now.day_index;
+                runtime_state.summary_grant_minutes = 0u;
+            }
+            runtime_state.summary_grant_minutes = (uint16_t)(
+                runtime_state.summary_grant_minutes + effective_add_minutes > 1440u ? 1440u :
+                runtime_state.summary_grant_minutes + effective_add_minutes);
+            if (!save_state(sysmodule, &runtime_state, now.unix_seconds) ||
+                !record_activity(sysmodule, request, now, verified.minutes, effective_add_minutes)) {
+                char result_path[320];
+                snprintf(result_path, sizeof(result_path), "%s/results/%s.json",
+                    sysmodule->app_root, request->request_id);
+                (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, result_path);
                 err = PTC_ERR_STORAGE_WRITE_FAILED;
                 if (!recovery_rollback(sysmodule)) {
                     write_disable_flag(sysmodule, "transaction_restore_failed\n");
@@ -2693,8 +3160,16 @@ static bool process_restore_install_snapshot(PtcSysmodule *sysmodule, const PtcR
 static void write_disable_flag(PtcSysmodule *sysmodule, const char *reason)
 {
     char path[320];
+    PtcActivityHistoryRecord record;
+    PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     join_path(path, sizeof(path), sysmodule->app_root, "flags/disable.flag");
-    (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, reason ? reason : "disabled\n");
+    if (!sysmodule->storage->vtable->write_text_atomic(
+            sysmodule->storage, path, reason ? reason : "disabled\n")) return;
+    memset(&record, 0, sizeof(record));
+    record.occurred_at = now.unix_seconds;
+    record.day_index = now.day_index;
+    snprintf(record.action, sizeof(record.action), "protection");
+    (void)save_activity_history(sysmodule, &record);
 }
 
 static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now)
@@ -4501,7 +4976,11 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     bool pctl_request = request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
         request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
         request->type == PTC_REQUEST_RESTORE_TODAY_POLICY ||
-        request->type == PTC_REQUEST_SET_HOLIDAY_POLICY;
+        request->type == PTC_REQUEST_SET_WEEKLY_TEMPLATE ||
+        request->type == PTC_REQUEST_SET_HOLIDAY_POLICY ||
+        request->type == PTC_REQUEST_SET_SCHEDULED_OVERRIDE ||
+        request->type == PTC_REQUEST_SET_AUTONOMY_POLICY;
+    PtcDayRule before_active_rule;
     if (disable_flag) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_DISABLED, now.day_index, caps);
     }
@@ -4511,6 +4990,7 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (!load_state(sysmodule, &runtime_state)) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_BAD_REQUEST, now.day_index, caps);
     }
+    before_active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, err, now.day_index, caps);
@@ -4538,7 +5018,12 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
             request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
             request->type == PTC_REQUEST_DISABLE_TODAY_LIMIT ||
             request->type == PTC_REQUEST_RESTORE_TODAY_POLICY ||
-            request->type == PTC_REQUEST_SET_HOLIDAY_POLICY) {
+            request->type == PTC_REQUEST_SET_HOLIDAY_POLICY ||
+            (request->type == PTC_REQUEST_SET_SCHEDULED_OVERRIDE &&
+             (before_active_rule.mode != ptc_rules_today_rule(&rules, now.day_index,
+                 ptc_weekday_from_day_index(now.day_index)).mode ||
+              before_active_rule.minutes != ptc_rules_today_rule(&rules, now.day_index,
+                 ptc_weekday_from_day_index(now.day_index)).minutes))) {
             active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
             err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode), target_from_day_rule(active_rule), active_rule.minutes);
             if (err != PTC_ERR_OK) {
@@ -4552,6 +5037,25 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
                     err = PTC_ERR_RECOVERY_FAILED;
                 }
                 return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
+            }
+        }
+        {
+            uint16_t activity_minutes = request->minutes;
+            if (request->type == PTC_REQUEST_SET_SCHEDULED_OVERRIDE) {
+                activity_minutes = request->scheduled_override.enabled
+                    ? request->scheduled_override.rule.minutes : 0u;
+            } else if (request->type == PTC_REQUEST_SET_AUTONOMY_POLICY) {
+                activity_minutes = request->autonomy_policy.daily_buffer_minutes;
+            }
+            if (!record_activity(sysmodule, request, now, activity_minutes, activity_minutes)) {
+                append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED,
+                    "activity_history");
+                if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule)) {
+                    write_disable_flag(sysmodule, "transaction_restore_failed\n");
+                    err = PTC_ERR_RECOVERY_FAILED;
+                } else err = PTC_ERR_STORAGE_WRITE_FAILED;
+                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                    err, now.day_index, caps);
             }
         }
     }
@@ -4630,6 +5134,12 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     case PTC_REQUEST_CLEAR_REDEMPTION_HISTORY:
         (void)process_clear_redemption_history(sysmodule, &request, &config, &caps, now);
         break;
+    case PTC_REQUEST_CLEAR_ACTIVITY_HISTORY:
+        (void)process_clear_activity_history(sysmodule, &request, &config, &caps, now);
+        break;
+    case PTC_REQUEST_CLAIM_DAILY_BUFFER:
+        (void)process_claim_daily_buffer(sysmodule, &request, &config, disable_flag, &caps, now);
+        break;
     case PTC_REQUEST_OFFLINE_CODE:
         (void)process_offline_code(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
@@ -4653,6 +5163,8 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     case PTC_REQUEST_RESTORE_TODAY_POLICY:
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
     case PTC_REQUEST_SET_HOLIDAY_POLICY:
+    case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
+    case PTC_REQUEST_SET_AUTONOMY_POLICY:
         (void)process_rule_request(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
 #ifdef PLAYWISE_DEVICE_LAB
@@ -5086,6 +5598,7 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     if (minute_changed || reload || storage_notified || disable_changed) {
 #ifndef PLAYWISE_DEVICE_LAB
         actions += ptc_sysmodule_enforce_tick(sysmodule);
+        actions += usage_summary_tick(sysmodule, now);
 #endif
         sysmodule->last_minute_day_index = now.day_index;
         sysmodule->last_minute_of_day = now.minute_of_day;

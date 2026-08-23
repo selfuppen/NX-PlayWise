@@ -34,6 +34,7 @@
 #define ISSUED_NONCES_PATH APP_ROOT "/grant-issued.json"
 #define LEDGER_PATH APP_ROOT "/ledger/used_nonces.jsonl"
 #define REDEMPTION_HISTORY_PATH APP_ROOT "/ledger/redemption-history.jsonl"
+#define ACTIVITY_HISTORY_PATH APP_ROOT "/activity/history.jsonl"
 #define RESULT_TEXT_SIZE 8192
 #define REQUEST_TIMEOUT_MS 30000
 #define INPUT_LOOP_SLEEP_NS 20000000LL
@@ -70,7 +71,8 @@ typedef enum {
     AUTH_RETRY_SHOW_QR,
     AUTH_RETRY_EXPORT_CONFIG,
     AUTH_RETRY_REVEAL_CREDENTIAL,
-    AUTH_RETRY_CLEAR_REDEMPTION_HISTORY
+    AUTH_RETRY_CLEAR_REDEMPTION_HISTORY,
+    AUTH_RETRY_CLEAR_ACTIVITY_HISTORY
 } AuthRetryAction;
 
 typedef struct {
@@ -131,6 +133,8 @@ static void show_pending_redemption(UiState *ui);
 static void show_grant_manager(UiState *ui, int selection);
 static void open_redemption_history(UiState *ui);
 static void request_clear_redemption_history(UiState *ui);
+static void open_activity_history(UiState *ui);
+static void request_clear_activity_history(UiState *ui);
 static void export_diagnostics(UiState *ui);
 static bool save_ui_preferences(UiState *ui);
 static bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference);
@@ -1206,6 +1210,10 @@ static void load_rule_drafts(UiState *ui)
     ui->model.draft_holiday_rule = rules.holiday_rule;
     ui->model.makeup_workday_rule = rules.makeup_workday_rule;
     ui->model.draft_makeup_workday_rule = rules.makeup_workday_rule;
+    ui->model.scheduled_override = rules.scheduled_override;
+    ui->model.draft_scheduled_override = rules.scheduled_override;
+    ui->model.autonomy_policy = rules.autonomy_policy;
+    ui->model.draft_autonomy_policy = rules.autonomy_policy;
     if (!ui->client.storage->vtable->read_text(ui->client.storage, RULES_PATH, text, sizeof(text))) {
         return;
     }
@@ -1244,6 +1252,24 @@ static void load_rule_drafts(UiState *ui)
     rules.makeup_workday_rule.mode = parse_rule_mode(rule_json_string(root, "makeup_workday_mode"));
     rules.makeup_workday_rule.minutes = clamp_rule_minutes(
         rule_json_int(root, "makeup_workday_minutes", rules.makeup_workday_rule.minutes));
+    rules.scheduled_override.enabled = cJSON_IsTrue(
+        cJSON_GetObjectItemCaseSensitive(root, "scheduled_override_enabled"));
+    rules.scheduled_override.start_day_index = (uint16_t)rule_json_int(
+        root, "scheduled_override_start_day_index", 0);
+    rules.scheduled_override.end_day_index = (uint16_t)rule_json_int(
+        root, "scheduled_override_end_day_index", 0);
+    rules.scheduled_override.rule.mode = parse_rule_mode(
+        rule_json_string(root, "scheduled_override_mode"));
+    rules.scheduled_override.rule.minutes = clamp_rule_minutes(rule_json_int(
+        root, "scheduled_override_minutes", rules.scheduled_override.rule.minutes));
+    if (!ptc_scheduled_override_is_valid(&rules.scheduled_override)) {
+        rules.scheduled_override.enabled = false;
+    }
+    rules.autonomy_policy.daily_buffer_minutes = (uint16_t)rule_json_int(
+        root, "daily_buffer_minutes", 0);
+    if (!ptc_autonomy_policy_is_valid(&rules.autonomy_policy)) {
+        rules.autonomy_policy.daily_buffer_minutes = 0;
+    }
     memcpy(ui->model.draft_week, rules.week, sizeof(rules.week));
     memcpy(ui->model.current_week, rules.week, sizeof(rules.week));
     ui->model.weekly_dirty = false;
@@ -1253,6 +1279,10 @@ static void load_rule_drafts(UiState *ui)
     ui->model.draft_holiday_rule = rules.holiday_rule;
     ui->model.makeup_workday_rule = rules.makeup_workday_rule;
     ui->model.draft_makeup_workday_rule = rules.makeup_workday_rule;
+    ui->model.scheduled_override = rules.scheduled_override;
+    ui->model.draft_scheduled_override = rules.scheduled_override;
+    ui->model.autonomy_policy = rules.autonomy_policy;
+    ui->model.draft_autonomy_policy = rules.autonomy_policy;
     ui->model.holiday_dirty = false;
     cJSON_Delete(root);
 }
@@ -1367,6 +1397,13 @@ static void poll_result(UiState *ui, bool force)
             snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                      cleared ? "加时码使用记录已清空；防重复兑换账本保持不变。"
                              : "清空加时码使用记录失败，原记录已保留。");
+        }
+        if (strcmp(ui->model.result_type, "clear_activity_history") == 0) {
+            bool cleared = strcmp(ui->model.result_status, "ok") == 0;
+            open_activity_history(ui);
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                cleared ? "家庭活动记录已清空；规则和加时码防重复账本保持不变。"
+                        : "清空家庭活动记录失败，原记录已保留。");
         }
         if (strcmp(ui->model.result_type, "preview_offline_code") == 0) {
             if (strcmp(ui->model.result_status, "ok") == 0) {
@@ -2131,6 +2168,72 @@ static void request_clear_redemption_history(UiState *ui)
     ui->model.confirm_hold_required = true;
 }
 
+static void submit_scheduled_override(UiState *ui)
+{
+    PtcCompanionStatus status;
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_set_scheduled_override(&ui->transport,
+        ui->active_request_id, time(NULL), &ui->model.draft_scheduled_override);
+    set_command_name(ui, "set_scheduled_override");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_scheduled_override", "正在保存日期计划...");
+    else set_message(ui, "日期计划提交失败", status);
+}
+
+static void submit_autonomy_policy(UiState *ui)
+{
+    PtcCompanionStatus status;
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_set_autonomy_policy(&ui->transport,
+        ui->active_request_id, time(NULL), &ui->model.draft_autonomy_policy);
+    set_command_name(ui, "set_autonomy_policy");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_autonomy_policy", "正在保存自主缓冲设置...");
+    else set_message(ui, "自主缓冲设置提交失败", status);
+}
+
+static bool load_activity_history(UiState *ui)
+{
+    char text[PTC_ACTIVITY_HISTORY_FILE_SIZE];
+    if (!ui || !ui->client.storage) return false;
+    if (!ui->client.storage->vtable->exists(ui->client.storage, ACTIVITY_HISTORY_PATH)) {
+        return ptc_ui_apply_activity_history_text(&ui->model, "");
+    }
+    if (!ui->client.storage->vtable->read_text(
+            ui->client.storage, ACTIVITY_HISTORY_PATH, text, sizeof(text))) {
+        ui->model.activity_history_available = false;
+        ui->model.activity_history_count = 0;
+        ui->model.activity_history_page = 0;
+        return false;
+    }
+    return ptc_ui_apply_activity_history_text(&ui->model, text);
+}
+
+static void open_activity_history(UiState *ui)
+{
+    (void)load_activity_history(ui);
+    ui->model.overlay = PTC_UI_OVERLAY_ACTIVITY_HISTORY;
+    ui->model.confirm_hold_required = false;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "家庭活动记录");
+    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+        "最多保留 200 条规则、加时、自主缓冲和保护事件；统计失败不会影响控制。");
+}
+
+static void request_clear_activity_history(UiState *ui)
+{
+    if (!ui) return;
+    if (ui->model.activity_history_available && ui->model.activity_history_count == 0) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "当前没有可清空的家庭活动记录。");
+        return;
+    }
+    ui->auth_retry_action = AUTH_RETRY_CLEAR_ACTIVITY_HISTORY;
+    if (!verify_sensitive_pin(ui, "清空全部家庭活动记录前，请再次输入本应用 PIN")) return;
+    open_confirm_overlay(ui, PTC_UI_OPERATION_CLEAR_ACTIVITY_HISTORY,
+        "清空全部家庭活动记录？",
+        "此操作不可撤销；加时码防重复兑换账本和控制规则保持不变。请长按确认。");
+    ui->model.confirm_hold_required = true;
+}
+
 static bool commit_credential(UiState *ui)
 {
     const char *path = ui->model.credential_kind == 1 ? CONFIG_PATH : CREDENTIALS_PATH;
@@ -2488,6 +2591,7 @@ static void dispatch_auth_retry(UiState *ui, AuthRetryAction action)
     case AUTH_RETRY_EXPORT_CONFIG: export_parent_import(ui); break;
     case AUTH_RETRY_REVEAL_CREDENTIAL: reveal_current_credential(ui); break;
     case AUTH_RETRY_CLEAR_REDEMPTION_HISTORY: request_clear_redemption_history(ui); break;
+    case AUTH_RETRY_CLEAR_ACTIVITY_HISTORY: request_clear_activity_history(ui); break;
     case AUTH_RETRY_NONE:
     default:
         break;
@@ -2847,6 +2951,28 @@ static void handle_parent_action(UiState *ui)
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单高级入口");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      "此功能只改变 hbmenu 启动方式，不提供防篡改保护。");
+        } else if (index == 1) {
+            ui->model.draft_scheduled_override = ui->model.scheduled_override;
+            if (!ui->model.draft_scheduled_override.enabled) {
+                ui->model.draft_scheduled_override.start_day_index = ui->model.day_index;
+                ui->model.draft_scheduled_override.end_day_index = ui->model.day_index;
+                ui->model.draft_scheduled_override.rule.mode = PTC_RULE_MODE_LIMIT;
+                ui->model.draft_scheduled_override.rule.minutes = 60;
+            }
+            ui->model.overlay = PTC_UI_OVERLAY_SCHEDULED;
+            ui->model.overlay_selection = 0;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "临时日期计划");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                "优先级：今日临时设置、日期计划、国家节假日、周计划。一次只保留一个区间。");
+        } else if (index == 2) {
+            ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
+            ui->model.overlay = PTC_UI_OVERLAY_AUTONOMY;
+            ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "今日自主缓冲");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                "孩子每天只能领取一次，仅限限时日；默认关闭。");
+        } else if (index == 3) {
+            open_activity_history(ui);
         }
         return;
     }
@@ -2954,6 +3080,9 @@ static void confirm_operation(UiState *ui)
         break;
     case PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY:
         submit_transport_empty(ui, "clear_redemption_history", "正在清空加时码使用记录...", "清空使用记录失败");
+        break;
+    case PTC_UI_OPERATION_CLEAR_ACTIVITY_HISTORY:
+        submit_transport_empty(ui, "clear_activity_history", "正在清空家庭活动记录...", "清空家庭活动记录失败");
         break;
     case PTC_UI_OPERATION_REDEEM_OFFLINE_CODE:
         ui->code_previous_after_available = ui->model.code_preview_after_available;
@@ -3235,6 +3364,81 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_SCHEDULED) {
+        PtcScheduledOverride *draft = &ui->model.draft_scheduled_override;
+        uint32_t duration = draft->end_day_index >= draft->start_day_index
+            ? (uint32_t)draft->end_day_index - draft->start_day_index + 1u : 1u;
+        int direction = (down & (HidNpadButton_Right | HidNpadButton_R | HidNpadButton_ZR)) ? 1 :
+            ((down & (HidNpadButton_Left | HidNpadButton_L | HidNpadButton_ZL)) ? -1 : 0);
+        int step = (down & (HidNpadButton_ZL | HidNpadButton_ZR)) ? 7 : 1;
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & HidNpadButton_Up) {
+            ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 3 : ui->model.overlay_selection - 1;
+        } else if (down & HidNpadButton_Down) {
+            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 4;
+        } else if ((down & HidNpadButton_X) ||
+                   ((down & HidNpadButton_A) && (ui->model.overlay_selection == 0 || ui->model.overlay_selection == 3))) {
+            if (ui->model.overlay_selection == 0) draft->enabled = !draft->enabled;
+            else if (ui->model.overlay_selection == 3) draft->rule.mode = ptc_ui_next_rule_mode(draft->rule.mode);
+        } else if (direction != 0 && ui->model.overlay_selection == 1) {
+            int start = (int)draft->start_day_index + direction * step;
+            if (start < (int)ui->model.day_index) start = ui->model.day_index;
+            if (start > 65535 - (int)duration + 1) start = 65535 - (int)duration + 1;
+            draft->start_day_index = (uint16_t)start;
+            draft->end_day_index = (uint16_t)(start + (int)duration - 1);
+        } else if (direction != 0 && ui->model.overlay_selection == 2) {
+            int next = (int)duration + direction * step;
+            if (next < 1) next = 1;
+            if (next > 366) next = 366;
+            if ((uint32_t)draft->start_day_index + (uint32_t)next - 1u > UINT16_MAX) {
+                next = (int)(UINT16_MAX - draft->start_day_index + 1u);
+            }
+            draft->end_day_index = (uint16_t)(draft->start_day_index + next - 1);
+        } else if (direction != 0 && ui->model.overlay_selection == 3 &&
+                   draft->rule.mode == PTC_RULE_MODE_LIMIT) {
+            int minute_step = (down & (HidNpadButton_ZL | HidNpadButton_ZR)) ? 15 : 5;
+            draft->rule.minutes = ptc_ui_adjust_minutes(draft->rule.minutes,
+                direction * minute_step, 1, 1440);
+        } else if (down & HidNpadButton_A) {
+            handle_overlay_input(ui, HidNpadButton_Right);
+        } else if (down & HidNpadButton_Plus) {
+            if (!ptc_scheduled_override_is_valid(draft)) {
+                snprintf(ui->model.message, sizeof(ui->model.message), "日期计划无效，请检查 1 到 366 天范围和额度。");
+            } else {
+                ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                submit_scheduled_override(ui);
+            }
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_AUTONOMY) {
+        static const uint16_t OPTIONS[] = {0, 5, 10, 15};
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & HidNpadButton_Left) {
+            ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 3 : ui->model.overlay_selection - 1;
+            ui->model.draft_autonomy_policy.daily_buffer_minutes = OPTIONS[ui->model.overlay_selection];
+        } else if (down & HidNpadButton_Right) {
+            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 4;
+            ui->model.draft_autonomy_policy.daily_buffer_minutes = OPTIONS[ui->model.overlay_selection];
+        } else if (down & HidNpadButton_A) {
+            ui->model.draft_autonomy_policy.daily_buffer_minutes = OPTIONS[ui->model.overlay_selection];
+        } else if (down & HidNpadButton_Plus) {
+            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            submit_autonomy_policy(ui);
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY) {
+        if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
+        else if (down & (HidNpadButton_L | HidNpadButton_Left))
+            ptc_ui_change_activity_history_page(&ui->model, -1);
+        else if (down & (HidNpadButton_R | HidNpadButton_Right))
+            ptc_ui_change_activity_history_page(&ui->model, 1);
+        else if (down & HidNpadButton_X) request_clear_activity_history(ui);
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY) {
         if (down & HidNpadButton_B) {
             ptc_ui_cancel_overlay(&ui->model);
@@ -3740,6 +3944,12 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_CHILD_REFRESH:
         submit_status(ui);
         break;
+    case PTC_UI_HIT_CHILD_BUFFER:
+        if (!ui->waiting && ui->model.daily_buffer_available) {
+            submit_transport_empty(ui, "claim_daily_buffer",
+                "正在领取今日自主缓冲...", "领取今日自主缓冲失败");
+        }
+        break;
     case PTC_UI_HIT_CHILD_PARENT:
         enter_parent_area(ui);
         break;
@@ -3850,7 +4060,8 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_CONFIRM:
-        if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY) {
+        if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY ||
+            ui->model.overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY) {
             handle_overlay_input(ui, HidNpadButton_X);
             break;
         }
@@ -3890,7 +4101,9 @@ static void handle_touch(UiState *ui, int x, int y)
                 ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR ||
                 ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL ||
                 ui->model.overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER ||
-                ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE
+                ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE ||
+                ui->model.overlay == PTC_UI_OVERLAY_SCHEDULED ||
+                ui->model.overlay == PTC_UI_OVERLAY_AUTONOMY
                     ? HidNpadButton_Plus : HidNpadButton_A);
         }
         break;
@@ -3909,6 +4122,14 @@ static void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_HISTORY_NEXT:
         handle_overlay_input(ui, HidNpadButton_Right);
+        break;
+    case PTC_UI_HIT_SCHEDULED_FIELD:
+        ui->model.overlay_selection = hit.index;
+        handle_overlay_input(ui, HidNpadButton_A);
+        break;
+    case PTC_UI_HIT_AUTONOMY_OPTION:
+        ui->model.overlay_selection = hit.index;
+        ui->model.draft_autonomy_policy.daily_buffer_minutes = (uint16_t)(hit.index * 5);
         break;
     case PTC_UI_HIT_MINUTES_INC:
         ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 5, ui->model.minimum_minutes, ui->model.maximum_minutes);
@@ -4372,6 +4593,17 @@ int main(int argc, char **argv)
                 }
             } else if (down & HidNpadButton_Y) {
                 submit_status(&ui);
+            } else if (down & HidNpadButton_X) {
+                if (ui.model.daily_buffer_available && !ui.waiting) {
+                    submit_transport_empty(&ui, "claim_daily_buffer",
+                        "正在领取今日自主缓冲...", "领取今日自主缓冲失败");
+                } else if (ui.model.daily_buffer_claimed) {
+                    snprintf(ui.model.message, sizeof(ui.model.message),
+                        "今日已使用缓冲，明天可以再次领取。");
+                } else {
+                    snprintf(ui.model.message, sizeof(ui.model.message),
+                        "今天没有可领取的自主缓冲。");
+                }
             }
         } else if (ui.model.view == PTC_UI_SETUP) {
             if (down & HidNpadButton_Y) {

@@ -99,6 +99,10 @@ static bool mem_write_text_atomic(PtcStorage *storage, const char *path, const c
         (mem->fail_write_path_contains && strstr(path, mem->fail_write_path_contains))) {
         return false;
     }
+    if (mem->fail_write_path_contains_once && strstr(path, mem->fail_write_path_contains_once)) {
+        mem->fail_write_path_contains_once = NULL;
+        return false;
+    }
     idx = find_file(mem, path);
     if (idx < 0) {
         idx = allocate_file(mem, path);
@@ -129,6 +133,10 @@ static bool mem_append_line(PtcStorage *storage, const char *path, const char *l
     char *text;
     if (mem->fail_writes || mem->fail_appends ||
         (mem->fail_write_path_contains && strstr(path, mem->fail_write_path_contains))) {
+        return false;
+    }
+    if (mem->fail_write_path_contains_once && strstr(path, mem->fail_write_path_contains_once)) {
+        mem->fail_write_path_contains_once = NULL;
         return false;
     }
     idx = find_file(mem, path);

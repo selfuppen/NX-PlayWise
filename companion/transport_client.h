@@ -66,5 +66,9 @@ PtcCompanionStatus ptc_companion_transport_submit_empty(PtcCompanionTransportCli
 PtcCompanionStatus ptc_companion_transport_submit_set_weekly_template(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at, const PtcDayRule week[7]);
 PtcCompanionStatus ptc_companion_transport_submit_set_holiday_policy(PtcCompanionTransportClient *client,
     const char *request_id, int64_t created_at, bool enabled, PtcDayRule holiday_rule, PtcDayRule makeup_workday_rule);
+PtcCompanionStatus ptc_companion_transport_submit_set_scheduled_override(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcScheduledOverride *scheduled_override);
+PtcCompanionStatus ptc_companion_transport_submit_set_autonomy_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcAutonomyPolicy *policy);
 
 #endif

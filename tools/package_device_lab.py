@@ -58,6 +58,12 @@ def create_package(out: Path, manifest_path: Path, sysmodule_exefs: Path, nro: P
             "today_override_day_index": 0,
             "today_override_mode": "unlimited",
             "today_override_minutes": 0,
+            "scheduled_override_enabled": False,
+            "scheduled_override_start_day_index": 0,
+            "scheduled_override_end_day_index": 0,
+            "scheduled_override_mode": "limit",
+            "scheduled_override_minutes": 60,
+            "daily_buffer_minutes": 0,
         },
     )
     write_json(

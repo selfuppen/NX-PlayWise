@@ -152,6 +152,9 @@ static const UiAction SETTINGS_ACTIONS[] = {
 
 static const UiAction ADVANCED_ACTIONS[] = {
     {"自制程序菜单高级入口", "改变 hbmenu 启动方式，不提供防篡改保护", COLOR(194, 61, 61)},
+    {"临时日期计划", "考试周、假期或旅行使用，最多 366 天", COLOR(28, 118, 188)},
+    {"今日自主缓冲", "孩子每天可自主领取一次小额缓冲", COLOR(25, 132, 95)},
+    {"家庭活动记录", "规则、加时和保护事件，最多 200 条", COLOR(91, 100, 116)},
 };
 
 static const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -800,6 +803,9 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char parent_hint[128];
     char fitted_hint[128];
     char rule_line[160];
+    char tomorrow_line[160];
+    char buffer_line[96];
+    char trend_line[96];
     const char *rule_label = "周计划";
     const char *mode = model->disable_flag_present ? "控制已停用" :
         (strcmp(model->setup_phase, "active") == 0 ? "正常运行" :
@@ -811,7 +817,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     } else {
         snprintf(played, sizeof(played), "暂不可用");
     }
-    draw_header(pixels, stride, "自律小达人  |  加时奖励", "遵守约定、合理安排时间");
+    draw_header(pixels, stride, "今天的约定  |  加时与自主缓冲", "合理安排时间，完成今天的约定");
     draw_disable_banner(pixels, stride, model);
     draw_status_tile(pixels, stride, (UiRect){54, 118, 278, 92}, "今日规则", today, COLOR(216, 49, 54));
     draw_status_tile(pixels, stride, (UiRect){350, 118, 278, 92}, "额度剩余", remaining, COLOR(25, 132, 95));
@@ -820,6 +826,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
                            timer, mode,
                            model->disable_flag_present ? COLOR(194, 61, 61) : COLOR(28, 118, 188));
     if (strcmp(model->rule_source, "today_override") == 0) rule_label = "今日临时设置";
+    else if (strcmp(model->rule_source, "scheduled_override") == 0) rule_label = "日期计划";
     else if (strcmp(model->rule_source, "statutory_holiday") == 0) rule_label = "国家法定休假日";
     else if (strcmp(model->rule_source, "makeup_workday") == 0) rule_label = "国家调休工作日";
     snprintf(rule_line, sizeof(rule_line), "当前按%s执行%s", rule_label,
@@ -829,9 +836,27 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     }
     draw_text_center(pixels, stride, (UiRect){54, 212, 1172, 22}, rule_line, 17,
                      model->calendar_update_warning ? COLOR(194, 61, 61) : COLOR(77, 86, 99));
+    if (model->forecast_available) {
+        const PtcResultForecastDay *tomorrow = &model->forecast[1];
+        const char *source = "周计划";
+        if (tomorrow->rule_source && strcmp(tomorrow->rule_source, "scheduled_override") == 0) source = "日期计划";
+        else if (tomorrow->rule_source && strcmp(tomorrow->rule_source, "statutory_holiday") == 0) source = "国家法定休假日";
+        else if (tomorrow->rule_source && strcmp(tomorrow->rule_source, "makeup_workday") == 0) source = "国家调休工作日";
+        snprintf(tomorrow_line, sizeof(tomorrow_line), "明天：%s  |  %s",
+            tomorrow->mode == PTC_RULE_MODE_UNLIMITED ? "不限时" : "限时",
+            tomorrow->mode == PTC_RULE_MODE_UNLIMITED ? source : "");
+        if (tomorrow->mode != PTC_RULE_MODE_UNLIMITED) {
+            snprintf(tomorrow_line, sizeof(tomorrow_line), "明天：限时 %u 分钟  |  %s",
+                (unsigned int)tomorrow->minutes, source);
+        }
+    } else {
+        snprintf(tomorrow_line, sizeof(tomorrow_line), "明天规则：状态刷新后显示");
+    }
+    draw_text_center(pixels, stride, (UiRect){54, 232, 1172, 20}, tomorrow_line, 15,
+        COLOR(91, 100, 114));
 
-    fill_round_rect(pixels, stride, (UiRect){54, 238, 760, 246}, 8, COLOR(255, 255, 255));
-    draw_rect_outline(pixels, stride, (UiRect){54, 238, 760, 246}, 1, COLOR(219, 225, 233));
+    fill_round_rect(pixels, stride, (UiRect){54, 256, 760, 256}, 8, COLOR(255, 255, 255));
+    draw_rect_outline(pixels, stride, (UiRect){54, 256, 760, 256}, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, 86, 275, "加时码", 18, COLOR(28, 118, 188));
     fill_round_rect(pixels, stride, to_uirect(ptc_ui_child_submit_rect()), 8,
                     model->disable_flag_present ? COLOR(244, 246, 249) : COLOR(244, 249, 255));
@@ -840,22 +865,45 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_text_center(pixels, stride, to_uirect(ptc_ui_child_submit_rect()),
                      model->disable_flag_present ? "紧急停用中" : "输入加时码", 34,
                      model->disable_flag_present ? COLOR(91, 100, 116) : COLOR(28, 118, 188));
-    draw_text(pixels, stride, 86, 416,
-              model->disable_flag_present ? "加时码兑换暂不可用" :
-              "加时之前，记得向窗外远眺至少 5 分钟，让眼睛放松一下吧！",
-              18, COLOR(85, 94, 107));
-    draw_text(pixels, stride, 86, 455,
-              model->disable_flag_present ? "" : "按 A 或点击输入  |  仅支持 8 位数字码",
-              17, COLOR(103, 111, 124));
+    if (model->daily_buffer_available) {
+        snprintf(buffer_line, sizeof(buffer_line), "X  领取今日自主缓冲  +%u 分钟",
+            (unsigned int)model->daily_buffer_minutes);
+    } else if (model->daily_buffer_claimed) {
+        snprintf(buffer_line, sizeof(buffer_line), "今日已使用缓冲");
+    } else if (model->daily_buffer_minutes == 0) {
+        snprintf(buffer_line, sizeof(buffer_line), "今日自主缓冲未开启");
+    } else {
+        snprintf(buffer_line, sizeof(buffer_line), "自主缓冲仅可在限时日领取");
+    }
+    fill_round_rect(pixels, stride, to_uirect(ptc_ui_child_buffer_rect()), 7,
+        model->daily_buffer_available ? COLOR(237, 248, 242) : COLOR(244, 246, 249));
+    draw_rect_outline(pixels, stride, to_uirect(ptc_ui_child_buffer_rect()), 1,
+        model->daily_buffer_available ? COLOR(25, 132, 95) : COLOR(203, 211, 222));
+    draw_text_center(pixels, stride, to_uirect(ptc_ui_child_buffer_rect()), buffer_line, 18,
+        model->daily_buffer_available ? COLOR(25, 132, 95) : COLOR(91, 100, 116));
+    draw_text(pixels, stride, 86, 480,
+              model->disable_flag_present ? "加时码兑换暂不可用" : "按 A 输入 8 位加时码  |  每日缓冲只能领取一次",
+              15, COLOR(103, 111, 124));
 
-    fill_round_rect(pixels, stride, (UiRect){836, 238, 390, 274}, 8, COLOR(250, 251, 253));
-    draw_rect_outline(pixels, stride, (UiRect){836, 238, 390, 274}, 1, COLOR(219, 225, 233));
+    fill_round_rect(pixels, stride, (UiRect){836, 256, 390, 256}, 8, COLOR(250, 251, 253));
+    draw_rect_outline(pixels, stride, (UiRect){836, 256, 390, 256}, 1, COLOR(219, 225, 233));
     draw_text(pixels, stride, 866, 282, "游戏时间统计", 24, COLOR(28, 34, 43));
-    draw_text(pixels, stride, 866, 329, "游戏明细暂不可用", 22, COLOR(85, 94, 107));
-    draw_text(pixels, stride, 866, 362, "前 3 名游戏将在数据可用后显示", 17, COLOR(103, 111, 124));
-    fill_round_rect(pixels, stride, (UiRect){866, 384, 330, 50}, 7, COLOR(244, 248, 253));
-    draw_text(pixels, stride, 884, 416, "今日额度已耗（估算）", 17, COLOR(103, 111, 124));
-    draw_text(pixels, stride, 1034, 416, played, 20, COLOR(28, 118, 188));
+    draw_text(pixels, stride, 866, 329, "游戏明细暂不可用", 20, COLOR(85, 94, 107));
+    if (model->usage_summary_available) {
+        snprintf(trend_line, sizeof(trend_line), "7 天 %u 分钟 (%u 天可靠)",
+            (unsigned int)model->usage_consumed_minutes_7, (unsigned int)model->usage_known_days_7);
+    } else {
+        snprintf(trend_line, sizeof(trend_line), "7/30 天额度消耗估算暂不可用");
+    }
+    draw_text(pixels, stride, 866, 360, trend_line, 16, COLOR(103, 111, 124));
+    if (model->usage_summary_available) {
+        snprintf(trend_line, sizeof(trend_line), "30 天 %u 分钟 (%u 天可靠)",
+            (unsigned int)model->usage_consumed_minutes_30, (unsigned int)model->usage_known_days_30);
+        draw_text(pixels, stride, 866, 382, trend_line, 16, COLOR(103, 111, 124));
+    }
+    fill_round_rect(pixels, stride, (UiRect){866, 400, 330, 42}, 7, COLOR(244, 248, 253));
+    draw_text(pixels, stride, 884, 427, "今日额度已耗（估算）", 15, COLOR(103, 111, 124));
+    draw_text(pixels, stride, 1050, 427, played, 17, COLOR(28, 118, 188));
     draw_dialog_button(pixels, stride, ptc_ui_child_refresh_rect(),
                        model->waiting ? "正在刷新状态..." : "Y  立即刷新状态",
                        model->waiting ? COLOR(215, 139, 25) : COLOR(28, 118, 188),
@@ -1842,6 +1890,42 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_notice(pixels, stride, model, 522, 128);
 }
 
+static const char *short_rule_source(const char *source)
+{
+    if (source && strcmp(source, "today_override") == 0) return "今日";
+    if (source && strcmp(source, "scheduled_override") == 0) return "日期";
+    if (source && strcmp(source, "statutory_holiday") == 0) return "休假";
+    if (source && strcmp(source, "makeup_workday") == 0) return "调休";
+    return "周计划";
+}
+
+static void draw_advanced_preview(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect panel = {842, 246, 384, 204};
+    int index;
+    char line[96];
+    fill_round_rect(pixels, stride, panel, 8, COLOR(250, 251, 253));
+    draw_rect_outline(pixels, stride, panel, 1, COLOR(219, 225, 233));
+    draw_text(pixels, stride, panel.x + 20, panel.y + 29, "未来 7 天规则", 19, COLOR(28, 34, 43));
+    if (!model->forecast_available) {
+        draw_text(pixels, stride, panel.x + 20, panel.y + 68, "刷新状态后显示", 16, COLOR(103, 111, 124));
+        return;
+    }
+    for (index = 0; index < (int)PTC_RESULT_FORECAST_DAYS; ++index) {
+        const PtcResultForecastDay *day = &model->forecast[index];
+        if (day->mode == PTC_RULE_MODE_UNLIMITED) {
+            snprintf(line, sizeof(line), "%s D+%d  不限时  %s",
+                index == 0 ? "今天" : "", index, short_rule_source(day->rule_source));
+        } else {
+            snprintf(line, sizeof(line), "%s D+%d  %u 分钟  %s",
+                index == 0 ? "今天" : "", index, (unsigned int)day->minutes,
+                short_rule_source(day->rule_source));
+        }
+        draw_text(pixels, stride, panel.x + 20, panel.y + 58 + index * 19,
+            line, 13, index == 0 ? COLOR(28, 118, 188) : COLOR(77, 86, 99));
+    }
+}
+
 static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const UiAction *actions;
@@ -1886,8 +1970,8 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
         }
         for (index = 0; index < action_count; ++index) {
             UiRect card = to_uirect(model->parent_page == PTC_UI_PARENT_SETTINGS
-                ? (model->settings_page == PTC_UI_SETTINGS_ADVANCED && index == 0
-                    ? ptc_ui_advanced_card_rect()
+                ? (model->settings_page == PTC_UI_SETTINGS_ADVANCED
+                    ? ptc_ui_advanced_feature_rect(index)
                     : (model->settings_page == PTC_UI_SETTINGS_SUPPORT
                         ? ptc_ui_support_card_rect(index) : ptc_ui_parent_card_rect(index)))
                 : ptc_ui_parent_card_rect(index));
@@ -1922,6 +2006,24 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 }
                 /* Use the card's single subtitle row; a second row at the same y overlaps it. */
                 dynamic_action.subtitle = detail;
+                action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
+                       model->settings_page == PTC_UI_SETTINGS_ADVANCED && index == 1) {
+                dynamic_action = *action;
+                dynamic_action.subtitle = model->scheduled_override.enabled
+                    ? "当前已启用，打开可调整日期、天数和额度" : "当前关闭";
+                action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
+                       model->settings_page == PTC_UI_SETTINGS_ADVANCED && index == 2) {
+                static char autonomy_detail[64];
+                dynamic_action = *action;
+                if (model->autonomy_policy.daily_buffer_minutes > 0u) {
+                    snprintf(autonomy_detail, sizeof(autonomy_detail), "当前每天 %u 分钟",
+                        (unsigned int)model->autonomy_policy.daily_buffer_minutes);
+                } else {
+                    snprintf(autonomy_detail, sizeof(autonomy_detail), "当前关闭");
+                }
+                dynamic_action.subtitle = autonomy_detail;
                 action = &dynamic_action;
             }
             if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT && index == 0) {
@@ -1972,6 +2074,8 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
         draw_grant_help(pixels, stride, model);
     } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
         draw_safety_status(pixels, stride, model);
+    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED) {
+        draw_advanced_preview(pixels, stride, model);
     }
     if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT &&
         model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
@@ -2946,6 +3050,136 @@ static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, c
                        COLOR(255, 235, 238), COLOR(194, 61, 61), false);
 }
 
+static const char *activity_label(const char *action)
+{
+    if (strcmp(action, "today_limit") == 0) return "修改今日总额度";
+    if (strcmp(action, "today_add") == 0) return "家长临时加时";
+    if (strcmp(action, "today_unlimited") == 0) return "今日改为不限时";
+    if (strcmp(action, "today_restore") == 0) return "恢复今日计划";
+    if (strcmp(action, "weekly_update") == 0) return "修改周计划";
+    if (strcmp(action, "holiday_update") == 0) return "修改节假日规则";
+    if (strcmp(action, "scheduled_update") == 0) return "修改日期计划";
+    if (strcmp(action, "autonomy_update") == 0) return "修改自主缓冲";
+    if (strcmp(action, "offline_grant") == 0) return "兑换加时码";
+    if (strcmp(action, "daily_buffer") == 0) return "领取自主缓冲";
+    if (strcmp(action, "protection") == 0) return "保护事件";
+    return "活动记录";
+}
+
+static void draw_activity_history_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    int pages = ptc_ui_activity_history_page_count(model);
+    int first = model->activity_history_page * 8;
+    int visible = model->activity_history_count - first;
+    int row;
+    char line[160];
+    if (visible > 8) visible = 8;
+    if (visible < 0) visible = 0;
+    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
+    snprintf(line, sizeof(line), "最新优先  |  第 %d/%d 页  |  共 %d 条  |  不含 PIN、密钥、完整代码或 nonce",
+        model->activity_history_page + 1, pages, model->activity_history_count);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 104, line, 15, COLOR(91, 100, 116));
+    if (!model->activity_history_available) {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
+            "家庭活动记录暂不可用；控制功能不会因此中断。", 19, COLOR(194, 61, 61));
+    } else if (model->activity_history_count == 0) {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
+            "暂无家庭活动记录。", 19, COLOR(91, 100, 116));
+    } else {
+        for (row = 0; row < visible; ++row) {
+            int source = model->activity_history_count - 1 - first - row;
+            const PtcActivityHistoryRecord *record = &model->activity_history[source];
+            UiRect item = {dialog.x + 34, dialog.y + 130 + row * 45, dialog.width - 68, 38};
+            char time_text[48];
+            format_event_time(record->occurred_at, true, time_text, sizeof(time_text));
+            snprintf(line, sizeof(line), "%s  |  %s  |  计划 %u 分钟，实际 %u 分钟",
+                time_text, activity_label(record->action), (unsigned int)record->minutes,
+                (unsigned int)record->effective_minutes);
+            fill_round_rect(pixels, stride, item, 6, COLOR(249, 250, 252));
+            draw_text(pixels, stride, item.x + 14, item.y + 24, line, 14,
+                strcmp(record->action, "protection") == 0 ? COLOR(194, 61, 61) : COLOR(45, 52, 62));
+        }
+    }
+    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_prev_rect(), "L / 左  上一页",
+        COLOR(244, 246, 249), COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_next_rect(), "R / 右  下一页",
+        COLOR(244, 246, 249), COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
+        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "X  清空全部",
+        COLOR(255, 235, 238), COLOR(194, 61, 61), false);
+}
+
+static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    int index;
+    uint32_t duration = model->draft_scheduled_override.end_day_index >= model->draft_scheduled_override.start_day_index
+        ? (uint32_t)model->draft_scheduled_override.end_day_index - model->draft_scheduled_override.start_day_index + 1u : 1u;
+    uint16_t start_year = 0;
+    uint8_t start_month = 0;
+    uint8_t start_day = 0;
+    char values[4][128];
+    draw_dialog_shell(pixels, stride, model, &dialog, 960, 560);
+    snprintf(values[0], sizeof(values[0]), "状态：%s", model->draft_scheduled_override.enabled ? "启用" : "关闭");
+    if (ptc_date_from_day_index(model->draft_scheduled_override.start_day_index,
+            &start_year, &start_month, &start_day)) {
+        snprintf(values[1], sizeof(values[1]), "开始：%04u-%02u-%02u  (今天%+d天)",
+            (unsigned int)start_year, (unsigned int)start_month, (unsigned int)start_day,
+            (int)model->draft_scheduled_override.start_day_index - (int)model->day_index);
+    } else {
+        snprintf(values[1], sizeof(values[1]), "开始日期索引：%u",
+            (unsigned int)model->draft_scheduled_override.start_day_index);
+    }
+    snprintf(values[2], sizeof(values[2]), "持续：%u 天  (允许 1 到 366 天)", (unsigned int)duration);
+    if (model->draft_scheduled_override.rule.mode == PTC_RULE_MODE_UNLIMITED) {
+        snprintf(values[3], sizeof(values[3]), "规则：不限时");
+    } else {
+        snprintf(values[3], sizeof(values[3]), "规则：限时 %u 分钟",
+            (unsigned int)model->draft_scheduled_override.rule.minutes);
+    }
+    for (index = 0; index < 4; ++index) {
+        UiRect row = to_uirect(ptc_ui_scheduled_field_rect(index));
+        fill_round_rect(pixels, stride, row, 7,
+            model->overlay_selection == index ? COLOR(230, 242, 255) : COLOR(249, 250, 252));
+        draw_rect_outline(pixels, stride, row, model->overlay_selection == index ? 2 : 1,
+            model->overlay_selection == index ? COLOR(28, 118, 188) : COLOR(211, 218, 228));
+        draw_text(pixels, stride, row.x + 18, row.y + 36, values[index], 18, COLOR(45, 52, 62));
+    }
+    draw_text(pixels, stride, dialog.x + 48, dialog.y + 410,
+        "上下选择  |  左右调整  |  X 切换启用或规则模式  |  ZL/ZR 大步调整",
+        15, COLOR(91, 100, 116));
+    draw_overlay_actions(pixels, stride, model, "+  保存日期计划");
+}
+
+static void draw_autonomy_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    static const uint16_t OPTIONS[] = {0, 5, 10, 15};
+    int index;
+    char label[48];
+    draw_dialog_shell(pixels, stride, model, &dialog, 760, 420);
+    for (index = 0; index < 4; ++index) {
+        UiRect option = to_uirect(ptc_ui_autonomy_option_rect(index));
+        bool selected = model->draft_autonomy_policy.daily_buffer_minutes == OPTIONS[index];
+        if (OPTIONS[index] > 0u) {
+            snprintf(label, sizeof(label), "%u 分钟", (unsigned int)OPTIONS[index]);
+        } else {
+            snprintf(label, sizeof(label), "关闭");
+        }
+        fill_round_rect(pixels, stride, option, 7, selected ? COLOR(237, 248, 242) : COLOR(249, 250, 252));
+        draw_rect_outline(pixels, stride, option, selected ? 2 : 1,
+            selected ? COLOR(25, 132, 95) : COLOR(211, 218, 228));
+        draw_text_center(pixels, stride, option, label, 21,
+            selected ? COLOR(25, 132, 95) : COLOR(66, 74, 86));
+    }
+    draw_text(pixels, stride, dialog.x + 48, dialog.y + 284,
+        "孩子每天仅可领取一次，只在限时日可用；失败不会消耗领取资格。",
+        16, COLOR(91, 100, 116));
+    draw_overlay_actions(pixels, stride, model, "+  保存缓冲设置");
+}
+
 static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
@@ -3434,6 +3668,15 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         break;
     case PTC_UI_OVERLAY_REDEMPTION_HISTORY:
         draw_redemption_history_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_ACTIVITY_HISTORY:
+        draw_activity_history_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_SCHEDULED:
+        draw_scheduled_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_AUTONOMY:
+        draw_autonomy_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
         draw_shortcut_manager_overlay(pixels, stride, model);

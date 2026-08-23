@@ -15,5 +15,9 @@ int ptc_companion_empty_payload_request_json(char *out, size_t out_size, const c
 int ptc_companion_set_weekly_template_request_json(char *out, size_t out_size, const char *request_id, int64_t created_at, const PtcDayRule week[7]);
 int ptc_companion_set_holiday_policy_request_json(char *out, size_t out_size, const char *request_id,
     int64_t created_at, bool enabled, PtcDayRule holiday_rule, PtcDayRule makeup_workday_rule);
+int ptc_companion_set_scheduled_override_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, const PtcScheduledOverride *scheduled_override);
+int ptc_companion_set_autonomy_policy_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, const PtcAutonomyPolicy *policy);
 
 #endif

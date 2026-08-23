@@ -311,6 +311,18 @@ static const char *request_success_message(const char *type)
     if (strcmp(type, "clear_redemption_history") == 0) {
         return "加时码使用记录已全部清空。";
     }
+    if (strcmp(type, "claim_daily_buffer") == 0) {
+        return "今日自主缓冲已领取，完成今天的约定后记得休息。";
+    }
+    if (strcmp(type, "set_scheduled_override") == 0) {
+        return "日期计划已保存，未来规则预览已更新。";
+    }
+    if (strcmp(type, "set_autonomy_policy") == 0) {
+        return "今日自主缓冲设置已保存。";
+    }
+    if (strcmp(type, "clear_activity_history") == 0) {
+        return "家庭活动记录已清空。";
+    }
     if (strcmp(type, "complete_setup") == 0) {
         return "首次设置已完成，已保留当前额度并接管控制。";
     }
@@ -450,6 +462,37 @@ bool ptc_ui_apply_redemption_history_text(PtcUiModel *model, const char *text)
     return true;
 }
 
+bool ptc_ui_apply_activity_history_text(PtcUiModel *model, const char *text)
+{
+    const char *cursor;
+    if (!model || !text || strlen(text) >= PTC_ACTIVITY_HISTORY_FILE_SIZE) return false;
+    model->activity_history_available = false;
+    model->activity_history_count = 0;
+    model->activity_history_page = 0;
+    cursor = text;
+    while (*cursor) {
+        const char *newline = strchr(cursor, '\n');
+        size_t length = newline ? (size_t)(newline - cursor) : strlen(cursor);
+        char line[PTC_ACTIVITY_HISTORY_LINE_SIZE];
+        PtcActivityHistoryRecord parsed;
+        if (length == 0) { cursor = newline ? newline + 1 : cursor + length; continue; }
+        if (length >= sizeof(line)) return false;
+        memcpy(line, cursor, length);
+        line[length] = '\0';
+        if (!ptc_activity_history_parse_line(line, &parsed)) return false;
+        if (model->activity_history_count == (int)PTC_ACTIVITY_HISTORY_MAX_RECORDS) {
+            memmove(model->activity_history, model->activity_history + 1,
+                (PTC_ACTIVITY_HISTORY_MAX_RECORDS - 1u) * sizeof(model->activity_history[0]));
+            model->activity_history_count = (int)PTC_ACTIVITY_HISTORY_MAX_RECORDS - 1;
+        }
+        model->activity_history[model->activity_history_count++] = parsed;
+        if (!newline) break;
+        cursor = newline + 1;
+    }
+    model->activity_history_available = true;
+    return true;
+}
+
 int ptc_ui_redemption_history_page_count(const PtcUiModel *model)
 {
     if (!model || model->redemption_history_count <= 0) return 1;
@@ -463,6 +506,21 @@ void ptc_ui_change_redemption_history_page(PtcUiModel *model, int direction)
     pages = ptc_ui_redemption_history_page_count(model);
     if (direction < 0 && model->redemption_history_page > 0) --model->redemption_history_page;
     else if (direction > 0 && model->redemption_history_page + 1 < pages) ++model->redemption_history_page;
+}
+
+int ptc_ui_activity_history_page_count(const PtcUiModel *model)
+{
+    if (!model || model->activity_history_count <= 0) return 1;
+    return (model->activity_history_count + 7) / 8;
+}
+
+void ptc_ui_change_activity_history_page(PtcUiModel *model, int direction)
+{
+    int pages;
+    if (!model || direction == 0) return;
+    pages = ptc_ui_activity_history_page_count(model);
+    if (direction < 0 && model->activity_history_page > 0) --model->activity_history_page;
+    else if (direction > 0 && model->activity_history_page + 1 < pages) ++model->activity_history_page;
 }
 
 const char *ptc_ui_settings_status_label(const PtcUiModel *model)
@@ -522,7 +580,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     count = model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED
-        ? 1 : ptc_ui_parent_action_count(model->parent_page);
+        ? 4 : ptc_ui_parent_action_count(model->parent_page);
     if (count <= 0) {
         model->selected_index = 0;
         return;
@@ -1426,6 +1484,50 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->calendar_covered = summary.calendar_covered;
         model->calendar_update_warning = summary.calendar_update_warning;
         snprintf(model->rule_source, sizeof(model->rule_source), "%s", summary.rule_source);
+        {
+            const cJSON *forecast = cJSON_GetObjectItemCaseSensitive(state, "forecast");
+            model->forecast_available = cJSON_IsArray(forecast) &&
+                cJSON_GetArraySize(forecast) == (int)PTC_RESULT_FORECAST_DAYS;
+            if (model->forecast_available) {
+                int forecast_index;
+                for (forecast_index = 0; forecast_index < (int)PTC_RESULT_FORECAST_DAYS; ++forecast_index) {
+                    const cJSON *item = cJSON_GetArrayItem(forecast, forecast_index);
+                    model->forecast[forecast_index].day_index = (uint16_t)json_int(item, "day_index", 0);
+                    model->forecast[forecast_index].mode = json_int(item, "mode", 1);
+                    model->forecast[forecast_index].minutes = (uint16_t)json_int(item, "minutes", 0);
+                    snprintf(model->forecast_rule_sources[forecast_index],
+                        sizeof(model->forecast_rule_sources[forecast_index]), "%s",
+                        json_string(item, "rule_source"));
+                    model->forecast[forecast_index].rule_source = model->forecast_rule_sources[forecast_index];
+                    model->forecast[forecast_index].calendar_covered =
+                        json_bool(item, "calendar_covered", false);
+                }
+            }
+        }
+        {
+            const cJSON *autonomy = cJSON_GetObjectItemCaseSensitive(state, "autonomy");
+            model->daily_buffer_minutes = cJSON_IsObject(autonomy)
+                ? (uint16_t)json_int(autonomy, "daily_buffer_minutes", 0) : 0;
+            model->daily_buffer_claimed = cJSON_IsObject(autonomy) &&
+                json_bool(autonomy, "claimed_today", false);
+            model->daily_buffer_available = cJSON_IsObject(autonomy) &&
+                json_bool(autonomy, "available", false);
+            snprintf(model->daily_buffer_reason, sizeof(model->daily_buffer_reason), "%s",
+                cJSON_IsObject(autonomy) ? json_string(autonomy, "reason") : "unavailable");
+        }
+        {
+            const cJSON *usage = cJSON_GetObjectItemCaseSensitive(state, "usage_summary");
+            model->usage_summary_available = cJSON_IsObject(usage) &&
+                json_bool(usage, "available", false);
+            model->usage_known_days_7 = cJSON_IsObject(usage)
+                ? (uint16_t)json_int(usage, "known_days_7", 0) : 0;
+            model->usage_consumed_minutes_7 = cJSON_IsObject(usage)
+                ? (uint32_t)json_int64(usage, "consumed_minutes_7", 0) : 0;
+            model->usage_known_days_30 = cJSON_IsObject(usage)
+                ? (uint16_t)json_int(usage, "known_days_30", 0) : 0;
+            model->usage_consumed_minutes_30 = cJSON_IsObject(usage)
+                ? (uint32_t)json_int64(usage, "consumed_minutes_30", 0) : 0;
+        }
     }
     if (strcmp(status, "ok") == 0 && type && strcmp(type, "preview_offline_code") == 0 &&
         summary.preview_available) {
@@ -1576,6 +1678,12 @@ PtcUiRect ptc_ui_child_refresh_rect(void)
     return rect;
 }
 
+PtcUiRect ptc_ui_child_buffer_rect(void)
+{
+    PtcUiRect rect = {86, 394, 696, 54};
+    return rect;
+}
+
 PtcUiRect ptc_ui_child_footer_rect(int index)
 {
     static const int widths[] = {250, 500, 180};
@@ -1706,6 +1814,14 @@ PtcUiRect ptc_ui_advanced_card_rect(void)
     return (PtcUiRect){54, 246, 365, 94};
 }
 
+PtcUiRect ptc_ui_advanced_feature_rect(int index)
+{
+    int column = index % 2;
+    int row = index / 2;
+    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){54 + column * 385, 246 + row * 110, 365, 94};
+}
+
 PtcUiRect ptc_ui_support_hierarchy_rect(void)
 {
     return (PtcUiRect){54, 172, 760, 56};
@@ -1823,6 +1939,18 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 1120;
         *height = 650;
         break;
+    case PTC_UI_OVERLAY_ACTIVITY_HISTORY:
+        *width = 1120;
+        *height = 650;
+        break;
+    case PTC_UI_OVERLAY_SCHEDULED:
+        *width = 960;
+        *height = 560;
+        break;
+    case PTC_UI_OVERLAY_AUTONOMY:
+        *width = 760;
+        *height = 420;
+        break;
     case PTC_UI_OVERLAY_QR:
         *width = 1120;
         *height = 650;
@@ -1915,6 +2043,20 @@ PtcUiRect ptc_ui_redemption_history_next_rect(void)
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_REDEMPTION_HISTORY);
     return (PtcUiRect){dialog.x + 200, dialog.y + dialog.h - PTC_UI_DIALOG_BTN_H - 24,
         160, PTC_UI_DIALOG_BTN_H};
+}
+
+PtcUiRect ptc_ui_scheduled_field_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_SCHEDULED);
+    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){dialog.x + 48, dialog.y + 104 + index * 72, dialog.w - 96, 58};
+}
+
+PtcUiRect ptc_ui_autonomy_option_rect(int index)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_AUTONOMY);
+    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){dialog.x + 48 + index * 164, dialog.y + 166, 148, 92};
 }
 
 PtcUiRect ptc_ui_minutes_value_rect(void)
@@ -2483,11 +2625,26 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     }
     switch (model->overlay) {
     case PTC_UI_OVERLAY_REDEMPTION_HISTORY:
+    case PTC_UI_OVERLAY_ACTIVITY_HISTORY:
         if (ptc_ui_rect_contains(ptc_ui_redemption_history_prev_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_HISTORY_PREV, 0);
         }
         if (ptc_ui_rect_contains(ptc_ui_redemption_history_next_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_HISTORY_NEXT, 0);
+        }
+        break;
+    case PTC_UI_OVERLAY_SCHEDULED:
+        for (i = 0; i < 4; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_scheduled_field_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_SCHEDULED_FIELD, i);
+            }
+        }
+        break;
+    case PTC_UI_OVERLAY_AUTONOMY:
+        for (i = 0; i < 4; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_autonomy_option_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_AUTONOMY_OPTION, i);
+            }
         }
         break;
     case PTC_UI_OVERLAY_MINUTE_EDITOR:
@@ -2686,6 +2843,10 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_child_refresh_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
         }
+        if (model->daily_buffer_available &&
+            ptc_ui_rect_contains(ptc_ui_child_buffer_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_CHILD_BUFFER, 0);
+        }
         if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(0), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
         }
@@ -2822,12 +2983,12 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     }
     count = model->parent_page == PTC_UI_PARENT_SETTINGS
         ? (model->settings_page == PTC_UI_SETTINGS_SUPPORT ? 6 :
-           model->settings_page == PTC_UI_SETTINGS_ADVANCED ? 1 : ptc_ui_parent_action_count(model->parent_page))
+           model->settings_page == PTC_UI_SETTINGS_ADVANCED ? 4 : ptc_ui_parent_action_count(model->parent_page))
         : ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {
         PtcUiRect card_rect = model->parent_page == PTC_UI_PARENT_SETTINGS
-            ? (model->settings_page == PTC_UI_SETTINGS_ADVANCED && i == 0
-                ? ptc_ui_advanced_card_rect()
+            ? (model->settings_page == PTC_UI_SETTINGS_ADVANCED
+                ? ptc_ui_advanced_feature_rect(i)
                 : (model->settings_page == PTC_UI_SETTINGS_SUPPORT
                     ? ptc_ui_support_card_rect(i) : ptc_ui_parent_card_rect(i)))
             : ptc_ui_parent_card_rect(i);
