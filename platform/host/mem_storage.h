@@ -6,6 +6,8 @@
 #define PTC_MEM_STORAGE_MAX_FILES 256
 #define PTC_MEM_STORAGE_PATH_SIZE 320
 #define PTC_MEM_STORAGE_TEXT_SIZE 8192
+#define PTC_MEM_STORAGE_LARGE_FILE_COUNT 4
+#define PTC_MEM_STORAGE_LARGE_TEXT_SIZE 32768
 
 typedef struct {
     char path[PTC_MEM_STORAGE_PATH_SIZE];
@@ -18,6 +20,8 @@ typedef struct {
 typedef struct {
     PtcStorage storage;
     PtcMemStorageFile files[PTC_MEM_STORAGE_MAX_FILES];
+    char large_text[PTC_MEM_STORAGE_LARGE_FILE_COUNT][PTC_MEM_STORAGE_LARGE_TEXT_SIZE];
+    int large_file_indices[PTC_MEM_STORAGE_LARGE_FILE_COUNT];
     bool fail_reads;
     bool fail_writes;
     bool fail_appends;

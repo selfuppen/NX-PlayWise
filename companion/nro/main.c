@@ -33,6 +33,7 @@
 #define CREDENTIALS_PATH APP_ROOT "/credentials.json"
 #define ISSUED_NONCES_PATH APP_ROOT "/grant-issued.json"
 #define LEDGER_PATH APP_ROOT "/ledger/used_nonces.jsonl"
+#define REDEMPTION_HISTORY_PATH APP_ROOT "/ledger/redemption-history.jsonl"
 #define RESULT_TEXT_SIZE 8192
 #define REQUEST_TIMEOUT_MS 30000
 #define INPUT_LOOP_SLEEP_NS 20000000LL
@@ -68,7 +69,8 @@ typedef enum {
     AUTH_RETRY_GENERATE_CODE,
     AUTH_RETRY_SHOW_QR,
     AUTH_RETRY_EXPORT_CONFIG,
-    AUTH_RETRY_REVEAL_CREDENTIAL
+    AUTH_RETRY_REVEAL_CREDENTIAL,
+    AUTH_RETRY_CLEAR_REDEMPTION_HISTORY
 } AuthRetryAction;
 
 typedef struct {
@@ -127,6 +129,8 @@ static void retry_error(UiState *ui);
 static void dispatch_auth_retry(UiState *ui, AuthRetryAction action);
 static void show_pending_redemption(UiState *ui);
 static void show_grant_manager(UiState *ui, int selection);
+static void open_redemption_history(UiState *ui);
+static void request_clear_redemption_history(UiState *ui);
 static void export_diagnostics(UiState *ui);
 static bool save_ui_preferences(UiState *ui);
 static bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference);
@@ -1357,6 +1361,13 @@ static void poll_result(UiState *ui, bool force)
             update_holiday_dirty(ui);
         }
         refresh_disable_flag(ui);
+        if (strcmp(ui->model.result_type, "clear_redemption_history") == 0) {
+            bool cleared = strcmp(ui->model.result_status, "ok") == 0;
+            open_redemption_history(ui);
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                     cleared ? "加时码使用记录已清空；防重复兑换账本保持不变。"
+                             : "清空加时码使用记录失败，原记录已保留。");
+        }
         if (strcmp(ui->model.result_type, "preview_offline_code") == 0) {
             if (strcmp(ui->model.result_status, "ok") == 0) {
                 bool after_zero = ui->model.code_preview_after_available &&
@@ -2078,6 +2089,48 @@ static bool verify_sensitive_pin(UiState *ui, const char *action)
     return true;
 }
 
+static bool load_redemption_history(UiState *ui)
+{
+    char text[PTC_REDEMPTION_HISTORY_FILE_SIZE];
+    if (!ui || !ui->client.storage) return false;
+    if (!ui->client.storage->vtable->exists(ui->client.storage, REDEMPTION_HISTORY_PATH)) {
+        return ptc_ui_apply_redemption_history_text(&ui->model, "");
+    }
+    if (!ui->client.storage->vtable->read_text(
+            ui->client.storage, REDEMPTION_HISTORY_PATH, text, sizeof(text))) {
+        ui->model.redemption_history_available = false;
+        ui->model.redemption_history_count = 0;
+        ui->model.redemption_history_page = 0;
+        return false;
+    }
+    return ptc_ui_apply_redemption_history_text(&ui->model, text);
+}
+
+static void open_redemption_history(UiState *ui)
+{
+    (void)load_redemption_history(ui);
+    ui->model.overlay = PTC_UI_OVERLAY_REDEMPTION_HISTORY;
+    ui->model.confirm_hold_required = false;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "加时码使用记录");
+    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+             "仅显示 Switch 上成功兑换的最近 100 条；不保存完整加时码或 nonce。");
+}
+
+static void request_clear_redemption_history(UiState *ui)
+{
+    if (!ui) return;
+    if (ui->model.redemption_history_available && ui->model.redemption_history_count == 0) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "当前没有可清空的加时码使用记录。");
+        return;
+    }
+    ui->auth_retry_action = AUTH_RETRY_CLEAR_REDEMPTION_HISTORY;
+    if (!verify_sensitive_pin(ui, "清空全部加时码使用记录前，请再次输入本应用 PIN")) return;
+    open_confirm_overlay(ui, PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY,
+        "清空全部加时码使用记录？",
+        "此操作不可撤销，但不会清除防重复兑换账本；已经使用的加时码仍然不能再次使用。请长按确认。");
+    ui->model.confirm_hold_required = true;
+}
+
 static bool commit_credential(UiState *ui)
 {
     const char *path = ui->model.credential_kind == 1 ? CONFIG_PATH : CREDENTIALS_PATH;
@@ -2434,6 +2487,7 @@ static void dispatch_auth_retry(UiState *ui, AuthRetryAction action)
     case AUTH_RETRY_SHOW_QR: show_pairing_qr(ui); break;
     case AUTH_RETRY_EXPORT_CONFIG: export_parent_import(ui); break;
     case AUTH_RETRY_REVEAL_CREDENTIAL: reveal_current_credential(ui); break;
+    case AUTH_RETRY_CLEAR_REDEMPTION_HISTORY: request_clear_redemption_history(ui); break;
     case AUTH_RETRY_NONE:
     default:
         break;
@@ -2753,6 +2807,7 @@ static void handle_parent_action(UiState *ui)
         case 0: open_local_grant(ui); break;
         case 1: show_pairing_qr(ui); break;
         case 2: open_grant_manager(ui); break;
+        case 3: open_redemption_history(ui); break;
         default: break;
         }
         return;
@@ -2896,6 +2951,9 @@ static void confirm_operation(UiState *ui)
         break;
     case PTC_UI_OPERATION_RESTORE_TODAY_POLICY:
         submit_transport_empty(ui, "restore_today_policy", "正在恢复周计划...", "恢复计划失败");
+        break;
+    case PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY:
+        submit_transport_empty(ui, "clear_redemption_history", "正在清空加时码使用记录...", "清空使用记录失败");
         break;
     case PTC_UI_OPERATION_REDEEM_OFFLINE_CODE:
         ui->code_previous_after_available = ui->model.code_preview_after_available;
@@ -3177,6 +3235,18 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY) {
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & (HidNpadButton_L | HidNpadButton_Left)) {
+            ptc_ui_change_redemption_history_page(&ui->model, -1);
+        } else if (down & (HidNpadButton_R | HidNpadButton_Right)) {
+            ptc_ui_change_redemption_history_page(&ui->model, 1);
+        } else if (down & HidNpadButton_X) {
+            request_clear_redemption_history(ui);
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_THEME) {
         if (down & HidNpadButton_B) {
             ptc_ui_cancel_overlay(&ui->model);
@@ -3753,7 +3823,9 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
-        if (ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR) {
+        if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY) {
+            handle_overlay_input(ui, HidNpadButton_B);
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR) {
             handle_overlay_input(ui, HidNpadButton_B);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL ||
             ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL ||
@@ -3778,6 +3850,10 @@ static void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_CONFIRM:
+        if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY) {
+            handle_overlay_input(ui, HidNpadButton_X);
+            break;
+        }
         if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
             close_code_result(ui);
             break;
@@ -3827,6 +3903,12 @@ static void handle_touch(UiState *ui, int x, int y)
             ui->model.overlay_selection = 0;
         }
         handle_overlay_input(ui, HidNpadButton_X);
+        break;
+    case PTC_UI_HIT_HISTORY_PREV:
+        handle_overlay_input(ui, HidNpadButton_Left);
+        break;
+    case PTC_UI_HIT_HISTORY_NEXT:
+        handle_overlay_input(ui, HidNpadButton_Right);
         break;
     case PTC_UI_HIT_MINUTES_INC:
         ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 5, ui->model.minimum_minutes, ui->model.maximum_minutes);

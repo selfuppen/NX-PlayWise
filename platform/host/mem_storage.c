@@ -3,6 +3,50 @@
 #include <stdio.h>
 #include <string.h>
 
+static int large_slot_for_file(const PtcMemStorage *mem, int file_index)
+{
+    int slot;
+    for (slot = 0; slot < PTC_MEM_STORAGE_LARGE_FILE_COUNT; ++slot) {
+        if (mem->large_file_indices[slot] == file_index) return slot;
+    }
+    return -1;
+}
+
+static char *file_text(PtcMemStorage *mem, int file_index)
+{
+    int slot = large_slot_for_file(mem, file_index);
+    return slot >= 0 ? mem->large_text[slot] : mem->files[file_index].text;
+}
+
+static void release_large_slot(PtcMemStorage *mem, int file_index)
+{
+    int slot = large_slot_for_file(mem, file_index);
+    if (slot >= 0) {
+        mem->large_file_indices[slot] = -1;
+        mem->large_text[slot][0] = '\0';
+    }
+}
+
+static char *ensure_text_capacity(PtcMemStorage *mem, int file_index, size_t needed)
+{
+    int slot;
+    if (needed <= PTC_MEM_STORAGE_TEXT_SIZE && large_slot_for_file(mem, file_index) < 0) {
+        return mem->files[file_index].text;
+    }
+    if (needed > PTC_MEM_STORAGE_LARGE_TEXT_SIZE) return NULL;
+    slot = large_slot_for_file(mem, file_index);
+    if (slot >= 0) return mem->large_text[slot];
+    for (slot = 0; slot < PTC_MEM_STORAGE_LARGE_FILE_COUNT; ++slot) {
+        if (mem->large_file_indices[slot] < 0) {
+            snprintf(mem->large_text[slot], sizeof(mem->large_text[slot]), "%s",
+                     mem->files[file_index].text);
+            mem->large_file_indices[slot] = file_index;
+            return mem->large_text[slot];
+        }
+    }
+    return NULL;
+}
+
 static int find_file(PtcMemStorage *mem, const char *path)
 {
     int i;
@@ -41,7 +85,7 @@ static bool mem_read_text(PtcStorage *storage, const char *path, char *out, size
     if (idx < 0) {
         return false;
     }
-    snprintf(out, out_size, "%s", mem->files[idx].text);
+    snprintf(out, out_size, "%s", file_text(mem, idx));
     return true;
 }
 
@@ -49,6 +93,8 @@ static bool mem_write_text_atomic(PtcStorage *storage, const char *path, const c
 {
     PtcMemStorage *mem = (PtcMemStorage *)storage->ctx;
     int idx;
+    char *destination;
+    size_t length;
     if (mem->fail_writes ||
         (mem->fail_write_path_contains && strstr(path, mem->fail_write_path_contains))) {
         return false;
@@ -60,7 +106,15 @@ static bool mem_write_text_atomic(PtcStorage *storage, const char *path, const c
     if (idx < 0) {
         return false;
     }
-    snprintf(mem->files[idx].text, sizeof(mem->files[idx].text), "%s", text);
+    length = strlen(text);
+    destination = ensure_text_capacity(mem, idx, length + 1u);
+    if (!destination) return false;
+    memcpy(destination, text, length + 1u);
+    if (length + 1u <= PTC_MEM_STORAGE_TEXT_SIZE &&
+        destination != mem->files[idx].text) {
+        memcpy(mem->files[idx].text, text, length + 1u);
+        release_large_slot(mem, idx);
+    }
     mem->files[idx].modified_unix_seconds = mem->now_unix_seconds++;
     mem->files[idx].modified_time_valid = true;
     return true;
@@ -71,6 +125,8 @@ static bool mem_append_line(PtcStorage *storage, const char *path, const char *l
     PtcMemStorage *mem = (PtcMemStorage *)storage->ctx;
     int idx;
     size_t used;
+    size_t line_length;
+    char *text;
     if (mem->fail_writes || mem->fail_appends ||
         (mem->fail_write_path_contains && strstr(path, mem->fail_write_path_contains))) {
         return false;
@@ -82,8 +138,14 @@ static bool mem_append_line(PtcStorage *storage, const char *path, const char *l
     if (idx < 0) {
         return false;
     }
-    used = strlen(mem->files[idx].text);
-    snprintf(mem->files[idx].text + used, sizeof(mem->files[idx].text) - used, "%s\n", line);
+    text = file_text(mem, idx);
+    used = strlen(text);
+    line_length = strlen(line);
+    text = ensure_text_capacity(mem, idx, used + line_length + 2u);
+    if (!text) return false;
+    memcpy(text + used, line, line_length);
+    text[used + line_length] = '\n';
+    text[used + line_length + 1u] = '\0';
     mem->files[idx].modified_unix_seconds = mem->now_unix_seconds++;
     mem->files[idx].modified_time_valid = true;
     return true;
@@ -118,6 +180,7 @@ static bool mem_remove_path(PtcStorage *storage, const char *path)
     if (idx < 0) {
         return false;
     }
+    release_large_slot(mem, idx);
     mem->files[idx].present = false;
     return true;
 }
@@ -205,6 +268,7 @@ static bool mem_remove_tree(PtcStorage *storage, const char *path)
         if (mem->files[i].present && (strcmp(mem->files[i].path, path) == 0 ||
             (strncmp(mem->files[i].path, path, path_len) == 0 && mem->files[i].path[path_len] == '/'))) {
             mem->files[i].present = false;
+            release_large_slot(mem, i);
             found = true;
         }
     }
@@ -260,7 +324,11 @@ static const PtcStorageVTable MEM_STORAGE_VTABLE = {
 
 void ptc_mem_storage_init(PtcMemStorage *mem)
 {
+    int slot;
     memset(mem, 0, sizeof(*mem));
+    for (slot = 0; slot < PTC_MEM_STORAGE_LARGE_FILE_COUNT; ++slot) {
+        mem->large_file_indices[slot] = -1;
+    }
     mem->storage.vtable = &MEM_STORAGE_VTABLE;
     mem->storage.ctx = mem;
     mem->now_unix_seconds = 1;

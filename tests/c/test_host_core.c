@@ -5,6 +5,7 @@
 #include "../../common/version.h"
 #include "../../common/policy/control_policy.h"
 #include "../../common/protocol/request_schema.h"
+#include "../../common/protocol/redemption_history.h"
 #include "../../common/protocol/result_builder.h"
 #include "../../common/support/support_export.h"
 #include "../../common/security/credential_policy.h"
@@ -43,6 +44,15 @@ static void check_int(long actual, long expected, const char *label)
         fprintf(stderr, "FAIL: %s expected %ld got %ld\n", label, expected, actual);
         ++failures;
     }
+}
+
+static int count_lines(const char *text)
+{
+    int count = 0;
+    while (text && *text) {
+        if (*text++ == '\n') ++count;
+    }
+    return count;
 }
 
 static bool fixed_random(uint8_t *out, size_t out_size, void *ctx)
@@ -108,6 +118,7 @@ static void test_release_request_contract(void)
         "{\"version\":1,\"request_id\":\"add-1\",\"type\":\"add_today_minutes\",\"created_at\":1,\"payload\":{\"minutes\":15}}",
         "{\"version\":1,\"request_id\":\"unlimited-1\",\"type\":\"disable_today_limit\",\"created_at\":1,\"payload\":{}}",
         "{\"version\":1,\"request_id\":\"restore-1\",\"type\":\"restore_today_policy\",\"created_at\":1,\"payload\":{}}",
+        "{\"version\":1,\"request_id\":\"clear-history-1\",\"type\":\"clear_redemption_history\",\"created_at\":1,\"payload\":{}}",
         "{\"version\":1,\"request_id\":\"setup-1\",\"type\":\"complete_setup\",\"created_at\":1,\"payload\":{}}",
         "{\"version\":1,\"request_id\":\"retry-1\",\"type\":\"retry_setup_release\",\"created_at\":1,\"payload\":{}}",
         "{\"version\":1,\"request_id\":\"snapshot-1\",\"type\":\"restore_install_snapshot\",\"created_at\":1,\"payload\":{}}"
@@ -981,6 +992,8 @@ static void test_offline_code_preview_is_non_consuming(void)
     check_int((int)pctl.apply_target_calls, (int)apply_calls, "preview performs no PCTL write");
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"),
         "preview does not consume nonce");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/redemption-history.jsonl"),
+        "preview does not create redemption history");
 
     snprintf(request, sizeof(request),
         "{\"version\":1,\"request_id\":\"redeem-code\",\"type\":\"offline_code\","
@@ -990,6 +1003,17 @@ static void test_offline_code_preview_is_non_consuming(void)
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "confirmed code processed");
     check_true(mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"),
         "confirmed successful redemption consumes nonce");
+    check_true(mem.storage.vtable->read_text(
+            &mem.storage, "app/ledger/redemption-history.jsonl", result, sizeof(result)) &&
+        strstr(result, "\"redeemed_at\":1783526401") &&
+        strstr(result, "\"day_index\":2380") &&
+        strstr(result, "\"token_version\":2") &&
+        strstr(result, "\"grant_minutes\":30") &&
+        strstr(result, "\"effective_add_minutes\":30") &&
+        strstr(result, "\"remaining_after_available\":true") &&
+        strstr(result, "\"remaining_after_minutes\":70") &&
+        strstr(result, code) == NULL && strstr(result, "\"nonce\"") == NULL,
+        "successful redemption records only the parent-visible audit fields");
     check_true(pctl.apply_target_calls > apply_calls, "confirmed redemption writes PCTL");
 
     snprintf(request, sizeof(request),
@@ -1000,6 +1024,167 @@ static void test_offline_code_preview_is_non_consuming(void)
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "used code preview processed");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/preview-used.json", result, sizeof(result)) &&
         strstr(result, "\"reason\":\"used_token\""), "used code is rejected before confirmation");
+}
+
+static void test_redemption_history_transaction_and_clear(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char code[PTC_TOKEN_V2_TEXT_SIZE];
+    char request[512];
+    char result[4096];
+    char history_before[4096];
+    char ledger_before[4096];
+    char text[4096];
+    char large_history[PTC_REDEMPTION_HISTORY_FILE_SIZE];
+    char history_line[PTC_REDEMPTION_HISTORY_LINE_SIZE];
+    PtcRedemptionHistoryRecord history_record;
+    size_t history_used = 0;
+    int index;
+    uint8_t tier = 0;
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.model_elapsed_time = true;
+    pctl.played_minutes_today = 20;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 40;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 60;
+    pctl.status.play_timer_enabled = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"active\",\"compatibility_status\":\"verified\",\"restriction_cleared\":true,"
+        "\"snapshot_available\":true,\"activate_after\":0,\"last_error\":\"\"}"),
+        "seed active setup for redemption-history transaction");
+    check_int(ptc_token_v2_tier_for_minutes(30, &tier), PTC_ERR_OK,
+        "history transaction token tier selected");
+    check_int(ptc_token_v2_encode(tier, 8, "kid-switch",
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", 2380, code),
+        PTC_ERR_OK, "history transaction token encoded");
+
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"history-write-fail\",\"type\":\"offline_code\","
+        "\"created_at\":1,\"payload\":{\"code\":\"%s\"}}", code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/history-write-fail.json", request), "queue redemption with failed history write");
+    mem.fail_write_path_contains = "ledger/redemption-history.jsonl";
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "failed history write is processed");
+    mem.fail_write_path_contains = NULL;
+    check_true(mem.storage.vtable->read_text(
+            &mem.storage, "app/results/history-write-fail.json", result, sizeof(result)) &&
+        strstr(result, "\"reason\":\"storage_write_failed\""),
+        "history persistence failure returns a storage error");
+    check_true(pctl.restore_called, "history persistence failure restores the PCTL snapshot");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/redemption-history.jsonl") &&
+        !mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"),
+        "history persistence failure records neither audit row nor nonce");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", text, sizeof(text)) &&
+        strstr(text, "\"today_override_present\":false"),
+        "history persistence failure restores the previous rules");
+
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"history-retry\",\"type\":\"offline_code\","
+        "\"created_at\":2,\"payload\":{\"code\":\"%s\"}}", code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/history-retry.json", request), "retry code after history failure");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "code remains reusable after history failure");
+    check_true(mem.storage.vtable->read_text(
+            &mem.storage, "app/ledger/redemption-history.jsonl", history_before, sizeof(history_before)) &&
+        count_lines(history_before) == 1, "retry creates exactly one history row");
+    check_true(mem.storage.vtable->read_text(
+            &mem.storage, "app/ledger/used_nonces.jsonl", ledger_before, sizeof(ledger_before)),
+        "retry consumes the nonce once");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/clear-history.json",
+        "{\"version\":1,\"request_id\":\"clear-history\",\"type\":\"clear_redemption_history\","
+        "\"created_at\":3,\"payload\":{}}"), "queue history clear");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "history clear is processed");
+    check_true(mem.storage.vtable->read_text(
+            &mem.storage, "app/ledger/redemption-history.jsonl", text, sizeof(text)) && text[0] == '\0',
+        "history clear empties the audit file");
+    check_true(mem.storage.vtable->read_text(
+            &mem.storage, "app/ledger/used_nonces.jsonl", text, sizeof(text)) &&
+        strcmp(text, ledger_before) == 0, "history clear preserves the nonce ledger");
+
+    check_true(mem.storage.vtable->write_text_atomic(
+        &mem.storage, "app/ledger/redemption-history.jsonl", history_before),
+        "restore a history row before failed clear");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/clear-history-fail.json",
+        "{\"version\":1,\"request_id\":\"clear-history-fail\",\"type\":\"clear_redemption_history\","
+        "\"created_at\":4,\"payload\":{}}"), "queue failed history clear");
+    mem.fail_write_path_contains = "ledger/redemption-history.jsonl";
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "failed history clear is processed");
+    mem.fail_write_path_contains = NULL;
+    check_true(mem.storage.vtable->read_text(
+            &mem.storage, "app/ledger/redemption-history.jsonl", text, sizeof(text)) &&
+        strcmp(text, history_before) == 0, "failed clear preserves all history rows");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/clear-result-fail.json",
+        "{\"version\":1,\"request_id\":\"clear-result-fail\",\"type\":\"clear_redemption_history\","
+        "\"created_at\":5,\"payload\":{}}"), "queue clear with failed result write");
+    mem.fail_write_path_contains = "results/clear-result-fail.json";
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "clear result failure is processed");
+    mem.fail_write_path_contains = NULL;
+    check_true(mem.storage.vtable->read_text(
+            &mem.storage, "app/ledger/redemption-history.jsonl", text, sizeof(text)) &&
+        strcmp(text, history_before) == 0, "unconfirmed clear rolls history back");
+
+    memset(&history_record, 0, sizeof(history_record));
+    history_record.day_index = 2380;
+    history_record.token_version = 2;
+    history_record.grant_minutes = 15;
+    history_record.effective_add_minutes = 15;
+    history_record.remaining_after_available = true;
+    history_record.remaining_after_minutes = 60;
+    large_history[0] = '\0';
+    for (index = 0; index < 100; ++index) {
+        size_t length;
+        history_record.redeemed_at = 1000 + index;
+        check_true(ptc_redemption_history_format_line(
+            history_line, sizeof(history_line), &history_record), "capped history fixture formats");
+        length = strlen(history_line);
+        check_true(history_used + length + 2u <= sizeof(large_history), "capped history fixture fits");
+        memcpy(large_history + history_used, history_line, length);
+        history_used += length;
+        large_history[history_used++] = '\n';
+        large_history[history_used] = '\0';
+    }
+    check_true(mem.storage.vtable->write_text_atomic(
+        &mem.storage, "app/ledger/redemption-history.jsonl", large_history),
+        "seed one hundred redemption-history rows");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":1435},{\"mode\":\"limit\",\"minutes\":1435},"
+        "{\"mode\":\"limit\",\"minutes\":1435},{\"mode\":\"limit\",\"minutes\":1435},"
+        "{\"mode\":\"limit\",\"minutes\":1435},{\"mode\":\"limit\",\"minutes\":1435},"
+        "{\"mode\":\"limit\",\"minutes\":1435}],\"today_override_present\":false}"),
+        "seed near-cap weekly rule");
+    check_int(ptc_token_v2_encode(tier, 9, "kid-switch",
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", 2380, code),
+        PTC_ERR_OK, "capped history token encoded");
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"history-cap\",\"type\":\"offline_code\","
+        "\"created_at\":6,\"payload\":{\"code\":\"%s\"}}", code);
+    check_true(mem.storage.vtable->write_text_atomic(
+        &mem.storage, "app/inbox/pending/history-cap.json", request),
+        "queue redemption against full history");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "full redemption history accepts a new success");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+            "app/ledger/redemption-history.jsonl", large_history, sizeof(large_history)) &&
+        count_lines(large_history) == 100 &&
+        strstr(large_history, "\"redeemed_at\":1000,") == NULL &&
+        strstr(large_history, "\"redeemed_at\":1001,") != NULL &&
+        strstr(large_history, "\"redeemed_at\":1783526401,") != NULL &&
+        strstr(large_history, "\"effective_add_minutes\":5,") != NULL,
+        "full history drops only the oldest row and records the effective capped credit");
 }
 
 static void test_play_timer_layout(void)
@@ -1394,6 +1579,7 @@ int main(void)
     test_played_time_status();
     test_restore_exhausted_weekly_limit_accepts_transient_restriction();
     test_offline_code_preview_is_non_consuming();
+    test_redemption_history_transaction_and_clear();
     test_play_timer_layout();
     test_credential_policy();
     test_album_restriction_transaction();

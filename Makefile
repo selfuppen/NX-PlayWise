@@ -10,6 +10,7 @@ PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 COMMON_SRCS := \
 	common/crypto/sha256.c \
 	common/protocol/error_code.c \
+	common/protocol/redemption_history.c \
 	common/protocol/request_schema.c \
 	common/protocol/result_builder.c \
 	common/token/token_v1.c \
@@ -44,7 +45,7 @@ ORCH_SRCS := \
 	companion/overlay/bridge.c
 
 TEST_SRCS := tests/c/test_host_core.c
-UI_TEST_SRCS := companion/nro/ui_state.c companion/nro/ui_theme.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
+UI_TEST_SRCS := companion/nro/ui_state.c companion/nro/ui_theme.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/redemption_history.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
 .PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean
 

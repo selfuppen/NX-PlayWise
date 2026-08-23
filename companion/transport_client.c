@@ -183,6 +183,7 @@ const char *ptc_companion_request_command_label_zh(const char *type)
     if (strcmp(type, "status") == 0) return "刷新状态";
     if (strcmp(type, "preview_offline_code") == 0) return "预览今日加时";
     if (strcmp(type, "offline_code") == 0) return "提交今日加时";
+    if (strcmp(type, "clear_redemption_history") == 0) return "清空加时码使用记录";
     if (strcmp(type, "set_today_limit") == 0) return "设置今日总额度";
     if (strcmp(type, "add_today_minutes") == 0) return "临时加时";
     if (strcmp(type, "disable_today_limit") == 0) return "解除当前限制";

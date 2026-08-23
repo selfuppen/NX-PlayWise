@@ -130,7 +130,7 @@ static void test_release_navigation(void)
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 7, "holiday policy exposes rules, actions and calendar entry");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 3, "grant page only exposes grant actions");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 4, "grant page exposes generation, management and history");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 5, "settings page exposes preferences, security and support");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
@@ -1263,6 +1263,95 @@ static void test_user_state_mapping(void)
                "today-limit result with remaining time keeps the ordinary success message");
 }
 
+static void test_redemption_history_state(void)
+{
+    PtcUiModel model;
+    PtcRedemptionHistoryRecord record;
+    char text[PTC_REDEMPTION_HISTORY_FILE_SIZE];
+    char line[PTC_REDEMPTION_HISTORY_LINE_SIZE];
+    size_t used = 0;
+    int index;
+    PtcUiRect previous;
+    PtcUiRect next;
+    PtcUiRect cancel;
+    PtcUiRect clear;
+
+    memset(&model, 0, sizeof(model));
+    check_true(ptc_ui_apply_redemption_history_text(&model, ""),
+        "empty redemption history parses");
+    check_true(model.redemption_history_available && model.redemption_history_count == 0 &&
+        ptc_ui_redemption_history_page_count(&model) == 1,
+        "empty redemption history exposes one empty page");
+    check_true(!ptc_ui_apply_redemption_history_text(&model, "{\"version\":2}\n") &&
+        !model.redemption_history_available && model.redemption_history_count == 0,
+        "malformed redemption history is unavailable instead of partially displayed");
+
+    memset(&record, 0, sizeof(record));
+    record.redeemed_at = 999;
+    record.day_index = 2380;
+    record.token_version = 2;
+    record.grant_minutes = 30;
+    record.effective_add_minutes = 30;
+    record.remaining_after_available = false;
+    record.remaining_after_minutes = -1;
+    check_true(ptc_redemption_history_format_line(line, sizeof(line), &record),
+        "history row without remaining time formats");
+    check_true(ptc_ui_apply_redemption_history_text(&model, line) &&
+        model.redemption_history_count == 1 &&
+        !model.redemption_history[0].remaining_after_available &&
+        model.redemption_history[0].remaining_after_minutes == -1,
+        "history preserves an unavailable post-redemption remaining value");
+
+    record.remaining_after_available = true;
+    record.remaining_after_minutes = 75;
+    text[0] = '\0';
+    for (index = 0; index < 101; ++index) {
+        size_t length;
+        record.redeemed_at = 1000 + index;
+        check_true(ptc_redemption_history_format_line(line, sizeof(line), &record),
+            "redemption history fixture formats");
+        length = strlen(line);
+        check_true(used + length + 2u <= sizeof(text), "redemption history fixture fits");
+        memcpy(text + used, line, length);
+        used += length;
+        text[used++] = '\n';
+        text[used] = '\0';
+    }
+    check_true(ptc_ui_apply_redemption_history_text(&model, text),
+        "valid redemption history parses");
+    check_true(model.redemption_history_available && model.redemption_history_count == 100 &&
+        model.redemption_history[0].redeemed_at == 1001 &&
+        model.redemption_history[99].redeemed_at == 1100,
+        "history retains the newest 100 rows in storage order");
+    check_int(ptc_ui_redemption_history_page_count(&model), 17,
+        "one hundred history rows use seventeen six-row pages");
+    for (index = 0; index < 30; ++index) ptc_ui_change_redemption_history_page(&model, 1);
+    check_int(model.redemption_history_page, 16, "history next-page movement stops at the last page");
+    for (index = 0; index < 30; ++index) ptc_ui_change_redemption_history_page(&model, -1);
+    check_int(model.redemption_history_page, 0, "history previous-page movement stops at the first page");
+
+    memset(&model, 0, sizeof(model));
+    model.parent_page = PTC_UI_PARENT_GRANT;
+    check_hit(hit_center(&model, ptc_ui_parent_card_rect(3)), PTC_UI_HIT_PARENT_CARD, 3,
+        "fourth grant card opens redemption history");
+    model.overlay = PTC_UI_OVERLAY_REDEMPTION_HISTORY;
+    previous = ptc_ui_redemption_history_prev_rect();
+    next = ptc_ui_redemption_history_next_rect();
+    cancel = ptc_ui_cancel_rect(model.overlay);
+    clear = ptc_ui_confirm_rect(model.overlay);
+    check_hit(hit_center(&model, previous), PTC_UI_HIT_HISTORY_PREV, 0,
+        "history previous-page button is touchable");
+    check_hit(hit_center(&model, next), PTC_UI_HIT_HISTORY_NEXT, 0,
+        "history next-page button is touchable");
+    check_hit(hit_center(&model, cancel), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+        "history back button is touchable");
+    check_hit(hit_center(&model, clear), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+        "history clear button is touchable");
+    check_true(!rects_overlap(previous, next) && !rects_overlap(previous, cancel) &&
+        !rects_overlap(next, cancel) && !rects_overlap(cancel, clear),
+        "history paging, back and clear touch targets do not overlap");
+}
+
 int main(void)
 {
     test_theme_resolution();
@@ -1276,6 +1365,7 @@ int main(void)
     test_candidate_navigation();
     test_release_hit_targets();
     test_user_state_mapping();
+    test_redemption_history_state();
     if (failures) return 1;
     puts("PTC release UI state tests passed");
     return 0;

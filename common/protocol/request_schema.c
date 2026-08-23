@@ -270,6 +270,9 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "set_holiday_policy") == 0) {
         return PTC_REQUEST_SET_HOLIDAY_POLICY;
     }
+    if (strcmp(value, "clear_redemption_history") == 0) {
+        return PTC_REQUEST_CLEAR_REDEMPTION_HISTORY;
+    }
     if (strcmp(value, "complete_setup") == 0) {
         return PTC_REQUEST_COMPLETE_SETUP;
     }
@@ -316,6 +319,8 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "set_weekly_template";
     case PTC_REQUEST_SET_HOLIDAY_POLICY:
         return "set_holiday_policy";
+    case PTC_REQUEST_CLEAR_REDEMPTION_HISTORY:
+        return "clear_redemption_history";
     case PTC_REQUEST_COMPLETE_SETUP:
         return "complete_setup";
     case PTC_REQUEST_RETRY_SETUP_RELEASE:
@@ -397,6 +402,7 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
     case PTC_REQUEST_STATUS:
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
     case PTC_REQUEST_RESTORE_TODAY_POLICY:
+    case PTC_REQUEST_CLEAR_REDEMPTION_HISTORY:
         return PTC_ERR_OK;
 #ifdef PLAYWISE_DEVICE_LAB
     case PTC_REQUEST_REMOVED_13:

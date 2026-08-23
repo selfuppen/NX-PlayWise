@@ -50,6 +50,7 @@ OBJS := \
 	$(BUILD)/qrcodegen.o \
 	$(BUILD)/ptc_time.o \
 	$(BUILD)/result_builder.o \
+	$(BUILD)/redemption_history.o \
 	$(BUILD)/error_code.o \
 	$(BUILD)/request_schema.o \
 	$(BUILD)/cJSON.o \
@@ -136,6 +137,9 @@ $(BUILD)/ptc_time.o: ../../common/time/ptc_time.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/result_builder.o: ../../common/protocol/result_builder.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/redemption_history.o: ../../common/protocol/redemption_history.c ../../common/protocol/redemption_history.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/error_code.o: ../../common/protocol/error_code.c | $(BUILD)

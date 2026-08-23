@@ -8,6 +8,7 @@
 #include "../common/crypto/sha256.h"
 #include "../common/policy/control_policy.h"
 #include "../common/protocol/request_schema.h"
+#include "../common/protocol/redemption_history.h"
 #include "../common/protocol/result_builder.h"
 #include "../common/rules/rules.h"
 #include "../common/rules/holiday_calendar.h"
@@ -455,7 +456,7 @@ static bool backup_text_file(PtcSysmodule *sysmodule, const char *relative, cons
 {
     char source[320];
     char backup[320];
-    char text[16384];
+    char text[PTC_REDEMPTION_HISTORY_FILE_SIZE];
     join_path(source, sizeof(source), sysmodule->app_root, relative);
     join_path(backup, sizeof(backup), sysmodule->app_root, backup_relative);
     *existed = sysmodule->storage->vtable->exists(sysmodule->storage, source);
@@ -468,7 +469,7 @@ static bool restore_text_file(PtcSysmodule *sysmodule, const char *relative, con
 {
     char target[320];
     char backup[320];
-    char text[16384];
+    char text[PTC_REDEMPTION_HISTORY_FILE_SIZE];
     join_path(target, sizeof(target), sysmodule->app_root, relative);
     if (!existed) {
         return !sysmodule->storage->vtable->exists(sysmodule->storage, target) ||
@@ -487,25 +488,30 @@ static bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, P
     bool rules_existed;
     bool state_existed;
     bool ledger_existed;
+    bool redemption_history_existed;
     if (recovery_path_exists(sysmodule)) return true;
     if (!sysmodule->pctl->vtable->snapshot_settings ||
         sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &snapshot) != PTC_ERR_OK ||
         !save_snapshot_file(sysmodule, "recovery/active/pctl_snapshot.json", &snapshot, now.unix_seconds) ||
         !backup_text_file(sysmodule, "rules.json", "recovery/active/rules.before", &rules_existed) ||
         !backup_text_file(sysmodule, "state.json", "recovery/active/state.before", &state_existed) ||
-        !backup_text_file(sysmodule, "ledger/used_nonces.jsonl", "recovery/active/ledger.before", &ledger_existed)) {
+        !backup_text_file(sysmodule, "ledger/used_nonces.jsonl", "recovery/active/ledger.before", &ledger_existed) ||
+        !backup_text_file(sysmodule, "ledger/redemption-history.jsonl",
+            "recovery/active/redemption-history.before", &redemption_history_existed)) {
         recovery_clear(sysmodule);
         return false;
     }
     join_path(meta_path, sizeof(meta_path), sysmodule->app_root, "recovery/active/meta.json");
     snprintf(meta, sizeof(meta),
         "{\"version\":1,\"request_id\":\"%s\",\"created_at\":%lld,"
-        "\"rules_existed\":%s,\"state_existed\":%s,\"ledger_existed\":%s}\n",
+        "\"rules_existed\":%s,\"state_existed\":%s,\"ledger_existed\":%s,"
+        "\"redemption_history_existed\":%s}\n",
         request && ptc_request_id_is_valid(request->request_id) ? request->request_id : "enforce",
         (long long)now.unix_seconds,
         rules_existed ? "true" : "false",
         state_existed ? "true" : "false",
-        ledger_existed ? "true" : "false");
+        ledger_existed ? "true" : "false",
+        redemption_history_existed ? "true" : "false");
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, meta_path, meta)) {
         recovery_clear(sysmodule);
         return false;
@@ -532,6 +538,8 @@ static bool recovery_rollback(PtcSysmodule *sysmodule)
     bool rules_existed;
     bool state_existed;
     bool ledger_existed;
+    bool redemption_history_existed = false;
+    bool redemption_history_tracked;
     bool raw_restored = false;
     bool timer_restored = false;
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
@@ -543,11 +551,17 @@ static bool recovery_rollback(PtcSysmodule *sysmodule)
         !json_bool_value(meta, "state_existed", &state_existed) ||
         !json_bool_value(meta, "ledger_existed", &ledger_existed) ||
         !load_snapshot_file(sysmodule, "recovery/active/pctl_snapshot.json", &original)) return false;
+    redemption_history_tracked = json_bool_value(
+        meta, "redemption_history_existed", &redemption_history_existed);
     ok = restore_snapshot_exact(sysmodule, &original, &restored, &status,
         ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored) == PTC_ERR_OK;
     ok = restore_text_file(sysmodule, "rules.json", "recovery/active/rules.before", rules_existed) && ok;
     ok = restore_text_file(sysmodule, "state.json", "recovery/active/state.before", state_existed) && ok;
     ok = restore_text_file(sysmodule, "ledger/used_nonces.jsonl", "recovery/active/ledger.before", ledger_existed) && ok;
+    if (redemption_history_tracked) {
+        ok = restore_text_file(sysmodule, "ledger/redemption-history.jsonl",
+            "recovery/active/redemption-history.before", redemption_history_existed) && ok;
+    }
     invalidate_all_caches(sysmodule);
     if (ok) recovery_clear(sysmodule);
     return ok;
@@ -1117,6 +1131,76 @@ static bool consume_nonce(PtcSysmodule *sysmodule, const PtcRequest *request, ui
     ok = sysmodule->storage->vtable->append_line(sysmodule->storage, path, line);
     append_event(sysmodule, request, ok ? "nonce_consumed" : "nonce_failed", ok ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED, "");
     return ok;
+}
+
+static bool save_redemption_history(
+    PtcSysmodule *sysmodule,
+    const PtcRedemptionHistoryRecord *record)
+{
+    char path[320];
+    char existing[PTC_REDEMPTION_HISTORY_FILE_SIZE];
+    char output[PTC_REDEMPTION_HISTORY_FILE_SIZE];
+    char new_line[PTC_REDEMPTION_HISTORY_LINE_SIZE];
+    char *lines[PTC_REDEMPTION_HISTORY_MAX_RECORDS];
+    char *cursor;
+    size_t count = 0;
+    size_t used = 0;
+    size_t index;
+    join_path(path, sizeof(path), sysmodule->app_root, "ledger/redemption-history.jsonl");
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, path)) {
+        if (!sysmodule->storage->vtable->read_text(
+                sysmodule->storage, path, existing, sizeof(existing))) return false;
+    } else {
+        existing[0] = '\0';
+    }
+    cursor = existing;
+    while (*cursor) {
+        char *newline = strchr(cursor, '\n');
+        size_t length = newline ? (size_t)(newline - cursor) : strlen(cursor);
+        PtcRedemptionHistoryRecord parsed;
+        if (length == 0) {
+            cursor = newline ? newline + 1 : cursor + length;
+            continue;
+        }
+        if (length >= PTC_REDEMPTION_HISTORY_LINE_SIZE) return false;
+        if (newline) *newline = '\0';
+        if (!ptc_redemption_history_parse_line(cursor, &parsed)) return false;
+        if (count == PTC_REDEMPTION_HISTORY_MAX_RECORDS) {
+            memmove(lines, lines + 1, (PTC_REDEMPTION_HISTORY_MAX_RECORDS - 1u) * sizeof(lines[0]));
+            count = PTC_REDEMPTION_HISTORY_MAX_RECORDS - 1u;
+        }
+        lines[count++] = cursor;
+        if (!newline) break;
+        cursor = newline + 1;
+    }
+    if (!ptc_redemption_history_format_line(new_line, sizeof(new_line), record)) return false;
+    if (count == PTC_REDEMPTION_HISTORY_MAX_RECORDS) {
+        memmove(lines, lines + 1, (PTC_REDEMPTION_HISTORY_MAX_RECORDS - 1u) * sizeof(lines[0]));
+        count = PTC_REDEMPTION_HISTORY_MAX_RECORDS - 1u;
+    }
+    for (index = 0; index < count; ++index) {
+        size_t length = strlen(lines[index]);
+        if (used + length + 1u >= sizeof(output)) return false;
+        memcpy(output + used, lines[index], length);
+        used += length;
+        output[used++] = '\n';
+    }
+    {
+        size_t length = strlen(new_line);
+        if (used + length + 2u > sizeof(output)) return false;
+        memcpy(output + used, new_line, length);
+        used += length;
+        output[used++] = '\n';
+        output[used] = '\0';
+    }
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, output);
+}
+
+static bool clear_redemption_history(PtcSysmodule *sysmodule)
+{
+    char path[320];
+    join_path(path, sizeof(path), sysmodule->app_root, "ledger/redemption-history.jsonl");
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, "");
 }
 
 static int64_t result_remaining_minutes(const PtcPctlStatus *status)
@@ -1742,6 +1826,44 @@ static bool process_status(PtcSysmodule *sysmodule, const PtcRequest *request, c
     return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, caps, now, false);
 }
 
+static bool process_clear_redemption_history(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    const PtcRuntimeConfig *config,
+    const PtcCapabilities *caps,
+    PtcClockSnapshot now)
+{
+    char path[320];
+    char previous[PTC_REDEMPTION_HISTORY_FILE_SIZE];
+    bool existed;
+    bool restored;
+    join_path(path, sizeof(path), sysmodule->app_root, "ledger/redemption-history.jsonl");
+    existed = sysmodule->storage->vtable->exists(sysmodule->storage, path);
+    if (existed && !sysmodule->storage->vtable->read_text(
+            sysmodule->storage, path, previous, sizeof(previous))) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+    }
+    if (!clear_redemption_history(sysmodule)) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+    }
+    append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "redemption_history_cleared");
+    if (write_current_status_result(
+            sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false)) {
+        return true;
+    }
+    restored = existed
+        ? sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, previous)
+        : (!sysmodule->storage->vtable->exists(sysmodule->storage, path) ||
+           sysmodule->storage->vtable->remove_path(sysmodule->storage, path));
+    append_event(sysmodule, request,
+        restored ? "state_rollback_ok" : "state_rollback_failed",
+        restored ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED,
+        "redemption_history_clear");
+    return false;
+}
+
 static bool code_is_v2_candidate(const char *code)
 {
     size_t length;
@@ -1927,6 +2049,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     PtcErrorCode err;
     PtcRuntimeConfig active_config;
     PtcVerifiedOfflineCode verified;
+    uint16_t effective_add_minutes = 0;
 
     if (config) {
         active_config = *config;
@@ -1953,10 +2076,16 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (decision.may_write_pctl) {
         uint16_t new_minutes;
         uint16_t played_minutes = ptc_pctl_played_minutes(&pctl_status);
+        uint16_t base_minutes;
+        PtcDayRule active_rule;
         (void)load_rules(sysmodule, &rules);
+        active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+        base_minutes = active_rule.mode == PTC_RULE_MODE_LIMIT ? active_rule.minutes : 0u;
+        if (played_minutes > base_minutes) base_minutes = played_minutes;
         /* Stack the granted minutes onto today's existing limit or played time rather than
            overwriting it, matching the add_today_minutes token action. */
         new_minutes = accumulate_today_limit(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index), verified.minutes, played_minutes);
+        effective_add_minutes = new_minutes >= base_minutes ? (uint16_t)(new_minutes - base_minutes) : 0u;
         /* Apply to PCTL first (idempotent absolute write); persist the override
            only after it succeeds. On failure the nonce is not consumed and the
            same code may be re-entered, so persisting first would double-count. */
@@ -1989,7 +2118,6 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     result_state_from_pctl(&state, now.day_index, &pctl_status, caps);
     (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, ptc_control_mode_name(active_config.mode), decision.dry_run, &state, now.unix_seconds);
     if (write_result(sysmodule, request->request_id, json)) {
-        append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
         if (verified.is_v2 && !decision.dry_run &&
             (runtime_state.v2_failed_attempts != 0 || runtime_state.v2_cooldown_until != 0)) {
             bool cleared;
@@ -2000,6 +2128,30 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                 cleared ? "v2_failures_cleared" : "result_write_failed",
                 cleared ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED,
                 "v2_cooldown");
+        }
+        if (decision.consume_nonce_after_success) {
+            PtcRedemptionHistoryRecord history_record;
+            history_record.redeemed_at = now.unix_seconds;
+            history_record.day_index = verified.day_index;
+            history_record.token_version = verified.version;
+            history_record.grant_minutes = verified.minutes;
+            history_record.effective_add_minutes = effective_add_minutes;
+            history_record.remaining_after_available = state.remaining_available;
+            history_record.remaining_after_minutes = state.remaining_available ? state.remaining_minutes : -1;
+            if (!save_redemption_history(sysmodule, &history_record)) {
+                char result_path[320];
+                snprintf(result_path, sizeof(result_path), "%s/results/%s.json", sysmodule->app_root, request->request_id);
+                (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, result_path);
+                append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED,
+                    "redemption_history");
+                err = PTC_ERR_STORAGE_WRITE_FAILED;
+                if (!recovery_rollback(sysmodule)) {
+                    write_disable_flag(sysmodule, "transaction_restore_failed\n");
+                    err = PTC_ERR_RECOVERY_FAILED;
+                }
+                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                    err, now.day_index, caps);
+            }
         }
         if (decision.consume_nonce_after_success &&
             !consume_nonce(sysmodule, request, verified.day_index, verified.nonce, verified.version)) {
@@ -2014,6 +2166,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
                 err, now.day_index, caps);
         }
+        append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
         recovery_clear(sysmodule);
         return true;
     }
@@ -4473,6 +4626,9 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
 #endif
     case PTC_REQUEST_STATUS:
         (void)process_status(sysmodule, &request, &config, disable_flag, &caps, now);
+        break;
+    case PTC_REQUEST_CLEAR_REDEMPTION_HISTORY:
+        (void)process_clear_redemption_history(sysmodule, &request, &config, &caps, now);
         break;
     case PTC_REQUEST_OFFLINE_CODE:
         (void)process_offline_code(sysmodule, &request, &config, disable_flag, &caps, now);

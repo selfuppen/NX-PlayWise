@@ -139,6 +139,7 @@ static const UiAction GRANT_ACTIONS[] = {
     {"立即生成加时码", "在本机生成 8 位加时码", COLOR(25, 132, 95)},
     {"手机/电脑生成加时码", "优先使用完整交付包中的离线网页", COLOR(42, 105, 188)},
     {"加时码生成管理", "管理设备名、密钥、导出配置和二维码地址", COLOR(91, 100, 116)},
+    {"加时码使用记录", "查看 Switch 上真实成功兑换的最近 100 条记录", COLOR(215, 139, 25)},
 };
 
 static const UiAction SETTINGS_ACTIONS[] = {
@@ -2884,6 +2885,67 @@ static void draw_grant_manager_overlay(uint32_t *pixels, uint32_t stride, const 
                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
 }
 
+static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    char page_text[64];
+    int pages = ptc_ui_redemption_history_page_count(model);
+    int first = model->redemption_history_page * 6;
+    int visible = model->redemption_history_count - first;
+    int row;
+    if (visible > 6) visible = 6;
+    if (visible < 0) visible = 0;
+    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
+    snprintf(page_text, sizeof(page_text), "最新优先  |  第 %d/%d 页  |  共 %d 条",
+             model->redemption_history_page + 1, pages, model->redemption_history_count);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 104, page_text, 16, COLOR(91, 100, 116));
+    if (!model->redemption_history_available) {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
+                         "暂时无法读取使用记录；可重试，或验证 PIN 后清空损坏记录。",
+                         19, COLOR(194, 61, 61));
+    } else if (model->redemption_history_count == 0) {
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
+                         "暂无成功使用记录；升级前的兑换不会回填。",
+                         19, COLOR(91, 100, 116));
+    } else {
+        for (row = 0; row < visible; ++row) {
+            int source = model->redemption_history_count - 1 - first - row;
+            const PtcRedemptionHistoryRecord *record = &model->redemption_history[source];
+            UiRect item = {dialog.x + 34, dialog.y + 132 + row * 62, dialog.width - 68, 54};
+            char time_text[48];
+            char allowance[160];
+            char remaining[80];
+            format_event_time(record->redeemed_at, true, time_text, sizeof(time_text));
+            if (record->remaining_after_available) {
+                char value[48];
+                format_duration((int)record->remaining_after_minutes, value, sizeof(value));
+                snprintf(remaining, sizeof(remaining), "兑换后 %s", value);
+            } else {
+                snprintf(remaining, sizeof(remaining), "兑换后暂不可用");
+            }
+            snprintf(allowance, sizeof(allowance), "代码 %u 分钟  |  实际计入 %u 分钟%s",
+                     (unsigned int)record->grant_minutes,
+                     (unsigned int)record->effective_add_minutes,
+                     record->effective_add_minutes < record->grant_minutes ? "（已到每日上限）" : "");
+            fill_round_rect(pixels, stride, item, 7, COLOR(249, 250, 252));
+            draw_rect_outline(pixels, stride, item, 1, COLOR(219, 225, 233));
+            draw_text(pixels, stride, item.x + 16, item.y + 20, time_text, 15, COLOR(45, 52, 62));
+            draw_text(pixels, stride, item.x + 250, item.y + 20, allowance, 15, COLOR(28, 118, 188));
+            draw_text(pixels, stride, item.x + 720, item.y + 20, remaining, 15, COLOR(45, 52, 62));
+            draw_text(pixels, stride, item.x + item.width - 84, item.y + 20,
+                      record->token_version == 2u ? "v2 成功" : "v1 成功", 14, COLOR(25, 132, 95));
+        }
+    }
+    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_prev_rect(), "L / 左  上一页",
+                       COLOR(244, 246, 249), COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_next_rect(), "R / 右  下一页",
+                       COLOR(244, 246, 249), COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
+                       COLOR(235, 238, 243), COLOR(66, 74, 86), true);
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "X  清空全部",
+                       COLOR(255, 235, 238), COLOR(194, 61, 61), false);
+}
+
 static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
@@ -3369,6 +3431,9 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
         break;
     case PTC_UI_OVERLAY_GRANT_MANAGER:
         draw_grant_manager_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_REDEMPTION_HISTORY:
+        draw_redemption_history_overlay(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
         draw_shortcut_manager_overlay(pixels, stride, model);

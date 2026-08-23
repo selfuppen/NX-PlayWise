@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../../common/protocol/redemption_history.h"
 #include "../../common/rules/rules.h"
 #include "ui_theme.h"
 #include "../../common/security/credential_policy.h"
@@ -68,7 +69,8 @@ typedef enum {
     PTC_UI_OVERLAY_ALBUM_MANAGER = 19,
     PTC_UI_OVERLAY_MINUTE_EDITOR = 20,
     PTC_UI_OVERLAY_THEME = 21,
-    PTC_UI_OVERLAY_PIN = 22
+    PTC_UI_OVERLAY_PIN = 22,
+    PTC_UI_OVERLAY_REDEMPTION_HISTORY = 23
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -137,7 +139,8 @@ typedef enum {
     PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION = 15,
     PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY = 16,
     PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY = 17,
-    PTC_UI_OPERATION_EXPORT_DIAGNOSTICS = 18
+    PTC_UI_OPERATION_EXPORT_DIAGNOSTICS = 18,
+    PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY = 19
 } PtcUiOperation;
 
 typedef enum {
@@ -194,6 +197,10 @@ typedef struct {
     char recent_event_details[3][96];
     char recent_event_request_ids[3][80];
     int64_t recent_event_timestamps[3];
+    bool redemption_history_available;
+    int redemption_history_count;
+    int redemption_history_page;
+    PtcRedemptionHistoryRecord redemption_history[PTC_REDEMPTION_HISTORY_MAX_RECORDS];
     uint16_t day_index;
     char mode[24];
     char request_id[80];
@@ -396,7 +403,9 @@ typedef enum {
     PTC_UI_HIT_PIN_BACKSPACE,
     PTC_UI_HIT_PIN_CONFIRM,
     PTC_UI_HIT_PIN_CANCEL,
-    PTC_UI_HIT_PIN_KEYBOARD
+    PTC_UI_HIT_PIN_KEYBOARD,
+    PTC_UI_HIT_HISTORY_PREV,
+    PTC_UI_HIT_HISTORY_NEXT
 } PtcUiHitKind;
 
 typedef struct {
@@ -521,6 +530,9 @@ int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now);
 bool ptc_ui_cancel_overlay(PtcUiModel *model);
 PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model);
 bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);
+bool ptc_ui_apply_redemption_history_text(PtcUiModel *model, const char *text);
+int ptc_ui_redemption_history_page_count(const PtcUiModel *model);
+void ptc_ui_change_redemption_history_page(PtcUiModel *model, int direction);
 void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const char *transport_label);
 
 PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int index);
@@ -558,6 +570,8 @@ PtcUiRect ptc_ui_holiday_minutes_rect(int index);
 PtcUiRect ptc_ui_holiday_calendar_rect(void);
 PtcUiRect ptc_ui_holiday_page_action_rect(int index);
 PtcUiRect ptc_ui_support_event_rect(int index);
+PtcUiRect ptc_ui_redemption_history_prev_rect(void);
+PtcUiRect ptc_ui_redemption_history_next_rect(void);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
 PtcUiRect ptc_ui_minutes_value_rect(void);
 PtcUiRect ptc_ui_minutes_dec_rect(void);

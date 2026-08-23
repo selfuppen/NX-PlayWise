@@ -308,6 +308,9 @@ static const char *request_success_message(const char *type)
     if (strcmp(type, "offline_code") == 0) {
         return "加时成功，今天的游玩时间已更新。";
     }
+    if (strcmp(type, "clear_redemption_history") == 0) {
+        return "加时码使用记录已全部清空。";
+    }
     if (strcmp(type, "complete_setup") == 0) {
         return "首次设置已完成，已保留当前额度并接管控制。";
     }
@@ -404,13 +407,62 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_HOLIDAY:
         return 7;
     case PTC_UI_PARENT_GRANT:
-        return 3;
+        return 4;
     case PTC_UI_PARENT_SETTINGS:
         return 5;
     case PTC_UI_PARENT_TODAY:
     default:
         return 5;
     }
+}
+
+bool ptc_ui_apply_redemption_history_text(PtcUiModel *model, const char *text)
+{
+    const char *cursor;
+    if (!model || !text || strlen(text) >= PTC_REDEMPTION_HISTORY_FILE_SIZE) return false;
+    model->redemption_history_available = false;
+    model->redemption_history_count = 0;
+    model->redemption_history_page = 0;
+    cursor = text;
+    while (*cursor) {
+        const char *newline = strchr(cursor, '\n');
+        size_t length = newline ? (size_t)(newline - cursor) : strlen(cursor);
+        char line[PTC_REDEMPTION_HISTORY_LINE_SIZE];
+        PtcRedemptionHistoryRecord parsed;
+        if (length == 0) {
+            cursor = newline ? newline + 1 : cursor + length;
+            continue;
+        }
+        if (length >= PTC_REDEMPTION_HISTORY_LINE_SIZE) return false;
+        memcpy(line, cursor, length);
+        line[length] = '\0';
+        if (!ptc_redemption_history_parse_line(line, &parsed)) return false;
+        if (model->redemption_history_count == (int)PTC_REDEMPTION_HISTORY_MAX_RECORDS) {
+            memmove(model->redemption_history, model->redemption_history + 1,
+                (PTC_REDEMPTION_HISTORY_MAX_RECORDS - 1u) * sizeof(model->redemption_history[0]));
+            model->redemption_history_count = (int)PTC_REDEMPTION_HISTORY_MAX_RECORDS - 1;
+        }
+        model->redemption_history[model->redemption_history_count++] = parsed;
+        if (!newline) break;
+        cursor = newline + 1;
+    }
+    model->redemption_history_available = true;
+    return true;
+}
+
+int ptc_ui_redemption_history_page_count(const PtcUiModel *model)
+{
+    if (!model || model->redemption_history_count <= 0) return 1;
+    return (model->redemption_history_count + 5) / 6;
+}
+
+void ptc_ui_change_redemption_history_page(PtcUiModel *model, int direction)
+{
+    int pages;
+    if (!model || direction == 0) return;
+    pages = ptc_ui_redemption_history_page_count(model);
+    if (direction < 0 && model->redemption_history_page > 0) --model->redemption_history_page;
+    else if (direction > 0 && model->redemption_history_page + 1 < pages) ++model->redemption_history_page;
 }
 
 const char *ptc_ui_settings_status_label(const PtcUiModel *model)
@@ -1767,6 +1819,10 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 1120;
         *height = 650;
         break;
+    case PTC_UI_OVERLAY_REDEMPTION_HISTORY:
+        *width = 1120;
+        *height = 650;
+        break;
     case PTC_UI_OVERLAY_QR:
         *width = 1120;
         *height = 650;
@@ -1845,6 +1901,20 @@ static PtcUiRect dialog_for(PtcUiOverlay overlay)
     int height = 0;
     dialog_dims(overlay, &width, &height);
     return ptc_ui_dialog_rect(width, height);
+}
+
+PtcUiRect ptc_ui_redemption_history_prev_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_REDEMPTION_HISTORY);
+    return (PtcUiRect){dialog.x + 24, dialog.y + dialog.h - PTC_UI_DIALOG_BTN_H - 24,
+        160, PTC_UI_DIALOG_BTN_H};
+}
+
+PtcUiRect ptc_ui_redemption_history_next_rect(void)
+{
+    PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_REDEMPTION_HISTORY);
+    return (PtcUiRect){dialog.x + 200, dialog.y + dialog.h - PTC_UI_DIALOG_BTN_H - 24,
+        160, PTC_UI_DIALOG_BTN_H};
 }
 
 PtcUiRect ptc_ui_minutes_value_rect(void)
@@ -2412,6 +2482,14 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_OVERLAY_DISCARD, 0);
     }
     switch (model->overlay) {
+    case PTC_UI_OVERLAY_REDEMPTION_HISTORY:
+        if (ptc_ui_rect_contains(ptc_ui_redemption_history_prev_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_HISTORY_PREV, 0);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_redemption_history_next_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_HISTORY_NEXT, 0);
+        }
+        break;
     case PTC_UI_OVERLAY_MINUTE_EDITOR:
         for (i = 0; i < 2; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_minute_editor_field_rect((PtcUiDurationField)i), x, y)) {
