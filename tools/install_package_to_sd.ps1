@@ -1,5 +1,10 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
+    # The source folder containing the package data.
+    # It can point directly to the extracted package (e.g., build\packages\playwise),
+    # or to the parent folder containing multiple packages (e.g., build\packages).
+    # If the parent is provided, it automatically selects the correct 'playwise' or
+    # 'playwise-device-lab' subfolder depending on the -Lab switch.
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
     [string]$SourceFolder,
@@ -15,7 +20,11 @@ param(
     # Clean / Full install switches (removes all existing PlayWise data before copying)
     [switch]$Clean,
 
-    [switch]$Full
+    [switch]$Full,
+
+    # Cleans both Release and Device Lab packages simultaneously to avoid conflicts.
+    # Removes all data (app paths, sysmodules, overlays) for BOTH editions before copying.
+    [switch]$CleanAll
 )
 
 Set-StrictMode -Version Latest
@@ -23,7 +32,7 @@ $ErrorActionPreference = "Stop"
 
 $destinationDriveLetter = $Drive.Substring(0, 1).ToUpperInvariant()
 $destinationRoot = "${destinationDriveLetter}:\"
-$isFullInstall = $Clean.IsPresent -or $Full.IsPresent
+$isFullInstall = $Clean.IsPresent -or $Full.IsPresent -or $CleanAll.IsPresent
 
 $isLab = $Lab.IsPresent
 if ($isLab) {
@@ -49,7 +58,12 @@ if ($isLab) {
     $legacyOverlayRelativePaths = @("switch\.overlays\pctc.ovl")
 }
 
-if ($isFullInstall) {
+if ($CleanAll.IsPresent) {
+    $allAppPaths = @("switch\playwise", "switch\playwise-device-lab")
+    $allSysmodulePaths = @("atmosphere\contents\4200000000BD2300", "atmosphere\contents\4200000000BD23F0")
+    $allOverlayPaths = @("switch\.overlays\playwise.ovl", "switch\.overlays\playwise-device-lab.ovl", "switch\.overlays\pctc.ovl")
+    $pathsToRemove = $allAppPaths + $allSysmodulePaths + $allOverlayPaths
+} elseif ($isFullInstall) {
     $pathsToRemove = @($appPath) + $ownedRelativePaths + $legacyOverlayRelativePaths
 } else {
     $pathsToRemove = $ownedRelativePaths + $legacyOverlayRelativePaths
@@ -128,6 +142,15 @@ function Test-InstalledPath {
 }
 
 $sourceRoot = Get-FullDirectoryPath -LiteralPath $SourceFolder
+
+if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $appPath)) -and (Test-Path -LiteralPath (Join-Path $sourceRoot $appName))) {
+    $nestedPath = Join-Path $sourceRoot $appName
+    if (Test-Path -LiteralPath (Join-Path $nestedPath $appPath)) {
+        $sourceRoot = $nestedPath
+        Write-Host "Auto-detected nested package directory: $sourceRoot"
+    }
+}
+
 $destinationDrive = Get-PSDrive -Name $destinationDriveLetter -PSProvider FileSystem -ErrorAction Stop
 if ($destinationDrive.Root -ne $destinationRoot) {
     throw "Drive ${destinationDriveLetter}: does not resolve to the expected filesystem root $destinationRoot"
@@ -181,7 +204,9 @@ if (-not $hasPackageCore) {
 
 Write-Host "Source package: $sourceRoot"
 Write-Host "Destination:    $destinationRoot"
-if ($isFullInstall) {
+if ($CleanAll.IsPresent) {
+    Write-Host "Install mode:   Full clean install (Clean All Lab & Release)"
+} elseif ($isFullInstall) {
     Write-Host "Install mode:   Full clean install"
 } else {
     Write-Host "Install mode:   Incremental update (preserves existing config and data)"
@@ -209,7 +234,9 @@ if (-not $Apply) {
 }
 
 if (-not $WhatIfPreference) {
-    if ($isFullInstall) {
+    if ($CleanAll.IsPresent) {
+        $confirmation = Read-Host "Type $destinationDriveLetter to confirm FULL CLEAN installation of $displayName (DELETES ALL PlayWise Release and Lab data)"
+    } elseif ($isFullInstall) {
         $confirmation = Read-Host "Type $destinationDriveLetter to confirm FULL CLEAN installation of $displayName (DELETES $appPath and all existing data)"
     } else {
         $confirmation = Read-Host "Type $destinationDriveLetter to confirm replacement of $displayName binaries"
