@@ -10,5 +10,6 @@ services:
     # network_mode: "host"
     volumes:
       - /data/sshdata:/root/data
-      - /h/workspace/codes/switch:/ws
+      # - /h/workspace/codes/switch:/ws
+      - /D/workspace/codes/nintendo-switch:/ws
     restart: unless-stopped
