@@ -118,10 +118,10 @@ package-complete: package-playwise
 	python3 tools/build_ptc_standalone.py --check
 	python3 tools/package_delivery.py --standard-package build/packages/playwise-$(PLAYWISE_VERSION).zip --offline-html tools/ptc_frontend/playwise-offline.html --output build/packages/playwise-complete-$(PLAYWISE_VERSION).zip
 
-packages: package-complete
+packages: package-complete device-lab-package
 
-# Internal-only target. It is deliberately not a dependency of `packages` and
-# its package omits boot2.flag so an operator must opt in on the device.
+# Internal test target. Built alongside release packages but omits boot2.flag
+# so an operator must opt in on the device.
 device-lab-sysmodule: device-lab-manifest
 	$(MAKE) -C sysmodule TARGET=pwtl-sysmodule BUILD=build-device-lab CONFIG_JSON=sysmodule.device-lab.json MANIFEST_INCLUDE=../build/device-lab/generated DEFINES=-DPLAYWISE_DEVICE_LAB
 	mkdir -p build/device-lab/switch
@@ -139,7 +139,7 @@ device-lab-overlay: device-lab-manifest
 	cp device_lab/overlay/playwise-device-lab.ovl build/device-lab/switch/playwise-device-lab.ovl
 
 device-lab-package: device-lab-sysmodule device-lab-nro device-lab-overlay
-	python3 tools/package_device_lab.py --out build/device-lab/package --zip build/device-lab/playwise-device-lab-$(PLAYWISE_VERSION).zip --manifest build/device-lab/generated/release-manifest.json --sysmodule-exefs build/device-lab/switch/exefs.nsp --nro build/device-lab/switch/playwise-device-lab.nro --overlay build/device-lab/switch/playwise-device-lab.ovl
+	python3 tools/package_device_lab.py --out build/packages/playwise-device-lab --zip build/packages/playwise-device-lab-$(PLAYWISE_VERSION).zip --manifest build/device-lab/generated/release-manifest.json --sysmodule-exefs build/device-lab/switch/exefs.nsp --nro build/device-lab/switch/playwise-device-lab.nro --overlay build/device-lab/switch/playwise-device-lab.ovl
 
 clean:
 	rm -rf build

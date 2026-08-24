@@ -350,20 +350,21 @@ def verify_packaged_artifacts(path: Path, manifest: dict) -> None:
 def latest_packages(package_dir: Path) -> dict[str, Path]:
     standard = package_dir / STANDARD_PACKAGE
     complete = package_dir / COMPLETE_PACKAGE
-    missing = [path.name for path in (standard, complete) if not path.is_file()]
+    device_lab = package_dir / DEVICE_LAB_PACKAGE
+    missing = [path.name for path in (standard, complete, device_lab) if not path.is_file()]
     if missing:
         raise PackageError(f"missing generated package: {', '.join(missing)}")
     zip_names = {path.name for path in package_dir.glob("*.zip")}
-    expected = {STANDARD_PACKAGE, COMPLETE_PACKAGE}
+    expected = {STANDARD_PACKAGE, COMPLETE_PACKAGE, DEVICE_LAB_PACKAGE}
     if zip_names != expected:
-        raise PackageError("release build must produce exactly the standard and complete public zips")
-    return {"playwise": standard, "complete": complete}
+        raise PackageError("release build must produce exactly the standard, complete and device lab public zips")
+    return {"playwise": standard, "complete": complete, "device_lab": device_lab}
 
 
 def container_command(container_path: str = DEFAULT_CONTAINER_PATH, *, with_eden: bool = False) -> str:
     path = "/opt/devkitpro/devkitA64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     # The emulator NRO is opt-in so the default run keeps its exact artifact set.
-    targets = "make test packages device-lab-package"
+    targets = "make test packages"
     if with_eden:
         targets += " eden-test-nro"
     container_script = (
@@ -458,10 +459,7 @@ def build_and_verify(
     verify_packaged_artifacts(standard_package, manifest)
     verify_complete_package(packages["complete"], standard_package)
     verify_flat_sysmodule(ROOT / "build" / "switch" / "pctc-sysmodule.bin", manifest, release=True)
-    for child in package_dir.iterdir():
-        if child.is_dir():
-            remove_path(child)
-    device_lab_package = device_lab_dir / DEVICE_LAB_PACKAGE
+    device_lab_package = packages["device_lab"]
     verify_device_lab_zip(device_lab_package)
     with zipfile.ZipFile(device_lab_package) as package:
         lab_manifest = json.loads(package.read("switch/playwise-device-lab/build.json").decode("utf-8"))
