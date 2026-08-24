@@ -80,16 +80,18 @@ def write_package(
 
 def test_container_command() -> None:
     command = package_remote.container_command()
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     require("/ws/playwise" in command, "container command must use the mounted repository")
     require("make test packages" in command, "container command must test and package")
-    require("device-lab-package" in command, "authoritative build must verify the isolated Device Lab target")
+    require("packages: package-complete device-lab-package" in makefile,
+            "packages target must verify the isolated Device Lab target")
     require("make clean" in command, "authoritative build must remove stale intermediates first")
     require("--emit-bundle" not in command, "container command must not stream a copied bundle")
     require("git " not in command, "mounted local source must not require a git update")
     require("eden-test-nro" not in command, "the default build must not spend time on the emulator NRO")
     eden_command = package_remote.container_command(with_eden=True)
     require("eden-test-nro" in eden_command, "--with-eden must build the isolated Eden NRO target")
-    require("device-lab-package" in eden_command, "--with-eden must keep the standard targets")
+    require("make test packages" in eden_command, "--with-eden must keep the standard package targets")
 
 
 def test_ssh_command() -> None:
@@ -274,16 +276,20 @@ def test_public_package_selection() -> None:
         root = Path(tmp_dir)
         standard = root / package_remote.STANDARD_PACKAGE
         complete = root / package_remote.COMPLETE_PACKAGE
+        device_lab = root / package_remote.DEVICE_LAB_PACKAGE
         standard.write_bytes(b"standard")
         complete.write_bytes(b"complete")
+        device_lab.write_bytes(b"device-lab")
         selected = package_remote.latest_packages(root)
-        require(selected == {"playwise": standard, "complete": complete}, "public outputs must be selected by exact versioned names")
+        require(selected == {"playwise": standard, "complete": complete, "device_lab": device_lab},
+                "build outputs must be selected by exact versioned names")
         extra = root / "unexpected.zip"
         extra.write_bytes(b"extra")
         try:
             package_remote.latest_packages(root)
         except package_remote.PackageError as exc:
-            require("exactly the standard and complete public zips" in str(exc), "extra public Zip must explain the output contract")
+            require("exactly the standard, complete and device lab public zips" in str(exc),
+                    "extra Zip must explain the output contract")
         else:
             raise AssertionError("an extra public Zip must be rejected")
         extra.unlink()

@@ -17,6 +17,7 @@ def main() -> None:
     client = (ROOT / "companion/switch_ipc_client.c").read_text(encoding="utf-8")
     bridge = (ROOT / "companion/overlay/bridge.c").read_text(encoding="utf-8")
     overlay = (ROOT / "companion/overlay/source/main.cpp").read_text(encoding="utf-8")
+    lab_nro = (ROOT / "device_lab/nro/main.c").read_text(encoding="utf-8")
 
     require("bool sm_initialized;" in header, "Switch IPC client must track its retained SM session")
     require("rc = smInitialize();" in client, "Switch IPC client init must retain an SM session")
@@ -32,6 +33,12 @@ def main() -> None:
     exit_pos = overlay.index("ptc_overlay_bridge_exit(&bridge_);")
     unmount_pos = overlay.index('fsdevUnmountDevice("sdmc");', exit_pos)
     require(exit_pos < unmount_pos, "Overlay IPC resources must close before SD is unmounted")
+    require("fsdevMountSdmc()" not in lab_nro,
+            "Device Lab NRO must use the SD mount provided by the default libnx runtime")
+    require('fsdevUnmountDevice("sdmc")' not in lab_nro,
+            "Device Lab NRO must leave the default libnx SD mount to runtime teardown")
+    require("smInitialize()" not in lab_nro and "smExit()" not in lab_nro,
+            "Device Lab NRO must use the SM lifecycle provided by the default libnx runtime")
 
     print("switch IPC lifecycle contract passed")
 

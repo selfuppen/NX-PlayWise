@@ -285,28 +285,21 @@ int main(int argc, char **argv)
     App app;
     PadState pad;
     bool running = true;
-    bool sm_ready = false;
-    bool sd_ready = false;
     char failed_path[320] = "";
     (void)argc;
     (void)argv;
     { const char *volatile anchor = PLAYWISE_EMBEDDED_MANIFEST; (void)anchor; }
     memset(&app, 0, sizeof(app));
     if (!ptc_lab_nro_graphics_init()) { fallback_console(); return 1; }
-    if (R_SUCCEEDED(smInitialize())) sm_ready = true;
-    if (fsdevMountSdmc() != 0) {
-        set_feedback(&app, true, "无法挂载 SD 卡，所有操作均已禁用。",
-            "result=sd_mount_failed\naction=check_sd_and_reboot");
+    /* libnx's default NRO runtime keeps SM initialized and mounts sdmc before
+       main. Mounting sdmc again fails because the device name already exists
+       and previously made a healthy boot-flag state look like a conflict. */
+    if (!ensure_directories(failed_path, sizeof(failed_path))) {
+        set_feedback(&app, true, "无法准备 Device Lab 目录，所有操作均已禁用。", "");
+        snprintf(app.ui.technical, sizeof(app.ui.technical), "result=mkdir_failed\npath=%s\nerrno=%d", failed_path, errno);
         app.ui.stage = PTC_LAB_NRO_CONFLICT;
     } else {
-        sd_ready = true;
-        if (!ensure_directories(failed_path, sizeof(failed_path))) {
-            set_feedback(&app, true, "无法准备 Device Lab 目录，所有操作均已禁用。", "");
-            snprintf(app.ui.technical, sizeof(app.ui.technical), "result=mkdir_failed\npath=%s\nerrno=%d", failed_path, errno);
-            app.ui.stage = PTC_LAB_NRO_CONFLICT;
-        } else {
-            refresh_status(&app);
-        }
+        refresh_status(&app);
     }
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&pad);
@@ -373,8 +366,6 @@ int main(int argc, char **argv)
         ptc_lab_nro_graphics_draw(&app.ui);
         svcSleepThread(16000000LL);
     }
-    if (sm_ready) smExit();
-    if (sd_ready) fsdevUnmountDevice("sdmc");
     ptc_lab_nro_graphics_exit();
     return 0;
 }
