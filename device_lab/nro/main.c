@@ -108,7 +108,12 @@ static void set_feedback(App *app, bool error, const char *message, const char *
 static void refresh_status(App *app)
 {
     bool inspected = ptc_lab_boot_flags_inspect(&FLAG_PATHS, &app->boot);
-    app->lab_service_running = lab_service_is_running();
+    /* Before the Lab boot flag has been enabled there cannot be a pwtl:u
+       server. Do not synchronously request that unavailable service on the
+       first NRO frame: some SM implementations/loaders can leave the applet
+       waiting at a black screen while resolving an unregistered service. */
+    app->lab_service_running = inspected && app->boot.state != PTC_LAB_BOOT_NORMAL &&
+        lab_service_is_running();
     memset(&app->ui.session, 0, sizeof(app->ui.session));
     app->ui.session_status = load_session(&app->ui.session);
     app->ui.report_available = find_latest_report(app->ui.report_path, sizeof(app->ui.report_path));
@@ -291,6 +296,7 @@ int main(int argc, char **argv)
     { const char *volatile anchor = PLAYWISE_EMBEDDED_MANIFEST; (void)anchor; }
     memset(&app, 0, sizeof(app));
     if (!ptc_lab_nro_graphics_init()) { fallback_console(); return 1; }
+    hidInitializeTouchScreen();
     /* libnx's default NRO runtime keeps SM initialized and mounts sdmc before
        main. Mounting sdmc again fails because the device name already exists
        and previously made a healthy boot-flag state look like a conflict. */

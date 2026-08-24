@@ -18,6 +18,7 @@ def main() -> None:
     bridge = (ROOT / "companion/overlay/bridge.c").read_text(encoding="utf-8")
     overlay = (ROOT / "companion/overlay/source/main.cpp").read_text(encoding="utf-8")
     lab_nro = (ROOT / "device_lab/nro/main.c").read_text(encoding="utf-8")
+    lab_overlay = (ROOT / "device_lab/overlay/source/main.cpp").read_text(encoding="utf-8")
 
     require("bool sm_initialized;" in header, "Switch IPC client must track its retained SM session")
     require("rc = smInitialize();" in client, "Switch IPC client init must retain an SM session")
@@ -39,6 +40,15 @@ def main() -> None:
             "Device Lab NRO must leave the default libnx SD mount to runtime teardown")
     require("smInitialize()" not in lab_nro and "smExit()" not in lab_nro,
             "Device Lab NRO must use the SM lifecycle provided by the default libnx runtime")
+    require("app->boot.state != PTC_LAB_BOOT_NORMAL" in lab_nro,
+            "Device Lab NRO must not query pwtl:u before the Lab boot flag is enabled")
+    require("hidInitializeTouchScreen();" in lab_nro,
+            "Device Lab NRO must activate touch before reading touch states")
+    require("ptc_switch_ipc_client_init" not in lab_overlay and
+            "ptc_switch_ipc_backend" not in lab_overlay,
+            "Device Lab Overlay startup must use the durable SD queue without retaining pwtl:u")
+    require("nullptr, nullptr" in lab_overlay,
+            "Device Lab Overlay transport must explicitly select the SD queue")
 
     print("switch IPC lifecycle contract passed")
 

@@ -12,7 +12,6 @@ extern "C" {
 #include "common/protocol/error_code.h"
 #include "common/version.h"
 #include "companion/transport_client.h"
-#include "companion/switch_ipc_client.h"
 #include "device_lab/ui_model.h"
 #include "platform/switch/fs_storage.h"
 }
@@ -488,15 +487,16 @@ public:
     {
         fsdevMountSdmc();
         ptc_fs_storage_init(&storage_);
-        ptc_switch_ipc_client_init(&ipc_);
+        /* Lab requests must remain recoverable even when pwtl:u is not yet
+           running. Use the durable SD queue from the first overlay frame and
+           let the Lab sysmodule claim requests after the required reboot. */
         ptc_companion_transport_init(&transport_, PLAYWISE_SD_ROOT,
-            ptc_fs_storage_as_storage(&storage_), ptc_switch_ipc_backend(), &ipc_);
+            ptc_fs_storage_as_storage(&storage_), nullptr, nullptr);
     }
 
     void exitServices() override
     {
         ptc_companion_transport_cancel(&transport_);
-        ptc_switch_ipc_client_exit(&ipc_);
         fsdevUnmountDevice("sdmc");
     }
 
@@ -504,7 +504,6 @@ public:
 
 private:
     PtcFsStorage storage_{};
-    PtcSwitchIpcClient ipc_{};
     PtcCompanionTransportClient transport_{};
 };
 

@@ -36,7 +36,7 @@ export TOPDIR := $(CURDIR)
 export VPATH := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir))
 export DEPSDIR := $(CURDIR)/$(BUILD)
 CPPFILES := main.cpp
-CFILES := ui_model.c file_protocol.c transport_client.c switch_ipc_client.c request_client.c request_schema.c result_builder.c error_code.c ptc_time.c rules.c fs_storage.c cJSON.c
+CFILES := ui_model.c file_protocol.c transport_client.c request_client.c request_schema.c result_builder.c error_code.c ptc_time.c rules.c fs_storage.c cJSON.c
 export LD := $(CXX)
 export OFILES_SRC := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o)
 export OFILES := $(OFILES_SRC)
