@@ -10,6 +10,8 @@ param(
 
     [switch]$Apply,
 
+    [switch]$Lab,
+
     # Clean / Full install switches (removes all existing PlayWise data before copying)
     [switch]$Clean,
 
@@ -23,13 +25,32 @@ $destinationDriveLetter = $Drive.Substring(0, 1).ToUpperInvariant()
 $destinationRoot = "${destinationDriveLetter}:\"
 $isFullInstall = $Clean.IsPresent -or $Full.IsPresent
 
-$ownedRelativePaths = @(
-    "atmosphere\contents\4200000000BD2300",
-    "switch\.overlays\playwise.ovl"
-)
-$legacyOverlayRelativePaths = @("switch\.overlays\pctc.ovl")
+$isLab = $Lab.IsPresent
+if ($isLab) {
+    $appName = "playwise-device-lab"
+    $sysmoduleId = "4200000000BD23F0"
+    $overlayName = "playwise-device-lab.ovl"
+} else {
+    $appName = "playwise"
+    $sysmoduleId = "4200000000BD2300"
+    $overlayName = "playwise.ovl"
+}
+
+$appPath = "switch\$appName"
+$sysmodulePath = "atmosphere\contents\$sysmoduleId"
+$overlayPath = "switch\.overlays\$overlayName"
+$displayName = if ($isLab) { "PlayWise Device Lab" } else { "PlayWise" }
+
+if ($isLab) {
+    $ownedRelativePaths = @($sysmodulePath, $overlayPath)
+    $legacyOverlayRelativePaths = @()
+} else {
+    $ownedRelativePaths = @($sysmodulePath, $overlayPath)
+    $legacyOverlayRelativePaths = @("switch\.overlays\pctc.ovl")
+}
+
 if ($isFullInstall) {
-    $pathsToRemove = @("switch\playwise") + $ownedRelativePaths + $legacyOverlayRelativePaths
+    $pathsToRemove = @($appPath) + $ownedRelativePaths + $legacyOverlayRelativePaths
 } else {
     $pathsToRemove = $ownedRelativePaths + $legacyOverlayRelativePaths
 }
@@ -116,40 +137,42 @@ if ($sourceRoot.StartsWith($destinationRoot, [System.StringComparison]::OrdinalI
     throw "SourceFolder must not be on ${destinationDriveLetter}:, because package binaries are replaced during installation."
 }
 
-$sourceApp = Join-Path $sourceRoot "switch\playwise"
-$sourceSysmodule = Join-Path $sourceRoot "atmosphere\contents\4200000000BD2300"
-$sourceOverlay = Join-Path $sourceRoot "switch\.overlays\playwise.ovl"
+$sourceApp = Join-Path $sourceRoot $appPath
+$sourceSysmodule = Join-Path $sourceRoot $sysmodulePath
+$sourceOverlay = Join-Path $sourceRoot $overlayPath
 $availableRelativePaths = @()
 $hasPackageCore = $false
 
 if (Test-Path -LiteralPath $sourceApp -PathType Container) {
-    $defaultFiles = @("config.json", "auth.json", "rules.json", "state.json", "compatibility.json", "setup.json")
-    foreach ($defaultFile in $defaultFiles) {
-        $defaultPath = Join-Path $sourceApp (Join-Path "defaults" $defaultFile)
-        if (-not (Test-Path -LiteralPath $defaultPath -PathType Leaf)) {
-            throw "Invalid package: switch\playwise\defaults\$defaultFile is missing."
-        }
-        $mutableSeed = Join-Path $sourceApp $defaultFile
-        if (Test-Path -LiteralPath $mutableSeed) {
-            throw "Invalid package: switch\playwise\$defaultFile would overwrite runtime data."
+    if (-not $isLab) {
+        $defaultFiles = @("config.json", "auth.json", "rules.json", "state.json", "compatibility.json", "setup.json")
+        foreach ($defaultFile in $defaultFiles) {
+            $defaultPath = Join-Path $sourceApp (Join-Path "defaults" $defaultFile)
+            if (-not (Test-Path -LiteralPath $defaultPath -PathType Leaf)) {
+                throw "Invalid package: $appPath\defaults\$defaultFile is missing."
+            }
+            $mutableSeed = Join-Path $sourceApp $defaultFile
+            if (Test-Path -LiteralPath $mutableSeed) {
+                throw "Invalid package: $appPath\$defaultFile would overwrite runtime data."
+            }
         }
     }
     if (-not (Test-Path -LiteralPath (Join-Path $sourceApp "build.json") -PathType Leaf)) {
-        throw "Invalid package: switch\playwise\build.json is missing."
+        throw "Invalid package: $appPath\build.json is missing."
     }
     $hasPackageCore = $true
 }
 
 if (Test-Path -LiteralPath $sourceSysmodule -PathType Container) {
     if (-not (Test-Path -LiteralPath (Join-Path $sourceSysmodule "exefs.nsp") -PathType Leaf)) {
-        throw "Invalid package: atmosphere\contents\4200000000BD2300\exefs.nsp is missing."
+        throw "Invalid package: $sysmodulePath\exefs.nsp is missing."
     }
-    $availableRelativePaths += "atmosphere\contents\4200000000BD2300"
+    $availableRelativePaths += $sysmodulePath
     $hasPackageCore = $true
 }
 
 if (Test-Path -LiteralPath $sourceOverlay -PathType Leaf) {
-    $availableRelativePaths += "switch\.overlays\playwise.ovl"
+    $availableRelativePaths += $overlayPath
 }
 
 if (-not $hasPackageCore) {
@@ -171,9 +194,9 @@ foreach ($relativePath in $pathsToRemove) {
 Write-Host ""
 Write-Host "Package paths to copy:"
 if ($isFullInstall) {
-    Write-Host "  switch\playwise (full clean install)"
+    Write-Host "  $appPath (full clean install)"
 } else {
-    Write-Host "  switch\playwise package assets (merge/replace); credentials, PIN, rules and runtime data are preserved"
+    Write-Host "  $appPath package assets (merge/replace); credentials, PIN, rules and runtime data are preserved"
 }
 foreach ($relativePath in $availableRelativePaths) {
     Write-Host "  $relativePath"
@@ -187,9 +210,9 @@ if (-not $Apply) {
 
 if (-not $WhatIfPreference) {
     if ($isFullInstall) {
-        $confirmation = Read-Host "Type $destinationDriveLetter to confirm FULL CLEAN installation of PlayWise (DELETES switch\playwise and all existing data)"
+        $confirmation = Read-Host "Type $destinationDriveLetter to confirm FULL CLEAN installation of $displayName (DELETES $appPath and all existing data)"
     } else {
-        $confirmation = Read-Host "Type $destinationDriveLetter to confirm replacement of PlayWise binaries"
+        $confirmation = Read-Host "Type $destinationDriveLetter to confirm replacement of $displayName binaries"
     }
     if ($confirmation -cne $destinationDriveLetter) {
         throw "Confirmation did not match drive letter $destinationDriveLetter; no files were changed."
@@ -212,9 +235,9 @@ if (-not $WhatIfPreference) {
     }
 }
 
-$destinationApp = Join-Path $destinationRoot "switch\playwise"
+$destinationApp = Join-Path $destinationRoot $appPath
 if ($isFullInstall) {
-    if ($PSCmdlet.ShouldProcess($destinationApp, "Full clean install PlayWise package data")) {
+    if ($PSCmdlet.ShouldProcess($destinationApp, "Full clean install $displayName package data")) {
         New-Item -ItemType Directory -Path $destinationApp -Force | Out-Null
         foreach ($sourceChild in Get-ChildItem -LiteralPath $sourceApp -Force) {
             Copy-Item -LiteralPath $sourceChild.FullName -Destination $destinationApp -Recurse -Force
@@ -222,7 +245,7 @@ if ($isFullInstall) {
         Test-InstalledPath -SourcePath $sourceApp -DestinationPath $destinationApp
     }
 } else {
-    if ($PSCmdlet.ShouldProcess($destinationApp, "Merge overwrite-safe PlayWise package assets")) {
+    if ($PSCmdlet.ShouldProcess($destinationApp, "Merge overwrite-safe $displayName package assets")) {
         New-Item -ItemType Directory -Path $destinationApp -Force | Out-Null
         foreach ($sourceDirectory in Get-ChildItem -LiteralPath $sourceApp -Directory -Recurse -Force) {
             $relativePath = $sourceDirectory.FullName.Substring($sourceApp.Length).TrimStart("\")
