@@ -81,11 +81,16 @@ def create_package(out: Path, manifest_path: Path, sysmodule_exefs: Path, nro: P
     copy_required(nro, out / APP_ROOT / "playwise-device-lab.nro")
     copy_required(overlay, out / "switch" / ".overlays" / "playwise-device-lab.ovl")
     copy_required(sysmodule_exefs, out / "atmosphere" / "contents" / TITLE_ID / "exefs.nsp")
+    # The NRO creates boot2.flag only after an explicit hold confirmation. Keep
+    # the parent directory in the package so ordinary Zip extractors can create
+    # the flag atomically without first repairing a missing directory.
+    (out / "atmosphere" / "contents" / TITLE_ID / "flags").mkdir(parents=True, exist_ok=True)
     warning = out / "DEVICE-LAB.txt"
     warning.write_text(
         "任我玩 DEVICE LAB - 内部取证工具 / 危险操作\n"
         "此配置不是公开发行版，并且有意不包含 boot2.flag。\n"
-        "请从 Device Lab NRO 启用实验后台，完成取证和精确恢复后再切回正常后台。\n",
+        "请从 Device Lab NRO 启用实验后台，完成取证和精确恢复后再切回正常后台。\n"
+        "第六阶段关闭浮窗观察 15 秒后，必须重新打开浮窗提交人工观察；提前恢复不会生成完整报告。\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -95,7 +100,9 @@ def write_zip(root: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as package:
         for path in sorted(root.rglob("*")):
-            if path.is_file():
+            if path.is_dir():
+                package.writestr(path.relative_to(root).as_posix().rstrip("/") + "/", b"")
+            else:
                 package.write(path, path.relative_to(root).as_posix())
 
 

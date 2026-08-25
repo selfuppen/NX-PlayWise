@@ -35,6 +35,11 @@ typedef struct {
     uint64_t forensic_monotonic_ns;
     bool suspend_event_armed;
     bool suspend_event_signaled;
+    bool suspend_event_signaled_latched;
+    uint32_t suspend_event_check_count;
+    uint64_t suspend_event_first_signaled_monotonic_ns;
+    bool public_parity_override_enabled;
+    PtcPctlPublicParity public_parity_override;
 } PtcPctlStub;
 
 void ptc_pctl_stub_init(PtcPctlStub *stub);

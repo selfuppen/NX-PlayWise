@@ -343,8 +343,16 @@ void ptc_lab_nro_graphics_draw(const PtcLabNroUi *ui)
         wrapped(pixels, stride, 906, 330, ptc_lab_verdict_zh(ui->session.restore_verdict),
             16, 300, 27, 3, RGB(86, 97, 112));
     }
-    text(pixels, stride, 906, 414, ui->report_available ? "报告：已生成" : "报告：尚未生成", 17,
-        ui->report_available ? RGB(25, 125, 89) : RGB(110, 118, 130));
+    if (ui->session_status == PTC_LAB_SESSION_VALID &&
+        strcmp(ui->session.state, "awaiting_observation") == 0) {
+        text(pixels, stride, 906, 414, "报告：待人工确认", 17, RGB(184, 112, 20));
+    } else if (ui->session_status == PTC_LAB_SESSION_VALID &&
+        strcmp(ui->session.state, "complete") == 0 && ui->session.restored) {
+        text(pixels, stride, 906, 414, "报告：完整", 17, RGB(25, 125, 89));
+    } else {
+        text(pixels, stride, 906, 414, ui->report_available ? "报告：采集中" : "报告：尚未生成", 17,
+            ui->report_available ? RGB(28, 94, 160) : RGB(110, 118, 130));
+    }
     if (ui->details_visible && ui->technical[0]) {
         text(pixels, stride, 906, 460, "技术详情", 18, RGB(50, 61, 76));
         wrapped(pixels, stride, 906, 492, ui->technical, 13, 300, 22, 6, RGB(102, 111, 123));

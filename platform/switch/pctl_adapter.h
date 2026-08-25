@@ -10,6 +10,9 @@ typedef struct {
     Result last_result;
 #ifdef PLAYWISE_DEVICE_LAB
     Handle suspend_event;
+    bool suspend_event_signaled;
+    uint32_t suspend_event_check_count;
+    uint64_t suspend_event_first_signaled_monotonic_ns;
 #endif
 } PtcSwitchPctl;
 

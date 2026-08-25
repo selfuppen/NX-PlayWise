@@ -195,6 +195,7 @@ public:
         bool restore_touch = touch_pressed && point_in(touch_x, touch_y,
             draw_x_ + 20, draw_y_ + 394, draw_w_ - 40, 44);
         if (session_status_ == PTC_LAB_SESSION_VALID &&
+            std::strcmp(view_.state, "awaiting_observation") != 0 &&
             ((keysDown & HidNpadButton_X) || restore_touch)) {
             submit_empty("lab_session_restore");
             return true;
@@ -438,7 +439,9 @@ private:
             }
         }
 
-        if (std::strcmp(view_.state, "complete") != 0 && session_status_ == PTC_LAB_SESSION_VALID)
+        if (std::strcmp(view_.state, "complete") != 0 &&
+            std::strcmp(view_.state, "awaiting_observation") != 0 &&
+            session_status_ == PTC_LAB_SESSION_VALID)
             draw_button(renderer, x + 20, y + 394, w - 40, 44, "X / 触摸：立即恢复原设置", COLOR_DANGER, true);
         if (waiting_) renderer->drawString("正在提交并等待后台结果...", false, x + 24, y + 466, 15, renderer->a(COLOR_GREEN));
 

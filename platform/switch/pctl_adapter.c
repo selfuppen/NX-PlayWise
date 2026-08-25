@@ -633,6 +633,9 @@ static PtcErrorCode switch_arm_suspend_event(PtcPctl *pctl)
         svcCloseHandle(adapter->suspend_event);
         adapter->suspend_event = INVALID_HANDLE;
     }
+    adapter->suspend_event_signaled = false;
+    adapter->suspend_event_check_count = 0;
+    adapter->suspend_event_first_signaled_monotonic_ns = 0;
     rc = dispatch_out_handle(&session.service,
         PTC_PCTL_CMD_GET_PLAY_TIMER_EVENT_TO_REQUEST_SUSPENSION, &adapter->suspend_event);
     close_session(&session);
@@ -644,15 +647,25 @@ static PtcErrorCode switch_arm_suspend_event(PtcPctl *pctl)
     return map_result(adapter, rc, PTC_ERR_OK);
 }
 
-static bool switch_suspend_event_signaled(PtcPctl *pctl, bool *known)
+static PtcErrorCode switch_poll_suspend_event(PtcPctl *pctl, PtcPctlSuspendEventEvidence *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
     s32 index = -1;
     Result rc;
-    if (known) *known = adapter->suspend_event != INVALID_HANDLE;
-    if (adapter->suspend_event == INVALID_HANDLE) return false;
+    if (!out) return PTC_ERR_BAD_REQUEST;
+    memset(out, 0, sizeof(*out));
+    out->known = adapter->suspend_event != INVALID_HANDLE;
+    if (adapter->suspend_event == INVALID_HANDLE) return PTC_ERR_OK;
+    ++adapter->suspend_event_check_count;
     rc = svcWaitSynchronization(&index, &adapter->suspend_event, 1, 0);
-    return R_SUCCEEDED(rc) && index == 0;
+    if (R_SUCCEEDED(rc) && index == 0 && !adapter->suspend_event_signaled) {
+        adapter->suspend_event_signaled = true;
+        adapter->suspend_event_first_signaled_monotonic_ns = armTicksToNs(armGetSystemTick());
+    }
+    out->signaled = adapter->suspend_event_signaled;
+    out->check_count = adapter->suspend_event_check_count;
+    out->first_signaled_monotonic_ns = adapter->suspend_event_first_signaled_monotonic_ns;
+    return PTC_ERR_OK;
 }
 #endif
 
@@ -677,7 +690,7 @@ static const PtcPctlVTable SWITCH_PCTL_VTABLE = {
     switch_forensic_sample,
     switch_public_parity,
     switch_arm_suspend_event,
-    switch_suspend_event_signaled,
+    switch_poll_suspend_event,
 #else
     NULL,
     NULL,
@@ -691,6 +704,9 @@ void ptc_switch_pctl_init(PtcSwitchPctl *adapter)
     memset(adapter, 0, sizeof(*adapter));
 #ifdef PLAYWISE_DEVICE_LAB
     adapter->suspend_event = INVALID_HANDLE;
+    adapter->suspend_event_signaled = false;
+    adapter->suspend_event_check_count = 0;
+    adapter->suspend_event_first_signaled_monotonic_ns = 0;
 #endif
     adapter->pctl.vtable = &SWITCH_PCTL_VTABLE;
     adapter->pctl.ctx = adapter;

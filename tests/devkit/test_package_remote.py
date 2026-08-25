@@ -237,6 +237,7 @@ def test_device_lab_zip_verification() -> None:
                     title=package_remote.DEVICE_LAB_OVERLAY_TITLE,
                     display_version=f"{package_remote.PLAYWISE_VERSION}-lab"))
             package.writestr(f"{package_remote.DEVICE_LAB_CONTENT_ROOT}/exefs.nsp", embedded)
+            package.writestr(f"{package_remote.DEVICE_LAB_CONTENT_ROOT}/flags/", b"")
             package.writestr("DEVICE-LAB.txt", "任我玩 DEVICE LAB - 内部取证工具")
         package_remote.verify_device_lab_zip(good)
 

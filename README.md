@@ -13,6 +13,9 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 > [!WARNING]
 > **仅支持已安装自定义固件的 Nintendo Switch，推荐 Atmosphère；未破解的原厂零售主机无法使用。** PlayWise 通过常驻后台服务（sysmodule）调用受限的 Horizon PCTL 系统家长控制服务，因此必须运行在允许 Homebrew 和自定义系统组件的环境中。
 
+> [!IMPORTANT]
+> **PlayWise 依赖 Nintendo 官方家长控制本身正常工作。** 安装和接管前，必须先在“系统设置 → 家长控制”中开启官方家长控制，并确认它能在真实游戏运行时正常倒计时、到时限制软件。PlayWise 基于官方 PCTL 系统服务管理额度，不能替代或修复已经失效的底层计时与限制能力；如果这项验证不通过，请先排查官方家长控制和系统环境，不要继续 PlayWise 接管。
+
 > [!NOTE]
 > PlayWise 不会破解账号、绕过在线验证，也不提供 Nintendo 官方家长控制 PIN 的重置、删除或官方手机 App 解绑功能。它只把本项目支持的游玩额度、系统计时、到期提醒和离线加时功能放到主机本地管理；“PlayWise PIN”仅用于保护本项目的家长区，不是 Nintendo 官方 PIN。
 
@@ -37,11 +40,12 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 ## 快速开始
 
-1. 准备已安装 Atmosphère 和 Homebrew Menu 的 Switch；如需游戏内入口，另行安装 Ultrahand Overlay。
-2. 首次使用优先下载 `playwise-complete-<版本>.zip` 完整交付包；其中的 `playwise-<版本>.zip` 用于安装 Switch 端，`playwise-offline.html` 用于家长手机或电脑。
-3. 从 Homebrew Menu 打开“任我玩”，完成首次设置。
-4. 在家长区设置今日总额度、周计划或国家节假日规则；需要临时加时时，由家长生成指定分钟数的 8 位码并告诉孩子。
-5. 孩子无需联网，在主机应用或游戏内浮窗中输入代码，确认后即可获得相应的游玩时间。
+1. 先在“系统设置 → 家长控制”中开启 Nintendo 官方家长控制，用真实游戏完成一次倒计时和到时限制验证；这是 PlayWise 正常工作的前提。
+2. 准备已安装 Atmosphère 和 Homebrew Menu 的 Switch；如需游戏内入口，另行安装 Ultrahand Overlay。
+3. 首次使用优先下载 `playwise-complete-<版本>.zip` 完整交付包；其中的 `playwise-<版本>.zip` 用于安装 Switch 端，`playwise-offline.html` 用于家长手机或电脑。
+4. 从 Homebrew Menu 打开“任我玩”，完成首次设置。
+5. 在家长区设置今日总额度、周计划或国家节假日规则；需要临时加时时，由家长生成指定分钟数的 8 位码并告诉孩子。
+6. 孩子无需联网，在主机应用或游戏内浮窗中输入代码，确认后即可获得相应的游玩时间。
 
 完整步骤、升级方法和截图位置见[使用指南](docs/使用指南.md)。
 

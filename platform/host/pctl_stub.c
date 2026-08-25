@@ -293,6 +293,10 @@ static PtcErrorCode stub_forensic_sample(PtcPctl *pctl, PtcPctlForensicSample *o
 static PtcErrorCode stub_public_parity(PtcPctl *pctl, PtcPctlPublicParity *out)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    if (stub->public_parity_override_enabled) {
+        *out = stub->public_parity_override;
+        return PTC_ERR_OK;
+    }
     memset(out, 0, sizeof(*out));
     out->raw_temporary_unlocked = stub->status.temporary_unlocked;
     out->libnx_temporary_unlocked = stub->status.temporary_unlocked;
@@ -308,14 +312,29 @@ static PtcErrorCode stub_arm_suspend_event(PtcPctl *pctl)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
     stub->suspend_event_armed = true;
+    stub->suspend_event_signaled_latched = false;
+    stub->suspend_event_check_count = 0;
+    stub->suspend_event_first_signaled_monotonic_ns = 0;
     return PTC_ERR_OK;
 }
 
-static bool stub_suspend_event_signaled(PtcPctl *pctl, bool *known)
+static PtcErrorCode stub_poll_suspend_event(PtcPctl *pctl, PtcPctlSuspendEventEvidence *out)
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
-    if (known) *known = stub->suspend_event_armed;
-    return stub->suspend_event_armed && stub->suspend_event_signaled;
+    if (!out) return PTC_ERR_BAD_REQUEST;
+    memset(out, 0, sizeof(*out));
+    out->known = stub->suspend_event_armed;
+    if (stub->suspend_event_armed) {
+        ++stub->suspend_event_check_count;
+        if (stub->suspend_event_signaled && !stub->suspend_event_signaled_latched) {
+            stub->suspend_event_signaled_latched = true;
+            stub->suspend_event_first_signaled_monotonic_ns = stub->forensic_monotonic_ns;
+        }
+    }
+    out->signaled = stub->suspend_event_signaled_latched;
+    out->check_count = stub->suspend_event_check_count;
+    out->first_signaled_monotonic_ns = stub->suspend_event_first_signaled_monotonic_ns;
+    return PTC_ERR_OK;
 }
 
 static const PtcPctlVTable PCTL_STUB_VTABLE = {
@@ -333,7 +352,7 @@ static const PtcPctlVTable PCTL_STUB_VTABLE = {
     stub_forensic_sample,
     stub_public_parity,
     stub_arm_suspend_event,
-    stub_suspend_event_signaled,
+    stub_poll_suspend_event,
 };
 
 void ptc_pctl_stub_init(PtcPctlStub *stub)

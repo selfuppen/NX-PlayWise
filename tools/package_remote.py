@@ -267,7 +267,8 @@ def verify_device_lab_zip(path: Path) -> None:
         exefs_path = f"{DEVICE_LAB_CONTENT_ROOT}/exefs.nsp"
         nro_path = "switch/playwise-device-lab/playwise-device-lab.nro"
         overlay_path = "switch/.overlays/playwise-device-lab.ovl"
-        required = {build_path, exefs_path, nro_path, overlay_path, "DEVICE-LAB.txt"}
+        flags_dir = f"{DEVICE_LAB_CONTENT_ROOT}/flags/"
+        required = {build_path, exefs_path, nro_path, overlay_path, flags_dir, "DEVICE-LAB.txt"}
         missing = sorted(required.difference(names))
         if missing:
             raise PackageError(f"{path.name}: missing Device Lab entries: {', '.join(missing)}")

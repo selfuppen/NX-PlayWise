@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 
 #include "../../companion/auth.h"
@@ -35,6 +36,9 @@
 #define LEDGER_PATH APP_ROOT "/ledger/used_nonces.jsonl"
 #define REDEMPTION_HISTORY_PATH APP_ROOT "/ledger/redemption-history.jsonl"
 #define ACTIVITY_HISTORY_PATH APP_ROOT "/activity/history.jsonl"
+#ifndef PLAYWISE_EDEN
+#define STANDARD_BOOT_FLAG_PATH "sdmc:/atmosphere/contents/4200000000BD2300/flags/boot2.flag"
+#endif
 #define RESULT_TEXT_SIZE 8192
 #define REQUEST_TIMEOUT_MS 30000
 #define INPUT_LOOP_SLEEP_NS 20000000LL
@@ -57,6 +61,14 @@
 #define DIRECTION_BUTTON_MASK (HidNpadButton_Up | HidNpadButton_Down | HidNpadButton_Left | HidNpadButton_Right)
 
 __attribute__((used)) static const char PLAYWISE_EMBEDDED_MANIFEST[] = PLAYWISE_RELEASE_MANIFEST_JSON;
+
+#ifndef PLAYWISE_EDEN
+static bool standard_backend_expected(void)
+{
+    struct stat info;
+    return stat(STANDARD_BOOT_FLAG_PATH, &info) == 0 && info.st_size == 0;
+}
+#endif
 
 typedef enum {
     AUTH_RETRY_NONE = 0,
@@ -4422,6 +4434,9 @@ int main(int argc, char **argv)
     bool touch_down = false;
     bool running = true;
     bool install_defaults_ready;
+#ifndef PLAYWISE_EDEN
+    bool backend_expected;
+#endif
 #ifdef PLAYWISE_EDEN
     /* PtcSysmodule alone is ~10 KiB, far too much for the main thread stack. */
     static PtcEdenRuntime eden_runtime;
@@ -4479,8 +4494,10 @@ int main(int argc, char **argv)
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs),
         ptc_eden_runtime_ipc_backend(), &eden_runtime);
 #else
-    ptc_switch_ipc_client_init(&ui.ipc);
-    ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs), ptc_switch_ipc_backend(), &ui.ipc);
+    backend_expected = standard_backend_expected();
+    if (backend_expected) ptc_switch_ipc_client_init(&ui.ipc);
+    ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs),
+        backend_expected ? ptc_switch_ipc_backend() : NULL, &ui.ipc);
 #endif
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     ui.last_setup_refresh_second = -1;
@@ -4492,7 +4509,14 @@ int main(int argc, char **argv)
     ) {
         snprintf(ui.model.message, sizeof(ui.model.message),
                  "安装数据初始化失败，请重新覆盖安装包并确认 SD 卡可写。");
-    } else if (!restore_pending_redemption(&ui)) {
+    }
+#ifndef PLAYWISE_EDEN
+    else if (!backend_expected) {
+        snprintf(ui.model.message, sizeof(ui.model.message),
+                 "标准后台启动标志当前未启用。请先用 Device Lab 恢复正常后台并完整重启主机。");
+    }
+#endif
+    else if (!restore_pending_redemption(&ui)) {
         submit_status(&ui);
     }
 

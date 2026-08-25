@@ -130,6 +130,112 @@ static void test_session_timing_order_restart_and_restore_failure(void)
         strstr(text, "\"1952\"") != NULL, "private 1952 evidence appears only in Lab report data");
 }
 
+static void test_complete_report_requires_observation_and_latches_event(void)
+{
+    PtcMemStorage storage;
+    PtcPctlStub pctl;
+    PtcFakeTime time;
+    PtcSysmodule sysmodule;
+    PtcRequest item;
+    char text[20000];
+    int phase;
+    static const char *const phases[] = {
+        "home_stopped", "home_started", "game_foreground", "game_suspended", "sleep_wake", "restriction_effect"
+    };
+    ptc_mem_storage_init(&storage);
+    ptc_pctl_stub_init(&pctl);
+    /* day_index 2999 maps to weekday 6, whose final day slot ends exactly at
+       the 0x44 settings boundary. */
+    ptc_fake_time_init(&time, 2100000000LL, 2999, 600);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 60;
+    pctl.status.play_timer_enabled = false;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
+    pctl.public_parity_override_enabled = true;
+    pctl.public_parity_override.current_settings_equal = true;
+    pctl.public_parity_override.raw_suspend_event_valid = true;
+    pctl.public_parity_override.libnx_suspend_event_valid = true;
+    pctl.public_parity_override.libnx_alarm_disabled_result = 19289U;
+    init_lab(&sysmodule, &storage, &pctl, &time);
+    check(storage.storage.vtable->write_text_atomic(&storage.storage, "/lab/environment.json",
+            "{\"version\":1,\"read_ok\":true,\"hos\":\"22.5.0\",\"model\":\"mariko-oled\"}"),
+        "Lab runtime environment fixture is stored");
+    check(storage.storage.vtable->write_text_atomic(&storage.storage, "/lab/build.json",
+            "{\"profile\":\"device-lab\",\"release_id\":\"test-lab\"}"),
+        "Lab build identity fixture is stored");
+
+    item = request(PTC_REQUEST_LAB_SESSION_START, "complete-start", NULL, NULL);
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    for (phase = 0; phase < 5; ++phase) {
+        char id[24];
+        if (phase == 1) pctl.status.remaining_minutes = 0;
+        snprintf(id, sizeof(id), "complete-phase-%d", phase);
+        item = request(PTC_REQUEST_LAB_PHASE_START, id, phases[phase], NULL);
+        (void)ptc_lab_process_request(&sysmodule, &item);
+        if (phase == 1) pctl.forensic_spent_ns = 75000000000LL;
+        time.snapshot.unix_seconds += 75;
+        check(ptc_lab_scheduler_tick(&sysmodule) == 1, "successful Lab phase completes");
+    }
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/phase-1.json", text, sizeof(text)) &&
+            strstr(text, "\"deltas\":{\"remaining_ns\":0,\"spent_ns\":75000000000}") != NULL &&
+            strstr(text, "\"product_semantics\":\"unsafe_for_home_start\"") != NULL,
+        "HOME spent-time growth marks active timer start unsafe even without a remaining-time delta");
+
+    item = request(PTC_REQUEST_LAB_PHASE_START, "complete-restriction", phases[5], NULL);
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(ptc_lab_next_wait_ms(&sysmodule, 5000) == 100,
+        "restriction phase polls the suspension event every 100 ms");
+    pctl.forensic_monotonic_ns = 123456789ULL;
+    pctl.suspend_event_signaled = true;
+    time.snapshot.unix_seconds += 1;
+    check(ptc_lab_scheduler_tick(&sysmodule) == 0, "restriction event can be sampled before the deadline");
+    pctl.suspend_event_signaled = false;
+    time.snapshot.unix_seconds += 14;
+    check(ptc_lab_scheduler_tick(&sysmodule) == 1, "restriction phase completes at its deadline");
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/phase-5.json", text, sizeof(text)) &&
+            strstr(text, "\"check_count\":2") != NULL &&
+            strstr(text, "\"signaled\":true") != NULL &&
+            strstr(text, "\"first_signaled_monotonic_ns\":123456789") != NULL,
+        "a transient suspension event remains latched in the final phase evidence");
+    check(strstr(text, "\"settings_hex\":") != NULL &&
+            strstr(text, "\"target_weekday\":6") != NULL &&
+            strstr(text, "\"expected_byte_start\":62") != NULL &&
+            strstr(text, "\"expected_byte_end_exclusive\":68") != NULL &&
+            strstr(text, "\"changed_offsets\":[") != NULL &&
+            strstr(text, "\"outside_today_changed_offsets\":[") != NULL &&
+            strstr(text, "\"unrelated_bytes_unchanged\":false") != NULL,
+        "restriction evidence includes raw settings and bounded byte-offset differences");
+
+    check(storage.storage.vtable->read_text(&storage.storage,
+            "/lab/reports/2100000000-test-boot.json", text, sizeof(text)) &&
+            strstr(text, "\"automated_phases_completed\":6") != NULL &&
+            strstr(text, "\"manual_observation_recorded\":false") != NULL &&
+            strstr(text, "\"complete\":false") != NULL &&
+            strstr(text, "\"runtime\":{\"version\":1") != NULL &&
+            strstr(text, "\"build\":{\"profile\":\"device-lab\"") != NULL,
+        "six automatic phases remain incomplete until the observation is recorded and carry environment identity");
+    check(strstr(text, "\"1458\":{\"raw_result\":0,\"libnx_result\":19289,\"comparable\":false,\"value_equal\":false}") != NULL,
+        "failed libnx parity is explicitly non-comparable instead of accidentally equal");
+
+    item = request(PTC_REQUEST_LAB_SESSION_RESTORE, "redundant-restore", NULL, NULL);
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/session.json", text, sizeof(text)) &&
+            strstr(text, "\"state\":\"awaiting_observation\"") != NULL,
+        "redundant restore preserves the pending manual observation");
+
+    item = request(PTC_REQUEST_LAB_OBSERVATION, "visible", NULL, "restriction_visible");
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage,
+            "/lab/reports/2100000000-test-boot.json", text, sizeof(text)) &&
+            strstr(text, "\"manual_observation\":\"restriction_visible\"") != NULL &&
+            strstr(text, "\"manual_observation_recorded\":true") != NULL &&
+            strstr(text, "\"complete\":true") != NULL,
+        "confirmed visible restriction finalizes the report");
+}
+
 static bool touch_empty(const char *path)
 {
     FILE *file = fopen(path, "wb");
@@ -277,9 +383,13 @@ static void test_ui_model(void)
     check(ptc_lab_nro_stage(&boot, true, PTC_LAB_SESSION_INVALID, NULL) == PTC_LAB_NRO_SESSION_INVALID,
         "damaged session blocks all new evidence actions");
     memset(&session, 0, sizeof(session));
-    snprintf(session.state, sizeof(session.state), "complete");
+    snprintf(session.state, sizeof(session.state), "awaiting_observation");
     snprintf(session.restore_verdict, sizeof(session.restore_verdict), "exact_restore_proved");
+    session.next_phase = 6;
     session.restored = true;
+    check(ptc_lab_nro_stage(&boot, true, PTC_LAB_SESSION_VALID, &session) == PTC_LAB_NRO_RESUME_OVERLAY,
+        "restored six-phase evidence still returns to the Overlay until observation is submitted");
+    snprintf(session.state, sizeof(session.state), "complete");
     check(ptc_lab_nro_stage(&boot, true, PTC_LAB_SESSION_VALID, &session) == PTC_LAB_NRO_RESTORE_NORMAL,
         "exact restore proof recommends switching back to the normal package");
     boot.state = PTC_LAB_BOOT_RESTORED;
@@ -298,6 +408,7 @@ int main(void)
 {
     test_protocol();
     test_session_timing_order_restart_and_restore_failure();
+    test_complete_report_requires_observation_and_latches_event();
     test_boot_flags();
     test_ui_model();
     if (failures) { fprintf(stderr, "%d Device Lab test(s) failed\n", failures); return 1; }

@@ -13,7 +13,8 @@
 
 #define LAB_PHASE_SECONDS 75LL
 #define LAB_RESTRICTION_SECONDS 15LL
-#define LAB_REPORT_BUFFER 8192U
+#define LAB_RESTRICTION_EVENT_POLL_MS 100U
+#define LAB_REPORT_BUFFER 16384U
 
 static const char *const LAB_PHASES[] = {
     "home_stopped", "home_started", "game_foreground",
@@ -29,6 +30,7 @@ typedef struct {
     int64_t deadline;
     char observation[32];
     bool event_armed;
+    int restriction_weekday;
     bool restored;
     char restore_verdict[32];
     PtcPctlSettingsSnapshot original;
@@ -156,7 +158,7 @@ static bool save_state(PtcSysmodule *sysmodule, const LabState *state)
     snprintf(text, sizeof(text),
         "{\"version\":1,\"run_id\":\"%s\",\"state\":\"%s\",\"next_phase\":%d,"
         "\"active_phase\":\"%s\",\"started_at\":%lld,\"deadline\":%lld,"
-        "\"observation\":\"%s\",\"event_armed\":%s,\"restored\":%s,"
+        "\"observation\":\"%s\",\"event_armed\":%s,\"restriction_weekday\":%d,\"restored\":%s,"
         "\"restore_verdict\":\"%s\",\"original_timer\":%s,\"original_hex\":\"%s\","
         "\"before_monotonic_ns\":%llu,\"before_timer_rc\":%u,\"before_timer\":%s,"
         "\"before_remaining_rc\":%u,\"before_remaining_ns\":%lld,"
@@ -165,7 +167,8 @@ static bool save_state(PtcSysmodule *sysmodule, const LabState *state)
         "\"before_settings_rc\":%u,\"before_settings_hex\":\"%s\"}\n",
         state->run_id, state->state, state->next_phase, state->active_phase,
         (long long)state->started_at, (long long)state->deadline, state->observation,
-        state->event_armed ? "true" : "false", state->restored ? "true" : "false",
+        state->event_armed ? "true" : "false", state->restriction_weekday,
+        state->restored ? "true" : "false",
         state->restore_verdict, state->original.timer_enabled ? "true" : "false", original_hex,
         (unsigned long long)state->before.monotonic_ns,
         state->before.timer_enabled_result, state->before.timer_enabled ? "true" : "false",
@@ -185,6 +188,7 @@ static bool load_state(PtcSysmodule *sysmodule, LabState *state)
     char before_hex[PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U + 1U];
     int64_t value;
     memset(state, 0, sizeof(*state));
+    state->restriction_weekday = -1;
     state_path(sysmodule, path, sizeof(path));
     if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) return false;
     if (!json_string(text, "run_id", state->run_id, sizeof(state->run_id)) ||
@@ -199,6 +203,8 @@ static bool load_state(PtcSysmodule *sysmodule, LabState *state)
         !json_string(text, "original_hex", original_hex, sizeof(original_hex)) ||
         !json_string(text, "before_settings_hex", before_hex, sizeof(before_hex))) return false;
     state->next_phase = (int)value;
+    if (json_i64(text, "restriction_weekday", &value) && value >= 0 && value < 7)
+        state->restriction_weekday = (int)value;
     state->original.size = PTC_PCTL_OPAQUE_SETTINGS_SIZE;
     if (!hex_bytes(original_hex, state->original.data, sizeof(state->original.data)) ||
         !hex_bytes(before_hex, state->before.settings, sizeof(state->before.settings))) return false;
@@ -249,30 +255,44 @@ static bool write_public_evidence(PtcSysmodule *sysmodule, const LabState *state
     const PtcPctlPublicParity *parity, bool same_value_write, bool same_value_restored)
 {
     char path[320];
-    char text[2048];
+    char text[3072];
+    bool comparable_1006 = parity->raw_temporary_unlocked_result == 0 &&
+        parity->libnx_temporary_unlocked_result == 0;
+    bool comparable_1031 = parity->raw_restriction_enabled_result == 0 &&
+        parity->libnx_restriction_enabled_result == 0;
+    bool comparable_1035 = parity->raw_current_settings_result == 0 &&
+        parity->libnx_current_settings_result == 0;
+    bool comparable_1457 = parity->raw_suspend_event_result == 0 &&
+        parity->libnx_suspend_event_result == 0;
+    bool comparable_1458 = parity->raw_alarm_disabled_result == 0 &&
+        parity->libnx_alarm_disabled_result == 0;
     snprintf(path, sizeof(path), "%s/lab/public.json", sysmodule->app_root);
     snprintf(text, sizeof(text),
         "{\"commands\":{"
-        "\"1006\":{\"raw_result\":%u,\"libnx_result\":%u,\"value_equal\":%s},"
-        "\"1031\":{\"raw_result\":%u,\"libnx_result\":%u,\"value_equal\":%s},"
-        "\"1035\":{\"raw_result\":%u,\"libnx_result\":%u,\"structure_equal\":%s},"
-        "\"1457\":{\"raw_result\":%u,\"libnx_result\":%u,\"raw_handle_valid\":%s,\"libnx_handle_valid\":%s},"
-        "\"1458\":{\"raw_result\":%u,\"libnx_result\":%u,\"value_equal\":%s}},"
+        "\"1006\":{\"raw_result\":%u,\"libnx_result\":%u,\"comparable\":%s,\"value_equal\":%s},"
+        "\"1031\":{\"raw_result\":%u,\"libnx_result\":%u,\"comparable\":%s,\"value_equal\":%s},"
+        "\"1035\":{\"raw_result\":%u,\"libnx_result\":%u,\"comparable\":%s,\"structure_equal\":%s},"
+        "\"1457\":{\"raw_result\":%u,\"libnx_result\":%u,\"comparable\":%s,\"raw_handle_valid\":%s,\"libnx_handle_valid\":%s},"
+        "\"1458\":{\"raw_result\":%u,\"libnx_result\":%u,\"comparable\":%s,\"value_equal\":%s}},"
         "\"settings_0x44\":{\"same_value_write_succeeded\":%s,\"exactly_restored\":%s},"
         "\"verdicts\":{\"ipc_callable\":%s,\"wire_shape_confirmed\":%s,\"product_semantics\":\"evidence_only\"}}",
         parity->raw_temporary_unlocked_result, parity->libnx_temporary_unlocked_result,
-        parity->raw_temporary_unlocked == parity->libnx_temporary_unlocked ? "true" : "false",
+        comparable_1006 ? "true" : "false",
+        comparable_1006 && parity->raw_temporary_unlocked == parity->libnx_temporary_unlocked ? "true" : "false",
         parity->raw_restriction_enabled_result, parity->libnx_restriction_enabled_result,
-        parity->raw_restriction_enabled == parity->libnx_restriction_enabled ? "true" : "false",
+        comparable_1031 ? "true" : "false",
+        comparable_1031 && parity->raw_restriction_enabled == parity->libnx_restriction_enabled ? "true" : "false",
         parity->raw_current_settings_result, parity->libnx_current_settings_result,
-        parity->current_settings_equal ? "true" : "false",
+        comparable_1035 ? "true" : "false", comparable_1035 && parity->current_settings_equal ? "true" : "false",
         parity->raw_suspend_event_result, parity->libnx_suspend_event_result,
+        comparable_1457 ? "true" : "false",
         parity->raw_suspend_event_valid ? "true" : "false", parity->libnx_suspend_event_valid ? "true" : "false",
         parity->raw_alarm_disabled_result, parity->libnx_alarm_disabled_result,
-        parity->raw_alarm_disabled == parity->libnx_alarm_disabled ? "true" : "false",
+        comparable_1458 ? "true" : "false",
+        comparable_1458 && parity->raw_alarm_disabled == parity->libnx_alarm_disabled ? "true" : "false",
         same_value_write ? "true" : "false", same_value_restored ? "true" : "false",
         parity->raw_temporary_unlocked_result == 0 && parity->raw_restriction_enabled_result == 0 ? "true" : "false",
-        parity->current_settings_equal && same_value_write && same_value_restored ? "true" : "false");
+        comparable_1035 && parity->current_settings_equal && same_value_write && same_value_restored ? "true" : "false");
     (void)state;
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
 }
@@ -284,36 +304,65 @@ static bool read_fragment(PtcSysmodule *sysmodule, const char *relative, char *o
     return sysmodule->storage->vtable->read_text(sysmodule->storage, path, out, size);
 }
 
+static bool append_text(char *out, size_t out_size, const char *value)
+{
+    size_t used = strlen(out);
+    size_t added = strlen(value);
+    if (used >= out_size || added >= out_size - used) return false;
+    memcpy(out + used, value, added + 1U);
+    return true;
+}
+
 static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
 {
     char report[LAB_REPORT_BUFFER];
-    char fragment[1536];
+    char fragment[4096];
     char path[320];
     size_t i;
+    unsigned int completed_phases = 0;
+    bool observation_recorded = state->observation[0] != '\0';
+    bool complete;
     int written = snprintf(report, sizeof(report),
         "{\"version\":1,\"run_id\":\"%s\",\"environment\":{\"title_id\":\"%s\","
-        "\"ipc_service\":\"%s\",\"sd_root\":\"%s\"},\"durations\":{\"phase_seconds\":75,"
-        "\"restriction_restore_seconds\":15},\"public_parity\":",
+        "\"ipc_service\":\"%s\",\"sd_root\":\"%s\",\"runtime\":",
         state->run_id, PLAYWISE_TITLE_ID, PLAYWISE_IPC_SERVICE, PLAYWISE_SD_ROOT);
     if (written < 0 || (size_t)written >= sizeof(report)) return false;
+    if (!read_fragment(sysmodule, "environment.json", fragment, sizeof(fragment)))
+        snprintf(fragment, sizeof(fragment), "null");
+    if (!append_text(report, sizeof(report), fragment) ||
+        !append_text(report, sizeof(report), ",\"build\":")) return false;
+    if (!read_fragment(sysmodule, "build.json", fragment, sizeof(fragment)))
+        snprintf(fragment, sizeof(fragment), "null");
+    if (!append_text(report, sizeof(report), fragment) ||
+        !append_text(report, sizeof(report), "},\"durations\":{\"phase_seconds\":75,"
+            "\"restriction_restore_seconds\":15},\"public_parity\":")) return false;
     if (!read_fragment(sysmodule, "lab/public.json", fragment, sizeof(fragment))) snprintf(fragment, sizeof(fragment), "null");
-    strncat(report, fragment, sizeof(report) - strlen(report) - 1U);
-    strncat(report, ",\"phases\":[", sizeof(report) - strlen(report) - 1U);
+    if (!append_text(report, sizeof(report), fragment) ||
+        !append_text(report, sizeof(report), ",\"phases\":[")) return false;
     for (i = 0; i < sizeof(LAB_PHASES) / sizeof(LAB_PHASES[0]); ++i) {
         char relative[96];
-        if (i) strncat(report, ",", sizeof(report) - strlen(report) - 1U);
+        bool phase_present;
+        if (i && !append_text(report, sizeof(report), ",")) return false;
         snprintf(relative, sizeof(relative), "lab/phase-%u.json", (unsigned int)i);
-        if (!read_fragment(sysmodule, relative, fragment, sizeof(fragment))) snprintf(fragment, sizeof(fragment), "null");
-        strncat(report, fragment, sizeof(report) - strlen(report) - 1U);
+        phase_present = read_fragment(sysmodule, relative, fragment, sizeof(fragment));
+        if (!phase_present) snprintf(fragment, sizeof(fragment), "null");
+        else ++completed_phases;
+        if (!append_text(report, sizeof(report), fragment)) return false;
     }
+    complete = completed_phases == sizeof(LAB_PHASES) / sizeof(LAB_PHASES[0]) &&
+        observation_recorded && state->restored &&
+        strcmp(state->restore_verdict, "exact_restore_proved") == 0 &&
+        strcmp(state->state, "complete") == 0;
     snprintf(fragment, sizeof(fragment),
         "],\"manual_observation\":%s%s%s,\"restoration\":{\"proved\":%s,\"verdict\":\"%s\"},"
-        "\"summary\":{\"ipc_callable\":\"see_commands\",\"wire_shape_confirmed\":\"see_commands\","
+        "\"summary\":{\"automated_phases_completed\":%u,\"manual_observation_recorded\":%s,"
+        "\"complete\":%s,\"ipc_callable\":\"see_commands\",\"wire_shape_confirmed\":\"see_commands\","
         "\"product_semantics\":\"evidence_only_until_review\"}}\n",
         state->observation[0] ? "\"" : "", state->observation[0] ? state->observation : "null",
         state->observation[0] ? "\"" : "",
-        state->restored ? "true" : "false", state->restore_verdict);
-    strncat(report, fragment, sizeof(report) - strlen(report) - 1U);
+        state->restored ? "true" : "false", state->restore_verdict,
+        completed_phases, observation_recorded ? "true" : "false", complete ? "true" : "false");
+    if (!append_text(report, sizeof(report), fragment)) return false;
     report_path(sysmodule, state, path, sizeof(path));
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, report);
 }
@@ -349,70 +398,143 @@ static void enter_restore_required(PtcSysmodule *sysmodule, LabState *state)
     (void)rebuild_report(sysmodule, state);
 }
 
+static bool format_settings_offsets(const uint8_t *original, const uint8_t *active,
+    size_t expected_start, size_t expected_end, char *changed, size_t changed_size,
+    char *outside, size_t outside_size, unsigned int *changed_count,
+    unsigned int *outside_count)
+{
+    size_t changed_used = 1U;
+    size_t outside_used = 1U;
+    size_t i;
+    changed[0] = '[';
+    changed[1] = '\0';
+    outside[0] = '[';
+    outside[1] = '\0';
+    *changed_count = 0;
+    *outside_count = 0;
+    for (i = 0; i < PTC_PCTL_OPAQUE_SETTINGS_SIZE; ++i) {
+        int written;
+        if (original[i] == active[i]) continue;
+        written = snprintf(changed + changed_used, changed_size - changed_used, "%s%u",
+            *changed_count ? "," : "", (unsigned int)i);
+        if (written < 0 || (size_t)written >= changed_size - changed_used) return false;
+        changed_used += (size_t)written;
+        ++*changed_count;
+        if (i >= expected_start && i < expected_end) continue;
+        written = snprintf(outside + outside_used, outside_size - outside_used, "%s%u",
+            *outside_count ? "," : "", (unsigned int)i);
+        if (written < 0 || (size_t)written >= outside_size - outside_used) return false;
+        outside_used += (size_t)written;
+        ++*outside_count;
+    }
+    if (changed_used + 2U > changed_size || outside_used + 2U > outside_size) return false;
+    changed[changed_used++] = ']';
+    changed[changed_used] = '\0';
+    outside[outside_used++] = ']';
+    outside[outside_used] = '\0';
+    return true;
+}
+
 static bool write_phase(PtcSysmodule *sysmodule, const LabState *state,
-    const PtcPctlForensicSample *after, bool event_known, bool event_signaled,
-    bool outside_today_unchanged)
+    const PtcPctlForensicSample *after, const PtcPctlSuspendEventEvidence *event,
+    uint8_t weekday)
 {
     char path[320];
     char before_hash[65];
     char after_hash[65];
+    char before_hex[PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U + 1U];
+    char after_hex[PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U + 1U];
+    char original_hex[PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U + 1U];
+    char changed_offsets[320];
+    char outside_offsets[320];
+    char settings_scope[1200];
+    char first_signal[32];
     char verdict[48] = "evidence_recorded";
-    char text[1536];
+    char text[4096];
     int64_t remaining_delta = after->remaining_ns - state->before.remaining_ns;
     int64_t spent_delta = after->spent_ns - state->before.spent_ns;
     bool callable = sample_ok(&state->before) && sample_ok(after);
+    bool restriction = strcmp(state->active_phase, "restriction_effect") == 0;
+    uint8_t target_weekday = state->restriction_weekday >= 0 && state->restriction_weekday < 7
+        ? (uint8_t)state->restriction_weekday : weekday;
+    size_t expected_start = (7U + (size_t)target_weekday * 4U) * 2U;
+    size_t expected_end = expected_start + 8U;
+    unsigned int changed_count = 0;
+    unsigned int outside_count = 0;
+    bool offsets_ok = false;
     if (strcmp(state->active_phase, "home_started") == 0 &&
-        state->before.remaining_result == 0 && after->remaining_result == 0 && remaining_delta < 0) {
+        ((state->before.remaining_result == 0 && after->remaining_result == 0 && remaining_delta < 0) ||
+         (state->before.spent_result == 0 && after->spent_result == 0 && spent_delta > 0))) {
         snprintf(verdict, sizeof(verdict), "unsafe_for_home_start");
     } else if (strcmp(state->active_phase, "home_stopped") == 0 && remaining_delta == 0) {
         snprintf(verdict, sizeof(verdict), "stopped_timer_stable");
-    } else if (strcmp(state->active_phase, "restriction_effect") == 0 && after->restricted_result == 0 && after->restricted) {
+    } else if (restriction && after->restricted_result == 0 && after->restricted) {
         snprintf(verdict, sizeof(verdict), "restriction_ipc_observed");
     }
     settings_hash(&state->before, before_hash);
     settings_hash(after, after_hash);
+    bytes_hex(state->before.settings, sizeof(state->before.settings), before_hex, sizeof(before_hex));
+    bytes_hex(after->settings, sizeof(after->settings), after_hex, sizeof(after_hex));
+    bytes_hex(state->original.data, sizeof(state->original.data), original_hex, sizeof(original_hex));
+    if (expected_end > sizeof(after->settings)) expected_end = sizeof(after->settings);
+    if (restriction && after->settings_result == 0 && expected_start < expected_end) {
+        offsets_ok = format_settings_offsets(state->original.data, after->settings,
+            expected_start, expected_end, changed_offsets, sizeof(changed_offsets),
+            outside_offsets, sizeof(outside_offsets), &changed_count, &outside_count);
+    }
+    if (restriction) {
+        snprintf(settings_scope, sizeof(settings_scope),
+            "{\"comparison\":\"session_original_to_restriction_active\",\"target_weekday\":%u,"
+            "\"expected_byte_start\":%u,\"expected_byte_end_exclusive\":%u,"
+            "\"original_settings_hex\":\"%s\",\"changed_byte_count\":%u,"
+            "\"changed_offsets\":%s,\"outside_today_changed_offsets\":%s,"
+            "\"unrelated_bytes_unchanged\":%s}",
+            (unsigned int)target_weekday, (unsigned int)expected_start, (unsigned int)expected_end,
+            original_hex, changed_count, offsets_ok ? changed_offsets : "null",
+            offsets_ok ? outside_offsets : "null",
+            offsets_ok && outside_count == 0 ? "true" : "false");
+    } else {
+        snprintf(settings_scope, sizeof(settings_scope),
+            "{\"comparison\":\"not_applicable\",\"unrelated_bytes_unchanged\":true}");
+    }
+    if (event && event->signaled) {
+        snprintf(first_signal, sizeof(first_signal), "%llu",
+            (unsigned long long)event->first_signaled_monotonic_ns);
+    } else {
+        snprintf(first_signal, sizeof(first_signal), "null");
+    }
     snprintf(text, sizeof(text),
         "{\"phase\":\"%s\",\"started_at\":%lld,\"ended_at\":%lld,"
         "\"before\":{\"monotonic_ns\":%llu,\"1453\":{\"result\":%u,\"value\":%s},"
         "\"1454\":{\"result\":%u,\"nanoseconds\":%lld},\"1455\":{\"result\":%u,\"value\":%s},"
-        "\"1952\":{\"result\":%u,\"nanoseconds\":%lld},\"settings_result\":%u,\"settings_sha256\":\"%s\"},"
+        "\"1952\":{\"result\":%u,\"nanoseconds\":%lld},\"settings_result\":%u,"
+        "\"settings_sha256\":\"%s\",\"settings_hex\":\"%s\"},"
         "\"after\":{\"monotonic_ns\":%llu,\"1453\":{\"result\":%u,\"value\":%s},"
         "\"1454\":{\"result\":%u,\"nanoseconds\":%lld},\"1455\":{\"result\":%u,\"value\":%s},"
-        "\"1952\":{\"result\":%u,\"nanoseconds\":%lld},\"settings_result\":%u,\"settings_sha256\":\"%s\"},"
+        "\"1952\":{\"result\":%u,\"nanoseconds\":%lld},\"settings_result\":%u,"
+        "\"settings_sha256\":\"%s\",\"settings_hex\":\"%s\"},"
         "\"deltas\":{\"remaining_ns\":%lld,\"spent_ns\":%lld},"
-        "\"suspend_event\":{\"known\":%s,\"signaled\":%s},"
-        "\"settings_write_scope\":{\"unrelated_bytes_unchanged\":%s},"
+        "\"suspend_event\":{\"known\":%s,\"check_count\":%u,\"signaled\":%s,"
+        "\"first_signaled_monotonic_ns\":%s},\"settings_write_scope\":%s,"
         "\"verdicts\":{\"ipc_callable\":%s,\"wire_shape_confirmed\":%s,\"product_semantics\":\"%s\"}}",
         state->active_phase, (long long)state->started_at, (long long)state->deadline,
         (unsigned long long)state->before.monotonic_ns,
         state->before.timer_enabled_result, state->before.timer_enabled ? "true" : "false",
         state->before.remaining_result, (long long)state->before.remaining_ns,
         state->before.restricted_result, state->before.restricted ? "true" : "false",
-        state->before.spent_result, (long long)state->before.spent_ns, state->before.settings_result, before_hash,
+        state->before.spent_result, (long long)state->before.spent_ns, state->before.settings_result, before_hash, before_hex,
         (unsigned long long)after->monotonic_ns,
         after->timer_enabled_result, after->timer_enabled ? "true" : "false",
         after->remaining_result, (long long)after->remaining_ns,
         after->restricted_result, after->restricted ? "true" : "false",
-        after->spent_result, (long long)after->spent_ns, after->settings_result, after_hash,
+        after->spent_result, (long long)after->spent_ns, after->settings_result, after_hash, after_hex,
         (long long)remaining_delta, (long long)spent_delta,
-        event_known ? "true" : "false", event_signaled ? "true" : "false",
-        outside_today_unchanged ? "true" : "false", callable ? "true" : "false",
+        event && event->known ? "true" : "false", event ? event->check_count : 0U,
+        event && event->signaled ? "true" : "false", first_signal, settings_scope,
+        callable ? "true" : "false",
         callable ? "true" : "false", verdict);
     snprintf(path, sizeof(path), "%s/lab/phase-%d.json", sysmodule->app_root, state->next_phase);
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
-}
-
-static bool restriction_outside_today_unchanged(const LabState *state,
-    const PtcPctlForensicSample *active, uint8_t weekday)
-{
-    size_t start = (7U + (size_t)weekday * 4U) * 2U;
-    size_t end = start + 8U;
-    size_t i;
-    if (active->settings_result != 0 || start >= sizeof(active->settings) || end > sizeof(active->settings)) return false;
-    for (i = 0; i < sizeof(active->settings); ++i) {
-        if ((i < start || i >= end) && active->settings[i] != state->original.data[i]) return false;
-    }
-    return true;
 }
 
 static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state)
@@ -425,6 +547,7 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state)
     bool restored_ok;
     size_t i;
     memset(state, 0, sizeof(*state));
+    state->restriction_weekday = -1;
     snprintf(state->run_id, sizeof(state->run_id), "%lld-%s", (long long)now.unix_seconds, sysmodule->boot_id);
     snprintf(state->state, sizeof(state->state), "ready");
     snprintf(state->restore_verdict, sizeof(state->restore_verdict), "pending");
@@ -478,6 +601,7 @@ static PtcErrorCode begin_phase(PtcSysmodule *sysmodule, LabState *state, const 
         target.mode = PTC_PCTL_TARGET_BLOCKED;
         target.minutes = 0;
         target.weekday = ptc_weekday_from_day_index(now.day_index);
+        state->restriction_weekday = target.weekday;
         err = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &target);
         if (err != PTC_ERR_OK) {
             if (!restore_original(sysmodule, state)) enter_restore_required(sysmodule, state);
@@ -563,7 +687,11 @@ bool ptc_lab_process_request(PtcSysmodule *sysmodule, const PtcRequest *request)
             enter_restore_required(sysmodule, &state);
             err = PTC_ERR_PCTL_RESTORE_FAILED;
         } else {
-            snprintf(state.state, sizeof(state.state), "complete");
+            /* The restriction phase already restores before asking what the
+               operator saw. A redundant recovery request must not erase that
+               still-required observation or turn an incomplete report final. */
+            if (strcmp(state.state, "awaiting_observation") != 0)
+                snprintf(state.state, sizeof(state.state), "complete");
             state.active_phase[0] = '\0';
             state.deadline = 0;
             if (sysmodule->storage->vtable->exists(sysmodule->storage, disable_path))
@@ -583,14 +711,17 @@ int ptc_lab_scheduler_tick(PtcSysmodule *sysmodule)
     LabState state;
     PtcClockSnapshot now;
     PtcPctlForensicSample after;
-    bool event_known = false;
-    bool event_signaled = false;
-    bool outside_unchanged = true;
+    PtcPctlSuspendEventEvidence event;
     bool restriction;
+    uint8_t weekday;
     if (!load_state(sysmodule, &state) || strcmp(state.state, "sampling") != 0) return 0;
     now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
-    if (now.unix_seconds < state.deadline) return 0;
     restriction = strcmp(state.active_phase, "restriction_effect") == 0;
+    weekday = ptc_weekday_from_day_index(now.day_index);
+    memset(&event, 0, sizeof(event));
+    if (restriction && sysmodule->pctl->vtable->poll_suspend_event)
+        (void)sysmodule->pctl->vtable->poll_suspend_event(sysmodule->pctl, &event);
+    if (now.unix_seconds < state.deadline) return 0;
     memset(&after, 0, sizeof(after));
     if (sysmodule->pctl->vtable->forensic_sample(sysmodule->pctl, &after) != PTC_ERR_OK) {
         if (!restore_original(sysmodule, &state)) enter_restore_required(sysmodule, &state);
@@ -598,14 +729,7 @@ int ptc_lab_scheduler_tick(PtcSysmodule *sysmodule)
         (void)rebuild_report(sysmodule, &state);
         return 1;
     }
-    if (restriction) {
-        if (sysmodule->pctl->vtable->suspend_event_signaled) {
-            event_signaled = sysmodule->pctl->vtable->suspend_event_signaled(sysmodule->pctl, &event_known);
-        }
-        outside_unchanged = restriction_outside_today_unchanged(&state, &after,
-            ptc_weekday_from_day_index(now.day_index));
-    }
-    if (!write_phase(sysmodule, &state, &after, event_known, event_signaled, outside_unchanged)) {
+    if (!write_phase(sysmodule, &state, &after, restriction ? &event : NULL, weekday)) {
         if (!restore_original(sysmodule, &state)) enter_restore_required(sysmodule, &state);
         else { snprintf(state.state, sizeof(state.state), "error"); (void)save_state(sysmodule, &state); }
         return 1;
@@ -637,6 +761,8 @@ uint32_t ptc_lab_next_wait_ms(PtcSysmodule *sysmodule, uint32_t current_wait_ms)
     now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     if (state.deadline <= now.unix_seconds) return 1U;
     remaining_ms = (uint64_t)(state.deadline - now.unix_seconds) * 1000ULL;
+    if (strcmp(state.active_phase, "restriction_effect") == 0 &&
+        remaining_ms > LAB_RESTRICTION_EVENT_POLL_MS) remaining_ms = LAB_RESTRICTION_EVENT_POLL_MS;
     return remaining_ms < current_wait_ms ? (uint32_t)remaining_ms : current_wait_ms;
 }
 

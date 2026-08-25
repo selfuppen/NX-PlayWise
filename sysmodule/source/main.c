@@ -120,14 +120,20 @@ static void write_environment_fingerprint(PtcStorage *storage)
     SetSysProductModel model = SetSysProductModel_Invalid;
     char json[640];
     bool read_ok = false;
+    bool firmware_read_ok = false;
     memset(&firmware, 0, sizeof(firmware));
     memset(&digest, 0, sizeof(digest));
     if (R_SUCCEEDED(setsysInitialize())) {
-        read_ok = R_SUCCEEDED(setsysGetFirmwareVersion(&firmware)) &&
-            R_SUCCEEDED(setsysGetFirmwareVersionDigest(&digest)) &&
+        firmware_read_ok = R_SUCCEEDED(setsysGetFirmwareVersion(&firmware));
+        read_ok = firmware_read_ok && R_SUCCEEDED(setsysGetFirmwareVersionDigest(&digest)) &&
             R_SUCCEEDED(setsysGetProductModel(&model));
         setsysExit();
     }
+    /* Sysmodules provide their own __appInit, so libnx's normal application
+       startup may not populate hosversion. Public wrappers such as command
+       1458 gate on this value even though the raw service is callable. */
+    if (firmware_read_ok && hosversionGet() == 0)
+        hosversionSet(MAKEHOSVERSION(firmware.major, firmware.minor, firmware.micro));
     snprintf(
         json,
         sizeof(json),

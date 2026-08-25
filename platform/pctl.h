@@ -104,6 +104,13 @@ typedef struct {
 } PtcPctlPublicParity;
 
 typedef struct {
+    bool known;
+    bool signaled;
+    uint32_t check_count;
+    uint64_t first_signaled_monotonic_ns;
+} PtcPctlSuspendEventEvidence;
+
+typedef struct {
     PtcErrorCode (*read_status)(PtcPctl *pctl, uint8_t weekday, PtcPctlStatus *out);
     PtcErrorCode (*backup)(PtcPctl *pctl, PtcPctlBackup *out);
     PtcErrorCode (*apply_target)(PtcPctl *pctl, const PtcPctlTarget *target);
@@ -120,7 +127,7 @@ typedef struct {
     PtcErrorCode (*forensic_sample)(PtcPctl *pctl, PtcPctlForensicSample *out);
     PtcErrorCode (*public_parity)(PtcPctl *pctl, PtcPctlPublicParity *out);
     PtcErrorCode (*arm_suspend_event)(PtcPctl *pctl);
-    bool (*suspend_event_signaled)(PtcPctl *pctl, bool *known);
+    PtcErrorCode (*poll_suspend_event)(PtcPctl *pctl, PtcPctlSuspendEventEvidence *out);
 } PtcPctlVTable;
 
 struct PtcPctl {

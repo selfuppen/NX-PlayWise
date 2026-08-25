@@ -23,6 +23,9 @@ static const PtcLabBootFlagPaths FLAG_PATHS = {
     PLAYWISE_DEVICE_LAB_SD_ROOT "/lab/boot-switch.json"
 };
 
+#define STANDARD_FLAGS_DIR "sdmc:/atmosphere/contents/4200000000BD2300/flags"
+#define DEVICE_LAB_FLAGS_DIR "sdmc:/atmosphere/contents/4200000000BD23F0/flags"
+
 typedef enum {
     OPERATION_NONE = 0,
     OPERATION_ENABLE = 1,
@@ -49,7 +52,11 @@ static bool ensure_directories(char *failed_path, size_t failed_path_size)
         PLAYWISE_DEVICE_LAB_SD_ROOT "/lab",
         PLAYWISE_DEVICE_LAB_SD_ROOT "/reports",
         PLAYWISE_DEVICE_LAB_SD_ROOT "/inbox",
-        PLAYWISE_DEVICE_LAB_SD_ROOT "/inbox/pending"
+        PLAYWISE_DEVICE_LAB_SD_ROOT "/inbox/pending",
+        /* The opt-in package intentionally has no boot2.flag. Zip extraction
+           therefore may not materialize this otherwise-empty directory. */
+        STANDARD_FLAGS_DIR,
+        DEVICE_LAB_FLAGS_DIR
     };
     size_t index;
     for (index = 0; index < sizeof(paths) / sizeof(paths[0]); ++index) {
@@ -59,14 +66,6 @@ static bool ensure_directories(char *failed_path, size_t failed_path_size)
         }
     }
     return true;
-}
-
-static bool lab_service_is_running(void)
-{
-    Service service;
-    Result result = smGetService(&service, PLAYWISE_DEVICE_LAB_IPC_SERVICE);
-    if (R_SUCCEEDED(result)) serviceClose(&service);
-    return R_SUCCEEDED(result);
 }
 
 static PtcLabSessionLoadStatus load_session(PtcLabSessionView *view)
@@ -108,23 +107,23 @@ static void set_feedback(App *app, bool error, const char *message, const char *
 static void refresh_status(App *app)
 {
     bool inspected = ptc_lab_boot_flags_inspect(&FLAG_PATHS, &app->boot);
-    /* Before the Lab boot flag has been enabled there cannot be a pwtl:u
-       server. Do not synchronously request that unavailable service on the
-       first NRO frame: some SM implementations/loaders can leave the applet
-       waiting at a black screen while resolving an unregistered service. */
-    app->lab_service_running = inspected && app->boot.state != PTC_LAB_BOOT_NORMAL &&
-        lab_service_is_running();
     memset(&app->ui.session, 0, sizeof(app->ui.session));
     app->ui.session_status = load_session(&app->ui.session);
+    /* Never probe pwtl:u from the NRO. SM may wait indefinitely for an absent
+       service both immediately after enabling the boot flag and in a torn
+       boot-switch transaction. A persisted session proves that the Lab
+       backend has run; all NRO recovery requests use the durable SD queue. */
+    app->lab_service_running = inspected && app->boot.state == PTC_LAB_BOOT_ENABLED &&
+        app->ui.session_status != PTC_LAB_SESSION_MISSING;
     app->ui.report_available = find_latest_report(app->ui.report_path, sizeof(app->ui.report_path));
     app->ui.stage = inspected ? ptc_lab_nro_stage(&app->boot, app->lab_service_running,
         app->ui.session_status, &app->ui.session) : PTC_LAB_NRO_CONFLICT;
     if (!app->ui.message[0]) {
         snprintf(app->ui.technical, sizeof(app->ui.technical),
-            "boot_state=%d\njournal_phase=%s\npwtl:u=%s\nsession=%d\nroot=%s",
+            "boot_state=%d\njournal_phase=%s\nlab_runtime_evidence=%s\nsession=%d\nroot=%s",
             inspected ? (int)app->boot.state : -1,
             inspected && app->boot.journal_phase[0] ? app->boot.journal_phase : "none",
-            app->lab_service_running ? "running" : "unavailable",
+            app->lab_service_running ? "present" : "absent",
             (int)app->ui.session_status, PLAYWISE_DEVICE_LAB_SD_ROOT);
     }
 }
