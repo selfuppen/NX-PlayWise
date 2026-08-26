@@ -141,6 +141,19 @@ static bool lab_observation_is_valid(const char *value)
         strcmp(value, "unsure") == 0;
 }
 
+static bool lab_mode_is_valid(const char *value)
+{
+    return strcmp(value, "restriction_quick") == 0 || strcmp(value, "full") == 0;
+}
+
+static bool lab_runtime_effect_is_valid(const char *value)
+{
+    return strcmp(value, "continued") == 0 ||
+        strcmp(value, "paused_or_suspended") == 0 ||
+        strcmp(value, "exited") == 0 ||
+        strcmp(value, "unsure") == 0;
+}
+
 static bool json_bool_optional(const char *text, const char *key, bool default_value, bool *out)
 {
     const char *pos = find_key(text, key);
@@ -461,6 +474,11 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         return json_bool_optional(text, "wait_for_expiry", false, &out->wait_for_expiry)
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_LAB_SESSION_START:
+        snprintf(out->lab_mode, sizeof(out->lab_mode), "full");
+        if (find_key(text, "mode") &&
+            (!json_string(text, "mode", out->lab_mode, sizeof(out->lab_mode)) ||
+             !lab_mode_is_valid(out->lab_mode))) return PTC_ERR_BAD_REQUEST;
+        return PTC_ERR_OK;
     case PTC_REQUEST_LAB_SESSION_STATUS:
     case PTC_REQUEST_LAB_SESSION_RESTORE:
         return PTC_ERR_OK;
@@ -468,8 +486,13 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         return json_string(text, "phase", out->phase, sizeof(out->phase)) && lab_phase_is_valid(out->phase)
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_LAB_OBSERVATION:
-        return json_string(text, "observation", out->observation, sizeof(out->observation)) &&
-            lab_observation_is_valid(out->observation) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+        if (!json_string(text, "observation", out->observation, sizeof(out->observation)) ||
+            !lab_observation_is_valid(out->observation)) return PTC_ERR_BAD_REQUEST;
+        snprintf(out->runtime_effect, sizeof(out->runtime_effect), "unsure");
+        if (find_key(text, "runtime_effect") &&
+            (!json_string(text, "runtime_effect", out->runtime_effect, sizeof(out->runtime_effect)) ||
+             !lab_runtime_effect_is_valid(out->runtime_effect))) return PTC_ERR_BAD_REQUEST;
+        return PTC_ERR_OK;
 #endif
     case PTC_REQUEST_UNKNOWN:
     default:

@@ -192,7 +192,7 @@ static int wrapped(uint32_t *pixels, uint32_t stride, int x, int baseline, const
 
 static void draw_steps(uint32_t *pixels, uint32_t stride, PtcLabNroStage stage)
 {
-    static const char *const labels[] = {"1  准备实验后台", "2  完成六阶段取证", "3  恢复正常后台"};
+    static const char *const labels[] = {"1  准备实验后台", "2  完成所选取证", "3  恢复正常后台"};
     int active = stage == PTC_LAB_NRO_PREPARE || stage == PTC_LAB_NRO_REBOOT_TO_LAB ? 0 :
         (stage == PTC_LAB_NRO_RESTORE_NORMAL || stage == PTC_LAB_NRO_REBOOT_TO_NORMAL ? 2 : 1);
     int index;
@@ -338,7 +338,8 @@ void ptc_lab_nro_graphics_draw(const PtcLabNroUi *ui)
         19, ui->message_is_error ? RGB(169, 38, 47) : RGB(28, 94, 160));
     if (ui->session_status == PTC_LAB_SESSION_VALID) {
         char phase[96];
-        snprintf(phase, sizeof(phase), "进度：%d / 6", ui->session.next_phase);
+        snprintf(phase, sizeof(phase), "%s / 进度：%d / %d", ptc_lab_mode_zh(ui->session.mode),
+            ui->session.next_phase, ui->session.required_phases);
         text(pixels, stride, 906, 292, phase, 17, RGB(86, 97, 112));
         wrapped(pixels, stride, 906, 330, ptc_lab_verdict_zh(ui->session.restore_verdict),
             16, 300, 27, 3, RGB(86, 97, 112));
@@ -346,12 +347,12 @@ void ptc_lab_nro_graphics_draw(const PtcLabNroUi *ui)
     if (ui->session_status == PTC_LAB_SESSION_VALID &&
         strcmp(ui->session.state, "awaiting_observation") == 0) {
         text(pixels, stride, 906, 414, "报告：待人工确认", 17, RGB(184, 112, 20));
-    } else if (ui->session_status == PTC_LAB_SESSION_VALID &&
-        strcmp(ui->session.state, "complete") == 0 && ui->session.restored) {
+    } else if (ui->report_available) {
         text(pixels, stride, 906, 414, "报告：完整", 17, RGB(25, 125, 89));
+    } else if (ui->draft_available) {
+        text(pixels, stride, 906, 414, "报告：草稿（不可交付）", 17, RGB(184, 112, 20));
     } else {
-        text(pixels, stride, 906, 414, ui->report_available ? "报告：采集中" : "报告：尚未生成", 17,
-            ui->report_available ? RGB(28, 94, 160) : RGB(110, 118, 130));
+        text(pixels, stride, 906, 414, "报告：尚未生成", 17, RGB(110, 118, 130));
     }
     if (ui->details_visible && ui->technical[0]) {
         text(pixels, stride, 906, 460, "技术详情", 18, RGB(50, 61, 76));
@@ -366,8 +367,9 @@ void ptc_lab_nro_graphics_draw(const PtcLabNroUi *ui)
     primary_subtitle = primary_danger ? "需要实体按键安全确认" : "按 A 或触摸执行";
     draw_action(pixels, stride, 0, ptc_lab_nro_stage_action_zh(ui->stage), primary_subtitle,
         ui->selected == 0, false, primary_danger);
-    draw_action(pixels, stride, 1, "查看最新报告",
-        ui->report_available ? "显示报告文件名和完整 SD 路径" : "完成取证后才会生成报告",
+    draw_action(pixels, stride, 1, "查看本轮完整报告",
+        ui->report_available ? "显示当前 run 的文件名和完整 SD 路径" :
+        (ui->draft_available ? "当前只有草稿，请返回浮窗完成观察" : "完成取证后才会生成报告"),
         ui->selected == 1, !ui->report_available, false);
     draw_action(pixels, stride, 2, "退出 Device Lab", "不执行其它更改并返回 HOME",
         ui->selected == 2, false, false);

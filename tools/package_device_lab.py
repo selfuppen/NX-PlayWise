@@ -90,7 +90,8 @@ def create_package(out: Path, manifest_path: Path, sysmodule_exefs: Path, nro: P
         "任我玩 DEVICE LAB - 内部取证工具 / 危险操作\n"
         "此配置不是公开发行版，并且有意不包含 boot2.flag。\n"
         "请从 Device Lab NRO 启用实验后台，完成取证和精确恢复后再切回正常后台。\n"
-        "第六阶段关闭浮窗观察 15 秒后，必须重新打开浮窗提交人工观察；提前恢复不会生成完整报告。\n",
+        "浮窗默认提供聚焦限制复测；关闭浮窗观察 15 秒后，必须重新打开并分别记录提示可见性和游戏实际行为。\n"
+        "人工观察完成前只生成 draft 草稿；只有阶段、观察和精确恢复全部完成后才发布正式报告。\n",
         encoding="utf-8",
         newline="\n",
     )

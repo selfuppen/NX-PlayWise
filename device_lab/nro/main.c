@@ -1,6 +1,5 @@
 #include <switch.h>
 
-#include <dirent.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -80,21 +79,16 @@ static PtcLabSessionLoadStatus load_session(PtcLabSessionView *view)
     return ptc_lab_session_parse(text, view) ? PTC_LAB_SESSION_VALID : PTC_LAB_SESSION_INVALID;
 }
 
-static bool find_latest_report(char *path, size_t path_size)
+static bool find_current_report(const PtcLabSessionView *session, bool final,
+    char *path, size_t path_size)
 {
-    DIR *directory = opendir(PLAYWISE_DEVICE_LAB_SD_ROOT "/reports");
-    struct dirent *entry;
-    char latest[192] = "";
-    if (!directory) return false;
-    while ((entry = readdir(directory)) != NULL) {
-        size_t length = strlen(entry->d_name);
-        if (length > 5U && strcmp(entry->d_name + length - 5U, ".json") == 0 &&
-            strcmp(entry->d_name, latest) > 0) snprintf(latest, sizeof(latest), "%s", entry->d_name);
-    }
-    closedir(directory);
-    if (!latest[0]) return false;
-    snprintf(path, path_size, "%s/reports/%s", PLAYWISE_DEVICE_LAB_SD_ROOT, latest);
-    return true;
+    struct stat info;
+    if (!session || !session->run_id[0]) return false;
+    if (final) snprintf(path, path_size, "%s/reports/%s.json",
+        PLAYWISE_DEVICE_LAB_SD_ROOT, session->run_id);
+    else snprintf(path, path_size, "%s/lab/report-%s.draft.json",
+        PLAYWISE_DEVICE_LAB_SD_ROOT, session->run_id);
+    return stat(path, &info) == 0 && S_ISREG(info.st_mode);
 }
 
 static void set_feedback(App *app, bool error, const char *message, const char *technical)
@@ -115,16 +109,23 @@ static void refresh_status(App *app)
        backend has run; all NRO recovery requests use the durable SD queue. */
     app->lab_service_running = inspected && app->boot.state == PTC_LAB_BOOT_ENABLED &&
         app->ui.session_status != PTC_LAB_SESSION_MISSING;
-    app->ui.report_available = find_latest_report(app->ui.report_path, sizeof(app->ui.report_path));
+    app->ui.report_available = app->ui.session_status == PTC_LAB_SESSION_VALID &&
+        find_current_report(&app->ui.session, true, app->ui.report_path, sizeof(app->ui.report_path));
+    app->ui.draft_available = false;
+    if (!app->ui.report_available && app->ui.session_status == PTC_LAB_SESSION_VALID)
+        app->ui.draft_available = find_current_report(&app->ui.session, false,
+            app->ui.report_path, sizeof(app->ui.report_path));
     app->ui.stage = inspected ? ptc_lab_nro_stage(&app->boot, app->lab_service_running,
         app->ui.session_status, &app->ui.session) : PTC_LAB_NRO_CONFLICT;
     if (!app->ui.message[0]) {
         snprintf(app->ui.technical, sizeof(app->ui.technical),
-            "boot_state=%d\njournal_phase=%s\nlab_runtime_evidence=%s\nsession=%d\nroot=%s",
+            "boot_state=%d\njournal_phase=%s\nlab_runtime_evidence=%s\nsession=%d\nmode=%s\nroot=%s",
             inspected ? (int)app->boot.state : -1,
             inspected && app->boot.journal_phase[0] ? app->boot.journal_phase : "none",
             app->lab_service_running ? "present" : "absent",
-            (int)app->ui.session_status, PLAYWISE_DEVICE_LAB_SD_ROOT);
+            (int)app->ui.session_status,
+            app->ui.session_status == PTC_LAB_SESSION_VALID ? app->ui.session.mode : "none",
+            PLAYWISE_DEVICE_LAB_SD_ROOT);
     }
 }
 

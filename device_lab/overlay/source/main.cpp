@@ -99,7 +99,9 @@ static PtcLabSessionLoadStatus load_session(PtcLabSessionView *view)
     if (view->next_phase > 0) {
         char path[256];
         char phase_text[2048];
-        std::snprintf(path, sizeof(path), PLAYWISE_SD_ROOT "/lab/phase-%d.json", view->next_phase - 1);
+        const int phase_slot = std::strcmp(view->mode, "restriction_quick") == 0
+            ? 5 : view->next_phase - 1;
+        std::snprintf(path, sizeof(path), PLAYWISE_SD_ROOT "/lab/phase-%d.json", phase_slot);
         FILE *phase_file = std::fopen(path, "rb");
         if (phase_file) {
             std::size_t phase_size = std::fread(phase_text, 1, sizeof(phase_text) - 1U, phase_file);
@@ -205,22 +207,27 @@ public:
             return true;
         }
         if (std::strcmp(view_.state, "awaiting_observation") == 0) {
-            if (keysDown & HidNpadButton_Up) observation_ = observation_ == 0 ? 2 : observation_ - 1;
-            if (keysDown & HidNpadButton_Down) observation_ = (observation_ + 1) % 3;
+            int &selection = observation_step_ == 0 ? observation_ : runtime_effect_;
+            const int count = observation_step_ == 0 ? 3 : 4;
+            if (keysDown & HidNpadButton_Up) selection = selection == 0 ? count - 1 : selection - 1;
+            if (keysDown & HidNpadButton_Down) selection = (selection + 1) % count;
             if (touch_pressed) {
-                for (int index = 0; index < 3; ++index) {
-                    if (point_in(touch_x, touch_y, draw_x_ + 26, draw_y_ + 180 + index * 43,
-                            draw_w_ - 52, 36)) observation_ = index;
+                for (int index = 0; index < count; ++index) {
+                    if (point_in(touch_x, touch_y, draw_x_ + 26, draw_y_ + 176 + index * 38,
+                            draw_w_ - 52, 36)) selection = index;
                 }
             }
-            if ((keysDown & HidNpadButton_A) || primary_touch) submit_observation();
+            if ((keysDown & HidNpadButton_A) || primary_touch) {
+                if (observation_step_ == 0) observation_step_ = 1;
+                else submit_observation();
+            }
             return true;
         }
         if (std::strcmp(view_.state, "restore_required") == 0 || std::strcmp(view_.state, "error") == 0) {
             if ((keysDown & HidNpadButton_A) || primary_touch) submit_empty("lab_session_restore");
             return true;
         }
-        if (view_.next_phase == 5 && std::strcmp(view_.state, "ready") == 0) {
+        if (current_phase_index() == 5 && std::strcmp(view_.state, "ready") == 0) {
             if (primary_touch) touch_hold_warning_ = true;
             if (keysHeld & HidNpadButton_A) {
                 if (danger_hold_tick_ == 0) danger_hold_tick_ = armGetSystemTick();
@@ -239,8 +246,18 @@ public:
             return true;
         }
         if ((keysDown & HidNpadButton_A) || primary_touch) {
-            if (std::strcmp(view_.state, "not_started") == 0) submit_empty("lab_session_start");
+            if (std::strcmp(view_.state, "not_started") == 0) submit_start();
             else if (std::strcmp(view_.state, "ready") == 0) submit_phase();
+            return true;
+        }
+        if (std::strcmp(view_.state, "not_started") == 0) {
+            if (keysDown & (HidNpadButton_Up | HidNpadButton_Down)) selected_mode_ = 1 - selected_mode_;
+            if (touch_pressed) {
+                for (int index = 0; index < 2; ++index) {
+                    if (point_in(touch_x, touch_y, draw_x_ + 26, draw_y_ + 190 + index * 58,
+                            draw_w_ - 52, 48)) selected_mode_ = index;
+                }
+            }
             return true;
         }
         return false;
@@ -254,9 +271,11 @@ private:
         if (session_status_ == PTC_LAB_SESSION_VALID) view_ = fresh;
         else if (session_status_ == PTC_LAB_SESSION_MISSING) {
             view_ = PtcLabSessionView{};
+            std::snprintf(view_.mode, sizeof(view_.mode), "restriction_quick");
             std::snprintf(view_.state, sizeof(view_.state), "not_started");
             std::snprintf(view_.restore_verdict, sizeof(view_.restore_verdict), "not_started");
             std::snprintf(view_.last_verdict, sizeof(view_.last_verdict), "pending");
+            view_.required_phases = 1;
         }
         last_refresh_tick_ = armGetSystemTick();
     }
@@ -302,11 +321,25 @@ private:
         submit_json(type, payload);
     }
 
+    void submit_start()
+    {
+        const char *mode = selected_mode_ == 0 ? "restriction_quick" : "full";
+        char payload[80];
+        std::snprintf(payload, sizeof(payload), "{\"mode\":\"%s\"}", mode);
+        submit_json("lab_session_start", payload);
+    }
+
+    int current_phase_index() const
+    {
+        return std::strcmp(view_.mode, "restriction_quick") == 0 ? 5 : view_.next_phase;
+    }
+
     void submit_phase()
     {
-        if (view_.next_phase < 0 || view_.next_phase >= 6) return;
+        const int phase = current_phase_index();
+        if (phase < 0 || phase >= 6) return;
         char payload[96];
-        std::snprintf(payload, sizeof(payload), "{\"phase\":\"%s\"}", PHASES[view_.next_phase]);
+        std::snprintf(payload, sizeof(payload), "{\"phase\":\"%s\"}", PHASES[phase]);
         submit_json("lab_phase_start", payload);
     }
 
@@ -315,19 +348,25 @@ private:
         static const char *const values[] = {
             "restriction_visible", "no_visible_restriction", "unsure"
         };
-        char payload[96];
-        std::snprintf(payload, sizeof(payload), "{\"observation\":\"%s\"}", values[observation_]);
+        static const char *const effects[] = {
+            "continued", "paused_or_suspended", "exited", "unsure"
+        };
+        char payload[160];
+        std::snprintf(payload, sizeof(payload),
+            "{\"observation\":\"%s\",\"runtime_effect\":\"%s\"}",
+            values[observation_], effects[runtime_effect_]);
         submit_json("lab_observation", payload);
     }
 
     void draw_progress(tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 width)
     {
         const int completed = view_.next_phase;
+        const int required = view_.required_phases > 0 ? view_.required_phases : 6;
         const s32 gap = 5;
-        const s32 segment = (width - gap * 5) / 6;
-        for (int index = 0; index < 6; ++index) {
+        const s32 segment = (width - gap * (required - 1)) / required;
+        for (int index = 0; index < required; ++index) {
             tsl::Color color = index < completed ? COLOR_GREEN :
-                (index == completed && completed < 6 ? COLOR_BLUE : COLOR_PANEL_RAISED);
+                (index == completed && completed < required ? COLOR_BLUE : COLOR_PANEL_RAISED);
             renderer->drawRect(x + index * (segment + gap), y, segment, 8, renderer->a(color));
         }
     }
@@ -356,7 +395,10 @@ private:
         const tsl::Color state_color = session_status_ == PTC_LAB_SESSION_INVALID || restore_state
             ? COLOR_DANGER : (std::strcmp(view_.state, "complete") == 0 ? COLOR_GREEN : COLOR_BLUE);
 
-        std::snprintf(line, sizeof(line), "第 %d / 6 阶段", view_.next_phase > 6 ? 6 : view_.next_phase);
+        const int required = view_.required_phases > 0 ? view_.required_phases : 6;
+        const int phase = current_phase_index();
+        std::snprintf(line, sizeof(line), "%s / %d / %d",
+            ptc_lab_mode_zh(view_.mode), view_.next_phase > required ? required : view_.next_phase, required);
         renderer->drawString(line, false, x + 20, y + 24, 16, renderer->a(COLOR_MUTED));
         renderer->drawString("PCTL 实机证据", false, x + w - 138, y + 24, 14, renderer->a(COLOR_DANGER));
         draw_progress(renderer, x + 20, y + 38, w - 40);
@@ -385,30 +427,36 @@ private:
             long long remaining = view_.deadline - static_cast<long long>(std::time(nullptr));
             if (remaining < 0) remaining = 0;
             draw_panel(renderer, x + 20, y + 184, w - 40, 184, COLOR_BLUE);
-            renderer->drawString(ptc_lab_phase_title_zh(view_.next_phase), false,
+            renderer->drawString(ptc_lab_phase_title_zh(phase), false,
                 x + 36, y + 218, 20, renderer->a(COLOR_TEXT));
             std::snprintf(line, sizeof(line), "自动采样剩余 %lld 秒", remaining);
             renderer->drawString(line, false, x + 36, y + 268, 28, renderer->a(COLOR_GREEN));
             draw_wrapped(renderer, "可以关闭本浮窗。实验后台会继续采样，并在期限到达时优先恢复原设置。",
                 x + 36, y + 312, 15, 24, 3, COLOR_MUTED);
         } else if (std::strcmp(view_.state, "awaiting_observation") == 0) {
-            static const char *const labels[] = {"看到了时间限制", "没有看到限制", "无法确定"};
-            renderer->drawString("刚才实际看到了什么？", false, x + 24, y + 172, 20, renderer->a(COLOR_TEXT));
-            for (int index = 0; index < 3; ++index) {
-                s32 row_y = y + 180 + index * 43;
+            static const char *const observations[] = {"看到了时间限制", "没有看到限制", "无法确定"};
+            static const char *const effects[] = {"游戏仍可操作", "游戏已暂停或挂起", "游戏实际退出", "无法确定"};
+            const char *const *labels = observation_step_ == 0 ? observations : effects;
+            const int count = observation_step_ == 0 ? 3 : 4;
+            const int selection = observation_step_ == 0 ? observation_ : runtime_effect_;
+            renderer->drawString(observation_step_ == 0 ? "是否看到系统时间限制提示？" :
+                "游戏实际发生了什么？", false, x + 24, y + 168, 18, renderer->a(COLOR_TEXT));
+            for (int index = 0; index < count; ++index) {
+                s32 row_y = y + 176 + index * 38;
                 renderer->drawRect(x + 26, row_y, w - 52, 36,
-                    renderer->a(index == observation_ ? COLOR_PANEL_RAISED : COLOR_PANEL));
-                draw_outline(renderer, x + 26, row_y, w - 52, 36, index == observation_ ? 2 : 1,
-                    index == observation_ ? COLOR_GREEN : COLOR_MUTED);
-                renderer->drawString(labels[index], false, x + 42, row_y + 25, 17,
-                    renderer->a(index == observation_ ? COLOR_GREEN : COLOR_TEXT));
+                    renderer->a(index == selection ? COLOR_PANEL_RAISED : COLOR_PANEL));
+                draw_outline(renderer, x + 26, row_y, w - 52, 36, index == selection ? 2 : 1,
+                    index == selection ? COLOR_GREEN : COLOR_MUTED);
+                renderer->drawString(labels[index], false, x + 42, row_y + 25, 16,
+                    renderer->a(index == selection ? COLOR_GREEN : COLOR_TEXT));
             }
-            draw_button(renderer, x + 20, y + 330, w - 40, 52, "确认观察结果", COLOR_GREEN);
+            draw_button(renderer, x + 20, y + 330, w - 40, 52,
+                observation_step_ == 0 ? "下一步：记录实际行为" : "确认两项观察结果", COLOR_GREEN);
         } else if (std::strcmp(view_.state, "complete") == 0 && view_.restored) {
             draw_panel(renderer, x + 20, y + 184, w - 40, 186, COLOR_GREEN);
-            renderer->drawString(view_.next_phase >= 6 ? "取证完成，原设置已恢复" :
+            renderer->drawString(view_.next_phase >= required ? "取证完成，原设置已恢复" :
                 "会话已停止，原设置已恢复", false, x + 36, y + 220, 21, renderer->a(COLOR_GREEN));
-            draw_wrapped(renderer, view_.next_phase >= 6 ?
+            draw_wrapped(renderer, view_.next_phase >= required ?
                 "请只发送下面这一份报告，然后运行 Device Lab NRO 恢复正常后台并重启主机。" :
                 "本次取证提前结束，报告并不完整。请运行 Device Lab NRO 恢复正常后台并重启主机。",
                 x + 36, y + 262, 15, 24, 3, COLOR_TEXT);
@@ -421,18 +469,34 @@ private:
                 x + 36, y + 258, 16, 24, 3, COLOR_TEXT);
             draw_button(renderer, x + 20, y + 330, w - 40, 52, "A / 触摸立即恢复", COLOR_DANGER);
         } else {
-            const int phase = view_.next_phase;
             draw_panel(renderer, x + 20, y + 184, w - 40, 136, phase == 5 ? COLOR_DANGER : COLOR_BLUE);
-            renderer->drawString(std::strcmp(view_.state, "not_started") == 0 ? "开始新的取证会话" :
-                ptc_lab_phase_title_zh(phase), false, x + 36, y + 218, 20,
-                renderer->a(phase == 5 ? COLOR_DANGER : COLOR_TEXT));
-            draw_wrapped(renderer, std::strcmp(view_.state, "not_started") == 0 ?
-                "开始时会先保存完整 PCTL 原设置，并验证公开命令与 raw 调用的一致性。" :
-                ptc_lab_phase_instruction_zh(phase), x + 36, y + 254, 15, 24, 3, COLOR_MUTED);
-            draw_button(renderer, x + 20, y + 330, w - 40, 52,
-                phase == 5 ? (touch_hold_warning_ ? "请使用手柄长按 A" : "长按 A 两秒开始") :
-                    "A / 触摸开始", phase == 5 ? COLOR_DANGER : COLOR_BLUE);
-            if (phase == 5) {
+            if (std::strcmp(view_.state, "not_started") == 0) {
+                static const char *const modes[] = {"聚焦限制复测（推荐）", "高级完整取证（六阶段）"};
+                renderer->drawString("选择本次取证模式", false, x + 36, y + 174, 20, renderer->a(COLOR_TEXT));
+                for (int index = 0; index < 2; ++index) {
+                    s32 row_y = y + 190 + index * 58;
+                    renderer->drawRect(x + 26, row_y, w - 52, 48,
+                        renderer->a(index == selected_mode_ ? COLOR_PANEL_RAISED : COLOR_PANEL));
+                    draw_outline(renderer, x + 26, row_y, w - 52, 48, index == selected_mode_ ? 2 : 1,
+                        index == selected_mode_ ? COLOR_GREEN : COLOR_MUTED);
+                    renderer->drawString(modes[index], false, x + 42, row_y + 31, 16,
+                        renderer->a(index == selected_mode_ ? COLOR_GREEN : COLOR_TEXT));
+                }
+                draw_button(renderer, x + 20, y + 330, w - 40, 52, "开始并保存 PCTL 原设置", COLOR_BLUE);
+            } else {
+                renderer->drawString(ptc_lab_phase_title_zh(phase), false, x + 36, y + 218, 20,
+                    renderer->a(phase == 5 ? COLOR_DANGER : COLOR_TEXT));
+                const bool weak_lifecycle_baseline = std::strcmp(view_.mode, "full") == 0 &&
+                    view_.baseline_all_zero && phase >= 2 && phase <= 4;
+                draw_wrapped(renderer, weak_lifecycle_baseline ?
+                    "原始 0x44 全零：本阶段可继续采样，但不足以证明游戏生命周期。完整复测应先配置非空 Nintendo 周计划。" :
+                    ptc_lab_phase_instruction_zh(phase), x + 36, y + 254,
+                    15, 24, 3, COLOR_MUTED);
+                draw_button(renderer, x + 20, y + 330, w - 40, 52,
+                    phase == 5 ? (touch_hold_warning_ ? "请使用手柄长按 A" : "长按 A 两秒开始") :
+                        "A / 触摸开始", phase == 5 ? COLOR_DANGER : COLOR_BLUE);
+            }
+            if (phase == 5 && std::strcmp(view_.state, "not_started") != 0) {
                 renderer->drawRect(x + 20, y + 384, w - 40, 8, renderer->a(COLOR_PANEL_RAISED));
                 if (danger_progress_ > 0) renderer->drawRect(x + 20, y + 384,
                     (w - 40) * danger_progress_ / 100, 8, renderer->a(COLOR_DANGER));
@@ -448,8 +512,8 @@ private:
         renderer->drawString(details_visible_ ? "[-] 收起技术详情" : "[-] 展开技术详情", false,
             x + 20, y + 492, 14, renderer->a(COLOR_MUTED));
         if (details_visible_) {
-            std::snprintf(line, sizeof(line), "state=%s  phase=%s\nrestore=%s\nrequest=%s\nstatus=%s  code=%d",
-                view_.state, view_.active_phase[0] ? view_.active_phase : "none", view_.restore_verdict,
+            std::snprintf(line, sizeof(line), "mode=%s  state=%s\nphase=%s  restore=%s\nrequest=%s\nstatus=%s  code=%d",
+                view_.mode, view_.state, view_.active_phase[0] ? view_.active_phase : "none", view_.restore_verdict,
                 last_request_id_[0] ? last_request_id_ : "none",
                 ptc_companion_status_name(last_transport_status_), error_code_);
             draw_wrapped(renderer, line, x + 20, y + 516, 12, 34, 5, COLOR_MUTED);
@@ -467,6 +531,9 @@ private:
     bool previous_touch_ = false;
     bool touch_hold_warning_ = false;
     int observation_ = 0;
+    int runtime_effect_ = 3;
+    int observation_step_ = 0;
+    int selected_mode_ = 0;
     int danger_progress_ = 0;
     int error_code_ = 0;
     PtcCompanionStatus last_transport_status_ = PTC_COMPANION_OK;
@@ -480,7 +547,7 @@ private:
     char error_message_[256]{};
     char error_reason_[64]{};
     char last_type_[48]{};
-    char last_payload_[128]{};
+    char last_payload_[192]{};
     char last_request_id_[80]{};
 };
 

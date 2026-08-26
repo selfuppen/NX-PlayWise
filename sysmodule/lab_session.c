@@ -14,7 +14,7 @@
 #define LAB_PHASE_SECONDS 75LL
 #define LAB_RESTRICTION_SECONDS 15LL
 #define LAB_RESTRICTION_EVENT_POLL_MS 100U
-#define LAB_REPORT_BUFFER 16384U
+#define LAB_REPORT_BUFFER 32768U
 
 static const char *const LAB_PHASES[] = {
     "home_stopped", "home_started", "game_foreground",
@@ -23,12 +23,15 @@ static const char *const LAB_PHASES[] = {
 
 typedef struct {
     char run_id[48];
+    char mode[32];
     char state[32];
     int next_phase;
     char active_phase[32];
     int64_t started_at;
     int64_t deadline;
     char observation[32];
+    char runtime_effect[32];
+    bool baseline_all_zero;
     bool event_armed;
     int restriction_weekday;
     bool restored;
@@ -142,9 +145,31 @@ static void state_path(PtcSysmodule *sysmodule, char *out, size_t size)
     snprintf(out, size, "%s/lab/session.json", sysmodule->app_root);
 }
 
-static void report_path(PtcSysmodule *sysmodule, const LabState *state, char *out, size_t size)
+static void final_report_path(PtcSysmodule *sysmodule, const LabState *state, char *out, size_t size)
 {
     snprintf(out, size, "%s/reports/%s.json", sysmodule->app_root, state->run_id);
+}
+
+static void draft_report_path(PtcSysmodule *sysmodule, const LabState *state, char *out, size_t size)
+{
+    snprintf(out, size, "%s/lab/report-%s.draft.json", sysmodule->app_root, state->run_id);
+}
+
+static unsigned int required_phase_count(const LabState *state)
+{
+    return strcmp(state->mode, "restriction_quick") == 0 ? 1U : 6U;
+}
+
+static int active_phase_slot(const LabState *state)
+{
+    return strcmp(state->mode, "restriction_quick") == 0 ? 5 : state->next_phase;
+}
+
+static const char *expected_phase(const LabState *state)
+{
+    if (strcmp(state->mode, "restriction_quick") == 0)
+        return state->next_phase == 0 ? "restriction_effect" : NULL;
+    return state->next_phase >= 0 && state->next_phase < 6 ? LAB_PHASES[state->next_phase] : NULL;
 }
 
 static bool save_state(PtcSysmodule *sysmodule, const LabState *state)
@@ -156,17 +181,19 @@ static bool save_state(PtcSysmodule *sysmodule, const LabState *state)
     bytes_hex(state->original.data, sizeof(state->original.data), original_hex, sizeof(original_hex));
     bytes_hex(state->before.settings, sizeof(state->before.settings), before_hex, sizeof(before_hex));
     snprintf(text, sizeof(text),
-        "{\"version\":1,\"run_id\":\"%s\",\"state\":\"%s\",\"next_phase\":%d,"
+        "{\"version\":1,\"run_id\":\"%s\",\"mode\":\"%s\",\"state\":\"%s\",\"next_phase\":%d,"
         "\"active_phase\":\"%s\",\"started_at\":%lld,\"deadline\":%lld,"
-        "\"observation\":\"%s\",\"event_armed\":%s,\"restriction_weekday\":%d,\"restored\":%s,"
+        "\"observation\":\"%s\",\"runtime_effect\":\"%s\",\"baseline_all_zero\":%s,"
+        "\"event_armed\":%s,\"restriction_weekday\":%d,\"restored\":%s,"
         "\"restore_verdict\":\"%s\",\"original_timer\":%s,\"original_hex\":\"%s\","
         "\"before_monotonic_ns\":%llu,\"before_timer_rc\":%u,\"before_timer\":%s,"
         "\"before_remaining_rc\":%u,\"before_remaining_ns\":%lld,"
         "\"before_restricted_rc\":%u,\"before_restricted\":%s,"
         "\"before_spent_rc\":%u,\"before_spent_ns\":%lld,"
         "\"before_settings_rc\":%u,\"before_settings_hex\":\"%s\"}\n",
-        state->run_id, state->state, state->next_phase, state->active_phase,
+        state->run_id, state->mode, state->state, state->next_phase, state->active_phase,
         (long long)state->started_at, (long long)state->deadline, state->observation,
+        state->runtime_effect, state->baseline_all_zero ? "true" : "false",
         state->event_armed ? "true" : "false", state->restriction_weekday,
         state->restored ? "true" : "false",
         state->restore_verdict, state->original.timer_enabled ? "true" : "false", original_hex,
@@ -188,6 +215,7 @@ static bool load_state(PtcSysmodule *sysmodule, LabState *state)
     char before_hex[PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U + 1U];
     int64_t value;
     memset(state, 0, sizeof(*state));
+    snprintf(state->mode, sizeof(state->mode), "full");
     state->restriction_weekday = -1;
     state_path(sysmodule, path, sizeof(path));
     if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) return false;
@@ -202,6 +230,9 @@ static bool load_state(PtcSysmodule *sysmodule, LabState *state)
         !json_bool(text, "original_timer", &state->original.timer_enabled) ||
         !json_string(text, "original_hex", original_hex, sizeof(original_hex)) ||
         !json_string(text, "before_settings_hex", before_hex, sizeof(before_hex))) return false;
+    (void)json_string(text, "mode", state->mode, sizeof(state->mode));
+    (void)json_string(text, "runtime_effect", state->runtime_effect, sizeof(state->runtime_effect));
+    (void)json_bool(text, "baseline_all_zero", &state->baseline_all_zero);
     state->next_phase = (int)value;
     if (json_i64(text, "restriction_weekday", &value) && value >= 0 && value < 7)
         state->restriction_weekday = (int)value;
@@ -240,12 +271,14 @@ static bool write_result(PtcSysmodule *sysmodule, const PtcRequest *request,
     }
     used = strlen(json);
     if (used >= 2U && json[used - 1U] == '\n' && json[used - 2U] == '}') json[used - 2U] = '\0';
-    report_path(sysmodule, state, report, sizeof(report));
+    final_report_path(sysmodule, state, report, sizeof(report));
+    if (!sysmodule->storage->vtable->exists(sysmodule->storage, report))
+        draft_report_path(sysmodule, state, report, sizeof(report));
     snprintf(json + strlen(json), sizeof(json) - strlen(json),
-        ",\"lab_session\":{\"run_id\":\"%s\",\"state\":\"%s\",\"next_phase\":%d,"
+        ",\"lab_session\":{\"run_id\":\"%s\",\"mode\":\"%s\",\"state\":\"%s\",\"next_phase\":%d,"
         "\"active_phase\":\"%s\",\"deadline\":%lld,\"restored\":%s,"
         "\"restore_verdict\":\"%s\",\"report_path\":\"%s\"}}\n",
-        state->run_id, state->state, state->next_phase, state->active_phase,
+        state->run_id, state->mode, state->state, state->next_phase, state->active_phase,
         (long long)state->deadline, state->restored ? "true" : "false", state->restore_verdict, report);
     snprintf(path, sizeof(path), "%s/results/%s.json", sysmodule->app_root, request->request_id);
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, json);
@@ -316,16 +349,20 @@ static bool append_text(char *out, size_t out_size, const char *value)
 static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
 {
     char report[LAB_REPORT_BUFFER];
-    char fragment[4096];
+    char fragment[6144];
     char path[320];
     size_t i;
     unsigned int completed_phases = 0;
+    unsigned int required_phases = required_phase_count(state);
     bool observation_recorded = state->observation[0] != '\0';
+    bool runtime_effect_recorded = state->runtime_effect[0] != '\0';
     bool complete;
     int written = snprintf(report, sizeof(report),
-        "{\"version\":1,\"run_id\":\"%s\",\"environment\":{\"title_id\":\"%s\","
+        "{\"version\":1,\"run_id\":\"%s\",\"mode\":\"%s\",\"report_status\":\"draft\","
+        "\"baseline\":{\"settings_all_zero\":%s},\"environment\":{\"title_id\":\"%s\","
         "\"ipc_service\":\"%s\",\"sd_root\":\"%s\",\"runtime\":",
-        state->run_id, PLAYWISE_TITLE_ID, PLAYWISE_IPC_SERVICE, PLAYWISE_SD_ROOT);
+        state->run_id, state->mode, state->baseline_all_zero ? "true" : "false",
+        PLAYWISE_TITLE_ID, PLAYWISE_IPC_SERVICE, PLAYWISE_SD_ROOT);
     if (written < 0 || (size_t)written >= sizeof(report)) return false;
     if (!read_fragment(sysmodule, "environment.json", fragment, sizeof(fragment)))
         snprintf(fragment, sizeof(fragment), "null");
@@ -349,21 +386,37 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
         else ++completed_phases;
         if (!append_text(report, sizeof(report), fragment)) return false;
     }
-    complete = completed_phases == sizeof(LAB_PHASES) / sizeof(LAB_PHASES[0]) &&
-        observation_recorded && state->restored &&
+    complete = completed_phases == required_phases &&
+        observation_recorded && runtime_effect_recorded && state->restored &&
         strcmp(state->restore_verdict, "exact_restore_proved") == 0 &&
         strcmp(state->state, "complete") == 0;
     snprintf(fragment, sizeof(fragment),
-        "],\"manual_observation\":%s%s%s,\"restoration\":{\"proved\":%s,\"verdict\":\"%s\"},"
-        "\"summary\":{\"automated_phases_completed\":%u,\"manual_observation_recorded\":%s,"
+        "],\"manual_observation\":%s%s%s,\"manual_runtime_effect\":%s%s%s,"
+        "\"restoration\":{\"proved\":%s,\"verdict\":\"%s\"},"
+        "\"summary\":{\"automated_phases_completed\":%u,\"required_automated_phases\":%u,"
+        "\"manual_observation_recorded\":%s,\"manual_runtime_effect_recorded\":%s,"
         "\"complete\":%s,\"ipc_callable\":\"see_commands\",\"wire_shape_confirmed\":\"see_commands\","
         "\"product_semantics\":\"evidence_only_until_review\"}}\n",
         state->observation[0] ? "\"" : "", state->observation[0] ? state->observation : "null",
         state->observation[0] ? "\"" : "",
+        state->runtime_effect[0] ? "\"" : "", state->runtime_effect[0] ? state->runtime_effect : "null",
+        state->runtime_effect[0] ? "\"" : "",
         state->restored ? "true" : "false", state->restore_verdict,
-        completed_phases, observation_recorded ? "true" : "false", complete ? "true" : "false");
+        completed_phases, required_phases, observation_recorded ? "true" : "false",
+        runtime_effect_recorded ? "true" : "false", complete ? "true" : "false");
     if (!append_text(report, sizeof(report), fragment)) return false;
-    report_path(sysmodule, state, path, sizeof(path));
+    if (complete) {
+        char draft_path[320];
+        char *status = strstr(report, "\"report_status\":\"draft\"");
+        if (status) memcpy(status + strlen("\"report_status\":\""), "final", 5U);
+        final_report_path(sysmodule, state, path, sizeof(path));
+        if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, report)) return false;
+        draft_report_path(sysmodule, state, draft_path, sizeof(draft_path));
+        if (sysmodule->storage->vtable->exists(sysmodule->storage, draft_path))
+            (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, draft_path);
+        return true;
+    }
+    draft_report_path(sysmodule, state, path, sizeof(path));
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, report);
 }
 
@@ -400,18 +453,28 @@ static void enter_restore_required(PtcSysmodule *sysmodule, LabState *state)
 
 static bool format_settings_offsets(const uint8_t *original, const uint8_t *active,
     size_t expected_start, size_t expected_end, char *changed, size_t changed_size,
-    char *outside, size_t outside_size, unsigned int *changed_count,
-    unsigned int *outside_count)
+    char *outside, size_t outside_size, char *header, size_t header_size,
+    char *today, size_t today_size, char *unexpected, size_t unexpected_size,
+    unsigned int *changed_count, unsigned int *outside_count, unsigned int *unexpected_count)
 {
     size_t changed_used = 1U;
     size_t outside_used = 1U;
+    size_t header_used = 1U;
+    size_t today_used = 1U;
+    size_t unexpected_used = 1U;
+    unsigned int header_count = 0;
+    unsigned int today_count = 0;
     size_t i;
     changed[0] = '[';
     changed[1] = '\0';
     outside[0] = '[';
     outside[1] = '\0';
+    header[0] = '['; header[1] = '\0';
+    today[0] = '['; today[1] = '\0';
+    unexpected[0] = '['; unexpected[1] = '\0';
     *changed_count = 0;
     *outside_count = 0;
+    *unexpected_count = 0;
     for (i = 0; i < PTC_PCTL_OPAQUE_SETTINGS_SIZE; ++i) {
         int written;
         if (original[i] == active[i]) continue;
@@ -420,18 +483,43 @@ static bool format_settings_offsets(const uint8_t *original, const uint8_t *acti
         if (written < 0 || (size_t)written >= changed_size - changed_used) return false;
         changed_used += (size_t)written;
         ++*changed_count;
-        if (i >= expected_start && i < expected_end) continue;
-        written = snprintf(outside + outside_used, outside_size - outside_used, "%s%u",
-            *outside_count ? "," : "", (unsigned int)i);
-        if (written < 0 || (size_t)written >= outside_size - outside_used) return false;
-        outside_used += (size_t)written;
-        ++*outside_count;
+        if (i >= expected_start && i < expected_end) {
+            written = snprintf(today + today_used, today_size - today_used, "%s%u",
+                today_count ? "," : "", (unsigned int)i);
+            if (written < 0 || (size_t)written >= today_size - today_used) return false;
+            today_used += (size_t)written;
+            ++today_count;
+        } else {
+            written = snprintf(outside + outside_used, outside_size - outside_used, "%s%u",
+                *outside_count ? "," : "", (unsigned int)i);
+            if (written < 0 || (size_t)written >= outside_size - outside_used) return false;
+            outside_used += (size_t)written;
+            ++*outside_count;
+            if (i < 4U) {
+                written = snprintf(header + header_used, header_size - header_used, "%s%u",
+                    header_count ? "," : "", (unsigned int)i);
+                if (written < 0 || (size_t)written >= header_size - header_used) return false;
+                header_used += (size_t)written;
+                ++header_count;
+            } else {
+                written = snprintf(unexpected + unexpected_used, unexpected_size - unexpected_used, "%s%u",
+                    *unexpected_count ? "," : "", (unsigned int)i);
+                if (written < 0 || (size_t)written >= unexpected_size - unexpected_used) return false;
+                unexpected_used += (size_t)written;
+                ++*unexpected_count;
+            }
+        }
     }
-    if (changed_used + 2U > changed_size || outside_used + 2U > outside_size) return false;
+    if (changed_used + 2U > changed_size || outside_used + 2U > outside_size ||
+        header_used + 2U > header_size || today_used + 2U > today_size ||
+        unexpected_used + 2U > unexpected_size) return false;
     changed[changed_used++] = ']';
     changed[changed_used] = '\0';
     outside[outside_used++] = ']';
     outside[outside_used] = '\0';
+    header[header_used++] = ']'; header[header_used] = '\0';
+    today[today_used++] = ']'; today[today_used] = '\0';
+    unexpected[unexpected_used++] = ']'; unexpected[unexpected_used] = '\0';
     return true;
 }
 
@@ -447,10 +535,13 @@ static bool write_phase(PtcSysmodule *sysmodule, const LabState *state,
     char original_hex[PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U + 1U];
     char changed_offsets[320];
     char outside_offsets[320];
-    char settings_scope[1200];
+    char header_offsets[320];
+    char today_offsets[320];
+    char unexpected_offsets[320];
+    char settings_scope[2600];
     char first_signal[32];
     char verdict[48] = "evidence_recorded";
-    char text[4096];
+    char text[6144];
     int64_t remaining_delta = after->remaining_ns - state->before.remaining_ns;
     int64_t spent_delta = after->spent_ns - state->before.spent_ns;
     bool callable = sample_ok(&state->before) && sample_ok(after);
@@ -461,6 +552,7 @@ static bool write_phase(PtcSysmodule *sysmodule, const LabState *state,
     size_t expected_end = expected_start + 8U;
     unsigned int changed_count = 0;
     unsigned int outside_count = 0;
+    unsigned int unexpected_count = 0;
     bool offsets_ok = false;
     if (strcmp(state->active_phase, "home_started") == 0 &&
         ((state->before.remaining_result == 0 && after->remaining_result == 0 && remaining_delta < 0) ||
@@ -470,6 +562,11 @@ static bool write_phase(PtcSysmodule *sysmodule, const LabState *state,
         snprintf(verdict, sizeof(verdict), "stopped_timer_stable");
     } else if (restriction && after->restricted_result == 0 && after->restricted) {
         snprintf(verdict, sizeof(verdict), "restriction_ipc_observed");
+    } else if (state->baseline_all_zero &&
+        (strcmp(state->active_phase, "game_foreground") == 0 ||
+         strcmp(state->active_phase, "game_suspended") == 0 ||
+         strcmp(state->active_phase, "sleep_wake") == 0)) {
+        snprintf(verdict, sizeof(verdict), "precondition_not_met");
     }
     settings_hash(&state->before, before_hash);
     settings_hash(after, after_hash);
@@ -480,7 +577,9 @@ static bool write_phase(PtcSysmodule *sysmodule, const LabState *state,
     if (restriction && after->settings_result == 0 && expected_start < expected_end) {
         offsets_ok = format_settings_offsets(state->original.data, after->settings,
             expected_start, expected_end, changed_offsets, sizeof(changed_offsets),
-            outside_offsets, sizeof(outside_offsets), &changed_count, &outside_count);
+            outside_offsets, sizeof(outside_offsets), header_offsets, sizeof(header_offsets),
+            today_offsets, sizeof(today_offsets), unexpected_offsets, sizeof(unexpected_offsets),
+            &changed_count, &outside_count, &unexpected_count);
     }
     if (restriction) {
         snprintf(settings_scope, sizeof(settings_scope),
@@ -488,10 +587,16 @@ static bool write_phase(PtcSysmodule *sysmodule, const LabState *state,
             "\"expected_byte_start\":%u,\"expected_byte_end_exclusive\":%u,"
             "\"original_settings_hex\":\"%s\",\"changed_byte_count\":%u,"
             "\"changed_offsets\":%s,\"outside_today_changed_offsets\":%s,"
+            "\"expected_header_changed_offsets\":%s,\"expected_today_changed_offsets\":%s,"
+            "\"unexpected_changed_offsets\":%s,\"unexpected_bytes_unchanged\":%s,"
+            "\"classification\":\"implementation_expected_not_hos_semantics_proved\","
             "\"unrelated_bytes_unchanged\":%s}",
             (unsigned int)target_weekday, (unsigned int)expected_start, (unsigned int)expected_end,
             original_hex, changed_count, offsets_ok ? changed_offsets : "null",
             offsets_ok ? outside_offsets : "null",
+            offsets_ok ? header_offsets : "null", offsets_ok ? today_offsets : "null",
+            offsets_ok ? unexpected_offsets : "null",
+            offsets_ok && unexpected_count == 0 ? "true" : "false",
             offsets_ok && outside_count == 0 ? "true" : "false");
     } else {
         snprintf(settings_scope, sizeof(settings_scope),
@@ -533,11 +638,11 @@ static bool write_phase(PtcSysmodule *sysmodule, const LabState *state,
         event && event->signaled ? "true" : "false", first_signal, settings_scope,
         callable ? "true" : "false",
         callable ? "true" : "false", verdict);
-    snprintf(path, sizeof(path), "%s/lab/phase-%d.json", sysmodule->app_root, state->next_phase);
+    snprintf(path, sizeof(path), "%s/lab/phase-%d.json", sysmodule->app_root, active_phase_slot(state));
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
 }
 
-static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state)
+static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, const char *mode)
 {
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     PtcPctlPublicParity parity;
@@ -547,6 +652,7 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state)
     bool restored_ok;
     size_t i;
     memset(state, 0, sizeof(*state));
+    snprintf(state->mode, sizeof(state->mode), "%s", mode && mode[0] ? mode : "full");
     state->restriction_weekday = -1;
     snprintf(state->run_id, sizeof(state->run_id), "%lld-%s", (long long)now.unix_seconds, sysmodule->boot_id);
     snprintf(state->state, sizeof(state->state), "ready");
@@ -562,6 +668,10 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state)
         !sysmodule->pctl->vtable->public_parity) return PTC_ERR_PCTL_INIT_FAILED;
     err = sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &state->original);
     if (err != PTC_ERR_OK || state->original.size != PTC_PCTL_OPAQUE_SETTINGS_SIZE) return PTC_ERR_PCTL_READ_FAILED;
+    state->baseline_all_zero = true;
+    for (i = 0; i < state->original.size; ++i) {
+        if (state->original.data[i] != 0U) { state->baseline_all_zero = false; break; }
+    }
     err = sysmodule->pctl->vtable->public_parity(sysmodule->pctl, &parity);
     if (err != PTC_ERR_OK) return err;
     write_ok = sysmodule->pctl->vtable->restore_settings(sysmodule->pctl, &state->original) == PTC_ERR_OK;
@@ -581,8 +691,9 @@ static PtcErrorCode begin_phase(PtcSysmodule *sysmodule, LabState *state, const 
 {
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     PtcErrorCode err;
-    if (strcmp(state->state, "ready") != 0 || state->next_phase < 0 || state->next_phase >= 6 ||
-        strcmp(phase, LAB_PHASES[state->next_phase]) != 0) return PTC_ERR_BAD_REQUEST;
+    const char *expected = expected_phase(state);
+    if (strcmp(state->state, "ready") != 0 || !expected || strcmp(phase, expected) != 0)
+        return PTC_ERR_BAD_REQUEST;
     if (strcmp(phase, "home_stopped") == 0) {
         err = sysmodule->pctl->vtable->stop_timer(sysmodule->pctl);
         if (err != PTC_ERR_OK) return err;
@@ -657,7 +768,7 @@ bool ptc_lab_process_request(PtcSysmodule *sysmodule, const PtcRequest *request)
         } else if (loaded && strcmp(state.state, "complete") != 0 && strcmp(state.state, "not_started") != 0) {
             err = PTC_ERR_BAD_REQUEST;
         } else {
-            err = start_session(sysmodule, &state);
+            err = start_session(sysmodule, &state, request->lab_mode);
             if (err != PTC_ERR_OK && state.original.size == PTC_PCTL_OPAQUE_SETTINGS_SIZE) {
                 if (!restore_original(sysmodule, &state)) enter_restore_required(sysmodule, &state);
             }
@@ -674,8 +785,9 @@ bool ptc_lab_process_request(PtcSysmodule *sysmodule, const PtcRequest *request)
         if (!loaded || strcmp(state.state, "awaiting_observation") != 0) err = PTC_ERR_BAD_REQUEST;
         else {
             snprintf(state.observation, sizeof(state.observation), "%s", request->observation);
+            snprintf(state.runtime_effect, sizeof(state.runtime_effect), "%s", request->runtime_effect);
             snprintf(state.state, sizeof(state.state), "complete");
-            state.next_phase = 6;
+            state.next_phase = (int)required_phase_count(&state);
             state.active_phase[0] = '\0';
             state.deadline = 0;
             if (!save_state(sysmodule, &state) || !rebuild_report(sysmodule, &state)) err = PTC_ERR_STORAGE_WRITE_FAILED;

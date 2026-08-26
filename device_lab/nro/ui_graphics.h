@@ -18,6 +18,7 @@ typedef struct {
     PtcLabSessionView session;
     int selected;
     bool report_available;
+    bool draft_available;
     bool details_visible;
     bool message_is_error;
     PtcLabNroModal modal;

@@ -33,6 +33,9 @@ typedef struct {
     int64_t forensic_remaining_ns;
     int64_t forensic_spent_ns;
     uint64_t forensic_monotonic_ns;
+    bool settings_header_initialized;
+    bool raw_settings_override_enabled;
+    uint8_t raw_settings[PTC_PCTL_OPAQUE_SETTINGS_SIZE];
     bool suspend_event_armed;
     bool suspend_event_signaled;
     bool suspend_event_signaled_latched;

@@ -64,6 +64,7 @@ bool ptc_lab_session_parse(const char *text, PtcLabSessionView *view)
     int64_t next_phase;
     if (!text || !view) return false;
     memset(&parsed, 0, sizeof(parsed));
+    snprintf(parsed.mode, sizeof(parsed.mode), "full");
     if (!ptc_lab_json_string(text, "run_id", parsed.run_id, sizeof(parsed.run_id)) ||
         !ptc_lab_json_string(text, "state", parsed.state, sizeof(parsed.state)) ||
         !ptc_lab_json_string(text, "active_phase", parsed.active_phase, sizeof(parsed.active_phase)) ||
@@ -71,7 +72,10 @@ bool ptc_lab_session_parse(const char *text, PtcLabSessionView *view)
         !json_int(text, "next_phase", &next_phase) ||
         !json_int(text, "deadline", &parsed.deadline) ||
         !json_bool(text, "restored", &parsed.restored) || next_phase < 0 || next_phase > 6) return false;
+    (void)ptc_lab_json_string(text, "mode", parsed.mode, sizeof(parsed.mode));
+    (void)json_bool(text, "baseline_all_zero", &parsed.baseline_all_zero);
     parsed.next_phase = (int)next_phase;
+    parsed.required_phases = strcmp(parsed.mode, "restriction_quick") == 0 ? 1 : 6;
     snprintf(parsed.last_verdict, sizeof(parsed.last_verdict), "pending");
     *view = parsed;
     return true;
@@ -128,10 +132,10 @@ const char *ptc_lab_nro_stage_body_zh(PtcLabNroStage stage)
     switch (stage) {
     case PTC_LAB_NRO_PREPARE: return "启用后会暂时停用正常后台，并在下次重启运行隔离的实验后台。标准数据和二进制不会被修改。";
     case PTC_LAB_NRO_REBOOT_TO_LAB: return "实验后台启动标志已经准备完成。请退出本程序并完整重启主机，然后从 Tesla 或 Ultrahand 打开 Device Lab 浮窗。";
-    case PTC_LAB_NRO_START_OVERLAY: return "实验后台正在运行。请打开 Device Lab 浮窗，按照六个阶段逐步完成取证。";
+    case PTC_LAB_NRO_START_OVERLAY: return "实验后台正在运行。请打开 Device Lab 浮窗，选择聚焦限制复测或高级完整取证。";
     case PTC_LAB_NRO_RESUME_OVERLAY: return "会话进度已经保存。重新打开 Device Lab 浮窗即可从当前阶段继续。";
     case PTC_LAB_NRO_RESTORE_PCTL: return "当前尚未证明 PCTL 原设置已精确恢复。程序不会切换启动标志，请先执行立即恢复。";
-    case PTC_LAB_NRO_RESTORE_NORMAL: return "报告已经生成，而且 PCTL 原设置已精确恢复。现在可以安全切回正常 PlayWise 后台。";
+    case PTC_LAB_NRO_RESTORE_NORMAL: return "PCTL 原设置已精确恢复。完整会话会生成正式报告；提前停止的会话只保留草稿。现在可以安全切回正常 PlayWise 后台。";
     case PTC_LAB_NRO_RECOVER_FLAGS: return "上次启动切换没有完整结束。只允许按事务记录恢复，不会覆盖未知文件。";
     case PTC_LAB_NRO_SESSION_INVALID: return "无法可信读取 session.json。为避免覆盖取证现场，已禁止开始新会话或切换启动标志。";
     case PTC_LAB_NRO_REBOOT_TO_NORMAL: return "启动标志已经精确恢复。请退出本程序并完整重启主机，重启后标准 PlayWise 后台将恢复运行。";
@@ -197,9 +201,15 @@ const char *ptc_lab_verdict_zh(const char *verdict)
     if (strcmp(verdict, "unsafe_for_home_start") == 0) return "HOME 菜单启动计时会消耗额度，不安全";
     if (strcmp(verdict, "stopped_timer_stable") == 0) return "计时停止时额度保持稳定";
     if (strcmp(verdict, "restriction_ipc_observed") == 0) return "IPC 已观察到限制状态";
+    if (strcmp(verdict, "precondition_not_met") == 0) return "全零基线不足以证明游戏生命周期";
     if (strcmp(verdict, "exact_restore_proved") == 0) return "已证明原设置精确恢复";
     if (strcmp(verdict, "restore_not_proved") == 0) return "尚未证明原设置恢复";
     return "证据已保存，查看技术详情";
+}
+
+const char *ptc_lab_mode_zh(const char *mode)
+{
+    return mode && strcmp(mode, "restriction_quick") == 0 ? "聚焦限制复测" : "高级完整取证";
 }
 
 const char *ptc_lab_transport_error_zh(int status)

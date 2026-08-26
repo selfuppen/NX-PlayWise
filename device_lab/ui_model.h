@@ -15,13 +15,16 @@ typedef enum {
 
 typedef struct {
     char run_id[48];
+    char mode[32];
     char state[32];
     char active_phase[32];
     char restore_verdict[32];
     char last_verdict[48];
     int next_phase;
+    int required_phases;
     int64_t deadline;
     bool restored;
+    bool baseline_all_zero;
 } PtcLabSessionView;
 
 typedef enum {
@@ -57,6 +60,7 @@ const char *ptc_lab_session_state_zh(const char *state);
 const char *ptc_lab_phase_title_zh(int phase);
 const char *ptc_lab_phase_instruction_zh(int phase);
 const char *ptc_lab_verdict_zh(const char *verdict);
+const char *ptc_lab_mode_zh(const char *mode);
 const char *ptc_lab_transport_error_zh(int status);
 
 PtcLabUiRect ptc_lab_nro_action_rect(int index);

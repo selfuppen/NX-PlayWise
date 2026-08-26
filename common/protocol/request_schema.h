@@ -24,8 +24,10 @@ typedef struct {
 #ifdef PLAYWISE_DEVICE_LAB
     bool start_timer;
     bool wait_for_expiry;
+    char lab_mode[32];
     char phase[32];
     char observation[32];
+    char runtime_effect[32];
 #endif
 } PtcRequest;
 

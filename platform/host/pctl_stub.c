@@ -30,8 +30,10 @@ static void stub_raw_and_slots(const PtcPctlStub *stub, char *raw_hex, size_t ra
     uint16_t minutes = stub_configured_minutes(stub);
     unsigned int day;
     memset(words, 0, sizeof(words));
-    words[0] = 0x0101U;
-    words[1] = 1U;
+    if (stub->settings_header_initialized) {
+        words[0] = 0x0101U;
+        words[1] = 1U;
+    }
     for (day = 0; day < PTC_PLAY_TIMER_DAY_COUNT; ++day) {
         unsigned int base = PTC_PLAY_TIMER_HEADER_WORDS + (day * PTC_PLAY_TIMER_DAY_WORDS);
         words[base + PTC_PLAY_TIMER_DAY_FLAG_WORD] = status->unrestricted_today ? 0U : PTC_PLAY_TIMER_DAY_CONFIGURED;
@@ -100,6 +102,17 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
     }
     stub->last_target = *target;
     stub->applied = true;
+    if (target->mode != PTC_PCTL_TARGET_UNLIMITED) stub->settings_header_initialized = true;
+    if (stub->raw_settings_override_enabled) {
+        uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS];
+        uint16_t raw_minutes = target->mode == PTC_PCTL_TARGET_UNLIMITED
+            ? PTC_PLAY_TIMER_UNLIMITED : target->minutes;
+        memcpy(words, stub->raw_settings, sizeof(words));
+        if (!ptc_play_timer_settings_set_day(words, PTC_PLAY_TIMER_SETTINGS_WORDS,
+                target->weekday, target->mode != PTC_PCTL_TARGET_UNLIMITED, raw_minutes))
+            return PTC_ERR_PCTL_WRITE_FAILED;
+        memcpy(stub->raw_settings, words, sizeof(words));
+    }
     if (!stub->runtime_effect_succeeds) {
         return PTC_ERR_OK;
     }
@@ -172,9 +185,17 @@ static void stub_encode_snapshot(const PtcPctlStub *stub, PtcPctlSettingsSnapsho
     unsigned int day;
     uint16_t minutes = stub_configured_minutes(stub);
     memset(out, 0, sizeof(*out));
+    if (stub->raw_settings_override_enabled) {
+        memcpy(out->data, stub->raw_settings, sizeof(stub->raw_settings));
+        out->size = PTC_PCTL_OPAQUE_SETTINGS_SIZE;
+        out->timer_enabled = stub->status.play_timer_enabled;
+        return;
+    }
     memset(words, 0, sizeof(words));
-    words[0] = 0x0101U;
-    words[1] = 1U;
+    if (stub->settings_header_initialized) {
+        words[0] = 0x0101U;
+        words[1] = 1U;
+    }
     for (day = 0; day < PTC_PLAY_TIMER_DAY_COUNT; ++day) {
         unsigned int base = PTC_PLAY_TIMER_HEADER_WORDS + (day * PTC_PLAY_TIMER_DAY_WORDS);
         words[base + PTC_PLAY_TIMER_DAY_FLAG_WORD] = stub->status.unrestricted_today ? 0U : PTC_PLAY_TIMER_DAY_CONFIGURED;
@@ -210,6 +231,9 @@ static PtcErrorCode stub_restore_settings(PtcPctl *pctl, const PtcPctlSettingsSn
     }
     stub->restore_called = true;
     memcpy(words, snapshot->data, sizeof(words));
+    if (stub->raw_settings_override_enabled)
+        memcpy(stub->raw_settings, snapshot->data, sizeof(stub->raw_settings));
+    stub->settings_header_initialized = words[0] == 0x0101U && words[1] == 1U;
     if (!ptc_play_timer_settings_get_minutes(words, PTC_PLAY_TIMER_SETTINGS_WORDS, weekday, &minutes)) {
         return PTC_ERR_PCTL_WRITE_FAILED;
     }
@@ -372,6 +396,7 @@ void ptc_pctl_stub_init(PtcPctlStub *stub)
     stub->start_timer_error = PTC_ERR_OK;
     stub->restore_error = PTC_ERR_OK;
     stub->runtime_effect_succeeds = true;
+    stub->settings_header_initialized = true;
 }
 
 PtcPctl *ptc_pctl_stub_as_pctl(PtcPctlStub *stub)

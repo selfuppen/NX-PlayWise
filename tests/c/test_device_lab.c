@@ -30,7 +30,10 @@ static PtcRequest request(PtcRequestType type, const char *id, const char *phase
     snprintf(value.request_id, sizeof(value.request_id), "%s", id);
     snprintf(value.type_text, sizeof(value.type_text), "%s", ptc_request_type_name(type));
     if (phase) snprintf(value.phase, sizeof(value.phase), "%s", phase);
-    if (observation) snprintf(value.observation, sizeof(value.observation), "%s", observation);
+    if (observation) {
+        snprintf(value.observation, sizeof(value.observation), "%s", observation);
+        snprintf(value.runtime_effect, sizeof(value.runtime_effect), "unsure");
+    }
     return value;
 }
 
@@ -51,6 +54,14 @@ static void test_protocol(void)
         "restriction_visible", "no_visible_restriction", "unsure"
     };
     size_t i;
+    check(ptc_request_parse("{\"version\":1,\"request_id\":\"s0\",\"type\":\"lab_session_start\",\"created_at\":1,\"payload\":{}}", &parsed) == PTC_ERR_OK &&
+            strcmp(parsed.lab_mode, "full") == 0,
+        "legacy Lab session start defaults to full mode");
+    check(ptc_request_parse("{\"version\":1,\"request_id\":\"s1\",\"type\":\"lab_session_start\",\"created_at\":1,\"payload\":{\"mode\":\"restriction_quick\"}}", &parsed) == PTC_ERR_OK &&
+            strcmp(parsed.lab_mode, "restriction_quick") == 0,
+        "focused restriction mode parses explicitly");
+    check(ptc_request_parse("{\"version\":1,\"request_id\":\"s2\",\"type\":\"lab_session_start\",\"created_at\":1,\"payload\":{\"mode\":\"skip\"}}", &parsed) == PTC_ERR_BAD_REQUEST,
+        "unknown Lab mode is rejected");
     check(ptc_request_parse("{\"version\":1,\"request_id\":\"p1\",\"type\":\"lab_phase_start\",\"created_at\":1,\"payload\":{\"phase\":\"sleep_wake\"}}", &parsed) == PTC_ERR_OK,
         "valid Lab phase parses");
     check(strcmp(parsed.phase, "sleep_wake") == 0, "Lab phase is retained");
@@ -62,7 +73,13 @@ static void test_protocol(void)
             "{\"version\":1,\"request_id\":\"o%u\",\"type\":\"lab_observation\",\"created_at\":1,"
             "\"payload\":{\"observation\":\"%s\"}}", (unsigned int)i, observations[i]);
         check(ptc_request_parse(json, &parsed) == PTC_ERR_OK, "each tri-state observation parses");
+        check(strcmp(parsed.runtime_effect, "unsure") == 0, "legacy observation defaults runtime effect to unsure");
     }
+    check(ptc_request_parse("{\"version\":1,\"request_id\":\"oe\",\"type\":\"lab_observation\",\"created_at\":1,\"payload\":{\"observation\":\"restriction_visible\",\"runtime_effect\":\"exited\"}}", &parsed) == PTC_ERR_OK &&
+            strcmp(parsed.runtime_effect, "exited") == 0,
+        "two-layer manual observation retains actual runtime effect");
+    check(ptc_request_parse("{\"version\":1,\"request_id\":\"ob\",\"type\":\"lab_observation\",\"created_at\":1,\"payload\":{\"observation\":\"restriction_visible\",\"runtime_effect\":\"prompt_only\"}}", &parsed) == PTC_ERR_BAD_REQUEST,
+        "unknown runtime effect is rejected");
 }
 
 static void test_session_timing_order_restart_and_restore_failure(void)
@@ -90,8 +107,9 @@ static void test_session_timing_order_restart_and_restore_failure(void)
 
     item = request(PTC_REQUEST_LAB_SESSION_START, "start", NULL, NULL);
     check(ptc_lab_process_request(&first, &item), "session start handled");
-    check(storage.storage.vtable->exists(&storage.storage, "/lab/reports/2000000000-test-boot.json"),
-        "single report is created at start");
+    check(storage.storage.vtable->exists(&storage.storage, "/lab/lab/report-2000000000-test-boot.draft.json") &&
+            !storage.storage.vtable->exists(&storage.storage, "/lab/reports/2000000000-test-boot.json"),
+        "session start creates only a clearly named draft report");
 
     item = request(PTC_REQUEST_LAB_PHASE_START, "wrong", "home_started", NULL);
     (void)ptc_lab_process_request(&first, &item);
@@ -126,7 +144,7 @@ static void test_session_timing_order_restart_and_restore_failure(void)
         "unproved restoration disables all later writes");
     check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/session.json", text, sizeof(text)) &&
         strstr(text, "restore_required") != NULL, "restore-required state survives restart");
-    check(storage.storage.vtable->read_text(&storage.storage, "/lab/reports/2000000000-test-boot.json", text, sizeof(text)) &&
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/report-2000000000-test-boot.draft.json", text, sizeof(text)) &&
         strstr(text, "\"1952\"") != NULL, "private 1952 evidence appears only in Lab report data");
 }
 
@@ -206,12 +224,17 @@ static void test_complete_report_requires_observation_and_latches_event(void)
             strstr(text, "\"expected_byte_end_exclusive\":68") != NULL &&
             strstr(text, "\"changed_offsets\":[") != NULL &&
             strstr(text, "\"outside_today_changed_offsets\":[") != NULL &&
+            strstr(text, "\"expected_header_changed_offsets\":[") != NULL &&
+            strstr(text, "\"expected_today_changed_offsets\":[") != NULL &&
+            strstr(text, "\"unexpected_changed_offsets\":[") != NULL &&
             strstr(text, "\"unrelated_bytes_unchanged\":false") != NULL,
         "restriction evidence includes raw settings and bounded byte-offset differences");
 
     check(storage.storage.vtable->read_text(&storage.storage,
-            "/lab/reports/2100000000-test-boot.json", text, sizeof(text)) &&
+            "/lab/lab/report-2100000000-test-boot.draft.json", text, sizeof(text)) &&
+            strstr(text, "\"report_status\":\"draft\"") != NULL &&
             strstr(text, "\"automated_phases_completed\":6") != NULL &&
+            strstr(text, "\"required_automated_phases\":6") != NULL &&
             strstr(text, "\"manual_observation_recorded\":false") != NULL &&
             strstr(text, "\"complete\":false") != NULL &&
             strstr(text, "\"runtime\":{\"version\":1") != NULL &&
@@ -231,9 +254,84 @@ static void test_complete_report_requires_observation_and_latches_event(void)
     check(storage.storage.vtable->read_text(&storage.storage,
             "/lab/reports/2100000000-test-boot.json", text, sizeof(text)) &&
             strstr(text, "\"manual_observation\":\"restriction_visible\"") != NULL &&
+            strstr(text, "\"manual_runtime_effect\":\"unsure\"") != NULL &&
             strstr(text, "\"manual_observation_recorded\":true") != NULL &&
+            strstr(text, "\"manual_runtime_effect_recorded\":true") != NULL &&
+            strstr(text, "\"report_status\":\"final\"") != NULL &&
             strstr(text, "\"complete\":true") != NULL,
         "confirmed visible restriction finalizes the report");
+    check(!storage.storage.vtable->exists(&storage.storage,
+            "/lab/lab/report-2100000000-test-boot.draft.json"),
+        "publishing the final report removes its draft");
+}
+
+static void test_restriction_quick_mode_and_zero_baseline_classification(void)
+{
+    PtcMemStorage storage;
+    PtcPctlStub pctl;
+    PtcFakeTime time;
+    PtcSysmodule sysmodule;
+    PtcRequest item;
+    char text[20000];
+    ptc_mem_storage_init(&storage);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&time, 2200000000LL, 3003, 600);
+    pctl.raw_settings_override_enabled = true;
+    pctl.model_elapsed_time = true;
+    memset(pctl.raw_settings, 0, sizeof(pctl.raw_settings));
+    pctl.settings_header_initialized = false;
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = false;
+    pctl.status.blocked_today = false;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    init_lab(&sysmodule, &storage, &pctl, &time);
+
+    item = request(PTC_REQUEST_LAB_SESSION_START, "quick-start", NULL, NULL);
+    snprintf(item.lab_mode, sizeof(item.lab_mode), "restriction_quick");
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/session.json", text, sizeof(text)) &&
+            strstr(text, "\"mode\":\"restriction_quick\"") != NULL &&
+            strstr(text, "\"baseline_all_zero\":true") != NULL,
+        "quick session persists its mode and all-zero baseline warning");
+
+    item = request(PTC_REQUEST_LAB_PHASE_START, "quick-wrong", "home_stopped", NULL);
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/results/quick-wrong.json", text, sizeof(text)) &&
+            strstr(text, "\"status\":\"error\"") != NULL,
+        "quick mode rejects every phase except restriction_effect");
+
+    item = request(PTC_REQUEST_LAB_PHASE_START, "quick-restriction", "restriction_effect", NULL);
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    time.snapshot.unix_seconds += 15;
+    check(ptc_lab_scheduler_tick(&sysmodule) == 1, "quick restriction phase completes and restores independently");
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/phase-5.json", text, sizeof(text)) &&
+            strstr(text, "\"expected_header_changed_offsets\":[0,1,2]") != NULL &&
+            strstr(text, "\"expected_today_changed_offsets\":[39,41]") != NULL &&
+            strstr(text, "\"unexpected_changed_offsets\":[]") != NULL &&
+            strstr(text, "\"unexpected_bytes_unchanged\":true") != NULL,
+        "all-zero baseline changes classify header, current day, and unexpected offsets separately");
+    check(storage.storage.vtable->read_text(&storage.storage,
+            "/lab/lab/report-2200000000-test-boot.draft.json", text, sizeof(text)) &&
+            strstr(text, "\"automated_phases_completed\":1") != NULL &&
+            strstr(text, "\"required_automated_phases\":1") != NULL &&
+            strstr(text, "\"complete\":false") != NULL,
+        "quick mode remains a draft after its single automated phase until both observations arrive");
+
+    item = request(PTC_REQUEST_LAB_OBSERVATION, "quick-visible", NULL, "restriction_visible");
+    snprintf(item.runtime_effect, sizeof(item.runtime_effect), "paused_or_suspended");
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/results/quick-visible.json", text, sizeof(text)) &&
+            strstr(text, "\"status\":\"ok\"") != NULL,
+        "quick two-layer observation request succeeds");
+    check(storage.storage.vtable->read_text(&storage.storage,
+            "/lab/reports/2200000000-test-boot.json", text, sizeof(text)),
+        "two-layer quick observation publishes a final report path");
+    check(strstr(text, "\"manual_runtime_effect\":\"paused_or_suspended\"") != NULL,
+        "quick final report retains the actual runtime effect");
+    check(strstr(text, "\"report_status\":\"final\"") != NULL &&
+            strstr(text, "\"complete\":true") != NULL,
+        "two-layer quick observation promotes the draft to final status");
 }
 
 static bool touch_empty(const char *path)
@@ -362,6 +460,10 @@ static void test_ui_model(void)
     static const char *const error =
         "{\"version\":1,\"status\":\"error\",\"error\":{\"code\":307,"
         "\"reason\":\"pctl_restore_failed\"}}";
+    static const char *const quick =
+        "{\"version\":1,\"run_id\":\"quick-1\",\"mode\":\"restriction_quick\","
+        "\"state\":\"ready\",\"next_phase\":0,\"active_phase\":\"\",\"deadline\":0,"
+        "\"restored\":false,\"baseline_all_zero\":true,\"restore_verdict\":\"pending\"}";
     PtcLabSessionView session;
     PtcLabBootStatus boot;
     int code = 0;
@@ -372,6 +474,9 @@ static void test_ui_model(void)
         "UI parser accepts the persisted Lab session schema");
     check(!ptc_lab_session_parse("{\"state\":\"ready\"}", &session),
         "UI parser rejects a damaged session instead of treating it as new");
+    check(ptc_lab_session_parse(quick, &session) && session.required_phases == 1 &&
+            session.baseline_all_zero && strcmp(session.mode, "restriction_quick") == 0,
+        "UI parser exposes focused mode progress and its all-zero baseline warning");
     check(ptc_lab_result_error(error, &code, reason, sizeof(reason)) && code == 307 &&
             strcmp(reason, "pctl_restore_failed") == 0,
         "UI extracts a durable backend error code and reason");
@@ -409,6 +514,7 @@ int main(void)
     test_protocol();
     test_session_timing_order_restart_and_restore_failure();
     test_complete_report_requires_observation_and_latches_event();
+    test_restriction_quick_mode_and_zero_baseline_classification();
     test_boot_flags();
     test_ui_model();
     if (failures) { fprintf(stderr, "%d Device Lab test(s) failed\n", failures); return 1; }
