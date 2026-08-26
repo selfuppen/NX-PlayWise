@@ -125,7 +125,11 @@ static bool lab_phase_is_valid(const char *value)
 {
     static const char *const VALUES[] = {
         "home_stopped", "home_started", "game_foreground",
-        "game_suspended", "sleep_wake", "restriction_effect"
+        "game_suspended", "sleep_wake", "restriction_effect",
+        "ab_home_awake", "ab_sleep_wake", "ab_limited_settings_only",
+        "ab_restriction_settings_only", "ab_grant_settings_only",
+        "ab_restriction_before_unlimited", "ab_unlimited_settings_only",
+        "ab_start_fallback"
     };
     size_t i;
     for (i = 0; i < sizeof(VALUES) / sizeof(VALUES[0]); ++i) {
@@ -143,7 +147,8 @@ static bool lab_observation_is_valid(const char *value)
 
 static bool lab_mode_is_valid(const char *value)
 {
-    return strcmp(value, "restriction_quick") == 0 || strcmp(value, "full") == 0;
+    return strcmp(value, "restriction_quick") == 0 || strcmp(value, "full") == 0 ||
+        strcmp(value, "timer_activation_ab") == 0;
 }
 
 static bool lab_runtime_effect_is_valid(const char *value)

@@ -711,6 +711,8 @@ static void test_daily_buffer_transactions(void)
         strstr(text, "\"status\":\"ok\"") && strstr(text, "\"claimed_today\":true") &&
         strstr(text, "\"forecast\":["), "buffer result contains claim state and forecast");
     check_int(pctl.last_target.minutes, 70, "buffer extends the active limit");
+    check_int((long)pctl.start_timer_calls, 0,
+        "interactive allowance update does not restart an already-running timer");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
         strstr(text, "\"buffer_claimed\":true") && strstr(text, "\"buffer_claim_day_index\":2380") &&
         strstr(text, "\"buffer_claimed_minutes\":10"), "successful buffer persists daily eligibility");
@@ -771,6 +773,17 @@ static void test_daily_buffer_transactions(void)
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-unlimited.json", text, sizeof(text)) &&
         strstr(text, "\"reason\":\"daily_buffer_limited_only\""),
         "unlimited day rejects a buffer claim");
+
+    seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 10, true);
+    pctl.status.play_timer_enabled = false;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-fallback.json",
+        "{\"version\":1,\"request_id\":\"buffer-fallback\",\"type\":\"claim_daily_buffer\","
+        "\"created_at\":8,\"payload\":{}}"), "queue buffer claim requiring activation");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "buffer activation fallback is processed");
+    check_int((long)pctl.start_timer_calls, 1,
+        "inactive interactive allowance uses exactly one activation fallback");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-fallback.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\""), "successful activation fallback commits the allowance");
 }
 
 static void test_daily_buffer_failure_rollbacks(void)
@@ -815,6 +828,22 @@ static void test_daily_buffer_failure_rollbacks(void)
             "failed buffer restores the previous rules");
         check_true(pctl.restore_called, "failed buffer restores the PCTL snapshot");
     }
+
+    seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 10, true);
+    pctl.status.play_timer_enabled = false;
+    pctl.start_timer_error = PTC_ERR_PCTL_WRITE_FAILED;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/buffer-start-fail.json",
+        "{\"version\":1,\"request_id\":\"buffer-start-fail\",\"type\":\"claim_daily_buffer\","
+        "\"created_at\":2,\"payload\":{}}"), "queue failed activation fallback");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "failed activation fallback is processed");
+    check_int((long)pctl.start_timer_calls, 1, "failed activation is attempted only once");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/state.json") &&
+        !mem.storage.vtable->exists(&mem.storage, "app/activity/history.jsonl"),
+        "failed activation does not consume buffer eligibility or write activity");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/rules.json", text, sizeof(text)) &&
+        strstr(text, "\"today_override_present\":false") && pctl.restore_called,
+        "failed activation restores rules and the exact PCTL snapshot");
 }
 
 static void test_activity_history_retention_and_clear_rollback(void)
@@ -1785,6 +1814,23 @@ static void test_daily_enforce_does_not_start_play_timer(void)
         strstr(text, "\"last_enforced_day_index\":2380") &&
         strstr(text, "\"apply_pending_confirmation\":false"),
         "passive settings confirmation persists the new day as enforced");
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0,
+        "unchanged today rule needs no second synchronization");
+    check_int((long)pctl.start_timer_calls, 0,
+        "unchanged today rule never activates the timer");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/future-weekly.json",
+        "{\"version\":1,\"request_id\":\"future-weekly\",\"type\":\"set_weekly_template\","
+        "\"created_at\":2,\"payload\":{\"days\":[{\"mode\":\"limit\",\"minutes\":90},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}"),
+        "queue a weekly template containing a future rule change");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1,
+        "future weekly rule change is persisted");
+    check_int((long)pctl.start_timer_calls, 0,
+        "future weekly rule modification never activates the timer");
 }
 
 static void test_restore_exhausted_weekly_limit_accepts_transient_restriction(void)

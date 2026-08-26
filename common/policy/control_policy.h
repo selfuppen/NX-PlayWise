@@ -34,6 +34,7 @@ typedef struct {
     char play_timer_effect_backend[32];
 #ifdef PLAYWISE_DEVICE_LAB
     bool raw_block_verified;
+    /* Legacy report field: auxiliary 1457 access, not pause/exit delivery proof. */
     bool suspend_verified;
 #endif
 } PtcCapabilities;

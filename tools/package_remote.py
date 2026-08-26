@@ -55,6 +55,7 @@ DEVICE_LAB_NRO_TITLE = b"PlayWise DEVICE LAB"
 DEVICE_LAB_OVERLAY_TITLE = b"PlayWise Device Lab"
 DEVICE_LAB_NRO_UI_MARKER = "准备启用实验后台".encode("utf-8")
 DEVICE_LAB_OVERLAY_UI_MARKER = "聚焦限制复测（推荐）".encode("utf-8")
+DEVICE_LAB_ACTIVATION_AB_MARKER = "Timer 激活 A/B（八阶段）".encode("utf-8")
 DEVICE_LAB_WARNING_MARKER = "内部取证工具".encode("utf-8")
 PLAYWISE_VERSION = read_playwise_version(ROOT)
 STANDARD_PACKAGE = f"playwise-{PLAYWISE_VERSION}.zip"
@@ -85,6 +86,7 @@ FORBIDDEN_RELEASE_MARKERS = (
     b"lab_phase_start",
     b"lab_session_restore",
     b"restriction_effect",
+    b"timer_activation_ab",
     b"GetPlayTimerSpentTimeForTest",
 )
 FORBIDDEN_SECRET_MARKERS = (b"replace-with-long-random-secret",)
@@ -288,6 +290,8 @@ def verify_device_lab_zip(path: Path) -> None:
             raise PackageError(f"{path.name}: {nro_path} does not contain the Chinese guided UI")
         if DEVICE_LAB_OVERLAY_UI_MARKER not in overlay_data:
             raise PackageError(f"{path.name}: {overlay_path} does not contain the Chinese guided UI")
+        if DEVICE_LAB_ACTIVATION_AB_MARKER not in overlay_data:
+            raise PackageError(f"{path.name}: {overlay_path} does not contain the timer activation A/B UI")
         if DEVICE_LAB_WARNING_MARKER not in package.read("DEVICE-LAB.txt"):
             raise PackageError(f"{path.name}: DEVICE-LAB.txt is not localized")
         lab_version = f"{PLAYWISE_VERSION}-lab"

@@ -59,6 +59,8 @@ const char *ptc_lab_nro_stage_action_zh(PtcLabNroStage stage);
 const char *ptc_lab_session_state_zh(const char *state);
 const char *ptc_lab_phase_title_zh(int phase);
 const char *ptc_lab_phase_instruction_zh(int phase);
+const char *ptc_lab_phase_title_for_mode_zh(const char *mode, int phase);
+const char *ptc_lab_phase_instruction_for_mode_zh(const char *mode, int phase);
 const char *ptc_lab_verdict_zh(const char *verdict);
 const char *ptc_lab_mode_zh(const char *mode);
 const char *ptc_lab_transport_error_zh(int status);

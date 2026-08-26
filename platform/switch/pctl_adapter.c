@@ -363,11 +363,10 @@ static PtcErrorCode switch_stop_timer(PtcPctl *pctl)
 }
 
 /*
- * Suspend capability is verified read-only. The play timer suspension-request event
- * (1457) is the surface Horizon uses to ask a running title to suspend, so a handle we
- * can actually wait on is the evidence that the suspend limit action is deliverable.
- * 1458 reports whether the alarm is disabled, which would silently swallow that request.
- * No settings write happens here: the raw block probe covers the write path.
+ * This legacy Lab probe only checks whether the 1457 auxiliary event surface can
+ * be opened. A valid handle, a signaled event, or the 1458 value does not prove
+ * that a restriction prompt was visible or that software paused/exited. Those are
+ * separate manual observations governed by Nintendo's suspend-at-limit setting.
  */
 static PtcErrorCode __attribute__((unused)) switch_probe_suspend(PtcPctl *pctl, PtcProbeResult *out)
 {
@@ -411,20 +410,12 @@ static PtcErrorCode __attribute__((unused)) switch_probe_suspend(PtcPctl *pctl, 
             alarm_known ? (alarm_disabled ? "true" : "false") : "unknown");
         return err;
     }
-    if (alarm_disabled) {
-        /* The channel exists but the console would swallow the request, so this is a
-           configuration failure rather than an IPC failure: keep the successful IPC
-           result and say so in the detail instead of inventing an error code. */
-        out->verified = false;
-        snprintf(out->detail, sizeof(out->detail), "suspension event ok but play timer alarm is disabled");
-        return PTC_ERR_PCTL_WRITE_FAILED;
-    }
     out->verified = true;
     snprintf(
         out->detail,
         sizeof(out->detail),
-        "suspension event handle ok alarm_disabled=%s",
-        alarm_known ? "false" : "unknown");
+        "auxiliary 1457 handle ok alarm_disabled=%s delivery_not_proved",
+        alarm_known ? (alarm_disabled ? "true" : "false") : "unknown");
     return PTC_ERR_OK;
 }
 

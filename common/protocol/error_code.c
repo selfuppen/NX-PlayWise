@@ -25,7 +25,7 @@ static const PtcErrorInfo PTC_ERROR_TABLE[] = {
     {PTC_ERR_UNLIMITED_NOT_ALLOWED, "unlimited_not_allowed", "当前无限制状态不允许改为有限制"},
 #ifdef PLAYWISE_DEVICE_LAB
     {PTC_ERR_RAW_BLOCK_NOT_VERIFIED, "raw_block_not_verified", "禁玩能力尚未验证"},
-    {PTC_ERR_SUSPEND_NOT_VERIFIED, "suspend_not_verified", "暂停能力尚未验证"},
+    {PTC_ERR_SUSPEND_NOT_VERIFIED, "suspend_not_verified", "1457 辅助事件尚未验证（不代表暂停能力）"},
     {PTC_ERR_PCTL_WRITE_NOT_VERIFIED, "pctl_write_not_verified", "家长控制写入能力尚未验证"},
     {PTC_ERR_PCTL_EFFECT_NOT_VERIFIED, "pctl_effect_not_verified", "家长控制运行时生效能力尚未验证"},
 #endif

@@ -88,6 +88,7 @@ static PtcErrorCode restore_snapshot_exact(
     uint8_t weekday,
     bool *raw_restored,
     bool *timer_restored);
+#ifdef PLAYWISE_DEVICE_LAB
 static PtcErrorCode start_timer_and_wait_target(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
@@ -98,6 +99,16 @@ static PtcErrorCode start_timer_and_wait_target(
     const char *event_detail,
     PtcPctlStatus *observed,
     bool *timer_started);
+#endif
+static PtcErrorCode observe_target_with_optional_activation(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    PtcClockSnapshot now,
+    const char *mode_name,
+    PtcPctlTargetMode target_mode,
+    uint16_t minutes,
+    const char *event_detail,
+    PtcPctlStatus *observed);
 static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
 static PtcErrorCode direct_handover_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
 static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSetupState *setup, PtcClockSnapshot now);
@@ -1644,49 +1655,6 @@ static bool request_file_stem(const char *name, char *out, size_t out_size)
     return ptc_request_id_is_valid(out);
 }
 
-/* An offline grant is successful only after Horizon reports that the timer is
-   running and the active restriction is cleared. The target is absolute, so a
-   retry after any failure safely re-applies the same requested total. */
-static PtcErrorCode start_timer_and_wait_unrestricted(
-    PtcSysmodule *sysmodule,
-    const PtcRequest *request,
-    PtcClockSnapshot now,
-    const char *mode_name,
-    uint16_t minutes,
-    PtcPctlStatus *observed)
-{
-    PtcPctlTarget target;
-    PtcPctlDebugSnapshot before;
-    PtcPctlDebugSnapshot after;
-    PtcErrorCode err;
-    unsigned int i;
-    memset(observed, 0, sizeof(*observed));
-    target.mode = PTC_PCTL_TARGET_LIMIT;
-    target.minutes = minutes;
-    target.weekday = ptc_weekday_from_day_index(now.day_index);
-    take_pctl_debug_snapshot(sysmodule, &before);
-    err = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
-    take_pctl_debug_snapshot(sysmodule, &after);
-    append_pctl_debug(sysmodule, request, "start_timer", mode_name, &target, err,
-        last_pctl_ipc_result(sysmodule), &before, &after);
-    append_event(sysmodule, request, err == PTC_ERR_OK ? "pctl_start_timer" : "pctl_apply_failed", err, "start_timer");
-    if (err != PTC_ERR_OK) {
-        return err;
-    }
-    for (i = 0; i < 20U; ++i) {
-        err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, target.weekday, observed);
-        if (err == PTC_ERR_OK && observed->play_timer_enabled && !observed->restricted_now) {
-            append_event(sysmodule, request, "effect_observed", PTC_ERR_OK, "offline_code");
-            return PTC_ERR_OK;
-        }
-        if (i + 1U < 20U) {
-            effect_wait(sysmodule, 250U);
-        }
-    }
-    append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_EFFECT_NOT_OBSERVED, "offline_code");
-    return PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
-}
-
 #ifdef PLAYWISE_DEVICE_LAB
 static void status_json(char *out, size_t out_size, const PtcPctlStatus *status, PtcErrorCode error)
 {
@@ -2265,8 +2233,9 @@ static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest
     effective = target >= base ? (uint16_t)(target - base) : 0u;
     err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode),
         PTC_PCTL_TARGET_LIMIT, target);
-    if (err == PTC_ERR_OK) err = start_timer_and_wait_unrestricted(sysmodule, request, now,
-        ptc_control_mode_name(config->mode), target, &observed_status);
+    if (err == PTC_ERR_OK) err = observe_target_with_optional_activation(sysmodule, request, now,
+        ptc_control_mode_name(config->mode), PTC_PCTL_TARGET_LIMIT, target,
+        "daily_buffer", &observed_status);
     if (err != PTC_ERR_OK || !save_rules(sysmodule, &rules)) {
         if (err == PTC_ERR_OK) err = PTC_ERR_STORAGE_WRITE_FAILED;
         if (!recovery_rollback(sysmodule)) {
@@ -2536,7 +2505,9 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         if (err != PTC_ERR_OK) {
             return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), false, err, now.day_index, caps);
         }
-        err = start_timer_and_wait_unrestricted(sysmodule, request, now, ptc_control_mode_name(active_config.mode), new_minutes, &pctl_status);
+        err = observe_target_with_optional_activation(sysmodule, request, now,
+            ptc_control_mode_name(active_config.mode), PTC_PCTL_TARGET_LIMIT, new_minutes,
+            "offline_code", &pctl_status);
         if (err != PTC_ERR_OK) {
             if (!recovery_rollback(sysmodule)) {
                 write_disable_flag(sysmodule, "transaction_restore_failed\n");
@@ -2714,11 +2685,52 @@ static bool target_status_observed(
         (status->remaining_minutes > 0U && status->play_timer_enabled_available && status->play_timer_enabled);
 }
 
+static bool target_settings_observed(
+    PtcPctlTargetMode mode,
+    uint16_t minutes,
+    const PtcPctlStatus *status);
+
+static bool target_runtime_ready(
+    PtcPctlTargetMode mode,
+    uint16_t minutes,
+    const PtcPctlStatus *status)
+{
+    if (!target_settings_observed(mode, minutes, status)) {
+        return false;
+    }
+    if (mode == PTC_PCTL_TARGET_UNLIMITED) {
+        return status->restricted_now_available && !status->restricted_now;
+    }
+    if (mode == PTC_PCTL_TARGET_BLOCKED || minutes == 0U ||
+        (status->remaining_available && status->remaining_minutes == 0U)) {
+        return status->restricted_now_available && status->restricted_now;
+    }
+    return status->remaining_available && status->remaining_minutes > 0U &&
+        status->play_timer_enabled_available && status->play_timer_enabled &&
+        status->restricted_now_available && !status->restricted_now;
+}
+
+static bool target_runtime_confirmed_after_activation(
+    PtcPctlTargetMode mode,
+    uint16_t minutes,
+    const PtcPctlStatus *status)
+{
+    if (target_runtime_ready(mode, minutes, status)) return true;
+    /* 1455 is instantaneous. After the one allowed activation attempt, an
+       exhausted or blocked target may already have shown the system prompt and
+       returned to restricted_now=false. Exact settings plus exhausted 1454 is
+       sufficient; prompt visibility and software outcome remain Lab observations. */
+    if (mode == PTC_PCTL_TARGET_BLOCKED || minutes == 0U ||
+        (status->remaining_available && status->remaining_minutes == 0U)) {
+        return target_status_observed(mode, minutes, status);
+    }
+    return false;
+}
+
 /* Daily rule synchronization only proves that the configured target was
-   written. Starting private command 1451 here is unsafe: device evidence shows
-   that a timer started by the sysmodule can consume 1454 while the console is
-   on HOME or asleep. Horizon remains responsible for the actual play-timer
-   lifecycle when an application starts, suspends, resumes, or exits. */
+   written. It must not activate private command 1451 in the background: HOME
+   and other awake console use legitimately consume Nintendo's allowance, so an
+   autonomous activation could charge time when no parent action requested it. */
 static bool target_settings_observed(
     PtcPctlTargetMode mode,
     uint16_t minutes,
@@ -2734,6 +2746,76 @@ static bool target_settings_observed(
         status->configured_minutes == minutes;
 }
 
+/* Interactive writes first prove the 0x44 target without touching command 1451.
+   A single activation fallback is allowed only after the settings are exact but
+   the current console-use state is not ready yet. Background Enforce never calls
+   this helper and therefore cannot start a timer while nobody is using the console. */
+static PtcErrorCode observe_target_with_optional_activation(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    PtcClockSnapshot now,
+    const char *mode_name,
+    PtcPctlTargetMode target_mode,
+    uint16_t minutes,
+    const char *event_detail,
+    PtcPctlStatus *observed)
+{
+    PtcPctlTarget target;
+    PtcPctlDebugSnapshot before;
+    PtcPctlDebugSnapshot after;
+    PtcErrorCode err = PTC_ERR_OK;
+    bool settings_seen = false;
+    unsigned int i;
+    memset(observed, 0, sizeof(*observed));
+    target.mode = target_mode;
+    target.minutes = minutes;
+    target.weekday = ptc_weekday_from_day_index(now.day_index);
+
+    for (i = 0; i < 20U; ++i) {
+        err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, target.weekday, observed);
+        if (err == PTC_ERR_OK && target_settings_observed(target_mode, minutes, observed)) {
+            settings_seen = true;
+            if (target_runtime_ready(target_mode, minutes, observed)) {
+                append_event(sysmodule, request, "effect_observed", PTC_ERR_OK, event_detail);
+                return PTC_ERR_OK;
+            }
+            break;
+        }
+        if (i + 1U < 20U) effect_wait(sysmodule, 250U);
+    }
+    if (!settings_seen) {
+        append_event(sysmodule, request, "pctl_apply_failed",
+            err == PTC_ERR_OK ? PTC_ERR_PCTL_EFFECT_NOT_OBSERVED : err,
+            "settings_not_observed_before_activation");
+        return err == PTC_ERR_OK ? PTC_ERR_PCTL_EFFECT_NOT_OBSERVED : err;
+    }
+
+    take_pctl_debug_snapshot(sysmodule, &before);
+    err = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
+    take_pctl_debug_snapshot(sysmodule, &after);
+    append_pctl_debug(sysmodule, request, "start_timer_fallback", mode_name, &target, err,
+        last_pctl_ipc_result(sysmodule), &before, &after);
+    append_event(sysmodule, request,
+        err == PTC_ERR_OK ? "pctl_start_timer_fallback" : "pctl_apply_failed",
+        err, event_detail);
+    if (err != PTC_ERR_OK) return err;
+
+    for (i = 0; i < 20U; ++i) {
+        err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, target.weekday, observed);
+        if (err == PTC_ERR_OK &&
+            target_runtime_confirmed_after_activation(target_mode, minutes, observed)) {
+            append_event(sysmodule, request, "effect_observed", PTC_ERR_OK, event_detail);
+            return PTC_ERR_OK;
+        }
+        if (i + 1U < 20U) effect_wait(sysmodule, 250U);
+    }
+    append_event(sysmodule, request, "pctl_apply_failed",
+        err == PTC_ERR_OK ? PTC_ERR_PCTL_EFFECT_NOT_OBSERVED : err,
+        "activation_fallback_not_observed");
+    return err == PTC_ERR_OK ? PTC_ERR_PCTL_EFFECT_NOT_OBSERVED : err;
+}
+
+#ifdef PLAYWISE_DEVICE_LAB
 static PtcErrorCode start_timer_and_wait_target(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
@@ -2782,6 +2864,7 @@ static PtcErrorCode start_timer_and_wait_target(
     append_event(sysmodule, request, "pctl_apply_failed", PTC_ERR_PCTL_EFFECT_NOT_OBSERVED, event_detail);
     return err == PTC_ERR_OK ? PTC_ERR_PCTL_EFFECT_NOT_OBSERVED : err;
 }
+#endif
 
 static PtcErrorCode restore_snapshot_exact(
     PtcSysmodule *sysmodule,
@@ -3218,7 +3301,6 @@ static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *se
     PtcPctlTarget target;
     bool raw_restored = false;
     bool timer_restored = false;
-    bool timer_started = false;
     PtcErrorCode err;
     memset(&original, 0, sizeof(original));
     memset(&restored, 0, sizeof(restored));
@@ -3268,8 +3350,8 @@ static PtcErrorCode release_setup_now(PtcSysmodule *sysmodule, PtcSetupState *se
         err = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &target);
     }
     if (err == PTC_ERR_OK) {
-        err = start_timer_and_wait_target(sysmodule, NULL, now, "setup", PTC_PCTL_TARGET_UNLIMITED,
-            0, "setup_release", &released, &timer_started);
+        err = observe_target_with_optional_activation(sysmodule, NULL, now, "setup",
+            PTC_PCTL_TARGET_UNLIMITED, 0, "setup_release", &released);
     }
     if (err != PTC_ERR_OK) {
         PtcErrorCode restore_error = restore_snapshot_exact(sysmodule, &original, &restored, &released,
@@ -3440,8 +3522,8 @@ static PtcErrorCode activate_handover_today(PtcSysmodule *sysmodule, PtcSetupSta
     if (err != PTC_ERR_OK) {
         goto restore_original;
     }
-    err = start_timer_and_wait_target(sysmodule, NULL, now, "setup_handover",
-        target_from_day_rule(rule), rule.minutes, "setup_handover", &observed, NULL);
+    err = observe_target_with_optional_activation(sysmodule, NULL, now, "setup_handover",
+        target_from_day_rule(rule), rule.minutes, "setup_handover", &observed);
     if (err != PTC_ERR_OK || !handover_remaining_matches(setup, &observed)) {
         if (err == PTC_ERR_OK) err = PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
         goto restore_original;
@@ -4923,8 +5005,9 @@ static bool process_disable_today_limit(
     pctl_changed = true;
     err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode), PTC_PCTL_TARGET_UNLIMITED, 0);
     if (err == PTC_ERR_OK) {
-        err = start_timer_and_wait_target(sysmodule, request, now, ptc_control_mode_name(config->mode),
-            PTC_PCTL_TARGET_UNLIMITED, 0, "disable_today_limit", &observed_status, NULL);
+        err = observe_target_with_optional_activation(sysmodule, request, now,
+            ptc_control_mode_name(config->mode), PTC_PCTL_TARGET_UNLIMITED, 0,
+            "disable_today_limit", &observed_status);
     }
     if (err != PTC_ERR_OK) {
         goto disable_today_rollback;
@@ -5029,8 +5112,9 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
             if (err != PTC_ERR_OK) {
                 return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
             }
-            err = start_timer_and_wait_target(sysmodule, request, now, ptc_control_mode_name(config->mode),
-                target_from_day_rule(active_rule), active_rule.minutes, "rule_request", &observed_status, NULL);
+            err = observe_target_with_optional_activation(sysmodule, request, now,
+                ptc_control_mode_name(config->mode), target_from_day_rule(active_rule),
+                active_rule.minutes, "rule_request", &observed_status);
             if (err != PTC_ERR_OK) {
                 if (!recovery_rollback(sysmodule)) {
                     write_disable_flag(sysmodule, "transaction_restore_failed\n");

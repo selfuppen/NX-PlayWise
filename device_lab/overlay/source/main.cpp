@@ -34,6 +34,13 @@ static const char *const PHASES[] = {
     "game_suspended", "sleep_wake", "restriction_effect"
 };
 
+static const char *const ACTIVATION_AB_PHASES[] = {
+    "ab_home_awake", "ab_sleep_wake", "ab_limited_settings_only",
+    "ab_restriction_settings_only", "ab_grant_settings_only",
+    "ab_restriction_before_unlimited", "ab_unlimited_settings_only",
+    "ab_start_fallback"
+};
+
 static bool point_in(s32 x, s32 y, s32 rx, s32 ry, s32 rw, s32 rh)
 {
     return x >= rx && y >= ry && x < rx + rw && y < ry + rh;
@@ -227,7 +234,7 @@ public:
             if ((keysDown & HidNpadButton_A) || primary_touch) submit_empty("lab_session_restore");
             return true;
         }
-        if (current_phase_index() == 5 && std::strcmp(view_.state, "ready") == 0) {
+        if (is_danger_phase() && std::strcmp(view_.state, "ready") == 0) {
             if (primary_touch) touch_hold_warning_ = true;
             if (keysHeld & HidNpadButton_A) {
                 if (danger_hold_tick_ == 0) danger_hold_tick_ = armGetSystemTick();
@@ -251,11 +258,12 @@ public:
             return true;
         }
         if (std::strcmp(view_.state, "not_started") == 0) {
-            if (keysDown & (HidNpadButton_Up | HidNpadButton_Down)) selected_mode_ = 1 - selected_mode_;
+            if (keysDown & HidNpadButton_Up) selected_mode_ = selected_mode_ == 0 ? 2 : selected_mode_ - 1;
+            if (keysDown & HidNpadButton_Down) selected_mode_ = (selected_mode_ + 1) % 3;
             if (touch_pressed) {
-                for (int index = 0; index < 2; ++index) {
-                    if (point_in(touch_x, touch_y, draw_x_ + 26, draw_y_ + 190 + index * 58,
-                            draw_w_ - 52, 48)) selected_mode_ = index;
+                for (int index = 0; index < 3; ++index) {
+                    if (point_in(touch_x, touch_y, draw_x_ + 26, draw_y_ + 178 + index * 46,
+                            draw_w_ - 52, 40)) selected_mode_ = index;
                 }
             }
             return true;
@@ -323,7 +331,8 @@ private:
 
     void submit_start()
     {
-        const char *mode = selected_mode_ == 0 ? "restriction_quick" : "full";
+        static const char *const modes[] = {"restriction_quick", "timer_activation_ab", "full"};
+        const char *mode = modes[selected_mode_];
         char payload[80];
         std::snprintf(payload, sizeof(payload), "{\"mode\":\"%s\"}", mode);
         submit_json("lab_session_start", payload);
@@ -334,12 +343,24 @@ private:
         return std::strcmp(view_.mode, "restriction_quick") == 0 ? 5 : view_.next_phase;
     }
 
+    bool is_danger_phase() const
+    {
+        const int phase = current_phase_index();
+        if (std::strcmp(view_.mode, "restriction_quick") == 0) return true;
+        if (std::strcmp(view_.mode, "timer_activation_ab") == 0)
+            return phase == 3 || phase == 5;
+        return phase == 5;
+    }
+
     void submit_phase()
     {
         const int phase = current_phase_index();
-        if (phase < 0 || phase >= 6) return;
+        const bool activation_ab = std::strcmp(view_.mode, "timer_activation_ab") == 0;
+        const int phase_count = activation_ab ? 8 : 6;
+        if (phase < 0 || phase >= phase_count) return;
         char payload[96];
-        std::snprintf(payload, sizeof(payload), "{\"phase\":\"%s\"}", PHASES[phase]);
+        std::snprintf(payload, sizeof(payload), "{\"phase\":\"%s\"}",
+            activation_ab ? ACTIVATION_AB_PHASES[phase] : PHASES[phase]);
         submit_json("lab_phase_start", payload);
     }
 
@@ -427,7 +448,7 @@ private:
             long long remaining = view_.deadline - static_cast<long long>(std::time(nullptr));
             if (remaining < 0) remaining = 0;
             draw_panel(renderer, x + 20, y + 184, w - 40, 184, COLOR_BLUE);
-            renderer->drawString(ptc_lab_phase_title_zh(phase), false,
+            renderer->drawString(ptc_lab_phase_title_for_mode_zh(view_.mode, phase), false,
                 x + 36, y + 218, 20, renderer->a(COLOR_TEXT));
             std::snprintf(line, sizeof(line), "自动采样剩余 %lld 秒", remaining);
             renderer->drawString(line, false, x + 36, y + 268, 28, renderer->a(COLOR_GREEN));
@@ -469,34 +490,37 @@ private:
                 x + 36, y + 258, 16, 24, 3, COLOR_TEXT);
             draw_button(renderer, x + 20, y + 330, w - 40, 52, "A / 触摸立即恢复", COLOR_DANGER);
         } else {
-            draw_panel(renderer, x + 20, y + 184, w - 40, 136, phase == 5 ? COLOR_DANGER : COLOR_BLUE);
+            const bool danger_phase = is_danger_phase();
+            draw_panel(renderer, x + 20, y + 184, w - 40, 136, danger_phase ? COLOR_DANGER : COLOR_BLUE);
             if (std::strcmp(view_.state, "not_started") == 0) {
-                static const char *const modes[] = {"聚焦限制复测（推荐）", "高级完整取证（六阶段）"};
-                renderer->drawString("选择本次取证模式", false, x + 36, y + 174, 20, renderer->a(COLOR_TEXT));
-                for (int index = 0; index < 2; ++index) {
-                    s32 row_y = y + 190 + index * 58;
-                    renderer->drawRect(x + 26, row_y, w - 52, 48,
+                static const char *const modes[] = {
+                    "聚焦限制复测（推荐）", "Timer 激活 A/B（八阶段）", "高级完整取证（六阶段）"
+                };
+                renderer->drawString("选择本次取证模式", false, x + 36, y + 166, 20, renderer->a(COLOR_TEXT));
+                for (int index = 0; index < 3; ++index) {
+                    s32 row_y = y + 178 + index * 46;
+                    renderer->drawRect(x + 26, row_y, w - 52, 40,
                         renderer->a(index == selected_mode_ ? COLOR_PANEL_RAISED : COLOR_PANEL));
-                    draw_outline(renderer, x + 26, row_y, w - 52, 48, index == selected_mode_ ? 2 : 1,
+                    draw_outline(renderer, x + 26, row_y, w - 52, 40, index == selected_mode_ ? 2 : 1,
                         index == selected_mode_ ? COLOR_GREEN : COLOR_MUTED);
-                    renderer->drawString(modes[index], false, x + 42, row_y + 31, 16,
+                    renderer->drawString(modes[index], false, x + 42, row_y + 27, 15,
                         renderer->a(index == selected_mode_ ? COLOR_GREEN : COLOR_TEXT));
                 }
                 draw_button(renderer, x + 20, y + 330, w - 40, 52, "开始并保存 PCTL 原设置", COLOR_BLUE);
             } else {
-                renderer->drawString(ptc_lab_phase_title_zh(phase), false, x + 36, y + 218, 20,
-                    renderer->a(phase == 5 ? COLOR_DANGER : COLOR_TEXT));
+                renderer->drawString(ptc_lab_phase_title_for_mode_zh(view_.mode, phase), false,
+                    x + 36, y + 218, 20, renderer->a(danger_phase ? COLOR_DANGER : COLOR_TEXT));
                 const bool weak_lifecycle_baseline = std::strcmp(view_.mode, "full") == 0 &&
                     view_.baseline_all_zero && phase >= 2 && phase <= 4;
                 draw_wrapped(renderer, weak_lifecycle_baseline ?
                     "原始 0x44 全零：本阶段可继续采样，但不足以证明游戏生命周期。完整复测应先配置非空 Nintendo 周计划。" :
-                    ptc_lab_phase_instruction_zh(phase), x + 36, y + 254,
+                    ptc_lab_phase_instruction_for_mode_zh(view_.mode, phase), x + 36, y + 254,
                     15, 24, 3, COLOR_MUTED);
                 draw_button(renderer, x + 20, y + 330, w - 40, 52,
-                    phase == 5 ? (touch_hold_warning_ ? "请使用手柄长按 A" : "长按 A 两秒开始") :
-                        "A / 触摸开始", phase == 5 ? COLOR_DANGER : COLOR_BLUE);
+                    danger_phase ? (touch_hold_warning_ ? "请使用手柄长按 A" : "长按 A 两秒开始") :
+                        "A / 触摸开始", danger_phase ? COLOR_DANGER : COLOR_BLUE);
             }
-            if (phase == 5 && std::strcmp(view_.state, "not_started") != 0) {
+            if (danger_phase && std::strcmp(view_.state, "not_started") != 0) {
                 renderer->drawRect(x + 20, y + 384, w - 40, 8, renderer->a(COLOR_PANEL_RAISED));
                 if (danger_progress_ > 0) renderer->drawRect(x + 20, y + 384,
                     (w - 40) * danger_progress_ / 100, 8, renderer->a(COLOR_DANGER));

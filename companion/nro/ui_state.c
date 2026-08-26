@@ -306,7 +306,7 @@ static const char *request_success_message(const char *type)
         return "今天的游玩状态已刷新。";
     }
     if (strcmp(type, "offline_code") == 0) {
-        return "加时成功，今天的游玩时间已更新。";
+        return "加时成功，今天的主机使用额度已更新。";
     }
     if (strcmp(type, "clear_redemption_history") == 0) {
         return "加时码使用记录已全部清空。";

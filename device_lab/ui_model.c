@@ -71,11 +71,13 @@ bool ptc_lab_session_parse(const char *text, PtcLabSessionView *view)
         !ptc_lab_json_string(text, "restore_verdict", parsed.restore_verdict, sizeof(parsed.restore_verdict)) ||
         !json_int(text, "next_phase", &next_phase) ||
         !json_int(text, "deadline", &parsed.deadline) ||
-        !json_bool(text, "restored", &parsed.restored) || next_phase < 0 || next_phase > 6) return false;
+        !json_bool(text, "restored", &parsed.restored)) return false;
     (void)ptc_lab_json_string(text, "mode", parsed.mode, sizeof(parsed.mode));
     (void)json_bool(text, "baseline_all_zero", &parsed.baseline_all_zero);
+    parsed.required_phases = strcmp(parsed.mode, "restriction_quick") == 0 ? 1 :
+        (strcmp(parsed.mode, "timer_activation_ab") == 0 ? 8 : 6);
+    if (next_phase < 0 || next_phase > parsed.required_phases) return false;
     parsed.next_phase = (int)next_phase;
-    parsed.required_phases = strcmp(parsed.mode, "restriction_quick") == 0 ? 1 : 6;
     snprintf(parsed.last_verdict, sizeof(parsed.last_verdict), "pending");
     *view = parsed;
     return true;
@@ -132,7 +134,7 @@ const char *ptc_lab_nro_stage_body_zh(PtcLabNroStage stage)
     switch (stage) {
     case PTC_LAB_NRO_PREPARE: return "启用后会暂时停用正常后台，并在下次重启运行隔离的实验后台。标准数据和二进制不会被修改。";
     case PTC_LAB_NRO_REBOOT_TO_LAB: return "实验后台启动标志已经准备完成。请退出本程序并完整重启主机，然后从 Tesla 或 Ultrahand 打开 Device Lab 浮窗。";
-    case PTC_LAB_NRO_START_OVERLAY: return "实验后台正在运行。请打开 Device Lab 浮窗，选择聚焦限制复测或高级完整取证。";
+    case PTC_LAB_NRO_START_OVERLAY: return "实验后台正在运行。请打开 Device Lab 浮窗，选择聚焦限制复测、Timer 激活 A/B 或高级完整取证。";
     case PTC_LAB_NRO_RESUME_OVERLAY: return "会话进度已经保存。重新打开 Device Lab 浮窗即可从当前阶段继续。";
     case PTC_LAB_NRO_RESTORE_PCTL: return "当前尚未证明 PCTL 原设置已精确恢复。程序不会切换启动标志，请先执行立即恢复。";
     case PTC_LAB_NRO_RESTORE_NORMAL: return "PCTL 原设置已精确恢复。完整会话会生成正式报告；提前停止的会话只保留草稿。现在可以安全切回正常 PlayWise 后台。";
@@ -181,6 +183,19 @@ const char *ptc_lab_phase_title_zh(int phase)
     return phase >= 0 && phase < 6 ? labels[phase] : "所有阶段已完成";
 }
 
+const char *ptc_lab_phase_title_for_mode_zh(const char *mode, int phase)
+{
+    static const char *const activation[] = {
+        "HOME 亮屏自然计时", "待机与唤醒", "限时设置：不调用 1451",
+        "耗尽设置：不调用 1451", "加时设置：不调用 1451",
+        "再次耗尽：准备不限时 A/B", "今日不限时：不调用 1451",
+        "按需执行 1451 fallback"
+    };
+    if (mode && strcmp(mode, "timer_activation_ab") == 0)
+        return phase >= 0 && phase < 8 ? activation[phase] : "所有阶段已完成";
+    return ptc_lab_phase_title_zh(phase);
+}
+
 const char *ptc_lab_phase_instruction_zh(int phase)
 {
     static const char *const labels[] = {
@@ -194,11 +209,40 @@ const char *ptc_lab_phase_instruction_zh(int phase)
     return phase >= 0 && phase < 6 ? labels[phase] : "报告已生成，请返回 NRO 恢复正常后台。";
 }
 
+const char *ptc_lab_phase_instruction_for_mode_zh(const char *mode, int phase)
+{
+    static const char *const activation[] = {
+        "停留在 HOME 菜单并保持亮屏，采样 75 秒自然计时行为。",
+        "开始后关闭浮窗，让主机待机并唤醒，再等待本阶段结束。",
+        "Lab 只写入安全的 1440 分钟限时设置，不主动启动 timer。",
+        "Lab 写入当日额度耗尽但不启动 timer；可能出现系统限制提示。",
+        "Lab 从耗尽状态写入 1440 分钟加时目标，不主动启动 timer。",
+        "Lab 再次写入耗尽状态，为今日不限时 A/B 准备现场。",
+        "Lab 写入今日不限时，不主动启动 timer，并观察限制是否解除。",
+        "仅当前述 settings-only 证据不足时调用一次 1451，随后精确恢复。"
+    };
+    if (mode && strcmp(mode, "timer_activation_ab") == 0)
+        return phase >= 0 && phase < 8 ? activation[phase] : "报告已生成，请返回 NRO 恢复正常后台。";
+    return ptc_lab_phase_instruction_zh(phase);
+}
+
 const char *ptc_lab_verdict_zh(const char *verdict)
 {
     if (!verdict || !verdict[0] || strcmp(verdict, "pending") == 0) return "等待本阶段证据";
     if (strcmp(verdict, "evidence_recorded") == 0) return "证据已记录，等待人工评审";
-    if (strcmp(verdict, "unsafe_for_home_start") == 0) return "HOME 菜单启动计时会消耗额度，不安全";
+    if (strcmp(verdict, "unsafe_for_home_start") == 0) return "旧版结论：HOME 会计时；需按主机使用语义重评";
+    if (strcmp(verdict, "home_usage_counted") == 0) return "HOME 亮屏使用会消耗主机额度";
+    if (strcmp(verdict, "home_usage_not_counted") == 0) return "本阶段未观察到 HOME 使用计时";
+    if (strcmp(verdict, "sleep_exclusion_observed") == 0) return "本阶段未观察到待机消耗";
+    if (strcmp(verdict, "sleep_usage_observed") == 0) return "待机阶段出现额度变化，需人工复核";
+    if (strcmp(verdict, "settings_only_timer_started") == 0) return "只写限时设置后 timer 已运行";
+    if (strcmp(verdict, "settings_only_timer_not_started") == 0) return "只写限时设置后 timer 未运行";
+    if (strcmp(verdict, "grant_settings_only_cleared") == 0) return "只写加时设置已解除瞬时限制";
+    if (strcmp(verdict, "grant_settings_only_not_cleared") == 0) return "只写加时设置未解除瞬时限制";
+    if (strcmp(verdict, "unlimited_settings_only_cleared") == 0) return "只写不限时设置已解除瞬时限制";
+    if (strcmp(verdict, "unlimited_settings_only_not_cleared") == 0) return "只写不限时设置未解除瞬时限制";
+    if (strcmp(verdict, "start_fallback_executed") == 0) return "已执行一次 1451 fallback";
+    if (strcmp(verdict, "start_fallback_not_required") == 0) return "本轮不需要 1451 fallback";
     if (strcmp(verdict, "stopped_timer_stable") == 0) return "计时停止时额度保持稳定";
     if (strcmp(verdict, "restriction_ipc_observed") == 0) return "IPC 已观察到限制状态";
     if (strcmp(verdict, "precondition_not_met") == 0) return "全零基线不足以证明游戏生命周期";
@@ -209,7 +253,9 @@ const char *ptc_lab_verdict_zh(const char *verdict)
 
 const char *ptc_lab_mode_zh(const char *mode)
 {
-    return mode && strcmp(mode, "restriction_quick") == 0 ? "聚焦限制复测" : "高级完整取证";
+    if (mode && strcmp(mode, "restriction_quick") == 0) return "聚焦限制复测";
+    if (mode && strcmp(mode, "timer_activation_ab") == 0) return "Timer 激活 A/B";
+    return "高级完整取证";
 }
 
 const char *ptc_lab_transport_error_zh(int status)

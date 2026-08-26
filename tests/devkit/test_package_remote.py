@@ -233,7 +233,8 @@ def test_device_lab_zip_verification() -> None:
                     title=package_remote.DEVICE_LAB_NRO_TITLE,
                     display_version=f"{package_remote.PLAYWISE_VERSION}-lab"))
             package.writestr("switch/.overlays/playwise-device-lab.ovl",
-                valid_nro(with_icon=False, embedded_manifest=embedded + package_remote.DEVICE_LAB_OVERLAY_UI_MARKER,
+                valid_nro(with_icon=False, embedded_manifest=embedded +
+                    package_remote.DEVICE_LAB_OVERLAY_UI_MARKER + package_remote.DEVICE_LAB_ACTIVATION_AB_MARKER,
                     title=package_remote.DEVICE_LAB_OVERLAY_TITLE,
                     display_version=f"{package_remote.PLAYWISE_VERSION}-lab"))
             package.writestr(f"{package_remote.DEVICE_LAB_CONTENT_ROOT}/exefs.nsp", embedded)

@@ -60,11 +60,17 @@ static void test_protocol(void)
     check(ptc_request_parse("{\"version\":1,\"request_id\":\"s1\",\"type\":\"lab_session_start\",\"created_at\":1,\"payload\":{\"mode\":\"restriction_quick\"}}", &parsed) == PTC_ERR_OK &&
             strcmp(parsed.lab_mode, "restriction_quick") == 0,
         "focused restriction mode parses explicitly");
+    check(ptc_request_parse("{\"version\":1,\"request_id\":\"sa\",\"type\":\"lab_session_start\",\"created_at\":1,\"payload\":{\"mode\":\"timer_activation_ab\"}}", &parsed) == PTC_ERR_OK &&
+            strcmp(parsed.lab_mode, "timer_activation_ab") == 0,
+        "timer activation A/B mode parses explicitly");
     check(ptc_request_parse("{\"version\":1,\"request_id\":\"s2\",\"type\":\"lab_session_start\",\"created_at\":1,\"payload\":{\"mode\":\"skip\"}}", &parsed) == PTC_ERR_BAD_REQUEST,
         "unknown Lab mode is rejected");
     check(ptc_request_parse("{\"version\":1,\"request_id\":\"p1\",\"type\":\"lab_phase_start\",\"created_at\":1,\"payload\":{\"phase\":\"sleep_wake\"}}", &parsed) == PTC_ERR_OK,
         "valid Lab phase parses");
     check(strcmp(parsed.phase, "sleep_wake") == 0, "Lab phase is retained");
+    check(ptc_request_parse("{\"version\":1,\"request_id\":\"pa\",\"type\":\"lab_phase_start\",\"created_at\":1,\"payload\":{\"phase\":\"ab_start_fallback\"}}", &parsed) == PTC_ERR_OK &&
+            strcmp(parsed.phase, "ab_start_fallback") == 0,
+        "timer activation A/B phase parses");
     check(ptc_request_parse("{\"version\":1,\"request_id\":\"p2\",\"type\":\"lab_phase_start\",\"created_at\":1,\"payload\":{\"phase\":\"skip\"}}", &parsed) == PTC_ERR_BAD_REQUEST,
         "unknown Lab phase is rejected");
     for (i = 0; i < sizeof(observations) / sizeof(observations[0]); ++i) {
@@ -199,8 +205,8 @@ static void test_complete_report_requires_observation_and_latches_event(void)
     }
     check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/phase-1.json", text, sizeof(text)) &&
             strstr(text, "\"deltas\":{\"remaining_ns\":0,\"spent_ns\":75000000000}") != NULL &&
-            strstr(text, "\"product_semantics\":\"unsafe_for_home_start\"") != NULL,
-        "HOME spent-time growth marks active timer start unsafe even without a remaining-time delta");
+            strstr(text, "\"product_semantics\":\"home_usage_counted\"") != NULL,
+        "HOME spent-time growth is recorded as factual console-use evidence");
 
     item = request(PTC_REQUEST_LAB_PHASE_START, "complete-restriction", phases[5], NULL);
     (void)ptc_lab_process_request(&sysmodule, &item);
@@ -334,6 +340,69 @@ static void test_restriction_quick_mode_and_zero_baseline_classification(void)
         "two-layer quick observation promotes the draft to final status");
 }
 
+static void test_timer_activation_ab_report(void)
+{
+    PtcMemStorage storage;
+    PtcPctlStub pctl;
+    PtcFakeTime time;
+    PtcSysmodule sysmodule;
+    PtcRequest item;
+    char text[24000];
+    int phase;
+    static const char *const phases[] = {
+        "ab_home_awake", "ab_sleep_wake", "ab_limited_settings_only",
+        "ab_restriction_settings_only", "ab_grant_settings_only",
+        "ab_restriction_before_unlimited", "ab_unlimited_settings_only",
+        "ab_start_fallback"
+    };
+    ptc_mem_storage_init(&storage);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&time, 2250000000LL, 3004, 600);
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 60;
+    pctl.status.play_timer_enabled = true;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
+    init_lab(&sysmodule, &storage, &pctl, &time);
+
+    item = request(PTC_REQUEST_LAB_SESSION_START, "ab-start", NULL, NULL);
+    snprintf(item.lab_mode, sizeof(item.lab_mode), "timer_activation_ab");
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/session.json", text, sizeof(text)) &&
+            strstr(text, "\"mode\":\"timer_activation_ab\"") != NULL,
+        "timer activation A/B session starts from a non-empty Nintendo schedule");
+
+    for (phase = 0; phase < 8; ++phase) {
+        char id[32];
+        snprintf(id, sizeof(id), "ab-phase-%d", phase);
+        item = request(PTC_REQUEST_LAB_PHASE_START, id, phases[phase], NULL);
+        (void)ptc_lab_process_request(&sysmodule, &item);
+        if (phase == 0) pctl.forensic_spent_ns = 75000000000LL;
+        time.snapshot.unix_seconds += phase < 2 ? 75 : 15;
+        check(ptc_lab_scheduler_tick(&sysmodule) == 1,
+            "each timer activation A/B phase completes in order");
+    }
+    check(storage.storage.vtable->read_text(&storage.storage,
+            "/lab/reports/2250000000-test-boot.json", text, sizeof(text)) &&
+            strstr(text, "\"report_status\":\"final\"") != NULL &&
+            strstr(text, "\"required_automated_phases\":8") != NULL &&
+            strstr(text, "\"manual_observation_recorded\":false") != NULL &&
+            strstr(text, "\"complete\":true") != NULL,
+        "A/B report finalizes from eight automated phases without inventing a manual observation");
+    check(strstr(text, "\"timer_activation_ab\":{\"home_awake_counted\":true,") != NULL &&
+            strstr(text, "\"sleep_excluded\":true") != NULL &&
+            strstr(text, "\"limited_settings_only_timer_started\":true") != NULL &&
+            strstr(text, "\"grant_settings_only_cleared_restriction\":true") != NULL &&
+            strstr(text, "\"unlimited_settings_only_cleared_restriction\":true") != NULL &&
+            strstr(text, "\"start_fallback_required\":false") != NULL,
+        "A/B compatibility extension records only directly observed tri-state facts");
+    check(strstr(text, "\"manual_observation\":null") != NULL &&
+            strstr(text, "\"manual_runtime_effect\":null") != NULL,
+        "A/B report keeps unrelated manual observation fields explicitly null");
+}
+
 static bool touch_empty(const char *path)
 {
     FILE *file = fopen(path, "wb");
@@ -464,6 +533,10 @@ static void test_ui_model(void)
         "{\"version\":1,\"run_id\":\"quick-1\",\"mode\":\"restriction_quick\","
         "\"state\":\"ready\",\"next_phase\":0,\"active_phase\":\"\",\"deadline\":0,"
         "\"restored\":false,\"baseline_all_zero\":true,\"restore_verdict\":\"pending\"}";
+    static const char *const activation_ab =
+        "{\"version\":1,\"run_id\":\"ab-1\",\"mode\":\"timer_activation_ab\","
+        "\"state\":\"ready\",\"next_phase\":7,\"active_phase\":\"\",\"deadline\":0,"
+        "\"restored\":false,\"baseline_all_zero\":false,\"restore_verdict\":\"pending\"}";
     PtcLabSessionView session;
     PtcLabBootStatus boot;
     int code = 0;
@@ -477,6 +550,9 @@ static void test_ui_model(void)
     check(ptc_lab_session_parse(quick, &session) && session.required_phases == 1 &&
             session.baseline_all_zero && strcmp(session.mode, "restriction_quick") == 0,
         "UI parser exposes focused mode progress and its all-zero baseline warning");
+    check(ptc_lab_session_parse(activation_ab, &session) && session.required_phases == 8 &&
+            session.next_phase == 7 && strcmp(session.mode, "timer_activation_ab") == 0,
+        "UI parser exposes eight-phase timer activation progress");
     check(ptc_lab_result_error(error, &code, reason, sizeof(reason)) && code == 307 &&
             strcmp(reason, "pctl_restore_failed") == 0,
         "UI extracts a durable backend error code and reason");
@@ -502,6 +578,8 @@ static void test_ui_model(void)
             ptc_lab_nro_stage(&boot, false, PTC_LAB_SESSION_VALID, &session) == PTC_LAB_NRO_PREPARE,
         "restored flags require one reboot before another Lab cycle is offered");
     check(strstr(ptc_lab_phase_title_zh(4), "待机") != NULL &&
+            strstr(ptc_lab_phase_title_for_mode_zh("timer_activation_ab", 0), "HOME") != NULL &&
+            strstr(ptc_lab_phase_instruction_for_mode_zh("timer_activation_ab", 7), "1451") != NULL &&
             strstr(ptc_lab_transport_error_zh(2), "超时") != NULL,
         "phase and transport guidance are localized in Chinese");
     check(ptc_lab_nro_hit_test(72, 402) == 0 && ptc_lab_nro_hit_test(831, 473) == 0 &&
@@ -515,6 +593,7 @@ int main(void)
     test_session_timing_order_restart_and_restore_failure();
     test_complete_report_requires_observation_and_latches_event();
     test_restriction_quick_mode_and_zero_baseline_classification();
+    test_timer_activation_ab_report();
     test_boot_flags();
     test_ui_model();
     if (failures) { fprintf(stderr, "%d Device Lab test(s) failed\n", failures); return 1; }

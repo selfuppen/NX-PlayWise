@@ -92,9 +92,9 @@ bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summar
     }
     timer = summary->play_timer_enabled == 1 ? "已启动" :
         (summary->play_timer_enabled == 0 ? "未启动" : "未确认");
-    restriction = summary->restricted_now == 1 ? "已触发" :
-        (summary->restricted_now == 0 ? "未触发" : "未确认");
-    written = snprintf(out, out_size, "%s  %s\n额度剩余：%s  额度已耗：%s%d%s\n计时器：%s  当前限制：%s",
+    restriction = summary->restricted_now == 1 ? "已报告" :
+        (summary->restricted_now == 0 ? "未报告" : "未确认");
+    written = snprintf(out, out_size, "%s  %s\n额度剩余：%s  额度已耗（估算）：%s%d%s\n计时器：%s  系统瞬时限制：%s",
         summary->ok ? "成功" : "失败",
         summary->ok ? "" : (summary->reason[0] ? summary->reason : "后台拒绝"),
         remaining,
