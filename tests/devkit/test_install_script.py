@@ -9,6 +9,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 INSTALL_SCRIPT = ROOT / "tools" / "install_package_to_sd.ps1"
+PREPARE_LAB_SCRIPT = ROOT / "tools" / "prepare_device_lab_sd.ps1"
 
 
 def require(condition: bool, message: str) -> None:
@@ -84,9 +85,24 @@ def test_install_script_confirmation_uses_drive_letter_only() -> None:
     )
 
 
+def test_device_lab_preparation_safety_contract() -> None:
+    script = PREPARE_LAB_SCRIPT.read_text(encoding="utf-8")
+    require("[switch]$WipeAll" in script and "explicit -WipeAll" in script,
+            "qualification preparation must require an explicit destructive mode")
+    require("Refusing to prepare the Windows system drive" in script,
+            "qualification preparation must reject the system drive")
+    require("backup.json" in script and "device-lab-backups" in script,
+            "all-clean preparation must create a recoverable host backup")
+    require("-Both -CleanAll -Apply" in script,
+            "qualification preparation must delegate to the verified dual installer")
+    require("standard boot2.flag is missing or non-empty" in script,
+            "post-install boot flag state must be verified")
+
+
 def main() -> int:
     test_install_script_preview()
     test_install_script_confirmation_uses_drive_letter_only()
+    test_device_lab_preparation_safety_contract()
     print("Install script tests passed")
     return 0
 

@@ -13,6 +13,8 @@
 
 维护者机器在仓库相对路径 `../libtesla` 提供可选的上游 libtesla checkout。涉及 Overlay 生命周期、输入处理、绘制或 libtesla API 行为时可查阅该目录。项目构建必须使用仓库内 `companion/overlay/vendor/libtesla/` 固定的版本，不得依赖工作区外的路径；同步 vendored 文件时同时更新 `companion/overlay/vendor/libtesla/UPSTREAM.txt` 中的上游 commit。
 
+维护者机器在仓库相对路径 `../Atmosphere` 提供可选的 Atmosphère checkout。只有问题涉及 `boot2.flag` 与 `atmosphere/contents` 扫描、sysmodule 自启动、SM/PM 服务和进程行为、hbmenu `override_config.ini` 解析、creport/fatal 取证或 Atmosphère/HOS 资格基线变化时，才把它作为 CFW 环境层参考；它不参与 PlayWise 构建，也不是 libnx、libtesla 或 Horizon PCTL 私有协议的替代来源。调查前必须用 `git -C ../Atmosphere rev-parse HEAD`、`git -C ../Atmosphere describe --tags --always --dirty` 和 `git -C ../Atmosphere status --short` 记录版本与工作树状态，只把绑定到该 commit 的已跟踪源码作为证据。未跟踪文件、当前 checkout 和远端 `main`/`master` 都不得自动视为项目固定依赖或其他版本的行为证明。详细阅读决策见 `docs/开发指南.md`，PCTL 边界见 `docs/PCTL集成架构.md`。
+
 ## 上游源码与 GitHub 调研
 
 编码代理不得把搜索 GitHub 当作普通代码修改的默认步骤。调查顺序应为：当前仓库和协议文档、仓库内 vendored 固定版本、本机已拉取的对应上游源码，最后才是 GitHub。

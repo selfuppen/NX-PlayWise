@@ -75,7 +75,7 @@ bool ptc_lab_session_parse(const char *text, PtcLabSessionView *view)
     (void)ptc_lab_json_string(text, "mode", parsed.mode, sizeof(parsed.mode));
     (void)json_bool(text, "baseline_all_zero", &parsed.baseline_all_zero);
     parsed.required_phases = strcmp(parsed.mode, "restriction_quick") == 0 ? 1 :
-        (strcmp(parsed.mode, "timer_activation_ab") == 0 ? 8 : 6);
+        (strcmp(parsed.mode, "timer_activation_ab") == 0 ? 7 : 6);
     if (next_phase < 0 || next_phase > parsed.required_phases) return false;
     parsed.next_phase = (int)next_phase;
     snprintf(parsed.last_verdict, sizeof(parsed.last_verdict), "pending");
@@ -188,11 +188,10 @@ const char *ptc_lab_phase_title_for_mode_zh(const char *mode, int phase)
     static const char *const activation[] = {
         "HOME 亮屏自然计时", "待机与唤醒", "限时设置：不调用 1451",
         "耗尽设置：不调用 1451", "加时设置：不调用 1451",
-        "再次耗尽：准备不限时 A/B", "今日不限时：不调用 1451",
-        "按需执行 1451 fallback"
+        "再次耗尽：准备不限时 A/B", "今日不限时：不调用 1451"
     };
     if (mode && strcmp(mode, "timer_activation_ab") == 0)
-        return phase >= 0 && phase < 8 ? activation[phase] : "所有阶段已完成";
+        return phase >= 0 && phase < 7 ? activation[phase] : "所有阶段已完成";
     return ptc_lab_phase_title_zh(phase);
 }
 
@@ -212,17 +211,16 @@ const char *ptc_lab_phase_instruction_zh(int phase)
 const char *ptc_lab_phase_instruction_for_mode_zh(const char *mode, int phase)
 {
     static const char *const activation[] = {
-        "停留在 HOME 菜单并保持亮屏，采样 75 秒自然计时行为。",
-        "开始后关闭浮窗，让主机待机并唤醒，再等待本阶段结束。",
-        "Lab 只写入安全的 1440 分钟限时设置，不主动启动 timer。",
+        "停留在 HOME 菜单并保持亮屏，采样 90 秒自然计时行为。开始前须有至少 10 分钟余额。",
+        "开始后立即关闭浮窗并待机至少 90 秒；唤醒后立即打开浮窗，避免混入亮屏时间。",
+        "Lab 先只写 1440 分钟限时；若运行条件未就绪，会对同一目标自动执行一次 1451。",
         "Lab 写入当日额度耗尽但不启动 timer；可能出现系统限制提示。",
-        "Lab 从耗尽状态写入 1440 分钟加时目标，不主动启动 timer。",
+        "Lab 从耗尽状态只写 1440 分钟目标；未就绪时仅对该目标执行一次 1451。",
         "Lab 再次写入耗尽状态，为今日不限时 A/B 准备现场。",
-        "Lab 写入今日不限时，不主动启动 timer，并观察限制是否解除。",
-        "仅当前述 settings-only 证据不足时调用一次 1451，随后精确恢复。"
+        "Lab 只写今日不限时；未解除限制时仅对不限时目标执行一次 1451，随后精确恢复。"
     };
     if (mode && strcmp(mode, "timer_activation_ab") == 0)
-        return phase >= 0 && phase < 8 ? activation[phase] : "报告已生成，请返回 NRO 恢复正常后台。";
+        return phase >= 0 && phase < 7 ? activation[phase] : "报告已生成，请返回 NRO 恢复正常后台。";
     return ptc_lab_phase_instruction_zh(phase);
 }
 
@@ -235,14 +233,9 @@ const char *ptc_lab_verdict_zh(const char *verdict)
     if (strcmp(verdict, "home_usage_not_counted") == 0) return "本阶段未观察到 HOME 使用计时";
     if (strcmp(verdict, "sleep_exclusion_observed") == 0) return "本阶段未观察到待机消耗";
     if (strcmp(verdict, "sleep_usage_observed") == 0) return "待机阶段出现额度变化，需人工复核";
-    if (strcmp(verdict, "settings_only_timer_started") == 0) return "只写限时设置后 timer 已运行";
-    if (strcmp(verdict, "settings_only_timer_not_started") == 0) return "只写限时设置后 timer 未运行";
-    if (strcmp(verdict, "grant_settings_only_cleared") == 0) return "只写加时设置已解除瞬时限制";
-    if (strcmp(verdict, "grant_settings_only_not_cleared") == 0) return "只写加时设置未解除瞬时限制";
-    if (strcmp(verdict, "unlimited_settings_only_cleared") == 0) return "只写不限时设置已解除瞬时限制";
-    if (strcmp(verdict, "unlimited_settings_only_not_cleared") == 0) return "只写不限时设置未解除瞬时限制";
-    if (strcmp(verdict, "start_fallback_executed") == 0) return "已执行一次 1451 fallback";
-    if (strcmp(verdict, "start_fallback_not_required") == 0) return "本轮不需要 1451 fallback";
+    if (strcmp(verdict, "settings_only_runtime_ready") == 0) return "只写设置后运行条件已满足，无需 1451";
+    if (strcmp(verdict, "target_bound_fallback_succeeded") == 0) return "同一目标的 1451 fallback 已验证";
+    if (strcmp(verdict, "target_bound_fallback_failed") == 0) return "同一目标 fallback 未得到证明，已停止取证";
     if (strcmp(verdict, "stopped_timer_stable") == 0) return "计时停止时额度保持稳定";
     if (strcmp(verdict, "restriction_ipc_observed") == 0) return "IPC 已观察到限制状态";
     if (strcmp(verdict, "precondition_not_met") == 0) return "全零基线不足以证明游戏生命周期";

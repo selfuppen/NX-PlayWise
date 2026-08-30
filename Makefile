@@ -75,7 +75,7 @@ $(HOST_TEST): $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SR
 $(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_graphics.h | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(UI_TEST_SRCS) -lm
 
-$(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/error_code.c common/protocol/request_schema.c common/protocol/result_builder.c common/time/ptc_time.c common/rules/rules.c common/rules/holiday_calendar.c platform/host/mem_storage.c platform/host/pctl_stub.c platform/host/fake_time.c platform/switch/play_timer_settings_layout.c sysmodule/lab_session.c device_lab/boot_flags.c device_lab/ui_model.c tests/c/test_device_lab.c | $(HOST_BUILD_DIR)
+$(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c common/protocol/error_code.c common/protocol/request_schema.c common/protocol/result_builder.c common/time/ptc_time.c common/rules/rules.c common/rules/holiday_calendar.c platform/host/mem_storage.c platform/host/pctl_stub.c platform/host/fake_time.c platform/switch/play_timer_settings_layout.c sysmodule/lab_session.c device_lab/boot_flags.c device_lab/ui_model.c tests/c/test_device_lab.c | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_DEVICE_LAB -o $@ $^
 
 test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST)
@@ -142,7 +142,8 @@ device-lab-package: device-lab-sysmodule device-lab-nro device-lab-overlay
 	python3 tools/package_device_lab.py --out build/packages/playwise-device-lab --zip build/packages/playwise-device-lab-$(PLAYWISE_VERSION).zip --manifest build/device-lab/generated/release-manifest.json --sysmodule-exefs build/device-lab/switch/exefs.nsp --nro build/device-lab/switch/playwise-device-lab.nro --overlay build/device-lab/switch/playwise-device-lab.ovl
 
 clean:
-	rm -rf build
+	rm -rf build/host build/generated build/switch build/packages build/device-lab
+	@if [ "$(CLEAN_EDEN)" = "1" ]; then rm -rf build/eden-test; fi
 	$(MAKE) -C companion/nro clean || true
 	rm -rf companion/nro/build-eden companion/nro/pctc-eden.elf companion/nro/pctc-eden.nro companion/nro/pctc-eden.nacp
 	$(MAKE) -C companion/overlay clean || true

@@ -10,6 +10,7 @@
 #include "../../platform/switch/usage_stats_adapter.h"
 #include "../../platform/install_defaults.h"
 #include "../../common/time/ptc_time.h"
+#include "../../common/protocol/atmosphere_version.h"
 #include "../../common/version.h"
 #include "../sysmodule_core.h"
 #include "../ipc_server.h"
@@ -118,9 +119,14 @@ static void write_environment_fingerprint(PtcStorage *storage)
     SetSysFirmwareVersion firmware;
     SetSysFirmwareVersionDigest digest;
     SetSysProductModel model = SetSysProductModel_Invalid;
-    char json[640];
+    PtcAtmosphereVersion atmosphere_version;
+    uint64_t atmosphere_raw = 0;
+    Result atmosphere_result = MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+    char json[896];
+    char atmosphere_version_json[32];
     bool read_ok = false;
     bool firmware_read_ok = false;
+    bool atmosphere = false;
     memset(&firmware, 0, sizeof(firmware));
     memset(&digest, 0, sizeof(digest));
     if (R_SUCCEEDED(setsysInitialize())) {
@@ -134,11 +140,29 @@ static void write_environment_fingerprint(PtcStorage *storage)
        1458 gate on this value even though the raw service is callable. */
     if (firmware_read_ok && hosversionGet() == 0)
         hosversionSet(MAKEHOSVERSION(firmware.major, firmware.minor, firmware.micro));
+    memset(&atmosphere_version, 0, sizeof(atmosphere_version));
+    if (R_SUCCEEDED(splInitialize())) {
+        atmosphere_result = splGetConfig((SplConfigItem)65000, &atmosphere_raw);
+        splExit();
+        atmosphere = R_SUCCEEDED(atmosphere_result) &&
+            ptc_atmosphere_version_decode(atmosphere_raw, &atmosphere_version);
+    }
+    if (atmosphere) {
+        snprintf(atmosphere_version_json, sizeof(atmosphere_version_json), "\"%u.%u.%u\"",
+            (unsigned int)atmosphere_version.major,
+            (unsigned int)atmosphere_version.minor,
+            (unsigned int)atmosphere_version.micro);
+    } else {
+        snprintf(atmosphere_version_json, sizeof(atmosphere_version_json), "null");
+    }
     snprintf(
         json,
         sizeof(json),
         "{\"version\":1,\"read_ok\":%s,\"hos\":\"%u.%u.%u\",\"firmware_hash\":\"%.64s\","
-        "\"firmware_digest\":\"%.64s\",\"model\":\"%s\",\"atmosphere\":%s}\n",
+        "\"firmware_digest\":\"%.64s\",\"model\":\"%s\",\"atmosphere\":%s,"
+        "\"atmosphere_version\":%s,\"atmosphere_detection_source\":\"spl:ExosphereApiVersion\","
+        "\"atmosphere_detection\":{\"source\":\"spl:ExosphereApiVersion\","
+        "\"result\":%u,\"raw\":\"0x%016llx\",\"version\":%s}}\n",
         read_ok ? "true" : "false",
         (unsigned int)firmware.major,
         (unsigned int)firmware.minor,
@@ -146,7 +170,11 @@ static void write_environment_fingerprint(PtcStorage *storage)
         firmware.version_hash,
         digest.digest,
         product_model_name(model),
-        hosversionIsAtmosphere() ? "true" : "false");
+        atmosphere ? "true" : "false",
+        atmosphere_version_json,
+        (unsigned int)atmosphere_result,
+        (unsigned long long)atmosphere_raw,
+        atmosphere_version_json);
     (void)storage->vtable->write_text_atomic(storage, PTC_APP_ROOT "/environment.json", json);
 }
 

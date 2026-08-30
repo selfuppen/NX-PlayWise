@@ -55,7 +55,7 @@ DEVICE_LAB_NRO_TITLE = b"PlayWise DEVICE LAB"
 DEVICE_LAB_OVERLAY_TITLE = b"PlayWise Device Lab"
 DEVICE_LAB_NRO_UI_MARKER = "准备启用实验后台".encode("utf-8")
 DEVICE_LAB_OVERLAY_UI_MARKER = "聚焦限制复测（推荐）".encode("utf-8")
-DEVICE_LAB_ACTIVATION_AB_MARKER = "Timer 激活 A/B（八阶段）".encode("utf-8")
+DEVICE_LAB_ACTIVATION_AB_MARKER = "Timer 激活 A/B（七阶段）".encode("utf-8")
 DEVICE_LAB_WARNING_MARKER = "内部取证工具".encode("utf-8")
 PLAYWISE_VERSION = read_playwise_version(ROOT)
 STANDARD_PACKAGE = f"playwise-{PLAYWISE_VERSION}.zip"
@@ -378,7 +378,7 @@ def container_command(container_path: str = DEFAULT_CONTAINER_PATH, *, with_eden
         "DEVKITA64=/opt/devkitpro/devkitA64 "
         f"PATH={shlex.quote(path)} "
         f"&& cd {shlex.quote(container_path)} "
-        "&& make clean "
+        f"&& make clean{' CLEAN_EDEN=1' if with_eden else ''} "
         f"&& {targets}"
     )
     return f"sh -lc {shlex.quote(container_script)}"
@@ -452,7 +452,8 @@ def build_and_verify(
     eden_dir = ROOT / "build" / "eden-test"
     clean_package_results(package_dir)
     remove_path(device_lab_dir)
-    remove_path(eden_dir)
+    if with_eden:
+        remove_path(eden_dir)
     run_container(host, port, user, container_path, identity, with_eden=with_eden)
     manifest_path = ROOT / "build" / "generated" / "release-manifest.json"
     if not manifest_path.is_file():

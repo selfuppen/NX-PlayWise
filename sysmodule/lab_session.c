@@ -10,11 +10,14 @@
 #include "../common/protocol/result_builder.h"
 #include "../common/time/ptc_time.h"
 #include "../common/version.h"
+#include "../platform/switch/play_timer_settings_layout.h"
 
 #define LAB_PHASE_SECONDS 75LL
+#define LAB_ACTIVATION_PHASE_SECONDS 90LL
 #define LAB_RESTRICTION_SECONDS 15LL
 #define LAB_RESTRICTION_EVENT_POLL_MS 100U
 #define LAB_REPORT_BUFFER 32768U
+#define LAB_MINIMUM_REMAINING_NS 600000000000LL
 
 static const char *const LAB_PHASES[] = {
     "home_stopped", "home_started", "game_foreground",
@@ -24,8 +27,7 @@ static const char *const LAB_PHASES[] = {
 static const char *const LAB_ACTIVATION_AB_PHASES[] = {
     "ab_home_awake", "ab_sleep_wake", "ab_limited_settings_only",
     "ab_restriction_settings_only", "ab_grant_settings_only",
-    "ab_restriction_before_unlimited", "ab_unlimited_settings_only",
-    "ab_start_fallback"
+    "ab_restriction_before_unlimited", "ab_unlimited_settings_only"
 };
 
 typedef struct {
@@ -39,12 +41,19 @@ typedef struct {
     char observation[32];
     char runtime_effect[32];
     bool baseline_all_zero;
+    bool activation_preconditions_met;
+    int64_t baseline_remaining_ns;
     int home_awake_counted;
     int sleep_excluded;
-    int limited_settings_only_timer_started;
-    int grant_settings_only_cleared_restriction;
-    int unlimited_settings_only_cleared_restriction;
-    int start_fallback_required;
+    int limited_settings_only_runtime_ready;
+    int grant_settings_only_runtime_ready;
+    int unlimited_settings_only_runtime_ready;
+    int limited_fallback_called;
+    int grant_fallback_called;
+    int unlimited_fallback_called;
+    int limited_fallback_succeeded;
+    int grant_fallback_succeeded;
+    int unlimited_fallback_succeeded;
     bool event_armed;
     int restriction_weekday;
     bool restored;
@@ -197,23 +206,41 @@ static const char *tri_state_json(int value)
     return value < 0 ? "null" : (value ? "true" : "false");
 }
 
+static void reset_activation_results(LabState *state)
+{
+    state->home_awake_counted = -1;
+    state->sleep_excluded = -1;
+    state->limited_settings_only_runtime_ready = -1;
+    state->grant_settings_only_runtime_ready = -1;
+    state->unlimited_settings_only_runtime_ready = -1;
+    state->limited_fallback_called = -1;
+    state->grant_fallback_called = -1;
+    state->unlimited_fallback_called = -1;
+    state->limited_fallback_succeeded = -1;
+    state->grant_fallback_succeeded = -1;
+    state->unlimited_fallback_succeeded = -1;
+}
+
 static bool save_state(PtcSysmodule *sysmodule, const LabState *state)
 {
     char path[320];
     char original_hex[PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U + 1U];
     char before_hex[PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U + 1U];
-    char text[2048];
+    char text[3072];
     bytes_hex(state->original.data, sizeof(state->original.data), original_hex, sizeof(original_hex));
     bytes_hex(state->before.settings, sizeof(state->before.settings), before_hex, sizeof(before_hex));
     snprintf(text, sizeof(text),
-        "{\"version\":1,\"run_id\":\"%s\",\"mode\":\"%s\",\"state\":\"%s\",\"next_phase\":%d,"
+        "{\"version\":2,\"run_id\":\"%s\",\"mode\":\"%s\",\"state\":\"%s\",\"next_phase\":%d,"
         "\"active_phase\":\"%s\",\"started_at\":%lld,\"deadline\":%lld,"
         "\"observation\":\"%s\",\"runtime_effect\":\"%s\",\"baseline_all_zero\":%s,"
+        "\"activation_preconditions_met\":%s,\"baseline_remaining_ns\":%lld,"
         "\"home_awake_counted\":%d,\"sleep_excluded\":%d,"
-        "\"limited_settings_only_timer_started\":%d,"
-        "\"grant_settings_only_cleared_restriction\":%d,"
-        "\"unlimited_settings_only_cleared_restriction\":%d,"
-        "\"start_fallback_required\":%d,"
+        "\"limited_settings_only_runtime_ready\":%d,"
+        "\"grant_settings_only_runtime_ready\":%d,"
+        "\"unlimited_settings_only_runtime_ready\":%d,"
+        "\"limited_fallback_called\":%d,\"grant_fallback_called\":%d,"
+        "\"unlimited_fallback_called\":%d,\"limited_fallback_succeeded\":%d,"
+        "\"grant_fallback_succeeded\":%d,\"unlimited_fallback_succeeded\":%d,"
         "\"event_armed\":%s,\"restriction_weekday\":%d,\"restored\":%s,"
         "\"restore_verdict\":\"%s\",\"original_timer\":%s,\"original_hex\":\"%s\","
         "\"before_monotonic_ns\":%llu,\"before_timer_rc\":%u,\"before_timer\":%s,"
@@ -224,11 +251,15 @@ static bool save_state(PtcSysmodule *sysmodule, const LabState *state)
         state->run_id, state->mode, state->state, state->next_phase, state->active_phase,
         (long long)state->started_at, (long long)state->deadline, state->observation,
         state->runtime_effect, state->baseline_all_zero ? "true" : "false",
+        state->activation_preconditions_met ? "true" : "false",
+        (long long)state->baseline_remaining_ns,
         state->home_awake_counted, state->sleep_excluded,
-        state->limited_settings_only_timer_started,
-        state->grant_settings_only_cleared_restriction,
-        state->unlimited_settings_only_cleared_restriction,
-        state->start_fallback_required,
+        state->limited_settings_only_runtime_ready,
+        state->grant_settings_only_runtime_ready,
+        state->unlimited_settings_only_runtime_ready,
+        state->limited_fallback_called, state->grant_fallback_called,
+        state->unlimited_fallback_called, state->limited_fallback_succeeded,
+        state->grant_fallback_succeeded, state->unlimited_fallback_succeeded,
         state->event_armed ? "true" : "false", state->restriction_weekday,
         state->restored ? "true" : "false",
         state->restore_verdict, state->original.timer_enabled ? "true" : "false", original_hex,
@@ -245,19 +276,14 @@ static bool save_state(PtcSysmodule *sysmodule, const LabState *state)
 static bool load_state(PtcSysmodule *sysmodule, LabState *state)
 {
     char path[320];
-    char text[2048];
+    char text[3072];
     char original_hex[PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U + 1U];
     char before_hex[PTC_PCTL_OPAQUE_SETTINGS_SIZE * 2U + 1U];
     int64_t value;
     memset(state, 0, sizeof(*state));
     snprintf(state->mode, sizeof(state->mode), "full");
     state->restriction_weekday = -1;
-    state->home_awake_counted = -1;
-    state->sleep_excluded = -1;
-    state->limited_settings_only_timer_started = -1;
-    state->grant_settings_only_cleared_restriction = -1;
-    state->unlimited_settings_only_cleared_restriction = -1;
-    state->start_fallback_required = -1;
+    reset_activation_results(state);
     state_path(sysmodule, path, sizeof(path));
     if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) return false;
     if (!json_string(text, "run_id", state->run_id, sizeof(state->run_id)) ||
@@ -275,16 +301,19 @@ static bool load_state(PtcSysmodule *sysmodule, LabState *state)
     (void)json_string(text, "mode", state->mode, sizeof(state->mode));
     (void)json_string(text, "runtime_effect", state->runtime_effect, sizeof(state->runtime_effect));
     (void)json_bool(text, "baseline_all_zero", &state->baseline_all_zero);
+    (void)json_bool(text, "activation_preconditions_met", &state->activation_preconditions_met);
+    (void)json_i64(text, "baseline_remaining_ns", &state->baseline_remaining_ns);
     if (json_i64(text, "home_awake_counted", &value)) state->home_awake_counted = (int)value;
     if (json_i64(text, "sleep_excluded", &value)) state->sleep_excluded = (int)value;
-    if (json_i64(text, "limited_settings_only_timer_started", &value))
-        state->limited_settings_only_timer_started = (int)value;
-    if (json_i64(text, "grant_settings_only_cleared_restriction", &value))
-        state->grant_settings_only_cleared_restriction = (int)value;
-    if (json_i64(text, "unlimited_settings_only_cleared_restriction", &value))
-        state->unlimited_settings_only_cleared_restriction = (int)value;
-    if (json_i64(text, "start_fallback_required", &value))
-        state->start_fallback_required = (int)value;
+    if (json_i64(text, "limited_settings_only_runtime_ready", &value)) state->limited_settings_only_runtime_ready = (int)value;
+    if (json_i64(text, "grant_settings_only_runtime_ready", &value)) state->grant_settings_only_runtime_ready = (int)value;
+    if (json_i64(text, "unlimited_settings_only_runtime_ready", &value)) state->unlimited_settings_only_runtime_ready = (int)value;
+    if (json_i64(text, "limited_fallback_called", &value)) state->limited_fallback_called = (int)value;
+    if (json_i64(text, "grant_fallback_called", &value)) state->grant_fallback_called = (int)value;
+    if (json_i64(text, "unlimited_fallback_called", &value)) state->unlimited_fallback_called = (int)value;
+    if (json_i64(text, "limited_fallback_succeeded", &value)) state->limited_fallback_succeeded = (int)value;
+    if (json_i64(text, "grant_fallback_succeeded", &value)) state->grant_fallback_succeeded = (int)value;
+    if (json_i64(text, "unlimited_fallback_succeeded", &value)) state->unlimited_fallback_succeeded = (int)value;
     if (json_i64(text, "restriction_weekday", &value) && value >= 0 && value < 7)
         state->restriction_weekday = (int)value;
     state->original.size = PTC_PCTL_OPAQUE_SETTINGS_SIZE;
@@ -410,12 +439,28 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
     bool manual_required = strcmp(state->mode, "timer_activation_ab") != 0;
     bool observation_recorded = state->observation[0] != '\0';
     bool runtime_effect_recorded = state->runtime_effect[0] != '\0';
+    bool activation_evidence_complete = true;
     bool complete;
+    if (strcmp(state->mode, "timer_activation_ab") == 0) {
+        activation_evidence_complete = state->home_awake_counted >= 0 && state->sleep_excluded >= 0 &&
+            state->limited_settings_only_runtime_ready >= 0 && state->grant_settings_only_runtime_ready >= 0 &&
+            state->unlimited_settings_only_runtime_ready >= 0 &&
+            ((state->limited_settings_only_runtime_ready == 1 && state->limited_fallback_called == 0) ||
+             (state->limited_settings_only_runtime_ready == 0 && state->limited_fallback_called == 1 && state->limited_fallback_succeeded == 1)) &&
+            ((state->grant_settings_only_runtime_ready == 1 && state->grant_fallback_called == 0) ||
+             (state->grant_settings_only_runtime_ready == 0 && state->grant_fallback_called == 1 && state->grant_fallback_succeeded == 1)) &&
+            ((state->unlimited_settings_only_runtime_ready == 1 && state->unlimited_fallback_called == 0) ||
+             (state->unlimited_settings_only_runtime_ready == 0 && state->unlimited_fallback_called == 1 && state->unlimited_fallback_succeeded == 1));
+    }
     int written = snprintf(report, sizeof(report),
-        "{\"version\":1,\"run_id\":\"%s\",\"mode\":\"%s\",\"report_status\":\"draft\","
-        "\"baseline\":{\"settings_all_zero\":%s},\"environment\":{\"title_id\":\"%s\","
+        "{\"version\":2,\"schema_version\":2,\"run_id\":\"%s\",\"mode\":\"%s\",\"report_status\":\"draft\","
+        "\"baseline\":{\"settings_all_zero\":%s,\"activation_preconditions_met\":%s,"
+        "\"remaining_ns\":%lld,\"minimum_remaining_ns\":%lld},"
+        "\"environment\":{\"title_id\":\"%s\","
         "\"ipc_service\":\"%s\",\"sd_root\":\"%s\",\"runtime\":",
         state->run_id, state->mode, state->baseline_all_zero ? "true" : "false",
+        state->activation_preconditions_met ? "true" : "false",
+        (long long)state->baseline_remaining_ns, (long long)LAB_MINIMUM_REMAINING_NS,
         PLAYWISE_TITLE_ID, PLAYWISE_IPC_SERVICE, PLAYWISE_SD_ROOT);
     if (written < 0 || (size_t)written >= sizeof(report)) return false;
     if (!read_fragment(sysmodule, "environment.json", fragment, sizeof(fragment)))
@@ -426,6 +471,7 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
         snprintf(fragment, sizeof(fragment), "null");
     if (!append_text(report, sizeof(report), fragment) ||
         !append_text(report, sizeof(report), "},\"durations\":{\"phase_seconds\":75,"
+            "\"activation_home_sleep_seconds\":90,"
             "\"restriction_restore_seconds\":15},\"public_parity\":")) return false;
     if (!read_fragment(sysmodule, "lab/public.json", fragment, sizeof(fragment))) snprintf(fragment, sizeof(fragment), "null");
     if (!append_text(report, sizeof(report), fragment) ||
@@ -443,31 +489,34 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
     complete = completed_phases == required_phases &&
         (!manual_required || (observation_recorded && runtime_effect_recorded)) && state->restored &&
         strcmp(state->restore_verdict, "exact_restore_proved") == 0 &&
-        strcmp(state->state, "complete") == 0;
+        strcmp(state->state, "complete") == 0 && activation_evidence_complete;
     snprintf(fragment, sizeof(fragment),
         "],\"timer_activation_ab\":{\"home_awake_counted\":%s,\"sleep_excluded\":%s,"
-        "\"limited_settings_only_timer_started\":%s,"
-        "\"grant_settings_only_cleared_restriction\":%s,"
-        "\"unlimited_settings_only_cleared_restriction\":%s,"
-        "\"start_fallback_required\":%s},"
+        "\"fallback_cases\":["
+        "{\"target\":\"limited\",\"settings_only_runtime_ready\":%s,\"fallback_called\":%s,\"fallback_succeeded\":%s},"
+        "{\"target\":\"grant\",\"settings_only_runtime_ready\":%s,\"fallback_called\":%s,\"fallback_succeeded\":%s},"
+        "{\"target\":\"unlimited\",\"settings_only_runtime_ready\":%s,\"fallback_called\":%s,\"fallback_succeeded\":%s}]},"
         "\"manual_observation\":%s%s%s,\"manual_runtime_effect\":%s%s%s,"
         "\"restoration\":{\"proved\":%s,\"verdict\":\"%s\"},"
         "\"summary\":{\"automated_phases_completed\":%u,\"required_automated_phases\":%u,"
-        "\"manual_observation_recorded\":%s,\"manual_runtime_effect_recorded\":%s,"
+        "\"manual_observation_recorded\":%s,\"manual_runtime_effect_recorded\":%s,\"activation_evidence_complete\":%s,"
         "\"complete\":%s,\"ipc_callable\":\"see_commands\",\"wire_shape_confirmed\":\"see_commands\","
         "\"product_semantics\":\"evidence_only_until_review\"}}\n",
         tri_state_json(state->home_awake_counted), tri_state_json(state->sleep_excluded),
-        tri_state_json(state->limited_settings_only_timer_started),
-        tri_state_json(state->grant_settings_only_cleared_restriction),
-        tri_state_json(state->unlimited_settings_only_cleared_restriction),
-        tri_state_json(state->start_fallback_required),
+        tri_state_json(state->limited_settings_only_runtime_ready),
+        tri_state_json(state->limited_fallback_called), tri_state_json(state->limited_fallback_succeeded),
+        tri_state_json(state->grant_settings_only_runtime_ready),
+        tri_state_json(state->grant_fallback_called), tri_state_json(state->grant_fallback_succeeded),
+        tri_state_json(state->unlimited_settings_only_runtime_ready),
+        tri_state_json(state->unlimited_fallback_called), tri_state_json(state->unlimited_fallback_succeeded),
         state->observation[0] ? "\"" : "", state->observation[0] ? state->observation : "null",
         state->observation[0] ? "\"" : "",
         state->runtime_effect[0] ? "\"" : "", state->runtime_effect[0] ? state->runtime_effect : "null",
         state->runtime_effect[0] ? "\"" : "",
         state->restored ? "true" : "false", state->restore_verdict,
         completed_phases, required_phases, observation_recorded ? "true" : "false",
-        runtime_effect_recorded ? "true" : "false", complete ? "true" : "false");
+        runtime_effect_recorded ? "true" : "false", activation_evidence_complete ? "true" : "false",
+        complete ? "true" : "false");
     if (!append_text(report, sizeof(report), fragment)) return false;
     if (complete) {
         char draft_path[320];
@@ -591,9 +640,36 @@ static bool format_settings_offsets(const uint8_t *original, const uint8_t *acti
     return true;
 }
 
+static bool settings_phase_runtime_ready(const char *phase, const PtcPctlForensicSample *sample,
+    uint8_t weekday)
+{
+    uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS];
+    PtcPlayTimerDayMode mode;
+    uint16_t minutes;
+    if (!phase || !sample) return false;
+    memcpy(words, sample->settings, sizeof(words));
+    if (sample->settings_result != 0 ||
+        !ptc_play_timer_settings_get_mode(words, PTC_PLAY_TIMER_SETTINGS_WORDS, weekday, &mode, &minutes))
+        return false;
+    if (strcmp(phase, "ab_unlimited_settings_only") == 0) {
+        return mode == PTC_PLAY_TIMER_DAY_MODE_UNLIMITED &&
+            sample->restricted_result == 0 && !sample->restricted;
+    }
+    if (strcmp(phase, "ab_limited_settings_only") == 0 ||
+        strcmp(phase, "ab_grant_settings_only") == 0) {
+        return mode == PTC_PLAY_TIMER_DAY_MODE_LIMIT && minutes == 1440U &&
+            sample->timer_enabled_result == 0 && sample->timer_enabled &&
+            sample->remaining_result == 0 && sample->remaining_ns > 0 &&
+            sample->restricted_result == 0 && !sample->restricted;
+    }
+    return false;
+}
+
 static bool write_phase(PtcSysmodule *sysmodule, LabState *state,
     const PtcPctlForensicSample *after, const PtcPctlSuspendEventEvidence *event,
-    uint8_t weekday)
+    uint8_t weekday, const PtcPctlTarget *fallback_target,
+    PtcErrorCode fallback_apply_result, PtcErrorCode fallback_start_result,
+    const PtcPctlForensicSample *fallback_after)
 {
     char path[320];
     char before_hash[65];
@@ -609,13 +685,18 @@ static bool write_phase(PtcSysmodule *sysmodule, LabState *state,
     char settings_scope[2600];
     char first_signal[32];
     char verdict[48] = "evidence_recorded";
-    char text[6144];
+    char fallback_json[1400];
+    char text[8192];
     int64_t remaining_delta = after->remaining_ns - state->before.remaining_ns;
     int64_t spent_delta = after->spent_ns - state->before.spent_ns;
     bool callable = sample_ok(&state->before) && sample_ok(after);
     bool restriction = strcmp(state->active_phase, "restriction_effect") == 0 ||
         strcmp(state->active_phase, "ab_restriction_settings_only") == 0 ||
         strcmp(state->active_phase, "ab_restriction_before_unlimited") == 0;
+    bool settings_write = restriction ||
+        strcmp(state->active_phase, "ab_limited_settings_only") == 0 ||
+        strcmp(state->active_phase, "ab_grant_settings_only") == 0 ||
+        strcmp(state->active_phase, "ab_unlimited_settings_only") == 0;
     uint8_t target_weekday = state->restriction_weekday >= 0 && state->restriction_weekday < 7
         ? (uint8_t)state->restriction_weekday : weekday;
     size_t expected_start = (7U + (size_t)target_weekday * 4U) * 2U;
@@ -624,6 +705,11 @@ static bool write_phase(PtcSysmodule *sysmodule, LabState *state,
     unsigned int outside_count = 0;
     unsigned int unexpected_count = 0;
     bool offsets_ok = false;
+    bool runtime_ready = settings_phase_runtime_ready(state->active_phase, after, target_weekday);
+    bool fallback_called = fallback_target != NULL;
+    bool fallback_succeeded = fallback_called && fallback_apply_result == PTC_ERR_OK &&
+        fallback_start_result == PTC_ERR_OK && fallback_after &&
+        sample_ok(fallback_after) && settings_phase_runtime_ready(state->active_phase, fallback_after, target_weekday);
     if (strcmp(state->active_phase, "home_started") == 0 &&
         ((state->before.remaining_result == 0 && after->remaining_result == 0 && remaining_delta < 0) ||
          (state->before.spent_result == 0 && after->spent_result == 0 && spent_delta > 0))) {
@@ -643,34 +729,31 @@ static bool write_phase(PtcSysmodule *sysmodule, LabState *state,
         snprintf(verdict, sizeof(verdict), "%s",
             state->home_awake_counted ? "home_usage_counted" : "home_usage_not_counted");
     } else if (strcmp(state->active_phase, "ab_sleep_wake") == 0 && callable) {
-        state->sleep_excluded = remaining_delta == 0 && spent_delta == 0 ? 1 : 0;
+        state->sleep_excluded = remaining_delta == 0 && spent_delta == 0 ? 1 : -1;
         snprintf(verdict, sizeof(verdict), "%s",
-            state->sleep_excluded ? "sleep_exclusion_observed" : "sleep_usage_observed");
+            state->sleep_excluded == 1 ? "sleep_exclusion_observed" :
+                "inconclusive_wake_awake_time_not_excluded");
     } else if (strcmp(state->active_phase, "ab_limited_settings_only") == 0 && callable) {
-        state->limited_settings_only_timer_started = after->timer_enabled_result == 0 &&
-            after->timer_enabled ? 1 : 0;
+        state->limited_settings_only_runtime_ready = runtime_ready ? 1 : 0;
+        state->limited_fallback_called = fallback_called ? 1 : 0;
+        state->limited_fallback_succeeded = fallback_called ? (fallback_succeeded ? 1 : 0) : -1;
         snprintf(verdict, sizeof(verdict), "%s",
-            state->limited_settings_only_timer_started ?
-                "settings_only_timer_started" : "settings_only_timer_not_started");
+            runtime_ready ? "settings_only_runtime_ready" :
+                (fallback_succeeded ? "target_bound_fallback_succeeded" : "target_bound_fallback_failed"));
     } else if (strcmp(state->active_phase, "ab_grant_settings_only") == 0 && callable) {
-        state->grant_settings_only_cleared_restriction = after->restricted_result == 0 &&
-            !after->restricted ? 1 : 0;
+        state->grant_settings_only_runtime_ready = runtime_ready ? 1 : 0;
+        state->grant_fallback_called = fallback_called ? 1 : 0;
+        state->grant_fallback_succeeded = fallback_called ? (fallback_succeeded ? 1 : 0) : -1;
         snprintf(verdict, sizeof(verdict), "%s",
-            state->grant_settings_only_cleared_restriction ?
-                "grant_settings_only_cleared" : "grant_settings_only_not_cleared");
+            runtime_ready ? "settings_only_runtime_ready" :
+                (fallback_succeeded ? "target_bound_fallback_succeeded" : "target_bound_fallback_failed"));
     } else if (strcmp(state->active_phase, "ab_unlimited_settings_only") == 0 && callable) {
-        state->unlimited_settings_only_cleared_restriction = after->restricted_result == 0 &&
-            !after->restricted ? 1 : 0;
-        state->start_fallback_required =
-            state->limited_settings_only_timer_started == 1 &&
-            state->grant_settings_only_cleared_restriction == 1 &&
-            state->unlimited_settings_only_cleared_restriction == 1 ? 0 : 1;
+        state->unlimited_settings_only_runtime_ready = runtime_ready ? 1 : 0;
+        state->unlimited_fallback_called = fallback_called ? 1 : 0;
+        state->unlimited_fallback_succeeded = fallback_called ? (fallback_succeeded ? 1 : 0) : -1;
         snprintf(verdict, sizeof(verdict), "%s",
-            state->unlimited_settings_only_cleared_restriction ?
-                "unlimited_settings_only_cleared" : "unlimited_settings_only_not_cleared");
-    } else if (strcmp(state->active_phase, "ab_start_fallback") == 0) {
-        snprintf(verdict, sizeof(verdict), "%s",
-            state->start_fallback_required == 1 ? "start_fallback_executed" : "start_fallback_not_required");
+            runtime_ready ? "settings_only_runtime_ready" :
+                (fallback_succeeded ? "target_bound_fallback_succeeded" : "target_bound_fallback_failed"));
     }
     settings_hash(&state->before, before_hash);
     settings_hash(after, after_hash);
@@ -678,25 +761,27 @@ static bool write_phase(PtcSysmodule *sysmodule, LabState *state,
     bytes_hex(after->settings, sizeof(after->settings), after_hex, sizeof(after_hex));
     bytes_hex(state->original.data, sizeof(state->original.data), original_hex, sizeof(original_hex));
     if (expected_end > sizeof(after->settings)) expected_end = sizeof(after->settings);
-    if (restriction && after->settings_result == 0 && expected_start < expected_end) {
-        offsets_ok = format_settings_offsets(state->original.data, after->settings,
+    if (settings_write && state->before.settings_result == 0 &&
+        after->settings_result == 0 && expected_start < expected_end) {
+        offsets_ok = format_settings_offsets(state->before.settings, after->settings,
             expected_start, expected_end, changed_offsets, sizeof(changed_offsets),
             outside_offsets, sizeof(outside_offsets), header_offsets, sizeof(header_offsets),
             today_offsets, sizeof(today_offsets), unexpected_offsets, sizeof(unexpected_offsets),
             &changed_count, &outside_count, &unexpected_count);
     }
-    if (restriction) {
+    if (settings_write) {
         snprintf(settings_scope, sizeof(settings_scope),
-            "{\"comparison\":\"session_original_to_restriction_active\",\"target_weekday\":%u,"
+            "{\"comparison\":\"phase_prewrite_to_after\",\"target_weekday\":%u,"
             "\"expected_byte_start\":%u,\"expected_byte_end_exclusive\":%u,"
-            "\"original_settings_hex\":\"%s\",\"changed_byte_count\":%u,"
+            "\"prewrite_settings_hex\":\"%s\",\"session_original_settings_hex\":\"%s\","
+            "\"changed_byte_count\":%u,"
             "\"changed_offsets\":%s,\"outside_today_changed_offsets\":%s,"
             "\"expected_header_changed_offsets\":%s,\"expected_today_changed_offsets\":%s,"
             "\"unexpected_changed_offsets\":%s,\"unexpected_bytes_unchanged\":%s,"
             "\"classification\":\"implementation_expected_not_hos_semantics_proved\","
             "\"unrelated_bytes_unchanged\":%s}",
             (unsigned int)target_weekday, (unsigned int)expected_start, (unsigned int)expected_end,
-            original_hex, changed_count, offsets_ok ? changed_offsets : "null",
+            before_hex, original_hex, changed_count, offsets_ok ? changed_offsets : "null",
             offsets_ok ? outside_offsets : "null",
             offsets_ok ? header_offsets : "null", offsets_ok ? today_offsets : "null",
             offsets_ok ? unexpected_offsets : "null",
@@ -712,6 +797,41 @@ static bool write_phase(PtcSysmodule *sysmodule, LabState *state,
     } else {
         snprintf(first_signal, sizeof(first_signal), "null");
     }
+    if (fallback_called && fallback_after) {
+        snprintf(fallback_json, sizeof(fallback_json),
+            "{\"called\":true,\"decision_reason\":\"settings_only_runtime_not_ready\","
+            "\"unable_to_determine_reason\":null,\"target\":{\"mode\":%d,\"minutes\":%u,\"weekday\":%u},"
+            "\"target_reapply_result\":%u,\"start_timer_result\":%u,\"succeeded\":%s,"
+            "\"after\":{\"monotonic_ns\":%llu,\"1453\":{\"result\":%u,\"value\":%s},"
+            "\"1454\":{\"result\":%u,\"nanoseconds\":%lld},"
+            "\"1455\":{\"result\":%u,\"value\":%s},\"settings_result\":%u}}",
+            (int)fallback_target->mode, (unsigned int)fallback_target->minutes,
+            (unsigned int)fallback_target->weekday, (unsigned int)fallback_apply_result,
+            (unsigned int)fallback_start_result, fallback_succeeded ? "true" : "false",
+            (unsigned long long)fallback_after->monotonic_ns,
+            fallback_after->timer_enabled_result, fallback_after->timer_enabled ? "true" : "false",
+            fallback_after->remaining_result, (long long)fallback_after->remaining_ns,
+            fallback_after->restricted_result, fallback_after->restricted ? "true" : "false",
+            fallback_after->settings_result);
+    } else if (fallback_called) {
+        snprintf(fallback_json, sizeof(fallback_json),
+            "{\"called\":true,\"decision_reason\":\"settings_only_runtime_not_ready\","
+            "\"unable_to_determine_reason\":\"fallback_after_sample_unavailable\","
+            "\"target\":{\"mode\":%d,\"minutes\":%u,\"weekday\":%u},"
+            "\"target_reapply_result\":%u,\"start_timer_result\":%u,\"succeeded\":false,"
+            "\"after\":null}", (int)fallback_target->mode, (unsigned int)fallback_target->minutes,
+            (unsigned int)fallback_target->weekday, (unsigned int)fallback_apply_result,
+            (unsigned int)fallback_start_result);
+    } else if (strcmp(state->active_phase, "ab_limited_settings_only") == 0 ||
+        strcmp(state->active_phase, "ab_grant_settings_only") == 0 ||
+        strcmp(state->active_phase, "ab_unlimited_settings_only") == 0) {
+        snprintf(fallback_json, sizeof(fallback_json),
+            "{\"called\":false,\"decision_reason\":\"settings_only_runtime_ready\","
+            "\"unable_to_determine_reason\":null}");
+    } else {
+        snprintf(fallback_json, sizeof(fallback_json),
+            "{\"called\":false,\"reason\":\"not_applicable\"}");
+    }
     snprintf(text, sizeof(text),
         "{\"phase\":\"%s\",\"started_at\":%lld,\"ended_at\":%lld,"
         "\"before\":{\"monotonic_ns\":%llu,\"1453\":{\"result\":%u,\"value\":%s},"
@@ -722,7 +842,7 @@ static bool write_phase(PtcSysmodule *sysmodule, LabState *state,
         "\"1454\":{\"result\":%u,\"nanoseconds\":%lld},\"1455\":{\"result\":%u,\"value\":%s},"
         "\"1952\":{\"result\":%u,\"nanoseconds\":%lld},\"settings_result\":%u,"
         "\"settings_sha256\":\"%s\",\"settings_hex\":\"%s\"},"
-        "\"deltas\":{\"remaining_ns\":%lld,\"spent_ns\":%lld},"
+        "\"deltas\":{\"remaining_ns\":%lld,\"spent_ns\":%lld},\"fallback\":%s,"
         "\"suspend_event\":{\"known\":%s,\"check_count\":%u,\"signaled\":%s,"
         "\"first_signaled_monotonic_ns\":%s},\"settings_write_scope\":%s,"
         "\"verdicts\":{\"ipc_callable\":%s,\"wire_shape_confirmed\":%s,\"product_semantics\":\"%s\"}}",
@@ -737,7 +857,7 @@ static bool write_phase(PtcSysmodule *sysmodule, LabState *state,
         after->remaining_result, (long long)after->remaining_ns,
         after->restricted_result, after->restricted ? "true" : "false",
         after->spent_result, (long long)after->spent_ns, after->settings_result, after_hash, after_hex,
-        (long long)remaining_delta, (long long)spent_delta,
+        (long long)remaining_delta, (long long)spent_delta, fallback_json,
         event && event->known ? "true" : "false", event ? event->check_count : 0U,
         event && event->signaled ? "true" : "false", first_signal, settings_scope,
         callable ? "true" : "false",
@@ -751,6 +871,7 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, cons
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     PtcPctlPublicParity parity;
     PtcPctlSettingsSnapshot verified;
+    PtcPctlForensicSample preflight;
     PtcErrorCode err;
     bool write_ok;
     bool restored_ok;
@@ -758,12 +879,7 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, cons
     memset(state, 0, sizeof(*state));
     snprintf(state->mode, sizeof(state->mode), "%s", mode && mode[0] ? mode : "full");
     state->restriction_weekday = -1;
-    state->home_awake_counted = -1;
-    state->sleep_excluded = -1;
-    state->limited_settings_only_timer_started = -1;
-    state->grant_settings_only_cleared_restriction = -1;
-    state->unlimited_settings_only_cleared_restriction = -1;
-    state->start_fallback_required = -1;
+    reset_activation_results(state);
     snprintf(state->run_id, sizeof(state->run_id), "%lld-%s", (long long)now.unix_seconds, sysmodule->boot_id);
     snprintf(state->state, sizeof(state->state), "ready");
     snprintf(state->restore_verdict, sizeof(state->restore_verdict), "pending");
@@ -784,6 +900,15 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, cons
     }
     if (strcmp(state->mode, "timer_activation_ab") == 0 && state->baseline_all_zero)
         return PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
+    memset(&preflight, 0, sizeof(preflight));
+    if (strcmp(state->mode, "timer_activation_ab") == 0) {
+        err = sysmodule->pctl->vtable->forensic_sample(sysmodule->pctl, &preflight);
+        state->baseline_remaining_ns = preflight.remaining_ns;
+        state->activation_preconditions_met = err == PTC_ERR_OK && sample_ok(&preflight) &&
+            preflight.timer_enabled && !preflight.restricted &&
+            preflight.remaining_ns >= LAB_MINIMUM_REMAINING_NS;
+        if (!state->activation_preconditions_met) return PTC_ERR_PCTL_EFFECT_NOT_OBSERVED;
+    }
     err = sysmodule->pctl->vtable->public_parity(sysmodule->pctl, &parity);
     if (err != PTC_ERR_OK) return err;
     write_ok = sysmodule->pctl->vtable->restore_settings(sysmodule->pctl, &state->original) == PTC_ERR_OK;
@@ -809,6 +934,9 @@ static PtcErrorCode begin_phase(PtcSysmodule *sysmodule, LabState *state, const 
     const char *expected = expected_phase(state);
     if (strcmp(state->state, "ready") != 0 || !expected || strcmp(phase, expected) != 0)
         return PTC_ERR_BAD_REQUEST;
+    memset(&state->before, 0, sizeof(state->before));
+    err = sysmodule->pctl->vtable->forensic_sample(sysmodule->pctl, &state->before);
+    if (err != PTC_ERR_OK) return err;
     if (strcmp(phase, "home_stopped") == 0) {
         err = sysmodule->pctl->vtable->stop_timer(sysmodule->pctl);
         if (err != PTC_ERR_OK) return err;
@@ -866,27 +994,14 @@ static PtcErrorCode begin_phase(PtcSysmodule *sysmodule, LabState *state, const 
             return err;
         }
         short_phase = true;
-    } else if (strcmp(phase, "ab_start_fallback") == 0) {
-        if (state->start_fallback_required == 1) {
-            err = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
-            if (err != PTC_ERR_OK) {
-                if (!restore_original(sysmodule, state)) enter_restore_required(sysmodule, state);
-                return err;
-            }
-        }
-        short_phase = true;
-    }
-    memset(&state->before, 0, sizeof(state->before));
-    err = sysmodule->pctl->vtable->forensic_sample(sysmodule->pctl, &state->before);
-    if (err != PTC_ERR_OK) {
-        if (!restore_original(sysmodule, state)) enter_restore_required(sysmodule, state);
-        return err;
     }
     snprintf(state->active_phase, sizeof(state->active_phase), "%s", phase);
     snprintf(state->state, sizeof(state->state), "sampling");
     state->started_at = now.unix_seconds;
     state->deadline = now.unix_seconds + (short_phase || strcmp(phase, "restriction_effect") == 0
-        ? LAB_RESTRICTION_SECONDS : LAB_PHASE_SECONDS);
+        ? LAB_RESTRICTION_SECONDS
+        : ((strcmp(phase, "ab_home_awake") == 0 || strcmp(phase, "ab_sleep_wake") == 0)
+            ? LAB_ACTIVATION_PHASE_SECONDS : LAB_PHASE_SECONDS));
     if (!save_state(sysmodule, state)) {
         if (!restore_original(sysmodule, state)) enter_restore_required(sysmodule, state);
         return PTC_ERR_STORAGE_WRITE_FAILED;
@@ -976,6 +1091,12 @@ int ptc_lab_scheduler_tick(PtcSysmodule *sysmodule)
     PtcClockSnapshot now;
     PtcPctlForensicSample after;
     PtcPctlSuspendEventEvidence event;
+    PtcPctlForensicSample fallback_after;
+    PtcPctlTarget fallback_target;
+    PtcPctlTarget *fallback_target_ptr = NULL;
+    PtcErrorCode fallback_apply_result = PTC_ERR_OK;
+    PtcErrorCode fallback_start_result = PTC_ERR_OK;
+    bool fallback_sample_ok = false;
     bool restriction;
     bool event_phase;
     uint8_t weekday;
@@ -996,9 +1117,37 @@ int ptc_lab_scheduler_tick(PtcSysmodule *sysmodule)
         (void)rebuild_report(sysmodule, &state);
         return 1;
     }
-    if (!write_phase(sysmodule, &state, &after, event_phase ? &event : NULL, weekday)) {
+    memset(&fallback_after, 0, sizeof(fallback_after));
+    memset(&fallback_target, 0, sizeof(fallback_target));
+    if ((strcmp(state.active_phase, "ab_limited_settings_only") == 0 ||
+         strcmp(state.active_phase, "ab_grant_settings_only") == 0 ||
+         strcmp(state.active_phase, "ab_unlimited_settings_only") == 0) &&
+        !settings_phase_runtime_ready(state.active_phase, &after, weekday)) {
+        fallback_target.mode = strcmp(state.active_phase, "ab_unlimited_settings_only") == 0
+            ? PTC_PCTL_TARGET_UNLIMITED : PTC_PCTL_TARGET_LIMIT;
+        fallback_target.minutes = fallback_target.mode == PTC_PCTL_TARGET_LIMIT ? 1440U : 0U;
+        fallback_target.weekday = weekday;
+        fallback_target_ptr = &fallback_target;
+        fallback_apply_result = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &fallback_target);
+        if (fallback_apply_result == PTC_ERR_OK)
+            fallback_start_result = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
+        else
+            fallback_start_result = fallback_apply_result;
+        fallback_sample_ok = sysmodule->pctl->vtable->forensic_sample(sysmodule->pctl, &fallback_after) == PTC_ERR_OK;
+    }
+    if (!write_phase(sysmodule, &state, &after, event_phase ? &event : NULL, weekday,
+            fallback_target_ptr, fallback_apply_result, fallback_start_result,
+            fallback_sample_ok ? &fallback_after : NULL)) {
         if (!restore_original(sysmodule, &state)) enter_restore_required(sysmodule, &state);
         else { snprintf(state.state, sizeof(state.state), "error"); (void)save_state(sysmodule, &state); }
+        return 1;
+    }
+    if (fallback_target_ptr && (!fallback_sample_ok || fallback_apply_result != PTC_ERR_OK ||
+            fallback_start_result != PTC_ERR_OK ||
+            !settings_phase_runtime_ready(state.active_phase, &fallback_after, weekday))) {
+        if (!restore_original(sysmodule, &state)) enter_restore_required(sysmodule, &state);
+        else { snprintf(state.state, sizeof(state.state), "error"); (void)save_state(sysmodule, &state); }
+        (void)rebuild_report(sysmodule, &state);
         return 1;
     }
     if (strcmp(state.active_phase, "home_started") == 0) (void)sysmodule->pctl->vtable->stop_timer(sysmodule->pctl);

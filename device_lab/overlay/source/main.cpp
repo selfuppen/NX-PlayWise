@@ -37,8 +37,7 @@ static const char *const PHASES[] = {
 static const char *const ACTIVATION_AB_PHASES[] = {
     "ab_home_awake", "ab_sleep_wake", "ab_limited_settings_only",
     "ab_restriction_settings_only", "ab_grant_settings_only",
-    "ab_restriction_before_unlimited", "ab_unlimited_settings_only",
-    "ab_start_fallback"
+    "ab_restriction_before_unlimited", "ab_unlimited_settings_only"
 };
 
 static bool point_in(s32 x, s32 y, s32 rx, s32 ry, s32 rw, s32 rh)
@@ -356,7 +355,7 @@ private:
     {
         const int phase = current_phase_index();
         const bool activation_ab = std::strcmp(view_.mode, "timer_activation_ab") == 0;
-        const int phase_count = activation_ab ? 8 : 6;
+        const int phase_count = activation_ab ? 7 : 6;
         if (phase < 0 || phase >= phase_count) return;
         char payload[96];
         std::snprintf(payload, sizeof(payload), "{\"phase\":\"%s\"}",
@@ -494,7 +493,7 @@ private:
             draw_panel(renderer, x + 20, y + 184, w - 40, 136, danger_phase ? COLOR_DANGER : COLOR_BLUE);
             if (std::strcmp(view_.state, "not_started") == 0) {
                 static const char *const modes[] = {
-                    "聚焦限制复测（推荐）", "Timer 激活 A/B（八阶段）", "高级完整取证（六阶段）"
+                    "聚焦限制复测（推荐）", "Timer 激活 A/B（七阶段）", "高级完整取证（六阶段）"
                 };
                 renderer->drawString("选择本次取证模式", false, x + 36, y + 166, 20, renderer->a(COLOR_TEXT));
                 for (int index = 0; index < 3; ++index) {

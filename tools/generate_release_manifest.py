@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 
 from playwise_version import read_playwise_version
@@ -28,6 +29,10 @@ def git_commit() -> str:
     return command_output(["git", "rev-parse", "HEAD"])
 
 
+def git_tracked_dirty() -> bool:
+    return bool(command_output(["git", "status", "--porcelain", "--untracked-files=no"], fallback=""))
+
+
 def toolchain_identity() -> str:
     compiler = Path(os.environ.get("DEVKITA64", "")) / "bin" / "aarch64-none-elf-gcc"
     if os.name == "nt":
@@ -36,16 +41,26 @@ def toolchain_identity() -> str:
 
 
 def libnx_identity() -> str:
-    version_header = Path(os.environ.get("DEVKITPRO", "")) / "libnx" / "include" / "switch" / "version.h"
-    if version_header.is_file():
-        values: dict[str, str] = {}
-        for line in version_header.read_text(encoding="utf-8").splitlines():
-            parts = line.split()
-            if len(parts) == 3 and parts[0] == "#define" and parts[1].startswith("LIBNX_VERSION_"):
-                values[parts[1]] = parts[2]
-        keys = ("LIBNX_VERSION_MAJOR", "LIBNX_VERSION_MINOR", "LIBNX_VERSION_MICRO")
-        if all(key in values for key in keys):
-            return ".".join(values[key] for key in keys)
+    devkitpro = Path(os.environ.get("DEVKITPRO", ""))
+    for pacman in (Path("pacman"), devkitpro / "pacman" / "bin" / "pacman"):
+        package = command_output([str(pacman), "-Q", "libnx"])
+        if re.fullmatch(r"libnx\s+\S+", package):
+            return package
+    package_db = devkitpro / "pacman" / "var" / "lib" / "pacman" / "local"
+    for description in sorted(package_db.glob("libnx-*/desc"), reverse=True):
+        lines = description.read_text(encoding="utf-8").splitlines()
+        for index, line in enumerate(lines[:-1]):
+            if line == "%VERSION%" and lines[index + 1].strip():
+                return f"libnx {lines[index + 1].strip()}"
+    for pkgconfig in (
+        devkitpro / "libnx" / "lib" / "pkgconfig" / "libnx.pc",
+        devkitpro / "libnx" / "share" / "pkgconfig" / "libnx.pc",
+    ):
+        if not pkgconfig.is_file():
+            continue
+        for line in pkgconfig.read_text(encoding="utf-8").splitlines():
+            if line.startswith("Version:") and line.partition(":")[2].strip():
+                return f"libnx {line.partition(':')[2].strip()}"
     return "unknown"
 
 
@@ -60,6 +75,9 @@ def libtesla_commit() -> str:
 
 def make_manifest(profile: str) -> dict:
     commit = git_commit()
+    libnx = libnx_identity()
+    build_image = os.environ.get("PLAYWISE_BUILD_IMAGE", "unknown")
+    build_image_digest = os.environ.get("PLAYWISE_BUILD_IMAGE_DIGEST", "unknown")
     return {
         "schema_version": 1,
         "playwise_version": VERSION,
@@ -71,15 +89,21 @@ def make_manifest(profile: str) -> dict:
         "pctl_layout_version": 1,
         "build": {
             "devkitpro": toolchain_identity(),
-            "libnx": libnx_identity(),
+            "libnx": libnx,
             "libtesla_commit": libtesla_commit(),
+            "container_image": build_image,
+            "container_image_digest": build_image_digest,
+            "source_dirty": git_tracked_dirty(),
+        },
+        "qualification": {
+            "status": "pending",
+            "artifact_binding": "detached-sha256",
         },
         "verified_environment": {
             "model": "Nintendo Switch OLED",
             "hos": "22.5.0",
             "atmosphere": "1.11.2",
-            "qualification_date": "2026-08-10",
-            "result": "verified",
+            "result": "pending",
         },
     }
 
@@ -114,6 +138,8 @@ def main() -> int:
     parser.add_argument("--header", type=Path, required=True)
     args = parser.parse_args()
     data = make_manifest(args.profile)
+    if args.profile in ("release", "device-lab") and data["build"]["libnx"] == "unknown":
+        raise SystemExit("cannot create a release candidate: installed libnx identity is unknown")
     args.json.parent.mkdir(parents=True, exist_ok=True)
     args.json.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     write_header(args.header, data)

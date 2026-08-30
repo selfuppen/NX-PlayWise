@@ -1,0 +1,6 @@
+docs(atmosphere): 新增 Atmosphère 源码阅读与上游调研指南
+
+- 在《开发指南》中补充 Atmosphère 源码阅读决策章节，明确 CFW 环境层问题（如 boot2.flag 扫描、sysmodule 启动、崩溃取证等）的优先阅读区域。
+- 明确 Atmosphère 源码不能作为 PCTL 私有协议、libnx API 或 PlayWise 包门禁验证的替代来源。
+- 在《开发环境指南》中增加 ../Atmosphere 作为可选的上游 checkout 说明。
+- 规定调查本地 Atmosphère 源码前，必须记录 checkout 的 commit、tag 和工作树状态，并只依据已跟踪文件形成结论，避免环境不一致导致误判。

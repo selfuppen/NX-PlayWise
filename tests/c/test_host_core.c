@@ -651,7 +651,7 @@ static void seed_release_setup(PtcMemStorage *mem)
         "{\"playwise_version\":\"" PLAYWISE_VERSION "\",\"profile\":\"release\","
         "\"release_id\":\"playwise-" PLAYWISE_VERSION "+test\"}"), "seed build manifest");
     check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/environment.json",
-        "{\"read_ok\":true,\"hos\":\"22.5.0\",\"firmware_hash\":\"test-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true}"),
+        "{\"read_ok\":true,\"hos\":\"22.5.0\",\"firmware_hash\":\"test-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\"}"),
         "seed verified environment");
 }
 
@@ -1110,7 +1110,7 @@ static void test_live_enforce_recovery_is_not_startup_recovery(void)
         "\"snapshot_available\":true,\"activate_after\":0,\"last_error\":\"\"}"), "seed active setup");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/compatibility.json",
         "{\"version\":1,\"status\":\"verified\",\"environment\":{\"hos\":\"22.5.0\","
-        "\"firmware_hash\":\"test-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true},"
+        "\"firmware_hash\":\"test-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\"},"
         "\"release_id\":\"playwise-" PLAYWISE_VERSION "+test\",\"accepted_at\":1783526401}"),
         "seed accepted runtime fingerprint");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/state.json",
@@ -1915,7 +1915,7 @@ static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
         "seed active setup before runtime change");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/compatibility.json",
         "{\"version\":1,\"status\":\"accepted_unknown\",\"environment\":{\"hos\":\"20.5.0\","
-        "\"firmware_hash\":\"old-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true},"
+        "\"firmware_hash\":\"old-hash\",\"model\":\"mariko-oled\",\"atmosphere\":true,\"atmosphere_version\":\"1.10.0\"},"
         "\"release_id\":\"playwise-" PLAYWISE_VERSION "+test\",\"accepted_at\":1}"),
         "seed old accepted runtime fingerprint");
 

@@ -19,7 +19,7 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 > [!NOTE]
 > PlayWise 不会破解账号、绕过在线验证，也不提供 Nintendo 官方家长控制 PIN 的重置、删除或官方手机 App 解绑功能。它只把本项目支持的游玩额度、系统计时、到期提醒和离线加时功能放到主机本地管理；“PlayWise PIN”仅用于保护本项目的家长区，不是 Nintendo 官方 PIN。
 
-当前版本是已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成测试，其它系统版本未充分测试，有风险请周知。
+当前源码候选只以 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 为资格目标。只有发布 Zip 的 SHA-256 与同目录 `qualification.json` 完全匹配时，才表示该原包已在此基线通过资格验证；没有匹配记录或使用其他系统版本时均视为“未验证”。
 
 - 项目仓库：[selfuppen/NX-PlayWise](https://github.com/selfuppen/NX-PlayWise)
 - 家长网页：优先使用完整交付包中的 `playwise-offline.html`；网络可访问时也可使用[公开演示网页](https://selfuppen.github.io/NX-PlayWise/)
@@ -81,7 +81,7 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 ## 推荐环境
 
-当前版本已在 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2 环境完成资格验证（2026-08-10）。
+推荐资格目标为 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2。2026-08-10 的记录仅是历史证据，早于当前 PCTL 改动；当前候选默认是 `pending`，必须由匹配原包哈希的独立 `qualification.json` 晋级。
 
 推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理 PlayWise 游戏内浮窗。也可参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境(整合包和大气层使用交流QQ群：switch大气层超频折腾群 ，群号：`1051287661`)。
 

@@ -22,6 +22,7 @@
     "fsp-srv",
     "time:u",
     "set:sys",
+    "spl:",
     "pctl",
     "pctl:s"
   ],

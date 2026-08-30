@@ -89,8 +89,10 @@ def test_container_command() -> None:
     require("--emit-bundle" not in command, "container command must not stream a copied bundle")
     require("git " not in command, "mounted local source must not require a git update")
     require("eden-test-nro" not in command, "the default build must not spend time on the emulator NRO")
+    require("CLEAN_EDEN=1" not in command, "the default build must preserve an independently running Eden artifact")
     eden_command = package_remote.container_command(with_eden=True)
     require("eden-test-nro" in eden_command, "--with-eden must build the isolated Eden NRO target")
+    require("CLEAN_EDEN=1" in eden_command, "--with-eden must clean its own stale Eden artifact")
     require("make test packages" in eden_command, "--with-eden must keep the standard package targets")
 
 

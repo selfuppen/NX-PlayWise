@@ -2991,6 +2991,7 @@ static PtcErrorCode run_release_preflight(
     char hos[32] = "unknown";
     char firmware_hash[96] = "unknown";
     char model[32] = "unknown";
+    char atmosphere_version[24] = "unknown";
     bool atmosphere = false;
     bool environment_read_ok = false;
     const char *compatibility_status;
@@ -3032,22 +3033,25 @@ static PtcErrorCode run_release_preflight(
         (void)json_string(text, "firmware_hash", firmware_hash, sizeof(firmware_hash));
         (void)json_string(text, "model", model, sizeof(model));
         (void)json_bool_value(text, "atmosphere", &atmosphere);
+        (void)json_string(text, "atmosphere_version", atmosphere_version, sizeof(atmosphere_version));
     }
     compatibility_status = environment_read_ok && strcmp(hos, "22.5.0") == 0 &&
-        strcmp(model, "mariko-oled") == 0 && atmosphere ? "verified" : "accepted_unknown";
+        strcmp(model, "mariko-oled") == 0 && atmosphere &&
+        strcmp(atmosphere_version, "1.11.2") == 0 ? "verified" : "accepted_unknown";
 
     snprintf(
         compatibility,
         sizeof(compatibility),
         "{\"version\":1,\"status\":\"%s\",\"environment\":{"
         "\"hos\":\"%s\",\"firmware_hash\":\"%s\",\"model\":\"%s\","
-        "\"atmosphere\":%s,\"pctl_profile\":\"layout-v1\"},"
+        "\"atmosphere\":%s,\"atmosphere_version\":\"%s\",\"pctl_profile\":\"layout-v1\"},"
         "\"release_id\":\"%s\",\"accepted_at\":%lld}\n",
         compatibility_status,
         hos,
         firmware_hash,
         model,
         atmosphere ? "true" : "false",
+        atmosphere_version,
         release_id,
         (long long)now.unix_seconds);
     join_path(path, sizeof(path), sysmodule->app_root, "compatibility.json");
@@ -3571,6 +3575,8 @@ static PtcErrorCode __attribute__((unused)) validate_runtime_fingerprint(PtcSysm
     char current_model[32];
     char accepted_hash[96];
     char current_hash[96];
+    char accepted_atmosphere_version[24];
+    char current_atmosphere_version[24];
     bool accepted_atmosphere = false;
     bool current_atmosphere = false;
     bool current_read_ok = false;
@@ -3600,12 +3606,15 @@ static PtcErrorCode __attribute__((unused)) validate_runtime_fingerprint(PtcSysm
         !json_string(environment, "model", current_model, sizeof(current_model)) ||
         !json_string(compatibility, "firmware_hash", accepted_hash, sizeof(accepted_hash)) ||
         !json_string(environment, "firmware_hash", current_hash, sizeof(current_hash)) ||
+        !json_string(compatibility, "atmosphere_version", accepted_atmosphere_version, sizeof(accepted_atmosphere_version)) ||
+        !json_string(environment, "atmosphere_version", current_atmosphere_version, sizeof(current_atmosphere_version)) ||
         !json_bool_value(compatibility, "atmosphere", &accepted_atmosphere) ||
         !json_bool_value(environment, "atmosphere", &current_atmosphere)) {
         return PTC_ERR_COMPATIBILITY_CONFIRMATION_REQUIRED;
     }
     if (strcmp(accepted_hos, current_hos) != 0 || strcmp(accepted_model, current_model) != 0 ||
-        strcmp(accepted_hash, current_hash) != 0 || accepted_atmosphere != current_atmosphere) {
+        strcmp(accepted_hash, current_hash) != 0 || accepted_atmosphere != current_atmosphere ||
+        strcmp(accepted_atmosphere_version, current_atmosphere_version) != 0) {
         return PTC_ERR_COMPATIBILITY_CONFIRMATION_REQUIRED;
     }
     return PTC_ERR_OK;

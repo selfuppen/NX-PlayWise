@@ -4,8 +4,10 @@ services:
   dev-ssh-v1.1:
     image: devkitpro:v1
     container_name: devkitpro-ssh-v1
+    environment:
+      PLAYWISE_BUILD_IMAGE: devkitpro:v1
     ports:
-      - "1888:58791"
+      - "127.0.0.1:1888:58791"
       # - "59301-59310:59301-59310"
     # network_mode: "host"
     volumes:
