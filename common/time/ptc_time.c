@@ -126,6 +126,17 @@ bool ptc_format_date_utc8(int64_t unix_seconds, char out[11])
     return written == 10;
 }
 
+bool ptc_format_date(uint16_t day_index, char out[11])
+{
+    uint16_t year;
+    uint8_t month;
+    uint8_t day;
+    int written;
+    if (!out || !ptc_date_from_day_index(day_index, &year, &month, &day)) return false;
+    written = snprintf(out, 11, "%04u-%02u-%02u", (unsigned int)year, (unsigned int)month, (unsigned int)day);
+    return written == 10;
+}
+
 uint8_t ptc_weekday_from_day_index(uint16_t day_index_since_2020)
 {
     return (uint8_t)((3u + day_index_since_2020) % 7u);

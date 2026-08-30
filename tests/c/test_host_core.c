@@ -784,6 +784,21 @@ static void test_daily_buffer_transactions(void)
         "inactive interactive allowance uses exactly one activation fallback");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-fallback.json", text, sizeof(text)) &&
         strstr(text, "\"status\":\"ok\""), "successful activation fallback commits the allowance");
+
+    seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 10, true);
+    pctl.status.temporary_unlocked_available = true;
+    pctl.status.temporary_unlocked = true;
+    pctl.status.play_timer_enabled = false;
+    pctl.status.restricted_now = false;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-unlocked.json",
+        "{\"version\":1,\"request_id\":\"buffer-unlocked\",\"type\":\"claim_daily_buffer\","
+        "\"created_at\":9,\"payload\":{}}"), "queue buffer claim during temporary unlock");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "temporary-unlock buffer claim is processed");
+    check_int((long)pctl.start_timer_calls, 0,
+        "temporary unlock preserves Nintendo's paused timer without calling 1451");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-unlocked.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"temporary_unlocked\":true"),
+        "temporary unlock accepts the new setting while preserving its runtime state");
 }
 
 static void test_daily_buffer_failure_rollbacks(void)

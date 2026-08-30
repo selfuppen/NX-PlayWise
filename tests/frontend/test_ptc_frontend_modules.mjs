@@ -8,7 +8,7 @@ import {
   encodeToken,
   runSelfTest,
   tierForMinutes,
-  todayUtc8,
+  todayLocal,
 } from "../../tools/ptc_frontend/token.js";
 import {
   CONFIG_KEY,
@@ -40,7 +40,7 @@ class MemoryStorage {
 assert.equal(await runSelfTest(webcrypto), true);
 assert.equal(await runSelfTest({}), true);
 assert.equal(dayIndexFor("2026-07-08"), 2380);
-assert.equal(todayUtc8(Date.UTC(2026, 6, 7, 16, 0, 0)), "2026-07-08");
+assert.equal(todayLocal(new Date(2026, 6, 8, 12, 0, 0).getTime()), "2026-07-08");
 assert.throws(() => dayIndexFor("2026-02-30"), /日期无效/);
 
 for (let minutes = 5; minutes <= 120; minutes += 5) {

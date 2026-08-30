@@ -32,10 +32,13 @@ static bool ipc_diagnostic_path(char *out, size_t out_size, int64_t now)
 {
     char date[11];
     char directory[192];
+    struct tm local;
+    time_t local_now = (time_t)now;
     int written;
     if (!out || out_size == 0) return false;
     (void)mkdir(PLAYWISE_SD_ROOT "/logs", 0777);
-    if (ptc_format_date_utc8(now, date)) {
+    if (localtime_r(&local_now, &local) != NULL &&
+        strftime(date, sizeof(date), "%Y-%m-%d", &local) == 10) {
         written = snprintf(directory, sizeof(directory), PLAYWISE_SD_ROOT "/logs/%s", date);
     } else {
         (void)mkdir(PLAYWISE_SD_ROOT "/logs/undated", 0777);

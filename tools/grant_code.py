@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 import json
 from pathlib import Path
 import secrets
@@ -32,8 +32,8 @@ def day_index_for(target: date) -> int:
     return (target - date(2020, 1, 1)).days
 
 
-def today_utc8() -> date:
-    return datetime.now(timezone(timedelta(hours=8))).date()
+def today_local() -> date:
+    return datetime.now().astimezone().date()
 
 
 def default_v2_nonce_state() -> Path:
@@ -76,7 +76,7 @@ def main() -> int:
     parser.add_argument("--v2-nonce-state", type=Path, default=default_v2_nonce_state(), help="Local v2 nonce state file.")
     args = parser.parse_args()
 
-    day_index = args.day_index if args.day_index is not None else day_index_for(args.date or today_utc8())
+    day_index = args.day_index if args.day_index is not None else day_index_for(args.date or today_local())
     if args.tier_minutes is not None:
         try:
             tier_index = tier_for_minutes(args.tier_minutes)

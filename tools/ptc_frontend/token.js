@@ -25,8 +25,12 @@ const SHA256_ROUND = new Uint32Array([
 ]);
 let fallbackNonceCounter = 0;
 
-export function todayUtc8(nowMs = Date.now()) {
-  return new Date(nowMs + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+export function todayLocal(nowMs = Date.now()) {
+  const value = new Date(nowMs);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function dayIndexFor(dateText) {

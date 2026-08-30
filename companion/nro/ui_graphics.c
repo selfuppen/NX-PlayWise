@@ -687,9 +687,19 @@ static void format_event_time(int64_t timestamp, bool full, char *out, size_t ou
         snprintf(out, out_size, "时间未知");
         return;
     }
-    event_day = ptc_day_index_from_unix_utc8(timestamp);
-    today = ptc_day_index_from_unix_utc8((int64_t)time(NULL));
-    minute = ptc_minute_of_day_from_unix_utc8(timestamp);
+    {
+        time_t event_time = (time_t)timestamp;
+        time_t now_time = time(NULL);
+        struct tm event_local;
+        struct tm today_local;
+        if (localtime_r(&event_time, &event_local) == NULL ||
+            localtime_r(&now_time, &today_local) == NULL ||
+            !ptc_day_index_from_date((uint16_t)(event_local.tm_year + 1900),
+                (uint8_t)(event_local.tm_mon + 1), (uint8_t)event_local.tm_mday, &event_day) ||
+            !ptc_day_index_from_date((uint16_t)(today_local.tm_year + 1900),
+                (uint8_t)(today_local.tm_mon + 1), (uint8_t)today_local.tm_mday, &today)) return;
+        minute = (uint16_t)(event_local.tm_hour * 60 + event_local.tm_min);
+    }
     if (full && ptc_date_from_day_index(event_day, &year, &month, &day)) {
         snprintf(out, out_size, "%u-%02u-%02u %02u:%02u", year, month, day, minute / 60, minute % 60);
     } else if (event_day == today) {
@@ -832,7 +842,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     snprintf(rule_line, sizeof(rule_line), "当前按%s执行%s", rule_label,
              model->calendar_update_warning ? "  |  节假日日历需要更新" : "");
     if (model->temporary_unlocked_available && model->temporary_unlocked) {
-        snprintf(rule_line, sizeof(rule_line), "当前按%s执行  |  临时解除中，锁屏后恢复限制", rule_label);
+        snprintf(rule_line, sizeof(rule_line), "当前按%s执行  |  临时解除期间不计时，进入睡眠后恢复限制", rule_label);
     }
     draw_text_center(pixels, stride, (UiRect){54, 212, 1172, 22}, rule_line, 17,
                      model->calendar_update_warning ? COLOR(194, 61, 61) : COLOR(77, 86, 99));
@@ -1360,7 +1370,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                     model->play_timer_enabled == 1 ? COLOR(25, 132, 95) :
                     (model->play_timer_enabled == 0 ? COLOR(28, 118, 188) : COLOR(91, 100, 116)));
     if (model->temporary_unlocked_available && model->temporary_unlocked) {
-        snprintf(freshness, sizeof(freshness), "临时解除中 | 锁屏后恢复限制");
+        snprintf(freshness, sizeof(freshness), "临时解除期间不计时 | 进入睡眠后恢复限制");
     } else if (model->restriction_enabled_available && !model->restriction_enabled) {
         snprintf(freshness, sizeof(freshness), "Nintendo 家长控制未启用");
     }

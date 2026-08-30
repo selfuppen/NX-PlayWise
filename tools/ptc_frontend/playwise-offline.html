@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#126b5b">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-f/GwpSkkvNLFuw4LzOdW6uRxwjG6hwhmOgWIDrHB4fQ='; style-src 'sha256-OZ5y+PxwCVrcFPmUXibBJ3U1Qgf0zW3nuyOvCgBRLhE='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Qc8Fh5Af6MLGtaSdoBE/Q6yJ6aNcZ2pi5OjbioMQOak='; style-src 'sha256-OZ5y+PxwCVrcFPmUXibBJ3U1Qgf0zW3nuyOvCgBRLhE='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
   <title>任我玩 · PlayWise</title>
   <style>
 :root {
@@ -178,7 +178,7 @@ footer a { color: var(--accent-dark); font-weight: 700; }
           </label>
 
           <label>
-            <span>生效日期（UTC+8）</span>
+            <span>生效日期（Switch 主机本地日期）</span>
             <input id="date" name="date" type="date" required>
           </label>
 
@@ -214,7 +214,7 @@ footer a { color: var(--accent-dark); font-weight: 700; }
         <h3>加时码无效或提示已使用</h3>
         <p>确认设备 ID、密钥、生效日期和 Switch 当前日期一致。修改密钥后，当前浏览器配对和使用原密钥签发的代码都会失效；提示已使用时请重新生成一个。</p>
         <h3>日期不正确</h3>
-        <p>加时码按 UTC+8 的当天生效。先校准家长设备与 Switch 的系统日期，再刷新状态并重新生成；不要继续尝试为错误日期生成的码。</p>
+        <p>加时码按 Switch 主机的本地日期生效。请确认家长设备日期与 Switch 主机日期一致，再刷新状态并重新生成；不要继续尝试为错误日期生成的码。</p>
         <h3>设备没有响应</h3>
         <p>在 Switch 孩子区或家长区刷新状态，等待正在同步的操作完成。仍无响应时导出诊断信息，并检查 SD 卡中的 PlayWise 文件是否可读。</p>
         <h3>紧急停用已开启</h3>
@@ -289,8 +289,12 @@ const SHA256_ROUND = new Uint32Array([
 ]);
 let fallbackNonceCounter = 0;
 
-function todayUtc8(nowMs = Date.now()) {
-  return new Date(nowMs + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+function todayLocal(nowMs = Date.now()) {
+  const value = new Date(nowMs);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function dayIndexFor(dateText) {
@@ -727,7 +731,7 @@ function resetToDefaults() {
   deviceInput.value = DEFAULT_CONFIG.deviceId;
   secretInput.value = DEFAULT_CONFIG.secret;
   tierInput.value = String(DEFAULT_CONFIG.tierMinutes);
-  dateInput.value = todayUtc8();
+  dateInput.value = todayLocal();
   syncDemoWarning();
 }
 
@@ -736,7 +740,7 @@ function loadSavedForm() {
   deviceInput.value = config.deviceId;
   secretInput.value = config.secret;
   tierInput.value = String(config.tierMinutes);
-  dateInput.value = todayUtc8();
+  dateInput.value = todayLocal();
   syncDemoWarning();
 }
 

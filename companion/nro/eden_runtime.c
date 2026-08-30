@@ -20,11 +20,15 @@
 static PtcClockSnapshot eden_now(PtcTimeProvider *provider)
 {
     PtcClockSnapshot snapshot;
-    int64_t now = (int64_t)time(NULL);
+    time_t now = time(NULL);
+    struct tm local;
     (void)provider;
-    snapshot.unix_seconds = now;
-    snapshot.day_index = ptc_day_index_from_unix_utc8(now);
-    snapshot.minute_of_day = ptc_minute_of_day_from_unix_utc8(now);
+    memset(&snapshot, 0, sizeof(snapshot));
+    snapshot.unix_seconds = (int64_t)now;
+    if (localtime_r(&now, &local) == NULL || !ptc_day_index_from_date(
+            (uint16_t)(local.tm_year + 1900), (uint8_t)(local.tm_mon + 1),
+            (uint8_t)local.tm_mday, &snapshot.day_index)) return snapshot;
+    snapshot.minute_of_day = (uint16_t)(local.tm_hour * 60 + local.tm_min);
     return snapshot;
 }
 

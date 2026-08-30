@@ -125,7 +125,7 @@ static bool daily_log_path(PtcSysmodule *sysmodule, const char *name, char *out,
 {
     char date[11];
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
-    if (!ptc_format_date_utc8(now.unix_seconds, date)) {
+    if (now.unix_seconds < PTC_DAY_INDEX_EPOCH_UNIX || !ptc_format_date(now.day_index, date)) {
         return snprintf(out, out_size, "%s/logs/undated/%s/%s", sysmodule->app_root, sysmodule->boot_id, name) > 0;
     }
     return snprintf(out, out_size, "%s/logs/%s/%s", sysmodule->app_root, date, name) > 0;
@@ -2697,6 +2697,12 @@ static bool target_runtime_ready(
 {
     if (!target_settings_observed(mode, minutes, status)) {
         return false;
+    }
+    /* Nintendo pauses its play timer while the parent PIN temporarily unlocks
+       restrictions. Preserve that behavior: settings may change, but an
+       interactive request must not restart command 1451 before Sleep Mode. */
+    if (status->temporary_unlocked_available && status->temporary_unlocked) {
+        return true;
     }
     if (mode == PTC_PCTL_TARGET_UNLIMITED) {
         return status->restricted_now_available && !status->restricted_now;
@@ -5527,16 +5533,14 @@ uint32_t ptc_sysmodule_current_scan_interval(const PtcSysmodule *sysmodule)
 uint32_t ptc_sysmodule_next_wait_ms(PtcSysmodule *sysmodule)
 {
     PtcClockSnapshot now;
-    int64_t shifted;
     int64_t second_of_day;
     uint32_t minute_ms;
     uint64_t date_ms;
     uint32_t wait_ms;
     if (!sysmodule) return 500;
     now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
-    shifted = now.unix_seconds + PTC_UTC8_OFFSET_SECONDS;
-    second_of_day = shifted % PTC_SECONDS_PER_DAY;
-    if (second_of_day < 0) second_of_day += PTC_SECONDS_PER_DAY;
+    second_of_day = (int64_t)now.minute_of_day * 60 + now.unix_seconds % 60;
+    if (second_of_day < 0) second_of_day += 60;
     minute_ms = (uint32_t)(60 - (second_of_day % 60)) * 1000u;
     date_ms = (uint64_t)(PTC_SECONDS_PER_DAY - second_of_day) * 1000u;
     wait_ms = ptc_sysmodule_current_scan_interval(sysmodule);
@@ -5578,8 +5582,8 @@ static bool cleanup_timestamped_json(
         char path[512];
         uint16_t file_day;
         if (entries[i].type != PTC_STORAGE_ENTRY_FILE || !request_file_stem(entries[i].name, stem, sizeof(stem)) ||
-            !entries[i].modified_time_valid || entries[i].modified_unix_seconds < PTC_DAY_INDEX_EPOCH_UNIX - PTC_UTC8_OFFSET_SECONDS) continue;
-        file_day = ptc_day_index_from_unix_utc8(entries[i].modified_unix_seconds);
+            !entries[i].modified_time_valid || entries[i].modified_unix_seconds < PTC_DAY_INDEX_EPOCH_UNIX) continue;
+        file_day = ptc_day_index_from_unix(entries[i].modified_unix_seconds);
         if (file_day > today || (uint16_t)(today - file_day) < 30u) continue;
         if (strlen(dir) + 1u + strlen(entries[i].name) >= sizeof(path)) continue;
         memcpy(path, dir, strlen(dir));
@@ -5633,7 +5637,7 @@ int ptc_sysmodule_rollover_legacy_logs(PtcSysmodule *sysmodule)
     int moved = 0;
     if (!sysmodule) return 0;
     now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
-    if (!ptc_format_date_utc8(now.unix_seconds, date)) return 0;
+    if (now.unix_seconds < PTC_DAY_INDEX_EPOCH_UNIX || !ptc_format_date(now.day_index, date)) return 0;
     for (i = 0; i < sizeof(NAMES) / sizeof(NAMES[0]); ++i) {
         char from[320];
         char to[352];

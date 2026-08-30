@@ -71,7 +71,7 @@ static void append_boot_log(PtcSysmodule *sysmodule, const char *message)
     char log_path[320];
     char line[160];
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
-    if (ptc_format_date_utc8(now.unix_seconds, date)) {
+    if (now.unix_seconds >= PTC_DAY_INDEX_EPOCH_UNIX && ptc_format_date(now.day_index, date)) {
         snprintf(event_path, sizeof(event_path), PTC_APP_ROOT "/logs/%s/events.jsonl", date);
         snprintf(log_path, sizeof(log_path), PTC_APP_ROOT "/logs/%s/sysmodule.log", date);
     } else {

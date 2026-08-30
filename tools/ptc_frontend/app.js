@@ -1,4 +1,4 @@
-import {chooseUnusedNonce, dayIndexFor, encodeToken, runSelfTest, tierForMinutes, todayUtc8} from "./token.js";
+import {chooseUnusedNonce, dayIndexFor, encodeToken, runSelfTest, tierForMinutes, todayLocal} from "./token.js";
 import {
   DEFAULT_CONFIG,
   acknowledgeDemoRisk,
@@ -135,7 +135,7 @@ function resetToDefaults() {
   deviceInput.value = DEFAULT_CONFIG.deviceId;
   secretInput.value = DEFAULT_CONFIG.secret;
   tierInput.value = String(DEFAULT_CONFIG.tierMinutes);
-  dateInput.value = todayUtc8();
+  dateInput.value = todayLocal();
   syncDemoWarning();
 }
 
@@ -144,7 +144,7 @@ function loadSavedForm() {
   deviceInput.value = config.deviceId;
   secretInput.value = config.secret;
   tierInput.value = String(config.tierMinutes);
-  dateInput.value = todayUtc8();
+  dateInput.value = todayLocal();
   syncDemoWarning();
 }
 

@@ -1216,7 +1216,7 @@ void ptc_ui_format_parent_status_summary(
         return;
     }
     if (model->temporary_unlocked_available && model->temporary_unlocked) {
-        snprintf(out, out_size, "! 系统限制临时解除  |  锁屏后恢复今日限制");
+        snprintf(out, out_size, "! 系统限制临时解除  |  期间不计时，进入睡眠后恢复今日限制");
         return;
     }
     if (model->apply_pending_confirmation) {

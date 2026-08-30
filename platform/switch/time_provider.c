@@ -8,6 +8,8 @@
 static PtcClockSnapshot switch_now(PtcTimeProvider *provider)
 {
     PtcClockSnapshot snapshot;
+    TimeCalendarTime calendar;
+    TimeCalendarAdditionalInfo additional;
     u64 timestamp = 0;
     Result rc;
     (void)provider;
@@ -18,8 +20,15 @@ static PtcClockSnapshot switch_now(PtcTimeProvider *provider)
         return snapshot;
     }
     snapshot.unix_seconds = (int64_t)timestamp;
-    snapshot.day_index = ptc_day_index_from_unix_utc8((int64_t)timestamp);
-    snapshot.minute_of_day = ptc_minute_of_day_from_unix_utc8((int64_t)timestamp);
+    memset(&calendar, 0, sizeof(calendar));
+    memset(&additional, 0, sizeof(additional));
+    rc = timeToCalendarTimeWithMyRule(timestamp, &calendar, &additional);
+    if (R_FAILED(rc) || !ptc_day_index_from_date(
+            calendar.year, calendar.month, calendar.day, &snapshot.day_index)) {
+        memset(&snapshot, 0, sizeof(snapshot));
+        return snapshot;
+    }
+    snapshot.minute_of_day = (uint16_t)((uint16_t)calendar.hour * 60u + calendar.minute);
     return snapshot;
 }
 

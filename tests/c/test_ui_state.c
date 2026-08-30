@@ -81,7 +81,7 @@ static void test_parent_status_summary(void)
                strcmp(remaining, "0 分钟") == 0,
                "temporary unlock preserves the configured limited policy and exhausted quota");
     check_true(strcmp(timer, "未计时") == 0 && strstr(summary, "临时解除") != NULL &&
-               strstr(summary, "锁屏后恢复") != NULL,
+               strstr(summary, "进入睡眠后恢复") != NULL && strstr(summary, "不计时") != NULL,
                "temporary unlock explains the confirmed timer state and relock behavior");
 
     model.temporary_unlocked = false;
