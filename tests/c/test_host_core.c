@@ -381,6 +381,7 @@ static void test_result_summary_unlimited_state(void)
 
     check_true(ptc_companion_result_summary_parse(result, &summary), "unlimited result summary parses");
     check_int(summary.unrestricted_today, 1, "unlimited state reaches compact result summary");
+    check_int(summary.day_index, 2380, "result summary carries the console day index for code generation");
     check_true(ptc_companion_result_summary_format(&summary, formatted, sizeof(formatted)) &&
         strstr(formatted, "额度剩余：不限时") && strstr(formatted, "计时器：未启动"),
         "unlimited result summary distinguishes quota and a confirmed stopped timer");

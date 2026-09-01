@@ -323,6 +323,7 @@ static void test_numeric_input(void)
 {
     PtcUiModel model;
     uint16_t value = 0;
+    char console_date[64];
     memset(&model, 0, sizeof(model));
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_MINUTES,
         "输入额度", "1 到 1440 分钟", 4, 1, 1440, 60);
@@ -413,6 +414,17 @@ static void test_numeric_input(void)
     check_true(!ptc_ui_numpad_validate(&model, NULL), "short code rejected");
     snprintf(model.numpad_text, sizeof(model.numpad_text), "10514680");
     check_true(ptc_ui_numpad_validate(&model, NULL), "eight-digit code accepted");
+
+    memset(console_date, 0, sizeof(console_date));
+    model.status_loaded = false;
+    model.day_index = 2380;
+    ptc_ui_format_console_date(&model, console_date, sizeof(console_date));
+    check_true(strcmp(console_date, "主机日期待刷新") == 0,
+               "console date stays unknown until status is loaded");
+    model.status_loaded = true;
+    ptc_ui_format_console_date(&model, console_date, sizeof(console_date));
+    check_true(strcmp(console_date, "主机今天 2026-07-08") == 0,
+               "console date renders the status day index for code generation");
 }
 
 static void test_pin_input(void)

@@ -2367,6 +2367,13 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         snprintf(duration_line, sizeof(duration_line), "换算：%s", duration);
         draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 244, dialog.width - 80, 22},
                          duration_line, 17, COLOR(28, 118, 188));
+    } else if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
+        char console_date[64];
+        char date_line[128];
+        ptc_ui_format_console_date(model, console_date, sizeof(console_date));
+        snprintf(date_line, sizeof(date_line), "%s  |  生成加时码请选这一天", console_date);
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 244, dialog.width - 80, 22},
+                         date_line, 16, model->status_loaded ? COLOR(28, 118, 188) : COLOR(215, 139, 25));
     }
     if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
         model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES ||

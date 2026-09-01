@@ -11,6 +11,7 @@ typedef struct {
     bool ok;
     bool unlock_observed;
     int error_code;
+    int day_index;
     int remaining_minutes;
     int played_minutes;
     int play_timer_enabled;

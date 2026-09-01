@@ -12,6 +12,7 @@
 extern "C" {
 #include "../bridge.h"
 #include "../input_model.h"
+#include "common/time/ptc_time.h"
 #include "platform/switch/fs_storage.h"
 }
 
@@ -53,6 +54,25 @@ static unsigned int to_overlay_buttons(u64 keys)
     if (keys & HidNpadButton_L) result |= PTC_OVERLAY_BUTTON_L;
     if (keys & HidNpadButton_R) result |= PTC_OVERLAY_BUTTON_R;
     return result;
+}
+
+// The offline code MAC binds the day index reported by status, so the console date
+// must come from the summary. A local-clock guess could advertise a day the
+// sysmodule would reject.
+static void format_console_date(const PtcCompanionResultSummary &summary, char *out, size_t out_size)
+{
+    uint16_t year = 0;
+    uint8_t month = 0;
+    uint8_t day = 0;
+    if (!out || out_size == 0) return;
+    if (!summary.valid || summary.day_index < 0 || summary.day_index > 0xffff ||
+        !ptc_date_from_day_index(static_cast<uint16_t>(summary.day_index), &year, &month, &day)) {
+        std::snprintf(out, out_size, "主机日期待刷新");
+        return;
+    }
+    std::snprintf(out, out_size, "主机今天 %04u-%02u-%02u",
+                  static_cast<unsigned int>(year), static_cast<unsigned int>(month),
+                  static_cast<unsigned int>(day));
 }
 
 enum class OverlayRequestKind {
@@ -861,7 +881,10 @@ public:
                 renderer->a(index < input_->length ? TEXT_COLOR : (is_cursor ? FOCUS_BORDER : MUTED_COLOR)));
         }
 
-        std::snprintf(line, sizeof(line), "已输入 %u/8 位   当前高亮数字：%c", input_->length, ptc_overlay_input_charset()[input_->cursor]);
+        char console_date[48];
+        format_console_date(summary, console_date, sizeof(console_date));
+        std::snprintf(line, sizeof(line), "已输入 %u/8 位  高亮：%c  %s", input_->length,
+                      ptc_overlay_input_charset()[input_->cursor], console_date);
         renderer->drawString(line, false, cx + 5, cy + 180, 14, renderer->a(MUTED_COLOR));
 
         // --- 3. Keypad 3x4 Grid (软键盘放大) ---

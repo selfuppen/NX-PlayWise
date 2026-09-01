@@ -1181,6 +1181,24 @@ void ptc_ui_format_timer_status(const PtcUiModel *model, char *out, size_t out_s
     }
 }
 
+void ptc_ui_format_console_date(const PtcUiModel *model, char *out, size_t out_size)
+{
+    uint16_t year = 0;
+    uint8_t month = 0;
+    uint8_t day = 0;
+    if (!out || out_size == 0) return;
+    /* The offline code MAC binds the day index reported by status. Never fall back
+       to the NRO local clock here: a guessed date would advertise a day the
+       sysmodule does not accept. */
+    if (!model || !model->status_loaded ||
+        !ptc_date_from_day_index(model->day_index, &year, &month, &day)) {
+        snprintf(out, out_size, "主机日期待刷新");
+        return;
+    }
+    snprintf(out, out_size, "主机今天 %04u-%02u-%02u",
+             (unsigned int)year, (unsigned int)month, (unsigned int)day);
+}
+
 void ptc_ui_format_parent_status_summary(
     const PtcUiModel *model,
     int64_t now,
