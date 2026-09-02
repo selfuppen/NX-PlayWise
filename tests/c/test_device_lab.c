@@ -311,9 +311,11 @@ static void test_complete_report_requires_observation_and_latches_event(void)
             strstr(text, "\"manual_runtime_effect\":\"unsure\"") != NULL &&
             strstr(text, "\"manual_observation_recorded\":true") != NULL &&
             strstr(text, "\"manual_runtime_effect_recorded\":true") != NULL &&
+            strstr(text, "\"activation_evidence_complete\":null") != NULL &&
+            strstr(text, "\"lifecycle_evidence_complete\":true") != NULL &&
             strstr(text, "\"report_status\":\"final\"") != NULL &&
             strstr(text, "\"complete\":true") != NULL,
-        "confirmed visible restriction finalizes the report");
+        "confirmed visible restriction finalizes a full report without mislabeling activation evidence");
     check(!storage.storage.vtable->exists(&storage.storage,
             "/lab/lab/report-2100000000-test-boot.draft.json"),
         "publishing the final report removes its draft");
@@ -384,8 +386,56 @@ static void test_restriction_quick_mode_and_zero_baseline_classification(void)
     check(strstr(text, "\"manual_runtime_effect\":\"paused_or_suspended\"") != NULL,
         "quick final report retains the actual runtime effect");
     check(strstr(text, "\"report_status\":\"final\"") != NULL &&
+            strstr(text, "\"activation_evidence_complete\":null") != NULL &&
+            strstr(text, "\"lifecycle_evidence_complete\":null") != NULL &&
             strstr(text, "\"complete\":true") != NULL,
-        "two-layer quick observation promotes the draft to final status");
+        "two-layer quick observation finalizes without unrelated evidence summaries");
+}
+
+static void test_full_zero_baseline_separates_collection_from_evidence(void)
+{
+    PtcMemStorage storage;
+    PtcPctlStub pctl;
+    PtcFakeTime time;
+    PtcSysmodule sysmodule;
+    PtcRequest item;
+    char text[20000];
+    int phase;
+    static const char *const phases[] = {
+        "home_stopped", "home_started", "game_foreground", "game_suspended", "sleep_wake", "restriction_effect"
+    };
+    ptc_mem_storage_init(&storage);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&time, 2220000000LL, 3003, 600);
+    pctl.raw_settings_override_enabled = true;
+    pctl.model_elapsed_time = true;
+    memset(pctl.raw_settings, 0, sizeof(pctl.raw_settings));
+    pctl.settings_header_initialized = false;
+    pctl.status.remaining_available = true;
+    init_lab(&sysmodule, &storage, &pctl, &time);
+
+    item = request(PTC_REQUEST_LAB_SESSION_START, "full-zero-start", NULL, NULL);
+    snprintf(item.lab_mode, sizeof(item.lab_mode), "full");
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    for (phase = 0; phase < 6; ++phase) {
+        char id[32];
+        snprintf(id, sizeof(id), "full-zero-phase-%d", phase);
+        item = request(PTC_REQUEST_LAB_PHASE_START, id, phases[phase], NULL);
+        (void)ptc_lab_process_request(&sysmodule, &item);
+        time.snapshot.unix_seconds += phase == 5 ? 15 : 75;
+        check(ptc_lab_scheduler_tick(&sysmodule) == 1,
+            "each all-zero full phase completes its collection workflow");
+    }
+    item = request(PTC_REQUEST_LAB_OBSERVATION, "full-zero-observation", NULL, "no_visible_restriction");
+    snprintf(item.runtime_effect, sizeof(item.runtime_effect), "paused_or_suspended");
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage,
+            "/lab/reports/2220000000-test-boot.json", text, sizeof(text)) &&
+            strstr(text, "\"report_status\":\"final\"") != NULL &&
+            strstr(text, "\"activation_evidence_complete\":null") != NULL &&
+            strstr(text, "\"lifecycle_evidence_complete\":false") != NULL &&
+            strstr(text, "\"complete\":true") != NULL,
+        "all-zero full report separates completed collection from incomplete lifecycle evidence");
 }
 
 static void test_timer_activation_ab_report(void)
@@ -455,6 +505,8 @@ static void test_timer_activation_ab_report(void)
             strstr(text, "\"schema_version\":2") != NULL &&
             strstr(text, "\"required_automated_phases\":7") != NULL &&
             strstr(text, "\"manual_observation_recorded\":false") != NULL &&
+            strstr(text, "\"activation_evidence_complete\":true") != NULL &&
+            strstr(text, "\"lifecycle_evidence_complete\":null") != NULL &&
             strstr(text, "\"complete\":true") != NULL,
         "A/B report finalizes from seven automated phases without inventing a manual observation");
     check(strstr(text, "\"timer_activation_ab\":{\"home_awake_counted\":true,") != NULL &&
@@ -666,6 +718,7 @@ int main(void)
     test_session_timing_order_restart_and_restore_failure();
     test_complete_report_requires_observation_and_latches_event();
     test_restriction_quick_mode_and_zero_baseline_classification();
+    test_full_zero_baseline_separates_collection_from_evidence();
     test_timer_activation_ab_report();
     test_boot_flags();
     test_ui_model();

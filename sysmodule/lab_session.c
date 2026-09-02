@@ -439,7 +439,8 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
     bool manual_required = strcmp(state->mode, "timer_activation_ab") != 0;
     bool observation_recorded = state->observation[0] != '\0';
     bool runtime_effect_recorded = state->runtime_effect[0] != '\0';
-    bool activation_evidence_complete = true;
+    int activation_evidence_complete = -1;
+    int lifecycle_evidence_complete = -1;
     bool complete;
     if (strcmp(state->mode, "timer_activation_ab") == 0) {
         activation_evidence_complete = state->home_awake_counted >= 0 && state->sleep_excluded >= 0 &&
@@ -484,10 +485,15 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
         else ++completed_phases;
         if (!append_text(report, sizeof(report), fragment)) return false;
     }
+    if (strcmp(state->mode, "full") == 0) {
+        /* A full run may finish collecting and restoring an all-zero baseline,
+           but those lifecycle phases remain evidence-incomplete. */
+        lifecycle_evidence_complete = !state->baseline_all_zero && completed_phases == required_phases;
+    }
     complete = completed_phases == required_phases &&
         (!manual_required || (observation_recorded && runtime_effect_recorded)) && state->restored &&
         strcmp(state->restore_verdict, "exact_restore_proved") == 0 &&
-        strcmp(state->state, "complete") == 0 && activation_evidence_complete;
+        strcmp(state->state, "complete") == 0 && activation_evidence_complete != 0;
     snprintf(fragment, sizeof(fragment),
         "],\"timer_activation_ab\":{\"home_awake_counted\":%s,\"sleep_excluded\":%s,"
         "\"fallback_cases\":["
@@ -497,7 +503,8 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
         "\"manual_observation\":%s%s%s,\"manual_runtime_effect\":%s%s%s,"
         "\"restoration\":{\"proved\":%s,\"verdict\":\"%s\"},"
         "\"summary\":{\"automated_phases_completed\":%u,\"required_automated_phases\":%u,"
-        "\"manual_observation_recorded\":%s,\"manual_runtime_effect_recorded\":%s,\"activation_evidence_complete\":%s,"
+        "\"manual_observation_recorded\":%s,\"manual_runtime_effect_recorded\":%s,"
+        "\"activation_evidence_complete\":%s,\"lifecycle_evidence_complete\":%s,"
         "\"complete\":%s,\"ipc_callable\":\"see_commands\",\"wire_shape_confirmed\":\"see_commands\","
         "\"product_semantics\":\"evidence_only_until_review\"}}\n",
         tri_state_json(state->home_awake_counted), tri_state_json(state->sleep_excluded),
@@ -513,7 +520,8 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
         state->runtime_effect[0] ? "\"" : "",
         state->restored ? "true" : "false", state->restore_verdict,
         completed_phases, required_phases, observation_recorded ? "true" : "false",
-        runtime_effect_recorded ? "true" : "false", activation_evidence_complete ? "true" : "false",
+        runtime_effect_recorded ? "true" : "false", tri_state_json(activation_evidence_complete),
+        tri_state_json(lifecycle_evidence_complete),
         complete ? "true" : "false");
     if (!append_text(report, sizeof(report), fragment)) return false;
     if (complete) {

@@ -102,7 +102,11 @@ def report(mode: str, run_id: str, effect: str | None = None) -> dict:
             for phase in write_phases
         ],
         "restoration": {"proved": True, "verdict": "exact_restore_proved"},
-        "summary": {"complete": True},
+        "summary": {
+            "complete": True,
+            "activation_evidence_complete": True if mode == "timer_activation_ab" else None,
+            "lifecycle_evidence_complete": None,
+        },
     }
     if mode == "timer_activation_ab":
         value["baseline"] = {"activation_preconditions_met": True, "remaining_ns": 700, "minimum_remaining_ns": 600}
@@ -186,10 +190,28 @@ def test_missing_runtime_identity_is_rejected_explicitly() -> None:
             raise AssertionError("report without runtime identity must not qualify")
 
 
+def test_misleading_evidence_summary_is_rejected() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        ab_path = reports / "ab.json"
+        misleading = json.loads(ab_path.read_text(encoding="utf-8"))
+        misleading["summary"]["activation_evidence_complete"] = None
+        ab_path.write_text(json.dumps(misleading), encoding="utf-8")
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
+        except verifier.QualificationError as exc:
+            require("A/B 摘要证据状态不一致" in str(exc), "misleading evidence summary rejection must be explicit")
+        else:
+            raise AssertionError("A/B report with a misleading evidence summary must not qualify")
+
+
 def main() -> int:
     test_verify_and_promote_byte_identical_packages()
     test_old_report_and_changed_package_are_rejected()
     test_missing_runtime_identity_is_rejected_explicitly()
+    test_misleading_evidence_summary_is_rejected()
     print("Qualification verifier and promotion tests passed")
     return 0
 

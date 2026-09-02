@@ -175,7 +175,11 @@ def verify_reports(reports_dir: Path, manifest: dict, expected_model: str,
         require(isinstance(run_id, str) and run_id and run_id not in run_ids, f"{label}: run_id 缺失或重复")
         run_ids.add(run_id)
         mode = report.get("mode")
+        summary = report.get("summary", {})
         if mode == "timer_activation_ab":
+            require(summary.get("activation_evidence_complete") is True and
+                    summary.get("lifecycle_evidence_complete") is None,
+                    f"{label}: A/B 摘要证据状态不一致")
             baseline = report.get("baseline", {})
             require(baseline.get("activation_preconditions_met") is True and
                     int(baseline.get("remaining_ns", 0)) >= int(baseline.get("minimum_remaining_ns", 1)),
@@ -195,6 +199,9 @@ def verify_reports(reports_dir: Path, manifest: dict, expected_model: str,
                         f"{label}: {item.get('target')} fallback 与 settings-only 结果未绑定")
             ab_runs.append(run_id)
         elif mode == "restriction_quick":
+            require(summary.get("activation_evidence_complete") is None and
+                    summary.get("lifecycle_evidence_complete") is None,
+                    f"{label}: 聚焦报告包含不适用的证据结论")
             require(report.get("manual_observation") == "restriction_visible", f"{label}: 未记录限制提示可见")
             effect = report.get("manual_runtime_effect")
             if effect == "paused_or_suspended":
