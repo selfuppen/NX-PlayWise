@@ -170,9 +170,26 @@ def test_old_report_and_changed_package_are_rejected() -> None:
             raise AssertionError("schema v1 report must not qualify")
 
 
+def test_missing_runtime_identity_is_rejected_explicitly() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        missing_runtime = json.loads((reports / "pause-a.json").read_text(encoding="utf-8"))
+        missing_runtime["environment"]["runtime"] = None
+        (reports / "pause-a.json").write_text(json.dumps(missing_runtime), encoding="utf-8")
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
+        except verifier.QualificationError as exc:
+            require("缺少运行时环境证据" in str(exc), "missing runtime rejection must be explicit")
+        else:
+            raise AssertionError("report without runtime identity must not qualify")
+
+
 def main() -> int:
     test_verify_and_promote_byte_identical_packages()
     test_old_report_and_changed_package_are_rejected()
+    test_missing_runtime_identity_is_rejected_explicitly()
     print("Qualification verifier and promotion tests passed")
     return 0
 

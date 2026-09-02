@@ -81,6 +81,8 @@ Enforce、跨日、启动恢复、未来规则修改和今日规则未变化都�
 
 2026-08-26 的增强 run `1787681083-b411b3488b91fee0` 使用 `2.0.2-alpha+d1fa4dcdfa11` 完成六个自动阶段并得到 `exact_restore_proved`。限制阶段 `1455=true`，timer 从 true 变为 false，`1952` 和负值 `1454` 均只变化约 1 秒；操作者补充确认提示可见且游戏实际暂停或挂起。原始附件保持 `manual_observation:null`、`complete:false` 且永不回写；该见证可信但位于旧报告之外，正式资格仍以新报告为准。
 
+聚焦 run `1788368835-3e64cea6860e4c1a` 已在报告内正式记录 `restriction_visible + paused_or_suspended`：限制阶段 `1455` 从 false 变为 true，1457 连续检查 131 次未触发，写入只涉及预期头部 offset `0、1、2` 与当天 offset `47、49`，最终得到 `exact_restore_proved`。这补强了限制提示和暂停效果的行为证据，但报告的 `environment.runtime` 为 null，构建身份还带有 `source_dirty:true` 和 unknown 容器，因此不能进入资格矩阵。Device Lab 后续在会话开始前强制读取 runtime/build 身份文件，报告重建不再以 null 代替缺失身份；资格工具也把缺失 runtime 作为明确错误。
+
 该 run 在 15 秒内检查 1457 共 131 次且始终未触发，但系统限制提示仍出现，直接证明 1457 不是提示出现或限制成功的必要条件。它只保留原始 Result、检查次数和首次触发时间，不参与完整性、可见性或产品资格。1458 的 raw/libnx 对照为 `comparable:true, value_equal:true`。原始全零 0x44 写入后变化为头部字节 `0、1、2` 和当日字节 `39、41`：前者与当前适配器显式写入的 `0x0101/0x0001` 完全一致，属于实现预期头初始化而非意外变化，但不据此推断更深层 HOS 语义。由于基线全零，游戏前台、挂起和待机三个静态阶段不足以形成生命周期结论；后续 A/B 模式强制要求非空 Nintendo 周计划。
 
 私有行为只能依据：

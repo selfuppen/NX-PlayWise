@@ -463,12 +463,10 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
         (long long)state->baseline_remaining_ns, (long long)LAB_MINIMUM_REMAINING_NS,
         PLAYWISE_TITLE_ID, PLAYWISE_IPC_SERVICE, PLAYWISE_SD_ROOT);
     if (written < 0 || (size_t)written >= sizeof(report)) return false;
-    if (!read_fragment(sysmodule, "environment.json", fragment, sizeof(fragment)))
-        snprintf(fragment, sizeof(fragment), "null");
+    if (!read_fragment(sysmodule, "environment.json", fragment, sizeof(fragment))) return false;
     if (!append_text(report, sizeof(report), fragment) ||
         !append_text(report, sizeof(report), ",\"build\":")) return false;
-    if (!read_fragment(sysmodule, "build.json", fragment, sizeof(fragment)))
-        snprintf(fragment, sizeof(fragment), "null");
+    if (!read_fragment(sysmodule, "build.json", fragment, sizeof(fragment))) return false;
     if (!append_text(report, sizeof(report), fragment) ||
         !append_text(report, sizeof(report), "},\"durations\":{\"phase_seconds\":75,"
             "\"activation_home_sleep_seconds\":90,"
@@ -872,6 +870,7 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, cons
     PtcPctlPublicParity parity;
     PtcPctlSettingsSnapshot verified;
     PtcPctlForensicSample preflight;
+    char identity_fragment[2048];
     PtcErrorCode err;
     bool write_ok;
     bool restored_ok;
@@ -883,6 +882,11 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, cons
     snprintf(state->run_id, sizeof(state->run_id), "%lld-%s", (long long)now.unix_seconds, sysmodule->boot_id);
     snprintf(state->state, sizeof(state->state), "ready");
     snprintf(state->restore_verdict, sizeof(state->restore_verdict), "pending");
+    /* A final Lab report is only useful when it remains bound to the runtime
+       fingerprint and exact Device Lab build that produced the evidence. */
+    if (!read_fragment(sysmodule, "environment.json", identity_fragment, sizeof(identity_fragment)) ||
+        !read_fragment(sysmodule, "build.json", identity_fragment, sizeof(identity_fragment)))
+        return PTC_ERR_STORAGE_READ_FAILED;
     for (i = 0; i < sizeof(LAB_ACTIVATION_AB_PHASES) / sizeof(LAB_ACTIVATION_AB_PHASES[0]); ++i) {
         char old_path[320];
         snprintf(old_path, sizeof(old_path), "%s/lab/phase-%u.json", sysmodule->app_root, (unsigned int)i);

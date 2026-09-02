@@ -47,6 +47,39 @@ static void init_lab(PtcSysmodule *sysmodule, PtcMemStorage *storage, PtcPctlStu
     sysmodule->storage = ptc_mem_storage_as_storage(storage);
     sysmodule->pctl = ptc_pctl_stub_as_pctl(pctl);
     sysmodule->time_provider = ptc_fake_time_as_provider(time);
+    check(storage->storage.vtable->write_text_atomic(&storage->storage, "/lab/environment.json",
+            "{\"version\":1,\"read_ok\":true,\"hos\":\"22.5.0\",\"model\":\"mariko-oled\","
+            "\"atmosphere\":true,\"atmosphere_detection\":{\"source\":\"spl:ExosphereApiVersion\","
+            "\"version\":\"1.11.2\"}}"),
+        "default Lab runtime identity fixture is stored");
+    check(storage->storage.vtable->write_text_atomic(&storage->storage, "/lab/build.json",
+            "{\"profile\":\"device-lab\",\"release_id\":\"test-lab\"}"),
+        "default Lab build identity fixture is stored");
+}
+
+static void test_session_requires_identity_evidence(void)
+{
+    PtcMemStorage storage;
+    PtcPctlStub pctl;
+    PtcFakeTime time;
+    PtcSysmodule sysmodule;
+    PtcRequest item;
+    char text[2048];
+    ptc_mem_storage_init(&storage);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&time, 1999999999LL, 3000, 600);
+    init_lab(&sysmodule, &storage, &pctl, &time);
+    check(storage.storage.vtable->remove_path(&storage.storage, "/lab/environment.json"),
+        "missing runtime identity is arranged");
+
+    item = request(PTC_REQUEST_LAB_SESSION_START, "missing-identity", NULL, NULL);
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage,
+            "/lab/results/missing-identity.json", text, sizeof(text)) &&
+            strstr(text, "\"code\":500") != NULL &&
+            !storage.storage.vtable->exists(&storage.storage,
+                "/lab/lab/report-1999999999-test-boot.draft.json"),
+        "Lab session rejects missing runtime identity before creating evidence");
 }
 
 static void test_protocol(void)
@@ -629,6 +662,7 @@ int main(void)
 {
     test_atmosphere_version();
     test_protocol();
+    test_session_requires_identity_evidence();
     test_session_timing_order_restart_and_restore_failure();
     test_complete_report_requires_observation_and_latches_event();
     test_restriction_quick_mode_and_zero_baseline_classification();

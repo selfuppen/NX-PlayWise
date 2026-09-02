@@ -115,10 +115,14 @@ def verify_report_common(report: dict, label: str, manifest: dict,
     require(report.get("restoration", {}).get("proved") is True and
             report.get("restoration", {}).get("verdict") == "exact_restore_proved",
             f"{label}: 缺少精确恢复证明")
-    build = report.get("environment", {}).get("build", {})
+    environment = report.get("environment")
+    require(isinstance(environment, dict), f"{label}: 缺少报告环境身份")
+    build = environment.get("build")
+    require(isinstance(build, dict), f"{label}: 缺少候选构建身份")
     require(build.get("commit") == manifest.get("commit") and
             build.get("release_id") == manifest.get("release_id"), f"{label}: 报告与候选 commit/release_id 不一致")
-    runtime = report.get("environment", {}).get("runtime", {})
+    runtime = environment.get("runtime")
+    require(isinstance(runtime, dict), f"{label}: 缺少运行时环境证据")
     expected_model_value = MODEL_ALIASES.get(expected_model.lower(), expected_model.lower())
     require(str(runtime.get("model", "")).lower() == expected_model_value, f"{label}: 主机型号不匹配")
     require(runtime.get("hos") == expected_hos, f"{label}: HOS 版本不匹配")
