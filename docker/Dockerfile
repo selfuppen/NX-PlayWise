@@ -37,6 +37,9 @@ ENV TZ=Asia/Shanghai
 # 2. SSH 配置
 # =============================
 RUN mkdir -p /var/run/sshd && \
+    install -d -m 0700 /root/.ssh && \
+    touch /root/.ssh/authorized_keys && \
+    chmod 0600 /root/.ssh/authorized_keys && \
     echo 'root:root' | chpasswd && \
     sed -ri 's/^#?PermitRootLogin .*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' /etc/pam.d/sshd && \

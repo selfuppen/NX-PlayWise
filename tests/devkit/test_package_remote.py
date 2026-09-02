@@ -107,6 +107,19 @@ def test_ssh_command() -> None:
             "--with-eden must reach the container through the same SSH transport")
 
 
+def test_container_ssh_key_persistence() -> None:
+    dockerfile = (ROOT / "docker" / "Dockerfile").read_text(encoding="utf-8")
+    compose = (ROOT / "docker" / "docker-compose.yml").read_text(encoding="utf-8")
+    require("install -d -m 0700 /root/.ssh" in dockerfile,
+            "container image must initialize the SSH directory with a safe mode")
+    require("chmod 0600 /root/.ssh/authorized_keys" in dockerfile,
+            "container image must initialize authorized_keys with a safe mode")
+    require("playwise-ssh-keys:/root/.ssh" in compose,
+            "Compose must persist root SSH authorization outside the container layer")
+    require("name: playwise-devkitpro-ssh-keys" in compose,
+            "SSH authorization volume must remain stable across Compose recreation")
+
+
 def test_zip_verification() -> None:
     with tempfile.TemporaryDirectory(prefix="ptc-package-test-") as tmp_dir:
         root = Path(tmp_dir)
@@ -309,6 +322,7 @@ def test_public_package_selection() -> None:
 def main() -> int:
     test_container_command()
     test_ssh_command()
+    test_container_ssh_key_persistence()
     test_zip_verification()
     test_eden_nro_verification()
     test_device_lab_zip_verification()

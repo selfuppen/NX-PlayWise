@@ -11,7 +11,12 @@ services:
       # - "59301-59310:59301-59310"
     # network_mode: "host"
     volumes:
+      - playwise-ssh-keys:/root/.ssh
       - /data/sshdata:/root/data
       # - /h/workspace/codes/switch:/ws
       - /D/workspace/codes/nintendo-switch:/ws
     restart: unless-stopped
+
+volumes:
+  playwise-ssh-keys:
+    name: playwise-devkitpro-ssh-keys
