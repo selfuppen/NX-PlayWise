@@ -10,6 +10,7 @@
 #include "../../common/protocol/request_schema.h"
 #include "../../common/protocol/atmosphere_version.h"
 #include "../../device_lab/boot_flags.h"
+#include "../../device_lab/handoff_guard.h"
 #include "../../device_lab/ui_model.h"
 #include "../../platform/host/fake_time.h"
 #include "../../platform/host/mem_storage.h"
@@ -78,7 +79,7 @@ static void test_session_requires_identity_evidence(void)
             "/lab/results/missing-identity.json", text, sizeof(text)) &&
             strstr(text, "\"code\":500") != NULL &&
             !storage.storage.vtable->exists(&storage.storage,
-                "/lab/lab/report-1999999999-test-boot.draft.json"),
+                "/lab/lab/report-1999999999-test-boot-03fa1743e02e.draft.json"),
         "Lab session rejects missing runtime identity before creating evidence");
 }
 
@@ -89,6 +90,9 @@ static void test_protocol(void)
         "restriction_visible", "no_visible_restriction", "unsure"
     };
     size_t i;
+    check(ptc_lab_request_type(PTC_REQUEST_LAB_CAMPAIGN_STATUS) &&
+            !ptc_lab_request_type(PTC_REQUEST_SET_SCHEDULED_OVERRIDE),
+        "Lab request dispatch does not absorb standard request IDs between protocol ranges");
     check(ptc_request_parse("{\"version\":1,\"request_id\":\"s0\",\"type\":\"lab_session_start\",\"created_at\":1,\"payload\":{}}", &parsed) == PTC_ERR_OK &&
             strcmp(parsed.lab_mode, "full") == 0,
         "legacy Lab session start defaults to full mode");
@@ -100,6 +104,14 @@ static void test_protocol(void)
         "timer activation A/B mode parses explicitly");
     check(ptc_request_parse("{\"version\":1,\"request_id\":\"s2\",\"type\":\"lab_session_start\",\"created_at\":1,\"payload\":{\"mode\":\"skip\"}}", &parsed) == PTC_ERR_BAD_REQUEST,
         "unknown Lab mode is rejected");
+    check(ptc_request_parse("{\"version\":1,\"request_id\":\"c0\",\"type\":\"lab_campaign_start\",\"created_at\":1,\"payload\":{\"original_pause_state\":\"on\"}}", &parsed) == PTC_ERR_OK &&
+            parsed.type == PTC_REQUEST_LAB_CAMPAIGN_START && strcmp(parsed.original_pause_state, "on") == 0,
+        "qualification campaign records the operator-confirmed original pause state");
+    check(ptc_request_parse("{\"version\":1,\"request_id\":\"cs\",\"type\":\"lab_session_start\",\"created_at\":1,\"payload\":{\"mode\":\"restriction_quick\",\"campaign_id\":\"campaign-1\",\"campaign_slot\":\"pause_on_game_a\",\"game_slot\":\"a\",\"official_pause_expected\":\"on\",\"context_confirmed\":true}}", &parsed) == PTC_ERR_OK &&
+            strcmp(parsed.campaign_slot, "pause_on_game_a") == 0 && parsed.context_confirmed,
+        "campaign session retains anonymous game slot and environment confirmation");
+    check(ptc_request_parse("{\"version\":1,\"request_id\":\"cb\",\"type\":\"lab_session_start\",\"created_at\":1,\"payload\":{\"mode\":\"restriction_quick\",\"campaign_id\":\"campaign-1\",\"campaign_slot\":\"pause_on_game_a\",\"game_slot\":\"a\",\"official_pause_expected\":\"on\",\"context_confirmed\":false}}", &parsed) == PTC_ERR_BAD_REQUEST,
+        "campaign session refuses an unconfirmed environment");
     check(ptc_request_parse("{\"version\":1,\"request_id\":\"p1\",\"type\":\"lab_phase_start\",\"created_at\":1,\"payload\":{\"phase\":\"sleep_wake\"}}", &parsed) == PTC_ERR_OK,
         "valid Lab phase parses");
     check(strcmp(parsed.phase, "sleep_wake") == 0, "Lab phase is retained");
@@ -148,8 +160,8 @@ static void test_session_timing_order_restart_and_restore_failure(void)
 
     item = request(PTC_REQUEST_LAB_SESSION_START, "start", NULL, NULL);
     check(ptc_lab_process_request(&first, &item), "session start handled");
-    check(storage.storage.vtable->exists(&storage.storage, "/lab/lab/report-2000000000-test-boot.draft.json") &&
-            !storage.storage.vtable->exists(&storage.storage, "/lab/reports/2000000000-test-boot.json"),
+    check(storage.storage.vtable->exists(&storage.storage, "/lab/lab/report-2000000000-test-boot-cced28c6dc3f.draft.json") &&
+            !storage.storage.vtable->exists(&storage.storage, "/lab/reports/2000000000-test-boot-cced28c6dc3f.json"),
         "session start creates only a clearly named draft report");
 
     item = request(PTC_REQUEST_LAB_PHASE_START, "wrong", "home_started", NULL);
@@ -185,8 +197,30 @@ static void test_session_timing_order_restart_and_restore_failure(void)
         "unproved restoration disables all later writes");
     check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/session.json", text, sizeof(text)) &&
         strstr(text, "restore_required") != NULL, "restore-required state survives restart");
-    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/report-2000000000-test-boot.draft.json", text, sizeof(text)) &&
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/report-2000000000-test-boot-cced28c6dc3f.draft.json", text, sizeof(text)) &&
         strstr(text, "\"1952\"") != NULL, "private 1952 evidence appears only in Lab report data");
+}
+
+static void test_handoff_launch_guard(void)
+{
+    PtcLabHandoffGuard guard = {true, true, true, true, true};
+    int missing;
+    check(ptc_lab_handoff_can_commit(&guard) && ptc_lab_handoff_can_launch(&guard),
+        "complete PM, quiesce, journal, and exit evidence permits one target launch");
+    for (missing = 0; missing < 5; ++missing) {
+        PtcLabHandoffGuard interrupted = guard;
+        bool *fields[] = {
+            &interrupted.source_confirmed, &interrupted.target_absent,
+            &interrupted.quiesce_ready, &interrupted.journal_committed,
+            &interrupted.source_absent
+        };
+        *fields[missing] = false;
+        check(!ptc_lab_handoff_can_launch(&interrupted),
+            "every interrupted handoff point forbids launching a second PCTL owner");
+    }
+    guard.source_absent = false;
+    check(!ptc_lab_handoff_can_launch(&guard),
+        "a source process that refuses to exit always blocks target launch");
 }
 
 static void test_atmosphere_version(void)
@@ -285,7 +319,7 @@ static void test_complete_report_requires_observation_and_latches_event(void)
         "restriction evidence includes raw settings and bounded byte-offset differences");
 
     check(storage.storage.vtable->read_text(&storage.storage,
-            "/lab/lab/report-2100000000-test-boot.draft.json", text, sizeof(text)) &&
+            "/lab/lab/report-2100000000-test-boot-364885fb04af.draft.json", text, sizeof(text)) &&
             strstr(text, "\"report_status\":\"draft\"") != NULL &&
             strstr(text, "\"automated_phases_completed\":6") != NULL &&
             strstr(text, "\"required_automated_phases\":6") != NULL &&
@@ -306,7 +340,7 @@ static void test_complete_report_requires_observation_and_latches_event(void)
     item = request(PTC_REQUEST_LAB_OBSERVATION, "visible", NULL, "restriction_visible");
     (void)ptc_lab_process_request(&sysmodule, &item);
     check(storage.storage.vtable->read_text(&storage.storage,
-            "/lab/reports/2100000000-test-boot.json", text, sizeof(text)) &&
+            "/lab/reports/2100000000-test-boot-364885fb04af.json", text, sizeof(text)) &&
             strstr(text, "\"manual_observation\":\"restriction_visible\"") != NULL &&
             strstr(text, "\"manual_runtime_effect\":\"unsure\"") != NULL &&
             strstr(text, "\"manual_observation_recorded\":true") != NULL &&
@@ -317,7 +351,7 @@ static void test_complete_report_requires_observation_and_latches_event(void)
             strstr(text, "\"complete\":true") != NULL,
         "confirmed visible restriction finalizes a full report without mislabeling activation evidence");
     check(!storage.storage.vtable->exists(&storage.storage,
-            "/lab/lab/report-2100000000-test-boot.draft.json"),
+            "/lab/lab/report-2100000000-test-boot-364885fb04af.draft.json"),
         "publishing the final report removes its draft");
 }
 
@@ -368,7 +402,7 @@ static void test_restriction_quick_mode_and_zero_baseline_classification(void)
             strstr(text, "\"unexpected_bytes_unchanged\":true") != NULL,
         "all-zero baseline changes classify header, current day, and unexpected offsets separately");
     check(storage.storage.vtable->read_text(&storage.storage,
-            "/lab/lab/report-2200000000-test-boot.draft.json", text, sizeof(text)) &&
+            "/lab/lab/report-2200000000-test-boot-a94beddb3517.draft.json", text, sizeof(text)) &&
             strstr(text, "\"automated_phases_completed\":1") != NULL &&
             strstr(text, "\"required_automated_phases\":1") != NULL &&
             strstr(text, "\"complete\":false") != NULL,
@@ -381,7 +415,7 @@ static void test_restriction_quick_mode_and_zero_baseline_classification(void)
             strstr(text, "\"status\":\"ok\"") != NULL,
         "quick two-layer observation request succeeds");
     check(storage.storage.vtable->read_text(&storage.storage,
-            "/lab/reports/2200000000-test-boot.json", text, sizeof(text)),
+            "/lab/reports/2200000000-test-boot-a94beddb3517.json", text, sizeof(text)),
         "two-layer quick observation publishes a final report path");
     check(strstr(text, "\"manual_runtime_effect\":\"paused_or_suspended\"") != NULL,
         "quick final report retains the actual runtime effect");
@@ -390,6 +424,96 @@ static void test_restriction_quick_mode_and_zero_baseline_classification(void)
             strstr(text, "\"lifecycle_evidence_complete\":null") != NULL &&
             strstr(text, "\"complete\":true") != NULL,
         "two-layer quick observation finalizes without unrelated evidence summaries");
+}
+
+static void test_campaign_retry_resume_and_unique_run_ids(void)
+{
+    PtcMemStorage storage;
+    PtcPctlStub pctl;
+    PtcFakeTime time;
+    PtcSysmodule sysmodule;
+    PtcRequest item;
+    PtcLabSessionView first_view;
+    PtcLabSessionView retry_view;
+    char text[8192];
+    ptc_mem_storage_init(&storage);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&time, 2210000000LL, 3003, 600);
+    pctl.raw_settings_override_enabled = true;
+    pctl.status.remaining_available = true;
+    init_lab(&sysmodule, &storage, &pctl, &time);
+    check(storage.storage.vtable->write_text_atomic(&storage.storage, "/lab/lab/activation.json",
+            "{\"version\":1,\"entry_method\":\"hot_switch\"}"),
+        "campaign entry method fixture is stored");
+
+    item = request(PTC_REQUEST_LAB_CAMPAIGN_START, "campaign-start", NULL, NULL);
+    snprintf(item.original_pause_state, sizeof(item.original_pause_state), "on");
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/campaign.json", text, sizeof(text)) &&
+            strstr(text, "\"entry_method\":\"hot_switch\"") != NULL &&
+            strstr(text, "\"next_slot\":0") != NULL,
+        "campaign start persists original environment and actual entry method");
+
+    /* Arrange the first quick slot directly; the full Timer A/B mechanics are
+       covered separately, while this case targets retry and resume semantics. */
+    check(storage.storage.vtable->write_text_atomic(&storage.storage, "/lab/lab/campaign.json",
+            "{\"version\":1,\"schema_version\":1,\"campaign_id\":\"campaign-test\","
+            "\"state\":\"active\",\"original_pause_state\":\"on\",\"entry_method\":\"hot_switch\","
+            "\"next_slot\":1,\"attempt_0\":1,\"attempt_1\":0,\"attempt_2\":0,\"attempt_3\":0,"
+            "\"accepted_run_0\":\"ab-run\",\"accepted_run_1\":\"\","
+            "\"accepted_run_2\":\"\",\"accepted_run_3\":\"\"}"),
+        "campaign resume fixture is stored");
+
+    item = request(PTC_REQUEST_LAB_SESSION_START, "campaign-try-1", NULL, NULL);
+    snprintf(item.lab_mode, sizeof(item.lab_mode), "restriction_quick");
+    snprintf(item.campaign_id, sizeof(item.campaign_id), "campaign-test");
+    snprintf(item.campaign_slot, sizeof(item.campaign_slot), "pause_on_game_a");
+    snprintf(item.game_slot, sizeof(item.game_slot), "a");
+    snprintf(item.official_pause_expected, sizeof(item.official_pause_expected), "on");
+    item.context_confirmed = true;
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/session.json", text, sizeof(text)) &&
+            ptc_lab_session_parse(text, &first_view) && first_view.campaign_attempt == 1,
+        "first campaign attempt is independently persisted");
+    item = request(PTC_REQUEST_LAB_PHASE_START, "campaign-phase-1", "restriction_effect", NULL);
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    time.snapshot.unix_seconds += 15;
+    (void)ptc_lab_scheduler_tick(&sysmodule);
+    item = request(PTC_REQUEST_LAB_OBSERVATION, "campaign-wrong", NULL, "restriction_visible");
+    snprintf(item.runtime_effect, sizeof(item.runtime_effect), "continued");
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/campaign.json", text, sizeof(text)) &&
+            strstr(text, "\"next_slot\":1") != NULL,
+        "unexpected observation keeps the report but does not advance the campaign");
+
+    item = request(PTC_REQUEST_LAB_SESSION_START, "campaign-try-2", NULL, NULL);
+    snprintf(item.lab_mode, sizeof(item.lab_mode), "restriction_quick");
+    snprintf(item.campaign_id, sizeof(item.campaign_id), "campaign-test");
+    snprintf(item.campaign_slot, sizeof(item.campaign_slot), "pause_on_game_a");
+    snprintf(item.game_slot, sizeof(item.game_slot), "a");
+    snprintf(item.official_pause_expected, sizeof(item.official_pause_expected), "on");
+    item.context_confirmed = true;
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/session.json", text, sizeof(text)) &&
+            ptc_lab_session_parse(text, &retry_view) && retry_view.campaign_attempt == 2 &&
+            strcmp(first_view.run_id, retry_view.run_id) != 0,
+        "same-second retries receive unique run IDs and increment their slot attempt");
+    item = request(PTC_REQUEST_LAB_PHASE_START, "campaign-phase-2", "restriction_effect", NULL);
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    time.snapshot.unix_seconds += 15;
+    (void)ptc_lab_scheduler_tick(&sysmodule);
+    item = request(PTC_REQUEST_LAB_OBSERVATION, "campaign-correct", NULL, "restriction_visible");
+    snprintf(item.runtime_effect, sizeof(item.runtime_effect), "paused_or_suspended");
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(storage.storage.vtable->read_text(&storage.storage, "/lab/lab/campaign.json", text, sizeof(text)) &&
+            strstr(text, "\"next_slot\":2") != NULL && strstr(text, retry_view.run_id) != NULL,
+        "matching retry advances exactly one campaign slot and records its accepted run ID");
+
+    item = request(PTC_REQUEST_LAB_CAMPAIGN_ABANDON, "campaign-abandon", NULL, NULL);
+    (void)ptc_lab_process_request(&sysmodule, &item);
+    check(!storage.storage.vtable->exists(&storage.storage, "/lab/lab/campaign.json") &&
+            storage.storage.vtable->exists(&storage.storage, "/lab/reports/campaign-test.abandoned.json"),
+        "abandon archives campaign state without deleting evidence reports");
 }
 
 static void test_full_zero_baseline_separates_collection_from_evidence(void)
@@ -430,7 +554,7 @@ static void test_full_zero_baseline_separates_collection_from_evidence(void)
     snprintf(item.runtime_effect, sizeof(item.runtime_effect), "paused_or_suspended");
     (void)ptc_lab_process_request(&sysmodule, &item);
     check(storage.storage.vtable->read_text(&storage.storage,
-            "/lab/reports/2220000000-test-boot.json", text, sizeof(text)) &&
+            "/lab/reports/2220000000-test-boot-ddecbace1f4d.json", text, sizeof(text)) &&
             strstr(text, "\"report_status\":\"final\"") != NULL &&
             strstr(text, "\"activation_evidence_complete\":null") != NULL &&
             strstr(text, "\"lifecycle_evidence_complete\":false") != NULL &&
@@ -500,7 +624,7 @@ static void test_timer_activation_ab_report(void)
         }
     }
     check(storage.storage.vtable->read_text(&storage.storage,
-            "/lab/reports/2250000000-test-boot.json", text, sizeof(text)) &&
+            "/lab/reports/2250000000-test-boot-434cc63d3c42.json", text, sizeof(text)) &&
             strstr(text, "\"report_status\":\"final\"") != NULL &&
             strstr(text, "\"schema_version\":2") != NULL &&
             strstr(text, "\"required_automated_phases\":7") != NULL &&
@@ -714,10 +838,12 @@ int main(void)
 {
     test_atmosphere_version();
     test_protocol();
+    test_handoff_launch_guard();
     test_session_requires_identity_evidence();
     test_session_timing_order_restart_and_restore_failure();
     test_complete_report_requires_observation_and_latches_event();
     test_restriction_quick_mode_and_zero_baseline_classification();
+    test_campaign_retry_resume_and_unique_run_ids();
     test_full_zero_baseline_separates_collection_from_evidence();
     test_timer_activation_ab_report();
     test_boot_flags();

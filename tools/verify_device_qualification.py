@@ -159,18 +159,64 @@ def verify_report_common(report: dict, label: str, manifest: dict,
             f"{label}: 危险写入阶段的前像或 offset 证据不完整")
 
 
+CAMPAIGN_SLOTS = (
+    ("timer_activation_ab", "none", "not_applicable"),
+    ("pause_on_game_a", "a", "on"),
+    ("pause_on_game_b", "b", "on"),
+    ("pause_off_game_b", "b", "off"),
+)
+
+
+def select_campaign(reports_dir: Path, campaign: str | None) -> tuple[Path, dict]:
+    manifests: list[tuple[Path, dict]] = []
+    for path in sorted(reports_dir.glob("*.campaign.json")):
+        value = read_json(path)
+        if value.get("schema_version") == 1 and value.get("report_status") == "final":
+            manifests.append((path, value))
+    if campaign:
+        matches = [(path, value) for path, value in manifests
+                   if value.get("campaign_id") == campaign or path.name == Path(campaign).name or
+                   str(path.resolve()) == str(Path(campaign).resolve())]
+        require(len(matches) == 1, f"无法唯一找到指定 campaign：{campaign}")
+        return matches[0]
+    require(manifests, f"没有完整的 campaign schema v1：{reports_dir}")
+    require(len(manifests) == 1, "存在多个完整 campaign，请使用 --campaign 显式指定")
+    return manifests[0]
+
+
 def verify_reports(reports_dir: Path, manifest: dict, expected_model: str,
-                   expected_hos: str, expected_atmosphere: str) -> tuple[list[str], list[str]]:
-    paths = sorted(path for path in reports_dir.glob("*.json") if path.is_file())
-    require(paths, f"报告目录为空：{reports_dir}")
+                   expected_hos: str, expected_atmosphere: str,
+                   campaign: str | None = None) -> tuple[list[str], list[str], dict]:
+    campaign_path, campaign_value = select_campaign(reports_dir, campaign)
+    require(campaign_value.get("state") == "complete", f"{campaign_path.name}: campaign 尚未完成")
+    require(campaign_value.get("entry_method") in ("hot_switch", "reboot"),
+            f"{campaign_path.name}: entry_method 必须是 hot_switch 或 reboot")
+    accepted = campaign_value.get("accepted_run_ids")
+    require(isinstance(accepted, list) and len(accepted) == 4 and
+            all(isinstance(item, str) and item for item in accepted) and len(set(accepted)) == 4,
+            f"{campaign_path.name}: 必须包含四个唯一的 accepted run ID")
+    paths = [reports_dir / f"{run_id}.json" for run_id in accepted]
+    require(all(path.is_file() for path in paths), f"{campaign_path.name}: accepted run 报告缺失")
     run_ids: set[str] = set()
     ab_runs: list[str] = []
     paused_runs: list[str] = []
     continued_runs: list[str] = []
-    for path in paths:
+    for slot_index, path in enumerate(paths):
         report = read_json(path)
         label = path.name
         verify_report_common(report, label, manifest, expected_model, expected_hos, expected_atmosphere)
+        require(report.get("entry_method") in ("hot_switch", "reboot"),
+                f"{label}: entry_method 必须是 hot_switch 或 reboot")
+        campaign_meta = report.get("campaign")
+        expected_slot, expected_game, expected_pause = CAMPAIGN_SLOTS[slot_index]
+        require(isinstance(campaign_meta, dict) and
+                campaign_meta.get("campaign_id") == campaign_value.get("campaign_id") and
+                campaign_meta.get("slot") == expected_slot and
+                campaign_meta.get("game_slot") == expected_game and
+                campaign_meta.get("official_pause_expected") == expected_pause and
+                campaign_meta.get("context_confirmed") is True and
+                isinstance(campaign_meta.get("attempt"), int) and campaign_meta.get("attempt") >= 1,
+                f"{label}: campaign 槽位、匿名游戏或人工环境确认不匹配")
         run_id = report.get("run_id")
         require(isinstance(run_id, str) and run_id and run_id not in run_ids, f"{label}: run_id 缺失或重复")
         run_ids.add(run_id)
@@ -212,10 +258,10 @@ def verify_reports(reports_dir: Path, manifest: dict, expected_model: str,
                 raise QualificationError(f"{label}: 游戏实际行为不是资格矩阵要求的结果")
         else:
             raise QualificationError(f"{label}: 资格报告集只接受 timer_activation_ab 和 restriction_quick")
-    require(len(ab_runs) >= 1, "缺少 Timer 激活 A/B 报告")
-    require(len(paused_runs) >= 2, "至少需要两份“提示可见 + 暂停/挂起”报告")
-    require(len(continued_runs) >= 1, "至少需要一份“提示可见 + 软件继续”报告")
-    return sorted(run_ids), paths_as_strings(paths)
+    require(len(ab_runs) == 1, "campaign 必须恰好包含一份 Timer 激活 A/B 报告")
+    require(len(paused_runs) == 2, "campaign 必须包含游戏 A/B 两份暂停/挂起报告")
+    require(len(continued_runs) == 1, "campaign 必须包含一份关闭官方暂停后的继续运行报告")
+    return list(accepted), paths_as_strings(paths), campaign_value
 
 
 def paths_as_strings(paths: list[Path]) -> list[str]:
@@ -223,14 +269,17 @@ def paths_as_strings(paths: list[Path]) -> list[str]:
 
 
 def verify(packages: Path, reports: Path, expected_model: str,
-           expected_hos: str, expected_atmosphere: str) -> dict:
+           expected_hos: str, expected_atmosphere: str, campaign: str | None = None) -> dict:
     manifest, _lab_manifest, zip_hashes, component_hashes = package_identity(packages)
-    run_ids, report_paths = verify_reports(reports, manifest, expected_model, expected_hos, expected_atmosphere)
+    run_ids, report_paths, campaign_value = verify_reports(
+        reports, manifest, expected_model, expected_hos, expected_atmosphere, campaign)
     return {
         "schema_version": 1,
         "status": "passed",
         "subject": {"commit": manifest["commit"], "release_id": manifest["release_id"]},
         "baseline": {"model": expected_model, "hos": expected_hos, "atmosphere": expected_atmosphere},
+        "campaign": {"campaign_id": campaign_value["campaign_id"],
+                     "entry_method": campaign_value["entry_method"]},
         "reports": {"run_ids": run_ids, "paths": report_paths},
         "artifacts": {"packages": zip_hashes, "release_components": component_hashes},
         "checks": [
@@ -249,11 +298,12 @@ def main() -> int:
     parser.add_argument("--expected-model", required=True)
     parser.add_argument("--expected-hos", required=True)
     parser.add_argument("--expected-atmosphere", required=True)
+    parser.add_argument("--campaign", help="campaign ID 或 *.campaign.json 文件名；只有一个完整批次时可省略")
     parser.add_argument("--output", type=Path, default=ROOT / "build" / "qualification" / "verification.json")
     args = parser.parse_args()
     try:
         result = verify(args.packages.resolve(), args.reports.resolve(), args.expected_model,
-                        args.expected_hos, args.expected_atmosphere)
+                        args.expected_hos, args.expected_atmosphere, args.campaign)
     except QualificationError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1

@@ -62,6 +62,7 @@ bool ptc_lab_session_parse(const char *text, PtcLabSessionView *view)
 {
     PtcLabSessionView parsed;
     int64_t next_phase;
+    int64_t campaign_attempt;
     if (!text || !view) return false;
     memset(&parsed, 0, sizeof(parsed));
     snprintf(parsed.mode, sizeof(parsed.mode), "full");
@@ -73,6 +74,12 @@ bool ptc_lab_session_parse(const char *text, PtcLabSessionView *view)
         !json_int(text, "deadline", &parsed.deadline) ||
         !json_bool(text, "restored", &parsed.restored)) return false;
     (void)ptc_lab_json_string(text, "mode", parsed.mode, sizeof(parsed.mode));
+    (void)ptc_lab_json_string(text, "campaign_id", parsed.campaign_id, sizeof(parsed.campaign_id));
+    (void)ptc_lab_json_string(text, "campaign_slot", parsed.campaign_slot, sizeof(parsed.campaign_slot));
+    (void)ptc_lab_json_string(text, "game_slot", parsed.game_slot, sizeof(parsed.game_slot));
+    (void)ptc_lab_json_string(text, "official_pause_expected", parsed.official_pause_expected,
+        sizeof(parsed.official_pause_expected));
+    if (json_int(text, "campaign_attempt", &campaign_attempt)) parsed.campaign_attempt = (int)campaign_attempt;
     (void)json_bool(text, "baseline_all_zero", &parsed.baseline_all_zero);
     parsed.required_phases = strcmp(parsed.mode, "restriction_quick") == 0 ? 1 :
         (strcmp(parsed.mode, "timer_activation_ab") == 0 ? 7 : 6);
@@ -132,12 +139,12 @@ const char *ptc_lab_nro_stage_title_zh(PtcLabNroStage stage)
 const char *ptc_lab_nro_stage_body_zh(PtcLabNroStage stage)
 {
     switch (stage) {
-    case PTC_LAB_NRO_PREPARE: return "启用后会暂时停用正常后台，并在下次重启运行隔离的实验后台。标准数据和二进制不会被修改。";
+    case PTC_LAB_NRO_PREPARE: return "确认后会先尝试安全热切换；若 pm:shell 或交接证明不可用，才准备启动标志并提示重启一次。标准数据和二进制不会被修改。";
     case PTC_LAB_NRO_REBOOT_TO_LAB: return "实验后台启动标志已经准备完成。请退出本程序并完整重启主机，然后从 Tesla 或 Ultrahand 打开 Device Lab 浮窗。";
     case PTC_LAB_NRO_START_OVERLAY: return "实验后台正在运行。请打开 Device Lab 浮窗，选择聚焦限制复测、Timer 激活 A/B 或高级完整取证。";
     case PTC_LAB_NRO_RESUME_OVERLAY: return "会话进度已经保存。重新打开 Device Lab 浮窗即可从当前阶段继续。";
     case PTC_LAB_NRO_RESTORE_PCTL: return "当前尚未证明 PCTL 原设置已精确恢复。程序不会切换启动标志，请先执行立即恢复。";
-    case PTC_LAB_NRO_RESTORE_NORMAL: return "PCTL 原设置已精确恢复。完整会话会生成正式报告；提前停止的会话只保留草稿。现在可以安全切回正常 PlayWise 后台。";
+    case PTC_LAB_NRO_RESTORE_NORMAL: return "PCTL 原设置已精确恢复。未完成资格批次会保留进度和报告；现在可以安全热切回正常后台，必要时自动回退一次重启。";
     case PTC_LAB_NRO_RECOVER_FLAGS: return "上次启动切换没有完整结束。只允许按事务记录恢复，不会覆盖未知文件。";
     case PTC_LAB_NRO_SESSION_INVALID: return "无法可信读取 session.json。为避免覆盖取证现场，已禁止开始新会话或切换启动标志。";
     case PTC_LAB_NRO_REBOOT_TO_NORMAL: return "启动标志已经精确恢复。请退出本程序并完整重启主机，重启后标准 PlayWise 后台将恢复运行。";
@@ -181,6 +188,29 @@ const char *ptc_lab_phase_title_zh(int phase)
         "游戏挂起并返回 HOME", "主机待机并再次唤醒", "观察时间限制效果"
     };
     return phase >= 0 && phase < 6 ? labels[phase] : "所有阶段已完成";
+}
+
+bool ptc_lab_campaign_parse(const char *text, PtcLabCampaignView *view)
+{
+    PtcLabCampaignView parsed;
+    int64_t value;
+    int index;
+    if (!text || !view) return false;
+    memset(&parsed, 0, sizeof(parsed));
+    if (!ptc_lab_json_string(text, "campaign_id", parsed.campaign_id, sizeof(parsed.campaign_id)) ||
+        !ptc_lab_json_string(text, "state", parsed.state, sizeof(parsed.state)) ||
+        !ptc_lab_json_string(text, "original_pause_state", parsed.original_pause_state,
+            sizeof(parsed.original_pause_state)) ||
+        !ptc_lab_json_string(text, "entry_method", parsed.entry_method, sizeof(parsed.entry_method)) ||
+        !json_int(text, "next_slot", &value) || value < 0 || value > 4) return false;
+    parsed.next_slot = (int)value;
+    for (index = 0; index < 4; ++index) {
+        char key[24];
+        snprintf(key, sizeof(key), "attempt_%d", index);
+        if (json_int(text, key, &value)) parsed.attempts[index] = (int)value;
+    }
+    *view = parsed;
+    return true;
 }
 
 const char *ptc_lab_phase_title_for_mode_zh(const char *mode, int phase)
@@ -260,6 +290,7 @@ const char *ptc_lab_transport_error_zh(int status)
     case 5: return "无法把请求安全写入 SD 卡。请检查 SD 卡后重试。";
     case 6:
     case 7: return "后台返回结果损坏或与本次请求不匹配。请勿继续下一阶段。";
+    case 8: return "后台正在安全切换，请稍后重新打开浮窗；请求没有降级重提。";
     default: return "无法连接实验后台。请确认已重启主机，并检查 Device Lab 安装是否完整。";
     }
 }

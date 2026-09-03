@@ -45,7 +45,13 @@ $(BUILD)/ui_model.o: ../ui_model.c ../ui_model.h | $(BUILD)
 $(BUILD)/boot_flags.o: ../boot_flags.c ../boot_flags.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGET).elf: $(BUILD)/main.o $(BUILD)/ui_graphics.o $(BUILD)/ui_model.o $(BUILD)/boot_flags.o
+$(BUILD)/hot_switch.o: hot_switch.c hot_switch.h ../boot_flags.h $(MANIFEST_HEADER) | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/handoff_guard.o: ../handoff_guard.c ../handoff_guard.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TARGET).elf: $(BUILD)/main.o $(BUILD)/ui_graphics.o $(BUILD)/ui_model.o $(BUILD)/boot_flags.o $(BUILD)/hot_switch.o $(BUILD)/handoff_guard.o
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(NACP): $(MAKEFILE_LIST)

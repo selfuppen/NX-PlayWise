@@ -159,6 +159,30 @@ static bool lab_runtime_effect_is_valid(const char *value)
         strcmp(value, "unsure") == 0;
 }
 
+static bool lab_pause_state_is_valid(const char *value)
+{
+    return value && (strcmp(value, "on") == 0 || strcmp(value, "off") == 0);
+}
+
+static bool lab_campaign_slot_is_valid(const char *value)
+{
+    return value && (strcmp(value, "timer_activation_ab") == 0 ||
+        strcmp(value, "pause_on_game_a") == 0 ||
+        strcmp(value, "pause_on_game_b") == 0 ||
+        strcmp(value, "pause_off_game_b") == 0);
+}
+
+static bool lab_game_slot_is_valid(const char *value)
+{
+    return value && (strcmp(value, "none") == 0 || strcmp(value, "a") == 0 || strcmp(value, "b") == 0);
+}
+
+static bool lab_pause_expectation_is_valid(const char *value)
+{
+    return value && (strcmp(value, "not_applicable") == 0 ||
+        strcmp(value, "on") == 0 || strcmp(value, "off") == 0);
+}
+
 static bool json_bool_optional(const char *text, const char *key, bool default_value, bool *out)
 {
     const char *pos = find_key(text, key);
@@ -324,6 +348,9 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "lab_session_status") == 0) return PTC_REQUEST_LAB_SESSION_STATUS;
     if (strcmp(value, "lab_observation") == 0) return PTC_REQUEST_LAB_OBSERVATION;
     if (strcmp(value, "lab_session_restore") == 0) return PTC_REQUEST_LAB_SESSION_RESTORE;
+    if (strcmp(value, "lab_campaign_start") == 0) return PTC_REQUEST_LAB_CAMPAIGN_START;
+    if (strcmp(value, "lab_campaign_status") == 0) return PTC_REQUEST_LAB_CAMPAIGN_STATUS;
+    if (strcmp(value, "lab_campaign_abandon") == 0) return PTC_REQUEST_LAB_CAMPAIGN_ABANDON;
 #endif
     return PTC_REQUEST_UNKNOWN;
 }
@@ -388,6 +415,12 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "lab_observation";
     case PTC_REQUEST_LAB_SESSION_RESTORE:
         return "lab_session_restore";
+    case PTC_REQUEST_LAB_CAMPAIGN_START:
+        return "lab_campaign_start";
+    case PTC_REQUEST_LAB_CAMPAIGN_STATUS:
+        return "lab_campaign_status";
+    case PTC_REQUEST_LAB_CAMPAIGN_ABANDON:
+        return "lab_campaign_abandon";
 #endif
     case PTC_REQUEST_UNKNOWN:
     default:
@@ -483,10 +516,29 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         if (find_key(text, "mode") &&
             (!json_string(text, "mode", out->lab_mode, sizeof(out->lab_mode)) ||
              !lab_mode_is_valid(out->lab_mode))) return PTC_ERR_BAD_REQUEST;
+        if (find_key(text, "campaign_id")) {
+            if (!json_string(text, "campaign_id", out->campaign_id, sizeof(out->campaign_id)) ||
+                !ptc_request_id_is_valid(out->campaign_id) ||
+                !json_string(text, "campaign_slot", out->campaign_slot, sizeof(out->campaign_slot)) ||
+                !lab_campaign_slot_is_valid(out->campaign_slot) ||
+                !json_string(text, "game_slot", out->game_slot, sizeof(out->game_slot)) ||
+                !lab_game_slot_is_valid(out->game_slot) ||
+                !json_string(text, "official_pause_expected", out->official_pause_expected,
+                    sizeof(out->official_pause_expected)) ||
+                !lab_pause_expectation_is_valid(out->official_pause_expected) ||
+                !json_bool_optional(text, "context_confirmed", false, &out->context_confirmed) ||
+                !out->context_confirmed) return PTC_ERR_BAD_REQUEST;
+        }
         return PTC_ERR_OK;
     case PTC_REQUEST_LAB_SESSION_STATUS:
     case PTC_REQUEST_LAB_SESSION_RESTORE:
+    case PTC_REQUEST_LAB_CAMPAIGN_STATUS:
+    case PTC_REQUEST_LAB_CAMPAIGN_ABANDON:
         return PTC_ERR_OK;
+    case PTC_REQUEST_LAB_CAMPAIGN_START:
+        return json_string(text, "original_pause_state", out->original_pause_state,
+            sizeof(out->original_pause_state)) && lab_pause_state_is_valid(out->original_pause_state)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_LAB_PHASE_START:
         return json_string(text, "phase", out->phase, sizeof(out->phase)) && lab_phase_is_valid(out->phase)
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;

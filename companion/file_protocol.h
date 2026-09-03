@@ -19,6 +19,7 @@ typedef enum {
     PTC_COMPANION_RENAME_FAILED = 5,
     PTC_COMPANION_RESULT_INVALID = 6,
     PTC_COMPANION_RESULT_MISMATCH = 7,
+    PTC_COMPANION_QUIESCING = 8,
 } PtcCompanionStatus;
 
 typedef struct {

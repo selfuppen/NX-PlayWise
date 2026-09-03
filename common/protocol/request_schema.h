@@ -28,6 +28,12 @@ typedef struct {
     char phase[32];
     char observation[32];
     char runtime_effect[32];
+    char original_pause_state[8];
+    char campaign_id[48];
+    char campaign_slot[40];
+    char game_slot[8];
+    char official_pause_expected[16];
+    bool context_confirmed;
 #endif
 } PtcRequest;
 

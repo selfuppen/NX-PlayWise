@@ -11,6 +11,7 @@
 #include "../boot_flags.h"
 #include "../ui_model.h"
 #include "ui_graphics.h"
+#include "hot_switch.h"
 #include "release_manifest.h"
 
 __attribute__((used)) static const char PLAYWISE_EMBEDDED_MANIFEST[] = PLAYWISE_RELEASE_MANIFEST_JSON;
@@ -48,10 +49,13 @@ static bool ensure_directories(char *failed_path, size_t failed_path_size)
 {
     static const char *const paths[] = {
         PLAYWISE_DEVICE_LAB_SD_ROOT,
+        PLAYWISE_RELEASE_SD_ROOT,
         PLAYWISE_DEVICE_LAB_SD_ROOT "/lab",
         PLAYWISE_DEVICE_LAB_SD_ROOT "/reports",
         PLAYWISE_DEVICE_LAB_SD_ROOT "/inbox",
         PLAYWISE_DEVICE_LAB_SD_ROOT "/inbox/pending",
+        PLAYWISE_DEVICE_LAB_SD_ROOT "/handover",
+        PLAYWISE_RELEASE_SD_ROOT "/handover",
         /* The opt-in package intentionally has no boot2.flag. Zip extraction
            therefore may not materialize this otherwise-empty directory. */
         STANDARD_FLAGS_DIR,
@@ -79,6 +83,41 @@ static PtcLabSessionLoadStatus load_session(PtcLabSessionView *view)
     return ptc_lab_session_parse(text, view) ? PTC_LAB_SESSION_VALID : PTC_LAB_SESSION_INVALID;
 }
 
+static bool lab_runtime_ready(void)
+{
+    char text[1280];
+    char expected[80];
+    FILE *file;
+    size_t got;
+    u64 pid;
+    if (R_FAILED(pmshellInitialize())) return false;
+    if (R_FAILED(pmshellGetProcessId(&pid, UINT64_C(0x4200000000BD23F0)))) {
+        pmshellExit();
+        return false;
+    }
+    pmshellExit();
+    file = fopen(PLAYWISE_DEVICE_LAB_SD_ROOT "/handover/runtime-ready.json", "rb");
+    if (!file) return false;
+    got = fread(text, 1, sizeof(text) - 1U, file);
+    if (fclose(file) != 0 || got == 0 || got >= sizeof(text) - 1U) return false;
+    text[got] = '\0';
+    snprintf(expected, sizeof(expected), "\"pid\":%llu", (unsigned long long)pid);
+    return strstr(text, expected) != NULL && strstr(text, "\"profile\":\"device-lab\"") != NULL &&
+        strstr(text, "\"release_id\":\"" PLAYWISE_BUILD_RELEASE_ID "\"") != NULL;
+}
+
+static bool load_campaign(PtcLabCampaignView *view)
+{
+    char text[4096];
+    FILE *file = fopen(PLAYWISE_DEVICE_LAB_SD_ROOT "/lab/campaign.json", "rb");
+    size_t got;
+    if (!file) return false;
+    got = fread(text, 1, sizeof(text) - 1U, file);
+    if (fclose(file) != 0 || got == 0 || got >= sizeof(text) - 1U) return false;
+    text[got] = '\0';
+    return ptc_lab_campaign_parse(text, view);
+}
+
 static bool find_current_report(const PtcLabSessionView *session, bool final,
     char *path, size_t path_size)
 {
@@ -95,7 +134,8 @@ static void set_feedback(App *app, bool error, const char *message, const char *
 {
     app->ui.message_is_error = error;
     snprintf(app->ui.message, sizeof(app->ui.message), "%s", message ? message : "");
-    snprintf(app->ui.technical, sizeof(app->ui.technical), "%s", technical ? technical : "");
+    snprintf(app->ui.technical, sizeof(app->ui.technical), "%.*s",
+        (int)sizeof(app->ui.technical) - 1, technical ? technical : "");
 }
 
 static void refresh_status(App *app)
@@ -103,12 +143,10 @@ static void refresh_status(App *app)
     bool inspected = ptc_lab_boot_flags_inspect(&FLAG_PATHS, &app->boot);
     memset(&app->ui.session, 0, sizeof(app->ui.session));
     app->ui.session_status = load_session(&app->ui.session);
-    /* Never probe pwtl:u from the NRO. SM may wait indefinitely for an absent
-       service both immediately after enabling the boot flag and in a torn
-       boot-switch transaction. A persisted session proves that the Lab
-       backend has run; all NRO recovery requests use the durable SD queue. */
+    /* Never probe pwtl:u from the NRO. PM plus the runtime identity record can
+       prove a hot-started backend without waiting on an absent SM service. */
     app->lab_service_running = inspected && app->boot.state == PTC_LAB_BOOT_ENABLED &&
-        app->ui.session_status != PTC_LAB_SESSION_MISSING;
+        (lab_runtime_ready() || app->ui.session_status != PTC_LAB_SESSION_MISSING);
     app->ui.report_available = app->ui.session_status == PTC_LAB_SESSION_VALID &&
         find_current_report(&app->ui.session, true, app->ui.report_path, sizeof(app->ui.report_path));
     app->ui.draft_available = false;
@@ -117,6 +155,12 @@ static void refresh_status(App *app)
             app->ui.report_path, sizeof(app->ui.report_path));
     app->ui.stage = inspected ? ptc_lab_nro_stage(&app->boot, app->lab_service_running,
         app->ui.session_status, &app->ui.session) : PTC_LAB_NRO_CONFLICT;
+    if (!app->ui.message[0] && app->ui.stage == PTC_LAB_NRO_RESTORE_NORMAL) {
+        PtcLabCampaignView campaign;
+        if (load_campaign(&campaign))
+            snprintf(app->ui.message, sizeof(app->ui.message), "恢复后台后，请把官方暂停设置恢复为：%s。",
+                strcmp(campaign.original_pause_state, "on") == 0 ? "开启" : "关闭");
+    }
     if (!app->ui.message[0]) {
         snprintf(app->ui.technical, sizeof(app->ui.technical),
             "boot_state=%d\njournal_phase=%s\nlab_runtime_evidence=%s\nsession=%d\nmode=%s\nroot=%s",
@@ -172,15 +216,12 @@ static bool queue_session_restore(App *app)
 static void complete_flag_operation(App *app, Operation operation)
 {
     char message[320];
-    PtcLabBootFlagResult result;
-    if (operation == OPERATION_ENABLE)
-        result = ptc_lab_boot_flags_enable(&FLAG_PATHS, message, sizeof(message));
-    else
-        result = ptc_lab_boot_flags_restore(&FLAG_PATHS, message, sizeof(message));
-    set_feedback(app, result != PTC_LAB_FLAG_OK && result != PTC_LAB_FLAG_ALREADY_DONE, message, "");
-    snprintf(app->ui.technical, sizeof(app->ui.technical),
-        "boot_flag_result=%d\njournal=%s\nlab_flag=%s",
-        (int)result, FLAG_PATHS.journal, FLAG_PATHS.lab_flag);
+    char technical[512];
+    PtcHotSwitchResult result = operation == OPERATION_ENABLE
+        ? ptc_hot_switch_enter(&FLAG_PATHS, message, sizeof(message), technical, sizeof(technical))
+        : ptc_hot_switch_leave(&FLAG_PATHS, app->boot.standard_was_enabled,
+            message, sizeof(message), technical, sizeof(technical));
+    set_feedback(app, result == PTC_HOT_SWITCH_REFUSED, message, technical);
     refresh_status(app);
 }
 

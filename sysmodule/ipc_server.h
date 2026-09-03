@@ -34,6 +34,7 @@ typedef struct {
     PtcIpcResultCacheEntry result_cache[8];
     unsigned int result_cache_next;
     bool running;
+    bool accepting;
     bool registered;
 } PtcIpcServer;
 
@@ -44,6 +45,7 @@ bool ptc_ipc_server_wait(PtcIpcServer *server, uint32_t timeout_ms);
 void ptc_ipc_server_signal_completed(PtcIpcServer *server);
 void ptc_ipc_server_lock_storage(PtcIpcServer *server);
 void ptc_ipc_server_unlock_storage(PtcIpcServer *server);
+void ptc_ipc_server_set_accepting(PtcIpcServer *server, bool accepting);
 
 #endif
 #endif

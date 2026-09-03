@@ -153,6 +153,10 @@ static PtcCompanionStatus backend_submit(void *ctx, const char *request_id, cons
         if (event_handle != INVALID_HANDLE) svcCloseHandle(event_handle);
         return PTC_COMPANION_BAD_ARGUMENT;
     }
+    if (out.status == PTC_IPC_SUBMIT_QUIESCING) {
+        if (event_handle != INVALID_HANDLE) svcCloseHandle(event_handle);
+        return PTC_COMPANION_QUIESCING;
+    }
     if (out.status == PTC_IPC_SUBMIT_STORAGE_FAILED || out.status == PTC_IPC_SUBMIT_TOO_MANY_WAITERS) {
         if (event_handle != INVALID_HANDLE) svcCloseHandle(event_handle);
         return PTC_COMPANION_WRITE_FAILED;

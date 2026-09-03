@@ -110,6 +110,12 @@ static void handle_submit(PtcIpcServer *server, HipcParsedRequest *hipc, const v
     if (ptc_request_parse(request_text, &request) != PTC_ERR_OK) { make_response_handle(0, &out, sizeof(out), server->error_event.revent); return; }
     mutexLock(&server->storage_mutex);
     reclaim_signaled_waiters(server);
+    if (!server->accepting) {
+        mutexUnlock(&server->storage_mutex);
+        out.status = PTC_IPC_SUBMIT_QUIESCING;
+        make_response_handle(0, &out, sizeof(out), server->error_event.revent);
+        return;
+    }
     for (i = 0; i < PTC_IPC_MAX_WAITERS; ++i) {
         if (server->waiters[i].active && strcmp(server->waiters[i].request_id, request.request_id) == 0) { waiter = &server->waiters[i]; break; }
     }
@@ -317,6 +323,7 @@ bool ptc_ipc_server_start(PtcIpcServer *server, PtcSysmodule *sysmodule)
     }
     server->registered = true;
     server->running = true;
+    server->accepting = true;
     if (R_FAILED(threadCreate(&server->thread, ipc_thread, server, NULL, 0x8000, 45, -2)) || R_FAILED(threadStart(&server->thread))) {
         ptc_ipc_server_stop(server);
         return false;
@@ -379,4 +386,11 @@ void ptc_ipc_server_signal_completed(PtcIpcServer *server)
 
 void ptc_ipc_server_lock_storage(PtcIpcServer *server) { if (server) mutexLock(&server->storage_mutex); }
 void ptc_ipc_server_unlock_storage(PtcIpcServer *server) { if (server) mutexUnlock(&server->storage_mutex); }
+void ptc_ipc_server_set_accepting(PtcIpcServer *server, bool accepting)
+{
+    if (!server) return;
+    mutexLock(&server->storage_mutex);
+    server->accepting = accepting;
+    mutexUnlock(&server->storage_mutex);
+}
 #endif

@@ -14,8 +14,13 @@ typedef enum {
 } PtcLabSessionLoadStatus;
 
 typedef struct {
-    char run_id[48];
+    char run_id[80];
     char mode[32];
+    char campaign_id[48];
+    char campaign_slot[40];
+    char game_slot[8];
+    char official_pause_expected[16];
+    int campaign_attempt;
     char state[32];
     char active_phase[32];
     char restore_verdict[32];
@@ -26,6 +31,15 @@ typedef struct {
     bool restored;
     bool baseline_all_zero;
 } PtcLabSessionView;
+
+typedef struct {
+    char campaign_id[48];
+    char state[16];
+    char original_pause_state[8];
+    char entry_method[16];
+    int next_slot;
+    int attempts[4];
+} PtcLabCampaignView;
 
 typedef enum {
     PTC_LAB_NRO_PREPARE = 0,
@@ -48,6 +62,7 @@ typedef struct {
 } PtcLabUiRect;
 
 bool ptc_lab_session_parse(const char *text, PtcLabSessionView *view);
+bool ptc_lab_campaign_parse(const char *text, PtcLabCampaignView *view);
 bool ptc_lab_json_string(const char *text, const char *key, char *out, size_t out_size);
 bool ptc_lab_result_error(const char *text, int *error_code, char *reason, size_t reason_size);
 PtcLabNroStage ptc_lab_nro_stage(const PtcLabBootStatus *boot, bool lab_service_running,

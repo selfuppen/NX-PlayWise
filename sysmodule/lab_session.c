@@ -31,8 +31,13 @@ static const char *const LAB_ACTIVATION_AB_PHASES[] = {
 };
 
 typedef struct {
-    char run_id[48];
+    char run_id[80];
     char mode[32];
+    char campaign_id[48];
+    char campaign_slot[40];
+    char game_slot[8];
+    char official_pause_expected[16];
+    int campaign_attempt;
     char state[32];
     int next_phase;
     char active_phase[32];
@@ -61,6 +66,34 @@ typedef struct {
     PtcPctlSettingsSnapshot original;
     PtcPctlForensicSample before;
 } LabState;
+
+#define LAB_CAMPAIGN_SLOT_COUNT 4
+
+typedef struct {
+    char campaign_id[48];
+    char state[16];
+    char original_pause_state[8];
+    char entry_method[16];
+    int next_slot;
+    int attempts[LAB_CAMPAIGN_SLOT_COUNT];
+    char accepted_run_ids[LAB_CAMPAIGN_SLOT_COUNT][80];
+} LabCampaign;
+
+static const char *const LAB_CAMPAIGN_SLOTS[LAB_CAMPAIGN_SLOT_COUNT] = {
+    "timer_activation_ab", "pause_on_game_a", "pause_on_game_b", "pause_off_game_b"
+};
+
+static const char *const LAB_CAMPAIGN_MODES[LAB_CAMPAIGN_SLOT_COUNT] = {
+    "timer_activation_ab", "restriction_quick", "restriction_quick", "restriction_quick"
+};
+
+static const char *const LAB_CAMPAIGN_GAMES[LAB_CAMPAIGN_SLOT_COUNT] = {
+    "none", "a", "b", "b"
+};
+
+static const char *const LAB_CAMPAIGN_PAUSE[LAB_CAMPAIGN_SLOT_COUNT] = {
+    "not_applicable", "on", "on", "off"
+};
 
 static const char *skip_ws(const char *p)
 {
@@ -167,6 +200,85 @@ static void state_path(PtcSysmodule *sysmodule, char *out, size_t size)
     snprintf(out, size, "%s/lab/session.json", sysmodule->app_root);
 }
 
+static bool read_fragment(PtcSysmodule *sysmodule, const char *relative, char *out, size_t size);
+
+static void campaign_path(PtcSysmodule *sysmodule, char *out, size_t size)
+{
+    snprintf(out, size, "%s/lab/campaign.json", sysmodule->app_root);
+}
+
+static bool save_campaign(PtcSysmodule *sysmodule, const LabCampaign *campaign)
+{
+    char path[320];
+    char text[2048];
+    campaign_path(sysmodule, path, sizeof(path));
+    snprintf(text, sizeof(text),
+        "{\"version\":1,\"schema_version\":1,\"campaign_id\":\"%s\",\"state\":\"%s\","
+        "\"original_pause_state\":\"%s\",\"entry_method\":\"%s\",\"next_slot\":%d,"
+        "\"attempts\":[%d,%d,%d,%d],"
+        "\"attempt_0\":%d,\"attempt_1\":%d,\"attempt_2\":%d,\"attempt_3\":%d,"
+        "\"accepted_run_ids\":[%s%s%s,%s%s%s,%s%s%s,%s%s%s],"
+        "\"accepted_run_0\":\"%s\",\"accepted_run_1\":\"%s\","
+        "\"accepted_run_2\":\"%s\",\"accepted_run_3\":\"%s\"}\n",
+        campaign->campaign_id, campaign->state, campaign->original_pause_state,
+        campaign->entry_method, campaign->next_slot,
+        campaign->attempts[0], campaign->attempts[1], campaign->attempts[2], campaign->attempts[3],
+        campaign->attempts[0], campaign->attempts[1], campaign->attempts[2], campaign->attempts[3],
+        campaign->accepted_run_ids[0][0] ? "\"" : "", campaign->accepted_run_ids[0][0] ? campaign->accepted_run_ids[0] : "null", campaign->accepted_run_ids[0][0] ? "\"" : "",
+        campaign->accepted_run_ids[1][0] ? "\"" : "", campaign->accepted_run_ids[1][0] ? campaign->accepted_run_ids[1] : "null", campaign->accepted_run_ids[1][0] ? "\"" : "",
+        campaign->accepted_run_ids[2][0] ? "\"" : "", campaign->accepted_run_ids[2][0] ? campaign->accepted_run_ids[2] : "null", campaign->accepted_run_ids[2][0] ? "\"" : "",
+        campaign->accepted_run_ids[3][0] ? "\"" : "", campaign->accepted_run_ids[3][0] ? campaign->accepted_run_ids[3] : "null", campaign->accepted_run_ids[3][0] ? "\"" : "",
+        campaign->accepted_run_ids[0], campaign->accepted_run_ids[1],
+        campaign->accepted_run_ids[2], campaign->accepted_run_ids[3]);
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
+}
+
+static bool load_campaign(PtcSysmodule *sysmodule, LabCampaign *campaign)
+{
+    char path[320];
+    char text[2048];
+    int64_t value;
+    int i;
+    memset(campaign, 0, sizeof(*campaign));
+    campaign_path(sysmodule, path, sizeof(path));
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text)) ||
+        !json_string(text, "campaign_id", campaign->campaign_id, sizeof(campaign->campaign_id)) ||
+        !json_string(text, "state", campaign->state, sizeof(campaign->state)) ||
+        !json_string(text, "original_pause_state", campaign->original_pause_state, sizeof(campaign->original_pause_state)) ||
+        !json_string(text, "entry_method", campaign->entry_method, sizeof(campaign->entry_method)) ||
+        !json_i64(text, "next_slot", &value)) return false;
+    campaign->next_slot = (int)value;
+    for (i = 0; i < LAB_CAMPAIGN_SLOT_COUNT; ++i) {
+        char key[32];
+        snprintf(key, sizeof(key), "attempt_%d", i);
+        if (json_i64(text, key, &value)) campaign->attempts[i] = (int)value;
+        snprintf(key, sizeof(key), "accepted_run_%d", i);
+        (void)json_string(text, key, campaign->accepted_run_ids[i], sizeof(campaign->accepted_run_ids[i]));
+    }
+    return campaign->next_slot >= 0 && campaign->next_slot <= LAB_CAMPAIGN_SLOT_COUNT;
+}
+
+static void activation_method(PtcSysmodule *sysmodule, char out[16])
+{
+    char text[1024];
+    snprintf(out, 16, "reboot");
+    if (read_fragment(sysmodule, "lab/activation.json", text, sizeof(text)))
+        (void)json_string(text, "entry_method", out, 16);
+}
+
+static void id_suffix(const char *value, char out[13])
+{
+    PtcSha256Ctx ctx;
+    uint8_t digest[PTC_SHA256_DIGEST_SIZE];
+    char hex[PTC_SHA256_DIGEST_SIZE * 2U + 1U];
+    ptc_sha256_init(&ctx);
+    ptc_sha256_update(&ctx, (const uint8_t *)value, strlen(value));
+    ptc_sha256_final(&ctx, digest);
+    bytes_hex(digest, sizeof(digest), hex, sizeof(hex));
+    memcpy(out, hex, 12U);
+    out[12] = '\0';
+}
+
 static void final_report_path(PtcSysmodule *sysmodule, const LabState *state, char *out, size_t size)
 {
     snprintf(out, size, "%s/reports/%s.json", sysmodule->app_root, state->run_id);
@@ -230,7 +342,10 @@ static bool save_state(PtcSysmodule *sysmodule, const LabState *state)
     bytes_hex(state->original.data, sizeof(state->original.data), original_hex, sizeof(original_hex));
     bytes_hex(state->before.settings, sizeof(state->before.settings), before_hex, sizeof(before_hex));
     snprintf(text, sizeof(text),
-        "{\"version\":2,\"run_id\":\"%s\",\"mode\":\"%s\",\"state\":\"%s\",\"next_phase\":%d,"
+        "{\"version\":2,\"run_id\":\"%s\",\"mode\":\"%s\","
+        "\"campaign_id\":\"%s\",\"campaign_slot\":\"%s\",\"campaign_attempt\":%d,"
+        "\"game_slot\":\"%s\",\"official_pause_expected\":\"%s\","
+        "\"state\":\"%s\",\"next_phase\":%d,"
         "\"active_phase\":\"%s\",\"started_at\":%lld,\"deadline\":%lld,"
         "\"observation\":\"%s\",\"runtime_effect\":\"%s\",\"baseline_all_zero\":%s,"
         "\"activation_preconditions_met\":%s,\"baseline_remaining_ns\":%lld,"
@@ -248,7 +363,9 @@ static bool save_state(PtcSysmodule *sysmodule, const LabState *state)
         "\"before_restricted_rc\":%u,\"before_restricted\":%s,"
         "\"before_spent_rc\":%u,\"before_spent_ns\":%lld,"
         "\"before_settings_rc\":%u,\"before_settings_hex\":\"%s\"}\n",
-        state->run_id, state->mode, state->state, state->next_phase, state->active_phase,
+        state->run_id, state->mode, state->campaign_id, state->campaign_slot,
+        state->campaign_attempt, state->game_slot, state->official_pause_expected,
+        state->state, state->next_phase, state->active_phase,
         (long long)state->started_at, (long long)state->deadline, state->observation,
         state->runtime_effect, state->baseline_all_zero ? "true" : "false",
         state->activation_preconditions_met ? "true" : "false",
@@ -299,6 +416,12 @@ static bool load_state(PtcSysmodule *sysmodule, LabState *state)
         !json_string(text, "before_settings_hex", before_hex, sizeof(before_hex))) return false;
     state->next_phase = (int)value;
     (void)json_string(text, "mode", state->mode, sizeof(state->mode));
+    (void)json_string(text, "campaign_id", state->campaign_id, sizeof(state->campaign_id));
+    (void)json_string(text, "campaign_slot", state->campaign_slot, sizeof(state->campaign_slot));
+    (void)json_string(text, "game_slot", state->game_slot, sizeof(state->game_slot));
+    (void)json_string(text, "official_pause_expected", state->official_pause_expected,
+        sizeof(state->official_pause_expected));
+    if (json_i64(text, "campaign_attempt", &value)) state->campaign_attempt = (int)value;
     (void)json_string(text, "runtime_effect", state->runtime_effect, sizeof(state->runtime_effect));
     (void)json_bool(text, "baseline_all_zero", &state->baseline_all_zero);
     (void)json_bool(text, "activation_preconditions_met", &state->activation_preconditions_met);
@@ -339,7 +462,9 @@ static bool write_result(PtcSysmodule *sysmodule, const PtcRequest *request,
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     char path[320];
     char report[320];
-    char json[2048];
+    char json[3072];
+    LabCampaign campaign;
+    bool campaign_loaded = load_campaign(sysmodule, &campaign);
     size_t used;
     ptc_result_state_default(&result_state, now.day_index);
     if (error == PTC_ERR_OK) {
@@ -357,9 +482,18 @@ static bool write_result(PtcSysmodule *sysmodule, const PtcRequest *request,
     snprintf(json + strlen(json), sizeof(json) - strlen(json),
         ",\"lab_session\":{\"run_id\":\"%s\",\"mode\":\"%s\",\"state\":\"%s\",\"next_phase\":%d,"
         "\"active_phase\":\"%s\",\"deadline\":%lld,\"restored\":%s,"
-        "\"restore_verdict\":\"%s\",\"report_path\":\"%s\"}}\n",
+        "\"restore_verdict\":\"%s\",\"report_path\":\"%s\"},\"lab_campaign\":",
         state->run_id, state->mode, state->state, state->next_phase, state->active_phase,
         (long long)state->deadline, state->restored ? "true" : "false", state->restore_verdict, report);
+    if (campaign_loaded) {
+        snprintf(json + strlen(json), sizeof(json) - strlen(json),
+            "{\"campaign_id\":\"%s\",\"state\":\"%s\",\"original_pause_state\":\"%s\","
+            "\"entry_method\":\"%s\",\"next_slot\":%d,\"slot_count\":%d}}\n",
+            campaign.campaign_id, campaign.state, campaign.original_pause_state,
+            campaign.entry_method, campaign.next_slot, LAB_CAMPAIGN_SLOT_COUNT);
+    } else {
+        snprintf(json + strlen(json), sizeof(json) - strlen(json), "null}\n");
+    }
     snprintf(path, sizeof(path), "%s/results/%s.json", sysmodule->app_root, request->request_id);
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, json);
 }
@@ -442,6 +576,19 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
     int activation_evidence_complete = -1;
     int lifecycle_evidence_complete = -1;
     bool complete;
+    char entry_method[16];
+    char campaign_fragment[384];
+    activation_method(sysmodule, entry_method);
+    if (state->campaign_id[0]) {
+        snprintf(campaign_fragment, sizeof(campaign_fragment),
+            "{\"campaign_id\":\"%s\",\"slot\":\"%s\",\"attempt\":%d,"
+            "\"game_slot\":\"%s\",\"official_pause_expected\":\"%s\","
+            "\"context_confirmed\":true}",
+            state->campaign_id, state->campaign_slot, state->campaign_attempt,
+            state->game_slot, state->official_pause_expected);
+    } else {
+        snprintf(campaign_fragment, sizeof(campaign_fragment), "null");
+    }
     if (strcmp(state->mode, "timer_activation_ab") == 0) {
         activation_evidence_complete = state->home_awake_counted >= 0 && state->sleep_excluded >= 0 &&
             state->limited_settings_only_runtime_ready >= 0 && state->grant_settings_only_runtime_ready >= 0 &&
@@ -455,11 +602,13 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
     }
     int written = snprintf(report, sizeof(report),
         "{\"version\":2,\"schema_version\":2,\"run_id\":\"%s\",\"mode\":\"%s\",\"report_status\":\"draft\","
+        "\"entry_method\":\"%s\",\"campaign\":%s,"
         "\"baseline\":{\"settings_all_zero\":%s,\"activation_preconditions_met\":%s,"
         "\"remaining_ns\":%lld,\"minimum_remaining_ns\":%lld},"
         "\"environment\":{\"title_id\":\"%s\","
         "\"ipc_service\":\"%s\",\"sd_root\":\"%s\",\"runtime\":",
-        state->run_id, state->mode, state->baseline_all_zero ? "true" : "false",
+        state->run_id, state->mode, entry_method, campaign_fragment,
+        state->baseline_all_zero ? "true" : "false",
         state->activation_preconditions_met ? "true" : "false",
         (long long)state->baseline_remaining_ns, (long long)LAB_MINIMUM_REMAINING_NS,
         PLAYWISE_TITLE_ID, PLAYWISE_IPC_SERVICE, PLAYWISE_SD_ROOT);
@@ -537,6 +686,127 @@ static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
     }
     draft_report_path(sysmodule, state, path, sizeof(path));
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, report);
+}
+
+static bool campaign_slot_observed(const LabState *state, int slot)
+{
+    if (slot == 0) {
+        return strcmp(state->mode, "timer_activation_ab") == 0 &&
+            state->home_awake_counted == 1 && state->sleep_excluded == 1 &&
+            ((state->limited_settings_only_runtime_ready == 1 && state->limited_fallback_called == 0) ||
+                (state->limited_settings_only_runtime_ready == 0 && state->limited_fallback_called == 1 &&
+                    state->limited_fallback_succeeded == 1)) &&
+            ((state->grant_settings_only_runtime_ready == 1 && state->grant_fallback_called == 0) ||
+                (state->grant_settings_only_runtime_ready == 0 && state->grant_fallback_called == 1 &&
+                    state->grant_fallback_succeeded == 1)) &&
+            ((state->unlimited_settings_only_runtime_ready == 1 && state->unlimited_fallback_called == 0) ||
+                (state->unlimited_settings_only_runtime_ready == 0 && state->unlimited_fallback_called == 1 &&
+                    state->unlimited_fallback_succeeded == 1));
+    }
+    if (strcmp(state->observation, "restriction_visible") != 0) return false;
+    return slot == 3
+        ? strcmp(state->runtime_effect, "continued") == 0
+        : strcmp(state->runtime_effect, "paused_or_suspended") == 0;
+}
+
+static bool write_campaign_manifest(PtcSysmodule *sysmodule, const LabCampaign *campaign)
+{
+    char path[320];
+    char text[2048];
+    snprintf(path, sizeof(path), "%s/reports/%s.campaign.json", sysmodule->app_root,
+        campaign->campaign_id);
+    snprintf(text, sizeof(text),
+        "{\"version\":1,\"schema_version\":1,\"report_status\":\"final\","
+        "\"campaign_id\":\"%s\",\"state\":\"complete\","
+        "\"original_pause_state\":\"%s\",\"entry_method\":\"%s\","
+        "\"accepted_run_ids\":[\"%s\",\"%s\",\"%s\",\"%s\"],"
+        "\"slots\":["
+        "{\"slot\":\"%s\",\"run_id\":\"%s\",\"attempts\":%d},"
+        "{\"slot\":\"%s\",\"run_id\":\"%s\",\"attempts\":%d},"
+        "{\"slot\":\"%s\",\"run_id\":\"%s\",\"attempts\":%d},"
+        "{\"slot\":\"%s\",\"run_id\":\"%s\",\"attempts\":%d}]}\n",
+        campaign->campaign_id, campaign->original_pause_state, campaign->entry_method,
+        campaign->accepted_run_ids[0], campaign->accepted_run_ids[1],
+        campaign->accepted_run_ids[2], campaign->accepted_run_ids[3],
+        LAB_CAMPAIGN_SLOTS[0], campaign->accepted_run_ids[0], campaign->attempts[0],
+        LAB_CAMPAIGN_SLOTS[1], campaign->accepted_run_ids[1], campaign->attempts[1],
+        LAB_CAMPAIGN_SLOTS[2], campaign->accepted_run_ids[2], campaign->attempts[2],
+        LAB_CAMPAIGN_SLOTS[3], campaign->accepted_run_ids[3], campaign->attempts[3]);
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
+}
+
+static bool campaign_accept_completed(PtcSysmodule *sysmodule, const LabState *state)
+{
+    LabCampaign campaign;
+    int slot;
+    char report_path[320];
+    if (!state->campaign_id[0] || strcmp(state->state, "complete") != 0 || !state->restored ||
+        strcmp(state->restore_verdict, "exact_restore_proved") != 0 ||
+        !load_campaign(sysmodule, &campaign) || strcmp(campaign.state, "active") != 0 ||
+        strcmp(campaign.campaign_id, state->campaign_id) != 0) return true;
+    slot = campaign.next_slot;
+    if (slot < 0 || slot >= LAB_CAMPAIGN_SLOT_COUNT ||
+        strcmp(state->campaign_slot, LAB_CAMPAIGN_SLOTS[slot]) != 0 ||
+        !campaign_slot_observed(state, slot)) return true;
+    final_report_path(sysmodule, state, report_path, sizeof(report_path));
+    if (!sysmodule->storage->vtable->exists(sysmodule->storage, report_path)) return true;
+    snprintf(campaign.accepted_run_ids[slot], sizeof(campaign.accepted_run_ids[slot]), "%s", state->run_id);
+    ++campaign.next_slot;
+    if (campaign.next_slot == LAB_CAMPAIGN_SLOT_COUNT)
+        snprintf(campaign.state, sizeof(campaign.state), "complete");
+    if (!save_campaign(sysmodule, &campaign)) return false;
+    return campaign.next_slot != LAB_CAMPAIGN_SLOT_COUNT || write_campaign_manifest(sysmodule, &campaign);
+}
+
+static PtcErrorCode start_campaign(PtcSysmodule *sysmodule, const PtcRequest *request)
+{
+    LabCampaign campaign;
+    LabState session;
+    PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    char suffix[13];
+    if (load_campaign(sysmodule, &campaign) && strcmp(campaign.state, "active") == 0)
+        return PTC_ERR_BAD_REQUEST;
+    if (load_state(sysmodule, &session) &&
+        (strcmp(session.state, "complete") != 0 || !session.restored ||
+            strcmp(session.restore_verdict, "exact_restore_proved") != 0))
+        return PTC_ERR_BAD_REQUEST;
+    memset(&campaign, 0, sizeof(campaign));
+    id_suffix(request->request_id, suffix);
+    snprintf(campaign.campaign_id, sizeof(campaign.campaign_id), "campaign-%lld-%s",
+        (long long)now.unix_seconds, suffix);
+    snprintf(campaign.state, sizeof(campaign.state), "active");
+    snprintf(campaign.original_pause_state, sizeof(campaign.original_pause_state), "%s",
+        request->original_pause_state);
+    activation_method(sysmodule, campaign.entry_method);
+    return save_campaign(sysmodule, &campaign) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+}
+
+static PtcErrorCode abandon_campaign(PtcSysmodule *sysmodule)
+{
+    LabCampaign campaign;
+    LabState session;
+    char active_path[320];
+    char archive_path[320];
+    if (!load_campaign(sysmodule, &campaign) || strcmp(campaign.state, "active") != 0)
+        return PTC_ERR_BAD_REQUEST;
+    if (load_state(sysmodule, &session) &&
+        (strcmp(session.state, "complete") != 0 || !session.restored ||
+            strcmp(session.restore_verdict, "exact_restore_proved") != 0))
+        return PTC_ERR_BAD_REQUEST;
+    snprintf(campaign.state, sizeof(campaign.state), "abandoned");
+    snprintf(archive_path, sizeof(archive_path), "%s/reports/%s.abandoned.json",
+        sysmodule->app_root, campaign.campaign_id);
+    campaign_path(sysmodule, active_path, sizeof(active_path));
+    if (!save_campaign(sysmodule, &campaign)) return PTC_ERR_STORAGE_WRITE_FAILED;
+    {
+        char text[2048];
+        if (!sysmodule->storage->vtable->read_text(sysmodule->storage, active_path, text, sizeof(text)) ||
+            !sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, archive_path, text))
+            return PTC_ERR_STORAGE_WRITE_FAILED;
+    }
+    if (!sysmodule->storage->vtable->remove_path(sysmodule->storage, active_path))
+        return PTC_ERR_STORAGE_WRITE_FAILED;
+    return PTC_ERR_OK;
 }
 
 static bool restore_original(PtcSysmodule *sysmodule, LabState *state)
@@ -872,7 +1142,7 @@ static bool write_phase(PtcSysmodule *sysmodule, LabState *state,
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
 }
 
-static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, const char *mode)
+static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, const PtcRequest *request)
 {
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     PtcPctlPublicParity parity;
@@ -883,11 +1153,39 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, cons
     bool write_ok;
     bool restored_ok;
     size_t i;
+    LabCampaign campaign;
+    bool campaign_loaded = load_campaign(sysmodule, &campaign) && strcmp(campaign.state, "active") == 0;
+    int campaign_slot = campaign_loaded ? campaign.next_slot : -1;
+    char suffix[13];
+    if (campaign_loaded) {
+        if (!request->campaign_id[0] || strcmp(request->campaign_id, campaign.campaign_id) != 0 ||
+            campaign_slot < 0 || campaign_slot >= LAB_CAMPAIGN_SLOT_COUNT ||
+            strcmp(request->campaign_slot, LAB_CAMPAIGN_SLOTS[campaign_slot]) != 0 ||
+            strcmp(request->lab_mode, LAB_CAMPAIGN_MODES[campaign_slot]) != 0 ||
+            strcmp(request->game_slot, LAB_CAMPAIGN_GAMES[campaign_slot]) != 0 ||
+            strcmp(request->official_pause_expected, LAB_CAMPAIGN_PAUSE[campaign_slot]) != 0 ||
+            !request->context_confirmed) return PTC_ERR_BAD_REQUEST;
+    } else if (request->campaign_id[0]) {
+        return PTC_ERR_BAD_REQUEST;
+    }
     memset(state, 0, sizeof(*state));
-    snprintf(state->mode, sizeof(state->mode), "%s", mode && mode[0] ? mode : "full");
+    snprintf(state->mode, sizeof(state->mode), "%s",
+        request->lab_mode[0] ? request->lab_mode : "full");
+    if (campaign_loaded) {
+        ++campaign.attempts[campaign_slot];
+        if (!save_campaign(sysmodule, &campaign)) return PTC_ERR_STORAGE_WRITE_FAILED;
+        snprintf(state->campaign_id, sizeof(state->campaign_id), "%s", campaign.campaign_id);
+        snprintf(state->campaign_slot, sizeof(state->campaign_slot), "%s", LAB_CAMPAIGN_SLOTS[campaign_slot]);
+        snprintf(state->game_slot, sizeof(state->game_slot), "%s", LAB_CAMPAIGN_GAMES[campaign_slot]);
+        snprintf(state->official_pause_expected, sizeof(state->official_pause_expected), "%s",
+            LAB_CAMPAIGN_PAUSE[campaign_slot]);
+        state->campaign_attempt = campaign.attempts[campaign_slot];
+    }
     state->restriction_weekday = -1;
     reset_activation_results(state);
-    snprintf(state->run_id, sizeof(state->run_id), "%lld-%s", (long long)now.unix_seconds, sysmodule->boot_id);
+    id_suffix(request->request_id, suffix);
+    snprintf(state->run_id, sizeof(state->run_id), "%lld-%.16s-%s",
+        (long long)now.unix_seconds, sysmodule->boot_id, suffix);
     snprintf(state->state, sizeof(state->state), "ready");
     snprintf(state->restore_verdict, sizeof(state->restore_verdict), "pending");
     /* A final Lab report is only useful when it remains bound to the runtime
@@ -1023,7 +1321,19 @@ static PtcErrorCode begin_phase(PtcSysmodule *sysmodule, LabState *state, const 
 
 bool ptc_lab_request_type(PtcRequestType type)
 {
-    return type >= PTC_REQUEST_LAB_SESSION_START && type <= PTC_REQUEST_LAB_SESSION_RESTORE;
+    switch (type) {
+    case PTC_REQUEST_LAB_SESSION_START:
+    case PTC_REQUEST_LAB_PHASE_START:
+    case PTC_REQUEST_LAB_SESSION_STATUS:
+    case PTC_REQUEST_LAB_OBSERVATION:
+    case PTC_REQUEST_LAB_SESSION_RESTORE:
+    case PTC_REQUEST_LAB_CAMPAIGN_START:
+    case PTC_REQUEST_LAB_CAMPAIGN_STATUS:
+    case PTC_REQUEST_LAB_CAMPAIGN_ABANDON:
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool ptc_lab_process_request(PtcSysmodule *sysmodule, const PtcRequest *request)
@@ -1041,13 +1351,24 @@ bool ptc_lab_process_request(PtcSysmodule *sysmodule, const PtcRequest *request)
     snprintf(disable_path, sizeof(disable_path), "%s/flags/disable.flag", sysmodule->app_root);
     writes_disabled = sysmodule->storage->vtable->exists(sysmodule->storage, disable_path);
     switch (request->type) {
+    case PTC_REQUEST_LAB_CAMPAIGN_START:
+        if (writes_disabled) err = PTC_ERR_DISABLED;
+        else err = start_campaign(sysmodule, request);
+        break;
+    case PTC_REQUEST_LAB_CAMPAIGN_STATUS:
+        break;
+    case PTC_REQUEST_LAB_CAMPAIGN_ABANDON:
+        if (writes_disabled) err = PTC_ERR_DISABLED;
+        else err = abandon_campaign(sysmodule);
+        break;
     case PTC_REQUEST_LAB_SESSION_START:
         if (writes_disabled) {
             err = PTC_ERR_DISABLED;
-        } else if (loaded && strcmp(state.state, "complete") != 0 && strcmp(state.state, "not_started") != 0) {
+        } else if (loaded && (strcmp(state.state, "complete") != 0 || !state.restored ||
+                strcmp(state.restore_verdict, "exact_restore_proved") != 0)) {
             err = PTC_ERR_BAD_REQUEST;
         } else {
-            err = start_session(sysmodule, &state, request->lab_mode);
+            err = start_session(sysmodule, &state, request);
             if (err != PTC_ERR_OK && state.original.size == PTC_PCTL_OPAQUE_SETTINGS_SIZE) {
                 if (!restore_original(sysmodule, &state)) enter_restore_required(sysmodule, &state);
             }
@@ -1069,7 +1390,8 @@ bool ptc_lab_process_request(PtcSysmodule *sysmodule, const PtcRequest *request)
             state.next_phase = (int)required_phase_count(&state);
             state.active_phase[0] = '\0';
             state.deadline = 0;
-            if (!save_state(sysmodule, &state) || !rebuild_report(sysmodule, &state)) err = PTC_ERR_STORAGE_WRITE_FAILED;
+            if (!save_state(sysmodule, &state) || !rebuild_report(sysmodule, &state) ||
+                !campaign_accept_completed(sysmodule, &state)) err = PTC_ERR_STORAGE_WRITE_FAILED;
         }
         break;
     case PTC_REQUEST_LAB_SESSION_RESTORE:
@@ -1087,7 +1409,8 @@ bool ptc_lab_process_request(PtcSysmodule *sysmodule, const PtcRequest *request)
             state.deadline = 0;
             if (sysmodule->storage->vtable->exists(sysmodule->storage, disable_path))
                 (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path);
-            if (!save_state(sysmodule, &state) || !rebuild_report(sysmodule, &state)) err = PTC_ERR_STORAGE_WRITE_FAILED;
+            if (!save_state(sysmodule, &state) || !rebuild_report(sysmodule, &state) ||
+                !campaign_accept_completed(sysmodule, &state)) err = PTC_ERR_STORAGE_WRITE_FAILED;
         }
         break;
     default:
@@ -1184,6 +1507,7 @@ int ptc_lab_scheduler_tick(PtcSysmodule *sysmodule)
     state.deadline = 0;
     (void)save_state(sysmodule, &state);
     (void)rebuild_report(sysmodule, &state);
+    (void)campaign_accept_completed(sysmodule, &state);
     return 1;
 }
 

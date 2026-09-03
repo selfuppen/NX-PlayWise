@@ -151,6 +151,7 @@ const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge)
     case PTC_COMPANION_RESULT_INVALID:
     case PTC_COMPANION_RESULT_MISMATCH: return "后台返回的结果无效";
     case PTC_COMPANION_BAD_ARGUMENT: return "请求被后台拒绝";
+    case PTC_COMPANION_QUIESCING: return "后台正在安全切换，请稍后重试";
     default: return "无法连接后台服务，请重试";
     }
 }

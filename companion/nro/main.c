@@ -185,6 +185,8 @@ static const char *companion_status_zh(PtcCompanionStatus status)
         return "后台结果格式无效";
     case PTC_COMPANION_RESULT_MISMATCH:
         return "后台结果与本次请求不匹配";
+    case PTC_COMPANION_QUIESCING:
+        return "后台正在安全切换，请稍后重试";
     default:
         return "未知错误";
     }

@@ -24,7 +24,7 @@ typedef struct {
     PtcLabNroModal modal;
     int confirm_progress;
     char message[320];
-    char technical[384];
+    char technical[512];
     char report_path[320];
 } PtcLabNroUi;
 

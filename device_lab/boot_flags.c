@@ -64,6 +64,9 @@ static bool read_journal_path(const char *path, Journal *journal)
     got = fread(text, 1, sizeof(text) - 1U, file);
     if (fclose(file) != 0 || got == 0 || got >= sizeof(text) - 1U) return false;
     text[got] = '\0';
+    /* v2 adds an explicit generation while preserving v1 recovery records
+       produced by already-distributed Device Lab packages. */
+    if (!strstr(text, "\"version\":1") && !strstr(text, "\"version\":2")) return false;
     phase = strstr(text, "\"phase\":\"");
     if (!phase) return false;
     phase += strlen("\"phase\":\"");
@@ -184,8 +187,10 @@ static bool write_journal(const PtcLabBootFlagPaths *paths, const Journal *journ
     if (!temporary_journal_path(paths, temporary, sizeof(temporary)) || exists(temporary)) return false;
     file = fopen(temporary, "wb");
     if (!file) return false;
-    if (fprintf(file, "{\"version\":1,\"phase\":\"%s\",\"standard_was_enabled\":%s}\n",
-            journal->phase, journal->standard_was_enabled ? "true" : "false") < 0) {
+    if (fprintf(file,
+            "{\"version\":2,\"phase\":\"%s\",\"generation\":%d,\"standard_was_enabled\":%s}\n",
+            journal->phase, journal_phase_order(journal->phase),
+            journal->standard_was_enabled ? "true" : "false") < 0) {
         (void)fclose(file);
         (void)remove(temporary);
         return false;

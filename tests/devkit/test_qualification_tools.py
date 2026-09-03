@@ -65,7 +65,8 @@ def parity() -> dict:
     }
 
 
-def report(mode: str, run_id: str, effect: str | None = None) -> dict:
+def report(mode: str, run_id: str, slot: str, game_slot: str,
+           pause_expected: str, effect: str | None = None) -> dict:
     write_phases = (
         ["ab_limited_settings_only", "ab_restriction_settings_only", "ab_grant_settings_only",
          "ab_restriction_before_unlimited", "ab_unlimited_settings_only"]
@@ -78,6 +79,15 @@ def report(mode: str, run_id: str, effect: str | None = None) -> dict:
         "run_id": run_id,
         "mode": mode,
         "report_status": "final",
+        "entry_method": "hot_switch",
+        "campaign": {
+            "campaign_id": "campaign-test",
+            "slot": slot,
+            "attempt": 1,
+            "game_slot": game_slot,
+            "official_pause_expected": pause_expected,
+            "context_confirmed": True,
+        },
         "environment": {
             "runtime": {
                 "model": "mariko-oled",
@@ -131,13 +141,23 @@ def prepare_reports(root: Path) -> Path:
     reports = root / "reports"
     reports.mkdir()
     values = (
-        report("timer_activation_ab", "ab"),
-        report("restriction_quick", "pause-a", "paused_or_suspended"),
-        report("restriction_quick", "continue-a", "continued"),
-        report("restriction_quick", "pause-b", "paused_or_suspended"),
+        report("timer_activation_ab", "ab", "timer_activation_ab", "none", "not_applicable"),
+        report("restriction_quick", "pause-a", "pause_on_game_a", "a", "on", "paused_or_suspended"),
+        report("restriction_quick", "pause-b", "pause_on_game_b", "b", "on", "paused_or_suspended"),
+        report("restriction_quick", "continue-b", "pause_off_game_b", "b", "off", "continued"),
     )
     for value in values:
         (reports / f"{value['run_id']}.json").write_text(json.dumps(value), encoding="utf-8")
+    (reports / "campaign-test.campaign.json").write_text(json.dumps({
+        "version": 1,
+        "schema_version": 1,
+        "report_status": "final",
+        "campaign_id": "campaign-test",
+        "state": "complete",
+        "original_pause_state": "on",
+        "entry_method": "hot_switch",
+        "accepted_run_ids": ["ab", "pause-a", "pause-b", "continue-b"],
+    }), encoding="utf-8")
     return reports
 
 
@@ -146,8 +166,11 @@ def test_verify_and_promote_byte_identical_packages() -> None:
         root = Path(tmp_dir)
         packages = prepare_packages(root)
         reports = prepare_reports(root)
+        (reports / "failed-attempt.json").write_text(json.dumps({"report_status": "final", "mode": "full"}), encoding="utf-8")
         verification = verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
         require(verification["status"] == "passed", "valid evidence matrix must pass")
+        require(verification["reports"]["run_ids"] == ["ab", "pause-a", "pause-b", "continue-b"],
+                "failed attempts and free sessions must not enter the accepted campaign set")
         verification_path = root / "verification.json"
         verification_path.write_text(json.dumps(verification), encoding="utf-8")
         output = root / "qualified"
@@ -207,11 +230,31 @@ def test_misleading_evidence_summary_is_rejected() -> None:
             raise AssertionError("A/B report with a misleading evidence summary must not qualify")
 
 
+def test_multiple_campaigns_require_explicit_selection() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        second = json.loads((reports / "campaign-test.campaign.json").read_text(encoding="utf-8"))
+        second["campaign_id"] = "campaign-second"
+        (reports / "campaign-second.campaign.json").write_text(json.dumps(second), encoding="utf-8")
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
+        except verifier.QualificationError as exc:
+            require("--campaign" in str(exc), "multiple campaign rejection must request explicit selection")
+        else:
+            raise AssertionError("multiple campaigns must not be selected implicitly")
+        verification = verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2", "campaign-test")
+        require(verification["campaign"]["campaign_id"] == "campaign-test",
+                "explicit campaign selection must bind the qualification result")
+
+
 def main() -> int:
     test_verify_and_promote_byte_identical_packages()
     test_old_report_and_changed_package_are_rejected()
     test_missing_runtime_identity_is_rejected_explicitly()
     test_misleading_evidence_summary_is_rejected()
+    test_multiple_campaigns_require_explicit_selection()
     print("Qualification verifier and promotion tests passed")
     return 0
 

@@ -100,15 +100,15 @@ Enforce、跨日、启动恢复、未来规则修改和今日规则未变化都�
 - Title ID `4200000000BD23F0`；
 - Lab sysmodule 提供 IPC `pwtl:u`，但当前 Device Lab Overlay 固定通过 SD 请求队列通信，不直接连接该服务；
 - SD 根目录 `sdmc:/switch/playwise-device-lab`；
-- NRO 以中文状态向导提供“启用实验后台 / 恢复正常后台 / 查看本轮完整报告”三个事务化入口，按当前 run 精确绑定报告，不把旧报告或草稿当成本轮完成结果；专用 Overlay 提供默认聚焦、Timer 激活 A/B 和高级六阶段三种模式并持续显示危险水印；
+- NRO 以中文状态向导提供安全进入与恢复入口；专用 Overlay 默认提供持久化四项资格批次，并保留聚焦、Timer 激活 A/B 和高级六阶段自由模式；
 - package 默认无 `boot2.flag`；
 - 不由标准分发目标 `make packages` 构建。
 
-NRO 在启用时记录标准与 Lab `boot2.flag` 的原状态：若标准后台原本启用，将其原子改名为唯一旁路备份，再创建 Lab flag；恢复时先请求 Lab sysmodule 恢复并证明会话前 PCTL 状态，证明成功或尚未创建会话后，才删除由该事务创建的空 Lab flag，并按 journal 精确恢复标准 flag 原本存在或不存在的状态。已有备份、未知 Lab flag、journal 损坏或外部并发修改都不会被覆盖，而是进入恢复提示。因此标准与 Lab sysmodule 不会同时竞争 PCTL；完整流程开始和结束各重启一次。该事务不修改标准二进制、配置、规则、凭据、日志或业务备份。
+NRO 启动切换前先只读探测 `pm:shell` 并确认源 PID。可用时，源 sysmodule 进入通用 quiesce、完成当前串行操作且确认没有活跃 recovery，NRO 再提交 boot journal；只有源 PID 消失后才启动目标，并核对新 PID、boot ID、profile、release ID 的 runtime-ready 身份。返回正常后台使用同一流程；标准后台原本未启用时只退出 Lab。任何步骤无法证明安全都会保留 journal 并回退重启，因此理想资格批次首尾均无需重启，回退路径整批最多首尾各一次，且任何时刻不会主动启动第二个 PCTL owner。schema v2 boot journal 继续兼容 v1 及 `.tmp` 代际恢复规则。
 
 NRO 的状态检查只读取现有 flag、journal 与 session；真正切换仍由原事务函数完成。恢复等待必须异步刷新页面，只有 `exact_restore_proved` 或从未创建过会话时才允许恢复正常 boot flag。中文错误页先说明是否发生过更改和下一步，再按需展开结果码、事务阶段、请求 ID 与路径。
 
-专用 Overlay 只通过 Lab SD 根目录的固定请求队列提交状态机请求。默认 `restriction_quick` 只执行限制效果；schema v2 的 `timer_activation_ab` 要求非空且正在生效的 Nintendo 周计划、至少 10 分钟剩余，依次验证 HOME 亮屏 90 秒、待机至少 90 秒并在唤醒后立即采样、只写限时设置、限制后只写加时、限制后只写不限时，以及仅在当前目标仍未达到运行条件时重新确认同一目标并调用一次 `1451`；高级 `full` 保留原六阶段取证。无法排除唤醒后的亮屏时间时结论为 `inconclusive`，扩展字段写 `null`，不得猜测。真实限制阶段只在用户对“无未保存进度的非关键游戏”长按确认后执行，并设定独立的 15 秒恢复期限。Overlay、进程或主机中断后，持久化阶段仍可继续；限制期限已过时后台优先恢复。每个危险实验保存完整 `0x44` 前像，恢复必须逐字节证明完整 `0x44` 和 timer 与会话前一致，否则写入 Lab `disable.flag` 并拒绝后续写入，只保留立即恢复能力。
+专用 Overlay 只通过 Lab SD 根目录的固定请求队列提交状态机请求。默认资格批次固定依次执行 Timer 激活 A/B、官方暂停开启的匿名游戏 A、官方暂停开启的匿名游戏 B、官方暂停关闭的匿名游戏 B；开始时记录官方暂停原始状态，结束时提示恢复。每份报告完成后可直接继续下一项或关闭浮窗转 NRO 恢复后台，不再切换 flag。失败观察保留报告并重试当前槽位；关闭 Overlay、睡眠或之后重新进入 Lab 都从 `campaign.json` 恢复。自由 `restriction_quick`、`timer_activation_ab` 与高级 `full` 仍可选择。真实限制阶段只在用户长按确认后执行，并设定独立的 15 秒恢复期限；每次会话都独立保存并逐字节恢复完整 `0x44` 和 timer。
 
 限制阶段自动恢复成功后，会话保持 `awaiting_observation`：恢复请求不能跳过或清除待提交的人工观察，Overlay 在此状态隐藏立即恢复入口，NRO 只引导操作者返回浮窗。人工观察分别记录提示可见性和游戏实际继续、暂停/挂起、退出或无法确定；`restriction_visible` 只证明提示可见。聚焦模式要求 1/1、完整模式要求 6/6，且两层观察与 `exact_restore_proved` 均齐全时才发布正式报告；A/B 模式要求 schema v2 的 7/7 阶段和精确恢复，不要求无关的限制人工观察。报告的 `summary.complete` 只描述流程完整性；A/B 激活证据和完整模式生命周期证据分别由 `activation_evidence_complete` 与 `lifecycle_evidence_complete` 表达，不适用时为 `null`。全零基线的完整报告可以完成采集和恢复，但生命周期证据必须保持 `false`。schema v1 只保留为历史证据，不能晋级当前候选。
 

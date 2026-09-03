@@ -14,6 +14,7 @@
 #include "../../common/version.h"
 #include "../sysmodule_core.h"
 #include "../ipc_server.h"
+#include "../../common/protocol/ipc_protocol.h"
 #include "release_manifest.h"
 
 #define PTC_APP_ROOT PLAYWISE_SD_ROOT
@@ -178,6 +179,84 @@ static void write_environment_fingerprint(PtcStorage *storage)
     (void)storage->vtable->write_text_atomic(storage, PTC_APP_ROOT "/environment.json", json);
 }
 
+static bool handoff_json_string(const char *text, const char *key, char *out, size_t out_size)
+{
+    char pattern[64];
+    const char *pos;
+    const char *end;
+    size_t length;
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    pos = strstr(text, pattern);
+    if (!pos || !(pos = strchr(pos, ':'))) return false;
+    while (*++pos == ' ' || *pos == '\t') {}
+    if (*pos++ != '"' || !(end = strchr(pos, '"'))) return false;
+    length = (size_t)(end - pos);
+    if (length == 0 || length >= out_size) return false;
+    memcpy(out, pos, length);
+    out[length] = '\0';
+    return true;
+}
+
+static void write_runtime_ready(PtcSysmodule *sysmodule)
+{
+    uint64_t pid = 0;
+    char path[320];
+    char json[1024];
+    (void)svcGetProcessId(&pid, CUR_PROCESS_HANDLE);
+    snprintf(path, sizeof(path), PTC_APP_ROOT "/handover/runtime-ready.json");
+    snprintf(json, sizeof(json),
+        "{\"version\":1,\"profile\":\"%s\",\"title_id\":\"%s\",\"pid\":%llu,"
+        "\"boot_id\":\"%s\",\"release_id\":\"%s\",\"ipc_version\":%u}\n",
+        PLAYWISE_PROFILE_NAME, PLAYWISE_TITLE_ID, (unsigned long long)pid, sysmodule->boot_id,
+        PLAYWISE_BUILD_RELEASE_ID, (unsigned int)PTC_IPC_INTERFACE_VERSION);
+    (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, json);
+}
+
+static bool handoff_tick(PtcSysmodule *sysmodule, PtcIpcServer *ipc_server,
+    bool ipc_available, unsigned int *quiesce_ticks)
+{
+    char intent_path[320];
+    char ack_path[320];
+    char recovery_path[320];
+    char boot_flag_path[320];
+    char text[768];
+    char transaction_id[64];
+    char action[24];
+    snprintf(intent_path, sizeof(intent_path), PTC_APP_ROOT "/handover/intent.json");
+    snprintf(ack_path, sizeof(ack_path), PTC_APP_ROOT "/handover/ready.json");
+    snprintf(recovery_path, sizeof(recovery_path), PTC_APP_ROOT "/recovery/active/meta.json");
+    snprintf(boot_flag_path, sizeof(boot_flag_path),
+        "sdmc:/atmosphere/contents/%s/flags/boot2.flag", PLAYWISE_TITLE_ID);
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, intent_path, text, sizeof(text)) ||
+        !handoff_json_string(text, "transaction_id", transaction_id, sizeof(transaction_id)) ||
+        !handoff_json_string(text, "action", action, sizeof(action)) || strcmp(action, "quiesce") != 0) {
+        *quiesce_ticks = 0;
+        if (ipc_available) ipc_server->accepting = true;
+        return false;
+    }
+    if (ipc_available) ipc_server->accepting = false;
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, recovery_path)) return false;
+    snprintf(text, sizeof(text),
+        "{\"version\":1,\"transaction_id\":\"%s\",\"status\":\"ready\","
+        "\"title_id\":\"%s\",\"boot_id\":\"%s\"}\n",
+        transaction_id, PLAYWISE_TITLE_ID, sysmodule->boot_id);
+    (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, ack_path, text);
+    if (!sysmodule->storage->vtable->exists(sysmodule->storage, boot_flag_path)) {
+        (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, intent_path);
+        (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, ack_path);
+        return true;
+    }
+    if (++*quiesce_ticks >= 120U) {
+        /* A launcher that vanished before committing the flag journal must not
+           leave the source permanently unavailable. */
+        (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, intent_path);
+        (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, ack_path);
+        *quiesce_ticks = 0;
+        if (ipc_available) ipc_server->accepting = true;
+    }
+    return false;
+}
+
 int main(int argc, char **argv)
 {
     /* Process-lifetime singletons kept in .bss, not on the stack: PtcIpcServer is
@@ -193,6 +272,8 @@ int main(int argc, char **argv)
     bool ipc_available;
     int recovered;
     char boot_id[24];
+    unsigned int quiesce_ticks = 0;
+    bool exit_for_handoff = false;
     (void)argc;
     (void)argv;
 
@@ -233,19 +314,23 @@ int main(int argc, char **argv)
     (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
     ipc_available = ptc_ipc_server_start(&ipc_server, &sysmodule);
     if (!ipc_available) append_boot_log(&sysmodule, PLAYWISE_IPC_SERVICE " unavailable; using file transport only");
+    write_runtime_ready(&sysmodule);
 
-    while (true) {
+    while (!exit_for_handoff) {
         bool notified;
         uint32_t wait_ms;
         wait_ms = ptc_sysmodule_next_wait_ms(&sysmodule);
+        if (wait_ms > 250U) wait_ms = 250U;
         notified = ipc_available ? ptc_ipc_server_wait(&ipc_server, wait_ms) : false;
         if (!ipc_available) svcSleepThread((int64_t)wait_ms * 1000000LL);
         if (ipc_available) ptc_ipc_server_lock_storage(&ipc_server);
         (void)ptc_sysmodule_scheduler_tick(&sysmodule, notified);
+        exit_for_handoff = handoff_tick(&sysmodule, &ipc_server, ipc_available, &quiesce_ticks);
         if (ipc_available) ptc_ipc_server_unlock_storage(&ipc_server);
         if (ipc_available) ptc_ipc_server_signal_completed(&ipc_server);
     }
 
+    if (ipc_available) ptc_ipc_server_stop(&ipc_server);
     ptc_switch_pctl_exit(&pctl);
     return 0;
 }

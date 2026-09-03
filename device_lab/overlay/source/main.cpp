@@ -120,6 +120,18 @@ static PtcLabSessionLoadStatus load_session(PtcLabSessionView *view)
     return PTC_LAB_SESSION_VALID;
 }
 
+static bool load_campaign(PtcLabCampaignView *view)
+{
+    char text[4096];
+    FILE *file = std::fopen(PLAYWISE_SD_ROOT "/lab/campaign.json", "rb");
+    std::size_t got;
+    if (!file) return false;
+    got = std::fread(text, 1, sizeof(text) - 1U, file);
+    if (std::fclose(file) != 0 || got == 0 || got >= sizeof(text) - 1U) return false;
+    text[got] = '\0';
+    return ptc_lab_campaign_parse(text, view);
+}
+
 class LabGui final : public tsl::Gui {
 public:
     explicit LabGui(PtcCompanionTransportClient *transport) : transport_(transport) {}
@@ -198,6 +210,12 @@ public:
         if (session_status_ == PTC_LAB_SESSION_INVALID) return true;
         if (waiting_) return true;
 
+        if (campaign_active() && std::strcmp(view_.state, "not_started") == 0 &&
+            (keysDown & HidNpadButton_Y)) {
+            submit_empty("lab_campaign_abandon");
+            return true;
+        }
+
         bool primary_touch = touch_pressed && point_in(touch_x, touch_y,
             draw_x_ + 20, draw_y_ + 330, draw_w_ - 40, 52);
         bool restore_touch = touch_pressed && point_in(touch_x, touch_y,
@@ -233,6 +251,13 @@ public:
             if ((keysDown & HidNpadButton_A) || primary_touch) submit_empty("lab_session_restore");
             return true;
         }
+        if (campaign_active() && std::strcmp(view_.state, "complete") == 0 && view_.restored) {
+            if ((keysDown & HidNpadButton_Y) && campaign_.next_slot < 4)
+                submit_empty("lab_campaign_abandon");
+            else if (((keysDown & HidNpadButton_A) || primary_touch) && campaign_.next_slot < 4)
+                submit_campaign_session();
+            return true;
+        }
         if (is_danger_phase() && std::strcmp(view_.state, "ready") == 0) {
             if (primary_touch) touch_hold_warning_ = true;
             if (keysHeld & HidNpadButton_A) {
@@ -252,17 +277,21 @@ public:
             return true;
         }
         if ((keysDown & HidNpadButton_A) || primary_touch) {
-            if (std::strcmp(view_.state, "not_started") == 0) submit_start();
+            if (mode_menu()) submit_start();
+            else if (campaign_active() && std::strcmp(view_.state, "not_started") == 0)
+                submit_campaign_session();
             else if (std::strcmp(view_.state, "ready") == 0) submit_phase();
             return true;
         }
-        if (std::strcmp(view_.state, "not_started") == 0) {
-            if (keysDown & HidNpadButton_Up) selected_mode_ = selected_mode_ == 0 ? 2 : selected_mode_ - 1;
-            if (keysDown & HidNpadButton_Down) selected_mode_ = (selected_mode_ + 1) % 3;
+        if (mode_menu()) {
+            if (keysDown & HidNpadButton_Up) selected_mode_ = selected_mode_ == 0 ? 3 : selected_mode_ - 1;
+            if (keysDown & HidNpadButton_Down) selected_mode_ = (selected_mode_ + 1) % 4;
+            if (selected_mode_ == 0 && (keysDown & (HidNpadButton_Left | HidNpadButton_Right)))
+                original_pause_on_ = !original_pause_on_;
             if (touch_pressed) {
-                for (int index = 0; index < 3; ++index) {
-                    if (point_in(touch_x, touch_y, draw_x_ + 26, draw_y_ + 178 + index * 46,
-                            draw_w_ - 52, 40)) selected_mode_ = index;
+                for (int index = 0; index < 4; ++index) {
+                    if (point_in(touch_x, touch_y, draw_x_ + 26, draw_y_ + 166 + index * 39,
+                            draw_w_ - 52, 35)) selected_mode_ = index;
                 }
             }
             return true;
@@ -274,6 +303,9 @@ private:
     void refresh()
     {
         PtcLabSessionView fresh{};
+        PtcLabCampaignView fresh_campaign{};
+        campaign_loaded_ = load_campaign(&fresh_campaign);
+        campaign_ = campaign_loaded_ ? fresh_campaign : PtcLabCampaignView{};
         session_status_ = load_session(&fresh);
         if (session_status_ == PTC_LAB_SESSION_VALID) view_ = fresh;
         else if (session_status_ == PTC_LAB_SESSION_MISSING) {
@@ -331,9 +363,62 @@ private:
     void submit_start()
     {
         static const char *const modes[] = {"restriction_quick", "timer_activation_ab", "full"};
-        const char *mode = modes[selected_mode_];
+        if (selected_mode_ == 0) {
+            char campaign_payload[64];
+            std::snprintf(campaign_payload, sizeof(campaign_payload),
+                "{\"original_pause_state\":\"%s\"}", original_pause_on_ ? "on" : "off");
+            submit_json("lab_campaign_start", campaign_payload);
+            return;
+        }
+        const char *mode = modes[selected_mode_ - 1];
         char payload[80];
         std::snprintf(payload, sizeof(payload), "{\"mode\":\"%s\"}", mode);
+        submit_json("lab_session_start", payload);
+    }
+
+    bool campaign_active() const
+    {
+        return campaign_loaded_ && std::strcmp(campaign_.state, "active") == 0;
+    }
+
+    bool mode_menu() const
+    {
+        return !campaign_loaded_ &&
+            (std::strcmp(view_.state, "not_started") == 0 ||
+             (std::strcmp(view_.state, "complete") == 0 && view_.restored));
+    }
+
+    bool current_attempt_accepted() const
+    {
+        static const char *const slots[] = {
+            "timer_activation_ab", "pause_on_game_a", "pause_on_game_b", "pause_off_game_b"
+        };
+        if (!campaign_loaded_ || std::strcmp(view_.campaign_id, campaign_.campaign_id) != 0) return false;
+        for (int index = 0; index < 4; ++index)
+            if (std::strcmp(view_.campaign_slot, slots[index]) == 0) return index < campaign_.next_slot;
+        return false;
+    }
+
+    void submit_campaign_session()
+    {
+        static const char *const slots[] = {
+            "timer_activation_ab", "pause_on_game_a", "pause_on_game_b", "pause_off_game_b"
+        };
+        static const char *const modes[] = {
+            "timer_activation_ab", "restriction_quick", "restriction_quick", "restriction_quick"
+        };
+        static const char *const games[] = {"none", "a", "b", "b"};
+        static const char *const pause[] = {"not_applicable", "on", "on", "off"};
+        const int slot = campaign_.next_slot;
+        char payload[384];
+        if (slot < 0 || slot >= 4) return;
+        std::snprintf(payload, sizeof(payload),
+            "{\"mode\":\"%s\",\"campaign_id\":\"%s\",\"campaign_slot\":\"%s\","
+            "\"game_slot\":\"%s\",\"official_pause_expected\":\"%s\",\"context_confirmed\":true}",
+            modes[slot], campaign_.campaign_id, slots[slot], games[slot], pause[slot]);
+        observation_ = 0;
+        runtime_effect_ = slot == 3 ? 0 : 1;
+        observation_step_ = 0;
         submit_json("lab_session_start", payload);
     }
 
@@ -417,8 +502,12 @@ private:
 
         const int required = view_.required_phases > 0 ? view_.required_phases : 6;
         const int phase = current_phase_index();
-        std::snprintf(line, sizeof(line), "%s / %d / %d",
-            ptc_lab_mode_zh(view_.mode), view_.next_phase > required ? required : view_.next_phase, required);
+        if (campaign_loaded_)
+            std::snprintf(line, sizeof(line), "资格批次 %d / 4 / %s",
+                campaign_.next_slot, campaign_.entry_method);
+        else
+            std::snprintf(line, sizeof(line), "%s / %d / %d",
+                ptc_lab_mode_zh(view_.mode), view_.next_phase > required ? required : view_.next_phase, required);
         renderer->drawString(line, false, x + 20, y + 24, 16, renderer->a(COLOR_MUTED));
         renderer->drawString("PCTL 实机证据", false, x + w - 138, y + 24, 14, renderer->a(COLOR_DANGER));
         draw_progress(renderer, x + 20, y + 38, w - 40);
@@ -472,16 +561,45 @@ private:
             }
             draw_button(renderer, x + 20, y + 330, w - 40, 52,
                 observation_step_ == 0 ? "下一步：记录实际行为" : "确认两项观察结果", COLOR_GREEN);
-        } else if (std::strcmp(view_.state, "complete") == 0 && view_.restored) {
+        } else if (campaign_active() && std::strcmp(view_.state, "not_started") == 0) {
+            static const char *const instructions[] = {
+                "保持 HOME 亮屏且剩余时间至少 10 分钟，准备 Timer 激活 A/B。",
+                "打开匿名游戏 A，并确认官方“时间到了暂停软件”已开启。",
+                "切换到匿名游戏 B，并确认官方暂停仍然开启。",
+                "保持匿名游戏 B，关闭官方暂停设置；预期游戏继续运行。"
+            };
+            draw_panel(renderer, x + 20, y + 184, w - 40, 186, COLOR_BLUE);
+            renderer->drawString("资格批次已保存", false, x + 36, y + 220, 21, renderer->a(COLOR_GREEN));
+            draw_wrapped(renderer, instructions[campaign_.next_slot], x + 36, y + 258,
+                15, 24, 3, COLOR_TEXT);
+            draw_button(renderer, x + 20, y + 330, w - 40, 52, "A 确认环境并开始 / Y 放弃", COLOR_BLUE);
+        } else if (std::strcmp(view_.state, "complete") == 0 && view_.restored && campaign_loaded_) {
+            static const char *const next_instructions[] = {
+                "保持 HOME 亮屏且剩余时间至少 10 分钟，开始 Timer 激活 A/B。",
+                "打开匿名游戏 A，并确认官方“时间到了暂停软件”已开启。",
+                "切换到匿名游戏 B，并确认官方暂停仍然开启。",
+                "保持匿名游戏 B，关闭官方暂停设置；本项应观察到游戏继续运行。"
+            };
             draw_panel(renderer, x + 20, y + 184, w - 40, 186, COLOR_GREEN);
-            renderer->drawString(view_.next_phase >= required ? "取证完成，原设置已恢复" :
-                "会话已停止，原设置已恢复", false, x + 36, y + 220, 21, renderer->a(COLOR_GREEN));
-            draw_wrapped(renderer, view_.next_phase >= required ?
-                "请只发送下面这一份报告，然后运行 Device Lab NRO 恢复正常后台并重启主机。" :
-                "本次取证提前结束，报告并不完整。请运行 Device Lab NRO 恢复正常后台并重启主机。",
-                x + 36, y + 262, 15, 24, 3, COLOR_TEXT);
-            std::snprintf(line, sizeof(line), "%s/reports/%s.json", PLAYWISE_SD_ROOT, view_.run_id);
-            draw_wrapped(renderer, line, x + 36, y + 330, 13, 28, 2, COLOR_BLUE);
+            const bool accepted = current_attempt_accepted();
+            const bool belongs_to_campaign = std::strcmp(view_.campaign_id, campaign_.campaign_id) == 0;
+            renderer->drawString(campaign_.next_slot >= 4 ? "四项资格取证完成" :
+                (accepted ? "本项已验收，可连续进行下一项" :
+                    (belongs_to_campaign ? "观察不符预期，本项需要重试" : "资格批次已创建，可以开始第一项")),
+                false, x + 36, y + 220, 20, renderer->a(accepted ? COLOR_GREEN : COLOR_AMBER));
+            if (campaign_.next_slot >= 4) {
+                draw_wrapped(renderer, campaign_.original_pause_state[0] == 'o' && campaign_.original_pause_state[1] == 'n' ?
+                    "请把官方暂停设置恢复为：开启。然后关闭浮窗并在 NRO 中恢复正常后台。" :
+                    "请把官方暂停设置恢复为：关闭。然后关闭浮窗并在 NRO 中恢复正常后台。",
+                    x + 36, y + 258, 15, 24, 4, COLOR_TEXT);
+            } else {
+                draw_wrapped(renderer, next_instructions[campaign_.next_slot], x + 36, y + 254,
+                    15, 24, 3, COLOR_TEXT);
+                draw_button(renderer, x + 20, y + 330, w - 40, 52,
+                    accepted ? "A 继续下一项 / Y 放弃并归档" :
+                        (belongs_to_campaign ? "A 重试本项 / Y 放弃并归档" : "A 开始第一项 / Y 放弃并归档"),
+                    accepted ? COLOR_BLUE : COLOR_AMBER);
+            }
         } else if (restore_state) {
             draw_panel(renderer, x + 20, y + 184, w - 40, 136, COLOR_DANGER);
             renderer->drawString("停止：恢复尚未得到证明", false, x + 36, y + 218, 21, renderer->a(COLOR_DANGER));
@@ -491,21 +609,25 @@ private:
         } else {
             const bool danger_phase = is_danger_phase();
             draw_panel(renderer, x + 20, y + 184, w - 40, 136, danger_phase ? COLOR_DANGER : COLOR_BLUE);
-            if (std::strcmp(view_.state, "not_started") == 0) {
+            if (mode_menu()) {
                 static const char *const modes[] = {
-                    "聚焦限制复测（推荐）", "Timer 激活 A/B（七阶段）", "高级完整取证（六阶段）"
+                    "资格批次（推荐，连续四项）", "自由：聚焦限制复测",
+                    "自由：Timer 激活 A/B", "自由：高级完整取证"
                 };
-                renderer->drawString("选择本次取证模式", false, x + 36, y + 166, 20, renderer->a(COLOR_TEXT));
-                for (int index = 0; index < 3; ++index) {
-                    s32 row_y = y + 178 + index * 46;
-                    renderer->drawRect(x + 26, row_y, w - 52, 40,
+                std::snprintf(line, sizeof(line), "选择流程 / 原官方暂停：%s（左右切换）",
+                    original_pause_on_ ? "开启" : "关闭");
+                renderer->drawString(line, false, x + 30, y + 158, 15, renderer->a(COLOR_TEXT));
+                for (int index = 0; index < 4; ++index) {
+                    s32 row_y = y + 166 + index * 39;
+                    renderer->drawRect(x + 26, row_y, w - 52, 35,
                         renderer->a(index == selected_mode_ ? COLOR_PANEL_RAISED : COLOR_PANEL));
-                    draw_outline(renderer, x + 26, row_y, w - 52, 40, index == selected_mode_ ? 2 : 1,
+                    draw_outline(renderer, x + 26, row_y, w - 52, 35, index == selected_mode_ ? 2 : 1,
                         index == selected_mode_ ? COLOR_GREEN : COLOR_MUTED);
-                    renderer->drawString(modes[index], false, x + 42, row_y + 27, 15,
+                    renderer->drawString(modes[index], false, x + 42, row_y + 24, 14,
                         renderer->a(index == selected_mode_ ? COLOR_GREEN : COLOR_TEXT));
                 }
-                draw_button(renderer, x + 20, y + 330, w - 40, 52, "开始并保存 PCTL 原设置", COLOR_BLUE);
+                draw_button(renderer, x + 20, y + 330, w - 40, 52,
+                    selected_mode_ == 0 ? "创建资格批次" : "开始自由会话并保存原设置", COLOR_BLUE);
             } else {
                 renderer->drawString(ptc_lab_phase_title_for_mode_zh(view_.mode, phase), false,
                     x + 36, y + 218, 20, renderer->a(danger_phase ? COLOR_DANGER : COLOR_TEXT));
@@ -547,7 +669,10 @@ private:
 
     PtcCompanionTransportClient *transport_;
     PtcLabSessionView view_{};
+    PtcLabCampaignView campaign_{};
     PtcLabSessionLoadStatus session_status_ = PTC_LAB_SESSION_MISSING;
+    bool campaign_loaded_ = false;
+    bool original_pause_on_ = true;
     bool waiting_ = false;
     bool request_error_ = false;
     bool details_visible_ = false;
@@ -570,7 +695,7 @@ private:
     char error_message_[256]{};
     char error_reason_[64]{};
     char last_type_[48]{};
-    char last_payload_[192]{};
+    char last_payload_[512]{};
     char last_request_id_[80]{};
 };
 

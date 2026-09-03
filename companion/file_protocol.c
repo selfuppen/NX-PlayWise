@@ -521,6 +521,8 @@ const char *ptc_companion_status_name(PtcCompanionStatus status)
         return "result_invalid";
     case PTC_COMPANION_RESULT_MISMATCH:
         return "result_mismatch";
+    case PTC_COMPANION_QUIESCING:
+        return "quiescing";
     default:
         return "unknown";
     }
