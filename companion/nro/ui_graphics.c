@@ -2765,6 +2765,7 @@ static void draw_code_result_overlay(uint32_t *pixels, uint32_t stride, const Pt
     char before_value[48];
     char after_value[48];
     char actual_value[48];
+    bool remaining_fresh = !model->code_result_failed && ptc_ui_status_is_fresh(model, (int64_t)time(NULL));
     format_duration(model->code_actual_add_minutes, actual_value, sizeof(actual_value));
     if (model->code_result_pending) {
         snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "加时结果确认中");
@@ -2773,7 +2774,7 @@ static void draw_code_result_overlay(uint32_t *pixels, uint32_t stride, const Pt
     } else if (model->code_result_failed) {
         snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "兑换未成功");
         snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
-                 "本次未消费代码。请返回后按提示重试，或请家长进入支持与恢复。");
+                 "%s", ptc_ui_code_failure_guidance(model->error_code));
     } else {
         snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "加时成功");
         snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
@@ -2786,7 +2787,8 @@ static void draw_code_result_overlay(uint32_t *pixels, uint32_t stride, const Pt
     if (model->code_result_pending) {
         format_duration(model->code_preview_after_available ? model->code_preview_after_minutes : -1,
                         after_value, sizeof(after_value));
-    } else if (model->unrestricted_today == 1) snprintf(after_value, sizeof(after_value), "不限时");
+    } else if (!remaining_fresh) snprintf(after_value, sizeof(after_value), "状态待确认");
+    else if (model->unrestricted_today == 1) snprintf(after_value, sizeof(after_value), "不限时");
     else format_duration(model->remaining_available ? model->remaining_minutes : -1,
                          after_value, sizeof(after_value));
     draw_time_state_card(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 142, 300, 92},
@@ -2797,7 +2799,7 @@ static void draw_code_result_overlay(uint32_t *pixels, uint32_t stride, const Pt
     draw_time_state_card(pixels, stride, (UiRect){dialog.x + 406, dialog.y + 142, 300, 92},
                          model->code_result_pending ? "预览兑换后" : (model->code_result_failed ? "上次剩余读数" : "兑换后剩余"), after_value,
                          time_state_accent(model->code_result_pending ? model->code_preview_after_available :
-                                           (model->unrestricted_today == 1 || model->remaining_available),
+                                           (remaining_fresh && (model->unrestricted_today == 1 || model->remaining_available)),
                                            model->code_result_pending ? false : model->unrestricted_today == 1,
                                            model->code_result_pending ? model->code_preview_after_minutes : model->remaining_minutes));
     if (!model->code_result_pending) {
@@ -2806,13 +2808,15 @@ static void draw_code_result_overlay(uint32_t *pixels, uint32_t stride, const Pt
         draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 312, 652, 24}, age, 18, status_age_color(model));
     }
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54}, 8,
-                    model->code_result_failed ? COLOR(255, 235, 238) : COLOR(235, 249, 242));
+                    model->code_result_pending ? UI_RGB(g_palette->surface_raised) :
+                    (model->code_result_failed ? COLOR(255, 235, 238) : COLOR(235, 249, 242)));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54},
                      model->code_result_pending ? "结果确认期间可关闭；下次打开会继续确认" :
-                     (model->code_result_failed ? "失败结果已确认；关闭后可重新输入" : (model->code_actual_add_available && model->code_actual_add_minutes < model->code_grant_minutes
+                     (model->code_result_failed ? "本次未消费代码；已使用或过期的代码仍不可用" : (model->code_actual_add_available && model->code_actual_add_minutes < model->code_grant_minutes
                          ? "已到每日上限，实际增加少于代码时长" :
                          (model->code_actual_add_available ? "兑换结果已确认并保存" : "成功已确认；加时明细暂不可核对，请查看使用记录"))),
-                     19, model->code_result_failed ? COLOR(194, 61, 61) : COLOR(25, 132, 95));
+                     19, model->code_result_pending ? UI_RGB(g_palette->text_secondary) :
+                     (model->code_result_failed ? COLOR(194, 61, 61) : COLOR(25, 132, 95)));
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回孩子区",
                        COLOR(235, 238, 243), COLOR(66, 74, 86), true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), model->code_result_pending ? "A  关闭" : "A  完成",
@@ -3106,7 +3110,7 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
     int expected = reliable ? ptc_ui_grant_estimate_remaining(model, model->grant_minutes, &capped) : -1;
     uint16_t year; uint8_t month, day;
     PtcUiModel shell = *model;
-    snprintf(shell.overlay_body, sizeof(shell.overlay_body), "选时长、生成，再把代码告诉孩子。孩子确认兑换后才会增加时间。");
+    snprintf(shell.overlay_body, sizeof(shell.overlay_body), "选时长、生成，再把代码告诉孩子。实际增加以兑换结果为准。");
     draw_dialog_shell(pixels, stride, &shell, &dialog, 920, 650);
     if (reliable && model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "不限时");
     else format_duration(reliable && model->remaining_available ? model->remaining_minutes : -1, remaining, sizeof(remaining));
@@ -3137,7 +3141,7 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
     if (model->grant_has_code) {
         ptc_ui_format_code(model->grant_code, code, sizeof(code));
         draw_text(pixels, stride, dialog.x + 54, dialog.y + 432, code, 42, UI_RGB(g_palette->text_primary));
-        snprintf(line, sizeof(line), "此码增加 %u 分钟", (unsigned)model->grant_issued_minutes);
+        snprintf(line, sizeof(line), "代码时长 %u 分钟", (unsigned)model->grant_issued_minutes);
         draw_text(pixels, stride, dialog.x + 420, dialog.y + 426, line, 25, UI_RGB(g_palette->text_primary));
         format_duration(model->grant_estimate_available ? model->grant_estimate_minutes : -1, estimate, sizeof(estimate));
         snprintf(line, sizeof(line), "生成时预计剩余 %s%s", estimate, model->grant_estimate_capped ? "（已到每日上限）" : "");

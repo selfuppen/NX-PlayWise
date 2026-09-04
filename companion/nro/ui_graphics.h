@@ -537,6 +537,7 @@ int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
 bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now);
 void ptc_ui_format_status_age(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
 void ptc_ui_match_redemption_result(PtcUiModel *model);
+const char *ptc_ui_code_failure_guidance(int error_code);
 void ptc_ui_format_code(const char *code, char *out, size_t out_size);
 void ptc_ui_format_today_mode(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_quota_remaining(const PtcUiModel *model, char *out, size_t out_size);

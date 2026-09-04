@@ -1561,6 +1561,30 @@ static void test_home_redesign(void)
     check_hit(hit_center(&model, ptc_ui_child_buffer_rect()), PTC_UI_HIT_NONE, 0, "closed buffer is read only");
 }
 
+static void test_redemption_failure_next_steps(void)
+{
+    PtcUiModel model = {0};
+    const int codes[] = {206, 205, 203, 208, 501, 312, 999};
+    const char *steps[] = {"另一枚代码", "主机日期", "核对 8 位数字", "稍候", "SD 卡空间", "支持与恢复", "支持与恢复"};
+    char json[8192];
+    PtcResultState state;
+    ptc_result_state_default(&state, 2380);
+    for (unsigned i = 0; i < sizeof(codes) / sizeof(codes[0]); ++i) {
+        check_true(ptc_result_error_json(json, sizeof(json), "failed-code", "offline_code",
+            "release", false, (PtcErrorCode)codes[i], &state, 1000) == 0, "build backend failure fixture");
+        check_true(ptc_ui_apply_result_json(&model, json), "restored failure result parses");
+        check_true(strstr(ptc_ui_code_failure_guidance(model.error_code), steps[i]) != NULL,
+            "failure next step follows the backend error");
+        model.view = PTC_UI_CHILD;
+        model.overlay = PTC_UI_OVERLAY_CODE_RESULT;
+        model.code_result_failed = true;
+        check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+            "each failure keeps a reachable return action");
+        ptc_ui_cancel_overlay(&model);
+        check_int(model.view, PTC_UI_CHILD, "failure returns to child area");
+    }
+}
+
 static void test_grant_flow_polish(void)
 {
     PtcUiModel model = {0};
@@ -1653,6 +1677,7 @@ static void test_grant_flow_polish(void)
 
 int main(void)
 {
+    test_redemption_failure_next_steps();
     test_grant_flow_polish();
     test_home_redesign();
     test_theme_resolution();

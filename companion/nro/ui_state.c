@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "../file_protocol.h"
+#include "../../common/protocol/error_code.h"
 #include "../../common/time/ptc_time.h"
 #include "../../third_party/cjson/cJSON.h"
 
@@ -1175,6 +1176,32 @@ void ptc_ui_format_code(const char *code, char *out, size_t out_size)
     if (!out || !out_size) return;
     for (size_t i = 0; i < 8 && i < length; ++i) grouped[i + (i >= 4)] = code[i];
     snprintf(out, out_size, "%s", grouped);
+}
+
+const char *ptc_ui_code_failure_guidance(int error_code)
+{
+    switch (error_code) {
+    case PTC_ERR_USED_TOKEN:
+        return "这枚代码已使用，请家长生成另一枚代码；返回后输入新码。";
+    case PTC_ERR_WRONG_DATE:
+        return "代码日期与主机不一致，请刷新主机日期，再请家长按这一天生成新码。";
+    case PTC_ERR_BAD_CLOCK:
+        return "主机日期无法确认，请家长检查系统日期，返回刷新后再试。";
+    case PTC_ERR_BAD_CODE:
+    case PTC_ERR_BAD_TOKEN_VERSION:
+    case PTC_ERR_UNSUPPORTED_TOKEN_ACTION:
+    case PTC_ERR_BAD_SIGNATURE:
+        return "代码未通过验证，请核对 8 位数字；仍失败时请家长核对设备并生成新码。";
+    case PTC_ERR_MINUTES_EXCEED_LIMIT:
+        return "代码时长超过允许上限，请家长选择较短时长生成新码。";
+    case PTC_ERR_CODE_COOLDOWN:
+        return "输入尝试过多，请稍候再输入；等待期间可返回孩子区。";
+    case PTC_ERR_STORAGE_READ_FAILED:
+    case PTC_ERR_STORAGE_WRITE_FAILED:
+        return "读写未完成，请家长检查 SD 卡空间，并到设置的支持与恢复中确认状态。";
+    default:
+        return "兑换未完成，请家长到设置的支持与恢复查看原因，恢复正常后再试。";
+    }
 }
 
 void ptc_ui_match_redemption_result(PtcUiModel *model)

@@ -1035,7 +1035,7 @@ static void poll_pending_redemption(UiState *ui)
     ptc_ui_mark_status_updated(&ui->model, ui->model.code_completed_at);
     if (ui->model.code_result_failed) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "后台已确认兑换未成功，加时码没有被消费，可以重新输入。");
+                 "%s", ptc_ui_code_failure_guidance(ui->model.error_code));
     } else {
         snprintf(ui->model.message, sizeof(ui->model.message),
                  "已恢复并确认上次兑换成功；这枚加时码已经使用，不能再次使用。");
