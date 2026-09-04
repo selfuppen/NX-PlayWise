@@ -82,18 +82,32 @@ def test_container_command() -> None:
     command = package_remote.container_command()
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     require("/ws/playwise" in command, "container command must use the mounted repository")
-    require("make test packages" in command, "container command must test and package")
+    require("test packages" in command, "container command must test and package")
     require("packages: package-complete device-lab-package" in makefile,
             "packages target must verify the isolated Device Lab target")
     require("make clean" in command, "authoritative build must remove stale intermediates first")
     require("--emit-bundle" not in command, "container command must not stream a copied bundle")
     require("git " not in command, "mounted local source must not require a git update")
-    require("eden-test-nro" not in command, "the default build must not spend time on the emulator NRO")
-    require("CLEAN_EDEN=1" not in command, "the default build must preserve an independently running Eden artifact")
-    eden_command = package_remote.container_command(with_eden=True)
-    require("eden-test-nro" in eden_command, "--with-eden must build the isolated Eden NRO target")
-    require("CLEAN_EDEN=1" in eden_command, "--with-eden must clean its own stale Eden artifact")
-    require("make test packages" in eden_command, "--with-eden must keep the standard package targets")
+    require("eden-test-nro" in command, "the default build must include the emulator NRO target")
+    require("CLEAN_EDEN=1" in command, "the default build must clean Eden stale intermediates")
+
+    without_eden = package_remote.container_command(with_eden=False)
+    require("eden-test-nro" not in without_eden, "with_eden=False must omit Eden target")
+    require("CLEAN_EDEN=1" not in without_eden, "with_eden=False must omit CLEAN_EDEN")
+
+    incremental = package_remote.container_command(clean=False)
+    require("make clean" not in incremental, "incremental build must omit make clean")
+    require("test packages" in incremental, "incremental build must still compile packages")
+
+    skip_tests = package_remote.container_command(run_tests=False)
+    require("test" not in skip_tests.split("make -j ")[1].split(), "skip_tests must omit test target")
+
+    only_lab = package_remote.container_command(only="device-lab")
+    require("device-lab-package" in only_lab, "only=device-lab must target device-lab-package")
+    require("eden-test-nro" not in only_lab, "only=device-lab must omit Eden")
+
+    jobs_cmd = package_remote.container_command(jobs=4)
+    require("make -j4 " in jobs_cmd, "explicit jobs must be reflected in make command")
 
 
 def test_ssh_command() -> None:
@@ -102,9 +116,12 @@ def test_ssh_command() -> None:
     require("1888" in command, "default container SSH port must be 1888")
     require("root@127.0.0.1" in command, "default container SSH target must be local root")
     require(command[-1] == package_remote.container_command(), "SSH must execute the container build command")
-    eden_command = package_remote.ssh_command(with_eden=True)
-    require(eden_command[-1] == package_remote.container_command(with_eden=True),
-            "--with-eden must reach the container through the same SSH transport")
+    without_eden_command = package_remote.ssh_command(with_eden=False)
+    require(without_eden_command[-1] == package_remote.container_command(with_eden=False),
+            "without eden must reach container through same SSH transport")
+    lab_command = package_remote.ssh_command(only="device-lab")
+    require(lab_command[-1] == package_remote.container_command(only="device-lab"),
+            "only=device-lab must propagate to container command")
 
 
 def test_container_ssh_key_persistence() -> None:
@@ -300,6 +317,14 @@ def test_public_package_selection() -> None:
         selected = package_remote.latest_packages(root)
         require(selected == {"playwise": standard, "complete": complete, "device_lab": device_lab},
                 "build outputs must be selected by exact versioned names")
+
+        single_dir = root / "single"
+        single_dir.mkdir()
+        single_lab = single_dir / package_remote.DEVICE_LAB_PACKAGE
+        single_lab.write_bytes(b"lab")
+        lab_selected = package_remote.latest_packages(single_dir, target_packages={"device_lab"})
+        require(lab_selected == {"device_lab": single_lab}, "single target selection must succeed")
+
         extra = root / "unexpected.zip"
         extra.write_bytes(b"extra")
         try:

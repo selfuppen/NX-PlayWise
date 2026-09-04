@@ -9,9 +9,23 @@ import shlex
 import shutil
 import struct
 import subprocess
+import sys
+import time
 import zipfile
 
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from playwise_version import read_playwise_version
+import stage_timer
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -352,34 +366,82 @@ def verify_packaged_artifacts(path: Path, manifest: dict) -> None:
                 raise PackageError(f"{path.name}: packaged {member_name} differs from the verified build artifact")
 
 
-def latest_packages(package_dir: Path) -> dict[str, Path]:
-    standard = package_dir / STANDARD_PACKAGE
-    complete = package_dir / COMPLETE_PACKAGE
-    device_lab = package_dir / DEVICE_LAB_PACKAGE
-    missing = [path.name for path in (standard, complete, device_lab) if not path.is_file()]
+def latest_packages(package_dir: Path, target_packages: set[str] | None = None) -> dict[str, Path]:
+    all_map = {
+        "playwise": package_dir / STANDARD_PACKAGE,
+        "complete": package_dir / COMPLETE_PACKAGE,
+        "device_lab": package_dir / DEVICE_LAB_PACKAGE,
+    }
+    if target_packages is None:
+        active_targets = {"playwise", "complete", "device_lab"}
+    else:
+        active_targets = target_packages
+
+    result: dict[str, Path] = {}
+    expected_names: set[str] = set()
+    for target in active_targets:
+        pkg_path = all_map.get(target)
+        if pkg_path is not None:
+            result[target] = pkg_path
+            expected_names.add(pkg_path.name)
+
+    missing = [path.name for path in result.values() if not path.is_file()]
     if missing:
         raise PackageError(f"missing generated package: {', '.join(missing)}")
     zip_names = {path.name for path in package_dir.glob("*.zip")}
-    expected = {STANDARD_PACKAGE, COMPLETE_PACKAGE, DEVICE_LAB_PACKAGE}
-    if zip_names != expected:
-        raise PackageError("release build must produce exactly the standard, complete and device lab public zips")
-    return {"playwise": standard, "complete": complete, "device_lab": device_lab}
+    if zip_names != expected_names:
+        if target_packages is None or target_packages == {"playwise", "complete", "device_lab"}:
+            raise PackageError("release build must produce exactly the standard, complete and device lab public zips")
+        expected_str = ", ".join(sorted(expected_names)) or "<none>"
+        got_str = ", ".join(sorted(zip_names)) or "<none>"
+        raise PackageError(f"expected public zips [{expected_str}], got [{got_str}]")
+    return result
 
 
-def container_command(container_path: str = DEFAULT_CONTAINER_PATH, *, with_eden: bool = False) -> str:
+def container_command(
+    container_path: str = DEFAULT_CONTAINER_PATH,
+    *,
+    only: str = "all",
+    with_eden: bool = True,
+    clean: bool = True,
+    run_tests: bool = True,
+    jobs: int | None = None,
+) -> str:
     path = "/opt/devkitpro/devkitA64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    # The emulator NRO is opt-in so the default run keeps its exact artifact set.
-    targets = "make test packages"
-    if with_eden:
-        targets += " eden-test-nro"
+    job_flag = f"-j{jobs} " if jobs else "-j "
+
+    clean_cmd = ""
+    if clean:
+        clean_eden = " CLEAN_EDEN=1" if (only in ("all", "eden") and with_eden) else ""
+        clean_cmd = f"make clean{clean_eden} && "
+
+    targets: list[str] = []
+    if run_tests:
+        targets.append("test")
+
+    if only == "all":
+        targets.append("packages")
+        if with_eden:
+            targets.append("eden-test-nro")
+    elif only == "playwise":
+        targets.append("package-playwise")
+    elif only == "complete":
+        targets.append("package-complete")
+    elif only == "device-lab":
+        targets.append("device-lab-package")
+    elif only == "eden":
+        targets.append("eden-test-nro")
+    else:
+        raise PackageError(f"unknown package target: {only}")
+
+    targets_str = f"make {job_flag}{' '.join(targets)}"
     container_script = (
         "export DEVKITPRO=/opt/devkitpro "
         "DEVKITARM=/opt/devkitpro/devkitARM "
         "DEVKITA64=/opt/devkitpro/devkitA64 "
         f"PATH={shlex.quote(path)} "
         f"&& cd {shlex.quote(container_path)} "
-        f"&& make clean{' CLEAN_EDEN=1' if with_eden else ''} "
-        f"&& {targets}"
+        f"&& {clean_cmd}{targets_str}"
     )
     return f"sh -lc {shlex.quote(container_script)}"
 
@@ -391,7 +453,11 @@ def ssh_command(
     container_path: str = DEFAULT_CONTAINER_PATH,
     identity: Path | None = None,
     *,
-    with_eden: bool = False,
+    only: str = "all",
+    with_eden: bool = True,
+    clean: bool = True,
+    run_tests: bool = True,
+    jobs: int | None = None,
 ) -> list[str]:
     command = ["ssh", "-p", str(port), "-o", "ConnectTimeout=10"]
     if host in {"127.0.0.1", "localhost", "::1"}:
@@ -399,7 +465,17 @@ def ssh_command(
         command.extend(["-o", "StrictHostKeyChecking=no", "-o", f"UserKnownHostsFile={os.devnull}"])
     if identity is not None:
         command.extend(["-i", str(identity)])
-    command.extend([f"{user}@{host}", container_command(container_path, with_eden=with_eden)])
+    command.extend([
+        f"{user}@{host}",
+        container_command(
+            container_path,
+            only=only,
+            with_eden=with_eden,
+            clean=clean,
+            run_tests=run_tests,
+            jobs=jobs,
+        ),
+    ])
     return command
 
 
@@ -410,10 +486,25 @@ def run_container(
     container_path: str = DEFAULT_CONTAINER_PATH,
     identity: Path | None = None,
     *,
-    with_eden: bool = False,
+    only: str = "all",
+    with_eden: bool = True,
+    clean: bool = True,
+    run_tests: bool = True,
+    jobs: int | None = None,
 ) -> None:
     process = subprocess.run(
-        ssh_command(host, port, user, container_path, identity, with_eden=with_eden),
+        ssh_command(
+            host,
+            port,
+            user,
+            container_path,
+            identity,
+            only=only,
+            with_eden=with_eden,
+            clean=clean,
+            run_tests=run_tests,
+            jobs=jobs,
+        ),
         cwd=ROOT,
         stdin=None,
     )
@@ -445,37 +536,108 @@ def build_and_verify(
     container_path: str = DEFAULT_CONTAINER_PATH,
     identity: Path | None = None,
     *,
-    with_eden: bool = False,
+    only: str = "all",
+    with_eden: bool = True,
+    clean: bool = True,
+    run_tests: bool = True,
+    jobs: int | None = None,
 ) -> None:
     package_dir = ROOT / "build" / "packages"
     device_lab_dir = ROOT / "build" / "device-lab"
     eden_dir = ROOT / "build" / "eden-test"
-    clean_package_results(package_dir)
-    remove_path(device_lab_dir)
-    if with_eden:
-        remove_path(eden_dir)
-    run_container(host, port, user, container_path, identity, with_eden=with_eden)
-    manifest_path = ROOT / "build" / "generated" / "release-manifest.json"
-    if not manifest_path.is_file():
-        raise PackageError(f"missing generated release manifest: {manifest_path}")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    packages = latest_packages(package_dir)
-    standard_package = packages["playwise"]
-    verify_package_zip(standard_package, "playwise", expected_manifest=manifest)
-    verify_packaged_artifacts(standard_package, manifest)
-    verify_complete_package(packages["complete"], standard_package)
-    verify_flat_sysmodule(ROOT / "build" / "switch" / "pctc-sysmodule.bin", manifest, release=True)
-    device_lab_package = packages["device_lab"]
-    verify_device_lab_zip(device_lab_package)
-    with zipfile.ZipFile(device_lab_package) as package:
-        lab_manifest = json.loads(package.read("switch/playwise-device-lab/build.json").decode("utf-8"))
-    verify_flat_sysmodule(device_lab_dir / "switch" / "pwtl-sysmodule.bin", lab_manifest, release=False)
-    if with_eden:
+
+    stage_timer.clear_timing_records()
+    if clean:
+        clean_package_results(package_dir)
+        remove_path(device_lab_dir)
+        if with_eden:
+            remove_path(eden_dir)
+    else:
+        package_dir.mkdir(parents=True, exist_ok=True)
+        if only in ("all", "playwise", "complete"):
+            remove_path(package_dir / STANDARD_PACKAGE)
+        if only in ("all", "complete"):
+            remove_path(package_dir / COMPLETE_PACKAGE)
+        if only in ("all", "device-lab"):
+            remove_path(package_dir / DEVICE_LAB_PACKAGE)
+        if only in ("all", "eden") and with_eden:
+            remove_path(eden_dir / EDEN_NRO)
+
+    run_container(
+        host,
+        port,
+        user,
+        container_path,
+        identity,
+        only=only,
+        with_eden=with_eden,
+        clean=clean,
+        run_tests=run_tests,
+        jobs=jobs,
+    )
+
+    if only == "all":
+        target_pkgs = {"playwise", "complete", "device_lab"}
+        check_eden = with_eden
+    elif only == "playwise":
+        target_pkgs = {"playwise"}
+        check_eden = False
+    elif only == "complete":
+        target_pkgs = {"playwise", "complete"}
+        check_eden = False
+    elif only == "device-lab":
+        target_pkgs = {"device_lab"}
+        check_eden = False
+    elif only == "eden":
+        target_pkgs = set()
+        check_eden = True
+    else:
+        raise PackageError(f"unknown package target: {only}")
+
+    packages = latest_packages(package_dir, target_pkgs)
+
+    if "playwise" in target_pkgs:
+        manifest_path = ROOT / "build" / "generated" / "release-manifest.json"
+        if not manifest_path.is_file():
+            raise PackageError(f"missing generated release manifest: {manifest_path}")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        standard_package = packages["playwise"]
+        t0 = time.perf_counter()
+        verify_package_zip(standard_package, "playwise", expected_manifest=manifest)
+        verify_packaged_artifacts(standard_package, manifest)
+        verify_flat_sysmodule(ROOT / "build" / "switch" / "pctc-sysmodule.bin", manifest, release=True)
+        stage_timer.write_timing_record("playwise", "verify", time.perf_counter() - t0)
+
+    if "complete" in target_pkgs:
+        t0 = time.perf_counter()
+        verify_complete_package(packages["complete"], packages["playwise"])
+        stage_timer.write_timing_record("playwise-complete", "verify", time.perf_counter() - t0)
+
+    if "device_lab" in target_pkgs:
+        t0 = time.perf_counter()
+        device_lab_package = packages["device_lab"]
+        verify_device_lab_zip(device_lab_package)
+        with zipfile.ZipFile(device_lab_package) as package:
+            lab_manifest = json.loads(package.read("switch/playwise-device-lab/build.json").decode("utf-8"))
+        verify_flat_sysmodule(device_lab_dir / "switch" / "pwtl-sysmodule.bin", lab_manifest, release=False)
+        stage_timer.write_timing_record("device-lab", "verify", time.perf_counter() - t0)
+
+    if check_eden:
+        t0 = time.perf_counter()
         eden_manifest_path = eden_dir / "generated" / "release-manifest.json"
         if not eden_manifest_path.is_file():
             raise PackageError(f"missing generated Eden manifest: {eden_manifest_path}")
         eden_manifest = json.loads(eden_manifest_path.read_text(encoding="utf-8"))
         verify_eden_nro(eden_dir / EDEN_NRO, eden_manifest)
+        stage_timer.write_timing_record("eden-test", "verify", time.perf_counter() - t0)
+
+    records = stage_timer.read_timing_records()
+    metadata = {
+        "目标": only,
+        "清理模式": "增量复用 (Incremental)" if not clean else "完整清理 (Clean)",
+        "单元测试": "跳过" if not run_tests else "已执行",
+    }
+    print("\n" + stage_timer.format_timing_report(records, metadata) + "\n")
 
 
 def parse_args() -> argparse.Namespace:
@@ -490,9 +652,52 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--identity", type=Path, help="Optional SSH private key path.")
     parser.add_argument(
+        "--only",
+        choices=["all", "playwise", "complete", "device-lab", "eden"],
+        default="all",
+        help="Only build and verify a specific package target. Choices: all, playwise, complete, device-lab, eden. (Default: all)",
+    )
+    eden_group = parser.add_mutually_exclusive_group()
+    eden_group.add_argument(
         "--with-eden",
+        dest="with_eden",
         action="store_true",
-        help="Also build and verify the emulator-only Eden NRO in build/eden-test/.",
+        default=True,
+        help="Build and verify the emulator-only Eden NRO in build/eden-test/. (Default: enabled)",
+    )
+    eden_group.add_argument(
+        "--no-eden",
+        "--without-eden",
+        dest="with_eden",
+        action="store_false",
+        help="Disable building and verifying the emulator-only Eden NRO.",
+    )
+    clean_group = parser.add_mutually_exclusive_group()
+    clean_group.add_argument(
+        "--clean",
+        dest="clean",
+        action="store_true",
+        default=True,
+        help="Perform authoritative full clean before building. (Default: enabled)",
+    )
+    clean_group.add_argument(
+        "--incremental",
+        "--no-clean",
+        dest="clean",
+        action="store_false",
+        help="Incremental build: reuse existing object files (.o) and skip make clean for fast iteration.",
+    )
+    parser.add_argument(
+        "--skip-tests",
+        action="store_true",
+        help="Skip running container tests (make test) to accelerate packaging during development.",
+    )
+    parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        help="Number of parallel make compilation jobs. Default: automatic multi-core parallel.",
     )
     return parser.parse_args()
 
@@ -506,7 +711,11 @@ def main() -> int:
             args.user,
             args.container_path,
             args.identity,
+            only=args.only,
             with_eden=args.with_eden,
+            clean=args.clean,
+            run_tests=not args.skip_tests,
+            jobs=args.jobs,
         )
     except (OSError, PackageError, subprocess.SubprocessError, zipfile.BadZipFile) as exc:
         print(f"FAIL: container packages: {exc}")
