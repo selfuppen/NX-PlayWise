@@ -921,7 +921,8 @@ static void activate_parent_status(UiState *ui)
         ui->model.parent_page = PTC_UI_PARENT_SETTINGS;
         ui->model.settings_page = PTC_UI_SETTINGS_SUPPORT;
         ui->model.parent_footer_focused = false;
-        ui->model.selected_index = 0;
+        ui->model.selected_index = ptc_ui_support_recommended_action(&ui->model);
+        if (ui->model.selected_index < 0) ui->model.selected_index = 4;
     } else {
         refresh_disable_flag(ui);
         submit_status(ui);
@@ -1337,6 +1338,8 @@ static void poll_result(UiState *ui, bool force)
     bool saved_holiday_enabled;
     PtcDayRule saved_holiday_rule;
     PtcDayRule saved_makeup_rule;
+    PtcScheduledOverride saved_scheduled_draft;
+    bool preserve_scheduled_draft;
     if (!ui->waiting) {
         if (force) {
             submit_status(ui);
@@ -1365,6 +1368,8 @@ static void poll_result(UiState *ui, bool force)
     }
     ui->waiting = false;
     if (status == PTC_COMPANION_OK) {
+        saved_scheduled_draft = ui->model.draft_scheduled_override;
+        preserve_scheduled_draft = ptc_ui_scheduled_dirty(&ui->model);
         preserve_weekly_draft = ui->model.weekly_dirty;
         if (preserve_weekly_draft) {
             memcpy(saved_draft, ui->model.draft_week, sizeof(saved_draft));
@@ -1391,6 +1396,7 @@ static void poll_result(UiState *ui, bool force)
         }
         sync_setup_wizard(ui);
         load_rule_drafts(ui);
+        ptc_ui_reconcile_scheduled_result(&ui->model, &saved_scheduled_draft, preserve_scheduled_draft);
         if (ui->model.status_loaded && strcmp(ui->model.result_status, "ok") == 0) {
             ptc_ui_mark_status_updated(&ui->model, (int64_t)time(NULL));
         }
@@ -1859,6 +1865,8 @@ static void handle_setup_input(UiState *ui, u64 down, u64 held)
         } else if (down & HidNpadButton_Plus) {
             setup_primary(ui);
         }
+    } else if (ui->model.setup_step == PTC_UI_SETUP_PIN && (down & HidNpadButton_X)) {
+        setup_pin(ui);
     } else if (ui->model.setup_step == PTC_UI_SETUP_THEME) {
         if (down & HidNpadButton_Left) {
             ui->model.setup_theme_index = ui->model.setup_theme_index <= 0 ? 2 : ui->model.setup_theme_index - 1;
@@ -2961,7 +2969,8 @@ static void handle_parent_action(UiState *ui)
             break;
         case 4:
             ui->model.settings_page = PTC_UI_SETTINGS_SUPPORT;
-            ui->model.selected_index = 0;
+            ui->model.selected_index = ptc_ui_support_recommended_action(&ui->model);
+            if (ui->model.selected_index < 0) ui->model.selected_index = 4;
             ui->model.parent_footer_focused = false;
             break;
         default: break;
@@ -2978,8 +2987,9 @@ static void handle_parent_action(UiState *ui)
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      "此功能只改变 hbmenu 启动方式，不提供防篡改保护。");
         } else if (index == 1) {
-            ui->model.draft_scheduled_override = ui->model.scheduled_override;
-            if (!ui->model.draft_scheduled_override.enabled) {
+            if (!ptc_ui_scheduled_dirty(&ui->model))
+                ui->model.draft_scheduled_override = ui->model.scheduled_override;
+            if (!ptc_ui_scheduled_dirty(&ui->model) && !ui->model.draft_scheduled_override.enabled) {
                 ui->model.draft_scheduled_override.start_day_index = ui->model.day_index;
                 ui->model.draft_scheduled_override.end_day_index = ui->model.day_index;
                 ui->model.draft_scheduled_override.rule.mode = PTC_RULE_MODE_LIMIT;
@@ -2989,7 +2999,7 @@ static void handle_parent_action(UiState *ui)
             ui->model.overlay_selection = 0;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "临时日期计划");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                "优先级：今日临时设置、日期计划、国家节假日、周计划。一次只保留一个区间。");
+                "安排一段时间的每日额度，保存后应用；一次保留一个日期区间。");
         } else if (index == 2) {
             ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
             ui->model.overlay = PTC_UI_OVERLAY_AUTONOMY;
@@ -3231,7 +3241,6 @@ static void refresh_album_restriction(UiState *ui)
 
 static void save_weekly_from_page(UiState *ui)
 {
-    uint8_t weekday;
     PtcDayRule before;
     PtcDayRule after;
     char body[192];
@@ -3242,9 +3251,8 @@ static void save_weekly_from_page(UiState *ui)
         snprintf(ui->model.message, sizeof(ui->model.message), "周计划没有修改。");
         return;
     }
-    weekday = ptc_weekday_from_day_index(ui->model.day_index);
-    before = ui->model.current_week[weekday];
-    after = ui->model.draft_week[weekday];
+    before = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_SAVED).rule;
+    after = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_WEEKLY).rule;
     if (!ui->model.today_override_present &&
         ptc_ui_day_rule_effectively_changed(before, after)) {
         if (after.mode == PTC_RULE_MODE_UNLIMITED) {
@@ -3390,6 +3398,11 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_SCHEDULED_LEAVE) {
+        if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
+        else if (down & HidNpadButton_A) ptc_ui_discard_scheduled(&ui->model);
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
         if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
             ptc_ui_cancel_overlay(&ui->model);
@@ -3397,6 +3410,8 @@ static void handle_overlay_input(UiState *ui, u64 down)
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_SCHEDULED) {
+        if (ui->waiting) return;
+        if (ui->model.disable_flag_present && !(down & HidNpadButton_B)) return;
         PtcScheduledOverride *draft = &ui->model.draft_scheduled_override;
         uint32_t duration = draft->end_day_index >= draft->start_day_index
             ? (uint32_t)draft->end_day_index - draft->start_day_index + 1u : 1u;
@@ -3435,10 +3450,11 @@ static void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & HidNpadButton_A) {
             handle_overlay_input(ui, HidNpadButton_Right);
         } else if (down & HidNpadButton_Plus) {
-            if (!ptc_scheduled_override_is_valid(draft)) {
+            if (ui->model.disable_flag_present || !ptc_ui_scheduled_dirty(&ui->model)) {
+                return;
+            } else if (!ptc_scheduled_override_is_valid(draft)) {
                 snprintf(ui->model.message, sizeof(ui->model.message), "日期计划无效，请检查 1 到 366 天范围和额度。");
             } else {
-                ui->model.overlay = PTC_UI_OVERLAY_NONE;
                 submit_scheduled_override(ui);
             }
         }

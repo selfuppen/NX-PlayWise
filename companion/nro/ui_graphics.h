@@ -76,7 +76,8 @@ typedef enum {
     PTC_UI_OVERLAY_SCHEDULED = 24,
     PTC_UI_OVERLAY_AUTONOMY = 25,
     PTC_UI_OVERLAY_ACTIVITY_HISTORY = 26,
-    PTC_UI_OVERLAY_HOME_DETAILS = 27
+    PTC_UI_OVERLAY_HOME_DETAILS = 27,
+    PTC_UI_OVERLAY_SCHEDULED_LEAVE = 28
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -573,6 +574,15 @@ void ptc_ui_move_overlay_selection(PtcUiModel *model, int horizontal, int vertic
 int ptc_ui_grant_estimate_remaining(const PtcUiModel *model, uint16_t grant_minutes, bool *capped);
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now);
 bool ptc_ui_cancel_overlay(PtcUiModel *model);
+typedef enum { PTC_UI_PLAN_SAVED, PTC_UI_PLAN_WEEKLY, PTC_UI_PLAN_HOLIDAY, PTC_UI_PLAN_SCHEDULED } PtcUiPlanKind;
+bool ptc_ui_scheduled_dirty(const PtcUiModel *model);
+void ptc_ui_discard_scheduled(PtcUiModel *model);
+void ptc_ui_reconcile_scheduled_result(PtcUiModel *model, const PtcScheduledOverride *draft, bool preserve);
+PtcEffectiveRule ptc_ui_plan_rule(const PtcUiModel *model, PtcUiPlanKind kind);
+void ptc_ui_format_plan_impact(const PtcUiModel *model, PtcUiPlanKind kind,
+                             int64_t now, char *out, size_t out_size);
+int ptc_ui_support_recommended_action(const PtcUiModel *model);
+const char *ptc_ui_support_problem(const PtcUiModel *model);
 PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model);
 bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text);
 bool ptc_ui_apply_redemption_history_text(PtcUiModel *model, const char *text);

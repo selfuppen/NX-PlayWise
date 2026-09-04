@@ -1675,8 +1675,132 @@ static void test_grant_flow_polish(void)
     check_true(!model.code_actual_add_available, "missing history never falls back to preview");
 }
 
+static void test_plan_polish(void)
+{
+    PtcUiModel model = {0};
+    PtcRules rules;
+    char text[512];
+    char detail[512];
+    ptc_rules_default(&rules);
+    memcpy(model.current_week, rules.week, sizeof(rules.week));
+    memcpy(model.draft_week, rules.week, sizeof(rules.week));
+    model.status_loaded = model.played_minutes_available = true;
+    model.status_updated_at = 1000;
+    model.day_index = 2380;
+    model.played_minutes = 20;
+    model.draft_week[ptc_weekday_from_day_index(2380)].minutes = 90;
+    ptc_ui_format_plan_impact(&model, PTC_UI_PLAN_WEEKLY, 1000, text, sizeof(text));
+    check_true(strstr(text, "70 分钟") != NULL, "weekly draft computes remaining from consumption");
+    model.scheduled_override = (PtcScheduledOverride){true, 2380, 2381, {PTC_RULE_MODE_LIMIT, 45}};
+    model.draft_scheduled_override = model.scheduled_override;
+    check_int(ptc_ui_plan_rule(&model, PTC_UI_PLAN_WEEKLY).source, PTC_RULE_SOURCE_SCHEDULED_OVERRIDE,
+              "scheduled plan overrides weekly preview");
+    ptc_ui_format_plan_impact(&model, PTC_UI_PLAN_WEEKLY, 1000, text, sizeof(text));
+    check_true(strstr(text, "今天不变") && strstr(text, "日期计划"), "covered weekly edit does not promise a change today");
+    model.holiday_enabled = model.draft_holiday_enabled = true;
+    model.holiday_rule = rules.holiday_rule;
+    model.makeup_workday_rule = rules.makeup_workday_rule;
+    model.draft_holiday_rule = (PtcDayRule){PTC_RULE_MODE_UNLIMITED, 0};
+    check_int(ptc_ui_plan_rule(&model, PTC_UI_PLAN_HOLIDAY).source, PTC_RULE_SOURCE_SCHEDULED_OVERRIDE,
+              "scheduled plan also overrides holiday draft");
+    snprintf(model.rule_source, sizeof(model.rule_source), "scheduled_override");
+    ptc_ui_format_weekly_save_result(&model, text, sizeof(text), detail, sizeof(detail));
+    check_true(strstr(text, "当前不变") && strstr(text, "日期计划"), "weekly success preserves scheduled explanation");
+    ptc_ui_format_holiday_save_result(&model, text, sizeof(text), detail, sizeof(detail));
+    check_true(strstr(text, "当前不变") && strstr(text, "日期计划"), "holiday success preserves scheduled explanation");
+    model.today_override_present = true;
+    model.today_override_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 30};
+    check_int(ptc_ui_plan_rule(&model, PTC_UI_PLAN_SCHEDULED).source, PTC_RULE_SOURCE_TODAY_OVERRIDE,
+              "today override remains highest priority");
+    check_int(ptc_ui_rule_after_today_restore(&model).source, PTC_RULE_SOURCE_SCHEDULED_OVERRIDE,
+              "restoring today reveals scheduled plan");
+    model.today_override_present = false;
+    model.draft_scheduled_override.rule.minutes = 10;
+    ptc_ui_format_plan_impact(&model, PTC_UI_PLAN_SCHEDULED, 1000, text, sizeof(text));
+    check_true(strstr(text, "还可玩 0 分钟") != NULL, "exhausted draft never shows negative remaining");
+    ptc_ui_format_plan_impact(&model, PTC_UI_PLAN_SCHEDULED, 1121, text, sizeof(text));
+    check_true(strstr(text, "状态待确认") != NULL, "stale plan impact does not claim current balance");
+    model.overlay = PTC_UI_OVERLAY_SCHEDULED;
+    for (int i = 0; i < 4; ++i) {
+        check_hit(hit_center(&model, ptc_ui_scheduled_field_rect(i)), PTC_UI_HIT_SCHEDULED_FIELD, i,
+                  "every scheduled field is touchable");
+        check_true(!rects_overlap(ptc_ui_scheduled_field_rect(i), ptc_ui_confirm_rect(model.overlay)),
+                   "scheduled field does not overlap save");
+    }
+    model.waiting = true;
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
+              "pending schedule blocks repeated touch save");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
+              "pending schedule cannot discard in-flight draft");
+    model.waiting = false;
+    ptc_ui_cancel_overlay(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_SCHEDULED_LEAVE, "dirty scheduled plan asks before leaving");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "continue scheduled editing touch target");
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "discard scheduled editing touch target");
+    ptc_ui_cancel_overlay(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_SCHEDULED, "cancel leave returns to draft");
+    check_int(model.draft_scheduled_override.rule.minutes, 10, "return retains draft");
+    PtcResultState state;
+    char json[8192];
+    ptc_result_state_default(&state, 2380);
+    check_int(ptc_result_error_json(json, sizeof(json), "plan-error", "set_scheduled_override",
+        "release", false, (PtcErrorCode)501, &state, 1000), 0, "build scheduled save failure");
+    check_true(ptc_ui_apply_result_json(&model, json), "apply scheduled save failure");
+    PtcScheduledOverride pending_draft = model.draft_scheduled_override;
+    model.draft_scheduled_override = model.scheduled_override;
+    ptc_ui_reconcile_scheduled_result(&model, &pending_draft, true);
+    check_true(ptc_ui_scheduled_dirty(&model), "failed save leaves scheduled draft available");
+    check_int(model.draft_scheduled_override.rule.minutes, 10, "rule reload after failure retains exact draft");
+    check_int(ptc_result_ok_json(json, sizeof(json), "plan-refresh", "status", "release", false,
+        &state, 1001), 0, "build unrelated status result");
+    check_true(ptc_ui_apply_result_json(&model, json), "apply status while editing");
+    model.draft_scheduled_override = model.scheduled_override;
+    ptc_ui_reconcile_scheduled_result(&model, &pending_draft, true);
+    check_int(model.draft_scheduled_override.rule.minutes, 10, "status refresh cannot overwrite draft");
+    ptc_ui_discard_scheduled(&model);
+    check_true(!ptc_ui_scheduled_dirty(&model) && model.overlay == PTC_UI_OVERLAY_NONE,
+               "explicit discard restores saved plan and returns");
+    model.overlay = PTC_UI_OVERLAY_SCHEDULED;
+    ptc_ui_cancel_overlay(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_NONE, "unchanged scheduled plan returns immediately");
+    model.overlay = PTC_UI_OVERLAY_SCHEDULED;
+    check_int(ptc_result_ok_json(json, sizeof(json), "plan-saved", "set_scheduled_override", "release", false,
+        &state, 1002), 0, "build scheduled save success");
+    check_true(ptc_ui_apply_result_json(&model, json), "apply scheduled save success");
+    model.scheduled_override = model.draft_scheduled_override = pending_draft;
+    ptc_ui_reconcile_scheduled_result(&model, &pending_draft, true);
+    check_true(!ptc_ui_scheduled_dirty(&model) && model.overlay == PTC_UI_OVERLAY_NONE,
+               "successful persisted plan ends editing without discarding saved values");
+}
+
+static void test_support_next_step(void)
+{
+    PtcUiModel model = {0};
+    model.status_loaded = true;
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
+    check_int(ptc_ui_support_recommended_action(&model), -1, "healthy support suggests no recovery");
+    model.disable_flag_present = true;
+    check_int(ptc_ui_support_recommended_action(&model), 0, "disabled support suggests resume");
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "failed");
+    check_int(ptc_ui_support_recommended_action(&model), 1, "failure suggests repair before resume");
+    model.waiting = true;
+    check_int(ptc_ui_support_recommended_action(&model), -1, "pending does not suggest a second operation");
+    model.waiting = false;
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
+    model.recovery_active = true;
+    check_int(ptc_ui_support_recommended_action(&model), 4, "unavailable repair suggests diagnostics");
+    check_true(strstr(ptc_ui_support_problem(&model), "恢复") != NULL, "recovery problem precedes disabled summary");
+    model.recovery_active = model.disable_flag_present = false;
+    model.error_code = 501;
+    check_int(ptc_ui_support_recommended_action(&model), 4, "recent failure suggests diagnostics");
+}
+
 int main(void)
 {
+    test_plan_polish();
+    test_support_next_step();
     test_redemption_failure_next_steps();
     test_grant_flow_polish();
     test_home_redesign();

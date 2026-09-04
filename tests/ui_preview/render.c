@@ -177,6 +177,98 @@ int main(int argc, char **argv)
         failed |= save_preview(argv[2], "confirmation", &model, dark);
         ptc_ui_cancel_overlay(&model);
     }
+    for (int dark = 0; dark <= 1; ++dark) {
+        PtcRules rules;
+        ptc_rules_default(&rules);
+        model = baseline;
+        model.view = PTC_UI_PARENT;
+        memcpy(model.current_week, rules.week, sizeof(rules.week));
+        memcpy(model.draft_week, rules.week, sizeof(rules.week));
+        model.parent_page = PTC_UI_PARENT_PLAN;
+        for (int slot = 0; slot < 7; ++slot)
+            if (ptc_ui_weekday_for_display_slot(slot) == ptc_weekday_from_day_index(model.day_index)) model.weekly_grid_slot = slot;
+        failed |= save_preview(argv[2], "plan-saved", &model, dark);
+        model.draft_week[ptc_weekday_from_day_index(model.day_index)].minutes = 90;
+        model.weekly_dirty = true;
+        failed |= save_preview(argv[2], "plan-draft-today", &model, dark);
+        model.scheduled_override = (PtcScheduledOverride){true, 2380, 2386, {PTC_RULE_MODE_LIMIT, 120}};
+        snprintf(model.rule_source, sizeof(model.rule_source), "scheduled_override");
+        model.selected_index = 4;
+        failed |= save_preview(argv[2], "plan-covered", &model, dark);
+        model.editor_index = ptc_weekday_from_day_index(model.day_index);
+        ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
+            "调整周计划额度", "完成输入后更新草稿，保存计划后才会应用。", 4, 1, 1440, 90);
+        failed |= save_preview(argv[2], "plan-minute-editor", &model, dark);
+        ptc_ui_cancel_overlay(&model);
+        snprintf(model.result_status, sizeof(model.result_status), "error");
+        snprintf(model.message, sizeof(model.message), "计划保存失败，修改仍保留，请检查后重试。");
+        model.error_code = 501;
+        failed |= save_preview(argv[2], "plan-failed", &model, dark);
+        model.error_code = 0;
+        snprintf(model.result_status, sizeof(model.result_status), "ok");
+        snprintf(model.message, sizeof(model.message), "已读取保存的计划");
+        model.parent_page = PTC_UI_PARENT_HOLIDAY;
+        model.holiday_rule = model.draft_holiday_rule = rules.holiday_rule;
+        model.makeup_workday_rule = model.draft_makeup_workday_rule = rules.makeup_workday_rule;
+        model.draft_holiday_enabled = true;
+        model.holiday_dirty = true;
+        model.selected_index = 1;
+        failed |= save_preview(argv[2], "holiday-draft", &model, dark);
+        model.disable_flag_present = true;
+        failed |= save_preview(argv[2], "holiday-disabled", &model, dark);
+        model.disable_flag_present = false;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.settings_page = PTC_UI_SETTINGS_ADVANCED;
+        model.draft_scheduled_override = model.scheduled_override;
+        model.draft_scheduled_override.rule.minutes = 90;
+        model.overlay = PTC_UI_OVERLAY_SCHEDULED;
+        model.overlay_selection = 1;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "临时日期计划");
+        snprintf(model.overlay_body, sizeof(model.overlay_body), "安排一段时间的每日额度，保存后应用；一次保留一个日期区间。");
+        failed |= save_preview(argv[2], "scheduled-draft", &model, dark);
+        model.draft_scheduled_override.end_day_index = 2745;
+        model.draft_scheduled_override.rule.mode = PTC_RULE_MODE_UNLIMITED;
+        failed |= save_preview(argv[2], "scheduled-long", &model, dark);
+        ptc_ui_cancel_overlay(&model);
+        failed |= save_preview(argv[2], "scheduled-leave", &model, dark);
+        ptc_ui_cancel_overlay(&model);
+        model.error_code = 501;
+        snprintf(model.result_status, sizeof(model.result_status), "error");
+        failed |= save_preview(argv[2], "scheduled-failed", &model, dark);
+        model = baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.selected_index = 3;
+        failed |= save_preview(argv[2], "settings-root", &model, dark);
+        model.settings_page = PTC_UI_SETTINGS_SUPPORT;
+        model.selected_index = 4;
+        failed |= save_preview(argv[2], "support-healthy", &model, dark);
+        model.disable_flag_present = true;
+        model.selected_index = 0;
+        failed |= save_preview(argv[2], "support-disabled", &model, dark);
+        snprintf(model.setup_phase, sizeof(model.setup_phase), "failed");
+        model.selected_index = 1;
+        model.recent_events_available = true;
+        model.recent_event_count = 3;
+        for (int i = 0; i < 3; ++i) {
+            snprintf(model.recent_events[i], sizeof(model.recent_events[i]), "规则保存未完成，请查看详情");
+            model.recent_event_timestamps[i] = 998;
+        }
+        failed |= save_preview(argv[2], "support-failed", &model, dark);
+        model.waiting = true;
+        failed |= save_preview(argv[2], "support-waiting", &model, dark);
+        model = baseline;
+        model.view = PTC_UI_SETUP;
+        snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
+        model.message[0] = '\0';
+        for (int step = 1; step <= PTC_UI_SETUP_ZONE; ++step) {
+            char name[32];
+            model.setup_step = step;
+            snprintf(name, sizeof(name), "setup-step-%d", step);
+            failed |= save_preview(argv[2], name, &model, dark);
+        }
+    }
+    model = baseline;
     model.view = PTC_UI_CHILD;
     model.remaining_minutes = 0;
     model.temporary_unlocked_available = model.temporary_unlocked = true;
