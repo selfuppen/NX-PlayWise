@@ -112,6 +112,13 @@ def c_string(text: str) -> str:
     return text.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def write_text_if_changed(path: Path, text: str) -> None:
+    if path.is_file() and path.read_text(encoding="utf-8") == text:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
 def write_header(path: Path, data: dict) -> None:
     compact = json.dumps(data, ensure_ascii=True, separators=(",", ":"))
     lines = [
@@ -127,8 +134,7 @@ def write_header(path: Path, data: dict) -> None:
         "#endif",
         "",
     ]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    write_text_if_changed(path, "\n".join(lines))
 
 
 def main() -> int:
@@ -140,8 +146,7 @@ def main() -> int:
     data = make_manifest(args.profile)
     if args.profile in ("release", "device-lab") and data["build"]["libnx"] == "unknown":
         raise SystemExit("cannot create a release candidate: installed libnx identity is unknown")
-    args.json.parent.mkdir(parents=True, exist_ok=True)
-    args.json.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    write_text_if_changed(args.json, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     write_header(args.header, data)
     return 0
 

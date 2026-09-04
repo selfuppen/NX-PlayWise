@@ -52,6 +52,7 @@ clean:
 else
 DEPENDS := $(OFILES:.o=.d)
 all: $(OUTPUT).ovl
+$(OFILES): $(TOPDIR)/Makefile $(TOPDIR)/../../common/version.mk $(TOPDIR)/../../build/device-lab/generated/release_manifest.h
 $(OUTPUT).ovl: $(OUTPUT).elf $(OUTPUT).nacp
 	@elf2nro $< $@ $(NROFLAGS)
 $(OUTPUT).elf: $(OFILES)

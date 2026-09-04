@@ -85,11 +85,15 @@ def test_container_command() -> None:
     require("test packages" in command, "container command must test and package")
     require("packages: package-complete device-lab-package" in makefile,
             "packages target must verify the isolated Device Lab target")
-    require("make clean" in command, "authoritative build must remove stale intermediates first")
+    require("make clean" not in command, "the default build must reuse valid intermediates")
     require("--emit-bundle" not in command, "container command must not stream a copied bundle")
     require("git " not in command, "mounted local source must not require a git update")
     require("eden-test-nro" in command, "the default build must include the emulator NRO target")
-    require("CLEAN_EDEN=1" in command, "the default build must clean Eden stale intermediates")
+    require("CLEAN_EDEN=1" not in command, "the default build must keep valid Eden intermediates")
+
+    clean = package_remote.container_command(clean=True)
+    require("make clean" in clean, "explicit clean build must remove stale intermediates first")
+    require("CLEAN_EDEN=1" in clean, "explicit clean build must remove Eden intermediates")
 
     without_eden = package_remote.container_command(with_eden=False)
     require("eden-test-nro" not in without_eden, "with_eden=False must omit Eden target")

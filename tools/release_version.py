@@ -95,7 +95,7 @@ def release(version: str, *, root: Path = ROOT, verify: bool = True) -> str:
         write_playwise_version(version, root)
 
     if verify:
-        subprocess.run([sys.executable, "tools/package_remote.py"], cwd=root, check=True)
+        subprocess.run([sys.executable, "tools/package_remote.py", "--clean"], cwd=root, check=True)
 
     refresh_verification_outputs(root)
 

@@ -81,6 +81,7 @@ else
 DEPENDS := $(OFILES:.o=.d)
 
 all: $(OUTPUT).nsp
+$(OFILES): $(TOPDIR)/Makefile $(TOPDIR)/../common/version.mk $(TOPDIR)/$(MANIFEST_INCLUDE)/release_manifest.h
 
 $(OUTPUT).nsp: $(OUTPUT).nso $(OUTPUT).npdm
 

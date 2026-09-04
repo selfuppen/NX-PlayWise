@@ -403,7 +403,7 @@ def container_command(
     *,
     only: str = "all",
     with_eden: bool = True,
-    clean: bool = True,
+    clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
 ) -> str:
@@ -455,7 +455,7 @@ def ssh_command(
     *,
     only: str = "all",
     with_eden: bool = True,
-    clean: bool = True,
+    clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
 ) -> list[str]:
@@ -488,7 +488,7 @@ def run_container(
     *,
     only: str = "all",
     with_eden: bool = True,
-    clean: bool = True,
+    clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
 ) -> None:
@@ -538,7 +538,7 @@ def build_and_verify(
     *,
     only: str = "all",
     with_eden: bool = True,
-    clean: bool = True,
+    clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
 ) -> None:
@@ -677,15 +677,15 @@ def parse_args() -> argparse.Namespace:
         "--clean",
         dest="clean",
         action="store_true",
-        default=True,
-        help="Perform authoritative full clean before building. (Default: enabled)",
+        default=False,
+        help="Perform an authoritative full clean before building.",
     )
     clean_group.add_argument(
         "--incremental",
         "--no-clean",
         dest="clean",
         action="store_false",
-        help="Incremental build: reuse existing object files (.o) and skip make clean for fast iteration.",
+        help="Incremental build: reuse valid object files and skip make clean. (Default: enabled)",
     )
     parser.add_argument(
         "--skip-tests",

@@ -52,7 +52,7 @@ UI_TEST_SRCS := companion/nro/ui_state.c companion/nro/ui_theme.c companion/file
 
 STAGE_TIMER ?= python3 tools/stage_timer.py
 
-.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean
+.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_REBUILD
 
 all: test
 
@@ -71,20 +71,22 @@ eden-test-manifest:
 $(HOST_BUILD_DIR):
 	mkdir -p $(HOST_BUILD_DIR)
 
-$(HOST_TEST): $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS) | $(HOST_BUILD_DIR)
+FORCE_HOST_REBUILD:
+
+$(HOST_TEST): $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS)
 
-$(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_graphics.h | $(HOST_BUILD_DIR)
+$(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_graphics.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(UI_TEST_SRCS) -lm
 
-$(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c common/protocol/error_code.c common/protocol/request_schema.c common/protocol/result_builder.c common/time/ptc_time.c common/rules/rules.c common/rules/holiday_calendar.c platform/host/mem_storage.c platform/host/pctl_stub.c platform/host/fake_time.c platform/switch/play_timer_settings_layout.c sysmodule/lab_session.c device_lab/boot_flags.c device_lab/handoff_guard.c device_lab/ui_model.c tests/c/test_device_lab.c | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_DEVICE_LAB -o $@ $^
+$(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c common/protocol/error_code.c common/protocol/request_schema.c common/protocol/result_builder.c common/time/ptc_time.c common/rules/rules.c common/rules/holiday_calendar.c platform/host/mem_storage.c platform/host/pctl_stub.c platform/host/fake_time.c platform/switch/play_timer_settings_layout.c sysmodule/lab_session.c device_lab/boot_flags.c device_lab/handoff_guard.c device_lab/ui_model.c tests/c/test_device_lab.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_DEVICE_LAB -o $@ $(filter-out FORCE_HOST_REBUILD,$^)
 
 test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST)
 	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST)'
 
 UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/render.c
-$(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) companion/nro/ui_graphics.c companion/nro/ui_graphics.h $(wildcard tests/ui_preview/*.h) | $(HOST_BUILD_DIR)
+$(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) companion/nro/ui_graphics.c companion/nro/ui_graphics.h $(wildcard tests/ui_preview/*.h) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -Itests/ui_preview -o $@ $(UI_PREVIEW_SRCS) -lm
 
 .PHONY: test-ui-primitives

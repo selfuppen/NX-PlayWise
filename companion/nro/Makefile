@@ -9,6 +9,7 @@ endif
 TARGET ?= pctc
 BUILD ?= build
 MANIFEST_INCLUDE ?= ../../build/generated
+MANIFEST_HEADER := $(MANIFEST_INCLUDE)/release_manifest.h
 DEFINES ?=
 EDEN_BUILD ?= 0
 include ../../common/version.mk
@@ -24,7 +25,7 @@ FREETYPE_CFLAGS := $(shell $(PKG_CONFIG) --cflags freetype2)
 FREETYPE_LIBS := $(shell $(PKG_CONFIG) --static --libs freetype2)
 
 ARCH := -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE
-CFLAGS := -std=gnu99 -O2 -g -Wall -Wextra -Werror -ffunction-sections $(ARCH)
+CFLAGS := -std=gnu99 -O2 -g -Wall -Wextra -Werror -ffunction-sections -MMD -MP $(ARCH)
 CFLAGS += -D__SWITCH__ -DPTC_IPC_CLIENT_NRO $(DEFINES) -I../.. -I$(MANIFEST_INCLUDE) -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map
 LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
@@ -58,6 +59,8 @@ OBJS := \
 	$(BUILD)/cJSON.o \
 	$(BUILD)/install_defaults.o \
 	$(BUILD)/fs_storage.o
+
+DEPENDS := $(OBJS:.o=.d)
 
 # Emulator-only build: run the control core in-process against the simulated
 # PCTL adapter, and drop the pctc:u client the emulator cannot reach.
@@ -182,6 +185,12 @@ $(BUILD)/token_v1.o: ../../common/token/token_v1.c ../../common/token/token_v1.h
 
 $(BUILD)/control_policy.o: ../../common/policy/control_policy.c ../../common/policy/control_policy.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+# Header dependencies are emitted beside each object. Rebuild all objects when
+# build flags or the project version included by this Makefile change.
+$(OBJS): Makefile ../../common/version.mk $(MANIFEST_HEADER)
+
+-include $(DEPENDS)
 
 $(TARGET).elf: $(OBJS)
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@

@@ -19,7 +19,7 @@ PKG_CONFIG := $(DEVKITPRO)/portlibs/switch/bin/aarch64-none-elf-pkg-config
 FREETYPE_CFLAGS := $(shell $(PKG_CONFIG) --cflags freetype2)
 FREETYPE_LIBS := $(shell $(PKG_CONFIG) --static --libs freetype2)
 ARCH := -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE
-CFLAGS := -std=gnu99 -O2 -g -Wall -Wextra -Werror -ffunction-sections $(ARCH)
+CFLAGS := -std=gnu99 -O2 -g -Wall -Wextra -Werror -ffunction-sections -MMD -MP $(ARCH)
 CFLAGS += -D__SWITCH__ -DPLAYWISE_DEVICE_LAB -I../.. -I../../build/device-lab/generated -I$(DEVKITPRO)/libnx/include $(FREETYPE_CFLAGS)
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map
 LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
@@ -53,6 +53,11 @@ $(BUILD)/handoff_guard.o: ../handoff_guard.c ../handoff_guard.h | $(BUILD)
 
 $(TARGET).elf: $(BUILD)/main.o $(BUILD)/ui_graphics.o $(BUILD)/ui_model.o $(BUILD)/boot_flags.o $(BUILD)/hot_switch.o $(BUILD)/handoff_guard.o
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@
+
+LAB_OBJS := $(BUILD)/main.o $(BUILD)/ui_graphics.o $(BUILD)/ui_model.o $(BUILD)/boot_flags.o $(BUILD)/hot_switch.o $(BUILD)/handoff_guard.o
+LAB_DEPENDS := $(LAB_OBJS:.o=.d)
+$(LAB_OBJS): Makefile ../../common/version.mk $(MANIFEST_HEADER)
+-include $(LAB_DEPENDS)
 
 $(NACP): $(MAKEFILE_LIST)
 	$(DEVKITPRO)/tools/bin/nacptool --create "$(APP_TITLE)" "$(APP_AUTHOR)" "$(APP_VERSION)" $@
