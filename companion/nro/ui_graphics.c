@@ -744,23 +744,31 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     bool expanded = error || model->waiting || model->feedback_detail[0] || support ||
         measure_text(model->message, 20) > 1094;
     uint32_t accent = error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_SUCCESS);
-    UiRect box = {54, y, 1172, expanded ? height : 52};
-    PtcUiRect status_icon = ptc_ui_notice_status_icon_rect(y);
-    int baseline = y + 30;
+    UiRect box = {54, y, 1172, height};
     fill_round_rect(pixels, stride, box, 16, error ? UI_DANGER_SOFT : (model->waiting ? UI_WARNING_SOFT : UI_SURFACE));
-    draw_status_symbol(pixels, stride, status_icon.x, status_icon.y, accent, error ? 3 : (model->waiting ? 2 : 1));
-    baseline = draw_wrapped_text(pixels, stride, box.x + 54, baseline,
-        model->message[0] ? model->message : "状态会在后台自动同步", 20, box.width - 78, 26,
-        expanded ? 2 : 1, UI_INK);
-    if (model->feedback_detail[0])
-        baseline = draw_wrapped_text(pixels, stride, box.x + 54, baseline + 2,
-            model->feedback_detail, 18, box.width - 78, 24, (y + height - baseline - 4) / 24, UI_MUTED);
-    if (support && baseline + 24 < y + height) {
-        char execution[160];
-        PtcUiRect command = ptc_ui_notice_command_text_rect(y, height);
-        snprintf(execution, sizeof(execution), "命令：%s    %s", model->command_name, model->transport_label);
-        if (baseline <= command.y)
-            draw_wrapped_text(pixels, stride, command.x, command.y + 18, execution, 18, command.w, 24, 1, UI_MUTED);
+    if (expanded) {
+        PtcUiRect status_icon = ptc_ui_notice_status_icon_rect(y);
+        int baseline = y + 30;
+        draw_status_symbol(pixels, stride, status_icon.x, status_icon.y, accent, error ? 3 : (model->waiting ? 2 : 1));
+        baseline = draw_wrapped_text(pixels, stride, box.x + 54, baseline,
+            model->message[0] ? model->message : "状态会在后台自动同步", 20, box.width - 78, 26,
+            2, UI_INK);
+        if (model->feedback_detail[0])
+            baseline = draw_wrapped_text(pixels, stride, box.x + 54, baseline + 2,
+                model->feedback_detail, 18, box.width - 78, 24, (y + height - baseline - 4) / 24, UI_MUTED);
+        if (support && baseline + 24 < y + height) {
+            char execution[160];
+            PtcUiRect command = ptc_ui_notice_command_text_rect(y, height);
+            snprintf(execution, sizeof(execution), "命令：%s    %s", model->command_name, model->transport_label);
+            if (baseline <= command.y)
+                draw_wrapped_text(pixels, stride, command.x, command.y + 18, execution, 18, command.w, 24, 1, UI_MUTED);
+        }
+    } else {
+        int icon_y = y + (height - 24) / 2;
+        int baseline = y + (height + 20) / 2 - 3;
+        draw_status_symbol(pixels, stride, box.x + 18, icon_y, accent, 1);
+        draw_text(pixels, stride, box.x + 54, baseline,
+            model->message[0] ? model->message : "状态会在后台自动同步", 20, UI_MUTED);
     }
 }
 
@@ -798,12 +806,12 @@ static void draw_home_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel
     bool error = strcmp(model->result_status, "error") == 0;
     const char *runtime = home_runtime_notice(model);
     const char *title = runtime[0] ? runtime : (error ? "操作未完成" : (model->waiting ? "正在同步" : ""));
-    UiRect box = {48, 520, 1184, expanded ? 128 : 52};
-    int y = 548;
+    UiRect box = {48, 520, 1184, 128};
     uint32_t accent = error || model->disable_flag_present ? UI_DANGER : UI_WARNING;
     fill_round_rect(pixels, stride, box, 16, expanded ? (error || model->disable_flag_present ? UI_DANGER_SOFT : UI_WARNING_SOFT) : UI_SURFACE);
-    draw_status_symbol(pixels, stride, 68, 535, expanded ? accent : UI_SUCCESS, expanded ? 2 : 1);
     if (expanded) {
+        int y = 548;
+        draw_status_symbol(pixels, stride, 68, 535, accent, error ? 3 : (model->waiting ? 2 : 1));
         draw_text(pixels, stride, 100, y, title, 20, accent);
         y += 26;
         y = draw_wrapped_text(pixels, stride, 100, y, model->message, 18, 1100, 23, 2, UI_INK);
@@ -811,7 +819,10 @@ static void draw_home_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel
             draw_wrapped_text(pixels, stride, 100, y, model->feedback_detail, 18, 1100, 23,
                 (644 - y) / 23 + 1, UI_MUTED);
     } else {
-        draw_text(pixels, stride, 100, 552,
+        int icon_y = 520 + (128 - 24) / 2;
+        int baseline = 520 + (128 + 20) / 2 - 3;
+        draw_status_symbol(pixels, stride, 68, icon_y, UI_SUCCESS, 1);
+        draw_text(pixels, stride, 100, baseline,
             model->message[0] ? model->message : "状态会在后台自动同步", 20, UI_MUTED);
     }
 }
@@ -833,8 +844,21 @@ static void draw_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiMode
     char *unit = strstr(remaining, " 分钟");
     if (unit) {
         *unit = '\0';
+        int minutes = atoi(remaining);
+        int num_w = measure_text(remaining, 80);
         draw_text(pixels, stride, x, box.y + 133, remaining, 80, UI_RGB(g_palette->on_hero));
-        draw_text(pixels, stride, x + measure_text(remaining, 80) + 12, box.y + 130, "分钟", 24, UI_RGB(g_palette->hero_secondary));
+        int unit_x = x + num_w + 12;
+        draw_text(pixels, stride, unit_x, box.y + 130, "分钟", 24, UI_RGB(g_palette->hero_secondary));
+        if (minutes >= 60) {
+            char duration_str[64];
+            if (minutes % 60 == 0) {
+                snprintf(duration_str, sizeof(duration_str), "（%d 小时）", minutes / 60);
+            } else {
+                snprintf(duration_str, sizeof(duration_str), "（%d 小时 %d 分钟）", minutes / 60, minutes % 60);
+            }
+            int dur_x = unit_x + measure_text("分钟", 24) + 12;
+            draw_text(pixels, stride, dur_x, box.y + 130, duration_str, 20, UI_RGB(g_palette->hero_secondary));
+        }
     } else {
         draw_wrapped_text(pixels, stride, x, box.y + 124, remaining, 40, box.width - 56, 48, 2, UI_RGB(g_palette->on_hero));
     }
@@ -1427,7 +1451,7 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
         draw_text_center(pixels, stride, (UiRect){mode.x + 6, mode.y + 4, mode.width - 12, 28},
                          limited ? "限时" : "不限时", 15,
                          model->disable_flag_present ? UI_DISABLED : UI_ON_ACCENT);
-        draw_text_center(pixels, stride, (UiRect){mode.x + 4, mode.y + 32, mode.width - 8, 20},
+        draw_text_center(pixels, stride, (UiRect){mode.x + 4, mode.y + 38, mode.width - 8, 20},
                          today ? "今天" : " ", 15, today ? UI_SUCCESS : UI_MUTED);
         if (limited) {
             snprintf(detail, sizeof(detail), "%u", (unsigned int)model->draft_week[day].minutes);
@@ -1748,9 +1772,7 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     } else if (model->parent_page == PTC_UI_PARENT_TODAY) {
         draw_home_notice(pixels, stride, model);
     } else if (model->parent_page != PTC_UI_PARENT_PLAN && model->parent_page != PTC_UI_PARENT_HOLIDAY) {
-        int notice_y = model->parent_page == PTC_UI_PARENT_SETTINGS &&
-            model->settings_page == PTC_UI_SETTINGS_ADVANCED ? 446 : 522;
-        draw_notice(pixels, stride, model, notice_y, 128);
+        draw_notice(pixels, stride, model, 522, 128);
     }
     if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT) {
         UiRect help = {842, 176, 384, 324};
@@ -3102,6 +3124,57 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 438, "也可按 B 返回", 16, UI_MUTED);
 }
 
+static bool holiday_is_past_or_today(
+    const PtcHolidayArrangement *entry,
+    uint16_t cur_year, uint8_t cur_month, uint8_t cur_day,
+    bool *is_past_out, bool *is_today_out)
+{
+    *is_past_out = false;
+    *is_today_out = false;
+    if (!entry) return false;
+    uint8_t last_month = entry->end_month;
+    uint8_t last_day = entry->end_day;
+    if (entry->makeup_workdays && strcmp(entry->makeup_workdays, "无") != 0) {
+        const char *p = entry->makeup_workdays;
+        while (*p) {
+            if (*p >= '0' && *p <= '9') {
+                unsigned int m = 0, d = 0;
+                if (sscanf(p, "%u月%u日", &m, &d) == 2) {
+                    if (m > last_month || (m == last_month && d > last_day)) {
+                        last_month = (uint8_t)m;
+                        last_day = (uint8_t)d;
+                    }
+                }
+                const char *next = strstr(p, "日");
+                if (next) {
+                    p = next + strlen("日");
+                    continue;
+                }
+            }
+            p++;
+        }
+    }
+    if (cur_year > entry->year ||
+        (cur_year == entry->year && (cur_month > last_month || (cur_month == last_month && cur_day > last_day)))) {
+        *is_past_out = true;
+        return true;
+    }
+    if (cur_year == entry->year) {
+        bool in_holiday = (cur_month > entry->start_month || (cur_month == entry->start_month && cur_day >= entry->start_day)) &&
+                          (cur_month < entry->end_month || (cur_month == entry->end_month && cur_day <= entry->end_day));
+        if (in_holiday) {
+            *is_today_out = true;
+        } else if (entry->makeup_workdays && strcmp(entry->makeup_workdays, "无") != 0) {
+            char today_str[32];
+            snprintf(today_str, sizeof(today_str), "%u月%u日", cur_month, cur_day);
+            if (strstr(entry->makeup_workdays, today_str)) {
+                *is_today_out = true;
+            }
+        }
+    }
+    return true;
+}
+
 static void draw_holiday_calendar_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
@@ -3111,6 +3184,9 @@ static void draw_holiday_calendar_overlay(uint32_t *pixels, uint32_t stride, con
     int pages = (int)((count + per_page - 1) / per_page);
     int page = model->holiday_calendar_page;
     char line[192];
+    uint16_t cur_year = 0;
+    uint8_t cur_month = 0, cur_day = 0;
+    bool has_date = model->status_loaded && ptc_date_from_day_index(model->day_index, &cur_year, &cur_month, &cur_day);
     draw_dialog_shell(pixels, stride, model, &dialog, 1040, 600);
     if (model->holiday_dirty) {
         fill_round_rect(pixels, stride, (UiRect){dialog.x + dialog.width - 330, dialog.y + 24, 290, 34}, 16, UI_WARNING_SOFT);
@@ -3123,12 +3199,28 @@ static void draw_holiday_calendar_overlay(uint32_t *pixels, uint32_t stride, con
         const PtcHolidayArrangement *entry = ptc_holiday_calendar_arrangement(info->last_year, index);
         UiRect card = {dialog.x + 34, dialog.y + 146 + row * 82, dialog.width - 68, 70};
         if (!entry) break;
-        fill_round_rect(pixels, stride, card, 16, UI_RAISED);
-        draw_rect_outline(pixels, stride, card, 16, 1, UI_BORDER);
-        draw_text(pixels, stride, card.x + 20, card.y + 28, entry->display_name, 21, UI_INK);
+        bool is_past = false, is_today = false;
+        if (has_date) {
+            holiday_is_past_or_today(entry, cur_year, cur_month, cur_day, &is_past, &is_today);
+        }
+        uint32_t bg_color = is_today ? UI_ACCENT_SOFT : (is_past ? UI_SURFACE : UI_RAISED);
+        uint32_t border_color = is_today ? UI_ACCENT : UI_BORDER;
+        uint32_t title_color = is_today ? UI_ACCENT : (is_past ? UI_MUTED : UI_INK);
+        uint32_t line_color = is_today ? UI_INK : (is_past ? UI_DISABLED : UI_MUTED);
+        fill_round_rect(pixels, stride, card, 16, bg_color);
+        draw_rect_outline(pixels, stride, card, 16, is_today ? 2 : 1, border_color);
+        draw_text(pixels, stride, card.x + 20, card.y + 28, entry->display_name, 21, title_color);
         snprintf(line, sizeof(line), "放假：%u月%u日-%u月%u日    调休上班：%s",
                  entry->start_month, entry->start_day, entry->end_month, entry->end_day, entry->makeup_workdays);
-        draw_text(pixels, stride, card.x + 150, card.y + 28, line, 18, UI_MUTED);
+        draw_text(pixels, stride, card.x + 150, card.y + 28, line, 18, line_color);
+        UiRect badge = {card.x + card.width - 96, card.y + 21, 76, 28};
+        if (is_today) {
+            fill_round_rect(pixels, stride, badge, 6, UI_ACCENT);
+            draw_text_center(pixels, stride, badge, "进行中", 14, UI_ON_ACCENT);
+        } else if (is_past) {
+            fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
+            draw_text_center(pixels, stride, badge, "已结束", 14, UI_MUTED);
+        }
     }
     snprintf(line, sizeof(line), "%u 年  |  v%u  |  发布于 %s  |  来源：www.gov.cn    第 %d/%d 页",
              info->last_year, info->version, info->published_date, page + 1, pages);
