@@ -75,7 +75,8 @@ typedef enum {
     PTC_UI_OVERLAY_REDEMPTION_HISTORY = 23,
     PTC_UI_OVERLAY_SCHEDULED = 24,
     PTC_UI_OVERLAY_AUTONOMY = 25,
-    PTC_UI_OVERLAY_ACTIVITY_HISTORY = 26
+    PTC_UI_OVERLAY_ACTIVITY_HISTORY = 26,
+    PTC_UI_OVERLAY_HOME_DETAILS = 27
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -328,6 +329,9 @@ typedef struct {
     bool code_before_unlimited;
     bool code_result_pending;
     bool code_result_failed;
+    int64_t code_completed_at;
+    bool code_actual_add_available;
+    int code_actual_add_minutes;
     int credential_kind;
     bool credential_revealed;
     bool credential_new_revealed;
@@ -348,6 +352,7 @@ typedef struct {
     int64_t grant_estimated_at;
     bool grant_status_refresh_failed;
     char grant_code[9];
+    char grant_notice[192];
     char software_version[32];
     char repository_url[128];
     char pwa_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
@@ -436,7 +441,8 @@ typedef enum {
     PTC_UI_HIT_HISTORY_PREV,
     PTC_UI_HIT_HISTORY_NEXT,
     PTC_UI_HIT_SCHEDULED_FIELD,
-    PTC_UI_HIT_AUTONOMY_OPTION
+    PTC_UI_HIT_AUTONOMY_OPTION,
+    PTC_UI_HIT_HOME_DETAILS
 } PtcUiHitKind;
 
 typedef struct {
@@ -528,8 +534,14 @@ void ptc_ui_numpad_finish(PtcUiModel *model);
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
+bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now);
+void ptc_ui_format_status_age(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
+void ptc_ui_match_redemption_result(PtcUiModel *model);
+void ptc_ui_format_code(const char *code, char *out, size_t out_size);
 void ptc_ui_format_today_mode(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_quota_remaining(const PtcUiModel *model, char *out, size_t out_size);
+void ptc_ui_format_home_remaining(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
+void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_timer_status(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_console_date(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_parent_status_summary(
@@ -593,6 +605,12 @@ PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_refresh_rect(void);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
+PtcUiRect ptc_ui_today_card_rect(int index);
+PtcUiRect ptc_ui_home_summary_rect(bool parent);
+PtcUiRect ptc_ui_home_details_rect(bool parent);
+PtcUiOperation ptc_ui_today_operation(int index);
+bool ptc_ui_open_home_details(PtcUiModel *model);
+bool ptc_ui_home_notice_expanded(const PtcUiModel *model);
 PtcUiRect ptc_ui_advanced_hierarchy_rect(void);
 PtcUiRect ptc_ui_advanced_back_rect(void);
 PtcUiRect ptc_ui_advanced_card_rect(void);

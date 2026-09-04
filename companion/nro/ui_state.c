@@ -423,6 +423,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_SETTINGS:
         return 5;
     case PTC_UI_PARENT_TODAY:
+        return 4;
     default:
         return 5;
     }
@@ -635,6 +636,19 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
                 model->parent_footer_focused = true;
                 model->parent_footer_selection = 1;
             }
+        }
+        model->selected_index = index;
+        return;
+    }
+    if (model->parent_page == PTC_UI_PARENT_TODAY) {
+        if (horizontal < 0 && index % 2 == 1) --index;
+        else if (horizontal > 0 && index % 2 == 0) ++index;
+        else if (vertical < 0) index = (index + 2) % 4;
+        else if (vertical > 0 && index < 2) index += 2;
+        else if (vertical > 0) {
+            model->parent_content_selection = index;
+            model->parent_footer_focused = true;
+            model->parent_footer_selection = 1;
         }
         model->selected_index = index;
         return;
@@ -1128,10 +1142,62 @@ int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now)
     if (!model || !model->status_loaded || model->status_updated_at <= 0) {
         return -1;
     }
-    if (now <= model->status_updated_at) {
+    if (now < model->status_updated_at) return -1;
+    if (now == model->status_updated_at) {
         return 0;
     }
     return now - model->status_updated_at;
+}
+
+bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
+{
+    int64_t age = ptc_ui_status_age_seconds(model, now);
+    return model && age >= 0 && age <= 120 && model->error_code == 0 &&
+        strcmp(model->result_status, "error") != 0;
+}
+
+void ptc_ui_format_status_age(const PtcUiModel *model, int64_t now, char *out, size_t out_size)
+{
+    int64_t age = ptc_ui_status_age_seconds(model, now);
+    if (!out || !out_size) return;
+    if (!model || !model->status_loaded) snprintf(out, out_size, "等待刷新");
+    else if (model->waiting) snprintf(out, out_size, "正在刷新状态...");
+    else if (!ptc_ui_status_is_fresh(model, now)) snprintf(out, out_size, "状态待确认，请刷新");
+    else if (age == 0) snprintf(out, out_size, "刚刚刷新");
+    else if (age < 60) snprintf(out, out_size, "上次刷新：%lld 秒前", (long long)age);
+    else snprintf(out, out_size, "上次刷新：%lld 分钟前", (long long)(age / 60));
+}
+
+void ptc_ui_format_code(const char *code, char *out, size_t out_size)
+{
+    char grouped[10] = "____ ____";
+    size_t length = code ? strlen(code) : 0;
+    if (!out || !out_size) return;
+    for (size_t i = 0; i < 8 && i < length; ++i) grouped[i + (i >= 4)] = code[i];
+    snprintf(out, out_size, "%s", grouped);
+}
+
+void ptc_ui_match_redemption_result(PtcUiModel *model)
+{
+    int matches = 0;
+    if (!model) return;
+    model->code_actual_add_available = false;
+    /* History has no request ID. Require a unique completion timestamp and
+       matching result values; never substitute the persisted preview. */
+    if (model->code_result_pending || model->code_result_failed ||
+        model->code_completed_at <= 0 || !model->redemption_history_available) return;
+    for (int i = 0; i < model->redemption_history_count; ++i) {
+        const PtcRedemptionHistoryRecord *record = &model->redemption_history[i];
+        if (record->redeemed_at != model->code_completed_at) continue;
+        ++matches;
+        if (record->day_index == model->day_index && record->grant_minutes == model->code_grant_minutes &&
+            record->remaining_after_available == model->remaining_available &&
+            (!model->remaining_available || record->remaining_after_minutes == model->remaining_minutes)) {
+            model->code_actual_add_available = true;
+            model->code_actual_add_minutes = record->effective_add_minutes;
+        }
+    }
+    if (matches != 1) model->code_actual_add_available = false;
 }
 
 void ptc_ui_format_today_mode(const PtcUiModel *model, char *out, size_t out_size)
@@ -1245,7 +1311,7 @@ void ptc_ui_format_parent_status_summary(
         snprintf(out, out_size, "... 正在检测当前状态");
         return;
     }
-    if (!model->status_loaded || age > 120 || model->error_code != 0) {
+    if (!ptc_ui_status_is_fresh(model, now)) {
         if (age < 0) snprintf(out, out_size, "? 状态待确认  |  尚无可靠读数");
         else if (age < 3600) snprintf(out, out_size, "? 状态待确认  |  上次成功于 %lld 分钟前", (long long)(age / 60));
         else if (age < 86400) snprintf(out, out_size, "? 状态待确认  |  上次成功于 %lld 小时前", (long long)(age / 3600));
@@ -1462,6 +1528,10 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     status = summary.status;
     type = summary.type;
+    if (strcmp(type, "offline_code") == 0) {
+        model->code_completed_at = json_int64(root, "completed_at", 0);
+        model->code_actual_add_available = false;
+    }
     if (!status || (strcmp(status, "ok") != 0 && strcmp(status, "error") != 0)) {
         cJSON_Delete(root);
         return false;
@@ -1684,21 +1754,19 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
 
 PtcUiRect ptc_ui_child_submit_rect(void)
 {
-    /* Large code field in the child reward card. */
-    PtcUiRect rect = {86, 292, 696, 84};
+    PtcUiRect rect = {736, 216, 464, 88};
     return rect;
 }
 
 PtcUiRect ptc_ui_child_refresh_rect(void)
 {
-    /* Bottom action in the taller game-time-statistics card. */
-    PtcUiRect rect = {866, 454, 330, 42};
+    PtcUiRect rect = {1044, 660, 188, 48};
     return rect;
 }
 
 PtcUiRect ptc_ui_child_buffer_rect(void)
 {
-    PtcUiRect rect = {86, 394, 696, 54};
+    PtcUiRect rect = {736, 328, 464, 64};
     return rect;
 }
 
@@ -1817,6 +1885,78 @@ PtcUiRect ptc_ui_parent_card_rect(int index)
     return rect;
 }
 
+void ptc_ui_format_home_remaining(const PtcUiModel *model, int64_t now, char *out, size_t out_size)
+{
+    if (!out || out_size == 0) return;
+    if (!model || !model->status_loaded) snprintf(out, out_size, "等待刷新");
+    else if (!ptc_ui_status_is_fresh(model, now))
+        snprintf(out, out_size, "状态待确认");
+    else ptc_ui_format_quota_remaining(model, out, out_size);
+}
+
+void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_size)
+{
+    if (!out || out_size == 0) return;
+    /* Only the backend's current-day forecast supplies the displayed total;
+       do not reconstruct it from remaining time or consumption estimates. */
+    if (!model || !model->status_loaded) snprintf(out, out_size, "今日总额度  待刷新");
+    else if (model->unrestricted_today == 1) snprintf(out, out_size, "今日总额度  不限时");
+    else if (model->forecast_available && model->forecast[0].day_index == model->day_index &&
+             model->forecast[0].mode == PTC_RULE_MODE_LIMIT)
+        snprintf(out, out_size, "今日总额度  %u 分钟", (unsigned int)model->forecast[0].minutes);
+    else snprintf(out, out_size, "今日总额度  暂不可用");
+}
+
+PtcUiRect ptc_ui_home_summary_rect(bool parent)
+{
+    return parent ? (PtcUiRect){48, 176, 488, 328} : (PtcUiRect){48, 120, 632, 384};
+}
+
+PtcUiRect ptc_ui_today_card_rect(int index)
+{
+    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){560 + (index % 2) * 348, 176 + (index / 2) * 136, 324, 112};
+}
+
+PtcUiRect ptc_ui_home_details_rect(bool parent)
+{
+    return parent ? (PtcUiRect){1008, 456, 224, 48} : (PtcUiRect){736, 424, 464, 48};
+}
+
+PtcUiOperation ptc_ui_today_operation(int index)
+{
+    /* UI order is independent of the operation enum and request dispatch. */
+    static const PtcUiOperation actions[] = {
+        PTC_UI_OPERATION_SET_TODAY_LIMIT, PTC_UI_OPERATION_ADD_TODAY_MINUTES,
+        PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, PTC_UI_OPERATION_RESTORE_TODAY_POLICY
+    };
+    return index >= 0 && index < 4 ? actions[index] : PTC_UI_OPERATION_NONE;
+}
+
+bool ptc_ui_open_home_details(PtcUiModel *model)
+{
+    if (!model || model->waiting || model->overlay != PTC_UI_OVERLAY_NONE ||
+        (model->view != PTC_UI_CHILD &&
+         !(model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_TODAY))) return false;
+    /* Keep the underlying focus and execution message intact on open/close. */
+    model->overlay = PTC_UI_OVERLAY_HOME_DETAILS;
+    snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
+        model->view == PTC_UI_CHILD ? "使用详情" : "今日详情");
+    model->overlay_body[0] = '\0';
+    return true;
+}
+
+bool ptc_ui_home_notice_expanded(const PtcUiModel *model)
+{
+    return model && (strcmp(model->result_status, "error") == 0 ||
+        model->disable_flag_present || model->recovery_active ||
+        model->apply_pending_confirmation || model->restricted_now == 1 ||
+        (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1) ||
+        (model->temporary_unlocked_available && model->temporary_unlocked) ||
+        (model->restriction_enabled_available && !model->restriction_enabled) ||
+        strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0);
+}
+
 PtcUiRect ptc_ui_advanced_hierarchy_rect(void)
 {
     return (PtcUiRect){54, 172, 1172, 56};
@@ -1933,6 +2073,10 @@ PtcUiRect ptc_ui_dialog_rect(int width, int height)
 static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
 {
     switch (overlay) {
+    case PTC_UI_OVERLAY_HOME_DETAILS:
+        *width = 1120;
+        *height = 640;
+        break;
     case PTC_UI_OVERLAY_MINUTES:
         *width = 720;
         *height = 560;
@@ -2231,6 +2375,8 @@ PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
 {
     PtcUiRect dialog = dialog_for(overlay);
+    if (overlay == PTC_UI_OVERLAY_GRANT_LOCAL)
+        return (PtcUiRect){dialog.x + 42, dialog.y + 588, 210, 44};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W * 2 - 16, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     return rect;
 }
@@ -2298,7 +2444,7 @@ PtcUiRect ptc_ui_grant_manager_card_rect(int index)
 PtcUiRect ptc_ui_grant_generate_rect(void)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_LOCAL);
-    PtcUiRect rect = {dialog.x + 42, dialog.y + 492, dialog.w - 84, 60};
+    PtcUiRect rect = {dialog.x + 42, dialog.y + 530, dialog.w - 84, 46};
     return rect;
 }
 
@@ -2352,7 +2498,7 @@ PtcUiRect ptc_ui_minute_editor_key_rect(int index)
 PtcUiRect ptc_ui_minute_editor_quick_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
-    PtcUiRect rect = {dialog.x + 34 + index * 108, dialog.y + 154, 100, 44};
+    PtcUiRect rect = {dialog.x + 34 + index * 108, dialog.y + 154, 100, 48};
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
     return rect;
 }
@@ -2532,7 +2678,7 @@ PtcUiRect ptc_ui_shortcut_hint_rect(void)
 PtcUiRect ptc_ui_grant_adjust_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_LOCAL);
-    PtcUiRect rect = {dialog.x + 42 + index * 139, dialog.y + 294, 126, 50};
+    PtcUiRect rect = {dialog.x + 42 + index * 139, dialog.y + 238, 126, 50};
     if (index < 0 || index >= 6) {
         rect.w = 0;
         rect.h = 0;
@@ -2621,6 +2767,10 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             }
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+        return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
+            ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
         return ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y)
@@ -2806,7 +2956,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
                 return make_hit(PTC_UI_HIT_GRANT_ADJUST, i);
             }
         }
-        if (ptc_ui_rect_contains(ptc_ui_grant_generate_rect(), x, y)) {
+        if (!model->waiting && ptc_ui_rect_contains(ptc_ui_grant_generate_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_GRANT_GENERATE, 0);
         }
         break;
@@ -2854,18 +3004,23 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     if (model->overlay != PTC_UI_OVERLAY_NONE) {
         return hit_test_overlay(model, x, y);
     }
+    if ((model->view == PTC_UI_CHILD ||
+         (model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_TODAY)) &&
+        ptc_ui_rect_contains(ptc_ui_home_details_rect(model->view == PTC_UI_PARENT), x, y)) {
+        return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_DETAILS, 0);
+    }
     if (model->view == PTC_UI_CHILD) {
-        if (!model->disable_flag_present && ptc_ui_rect_contains(ptc_ui_child_submit_rect(), x, y)) {
+        if (!model->disable_flag_present && !model->waiting && ptc_ui_rect_contains(ptc_ui_child_submit_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
         }
         if (ptc_ui_rect_contains(ptc_ui_child_refresh_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_REFRESH, 0);
         }
-        if (model->daily_buffer_available &&
+        if (model->daily_buffer_available && !model->disable_flag_present && !model->waiting &&
             ptc_ui_rect_contains(ptc_ui_child_buffer_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_BUFFER, 0);
         }
-        if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(0), x, y)) {
+        if (!model->disable_flag_present && !model->waiting && ptc_ui_rect_contains(ptc_ui_child_footer_rect(0), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
         }
         if (ptc_ui_rect_contains(ptc_ui_child_footer_rect(1), x, y)) {
@@ -3009,7 +3164,8 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
                 ? ptc_ui_advanced_feature_rect(i)
                 : (model->settings_page == PTC_UI_SETTINGS_SUPPORT
                     ? ptc_ui_support_card_rect(i) : ptc_ui_parent_card_rect(i)))
-            : ptc_ui_parent_card_rect(i);
+            : (model->parent_page == PTC_UI_PARENT_TODAY ? ptc_ui_today_card_rect(i) : ptc_ui_parent_card_rect(i));
+        if (model->parent_page == PTC_UI_PARENT_TODAY && (model->disable_flag_present || model->waiting)) continue;
         if ((model->parent_page != PTC_UI_PARENT_SETTINGS || model->settings_page != PTC_UI_SETTINGS_SUPPORT ||
              (ptc_ui_safety_action_visible(model, i) &&
               ptc_ui_safety_action_available(model, i) != PTC_UI_ACTION_DISABLED)) &&

@@ -1,6 +1,7 @@
-docs(atmosphere): 新增 Atmosphère 源码阅读与上游调研指南
+feat(ui): 支持宿主侧离线渲染 UI 预览并更新验收记录和文档
 
-- 在《开发指南》中补充 Atmosphère 源码阅读决策章节，明确 CFW 环境层问题（如 boot2.flag 扫描、sysmodule 启动、崩溃取证等）的优先阅读区域。
-- 明确 Atmosphère 源码不能作为 PCTL 私有协议、libnx API 或 PlayWise 包门禁验证的替代来源。
-- 在《开发环境指南》中增加 ../Atmosphere 作为可选的上游 checkout 说明。
-- 规定调查本地 Atmosphère 源码前，必须记录 checkout 的 commit、tag 和工作树状态，并只依据已跟踪文件形成结论，避免环境不一致导致误判。
+- 新增 tests/ui_preview/ 目录及 convert_ui_previews.py，支持脱离物理机生成 UI 渲染预览图（PPM 转 PNG）。
+- 更新 companion/nro/ 的 UI 交互代码，支持 PTC_UI_OVERLAY_HOME_DETAILS 详情遮罩及相关的按键处理。
+- 在 docs/images/usage/ 补充最新的 UI 截图。
+- 更新 使用指南.md、协议.md、测试指南.md，并添加对应的 P0-P1 验收记录。
+- 更新 Makefile 增加对新测试和产物构建的支持。

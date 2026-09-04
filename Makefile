@@ -83,6 +83,21 @@ test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST)
 	$(HOST_UI_TEST)
 	$(HOST_LAB_TEST)
 
+# Optional visual QA with a local, untracked font; nothing enters release Zips.
+ifneq ($(wildcard build/ui-preview-font.ttf),)
+UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/render.c
+$(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) companion/nro/ui_graphics.c $(wildcard tests/ui_preview/*.h) | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -Itests/ui_preview -o $@ $(UI_PREVIEW_SRCS) -lm
+
+.PHONY: ui-previews
+ui-previews: $(HOST_BUILD_DIR)/ui_preview
+	mkdir -p build/ui-previews
+	$(HOST_BUILD_DIR)/ui_preview build/ui-preview-font.ttf build/ui-previews
+	python3 tools/convert_ui_previews.py
+
+test-host: ui-previews
+endif
+
 test-python:
 	python3 tools/test.py
 

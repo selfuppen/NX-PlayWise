@@ -127,7 +127,7 @@ static void test_release_navigation(void)
     PtcUiModel model;
     char shortcut_hint[160];
     memset(&model, 0, sizeof(model));
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 5, "today actions");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 4, "today actions");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 7, "holiday policy exposes rules, actions and calendar entry");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 4, "grant page exposes generation, management and history");
@@ -158,7 +158,7 @@ static void test_release_navigation(void)
     ptc_ui_move_parent_selection(&model, 1, 0);
     check_int(model.selected_index, 1, "selection moves right");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_int(model.selected_index, 4, "five-card selection wraps upward");
+    check_int(model.selected_index, 3, "four-card selection wraps upward");
 
     model.parent_page = PTC_UI_PARENT_HOLIDAY;
     model.selected_index = 0;
@@ -772,9 +772,9 @@ static void test_release_hit_targets(void)
     model.view = PTC_UI_CHILD;
     code_input = ptc_ui_child_submit_rect();
     refresh = ptc_ui_child_refresh_rect();
-    check_int(code_input.x, 86, "child code input aligns with reward card");
-    check_int(code_input.w, 696, "child code input uses the prominent field width");
-    check_int(refresh.y, 454, "child refresh stays below game-time summary");
+    check_int(code_input.x, 736, "child code input aligns with action panel");
+    check_int(code_input.w, 464, "child code input uses the action panel width");
+    check_int(refresh.y, 660, "child refresh stays in the footer");
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "child code button");
     model.disable_flag_present = true;
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "disabled child code button is not actionable");
@@ -1220,7 +1220,7 @@ static void test_user_state_mapping(void)
                "recent event keeps readable summary and complete diagnostic detail");
     ptc_ui_mark_status_updated(&model, 1000);
     check_int((int)ptc_ui_status_age_seconds(&model, 1030), 30, "status age is measured from last refresh");
-    check_int((int)ptc_ui_status_age_seconds(&model, 999), 0, "status age never goes negative");
+    check_int((int)ptc_ui_status_age_seconds(&model, 999), -1, "clock rollback invalidates status age");
     check_true(ptc_ui_apply_result_json(&model, protection), "protection result parses");
     check_true(strstr(model.message, "保护模式") != NULL, "protection guidance is visible");
     check_true(ptc_ui_apply_result_json(&model, effect_not_observed), "306 result parses");
@@ -1462,8 +1462,199 @@ static void test_balanced_feature_state(void)
         PTC_UI_HIT_OVERLAY_CONFIRM, 0, "family activity clear button is touchable");
 }
 
+static void test_home_redesign(void)
+{
+    PtcUiModel model;
+    char text[128];
+    const PtcUiOperation expected[] = {PTC_UI_OPERATION_SET_TODAY_LIMIT,
+        PTC_UI_OPERATION_ADD_TODAY_MINUTES, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT,
+        PTC_UI_OPERATION_RESTORE_TODAY_POLICY};
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_TODAY;
+    for (int i = 0; i < 4; ++i) {
+        PtcUiRect rect = ptc_ui_today_card_rect(i);
+        check_int(ptc_ui_today_operation(i), expected[i], "today card maps to its named operation");
+        check_hit(hit_center(&model, rect), PTC_UI_HIT_PARENT_CARD, i, "today card hit matches render position");
+        check_true(rect.h >= 48 && !rects_overlap(rect, ptc_ui_home_summary_rect(true)), "card is large enough and clear of summary");
+        for (int j = i + 1; j < 4; ++j)
+            check_true(!rects_overlap(rect, ptc_ui_today_card_rect(j)), "today cards do not overlap");
+        model.disable_flag_present = true;
+        check_hit(hit_center(&model, rect), PTC_UI_HIT_NONE, 0, "disabled today action has no touch target");
+        model.disable_flag_present = false;
+    }
+    check_int(ptc_ui_today_operation(-1), PTC_UI_OPERATION_NONE, "invalid action cannot dispatch");
+    check_int(ptc_ui_today_operation(4), PTC_UI_OPERATION_NONE, "old fifth action cannot dispatch");
+    model.selected_index = 3;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused && model.parent_content_selection == 3, "footer remembers last card");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_true(!model.parent_footer_focused && model.selected_index == 3, "up restores card focus");
+    snprintf(model.message, sizeof(model.message), "keep result");
+    for (int parent = 0; parent <= 1; ++parent) {
+        model.view = parent ? PTC_UI_PARENT : PTC_UI_CHILD;
+        check_hit(hit_center(&model, ptc_ui_home_details_rect(parent)), PTC_UI_HIT_HOME_DETAILS, 0, "details touch entry");
+        check_true(ptc_ui_open_home_details(&model), "details open without a request");
+        check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "details block underlying input");
+        check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_NONE, 0, "details have no hidden confirm action");
+        check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0, "details return is touchable");
+        check_true(ptc_ui_cancel_overlay(&model) && model.selected_index == 3 && strcmp(model.message, "keep result") == 0,
+            "details close preserves focus and result");
+    }
+    model.waiting = true;
+    check_true(!ptc_ui_open_home_details(&model), "pending requests cannot be displaced by details");
+    model.waiting = false;
+    ptc_ui_format_home_remaining(&model, 1000, text, sizeof(text));
+    check_true(strcmp(text, "等待刷新") == 0, "unloaded remaining is not zero");
+    model.status_loaded = true;
+    ptc_ui_mark_status_updated(&model, 1000);
+    model.remaining_available = true;
+    model.remaining_minutes = 1440;
+    ptc_ui_format_home_remaining(&model, 1001, text, sizeof(text));
+    check_true(strcmp(text, "1440 分钟") == 0, "maximum remaining is shown");
+    ptc_ui_format_home_remaining(&model, 1121, text, sizeof(text));
+    check_true(strcmp(text, "状态待确认") == 0, "stale remaining is not advertised as current");
+    model.remaining_minutes = 0;
+    ptc_ui_format_home_remaining(&model, 1001, text, sizeof(text));
+    check_true(strcmp(text, "0 分钟") == 0 && ptc_ui_home_notice_expanded(&model), "zero shows expanded guidance");
+    model.remaining_available = false;
+    ptc_ui_format_home_remaining(&model, 1001, text, sizeof(text));
+    check_true(strcmp(text, "暂不可用") == 0, "missing remaining is not guessed");
+    model.unrestricted_today = 1;
+    ptc_ui_format_home_remaining(&model, 1001, text, sizeof(text));
+    check_true(strcmp(text, "不限时") == 0, "unlimited remains explicit");
+    model.unrestricted_today = 0;
+    model.temporary_unlocked_available = true;
+    model.temporary_unlocked = true;
+    check_true(ptc_ui_home_notice_expanded(&model), "temporary unlock is persistently visible");
+    model.temporary_unlocked = false;
+    snprintf(model.result_status, sizeof(model.result_status), "error");
+    check_true(ptc_ui_home_notice_expanded(&model), "failure is expanded");
+    ptc_ui_format_home_remaining(&model, 1001, text, sizeof(text));
+    check_true(strcmp(text, "状态待确认") == 0, "transport errors do not present cached remaining as live");
+    snprintf(model.result_status, sizeof(model.result_status), "ok");
+    check_true(!ptc_ui_home_notice_expanded(&model), "ordinary success is compact");
+    ptc_ui_format_home_total(&model, text, sizeof(text));
+    check_true(strcmp(text, "今日总额度  暂不可用") == 0, "missing total is not inferred");
+    model.forecast_available = true;
+    model.day_index = model.forecast[0].day_index = 2380;
+    model.forecast[0].mode = PTC_RULE_MODE_LIMIT;
+    model.forecast[0].minutes = 120;
+    ptc_ui_format_home_total(&model, text, sizeof(text));
+    check_true(strcmp(text, "今日总额度  120 分钟") == 0, "total uses current backend forecast");
+    model.view = PTC_UI_CHILD;
+    model.disable_flag_present = true;
+    check_hit(hit_center(&model, ptc_ui_child_footer_rect(0)), PTC_UI_HIT_NONE, 0, "footer cannot bypass disabled redemption");
+    check_hit(hit_center(&model, ptc_ui_child_refresh_rect()), PTC_UI_HIT_CHILD_REFRESH, 0, "disabled control can still refresh");
+    model.daily_buffer_available = true;
+    check_hit(hit_center(&model, ptc_ui_child_buffer_rect()), PTC_UI_HIT_NONE, 0, "disabled control cannot claim cached buffer");
+    model.disable_flag_present = false;
+    check_hit(hit_center(&model, ptc_ui_child_buffer_rect()), PTC_UI_HIT_CHILD_BUFFER, 0, "available buffer stays one step away");
+    model.waiting = true;
+    check_hit(hit_center(&model, ptc_ui_child_buffer_rect()), PTC_UI_HIT_NONE, 0, "pending buffer cannot be resubmitted");
+    model.waiting = false;
+    model.daily_buffer_available = false;
+    model.daily_buffer_claimed = true;
+    check_hit(hit_center(&model, ptc_ui_child_buffer_rect()), PTC_UI_HIT_NONE, 0, "claimed buffer is read only");
+    model.daily_buffer_claimed = false;
+    model.daily_buffer_minutes = 0;
+    check_hit(hit_center(&model, ptc_ui_child_buffer_rect()), PTC_UI_HIT_NONE, 0, "closed buffer is read only");
+}
+
+static void test_grant_flow_polish(void)
+{
+    PtcUiModel model = {0};
+    char text[128];
+    model.status_loaded = true;
+    model.status_updated_at = 1000;
+    model.remaining_available = true;
+    model.remaining_minutes = 10;
+    for (int age = 0; age <= 120; ++age)
+        check_true(ptc_ui_status_is_fresh(&model, 1000 + age), "status remains fresh through 120 seconds");
+    check_true(!ptc_ui_status_is_fresh(&model, 1121), "121 seconds is stale");
+    check_true(!ptc_ui_status_is_fresh(&model, 999), "clock rollback is not fresh");
+    ptc_ui_format_status_age(&model, 1121, text, sizeof(text));
+    check_true(strcmp(text, "状态待确认，请刷新") == 0, "stale status gives next step");
+    model.error_code = 301;
+    check_true(!ptc_ui_status_is_fresh(&model, 1001), "failed refresh does not revive cached status");
+    model.error_code = 0;
+    snprintf(model.result_status, sizeof(model.result_status), "error");
+    check_true(!ptc_ui_status_is_fresh(&model, 1001), "error result without code is not fresh");
+    model.result_status[0] = '\0';
+    model.status_updated_at = 0;
+    check_true(!ptc_ui_status_is_fresh(&model, 1001), "missing timestamp is not fresh");
+    ptc_ui_format_code("12345678", text, sizeof(text));
+    check_true(strcmp(text, "1234 5678") == 0, "eight digits grouped four by four");
+    ptc_ui_format_code("12345", text, sizeof(text));
+    check_true(strcmp(text, "1234 5___") == 0, "partial entry keeps four-digit grouping");
+    ptc_ui_format_code(NULL, text, sizeof(text));
+    check_true(strcmp(text, "____ ____") == 0, "empty code has eight slots");
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_GRANT;
+    model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
+    model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
+    model.grant_has_code = true;
+    model.grant_issued_minutes = 20;
+    model.grant_minutes = 60;
+    snprintf(model.grant_code, sizeof(model.grant_code), "12345678");
+    ptc_ui_move_overlay_selection(&model, 0, -1);
+    for (int i = 0; i < 6; ++i) {
+        check_int(model.overlay_selection, i, "each adjustment reachable by controller");
+        check_hit(hit_center(&model, ptc_ui_grant_adjust_rect(i)), PTC_UI_HIT_GRANT_ADJUST, i,
+            "each adjustment reachable by touch");
+        ptc_ui_move_overlay_selection(&model, 1, 0);
+    }
+    ptc_ui_move_overlay_selection(&model, 0, 1);
+    check_int(model.overlay_selection, PTC_UI_GRANT_LOCAL_GENERATE, "down reaches generate");
+    PtcUiRect back = ptc_ui_cancel_rect(model.overlay);
+    check_true(back.x + back.w < ptc_ui_dialog_rect(920, 650).x + 280, "return button does not overlap shortcut hints");
+    check_hit(hit_center(&model, back), PTC_UI_HIT_OVERLAY_CANCEL, 0, "local grant return is touch reachable");
+    model.waiting = true;
+    check_hit(hit_center(&model, ptc_ui_grant_generate_rect()), PTC_UI_HIT_NONE, 0, "refresh blocks overlapping generation");
+    model.waiting = false;
+    ptc_ui_move_overlay_selection(&model, 0, 1);
+    check_int(model.overlay_selection, PTC_UI_GRANT_LOCAL_BACK, "down reaches return");
+    ptc_ui_cancel_overlay(&model);
+    check_int(model.parent_page, PTC_UI_PARENT_GRANT, "return keeps grant tab");
+    check_int(model.grant_issued_minutes, 20, "navigation preserves issued duration");
+    check_true(strcmp(model.grant_code, "12345678") == 0, "navigation preserves issued code");
+    model.code_completed_at = 2000;
+    model.day_index = 2380;
+    model.code_grant_minutes = 30;
+    model.code_effective_add_minutes = 30;
+    model.redemption_history_available = true;
+    model.redemption_history_count = 1;
+    model.redemption_history[0] = (PtcRedemptionHistoryRecord){
+        .redeemed_at=2000, .day_index=2380, .grant_minutes=30, .effective_add_minutes=5,
+        .remaining_after_available=true, .remaining_after_minutes=10};
+    ptc_ui_match_redemption_result(&model);
+    check_true(model.code_actual_add_available, "unique terminal history is available");
+    check_int(model.code_actual_add_minutes, 5, "actual capped addition does not use preview or face value");
+    model.code_result_pending = true;
+    ptc_ui_match_redemption_result(&model);
+    check_true(!model.code_actual_add_available, "pending never claims success");
+    model.code_result_pending = false;
+    model.code_result_failed = true;
+    ptc_ui_match_redemption_result(&model);
+    check_true(!model.code_actual_add_available, "failed redemption never claims addition");
+    model.code_result_failed = false;
+    model.redemption_history[1] = model.redemption_history[0];
+    model.redemption_history_count = 2;
+    ptc_ui_match_redemption_result(&model);
+    check_true(!model.code_actual_add_available, "ambiguous same-second history is not guessed");
+    model.redemption_history_count = 1;
+    model.redemption_history[0].remaining_after_minutes = 11;
+    ptc_ui_match_redemption_result(&model);
+    check_true(!model.code_actual_add_available, "mismatching result snapshot is not guessed");
+    model.redemption_history_available = false;
+    ptc_ui_match_redemption_result(&model);
+    check_true(!model.code_actual_add_available, "missing history never falls back to preview");
+}
+
 int main(void)
 {
+    test_grant_flow_polish();
+    test_home_redesign();
     test_theme_resolution();
     test_parent_status_summary();
     test_release_navigation();

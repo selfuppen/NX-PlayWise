@@ -143,6 +143,7 @@ static void retry_error(UiState *ui);
 static void dispatch_auth_retry(UiState *ui, AuthRetryAction action);
 static void show_pending_redemption(UiState *ui);
 static void show_grant_manager(UiState *ui, int selection);
+static bool load_redemption_history(UiState *ui);
 static void open_redemption_history(UiState *ui);
 static void request_clear_redemption_history(UiState *ui);
 static void open_activity_history(UiState *ui);
@@ -861,7 +862,7 @@ static void open_offline_code_input(UiState *ui)
     }
     ptc_ui_numpad_open(
         &ui->model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
-        "A 输入加时码", "加时之前，记得向窗外远眺至少 5 分钟，\n让眼睛放松一下吧！", 8, 0, 0, 0);
+        "输入加时码", "输入家长给你的 8 位码，确认前会先显示加时预览。", 8, 0, 0, 0);
 }
 
 static void begin_wait(UiState *ui, const char *type, const char *message)
@@ -1029,6 +1030,9 @@ static void poll_pending_redemption(UiState *ui)
     ui->model.overlay = PTC_UI_OVERLAY_CODE_RESULT;
     ui->model.code_result_pending = false;
     ui->model.code_result_failed = strcmp(ui->model.result_status, "ok") != 0;
+    (void)load_redemption_history(ui);
+    ptc_ui_match_redemption_result(&ui->model);
+    ptc_ui_mark_status_updated(&ui->model, ui->model.code_completed_at);
     if (ui->model.code_result_failed) {
         snprintf(ui->model.message, sizeof(ui->model.message),
                  "后台已确认兑换未成功，加时码没有被消费，可以重新输入。");
@@ -1387,7 +1391,7 @@ static void poll_result(UiState *ui, bool force)
         }
         sync_setup_wizard(ui);
         load_rule_drafts(ui);
-        if (ui->model.status_loaded) {
+        if (ui->model.status_loaded && strcmp(ui->model.result_status, "ok") == 0) {
             ptc_ui_mark_status_updated(&ui->model, (int64_t)time(NULL));
         }
         if (preserve_weekly_draft &&
@@ -1454,6 +1458,9 @@ static void poll_result(UiState *ui, bool force)
             ui->model.pending_code[0] = '\0';
             ui->model.code_result_pending = false;
             ui->model.code_result_failed = strcmp(ui->model.result_status, "ok") != 0;
+            (void)load_redemption_history(ui);
+            ptc_ui_match_redemption_result(&ui->model);
+            ptc_ui_mark_status_updated(&ui->model, ui->model.code_completed_at);
             if (strcmp(ui->model.result_status, "ok") == 0) {
                 ui->model.overlay = PTC_UI_OVERLAY_CODE_RESULT;
                 ui->model.operation = PTC_UI_OPERATION_NONE;
@@ -2404,6 +2411,7 @@ static void open_local_grant(UiState *ui)
     }
     ui->model.grant_max_minutes = maximum;
     ui->model.grant_minutes = legal_grant_minutes(20U, maximum);
+    ui->model.grant_notice[0] = '\0';
     ui->model.grant_has_code = false;
     ui->model.grant_issued_minutes = 0;
     ui->model.grant_estimate_available = false;
@@ -2418,7 +2426,7 @@ static void open_local_grant(UiState *ui)
     ui->model.grant_status_refresh_failed = false;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "本机生成 8 位加时码");
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "选择今天要增加的时间；快捷键会自动吸附到协议支持的合法档位。");
+             "选时长、生成，再把代码告诉孩子。");
     submit_status(ui);
     if (!ui->waiting) ui->model.grant_status_refresh_failed = true;
 }
@@ -2476,37 +2484,39 @@ static void generate_local_grant_code(UiState *ui)
     uint16_t nonce = 0;
     uint8_t tier;
     bool found = false;
+    if (ui->waiting) return;
+    ui->model.grant_notice[0] = '\0';
     if (!ui->model.status_loaded) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "无法确认设备日期，请先关闭弹层并刷新设备状态。");
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "无法确认设备日期，请先关闭弹层并刷新设备状态。");
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_GENERATE_CODE;
     if (!verify_sensitive_pin(ui, "本机生成加时码前，请再次输入本应用 PIN")) return;
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret)) ||
         ptc_token_v2_tier_for_minutes(ui->model.grant_minutes, &tier) != PTC_ERR_OK) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "生成参数或设备配对信息无效。");
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "配对信息无效，请返回加时码生成管理检查配置。");
         return;
     }
     load_consumed_nonces(ui->model.day_index, consumed);
     if (!load_issued_nonces(ui, ui->model.day_index, issued)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "读取本机已签发记录失败。");
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "读取签发记录失败，请返回检查 SD 卡后重试。");
         return;
     }
     randomGet(&start, sizeof(start));
     found = ptc_token_v2_find_available_nonce(consumed, issued, start, &nonce);
     if (!found) {
-        snprintf(ui->model.message, sizeof(ui->model.message),
-                 "今日生成的加时码已达 512 枚上限，请明日再试；此前生成的代码不受影响。");
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice),
+                 "今日已达 512 枚上限，请明日再试；旧码未撤销。");
         return;
     }
     if (ptc_token_v2_encode(tier, nonce, device, secret, ui->model.day_index, next_code) != PTC_ERR_OK) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "本机生成加时码失败。");
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "生成失败，请返回检查配置后重试。");
         return;
     }
     issued[nonce] = true;
     if (!save_issued_nonces(ui, ui->model.day_index, issued)) {
-        snprintf(ui->model.message, sizeof(ui->model.message),
-                 "保存已签发记录失败，本次未生成新码；此前显示的代码仍然有效。");
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice),
+                 "保存失败，请返回检查 SD 卡空间后重试；旧码未撤销。");
         return;
     }
     snprintf(ui->model.grant_code, sizeof(ui->model.grant_code), "%s", next_code);
@@ -2515,7 +2525,8 @@ static void generate_local_grant_code(UiState *ui)
     ui->model.grant_issued_minutes = ui->model.grant_minutes;
     ui->model.grant_estimate_minutes = ptc_ui_grant_estimate_remaining(
         &ui->model, ui->model.grant_minutes, &ui->model.grant_estimate_capped);
-    ui->model.grant_estimate_available = ui->model.grant_estimate_minutes >= 0;
+    ui->model.grant_estimate_available = ui->model.grant_estimate_minutes >= 0 &&
+        ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL));
     ui->model.grant_estimate_unrestricted = ui->model.unrestricted_today == 1;
     ui->model.grant_estimated_at = (int64_t)time(NULL);
     ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
@@ -2783,7 +2794,7 @@ static void handle_today_action_ready(UiState *ui, int index)
     else if (ui->model.remaining_available) snprintf(remaining, sizeof(remaining), "%d 分钟", ui->model.remaining_minutes);
     else snprintf(remaining, sizeof(remaining), "暂不可用");
     switch (index) {
-    case 1:
+    case PTC_UI_OPERATION_SET_TODAY_LIMIT:
         ui->model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
         ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
             "设置今日总额度",
@@ -2794,7 +2805,7 @@ static void handle_today_action_ready(UiState *ui, int index)
                     : "全天总额度包含今日额度消耗；右侧显示调整前后的可玩时间。"),
             4, 1, 1440, current_today_limit_value(ui));
         break;
-    case 2:
+    case PTC_UI_OPERATION_ADD_TODAY_MINUTES:
         if (ui->model.unrestricted_today == 1) {
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "今天已不限时，无需加时；如需恢复限时，请使用“设置今日总额度”。");
@@ -2805,12 +2816,12 @@ static void handle_today_action_ready(UiState *ui, int index)
                 3, 1, 120, 15);
         }
         break;
-    case 3:
+    case PTC_UI_OPERATION_DISABLE_TODAY_LIMIT:
         snprintf(body, sizeof(body), "%s：额度已耗（估算）%s，今天还可玩 %s。\n设置后今天不限时；明天继续使用每周计划。",
                  date, played, remaining);
         open_confirm_overlay(ui, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, "将今天设为不限时", body);
         break;
-    case 4: {
+    case PTC_UI_OPERATION_RESTORE_TODAY_POLICY: {
         PtcEffectiveRule restored = ptc_ui_rule_after_today_restore(&ui->model);
         char basis[256];
         ptc_ui_format_restore_today_basis(&ui->model, basis, sizeof(basis));
@@ -2830,18 +2841,19 @@ static void handle_today_action_ready(UiState *ui, int index)
 static void handle_parent_action(UiState *ui)
 {
     int index = ui->model.selected_index;
-    if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY && index > 0) {
+    if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY) {
         snprintf(ui->model.message, sizeof(ui->model.message),
                  "紧急停用已开启，此项控制写入不可用；请到支持与恢复解除停用。");
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
-        if (index == 0) {
+        if (ui->waiting) return;
+        if (ptc_ui_today_operation(index) != PTC_UI_OPERATION_NONE) {
             submit_status(ui);
-        } else {
-            ui->pending_today_action = index;
-            submit_status(ui);
-            snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新额度消耗估算和今天还可玩...");
+            /* A failed submit must not leave an action for a later auto-refresh. */
+            ui->pending_today_action = ui->waiting ? (int)ptc_ui_today_operation(index) : -1;
+            if (ui->waiting)
+                snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新额度消耗估算和今天还可玩...");
         }
         return;
     }
@@ -3378,6 +3390,12 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+        if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
+            ptc_ui_cancel_overlay(&ui->model);
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_SCHEDULED) {
         PtcScheduledOverride *draft = &ui->model.draft_scheduled_override;
         uint32_t duration = draft->end_day_index >= draft->start_day_index
@@ -4046,8 +4064,13 @@ static void handle_touch(UiState *ui, int x, int y)
                      "家长区已通过 PIN 验证；这里显示完整诊断字段，但不会显示 PIN、密钥或可复用授权材料。");
         }
         break;
+    case PTC_UI_HIT_HOME_DETAILS:
+        ptc_ui_open_home_details(&ui->model);
+        break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
-        if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY) {
+        if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+            handle_overlay_input(ui, HidNpadButton_B);
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY) {
             handle_overlay_input(ui, HidNpadButton_B);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR) {
             handle_overlay_input(ui, HidNpadButton_B);
@@ -4619,8 +4642,12 @@ int main(int argc, char **argv)
                 }
             } else if (down & HidNpadButton_Y) {
                 submit_status(&ui);
+            } else if (down & HidNpadButton_Plus) {
+                ptc_ui_open_home_details(&ui.model);
             } else if (down & HidNpadButton_X) {
-                if (ui.model.daily_buffer_available && !ui.waiting) {
+                if (ui.model.disable_flag_present) {
+                    snprintf(ui.model.message, sizeof(ui.model.message), "控制已停用，自主缓冲暂不可领取。");
+                } else if (ui.model.daily_buffer_available && !ui.waiting) {
                     submit_transport_empty(&ui, "claim_daily_buffer",
                         "正在领取今日自主缓冲...", "领取今日自主缓冲失败");
                 } else if (ui.model.daily_buffer_claimed) {
@@ -4644,7 +4671,9 @@ int main(int argc, char **argv)
                 enter_child_area(&ui);
             }
         } else {
-            if (ui.model.parent_footer_focused) {
+            if ((down & HidNpadButton_Plus) && ui.model.parent_page == PTC_UI_PARENT_TODAY) {
+                ptc_ui_open_home_details(&ui.model);
+            } else if (ui.model.parent_footer_focused) {
                 if (down & HidNpadButton_B) {
                     request_parent_navigation(&ui, -1, true);
                 } else if (down & HidNpadButton_L &&
