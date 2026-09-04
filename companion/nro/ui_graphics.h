@@ -544,6 +544,7 @@ void ptc_ui_format_today_mode(const PtcUiModel *model, char *out, size_t out_siz
 void ptc_ui_format_quota_remaining(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_home_remaining(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
 void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_size);
+void ptc_ui_format_home_total_value(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_timer_status(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_console_date(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_parent_status_summary(

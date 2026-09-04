@@ -907,14 +907,15 @@ static void test_release_hit_targets(void)
               "support hierarchy bar exposes a touch return to settings");
     check_hit(hit_center(&model, ptc_ui_support_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4,
               "support cards use the secondary-page layout");
-    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0,
-              "support actions no longer use the area reserved for hierarchy context");
     check_true(!rects_overlap(ptc_ui_support_hierarchy_rect(), ptc_ui_support_card_rect(0)),
                "support hierarchy bar does not overlap the action cards");
     check_true(!rects_overlap(ptc_ui_support_card_rect(4), (PtcUiRect){54, 522, 1172, 128}),
                "support action cards do not overlap recent execution");
-    check_hit(hit_center(&model, ptc_ui_parent_tab_rect(0)), PTC_UI_HIT_NONE, 0,
-              "support page hides top-level tab touch navigation");
+    check_hit(hit_center(&model, ptc_ui_parent_tab_rect(0)), PTC_UI_HIT_PARENT_BACK, 0,
+              "support replaces first tab with return to settings");
+    for (int tab = 1; tab < PTC_UI_PARENT_PAGE_COUNT; ++tab)
+        check_hit(hit_center(&model, ptc_ui_parent_tab_rect(tab)), PTC_UI_HIT_NONE, 0,
+                  "support removes all other tab touch targets");
 
     model.settings_page = PTC_UI_SETTINGS_ADVANCED;
     model.recent_event_count = 0;
@@ -922,14 +923,21 @@ static void test_release_hit_targets(void)
               "advanced settings exposes the hbmenu entry card");
     check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_PARENT_BACK, 0,
               "advanced hierarchy bar exposes a touch return to settings");
-    check_hit(hit_center(&model, ptc_ui_parent_card_rect(0)), PTC_UI_HIT_NONE, 0,
-              "advanced action no longer uses the area reserved for hierarchy context");
     check_true(!rects_overlap(ptc_ui_advanced_hierarchy_rect(), ptc_ui_advanced_card_rect()),
                "advanced hierarchy bar does not overlap the action card");
-    check_true(!rects_overlap(ptc_ui_advanced_card_rect(), (PtcUiRect){54, 522, 1172, 128}),
-               "advanced action card does not overlap recent execution");
-    check_hit(hit_center(&model, ptc_ui_parent_tab_rect(0)), PTC_UI_HIT_NONE, 0,
-              "advanced settings hides top-level tab touch navigation");
+    for (int card = 0; card < 4; ++card)
+        check_true(!rects_overlap(ptc_ui_advanced_feature_rect(card), (PtcUiRect){54, 446, 1172, 128}),
+                   "advanced cards do not overlap the relocated recent execution");
+    check_hit(hit_center(&model, ptc_ui_parent_tab_rect(0)), PTC_UI_HIT_PARENT_BACK, 0,
+              "advanced replaces first tab with return to settings");
+    for (int tab = 1; tab < PTC_UI_PARENT_PAGE_COUNT; ++tab)
+        check_hit(hit_center(&model, ptc_ui_parent_tab_rect(tab)), PTC_UI_HIT_NONE, 0,
+                  "advanced removes all other tab touch targets");
+    model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+    check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_NONE, 0,
+              "nested overlay blocks secondary-page return touch");
+    check_true(ptc_ui_cancel_overlay(&model), "nested overlay closes first");
+    check_int(model.settings_page, PTC_UI_SETTINGS_ADVANCED, "closing overlay stays on secondary page");
 
     model.parent_page = PTC_UI_PARENT_HOLIDAY;
     check_hit(hit_center(&model, ptc_ui_holiday_enable_rect()), PTC_UI_HIT_HOLIDAY_ENABLE, 0, "holiday global switch target");

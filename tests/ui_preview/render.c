@@ -8,27 +8,93 @@ static time_t preview_time(time_t *out) { if (out) *out = 1000; return 1000; }
 
 uint32_t preview_pixels[1280 * 720];
 
+static int check_primitives(void)
+{
+    const uint32_t background = pack_rgb(0x182838), ink = pack_rgb(0xe0c0a0);
+    UiRect rect = {20, 20, 96, 64};
+    int failed = 0, mixed = 0;
+    g_palette = ptc_ui_theme_palette(PTC_UI_RESOLVED_LIGHT);
+    fill_rect_packed(preview_pixels, 1280, (UiRect){0, 0, 1280, 720}, background);
+    fill_round_rect(preview_pixels, 1280, rect, 16, UI_RGB(0xe0c0a0));
+    for (int y = 0; y < rect.height; ++y) {
+        for (int x = 0; x < rect.width; ++x) {
+            uint32_t pixel = preview_pixels[(rect.y + y) * 1280 + rect.x + x];
+            if (pixel != preview_pixels[(rect.y + y) * 1280 + rect.x + rect.width - 1 - x] ||
+                pixel != preview_pixels[(rect.y + rect.height - 1 - y) * 1280 + rect.x + x]) ++failed;
+            if (pixel != background && pixel != ink) ++mixed;
+        }
+    }
+    if (!mixed || preview_pixels[20 * 1280 + 20] != background || preview_pixels[40 * 1280 + 40] != ink) ++failed;
+    /* A stroke must not erase text or other content inside its inner contour. */
+    preview_pixels[40 * 1280 + 40] = pack_rgb(0xff00ff);
+    draw_rect_outline(preview_pixels, 1280, rect, 16, 3, UI_RGB(0xabcdef));
+    if (preview_pixels[40 * 1280 + 40] != pack_rgb(0xff00ff) || preview_pixels[20 * 1280 + 20] != background) ++failed;
+    if (preview_pixels[21 * 1280 + 60] != pack_rgb(0xabcdef) || preview_pixels[40 * 1280 + 21] != pack_rgb(0xabcdef)) ++failed;
+    draw_focus_ring(preview_pixels, 1280, rect, 16);
+    if (preview_pixels[40 * 1280 + 19] != background ||
+        preview_pixels[40 * 1280 + 17] != resolve_color(UI_FOCUS) ||
+        preview_pixels[40 * 1280 + 40] != pack_rgb(0xff00ff)) ++failed;
+    /* Requested radii remain distinct even on large cards. */
+    fill_round_rect(preview_pixels, 1280, (UiRect){200, 20, 96, 64}, 8, UI_RGB(0xe0c0a0));
+    if (preview_pixels[22 * 1280 + 202] == preview_pixels[22 * 1280 + 22]) ++failed;
+    fill_rect_packed(preview_pixels, 1280, (UiRect){0, 0, 1280, 720}, background);
+    draw_circle_outline(preview_pixels, 1280, 100, 100, 16, 3, UI_RGB(0xe0c0a0));
+    mixed = 0;
+    for (int y = -17; y <= 17; ++y) {
+        for (int x = -17; x <= 17; ++x) {
+            uint32_t pixel = preview_pixels[(100 + y) * 1280 + 100 + x];
+            if (pixel != preview_pixels[(100 - y) * 1280 + 100 - x]) ++failed;
+            if (pixel != ink && pixel != background) ++mixed;
+        }
+    }
+    if (!mixed || preview_pixels[100 * 1280 + 100] != background) ++failed;
+    /* Non-default stride and off-screen shapes must preserve all guard pixels. */
+    uint32_t stride = 1284;
+    uint32_t *guarded = malloc(stride * 722 * sizeof(*guarded));
+    if (!guarded) return 1;
+    for (unsigned int i = 0; i < stride * 722; ++i) guarded[i] = background;
+    uint32_t *canvas = guarded + stride + 2;
+    fill_round_rect(canvas, stride, (UiRect){-18, -15, 80, 60}, 16, UI_RGB(0xffffff));
+    draw_rect_outline(canvas, stride, (UiRect){1250, 680, 90, 90}, 16, 3, UI_RGB(0xffffff));
+    draw_circle_outline(canvas, stride, 0, 719, 20, 3, UI_RGB(0xffffff));
+    fill_round_rect(canvas, stride, (UiRect){1279, 0, 1, 1}, 16, UI_RGB(0xffffff));
+    draw_rect_outline(canvas, stride, (UiRect){1279, 0, 1, 1}, 16, 3, UI_RGB(0xffffff));
+    fill_round_rect(canvas, stride, (UiRect){0, 0, 0, 0}, 16, UI_RGB(0xffffff));
+    for (unsigned int y = 0; y < 722; ++y)
+        for (unsigned int x = 0; x < stride; ++x)
+            if ((y == 0 || y == 721 || x < 2 || x >= 1282) && guarded[y * stride + x] != background) ++failed;
+    free(guarded);
+    printf("%s: UI primitive coverage, symmetry, strokes and clipping\n", failed ? "FAIL" : "PASS");
+    return failed ? 1 : 0;
+}
+
 static int save_preview(const char *directory, const char *name, const PtcUiModel *model, bool dark)
 {
     char path[512];
     FILE *file;
+    unsigned char *rgb;
     PtcUiThemeView theme = ptc_ui_theme_make_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
     ptc_ui_graphics_draw(model, &theme);
     draw_text(preview_pixels, 1280, 820, 22, "HOST PREVIEW / SAMPLE DATA", 16, UI_RGB(g_palette->text_secondary));
     snprintf(path, sizeof(path), "%s/%s-%s.ppm", directory, name, dark ? "dark" : "light");
     file = fopen(path, "wb");
     if (!file) return 1;
+    rgb = malloc(1280 * 720 * 3);
+    if (!rgb) { fclose(file); return 1; }
     fprintf(file, "P6\n1280 720\n255\n");
     for (int y = 0; y < 720; ++y) {
-        unsigned char rgb[1280 * 3];
         for (int x = 0; x < 1280; ++x) {
             uint32_t pixel = preview_pixels[y * 1280 + x];
-            rgb[x * 3] = pixel & 255;
-            rgb[x * 3 + 1] = (pixel >> 8) & 255;
-            rgb[x * 3 + 2] = (pixel >> 16) & 255;
+            int offset = (y * 1280 + x) * 3;
+            rgb[offset] = pixel & 255;
+            rgb[offset + 1] = (pixel >> 8) & 255;
+            rgb[offset + 2] = (pixel >> 16) & 255;
         }
-        if (fwrite(rgb, 1, sizeof(rgb), file) != sizeof(rgb)) { fclose(file); return 1; }
     }
+    /* One frame write avoids hundreds of small writes across a Docker bind mount. */
+    bool written = fwrite(rgb, 1, 1280 * 720 * 3, file) == 1280 * 720 * 3;
+    free(rgb);
+    if (!written) { fclose(file); return 1; }
     return fclose(file) != 0;
 }
 
@@ -91,7 +157,35 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
                 if (state == 5) { model.remaining_minutes = 1440; model.played_minutes = 0; model.forecast[0].minutes = 1440; }
                 snprintf(name, sizeof(name), "matrix-%s-state-%d", parent ? "parent" : "child", state);
                 failed |= save_preview(directory, name, &model, dark != 0);
+                ptc_ui_open_home_details(&model);
+                if (model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+                    snprintf(name, sizeof(name), "details-%s-state-%d", parent ? "parent" : "child", state);
+                    failed |= save_preview(directory, name, &model, dark != 0);
+                }
             }
+        }
+        for (int state = 0; state < 6; ++state) {
+            PtcUiModel details = *baseline;
+            char name[64];
+            details.view = PTC_UI_PARENT;
+            details.parent_page = PTC_UI_PARENT_TODAY;
+            if (state == 0) details.usage_summary_available = details.played_minutes_available = false;
+            if (state == 1) details.disable_flag_present = true;
+            if (state == 2) details.apply_pending_confirmation = true;
+            if (state == 3) {
+                details.usage_known_days_7 = details.usage_known_days_30 = 0;
+                details.usage_consumed_minutes_7 = details.usage_consumed_minutes_30 = 0;
+            }
+            if (state == 4) snprintf(details.setup_phase, sizeof(details.setup_phase), "protection");
+            if (state == 5) {
+                details.disable_flag_present = true;
+                snprintf(details.result_status, sizeof(details.result_status), "error");
+                snprintf(details.message, sizeof(details.message), "设置未完成，请等待状态同步后重试。当前设置尚未确认生效，请家长到支持与恢复查看详细原因。请勿重复提交，请先确认系统当前状态。");
+                snprintf(details.feedback_detail, sizeof(details.feedback_detail), "请勿重复提交；状态刷新和诊断仍然可用。若需要继续使用，请家长确认当前限制和剩余额度，检查后台是否正在恢复。");
+            }
+            ptc_ui_open_home_details(&details);
+            snprintf(name, sizeof(name), "details-special-%d", state);
+            failed |= save_preview(directory, name, &details, dark != 0);
         }
         PtcUiModel model = *baseline;
         model.view = PTC_UI_PARENT;
@@ -113,6 +207,7 @@ int main(int argc, char **argv)
     unsigned char *bytes;
     PtcUiModel model;
     int failed = 0;
+    if (argc == 2 && strcmp(argv[1], "--check-primitives") == 0) return check_primitives();
     if (argc != 3 || !(font = fopen(argv[1], "rb"))) return 1;
     fseek(font, 0, SEEK_END); length = ftell(font); rewind(font);
     if (length <= 0 || !(bytes = malloc((size_t)length))) { fclose(font); return 1; }

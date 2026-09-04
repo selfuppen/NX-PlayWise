@@ -2011,17 +2011,25 @@ void ptc_ui_format_home_remaining(const PtcUiModel *model, int64_t now, char *ou
     else ptc_ui_format_quota_remaining(model, out, out_size);
 }
 
-void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_size)
+void ptc_ui_format_home_total_value(const PtcUiModel *model, char *out, size_t out_size)
 {
     if (!out || out_size == 0) return;
     /* Only the backend's current-day forecast supplies the displayed total;
        do not reconstruct it from remaining time or consumption estimates. */
-    if (!model || !model->status_loaded) snprintf(out, out_size, "今日总额度  待刷新");
-    else if (model->unrestricted_today == 1) snprintf(out, out_size, "今日总额度  不限时");
+    if (!model || !model->status_loaded) snprintf(out, out_size, "待刷新");
+    else if (model->unrestricted_today == 1) snprintf(out, out_size, "不限时");
     else if (model->forecast_available && model->forecast[0].day_index == model->day_index &&
              model->forecast[0].mode == PTC_RULE_MODE_LIMIT)
-        snprintf(out, out_size, "今日总额度  %u 分钟", (unsigned int)model->forecast[0].minutes);
-    else snprintf(out, out_size, "今日总额度  暂不可用");
+        snprintf(out, out_size, "%u 分钟", (unsigned int)model->forecast[0].minutes);
+    else snprintf(out, out_size, "暂不可用");
+}
+
+void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_size)
+{
+    char value[64];
+    if (!out || out_size == 0) return;
+    ptc_ui_format_home_total_value(model, value, sizeof(value));
+    snprintf(out, out_size, "今日总额度  %s", value);
 }
 
 PtcUiRect ptc_ui_home_summary_rect(bool parent)
@@ -2076,17 +2084,17 @@ bool ptc_ui_home_notice_expanded(const PtcUiModel *model)
 
 PtcUiRect ptc_ui_advanced_hierarchy_rect(void)
 {
-    return (PtcUiRect){54, 172, 1172, 56};
+    return (PtcUiRect){54, 108, 1172, 48};
 }
 
 PtcUiRect ptc_ui_advanced_back_rect(void)
 {
-    return (PtcUiRect){1038, 180, 170, 40};
+    return (PtcUiRect){54, 108, 192, 48};
 }
 
 PtcUiRect ptc_ui_advanced_card_rect(void)
 {
-    return (PtcUiRect){54, 246, 365, 94};
+    return ptc_ui_advanced_feature_rect(0);
 }
 
 PtcUiRect ptc_ui_advanced_feature_rect(int index)
@@ -2094,17 +2102,17 @@ PtcUiRect ptc_ui_advanced_feature_rect(int index)
     int column = index % 2;
     int row = index / 2;
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54 + column * 385, 246 + row * 110, 365, 94};
+    return (PtcUiRect){54 + column * 385, 176 + row * 136, 365, 112};
 }
 
 PtcUiRect ptc_ui_support_hierarchy_rect(void)
 {
-    return (PtcUiRect){54, 172, 760, 56};
+    return ptc_ui_advanced_hierarchy_rect();
 }
 
 PtcUiRect ptc_ui_support_back_rect(void)
 {
-    return (PtcUiRect){644, 180, 152, 40};
+    return ptc_ui_advanced_back_rect();
 }
 
 PtcUiRect ptc_ui_support_card_rect(int index)
@@ -2114,7 +2122,7 @@ PtcUiRect ptc_ui_support_card_rect(int index)
     if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
     column = index % 2;
     row = index / 2;
-    return (PtcUiRect){54 + column * 385, 240 + row * 88, 365, 82};
+    return (PtcUiRect){54 + column * 385, 176 + row * 110, 365, 94};
 }
 
 PtcUiRect ptc_ui_holiday_card_rect(int index)

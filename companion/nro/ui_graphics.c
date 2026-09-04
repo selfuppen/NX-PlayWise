@@ -259,64 +259,92 @@ static void fill_rect(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t c
     fill_rect_packed(pixels, stride, rect, resolve_color(color));
 }
 
-static void fill_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, uint32_t color)
+/* Pixel coverage uses eighth-pixel coordinates: 4 x 4 sample centres at
+ * 1, 3, 5, 7. Only pixels intersecting a curve need multiple samples. */
+static int disk_coverage(int dx, int dy, int radius)
 {
-    if (radius >= 8 && rect.height >= 64 && rect.width >= 64) radius = 16;
+    int near_x = dx > 4 ? dx - 4 : 0;
+    int near_y = dy > 4 ? dy - 4 : 0;
+    int squared = radius * radius;
+    int count = 0;
+    if ((dx + 4) * (dx + 4) + (dy + 4) * (dy + 4) <= squared) return 16;
+    if (near_x * near_x + near_y * near_y >= squared) return 0;
+    for (int sy = -3; sy <= 3; sy += 2)
+        for (int sx = -3; sx <= 3; sx += 2)
+            if ((dx + sx) * (dx + sx) + (dy + sy) * (dy + sy) <= squared) ++count;
+    return count;
+}
+
+static int round_rect_coverage(UiRect rect, int radius, int x, int y)
+{
+    int px = x - rect.x, py = y - rect.y;
+    if (px < 0 || py < 0 || px >= rect.width || py >= rect.height) return 0;
+    int dx = px < radius ? radius * 8 - (px * 8 + 4) :
+             (px >= rect.width - radius ? px * 8 + 4 - (rect.width - radius) * 8 : 0);
+    int dy = py < radius ? radius * 8 - (py * 8 + 4) :
+             (py >= rect.height - radius ? py * 8 + 4 - (rect.height - radius) * 8 : 0);
+    return dx && dy ? disk_coverage(dx, dy, radius * 8) : 16;
+}
+
+static void paint_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect,
+                             int radius, int stroke, uint32_t color)
+{
+    if (rect.width <= 0 || rect.height <= 0) return;
+    if (radius < 0) radius = 0;
     if (radius > rect.width / 2) radius = rect.width / 2;
     if (radius > rect.height / 2) radius = rect.height / 2;
-    int radius_squared = radius * radius;
+    if (stroke * 2 >= rect.width || stroke * 2 >= rect.height) stroke = 0;
+    UiRect inner = {rect.x + stroke, rect.y + stroke, rect.width - 2 * stroke, rect.height - 2 * stroke};
+    int inner_radius = radius > stroke ? radius - stroke : 0;
+    int band = radius > stroke ? radius : stroke;
     uint32_t resolved = resolve_color(color);
-    int y;
-    for (y = rect.y; y < rect.y + rect.height; ++y) {
-        int x;
-        for (x = rect.x; x < rect.x + rect.width; ++x) {
-            int dx = 0;
-            int dy = 0;
-            if (x < rect.x + radius) {
-                dx = rect.x + radius - x;
-            } else if (x >= rect.x + rect.width - radius) {
-                dx = x - (rect.x + rect.width - radius - 1);
+    int first_y = rect.y < 0 ? 0 : rect.y;
+    int last_y = rect.y + rect.height > SCREEN_HEIGHT ? SCREEN_HEIGHT : rect.y + rect.height;
+    for (int y = first_y; y < last_y; ++y) {
+        int local_y = y - rect.y;
+        if (local_y >= band && local_y < rect.height - band) {
+            if (!stroke) fill_rect_packed(pixels, stride, (UiRect){rect.x, y, rect.width, 1}, resolved);
+            else {
+                fill_rect_packed(pixels, stride, (UiRect){rect.x, y, stroke, 1}, resolved);
+                fill_rect_packed(pixels, stride, (UiRect){rect.x + rect.width - stroke, y, stroke, 1}, resolved);
             }
-            if (y < rect.y + radius) {
-                dy = rect.y + radius - y;
-            } else if (y >= rect.y + rect.height - radius) {
-                dy = y - (rect.y + rect.height - radius - 1);
+            continue;
+        }
+        int first_x = rect.x < 0 ? 0 : rect.x;
+        int last_x = rect.x + rect.width > SCREEN_WIDTH ? SCREEN_WIDTH : rect.x + rect.width;
+        for (int x = first_x; x < last_x; ++x) {
+            if (x >= rect.x + band && x < rect.x + rect.width - band) {
+                int end = rect.x + rect.width - band;
+                if (end > last_x) end = last_x;
+                if (!stroke || local_y < stroke || local_y >= rect.height - stroke)
+                    fill_rect_packed(pixels, stride, (UiRect){x, y, end - x, 1}, resolved);
+                x = end - 1;
+                continue;
             }
-            if (dx == 0 || dy == 0 || dx * dx + dy * dy <= radius_squared) {
-                set_pixel(pixels, stride, x, y, resolved);
-            }
+            int coverage = round_rect_coverage(rect, radius, x, y);
+            if (stroke) coverage -= round_rect_coverage(inner, inner_radius, x, y);
+            if (coverage == 16) set_pixel(pixels, stride, x, y, resolved);
+            else if (coverage > 0) blend_pixel(pixels, stride, x, y, resolved, (uint8_t)((coverage * 255 + 8) / 16));
         }
     }
 }
 
-static void draw_rect_outline(uint32_t *pixels, uint32_t stride, UiRect rect, int width, uint32_t color)
+static void fill_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, uint32_t color)
 {
-    /* Stroke only the perimeter: preserve content already drawn inside. */
-    int radius = rect.height >= 64 && rect.width >= 64 ? 16 : 8;
-    uint32_t resolved = resolve_color(color);
-    int inner = radius - width;
-    if (rect.width < radius * 2 || rect.height < radius * 2) {
-        fill_rect_packed(pixels, stride, (UiRect){rect.x, rect.y, rect.width, width}, resolved);
-        fill_rect_packed(pixels, stride, (UiRect){rect.x, rect.y + rect.height - width, rect.width, width}, resolved);
-        fill_rect_packed(pixels, stride, (UiRect){rect.x, rect.y, width, rect.height}, resolved);
-        fill_rect_packed(pixels, stride, (UiRect){rect.x + rect.width - width, rect.y, width, rect.height}, resolved);
-        return;
-    }
-    for (int y = 0; y < rect.height; ++y) {
-        if (y >= radius && y < rect.height - radius) {
-            fill_rect_packed(pixels, stride, (UiRect){rect.x, rect.y + y, width, 1}, resolved);
-            fill_rect_packed(pixels, stride, (UiRect){rect.x + rect.width - width, rect.y + y, width, 1}, resolved);
-            continue;
-        }
-        for (int x = 0; x < rect.width; ++x) {
-            int dx = x < radius ? radius - x : (x >= rect.width - radius ? x - (rect.width - radius - 1) : 0);
-            int dy = y < radius ? radius - y : (y >= rect.height - radius ? y - (rect.height - radius - 1) : 0);
-            bool corner = dx > 0 && dy > 0;
-            bool edge = x < width || y < width || x >= rect.width - width || y >= rect.height - width;
-            if ((corner && dx * dx + dy * dy <= radius * radius && dx * dx + dy * dy >= inner * inner) || (!corner && edge))
-                set_pixel(pixels, stride, rect.x + x, rect.y + y, resolved);
-        }
-    }
+    paint_round_rect(pixels, stride, rect, radius, 0, color);
+}
+
+static void draw_rect_outline(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, int width, uint32_t color)
+{
+    /* Subtract inner coverage, never repaint the contents under the stroke. */
+    if (width > 0) paint_round_rect(pixels, stride, rect, radius, width, color);
+}
+
+static void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
+{
+    /* A one-pixel gap keeps focus distinct even on an accent-filled button. */
+    draw_rect_outline(pixels, stride,
+        (UiRect){rect.x - 4, rect.y - 4, rect.width + 8, rect.height + 8}, radius + 4, 3, UI_FOCUS);
 }
 
 static void draw_circle_outline(
@@ -328,18 +356,18 @@ static void draw_circle_outline(
     int width,
     uint32_t color)
 {
-    int outer_squared = radius * radius;
+    if (radius <= 0 || width <= 0) return;
     int inner_radius = radius - width;
-    int inner_squared = inner_radius > 0 ? inner_radius * inner_radius : 0;
     uint32_t resolved = resolve_color(color);
     int y;
     for (y = -radius; y <= radius; ++y) {
         int x;
         for (x = -radius; x <= radius; ++x) {
-            int distance_squared = x * x + y * y;
-            if (distance_squared <= outer_squared && distance_squared >= inner_squared) {
-                set_pixel(pixels, stride, center_x + x, center_y + y, resolved);
-            }
+            int dx = (x < 0 ? -x : x) * 8, dy = (y < 0 ? -y : y) * 8;
+            int coverage = disk_coverage(dx, dy, radius * 8);
+            if (inner_radius > 0) coverage -= disk_coverage(dx, dy, inner_radius * 8);
+            if (coverage > 0) blend_pixel(pixels, stride, center_x + x, center_y + y,
+                resolved, (uint8_t)((coverage * 255 + 8) / 16));
         }
     }
 }
@@ -379,7 +407,7 @@ static void draw_status_symbol(
     uint32_t color,
     int kind)
 {
-    draw_rect_outline(pixels, stride, (UiRect){x, y, 20, 20}, 2, color);
+    draw_rect_outline(pixels, stride, (UiRect){x, y, 20, 20}, 4, 2, color);
     if (kind == 1) {
         draw_line(pixels, stride, x + 4, y + 11, x + 8, y + 15, 2, color);
         draw_line(pixels, stride, x + 8, y + 15, x + 16, y + 5, 2, color);
@@ -628,10 +656,9 @@ static void draw_candidate_button(uint32_t *pixels, uint32_t stride, PtcUiRect r
     UiRect box = to_uirect(rect);
     bool primary = foreground == UI_ON_ACCENT;
     uint32_t fill = disabled ? UI_RAISED : (selected && !primary ? UI_ACCENT_SOFT : background);
-    fill_round_rect(pixels, stride, box, 16, fill);
-    draw_rect_outline(pixels, stride, box, selected ? 3 : 1, selected ? UI_FOCUS : UI_CONTROL);
-    if (selected) draw_rect_outline(pixels, stride,
-        (UiRect){box.x + 4, box.y + 4, box.width - 8, box.height - 8}, 2, UI_PAGE);
+    fill_round_rect(pixels, stride, box, 12, fill);
+    if (selected) draw_focus_ring(pixels, stride, box, 12);
+    else draw_rect_outline(pixels, stride, box, 12, 1, UI_CONTROL);
     draw_text_center(pixels, stride, box, label, 20, disabled ? UI_DISABLED : foreground);
 }
 
@@ -642,11 +669,11 @@ static void draw_overlay_actions(uint32_t *pixels, uint32_t stride, const PtcUiM
     if (model->confirm_hold_required && model->overlay == PTC_UI_OVERLAY_CONFIRM && model->confirm_hold_progress > 0) {
         UiRect progress = to_uirect(confirm);
         progress.width = progress.width * model->confirm_hold_progress / 1000;
-        fill_round_rect(pixels, stride, progress, 8, UI_SUCCESS);
+        fill_round_rect(pixels, stride, progress, 12, UI_SUCCESS);
         draw_text_center(pixels, stride, to_uirect(confirm),
                          model->confirm_hold_progress >= 1000 ? "确认完成" : "继续按住...",
                          20, UI_ON_ACCENT);
-        draw_rect_outline(pixels, stride, to_uirect(confirm), 2, UI_SUCCESS);
+        draw_rect_outline(pixels, stride, to_uirect(confirm), 12, 2, UI_SUCCESS);
     }
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  取消", UI_RAISED, UI_INK, true);
     if (model->overlay == PTC_UI_OVERLAY_CONFIRM &&
@@ -655,7 +682,7 @@ static void draw_overlay_actions(uint32_t *pixels, uint32_t stride, const PtcUiM
          model->operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY)) {
         PtcUiRect selected = model->overlay_selection == 0
             ? ptc_ui_cancel_rect(model->overlay) : ptc_ui_confirm_rect(model->overlay);
-        draw_rect_outline(pixels, stride, to_uirect(selected), 3, UI_ACCENT);
+        draw_rect_outline(pixels, stride, to_uirect(selected), 12, 3, UI_ACCENT);
     }
 }
 
@@ -703,8 +730,8 @@ static void draw_disable_banner(uint32_t *pixels, uint32_t stride, const PtcUiMo
 {
     UiRect banner = {790, 42, 436, 38};
     if (!model->disable_flag_present) return;
-    fill_round_rect(pixels, stride, banner, 7, UI_DANGER_SOFT);
-    draw_rect_outline(pixels, stride, banner, 1, UI_DANGER);
+    fill_round_rect(pixels, stride, banner, 6, UI_DANGER_SOFT);
+    draw_rect_outline(pixels, stride, banner, 6, 1, UI_DANGER);
     draw_status_symbol(pixels, stride, banner.x + 8, banner.y + 5, UI_DANGER, 3);
     draw_text_center(pixels, stride, banner, "紧急停用已开启  |  新的时间控制不会应用", 18, UI_DANGER);
 }
@@ -738,17 +765,12 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
 }
 
 static void home_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,
-                        const char *label, bool primary, bool focused, bool disabled)
+    const char *label, bool primary, bool selected, bool disabled)
 {
     UiRect box = to_uirect(target);
     uint32_t fill = disabled ? UI_RAISED : (primary ? UI_ACCENT : UI_ACCENT_SOFT);
-    if (focused) {
-        fill_round_rect(pixels, stride, box, 16, UI_FOCUS);
-        box = (UiRect){box.x + 4, box.y + 4, box.width - 8, box.height - 8};
-        fill_round_rect(pixels, stride, box, 16, UI_PAGE);
-        box = (UiRect){box.x + 3, box.y + 3, box.width - 6, box.height - 6};
-    }
-    fill_round_rect(pixels, stride, box, 16, fill);
+    fill_round_rect(pixels, stride, box, 12, fill);
+    if (selected) draw_focus_ring(pixels, stride, box, 12);
     draw_text_center(pixels, stride, box, label, target.h <= 48 ? 18 : 22,
         disabled ? UI_DISABLED : (primary ? UI_ON_ACCENT : UI_ACCENT));
 }
@@ -801,7 +823,7 @@ static void draw_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiMode
     int x = box.x + 28;
     ptc_ui_format_home_remaining(model, (int64_t)time(NULL), remaining, sizeof(remaining));
     ptc_ui_format_today_mode(model, today, sizeof(today));
-    fill_round_rect(pixels, stride, box, 20, UI_RGB(g_palette->hero));
+    fill_round_rect(pixels, stride, box, 16, UI_RGB(g_palette->hero));
     draw_text(pixels, stride, x, box.y + 42, "今天还可玩", 22, UI_RGB(g_palette->hero_secondary));
     draw_circle_outline(pixels, stride, box.x + box.width - 46, box.y + 40, 16, 2, UI_RGB(g_palette->hero_secondary));
     draw_line(pixels, stride, box.x + box.width - 46, box.y + 29, box.x + box.width - 46, box.y + 40, 2, UI_RGB(g_palette->hero_secondary));
@@ -851,7 +873,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_header(pixels, stride, "今天的约定", "合理安排时间，完成今天的约定");
     draw_disable_banner(pixels, stride, model);
     draw_home_summary(pixels, stride, model, false);
-    fill_round_rect(pixels, stride, (UiRect){704, 120, 528, 384}, 12, UI_RGB(g_palette->surface));
+    fill_round_rect(pixels, stride, (UiRect){704, 120, 528, 384}, 16, UI_RGB(g_palette->surface));
     draw_text(pixels, stride, 736, 164, "需要多一点时间？", 28, UI_RGB(g_palette->text_primary));
     draw_text(pixels, stride, 736, 195, "输入家长给你的 8 位数字", 18, UI_RGB(g_palette->text_secondary));
     home_button(pixels, stride, ptc_ui_child_submit_rect(),
@@ -887,8 +909,8 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     snprintf(title, sizeof(title), "首次设置  |  %d/5", step);
     draw_header(pixels, stride, grace_remaining >= 0 ? "正在同步" : title,
         grace_remaining >= 0 ? "系统设置正在同步，完成后继续选择进入的区域" : "按步骤完成 任我玩 的家长设置");
-    fill_round_rect(pixels, stride, panel, 8, UI_SURFACE);
-    draw_rect_outline(pixels, stride, panel, 1, UI_BORDER);
+    fill_round_rect(pixels, stride, panel, 16, UI_SURFACE);
+    draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
     for (int i = 0; i < 5; ++i)
         fill_round_rect(pixels, stride, (UiRect){104 + i * 212, 167, 188, 5}, 2,
             i < step ? UI_ACCENT : UI_RAISED);
@@ -912,16 +934,15 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
         draw_text(pixels, stride, 912, 154, "5 进入区域", 16, step == PTC_UI_SETUP_ZONE ? UI_ACCENT : UI_MUTED);
         if (step == PTC_UI_SETUP_SHORTCUT) {
             UiRect compact_fixed = {204, 184, 872, 54};
-            fill_round_rect(pixels, stride, compact_fixed, 8, UI_ACCENT_SOFT);
-            draw_rect_outline(pixels, stride, compact_fixed, 2, UI_ACCENT);
+            fill_round_rect(pixels, stride, compact_fixed, 12, UI_ACCENT_SOFT);
+            draw_rect_outline(pixels, stride, compact_fixed, 12, 2, UI_ACCENT);
             draw_text(pixels, stride, 232, 218, "固定入口 Minus：松开即可进入，无需长按", 20, UI_ACCENT);
             draw_text(pixels, stride, 204, 264, "自定义组合需长按约 400ms；按 A 加入草稿，按 + 确认后生效", 18, UI_MUTED);
             for (int index = 0; index < PTC_UI_SHORTCUT_PRESET_COUNT; ++index) {
                 UiRect card = to_uirect(ptc_ui_setup_shortcut_card_rect(index));
                 bool selected = index == model->setup_shortcut_index;
-                fill_round_rect(pixels, stride, card, 8, selected ? UI_ACCENT_SOFT : UI_RAISED);
-                draw_rect_outline(pixels, stride, card, selected ? 2 : 1,
-                                  selected ? UI_ACCENT : UI_CONTROL);
+                fill_round_rect(pixels, stride, card, 16, selected ? UI_ACCENT_SOFT : UI_RAISED);
+                draw_rect_outline(pixels, stride, card, 16, selected ? 2 : 1, selected ? UI_ACCENT : UI_CONTROL);
                 draw_text_center(pixels, stride, card,
                                  ptc_ui_shortcut_common_label(index), 16,
                                  selected ? UI_ACCENT : UI_INK);
@@ -988,9 +1009,8 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             for (int index = 0; index < 3; ++index) {
                 UiRect option = to_uirect(ptc_ui_setup_theme_rect(index));
                 bool selected = index == model->setup_theme_index;
-                fill_round_rect(pixels, stride, option, 8, selected ? UI_ACCENT_SOFT : UI_RAISED);
-                draw_rect_outline(pixels, stride, option, selected ? 3 : 1,
-                                  selected ? UI_ACCENT : UI_CONTROL);
+                fill_round_rect(pixels, stride, option, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
+                draw_rect_outline(pixels, stride, option, 12, selected ? 3 : 1, selected ? UI_ACCENT : UI_CONTROL);
                 draw_text_center(pixels, stride, (UiRect){option.x, option.y + 22, option.width, 36},
                                  LABELS[index], 23, UI_INK);
                 draw_text_center(pixels, stride, (UiRect){option.x, option.y + 70, option.width, 28},
@@ -1003,9 +1023,8 @@ static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
             for (int index = 0; index < 2; ++index) {
                 UiRect card = to_uirect(ptc_ui_setup_zone_rect(index));
                 bool selected = index == model->setup_zone_index;
-                fill_round_rect(pixels, stride, card, 8, selected ? UI_ACCENT_SOFT : UI_RAISED);
-                draw_rect_outline(pixels, stride, card, selected ? 3 : 1,
-                                  selected ? UI_ACCENT : UI_CONTROL);
+                fill_round_rect(pixels, stride, card, 16, selected ? UI_ACCENT_SOFT : UI_RAISED);
+                draw_rect_outline(pixels, stride, card, 16, selected ? 3 : 1, selected ? UI_ACCENT : UI_CONTROL);
                 draw_text_center(pixels, stride, (UiRect){card.x, card.y + 26, card.width, 34},
                                  index == 0 ? "孩子区" : "家长区", 27,
                                  selected ? UI_ACCENT : UI_INK);
@@ -1063,9 +1082,9 @@ static void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char fitted[192];
     char execution[150];
     draw_header(pixels, stride, "操作未完成", "请查看错误信息后重试或返回");
-    fill_round_rect(pixels, stride, panel, 8, UI_SURFACE);
-    draw_rect_outline(pixels, stride, panel, 1, UI_BORDER);
-    fill_round_rect(pixels, stride, (UiRect){254, 194, 64, 64}, 8, UI_DANGER);
+    fill_round_rect(pixels, stride, panel, 16, UI_SURFACE);
+    draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
+    fill_round_rect(pixels, stride, (UiRect){254, 194, 64, 64}, 16, UI_DANGER);
     draw_text_center(pixels, stride, (UiRect){254, 194, 64, 64}, "!", 34, UI_ON_ACCENT);
     draw_text(pixels, stride, 342, 214, "加时码处理失败", 28, UI_INK);
     snprintf(
@@ -1083,11 +1102,11 @@ static void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
         draw_text(pixels, stride, 254, 390, fitted, 17, UI_DANGER);
     }
 
-    fill_round_rect(pixels, stride, to_uirect(ptc_ui_error_retry_rect()), 8, UI_ACCENT);
+    fill_round_rect(pixels, stride, to_uirect(ptc_ui_error_retry_rect()), 12, UI_ACCENT);
     draw_text_center(pixels, stride, to_uirect(ptc_ui_error_retry_rect()),
                     model->error_code == 306 ? "A  重新检测" : "A  重新输入", 25, UI_ON_ACCENT);
-    fill_round_rect(pixels, stride, to_uirect(ptc_ui_error_back_rect()), 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, to_uirect(ptc_ui_error_back_rect()), 1, UI_CONTROL);
+    fill_round_rect(pixels, stride, to_uirect(ptc_ui_error_back_rect()), 12, UI_RAISED);
+    draw_rect_outline(pixels, stride, to_uirect(ptc_ui_error_back_rect()), 12, 1, UI_CONTROL);
     draw_text_center(pixels, stride, to_uirect(ptc_ui_error_back_rect()), "B  返回主页", 25, UI_INK);
 }
 
@@ -1116,12 +1135,19 @@ static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
 static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     static const char *LABELS[] = {"今日总额度", "周计划", "国家节假日", "加时码", "设置"};
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page != PTC_UI_SETTINGS_ROOT) {
+        bool support = model->settings_page == PTC_UI_SETTINGS_SUPPORT;
+        home_button(pixels, stride, support ? ptc_ui_support_back_rect() : ptc_ui_advanced_back_rect(),
+                    "B  返回设置", false, false, false);
+        draw_text(pixels, stride, 278, 140, support ? "设置 / 支持与恢复" : "设置 / 高级设置", 22, UI_MUTED);
+        return;
+    }
     int index;
     for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
         UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
         uint32_t background = index == (int)model->parent_page ? UI_ACCENT : UI_RAISED;
         uint32_t foreground = index == (int)model->parent_page ? UI_ON_ACCENT : UI_INK;
-        fill_round_rect(pixels, stride, tab, 8, background);
+        fill_round_rect(pixels, stride, tab, 12, background);
         draw_text_center(pixels, stride, tab, LABELS[index], 18, foreground);
     }
     if (!(model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page != PTC_UI_SETTINGS_ROOT)) {
@@ -1136,26 +1162,10 @@ static void draw_settings_badge(uint32_t *pixels, uint32_t stride, const PtcUiMo
     UiRect badge;
     if (!label) return;
     badge = (UiRect){54 + PTC_UI_PARENT_SETTINGS * 174 + 96, 113, 56, 24};
+    if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page != PTC_UI_SETTINGS_ROOT)
+        badge = (UiRect){534, 115, 72, 32};
     fill_round_rect(pixels, stride, badge, 6, color);
     draw_text_center(pixels, stride, badge, label, 11, UI_ON_ACCENT);
-}
-
-static void draw_settings_hierarchy(
-    uint32_t *pixels,
-    uint32_t stride,
-    PtcUiRect hierarchy_rect,
-    PtcUiRect back_rect,
-    const char *title)
-{
-    UiRect bar = to_uirect(hierarchy_rect);
-    UiRect badge = {bar.x + 218, bar.y + 14, 84, 28};
-    fill_round_rect(pixels, stride, bar, 8, UI_ACCENT_SOFT);
-    draw_rect_outline(pixels, stride, bar, 1, UI_BORDER);
-    draw_text(pixels, stride, bar.x + 18, bar.y + 36, title, 20, UI_ACCENT);
-    fill_round_rect(pixels, stride, badge, 6, UI_ACCENT);
-    draw_text_center(pixels, stride, badge, "二级页面", 13, UI_ON_ACCENT);
-    draw_dialog_button(pixels, stride, back_rect, "B  返回设置",
-                       UI_SURFACE, UI_INK, true);
 }
 
 static void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
@@ -1170,8 +1180,7 @@ static void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     uint32_t background = disabled ? UI_RAISED : (selected ? UI_ACCENT_SOFT : UI_SURFACE);
     fill_round_rect(pixels, stride, rect, 16, background);
     if (selected) {
-        draw_rect_outline(pixels, stride, rect, 3, UI_FOCUS);
-        draw_rect_outline(pixels, stride, (UiRect){rect.x + 4, rect.y + 4, rect.width - 8, rect.height - 8}, 2, UI_PAGE);
+        draw_focus_ring(pixels, stride, rect, 16);
     }
     fill_round_rect(pixels, stride, (UiRect){rect.x + 12, rect.y + 24, 4, rect.height - 48}, 2,
         disabled ? UI_DISABLED : action->accent);
@@ -1182,7 +1191,7 @@ static void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
         content_width, 22, (rect.y + rect.height - baseline - 4) / 22 + 1,
         disabled ? UI_DISABLED : UI_MUTED);
     if (recommended && !disabled) {
-        fill_round_rect(pixels, stride, (UiRect){rect.x + rect.width - 66, rect.y + 8, 56, 24}, 8, UI_SUCCESS);
+        fill_round_rect(pixels, stride, (UiRect){rect.x + rect.width - 66, rect.y + 8, 56, 24}, 6, UI_SUCCESS);
         draw_text_center(pixels, stride, (UiRect){rect.x + rect.width - 66, rect.y + 8, 56, 24}, "建议", 16, UI_ON_ACCENT);
     }
 }
@@ -1191,8 +1200,8 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
 {
     UiRect panel = {842, 176, 384, 324};
     char troubleshoot[128];
-    fill_round_rect(pixels, stride, panel, 8, UI_SURFACE);
-    draw_rect_outline(pixels, stride, panel, 1, UI_BORDER);
+    fill_round_rect(pixels, stride, panel, 16, UI_SURFACE);
+    draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
     int recommended = ptc_ui_support_recommended_action(model);
     draw_text(pixels, stride, panel.x + 26, panel.y + 36, "当前问题", 23, UI_INK);
     draw_wrapped_text(pixels, stride, panel.x + 26, panel.y + 70, ptc_ui_support_problem(model),
@@ -1221,8 +1230,7 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
             snprintf(latest, sizeof(latest), "%s  |  %s", model->recent_events[source_index], event_time);
             fit_text(latest, sizeof(latest), latest, 13, panel.width - 52);
             if (event_index + 6 == model->selected_index && !model->parent_footer_focused)
-                draw_rect_outline(pixels, stride, to_uirect(ptc_ui_support_event_rect(event_index)),
-                                  2, UI_RGB(g_palette->focus));
+                draw_rect_outline(pixels, stride, to_uirect(ptc_ui_support_event_rect(event_index)), 6, 2, UI_RGB(g_palette->focus));
             draw_text(pixels, stride, panel.x + 26, panel.y + 270 + event_index * 22,
                       latest, 13, event_index + 6 == model->selected_index ? UI_ACCENT : UI_MUTED);
         }
@@ -1243,8 +1251,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
         uint32_t fill = disabled ? UI_RAISED : (index == 0 ? UI_ACCENT : (index == 1 ? UI_ACCENT_SOFT : UI_SURFACE));
         fill_round_rect(pixels, stride, box, 16, fill);
         if (focused) {
-            draw_rect_outline(pixels, stride, box, 3, UI_FOCUS);
-            draw_rect_outline(pixels, stride, (UiRect){box.x + 4, box.y + 4, box.width - 8, box.height - 8}, 2, UI_PAGE);
+            draw_focus_ring(pixels, stride, box, 16);
         }
         draw_text(pixels, stride, box.x + 24, box.y + 40, TODAY_ACTIONS[index].title, 24,
             disabled ? UI_DISABLED : (index == 0 ? UI_ON_ACCENT : UI_INK));
@@ -1259,7 +1266,7 @@ static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel 
 {
     UiRect panel = {842, 176, 384, 274};
     (void)model;
-    fill_round_rect(pixels, stride, panel, 12, UI_RGB(g_palette->surface));
+    fill_round_rect(pixels, stride, panel, 16, UI_RGB(g_palette->surface));
     draw_text(pixels, stride, 866, 216, "把加时码告诉孩子", 24, UI_RGB(g_palette->text_primary));
     draw_text(pixels, stride, 866, 258, "1  选择要增加的时长", 20, UI_RGB(g_palette->text_primary));
     draw_text(pixels, stride, 866, 294, "2  验证 PIN，生成代码", 20, UI_RGB(g_palette->text_primary));
@@ -1290,9 +1297,9 @@ static void draw_diagnostic_notice(uint32_t *pixels, uint32_t stride, const PtcU
         : (model->diagnostic_status == PTC_UI_DIAGNOSTIC_ERROR
             ? UI_DANGER : UI_WARNING);
     char line[320];
-    fill_round_rect(pixels, stride, rect, 8, UI_SURFACE);
-    draw_rect_outline(pixels, stride, rect, 1, UI_BORDER);
-    fill_rect(pixels, stride, (UiRect){rect.x, rect.y, 6, rect.height}, accent);
+    fill_round_rect(pixels, stride, rect, 16, UI_SURFACE);
+    draw_rect_outline(pixels, stride, rect, 16, 1, UI_BORDER);
+    fill_round_rect(pixels, stride, (UiRect){rect.x + 12, rect.y + 20, 4, rect.height - 40}, 2, accent);
     if (model->diagnostic_status == PTC_UI_DIAGNOSTIC_EXPORTING) {
         draw_text(pixels, stride, rect.x + 24, rect.y + 36, "正在导出诊断包...", 21, accent);
         draw_text(pixels, stride, rect.x + 24, rect.y + 76,
@@ -1334,7 +1341,7 @@ static void draw_time_state_card(
     int value_size = 23;
     while (label_size > 16 && measure_text(label, label_size) > rect.width - 16) --label_size;
     while (value_size > 17 && measure_text(value, value_size) > rect.width - 16) --value_size;
-    fill_round_rect(pixels, stride, rect, 12, UI_RGB(g_palette->surface_raised));
+    fill_round_rect(pixels, stride, rect, 16, UI_RGB(g_palette->surface_raised));
     draw_text_center(pixels, stride, (UiRect){rect.x + 8, rect.y + 10, rect.width - 16, 26}, label, label_size, UI_MUTED);
     draw_text_center(pixels, stride, (UiRect){rect.x + 8, rect.y + 38, rect.width - 16, 38}, value, value_size, accent);
 }
@@ -1363,9 +1370,8 @@ static const char *rule_source_label(const char *source)
 
 static void draw_plan_card(uint32_t *pixels, uint32_t stride, UiRect card, bool focused)
 {
-    fill_round_rect(pixels, stride, card, 10, UI_RGB(g_palette->surface));
-    draw_rect_outline(pixels, stride, card, focused ? 3 : 1,
-                      UI_RGB(focused ? g_palette->focus : g_palette->border_control));
+    fill_round_rect(pixels, stride, card, 16, UI_RGB(g_palette->surface));
+    draw_rect_outline(pixels, stride, card, 16, focused ? 3 : 1, UI_RGB(focused ? g_palette->focus : g_palette->border_control));
 }
 
 static void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
@@ -1399,7 +1405,7 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
     char freshness[64];
     uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
     format_status_age(model, freshness, sizeof(freshness));
-    draw_rect_outline(pixels, stride, (UiRect){54, 180, 26, 24}, 2, UI_ACCENT);
+    draw_rect_outline(pixels, stride, (UiRect){54, 180, 26, 24}, 4, 2, UI_ACCENT);
     draw_line(pixels, stride, 54, 188, 80, 188, 2, UI_ACCENT);
     draw_line(pixels, stride, 61, 176, 61, 183, 3, UI_ACCENT);
     draw_line(pixels, stride, 73, 176, 73, 183, 3, UI_ACCENT);
@@ -1497,10 +1503,8 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     char minutes_str[64];
     bool disabled = model->disable_flag_present;
     bool top_selected = model->selected_index == 0;
-    fill_round_rect(pixels, stride, top_card, 10,
-                    disabled ? UI_PAGE : (top_selected ? UI_ACCENT_SOFT : UI_SURFACE));
-    draw_rect_outline(pixels, stride, top_card, top_selected ? 3 : 1,
-                      top_selected ? UI_ACCENT : UI_BORDER);
+    fill_round_rect(pixels, stride, top_card, 16, disabled ? UI_PAGE : (top_selected ? UI_ACCENT_SOFT : UI_SURFACE));
+    draw_rect_outline(pixels, stride, top_card, 16, top_selected ? 3 : 1, top_selected ? UI_ACCENT : UI_BORDER);
     draw_text(pixels, stride, top_card.x + 18, top_card.y + 28, "国家节假日规则", 20, UI_INK);
     draw_text(pixels, stride, top_card.x + 18, top_card.y + 54, "开启后自动应用法定休假与调休工作日规则", 14, UI_MUTED);
     {
@@ -1526,7 +1530,7 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                         disabled ? UI_BORDER : (limited ? UI_ACCENT : UI_SUCCESS));
         draw_text_center(pixels, stride, mode, limited ? "限时" : "不限时", 14,
                          disabled ? UI_DISABLED : UI_ON_ACCENT);
-        fill_round_rect(pixels, stride, minutes, 8, disabled || !limited ? UI_RAISED : UI_RAISED);
+        fill_round_rect(pixels, stride, minutes, 12, disabled || !limited ? UI_RAISED : UI_RAISED);
         if (limited) {
             snprintf(minutes_str, sizeof(minutes_str), "%u 分钟（%u小时%u分）", (unsigned int)rule.minutes,
                      (unsigned int)rule.minutes / 60, (unsigned int)rule.minutes % 60);
@@ -1566,11 +1570,11 @@ static const char *short_rule_source(const char *source)
 
 static void draw_advanced_preview(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect panel = {842, 246, 384, 204};
+    UiRect panel = {842, 176, 384, 248};
     int index;
     char line[96];
-    fill_round_rect(pixels, stride, panel, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, panel, 1, UI_BORDER);
+    fill_round_rect(pixels, stride, panel, 16, UI_RAISED);
+    draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
     draw_text(pixels, stride, panel.x + 20, panel.y + 29, "未来 7 天规则", 19, UI_INK);
     if (!model->forecast_available) {
         draw_text(pixels, stride, panel.x + 20, panel.y + 68, "刷新状态后显示", 16, UI_MUTED);
@@ -1609,21 +1613,12 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     draw_disable_banner(pixels, stride, model);
     if (model->demo_secret_enabled) {
         UiRect warning = model->disable_flag_present ? (UiRect){526, 42, 246, 38} : (UiRect){900, 42, 326, 36};
-        fill_round_rect(pixels, stride, warning, 7, UI_DANGER_SOFT);
+        fill_round_rect(pixels, stride, warning, 6, UI_DANGER_SOFT);
         draw_text_center(pixels, stride, warning,
                          model->disable_flag_present ? "公共演示密钥已启用" : "公共演示密钥已启用  |  低安全模式",
                          17, UI_DANGER);
     }
     draw_tabs(pixels, stride, model);
-    if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
-        model->settings_page == PTC_UI_SETTINGS_ADVANCED) {
-        draw_settings_hierarchy(pixels, stride, ptc_ui_advanced_hierarchy_rect(),
-                                ptc_ui_advanced_back_rect(), "设置 / 高级设置");
-    } else if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
-               model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
-        draw_settings_hierarchy(pixels, stride, ptc_ui_support_hierarchy_rect(),
-                                ptc_ui_support_back_rect(), "设置 / 支持与恢复");
-    }
     if (model->parent_page != PTC_UI_PARENT_PLAN && model->parent_page != PTC_UI_PARENT_HOLIDAY &&
         model->parent_page != PTC_UI_PARENT_TODAY) {
         if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
@@ -1753,7 +1748,9 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     } else if (model->parent_page == PTC_UI_PARENT_TODAY) {
         draw_home_notice(pixels, stride, model);
     } else if (model->parent_page != PTC_UI_PARENT_PLAN && model->parent_page != PTC_UI_PARENT_HOLIDAY) {
-        draw_notice(pixels, stride, model, 522, 128);
+        int notice_y = model->parent_page == PTC_UI_PARENT_SETTINGS &&
+            model->settings_page == PTC_UI_SETTINGS_ADVANCED ? 446 : 522;
+        draw_notice(pixels, stride, model, notice_y, 128);
     }
     if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT) {
         UiRect help = {842, 176, 384, 324};
@@ -1775,7 +1772,7 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                        model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page != PTC_UI_SETTINGS_ROOT ? "B  返回设置" : "B  返回孩子页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(3), "Y  刷新");
     if (model->parent_footer_focused && model->parent_footer_selection == 0) {
-        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_parent_footer_rect(3)), 3, UI_ACCENT);
+        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_parent_footer_rect(3)), 12, 3, UI_ACCENT);
     }
     draw_parent_status_footer(pixels, stride, model);
 }
@@ -1806,7 +1803,7 @@ static void draw_dialog_shell(
     *dialog = to_uirect(ptc_ui_dialog_rect(width, height));
     fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT},
                      pack_rgb(g_palette->scrim));
-    fill_round_rect(pixels, stride, *dialog, 20, UI_SURFACE);
+    fill_round_rect(pixels, stride, *dialog, 16, UI_SURFACE);
     fill_round_rect(pixels, stride, (UiRect){dialog->x + 34, dialog->y + 15, 36, 5}, 2, UI_CORAL);
     draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
     if (description[0]) {
@@ -1835,8 +1832,8 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     draw_dialog_shell(pixels, stride, model, &dialog, 720, 560);
     snprintf(value, sizeof(value), "%u 分钟", (unsigned int)model->draft_minutes);
     format_duration(model->draft_minutes, duration, sizeof(duration));
-    fill_round_rect(pixels, stride, value_box, 8, UI_ACCENT_SOFT);
-    draw_rect_outline(pixels, stride, value_box, 2, UI_ACCENT);
+    fill_round_rect(pixels, stride, value_box, 16, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, value_box, 16, 2, UI_ACCENT);
     draw_text_center(pixels, stride, value_box, value, 39, UI_ACCENT);
     draw_dialog_button(pixels, stride, ptc_ui_minutes_dec_rect(), "-5", UI_RAISED, UI_ACCENT, true);
     draw_dialog_button(pixels, stride, ptc_ui_minutes_inc_rect(), "+5", UI_RAISED, UI_ACCENT, true);
@@ -1871,8 +1868,8 @@ static void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     }
     format_status_age(model, freshness, sizeof(freshness));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 316, 640, 24}, date_line, 17, UI_MUTED);
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 44, dialog.y + 344, 304, 38}, 7, UI_RAISED);
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 372, dialog.y + 344, 304, 38}, 7, UI_RAISED);
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 44, dialog.y + 344, 304, 38}, 16, UI_RAISED);
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 372, dialog.y + 344, 304, 38}, 16, UI_RAISED);
     draw_text_center(pixels, stride, (UiRect){dialog.x + 44, dialog.y + 344, 304, 38}, played_line, 17, UI_MUTED);
     draw_text_center(pixels, stride, (UiRect){dialog.x + 372, dialog.y + 344, 304, 38}, remaining_line, 17,
                      model->unrestricted_today == 1 ? UI_SUCCESS : UI_MUTED);
@@ -1895,8 +1892,8 @@ static void draw_weekly_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         UiRect card = to_uirect(ptc_ui_weekly_day_rect(day));
         uint32_t border = day == model->editor_index ? UI_ACCENT : UI_BORDER;
         char minutes[32];
-        fill_round_rect(pixels, stride, card, 8, day == model->editor_index ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, card, day == model->editor_index ? 3 : 1, border);
+        fill_round_rect(pixels, stride, card, 16, day == model->editor_index ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, card, 16, day == model->editor_index ? 3 : 1, border);
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 14, card.width, 34}, DAYS[day], 21, UI_INK);
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 69, card.width, 34}, rule_mode_label(model->draft_week[day].mode), 22,
                          UI_ACCENT);
@@ -1952,8 +1949,8 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     } else {
         snprintf(shown, sizeof(shown), "%.*s", model->numpad_max_digits, "________");
     }
-    fill_round_rect(pixels, stride, display, 8, UI_ACCENT_SOFT);
-    draw_rect_outline(pixels, stride, display, 2, UI_ACCENT);
+    fill_round_rect(pixels, stride, display, 16, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, display, 16, 2, UI_ACCENT);
     draw_text_center(pixels, stride, display, shown, 30, UI_ACCENT);
 
     if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
@@ -2015,13 +2012,11 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         snprintf(right, sizeof(right), "%s：%s",
                  model->today_override_present ? "恢复后预计还可玩" : "保存后预计还可玩", after_value);
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 32, dialog.y + 242, 266, 32}, 6, UI_RAISED);
-        draw_rect_outline(pixels, stride, (UiRect){dialog.x + 32, dialog.y + 242, 266, 32}, 1,
-                          time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
+        draw_rect_outline(pixels, stride, (UiRect){dialog.x + 32, dialog.y + 242, 266, 32}, 6, 1, time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
                                             model->unrestricted_today == 1, model->remaining_minutes));
         draw_text_center(pixels, stride, (UiRect){dialog.x + 36, dialog.y + 244, 258, 28}, left, 14, UI_INK);
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 322, dialog.y + 242, 266, 32}, 6, UI_RAISED);
-        draw_rect_outline(pixels, stride, (UiRect){dialog.x + 322, dialog.y + 242, 266, 32}, 1,
-                          time_state_accent(model->played_minutes_available, false, after_minutes));
+        draw_rect_outline(pixels, stride, (UiRect){dialog.x + 322, dialog.y + 242, 266, 32}, 6, 1, time_state_accent(model->played_minutes_available, false, after_minutes));
         draw_text_center(pixels, stride, (UiRect){dialog.x + 326, dialog.y + 244, 258, 28}, right,
                          model->today_override_present ? 12 : 14, UI_INK);
     } else if (duration[0]) {
@@ -2049,9 +2044,8 @@ static void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     for (index = 0; index < 12; ++index) {
         UiRect key = to_uirect(ptc_ui_numpad_key_rect(index));
         bool selected = index == model->numpad_cursor;
-        fill_round_rect(pixels, stride, key, 8, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, key, selected ? 3 : 1,
-                          selected ? UI_ACCENT : UI_CONTROL);
+        fill_round_rect(pixels, stride, key, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, key, 12, selected ? 3 : 1, selected ? UI_ACCENT : UI_CONTROL);
         draw_text_center(pixels, stride, key, KEY_LABELS[index], index == 9 || index == 11 ? 18 : 30,
                          selected ? UI_ACCENT : UI_INK);
     }
@@ -2073,8 +2067,8 @@ static void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel
     int row;
     ptc_ui_pin_format_mask(model, mask, sizeof(mask));
     draw_dialog_shell(pixels, stride, model, &dialog, 1040, 620);
-    fill_round_rect(pixels, stride, display, 8, UI_ACCENT_SOFT);
-    draw_rect_outline(pixels, stride, display, 2, UI_ACCENT);
+    fill_round_rect(pixels, stride, display, 16, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, display, 16, 2, UI_ACCENT);
     draw_text_center(pixels, stride, display, mask[0] ? mask : "输入内容只显示为圆点", mask[0] ? 26 : 18,
                      mask[0] ? UI_ACCENT : UI_MUTED);
     snprintf(count, sizeof(count), "已输入 %u 位", (unsigned int)strlen(model->pin_text));
@@ -2145,9 +2139,8 @@ static void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel
         bool selected = model->pin_focus == row;
         char label[4];
         snprintf(label, sizeof(label), "%d", row);
-        fill_round_rect(pixels, stride, key, 7, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, key, selected ? 2 : 1,
-                          selected ? UI_ACCENT : UI_CONTROL);
+        fill_round_rect(pixels, stride, key, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, key, 12, selected ? 2 : 1, selected ? UI_ACCENT : UI_CONTROL);
         draw_text_center(pixels, stride, key, label, 24, selected ? UI_ACCENT : UI_INK);
     }
     draw_dialog_button(pixels, stride, ptc_ui_pin_backspace_rect(), "ZL  退格",
@@ -2259,14 +2252,13 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
     } else if (model->confirm_hold_required && model->played_minutes_available) {
         snprintf(comparison, sizeof(comparison), "额度已耗 %d 分钟       还剩 0 分钟",
                  model->played_minutes);
-        fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 218, 652, 92}, 8, UI_DANGER_SOFT);
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 218, 652, 92}, 16, UI_DANGER_SOFT);
         draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 226, 652, 34}, comparison, 25, UI_DANGER);
         draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 264, 652, 34},
                          "新额度不高于额度消耗估算，保存后会马上限制儿童使用", 20, UI_DANGER);
     }
     if (restore || limit_change || code_preview) {
-        fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54}, 8,
-                        model->confirm_hold_required ? UI_DANGER_SOFT : UI_WARNING_SOFT);
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54}, 16, model->confirm_hold_required ? UI_DANGER_SOFT : UI_WARNING_SOFT);
         if (code_preview) {
             char warning[160];
             if (model->code_preview_converts_unlimited) {
@@ -2300,8 +2292,7 @@ static void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
                              19, model->confirm_hold_required ? UI_DANGER : UI_WARNING);
         }
     } else if (!album_change && (!model->confirm_hold_required || !model->played_minutes_available)) {
-        fill_round_rect(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 230, 620, 72}, 8,
-                        danger ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 230, 620, 72}, 16, danger ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
         draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 230, 620, 72},
                          danger ? "请确认已了解这项操作的影响" : "确认执行这项操作", 22,
                          danger ? UI_DANGER : UI_SUCCESS);
@@ -2369,9 +2360,8 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
     for (int field = 0; field < 2; ++field) {
         UiRect rect = to_uirect(ptc_ui_minute_editor_field_rect((PtcUiDurationField)field));
         bool selected = model->duration_field == (PtcUiDurationField)field;
-        fill_round_rect(pixels, stride, rect, 8, selected ? UI_ACCENT_SOFT : UI_ACCENT_SOFT);
-        draw_rect_outline(pixels, stride, rect, selected ? 3 : 1,
-                          selected ? UI_ACCENT : UI_CONTROL);
+        fill_round_rect(pixels, stride, rect, 16, selected ? UI_ACCENT_SOFT : UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, rect, 16, selected ? 3 : 1, selected ? UI_ACCENT : UI_CONTROL);
         draw_text_center(pixels, stride, rect,
                          field == PTC_UI_DURATION_HOURS ? hours_value : minutes_value,
                          25, selected ? UI_ACCENT : UI_INK);
@@ -2468,9 +2458,8 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
     for (int index = 0; index < 12; ++index) {
         UiRect key = to_uirect(ptc_ui_minute_editor_key_rect(index));
         bool selected = index == model->numpad_cursor;
-        fill_round_rect(pixels, stride, key, 8, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, key, selected ? 3 : 1,
-                          selected ? UI_ACCENT : UI_CONTROL);
+        fill_round_rect(pixels, stride, key, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, key, 12, selected ? 3 : 1, selected ? UI_ACCENT : UI_CONTROL);
         draw_text_center(pixels, stride, key, KEY_LABELS[index], index == 9 || index == 11 ? 18 : 28,
                          selected ? UI_ACCENT : UI_INK);
     }
@@ -2508,7 +2497,7 @@ static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const Ptc
     masked_value(model->credential_current, model->credential_kind == 1 || model->credential_revealed, current, sizeof(current));
     masked_value(model->credential_new, model->credential_kind == 1 || model->credential_new_revealed, next, sizeof(next));
     draw_text(pixels, stride, dialog.x + 42, dialog.y + 122, "当前值", 17, UI_MUTED);
-    fill_round_rect(pixels, stride, current_box, 7, UI_PAGE);
+    fill_round_rect(pixels, stride, current_box, 16, UI_PAGE);
     if (model->credential_kind == 2 && model->credential_revealed) {
         if (strlen(current) > 32U) {
             char first[33];
@@ -2529,10 +2518,8 @@ static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const Ptc
                               model->overlay_selection == PTC_UI_CREDENTIAL_REVEAL, false);
     }
     draw_text(pixels, stride, dialog.x + 42, dialog.y + 215, "新值", 17, UI_MUTED);
-    fill_round_rect(pixels, stride, input_box, 7, UI_ACCENT_SOFT);
-    draw_rect_outline(pixels, stride, input_box,
-                      model->overlay_selection == PTC_UI_CREDENTIAL_INPUT ? 3 : 1,
-                      model->overlay_selection == PTC_UI_CREDENTIAL_INPUT ? UI_ACCENT : UI_CONTROL);
+    fill_round_rect(pixels, stride, input_box, 12, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, input_box, 12, model->overlay_selection == PTC_UI_CREDENTIAL_INPUT ? 3 : 1, model->overlay_selection == PTC_UI_CREDENTIAL_INPUT ? UI_ACCENT : UI_CONTROL);
     if (model->overlay_selection == PTC_UI_CREDENTIAL_INPUT) {
         draw_text(pixels, stride, input_box.x + input_box.width - 72, input_box.y + 20, "A / X", 14, UI_ACCENT);
     }
@@ -2624,8 +2611,7 @@ static void draw_code_result_overlay(uint32_t *pixels, uint32_t stride, const Pt
         format_status_age(model, age, sizeof(age));
         draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 312, 652, 24}, age, 18, status_age_color(model));
     }
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54}, 8,
-                    model->code_result_pending ? UI_RGB(g_palette->surface_raised) :
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54}, 16, model->code_result_pending ? UI_RGB(g_palette->surface_raised) :
                     (model->code_result_failed ? UI_DANGER_SOFT : UI_SUCCESS_SOFT));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54},
                      model->code_result_pending ? "结果确认期间可关闭；下次打开会继续确认" :
@@ -2650,8 +2636,7 @@ static void draw_auth_error_overlay(uint32_t *pixels, uint32_t stride, const Ptc
     snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body), "%s",
              model->auth_error_message[0] ? model->auth_error_message : "PIN 不正确，请重试。");
     draw_dialog_shell(pixels, stride, &shell_model, &dialog, 720, 340);
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 44, dialog.y + 142, dialog.width - 88, 72}, 8,
-                    UI_DANGER_SOFT);
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 44, dialog.y + 142, dialog.width - 88, 72}, 16, UI_DANGER_SOFT);
     draw_text_center(pixels, stride, (UiRect){dialog.x + 58, dialog.y + 142, dialog.width - 116, 72},
                      model->auth_cooldown_seconds > 0
                         ? "错误次数过多，倒计时结束后才能重试"
@@ -2735,8 +2720,8 @@ static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, c
                      (unsigned int)record->grant_minutes,
                      (unsigned int)record->effective_add_minutes,
                      record->effective_add_minutes < record->grant_minutes ? "（已到每日上限）" : "");
-            fill_round_rect(pixels, stride, item, 7, UI_RAISED);
-            draw_rect_outline(pixels, stride, item, 1, UI_BORDER);
+            fill_round_rect(pixels, stride, item, 16, UI_RAISED);
+            draw_rect_outline(pixels, stride, item, 16, 1, UI_BORDER);
             draw_text(pixels, stride, item.x + 16, item.y + 20, time_text, 15, UI_INK);
             draw_text(pixels, stride, item.x + 250, item.y + 20, allowance, 15, UI_ACCENT);
             draw_text(pixels, stride, item.x + 720, item.y + 20, remaining, 15, UI_INK);
@@ -2884,9 +2869,8 @@ static void draw_autonomy_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
         } else {
             snprintf(label, sizeof(label), "关闭");
         }
-        fill_round_rect(pixels, stride, option, 7, selected ? UI_SUCCESS_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, selected ? 2 : 1,
-            selected ? UI_SUCCESS : UI_BORDER);
+        fill_round_rect(pixels, stride, option, 12, selected ? UI_SUCCESS_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, option, 12, selected ? 2 : 1, selected ? UI_SUCCESS : UI_BORDER);
         draw_text_center(pixels, stride, option, label, 21,
             selected ? UI_SUCCESS : UI_INK);
     }
@@ -2907,9 +2891,8 @@ static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, con
         UiRect option = to_uirect(ptc_ui_shortcut_option_rect(index));
         bool selected = index == model->setup_shortcut_index;
         bool chosen = model->shortcut_draft_enabled && selected;
-        fill_round_rect(pixels, stride, option, 7, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, selected ? 2 : 1,
-                          selected ? UI_ACCENT : UI_BORDER);
+        fill_round_rect(pixels, stride, option, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, option, 12, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
         draw_text(pixels, stride, option.x + 14, option.y + 23,
                   ptc_ui_shortcut_common_label(index), 16,
                   selected ? UI_ACCENT : UI_INK);
@@ -2950,7 +2933,7 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
     if (model->grant_notice[0]) snprintf(line, sizeof(line), "%s", model->grant_notice);
     draw_text(pixels, stride, dialog.x + 42, dialog.y + 126, line, 18, UI_RGB(g_palette->text_secondary));
 
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 144, 852, 192}, 12, UI_RGB(g_palette->surface_raised));
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 144, 852, 192}, 16, UI_RGB(g_palette->surface_raised));
     draw_text(pixels, stride, dialog.x + 54, dialog.y + 176, "下次加时时长", 20, UI_RGB(g_palette->text_secondary));
     char played[48];
     format_duration(reliable && model->played_minutes_available ? model->played_minutes : -1, played, sizeof(played));
@@ -2965,7 +2948,7 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
             UI_RGB(g_palette->surface), UI_RGB(g_palette->text_primary), model->overlay_selection == i, false);
     draw_text(pixels, stride, dialog.x + 54, dialog.y + 320, "调整这里不会改变已生成代码的时长，也不会撤销旧码。", 18, UI_RGB(g_palette->text_secondary));
 
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 350, 852, 170}, 12, UI_RGB(g_palette->surface_raised));
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 350, 852, 170}, 16, UI_RGB(g_palette->surface_raised));
     draw_text(pixels, stride, dialog.x + 54, dialog.y + 382, "已生成代码", 20, UI_RGB(g_palette->text_secondary));
     if (model->grant_has_code) {
         ptc_ui_format_code(model->grant_code, code, sizeof(code));
@@ -3047,7 +3030,7 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
               "手机请先保存文件，再交给系统浏览器打开；", 14, UI_MUTED);
     draw_text(pixels, stride, dialog.x + 470, next_y + 58,
               "不要使用聊天软件或网盘的内置预览器。", 14, UI_MUTED);
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 470, next_y + 74, 610, 48}, 7, UI_DANGER_SOFT);
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 470, next_y + 74, 610, 48}, 16, UI_DANGER_SOFT);
     draw_text(pixels, stride, dialog.x + 486, next_y + 104,
               "配置文件包含加时码密钥，请勿发送给他人。", 15, UI_DANGER);
 
@@ -3076,11 +3059,11 @@ static void draw_weekly_leave_overlay(uint32_t *pixels, uint32_t stride, const P
                          : (refreshing ? "+  保存并刷新" : "+  保存并离开"),
                        UI_ACCENT, UI_ON_ACCENT, false);
     if (model->weekly_leave_selection == 0) {
-        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_discard_rect(model->overlay)), 3, UI_DANGER);
+        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_discard_rect(model->overlay)), 12, 3, UI_DANGER);
     } else if (model->weekly_leave_selection == 1) {
-        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_cancel_rect(model->overlay)), 3, UI_ACCENT);
+        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_cancel_rect(model->overlay)), 12, 3, UI_ACCENT);
     } else {
-        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_confirm_rect(model->overlay)), 3, UI_SURFACE);
+        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_confirm_rect(model->overlay)), 12, 3, UI_SURFACE);
     }
 }
 
@@ -3104,8 +3087,8 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     UiRect details;
     draw_dialog_shell(pixels, stride, model, &dialog, 960, 480);
     details = (UiRect){dialog.x + 34, dialog.y + 126, dialog.width - 68, 224};
-    fill_round_rect(pixels, stride, details, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, details, 1, UI_BORDER);
+    fill_round_rect(pixels, stride, details, 16, UI_RAISED);
+    draw_rect_outline(pixels, stride, details, 16, 1, UI_BORDER);
     draw_text(pixels, stride, details.x + 24, details.y + 42, "软件名称", 18, UI_MUTED);
     draw_text(pixels, stride, details.x + 180, details.y + 42, "PlayWise（任我玩）", 20, UI_INK);
     draw_text(pixels, stride, details.x + 24, details.y + 84, "当前版本", 18, UI_MUTED);
@@ -3130,8 +3113,7 @@ static void draw_holiday_calendar_overlay(uint32_t *pixels, uint32_t stride, con
     char line[192];
     draw_dialog_shell(pixels, stride, model, &dialog, 1040, 600);
     if (model->holiday_dirty) {
-        fill_round_rect(pixels, stride, (UiRect){dialog.x + dialog.width - 330, dialog.y + 24, 290, 34},
-                        7, UI_WARNING_SOFT);
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + dialog.width - 330, dialog.y + 24, 290, 34}, 16, UI_WARNING_SOFT);
         draw_text_center(pixels, stride, (UiRect){dialog.x + dialog.width - 330, dialog.y + 24, 290, 34},
                          "预览尚未保存的设置", 16, UI_WARNING);
     }
@@ -3141,8 +3123,8 @@ static void draw_holiday_calendar_overlay(uint32_t *pixels, uint32_t stride, con
         const PtcHolidayArrangement *entry = ptc_holiday_calendar_arrangement(info->last_year, index);
         UiRect card = {dialog.x + 34, dialog.y + 146 + row * 82, dialog.width - 68, 70};
         if (!entry) break;
-        fill_round_rect(pixels, stride, card, 7, UI_RAISED);
-        draw_rect_outline(pixels, stride, card, 1, UI_BORDER);
+        fill_round_rect(pixels, stride, card, 16, UI_RAISED);
+        draw_rect_outline(pixels, stride, card, 16, 1, UI_BORDER);
         draw_text(pixels, stride, card.x + 20, card.y + 28, entry->display_name, 21, UI_INK);
         snprintf(line, sizeof(line), "放假：%u月%u日-%u月%u日    调休上班：%s",
                  entry->start_month, entry->start_day, entry->end_month, entry->end_day, entry->makeup_workdays);
@@ -3179,17 +3161,16 @@ static void draw_weekly_bulk_overlay(uint32_t *pixels, uint32_t stride, const Pt
     for (int index = 0; index < 2; ++index) {
         UiRect card = to_uirect(ptc_ui_weekly_bulk_target_rect(index));
         bool selected = model->overlay_selection == index;
-        fill_round_rect(pixels, stride, card, 8, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, card, selected ? 3 : 1,
-                          selected ? UI_ACCENT : UI_BORDER);
+        fill_round_rect(pixels, stride, card, 16, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, card, 16, selected ? 3 : 1, selected ? UI_ACCENT : UI_BORDER);
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 18, card.width, 34},
                          index == 0 ? "工作日" : "周末", 22, UI_INK);
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 54, card.width, 28},
                          index == 0 ? "周一至周五" : "周六与周日", 17, UI_MUTED);
     }
     ptc_ui_weekly_bulk_stats(model, model->overlay_selection == 1, &stats);
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 490, dialog.y + 148, 510, 270}, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, (UiRect){dialog.x + 490, dialog.y + 148, 510, 270}, 1, UI_BORDER);
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 490, dialog.y + 148, 510, 270}, 16, UI_RAISED);
+    draw_rect_outline(pixels, stride, (UiRect){dialog.x + 490, dialog.y + 148, 510, 270}, 16, 1, UI_BORDER);
     draw_text(pixels, stride, dialog.x + 516, dialog.y + 180, "2. 覆盖预览", 20, UI_INK);
     snprintf(line, sizeof(line), "目标 %d 天；会改变 %d 天；相同跳过 %d 天",
              stats.target_count, stats.changed_count, stats.unchanged_count);
@@ -3232,10 +3213,9 @@ static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const 
         bool enabled = index == 0 ? model->album_restriction_state == 0 :
                        (model->album_restriction_state == 1 ||
                         (model->album_restriction_state == 2 && model->album_backup_valid));
-        fill_round_rect(pixels, stride, card, 8, enabled && selected ? UI_ACCENT_SOFT :
+        fill_round_rect(pixels, stride, card, 16, enabled && selected ? UI_ACCENT_SOFT :
                         (enabled ? UI_SURFACE : UI_PAGE));
-        draw_rect_outline(pixels, stride, card, enabled && selected ? 3 : 1,
-                          enabled && selected ? UI_ACCENT : UI_BORDER);
+        draw_rect_outline(pixels, stride, card, 16, enabled && selected ? 3 : 1, enabled && selected ? UI_ACCENT : UI_BORDER);
         draw_text(pixels, stride, card.x + 24, card.y + 42,
                   index == 0 ? (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL
                                   ? "无需重复配置" : "配置自制程序菜单高级入口") :
@@ -3270,9 +3250,8 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
     for (index = 0; index < 3; ++index) {
         UiRect option = to_uirect(ptc_ui_theme_option_rect(index));
         bool selected = index == model->overlay_selection;
-        fill_round_rect(pixels, stride, option, 8, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, option, selected ? 3 : 1,
-                          selected ? UI_ACCENT : UI_CONTROL);
+        fill_round_rect(pixels, stride, option, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, option, 12, selected ? 3 : 1, selected ? UI_ACCENT : UI_CONTROL);
         draw_text_center(pixels, stride, (UiRect){option.x, option.y + 14, option.width, 34},
                          LABELS[index], 22, UI_INK);
         draw_text_center(pixels, stride, (UiRect){option.x, option.y + 52, option.width, 26},
@@ -3324,44 +3303,90 @@ static void draw_support_event_overlay(uint32_t *pixels, uint32_t stride, const 
                        UI_ACCENT, UI_ON_ACCENT, false);
 }
 
+static void draw_detail_metric(uint32_t *pixels, uint32_t stride, int x, int y,
+                               const char *label, const char *value, uint32_t color)
+{
+    draw_text(pixels, stride, x, y, label, 17, UI_MUTED);
+    draw_text(pixels, stride, x, y + 36, value, 28, color);
+}
+
 static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
-    char line[256], timer[64], remaining[64], today[64], age[64];
-    int x, y;
+    char line[256], timer[64], remaining[64], today[64], age[64], total[64];
     bool parent = model->view == PTC_UI_PARENT;
+    bool error = strcmp(model->result_status, "error") == 0;
+    const char *notice = home_runtime_notice(model);
+    bool fresh = ptc_ui_status_is_fresh(model, (int64_t)time(NULL));
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 640);
-    x = dialog.x + 32;
-    y = dialog.y + 100;
+    int x = dialog.x + 32, y = dialog.y + 80;
+    UiRect hero = {x, y, 688, 200};
+    UiRect status = {x + 704, y, 352, 200};
     ptc_ui_format_timer_status(model, timer, sizeof(timer));
     ptc_ui_format_home_remaining(model, (int64_t)time(NULL), remaining, sizeof(remaining));
+    ptc_ui_format_home_total_value(model, total, sizeof(total));
     ptc_ui_format_today_mode(model, today, sizeof(today));
     format_status_age(model, age, sizeof(age));
-    snprintf(line, sizeof(line), "今日规则  %s    今天还可玩  %s    %s", today, remaining, age);
-    draw_text(pixels, stride, x, y, line, 20, UI_RGB(g_palette->text_primary));
-    snprintf(line, sizeof(line), "系统计时器  %s    PlayWise  %s", timer,
-        model->disable_flag_present ? "控制已停用" : (strcmp(model->setup_phase, "active") == 0 ? "正常运行" : "需家长确认"));
-    draw_text(pixels, stride, x, y + 36, line, 20, UI_RGB(g_palette->text_primary));
-    draw_wrapped_text(pixels, stride, x, y + 72, home_runtime_notice(model), 20, dialog.width - 64, 26, 2,
-        UI_RGB(g_palette->warning));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 736, dialog.y + 26, 352, 30}, age, 17, status_age_color(model));
+
+    fill_round_rect(pixels, stride, hero, 16, UI_ACCENT_SOFT);
+    draw_text(pixels, stride, x + 24, y + 32, "今天还可玩", 20, UI_MUTED);
+    draw_text(pixels, stride, x + 24, y + 100, remaining, 56, fresh ? UI_ACCENT : UI_MUTED);
+    draw_detail_metric(pixels, stride, x + 24, y + 142, "今日总额度", total, UI_INK);
     if (model->played_minutes_available && model->played_minutes >= 0)
-        snprintf(line, sizeof(line), "本机今日额度消耗估算  约 %d 分钟", model->played_minutes);
-    else snprintf(line, sizeof(line), "本机今日额度消耗估算  暂不可用");
-    draw_text(pixels, stride, x, y + 138, line, 22, UI_RGB(g_palette->text_primary));
-    if (model->usage_summary_available)
-        snprintf(line, sizeof(line), "7 天  %u 分钟 (%u 天可靠)    30 天  %u 分钟 (%u 天可靠)",
-            (unsigned int)model->usage_consumed_minutes_7, (unsigned int)model->usage_known_days_7,
-            (unsigned int)model->usage_consumed_minutes_30, (unsigned int)model->usage_known_days_30);
-    else snprintf(line, sizeof(line), "7/30 天额度消耗估算暂不可用");
-    draw_text(pixels, stride, x, y + 174, line, 20, UI_RGB(g_palette->text_secondary));
-    draw_text(pixels, stride, x, y + 210, "游戏明细暂不可用；缺失日期不计入估算", 18, UI_RGB(g_palette->text_secondary));
+        snprintf(line, sizeof(line), "约 %d 分钟", model->played_minutes);
+    else snprintf(line, sizeof(line), "暂不可用");
+    draw_detail_metric(pixels, stride, x + 360, y + 142, "今日额度消耗估算", line, UI_INK);
+
+    fill_round_rect(pixels, stride, status, 16, UI_RAISED);
+    const char *runtime = !model->status_loaded ? "等待刷新" :
+        model->disable_flag_present ? "控制已停用" : model->recovery_active ? "正在恢复" :
+        model->apply_pending_confirmation ? "等待生效" : !fresh ? "状态待确认" :
+        strcmp(model->setup_phase, "active") == 0 ? "正常运行" : "需家长确认";
+    const char *labels[] = {"今日规则", "系统计时器", "PlayWise"};
+    const char *values[] = {today, timer, runtime};
+    for (int i = 0; i < 3; ++i) {
+        draw_text(pixels, stride, status.x + 24, y + 28 + i * 60, labels[i], 16, UI_MUTED);
+        fit_text(line, sizeof(line), values[i], 22, status.width - 48);
+        draw_text(pixels, stride, status.x + 24, y + 54 + i * 60, line, 22,
+            i == 2 && (notice[0] || !fresh) ? UI_WARNING : UI_INK);
+    }
+
+    int history_y = y + 216;
+    if (notice[0]) {
+        fill_round_rect(pixels, stride, (UiRect){x, history_y, 1056, 44}, 6,
+            model->disable_flag_present ? UI_DANGER_SOFT : UI_WARNING_SOFT);
+        draw_wrapped_text(pixels, stride, x + 16, history_y + 19, notice, 17, 1024, 20, 2,
+            model->disable_flag_present ? UI_DANGER : UI_WARNING);
+        history_y += 52;
+    }
+    for (int i = 0; i < 2; ++i) {
+        UiRect card = {x + i * 536, history_y, 520, 98};
+        unsigned int days = i ? model->usage_known_days_30 : model->usage_known_days_7;
+        unsigned int minutes = i ? model->usage_consumed_minutes_30 : model->usage_consumed_minutes_7;
+        fill_round_rect(pixels, stride, card, 16, UI_RAISED);
+        if (model->usage_summary_available && days > 0)
+            snprintf(line, sizeof(line), "%u 分钟", minutes);
+        else snprintf(line, sizeof(line), "暂不可用");
+        draw_detail_metric(pixels, stride, card.x + 24, card.y + 28,
+            i ? "近 30 天额度消耗估算" : "近 7 天额度消耗估算", line, UI_INK);
+        if (model->usage_summary_available)
+            snprintf(line, sizeof(line), "可靠记录 %u 天", days);
+        else snprintf(line, sizeof(line), "可靠记录暂不可用");
+        draw_text(pixels, stride, card.x + 24, card.y + 86, line, 15, UI_MUTED);
+    }
+    draw_text(pixels, stride, x, history_y + 122,
+        "本机额度消耗包含 HOME 等亮屏使用；游戏明细暂不可用，缺失日期不计入估算", 16, UI_MUTED);
     if (parent) {
+        fill_rect(pixels, stride, (UiRect){x, history_y + 140, 1056, 1}, UI_BORDER);
         snprintf(line, sizeof(line), "最近执行  %s    %s", model->command_name, model->transport_label);
-        draw_text(pixels, stride, x, y + 264, line, 18, UI_RGB(g_palette->text_secondary));
-        draw_wrapped_text(pixels, stride, x, y + 298, model->message, 20, dialog.width - 64, 26, 2,
-            UI_RGB(g_palette->text_primary));
-        draw_wrapped_text(pixels, stride, x, y + 352, model->feedback_detail, 18, dialog.width - 64, 24, 2,
-            UI_RGB(g_palette->text_secondary));
+        fit_text(line, sizeof(line), line, 16, 1056);
+        draw_text(pixels, stride, x, history_y + 162, line, 16, UI_MUTED);
+        draw_wrapped_text(pixels, stride, x, history_y + 187, model->message, 19, 1056, 24, 2,
+            error ? UI_DANGER : UI_INK);
+        /* The last two detail lines reserve the return button's entire column. */
+        draw_wrapped_text(pixels, stride, x, history_y + 231, model->feedback_detail, 16, 600, 20, 2,
+            error ? UI_DANGER : UI_MUTED);
     }
     home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "A / B  返回", false, true, false);
 }
