@@ -19,12 +19,91 @@ static int save_preview(const char *directory, const char *name, const PtcUiMode
     file = fopen(path, "wb");
     if (!file) return 1;
     fprintf(file, "P6\n1280 720\n255\n");
-    for (int i = 0; i < 1280 * 720; ++i) {
-        uint32_t pixel = preview_pixels[i];
-        unsigned char rgb[] = {pixel & 255, (pixel >> 8) & 255, (pixel >> 16) & 255};
-        if (fwrite(rgb, 1, 3, file) != 3) { fclose(file); return 1; }
+    for (int y = 0; y < 720; ++y) {
+        unsigned char rgb[1280 * 3];
+        for (int x = 0; x < 1280; ++x) {
+            uint32_t pixel = preview_pixels[y * 1280 + x];
+            rgb[x * 3] = pixel & 255;
+            rgb[x * 3 + 1] = (pixel >> 8) & 255;
+            rgb[x * 3 + 2] = (pixel >> 16) & 255;
+        }
+        if (fwrite(rgb, 1, sizeof(rgb), file) != sizeof(rgb)) { fclose(file); return 1; }
     }
     return fclose(file) != 0;
+}
+
+static int render_visual_matrix(const char *directory, const PtcUiModel *baseline)
+{
+    static const char *titles[] = {
+        "", "调整今日额度", "编辑周计划", "确认本次修改", "输入加时码", "加时密钥管理",
+        "加时码生成管理", "手机和电脑配对", "保留周计划草稿？", "家长区快捷键", "本机生成加时码",
+        "保留密钥更改？", "兑换结果", "验证未通过", "软件信息", "节假日安排", "保留节假日草稿？",
+        "支持事件详情", "批量设置", "自制程序菜单高级入口", "调整时长", "外观主题", "输入家长 PIN",
+        "加时码使用记录", "临时日期计划", "今日自主缓冲", "家庭活动记录", "今日详情", "保留日期计划草稿？"
+    };
+    int failed = 0;
+    for (int dark = 0; dark < 2; ++dark) {
+        for (int overlay = PTC_UI_OVERLAY_MINUTES; overlay <= PTC_UI_OVERLAY_SCHEDULED_LEAVE; ++overlay) {
+            PtcUiModel model = *baseline;
+            char name[48];
+            PtcRules rules;
+            uint8_t temp[qrcodegen_BUFFER_LEN_MAX];
+            ptc_rules_default(&rules);
+            memcpy(model.current_week, rules.week, sizeof(model.current_week));
+            memcpy(model.draft_week, rules.week, sizeof(model.draft_week));
+            model.view = PTC_UI_PARENT;
+            model.overlay = (PtcUiOverlay)overlay;
+            model.minimum_minutes = 1; model.maximum_minutes = 1440; model.draft_minutes = 120;
+            model.grant_minutes = 30; model.grant_max_minutes = 240;
+            model.numpad_purpose = PTC_UI_NUMPAD_OFFLINE_CODE;
+            model.numpad_max_digits = 8;
+            model.daily_buffer_minutes = 10;
+            model.draft_autonomy_policy.daily_buffer_minutes = 10;
+            model.draft_scheduled_override = (PtcScheduledOverride){true, 2380, 2386, {PTC_RULE_MODE_LIMIT, 120}};
+            model.redemption_history_available = model.activity_history_available = true;
+            snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", titles[overlay]);
+            snprintf(model.numpad_title, sizeof(model.numpad_title), "输入加时码");
+            snprintf(model.numpad_text, sizeof(model.numpad_text), "1234");
+            snprintf(model.pin_title, sizeof(model.pin_title), "输入家长 PIN");
+            snprintf(model.pin_guide, sizeof(model.pin_guide), "验证后继续当前操作");
+            snprintf(model.pin_text, sizeof(model.pin_text), "1234");
+            snprintf(model.auth_error_title, sizeof(model.auth_error_title), "PIN 不正确");
+            snprintf(model.auth_error_message, sizeof(model.auth_error_message), "请检查后重新输入");
+            snprintf(model.pairing_base_url, sizeof(model.pairing_base_url), "https://example.invalid/playwise");
+            if (!qrcodegen_encodeText(model.pairing_base_url, temp, model.qr_code,
+                    qrcodegen_Ecc_LOW, 1, 20, qrcodegen_Mask_AUTO, true)) return 1;
+            snprintf(name, sizeof(name), "matrix-overlay-%02d", overlay);
+            failed |= save_preview(directory, name, &model, dark != 0);
+        }
+        for (int parent = 0; parent < 2; ++parent) {
+            for (int state = 0; state < 6; ++state) {
+                PtcUiModel model = *baseline;
+                char name[48];
+                model.view = parent ? PTC_UI_PARENT : PTC_UI_CHILD;
+                if (state == 0) {
+                    model.status_loaded = model.remaining_available = model.played_minutes_available = model.forecast_available = false;
+                    snprintf(model.message, sizeof(model.message), "等待读取主机状态");
+                }
+                if (state == 1) model.remaining_minutes = 0;
+                if (state == 2) { model.unrestricted_today = 1; model.limited_today = 0; }
+                if (state == 3) model.status_updated_at = 879;
+                if (state == 4) { model.waiting = true; snprintf(model.message, sizeof(model.message), "正在同步，请稍候"); }
+                if (state == 5) { model.remaining_minutes = 1440; model.played_minutes = 0; model.forecast[0].minutes = 1440; }
+                snprintf(name, sizeof(name), "matrix-%s-state-%d", parent ? "parent" : "child", state);
+                failed |= save_preview(directory, name, &model, dark != 0);
+            }
+        }
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.settings_page = PTC_UI_SETTINGS_ADVANCED;
+        failed |= save_preview(directory, "settings-advanced", &model, dark != 0);
+        model.view = PTC_UI_ERROR;
+        model.error_code = 306;
+        snprintf(model.message, sizeof(model.message), "主机环境已变化，请家长重新检测");
+        failed |= save_preview(directory, "error-page", &model, dark != 0);
+    }
+    return failed;
 }
 
 int main(int argc, char **argv)
@@ -277,6 +356,7 @@ int main(int argc, char **argv)
     snprintf(model.feedback_detail, sizeof(model.feedback_detail), "请勿重复提交；状态刷新和诊断仍然可用。若需要继续使用，请家长确认当前限制和剩余额度。");
     failed |= save_preview(argv[2], "child-error", &model, false);
     failed |= save_preview(argv[2], "child-error", &model, true);
+    failed |= render_visual_matrix(argv[2], &baseline);
     FT_Done_Face(g_ui.face);
     free(bytes);
     return failed;

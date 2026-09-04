@@ -667,14 +667,33 @@ static void test_theme_resolution(void)
     view = ptc_ui_theme_make_view(PTC_UI_THEME_SYSTEM, PTC_UI_SYSTEM_THEME_DARK);
     check_int(view.resolved, PTC_UI_RESOLVED_DARK, "system dark theme resolves to dark");
     dark = view.palette;
-    check_true(dark && dark->page_bg == 0x000000 && dark->surface == 0x14191E &&
-               dark->accent == 0x6EA8FE && dark->focus == 0xA9C8FF,
-               "OLED Hybrid palette is stable");
+    check_true(dark && dark->page_bg != dark->surface && dark->surface != dark->surface_raised,
+               "dark page, card and raised surfaces remain distinct");
     check_true(contrast_ratio(dark->text_primary, dark->surface) >= 4.5 &&
                contrast_ratio(dark->text_secondary, dark->surface) >= 4.5 &&
                contrast_ratio(dark->border_control, dark->surface) >= 3.0 &&
                contrast_ratio(dark->focus, dark->surface) >= 3.0,
                "dark palette meets text and control contrast thresholds");
+    for (int i = 0; i < 2; ++i) {
+        const PtcUiPalette *palette = ptc_ui_theme_palette((PtcUiResolvedTheme)i);
+        const uint32_t surfaces[] = {palette->page_bg, palette->surface, palette->surface_raised, palette->accent_soft};
+        for (unsigned int j = 0; j < sizeof(surfaces) / sizeof(surfaces[0]); ++j) {
+            check_true(contrast_ratio(palette->text_primary, surfaces[j]) >= 4.5 &&
+                       contrast_ratio(palette->text_secondary, surfaces[j]) >= 4.5,
+                       "both themes keep primary and secondary text readable on every surface");
+            check_true(contrast_ratio(palette->focus, surfaces[j]) >= 3.0 &&
+                       contrast_ratio(palette->border_control, surfaces[j]) >= 3.0,
+                       "both themes keep focus and controls visible");
+        }
+        check_true(contrast_ratio(palette->on_accent, palette->accent) >= 4.5 &&
+                   contrast_ratio(palette->on_hero, palette->hero) >= 4.5 &&
+                   contrast_ratio(palette->hero_secondary, palette->hero) >= 4.5,
+                   "primary action and hero text meet contrast thresholds");
+        check_true(contrast_ratio(palette->danger, palette->danger_soft) >= 4.5 &&
+                   contrast_ratio(palette->warning, palette->warning_soft) >= 4.5 &&
+                   contrast_ratio(palette->success, palette->success_soft) >= 4.5,
+                   "status notices are readable without relying on color alone");
+    }
     {
         PtcUiModel model;
         PtcUiRect option;
@@ -1585,6 +1604,47 @@ static void test_redemption_failure_next_steps(void)
     }
 }
 
+static void test_visual_action_boundaries(void)
+{
+    PtcUiModel model = {0};
+    PtcUiRect keypad = ptc_ui_dialog_rect(620, 700);
+    check_true(keypad.y >= 10 && keypad.y + keypad.h <= 710,
+               "tall keypad leaves a visible margin at both screen edges");
+    model.overlay = PTC_UI_OVERLAY_NUMPAD;
+    model.numpad_purpose = PTC_UI_NUMPAD_OFFLINE_CODE;
+    check_hit(hit_center(&model, ptc_ui_numpad_key_rect(0)), PTC_UI_HIT_NUMPAD_KEY, 0,
+              "repositioned keypad drawing and touch targets share the dialog origin");
+    model.overlay = PTC_UI_OVERLAY_NONE;
+    model.view = PTC_UI_CHILD;
+    PtcUiRect code = ptc_ui_child_submit_rect();
+    check_hit(ptc_ui_hit_test(&model, code.x + 1, code.y + code.h / 2),
+              PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "primary action inner edge is touchable");
+    check_hit(ptc_ui_hit_test(&model, code.x - 1, code.y + code.h / 2),
+              PTC_UI_HIT_NONE, 0, "space beside primary action is not touchable");
+    check_true(!rects_overlap(code, ptc_ui_child_buffer_rect()) &&
+               !rects_overlap(ptc_ui_child_buffer_rect(), ptc_ui_home_details_rect(false)),
+               "child primary, secondary and detail actions do not overlap");
+    model.waiting = true;
+    check_hit(hit_center(&model, code), PTC_UI_HIT_NONE, 0, "syncing primary action remains blocked");
+    model.waiting = false;
+    model.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
+    check_true(hit_center(&model, code).kind != PTC_UI_HIT_CHILD_SUBMIT_CODE,
+               "details modal does not activate the primary action behind it");
+    model.overlay = PTC_UI_OVERLAY_NONE;
+    model.view = PTC_UI_PARENT;
+    for (int i = 0; i < 4; ++i) {
+        PtcUiRect action = ptc_ui_today_card_rect(i);
+        check_true(action.x >= 0 && action.y >= 0 && action.x + action.w <= 1280 && action.y + action.h < 520,
+                   "today actions remain above the feedback area and within the screen");
+        check_hit(hit_center(&model, action), PTC_UI_HIT_PARENT_CARD, i, "each visual today action is reachable");
+        for (int j = i + 1; j < 4; ++j)
+            check_true(!rects_overlap(action, ptc_ui_today_card_rect(j)), "today action targets remain separated");
+    }
+    model.disable_flag_present = true;
+    check_hit(hit_center(&model, ptc_ui_today_card_rect(0)), PTC_UI_HIT_NONE, 0,
+              "primary styling never enables control while disabled");
+}
+
 static void test_grant_flow_polish(void)
 {
     PtcUiModel model = {0};
@@ -1799,6 +1859,7 @@ static void test_support_next_step(void)
 
 int main(void)
 {
+    test_visual_action_boundaries();
     test_plan_polish();
     test_support_next_step();
     test_redemption_failure_next_steps();

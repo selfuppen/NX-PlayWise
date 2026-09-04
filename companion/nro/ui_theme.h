@@ -37,6 +37,15 @@ typedef struct {
     uint32_t success;
     uint32_t warning;
     uint32_t danger;
+    uint32_t accent_soft;
+    uint32_t hero;
+    uint32_t on_hero;
+    uint32_t hero_secondary;
+    uint32_t coral;
+    uint32_t success_soft;
+    uint32_t warning_soft;
+    uint32_t danger_soft;
+    uint32_t scrim;
 } PtcUiPalette;
 
 typedef struct {

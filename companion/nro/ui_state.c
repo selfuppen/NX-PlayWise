@@ -1950,13 +1950,13 @@ PtcUiRect ptc_ui_setup_theme_rect(int index)
 
 PtcUiRect ptc_ui_notice_status_icon_rect(int y)
 {
-    return (PtcUiRect){74, y + 9, 20, 20};
+    return (PtcUiRect){74, y + 16, 20, 20};
 }
 
 PtcUiRect ptc_ui_notice_command_text_rect(int y, int height)
 {
-    bool compact = height < 128;
-    return (PtcUiRect){78, y + (compact ? 38 : 43), 1124, compact ? 20 : 22};
+    /* The support-only command follows up to two lines of user feedback. */
+    return (PtcUiRect){108, y + height - 28, 1094, 22};
 }
 
 PtcUiRect ptc_ui_setup_zone_rect(int index)
@@ -2184,6 +2184,7 @@ PtcUiRect ptc_ui_support_event_rect(int index)
 PtcUiRect ptc_ui_dialog_rect(int width, int height)
 {
     PtcUiRect rect = {(PTC_UI_SCREEN_W - width) / 2, (PTC_UI_SCREEN_H - height) / 2 - 10, width, height};
+    if (rect.y < 10) rect.y = 10;
     return rect;
 }
 
