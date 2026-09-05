@@ -580,6 +580,99 @@ static void draw_circle_outline(
     }
 }
 
+/* 0xRRGGBB 颜色向目标色按百分比混合，用于在同一表面上派生弱化色。 */
+static uint32_t ui_mix_rgb(uint32_t base, uint32_t target, int percent)
+{
+    uint32_t channel;
+    uint32_t mixed = 0;
+    int shift;
+    if (percent <= 0) return base;
+    if (percent > 100) percent = 100;
+    for (shift = 0; shift <= 16; shift += 8) {
+        int base_value = (int)((base >> shift) & 0xff);
+        int target_value = (int)((target >> shift) & 0xff);
+        channel = (uint32_t)(base_value + (target_value - base_value) * percent / 100);
+        mixed |= (channel & 0xff) << shift;
+    }
+    return mixed;
+}
+
+/* 抗锯齿环形进度：radius 为环中心线半径，stroke 为环宽。弧从正上方顺时针，
+ * 前沿按弧长做羽化；fraction 不小于 1 时画满环。 */
+static void draw_ring_progress(
+    uint32_t *pixels,
+    uint32_t stride,
+    int center_x,
+    int center_y,
+    int radius,
+    int stroke,
+    float fraction,
+    uint32_t track_color,
+    uint32_t fill_color)
+{
+    const float feather = 1.25f;
+    const float half_feather = feather * 0.5f;
+    const float two_pi = 6.2831853f;
+    float half_stroke = stroke * 0.5f;
+    float reach = (float)radius + half_stroke + half_feather;
+    uint32_t track_resolved = resolve_color(track_color);
+    uint32_t fill_resolved = resolve_color(fill_color);
+    int x_start = center_x - (int)reach - 1;
+    int y_start = center_y - (int)reach - 1;
+    int x_end = center_x + (int)reach + 2;
+    int y_end = center_y + (int)reach + 2;
+    int x;
+    int y;
+    bool full;
+    float sweep;
+    if (stroke <= 0 || radius <= 0) return;
+    if (fraction < 0) fraction = 0;
+    if (fraction > 1) fraction = 1;
+    full = fraction >= 0.999f;
+    sweep = fraction * two_pi;
+    if (x_start < 0) x_start = 0;
+    if (y_start < 0) y_start = 0;
+    if (x_end > SCREEN_WIDTH) x_end = SCREEN_WIDTH;
+    if (y_end > SCREEN_HEIGHT) y_end = SCREEN_HEIGHT;
+    for (y = y_start; y < y_end; ++y) {
+        for (x = x_start; x < x_end; ++x) {
+            float fx = (float)x + 0.5f - (float)center_x;
+            float fy = (float)y + 0.5f - (float)center_y;
+            float dist = sqrtf(fx * fx + fy * fy);
+            float band = fabsf(dist - (float)radius);
+            float band_t;
+            float band_coverage;
+            float fill_coverage;
+            if (band >= half_stroke + half_feather) continue;
+            band_t = (half_stroke + half_feather - band) / feather;
+            if (band_t > 1) band_t = 1;
+            band_coverage = band_t * band_t * (3.0f - 2.0f * band_t);
+            fill_coverage = band_coverage;
+            if (!full) {
+                float angle = atan2f(fx, -fy);
+                float signed_arc;
+                float fill_t;
+                if (angle < 0) angle += two_pi;
+                /* 跨前沿的带符号弧长：越入弧内越接近 1，越出弧外为 0，边缘半羽化。 */
+                signed_arc = (sweep - angle) * dist;
+                fill_t = (signed_arc + half_feather) / feather;
+                if (fill_t < 0) fill_t = 0;
+                if (fill_t > 1) fill_t = 1;
+                fill_coverage = band_coverage * (fill_t * fill_t * (3.0f - 2.0f * fill_t));
+            }
+            if (band_coverage > 0) {
+                blend_pixel(pixels, stride, x, y, track_resolved,
+                            (uint8_t)(band_coverage * 255.0f + 0.5f));
+            }
+            if (fill_coverage > 0) {
+                blend_pixel(pixels, stride, x, y, fill_resolved,
+                            (uint8_t)(fill_coverage * 255.0f + 0.5f));
+            }
+        }
+    }
+}
+
+/* 抗锯齿粗线：段距离 SDF + 与圆角一致的 1.25px smoothstep 羽化，端点为圆头。 */
 static void draw_line(
     uint32_t *pixels,
     uint32_t stride,
@@ -590,19 +683,48 @@ static void draw_line(
     int width,
     uint32_t color)
 {
-    int dx = x1 > x0 ? x1 - x0 : x0 - x1;
-    int sx = x0 < x1 ? 1 : -1;
-    int dy = y1 > y0 ? y0 - y1 : y1 - y0;
-    int sy = y0 < y1 ? 1 : -1;
-    int error = dx + dy;
+    const float feather = 1.25f;
+    const float half_feather = feather * 0.5f;
+    float px0 = (float)x0 + 0.5f;
+    float py0 = (float)y0 + 0.5f;
+    float dx = (float)x1 - (float)x0;
+    float dy = (float)y1 - (float)y0;
+    float length_sq = dx * dx + dy * dy;
+    float half = width * 0.5f;
     uint32_t resolved = resolve_color(color);
-    for (;;) {
-        fill_rect_packed(pixels, stride, (UiRect){x0 - width / 2, y0 - width / 2, width, width}, resolved);
-        if (x0 == x1 && y0 == y1) break;
-        {
-            int twice = error * 2;
-            if (twice >= dy) { error += dy; x0 += sx; }
-            if (twice <= dx) { error += dx; y0 += sy; }
+    int x_start = (x0 < x1 ? x0 : x1) - width - 2;
+    int x_end = (x0 > x1 ? x0 : x1) + width + 3;
+    int y_start = (y0 < y1 ? y0 : y1) - width - 2;
+    int y_end = (y0 > y1 ? y0 : y1) + width + 3;
+    int x;
+    int y;
+    if (width <= 0) return;
+    if (length_sq < 0.000001f) length_sq = 1.0f;
+    if (x_start < 0) x_start = 0;
+    if (y_start < 0) y_start = 0;
+    if (x_end > SCREEN_WIDTH) x_end = SCREEN_WIDTH;
+    if (y_end > SCREEN_HEIGHT) y_end = SCREEN_HEIGHT;
+    for (y = y_start; y < y_end; ++y) {
+        for (x = x_start; x < x_end; ++x) {
+            float fx = (float)x + 0.5f - px0;
+            float fy = (float)y + 0.5f - py0;
+            float t = (fx * dx + fy * dy) / length_sq;
+            float nx;
+            float ny;
+            float edge;
+            if (t < 0) t = 0;
+            if (t > 1) t = 1;
+            nx = px0 + dx * t - ((float)x + 0.5f);
+            ny = py0 + dy * t - ((float)y + 0.5f);
+            edge = sqrtf(nx * nx + ny * ny) - half;
+            if (edge >= half_feather) continue;
+            if (edge <= -half_feather) {
+                set_pixel(pixels, stride, x, y, resolved);
+            } else {
+                float s = (edge + half_feather) / feather;
+                blend_pixel(pixels, stride, x, y, resolved,
+                            (uint8_t)(s * s * (3.0f - 2.0f * s) * 255.0f + 0.5f));
+            }
         }
     }
 }
@@ -1308,9 +1430,38 @@ static void draw_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_card_shadow(pixels, stride, box, 16);
     fill_round_rect(pixels, stride, box, 16, UI_RGB(g_palette->hero));
     draw_text_bold(pixels, stride, x, box.y + 42, "今天还可玩", 22, UI_RGB(g_palette->hero_secondary));
-    draw_circle_outline(pixels, stride, box.x + box.width - 46, box.y + 40, 16, 2, UI_RGB(g_palette->hero_secondary));
-    draw_line(pixels, stride, box.x + box.width - 46, box.y + 29, box.x + box.width - 46, box.y + 40, 2, UI_RGB(g_palette->hero_secondary));
-    draw_line(pixels, stride, box.x + box.width - 46, box.y + 40, box.x + box.width - 38, box.y + 44, 2, UI_RGB(g_palette->hero_secondary));
+    /* 环形额度表：弧长由缓动后的剩余分钟驱动，颜色沿用今日额度健康色；
+     * 数据不可用时只画弱化轨道环。 */
+    {
+        float fraction = 0.0f;
+        uint32_t ring_fill = UI_SUCCESS;
+        bool has_fraction = false;
+        if (model->unrestricted_today == 1) {
+            fraction = 1.0f;
+            ring_fill = UI_SUCCESS;
+            has_fraction = true;
+        } else if (model->remaining_available && model->played_minutes_available &&
+                   model->remaining_minutes >= 0 && model->played_minutes >= 0 &&
+                   model->remaining_minutes + model->played_minutes > 0) {
+            int total = model->remaining_minutes + model->played_minutes;
+            /* 与下方额度条同语义：弧长表示剩余占比，随消耗缩小。 */
+            fraction = (float)model->displayed_remaining_minutes / (float)total;
+            has_fraction = true;
+        } else if (model->remaining_available && model->remaining_minutes > 0) {
+            int shown = model->remaining_minutes > 120 ? 120 : model->remaining_minutes;
+            fraction = (float)shown / 120.0f;
+            has_fraction = true;
+        }
+        if (has_fraction && model->unrestricted_today != 1) {
+            if (model->remaining_available && model->remaining_minutes <= 10) ring_fill = UI_DANGER;
+            else if (model->remaining_available && model->remaining_minutes <= 30) ring_fill = UI_WARNING;
+            else ring_fill = UI_SUCCESS;
+        }
+        if (fraction < 0) fraction = 0;
+        if (fraction > 1) fraction = 1;
+        draw_ring_progress(pixels, stride, box.x + box.width - 46, box.y + 40, 16, 5, fraction,
+                           UI_RGB(ui_mix_rgb(g_palette->hero, 0xFFFFFF, 20)), ring_fill);
+    }
     /* Split only the existing numeric formatter output. Unknown/stale states
      * retain their words and are never converted to a numeric zero. */
     char *unit = strstr(remaining, " 分钟");

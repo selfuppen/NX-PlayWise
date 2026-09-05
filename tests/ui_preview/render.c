@@ -77,7 +77,11 @@ static int save_preview(const char *directory, const char *name, const PtcUiMode
     FILE *file;
     unsigned char *rgb;
     PtcUiThemeView theme = ptc_ui_theme_make_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
-    ptc_ui_graphics_draw(model, &theme);
+    /* Previews skip update_animations, so render the tweened values at rest. */
+    PtcUiModel settled = *model;
+    settled.displayed_remaining_minutes = settled.remaining_minutes;
+    settled.displayed_grant_minutes = settled.grant_minutes;
+    ptc_ui_graphics_draw(&settled, &theme);
     draw_text(preview_pixels, 1280, 820, 22, "HOST PREVIEW / SAMPLE DATA", 16, UI_RGB(g_palette->text_secondary));
     snprintf(path, sizeof(path), "%s/%s-%s.ppm", directory, name, dark ? "dark" : "light");
     file = fopen(path, "wb");
