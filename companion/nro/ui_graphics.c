@@ -490,40 +490,65 @@ static void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int 
 }
 
 
-static void draw_drop_shadow(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, int depth)
+/* 圆角矩形符号距离（负值在内部）。轴对齐带状区域免开方，仅角部走 sqrt。 */
+static float round_rect_sdf(UiRect rect, int radius, float x, float y)
 {
-    (void)radius;
-    if (depth <= 0) return;
-    uint32_t black = RGBA8_MAXALPHA(0, 0, 0);
+    float hw = rect.width * 0.5f;
+    float hh = rect.height * 0.5f;
+    float r = (float)radius;
+    float qx;
+    float qy;
+    if (r > hw) r = hw;
+    if (r > hh) r = hh;
+    qx = fabsf(x - (rect.x + hw)) - (hw - r);
+    qy = fabsf(y - (rect.y + hh)) - (hh - r);
+    if (qx <= 0 && qy <= 0) return (qx > qy ? qx : qy) - r;
+    if (qx <= 0) return qy - r;
+    if (qy <= 0) return qx - r;
+    return sqrtf(qx * qx + qy * qy) - r;
+}
 
-    /* 绘制多层递减透明度的外展阴影带 */
-    for (int d = 1; d <= depth; ++d) {
-        uint8_t alpha = (uint8_t)(32 - d * 4);
-        int sx = rect.x - d;
-        int sy = rect.y + d;
-        int sw = rect.width + d * 2;
-        int sh = rect.height + d;
-
-        int x_start = sx < 0 ? 0 : sx;
-        int y_start = sy < 0 ? 0 : sy;
-        int x_end = sx + sw > SCREEN_WIDTH ? SCREEN_WIDTH : sx + sw;
-        int y_end = sy + sh > SCREEN_HEIGHT ? SCREEN_HEIGHT : sy + sh;
-
-        for (int x = x_start; x < x_end; ++x) {
-            int y = rect.y + rect.height + d - 1;
-            if (y >= 0 && y < SCREEN_HEIGHT) {
-                blend_pixel(pixels, stride, x, y, black, alpha);
-            }
-        }
-        for (int y = y_start; y < y_end; ++y) {
-            if (sx >= 0 && sx < SCREEN_WIDTH) {
-                blend_pixel(pixels, stride, sx, y, black, alpha);
-            }
-            if (sx + sw - 1 >= 0 && sx + sw - 1 < SCREEN_WIDTH) {
-                blend_pixel(pixels, stride, sx + sw - 1, y, black, alpha);
-            }
+/* 圆角感知软阴影：沿卡片外缘按 SDF 距离做 smoothstep 衰减，y_bias 营造
+ * 光源在顶部的下坠感；卡片本体覆盖的像素跳过，由随后的卡片填充覆盖。 */
+static void draw_round_rect_shadow(
+    uint32_t *pixels,
+    uint32_t stride,
+    UiRect rect,
+    int radius,
+    int blur,
+    int peak_alpha,
+    int y_bias)
+{
+    int margin = blur + 2;
+    int x_start = rect.x - margin < 0 ? 0 : rect.x - margin;
+    int x_end = rect.x + rect.width + margin > SCREEN_WIDTH ? SCREEN_WIDTH : rect.x + rect.width + margin;
+    int y_start = rect.y + y_bias - margin < 0 ? 0 : rect.y + y_bias - margin;
+    int y_end = rect.y + rect.height + y_bias + margin > SCREEN_HEIGHT ? SCREEN_HEIGHT : rect.y + rect.height + y_bias + margin;
+    int x;
+    int y;
+    if (blur <= 0 || peak_alpha <= 0) return;
+    if (radius > rect.width / 2) radius = rect.width / 2;
+    if (radius > rect.height / 2) radius = rect.height / 2;
+    for (y = y_start; y < y_end; ++y) {
+        for (x = x_start; x < x_end; ++x) {
+            float dist;
+            float t;
+            int alpha;
+            if (x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height) continue;
+            dist = round_rect_sdf(rect, radius, (float)x + 0.5f, (float)(y - y_bias) + 0.5f);
+            if (dist >= (float)blur) continue;
+            t = 1.0f - dist / (float)blur;
+            if (t < 0) t = 0;
+            alpha = (int)(peak_alpha * t * t * (3.0f - 2.0f * t) + 0.5f);
+            if (alpha > 0) blend_pixel(pixels, stride, x, y, RGBA8_MAXALPHA(0, 0, 0), (uint8_t)alpha);
         }
     }
+}
+
+/* 海拔档位：页面卡片用轻阴影；弹窗在 draw_dialog_shell 用更强更扩散的一档。 */
+static void draw_card_shadow(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
+{
+    draw_round_rect_shadow(pixels, stride, rect, radius, 8, 40, 3);
 }
 
 static void draw_circle_outline(
@@ -1280,6 +1305,7 @@ static void draw_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiMode
     int x = box.x + 28;
     ptc_ui_format_home_remaining(model, (int64_t)time(NULL), remaining, sizeof(remaining));
     ptc_ui_format_today_mode(model, today, sizeof(today));
+    draw_card_shadow(pixels, stride, box, 16);
     fill_round_rect(pixels, stride, box, 16, UI_RGB(g_palette->hero));
     draw_text_bold(pixels, stride, x, box.y + 42, "今天还可玩", 22, UI_RGB(g_palette->hero_secondary));
     draw_circle_outline(pixels, stride, box.x + box.width - 46, box.y + 40, 16, 2, UI_RGB(g_palette->hero_secondary));
@@ -1374,6 +1400,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     draw_header(pixels, stride, "今天的约定", "合理安排时间，完成今天的约定");
     draw_disable_banner(pixels, stride, model);
     draw_home_summary(pixels, stride, model, false);
+    draw_card_shadow(pixels, stride, (UiRect){704, 120, 528, 384}, 16);
     fill_round_rect(pixels, stride, (UiRect){704, 120, 528, 384}, 16, UI_RGB(g_palette->surface));
     draw_text(pixels, stride, 736, 164, "需要多一点时间？", 28, UI_RGB(g_palette->text_primary));
     draw_text(pixels, stride, 736, 195, "输入家长给你的 8 位数字", 18, UI_RGB(g_palette->text_secondary));
@@ -1758,6 +1785,7 @@ static void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     int content_width = rect.width - 76;
     int title_width = content_width - reserved_right - (recommended ? 64 : 0);
     uint32_t background = disabled ? UI_RAISED : (selected ? UI_ACCENT_SOFT : UI_SURFACE);
+    draw_card_shadow(pixels, stride, rect, 16);
     fill_round_rect(pixels, stride, rect, 16, background);
     if (selected) {
         draw_focus_ring(pixels, stride, rect, 16);
@@ -1963,6 +1991,7 @@ static const char *rule_source_label(const char *source)
 
 static void draw_plan_card(uint32_t *pixels, uint32_t stride, UiRect card, bool focused)
 {
+    draw_card_shadow(pixels, stride, card, 16);
     fill_round_rect(pixels, stride, card, 16, UI_RGB(g_palette->surface));
     draw_rect_outline(pixels, stride, card, 16, focused ? 3 : 1, UI_RGB(focused ? g_palette->focus : g_palette->border_control));
 }
@@ -2421,7 +2450,7 @@ static void draw_dialog_shell(
     uint32_t fade_scrim = (a << 24) | (raw_scrim & 0xffffff);
 
     fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, fade_scrim);
-    draw_drop_shadow(pixels, stride, *dialog, 16, 6);
+    draw_round_rect_shadow(pixels, stride, *dialog, 16, 16, 76, 5);
     fill_round_rect_gradient(pixels, stride, *dialog, 16, UI_SURFACE, 4);
     draw_rect_outline(pixels, stride, *dialog, 16, 1, UI_BORDER);
     fill_round_rect(pixels, stride, (UiRect){dialog->x + 34, dialog->y + 15, 36, 5}, 2, UI_CORAL);
