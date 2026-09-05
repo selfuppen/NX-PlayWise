@@ -347,6 +347,58 @@ static void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int 
         (UiRect){rect.x - 4, rect.y - 4, rect.width + 8, rect.height + 8}, radius + 4, 3, UI_FOCUS);
 }
 
+static void draw_inner_top_highlight(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
+{
+    if (rect.width <= radius * 2 || rect.height <= 4) return;
+    int y = rect.y + 1;
+    if (y < 0 || y >= SCREEN_HEIGHT) return;
+    int x_start = rect.x + radius;
+    int x_end = rect.x + rect.width - radius;
+    if (x_start < 0) x_start = 0;
+    if (x_end > SCREEN_WIDTH) x_end = SCREEN_WIDTH;
+    uint8_t alpha = (g_theme.resolved == PTC_UI_RESOLVED_DARK) ? 40 : 80;
+    uint32_t white = RGBA8_MAXALPHA(255, 255, 255);
+    for (int x = x_start; x < x_end; ++x) {
+        blend_pixel(pixels, stride, x, y, white, alpha);
+    }
+}
+
+static void draw_drop_shadow(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, int depth)
+{
+    (void)radius;
+    if (depth <= 0) return;
+    uint32_t black = RGBA8_MAXALPHA(0, 0, 0);
+
+    /* 绘制多层递减透明度的外展阴影带 */
+    for (int d = 1; d <= depth; ++d) {
+        uint8_t alpha = (uint8_t)(32 - d * 4);
+        int sx = rect.x - d;
+        int sy = rect.y + d;
+        int sw = rect.width + d * 2;
+        int sh = rect.height + d;
+
+        int x_start = sx < 0 ? 0 : sx;
+        int y_start = sy < 0 ? 0 : sy;
+        int x_end = sx + sw > SCREEN_WIDTH ? SCREEN_WIDTH : sx + sw;
+        int y_end = sy + sh > SCREEN_HEIGHT ? SCREEN_HEIGHT : sy + sh;
+
+        for (int x = x_start; x < x_end; ++x) {
+            int y = rect.y + rect.height + d - 1;
+            if (y >= 0 && y < SCREEN_HEIGHT) {
+                blend_pixel(pixels, stride, x, y, black, alpha);
+            }
+        }
+        for (int y = y_start; y < y_end; ++y) {
+            if (sx >= 0 && sx < SCREEN_WIDTH) {
+                blend_pixel(pixels, stride, sx, y, black, alpha);
+            }
+            if (sx + sw - 1 >= 0 && sx + sw - 1 < SCREEN_WIDTH) {
+                blend_pixel(pixels, stride, sx + sw - 1, y, black, alpha);
+            }
+        }
+    }
+}
+
 static void draw_circle_outline(
     uint32_t *pixels,
     uint32_t stride,
@@ -477,6 +529,12 @@ static void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, co
     }
 }
 
+static void draw_text_bold(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color)
+{
+    draw_text(pixels, stride, x, baseline, text, size, color);
+    draw_text(pixels, stride, x + 1, baseline, text, size, color);
+}
+
 static void draw_text_center(uint32_t *pixels, uint32_t stride, UiRect rect, const char *text, int size, uint32_t color)
 {
     int width = measure_text(text, size);
@@ -547,7 +605,7 @@ static void draw_header(uint32_t *pixels, uint32_t stride, const char *title, co
     draw_line(pixels, stride, 72, 42, 72, 56, 3, UI_ON_ACCENT);
     draw_circle_outline(pixels, stride, 90, 44, 3, 3, UI_ON_ACCENT);
     draw_circle_outline(pixels, stride, 86, 55, 3, 3, UI_ON_ACCENT);
-    draw_text(pixels, stride, 124, 49, title, 30, UI_INK);
+    draw_text_bold(pixels, stride, 124, 49, title, 30, UI_INK);
     draw_text(pixels, stride, 124, 77, subtitle, 18, UI_MUTED);
 }
 
@@ -962,7 +1020,8 @@ static void draw_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiMode
     ptc_ui_format_home_remaining(model, (int64_t)time(NULL), remaining, sizeof(remaining));
     ptc_ui_format_today_mode(model, today, sizeof(today));
     fill_round_rect(pixels, stride, box, 16, UI_RGB(g_palette->hero));
-    draw_text(pixels, stride, x, box.y + 42, "今天还可玩", 22, UI_RGB(g_palette->hero_secondary));
+    draw_inner_top_highlight(pixels, stride, box, 16);
+    draw_text_bold(pixels, stride, x, box.y + 42, "今天还可玩", 22, UI_RGB(g_palette->hero_secondary));
     draw_circle_outline(pixels, stride, box.x + box.width - 46, box.y + 40, 16, 2, UI_RGB(g_palette->hero_secondary));
     draw_line(pixels, stride, box.x + box.width - 46, box.y + 29, box.x + box.width - 46, box.y + 40, 2, UI_RGB(g_palette->hero_secondary));
     draw_line(pixels, stride, box.x + box.width - 46, box.y + 40, box.x + box.width - 38, box.y + 44, 2, UI_RGB(g_palette->hero_secondary));
@@ -973,7 +1032,7 @@ static void draw_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiMode
         *unit = '\0';
         int minutes = atoi(remaining);
         int num_w = measure_text(remaining, 80);
-        draw_text(pixels, stride, x, box.y + 133, remaining, 80, UI_RGB(g_palette->on_hero));
+        draw_text_bold(pixels, stride, x, box.y + 133, remaining, 80, UI_RGB(g_palette->on_hero));
         int unit_x = x + num_w + 12;
         draw_text(pixels, stride, unit_x, box.y + 130, "分钟", 24, UI_RGB(g_palette->hero_secondary));
         if (minutes >= 60) {
@@ -1440,8 +1499,11 @@ static void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     int title_width = content_width - reserved_right - (recommended ? 64 : 0);
     uint32_t background = disabled ? UI_RAISED : (selected ? UI_ACCENT_SOFT : UI_SURFACE);
     fill_round_rect(pixels, stride, rect, 16, background);
+    draw_inner_top_highlight(pixels, stride, rect, 16);
     if (selected) {
         draw_focus_ring(pixels, stride, rect, 16);
+    } else {
+        draw_rect_outline(pixels, stride, rect, 16, 1, UI_BORDER);
     }
     /* 左侧精致微图标徽章 */
     int icon_cx = rect.x + 32;
@@ -2090,9 +2152,12 @@ static void draw_dialog_shell(
     *dialog = to_uirect(ptc_ui_dialog_rect(width, height));
     fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT},
                      pack_rgb(g_palette->scrim));
+    draw_drop_shadow(pixels, stride, *dialog, 16, 6);
     fill_round_rect(pixels, stride, *dialog, 16, UI_SURFACE);
+    draw_rect_outline(pixels, stride, *dialog, 16, 1, UI_BORDER);
+    draw_inner_top_highlight(pixels, stride, *dialog, 16);
     fill_round_rect(pixels, stride, (UiRect){dialog->x + 34, dialog->y + 15, 36, 5}, 2, UI_CORAL);
-    draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
+    draw_text_bold(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
     if (description[0]) {
         draw_wrapped_text(pixels, stride, dialog->x + 34, dialog->y + 88, description,
                           18, dialog->width - 68, 26, 6, UI_MUTED);
