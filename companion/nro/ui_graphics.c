@@ -922,11 +922,13 @@ static bool set_font_size(int size)
     return true;
 }
 
-/* 命中返回缓存项；未命中渲染一次并写入缓存。失败（缺字等）返回 NULL，不缓存。 */
-static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size)
+/* 命中返回缓存项；未命中渲染一次并写入缓存。失败（缺字等）返回 NULL，不缓存。
+ * bold 走独立缓存键，位图做 3x3 最大值膨胀 1px 生成粗体变体（与后端无关）。 */
+static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bold)
 {
     uint32_t mask = UI_GLYPH_CACHE_SIZE - 1;
-    uint32_t slot = ui_glyph_hash(codepoint, (uint32_t)size);
+    uint32_t size_key = (uint32_t)size | (bold ? 0x10000u : 0u);
+    uint32_t slot = ui_glyph_hash(codepoint, size_key);
     UiGlyphEntry *entry;
     if (!set_font_size(size)) {
         return NULL;
@@ -934,12 +936,12 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size)
     for (;;) {
         entry = &g_glyph_cache[slot];
         if (entry->codepoint == 0) break;
-        if (entry->codepoint == codepoint && entry->size == (uint32_t)size) return entry;
+        if (entry->codepoint == codepoint && entry->size == size_key) return entry;
         slot = (slot + 1) & mask;
     }
     if (g_glyph_cache_count >= UI_GLYPH_CACHE_LIMIT) {
         ui_glyph_cache_clear();
-        slot = ui_glyph_hash(codepoint, (uint32_t)size);
+        slot = ui_glyph_hash(codepoint, size_key);
         entry = &g_glyph_cache[slot];
     }
     if (FT_Load_Char(g_ui.face, codepoint, FT_LOAD_RENDER) != 0) {
@@ -948,23 +950,54 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size)
     {
         FT_GlyphSlot glyph = g_ui.face->glyph;
         uint8_t *copy = NULL;
+        int extra = bold ? 1 : 0;
         if (glyph->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY && glyph->bitmap.rows > 0 &&
             glyph->bitmap.width > 0) {
-            size_t bytes = (size_t)glyph->bitmap.rows * glyph->bitmap.width;
-            copy = (uint8_t *)malloc(bytes);
+            int width = (int)glyph->bitmap.width + extra * 2;
+            int height = (int)glyph->bitmap.rows + extra * 2;
+            copy = (uint8_t *)malloc((size_t)width * height);
             if (copy) {
                 int row;
-                for (row = 0; row < (int)glyph->bitmap.rows; ++row) {
-                    memcpy(copy + (size_t)row * glyph->bitmap.width,
-                           glyph->bitmap.buffer + (size_t)row * glyph->bitmap.pitch,
-                           glyph->bitmap.width);
+                int column;
+                memset(copy, 0, (size_t)width * height);
+                for (row = 0; row < height; ++row) {
+                    uint8_t *out_line = copy + (size_t)row * width;
+                    for (column = 0; column < width; ++column) {
+                        if (!bold) {
+                            out_line[column] = glyph->bitmap.buffer[(size_t)row * glyph->bitmap.pitch + column];
+                            continue;
+                        }
+                        /* 3x3 邻域最大值：输出外圈 1px 由源图边缘膨胀而来。 */
+                        int source_row;
+                        int source_column;
+                        uint8_t value = 0;
+                        for (source_row = row - 1; source_row <= row + 1; ++source_row) {
+                            for (source_column = column - 1; source_column <= column + 1; ++source_column) {
+                                if (source_row < 0 || source_row >= (int)glyph->bitmap.rows ||
+                                    source_column < 0 || source_column >= (int)glyph->bitmap.width) continue;
+                                {
+                                    uint8_t sample = glyph->bitmap.buffer[
+                                        (size_t)source_row * glyph->bitmap.pitch + source_column];
+                                    if (sample > value) value = sample;
+                                }
+                            }
+                        }
+                        out_line[column] = value;
+                    }
+                }
+                if (bold) {
+                    entry->bearing_x = (int16_t)(glyph->bitmap_left - 1);
+                    entry->bearing_y = (int16_t)(glyph->bitmap_top + 1);
+                } else {
+                    entry->bearing_x = (int16_t)glyph->bitmap_left;
+                    entry->bearing_y = (int16_t)glyph->bitmap_top;
                 }
             }
         }
         if (!copy) {
             /* 零尺寸（空格）或非灰度位图也占位缓存，避免每帧重复加载。 */
             entry->codepoint = codepoint;
-            entry->size = (uint32_t)size;
+            entry->size = size_key;
             entry->bearing_x = 0;
             entry->bearing_y = 0;
             entry->advance = (int16_t)(glyph->advance.x >> 6);
@@ -975,12 +1008,10 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size)
             return entry;
         }
         entry->codepoint = codepoint;
-        entry->size = (uint32_t)size;
-        entry->bearing_x = (int16_t)glyph->bitmap_left;
-        entry->bearing_y = (int16_t)glyph->bitmap_top;
+        entry->size = size_key;
         entry->advance = (int16_t)(glyph->advance.x >> 6);
-        entry->width = (uint16_t)glyph->bitmap.width;
-        entry->height = (uint16_t)glyph->bitmap.rows;
+        entry->width = (uint16_t)((int)glyph->bitmap.width + extra * 2);
+        entry->height = (uint16_t)((int)glyph->bitmap.rows + extra * 2);
         entry->bitmap = copy;
         ++g_glyph_cache_count;
         return entry;
@@ -996,7 +1027,7 @@ static int measure_text(const char *text, int size)
     }
     while (*cursor) {
         uint32_t codepoint = ui_decode_utf8(&cursor);
-        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size);
+        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, false);
         if (entry) {
             width += entry->advance;
         }
@@ -1004,7 +1035,7 @@ static int measure_text(const char *text, int size)
     return width;
 }
 
-static void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color)
+static void draw_text_impl(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color, bool bold)
 {
     const char *cursor = text;
     int pen_x = x;
@@ -1014,7 +1045,7 @@ static void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, co
     }
     while (*cursor) {
         uint32_t codepoint = ui_decode_utf8(&cursor);
-        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size);
+        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, bold);
         int row;
         if (!entry) {
             continue;
@@ -1038,10 +1069,15 @@ static void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, co
     }
 }
 
+/* 粗体走缓存的膨胀变体，单次绘制，无位移重影。 */
+static void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color)
+{
+    draw_text_impl(pixels, stride, x, baseline, text, size, color, false);
+}
+
 static void draw_text_bold(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color)
 {
-    draw_text(pixels, stride, x, baseline, text, size, color);
-    draw_text(pixels, stride, x + 1, baseline, text, size, color);
+    draw_text_impl(pixels, stride, x, baseline, text, size, color, true);
 }
 
 static void draw_text_center(uint32_t *pixels, uint32_t stride, UiRect rect, const char *text, int size, uint32_t color)
@@ -1073,7 +1109,7 @@ static void fit_text(char *out, size_t out_size, const char *text, int size, int
     while (*cursor) {
         const char *next = cursor;
         uint32_t codepoint = ui_decode_utf8(&next);
-        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size);
+        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, false);
         int advance = 0;
         if (entry) {
             advance = entry->advance;
