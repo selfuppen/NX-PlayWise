@@ -414,21 +414,6 @@ static void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int 
         radius + offset, stroke_w, focus_token);
 }
 
-static void draw_inner_top_highlight(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
-{
-    if (rect.width <= radius * 2 || rect.height <= 4) return;
-    int y = rect.y + 1;
-    if (y < 0 || y >= SCREEN_HEIGHT) return;
-    int x_start = rect.x + radius;
-    int x_end = rect.x + rect.width - radius;
-    if (x_start < 0) x_start = 0;
-    if (x_end > SCREEN_WIDTH) x_end = SCREEN_WIDTH;
-    uint8_t alpha = (g_theme.resolved == PTC_UI_RESOLVED_DARK) ? 40 : 80;
-    uint32_t white = RGBA8_MAXALPHA(255, 255, 255);
-    for (int x = x_start; x < x_end; ++x) {
-        blend_pixel(pixels, stride, x, y, white, alpha);
-    }
-}
 
 static void draw_drop_shadow(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, int depth)
 {
@@ -1007,10 +992,10 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     } else {
         draw_rect_outline(pixels, stride, box, 16, 1, UI_BORDER);
     }
+    PtcUiRect status_icon = ptc_ui_notice_status_icon_rect(y);
+    int baseline = y + 30;
+    draw_status_symbol(pixels, stride, status_icon.x, status_icon.y, accent, error ? 3 : (model->waiting ? 2 : 1));
     if (expanded) {
-        PtcUiRect status_icon = ptc_ui_notice_status_icon_rect(y);
-        int baseline = y + 30;
-        draw_status_symbol(pixels, stride, status_icon.x, status_icon.y, accent, error ? 3 : (model->waiting ? 2 : 1));
         baseline = draw_wrapped_text(pixels, stride, box.x + 54, baseline,
             model->message[0] ? model->message : "状态会在后台自动同步", 20, box.width - 78, 26,
             2, UI_INK);
@@ -1025,11 +1010,9 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 draw_wrapped_text(pixels, stride, command.x, command.y + 18, execution, 18, command.w, 24, 1, UI_MUTED);
         }
     } else {
-        int icon_y = y + (height - 24) / 2;
-        int baseline = y + (height + 20) / 2 - 3;
-        draw_status_symbol(pixels, stride, box.x + 18, icon_y, accent, 1);
-        draw_text(pixels, stride, box.x + 54, baseline,
-            model->message[0] ? model->message : "状态会在后台自动同步", 20, UI_MUTED);
+        const char *msg = model->message[0] ? model->message : "状态会在后台自动同步";
+        uint32_t text_col = model->message[0] ? UI_INK : UI_MUTED;
+        draw_text(pixels, stride, box.x + 54, baseline, msg, 20, text_col);
     }
 }
 
@@ -1075,21 +1058,27 @@ static void draw_home_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel
     } else {
         draw_rect_outline(pixels, stride, box, 16, 1, UI_BORDER);
     }
-    if (expanded) {
-        int y = 548;
-        draw_status_symbol(pixels, stride, 68, 535, accent, error ? 3 : (model->waiting ? 2 : 1));
-        draw_text(pixels, stride, 100, y, title, 20, accent);
-        y += 26;
-        y = draw_wrapped_text(pixels, stride, 100, y, model->message, 18, 1100, 23, 2, UI_INK);
+    int icon_x = 68;
+    int icon_y = 535;
+    int text_x = 100;
+    int baseline = 548;
+
+    if (title[0]) {
+        draw_status_symbol(pixels, stride, icon_x, icon_y, accent, error ? 3 : (model->waiting ? 2 : 1));
+        draw_text(pixels, stride, text_x, baseline, title, 20, accent);
+        int y = baseline + 26;
+        y = draw_wrapped_text(pixels, stride, text_x, y, model->message, 18, 1100, 23, 2, UI_INK);
         if (model->feedback_detail[0])
-            draw_wrapped_text(pixels, stride, 100, y, model->feedback_detail, 18, 1100, 23,
+            draw_wrapped_text(pixels, stride, text_x, y, model->feedback_detail, 18, 1100, 23,
                 (644 - y) / 23 + 1, UI_MUTED);
     } else {
-        int icon_y = 520 + (128 - 24) / 2;
-        int baseline = 520 + (128 + 20) / 2 - 3;
-        draw_status_symbol(pixels, stride, 68, icon_y, UI_SUCCESS, 1);
-        draw_text(pixels, stride, 100, baseline,
-            model->message[0] ? model->message : "状态会在后台自动同步", 20, UI_MUTED);
+        draw_status_symbol(pixels, stride, icon_x, icon_y, UI_SUCCESS, 1);
+        const char *msg = model->message[0] ? model->message : "状态会在后台自动同步";
+        uint32_t text_col = model->message[0] ? UI_INK : UI_MUTED;
+        draw_text(pixels, stride, text_x, baseline, msg, 20, text_col);
+        if (model->feedback_detail[0])
+            draw_wrapped_text(pixels, stride, text_x, baseline + 26, model->feedback_detail, 18, 1100, 23,
+                (644 - (baseline + 26)) / 23 + 1, UI_MUTED);
     }
 }
 
@@ -1101,7 +1090,6 @@ static void draw_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiMode
     ptc_ui_format_home_remaining(model, (int64_t)time(NULL), remaining, sizeof(remaining));
     ptc_ui_format_today_mode(model, today, sizeof(today));
     fill_round_rect(pixels, stride, box, 16, UI_RGB(g_palette->hero));
-    draw_inner_top_highlight(pixels, stride, box, 16);
     draw_text_bold(pixels, stride, x, box.y + 42, "今天还可玩", 22, UI_RGB(g_palette->hero_secondary));
     draw_circle_outline(pixels, stride, box.x + box.width - 46, box.y + 40, 16, 2, UI_RGB(g_palette->hero_secondary));
     draw_line(pixels, stride, box.x + box.width - 46, box.y + 29, box.x + box.width - 46, box.y + 40, 2, UI_RGB(g_palette->hero_secondary));
@@ -1580,7 +1568,6 @@ static void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     int title_width = content_width - reserved_right - (recommended ? 64 : 0);
     uint32_t background = disabled ? UI_RAISED : (selected ? UI_ACCENT_SOFT : UI_SURFACE);
     fill_round_rect(pixels, stride, rect, 16, background);
-    draw_inner_top_highlight(pixels, stride, rect, 16);
     if (selected) {
         draw_focus_ring(pixels, stride, rect, 16);
     } else {
@@ -1842,7 +1829,10 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
         draw_text_center(pixels, stride, (UiRect){mode.x + 6, mode.y + 4, mode.width - 12, 28},
                          limited ? "限时" : "不限时", 15,
                          model->disable_flag_present ? UI_DISABLED : UI_ON_ACCENT);
-        draw_text_center(pixels, stride, (UiRect){mode.x + 4, mode.y + 38, mode.width - 8, 20},
+        int pill_bottom = mode.y + 4 + 28;
+        int minutes_top = minutes.y + 16;
+        UiRect today_rect = {card.x, pill_bottom, card.width, minutes_top - pill_bottom};
+        draw_text_center(pixels, stride, today_rect,
                          today ? "今天" : " ", 15, today ? UI_SUCCESS : UI_MUTED);
         if (limited) {
             snprintf(detail, sizeof(detail), "%u", (unsigned int)model->draft_week[day].minutes);
@@ -2236,7 +2226,6 @@ static void draw_dialog_shell(
     draw_drop_shadow(pixels, stride, *dialog, 16, 6);
     fill_round_rect(pixels, stride, *dialog, 16, UI_SURFACE);
     draw_rect_outline(pixels, stride, *dialog, 16, 1, UI_BORDER);
-    draw_inner_top_highlight(pixels, stride, *dialog, 16);
     fill_round_rect(pixels, stride, (UiRect){dialog->x + 34, dialog->y + 15, 36, 5}, 2, UI_CORAL);
     draw_text_bold(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
     if (description[0]) {
