@@ -46,6 +46,12 @@ typedef struct {
     uint32_t warning_soft;
     uint32_t danger_soft;
     uint32_t scrim;
+    /* 键位徽章、额度槽的表面色，以及阴影峰值强度（百分比，暗色主题更强）。 */
+    uint32_t key_glyph_bg;
+    uint32_t key_glyph_border;
+    uint32_t gauge_slot;
+    uint32_t gauge_slot_border;
+    uint32_t shadow_strength;
 } PtcUiPalette;
 
 typedef struct {
