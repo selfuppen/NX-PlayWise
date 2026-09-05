@@ -375,6 +375,56 @@ static void fill_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect, int 
     paint_round_rect(pixels, stride, rect, radius, 0, color);
 }
 
+static void paint_round_rect_gradient(uint32_t *pixels, uint32_t stride, UiRect rect,
+                                      int radius, uint32_t color, int darken_percent)
+{
+    if (rect.width <= 0 || rect.height <= 0) return;
+    if (radius < 0) radius = 0;
+    if (radius > rect.width / 2) radius = rect.width / 2;
+    if (radius > rect.height / 2) radius = rect.height / 2;
+    uint32_t resolved_base = resolve_color(color);
+    uint32_t r = resolved_base & 0xff;
+    uint32_t g = (resolved_base >> 8) & 0xff;
+    uint32_t b = (resolved_base >> 16) & 0xff;
+
+    int first_y = rect.y < 0 ? 0 : rect.y;
+    int last_y = rect.y + rect.height > SCREEN_HEIGHT ? SCREEN_HEIGHT : rect.y + rect.height;
+    int band = radius;
+
+    for (int y = first_y; y < last_y; ++y) {
+        int local_y = y - rect.y;
+        int decay = (local_y * darken_percent * 255 / 100) / (rect.height > 0 ? rect.height : 1);
+        uint32_t cr = r > (uint32_t)decay ? r - decay : 0;
+        uint32_t cg = g > (uint32_t)decay ? g - decay : 0;
+        uint32_t cb = b > (uint32_t)decay ? b - decay : 0;
+        uint32_t resolved = RGBA8_MAXALPHA(cr, cg, cb);
+
+        if (local_y >= band && local_y < rect.height - band) {
+            fill_rect_packed(pixels, stride, (UiRect){rect.x, y, rect.width, 1}, resolved);
+            continue;
+        }
+        int first_x = rect.x < 0 ? 0 : rect.x;
+        int last_x = rect.x + rect.width > SCREEN_WIDTH ? SCREEN_WIDTH : rect.x + rect.width;
+        for (int x = first_x; x < last_x; ++x) {
+            if (x >= rect.x + band && x < rect.x + rect.width - band) {
+                int end = rect.x + rect.width - band;
+                if (end > last_x) end = last_x;
+                fill_rect_packed(pixels, stride, (UiRect){x, y, end - x, 1}, resolved);
+                x = end - 1;
+                continue;
+            }
+            int coverage = round_rect_coverage(rect, radius, x, y);
+            if (coverage >= 255) set_pixel(pixels, stride, x, y, resolved);
+            else if (coverage > 0) blend_pixel(pixels, stride, x, y, resolved, (uint8_t)coverage);
+        }
+    }
+}
+
+static void fill_round_rect_gradient(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, uint32_t color, int darken_percent)
+{
+    paint_round_rect_gradient(pixels, stride, rect, radius, color, darken_percent);
+}
+
 static void draw_rect_outline(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, int width, uint32_t color)
 {
     /* Subtract inner coverage, never repaint the contents under the stroke. */
@@ -2221,10 +2271,17 @@ static void draw_dialog_shell(
     const char *title = numeric ? model->numpad_title : (pin ? model->pin_title : model->overlay_title);
     const char *description = numeric ? model->numpad_guide : (pin ? model->pin_guide : model->overlay_body);
     *dialog = to_uirect(ptc_ui_dialog_rect(width, height));
-    fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT},
-                     pack_rgb(g_palette->scrim));
+    int y_offset = (8 - model->overlay_open_frames) * 2;
+    dialog->y += y_offset;
+
+    uint32_t raw_scrim = g_palette->scrim;
+    uint32_t a = (raw_scrim >> 24) & 0xff;
+    a = (a * model->overlay_open_frames) / 8;
+    uint32_t fade_scrim = (a << 24) | (raw_scrim & 0xffffff);
+
+    fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, fade_scrim);
     draw_drop_shadow(pixels, stride, *dialog, 16, 6);
-    fill_round_rect(pixels, stride, *dialog, 16, UI_SURFACE);
+    fill_round_rect_gradient(pixels, stride, *dialog, 16, UI_SURFACE, 4);
     draw_rect_outline(pixels, stride, *dialog, 16, 1, UI_BORDER);
     fill_round_rect(pixels, stride, (UiRect){dialog->x + 34, dialog->y + 15, 36, 5}, 2, UI_CORAL);
     draw_text_bold(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
@@ -3123,10 +3180,16 @@ static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, c
                          "暂无成功使用记录；升级前的兑换不会回填。",
                          19, UI_MUTED);
     } else {
+        if (visible > 0) {
+            int line_x = dialog.x + 48;
+            int start_y = dialog.y + 132 + 27;
+            int end_y = dialog.y + 132 + (visible - 1) * 62 + 27;
+            fill_rect(pixels, stride, (UiRect){line_x - 1, start_y, 2, end_y - start_y}, UI_BORDER);
+        }
         for (row = 0; row < visible; ++row) {
             int source = model->redemption_history_count - 1 - first - row;
             const PtcRedemptionHistoryRecord *record = &model->redemption_history[source];
-            UiRect item = {dialog.x + 34, dialog.y + 132 + row * 62, dialog.width - 68, 54};
+            UiRect item = {dialog.x + 68, dialog.y + 132 + row * 62, dialog.width - 102, 54};
             char time_text[48];
             char allowance[160];
             char remaining[80];
@@ -3149,6 +3212,11 @@ static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, c
             draw_text(pixels, stride, item.x + 720, item.y + 20, remaining, 15, UI_INK);
             draw_text(pixels, stride, item.x + item.width - 84, item.y + 20,
                       record->token_version == 2u ? "v2 成功" : "v1 成功", 14, UI_SUCCESS);
+
+            int cy = item.y + 27;
+            int cx = dialog.x + 48;
+            fill_round_rect(pixels, stride, (UiRect){cx - 4, cy - 4, 8, 8}, 4, UI_SUCCESS);
+            fill_round_rect(pixels, stride, (UiRect){cx - 2, cy - 2, 4, 4}, 2, UI_SURFACE);
         }
     }
     draw_dialog_button(pixels, stride, ptc_ui_redemption_history_prev_rect(), "L / 左  上一页",
@@ -3198,10 +3266,16 @@ static void draw_activity_history_overlay(uint32_t *pixels, uint32_t stride, con
         draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
             "暂无家庭活动记录。", 19, UI_MUTED);
     } else {
+        if (visible > 0) {
+            int line_x = dialog.x + 48;
+            int start_y = dialog.y + 130 + 19;
+            int end_y = dialog.y + 130 + (visible - 1) * 45 + 19;
+            fill_rect(pixels, stride, (UiRect){line_x - 1, start_y, 2, end_y - start_y}, UI_BORDER);
+        }
         for (row = 0; row < visible; ++row) {
             int source = model->activity_history_count - 1 - first - row;
             const PtcActivityHistoryRecord *record = &model->activity_history[source];
-            UiRect item = {dialog.x + 34, dialog.y + 130 + row * 45, dialog.width - 68, 38};
+            UiRect item = {dialog.x + 68, dialog.y + 130 + row * 45, dialog.width - 102, 38};
             char time_text[48];
             format_event_time(record->occurred_at, true, time_text, sizeof(time_text));
             snprintf(line, sizeof(line), "%s  |  %s  |  计划 %u 分钟，实际 %u 分钟",
@@ -3210,6 +3284,12 @@ static void draw_activity_history_overlay(uint32_t *pixels, uint32_t stride, con
             fill_round_rect(pixels, stride, item, 6, UI_RAISED);
             draw_text(pixels, stride, item.x + 14, item.y + 24, line, 14,
                 strcmp(record->action, "protection") == 0 ? UI_DANGER : UI_INK);
+
+            int cy = item.y + 19;
+            int cx = dialog.x + 48;
+            uint32_t dot_color = strcmp(record->action, "protection") == 0 ? UI_DANGER : UI_ACCENT;
+            fill_round_rect(pixels, stride, (UiRect){cx - 4, cy - 4, 8, 8}, 4, dot_color);
+            fill_round_rect(pixels, stride, (UiRect){cx - 2, cy - 2, 4, 4}, 2, UI_SURFACE);
         }
     }
     draw_dialog_button(pixels, stride, ptc_ui_redemption_history_prev_rect(), "L / 左  上一页",
@@ -3821,7 +3901,7 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
     format_status_age(model, age, sizeof(age));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 736, dialog.y + 26, 352, 30}, age, 17, status_age_color(model));
 
-    fill_round_rect(pixels, stride, hero, 16, UI_ACCENT_SOFT);
+    fill_round_rect_gradient(pixels, stride, hero, 16, UI_ACCENT_SOFT, 5);
     draw_text(pixels, stride, x + 24, y + 32, "今天还可玩", 20, UI_MUTED);
     draw_text(pixels, stride, x + 24, y + 100, remaining, 56, fresh ? UI_ACCENT : UI_MUTED);
     draw_detail_metric(pixels, stride, x + 24, y + 142, "今日总额度", total, UI_INK);

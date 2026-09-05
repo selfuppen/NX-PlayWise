@@ -153,6 +153,28 @@ static bool save_ui_preferences(UiState *ui);
 static bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference);
 static bool ensure_default_setup_pin(UiState *ui);
 
+static void update_animations(PtcUiModel *model)
+{
+    if (model->overlay != model->previous_overlay) {
+        model->overlay_open_frames = 0;
+        model->previous_overlay = model->overlay;
+    } else if (model->overlay_open_frames < 8) {
+        model->overlay_open_frames++;
+    }
+
+    if (model->displayed_remaining_minutes < model->remaining_minutes) {
+        model->displayed_remaining_minutes += (model->remaining_minutes - model->displayed_remaining_minutes) / 4 + 1;
+    } else if (model->displayed_remaining_minutes > model->remaining_minutes) {
+        model->displayed_remaining_minutes -= (model->displayed_remaining_minutes - model->remaining_minutes) / 4 + 1;
+    }
+
+    if (model->displayed_grant_minutes < model->grant_minutes) {
+        model->displayed_grant_minutes += (model->grant_minutes - model->displayed_grant_minutes) / 4 + 1;
+    } else if (model->displayed_grant_minutes > model->grant_minutes) {
+        model->displayed_grant_minutes -= (model->displayed_grant_minutes - model->grant_minutes) / 4 + 1;
+    }
+}
+
 static int64_t unix_ms_now(void)
 {
     return (int64_t)time(NULL) * 1000;

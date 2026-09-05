@@ -1,0 +1,6 @@
+feat(ui): 视觉效果优化与动画渲染重构
+
+- 引入动画状态机：在 PtcUiModel 中添加 overlay_open_frames 控制弹窗动效，新增 displayed_* 系列变量用于数字插值动画。
+- 重构主循环：在 main.c 中独立出 update_animations 函数处理所有的 UI 插值与缓动更新。
+- 优化渲染质感：封装 paint_round_rect_gradient 提供从上至下的微量线性渐变效果，消除单色卡片死板感。
+- 增强视觉表现：实现历史记录页面的时间轴绘制逻辑，集成弹窗全局 Alpha 淡入与上浮动效。

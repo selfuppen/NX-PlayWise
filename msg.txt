@@ -1,5 +1,0 @@
-refactor(ui): 移除多余的顶部高亮并优化部分组件布局
-
-- 移除了 `draw_inner_top_highlight` 函数及其在 `draw_home_summary`、`draw_action_card` 和 `draw_dialog_shell` 中的调用。
-- 优化了 `draw_notice` 和 `draw_home_notice`：调整了未展开状态下的文本颜色（有无消息时的对比）和布局对齐，同时在 `draw_home_notice` 的未展开状态下支持了 `feedback_detail` 的展示。
-- 优化了 `draw_weekly_page`：重构了周计划页面中“今天”标签的垂直居中对齐计算逻辑。

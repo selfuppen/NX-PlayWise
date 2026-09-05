@@ -360,6 +360,10 @@ typedef struct {
     uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];
     PtcUiDiagnosticStatus diagnostic_status;
     char diagnostic_path[192];
+    int overlay_open_frames;
+    PtcUiOverlay previous_overlay;
+    int displayed_remaining_minutes;
+    int displayed_grant_minutes;
 } PtcUiModel;
 
 typedef struct {
