@@ -6,3 +6,5 @@ List-parent static_cast so the overlay can honor -fno-rtti.
 Local Device Lab patch: defining TESLA_FORCE_CHINESE_SIMPLIFIED_FONT makes the
 internal forensic overlay load Nintendo's Simplified Chinese shared font even
 when the console language is not Chinese. Normal overlay builds do not define it.
+Local correctness patch: List focus traversal uses an underflow-safe reverse
+loop for its unsigned focused index.

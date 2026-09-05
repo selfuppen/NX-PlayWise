@@ -329,17 +329,24 @@ private:
 
     void submit_json(const char *type, const char *payload)
     {
-        char request[512];
+        char request[1024];
         char request_id[80];
         long long now = static_cast<long long>(std::time(nullptr));
         std::snprintf(request_id, sizeof(request_id), "lab-ui-%016llx",
             static_cast<unsigned long long>(randomGet64()));
-        std::snprintf(request, sizeof(request),
+        const int written = std::snprintf(request, sizeof(request),
             "{\"version\":1,\"request_id\":\"%s\",\"type\":\"%s\",\"created_at\":%lld,\"payload\":%s}\n",
             request_id, type, now, payload);
         std::snprintf(last_type_, sizeof(last_type_), "%s", type);
         std::snprintf(last_payload_, sizeof(last_payload_), "%s", payload);
         std::snprintf(last_request_id_, sizeof(last_request_id_), "%s", request_id);
+        if (written < 0 || static_cast<std::size_t>(written) >= sizeof(request)) {
+            waiting_ = false;
+            last_transport_status_ = PTC_COMPANION_BAD_ARGUMENT;
+            set_transport_error(PTC_COMPANION_BAD_ARGUMENT);
+            last_poll_tick_ = armGetSystemTick();
+            return;
+        }
         PtcCompanionStatus status = ptc_companion_transport_submit_json(transport_, request_id, request);
         waiting_ = status == PTC_COMPANION_OK;
         request_error_ = status != PTC_COMPANION_OK;

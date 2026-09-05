@@ -26,7 +26,6 @@ CFLAGS := -g -O2 -Wall -Wextra -Werror -ffunction-sections $(ARCH) $(DEFINES)
 CFLAGS += $(INCLUDE) -D__SWITCH__ -DPTC_IPC_CLIENT_OVERLAY
 CXXFLAGS := $(filter-out -Werror,$(CFLAGS)) -std=c++20 -fno-exceptions -fno-rtti \
 	-Wno-missing-field-initializers -Wno-unused-parameter -Wno-ignored-qualifiers
-CXXFLAGS += -Wno-type-limits
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 LIBS := -lnx
 LIBDIRS := $(PORTLIBS) $(LIBNX)

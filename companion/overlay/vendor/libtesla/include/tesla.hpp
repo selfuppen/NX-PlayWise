@@ -2021,7 +2021,7 @@ namespace tsl {
                     } else if (direction == FocusDirection::Up) {
                         if (this->m_focusedIndex > 0) {
 
-                            for (u16 i = this->m_focusedIndex - 1; i >= 0; i--) {
+                            for (u16 i = this->m_focusedIndex; i-- > 0;) {
                                 if (i > this->m_items.size() || this->m_items[i] == nullptr)
                                     return oldFocus;
                                 else

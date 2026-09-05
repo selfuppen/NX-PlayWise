@@ -19,6 +19,8 @@ def main() -> None:
     overlay = (ROOT / "companion/overlay/source/main.cpp").read_text(encoding="utf-8")
     lab_nro = (ROOT / "device_lab/nro/main.c").read_text(encoding="utf-8")
     lab_overlay = (ROOT / "device_lab/overlay/source/main.cpp").read_text(encoding="utf-8")
+    libtesla = (ROOT / "companion/overlay/vendor/libtesla/include/tesla.hpp").read_text(encoding="utf-8")
+    overlay_makefile = (ROOT / "companion/overlay/Makefile").read_text(encoding="utf-8")
 
     require("bool sm_initialized;" in header, "Switch IPC client must track its retained SM session")
     require("rc = smInitialize();" in client, "Switch IPC client init must retain an SM session")
@@ -51,6 +53,13 @@ def main() -> None:
             "Device Lab Overlay startup must use the durable SD queue without retaining pwtl:u")
     require("nullptr, nullptr" in lab_overlay,
             "Device Lab Overlay transport must explicitly select the SD queue")
+    require("char request[1024];" in lab_overlay and
+            "static_cast<std::size_t>(written) >= sizeof(request)" in lab_overlay,
+            "Device Lab Overlay must reject a request instead of submitting truncated JSON")
+    require("for (u16 i = this->m_focusedIndex; i-- > 0;)" in libtesla,
+            "vendored libtesla must traverse upward without unsigned-index underflow")
+    require("-Wno-type-limits" not in overlay_makefile,
+            "the standard Overlay build must not hide unsigned-index diagnostics")
     require("standard_backend_expected()" in (ROOT / "companion/nro/main.c").read_text(encoding="utf-8"),
             "standard NRO must skip IPC when Device Lab has disabled its boot flag")
 
