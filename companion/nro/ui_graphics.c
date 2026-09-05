@@ -6,6 +6,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -273,31 +274,53 @@ static void fill_rect(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t c
     fill_rect_packed(pixels, stride, rect, resolve_color(color));
 }
 
-/* Pixel coverage uses eighth-pixel coordinates: 4 x 4 sample centres at
- * 1, 3, 5, 7. Only pixels intersecting a curve need multiple samples. */
-static int disk_coverage(int dx, int dy, int radius)
+/* Pixel coverage uses Analytical Signed Distance Field (SDF) with cubic Hermite smoothstep. */
+static int disk_coverage(int dx_eighths, int dy_eighths, int radius_eighths)
 {
-    int near_x = dx > 4 ? dx - 4 : 0;
-    int near_y = dy > 4 ? dy - 4 : 0;
-    int squared = radius * radius;
-    int count = 0;
-    if ((dx + 4) * (dx + 4) + (dy + 4) * (dy + 4) <= squared) return 16;
-    if (near_x * near_x + near_y * near_y >= squared) return 0;
-    for (int sy = -3; sy <= 3; sy += 2)
-        for (int sx = -3; sx <= 3; sx += 2)
-            if ((dx + sx) * (dx + sx) + (dy + sy) * (dy + sy) <= squared) ++count;
-    return count;
+    float dx = (float)dx_eighths * 0.125f;
+    float dy = (float)dy_eighths * 0.125f;
+    float r = (float)radius_eighths * 0.125f;
+    float dist = r - sqrtf(dx * dx + dy * dy);
+    const float feather = 1.25f;
+    const float half_feather = feather * 0.5f;
+    if (dist >= half_feather) return 255;
+    if (dist <= -half_feather) return 0;
+    float t = (dist + half_feather) / feather;
+    int cov = (int)(t * t * (3.0f - 2.0f * t) * 255.0f + 0.5f);
+    return cov > 255 ? 255 : (cov < 0 ? 0 : cov);
 }
 
 static int round_rect_coverage(UiRect rect, int radius, int x, int y)
 {
     int px = x - rect.x, py = y - rect.y;
-    if (px < 0 || py < 0 || px >= rect.width || py >= rect.height) return 0;
-    int dx = px < radius ? radius * 8 - (px * 8 + 4) :
-             (px >= rect.width - radius ? px * 8 + 4 - (rect.width - radius) * 8 : 0);
-    int dy = py < radius ? radius * 8 - (py * 8 + 4) :
-             (py >= rect.height - radius ? py * 8 + 4 - (rect.height - radius) * 8 : 0);
-    return dx && dy ? disk_coverage(dx, dy, radius * 8) : 16;
+    if ((unsigned int)px >= (unsigned int)rect.width || (unsigned int)py >= (unsigned int)rect.height) return 0;
+    if (radius <= 0) return 255;
+    if (radius * 2 > rect.width) radius = rect.width / 2;
+    if (radius * 2 > rect.height) radius = rect.height / 2;
+
+    /* 直边中心交叉区域全覆盖 */
+    bool in_cx = (px >= radius && px < rect.width - radius);
+    bool in_cy = (py >= radius && py < rect.height - radius);
+    if (in_cx || in_cy) return 255;
+
+    /* 映射到最近外边界的对称像素坐标（严格满足左右与上下像素级几何对称） */
+    int sx = px < radius ? px : (rect.width - 1 - px);
+    int sy = py < radius ? py : (rect.height - 1 - py);
+
+    /* 像素中心到圆角圆心的精确几何距离 */
+    float dx = (float)(radius - 1 - sx) + 0.5f;
+    float dy = (float)(radius - 1 - sy) + 0.5f;
+    float dist = (float)radius - sqrtf(dx * dx + dy * dy);
+
+    /* 亚像素三次 Smoothstep 平滑过渡，彻底消除台阶锯齿 */
+    const float feather = 1.25f;
+    const float half_feather = feather * 0.5f;
+    if (dist >= half_feather) return 255;
+    if (dist <= -half_feather) return 0;
+
+    float t = (dist + half_feather) / feather;
+    int cov = (int)(t * t * (3.0f - 2.0f * t) * 255.0f + 0.5f);
+    return cov > 255 ? 255 : (cov < 0 ? 0 : cov);
 }
 
 static void paint_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect,
@@ -336,9 +359,13 @@ static void paint_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect,
                 continue;
             }
             int coverage = round_rect_coverage(rect, radius, x, y);
-            if (stroke) coverage -= round_rect_coverage(inner, inner_radius, x, y);
-            if (coverage == 16) set_pixel(pixels, stride, x, y, resolved);
-            else if (coverage > 0) blend_pixel(pixels, stride, x, y, resolved, (uint8_t)((coverage * 255 + 8) / 16));
+            if (stroke) {
+                int inner_cov = round_rect_coverage(inner, inner_radius, x, y);
+                coverage -= inner_cov;
+                if (coverage < 0) coverage = 0;
+            }
+            if (coverage >= 255) set_pixel(pixels, stride, x, y, resolved);
+            else if (coverage > 0) blend_pixel(pixels, stride, x, y, resolved, (uint8_t)coverage);
         }
     }
 }
@@ -365,42 +392,26 @@ static int get_breathing_phase(void)
 static void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
 {
     int phase = get_breathing_phase();
-    uint8_t glow_alpha = (uint8_t)(95 + phase * 9);
-    uint32_t focus_col = resolve_color(UI_FOCUS);
     int offset = is_docked_mode() ? 4 : 3;
     int stroke_w = is_docked_mode() ? 3 : 2;
-    int glow_offset = is_docked_mode() ? 6 : 5;
 
-    /* 1. 核心高亮骨架：掌机外扩 3px(线宽 2px) / 底座 TV 外扩 4px(线宽 3px)，保持清晰锐利的焦点边框 */
+    /* 呼吸动态颜色：在基础 UI_FOCUS 与呼吸高光荧光亮蓝之间平滑脉冲插值 */
+    uint32_t focus_token = UI_FOCUS;
+    if (phase > 0 && g_palette) {
+        uint32_t raw_rgb = g_palette->focus;
+        uint32_t r = (raw_rgb >> 16) & 0xff;
+        uint32_t g = (raw_rgb >> 8) & 0xff;
+        uint32_t b = raw_rgb & 0xff;
+        r += (uint32_t)((215 - (int)r) * phase) / 30u;
+        g += (uint32_t)((238 - (int)g) * phase) / 30u;
+        b += (uint32_t)((255 - (int)b) * phase) / 30u;
+        focus_token = UI_RGB((r << 16) | (g << 8) | b);
+    }
+
+    /* 绘制完整、闭合、严密同心的圆角焦点框，彻底根除断裂悬空的多余线条 */
     draw_rect_outline(pixels, stride,
         (UiRect){rect.x - offset, rect.y - offset, rect.width + 2 * offset, rect.height + 2 * offset},
-        radius + offset, stroke_w, UI_FOCUS);
-
-    /* 2. 呼吸光晕脉冲：外扩光晕，透明度随节拍往复呼吸 */
-    UiRect glow_rect = {rect.x - glow_offset, rect.y - glow_offset, rect.width + 2 * glow_offset, rect.height + 2 * glow_offset};
-    int glow_rad = radius + glow_offset;
-    int first_y = glow_rect.y < 0 ? 0 : glow_rect.y;
-    int last_y = glow_rect.y + glow_rect.height > SCREEN_HEIGHT ? SCREEN_HEIGHT : glow_rect.y + glow_rect.height;
-    int first_x = glow_rect.x < 0 ? 0 : glow_rect.x;
-    int last_x = glow_rect.x + glow_rect.width > SCREEN_WIDTH ? SCREEN_WIDTH : glow_rect.x + glow_rect.width;
-
-    for (int y = first_y; y < last_y; ++y) {
-        int ly = y - glow_rect.y;
-        if (ly < 2 || ly >= glow_rect.height - 2) {
-            for (int x = first_x + glow_rad; x < last_x - glow_rad; ++x) {
-                blend_pixel(pixels, stride, x, y, focus_col, glow_alpha);
-            }
-        } else if (ly >= glow_rad && ly < glow_rect.height - glow_rad) {
-            if (glow_rect.x >= 0 && glow_rect.x < SCREEN_WIDTH)
-                blend_pixel(pixels, stride, glow_rect.x, y, focus_col, glow_alpha);
-            if (glow_rect.x + 1 >= 0 && glow_rect.x + 1 < SCREEN_WIDTH)
-                blend_pixel(pixels, stride, glow_rect.x + 1, y, focus_col, glow_alpha);
-            if (glow_rect.x + glow_rect.width - 2 >= 0 && glow_rect.x + glow_rect.width - 2 < SCREEN_WIDTH)
-                blend_pixel(pixels, stride, glow_rect.x + glow_rect.width - 2, y, focus_col, glow_alpha);
-            if (glow_rect.x + glow_rect.width - 1 >= 0 && glow_rect.x + glow_rect.width - 1 < SCREEN_WIDTH)
-                blend_pixel(pixels, stride, glow_rect.x + glow_rect.width - 1, y, focus_col, glow_alpha);
-        }
-    }
+        radius + offset, stroke_w, focus_token);
 }
 
 static void draw_inner_top_highlight(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
@@ -473,9 +484,13 @@ static void draw_circle_outline(
         for (x = -radius; x <= radius; ++x) {
             int dx = (x < 0 ? -x : x) * 8, dy = (y < 0 ? -y : y) * 8;
             int coverage = disk_coverage(dx, dy, radius * 8);
-            if (inner_radius > 0) coverage -= disk_coverage(dx, dy, inner_radius * 8);
+            if (inner_radius > 0) {
+                int inner_cov = disk_coverage(dx, dy, inner_radius * 8);
+                coverage -= inner_cov;
+                if (coverage < 0) coverage = 0;
+            }
             if (coverage > 0) blend_pixel(pixels, stride, center_x + x, center_y + y,
-                resolved, (uint8_t)((coverage * 255 + 8) / 16));
+                resolved, (uint8_t)(coverage > 255 ? 255 : coverage));
         }
     }
 }
