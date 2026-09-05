@@ -87,6 +87,14 @@ typedef enum {
 #define PTC_UI_OVERLAY_OPEN_FRAME_MS 40
 #define PTC_UI_OVERLAY_OPEN_TOTAL_MS (PTC_UI_OVERLAY_OPEN_FRAMES * PTC_UI_OVERLAY_OPEN_FRAME_MS)
 
+/* 弹窗退场动画：5 帧反向淡出下沉，期间输入已回到下层页面。 */
+#define PTC_UI_OVERLAY_CLOSE_FRAMES 5
+#define PTC_UI_OVERLAY_CLOSE_FRAME_MS 40
+#define PTC_UI_OVERLAY_CLOSE_TOTAL_MS (PTC_UI_OVERLAY_CLOSE_FRAMES * PTC_UI_OVERLAY_CLOSE_FRAME_MS)
+
+/* 家长区页签指示胶囊滑动时长。 */
+#define PTC_UI_PAGE_SWITCH_TOTAL_MS 240
+
 typedef enum {
     PTC_UI_CREDENTIAL_INPUT = 0,
     PTC_UI_CREDENTIAL_RANDOM = 1,
@@ -368,6 +376,12 @@ typedef struct {
     int overlay_open_frames;
     int64_t overlay_opened_at_ms;
     PtcUiOverlay previous_overlay;
+    PtcUiOverlay closing_overlay;
+    int64_t closing_started_ms;
+    /* 绘制侧可见的弹层：打开时等于 overlay，关闭动画期间保持上一个弹层。 */
+    PtcUiOverlay rendered_overlay;
+    PtcUiParentPage last_parent_page;
+    int64_t page_switched_at_ms;
     int displayed_remaining_minutes;
     int displayed_grant_minutes;
 } PtcUiModel;

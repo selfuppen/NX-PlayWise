@@ -42,8 +42,10 @@
 #define RESULT_TEXT_SIZE 8192
 #define REQUEST_TIMEOUT_MS 30000
 #define INPUT_LOOP_SLEEP_NS 20000000LL
+#define INPUT_LOOP_SLEEP_FAST_NS 5000000LL
 #define INPUT_LOOP_MS 20
 #define DRAW_INTERVAL_MS 40
+#define DRAW_INTERVAL_FAST_MS 20
 #define BACKGROUND_POLL_INTERVAL_MS 100
 #define INPUT_SAMPLES_FOR_MS(milliseconds) (((milliseconds) + INPUT_LOOP_MS - 1) / INPUT_LOOP_MS)
 #define HIDDEN_HOLD_TICKS INPUT_SAMPLES_FOR_MS(2000)
@@ -105,6 +107,7 @@ typedef struct {
     PtcUiConfirmHoldState confirm_hold;
     bool minus_pending;
     bool waiting;
+    bool animating;
     bool exit_requested;
     PtcUiView request_view;
     int64_t last_setup_refresh_second;
@@ -165,9 +168,9 @@ static void tween_displayed_minutes(int *value, int target, int64_t delta_ms)
     *value += diff > 0 ? step : -step;
 }
 
-/* 动画全部按真实时间推进：弹窗入场以上次切换时刻推算帧数，
- * 不依赖绘制节拍，掉帧或提帧都不会改变动画时长。 */
-static void update_animations(PtcUiModel *model)
+/* 动画全部按真实时间推进：弹窗开合以上次切换时刻推算帧数，数字缓动按帧间隔
+ * 归一。返回是否仍有进行中的动画，供主循环在动画期自适应提高帧率。 */
+static bool update_animations(PtcUiModel *model)
 {
     static int64_t last_update_ms = 0;
     int64_t now = ptc_ui_anim_now_ms();
@@ -178,17 +181,39 @@ static void update_animations(PtcUiModel *model)
     last_update_ms = now;
 
     if (model->overlay != model->previous_overlay) {
+        if (model->overlay == PTC_UI_OVERLAY_NONE && model->previous_overlay != PTC_UI_OVERLAY_NONE) {
+            model->closing_overlay = model->previous_overlay;
+            model->closing_started_ms = now;
+        } else {
+            model->closing_overlay = PTC_UI_OVERLAY_NONE;
+        }
         model->overlay_opened_at_ms = now;
         model->previous_overlay = model->overlay;
+    }
+    if (model->closing_overlay != PTC_UI_OVERLAY_NONE &&
+        now - model->closing_started_ms >= PTC_UI_OVERLAY_CLOSE_TOTAL_MS) {
+        model->closing_overlay = PTC_UI_OVERLAY_NONE;
     }
     elapsed = now - model->overlay_opened_at_ms;
     if (elapsed < 0) elapsed = 0;
     frames = (int)(elapsed / PTC_UI_OVERLAY_OPEN_FRAME_MS);
     if (frames > PTC_UI_OVERLAY_OPEN_FRAMES) frames = PTC_UI_OVERLAY_OPEN_FRAMES;
     model->overlay_open_frames = frames;
+    model->rendered_overlay = model->overlay != PTC_UI_OVERLAY_NONE ? model->overlay : model->closing_overlay;
+
+    if (model->parent_page != model->last_parent_page) {
+        model->last_parent_page = model->parent_page;
+        model->page_switched_at_ms = now;
+    }
 
     tween_displayed_minutes(&model->displayed_remaining_minutes, model->remaining_minutes, delta);
     tween_displayed_minutes(&model->displayed_grant_minutes, model->grant_minutes, delta);
+
+    return model->overlay_open_frames < PTC_UI_OVERLAY_OPEN_FRAMES ||
+           model->closing_overlay != PTC_UI_OVERLAY_NONE ||
+           model->displayed_remaining_minutes != model->remaining_minutes ||
+           model->displayed_grant_minutes != model->grant_minutes ||
+           now - model->page_switched_at_ms < PTC_UI_PAGE_SWITCH_TOTAL_MS;
 }
 
 static int64_t unix_ms_now(void)
@@ -603,12 +628,12 @@ static bool pin_input(UiState *ui, const char *title, const char *guide,
         }
         if (touch_allowed) touch_was_active = touch_active;
         draw_elapsed_ms += INPUT_LOOP_MS;
-        if (draw_elapsed_ms >= DRAW_INTERVAL_MS) {
-            update_animations(&ui->model);
+        if (draw_elapsed_ms >= (ui->animating ? DRAW_INTERVAL_FAST_MS : DRAW_INTERVAL_MS)) {
+            ui->animating = update_animations(&ui->model);
             draw(ui);
             draw_elapsed_ms = 0;
         }
-        svcSleepThread(INPUT_LOOP_SLEEP_NS);
+        svcSleepThread(ui->animating ? INPUT_LOOP_SLEEP_FAST_NS : INPUT_LOOP_SLEEP_NS);
     }
     ptc_ui_pin_finish(&ui->model);
     return false;
@@ -4936,12 +4961,12 @@ int main(int argc, char **argv)
             background_poll_elapsed_ms = 0;
         }
         draw_elapsed_ms += INPUT_LOOP_MS;
-        if (draw_elapsed_ms >= DRAW_INTERVAL_MS) {
-            update_animations(&ui.model);
+        if (draw_elapsed_ms >= (ui.animating ? DRAW_INTERVAL_FAST_MS : DRAW_INTERVAL_MS)) {
+            ui.animating = update_animations(&ui.model);
             draw(&ui);
             draw_elapsed_ms = 0;
         }
-        svcSleepThread(INPUT_LOOP_SLEEP_NS);
+        svcSleepThread(ui.animating ? INPUT_LOOP_SLEEP_FAST_NS : INPUT_LOOP_SLEEP_NS);
     }
 
     appletUnhook(&hook_cookie);

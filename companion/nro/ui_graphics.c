@@ -455,6 +455,16 @@ int64_t ptc_ui_anim_now_ms(void)
 /* 呼吸周期 1280ms：亮度从基色线性升到高光再回落，与旧 32 拍（40ms 拍长）节奏一致。 */
 #define UI_BREATHING_CYCLE_MS 1280
 
+/* ease-out cubic：动效统一缓动曲线，t 为 0..1 进度。 */
+static float ui_ease_out(float t)
+{
+    float inv;
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    inv = 1.0f - t;
+    return 1.0f - inv * inv * inv;
+}
+
 static int get_breathing_phase(void)
 {
     int64_t cycle = ptc_ui_anim_now_ms() % UI_BREATHING_CYCLE_MS;
@@ -1429,6 +1439,13 @@ static void draw_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiMode
     ptc_ui_format_today_mode(model, today, sizeof(today));
     draw_card_shadow(pixels, stride, box, 16);
     fill_round_rect(pixels, stride, box, 16, UI_RGB(g_palette->hero));
+    /* 剩余告急时描边随呼吸相位脉冲。 */
+    if (model->remaining_available && model->unrestricted_today != 1 &&
+        model->remaining_minutes >= 0 && model->remaining_minutes <= 10) {
+        int phase = get_breathing_phase();
+        draw_rect_outline(pixels, stride, box, 16, 2,
+                          UI_RGB(ui_mix_rgb(g_palette->danger, 0xFF9A8A, phase * 4)));
+    }
     draw_text_bold(pixels, stride, x, box.y + 42, "今天还可玩", 22, UI_RGB(g_palette->hero_secondary));
     /* 环形额度表：弧长由缓动后的剩余分钟驱动，颜色沿用今日额度健康色；
      * 数据不可用时只画弱化轨道环。 */
@@ -1504,14 +1521,17 @@ static void draw_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiMode
     } else if (model->remaining_available && model->played_minutes_available &&
                (model->remaining_minutes + model->played_minutes > 0)) {
         int total_mins = model->remaining_minutes + model->played_minutes;
-        int remain_w = (int)((int64_t)gauge_bg.width * model->remaining_minutes / total_mins);
+        /* 填充宽度用缓动后的剩余分钟，随数字一起滚动。 */
+        int remain_w = (int)((int64_t)gauge_bg.width * model->displayed_remaining_minutes / total_mins);
         if (remain_w < 6 && model->remaining_minutes > 0) remain_w = 6;
         if (remain_w > gauge_bg.width) remain_w = gauge_bg.width;
         if (remain_w > 0) {
             fill_round_rect(pixels, stride, (UiRect){gauge_bg.x, gauge_bg.y, remain_w, gauge_bg.height}, 4, health_color);
         }
     } else if (model->remaining_available && model->remaining_minutes > 0) {
-        int fill_w = (int)((int64_t)gauge_bg.width * (model->remaining_minutes > 120 ? 120 : model->remaining_minutes) / 120);
+        int displayed_shown = model->displayed_remaining_minutes > 120 ? 120 :
+                              (model->displayed_remaining_minutes < 0 ? 0 : model->displayed_remaining_minutes);
+        int fill_w = (int)((int64_t)gauge_bg.width * displayed_shown / 120);
         if (fill_w < 6) fill_w = 6;
         fill_round_rect(pixels, stride, (UiRect){gauge_bg.x, gauge_bg.y, fill_w, gauge_bg.height}, 4, health_color);
     }
@@ -1824,10 +1844,28 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
     int index;
     for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
         UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
-        uint32_t background = index == (int)model->parent_page ? UI_ACCENT : UI_RAISED;
-        uint32_t foreground = index == (int)model->parent_page ? UI_ON_ACCENT : UI_INK;
-        fill_round_rect(pixels, stride, tab, 12, background);
-        draw_text_center(pixels, stride, tab, LABELS[index], 18, foreground);
+        fill_round_rect(pixels, stride, tab, 12, UI_RAISED);
+    }
+    /* 选中指示胶囊从上一页位置滑向当前页，页签文字保持不动。 */
+    {
+        UiRect from = to_uirect(ptc_ui_parent_tab_rect((int)model->last_parent_page));
+        UiRect to = to_uirect(ptc_ui_parent_tab_rect((int)model->parent_page));
+        float slide_t = 1.0f;
+        if (model->last_parent_page != model->parent_page) {
+            slide_t = ui_ease_out((float)(ptc_ui_anim_now_ms() - model->page_switched_at_ms) /
+                                  (float)PTC_UI_PAGE_SWITCH_TOTAL_MS);
+        }
+        UiRect pill = {
+            from.x + (int)((to.x - from.x) * slide_t),
+            from.y,
+            from.width + (int)((to.width - from.width) * slide_t),
+            from.height};
+        fill_round_rect(pixels, stride, pill, 12, UI_ACCENT);
+    }
+    for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
+        UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
+        bool active = index == (int)model->parent_page;
+        draw_text_center(pixels, stride, tab, LABELS[index], 18, active ? UI_ON_ACCENT : UI_INK);
     }
     if (!(model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page != PTC_UI_SETTINGS_ROOT)) {
         draw_text(pixels, stride, 1038, 140, "L / R 切换", 19, UI_MUTED);
@@ -2268,7 +2306,27 @@ static void draw_toggle_switch(
                        (is_on ? UI_SUCCESS : UI_BORDER);
     uint32_t knob_color = disabled ? UI_RAISED : UI_SURFACE;
     int knob_size = rect.height - 6;
-    int knob_x = is_on ? (rect.x + rect.width - 3 - knob_size) : (rect.x + 3);
+    int off_x = rect.x + 3;
+    int on_x = rect.x + rect.width - 3 - knob_size;
+    /* 滑块按切换时刻缓动；首帧或预览直接落位（单调用点，矩形即身份）。 */
+    static UiRect memo_rect = {0, 0, 0, 0};
+    static bool memo_is_on = false;
+    static int64_t memo_changed_ms = 0;
+    float slide_t = 1.0f;
+    int knob_x;
+    if (memo_rect.x != rect.x || memo_rect.y != rect.y || memo_rect.width != rect.width) {
+        memo_rect = rect;
+        memo_is_on = is_on;
+        memo_changed_ms = 0;
+    } else if (memo_is_on != is_on) {
+        memo_is_on = is_on;
+        memo_changed_ms = ptc_ui_anim_now_ms();
+    }
+    if (memo_changed_ms != 0) {
+        slide_t = ui_ease_out((float)(ptc_ui_anim_now_ms() - memo_changed_ms) / 120.0f);
+        if (slide_t >= 1.0f) memo_changed_ms = 0;
+    }
+    knob_x = off_x + (int)((float)(on_x - off_x) * (is_on ? slide_t : 1.0f - slide_t));
     int knob_y = rect.y + 3;
 
     if (selected && !disabled) {
@@ -2592,12 +2650,13 @@ static void draw_dialog_shell(
     const char *title = numeric ? model->numpad_title : (pin ? model->pin_title : model->overlay_title);
     const char *description = numeric ? model->numpad_guide : (pin ? model->pin_guide : model->overlay_body);
     *dialog = to_uirect(ptc_ui_dialog_rect(width, height));
-    int y_offset = (PTC_UI_OVERLAY_OPEN_FRAMES - model->overlay_open_frames) * 2;
+    float open_progress = ui_ease_out((float)model->overlay_open_frames / (float)PTC_UI_OVERLAY_OPEN_FRAMES);
+    int y_offset = (int)(((float)PTC_UI_OVERLAY_OPEN_FRAMES - open_progress * (float)PTC_UI_OVERLAY_OPEN_FRAMES) * 2.0f + 0.5f);
     dialog->y += y_offset;
 
     uint32_t raw_scrim = g_palette->scrim;
     uint32_t a = (raw_scrim >> 24) & 0xff;
-    a = (a * model->overlay_open_frames) / PTC_UI_OVERLAY_OPEN_FRAMES;
+    a = (uint32_t)(a * open_progress + 0.5f);
     uint32_t fade_scrim = (a << 24) | (raw_scrim & 0xffffff);
 
     fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, fade_scrim);
@@ -4468,8 +4527,19 @@ void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
     } else {
         draw_child(pixels, stride, model);
     }
-    if (model->overlay != PTC_UI_OVERLAY_NONE) {
-        draw_overlay(pixels, stride, model);
+    if (model->rendered_overlay != PTC_UI_OVERLAY_NONE) {
+        /* 关闭动画期间渲染上一个弹层：输入已切回下层页面，仅视觉保留数帧。 */
+        PtcUiModel visual = *model;
+        visual.overlay = model->rendered_overlay;
+        if (model->overlay == PTC_UI_OVERLAY_NONE) {
+            int64_t closing_elapsed = ptc_ui_anim_now_ms() - model->closing_started_ms;
+            int closed_frames = (int)(closing_elapsed / PTC_UI_OVERLAY_CLOSE_FRAME_MS);
+            if (closed_frames < 0) closed_frames = 0;
+            if (closed_frames > PTC_UI_OVERLAY_CLOSE_FRAMES) closed_frames = PTC_UI_OVERLAY_CLOSE_FRAMES;
+            visual.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES -
+                closed_frames * PTC_UI_OVERLAY_OPEN_FRAMES / PTC_UI_OVERLAY_CLOSE_FRAMES;
+        }
+        draw_overlay(pixels, stride, &visual);
     }
 #ifdef PLAYWISE_EDEN
     /* Permanent badge: no screenshot from the simulated build may be mistaken
