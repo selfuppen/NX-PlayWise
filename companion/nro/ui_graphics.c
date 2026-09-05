@@ -82,6 +82,15 @@ static const char *rule_source_label(const char *source);
 static void draw_toggle_switch(uint32_t *pixels, uint32_t stride, UiRect rect, bool is_on,
                                bool selected, bool disabled, const char *on_label, const char *off_label);
 
+static bool is_docked_mode(void)
+{
+#if defined(__SWITCH__) && !defined(PLAYWISE_EDEN)
+    return appletGetOperationMode() == AppletOperationMode_Console;
+#else
+    return false;
+#endif
+}
+
 static uint32_t pack_rgb(uint32_t rgb)
 {
     return RGBA8_MAXALPHA((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff);
@@ -92,7 +101,12 @@ static uint32_t resolve_color(uint32_t source)
     if (source & 0x01000000u) return pack_rgb(source & 0xFFFFFFu);
     switch (source) {
     case UI_INK: return pack_rgb(g_palette->text_primary);
-    case UI_MUTED: return pack_rgb(g_palette->text_secondary);
+    case UI_MUTED:
+        if (is_docked_mode()) {
+            bool is_dark = ((g_palette->text_primary & 0xFF) > 0x80);
+            return pack_rgb(is_dark ? 0xC8D5E8 : 0x3E4C62);
+        }
+        return pack_rgb(g_palette->text_secondary);
     case UI_DISABLED: return pack_rgb(g_palette->text_disabled);
     case UI_SURFACE: return pack_rgb(g_palette->surface);
     case UI_RAISED: return pack_rgb(g_palette->surface_raised);
@@ -353,14 +367,18 @@ static void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int 
     int phase = get_breathing_phase();
     uint8_t glow_alpha = (uint8_t)(95 + phase * 9);
     uint32_t focus_col = resolve_color(UI_FOCUS);
+    int offset = is_docked_mode() ? 4 : 3;
+    int stroke_w = is_docked_mode() ? 3 : 2;
+    int glow_offset = is_docked_mode() ? 6 : 5;
 
-    /* 1. 核心高亮骨架：外扩 3px，线宽 2px，保持清晰锐利的焦点边框 */
+    /* 1. 核心高亮骨架：掌机外扩 3px(线宽 2px) / 底座 TV 外扩 4px(线宽 3px)，保持清晰锐利的焦点边框 */
     draw_rect_outline(pixels, stride,
-        (UiRect){rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6}, radius + 3, 2, UI_FOCUS);
+        (UiRect){rect.x - offset, rect.y - offset, rect.width + 2 * offset, rect.height + 2 * offset},
+        radius + offset, stroke_w, UI_FOCUS);
 
-    /* 2. 呼吸光晕脉冲：外扩 5px，线宽 1px，透明度随节拍往复呼吸 */
-    UiRect glow_rect = {rect.x - 5, rect.y - 5, rect.width + 10, rect.height + 10};
-    int glow_rad = radius + 5;
+    /* 2. 呼吸光晕脉冲：外扩光晕，透明度随节拍往复呼吸 */
+    UiRect glow_rect = {rect.x - glow_offset, rect.y - glow_offset, rect.width + 2 * glow_offset, rect.height + 2 * glow_offset};
+    int glow_rad = radius + glow_offset;
     int first_y = glow_rect.y < 0 ? 0 : glow_rect.y;
     int last_y = glow_rect.y + glow_rect.height > SCREEN_HEIGHT ? SCREEN_HEIGHT : glow_rect.y + glow_rect.height;
     int first_x = glow_rect.x < 0 ? 0 : glow_rect.x;

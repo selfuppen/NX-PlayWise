@@ -29,10 +29,10 @@ static const PtcUiPalette LIGHT_PALETTE = {
 };
 
 static const PtcUiPalette DARK_PALETTE = {
-    0x101827,
-    0x1B283C,
-    0x24344B,
-    0x35465F,
+    0x0B0F19,
+    0x162032,
+    0x1E2C44,
+    0x2A3B54,
     0x7E90AA,
     0xF3F6FD,
     0xB6C4D9,
@@ -51,7 +51,7 @@ static const PtcUiPalette DARK_PALETTE = {
     0x193C32,
     0x40351F,
     0x462936,
-    0x0B1220,
+    0x070B14,
 };
 
 bool ptc_ui_theme_parse_preference(const char *text, PtcUiThemePreference *out)
