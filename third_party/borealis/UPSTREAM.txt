@@ -1,0 +1,16 @@
+Upstream: https://github.com/xfangfang/borealis
+Branch: wiliwili
+Commit: 5f08b286f3df737f3321d2247a6fe633fcead03c
+License: Apache-2.0 (see LICENSE and NOTICE)
+Queried: 2026-09-05
+
+Vendored scope:
+- library/
+- resources/
+- the upstream build metadata and license files needed to reproduce the
+  Nintendo Switch build
+
+The upstream SDL and GLFW git submodules are intentionally not vendored.
+The PlayWise Borealis PoC uses the Nintendo Switch deko3d backend, which does
+not require either submodule. Updating this directory requires an explicit
+commit change here plus a clean PoC build; it must never track a moving branch.

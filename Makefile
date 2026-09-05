@@ -52,7 +52,7 @@ UI_TEST_SRCS := companion/nro/ui_state.c companion/nro/ui_theme.c companion/file
 
 STAGE_TIMER ?= python3 tools/stage_timer.py
 
-.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_REBUILD
+.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp eden-test-nro borealis-poc-nro borealis-poc-clean packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_REBUILD
 
 all: test
 
@@ -128,6 +128,17 @@ eden-test-nro: eden-test-manifest
 	mkdir -p build/eden-test
 	cp companion/nro/pctc-eden.nro build/eden-test/pctc-eden.nro
 
+# UI-framework evaluation only. It is isolated from all package targets and
+# contains no PlayWise protocol, storage, IPC or PCTL implementation.
+borealis-poc-nro:
+	$(STAGE_TIMER) borealis-poc configure -- cmake -S experiments/borealis_poc -B build/borealis-poc/cmake -DPLATFORM_SWITCH=ON -DUSE_DEKO3D=ON -DUSE_SYSTEM_FMT=OFF -DUSE_SYSTEM_TINYXML2=OFF -DUSE_SYSTEM_TWEENY=OFF -DBRLS_UNITY_BUILD=OFF -DPLAYWISE_VERSION=$(PLAYWISE_VERSION) -DCMAKE_BUILD_TYPE=Release
+	$(STAGE_TIMER) borealis-poc nro -- cmake --build build/borealis-poc/cmake --target playwise-borealis-poc.nro --parallel 4
+	mkdir -p build/borealis-poc
+	cp build/borealis-poc/cmake/playwise-borealis-poc.nro build/borealis-poc/playwise-borealis-poc.nro
+
+borealis-poc-clean:
+	rm -rf build/borealis-poc
+
 sysmodule-nsp: manifest
 	$(STAGE_TIMER) playwise sysmodule -- sh -c '$(MAKE) -C sysmodule && mkdir -p build/switch && cp sysmodule/pctc-sysmodule.nsp build/switch/exefs.nsp && $(DEVKITA64)/bin/aarch64-none-elf-objcopy -O binary sysmodule/pctc-sysmodule.elf build/switch/pctc-sysmodule.bin'
 
@@ -159,4 +170,4 @@ device-lab-package: device-lab-sysmodule device-lab-nro device-lab-overlay
 	$(STAGE_TIMER) device-lab package-zip -- python3 tools/package_device_lab.py --out build/packages/playwise-device-lab --zip build/packages/playwise-device-lab-$(PLAYWISE_VERSION).zip --manifest build/device-lab/generated/release-manifest.json --sysmodule-exefs build/device-lab/switch/exefs.nsp --nro build/device-lab/switch/playwise-device-lab.nro --overlay build/device-lab/switch/playwise-device-lab.ovl
 
 clean:
-	$(STAGE_TIMER) global clean -- sh -c 'rm -rf build/host build/generated build/switch build/packages build/device-lab && if [ "$(CLEAN_EDEN)" = "1" ]; then rm -rf build/eden-test; fi && $(MAKE) -C companion/nro clean || true && rm -rf companion/nro/build-eden companion/nro/pctc-eden.elf companion/nro/pctc-eden.nro companion/nro/pctc-eden.nacp && $(MAKE) -C companion/overlay clean || true && $(MAKE) -C sysmodule clean || true && $(MAKE) -C device_lab/nro clean || true && $(MAKE) -C device_lab/overlay clean || true'
+	$(STAGE_TIMER) global clean -- sh -c 'rm -rf build/host build/generated build/switch build/packages build/device-lab && if [ "$(CLEAN_EDEN)" = "1" ]; then rm -rf build/eden-test; fi && if [ "$(CLEAN_BOREALIS_POC)" = "1" ]; then rm -rf build/borealis-poc; fi && $(MAKE) -C companion/nro clean || true && rm -rf companion/nro/build-eden companion/nro/pctc-eden.elf companion/nro/pctc-eden.nro companion/nro/pctc-eden.nacp && $(MAKE) -C companion/overlay clean || true && $(MAKE) -C sysmodule clean || true && $(MAKE) -C device_lab/nro clean || true && $(MAKE) -C device_lab/overlay clean || true'

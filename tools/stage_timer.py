@@ -55,6 +55,7 @@ PACKAGE_TITLES: dict[str, str] = {
     "playwise-complete": "完整交付包 (playwise-complete)",
     "device-lab": "设备实验室包 (playwise-device-lab)",
     "eden-test": "Eden 模拟器测试包 (eden-test)",
+    "borealis-poc": "Borealis UI 框架 PoC (borealis-poc)",
 }
 
 STAGE_DESCRIPTIONS: dict[str, dict[str, str]] = {
@@ -88,6 +89,11 @@ STAGE_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "manifest": "生成 Eden 专用元数据清单",
         "nro": "编译 Eden 模拟器专用前端 NRO",
         "verify": "宿主机 Eden NACP 与 Marker 隔离校验",
+    },
+    "borealis-poc": {
+        "configure": "配置固定 Borealis/deko3d CMake 工程",
+        "nro": "编译隔离 UI 框架 PoC NRO",
+        "verify": "宿主机 PoC NACP 与 Marker 隔离校验",
     },
 }
 
@@ -194,7 +200,7 @@ def format_timing_report(
     lines.append("-" * bar_width)
 
     # Order: global first, then specific packages in standard order, then any other
-    desired_order = ["global", "playwise", "playwise-complete", "device-lab", "eden-test"]
+    desired_order = ["global", "playwise", "playwise-complete", "device-lab", "eden-test", "borealis-poc"]
     package_keys = [k for k in desired_order if k in grouped]
     for k in grouped:
         if k not in package_keys:

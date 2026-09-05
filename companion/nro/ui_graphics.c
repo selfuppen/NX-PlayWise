@@ -59,6 +59,7 @@ typedef struct {
 typedef struct {
     Framebuffer framebuffer;
     FT_Library library;
+    FT_Face latin_face;
     FT_Face face;
     bool framebuffer_ready;
     bool font_ready;
@@ -562,26 +563,9 @@ static void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int 
 }
 
 
-/* 圆角矩形符号距离（负值在内部）。轴对齐带状区域免开方，仅角部走 sqrt。 */
-static float round_rect_sdf(UiRect rect, int radius, float x, float y)
-{
-    float hw = rect.width * 0.5f;
-    float hh = rect.height * 0.5f;
-    float r = (float)radius;
-    float qx;
-    float qy;
-    if (r > hw) r = hw;
-    if (r > hh) r = hh;
-    qx = fabsf(x - (rect.x + hw)) - (hw - r);
-    qy = fabsf(y - (rect.y + hh)) - (hh - r);
-    if (qx <= 0 && qy <= 0) return (qx > qy ? qx : qy) - r;
-    if (qx <= 0) return qy - r;
-    if (qy <= 0) return qx - r;
-    return sqrtf(qx * qx + qy * qy) - r;
-}
-
-/* 圆角感知软阴影：沿卡片外缘按 SDF 距离做 smoothstep 衰减，y_bias 营造
- * 光源在顶部的下坠感；卡片本体覆盖的像素跳过，由随后的卡片填充覆盖。 */
+/* 软件 framebuffer 上的窄渐变阴影会形成可见色带，底座模式的 1.5 倍缩放
+ * 还会进一步放大这些色带。页面与弹窗统一使用扁平表面、边框和遮罩分层；
+ * 保留入口使调用点保持清晰，后续矢量后端可在这里重新提供真正的模糊阴影。 */
 static void draw_round_rect_shadow(
     uint32_t *pixels,
     uint32_t stride,
@@ -591,34 +575,13 @@ static void draw_round_rect_shadow(
     int peak_alpha,
     int y_bias)
 {
-    int margin = blur + 2;
-    int x_start = rect.x - margin < 0 ? 0 : rect.x - margin;
-    int x_end = rect.x + rect.width + margin > SCREEN_WIDTH ? SCREEN_WIDTH : rect.x + rect.width + margin;
-    int y_start = rect.y + y_bias - margin < 0 ? 0 : rect.y + y_bias - margin;
-    int y_end = rect.y + rect.height + y_bias + margin > SCREEN_HEIGHT ? SCREEN_HEIGHT : rect.y + rect.height + y_bias + margin;
-    int x;
-    int y;
-    if (blur <= 0 || peak_alpha <= 0) return;
-    if (radius > rect.width / 2) radius = rect.width / 2;
-    if (radius > rect.height / 2) radius = rect.height / 2;
-    /* 阴影峰值按主题 shadow_strength 缩放，暗色主题阴影更实。 */
-    if (g_palette && g_palette->shadow_strength) {
-        peak_alpha = peak_alpha * (int)g_palette->shadow_strength / 100;
-    }
-    for (y = y_start; y < y_end; ++y) {
-        for (x = x_start; x < x_end; ++x) {
-            float dist;
-            float t;
-            int alpha;
-            if (x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height) continue;
-            dist = round_rect_sdf(rect, radius, (float)x + 0.5f, (float)(y - y_bias) + 0.5f);
-            if (dist >= (float)blur) continue;
-            t = 1.0f - dist / (float)blur;
-            if (t < 0) t = 0;
-            alpha = (int)(peak_alpha * t * t * (3.0f - 2.0f * t) + 0.5f);
-            if (alpha > 0) blend_pixel(pixels, stride, x, y, RGBA8_MAXALPHA(0, 0, 0), (uint8_t)alpha);
-        }
-    }
+    (void)pixels;
+    (void)stride;
+    (void)rect;
+    (void)radius;
+    (void)blur;
+    (void)peak_alpha;
+    (void)y_bias;
 }
 
 /* 海拔档位：页面卡片用轻阴影；弹窗在 draw_dialog_shell 用更强更扩散的一档。 */
@@ -918,18 +881,22 @@ static bool set_font_size(int size)
     if (FT_Set_Pixel_Sizes(g_ui.face, 0, (FT_UInt)size) != 0) {
         return false;
     }
+    if (g_ui.latin_face) {
+        (void)FT_Set_Pixel_Sizes(g_ui.latin_face, 0, (FT_UInt)size);
+    }
     g_font_pixel_size = size;
     return true;
 }
 
-/* 命中返回缓存项；未命中渲染一次并写入缓存。失败（缺字等）返回 NULL，不缓存。
- * bold 走独立缓存键，位图做 3x3 最大值膨胀 1px 生成粗体变体（与后端无关）。 */
-static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bold)
+/* 命中返回缓存项；未命中渲染一次并写入缓存。拉丁字符优先使用标准
+ * Nintendo 共享字体，缺字时回退简体中文共享字体。 */
+static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size)
 {
     uint32_t mask = UI_GLYPH_CACHE_SIZE - 1;
-    uint32_t size_key = (uint32_t)size | (bold ? 0x10000u : 0u);
+    uint32_t size_key = (uint32_t)size;
     uint32_t slot = ui_glyph_hash(codepoint, size_key);
     UiGlyphEntry *entry;
+    FT_Face face;
     if (!set_font_size(size)) {
         return NULL;
     }
@@ -944,54 +911,32 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
         slot = ui_glyph_hash(codepoint, size_key);
         entry = &g_glyph_cache[slot];
     }
-    if (FT_Load_Char(g_ui.face, codepoint, FT_LOAD_RENDER) != 0) {
+    face = g_ui.face;
+    if (g_ui.latin_face && FT_Get_Char_Index(g_ui.latin_face, codepoint) != 0) {
+        face = g_ui.latin_face;
+    }
+    if (FT_Load_Char(face, codepoint, FT_LOAD_RENDER | FT_LOAD_TARGET_LIGHT) != 0) {
         return NULL;
     }
     {
-        FT_GlyphSlot glyph = g_ui.face->glyph;
+        FT_GlyphSlot glyph = face->glyph;
         uint8_t *copy = NULL;
-        int extra = bold ? 1 : 0;
         if (glyph->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY && glyph->bitmap.rows > 0 &&
             glyph->bitmap.width > 0) {
-            int width = (int)glyph->bitmap.width + extra * 2;
-            int height = (int)glyph->bitmap.rows + extra * 2;
+            int width = (int)glyph->bitmap.width;
+            int height = (int)glyph->bitmap.rows;
             copy = (uint8_t *)malloc((size_t)width * height);
             if (copy) {
                 int row;
-                int column;
-                memset(copy, 0, (size_t)width * height);
                 for (row = 0; row < height; ++row) {
                     uint8_t *out_line = copy + (size_t)row * width;
-                    for (column = 0; column < width; ++column) {
-                        if (!bold) {
-                            out_line[column] = glyph->bitmap.buffer[(size_t)row * glyph->bitmap.pitch + column];
-                            continue;
-                        }
-                        /* 3x3 邻域最大值：输出外圈 1px 由源图边缘膨胀而来。 */
-                        int source_row;
-                        int source_column;
-                        uint8_t value = 0;
-                        for (source_row = row - 1; source_row <= row + 1; ++source_row) {
-                            for (source_column = column - 1; source_column <= column + 1; ++source_column) {
-                                if (source_row < 0 || source_row >= (int)glyph->bitmap.rows ||
-                                    source_column < 0 || source_column >= (int)glyph->bitmap.width) continue;
-                                {
-                                    uint8_t sample = glyph->bitmap.buffer[
-                                        (size_t)source_row * glyph->bitmap.pitch + source_column];
-                                    if (sample > value) value = sample;
-                                }
-                            }
-                        }
-                        out_line[column] = value;
-                    }
+                    const uint8_t *source_line = glyph->bitmap.pitch >= 0
+                        ? glyph->bitmap.buffer + (size_t)row * (size_t)glyph->bitmap.pitch
+                        : glyph->bitmap.buffer + (size_t)(height - 1 - row) * (size_t)(-glyph->bitmap.pitch);
+                    memcpy(out_line, source_line, (size_t)width);
                 }
-                if (bold) {
-                    entry->bearing_x = (int16_t)(glyph->bitmap_left - 1);
-                    entry->bearing_y = (int16_t)(glyph->bitmap_top + 1);
-                } else {
-                    entry->bearing_x = (int16_t)glyph->bitmap_left;
-                    entry->bearing_y = (int16_t)glyph->bitmap_top;
-                }
+                entry->bearing_x = (int16_t)glyph->bitmap_left;
+                entry->bearing_y = (int16_t)glyph->bitmap_top;
             }
         }
         if (!copy) {
@@ -1010,8 +955,8 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
         entry->codepoint = codepoint;
         entry->size = size_key;
         entry->advance = (int16_t)(glyph->advance.x >> 6);
-        entry->width = (uint16_t)((int)glyph->bitmap.width + extra * 2);
-        entry->height = (uint16_t)((int)glyph->bitmap.rows + extra * 2);
+        entry->width = (uint16_t)glyph->bitmap.width;
+        entry->height = (uint16_t)glyph->bitmap.rows;
         entry->bitmap = copy;
         ++g_glyph_cache_count;
         return entry;
@@ -1027,7 +972,7 @@ static int measure_text(const char *text, int size)
     }
     while (*cursor) {
         uint32_t codepoint = ui_decode_utf8(&cursor);
-        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, false);
+        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size);
         if (entry) {
             width += entry->advance;
         }
@@ -1035,7 +980,7 @@ static int measure_text(const char *text, int size)
     return width;
 }
 
-static void draw_text_impl(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color, bool bold)
+static void draw_text_impl(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color)
 {
     const char *cursor = text;
     int pen_x = x;
@@ -1045,7 +990,7 @@ static void draw_text_impl(uint32_t *pixels, uint32_t stride, int x, int baselin
     }
     while (*cursor) {
         uint32_t codepoint = ui_decode_utf8(&cursor);
-        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, bold);
+        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size);
         int row;
         if (!entry) {
             continue;
@@ -1069,15 +1014,15 @@ static void draw_text_impl(uint32_t *pixels, uint32_t stride, int x, int baselin
     }
 }
 
-/* 粗体走缓存的膨胀变体，单次绘制，无位移重影。 */
+/* 软件后端不合成人工粗体；标题暂用字体原始轮廓，避免笔画粘连。 */
 static void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color)
 {
-    draw_text_impl(pixels, stride, x, baseline, text, size, color, false);
+    draw_text_impl(pixels, stride, x, baseline, text, size, color);
 }
 
 static void draw_text_bold(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color)
 {
-    draw_text_impl(pixels, stride, x, baseline, text, size, color, true);
+    draw_text_impl(pixels, stride, x, baseline, text, size, color);
 }
 
 static void draw_text_center(uint32_t *pixels, uint32_t stride, UiRect rect, const char *text, int size, uint32_t color)
@@ -1109,7 +1054,7 @@ static void fit_text(char *out, size_t out_size, const char *text, int size, int
     while (*cursor) {
         const char *next = cursor;
         uint32_t codepoint = ui_decode_utf8(&next);
-        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, false);
+        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size);
         int advance = 0;
         if (entry) {
             advance = entry->advance;
@@ -4576,8 +4521,12 @@ bool ptc_ui_graphics_init(void)
         return false;
     }
     g_ui.pl_ready = true;
+    if (FT_Init_FreeType(&g_ui.library) != 0) {
+        ptc_ui_graphics_exit();
+        return false;
+    }
     result = plGetSharedFontByType(&font_data, PlSharedFontType_ChineseSimplified);
-    if (R_FAILED(result) || FT_Init_FreeType(&g_ui.library) != 0) {
+    if (R_FAILED(result)) {
         ptc_ui_graphics_exit();
         return false;
     }
@@ -4591,6 +4540,16 @@ bool ptc_ui_graphics_init(void)
         return false;
     }
     g_ui.font_ready = true;
+    /* 标准共享字体提供更自然的拉丁字形；加载失败时仍可完整回退中文字体。 */
+    result = plGetSharedFontByType(&font_data, PlSharedFontType_Standard);
+    if (R_SUCCEEDED(result)) {
+        (void)FT_New_Memory_Face(
+            g_ui.library,
+            (const FT_Byte *)font_data.address,
+            (FT_Long)font_data.size,
+            0,
+            &g_ui.latin_face);
+    }
     result = framebufferCreate(
         &g_ui.framebuffer,
         nwindowGetDefault(),
@@ -4623,6 +4582,9 @@ void ptc_ui_graphics_exit(void)
     }
     if (g_ui.font_ready) {
         FT_Done_Face(g_ui.face);
+    }
+    if (g_ui.latin_face) {
+        FT_Done_Face(g_ui.latin_face);
     }
     if (g_ui.library) {
         FT_Done_FreeType(g_ui.library);

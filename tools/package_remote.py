@@ -65,6 +65,7 @@ NACP_TITLE_SIZE = 0x200
 NACP_DISPLAY_VERSION_OFFSET = 0x3060
 APP_TITLE = "任我玩".encode("utf-8")
 EDEN_APP_TITLE = b"PlayWise Eden Test"
+BOREALIS_POC_APP_TITLE = b"PlayWise Borealis PoC"
 DEVICE_LAB_NRO_TITLE = b"PlayWise DEVICE LAB"
 DEVICE_LAB_OVERLAY_TITLE = b"PlayWise Device Lab"
 DEVICE_LAB_NRO_UI_MARKER = "准备启用实验后台".encode("utf-8")
@@ -77,6 +78,7 @@ COMPLETE_PACKAGE = f"playwise-complete-{PLAYWISE_VERSION}.zip"
 OFFLINE_HTML = ROOT / "tools" / "ptc_frontend" / "playwise-offline.html"
 DEVICE_LAB_PACKAGE = f"playwise-device-lab-{PLAYWISE_VERSION}.zip"
 EDEN_NRO = "pctc-eden.nro"
+BOREALIS_POC_NRO = "playwise-borealis-poc.nro"
 PACKAGE_EXPECTATIONS = {"playwise": True}
 RELEASE_COMPONENTS = (
     f"{CONTENT_ROOT}/exefs.nsp",
@@ -111,6 +113,10 @@ FORBIDDEN_EDEN_MARKERS = (
     b"eden-test",
     b"playwise-eden",
     b"playwise-eden-test-secret-00000001",
+)
+FORBIDDEN_BOREALIS_POC_MARKERS = (
+    b"PLAYWISE BOREALIS POC",
+    b"borealis-poc",
 )
 NRO_INFORMATION_MARKERS = (
     "软件信息".encode("utf-8"),
@@ -195,6 +201,22 @@ def verify_eden_nro(path: Path, manifest: dict) -> None:
             raise PackageError(f"{path.name}: missing Eden marker {marker.decode('ascii')}")
 
 
+def verify_borealis_poc_nro(path: Path) -> None:
+    """Verify the framework PoC is self-identifying and outside release packages."""
+    if not path.is_file():
+        raise PackageError(f"missing Borealis PoC NRO: {path}")
+    data = path.read_bytes()
+    verify_nro_asset(
+        data,
+        path.name,
+        require_icon=True,
+        expected_title=BOREALIS_POC_APP_TITLE,
+        expected_version=f"{PLAYWISE_VERSION}-poc",
+    )
+    if FORBIDDEN_BOREALIS_POC_MARKERS[0] not in data:
+        raise PackageError(f"{path.name}: missing Borealis PoC marker")
+
+
 def verify_package_zip(
     path: Path,
     prefix: str | None = None,
@@ -242,6 +264,9 @@ def verify_package_zip(
         for marker in FORBIDDEN_EDEN_MARKERS:
             if marker in data:
                 raise PackageError(f"{path.name}: {member_name} contains forbidden Eden marker {marker.decode('ascii')}")
+        for marker in FORBIDDEN_BOREALIS_POC_MARKERS:
+            if marker in data:
+                raise PackageError(f"{path.name}: {member_name} contains forbidden Borealis PoC marker {marker.decode('ascii')}")
     boot2 = f"{CONTENT_ROOT}/flags/boot2.flag"
     exefs = f"{CONTENT_ROOT}/exefs.nsp"
     nro = "switch/playwise/pctc.nro"
@@ -296,6 +321,15 @@ def verify_device_lab_zip(path: Path) -> None:
         embedded = json.dumps(manifest, ensure_ascii=True, separators=(",", ":")).encode("ascii")
         nro_data = package.read(nro_path)
         overlay_data = package.read(overlay_path)
+        for member_name in names:
+            if member_name.endswith("/"):
+                continue
+            member_data = package.read(member_name)
+            for marker in FORBIDDEN_BOREALIS_POC_MARKERS:
+                if marker in member_data:
+                    raise PackageError(
+                        f"{path.name}: {member_name} contains forbidden Borealis PoC marker {marker.decode('ascii')}"
+                    )
         if embedded not in nro_data:
             raise PackageError(f"{path.name}: {nro_path} does not embed the Device Lab manifest")
         if embedded not in overlay_data:
@@ -349,6 +383,9 @@ def verify_flat_sysmodule(path: Path, manifest: dict, *, release: bool) -> None:
     for marker in FORBIDDEN_EDEN_MARKERS:
         if marker in data:
             raise PackageError(f"{path.name}: sysmodule contains forbidden Eden marker {marker.decode('ascii')}")
+    for marker in FORBIDDEN_BOREALIS_POC_MARKERS:
+        if marker in data:
+            raise PackageError(f"{path.name}: sysmodule contains forbidden Borealis PoC marker {marker.decode('ascii')}")
 
 
 def verify_packaged_artifacts(path: Path, manifest: dict) -> None:
@@ -377,6 +414,10 @@ def latest_packages(package_dir: Path, target_packages: set[str] | None = None) 
     else:
         active_targets = target_packages
 
+    # Isolated NRO-only targets do not create or mutate public package Zips.
+    if not active_targets:
+        return {}
+
     result: dict[str, Path] = {}
     expected_names: set[str] = set()
     for target in active_targets:
@@ -403,6 +444,7 @@ def container_command(
     *,
     only: str = "all",
     with_eden: bool = True,
+    with_borealis_poc: bool = False,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -412,8 +454,12 @@ def container_command(
 
     clean_cmd = ""
     if clean:
-        clean_eden = " CLEAN_EDEN=1" if (only in ("all", "eden") and with_eden) else ""
-        clean_cmd = f"make clean{clean_eden} && "
+        if only == "borealis-poc":
+            clean_cmd = "make borealis-poc-clean && "
+        else:
+            clean_eden = " CLEAN_EDEN=1" if (only in ("all", "eden") and with_eden) else ""
+            clean_poc = " CLEAN_BOREALIS_POC=1" if only == "all" and with_borealis_poc else ""
+            clean_cmd = f"make clean{clean_eden}{clean_poc} && "
 
     targets: list[str] = []
     if run_tests:
@@ -423,6 +469,8 @@ def container_command(
         targets.append("packages")
         if with_eden:
             targets.append("eden-test-nro")
+        if with_borealis_poc:
+            targets.append("borealis-poc-nro")
     elif only == "playwise":
         targets.append("package-playwise")
     elif only == "complete":
@@ -431,6 +479,8 @@ def container_command(
         targets.append("device-lab-package")
     elif only == "eden":
         targets.append("eden-test-nro")
+    elif only == "borealis-poc":
+        targets.append("borealis-poc-nro")
     else:
         raise PackageError(f"unknown package target: {only}")
 
@@ -455,6 +505,7 @@ def ssh_command(
     *,
     only: str = "all",
     with_eden: bool = True,
+    with_borealis_poc: bool = False,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -471,6 +522,7 @@ def ssh_command(
             container_path,
             only=only,
             with_eden=with_eden,
+            with_borealis_poc=with_borealis_poc,
             clean=clean,
             run_tests=run_tests,
             jobs=jobs,
@@ -488,6 +540,7 @@ def run_container(
     *,
     only: str = "all",
     with_eden: bool = True,
+    with_borealis_poc: bool = False,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -501,6 +554,7 @@ def run_container(
             identity,
             only=only,
             with_eden=with_eden,
+            with_borealis_poc=with_borealis_poc,
             clean=clean,
             run_tests=run_tests,
             jobs=jobs,
@@ -538,6 +592,7 @@ def build_and_verify(
     *,
     only: str = "all",
     with_eden: bool = True,
+    with_borealis_poc: bool = False,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -546,13 +601,17 @@ def build_and_verify(
     package_dir = ROOT / "build" / "packages"
     device_lab_dir = ROOT / "build" / "device-lab"
     eden_dir = ROOT / "build" / "eden-test"
+    borealis_poc_dir = ROOT / "build" / "borealis-poc"
 
     stage_timer.clear_timing_records()
     if clean:
-        clean_package_results(package_dir)
-        remove_path(device_lab_dir)
-        if with_eden:
+        if only != "borealis-poc":
+            clean_package_results(package_dir)
+            remove_path(device_lab_dir)
+        if only in ("all", "eden") and with_eden:
             remove_path(eden_dir)
+        if with_borealis_poc or only == "borealis-poc":
+            remove_path(borealis_poc_dir)
     else:
         package_dir.mkdir(parents=True, exist_ok=True)
         if only in ("all", "playwise", "complete"):
@@ -563,6 +622,8 @@ def build_and_verify(
             remove_path(package_dir / DEVICE_LAB_PACKAGE)
         if only in ("all", "eden") and with_eden:
             remove_path(eden_dir / EDEN_NRO)
+        if only == "borealis-poc" or (only == "all" and with_borealis_poc):
+            remove_path(borealis_poc_dir / BOREALIS_POC_NRO)
 
     run_container(
         host,
@@ -572,6 +633,7 @@ def build_and_verify(
         identity,
         only=only,
         with_eden=with_eden,
+        with_borealis_poc=with_borealis_poc,
         clean=clean,
         run_tests=run_tests,
         jobs=jobs,
@@ -580,18 +642,27 @@ def build_and_verify(
     if only == "all":
         target_pkgs = {"playwise", "complete", "device_lab"}
         check_eden = with_eden
+        check_borealis_poc = with_borealis_poc
     elif only == "playwise":
         target_pkgs = {"playwise"}
         check_eden = False
+        check_borealis_poc = False
     elif only == "complete":
         target_pkgs = {"playwise", "complete"}
         check_eden = False
+        check_borealis_poc = False
     elif only == "device-lab":
         target_pkgs = {"device_lab"}
         check_eden = False
+        check_borealis_poc = False
     elif only == "eden":
         target_pkgs = set()
         check_eden = True
+        check_borealis_poc = False
+    elif only == "borealis-poc":
+        target_pkgs = set()
+        check_eden = False
+        check_borealis_poc = True
     else:
         raise PackageError(f"unknown package target: {only}")
 
@@ -632,6 +703,11 @@ def build_and_verify(
         verify_eden_nro(eden_dir / EDEN_NRO, eden_manifest)
         stage_timer.write_timing_record("eden-test", "verify", time.perf_counter() - t0)
 
+    if check_borealis_poc:
+        t0 = time.perf_counter()
+        verify_borealis_poc_nro(borealis_poc_dir / BOREALIS_POC_NRO)
+        stage_timer.write_timing_record("borealis-poc", "verify", time.perf_counter() - t0)
+
     records = stage_timer.read_timing_records()
     overall_wall_time = time.perf_counter() - overall_t0
 
@@ -664,9 +740,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--identity", type=Path, help="Optional SSH private key path.")
     parser.add_argument(
         "--only",
-        choices=["all", "playwise", "complete", "device-lab", "eden"],
+        choices=["all", "playwise", "complete", "device-lab", "eden", "borealis-poc"],
         default="all",
-        help="Only build and verify a specific package target. Choices: all, playwise, complete, device-lab, eden. (Default: all)",
+        help="Only build and verify a specific target. Choices: all, playwise, complete, device-lab, eden, borealis-poc. (Default: all)",
     )
     eden_group = parser.add_mutually_exclusive_group()
     eden_group.add_argument(
@@ -682,6 +758,12 @@ def parse_args() -> argparse.Namespace:
         dest="with_eden",
         action="store_false",
         help="Disable building and verifying the emulator-only Eden NRO.",
+    )
+    parser.add_argument(
+        "--with-borealis-poc",
+        action="store_true",
+        default=False,
+        help="Also build and verify the isolated Borealis UI PoC NRO.",
     )
     clean_group = parser.add_mutually_exclusive_group()
     clean_group.add_argument(
@@ -724,6 +806,7 @@ def main() -> int:
             args.identity,
             only=args.only,
             with_eden=args.with_eden,
+            with_borealis_poc=args.with_borealis_poc,
             clean=args.clean,
             run_tests=not args.skip_tests,
             jobs=args.jobs,

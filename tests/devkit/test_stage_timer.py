@@ -44,14 +44,16 @@ def test_format_timing_report() -> None:
         {"package": "playwise", "stage": "manifest", "duration": 0.5},
         {"package": "playwise", "stage": "sysmodule", "duration": 4.5},
         {"package": "device-lab", "stage": "nro", "duration": 4.0},
+        {"package": "borealis-poc", "stage": "verify", "duration": 0.5},
     ]
     report = stage_timer.format_timing_report(records, metadata={"目标": "all", "模式": "clean"})
     require("PlayWise 打包耗时统计报告" in report, "report must include header")
     require("[目标: all]" in report, "report must include metadata")
     require("标准分发包 (playwise)" in report, "report must include package title")
     require("设备实验室包 (playwise-device-lab)" in report, "report must include device-lab title")
-    require("10.00s" in report, "total must be 10.00s")
-    require("45.0%" in report or "45%" in report, "sysmodule must be 45% of total or 90% of package")
+    require("Borealis UI 框架 PoC (borealis-poc)" in report, "report must include Borealis PoC title")
+    require("10.50s" in report, "total must be 10.50s")
+    require("90.0%" in report or "90%" in report, "sysmodule must be 90% of its package")
 
     empty_report = stage_timer.format_timing_report([])
     require("没有耗时统计记录" in empty_report, "empty records must be handled safely")

@@ -25,6 +25,7 @@ typedef struct {
 } *FT_Face;
 #define FT_LOAD_DEFAULT 0
 #define FT_LOAD_RENDER 1
+#define FT_LOAD_TARGET_LIGHT 4
 #define FT_PIXEL_MODE_GRAY 2
 static inline int FT_Init_FreeType(FT_Library *lib) { *lib = (void *)1; return 0; }
 static inline int FT_New_Memory_Face(FT_Library lib, const FT_Byte *data, FT_Long len, long index, FT_Face *out)
@@ -37,6 +38,11 @@ static inline int FT_New_Memory_Face(FT_Library lib, const FT_Byte *data, FT_Lon
 }
 static inline int FT_Set_Pixel_Sizes(FT_Face face, unsigned int w, unsigned int h)
 { (void)w; face->scale = stbtt_ScaleForMappingEmToPixels(&face->info, (float)h); return 0; }
+static inline FT_UInt FT_Get_Char_Index(FT_Face face, unsigned long code)
+{
+    if (!face) return 0;
+    return (FT_UInt)stbtt_FindGlyphIndex(&face->info, (int)code);
+}
 static inline int FT_Load_Char(FT_Face face, unsigned long code, int flags)
 {
     int advance, bearing, w, h, x, y;
@@ -44,7 +50,7 @@ static inline int FT_Load_Char(FT_Face face, unsigned long code, int flags)
     memset(&face->slot, 0, sizeof(face->slot));
     stbtt_GetCodepointHMetrics(&face->info, (int)code, &advance, &bearing);
     face->slot.advance.x = (long)(advance * face->scale + 0.5f) * 64;
-    if (flags == FT_LOAD_RENDER) {
+    if (flags & FT_LOAD_RENDER) {
         face->slot.bitmap.buffer = stbtt_GetCodepointBitmap(&face->info, face->scale, face->scale, (int)code, &w, &h, &x, &y);
         face->slot.bitmap.width = w;
         face->slot.bitmap.rows = h;

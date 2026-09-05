@@ -89,11 +89,18 @@ def test_container_command() -> None:
     require("--emit-bundle" not in command, "container command must not stream a copied bundle")
     require("git " not in command, "mounted local source must not require a git update")
     require("eden-test-nro" in command, "the default build must include the emulator NRO target")
+    require("borealis-poc-nro" not in command, "the framework PoC must remain opt-in")
     require("CLEAN_EDEN=1" not in command, "the default build must keep valid Eden intermediates")
 
     clean = package_remote.container_command(clean=True)
     require("make clean" in clean, "explicit clean build must remove stale intermediates first")
     require("CLEAN_EDEN=1" in clean, "explicit clean build must remove Eden intermediates")
+    require("CLEAN_BOREALIS_POC=1" not in clean, "default clean must not touch the opt-in PoC")
+
+    with_poc = package_remote.container_command(with_borealis_poc=True)
+    require("borealis-poc-nro" in with_poc, "with_borealis_poc=True must add the isolated PoC target")
+    clean_with_poc = package_remote.container_command(with_borealis_poc=True, clean=True)
+    require("CLEAN_BOREALIS_POC=1" in clean_with_poc, "clean PoC build must remove its intermediates")
 
     without_eden = package_remote.container_command(with_eden=False)
     require("eden-test-nro" not in without_eden, "with_eden=False must omit Eden target")
@@ -110,6 +117,13 @@ def test_container_command() -> None:
     require("device-lab-package" in only_lab, "only=device-lab must target device-lab-package")
     require("eden-test-nro" not in only_lab, "only=device-lab must omit Eden")
 
+    only_poc = package_remote.container_command(only="borealis-poc")
+    require("borealis-poc-nro" in only_poc, "only=borealis-poc must target the framework PoC")
+    require("packages" not in only_poc, "only=borealis-poc must not build public packages")
+    clean_only_poc = package_remote.container_command(only="borealis-poc", clean=True)
+    require("borealis-poc-clean" in clean_only_poc, "clean PoC build must use its scoped clean target")
+    require("make clean" not in clean_only_poc, "clean PoC build must not remove public package outputs")
+
     jobs_cmd = package_remote.container_command(jobs=4)
     require("make -j4 " in jobs_cmd, "explicit jobs must be reflected in make command")
 
@@ -123,6 +137,9 @@ def test_ssh_command() -> None:
     without_eden_command = package_remote.ssh_command(with_eden=False)
     require(without_eden_command[-1] == package_remote.container_command(with_eden=False),
             "without eden must reach container through same SSH transport")
+    with_poc_command = package_remote.ssh_command(with_borealis_poc=True)
+    require(with_poc_command[-1] == package_remote.container_command(with_borealis_poc=True),
+            "the Borealis PoC option must reach the container through the same SSH transport")
     lab_command = package_remote.ssh_command(only="device-lab")
     require(lab_command[-1] == package_remote.container_command(only="device-lab"),
             "only=device-lab must propagate to container command")
@@ -176,6 +193,20 @@ def test_zip_verification() -> None:
                     "Eden marker rejection must explain the isolation boundary")
         else:
             raise AssertionError("a Release binary containing Eden markers must be rejected")
+
+        poc_path = root / "playwise-20260730-120005.zip"
+        poc_manifest = write_package(
+            poc_path,
+            True,
+            component_marker=package_remote.FORBIDDEN_BOREALIS_POC_MARKERS[0],
+        )
+        try:
+            package_remote.verify_package_zip(poc_path, "playwise", expected_manifest=poc_manifest)
+        except package_remote.PackageError as exc:
+            require("forbidden Borealis PoC marker" in str(exc),
+                    "Borealis PoC contamination must explain the isolation boundary")
+        else:
+            raise AssertionError("a Release binary containing Borealis PoC markers must be rejected")
 
         mutable_path = root / "playwise-20260730-120003.zip"
         mutable_manifest = write_package(mutable_path, True)
@@ -243,6 +274,46 @@ def test_eden_nro_verification() -> None:
             require("NACP title must be" in str(exc), "an Eden NRO wearing the Release title must be rejected")
         else:
             raise AssertionError("an Eden NRO with the Release NACP title must be rejected")
+
+
+def test_borealis_poc_nro_verification() -> None:
+    marker = package_remote.FORBIDDEN_BOREALIS_POC_MARKERS[0]
+    with tempfile.TemporaryDirectory(prefix="ptc-borealis-poc-") as tmp_dir:
+        root = Path(tmp_dir)
+        good = root / package_remote.BOREALIS_POC_NRO
+        good.write_bytes(valid_nro(
+            with_icon=True,
+            embedded_manifest=marker,
+            title=package_remote.BOREALIS_POC_APP_TITLE,
+            display_version=f"{package_remote.PLAYWISE_VERSION}-poc",
+        ))
+        package_remote.verify_borealis_poc_nro(good)
+
+        unbadged = root / "unbadged.nro"
+        unbadged.write_bytes(valid_nro(
+            with_icon=True,
+            title=package_remote.BOREALIS_POC_APP_TITLE,
+            display_version=f"{package_remote.PLAYWISE_VERSION}-poc",
+        ))
+        try:
+            package_remote.verify_borealis_poc_nro(unbadged)
+        except package_remote.PackageError as exc:
+            require("missing Borealis PoC marker" in str(exc), "an unbadged PoC must be rejected")
+        else:
+            raise AssertionError("a Borealis PoC without its marker must be rejected")
+
+        mistitled = root / "mistitled.nro"
+        mistitled.write_bytes(valid_nro(
+            with_icon=True,
+            embedded_manifest=marker,
+            display_version=f"{package_remote.PLAYWISE_VERSION}-poc",
+        ))
+        try:
+            package_remote.verify_borealis_poc_nro(mistitled)
+        except package_remote.PackageError as exc:
+            require("NACP title must be" in str(exc), "a PoC wearing the Release title must be rejected")
+        else:
+            raise AssertionError("a Borealis PoC with the Release NACP title must be rejected")
 
 
 def test_device_lab_zip_verification() -> None:
@@ -354,6 +425,7 @@ def main() -> int:
     test_container_ssh_key_persistence()
     test_zip_verification()
     test_eden_nro_verification()
+    test_borealis_poc_nro_verification()
     test_device_lab_zip_verification()
     test_clean_package_safety()
     test_public_package_selection()

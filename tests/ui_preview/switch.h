@@ -8,8 +8,10 @@ typedef struct { int unused; } Framebuffer;
 typedef struct { const void *address; size_t size; } PlFontData;
 #define PlServiceType_User 0
 #define PlSharedFontType_ChineseSimplified 0
+#define PlSharedFontType_Standard 1
 #define PIXEL_FORMAT_RGBA_8888 0
 #define R_FAILED(value) ((value) != 0)
+#define R_SUCCEEDED(value) ((value) == 0)
 #define RGBA8_MAXALPHA(r,g,b) ((uint32_t)(r) | ((uint32_t)(g) << 8) | ((uint32_t)(b) << 16) | 0xFF000000u)
 extern uint32_t preview_pixels[1280 * 720];
 static inline int plInitialize(int type) { (void)type; return 0; }
