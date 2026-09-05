@@ -29,6 +29,10 @@ set(POC_ICON "${CMAKE_CURRENT_SOURCE_DIR}/../../companion/nro/icon.png")
 
 add_subdirectory("${BOREALIS_LIBRARY}" "${CMAKE_CURRENT_BINARY_DIR}/borealis")
 
+# The PoC is fully offline. Eden v0.2.1 does not implement the unrelated
+# ISelfController wireless-priority command and stops guest execution on it.
+target_compile_definitions(borealis PRIVATE BOREALIS_SKIP_WIRELESS_PRIORITY)
+
 add_executable(${POC_TARGET}
     source/main.cpp
     "${BOREALIS_LIBRARY}/lib/platforms/switch/switch_wrapper.c"
