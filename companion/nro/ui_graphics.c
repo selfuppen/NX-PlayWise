@@ -551,9 +551,136 @@ static void draw_header(uint32_t *pixels, uint32_t stride, const char *title, co
     draw_text(pixels, stride, 124, 77, subtitle, 18, UI_MUTED);
 }
 
+static void draw_single_key_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int size, const char *key_str, bool disabled)
+{
+    int d = size;
+    int r = d / 2;
+    uint32_t bg_col;
+    uint32_t border_col;
+    uint32_t fg_col;
+
+    if (disabled) {
+        bg_col = UI_RAISED;
+        border_col = UI_BORDER;
+        fg_col = UI_DISABLED;
+    } else {
+        if (g_theme.resolved == PTC_UI_RESOLVED_DARK) {
+            bg_col = 0x0124354D;
+            border_col = 0x013D506E;
+            fg_col = UI_RGB(0xF3F6FD);
+        } else {
+            bg_col = 0x01DCE3ED;
+            border_col = 0x01B8C5D6;
+            fg_col = UI_RGB(0x172640);
+        }
+    }
+    fill_round_rect(pixels, stride, (UiRect){x, y, d, d}, r, bg_col);
+    draw_rect_outline(pixels, stride, (UiRect){x, y, d, d}, r, 1, border_col);
+
+    if (strcmp(key_str, "+") == 0) {
+        int cx = x + r, cy = y + r;
+        draw_line(pixels, stride, cx - 4, cy, cx + 4, cy, 2, fg_col);
+        draw_line(pixels, stride, cx, cy - 4, cx, cy + 4, 2, fg_col);
+    } else if (strcmp(key_str, "-") == 0) {
+        int cx = x + r, cy = y + r;
+        draw_line(pixels, stride, cx - 4, cy, cx + 4, cy, 2, fg_col);
+    } else {
+        draw_text_center(pixels, stride, (UiRect){x, y, d, d}, key_str, 14, fg_col);
+    }
+}
+
+static void draw_shoulder_key_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int width, int height, const char *key_str, bool disabled)
+{
+    uint32_t bg_col;
+    uint32_t border_col;
+    uint32_t fg_col;
+
+    if (disabled) {
+        bg_col = UI_RAISED;
+        border_col = UI_BORDER;
+        fg_col = UI_DISABLED;
+    } else {
+        if (g_theme.resolved == PTC_UI_RESOLVED_DARK) {
+            bg_col = 0x0124354D;
+            border_col = 0x013D506E;
+            fg_col = UI_RGB(0xF3F6FD);
+        } else {
+            bg_col = 0x01DCE3ED;
+            border_col = 0x01B8C5D6;
+            fg_col = UI_RGB(0x172640);
+        }
+    }
+    fill_round_rect(pixels, stride, (UiRect){x, y, width, height}, 5, bg_col);
+    draw_rect_outline(pixels, stride, (UiRect){x, y, width, height}, 5, 1, border_col);
+    draw_text_center(pixels, stride, (UiRect){x, y, width, height}, key_str, 13, fg_col);
+}
+
+static void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char *label, int size, uint32_t color)
+{
+    if (!label || !*label) return;
+
+    bool disabled = (color == UI_DISABLED);
+
+    /* 匹配复合肩键 "L/R  " 或 "L/R " */
+    if (strncmp(label, "L/R  ", 5) == 0 || strncmp(label, "L/R ", 4) == 0) {
+        const char *rest = strncmp(label, "L/R  ", 5) == 0 ? label + 5 : label + 4;
+        int rest_w = measure_text(rest, size);
+        int slash_w = measure_text("/", 14);
+        int total_w = 24 + 4 + slash_w + 4 + 24 + 8 + rest_w;
+        int start_x = box.x + (box.width - total_w) / 2;
+        if (start_x < box.x + 2) start_x = box.x + 2;
+        int gly_y = box.y + (box.height - 20) / 2;
+        int baseline = box.y + (box.height + size - 4) / 2;
+
+        draw_shoulder_key_glyph(pixels, stride, start_x, gly_y, 24, 20, "L", disabled);
+        draw_text(pixels, stride, start_x + 28, baseline, "/", 14, color);
+        draw_shoulder_key_glyph(pixels, stride, start_x + 28 + slash_w + 4, gly_y, 24, 20, "R", disabled);
+        draw_text(pixels, stride, start_x + 28 + slash_w + 4 + 24 + 8, baseline, rest, size, color);
+        return;
+    }
+
+    /* 匹配单肩键 "ZL  " 或 "ZR  " */
+    if (strncmp(label, "ZL  ", 4) == 0 || strncmp(label, "ZR  ", 4) == 0) {
+        char key_buf[4];
+        memcpy(key_buf, label, 2);
+        key_buf[2] = '\0';
+        const char *rest = label + 4;
+        int rest_w = measure_text(rest, size);
+        int total_w = 32 + 8 + rest_w;
+        int start_x = box.x + (box.width - total_w) / 2;
+        if (start_x < box.x + 2) start_x = box.x + 2;
+        int gly_y = box.y + (box.height - 20) / 2;
+        int baseline = box.y + (box.height + size - 4) / 2;
+
+        draw_shoulder_key_glyph(pixels, stride, start_x, gly_y, 32, 20, key_buf, disabled);
+        draw_text(pixels, stride, start_x + 32 + 8, baseline, rest, size, color);
+        return;
+    }
+
+    /* 匹配单字符圆键 "A  ", "B  ", "X  ", "Y  ", "+  ", "-  " */
+    if ((label[0] == 'A' || label[0] == 'B' || label[0] == 'X' || label[0] == 'Y' ||
+         label[0] == '+' || label[0] == '-') && (label[1] == ' ' && label[2] == ' ')) {
+        char key_buf[2] = {label[0], '\0'};
+        const char *rest = label + 3;
+        int rest_w = measure_text(rest, size);
+        int total_w = 22 + 8 + rest_w;
+        int start_x = box.x + (box.width - total_w) / 2;
+        if (start_x < box.x + 2) start_x = box.x + 2;
+        int gly_y = box.y + (box.height - 22) / 2;
+        int baseline = box.y + (box.height + size - 4) / 2;
+
+        draw_single_key_glyph(pixels, stride, start_x, gly_y, 22, key_buf, disabled);
+        draw_text(pixels, stride, start_x + 22 + 8, baseline, rest, size, color);
+        return;
+    }
+
+    /* 普通文本居中展示 */
+    draw_text_center(pixels, stride, box, label, size, color);
+}
+
 static void draw_footer_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect, const char *label)
 {
-    draw_text_center(pixels, stride, to_uirect(rect), label, 18, UI_MUTED);
+    draw_button_label(pixels, stride, to_uirect(rect), label, 18, UI_MUTED);
 }
 
 static bool parent_status_is_exception(const PtcUiModel *model)
@@ -599,7 +726,7 @@ static void draw_dialog_button(
 {
     UiRect box = to_uirect(rect);
     fill_round_rect(pixels, stride, box, 12, outline ? UI_RGB(g_palette->surface_raised) : background);
-    draw_text_center(pixels, stride, box, label, 21, foreground);
+    draw_button_label(pixels, stride, box, label, 21, foreground);
 }
 
 static int draw_wrapped_text(
@@ -659,7 +786,7 @@ static void draw_candidate_button(uint32_t *pixels, uint32_t stride, PtcUiRect r
     fill_round_rect(pixels, stride, box, 12, fill);
     if (selected) draw_focus_ring(pixels, stride, box, 12);
     else draw_rect_outline(pixels, stride, box, 12, 1, UI_CONTROL);
-    draw_text_center(pixels, stride, box, label, 20, disabled ? UI_DISABLED : foreground);
+    draw_button_label(pixels, stride, box, label, 20, disabled ? UI_DISABLED : foreground);
 }
 
 static void draw_overlay_actions(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, const char *confirm_label)
@@ -779,7 +906,7 @@ static void home_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,
     uint32_t fill = disabled ? UI_RAISED : (primary ? UI_ACCENT : UI_ACCENT_SOFT);
     fill_round_rect(pixels, stride, box, 12, fill);
     if (selected) draw_focus_ring(pixels, stride, box, 12);
-    draw_text_center(pixels, stride, box, label, target.h <= 48 ? 18 : 22,
+    draw_button_label(pixels, stride, box, label, target.h <= 48 ? 18 : 22,
         disabled ? UI_DISABLED : (primary ? UI_ON_ACCENT : UI_ACCENT));
 }
 
@@ -910,14 +1037,14 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
         disabled || !model->daily_buffer_available);
     home_button(pixels, stride, ptc_ui_home_details_rect(false), "+  使用详情", false, false, model->waiting);
     draw_home_notice(pixels, stride, model);
-    draw_text_center(pixels, stride, to_uirect(ptc_ui_child_footer_rect(0)), "A  输入加时码", 18, disabled ? UI_DISABLED : UI_MUTED);
+    draw_button_label(pixels, stride, to_uirect(ptc_ui_child_footer_rect(0)), "A  输入加时码", 18, disabled ? UI_DISABLED : UI_MUTED);
     if (model->show_parent_shortcut_hint && model->custom_shortcut_enabled)
         ptc_ui_format_custom_shortcut_hint(model->custom_shortcut_label, hint, sizeof(hint));
     else snprintf(hint, sizeof(hint), "状态会在后台自动同步");
     fit_text(fitted_hint, sizeof(fitted_hint), hint, 18, ptc_ui_child_footer_rect(1).w - 24);
     draw_text_center(pixels, stride, to_uirect(ptc_ui_child_footer_rect(1)), fitted_hint, 18, UI_RGB(g_palette->text_secondary));
     draw_footer_button(pixels, stride, ptc_ui_child_footer_rect(2), "B  退出");
-    draw_text_center(pixels, stride, to_uirect(ptc_ui_child_refresh_rect()), "Y  刷新", 18, model->waiting ? UI_DISABLED : UI_MUTED);
+    draw_button_label(pixels, stride, to_uirect(ptc_ui_child_refresh_rect()), "Y  刷新", 18, model->waiting ? UI_DISABLED : UI_MUTED);
 }
 
 static void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -1192,6 +1319,85 @@ static void draw_settings_badge(uint32_t *pixels, uint32_t stride, const PtcUiMo
     draw_text_center(pixels, stride, badge, label, 11, UI_ON_ACCENT);
 }
 
+static void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int cy, const char *title, uint32_t color, bool disabled)
+{
+    (void)disabled;
+    if (!title) return;
+
+    /* 1. 时钟/时间类：包含 "额度", "加时", "时间", "缓冲" */
+    if (strstr(title, "额度") || strstr(title, "加时") || strstr(title, "时间") || strstr(title, "缓冲")) {
+        draw_circle_outline(pixels, stride, cx, cy, 10, 2, color);
+        draw_line(pixels, stride, cx, cy, cx, cy - 5, 2, color);
+        draw_line(pixels, stride, cx, cy, cx + 4, cy + 1, 2, color);
+        return;
+    }
+
+    /* 2. 日历/休假类：包含 "日历", "节假日", "休假", "调休", "计划" */
+    if (strstr(title, "日历") || strstr(title, "节假日") || strstr(title, "休假") ||
+        strstr(title, "调休") || strstr(title, "计划")) {
+        draw_rect_outline(pixels, stride, (UiRect){cx - 9, cy - 8, 18, 16}, 3, 2, color);
+        draw_line(pixels, stride, cx - 9, cy - 2, cx + 9, cy - 2, 2, color);
+        draw_line(pixels, stride, cx - 4, cy - 10, cx - 4, cy - 7, 2, color);
+        draw_line(pixels, stride, cx + 4, cy - 10, cx + 4, cy - 7, 2, color);
+        return;
+    }
+
+    /* 3. 钥匙/安全类：包含 "PIN", "密钥" */
+    if (strstr(title, "PIN") || strstr(title, "密钥")) {
+        draw_circle_outline(pixels, stride, cx - 4, cy - 4, 6, 2, color);
+        draw_line(pixels, stride, cx, cy, cx + 7, cy + 7, 2, color);
+        draw_line(pixels, stride, cx + 4, cy + 4, cx + 7, cy + 1, 2, color);
+        return;
+    }
+
+    /* 4. 设备/二维码类：包含 "二维码", "手机", "电脑", "设备" */
+    if (strstr(title, "二维码") || strstr(title, "手机") || strstr(title, "电脑") || strstr(title, "设备")) {
+        draw_rect_outline(pixels, stride, (UiRect){cx - 8, cy - 9, 16, 18}, 3, 2, color);
+        draw_line(pixels, stride, cx - 3, cy + 4, cx + 3, cy + 4, 2, color);
+        fill_rect(pixels, stride, (UiRect){cx - 1, cy - 6, 2, 2}, color);
+        return;
+    }
+
+    /* 5. 外观主题：包含 "主题", "外观" */
+    if (strstr(title, "主题") || strstr(title, "外观")) {
+        draw_circle_outline(pixels, stride, cx, cy, 9, 2, color);
+        fill_rect(pixels, stride, (UiRect){cx - 4, cy - 4, 3, 3}, color);
+        fill_rect(pixels, stride, (UiRect){cx + 1, cy - 3, 3, 3}, color);
+        fill_rect(pixels, stride, (UiRect){cx - 2, cy + 2, 3, 3}, color);
+        return;
+    }
+
+    /* 6. 快捷键/程序入口：包含 "快捷键", "自制程序" */
+    if (strstr(title, "快捷键") || strstr(title, "自制程序")) {
+        draw_rect_outline(pixels, stride, (UiRect){cx - 10, cy - 6, 20, 13}, 4, 2, color);
+        draw_line(pixels, stride, cx - 5, cy, cx - 1, cy, 2, color);
+        draw_line(pixels, stride, cx - 3, cy - 2, cx - 3, cy + 2, 2, color);
+        fill_rect(pixels, stride, (UiRect){cx + 3, cy - 2, 2, 2}, color);
+        fill_rect(pixels, stride, (UiRect){cx + 5, cy + 1, 2, 2}, color);
+        return;
+    }
+
+    /* 7. 安全/恢复/接管：包含 "接管", "重试", "停用", "恢复", "诊断", "支持" */
+    if (strstr(title, "接管") || strstr(title, "重试") || strstr(title, "停用") ||
+        strstr(title, "恢复") || strstr(title, "诊断") || strstr(title, "支持")) {
+        draw_line(pixels, stride, cx - 8, cy - 8, cx + 8, cy - 8, 2, color);
+        draw_line(pixels, stride, cx - 8, cy - 8, cx - 8, cy, 2, color);
+        draw_line(pixels, stride, cx - 8, cy, cx, cy + 9, 2, color);
+        draw_line(pixels, stride, cx + 8, cy - 8, cx + 8, cy, 2, color);
+        draw_line(pixels, stride, cx + 8, cy, cx, cy + 9, 2, color);
+        draw_line(pixels, stride, cx - 3, cy, cx - 1, cy + 3, 2, color);
+        draw_line(pixels, stride, cx - 1, cy + 3, cx + 4, cy - 3, 2, color);
+        return;
+    }
+
+    /* 8. 默认：齿轮/设置/记录 */
+    draw_circle_outline(pixels, stride, cx, cy, 7, 2, color);
+    draw_line(pixels, stride, cx, cy - 9, cx, cy - 7, 2, color);
+    draw_line(pixels, stride, cx, cy + 7, cx, cy + 9, 2, color);
+    draw_line(pixels, stride, cx - 9, cy, cx - 7, cy, 2, color);
+    draw_line(pixels, stride, cx + 7, cy, cx + 9, cy, 2, color);
+}
+
 static void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     const UiAction *action, bool selected, PtcUiActionState state, int reserved_right)
 {
@@ -1199,19 +1405,30 @@ static void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     bool recommended = state == PTC_UI_ACTION_RECOMMENDED;
     bool compact = rect.height < 90;
     int title_size = 22;
-    int content_width = rect.width - 48;
+    int content_width = rect.width - 76;
     int title_width = content_width - reserved_right - (recommended ? 64 : 0);
     uint32_t background = disabled ? UI_RAISED : (selected ? UI_ACCENT_SOFT : UI_SURFACE);
     fill_round_rect(pixels, stride, rect, 16, background);
     if (selected) {
         draw_focus_ring(pixels, stride, rect, 16);
     }
-    fill_round_rect(pixels, stride, (UiRect){rect.x + 12, rect.y + 24, 4, rect.height - 48}, 2,
-        disabled ? UI_DISABLED : action->accent);
+    /* 左侧精致微图标徽章 */
+    int icon_cx = rect.x + 32;
+    int icon_cy = rect.y + rect.height / 2;
+    UiRect badge_rect = {icon_cx - 17, icon_cy - 17, 34, 34};
+    uint32_t badge_bg = disabled ? UI_PAGE :
+        (action->accent == UI_SUCCESS ? UI_SUCCESS_SOFT :
+        (action->accent == UI_DANGER ? UI_DANGER_SOFT :
+        (action->accent == UI_WARNING ? UI_WARNING_SOFT : UI_ACCENT_SOFT)));
+    fill_round_rect(pixels, stride, badge_rect, 10, badge_bg);
+    draw_rect_outline(pixels, stride, badge_rect, 10, 1, UI_BORDER);
+    draw_card_action_icon(pixels, stride, icon_cx, icon_cy, action->title,
+        disabled ? UI_DISABLED : action->accent, disabled);
+
     int title_lines = measure_text(action->title, title_size) > title_width ? 2 : 1;
-    int baseline = draw_wrapped_text(pixels, stride, rect.x + 24, rect.y + (compact ? 28 : 32),
+    int baseline = draw_wrapped_text(pixels, stride, rect.x + 58, rect.y + (compact ? 28 : 32),
         action->title, title_size, title_width, 25, title_lines, disabled ? UI_DISABLED : UI_INK);
-    draw_wrapped_text(pixels, stride, rect.x + 24, baseline + 3, action->subtitle, 18,
+    draw_wrapped_text(pixels, stride, rect.x + 58, baseline + 3, action->subtitle, 18,
         content_width, 22, (rect.y + rect.height - baseline - 4) / 22 + 1,
         disabled ? UI_DISABLED : UI_MUTED);
     if (recommended && !disabled) {
