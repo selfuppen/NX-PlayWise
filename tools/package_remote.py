@@ -542,6 +542,7 @@ def build_and_verify(
     run_tests: bool = True,
     jobs: int | None = None,
 ) -> None:
+    overall_t0 = time.perf_counter()
     package_dir = ROOT / "build" / "packages"
     device_lab_dir = ROOT / "build" / "device-lab"
     eden_dir = ROOT / "build" / "eden-test"
@@ -632,12 +633,22 @@ def build_and_verify(
         stage_timer.write_timing_record("eden-test", "verify", time.perf_counter() - t0)
 
     records = stage_timer.read_timing_records()
+    overall_wall_time = time.perf_counter() - overall_t0
+
+    if jobs is None:
+        parallel_mode = "自动多核 (-j)"
+    elif jobs == 1:
+        parallel_mode = "串行 (-j1)"
+    else:
+        parallel_mode = f"手动指定 (-j{jobs})"
+
     metadata = {
         "目标": only,
         "清理模式": "增量复用 (Incremental)" if not clean else "完整清理 (Clean)",
         "单元测试": "跳过" if not run_tests else "已执行",
+        "并行机制": parallel_mode,
     }
-    print("\n" + stage_timer.format_timing_report(records, metadata) + "\n")
+    print("\n" + stage_timer.format_timing_report(records, metadata, wall_clock_duration=overall_wall_time) + "\n")
 
 
 def parse_args() -> argparse.Namespace:

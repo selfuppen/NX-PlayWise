@@ -95,9 +95,52 @@ def test_cli_execution() -> None:
         require(fail_res.returncode == 42, f"CLI must pass-through return code, got {fail_res.returncode}")
 
 
+def test_format_timing_report_with_wall_clock() -> None:
+    records = [
+        {"package": "global", "stage": "clean", "duration": 1.0},
+        {"package": "playwise", "stage": "sysmodule", "duration": 4.5},
+        {"package": "playwise", "stage": "nro", "duration": 4.5},
+    ]
+    # 场景 1：多核加速场景 (10s 任务，5s 物理完成 -> 2.00x 加速)
+    report_speedup = stage_timer.format_timing_report(
+        records,
+        metadata={"目标": "all", "并行机制": "自动多核 (-j)"},
+        wall_clock_duration=5.0,
+    )
+    require("各阶段累计工作耗时 (任务工时总和)" in report_speedup, "must label task workload sum")
+    require("端到端真实挂钟耗时 (实际等待用时)" in report_speedup, "must label wall-clock elapsed")
+    require("10.00s" in report_speedup, "task sum must be 10.00s")
+    require("5.00s" in report_speedup, "wall clock must be 5.00s")
+    require("2.00x" in report_speedup, "speedup must be 2.00x")
+    require("耗时缩短 50.0%" in report_speedup, "must report percent saved")
+    require("节约 5.00s" in report_speedup, "must report seconds saved")
+    require("[并行机制: 自动多核 (-j)]" in report_speedup, "must report parallel mode metadata")
+
+    # 场景 2：基准串行场景 (10s 任务，10s 物理完成 -> 1.00x)
+    report_serial = stage_timer.format_timing_report(
+        records,
+        metadata={"目标": "playwise", "并行机制": "串行 (-j1)"},
+        wall_clock_duration=10.0,
+    )
+    require("1.00x" in report_serial, "serial speedup must be 1.00x")
+    require("基准串行 / 均衡状态" in report_serial, "serial mode must describe baseline")
+
+    # 场景 3：并发调度与 I/O 损耗 (10s 任务，11s 物理完成 -> <0.95x)
+    report_overhead = stage_timer.format_timing_report(
+        records,
+        wall_clock_duration=11.0,
+    )
+    require("轻微并发调度与 I/O 损耗" in report_overhead, "overhead scenario must describe loss")
+
+    # 场景 4：边界容错 (wall_clock <= 0 时安全回退)
+    report_zero = stage_timer.format_timing_report(records, wall_clock_duration=0.0)
+    require("全流程总计耗时" in report_zero, "zero wall clock must fallback to standard total")
+
+
 def main() -> int:
     test_write_and_read_records()
     test_format_timing_report()
+    test_format_timing_report_with_wall_clock()
     test_cli_execution()
     print("Stage timer tests passed")
     return 0

@@ -155,7 +155,11 @@ def stage_label(package: str, stage: str) -> str:
     return stage
 
 
-def format_timing_report(records: list[dict], metadata: dict | None = None) -> str:
+def format_timing_report(
+    records: list[dict],
+    metadata: dict | None = None,
+    wall_clock_duration: float | None = None,
+) -> str:
     if not records:
         return "没有耗时统计记录。"
 
@@ -170,7 +174,7 @@ def format_timing_report(records: list[dict], metadata: dict | None = None) -> s
     grand_total = sum(r["duration"] for r in records)
 
     lines: list[str] = []
-    bar_width = 94
+    bar_width = 95
     lines.append("=" * bar_width)
     lines.append(pad_display("PlayWise 打包耗时统计报告", bar_width, align="center"))
     if metadata:
@@ -247,16 +251,57 @@ def format_timing_report(records: list[dict], metadata: dict | None = None) -> s
 
     lines.append("-" * bar_width)
     total_str = f"{grand_total:.2f}s"
-    total_row = (
-        pad_display("全流程总计耗时", 52)
-        + " "
-        + pad_display(total_str, 12, "right")
-        + " "
-        + pad_display("100.0%", 14, "right")
-        + " "
-        + pad_display("100.0%", 14, "right")
-    )
-    lines.append(total_row)
+
+    if wall_clock_duration is not None and wall_clock_duration > 0:
+        task_row = (
+            pad_display("各阶段累计工作耗时 (任务工时总和)", 52)
+            + " "
+            + pad_display(total_str, 12, "right")
+            + " "
+            + pad_display("100.0%", 14, "right")
+            + " "
+            + pad_display("100.0%", 14, "right")
+        )
+        lines.append(task_row)
+
+        wall_str = f"{wall_clock_duration:.2f}s"
+        wall_row = (
+            pad_display("端到端真实挂钟耗时 (实际等待用时)", 52)
+            + " "
+            + pad_display(wall_str, 12, "right")
+            + " "
+            + pad_display("(物理流逝 / 真实等待)", 29, "right")
+        )
+        lines.append(wall_row)
+
+        speedup = (grand_total / wall_clock_duration) if wall_clock_duration > 0 else 1.0
+        saved_time = grand_total - wall_clock_duration
+        if speedup >= 1.05:
+            pct_saved = (saved_time / grand_total * 100.0) if grand_total > 0 else 0.0
+            speedup_desc = f"{speedup:.2f}x (并行加速: 耗时缩短 {pct_saved:.1f}% / 节约 {saved_time:.2f}s)"
+        elif speedup >= 0.95:
+            speedup_desc = f"{speedup:.2f}x (基准串行 / 均衡状态)"
+        else:
+            speedup_desc = f"{speedup:.2f}x (轻微并发调度与 I/O 损耗)"
+
+        speedup_row = (
+            pad_display("并行加速收益与效率提升", 32)
+            + " "
+            + pad_display(speedup_desc, 62, "left")
+        )
+        lines.append(speedup_row)
+    else:
+        total_row = (
+            pad_display("全流程总计耗时", 52)
+            + " "
+            + pad_display(total_str, 12, "right")
+            + " "
+            + pad_display("100.0%", 14, "right")
+            + " "
+            + pad_display("100.0%", 14, "right")
+        )
+        lines.append(total_row)
+
     lines.append("=" * bar_width)
 
     return "\n".join(lines)
