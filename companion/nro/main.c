@@ -588,6 +588,7 @@ static bool pin_input(UiState *ui, const char *title, const char *guide,
         if (touch_allowed) touch_was_active = touch_active;
         draw_elapsed_ms += INPUT_LOOP_MS;
         if (draw_elapsed_ms >= DRAW_INTERVAL_MS) {
+            update_animations(&ui->model);
             draw(ui);
             draw_elapsed_ms = 0;
         }
@@ -4920,6 +4921,7 @@ int main(int argc, char **argv)
         }
         draw_elapsed_ms += INPUT_LOOP_MS;
         if (draw_elapsed_ms >= DRAW_INTERVAL_MS) {
+            update_animations(&ui.model);
             draw(&ui);
             draw_elapsed_ms = 0;
         }
