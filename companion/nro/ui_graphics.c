@@ -340,11 +340,49 @@ static void draw_rect_outline(uint32_t *pixels, uint32_t stride, UiRect rect, in
     if (width > 0) paint_round_rect(pixels, stride, rect, radius, width, color);
 }
 
+static uint32_t s_anim_frame = 0;
+
+static int get_breathing_phase(void)
+{
+    int cycle = (int)(s_anim_frame & 31u);
+    return (cycle < 16) ? cycle : (31 - cycle);
+}
+
 static void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
 {
-    /* A one-pixel gap keeps focus distinct even on an accent-filled button. */
+    int phase = get_breathing_phase();
+    uint8_t glow_alpha = (uint8_t)(95 + phase * 9);
+    uint32_t focus_col = resolve_color(UI_FOCUS);
+
+    /* 1. 核心高亮骨架：外扩 3px，线宽 2px，保持清晰锐利的焦点边框 */
     draw_rect_outline(pixels, stride,
-        (UiRect){rect.x - 4, rect.y - 4, rect.width + 8, rect.height + 8}, radius + 4, 3, UI_FOCUS);
+        (UiRect){rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6}, radius + 3, 2, UI_FOCUS);
+
+    /* 2. 呼吸光晕脉冲：外扩 5px，线宽 1px，透明度随节拍往复呼吸 */
+    UiRect glow_rect = {rect.x - 5, rect.y - 5, rect.width + 10, rect.height + 10};
+    int glow_rad = radius + 5;
+    int first_y = glow_rect.y < 0 ? 0 : glow_rect.y;
+    int last_y = glow_rect.y + glow_rect.height > SCREEN_HEIGHT ? SCREEN_HEIGHT : glow_rect.y + glow_rect.height;
+    int first_x = glow_rect.x < 0 ? 0 : glow_rect.x;
+    int last_x = glow_rect.x + glow_rect.width > SCREEN_WIDTH ? SCREEN_WIDTH : glow_rect.x + glow_rect.width;
+
+    for (int y = first_y; y < last_y; ++y) {
+        int ly = y - glow_rect.y;
+        if (ly < 2 || ly >= glow_rect.height - 2) {
+            for (int x = first_x + glow_rad; x < last_x - glow_rad; ++x) {
+                blend_pixel(pixels, stride, x, y, focus_col, glow_alpha);
+            }
+        } else if (ly >= glow_rad && ly < glow_rect.height - glow_rad) {
+            if (glow_rect.x >= 0 && glow_rect.x < SCREEN_WIDTH)
+                blend_pixel(pixels, stride, glow_rect.x, y, focus_col, glow_alpha);
+            if (glow_rect.x + 1 >= 0 && glow_rect.x + 1 < SCREEN_WIDTH)
+                blend_pixel(pixels, stride, glow_rect.x + 1, y, focus_col, glow_alpha);
+            if (glow_rect.x + glow_rect.width - 2 >= 0 && glow_rect.x + glow_rect.width - 2 < SCREEN_WIDTH)
+                blend_pixel(pixels, stride, glow_rect.x + glow_rect.width - 2, y, focus_col, glow_alpha);
+            if (glow_rect.x + glow_rect.width - 1 >= 0 && glow_rect.x + glow_rect.width - 1 < SCREEN_WIDTH)
+                blend_pixel(pixels, stride, glow_rect.x + glow_rect.width - 1, y, focus_col, glow_alpha);
+        }
+    }
 }
 
 static void draw_inner_top_highlight(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
@@ -931,6 +969,11 @@ static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     uint32_t accent = error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_SUCCESS);
     UiRect box = {54, y, 1172, height};
     fill_round_rect(pixels, stride, box, 16, error ? UI_DANGER_SOFT : (model->waiting ? UI_WARNING_SOFT : UI_SURFACE));
+    if (model->waiting) {
+        draw_rect_outline(pixels, stride, box, 16, 1, UI_WARNING);
+    } else {
+        draw_rect_outline(pixels, stride, box, 16, 1, UI_BORDER);
+    }
     if (expanded) {
         PtcUiRect status_icon = ptc_ui_notice_status_icon_rect(y);
         int baseline = y + 30;
@@ -994,6 +1037,11 @@ static void draw_home_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel
     UiRect box = {48, 520, 1184, 128};
     uint32_t accent = error || model->disable_flag_present ? UI_DANGER : UI_WARNING;
     fill_round_rect(pixels, stride, box, 16, expanded ? (error || model->disable_flag_present ? UI_DANGER_SOFT : UI_WARNING_SOFT) : UI_SURFACE);
+    if (model->waiting) {
+        draw_rect_outline(pixels, stride, box, 16, 1, UI_WARNING);
+    } else {
+        draw_rect_outline(pixels, stride, box, 16, 1, UI_BORDER);
+    }
     if (expanded) {
         int y = 548;
         draw_status_symbol(pixels, stride, 68, 535, accent, error ? 3 : (model->waiting ? 2 : 1));
@@ -3983,6 +4031,7 @@ void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
         return;
     }
     stride = stride_bytes / sizeof(uint32_t);
+    ++s_anim_frame;
     fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, pack_rgb(g_palette->page_bg));
     if (model->view == PTC_UI_PARENT) {
         draw_parent(pixels, stride, model);
