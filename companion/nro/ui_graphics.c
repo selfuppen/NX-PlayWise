@@ -989,9 +989,40 @@ static void draw_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiMode
     } else {
         draw_wrapped_text(pixels, stride, x, box.y + 124, remaining, 40, box.width - 56, 48, 2, UI_RGB(g_palette->on_hero));
     }
+    /* 今日额度胶囊进度槽 (Time Progress Gauge) */
+    UiRect gauge_bg = {box.x + 28, box.y + 150, box.width - 56, 8};
+    uint32_t slot_bg = (g_theme.resolved == PTC_UI_RESOLVED_DARK) ? 0x0119273D : 0x01D3DCED;
+    fill_round_rect(pixels, stride, gauge_bg, 4, slot_bg);
+    draw_rect_outline(pixels, stride, gauge_bg, 4, 1, 0x013D5375);
+
+    uint32_t health_color = UI_SUCCESS;
+    int remaining_mins = model->remaining_available ? model->remaining_minutes : -1;
+    if (remaining_mins >= 0) {
+        if (remaining_mins <= 10) health_color = UI_DANGER;
+        else if (remaining_mins <= 30) health_color = UI_WARNING;
+        else health_color = UI_SUCCESS;
+    }
+
+    if (model->unrestricted_today == 1) {
+        fill_round_rect(pixels, stride, gauge_bg, 4, UI_SUCCESS);
+    } else if (model->remaining_available && model->played_minutes_available &&
+               (model->remaining_minutes + model->played_minutes > 0)) {
+        int total_mins = model->remaining_minutes + model->played_minutes;
+        int remain_w = (int)((int64_t)gauge_bg.width * model->remaining_minutes / total_mins);
+        if (remain_w < 6 && model->remaining_minutes > 0) remain_w = 6;
+        if (remain_w > gauge_bg.width) remain_w = gauge_bg.width;
+        if (remain_w > 0) {
+            fill_round_rect(pixels, stride, (UiRect){gauge_bg.x, gauge_bg.y, remain_w, gauge_bg.height}, 4, health_color);
+        }
+    } else if (model->remaining_available && model->remaining_minutes > 0) {
+        int fill_w = (int)((int64_t)gauge_bg.width * (model->remaining_minutes > 120 ? 120 : model->remaining_minutes) / 120);
+        if (fill_w < 6) fill_w = 6;
+        fill_round_rect(pixels, stride, (UiRect){gauge_bg.x, gauge_bg.y, fill_w, gauge_bg.height}, 4, health_color);
+    }
+
     snprintf(line, sizeof(line), "今日%s  /  %s", today,
         model->status_loaded ? rule_source_label(model->rule_source) : "待确认规则");
-    draw_text(pixels, stride, x, box.y + 180, line, 18, UI_RGB(g_palette->hero_secondary));
+    draw_text(pixels, stride, x, box.y + 176, line, 18, UI_RGB(g_palette->hero_secondary));
     /* Supporting information sits on a separate surface, below the hero. */
     UiRect lower = {box.x + 12, box.y + 200, box.width - 24, box.height - 212};
     fill_round_rect(pixels, stride, lower, 16, UI_SURFACE);
@@ -1681,6 +1712,23 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
             draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 29, minutes.width, 36}, "不限时间", 18,
                              model->disable_flag_present ? UI_DISABLED : UI_SUCCESS);
             draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 72, minutes.width, 20}, "点按看提示", 11, UI_DISABLED);
+        }
+        /* 每日容量柱状直方图 (Weekly Capacity Histogram Bar) */
+        int bar_w = card.width - 24;
+        int bar_x = card.x + 12;
+        int bar_y = card.y + card.height - 11;
+        UiRect bar_bg = {bar_x, bar_y, bar_w, 4};
+        fill_round_rect(pixels, stride, bar_bg, 2, UI_BORDER);
+        if (limited) {
+            int fill_w = (int)((int64_t)bar_w * (model->draft_week[day].minutes > 180 ? 180 : model->draft_week[day].minutes) / 180);
+            if (fill_w < 4 && model->draft_week[day].minutes > 0) fill_w = 4;
+            uint32_t bar_col = model->disable_flag_present ? UI_DISABLED :
+                (model->draft_week[day].minutes <= 30 ? UI_WARNING : UI_ACCENT);
+            if (fill_w > 0) {
+                fill_round_rect(pixels, stride, (UiRect){bar_x, bar_y, fill_w, 4}, 2, bar_col);
+            }
+        } else {
+            fill_round_rect(pixels, stride, bar_bg, 2, model->disable_flag_present ? UI_DISABLED : UI_SUCCESS);
         }
     }
     draw_plan_impact(pixels, stride, model, PTC_UI_PLAN_WEEKLY, model->weekly_dirty,
