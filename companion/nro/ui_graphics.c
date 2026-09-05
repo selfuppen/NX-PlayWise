@@ -627,6 +627,60 @@ static void draw_card_shadow(uint32_t *pixels, uint32_t stride, UiRect rect, int
     draw_round_rect_shadow(pixels, stride, rect, radius, 8, 40, 3);
 }
 
+/* 背景氛围层：页面底色加两团极低透明度的主题色光斑，整幅缓存在离屏，
+ * 仅在主题、底座状态或过渡进行中重建；绘制时一次整幅拷贝。 */
+static uint32_t *g_background_cache;
+static const PtcUiPalette *g_background_palette;
+static bool g_background_docked;
+
+static void ui_background_glow(int center_x, int center_y, int radius, uint32_t rgb, int peak_alpha)
+{
+    int radius_sq = radius * radius;
+    int x0 = center_x - radius < 0 ? 0 : center_x - radius;
+    int x1 = center_x + radius > SCREEN_WIDTH ? SCREEN_WIDTH : center_x + radius;
+    int y0 = center_y - radius < 0 ? 0 : center_y - radius;
+    int y1 = center_y + radius > SCREEN_HEIGHT ? SCREEN_HEIGHT : center_y + radius;
+    uint32_t red = rgb & 0xff;
+    uint32_t green = (rgb >> 8) & 0xff;
+    uint32_t blue = (rgb >> 16) & 0xff;
+    int x;
+    int y;
+    for (y = y0; y < y1; ++y) {
+        int dy = y - center_y;
+        uint32_t *row = g_background_cache + (size_t)y * SCREEN_WIDTH;
+        for (x = x0; x < x1; ++x) {
+            int dx = x - center_x;
+            int dist_sq = dx * dx + dy * dy;
+            int alpha;
+            uint32_t destination;
+            if (dist_sq >= radius_sq) continue;
+            alpha = peak_alpha * (radius_sq - dist_sq) / radius_sq;
+            if (alpha <= 0) continue;
+            destination = row[x];
+            row[x] = RGBA8_MAXALPHA(
+                (red * alpha + (destination & 0xff) * (255 - alpha)) / 255,
+                (green * alpha + ((destination >> 8) & 0xff) * (255 - alpha)) / 255,
+                (blue * alpha + ((destination >> 16) & 0xff) * (255 - alpha)) / 255);
+        }
+    }
+}
+
+static void ui_background_rebuild(void)
+{
+    uint32_t base = pack_rgb(UI_BLENDED(page_bg));
+    int y;
+    if (!g_background_cache) return;
+    for (y = 0; y < SCREEN_HEIGHT; ++y) {
+        uint32_t *row = g_background_cache + (size_t)y * SCREEN_WIDTH;
+        int x;
+        for (x = 0; x < SCREEN_WIDTH; ++x) row[x] = base;
+    }
+    ui_background_glow(230, 40, 760, UI_BLENDED(accent), 12);
+    ui_background_glow(1180, 730, 680, UI_BLENDED(coral), 10);
+    g_background_palette = g_palette;
+    g_background_docked = is_docked_mode();
+}
+
 static void draw_circle_outline(
     uint32_t *pixels,
     uint32_t stride,
@@ -4525,6 +4579,9 @@ void ptc_ui_graphics_exit(void)
 {
     ui_glyph_cache_clear();
     g_font_pixel_size = -1;
+    free(g_background_cache);
+    g_background_cache = NULL;
+    g_background_palette = NULL;
     if (g_ui.framebuffer_ready) {
         framebufferClose(&g_ui.framebuffer);
     }
@@ -4566,7 +4623,33 @@ void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
         return;
     }
     stride = stride_bytes / sizeof(uint32_t);
-    fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, pack_rgb(UI_BLENDED(page_bg)));
+    if (!g_background_cache || g_background_palette != g_palette ||
+        g_background_docked != is_docked_mode()
+#ifndef PTC_UI_PREVIEW_ANIM_CLOCK_MS
+        || g_theme_blending
+#endif
+    ) {
+        if (!g_background_cache) {
+            g_background_cache = (uint32_t *)malloc((size_t)SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
+        }
+        if (g_background_cache) {
+            ui_background_rebuild();
+        }
+    }
+    if (g_background_cache) {
+        if (stride == SCREEN_WIDTH) {
+            memcpy(pixels, g_background_cache, (size_t)SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t));
+        } else {
+            int row;
+            for (row = 0; row < SCREEN_HEIGHT; ++row) {
+                memcpy(pixels + (size_t)row * stride,
+                       g_background_cache + (size_t)row * SCREEN_WIDTH,
+                       SCREEN_WIDTH * sizeof(uint32_t));
+            }
+        }
+    } else {
+        fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, pack_rgb(UI_BLENDED(page_bg)));
+    }
     if (model->view == PTC_UI_PARENT) {
         draw_parent(pixels, stride, model);
     } else if (model->view == PTC_UI_SETUP) {
