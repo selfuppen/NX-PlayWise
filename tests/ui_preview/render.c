@@ -3,6 +3,9 @@
 #include <time.h>
 static time_t preview_time(time_t *out) { if (out) *out = 1000; return 1000; }
 #define time preview_time
+/* Pin the animation clock so breathing/fade phases render identically on every run.
+ * The value must be a multiple of 1280 to keep the focus-ring breathing at phase 0. */
+#define PTC_UI_PREVIEW_ANIM_CLOCK_MS 1024000
 #include "../../companion/nro/ui_graphics.c"
 #undef time
 

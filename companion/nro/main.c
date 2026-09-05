@@ -153,26 +153,42 @@ static bool save_ui_preferences(UiState *ui);
 static bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference);
 static bool ensure_default_setup_pin(UiState *ui);
 
+/* 数字缓动按帧间隔归一：40ms 拍下与旧 (差值/4 + 1) 公式等价，拍长变化时节奏不变。 */
+static void tween_displayed_minutes(int *value, int target, int64_t delta_ms)
+{
+    int diff = target - *value;
+    int distance = diff > 0 ? diff : -diff;
+    int step;
+    if (diff == 0) return;
+    step = (int)((int64_t)distance * delta_ms / 160) + 1;
+    if (step > distance) step = distance;
+    *value += diff > 0 ? step : -step;
+}
+
+/* 动画全部按真实时间推进：弹窗入场以上次切换时刻推算帧数，
+ * 不依赖绘制节拍，掉帧或提帧都不会改变动画时长。 */
 static void update_animations(PtcUiModel *model)
 {
+    static int64_t last_update_ms = 0;
+    int64_t now = ptc_ui_anim_now_ms();
+    int64_t delta = now - last_update_ms;
+    int64_t elapsed;
+    int frames;
+    if (delta <= 0 || delta > 200) delta = PTC_UI_OVERLAY_OPEN_FRAME_MS;
+    last_update_ms = now;
+
     if (model->overlay != model->previous_overlay) {
-        model->overlay_open_frames = 0;
+        model->overlay_opened_at_ms = now;
         model->previous_overlay = model->overlay;
-    } else if (model->overlay_open_frames < 8) {
-        model->overlay_open_frames++;
     }
+    elapsed = now - model->overlay_opened_at_ms;
+    if (elapsed < 0) elapsed = 0;
+    frames = (int)(elapsed / PTC_UI_OVERLAY_OPEN_FRAME_MS);
+    if (frames > PTC_UI_OVERLAY_OPEN_FRAMES) frames = PTC_UI_OVERLAY_OPEN_FRAMES;
+    model->overlay_open_frames = frames;
 
-    if (model->displayed_remaining_minutes < model->remaining_minutes) {
-        model->displayed_remaining_minutes += (model->remaining_minutes - model->displayed_remaining_minutes) / 4 + 1;
-    } else if (model->displayed_remaining_minutes > model->remaining_minutes) {
-        model->displayed_remaining_minutes -= (model->displayed_remaining_minutes - model->remaining_minutes) / 4 + 1;
-    }
-
-    if (model->displayed_grant_minutes < model->grant_minutes) {
-        model->displayed_grant_minutes += (model->grant_minutes - model->displayed_grant_minutes) / 4 + 1;
-    } else if (model->displayed_grant_minutes > model->grant_minutes) {
-        model->displayed_grant_minutes -= (model->displayed_grant_minutes - model->grant_minutes) / 4 + 1;
-    }
+    tween_displayed_minutes(&model->displayed_remaining_minutes, model->remaining_minutes, delta);
+    tween_displayed_minutes(&model->displayed_grant_minutes, model->grant_minutes, delta);
 }
 
 static int64_t unix_ms_now(void)

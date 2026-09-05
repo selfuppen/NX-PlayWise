@@ -9,6 +9,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -431,12 +432,36 @@ static void draw_rect_outline(uint32_t *pixels, uint32_t stride, UiRect rect, in
     if (width > 0) paint_round_rect(pixels, stride, rect, radius, width, color);
 }
 
-static uint32_t s_anim_frame = 0;
+/* 动画时钟（毫秒）。设备走系统计数器；宿主预览可固定，保证逐像素可复现。 */
+#if defined(PTC_UI_PREVIEW_ANIM_CLOCK_MS)
+int64_t ptc_ui_anim_now_ms(void)
+{
+    return PTC_UI_PREVIEW_ANIM_CLOCK_MS;
+}
+#elif defined(__SWITCH__)
+int64_t ptc_ui_anim_now_ms(void)
+{
+    return (int64_t)(armTicksToNs(armGetSystemTick()) / 1000000ULL);
+}
+#else
+int64_t ptc_ui_anim_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000 + (int64_t)ts.tv_nsec / 1000000;
+}
+#endif
+
+/* 呼吸周期 1280ms：亮度从基色线性升到高光再回落，与旧 32 拍（40ms 拍长）节奏一致。 */
+#define UI_BREATHING_CYCLE_MS 1280
 
 static int get_breathing_phase(void)
 {
-    int cycle = (int)(s_anim_frame & 31u);
-    return (cycle < 16) ? cycle : (31 - cycle);
+    int64_t cycle = ptc_ui_anim_now_ms() % UI_BREATHING_CYCLE_MS;
+    int64_t half = UI_BREATHING_CYCLE_MS / 2;
+    int phase = (int)((cycle * 16) / half);
+    if (cycle >= half) phase = (int)(((UI_BREATHING_CYCLE_MS - cycle) * 16) / half);
+    return phase > 15 ? 15 : phase;
 }
 
 static void draw_focus_ring(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
@@ -581,22 +606,139 @@ static void draw_status_symbol(
     }
 }
 
+/* Glyph 位图缓存：键为码点与像素字号，命中后整帧不再触发 FreeType 渲染。
+ * 采用开放寻址；占用超过阈值时整体清空（单帧工作集远小于容量，极少触发）。 */
+#define UI_GLYPH_CACHE_SIZE 1024
+#define UI_GLYPH_CACHE_LIMIT (UI_GLYPH_CACHE_SIZE * 3 / 4)
+
+typedef struct {
+    uint32_t codepoint;
+    uint32_t size;
+    int16_t bearing_x;
+    int16_t bearing_y;
+    int16_t advance;
+    uint16_t width;
+    uint16_t height;
+    uint8_t *bitmap;
+} UiGlyphEntry;
+
+static UiGlyphEntry g_glyph_cache[UI_GLYPH_CACHE_SIZE];
+static int g_glyph_cache_count;
+static int g_font_pixel_size = -1;
+
+static uint32_t ui_glyph_hash(uint32_t codepoint, uint32_t size)
+{
+    uint32_t hash = codepoint * 0x9E3779B1u;
+    hash ^= size * 0x85EBCA6Bu;
+    hash ^= hash >> 15;
+    hash *= 0x2545F491u;
+    hash ^= hash >> 13;
+    return hash & (UI_GLYPH_CACHE_SIZE - 1);
+}
+
+static void ui_glyph_cache_clear(void)
+{
+    int i;
+    for (i = 0; i < UI_GLYPH_CACHE_SIZE; ++i) {
+        free(g_glyph_cache[i].bitmap);
+        g_glyph_cache[i].bitmap = NULL;
+        g_glyph_cache[i].codepoint = 0;
+    }
+    g_glyph_cache_count = 0;
+}
+
 static bool set_font_size(int size)
 {
-    return g_ui.font_ready && FT_Set_Pixel_Sizes(g_ui.face, 0, (FT_UInt)size) == 0;
+    if (!g_ui.font_ready || size <= 0) {
+        return false;
+    }
+    if (size == g_font_pixel_size) {
+        return true;
+    }
+    if (FT_Set_Pixel_Sizes(g_ui.face, 0, (FT_UInt)size) != 0) {
+        return false;
+    }
+    g_font_pixel_size = size;
+    return true;
+}
+
+/* 命中返回缓存项；未命中渲染一次并写入缓存。失败（缺字等）返回 NULL，不缓存。 */
+static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size)
+{
+    uint32_t mask = UI_GLYPH_CACHE_SIZE - 1;
+    uint32_t slot = ui_glyph_hash(codepoint, (uint32_t)size);
+    UiGlyphEntry *entry;
+    if (!set_font_size(size)) {
+        return NULL;
+    }
+    for (;;) {
+        entry = &g_glyph_cache[slot];
+        if (entry->codepoint == 0) break;
+        if (entry->codepoint == codepoint && entry->size == (uint32_t)size) return entry;
+        slot = (slot + 1) & mask;
+    }
+    if (g_glyph_cache_count >= UI_GLYPH_CACHE_LIMIT) {
+        ui_glyph_cache_clear();
+        slot = ui_glyph_hash(codepoint, (uint32_t)size);
+        entry = &g_glyph_cache[slot];
+    }
+    if (FT_Load_Char(g_ui.face, codepoint, FT_LOAD_RENDER) != 0) {
+        return NULL;
+    }
+    {
+        FT_GlyphSlot glyph = g_ui.face->glyph;
+        uint8_t *copy = NULL;
+        if (glyph->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY && glyph->bitmap.rows > 0 &&
+            glyph->bitmap.width > 0) {
+            size_t bytes = (size_t)glyph->bitmap.rows * glyph->bitmap.width;
+            copy = (uint8_t *)malloc(bytes);
+            if (copy) {
+                int row;
+                for (row = 0; row < (int)glyph->bitmap.rows; ++row) {
+                    memcpy(copy + (size_t)row * glyph->bitmap.width,
+                           glyph->bitmap.buffer + (size_t)row * glyph->bitmap.pitch,
+                           glyph->bitmap.width);
+                }
+            }
+        }
+        if (!copy) {
+            /* 零尺寸（空格）或非灰度位图也占位缓存，避免每帧重复加载。 */
+            entry->codepoint = codepoint;
+            entry->size = (uint32_t)size;
+            entry->bearing_x = 0;
+            entry->bearing_y = 0;
+            entry->advance = (int16_t)(glyph->advance.x >> 6);
+            entry->width = 0;
+            entry->height = 0;
+            entry->bitmap = NULL;
+            ++g_glyph_cache_count;
+            return entry;
+        }
+        entry->codepoint = codepoint;
+        entry->size = (uint32_t)size;
+        entry->bearing_x = (int16_t)glyph->bitmap_left;
+        entry->bearing_y = (int16_t)glyph->bitmap_top;
+        entry->advance = (int16_t)(glyph->advance.x >> 6);
+        entry->width = (uint16_t)glyph->bitmap.width;
+        entry->height = (uint16_t)glyph->bitmap.rows;
+        entry->bitmap = copy;
+        ++g_glyph_cache_count;
+        return entry;
+    }
 }
 
 static int measure_text(const char *text, int size)
 {
     int width = 0;
     const char *cursor = text;
-    if (!text || !set_font_size(size)) {
+    if (!text) {
         return 0;
     }
     while (*cursor) {
         uint32_t codepoint = ui_decode_utf8(&cursor);
-        if (FT_Load_Char(g_ui.face, codepoint, FT_LOAD_DEFAULT) == 0) {
-            width += (int)(g_ui.face->glyph->advance.x >> 6);
+        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size);
+        if (entry) {
+            width += entry->advance;
         }
     }
     return width;
@@ -607,31 +749,32 @@ static void draw_text(uint32_t *pixels, uint32_t stride, int x, int baseline, co
     const char *cursor = text;
     int pen_x = x;
     uint32_t resolved = resolve_color(color);
-    if (!text || !set_font_size(size)) {
+    if (!text) {
         return;
     }
     while (*cursor) {
         uint32_t codepoint = ui_decode_utf8(&cursor);
-        FT_GlyphSlot glyph;
+        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size);
         int row;
-        if (FT_Load_Char(g_ui.face, codepoint, FT_LOAD_RENDER) != 0) {
+        if (!entry) {
             continue;
         }
-        glyph = g_ui.face->glyph;
-        for (row = 0; row < (int)glyph->bitmap.rows; ++row) {
+        for (row = 0; row < entry->height; ++row) {
+            const uint8_t *line = entry->bitmap + (size_t)row * entry->width;
             int column;
-            for (column = 0; column < (int)glyph->bitmap.width; ++column) {
-                uint8_t alpha = glyph->bitmap.buffer[row * glyph->bitmap.pitch + column];
-                blend_pixel(
-                    pixels,
-                    stride,
-                    pen_x + glyph->bitmap_left + column,
-                    baseline - glyph->bitmap_top + row,
-                    resolved,
-                    alpha);
+            for (column = 0; column < entry->width; ++column) {
+                if (line[column]) {
+                    blend_pixel(
+                        pixels,
+                        stride,
+                        pen_x + entry->bearing_x + column,
+                        baseline - entry->bearing_y + row,
+                        resolved,
+                        line[column]);
+                }
             }
         }
-        pen_x += (int)(glyph->advance.x >> 6);
+        pen_x += entry->advance;
     }
 }
 
@@ -667,15 +810,13 @@ static void fit_text(char *out, size_t out_size, const char *text, int size, int
     cursor = source;
     end = cursor;
     out[0] = '\0';
-    if (!set_font_size(size)) {
-        return;
-    }
     while (*cursor) {
         const char *next = cursor;
         uint32_t codepoint = ui_decode_utf8(&next);
+        const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size);
         int advance = 0;
-        if (FT_Load_Char(g_ui.face, codepoint, FT_LOAD_DEFAULT) == 0) {
-            advance = (int)(g_ui.face->glyph->advance.x >> 6);
+        if (entry) {
+            advance = entry->advance;
         }
         if (width + advance > max_width || (*next && width + advance + 28 > max_width)) {
             truncated = true;
@@ -2271,12 +2412,12 @@ static void draw_dialog_shell(
     const char *title = numeric ? model->numpad_title : (pin ? model->pin_title : model->overlay_title);
     const char *description = numeric ? model->numpad_guide : (pin ? model->pin_guide : model->overlay_body);
     *dialog = to_uirect(ptc_ui_dialog_rect(width, height));
-    int y_offset = (8 - model->overlay_open_frames) * 2;
+    int y_offset = (PTC_UI_OVERLAY_OPEN_FRAMES - model->overlay_open_frames) * 2;
     dialog->y += y_offset;
 
     uint32_t raw_scrim = g_palette->scrim;
     uint32_t a = (raw_scrim >> 24) & 0xff;
-    a = (a * model->overlay_open_frames) / 8;
+    a = (a * model->overlay_open_frames) / PTC_UI_OVERLAY_OPEN_FRAMES;
     uint32_t fade_scrim = (a << 24) | (raw_scrim & 0xffffff);
 
     fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, fade_scrim);
@@ -4061,6 +4202,8 @@ bool ptc_ui_graphics_init(void)
     PlFontData font_data;
     Result result;
     memset(&g_ui, 0, sizeof(g_ui));
+    ui_glyph_cache_clear();
+    g_font_pixel_size = -1;
     result = plInitialize(PlServiceType_User);
     if (R_FAILED(result)) {
         return false;
@@ -4103,6 +4246,8 @@ bool ptc_ui_graphics_init(void)
 
 void ptc_ui_graphics_exit(void)
 {
+    ui_glyph_cache_clear();
+    g_font_pixel_size = -1;
     if (g_ui.framebuffer_ready) {
         framebufferClose(&g_ui.framebuffer);
     }
@@ -4133,7 +4278,6 @@ void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme)
         return;
     }
     stride = stride_bytes / sizeof(uint32_t);
-    ++s_anim_frame;
     fill_rect_packed(pixels, stride, (UiRect){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, pack_rgb(g_palette->page_bg));
     if (model->view == PTC_UI_PARENT) {
         draw_parent(pixels, stride, model);

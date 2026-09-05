@@ -12,7 +12,7 @@ typedef long FT_Long;
 typedef unsigned int FT_UInt;
 typedef void *FT_Library;
 typedef struct {
-    struct { unsigned int rows, width; int pitch; unsigned char *buffer; } bitmap;
+    struct { unsigned int rows, width; int pitch; unsigned char *buffer; unsigned int pixel_mode; } bitmap;
     int bitmap_left, bitmap_top;
     struct { long x; } advance;
 } PreviewGlyph;
@@ -25,6 +25,7 @@ typedef struct {
 } *FT_Face;
 #define FT_LOAD_DEFAULT 0
 #define FT_LOAD_RENDER 1
+#define FT_PIXEL_MODE_GRAY 2
 static inline int FT_Init_FreeType(FT_Library *lib) { *lib = (void *)1; return 0; }
 static inline int FT_New_Memory_Face(FT_Library lib, const FT_Byte *data, FT_Long len, long index, FT_Face *out)
 {
@@ -48,6 +49,7 @@ static inline int FT_Load_Char(FT_Face face, unsigned long code, int flags)
         face->slot.bitmap.width = w;
         face->slot.bitmap.rows = h;
         face->slot.bitmap.pitch = w;
+        face->slot.bitmap.pixel_mode = FT_PIXEL_MODE_GRAY;
         face->slot.bitmap_left = x;
         face->slot.bitmap_top = -y;
     }

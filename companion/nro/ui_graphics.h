@@ -82,6 +82,11 @@ typedef enum {
 
 #define PTC_UI_PIN_MAX_DIGITS 64
 
+/* 弹窗入场动画：8 帧内完成淡入与上浮，帧长 40ms，按动画时钟推进。 */
+#define PTC_UI_OVERLAY_OPEN_FRAMES 8
+#define PTC_UI_OVERLAY_OPEN_FRAME_MS 40
+#define PTC_UI_OVERLAY_OPEN_TOTAL_MS (PTC_UI_OVERLAY_OPEN_FRAMES * PTC_UI_OVERLAY_OPEN_FRAME_MS)
+
 typedef enum {
     PTC_UI_CREDENTIAL_INPUT = 0,
     PTC_UI_CREDENTIAL_RANDOM = 1,
@@ -361,6 +366,7 @@ typedef struct {
     PtcUiDiagnosticStatus diagnostic_status;
     char diagnostic_path[192];
     int overlay_open_frames;
+    int64_t overlay_opened_at_ms;
     PtcUiOverlay previous_overlay;
     int displayed_remaining_minutes;
     int displayed_grant_minutes;
@@ -481,6 +487,10 @@ typedef struct {
 bool ptc_ui_graphics_init(void);
 void ptc_ui_graphics_exit(void);
 void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme);
+
+/* 单调动画时钟（毫秒）。预览构建通过 PTC_UI_PREVIEW_ANIM_CLOCK_MS 固定，
+ * 保证宿主渲染逐像素可复现。 */
+int64_t ptc_ui_anim_now_ms(void);
 
 int ptc_ui_parent_action_count(PtcUiParentPage page);
 const char *ptc_ui_settings_status_label(const PtcUiModel *model);
