@@ -208,12 +208,123 @@ def test_device_lab_preparation_safety_contract() -> None:
             "post-install boot flag state must be verified")
 
 
+FTP_INSTALL_PY = ROOT / "tools" / "install_package_via_ftp.py"
+FTP_INSTALL_PS1 = ROOT / "tools" / "install_package_via_ftp.ps1"
+
+
+def create_fake_lab_package(root: Path) -> Path:
+    pkg = root / "fake_lab_package"
+    app = pkg / "switch" / "playwise-device-lab"
+    app.mkdir(parents=True, exist_ok=True)
+    (app / "build.json").write_text('{"profile":"device-lab"}', encoding="utf-8")
+    overlay = pkg / "switch" / ".overlays" / "playwise-device-lab.ovl"
+    sysmodule = pkg / "atmosphere" / "contents" / "4200000000BD23F0" / "exefs.nsp"
+    overlay.parent.mkdir(parents=True, exist_ok=True)
+    sysmodule.parent.mkdir(parents=True, exist_ok=True)
+    overlay.write_bytes(b"dummy_lab_overlay")
+    sysmodule.write_bytes(b"dummy_lab_sysmodule")
+    return pkg
+
+
+def test_ftp_install_preview() -> None:
+    with tempfile.TemporaryDirectory(prefix="ptc-test-ftp-install-") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        std_pkg = create_fake_mtp_package(tmp_path)
+        lab_pkg = create_fake_lab_package(tmp_path)
+
+        # 1. Default preview with standard package
+        res_default = subprocess.run(
+            [sys.executable, str(FTP_INSTALL_PY), "--source", str(std_pkg)],
+            capture_output=True,
+            text=True,
+        )
+        require(res_default.returncode == 0, f"FTP default preview failed: {res_default.stderr}")
+        require("Target FTP:     ftp://192.168.8.178:5000/" in res_default.stdout, "Default FTP URL missing")
+        require("Package type:   standard" in res_default.stdout, "Default standard package type missing")
+        require("[-] /switch/playwise" in res_default.stdout, "Standard app clean path missing")
+        require("[-] /atmosphere/contents/4200000000BD2300" in res_default.stdout, "Standard sysmodule clean path missing")
+        require("Dry-run preview only" in res_default.stdout, "Dry-run notice missing")
+
+        # 2. Lab package preview
+        res_lab = subprocess.run(
+            [sys.executable, str(FTP_INSTALL_PY), "--source", str(lab_pkg), "--lab"],
+            capture_output=True,
+            text=True,
+        )
+        require(res_lab.returncode == 0, f"FTP lab preview failed: {res_lab.stderr}")
+        require("Package type:   lab" in res_lab.stdout, "Lab package type missing")
+        require("[-] /switch/playwise-device-lab" in res_lab.stdout, "Lab clean path missing")
+
+        # 3. Custom FTP URL preview
+        res_custom_url = subprocess.run(
+            [sys.executable, str(FTP_INSTALL_PY), "--source", str(std_pkg), "--url", "ftp://10.0.0.99:2121/custom"],
+            capture_output=True,
+            text=True,
+        )
+        require(res_custom_url.returncode == 0, f"FTP custom URL preview failed: {res_custom_url.stderr}")
+        require("Target FTP:     ftp://10.0.0.99:2121/custom" in res_custom_url.stdout, "Custom URL not reflected")
+
+        # 4. PowerShell wrapper preview on Windows
+        if sys.platform == "win32":
+            res_ps = subprocess.run(
+                [
+                    "powershell",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(FTP_INSTALL_PS1),
+                    "-SourceFolder",
+                    str(std_pkg),
+                    "-FtpUrl",
+                    "ftp://192.168.8.178:5000/",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            require(res_ps.returncode == 0, f"FTP PS1 preview failed: {res_ps.stderr}")
+            require("PlayWise Switch FTP Full Clean Installer" in res_ps.stdout, "PS1 title missing")
+            require("Target FTP:     ftp://192.168.8.178:5000/" in res_ps.stdout, "PS1 FTP target missing")
+
+
+def test_ftp_install_safety_contract() -> None:
+    with tempfile.TemporaryDirectory(prefix="ptc-test-ftp-safety-") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        std_pkg = create_fake_mtp_package(tmp_path)
+
+        # Inject forbidden credentials.json
+        cred_file = std_pkg / "switch" / "playwise" / "credentials.json"
+        cred_file.write_text('{"secret":"leak"}', encoding="utf-8")
+
+        res_unsafe = subprocess.run(
+            [sys.executable, str(FTP_INSTALL_PY), "--source", str(std_pkg)],
+            capture_output=True,
+            text=True,
+        )
+        require(res_unsafe.returncode != 0, "Package with credentials.json must be rejected")
+        require("credentials.json must not be installed" in res_unsafe.stderr, "Error message must mention credentials.json")
+
+    # Safety checks in script contents
+    py_code = FTP_INSTALL_PY.read_text(encoding="utf-8")
+    require("assert_standard_package" in py_code, "FTP installer must assert standard package safety")
+    require("remove_path" in py_code, "FTP installer must include robust removal method")
+    require("DEFAULT_FTP_URL = \"ftp://192.168.8.178:5000/\"" in py_code, "FTP installer must default to specified switch URL")
+    require("Dry-run preview only" in py_code, "FTP installer must require explicit apply")
+
+    ps_code = FTP_INSTALL_PS1.read_text(encoding="utf-8")
+    require("[string]$FtpUrl = \"ftp://192.168.8.178:5000/\"" in ps_code, "PS1 must default to specified switch URL")
+    require("[switch]$Apply" in ps_code, "PS1 must support -Apply switch")
+    require("[switch]$Lab" in ps_code, "PS1 must support -Lab switch")
+    require("[switch]$Both" in ps_code, "PS1 must support -Both switch")
+
+
 def main() -> int:
     test_install_script_preview()
     test_install_script_confirmation_uses_drive_letter_only()
     test_dbi_mtp_install_script_preview()
     test_dbi_mtp_install_script_safety_contract()
     test_device_lab_preparation_safety_contract()
+    test_ftp_install_preview()
+    test_ftp_install_safety_contract()
     print("Install script tests passed")
     return 0
 
