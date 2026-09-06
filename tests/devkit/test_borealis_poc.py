@@ -35,8 +35,33 @@ def main() -> int:
         / "switch_video.cpp"
     ).read_text(encoding="utf-8")
     upstream = (ROOT / "third_party" / "borealis" / "UPSTREAM.txt").read_text(encoding="utf-8")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
-    require("USE_DEKO3D" in cmake, "the Switch PoC must keep its pinned deko3d backend")
+    require(
+        "elseif (NOT USE_SDL2 OR NOT USE_EGL OR NOT USE_GL3 OR USE_GL2 OR USE_GLES2 OR USE_GLES3)" in cmake,
+        "the default Switch PoC must require the SDL2/EGL/OpenGL 4.3 core backend",
+    )
+    require(
+        "if (USE_DEKO3D)\n    gen_dksh" in cmake,
+        "deko3d shaders must not be generated for the OpenGL PoC",
+    )
+    default_target = makefile.split("borealis-poc-nro:", 1)[1].split("borealis-poc-deko3d-nro:", 1)[0]
+    require(
+        "-DUSE_DEKO3D=OFF" in default_target
+        and "-DUSE_SDL2=ON" in default_target
+        and "-DUSE_EGL=ON" in default_target
+        and "-DUSE_GL3=ON" in default_target
+        and "-DUSE_GL2=OFF" in default_target
+        and "-DUSE_GLES2=OFF" in default_target
+        and "-DUSE_GLES3=OFF" in default_target,
+        "borealis-poc-nro must build the stability-first OpenGL variant",
+    )
+    deko3d_target = makefile.split("borealis-poc-deko3d-nro:", 1)[1].split("borealis-poc-clean:", 1)[0]
+    require(
+        "-DUSE_DEKO3D=ON" in deko3d_target
+        and "build/borealis-poc-deko3d" in deko3d_target,
+        "deko3d must remain available only as an isolated comparison target",
+    )
     require(
         "BOREALIS_SKIP_WIRELESS_PRIORITY" in cmake
         and "#ifndef BOREALIS_SKIP_WIRELESS_PRIORITY" in platform,

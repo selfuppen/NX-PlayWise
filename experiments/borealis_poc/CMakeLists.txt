@@ -12,8 +12,14 @@ if (NOT PLATFORM_SWITCH)
     message(FATAL_ERROR "The PlayWise Borealis PoC is a Nintendo Switch-only target")
 endif ()
 
-if (NOT USE_DEKO3D)
-    message(FATAL_ERROR "The pinned PoC backend is deko3d; configure with -DUSE_DEKO3D=ON")
+if (USE_DEKO3D)
+    if (USE_SDL2 OR USE_EGL OR USE_GL3 OR USE_GL2 OR USE_GLES2 OR USE_GLES3)
+        message(FATAL_ERROR "The deko3d PoC must not enable SDL2/EGL/OpenGL")
+    endif ()
+elseif (NOT USE_SDL2 OR NOT USE_EGL OR NOT USE_GL3 OR USE_GL2 OR USE_GLES2 OR USE_GLES3)
+    # Switch SDL requests a 4.3 core profile in sdl_video.cpp. NanoVG must use
+    # its GL3 renderer; GLES2 against that context can stall before first frame.
+    message(FATAL_ERROR "The default PoC backend is SDL2/EGL/OpenGL 4.3 core with NanoVG GL3")
 endif ()
 
 if (NOT DEFINED PLAYWISE_VERSION)
@@ -46,7 +52,9 @@ file(MAKE_DIRECTORY "${POC_ROMFS}/material")
 file(COPY "${BOREALIS_ROOT}/resources/material/MaterialIcons-Regular.ttf"
     DESTINATION "${POC_ROMFS}/material")
 file(COPY "${BOREALIS_ROOT}/resources/i18n" DESTINATION "${POC_ROMFS}")
-gen_dksh("${POC_ROMFS}/shaders")
+if (USE_DEKO3D)
+    gen_dksh("${POC_ROMFS}/shaders")
+endif ()
 
 add_custom_target(${POC_TARGET}.nro DEPENDS ${POC_TARGET}
     COMMAND ${NX_NACPTOOL_EXE} --create "${POC_TITLE}" "${POC_AUTHOR}"

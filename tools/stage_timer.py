@@ -91,7 +91,7 @@ STAGE_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "verify": "宿主机 Eden NACP 与 Marker 隔离校验",
     },
     "borealis-poc": {
-        "configure": "配置固定 Borealis/deko3d CMake 工程",
+        "configure": "配置固定 Borealis/OpenGL CMake 工程",
         "nro": "编译隔离 UI 框架 PoC NRO",
         "verify": "宿主机 PoC NACP 与 Marker 隔离校验",
     },

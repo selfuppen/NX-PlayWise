@@ -10,15 +10,19 @@ Vendored scope:
 - the upstream build metadata and license files needed to reproduce the
   Nintendo Switch build
 
-The upstream SDL and GLFW git submodules are intentionally not vendored.
-The PlayWise Borealis PoC uses the Nintendo Switch deko3d backend, which does
-not require either submodule. Updating this directory requires an explicit
-commit change here plus a clean PoC build; it must never track a moving branch.
+The upstream SDL and GLFW git submodules are intentionally not vendored. The
+default PlayWise Borealis PoC uses the SDL2/EGL/OpenGL 4.3 core backend and
+NanoVG GL3 renderer supplied by the pinned devkitPro environment, so it does
+not require the upstream SDL submodule. An isolated deko3d comparison target
+also remains available.
+Updating this directory requires an explicit commit change here plus a clean
+PoC build; it must never track a moving branch.
 
 Local integration patch:
 - `library/lib/platforms/switch/switch_platform.cpp` accepts
   `BOREALIS_SKIP_WIRELESS_PRIORITY`, used only by the offline PlayWise PoC so
   Eden does not stop on its unimplemented ISelfController command 80.
 - `library/lib/platforms/switch/switch_video.cpp` uses `Z24S8` instead of a
-  standalone `S8` stencil target because Eden/Ryujinx on Intel Iris Xe cannot
-  expose `S8Uint`; NanoVG still receives an 8-bit stencil plane.
+  standalone `S8` stencil target for the opt-in deko3d comparison build because
+  Eden/Ryujinx on Intel Iris Xe cannot expose `S8Uint`; NanoVG still receives
+  an 8-bit stencil plane.
