@@ -580,8 +580,20 @@ static float round_rect_sdf(UiRect rect, int radius, float x, float y)
     return sqrtf(qx * qx + qy * qy) - r;
 }
 
-/* 圆角感知软阴影：沿卡片外缘按 SDF 距离做 smoothstep 衰减，y_bias 营造
- * 光源在顶部的下坠感；卡片本体覆盖的像素跳过，由随后的卡片填充覆盖。 */
+/* 五次 Smootherstep（Ken Perlin 改进公式）：一阶与二阶导数在两端皆为 0，
+ * 彻底消除阴影外缘光晕消散时的色环断阶（Mach bands）。 */
+static inline float smootherstep(float t)
+{
+    if (t <= 0.0f) return 0.0f;
+    if (t >= 1.0f) return 1.0f;
+    return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+}
+
+/* 工业级圆角感知软阴影：
+ * 1. 采用精准圆角 SDF 几何遮罩剔除卡片实心本体，保留四个转角弧线外的完整阴影与抗锯齿带，
+ *    根除外接矩形 AABB 直角截断导致的转角分层断裂；
+ * 2. 单次像素遍历中融合 Key（向下投影核心）与 Ambient（大范围漫反射光晕）双层物理软阴影；
+ * 3. 采用五次 Smootherstep 极平滑衰减，并在单次 blend_pixel 中完成 Alpha 复合，画质与帧率兼顾。 */
 static void draw_round_rect_shadow(
     uint32_t *pixels,
     uint32_t stride,
@@ -591,32 +603,88 @@ static void draw_round_rect_shadow(
     int peak_alpha,
     int y_bias)
 {
-    int margin = blur + 2;
-    int x_start = rect.x - margin < 0 ? 0 : rect.x - margin;
-    int x_end = rect.x + rect.width + margin > SCREEN_WIDTH ? SCREEN_WIDTH : rect.x + rect.width + margin;
-    int y_start = rect.y + y_bias - margin < 0 ? 0 : rect.y + y_bias - margin;
-    int y_end = rect.y + rect.height + y_bias + margin > SCREEN_HEIGHT ? SCREEN_HEIGHT : rect.y + rect.height + y_bias + margin;
-    int x;
-    int y;
     if (blur <= 0 || peak_alpha <= 0) return;
+    if (rect.width <= 0 || rect.height <= 0) return;
     if (radius > rect.width / 2) radius = rect.width / 2;
     if (radius > rect.height / 2) radius = rect.height / 2;
+
     /* 阴影峰值按主题 shadow_strength 缩放，暗色主题阴影更实。 */
     if (g_palette && g_palette->shadow_strength) {
         peak_alpha = peak_alpha * (int)g_palette->shadow_strength / 100;
+        if (peak_alpha > 255) peak_alpha = 255;
     }
-    for (y = y_start; y < y_end; ++y) {
-        for (x = x_start; x < x_end; ++x) {
-            float dist;
-            float t;
-            int alpha;
-            if (x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height) continue;
-            dist = round_rect_sdf(rect, radius, (float)x + 0.5f, (float)(y - y_bias) + 0.5f);
-            if (dist >= (float)blur) continue;
-            t = 1.0f - dist / (float)blur;
-            if (t < 0) t = 0;
-            alpha = (int)(peak_alpha * t * t * (3.0f - 2.0f * t) + 0.5f);
-            if (alpha > 0) blend_pixel(pixels, stride, x, y, RGBA8_MAXALPHA(0, 0, 0), (uint8_t)alpha);
+
+    /* 双层软阴影配比分解：
+     * Key 层：聚集清晰，偏置随光源下移；
+     * Ambient 层：扩散更广，偏置轻微，营造柔和弥散光晕。 */
+    int blur_key = blur * 3 / 5;
+    if (blur_key < 3) blur_key = 3;
+    int blur_amb = blur + 2;
+    int alpha_key = peak_alpha * 65 / 100;
+    int alpha_amb = peak_alpha * 40 / 100;
+    int bias_key = y_bias;
+    int bias_amb = y_bias > 1 ? y_bias / 3 : 0;
+
+    int max_blur = blur_amb;
+    int margin = max_blur + 2;
+    int min_y_bias = bias_amb < bias_key ? bias_amb : bias_key;
+    int max_y_bias = bias_amb > bias_key ? bias_amb : bias_key;
+    int y_top = rect.y + (min_y_bias < 0 ? min_y_bias : 0) - margin;
+    int y_bottom = rect.y + rect.height + (max_y_bias > 0 ? max_y_bias : 0) + margin;
+
+    int x_start = rect.x - margin < 0 ? 0 : rect.x - margin;
+    int x_end = rect.x + rect.width + margin > SCREEN_WIDTH ? SCREEN_WIDTH : rect.x + rect.width + margin;
+    int y_start = y_top < 0 ? 0 : y_top;
+    int y_end = y_bottom > SCREEN_HEIGHT ? SCREEN_HEIGHT : y_bottom;
+
+    float inv_blur_key = 1.0f / (float)blur_key;
+    float inv_blur_amb = 1.0f / (float)blur_amb;
+    float outer_cutoff = (float)(max_blur + max_y_bias);
+
+    for (int y = y_start; y < y_end; ++y) {
+        float py = (float)y + 0.5f;
+        for (int x = x_start; x < x_end; ++x) {
+            float px = (float)x + 0.5f;
+
+            /* 精准卡片本体遮罩：仅剔除完全落在卡片本体实心内部的像素（<= -0.5f），
+             * 彻底解决旧 AABB 直角判断在圆角转弯处将阴影粗暴截断造成的分层断裂。
+             * 边缘亚像素过渡带（> -0.5f）保留绘制阴影，后续卡片绘制时亚像素叠加即可实现完美抗锯齿。 */
+            float body_dist = round_rect_sdf(rect, radius, px, py);
+            if (body_dist <= -0.5f) continue;
+            if (body_dist >= outer_cutoff) continue;
+
+            /* Ambient 层计算 */
+            int a_amb = 0;
+            float dist_amb = round_rect_sdf(rect, radius, px, py - (float)bias_amb);
+            if (dist_amb < (float)blur_amb) {
+                if (dist_amb <= 0.0f) {
+                    a_amb = alpha_amb;
+                } else {
+                    float t = 1.0f - dist_amb * inv_blur_amb;
+                    a_amb = (int)(alpha_amb * smootherstep(t) + 0.5f);
+                }
+            }
+
+            /* Key 层计算 */
+            int a_key = 0;
+            float dist_key = round_rect_sdf(rect, radius, px, py - (float)bias_key);
+            if (dist_key < (float)blur_key) {
+                if (dist_key <= 0.0f) {
+                    a_key = alpha_key;
+                } else {
+                    float t = 1.0f - dist_key * inv_blur_key;
+                    a_key = (int)(alpha_key * smootherstep(t) + 0.5f);
+                }
+            }
+
+            if (a_amb == 0 && a_key == 0) continue;
+
+            /* 标准复合 Alpha 混合：A_total = A1 + A2 - A1*A2/255 */
+            int total_alpha = a_amb + a_key - (a_amb * a_key + 127) / 255;
+            if (total_alpha > 255) total_alpha = 255;
+            if (total_alpha > 0) {
+                blend_pixel(pixels, stride, x, y, RGBA8_MAXALPHA(0, 0, 0), (uint8_t)total_alpha);
+            }
         }
     }
 }
@@ -624,7 +692,7 @@ static void draw_round_rect_shadow(
 /* 海拔档位：页面卡片用轻阴影；弹窗在 draw_dialog_shell 用更强更扩散的一档。 */
 static void draw_card_shadow(uint32_t *pixels, uint32_t stride, UiRect rect, int radius)
 {
-    draw_round_rect_shadow(pixels, stride, rect, radius, 8, 40, 3);
+    draw_round_rect_shadow(pixels, stride, rect, radius, 10, 42, 3);
 }
 
 /* 背景氛围层：页面底色加两团极低透明度的主题色光斑，整幅缓存在离屏，
@@ -923,7 +991,7 @@ static bool set_font_size(int size)
 }
 
 /* 命中返回缓存项；未命中渲染一次并写入缓存。失败（缺字等）返回 NULL，不缓存。
- * bold 走独立缓存键，位图做 3x3 最大值膨胀 1px 生成粗体变体（与后端无关）。 */
+ * bold 走独立缓存键，位图做水平向右单向平滑加粗 1px（高度与垂直笔画间隙保持不变，避免复杂汉字横画粘连）。 */
 static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bold)
 {
     uint32_t mask = UI_GLYPH_CACHE_SIZE - 1;
@@ -953,45 +1021,29 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
         int extra = bold ? 1 : 0;
         if (glyph->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY && glyph->bitmap.rows > 0 &&
             glyph->bitmap.width > 0) {
-            int width = (int)glyph->bitmap.width + extra * 2;
-            int height = (int)glyph->bitmap.rows + extra * 2;
+            int width = (int)glyph->bitmap.width + extra;
+            int height = (int)glyph->bitmap.rows;
             copy = (uint8_t *)malloc((size_t)width * height);
             if (copy) {
                 int row;
-                int column;
-                memset(copy, 0, (size_t)width * height);
                 for (row = 0; row < height; ++row) {
                     uint8_t *out_line = copy + (size_t)row * width;
+                    const uint8_t *src_line = glyph->bitmap.buffer + (size_t)row * glyph->bitmap.pitch;
+                    if (!bold) {
+                        memcpy(out_line, src_line, (size_t)glyph->bitmap.width);
+                        continue;
+                    }
+                    /* 水平单向抗锯齿平滑加粗：高度不变，横画间隙绝不粘连；
+                     * 宽度仅向右扩展 1px，竖画与笔画自然加厚。 */
+                    int column;
                     for (column = 0; column < width; ++column) {
-                        if (!bold) {
-                            out_line[column] = glyph->bitmap.buffer[(size_t)row * glyph->bitmap.pitch + column];
-                            continue;
-                        }
-                        /* 3x3 邻域最大值：输出外圈 1px 由源图边缘膨胀而来。 */
-                        int source_row;
-                        int source_column;
-                        uint8_t value = 0;
-                        for (source_row = row - 1; source_row <= row + 1; ++source_row) {
-                            for (source_column = column - 1; source_column <= column + 1; ++source_column) {
-                                if (source_row < 0 || source_row >= (int)glyph->bitmap.rows ||
-                                    source_column < 0 || source_column >= (int)glyph->bitmap.width) continue;
-                                {
-                                    uint8_t sample = glyph->bitmap.buffer[
-                                        (size_t)source_row * glyph->bitmap.pitch + source_column];
-                                    if (sample > value) value = sample;
-                                }
-                            }
-                        }
-                        out_line[column] = value;
+                        uint8_t c0 = (column < (int)glyph->bitmap.width) ? src_line[column] : 0;
+                        uint8_t cl = (column > 0) ? src_line[column - 1] : 0;
+                        out_line[column] = c0 > cl ? c0 : cl;
                     }
                 }
-                if (bold) {
-                    entry->bearing_x = (int16_t)(glyph->bitmap_left - 1);
-                    entry->bearing_y = (int16_t)(glyph->bitmap_top + 1);
-                } else {
-                    entry->bearing_x = (int16_t)glyph->bitmap_left;
-                    entry->bearing_y = (int16_t)glyph->bitmap_top;
-                }
+                entry->bearing_x = (int16_t)glyph->bitmap_left;
+                entry->bearing_y = (int16_t)glyph->bitmap_top;
             }
         }
         if (!copy) {
@@ -1010,8 +1062,8 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
         entry->codepoint = codepoint;
         entry->size = size_key;
         entry->advance = (int16_t)(glyph->advance.x >> 6);
-        entry->width = (uint16_t)((int)glyph->bitmap.width + extra * 2);
-        entry->height = (uint16_t)((int)glyph->bitmap.rows + extra * 2);
+        entry->width = (uint16_t)((int)glyph->bitmap.width + extra);
+        entry->height = (uint16_t)glyph->bitmap.rows;
         entry->bitmap = copy;
         ++g_glyph_cache_count;
         return entry;
@@ -1148,7 +1200,7 @@ static void draw_header(uint32_t *pixels, uint32_t stride, const char *title, co
     draw_line(pixels, stride, 72, 42, 72, 56, 3, UI_ON_ACCENT);
     draw_circle_outline(pixels, stride, 90, 44, 3, 3, UI_ON_ACCENT);
     draw_circle_outline(pixels, stride, 86, 55, 3, 3, UI_ON_ACCENT);
-    draw_text_bold(pixels, stride, 124, 49, title, 30, UI_INK);
+    draw_text(pixels, stride, 124, 49, title, 30, UI_INK);
     draw_text(pixels, stride, 124, 77, subtitle, 18, UI_MUTED);
 }
 
@@ -1573,7 +1625,7 @@ static void draw_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_rect_outline(pixels, stride, box, 16, 2,
                           UI_RGB(ui_mix_rgb(UI_BLENDED(danger), 0xFF9A8A, phase * 4)));
     }
-    draw_text_bold(pixels, stride, x, box.y + 42, "今天还可玩", 22, UI_RGB(UI_BLENDED(hero_secondary)));
+    draw_text(pixels, stride, x, box.y + 42, "今天还可玩", 22, UI_RGB(UI_BLENDED(hero_secondary)));
     /* 环形额度表：弧长由缓动后的剩余分钟驱动，颜色沿用今日额度健康色；
      * 数据不可用时只画弱化轨道环。 */
     {
@@ -2791,7 +2843,7 @@ static void draw_dialog_shell(
                              UI_RGB(ui_darken(UI_BLENDED(surface), 4)));
     draw_rect_outline(pixels, stride, *dialog, 16, 1, UI_BORDER);
     fill_round_rect(pixels, stride, (UiRect){dialog->x + 34, dialog->y + 15, 36, 5}, 2, UI_CORAL);
-    draw_text_bold(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
+    draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
     if (description[0]) {
         draw_wrapped_text(pixels, stride, dialog->x + 34, dialog->y + 88, description,
                           18, dialog->width - 68, 26, 6, UI_MUTED);
