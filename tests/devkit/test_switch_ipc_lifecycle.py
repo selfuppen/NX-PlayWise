@@ -95,6 +95,12 @@ def main() -> None:
     require("if (!out->restricted_now_available)" in read_status and
             "&settings_session.service" in read_status,
             "pctl:s restricted-now fallback must run only when the pctl query is unavailable")
+    require("volatile bool status_refresh_pending;" in nro_main,
+            "NRO state must track pending status refresh across sleep and focus transitions")
+    require("ui->status_refresh_pending = true;" in nro_main,
+            "NRO applet hook must flag status refresh upon resume or returning to focus")
+    require("trigger_resume_status_refresh(&ui, &background_poll_elapsed_ms);" in nro_main,
+            "NRO main loop must actively trigger status refresh and poll when resuming from sleep")
 
     print("switch IPC lifecycle contract passed")
 

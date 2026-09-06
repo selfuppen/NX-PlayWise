@@ -330,6 +330,8 @@ typedef struct {
     PtcUiDurationField duration_field;
     bool duration_hours_replace_on_input;
     bool duration_minutes_replace_on_input;
+    int8_t duration_scroll_dir;
+    uint8_t duration_scroll_anim_ticks;
     char numpad_title[64];
     char numpad_guide[128];
     char numpad_error[96];
@@ -551,6 +553,7 @@ bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, 
 bool ptc_ui_duration_value(const PtcUiModel *model, uint16_t *out_value);
 void ptc_ui_duration_select_field(PtcUiModel *model, PtcUiDurationField field);
 void ptc_ui_duration_toggle_field(PtcUiModel *model);
+bool ptc_ui_duration_step_field(PtcUiModel *model, int step);
 void ptc_ui_pin_open(PtcUiModel *model, const char *title, const char *guide);
 bool ptc_ui_pin_append(PtcUiModel *model, int digit);
 bool ptc_ui_pin_backspace(PtcUiModel *model);

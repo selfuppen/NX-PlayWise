@@ -103,6 +103,7 @@ typedef struct {
     PtcUiSystemTheme system_theme;
     PtcUiThemeView theme_view;
     volatile bool theme_refresh_pending;
+    volatile bool status_refresh_pending;
     char active_request_id[PTC_COMPANION_REQUEST_ID_SIZE];
     char last_result[RESULT_TEXT_SIZE];
     int elapsed_ms;
@@ -110,6 +111,10 @@ typedef struct {
     PtcUiShortcutHoldState custom_shortcut_hold;
     PtcUiConfirmHoldState confirm_hold;
     bool minus_pending;
+    int r_stick_active_dir;
+    uint32_t r_stick_hold_ticks;
+    uint32_t r_stick_next_step_tick;
+    int r_stick_prev_h_dir;
     bool waiting;
     bool animating;
     bool exit_requested;
@@ -2932,12 +2937,26 @@ static void refresh_theme(UiState *ui)
     ui->theme_refresh_pending = false;
 }
 
+static void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms)
+{
+    if (!ui || ui->waiting || ui->recovering_redemption) return;
+    ui->status_refresh_pending = false;
+    refresh_disable_flag(ui);
+    refresh_album_restriction(ui);
+    refresh_security_state(ui);
+    submit_status(ui);
+    if (background_poll_elapsed_ms) {
+        *background_poll_elapsed_ms = BACKGROUND_POLL_INTERVAL_MS;
+    }
+}
+
 static void applet_hook(AppletHookType hook, void *param)
 {
     UiState *ui = (UiState *)param;
     if (ui && (hook == AppletHookType_OnResume ||
                (hook == AppletHookType_OnFocusState && appletGetFocusState() == AppletFocusState_InFocus))) {
         ui->theme_refresh_pending = true;
+        ui->status_refresh_pending = true;
     }
 }
 
@@ -4004,6 +4023,10 @@ static void handle_overlay_input(UiState *ui, u64 down)
         ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
         if (ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR && (down & HidNpadButton_Minus)) {
             ptc_ui_duration_toggle_field(&ui->model);
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR && (down & HidNpadButton_L)) {
+            ptc_ui_duration_select_field(&ui->model, PTC_UI_DURATION_HOURS);
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR && (down & HidNpadButton_R)) {
+            ptc_ui_duration_select_field(&ui->model, PTC_UI_DURATION_MINUTES);
         } else if (down & HidNpadButton_Left) {
             ptc_ui_numpad_move(&ui->model, -1, 0);
         } else if (down & HidNpadButton_Right) {
@@ -4776,6 +4799,7 @@ int main(int argc, char **argv)
         int touch_x = -1;
         int touch_y = -1;
         if (ui.theme_refresh_pending) refresh_theme(&ui);
+        if (ui.status_refresh_pending) trigger_resume_status_refresh(&ui, &background_poll_elapsed_ms);
         padUpdate(&pad);
         down = padGetButtonsDown(&pad);
         held = padGetButtons(&pad);
@@ -4838,6 +4862,62 @@ int main(int argc, char **argv)
                 ptc_ui_confirm_hold_update(&ui.confirm_hold, false, DANGER_CONFIRM_HOLD_TICKS);
                 ui.model.confirm_hold_progress = 0;
                 handle_overlay_input(&ui, down);
+            }
+            if (ui.model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
+                HidAnalogStickState r_stick = padGetStickPos(&pad, 1);
+                int v_dir = 0;
+                int h_dir = 0;
+                if (r_stick.y > STICK_DEADZONE) v_dir = 1;
+                else if (r_stick.y < -STICK_DEADZONE) v_dir = -1;
+                if (r_stick.x > STICK_DEADZONE) h_dir = 1;
+                else if (r_stick.x < -STICK_DEADZONE) h_dir = -1;
+
+                if (h_dir != 0 && h_dir != ui.r_stick_prev_h_dir) {
+                    if (h_dir > 0) ptc_ui_duration_select_field(&ui.model, PTC_UI_DURATION_MINUTES);
+                    else ptc_ui_duration_select_field(&ui.model, PTC_UI_DURATION_HOURS);
+                }
+                ui.r_stick_prev_h_dir = h_dir;
+
+                if (v_dir != 0) {
+                    if (ui.r_stick_active_dir != v_dir) {
+                        ui.r_stick_active_dir = v_dir;
+                        ui.r_stick_hold_ticks = 0;
+                        ui.r_stick_next_step_tick = 20;
+                        ptc_ui_duration_step_field(&ui.model, v_dir);
+                        ui.model.duration_scroll_dir = (int8_t)v_dir;
+                        ui.model.duration_scroll_anim_ticks = 8;
+                    } else {
+                        ++ui.r_stick_hold_ticks;
+                        ui.model.duration_scroll_dir = (int8_t)v_dir;
+                        if (ui.r_stick_hold_ticks >= ui.r_stick_next_step_tick) {
+                            ptc_ui_duration_step_field(&ui.model, v_dir);
+                            ui.model.duration_scroll_anim_ticks = 6;
+                            if (ui.r_stick_hold_ticks > 150) {
+                                ui.r_stick_next_step_tick = ui.r_stick_hold_ticks + 2;
+                            } else if (ui.r_stick_hold_ticks > 70) {
+                                ui.r_stick_next_step_tick = ui.r_stick_hold_ticks + 3;
+                            } else {
+                                ui.r_stick_next_step_tick = ui.r_stick_hold_ticks + 6;
+                            }
+                        }
+                    }
+                } else {
+                    ui.r_stick_active_dir = 0;
+                    ui.r_stick_hold_ticks = 0;
+                    ui.r_stick_next_step_tick = 0;
+                    ui.model.duration_scroll_dir = 0;
+                }
+
+                if (ui.model.duration_scroll_anim_ticks > 0) {
+                    --ui.model.duration_scroll_anim_ticks;
+                }
+            } else {
+                ui.r_stick_active_dir = 0;
+                ui.r_stick_hold_ticks = 0;
+                ui.r_stick_next_step_tick = 0;
+                ui.r_stick_prev_h_dir = 0;
+                ui.model.duration_scroll_dir = 0;
+                ui.model.duration_scroll_anim_ticks = 0;
             }
         } else if (ui.model.view == PTC_UI_CHILD) {
             if (down & HidNpadButton_Minus) {

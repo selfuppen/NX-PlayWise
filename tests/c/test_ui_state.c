@@ -396,6 +396,26 @@ static void test_numeric_input(void)
                strcmp(model.duration_minutes_text, "1") == 0,
                "weekly quick adjustment clamps to minimum");
 
+    ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
+        "输入额度", "1 到 1440 分钟", 4, 1, 1440, 60);
+    check_true(model.duration_field == PTC_UI_DURATION_MINUTES, "default focus is minutes");
+    ptc_ui_duration_step_field(&model, 1);
+    check_true(strcmp(model.duration_hours_text, "1") == 0 &&
+               strcmp(model.duration_minutes_text, "1") == 0 && model.numpad_current == 61,
+               "step minute +1 updates minutes to 1 and total to 61");
+    ptc_ui_duration_step_field(&model, 58);
+    check_true(strcmp(model.duration_minutes_text, "59") == 0, "step minute to 59");
+    ptc_ui_duration_step_field(&model, 1);
+    check_true(strcmp(model.duration_minutes_text, "59") == 0, "step minute clamped at 59");
+    ptc_ui_duration_select_field(&model, PTC_UI_DURATION_HOURS);
+    ptc_ui_duration_step_field(&model, 1);
+    check_true(strcmp(model.duration_hours_text, "2") == 0 && model.numpad_current == 179,
+               "step hour +1 updates hours to 2");
+    ptc_ui_duration_step_field(&model, -3);
+    check_true(strcmp(model.duration_hours_text, "0") == 0 &&
+               strcmp(model.duration_minutes_text, "59") == 0,
+               "step hour -3 clamped at 0 hour");
+
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_HOLIDAY_MINUTES, PTC_UI_OVERLAY_NONE,
         "设置法定休假日额度", "输入 1 到 1440 分钟", 4, 1, 1440, 120);
     check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR,

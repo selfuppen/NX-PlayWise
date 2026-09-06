@@ -860,6 +860,55 @@ void ptc_ui_duration_toggle_field(PtcUiModel *model)
         ? PTC_UI_DURATION_MINUTES : PTC_UI_DURATION_HOURS);
 }
 
+bool ptc_ui_duration_step_field(PtcUiModel *model, int step)
+{
+    unsigned int hours = 0;
+    unsigned int minutes = 0;
+    int target_hours;
+    int target_minutes;
+    int total;
+
+    if (!model || !duration_purpose(model->numpad_purpose) || step == 0) return false;
+
+    if (!parse_duration_component(model->duration_hours_text, 24, &hours) ||
+        !parse_duration_component(model->duration_minutes_text, 59, &minutes)) {
+        hours = model->numpad_current / 60U;
+        minutes = model->numpad_current % 60U;
+    }
+
+    target_hours = (int)hours;
+    target_minutes = (int)minutes;
+
+    if (model->duration_field == PTC_UI_DURATION_HOURS) {
+        target_hours += step;
+        if (target_hours < 0) target_hours = 0;
+        if (target_hours > 24) target_hours = 24;
+    } else {
+        target_minutes += step;
+        if (target_minutes < 0) target_minutes = 0;
+        if (target_minutes > 59) target_minutes = 59;
+    }
+
+    total = target_hours * 60 + target_minutes;
+    if (total < (int)model->numpad_minimum) {
+        total = (int)model->numpad_minimum;
+        target_hours = total / 60;
+        target_minutes = total % 60;
+    } else if (total > (int)model->numpad_maximum) {
+        total = (int)model->numpad_maximum;
+        target_hours = total / 60;
+        target_minutes = total % 60;
+    }
+
+    snprintf(model->duration_hours_text, sizeof(model->duration_hours_text), "%u", (unsigned int)target_hours);
+    snprintf(model->duration_minutes_text, sizeof(model->duration_minutes_text), "%u", (unsigned int)target_minutes);
+    model->numpad_current = (uint16_t)total;
+    model->duration_hours_replace_on_input = false;
+    model->duration_minutes_replace_on_input = false;
+    model->numpad_error[0] = '\0';
+    return true;
+}
+
 void ptc_ui_numpad_open(
     PtcUiModel *model,
     PtcUiNumpadPurpose purpose,
@@ -884,6 +933,8 @@ void ptc_ui_numpad_open(
     model->numpad_maximum = maximum;
     model->numpad_current = current;
     model->numpad_replace_on_input = false;
+    model->duration_scroll_dir = 0;
+    model->duration_scroll_anim_ticks = 0;
     if (duration_purpose(purpose)) {
         set_duration_value(model, current);
         model->duration_field = PTC_UI_DURATION_MINUTES;

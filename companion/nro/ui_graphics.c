@@ -1256,6 +1256,34 @@ static void draw_shoulder_key_glyph(uint32_t *pixels, uint32_t stride, int x, in
     draw_text_center(pixels, stride, (UiRect){x, y, width, height}, key_str, 13, fg_col);
 }
 
+static void draw_arrow_glyph(uint32_t *pixels, uint32_t stride, int cx, int cy, bool up, uint32_t color)
+{
+    int h = 5;
+    for (int dy = 0; dy <= h; ++dy) {
+        int span = up ? dy : (h - dy);
+        int y = up ? (cy - h / 2 + dy) : (cy - h / 2 + dy);
+        draw_line(pixels, stride, cx - span, y, cx + span, y, 1, color);
+    }
+}
+
+static void draw_r_stick_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int size, int dir)
+{
+    int r = size / 2;
+    int cx = x + r;
+    uint32_t bg_col = UI_KEY_GLYPH_BG;
+    uint32_t border_col = UI_KEY_GLYPH_BORDER;
+    uint32_t fg_col = UI_INK;
+
+    fill_round_rect(pixels, stride, (UiRect){x, y, size, size}, r, bg_col);
+    draw_rect_outline(pixels, stride, (UiRect){x, y, size, size}, r, 1, border_col);
+
+    int offset_y = dir > 0 ? -1 : (dir < 0 ? 1 : 0);
+    draw_text_center(pixels, stride, (UiRect){x, y + offset_y, size, size}, "R", 12, fg_col);
+
+    draw_line(pixels, stride, cx, y - 4, cx, y - 2, 1, dir > 0 ? UI_ACCENT : UI_MUTED);
+    draw_line(pixels, stride, cx, y + size + 2, cx, y + size + 4, 1, dir < 0 ? UI_ACCENT : UI_MUTED);
+}
+
 static void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char *label, int size, uint32_t color)
 {
     if (!label || !*label) return;
@@ -3395,14 +3423,39 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
     format_status_age(model, freshness, sizeof(freshness));
 
     /* The compact editor keeps the keypad on the left and puts the two-part duration on the right. */
+    int guide_cx = dialog.x + 536 + 350 / 2;
+    int guide_y = dialog.y + 116;
+    draw_r_stick_glyph(pixels, stride, guide_cx - 105, guide_y - 11, 20, model->duration_scroll_dir);
+    draw_text(pixels, stride, guide_cx - 78, guide_y + 4, "上下推调数值", 15, UI_MUTED);
+    draw_text(pixels, stride, guide_cx + 28, guide_y + 4, "|", 15, UI_MUTED);
+    draw_shoulder_key_glyph(pixels, stride, guide_cx + 40, guide_y - 9, 22, 18, "L", false);
+    draw_text(pixels, stride, guide_cx + 64, guide_y + 4, "/", 14, UI_MUTED);
+    draw_shoulder_key_glyph(pixels, stride, guide_cx + 72, guide_y - 9, 22, 18, "R", false);
+    draw_text(pixels, stride, guide_cx + 98, guide_y + 4, "选栏", 15, UI_MUTED);
+
     for (int field = 0; field < 2; ++field) {
         UiRect rect = to_uirect(ptc_ui_minute_editor_field_rect((PtcUiDurationField)field));
         bool selected = model->duration_field == (PtcUiDurationField)field;
-        fill_round_rect(pixels, stride, rect, 16, selected ? UI_ACCENT_SOFT : UI_ACCENT_SOFT);
+        fill_round_rect(pixels, stride, rect, 16, selected ? UI_ACCENT_SOFT : UI_RAISED);
         draw_rect_outline(pixels, stride, rect, 16, selected ? 3 : 1, selected ? UI_ACCENT : UI_CONTROL);
-        draw_text_center(pixels, stride, rect,
+
+        const char *key_name = field == PTC_UI_DURATION_HOURS ? "L" : "R";
+        draw_shoulder_key_glyph(pixels, stride, rect.x + 14, rect.y + (rect.height - 22) / 2, 28, 22, key_name, !selected);
+
+        UiRect text_rect = {rect.x + 44, rect.y, rect.width - 48, rect.height};
+        draw_text_center(pixels, stride, text_rect,
                          field == PTC_UI_DURATION_HOURS ? hours_value : minutes_value,
                          25, selected ? UI_ACCENT : UI_INK);
+
+        if (selected) {
+            int arrow_cx = rect.x + rect.width / 2;
+            bool up_active = model->duration_scroll_anim_ticks > 0 && model->duration_scroll_dir > 0;
+            bool down_active = model->duration_scroll_anim_ticks > 0 && model->duration_scroll_dir < 0;
+            draw_arrow_glyph(pixels, stride, arrow_cx, rect.y - 8 + (up_active ? -2 : 0), true,
+                             up_active ? UI_ACCENT : UI_MUTED);
+            draw_arrow_glyph(pixels, stride, arrow_cx, rect.y + rect.height + 8 + (down_active ? 2 : 0), false,
+                             down_active ? UI_ACCENT : UI_MUTED);
+        }
     }
     draw_text_center(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 218, 350, 28},
                      total_value, 19, entered_valid ? UI_ACCENT : UI_DANGER);
@@ -3506,7 +3559,7 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
                          model->numpad_error, 18, UI_DANGER);
     }
     draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 518, 450, 24},
-                     "Minus 切换小时/分钟", 18, UI_MUTED);
+                     "使用方向键与 A 键输入数字，或直接触摸", 16, UI_MUTED);
     draw_overlay_actions(pixels, stride, model, "+  完成输入");
 }
 
