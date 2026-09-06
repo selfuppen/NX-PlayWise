@@ -1054,12 +1054,34 @@ static void test_release_hit_targets(void)
     check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_NONE, "confirmation cannot be reused");
 
     model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+    model.hot_reload_status = PTC_UI_HOT_RELOAD_CURRENT;
     check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
               "software information close button");
     check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
               "software information has no invisible secondary button");
     check_true(ptc_ui_cancel_overlay(&model), "software information closes with the shared modal path");
     check_int(model.overlay, PTC_UI_OVERLAY_NONE, "software information close returns to support");
+
+    model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+    model.hot_reload_status = PTC_UI_HOT_RELOAD_PENDING;
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "pending software information exposes the parent hot reload action");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "pending software information exposes a visible defer action");
+    model.operation = PTC_UI_OPERATION_HOT_RELOAD;
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_HOT_RELOAD,
+              "hot reload confirmation is consumed once");
+    check_int(ptc_ui_take_confirmed_operation(&model), PTC_UI_OPERATION_NONE,
+              "hot reload confirmation cannot be replayed");
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    model.operation = PTC_UI_OPERATION_HOT_RELOAD;
+    model.confirm_return_overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+    check_true(ptc_ui_cancel_overlay(&model), "parent may defer hot reload confirmation");
+    check_int(model.overlay, PTC_UI_OVERLAY_SOFTWARE_INFO,
+              "deferred hot reload returns to the manual software information entry");
+    check_int(model.operation, PTC_UI_OPERATION_NONE,
+              "deferred hot reload clears the pending confirmation operation");
 
     model.overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
     model.numpad_purpose = PTC_UI_NUMPAD_WEEKLY_MINUTES;

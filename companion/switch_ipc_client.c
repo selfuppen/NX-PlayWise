@@ -246,5 +246,10 @@ void ptc_switch_ipc_client_exit(PtcSwitchIpcClient *client)
         client->sm_initialized = false;
     }
 }
+
+bool ptc_switch_ipc_client_probe(PtcSwitchIpcClient *client)
+{
+    return backend_connect(client);
+}
 const PtcCompanionIpcBackend *ptc_switch_ipc_backend(void) { return &BACKEND; }
 #endif

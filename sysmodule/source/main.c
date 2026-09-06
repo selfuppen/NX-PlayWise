@@ -205,7 +205,7 @@ static void write_runtime_ready(PtcSysmodule *sysmodule)
     (void)svcGetProcessId(&pid, CUR_PROCESS_HANDLE);
     snprintf(path, sizeof(path), PTC_APP_ROOT "/handover/runtime-ready.json");
     snprintf(json, sizeof(json),
-        "{\"version\":1,\"profile\":\"%s\",\"title_id\":\"%s\",\"pid\":%llu,"
+        "{\"version\":1,\"handover_version\":1,\"profile\":\"%s\",\"title_id\":\"%s\",\"pid\":%llu,"
         "\"boot_id\":\"%s\",\"release_id\":\"%s\",\"ipc_version\":%u}\n",
         PLAYWISE_PROFILE_NAME, PLAYWISE_TITLE_ID, (unsigned long long)pid, sysmodule->boot_id,
         PLAYWISE_BUILD_RELEASE_ID, (unsigned int)PTC_IPC_INTERFACE_VERSION);
@@ -222,6 +222,7 @@ static bool handoff_tick(PtcSysmodule *sysmodule, PtcIpcServer *ipc_server,
     char text[768];
     char transaction_id[64];
     char action[24];
+    uint64_t source_pid = 0;
     snprintf(intent_path, sizeof(intent_path), PTC_APP_ROOT "/handover/intent.json");
     snprintf(ack_path, sizeof(ack_path), PTC_APP_ROOT "/handover/ready.json");
     snprintf(recovery_path, sizeof(recovery_path), PTC_APP_ROOT "/recovery/active/meta.json");
@@ -236,10 +237,13 @@ static bool handoff_tick(PtcSysmodule *sysmodule, PtcIpcServer *ipc_server,
     }
     if (ipc_available) ipc_server->accepting = false;
     if (sysmodule->storage->vtable->exists(sysmodule->storage, recovery_path)) return false;
+    (void)svcGetProcessId(&source_pid, CUR_PROCESS_HANDLE);
     snprintf(text, sizeof(text),
-        "{\"version\":1,\"transaction_id\":\"%s\",\"status\":\"ready\","
-        "\"title_id\":\"%s\",\"boot_id\":\"%s\"}\n",
-        transaction_id, PLAYWISE_TITLE_ID, sysmodule->boot_id);
+        "{\"version\":1,\"handover_version\":1,\"transaction_id\":\"%s\",\"status\":\"ready\","
+        "\"title_id\":\"%s\",\"profile\":\"%s\",\"boot_id\":\"%s\","
+        "\"release_id\":\"%s\",\"source_pid\":%llu}\n",
+        transaction_id, PLAYWISE_TITLE_ID, PLAYWISE_PROFILE_NAME, sysmodule->boot_id,
+        PLAYWISE_BUILD_RELEASE_ID, (unsigned long long)source_pid);
     (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, ack_path, text);
     if (!sysmodule->storage->vtable->exists(sysmodule->storage, boot_flag_path)) {
         (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, intent_path);

@@ -4146,21 +4146,53 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
 {
     UiRect dialog;
     UiRect details;
-    draw_dialog_shell(pixels, stride, model, &dialog, 960, 480);
-    details = (UiRect){dialog.x + 34, dialog.y + 126, dialog.width - 68, 224};
+    char value[128];
+    const char *status = "状态未知";
+    uint32_t status_color = UI_MUTED;
+    draw_dialog_shell(pixels, stride, model, &dialog, 960, 560);
+    details = (UiRect){dialog.x + 34, dialog.y + 106, dialog.width - 68, 326};
     fill_round_rect(pixels, stride, details, 16, UI_RAISED);
     draw_rect_outline(pixels, stride, details, 16, 1, UI_BORDER);
-    draw_text(pixels, stride, details.x + 24, details.y + 42, "软件名称", 18, UI_MUTED);
-    draw_text(pixels, stride, details.x + 180, details.y + 42, "PlayWise（任我玩）", 20, UI_INK);
-    draw_text(pixels, stride, details.x + 24, details.y + 84, "当前版本", 18, UI_MUTED);
-    draw_text(pixels, stride, details.x + 180, details.y + 84, model->software_version, 20, UI_ACCENT);
-    draw_text(pixels, stride, details.x + 24, details.y + 126, "项目仓库", 18, UI_MUTED);
-    draw_text(pixels, stride, details.x + 180, details.y + 126, model->repository_url, 18, UI_ACCENT);
-    draw_text(pixels, stride, details.x + 24, details.y + 168, "家长网页", 18, UI_MUTED);
-    draw_text(pixels, stride, details.x + 180, details.y + 168, model->pwa_url, 18, UI_SUCCESS);
-    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "A  关闭",
-                       UI_ACCENT, UI_ON_ACCENT, false);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 438, "也可按 B 返回", 16, UI_MUTED);
+    draw_text(pixels, stride, details.x + 24, details.y + 38, "主机应用", 18, UI_MUTED);
+    snprintf(value, sizeof(value), "%.24s  (%.88s)", model->software_version,
+             model->app_release_id[0] ? model->app_release_id : "身份未知");
+    fit_text(value, sizeof(value), value, 18, details.width - 220);
+    draw_text(pixels, stride, details.x + 180, details.y + 38, value, 18, UI_ACCENT);
+    draw_text(pixels, stride, details.x + 24, details.y + 82, "当前后台", 18, UI_MUTED);
+    fit_text(value, sizeof(value), model->backend_release_id[0] ? model->backend_release_id : "无法可信确认", 18,
+             details.width - 220);
+    draw_text(pixels, stride, details.x + 180, details.y + 82, value, 18, UI_INK);
+    if (model->hot_reload_status == PTC_UI_HOT_RELOAD_CURRENT ||
+        model->hot_reload_status == PTC_UI_HOT_RELOAD_SUCCESS) {
+        status = "已加载"; status_color = UI_SUCCESS;
+    } else if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING) {
+        status = "待加载"; status_color = UI_WARNING;
+    } else if (model->hot_reload_status == PTC_UI_HOT_RELOAD_INCOMPLETE) {
+        status = "安装不完整"; status_color = UI_DANGER;
+    } else if (model->hot_reload_status == PTC_UI_HOT_RELOAD_RECOVERY_REQUIRED) {
+        status = "需要恢复"; status_color = UI_DANGER;
+    } else if (model->hot_reload_status == PTC_UI_HOT_RELOAD_RUNNING) {
+        status = "正在加载"; status_color = UI_WARNING;
+    } else if (model->hot_reload_status == PTC_UI_HOT_RELOAD_UNAVAILABLE) {
+        status = "热加载不可用"; status_color = UI_WARNING;
+    }
+    draw_text(pixels, stride, details.x + 24, details.y + 126, "加载状态", 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + 180, details.y + 126, status, 20, status_color);
+    draw_wrapped_text(pixels, stride, details.x + 180, details.y + 154,
+        model->hot_reload_detail, 15, details.width - 210, 20, 2, UI_MUTED);
+    draw_text(pixels, stride, details.x + 24, details.y + 216, "项目仓库", 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + 180, details.y + 216, model->repository_url, 17, UI_ACCENT);
+    draw_text(pixels, stride, details.x + 24, details.y + 266, "家长网页", 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + 180, details.y + 266, model->pwa_url, 17, UI_SUCCESS);
+    if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING) {
+        draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  暂不",
+                           UI_RAISED, UI_INK, false);
+        draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "A  加载新版",
+                           UI_ACCENT, UI_ON_ACCENT, false);
+    } else {
+        draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "A  关闭",
+                           UI_ACCENT, UI_ON_ACCENT, false);
+    }
 }
 
 static bool holiday_is_past_or_today(

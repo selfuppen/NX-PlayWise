@@ -120,6 +120,17 @@ typedef enum {
 } PtcUiDiagnosticStatus;
 
 typedef enum {
+    PTC_UI_HOT_RELOAD_UNKNOWN = 0,
+    PTC_UI_HOT_RELOAD_CURRENT = 1,
+    PTC_UI_HOT_RELOAD_PENDING = 2,
+    PTC_UI_HOT_RELOAD_UNAVAILABLE = 3,
+    PTC_UI_HOT_RELOAD_INCOMPLETE = 4,
+    PTC_UI_HOT_RELOAD_RECOVERY_REQUIRED = 5,
+    PTC_UI_HOT_RELOAD_RUNNING = 6,
+    PTC_UI_HOT_RELOAD_SUCCESS = 7
+} PtcUiHotReloadStatus;
+
+typedef enum {
     PTC_UI_GRANT_LOCAL_ADJUST_FIRST = 0,
     PTC_UI_GRANT_LOCAL_ADJUST_LAST = 5,
     PTC_UI_GRANT_LOCAL_GENERATE = 6,
@@ -163,7 +174,8 @@ typedef enum {
     PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY = 19,
     PTC_UI_OPERATION_SAVE_SCHEDULED = 20,
     PTC_UI_OPERATION_SAVE_AUTONOMY = 21,
-    PTC_UI_OPERATION_CLEAR_ACTIVITY_HISTORY = 22
+    PTC_UI_OPERATION_CLEAR_ACTIVITY_HISTORY = 22,
+    PTC_UI_OPERATION_HOT_RELOAD = 23
 } PtcUiOperation;
 
 typedef enum {
@@ -368,6 +380,10 @@ typedef struct {
     char grant_code[9];
     char grant_notice[192];
     char software_version[32];
+    char app_release_id[96];
+    char backend_release_id[96];
+    char hot_reload_detail[192];
+    int hot_reload_status;
     char repository_url[128];
     char pwa_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];

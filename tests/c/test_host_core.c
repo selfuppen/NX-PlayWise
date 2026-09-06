@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "../../common/version.h"
 #include "../../common/policy/control_policy.h"
@@ -19,6 +20,7 @@
 #include "../../companion/auth.h"
 #include "../../companion/album_restriction.h"
 #include "../../companion/file_protocol.h"
+#include "../../companion/hot_reload_guard.h"
 #include "../../companion/result_summary.h"
 #include "../../companion/overlay/bridge.h"
 #include "../../companion/overlay/input_model.h"
@@ -56,6 +58,131 @@ static int count_lines(const char *text)
         if (*text++ == '\n') ++count;
     }
     return count;
+}
+
+static bool write_host_file(const char *path, const char *text)
+{
+    FILE *file = fopen(path, "wb");
+    size_t length = text ? strlen(text) : 0;
+    bool ok;
+    if (!file) return false;
+    ok = length == 0 || fwrite(text, 1, length, file) == length;
+    if (fclose(file) != 0) ok = false;
+    return ok;
+}
+
+static bool host_file_exists(const char *path)
+{
+    struct stat info;
+    return stat(path, &info) == 0;
+}
+
+static void clear_hot_reload_fixture(void)
+{
+    (void)remove("build/test-hot-reload-guard/boot2.flag");
+    (void)remove("build/test-hot-reload-guard/boot2.flag.backup");
+    (void)remove("build/test-hot-reload-guard/reload.json");
+    (void)remove("build/test-hot-reload-guard/reload.json.tmp");
+}
+
+static void test_hot_reload_guard(void)
+{
+    static const PtcHotReloadPaths paths = {
+        "build/test-hot-reload-guard/boot2.flag",
+        "build/test-hot-reload-guard/boot2.flag.backup",
+        "build/test-hot-reload-guard/reload.json",
+    };
+    static const char *const phases[] = {
+        "prepared", "boot_disabled", "boot_restored", "target_launched"
+    };
+    PtcHotReloadIdentity identity;
+    PtcHotReloadJournal journal;
+    PtcHotReloadJournal parsed;
+    PtcHotReloadPaths temporary_paths = paths;
+    size_t index;
+
+    (void)mkdir("build", 0777);
+    (void)mkdir("build/test-hot-reload-guard", 0777);
+    clear_hot_reload_fixture();
+    check_true(ptc_hot_reload_parse_identity(
+        "{\"profile\":\"release\",\"release_id\":\"new-build\",\"boot_id\":\"boot-new\","
+        "\"pid\":42,\"ipc_version\":2}", &identity),
+        "hot reload parses a complete runtime identity");
+    check_true(ptc_hot_reload_identity_matches(&identity, 42, "release", "new-build"),
+        "hot reload identity binds PID, profile, release and boot ID");
+    check_true(!ptc_hot_reload_identity_matches(&identity, 41, "release", "new-build") &&
+        !ptc_hot_reload_identity_matches(&identity, 42, "device-lab", "new-build") &&
+        !ptc_hot_reload_identity_matches(&identity, 42, "release", "other-build"),
+        "hot reload rejects mismatched target identity");
+    check_true(!ptc_hot_reload_parse_identity(
+        "{\"profile\":\"release\",\"release_id\":\"new-build\",\"pid\":42,\"ipc_version\":2}",
+        &identity), "hot reload rejects an identity without a new boot ID");
+
+    memset(&journal, 0, sizeof(journal));
+    snprintf(journal.transaction_id, sizeof(journal.transaction_id), "reload-1");
+    snprintf(journal.source_release_id, sizeof(journal.source_release_id), "old-build");
+    snprintf(journal.target_release_id, sizeof(journal.target_release_id), "new-build");
+    snprintf(journal.phase, sizeof(journal.phase), "prepared");
+    journal.source_pid = 41;
+    check_true(write_host_file(paths.boot_flag, ""), "seed empty standard boot flag");
+    check_true(ptc_hot_reload_write_journal(&paths, &journal),
+        "persist reload intent before touching the boot flag");
+    check_int(ptc_hot_reload_disable_boot(&paths, &journal), PTC_HOT_RELOAD_FLAG_OK,
+        "hot reload atomically disables the standard boot flag");
+    check_true(!host_file_exists(paths.boot_flag) && host_file_exists(paths.boot_flag_backup),
+        "disabled boot flag path remains absent while backup owns the original name");
+    check_true(ptc_hot_reload_read_journal(&paths, &parsed) &&
+        strcmp(parsed.phase, "boot_disabled") == 0,
+        "boot disable phase is durable");
+    check_int(ptc_hot_reload_restore_boot(&paths, &parsed), PTC_HOT_RELOAD_FLAG_OK,
+        "hot reload restores the original empty boot flag");
+    check_true(ptc_hot_reload_finish_journal(&paths), "completed reload journal is removable");
+
+    clear_hot_reload_fixture();
+    check_true(write_host_file(paths.boot_flag, "") && write_host_file(paths.boot_flag_backup, ""),
+        "seed conflicting flag and backup");
+    check_int(ptc_hot_reload_restore_boot(&paths, &journal), PTC_HOT_RELOAD_FLAG_CONFLICT,
+        "flag and backup conflict is never overwritten");
+    clear_hot_reload_fixture();
+    check_true(write_host_file(paths.boot_flag, "not-empty"), "seed non-empty boot flag");
+    check_int(ptc_hot_reload_disable_boot(&paths, &journal), PTC_HOT_RELOAD_FLAG_CONFLICT,
+        "non-empty boot flag cannot be claimed by hot reload");
+
+    clear_hot_reload_fixture();
+    check_true(write_host_file(paths.journal, "{\"version\":1,\"phase\":\"unknown\"}\n"),
+        "seed malformed reload journal");
+    check_true(!ptc_hot_reload_read_journal(&paths, &parsed),
+        "malformed reload journal is never treated as recoverable");
+
+    clear_hot_reload_fixture();
+    for (index = 0; index < sizeof(phases) / sizeof(phases[0]); ++index) {
+        snprintf(journal.phase, sizeof(journal.phase), "%s", phases[index]);
+        check_true(ptc_hot_reload_write_journal(&paths, &journal), "write each reload recovery phase");
+        check_true(ptc_hot_reload_read_journal(&paths, &parsed) &&
+            strcmp(parsed.phase, phases[index]) == 0,
+            "read each reload recovery phase");
+    }
+    check_true(rename(paths.journal, "build/test-hot-reload-guard/reload.json.tmp") == 0,
+        "simulate interruption before journal rename");
+    check_true(ptc_hot_reload_read_journal(&paths, &parsed) &&
+        strcmp(parsed.transaction_id, "reload-1") == 0,
+        "valid temporary journal is promoted during recovery");
+
+    snprintf(journal.transaction_id, sizeof(journal.transaction_id), "reload-current");
+    snprintf(journal.phase, sizeof(journal.phase), "prepared");
+    check_true(ptc_hot_reload_write_journal(&paths, &journal), "seed current reload journal");
+    temporary_paths.journal = "build/test-hot-reload-guard/reload.json.tmp";
+    snprintf(journal.transaction_id, sizeof(journal.transaction_id), "reload-conflict");
+    check_true(ptc_hot_reload_write_journal(&temporary_paths, &journal), "seed contradictory temporary journal");
+    check_true(!ptc_hot_reload_read_journal(&paths, &parsed),
+        "contradictory journals require manual recovery");
+
+    clear_hot_reload_fixture();
+    check_true(write_host_file(paths.boot_flag_backup, ""), "seed unknown backup without journal");
+    check_true(!ptc_hot_reload_read_journal(&paths, &parsed),
+        "unknown backup has no trusted transaction identity");
+    clear_hot_reload_fixture();
+    (void)remove("build/test-hot-reload-guard");
 }
 
 static bool fixed_random(uint8_t *out, size_t out_size, void *ctx)
@@ -1988,6 +2115,7 @@ static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
 
 int main(void)
 {
+    test_hot_reload_guard();
     test_result_summary_unlimited_state();
     test_tokens();
     test_release_request_contract();

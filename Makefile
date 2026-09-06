@@ -38,6 +38,7 @@ PLATFORM_HOST_SRCS := \
 
 ORCH_SRCS := \
 	companion/album_restriction.c \
+	companion/hot_reload_guard.c \
 	sysmodule/sysmodule_core.c \
 	companion/auth.c \
 	companion/file_protocol.c \

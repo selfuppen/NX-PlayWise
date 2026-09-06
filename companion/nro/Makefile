@@ -32,6 +32,8 @@ LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
 
 OBJS := \
 	$(BUILD)/main.o \
+	$(BUILD)/hot_reload.o \
+	$(BUILD)/hot_reload_guard.o \
 	$(BUILD)/album_restriction.o \
 	$(BUILD)/ui_graphics.o \
 	$(BUILD)/ui_theme.o \
@@ -65,7 +67,7 @@ DEPENDS := $(OBJS:.o=.d)
 # Emulator-only build: run the control core in-process against the simulated
 # PCTL adapter, and drop the pctc:u client the emulator cannot reach.
 ifeq ($(EDEN_BUILD),1)
-OBJS := $(filter-out $(BUILD)/switch_ipc_client.o,$(OBJS))
+OBJS := $(filter-out $(BUILD)/switch_ipc_client.o $(BUILD)/hot_reload.o $(BUILD)/hot_reload_guard.o,$(OBJS))
 OBJS += \
 	$(BUILD)/eden_runtime.o \
 	$(BUILD)/pctl_stub.o \
@@ -85,6 +87,12 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 $(BUILD)/main.o: main.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/hot_reload.o: hot_reload.c hot_reload.h ../hot_reload_guard.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/hot_reload_guard.o: ../hot_reload_guard.c ../hot_reload_guard.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/album_restriction.o: ../album_restriction.c ../album_restriction.h | $(BUILD)

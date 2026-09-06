@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -166,9 +167,24 @@ def verify_playwise_package() -> None:
         require(not (package_app / "credentials.json").exists(), "package must generate credentials on the device")
         require(read_json(package_app / "defaults" / "setup.json")["phase"] == "unconfigured", "package must not take control before setup")
         require(read_json(package_app / "build.json") == expected_manifest, "package build manifest must match the generated manifest")
+        artifacts = read_json(package_app / "package-artifacts.json")
+        require(artifacts["schema_version"] == 1 and artifacts["release_id"] == expected_manifest["release_id"],
+                "package artifact manifest must match the release identity")
+        expected_artifacts = {
+            "switch/playwise/pctc.nro": b"nro",
+            "switch/.overlays/playwise.ovl": b"ovl",
+            f"{CONTENT_DIR.as_posix()}/exefs.nsp": b"nsp",
+        }
+        require(set(artifacts["artifacts"]) == set(expected_artifacts), "package artifact list must cover all runtime components")
+        for artifact_name, artifact_data in expected_artifacts.items():
+            entry = artifacts["artifacts"][artifact_name]
+            require(entry["size"] == len(artifact_data) and entry["sha256"] == hashlib.sha256(artifact_data).hexdigest(),
+                    f"package artifact digest mismatch: {artifact_name}")
         require((out / CONTENT_DIR / "flags" / "boot2.flag").exists(), "package must contain boot2.flag")
+        require((package_app / "handover").is_dir(), "package must materialize the hot reload handover directory")
         with zipfile.ZipFile(zip_path) as package:
             names = package.namelist()
+        require("switch/playwise/handover/" in names, "playwise zip missing hot reload handover directory")
         require("switch/playwise/defaults/config.json" in names, "playwise zip missing config defaults")
         require(not any(name in names for name in (
             "switch/playwise/config.json",
@@ -192,8 +208,10 @@ def verify_playwise_package() -> None:
             "setup.json": b'{"phase":"active"}',
             "credentials.json": b'{"grant_secret":"private"}',
             "ledger/used_nonces.jsonl": b"existing-ledger\n",
+            "ledger/redemption-history.jsonl": b"existing-history\n",
             "logs/old.log": b"existing-log\n",
             "backups/install_pctl_snapshot.json": b"existing-backup",
+            "recovery/active/meta.json": b'{"phase":"existing"}',
         }
         for relative, data in preserved.items():
             path = installed / APP_DIR / relative
@@ -210,6 +228,8 @@ def verify_playwise_package() -> None:
         require((installed / APP_DIR / "pctc.nro").read_bytes() == b"nro", "direct overlay must replace the Companion binary")
         require(read_json(installed / APP_DIR / "build.json") == expected_manifest,
                 "direct overlay must replace build.json")
+        require(read_json(installed / APP_DIR / "package-artifacts.json") == artifacts,
+                "direct overlay must replace package-artifacts.json")
         require((installed / CONTENT_DIR / "exefs.nsp").read_bytes() == b"nsp",
                 "direct overlay must replace the sysmodule binary")
         require((installed / "switch" / ".overlays" / "playwise.ovl").read_bytes() == b"ovl",

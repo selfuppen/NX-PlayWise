@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -36,6 +37,7 @@ DEFAULT_CONTAINER_PATH = "/ws/playwise"
 DEFAULT_DOCKER_CONTAINER = "devkitpro-ssh-v1"
 APP_DEFAULTS = "switch/playwise/defaults"
 APP_BUILD = "switch/playwise/build.json"
+APP_ARTIFACTS = "switch/playwise/package-artifacts.json"
 APP_DEFAULT_FILES = tuple(f"{APP_DEFAULTS}/{name}" for name in (
     "config.json",
     "auth.json",
@@ -260,6 +262,12 @@ def verify_package_zip(
         if APP_BUILD not in names:
             raise PackageError(f"{path.name}: missing {APP_BUILD}")
         build = json.loads(package.read(APP_BUILD).decode("utf-8"))
+        if APP_ARTIFACTS not in names:
+            raise PackageError(f"{path.name}: missing {APP_ARTIFACTS}")
+        try:
+            artifacts = json.loads(package.read(APP_ARTIFACTS).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise PackageError(f"{path.name}: invalid {APP_ARTIFACTS}: {exc}") from exc
         manifest = build if expected_manifest is None else expected_manifest
         component_data = {name: package.read(name) for name in RELEASE_COMPONENTS if name in names}
         nro_data = component_data.get("switch/playwise/pctc.nro")
@@ -275,6 +283,18 @@ def verify_package_zip(
         raise PackageError(f"{path.name}: build manifest is not a release profile")
     if manifest.get("playwise_version") != PLAYWISE_VERSION:
         raise PackageError(f"{path.name}: manifest version must be {PLAYWISE_VERSION}")
+    if not isinstance(artifacts, dict) or artifacts.get("schema_version") != 1 or \
+            artifacts.get("release_id") != manifest.get("release_id"):
+        raise PackageError(f"{path.name}: invalid package artifact identity")
+    artifact_entries = artifacts.get("artifacts")
+    if not isinstance(artifact_entries, dict) or set(artifact_entries) != set(RELEASE_COMPONENTS):
+        raise PackageError(f"{path.name}: package artifact list must match release components")
+    for member_name in RELEASE_COMPONENTS:
+        entry = artifact_entries.get(member_name)
+        data = component_data.get(member_name)
+        if not isinstance(entry, dict) or data is None or entry.get("size") != len(data) or \
+                entry.get("sha256") != hashlib.sha256(data).hexdigest():
+            raise PackageError(f"{path.name}: artifact digest mismatch for {member_name}")
     for member_name, data in package_payloads.items():
         for marker in FORBIDDEN_SECRET_MARKERS:
             if marker in data:

@@ -22,6 +22,8 @@ def main() -> None:
     pctl_adapter = (ROOT / "platform/switch/pctl_adapter.c").read_text(encoding="utf-8")
     libtesla = (ROOT / "companion/overlay/vendor/libtesla/include/tesla.hpp").read_text(encoding="utf-8")
     overlay_makefile = (ROOT / "companion/overlay/Makefile").read_text(encoding="utf-8")
+    hot_reload = (ROOT / "companion/nro/hot_reload.c").read_text(encoding="utf-8")
+    nro_main = (ROOT / "companion/nro/main.c").read_text(encoding="utf-8")
 
     require("bool sm_initialized;" in header, "Switch IPC client must track its retained SM session")
     require("rc = smInitialize();" in client, "Switch IPC client init must retain an SM session")
@@ -63,6 +65,28 @@ def main() -> None:
             "the standard Overlay build must not hide unsigned-index diagnostics")
     require("standard_backend_expected()" in (ROOT / "companion/nro/main.c").read_text(encoding="utf-8"),
             "standard NRO must skip IPC when Device Lab has disabled its boot flag")
+    require("pmshellTerminateProcess" not in hot_reload and "pmshellTerminateProcess" not in nro_main,
+            "standard hot reload must never force-terminate the source sysmodule")
+    require("HANDOFF_TIMEOUT_NS UINT64_C(10000000000)" in hot_reload and
+            "EXIT_TIMEOUT_NS UINT64_C(10000000000)" in hot_reload and
+            "READY_TIMEOUT_NS UINT64_C(30000000000)" in hot_reload,
+            "hot reload must retain the 10s handoff, 10s exit and 30s ready deadlines")
+    absent_pos = hot_reload.index("controller->absent_samples >= 3U")
+    restore_pos = hot_reload.index("ptc_hot_reload_restore_boot", absent_pos)
+    launch_pos = hot_reload.index("launch_target(controller)", restore_pos)
+    require(absent_pos < restore_pos < launch_pos,
+            "hot reload must prove source exit and restore boot2 before launching the target")
+    require("NcmStorageId_None" in hot_reload and "RELEASE_PROGRAM_ID" in hot_reload,
+            "hot reload must launch the installed SD title through PM using storage None")
+    require("controller->launch_attempts < 2U" in hot_reload,
+            "hot reload may retry an absent target only once")
+    recover_pos = nro_main.index("ptc_hot_reload_recover_startup(&ui.hot_reload);")
+    expected_pos = nro_main.index("backend_expected = standard_backend_expected();")
+    require(recover_pos < expected_pos,
+            "standard NRO must restore an interrupted boot flag before deciding whether IPC is expected")
+    require("ui->model.view != PTC_UI_PARENT" in nro_main and
+            "PTC_UI_OPERATION_HOT_RELOAD" in nro_main,
+            "hot reload confirmation must remain reachable only after entering the PIN-protected parent area")
     read_status_start = pctl_adapter.index("static PtcErrorCode switch_read_status")
     read_status_end = pctl_adapter.index("static PtcErrorCode switch_backup", read_status_start)
     read_status = pctl_adapter[read_status_start:read_status_end]

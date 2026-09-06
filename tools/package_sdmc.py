@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -11,6 +12,7 @@ import zipfile
 APP_DIR = Path("switch") / "playwise"
 DEFAULTS_DIR = APP_DIR / "defaults"
 ATMOSPHERE_CONTENT_DIR = Path("atmosphere") / "contents" / "4200000000BD2300"
+PACKAGE_ARTIFACTS_FILE = APP_DIR / "package-artifacts.json"
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -23,6 +25,13 @@ def copy_file(src: Path, dst: Path) -> None:
         raise FileNotFoundError(f"missing input file: {src}")
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst)
+
+
+def artifact_record(path: Path) -> dict[str, int | str]:
+    return {
+        "size": path.stat().st_size,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
 
 
 def write_zip(root: Path, zip_path: Path) -> None:
@@ -69,6 +78,7 @@ def create_package(
         app / "activity",
         app / "stats",
         app / "backups",
+        app / "handover",
         app / "recovery" / "active",
         app / "flags",
         app / "support",
@@ -175,6 +185,24 @@ def create_package(
         boot2 = out / ATMOSPHERE_CONTENT_DIR / "flags" / "boot2.flag"
         boot2.parent.mkdir(parents=True, exist_ok=True)
         boot2.write_text("", encoding="utf-8")
+
+    if nro is not None and overlay is not None and sysmodule_exefs is not None:
+        artifact_paths = (
+            APP_DIR / nro.name,
+            Path("switch") / ".overlays" / overlay.name,
+            ATMOSPHERE_CONTENT_DIR / "exefs.nsp",
+        )
+        write_json(
+            out / PACKAGE_ARTIFACTS_FILE,
+            {
+                "schema_version": 1,
+                "release_id": manifest_data["release_id"],
+                "artifacts": {
+                    path.as_posix(): artifact_record(out / path)
+                    for path in artifact_paths
+                },
+            },
+        )
 
 
 def main() -> int:

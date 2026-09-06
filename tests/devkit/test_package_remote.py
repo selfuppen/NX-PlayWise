@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import struct
@@ -63,6 +64,20 @@ def write_package(
     manifest = (f'{{"schema_version":1,"playwise_version":"{version}","commit":"' + "a" * 40 +
         f'","release_id":"playwise-{version}+aaaaaaaaaaaa","profile":"release","protocol_version":1,'
         '"recovery_version":1,"pctl_layout_version":1,"build":{},"verified_environment":{}}')
+    embedded = manifest.encode()
+    components = {
+        "switch/playwise/pctc.nro": valid_nro(with_icon=True, embedded_manifest=embedded + component_marker),
+        "switch/.overlays/playwise.ovl": valid_nro(with_icon=False, embedded_manifest=embedded) if overlay_data is None else overlay_data,
+        "atmosphere/contents/4200000000BD2300/exefs.nsp": embedded,
+    }
+    artifacts = {
+        "schema_version": 1,
+        "release_id": f"playwise-{version}+aaaaaaaaaaaa",
+        "artifacts": {
+            name: {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+            for name, data in components.items()
+        },
+    }
     with zipfile.ZipFile(path, "w") as package:
         package.writestr("switch/playwise/defaults/config.json", '{"version":1,"device_id":"kid-switch"}')
         package.writestr("switch/playwise/defaults/auth.json", '{"version":1,"pin_hash":"","pin_salt":"","hash":"hmac-sha256","updated_at":0,"failed_attempts":0,"cooldown_until":0}')
@@ -71,11 +86,11 @@ def write_package(
         package.writestr("switch/playwise/defaults/compatibility.json", '{"version":1}')
         package.writestr("switch/playwise/defaults/setup.json", '{"version":1,"phase":"unconfigured"}')
         package.writestr("switch/playwise/build.json", manifest)
-        embedded = manifest.encode()
-        package.writestr("switch/playwise/pctc.nro", valid_nro(with_icon=True, embedded_manifest=embedded + component_marker))
+        package.writestr("switch/playwise/package-artifacts.json", json.dumps(artifacts))
+        package.writestr("switch/playwise/pctc.nro", components["switch/playwise/pctc.nro"])
         if boot2:
-            package.writestr("switch/.overlays/playwise.ovl", valid_nro(with_icon=False, embedded_manifest=embedded) if overlay_data is None else overlay_data)
-            package.writestr("atmosphere/contents/4200000000BD2300/exefs.nsp", embedded)
+            package.writestr("switch/.overlays/playwise.ovl", components["switch/.overlays/playwise.ovl"])
+            package.writestr("atmosphere/contents/4200000000BD2300/exefs.nsp", components["atmosphere/contents/4200000000BD2300/exefs.nsp"])
             package.writestr("atmosphere/contents/4200000000BD2300/flags/boot2.flag", b"")
     return json.loads(manifest)
 
@@ -223,6 +238,36 @@ def test_zip_verification() -> None:
             require("must not overwrite runtime data" in str(exc), "runtime seed rejection must explain data preservation")
         else:
             raise AssertionError("a package containing a live mutable seed must be rejected")
+
+        missing_artifacts = root / "playwise-20260730-120005.zip"
+        with zipfile.ZipFile(mutable_path) as source, zipfile.ZipFile(missing_artifacts, "w") as destination:
+            for name in source.namelist():
+                if name != package_remote.APP_ARTIFACTS and name != "switch/playwise/auth.json":
+                    destination.writestr(name, source.read(name))
+        try:
+            package_remote.verify_package_zip(missing_artifacts, "playwise", expected_manifest=mutable_manifest)
+        except package_remote.PackageError as exc:
+            require("missing switch/playwise/package-artifacts.json" in str(exc),
+                    "missing artifact manifest must be rejected explicitly")
+        else:
+            raise AssertionError("a standard package without artifact identity must be rejected")
+
+        bad_digest = root / "playwise-20260730-120006.zip"
+        with zipfile.ZipFile(mutable_path) as source, zipfile.ZipFile(bad_digest, "w") as destination:
+            artifact_data = json.loads(source.read(package_remote.APP_ARTIFACTS))
+            artifact_data["artifacts"]["switch/playwise/pctc.nro"]["sha256"] = "0" * 64
+            for name in source.namelist():
+                if name == "switch/playwise/auth.json":
+                    continue
+                destination.writestr(name,
+                    json.dumps(artifact_data) if name == package_remote.APP_ARTIFACTS else source.read(name))
+        try:
+            package_remote.verify_package_zip(bad_digest, "playwise", expected_manifest=mutable_manifest)
+        except package_remote.PackageError as exc:
+            require("artifact digest mismatch for switch/playwise/pctc.nro" in str(exc),
+                    "torn component copy must identify the mismatched artifact")
+        else:
+            raise AssertionError("a standard package with a torn component digest must be rejected")
 
 
 def test_eden_nro_verification() -> None:

@@ -24,6 +24,9 @@
 #include "../../common/version.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
 #include "ui_graphics.h"
+#ifndef PLAYWISE_EDEN
+#include "hot_reload.h"
+#endif
 #ifdef PLAYWISE_EDEN
 #include "eden_runtime.h"
 #endif
@@ -70,6 +73,7 @@ static bool standard_backend_expected(void)
     struct stat info;
     return stat(STANDARD_BOOT_FLAG_PATH, &info) == 0 && info.st_size == 0;
 }
+
 #endif
 
 typedef enum {
@@ -124,10 +128,18 @@ typedef struct {
     AuthRetryAction auth_retry_action;
     PtcUiOverlay auth_return_overlay;
     int64_t auth_cooldown_until;
+#ifndef PLAYWISE_EDEN
+    PtcHotReloadController hot_reload;
+    bool hot_reload_prompted;
+    bool hot_reload_ipc_closed;
+    bool hot_reload_terminal_handled;
+    bool hot_reload_child_notice_shown;
+#endif
 } UiState;
 
 static PadState *g_active_pad;
 static void draw(UiState *ui);
+static void submit_status(UiState *ui);
 
 static void request_parent_navigation(UiState *ui, int target_page, bool leave_parent);
 
@@ -155,6 +167,86 @@ static void export_diagnostics(UiState *ui);
 static bool save_ui_preferences(UiState *ui);
 static bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference);
 static bool ensure_default_setup_pin(UiState *ui);
+#ifndef PLAYWISE_EDEN
+static void sync_hot_reload_model(UiState *ui);
+static void open_hot_reload_confirmation(UiState *ui);
+static void poll_hot_reload(UiState *ui);
+#endif
+
+#ifndef PLAYWISE_EDEN
+static void sync_hot_reload_model(UiState *ui)
+{
+    if (!ui) return;
+    ui->model.hot_reload_status = (int)ui->hot_reload.status;
+    snprintf(ui->model.app_release_id, sizeof(ui->model.app_release_id), "%s", PLAYWISE_BUILD_RELEASE_ID);
+    snprintf(ui->model.backend_release_id, sizeof(ui->model.backend_release_id), "%s",
+        ui->hot_reload.journal.source_release_id);
+    snprintf(ui->model.hot_reload_detail, sizeof(ui->model.hot_reload_detail), "%s",
+        ui->hot_reload.detail);
+}
+
+static void open_hot_reload_confirmation(UiState *ui)
+{
+    char body[320];
+    if (!ui || ui->model.view != PTC_UI_PARENT ||
+        ui->hot_reload.status != PTC_HOT_RELOAD_PENDING || ui->waiting) return;
+    snprintf(body, sizeof(body),
+        "当前后台：%.88s\n待加载：%.88s\n将短暂停止接单，安全退出旧后台后加载已安装版本；PIN、规则和运行数据保持不变。",
+        ui->hot_reload.journal.source_release_id, PLAYWISE_BUILD_RELEASE_ID);
+    open_confirm_overlay(ui, PTC_UI_OPERATION_HOT_RELOAD, "加载已安装的新版本", body);
+}
+
+static void poll_hot_reload(UiState *ui)
+{
+    if (!ui) return;
+    ptc_hot_reload_tick(&ui->hot_reload);
+    if (ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_NEED_IPC_CLOSE) {
+        ptc_companion_transport_cancel(&ui->transport);
+        ptc_switch_ipc_client_exit(&ui->ipc);
+        ui->hot_reload_ipc_closed = true;
+        ptc_hot_reload_confirm_ipc_closed(&ui->hot_reload);
+    }
+    sync_hot_reload_model(ui);
+    if (ui->hot_reload.status == PTC_HOT_RELOAD_RUNNING) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
+    }
+    if (ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_COMPLETE && !ui->hot_reload_terminal_handled) {
+        ui->hot_reload_terminal_handled = true;
+        ptc_switch_ipc_client_init(&ui->ipc);
+        ui->hot_reload_ipc_closed = false;
+        ui->waiting = false;
+        ui->model.waiting = false;
+        if (ptc_switch_ipc_client_probe(&ui->ipc)) {
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                "新版后台已安全加载，正在刷新状态...");
+            submit_status(ui);
+        } else {
+            ui->hot_reload.status = PTC_HOT_RELOAD_UNAVAILABLE;
+            snprintf(ui->hot_reload.detail, sizeof(ui->hot_reload.detail),
+                "后台已启动但 IPC 重连失败，请完整重启主机");
+            sync_hot_reload_model(ui);
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
+        }
+    } else if (ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED && !ui->hot_reload_terminal_handled) {
+        ui->hot_reload_terminal_handled = true;
+        ui->waiting = false;
+        ui->model.waiting = false;
+        if (ui->hot_reload_ipc_closed) {
+            ptc_switch_ipc_client_init(&ui->ipc);
+            (void)ptc_switch_ipc_client_probe(&ui->ipc);
+            ui->hot_reload_ipc_closed = false;
+        }
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
+    }
+    if (ui->hot_reload.status == PTC_HOT_RELOAD_PENDING &&
+        ui->model.view == PTC_UI_CHILD && !ui->waiting &&
+        ui->model.overlay == PTC_UI_OVERLAY_NONE && !ui->hot_reload_child_notice_shown) {
+        ui->hot_reload_child_notice_shown = true;
+        snprintf(ui->model.message, sizeof(ui->model.message),
+            "已安装新版本；请进入家长区，通过 PIN 确认加载。");
+    }
+}
+#endif
 
 /* 数字缓动按帧间隔归一：40ms 拍下与旧 (差值/4 + 1) 公式等价，拍长变化时节奏不变。 */
 static void tween_displayed_minutes(int *value, int target, int64_t delta_ms)
@@ -1625,6 +1717,15 @@ static void enter_parent_area_unlocked(UiState *ui)
         ? PTC_UI_SETTINGS_SUPPORT : PTC_UI_SETTINGS_ROOT;
     ui->model.selected_index = 0;
     snprintf(ui->model.message, sizeof(ui->model.message), "家长区已解锁。进入孩子区请按 B。");
+#ifndef PLAYWISE_EDEN
+    ptc_hot_reload_inspect(&ui->hot_reload);
+    sync_hot_reload_model(ui);
+    if (ui->hot_reload.status == PTC_HOT_RELOAD_PENDING && !ui->hot_reload_prompted) {
+        ui->hot_reload_prompted = true;
+        open_hot_reload_confirmation(ui);
+        return;
+    }
+#endif
     if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
         submit_status(ui);
     }
@@ -3118,6 +3219,10 @@ static void handle_parent_action(UiState *ui)
             "诊断文件可能包含设备标识和文件路径信息，请只发送给可信的支持人员。\nPIN、加时码密钥和可复用授权材料不会导出。");
         break;
     case 5:
+#ifndef PLAYWISE_EDEN
+        ptc_hot_reload_inspect(&ui->hot_reload);
+        sync_hot_reload_model(ui);
+#endif
         ui->model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
         snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "软件信息");
         ui->model.overlay_body[0] = '\0';
@@ -3136,6 +3241,25 @@ static void confirm_operation(UiState *ui)
     PtcUiOverlay return_overlay = ui->model.confirm_return_overlay;
     PtcUiOperation operation = ptc_ui_take_confirmed_operation(&ui->model);
     switch (operation) {
+#ifndef PLAYWISE_EDEN
+    case PTC_UI_OPERATION_HOT_RELOAD:
+        if (ui->waiting || ui->model.recovery_active) {
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                "当前请求或恢复事务尚未完成，暂不能热加载。");
+        } else if (ptc_hot_reload_begin(&ui->hot_reload)) {
+            ui->hot_reload_terminal_handled = false;
+            ui->waiting = true;
+            ui->model.waiting = true;
+            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            sync_hot_reload_model(ui);
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
+        } else {
+            sync_hot_reload_model(ui);
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                ui->hot_reload.detail[0] ? ui->hot_reload.detail : "热加载前置检查未通过");
+        }
+        break;
+#endif
     case PTC_UI_OPERATION_EXPORT_DIAGNOSTICS:
         export_diagnostics(ui);
         break;
@@ -3651,7 +3775,12 @@ static void handle_overlay_input(UiState *ui, u64 down)
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
-        if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
+        if ((down & (HidNpadButton_A | HidNpadButton_Plus)) &&
+            ui->model.hot_reload_status == PTC_UI_HOT_RELOAD_PENDING) {
+#ifndef PLAYWISE_EDEN
+            open_hot_reload_confirmation(ui);
+#endif
+        } else if (down & (HidNpadButton_B | HidNpadButton_A | HidNpadButton_Plus)) {
             ptc_ui_cancel_overlay(&ui->model);
         }
         return;
@@ -4021,7 +4150,9 @@ static void handle_overlay_input(UiState *ui, u64 down)
         bool album_change = ui->model.operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
                             ui->model.operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||
                             ui->model.operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY;
-        if (album_change && (down & (HidNpadButton_Left | HidNpadButton_Right))) {
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (album_change && (down & (HidNpadButton_Left | HidNpadButton_Right))) {
             ui->model.overlay_selection = 1 - ui->model.overlay_selection;
         } else if (album_change && (down & HidNpadButton_A) && ui->model.overlay_selection == 0) {
             ptc_ui_cancel_overlay(&ui->model);
@@ -4579,6 +4710,10 @@ int main(int argc, char **argv)
     ptc_ui_set_execution(&ui.model, NULL, NULL);
     snprintf(ui.model.message, sizeof(ui.model.message), "正在读取今天的游玩状态...");
     ptc_fs_storage_init(&fs);
+#ifndef PLAYWISE_EDEN
+    ptc_hot_reload_init(&ui.hot_reload);
+    ptc_hot_reload_recover_startup(&ui.hot_reload);
+#endif
 #ifdef PLAYWISE_EDEN
     /* Seeds the live root files, so the materialization below finds them all
        present and succeeds without a packaged defaults/ directory. Keep this
@@ -4603,6 +4738,8 @@ int main(int argc, char **argv)
     if (backend_expected) ptc_switch_ipc_client_init(&ui.ipc);
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs),
         backend_expected ? ptc_switch_ipc_backend() : NULL, &ui.ipc);
+    if (ui.hot_reload.status == PTC_HOT_RELOAD_UNKNOWN) ptc_hot_reload_inspect(&ui.hot_reload);
+    sync_hot_reload_model(&ui);
 #endif
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     ui.last_setup_refresh_second = -1;
@@ -4616,7 +4753,9 @@ int main(int argc, char **argv)
                  "安装数据初始化失败，请重新覆盖安装包并确认 SD 卡可写。");
     }
 #ifndef PLAYWISE_EDEN
-    else if (!backend_expected) {
+    else if (ui.hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED) {
+        snprintf(ui.model.message, sizeof(ui.model.message), "%s", ui.hot_reload.detail);
+    } else if (!backend_expected) {
         snprintf(ui.model.message, sizeof(ui.model.message),
                  "标准后台启动标志当前未启用。请先用 Device Lab 恢复正常后台并完整重启主机。");
     }
@@ -4954,6 +5093,8 @@ int main(int argc, char **argv)
         if (background_poll_elapsed_ms >= BACKGROUND_POLL_INTERVAL_MS) {
 #ifdef PLAYWISE_EDEN
             ptc_eden_runtime_tick(&eden_runtime);
+#else
+            poll_hot_reload(&ui);
 #endif
             poll_pending_redemption(&ui);
             poll_result(&ui, false);
@@ -4972,6 +5113,7 @@ int main(int argc, char **argv)
     appletUnhook(&hook_cookie);
     ptc_ui_graphics_exit();
 #ifndef PLAYWISE_EDEN
+    ptc_hot_reload_exit(&ui.hot_reload);
     ptc_switch_ipc_client_exit(&ui.ipc);
 #endif
     return 0;
