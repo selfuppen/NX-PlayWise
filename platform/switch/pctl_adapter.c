@@ -221,6 +221,21 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
        daily policy and its derived played estimate stay unknown. */
     if (weekday < PTC_PLAY_TIMER_DAY_COUNT &&
         open_write_session(adapter, &settings_session) == PTC_ERR_OK) {
+        /* HOS 22.5.0 can expose 1453/1454 through pctl while rejecting 1455 on
+           that service. Device Lab evidence confirms 1455 on pctl:s, which is
+           already required here for the private settings read. Retry only the
+           unavailable instantaneous flag without weakening runtime confirmation. */
+        if (!out->restricted_now_available) {
+            Result privileged_restricted_rc = dispatch_out(
+                &settings_session.service,
+                PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER,
+                &restricted,
+                sizeof(restricted));
+            out->restricted_now_available = R_SUCCEEDED(privileged_restricted_rc);
+            if (out->restricted_now_available) {
+                out->restricted_now = restricted;
+            }
+        }
         if (get_play_timer_settings(adapter, &settings_session.service, &timer_settings) == PTC_ERR_OK) {
             /* The configured daily policy is independent from the transient
                restriction switch and Nintendo's temporary-unlock state. */

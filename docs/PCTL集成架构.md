@@ -63,6 +63,8 @@ flowchart LR
 
 Enforce、跨日、启动恢复、未来规则修改和今日规则未变化都不得进入 `1451` fallback。只有家长/孩子正在进行的即时修改，在目标设置已精确生效但限时 timer 仍未运行，或加时/不限时仍未解除瞬时限制时，才允许调用一次；设置不精确、fallback 或再次回读失败均按已有 snapshot 精确回滚。`1455 restricted_now` 只描述系统瞬时限制状态，不能表示提示是否可见，也不能证明软件暂停或退出。
 
+状态读取优先通过低权限 `pctl` 会话获取运行时字段。绑定环境的现场记录显示 `1453/1454` 可用时，`1455` 仍可能只在 `pctl:s` 上可用；因此适配层在低权限查询失败后，只复用本次读取私有设置所需的短时 `pctl:s` 会话补读 `1455`。这不是放宽生效条件：两条通道都不可用时 `restricted_now` 仍为未知，即时写入仍须失败并按 snapshot 精确回滚。
+
 ## 私有命令证据
 
 当前本机 libnx 源码不提供 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSpentTimeForTest (1952)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装。不得用“libnx 没有定义”推断参数单位或 0x44 raw 布局。

@@ -19,6 +19,7 @@ def main() -> None:
     overlay = (ROOT / "companion/overlay/source/main.cpp").read_text(encoding="utf-8")
     lab_nro = (ROOT / "device_lab/nro/main.c").read_text(encoding="utf-8")
     lab_overlay = (ROOT / "device_lab/overlay/source/main.cpp").read_text(encoding="utf-8")
+    pctl_adapter = (ROOT / "platform/switch/pctl_adapter.c").read_text(encoding="utf-8")
     libtesla = (ROOT / "companion/overlay/vendor/libtesla/include/tesla.hpp").read_text(encoding="utf-8")
     overlay_makefile = (ROOT / "companion/overlay/Makefile").read_text(encoding="utf-8")
 
@@ -62,6 +63,14 @@ def main() -> None:
             "the standard Overlay build must not hide unsigned-index diagnostics")
     require("standard_backend_expected()" in (ROOT / "companion/nro/main.c").read_text(encoding="utf-8"),
             "standard NRO must skip IPC when Device Lab has disabled its boot flag")
+    read_status_start = pctl_adapter.index("static PtcErrorCode switch_read_status")
+    read_status_end = pctl_adapter.index("static PtcErrorCode switch_backup", read_status_start)
+    read_status = pctl_adapter[read_status_start:read_status_end]
+    require(read_status.count("PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER") == 2,
+            "Switch status must try restricted-now on both pctl and pctl:s")
+    require("if (!out->restricted_now_available)" in read_status and
+            "&settings_session.service" in read_status,
+            "pctl:s restricted-now fallback must run only when the pctl query is unavailable")
 
     print("switch IPC lifecycle contract passed")
 
