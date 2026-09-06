@@ -52,8 +52,14 @@ def main() -> int:
         "max_add_minutes": 240,
         "cases": cases,
     }
+    rendered = json.dumps(fixture, ensure_ascii=False, indent=2) + "\n"
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(fixture, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # Tests run in a Linux container against the Windows-mounted checkout. A
+    # byte-for-byte rewrite would turn a CRLF checkout into LF and make Git
+    # report a tracked modification even when the normalized fixture is
+    # unchanged. Preserve the existing file and its checkout line endings.
+    if not OUT.is_file() or OUT.read_text(encoding="utf-8") != rendered:
+        OUT.write_text(rendered, encoding="utf-8", newline="\n")
     print(OUT)
     return 0
 

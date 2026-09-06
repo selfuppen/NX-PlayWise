@@ -33,6 +33,7 @@ DEFAULT_SSH_HOST = "127.0.0.1"
 DEFAULT_SSH_PORT = 1888
 DEFAULT_SSH_USER = "root"
 DEFAULT_CONTAINER_PATH = "/ws/playwise"
+DEFAULT_DOCKER_CONTAINER = "devkitpro-ssh-v1"
 APP_DEFAULTS = "switch/playwise/defaults"
 APP_BUILD = "switch/playwise/build.json"
 APP_DEFAULT_FILES = tuple(f"{APP_DEFAULTS}/{name}" for name in (
@@ -121,6 +122,45 @@ NRO_INFORMATION_MARKERS = (
 
 class PackageError(RuntimeError):
     pass
+
+
+def detect_local_docker_identity(container_name: str) -> tuple[str | None, str | None]:
+    """Return the configured image tag and immutable image ID for a local container."""
+    try:
+        result = subprocess.run(
+            [
+                "docker", "inspect", container_name,
+                "--format", "{{.Config.Image}}\n{{.Image}}",
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None, None
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    image = lines[0] if lines else None
+    digest = lines[1] if len(lines) > 1 else None
+    if digest and not digest.startswith("sha256:"):
+        digest = None
+    return image, digest
+
+
+def resolve_build_identity(
+    host: str,
+    *,
+    build_image: str | None = None,
+    build_image_digest: str | None = None,
+    docker_container: str | None = DEFAULT_DOCKER_CONTAINER,
+) -> tuple[str | None, str | None]:
+    image = build_image or os.environ.get("PLAYWISE_BUILD_IMAGE")
+    digest = build_image_digest or os.environ.get("PLAYWISE_BUILD_IMAGE_DIGEST")
+    if docker_container and host in {"127.0.0.1", "localhost", "::1"} and (not image or not digest):
+        detected_image, detected_digest = detect_local_docker_identity(docker_container)
+        image = image or detected_image
+        digest = digest or detected_digest
+    return image, digest
 
 
 def package_prefix(path: Path) -> str:
@@ -406,6 +446,8 @@ def container_command(
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
+    build_image: str | None = None,
+    build_image_digest: str | None = None,
 ) -> str:
     path = "/opt/devkitpro/devkitA64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     job_flag = f"-j{jobs} " if jobs else "-j "
@@ -416,9 +458,6 @@ def container_command(
         clean_cmd = f"make clean{clean_eden} && "
 
     targets: list[str] = []
-    if run_tests:
-        targets.append("test")
-
     if only == "all":
         targets.append("packages")
         if with_eden:
@@ -435,13 +474,19 @@ def container_command(
         raise PackageError(f"unknown package target: {only}")
 
     targets_str = f"make {job_flag}{' '.join(targets)}"
+    test_cmd = f"make {job_flag}test && " if run_tests else ""
+    identity_exports = ""
+    if build_image:
+        identity_exports += f" PLAYWISE_BUILD_IMAGE={shlex.quote(build_image)}"
+    if build_image_digest:
+        identity_exports += f" PLAYWISE_BUILD_IMAGE_DIGEST={shlex.quote(build_image_digest)}"
     container_script = (
         "export DEVKITPRO=/opt/devkitpro "
         "DEVKITARM=/opt/devkitpro/devkitARM "
         "DEVKITA64=/opt/devkitpro/devkitA64 "
-        f"PATH={shlex.quote(path)} "
+        f"PATH={shlex.quote(path)}{identity_exports} "
         f"&& cd {shlex.quote(container_path)} "
-        f"&& {clean_cmd}{targets_str}"
+        f"&& {clean_cmd}{test_cmd}{targets_str}"
     )
     return f"sh -lc {shlex.quote(container_script)}"
 
@@ -458,6 +503,8 @@ def ssh_command(
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
+    build_image: str | None = None,
+    build_image_digest: str | None = None,
 ) -> list[str]:
     command = ["ssh", "-p", str(port), "-o", "ConnectTimeout=10"]
     if host in {"127.0.0.1", "localhost", "::1"}:
@@ -474,6 +521,8 @@ def ssh_command(
             clean=clean,
             run_tests=run_tests,
             jobs=jobs,
+            build_image=build_image,
+            build_image_digest=build_image_digest,
         ),
     ])
     return command
@@ -491,6 +540,8 @@ def run_container(
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
+    build_image: str | None = None,
+    build_image_digest: str | None = None,
 ) -> None:
     process = subprocess.run(
         ssh_command(
@@ -504,6 +555,8 @@ def run_container(
             clean=clean,
             run_tests=run_tests,
             jobs=jobs,
+            build_image=build_image,
+            build_image_digest=build_image_digest,
         ),
         cwd=ROOT,
         stdin=None,
@@ -541,6 +594,9 @@ def build_and_verify(
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
+    build_image: str | None = None,
+    build_image_digest: str | None = None,
+    docker_container: str | None = DEFAULT_DOCKER_CONTAINER,
 ) -> None:
     overall_t0 = time.perf_counter()
     package_dir = ROOT / "build" / "packages"
@@ -564,6 +620,17 @@ def build_and_verify(
         if only in ("all", "eden") and with_eden:
             remove_path(eden_dir / EDEN_NRO)
 
+    build_image, build_image_digest = resolve_build_identity(
+        host,
+        build_image=build_image,
+        build_image_digest=build_image_digest,
+        docker_container=docker_container,
+    )
+    if not build_image:
+        print("WARN: Docker image tag is unavailable; manifest container_image will be unknown.")
+    if not build_image_digest:
+        print("WARN: Docker image ID is unavailable; manifest container_image_digest will be unknown.")
+
     run_container(
         host,
         port,
@@ -575,6 +642,8 @@ def build_and_verify(
         clean=clean,
         run_tests=run_tests,
         jobs=jobs,
+        build_image=build_image,
+        build_image_digest=build_image_digest,
     )
 
     if only == "all":
@@ -663,6 +732,19 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--identity", type=Path, help="Optional SSH private key path.")
     parser.add_argument(
+        "--build-image",
+        help="Build image tag recorded in manifests. Defaults to PLAYWISE_BUILD_IMAGE or local Docker inspection.",
+    )
+    parser.add_argument(
+        "--build-image-digest",
+        help="Immutable build image ID recorded in manifests. Defaults to PLAYWISE_BUILD_IMAGE_DIGEST or local Docker inspection.",
+    )
+    parser.add_argument(
+        "--docker-container",
+        default=DEFAULT_DOCKER_CONTAINER,
+        help=f"Local container inspected for build identity. Default: {DEFAULT_DOCKER_CONTAINER}",
+    )
+    parser.add_argument(
         "--only",
         choices=["all", "playwise", "complete", "device-lab", "eden"],
         default="all",
@@ -727,6 +809,9 @@ def main() -> int:
             clean=args.clean,
             run_tests=not args.skip_tests,
             jobs=args.jobs,
+            build_image=args.build_image,
+            build_image_digest=args.build_image_digest,
+            docker_container=args.docker_container,
         )
     except (OSError, PackageError, subprocess.SubprocessError, zipfile.BadZipFile) as exc:
         print(f"FAIL: container packages: {exc}")

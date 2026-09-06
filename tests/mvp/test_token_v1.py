@@ -29,8 +29,12 @@ def assert_reason(reason: str, fn) -> None:
 
 
 def main() -> int:
-    subprocess.run([sys.executable, str(TOOLS / "make_fixtures.py")], check=True)
     fixture_path = ROOT / "tests" / "fixtures" / "token_v1_fixture.json"
+    fixture_before = fixture_path.read_bytes()
+    fixture_mtime_before = fixture_path.stat().st_mtime_ns
+    subprocess.run([sys.executable, str(TOOLS / "make_fixtures.py")], check=True)
+    assert_equal(fixture_path.read_bytes(), fixture_before, "fixture bytes remain unchanged")
+    assert_equal(fixture_path.stat().st_mtime_ns, fixture_mtime_before, "fixture mtime remains unchanged")
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
 
     device_id = fixture["device_id"]

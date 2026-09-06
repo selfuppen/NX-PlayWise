@@ -4,8 +4,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import struct
+import subprocess
 import sys
 import tempfile
+from unittest import mock
 import zipfile
 
 
@@ -82,7 +84,8 @@ def test_container_command() -> None:
     command = package_remote.container_command()
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     require("/ws/playwise" in command, "container command must use the mounted repository")
-    require("test packages" in command, "container command must test and package")
+    require("make -j test && make -j packages" in command,
+            "container command must finish tests before generating package manifests")
     require("packages: package-complete device-lab-package" in makefile,
             "packages target must verify the isolated Device Lab target")
     require("make clean" not in command, "the default build must reuse valid intermediates")
@@ -101,7 +104,8 @@ def test_container_command() -> None:
 
     incremental = package_remote.container_command(clean=False)
     require("make clean" not in incremental, "incremental build must omit make clean")
-    require("test packages" in incremental, "incremental build must still compile packages")
+    require("make -j test && make -j packages" in incremental,
+            "incremental build must still finish tests before compiling packages")
 
     skip_tests = package_remote.container_command(run_tests=False)
     require("test" not in skip_tests.split("make -j ")[1].split(), "skip_tests must omit test target")
@@ -112,6 +116,38 @@ def test_container_command() -> None:
 
     jobs_cmd = package_remote.container_command(jobs=4)
     require("make -j4 " in jobs_cmd, "explicit jobs must be reflected in make command")
+
+    identified = package_remote.container_command(
+        build_image="devkitpro:v1",
+        build_image_digest="sha256:" + "a" * 64,
+    )
+    require("PLAYWISE_BUILD_IMAGE=devkitpro:v1" in identified,
+            "container command must explicitly export the image tag")
+    require("PLAYWISE_BUILD_IMAGE_DIGEST=sha256:" + "a" * 64 in identified,
+            "container command must explicitly export the immutable image ID")
+
+
+def test_build_identity_detection() -> None:
+    inspected = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout="devkitpro:v1\nsha256:" + "b" * 64 + "\n",
+        stderr="",
+    )
+    with mock.patch.object(package_remote.subprocess, "run", return_value=inspected):
+        image, digest = package_remote.detect_local_docker_identity("devkitpro-ssh-v1")
+    require(image == "devkitpro:v1", "Docker inspection must return the configured image tag")
+    require(digest == "sha256:" + "b" * 64, "Docker inspection must return the immutable image ID")
+
+    with mock.patch.dict(package_remote.os.environ, {
+        "PLAYWISE_BUILD_IMAGE": "explicit:v2",
+        "PLAYWISE_BUILD_IMAGE_DIGEST": "sha256:" + "c" * 64,
+    }, clear=True), mock.patch.object(
+        package_remote, "detect_local_docker_identity", side_effect=AssertionError("must not inspect Docker")
+    ):
+        image, digest = package_remote.resolve_build_identity("127.0.0.1")
+    require(image == "explicit:v2" and digest == "sha256:" + "c" * 64,
+            "explicit environment identity must take precedence over Docker inspection")
 
 
 def test_ssh_command() -> None:
@@ -350,6 +386,7 @@ def test_public_package_selection() -> None:
 
 def main() -> int:
     test_container_command()
+    test_build_identity_detection()
     test_ssh_command()
     test_container_ssh_key_persistence()
     test_zip_verification()

@@ -60,11 +60,21 @@ def test_candidate_defaults_to_pending() -> None:
     require(data["build"]["source_dirty"] is False, "tracked dirty state must be recorded")
 
 
+def test_tracked_dirty_uses_content_diff() -> None:
+    clean = manifest.subprocess.CompletedProcess(args=[], returncode=0)
+    dirty = manifest.subprocess.CompletedProcess(args=[], returncode=1)
+    with mock.patch.object(manifest.subprocess, "run", return_value=clean):
+        require(manifest.git_tracked_dirty() is False, "content-identical tracked files must remain clean")
+    with mock.patch.object(manifest.subprocess, "run", return_value=dirty):
+        require(manifest.git_tracked_dirty() is True, "tracked content changes must mark the candidate dirty")
+
+
 def main() -> int:
     test_libnx_package_identity()
     test_libnx_pkgconfig_fallback()
     test_libnx_devkitpro_package_database_fallback()
     test_candidate_defaults_to_pending()
+    test_tracked_dirty_uses_content_diff()
     print("Release manifest tests passed")
     return 0
 

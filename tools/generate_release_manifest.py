@@ -30,7 +30,18 @@ def git_commit() -> str:
 
 
 def git_tracked_dirty() -> bool:
-    return bool(command_output(["git", "status", "--porcelain", "--untracked-files=no"], fallback=""))
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--quiet", "HEAD", "--"],
+            cwd=ROOT,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        # A missing or unreadable Git checkout must never be presented as a
+        # clean release candidate.
+        return True
+    return result.returncode != 0
 
 
 def toolchain_identity() -> str:
