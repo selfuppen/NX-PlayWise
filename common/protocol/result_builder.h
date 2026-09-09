@@ -45,6 +45,23 @@ typedef struct {
     uint32_t usage_consumed_minutes_7;
     uint16_t usage_known_days_30;
     uint32_t usage_consumed_minutes_30;
+    bool bedtime_enabled;
+    bool bedtime_active;
+    bool bedtime_skipped;
+    uint64_t bedtime_window_instance_id;
+    uint16_t bedtime_start_day_index;
+    uint16_t bedtime_start_minute;
+    uint16_t bedtime_end_minute;
+    const char *bedtime_source;
+    bool bedtime_next_available;
+    uint16_t bedtime_next_start_day_index;
+    uint16_t bedtime_next_start_minute;
+    uint16_t bedtime_next_end_minute;
+    uint64_t bedtime_next_window_instance_id;
+    bool bedtime_official_setting_confirmed;
+    bool bedtime_overlay_verified;
+    const char *bedtime_recovery_phase;
+    bool daily_restriction_active;
 } PtcResultState;
 
 typedef struct {

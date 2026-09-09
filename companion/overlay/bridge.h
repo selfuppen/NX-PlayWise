@@ -30,6 +30,15 @@ PtcCompanionStatus ptc_overlay_bridge_submit(
     const PtcCompanionResultSummary *preview);
 PtcCompanionStatus ptc_overlay_bridge_preview(PtcOverlayBridge *bridge, const char *code, int64_t created_at, uint16_t random16);
 PtcCompanionStatus ptc_overlay_bridge_submit_status(PtcOverlayBridge *bridge, int64_t created_at, uint16_t random16);
+PtcCompanionStatus ptc_overlay_bridge_submit_overlay_ready(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, const char *release_id,
+    const char *boot_id, const char *environment_fingerprint);
+PtcCompanionStatus ptc_overlay_bridge_skip_bedtime(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, uint64_t window_instance_id);
+PtcCompanionStatus ptc_overlay_bridge_disable_bedtime(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16);
+PtcCompanionStatus ptc_overlay_bridge_restore_install_snapshot(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16);
 PtcCompanionStatus ptc_overlay_bridge_poll(PtcOverlayBridge *bridge, int elapsed_ms, int timeout_ms);
 bool ptc_overlay_bridge_waiting(const PtcOverlayBridge *bridge);
 const PtcCompanionResultSummary *ptc_overlay_bridge_summary(const PtcOverlayBridge *bridge);

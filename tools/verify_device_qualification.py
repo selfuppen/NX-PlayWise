@@ -268,11 +268,91 @@ def paths_as_strings(paths: list[Path]) -> list[str]:
     return [str(path.resolve()) for path in paths]
 
 
+def verify_bedtime_report(reports_dir: Path, manifest: dict, expected_model: str,
+                           expected_hos: str, expected_atmosphere: str) -> Path:
+    path = reports_dir / "bedtime-qualification.json"
+    require(path.is_file(), "缺少 bedtime-qualification.json；bedtime 仍不得进入标准包")
+    report = read_json(path)
+    label = path.name
+    require(report.get("schema_version") == 1 and report.get("report_status") == "final",
+            f"{label}: 只接受 final schema v1")
+    subject = report.get("subject", {})
+    require(subject.get("commit") == manifest.get("commit") and
+            subject.get("release_id") == manifest.get("release_id"),
+            f"{label}: 报告与候选 commit/release_id 不一致")
+    environment = report.get("environment", {})
+    expected_model_value = MODEL_ALIASES.get(expected_model.lower(), expected_model.lower())
+    require(str(environment.get("model", "")).lower() == expected_model_value and
+            environment.get("hos") == expected_hos and
+            environment.get("atmosphere") == expected_atmosphere,
+            f"{label}: bedtime 真机环境不匹配")
+    games = report.get("games")
+    require(isinstance(games, list) and len(games) == 2 and
+            all(isinstance(item, str) and item for item in games) and len(set(games)) == 2,
+            f"{label}: 必须记录两款不同游戏")
+
+    timing = report.get("timing", {})
+    boundary_seconds = timing.get("boundary_trigger_seconds")
+    wake_seconds = timing.get("wake_trigger_seconds")
+    require(isinstance(boundary_seconds, (int, float)) and not isinstance(boundary_seconds, bool) and
+            isinstance(wake_seconds, (int, float)) and not isinstance(wake_seconds, bool) and
+            0 <= boundary_seconds <= 60 and 0 <= wake_seconds <= 60,
+            f"{label}: 到点或窗口内唤醒未在 60 秒内限制")
+    blocked = report.get("blocked_entries", {})
+    for entry in ("game", "homebrew", "home", "system_settings", "playwise_nro"):
+        require(blocked.get(entry) is True, f"{label}: 未证明 {entry} 入口被阻断")
+
+    overlay = report.get("overlay", {})
+    require(overlay.get("opened_during_popup") is True and
+            overlay.get("pin_verified") is True and
+            overlay.get("shared_cooldown_verified") is True and
+            overlay.get("single_action_authorization_verified") is True,
+            f"{label}: Overlay 打开或 PIN 安全证据不完整")
+    recovery = overlay.get("recovery", {})
+    for action in ("skip_instance", "disable_bedtime", "restore_install_snapshot"):
+        evidence = recovery.get(action, {})
+        require(evidence.get("request_submitted") is True and
+                evidence.get("pctl_reread") is True and
+                evidence.get("popup_cleared") is True,
+                f"{label}: Overlay {action} 恢复证据不完整")
+    require(overlay.get("daily_limit_message_verified") is True,
+            f"{label}: 未验证每日额度仍生效时的提示")
+    failure = overlay.get("backend_failure", {})
+    require(failure.get("reported_unconfirmed") is True and
+            failure.get("external_recovery_shown") is True and
+            failure.get("startup_restore_flag_created") is False,
+            f"{label}: 后台失联处理或自动恢复旗标结论不符合设计")
+
+    official_pause = report.get("official_pause", {})
+    require(official_pause.get("on_recorded") is True and
+            official_pause.get("off_recorded") is True and
+            official_pause.get("playwise_modified_setting") is False,
+            f"{label}: Nintendo 官方暂停开关 A/B 证据不完整")
+    lifecycle = report.get("lifecycle", {})
+    for phase in ("home", "foreground", "suspend", "sleep", "reboot", "cross_day",
+                  "manual_clock_change", "recovery_failure"):
+        require(lifecycle.get(phase) is True, f"{label}: 生命周期场景 {phase} 未通过")
+    pctl = report.get("pctl", {})
+    require(pctl.get("settings_exactly_restored") is True and
+            pctl.get("unexpected_raw_offsets") == [] and
+            pctl.get("bedtime_consumed_daily_allowance") is False,
+            f"{label}: PCTL 精确恢复、raw offset 或额度隔离证据失败")
+    missing_overlay = report.get("missing_overlay", {})
+    require(missing_overlay.get("warning_unskippable") is True and
+            missing_overlay.get("pin_and_long_hold_required") is True and
+            missing_overlay.get("enable_allowed_after_confirmation") is True and
+            missing_overlay.get("schedule_continues_without_handshake") is True,
+            f"{label}: Overlay 缺失高风险确认或防绕过证据不完整")
+    return path
+
+
 def verify(packages: Path, reports: Path, expected_model: str,
            expected_hos: str, expected_atmosphere: str, campaign: str | None = None) -> dict:
     manifest, _lab_manifest, zip_hashes, component_hashes = package_identity(packages)
     run_ids, report_paths, campaign_value = verify_reports(
         reports, manifest, expected_model, expected_hos, expected_atmosphere, campaign)
+    bedtime_report = verify_bedtime_report(
+        reports, manifest, expected_model, expected_hos, expected_atmosphere)
     return {
         "schema_version": 1,
         "status": "passed",
@@ -280,11 +360,13 @@ def verify(packages: Path, reports: Path, expected_model: str,
         "baseline": {"model": expected_model, "hos": expected_hos, "atmosphere": expected_atmosphere},
         "campaign": {"campaign_id": campaign_value["campaign_id"],
                      "entry_method": campaign_value["entry_method"]},
-        "reports": {"run_ids": run_ids, "paths": report_paths},
+        "reports": {"run_ids": run_ids, "paths": report_paths,
+                    "bedtime_path": str(bedtime_report.resolve())},
         "artifacts": {"packages": zip_hashes, "release_components": component_hashes},
         "checks": [
             "device_lab_schema_v2", "environment_exosphere", "public_raw_libnx_parity",
             "target_bound_activation_fallback", "restriction_matrix", "exact_restore",
+            "bedtime_full_entry_block", "bedtime_overlay_recovery", "bedtime_lifecycle",
             "artifact_identity",
         ],
     }
@@ -316,6 +398,9 @@ def main() -> int:
         "target_bound_activation_fallback": "Timer fallback 与目标及前置读数绑定",
         "restriction_matrix": "两游戏与官方暂停开关观察矩阵完整",
         "exact_restore": "全部危险实验均逐字节精确恢复",
+        "bedtime_full_entry_block": "bedtime 弹窗期间五类应用入口均被阻断",
+        "bedtime_overlay_recovery": "Overlay PIN 与三级恢复路径均完成真机验证",
+        "bedtime_lifecycle": "bedtime 时限、生命周期、时钟与失败路径完整",
         "artifact_identity": "报告、候选 Zip 与 Switch 二进制身份绑定",
     }
     for check_name in result["checks"]:

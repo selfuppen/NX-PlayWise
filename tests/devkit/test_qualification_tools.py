@@ -158,6 +158,38 @@ def prepare_reports(root: Path) -> Path:
         "entry_method": "hot_switch",
         "accepted_run_ids": ["ab", "pause-a", "pause-b", "continue-b"],
     }), encoding="utf-8")
+    (reports / "bedtime-qualification.json").write_text(json.dumps({
+        "schema_version": 1,
+        "report_status": "final",
+        "subject": {"commit": "a" * 40,
+                    "release_id": f"playwise-{verifier.VERSION}+aaaaaaaaaaaa"},
+        "environment": {"model": "mariko-oled", "hos": "22.5.0", "atmosphere": "1.11.2"},
+        "games": ["game-a", "game-b"],
+        "timing": {"boundary_trigger_seconds": 60, "wake_trigger_seconds": 59},
+        "blocked_entries": {"game": True, "homebrew": True, "home": True,
+                            "system_settings": True, "playwise_nro": True},
+        "overlay": {
+            "opened_during_popup": True, "pin_verified": True,
+            "shared_cooldown_verified": True, "single_action_authorization_verified": True,
+            "daily_limit_message_verified": True,
+            "recovery": {
+                action: {"request_submitted": True, "pctl_reread": True, "popup_cleared": True}
+                for action in ("skip_instance", "disable_bedtime", "restore_install_snapshot")
+            },
+            "backend_failure": {"reported_unconfirmed": True, "external_recovery_shown": True,
+                                "startup_restore_flag_created": False},
+        },
+        "official_pause": {"on_recorded": True, "off_recorded": True,
+                           "playwise_modified_setting": False},
+        "lifecycle": {phase: True for phase in
+                      ("home", "foreground", "suspend", "sleep", "reboot", "cross_day",
+                       "manual_clock_change", "recovery_failure")},
+        "pctl": {"settings_exactly_restored": True, "unexpected_raw_offsets": [],
+                 "bedtime_consumed_daily_allowance": False},
+        "missing_overlay": {"warning_unskippable": True, "pin_and_long_hold_required": True,
+                            "enable_allowed_after_confirmation": True,
+                            "schedule_continues_without_handshake": True},
+    }), encoding="utf-8")
     return reports
 
 
@@ -213,6 +245,40 @@ def test_missing_runtime_identity_is_rejected_explicitly() -> None:
             raise AssertionError("report without runtime identity must not qualify")
 
 
+def test_incomplete_bedtime_recovery_is_rejected() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        bedtime_path = reports / "bedtime-qualification.json"
+        bedtime = json.loads(bedtime_path.read_text(encoding="utf-8"))
+        bedtime["overlay"]["recovery"]["skip_instance"]["popup_cleared"] = False
+        bedtime_path.write_text(json.dumps(bedtime), encoding="utf-8")
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
+        except verifier.QualificationError as exc:
+            require("skip_instance" in str(exc), "bedtime recovery rejection must name the missing action")
+        else:
+            raise AssertionError("incomplete bedtime recovery evidence must not qualify")
+
+
+def test_incomplete_bedtime_timing_is_rejected_cleanly() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        bedtime_path = reports / "bedtime-qualification.json"
+        bedtime = json.loads(bedtime_path.read_text(encoding="utf-8"))
+        bedtime["timing"]["wake_trigger_seconds"] = None
+        bedtime_path.write_text(json.dumps(bedtime), encoding="utf-8")
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
+        except verifier.QualificationError as exc:
+            require("60 秒" in str(exc), "incomplete bedtime timing rejection must be explicit")
+        else:
+            raise AssertionError("incomplete bedtime timing evidence must not qualify")
+
+
 def test_misleading_evidence_summary_is_rejected() -> None:
     with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
         root = Path(tmp_dir)
@@ -253,6 +319,8 @@ def main() -> int:
     test_verify_and_promote_byte_identical_packages()
     test_old_report_and_changed_package_are_rejected()
     test_missing_runtime_identity_is_rejected_explicitly()
+    test_incomplete_bedtime_recovery_is_rejected()
+    test_incomplete_bedtime_timing_is_rejected_cleanly()
     test_misleading_evidence_summary_is_rejected()
     test_multiple_campaigns_require_explicit_selection()
     print("Qualification verifier and promotion tests passed")

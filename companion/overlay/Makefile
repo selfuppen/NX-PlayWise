@@ -12,7 +12,7 @@ include $(TOPDIR)/../../common/version.mk
 
 TARGET := playwise
 BUILD := build
-SOURCES := source . .. ../.. ../../common/protocol ../../common/time ../../platform/switch ../../third_party/cjson
+SOURCES := source . .. ../.. ../../common/protocol ../../common/time ../../common/crypto ../../platform/switch ../../third_party/cjson
 INCLUDES := vendor/libtesla/include ../.. ../../common ../../platform ../../platform/switch ../../build/generated
 APP_TITLE := 任我玩
 APP_AUTHOR := selfuppen@qq.com
@@ -36,7 +36,7 @@ export TOPDIR := $(CURDIR)
 export VPATH := $(foreach dir,$(SOURCES),$(CURDIR)/$(dir))
 export DEPSDIR := $(CURDIR)/$(BUILD)
 CPPFILES := main.cpp
-CFILES := input_model.c bridge.c file_protocol.c transport_client.c switch_ipc_client.c request_client.c result_summary.c request_schema.c result_builder.c error_code.c ptc_time.c fs_storage.c cJSON.c
+CFILES := input_model.c bridge.c file_protocol.c transport_client.c switch_ipc_client.c request_client.c result_summary.c auth.c request_schema.c result_builder.c error_code.c ptc_time.c sha256.c fs_storage.c cJSON.c
 export LD := $(CXX)
 export OFILES_SRC := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o)
 export OFILES := $(OFILES_SRC)

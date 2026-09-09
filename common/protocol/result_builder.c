@@ -142,7 +142,14 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "],\"autonomy\":{\"daily_buffer_minutes\":%u,\"claimed_today\":%s,"
         "\"available\":%s,\"reason\":\"%s\"},"
         "\"usage_summary\":{\"available\":%s,\"known_days_7\":%u,"
-        "\"consumed_minutes_7\":%lu,\"known_days_30\":%u,\"consumed_minutes_30\":%lu}}",
+        "\"consumed_minutes_7\":%lu,\"known_days_30\":%u,\"consumed_minutes_30\":%lu},"
+        "\"bedtime\":{\"enabled\":%s,\"active\":%s,\"skipped\":%s,"
+        "\"window_instance_id\":%llu,\"start_day_index\":%u,\"start_minute\":%u,"
+        "\"end_minute\":%u,\"source\":\"%s\",\"next_available\":%s,"
+        "\"next_start_day_index\":%u,\"next_start_minute\":%u,\"next_end_minute\":%u,"
+        "\"next_window_instance_id\":%llu,\"official_setting_confirmed\":%s,"
+        "\"overlay_verified\":%s,\"recovery_phase\":\"%s\"},"
+        "\"restriction_reasons\":{\"bedtime\":%s,\"daily_allowance\":%s}}",
         state->daily_buffer_minutes,
         json_bool(state->daily_buffer_claimed),
         json_bool(state->daily_buffer_available),
@@ -151,7 +158,19 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         state->usage_known_days_7,
         (unsigned long)state->usage_consumed_minutes_7,
         state->usage_known_days_30,
-        (unsigned long)state->usage_consumed_minutes_30);
+        (unsigned long)state->usage_consumed_minutes_30,
+        json_bool(state->bedtime_enabled), json_bool(state->bedtime_active),
+        json_bool(state->bedtime_skipped), (unsigned long long)state->bedtime_window_instance_id,
+        state->bedtime_start_day_index, state->bedtime_start_minute, state->bedtime_end_minute,
+        state->bedtime_source ? state->bedtime_source : "weekly",
+        json_bool(state->bedtime_next_available), state->bedtime_next_start_day_index,
+        state->bedtime_next_start_minute, state->bedtime_next_end_minute,
+        (unsigned long long)state->bedtime_next_window_instance_id,
+        json_bool(state->bedtime_official_setting_confirmed),
+        json_bool(state->bedtime_overlay_verified),
+        state->bedtime_recovery_phase ? state->bedtime_recovery_phase : "idle",
+        json_bool(state->bedtime_active && !state->bedtime_skipped),
+        json_bool(state->daily_restriction_active));
 }
 
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
@@ -190,6 +209,23 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->usage_consumed_minutes_7 = 0;
     state->usage_known_days_30 = 0;
     state->usage_consumed_minutes_30 = 0;
+    state->bedtime_enabled = false;
+    state->bedtime_active = false;
+    state->bedtime_skipped = false;
+    state->bedtime_window_instance_id = 0;
+    state->bedtime_start_day_index = 0;
+    state->bedtime_start_minute = 0;
+    state->bedtime_end_minute = 0;
+    state->bedtime_source = "weekly";
+    state->bedtime_next_available = false;
+    state->bedtime_next_start_day_index = 0;
+    state->bedtime_next_start_minute = 0;
+    state->bedtime_next_end_minute = 0;
+    state->bedtime_next_window_instance_id = 0;
+    state->bedtime_official_setting_confirmed = false;
+    state->bedtime_overlay_verified = false;
+    state->bedtime_recovery_phase = "idle";
+    state->daily_restriction_active = false;
 }
 
 PtcErrorCode ptc_result_validate(const char *text)

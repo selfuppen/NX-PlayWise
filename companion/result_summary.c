@@ -24,12 +24,21 @@ static bool bool_value(const cJSON *object, const char *key, bool fallback)
     return cJSON_IsBool(item) ? cJSON_IsTrue(item) : fallback;
 }
 
+static unsigned long long u64_value(const cJSON *object, const char *key)
+{
+    const cJSON *item = object ? cJSON_GetObjectItemCaseSensitive(object, key) : NULL;
+    return cJSON_IsNumber(item) && item->valuedouble >= 0
+        ? (unsigned long long)item->valuedouble : 0ULL;
+}
+
 bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionResultSummary *out)
 {
     cJSON *root;
     const cJSON *state;
     const cJSON *error;
     const cJSON *preview;
+    const cJSON *bedtime;
+    const cJSON *restriction_reasons;
     const char *status;
     if (!out || !result_json || ptc_result_validate(result_json) != PTC_ERR_OK) {
         return false;
@@ -56,6 +65,26 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->calendar_covered = bool_value(state, "calendar_covered", false);
     out->calendar_update_warning = bool_value(state, "calendar_update_warning", false);
     snprintf(out->rule_source, sizeof(out->rule_source), "%s", string_value(state, "rule_source"));
+    bedtime = cJSON_GetObjectItemCaseSensitive(state, "bedtime");
+    out->bedtime_enabled = bool_value(bedtime, "enabled", false);
+    out->bedtime_active = bool_value(bedtime, "active", false);
+    out->bedtime_skipped = bool_value(bedtime, "skipped", false);
+    out->bedtime_window_instance_id = u64_value(bedtime, "window_instance_id");
+    out->bedtime_start_day_index = number_value(bedtime, "start_day_index", 0);
+    out->bedtime_start_minute = number_value(bedtime, "start_minute", 0);
+    out->bedtime_end_minute = number_value(bedtime, "end_minute", 0);
+    out->bedtime_next_available = bool_value(bedtime, "next_available", false);
+    out->bedtime_next_start_day_index = number_value(bedtime, "next_start_day_index", 0);
+    out->bedtime_next_start_minute = number_value(bedtime, "next_start_minute", 0);
+    out->bedtime_next_end_minute = number_value(bedtime, "next_end_minute", 0);
+    out->bedtime_next_window_instance_id = u64_value(bedtime, "next_window_instance_id");
+    out->bedtime_official_setting_confirmed = bool_value(bedtime, "official_setting_confirmed", false);
+    out->bedtime_overlay_verified = bool_value(bedtime, "overlay_verified", false);
+    snprintf(out->bedtime_source, sizeof(out->bedtime_source), "%s", string_value(bedtime, "source"));
+    snprintf(out->bedtime_recovery_phase, sizeof(out->bedtime_recovery_phase), "%s",
+        string_value(bedtime, "recovery_phase"));
+    restriction_reasons = cJSON_GetObjectItemCaseSensitive(state, "restriction_reasons");
+    out->daily_restriction_active = bool_value(restriction_reasons, "daily_allowance", false);
     preview = cJSON_GetObjectItemCaseSensitive(root, "preview");
     out->preview_available = cJSON_IsObject(preview);
     out->grant_minutes = number_value(preview, "grant_minutes", 0);

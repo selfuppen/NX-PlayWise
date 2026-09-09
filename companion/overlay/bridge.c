@@ -27,6 +27,30 @@ void ptc_overlay_bridge_exit(PtcOverlayBridge *bridge)
     bridge->waiting = false;
 }
 
+static PtcCompanionStatus begin_request(PtcOverlayBridge *bridge, PtcCompanionStatus status)
+{
+    if (!bridge) return PTC_COMPANION_BAD_ARGUMENT;
+    bridge->last_status = status;
+    if (status == PTC_COMPANION_OK) {
+        bridge->elapsed_ms = 0;
+        bridge->waiting = true;
+    }
+    return status;
+}
+
+static bool prepare_request(PtcOverlayBridge *bridge, int64_t created_at, uint16_t random16)
+{
+    if (!bridge || bridge->waiting) return false;
+    memset(&bridge->summary, 0, sizeof(bridge->summary));
+    bridge->last_status = PTC_COMPANION_PENDING;
+    if (ptc_companion_make_request_id(bridge->request_id, sizeof(bridge->request_id),
+            created_at * 1000, random16) != PTC_COMPANION_OK) {
+        bridge->last_status = PTC_COMPANION_BAD_ARGUMENT;
+        return false;
+    }
+    return true;
+}
+
 PtcCompanionStatus ptc_overlay_bridge_submit(
     PtcOverlayBridge *bridge,
     const char *code,
@@ -92,6 +116,45 @@ PtcCompanionStatus ptc_overlay_bridge_submit_status(PtcOverlayBridge *bridge, in
         bridge->waiting = true;
     }
     return status;
+}
+
+PtcCompanionStatus ptc_overlay_bridge_submit_overlay_ready(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, const char *release_id,
+    const char *boot_id, const char *environment_fingerprint)
+{
+    if (!release_id || !boot_id || !environment_fingerprint ||
+        !prepare_request(bridge, created_at, random16)) return PTC_COMPANION_BAD_ARGUMENT;
+    return begin_request(bridge,
+        ptc_companion_transport_submit_overlay_ready(&bridge->transport, bridge->request_id,
+            created_at, release_id, boot_id, environment_fingerprint));
+}
+
+PtcCompanionStatus ptc_overlay_bridge_skip_bedtime(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, uint64_t window_instance_id)
+{
+    if (window_instance_id == 0 || !prepare_request(bridge, created_at, random16))
+        return PTC_COMPANION_BAD_ARGUMENT;
+    return begin_request(bridge,
+        ptc_companion_transport_submit_skip_bedtime(&bridge->transport, bridge->request_id,
+            created_at, window_instance_id));
+}
+
+PtcCompanionStatus ptc_overlay_bridge_disable_bedtime(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16)
+{
+    if (!prepare_request(bridge, created_at, random16)) return PTC_COMPANION_BAD_ARGUMENT;
+    return begin_request(bridge,
+        ptc_companion_transport_submit_empty(&bridge->transport, bridge->request_id,
+            created_at, "disable_bedtime"));
+}
+
+PtcCompanionStatus ptc_overlay_bridge_restore_install_snapshot(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16)
+{
+    if (!prepare_request(bridge, created_at, random16)) return PTC_COMPANION_BAD_ARGUMENT;
+    return begin_request(bridge,
+        ptc_companion_transport_submit_empty(&bridge->transport, bridge->request_id,
+            created_at, "restore_install_snapshot"));
 }
 
 PtcCompanionStatus ptc_overlay_bridge_poll(PtcOverlayBridge *bridge, int elapsed_ms, int timeout_ms)

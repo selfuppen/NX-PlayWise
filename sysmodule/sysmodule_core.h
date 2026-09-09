@@ -24,8 +24,8 @@ typedef struct {
     bool disable_present;
     char boot_id[24];
     char config_cache_text[4096];
-    char rules_cache_text[4096];
-    char state_cache_text[1024];
+    char rules_cache_text[6144];
+    char state_cache_text[2048];
     char capabilities_cache_text[1024];
     PtcStorageMetadata config_meta;
     PtcStorageMetadata rules_meta;

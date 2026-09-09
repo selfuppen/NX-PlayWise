@@ -21,6 +21,15 @@ typedef struct {
     PtcDayRule makeup_workday_rule;
     PtcScheduledOverride scheduled_override;
     PtcAutonomyPolicy autonomy_policy;
+    PtcBedtimePolicy bedtime_policy;
+    uint64_t bedtime_window_instance_id;
+    bool bedtime_apply_immediately;
+    bool bedtime_official_setting_confirmed;
+    bool bedtime_overlay_risk_accepted;
+    uint16_t bedtime_confirmation_version;
+    char environment_fingerprint[65];
+    char overlay_release_id[65];
+    char overlay_boot_id[65];
 #ifdef PLAYWISE_DEVICE_LAB
     bool start_timer;
     bool wait_for_expiry;

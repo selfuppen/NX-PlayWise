@@ -92,7 +92,7 @@ FORBIDDEN_RELEASE_MARKERS = (
     b"probe_suspend",
     b"prepare_device_test",
     b"parent_unlock",
-    b"set_bedtime",
+    b"bedtime",
     b"set_limit_action",
     b"block_today",
     b"capabilities.json",

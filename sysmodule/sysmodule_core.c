@@ -52,6 +52,10 @@ typedef struct {
     uint16_t buffer_claimed_minutes;
     uint16_t summary_day_index;
     uint16_t summary_grant_minutes;
+    bool bedtime_enforced;
+    uint64_t bedtime_window_instance_id;
+    uint16_t bedtime_start_day_index;
+    uint64_t bedtime_skipped_instance_id;
 } PtcRuntimeState;
 
 typedef struct {
@@ -115,6 +119,8 @@ static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSet
 static void write_disable_flag(PtcSysmodule *sysmodule, const char *reason);
 static void recovery_clear(PtcSysmodule *sysmodule);
 static bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules);
+static bool bedtime_blocks_grants(PtcSysmodule *sysmodule, PtcClockSnapshot now);
+static bool bedtime_overlay_verified(PtcSysmodule *sysmodule);
 
 static void join_path(char *out, size_t out_size, const char *a, const char *b)
 {
@@ -239,6 +245,22 @@ static bool json_u16(const char *text, const char *key, uint16_t *out)
     return true;
 }
 
+static bool json_u64(const char *text, const char *key, uint64_t *out)
+{
+    const char *pos = find_key(text, key);
+    char *endptr;
+    unsigned long long value;
+    if (!pos) return false;
+    pos = strchr(pos + strlen(key) + 2, ':');
+    if (!pos) return false;
+    pos = skip_ws(pos + 1);
+    if (*pos == '-') return false;
+    value = strtoull(pos, &endptr, 10);
+    if (endptr == pos) return false;
+    *out = (uint64_t)value;
+    return true;
+}
+
 static bool json_bool_value(const char *text, const char *key, bool *out)
 {
     const char *pos = find_key(text, key);
@@ -271,7 +293,7 @@ static void setup_state_default(PtcSetupState *setup)
 static bool load_setup_state(PtcSysmodule *sysmodule, PtcSetupState *setup)
 {
     char path[320];
-    char text[1024];
+    char text[2048];
     int64_t version;
     setup_state_default(setup);
     join_path(path, sizeof(path), sysmodule->app_root, "setup.json");
@@ -461,6 +483,45 @@ static bool load_snapshot_file(PtcSysmodule *sysmodule, const char *relative, Pt
     if (!hex_bytes(settings_hex, snapshot->data, snapshot->size)) return false;
     snapshot_sha256(actual_digest, snapshot);
     return strcmp(actual_digest, expected_digest) == 0;
+}
+
+static bool save_bedtime_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapshot *snapshot,
+    const PtcBedtimeEvaluation *evaluation, int64_t captured_at)
+{
+    char path[320];
+    char meta[320];
+    if (!snapshot || !evaluation || !evaluation->active ||
+        !save_snapshot_file(sysmodule, "backups/bedtime_pctl_snapshot.json", snapshot, captured_at)) return false;
+    join_path(path, sizeof(path), sysmodule->app_root, "backups/bedtime_active.json");
+    snprintf(meta, sizeof(meta),
+        "{\"version\":1,\"window_instance_id\":%llu,\"start_day_index\":%u,"
+        "\"captured_at\":%lld}\n",
+        (unsigned long long)evaluation->window_instance_id, evaluation->start_day_index,
+        (long long)captured_at);
+    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, meta);
+}
+
+static bool load_bedtime_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot,
+    uint64_t *window_instance_id, uint16_t *start_day_index)
+{
+    char path[320];
+    char meta[512];
+    int64_t version;
+    join_path(path, sizeof(path), sysmodule->app_root, "backups/bedtime_active.json");
+    return sysmodule->storage->vtable->read_text(sysmodule->storage, path, meta, sizeof(meta)) &&
+        json_i64(meta, "version", &version) && version == 1 &&
+        json_u64(meta, "window_instance_id", window_instance_id) &&
+        json_u16(meta, "start_day_index", start_day_index) &&
+        load_snapshot_file(sysmodule, "backups/bedtime_pctl_snapshot.json", snapshot);
+}
+
+static void clear_bedtime_snapshot(PtcSysmodule *sysmodule)
+{
+    char path[320];
+    join_path(path, sizeof(path), sysmodule->app_root, "backups/bedtime_active.json");
+    (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, path);
+    join_path(path, sizeof(path), sysmodule->app_root, "backups/bedtime_pctl_snapshot.json");
+    (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, path);
 }
 
 static bool recovery_path_exists(PtcSysmodule *sysmodule)
@@ -676,6 +737,73 @@ static bool parse_rule_array(const char *text, const char *key, PtcDayRule week[
     return true;
 }
 
+static bool parse_bedtime_mode(const char *value, PtcBedtimeOverrideMode *out)
+{
+    if (strcmp(value, "inherit") == 0) *out = PTC_BEDTIME_OVERRIDE_INHERIT;
+    else if (strcmp(value, "disabled") == 0) *out = PTC_BEDTIME_OVERRIDE_DISABLED;
+    else if (strcmp(value, "custom") == 0) *out = PTC_BEDTIME_OVERRIDE_CUSTOM;
+    else return false;
+    return true;
+}
+
+static const char *bedtime_mode_name(PtcBedtimeOverrideMode mode)
+{
+    switch (mode) {
+    case PTC_BEDTIME_OVERRIDE_DISABLED: return "disabled";
+    case PTC_BEDTIME_OVERRIDE_CUSTOM: return "custom";
+    case PTC_BEDTIME_OVERRIDE_INHERIT:
+    default: return "inherit";
+    }
+}
+
+static bool parse_bedtime_array(const char *text, PtcBedtimeWindow week[7])
+{
+    const char *pos = find_key(text, "bedtime_week");
+    unsigned int i;
+    if (!pos || !(pos = strchr(pos, '['))) return false;
+    for (i = 0; i < 7; ++i) {
+        const char *start = strchr(pos, '{');
+        const char *end;
+        char item[192];
+        size_t length;
+        if (!start || !(end = strchr(start, '}'))) return false;
+        length = (size_t)(end - start + 1);
+        if (length >= sizeof(item)) return false;
+        memcpy(item, start, length);
+        item[length] = '\0';
+        if (!json_bool_value(item, "enabled", &week[i].enabled) ||
+            !json_u16(item, "start_minute", &week[i].start_minute) ||
+            !json_u16(item, "end_minute", &week[i].end_minute)) return false;
+        pos = end + 1;
+    }
+    return true;
+}
+
+static bool current_environment_fingerprint(PtcSysmodule *sysmodule, char out[65])
+{
+    char path[320];
+    char environment[1024];
+    uint8_t digest[PTC_SHA256_DIGEST_SIZE];
+    static const char HEX[] = "0123456789abcdef";
+    size_t i;
+    if (!sysmodule || !out) return false;
+    join_path(path, sizeof(path), sysmodule->app_root, "environment.json");
+    if (!sysmodule->storage->vtable->read_text(
+            sysmodule->storage, path, environment, sizeof(environment))) return false;
+    {
+        PtcSha256Ctx hash;
+        ptc_sha256_init(&hash);
+        ptc_sha256_update(&hash, (const uint8_t *)environment, strlen(environment));
+        ptc_sha256_final(&hash, digest);
+    }
+    for (i = 0; i < sizeof(digest); ++i) {
+        out[i * 2] = HEX[digest[i] >> 4];
+        out[i * 2 + 1] = HEX[digest[i] & 0x0fu];
+    }
+    out[64] = '\0';
+    return true;
+}
+
 static void append_event(PtcSysmodule *sysmodule, const PtcRequest *request, const char *event, PtcErrorCode error, const char *detail)
 {
     char path[320];
@@ -854,7 +982,7 @@ static void append_pctl_debug(
 static bool load_config(PtcSysmodule *sysmodule, PtcRuntimeConfig *config)
 {
     char path[320];
-    char text[4096];
+    char text[6144];
     char credentials[512];
     int64_t version;
     join_path(path, sizeof(path), sysmodule->app_root, "config.json");
@@ -938,7 +1066,7 @@ static bool restore_capabilities(PtcSysmodule *sysmodule, const PtcCapabilities 
 static bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
 {
     char path[320];
-    char text[4096];
+    char text[6144];
     char mode[24];
     int64_t version;
     ptc_rules_default(rules);
@@ -947,7 +1075,7 @@ static bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
             &sysmodule->rules_meta, &sysmodule->rules_cache_valid, text, sizeof(text), true) || text[0] == '\0') {
         return true;
     }
-    if (!json_i64(text, "version", &version) || version != 1) {
+    if (!json_i64(text, "version", &version) || (version != 1 && version != 2)) {
         return false;
     }
     (void)parse_rule_array(text, "week", rules->week);
@@ -978,17 +1106,47 @@ static bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
         (void)parse_rule_mode(mode, &rules->makeup_workday_rule.mode);
     }
     (void)json_u16(text, "makeup_workday_minutes", &rules->makeup_workday_rule.minutes);
+    if (version >= 2 && find_key(text, "bedtime_enabled")) {
+        char bedtime_mode[24];
+        if (!json_bool_value(text, "bedtime_enabled", &rules->bedtime.enabled) ||
+            !parse_bedtime_array(text, rules->bedtime.week) ||
+            !json_bool_value(text, "bedtime_calendar_enabled", &rules->bedtime.calendar_enabled) ||
+            !json_string(text, "bedtime_holiday_mode", bedtime_mode, sizeof(bedtime_mode)) ||
+            !parse_bedtime_mode(bedtime_mode, &rules->bedtime.holiday_rule.mode) ||
+            !json_string(text, "bedtime_makeup_mode", bedtime_mode, sizeof(bedtime_mode)) ||
+            !parse_bedtime_mode(bedtime_mode, &rules->bedtime.makeup_workday_rule.mode) ||
+            !json_bool_value(text, "bedtime_scheduled_present", &rules->bedtime.scheduled_override.present)) return false;
+        (void)json_bool_value(text, "bedtime_holiday_enabled", &rules->bedtime.holiday_rule.window.enabled);
+        (void)json_u16(text, "bedtime_holiday_start_minute", &rules->bedtime.holiday_rule.window.start_minute);
+        (void)json_u16(text, "bedtime_holiday_end_minute", &rules->bedtime.holiday_rule.window.end_minute);
+        (void)json_bool_value(text, "bedtime_makeup_enabled", &rules->bedtime.makeup_workday_rule.window.enabled);
+        (void)json_u16(text, "bedtime_makeup_start_minute", &rules->bedtime.makeup_workday_rule.window.start_minute);
+        (void)json_u16(text, "bedtime_makeup_end_minute", &rules->bedtime.makeup_workday_rule.window.end_minute);
+        (void)json_u16(text, "bedtime_scheduled_start_day_index", &rules->bedtime.scheduled_override.start_day_index);
+        (void)json_u16(text, "bedtime_scheduled_end_day_index", &rules->bedtime.scheduled_override.end_day_index);
+        if (json_string(text, "bedtime_scheduled_mode", bedtime_mode, sizeof(bedtime_mode)))
+            (void)parse_bedtime_mode(bedtime_mode, &rules->bedtime.scheduled_override.rule.mode);
+        (void)json_bool_value(text, "bedtime_scheduled_enabled", &rules->bedtime.scheduled_override.rule.window.enabled);
+        (void)json_u16(text, "bedtime_scheduled_start_minute", &rules->bedtime.scheduled_override.rule.window.start_minute);
+        (void)json_u16(text, "bedtime_scheduled_end_minute", &rules->bedtime.scheduled_override.rule.window.end_minute);
+        (void)json_u16(text, "bedtime_confirmation_version", &rules->bedtime.confirmation_version);
+        (void)json_i64(text, "bedtime_official_setting_confirmed_at", &rules->bedtime.official_setting_confirmed_at);
+        (void)json_string(text, "bedtime_confirmed_environment", rules->bedtime.confirmed_environment,
+            sizeof(rules->bedtime.confirmed_environment));
+        (void)json_bool_value(text, "bedtime_overlay_risk_accepted", &rules->bedtime.unverified_overlay_risk_accepted);
+        if (!ptc_bedtime_policy_is_valid(&rules->bedtime)) return false;
+    }
     return true;
 }
 
 static bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
 {
     char path[320];
-    char text[4096];
+    char text[6144];
     size_t used;
     unsigned int i;
     snprintf(path, sizeof(path), "%s/rules.json", sysmodule->app_root);
-    snprintf(text, sizeof(text), "{\"version\":1,\"week\":[");
+    snprintf(text, sizeof(text), "{\"version\":2,\"week\":[");
     for (i = 0; i < 7; ++i) {
         used = strlen(text);
         snprintf(
@@ -1009,7 +1167,8 @@ static bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
         "\"scheduled_override_end_day_index\":%u,\"scheduled_override_mode\":\"%s\","
         "\"scheduled_override_minutes\":%u,\"daily_buffer_minutes\":%u,"
         "\"holiday_enabled\":%s,\"holiday_mode\":\"%s\",\"holiday_minutes\":%u,"
-        "\"makeup_workday_mode\":\"%s\",\"makeup_workday_minutes\":%u}\n",
+        "\"makeup_workday_mode\":\"%s\",\"makeup_workday_minutes\":%u,"
+        "\"bedtime_enabled\":%s,\"bedtime_week\":[",
         rules->today_override.present ? "true" : "false",
         rules->today_override.day_index,
         rule_mode_name(rules->today_override.rule.mode),
@@ -1024,7 +1183,44 @@ static bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
         rule_mode_name(rules->holiday_rule.mode),
         rules->holiday_rule.minutes,
         rule_mode_name(rules->makeup_workday_rule.mode),
-        rules->makeup_workday_rule.minutes);
+        rules->makeup_workday_rule.minutes,
+        rules->bedtime.enabled ? "true" : "false");
+    for (i = 0; i < 7; ++i) {
+        used = strlen(text);
+        snprintf(text + used, sizeof(text) - used,
+            "%s{\"enabled\":%s,\"start_minute\":%u,\"end_minute\":%u}",
+            i ? "," : "", rules->bedtime.week[i].enabled ? "true" : "false",
+            rules->bedtime.week[i].start_minute, rules->bedtime.week[i].end_minute);
+    }
+    used = strlen(text);
+    snprintf(text + used, sizeof(text) - used,
+        "],\"bedtime_calendar_enabled\":%s,"
+        "\"bedtime_holiday_mode\":\"%s\",\"bedtime_holiday_enabled\":%s,"
+        "\"bedtime_holiday_start_minute\":%u,\"bedtime_holiday_end_minute\":%u,"
+        "\"bedtime_makeup_mode\":\"%s\",\"bedtime_makeup_enabled\":%s,"
+        "\"bedtime_makeup_start_minute\":%u,\"bedtime_makeup_end_minute\":%u,"
+        "\"bedtime_scheduled_present\":%s,\"bedtime_scheduled_start_day_index\":%u,"
+        "\"bedtime_scheduled_end_day_index\":%u,\"bedtime_scheduled_mode\":\"%s\","
+        "\"bedtime_scheduled_enabled\":%s,\"bedtime_scheduled_start_minute\":%u,"
+        "\"bedtime_scheduled_end_minute\":%u,\"bedtime_confirmation_version\":%u,"
+        "\"bedtime_official_setting_confirmed_at\":%lld,\"bedtime_confirmed_environment\":\"%s\","
+        "\"bedtime_overlay_risk_accepted\":%s}\n",
+        rules->bedtime.calendar_enabled ? "true" : "false",
+        bedtime_mode_name(rules->bedtime.holiday_rule.mode),
+        rules->bedtime.holiday_rule.window.enabled ? "true" : "false",
+        rules->bedtime.holiday_rule.window.start_minute, rules->bedtime.holiday_rule.window.end_minute,
+        bedtime_mode_name(rules->bedtime.makeup_workday_rule.mode),
+        rules->bedtime.makeup_workday_rule.window.enabled ? "true" : "false",
+        rules->bedtime.makeup_workday_rule.window.start_minute, rules->bedtime.makeup_workday_rule.window.end_minute,
+        rules->bedtime.scheduled_override.present ? "true" : "false",
+        rules->bedtime.scheduled_override.start_day_index, rules->bedtime.scheduled_override.end_day_index,
+        bedtime_mode_name(rules->bedtime.scheduled_override.rule.mode),
+        rules->bedtime.scheduled_override.rule.window.enabled ? "true" : "false",
+        rules->bedtime.scheduled_override.rule.window.start_minute,
+        rules->bedtime.scheduled_override.rule.window.end_minute,
+        rules->bedtime.confirmation_version, (long long)rules->bedtime.official_setting_confirmed_at,
+        rules->bedtime.confirmed_environment,
+        rules->bedtime.unverified_overlay_risk_accepted ? "true" : "false");
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
     snprintf(sysmodule->rules_cache_text, sizeof(sysmodule->rules_cache_text), "%s", text);
     sysmodule->rules_cache_valid = sysmodule->storage->vtable->metadata &&
@@ -1062,6 +1258,10 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     state->buffer_claimed_minutes = 0;
     state->summary_day_index = 0;
     state->summary_grant_minutes = 0;
+    state->bedtime_enforced = false;
+    state->bedtime_window_instance_id = 0;
+    state->bedtime_start_day_index = 0;
+    state->bedtime_skipped_instance_id = 0;
     join_path(path, sizeof(path), sysmodule->app_root, "state.json");
     if (!read_cached_text(sysmodule, "state.json", sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text),
             &sysmodule->state_meta, &sysmodule->state_cache_valid, text, sizeof(text), true) || text[0] == '\0') {
@@ -1086,6 +1286,10 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     (void)json_u16(text, "buffer_claimed_minutes", &state->buffer_claimed_minutes);
     (void)json_u16(text, "summary_day_index", &state->summary_day_index);
     (void)json_u16(text, "summary_grant_minutes", &state->summary_grant_minutes);
+    (void)json_bool_value(text, "bedtime_enforced", &state->bedtime_enforced);
+    (void)json_u64(text, "bedtime_window_instance_id", &state->bedtime_window_instance_id);
+    (void)json_u16(text, "bedtime_start_day_index", &state->bedtime_start_day_index);
+    (void)json_u64(text, "bedtime_skipped_instance_id", &state->bedtime_skipped_instance_id);
     {
         uint16_t mode = 0;
         if (json_u16(text, "last_enforced_mode", &mode)) {
@@ -1098,7 +1302,7 @@ static bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
 static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t updated_at)
 {
     char path[320];
-    char text[1024];
+    char text[2048];
     snprintf(path, sizeof(path), "%s/state.json", sysmodule->app_root);
     snprintf(
         text,
@@ -1109,7 +1313,10 @@ static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, in
         "\"apply_confirmation_deadline\":%lld,\"pending_mode\":%u,\"pending_minutes\":%u,"
         "\"v2_failed_attempts\":%u,\"v2_cooldown_until\":%lld,"
         "\"buffer_claimed\":%s,\"buffer_claim_day_index\":%u,\"buffer_claimed_minutes\":%u,"
-        "\"summary_day_index\":%u,\"summary_grant_minutes\":%u,\"updated_at\":%lld}\n",
+        "\"summary_day_index\":%u,\"summary_grant_minutes\":%u,"
+        "\"bedtime_enforced\":%s,\"bedtime_window_instance_id\":%llu,"
+        "\"bedtime_start_day_index\":%u,\"bedtime_skipped_instance_id\":%llu,"
+        "\"updated_at\":%lld}\n",
         state->last_enforced_day_index,
         (unsigned int)state->last_enforced_mode,
         state->last_enforced_minutes,
@@ -1125,6 +1332,10 @@ static bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, in
         state->buffer_claimed_minutes,
         state->summary_day_index,
         state->summary_grant_minutes,
+        state->bedtime_enforced ? "true" : "false",
+        (unsigned long long)state->bedtime_window_instance_id,
+        state->bedtime_start_day_index,
+        (unsigned long long)state->bedtime_skipped_instance_id,
         (long long)updated_at);
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
     snprintf(sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text), "%s", text);
@@ -1850,6 +2061,10 @@ static PtcOperation request_operation(PtcRequestType type)
     case PTC_REQUEST_SET_HOLIDAY_POLICY:
     case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
     case PTC_REQUEST_SET_AUTONOMY_POLICY:
+    case PTC_REQUEST_SET_BEDTIME_POLICY:
+    case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS:
+    case PTC_REQUEST_SKIP_BEDTIME:
+    case PTC_REQUEST_DISABLE_BEDTIME:
         return PTC_OPERATION_RULE_UPDATE;
     case PTC_REQUEST_CLAIM_DAILY_BUFFER:
         return PTC_OPERATION_GRANT_MINUTES;
@@ -1915,7 +2130,6 @@ static uint16_t accumulate_today_limit(PtcRules *rules, uint16_t day_index, uint
 
 static PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest *request, PtcRules *rules, PtcRuntimeState *runtime_state, PtcClockSnapshot now, uint16_t played_minutes)
 {
-    (void)runtime_state;
     switch (request->type) {
     case PTC_REQUEST_SET_TODAY_LIMIT:
         rules->today_override.present = true;
@@ -1949,6 +2163,57 @@ static PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcR
     case PTC_REQUEST_SET_AUTONOMY_POLICY:
         rules->autonomy_policy = request->autonomy_policy;
         return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+    case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS:
+    {
+        char fingerprint[65];
+        if (!request->bedtime_official_setting_confirmed ||
+            request->bedtime_confirmation_version == 0 || request->environment_fingerprint[0] == '\0' ||
+            !current_environment_fingerprint(sysmodule, fingerprint) ||
+            strcmp(fingerprint, request->environment_fingerprint) != 0) {
+            return PTC_ERR_BEDTIME_CONFIRMATION_REQUIRED;
+        }
+        rules->bedtime.confirmation_version = request->bedtime_confirmation_version;
+        rules->bedtime.official_setting_confirmed_at = now.unix_seconds;
+        snprintf(rules->bedtime.confirmed_environment,
+            sizeof(rules->bedtime.confirmed_environment), "%s", request->environment_fingerprint);
+        rules->bedtime.unverified_overlay_risk_accepted = request->bedtime_overlay_risk_accepted;
+        return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+    }
+    case PTC_REQUEST_SET_BEDTIME_POLICY: {
+        PtcBedtimeEvaluation before = ptc_bedtime_evaluate(
+            rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
+        PtcBedtimeEvaluation after;
+        PtcBedtimePolicy next = request->bedtime_policy;
+        next.confirmation_version = rules->bedtime.confirmation_version;
+        next.official_setting_confirmed_at = rules->bedtime.official_setting_confirmed_at;
+        snprintf(next.confirmed_environment, sizeof(next.confirmed_environment), "%s",
+            rules->bedtime.confirmed_environment);
+        next.unverified_overlay_risk_accepted = rules->bedtime.unverified_overlay_risk_accepted;
+        if (next.enabled) {
+            char fingerprint[65];
+            if (next.confirmation_version == 0 || next.official_setting_confirmed_at <= 0 ||
+                next.confirmed_environment[0] == '\0' ||
+                !current_environment_fingerprint(sysmodule, fingerprint) ||
+                strcmp(fingerprint, next.confirmed_environment) != 0) {
+                return PTC_ERR_BEDTIME_CONFIRMATION_REQUIRED;
+            }
+            /* The risk acknowledgement is needed only for the disabled -> enabled
+               transition. Once enabled, a missing Overlay handshake is surfaced as
+               a warning but cannot become a way to bypass the active schedule. */
+            if (!rules->bedtime.enabled && !bedtime_overlay_verified(sysmodule) &&
+                !next.unverified_overlay_risk_accepted) {
+                return PTC_ERR_OVERLAY_UNVERIFIED;
+            }
+        }
+        rules->bedtime = next;
+        after = ptc_bedtime_evaluate(
+            rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
+        if (!request->bedtime_apply_immediately && after.active && !before.active) {
+            runtime_state->bedtime_skipped_instance_id = after.window_instance_id;
+            if (!save_state(sysmodule, runtime_state, now.unix_seconds)) return PTC_ERR_STORAGE_WRITE_FAILED;
+        }
+        return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+    }
     default:
         return PTC_ERR_OK;
     }
@@ -1965,6 +2230,10 @@ static const char *activity_action_for_request(PtcRequestType type)
     case PTC_REQUEST_SET_HOLIDAY_POLICY: return "holiday_update";
     case PTC_REQUEST_SET_SCHEDULED_OVERRIDE: return "scheduled_update";
     case PTC_REQUEST_SET_AUTONOMY_POLICY: return "autonomy_update";
+    case PTC_REQUEST_SET_BEDTIME_POLICY: return "bedtime_update";
+    case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS: return "bedtime_confirm";
+    case PTC_REQUEST_SKIP_BEDTIME: return "bedtime_skip";
+    case PTC_REQUEST_DISABLE_BEDTIME: return "bedtime_disable";
     case PTC_REQUEST_OFFLINE_CODE: return "offline_grant";
     case PTC_REQUEST_CLAIM_DAILY_BUFFER: return "daily_buffer";
     default: return NULL;
@@ -1984,6 +2253,77 @@ static bool record_activity(PtcSysmodule *sysmodule, const PtcRequest *request,
     record.minutes = minutes;
     record.effective_minutes = effective_minutes;
     return save_activity_history(sysmodule, &record);
+}
+
+static bool bedtime_overlay_verified(PtcSysmodule *sysmodule)
+{
+    char path[320];
+    char text[512];
+    char build[1024];
+    char boot_id[65];
+    char ready_release_id[96];
+    char build_release_id[96];
+    char ready_fingerprint[65];
+    char current_fingerprint[65];
+    join_path(path, sizeof(path), sysmodule->app_root, "overlay/ready.json");
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text)) ||
+        !json_string(text, "boot_id", boot_id, sizeof(boot_id)) ||
+        strcmp(boot_id, sysmodule->boot_id) != 0 ||
+        !json_string(text, "release_id", ready_release_id, sizeof(ready_release_id)) ||
+        !json_string(text, "environment_fingerprint", ready_fingerprint, sizeof(ready_fingerprint)) ||
+        !current_environment_fingerprint(sysmodule, current_fingerprint) ||
+        strcmp(ready_fingerprint, current_fingerprint) != 0) {
+        return false;
+    }
+    join_path(path, sizeof(path), sysmodule->app_root, "build.json");
+    return sysmodule->storage->vtable->read_text(sysmodule->storage, path, build, sizeof(build)) &&
+        json_string(build, "release_id", build_release_id, sizeof(build_release_id)) &&
+        strcmp(ready_release_id, build_release_id) == 0;
+}
+
+static void fill_bedtime_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
+    const PtcRules *rules, const PtcRuntimeState *runtime_state,
+    const PtcPctlStatus *pctl_status, PtcClockSnapshot now)
+{
+    PtcBedtimeEvaluation evaluation = ptc_bedtime_evaluate(
+        rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
+    char fingerprint[65];
+    unsigned int offset;
+    state->bedtime_enabled = rules->bedtime.enabled;
+    state->bedtime_active = evaluation.active;
+    state->bedtime_skipped = evaluation.active &&
+        runtime_state->bedtime_skipped_instance_id == evaluation.window_instance_id;
+    state->bedtime_window_instance_id = evaluation.window_instance_id;
+    state->bedtime_start_day_index = evaluation.start_day_index;
+    state->bedtime_start_minute = evaluation.start_minute;
+    state->bedtime_end_minute = evaluation.end_minute;
+    state->bedtime_source = ptc_bedtime_source_name(evaluation.source);
+    state->bedtime_official_setting_confirmed = rules->bedtime.confirmation_version > 0 &&
+        rules->bedtime.official_setting_confirmed_at > 0 && rules->bedtime.confirmed_environment[0] != '\0' &&
+        current_environment_fingerprint(sysmodule, fingerprint) &&
+        strcmp(fingerprint, rules->bedtime.confirmed_environment) == 0;
+    state->bedtime_overlay_verified = bedtime_overlay_verified(sysmodule);
+    state->bedtime_recovery_phase = runtime_state->bedtime_enforced ? "restricted" : "idle";
+    state->daily_restriction_active = (!evaluation.active || state->bedtime_skipped) &&
+        pctl_status->limited_today &&
+        pctl_status->remaining_available && pctl_status->remaining_minutes == 0u;
+    if (!rules->bedtime.enabled) return;
+    for (offset = 0; offset < 8u; ++offset) {
+        uint16_t start_day = (uint16_t)(now.day_index + offset);
+        PtcEffectiveBedtime next = ptc_bedtime_resolve_start_day(
+            rules, start_day, ptc_weekday_from_day_index(start_day));
+        uint64_t instance_id;
+        if (!next.window.enabled) continue;
+        if (offset == 0u && now.minute_of_day >= next.window.start_minute) continue;
+        instance_id = ptc_bedtime_window_instance_id(start_day, next.window.start_minute);
+        if (instance_id == runtime_state->bedtime_skipped_instance_id) continue;
+        state->bedtime_next_available = true;
+        state->bedtime_next_start_day_index = start_day;
+        state->bedtime_next_start_minute = next.window.start_minute;
+        state->bedtime_next_end_minute = next.window.end_minute;
+        state->bedtime_next_window_instance_id = instance_id;
+        break;
+    }
 }
 
 static void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
@@ -2021,6 +2361,7 @@ static void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *
         state->usage_known_days_30 = aggregate.known_days_30;
         state->usage_consumed_minutes_30 = aggregate.consumed_minutes_30;
     }
+    fill_bedtime_result_state(sysmodule, state, rules, runtime_state, pctl_status, now);
 }
 
 static bool write_current_status_result(
@@ -2036,7 +2377,7 @@ static bool write_current_status_result(
     PtcRules rules;
     PtcRuntimeState runtime_state;
     PtcResultState state;
-    char json[4096];
+    char json[6144];
     PtcErrorCode err;
     PtcEffectiveRule effective;
     const PtcHolidayCalendarInfo *calendar_info;
@@ -2200,6 +2541,9 @@ static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest
     uint16_t effective;
     if (disable_flag) return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode),
         true, PTC_ERR_DISABLED, now.day_index, caps);
+    if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
+        sysmodule, request, ptc_control_mode_name(config->mode), true,
+        PTC_ERR_BEDTIME_ACTIVE, now.day_index, caps);
     if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true,
             PTC_ERR_RULES_INVALID, now.day_index, caps);
@@ -2389,6 +2733,10 @@ static bool process_preview_offline_code(
     uint16_t target_minutes;
     char json[2304];
 
+    if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
+        sysmodule, request, ptc_control_mode_name(active_config.mode), true,
+        PTC_ERR_BEDTIME_ACTIVE, now.day_index, caps);
+
     decision = ptc_policy_decide(active_config.mode, disable_flag, PTC_OPERATION_GRANT_MINUTES,
         caps, false, active_config.allow_unlimited_to_limited);
     if (decision.error != PTC_ERR_OK) {
@@ -2468,6 +2816,10 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     } else {
         memset(&active_config, 0, sizeof(active_config));
     }
+
+    if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
+        sysmodule, request, ptc_control_mode_name(active_config.mode), true,
+        PTC_ERR_BEDTIME_ACTIVE, now.day_index, caps);
 
     decision = ptc_policy_decide(active_config.mode, disable_flag, PTC_OPERATION_GRANT_MINUTES, caps, false, active_config.allow_unlimited_to_limited);
     if (decision.error == PTC_ERR_DISABLED) {
@@ -2683,6 +3035,17 @@ static bool target_status_observed(
        requiring restricted_now to remain latched. */
     return status->restricted_now || status->remaining_minutes == 0U ||
         (status->remaining_minutes > 0U && status->play_timer_enabled_available && status->play_timer_enabled);
+}
+
+static bool bedtime_blocks_grants(PtcSysmodule *sysmodule, PtcClockSnapshot now)
+{
+    PtcRules rules;
+    PtcRuntimeState state;
+    PtcBedtimeEvaluation evaluation;
+    if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &state)) return false;
+    evaluation = ptc_bedtime_evaluate(
+        &rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
+    return evaluation.active && state.bedtime_skipped_instance_id != evaluation.window_instance_id;
 }
 
 static bool target_settings_observed(
@@ -3270,6 +3633,8 @@ static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSet
     PtcPctlSettingsSnapshot original;
     PtcPctlSettingsSnapshot restored;
     PtcPctlStatus status;
+    PtcRules rules;
+    PtcRuntimeState runtime_state;
     bool raw_restored = false;
     bool timer_restored = false;
     PtcErrorCode err;
@@ -3288,6 +3653,29 @@ static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSet
         write_disable_flag(sysmodule, "recovery_failed\n");
         return PTC_ERR_RECOVERY_FAILED;
     }
+    /* A full installation restore is also the terminal PlayWise escape hatch.
+       Persist that bedtime is no longer effective so the refreshed Overlay
+       result cannot claim that a successfully restored PCTL snapshot remains
+       restricted by the old window. */
+    if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
+        write_disable_flag(sysmodule, "recovery_state_unavailable\n");
+        return PTC_ERR_STORAGE_WRITE_FAILED;
+    }
+    rules.bedtime.enabled = false;
+    runtime_state.bedtime_enforced = false;
+    runtime_state.bedtime_window_instance_id = 0;
+    runtime_state.bedtime_start_day_index = 0;
+    runtime_state.bedtime_skipped_instance_id = 0;
+    runtime_state.apply_pending_confirmation = false;
+    runtime_state.apply_confirmation_deadline = 0;
+    runtime_state.pending_mode = 0;
+    runtime_state.pending_minutes = 0;
+    if (!save_rules(sysmodule, &rules) ||
+        !save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+        write_disable_flag(sysmodule, "recovery_state_failed\n");
+        return PTC_ERR_STORAGE_WRITE_FAILED;
+    }
+    clear_bedtime_snapshot(sysmodule);
     snprintf(setup->phase, sizeof(setup->phase), "restored");
     setup->restriction_cleared = false;
     setup->snapshot_available = true;
@@ -5062,6 +5450,140 @@ disable_today_rollback:
     return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
 }
 
+static PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *request,
+    const PtcCapabilities *caps, const PtcRuntimeConfig *config, const PtcRules *rules,
+    PtcRuntimeState *runtime_state, PtcClockSnapshot now)
+{
+    PtcPctlSettingsSnapshot snapshot;
+    PtcPctlSettingsSnapshot restored;
+    PtcPctlStatus status;
+    PtcPctlStatus observed;
+    uint64_t snapshot_instance = 0;
+    uint16_t snapshot_start_day = 0;
+    bool raw_restored = false;
+    bool timer_restored = false;
+    PtcErrorCode err;
+    if (!runtime_state->bedtime_enforced) return PTC_ERR_OK;
+    if (!recovery_begin(sysmodule, request, now)) return PTC_ERR_PCTL_BACKUP_FAILED;
+    if (now.day_index == runtime_state->bedtime_start_day_index &&
+        load_bedtime_snapshot(sysmodule, &snapshot, &snapshot_instance, &snapshot_start_day) &&
+        snapshot_instance == runtime_state->bedtime_window_instance_id &&
+        snapshot_start_day == runtime_state->bedtime_start_day_index) {
+        err = restore_snapshot_exact(sysmodule, &snapshot, &restored, &status,
+            ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored);
+        if (err != PTC_ERR_OK || !raw_restored || !timer_restored) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+    } else {
+        PtcDayRule base = ptc_rules_today_rule(
+            rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+        err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode),
+            target_from_day_rule(base), base.minutes);
+        if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+        err = observe_target_with_optional_activation(sysmodule, request, now,
+            ptc_control_mode_name(config->mode), target_from_day_rule(base), base.minutes,
+            "bedtime_restore_base", &observed);
+        if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+    }
+    runtime_state->bedtime_enforced = false;
+    runtime_state->bedtime_window_instance_id = 0;
+    runtime_state->bedtime_start_day_index = 0;
+    runtime_state->last_enforced_day_index = 0;
+    runtime_state->last_enforced_mode = 0;
+    runtime_state->last_enforced_minutes = 0;
+    if (!save_state(sysmodule, runtime_state, now.unix_seconds)) return PTC_ERR_STORAGE_WRITE_FAILED;
+    clear_bedtime_snapshot(sysmodule);
+    append_event(sysmodule, request, "bedtime_recovered", PTC_ERR_OK,
+        now.day_index == snapshot_start_day ? "same_day_snapshot" : "current_day_rule");
+    return PTC_ERR_OK;
+}
+
+static bool bedtime_instance_is_upcoming(const PtcRules *rules, PtcClockSnapshot now, uint64_t instance_id)
+{
+    unsigned int offset;
+    PtcBedtimeEvaluation current = ptc_bedtime_evaluate(
+        rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
+    if (current.active && current.window_instance_id == instance_id) return true;
+    for (offset = 0; offset < 8u; ++offset) {
+        uint16_t day = (uint16_t)(now.day_index + offset);
+        PtcEffectiveBedtime next = ptc_bedtime_resolve_start_day(
+            rules, day, ptc_weekday_from_day_index(day));
+        if (!next.window.enabled || (offset == 0u && now.minute_of_day >= next.window.start_minute)) continue;
+        return ptc_bedtime_window_instance_id(day, next.window.start_minute) == instance_id;
+    }
+    return false;
+}
+
+static bool process_bedtime_recovery_request(PtcSysmodule *sysmodule, const PtcRequest *request,
+    const PtcRuntimeConfig *config, const PtcCapabilities *caps, PtcClockSnapshot now)
+{
+    PtcRules rules;
+    PtcRuntimeState state;
+    PtcBedtimeEvaluation current;
+    PtcErrorCode err;
+    if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &state)) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_RULES_INVALID, now.day_index, caps);
+    }
+    current = ptc_bedtime_evaluate(
+        &rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
+    if (request->type == PTC_REQUEST_SKIP_BEDTIME) {
+        if (!bedtime_instance_is_upcoming(&rules, now, request->bedtime_window_instance_id)) {
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                PTC_ERR_BEDTIME_INSTANCE_NOT_ACTIVE, now.day_index, caps);
+        }
+        state.bedtime_skipped_instance_id = request->bedtime_window_instance_id;
+    } else {
+        rules.bedtime.enabled = false;
+    }
+    if (current.active && state.bedtime_enforced &&
+        (request->type == PTC_REQUEST_DISABLE_BEDTIME ||
+         request->bedtime_window_instance_id == current.window_instance_id)) {
+        err = restore_bedtime_base(sysmodule, request, caps, config, &rules, &state, now);
+        if (err != PTC_ERR_OK) {
+            write_disable_flag(sysmodule, "bedtime_restore_failed\n");
+            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                PTC_ERR_BEDTIME_RECOVERY_FAILED, now.day_index, caps);
+        }
+    }
+    if (!save_rules(sysmodule, &rules) || !save_state(sysmodule, &state, now.unix_seconds)) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+    }
+    (void)record_activity(sysmodule, request, now, 0, 0);
+    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode),
+        false, caps, now, recovery_path_exists(sysmodule));
+}
+
+static bool process_overlay_ready(PtcSysmodule *sysmodule, const PtcRequest *request,
+    const PtcRuntimeConfig *config, const PtcCapabilities *caps, PtcClockSnapshot now)
+{
+    char path[320];
+    char text[512];
+    char build[1024];
+    char build_release_id[96];
+    char fingerprint[65];
+    join_path(path, sizeof(path), sysmodule->app_root, "build.json");
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, build, sizeof(build)) ||
+        !json_string(build, "release_id", build_release_id, sizeof(build_release_id)) ||
+        strcmp(build_release_id, request->overlay_release_id) != 0 ||
+        !current_environment_fingerprint(sysmodule, fingerprint) ||
+        strcmp(fingerprint, request->environment_fingerprint) != 0) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_OVERLAY_UNVERIFIED, now.day_index, caps);
+    }
+    join_path(path, sizeof(path), sysmodule->app_root, "overlay/ready.json");
+    snprintf(text, sizeof(text),
+        "{\"version\":1,\"release_id\":\"%s\",\"boot_id\":\"%s\","
+        "\"environment_fingerprint\":\"%s\",\"confirmed_at\":%lld}\n",
+        build_release_id, sysmodule->boot_id, request->environment_fingerprint,
+        (long long)now.unix_seconds);
+    if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) {
+        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+    }
+    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode),
+        false, caps, now, false);
+}
+
 static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
 {
     PtcPctlStatus pctl_status;
@@ -5077,7 +5599,8 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
         request->type == PTC_REQUEST_SET_WEEKLY_TEMPLATE ||
         request->type == PTC_REQUEST_SET_HOLIDAY_POLICY ||
         request->type == PTC_REQUEST_SET_SCHEDULED_OVERRIDE ||
-        request->type == PTC_REQUEST_SET_AUTONOMY_POLICY;
+        request->type == PTC_REQUEST_SET_AUTONOMY_POLICY ||
+        request->type == PTC_REQUEST_SET_BEDTIME_POLICY;
     PtcDayRule before_active_rule;
     if (disable_flag) {
         return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_DISABLED, now.day_index, caps);
@@ -5110,6 +5633,18 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
                 err = PTC_ERR_RECOVERY_FAILED;
             }
             return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
+        }
+        if (request->type == PTC_REQUEST_SET_BEDTIME_POLICY && runtime_state.bedtime_enforced) {
+            PtcBedtimeEvaluation bedtime_now = ptc_bedtime_evaluate(
+                &rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
+            if (!bedtime_now.active || runtime_state.bedtime_skipped_instance_id == bedtime_now.window_instance_id) {
+                err = restore_bedtime_base(sysmodule, request, caps, config, &rules, &runtime_state, now);
+                if (err != PTC_ERR_OK) {
+                    write_disable_flag(sysmodule, "bedtime_restore_failed\n");
+                    return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
+                        PTC_ERR_BEDTIME_RECOVERY_FAILED, now.day_index, caps);
+                }
+            }
         }
         append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "");
         if (request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
@@ -5208,7 +5743,10 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     if (request.type != PTC_REQUEST_STATUS &&
         request.type != PTC_REQUEST_COMPLETE_SETUP &&
         request.type != PTC_REQUEST_RETRY_SETUP_RELEASE &&
-        request.type != PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT) {
+        request.type != PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT &&
+        request.type != PTC_REQUEST_SKIP_BEDTIME &&
+        request.type != PTC_REQUEST_DISABLE_BEDTIME &&
+        request.type != PTC_REQUEST_OVERLAY_READY) {
         PtcSetupState setup;
         if (!load_setup_state(sysmodule, &setup) || strcmp(setup.phase, "active") != 0) {
             (void)finish_with_error(sysmodule, &request, ptc_control_mode_name(config.mode), true,
@@ -5254,6 +5792,13 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     case PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT:
         (void)process_restore_install_snapshot(sysmodule, &request, &config, &caps, now);
         break;
+    case PTC_REQUEST_SKIP_BEDTIME:
+    case PTC_REQUEST_DISABLE_BEDTIME:
+        (void)process_bedtime_recovery_request(sysmodule, &request, &config, &caps, now);
+        break;
+    case PTC_REQUEST_OVERLAY_READY:
+        (void)process_overlay_ready(sysmodule, &request, &config, &caps, now);
+        break;
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
         (void)process_disable_today_limit(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
@@ -5264,6 +5809,8 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     case PTC_REQUEST_SET_HOLIDAY_POLICY:
     case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
     case PTC_REQUEST_SET_AUTONOMY_POLICY:
+    case PTC_REQUEST_SET_BEDTIME_POLICY:
+    case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS:
         (void)process_rule_request(sysmodule, &request, &config, disable_flag, &caps, now);
         break;
 #ifdef PLAYWISE_DEVICE_LAB
@@ -5308,12 +5855,14 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     PtcRuntimeState runtime_state;
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     PtcDayRule active_rule;
+    PtcBedtimeEvaluation bedtime;
     PtcPctlStatus observed_status;
     PtcPctlTargetMode target_mode;
     uint16_t target_minutes;
     char disable_path[320];
     PtcSetupState setup;
     PtcErrorCode err;
+    bool bedtime_should_enforce;
 
     if (!load_config(sysmodule, &config) || config.mode != PTC_CONTROL_ENFORCE) {
         return 0;
@@ -5353,20 +5902,50 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
                 "enforce_pending_confirmation_timeout");
             if (!recovery_rollback(sysmodule)) {
                 write_disable_flag(sysmodule, "pending_confirmation_restore_failed\n");
+            } else if (runtime_state.bedtime_enforced) {
+                clear_bedtime_snapshot(sysmodule);
             }
             return 0;
         }
     }
     active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-    target_mode = target_from_day_rule(active_rule);
-    target_minutes = active_rule.minutes;
+    bedtime = ptc_bedtime_evaluate(
+        &rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
+    bedtime_should_enforce = bedtime.active &&
+        runtime_state.bedtime_skipped_instance_id != bedtime.window_instance_id;
+    if (runtime_state.bedtime_enforced &&
+        (!bedtime_should_enforce || runtime_state.bedtime_window_instance_id != bedtime.window_instance_id)) {
+        err = restore_bedtime_base(sysmodule, NULL, &caps, &config, &rules, &runtime_state, now);
+        if (err != PTC_ERR_OK) {
+            write_disable_flag(sysmodule, "bedtime_restore_failed\n");
+            append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_BEDTIME_RECOVERY_FAILED,
+                "bedtime_exit");
+            return 0;
+        }
+        recovery_clear(sysmodule);
+    }
+    target_mode = bedtime_should_enforce ? PTC_PCTL_TARGET_BLOCKED : target_from_day_rule(active_rule);
+    target_minutes = bedtime_should_enforce ? 0u : active_rule.minutes;
     if (runtime_state.last_enforced_day_index == now.day_index &&
         runtime_state.last_enforced_mode == target_mode &&
-        runtime_state.last_enforced_minutes == target_minutes) {
+        runtime_state.last_enforced_minutes == target_minutes &&
+        runtime_state.bedtime_enforced == bedtime_should_enforce &&
+        (!bedtime_should_enforce || runtime_state.bedtime_window_instance_id == bedtime.window_instance_id)) {
         return 0;
+    }
+    if (bedtime_should_enforce && !runtime_state.bedtime_enforced) {
+        PtcPctlSettingsSnapshot bedtime_snapshot;
+        if (!sysmodule->pctl->vtable->snapshot_settings ||
+            sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &bedtime_snapshot) != PTC_ERR_OK ||
+            !save_bedtime_snapshot(sysmodule, &bedtime_snapshot, &bedtime, now.unix_seconds)) {
+            append_event(sysmodule, NULL, "pctl_backup_failed", PTC_ERR_PCTL_BACKUP_FAILED,
+                "bedtime_entry");
+            return 0;
+        }
     }
     err = apply_target(sysmodule, NULL, &caps, now, ptc_control_mode_name(config.mode), target_mode, target_minutes);
     if (err != PTC_ERR_OK) {
+        if (bedtime_should_enforce && !runtime_state.bedtime_enforced) clear_bedtime_snapshot(sysmodule);
         return 0;
     }
     {
@@ -5406,6 +5985,9 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     runtime_state.last_enforced_day_index = now.day_index;
     runtime_state.last_enforced_mode = target_mode;
     runtime_state.last_enforced_minutes = target_minutes;
+    runtime_state.bedtime_enforced = bedtime_should_enforce;
+    runtime_state.bedtime_window_instance_id = bedtime_should_enforce ? bedtime.window_instance_id : 0;
+    runtime_state.bedtime_start_day_index = bedtime_should_enforce ? bedtime.start_day_index : 0;
     if (!save_state(sysmodule, &runtime_state, now.unix_seconds)) {
         append_event(sysmodule, NULL, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "enforce_state");
         if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "enforce_restore_failed\n");
@@ -5694,6 +6276,15 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
         sysmodule->last_minute_of_day != now.minute_of_day;
     if (minute_changed || reload || storage_notified || disable_changed) {
 #ifndef PLAYWISE_DEVICE_LAB
+        if (sysmodule->minute_initialized) {
+            uint32_t previous = (uint32_t)sysmodule->last_minute_day_index * 1440u +
+                sysmodule->last_minute_of_day;
+            uint32_t current = (uint32_t)now.day_index * 1440u + now.minute_of_day;
+            if (current != previous && current != previous + 1u) {
+                append_event(sysmodule, NULL, "bedtime_clock_changed", PTC_ERR_OK,
+                    current < previous ? "clock_moved_backward" : "clock_jump_forward");
+            }
+        }
         actions += ptc_sysmodule_enforce_tick(sysmodule);
         actions += usage_summary_tick(sysmodule, now);
 #endif

@@ -120,6 +120,22 @@ static bool json_bool_required(const char *text, const char *key, bool *out)
     return false;
 }
 
+static bool json_u64(const char *text, const char *key, uint64_t *out)
+{
+    const char *pos = find_key(text, key);
+    char *endptr;
+    unsigned long long value;
+    if (!pos) return false;
+    pos = strchr(pos + strlen(key) + 2, ':');
+    if (!pos) return false;
+    pos = skip_ws(pos + 1);
+    if (*pos == '-') return false;
+    value = strtoull(pos, &endptr, 10);
+    if (endptr == pos) return false;
+    *out = (uint64_t)value;
+    return true;
+}
+
 #ifdef PLAYWISE_DEVICE_LAB
 static bool lab_phase_is_valid(const char *value)
 {
@@ -280,6 +296,82 @@ static bool parse_named_rule(const char *text, const char *key, PtcDayRule *rule
     return rule->mode == PTC_RULE_MODE_UNLIMITED || (rule->minutes >= 1 && rule->minutes <= 1440);
 }
 
+static bool parse_bedtime_mode(const char *value, PtcBedtimeOverrideMode *out)
+{
+    if (strcmp(value, "inherit") == 0) *out = PTC_BEDTIME_OVERRIDE_INHERIT;
+    else if (strcmp(value, "disabled") == 0) *out = PTC_BEDTIME_OVERRIDE_DISABLED;
+    else if (strcmp(value, "custom") == 0) *out = PTC_BEDTIME_OVERRIDE_CUSTOM;
+    else return false;
+    return true;
+}
+
+static bool parse_bedtime_days(const char *text, PtcBedtimeWindow week[7])
+{
+    const char *days = find_key(text, "bedtime_days");
+    unsigned int i;
+    if (!days || !(days = strchr(days, '['))) return false;
+    for (i = 0; i < 7; ++i) {
+        const char *start = strchr(days, '{');
+        const char *end;
+        char item[192];
+        size_t length;
+        if (!start || !(end = strchr(start, '}'))) return false;
+        length = (size_t)(end - start + 1);
+        if (length >= sizeof(item)) return false;
+        memcpy(item, start, length);
+        item[length] = '\0';
+        if (!json_bool_required(item, "enabled", &week[i].enabled) ||
+            !json_u16(item, "start_minute", &week[i].start_minute) ||
+            !json_u16(item, "end_minute", &week[i].end_minute) ||
+            !ptc_bedtime_window_is_valid(&week[i])) return false;
+        days = end + 1;
+    }
+    return true;
+}
+
+static bool parse_bedtime_special(const char *text, const char *prefix, PtcBedtimeSpecialRule *out)
+{
+    char mode_key[64];
+    char enabled_key[64];
+    char start_key[64];
+    char end_key[64];
+    char mode[24];
+    snprintf(mode_key, sizeof(mode_key), "%s_mode", prefix);
+    snprintf(enabled_key, sizeof(enabled_key), "%s_enabled", prefix);
+    snprintf(start_key, sizeof(start_key), "%s_start_minute", prefix);
+    snprintf(end_key, sizeof(end_key), "%s_end_minute", prefix);
+    if (!json_string(text, mode_key, mode, sizeof(mode)) || !parse_bedtime_mode(mode, &out->mode)) return false;
+    if (out->mode != PTC_BEDTIME_OVERRIDE_CUSTOM) {
+        out->window.enabled = false;
+        return true;
+    }
+    return json_bool_required(text, enabled_key, &out->window.enabled) && out->window.enabled &&
+        json_u16(text, start_key, &out->window.start_minute) &&
+        json_u16(text, end_key, &out->window.end_minute) &&
+        ptc_bedtime_window_is_valid(&out->window);
+}
+
+static bool parse_bedtime_policy(const char *text, PtcBedtimePolicy *out)
+{
+    bool scheduled_present;
+    PtcRules defaults;
+    ptc_rules_default(&defaults);
+    *out = defaults.bedtime;
+    if (!json_bool_required(text, "bedtime_enabled", &out->enabled) ||
+        !parse_bedtime_days(text, out->week) ||
+        !json_bool_required(text, "bedtime_calendar_enabled", &out->calendar_enabled) ||
+        !parse_bedtime_special(text, "bedtime_holiday", &out->holiday_rule) ||
+        !parse_bedtime_special(text, "bedtime_makeup", &out->makeup_workday_rule) ||
+        !json_bool_required(text, "bedtime_scheduled_present", &scheduled_present)) return false;
+    out->scheduled_override.present = scheduled_present;
+    if (scheduled_present) {
+        if (!json_u16(text, "bedtime_scheduled_start_day_index", &out->scheduled_override.start_day_index) ||
+            !json_u16(text, "bedtime_scheduled_end_day_index", &out->scheduled_override.end_day_index) ||
+            !parse_bedtime_special(text, "bedtime_scheduled", &out->scheduled_override.rule)) return false;
+    }
+    return ptc_bedtime_policy_is_valid(out);
+}
+
 PtcRequestType ptc_request_type_from_string(const char *value)
 {
     if (!value) {
@@ -327,6 +419,11 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "clear_activity_history") == 0) {
         return PTC_REQUEST_CLEAR_ACTIVITY_HISTORY;
     }
+    if (strcmp(value, "set_bedtime_policy") == 0) return PTC_REQUEST_SET_BEDTIME_POLICY;
+    if (strcmp(value, "skip_bedtime") == 0) return PTC_REQUEST_SKIP_BEDTIME;
+    if (strcmp(value, "disable_bedtime") == 0) return PTC_REQUEST_DISABLE_BEDTIME;
+    if (strcmp(value, "confirm_bedtime_requirements") == 0) return PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS;
+    if (strcmp(value, "overlay_ready") == 0) return PTC_REQUEST_OVERLAY_READY;
     if (strcmp(value, "complete_setup") == 0) {
         return PTC_REQUEST_COMPLETE_SETUP;
     }
@@ -386,6 +483,11 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "claim_daily_buffer";
     case PTC_REQUEST_CLEAR_ACTIVITY_HISTORY:
         return "clear_activity_history";
+    case PTC_REQUEST_SET_BEDTIME_POLICY: return "set_bedtime_policy";
+    case PTC_REQUEST_SKIP_BEDTIME: return "skip_bedtime";
+    case PTC_REQUEST_DISABLE_BEDTIME: return "disable_bedtime";
+    case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS: return "confirm_bedtime_requirements";
+    case PTC_REQUEST_OVERLAY_READY: return "overlay_ready";
     case PTC_REQUEST_COMPLETE_SETUP:
         return "complete_setup";
     case PTC_REQUEST_RETRY_SETUP_RELEASE:
@@ -486,6 +588,33 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
     case PTC_REQUEST_SET_AUTONOMY_POLICY:
         return json_u16(text, "daily_buffer_minutes", &out->autonomy_policy.daily_buffer_minutes) &&
             ptc_autonomy_policy_is_valid(&out->autonomy_policy)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_SET_BEDTIME_POLICY: {
+        char activation[16];
+        if (!parse_bedtime_policy(text, &out->bedtime_policy) ||
+            !json_string(text, "activation", activation, sizeof(activation))) return PTC_ERR_BAD_REQUEST;
+        if (strcmp(activation, "immediate") == 0) out->bedtime_apply_immediately = true;
+        else if (strcmp(activation, "next_window") == 0) out->bedtime_apply_immediately = false;
+        else return PTC_ERR_BAD_REQUEST;
+        return PTC_ERR_OK;
+    }
+    case PTC_REQUEST_SKIP_BEDTIME:
+        return json_u64(text, "window_instance_id", &out->bedtime_window_instance_id)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_DISABLE_BEDTIME:
+        return PTC_ERR_OK;
+    case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS:
+        return json_bool_required(text, "official_setting_confirmed", &out->bedtime_official_setting_confirmed) &&
+            json_bool_required(text, "overlay_risk_accepted", &out->bedtime_overlay_risk_accepted) &&
+            json_u16(text, "confirmation_version", &out->bedtime_confirmation_version) &&
+            json_string(text, "environment_fingerprint", out->environment_fingerprint,
+                sizeof(out->environment_fingerprint))
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_OVERLAY_READY:
+        return json_string(text, "release_id", out->overlay_release_id, sizeof(out->overlay_release_id)) &&
+            json_string(text, "boot_id", out->overlay_boot_id, sizeof(out->overlay_boot_id)) &&
+            json_string(text, "environment_fingerprint", out->environment_fingerprint,
+                sizeof(out->environment_fingerprint))
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_COMPLETE_SETUP:
     case PTC_REQUEST_RETRY_SETUP_RELEASE:

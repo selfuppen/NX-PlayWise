@@ -19,5 +19,15 @@ int ptc_companion_set_scheduled_override_request_json(char *out, size_t out_size
     const char *request_id, int64_t created_at, const PtcScheduledOverride *scheduled_override);
 int ptc_companion_set_autonomy_policy_request_json(char *out, size_t out_size,
     const char *request_id, int64_t created_at, const PtcAutonomyPolicy *policy);
+int ptc_companion_set_bedtime_policy_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, const PtcBedtimePolicy *policy, bool apply_immediately);
+int ptc_companion_skip_bedtime_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, uint64_t window_instance_id);
+int ptc_companion_confirm_bedtime_requirements_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, bool official_setting_confirmed,
+    bool overlay_risk_accepted, uint16_t confirmation_version, const char *environment_fingerprint);
+int ptc_companion_overlay_ready_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, const char *release_id,
+    const char *boot_id, const char *environment_fingerprint);
 
 #endif

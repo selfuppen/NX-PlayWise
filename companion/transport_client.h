@@ -70,5 +70,15 @@ PtcCompanionStatus ptc_companion_transport_submit_set_scheduled_override(PtcComp
     const char *request_id, int64_t created_at, const PtcScheduledOverride *scheduled_override);
 PtcCompanionStatus ptc_companion_transport_submit_set_autonomy_policy(PtcCompanionTransportClient *client,
     const char *request_id, int64_t created_at, const PtcAutonomyPolicy *policy);
+PtcCompanionStatus ptc_companion_transport_submit_set_bedtime_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcBedtimePolicy *policy, bool apply_immediately);
+PtcCompanionStatus ptc_companion_transport_submit_skip_bedtime(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint64_t window_instance_id);
+PtcCompanionStatus ptc_companion_transport_submit_confirm_bedtime_requirements(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, bool official_setting_confirmed,
+    bool overlay_risk_accepted, uint16_t confirmation_version, const char *environment_fingerprint);
+PtcCompanionStatus ptc_companion_transport_submit_overlay_ready(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const char *release_id,
+    const char *boot_id, const char *environment_fingerprint);
 
 #endif

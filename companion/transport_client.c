@@ -197,6 +197,11 @@ const char *ptc_companion_request_command_label_zh(const char *type)
     if (strcmp(type, "complete_setup") == 0) return "启用自动控制";
     if (strcmp(type, "retry_setup_release") == 0) return "重试前置解限";
     if (strcmp(type, "restore_install_snapshot") == 0) return "恢复安装前状态";
+    if (strcmp(type, "set_bedtime_policy") == 0) return "保存就寝计划";
+    if (strcmp(type, "skip_bedtime") == 0) return "跳过本次就寝限制";
+    if (strcmp(type, "disable_bedtime") == 0) return "关闭就寝计划";
+    if (strcmp(type, "confirm_bedtime_requirements") == 0) return "确认就寝限制风险";
+    if (strcmp(type, "overlay_ready") == 0) return "验证浮窗恢复通道";
     return "后台操作";
 }
 
@@ -270,6 +275,49 @@ PtcCompanionStatus ptc_companion_transport_submit_set_autonomy_policy(PtcCompani
     char json[512];
     int written = ptc_companion_set_autonomy_policy_request_json(
         json, sizeof(json), request_id, created_at, policy);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_set_bedtime_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcBedtimePolicy *policy, bool apply_immediately)
+{
+    char json[4096];
+    int written = ptc_companion_set_bedtime_policy_request_json(
+        json, sizeof(json), request_id, created_at, policy, apply_immediately);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_skip_bedtime(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint64_t window_instance_id)
+{
+    char json[512];
+    int written = ptc_companion_skip_bedtime_request_json(
+        json, sizeof(json), request_id, created_at, window_instance_id);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_confirm_bedtime_requirements(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, bool official_setting_confirmed,
+    bool overlay_risk_accepted, uint16_t confirmation_version, const char *environment_fingerprint)
+{
+    char json[768];
+    int written = ptc_companion_confirm_bedtime_requirements_request_json(
+        json, sizeof(json), request_id, created_at, official_setting_confirmed,
+        overlay_risk_accepted, confirmation_version, environment_fingerprint);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_overlay_ready(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const char *release_id,
+    const char *boot_id, const char *environment_fingerprint)
+{
+    char json[768];
+    int written = ptc_companion_overlay_ready_request_json(
+        json, sizeof(json), request_id, created_at, release_id, boot_id, environment_fingerprint);
     if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
     return ptc_companion_transport_submit_json(client, request_id, json);
 }

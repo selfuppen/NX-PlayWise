@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 
 #include "../../common/version.h"
+#include "../../common/crypto/sha256.h"
 #include "../../common/policy/control_policy.h"
 #include "../../common/protocol/request_schema.h"
 #include "../../common/protocol/activity_history.h"
@@ -21,6 +22,7 @@
 #include "../../companion/album_restriction.h"
 #include "../../companion/file_protocol.h"
 #include "../../companion/hot_reload_guard.h"
+#include "../../companion/request_client.h"
 #include "../../companion/result_summary.h"
 #include "../../companion/overlay/bridge.h"
 #include "../../companion/overlay/input_model.h"
@@ -421,6 +423,117 @@ static void test_holiday_calendar_and_priority(void)
         "buffer claim keeps protocol id 32");
     check_int(ptc_request_type_from_string("clear_activity_history"), 33,
         "activity clear keeps protocol id 33");
+}
+
+static void sha256_hex(const char *text, char out[65])
+{
+    static const char HEX[] = "0123456789abcdef";
+    PtcSha256Ctx hash;
+    uint8_t digest[PTC_SHA256_DIGEST_SIZE];
+    size_t index;
+    ptc_sha256_init(&hash);
+    ptc_sha256_update(&hash, (const uint8_t *)text, strlen(text));
+    ptc_sha256_final(&hash, digest);
+    for (index = 0; index < sizeof(digest); ++index) {
+        out[index * 2] = HEX[digest[index] >> 4];
+        out[index * 2 + 1] = HEX[digest[index] & 0x0fu];
+    }
+    out[64] = '\0';
+}
+
+static void test_bedtime_rules_and_protocol(void)
+{
+    PtcRules rules;
+    PtcBedtimeEvaluation evaluation;
+    PtcEffectiveBedtime effective;
+    PtcRequest request;
+    char json[4096];
+    uint16_t holiday = 0;
+    uint64_t instance;
+
+    ptc_rules_default(&rules);
+    check_true(!rules.bedtime.enabled, "bedtime defaults off for old and new installations");
+    check_true(rules.bedtime.week[0].start_minute == 1260 &&
+        rules.bedtime.week[4].end_minute == 420 &&
+        rules.bedtime.week[5].start_minute == 1320 &&
+        rules.bedtime.week[6].end_minute == 480,
+        "bedtime defaults keep seven explicit weekday values");
+    rules.bedtime.week[1].start_minute = 1300;
+    check_int(rules.bedtime.week[2].start_minute, 1260,
+        "editing one weekday does not create an implicit mapping");
+
+    rules.bedtime.enabled = true;
+    evaluation = ptc_bedtime_evaluate(&rules, 100, 1, 1320);
+    instance = ptc_bedtime_window_instance_id(100, 1300);
+    check_true(evaluation.active && evaluation.start_day_index == 100 &&
+        evaluation.window_instance_id == instance,
+        "a bedtime window belongs to its starting date and gets a stable id");
+    evaluation = ptc_bedtime_evaluate(&rules, 101, 2, 300);
+    check_true(evaluation.active && evaluation.start_day_index == 100 &&
+        evaluation.window_instance_id == instance,
+        "the next-day part resolves to the previous start-date instance");
+    evaluation = ptc_bedtime_evaluate(&rules, 101, 2, 500);
+    check_true(!evaluation.active, "the cross-night window ends at minute precision");
+
+    check_true(ptc_day_index_from_date(2026, 10, 1, &holiday),
+        "holiday bedtime test date converts");
+    effective = ptc_bedtime_resolve_start_day(&rules, holiday,
+        ptc_weekday_from_day_index(holiday));
+    check_int(effective.source, PTC_BEDTIME_SOURCE_STATUTORY_HOLIDAY,
+        "independent bedtime holiday calendar overrides weekday data");
+    rules.bedtime.scheduled_override.present = true;
+    rules.bedtime.scheduled_override.start_day_index = holiday;
+    rules.bedtime.scheduled_override.end_day_index = holiday;
+    rules.bedtime.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_DISABLED;
+    effective = ptc_bedtime_resolve_start_day(&rules, holiday,
+        ptc_weekday_from_day_index(holiday));
+    check_true(effective.source == PTC_BEDTIME_SOURCE_SCHEDULED_OVERRIDE &&
+        !effective.window.enabled,
+        "date override has priority and can disable a holiday bedtime");
+    rules.bedtime.scheduled_override.end_day_index = (uint16_t)(holiday + 365u);
+    check_true(ptc_bedtime_policy_is_valid(&rules.bedtime),
+        "bedtime date override accepts the longest 366-day range");
+    rules.bedtime.scheduled_override.end_day_index = (uint16_t)(holiday + 366u);
+    check_true(!ptc_bedtime_policy_is_valid(&rules.bedtime),
+        "bedtime date override rejects 367 days");
+    rules.bedtime.scheduled_override.present = false;
+    rules.bedtime.week[0].end_minute = 800;
+    rules.bedtime.week[1].start_minute = 700;
+    check_true(!ptc_bedtime_policy_is_valid(&rules.bedtime),
+        "adjacent cross-night bedtime windows may not overlap");
+
+    ptc_rules_default(&rules);
+    rules.bedtime.holiday_rule.window.end_minute = 1300;
+    check_true(!ptc_bedtime_policy_is_valid(&rules.bedtime),
+        "a special-date bedtime may not overlap any possible following weekday");
+
+    ptc_rules_default(&rules);
+    rules.bedtime.enabled = true;
+    check_true(ptc_companion_set_bedtime_policy_request_json(
+        json, sizeof(json), "bedtime-policy-1", 1, &rules.bedtime, false) > 0,
+        "bedtime policy request formats");
+    check_int(ptc_request_parse(json, &request), PTC_ERR_OK,
+        "bedtime policy request parses");
+    check_true(request.type == PTC_REQUEST_SET_BEDTIME_POLICY &&
+        !request.bedtime_apply_immediately &&
+        request.bedtime_policy.week[5].start_minute == 1320,
+        "bedtime policy preserves activation and independent weekday values");
+    check_true(ptc_companion_skip_bedtime_request_json(
+        json, sizeof(json), "bedtime-skip-1", 1, instance) > 0 &&
+        ptc_request_parse(json, &request) == PTC_ERR_OK &&
+        request.bedtime_window_instance_id == instance,
+        "skip request binds exactly one stable window instance");
+    check_true(ptc_companion_confirm_bedtime_requirements_request_json(
+        json, sizeof(json), "bedtime-confirm-1", 1, true, true, 1, "environment-1") > 0 &&
+        ptc_request_parse(json, &request) == PTC_ERR_OK &&
+        request.bedtime_official_setting_confirmed && request.bedtime_overlay_risk_accepted,
+        "manual official-setting and overlay-risk confirmation share a versioned environment binding");
+    check_true(ptc_companion_overlay_ready_request_json(
+        json, sizeof(json), "overlay-ready-1", 1, "release-1", "overlay-boot-1", "environment-1") > 0 &&
+        ptc_request_parse(json, &request) == PTC_ERR_OK &&
+        request.type == PTC_REQUEST_OVERLAY_READY,
+        "overlay readiness handshake is a distinct request without PIN data");
+    check_true(strstr(json, "pin") == NULL, "overlay handshake never serializes a PIN");
 }
 
 static void test_daily_summary_and_read_only_stats_boundary(void)
@@ -1976,6 +2089,185 @@ static void test_daily_enforce_does_not_start_play_timer(void)
         "future weekly rule modification never activates the timer");
 }
 
+static void test_bedtime_enforcement_and_overlay_recovery(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    PtcRules rules;
+    char request[4096];
+    char text[8192];
+    char fingerprint[65];
+    uint64_t instance;
+    unsigned int start_timer_calls_before_enforce;
+    static const char ENVIRONMENT[] =
+        "{\"read_ok\":true,\"hos\":\"22.5.0\",\"firmware_hash\":\"test-hash\","
+        "\"model\":\"mariko-oled\",\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\"}";
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.status.limited_today = true;
+    pctl.status.unrestricted_today = false;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 0;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 60;
+    pctl.status.restricted_now = true;
+    pctl.status.play_timer_enabled = false;
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
+    pctl.played_minutes_today = 60;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 1400);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    ptc_sysmodule_set_boot_id(&sysmodule, "sysmodule-boot-1");
+    seed_release_setup(&mem);
+    sha256_hex(ENVIRONMENT, fingerprint);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"active\",\"compatibility_status\":\"verified\","
+        "\"restriction_cleared\":true,\"snapshot_available\":true,\"activate_after\":0,"
+        "\"last_error\":\"\"}"), "seed active setup for bedtime");
+
+    check_true(ptc_companion_confirm_bedtime_requirements_request_json(request, sizeof(request),
+        "bedtime-confirm", 1, true, false, 1, fingerprint) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage,
+            "app/inbox/pending/bedtime-confirm.json", request),
+        "queue bedtime risk confirmation");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "bedtime risk confirmation is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-confirm.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\""),
+        "bedtime confirmation commits its result and redacted activity");
+
+    ptc_rules_default(&rules);
+    rules.bedtime.enabled = true;
+    check_true(ptc_companion_set_bedtime_policy_request_json(request, sizeof(request),
+        "bedtime-policy-unverified", 2, &rules.bedtime, true) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage,
+            "app/inbox/pending/bedtime-policy-unverified.json", request),
+        "queue first enable without an Overlay handshake or risk acknowledgement");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1,
+        "unverified first enable is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-policy-unverified.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"overlay_unverified\""),
+        "first enable requires an Overlay handshake or explicit risk acknowledgement");
+
+    check_true(ptc_companion_overlay_ready_request_json(request, sizeof(request),
+        "overlay-ready", 3, "playwise-" PLAYWISE_VERSION "+test", "overlay-boot-1", fingerprint) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage,
+            "app/inbox/pending/overlay-ready.json", request),
+        "queue overlay readiness handshake");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "overlay handshake is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/overlay/ready.json", text, sizeof(text)) &&
+        strstr(text, "sysmodule-boot-1") && strstr(text, "playwise-" PLAYWISE_VERSION "+test"),
+        "overlay handshake is bound to release and current sysmodule boot");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/environment.json",
+        "{\"read_ok\":true,\"hos\":\"22.5.1\",\"firmware_hash\":\"changed\","
+        "\"model\":\"mariko-oled\",\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\"}"),
+        "change environment after manual confirmation");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-status-changed.json",
+        "{\"version\":1,\"request_id\":\"bedtime-status-changed\","
+        "\"type\":\"status\",\"created_at\":4,\"payload\":{}}"),
+        "queue status after the environment fingerprint changes");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1,
+        "changed-environment status is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-status-changed.json", text, sizeof(text)) &&
+        strstr(text, "\"official_setting_confirmed\":false") &&
+        strstr(text, "\"overlay_verified\":false"),
+        "environment change invalidates both persisted safety confirmations");
+
+    check_true(ptc_companion_set_bedtime_policy_request_json(request, sizeof(request),
+        "bedtime-policy", 4, &rules.bedtime, true) > 0,
+        "format active bedtime policy");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-policy.json", request), "queue bedtime policy");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "bedtime policy is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-policy.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"bedtime_confirmation_required\"") &&
+        strstr(text, "\"overlay_verified\":false"),
+        "environment change invalidates both confirmation and Overlay handshake");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/environment.json", ENVIRONMENT),
+        "restore confirmed environment");
+    check_true(ptc_companion_set_bedtime_policy_request_json(request, sizeof(request),
+        "bedtime-policy-retry", 5, &rules.bedtime, true) > 0,
+        "format confirmed bedtime policy retry");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-policy-retry.json", request), "retry bedtime policy");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "confirmed bedtime policy is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-policy-retry.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\""),
+        "confirmed environment accepts the bedtime policy");
+    start_timer_calls_before_enforce = pctl.start_timer_calls;
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1, "active bedtime enters restriction");
+    check_int(pctl.last_target.mode, PTC_PCTL_TARGET_BLOCKED,
+        "bedtime is a blocked overlay over the daily quota");
+    check_int((long)pctl.start_timer_calls, (long)start_timer_calls_before_enforce,
+        "bedtime does not use the unqualified 1451 fallback");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/backups/bedtime_pctl_snapshot.json"),
+        "bedtime entry persists an exact rollback snapshot");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/backups/bedtime_pctl_snapshot.json", text, sizeof(text)) &&
+        mem.storage.vtable->write_text_atomic(&mem.storage,
+            "app/backups/install_pctl_snapshot.json", text),
+        "seed the full recovery fixture from the exact pre-bedtime snapshot");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-code.json",
+        "{\"version\":1,\"request_id\":\"bedtime-code\",\"type\":\"offline_code\","
+        "\"created_at\":4,\"payload\":{\"code\":\"00000000\"}}"),
+        "queue ordinary grant during bedtime");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "grant during bedtime is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-code.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"bedtime_active\""),
+        "bedtime rejects ordinary grants before token or nonce consumption");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger.json"),
+        "bedtime rejection does not create or consume a nonce ledger");
+
+    instance = ptc_bedtime_evaluate(&rules, 2380,
+        ptc_weekday_from_day_index(2380), 1400).window_instance_id;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/flags/disable.flag",
+        "manual-protection\n"), "seed protection state before overlay recovery");
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"bedtime-skip\",\"type\":\"skip_bedtime\","
+        "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
+        (unsigned long long)instance);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-skip.json", request), "queue overlay skip in protection state");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1,
+        "bedtime recovery remains whitelisted while control is disabled");
+    check_true(pctl.restore_called && !pctl.status.blocked_today,
+        "same-day skip restores the exact pre-bedtime PCTL snapshot");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-skip.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"bedtime\"") &&
+        strstr(text, "\"skipped\":true") && strstr(text, "\"daily_allowance\":true"),
+        "recovery result reports a skipped bedtime while preserving exhausted daily quota");
+    check_true(!mem.storage.vtable->exists(&mem.storage,
+        "app/flags/restore_install_snapshot.flag"),
+        "overlay recovery never creates an automatic startup restore flag");
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-full-restore.json",
+        "{\"version\":1,\"request_id\":\"bedtime-full-restore\","
+        "\"type\":\"restore_install_snapshot\",\"created_at\":6,\"payload\":{}}"),
+        "queue complete installation snapshot recovery from Overlay");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1,
+        "complete snapshot recovery is accepted in protection state");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-full-restore.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") && strstr(text, "\"enabled\":false") &&
+        strstr(text, "\"active\":false") && strstr(text, "\"recovery_phase\":\"idle\""),
+        "complete snapshot recovery disables PlayWise bedtime state in its refreshed result");
+}
+
 static void test_restore_exhausted_weekly_limit_accepts_transient_restriction(void)
 {
     PtcMemStorage mem;
@@ -2120,6 +2412,7 @@ int main(void)
     test_tokens();
     test_release_request_contract();
     test_holiday_calendar_and_priority();
+    test_bedtime_rules_and_protocol();
     test_daily_summary_and_read_only_stats_boundary();
     test_policy_and_disable_flag();
     test_support_redaction();
@@ -2137,6 +2430,7 @@ int main(void)
     test_setup_refuses_unknown_handover_total();
     test_runtime_fingerprint_change_can_be_reconfirmed();
     test_daily_enforce_does_not_start_play_timer();
+    test_bedtime_enforcement_and_overlay_recovery();
     test_live_enforce_recovery_is_not_startup_recovery();
     test_played_time_status();
     test_restore_exhausted_weekly_limit_accepts_transient_restriction();
