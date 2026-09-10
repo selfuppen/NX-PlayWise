@@ -2190,6 +2190,14 @@ static PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcR
             rules->bedtime.confirmed_environment);
         next.unverified_overlay_risk_accepted = rules->bedtime.unverified_overlay_risk_accepted;
         if (next.enabled) {
+#ifdef PLAYWISE_EDEN
+            /* Eden owns a simulated PCTL adapter and cannot load Tesla. Its purpose
+               is to exercise the full rule/enforcement/recovery flow in one NRO. */
+            next.confirmation_version = 1;
+            next.official_setting_confirmed_at = now.unix_seconds;
+            snprintf(next.confirmed_environment, sizeof(next.confirmed_environment), "eden-simulated");
+            next.unverified_overlay_risk_accepted = true;
+#else
             char fingerprint[65];
             if (next.confirmation_version == 0 || next.official_setting_confirmed_at <= 0 ||
                 next.confirmed_environment[0] == '\0' ||
@@ -2204,6 +2212,7 @@ static PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcR
                 !next.unverified_overlay_risk_accepted) {
                 return PTC_ERR_OVERLAY_UNVERIFIED;
             }
+#endif
         }
         rules->bedtime = next;
         after = ptc_bedtime_evaluate(

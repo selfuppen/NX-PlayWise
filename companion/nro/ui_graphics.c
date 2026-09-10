@@ -225,6 +225,9 @@ static const UiAction ADVANCED_ACTIONS[] = {
     {"临时日期计划", "考试周、假期或旅行使用，最多 366 天", UI_ACCENT},
     {"今日自主缓冲", "孩子每天可自主领取一次小额缓冲", UI_SUCCESS},
     {"家庭活动记录", "规则、加时和保护事件，最多 200 条", UI_MUTED},
+#ifdef PLAYWISE_EDEN
+    {"模拟就寝时间", "Eden 专用：测试跨夜限制与跳过流程", UI_WARNING},
+#endif
 };
 
 static const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -2747,6 +2750,15 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 }
                 dynamic_action.subtitle = autonomy_detail;
                 action = &dynamic_action;
+#ifdef PLAYWISE_EDEN
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
+                       model->settings_page == PTC_UI_SETTINGS_ADVANCED && index == 4) {
+                dynamic_action = *action;
+                dynamic_action.subtitle = model->bedtime_policy.enabled
+                    ? (model->bedtime_active && !model->bedtime_skipped ? "当前模拟限制生效中" : "当前已开启")
+                    : "当前关闭";
+                action = &dynamic_action;
+#endif
             }
             if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ROOT && index == 0) {
                 dynamic_action = *action;
@@ -3994,6 +4006,37 @@ static void draw_autonomy_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
     draw_overlay_actions(pixels, stride, model, "+  保存缓冲设置");
 }
 
+#ifdef PLAYWISE_EDEN
+static void draw_eden_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
+    char values[4][96];
+    draw_dialog_shell(pixels, stride, model, &dialog, 860, 540);
+    snprintf(values[0], sizeof(values[0]), "模拟就寝计划：%s", draft->enabled ? "开启" : "关闭");
+    snprintf(values[1], sizeof(values[1]), "每天开始：%02u:%02u",
+        (unsigned int)(draft->week[0].start_minute / 60),
+        (unsigned int)(draft->week[0].start_minute % 60));
+    snprintf(values[2], sizeof(values[2]), "次日结束：%02u:%02u",
+        (unsigned int)(draft->week[0].end_minute / 60),
+        (unsigned int)(draft->week[0].end_minute % 60));
+    snprintf(values[3], sizeof(values[3]), "%s",
+        model->bedtime_active && !model->bedtime_skipped ? "A  跳过当前模拟窗口" : "当前没有可跳过的模拟窗口");
+    for (int index = 0; index < 4; ++index) {
+        UiRect row = {dialog.x + 42, dialog.y + 118 + index * 70, dialog.width - 84, 56};
+        draw_plan_card(pixels, stride, row, model->overlay_selection == index);
+        draw_text(pixels, stride, row.x + 18, row.y + 35, values[index], 20,
+            index == 3 && model->bedtime_active && !model->bedtime_skipped ? UI_WARNING : UI_INK);
+    }
+    draw_text(pixels, stride, dialog.x + 42, dialog.y + 412,
+        "上下选择；左右每次 15 分钟，ZL/ZR 每次 1 小时；+ 保存并立即模拟。", 16, UI_MUTED);
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
+        UI_RAISED, UI_INK, true);
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "+  保存并模拟",
+        UI_WARNING, UI_ON_ACCENT, false);
+}
+#endif
+
 static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
@@ -4653,6 +4696,11 @@ static void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
     case PTC_UI_OVERLAY_AUTONOMY:
         draw_autonomy_overlay(pixels, stride, model);
         break;
+#ifdef PLAYWISE_EDEN
+    case PTC_UI_OVERLAY_EDEN_BEDTIME:
+        draw_eden_bedtime_overlay(pixels, stride, model);
+        break;
+#endif
     case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
         draw_shortcut_manager_overlay(pixels, stride, model);
         break;

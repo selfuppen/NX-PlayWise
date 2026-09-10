@@ -1394,6 +1394,10 @@ static void load_rule_drafts(UiState *ui)
     ui->model.draft_scheduled_override = rules.scheduled_override;
     ui->model.autonomy_policy = rules.autonomy_policy;
     ui->model.draft_autonomy_policy = rules.autonomy_policy;
+#ifdef PLAYWISE_EDEN
+    ui->model.bedtime_policy = rules.bedtime;
+    ui->model.draft_bedtime_policy = rules.bedtime;
+#endif
     if (!ui->client.storage->vtable->read_text(ui->client.storage, RULES_PATH, text, sizeof(text))) {
         return;
     }
@@ -1403,7 +1407,7 @@ static void load_rule_drafts(UiState *ui)
         return;
     }
     version = cJSON_GetObjectItemCaseSensitive(root, "version");
-    if (!cJSON_IsNumber(version) || version->valueint != 1) {
+    if (!cJSON_IsNumber(version) || (version->valueint != 1 && version->valueint != 2)) {
         cJSON_Delete(root);
         return;
     }
@@ -1450,6 +1454,28 @@ static void load_rule_drafts(UiState *ui)
     if (!ptc_autonomy_policy_is_valid(&rules.autonomy_policy)) {
         rules.autonomy_policy.daily_buffer_minutes = 0;
     }
+#ifdef PLAYWISE_EDEN
+    if (version->valueint >= 2) {
+        const cJSON *bedtime_week = cJSON_GetObjectItemCaseSensitive(root, "bedtime_week");
+        rules.bedtime.enabled = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "bedtime_enabled"));
+        if (cJSON_IsArray(bedtime_week) && cJSON_GetArraySize(bedtime_week) == 7) {
+            for (index = 0; index < 7; ++index) {
+                const cJSON *day = cJSON_GetArrayItem(bedtime_week, (int)index);
+                rules.bedtime.week[index].enabled = cJSON_IsTrue(
+                    cJSON_GetObjectItemCaseSensitive(day, "enabled"));
+                rules.bedtime.week[index].start_minute = (uint16_t)rule_json_int(
+                    day, "start_minute", rules.bedtime.week[index].start_minute);
+                rules.bedtime.week[index].end_minute = (uint16_t)rule_json_int(
+                    day, "end_minute", rules.bedtime.week[index].end_minute);
+            }
+        }
+        if (!ptc_bedtime_policy_is_valid(&rules.bedtime)) {
+            PtcRules defaults;
+            ptc_rules_default(&defaults);
+            rules.bedtime = defaults.bedtime;
+        }
+    }
+#endif
     memcpy(ui->model.draft_week, rules.week, sizeof(rules.week));
     memcpy(ui->model.current_week, rules.week, sizeof(rules.week));
     ui->model.weekly_dirty = false;
@@ -1463,6 +1489,10 @@ static void load_rule_drafts(UiState *ui)
     ui->model.draft_scheduled_override = rules.scheduled_override;
     ui->model.autonomy_policy = rules.autonomy_policy;
     ui->model.draft_autonomy_policy = rules.autonomy_policy;
+#ifdef PLAYWISE_EDEN
+    ui->model.bedtime_policy = rules.bedtime;
+    ui->model.draft_bedtime_policy = rules.bedtime;
+#endif
     ui->model.holiday_dirty = false;
     cJSON_Delete(root);
 }
@@ -2391,6 +2421,33 @@ static void submit_autonomy_policy(UiState *ui)
     else set_message(ui, "自主缓冲设置提交失败", status);
 }
 
+#ifdef PLAYWISE_EDEN
+static void submit_eden_bedtime_policy(UiState *ui)
+{
+    PtcCompanionStatus status;
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_set_bedtime_policy(&ui->transport,
+        ui->active_request_id, time(NULL), &ui->model.draft_bedtime_policy, true);
+    set_command_name(ui, "set_bedtime_policy");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_bedtime_policy", "正在保存 Eden 就寝计划...");
+    else set_message(ui, "Eden 就寝计划提交失败", status);
+}
+
+static void submit_eden_skip_bedtime(UiState *ui)
+{
+    PtcCompanionStatus status;
+    if (!ui->model.bedtime_active || ui->model.bedtime_window_instance_id == 0) return;
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_skip_bedtime(&ui->transport,
+        ui->active_request_id, time(NULL), ui->model.bedtime_window_instance_id);
+    set_command_name(ui, "skip_bedtime");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "skip_bedtime", "正在跳过当前模拟就寝窗口...");
+    else set_message(ui, "跳过模拟就寝窗口失败", status);
+}
+#endif
+
 static bool load_activity_history(UiState *ui)
 {
     char text[PTC_ACTIVITY_HISTORY_FILE_SIZE];
@@ -3193,6 +3250,20 @@ static void handle_parent_action(UiState *ui)
                 "孩子每天只能领取一次，仅限限时日；默认关闭。");
         } else if (index == 3) {
             open_activity_history(ui);
+#ifdef PLAYWISE_EDEN
+        } else if (index == 4) {
+            ui->model.draft_bedtime_policy = ui->model.bedtime_policy;
+            ui->model.draft_bedtime_policy.calendar_enabled = false;
+            ui->model.draft_bedtime_policy.scheduled_override.present = false;
+            for (int day = 0; day < 7; ++day) {
+                ui->model.draft_bedtime_policy.week[day].enabled = true;
+            }
+            ui->model.overlay = PTC_UI_OVERLAY_EDEN_BEDTIME;
+            ui->model.overlay_selection = 0;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "Eden 模拟就寝计划");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                "仅模拟规则、限制与恢复流程；不会连接 Nintendo PCTL，也不需要 Overlay。");
+#endif
         }
         return;
     }
@@ -3605,6 +3676,41 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
+#ifdef PLAYWISE_EDEN
+    if (ui->model.overlay == PTC_UI_OVERLAY_EDEN_BEDTIME) {
+        PtcBedtimePolicy *draft = &ui->model.draft_bedtime_policy;
+        int direction = (down & (HidNpadButton_Right | HidNpadButton_R | HidNpadButton_ZR)) ? 1 :
+            ((down & (HidNpadButton_Left | HidNpadButton_L | HidNpadButton_ZL)) ? -1 : 0);
+        int step = (down & (HidNpadButton_ZL | HidNpadButton_ZR)) ? 60 : 15;
+        if (ui->waiting) return;
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & HidNpadButton_Up) {
+            ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 3 : ui->model.overlay_selection - 1;
+        } else if (down & HidNpadButton_Down) {
+            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 4;
+        } else if ((down & (HidNpadButton_A | HidNpadButton_X)) && ui->model.overlay_selection == 0) {
+            draft->enabled = !draft->enabled;
+        } else if (direction != 0 && (ui->model.overlay_selection == 1 || ui->model.overlay_selection == 2)) {
+            int value = ui->model.overlay_selection == 1 ? draft->week[0].start_minute : draft->week[0].end_minute;
+            value = (value + direction * step + 1440) % 1440;
+            for (int day = 0; day < 7; ++day) {
+                if (ui->model.overlay_selection == 1) draft->week[day].start_minute = (uint16_t)value;
+                else draft->week[day].end_minute = (uint16_t)value;
+            }
+        } else if ((down & HidNpadButton_A) && ui->model.overlay_selection == 3) {
+            submit_eden_skip_bedtime(ui);
+        } else if (down & HidNpadButton_Plus) {
+            if (!ptc_bedtime_policy_is_valid(draft)) {
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                    "就寝窗口必须跨越午夜，开始时间需要晚于结束时间。");
+            } else {
+                submit_eden_bedtime_policy(ui);
+            }
+        }
+        return;
+    }
+#endif
     if (ui->model.overlay == PTC_UI_OVERLAY_SCHEDULED_LEAVE) {
         if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
         else if (down & HidNpadButton_A) ptc_ui_discard_scheduled(&ui->model);

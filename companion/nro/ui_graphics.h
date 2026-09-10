@@ -77,7 +77,10 @@ typedef enum {
     PTC_UI_OVERLAY_AUTONOMY = 25,
     PTC_UI_OVERLAY_ACTIVITY_HISTORY = 26,
     PTC_UI_OVERLAY_HOME_DETAILS = 27,
-    PTC_UI_OVERLAY_SCHEDULED_LEAVE = 28
+    PTC_UI_OVERLAY_SCHEDULED_LEAVE = 28,
+#ifdef PLAYWISE_EDEN
+    PTC_UI_OVERLAY_EDEN_BEDTIME = 29
+#endif
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -251,6 +254,13 @@ typedef struct {
     PtcScheduledOverride draft_scheduled_override;
     PtcAutonomyPolicy autonomy_policy;
     PtcAutonomyPolicy draft_autonomy_policy;
+#ifdef PLAYWISE_EDEN
+    PtcBedtimePolicy bedtime_policy;
+    PtcBedtimePolicy draft_bedtime_policy;
+    bool bedtime_active;
+    bool bedtime_skipped;
+    uint64_t bedtime_window_instance_id;
+#endif
     bool usage_summary_available;
     uint16_t usage_known_days_7;
     uint32_t usage_consumed_minutes_7;

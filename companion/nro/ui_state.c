@@ -662,7 +662,12 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     count = model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED
-        ? 4 : ptc_ui_parent_action_count(model->parent_page);
+#ifdef PLAYWISE_EDEN
+        ? 5
+#else
+        ? 4
+#endif
+        : ptc_ui_parent_action_count(model->parent_page);
     if (count <= 0) {
         model->selected_index = 0;
         return;
@@ -1737,6 +1742,11 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         }
         model->play_timer_enabled = summary.play_timer_enabled;
         model->restricted_now = summary.restricted_now;
+#ifdef PLAYWISE_EDEN
+        model->bedtime_active = summary.bedtime_active;
+        model->bedtime_skipped = summary.bedtime_skipped;
+        model->bedtime_window_instance_id = summary.bedtime_window_instance_id;
+#endif
         model->calendar_covered = summary.calendar_covered;
         model->calendar_update_warning = summary.calendar_update_warning;
         snprintf(model->rule_source, sizeof(model->rule_source), "%s", summary.rule_source);
@@ -2152,8 +2162,18 @@ PtcUiRect ptc_ui_advanced_feature_rect(int index)
 {
     int column = index % 2;
     int row = index / 2;
-    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    if (index < 0 || index >=
+#ifdef PLAYWISE_EDEN
+        5
+#else
+        4
+#endif
+    ) return (PtcUiRect){0, 0, 0, 0};
+#ifdef PLAYWISE_EDEN
+    return (PtcUiRect){54 + column * 385, 176 + row * 110, 365, 94};
+#else
     return (PtcUiRect){54 + column * 385, 176 + row * 136, 365, 112};
+#endif
 }
 
 PtcUiRect ptc_ui_support_hierarchy_rect(void)
@@ -2290,6 +2310,12 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 760;
         *height = 420;
         break;
+#ifdef PLAYWISE_EDEN
+    case PTC_UI_OVERLAY_EDEN_BEDTIME:
+        *width = 860;
+        *height = 540;
+        break;
+#endif
     case PTC_UI_OVERLAY_QR:
         *width = 1120;
         *height = 650;
@@ -3339,7 +3365,13 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     }
     count = model->parent_page == PTC_UI_PARENT_SETTINGS
         ? (model->settings_page == PTC_UI_SETTINGS_SUPPORT ? 6 :
-           model->settings_page == PTC_UI_SETTINGS_ADVANCED ? 4 : ptc_ui_parent_action_count(model->parent_page))
+           model->settings_page == PTC_UI_SETTINGS_ADVANCED ?
+#ifdef PLAYWISE_EDEN
+           5
+#else
+           4
+#endif
+           : ptc_ui_parent_action_count(model->parent_page))
         : ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {
         PtcUiRect card_rect = model->parent_page == PTC_UI_PARENT_SETTINGS

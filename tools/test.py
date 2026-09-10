@@ -65,6 +65,7 @@ def run_python_regressions() -> None:
         "tests/devkit/test_install_script.py",
         "tests/devkit/test_switch_ipc_lifecycle.py",
         "tests/devkit/test_switch_ui_glyphs.py",
+        "tests/devkit/test_eden_bedtime.py",
     ]:
         run([PYTHON, test])
 
