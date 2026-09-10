@@ -53,7 +53,7 @@ UI_TEST_SRCS := companion/nro/ui_state.c companion/nro/ui_theme.c companion/file
 
 STAGE_TIMER ?= python3 tools/stage_timer.py
 
-.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_REBUILD
+.PHONY: all manifest device-lab-manifest eden-test-manifest test-host test-python test ui-previews companion-nro companion-overlay sysmodule-nsp eden-test-nro packages package-playwise package-complete device-lab-sysmodule device-lab-nro device-lab-overlay device-lab-package clean FORCE_HOST_REBUILD
 
 all: test
 
@@ -96,14 +96,19 @@ test-ui-primitives: $(HOST_BUILD_DIR)/ui_preview
 
 test-host: test-ui-primitives
 
-# Optional visual QA with a local, untracked font; nothing enters release Zips.
-ifneq ($(wildcard build/ui-preview-font.ttf),)
+# UI preview generation with a local, untracked font; nothing enters release Zips.
 .PHONY: ui-previews
 ui-previews: $(HOST_BUILD_DIR)/ui_preview
+	@if [ ! -f build/ui-preview-font.ttf ]; then \
+		echo "ERROR: missing build/ui-preview-font.ttf" >&2; \
+		echo "Please place a valid Chinese TTF font at build/ui-preview-font.ttf to generate UI previews." >&2; \
+		exit 1; \
+	fi
 	mkdir -p build/ui-previews
-	$(HOST_BUILD_DIR)/ui_preview build/ui-preview-font.ttf build/ui-previews
-	python3 tools/convert_ui_previews.py
+	$(STAGE_TIMER) playwise ui-previews -- $(HOST_BUILD_DIR)/ui_preview build/ui-preview-font.ttf build/ui-previews
+	$(STAGE_TIMER) playwise convert-previews -- python3 tools/convert_ui_previews.py
 
+ifneq ($(wildcard build/ui-preview-font.ttf),)
 test-host: ui-previews
 endif
 

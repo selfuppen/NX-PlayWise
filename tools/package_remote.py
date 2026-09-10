@@ -490,11 +490,13 @@ def container_command(
         targets.append("device-lab-package")
     elif only == "eden":
         targets.append("eden-test-nro")
+    elif only == "previews":
+        targets.append("ui-previews")
     else:
         raise PackageError(f"unknown package target: {only}")
 
     targets_str = f"make {job_flag}{' '.join(targets)}"
-    test_cmd = f"make {job_flag}test && " if run_tests else ""
+    test_cmd = f"make {job_flag}test && " if (run_tests and only != "previews") else ""
     identity_exports = ""
     if build_image:
         identity_exports += f" PLAYWISE_BUILD_IMAGE={shlex.quote(build_image)}"
@@ -629,6 +631,8 @@ def build_and_verify(
         remove_path(device_lab_dir)
         if with_eden:
             remove_path(eden_dir)
+        if only in ("all", "previews"):
+            remove_path(ROOT / "build" / "ui-previews")
     else:
         package_dir.mkdir(parents=True, exist_ok=True)
         if only in ("all", "playwise", "complete"):
@@ -681,45 +685,59 @@ def build_and_verify(
     elif only == "eden":
         target_pkgs = set()
         check_eden = True
+    elif only == "previews":
+        target_pkgs = set()
+        check_eden = False
     else:
         raise PackageError(f"unknown package target: {only}")
 
-    packages = latest_packages(package_dir, target_pkgs)
-
-    if "playwise" in target_pkgs:
-        manifest_path = ROOT / "build" / "generated" / "release-manifest.json"
-        if not manifest_path.is_file():
-            raise PackageError(f"missing generated release manifest: {manifest_path}")
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        standard_package = packages["playwise"]
+    if only == "previews":
         t0 = time.perf_counter()
-        verify_package_zip(standard_package, "playwise", expected_manifest=manifest)
-        verify_packaged_artifacts(standard_package, manifest)
-        verify_flat_sysmodule(ROOT / "build" / "switch" / "pctc-sysmodule.bin", manifest, release=True)
-        stage_timer.write_timing_record("playwise", "verify", time.perf_counter() - t0)
+        preview_dir = ROOT / "build" / "ui-previews"
+        if not preview_dir.is_dir():
+            raise PackageError(f"missing preview directory: {preview_dir}")
+        png_files = sorted(preview_dir.glob("*.png"))
+        if not png_files:
+            raise PackageError(f"no preview PNG images found in {preview_dir}")
+        stage_timer.write_timing_record("playwise", "verify-previews", time.perf_counter() - t0)
+        print(f"PASS: verified {len(png_files)} UI preview PNGs in {preview_dir}")
+    else:
+        packages = latest_packages(package_dir, target_pkgs)
 
-    if "complete" in target_pkgs:
-        t0 = time.perf_counter()
-        verify_complete_package(packages["complete"], packages["playwise"])
-        stage_timer.write_timing_record("playwise-complete", "verify", time.perf_counter() - t0)
+        if "playwise" in target_pkgs:
+            manifest_path = ROOT / "build" / "generated" / "release-manifest.json"
+            if not manifest_path.is_file():
+                raise PackageError(f"missing generated release manifest: {manifest_path}")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            standard_package = packages["playwise"]
+            t0 = time.perf_counter()
+            verify_package_zip(standard_package, "playwise", expected_manifest=manifest)
+            verify_packaged_artifacts(standard_package, manifest)
+            verify_flat_sysmodule(ROOT / "build" / "switch" / "pctc-sysmodule.bin", manifest, release=True)
+            stage_timer.write_timing_record("playwise", "verify", time.perf_counter() - t0)
 
-    if "device_lab" in target_pkgs:
-        t0 = time.perf_counter()
-        device_lab_package = packages["device_lab"]
-        verify_device_lab_zip(device_lab_package)
-        with zipfile.ZipFile(device_lab_package) as package:
-            lab_manifest = json.loads(package.read("switch/playwise-device-lab/build.json").decode("utf-8"))
-        verify_flat_sysmodule(device_lab_dir / "switch" / "pwtl-sysmodule.bin", lab_manifest, release=False)
-        stage_timer.write_timing_record("device-lab", "verify", time.perf_counter() - t0)
+        if "complete" in target_pkgs:
+            t0 = time.perf_counter()
+            verify_complete_package(packages["complete"], packages["playwise"])
+            stage_timer.write_timing_record("playwise-complete", "verify", time.perf_counter() - t0)
 
-    if check_eden:
-        t0 = time.perf_counter()
-        eden_manifest_path = eden_dir / "generated" / "release-manifest.json"
-        if not eden_manifest_path.is_file():
-            raise PackageError(f"missing generated Eden manifest: {eden_manifest_path}")
-        eden_manifest = json.loads(eden_manifest_path.read_text(encoding="utf-8"))
-        verify_eden_nro(eden_dir / EDEN_NRO, eden_manifest)
-        stage_timer.write_timing_record("eden-test", "verify", time.perf_counter() - t0)
+        if "device_lab" in target_pkgs:
+            t0 = time.perf_counter()
+            device_lab_package = packages["device_lab"]
+            verify_device_lab_zip(device_lab_package)
+            with zipfile.ZipFile(device_lab_package) as package:
+                lab_manifest = json.loads(package.read("switch/playwise-device-lab/build.json").decode("utf-8"))
+            verify_flat_sysmodule(device_lab_dir / "switch" / "pwtl-sysmodule.bin", lab_manifest, release=False)
+            stage_timer.write_timing_record("device-lab", "verify", time.perf_counter() - t0)
+
+        if check_eden:
+            t0 = time.perf_counter()
+            eden_manifest_path = eden_dir / "generated" / "release-manifest.json"
+            if not eden_manifest_path.is_file():
+                raise PackageError(f"missing generated Eden manifest: {eden_manifest_path}")
+            eden_manifest = json.loads(eden_manifest_path.read_text(encoding="utf-8"))
+            verify_eden_nro(eden_dir / EDEN_NRO, eden_manifest)
+            stage_timer.write_timing_record("eden-test", "verify", time.perf_counter() - t0)
 
     records = stage_timer.read_timing_records()
     overall_wall_time = time.perf_counter() - overall_t0
@@ -731,8 +749,9 @@ def build_and_verify(
     else:
         parallel_mode = f"手动指定 (-j{jobs})"
 
+    target_desc = "标准包 UI 界面预览图 (previews)" if only == "previews" else only
     metadata = {
-        "目标": only,
+        "目标": target_desc,
         "清理模式": "增量复用 (Incremental)" if not clean else "完整清理 (Clean)",
         "单元测试": "跳过" if not run_tests else "已执行",
         "并行机制": parallel_mode,
@@ -766,9 +785,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--only",
-        choices=["all", "playwise", "complete", "device-lab", "eden"],
+        choices=["all", "playwise", "complete", "device-lab", "eden", "previews"],
         default="all",
-        help="Only build and verify a specific package target. Choices: all, playwise, complete, device-lab, eden. (Default: all)",
+        help="Only build and verify a specific package target. Choices: all, playwise, complete, device-lab, eden, previews. (Default: all)",
+    )
+    parser.add_argument(
+        "--previews",
+        action="store_true",
+        help="Generate standard package UI preview images without building packages (shorthand for --only previews).",
     )
     eden_group = parser.add_mutually_exclusive_group()
     eden_group.add_argument(
@@ -817,6 +841,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    only = "previews" if args.previews else args.only
     try:
         build_and_verify(
             args.host,
@@ -824,7 +849,7 @@ def main() -> int:
             args.user,
             args.container_path,
             args.identity,
-            only=args.only,
+            only=only,
             with_eden=args.with_eden,
             clean=args.clean,
             run_tests=not args.skip_tests,
@@ -836,7 +861,10 @@ def main() -> int:
     except (OSError, PackageError, subprocess.SubprocessError, zipfile.BadZipFile) as exc:
         print(f"FAIL: container packages: {exc}")
         return 1
-    print(f"PASS: container packages -> {ROOT / 'build' / 'packages'}")
+    if only == "previews":
+        print(f"PASS: container previews -> {ROOT / 'build' / 'ui-previews'}")
+    else:
+        print(f"PASS: container packages -> {ROOT / 'build' / 'packages'}")
     return 0
 
 

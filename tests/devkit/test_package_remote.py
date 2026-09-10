@@ -129,6 +129,11 @@ def test_container_command() -> None:
     require("device-lab-package" in only_lab, "only=device-lab must target device-lab-package")
     require("eden-test-nro" not in only_lab, "only=device-lab must omit Eden")
 
+    only_previews = package_remote.container_command(only="previews")
+    require("ui-previews" in only_previews, "only=previews must target ui-previews")
+    require("make -j test &&" not in only_previews, "only=previews must skip redundant make test")
+    require("packages" not in only_previews, "only=previews must omit package targets")
+
     jobs_cmd = package_remote.container_command(jobs=4)
     require("make -j4 " in jobs_cmd, "explicit jobs must be reflected in make command")
 
@@ -429,6 +434,15 @@ def test_public_package_selection() -> None:
             raise AssertionError("a missing complete package must be rejected")
 
 
+def test_parse_args_previews() -> None:
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--only", "previews"]):
+        args = package_remote.parse_args()
+        require(args.only == "previews", "parse_args must accept --only previews")
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--previews"]):
+        args = package_remote.parse_args()
+        require(args.previews is True, "parse_args must accept --previews")
+
+
 def main() -> int:
     test_container_command()
     test_build_identity_detection()
@@ -439,6 +453,7 @@ def main() -> int:
     test_device_lab_zip_verification()
     test_clean_package_safety()
     test_public_package_selection()
+    test_parse_args_previews()
     print("Container package helper tests passed")
     return 0
 
