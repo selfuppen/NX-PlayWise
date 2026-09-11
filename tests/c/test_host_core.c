@@ -627,6 +627,45 @@ static void test_result_summary_unlimited_state(void)
         "unlimited result summary distinguishes quota and a confirmed stopped timer");
 }
 
+static void test_result_summary_access_recovery(void)
+{
+    const char *daily_locked =
+        "{\"version\":1,\"request_id\":\"status-daily-locked\",\"type\":\"status\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":0,\"played_minutes_available\":true,"
+        "\"played_minutes\":60,\"play_timer_enabled\":0,\"restricted_now\":1,"
+        "\"temporary_unlocked_available\":true,\"temporary_unlocked\":false,"
+        "\"restriction_reasons\":{\"daily_allowance\":true},"
+        "\"bedtime\":{\"active\":false,\"skipped\":false}},\"completed_at\":1}";
+    const char *native_unlocked =
+        "{\"version\":1,\"request_id\":\"status-native-unlocked\",\"type\":\"status\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":0,\"played_minutes_available\":true,"
+        "\"played_minutes\":60,\"play_timer_enabled\":0,\"restricted_now\":1,"
+        "\"temporary_unlocked_available\":true,\"temporary_unlocked\":true,"
+        "\"restriction_reasons\":{\"daily_allowance\":true},"
+        "\"bedtime\":{\"active\":false,\"skipped\":false}},\"completed_at\":1}";
+    const char *bedtime_locked =
+        "{\"version\":1,\"request_id\":\"status-bedtime-locked\",\"type\":\"status\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":30,\"played_minutes_available\":true,"
+        "\"played_minutes\":30,\"play_timer_enabled\":0,\"restricted_now\":1,"
+        "\"temporary_unlocked_available\":false,\"temporary_unlocked\":false,"
+        "\"restriction_reasons\":{\"daily_allowance\":false},"
+        "\"bedtime\":{\"active\":true,\"skipped\":false}},\"completed_at\":1}";
+    PtcCompanionResultSummary summary;
+
+    check_true(ptc_companion_result_summary_parse(daily_locked, &summary) &&
+        summary.daily_restriction_active && summary.access_recovery_required,
+        "daily allowance lock enters Overlay access recovery");
+    check_true(ptc_companion_result_summary_parse(native_unlocked, &summary) &&
+        summary.temporary_unlocked && !summary.access_recovery_required,
+        "Nintendo temporary unlock suppresses the PlayWise lock screen");
+    check_true(ptc_companion_result_summary_parse(bedtime_locked, &summary) &&
+        summary.bedtime_active && summary.access_recovery_required,
+        "bedtime lock enters the same Overlay access recovery path");
+}
+
 static void test_install_defaults_preserve_runtime_data(void)
 {
     static const char *const names[] = {
@@ -2409,6 +2448,7 @@ int main(void)
 {
     test_hot_reload_guard();
     test_result_summary_unlimited_state();
+    test_result_summary_access_recovery();
     test_tokens();
     test_release_request_contract();
     test_holiday_calendar_and_priority();

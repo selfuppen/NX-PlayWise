@@ -14,7 +14,7 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 > **仅支持已安装自定义固件的 Nintendo Switch，推荐 Atmosphère；未破解的原厂零售主机无法使用。** PlayWise 通过常驻后台服务（sysmodule）调用受限的 Horizon PCTL 系统家长控制服务，因此必须运行在允许 Homebrew 和自定义系统组件的环境中。
 
 > [!IMPORTANT]
-> **PlayWise 依赖 Nintendo 官方家长控制本身正常工作。** 官方额度按主机使用时间累计：即使没有运行游戏，HOME、系统设置等亮屏使用也可能消耗额度，详见[任天堂官方说明](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html)。安装和接管前，必须先在“系统设置 → 家长控制”中开启官方家长控制，并分别验证亮屏计时与到时效果。是否只通知还是暂停软件，由 Nintendo 官方“时间到了暂停软件”设置决定；PlayWise 不修改该开关，也不承诺游戏一定退出，详见[Nintendo Support](https://en-americas-support.nintendo.com/app/answers/detail/a_id/22447)。
+> **PlayWise 依赖 Nintendo 官方家长控制本身正常工作，并要求开启“时间到了暂停软件”。** 官方额度按主机使用时间累计：即使没有运行游戏，HOME、系统设置等亮屏使用也可能消耗额度，详见[任天堂官方说明](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html)。每日额度耗尽或 PlayWise 就寝时间生效时，产品按“任天堂原生弹窗阻断游戏、Homebrew、HOME、系统设置和 PlayWise NRO，仅 PlayWise Overlay 可操作”设计；原生弹窗仍可使用 Nintendo 官方 PIN 临时解锁。PlayWise 不修改官方暂停开关，安装前必须在非关键游戏上验证该效果，详见[Nintendo Support](https://en-americas-support.nintendo.com/app/answers/detail/a_id/22447)。
 
 > [!NOTE]
 > PlayWise 不会破解账号、绕过在线验证，也不提供 Nintendo 官方家长控制 PIN 的重置、删除或官方手机 App 解绑功能。它只把本项目支持的游玩额度、系统计时、到期提醒和离线加时功能放到主机本地管理；“PlayWise PIN”仅用于保护本项目的家长区，不是 Nintendo 官方 PIN。
@@ -41,8 +41,8 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 
 ## 快速开始
 
-1. 先在“系统设置 → 家长控制”中开启 Nintendo 官方家长控制，确认 HOME 等亮屏使用会计入额度；再分别关闭和开启“时间到了暂停软件”，用非关键游戏验证到时只通知或实际暂停的行为。
-2. 准备已安装 Atmosphère 和 Homebrew Menu 的 Switch；如需游戏内入口，另行安装 Ultrahand Overlay。
+1. 先在“系统设置 → 家长控制”中开启 Nintendo 官方家长控制及“时间到了暂停软件”，确认 HOME 等亮屏使用会计入额度，并用非关键游戏验证到时弹窗会阻断各应用入口。
+2. 准备已安装 Atmosphère、Homebrew Menu 和 Ultrahand/Tesla 的 Switch；PlayWise Overlay 是限制期间的主机内恢复入口，不应省略。
 3. 首次使用优先下载 `playwise-complete-<版本>.zip` 完整交付包；其中的 `playwise-<版本>.zip` 用于安装 Switch 端，`playwise-offline.html` 用于家长手机或电脑。
 4. 从 Homebrew Menu 打开“任我玩”，完成首次设置。
 5. 在家长区设置今日总额度、周计划或国家节假日规则；需要临时加时时，由家长生成指定分钟数的 8 位码并告诉孩子。
@@ -97,10 +97,10 @@ NX-PlayWise 是项目和 GitHub 仓库名称，产品品牌为“任我玩 · Pl
 | 家庭活动记录与 7/30 天额度消耗估算 | 已实现（本机使用；缺失数据标为未知） |
 | Companion NRO 暗黑模式 | 已实现（三态主题；Overlay 保持固定暗色） |
 | 自定义快捷键录制 | 验证中（预设组合已开放；真机验证后发布录制入口） |
-| bedtime | 候选规则、后台覆盖层与 Overlay 恢复已实现；Eden 可模拟配置和恢复，标准版仍受真机证据门禁保护 |
+| bedtime | 标准版已提供跨夜计划、后台限制和 Overlay 恢复；新安装默认关闭，真机资格仍为 pending |
 | 按游戏时间统计 | `pdm:qry` 真机证据门禁中（当前显示不可用） |
 
-> Bedtime 的 Nintendo PCTL 弹窗可能阻断游戏、Homebrew、HOME、系统设置和 PlayWise NRO，限制期间只有 Overlay 可操作。因此候选实现把 PIN 保护的“跳过本次”“关闭 bedtime”和“恢复安装前快照”全部放在 Overlay；Overlay 或后台不可用时没有可靠的主机内自救路径，也不会自动写入启动恢复旗标。完整真机报告通过前，标准分发包仍由构建门禁拒绝 bedtime 协议和 UI。
+> 每日额度耗尽与 bedtime 生效共用同一锁定语义：游戏、Homebrew、HOME、系统设置和 PlayWise NRO 不可访问，PlayWise 侧只保留 Overlay。每日限制可输入加时码，或在 PlayWise PIN 单次授权后增加分钟/设为今日不限时；bedtime 可跳过本次、关闭计划或恢复安装前快照。Nintendo 原生弹窗及其官方 PIN 临时解锁不属于 PlayWise 应用入口。Overlay 或后台不可用时没有可靠的 PlayWise 主机内自救路径，也不会自动写入启动恢复旗标。
 
 ## 更多文档
 

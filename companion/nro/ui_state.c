@@ -401,6 +401,12 @@ static const char *request_success_message(const char *type)
     if (strcmp(type, "set_autonomy_policy") == 0) {
         return "今日自主缓冲设置已保存。";
     }
+    if (strcmp(type, "confirm_bedtime_requirements") == 0) {
+        return "就寝限制环境已确认；请再次按 + 保存并生效。";
+    }
+    if (strcmp(type, "set_bedtime_policy") == 0) {
+        return "就寝计划已保存；限制生效后请使用 Overlay 恢复。";
+    }
     if (strcmp(type, "clear_activity_history") == 0) {
         return "家庭活动记录已清空。";
     }
@@ -662,12 +668,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     count = model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED
-#ifdef PLAYWISE_EDEN
-        ? 5
-#else
-        ? 4
-#endif
-        : ptc_ui_parent_action_count(model->parent_page);
+        ? 5 : ptc_ui_parent_action_count(model->parent_page);
     if (count <= 0) {
         model->selected_index = 0;
         return;
@@ -1742,11 +1743,11 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         }
         model->play_timer_enabled = summary.play_timer_enabled;
         model->restricted_now = summary.restricted_now;
-#ifdef PLAYWISE_EDEN
         model->bedtime_active = summary.bedtime_active;
         model->bedtime_skipped = summary.bedtime_skipped;
         model->bedtime_window_instance_id = summary.bedtime_window_instance_id;
-#endif
+        model->bedtime_official_setting_confirmed = summary.bedtime_official_setting_confirmed;
+        model->bedtime_overlay_verified = summary.bedtime_overlay_verified;
         model->calendar_covered = summary.calendar_covered;
         model->calendar_update_warning = summary.calendar_update_warning;
         snprintf(model->rule_source, sizeof(model->rule_source), "%s", summary.rule_source);
@@ -2162,18 +2163,8 @@ PtcUiRect ptc_ui_advanced_feature_rect(int index)
 {
     int column = index % 2;
     int row = index / 2;
-    if (index < 0 || index >=
-#ifdef PLAYWISE_EDEN
-        5
-#else
-        4
-#endif
-    ) return (PtcUiRect){0, 0, 0, 0};
-#ifdef PLAYWISE_EDEN
+    if (index < 0 || index >= 5) return (PtcUiRect){0, 0, 0, 0};
     return (PtcUiRect){54 + column * 385, 176 + row * 110, 365, 94};
-#else
-    return (PtcUiRect){54 + column * 385, 176 + row * 136, 365, 112};
-#endif
 }
 
 PtcUiRect ptc_ui_support_hierarchy_rect(void)
@@ -2310,12 +2301,10 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 760;
         *height = 420;
         break;
-#ifdef PLAYWISE_EDEN
-    case PTC_UI_OVERLAY_EDEN_BEDTIME:
+    case PTC_UI_OVERLAY_BEDTIME:
         *width = 860;
         *height = 540;
         break;
-#endif
     case PTC_UI_OVERLAY_QR:
         *width = 1120;
         *height = 650;
@@ -3365,12 +3354,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     }
     count = model->parent_page == PTC_UI_PARENT_SETTINGS
         ? (model->settings_page == PTC_UI_SETTINGS_SUPPORT ? 6 :
-           model->settings_page == PTC_UI_SETTINGS_ADVANCED ?
-#ifdef PLAYWISE_EDEN
-           5
-#else
-           4
-#endif
+           model->settings_page == PTC_UI_SETTINGS_ADVANCED ? 5
            : ptc_ui_parent_action_count(model->parent_page))
         : ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {

@@ -62,6 +62,8 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->play_timer_enabled = number_value(state, "play_timer_enabled", -1);
     out->restricted_now = number_value(state, "restricted_now", -1);
     out->unrestricted_today = number_value(state, "unrestricted_today", -1);
+    out->temporary_unlocked_available = bool_value(state, "temporary_unlocked_available", false);
+    out->temporary_unlocked = bool_value(state, "temporary_unlocked", false);
     out->calendar_covered = bool_value(state, "calendar_covered", false);
     out->calendar_update_warning = bool_value(state, "calendar_update_warning", false);
     snprintf(out->rule_source, sizeof(out->rule_source), "%s", string_value(state, "rule_source"));
@@ -85,6 +87,9 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
         string_value(bedtime, "recovery_phase"));
     restriction_reasons = cJSON_GetObjectItemCaseSensitive(state, "restriction_reasons");
     out->daily_restriction_active = bool_value(restriction_reasons, "daily_allowance", false);
+    out->access_recovery_required =
+        (out->daily_restriction_active || (out->bedtime_active && !out->bedtime_skipped)) &&
+        !(out->temporary_unlocked_available && out->temporary_unlocked);
     preview = cJSON_GetObjectItemCaseSensitive(root, "preview");
     out->preview_available = cJSON_IsObject(preview);
     out->grant_minutes = number_value(preview, "grant_minutes", 0);

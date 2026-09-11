@@ -99,7 +99,7 @@ def create_package(
     write_json(
         out / DEFAULTS_DIR / "rules.json",
         {
-            "version": 1,
+            "version": 2,
             "week": [
                 {"mode": "unlimited", "minutes": 120},
                 {"mode": "limit", "minutes": 60},
@@ -124,6 +124,34 @@ def create_package(
             "holiday_minutes": 120,
             "makeup_workday_mode": "limit",
             "makeup_workday_minutes": 60,
+            "bedtime_enabled": False,
+            "bedtime_week": [
+                {"enabled": True, "start_minute": 1260, "end_minute": 420},
+                {"enabled": True, "start_minute": 1260, "end_minute": 420},
+                {"enabled": True, "start_minute": 1260, "end_minute": 420},
+                {"enabled": True, "start_minute": 1260, "end_minute": 420},
+                {"enabled": True, "start_minute": 1260, "end_minute": 420},
+                {"enabled": True, "start_minute": 1320, "end_minute": 480},
+                {"enabled": True, "start_minute": 1320, "end_minute": 480},
+            ],
+            "bedtime_calendar_enabled": True,
+            "bedtime_holiday_enabled": True,
+            "bedtime_holiday_start_minute": 1320,
+            "bedtime_holiday_end_minute": 480,
+            "bedtime_makeup_workday_enabled": True,
+            "bedtime_makeup_workday_start_minute": 1260,
+            "bedtime_makeup_workday_end_minute": 420,
+            "bedtime_scheduled_present": False,
+            "bedtime_scheduled_start_day_index": 0,
+            "bedtime_scheduled_end_day_index": 0,
+            "bedtime_scheduled_mode": "inherit",
+            "bedtime_scheduled_enabled": False,
+            "bedtime_scheduled_start_minute": 1260,
+            "bedtime_scheduled_end_minute": 420,
+            "bedtime_confirmation_version": 0,
+            "bedtime_official_setting_confirmed_at": 0,
+            "bedtime_confirmed_environment": "",
+            "bedtime_overlay_risk_accepted": False,
         },
     )
     write_json(

@@ -82,6 +82,8 @@ static int save_preview(const char *directory, const char *name, const PtcUiMode
     settled.displayed_remaining_minutes = settled.remaining_minutes;
     settled.displayed_grant_minutes = settled.grant_minutes;
     settled.last_parent_page = settled.parent_page;
+    settled.rendered_overlay = settled.overlay;
+    settled.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
     ptc_ui_graphics_draw(&settled, &theme);
     draw_text(preview_pixels, 1280, 820, 22, "HOST PREVIEW / SAMPLE DATA", 16, UI_RGB(g_palette->text_secondary));
     snprintf(path, sizeof(path), "%s/%s-%s.ppm", directory, name, dark ? "dark" : "light");
@@ -113,11 +115,12 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
         "加时码生成管理", "手机和电脑配对", "保留周计划草稿？", "家长区快捷键", "本机生成加时码",
         "保留密钥更改？", "兑换结果", "验证未通过", "软件信息", "节假日安排", "保留节假日草稿？",
         "支持事件详情", "批量设置", "自制程序菜单高级入口", "调整时长", "外观主题", "输入家长 PIN",
-        "加时码使用记录", "临时日期计划", "今日自主缓冲", "家庭活动记录", "今日详情", "保留日期计划草稿？"
+        "加时码使用记录", "临时日期计划", "今日自主缓冲", "家庭活动记录", "今日详情", "保留日期计划草稿？",
+        "就寝时间"
     };
     int failed = 0;
     for (int dark = 0; dark < 2; ++dark) {
-        for (int overlay = PTC_UI_OVERLAY_MINUTES; overlay <= PTC_UI_OVERLAY_SCHEDULED_LEAVE; ++overlay) {
+        for (int overlay = PTC_UI_OVERLAY_MINUTES; overlay <= PTC_UI_OVERLAY_BEDTIME; ++overlay) {
             PtcUiModel model = *baseline;
             char name[48];
             PtcRules rules;
@@ -134,6 +137,8 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
             model.daily_buffer_minutes = 10;
             model.draft_autonomy_policy.daily_buffer_minutes = 10;
             model.draft_scheduled_override = (PtcScheduledOverride){true, 2380, 2386, {PTC_RULE_MODE_LIMIT, 120}};
+            model.bedtime_policy = rules.bedtime;
+            model.draft_bedtime_policy = rules.bedtime;
             model.redemption_history_available = model.activity_history_available = true;
             snprintf(model.overlay_title, sizeof(model.overlay_title), "%s", titles[overlay]);
             snprintf(model.numpad_title, sizeof(model.numpad_title), "输入加时码");

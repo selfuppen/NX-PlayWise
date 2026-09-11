@@ -17,6 +17,8 @@ typedef struct {
     int play_timer_enabled;
     int restricted_now;
     int unrestricted_today;
+    bool temporary_unlocked_available;
+    bool temporary_unlocked;
     bool remaining_available;
     bool played_minutes_available;
     bool preview_available;
@@ -43,6 +45,7 @@ typedef struct {
     bool bedtime_official_setting_confirmed;
     bool bedtime_overlay_verified;
     bool daily_restriction_active;
+    bool access_recovery_required;
     char bedtime_source[32];
     char bedtime_recovery_phase[32];
     char rule_source[32];

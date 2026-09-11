@@ -148,6 +148,25 @@ PtcCompanionStatus ptc_overlay_bridge_disable_bedtime(PtcOverlayBridge *bridge,
             created_at, "disable_bedtime"));
 }
 
+PtcCompanionStatus ptc_overlay_bridge_add_today_minutes(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, uint16_t minutes)
+{
+    if (minutes < 1u || minutes > 120u ||
+        !prepare_request(bridge, created_at, random16)) return PTC_COMPANION_BAD_ARGUMENT;
+    return begin_request(bridge,
+        ptc_companion_transport_submit_add_today_minutes(&bridge->transport,
+            bridge->request_id, created_at, minutes));
+}
+
+PtcCompanionStatus ptc_overlay_bridge_disable_today_limit(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16)
+{
+    if (!prepare_request(bridge, created_at, random16)) return PTC_COMPANION_BAD_ARGUMENT;
+    return begin_request(bridge,
+        ptc_companion_transport_submit_empty(&bridge->transport, bridge->request_id,
+            created_at, "disable_today_limit"));
+}
+
 PtcCompanionStatus ptc_overlay_bridge_restore_install_snapshot(PtcOverlayBridge *bridge,
     int64_t created_at, uint16_t random16)
 {
