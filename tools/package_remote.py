@@ -603,6 +603,34 @@ def clean_package_results(package_dir: Path) -> None:
     package_dir.mkdir(parents=True)
 
 
+def sync_doc_previews(preview_dir: Path, doc_images_dir: Path) -> int:
+    """Synchronize generated UI preview images to the documentation images directory."""
+    usage_dir = doc_images_dir / "usage"
+    if not usage_dir.is_dir():
+        return 0
+
+    count = 0
+    for target_file in usage_dir.rglob("*.png"):
+        rel = target_file.relative_to(usage_dir)
+        source_file = preview_dir / rel
+        if source_file.is_file():
+            shutil.copy2(source_file, target_file)
+            count += 1
+
+    aliases = {
+        usage_dir / "ui-child-light.png": preview_dir / "child" / "child-light.png",
+        usage_dir / "ui-parent-dark.png": preview_dir / "parent" / "parent-dark.png",
+        usage_dir / "ui-refresh-child-light.png": preview_dir / "child" / "child-light.png",
+        usage_dir / "ui-refresh-parent-dark.png": preview_dir / "parent" / "parent-dark.png",
+    }
+    for target, source in aliases.items():
+        if target.is_file() and source.is_file():
+            shutil.copy2(source, target)
+            count += 1
+
+    return count
+
+
 def build_and_verify(
     host: str = DEFAULT_SSH_HOST,
     port: int = DEFAULT_SSH_PORT,
@@ -695,11 +723,14 @@ def build_and_verify(
         preview_dir = ROOT / "build" / "ui-previews"
         if not preview_dir.is_dir():
             raise PackageError(f"missing preview directory: {preview_dir}")
-        png_files = sorted(preview_dir.glob("*.png"))
+        png_files = sorted(preview_dir.rglob("*.png"))
         if not png_files:
             raise PackageError(f"no preview PNG images found in {preview_dir}")
+        synced = sync_doc_previews(preview_dir, ROOT / "docs" / "images")
         stage_timer.write_timing_record("playwise", "verify-previews", time.perf_counter() - t0)
         print(f"PASS: verified {len(png_files)} UI preview PNGs in {preview_dir}")
+        if synced:
+            print(f"PASS: synchronized {synced} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage'}")
     else:
         packages = latest_packages(package_dir, target_pkgs)
 

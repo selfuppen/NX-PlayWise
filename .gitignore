@@ -290,7 +290,8 @@ node_modules/
 **/node_modules/
 
 # Switch build and packaging artifacts
-/build/
+/build/*
+!/build/ui-preview-font.ttf
 /companion/nro/build/
 /companion/nro/build-eden/
 /companion/nro/pctc.elf

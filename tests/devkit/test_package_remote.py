@@ -443,6 +443,25 @@ def test_parse_args_previews() -> None:
         require(args.previews is True, "parse_args must accept --previews")
 
 
+def test_sync_doc_previews(tmp_path: Path | None = None) -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        preview_dir = root / "build" / "ui-previews"
+        doc_images_dir = root / "docs" / "images"
+        (preview_dir / "child").mkdir(parents=True)
+        (preview_dir / "child" / "child-light.png").write_bytes(b"NEW_CHILD")
+        (doc_images_dir / "usage" / "child").mkdir(parents=True)
+        target_mod = doc_images_dir / "usage" / "child" / "child-light.png"
+        target_mod.write_bytes(b"OLD_CHILD")
+        target_alias = doc_images_dir / "usage" / "ui-child-light.png"
+        target_alias.write_bytes(b"OLD_ALIAS")
+
+        synced = package_remote.sync_doc_previews(preview_dir, doc_images_dir)
+        require(synced == 2, f"expected 2 synced images, got {synced}")
+        require(target_mod.read_bytes() == b"NEW_CHILD", "target module preview must be updated")
+        require(target_alias.read_bytes() == b"NEW_CHILD", "target alias preview must be updated")
+
+
 def main() -> int:
     test_container_command()
     test_build_identity_detection()
@@ -454,6 +473,7 @@ def main() -> int:
     test_clean_package_safety()
     test_public_package_selection()
     test_parse_args_previews()
+    test_sync_doc_previews()
     print("Container package helper tests passed")
     return 0
 

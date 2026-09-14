@@ -14,7 +14,7 @@ def chunk(kind: bytes, data: bytes) -> bytes:
 
 
 def main() -> int:
-    for source in sorted((ROOT / "build" / "ui-previews").glob("*.ppm")):
+    for source in sorted((ROOT / "build" / "ui-previews").rglob("*.ppm")):
         magic, dimensions, maximum, pixels = source.read_bytes().split(b"\n", 3)
         width, height = map(int, dimensions.split())
         if magic != b"P6" or maximum != b"255" or len(pixels) != width * height * 3:

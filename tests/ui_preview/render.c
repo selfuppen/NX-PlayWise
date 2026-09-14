@@ -1,6 +1,13 @@
 /* Deterministic host screenshots of the real renderer, not a reimplemented UI. */
 #define _POSIX_C_SOURCE 200809L
 #include <time.h>
+#ifdef _WIN32
+#include <direct.h>
+#define ptc_mkdir(dir) _mkdir(dir)
+#else
+#include <sys/stat.h>
+#define ptc_mkdir(dir) mkdir(dir, 0777)
+#endif
 static time_t preview_time(time_t *out) { if (out) *out = 1000; return 1000; }
 #define time preview_time
 /* Pin the animation clock so breathing/fade phases render identically on every run.
@@ -71,11 +78,13 @@ static int check_primitives(void)
     return failed ? 1 : 0;
 }
 
-static int save_preview(const char *directory, const char *name, const PtcUiModel *model, bool dark)
+static int save_preview(const char *directory, const char *module, const char *name, const PtcUiModel *model, bool dark)
 {
-    char path[512];
+    char dir_path[1024];
+    char path[1024];
     FILE *file;
     unsigned char *rgb;
+    int n;
     PtcUiThemeView theme = ptc_ui_theme_make_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
     /* Previews skip update_animations, so render the tweened values at rest. */
     PtcUiModel settled = *model;
@@ -86,7 +95,11 @@ static int save_preview(const char *directory, const char *name, const PtcUiMode
     settled.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
     ptc_ui_graphics_draw(&settled, &theme);
     draw_text(preview_pixels, 1280, 820, 22, "HOST PREVIEW / SAMPLE DATA", 16, UI_RGB(g_palette->text_secondary));
-    snprintf(path, sizeof(path), "%s/%s-%s.ppm", directory, name, dark ? "dark" : "light");
+    n = snprintf(dir_path, sizeof(dir_path), "%s/%s", directory, module);
+    if (n < 0 || (size_t)n >= sizeof(dir_path)) return 1;
+    ptc_mkdir(dir_path);
+    n = snprintf(path, sizeof(path), "%s/%s-%s.ppm", dir_path, name, dark ? "dark" : "light");
+    if (n < 0 || (size_t)n >= sizeof(path)) return 1;
     file = fopen(path, "wb");
     if (!file) return 1;
     rgb = malloc(1280 * 720 * 3);
@@ -152,7 +165,7 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
             if (!qrcodegen_encodeText(model.pairing_base_url, temp, model.qr_code,
                     qrcodegen_Ecc_LOW, 1, 20, qrcodegen_Mask_AUTO, true)) return 1;
             snprintf(name, sizeof(name), "matrix-overlay-%02d", overlay);
-            failed |= save_preview(directory, name, &model, dark != 0);
+            failed |= save_preview(directory, "matrix", name, &model, dark != 0);
         }
         for (int parent = 0; parent < 2; ++parent) {
             for (int state = 0; state < 6; ++state) {
@@ -169,11 +182,11 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
                 if (state == 4) { model.waiting = true; snprintf(model.message, sizeof(model.message), "正在同步，请稍候"); }
                 if (state == 5) { model.remaining_minutes = 1440; model.played_minutes = 0; model.forecast[0].minutes = 1440; }
                 snprintf(name, sizeof(name), "matrix-%s-state-%d", parent ? "parent" : "child", state);
-                failed |= save_preview(directory, name, &model, dark != 0);
+                failed |= save_preview(directory, "matrix", name, &model, dark != 0);
                 ptc_ui_open_home_details(&model);
                 if (model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
                     snprintf(name, sizeof(name), "details-%s-state-%d", parent ? "parent" : "child", state);
-                    failed |= save_preview(directory, name, &model, dark != 0);
+                    failed |= save_preview(directory, "matrix", name, &model, dark != 0);
                 }
             }
         }
@@ -198,17 +211,17 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
             }
             ptc_ui_open_home_details(&details);
             snprintf(name, sizeof(name), "details-special-%d", state);
-            failed |= save_preview(directory, name, &details, dark != 0);
+            failed |= save_preview(directory, "matrix", name, &details, dark != 0);
         }
         PtcUiModel model = *baseline;
         model.view = PTC_UI_PARENT;
         model.parent_page = PTC_UI_PARENT_SETTINGS;
         model.settings_page = PTC_UI_SETTINGS_ADVANCED;
-        failed |= save_preview(directory, "settings-advanced", &model, dark != 0);
+        failed |= save_preview(directory, "settings", "settings-advanced", &model, dark != 0);
         model.view = PTC_UI_ERROR;
         model.error_code = 306;
         snprintf(model.message, sizeof(model.message), "主机环境已变化，请家长重新检测");
-        failed |= save_preview(directory, "error-page", &model, dark != 0);
+        failed |= save_preview(directory, "error", "error-page", &model, dark != 0);
     }
     return failed;
 }
@@ -255,24 +268,24 @@ int main(int argc, char **argv)
     for (int dark = 0; dark <= 1; ++dark) {
         model = baseline;
         model.view = PTC_UI_CHILD;
-        failed |= save_preview(argv[2], "child", &model, dark);
+        failed |= save_preview(argv[2], "child", "child", &model, dark);
         ptc_ui_open_home_details(&model);
-        failed |= save_preview(argv[2], "child-details", &model, dark);
+        failed |= save_preview(argv[2], "child", "child-details", &model, dark);
         ptc_ui_cancel_overlay(&model);
         model.view = PTC_UI_PARENT;
         model.parent_page = PTC_UI_PARENT_TODAY;
-        failed |= save_preview(argv[2], "parent", &model, dark);
+        failed |= save_preview(argv[2], "parent", "parent", &model, dark);
         ptc_ui_open_home_details(&model);
-        failed |= save_preview(argv[2], "parent-details", &model, dark);
+        failed |= save_preview(argv[2], "parent", "parent-details", &model, dark);
         ptc_ui_cancel_overlay(&model);
         model.parent_page = PTC_UI_PARENT_GRANT;
-        failed |= save_preview(argv[2], "grant-entry", &model, dark);
+        failed |= save_preview(argv[2], "grant", "grant-entry", &model, dark);
         model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
         model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
         model.grant_minutes = 20;
         model.grant_has_code = false;
         snprintf(model.overlay_title, sizeof(model.overlay_title), "本机生成 8 位加时码");
-        failed |= save_preview(argv[2], "grant-empty", &model, dark);
+        failed |= save_preview(argv[2], "grant", "grant-empty", &model, dark);
         model.grant_has_code = true;
         model.grant_issued_minutes = 20;
         model.grant_day_index = 2380;
@@ -280,14 +293,14 @@ int main(int argc, char **argv)
         model.grant_estimate_minutes = 71;
         model.grant_minutes = 240;
         snprintf(model.grant_code, sizeof(model.grant_code), "12345678");
-        failed |= save_preview(argv[2], "grant-issued", &model, dark);
+        failed |= save_preview(argv[2], "grant", "grant-issued", &model, dark);
         model.played_minutes = 1430;
         model.remaining_minutes = 5;
         model.grant_estimate_minutes = 10;
         model.grant_estimate_capped = true;
-        failed |= save_preview(argv[2], "grant-capped", &model, dark);
+        failed |= save_preview(argv[2], "grant", "grant-capped", &model, dark);
         model.status_updated_at = 879;
-        failed |= save_preview(argv[2], "grant-stale", &model, dark);
+        failed |= save_preview(argv[2], "grant", "grant-stale", &model, dark);
         model.status_updated_at = 998;
         model.played_minutes = 69;
         model.remaining_minutes = 51;
@@ -295,7 +308,7 @@ int main(int argc, char **argv)
         model.grant_estimate_capped = false;
         model.grant_status_refresh_failed = true;
         snprintf(model.grant_notice, sizeof(model.grant_notice), "保存失败，请返回检查 SD 卡空间后重试；旧码未撤销。");
-        failed |= save_preview(argv[2], "grant-error", &model, dark);
+        failed |= save_preview(argv[2], "grant", "grant-error", &model, dark);
         model.grant_status_refresh_failed = false;
         model.grant_notice[0] = '\0';
         ptc_ui_cancel_overlay(&model);
@@ -303,7 +316,7 @@ int main(int argc, char **argv)
         ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
             "输入加时码", "输入家长给你的 8 位码，确认前会先显示加时预览。", 8, 0, 0, 0);
         snprintf(model.numpad_text, sizeof(model.numpad_text), "12345678");
-        failed |= save_preview(argv[2], "redeem-input", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-input", &model, dark);
         ptc_ui_cancel_overlay(&model);
         model.confirm_hold_required = false;
         model.operation = PTC_UI_OPERATION_REDEEM_OFFLINE_CODE;
@@ -314,37 +327,37 @@ int main(int argc, char **argv)
         model.code_effective_add_minutes = 5;
         model.code_preview_capped = true;
         snprintf(model.overlay_title, sizeof(model.overlay_title), "确认兑换加时码");
-        failed |= save_preview(argv[2], "redeem-confirm", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-confirm", &model, dark);
         model.confirm_hold_required = true;
         model.code_preview_after_minutes = 0;
-        failed |= save_preview(argv[2], "redeem-confirm-hold", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-confirm-hold", &model, dark);
         model.code_preview_after_minutes = 56;
         model.overlay = PTC_UI_OVERLAY_CODE_RESULT;
         model.code_actual_add_available = true;
         model.code_actual_add_minutes = 5;
         model.remaining_minutes = 56;
-        failed |= save_preview(argv[2], "redeem-success-capped", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-success-capped", &model, dark);
         model.code_actual_add_minutes = 30;
-        failed |= save_preview(argv[2], "redeem-success", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-success", &model, dark);
         model.status_updated_at = 880;
-        failed |= save_preview(argv[2], "redeem-age-120", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-age-120", &model, dark);
         model.status_updated_at = 879;
-        failed |= save_preview(argv[2], "redeem-old-result", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-old-result", &model, dark);
         model.status_updated_at = 998;
         model.code_actual_add_available = false;
-        failed |= save_preview(argv[2], "redeem-missing-record", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-missing-record", &model, dark);
         model.code_result_pending = true;
-        failed |= save_preview(argv[2], "redeem-pending", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-pending", &model, dark);
         model.code_result_pending = false;
         model.code_result_failed = true;
         snprintf(model.result_status, sizeof(model.result_status), "error");
-        failed |= save_preview(argv[2], "redeem-failed", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-failed", &model, dark);
         model.error_code = 206;
-        failed |= save_preview(argv[2], "redeem-used", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-used", &model, dark);
         model.error_code = 205;
-        failed |= save_preview(argv[2], "redeem-wrong-date", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-wrong-date", &model, dark);
         model.error_code = 501;
-        failed |= save_preview(argv[2], "redeem-storage-error", &model, dark);
+        failed |= save_preview(argv[2], "redeem", "redeem-storage-error", &model, dark);
         model.error_code = 0;
         model.code_result_failed = false;
         snprintf(model.result_status, sizeof(model.result_status), "ok");
@@ -355,13 +368,13 @@ int main(int argc, char **argv)
         model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
         ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
             "设置今日总额度", "全天总额度包含今日额度消耗；右侧显示调整前后的可玩时间。", 4, 1, 1440, 1440);
-        failed |= save_preview(argv[2], "quota-editor", &model, dark);
+        failed |= save_preview(argv[2], "parent", "quota-editor", &model, dark);
         ptc_ui_cancel_overlay(&model);
         model.overlay = PTC_UI_OVERLAY_CONFIRM;
         model.confirm_hold_required = true;
         snprintf(model.overlay_title, sizeof(model.overlay_title), "设置后可能立即限制");
         snprintf(model.overlay_body, sizeof(model.overlay_body), "全天总额度包含今日额度消耗。新额度可能已经耗尽，保存后可能立即进入时间限制。可通过临时加时、今日不限时或兑换加时码解除。");
-        failed |= save_preview(argv[2], "confirmation", &model, dark);
+        failed |= save_preview(argv[2], "parent", "confirmation", &model, dark);
         ptc_ui_cancel_overlay(&model);
     }
     for (int dark = 0; dark <= 1; ++dark) {
@@ -374,23 +387,23 @@ int main(int argc, char **argv)
         model.parent_page = PTC_UI_PARENT_PLAN;
         for (int slot = 0; slot < 7; ++slot)
             if (ptc_ui_weekday_for_display_slot(slot) == ptc_weekday_from_day_index(model.day_index)) model.weekly_grid_slot = slot;
-        failed |= save_preview(argv[2], "plan-saved", &model, dark);
+        failed |= save_preview(argv[2], "plan", "plan-saved", &model, dark);
         model.draft_week[ptc_weekday_from_day_index(model.day_index)].minutes = 90;
         model.weekly_dirty = true;
-        failed |= save_preview(argv[2], "plan-draft-today", &model, dark);
+        failed |= save_preview(argv[2], "plan", "plan-draft-today", &model, dark);
         model.scheduled_override = (PtcScheduledOverride){true, 2380, 2386, {PTC_RULE_MODE_LIMIT, 120}};
         snprintf(model.rule_source, sizeof(model.rule_source), "scheduled_override");
         model.selected_index = 4;
-        failed |= save_preview(argv[2], "plan-covered", &model, dark);
+        failed |= save_preview(argv[2], "plan", "plan-covered", &model, dark);
         model.editor_index = ptc_weekday_from_day_index(model.day_index);
         ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
             "调整周计划额度", "完成输入后更新草稿，保存计划后才会应用。", 4, 1, 1440, 90);
-        failed |= save_preview(argv[2], "plan-minute-editor", &model, dark);
+        failed |= save_preview(argv[2], "plan", "plan-minute-editor", &model, dark);
         ptc_ui_cancel_overlay(&model);
         snprintf(model.result_status, sizeof(model.result_status), "error");
         snprintf(model.message, sizeof(model.message), "计划保存失败，修改仍保留，请检查后重试。");
         model.error_code = 501;
-        failed |= save_preview(argv[2], "plan-failed", &model, dark);
+        failed |= save_preview(argv[2], "plan", "plan-failed", &model, dark);
         model.error_code = 0;
         snprintf(model.result_status, sizeof(model.result_status), "ok");
         snprintf(model.message, sizeof(model.message), "已读取保存的计划");
@@ -400,9 +413,9 @@ int main(int argc, char **argv)
         model.draft_holiday_enabled = true;
         model.holiday_dirty = true;
         model.selected_index = 1;
-        failed |= save_preview(argv[2], "holiday-draft", &model, dark);
+        failed |= save_preview(argv[2], "holiday", "holiday-draft", &model, dark);
         model.disable_flag_present = true;
-        failed |= save_preview(argv[2], "holiday-disabled", &model, dark);
+        failed |= save_preview(argv[2], "holiday", "holiday-disabled", &model, dark);
         model.disable_flag_present = false;
         model.parent_page = PTC_UI_PARENT_SETTINGS;
         model.settings_page = PTC_UI_SETTINGS_ADVANCED;
@@ -412,27 +425,27 @@ int main(int argc, char **argv)
         model.overlay_selection = 1;
         snprintf(model.overlay_title, sizeof(model.overlay_title), "临时日期计划");
         snprintf(model.overlay_body, sizeof(model.overlay_body), "安排一段时间的每日额度，保存后应用；一次保留一个日期区间。");
-        failed |= save_preview(argv[2], "scheduled-draft", &model, dark);
+        failed |= save_preview(argv[2], "scheduled", "scheduled-draft", &model, dark);
         model.draft_scheduled_override.end_day_index = 2745;
         model.draft_scheduled_override.rule.mode = PTC_RULE_MODE_UNLIMITED;
-        failed |= save_preview(argv[2], "scheduled-long", &model, dark);
+        failed |= save_preview(argv[2], "scheduled", "scheduled-long", &model, dark);
         ptc_ui_cancel_overlay(&model);
-        failed |= save_preview(argv[2], "scheduled-leave", &model, dark);
+        failed |= save_preview(argv[2], "scheduled", "scheduled-leave", &model, dark);
         ptc_ui_cancel_overlay(&model);
         model.error_code = 501;
         snprintf(model.result_status, sizeof(model.result_status), "error");
-        failed |= save_preview(argv[2], "scheduled-failed", &model, dark);
+        failed |= save_preview(argv[2], "scheduled", "scheduled-failed", &model, dark);
         model = baseline;
         model.view = PTC_UI_PARENT;
         model.parent_page = PTC_UI_PARENT_SETTINGS;
         model.selected_index = 3;
-        failed |= save_preview(argv[2], "settings-root", &model, dark);
+        failed |= save_preview(argv[2], "settings", "settings-root", &model, dark);
         model.settings_page = PTC_UI_SETTINGS_SUPPORT;
         model.selected_index = 4;
-        failed |= save_preview(argv[2], "support-healthy", &model, dark);
+        failed |= save_preview(argv[2], "support", "support-healthy", &model, dark);
         model.disable_flag_present = true;
         model.selected_index = 0;
-        failed |= save_preview(argv[2], "support-disabled", &model, dark);
+        failed |= save_preview(argv[2], "support", "support-disabled", &model, dark);
         snprintf(model.setup_phase, sizeof(model.setup_phase), "failed");
         model.selected_index = 1;
         model.recent_events_available = true;
@@ -441,9 +454,9 @@ int main(int argc, char **argv)
             snprintf(model.recent_events[i], sizeof(model.recent_events[i]), "规则保存未完成，请查看详情");
             model.recent_event_timestamps[i] = 998;
         }
-        failed |= save_preview(argv[2], "support-failed", &model, dark);
+        failed |= save_preview(argv[2], "support", "support-failed", &model, dark);
         model.waiting = true;
-        failed |= save_preview(argv[2], "support-waiting", &model, dark);
+        failed |= save_preview(argv[2], "support", "support-waiting", &model, dark);
         model = baseline;
         model.view = PTC_UI_SETUP;
         snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
@@ -452,7 +465,7 @@ int main(int argc, char **argv)
             char name[32];
             model.setup_step = step;
             snprintf(name, sizeof(name), "setup-step-%d", step);
-            failed |= save_preview(argv[2], name, &model, dark);
+            failed |= save_preview(argv[2], "setup", name, &model, dark);
         }
     }
     model = baseline;
@@ -462,8 +475,8 @@ int main(int argc, char **argv)
     snprintf(model.result_status, sizeof(model.result_status), "error");
     snprintf(model.message, sizeof(model.message), "设置未完成，请等待状态同步后重试。当前设置尚未确认生效，请家长到支持与恢复查看详细原因。");
     snprintf(model.feedback_detail, sizeof(model.feedback_detail), "请勿重复提交；状态刷新和诊断仍然可用。若需要继续使用，请家长确认当前限制和剩余额度。");
-    failed |= save_preview(argv[2], "child-error", &model, false);
-    failed |= save_preview(argv[2], "child-error", &model, true);
+    failed |= save_preview(argv[2], "child", "child-error", &model, false);
+    failed |= save_preview(argv[2], "child", "child-error", &model, true);
     failed |= render_visual_matrix(argv[2], &baseline);
     FT_Done_Face(g_ui.face);
     free(bytes);
