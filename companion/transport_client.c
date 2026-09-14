@@ -191,7 +191,7 @@ const char *ptc_companion_request_command_label_zh(const char *type)
     if (strcmp(type, "set_today_limit") == 0) return "设置今日总额度";
     if (strcmp(type, "add_today_minutes") == 0) return "临时加时";
     if (strcmp(type, "disable_today_limit") == 0) return "解除当前限制";
-    if (strcmp(type, "restore_today_policy") == 0) return "恢复周计划";
+    if (strcmp(type, "restore_today_policy") == 0) return "清除今日额度调整";
     if (strcmp(type, "set_weekly_template") == 0) return "每周计划";
     if (strcmp(type, "set_holiday_policy") == 0) return "国家节假日设置";
     if (strcmp(type, "complete_setup") == 0) return "启用自动控制";

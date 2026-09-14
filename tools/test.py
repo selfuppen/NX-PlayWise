@@ -164,7 +164,17 @@ def verify_playwise_package() -> None:
         ]:
             require((package_app / relative).exists(), f"playwise package missing {relative}")
         config = read_json(package_app / "defaults" / "config.json")
+        rules = read_json(package_app / "defaults" / "rules.json")
         require("grant_secret" not in config and "control_mode" not in config, "release config must contain neither secrets nor legacy modes")
+        require(
+            rules.get("version") == 2
+            and rules.get("bedtime_holiday_mode") == "custom"
+            and rules.get("bedtime_makeup_mode") == "custom"
+            and "bedtime_makeup_enabled" in rules
+            and "bedtime_makeup_start_minute" in rules
+            and "bedtime_makeup_end_minute" in rules,
+            "release defaults must use the complete bedtime v2 field names",
+        )
         require(not (package_app / "credentials.json").exists(), "package must generate credentials on the device")
         require(read_json(package_app / "defaults" / "setup.json")["phase"] == "unconfigured", "package must not take control before setup")
         require(read_json(package_app / "build.json") == expected_manifest, "package build manifest must match the generated manifest")

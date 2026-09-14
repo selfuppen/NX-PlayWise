@@ -2317,6 +2317,35 @@ static void fill_bedtime_result_state(PtcSysmodule *sysmodule, PtcResultState *s
         pctl_status->limited_today &&
         pctl_status->remaining_available && pctl_status->remaining_minutes == 0u;
     if (!rules->bedtime.enabled) return;
+    if (runtime_state->bedtime_skipped_instance_id != 0) {
+        if (evaluation.active &&
+            evaluation.window_instance_id == runtime_state->bedtime_skipped_instance_id) {
+            state->bedtime_skipped_window_available = true;
+            state->bedtime_skipped_window_instance_id = evaluation.window_instance_id;
+            state->bedtime_skipped_start_day_index = evaluation.start_day_index;
+            state->bedtime_skipped_start_minute = evaluation.start_minute;
+            state->bedtime_skipped_end_minute = evaluation.end_minute;
+            state->bedtime_skipped_source = ptc_bedtime_source_name(evaluation.source);
+        } else {
+            for (offset = 0; offset < 8u; ++offset) {
+                uint16_t start_day = (uint16_t)(now.day_index + offset);
+                PtcEffectiveBedtime skipped = ptc_bedtime_resolve_start_day(
+                    rules, start_day, ptc_weekday_from_day_index(start_day));
+                uint64_t instance_id;
+                if (!skipped.window.enabled ||
+                    (offset == 0u && now.minute_of_day >= skipped.window.start_minute)) continue;
+                instance_id = ptc_bedtime_window_instance_id(start_day, skipped.window.start_minute);
+                if (instance_id != runtime_state->bedtime_skipped_instance_id) continue;
+                state->bedtime_skipped_window_available = true;
+                state->bedtime_skipped_window_instance_id = instance_id;
+                state->bedtime_skipped_start_day_index = start_day;
+                state->bedtime_skipped_start_minute = skipped.window.start_minute;
+                state->bedtime_skipped_end_minute = skipped.window.end_minute;
+                state->bedtime_skipped_source = ptc_bedtime_source_name(skipped.source);
+                break;
+            }
+        }
+    }
     for (offset = 0; offset < 8u; ++offset) {
         uint16_t start_day = (uint16_t)(now.day_index + offset);
         PtcEffectiveBedtime next = ptc_bedtime_resolve_start_day(

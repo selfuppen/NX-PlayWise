@@ -147,7 +147,10 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"window_instance_id\":%llu,\"start_day_index\":%u,\"start_minute\":%u,"
         "\"end_minute\":%u,\"source\":\"%s\",\"next_available\":%s,"
         "\"next_start_day_index\":%u,\"next_start_minute\":%u,\"next_end_minute\":%u,"
-        "\"next_window_instance_id\":%llu,\"official_setting_confirmed\":%s,"
+        "\"next_window_instance_id\":%llu,"
+        "\"skipped_window\":{\"available\":%s,\"window_instance_id\":%llu,"
+        "\"start_day_index\":%u,\"start_minute\":%u,\"end_minute\":%u,\"source\":\"%s\"},"
+        "\"official_setting_confirmed\":%s,"
         "\"overlay_verified\":%s,\"recovery_phase\":\"%s\"},"
         "\"restriction_reasons\":{\"bedtime\":%s,\"daily_allowance\":%s}}",
         state->daily_buffer_minutes,
@@ -166,6 +169,11 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         json_bool(state->bedtime_next_available), state->bedtime_next_start_day_index,
         state->bedtime_next_start_minute, state->bedtime_next_end_minute,
         (unsigned long long)state->bedtime_next_window_instance_id,
+        json_bool(state->bedtime_skipped_window_available),
+        (unsigned long long)state->bedtime_skipped_window_instance_id,
+        state->bedtime_skipped_start_day_index, state->bedtime_skipped_start_minute,
+        state->bedtime_skipped_end_minute,
+        state->bedtime_skipped_source ? state->bedtime_skipped_source : "weekly",
         json_bool(state->bedtime_official_setting_confirmed),
         json_bool(state->bedtime_overlay_verified),
         state->bedtime_recovery_phase ? state->bedtime_recovery_phase : "idle",
@@ -222,6 +230,12 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->bedtime_next_start_minute = 0;
     state->bedtime_next_end_minute = 0;
     state->bedtime_next_window_instance_id = 0;
+    state->bedtime_skipped_window_available = false;
+    state->bedtime_skipped_window_instance_id = 0;
+    state->bedtime_skipped_start_day_index = 0;
+    state->bedtime_skipped_start_minute = 0;
+    state->bedtime_skipped_end_minute = 0;
+    state->bedtime_skipped_source = "weekly";
     state->bedtime_official_setting_confirmed = false;
     state->bedtime_overlay_verified = false;
     state->bedtime_recovery_phase = "idle";

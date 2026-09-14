@@ -80,6 +80,16 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->bedtime_next_start_minute = number_value(bedtime, "next_start_minute", 0);
     out->bedtime_next_end_minute = number_value(bedtime, "next_end_minute", 0);
     out->bedtime_next_window_instance_id = u64_value(bedtime, "next_window_instance_id");
+    {
+        const cJSON *skipped = cJSON_GetObjectItemCaseSensitive(bedtime, "skipped_window");
+        out->bedtime_skipped_window_available = bool_value(skipped, "available", false);
+        out->bedtime_skipped_window_instance_id = u64_value(skipped, "window_instance_id");
+        out->bedtime_skipped_start_day_index = number_value(skipped, "start_day_index", 0);
+        out->bedtime_skipped_start_minute = number_value(skipped, "start_minute", 0);
+        out->bedtime_skipped_end_minute = number_value(skipped, "end_minute", 0);
+        snprintf(out->bedtime_skipped_source, sizeof(out->bedtime_skipped_source), "%s",
+            string_value(skipped, "source"));
+    }
     out->bedtime_official_setting_confirmed = bool_value(bedtime, "official_setting_confirmed", false);
     out->bedtime_overlay_verified = bool_value(bedtime, "overlay_verified", false);
     snprintf(out->bedtime_source, sizeof(out->bedtime_source), "%s", string_value(bedtime, "source"));

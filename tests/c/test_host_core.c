@@ -653,6 +653,14 @@ static void test_result_summary_access_recovery(void)
         "\"temporary_unlocked_available\":false,\"temporary_unlocked\":false,"
         "\"restriction_reasons\":{\"daily_allowance\":false},"
         "\"bedtime\":{\"active\":true,\"skipped\":false}},\"completed_at\":1}";
+    const char *bedtime_skipped =
+        "{\"version\":1,\"request_id\":\"status-bedtime-skipped\",\"type\":\"status\",\"status\":\"ok\","
+        "\"state\":{\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":30,\"played_minutes_available\":true,"
+        "\"played_minutes\":30,\"play_timer_enabled\":1,\"restricted_now\":0,"
+        "\"bedtime\":{\"active\":false,\"skipped\":false,\"skipped_window\":{\"available\":true,"
+        "\"window_instance_id\":155977020,\"start_day_index\":2380,\"start_minute\":1320,"
+        "\"end_minute\":420,\"source\":\"weekly\"}}},\"completed_at\":1}";
     PtcCompanionResultSummary summary;
 
     check_true(ptc_companion_result_summary_parse(daily_locked, &summary) &&
@@ -664,6 +672,15 @@ static void test_result_summary_access_recovery(void)
     check_true(ptc_companion_result_summary_parse(bedtime_locked, &summary) &&
         summary.bedtime_active && summary.access_recovery_required,
         "bedtime lock enters the same Overlay access recovery path");
+    check_true(ptc_companion_result_summary_parse(bedtime_skipped, &summary) &&
+        summary.bedtime_skipped_window_available &&
+        summary.bedtime_skipped_window_instance_id == 155977020ULL &&
+        summary.bedtime_skipped_start_day_index == 2380 &&
+        strcmp(summary.bedtime_skipped_source, "weekly") == 0,
+        "result summary projects the backward-compatible skipped bedtime window");
+    check_true(ptc_companion_result_summary_parse(bedtime_locked, &summary) &&
+        !summary.bedtime_skipped_window_available,
+        "older results without skipped_window remain valid and treat it as unavailable");
 }
 
 static void test_install_defaults_preserve_runtime_data(void)
@@ -1360,7 +1377,7 @@ static void test_setup_refuses_unknown_handover_total(void)
     PtcPctlStub pctl;
     PtcFakeTime fake_time;
     PtcSysmodule sysmodule;
-    char text[2048];
+    char text[8192];
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
@@ -1392,7 +1409,7 @@ static void test_live_enforce_recovery_is_not_startup_recovery(void)
     PtcFakeTime fake_time;
     PtcSysmodule sysmodule;
     PtcSysmodule restarted;
-    char text[2048];
+    char text[8192];
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
@@ -2082,7 +2099,7 @@ static void test_daily_enforce_does_not_start_play_timer(void)
     PtcPctlStub pctl;
     PtcFakeTime fake_time;
     PtcSysmodule sysmodule;
-    char text[2048];
+    char text[8192];
 
     ptc_mem_storage_init(&mem);
     ptc_pctl_stub_init(&pctl);
@@ -2287,7 +2304,8 @@ static void test_bedtime_enforcement_and_overlay_recovery(void)
     check_true(mem.storage.vtable->read_text(&mem.storage,
         "app/results/bedtime-skip.json", text, sizeof(text)) &&
         strstr(text, "\"status\":\"ok\"") && strstr(text, "\"bedtime\"") &&
-        strstr(text, "\"skipped\":true") && strstr(text, "\"daily_allowance\":true"),
+        strstr(text, "\"skipped\":true") && strstr(text, "\"skipped_window\":{\"available\":true") &&
+        strstr(text, "\"daily_allowance\":true"),
         "recovery result reports a skipped bedtime while preserving exhausted daily quota");
     check_true(!mem.storage.vtable->exists(&mem.storage,
         "app/flags/restore_install_snapshot.flag"),

@@ -127,15 +127,15 @@ static void test_release_navigation(void)
     PtcUiModel model;
     char shortcut_hint[160];
     memset(&model, 0, sizeof(model));
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 4, "today actions");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 0, "weekly plan is edited directly");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_HOLIDAY), 7, "holiday policy exposes rules, actions and calendar entry");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 6, "today exposes quota, bedtime and buffer cards");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 5, "time plan root exposes five direct cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 4, "grant page exposes generation, management and history");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 5, "settings page exposes preferences, security and support");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 5, "settings page exposes preferences and security");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support is a top-level six-action page");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
     ptc_ui_change_parent_page(&model, -1);
-    check_int(model.parent_page, PTC_UI_PARENT_SETTINGS, "page wraps to settings");
+    check_int(model.parent_page, PTC_UI_PARENT_SUPPORT, "page wraps to support");
     check_int(model.settings_page, PTC_UI_SETTINGS_ROOT, "top-level navigation opens settings root");
     ptc_ui_change_parent_page(&model, 1);
     check_int(model.parent_page, PTC_UI_PARENT_TODAY, "page wraps to today");
@@ -158,9 +158,11 @@ static void test_release_navigation(void)
     ptc_ui_move_parent_selection(&model, 1, 0);
     check_int(model.selected_index, 1, "selection moves right");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_int(model.selected_index, 3, "four-card selection wraps upward");
+    check_int(model.selected_index, 1, "six-card selection stays in the first row when moving upward");
 
-    model.parent_page = PTC_UI_PARENT_HOLIDAY;
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
+    model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 1, "holiday header moves down to statutory rule");
@@ -169,8 +171,7 @@ static void test_release_navigation(void)
     ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 6, "holiday right rule reaches calendar entry");
 
-    model.parent_page = PTC_UI_PARENT_SETTINGS;
-    model.settings_page = PTC_UI_SETTINGS_SUPPORT;
+    model.parent_page = PTC_UI_PARENT_SUPPORT;
     model.recent_event_count = 3;
     model.selected_index = 4;
     ptc_ui_move_parent_selection(&model, 0, 1);
@@ -265,7 +266,7 @@ static void test_rule_result_guidance(void)
     model.draft_week[ptc_weekday_from_day_index(model.day_index)].minutes = 90;
     snprintf(model.rule_source, sizeof(model.rule_source), "today_override");
     ptc_ui_format_weekly_save_result(&model, message, sizeof(message), detail, sizeof(detail));
-    check_true(strstr(message, "当前不变") != NULL && strstr(detail, "恢复周计划生效后") != NULL &&
+    check_true(strstr(message, "当前不变") != NULL && strstr(detail, "清除今日额度调整后") != NULL &&
                strstr(detail, "90") != NULL && strstr(detail, "20") != NULL && strstr(detail, "70") != NULL,
                "weekly override result states conclusion and calculation basis");
     snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
@@ -845,6 +846,7 @@ static void test_release_hit_targets(void)
     check_int(ptc_ui_parent_footer_rect(4).x + ptc_ui_parent_footer_rect(4).w, 1226,
               "parent status footer aligns with the main content border");
     model.parent_page = PTC_UI_PARENT_PLAN;
+    model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
     model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
     check_hit(hit_center(&model, ptc_ui_weekly_day_mode_rect(0)), PTC_UI_HIT_WEEKLY_MODE, 1,
               "weekly mode pill toggles Monday directly");
@@ -901,8 +903,7 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_weekly_discard_rect()), PTC_UI_HIT_WEEKLY_DISCARD, 0,
               "disabled weekly page still allows discarding a draft");
     model.disable_flag_present = false;
-    model.parent_page = PTC_UI_PARENT_SETTINGS;
-    model.settings_page = PTC_UI_SETTINGS_SUPPORT;
+    model.parent_page = PTC_UI_PARENT_SUPPORT;
     model.recent_event_count = 3;
     snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
     check_true(ptc_ui_safety_action_visible(&model, 0) && ptc_ui_safety_action_visible(&model, 1),
@@ -923,43 +924,16 @@ static void test_release_hit_targets(void)
     }
     check_true(!rects_overlap(ptc_ui_support_event_rect(0), ptc_ui_support_event_rect(1)),
                "support event rows do not overlap");
-    check_hit(hit_center(&model, ptc_ui_support_back_rect()), PTC_UI_HIT_PARENT_BACK, 0,
-              "support hierarchy bar exposes a touch return to settings");
     check_hit(hit_center(&model, ptc_ui_support_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4,
-              "support cards use the secondary-page layout");
-    check_true(!rects_overlap(ptc_ui_support_hierarchy_rect(), ptc_ui_support_card_rect(0)),
-               "support hierarchy bar does not overlap the action cards");
+              "support cards use the top-level layout");
     check_true(!rects_overlap(ptc_ui_support_card_rect(4), (PtcUiRect){54, 522, 1172, 128}),
                "support action cards do not overlap recent execution");
-    check_hit(hit_center(&model, ptc_ui_parent_tab_rect(0)), PTC_UI_HIT_PARENT_BACK, 0,
-              "support replaces first tab with return to settings");
-    for (int tab = 1; tab < PTC_UI_PARENT_PAGE_COUNT; ++tab)
-        check_hit(hit_center(&model, ptc_ui_parent_tab_rect(tab)), PTC_UI_HIT_NONE, 0,
-                  "support removes all other tab touch targets");
+    for (int tab = 0; tab < PTC_UI_PARENT_PAGE_COUNT; ++tab)
+        check_hit(hit_center(&model, ptc_ui_parent_tab_rect(tab)), PTC_UI_HIT_PARENT_TAB, tab,
+                  "support keeps all top-level tab touch targets");
 
-    model.settings_page = PTC_UI_SETTINGS_ADVANCED;
-    model.recent_event_count = 0;
-    check_hit(hit_center(&model, ptc_ui_advanced_card_rect()), PTC_UI_HIT_PARENT_CARD, 0,
-              "advanced settings exposes the hbmenu entry card");
-    check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_PARENT_BACK, 0,
-              "advanced hierarchy bar exposes a touch return to settings");
-    check_true(!rects_overlap(ptc_ui_advanced_hierarchy_rect(), ptc_ui_advanced_card_rect()),
-               "advanced hierarchy bar does not overlap the action card");
-    for (int card = 0; card < 4; ++card)
-        check_true(!rects_overlap(ptc_ui_advanced_feature_rect(card), (PtcUiRect){54, 446, 1172, 128}),
-                   "advanced cards do not overlap the relocated recent execution");
-    check_hit(hit_center(&model, ptc_ui_parent_tab_rect(0)), PTC_UI_HIT_PARENT_BACK, 0,
-              "advanced replaces first tab with return to settings");
-    for (int tab = 1; tab < PTC_UI_PARENT_PAGE_COUNT; ++tab)
-        check_hit(hit_center(&model, ptc_ui_parent_tab_rect(tab)), PTC_UI_HIT_NONE, 0,
-                  "advanced removes all other tab touch targets");
-    model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
-    check_hit(hit_center(&model, ptc_ui_advanced_back_rect()), PTC_UI_HIT_NONE, 0,
-              "nested overlay blocks secondary-page return touch");
-    check_true(ptc_ui_cancel_overlay(&model), "nested overlay closes first");
-    check_int(model.settings_page, PTC_UI_SETTINGS_ADVANCED, "closing overlay stays on secondary page");
-
-    model.parent_page = PTC_UI_PARENT_HOLIDAY;
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
     check_hit(hit_center(&model, ptc_ui_holiday_enable_rect()), PTC_UI_HIT_HOLIDAY_ENABLE, 0, "holiday global switch target");
     check_hit(hit_center(&model, ptc_ui_holiday_mode_rect(0)), PTC_UI_HIT_HOLIDAY_MODE, 0, "holiday statutory mode target");
     {
@@ -1485,12 +1459,13 @@ static void test_balanced_feature_state(void)
         "unavailable child buffer cannot be claimed by touch");
 
     model.view = PTC_UI_PARENT;
-    model.parent_page = PTC_UI_PARENT_SETTINGS;
-    model.settings_page = PTC_UI_SETTINGS_ADVANCED;
-    for (index = 0; index < 4; ++index) {
-        check_hit(hit_center(&model, ptc_ui_advanced_feature_rect(index)),
-            PTC_UI_HIT_PARENT_CARD, index, "all balanced advanced cards are touchable");
-    }
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
+    model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
+    check_hit(hit_center(&model, ptc_ui_bedtime_section_rect(2)),
+        PTC_UI_HIT_BEDTIME_SECTION, 2, "bedtime sections are touchable");
+    check_hit(hit_center(&model, ptc_ui_bedtime_field_rect(PTC_UI_BEDTIME_WEEKLY, 0)),
+        PTC_UI_HIT_BEDTIME_FIELD, 0, "bedtime weekday cards are touchable");
     model.overlay = PTC_UI_OVERLAY_SCHEDULED;
     check_hit(hit_center(&model, ptc_ui_scheduled_field_rect(2)),
         PTC_UI_HIT_SCHEDULED_FIELD, 2, "scheduled duration field is touchable");
@@ -1537,28 +1512,30 @@ static void test_home_redesign(void)
     char text[128];
     const PtcUiOperation expected[] = {PTC_UI_OPERATION_SET_TODAY_LIMIT,
         PTC_UI_OPERATION_ADD_TODAY_MINUTES, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT,
-        PTC_UI_OPERATION_RESTORE_TODAY_POLICY};
+        PTC_UI_OPERATION_RESTORE_TODAY_POLICY, PTC_UI_OPERATION_SKIP_BEDTIME,
+        PTC_UI_OPERATION_NONE};
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 6; ++i) {
         PtcUiRect rect = ptc_ui_today_card_rect(i);
         check_int(ptc_ui_today_operation(i), expected[i], "today card maps to its named operation");
         check_hit(hit_center(&model, rect), PTC_UI_HIT_PARENT_CARD, i, "today card hit matches render position");
         check_true(rect.h >= 48 && !rects_overlap(rect, ptc_ui_home_summary_rect(true)), "card is large enough and clear of summary");
-        for (int j = i + 1; j < 4; ++j)
+        for (int j = i + 1; j < 6; ++j)
             check_true(!rects_overlap(rect, ptc_ui_today_card_rect(j)), "today cards do not overlap");
         model.disable_flag_present = true;
         check_hit(hit_center(&model, rect), PTC_UI_HIT_NONE, 0, "disabled today action has no touch target");
         model.disable_flag_present = false;
     }
     check_int(ptc_ui_today_operation(-1), PTC_UI_OPERATION_NONE, "invalid action cannot dispatch");
-    check_int(ptc_ui_today_operation(4), PTC_UI_OPERATION_NONE, "old fifth action cannot dispatch");
-    model.selected_index = 3;
+    check_int(ptc_ui_today_operation(4), PTC_UI_OPERATION_SKIP_BEDTIME, "fifth action dispatches bedtime skip");
+    check_int(ptc_ui_today_operation(5), PTC_UI_OPERATION_NONE, "buffer status card does not dispatch a write");
+    model.selected_index = 5;
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(model.parent_footer_focused && model.parent_content_selection == 3, "footer remembers last card");
+    check_true(model.parent_footer_focused && model.parent_content_selection == 5, "footer remembers last card");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_true(!model.parent_footer_focused && model.selected_index == 3, "up restores card focus");
+    check_true(!model.parent_footer_focused && model.selected_index == 5, "up restores card focus");
     snprintf(model.message, sizeof(model.message), "keep result");
     for (int parent = 0; parent <= 1; ++parent) {
         model.view = parent ? PTC_UI_PARENT : PTC_UI_CHILD;
@@ -1567,7 +1544,7 @@ static void test_home_redesign(void)
         check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "details block underlying input");
         check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_NONE, 0, "details have no hidden confirm action");
         check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0, "details return is touchable");
-        check_true(ptc_ui_cancel_overlay(&model) && model.selected_index == 3 && strcmp(model.message, "keep result") == 0,
+        check_true(ptc_ui_cancel_overlay(&model) && model.selected_index == 5 && strcmp(model.message, "keep result") == 0,
             "details close preserves focus and result");
     }
     model.waiting = true;
@@ -1907,8 +1884,61 @@ static void test_support_next_step(void)
     check_int(ptc_ui_support_recommended_action(&model), 4, "recent failure suggests diagnostics");
 }
 
+static void test_time_menu_modal_touch_guards(void)
+{
+    static const PtcUiOverlay bedtime_modals[] = {
+        PTC_UI_OVERLAY_BEDTIME_WINDOW,
+        PTC_UI_OVERLAY_BEDTIME_SPECIAL,
+        PTC_UI_OVERLAY_BEDTIME_BULK,
+        PTC_UI_OVERLAY_BEDTIME_LEAVE,
+    };
+    PtcUiModel model = {0};
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
+
+    for (int section = PTC_UI_BEDTIME_WEEKLY; section <= PTC_UI_BEDTIME_SCHEDULED; ++section) {
+        int field_count = section == PTC_UI_BEDTIME_WEEKLY ? 11 :
+            (section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
+        model.bedtime_section = (PtcUiBedtimeSection)section;
+        check_hit(hit_center(&model, ptc_ui_bedtime_section_rect(section)),
+            PTC_UI_HIT_BEDTIME_SECTION, section, "bedtime section tab is touchable");
+        for (int field = 0; field < field_count; ++field) {
+            check_hit(hit_center(&model, ptc_ui_bedtime_field_rect(section, field)),
+                PTC_UI_HIT_BEDTIME_FIELD, field, "bedtime editor field is touchable");
+        }
+    }
+
+    model.parent_page = PTC_UI_PARENT_TODAY;
+    model.overlay = PTC_UI_OVERLAY_QUICK_ADD;
+    for (int option = 0; option < 4; ++option) {
+        check_hit(hit_center(&model, ptc_ui_autonomy_option_rect(option)),
+            PTC_UI_HIT_QUICK_ADD_OPTION, option, "quick-add option is touchable");
+    }
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)),
+        PTC_UI_HIT_OVERLAY_CANCEL, 0, "quick-add cancel is touchable");
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)),
+        PTC_UI_HIT_OVERLAY_CONFIRM, 0, "quick-add continue is touchable");
+    check_hit(ptc_ui_hit_test(&model, 10, 10), PTC_UI_HIT_NONE, 0,
+        "quick-add empty space cannot reach the page below");
+
+    for (size_t index = 0; index < sizeof(bedtime_modals) / sizeof(bedtime_modals[0]); ++index) {
+        model.overlay = bedtime_modals[index];
+        check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)),
+            PTC_UI_HIT_OVERLAY_CANCEL, 0, "bedtime modal return is touchable");
+        check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)),
+            PTC_UI_HIT_OVERLAY_CONFIRM, 0, "bedtime modal primary action is touchable");
+        check_hit(ptc_ui_hit_test(&model, 10, 10), PTC_UI_HIT_NONE, 0,
+            "bedtime modal empty space cannot reach the page below");
+    }
+    model.overlay = PTC_UI_OVERLAY_BEDTIME_LEAVE;
+    check_hit(hit_center(&model, ptc_ui_discard_rect(model.overlay)),
+        PTC_UI_HIT_OVERLAY_DISCARD, 0, "bedtime leave discard is touchable");
+}
+
 int main(void)
 {
+    test_time_menu_modal_touch_guards();
     test_visual_action_boundaries();
     test_plan_polish();
     test_support_next_step();

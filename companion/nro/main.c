@@ -91,7 +91,8 @@ typedef enum {
     AUTH_RETRY_EXPORT_CONFIG,
     AUTH_RETRY_REVEAL_CREDENTIAL,
     AUTH_RETRY_CLEAR_REDEMPTION_HISTORY,
-    AUTH_RETRY_CLEAR_ACTIVITY_HISTORY
+    AUTH_RETRY_CLEAR_ACTIVITY_HISTORY,
+    AUTH_RETRY_SKIP_BEDTIME
 } AuthRetryAction;
 
 typedef struct {
@@ -176,6 +177,7 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
 
 static void handle_parent_action(UiState *ui);
 static void handle_today_action_ready(UiState *ui, int index);
+static void submit_bedtime_policy(UiState *ui);
 static void refresh_security_state(UiState *ui);
 static void update_weekly_dirty(UiState *ui);
 static void update_holiday_dirty(UiState *ui);
@@ -1105,8 +1107,7 @@ static bool parent_status_needs_support(const PtcUiModel *model)
 static void activate_parent_status(UiState *ui)
 {
     if (parent_status_needs_support(&ui->model)) {
-        ui->model.parent_page = PTC_UI_PARENT_SETTINGS;
-        ui->model.settings_page = PTC_UI_SETTINGS_SUPPORT;
+        ui->model.parent_page = PTC_UI_PARENT_SUPPORT;
         ui->model.parent_footer_focused = false;
         ui->model.selected_index = ptc_ui_support_recommended_action(&ui->model);
         if (ui->model.selected_index < 0) ui->model.selected_index = 4;
@@ -1371,6 +1372,13 @@ static PtcRuleMode parse_rule_mode(const char *mode)
     return PTC_RULE_MODE_LIMIT;
 }
 
+static PtcBedtimeOverrideMode parse_bedtime_override_mode(const char *mode)
+{
+    if (mode && strcmp(mode, "disabled") == 0) return PTC_BEDTIME_OVERRIDE_DISABLED;
+    if (mode && strcmp(mode, "custom") == 0) return PTC_BEDTIME_OVERRIDE_CUSTOM;
+    return PTC_BEDTIME_OVERRIDE_INHERIT;
+}
+
 static const char *rule_json_string(const cJSON *object, const char *name)
 {
     const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
@@ -1480,6 +1488,7 @@ static void load_rule_drafts(UiState *ui)
     }
     if (version->valueint >= 2) {
         const cJSON *bedtime_week = cJSON_GetObjectItemCaseSensitive(root, "bedtime_week");
+        const cJSON *item;
         rules.bedtime.enabled = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "bedtime_enabled"));
         if (cJSON_IsArray(bedtime_week) && cJSON_GetArraySize(bedtime_week) == 7) {
             for (index = 0; index < 7; ++index) {
@@ -1492,6 +1501,49 @@ static void load_rule_drafts(UiState *ui)
                     day, "end_minute", rules.bedtime.week[index].end_minute);
             }
         }
+        rules.bedtime.calendar_enabled = cJSON_IsTrue(
+            cJSON_GetObjectItemCaseSensitive(root, "bedtime_calendar_enabled"));
+        rules.bedtime.holiday_rule.mode = parse_bedtime_override_mode(
+            rule_json_string(root, "bedtime_holiday_mode"));
+        rules.bedtime.holiday_rule.window.enabled = cJSON_IsTrue(
+            cJSON_GetObjectItemCaseSensitive(root, "bedtime_holiday_enabled"));
+        rules.bedtime.holiday_rule.window.start_minute = (uint16_t)rule_json_int(
+            root, "bedtime_holiday_start_minute", rules.bedtime.holiday_rule.window.start_minute);
+        rules.bedtime.holiday_rule.window.end_minute = (uint16_t)rule_json_int(
+            root, "bedtime_holiday_end_minute", rules.bedtime.holiday_rule.window.end_minute);
+        rules.bedtime.makeup_workday_rule.mode = parse_bedtime_override_mode(
+            rule_json_string(root, "bedtime_makeup_mode"));
+        rules.bedtime.makeup_workday_rule.window.enabled = cJSON_IsTrue(
+            cJSON_GetObjectItemCaseSensitive(root, "bedtime_makeup_enabled"));
+        rules.bedtime.makeup_workday_rule.window.start_minute = (uint16_t)rule_json_int(
+            root, "bedtime_makeup_start_minute", rules.bedtime.makeup_workday_rule.window.start_minute);
+        rules.bedtime.makeup_workday_rule.window.end_minute = (uint16_t)rule_json_int(
+            root, "bedtime_makeup_end_minute", rules.bedtime.makeup_workday_rule.window.end_minute);
+        rules.bedtime.scheduled_override.present = cJSON_IsTrue(
+            cJSON_GetObjectItemCaseSensitive(root, "bedtime_scheduled_present"));
+        rules.bedtime.scheduled_override.start_day_index = (uint16_t)rule_json_int(
+            root, "bedtime_scheduled_start_day_index", rules.bedtime.scheduled_override.start_day_index);
+        rules.bedtime.scheduled_override.end_day_index = (uint16_t)rule_json_int(
+            root, "bedtime_scheduled_end_day_index", rules.bedtime.scheduled_override.end_day_index);
+        rules.bedtime.scheduled_override.rule.mode = parse_bedtime_override_mode(
+            rule_json_string(root, "bedtime_scheduled_mode"));
+        rules.bedtime.scheduled_override.rule.window.enabled = cJSON_IsTrue(
+            cJSON_GetObjectItemCaseSensitive(root, "bedtime_scheduled_enabled"));
+        rules.bedtime.scheduled_override.rule.window.start_minute = (uint16_t)rule_json_int(
+            root, "bedtime_scheduled_start_minute", rules.bedtime.scheduled_override.rule.window.start_minute);
+        rules.bedtime.scheduled_override.rule.window.end_minute = (uint16_t)rule_json_int(
+            root, "bedtime_scheduled_end_minute", rules.bedtime.scheduled_override.rule.window.end_minute);
+        rules.bedtime.confirmation_version = (uint16_t)rule_json_int(
+            root, "bedtime_confirmation_version", rules.bedtime.confirmation_version);
+        item = cJSON_GetObjectItemCaseSensitive(root, "bedtime_official_setting_confirmed_at");
+        if (cJSON_IsNumber(item)) rules.bedtime.official_setting_confirmed_at = (int64_t)item->valuedouble;
+        item = cJSON_GetObjectItemCaseSensitive(root, "bedtime_confirmed_environment");
+        if (cJSON_IsString(item) && item->valuestring) {
+            snprintf(rules.bedtime.confirmed_environment, sizeof(rules.bedtime.confirmed_environment),
+                "%s", item->valuestring);
+        }
+        rules.bedtime.unverified_overlay_risk_accepted = cJSON_IsTrue(
+            cJSON_GetObjectItemCaseSensitive(root, "bedtime_overlay_risk_accepted"));
         if (!ptc_bedtime_policy_is_valid(&rules.bedtime)) {
             PtcRules defaults;
             ptc_rules_default(&defaults);
@@ -1584,7 +1636,9 @@ static void poll_result(UiState *ui, bool force)
         saved_scheduled_draft = ui->model.draft_scheduled_override;
         preserve_scheduled_draft = ptc_ui_scheduled_dirty(&ui->model);
         saved_bedtime_draft = ui->model.draft_bedtime_policy;
-        preserve_bedtime_draft = ui->model.overlay == PTC_UI_OVERLAY_BEDTIME;
+        preserve_bedtime_draft = ui->model.bedtime_dirty ||
+            (ui->model.parent_page == PTC_UI_PARENT_PLAN &&
+             ui->model.plan_page == PTC_UI_PLAN_PAGE_BEDTIME);
         preserve_weekly_draft = ui->model.weekly_dirty;
         if (preserve_weekly_draft) {
             memcpy(saved_draft, ui->model.draft_week, sizeof(saved_draft));
@@ -1616,6 +1670,11 @@ static void poll_result(UiState *ui, bool force)
             !(strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&
               strcmp(ui->model.result_status, "ok") == 0)) {
             ui->model.draft_bedtime_policy = saved_bedtime_draft;
+            ui->model.bedtime_dirty = memcmp(&ui->model.draft_bedtime_policy,
+                &ui->model.bedtime_policy, sizeof(PtcBedtimePolicy)) != 0;
+        } else if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&
+                   strcmp(ui->model.result_status, "ok") == 0) {
+            ui->model.bedtime_dirty = false;
         }
         if (ui->model.status_loaded && strcmp(ui->model.result_status, "ok") == 0) {
             ptc_ui_mark_status_updated(&ui->model, (int64_t)time(NULL));
@@ -1730,7 +1789,42 @@ static void poll_result(UiState *ui, bool force)
                 ui->pending_leave_parent = false;
                 snprintf(ui->model.message, sizeof(ui->model.message),
                          "周计划保存未完成，修改仍保留，请重试。");
+            } else if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&
+                       strcmp(ui->model.result_status, "ok") == 0) {
+                ui->model.bedtime_dirty = false;
+                apply_pending_navigation(ui);
+            } else if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0) {
+                ui->pending_parent_page = -1;
+                ui->pending_leave_parent = false;
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                         "就寝时间保存未完成，修改仍保留，请重试。");
             }
+        }
+        if (strcmp(ui->model.result_type, "confirm_bedtime_requirements") == 0) {
+            if (strcmp(ui->model.result_status, "ok") == 0 && ui->model.bedtime_dirty) {
+                /* First enablement is one guarded save operation: after the
+                 * environment acknowledgement is persisted, submit the
+                 * unchanged full draft before honoring pending navigation. */
+                submit_bedtime_policy(ui);
+                if (!ui->waiting) {
+                    ui->pending_parent_page = -1;
+                    ui->pending_leave_parent = false;
+                }
+                return;
+            }
+            if (strcmp(ui->model.result_status, "ok") != 0) {
+                ui->pending_parent_page = -1;
+                ui->pending_leave_parent = false;
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                    "就寝限制环境确认未完成，草稿仍保留，请检查后重试。");
+            }
+        }
+        if (strcmp(ui->model.result_type, "skip_bedtime") == 0 &&
+            strcmp(ui->model.result_status, "error") == 0 && ui->model.error_code == 318) {
+            ui->model.pending_bedtime_skip_instance_id = 0;
+            submit_status(ui);
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                "就寝窗口已变化，正在刷新；不会自动跳过另一个窗口。");
         }
         return;
     }
@@ -1776,9 +1870,9 @@ static void enter_parent_area_unlocked(UiState *ui)
     refresh_security_state(ui);
     ui->model.view = PTC_UI_PARENT;
     ui->model.parent_page = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
-        ? PTC_UI_PARENT_SETTINGS : PTC_UI_PARENT_TODAY;
-    ui->model.settings_page = ui->model.parent_page == PTC_UI_PARENT_SETTINGS && parent_status_needs_support(&ui->model)
-        ? PTC_UI_SETTINGS_SUPPORT : PTC_UI_SETTINGS_ROOT;
+        ? PTC_UI_PARENT_SUPPORT : PTC_UI_PARENT_TODAY;
+    ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+    ui->model.settings_page = PTC_UI_SETTINGS_ROOT;
     ui->model.selected_index = 0;
     snprintf(ui->model.message, sizeof(ui->model.message), "家长区已解锁。进入孩子区请按 B。");
 #ifndef PLAYWISE_EDEN
@@ -2150,6 +2244,7 @@ static void open_weekly_page(UiState *ui)
         ui->model.editor_index = ptc_weekday_from_day_index(ui->model.day_index);
     }
     ui->model.parent_page = PTC_UI_PARENT_PLAN;
+    ui->model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
     ui->model.selected_index = 0;
     for (int slot = 0; slot < 7; ++slot) {
         if (ptc_ui_weekday_for_display_slot(slot) == ui->model.editor_index) {
@@ -2482,6 +2577,23 @@ static void submit_bedtime_policy(UiState *ui)
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) begin_wait(ui, "set_bedtime_policy", "正在保存就寝计划...");
     else set_message(ui, "就寝计划提交失败", status);
+}
+
+static void submit_bedtime_skip(UiState *ui)
+{
+    PtcCompanionStatus status;
+    uint64_t instance_id = ui->model.pending_bedtime_skip_instance_id;
+    if (instance_id == 0) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "没有可提交的就寝窗口。");
+        return;
+    }
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_skip_bedtime(&ui->transport,
+        ui->active_request_id, time(NULL), instance_id);
+    set_command_name(ui, "skip_bedtime");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "skip_bedtime", "正在跳过这一次就寝时间...");
+    else set_message(ui, "跳过就寝时间提交失败", status);
 }
 
 static bool load_activity_history(UiState *ui)
@@ -2888,6 +3000,11 @@ static void dispatch_auth_retry(UiState *ui, AuthRetryAction action)
     case AUTH_RETRY_REVEAL_CREDENTIAL: reveal_current_credential(ui); break;
     case AUTH_RETRY_CLEAR_REDEMPTION_HISTORY: request_clear_redemption_history(ui); break;
     case AUTH_RETRY_CLEAR_ACTIVITY_HISTORY: request_clear_activity_history(ui); break;
+    case AUTH_RETRY_SKIP_BEDTIME:
+        ui->model.parent_page = PTC_UI_PARENT_TODAY;
+        ui->model.selected_index = 4;
+        handle_parent_action(ui);
+        break;
     case AUTH_RETRY_NONE:
     default:
         break;
@@ -3096,9 +3213,12 @@ static void handle_today_action_ready(UiState *ui, int index)
                      "今天已不限时，无需加时；如需恢复限时，请使用“设置今日总额度”。");
         } else {
             ui->model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
-            ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
-                "临时加时", "分别输入要增加的小时和分钟；右侧显示加时前后的可玩时间。",
-                3, 1, 120, 15);
+            ui->model.draft_minutes = 15;
+            ui->model.overlay = PTC_UI_OVERLAY_QUICK_ADD;
+            ui->model.overlay_selection = 0;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "快速加时");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                "选择常用时长或自定义；确认前不会修改今天的额度。");
         }
         break;
     case PTC_UI_OPERATION_DISABLE_TODAY_LIMIT:
@@ -3111,11 +3231,52 @@ static void handle_today_action_ready(UiState *ui, int index)
         char basis[256];
         ptc_ui_format_restore_today_basis(&ui->model, basis, sizeof(basis));
         snprintf(body, sizeof(body), "%s\n%s", date, basis);
-        open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, "恢复周计划", body);
+        open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, "清除今日额度调整", body);
         if (restored.rule.mode == PTC_RULE_MODE_LIMIT) {
             ui->model.confirm_hold_required = !ui->model.played_minutes_available ||
                 ui->model.played_minutes < 0 || (int)restored.rule.minutes - ui->model.played_minutes <= 0;
         }
+        break;
+    }
+    case PTC_UI_OPERATION_SKIP_BEDTIME: {
+        uint64_t instance_id = 0;
+        uint16_t start_day = 0, start_minute = 0, end_minute = 0;
+        char start_date[64];
+        if (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL))) {
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                "就寝状态仍待确认，请刷新后重试。");
+            break;
+        }
+        if (ui->model.bedtime_active) {
+            if (!ui->model.bedtime_skipped) {
+                instance_id = ui->model.bedtime_window_instance_id;
+                start_day = ui->model.bedtime_start_day_index;
+                start_minute = ui->model.bedtime_start_minute;
+                end_minute = ui->model.bedtime_end_minute;
+            }
+        } else if (ui->model.bedtime_next_available) {
+            instance_id = ui->model.bedtime_next_window_instance_id;
+            start_day = ui->model.bedtime_next_start_day_index;
+            start_minute = ui->model.bedtime_next_start_minute;
+            end_minute = ui->model.bedtime_next_end_minute;
+        }
+        if (instance_id == 0) {
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                ui->model.bedtime_skipped_window_available
+                    ? "最近一次就寝窗口已经跳过。" : "当前没有可跳过的就寝窗口。");
+            break;
+        }
+        ui->model.pending_bedtime_skip_instance_id = instance_id;
+        ui->model.pending_bedtime_skip_start_day_index = start_day;
+        ui->model.pending_bedtime_skip_start_minute = start_minute;
+        ui->model.pending_bedtime_skip_end_minute = end_minute;
+        ui->auth_retry_action = AUTH_RETRY_SKIP_BEDTIME;
+        if (!verify_sensitive_pin(ui, "跳过最近一次就寝窗口前，请再次输入本应用 PIN")) break;
+        format_today_label(start_day, start_date, sizeof(start_date));
+        snprintf(body, sizeof(body), "%s %02u:%02u 到次日 %02u:%02u。\n只跳过这一次；后续就寝计划不变。",
+            start_date, (unsigned int)(start_minute / 60), (unsigned int)(start_minute % 60),
+            (unsigned int)(end_minute / 60), (unsigned int)(end_minute % 60));
+        open_confirm_overlay(ui, PTC_UI_OPERATION_SKIP_BEDTIME, "跳过这一次就寝时间？", body);
         break;
     }
     default:
@@ -3139,13 +3300,65 @@ static void handle_parent_action(UiState *ui)
             ui->pending_today_action = ui->waiting ? (int)ptc_ui_today_operation(index) : -1;
             if (ui->waiting)
                 snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新额度消耗估算和今天还可玩...");
+        } else if (index == 5) {
+            if (ui->model.daily_buffer_minutes == 0) {
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                    "自主缓冲当前关闭；可到时间计划中设置。");
+            } else if (ui->model.daily_buffer_claimed) {
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                    "孩子今天已经领取自主缓冲，明天恢复资格。");
+            } else {
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                    "自主缓冲为只读状态；领取操作仍在孩子页。");
+            }
         }
         return;
     }
-    if (ui->model.parent_page == PTC_UI_PARENT_PLAN) {
+    if (ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.plan_page == PTC_UI_PLAN_PAGE_ROOT) {
+        switch (index) {
+        case 0:
+            open_weekly_page(ui);
+            break;
+        case 1:
+            ui->model.draft_bedtime_policy = ui->model.bedtime_policy;
+            ui->model.bedtime_dirty = false;
+            ui->model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
+            ui->model.selected_index = 0;
+            break;
+        case 2:
+            if (!ptc_ui_scheduled_dirty(&ui->model))
+                ui->model.draft_scheduled_override = ui->model.scheduled_override;
+            if (!ptc_ui_scheduled_dirty(&ui->model) && !ui->model.draft_scheduled_override.enabled) {
+                ui->model.draft_scheduled_override.start_day_index = ui->model.day_index;
+                ui->model.draft_scheduled_override.end_day_index = ui->model.day_index;
+                ui->model.draft_scheduled_override.rule.mode = PTC_RULE_MODE_LIMIT;
+                ui->model.draft_scheduled_override.rule.minutes = 60;
+            }
+            ui->model.overlay = PTC_UI_OVERLAY_SCHEDULED;
+            ui->model.overlay_selection = 0;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "临时日期计划");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                "额度日期计划独立于就寝日期覆盖；一次保留一个日期区间。");
+            break;
+        case 3:
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
+            ui->model.selected_index = 0;
+            break;
+        case 4:
+            ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
+            ui->model.overlay = PTC_UI_OVERLAY_AUTONOMY;
+            ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "今日自主缓冲");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                "孩子每天只能领取一次，仅限限时日；默认关闭。");
+            break;
+        default:
+            break;
+        }
         return;
     }
-    if (ui->model.parent_page == PTC_UI_PARENT_HOLIDAY) {
+    if (ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
         if (ui->model.disable_flag_present && index != 4 && index != 6) {
             snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，国家节假日设置暂时只读。");
             return;
@@ -3227,7 +3440,7 @@ static void handle_parent_action(UiState *ui)
         }
         return;
     }
-    if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS && ui->model.settings_page == PTC_UI_SETTINGS_ROOT) {
+    if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS) {
         switch (index) {
         case 0:
             ui->model.overlay = PTC_UI_OVERLAY_THEME;
@@ -3239,69 +3452,21 @@ static void handle_parent_action(UiState *ui)
         case 1: change_parent_pin(ui); break;
         case 2: open_shortcut_manager(ui); break;
         case 3:
-            ui->model.settings_page = PTC_UI_SETTINGS_ADVANCED;
-            ui->model.selected_index = 0;
-            ui->model.parent_footer_focused = false;
-            refresh_album_restriction(ui);
-            break;
-        case 4:
-            ui->model.settings_page = PTC_UI_SETTINGS_SUPPORT;
-            ui->model.selected_index = ptc_ui_support_recommended_action(&ui->model);
-            if (ui->model.selected_index < 0) ui->model.selected_index = 4;
-            ui->model.parent_footer_focused = false;
-            break;
-        default: break;
-        }
-        return;
-    }
-    if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS &&
-        ui->model.settings_page == PTC_UI_SETTINGS_ADVANCED) {
-        if (index == 0) {
             refresh_album_restriction(ui);
             ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单高级入口");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      "此功能只改变 hbmenu 启动方式，不提供防篡改保护。");
-        } else if (index == 1) {
-            if (!ptc_ui_scheduled_dirty(&ui->model))
-                ui->model.draft_scheduled_override = ui->model.scheduled_override;
-            if (!ptc_ui_scheduled_dirty(&ui->model) && !ui->model.draft_scheduled_override.enabled) {
-                ui->model.draft_scheduled_override.start_day_index = ui->model.day_index;
-                ui->model.draft_scheduled_override.end_day_index = ui->model.day_index;
-                ui->model.draft_scheduled_override.rule.mode = PTC_RULE_MODE_LIMIT;
-                ui->model.draft_scheduled_override.rule.minutes = 60;
-            }
-            ui->model.overlay = PTC_UI_OVERLAY_SCHEDULED;
-            ui->model.overlay_selection = 0;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "临时日期计划");
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                "安排一段时间的每日额度，保存后应用；一次保留一个日期区间。");
-        } else if (index == 2) {
-            ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
-            ui->model.overlay = PTC_UI_OVERLAY_AUTONOMY;
-            ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "今日自主缓冲");
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                "孩子每天只能领取一次，仅限限时日；默认关闭。");
-        } else if (index == 3) {
+            break;
+        case 4:
             open_activity_history(ui);
-        } else if (index == 4) {
-            ui->model.draft_bedtime_policy = ui->model.bedtime_policy;
-            ui->model.draft_bedtime_policy.calendar_enabled = false;
-            ui->model.draft_bedtime_policy.scheduled_override.present = false;
-            for (int day = 0; day < 7; ++day) {
-                ui->model.draft_bedtime_policy.week[day].enabled = true;
-            }
-            ui->model.overlay = PTC_UI_OVERLAY_BEDTIME;
-            ui->model.overlay_selection = 0;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "就寝计划");
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                "生效时任天堂弹窗会阻断游戏、HOME、系统设置和 PlayWise NRO；请确保 Overlay 可用。");
+            break;
+        default: break;
         }
         return;
     }
-    if (ui->model.parent_page != PTC_UI_PARENT_SETTINGS || ui->model.settings_page != PTC_UI_SETTINGS_SUPPORT) return;
+    if (ui->model.parent_page != PTC_UI_PARENT_SUPPORT) return;
     if (ptc_ui_safety_action_available(&ui->model, index) == PTC_UI_ACTION_DISABLED) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                  ptc_ui_safety_action_hint(&ui->model, index));
@@ -3417,6 +3582,9 @@ static void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_SET_TODAY_LIMIT:
         submit_minutes(ui, operation, ui->model.draft_minutes);
         break;
+    case PTC_UI_OPERATION_ADD_TODAY_MINUTES:
+        submit_minutes(ui, operation, ui->model.draft_minutes);
+        break;
     case PTC_UI_OPERATION_SAVE_WEEKLY:
         submit_weekly(ui);
         break;
@@ -3424,7 +3592,10 @@ static void confirm_operation(UiState *ui)
         submit_transport_empty(ui, "disable_today_limit", "正在解除当前限制...", "解除当前限制失败");
         break;
     case PTC_UI_OPERATION_RESTORE_TODAY_POLICY:
-        submit_transport_empty(ui, "restore_today_policy", "正在恢复周计划...", "恢复计划失败");
+        submit_transport_empty(ui, "restore_today_policy", "正在清除今日额度调整...", "清除今日额度调整失败");
+        break;
+    case PTC_UI_OPERATION_SKIP_BEDTIME:
+        submit_bedtime_skip(ui);
         break;
     case PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY:
         submit_transport_empty(ui, "clear_redemption_history", "正在清空加时码使用记录...", "清空使用记录失败");
@@ -3588,7 +3759,14 @@ static void save_weekly_from_page(UiState *ui)
 
 static void apply_pending_navigation(UiState *ui)
 {
-    if (ui->pending_leave_parent) {
+    if (ui->pending_leave_parent && ui->model.parent_page == PTC_UI_PARENT_PLAN &&
+        ui->model.plan_page != PTC_UI_PLAN_PAGE_ROOT) {
+        PtcUiPlanPage previous = ui->model.plan_page;
+        ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+        ui->model.selected_index = previous == PTC_UI_PLAN_PAGE_WEEKLY ? 0 :
+            (previous == PTC_UI_PLAN_PAGE_HOLIDAY ? 3 : 1);
+        ui->model.parent_footer_focused = false;
+    } else if (ui->pending_leave_parent) {
         ui->model.view = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
             ? PTC_UI_SETUP : PTC_UI_CHILD;
         snprintf(ui->model.message, sizeof(ui->model.message), "已返回主页面。");
@@ -3596,17 +3774,16 @@ static void apply_pending_navigation(UiState *ui)
             submit_status(ui);
         }
     } else if (ui->pending_parent_page >= 0) {
-        if (ui->pending_parent_page == PTC_UI_PARENT_PLAN) {
-            open_weekly_page(ui);
-        } else {
-            ui->model.parent_page = (PtcUiParentPage)ui->pending_parent_page;
-            ui->model.selected_index = 0;
-            if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
-                submit_status(ui);
-            } else if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS) {
-                ui->model.settings_page = PTC_UI_SETTINGS_ROOT;
-                refresh_album_restriction(ui);
-            }
+        ui->model.parent_page = (PtcUiParentPage)ui->pending_parent_page;
+        ui->model.selected_index = 0;
+        if (ui->model.parent_page == PTC_UI_PARENT_PLAN) {
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+        }
+        if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
+            submit_status(ui);
+        } else if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS) {
+            ui->model.settings_page = PTC_UI_SETTINGS_ROOT;
+            refresh_album_restriction(ui);
         }
     }
     ui->pending_parent_page = -1;
@@ -3623,12 +3800,113 @@ static void refresh_recovery_state(UiState *ui)
     ui->model.recovery_active = ui->client.storage->vtable->exists(ui->client.storage, path);
 }
 
+static void request_parent_navigation(UiState *ui, int target_page, bool leave_parent);
+
 static void discard_holiday_draft(UiState *ui)
 {
     ui->model.draft_holiday_enabled = ui->model.holiday_enabled;
     ui->model.draft_holiday_rule = ui->model.holiday_rule;
     ui->model.draft_makeup_workday_rule = ui->model.makeup_workday_rule;
     update_holiday_dirty(ui);
+}
+
+static void update_bedtime_dirty(UiState *ui)
+{
+    if (!ui) return;
+    ui->model.bedtime_dirty = memcmp(&ui->model.draft_bedtime_policy,
+        &ui->model.bedtime_policy, sizeof(PtcBedtimePolicy)) != 0;
+}
+
+static void discard_bedtime_draft(UiState *ui)
+{
+    if (!ui) return;
+    ui->model.draft_bedtime_policy = ui->model.bedtime_policy;
+    update_bedtime_dirty(ui);
+    snprintf(ui->model.message, sizeof(ui->model.message), "已放弃未保存的就寝时间修改。");
+}
+
+static void save_bedtime_from_page(UiState *ui)
+{
+    PtcBedtimePolicy *draft;
+    if (!ui || ui->waiting) return;
+    if (ui->model.disable_flag_present) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，就寝时间设置暂时只读。");
+        return;
+    }
+    if (!ui->model.bedtime_dirty) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "就寝时间没有修改。");
+        return;
+    }
+    draft = &ui->model.draft_bedtime_policy;
+    if (!ptc_bedtime_policy_is_valid(draft)) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+            "无法保存：请检查跨夜窗口、相邻日期重叠、特殊规则冲突和日期长度。");
+        return;
+    }
+    if (draft->enabled && !ui->model.bedtime_official_setting_confirmed) {
+        submit_bedtime_confirmation(ui);
+        return;
+    }
+    submit_bedtime_policy(ui);
+}
+
+static int bedtime_section_field_count(PtcUiBedtimeSection section)
+{
+    if (section == PTC_UI_BEDTIME_WEEKLY) return 11;
+    if (section == PTC_UI_BEDTIME_CALENDAR) return 5;
+    return 6;
+}
+
+static void select_bedtime_section(UiState *ui, int section)
+{
+    if (!ui) return;
+    if (section < PTC_UI_BEDTIME_WEEKLY) section = PTC_UI_BEDTIME_SCHEDULED;
+    if (section > PTC_UI_BEDTIME_SCHEDULED) section = PTC_UI_BEDTIME_WEEKLY;
+    ui->model.bedtime_section = (PtcUiBedtimeSection)section;
+    ui->model.selected_index = 0;
+    ui->model.parent_footer_focused = false;
+}
+
+static void open_bedtime_window_editor(UiState *ui, int weekday)
+{
+    if (!ui || weekday < 0 || weekday >= 7) return;
+    ui->model.bedtime_editor_day = weekday;
+    ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
+    ui->model.overlay_selection = 0;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "编辑每周就寝窗口");
+    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+        "未改动的非整刻时间会原样保留；左右 15 分钟，ZL/ZR 60 分钟。");
+}
+
+static void open_bedtime_special_editor(UiState *ui, int kind)
+{
+    if (!ui || kind < 0 || kind > 2) return;
+    ui->model.bedtime_special_kind = kind;
+    ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_SPECIAL;
+    ui->model.overlay_selection = 0;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
+        kind == 0 ? "法定休假就寝规则" :
+        (kind == 1 ? "调休工作日就寝规则" : "日期覆盖就寝规则"));
+    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+        "选择继承、关闭或自定义；自定义窗口必须跨越午夜且不能与相邻窗口重叠。");
+}
+
+static void request_bedtime_leave(UiState *ui, int target_page, bool leave_parent)
+{
+    if (!ui) return;
+    if (!ui->model.bedtime_dirty) {
+        request_parent_navigation(ui, target_page, leave_parent);
+        return;
+    }
+    ui->pending_parent_page = target_page;
+    ui->pending_leave_parent = leave_parent;
+    ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_LEAVE;
+    ui->model.overlay_selection = ui->model.disable_flag_present ? 2 : 0;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "离开就寝时间编辑？");
+    snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
+        ui->model.disable_flag_present
+            ? "紧急停用期间不能保存；可继续编辑或放弃草稿后离开。"
+            : "请选择保存并离开、放弃修改，或继续编辑。");
 }
 
 static void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
@@ -3638,22 +3916,13 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
                  "请等待当前设置保存完成后再离开页面。");
         return;
     }
-    if (leave_parent && ui->model.parent_page == PTC_UI_PARENT_SETTINGS &&
-        ui->model.settings_page != PTC_UI_SETTINGS_ROOT) {
-        bool returning_from_support = ui->model.settings_page == PTC_UI_SETTINGS_SUPPORT;
-        ui->model.settings_page = PTC_UI_SETTINGS_ROOT;
-        ui->model.selected_index = returning_from_support ? 4 : 3;
-        ui->model.parent_footer_focused = false;
-        ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_IDLE;
-        ui->model.diagnostic_path[0] = '\0';
-        return;
-    }
-    if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS && ui->model.settings_page == PTC_UI_SETTINGS_SUPPORT &&
-        (leave_parent || target_page != PTC_UI_PARENT_SETTINGS)) {
+    if (ui->model.parent_page == PTC_UI_PARENT_SUPPORT &&
+        (leave_parent || target_page != PTC_UI_PARENT_SUPPORT)) {
         ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_IDLE;
         ui->model.diagnostic_path[0] = '\0';
     }
-    if (ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.weekly_dirty) {
+    if (ui->model.parent_page == PTC_UI_PARENT_PLAN &&
+        ui->model.plan_page == PTC_UI_PLAN_PAGE_WEEKLY && ui->model.weekly_dirty) {
         ui->pending_parent_page = target_page;
         ui->pending_leave_parent = leave_parent;
         ui->model.overlay = PTC_UI_OVERLAY_WEEKLY_LEAVE;
@@ -3674,7 +3943,8 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
         }
         return;
     }
-    if (ui->model.parent_page == PTC_UI_PARENT_HOLIDAY && ui->model.holiday_dirty) {
+    if (ui->model.parent_page == PTC_UI_PARENT_PLAN &&
+        ui->model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY && ui->model.holiday_dirty) {
         ui->pending_parent_page = target_page;
         ui->pending_leave_parent = leave_parent;
         ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_LEAVE;
@@ -3682,6 +3952,20 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
         snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "离开国家节假日设置？");
         snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                  "这里还有尚未保存的更改。继续编辑可以保留内容；放弃更改后再离开。");
+        return;
+    }
+    if (ui->model.parent_page == PTC_UI_PARENT_PLAN &&
+        ui->model.plan_page == PTC_UI_PLAN_PAGE_BEDTIME && ui->model.bedtime_dirty) {
+        request_bedtime_leave(ui, target_page, leave_parent);
+        return;
+    }
+    if (leave_parent && ui->model.parent_page == PTC_UI_PARENT_PLAN &&
+        ui->model.plan_page != PTC_UI_PLAN_PAGE_ROOT) {
+        PtcUiPlanPage previous = ui->model.plan_page;
+        ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+        ui->model.selected_index = previous == PTC_UI_PLAN_PAGE_WEEKLY ? 0 :
+            (previous == PTC_UI_PLAN_PAGE_HOLIDAY ? 3 : 1);
+        ui->model.parent_footer_focused = false;
         return;
     }
     ui->pending_parent_page = target_page;
@@ -3710,6 +3994,122 @@ static void close_code_result(UiState *ui)
 
 static void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_QUICK_ADD) {
+        static const uint16_t OPTIONS[] = {15, 30, 60};
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & HidNpadButton_Left) {
+            ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 3 : ui->model.overlay_selection - 1;
+        } else if (down & HidNpadButton_Right) {
+            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 4;
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+            if (ui->model.overlay_selection == 3) {
+                ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_QUICK_ADD,
+                    "自定义快速加时", "输入 1 到 120 分钟；完成后仍需确认才会提交。",
+                    3, 1, 120, ui->model.draft_minutes);
+                ui->model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
+            } else {
+                char body[192];
+                ui->model.draft_minutes = OPTIONS[ui->model.overlay_selection];
+                snprintf(body, sizeof(body), "将在今天当前额度上增加 %u 分钟。\n确认前不会修改额度。",
+                    (unsigned int)ui->model.draft_minutes);
+                open_confirm_overlay(ui, PTC_UI_OPERATION_ADD_TODAY_MINUTES, "确认快速加时", body);
+            }
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW) {
+        PtcBedtimeWindow *window = &ui->model.draft_bedtime_policy.week[ui->model.bedtime_editor_day];
+        int direction = (down & (HidNpadButton_Right | HidNpadButton_R | HidNpadButton_ZR)) ? 1 :
+            ((down & (HidNpadButton_Left | HidNpadButton_L | HidNpadButton_ZL)) ? -1 : 0);
+        int step = (down & (HidNpadButton_ZL | HidNpadButton_ZR)) ? 60 : 15;
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & HidNpadButton_Up) {
+            ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 2 : ui->model.overlay_selection - 1;
+        } else if (down & HidNpadButton_Down) {
+            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 3;
+        } else if ((down & (HidNpadButton_A | HidNpadButton_X)) && ui->model.overlay_selection == 0) {
+            window->enabled = !window->enabled;
+            update_bedtime_dirty(ui);
+        } else if (direction != 0 && ui->model.overlay_selection >= 1) {
+            uint16_t *value = ui->model.overlay_selection == 1 ? &window->start_minute : &window->end_minute;
+            int adjusted = ((int)*value + direction * step + 1440) % 1440;
+            *value = (uint16_t)adjusted;
+            update_bedtime_dirty(ui);
+        } else if (down & HidNpadButton_Plus) {
+            ptc_ui_cancel_overlay(&ui->model);
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_SPECIAL) {
+        PtcBedtimeSpecialRule *rule = ui->model.bedtime_special_kind == 0
+            ? &ui->model.draft_bedtime_policy.holiday_rule
+            : (ui->model.bedtime_special_kind == 1
+                ? &ui->model.draft_bedtime_policy.makeup_workday_rule
+                : &ui->model.draft_bedtime_policy.scheduled_override.rule);
+        int direction = (down & (HidNpadButton_Right | HidNpadButton_R | HidNpadButton_ZR)) ? 1 :
+            ((down & (HidNpadButton_Left | HidNpadButton_L | HidNpadButton_ZL)) ? -1 : 0);
+        int step = (down & (HidNpadButton_ZL | HidNpadButton_ZR)) ? 60 : 15;
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & HidNpadButton_Up) {
+            ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 2 : ui->model.overlay_selection - 1;
+        } else if (down & HidNpadButton_Down) {
+            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 3;
+        } else if ((down & (HidNpadButton_A | HidNpadButton_X)) && ui->model.overlay_selection == 0) {
+            rule->mode = (PtcBedtimeOverrideMode)((rule->mode + 1) % 3);
+            if (rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM) rule->window.enabled = true;
+            update_bedtime_dirty(ui);
+        } else if (direction != 0 && ui->model.overlay_selection >= 1) {
+            uint16_t *value = ui->model.overlay_selection == 1
+                ? &rule->window.start_minute : &rule->window.end_minute;
+            int adjusted = ((int)*value + direction * step + 1440) % 1440;
+            rule->mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+            rule->window.enabled = true;
+            *value = (uint16_t)adjusted;
+            update_bedtime_dirty(ui);
+        } else if (down & HidNpadButton_Plus) {
+            ptc_ui_cancel_overlay(&ui->model);
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_BULK) {
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+            ui->model.overlay_selection = 1 - ui->model.overlay_selection;
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+            PtcBedtimeWindow source = ui->model.draft_bedtime_policy.week[ui->model.bedtime_editor_day];
+            int target = ui->model.overlay_selection;
+            if (target == 0) {
+                for (int day = 1; day <= 5; ++day) ui->model.draft_bedtime_policy.week[day] = source;
+            } else {
+                ui->model.draft_bedtime_policy.week[0] = source;
+                ui->model.draft_bedtime_policy.week[6] = source;
+            }
+            update_bedtime_dirty(ui);
+            ptc_ui_cancel_overlay(&ui->model);
+            snprintf(ui->model.message, sizeof(ui->model.message), "已复制到%s；保存前仍可放弃。",
+                target == 0 ? "周一至周五" : "周六、周日");
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE) {
+        if (down & HidNpadButton_B) {
+            ui->pending_parent_page = -1;
+            ui->pending_leave_parent = false;
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & HidNpadButton_X) {
+            discard_bedtime_draft(ui);
+            ptc_ui_cancel_overlay(&ui->model);
+            apply_pending_navigation(ui);
+        } else if ((down & (HidNpadButton_A | HidNpadButton_Plus)) && !ui->model.disable_flag_present) {
+            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            save_bedtime_from_page(ui);
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_BEDTIME) {
         PtcBedtimePolicy *draft = &ui->model.draft_bedtime_policy;
         int direction = (down & (HidNpadButton_Right | HidNpadButton_R | HidNpadButton_ZR)) ? 1 :
@@ -4210,6 +4610,11 @@ static void handle_overlay_input(UiState *ui, u64 down)
                     }
                     open_confirm_overlay(ui, operation, title, body);
                     ui->model.confirm_hold_required = true;
+                } else if (operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES) {
+                    char body[192];
+                    snprintf(body, sizeof(body), "将在今天当前额度上增加 %u 分钟。\n确认前不会修改额度。",
+                        (unsigned int)value);
+                    open_confirm_overlay(ui, operation, "确认快速加时", body);
                 } else {
                     ui->model.operation = PTC_UI_OPERATION_NONE;
                     submit_minutes(ui, operation, value);
@@ -4413,7 +4818,8 @@ static void handle_touch(UiState *ui, int x, int y)
             snprintf(ui->model.message, sizeof(ui->model.message), "请等待当前操作完成后再执行其他设置。");
         } else {
             ui->model.selected_index = hit.index;
-            if (ui->model.parent_page != PTC_UI_PARENT_HOLIDAY || hit.index >= 3) {
+            if (!(ui->model.parent_page == PTC_UI_PARENT_PLAN &&
+                  ui->model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) || hit.index >= 3) {
                 handle_parent_action(ui);
             }
         }
@@ -4461,7 +4867,8 @@ static void handle_touch(UiState *ui, int x, int y)
                     ui->model.operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY)) {
             ui->model.overlay_selection = 0;
             handle_overlay_input(ui, HidNpadButton_A);
-        } else if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE) {
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
+                   ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE) {
             handle_overlay_input(ui, HidNpadButton_B);
         } else {
             ptc_ui_cancel_overlay(&ui->model);
@@ -4478,7 +4885,8 @@ static void handle_touch(UiState *ui, int x, int y)
             close_code_result(ui);
             break;
         }
-        if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE) {
+        if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
+            ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE) {
             handle_overlay_input(ui, HidNpadButton_A);
             break;
         }
@@ -4512,12 +4920,16 @@ static void handle_touch(UiState *ui, int x, int y)
                 ui->model.overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER ||
                 ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE ||
                 ui->model.overlay == PTC_UI_OVERLAY_SCHEDULED ||
-                ui->model.overlay == PTC_UI_OVERLAY_AUTONOMY
+                ui->model.overlay == PTC_UI_OVERLAY_AUTONOMY ||
+                ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW ||
+                ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_SPECIAL ||
+                ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_BULK
                     ? HidNpadButton_Plus : HidNpadButton_A);
         }
         break;
     case PTC_UI_HIT_OVERLAY_DISCARD:
-        if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE) {
+        if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
+            ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE) {
             handle_overlay_input(ui, HidNpadButton_X);
             break;
         }
@@ -4539,6 +4951,51 @@ static void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_AUTONOMY_OPTION:
         ui->model.overlay_selection = hit.index;
         ui->model.draft_autonomy_policy.daily_buffer_minutes = (uint16_t)(hit.index * 5);
+        break;
+    case PTC_UI_HIT_QUICK_ADD_OPTION:
+        ui->model.overlay_selection = hit.index;
+        handle_overlay_input(ui, HidNpadButton_A);
+        break;
+    case PTC_UI_HIT_BEDTIME_SECTION:
+        select_bedtime_section(ui, hit.index);
+        break;
+    case PTC_UI_HIT_BEDTIME_FIELD:
+        ui->model.selected_index = hit.index;
+        if (ui->model.parent_page == PTC_UI_PARENT_PLAN &&
+            ui->model.plan_page == PTC_UI_PLAN_PAGE_BEDTIME) {
+            if (ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY && hit.index < 7) {
+                int day = ptc_ui_weekday_for_display_slot(hit.index);
+                ui->model.bedtime_editor_day = day;
+                open_bedtime_window_editor(ui, day);
+            } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY &&
+                       (hit.index == 7 || hit.index == 8)) {
+                ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_BULK;
+                ui->model.overlay_selection = hit.index - 7;
+                snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "复制每周就寝窗口");
+                snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                    "把最后编辑日期的完整开关和时间复制到所选日期组。");
+            } else if ((ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY && hit.index == 9) ||
+                       (ui->model.bedtime_section == PTC_UI_BEDTIME_CALENDAR && hit.index == 3) ||
+                       (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 4)) {
+                discard_bedtime_draft(ui);
+            } else if ((ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY && hit.index == 10) ||
+                       (ui->model.bedtime_section == PTC_UI_BEDTIME_CALENDAR && hit.index == 4) ||
+                       (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 5)) {
+                save_bedtime_from_page(ui);
+            } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_CALENDAR && hit.index == 0) {
+                ui->model.draft_bedtime_policy.calendar_enabled =
+                    !ui->model.draft_bedtime_policy.calendar_enabled;
+                update_bedtime_dirty(ui);
+            } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_CALENDAR && hit.index <= 2) {
+                open_bedtime_special_editor(ui, hit.index - 1);
+            } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 0) {
+                ui->model.draft_bedtime_policy.scheduled_override.present =
+                    !ui->model.draft_bedtime_policy.scheduled_override.present;
+                update_bedtime_dirty(ui);
+            } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 3) {
+                open_bedtime_special_editor(ui, 2);
+            }
+        }
         break;
     case PTC_UI_HIT_MINUTES_INC:
         ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 5, ui->model.minimum_minutes, ui->model.maximum_minutes);
@@ -5114,11 +5571,11 @@ int main(int argc, char **argv)
                 if (down & HidNpadButton_B) {
                     request_parent_navigation(&ui, -1, true);
                 } else if (down & HidNpadButton_L &&
-                           !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page != PTC_UI_SETTINGS_ROOT)) {
+                           !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
                     request_parent_navigation(&ui,
                         (ui.model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
                 } else if (down & HidNpadButton_R &&
-                           !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page != PTC_UI_SETTINGS_ROOT)) {
+                           !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
                     request_parent_navigation(&ui,
                         (ui.model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
                 } else if (down & HidNpadButton_Up) {
@@ -5135,7 +5592,8 @@ int main(int argc, char **argv)
                     if (ui.model.parent_footer_selection == 0) submit_status(&ui);
                     else activate_parent_status(&ui);
                 }
-            } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN) {
+            } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN &&
+                       ui.model.plan_page == PTC_UI_PLAN_PAGE_WEEKLY) {
                 PtcDayRule *day = &ui.model.draft_week[ui.model.editor_index];
                 if (ui.waiting) {
                     if (down) {
@@ -5144,10 +5602,8 @@ int main(int argc, char **argv)
                     }
                 } else if (down & HidNpadButton_B) {
                     request_parent_navigation(&ui, -1, true);
-                } else if (down & HidNpadButton_L) {
-                    request_parent_navigation(&ui, PTC_UI_PARENT_TODAY, false);
-                } else if (down & HidNpadButton_R) {
-                    request_parent_navigation(&ui, PTC_UI_PARENT_HOLIDAY, false);
+                } else if (down & (HidNpadButton_L | HidNpadButton_R)) {
+                    request_parent_navigation(&ui, -1, true);
                 } else if (down & HidNpadButton_Left) {
                     ptc_ui_move_weekly_focus(&ui.model, -1, 0);
                 } else if (down & HidNpadButton_Right) {
@@ -5224,7 +5680,134 @@ int main(int argc, char **argv)
                         snprintf(ui.model.message, sizeof(ui.model.message), "周计划没有修改。");
                     }
                 }
-            } else if (ui.waiting && ui.model.parent_page == PTC_UI_PARENT_HOLIDAY) {
+            } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN &&
+                       ui.model.plan_page == PTC_UI_PLAN_PAGE_BEDTIME) {
+                PtcBedtimePolicy *draft = &ui.model.draft_bedtime_policy;
+                int field_count = bedtime_section_field_count(ui.model.bedtime_section);
+                if (ui.waiting) {
+                    if (down) snprintf(ui.model.message, sizeof(ui.model.message),
+                        "请等待就寝时间设置保存完成后再继续编辑。");
+                } else if (down & HidNpadButton_B) {
+                    request_bedtime_leave(&ui, -1, true);
+                } else if (down & HidNpadButton_L) {
+                    select_bedtime_section(&ui, ui.model.bedtime_section - 1);
+                } else if (down & HidNpadButton_R) {
+                    select_bedtime_section(&ui, ui.model.bedtime_section + 1);
+                } else if (down & HidNpadButton_Up) {
+                    ui.model.selected_index = ui.model.selected_index <= 0
+                        ? field_count - 1 : ui.model.selected_index - 1;
+                } else if (down & HidNpadButton_Down) {
+                    ui.model.selected_index = (ui.model.selected_index + 1) % field_count;
+                } else if (down & HidNpadButton_Y) {
+                    if (!ui.model.disable_flag_present) {
+                        draft->enabled = !draft->enabled;
+                        update_bedtime_dirty(&ui);
+                        snprintf(ui.model.message, sizeof(ui.model.message), "就寝时间总开关已%s；保存后生效。",
+                            draft->enabled ? "开启" : "关闭");
+                    }
+                } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+                    int direction = down & HidNpadButton_Right ? 1 : -1;
+                    if (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
+                        ui.model.selected_index == 1) {
+                        uint32_t duration = draft->scheduled_override.end_day_index >=
+                            draft->scheduled_override.start_day_index
+                            ? (uint32_t)draft->scheduled_override.end_day_index -
+                              draft->scheduled_override.start_day_index + 1u : 1u;
+                        int next = (int)draft->scheduled_override.start_day_index + direction;
+                        if (next < (int)ui.model.day_index) next = ui.model.day_index;
+                        if ((uint32_t)next + duration - 1u > UINT16_MAX) next = UINT16_MAX - (int)duration + 1;
+                        draft->scheduled_override.start_day_index = (uint16_t)next;
+                        draft->scheduled_override.end_day_index = (uint16_t)(next + (int)duration - 1);
+                        update_bedtime_dirty(&ui);
+                    } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
+                               ui.model.selected_index == 2) {
+                        uint32_t duration = draft->scheduled_override.end_day_index >=
+                            draft->scheduled_override.start_day_index
+                            ? (uint32_t)draft->scheduled_override.end_day_index -
+                              draft->scheduled_override.start_day_index + 1u : 1u;
+                        int next = (int)duration + direction;
+                        if (next < 1) next = 1;
+                        if (next > 366) next = 366;
+                        if ((uint32_t)draft->scheduled_override.start_day_index + (uint32_t)next - 1u > UINT16_MAX)
+                            next = UINT16_MAX - draft->scheduled_override.start_day_index + 1;
+                        draft->scheduled_override.end_day_index =
+                            (uint16_t)(draft->scheduled_override.start_day_index + next - 1);
+                        update_bedtime_dirty(&ui);
+                    } else {
+                        ui.model.selected_index += direction;
+                        if (ui.model.selected_index < 0) ui.model.selected_index = field_count - 1;
+                        if (ui.model.selected_index >= field_count) ui.model.selected_index = 0;
+                    }
+                } else if (down & HidNpadButton_X) {
+                    if (ui.model.disable_flag_present) {
+                        snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，就寝时间设置暂时只读。");
+                    } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_WEEKLY &&
+                               ui.model.selected_index < 7) {
+                        int day = ptc_ui_weekday_for_display_slot(ui.model.selected_index);
+                        draft->week[day].enabled = !draft->week[day].enabled;
+                        ui.model.bedtime_editor_day = day;
+                        update_bedtime_dirty(&ui);
+                    } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_CALENDAR &&
+                               ui.model.selected_index == 0) {
+                        draft->calendar_enabled = !draft->calendar_enabled;
+                        update_bedtime_dirty(&ui);
+                    } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
+                               ui.model.selected_index == 0) {
+                        draft->scheduled_override.present = !draft->scheduled_override.present;
+                        if (draft->scheduled_override.start_day_index < ui.model.day_index) {
+                            draft->scheduled_override.start_day_index = ui.model.day_index;
+                            draft->scheduled_override.end_day_index = ui.model.day_index;
+                        }
+                        update_bedtime_dirty(&ui);
+                    } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
+                               ui.model.selected_index == 3) {
+                        PtcBedtimeSpecialRule *rule = &draft->scheduled_override.rule;
+                        rule->mode = (PtcBedtimeOverrideMode)((rule->mode + 1) % 3);
+                        if (rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM) rule->window.enabled = true;
+                        update_bedtime_dirty(&ui);
+                    }
+                } else if (down & HidNpadButton_A) {
+                    if (ui.model.bedtime_section == PTC_UI_BEDTIME_WEEKLY) {
+                        if (ui.model.selected_index < 7) {
+                            int day = ptc_ui_weekday_for_display_slot(ui.model.selected_index);
+                            ui.model.bedtime_editor_day = day;
+                            open_bedtime_window_editor(&ui, day);
+                        } else if (ui.model.selected_index == 7 || ui.model.selected_index == 8) {
+                            ui.model.overlay = PTC_UI_OVERLAY_BEDTIME_BULK;
+                            ui.model.overlay_selection = ui.model.selected_index - 7;
+                            snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "复制每周就寝窗口");
+                            snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body),
+                                "把最后编辑日期的完整开关和时间复制到所选日期组。");
+                        } else if (ui.model.selected_index == 9) discard_bedtime_draft(&ui);
+                        else save_bedtime_from_page(&ui);
+                    } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_CALENDAR) {
+                        if (ui.model.selected_index == 0) {
+                            draft->calendar_enabled = !draft->calendar_enabled;
+                            update_bedtime_dirty(&ui);
+                        } else if (ui.model.selected_index <= 2) {
+                            open_bedtime_special_editor(&ui, ui.model.selected_index - 1);
+                        } else if (ui.model.selected_index == 3) discard_bedtime_draft(&ui);
+                        else save_bedtime_from_page(&ui);
+                    } else {
+                        if (ui.model.selected_index == 0) {
+                            draft->scheduled_override.present = !draft->scheduled_override.present;
+                            if (draft->scheduled_override.start_day_index < ui.model.day_index) {
+                                draft->scheduled_override.start_day_index = ui.model.day_index;
+                                draft->scheduled_override.end_day_index = ui.model.day_index;
+                            }
+                            update_bedtime_dirty(&ui);
+                        } else if (ui.model.selected_index == 3) {
+                            open_bedtime_special_editor(&ui, 2);
+                        } else if (ui.model.selected_index == 4) discard_bedtime_draft(&ui);
+                        else if (ui.model.selected_index == 5) save_bedtime_from_page(&ui);
+                    }
+                } else if (down & HidNpadButton_Plus) {
+                    save_bedtime_from_page(&ui);
+                } else if (down & HidNpadButton_ZL) {
+                    discard_bedtime_draft(&ui);
+                }
+            } else if (ui.waiting && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
+                       ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 if (down) {
                     snprintf(ui.model.message, sizeof(ui.model.message),
                              "请等待国家节假日设置保存完成后再继续编辑。");
@@ -5232,11 +5815,11 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_B) {
                 request_parent_navigation(&ui, -1, true);
             } else if (down & HidNpadButton_L &&
-                       !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page != PTC_UI_SETTINGS_ROOT)) {
+                       !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
                 request_parent_navigation(&ui,
                     (ui.model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
             } else if (down & HidNpadButton_R &&
-                       !(ui.model.parent_page == PTC_UI_PARENT_SETTINGS && ui.model.settings_page != PTC_UI_SETTINGS_ROOT)) {
+                       !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
                 request_parent_navigation(&ui,
                     (ui.model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
             } else if (down & HidNpadButton_Left) {
@@ -5250,7 +5833,8 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_Y) {
                 refresh_disable_flag(&ui);
                 submit_status(&ui);
-            } else if (down & HidNpadButton_X && ui.model.parent_page == PTC_UI_PARENT_HOLIDAY) {
+            } else if (down & HidNpadButton_X && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
+                       ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 if (ui.model.disable_flag_present) {
                     snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，规则暂时只读。");
                 } else if (ui.model.selected_index == 1 ||
@@ -5263,10 +5847,12 @@ int main(int argc, char **argv)
                     ui.model.draft_makeup_workday_rule.mode = ptc_ui_next_rule_mode(ui.model.draft_makeup_workday_rule.mode);
                     update_holiday_dirty(&ui);
                 }
-            } else if (down & HidNpadButton_Plus && ui.model.parent_page == PTC_UI_PARENT_HOLIDAY) {
+            } else if (down & HidNpadButton_Plus && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
+                       ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 ui.model.selected_index = 5;
                 submit_holiday_policy(&ui);
-            } else if (down & HidNpadButton_ZL && ui.model.parent_page == PTC_UI_PARENT_HOLIDAY) {
+            } else if (down & HidNpadButton_ZL && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
+                       ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 ui.model.selected_index = 4;
                 discard_holiday_draft(&ui);
             } else if (down & HidNpadButton_A) {
@@ -5274,8 +5860,7 @@ int main(int argc, char **argv)
                     snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再执行其他设置。");
                 } else if (ui.model.parent_footer_focused) {
                     activate_parent_status(&ui);
-                } else if (ui.model.parent_page == PTC_UI_PARENT_SETTINGS &&
-                           ui.model.settings_page == PTC_UI_SETTINGS_SUPPORT && ui.model.selected_index >= 6) {
+                } else if (ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.model.selected_index >= 6) {
                     int visible_index = ui.model.selected_index - 6;
                     int event_index = ui.model.recent_event_count - 1 - visible_index;
                     if (event_index >= 0 && event_index < ui.model.recent_event_count) {

@@ -36,11 +36,24 @@ typedef enum {
 typedef enum {
     PTC_UI_PARENT_TODAY = 0,
     PTC_UI_PARENT_PLAN = 1,
-    PTC_UI_PARENT_HOLIDAY = 2,
-    PTC_UI_PARENT_GRANT = 3,
-    PTC_UI_PARENT_SETTINGS = 4,
+    PTC_UI_PARENT_GRANT = 2,
+    PTC_UI_PARENT_SETTINGS = 3,
+    PTC_UI_PARENT_SUPPORT = 4,
     PTC_UI_PARENT_PAGE_COUNT = 5
 } PtcUiParentPage;
+
+typedef enum {
+    PTC_UI_PLAN_PAGE_ROOT = 0,
+    PTC_UI_PLAN_PAGE_WEEKLY = 1,
+    PTC_UI_PLAN_PAGE_HOLIDAY = 2,
+    PTC_UI_PLAN_PAGE_BEDTIME = 3
+} PtcUiPlanPage;
+
+typedef enum {
+    PTC_UI_BEDTIME_WEEKLY = 0,
+    PTC_UI_BEDTIME_CALENDAR = 1,
+    PTC_UI_BEDTIME_SCHEDULED = 2
+} PtcUiBedtimeSection;
 
 typedef enum {
     PTC_UI_SETTINGS_ROOT = 0,
@@ -78,7 +91,12 @@ typedef enum {
     PTC_UI_OVERLAY_ACTIVITY_HISTORY = 26,
     PTC_UI_OVERLAY_HOME_DETAILS = 27,
     PTC_UI_OVERLAY_SCHEDULED_LEAVE = 28,
-    PTC_UI_OVERLAY_BEDTIME = 29
+    PTC_UI_OVERLAY_BEDTIME = 29,
+    PTC_UI_OVERLAY_QUICK_ADD = 30,
+    PTC_UI_OVERLAY_BEDTIME_WINDOW = 31,
+    PTC_UI_OVERLAY_BEDTIME_SPECIAL = 32,
+    PTC_UI_OVERLAY_BEDTIME_LEAVE = 33,
+    PTC_UI_OVERLAY_BEDTIME_BULK = 34
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -176,7 +194,8 @@ typedef enum {
     PTC_UI_OPERATION_SAVE_SCHEDULED = 20,
     PTC_UI_OPERATION_SAVE_AUTONOMY = 21,
     PTC_UI_OPERATION_CLEAR_ACTIVITY_HISTORY = 22,
-    PTC_UI_OPERATION_HOT_RELOAD = 23
+    PTC_UI_OPERATION_HOT_RELOAD = 23,
+    PTC_UI_OPERATION_SKIP_BEDTIME = 24
 } PtcUiOperation;
 
 typedef enum {
@@ -188,6 +207,8 @@ typedef enum {
 typedef struct {
     PtcUiView view;
     PtcUiParentPage parent_page;
+    PtcUiPlanPage plan_page;
+    PtcUiBedtimeSection bedtime_section;
     PtcUiSettingsPage settings_page;
     int selected_index;
     bool waiting;
@@ -257,6 +278,21 @@ typedef struct {
     bool bedtime_active;
     bool bedtime_skipped;
     uint64_t bedtime_window_instance_id;
+    uint16_t bedtime_start_day_index;
+    uint16_t bedtime_start_minute;
+    uint16_t bedtime_end_minute;
+    char bedtime_source[32];
+    bool bedtime_next_available;
+    uint16_t bedtime_next_start_day_index;
+    uint16_t bedtime_next_start_minute;
+    uint16_t bedtime_next_end_minute;
+    uint64_t bedtime_next_window_instance_id;
+    bool bedtime_skipped_window_available;
+    uint64_t bedtime_skipped_window_instance_id;
+    uint16_t bedtime_skipped_start_day_index;
+    uint16_t bedtime_skipped_start_minute;
+    uint16_t bedtime_skipped_end_minute;
+    char bedtime_skipped_source[32];
     bool bedtime_official_setting_confirmed;
     bool bedtime_overlay_verified;
     bool usage_summary_available;
@@ -315,6 +351,14 @@ typedef struct {
     bool calendar_update_warning;
     int holiday_calendar_page;
     int holiday_last_rule;
+    bool bedtime_dirty;
+    int bedtime_editor_day;
+    int bedtime_special_kind;
+    int bedtime_bulk_target;
+    uint64_t pending_bedtime_skip_instance_id;
+    uint16_t pending_bedtime_skip_start_day_index;
+    uint16_t pending_bedtime_skip_start_minute;
+    uint16_t pending_bedtime_skip_end_minute;
     int album_restriction_state;
     bool album_backup_valid;
     char album_restriction_detail[160];
@@ -493,6 +537,9 @@ typedef enum {
     PTC_UI_HIT_HISTORY_NEXT,
     PTC_UI_HIT_SCHEDULED_FIELD,
     PTC_UI_HIT_AUTONOMY_OPTION,
+    PTC_UI_HIT_QUICK_ADD_OPTION,
+    PTC_UI_HIT_BEDTIME_SECTION,
+    PTC_UI_HIT_BEDTIME_FIELD,
     PTC_UI_HIT_HOME_DETAILS
 } PtcUiHitKind;
 
@@ -696,6 +743,8 @@ PtcUiRect ptc_ui_redemption_history_prev_rect(void);
 PtcUiRect ptc_ui_redemption_history_next_rect(void);
 PtcUiRect ptc_ui_scheduled_field_rect(int index);
 PtcUiRect ptc_ui_autonomy_option_rect(int index);
+PtcUiRect ptc_ui_bedtime_section_rect(int index);
+PtcUiRect ptc_ui_bedtime_field_rect(int section, int index);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
 PtcUiRect ptc_ui_minutes_value_rect(void);
 PtcUiRect ptc_ui_minutes_dec_rect(void);

@@ -42,6 +42,12 @@ typedef struct {
     int bedtime_next_start_minute;
     int bedtime_next_end_minute;
     unsigned long long bedtime_next_window_instance_id;
+    bool bedtime_skipped_window_available;
+    unsigned long long bedtime_skipped_window_instance_id;
+    int bedtime_skipped_start_day_index;
+    int bedtime_skipped_start_minute;
+    int bedtime_skipped_end_minute;
+    char bedtime_skipped_source[32];
     bool bedtime_official_setting_confirmed;
     bool bedtime_overlay_verified;
     bool daily_restriction_active;

@@ -284,7 +284,7 @@ void ptc_ui_format_weekly_save_result(const PtcUiModel *model, char *message, si
         PtcEffectiveRule restored = ptc_ui_rule_after_today_restore(model);
         snprintf(message, message_size, "周计划已保存；今天仍按临时设置执行，当前不变。");
         if (restored.source == PTC_RULE_SOURCE_WEEKLY) {
-            snprintf(detail, detail_size, "当前按今日临时设置：%s；恢复周计划生效后：%s。",
+            snprintf(detail, detail_size, "当前按今日临时设置：%s；清除今日额度调整后：%s。",
                      current_basis, basis);
         } else {
             snprintf(detail, detail_size, "清除今日临时设置后仍按%s执行；本次只更新周计划。",
@@ -402,7 +402,7 @@ static const char *request_success_message(const char *type)
         return "今日自主缓冲设置已保存。";
     }
     if (strcmp(type, "confirm_bedtime_requirements") == 0) {
-        return "就寝限制环境已确认；请再次按 + 保存并生效。";
+        return "就寝限制环境已确认，正在保存完整计划。";
     }
     if (strcmp(type, "set_bedtime_policy") == 0) {
         return "就寝计划已保存；限制生效后请使用 Overlay 恢复。";
@@ -429,7 +429,7 @@ static const char *request_success_message(const char *type)
         return "临时加时已生效，当前状态已刷新。";
     }
     if (strcmp(type, "restore_today_policy") == 0) {
-        return "今日临时设置已清除，已恢复周计划。";
+        return "今日额度调整已清除，已恢复下级规则。";
     }
     if (strcmp(type, "set_weekly_template") == 0) {
         return "周计划已保存。如果今天没有单独设置，今天也会按新计划执行。";
@@ -502,15 +502,15 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
 {
     switch (page) {
     case PTC_UI_PARENT_PLAN:
-        return 0;
-    case PTC_UI_PARENT_HOLIDAY:
-        return 7;
+        return 5;
     case PTC_UI_PARENT_GRANT:
         return 4;
     case PTC_UI_PARENT_SETTINGS:
         return 5;
+    case PTC_UI_PARENT_SUPPORT:
+        return 6;
     case PTC_UI_PARENT_TODAY:
-        return 4;
+        return 6;
     default:
         return 5;
     }
@@ -640,7 +640,8 @@ void ptc_ui_change_parent_page(PtcUiModel *model, int direction)
         page = 0;
     }
     model->parent_page = (PtcUiParentPage)page;
-    if (model->parent_page == PTC_UI_PARENT_SETTINGS) model->settings_page = PTC_UI_SETTINGS_ROOT;
+    if (model->parent_page == PTC_UI_PARENT_PLAN) model->plan_page = PTC_UI_PLAN_PAGE_ROOT;
+    model->settings_page = PTC_UI_SETTINGS_ROOT;
     if (!model->parent_footer_focused) model->selected_index = 0;
 }
 
@@ -667,20 +668,19 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         }
         return;
     }
-    count = model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_ADVANCED
-        ? 5 : ptc_ui_parent_action_count(model->parent_page);
+    count = ptc_ui_parent_action_count(model->parent_page);
     if (count <= 0) {
         model->selected_index = 0;
         return;
     }
     index = model->selected_index;
     if (index < 0 ||
-        (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT
+        (model->parent_page == PTC_UI_PARENT_SUPPORT
             ? index >= count + model->recent_event_count
             : index >= count)) {
         index = 0;
     }
-    if (model->parent_page == PTC_UI_PARENT_HOLIDAY) {
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
         static const int left[7]  = {0, 1, 1, 3, 3, 4, 2};
         static const int right[7] = {0, 2, 2, 4, 5, 5, 6};
         static const int up[7]    = {0, 0, 0, 1, 1, 2, 0};
@@ -699,7 +699,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         }
         return;
     }
-    if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
+    if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
         int event_count = model->recent_event_count;
         int max_index = 5 + event_count;
         if (index > max_index) index = 0;
@@ -730,8 +730,8 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
         if (horizontal < 0 && index % 2 == 1) --index;
         else if (horizontal > 0 && index % 2 == 0) ++index;
-        else if (vertical < 0) index = (index + 2) % 4;
-        else if (vertical > 0 && index < 2) index += 2;
+        else if (vertical < 0 && index >= 2) index -= 2;
+        else if (vertical > 0 && index < 4) index += 2;
         else if (vertical > 0) {
             model->parent_content_selection = index;
             model->parent_footer_focused = true;
@@ -1746,6 +1746,22 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->bedtime_active = summary.bedtime_active;
         model->bedtime_skipped = summary.bedtime_skipped;
         model->bedtime_window_instance_id = summary.bedtime_window_instance_id;
+        model->bedtime_start_day_index = (uint16_t)summary.bedtime_start_day_index;
+        model->bedtime_start_minute = (uint16_t)summary.bedtime_start_minute;
+        model->bedtime_end_minute = (uint16_t)summary.bedtime_end_minute;
+        snprintf(model->bedtime_source, sizeof(model->bedtime_source), "%s", summary.bedtime_source);
+        model->bedtime_next_available = summary.bedtime_next_available;
+        model->bedtime_next_start_day_index = (uint16_t)summary.bedtime_next_start_day_index;
+        model->bedtime_next_start_minute = (uint16_t)summary.bedtime_next_start_minute;
+        model->bedtime_next_end_minute = (uint16_t)summary.bedtime_next_end_minute;
+        model->bedtime_next_window_instance_id = summary.bedtime_next_window_instance_id;
+        model->bedtime_skipped_window_available = summary.bedtime_skipped_window_available;
+        model->bedtime_skipped_window_instance_id = summary.bedtime_skipped_window_instance_id;
+        model->bedtime_skipped_start_day_index = (uint16_t)summary.bedtime_skipped_start_day_index;
+        model->bedtime_skipped_start_minute = (uint16_t)summary.bedtime_skipped_start_minute;
+        model->bedtime_skipped_end_minute = (uint16_t)summary.bedtime_skipped_end_minute;
+        snprintf(model->bedtime_skipped_source, sizeof(model->bedtime_skipped_source), "%s",
+            summary.bedtime_skipped_source);
         model->bedtime_official_setting_confirmed = summary.bedtime_official_setting_confirmed;
         model->bedtime_overlay_verified = summary.bedtime_overlay_verified;
         model->calendar_covered = summary.calendar_covered;
@@ -2101,13 +2117,35 @@ PtcUiRect ptc_ui_home_summary_rect(bool parent)
 
 PtcUiRect ptc_ui_today_card_rect(int index)
 {
-    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){560 + (index % 2) * 348, 176 + (index / 2) * 136, 324, 112};
+    if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){560 + (index % 2) * 348, 176 + (index / 2) * 110, 324, 94};
+}
+
+PtcUiRect ptc_ui_bedtime_section_rect(int index)
+{
+    if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){54 + index * 250, 172, 230, 44};
+}
+
+PtcUiRect ptc_ui_bedtime_field_rect(int section, int index)
+{
+    if (section == PTC_UI_BEDTIME_WEEKLY) {
+        if (index >= 0 && index < 7) return (PtcUiRect){54 + index * 108, 234, 96, 182};
+        if (index >= 7 && index <= 10) return (PtcUiRect){54 + (index - 7) * 188, 436, 176, 54};
+    } else if (section == PTC_UI_BEDTIME_CALENDAR) {
+        if (index == 0) return (PtcUiRect){54, 234, 752, 68};
+        if (index == 1 || index == 2) return (PtcUiRect){54 + (index - 1) * 376, 318, 364, 112};
+        if (index == 3 || index == 4) return (PtcUiRect){430 + (index - 3) * 188, 446, 176, 54};
+    } else if (section == PTC_UI_BEDTIME_SCHEDULED) {
+        if (index >= 0 && index < 4) return (PtcUiRect){54, 234 + index * 62, 752, 50};
+        if (index == 4 || index == 5) return (PtcUiRect){430 + (index - 4) * 188, 490, 176, 54};
+    }
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? (PtcUiRect){1008, 456, 224, 48} : (PtcUiRect){736, 424, 464, 48};
+    return parent ? (PtcUiRect){288, 448, 224, 48} : (PtcUiRect){736, 424, 464, 48};
 }
 
 PtcUiOperation ptc_ui_today_operation(int index)
@@ -2115,9 +2153,10 @@ PtcUiOperation ptc_ui_today_operation(int index)
     /* UI order is independent of the operation enum and request dispatch. */
     static const PtcUiOperation actions[] = {
         PTC_UI_OPERATION_SET_TODAY_LIMIT, PTC_UI_OPERATION_ADD_TODAY_MINUTES,
-        PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, PTC_UI_OPERATION_RESTORE_TODAY_POLICY
+        PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, PTC_UI_OPERATION_RESTORE_TODAY_POLICY,
+        PTC_UI_OPERATION_SKIP_BEDTIME, PTC_UI_OPERATION_NONE
     };
-    return index >= 0 && index < 4 ? actions[index] : PTC_UI_OPERATION_NONE;
+    return index >= 0 && index < 6 ? actions[index] : PTC_UI_OPERATION_NONE;
 }
 
 bool ptc_ui_open_home_details(PtcUiModel *model)
@@ -2985,6 +3024,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     }
     if ((model->overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE ||
          model->overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
+         model->overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE ||
          model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) &&
         ptc_ui_rect_contains(ptc_ui_discard_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_DISCARD, 0);
@@ -2997,6 +3037,13 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         if (ptc_ui_rect_contains(ptc_ui_redemption_history_next_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_HISTORY_NEXT, 0);
+        }
+        break;
+    case PTC_UI_OVERLAY_QUICK_ADD:
+        for (i = 0; i < 4; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_autonomy_option_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_QUICK_ADD_OPTION, i);
+            }
         }
         break;
     case PTC_UI_OVERLAY_SCHEDULED:
@@ -3275,7 +3322,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (!(model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page != PTC_UI_SETTINGS_ROOT)) {
+    if (!(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
         for (i = 0; i < PTC_UI_PARENT_PAGE_COUNT; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_parent_tab_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_PARENT_TAB, i);
@@ -3288,11 +3335,8 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_PARENT_NEXT_PAGE, 0);
         }
     }
-    if (model->parent_page == PTC_UI_PARENT_SETTINGS &&
-        ((model->settings_page == PTC_UI_SETTINGS_ADVANCED &&
-          ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) ||
-         (model->settings_page == PTC_UI_SETTINGS_SUPPORT &&
-          ptc_ui_rect_contains(ptc_ui_support_back_rect(), x, y)))) {
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page != PTC_UI_PLAN_PAGE_ROOT &&
+        ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(2), x, y)) {
@@ -3304,7 +3348,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(4), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_STATUS, 0);
     }
-    if (model->parent_page == PTC_UI_PARENT_PLAN) {
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY) {
         for (i = 0; i < 7; ++i) {
             int weekday = ptc_ui_weekday_for_display_slot(i);
             if (ptc_ui_rect_contains(ptc_ui_weekly_day_mode_rect(i), x, y)) {
@@ -3323,7 +3367,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         if (ptc_ui_rect_contains(ptc_ui_weekly_bulk_rect(), x, y)) return make_hit(PTC_UI_HIT_WEEKLY_BULK, 0);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (model->parent_page == PTC_UI_PARENT_HOLIDAY) {
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
         if (rect_contains_with_padding(ptc_ui_holiday_enable_rect(), 4, x, y)) {
             return make_hit(PTC_UI_HIT_HOLIDAY_ENABLE, 0);
         }
@@ -3345,27 +3389,35 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (model->parent_page == PTC_UI_PARENT_SETTINGS && model->settings_page == PTC_UI_SETTINGS_SUPPORT) {
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_BEDTIME) {
+        int fields = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 11 :
+            (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
+        for (i = 0; i < 3; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_bedtime_section_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_BEDTIME_SECTION, i);
+            }
+        }
+        for (i = 0; i < fields; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_bedtime_field_rect(model->bedtime_section, i), x, y)) {
+                return make_hit(PTC_UI_HIT_BEDTIME_FIELD, i);
+            }
+        }
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
         for (i = 0; i < model->recent_event_count; ++i) {
             if (rect_contains_row_cell(ptc_ui_support_event_rect(i), 22, x, y)) {
                 return make_hit(PTC_UI_HIT_SUPPORT_EVENT, model->recent_event_count - 1 - i);
             }
         }
     }
-    count = model->parent_page == PTC_UI_PARENT_SETTINGS
-        ? (model->settings_page == PTC_UI_SETTINGS_SUPPORT ? 6 :
-           model->settings_page == PTC_UI_SETTINGS_ADVANCED ? 5
-           : ptc_ui_parent_action_count(model->parent_page))
-        : ptc_ui_parent_action_count(model->parent_page);
+    count = ptc_ui_parent_action_count(model->parent_page);
     for (i = 0; i < count; ++i) {
-        PtcUiRect card_rect = model->parent_page == PTC_UI_PARENT_SETTINGS
-            ? (model->settings_page == PTC_UI_SETTINGS_ADVANCED
-                ? ptc_ui_advanced_feature_rect(i)
-                : (model->settings_page == PTC_UI_SETTINGS_SUPPORT
-                    ? ptc_ui_support_card_rect(i) : ptc_ui_parent_card_rect(i)))
+        PtcUiRect card_rect = model->parent_page == PTC_UI_PARENT_SUPPORT
+            ? ptc_ui_support_card_rect(i)
             : (model->parent_page == PTC_UI_PARENT_TODAY ? ptc_ui_today_card_rect(i) : ptc_ui_parent_card_rect(i));
         if (model->parent_page == PTC_UI_PARENT_TODAY && (model->disable_flag_present || model->waiting)) continue;
-        if ((model->parent_page != PTC_UI_PARENT_SETTINGS || model->settings_page != PTC_UI_SETTINGS_SUPPORT ||
+        if ((model->parent_page != PTC_UI_PARENT_SUPPORT ||
              (ptc_ui_safety_action_visible(model, i) &&
               ptc_ui_safety_action_available(model, i) != PTC_UI_ACTION_DISABLED)) &&
             ptc_ui_rect_contains(card_rect, x, y)) {

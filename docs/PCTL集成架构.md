@@ -45,7 +45,7 @@ Horizon PCTL
 
 ## 普通写入事务
 
-设置今日总额度、加时、今日不限时、恢复周计划和 Enforce 共用恢复框架：
+设置今日总额度、快速加时、今日不限时、清除今日额度调整和 Enforce 共用恢复框架：
 
 ```mermaid
 flowchart LR

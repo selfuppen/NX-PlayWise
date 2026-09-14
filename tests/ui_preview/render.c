@@ -129,11 +129,12 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
         "保留密钥更改？", "兑换结果", "验证未通过", "软件信息", "节假日安排", "保留节假日草稿？",
         "支持事件详情", "批量设置", "自制程序菜单高级入口", "调整时长", "外观主题", "输入家长 PIN",
         "加时码使用记录", "临时日期计划", "今日自主缓冲", "家庭活动记录", "今日详情", "保留日期计划草稿？",
-        "就寝时间"
+        "就寝时间", "快速加时", "编辑每周就寝窗口", "编辑特殊就寝规则",
+        "离开就寝时间编辑？", "复制每周就寝窗口"
     };
     int failed = 0;
     for (int dark = 0; dark < 2; ++dark) {
-        for (int overlay = PTC_UI_OVERLAY_MINUTES; overlay <= PTC_UI_OVERLAY_BEDTIME; ++overlay) {
+        for (int overlay = PTC_UI_OVERLAY_MINUTES; overlay <= PTC_UI_OVERLAY_BEDTIME_BULK; ++overlay) {
             PtcUiModel model = *baseline;
             char name[48];
             PtcRules rules;
@@ -216,8 +217,7 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
         PtcUiModel model = *baseline;
         model.view = PTC_UI_PARENT;
         model.parent_page = PTC_UI_PARENT_SETTINGS;
-        model.settings_page = PTC_UI_SETTINGS_ADVANCED;
-        failed |= save_preview(directory, "settings", "settings-advanced", &model, dark != 0);
+        failed |= save_preview(directory, "settings", "settings-root", &model, dark != 0);
         model.view = PTC_UI_ERROR;
         model.error_code = 306;
         snprintf(model.message, sizeof(model.message), "主机环境已变化，请家长重新检测");
@@ -275,6 +275,40 @@ int main(int argc, char **argv)
         model.view = PTC_UI_PARENT;
         model.parent_page = PTC_UI_PARENT_TODAY;
         failed |= save_preview(argv[2], "parent", "parent", &model, dark);
+        model.bedtime_policy.enabled = true;
+        model.bedtime_active = true;
+        model.bedtime_window_instance_id = 23801260;
+        model.bedtime_start_day_index = 2380;
+        model.bedtime_start_minute = 1260;
+        model.bedtime_end_minute = 420;
+        snprintf(model.bedtime_source, sizeof(model.bedtime_source), "weekly");
+        failed |= save_preview(argv[2], "parent", "bedtime-current", &model, dark);
+        model.bedtime_active = false;
+        model.bedtime_next_available = true;
+        model.bedtime_next_window_instance_id = 23801260;
+        model.bedtime_next_start_day_index = 2380;
+        model.bedtime_next_start_minute = 1260;
+        model.bedtime_next_end_minute = 420;
+        failed |= save_preview(argv[2], "parent", "bedtime-tonight", &model, dark);
+        model.bedtime_next_window_instance_id = 23821410;
+        model.bedtime_next_start_day_index = 2382;
+        model.bedtime_next_start_minute = 1410;
+        model.bedtime_next_end_minute = 480;
+        failed |= save_preview(argv[2], "parent", "bedtime-future", &model, dark);
+        model.bedtime_next_available = false;
+        model.bedtime_skipped_window_available = true;
+        model.bedtime_skipped_window_instance_id = 23801260;
+        model.bedtime_skipped_start_day_index = 2380;
+        model.bedtime_skipped_start_minute = 1260;
+        model.bedtime_skipped_end_minute = 420;
+        snprintf(model.bedtime_skipped_source, sizeof(model.bedtime_skipped_source), "weekly");
+        failed |= save_preview(argv[2], "parent", "bedtime-skipped", &model, dark);
+        model.bedtime_policy.enabled = false;
+        model.bedtime_skipped_window_available = false;
+        failed |= save_preview(argv[2], "parent", "bedtime-none", &model, dark);
+        model = baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_TODAY;
         ptc_ui_open_home_details(&model);
         failed |= save_preview(argv[2], "parent", "parent-details", &model, dark);
         ptc_ui_cancel_overlay(&model);
@@ -385,6 +419,21 @@ int main(int argc, char **argv)
         memcpy(model.current_week, rules.week, sizeof(rules.week));
         memcpy(model.draft_week, rules.week, sizeof(rules.week));
         model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+        model.bedtime_policy = model.draft_bedtime_policy = rules.bedtime;
+        model.bedtime_policy.enabled = model.draft_bedtime_policy.enabled = true;
+        for (int day = 0; day < 7; ++day) {
+            model.bedtime_policy.week[day] = model.draft_bedtime_policy.week[day] =
+                (PtcBedtimeWindow){true, 1260, 420};
+            model.forecast[day] = (PtcResultForecastDay){
+                .day_index = (uint16_t)(2380 + day),
+                .mode = PTC_RULE_MODE_LIMIT,
+                .minutes = (uint16_t)(day == 0 ? 120 : day == 1 ? 90 : 60),
+                .rule_source = day == 0 ? "today_override" : day == 1 ? "scheduled_override" : "weekly"
+            };
+        }
+        failed |= save_preview(argv[2], "plan", "plan-root", &model, dark);
+        model.plan_page = PTC_UI_PLAN_PAGE_WEEKLY;
         for (int slot = 0; slot < 7; ++slot)
             if (ptc_ui_weekday_for_display_slot(slot) == ptc_weekday_from_day_index(model.day_index)) model.weekly_grid_slot = slot;
         failed |= save_preview(argv[2], "plan", "plan-saved", &model, dark);
@@ -407,7 +456,8 @@ int main(int argc, char **argv)
         model.error_code = 0;
         snprintf(model.result_status, sizeof(model.result_status), "ok");
         snprintf(model.message, sizeof(model.message), "已读取保存的计划");
-        model.parent_page = PTC_UI_PARENT_HOLIDAY;
+        model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
         model.holiday_rule = model.draft_holiday_rule = rules.holiday_rule;
         model.makeup_workday_rule = model.draft_makeup_workday_rule = rules.makeup_workday_rule;
         model.draft_holiday_enabled = true;
@@ -417,8 +467,19 @@ int main(int argc, char **argv)
         model.disable_flag_present = true;
         failed |= save_preview(argv[2], "holiday", "holiday-disabled", &model, dark);
         model.disable_flag_present = false;
-        model.parent_page = PTC_UI_PARENT_SETTINGS;
-        model.settings_page = PTC_UI_SETTINGS_ADVANCED;
+        model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
+        model.draft_bedtime_policy.enabled = true;
+        model.draft_bedtime_policy.week[1] = (PtcBedtimeWindow){true, 1327, 420};
+        model.bedtime_dirty = true;
+        for (int section = PTC_UI_BEDTIME_WEEKLY; section <= PTC_UI_BEDTIME_SCHEDULED; ++section) {
+            char name[48];
+            model.bedtime_section = (PtcUiBedtimeSection)section;
+            model.selected_index = 0;
+            snprintf(name, sizeof(name), "bedtime-section-%d", section);
+            failed |= save_preview(argv[2], "bedtime", name, &model, dark);
+        }
+        model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
         model.draft_scheduled_override = model.scheduled_override;
         model.draft_scheduled_override.rule.minutes = 90;
         model.overlay = PTC_UI_OVERLAY_SCHEDULED;
@@ -440,7 +501,7 @@ int main(int argc, char **argv)
         model.parent_page = PTC_UI_PARENT_SETTINGS;
         model.selected_index = 3;
         failed |= save_preview(argv[2], "settings", "settings-root", &model, dark);
-        model.settings_page = PTC_UI_SETTINGS_SUPPORT;
+        model.parent_page = PTC_UI_PARENT_SUPPORT;
         model.selected_index = 4;
         failed |= save_preview(argv[2], "support", "support-healthy", &model, dark);
         model.disable_flag_present = true;

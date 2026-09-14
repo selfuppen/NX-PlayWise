@@ -58,6 +58,12 @@ typedef struct {
     uint16_t bedtime_next_start_minute;
     uint16_t bedtime_next_end_minute;
     uint64_t bedtime_next_window_instance_id;
+    bool bedtime_skipped_window_available;
+    uint64_t bedtime_skipped_window_instance_id;
+    uint16_t bedtime_skipped_start_day_index;
+    uint16_t bedtime_skipped_start_minute;
+    uint16_t bedtime_skipped_end_minute;
+    const char *bedtime_skipped_source;
     bool bedtime_official_setting_confirmed;
     bool bedtime_overlay_verified;
     const char *bedtime_recovery_phase;
