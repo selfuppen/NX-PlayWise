@@ -323,9 +323,30 @@ static void test_rule_result_guidance(void)
 static void test_numeric_input(void)
 {
     PtcUiModel model;
+    PtcUiValueRepeatState repeat = {0};
     uint16_t value = 0;
     char console_date[64];
     memset(&model, 0, sizeof(model));
+    check_int(ptc_ui_value_repeat_update(&repeat, 1, false, 1000), 1,
+              "value repeat changes immediately on first push");
+    check_int(ptc_ui_value_repeat_update(&repeat, 1, false, 1299), 0,
+              "value repeat waits 300ms before repeating");
+    check_int(ptc_ui_value_repeat_update(&repeat, 1, false, 1300), 1,
+              "value repeat starts at 300ms");
+    check_int(ptc_ui_value_repeat_update(&repeat, 1, false, 1700), 5,
+              "value repeat uses five-minute steps at 700ms");
+    check_int(ptc_ui_value_repeat_update(&repeat, 1, false, 2400), 15,
+              "value repeat uses fifteen-minute steps at 1400ms");
+    check_int(ptc_ui_value_repeat_update(&repeat, 1, false, 2432), 0,
+              "fast repeat waits its 33ms interval");
+    check_int(ptc_ui_value_repeat_update(&repeat, 1, false, 2433), 15,
+              "fast repeat fires after 33ms");
+    check_int(ptc_ui_value_repeat_update(&repeat, 0, false, 2500), 0,
+              "releasing resets value repeat");
+    check_int(ptc_ui_value_repeat_update(&repeat, -1, true, 3000), -1,
+              "hour repeat changes immediately");
+    check_int(ptc_ui_value_repeat_update(&repeat, -1, true, 4400), -1,
+              "hour repeat accelerates frequency without changing magnitude");
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_MINUTES,
         "输入额度", "1 到 1440 分钟", 4, 1, 1440, 60);
     check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR, "quota opens the shared duration editor");
@@ -453,10 +474,36 @@ static void test_numeric_input(void)
 
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
         "输入加时码", "8 位数字", 8, 0, 0, 0);
+    for (int slot = 0; slot < 8; ++slot) {
+        PtcUiRect rect = ptc_ui_code_slot_rect(slot);
+        check_true(rect.w > 0 && rect.h > 0, "every offline code digit has a visible slot");
+        if (slot > 0) {
+            PtcUiRect previous = ptc_ui_code_slot_rect(slot - 1);
+            check_true(previous.x + previous.w < rect.x, "offline code slots do not overlap");
+        }
+    }
+    check_true(ptc_ui_code_slot_rect(4).x -
+               (ptc_ui_code_slot_rect(3).x + ptc_ui_code_slot_rect(3).w) > 6,
+               "offline code slots show a larger four-digit group gap");
     snprintf(model.numpad_text, sizeof(model.numpad_text), "1051468");
     check_true(!ptc_ui_numpad_validate(&model, NULL), "short code rejected");
     snprintf(model.numpad_text, sizeof(model.numpad_text), "10514680");
     check_true(ptc_ui_numpad_validate(&model, NULL), "eight-digit code accepted");
+
+    ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_BEDTIME_TIME, PTC_UI_OVERLAY_BEDTIME_WINDOW,
+        "设置开始时间", "选择小时或分钟", 4, 0, 1439, 0);
+    check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR, "bedtime uses the shared value editor");
+    ptc_ui_duration_step_field(&model, -1);
+    check_int(model.numpad_current, 1439, "bedtime minute step wraps before midnight");
+    ptc_ui_numpad_adjust(&model, 15);
+    check_int(model.numpad_current, 14, "bedtime shoulder adjustment wraps after midnight");
+    snprintf(model.duration_hours_text, sizeof(model.duration_hours_text), "24");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "0");
+    check_true(!ptc_ui_numpad_validate(&model, &value), "bedtime rejects hour 24");
+    snprintf(model.duration_hours_text, sizeof(model.duration_hours_text), "23");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "59");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 1439,
+               "bedtime accepts 23:59");
 
     memset(console_date, 0, sizeof(console_date));
     model.status_loaded = false;
@@ -1111,9 +1158,12 @@ static void test_release_hit_targets(void)
               "compact minute editor zero key is touchable");
     check_hit(hit_center(&model, ptc_ui_minute_editor_quick_rect(0)), PTC_UI_HIT_NUMPAD_QUICK, 0,
               "compact minute editor quick adjustment is touchable");
+    check_hit(hit_center(&model, ptc_ui_minute_editor_quick_rect(1)), PTC_UI_HIT_NUMPAD_QUICK, 1,
+              "compact minute editor opposite quick adjustment is touchable");
     check_true(ptc_ui_minute_editor_key_rect(2).x + ptc_ui_minute_editor_key_rect(2).w < 716,
                "compact minute editor keypad stays left of the right-side information panel");
-    check_true(ptc_ui_minute_editor_quick_rect(3).x + ptc_ui_minute_editor_quick_rect(3).w < 716,
+    check_true(ptc_ui_minute_editor_quick_rect(1).x + ptc_ui_minute_editor_quick_rect(1).w < 716 &&
+               ptc_ui_minute_editor_quick_rect(2).w == 0,
                "compact minute editor quick actions stay left of the information panel");
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
@@ -2063,6 +2113,25 @@ static void test_global_time_projection_and_direct_inputs(void)
     for (int index = 0; index < 5; ++index)
         check_hit(hit_center(&model, ptc_ui_plan_card_rect(index)), PTC_UI_HIT_PARENT_CARD, index,
                   "grouped plan card remains touchable");
+
+    model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
+    model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
+    model.selected_index = 0;
+    model.bedtime_section_focused = false;
+    ptc_ui_move_bedtime_focus(&model, 1, 0);
+    check_int(model.selected_index, 1, "bedtime focus moves right within the weekly row");
+    ptc_ui_move_bedtime_focus(&model, -1, 0);
+    check_int(model.selected_index, 0, "bedtime focus moves left within the weekly row");
+    ptc_ui_move_bedtime_focus(&model, 0, -1);
+    check_true(model.bedtime_section_focused, "bedtime focus moves up to the active section tab");
+    ptc_ui_move_bedtime_focus(&model, 1, 0);
+    check_true(model.bedtime_section_focused && model.bedtime_section == PTC_UI_BEDTIME_CALENDAR,
+               "bedtime tab focus moves horizontally without wrapping");
+    ptc_ui_move_bedtime_focus(&model, 0, 1);
+    check_true(!model.bedtime_section_focused && model.selected_index == 0,
+               "bedtime tab focus moves down to the nearest content row");
+    ptc_ui_move_bedtime_focus(&model, -1, 0);
+    check_int(model.selected_index, 0, "bedtime focus stops at a horizontal edge");
 
     model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
     check_hit(ptc_ui_hit_test(&model, 330, 260), PTC_UI_HIT_BEDTIME_OVERLAY_FIELD, 0,

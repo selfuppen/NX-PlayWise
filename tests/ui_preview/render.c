@@ -355,6 +355,9 @@ int main(int argc, char **argv)
         model.view = PTC_UI_CHILD;
         ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
             "输入加时码", "输入家长给你的 8 位码，确认前会先显示加时预览。", 8, 0, 0, 0);
+        failed |= save_preview(argv[2], "redeem", "redeem-input-empty", &model, dark);
+        snprintf(model.numpad_text, sizeof(model.numpad_text), "123");
+        failed |= save_preview(argv[2], "redeem", "redeem-input-partial", &model, dark);
         snprintf(model.numpad_text, sizeof(model.numpad_text), "12345678");
         failed |= save_preview(argv[2], "redeem", "redeem-input", &model, dark);
         ptc_ui_cancel_overlay(&model);
@@ -371,6 +374,9 @@ int main(int argc, char **argv)
         model.confirm_hold_required = true;
         model.code_preview_after_minutes = 0;
         failed |= save_preview(argv[2], "redeem", "redeem-confirm-hold", &model, dark);
+        model.confirm_hold_progress = 250;
+        failed |= save_preview(argv[2], "redeem", "redeem-confirm-hold-progress", &model, dark);
+        model.confirm_hold_progress = 0;
         model.code_preview_after_minutes = 56;
         model.overlay = PTC_UI_OVERLAY_CODE_RESULT;
         model.code_actual_add_available = true;
@@ -489,6 +495,10 @@ int main(int argc, char **argv)
         model.overlay_selection = 1;
         snprintf(model.overlay_title, sizeof(model.overlay_title), "编辑每周就寝窗口");
         failed |= save_preview(argv[2], "bedtime", "bedtime-window-input", &model, dark);
+        ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_BEDTIME_TIME, PTC_UI_OVERLAY_BEDTIME_WINDOW,
+            "设置就寝开始时间", "选择小时或分钟；右摇杆上下调整，长推加速", 4, 0, 1439, 1327);
+        failed |= save_preview(argv[2], "bedtime", "bedtime-time-editor", &model, dark);
+        ptc_ui_cancel_overlay(&model);
         ptc_ui_cancel_overlay(&model);
         model.parent_page = PTC_UI_PARENT_PLAN;
         model.plan_page = PTC_UI_PLAN_PAGE_ROOT;

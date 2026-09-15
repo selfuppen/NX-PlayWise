@@ -1,5 +1,6 @@
 #include "ui_graphics.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -882,7 +883,8 @@ static bool duration_purpose(PtcUiNumpadPurpose purpose)
         purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
         purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES ||
         purpose == PTC_UI_NUMPAD_SCHEDULED_MINUTES ||
-        purpose == PTC_UI_NUMPAD_GRANT_MINUTES;
+        purpose == PTC_UI_NUMPAD_GRANT_MINUTES ||
+        purpose == PTC_UI_NUMPAD_BEDTIME_TIME;
 }
 
 static bool parse_duration_component(const char *text, unsigned int maximum, unsigned int *out)
@@ -905,7 +907,9 @@ bool ptc_ui_duration_value(const PtcUiModel *model, uint16_t *out_value)
     unsigned int minutes;
     unsigned int total;
     if (!model || !out_value || !duration_purpose(model->numpad_purpose) ||
-        !parse_duration_component(model->duration_hours_text, 24, &hours) ||
+        !parse_duration_component(model->duration_hours_text,
+                                  model->numpad_purpose == PTC_UI_NUMPAD_BEDTIME_TIME ? 23 : 24,
+                                  &hours) ||
         !parse_duration_component(model->duration_minutes_text, 59, &minutes)) {
         return false;
     }
@@ -958,7 +962,10 @@ bool ptc_ui_duration_step_field(PtcUiModel *model, int step)
     total = (int)(hours * 60U + minutes);
     direction = step > 0 ? 1 : -1;
     total += model->duration_field == PTC_UI_DURATION_HOURS ? direction * 60 : step;
-    if (total < (int)model->numpad_minimum) {
+    if (model->numpad_purpose == PTC_UI_NUMPAD_BEDTIME_TIME) {
+        total %= 1440;
+        if (total < 0) total += 1440;
+    } else if (total < (int)model->numpad_minimum) {
         total = (int)model->numpad_minimum;
     } else if (total > (int)model->numpad_maximum) {
         total = (int)model->numpad_maximum;
@@ -981,6 +988,45 @@ bool ptc_ui_duration_step_field(PtcUiModel *model, int step)
     model->duration_minutes_replace_on_input = false;
     model->numpad_error[0] = '\0';
     return true;
+}
+
+int ptc_ui_value_repeat_update(
+    PtcUiValueRepeatState *state,
+    int direction,
+    bool hour_field,
+    int64_t now_ms)
+{
+    int64_t elapsed;
+    int magnitude;
+    int interval_ms;
+
+    if (!state) return 0;
+    if (direction == 0) {
+        memset(state, 0, sizeof(*state));
+        return 0;
+    }
+    direction = direction > 0 ? 1 : -1;
+    if (state->direction != direction || now_ms < state->started_ms) {
+        state->direction = direction;
+        state->started_ms = now_ms;
+        state->next_step_ms = now_ms + 300;
+        return direction;
+    }
+    if (now_ms < state->next_step_ms) return 0;
+
+    elapsed = now_ms - state->started_ms;
+    if (elapsed >= 1400) {
+        magnitude = hour_field ? 1 : 15;
+        interval_ms = 33;
+    } else if (elapsed >= 700) {
+        magnitude = hour_field ? 1 : 5;
+        interval_ms = 67;
+    } else {
+        magnitude = 1;
+        interval_ms = 100;
+    }
+    state->next_step_ms = now_ms + interval_ms;
+    return direction * magnitude;
 }
 
 void ptc_ui_numpad_open(
@@ -1102,8 +1148,14 @@ void ptc_ui_numpad_adjust(PtcUiModel *model, int delta)
     if (ptc_ui_duration_value(model, &value)) {
         /* A quick adjustment commits any complete value already typed. */
     }
-    value = ptc_ui_adjust_minutes(
-        value, delta, model->numpad_minimum, model->numpad_maximum);
+    if (model->numpad_purpose == PTC_UI_NUMPAD_BEDTIME_TIME) {
+        int wrapped = ((int)value + delta) % 1440;
+        if (wrapped < 0) wrapped += 1440;
+        value = (uint16_t)wrapped;
+    } else {
+        value = ptc_ui_adjust_minutes(
+            value, delta, model->numpad_minimum, model->numpad_maximum);
+    }
     if (model->numpad_purpose == PTC_UI_NUMPAD_GRANT_MINUTES &&
         !ptc_ui_grant_minutes_legal(value, model->numpad_maximum)) {
         int candidate = value;
@@ -1190,8 +1242,13 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
     }
     if (duration_purpose(model->numpad_purpose)) {
         if (!ptc_ui_duration_value(model, &value)) {
-            snprintf(model->numpad_error, sizeof(model->numpad_error), "请输入完整时长，总计范围为 %u 到 %u 分钟",
-                     (unsigned int)model->numpad_minimum, (unsigned int)model->numpad_maximum);
+            if (model->numpad_purpose == PTC_UI_NUMPAD_BEDTIME_TIME) {
+                snprintf(model->numpad_error, sizeof(model->numpad_error),
+                         "请输入有效时间：小时 0-23，分钟 0-59");
+            } else {
+                snprintf(model->numpad_error, sizeof(model->numpad_error), "请输入完整时长，总计范围为 %u 到 %u 分钟",
+                         (unsigned int)model->numpad_minimum, (unsigned int)model->numpad_maximum);
+            }
             return false;
         }
         if (model->numpad_purpose == PTC_UI_NUMPAD_GRANT_MINUTES &&
@@ -2325,6 +2382,109 @@ PtcUiRect ptc_ui_bedtime_field_rect(int section, int index)
     return (PtcUiRect){0, 0, 0, 0};
 }
 
+void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
+{
+    PtcUiRect current;
+    int field_count;
+    int current_x;
+    int current_y;
+    int best_index = -1;
+    int best_score = INT_MAX;
+
+    if (!model || (horizontal == 0 && vertical == 0)) return;
+    if (model->bedtime_section < PTC_UI_BEDTIME_WEEKLY ||
+        model->bedtime_section > PTC_UI_BEDTIME_SCHEDULED) {
+        model->bedtime_section = PTC_UI_BEDTIME_WEEKLY;
+    }
+    field_count = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 11 :
+        (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
+
+    if (model->bedtime_section_focused) {
+        if (horizontal != 0) {
+            int next = (int)model->bedtime_section + (horizontal > 0 ? 1 : -1);
+            if (next >= PTC_UI_BEDTIME_WEEKLY && next <= PTC_UI_BEDTIME_SCHEDULED) {
+                model->bedtime_section = (PtcUiBedtimeSection)next;
+                model->selected_index = 0;
+            }
+        } else if (vertical > 0) {
+            PtcUiRect tab = ptc_ui_bedtime_section_rect(model->bedtime_section);
+            int tab_x = tab.x + tab.w / 2;
+            for (int index = 0; index < field_count; ++index) {
+                PtcUiRect field = ptc_ui_bedtime_field_rect(model->bedtime_section, index);
+                int dx = abs(field.x + field.w / 2 - tab_x);
+                int dy = field.y - (tab.y + tab.h);
+                if (dy < 0) continue;
+                if (dy * 4 + dx < best_score) {
+                    best_score = dy * 4 + dx;
+                    best_index = index;
+                }
+            }
+            if (best_index >= 0) {
+                model->bedtime_section_focused = false;
+                model->selected_index = best_index;
+            }
+        }
+        return;
+    }
+
+    if (model->selected_index < 0 || model->selected_index >= field_count) model->selected_index = 0;
+    current = ptc_ui_bedtime_field_rect(model->bedtime_section, model->selected_index);
+    current_x = current.x + current.w / 2;
+    current_y = current.y + current.h / 2;
+
+    if (horizontal != 0) {
+        for (int index = 0; index < field_count; ++index) {
+            PtcUiRect candidate;
+            int candidate_x;
+            int overlap;
+            int distance;
+            if (index == model->selected_index) continue;
+            candidate = ptc_ui_bedtime_field_rect(model->bedtime_section, index);
+            candidate_x = candidate.x + candidate.w / 2;
+            if ((horizontal < 0 && candidate_x >= current_x) ||
+                (horizontal > 0 && candidate_x <= current_x)) continue;
+            overlap = (current.y + current.h < candidate.y + candidate.h
+                ? current.y + current.h : candidate.y + candidate.h) -
+                (current.y > candidate.y ? current.y : candidate.y);
+            if (overlap <= 0) continue;
+            distance = abs(candidate_x - current_x);
+            if (distance < best_score) {
+                best_score = distance;
+                best_index = index;
+            }
+        }
+    } else {
+        for (int index = 0; index < field_count; ++index) {
+            PtcUiRect candidate;
+            int candidate_x;
+            int candidate_y;
+            int dy;
+            int score;
+            if (index == model->selected_index) continue;
+            candidate = ptc_ui_bedtime_field_rect(model->bedtime_section, index);
+            candidate_x = candidate.x + candidate.w / 2;
+            candidate_y = candidate.y + candidate.h / 2;
+            if ((vertical < 0 && candidate_y >= current_y) ||
+                (vertical > 0 && candidate_y <= current_y)) continue;
+            dy = abs(candidate_y - current_y);
+            score = dy * 4 + abs(candidate_x - current_x);
+            if (score < best_score) {
+                best_score = score;
+                best_index = index;
+            }
+        }
+        if (vertical < 0) {
+            PtcUiRect tab = ptc_ui_bedtime_section_rect(model->bedtime_section);
+            int tab_y = tab.y + tab.h / 2;
+            int score = (current_y - tab_y) * 4 + abs(current_x - (tab.x + tab.w / 2));
+            if (tab_y < current_y && score < best_score) best_index = -2;
+        }
+    }
+
+    if (best_index >= 0) model->selected_index = best_index;
+    else if (best_index == -2) model->bedtime_section_focused = true;
+}
+
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
     return parent ? (PtcUiRect){288, 448, 224, 48} : (PtcUiRect){736, 424, 464, 48};
@@ -2708,6 +2868,20 @@ PtcUiRect ptc_ui_numpad_display_rect(void)
     return rect;
 }
 
+PtcUiRect ptc_ui_code_slot_rect(int index)
+{
+    PtcUiRect display = ptc_ui_numpad_display_rect();
+    const int slot_width = 48;
+    const int gap = 6;
+    const int group_gap = 18;
+    const int total_width = slot_width * 8 + gap * 6 + group_gap;
+    int x;
+    if (index < 0 || index >= 8) return (PtcUiRect){0, 0, 0, 0};
+    x = display.x + (display.w - total_width) / 2 + index * (slot_width + gap);
+    if (index >= 4) x += group_gap - gap;
+    return (PtcUiRect){x, display.y + 9, slot_width, display.h - 18};
+}
+
 PtcUiRect ptc_ui_numpad_key_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_NUMPAD);
@@ -2912,8 +3086,8 @@ PtcUiRect ptc_ui_minute_editor_key_rect(int index)
 PtcUiRect ptc_ui_minute_editor_quick_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
-    PtcUiRect rect = {dialog.x + 34 + index * 108, dialog.y + 154, 100, 48};
-    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    PtcUiRect rect = {dialog.x + 34 + index * 226, dialog.y + 154, 208, 48};
+    if (index < 0 || index >= 2) return (PtcUiRect){0, 0, 0, 0};
     return rect;
 }
 
@@ -3266,7 +3440,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
                 return make_hit(PTC_UI_HIT_DURATION_FIELD, i);
             }
         }
-        for (i = 0; i < 4; ++i) {
+        for (i = 0; i < 2; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_minute_editor_quick_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_NUMPAD_QUICK, i);
             }

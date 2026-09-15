@@ -164,7 +164,8 @@ typedef enum {
     PTC_UI_NUMPAD_HOLIDAY_MINUTES = 4,
     PTC_UI_NUMPAD_MAKEUP_MINUTES = 5,
     PTC_UI_NUMPAD_SCHEDULED_MINUTES = 6,
-    PTC_UI_NUMPAD_GRANT_MINUTES = 7
+    PTC_UI_NUMPAD_GRANT_MINUTES = 7,
+    PTC_UI_NUMPAD_BEDTIME_TIME = 8
 } PtcUiNumpadPurpose;
 
 typedef enum {
@@ -194,6 +195,17 @@ typedef enum {
     PTC_UI_DURATION_HOURS = 0,
     PTC_UI_DURATION_MINUTES = 1
 } PtcUiDurationField;
+
+typedef enum {
+    PTC_UI_BEDTIME_TIME_START = 0,
+    PTC_UI_BEDTIME_TIME_END = 1
+} PtcUiBedtimeTimeTarget;
+
+typedef struct {
+    int direction;
+    int64_t started_ms;
+    int64_t next_step_ms;
+} PtcUiValueRepeatState;
 
 typedef enum {
     PTC_UI_OPERATION_NONE = 0,
@@ -377,8 +389,10 @@ typedef struct {
     int holiday_calendar_page;
     int holiday_last_rule;
     bool bedtime_dirty;
+    bool bedtime_section_focused;
     int bedtime_editor_day;
     int bedtime_special_kind;
+    PtcUiBedtimeTimeTarget bedtime_editor_time_target;
     int bedtime_bulk_target;
     uint64_t pending_bedtime_skip_instance_id;
     uint16_t pending_bedtime_skip_start_day_index;
@@ -640,6 +654,11 @@ bool ptc_ui_duration_value(const PtcUiModel *model, uint16_t *out_value);
 void ptc_ui_duration_select_field(PtcUiModel *model, PtcUiDurationField field);
 void ptc_ui_duration_toggle_field(PtcUiModel *model);
 bool ptc_ui_duration_step_field(PtcUiModel *model, int step);
+int ptc_ui_value_repeat_update(
+    PtcUiValueRepeatState *state,
+    int direction,
+    bool hour_field,
+    int64_t now_ms);
 void ptc_ui_pin_open(PtcUiModel *model, const char *title, const char *guide);
 bool ptc_ui_pin_append(PtcUiModel *model, int digit);
 bool ptc_ui_pin_backspace(PtcUiModel *model);
@@ -811,6 +830,8 @@ PtcUiRect ptc_ui_pin_keyboard_rect(void);
 PtcUiRect ptc_ui_minute_editor_key_rect(int index);
 PtcUiRect ptc_ui_minute_editor_quick_rect(int index);
 PtcUiRect ptc_ui_minute_editor_field_rect(PtcUiDurationField field);
+PtcUiRect ptc_ui_code_slot_rect(int index);
+void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical);
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay);
