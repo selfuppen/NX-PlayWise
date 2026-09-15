@@ -162,8 +162,33 @@ typedef enum {
     PTC_UI_NUMPAD_MINUTES = 2,
     PTC_UI_NUMPAD_WEEKLY_MINUTES = 3,
     PTC_UI_NUMPAD_HOLIDAY_MINUTES = 4,
-    PTC_UI_NUMPAD_MAKEUP_MINUTES = 5
+    PTC_UI_NUMPAD_MAKEUP_MINUTES = 5,
+    PTC_UI_NUMPAD_SCHEDULED_MINUTES = 6,
+    PTC_UI_NUMPAD_GRANT_MINUTES = 7
 } PtcUiNumpadPurpose;
+
+typedef enum {
+    PTC_UI_TIME_UNKNOWN = 0,
+    PTC_UI_TIME_NORMAL,
+    PTC_UI_TIME_REMINDER,
+    PTC_UI_TIME_DANGER,
+    PTC_UI_TIME_EXHAUSTED,
+    PTC_UI_TIME_UNLIMITED,
+    PTC_UI_TIME_WAITING,
+    PTC_UI_TIME_DISABLED,
+    PTC_UI_TIME_PROTECTION,
+    PTC_UI_TIME_RECOVERY,
+    PTC_UI_TIME_TEMPORARY_UNLOCK
+} PtcUiTimeState;
+
+typedef struct {
+    char clock_text[6];
+    char remaining_text[48];
+    char freshness_text[48];
+    bool progress_available;
+    uint16_t progress_per_mille;
+    PtcUiTimeState state;
+} PtcUiTimeProjection;
 
 typedef enum {
     PTC_UI_DURATION_HOURS = 0,
@@ -384,6 +409,7 @@ typedef struct {
     bool duration_minutes_replace_on_input;
     int8_t duration_scroll_dir;
     uint8_t duration_scroll_anim_ticks;
+    uint8_t duration_step_feedback;
     char numpad_title[64];
     char numpad_guide[128];
     char numpad_error[96];
@@ -540,6 +566,7 @@ typedef enum {
     PTC_UI_HIT_QUICK_ADD_OPTION,
     PTC_UI_HIT_BEDTIME_SECTION,
     PTC_UI_HIT_BEDTIME_FIELD,
+    PTC_UI_HIT_BEDTIME_OVERLAY_FIELD,
     PTC_UI_HIT_HOME_DETAILS
 } PtcUiHitKind;
 
@@ -605,6 +632,10 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
 uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback);
 bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out);
+bool ptc_ui_parse_date_yyyymmdd(const char *text, uint16_t today_day_index, uint16_t *out_day_index);
+bool ptc_ui_parse_time_hhmm(const char *text, uint16_t *out_minute_of_day);
+bool ptc_ui_parse_span_days(const char *text, uint16_t *out_days);
+bool ptc_ui_grant_minutes_legal(uint16_t minutes, uint16_t maximum);
 bool ptc_ui_duration_value(const PtcUiModel *model, uint16_t *out_value);
 void ptc_ui_duration_select_field(PtcUiModel *model, PtcUiDurationField field);
 void ptc_ui_duration_toggle_field(PtcUiModel *model);
@@ -638,6 +669,10 @@ int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
 bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now);
+void ptc_ui_project_time_status(
+    const PtcUiModel *model,
+    int64_t now,
+    PtcUiTimeProjection *out);
 void ptc_ui_format_status_age(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
 void ptc_ui_match_redemption_result(PtcUiModel *model);
 const char *ptc_ui_code_failure_guidance(int error_code);
@@ -719,6 +754,7 @@ PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_refresh_rect(void);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
+PtcUiRect ptc_ui_plan_card_rect(int index);
 PtcUiRect ptc_ui_today_card_rect(int index);
 PtcUiRect ptc_ui_home_summary_rect(bool parent);
 PtcUiRect ptc_ui_home_details_rect(bool parent);

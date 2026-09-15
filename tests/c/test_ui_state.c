@@ -99,7 +99,7 @@ static void test_parent_status_summary(void)
     memset(&model, 0, sizeof(model));
     model.today_override_present = true;
     ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
-    check_true(strstr(summary, "今日临时设置覆盖") != NULL,
+    check_true(strstr(summary, "今日额度调整覆盖") != NULL,
                "holiday priority summary identifies the highest-priority override");
     model.today_override_present = false;
     model.holiday_enabled = false;
@@ -290,7 +290,7 @@ static void test_rule_result_guidance(void)
     restored = ptc_ui_rule_after_today_restore(&model);
     check_int(restored.source, PTC_RULE_SOURCE_WEEKLY, "ordinary restore falls back to weekly plan");
     ptc_ui_format_restore_today_basis(&model, detail, sizeof(detail));
-    check_true(strstr(detail, "当前临时设置") != NULL && strstr(detail, "额度 45") != NULL &&
+    check_true(strstr(detail, "今日额度调整当前值") != NULL && strstr(detail, "额度 45") != NULL &&
                strstr(detail, "周计划") != NULL && strstr(detail, "额度 60") != NULL,
                "restore confirmation exposes current and restored calculation basis");
 
@@ -315,9 +315,9 @@ static void test_rule_result_guidance(void)
     model.today_override_rule.minutes = 45;
     snprintf(model.rule_source, sizeof(model.rule_source), "today_override");
     ptc_ui_format_holiday_save_result(&model, message, sizeof(message), detail, sizeof(detail));
-    check_true(strstr(message, "当前不变") != NULL && strstr(detail, "临时设置优先") != NULL &&
-               strstr(detail, "额度") == NULL && strstr(detail, "分钟") == NULL,
-               "holiday override result omits unchanged calculation detail");
+    check_true(strstr(message, "当前不变") != NULL && strstr(detail, "今日额度调整优先") != NULL &&
+                strstr(detail, "120") == NULL && strstr(detail, "分钟") == NULL,
+                "holiday override result omits unchanged calculation detail");
 }
 
 static void test_numeric_input(void)
@@ -407,15 +407,17 @@ static void test_numeric_input(void)
     ptc_ui_duration_step_field(&model, 58);
     check_true(strcmp(model.duration_minutes_text, "59") == 0, "step minute to 59");
     ptc_ui_duration_step_field(&model, 1);
-    check_true(strcmp(model.duration_minutes_text, "59") == 0, "step minute clamped at 59");
+    check_true(strcmp(model.duration_hours_text, "2") == 0 &&
+               strcmp(model.duration_minutes_text, "0") == 0,
+               "minute step carries into the next hour");
     ptc_ui_duration_select_field(&model, PTC_UI_DURATION_HOURS);
     ptc_ui_duration_step_field(&model, 1);
-    check_true(strcmp(model.duration_hours_text, "2") == 0 && model.numpad_current == 179,
-               "step hour +1 updates hours to 2");
+    check_true(strcmp(model.duration_hours_text, "3") == 0 && model.numpad_current == 180,
+               "step hour +1 updates total by one hour");
     ptc_ui_duration_step_field(&model, -3);
-    check_true(strcmp(model.duration_hours_text, "0") == 0 &&
-               strcmp(model.duration_minutes_text, "59") == 0,
-               "step hour -3 clamped at 0 hour");
+    check_true(strcmp(model.duration_hours_text, "2") == 0 &&
+               strcmp(model.duration_minutes_text, "0") == 0,
+               "hour field never magnifies a repeated step into multiple hours");
 
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_HOLIDAY_MINUTES, PTC_UI_OVERLAY_NONE,
         "设置法定休假日额度", "输入 1 到 1440 分钟", 4, 1, 1440, 120);
@@ -428,6 +430,26 @@ static void test_numeric_input(void)
         "设置调休工作日额度", "输入 1 到 1440 分钟", 4, 1, 1440, 60);
     check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR,
               "makeup workday quota uses the compact minute editor");
+
+    ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_SCHEDULED_MINUTES, PTC_UI_OVERLAY_SCHEDULED,
+        "设置临时额度计划", "输入 1 到 1440 分钟", 4, 1, 1440, 90);
+    check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR,
+              "scheduled quota uses the compact minute editor");
+    ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_GRANT_MINUTES, PTC_UI_OVERLAY_GRANT_LOCAL,
+        "设置代码时长", "合法面额", 4, 1, 240, 120);
+    snprintf(model.duration_hours_text, sizeof(model.duration_hours_text), "2");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "1");
+    check_true(!ptc_ui_numpad_validate(&model, &value), "grant editor rejects an illegal direct denomination");
+    snprintf(model.duration_hours_text, sizeof(model.duration_hours_text), "2");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "30");
+    check_true(ptc_ui_numpad_validate(&model, &value) && value == 150,
+               "grant editor accepts a protocol denomination");
+    snprintf(model.duration_hours_text, sizeof(model.duration_hours_text), "2");
+    snprintf(model.duration_minutes_text, sizeof(model.duration_minutes_text), "0");
+    model.numpad_current = 120;
+    ptc_ui_duration_select_field(&model, PTC_UI_DURATION_MINUTES);
+    ptc_ui_duration_step_field(&model, 1);
+    check_int(model.numpad_current, 150, "grant step advances to the next legal denomination");
 
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
         "输入加时码", "8 位数字", 8, 0, 0, 0);
@@ -1111,8 +1133,9 @@ static void test_release_hit_targets(void)
               PTC_UI_HIT_GRANT_MANAGER_CARD, PTC_UI_GRANT_MANAGER_RESET_URL,
               "grant manager exposes default URL restore");
     model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
-    check_hit(hit_center(&model, ptc_ui_grant_adjust_rect(3)), PTC_UI_HIT_GRANT_ADJUST, 3,
-              "local generator exposes the plus-fifteen shortcut");
+    check_hit(hit_center(&model, ptc_ui_grant_adjust_rect(0)), PTC_UI_HIT_GRANT_ADJUST, 0,
+              "local generator exposes the shared duration field");
+    check_int(ptc_ui_grant_adjust_rect(1).w, 0, "local generator removes legacy adjustment shortcuts");
     check_hit(hit_center(&model, ptc_ui_grant_generate_rect()), PTC_UI_HIT_GRANT_GENERATE, 0,
               "local generator has a dedicated generate action");
     model.overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
@@ -1709,12 +1732,13 @@ static void test_grant_flow_polish(void)
     model.grant_minutes = 60;
     snprintf(model.grant_code, sizeof(model.grant_code), "12345678");
     ptc_ui_move_overlay_selection(&model, 0, -1);
-    for (int i = 0; i < 6; ++i) {
-        check_int(model.overlay_selection, i, "each adjustment reachable by controller");
-        check_hit(hit_center(&model, ptc_ui_grant_adjust_rect(i)), PTC_UI_HIT_GRANT_ADJUST, i,
-            "each adjustment reachable by touch");
-        ptc_ui_move_overlay_selection(&model, 1, 0);
-    }
+    check_int(model.overlay_selection, PTC_UI_GRANT_LOCAL_ADJUST_FIRST,
+        "shared duration field is reachable by controller");
+    check_hit(hit_center(&model, ptc_ui_grant_adjust_rect(0)), PTC_UI_HIT_GRANT_ADJUST, 0,
+        "shared duration field is reachable by touch");
+    for (int i = 1; i <= PTC_UI_GRANT_LOCAL_ADJUST_LAST; ++i)
+        check_true(ptc_ui_grant_adjust_rect(i).w == 0 && ptc_ui_grant_adjust_rect(i).h == 0,
+            "legacy adjustment touch targets are removed");
     ptc_ui_move_overlay_selection(&model, 0, 1);
     check_int(model.overlay_selection, PTC_UI_GRANT_LOCAL_GENERATE, "down reaches generate");
     PtcUiRect back = ptc_ui_cancel_rect(model.overlay);
@@ -1783,7 +1807,7 @@ static void test_plan_polish(void)
     check_int(ptc_ui_plan_rule(&model, PTC_UI_PLAN_WEEKLY).source, PTC_RULE_SOURCE_SCHEDULED_OVERRIDE,
               "scheduled plan overrides weekly preview");
     ptc_ui_format_plan_impact(&model, PTC_UI_PLAN_WEEKLY, 1000, text, sizeof(text));
-    check_true(strstr(text, "今天不变") && strstr(text, "日期计划"), "covered weekly edit does not promise a change today");
+    check_true(strstr(text, "今天不变") && strstr(text, "临时额度计划"), "covered weekly edit does not promise a change today");
     model.holiday_enabled = model.draft_holiday_enabled = true;
     model.holiday_rule = rules.holiday_rule;
     model.makeup_workday_rule = rules.makeup_workday_rule;
@@ -1792,9 +1816,9 @@ static void test_plan_polish(void)
               "scheduled plan also overrides holiday draft");
     snprintf(model.rule_source, sizeof(model.rule_source), "scheduled_override");
     ptc_ui_format_weekly_save_result(&model, text, sizeof(text), detail, sizeof(detail));
-    check_true(strstr(text, "当前不变") && strstr(text, "日期计划"), "weekly success preserves scheduled explanation");
+    check_true(strstr(text, "当前不变") && strstr(text, "临时额度计划"), "weekly success preserves scheduled explanation");
     ptc_ui_format_holiday_save_result(&model, text, sizeof(text), detail, sizeof(detail));
-    check_true(strstr(text, "当前不变") && strstr(text, "日期计划"), "holiday success preserves scheduled explanation");
+    check_true(strstr(text, "当前不变") && strstr(text, "临时额度计划"), "holiday success preserves scheduled explanation");
     model.today_override_present = true;
     model.today_override_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 30};
     check_int(ptc_ui_plan_rule(&model, PTC_UI_PLAN_SCHEDULED).source, PTC_RULE_SOURCE_TODAY_OVERRIDE,
@@ -1936,8 +1960,118 @@ static void test_time_menu_modal_touch_guards(void)
         PTC_UI_HIT_OVERLAY_DISCARD, 0, "bedtime leave discard is touchable");
 }
 
+static void test_global_time_projection_and_direct_inputs(void)
+{
+    PtcUiModel model = {0};
+    PtcUiTimeProjection status;
+    uint16_t today;
+    uint16_t value;
+    model.status_loaded = true;
+    model.status_updated_at = 1000;
+    model.remaining_available = true;
+    model.remaining_minutes = 50;
+    model.day_index = 2380;
+    model.forecast_available = true;
+    model.forecast[0] = (PtcResultForecastDay){2380, PTC_RULE_MODE_LIMIT, 100, "weekly", true};
+    snprintf(model.result_status, sizeof(model.result_status), "ok");
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_true(strlen(status.clock_text) == 5 && status.clock_text[2] == ':',
+               "global status formats the current clock as HH:mm");
+    check_true(status.progress_available && status.progress_per_mille == 500 &&
+               status.state == PTC_UI_TIME_NORMAL,
+               "global status uses forecast total for the remaining ratio");
+    model.remaining_minutes = 200;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_int(status.progress_per_mille, 1000, "global status clamps ratio above total");
+    model.remaining_minutes = 0;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_int(status.state, PTC_UI_TIME_EXHAUSTED, "zero remaining is exhausted");
+    model.remaining_minutes = 9;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_int(status.state, PTC_UI_TIME_DANGER, "under ten minutes is dangerous");
+    model.remaining_minutes = 29;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_int(status.state, PTC_UI_TIME_REMINDER, "under thirty minutes is a reminder");
+    model.unrestricted_today = 1;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_true(status.state == PTC_UI_TIME_UNLIMITED && status.progress_per_mille == 1000,
+               "unlimited time is a full authoritative bar");
+    model.unrestricted_today = 0;
+    model.remaining_minutes = 1440;
+    model.forecast[0].minutes = 1440;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_int(status.progress_per_mille, 1000, "1440 minute day renders full");
+    model.forecast_available = false;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_true(!status.progress_available && strstr(status.remaining_text, "状态待确认"),
+               "missing total never becomes a fake zero");
+    model.forecast_available = true;
+    model.forecast[0].minutes = 0;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_true(!status.progress_available && status.progress_per_mille == 0 &&
+               strstr(status.remaining_text, "状态待确认"),
+               "zero forecast total is treated as unknown rather than exhausted");
+    model.forecast[0].minutes = 1440;
+    ptc_ui_project_time_status(&model, 1121, &status);
+    check_true(!status.progress_available && strstr(status.freshness_text, "状态待确认"),
+               "stale state clears the effective progress");
+    model.waiting = true;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_int(status.state, PTC_UI_TIME_WAITING, "pending refresh projects a waiting state");
+    model.waiting = false;
+    model.temporary_unlocked_available = model.temporary_unlocked = true;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_int(status.state, PTC_UI_TIME_TEMPORARY_UNLOCK, "temporary unlock is visible globally");
+    model.disable_flag_present = true;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_int(status.state, PTC_UI_TIME_DISABLED, "emergency disable outranks temporary unlock");
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "protection");
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_int(status.state, PTC_UI_TIME_PROTECTION, "protection outranks disable");
+    model.recovery_active = true;
+    ptc_ui_project_time_status(&model, 1000, &status);
+    check_int(status.state, PTC_UI_TIME_RECOVERY, "recovery is the highest operational status");
+
+    check_true(ptc_day_index_from_date(2026, 7, 8, &today), "direct-input test date converts");
+    check_true(ptc_ui_parse_date_yyyymmdd("20260708", today, &value) && value == today,
+               "date input accepts today");
+    check_true(ptc_ui_parse_date_yyyymmdd("20280229", today, &value), "date input accepts a leap day");
+    check_true(!ptc_ui_parse_date_yyyymmdd("20270229", today, &value), "date input rejects invalid leap day");
+    check_true(!ptc_ui_parse_date_yyyymmdd("20250708", today, &value), "date input rejects past dates");
+    check_true(!ptc_ui_parse_date_yyyymmdd("2026-07-08", today, &value), "date input requires eight digits");
+    check_true(ptc_ui_parse_span_days("1", &value) && value == 1, "span accepts one day");
+    check_true(ptc_ui_parse_span_days("366", &value) && value == 366, "span accepts 366 days");
+    check_true(!ptc_ui_parse_span_days("0", &value) && !ptc_ui_parse_span_days("367", &value),
+               "span rejects values outside 1 to 366");
+    check_true(ptc_ui_parse_time_hhmm("0000", &value) && value == 0, "HHMM accepts midnight");
+    check_true(ptc_ui_parse_time_hhmm("2359", &value) && value == 1439, "HHMM accepts 23:59");
+    check_true(!ptc_ui_parse_time_hhmm("2400", &value) && !ptc_ui_parse_time_hhmm("1260", &value),
+               "HHMM rejects invalid hours and minutes");
+
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+    model.selected_index = 1;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 4, "plan right navigation chooses the nearest parallel card");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 1, "plan left navigation returns to the nearest quota card");
+    model.selected_index = 2;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused, "plan group end moves down into the footer");
+    for (int index = 0; index < 5; ++index)
+        check_hit(hit_center(&model, ptc_ui_plan_card_rect(index)), PTC_UI_HIT_PARENT_CARD, index,
+                  "grouped plan card remains touchable");
+
+    model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
+    check_hit(ptc_ui_hit_test(&model, 330, 260), PTC_UI_HIT_BEDTIME_OVERLAY_FIELD, 0,
+              "bedtime overlay rows are touchable for direct input");
+}
+
 int main(void)
 {
+    test_global_time_projection_and_direct_inputs();
     test_time_menu_modal_touch_guards();
     test_visual_action_boundaries();
     test_plan_polish();

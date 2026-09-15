@@ -184,7 +184,7 @@ const char *ptc_companion_request_command_label_zh(const char *type)
     if (strcmp(type, "preview_offline_code") == 0) return "预览今日加时";
     if (strcmp(type, "offline_code") == 0) return "提交今日加时";
     if (strcmp(type, "clear_redemption_history") == 0) return "清空加时码使用记录";
-    if (strcmp(type, "set_scheduled_override") == 0) return "设置临时日期计划";
+    if (strcmp(type, "set_scheduled_override") == 0) return "设置临时额度计划";
     if (strcmp(type, "set_autonomy_policy") == 0) return "设置今日自主缓冲";
     if (strcmp(type, "claim_daily_buffer") == 0) return "领取今日自主缓冲";
     if (strcmp(type, "clear_activity_history") == 0) return "清空家庭活动记录";

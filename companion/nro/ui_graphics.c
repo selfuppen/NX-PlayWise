@@ -200,10 +200,10 @@ static const UiAction TODAY_ACTIONS[] = {
 };
 
 static const UiAction PLAN_ACTIONS[] = {
-    {"每周计划", "设置周一到周日的基础额度", UI_ACCENT},
-    {"就寝时间", "七天窗口、节假日和日期覆盖", UI_WARNING},
-    {"临时日期计划", "考试周、假期或旅行，最多 366 天", UI_ACCENT},
+    {"临时额度计划", "指定日期范围的每天额度，最多 366 天", UI_ACCENT},
     {"国家节假日", "法定休假和调休工作日额度", UI_SUCCESS},
+    {"每周计划", "设置周一到周日的基础额度", UI_ACCENT},
+    {"就寝时间", "独立设置每周、节假日和指定日期就寝", UI_WARNING},
     {"自主缓冲", "孩子每天可自主领取的小额时间", UI_SUCCESS},
 };
 
@@ -1199,6 +1199,55 @@ static void draw_header(uint32_t *pixels, uint32_t stride, const char *title, co
     draw_text(pixels, stride, 124, 77, subtitle, 18, UI_MUTED);
 }
 
+static uint32_t time_projection_color(PtcUiTimeState state)
+{
+    switch (state) {
+    case PTC_UI_TIME_NORMAL: return UI_SUCCESS;
+    case PTC_UI_TIME_REMINDER: return UI_WARNING;
+    case PTC_UI_TIME_DANGER:
+    case PTC_UI_TIME_EXHAUSTED:
+    case PTC_UI_TIME_DISABLED:
+    case PTC_UI_TIME_PROTECTION: return UI_DANGER;
+    case PTC_UI_TIME_UNLIMITED: return UI_ACCENT;
+    case PTC_UI_TIME_RECOVERY:
+    case PTC_UI_TIME_TEMPORARY_UNLOCK:
+    case PTC_UI_TIME_WAITING: return UI_WARNING;
+    default: return UI_MUTED;
+    }
+}
+
+static void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    PtcUiTimeProjection status;
+    UiRect box = {760, 24, 466, 66};
+    UiRect track = {862, 67, 310, 7};
+    char clock[24];
+    char fitted[64];
+    uint32_t color;
+    ptc_ui_project_time_status(model, (int64_t)time(NULL), &status);
+    color = time_projection_color(status.state);
+    fill_round_rect(pixels, stride, box, 14, UI_SURFACE);
+    draw_rect_outline(pixels, stride, box, 14, 1, UI_BORDER);
+    snprintf(clock, sizeof(clock), "当前 %s", status.clock_text);
+    draw_text(pixels, stride, box.x + 16, box.y + 25, clock, 16, UI_INK);
+    fit_text(fitted, sizeof(fitted), status.remaining_text, 16, 190);
+    draw_text(pixels, stride, box.x + 104, box.y + 25, fitted, 16, color);
+    fit_text(fitted, sizeof(fitted), status.freshness_text, 13, 118);
+    draw_text(pixels, stride, box.x + 336, box.y + 25, fitted, 13, color);
+    fill_round_rect(pixels, stride, track, 3, UI_RAISED);
+    if (status.progress_available && status.progress_per_mille > 0) {
+        int width = track.width * status.progress_per_mille / 1000;
+        if (width < 4) width = 4;
+        if (width > track.width) width = track.width;
+        fill_round_rect(pixels, stride, (UiRect){track.x, track.y, width, track.height}, 3, color);
+    }
+    if (model->demo_secret_enabled) {
+        UiRect badge = {1178, 61, 40, 18};
+        fill_round_rect(pixels, stride, badge, 5, UI_DANGER_SOFT);
+        draw_text_center(pixels, stride, badge, "演示", 11, UI_DANGER);
+    }
+}
+
 static void draw_single_key_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int size, const char *key_str, bool disabled)
 {
     int d = size;
@@ -1359,18 +1408,18 @@ static bool parent_status_is_exception(const PtcUiModel *model)
 static void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect box = to_uirect(ptc_ui_parent_footer_rect(4));
-    char summary[160];
-    char fitted[160];
+    PtcUiTimeProjection status;
+    char summary[96];
     uint32_t color = parent_status_is_exception(model) ? UI_DANGER : UI_ACCENT;
-    ptc_ui_format_parent_status_summary(model, (int64_t)time(NULL), summary, sizeof(summary));
+    ptc_ui_project_time_status(model, (int64_t)time(NULL), &status);
+    snprintf(summary, sizeof(summary), "状态与操作  |  %s", status.freshness_text);
     fill_round_rect(pixels, stride, box, 12, UI_RGB(UI_BLENDED(surface)));
     if (model->parent_footer_focused && model->parent_footer_selection == 1) {
         fill_round_rect(pixels, stride, box, 12, UI_RGB(UI_BLENDED(focus)));
         fill_round_rect(pixels, stride, (UiRect){box.x + 3, box.y + 3, box.width - 6, box.height - 6},
             9, UI_RGB(UI_BLENDED(surface_raised)));
     }
-    fit_text(fitted, sizeof(fitted), summary, 18, box.width - 32);
-    draw_text_center(pixels, stride, box, fitted, 18, color);
+    draw_text_center(pixels, stride, box, summary, 17, color);
 }
 
 static UiRect to_uirect(PtcUiRect rect)
@@ -1515,16 +1564,6 @@ static void format_event_time(int64_t timestamp, bool full, char *out, size_t ou
     } else {
         snprintf(out, out_size, "时间未知");
     }
-}
-
-static void draw_disable_banner(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
-{
-    UiRect banner = {790, 42, 436, 38};
-    if (!model->disable_flag_present) return;
-    fill_round_rect(pixels, stride, banner, 6, UI_DANGER_SOFT);
-    draw_rect_outline(pixels, stride, banner, 6, 1, UI_DANGER);
-    draw_status_symbol(pixels, stride, banner.x + 8, banner.y + 5, UI_DANGER, 3);
-    draw_text_center(pixels, stride, banner, "紧急停用已开启  |  新的时间控制不会应用", 18, UI_DANGER);
 }
 
 static void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, int y, int height)
@@ -1769,7 +1808,7 @@ static void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *mode
     char buffer[128], hint[160], fitted_hint[160];
     bool disabled = model->disable_flag_present || model->waiting;
     draw_header(pixels, stride, "今天的约定", "合理安排时间，完成今天的约定");
-    draw_disable_banner(pixels, stride, model);
+    draw_time_status_bar(pixels, stride, model);
     draw_home_summary(pixels, stride, model, false);
     draw_card_shadow(pixels, stride, (UiRect){704, 120, 528, 384}, 16);
     fill_round_rect(pixels, stride, (UiRect){704, 120, 528, 384}, 16, UI_RGB(UI_BLENDED(surface)));
@@ -2433,8 +2472,8 @@ static uint32_t status_age_color(const PtcUiModel *model)
 static const char *rule_source_label(const char *source)
 {
     if (!source || !source[0]) return "尚未刷新";
-    if (strcmp(source, "today_override") == 0) return "今日临时设置";
-    if (strcmp(source, "scheduled_override") == 0) return "日期计划";
+    if (strcmp(source, "today_override") == 0) return "今日额度调整";
+    if (strcmp(source, "scheduled_override") == 0) return "临时额度计划";
     if (strcmp(source, "statutory_holiday") == 0) return "国家法定休假日";
     if (strcmp(source, "makeup_workday") == 0) return "国家调休工作日";
     return "周计划";
@@ -2689,7 +2728,7 @@ static void draw_bedtime_window_value(char *out, size_t out_size, const PtcBedti
 
 static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    static const char *SECTIONS[] = {"每周", "节假日", "日期覆盖"};
+    static const char *SECTIONS[] = {"每周", "节假日", "指定日期就寝"};
     static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
     const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
     char line[128];
@@ -2703,7 +2742,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         model->bedtime_dirty ? "草稿尚未保存" : "已保存");
     draw_text(pixels, stride, 838, 202, line, 18, model->bedtime_dirty ? UI_WARNING : UI_SUCCESS);
     draw_wrapped_text(pixels, stride, 838, 236,
-        "就寝时间与每日额度并行生效。保存后立即重算；若当前正处新窗口内，NRO 可能随即受限。",
+        "就寝时间与每日额度并行生效。临时额度计划只改可玩额度；指定日期就寝只改开始和结束，两者可同时生效。",
         16, 388, 23, 4, UI_MUTED);
     draw_text(pixels, stride, 838, 350, "操作", 19, UI_INK);
     draw_text(pixels, stride, 838, 382, "L / R 切换区段", 15, UI_MUTED);
@@ -2779,7 +2818,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         const PtcBedtimeScheduledOverride *scheduled = &draft->scheduled_override;
         uint32_t duration = scheduled->end_day_index >= scheduled->start_day_index
             ? (uint32_t)scheduled->end_day_index - scheduled->start_day_index + 1u : 1u;
-        const char *labels[] = {"日期覆盖", "开始日期", "持续天数", "覆盖规则"};
+        const char *labels[] = {"指定日期就寝", "开始日期", "持续天数", "就寝规则"};
         char values[4][96];
         snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? "开启" : "关闭");
         {
@@ -2801,6 +2840,9 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
             draw_plan_card(pixels, stride, row, model->selected_index == i);
             draw_text(pixels, stride, row.x + 18, row.y + 31, labels[i], 17, UI_MUTED);
             draw_text(pixels, stride, row.x + 240, row.y + 31, values[i], 18, UI_INK);
+            if (i == 1 || i == 2)
+                draw_text(pixels, stride, row.x + 484, row.y + 31,
+                          "左/右调整 | A 输入 | ZL/ZR 大步", 11, UI_MUTED);
         }
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 4), "ZL  放弃",
             UI_PAGE, UI_INK, model->selected_index == 4, !model->bedtime_dirty);
@@ -2840,11 +2882,15 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
     draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
     draw_text(pixels, stride, panel.x + 20, panel.y + 29, "规则优先级与未来 7 天", 19, UI_INK);
     draw_text(pixels, stride, panel.x + 20, panel.y + 55,
-        "今日临时 > 日期 > 节假日 > 每周", 13, UI_ACCENT);
-    draw_text(pixels, stride, panel.x + 20, panel.y + 75,
+        "今日额度调整（在今日调度） > 临时额度计划", 12, UI_ACCENT);
+    draw_text(pixels, stride, panel.x + 20, panel.y + 73,
+        "> 国家节假日 > 每周计划", 12, UI_ACCENT);
+    draw_text(pixels, stride, panel.x + 20, panel.y + 93,
         "就寝时间并行生效，不属于额度覆盖链", 12, UI_WARNING);
+    draw_text(pixels, stride, panel.x + 20, panel.y + 112,
+        "自主缓冲只在限时日追加", 12, UI_MUTED);
     if (!model->forecast_available) {
-        draw_text(pixels, stride, panel.x + 20, panel.y + 112, "刷新状态后显示", 16, UI_MUTED);
+        draw_text(pixels, stride, panel.x + 20, panel.y + 134, "刷新状态后显示", 16, UI_MUTED);
         return;
     }
     for (index = 0; index < (int)PTC_RESULT_FORECAST_DAYS; ++index) {
@@ -2871,7 +2917,7 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
                 index, (unsigned int)day->minutes,
                 short_rule_source(day->rule_source), bedtime_text);
         }
-        draw_text(pixels, stride, panel.x + 20, panel.y + 108 + index * 27,
+        draw_text(pixels, stride, panel.x + 20, panel.y + 140 + index * 23,
             line, 13, index == 0 ? UI_ACCENT : UI_MUTED);
     }
 }
@@ -2894,20 +2940,18 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
     draw_header(pixels, stride, title,
         model->parent_page == PTC_UI_PARENT_SUPPORT ? "兼容状态、诊断与安全恢复" :
         (model->parent_page == PTC_UI_PARENT_PLAN ? "额度规则与并行就寝计划" : "本地规则与设备安全设置"));
-    draw_disable_banner(pixels, stride, model);
-    if (model->demo_secret_enabled) {
-        UiRect warning = model->disable_flag_present ? (UiRect){526, 42, 246, 38} : (UiRect){900, 42, 326, 36};
-        fill_round_rect(pixels, stride, warning, 6, UI_DANGER_SOFT);
-        draw_text_center(pixels, stride, warning,
-                         model->disable_flag_present ? "公共演示密钥已启用" : "公共演示密钥已启用  |  低安全模式",
-                         17, UI_DANGER);
-    }
+    draw_time_status_bar(pixels, stride, model);
     draw_tabs(pixels, stride, model);
     if (!plan_subpage && model->parent_page != PTC_UI_PARENT_TODAY) {
         actions = actions_for_page(model->parent_page, &action_count);
+        if (model->parent_page == PTC_UI_PARENT_PLAN) {
+            draw_text(pixels, stride, 54, 182, "额度规则（高到低）", 16, UI_MUTED);
+            draw_text(pixels, stride, 439, 182, "并行与补充", 16, UI_MUTED);
+        }
         for (index = 0; index < action_count; ++index) {
             UiRect card = to_uirect(model->parent_page == PTC_UI_PARENT_SUPPORT
-                ? ptc_ui_support_card_rect(index) : ptc_ui_parent_card_rect(index));
+                ? ptc_ui_support_card_rect(index) : (model->parent_page == PTC_UI_PARENT_PLAN
+                    ? ptc_ui_plan_card_rect(index) : ptc_ui_parent_card_rect(index)));
             PtcUiActionState astate = PTC_UI_ACTION_AVAILABLE;
             if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
                 if (!ptc_ui_safety_action_visible(model, index)) continue;
@@ -2937,20 +2981,20 @@ static void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *mod
                 /* Use the card's single subtitle row; a second row at the same y overlaps it. */
                 dynamic_action.subtitle = detail;
                 action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 0) {
+                dynamic_action = *action;
+                dynamic_action.subtitle = model->scheduled_override.enabled
+                    ? "当前已启用，只覆盖每天可玩额度" : "当前关闭";
+                action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 1) {
+                dynamic_action = *action;
+                dynamic_action.subtitle = model->holiday_enabled ? "当前已启用" : "当前关闭，可预设规则";
+                action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 3) {
                 dynamic_action = *action;
                 dynamic_action.subtitle = model->bedtime_policy.enabled
                     ? (model->bedtime_active && !model->bedtime_skipped ? "当前限制生效中" : "当前已开启")
                     : "当前关闭";
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 2) {
-                dynamic_action = *action;
-                dynamic_action.subtitle = model->scheduled_override.enabled
-                    ? "当前已启用，额度日期区间独立于就寝覆盖" : "当前关闭";
-                action = &dynamic_action;
-            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 3) {
-                dynamic_action = *action;
-                dynamic_action.subtitle = model->holiday_enabled ? "当前已启用" : "当前关闭，可预设规则";
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 4) {
                 static char autonomy_detail[64];
@@ -3347,64 +3391,65 @@ static void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel
     snprintf(count, sizeof(count), "已输入 %u 位", (unsigned int)strlen(model->pin_text));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 188, 480, 24}, count, 17, UI_MUTED);
 
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 222, "摇杆方向映射", 20, UI_INK);
+    draw_text(pixels, stride, dialog.x + 40, dialog.y + 222, "手柄输入示意（无品牌）", 20, UI_INK);
     {
         int i;
-        int cx = dialog.x + 180;
-        int cy = dialog.y + 338;
-        fill_round_rect(pixels, stride, (UiRect){cx - 48, cy - 48, 96, 96}, 48, UI_RAISED);
-        draw_circle_outline(pixels, stride, cx, cy, 48, 2, UI_ACCENT);
-        draw_circle_outline(pixels, stride, cx, cy, 36, 2, UI_CONTROL);
-        draw_text_center(pixels, stride, (UiRect){cx - 32, cy - 18, 64, 36}, "摇杆", 13, UI_ACCENT);
-        
+        int stick_x = dialog.x + 166;
+        int stick_y = dialog.y + 326;
+        int buttons_x = dialog.x + 414;
+        int buttons_y = dialog.y + 320;
+        /* A controller-like silhouette built from the same deterministic UI primitives. */
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 68, dialog.y + 258, 420, 166}, 72, UI_RAISED);
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 76, dialog.y + 350, 118, 112}, 48, UI_RAISED);
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 362, dialog.y + 350, 118, 112}, 48, UI_RAISED);
+        draw_rect_outline(pixels, stride, (UiRect){dialog.x + 68, dialog.y + 258, 420, 166}, 72, 2, UI_CONTROL);
+
+        draw_circle_outline(pixels, stride, stick_x, stick_y, 31, 3, UI_ACCENT);
+        fill_round_rect(pixels, stride, (UiRect){stick_x - 22, stick_y - 22, 44, 44}, 22, UI_SURFACE);
+        draw_circle_outline(pixels, stride, stick_x, stick_y, 21, 2, UI_CONTROL);
+        draw_circle_outline(pixels, stride, dialog.x + 352, dialog.y + 390, 27, 3, UI_CONTROL);
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 332, dialog.y + 370, 40, 40}, 20, UI_SURFACE);
+
+        /* D-pad. */
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 238, dialog.y + 362, 66, 22}, 6, UI_CONTROL);
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 260, dialog.y + 340, 22, 66}, 6, UI_CONTROL);
+
         for (i = 1; i <= 8; ++i) {
             int dx = 0, dy = 0;
-            UiRect cell;
             char label[4];
             switch (i) {
-            case 1: dx = 0; dy = -78; break;
-            case 2: dx = 62; dy = -62; break;
-            case 3: dx = 78; dy = 0; break;
-            case 4: dx = 62; dy = 62; break;
-            case 5: dx = 0; dy = 78; break;
-            case 6: dx = -62; dy = 62; break;
-            case 7: dx = -78; dy = 0; break;
-            case 8: dx = -62; dy = -62; break;
+            case 1: dy = -58; break;
+            case 2: dx = 47; dy = -47; break;
+            case 3: dx = 58; break;
+            case 4: dx = 47; dy = 47; break;
+            case 5: dy = 58; break;
+            case 6: dx = -47; dy = 47; break;
+            case 7: dx = -58; break;
+            case 8: dx = -47; dy = -47; break;
             }
-            cell = (UiRect){cx + dx - 18, cy + dy - 18, 36, 36};
             snprintf(label, sizeof(label), "%d", i);
-            draw_text_center(pixels, stride, cell, label, 22, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){stick_x + dx - 13, stick_y + dy - 13, 26, 26},
+                             label, 17, UI_ACCENT);
         }
-        
-        int bcx = dialog.x + 410;
-        int bcy = cy;
+
         for (i = 0; i < 4; ++i) {
-            int dx = 0, dy = 0;
-            int d = 48;
-            int digit = -1;
-            const char *button = "";
-            UiRect cell;
-            switch (i) {
-            case 0: dx = 0; dy = -d; digit = 0; button = "X"; break;
-            case 1: dx = d; dy = 0; break;
-            case 2: dx = 0; dy = d; break;
-            case 3: dx = -d; dy = 0; digit = 9; button = "Y"; break;
-            }
-            cell = (UiRect){bcx + dx - 26, bcy + dy - 26, 52, 52};
-            fill_round_rect(pixels, stride, cell, 26, UI_RAISED);
-            draw_circle_outline(pixels, stride, bcx + dx, bcy + dy, 26, 2,
-                                digit >= 0 ? UI_ACCENT : UI_CONTROL);
-            if (digit >= 0) {
-                char digit_label[4];
-                snprintf(digit_label, sizeof(digit_label), "%d", digit);
-                draw_text_center(pixels, stride, (UiRect){cell.x, cell.y + 3, cell.width, 21},
-                                 button, 12, UI_MUTED);
-                draw_text_center(pixels, stride, (UiRect){cell.x, cell.y + 19, cell.width, 28},
-                                 digit_label, 20, UI_ACCENT);
-            }
+            int dx = i == 1 ? 31 : (i == 3 ? -31 : 0);
+            int dy = i == 0 ? -31 : (i == 2 ? 31 : 0);
+            const char *letter = i == 0 ? "X" : (i == 1 ? "A" : (i == 2 ? "B" : "Y"));
+            char label[12];
+            UiRect key = {buttons_x + dx - 18, buttons_y + dy - 18, 36, 36};
+            fill_round_rect(pixels, stride, key, 18, UI_SURFACE);
+            draw_circle_outline(pixels, stride, buttons_x + dx, buttons_y + dy, 18, 2,
+                                (i == 0 || i == 3) ? UI_ACCENT : UI_CONTROL);
+            if (i == 0) snprintf(label, sizeof(label), "X=0");
+            else if (i == 3) snprintf(label, sizeof(label), "Y=9");
+            else snprintf(label, sizeof(label), "%s", letter);
+            draw_text_center(pixels, stride, key, label, i == 0 || i == 3 ? 11 : 14,
+                             (i == 0 || i == 3) ? UI_ACCENT : UI_MUTED);
         }
     }
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 452, "左右摇杆均可输入；十字键支持上、右、下、左", 16, UI_MUTED);
+    draw_text(pixels, stride, dialog.x + 40, dialog.y + 486,
+              "左右摇杆映射相同：方向 1-8；X=0，Y=9；十字键也可输入四个正方向", 14, UI_MUTED);
 
     draw_text(pixels, stride, dialog.x + 590, dialog.y + 212, "触摸数字键盘", 20, UI_INK);
     for (row = 0; row < 10; ++row) {
@@ -3598,6 +3643,8 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
     bool weekly = model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES;
     bool holiday = model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
                    model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES;
+    bool scheduled = model->numpad_purpose == PTC_UI_NUMPAD_SCHEDULED_MINUTES;
+    bool grant = model->numpad_purpose == PTC_UI_NUMPAD_GRANT_MINUTES;
     bool entered_valid = ptc_ui_duration_value(model, &entered);
     draw_dialog_shell(pixels, stride, model, &dialog, 920, 620);
     if (entered_valid) {
@@ -3624,8 +3671,9 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
             ? model->remaining_minutes + entered : (int)entered - model->played_minutes;
     }
     if (after_minutes < 0 && model->played_minutes_available &&
-        (model->numpad_purpose != PTC_UI_NUMPAD_WEEKLY_MINUTES ||
-         model->editor_index == ptc_weekday_from_day_index(model->day_index))) after_minutes = 0;
+        (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
+         (model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES &&
+          model->editor_index == ptc_weekday_from_day_index(model->day_index)))) after_minutes = 0;
     format_duration(after_minutes, after, sizeof(after));
     format_status_age(model, freshness, sizeof(freshness));
 
@@ -3639,6 +3687,13 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
     draw_text(pixels, stride, guide_cx + 64, guide_y + 4, "/", 14, UI_MUTED);
     draw_shoulder_key_glyph(pixels, stride, guide_cx + 72, guide_y - 9, 22, 18, "R", false);
     draw_text(pixels, stride, guide_cx + 98, guide_y + 4, "选栏", 15, UI_MUTED);
+    {
+        char step_hint[32];
+        if (model->duration_field == PTC_UI_DURATION_HOURS)
+            snprintf(step_hint, sizeof(step_hint), "步长 1 小时");
+        else snprintf(step_hint, sizeof(step_hint), "步长 +%u", (unsigned)model->duration_step_feedback);
+        draw_text(pixels, stride, guide_cx + 154, guide_y + 4, step_hint, 14, UI_ACCENT);
+    }
 
     for (int field = 0; field < 2; ++field) {
         UiRect rect = to_uirect(ptc_ui_minute_editor_field_rect((PtcUiDurationField)field));
@@ -3689,7 +3744,7 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
                     snprintf(holiday_detail, sizeof(holiday_detail), "今日日期命中：%s（被临时设置覆盖）",
                              match.arrangement ? match.arrangement->display_name : kind);
                 } else if (ptc_ui_plan_rule(model, PTC_UI_PLAN_HOLIDAY).source == PTC_RULE_SOURCE_SCHEDULED_OVERRIDE) {
-                    snprintf(holiday_detail, sizeof(holiday_detail), "今日日期命中：%s（被日期计划覆盖）",
+                    snprintf(holiday_detail, sizeof(holiday_detail), "今日日期命中：%s（被临时额度计划覆盖）",
                              match.arrangement ? match.arrangement->display_name : kind);
                 } else if (!model->holiday_enabled) {
                     snprintf(holiday_detail, sizeof(holiday_detail), "今日日期命中：%s（保存后启用）",
@@ -3713,7 +3768,7 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
                   model->draft_holiday_enabled ? "当前预设：已开启" : "当前预设：未开启", 16,
                   model->draft_holiday_enabled ? UI_SUCCESS : UI_WARNING);
         draw_text(pixels, stride, dialog.x + 548, dialog.y + 378,
-                  model->today_override_present ? "今天临时设置优先，当前额度可能未生效" : "节假日规则命中后优先于周计划",
+                  model->today_override_present ? "今日额度调整优先，当前额度可能未生效" : "节假日规则命中后优先于周计划",
                   15, model->today_override_present ? UI_WARNING : UI_MUTED);
     } else if (weekly) {
         PtcUiModel preview = *model;
@@ -3724,6 +3779,20 @@ static void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const 
         } else {
             draw_text(pixels, stride, dialog.x + 558, dialog.y + 310, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
         }
+    } else if (scheduled || grant) {
+        PtcUiTimeProjection current_status;
+        ptc_ui_project_time_status(model, (int64_t)time(NULL), &current_status);
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 264, 350, 74},
+                             "当前状态", current_status.remaining_text,
+                             time_projection_color(current_status.state));
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 350, 350, 74},
+                             scheduled ? "临时计划每天额度" : "下一枚代码时长", value,
+                             entered_valid ? UI_ACCENT : UI_DANGER);
+        draw_wrapped_text(pixels, stride, dialog.x + 548, dialog.y + 458,
+            scheduled
+                ? "只修改所选日期范围的每天额度；今日额度调整仍优先，就寝规则并行生效。"
+                : "只影响下一枚新代码；已生成代码保留签发时长。非法协议面额不会生成。",
+            15, 326, 21, 3, UI_MUTED);
     } else {
         static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
         uint8_t today_weekday = ptc_weekday_from_day_index(model->day_index);
@@ -4056,7 +4125,7 @@ static const char *activity_label(const char *action)
     if (strcmp(action, "today_restore") == 0) return "恢复今日计划";
     if (strcmp(action, "weekly_update") == 0) return "修改周计划";
     if (strcmp(action, "holiday_update") == 0) return "修改节假日规则";
-    if (strcmp(action, "scheduled_update") == 0) return "修改日期计划";
+    if (strcmp(action, "scheduled_update") == 0) return "修改临时额度计划";
     if (strcmp(action, "autonomy_update") == 0) return "修改自主缓冲";
     if (strcmp(action, "offline_grant") == 0) return "兑换加时码";
     if (strcmp(action, "daily_buffer") == 0) return "领取自主缓冲";
@@ -4131,7 +4200,7 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
     char values[4][128];
     char end_date[80];
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 640);
-    snprintf(values[0], sizeof(values[0]), "日期计划：%s", draft->enabled ? "开启" : "关闭");
+    snprintf(values[0], sizeof(values[0]), "临时额度计划：%s", draft->enabled ? "开启" : "关闭");
     if (ptc_date_from_day_index(draft->start_day_index, &year, &month, &day))
         snprintf(values[1], sizeof(values[1]), "开始日期：%04u-%02u-%02u%s", year, month, day,
                  model->status_loaded && draft->start_day_index == model->day_index ? "  今天" : "");
@@ -4143,6 +4212,15 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
         UiRect row = to_uirect(ptc_ui_scheduled_field_rect(index));
         draw_plan_card(pixels, stride, row, model->overlay_selection == index);
         draw_text(pixels, stride, row.x + 18, row.y + 38, values[index], 21, UI_RGB(UI_BLENDED(text_primary)));
+        if (index == 0) {
+            draw_text(pixels, stride, row.x + 390, row.y + 38, "A 开关", 13, UI_MUTED);
+        } else if (index == 1 || index == 2) {
+            draw_text(pixels, stride, row.x + 268, row.y + 38,
+                      "左/右调整 | A 输入 | ZL/ZR 大步", 12, UI_MUTED);
+        } else {
+            draw_text(pixels, stride, row.x + 318, row.y + 38,
+                      draft->rule.mode == PTC_RULE_MODE_LIMIT ? "A 输入 | X 切换" : "X 切换限时", 12, UI_MUTED);
+        }
     }
     draw_plan_impact(pixels, stride, model, PTC_UI_PLAN_SCHEDULED, ptc_ui_scheduled_dirty(model),
                      (UiRect){dialog.x + 626, dialog.y + 116, 460, 306});
@@ -4151,7 +4229,7 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
     else snprintf(end_date, sizeof(end_date), "请检查结束日期");
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 448, end_date, 18, UI_RGB(UI_BLENDED(text_secondary)));
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 482,
-              "上下选择，左右调整；X 切换状态或模式；ZL/ZR 大步调整", 18, UI_RGB(UI_BLENDED(text_secondary)));
+              "临时额度计划只改每天可玩额度；指定日期就寝只改几点开始和结束，两者互不替代。", 16, UI_RGB(UI_BLENDED(text_secondary)));
     if (strcmp(model->result_status, "error") == 0)
         draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 516,
                           "上次操作未完成，草稿仍保留。可重试，或放弃草稿后到支持与恢复检查。",
@@ -4166,7 +4244,7 @@ static void draw_scheduled_leave(uint32_t *pixels, uint32_t stride, const PtcUiM
 {
     UiRect dialog;
     PtcUiModel copy = *model;
-    snprintf(copy.overlay_title, sizeof(copy.overlay_title), "放弃日期计划草稿？");
+    snprintf(copy.overlay_title, sizeof(copy.overlay_title), "放弃临时额度计划草稿？");
     snprintf(copy.overlay_body, sizeof(copy.overlay_body), "尚未保存的修改会丢失，已保存的计划不变。");
     draw_dialog_shell(pixels, stride, &copy, &dialog, 720, 300);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  继续编辑",
@@ -4276,7 +4354,7 @@ static void draw_bedtime_window_overlay(uint32_t *pixels, uint32_t stride, const
         draw_text(pixels, stride, row.x + 18, row.y + 32, values[i], 19, UI_INK);
     }
     draw_text(pixels, stride, dialog.x + 48, dialog.y + 324,
-        "左右 15 分钟，ZL/ZR 60 分钟；非整刻值只有编辑后才按步长变化。", 15, UI_MUTED);
+        "左/右调整 15 分钟 | A 输入 | ZL/ZR 大步 60 分钟", 15, UI_MUTED);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
         UI_RAISED, UI_INK, true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "+  完成",
@@ -4305,7 +4383,7 @@ static void draw_bedtime_special_overlay(uint32_t *pixels, uint32_t stride, cons
             i > 0 && rule->mode != PTC_BEDTIME_OVERRIDE_CUSTOM ? UI_MUTED : UI_INK);
     }
     draw_text(pixels, stride, dialog.x + 48, dialog.y + 324,
-        "编辑时间会自动切换为自定义；窗口必须跨越午夜。", 15, UI_MUTED);
+        "左/右调整 15 分钟 | A 输入 | ZL/ZR 大步 60 分钟；窗口必须跨越午夜。", 14, UI_MUTED);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
         UI_RAISED, UI_INK, true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "+  完成",
@@ -4377,7 +4455,6 @@ static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, con
 
 static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    static const char *ADJUST[] = {"上一档", "下一档", "L -15", "R +15", "ZL -30", "ZR +30"};
     UiRect dialog;
     char line[256], remaining[48], estimate[48], code[16], freshness[80];
     bool capped = false;
@@ -4402,13 +4479,12 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
     format_duration(reliable && model->played_minutes_available ? model->played_minutes : -1, played, sizeof(played));
     snprintf(line, sizeof(line), "额度已耗（估算）%s", played);
     draw_text(pixels, stride, dialog.x + 420, dialog.y + 176, line, 18, UI_RGB(UI_BLENDED(text_secondary)));
-    snprintf(line, sizeof(line), "%u 分钟", (unsigned)model->grant_minutes);
-    draw_text(pixels, stride, dialog.x + 54, dialog.y + 218, line, 32, UI_RGB(UI_BLENDED(text_primary)));
+    snprintf(line, sizeof(line), "%u 分钟  |  A 输入", (unsigned)model->grant_minutes);
+    draw_candidate_button(pixels, stride, ptc_ui_grant_adjust_rect(0), line,
+        UI_ACCENT_SOFT, UI_ACCENT,
+        model->overlay_selection == PTC_UI_GRANT_LOCAL_ADJUST_FIRST, false);
     snprintf(line, sizeof(line), "兑换后预计 %s%s", estimate, capped ? "（已到每日上限）" : "");
-    draw_text(pixels, stride, dialog.x + 260, dialog.y + 215, line, 20, UI_RGB(UI_BLENDED(text_secondary)));
-    for (int i = 0; i < 6; ++i)
-        draw_candidate_button(pixels, stride, ptc_ui_grant_adjust_rect(i), ADJUST[i],
-            UI_RGB(UI_BLENDED(surface)), UI_RGB(UI_BLENDED(text_primary)), model->overlay_selection == i, false);
+    draw_text(pixels, stride, dialog.x + 420, dialog.y + 238, line, 20, UI_RGB(UI_BLENDED(text_secondary)));
     draw_text(pixels, stride, dialog.x + 54, dialog.y + 320, "调整这里不会改变已生成代码的时长，也不会撤销旧码。", 18, UI_RGB(UI_BLENDED(text_secondary)));
 
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 350, 852, 170}, 16, UI_RGB(UI_BLENDED(surface_raised)));
@@ -4434,7 +4510,7 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
         model->overlay_selection == PTC_UI_GRANT_LOCAL_GENERATE, model->waiting);
     draw_candidate_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
         UI_RGB(UI_BLENDED(surface_raised)), UI_RGB(UI_BLENDED(text_primary)), model->overlay_selection == PTC_UI_GRANT_LOCAL_BACK, false);
-    draw_text(pixels, stride, dialog.x + 280, dialog.y + 615, "方向键选择  |  A 确定  |  L/R、ZL/ZR 调整", 18, UI_RGB(UI_BLENDED(text_secondary)));
+    draw_text(pixels, stride, dialog.x + 280, dialog.y + 615, "方向键选择  |  A 编辑代码时长  |  + 生成", 18, UI_RGB(UI_BLENDED(text_secondary)));
 }
 
 static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

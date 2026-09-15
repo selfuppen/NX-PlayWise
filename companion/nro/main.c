@@ -601,6 +601,112 @@ static bool keyboard_input(
     return keyboard_input_initial(header, guide, out, out_size, password, numeric, download_code, NULL);
 }
 
+static bool keyboard_date(UiState *ui, uint16_t current, uint16_t *out_day_index)
+{
+    uint16_t year;
+    uint8_t month;
+    uint8_t day;
+    char initial[9];
+    char value[9];
+    if (!ui || !out_day_index || !ui->model.status_loaded ||
+        !ptc_date_from_day_index(current, &year, &month, &day)) {
+        if (ui) snprintf(ui->model.message, sizeof(ui->model.message),
+                         "主机日期尚未加载，请刷新状态后再输入日期。");
+        return false;
+    }
+    initial[0] = (char)('0' + (year / 1000u) % 10u);
+    initial[1] = (char)('0' + (year / 100u) % 10u);
+    initial[2] = (char)('0' + (year / 10u) % 10u);
+    initial[3] = (char)('0' + year % 10u);
+    initial[4] = (char)('0' + (month / 10u) % 10u);
+    initial[5] = (char)('0' + month % 10u);
+    initial[6] = (char)('0' + (day / 10u) % 10u);
+    initial[7] = (char)('0' + day % 10u);
+    initial[8] = '\0';
+    snprintf(value, sizeof(value), "%s", initial);
+    if (!keyboard_input_initial("输入日期", "8 位 YYYYMMDD，只能输入今天或未来日期",
+                                value, sizeof(value), false, true, false, initial)) return false;
+    if (!ptc_ui_parse_date_yyyymmdd(value, ui->model.day_index, out_day_index)) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "日期无效；请输入今天或未来的 8 位日期 YYYYMMDD。");
+        return false;
+    }
+    return true;
+}
+
+static bool keyboard_span(UiState *ui, uint16_t current, uint16_t *out_days)
+{
+    char initial[4];
+    char value[4];
+    if (!ui || !out_days) return false;
+    if (current < 1u) current = 1u;
+    if (current > 366u) current = 366u;
+    snprintf(initial, sizeof(initial), "%u", (unsigned)current);
+    snprintf(value, sizeof(value), "%s", initial);
+    if (!keyboard_input_initial("输入持续天数", "范围 1 到 366 天", value, sizeof(value),
+                                false, true, false, initial)) return false;
+    if (!ptc_ui_parse_span_days(value, out_days)) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "持续天数必须是 1 到 366。");
+        return false;
+    }
+    return true;
+}
+
+static bool keyboard_time(UiState *ui, const char *title, uint16_t current, uint16_t *out_minute)
+{
+    char initial[5];
+    char value[5];
+    uint16_t hour;
+    uint16_t minute;
+    if (!ui || !out_minute) return false;
+    if (current > 1439u) current = 1439u;
+    hour = (uint16_t)(current / 60u);
+    minute = (uint16_t)(current % 60u);
+    initial[0] = (char)('0' + hour / 10u);
+    initial[1] = (char)('0' + hour % 10u);
+    initial[2] = (char)('0' + minute / 10u);
+    initial[3] = (char)('0' + minute % 10u);
+    initial[4] = '\0';
+    snprintf(value, sizeof(value), "%s", initial);
+    if (!keyboard_input_initial(title, "4 位 HHMM，范围 0000 到 2359", value, sizeof(value),
+                                false, true, false, initial)) return false;
+    if (!ptc_ui_parse_time_hhmm(value, out_minute)) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "时间无效；请输入 4 位 HHMM（0000 到 2359）。");
+        return false;
+    }
+    return true;
+}
+
+static bool edit_date_range_start(UiState *ui, uint16_t *start, uint16_t *end)
+{
+    uint32_t duration;
+    uint16_t next;
+    if (!ui || !start || !end) return false;
+    duration = *end >= *start ? (uint32_t)*end - *start + 1u : 1u;
+    if (!keyboard_date(ui, *start, &next)) return false;
+    if ((uint32_t)next + duration - 1u > UINT16_MAX) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "该开始日期会使结束日期越界，未修改草稿。");
+        return false;
+    }
+    *start = next;
+    *end = (uint16_t)(next + duration - 1u);
+    return true;
+}
+
+static bool edit_date_range_span(UiState *ui, uint16_t start, uint16_t *end)
+{
+    uint32_t duration = *end >= start ? (uint32_t)*end - start + 1u : 1u;
+    uint16_t next;
+    if (!ui || !end || !keyboard_span(ui, (uint16_t)duration, &next)) return false;
+    if ((uint32_t)start + next - 1u > UINT16_MAX) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "持续天数超出可用日期范围，未修改草稿。");
+        return false;
+    }
+    *end = (uint16_t)(start + next - 1u);
+    return true;
+}
+
 static bool pin_keyboard_fallback(UiState *ui)
 {
     char value[PTC_UI_PIN_MAX_DIGITS + 1];
@@ -1370,6 +1476,31 @@ static PtcRuleMode parse_rule_mode(const char *mode)
         return PTC_RULE_MODE_UNLIMITED;
     }
     return PTC_RULE_MODE_LIMIT;
+}
+
+static void edit_scheduled_minutes(UiState *ui)
+{
+    PtcScheduledOverride *draft;
+    if (!ui) return;
+    draft = &ui->model.draft_scheduled_override;
+    if (draft->rule.mode != PTC_RULE_MODE_LIMIT) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "当前为不限时；按 X 切换为限时后可编辑额度。");
+        return;
+    }
+    ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_SCHEDULED_MINUTES,
+        PTC_UI_OVERLAY_SCHEDULED, "设置临时额度计划",
+        "分别输入小时和分钟，总计 1 到 1440 分钟", 4, 1, 1440,
+        draft->rule.minutes);
+}
+
+static void edit_grant_minutes(UiState *ui)
+{
+    if (!ui) return;
+    ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_GRANT_MINUTES,
+        PTC_UI_OVERLAY_GRANT_LOCAL, "设置代码时长",
+        "合法面额：1-4、5-120 每 5 分钟，以及 150/180/210/240", 4, 1,
+        ui->model.grant_max_minutes, ui->model.grant_minutes);
 }
 
 static PtcBedtimeOverrideMode parse_bedtime_override_mode(const char *mode)
@@ -2341,43 +2472,6 @@ static uint16_t legal_grant_minutes(uint16_t requested, uint16_t maximum)
     return requested > 0U ? requested : 1U;
 }
 
-static void adjust_grant_minutes(UiState *ui, int direction)
-{
-    int next = ui->model.grant_minutes;
-    do {
-        next += direction > 0 ? 1 : -1;
-        if (next < 1) next = ui->model.grant_max_minutes;
-        if (next > ui->model.grant_max_minutes) next = 1;
-    } while (next != ui->model.grant_minutes &&
-             ptc_token_v2_tier_for_minutes((uint16_t)next, &(uint8_t){0}) != PTC_ERR_OK);
-    ui->model.grant_minutes = (uint16_t)next;
-}
-
-static void adjust_grant_minutes_delta(UiState *ui, int delta)
-{
-    int target;
-    int best;
-    int best_distance = 10000;
-    int candidate;
-    uint8_t tier;
-    if (!ui || delta == 0) return;
-    target = (int)ui->model.grant_minutes + delta;
-    if (target < 1) target = 1;
-    if (target > ui->model.grant_max_minutes) target = ui->model.grant_max_minutes;
-    best = ui->model.grant_minutes;
-    for (candidate = 1; candidate <= ui->model.grant_max_minutes; ++candidate) {
-        int distance;
-        if (ptc_token_v2_tier_for_minutes((uint16_t)candidate, &tier) != PTC_ERR_OK) continue;
-        distance = abs(candidate - target);
-        if (distance < best_distance ||
-            (distance == best_distance && ((delta > 0 && candidate > best) || (delta < 0 && candidate < best)))) {
-            best = candidate;
-            best_distance = distance;
-        }
-    }
-    ui->model.grant_minutes = (uint16_t)best;
-}
-
 static void load_consumed_nonces(uint16_t day_index, bool used[PTC_TOKEN_V2_MAX_NONCE + 1U])
 {
     FILE *file = fopen(LEDGER_PATH, "r");
@@ -2529,8 +2623,8 @@ static void submit_scheduled_override(UiState *ui)
         ui->active_request_id, time(NULL), &ui->model.draft_scheduled_override);
     set_command_name(ui, "set_scheduled_override");
     sync_transport_label(ui);
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_scheduled_override", "正在保存日期计划...");
-    else set_message(ui, "日期计划提交失败", status);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_scheduled_override", "正在保存临时额度计划...");
+    else set_message(ui, "临时额度计划提交失败", status);
 }
 
 static void submit_autonomy_policy(UiState *ui)
@@ -3317,16 +3411,6 @@ static void handle_parent_action(UiState *ui)
     if (ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.plan_page == PTC_UI_PLAN_PAGE_ROOT) {
         switch (index) {
         case 0:
-            open_weekly_page(ui);
-            break;
-        case 1:
-            ui->model.draft_bedtime_policy = ui->model.bedtime_policy;
-            ui->model.bedtime_dirty = false;
-            ui->model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
-            ui->model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
-            ui->model.selected_index = 0;
-            break;
-        case 2:
             if (!ptc_ui_scheduled_dirty(&ui->model))
                 ui->model.draft_scheduled_override = ui->model.scheduled_override;
             if (!ptc_ui_scheduled_dirty(&ui->model) && !ui->model.draft_scheduled_override.enabled) {
@@ -3337,12 +3421,22 @@ static void handle_parent_action(UiState *ui)
             }
             ui->model.overlay = PTC_UI_OVERLAY_SCHEDULED;
             ui->model.overlay_selection = 0;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "临时日期计划");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "临时额度计划");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                "额度日期计划独立于就寝日期覆盖；一次保留一个日期区间。");
+                "只改每天可玩额度；指定日期就寝只改开始和结束，两者可同时生效。");
+            break;
+        case 1:
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
+            ui->model.selected_index = 0;
+            break;
+        case 2:
+            open_weekly_page(ui);
             break;
         case 3:
-            ui->model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
+            ui->model.draft_bedtime_policy = ui->model.bedtime_policy;
+            ui->model.bedtime_dirty = false;
+            ui->model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
             ui->model.selected_index = 0;
             break;
         case 4:
@@ -3686,6 +3780,10 @@ static void accept_numpad(UiState *ui)
     } else if (purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES) {
         ui->model.draft_makeup_workday_rule.minutes = value;
         update_holiday_dirty(ui);
+    } else if (purpose == PTC_UI_NUMPAD_SCHEDULED_MINUTES) {
+        ui->model.draft_scheduled_override.rule.minutes = value;
+    } else if (purpose == PTC_UI_NUMPAD_GRANT_MINUTES) {
+        ui->model.grant_minutes = value;
     } else if (purpose == PTC_UI_NUMPAD_MINUTES) {
         ui->model.draft_minutes = value;
     }
@@ -3763,8 +3861,8 @@ static void apply_pending_navigation(UiState *ui)
         ui->model.plan_page != PTC_UI_PLAN_PAGE_ROOT) {
         PtcUiPlanPage previous = ui->model.plan_page;
         ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
-        ui->model.selected_index = previous == PTC_UI_PLAN_PAGE_WEEKLY ? 0 :
-            (previous == PTC_UI_PLAN_PAGE_HOLIDAY ? 3 : 1);
+            ui->model.selected_index = previous == PTC_UI_PLAN_PAGE_WEEKLY ? 2 :
+            (previous == PTC_UI_PLAN_PAGE_HOLIDAY ? 1 : 3);
         ui->model.parent_footer_focused = false;
     } else if (ui->pending_leave_parent) {
         ui->model.view = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
@@ -3886,7 +3984,7 @@ static void open_bedtime_special_editor(UiState *ui, int kind)
     ui->model.overlay_selection = 0;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
         kind == 0 ? "法定休假就寝规则" :
-        (kind == 1 ? "调休工作日就寝规则" : "日期覆盖就寝规则"));
+        (kind == 1 ? "调休工作日就寝规则" : "指定日期就寝规则"));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
         "选择继承、关闭或自定义；自定义窗口必须跨越午夜且不能与相邻窗口重叠。");
 }
@@ -3963,8 +4061,8 @@ static void request_parent_navigation(UiState *ui, int target_page, bool leave_p
         ui->model.plan_page != PTC_UI_PLAN_PAGE_ROOT) {
         PtcUiPlanPage previous = ui->model.plan_page;
         ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
-        ui->model.selected_index = previous == PTC_UI_PLAN_PAGE_WEEKLY ? 0 :
-            (previous == PTC_UI_PLAN_PAGE_HOLIDAY ? 3 : 1);
+        ui->model.selected_index = previous == PTC_UI_PLAN_PAGE_WEEKLY ? 2 :
+            (previous == PTC_UI_PLAN_PAGE_HOLIDAY ? 1 : 3);
         ui->model.parent_footer_focused = false;
         return;
     }
@@ -4032,6 +4130,14 @@ static void handle_overlay_input(UiState *ui, u64 down)
         } else if ((down & (HidNpadButton_A | HidNpadButton_X)) && ui->model.overlay_selection == 0) {
             window->enabled = !window->enabled;
             update_bedtime_dirty(ui);
+        } else if ((down & HidNpadButton_A) && ui->model.overlay_selection >= 1) {
+            uint16_t *value = ui->model.overlay_selection == 1 ? &window->start_minute : &window->end_minute;
+            uint16_t next;
+            if (keyboard_time(ui, ui->model.overlay_selection == 1 ? "输入就寝开始时间" : "输入次日结束时间",
+                              *value, &next)) {
+                *value = next;
+                update_bedtime_dirty(ui);
+            }
         } else if (direction != 0 && ui->model.overlay_selection >= 1) {
             uint16_t *value = ui->model.overlay_selection == 1 ? &window->start_minute : &window->end_minute;
             int adjusted = ((int)*value + direction * step + 1440) % 1440;
@@ -4061,6 +4167,17 @@ static void handle_overlay_input(UiState *ui, u64 down)
             rule->mode = (PtcBedtimeOverrideMode)((rule->mode + 1) % 3);
             if (rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM) rule->window.enabled = true;
             update_bedtime_dirty(ui);
+        } else if ((down & HidNpadButton_A) && ui->model.overlay_selection >= 1) {
+            uint16_t *value = ui->model.overlay_selection == 1
+                ? &rule->window.start_minute : &rule->window.end_minute;
+            uint16_t next;
+            if (keyboard_time(ui, ui->model.overlay_selection == 1 ? "输入就寝开始时间" : "输入次日结束时间",
+                              *value, &next)) {
+                rule->mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+                rule->window.enabled = true;
+                *value = next;
+                update_bedtime_dirty(ui);
+            }
         } else if (direction != 0 && ui->model.overlay_selection >= 1) {
             uint16_t *value = ui->model.overlay_selection == 1
                 ? &rule->window.start_minute : &rule->window.end_minute;
@@ -4124,6 +4241,18 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 4;
         } else if ((down & (HidNpadButton_A | HidNpadButton_X)) && ui->model.overlay_selection == 0) {
             draft->enabled = !draft->enabled;
+        } else if ((down & HidNpadButton_A) &&
+                   (ui->model.overlay_selection == 1 || ui->model.overlay_selection == 2)) {
+            uint16_t current = ui->model.overlay_selection == 1
+                ? draft->week[0].start_minute : draft->week[0].end_minute;
+            uint16_t next;
+            if (keyboard_time(ui, ui->model.overlay_selection == 1 ? "输入就寝开始时间" : "输入次日结束时间",
+                              current, &next)) {
+                for (int day = 0; day < 7; ++day) {
+                    if (ui->model.overlay_selection == 1) draft->week[day].start_minute = next;
+                    else draft->week[day].end_minute = next;
+                }
+            }
         } else if (direction != 0 && (ui->model.overlay_selection == 1 || ui->model.overlay_selection == 2)) {
             int value = ui->model.overlay_selection == 1 ? draft->week[0].start_minute : draft->week[0].end_minute;
             value = (value + direction * step + 1440) % 1440;
@@ -4169,10 +4298,16 @@ static void handle_overlay_input(UiState *ui, u64 down)
             ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 3 : ui->model.overlay_selection - 1;
         } else if (down & HidNpadButton_Down) {
             ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 4;
-        } else if ((down & HidNpadButton_X) ||
-                   ((down & HidNpadButton_A) && (ui->model.overlay_selection == 0 || ui->model.overlay_selection == 3))) {
-            if (ui->model.overlay_selection == 0) draft->enabled = !draft->enabled;
-            else if (ui->model.overlay_selection == 3) draft->rule.mode = ptc_ui_next_rule_mode(draft->rule.mode);
+        } else if (down & HidNpadButton_X) {
+            draft->rule.mode = ptc_ui_next_rule_mode(draft->rule.mode);
+        } else if ((down & HidNpadButton_A) && ui->model.overlay_selection == 0) {
+            draft->enabled = !draft->enabled;
+        } else if ((down & HidNpadButton_A) && ui->model.overlay_selection == 1) {
+            (void)edit_date_range_start(ui, &draft->start_day_index, &draft->end_day_index);
+        } else if ((down & HidNpadButton_A) && ui->model.overlay_selection == 2) {
+            (void)edit_date_range_span(ui, draft->start_day_index, &draft->end_day_index);
+        } else if ((down & HidNpadButton_A) && ui->model.overlay_selection == 3) {
+            edit_scheduled_minutes(ui);
         } else if (direction != 0 && ui->model.overlay_selection == 1) {
             int start = (int)draft->start_day_index + direction * step;
             if (start < (int)ui->model.day_index) start = ui->model.day_index;
@@ -4187,18 +4322,11 @@ static void handle_overlay_input(UiState *ui, u64 down)
                 next = (int)(UINT16_MAX - draft->start_day_index + 1u);
             }
             draft->end_day_index = (uint16_t)(draft->start_day_index + next - 1);
-        } else if (direction != 0 && ui->model.overlay_selection == 3 &&
-                   draft->rule.mode == PTC_RULE_MODE_LIMIT) {
-            int minute_step = (down & (HidNpadButton_ZL | HidNpadButton_ZR)) ? 15 : 5;
-            draft->rule.minutes = ptc_ui_adjust_minutes(draft->rule.minutes,
-                direction * minute_step, 1, 1440);
-        } else if (down & HidNpadButton_A) {
-            handle_overlay_input(ui, HidNpadButton_Right);
         } else if (down & HidNpadButton_Plus) {
             if (ui->model.disable_flag_present || !ptc_ui_scheduled_dirty(&ui->model)) {
                 return;
             } else if (!ptc_scheduled_override_is_valid(draft)) {
-                snprintf(ui->model.message, sizeof(ui->model.message), "日期计划无效，请检查 1 到 366 天范围和额度。");
+                snprintf(ui->model.message, sizeof(ui->model.message), "临时额度计划无效，请检查 1 到 366 天范围和额度。");
             } else {
                 submit_scheduled_override(ui);
             }
@@ -4518,25 +4646,21 @@ static void handle_overlay_input(UiState *ui, u64 down)
     if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
         if (down & HidNpadButton_B) {
             ptc_ui_cancel_overlay(&ui->model);
-        } else if (down & HidNpadButton_Left) ptc_ui_move_overlay_selection(&ui->model, -1, 0);
-        else if (down & HidNpadButton_Right) ptc_ui_move_overlay_selection(&ui->model, 1, 0);
-        else if (down & HidNpadButton_Up) ptc_ui_move_overlay_selection(&ui->model, 0, -1);
-        else if (down & HidNpadButton_Down) ptc_ui_move_overlay_selection(&ui->model, 0, 1);
-        else if (down & HidNpadButton_L) { ui->model.overlay_selection = 2; adjust_grant_minutes_delta(ui, -15); }
-        else if (down & HidNpadButton_R) { ui->model.overlay_selection = 3; adjust_grant_minutes_delta(ui, 15); }
-        else if (down & HidNpadButton_ZL) { ui->model.overlay_selection = 4; adjust_grant_minutes_delta(ui, -30); }
-        else if (down & HidNpadButton_ZR) { ui->model.overlay_selection = 5; adjust_grant_minutes_delta(ui, 30); }
+        } else if (down & HidNpadButton_Up) {
+            ui->model.overlay_selection = ui->model.overlay_selection == PTC_UI_GRANT_LOCAL_BACK
+                ? PTC_UI_GRANT_LOCAL_GENERATE : (ui->model.overlay_selection == PTC_UI_GRANT_LOCAL_GENERATE
+                    ? PTC_UI_GRANT_LOCAL_ADJUST_FIRST : PTC_UI_GRANT_LOCAL_BACK);
+        } else if (down & HidNpadButton_Down) {
+            ui->model.overlay_selection = ui->model.overlay_selection == PTC_UI_GRANT_LOCAL_ADJUST_FIRST
+                ? PTC_UI_GRANT_LOCAL_GENERATE : (ui->model.overlay_selection == PTC_UI_GRANT_LOCAL_GENERATE
+                    ? PTC_UI_GRANT_LOCAL_BACK : PTC_UI_GRANT_LOCAL_ADJUST_FIRST);
+        }
         else if (down & HidNpadButton_Plus) {
             ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
             generate_local_grant_code(ui);
         } else if (down & HidNpadButton_A) {
             int selection = ui->model.overlay_selection;
-            if (selection == 0) adjust_grant_minutes(ui, -1);
-            else if (selection == 1) adjust_grant_minutes(ui, 1);
-            else if (selection == 2) adjust_grant_minutes_delta(ui, -15);
-            else if (selection == 3) adjust_grant_minutes_delta(ui, 15);
-            else if (selection == 4) adjust_grant_minutes_delta(ui, -30);
-            else if (selection == 5) adjust_grant_minutes_delta(ui, 30);
+            if (selection == PTC_UI_GRANT_LOCAL_ADJUST_FIRST) edit_grant_minutes(ui);
             else if (selection == PTC_UI_GRANT_LOCAL_BACK) handle_overlay_input(ui, HidNpadButton_B);
             else generate_local_grant_code(ui);
         }
@@ -4992,10 +5116,24 @@ static void handle_touch(UiState *ui, int x, int y)
                 ui->model.draft_bedtime_policy.scheduled_override.present =
                     !ui->model.draft_bedtime_policy.scheduled_override.present;
                 update_bedtime_dirty(ui);
+            } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 1) {
+                if (edit_date_range_start(ui,
+                        &ui->model.draft_bedtime_policy.scheduled_override.start_day_index,
+                        &ui->model.draft_bedtime_policy.scheduled_override.end_day_index))
+                    update_bedtime_dirty(ui);
+            } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 2) {
+                if (edit_date_range_span(ui,
+                        ui->model.draft_bedtime_policy.scheduled_override.start_day_index,
+                        &ui->model.draft_bedtime_policy.scheduled_override.end_day_index))
+                    update_bedtime_dirty(ui);
             } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 3) {
                 open_bedtime_special_editor(ui, 2);
             }
         }
+        break;
+    case PTC_UI_HIT_BEDTIME_OVERLAY_FIELD:
+        ui->model.overlay_selection = hit.index;
+        handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_MINUTES_INC:
         ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 5, ui->model.minimum_minutes, ui->model.maximum_minutes);
@@ -5204,13 +5342,8 @@ static void handle_touch(UiState *ui, int x, int y)
         setup_primary(ui);
         break;
     case PTC_UI_HIT_GRANT_ADJUST:
-        ui->model.overlay_selection = hit.index;
-        if (hit.index == 0) adjust_grant_minutes(ui, -1);
-        else if (hit.index == 1) adjust_grant_minutes(ui, 1);
-        else if (hit.index == 2) adjust_grant_minutes_delta(ui, -15);
-        else if (hit.index == 3) adjust_grant_minutes_delta(ui, 15);
-        else if (hit.index == 4) adjust_grant_minutes_delta(ui, -30);
-        else if (hit.index == 5) adjust_grant_minutes_delta(ui, 30);
+        ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_ADJUST_FIRST;
+        edit_grant_minutes(ui);
         break;
     case PTC_UI_HIT_NUMPAD_KEY:
         ui->model.numpad_cursor = hit.index;
@@ -5477,7 +5610,8 @@ int main(int argc, char **argv)
                     if (ui.r_stick_active_dir != v_dir) {
                         ui.r_stick_active_dir = v_dir;
                         ui.r_stick_hold_ticks = 0;
-                        ui.r_stick_next_step_tick = 20;
+                        ui.r_stick_next_step_tick = 24;
+                        ui.model.duration_step_feedback = 1;
                         ptc_ui_duration_step_field(&ui.model, v_dir);
                         ui.model.duration_scroll_dir = (int8_t)v_dir;
                         ui.model.duration_scroll_anim_ticks = 8;
@@ -5485,12 +5619,16 @@ int main(int argc, char **argv)
                         ++ui.r_stick_hold_ticks;
                         ui.model.duration_scroll_dir = (int8_t)v_dir;
                         if (ui.r_stick_hold_ticks >= ui.r_stick_next_step_tick) {
-                            ptc_ui_duration_step_field(&ui.model, v_dir);
+                            int magnitude = ui.model.duration_field == PTC_UI_DURATION_MINUTES
+                                ? (ui.r_stick_hold_ticks >= 144 ? 15 :
+                                   (ui.r_stick_hold_ticks >= 72 ? 5 : 1)) : 1;
+                            ui.model.duration_step_feedback = (uint8_t)magnitude;
+                            ptc_ui_duration_step_field(&ui.model, v_dir * magnitude);
                             ui.model.duration_scroll_anim_ticks = 6;
-                            if (ui.r_stick_hold_ticks > 150) {
+                            if (ui.r_stick_hold_ticks >= 144) {
                                 ui.r_stick_next_step_tick = ui.r_stick_hold_ticks + 2;
-                            } else if (ui.r_stick_hold_ticks > 70) {
-                                ui.r_stick_next_step_tick = ui.r_stick_hold_ticks + 3;
+                            } else if (ui.r_stick_hold_ticks >= 72) {
+                                ui.r_stick_next_step_tick = ui.r_stick_hold_ticks + 4;
                             } else {
                                 ui.r_stick_next_step_tick = ui.r_stick_hold_ticks + 6;
                             }
@@ -5501,6 +5639,7 @@ int main(int argc, char **argv)
                     ui.r_stick_hold_ticks = 0;
                     ui.r_stick_next_step_tick = 0;
                     ui.model.duration_scroll_dir = 0;
+                    ui.model.duration_step_feedback = 1;
                 }
 
                 if (ui.model.duration_scroll_anim_ticks > 0) {
@@ -5705,15 +5844,18 @@ int main(int argc, char **argv)
                         snprintf(ui.model.message, sizeof(ui.model.message), "就寝时间总开关已%s；保存后生效。",
                             draft->enabled ? "开启" : "关闭");
                     }
-                } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
-                    int direction = down & HidNpadButton_Right ? 1 : -1;
+                } else if ((down & (HidNpadButton_Left | HidNpadButton_Right)) ||
+                           (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
+                            (down & (HidNpadButton_ZL | HidNpadButton_ZR)))) {
+                    int direction = down & (HidNpadButton_Right | HidNpadButton_ZR) ? 1 : -1;
+                    int date_step = down & (HidNpadButton_ZL | HidNpadButton_ZR) ? 7 : 1;
                     if (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
                         ui.model.selected_index == 1) {
                         uint32_t duration = draft->scheduled_override.end_day_index >=
                             draft->scheduled_override.start_day_index
                             ? (uint32_t)draft->scheduled_override.end_day_index -
                               draft->scheduled_override.start_day_index + 1u : 1u;
-                        int next = (int)draft->scheduled_override.start_day_index + direction;
+                        int next = (int)draft->scheduled_override.start_day_index + direction * date_step;
                         if (next < (int)ui.model.day_index) next = ui.model.day_index;
                         if ((uint32_t)next + duration - 1u > UINT16_MAX) next = UINT16_MAX - (int)duration + 1;
                         draft->scheduled_override.start_day_index = (uint16_t)next;
@@ -5725,7 +5867,7 @@ int main(int argc, char **argv)
                             draft->scheduled_override.start_day_index
                             ? (uint32_t)draft->scheduled_override.end_day_index -
                               draft->scheduled_override.start_day_index + 1u : 1u;
-                        int next = (int)duration + direction;
+                        int next = (int)duration + direction * date_step;
                         if (next < 1) next = 1;
                         if (next > 366) next = 366;
                         if ((uint32_t)draft->scheduled_override.start_day_index + (uint32_t)next - 1u > UINT16_MAX)
@@ -5796,6 +5938,14 @@ int main(int argc, char **argv)
                                 draft->scheduled_override.end_day_index = ui.model.day_index;
                             }
                             update_bedtime_dirty(&ui);
+                        } else if (ui.model.selected_index == 1) {
+                            if (edit_date_range_start(&ui, &draft->scheduled_override.start_day_index,
+                                                      &draft->scheduled_override.end_day_index))
+                                update_bedtime_dirty(&ui);
+                        } else if (ui.model.selected_index == 2) {
+                            if (edit_date_range_span(&ui, draft->scheduled_override.start_day_index,
+                                                     &draft->scheduled_override.end_day_index))
+                                update_bedtime_dirty(&ui);
                         } else if (ui.model.selected_index == 3) {
                             open_bedtime_special_editor(&ui, 2);
                         } else if (ui.model.selected_index == 4) discard_bedtime_draft(&ui);

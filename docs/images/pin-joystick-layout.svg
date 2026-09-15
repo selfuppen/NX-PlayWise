@@ -1,96 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
-  <title id="title">PlayWise PIN 输入示意</title>
-  <desc id="desc">顺时针八方向摇杆映射到数字 1 到 8，X 输入 0，Y 输入 9，并标出确认、退格、取消和传统键盘切换。</desc>
+  <title id="title">PlayWise PIN 无品牌手柄输入示意</title>
+  <desc id="desc">写实化的无品牌手柄轮廓，左右摇杆使用相同的八方向数字映射，X 输入 0，Y 输入 9。</desc>
   <defs>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#16202a" flood-opacity="0.14"/>
-    </filter>
-    <style>
-      .title { font: 700 34px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; fill: #17212b; }
-      .section { font: 700 24px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; fill: #17212b; }
-      .label { font: 600 20px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; fill: #344454; }
-      .small { font: 500 18px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; fill: #5b6875; }
-      .key { font: 700 30px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; fill: #17212b; }
-      .key-small { font: 700 22px "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; fill: #17212b; }
-      .accent { fill: #1b9aaa; }
-      .white { fill: #fff; }
-    </style>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#16202a" flood-opacity=".14"/></filter>
+    <style>.title{font:700 34px "Microsoft YaHei",sans-serif;fill:#17212b}.section{font:700 24px "Microsoft YaHei",sans-serif;fill:#17212b}.label{font:600 20px "Microsoft YaHei",sans-serif;fill:#344454}.small{font:500 18px "Microsoft YaHei",sans-serif;fill:#5b6875}.digit{font:700 24px "Microsoft YaHei",sans-serif;fill:#1769d2}.key{font:700 25px "Microsoft YaHei",sans-serif;fill:#17212b}</style>
   </defs>
-
   <rect width="1200" height="760" fill="#f4f7fa"/>
   <text x="60" y="66" class="title">PlayWise PIN 输入示意</text>
-  <text x="60" y="102" class="small">默认使用隐藏数字的摇杆输入；短按 + 确认，长按 + 切换传统数字键盘。</text>
-
-  <rect x="48" y="138" width="690" height="548" rx="18" fill="#ffffff" filter="url(#shadow)"/>
-  <text x="82" y="185" class="section">摇杆模式（默认）</text>
-  <text x="82" y="218" class="small">方向按顺时针从上方开始编号；输入内容只显示为圆点。</text>
-
-  <!-- Direction wheel -->
-  <g transform="translate(116 260)">
-    <rect x="0" y="0" width="450" height="300" rx="18" fill="#edf5f8" stroke="#c5d8df" stroke-width="2"/>
-    <path d="M225 38 L238 62 L212 62 Z" fill="#1b9aaa"/>
-    <path d="M225 262 L212 238 L238 238 Z" fill="#1b9aaa"/>
-    <path d="M38 150 L62 137 L62 163 Z" fill="#1b9aaa"/>
-    <path d="M412 150 L388 137 L388 163 Z" fill="#1b9aaa"/>
-    <path d="M95 70 L120 76 L101 95 Z" fill="#1b9aaa"/>
-    <path d="M355 230 L330 224 L349 205 Z" fill="#1b9aaa"/>
-    <path d="M355 70 L349 95 L330 76 Z" fill="#1b9aaa"/>
-    <path d="M95 230 L101 205 L120 224 Z" fill="#1b9aaa"/>
-
-    <circle cx="225" cy="150" r="52" fill="#263746"/>
-    <circle cx="225" cy="150" r="20" fill="#8aa0ae"/>
-    <text x="225" y="157" text-anchor="middle" class="white key-small">摇杆</text>
-
+  <text x="60" y="102" class="small">左右摇杆映射相同；短按 + 确认，长按 + 切换传统数字键盘。</text>
+  <rect x="48" y="138" width="700" height="548" rx="18" fill="#fff" filter="url(#shadow)"/>
+  <text x="82" y="185" class="section">无品牌手柄示意</text>
+  <text x="82" y="218" class="small">摇杆方向从上方开始顺时针映射 1–8；输入内容始终隐藏。</text>
+  <g transform="translate(92 244)">
+    <ellipse cx="125" cy="265" rx="86" ry="118" fill="#dfe8f4" stroke="#73849b" stroke-width="4"/>
+    <ellipse cx="515" cy="265" rx="86" ry="118" fill="#dfe8f4" stroke="#73849b" stroke-width="4"/>
+    <rect x="65" y="44" width="510" height="260" rx="116" fill="#e7edf6" stroke="#73849b" stroke-width="4"/>
+    <rect x="180" y="72" width="280" height="42" rx="18" fill="#d5dfec"/>
+    <circle cx="178" cy="154" r="39" fill="#f8fafc" stroke="#1769d2" stroke-width="5"/>
+    <circle cx="178" cy="154" r="27" fill="#d8e0ea" stroke="#73849b" stroke-width="3"/>
+    <g text-anchor="middle" dominant-baseline="middle" class="digit"><text x="178" y="92">1</text><text x="225" y="107">2</text><text x="242" y="154">3</text><text x="225" y="201">4</text><text x="178" y="218">5</text><text x="131" y="201">6</text><text x="114" y="154">7</text><text x="131" y="107">8</text></g>
+    <rect x="224" y="214" width="86" height="30" rx="7" fill="#73849b"/><rect x="252" y="186" width="30" height="86" rx="7" fill="#73849b"/>
+    <circle cx="382" cy="239" r="34" fill="#f8fafc" stroke="#73849b" stroke-width="5"/><circle cx="382" cy="239" r="23" fill="#d8e0ea"/>
     <g text-anchor="middle" dominant-baseline="middle">
-      <text x="225" y="55" class="key accent">1</text>
-      <text x="337" y="92" class="key accent">2</text>
-      <text x="385" y="150" class="key accent">3</text>
-      <text x="337" y="208" class="key accent">4</text>
-      <text x="225" y="245" class="key accent">5</text>
-      <text x="113" y="208" class="key accent">6</text>
-      <text x="65" y="150" class="key accent">7</text>
-      <text x="113" y="92" class="key accent">8</text>
+      <circle cx="470" cy="104" r="28" fill="#fff" stroke="#1769d2" stroke-width="4"/><text x="470" y="104" class="digit" font-size="17">X=0</text>
+      <circle cx="516" cy="150" r="28" fill="#fff" stroke="#73849b" stroke-width="3"/><text x="516" y="150" class="key">A</text>
+      <circle cx="470" cy="196" r="28" fill="#fff" stroke="#73849b" stroke-width="3"/><text x="470" y="196" class="key">B</text>
+      <circle cx="424" cy="150" r="28" fill="#fff" stroke="#1769d2" stroke-width="4"/><text x="424" y="150" class="digit" font-size="17">Y=9</text>
     </g>
   </g>
-
-  <g transform="translate(116 570)">
-    <rect x="0" y="0" width="450" height="104" rx="12" fill="#edf5f8" stroke="#c5d8df" stroke-width="2"/>
-    <g transform="translate(225 52)" text-anchor="middle">
-      <circle cx="0" cy="-29" r="22" fill="#fff" stroke="#1b9aaa" stroke-width="2"/>
-      <circle cx="29" cy="0" r="22" fill="#fff" stroke="#c5d8df" stroke-width="2"/>
-      <circle cx="0" cy="29" r="22" fill="#fff" stroke="#c5d8df" stroke-width="2"/>
-      <circle cx="-29" cy="0" r="22" fill="#fff" stroke="#1b9aaa" stroke-width="2"/>
-      <text x="0" y="-33" class="small">X</text><text x="0" y="-17" class="label accent">0</text>
-      <text x="-29" y="-4" class="small">Y</text><text x="-29" y="12" class="label accent">9</text>
-    </g>
-  </g>
-
-  <rect x="768" y="138" width="384" height="548" rx="18" fill="#ffffff" filter="url(#shadow)"/>
-  <text x="802" y="185" class="section">功能键与传统模式</text>
-
-  <g transform="translate(802 220)">
-    <rect x="0" y="0" width="316" height="52" rx="10" fill="#e8f4f6"/>
-    <text x="20" y="34" class="label">ZL</text><text x="88" y="34" class="small">逐位退格</text>
-    <rect x="0" y="66" width="316" height="52" rx="10" fill="#eef1f4"/>
-    <text x="20" y="100" class="label">B</text><text x="88" y="100" class="small">取消输入</text>
-    <rect x="0" y="132" width="316" height="52" rx="10" fill="#d8f0f2"/>
-    <text x="20" y="166" class="label">+</text><text x="88" y="166" class="small">短按：确认</text>
-    <rect x="0" y="198" width="316" height="74" rx="10" fill="#fff3d9"/>
-    <text x="20" y="231" class="label">+</text><text x="88" y="231" class="small">长按约 1 秒：</text>
-    <text x="88" y="256" class="small">切换传统数字键盘</text>
-  </g>
-
-  <text x="802" y="516" class="label">传统数字键盘布局</text>
-  <g transform="translate(802 532)" text-anchor="middle" dominant-baseline="middle">
-    <g fill="#f0f3f6" stroke="#c6d1da" stroke-width="2">
-      <rect x="0" y="0" width="90" height="30" rx="7"/><rect x="105" y="0" width="90" height="30" rx="7"/><rect x="210" y="0" width="90" height="30" rx="7"/>
-      <rect x="0" y="36" width="90" height="30" rx="7"/><rect x="105" y="36" width="90" height="30" rx="7"/><rect x="210" y="36" width="90" height="30" rx="7"/>
-      <rect x="0" y="72" width="90" height="30" rx="7"/><rect x="105" y="72" width="90" height="30" rx="7"/><rect x="210" y="72" width="90" height="30" rx="7"/>
-      <rect x="105" y="108" width="90" height="30" rx="7"/>
-    </g>
-    <text x="45" y="15" class="key-small">1</text><text x="150" y="15" class="key-small">2</text><text x="255" y="15" class="key-small">3</text>
-    <text x="45" y="51" class="key-small">4</text><text x="150" y="51" class="key-small">5</text><text x="255" y="51" class="key-small">6</text>
-    <text x="45" y="87" class="key-small">7</text><text x="150" y="87" class="key-small">8</text><text x="255" y="87" class="key-small">9</text>
-    <text x="150" y="123" class="key-small">0</text>
+  <text x="82" y="638" class="label">左右摇杆映射相同：方向 1–8；X=0，Y=9</text>
+  <text x="82" y="668" class="small">十字键也支持上、右、下、左四个正方向。</text>
+  <rect x="778" y="138" width="374" height="548" rx="18" fill="#fff" filter="url(#shadow)"/>
+  <text x="812" y="185" class="section">触摸与功能键</text>
+  <g transform="translate(812 220)">
+    <g fill="#eef2f7" stroke="#9aaabd" stroke-width="2"><rect width="90" height="54" rx="10"/><rect x="105" width="90" height="54" rx="10"/><rect x="210" width="90" height="54" rx="10"/><rect y="68" width="90" height="54" rx="10"/><rect x="105" y="68" width="90" height="54" rx="10"/><rect x="210" y="68" width="90" height="54" rx="10"/><rect y="136" width="90" height="54" rx="10"/><rect x="105" y="136" width="90" height="54" rx="10"/><rect x="210" y="136" width="90" height="54" rx="10"/><rect x="105" y="204" width="90" height="54" rx="10"/></g>
+    <g text-anchor="middle" dominant-baseline="middle" class="key"><text x="45" y="27">1</text><text x="150" y="27">2</text><text x="255" y="27">3</text><text x="45" y="95">4</text><text x="150" y="95">5</text><text x="255" y="95">6</text><text x="45" y="163">7</text><text x="150" y="163">8</text><text x="255" y="163">9</text><text x="150" y="231">0</text></g>
+    <rect y="292" width="142" height="52" rx="10" fill="#fff3d9"/><text x="20" y="326" class="label">ZL 退格</text>
+    <rect x="158" y="292" width="142" height="52" rx="10" fill="#dceafa"/><text x="176" y="326" class="label">+ 确认</text>
+    <rect y="358" width="142" height="52" rx="10" fill="#eef2f7"/><text x="20" y="392" class="label">B 取消</text>
+    <rect x="158" y="358" width="142" height="52" rx="10" fill="#eef2f7"/><text x="174" y="392" class="small">长按 + 键盘</text>
   </g>
 </svg>

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "../file_protocol.h"
 #include "../../common/protocol/error_code.h"
@@ -122,8 +123,8 @@ static const char *effective_rule_label(PtcRuleSource source)
     switch (source) {
     case PTC_RULE_SOURCE_STATUTORY_HOLIDAY: return "国家法定休假日";
     case PTC_RULE_SOURCE_MAKEUP_WORKDAY: return "国家调休工作日";
-    case PTC_RULE_SOURCE_TODAY_OVERRIDE: return "今日临时设置";
-    case PTC_RULE_SOURCE_SCHEDULED_OVERRIDE: return "日期计划";
+    case PTC_RULE_SOURCE_TODAY_OVERRIDE: return "今日额度调整";
+    case PTC_RULE_SOURCE_SCHEDULED_OVERRIDE: return "临时额度计划";
     case PTC_RULE_SOURCE_WEEKLY:
     default: return "周计划";
     }
@@ -253,7 +254,7 @@ void ptc_ui_format_restore_today_basis(const PtcUiModel *model, char *out, size_
                       current, sizeof(current));
     format_rule_basis(after.rule, model->played_minutes, model->played_minutes_available,
                       restored, sizeof(restored));
-    snprintf(out, out_size, "当前临时设置：%s\n清除后按%s：%s",
+    snprintf(out, out_size, "今日额度调整当前值：%s\n清除后按%s：%s",
              current, effective_rule_label(after.source), restored);
 }
 
@@ -284,15 +285,15 @@ void ptc_ui_format_weekly_save_result(const PtcUiModel *model, char *message, si
         PtcEffectiveRule restored = ptc_ui_rule_after_today_restore(model);
         snprintf(message, message_size, "周计划已保存；今天仍按临时设置执行，当前不变。");
         if (restored.source == PTC_RULE_SOURCE_WEEKLY) {
-            snprintf(detail, detail_size, "当前按今日临时设置：%s；清除今日额度调整后：%s。",
+            snprintf(detail, detail_size, "当前按今日额度调整：%s；清除今日额度调整后：%s。",
                      current_basis, basis);
         } else {
-            snprintf(detail, detail_size, "清除今日临时设置后仍按%s执行；本次只更新周计划。",
+            snprintf(detail, detail_size, "清除今日额度调整后仍按%s执行；本次只更新周计划。",
                      effective_rule_label(restored.source));
         }
     } else if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        snprintf(message, message_size, "周计划已保存；今天仍按日期计划执行，当前不变。");
-        snprintf(detail, detail_size, "今天继续按日期计划：%s。", current_basis);
+        snprintf(message, message_size, "周计划已保存；今天仍按临时额度计划执行，当前不变。");
+        snprintf(detail, detail_size, "今天继续按临时额度计划：%s。", current_basis);
     } else if (strcmp(model->rule_source, "statutory_holiday") == 0 ||
                strcmp(model->rule_source, "makeup_workday") == 0) {
         snprintf(message, message_size, "周计划已保存；今天由%s覆盖，当前不变。",
@@ -316,15 +317,15 @@ void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, s
     detail[0] = '\0';
     weekday = ptc_weekday_from_day_index(model->day_index);
     if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        snprintf(message, message_size, "国家节假日设置已保存；今天仍按日期计划执行，当前不变。");
-        snprintf(detail, detail_size, "原因：日期计划优先于国家节假日规则。");
+        snprintf(message, message_size, "国家节假日设置已保存；今天仍按临时额度计划执行，当前不变。");
+        snprintf(detail, detail_size, "原因：临时额度计划优先于国家节假日规则。");
         return;
     }
     if (strcmp(model->rule_source, "today_override") == 0) {
         format_rule_basis(model->today_override_rule, model->played_minutes,
                           model->played_minutes_available, basis, sizeof(basis));
         snprintf(message, message_size, "国家节假日设置已保存；今天仍按临时设置执行，当前不变。");
-        snprintf(detail, detail_size, "原因：今日临时设置优先于国家节假日规则。");
+        snprintf(detail, detail_size, "原因：今日额度调整优先于国家节假日规则。");
         return;
     }
     if (strcmp(model->rule_source, "statutory_holiday") == 0) {
@@ -396,7 +397,7 @@ static const char *request_success_message(const char *type)
         return "今日自主缓冲已领取，完成今天的约定后记得休息。";
     }
     if (strcmp(type, "set_scheduled_override") == 0) {
-        return "日期计划已保存，未来规则预览已更新。";
+        return "临时额度计划已保存，未来规则预览已更新。";
     }
     if (strcmp(type, "set_autonomy_policy") == 0) {
         return "今日自主缓冲设置已保存。";
@@ -740,6 +741,25 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         model->selected_index = index;
         return;
     }
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT) {
+        static const int left_target[5] = {0, 1, 2, 0, 1};
+        static const int right_target[5] = {3, 4, 4, 3, 4};
+        int previous = index;
+        if (horizontal < 0 && index >= 3) index = left_target[index];
+        else if (horizontal > 0 && index < 3) index = right_target[index];
+        else if (vertical < 0) {
+            if (index == 1 || index == 2 || index == 4) --index;
+        } else if (vertical > 0) {
+            if (index == 0 || index == 1 || index == 3) ++index;
+            else {
+                model->parent_content_selection = previous;
+                model->parent_footer_focused = true;
+                model->parent_footer_selection = 1;
+            }
+        }
+        model->selected_index = index;
+        return;
+    }
     column = index % 2;
     if (horizontal < 0 && column > 0) {
         --index;
@@ -803,12 +823,66 @@ bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, 
     return true;
 }
 
+static bool parse_fixed_digits(const char *text, size_t length, unsigned long *out)
+{
+    size_t index;
+    if (!text || !out || strlen(text) != length) return false;
+    for (index = 0; index < length; ++index) {
+        if (text[index] < '0' || text[index] > '9') return false;
+    }
+    *out = strtoul(text, NULL, 10);
+    return true;
+}
+
+bool ptc_ui_parse_date_yyyymmdd(const char *text, uint16_t today_day_index, uint16_t *out_day_index)
+{
+    unsigned long value;
+    uint16_t day_index;
+    if (!out_day_index || !parse_fixed_digits(text, 8, &value) ||
+        !ptc_day_index_from_date((uint16_t)(value / 10000UL),
+                                 (uint8_t)((value / 100UL) % 100UL),
+                                 (uint8_t)(value % 100UL), &day_index) ||
+        day_index < today_day_index) {
+        return false;
+    }
+    *out_day_index = day_index;
+    return true;
+}
+
+bool ptc_ui_parse_time_hhmm(const char *text, uint16_t *out_minute_of_day)
+{
+    unsigned long value;
+    unsigned long hours;
+    unsigned long minutes;
+    if (!out_minute_of_day || !parse_fixed_digits(text, 4, &value)) return false;
+    hours = value / 100UL;
+    minutes = value % 100UL;
+    if (hours > 23UL || minutes > 59UL) return false;
+    *out_minute_of_day = (uint16_t)(hours * 60UL + minutes);
+    return true;
+}
+
+bool ptc_ui_parse_span_days(const char *text, uint16_t *out_days)
+{
+    return ptc_ui_parse_minutes(text, 1, 366, out_days);
+}
+
+bool ptc_ui_grant_minutes_legal(uint16_t minutes, uint16_t maximum)
+{
+    if (minutes == 0 || minutes > maximum) return false;
+    if (minutes <= 4) return true;
+    if (minutes <= 120) return minutes % 5 == 0;
+    return minutes == 150 || minutes == 180 || minutes == 210 || minutes == 240;
+}
+
 static bool duration_purpose(PtcUiNumpadPurpose purpose)
 {
     return purpose == PTC_UI_NUMPAD_MINUTES ||
         purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES ||
         purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
-        purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES;
+        purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES ||
+        purpose == PTC_UI_NUMPAD_SCHEDULED_MINUTES ||
+        purpose == PTC_UI_NUMPAD_GRANT_MINUTES;
 }
 
 static bool parse_duration_component(const char *text, unsigned int maximum, unsigned int *out)
@@ -870,9 +944,8 @@ bool ptc_ui_duration_step_field(PtcUiModel *model, int step)
 {
     unsigned int hours = 0;
     unsigned int minutes = 0;
-    int target_hours;
-    int target_minutes;
     int total;
+    int direction;
 
     if (!model || !duration_purpose(model->numpad_purpose) || step == 0) return false;
 
@@ -882,33 +955,28 @@ bool ptc_ui_duration_step_field(PtcUiModel *model, int step)
         minutes = model->numpad_current % 60U;
     }
 
-    target_hours = (int)hours;
-    target_minutes = (int)minutes;
-
-    if (model->duration_field == PTC_UI_DURATION_HOURS) {
-        target_hours += step;
-        if (target_hours < 0) target_hours = 0;
-        if (target_hours > 24) target_hours = 24;
-    } else {
-        target_minutes += step;
-        if (target_minutes < 0) target_minutes = 0;
-        if (target_minutes > 59) target_minutes = 59;
-    }
-
-    total = target_hours * 60 + target_minutes;
+    total = (int)(hours * 60U + minutes);
+    direction = step > 0 ? 1 : -1;
+    total += model->duration_field == PTC_UI_DURATION_HOURS ? direction * 60 : step;
     if (total < (int)model->numpad_minimum) {
         total = (int)model->numpad_minimum;
-        target_hours = total / 60;
-        target_minutes = total % 60;
     } else if (total > (int)model->numpad_maximum) {
         total = (int)model->numpad_maximum;
-        target_hours = total / 60;
-        target_minutes = total % 60;
     }
-
-    snprintf(model->duration_hours_text, sizeof(model->duration_hours_text), "%u", (unsigned int)target_hours);
-    snprintf(model->duration_minutes_text, sizeof(model->duration_minutes_text), "%u", (unsigned int)target_minutes);
-    model->numpad_current = (uint16_t)total;
+    if (model->numpad_purpose == PTC_UI_NUMPAD_GRANT_MINUTES &&
+        !ptc_ui_grant_minutes_legal((uint16_t)total, model->numpad_maximum)) {
+        int candidate = total;
+        while (candidate >= (int)model->numpad_minimum &&
+               candidate <= (int)model->numpad_maximum &&
+               !ptc_ui_grant_minutes_legal((uint16_t)candidate, model->numpad_maximum)) {
+            candidate += direction;
+        }
+        if (candidate < (int)model->numpad_minimum || candidate > (int)model->numpad_maximum) {
+            candidate = (int)model->numpad_current;
+        }
+        total = candidate;
+    }
+    set_duration_value(model, (uint16_t)total);
     model->duration_hours_replace_on_input = false;
     model->duration_minutes_replace_on_input = false;
     model->numpad_error[0] = '\0';
@@ -941,6 +1009,7 @@ void ptc_ui_numpad_open(
     model->numpad_replace_on_input = false;
     model->duration_scroll_dir = 0;
     model->duration_scroll_anim_ticks = 0;
+    model->duration_step_feedback = 1;
     if (duration_purpose(purpose)) {
         set_duration_value(model, current);
         model->duration_field = PTC_UI_DURATION_MINUTES;
@@ -1025,6 +1094,7 @@ void ptc_ui_numpad_clear(PtcUiModel *model)
 void ptc_ui_numpad_adjust(PtcUiModel *model, int delta)
 {
     uint16_t value;
+    int direction;
     if (!model || !duration_purpose(model->numpad_purpose)) {
         return;
     }
@@ -1034,6 +1104,19 @@ void ptc_ui_numpad_adjust(PtcUiModel *model, int delta)
     }
     value = ptc_ui_adjust_minutes(
         value, delta, model->numpad_minimum, model->numpad_maximum);
+    if (model->numpad_purpose == PTC_UI_NUMPAD_GRANT_MINUTES &&
+        !ptc_ui_grant_minutes_legal(value, model->numpad_maximum)) {
+        int candidate = value;
+        direction = delta > 0 ? 1 : -1;
+        while (candidate >= (int)model->numpad_minimum &&
+               candidate <= (int)model->numpad_maximum &&
+               !ptc_ui_grant_minutes_legal((uint16_t)candidate, model->numpad_maximum)) {
+            candidate += direction;
+        }
+        if (candidate >= (int)model->numpad_minimum && candidate <= (int)model->numpad_maximum)
+            value = (uint16_t)candidate;
+        else value = model->numpad_current;
+    }
     set_duration_value(model, value);
     model->duration_hours_replace_on_input = false;
     model->duration_minutes_replace_on_input = false;
@@ -1111,6 +1194,12 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
                      (unsigned int)model->numpad_minimum, (unsigned int)model->numpad_maximum);
             return false;
         }
+        if (model->numpad_purpose == PTC_UI_NUMPAD_GRANT_MINUTES &&
+            !ptc_ui_grant_minutes_legal(value, model->numpad_maximum)) {
+            snprintf(model->numpad_error, sizeof(model->numpad_error),
+                     "支持 1-4、5-120 的 5 分钟档，以及 150/180/210/240 分钟");
+            return false;
+        }
     } else {
         return false;
     }
@@ -1134,6 +1223,7 @@ void ptc_ui_numpad_finish(PtcUiModel *model)
     model->duration_minutes_text[0] = '\0';
     model->duration_hours_replace_on_input = false;
     model->duration_minutes_replace_on_input = false;
+    model->duration_step_feedback = 1;
     model->numpad_return_overlay = PTC_UI_OVERLAY_NONE;
     model->numpad_error[0] = '\0';
 }
@@ -1292,6 +1382,91 @@ bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
     int64_t age = ptc_ui_status_age_seconds(model, now);
     return model && age >= 0 && age <= 120 && model->error_code == 0 &&
         strcmp(model->result_status, "error") != 0;
+}
+
+void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeProjection *out)
+{
+    time_t clock_value = (time_t)now;
+    struct tm *local;
+    int remaining;
+    int total;
+    int64_t age;
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    snprintf(out->clock_text, sizeof(out->clock_text), "--:--");
+    snprintf(out->remaining_text, sizeof(out->remaining_text), "状态待确认");
+    snprintf(out->freshness_text, sizeof(out->freshness_text), "等待刷新");
+    out->state = PTC_UI_TIME_UNKNOWN;
+    local = localtime(&clock_value);
+    if (local) {
+        snprintf(out->clock_text, sizeof(out->clock_text), "%02d:%02d",
+                 local->tm_hour, local->tm_min);
+    }
+    if (!model) return;
+
+    age = ptc_ui_status_age_seconds(model, now);
+    if (model->waiting) {
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "正在同步");
+        out->state = PTC_UI_TIME_WAITING;
+    } else if (!model->status_loaded) {
+        snprintf(out->freshness_text, sizeof(out->freshness_text),
+                 model->error_code || strcmp(model->result_status, "error") == 0
+                     ? "暂不可用" : "等待刷新");
+    } else if (!ptc_ui_status_is_fresh(model, now)) {
+        snprintf(out->freshness_text, sizeof(out->freshness_text),
+                 model->error_code || strcmp(model->result_status, "error") == 0
+                     ? "暂不可用" : "状态待确认");
+    } else if (age <= 0) {
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "刚刚更新");
+    } else {
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "%lld 秒前更新",
+                 (long long)age);
+    }
+
+    if (ptc_ui_status_is_fresh(model, now)) {
+        if (model->unrestricted_today == 1) {
+            snprintf(out->remaining_text, sizeof(out->remaining_text), "今天还可玩：不限时");
+            out->progress_available = true;
+            out->progress_per_mille = 1000;
+            out->state = PTC_UI_TIME_UNLIMITED;
+        } else if (model->remaining_available && model->remaining_minutes >= 0 &&
+                   model->forecast_available && model->forecast[0].day_index == model->day_index &&
+                   model->forecast[0].mode == PTC_RULE_MODE_LIMIT) {
+            remaining = model->remaining_minutes;
+            total = model->forecast[0].minutes;
+            if (total > 0) {
+                snprintf(out->remaining_text, sizeof(out->remaining_text), "今天还可玩：%d 分钟", remaining);
+                out->progress_available = true;
+                if (remaining >= total) out->progress_per_mille = 1000;
+                else out->progress_per_mille = (uint16_t)(remaining * 1000 / total);
+                if (remaining == 0) out->state = PTC_UI_TIME_EXHAUSTED;
+                else if (remaining < 10) out->state = PTC_UI_TIME_DANGER;
+                else if (remaining < 30) out->state = PTC_UI_TIME_REMINDER;
+                else out->state = PTC_UI_TIME_NORMAL;
+            }
+        } else {
+            snprintf(out->remaining_text, sizeof(out->remaining_text), "状态待确认");
+        }
+    }
+
+    /* Operational exceptions are badges over the last authoritative quota;
+       they never manufacture a countdown or a zero value. */
+    if (model->recovery_active) {
+        out->state = PTC_UI_TIME_RECOVERY;
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "恢复中");
+    } else if (strcmp(model->setup_phase, "protection") == 0 ||
+               strcmp(model->setup_phase, "failed") == 0) {
+        out->state = PTC_UI_TIME_PROTECTION;
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "保护中");
+    } else if (model->disable_flag_present) {
+        out->state = PTC_UI_TIME_DISABLED;
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "控制已停用");
+    } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
+        out->state = PTC_UI_TIME_TEMPORARY_UNLOCK;
+        snprintf(out->freshness_text, sizeof(out->freshness_text), "临时解除中");
+    } else if (model->waiting) {
+        out->state = PTC_UI_TIME_WAITING;
+    }
 }
 
 void ptc_ui_format_status_age(const PtcUiModel *model, int64_t now, char *out, size_t out_size)
@@ -1502,9 +1677,9 @@ void ptc_ui_format_holiday_priority_summary(const PtcUiModel *model, char *out, 
     if (!model) {
         snprintf(out, out_size, "当前原因：状态尚未刷新");
     } else if (model->today_override_present) {
-        snprintf(out, out_size, "当前原因：今日临时设置覆盖其他规则");
+        snprintf(out, out_size, "当前原因：今日额度调整覆盖其他规则");
     } else if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        snprintf(out, out_size, "当前原因：日期计划覆盖国家节假日规则");
+        snprintf(out, out_size, "当前原因：临时额度计划覆盖国家节假日规则");
     } else if (!model->holiday_enabled) {
         snprintf(out, out_size, "当前原因：节假日预设未开启，回退周计划");
     } else if (!model->calendar_covered) {
@@ -2119,6 +2294,13 @@ PtcUiRect ptc_ui_today_card_rect(int index)
 {
     if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
     return (PtcUiRect){560 + (index % 2) * 348, 176 + (index / 2) * 110, 324, 94};
+}
+
+PtcUiRect ptc_ui_plan_card_rect(int index)
+{
+    if (index >= 0 && index < 3) return (PtcUiRect){54, 194 + index * 102, 365, 86};
+    if (index >= 3 && index < 5) return (PtcUiRect){439, 194 + (index - 3) * 102, 365, 86};
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_bedtime_section_rect(int index)
@@ -2842,19 +3024,20 @@ void ptc_ui_move_overlay_selection(PtcUiModel *model, int horizontal, int vertic
         model->overlay_selection = index;
     } else if (model->overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
         int selection = model->overlay_selection;
-        if (selection < PTC_UI_GRANT_LOCAL_ADJUST_FIRST || selection > PTC_UI_GRANT_LOCAL_BACK) {
+        if (selection != PTC_UI_GRANT_LOCAL_ADJUST_FIRST &&
+            selection != PTC_UI_GRANT_LOCAL_GENERATE &&
+            selection != PTC_UI_GRANT_LOCAL_BACK) {
             selection = PTC_UI_GRANT_LOCAL_GENERATE;
         }
-        if (selection <= PTC_UI_GRANT_LOCAL_ADJUST_LAST) {
-            if (horizontal < 0 && selection > PTC_UI_GRANT_LOCAL_ADJUST_FIRST) --selection;
-            else if (horizontal > 0 && selection < PTC_UI_GRANT_LOCAL_ADJUST_LAST) ++selection;
-            else if (vertical > 0) selection = PTC_UI_GRANT_LOCAL_GENERATE;
+        if (selection == PTC_UI_GRANT_LOCAL_ADJUST_FIRST) {
+            if (vertical > 0) selection = PTC_UI_GRANT_LOCAL_GENERATE;
         } else if (selection == PTC_UI_GRANT_LOCAL_GENERATE) {
             if (vertical < 0) selection = PTC_UI_GRANT_LOCAL_ADJUST_FIRST;
             else if (vertical > 0) selection = PTC_UI_GRANT_LOCAL_BACK;
         } else if (vertical < 0) {
             selection = PTC_UI_GRANT_LOCAL_GENERATE;
         }
+        (void)horizontal;
         model->overlay_selection = selection;
     }
 }
@@ -2910,8 +3093,8 @@ PtcUiRect ptc_ui_shortcut_hint_rect(void)
 PtcUiRect ptc_ui_grant_adjust_rect(int index)
 {
     PtcUiRect dialog = dialog_for(PTC_UI_OVERLAY_GRANT_LOCAL);
-    PtcUiRect rect = {dialog.x + 42 + index * 139, dialog.y + 238, 126, 50};
-    if (index < 0 || index >= 6) {
+    PtcUiRect rect = {dialog.x + 54, dialog.y + 194, 330, 92};
+    if (index != 0) {
         rect.w = 0;
         rect.h = 0;
     }
@@ -3039,6 +3222,23 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_HISTORY_NEXT, 0);
         }
         break;
+    case PTC_UI_OVERLAY_BEDTIME_WINDOW:
+    case PTC_UI_OVERLAY_BEDTIME_SPECIAL: {
+        PtcUiRect dialog = dialog_for(model->overlay);
+        for (i = 0; i < 3; ++i) {
+            PtcUiRect row = {dialog.x + 48, dialog.y + 112 + i * 66, dialog.w - 96, 52};
+            if (ptc_ui_rect_contains(row, x, y)) return make_hit(PTC_UI_HIT_BEDTIME_OVERLAY_FIELD, i);
+        }
+        break;
+    }
+    case PTC_UI_OVERLAY_BEDTIME: {
+        PtcUiRect dialog = dialog_for(model->overlay);
+        for (i = 0; i < 4; ++i) {
+            PtcUiRect row = {dialog.x + 42, dialog.y + 118 + i * 70, dialog.w - 84, 56};
+            if (ptc_ui_rect_contains(row, x, y)) return make_hit(PTC_UI_HIT_BEDTIME_OVERLAY_FIELD, i);
+        }
+        break;
+    }
     case PTC_UI_OVERLAY_QUICK_ADD:
         for (i = 0; i < 4; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_autonomy_option_rect(i), x, y)) {
@@ -3196,7 +3396,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         break;
     case PTC_UI_OVERLAY_GRANT_LOCAL:
-        for (i = 0; i < 6; ++i) {
+        for (i = 0; i < 1; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_grant_adjust_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_GRANT_ADJUST, i);
             }
@@ -3415,7 +3615,8 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     for (i = 0; i < count; ++i) {
         PtcUiRect card_rect = model->parent_page == PTC_UI_PARENT_SUPPORT
             ? ptc_ui_support_card_rect(i)
-            : (model->parent_page == PTC_UI_PARENT_TODAY ? ptc_ui_today_card_rect(i) : ptc_ui_parent_card_rect(i));
+            : (model->parent_page == PTC_UI_PARENT_TODAY ? ptc_ui_today_card_rect(i) :
+               (model->parent_page == PTC_UI_PARENT_PLAN ? ptc_ui_plan_card_rect(i) : ptc_ui_parent_card_rect(i)));
         if (model->parent_page == PTC_UI_PARENT_TODAY && (model->disable_flag_present || model->waiting)) continue;
         if ((model->parent_page != PTC_UI_PARENT_SUPPORT ||
              (ptc_ui_safety_action_visible(model, i) &&

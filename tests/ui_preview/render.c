@@ -128,7 +128,7 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
         "加时码生成管理", "手机和电脑配对", "保留周计划草稿？", "家长区快捷键", "本机生成加时码",
         "保留密钥更改？", "兑换结果", "验证未通过", "软件信息", "节假日安排", "保留节假日草稿？",
         "支持事件详情", "批量设置", "自制程序菜单高级入口", "调整时长", "外观主题", "输入家长 PIN",
-        "加时码使用记录", "临时日期计划", "今日自主缓冲", "家庭活动记录", "今日详情", "保留日期计划草稿？",
+        "加时码使用记录", "临时额度计划", "今日自主缓冲", "家庭活动记录", "今日详情", "保留临时额度计划草稿？",
         "就寝时间", "快速加时", "编辑每周就寝窗口", "编辑特殊就寝规则",
         "离开就寝时间编辑？", "复制每周就寝窗口"
     };
@@ -317,9 +317,15 @@ int main(int argc, char **argv)
         model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
         model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
         model.grant_minutes = 20;
+        model.grant_max_minutes = 240;
         model.grant_has_code = false;
         snprintf(model.overlay_title, sizeof(model.overlay_title), "本机生成 8 位加时码");
         failed |= save_preview(argv[2], "grant", "grant-empty", &model, dark);
+        model.overlay_selection = PTC_UI_GRANT_LOCAL_ADJUST_FIRST;
+        ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_GRANT_MINUTES, PTC_UI_OVERLAY_GRANT_LOCAL,
+            "设置代码时长", "选择协议支持的合法面额", 4, 1, 240, 20);
+        failed |= save_preview(argv[2], "grant", "grant-duration-editor", &model, dark);
+        ptc_ui_cancel_overlay(&model);
         model.grant_has_code = true;
         model.grant_issued_minutes = 20;
         model.grant_day_index = 2380;
@@ -478,15 +484,25 @@ int main(int argc, char **argv)
             snprintf(name, sizeof(name), "bedtime-section-%d", section);
             failed |= save_preview(argv[2], "bedtime", name, &model, dark);
         }
+        model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
+        model.bedtime_editor_day = 1;
+        model.overlay_selection = 1;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "编辑每周就寝窗口");
+        failed |= save_preview(argv[2], "bedtime", "bedtime-window-input", &model, dark);
+        ptc_ui_cancel_overlay(&model);
         model.parent_page = PTC_UI_PARENT_PLAN;
         model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
         model.draft_scheduled_override = model.scheduled_override;
         model.draft_scheduled_override.rule.minutes = 90;
         model.overlay = PTC_UI_OVERLAY_SCHEDULED;
         model.overlay_selection = 1;
-        snprintf(model.overlay_title, sizeof(model.overlay_title), "临时日期计划");
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "临时额度计划");
         snprintf(model.overlay_body, sizeof(model.overlay_body), "安排一段时间的每日额度，保存后应用；一次保留一个日期区间。");
         failed |= save_preview(argv[2], "scheduled", "scheduled-draft", &model, dark);
+        ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_SCHEDULED_MINUTES, PTC_UI_OVERLAY_SCHEDULED,
+            "设置临时额度计划", "分别输入小时和分钟", 4, 1, 1440, 90);
+        failed |= save_preview(argv[2], "scheduled", "scheduled-duration-editor", &model, dark);
+        ptc_ui_cancel_overlay(&model);
         model.draft_scheduled_override.end_day_index = 2745;
         model.draft_scheduled_override.rule.mode = PTC_RULE_MODE_UNLIMITED;
         failed |= save_preview(argv[2], "scheduled", "scheduled-long", &model, dark);
