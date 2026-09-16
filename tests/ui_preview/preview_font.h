@@ -5,7 +5,9 @@
  * glyph hinting and the font are not Switch qualification evidence. */
 #include <stdlib.h>
 #include <string.h>
+#ifdef PTC_UI_PREVIEW_FONT_IMPLEMENTATION
 #define STB_TRUETYPE_IMPLEMENTATION
+#endif
 #include "../../companion/overlay/vendor/libtesla/include/stb_truetype.h"
 typedef unsigned char FT_Byte;
 typedef long FT_Long;

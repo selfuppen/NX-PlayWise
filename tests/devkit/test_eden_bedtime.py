@@ -15,7 +15,16 @@ def require(condition: bool, message: str) -> None:
 def main() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     main_source = (ROOT / "companion/nro/main.c").read_text(encoding="utf-8")
-    graphics = (ROOT / "companion/nro/ui_graphics.c").read_text(encoding="utf-8")
+    graphics = "\n".join(
+        (ROOT / "companion/nro" / name).read_text(encoding="utf-8")
+        for name in (
+            "ui_graphics.c",
+            "ui_render_core.c",
+            "ui_render_pages.c",
+            "ui_render_dialogs.c",
+            "ui_render_overlays.c",
+        )
+    )
     core = (ROOT / "sysmodule/sysmodule_core.c").read_text(encoding="utf-8")
 
     eden_line = next(line for line in makefile.splitlines() if "DEFINES=-DPLAYWISE_EDEN" in line)

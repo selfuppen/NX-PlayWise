@@ -36,6 +36,10 @@ OBJS := \
 	$(BUILD)/hot_reload_guard.o \
 	$(BUILD)/album_restriction.o \
 	$(BUILD)/ui_graphics.o \
+	$(BUILD)/ui_render_core.o \
+	$(BUILD)/ui_render_pages.o \
+	$(BUILD)/ui_render_dialogs.o \
+	$(BUILD)/ui_render_overlays.o \
 	$(BUILD)/ui_theme.o \
 	$(BUILD)/ui_state.o \
 	$(BUILD)/ui_layout.o \
@@ -100,6 +104,18 @@ $(BUILD)/album_restriction.o: ../album_restriction.c ../album_restriction.h | $(
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h ui_model.h ui_state.h ui_layout.h ui_theme.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_core.o: ui_render_core.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_pages.o: ui_render_pages.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_dialogs.o: ui_render_dialogs.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_overlays.o: ui_render_overlays.c ui_render_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_theme.o: ui_theme.c ui_theme.h | $(BUILD)

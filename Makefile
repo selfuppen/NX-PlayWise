@@ -49,6 +49,7 @@ ORCH_SRCS := \
 
 TEST_SRCS := tests/c/test_host_core.c
 UI_STATE_SRCS := companion/nro/ui_state.c companion/nro/ui_layout.c companion/nro/ui_hit_test.c
+UI_RENDER_SRCS := companion/nro/ui_graphics.c companion/nro/ui_render_core.c companion/nro/ui_render_pages.c companion/nro/ui_render_dialogs.c companion/nro/ui_render_overlays.c
 UI_TEST_SRCS := $(UI_STATE_SRCS) companion/nro/ui_theme.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/activity_history.c common/protocol/redemption_history.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c common/usage/daily_summary.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
 STAGE_TIMER ?= python3 tools/stage_timer.py
@@ -86,9 +87,9 @@ $(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c co
 test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST)
 	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST)'
 
-UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/render.c
-$(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) companion/nro/ui_graphics.c companion/nro/ui_graphics.h $(wildcard tests/ui_preview/*.h) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -Itests/ui_preview -o $@ $(UI_PREVIEW_SRCS) -lm
+UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/preview_font.c tests/ui_preview/render.c
+$(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro/ui_graphics.h companion/nro/ui_render_internal.h $(wildcard tests/ui_preview/*.h) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -D_POSIX_C_SOURCE=200809L -DPTC_UI_PREVIEW_ANIM_CLOCK_MS=1024000 -DPTC_UI_PREVIEW_WALL_TIME=1000 -Itests/ui_preview -o $@ $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) -lm
 
 .PHONY: test-ui-primitives
 test-ui-primitives: $(HOST_BUILD_DIR)/ui_preview
