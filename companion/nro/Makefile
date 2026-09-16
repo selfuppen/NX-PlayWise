@@ -32,6 +32,11 @@ LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
 
 OBJS := \
 	$(BUILD)/main.o \
+	$(BUILD)/nro_runtime.o \
+	$(BUILD)/nro_requests.o \
+	$(BUILD)/nro_setup.o \
+	$(BUILD)/nro_actions.o \
+	$(BUILD)/nro_input.o \
 	$(BUILD)/hot_reload.o \
 	$(BUILD)/hot_reload_guard.o \
 	$(BUILD)/album_restriction.o \
@@ -92,6 +97,21 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 $(BUILD)/main.o: main.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_runtime.o: nro_runtime.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_requests.o: nro_requests.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_setup.o: nro_setup.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_actions.o: nro_actions.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_input.o: nro_input.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/hot_reload.o: hot_reload.c hot_reload.h ../hot_reload_guard.h | $(BUILD)

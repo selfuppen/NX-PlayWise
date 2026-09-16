@@ -24,6 +24,18 @@ def main() -> None:
     overlay_makefile = (ROOT / "companion/overlay/Makefile").read_text(encoding="utf-8")
     hot_reload = (ROOT / "companion/nro/hot_reload.c").read_text(encoding="utf-8")
     nro_main = (ROOT / "companion/nro/main.c").read_text(encoding="utf-8")
+    nro_source = "\n".join(
+        (ROOT / "companion/nro" / name).read_text(encoding="utf-8")
+        for name in (
+            "main.c",
+            "nro_runtime.c",
+            "nro_requests.c",
+            "nro_setup.c",
+            "nro_actions.c",
+            "nro_input.c",
+            "nro_app_internal.h",
+        )
+    )
 
     require("bool sm_initialized;" in header, "Switch IPC client must track its retained SM session")
     require("rc = smInitialize();" in client, "Switch IPC client init must retain an SM session")
@@ -63,9 +75,9 @@ def main() -> None:
             "vendored libtesla must traverse upward without unsigned-index underflow")
     require("-Wno-type-limits" not in overlay_makefile,
             "the standard Overlay build must not hide unsigned-index diagnostics")
-    require("standard_backend_expected()" in (ROOT / "companion/nro/main.c").read_text(encoding="utf-8"),
+    require("standard_backend_expected()" in nro_source,
             "standard NRO must skip IPC when Device Lab has disabled its boot flag")
-    require("pmshellTerminateProcess" not in hot_reload and "pmshellTerminateProcess" not in nro_main,
+    require("pmshellTerminateProcess" not in hot_reload and "pmshellTerminateProcess" not in nro_source,
             "standard hot reload must never force-terminate the source sysmodule")
     require("HANDOFF_TIMEOUT_NS UINT64_C(10000000000)" in hot_reload and
             "EXIT_TIMEOUT_NS UINT64_C(10000000000)" in hot_reload and
@@ -84,8 +96,8 @@ def main() -> None:
     expected_pos = nro_main.index("backend_expected = standard_backend_expected();")
     require(recover_pos < expected_pos,
             "standard NRO must restore an interrupted boot flag before deciding whether IPC is expected")
-    require("ui->model.view != PTC_UI_PARENT" in nro_main and
-            "PTC_UI_OPERATION_HOT_RELOAD" in nro_main,
+    require("ui->model.view != PTC_UI_PARENT" in nro_source and
+            "PTC_UI_OPERATION_HOT_RELOAD" in nro_source,
             "hot reload confirmation must remain reachable only after entering the PIN-protected parent area")
     read_status_start = pctl_adapter.index("static PtcErrorCode switch_read_status")
     read_status_end = pctl_adapter.index("static PtcErrorCode switch_backup", read_status_start)
@@ -95,9 +107,9 @@ def main() -> None:
     require("if (!out->restricted_now_available)" in read_status and
             "&settings_session.service" in read_status,
             "pctl:s restricted-now fallback must run only when the pctl query is unavailable")
-    require("volatile bool status_refresh_pending;" in nro_main,
+    require("volatile bool status_refresh_pending;" in nro_source,
             "NRO state must track pending status refresh across sleep and focus transitions")
-    require("ui->status_refresh_pending = true;" in nro_main,
+    require("ui->status_refresh_pending = true;" in nro_source,
             "NRO applet hook must flag status refresh upon resume or returning to focus")
     require("trigger_resume_status_refresh(&ui, &background_poll_elapsed_ms);" in nro_main,
             "NRO main loop must actively trigger status refresh and poll when resuming from sleep")

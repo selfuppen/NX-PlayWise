@@ -14,7 +14,17 @@ def require(condition: bool, message: str) -> None:
 
 def main() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-    main_source = (ROOT / "companion/nro/main.c").read_text(encoding="utf-8")
+    main_source = "\n".join(
+        (ROOT / "companion/nro" / name).read_text(encoding="utf-8")
+        for name in (
+            "main.c",
+            "nro_runtime.c",
+            "nro_requests.c",
+            "nro_setup.c",
+            "nro_actions.c",
+            "nro_input.c",
+        )
+    )
     graphics = "\n".join(
         (ROOT / "companion/nro" / name).read_text(encoding="utf-8")
         for name in (
