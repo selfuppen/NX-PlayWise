@@ -6,7 +6,6 @@
 #include <string.h>
 
 #include "../common/crypto/sha256.h"
-#include "../common/policy/control_policy.h"
 #include "../common/protocol/activity_history.h"
 #include "../common/protocol/request_schema.h"
 #include "../common/protocol/redemption_history.h"
@@ -1806,37 +1805,6 @@ static bool finish_with_error(
     return write_result(sysmodule, request ? request->request_id : "unknown", json);
 }
 
-static PtcOperation request_operation(PtcRequestType type)
-{
-    switch (type) {
-    case PTC_REQUEST_SET_TODAY_LIMIT:
-    case PTC_REQUEST_ADD_TODAY_MINUTES:
-        return PTC_OPERATION_SET_TODAY_LIMIT;
-    case PTC_REQUEST_RESTORE_TODAY_POLICY:
-        return PTC_OPERATION_SET_TODAY_LIMIT;
-    case PTC_REQUEST_DISABLE_TODAY_LIMIT:
-        return PTC_OPERATION_DISABLE_TODAY_LIMIT;
-    case PTC_REQUEST_OFFLINE_CODE:
-    case PTC_REQUEST_PREVIEW_OFFLINE_CODE:
-        return PTC_OPERATION_GRANT_MINUTES;
-    case PTC_REQUEST_STATUS:
-        return PTC_OPERATION_STATUS;
-    case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
-    case PTC_REQUEST_SET_HOLIDAY_POLICY:
-    case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
-    case PTC_REQUEST_SET_AUTONOMY_POLICY:
-    case PTC_REQUEST_SET_BEDTIME_POLICY:
-    case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS:
-    case PTC_REQUEST_SKIP_BEDTIME:
-    case PTC_REQUEST_DISABLE_BEDTIME:
-        return PTC_OPERATION_RULE_UPDATE;
-    case PTC_REQUEST_CLAIM_DAILY_BUFFER:
-        return PTC_OPERATION_GRANT_MINUTES;
-    default:
-        return PTC_OPERATION_STATUS;
-    }
-}
-
 static PtcPctlTargetMode target_from_day_rule(PtcDayRule rule)
 {
     if (rule.mode == PTC_RULE_MODE_UNLIMITED) {
@@ -2212,13 +2180,9 @@ static bool write_current_status_result(
 }
 
 static bool process_status(PtcSysmodule *sysmodule, const PtcRequest *request,
-    bool disable_flag, PtcClockSnapshot now)
+    PtcClockSnapshot now)
 {
-    PtcPolicyDecision decision = ptc_policy_decide(disable_flag, PTC_OPERATION_STATUS);
-    if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, "release", true, decision.error, now.day_index);
-    }
-    return write_current_status_result(sysmodule, request, "release", decision.dry_run, now, false);
+    return write_current_status_result(sysmodule, request, "release", true, now, false);
 }
 
 #ifndef PLAYWISE_DEVICE_LAB
@@ -2517,7 +2481,6 @@ static bool process_preview_offline_code(
     PtcRuntimeConfig active_config = *config;
     PtcRuntimeState runtime_state;
     PtcVerifiedOfflineCode verified;
-    PtcPolicyDecision decision;
     PtcPctlStatus pctl_status;
     PtcRules rules;
     PtcRules preview_rules;
@@ -2534,10 +2497,9 @@ static bool process_preview_offline_code(
         sysmodule, request, "release", true,
         PTC_ERR_BEDTIME_ACTIVE, now.day_index);
 
-    decision = ptc_policy_decide(disable_flag, PTC_OPERATION_GRANT_MINUTES);
-    if (decision.error != PTC_ERR_OK) {
+    if (disable_flag) {
         return finish_with_error(sysmodule, request, "release", true,
-            decision.error, now.day_index);
+            PTC_ERR_DISABLED, now.day_index);
     }
     err = verify_offline_code(sysmodule, request, &active_config, now, &runtime_state, &verified);
     if (err != PTC_ERR_OK) {
@@ -2549,11 +2511,6 @@ static bool process_preview_offline_code(
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, "release", true,
             err, now.day_index);
-    }
-    decision = ptc_policy_decide(disable_flag, PTC_OPERATION_GRANT_MINUTES);
-    if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, "release", true,
-            decision.error, now.day_index);
     }
     if (!load_rules(sysmodule, &rules)) {
         return finish_with_error(sysmodule, request, "release", true,
@@ -2596,7 +2553,6 @@ static bool process_preview_offline_code(
 static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, PtcClockSnapshot now)
 {
     PtcPctlStatus pctl_status;
-    PtcPolicyDecision decision;
     PtcRules rules;
     PtcRuntimeState runtime_state;
     PtcResultState state;
@@ -2616,9 +2572,8 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         sysmodule, request, "release", true,
         PTC_ERR_BEDTIME_ACTIVE, now.day_index);
 
-    decision = ptc_policy_decide(disable_flag, PTC_OPERATION_GRANT_MINUTES);
-    if (decision.error == PTC_ERR_DISABLED) {
-        return finish_with_error(sysmodule, request, "release", decision.dry_run, decision.error, now.day_index);
+    if (disable_flag) {
+        return finish_with_error(sysmodule, request, "release", true, PTC_ERR_DISABLED, now.day_index);
     }
     err = verify_offline_code(sysmodule, request, &active_config, now, &runtime_state, &verified);
     if (err != PTC_ERR_OK) {
@@ -2628,11 +2583,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, "release", true, err, now.day_index);
     }
-    decision = ptc_policy_decide(disable_flag, PTC_OPERATION_GRANT_MINUTES);
-    if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, "release", decision.dry_run, decision.error, now.day_index);
-    }
-    if (decision.may_write_pctl) {
+    {
         uint16_t new_minutes;
         uint16_t played_minutes = ptc_pctl_played_minutes(&pctl_status);
         uint16_t base_minutes;
@@ -2678,9 +2629,9 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     (void)sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     result_state_from_pctl(&state, now.day_index, &pctl_status);
     fill_extended_result_state(sysmodule, &state, &rules, &runtime_state, &pctl_status, now);
-    (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, "release", decision.dry_run, &state, now.unix_seconds);
+    (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, "release", false, &state, now.unix_seconds);
     if (write_result(sysmodule, request->request_id, json)) {
-        if (verified.is_v2 && !decision.dry_run &&
+        if (verified.is_v2 &&
             (runtime_state.v2_failed_attempts != 0 || runtime_state.v2_cooldown_until != 0)) {
             bool cleared;
             runtime_state.v2_failed_attempts = 0;
@@ -2691,7 +2642,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                 cleared ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED,
                 "v2_cooldown");
         }
-        if (decision.consume_nonce_after_success) {
+        {
             PtcRedemptionHistoryRecord history_record;
             history_record.redeemed_at = now.unix_seconds;
             history_record.day_index = verified.day_index;
@@ -2715,7 +2666,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                     err, now.day_index);
             }
         }
-        if (decision.consume_nonce_after_success) {
+        {
             if (runtime_state.summary_day_index != now.day_index) {
                 runtime_state.summary_day_index = now.day_index;
                 runtime_state.summary_grant_minutes = 0u;
@@ -2738,8 +2689,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                     err, now.day_index);
             }
         }
-        if (decision.consume_nonce_after_success &&
-            !consume_nonce(sysmodule, request, verified.day_index, verified.nonce, verified.version)) {
+        if (!consume_nonce(sysmodule, request, verified.day_index, verified.nonce, verified.version)) {
             char result_path[320];
             snprintf(result_path, sizeof(result_path), "%s/results/%s.json", sysmodule->app_root, request->request_id);
             (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, result_path);
@@ -3669,7 +3619,8 @@ restore_original:
     return PTC_ERR_RECOVERY_FAILED;
 }
 
-static PtcErrorCode __attribute__((unused)) validate_runtime_fingerprint(PtcSysmodule *sysmodule)
+#if !defined(PLAYWISE_DEVICE_LAB) && !defined(PLAYWISE_EDEN)
+static PtcErrorCode validate_runtime_fingerprint(PtcSysmodule *sysmodule)
 {
     char path[320];
     char build[4096];
@@ -3729,6 +3680,7 @@ static PtcErrorCode __attribute__((unused)) validate_runtime_fingerprint(PtcSysm
     }
     return PTC_ERR_OK;
 }
+#endif
 
 int ptc_sysmodule_bootstrap_setup(PtcSysmodule *sysmodule)
 {
@@ -3812,7 +3764,6 @@ static bool process_disable_today_limit(
     bool disable_flag,
     PtcClockSnapshot now)
 {
-    PtcPolicyDecision decision;
     PtcPctlSettingsSnapshot original_snapshot;
     PtcPctlSettingsSnapshot restored_snapshot;
     PtcPctlStatus before_status;
@@ -3847,13 +3798,6 @@ static bool process_disable_today_limit(
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &before_status);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, "release", true, err, now.day_index);
-    }
-    decision = ptc_policy_decide(disable_flag, PTC_OPERATION_DISABLE_TODAY_LIMIT);
-    if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, "release", decision.dry_run, decision.error, now.day_index);
-    }
-    if (decision.dry_run) {
-        return write_current_status_result(sysmodule, request, "release", true, now, false);
     }
     if (!sysmodule->pctl->vtable->snapshot_settings ||
         sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &original_snapshot) != PTC_ERR_OK) {
@@ -4052,7 +3996,6 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
 {
     PtcPctlStatus pctl_status;
     PtcPctlStatus observed_status;
-    PtcPolicyDecision decision;
     PtcRules rules;
     PtcRuntimeState runtime_state;
     PtcErrorCode err;
@@ -4080,11 +4023,7 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, "release", true, err, now.day_index);
     }
-    decision = ptc_policy_decide(disable_flag, request_operation(request->type));
-    if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, "release", decision.dry_run, decision.error, now.day_index);
-    }
-    if (!decision.dry_run) {
+    {
         if (pctl_request && !recovery_begin(sysmodule, request, now)) {
             return finish_with_error(sysmodule, request, "release", false,
                 PTC_ERR_PCTL_BACKUP_FAILED, now.day_index);
@@ -4159,7 +4098,7 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     }
     {
         bool ok = write_current_status_result(sysmodule, request, "release",
-            decision.dry_run, now, !decision.dry_run && pctl_request && recovery_path_exists(sysmodule));
+            false, now, pctl_request && recovery_path_exists(sysmodule));
         if (ok) recovery_clear(sysmodule);
         else if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule))
             write_disable_flag(sysmodule, "transaction_restore_failed\n");
@@ -4228,7 +4167,7 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
         break;
 #endif
     case PTC_REQUEST_STATUS:
-        (void)process_status(sysmodule, &request, disable_flag, now);
+        (void)process_status(sysmodule, &request, now);
         break;
     case PTC_REQUEST_CLEAR_REDEMPTION_HISTORY:
         (void)process_clear_redemption_history(sysmodule, &request, now);

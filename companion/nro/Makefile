@@ -73,8 +73,7 @@ OBJS += \
 	$(BUILD)/pctl_stub.o \
 	$(BUILD)/sysmodule_core.o \
 	$(BUILD)/play_timer_settings_layout.o \
-	$(BUILD)/token_v1.o \
-	$(BUILD)/control_policy.o
+	$(BUILD)/token_v1.o
 endif
 
 .PHONY: all clean
@@ -189,9 +188,6 @@ $(BUILD)/play_timer_settings_layout.o: ../../platform/switch/play_timer_settings
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/token_v1.o: ../../common/token/token_v1.c ../../common/token/token_v1.h | $(BUILD)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD)/control_policy.o: ../../common/policy/control_policy.c ../../common/policy/control_policy.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Header dependencies are emitted beside each object. Rebuild all objects when

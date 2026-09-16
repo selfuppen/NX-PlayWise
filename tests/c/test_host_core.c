@@ -5,7 +5,6 @@
 
 #include "../../common/version.h"
 #include "../../common/crypto/sha256.h"
-#include "../../common/policy/control_policy.h"
 #include "../../common/protocol/request_schema.h"
 #include "../../common/protocol/activity_history.h"
 #include "../../common/protocol/redemption_history.h"
@@ -576,19 +575,6 @@ static void test_daily_summary_and_read_only_stats_boundary(void)
         PTC_USAGE_STATS_UNAVAILABLE, "per-game adapter stays unavailable before Device Lab evidence");
     check_true(snapshot.local_device_scope && snapshot.day_index == 2380 && snapshot.title_count == 0,
         "unavailable statistics retain explicit local-device scope without guessing titles");
-}
-
-static void test_policy_and_disable_flag(void)
-{
-    PtcPolicyDecision decision;
-    decision = ptc_policy_decide(true, PTC_OPERATION_STATUS);
-    check_int(decision.error, PTC_ERR_OK, "disable flag preserves status");
-    check_true(decision.may_read_pctl && !decision.may_write_pctl, "disabled status remains read-only");
-    decision = ptc_policy_decide(true, PTC_OPERATION_SET_TODAY_LIMIT);
-    check_int(decision.error, PTC_ERR_DISABLED, "disable flag blocks writes");
-    decision = ptc_policy_decide(false, PTC_OPERATION_GRANT_MINUTES);
-    check_true(decision.may_write_pctl && decision.requires_backup && decision.consume_nonce_after_success,
-        "offline grant is transactional");
 }
 
 static void test_support_redaction(void)
@@ -2471,7 +2457,6 @@ int main(void)
     test_holiday_calendar_and_priority();
     test_bedtime_rules_and_protocol();
     test_daily_summary_and_read_only_stats_boundary();
-    test_policy_and_disable_flag();
     test_support_redaction();
     test_install_defaults_preserve_runtime_data();
     test_auth_and_queue();

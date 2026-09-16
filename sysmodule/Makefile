@@ -16,7 +16,6 @@ SOURCES := \
 	source \
 	. \
 	../common/crypto \
-	../common/policy \
 	../common/protocol \
 	../common/rules \
 	../common/time \

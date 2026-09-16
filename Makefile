@@ -21,8 +21,7 @@ COMMON_SRCS := \
 	common/rules/rules.c \
 	common/rules/holiday_calendar.c \
 	common/support/support_export.c \
-	common/security/credential_policy.c \
-	common/policy/control_policy.c
+	common/security/credential_policy.c
 
 THIRD_PARTY_SRCS := \
 	third_party/cjson/cJSON.c \
