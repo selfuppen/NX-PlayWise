@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
-  <title id="title">PlayWise PIN 手柄输入示意</title>
+  <title id="title">PlayWise PIN Joy-Con 输入示意</title>
   <desc id="desc">Nintendo Switch 官方风格 Joy-Con 手柄输入示意，左右摇杆使用相同的八方向数字映射，X 输入 0，Y 输入 9。</desc>
   <defs>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#16202a" flood-opacity=".14"/></filter>
@@ -9,90 +9,134 @@
   <text x="60" y="66" class="title">PlayWise PIN 输入示意</text>
   <text x="60" y="102" class="small">左右摇杆映射相同；短按 + 确认，长按 + 切换传统数字键盘。</text>
   <rect x="48" y="138" width="700" height="548" rx="18" fill="#fff" filter="url(#shadow)"/>
-  <text x="82" y="185" class="section">手柄输入示意</text>
+  <text x="82" y="185" class="section">Joy-Con 手柄输入示意</text>
   <text x="82" y="218" class="small">摇杆方向从上方开始顺时针映射 1–8；输入内容始终隐藏。</text>
-  <g transform="translate(90 236)">
-    <!-- Joy-Con Grip Center Bridge -->
-    <rect x="155" y="12" width="230" height="295" rx="28" fill="#e8edf5" stroke="#73849b" stroke-width="3"/>
-    <line x1="155" y1="16" x2="155" y2="300" stroke="#73849b" stroke-width="2"/>
-    <line x1="385" y1="16" x2="385" y2="300" stroke="#73849b" stroke-width="2"/>
-    <!-- Player Indicator LEDs -->
-    <g transform="translate(230 162)">
-      <rect x="0" y="0" width="12" height="12" rx="3" fill="#1769d2"/>
-      <rect x="22" y="0" width="12" height="12" rx="3" fill="#9aaabd"/>
-      <rect x="44" y="0" width="12" height="12" rx="3" fill="#9aaabd"/>
-      <rect x="66" y="0" width="12" height="12" rx="3" fill="#9aaabd"/>
-    </g>
 
-    <!-- Left Joy-Con (Neon Blue accent) -->
-    <rect x="40" y="8" width="115" height="304" rx="44" fill="#e2edfa" stroke="#1769d2" stroke-width="3"/>
-    <rect x="56" y="-3" width="76" height="11" rx="5" fill="#73849b"/>
-    <text x="94" y="6" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">L</text>
+  <g transform="translate(80 236)">
+    <!-- Left Joy-Con (L) - 霓虹蓝 -->
+    <rect x="20" y="8" width="136" height="304" rx="36" fill="#d8f0fa" stroke="#00aee6" stroke-width="3"/>
+    <!-- L Shoulder Button -->
+    <rect x="36" y="-3" width="76" height="11" rx="5" fill="#0094c4"/>
+    <text x="74" y="6" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">L</text>
     <!-- Minus Button -->
-    <rect x="122" y="24" width="22" height="7" rx="3.5" fill="#4a5a6e"/>
-    <!-- Left Stick with 1-8 Directions -->
-    <circle cx="98" cy="106" r="36" fill="#f8fafc" stroke="#1769d2" stroke-width="4"/>
-    <circle cx="98" cy="106" r="25" fill="#d8e0ea" stroke="#73849b" stroke-width="2"/>
-    <g text-anchor="middle" dominant-baseline="middle" class="digit">
-      <text x="98" y="48">1</text>
-      <text x="138" y="64">2</text>
-      <text x="154" y="106">3</text>
-      <text x="138" y="148">4</text>
-      <text x="98" y="164">5</text>
-      <text x="58" y="148">6</text>
-      <text x="42" y="106">7</text>
-      <text x="58" y="64">8</text>
-    </g>
-    <!-- Directional Buttons (Switch D-Pad 4 Circles) -->
-    <g text-anchor="middle" dominant-baseline="middle">
-      <circle cx="98" cy="194" r="14" fill="#fff" stroke="#73849b" stroke-width="2"/>
-      <text x="98" y="194" font-size="13" fill="#4a5a6e">▲</text>
-      <circle cx="126" cy="222" r="14" fill="#fff" stroke="#73849b" stroke-width="2"/>
-      <text x="126" y="222" font-size="13" fill="#4a5a6e">►</text>
-      <circle cx="98" cy="250" r="14" fill="#fff" stroke="#73849b" stroke-width="2"/>
-      <text x="98" y="250" font-size="13" fill="#4a5a6e">▼</text>
-      <circle cx="70" cy="222" r="14" fill="#fff" stroke="#73849b" stroke-width="2"/>
-      <text x="70" y="222" font-size="13" fill="#4a5a6e">◄</text>
-    </g>
-    <!-- Capture Button -->
-    <rect x="124" y="260" width="16" height="16" rx="4" fill="#73849b"/>
+    <rect x="122" y="24" width="20" height="7" rx="3.5" fill="#4a5a6e"/>
 
-    <!-- Right Joy-Con (Neon Red accent) -->
-    <rect x="385" y="8" width="115" height="304" rx="44" fill="#fae8e8" stroke="#eb4848" stroke-width="3"/>
-    <rect x="408" y="-3" width="76" height="11" rx="5" fill="#73849b"/>
-    <text x="446" y="6" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">R</text>
+    <!-- Left Stick with Official Compass Dial 1-8 -->
+    <circle cx="88" cy="106" r="46" fill="none" stroke="#b2d8ea" stroke-width="1.5" stroke-dasharray="4,4"/>
+    <circle cx="88" cy="106" r="30" fill="#f8fafc" stroke="#00aee6" stroke-width="3"/>
+    <circle cx="88" cy="106" r="20" fill="#d8e0ea" stroke="#73849b" stroke-width="1.5"/>
+    <!-- Stick thumb grip tick marks -->
+    <line x1="88" y1="89" x2="88" y2="94" stroke="#73849b" stroke-width="2"/>
+    <line x1="88" y1="118" x2="88" y2="123" stroke="#73849b" stroke-width="2"/>
+    <line x1="71" y1="106" x2="76" y2="106" stroke="#73849b" stroke-width="2"/>
+    <line x1="100" y1="106" x2="105" y2="106" stroke="#73849b" stroke-width="2"/>
+
+    <!-- 1-8 Digits positioned around stick compass -->
+    <g text-anchor="middle" dominant-baseline="middle" font-weight="700" font-size="19" fill="#0088b8">
+      <text x="88" y="48">1</text>
+      <text x="128" y="65">2</text>
+      <text x="144" y="106">3</text>
+      <text x="128" y="147">4</text>
+      <text x="88" y="164">5</text>
+      <text x="48" y="147">6</text>
+      <text x="32" y="106">7</text>
+      <text x="48" y="65">8</text>
+    </g>
+
+    <!-- Directional Buttons (D-Pad 4 separate circles) -->
+    <g text-anchor="middle" dominant-baseline="middle">
+      <circle cx="88" cy="198" r="13" fill="#fff" stroke="#73849b" stroke-width="2"/>
+      <text x="88" y="198" font-size="12" fill="#4a5a6e">▲</text>
+      <circle cx="116" cy="226" r="13" fill="#fff" stroke="#73849b" stroke-width="2"/>
+      <text x="116" y="226" font-size="12" fill="#4a5a6e">►</text>
+      <circle cx="88" cy="254" r="13" fill="#fff" stroke="#73849b" stroke-width="2"/>
+      <text x="88" y="254" font-size="12" fill="#4a5a6e">▼</text>
+      <circle cx="60" cy="226" r="13" fill="#fff" stroke="#73849b" stroke-width="2"/>
+      <text x="60" y="226" font-size="12" fill="#4a5a6e">◄</text>
+    </g>
+    <text x="88" y="284" text-anchor="middle" font-size="12" fill="#5b6875">十字键同正方向</text>
+    <!-- Capture Button -->
+    <rect x="124" y="270" width="16" height="16" rx="4" fill="#73849b"/>
+
+    <!-- Center Guide Legend Card -->
+    <g transform="translate(178 16)">
+      <rect width="132" height="288" rx="16" fill="#f4f7fb" stroke="#ccd7e6" stroke-width="2"/>
+      <rect x="16" y="14" width="100" height="28" rx="8" fill="#dceafa"/>
+      <text x="66" y="33" text-anchor="middle" font-size="14" font-weight="700" fill="#1769d2">Joy-Con 输入</text>
+      <text x="66" y="72" text-anchor="middle" font-size="15" font-weight="700" fill="#17212b">摇杆 ➔ 1–8</text>
+      <text x="66" y="94" text-anchor="middle" font-size="12" fill="#73849b">(顺时针旋转)</text>
+      <rect x="16" y="112" width="100" height="30" rx="8" fill="#fad0d4" stroke="#ff4554" stroke-width="1.5"/>
+      <text x="66" y="132" text-anchor="middle" font-size="14" font-weight="700" fill="#de3646">X 键 ➔ 0</text>
+      <rect x="16" y="150" width="100" height="30" rx="8" fill="#fad0d4" stroke="#ff4554" stroke-width="1.5"/>
+      <text x="66" y="170" text-anchor="middle" font-size="14" font-weight="700" fill="#de3646">Y 键 ➔ 9</text>
+      <line x1="16" y1="194" x2="116" y2="194" stroke="#ccd7e6" stroke-width="1.5"/>
+      <text x="66" y="216" text-anchor="middle" font-size="13" font-weight="600" fill="#4a5a6e">ZL 键 退格</text>
+      <text x="66" y="240" text-anchor="middle" font-size="13" font-weight="600" fill="#4a5a6e">+ 键 确认</text>
+      <text x="66" y="264" text-anchor="middle" font-size="12" fill="#73849b">长按+切换键盘</text>
+    </g>
+
+    <!-- Right Joy-Con (R) - 霓虹红 -->
+    <rect x="332" y="8" width="136" height="304" rx="36" fill="#fce4e6" stroke="#ff4554" stroke-width="3"/>
+    <!-- R Shoulder Button -->
+    <rect x="376" y="-3" width="76" height="11" rx="5" fill="#de3646"/>
+    <text x="414" y="6" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">R</text>
     <!-- Plus Button -->
-    <rect x="398" y="25" width="16" height="6" rx="2" fill="#4a5a6e"/>
-    <rect x="403" y="20" width="6" height="16" rx="2" fill="#4a5a6e"/>
+    <rect x="344" y="25" width="18" height="6" rx="2" fill="#4a5a6e"/>
+    <rect x="350" y="19" width="6" height="18" rx="2" fill="#4a5a6e"/>
+
     <!-- ABXY Face Buttons -->
     <g text-anchor="middle" dominant-baseline="middle">
-      <circle cx="442" cy="66" r="18" fill="#fff" stroke="#1769d2" stroke-width="3"/>
-      <text x="442" y="66" class="digit" font-size="14">X=0</text>
-      <circle cx="482" cy="106" r="18" fill="#fff" stroke="#73849b" stroke-width="2"/>
-      <text x="482" y="106" class="key" font-size="17">A</text>
-      <circle cx="442" cy="146" r="18" fill="#fff" stroke="#73849b" stroke-width="2"/>
-      <text x="442" y="146" class="key" font-size="17">B</text>
-      <circle cx="402" cy="106" r="18" fill="#fff" stroke="#1769d2" stroke-width="3"/>
-      <text x="402" y="106" class="digit" font-size="14">Y=9</text>
+      <circle cx="400" cy="70" r="18" fill="#fad0d4" stroke="#ff4554" stroke-width="2.5"/>
+      <text x="400" y="70" font-size="14" font-weight="700" fill="#de3646">X=0</text>
+      <circle cx="436" cy="106" r="18" fill="#fff" stroke="#73849b" stroke-width="2"/>
+      <text x="436" y="106" class="key" font-size="16" fill="#4a5a6e">A</text>
+      <circle cx="400" cy="142" r="18" fill="#fff" stroke="#73849b" stroke-width="2"/>
+      <text x="400" y="142" class="key" font-size="16" fill="#4a5a6e">B</text>
+      <circle cx="364" cy="106" r="18" fill="#fad0d4" stroke="#ff4554" stroke-width="2.5"/>
+      <text x="364" y="106" font-size="14" font-weight="700" fill="#de3646">Y=9</text>
     </g>
+
     <!-- Right Stick -->
-    <circle cx="442" cy="222" r="32" fill="#f8fafc" stroke="#73849b" stroke-width="3"/>
-    <circle cx="442" cy="222" r="22" fill="#d8e0ea"/>
-    <text x="442" y="222" class="key" font-size="16" fill="#73849b" text-anchor="middle" dominant-baseline="middle">R</text>
+    <circle cx="400" cy="226" r="30" fill="#f8fafc" stroke="#73849b" stroke-width="3"/>
+    <circle cx="400" cy="226" r="20" fill="#d8e0ea"/>
+    <text x="400" y="226" class="key" font-size="16" fill="#73849b" text-anchor="middle" dominant-baseline="middle">R</text>
+    <text x="400" y="270" text-anchor="middle" font-size="12" fill="#5b6875">右摇杆映射相同</text>
     <!-- Home Button -->
-    <circle cx="406" cy="268" r="10" fill="#fff" stroke="#73849b" stroke-width="2"/>
-    <circle cx="406" cy="268" r="5" fill="#73849b"/>
+    <circle cx="354" cy="274" r="11" fill="#fff" stroke="#73849b" stroke-width="2"/>
+    <circle cx="354" cy="274" r="5" fill="#73849b"/>
   </g>
+
   <text x="82" y="638" class="label">左右摇杆映射相同：方向 1–8；X=0，Y=9</text>
   <text x="82" y="668" class="small">十字键也支持上、右、下、左四个正方向；左右 Joy-Con 均支持输入。</text>
+
   <rect x="778" y="138" width="374" height="548" rx="18" fill="#fff" filter="url(#shadow)"/>
   <text x="812" y="185" class="section">触摸与功能键</text>
   <g transform="translate(812 220)">
-    <g fill="#eef2f7" stroke="#9aaabd" stroke-width="2"><rect width="90" height="54" rx="10"/><rect x="105" width="90" height="54" rx="10"/><rect x="210" width="90" height="54" rx="10"/><rect y="68" width="90" height="54" rx="10"/><rect x="105" y="68" width="90" height="54" rx="10"/><rect x="210" y="68" width="90" height="54" rx="10"/><rect y="136" width="90" height="54" rx="10"/><rect x="105" y="136" width="90" height="54" rx="10"/><rect x="210" y="136" width="90" height="54" rx="10"/><rect x="105" y="204" width="90" height="54" rx="10"/></g>
-    <g text-anchor="middle" dominant-baseline="middle" class="key"><text x="45" y="27">1</text><text x="150" y="27">2</text><text x="255" y="27">3</text><text x="45" y="95">4</text><text x="150" y="95">5</text><text x="255" y="95">6</text><text x="45" y="163">7</text><text x="150" y="163">8</text><text x="255" y="163">9</text><text x="150" y="231">0</text></g>
-    <rect y="292" width="142" height="52" rx="10" fill="#fff3d9"/><text x="20" y="326" class="label">ZL 退格</text>
-    <rect x="158" y="292" width="142" height="52" rx="10" fill="#dceafa"/><text x="176" y="326" class="label">+ 确认</text>
-    <rect y="358" width="142" height="52" rx="10" fill="#eef2f7"/><text x="20" y="392" class="label">B 取消</text>
-    <rect x="158" y="358" width="142" height="52" rx="10" fill="#eef2f7"/><text x="174" y="392" class="small">长按 + 键盘</text>
+    <g fill="#eef2f7" stroke="#9aaabd" stroke-width="2">
+      <rect width="90" height="54" rx="10"/>
+      <rect x="105" width="90" height="54" rx="10"/>
+      <rect x="210" width="90" height="54" rx="10"/>
+      <rect y="68" width="90" height="54" rx="10"/>
+      <rect x="105" y="68" width="90" height="54" rx="10"/>
+      <rect x="210" y="68" width="90" height="54" rx="10"/>
+      <rect y="136" width="90" height="54" rx="10"/>
+      <rect x="105" y="136" width="90" height="54" rx="10"/>
+      <rect x="210" y="136" width="90" height="54" rx="10"/>
+      <rect x="105" y="204" width="90" height="54" rx="10"/>
+    </g>
+    <g text-anchor="middle" dominant-baseline="middle" class="key">
+      <text x="45" y="27">1</text><text x="150" y="27">2</text><text x="255" y="27">3</text>
+      <text x="45" y="95">4</text><text x="150" y="95">5</text><text x="255" y="95">6</text>
+      <text x="45" y="163">7</text><text x="150" y="163">8</text><text x="255" y="163">9</text>
+      <text x="150" y="231">0</text>
+    </g>
+    <rect y="292" width="142" height="52" rx="10" fill="#fff3d9"/>
+    <text x="20" y="326" class="label">ZL 退格</text>
+    <rect x="158" y="292" width="142" height="52" rx="10" fill="#dceafa"/>
+    <text x="176" y="326" class="label">+ 确认</text>
+    <rect y="358" width="142" height="52" rx="10" fill="#eef2f7"/>
+    <text x="20" y="392" class="label">B 取消</text>
+    <rect x="158" y="358" width="142" height="52" rx="10" fill="#eef2f7"/>
+    <text x="174" y="392" class="small">长按 + 键盘</text>
   </g>
 </svg>

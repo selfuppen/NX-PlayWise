@@ -320,74 +320,81 @@ void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
     draw_text(pixels, stride, dialog.x + 40, dialog.y + 222, "手柄输入示意", 20, UI_INK);
     {
         int i;
-        int left_jc_x = dialog.x + 68;
-        int left_jc_y = dialog.y + 260;
-        int jc_w = 120;
-        int jc_h = 208;
-        int grip_x = dialog.x + 184;
-        int grip_y = dialog.y + 268;
-        int grip_w = 180;
-        int grip_h = 196;
-        int right_jc_x = dialog.x + 360;
-        int right_jc_y = dialog.y + 260;
-        int stick_x = dialog.x + 128;
-        int stick_y = dialog.y + 322;
-        int dpad_cx = dialog.x + 128;
-        int dpad_cy = dialog.y + 414;
-        int buttons_x = dialog.x + 420;
-        int buttons_y = dialog.y + 322;
-        int rstick_x = dialog.x + 420;
-        int rstick_y = dialog.y + 414;
+        bool is_dark = (g_theme.resolved == PTC_UI_RESOLVED_DARK);
 
-        /* Center Joy-Con Grip bridge connecting Left and Right Joy-Cons */
-        fill_round_rect(pixels, stride, (UiRect){grip_x, grip_y, grip_w, grip_h}, 24, UI_PAGE);
-        draw_rect_outline(pixels, stride, (UiRect){grip_x, grip_y, grip_w, grip_h}, 24, 1, UI_BORDER);
+        /* 官方 Joy-Con 配色：左霓虹蓝 (Neon Blue)，右霓虹红 (Neon Red) */
+        uint32_t left_jc_bg = is_dark ? UI_RGB(0x0C3048) : UI_RGB(0xD4EEFA);
+        uint32_t left_jc_border = is_dark ? UI_RGB(0x00AEE6) : UI_RGB(0x009BD0);
+        uint32_t left_jc_shoulder = is_dark ? UI_RGB(0x0094C4) : UI_RGB(0x0088B8);
+        uint32_t left_stick_accent = is_dark ? UI_RGB(0x00C4FA) : UI_RGB(0x009BD0);
 
-        /* Grip rails between Joy-Cons and bridge */
-        draw_line(pixels, stride, left_jc_x + jc_w, left_jc_y + 4, left_jc_x + jc_w, left_jc_y + jc_h - 4, 2, UI_CONTROL);
-        draw_line(pixels, stride, right_jc_x, right_jc_y + 4, right_jc_x, right_jc_y + jc_h - 4, 2, UI_CONTROL);
+        uint32_t right_jc_bg = is_dark ? UI_RGB(0x441820) : UI_RGB(0xFCE4E6);
+        uint32_t right_jc_border = is_dark ? UI_RGB(0xFF4554) : UI_RGB(0xEB3646);
+        uint32_t right_jc_shoulder = is_dark ? UI_RGB(0xDE3646) : UI_RGB(0xD42838);
+        uint32_t right_key_active_bg = is_dark ? UI_RGB(0x601C26) : UI_RGB(0xFAD0D4);
+        uint32_t right_key_active_border = is_dark ? UI_RGB(0xFF4554) : UI_RGB(0xEB3646);
+        uint32_t right_key_active_text = is_dark ? UI_RGB(0xFF707E) : UI_RGB(0xD42838);
 
-        /* Player indicator LEDs in grip center (Player 1 lit) */
-        for (i = 0; i < 4; ++i) {
-            UiRect led = {grip_x + (grip_w / 2) - 27 + i * 14, grip_y + 98, 8, 8};
-            fill_round_rect(pixels, stride, led, 2, i == 0 ? UI_ACCENT : UI_CONTROL);
-        }
+        /* 调整 Joy-Con 宽高比：宽度收窄至 126，高度保持 238，造型更修长匀称 */
+        int jc_w = 126;
+        int jc_h = 238;
+        int left_jc_x = dialog.x + 52;
+        int left_jc_y = dialog.y + 242;
+        int right_jc_x = dialog.x + 330;
+        int right_jc_y = dialog.y + 242;
 
-        /* Left Joy-Con body */
-        fill_round_rect(pixels, stride, (UiRect){left_jc_x, left_jc_y, jc_w, jc_h}, 36, UI_RAISED);
-        draw_rect_outline(pixels, stride, (UiRect){left_jc_x, left_jc_y, jc_w, jc_h}, 36, 2, UI_CONTROL);
+        int stick_x = left_jc_x + 63;
+        int stick_y = left_jc_y + 70;
+        int dpad_cx = left_jc_x + 63;
+        int dpad_cy = left_jc_y + 164;
+        int buttons_x = right_jc_x + 63;
+        int buttons_y = right_jc_y + 70;
+        int rstick_x = right_jc_x + 63;
+        int rstick_y = right_jc_y + 164;
+
+        /* Left Joy-Con (L) body - 霓虹蓝 */
+        fill_round_rect(pixels, stride, (UiRect){left_jc_x, left_jc_y, jc_w, jc_h}, 26, left_jc_bg);
+        draw_rect_outline(pixels, stride, (UiRect){left_jc_x, left_jc_y, jc_w, jc_h}, 26, 2, left_jc_border);
 
         /* Left shoulder (L button) */
-        fill_round_rect(pixels, stride, (UiRect){left_jc_x + 14, left_jc_y - 8, 80, 8}, 4, UI_CONTROL);
-        draw_text_center(pixels, stride, (UiRect){left_jc_x + 14, left_jc_y - 9, 80, 10}, "L", 10, UI_PAGE);
+        fill_round_rect(pixels, stride, (UiRect){left_jc_x + 10, left_jc_y - 10, 68, 10}, 4, left_jc_shoulder);
+        draw_text_center(pixels, stride, (UiRect){left_jc_x + 10, left_jc_y - 10, 68, 10}, "L", 10, UI_PAGE);
 
         /* Minus (-) button */
-        fill_round_rect(pixels, stride, (UiRect){left_jc_x + jc_w - 28, left_jc_y + 12, 16, 5}, 2, UI_CONTROL);
+        fill_round_rect(pixels, stride, (UiRect){left_jc_x + jc_w - 24, left_jc_y + 14, 14, 4}, 2, UI_CONTROL);
 
-        /* Left Stick: 8-direction mapping 1-8 around stick cap */
-        draw_circle_outline(pixels, stride, stick_x, stick_y, 22, 2, UI_ACCENT);
+        /* Left Stick: 官方风格 1-8 指南针刻度表盘 */
+        draw_circle_outline(pixels, stride, stick_x, stick_y, 38, 1, UI_BORDER);
+        draw_circle_outline(pixels, stride, stick_x, stick_y, 22, 2, left_stick_accent);
         fill_round_rect(pixels, stride, (UiRect){stick_x - 16, stick_y - 16, 32, 32}, 16, UI_SURFACE);
         draw_circle_outline(pixels, stride, stick_x, stick_y, 16, 1, UI_CONTROL);
 
+        /* 摇杆防滑十字刻痕 */
+        draw_line(pixels, stride, stick_x, stick_y - 14, stick_x, stick_y - 10, 1, UI_CONTROL);
+        draw_line(pixels, stride, stick_x, stick_y + 10, stick_x, stick_y + 14, 1, UI_CONTROL);
+        draw_line(pixels, stride, stick_x - 14, stick_y, stick_x - 10, stick_y, 1, UI_CONTROL);
+        draw_line(pixels, stride, stick_x + 10, stick_y, stick_x + 14, stick_y, 1, UI_CONTROL);
+
+        /* 顺时针 8 方向数字与向外刻度 */
         for (i = 1; i <= 8; ++i) {
             int dx = 0, dy = 0;
             char label[4];
             switch (i) {
-            case 1: dy = -40; break;
-            case 2: dx = 29; dy = -29; break;
-            case 3: dx = 40; break;
-            case 4: dx = 29; dy = 29; break;
-            case 5: dy = 40; break;
-            case 6: dx = -29; dy = 29; break;
-            case 7: dx = -40; break;
-            case 8: dx = -29; dy = -29; break;
+            case 1: dy = -42; break;
+            case 2: dx = 30; dy = -30; break;
+            case 3: dx = 42; break;
+            case 4: dx = 30; dy = 30; break;
+            case 5: dy = 42; break;
+            case 6: dx = -30; dy = 30; break;
+            case 7: dx = -42; break;
+            case 8: dx = -30; dy = -30; break;
             }
             snprintf(label, sizeof(label), "%d", i);
-            draw_text_center(pixels, stride, (UiRect){stick_x + dx - 12, stick_y + dy - 12, 24, 24},
-                             label, 16, UI_ACCENT);
+            draw_text_center(pixels, stride, (UiRect){stick_x + dx - 10, stick_y + dy - 10, 20, 20},
+                             label, 15, left_stick_accent);
         }
 
-        /* Switch Left Joy-Con: 4 separate circular directional buttons (D-pad) below stick */
+        /* 方向键（十字键 4 颗独立圆键） */
         for (i = 0; i < 4; ++i) {
             int d = 16;
             int dx = i == 1 ? d : (i == 3 ? -d : 0);
@@ -398,23 +405,25 @@ void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
             draw_circle_outline(pixels, stride, dpad_cx + dx, dpad_cy + dy, 9, 1, UI_CONTROL);
             draw_text_center(pixels, stride, btn, arrow, 11, UI_MUTED);
         }
+        draw_text_center(pixels, stride, (UiRect){left_jc_x + 6, left_jc_y + 192, jc_w - 12, 16},
+                         "十字键同正方向", 11, UI_MUTED);
 
-        /* Capture button */
-        fill_round_rect(pixels, stride, (UiRect){left_jc_x + jc_w - 24, left_jc_y + jc_h - 28, 12, 12}, 3, UI_CONTROL);
+        /* 截图键 */
+        fill_round_rect(pixels, stride, (UiRect){left_jc_x + jc_w - 22, left_jc_y + jc_h - 24, 12, 12}, 3, UI_CONTROL);
 
-        /* Right Joy-Con body */
-        fill_round_rect(pixels, stride, (UiRect){right_jc_x, right_jc_y, jc_w, jc_h}, 36, UI_RAISED);
-        draw_rect_outline(pixels, stride, (UiRect){right_jc_x, right_jc_y, jc_w, jc_h}, 36, 2, UI_CONTROL);
+        /* Right Joy-Con (R) body - 霓虹红 */
+        fill_round_rect(pixels, stride, (UiRect){right_jc_x, right_jc_y, jc_w, jc_h}, 26, right_jc_bg);
+        draw_rect_outline(pixels, stride, (UiRect){right_jc_x, right_jc_y, jc_w, jc_h}, 26, 2, right_jc_border);
 
         /* Right shoulder (R button) */
-        fill_round_rect(pixels, stride, (UiRect){right_jc_x + jc_w - 94, right_jc_y - 8, 80, 8}, 4, UI_CONTROL);
-        draw_text_center(pixels, stride, (UiRect){right_jc_x + jc_w - 94, right_jc_y - 9, 80, 10}, "R", 10, UI_PAGE);
+        fill_round_rect(pixels, stride, (UiRect){right_jc_x + jc_w - 78, right_jc_y - 10, 68, 10}, 4, right_jc_shoulder);
+        draw_text_center(pixels, stride, (UiRect){right_jc_x + jc_w - 78, right_jc_y - 10, 68, 10}, "R", 10, UI_PAGE);
 
         /* Plus (+) button */
-        draw_line(pixels, stride, right_jc_x + 15, right_jc_y + 14, right_jc_x + 25, right_jc_y + 14, 2, UI_CONTROL);
-        draw_line(pixels, stride, right_jc_x + 20, right_jc_y + 9, right_jc_x + 20, right_jc_y + 19, 2, UI_CONTROL);
+        draw_line(pixels, stride, right_jc_x + 14, right_jc_y + 16, right_jc_x + 24, right_jc_y + 16, 2, UI_CONTROL);
+        draw_line(pixels, stride, right_jc_x + 19, right_jc_y + 11, right_jc_x + 19, right_jc_y + 21, 2, UI_CONTROL);
 
-        /* ABXY action buttons on Right Joy-Con */
+        /* ABXY 四键：突出强化 X=0 与 Y=9 */
         for (i = 0; i < 4; ++i) {
             int d = 26;
             int dx = i == 1 ? d : (i == 3 ? -d : 0);
@@ -423,27 +432,48 @@ void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
             char label[12];
             UiRect key = {buttons_x + dx - 15, buttons_y + dy - 15, 30, 30};
             bool is_digit = (i == 0 || i == 3);
-            fill_round_rect(pixels, stride, key, 15, is_digit ? UI_ACCENT_SOFT : UI_SURFACE);
+            fill_round_rect(pixels, stride, key, 15, is_digit ? right_key_active_bg : UI_SURFACE);
             draw_circle_outline(pixels, stride, buttons_x + dx, buttons_y + dy, 15, 2,
-                                is_digit ? UI_ACCENT : UI_CONTROL);
+                                is_digit ? right_key_active_border : UI_CONTROL);
             if (i == 0) snprintf(label, sizeof(label), "X=0");
             else if (i == 3) snprintf(label, sizeof(label), "Y=9");
             else snprintf(label, sizeof(label), "%s", letter);
             draw_text_center(pixels, stride, key, label, is_digit ? 11 : 14,
-                             is_digit ? UI_ACCENT : UI_MUTED);
+                             is_digit ? right_key_active_text : UI_MUTED);
         }
 
-        /* Right Stick below ABXY buttons */
+        /* 右摇杆（同样映射 1-8） */
         draw_circle_outline(pixels, stride, rstick_x, rstick_y, 20, 2, UI_CONTROL);
         fill_round_rect(pixels, stride, (UiRect){rstick_x - 14, rstick_y - 14, 28, 28}, 14, UI_SURFACE);
         draw_circle_outline(pixels, stride, rstick_x, rstick_y, 14, 1, UI_CONTROL);
         draw_text_center(pixels, stride, (UiRect){rstick_x - 14, rstick_y - 14, 28, 28}, "R", 13, UI_MUTED);
+        draw_text_center(pixels, stride, (UiRect){right_jc_x + 6, right_jc_y + 192, jc_w - 12, 16},
+                         "右摇杆映射相同", 11, UI_MUTED);
 
-        /* Home button */
-        draw_circle_outline(pixels, stride, right_jc_x + 20, right_jc_y + jc_h - 22, 7, 2, UI_CONTROL);
+        /* Home 键 */
+        draw_circle_outline(pixels, stride, right_jc_x + 18, right_jc_y + jc_h - 18, 7, 2, UI_CONTROL);
+
+        /* 中央说明卡片（提供官方风格图例） */
+        UiRect center_guide = {dialog.x + 196, dialog.y + 248, 116, 222};
+        fill_round_rect(pixels, stride, center_guide, 14, UI_PAGE);
+        draw_rect_outline(pixels, stride, center_guide, 14, 1, UI_BORDER);
+
+        UiRect gbadge = {dialog.x + 204, dialog.y + 258, 100, 22};
+        fill_round_rect(pixels, stride, gbadge, 6, UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, gbadge, 6, 1, UI_ACCENT);
+        draw_text_center(pixels, stride, gbadge, "Joy-Con 输入", 12, UI_ACCENT);
+
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 198, dialog.y + 288, 112, 16}, "摇杆: 1 到 8", 13, UI_INK);
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 198, dialog.y + 306, 112, 14}, "(顺时针方向)", 11, UI_MUTED);
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 198, dialog.y + 328, 112, 16}, "X 键: 0", 13, right_key_active_border);
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 198, dialog.y + 350, 112, 16}, "Y 键: 9", 13, right_key_active_border);
+        draw_line(pixels, stride, dialog.x + 208, dialog.y + 374, dialog.x + 300, dialog.y + 374, 1, UI_BORDER);
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 198, dialog.y + 382, 112, 16}, "ZL 键 退格", 12, UI_MUTED);
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 198, dialog.y + 402, 112, 16}, "+ 键 确认", 12, UI_MUTED);
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 198, dialog.y + 422, 112, 14}, "长按+切换键盘", 11, UI_MUTED);
     }
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 486,
-              "左右摇杆映射相同：方向 1-8；X=0，Y=9；十字键也可输入四个正方向", 14, UI_MUTED);
+    draw_text(pixels, stride, dialog.x + 52, dialog.y + 490,
+              "左右摇杆映射相同：方向 1-8；X=0，Y=9；十字键同正方向", 13, UI_MUTED);
 
     draw_text(pixels, stride, dialog.x + 590, dialog.y + 212, "触摸数字键盘", 20, UI_INK);
     for (row = 0; row < 10; ++row) {

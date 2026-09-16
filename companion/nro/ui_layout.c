@@ -194,8 +194,8 @@ PtcUiRect ptc_ui_today_card_rect(int index)
 
 PtcUiRect ptc_ui_plan_card_rect(int index)
 {
-    if (index >= 0 && index < 3) return (PtcUiRect){54, 194 + index * 102, 365, 86};
-    if (index >= 3 && index < 5) return (PtcUiRect){439, 194 + (index - 3) * 102, 365, 86};
+    if (index >= 0 && index < 3) return (PtcUiRect){54, 192 + index * 102, 365, 78};
+    if (index >= 3 && index < 5) return (PtcUiRect){439, 192 + (index - 3) * 102, 365, 78};
     return (PtcUiRect){0, 0, 0, 0};
 }
 

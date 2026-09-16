@@ -1330,22 +1330,45 @@ static const char *bedtime_source_short(PtcBedtimeSource source)
 
 static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    UiRect panel = {842, 176, 384, 324};
+    UiRect panel = {824, 164, 402, 332};
     int index;
     char line[96];
     fill_round_rect(pixels, stride, panel, 16, UI_RAISED);
     draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
-    draw_text(pixels, stride, panel.x + 20, panel.y + 29, "规则优先级与未来 7 天", 19, UI_INK);
-    draw_text(pixels, stride, panel.x + 20, panel.y + 55,
-        "今日额度调整（在今日调度） > 临时额度计划", 12, UI_ACCENT);
-    draw_text(pixels, stride, panel.x + 20, panel.y + 73,
-        "> 国家节假日 > 每周计划", 12, UI_ACCENT);
-    draw_text(pixels, stride, panel.x + 20, panel.y + 93,
-        "就寝时间并行生效，不属于额度覆盖链", 12, UI_WARNING);
-    draw_text(pixels, stride, panel.x + 20, panel.y + 112,
-        "自主缓冲只在限时日追加", 12, UI_MUTED);
+    draw_text(pixels, stride, panel.x + 18, panel.y + 24, "规则优先级与 7 天预测", 17, UI_INK);
+
+    /* 规则优先级流水线图示 */
+    UiRect p0 = {panel.x + 18, panel.y + 36, 72, 22};
+    fill_round_rect(pixels, stride, p0, 5, UI_WARNING_SOFT);
+    draw_rect_outline(pixels, stride, p0, 5, 1, UI_WARNING);
+    draw_text_center(pixels, stride, p0, "今日调整", 11, UI_WARNING);
+
+    draw_text_center(pixels, stride, (UiRect){panel.x + 90, panel.y + 36, 16, 22}, ">", 12, UI_MUTED);
+
+    UiRect p1 = {panel.x + 106, panel.y + 36, 72, 22};
+    fill_round_rect(pixels, stride, p1, 5, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, p1, 5, 1, UI_ACCENT);
+    draw_text_center(pixels, stride, p1, "临时计划", 11, UI_ACCENT);
+
+    draw_text_center(pixels, stride, (UiRect){panel.x + 178, panel.y + 36, 16, 22}, ">", 12, UI_MUTED);
+
+    UiRect p2 = {panel.x + 194, panel.y + 36, 72, 22};
+    fill_round_rect(pixels, stride, p2, 5, UI_SUCCESS_SOFT);
+    draw_rect_outline(pixels, stride, p2, 5, 1, UI_SUCCESS);
+    draw_text_center(pixels, stride, p2, "节假日", 11, UI_SUCCESS);
+
+    draw_text_center(pixels, stride, (UiRect){panel.x + 266, panel.y + 36, 16, 22}, ">", 12, UI_MUTED);
+
+    UiRect p3 = {panel.x + 282, panel.y + 36, 72, 22};
+    fill_round_rect(pixels, stride, p3, 5, UI_PAGE);
+    draw_rect_outline(pixels, stride, p3, 5, 1, UI_BORDER);
+    draw_text_center(pixels, stride, p3, "每周常规", 11, UI_MUTED);
+
+    draw_text(pixels, stride, panel.x + 18, panel.y + 73, "注: 就寝时间独立并行  |  自主缓冲限时日追加", 11, UI_MUTED);
+    draw_line(pixels, stride, panel.x + 18, panel.y + 82, panel.x + panel.width - 18, panel.y + 82, 1, UI_BORDER);
+
     if (!model->forecast_available) {
-        draw_text(pixels, stride, panel.x + 20, panel.y + 134, "刷新状态后显示", 16, UI_MUTED);
+        draw_text(pixels, stride, panel.x + 18, panel.y + 110, "刷新状态后显示预测数据", 15, UI_MUTED);
         return;
     }
     for (index = 0; index < (int)PTC_RESULT_FORECAST_DAYS; ++index) {
@@ -1365,15 +1388,16 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
                 bedtime_source_short(bedtime.source));
         }
         if (day->mode == PTC_RULE_MODE_UNLIMITED) {
-            snprintf(line, sizeof(line), "D+%d  不限时 %s  |  %s",
-                index, short_rule_source(day->rule_source), bedtime_text);
+            snprintf(line, sizeof(line), "D+%d %s  不限时 [%s]  |  %s",
+                index, index == 0 ? "今天" : "",
+                short_rule_source(day->rule_source), bedtime_text);
         } else {
-            snprintf(line, sizeof(line), "D+%d  %u分 %s  |  %s",
-                index, (unsigned int)day->minutes,
+            snprintf(line, sizeof(line), "D+%d %s  %u分钟 [%s]  |  %s",
+                index, index == 0 ? "今天" : "", (unsigned int)day->minutes,
                 short_rule_source(day->rule_source), bedtime_text);
         }
-        draw_text(pixels, stride, panel.x + 20, panel.y + 140 + index * 23,
-            line, 13, index == 0 ? UI_ACCENT : UI_MUTED);
+        draw_text(pixels, stride, panel.x + 18, panel.y + 102 + index * 23,
+            line, 12, index == 0 ? UI_ACCENT : UI_MUTED);
     }
 }
 
@@ -1400,8 +1424,31 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     if (!plan_subpage && model->parent_page != PTC_UI_PARENT_TODAY) {
         actions = actions_for_page(model->parent_page, &action_count);
         if (model->parent_page == PTC_UI_PARENT_PLAN) {
-            draw_text(pixels, stride, 54, 182, "额度规则（高到低）", 16, UI_MUTED);
-            draw_text(pixels, stride, 439, 182, "并行与补充", 16, UI_MUTED);
+            UiRect quota_zone = {42, 164, 388, 332};
+            UiRect parallel_zone = {428, 164, 388, 332};
+            fill_round_rect(pixels, stride, quota_zone, 16, UI_RAISED);
+            draw_rect_outline(pixels, stride, quota_zone, 16, 1, UI_BORDER);
+            UiRect qbadge = {54, 170, 76, 20};
+            fill_round_rect(pixels, stride, qbadge, 6, UI_ACCENT_SOFT);
+            draw_rect_outline(pixels, stride, qbadge, 6, 1, UI_ACCENT);
+            draw_text_center(pixels, stride, qbadge, "额度规则", 12, UI_ACCENT);
+            draw_text(pixels, stride, 138, 185, "优先级自上而下逐级生效", 13, UI_MUTED);
+
+            fill_round_rect(pixels, stride, parallel_zone, 16, UI_RAISED);
+            draw_rect_outline(pixels, stride, parallel_zone, 16, 1, UI_BORDER);
+            UiRect pbadge = {440, 170, 76, 20};
+            fill_round_rect(pixels, stride, pbadge, 6, UI_WARNING_SOFT);
+            draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING);
+            draw_text_center(pixels, stride, pbadge, "并行补充", 12, UI_WARNING);
+            draw_text(pixels, stride, 524, 185, "独立于额度规则链生效", 13, UI_MUTED);
+
+            /* 并行与补充下方对称说明卡片 */
+            UiRect info_card = {439, 396, 365, 78};
+            fill_round_rect(pixels, stride, info_card, 16, UI_PAGE);
+            draw_rect_outline(pixels, stride, info_card, 16, 1, UI_BORDER);
+            draw_text(pixels, stride, 455, 418, "规则独立生效机制", 14, UI_INK);
+            draw_text(pixels, stride, 455, 440, "就寝时间：到点强制限制，不受额度多寡影响", 12, UI_MUTED);
+            draw_text(pixels, stride, 455, 460, "自主缓冲：仅限时日额度耗尽前由孩子申请", 12, UI_MUTED);
         }
         for (index = 0; index < action_count; ++index) {
             UiRect card = to_uirect(model->parent_page == PTC_UI_PARENT_SUPPORT
@@ -1468,9 +1515,34 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 dynamic_action.subtitle = ptc_ui_theme_preference_label(g_theme.preference);
                 action = &dynamic_action;
             }
+            int reserved_right = (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) ? 100 :
+                                 (model->parent_page == PTC_UI_PARENT_PLAN ? 80 : 0);
             draw_action_card(pixels, stride, card, action, index == model->selected_index && !model->parent_footer_focused, astate,
-                             model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3 ? 100 : 0);
-            if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
+                             reserved_right);
+            if (model->parent_page == PTC_UI_PARENT_PLAN) {
+                UiRect pbadge = {card.x + card.width - 86, card.y + 8, 74, 22};
+                if (index == 0) {
+                    fill_round_rect(pixels, stride, pbadge, 6, UI_ACCENT_SOFT);
+                    draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_ACCENT);
+                    draw_text_center(pixels, stride, pbadge, "优先 1", 12, UI_ACCENT);
+                } else if (index == 1) {
+                    fill_round_rect(pixels, stride, pbadge, 6, UI_SUCCESS_SOFT);
+                    draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_SUCCESS);
+                    draw_text_center(pixels, stride, pbadge, "优先 2", 12, UI_SUCCESS);
+                } else if (index == 2) {
+                    fill_round_rect(pixels, stride, pbadge, 6, UI_PAGE);
+                    draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_BORDER);
+                    draw_text_center(pixels, stride, pbadge, "基础规则", 12, UI_MUTED);
+                } else if (index == 3) {
+                    fill_round_rect(pixels, stride, pbadge, 6, UI_WARNING_SOFT);
+                    draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING);
+                    draw_text_center(pixels, stride, pbadge, "独立并行", 12, UI_WARNING);
+                } else if (index == 4) {
+                    fill_round_rect(pixels, stride, pbadge, 6, UI_SUCCESS_SOFT);
+                    draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_SUCCESS);
+                    draw_text_center(pixels, stride, pbadge, "限时追加", 12, UI_SUCCESS);
+                }
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
                 const char *state_label = "状态未知";
                 uint32_t state_color = UI_DANGER;
                 if (model->album_restriction_state == 0) {
@@ -1490,6 +1562,19 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
                 draw_text_center(pixels, stride, badge, state_label, 13, state_color);
             }
+        }
+        if (model->parent_page == PTC_UI_PARENT_PLAN) {
+            /* 胶囊 1: 优先于节假日规则 (位于卡片 0 底部 270 与卡片 1 顶部 294 之间，无重叠) */
+            UiRect pill0 = {54 + 20, 273, 152, 18};
+            fill_round_rect(pixels, stride, pill0, 9, UI_PAGE);
+            draw_rect_outline(pixels, stride, pill0, 9, 1, UI_BORDER);
+            draw_text_center(pixels, stride, pill0, "▼ 优先于节假日规则", 11, UI_ACCENT);
+
+            /* 胶囊 2: 优先于每周常规计划 (位于卡片 1 底部 372 与卡片 2 顶部 396 之间，无重叠) */
+            UiRect pill1 = {54 + 20, 375, 152, 18};
+            fill_round_rect(pixels, stride, pill1, 9, UI_PAGE);
+            draw_rect_outline(pixels, stride, pill1, 9, 1, UI_BORDER);
+            draw_text_center(pixels, stride, pill1, "▼ 优先于每周常规计划", 11, UI_SUCCESS);
         }
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY) {
