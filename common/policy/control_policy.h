@@ -8,27 +8,12 @@
 #include "../rules/rules.h"
 
 typedef enum {
-    PTC_CONTROL_ENFORCE = 1
-} PtcControlMode;
-
-typedef enum {
     PTC_OPERATION_STATUS = 1,
     PTC_OPERATION_GRANT_MINUTES = 2,
     PTC_OPERATION_SET_TODAY_LIMIT = 3,
     PTC_OPERATION_DISABLE_TODAY_LIMIT = 4,
     PTC_OPERATION_RULE_UPDATE = 8
 } PtcOperation;
-
-typedef struct {
-    bool play_timer_write_verified;
-    bool play_timer_effect_verified;
-    char play_timer_effect_backend[32];
-#ifdef PLAYWISE_DEVICE_LAB
-    bool raw_block_verified;
-    /* Legacy report field: auxiliary 1457 access, not pause/exit delivery proof. */
-    bool suspend_verified;
-#endif
-} PtcCapabilities;
 
 typedef struct {
     bool dry_run;
@@ -39,13 +24,8 @@ typedef struct {
     PtcErrorCode error;
 } PtcPolicyDecision;
 
-const char *ptc_control_mode_name(PtcControlMode mode);
 PtcPolicyDecision ptc_policy_decide(
-    PtcControlMode mode,
     bool disable_flag,
-    PtcOperation operation,
-    const PtcCapabilities *capabilities,
-    bool current_unlimited,
-    bool allow_unlimited_to_limited);
+    PtcOperation operation);
 
 #endif

@@ -31,8 +31,6 @@ typedef struct {
     char overlay_release_id[65];
     char overlay_boot_id[65];
 #ifdef PLAYWISE_DEVICE_LAB
-    bool start_timer;
-    bool wait_for_expiry;
     char lab_mode[32];
     char phase[32];
     char observation[32];

@@ -23,8 +23,6 @@ typedef struct {
     char device_id[80];
     char grant_secret[128];
     uint16_t max_add_minutes;
-    PtcControlMode mode;
-    bool allow_unlimited_to_limited;
 } PtcRuntimeConfig;
 
 typedef struct {
@@ -983,23 +981,7 @@ static bool load_config(PtcSysmodule *sysmodule, PtcRuntimeConfig *config)
     if (!json_u16(text, "max_add_minutes", &config->max_add_minutes)) {
         config->max_add_minutes = 240;
     }
-    config->mode = PTC_CONTROL_ENFORCE;
-    config->allow_unlimited_to_limited = true;
     return true;
-}
-
-static PtcCapabilities load_capabilities(PtcSysmodule *sysmodule)
-{
-    PtcCapabilities caps;
-    (void)sysmodule;
-    caps.play_timer_write_verified = true;
-    caps.play_timer_effect_verified = true;
-    caps.play_timer_effect_backend[0] = '\0';
-#ifdef PLAYWISE_DEVICE_LAB
-    caps.raw_block_verified = false;
-    caps.suspend_verified = false;
-#endif
-    return caps;
 }
 
 static bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
@@ -1593,8 +1575,7 @@ static int result_observed_bool(bool available, bool value)
 static void result_state_from_pctl(
     PtcResultState *state,
     uint16_t day_index,
-    const PtcPctlStatus *status,
-    const PtcCapabilities *caps)
+    const PtcPctlStatus *status)
 {
     ptc_result_state_default(state, day_index);
     state->restriction_enabled_available = status->restriction_enabled_available;
@@ -1612,13 +1593,6 @@ static void result_state_from_pctl(
         status->play_timer_enabled_available, status->play_timer_enabled);
     state->restricted_now = result_observed_bool(
         status->restricted_now_available, status->restricted_now);
-    (void)caps;
-}
-
-static void result_state_default_with_caps(PtcResultState *state, uint16_t day_index, const PtcCapabilities *caps)
-{
-    ptc_result_state_default(state, day_index);
-    (void)caps;
 }
 
 static bool write_result(PtcSysmodule *sysmodule, const char *request_id, const char *json)
@@ -1755,7 +1729,6 @@ static PtcErrorCode backup_before_write(PtcSysmodule *sysmodule, const PtcReques
 static PtcErrorCode apply_target(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
-    const PtcCapabilities *caps,
     PtcClockSnapshot now,
     const char *mode_name,
     PtcPctlTargetMode mode,
@@ -1765,7 +1738,6 @@ static PtcErrorCode apply_target(
     PtcPctlDebugSnapshot before;
     PtcPctlDebugSnapshot after;
     PtcErrorCode err;
-    (void)caps;
     if (!recovery_begin(sysmodule, request, now)) {
         append_event(sysmodule, request, "pctl_backup_failed", PTC_ERR_PCTL_BACKUP_FAILED, "recovery_transaction");
         return PTC_ERR_PCTL_BACKUP_FAILED;
@@ -1811,8 +1783,7 @@ static bool finish_with_error(
     const char *mode,
     bool dry_run,
     PtcErrorCode error,
-    uint16_t day_index,
-    const PtcCapabilities *caps)
+    uint16_t day_index)
 {
     char json[4096];
     PtcResultState state;
@@ -1820,7 +1791,7 @@ static bool finish_with_error(
         write_disable_flag(sysmodule, "transaction_restore_failed\n");
         error = PTC_ERR_RECOVERY_FAILED;
     }
-    result_state_default_with_caps(&state, day_index, caps);
+    ptc_result_state_default(&state, day_index);
     (void)ptc_result_error_json(
         json,
         sizeof(json),
@@ -2200,7 +2171,6 @@ static bool write_current_status_result(
     const PtcRequest *request,
     const char *mode,
     bool dry_run,
-    const PtcCapabilities *caps,
     PtcClockSnapshot now,
     bool commits_recovery)
 {
@@ -2216,16 +2186,16 @@ static bool write_current_status_result(
     uint8_t month = 0;
     uint8_t day = 0;
     if (!load_rules(sysmodule, &rules)) {
-        return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_RULES_INVALID, now.day_index, caps);
+        return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_RULES_INVALID, now.day_index);
     }
     if (!load_state(sysmodule, &runtime_state)) {
-        return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_BAD_REQUEST, now.day_index, caps);
+        return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_BAD_REQUEST, now.day_index);
     }
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, mode, dry_run, err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, mode, dry_run, err, now.day_index);
     }
-    result_state_from_pctl(&state, now.day_index, &pctl_status, caps);
+    result_state_from_pctl(&state, now.day_index, &pctl_status);
     effective = ptc_rules_resolve(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
     state.rule_source = ptc_rule_source_name(effective.source);
     state.calendar_covered = effective.calendar_covered;
@@ -2241,13 +2211,14 @@ static bool write_current_status_result(
     return write_result_with_setup(sysmodule, request->request_id, json, commits_recovery);
 }
 
-static bool process_status(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
+static bool process_status(PtcSysmodule *sysmodule, const PtcRequest *request,
+    bool disable_flag, PtcClockSnapshot now)
 {
-    PtcPolicyDecision decision = ptc_policy_decide(config->mode, disable_flag, PTC_OPERATION_STATUS, caps, false, config->allow_unlimited_to_limited);
+    PtcPolicyDecision decision = ptc_policy_decide(disable_flag, PTC_OPERATION_STATUS);
     if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, decision.error, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true, decision.error, now.day_index);
     }
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, caps, now, false);
+    return write_current_status_result(sysmodule, request, "release", decision.dry_run, now, false);
 }
 
 #ifndef PLAYWISE_DEVICE_LAB
@@ -2288,8 +2259,6 @@ static int usage_summary_tick(PtcSysmodule *sysmodule, PtcClockSnapshot now)
 static bool process_clear_redemption_history(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
-    const PtcRuntimeConfig *config,
-    const PtcCapabilities *caps,
     PtcClockSnapshot now)
 {
     char path[320];
@@ -2300,16 +2269,16 @@ static bool process_clear_redemption_history(
     existed = sysmodule->storage->vtable->exists(sysmodule->storage, path);
     if (existed && !sysmodule->storage->vtable->read_text(
             sysmodule->storage, path, previous, sizeof(previous))) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     }
     if (!clear_redemption_history(sysmodule)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     }
     append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "redemption_history_cleared");
     if (write_current_status_result(
-            sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false)) {
+            sysmodule, request, "release", false, now, false)) {
         return true;
     }
     restored = existed
@@ -2326,8 +2295,6 @@ static bool process_clear_redemption_history(
 static bool process_clear_activity_history(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
-    const PtcRuntimeConfig *config,
-    const PtcCapabilities *caps,
     PtcClockSnapshot now)
 {
     char path[320];
@@ -2338,16 +2305,16 @@ static bool process_clear_activity_history(
     existed = sysmodule->storage->vtable->exists(sysmodule->storage, path);
     if (existed && !sysmodule->storage->vtable->read_text(
             sysmodule->storage, path, previous, sizeof(previous))) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_STORAGE_READ_FAILED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_STORAGE_READ_FAILED, now.day_index);
     }
     if (!clear_activity_history(sysmodule)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     }
     append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "activity_history_cleared");
     if (write_current_status_result(
-            sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false)) return true;
+            sysmodule, request, "release", false, now, false)) return true;
     restored = existed
         ? sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, previous)
         : (!sysmodule->storage->vtable->exists(sysmodule->storage, path) ||
@@ -2358,7 +2325,7 @@ static bool process_clear_activity_history(
 }
 
 static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest *request,
-    const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
+    bool disable_flag, PtcClockSnapshot now)
 {
     PtcRules rules;
     PtcRuntimeState runtime_state;
@@ -2370,32 +2337,32 @@ static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest
     uint16_t base;
     uint16_t target;
     uint16_t effective;
-    if (disable_flag) return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode),
-        true, PTC_ERR_DISABLED, now.day_index, caps);
+    if (disable_flag) return finish_with_error(sysmodule, request, "release",
+        true, PTC_ERR_DISABLED, now.day_index);
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
-        sysmodule, request, ptc_control_mode_name(config->mode), true,
-        PTC_ERR_BEDTIME_ACTIVE, now.day_index, caps);
+        sysmodule, request, "release", true,
+        PTC_ERR_BEDTIME_ACTIVE, now.day_index);
     if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true,
-            PTC_ERR_RULES_INVALID, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_RULES_INVALID, now.day_index);
     }
     grant = rules.autonomy_policy.daily_buffer_minutes;
-    if (grant == 0u) return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode),
-        true, PTC_ERR_AUTONOMY_DISABLED, now.day_index, caps);
+    if (grant == 0u) return finish_with_error(sysmodule, request, "release",
+        true, PTC_ERR_AUTONOMY_DISABLED, now.day_index);
     if (runtime_state.buffer_claimed && runtime_state.buffer_claim_day_index == now.day_index) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode),
-            true, PTC_ERR_DAILY_BUFFER_ALREADY_CLAIMED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release",
+            true, PTC_ERR_DAILY_BUFFER_ALREADY_CLAIMED, now.day_index);
     }
     err = sysmodule->pctl->vtable->read_status(
         sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) return finish_with_error(sysmodule, request,
-        ptc_control_mode_name(config->mode), true, err, now.day_index, caps);
+        "release", true, err, now.day_index);
     if (!pctl_status.limited_today || pctl_status.unrestricted_today) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode),
-            true, PTC_ERR_DAILY_BUFFER_LIMITED_ONLY, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release",
+            true, PTC_ERR_DAILY_BUFFER_LIMITED_ONLY, now.day_index);
     }
     if (!recovery_begin(sysmodule, request, now)) return finish_with_error(sysmodule, request,
-        ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_BACKUP_FAILED, now.day_index, caps);
+        "release", false, PTC_ERR_PCTL_BACKUP_FAILED, now.day_index);
     played = ptc_pctl_played_minutes(&pctl_status);
     {
         PtcDayRule active = ptc_rules_today_rule(&rules, now.day_index,
@@ -2406,10 +2373,10 @@ static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest
     target = accumulate_today_limit(&rules, now.day_index,
         ptc_weekday_from_day_index(now.day_index), grant, played);
     effective = target >= base ? (uint16_t)(target - base) : 0u;
-    err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode),
+    err = apply_target(sysmodule, request, now, "release",
         PTC_PCTL_TARGET_LIMIT, target);
     if (err == PTC_ERR_OK) err = observe_target_with_optional_activation(sysmodule, request, now,
-        ptc_control_mode_name(config->mode), PTC_PCTL_TARGET_LIMIT, target,
+        "release", PTC_PCTL_TARGET_LIMIT, target,
         "daily_buffer", &observed_status);
     if (err != PTC_ERR_OK || !save_rules(sysmodule, &rules)) {
         if (err == PTC_ERR_OK) err = PTC_ERR_STORAGE_WRITE_FAILED;
@@ -2417,8 +2384,8 @@ static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest
             write_disable_flag(sysmodule, "transaction_restore_failed\n");
             err = PTC_ERR_RECOVERY_FAILED;
         }
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            err, now.day_index);
     }
     runtime_state.buffer_claimed = true;
     runtime_state.buffer_claim_day_index = now.day_index;
@@ -2437,12 +2404,12 @@ static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest
             write_disable_flag(sysmodule, "transaction_restore_failed\n");
             err = PTC_ERR_RECOVERY_FAILED;
         }
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            err, now.day_index);
     }
     append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "daily_buffer");
-    if (write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode),
-            false, caps, now, true)) {
+    if (write_current_status_result(sysmodule, request, "release",
+            false, now, true)) {
         recovery_clear(sysmodule);
         return true;
     }
@@ -2545,7 +2512,6 @@ static bool process_preview_offline_code(
     const PtcRequest *request,
     const PtcRuntimeConfig *config,
     bool disable_flag,
-    const PtcCapabilities *caps,
     PtcClockSnapshot now)
 {
     PtcRuntimeConfig active_config = *config;
@@ -2565,35 +2531,33 @@ static bool process_preview_offline_code(
     char json[2304];
 
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
-        sysmodule, request, ptc_control_mode_name(active_config.mode), true,
-        PTC_ERR_BEDTIME_ACTIVE, now.day_index, caps);
+        sysmodule, request, "release", true,
+        PTC_ERR_BEDTIME_ACTIVE, now.day_index);
 
-    decision = ptc_policy_decide(active_config.mode, disable_flag, PTC_OPERATION_GRANT_MINUTES,
-        caps, false, active_config.allow_unlimited_to_limited);
+    decision = ptc_policy_decide(disable_flag, PTC_OPERATION_GRANT_MINUTES);
     if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), true,
-            decision.error, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true,
+            decision.error, now.day_index);
     }
     err = verify_offline_code(sysmodule, request, &active_config, now, &runtime_state, &verified);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), true,
-            err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true,
+            err, now.day_index);
     }
     err = sysmodule->pctl->vtable->read_status(
         sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), true,
-            err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true,
+            err, now.day_index);
     }
-    decision = ptc_policy_decide(active_config.mode, disable_flag, PTC_OPERATION_GRANT_MINUTES,
-        caps, pctl_status.unrestricted_today, active_config.allow_unlimited_to_limited);
+    decision = ptc_policy_decide(disable_flag, PTC_OPERATION_GRANT_MINUTES);
     if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), true,
-            decision.error, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true,
+            decision.error, now.day_index);
     }
     if (!load_rules(sysmodule, &rules)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), true,
-            PTC_ERR_RULES_INVALID, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_RULES_INVALID, now.day_index);
     }
     preview_rules = rules;
     played_for_apply = ptc_pctl_played_minutes(&pctl_status);
@@ -2614,7 +2578,7 @@ static bool process_preview_offline_code(
     preview.remaining_after_minutes = preview.remaining_after_available
         ? ((int64_t)target_minutes > played_minutes ? (int64_t)target_minutes - played_minutes : 0)
         : -1;
-    result_state_from_pctl(&state, now.day_index, &pctl_status, caps);
+    result_state_from_pctl(&state, now.day_index, &pctl_status);
     fill_extended_result_state(sysmodule, &state, &rules, &runtime_state, &pctl_status, now);
     if (ptc_result_preview_ok_json(json, sizeof(json), request->request_id, request->type_text,
             &state, &preview, now.unix_seconds) != 0) {
@@ -2629,7 +2593,7 @@ static bool process_preview_offline_code(
     return true;
 }
 
-static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
+static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, PtcClockSnapshot now)
 {
     PtcPctlStatus pctl_status;
     PtcPolicyDecision decision;
@@ -2649,24 +2613,24 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     }
 
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
-        sysmodule, request, ptc_control_mode_name(active_config.mode), true,
-        PTC_ERR_BEDTIME_ACTIVE, now.day_index, caps);
+        sysmodule, request, "release", true,
+        PTC_ERR_BEDTIME_ACTIVE, now.day_index);
 
-    decision = ptc_policy_decide(active_config.mode, disable_flag, PTC_OPERATION_GRANT_MINUTES, caps, false, active_config.allow_unlimited_to_limited);
+    decision = ptc_policy_decide(disable_flag, PTC_OPERATION_GRANT_MINUTES);
     if (decision.error == PTC_ERR_DISABLED) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), decision.dry_run, decision.error, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", decision.dry_run, decision.error, now.day_index);
     }
     err = verify_offline_code(sysmodule, request, &active_config, now, &runtime_state, &verified);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), true, err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true, err, now.day_index);
     }
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), true, err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true, err, now.day_index);
     }
-    decision = ptc_policy_decide(active_config.mode, disable_flag, PTC_OPERATION_GRANT_MINUTES, caps, pctl_status.unrestricted_today, active_config.allow_unlimited_to_limited);
+    decision = ptc_policy_decide(disable_flag, PTC_OPERATION_GRANT_MINUTES);
     if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), decision.dry_run, decision.error, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", decision.dry_run, decision.error, now.day_index);
     }
     if (decision.may_write_pctl) {
         uint16_t new_minutes;
@@ -2684,19 +2648,19 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         /* Apply to PCTL first (idempotent absolute write); persist the override
            only after it succeeds. On failure the nonce is not consumed and the
            same code may be re-entered, so persisting first would double-count. */
-        err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(active_config.mode), PTC_PCTL_TARGET_LIMIT, new_minutes);
+        err = apply_target(sysmodule, request, now, "release", PTC_PCTL_TARGET_LIMIT, new_minutes);
         if (err != PTC_ERR_OK) {
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), false, err, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
         }
         err = observe_target_with_optional_activation(sysmodule, request, now,
-            ptc_control_mode_name(active_config.mode), PTC_PCTL_TARGET_LIMIT, new_minutes,
+            "release", PTC_PCTL_TARGET_LIMIT, new_minutes,
             "offline_code", &pctl_status);
         if (err != PTC_ERR_OK) {
             if (!recovery_rollback(sysmodule)) {
                 write_disable_flag(sysmodule, "transaction_restore_failed\n");
                 err = PTC_ERR_RECOVERY_FAILED;
             }
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), false, err, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
         }
         if (!save_rules(sysmodule, &rules)) {
             append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "rules");
@@ -2705,16 +2669,16 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                 write_disable_flag(sysmodule, "transaction_restore_failed\n");
                 err = PTC_ERR_RECOVERY_FAILED;
             }
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(active_config.mode), false, err, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
         }
         append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "offline_code");
     }
     (void)load_rules(sysmodule, &rules);
     (void)load_state(sysmodule, &runtime_state);
     (void)sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
-    result_state_from_pctl(&state, now.day_index, &pctl_status, caps);
+    result_state_from_pctl(&state, now.day_index, &pctl_status);
     fill_extended_result_state(sysmodule, &state, &rules, &runtime_state, &pctl_status, now);
-    (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, ptc_control_mode_name(active_config.mode), decision.dry_run, &state, now.unix_seconds);
+    (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, "release", decision.dry_run, &state, now.unix_seconds);
     if (write_result(sysmodule, request->request_id, json)) {
         if (verified.is_v2 && !decision.dry_run &&
             (runtime_state.v2_failed_attempts != 0 || runtime_state.v2_cooldown_until != 0)) {
@@ -2747,8 +2711,8 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                     write_disable_flag(sysmodule, "transaction_restore_failed\n");
                     err = PTC_ERR_RECOVERY_FAILED;
                 }
-                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                    err, now.day_index, caps);
+                return finish_with_error(sysmodule, request, "release", false,
+                    err, now.day_index);
             }
         }
         if (decision.consume_nonce_after_success) {
@@ -2770,8 +2734,8 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                     write_disable_flag(sysmodule, "transaction_restore_failed\n");
                     err = PTC_ERR_RECOVERY_FAILED;
                 }
-                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                    err, now.day_index, caps);
+                return finish_with_error(sysmodule, request, "release", false,
+                    err, now.day_index);
             }
         }
         if (decision.consume_nonce_after_success &&
@@ -2784,8 +2748,8 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
                 write_disable_flag(sysmodule, "transaction_restore_failed\n");
                 err = PTC_ERR_RECOVERY_FAILED;
             }
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                err, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false,
+                err, now.day_index);
         }
         append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
         recovery_clear(sysmodule);
@@ -3186,7 +3150,7 @@ static PtcErrorCode run_release_preflight(
 }
 
 static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *request,
-    const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
+    const PtcRuntimeConfig *config, bool disable_flag, PtcClockSnapshot now)
 {
     PtcSetupState setup;
     bool resuming_disabled_setup;
@@ -3194,14 +3158,14 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
     bool retrying_failed_release = false;
     char disable_path[320];
     if (!load_setup_state(sysmodule, &setup)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_SETUP_PENDING, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_SETUP_PENDING, now.day_index);
     }
     /* A completed takeover is idempotent: stale clients may resubmit after
        navigating back, but must never repeat the snapshot or PCTL writes. */
     if (strcmp(setup.phase, "active") == 0 && !disable_flag) {
         return write_current_status_result(
-            sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
+            sysmodule, request, "release", false, now, false);
     }
     if (disable_flag) {
         char reason[64];
@@ -3219,8 +3183,8 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
         (strcmp(setup.phase, "restored") == 0 || strcmp(setup.phase, "active") == 0 ||
          reconfirming_runtime_fingerprint || retrying_failed_release);
     if (disable_flag && !resuming_disabled_setup) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_DISABLED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_DISABLED, now.day_index);
     }
     if (strcmp(setup.phase, "unconfigured") == 0 || strcmp(setup.phase, "compatibility_pending") == 0 ||
         strcmp(setup.phase, "protection") == 0 || strcmp(setup.phase, "restored") == 0 ||
@@ -3239,8 +3203,8 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
             }
             snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(preflight_err));
             (void)save_setup_state(sysmodule, &setup);
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                preflight_err, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false,
+                preflight_err, now.day_index);
         }
         preflight_err = persist_handover_today_rule(sysmodule, &setup, now);
         if (preflight_err != PTC_ERR_OK) {
@@ -3248,60 +3212,60 @@ static bool process_complete_setup(PtcSysmodule *sysmodule, const PtcRequest *re
             snprintf(setup.compatibility_status, sizeof(setup.compatibility_status), "protection");
             snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(preflight_err));
             (void)save_setup_state(sysmodule, &setup);
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                preflight_err, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false,
+                preflight_err, now.day_index);
         }
         snprintf(setup.phase, sizeof(setup.phase), "pending");
         if (!save_setup_state(sysmodule, &setup)) {
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false,
+                PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
         }
         if (setup.handover_today_pending) {
             PtcErrorCode handover_err = direct_handover_now(sysmodule, &setup, now);
             if (handover_err != PTC_ERR_OK) {
-                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                    handover_err, now.day_index, caps);
+                return finish_with_error(sysmodule, request, "release", false,
+                    handover_err, now.day_index);
             }
             if (disable_flag) {
                 join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
                 if (!sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path)) {
-                    return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                        PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+                    return finish_with_error(sysmodule, request, "release", false,
+                        PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
                 }
             }
             return write_current_status_result(
-                sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
+                sysmodule, request, "release", false, now, false);
         }
         {
             PtcErrorCode release_err = release_setup_now(sysmodule, &setup, now);
             if (release_err != PTC_ERR_OK) {
-                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                    release_err, now.day_index, caps);
+                return finish_with_error(sysmodule, request, "release", false,
+                    release_err, now.day_index);
             }
         }
     }
     if (strcmp(setup.phase, "released") != 0 || !setup.restriction_cleared) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_SETUP_PENDING, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_SETUP_PENDING, now.day_index);
     }
     setup.activate_after = now.unix_seconds + 5;
     setup.last_error[0] = '\0';
     if (!save_setup_state(sysmodule, &setup)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     }
     if (disable_flag) {
         join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
         if (!sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path)) {
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false,
+                PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
         }
     }
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
+    return write_current_status_result(sysmodule, request, "release", false, now, false);
 }
 
 static bool process_retry_setup_release(PtcSysmodule *sysmodule, const PtcRequest *request,
-    const PtcRuntimeConfig *config, const PtcCapabilities *caps, PtcClockSnapshot now)
+    const PtcRuntimeConfig *config, PtcClockSnapshot now)
 {
     PtcSetupState setup;
     char disable_path[320];
@@ -3309,62 +3273,62 @@ static bool process_retry_setup_release(PtcSysmodule *sysmodule, const PtcReques
     if (!load_setup_state(sysmodule, &setup) ||
         (strcmp(setup.phase, "pending") != 0 && strcmp(setup.phase, "failed") != 0 &&
          strcmp(setup.phase, "protection") != 0)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_BAD_REQUEST, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_BAD_REQUEST, now.day_index);
     }
     err = run_release_preflight(sysmodule, config, &setup, now, !setup.handover_today_pending);
     if (err != PTC_ERR_OK) {
         snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(err));
         (void)save_setup_state(sysmodule, &setup);
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            err, now.day_index);
     }
     err = persist_handover_today_rule(sysmodule, &setup, now);
     if (err != PTC_ERR_OK) {
         snprintf(setup.last_error, sizeof(setup.last_error), "%s", ptc_error_reason(err));
         (void)save_setup_state(sysmodule, &setup);
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            err, now.day_index);
     }
     snprintf(setup.phase, sizeof(setup.phase), "pending");
     setup.restriction_cleared = false;
     setup.activate_after = 0;
     setup.last_error[0] = '\0';
     if (!save_setup_state(sysmodule, &setup)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     }
     err = setup.handover_today_pending
         ? direct_handover_now(sysmodule, &setup, now)
         : release_setup_now(sysmodule, &setup, now);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            err, now.day_index);
     }
     join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
     if (sysmodule->storage->vtable->exists(sysmodule->storage, disable_path) &&
         !sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     }
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
+    return write_current_status_result(sysmodule, request, "release", false, now, false);
 }
 
 static bool process_restore_install_snapshot(PtcSysmodule *sysmodule, const PtcRequest *request,
-    const PtcRuntimeConfig *config, const PtcCapabilities *caps, PtcClockSnapshot now)
+    PtcClockSnapshot now)
 {
     PtcSetupState setup;
     PtcErrorCode err;
     if (!load_setup_state(sysmodule, &setup)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_RECOVERY_UNAVAILABLE, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_RECOVERY_UNAVAILABLE, now.day_index);
     }
     err = restore_install_snapshot_now(sysmodule, &setup, now);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            err, now.day_index);
     }
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, false);
+    return write_current_status_result(sysmodule, request, "release", false, now, false);
 }
 
 static void write_disable_flag(PtcSysmodule *sysmodule, const char *reason)
@@ -3646,7 +3610,6 @@ static PtcErrorCode activate_handover_today(PtcSysmodule *sysmodule, PtcSetupSta
     PtcRuntimeState runtime_state;
     PtcPctlStatus observed;
     PtcDayRule rule;
-    PtcCapabilities caps;
     PtcErrorCode err;
     if (!setup->handover_today_pending) {
         return PTC_ERR_OK;
@@ -3668,8 +3631,7 @@ static PtcErrorCode activate_handover_today(PtcSysmodule *sysmodule, PtcSetupSta
         err = PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
         goto restore_original;
     }
-    caps = load_capabilities(sysmodule);
-    err = apply_target(sysmodule, NULL, &caps, now, "setup_handover",
+    err = apply_target(sysmodule, NULL, now, "setup_handover",
         target_from_day_rule(rule), rule.minutes);
     if (err != PTC_ERR_OK) {
         goto restore_original;
@@ -3847,9 +3809,7 @@ int ptc_sysmodule_bootstrap_setup(PtcSysmodule *sysmodule)
 static bool process_disable_today_limit(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
-    const PtcRuntimeConfig *config,
     bool disable_flag,
-    PtcCapabilities *caps,
     PtcClockSnapshot now)
 {
     PtcPolicyDecision decision;
@@ -3876,29 +3836,28 @@ static bool process_disable_today_limit(
     memset(&observed_status, 0, sizeof(observed_status));
     memset(&restored_status, 0, sizeof(restored_status));
     if (disable_flag) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_DISABLED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true, PTC_ERR_DISABLED, now.day_index);
     }
     if (!load_rules(sysmodule, &original_rules)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_RULES_INVALID, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true, PTC_ERR_RULES_INVALID, now.day_index);
     }
     if (!load_state(sysmodule, &runtime_state)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_BAD_REQUEST, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true, PTC_ERR_BAD_REQUEST, now.day_index);
     }
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &before_status);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true, err, now.day_index);
     }
-    decision = ptc_policy_decide(config->mode, disable_flag, PTC_OPERATION_DISABLE_TODAY_LIMIT,
-        caps, before_status.unrestricted_today, config->allow_unlimited_to_limited);
+    decision = ptc_policy_decide(disable_flag, PTC_OPERATION_DISABLE_TODAY_LIMIT);
     if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", decision.dry_run, decision.error, now.day_index);
     }
     if (decision.dry_run) {
-        return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), true, caps, now, false);
+        return write_current_status_result(sysmodule, request, "release", true, now, false);
     }
     if (!sysmodule->pctl->vtable->snapshot_settings ||
         sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &original_snapshot) != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, PTC_ERR_PCTL_BACKUP_FAILED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false, PTC_ERR_PCTL_BACKUP_FAILED, now.day_index);
     }
 
     updated_rules = original_rules;
@@ -3910,10 +3869,10 @@ static bool process_disable_today_limit(
     rules_existed = sysmodule->storage->vtable->exists(sysmodule->storage, rules_path);
 
     pctl_changed = true;
-    err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode), PTC_PCTL_TARGET_UNLIMITED, 0);
+    err = apply_target(sysmodule, request, now, "release", PTC_PCTL_TARGET_UNLIMITED, 0);
     if (err == PTC_ERR_OK) {
         err = observe_target_with_optional_activation(sysmodule, request, now,
-            ptc_control_mode_name(config->mode), PTC_PCTL_TARGET_UNLIMITED, 0,
+            "release", PTC_PCTL_TARGET_UNLIMITED, 0,
             "disable_today_limit", &observed_status);
     }
     if (err != PTC_ERR_OK) {
@@ -3925,7 +3884,7 @@ static bool process_disable_today_limit(
     }
     rules_persisted = true;
     append_event(sysmodule, request, "state_persisted", PTC_ERR_OK, "disable_today_limit");
-    if (write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode), false, caps, now, true)) {
+    if (write_current_status_result(sysmodule, request, "release", false, now, true)) {
         recovery_clear(sysmodule);
         return true;
     }
@@ -3951,11 +3910,11 @@ disable_today_rollback:
     } else {
         recovery_clear(sysmodule);
     }
-    return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
+    return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
 }
 
 static PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *request,
-    const PtcCapabilities *caps, const PtcRuntimeConfig *config, const PtcRules *rules,
+    const PtcRules *rules,
     PtcRuntimeState *runtime_state, PtcClockSnapshot now)
 {
     PtcPctlSettingsSnapshot snapshot;
@@ -3979,11 +3938,11 @@ static PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcReque
     } else {
         PtcDayRule base = ptc_rules_today_rule(
             rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-        err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode),
+        err = apply_target(sysmodule, request, now, "release",
             target_from_day_rule(base), base.minutes);
         if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
         err = observe_target_with_optional_activation(sysmodule, request, now,
-            ptc_control_mode_name(config->mode), target_from_day_rule(base), base.minutes,
+            "release", target_from_day_rule(base), base.minutes,
             "bedtime_restore_base", &observed);
         if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
     }
@@ -4017,22 +3976,22 @@ static bool bedtime_instance_is_upcoming(const PtcRules *rules, PtcClockSnapshot
 }
 
 static bool process_bedtime_recovery_request(PtcSysmodule *sysmodule, const PtcRequest *request,
-    const PtcRuntimeConfig *config, const PtcCapabilities *caps, PtcClockSnapshot now)
+    PtcClockSnapshot now)
 {
     PtcRules rules;
     PtcRuntimeState state;
     PtcBedtimeEvaluation current;
     PtcErrorCode err;
     if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &state)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_RULES_INVALID, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_RULES_INVALID, now.day_index);
     }
     current = ptc_bedtime_evaluate(
         &rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
     if (request->type == PTC_REQUEST_SKIP_BEDTIME) {
         if (!bedtime_instance_is_upcoming(&rules, now, request->bedtime_window_instance_id)) {
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                PTC_ERR_BEDTIME_INSTANCE_NOT_ACTIVE, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false,
+                PTC_ERR_BEDTIME_INSTANCE_NOT_ACTIVE, now.day_index);
         }
         state.bedtime_skipped_instance_id = request->bedtime_window_instance_id;
     } else {
@@ -4041,24 +4000,24 @@ static bool process_bedtime_recovery_request(PtcSysmodule *sysmodule, const PtcR
     if (current.active && state.bedtime_enforced &&
         (request->type == PTC_REQUEST_DISABLE_BEDTIME ||
          request->bedtime_window_instance_id == current.window_instance_id)) {
-        err = restore_bedtime_base(sysmodule, request, caps, config, &rules, &state, now);
+        err = restore_bedtime_base(sysmodule, request, &rules, &state, now);
         if (err != PTC_ERR_OK) {
             write_disable_flag(sysmodule, "bedtime_restore_failed\n");
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                PTC_ERR_BEDTIME_RECOVERY_FAILED, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false,
+                PTC_ERR_BEDTIME_RECOVERY_FAILED, now.day_index);
         }
     }
     if (!save_rules(sysmodule, &rules) || !save_state(sysmodule, &state, now.unix_seconds)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     }
     (void)record_activity(sysmodule, request, now, 0, 0);
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode),
-        false, caps, now, recovery_path_exists(sysmodule));
+    return write_current_status_result(sysmodule, request, "release",
+        false, now, recovery_path_exists(sysmodule));
 }
 
 static bool process_overlay_ready(PtcSysmodule *sysmodule, const PtcRequest *request,
-    const PtcRuntimeConfig *config, const PtcCapabilities *caps, PtcClockSnapshot now)
+    PtcClockSnapshot now)
 {
     char path[320];
     char text[512];
@@ -4071,8 +4030,8 @@ static bool process_overlay_ready(PtcSysmodule *sysmodule, const PtcRequest *req
         strcmp(build_release_id, request->overlay_release_id) != 0 ||
         !current_environment_fingerprint(sysmodule, fingerprint) ||
         strcmp(fingerprint, request->environment_fingerprint) != 0) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_OVERLAY_UNVERIFIED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_OVERLAY_UNVERIFIED, now.day_index);
     }
     join_path(path, sizeof(path), sysmodule->app_root, "overlay/ready.json");
     snprintf(text, sizeof(text),
@@ -4081,14 +4040,15 @@ static bool process_overlay_ready(PtcSysmodule *sysmodule, const PtcRequest *req
         build_release_id, sysmodule->boot_id, request->environment_fingerprint,
         (long long)now.unix_seconds);
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     }
-    return write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode),
-        false, caps, now, false);
+    return write_current_status_result(sysmodule, request, "release",
+        false, now, false);
 }
 
-static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *request, const PtcRuntimeConfig *config, bool disable_flag, const PtcCapabilities *caps, PtcClockSnapshot now)
+static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *request,
+    bool disable_flag, PtcClockSnapshot now)
 {
     PtcPctlStatus pctl_status;
     PtcPctlStatus observed_status;
@@ -4107,27 +4067,27 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
         request->type == PTC_REQUEST_SET_BEDTIME_POLICY;
     PtcDayRule before_active_rule;
     if (disable_flag) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_DISABLED, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true, PTC_ERR_DISABLED, now.day_index);
     }
     if (!load_rules(sysmodule, &rules)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_RULES_INVALID, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true, PTC_ERR_RULES_INVALID, now.day_index);
     }
     if (!load_state(sysmodule, &runtime_state)) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, PTC_ERR_BAD_REQUEST, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true, PTC_ERR_BAD_REQUEST, now.day_index);
     }
     before_active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), true, err, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", true, err, now.day_index);
     }
-    decision = ptc_policy_decide(config->mode, disable_flag, request_operation(request->type), caps, pctl_status.unrestricted_today, config->allow_unlimited_to_limited);
+    decision = ptc_policy_decide(disable_flag, request_operation(request->type));
     if (decision.error != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), decision.dry_run, decision.error, now.day_index, caps);
+        return finish_with_error(sysmodule, request, "release", decision.dry_run, decision.error, now.day_index);
     }
     if (!decision.dry_run) {
         if (pctl_request && !recovery_begin(sysmodule, request, now)) {
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                PTC_ERR_PCTL_BACKUP_FAILED, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false,
+                PTC_ERR_PCTL_BACKUP_FAILED, now.day_index);
         }
         uint16_t played_minutes = ptc_pctl_played_minutes(&pctl_status);
         err = update_rules_for_request(sysmodule, request, &rules, &runtime_state, now, played_minutes);
@@ -4136,17 +4096,17 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
                 write_disable_flag(sysmodule, "transaction_restore_failed\n");
                 err = PTC_ERR_RECOVERY_FAILED;
             }
-            return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
+            return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
         }
         if (request->type == PTC_REQUEST_SET_BEDTIME_POLICY && runtime_state.bedtime_enforced) {
             PtcBedtimeEvaluation bedtime_now = ptc_bedtime_evaluate(
                 &rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
             if (!bedtime_now.active || runtime_state.bedtime_skipped_instance_id == bedtime_now.window_instance_id) {
-                err = restore_bedtime_base(sysmodule, request, caps, config, &rules, &runtime_state, now);
+                err = restore_bedtime_base(sysmodule, request, &rules, &runtime_state, now);
                 if (err != PTC_ERR_OK) {
                     write_disable_flag(sysmodule, "bedtime_restore_failed\n");
-                    return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                        PTC_ERR_BEDTIME_RECOVERY_FAILED, now.day_index, caps);
+                    return finish_with_error(sysmodule, request, "release", false,
+                        PTC_ERR_BEDTIME_RECOVERY_FAILED, now.day_index);
                 }
             }
         }
@@ -4162,19 +4122,19 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
               before_active_rule.minutes != ptc_rules_today_rule(&rules, now.day_index,
                  ptc_weekday_from_day_index(now.day_index)).minutes))) {
             active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-            err = apply_target(sysmodule, request, caps, now, ptc_control_mode_name(config->mode), target_from_day_rule(active_rule), active_rule.minutes);
+            err = apply_target(sysmodule, request, now, "release", target_from_day_rule(active_rule), active_rule.minutes);
             if (err != PTC_ERR_OK) {
-                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
+                return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
             }
             err = observe_target_with_optional_activation(sysmodule, request, now,
-                ptc_control_mode_name(config->mode), target_from_day_rule(active_rule),
+                "release", target_from_day_rule(active_rule),
                 active_rule.minutes, "rule_request", &observed_status);
             if (err != PTC_ERR_OK) {
                 if (!recovery_rollback(sysmodule)) {
                     write_disable_flag(sysmodule, "transaction_restore_failed\n");
                     err = PTC_ERR_RECOVERY_FAILED;
                 }
-                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false, err, now.day_index, caps);
+                return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
             }
         }
         {
@@ -4192,14 +4152,14 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
                     write_disable_flag(sysmodule, "transaction_restore_failed\n");
                     err = PTC_ERR_RECOVERY_FAILED;
                 } else err = PTC_ERR_STORAGE_WRITE_FAILED;
-                return finish_with_error(sysmodule, request, ptc_control_mode_name(config->mode), false,
-                    err, now.day_index, caps);
+                return finish_with_error(sysmodule, request, "release", false,
+                    err, now.day_index);
             }
         }
     }
     {
-        bool ok = write_current_status_result(sysmodule, request, ptc_control_mode_name(config->mode),
-            decision.dry_run, caps, now, !decision.dry_run && pctl_request && recovery_path_exists(sysmodule));
+        bool ok = write_current_status_result(sysmodule, request, "release",
+            decision.dry_run, now, !decision.dry_run && pctl_request && recovery_path_exists(sysmodule));
         if (ok) recovery_clear(sysmodule);
         else if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule))
             write_disable_flag(sysmodule, "transaction_restore_failed\n");
@@ -4211,7 +4171,6 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
 {
     PtcRequest request;
     PtcRuntimeConfig config;
-    PtcCapabilities caps;
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     PtcErrorCode parse_err;
     bool disable_flag;
@@ -4232,17 +4191,16 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
             if (!ptc_request_id_is_valid(request.request_id)) snprintf(request.request_id, sizeof(request.request_id), "unknown");
         }
         (void)json_string(request_text, "type", request.type_text, sizeof(request.type_text));
-        (void)finish_with_error(sysmodule, &request, "release", true, parse_err, now.day_index, NULL);
+        (void)finish_with_error(sysmodule, &request, "release", true, parse_err, now.day_index);
         return;
     }
     append_event(sysmodule, &request, "request_received", PTC_ERR_OK, "");
     if (!load_config(sysmodule, &config)) {
-        (void)finish_with_error(sysmodule, &request, "release", true, PTC_ERR_CONFIG_INVALID, now.day_index, NULL);
+        (void)finish_with_error(sysmodule, &request, "release", true, PTC_ERR_CONFIG_INVALID, now.day_index);
         return;
     }
     join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
     disable_flag = sysmodule->storage->vtable->exists(sysmodule->storage, disable_path);
-    caps = load_capabilities(sysmodule);
 
     if (request.type != PTC_REQUEST_STATUS &&
         request.type != PTC_REQUEST_COMPLETE_SETUP &&
@@ -4253,8 +4211,8 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
         request.type != PTC_REQUEST_OVERLAY_READY) {
         PtcSetupState setup;
         if (!load_setup_state(sysmodule, &setup) || strcmp(setup.phase, "active") != 0) {
-            (void)finish_with_error(sysmodule, &request, ptc_control_mode_name(config.mode), true,
-                PTC_ERR_SETUP_PENDING, now.day_index, &caps);
+            (void)finish_with_error(sysmodule, &request, "release", true,
+                PTC_ERR_SETUP_PENDING, now.day_index);
             return;
         }
     }
@@ -4270,41 +4228,41 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
         break;
 #endif
     case PTC_REQUEST_STATUS:
-        (void)process_status(sysmodule, &request, &config, disable_flag, &caps, now);
+        (void)process_status(sysmodule, &request, disable_flag, now);
         break;
     case PTC_REQUEST_CLEAR_REDEMPTION_HISTORY:
-        (void)process_clear_redemption_history(sysmodule, &request, &config, &caps, now);
+        (void)process_clear_redemption_history(sysmodule, &request, now);
         break;
     case PTC_REQUEST_CLEAR_ACTIVITY_HISTORY:
-        (void)process_clear_activity_history(sysmodule, &request, &config, &caps, now);
+        (void)process_clear_activity_history(sysmodule, &request, now);
         break;
     case PTC_REQUEST_CLAIM_DAILY_BUFFER:
-        (void)process_claim_daily_buffer(sysmodule, &request, &config, disable_flag, &caps, now);
+        (void)process_claim_daily_buffer(sysmodule, &request, disable_flag, now);
         break;
     case PTC_REQUEST_OFFLINE_CODE:
-        (void)process_offline_code(sysmodule, &request, &config, disable_flag, &caps, now);
+        (void)process_offline_code(sysmodule, &request, &config, disable_flag, now);
         break;
     case PTC_REQUEST_PREVIEW_OFFLINE_CODE:
-        (void)process_preview_offline_code(sysmodule, &request, &config, disable_flag, &caps, now);
+        (void)process_preview_offline_code(sysmodule, &request, &config, disable_flag, now);
         break;
     case PTC_REQUEST_COMPLETE_SETUP:
-        (void)process_complete_setup(sysmodule, &request, &config, disable_flag, &caps, now);
+        (void)process_complete_setup(sysmodule, &request, &config, disable_flag, now);
         break;
     case PTC_REQUEST_RETRY_SETUP_RELEASE:
-        (void)process_retry_setup_release(sysmodule, &request, &config, &caps, now);
+        (void)process_retry_setup_release(sysmodule, &request, &config, now);
         break;
     case PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT:
-        (void)process_restore_install_snapshot(sysmodule, &request, &config, &caps, now);
+        (void)process_restore_install_snapshot(sysmodule, &request, now);
         break;
     case PTC_REQUEST_SKIP_BEDTIME:
     case PTC_REQUEST_DISABLE_BEDTIME:
-        (void)process_bedtime_recovery_request(sysmodule, &request, &config, &caps, now);
+        (void)process_bedtime_recovery_request(sysmodule, &request, now);
         break;
     case PTC_REQUEST_OVERLAY_READY:
-        (void)process_overlay_ready(sysmodule, &request, &config, &caps, now);
+        (void)process_overlay_ready(sysmodule, &request, now);
         break;
     case PTC_REQUEST_DISABLE_TODAY_LIMIT:
-        (void)process_disable_today_limit(sysmodule, &request, &config, disable_flag, &caps, now);
+        (void)process_disable_today_limit(sysmodule, &request, disable_flag, now);
         break;
     case PTC_REQUEST_SET_TODAY_LIMIT:
     case PTC_REQUEST_ADD_TODAY_MINUTES:
@@ -4315,11 +4273,11 @@ static void process_request_text(PtcSysmodule *sysmodule, const char *request_te
     case PTC_REQUEST_SET_AUTONOMY_POLICY:
     case PTC_REQUEST_SET_BEDTIME_POLICY:
     case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS:
-        (void)process_rule_request(sysmodule, &request, &config, disable_flag, &caps, now);
+        (void)process_rule_request(sysmodule, &request, disable_flag, now);
         break;
     case PTC_REQUEST_UNKNOWN:
     default:
-        (void)finish_with_error(sysmodule, &request, ptc_control_mode_name(config.mode), true, PTC_ERR_UNKNOWN_REQUEST_TYPE, now.day_index, &caps);
+        (void)finish_with_error(sysmodule, &request, "release", true, PTC_ERR_UNKNOWN_REQUEST_TYPE, now.day_index);
         break;
     }
 }
@@ -4336,7 +4294,6 @@ void ptc_sysmodule_process_request_direct(PtcSysmodule *sysmodule,
 int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
 {
     PtcRuntimeConfig config;
-    PtcCapabilities caps;
     PtcRules rules;
     PtcRuntimeState runtime_state;
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
@@ -4350,7 +4307,7 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     PtcErrorCode err;
     bool bedtime_should_enforce;
 
-    if (!load_config(sysmodule, &config) || config.mode != PTC_CONTROL_ENFORCE) {
+    if (!load_config(sysmodule, &config)) {
         return 0;
     }
     if (!load_setup_state(sysmodule, &setup) || strcmp(setup.phase, "active") != 0) {
@@ -4360,7 +4317,6 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     if (sysmodule->storage->vtable->exists(sysmodule->storage, disable_path)) {
         return 0;
     }
-    caps = load_capabilities(sysmodule);
     if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
         append_event(sysmodule, NULL, "result_error", PTC_ERR_RULES_INVALID, "enforce");
         return 0;
@@ -4401,7 +4357,7 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         runtime_state.bedtime_skipped_instance_id != bedtime.window_instance_id;
     if (runtime_state.bedtime_enforced &&
         (!bedtime_should_enforce || runtime_state.bedtime_window_instance_id != bedtime.window_instance_id)) {
-        err = restore_bedtime_base(sysmodule, NULL, &caps, &config, &rules, &runtime_state, now);
+        err = restore_bedtime_base(sysmodule, NULL, &rules, &runtime_state, now);
         if (err != PTC_ERR_OK) {
             write_disable_flag(sysmodule, "bedtime_restore_failed\n");
             append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_BEDTIME_RECOVERY_FAILED,
@@ -4429,7 +4385,7 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
             return 0;
         }
     }
-    err = apply_target(sysmodule, NULL, &caps, now, ptc_control_mode_name(config.mode), target_mode, target_minutes);
+    err = apply_target(sysmodule, NULL, now, "release", target_mode, target_minutes);
     if (err != PTC_ERR_OK) {
         if (bedtime_should_enforce && !runtime_state.bedtime_enforced) clear_bedtime_snapshot(sysmodule);
         return 0;

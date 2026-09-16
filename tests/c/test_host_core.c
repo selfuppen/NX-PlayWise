@@ -580,14 +580,13 @@ static void test_daily_summary_and_read_only_stats_boundary(void)
 
 static void test_policy_and_disable_flag(void)
 {
-    PtcCapabilities caps = {0};
     PtcPolicyDecision decision;
-    decision = ptc_policy_decide(PTC_CONTROL_ENFORCE, true, PTC_OPERATION_STATUS, &caps, false, true);
+    decision = ptc_policy_decide(true, PTC_OPERATION_STATUS);
     check_int(decision.error, PTC_ERR_OK, "disable flag preserves status");
     check_true(decision.may_read_pctl && !decision.may_write_pctl, "disabled status remains read-only");
-    decision = ptc_policy_decide(PTC_CONTROL_ENFORCE, true, PTC_OPERATION_SET_TODAY_LIMIT, &caps, false, true);
+    decision = ptc_policy_decide(true, PTC_OPERATION_SET_TODAY_LIMIT);
     check_int(decision.error, PTC_ERR_DISABLED, "disable flag blocks writes");
-    decision = ptc_policy_decide(PTC_CONTROL_ENFORCE, false, PTC_OPERATION_GRANT_MINUTES, &caps, false, true);
+    decision = ptc_policy_decide(false, PTC_OPERATION_GRANT_MINUTES);
     check_true(decision.may_write_pctl && decision.requires_backup && decision.consume_nonce_after_success,
         "offline grant is transactional");
 }
