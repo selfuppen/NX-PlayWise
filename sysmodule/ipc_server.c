@@ -344,11 +344,6 @@ void ptc_ipc_server_stop(PtcIpcServer *server)
     eventClose(&server->wake_event);
 }
 
-bool ptc_ipc_server_take_wake(PtcIpcServer *server)
-{
-    return server && R_SUCCEEDED(eventWait(&server->wake_event, 0));
-}
-
 bool ptc_ipc_server_wait(PtcIpcServer *server, uint32_t timeout_ms)
 {
     if (!server) return false;
@@ -386,11 +381,4 @@ void ptc_ipc_server_signal_completed(PtcIpcServer *server)
 
 void ptc_ipc_server_lock_storage(PtcIpcServer *server) { if (server) mutexLock(&server->storage_mutex); }
 void ptc_ipc_server_unlock_storage(PtcIpcServer *server) { if (server) mutexUnlock(&server->storage_mutex); }
-void ptc_ipc_server_set_accepting(PtcIpcServer *server, bool accepting)
-{
-    if (!server) return;
-    mutexLock(&server->storage_mutex);
-    server->accepting = accepting;
-    mutexUnlock(&server->storage_mutex);
-}
 #endif

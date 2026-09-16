@@ -305,27 +305,3 @@ PtcAuthStatus ptc_companion_auth_verify_pin(
     if (status != PTC_AUTH_OK) return status;
     return record.cooldown_until ? PTC_AUTH_COOLDOWN : PTC_AUTH_DENIED;
 }
-
-const char *ptc_auth_status_name(PtcAuthStatus status)
-{
-    switch (status) {
-    case PTC_AUTH_OK:
-        return "ok";
-    case PTC_AUTH_EMPTY:
-        return "empty";
-    case PTC_AUTH_BAD_ARGUMENT:
-        return "bad_argument";
-    case PTC_AUTH_READ_FAILED:
-        return "read_failed";
-    case PTC_AUTH_WRITE_FAILED:
-        return "write_failed";
-    case PTC_AUTH_INVALID_FILE:
-        return "invalid_file";
-    case PTC_AUTH_DENIED:
-        return "denied";
-    case PTC_AUTH_COOLDOWN:
-        return "cooldown";
-    default:
-        return "unknown";
-    }
-}

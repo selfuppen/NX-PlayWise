@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../common/rules/rules.h"
 #include "file_protocol.h"
 
 typedef enum {
@@ -40,7 +41,6 @@ typedef struct {
     int elapsed_ms;
     int next_file_poll_ms;
     int file_poll_delay_ms;
-    bool accepted_by_ipc;
     PtcCompanionTransportRoute route;
 } PtcCompanionTransportClient;
 
@@ -52,8 +52,6 @@ PtcCompanionStatus ptc_companion_transport_poll(PtcCompanionTransportClient *cli
     int timeout_ms, char *out, size_t out_size);
 void ptc_companion_transport_cancel(PtcCompanionTransportClient *client);
 bool ptc_companion_transport_notify_storage_changed(PtcCompanionTransportClient *client);
-PtcCompanionTransportKind ptc_companion_transport_active(const PtcCompanionTransportClient *client);
-bool ptc_companion_transport_accepted_by_ipc(const PtcCompanionTransportClient *client);
 PtcCompanionTransportRoute ptc_companion_transport_route(const PtcCompanionTransportClient *client);
 const char *ptc_companion_transport_route_label_zh(PtcCompanionTransportRoute route);
 const char *ptc_companion_request_command_label_zh(const char *type);

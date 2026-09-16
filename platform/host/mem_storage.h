@@ -36,7 +36,5 @@ typedef struct {
 
 void ptc_mem_storage_init(PtcMemStorage *mem);
 PtcStorage *ptc_mem_storage_as_storage(PtcMemStorage *mem);
-void ptc_mem_storage_set_now(PtcMemStorage *mem, int64_t unix_seconds);
-bool ptc_mem_storage_set_mtime(PtcMemStorage *mem, const char *path, int64_t unix_seconds, bool valid);
 
 #endif

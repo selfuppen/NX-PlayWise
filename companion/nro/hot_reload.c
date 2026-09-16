@@ -510,17 +510,3 @@ void ptc_hot_reload_exit(PtcHotReloadController *controller)
     }
     close_pm(controller);
 }
-
-const char *ptc_hot_reload_status_label(PtcHotReloadStatus status)
-{
-    switch (status) {
-    case PTC_HOT_RELOAD_CURRENT: return "已加载";
-    case PTC_HOT_RELOAD_PENDING: return "待加载";
-    case PTC_HOT_RELOAD_UNAVAILABLE: return "热加载不可用";
-    case PTC_HOT_RELOAD_INCOMPLETE: return "安装不完整";
-    case PTC_HOT_RELOAD_RECOVERY_REQUIRED: return "需要恢复";
-    case PTC_HOT_RELOAD_RUNNING: return "正在加载";
-    case PTC_HOT_RELOAD_SUCCESS: return "已加载";
-    default: return "状态未知";
-    }
-}

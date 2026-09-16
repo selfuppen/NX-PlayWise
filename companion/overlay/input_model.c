@@ -143,7 +143,7 @@ bool ptc_overlay_input_handle(
     unsigned int buttons_held,
     int elapsed_ms)
 {
-    if (!input || input->timed_out) {
+    if (!input) {
         return false;
     }
     if (handle_direction_repeat(input, buttons_down, buttons_held, elapsed_ms)) {
@@ -171,17 +171,6 @@ bool ptc_overlay_input_handle(
     return (buttons_down & (PTC_OVERLAY_BUTTON_B | PTC_OVERLAY_BUTTON_PLUS)) != 0;
 }
 
-void ptc_overlay_input_tick(PtcOverlayInput *input, int elapsed_ms, int timeout_ms)
-{
-    if (!input || input->timed_out || elapsed_ms <= 0 || timeout_ms < 0) {
-        return;
-    }
-    input->elapsed_ms += elapsed_ms;
-    if (input->elapsed_ms >= timeout_ms) {
-        input->timed_out = true;
-    }
-}
-
 bool ptc_overlay_input_format(const PtcOverlayInput *input, char *out, size_t out_size)
 {
     unsigned int i;
@@ -200,5 +189,5 @@ bool ptc_overlay_input_format(const PtcOverlayInput *input, char *out, size_t ou
 
 bool ptc_overlay_input_can_submit(const PtcOverlayInput *input)
 {
-    return input && !input->timed_out && input->length == PTC_OVERLAY_CODE_SYMBOLS;
+    return input && input->length == PTC_OVERLAY_CODE_SYMBOLS;
 }

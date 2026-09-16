@@ -4,7 +4,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../common/rules/rules.h"
 #include "../platform/storage.h"
 #include "result_summary.h"
 
@@ -45,14 +44,6 @@ typedef struct {
 void ptc_companion_file_client_init(PtcCompanionFileClient *client, const char *app_root, PtcStorage *storage);
 PtcCompanionStatus ptc_companion_make_request_id(char *out, size_t out_size, int64_t unix_ms, uint16_t random16);
 PtcCompanionStatus ptc_companion_submit_status(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
-PtcCompanionStatus ptc_companion_submit_offline_code(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, const char *code);
-PtcCompanionStatus ptc_companion_submit_set_today_limit(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, uint16_t minutes);
-PtcCompanionStatus ptc_companion_submit_add_today_minutes(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, uint16_t minutes);
-PtcCompanionStatus ptc_companion_submit_disable_today_limit(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
-PtcCompanionStatus ptc_companion_submit_restore_today_policy(PtcCompanionFileClient *client, const char *request_id, int64_t created_at);
-PtcCompanionStatus ptc_companion_submit_set_weekly_template(PtcCompanionFileClient *client, const char *request_id, int64_t created_at, const PtcDayRule week[7]);
-PtcCompanionStatus ptc_companion_submit_set_holiday_policy(PtcCompanionFileClient *client, const char *request_id,
-    int64_t created_at, bool enabled, PtcDayRule holiday_rule, PtcDayRule makeup_workday_rule);
 PtcCompanionStatus ptc_companion_set_disable_flag(PtcCompanionFileClient *client, bool enabled);
 PtcCompanionStatus ptc_companion_pending_redemption_save(
     PtcCompanionFileClient *client,
@@ -72,7 +63,6 @@ PtcCompanionStatus ptc_companion_read_result(
     int timeout_ms,
     char *out,
     size_t out_size);
-PtcCompanionStatus ptc_companion_format_result_summary(const char *result_json, char *out, size_t out_size);
 PtcCompanionStatus ptc_companion_parse_result_summary(const char *result_json, PtcCompanionResultSummary *out);
 const char *ptc_companion_status_name(PtcCompanionStatus status);
 

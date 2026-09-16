@@ -643,7 +643,6 @@ void ptc_ui_change_parent_page(PtcUiModel *model, int direction)
     }
     model->parent_page = (PtcUiParentPage)page;
     if (model->parent_page == PTC_UI_PARENT_PLAN) model->plan_page = PTC_UI_PLAN_PAGE_ROOT;
-    model->settings_page = PTC_UI_SETTINGS_ROOT;
     if (!model->parent_footer_focused) model->selected_index = 0;
 }
 
@@ -2291,12 +2290,6 @@ PtcUiRect ptc_ui_parent_footer_rect(int index)
     return rect;
 }
 
-PtcUiRect ptc_ui_parent_refresh_rect(void)
-{
-    PtcUiRect rect = {1010, 108, 216, 48};
-    return rect;
-}
-
 PtcUiRect ptc_ui_parent_tab_rect(int index)
 {
     PtcUiRect rect = {54 + index * 174, 108, 158, 48};
@@ -2525,37 +2518,9 @@ bool ptc_ui_home_notice_expanded(const PtcUiModel *model)
         strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0);
 }
 
-PtcUiRect ptc_ui_advanced_hierarchy_rect(void)
-{
-    return (PtcUiRect){54, 108, 1172, 48};
-}
-
 PtcUiRect ptc_ui_advanced_back_rect(void)
 {
     return (PtcUiRect){54, 108, 192, 48};
-}
-
-PtcUiRect ptc_ui_advanced_card_rect(void)
-{
-    return ptc_ui_advanced_feature_rect(0);
-}
-
-PtcUiRect ptc_ui_advanced_feature_rect(int index)
-{
-    int column = index % 2;
-    int row = index / 2;
-    if (index < 0 || index >= 5) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54 + column * 385, 176 + row * 110, 365, 94};
-}
-
-PtcUiRect ptc_ui_support_hierarchy_rect(void)
-{
-    return ptc_ui_advanced_hierarchy_rect();
-}
-
-PtcUiRect ptc_ui_support_back_rect(void)
-{
-    return ptc_ui_advanced_back_rect();
 }
 
 PtcUiRect ptc_ui_support_card_rect(int index)

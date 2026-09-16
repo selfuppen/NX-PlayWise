@@ -197,8 +197,6 @@ PtcCompanionStatus ptc_overlay_bridge_poll(PtcOverlayBridge *bridge, int elapsed
     return status;
 }
 
-bool ptc_overlay_bridge_waiting(const PtcOverlayBridge *bridge) { return bridge && bridge->waiting; }
-const PtcCompanionResultSummary *ptc_overlay_bridge_summary(const PtcOverlayBridge *bridge) { return bridge ? &bridge->summary : NULL; }
 PtcCompanionTransportRoute ptc_overlay_bridge_transport_state(const PtcOverlayBridge *bridge)
 {
     return bridge ? ptc_companion_transport_route(&bridge->transport) : PTC_TRANSPORT_ROUTE_NONE;
@@ -207,11 +205,6 @@ PtcCompanionTransportRoute ptc_overlay_bridge_transport_state(const PtcOverlayBr
 const char *ptc_overlay_bridge_transport_label(const PtcOverlayBridge *bridge)
 {
     return ptc_companion_transport_route_label_zh(ptc_overlay_bridge_transport_state(bridge));
-}
-
-PtcCompanionStatus ptc_overlay_bridge_last_status(const PtcOverlayBridge *bridge)
-{
-    return bridge ? bridge->last_status : PTC_COMPANION_BAD_ARGUMENT;
 }
 
 const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge)

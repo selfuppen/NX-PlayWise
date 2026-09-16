@@ -136,7 +136,6 @@ static void test_release_navigation(void)
     model.parent_page = PTC_UI_PARENT_TODAY;
     ptc_ui_change_parent_page(&model, -1);
     check_int(model.parent_page, PTC_UI_PARENT_SUPPORT, "page wraps to support");
-    check_int(model.settings_page, PTC_UI_SETTINGS_ROOT, "top-level navigation opens settings root");
     ptc_ui_change_parent_page(&model, 1);
     check_int(model.parent_page, PTC_UI_PARENT_TODAY, "page wraps to today");
 

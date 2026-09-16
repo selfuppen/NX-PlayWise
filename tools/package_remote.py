@@ -617,17 +617,6 @@ def sync_doc_previews(preview_dir: Path, doc_images_dir: Path) -> int:
             shutil.copy2(source_file, target_file)
             count += 1
 
-    aliases = {
-        usage_dir / "ui-child-light.png": preview_dir / "child" / "child-light.png",
-        usage_dir / "ui-parent-dark.png": preview_dir / "parent" / "parent-dark.png",
-        usage_dir / "ui-refresh-child-light.png": preview_dir / "child" / "child-light.png",
-        usage_dir / "ui-refresh-parent-dark.png": preview_dir / "parent" / "parent-dark.png",
-    }
-    for target, source in aliases.items():
-        if target.is_file() and source.is_file():
-            shutil.copy2(source, target)
-            count += 1
-
     return count
 
 

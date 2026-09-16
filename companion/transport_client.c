@@ -64,14 +64,12 @@ PtcCompanionStatus ptc_companion_transport_submit_json(PtcCompanionTransportClie
         status = client->ipc->submit(client->ipc_ctx, request_id, json, &client->wait_token);
         if (status == PTC_COMPANION_OK) {
             client->active = PTC_TRANSPORT_IPC;
-            client->accepted_by_ipc = true;
             return status;
         }
         if (status == PTC_COMPANION_PENDING) {
             /* Submit may have reached the server even if its reply was lost. Poll only
                this request's durable result so an in-flight request is never duplicated. */
             client->active = PTC_TRANSPORT_FILE;
-            client->accepted_by_ipc = true;
             client->route = PTC_TRANSPORT_ROUTE_IPC_SD_RESULT;
             client->file_poll_delay_ms = 100;
             client->next_file_poll_ms = 100;
@@ -134,7 +132,6 @@ void ptc_companion_transport_cancel(PtcCompanionTransportClient *client)
     if (!client) return;
     close_wait_token(client);
     client->active = PTC_TRANSPORT_NONE;
-    client->accepted_by_ipc = false;
     client->active_request_id[0] = '\0';
     client->elapsed_ms = 0;
 }
@@ -143,16 +140,6 @@ bool ptc_companion_transport_notify_storage_changed(PtcCompanionTransportClient 
 {
     return client && client->ipc && client->ipc->connect && client->ipc->connect(client->ipc_ctx) &&
         client->ipc->notify_storage_changed && client->ipc->notify_storage_changed(client->ipc_ctx);
-}
-
-PtcCompanionTransportKind ptc_companion_transport_active(const PtcCompanionTransportClient *client)
-{
-    return client ? client->active : PTC_TRANSPORT_NONE;
-}
-
-bool ptc_companion_transport_accepted_by_ipc(const PtcCompanionTransportClient *client)
-{
-    return client && client->accepted_by_ipc;
 }
 
 PtcCompanionTransportRoute ptc_companion_transport_route(const PtcCompanionTransportClient *client)

@@ -453,13 +453,10 @@ def test_sync_doc_previews(tmp_path: Path | None = None) -> None:
         (doc_images_dir / "usage" / "child").mkdir(parents=True)
         target_mod = doc_images_dir / "usage" / "child" / "child-light.png"
         target_mod.write_bytes(b"OLD_CHILD")
-        target_alias = doc_images_dir / "usage" / "ui-child-light.png"
-        target_alias.write_bytes(b"OLD_ALIAS")
 
         synced = package_remote.sync_doc_previews(preview_dir, doc_images_dir)
-        require(synced == 2, f"expected 2 synced images, got {synced}")
+        require(synced == 1, f"expected 1 synced image, got {synced}")
         require(target_mod.read_bytes() == b"NEW_CHILD", "target module preview must be updated")
-        require(target_alias.read_bytes() == b"NEW_CHILD", "target alias preview must be updated")
 
 
 def main() -> int:

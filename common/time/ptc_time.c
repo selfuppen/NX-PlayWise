@@ -30,24 +30,6 @@ uint16_t ptc_day_index_from_unix(int64_t unix_seconds)
     return (uint16_t)((unix_seconds - PTC_DAY_INDEX_EPOCH_UNIX) / PTC_SECONDS_PER_DAY);
 }
 
-uint16_t ptc_day_index_from_unix_utc8(int64_t unix_seconds)
-{
-    if (unix_seconds < PTC_DAY_INDEX_EPOCH_UNIX - PTC_UTC8_OFFSET_SECONDS) {
-        return 0;
-    }
-    return (uint16_t)((unix_seconds + PTC_UTC8_OFFSET_SECONDS - PTC_DAY_INDEX_EPOCH_UNIX) / PTC_SECONDS_PER_DAY);
-}
-
-uint16_t ptc_minute_of_day_from_unix_utc8(int64_t unix_seconds)
-{
-    int64_t shifted = unix_seconds + PTC_UTC8_OFFSET_SECONDS;
-    int64_t seconds = shifted % PTC_SECONDS_PER_DAY;
-    if (seconds < 0) {
-        seconds += PTC_SECONDS_PER_DAY;
-    }
-    return (uint16_t)(seconds / 60);
-}
-
 bool ptc_day_index_from_date(uint16_t year, uint8_t month, uint8_t day, uint16_t *out)
 {
     uint32_t days = 0;
@@ -110,20 +92,6 @@ bool ptc_date_from_day_index(uint16_t day_index, uint16_t *year, uint8_t *month,
     *month = m;
     *day = (uint8_t)(remaining + 1u);
     return true;
-}
-
-bool ptc_format_date_utc8(int64_t unix_seconds, char out[11])
-{
-    uint16_t year;
-    uint8_t month;
-    uint8_t day;
-    uint16_t day_index;
-    int written;
-    if (!out || unix_seconds < PTC_DAY_INDEX_EPOCH_UNIX - PTC_UTC8_OFFSET_SECONDS) return false;
-    day_index = ptc_day_index_from_unix_utc8(unix_seconds);
-    if (!ptc_date_from_day_index(day_index, &year, &month, &day)) return false;
-    written = snprintf(out, 11, "%04u-%02u-%02u", (unsigned int)year, (unsigned int)month, (unsigned int)day);
-    return written == 10;
 }
 
 bool ptc_format_date(uint16_t day_index, char out[11])

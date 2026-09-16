@@ -56,12 +56,6 @@ typedef enum {
 } PtcUiBedtimeSection;
 
 typedef enum {
-    PTC_UI_SETTINGS_ROOT = 0,
-    PTC_UI_SETTINGS_ADVANCED = 1,
-    PTC_UI_SETTINGS_SUPPORT = 2
-} PtcUiSettingsPage;
-
-typedef enum {
     PTC_UI_OVERLAY_NONE = 0,
     PTC_UI_OVERLAY_MINUTES = 1,
     PTC_UI_OVERLAY_WEEKLY = 2,
@@ -246,7 +240,6 @@ typedef struct {
     PtcUiParentPage parent_page;
     PtcUiPlanPage plan_page;
     PtcUiBedtimeSection bedtime_section;
-    PtcUiSettingsPage settings_page;
     int selected_index;
     bool waiting;
     bool status_loaded;
@@ -770,7 +763,6 @@ PtcUiRect ptc_ui_setup_zone_rect(int index);
 PtcUiRect ptc_ui_notice_status_icon_rect(int y);
 PtcUiRect ptc_ui_notice_command_text_rect(int y, int height);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
-PtcUiRect ptc_ui_parent_refresh_rect(void);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_plan_card_rect(int index);
@@ -780,12 +772,7 @@ PtcUiRect ptc_ui_home_details_rect(bool parent);
 PtcUiOperation ptc_ui_today_operation(int index);
 bool ptc_ui_open_home_details(PtcUiModel *model);
 bool ptc_ui_home_notice_expanded(const PtcUiModel *model);
-PtcUiRect ptc_ui_advanced_hierarchy_rect(void);
 PtcUiRect ptc_ui_advanced_back_rect(void);
-PtcUiRect ptc_ui_advanced_card_rect(void);
-PtcUiRect ptc_ui_advanced_feature_rect(int index);
-PtcUiRect ptc_ui_support_hierarchy_rect(void);
-PtcUiRect ptc_ui_support_back_rect(void);
 PtcUiRect ptc_ui_support_card_rect(int index);
 PtcUiRect ptc_ui_holiday_card_rect(int index);
 PtcUiRect ptc_ui_holiday_enable_rect(void);

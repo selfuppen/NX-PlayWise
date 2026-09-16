@@ -342,22 +342,6 @@ void ptc_mem_storage_init(PtcMemStorage *mem)
     mem->now_unix_seconds = 1;
 }
 
-void ptc_mem_storage_set_now(PtcMemStorage *mem, int64_t unix_seconds)
-{
-    if (mem) mem->now_unix_seconds = unix_seconds;
-}
-
-bool ptc_mem_storage_set_mtime(PtcMemStorage *mem, const char *path, int64_t unix_seconds, bool valid)
-{
-    int idx;
-    if (!mem || !path) return false;
-    idx = find_file(mem, path);
-    if (idx < 0) return false;
-    mem->files[idx].modified_unix_seconds = unix_seconds;
-    mem->files[idx].modified_time_valid = valid;
-    return true;
-}
-
 PtcStorage *ptc_mem_storage_as_storage(PtcMemStorage *mem)
 {
     return &mem->storage;

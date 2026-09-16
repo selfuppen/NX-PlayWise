@@ -48,6 +48,4 @@ PtcAuthStatus ptc_companion_auth_verify_pin(
     const char *pin,
     int64_t now,
     int64_t *retry_after_seconds);
-const char *ptc_auth_status_name(PtcAuthStatus status);
-
 #endif

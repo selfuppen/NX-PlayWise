@@ -1977,7 +1977,6 @@ static void enter_parent_area_unlocked(UiState *ui)
     ui->model.parent_page = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
         ? PTC_UI_PARENT_SUPPORT : PTC_UI_PARENT_TODAY;
     ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
-    ui->model.settings_page = PTC_UI_SETTINGS_ROOT;
     ui->model.selected_index = 0;
     snprintf(ui->model.message, sizeof(ui->model.message), "家长区已解锁。进入孩子区请按 B。");
 #ifndef PLAYWISE_EDEN
@@ -3883,7 +3882,6 @@ static void apply_pending_navigation(UiState *ui)
         if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
             submit_status(ui);
         } else if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS) {
-            ui->model.settings_page = PTC_UI_SETTINGS_ROOT;
             refresh_album_restriction(ui);
         }
     }

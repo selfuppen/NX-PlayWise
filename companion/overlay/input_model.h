@@ -33,9 +33,7 @@ typedef struct {
     unsigned int cursor;
     unsigned int repeat_direction;
     int repeat_elapsed_ms;
-    int elapsed_ms;
     bool repeat_started;
-    bool timed_out;
 } PtcOverlayInput;
 
 void ptc_overlay_input_init(PtcOverlayInput *input);
@@ -44,7 +42,6 @@ bool ptc_overlay_input_handle(
     unsigned int buttons_down,
     unsigned int buttons_held,
     int elapsed_ms);
-void ptc_overlay_input_tick(PtcOverlayInput *input, int elapsed_ms, int timeout_ms);
 bool ptc_overlay_input_format(const PtcOverlayInput *input, char *out, size_t out_size);
 bool ptc_overlay_input_can_submit(const PtcOverlayInput *input);
 const char *ptc_overlay_input_charset(void);

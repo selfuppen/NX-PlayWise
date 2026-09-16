@@ -50,6 +50,5 @@ bool ptc_hot_reload_begin(PtcHotReloadController *controller);
 void ptc_hot_reload_confirm_ipc_closed(PtcHotReloadController *controller);
 void ptc_hot_reload_tick(PtcHotReloadController *controller);
 void ptc_hot_reload_exit(PtcHotReloadController *controller);
-const char *ptc_hot_reload_status_label(PtcHotReloadStatus status);
 
 #endif
