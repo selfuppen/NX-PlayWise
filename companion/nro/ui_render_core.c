@@ -1083,24 +1083,89 @@ uint32_t time_projection_color(PtcUiTimeState state)
     }
 }
 
+typedef struct {
+    const char *label;
+    uint32_t color;
+    uint32_t bg_color;
+} UiActiveRuleBadge;
+
+static UiActiveRuleBadge get_active_rule_badge(const PtcUiModel *model)
+{
+    UiActiveRuleBadge badge;
+    if (model->bedtime_active && !model->bedtime_skipped) {
+        badge.label = "就寝限制";
+        badge.color = UI_DANGER;
+        badge.bg_color = UI_DANGER_SOFT;
+        return badge;
+    }
+    if (!model->status_loaded) {
+        badge.label = "待确认";
+        badge.color = UI_MUTED;
+        badge.bg_color = UI_PAGE;
+        return badge;
+    }
+    if (strcmp(model->rule_source, "today_override") == 0) {
+        badge.label = "今日调整";
+        badge.color = UI_ACCENT;
+        badge.bg_color = UI_ACCENT_SOFT;
+    } else if (strcmp(model->rule_source, "scheduled_override") == 0) {
+        badge.label = "临时计划";
+        badge.color = UI_ACCENT;
+        badge.bg_color = UI_ACCENT_SOFT;
+    } else if (strcmp(model->rule_source, "statutory_holiday") == 0) {
+        badge.label = "法定假日";
+        badge.color = UI_SUCCESS;
+        badge.bg_color = UI_SUCCESS_SOFT;
+    } else if (strcmp(model->rule_source, "makeup_workday") == 0) {
+        badge.label = "调休工作";
+        badge.color = UI_SUCCESS;
+        badge.bg_color = UI_SUCCESS_SOFT;
+    } else {
+        badge.label = "周计划";
+        badge.color = UI_ACCENT;
+        badge.bg_color = UI_ACCENT_SOFT;
+    }
+    return badge;
+}
+
 void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     PtcUiTimeProjection status;
-    UiRect box = {760, 24, 466, 66};
-    UiRect track = {862, 67, 310, 7};
-    char clock[24];
+    UiRect box = {754, 24, 472, 66};
     char fitted[64];
+    char fitted_fresh[64];
     uint32_t color;
+    UiActiveRuleBadge badge;
+
     ptc_ui_project_time_status(model, ptc_ui_render_now(), &status);
     color = time_projection_color(status.state);
+    badge = get_active_rule_badge(model);
+
     fill_round_rect(pixels, stride, box, 14, UI_SURFACE);
     draw_rect_outline(pixels, stride, box, 14, 1, UI_BORDER);
-    snprintf(clock, sizeof(clock), "当前 %s", status.clock_text);
-    draw_text(pixels, stride, box.x + 16, box.y + 25, clock, 16, UI_INK);
-    fit_text(fitted, sizeof(fitted), status.remaining_text, 16, 190);
-    draw_text(pixels, stride, box.x + 104, box.y + 25, fitted, 16, color);
-    fit_text(fitted, sizeof(fitted), status.freshness_text, 13, 118);
-    draw_text(pixels, stride, box.x + 336, box.y + 25, fitted, 13, color);
+
+    /* 时钟显示 */
+    draw_text(pixels, stride, box.x + 14, box.y + 26, status.clock_text, 17, UI_INK);
+
+    /* 当前生效规则胶囊徽章 */
+    UiRect pill = {box.x + 68, box.y + 11, 74, 22};
+    fill_round_rect(pixels, stride, pill, 6, badge.bg_color);
+    draw_rect_outline(pixels, stride, pill, 6, 1, badge.color);
+    fill_round_rect(pixels, stride, (UiRect){pill.x + 6, pill.y + 8, 6, 6}, 3, badge.color);
+    draw_text(pixels, stride, pill.x + 16, box.y + 26, badge.label, 12, badge.color);
+
+    /* 剩余/状态文本 */
+    fit_text(fitted, sizeof(fitted), status.remaining_text, 16, 185);
+    draw_text(pixels, stride, box.x + 150, box.y + 26, fitted, 16, color);
+
+    /* 更新时效 */
+    fit_text(fitted_fresh, sizeof(fitted_fresh), status.freshness_text, 12, 110);
+    int fresh_w = measure_text(fitted_fresh, 12);
+    draw_text(pixels, stride, box.x + box.width - 14 - fresh_w, box.y + 26, fitted_fresh, 12, UI_MUTED);
+
+    /* 额度进度槽 */
+    int demo_w = model->demo_secret_enabled ? 46 : 0;
+    UiRect track = {box.x + 14, box.y + 46, box.width - 28 - demo_w, 6};
     fill_round_rect(pixels, stride, track, 3, UI_RAISED);
     if (status.progress_available && status.progress_per_mille > 0) {
         int width = track.width * status.progress_per_mille / 1000;
@@ -1109,9 +1174,9 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         fill_round_rect(pixels, stride, (UiRect){track.x, track.y, width, track.height}, 3, color);
     }
     if (model->demo_secret_enabled) {
-        UiRect badge = {1178, 61, 40, 18};
-        fill_round_rect(pixels, stride, badge, 5, UI_DANGER_SOFT);
-        draw_text_center(pixels, stride, badge, "演示", 11, UI_DANGER);
+        UiRect dbadge = {box.x + box.width - 14 - 38, box.y + 40, 38, 18};
+        fill_round_rect(pixels, stride, dbadge, 5, UI_DANGER_SOFT);
+        draw_text_center(pixels, stride, dbadge, "演示", 11, UI_DANGER);
     }
 }
 
@@ -1275,12 +1340,34 @@ static bool parent_status_is_exception(const PtcUiModel *model)
 void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect box = to_uirect(ptc_ui_parent_footer_rect(4));
-    PtcUiTimeProjection status;
     char summary[96];
-    uint32_t color = parent_status_is_exception(model) ? UI_DANGER : UI_ACCENT;
-    ptc_ui_project_time_status(model, ptc_ui_render_now(), &status);
-    snprintf(summary, sizeof(summary), "状态与操作  |  %s", status.freshness_text);
+    bool exception = parent_status_is_exception(model);
+    uint32_t color = exception ? UI_DANGER : UI_ACCENT;
+
+    if (exception) {
+        if (model->disable_flag_present) {
+            snprintf(summary, sizeof(summary), "▲ 控制已停用  |  按 A 查看恢复");
+        } else if (model->recovery_active) {
+            snprintf(summary, sizeof(summary), "▲ 存在待恢复事务  |  按 A 进入排障");
+        } else if (strcmp(model->setup_phase, "protection") == 0) {
+            snprintf(summary, sizeof(summary), "▲ 系统防护已激活  |  按 A 查看详情");
+        } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
+            snprintf(summary, sizeof(summary), "● 临时解除中  |  按 A 管理设置");
+            color = UI_WARNING;
+        } else if (!ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
+            snprintf(summary, sizeof(summary), "▲ 状态待同步  |  按 A 检查更新");
+            color = UI_WARNING;
+        } else {
+            snprintf(summary, sizeof(summary), "▲ 系统异常需处理  |  按 A 进入支持");
+        }
+    } else {
+        snprintf(summary, sizeof(summary), "守护控制运行中  |  按 A 查看系统状态");
+    }
+
     fill_round_rect(pixels, stride, box, 12, UI_RGB(UI_BLENDED(surface)));
+    if (exception) {
+        draw_rect_outline(pixels, stride, box, 12, 1, color);
+    }
     if (model->parent_footer_focused && model->parent_footer_selection == 1) {
         fill_round_rect(pixels, stride, box, 12, UI_RGB(UI_BLENDED(focus)));
         fill_round_rect(pixels, stride, (UiRect){box.x + 3, box.y + 3, box.width - 6, box.height - 6},

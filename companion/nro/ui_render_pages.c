@@ -823,6 +823,15 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_wrapped_text(pixels, stride, box.x + 20, box.y + 57,
             subtitle, 14, box.width - 40, 18, 2,
             disabled ? UI_DISABLED : (index == 0 ? UI_ON_ACCENT : UI_MUTED));
+        if (index == 0 && strcmp(model->rule_source, "today_override") == 0) {
+            UiRect tbadge = {box.x + box.width - 78, box.y + 10, 66, 20};
+            fill_round_rect(pixels, stride, tbadge, 5, UI_ON_ACCENT);
+            draw_text_center(pixels, stride, tbadge, "生效中", 12, UI_ACCENT);
+        } else if (index == 4 && model->bedtime_active && !model->bedtime_skipped) {
+            UiRect tbadge = {box.x + box.width - 78, box.y + 10, 66, 20};
+            fill_round_rect(pixels, stride, tbadge, 5, UI_DANGER);
+            draw_text_center(pixels, stride, tbadge, "限制中", 12, UI_ON_ACCENT);
+        }
     }
     home_button(pixels, stride, ptc_ui_home_details_rect(true), "+  查看详情", false, false, model->waiting);
 }
@@ -1485,17 +1494,41 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 0) {
                 dynamic_action = *action;
-                dynamic_action.subtitle = model->scheduled_override.enabled
-                    ? "当前已启用，只覆盖每天可玩额度" : "当前关闭";
+                bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
+                dynamic_action.subtitle = scheduled_active
+                    ? "当前生效中，覆盖每天可玩额度"
+                    : (model->scheduled_override.enabled ? "已启用，今日未在计划日期范围内" : "当前关闭");
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 1) {
                 dynamic_action = *action;
-                dynamic_action.subtitle = model->holiday_enabled ? "当前已启用" : "当前关闭，可预设规则";
+                bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
+                                       strcmp(model->rule_source, "makeup_workday") == 0);
+                dynamic_action.subtitle = holiday_active
+                    ? (strcmp(model->rule_source, "statutory_holiday") == 0
+                        ? "当前生效中，国家法定休假日" : "当前生效中，国家调休工作日")
+                    : (model->holiday_enabled ? "已启用，今日非节假日" : "当前关闭，可预设规则");
+                action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 2) {
+                dynamic_action = *action;
+                bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
+                bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
+                                       strcmp(model->rule_source, "makeup_workday") == 0);
+                bool today_active = (strcmp(model->rule_source, "today_override") == 0);
+                if (today_active) {
+                    dynamic_action.subtitle = "今日已被临时调整覆盖";
+                } else if (scheduled_active) {
+                    dynamic_action.subtitle = "今日已被临时额度计划覆盖";
+                } else if (holiday_active) {
+                    dynamic_action.subtitle = "今日已被国家节假日规则覆盖";
+                } else {
+                    dynamic_action.subtitle = "当前生效中，周一到周日基础额度";
+                }
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 3) {
                 dynamic_action = *action;
+                bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
                 dynamic_action.subtitle = model->bedtime_policy.enabled
-                    ? (model->bedtime_active && !model->bedtime_skipped ? "当前限制生效中" : "当前已开启")
+                    ? (bedtime_enforcing ? "当前限制生效中" : "当前已开启，等待下次窗口")
                     : "当前关闭";
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 4) {
@@ -1520,27 +1553,74 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             draw_action_card(pixels, stride, card, action, index == model->selected_index && !model->parent_footer_focused, astate,
                              reserved_right);
             if (model->parent_page == PTC_UI_PARENT_PLAN) {
+                bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
+                bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
+                                       strcmp(model->rule_source, "makeup_workday") == 0);
+                bool today_active = (strcmp(model->rule_source, "today_override") == 0);
+                bool weekly_active = !scheduled_active && !holiday_active && !today_active;
+                bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
+                bool is_active_rule = (index == 0 && scheduled_active) ||
+                                      (index == 1 && holiday_active) ||
+                                      (index == 2 && weekly_active) ||
+                                      (index == 3 && bedtime_enforcing);
+
+                /* 当前生效规则的高亮描边（非聚焦时呈现） */
+                if (is_active_rule && !(index == model->selected_index && !model->parent_footer_focused)) {
+                    uint32_t active_border = (index == 3 ? UI_DANGER : (index == 1 ? UI_SUCCESS : UI_ACCENT));
+                    draw_rect_outline(pixels, stride, card, 16, 2, active_border);
+                }
+
                 UiRect pbadge = {card.x + card.width - 86, card.y + 8, 74, 22};
                 if (index == 0) {
-                    fill_round_rect(pixels, stride, pbadge, 6, UI_ACCENT_SOFT);
-                    draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_ACCENT);
-                    draw_text_center(pixels, stride, pbadge, "优先 1", 12, UI_ACCENT);
+                    if (scheduled_active) {
+                        fill_round_rect(pixels, stride, pbadge, 6, UI_ACCENT);
+                        draw_text_center(pixels, stride, pbadge, "当前生效", 12, UI_ON_ACCENT);
+                    } else {
+                        fill_round_rect(pixels, stride, pbadge, 6, UI_ACCENT_SOFT);
+                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_ACCENT);
+                        draw_text_center(pixels, stride, pbadge, "优先 1", 12, UI_ACCENT);
+                    }
                 } else if (index == 1) {
-                    fill_round_rect(pixels, stride, pbadge, 6, UI_SUCCESS_SOFT);
-                    draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_SUCCESS);
-                    draw_text_center(pixels, stride, pbadge, "优先 2", 12, UI_SUCCESS);
+                    if (holiday_active) {
+                        fill_round_rect(pixels, stride, pbadge, 6, UI_SUCCESS);
+                        draw_text_center(pixels, stride, pbadge, "当前生效", 12, UI_ON_ACCENT);
+                    } else {
+                        fill_round_rect(pixels, stride, pbadge, 6, UI_SUCCESS_SOFT);
+                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_SUCCESS);
+                        draw_text_center(pixels, stride, pbadge, "优先 2", 12, UI_SUCCESS);
+                    }
                 } else if (index == 2) {
-                    fill_round_rect(pixels, stride, pbadge, 6, UI_PAGE);
-                    draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_BORDER);
-                    draw_text_center(pixels, stride, pbadge, "基础规则", 12, UI_MUTED);
+                    if (weekly_active) {
+                        fill_round_rect(pixels, stride, pbadge, 6, UI_ACCENT);
+                        draw_text_center(pixels, stride, pbadge, "当前生效", 12, UI_ON_ACCENT);
+                    } else {
+                        fill_round_rect(pixels, stride, pbadge, 6, UI_PAGE);
+                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_BORDER);
+                        draw_text_center(pixels, stride, pbadge, "基础规则", 12, UI_MUTED);
+                    }
                 } else if (index == 3) {
-                    fill_round_rect(pixels, stride, pbadge, 6, UI_WARNING_SOFT);
-                    draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING);
-                    draw_text_center(pixels, stride, pbadge, "独立并行", 12, UI_WARNING);
+                    if (bedtime_enforcing) {
+                        fill_round_rect(pixels, stride, pbadge, 6, UI_DANGER);
+                        draw_text_center(pixels, stride, pbadge, "限制中", 12, UI_ON_ACCENT);
+                    } else {
+                        fill_round_rect(pixels, stride, pbadge, 6, UI_WARNING_SOFT);
+                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING);
+                        draw_text_center(pixels, stride, pbadge, "独立并行", 12, UI_WARNING);
+                    }
                 } else if (index == 4) {
-                    fill_round_rect(pixels, stride, pbadge, 6, UI_SUCCESS_SOFT);
-                    draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_SUCCESS);
-                    draw_text_center(pixels, stride, pbadge, "限时追加", 12, UI_SUCCESS);
+                    if (model->daily_buffer_claimed) {
+                        fill_round_rect(pixels, stride, pbadge, 6, UI_PAGE);
+                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_BORDER);
+                        draw_text_center(pixels, stride, pbadge, "今日已领", 12, UI_MUTED);
+                    } else if (model->daily_buffer_available) {
+                        fill_round_rect(pixels, stride, pbadge, 6, UI_SUCCESS_SOFT);
+                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_SUCCESS);
+                        draw_text_center(pixels, stride, pbadge, "今日可领", 12, UI_SUCCESS);
+                    } else {
+                        fill_round_rect(pixels, stride, pbadge, 6, UI_PAGE);
+                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_BORDER);
+                        draw_text_center(pixels, stride, pbadge, "限时追加", 12, UI_MUTED);
+                    }
                 }
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
                 const char *state_label = "状态未知";
