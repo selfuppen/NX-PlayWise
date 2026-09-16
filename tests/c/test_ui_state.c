@@ -1744,6 +1744,13 @@ static void test_visual_action_boundaries(void)
     model.disable_flag_present = true;
     check_hit(hit_center(&model, ptc_ui_today_card_rect(0)), PTC_UI_HIT_NONE, 0,
               "primary styling never enables control while disabled");
+    PtcUiRect parent_summary = ptc_ui_home_summary_rect(true);
+    PtcUiRect parent_details = ptc_ui_home_details_rect(true);
+    check_true(parent_details.x >= parent_summary.x &&
+               parent_details.y >= parent_summary.y &&
+               parent_details.x + parent_details.w <= parent_summary.x + parent_summary.w &&
+               parent_details.y + parent_details.h <= parent_summary.y + parent_summary.h,
+               "parent details action remains strictly contained within summary card");
 }
 
 static void test_grant_flow_polish(void)
