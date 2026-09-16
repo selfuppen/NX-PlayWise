@@ -2,7 +2,9 @@
 #include <string.h>
 #include <math.h>
 
-#include "../../companion/nro/ui_graphics.h"
+#include "../../companion/nro/ui_model.h"
+#include "../../companion/nro/ui_state.h"
+#include "../../companion/nro/ui_layout.h"
 #include "../../common/time/ptc_time.h"
 
 static int failures;

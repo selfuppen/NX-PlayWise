@@ -38,6 +38,8 @@ OBJS := \
 	$(BUILD)/ui_graphics.o \
 	$(BUILD)/ui_theme.o \
 	$(BUILD)/ui_state.o \
+	$(BUILD)/ui_layout.o \
+	$(BUILD)/ui_hit_test.o \
 	$(BUILD)/auth.o \
 	$(BUILD)/file_protocol.o \
 	$(BUILD)/transport_client.o \
@@ -97,13 +99,19 @@ $(BUILD)/hot_reload_guard.o: ../hot_reload_guard.c ../hot_reload_guard.h | $(BUI
 $(BUILD)/album_restriction.o: ../album_restriction.c ../album_restriction.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h ui_theme.h | $(BUILD)
+$(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h ui_model.h ui_state.h ui_layout.h ui_theme.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_theme.o: ui_theme.c ui_theme.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/ui_state.o: ui_state.c ui_graphics.h | $(BUILD)
+$(BUILD)/ui_state.o: ui_state.c ui_state.h ui_model.h ui_layout.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_layout.o: ui_layout.c ui_layout.h ui_state.h ui_model.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_hit_test.o: ui_hit_test.c ui_layout.h ui_state.h ui_model.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/file_protocol.o: ../file_protocol.c | $(BUILD)

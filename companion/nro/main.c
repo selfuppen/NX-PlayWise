@@ -25,6 +25,8 @@
 #include "../../common/version.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
 #include "ui_graphics.h"
+#include "ui_state.h"
+#include "ui_layout.h"
 #ifndef PLAYWISE_EDEN
 #include "hot_reload.h"
 #endif

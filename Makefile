@@ -48,7 +48,8 @@ ORCH_SRCS := \
 	companion/overlay/bridge.c
 
 TEST_SRCS := tests/c/test_host_core.c
-UI_TEST_SRCS := companion/nro/ui_state.c companion/nro/ui_theme.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/activity_history.c common/protocol/redemption_history.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c common/usage/daily_summary.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
+UI_STATE_SRCS := companion/nro/ui_state.c companion/nro/ui_layout.c companion/nro/ui_hit_test.c
+UI_TEST_SRCS := $(UI_STATE_SRCS) companion/nro/ui_theme.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/activity_history.c common/protocol/redemption_history.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c common/usage/daily_summary.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 
 STAGE_TIMER ?= python3 tools/stage_timer.py
 
@@ -76,7 +77,7 @@ FORCE_HOST_REBUILD:
 $(HOST_TEST): $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SRCS) $(TEST_SRCS)
 
-$(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_graphics.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+$(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_model.h companion/nro/ui_state.h companion/nro/ui_layout.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(UI_TEST_SRCS) -lm
 
 $(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c common/protocol/error_code.c common/protocol/request_schema.c common/protocol/result_builder.c common/time/ptc_time.c common/rules/rules.c common/rules/holiday_calendar.c platform/host/mem_storage.c platform/host/pctl_stub.c platform/host/fake_time.c platform/switch/play_timer_settings_layout.c sysmodule/lab_session.c device_lab/boot_flags.c device_lab/handoff_guard.c device_lab/ui_model.c tests/c/test_device_lab.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)

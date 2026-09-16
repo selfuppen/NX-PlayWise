@@ -1,4 +1,6 @@
 #include "ui_graphics.h"
+#include "ui_state.h"
+#include "ui_layout.h"
 #include "../album_restriction.h"
 
 #include <switch.h>
