@@ -35,7 +35,16 @@ def main() -> None:
             "ui_render_overlays.c",
         )
     )
-    core = (ROOT / "sysmodule/sysmodule_core.c").read_text(encoding="utf-8")
+    core = "\n".join(
+        (ROOT / "sysmodule" / name).read_text(encoding="utf-8")
+        for name in (
+            "sysmodule_storage.c",
+            "sysmodule_history.c",
+            "sysmodule_control.c",
+            "sysmodule_requests.c",
+            "sysmodule_core.c",
+        )
+    )
 
     eden_line = next(line for line in makefile.splitlines() if "DEFINES=-DPLAYWISE_EDEN" in line)
     require("eden-test-nro" not in makefile.split("packages:", 1)[-1].splitlines()[0],

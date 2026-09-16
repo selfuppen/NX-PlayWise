@@ -82,6 +82,10 @@ OBJS := $(filter-out $(BUILD)/switch_ipc_client.o $(BUILD)/hot_reload.o $(BUILD)
 OBJS += \
 	$(BUILD)/eden_runtime.o \
 	$(BUILD)/pctl_stub.o \
+	$(BUILD)/sysmodule_storage.o \
+	$(BUILD)/sysmodule_history.o \
+	$(BUILD)/sysmodule_control.o \
+	$(BUILD)/sysmodule_requests.o \
 	$(BUILD)/sysmodule_core.o \
 	$(BUILD)/play_timer_settings_layout.o \
 	$(BUILD)/token_v1.o
@@ -226,6 +230,18 @@ $(BUILD)/pctl_stub.o: ../../platform/host/pctl_stub.c ../../platform/host/pctl_s
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sysmodule_core.o: ../../sysmodule/sysmodule_core.c ../../sysmodule/sysmodule_core.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sysmodule_storage.o: ../../sysmodule/sysmodule_storage.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sysmodule_history.o: ../../sysmodule/sysmodule_history.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sysmodule_control.o: ../../sysmodule/sysmodule_control.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sysmodule_requests.o: ../../sysmodule/sysmodule_requests.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/play_timer_settings_layout.o: ../../platform/switch/play_timer_settings_layout.c ../../platform/switch/play_timer_settings_layout.h | $(BUILD)
