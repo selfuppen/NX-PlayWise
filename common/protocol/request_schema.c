@@ -434,12 +434,6 @@ PtcRequestType ptc_request_type_from_string(const char *value)
         return PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT;
     }
 #ifdef PLAYWISE_DEVICE_LAB
-    if (strcmp(value, "probe_raw_block") == 0) return PTC_REQUEST_REMOVED_13;
-    if (strcmp(value, "probe_suspend") == 0) return PTC_REQUEST_REMOVED_14;
-    if (strcmp(value, "probe_play_timer_write") == 0) return PTC_REQUEST_REMOVED_15;
-    if (strcmp(value, "probe_apply_today_limit") == 0) return PTC_REQUEST_REMOVED_16;
-    if (strcmp(value, "probe_play_timer_effect") == 0) return PTC_REQUEST_REMOVED_17;
-    if (strcmp(value, "prepare_device_test") == 0) return PTC_REQUEST_REMOVED_18;
     if (strcmp(value, "lab_session_start") == 0) return PTC_REQUEST_LAB_SESSION_START;
     if (strcmp(value, "lab_phase_start") == 0) return PTC_REQUEST_LAB_PHASE_START;
     if (strcmp(value, "lab_session_status") == 0) return PTC_REQUEST_LAB_SESSION_STATUS;
@@ -495,18 +489,6 @@ const char *ptc_request_type_name(PtcRequestType type)
     case PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT:
         return "restore_install_snapshot";
 #ifdef PLAYWISE_DEVICE_LAB
-    case PTC_REQUEST_REMOVED_13:
-        return "probe_raw_block";
-    case PTC_REQUEST_REMOVED_14:
-        return "probe_suspend";
-    case PTC_REQUEST_REMOVED_15:
-        return "probe_play_timer_write";
-    case PTC_REQUEST_REMOVED_16:
-        return "probe_apply_today_limit";
-    case PTC_REQUEST_REMOVED_17:
-        return "probe_play_timer_effect";
-    case PTC_REQUEST_REMOVED_18:
-        return "prepare_device_test";
     case PTC_REQUEST_LAB_SESSION_START:
         return "lab_session_start";
     case PTC_REQUEST_LAB_PHASE_START:
@@ -627,19 +609,6 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
     case PTC_REQUEST_CLEAR_ACTIVITY_HISTORY:
         return PTC_ERR_OK;
 #ifdef PLAYWISE_DEVICE_LAB
-    case PTC_REQUEST_REMOVED_13:
-    case PTC_REQUEST_REMOVED_14:
-    case PTC_REQUEST_REMOVED_15:
-    case PTC_REQUEST_REMOVED_18:
-        return PTC_ERR_OK;
-    case PTC_REQUEST_REMOVED_16:
-        out->minutes = 1;
-        (void)json_u16(text, "minutes", &out->minutes);
-        return json_bool_optional(text, "start_timer", false, &out->start_timer)
-            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
-    case PTC_REQUEST_REMOVED_17:
-        return json_bool_optional(text, "wait_for_expiry", false, &out->wait_for_expiry)
-            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_LAB_SESSION_START:
         snprintf(out->lab_mode, sizeof(out->lab_mode), "full");
         if (find_key(text, "mode") &&

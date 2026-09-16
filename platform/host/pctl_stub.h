@@ -10,8 +10,6 @@ typedef struct {
     bool applied;
     bool timer_started;
     bool timer_stopped;
-    bool play_timer_write_probe_succeeds;
-    bool suspend_probe_succeeds;
     PtcErrorCode read_error;
     bool read_fails_after_apply;
     PtcErrorCode backup_error;

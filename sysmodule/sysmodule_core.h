@@ -26,15 +26,12 @@ typedef struct {
     char config_cache_text[4096];
     char rules_cache_text[6144];
     char state_cache_text[2048];
-    char capabilities_cache_text[1024];
     PtcStorageMetadata config_meta;
     PtcStorageMetadata rules_meta;
     PtcStorageMetadata state_meta;
-    PtcStorageMetadata capabilities_meta;
     bool config_cache_valid;
     bool rules_cache_valid;
     bool state_cache_valid;
-    bool capabilities_cache_valid;
 } PtcSysmodule;
 
 void ptc_sysmodule_init(

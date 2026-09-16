@@ -89,6 +89,10 @@ static void test_protocol(void)
     static const char *const observations[] = {
         "restriction_visible", "no_visible_restriction", "unsure"
     };
+    static const char *const removed_probes[] = {
+        "probe_raw_block", "probe_suspend", "probe_play_timer_write",
+        "probe_apply_today_limit", "probe_play_timer_effect", "prepare_device_test"
+    };
     size_t i;
     check(ptc_lab_request_type(PTC_REQUEST_LAB_CAMPAIGN_STATUS) &&
             !ptc_lab_request_type(PTC_REQUEST_SET_SCHEDULED_OVERRIDE),
@@ -104,6 +108,14 @@ static void test_protocol(void)
         "timer activation A/B mode parses explicitly");
     check(ptc_request_parse("{\"version\":1,\"request_id\":\"s2\",\"type\":\"lab_session_start\",\"created_at\":1,\"payload\":{\"mode\":\"skip\"}}", &parsed) == PTC_ERR_BAD_REQUEST,
         "unknown Lab mode is rejected");
+    for (i = 0; i < sizeof(removed_probes) / sizeof(removed_probes[0]); ++i) {
+        char json[256];
+        snprintf(json, sizeof(json),
+            "{\"version\":1,\"request_id\":\"removed-%u\",\"type\":\"%s\",\"created_at\":1,\"payload\":{}}",
+            (unsigned int)i, removed_probes[i]);
+        check(ptc_request_parse(json, &parsed) == PTC_ERR_UNKNOWN_REQUEST_TYPE,
+            "removed legacy probe stays unreachable in Device Lab");
+    }
     check(ptc_request_parse("{\"version\":1,\"request_id\":\"c0\",\"type\":\"lab_campaign_start\",\"created_at\":1,\"payload\":{\"original_pause_state\":\"on\"}}", &parsed) == PTC_ERR_OK &&
             parsed.type == PTC_REQUEST_LAB_CAMPAIGN_START && strcmp(parsed.original_pause_state, "on") == 0,
         "qualification campaign records the operator-confirmed original pause state");

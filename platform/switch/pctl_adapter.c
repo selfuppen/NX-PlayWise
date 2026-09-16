@@ -57,6 +57,7 @@ static Result dispatch_out(Service *service, u32 request_id, void *out_data, u32
     return serviceDispatchImpl(service, request_id, NULL, 0, out_data, out_size, params);
 }
 
+#ifdef PLAYWISE_DEVICE_LAB
 /* Requests a copy handle out; caller owns the returned handle. */
 static Result dispatch_out_handle(Service *service, u32 request_id, Handle *out_handle)
 {
@@ -67,6 +68,7 @@ static Result dispatch_out_handle(Service *service, u32 request_id, Handle *out_
     *out_handle = INVALID_HANDLE;
     return serviceDispatchImpl(service, request_id, NULL, 0, NULL, 0, params);
 }
+#endif
 
 static Result open_session(PtcSwitchPctl *adapter, const char *service_name, PtcSwitchSession *session)
 {
@@ -377,93 +379,6 @@ static PtcErrorCode switch_stop_timer(PtcPctl *pctl)
     return map_result(adapter, rc, PTC_ERR_PCTL_WRITE_FAILED);
 }
 
-/*
- * This legacy Lab probe only checks whether the 1457 auxiliary event surface can
- * be opened. A valid handle, a signaled event, or the 1458 value does not prove
- * that a restriction prompt was visible or that software paused/exited. Those are
- * separate manual observations governed by Nintendo's suspend-at-limit setting.
- */
-static PtcErrorCode __attribute__((unused)) switch_probe_suspend(PtcPctl *pctl, PtcProbeResult *out)
-{
-    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
-    PtcSwitchSession session;
-    Handle suspension_event = INVALID_HANDLE;
-    bool alarm_disabled = false;
-    bool alarm_known;
-    Result rc;
-    PtcErrorCode err = open_write_session(adapter, &session);
-
-    if (err != PTC_ERR_OK) {
-        out->verified = false;
-        snprintf(out->detail, sizeof(out->detail), "pctl:s session open failed result=0x%x", adapter->last_result);
-        return err;
-    }
-    alarm_known = R_SUCCEEDED(dispatch_out(
-        &session.service,
-        PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED,
-        &alarm_disabled,
-        sizeof(alarm_disabled)));
-    rc = dispatch_out_handle(
-        &session.service,
-        PTC_PCTL_CMD_GET_PLAY_TIMER_EVENT_TO_REQUEST_SUSPENSION,
-        &suspension_event);
-    err = map_result(adapter, rc, PTC_ERR_PCTL_WRITE_FAILED);
-    if (err == PTC_ERR_OK && suspension_event == INVALID_HANDLE) {
-        err = PTC_ERR_PCTL_WRITE_FAILED;
-    }
-    if (suspension_event != INVALID_HANDLE) {
-        svcCloseHandle(suspension_event);
-    }
-    close_session(&session);
-    if (err != PTC_ERR_OK) {
-        out->verified = false;
-        snprintf(
-            out->detail,
-            sizeof(out->detail),
-            "suspension event unavailable result=0x%x alarm_disabled=%s",
-            adapter->last_result,
-            alarm_known ? (alarm_disabled ? "true" : "false") : "unknown");
-        return err;
-    }
-    out->verified = true;
-    snprintf(
-        out->detail,
-        sizeof(out->detail),
-        "auxiliary 1457 handle ok alarm_disabled=%s delivery_not_proved",
-        alarm_known ? (alarm_disabled ? "true" : "false") : "unknown");
-    return PTC_ERR_OK;
-}
-
-static PtcErrorCode __attribute__((unused)) switch_probe_play_timer_write(PtcPctl *pctl, PtcProbeResult *out)
-{
-    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
-    PtcSwitchSession session;
-    PtcSwitchPlayTimerSettings before;
-    PtcSwitchPlayTimerSettings after;
-    PtcErrorCode err = open_write_session(adapter, &session);
-    if (err != PTC_ERR_OK) {
-        out->verified = false;
-        snprintf(out->detail, sizeof(out->detail), "pctl:s session open failed result=0x%x", adapter->last_result);
-        return err;
-    }
-    err = get_play_timer_settings(adapter, &session.service, &before);
-    if (err == PTC_ERR_OK) {
-        err = set_play_timer_settings(adapter, &session.service, &before);
-    }
-    if (err == PTC_ERR_OK) {
-        err = get_play_timer_settings(adapter, &session.service, &after);
-    }
-    close_session(&session);
-    if (err != PTC_ERR_OK || memcmp(&before, &after, sizeof(before)) != 0) {
-        out->verified = false;
-        snprintf(out->detail, sizeof(out->detail), "pctl:s play timer write readback failed result=0x%x", adapter->last_result);
-        return err == PTC_ERR_OK ? PTC_ERR_PCTL_WRITE_FAILED : err;
-    }
-    out->verified = true;
-    snprintf(out->detail, sizeof(out->detail), "pctl:s play timer write readback ok");
-    return PTC_ERR_OK;
-}
-
 static PtcErrorCode switch_snapshot_settings(PtcPctl *pctl, PtcPctlSettingsSnapshot *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
@@ -681,13 +596,6 @@ static const PtcPctlVTable SWITCH_PCTL_VTABLE = {
     switch_apply_target,
     switch_start_timer,
     switch_stop_timer,
-#ifdef PLAYWISE_DEVICE_LAB
-    switch_probe_suspend,
-    switch_probe_play_timer_write,
-#else
-    NULL,
-    NULL,
-#endif
     switch_snapshot_settings,
     switch_restore_settings,
     switch_debug_snapshot,

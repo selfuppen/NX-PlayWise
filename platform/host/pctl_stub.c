@@ -163,22 +163,6 @@ static PtcErrorCode stub_stop_timer(PtcPctl *pctl)
     return PTC_ERR_OK;
 }
 
-static PtcErrorCode stub_probe_suspend(PtcPctl *pctl, PtcProbeResult *out)
-{
-    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
-    out->verified = stub->suspend_probe_succeeds;
-    snprintf(out->detail, sizeof(out->detail), "%s", out->verified ? "stub suspend ok" : "stub suspend failed");
-    return out->verified ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
-}
-
-static PtcErrorCode stub_probe_play_timer_write(PtcPctl *pctl, PtcProbeResult *out)
-{
-    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
-    out->verified = stub->play_timer_write_probe_succeeds;
-    snprintf(out->detail, sizeof(out->detail), "%s", out->verified ? "stub play timer write ok" : "stub play timer write failed");
-    return out->verified ? PTC_ERR_OK : PTC_ERR_PCTL_WRITE_FAILED;
-}
-
 static void stub_encode_snapshot(const PtcPctlStub *stub, PtcPctlSettingsSnapshot *out)
 {
     uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS];
@@ -367,8 +351,6 @@ static const PtcPctlVTable PCTL_STUB_VTABLE = {
     stub_apply_target,
     stub_start_timer,
     stub_stop_timer,
-    stub_probe_suspend,
-    stub_probe_play_timer_write,
     stub_snapshot_settings,
     stub_restore_settings,
     stub_debug_snapshot,

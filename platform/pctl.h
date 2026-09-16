@@ -45,11 +45,6 @@ typedef struct {
 } PtcPctlBackup;
 
 typedef struct {
-    bool verified;
-    char detail[128];
-} PtcProbeResult;
-
-typedef struct {
     bool available;
     PtcErrorCode error;
     uint32_t ipc_result;
@@ -116,10 +111,6 @@ typedef struct {
     PtcErrorCode (*apply_target)(PtcPctl *pctl, const PtcPctlTarget *target);
     PtcErrorCode (*start_timer)(PtcPctl *pctl);
     PtcErrorCode (*stop_timer)(PtcPctl *pctl);
-    /* Raw block has no probe entry: it is orchestrated by the sysmodule through
-       snapshot_settings/apply_target/restore_settings so it produces A/B evidence. */
-    PtcErrorCode (*probe_suspend)(PtcPctl *pctl, PtcProbeResult *out);
-    PtcErrorCode (*probe_play_timer_write)(PtcPctl *pctl, PtcProbeResult *out);
     PtcErrorCode (*snapshot_settings)(PtcPctl *pctl, PtcPctlSettingsSnapshot *out);
     PtcErrorCode (*restore_settings)(PtcPctl *pctl, const PtcPctlSettingsSnapshot *snapshot);
     PtcErrorCode (*debug_snapshot)(PtcPctl *pctl, PtcPctlDebugSnapshot *out);
