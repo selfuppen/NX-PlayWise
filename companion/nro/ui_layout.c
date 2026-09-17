@@ -221,6 +221,11 @@ PtcUiRect ptc_ui_bedtime_field_rect(int section, int index)
     return (PtcUiRect){0, 0, 0, 0};
 }
 
+PtcUiRect ptc_ui_bedtime_master_switch_rect(void)
+{
+    return (PtcUiRect){838, 172, 388, 76};
+}
+
 void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
 {
     PtcUiRect current;

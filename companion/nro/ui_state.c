@@ -120,7 +120,7 @@ int ptc_ui_migrate_setup_step(int step, int wizard_version)
     return PTC_UI_SETUP_SHORTCUT;
 }
 
-static const char *effective_rule_label(PtcRuleSource source)
+const char *ptc_ui_effective_rule_label(PtcRuleSource source)
 {
     switch (source) {
     case PTC_RULE_SOURCE_STATUTORY_HOLIDAY: return "国家法定休假日";
@@ -131,6 +131,7 @@ static const char *effective_rule_label(PtcRuleSource source)
     default: return "周计划";
     }
 }
+#define effective_rule_label ptc_ui_effective_rule_label
 
 static void format_rule_basis(PtcDayRule rule, int played_minutes, bool played_available,
                               char *out, size_t out_size)

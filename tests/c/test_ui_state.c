@@ -2140,6 +2140,9 @@ static void test_global_time_projection_and_direct_inputs(void)
                "bedtime tab focus moves down to the nearest content row");
     ptc_ui_move_bedtime_focus(&model, -1, 0);
     check_int(model.selected_index, 0, "bedtime focus stops at a horizontal edge");
+    PtcUiRect master_switch = ptc_ui_bedtime_master_switch_rect();
+    check_hit(hit_center(&model, master_switch), PTC_UI_HIT_BEDTIME_MASTER_SWITCH, 0,
+              "bedtime master switch card is touchable");
 
     model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
     check_hit(ptc_ui_hit_test(&model, 330, 260), PTC_UI_HIT_BEDTIME_OVERLAY_FIELD, 0,

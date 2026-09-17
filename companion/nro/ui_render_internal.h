@@ -160,6 +160,15 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
                       const UiAction *action, bool selected, PtcUiActionState state,
                       int reserved_right);
 void draw_plan_card(uint32_t *pixels, uint32_t stride, UiRect card, bool focused);
+void draw_toggle_switch(
+    uint32_t *pixels,
+    uint32_t stride,
+    UiRect rect,
+    bool is_on,
+    bool selected,
+    bool disabled,
+    const char *on_label,
+    const char *off_label);
 const char *bedtime_override_label(PtcBedtimeOverrideMode mode);
 const char *home_runtime_notice(const PtcUiModel *model);
 void home_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,

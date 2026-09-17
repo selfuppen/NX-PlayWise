@@ -118,6 +118,7 @@ bool ptc_ui_scheduled_dirty(const PtcUiModel *model);
 void ptc_ui_discard_scheduled(PtcUiModel *model);
 void ptc_ui_reconcile_scheduled_result(PtcUiModel *model, const PtcScheduledOverride *draft, bool preserve);
 PtcEffectiveRule ptc_ui_plan_rule(const PtcUiModel *model, PtcUiPlanKind kind);
+const char *ptc_ui_effective_rule_label(PtcRuleSource source);
 void ptc_ui_format_plan_impact(const PtcUiModel *model, PtcUiPlanKind kind,
                              int64_t now, char *out, size_t out_size);
 int ptc_ui_support_recommended_action(const PtcUiModel *model);

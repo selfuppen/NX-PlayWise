@@ -87,6 +87,7 @@ typedef enum {
     PTC_UI_HIT_QUICK_ADD_OPTION,
     PTC_UI_HIT_BEDTIME_SECTION,
     PTC_UI_HIT_BEDTIME_FIELD,
+    PTC_UI_HIT_BEDTIME_MASTER_SWITCH,
     PTC_UI_HIT_BEDTIME_OVERLAY_FIELD,
     PTC_UI_HIT_HOME_DETAILS
 } PtcUiHitKind;
@@ -136,6 +137,7 @@ PtcUiRect ptc_ui_scheduled_field_rect(int index);
 PtcUiRect ptc_ui_autonomy_option_rect(int index);
 PtcUiRect ptc_ui_bedtime_section_rect(int index);
 PtcUiRect ptc_ui_bedtime_field_rect(int section, int index);
+PtcUiRect ptc_ui_bedtime_master_switch_rect(void);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
 PtcUiRect ptc_ui_minutes_value_rect(void);
 PtcUiRect ptc_ui_minutes_dec_rect(void);

@@ -454,6 +454,9 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_BEDTIME) {
+        if (ptc_ui_rect_contains(ptc_ui_bedtime_master_switch_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_BEDTIME_MASTER_SWITCH, 0);
+        }
         int fields = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 11 :
             (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
         for (i = 0; i < 3; ++i) {

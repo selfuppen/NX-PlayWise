@@ -658,10 +658,6 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     char remaining[48];
     char after[48];
     char freshness[64];
-    char holiday_line[160];
-    char holiday_detail[160];
-    char holiday_date[64];
-    char fitted[160];
     int after_minutes = -1;
     bool weekly = model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES;
     bool holiday = model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
@@ -748,54 +744,18 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     draw_text_center(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 218, 350, 28},
                      total_value, 19, entered_valid ? UI_ACCENT : UI_DANGER);
     if (holiday) {
-        PtcCalendarDayType type = model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES
-            ? PTC_CALENDAR_DAY_STATUTORY_HOLIDAY : PTC_CALENDAR_DAY_MAKEUP_WORKDAY;
-        PtcHolidayCalendarMatch match;
-        bool today_match = model->status_loaded && ptc_holiday_calendar_find(type, model->day_index, &match) &&
-                           match.day_index == model->day_index;
-        bool found = today_match || (model->status_loaded && model->day_index < UINT16_MAX &&
-                     ptc_holiday_calendar_find(type, (uint16_t)(model->day_index + 1u), &match));
-        uint16_t year = 0;
-        uint8_t month = 0;
-        uint8_t day = 0;
-        const char *kind = type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY ? "法定休假日" : "调休工作日";
-        snprintf(holiday_line, sizeof(holiday_line), "规则类型：%s", kind);
-        if (found && ptc_date_from_day_index(match.day_index, &year, &month, &day)) {
-            snprintf(holiday_date, sizeof(holiday_date), "%u-%02u-%02u", year, month, day);
-            if (today_match) {
-                if (!model->draft_holiday_enabled) {
-                    snprintf(holiday_detail, sizeof(holiday_detail), "今日日期命中：%s（预设未开启）",
-                             match.arrangement ? match.arrangement->display_name : kind);
-                } else if (model->today_override_present) {
-                    snprintf(holiday_detail, sizeof(holiday_detail), "今日日期命中：%s（被临时设置覆盖）",
-                             match.arrangement ? match.arrangement->display_name : kind);
-                } else if (ptc_ui_plan_rule(model, PTC_UI_PLAN_HOLIDAY).source == PTC_RULE_SOURCE_SCHEDULED_OVERRIDE) {
-                    snprintf(holiday_detail, sizeof(holiday_detail), "今日日期命中：%s（被临时额度计划覆盖）",
-                             match.arrangement ? match.arrangement->display_name : kind);
-                } else if (!model->holiday_enabled) {
-                    snprintf(holiday_detail, sizeof(holiday_detail), "今日日期命中：%s（保存后启用）",
-                             match.arrangement ? match.arrangement->display_name : kind);
-                } else {
-                    snprintf(holiday_detail, sizeof(holiday_detail), "今日正在适用：%s",
-                             match.arrangement ? match.arrangement->display_name : kind);
-                }
+        PtcUiModel preview = *model;
+        if (entered_valid) {
+            if (model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES) {
+                preview.draft_holiday_rule.minutes = entered;
             } else {
-                snprintf(holiday_detail, sizeof(holiday_detail), "下一次安排：%s  |  %s",
-                         match.arrangement ? match.arrangement->display_name : kind, holiday_date);
+                preview.draft_makeup_workday_rule.minutes = entered;
             }
+            draw_plan_impact(pixels, stride, &preview, PTC_UI_PLAN_HOLIDAY, true,
+                             (UiRect){dialog.x + 536, dialog.y + 264, 350, 254});
         } else {
-            snprintf(holiday_detail, sizeof(holiday_detail), "内置日历未覆盖或暂无后续安排");
+            draw_text(pixels, stride, dialog.x + 558, dialog.y + 310, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
         }
-        draw_text(pixels, stride, dialog.x + 548, dialog.y + 276, holiday_line, 17, UI_INK);
-        fit_text(fitted, sizeof(fitted), holiday_detail, 15, 326);
-        draw_text(pixels, stride, dialog.x + 548, dialog.y + 310, fitted, 15,
-                  today_match ? UI_SUCCESS : UI_MUTED);
-        draw_text(pixels, stride, dialog.x + 548, dialog.y + 344,
-                  model->draft_holiday_enabled ? "当前预设：已开启" : "当前预设：未开启", 16,
-                  model->draft_holiday_enabled ? UI_SUCCESS : UI_WARNING);
-        draw_text(pixels, stride, dialog.x + 548, dialog.y + 378,
-                  model->today_override_present ? "今日额度调整优先，当前额度可能未生效" : "节假日规则命中后优先于周计划",
-                  15, model->today_override_present ? UI_WARNING : UI_MUTED);
     } else if (weekly) {
         PtcUiModel preview = *model;
         if (entered_valid) {
