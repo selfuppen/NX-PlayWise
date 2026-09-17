@@ -5,6 +5,7 @@
 #include "../../companion/nro/ui_model.h"
 #include "../../companion/nro/ui_state.h"
 #include "../../companion/nro/ui_layout.h"
+#include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
 
 static int failures;
@@ -170,7 +171,9 @@ static void test_release_navigation(void)
     ptc_ui_move_parent_selection(&model, 1, 0);
     check_int(model.selected_index, 2, "holiday navigation moves across rule cards");
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 6, "holiday right rule reaches calendar entry");
+    check_int(model.selected_index, 5, "holiday right rule moves down to save");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 6, "holiday save reaches calendar entry to the right");
 
     model.parent_page = PTC_UI_PARENT_SUPPORT;
     model.recent_event_count = 3;
@@ -1944,6 +1947,159 @@ static void test_plan_polish(void)
                "successful persisted plan ends editing without discarding saved values");
 }
 
+static void test_today_decision_and_plan_review(void)
+{
+    PtcUiModel model = {0};
+    PtcRules rules;
+    PtcUiTodayDecision decision;
+    char badge[32];
+    char detail[128];
+    uint16_t holiday_day = 0;
+    ptc_rules_default(&rules);
+    memcpy(model.current_week, rules.week, sizeof(rules.week));
+    memcpy(model.draft_week, rules.week, sizeof(rules.week));
+    model.status_loaded = true;
+    model.status_updated_at = 1000;
+    model.played_minutes_available = true;
+    model.played_minutes = 20;
+    model.day_index = 2380;
+
+    ptc_ui_build_today_decision(&model, PTC_UI_PLAN_SAVED, 1000, &decision);
+    check_int(decision.today_override.state, PTC_UI_DECISION_NOT_CONFIGURED,
+              "decision reports a missing today adjustment");
+    check_int(decision.weekly.state, PTC_UI_DECISION_SELECTED,
+              "weekly plan is selected when higher layers do not match");
+    ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
+    check_true(strcmp(badge, "未设置") == 0 && strstr(detail, "周计划") != NULL,
+               "today card explains the active fallback rule");
+
+    model.today_override_cleared_in_session = true;
+    ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
+    check_true(strcmp(badge, "已清除") == 0, "session clear is explicitly visible");
+    model.today_override_present = true;
+    model.today_override_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 90};
+    model.today_override_cleared_in_session = false;
+    ptc_ui_build_today_decision(&model, PTC_UI_PLAN_SAVED, 1000, &decision);
+    check_int(decision.today_override.state, PTC_UI_DECISION_SELECTED,
+              "today adjustment wins the decision chain");
+    check_int(decision.weekly.state, PTC_UI_DECISION_OVERRIDDEN,
+              "weekly layer remains visible when overridden");
+    ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
+    check_true(strcmp(badge, "生效中") == 0 && strstr(detail, "90") != NULL,
+               "active today adjustment exposes its quota");
+
+    model.apply_pending_confirmation = true;
+    ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
+    check_true(strcmp(badge, "等待生效") == 0, "pending apply is not advertised as already active");
+    model.apply_pending_confirmation = false;
+    model.recovery_active = true;
+    ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
+    check_true(strcmp(badge, "恢复中") == 0, "active recovery has its own today-card state");
+    model.recovery_active = false;
+
+    model.temporary_unlocked_available = model.temporary_unlocked = true;
+    ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
+    check_true(strcmp(badge, "暂不计时") == 0, "temporary unlock explains the paused timer");
+    model.temporary_unlocked = false;
+    model.disable_flag_present = true;
+    ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
+    check_true(strcmp(badge, "控制停用") == 0, "disabled control outranks active-rule status");
+    model.disable_flag_present = false;
+    ptc_ui_format_today_adjustment_status(&model, 1121, badge, sizeof(badge), detail, sizeof(detail));
+    check_true(strcmp(badge, "待确认") == 0, "stale today state is not advertised as active");
+    ptc_ui_build_today_decision(&model, PTC_UI_PLAN_SAVED, 1121, &decision);
+    check_int(decision.today_override.state, PTC_UI_DECISION_UNKNOWN,
+              "stale decision chain does not reuse an old active rule");
+
+    model.today_override_present = false;
+    model.scheduled_override = (PtcScheduledOverride){true, 2380, 2381, {PTC_RULE_MODE_LIMIT, 45}};
+    ptc_ui_build_today_decision(&model, PTC_UI_PLAN_SAVED, 1000, &decision);
+    check_int(decision.scheduled_override.state, PTC_UI_DECISION_SELECTED,
+              "matching scheduled plan wins over lower layers");
+    check_int(decision.weekly.state, PTC_UI_DECISION_OVERRIDDEN,
+              "scheduled plan visibly overrides weekly");
+
+    check_true(ptc_day_index_from_date(2026, 1, 1, &holiday_day), "holiday test date converts");
+    model.day_index = holiday_day;
+    model.scheduled_override.enabled = false;
+    model.holiday_enabled = true;
+    model.holiday_rule = (PtcDayRule){PTC_RULE_MODE_UNLIMITED, 0};
+    ptc_ui_build_today_decision(&model, PTC_UI_PLAN_SAVED, 1000, &decision);
+    check_int(decision.holiday.state, PTC_UI_DECISION_SELECTED,
+              "statutory holiday is represented as the selected layer");
+
+    {
+        uint16_t first_day = 0;
+        uint16_t makeup_day = 0;
+        uint16_t ordinary_day = 0;
+        check_true(ptc_day_index_from_date(2026, 1, 1, &first_day), "calendar scan start converts");
+        for (uint16_t candidate = first_day; candidate < (uint16_t)(first_day + 366); ++candidate) {
+            bool covered = false;
+            PtcCalendarDayType type = ptc_holiday_calendar_classify(candidate, &covered);
+            if (covered && type == PTC_CALENDAR_DAY_MAKEUP_WORKDAY && makeup_day == 0) makeup_day = candidate;
+            if (covered && type == PTC_CALENDAR_DAY_ORDINARY && ordinary_day == 0) ordinary_day = candidate;
+        }
+        check_true(makeup_day != 0 && ordinary_day != 0, "embedded calendar has makeup and ordinary dates");
+        model.makeup_workday_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 30};
+        model.day_index = makeup_day;
+        ptc_ui_build_today_decision(&model, PTC_UI_PLAN_SAVED, 1000, &decision);
+        check_int(decision.holiday.state, PTC_UI_DECISION_SELECTED,
+                  "makeup workday rule is represented as the selected layer");
+        model.day_index = ordinary_day;
+        ptc_ui_build_today_decision(&model, PTC_UI_PLAN_SAVED, 1000, &decision);
+        check_int(decision.holiday.state, PTC_UI_DECISION_NOT_MATCHED,
+                  "ordinary covered dates do not claim a holiday match");
+    }
+
+    check_true(ptc_day_index_from_date(2030, 1, 1, &holiday_day), "uncovered calendar date converts");
+    model.day_index = holiday_day;
+    ptc_ui_build_today_decision(&model, PTC_UI_PLAN_SAVED, 1000, &decision);
+    check_int(decision.holiday.state, PTC_UI_DECISION_CALENDAR_UNCOVERED,
+              "calendar years outside the embedded range have a distinct decision state");
+
+    model.day_index = 2380;
+    model.holiday_enabled = false;
+    model.bedtime_policy.enabled = true;
+    model.bedtime_active = true;
+    model.bedtime_skipped = true;
+    model.daily_buffer_minutes = 10;
+    model.daily_buffer_claimed = true;
+    ptc_ui_build_today_decision(&model, PTC_UI_PLAN_SAVED, 1000, &decision);
+    check_true(strstr(decision.bedtime, "已跳过") != NULL && strstr(decision.autonomy, "已领取") != NULL,
+               "parallel bedtime skip and claimed autonomy states remain visible");
+
+    model.draft_week[ptc_weekday_from_day_index(model.day_index)].minutes = 10;
+    check_true(ptc_ui_plan_save_requires_hold(&model, PTC_UI_PLAN_WEEKLY, 1000),
+               "plan review requires a hold when the new quota is exhausted");
+    model.today_override_present = true;
+    model.today_override_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 90};
+    check_true(!ptc_ui_plan_save_requires_hold(&model, PTC_UI_PLAN_WEEKLY, 1000),
+               "covered weekly changes do not claim an immediate restriction");
+
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
+    model.selected_index = 2;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 6, "holiday rule moves right to calendar button");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 5, "calendar button moves left to save");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 6, "holiday save moves right to calendar button");
+    model.selected_index = 6;
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 2, "calendar button moves up to makeup rule");
+    model.selected_index = 6;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused, "calendar button moves down to footer");
+
+    model.parent_page = PTC_UI_PARENT_TODAY;
+    model.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
+    model.home_details_page = 0;
+    check_hit(hit_center(&model, ptc_ui_home_details_tab_rect(1)),
+              PTC_UI_HIT_HOME_DETAILS_TAB, 1, "details usage tab is touchable");
+}
+
 static void test_support_next_step(void)
 {
     PtcUiModel model = {0};
@@ -2155,6 +2311,7 @@ int main(void)
     test_time_menu_modal_touch_guards();
     test_visual_action_boundaries();
     test_plan_polish();
+    test_today_decision_and_plan_review();
     test_support_next_step();
     test_redemption_failure_next_steps();
     test_grant_flow_polish();

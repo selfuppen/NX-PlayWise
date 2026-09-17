@@ -225,6 +225,7 @@ int main(int argc, char **argv)
     long length;
     unsigned char *bytes;
     PtcUiModel model;
+    PtcRules baseline_rules;
     int failed = 0;
     if (argc == 2 && strcmp(argv[1], "--check-primitives") == 0) return check_primitives();
     if (argc != 3 || !(font = fopen(argv[1], "rb"))) return 1;
@@ -248,6 +249,15 @@ int main(int argc, char **argv)
     model.forecast[1] = (PtcResultForecastDay){.day_index=2381, .mode=PTC_RULE_MODE_LIMIT, .minutes=90, .rule_source="weekly"};
     model.daily_buffer_available = true;
     model.daily_buffer_minutes = 10;
+    ptc_rules_default(&baseline_rules);
+    memcpy(model.current_week, baseline_rules.week, sizeof(model.current_week));
+    memcpy(model.draft_week, baseline_rules.week, sizeof(model.draft_week));
+    model.current_week[ptc_weekday_from_day_index(model.day_index)].minutes = 120;
+    model.draft_week[ptc_weekday_from_day_index(model.day_index)].minutes = 120;
+    model.holiday_enabled = model.draft_holiday_enabled = baseline_rules.holiday_enabled;
+    model.holiday_rule = model.draft_holiday_rule = baseline_rules.holiday_rule;
+    model.makeup_workday_rule = model.draft_makeup_workday_rule = baseline_rules.makeup_workday_rule;
+    model.bedtime_policy = model.draft_bedtime_policy = baseline_rules.bedtime;
     model.usage_summary_available = true;
     model.usage_known_days_7 = 5; model.usage_consumed_minutes_7 = 350;
     model.usage_known_days_30 = 20; model.usage_consumed_minutes_30 = 1420;
@@ -268,6 +278,19 @@ int main(int argc, char **argv)
         model.view = PTC_UI_PARENT;
         model.parent_page = PTC_UI_PARENT_TODAY;
         failed |= save_preview(argv[2], "parent", "parent", &model, dark);
+        model.today_override_present = true;
+        model.today_override_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 90};
+        model.forecast[0].minutes = 90;
+        model.forecast[0].rule_source = "today_override";
+        snprintf(model.rule_source, sizeof(model.rule_source), "today_override");
+        failed |= save_preview(argv[2], "parent", "today-active", &model, dark);
+        model.today_override_present = false;
+        model.today_override_cleared_in_session = true;
+        model.forecast[0].minutes = 120;
+        model.forecast[0].rule_source = "weekly";
+        snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
+        failed |= save_preview(argv[2], "parent", "today-cleared", &model, dark);
+        model.today_override_cleared_in_session = false;
         model.bedtime_policy.enabled = true;
         model.bedtime_active = true;
         model.bedtime_window_instance_id = 23801260;
@@ -303,7 +326,9 @@ int main(int argc, char **argv)
         model.view = PTC_UI_PARENT;
         model.parent_page = PTC_UI_PARENT_TODAY;
         ptc_ui_open_home_details(&model);
-        failed |= save_preview(argv[2], "parent", "parent-details", &model, dark);
+        failed |= save_preview(argv[2], "parent", "parent-details-decision", &model, dark);
+        model.home_details_page = 1;
+        failed |= save_preview(argv[2], "parent", "parent-details-usage", &model, dark);
         ptc_ui_cancel_overlay(&model);
         model.parent_page = PTC_UI_PARENT_GRANT;
         failed |= save_preview(argv[2], "grant", "grant-entry", &model, dark);
@@ -442,13 +467,53 @@ int main(int argc, char **argv)
         for (int slot = 0; slot < 7; ++slot)
             if (ptc_ui_weekday_for_display_slot(slot) == ptc_weekday_from_day_index(model.day_index)) model.weekly_grid_slot = slot;
         failed |= save_preview(argv[2], "plan", "plan-saved", &model, dark);
+        {
+            PtcUiModel confirmation = model;
+            uint8_t other_day = (uint8_t)((ptc_weekday_from_day_index(confirmation.day_index) + 1) % 7);
+            confirmation.draft_week[other_day].minutes = 90;
+            confirmation.weekly_dirty = true;
+            confirmation.operation = PTC_UI_OPERATION_SAVE_WEEKLY;
+            confirmation.overlay = PTC_UI_OVERLAY_CONFIRM;
+            confirmation.confirm_hold_required = false;
+            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), "确认保存每周计划");
+            failed |= save_preview(argv[2], "plan", "weekly-confirm-other-day", &confirmation, dark);
+        }
         model.draft_week[ptc_weekday_from_day_index(model.day_index)].minutes = 90;
         model.weekly_dirty = true;
         failed |= save_preview(argv[2], "plan", "plan-draft-today", &model, dark);
+        {
+            PtcUiModel confirmation = model;
+            confirmation.operation = PTC_UI_OPERATION_SAVE_WEEKLY;
+            confirmation.overlay = PTC_UI_OVERLAY_CONFIRM;
+            confirmation.confirm_hold_required = false;
+            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), "周计划将影响今天");
+            failed |= save_preview(argv[2], "plan", "weekly-confirm-change", &confirmation, dark);
+        }
         model.scheduled_override = (PtcScheduledOverride){true, 2380, 2386, {PTC_RULE_MODE_LIMIT, 120}};
         snprintf(model.rule_source, sizeof(model.rule_source), "scheduled_override");
         model.selected_index = 4;
         failed |= save_preview(argv[2], "plan", "plan-covered", &model, dark);
+        {
+            PtcUiModel confirmation = model;
+            confirmation.operation = PTC_UI_OPERATION_SAVE_WEEKLY;
+            confirmation.overlay = PTC_UI_OVERLAY_CONFIRM;
+            confirmation.confirm_hold_required = false;
+            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), "确认保存每周计划");
+            failed |= save_preview(argv[2], "plan", "weekly-confirm-covered", &confirmation, dark);
+        }
+        {
+            PtcUiModel confirmation = model;
+            confirmation.scheduled_override.enabled = false;
+            snprintf(confirmation.rule_source, sizeof(confirmation.rule_source), "weekly");
+            confirmation.draft_week[ptc_weekday_from_day_index(confirmation.day_index)].minutes = 30;
+            confirmation.operation = PTC_UI_OPERATION_SAVE_WEEKLY;
+            confirmation.overlay = PTC_UI_OVERLAY_CONFIRM;
+            confirmation.confirm_hold_required = true;
+            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title), "周计划将影响今天");
+            failed |= save_preview(argv[2], "plan", "weekly-confirm-danger", &confirmation, dark);
+            confirmation.status_updated_at = 879;
+            failed |= save_preview(argv[2], "plan", "weekly-confirm-unknown", &confirmation, dark);
+        }
         model.editor_index = ptc_weekday_from_day_index(model.day_index);
         ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
             "调整周计划额度", "完成输入后更新草稿，保存计划后才会应用。", 4, 1, 1440, 90);
@@ -469,6 +534,23 @@ int main(int argc, char **argv)
         model.holiday_dirty = true;
         model.selected_index = 1;
         failed |= save_preview(argv[2], "holiday", "holiday-draft", &model, dark);
+        {
+            PtcUiModel confirmation = model;
+            if (!ptc_day_index_from_date(2026, 1, 1, &confirmation.day_index)) return 1;
+            confirmation.scheduled_override.enabled = false;
+            confirmation.holiday_enabled = false;
+            confirmation.draft_holiday_enabled = true;
+            confirmation.current_week[ptc_weekday_from_day_index(confirmation.day_index)] =
+                (PtcDayRule){PTC_RULE_MODE_LIMIT, 120};
+            confirmation.draft_week[ptc_weekday_from_day_index(confirmation.day_index)] =
+                confirmation.current_week[ptc_weekday_from_day_index(confirmation.day_index)];
+            confirmation.operation = PTC_UI_OPERATION_SAVE_HOLIDAY;
+            confirmation.overlay = PTC_UI_OVERLAY_CONFIRM;
+            confirmation.confirm_hold_required = false;
+            snprintf(confirmation.overlay_title, sizeof(confirmation.overlay_title),
+                     "国家节假日设置将影响今天");
+            failed |= save_preview(argv[2], "holiday", "holiday-confirm", &confirmation, dark);
+        }
         model.disable_flag_present = true;
         failed |= save_preview(argv[2], "holiday", "holiday-disabled", &model, dark);
         model.disable_flag_present = false;

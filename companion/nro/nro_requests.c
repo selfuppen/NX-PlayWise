@@ -652,6 +652,12 @@ void poll_result(UiState *ui, bool force)
         }
         sync_setup_wizard(ui);
         load_rule_drafts(ui);
+        if (strcmp(ui->model.result_status, "ok") == 0 &&
+            strcmp(ui->model.result_type, "restore_today_policy") == 0) {
+            ui->model.today_override_cleared_in_session = true;
+        } else if (ui->model.today_override_present) {
+            ui->model.today_override_cleared_in_session = false;
+        }
         ptc_ui_reconcile_scheduled_result(&ui->model, &saved_scheduled_draft, preserve_scheduled_draft);
         if (preserve_bedtime_draft &&
             !(strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&

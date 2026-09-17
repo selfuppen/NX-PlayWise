@@ -746,15 +746,28 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
 static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
+    char adjustment_badge[32];
+    char adjustment_detail[128];
+    int64_t now = ptc_ui_render_now();
+    ptc_ui_format_today_adjustment_status(model, now, adjustment_badge, sizeof(adjustment_badge),
+                                          adjustment_detail, sizeof(adjustment_detail));
     draw_home_summary(pixels, stride, model, true);
     for (int index = 0; index < 6; ++index) {
         UiRect box = to_uirect(ptc_ui_today_card_rect(index));
         bool focused = !model->parent_footer_focused && model->selected_index == index;
-        bool disabled = model->disable_flag_present || model->waiting;
+        bool clear_unavailable = index == 3 && ptc_ui_status_is_fresh(model, now) &&
+                                 !model->today_override_present;
+        bool disabled = model->disable_flag_present || model->waiting || clear_unavailable;
         const char *title = TODAY_ACTIONS[index].title;
         const char *subtitle = TODAY_ACTIONS[index].subtitle;
         char dynamic[128];
-        if (index == 4) {
+        UiAction action = TODAY_ACTIONS[index];
+        if (index == 0) {
+            subtitle = adjustment_detail;
+        } else if (index == 3 && clear_unavailable) {
+            subtitle = model->today_override_cleared_in_session
+                ? "本次会话已清除，当前使用下级规则" : "今天没有单独额度调整，无需清除";
+        } else if (index == 4) {
             if (!model->status_loaded) {
                 subtitle = "刷新后显示当前或下次窗口";
             } else if (model->bedtime_active) {
@@ -813,20 +826,24 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 subtitle = dynamic;
             } else subtitle = "今天暂不可领取";
         }
-        uint32_t fill = disabled ? UI_RAISED : (index == 0 ? UI_ACCENT : (index == 1 ? UI_ACCENT_SOFT : UI_SURFACE));
-        fill_round_rect(pixels, stride, box, 16, fill);
-        if (focused) {
-            draw_focus_ring(pixels, stride, box, 16);
-        }
-        draw_text(pixels, stride, box.x + 20, box.y + 32, title, 20,
-            disabled ? UI_DISABLED : (index == 0 ? UI_ON_ACCENT : UI_INK));
-        draw_wrapped_text(pixels, stride, box.x + 20, box.y + 57,
-            subtitle, 14, box.width - 40, 18, 2,
-            disabled ? UI_DISABLED : (index == 0 ? UI_ON_ACCENT : UI_MUTED));
-        if (index == 0 && strcmp(model->rule_source, "today_override") == 0) {
-            UiRect tbadge = {box.x + box.width - 78, box.y + 10, 66, 20};
-            fill_round_rect(pixels, stride, tbadge, 5, UI_ON_ACCENT);
-            draw_text_center(pixels, stride, tbadge, "生效中", 12, UI_ACCENT);
+        action.title = title;
+        action.subtitle = subtitle;
+        draw_action_card(pixels, stride, box, &action, focused,
+                         disabled ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE,
+                         (index == 0 || index == 4) ? 82 : 0);
+        if (index == 0) {
+            UiRect tbadge = {box.x + box.width - 86, box.y + 10, 74, 22};
+            uint32_t badge_color = strcmp(adjustment_badge, "生效中") == 0 ? UI_SUCCESS :
+                (strcmp(adjustment_badge, "控制停用") == 0 || strcmp(adjustment_badge, "恢复中") == 0
+                    ? UI_DANGER :
+                 (strcmp(adjustment_badge, "等待生效") == 0 || strcmp(adjustment_badge, "待确认") == 0
+                    ? UI_WARNING : UI_MUTED));
+            fill_round_rect(pixels, stride, tbadge, 6,
+                            badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
+                            (badge_color == UI_DANGER ? UI_DANGER_SOFT :
+                             (badge_color == UI_WARNING ? UI_WARNING_SOFT : UI_PAGE)));
+            draw_rect_outline(pixels, stride, tbadge, 6, 1, badge_color);
+            draw_text_center(pixels, stride, tbadge, adjustment_badge, 12, badge_color);
         } else if (index == 4 && model->bedtime_active && !model->bedtime_skipped) {
             UiRect tbadge = {box.x + box.width - 78, box.y + 10, 66, 20};
             fill_round_rect(pixels, stride, tbadge, 5, UI_DANGER);
@@ -956,7 +973,8 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
     char age[80];
     PtcEffectiveRule before = ptc_ui_plan_rule(model, PTC_UI_PLAN_SAVED);
     PtcEffectiveRule after = ptc_ui_plan_rule(model, kind);
-    int played = model->played_minutes_available ? model->played_minutes : -1;
+    bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
+    int played = fresh && model->played_minutes_available ? model->played_minutes : -1;
     bool unlimited = after.rule.mode == PTC_RULE_MODE_UNLIMITED;
     int remaining = unlimited ? -999 : (played >= 0 ? (int)after.rule.minutes - played : -1);
     if (remaining < 0 && !unlimited && played >= 0) remaining = 0;

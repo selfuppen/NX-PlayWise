@@ -50,6 +50,12 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+        if (model->view == PTC_UI_PARENT) {
+            for (i = 0; i < 2; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_home_details_tab_rect(i), x, y))
+                    return make_hit(PTC_UI_HIT_HOME_DETAILS_TAB, i);
+            }
+        }
         return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }
@@ -484,7 +490,10 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
             ? ptc_ui_support_card_rect(i)
             : (model->parent_page == PTC_UI_PARENT_TODAY ? ptc_ui_today_card_rect(i) :
                (model->parent_page == PTC_UI_PARENT_PLAN ? ptc_ui_plan_card_rect(i) : ptc_ui_parent_card_rect(i)));
-        if (model->parent_page == PTC_UI_PARENT_TODAY && (model->disable_flag_present || model->waiting)) continue;
+        if (model->parent_page == PTC_UI_PARENT_TODAY &&
+            (model->disable_flag_present || model->waiting ||
+             (i == 3 && ptc_ui_status_is_fresh(model, (int64_t)time(NULL)) &&
+              !model->today_override_present))) continue;
         if ((model->parent_page != PTC_UI_PARENT_SUPPORT ||
              (ptc_ui_safety_action_visible(model, i) &&
               ptc_ui_safety_action_available(model, i) != PTC_UI_ACTION_DISABLED)) &&

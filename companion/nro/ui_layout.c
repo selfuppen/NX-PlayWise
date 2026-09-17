@@ -334,6 +334,12 @@ PtcUiRect ptc_ui_home_details_rect(bool parent)
     return parent ? (PtcUiRect){324, 412, 184, 44} : (PtcUiRect){736, 424, 464, 48};
 }
 
+PtcUiRect ptc_ui_home_details_tab_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){112 + index * 210, 92, 194, 42};
+}
+
 PtcUiOperation ptc_ui_today_operation(int index)
 {
     /* UI order is independent of the operation enum and request dispatch. */
@@ -352,6 +358,7 @@ bool ptc_ui_open_home_details(PtcUiModel *model)
          !(model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_TODAY))) return false;
     /* Keep the underlying focus and execution message intact on open/close. */
     model->overlay = PTC_UI_OVERLAY_HOME_DETAILS;
+    model->home_details_page = model->view == PTC_UI_PARENT ? 0 : 1;
     snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
         model->view == PTC_UI_CHILD ? "使用详情" : "今日详情");
     model->overlay_body[0] = '\0';

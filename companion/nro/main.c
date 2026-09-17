@@ -616,7 +616,7 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_Plus && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 ui.model.selected_index = 5;
-                submit_holiday_policy(&ui);
+                save_holiday_from_page(&ui);
             } else if (down & HidNpadButton_ZL && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 ui.model.selected_index = 4;

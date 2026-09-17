@@ -207,6 +207,12 @@ void handle_parent_action(UiState *ui)
     }
     if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
         if (ui->waiting) return;
+        if (index == 3 && ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) &&
+            !ui->model.today_override_present) {
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                     "今天没有可清除的额度调整；当前继续使用下级规则。");
+            return;
+        }
         if (ptc_ui_today_operation(index) != PTC_UI_OPERATION_NONE) {
             submit_status(ui);
             /* A failed submit must not leave an action for a later auto-refresh. */
@@ -336,7 +342,7 @@ void handle_parent_action(UiState *ui)
             break;
         }
         case 5:
-            submit_holiday_policy(ui);
+            save_holiday_from_page(ui);
             break;
         default:
             break;
@@ -500,6 +506,9 @@ void confirm_operation(UiState *ui)
         break;
     case PTC_UI_OPERATION_SAVE_WEEKLY:
         submit_weekly(ui);
+        break;
+    case PTC_UI_OPERATION_SAVE_HOLIDAY:
+        submit_holiday_policy(ui);
         break;
     case PTC_UI_OPERATION_DISABLE_TODAY_LIMIT:
         submit_transport_empty(ui, "disable_today_limit", "正在解除当前限制...", "解除当前限制失败");
@@ -670,8 +679,8 @@ void refresh_album_restriction(UiState *ui)
 
 void save_weekly_from_page(UiState *ui)
 {
-    PtcDayRule before;
-    PtcDayRule after;
+    PtcEffectiveRule before;
+    PtcEffectiveRule after;
     char body[192];
     if (weekly_editing_blocked(ui)) {
         return;
@@ -680,27 +689,37 @@ void save_weekly_from_page(UiState *ui)
         snprintf(ui->model.message, sizeof(ui->model.message), "周计划没有修改。");
         return;
     }
-    before = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_SAVED).rule;
-    after = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_WEEKLY).rule;
-    if (!ui->model.today_override_present &&
-        ptc_ui_day_rule_effectively_changed(before, after)) {
-        if (after.mode == PTC_RULE_MODE_UNLIMITED) {
-            snprintf(body, sizeof(body), "今天对应的周计划将改为不限时。\n保存后今天生效，今天将不限时。");
-        } else if (ui->model.played_minutes_available) {
-            int remaining = (int)after.minutes - ui->model.played_minutes;
-            if (remaining < 0) remaining = 0;
-            snprintf(body, sizeof(body), "额度已耗约 %d 分钟（估算）；新额度 %u 分钟。\n保存后今天生效，预计还可玩约 %d 分钟。",
-                     ui->model.played_minutes, (unsigned int)after.minutes, remaining);
-        } else {
-            snprintf(body, sizeof(body), "今天的新额度为 %u 分钟。\n保存后今天生效；额度消耗估算不可用，请刷新查看实际剩余。",
-                     (unsigned int)after.minutes);
-        }
-        open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY, "周计划将影响今天", body);
-        ui->model.confirm_hold_required = !ui->model.played_minutes_available ||
-            ptc_ui_day_rule_would_restrict(&ui->model, after);
-    } else {
-        submit_weekly(ui);
+    before = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_SAVED);
+    after = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_WEEKLY);
+    snprintf(body, sizeof(body), "保存前请核对今天的最终规则、预计剩余时间和覆盖原因。");
+    open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY,
+        (before.source != after.source || ptc_ui_day_rule_effectively_changed(before.rule, after.rule))
+            ? "周计划将影响今天" : "确认保存每周计划", body);
+    ui->model.confirm_hold_required = ptc_ui_plan_save_requires_hold(
+        &ui->model, PTC_UI_PLAN_WEEKLY, (int64_t)time(NULL));
+}
+
+void save_holiday_from_page(UiState *ui)
+{
+    PtcEffectiveRule before;
+    PtcEffectiveRule after;
+    if (!ui || ui->model.disable_flag_present) {
+        if (ui) snprintf(ui->model.message, sizeof(ui->model.message),
+                         "紧急停用中，国家节假日设置暂时只读。");
+        return;
     }
+    if (!ui->model.holiday_dirty) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "国家节假日设置没有修改。");
+        return;
+    }
+    before = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_SAVED);
+    after = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_HOLIDAY);
+    open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_HOLIDAY,
+        (before.source != after.source || ptc_ui_day_rule_effectively_changed(before.rule, after.rule))
+            ? "国家节假日设置将影响今天" : "确认保存国家节假日设置",
+        "保存前请核对今天的最终规则、预计剩余时间和覆盖原因。");
+    ui->model.confirm_hold_required = ptc_ui_plan_save_requires_hold(
+        &ui->model, PTC_UI_PLAN_HOLIDAY, (int64_t)time(NULL));
 }
 
 void apply_pending_navigation(UiState *ui)

@@ -226,8 +226,36 @@ typedef enum {
     PTC_UI_OPERATION_SAVE_AUTONOMY = 21,
     PTC_UI_OPERATION_CLEAR_ACTIVITY_HISTORY = 22,
     PTC_UI_OPERATION_HOT_RELOAD = 23,
-    PTC_UI_OPERATION_SKIP_BEDTIME = 24
+    PTC_UI_OPERATION_SKIP_BEDTIME = 24,
+    PTC_UI_OPERATION_SAVE_HOLIDAY = 25
 } PtcUiOperation;
+
+typedef enum {
+    PTC_UI_DECISION_UNKNOWN = 0,
+    PTC_UI_DECISION_SELECTED,
+    PTC_UI_DECISION_OVERRIDDEN,
+    PTC_UI_DECISION_NOT_CONFIGURED,
+    PTC_UI_DECISION_NOT_MATCHED,
+    PTC_UI_DECISION_DISABLED,
+    PTC_UI_DECISION_CALENDAR_UNCOVERED
+} PtcUiDecisionState;
+
+typedef struct {
+    PtcUiDecisionState state;
+    PtcDayRule rule;
+    char reason[96];
+} PtcUiDecisionStep;
+
+typedef struct {
+    PtcEffectiveRule effective;
+    PtcUiDecisionStep today_override;
+    PtcUiDecisionStep scheduled_override;
+    PtcUiDecisionStep holiday;
+    PtcUiDecisionStep weekly;
+    char final_reason[128];
+    char bedtime[128];
+    char autonomy[128];
+} PtcUiTodayDecision;
 
 typedef enum {
     PTC_UI_ACTION_AVAILABLE = 0,
@@ -368,6 +396,7 @@ typedef struct {
     int weekly_last_day_slot;
     int weekly_leave_selection;
     bool today_override_present;
+    bool today_override_cleared_in_session;
     PtcDayRule today_override_rule;
     bool holiday_enabled;
     bool draft_holiday_enabled;
@@ -395,6 +424,7 @@ typedef struct {
     bool album_backup_valid;
     char album_restriction_detail[160];
     char rule_source[32];
+    int home_details_page;
     int editor_index;
     char overlay_title[64];
     char overlay_body[320];

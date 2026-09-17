@@ -18,6 +18,12 @@ bool ptc_ui_touch_after_entry_allowed(bool *ignore_until_release, bool touch_act
 uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int required_samples);
 int ptc_ui_migrate_setup_step(int step, int wizard_version);
 PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model);
+void ptc_ui_build_today_decision(const PtcUiModel *model, PtcUiPlanKind kind, int64_t now,
+                                 PtcUiTodayDecision *decision);
+const char *ptc_ui_decision_state_label(PtcUiDecisionState state);
+void ptc_ui_format_today_adjustment_status(const PtcUiModel *model, int64_t now,
+                                           char *badge, size_t badge_size,
+                                           char *detail, size_t detail_size);
 void ptc_ui_format_restore_today_basis(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_weekly_save_result(const PtcUiModel *model, char *message, size_t message_size,
                                       char *detail, size_t detail_size);
@@ -104,6 +110,7 @@ void ptc_ui_format_today_limit_confirmation(
     char *recovery,
     size_t recovery_size);
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
+bool ptc_ui_plan_save_requires_hold(const PtcUiModel *model, PtcUiPlanKind kind, int64_t now);
 bool ptc_ui_setup_takeover_complete(const PtcUiModel *model);
 bool ptc_ui_runtime_fingerprint_reconfirmation_needed(const PtcUiModel *model);
 void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction);

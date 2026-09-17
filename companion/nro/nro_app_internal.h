@@ -243,6 +243,7 @@ void update_weekly_dirty(UiState *ui);
 void update_holiday_dirty(UiState *ui);
 void refresh_album_restriction(UiState *ui);
 void save_weekly_from_page(UiState *ui);
+void save_holiday_from_page(UiState *ui);
 void apply_pending_navigation(UiState *ui);
 void refresh_recovery_state(UiState *ui);
 void discard_holiday_draft(UiState *ui);

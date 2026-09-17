@@ -89,7 +89,8 @@ typedef enum {
     PTC_UI_HIT_BEDTIME_FIELD,
     PTC_UI_HIT_BEDTIME_MASTER_SWITCH,
     PTC_UI_HIT_BEDTIME_OVERLAY_FIELD,
-    PTC_UI_HIT_HOME_DETAILS
+    PTC_UI_HIT_HOME_DETAILS,
+    PTC_UI_HIT_HOME_DETAILS_TAB
 } PtcUiHitKind;
 
 typedef struct {
@@ -119,6 +120,7 @@ PtcUiRect ptc_ui_plan_card_rect(int index);
 PtcUiRect ptc_ui_today_card_rect(int index);
 PtcUiRect ptc_ui_home_summary_rect(bool parent);
 PtcUiRect ptc_ui_home_details_rect(bool parent);
+PtcUiRect ptc_ui_home_details_tab_rect(int index);
 PtcUiOperation ptc_ui_today_operation(int index);
 bool ptc_ui_open_home_details(PtcUiModel *model);
 bool ptc_ui_home_notice_expanded(const PtcUiModel *model);

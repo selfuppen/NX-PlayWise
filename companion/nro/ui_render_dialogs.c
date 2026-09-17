@@ -498,6 +498,86 @@ void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
               16, model->pin_error[0] ? UI_DANGER : UI_MUTED);
 }
 
+static void format_plan_rule_value(PtcEffectiveRule rule, char *out, size_t out_size)
+{
+    if (rule.rule.mode == PTC_RULE_MODE_UNLIMITED)
+        snprintf(out, out_size, "不限时");
+    else
+        snprintf(out, out_size, "%u 分钟", (unsigned int)rule.rule.minutes);
+}
+
+static void draw_plan_save_confirmation(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    PtcUiPlanKind kind = model->operation == PTC_UI_OPERATION_SAVE_HOLIDAY
+        ? PTC_UI_PLAN_HOLIDAY : PTC_UI_PLAN_WEEKLY;
+    PtcEffectiveRule before = ptc_ui_plan_rule(model, PTC_UI_PLAN_SAVED);
+    PtcEffectiveRule after = ptc_ui_plan_rule(model, kind);
+    PtcUiTodayDecision decision;
+    char before_value[48], after_value[48], impact[256], change[96], remaining[48];
+    bool today_changes = before.source != after.source ||
+        ptc_ui_day_rule_effectively_changed(before.rule, after.rule);
+    int changed = 0;
+    ptc_ui_build_today_decision(model, kind, ptc_ui_render_now(), &decision);
+    format_plan_rule_value(before, before_value, sizeof(before_value));
+    format_plan_rule_value(after, after_value, sizeof(after_value));
+    ptc_ui_format_plan_impact(model, kind, ptc_ui_render_now(), impact, sizeof(impact));
+    if (kind == PTC_UI_PLAN_WEEKLY) {
+        for (int day = 0; day < 7; ++day)
+            if (ptc_ui_day_rule_effectively_changed(model->current_week[day], model->draft_week[day])) ++changed;
+        snprintf(change, sizeof(change), "本次修改：调整了 %d 天的周计划", changed);
+    } else {
+        if (model->holiday_enabled != model->draft_holiday_enabled) ++changed;
+        if (ptc_ui_day_rule_effectively_changed(model->holiday_rule, model->draft_holiday_rule)) ++changed;
+        if (ptc_ui_day_rule_effectively_changed(model->makeup_workday_rule, model->draft_makeup_workday_rule)) ++changed;
+        snprintf(change, sizeof(change), "本次修改：%d 项节假日设置", changed);
+    }
+    if (after.rule.mode == PTC_RULE_MODE_UNLIMITED) {
+        snprintf(remaining, sizeof(remaining), "不限时");
+    } else if (ptc_ui_status_is_fresh(model, ptc_ui_render_now()) &&
+               model->played_minutes_available && model->played_minutes >= 0) {
+        int value = (int)after.rule.minutes - model->played_minutes;
+        snprintf(remaining, sizeof(remaining), "%d 分钟", value > 0 ? value : 0);
+    } else {
+        snprintf(remaining, sizeof(remaining), "暂不可用");
+    }
+    draw_dialog_shell(pixels, stride, model, &dialog, 760, 420);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 126, change, 15, UI_MUTED);
+    UiRect current = {dialog.x + 34, dialog.y + 146, 326, 94};
+    UiRect saved = {dialog.x + 400, dialog.y + 146, 326, 94};
+    fill_round_rect(pixels, stride, current, 14, UI_RAISED);
+    draw_rect_outline(pixels, stride, current, 14, 1, UI_BORDER);
+    fill_round_rect(pixels, stride, saved, 14,
+                    model->confirm_hold_required ? UI_DANGER_SOFT : UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, saved, 14, 2,
+                      model->confirm_hold_required ? UI_DANGER : UI_ACCENT);
+    draw_text(pixels, stride, current.x + 16, current.y + 24, "当前生效", 14, UI_MUTED);
+    draw_text(pixels, stride, current.x + 16, current.y + 57, before_value, 26, UI_INK);
+    draw_text(pixels, stride, current.x + 16, current.y + 80,
+              ptc_ui_effective_rule_label(before.source), 13, UI_MUTED);
+    draw_text(pixels, stride, saved.x + 16, saved.y + 24,
+              today_changes ? "保存后今天" : "保存后今天不变", 14,
+              model->confirm_hold_required ? UI_DANGER : UI_ACCENT);
+    draw_text(pixels, stride, saved.x + 16, saved.y + 57, after_value, 26,
+              model->confirm_hold_required ? UI_DANGER :
+              (after.rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS : UI_ACCENT));
+    char after_source[96];
+    snprintf(after_source, sizeof(after_source), "%s  |  预计剩余 %s",
+             ptc_ui_effective_rule_label(after.source), remaining);
+    draw_text(pixels, stride, saved.x + 16, saved.y + 80, after_source, 13, UI_MUTED);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 258, "决策说明", 15, UI_INK);
+    draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 280, impact,
+                      15, dialog.width - 68, 20, 2, UI_MUTED);
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 306, dialog.width - 68, 38}, 10,
+                    model->confirm_hold_required ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 46, dialog.y + 306, dialog.width - 92, 38},
+                     model->confirm_hold_required
+                        ? "保存后可能立即耗尽；请长按确认" : decision.final_reason,
+                     15, model->confirm_hold_required ? UI_DANGER : UI_SUCCESS);
+    draw_overlay_actions(pixels, stride, model,
+                         model->confirm_hold_required ? "长按 A / 触摸按住" : "A  确认保存");
+}
+
 void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
@@ -512,11 +592,17 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     bool danger = model->operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT ||
                   model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT ||
                   model->operation == PTC_UI_OPERATION_SAVE_WEEKLY ||
+                  model->operation == PTC_UI_OPERATION_SAVE_HOLIDAY ||
                   model->operation == PTC_UI_OPERATION_EMERGENCY_DISABLE ||
                   model->operation == PTC_UI_OPERATION_RESUME_CONTROL ||
                   model->operation == PTC_UI_OPERATION_COMPLETE_SETUP ||
                   model->operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT ||
                   code_preview;
+    if (model->operation == PTC_UI_OPERATION_SAVE_WEEKLY ||
+        model->operation == PTC_UI_OPERATION_SAVE_HOLIDAY) {
+        draw_plan_save_confirmation(pixels, stride, model);
+        return;
+    }
     shell_model = *model;
     if (code_preview) {
         snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
