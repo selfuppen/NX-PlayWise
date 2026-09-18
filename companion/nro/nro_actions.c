@@ -682,11 +682,18 @@ void save_weekly_from_page(UiState *ui)
     PtcEffectiveRule before;
     PtcEffectiveRule after;
     char body[192];
+    bool hold;
     if (weekly_editing_blocked(ui)) {
         return;
     }
     if (!ui->model.weekly_dirty) {
         snprintf(ui->model.message, sizeof(ui->model.message), "周计划没有修改。");
+        return;
+    }
+    hold = ptc_ui_plan_save_requires_hold(
+        &ui->model, PTC_UI_PLAN_WEEKLY, (int64_t)time(NULL));
+    if (!hold) {
+        submit_weekly(ui);
         return;
     }
     before = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_SAVED);
@@ -695,14 +702,14 @@ void save_weekly_from_page(UiState *ui)
     open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY,
         (before.source != after.source || ptc_ui_day_rule_effectively_changed(before.rule, after.rule))
             ? "周计划将影响今天" : "确认保存每周计划", body);
-    ui->model.confirm_hold_required = ptc_ui_plan_save_requires_hold(
-        &ui->model, PTC_UI_PLAN_WEEKLY, (int64_t)time(NULL));
+    ui->model.confirm_hold_required = true;
 }
 
 void save_holiday_from_page(UiState *ui)
 {
     PtcEffectiveRule before;
     PtcEffectiveRule after;
+    bool hold;
     if (!ui || ui->model.disable_flag_present) {
         if (ui) snprintf(ui->model.message, sizeof(ui->model.message),
                          "紧急停用中，国家节假日设置暂时只读。");
@@ -712,14 +719,19 @@ void save_holiday_from_page(UiState *ui)
         snprintf(ui->model.message, sizeof(ui->model.message), "国家节假日设置没有修改。");
         return;
     }
+    hold = ptc_ui_plan_save_requires_hold(
+        &ui->model, PTC_UI_PLAN_HOLIDAY, (int64_t)time(NULL));
+    if (!hold) {
+        submit_holiday_policy(ui);
+        return;
+    }
     before = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_SAVED);
     after = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_HOLIDAY);
     open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_HOLIDAY,
         (before.source != after.source || ptc_ui_day_rule_effectively_changed(before.rule, after.rule))
             ? "国家节假日设置将影响今天" : "确认保存国家节假日设置",
         "保存前请核对今天的最终规则、预计剩余时间和覆盖原因。");
-    ui->model.confirm_hold_required = ptc_ui_plan_save_requires_hold(
-        &ui->model, PTC_UI_PLAN_HOLIDAY, (int64_t)time(NULL));
+    ui->model.confirm_hold_required = true;
 }
 
 void apply_pending_navigation(UiState *ui)
