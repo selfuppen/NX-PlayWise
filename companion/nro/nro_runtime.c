@@ -139,6 +139,12 @@ bool update_animations(PtcUiModel *model)
             model->closing_overlay = model->previous_overlay;
             model->closing_started_ms = now;
         } else {
+            if (model->previous_overlay == PTC_UI_OVERLAY_NUMPAD ||
+                model->previous_overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
+                model->numpad_purpose = PTC_UI_NUMPAD_NONE;
+                model->duration_hours_text[0] = '\0';
+                model->duration_minutes_text[0] = '\0';
+            }
             model->closing_overlay = PTC_UI_OVERLAY_NONE;
         }
         model->overlay_opened_at_ms = now;
@@ -146,6 +152,12 @@ bool update_animations(PtcUiModel *model)
     }
     if (model->closing_overlay != PTC_UI_OVERLAY_NONE &&
         now - model->closing_started_ms >= PTC_UI_OVERLAY_CLOSE_TOTAL_MS) {
+        if (model->closing_overlay == PTC_UI_OVERLAY_NUMPAD ||
+            model->closing_overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
+            model->numpad_purpose = PTC_UI_NUMPAD_NONE;
+            model->duration_hours_text[0] = '\0';
+            model->duration_minutes_text[0] = '\0';
+        }
         model->closing_overlay = PTC_UI_OVERLAY_NONE;
     }
     elapsed = now - model->overlay_opened_at_ms;

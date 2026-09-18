@@ -50,12 +50,6 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
-        if (model->view == PTC_UI_PARENT) {
-            for (i = 0; i < 2; ++i) {
-                if (ptc_ui_rect_contains(ptc_ui_home_details_tab_rect(i), x, y))
-                    return make_hit(PTC_UI_HIT_HOME_DETAILS_TAB, i);
-            }
-        }
         return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }

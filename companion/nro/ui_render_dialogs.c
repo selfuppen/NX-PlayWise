@@ -873,7 +873,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         draw_wrapped_text(pixels, stride, dialog.x + 548, dialog.y + 472,
             "时间可跨过 00:00 循环；完成后仍会检查就寝窗口是否跨越午夜及是否与相邻日期冲突。",
             15, 326, 21, 3, UI_MUTED);
-    } else {
+    } else if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
         static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
         uint8_t today_weekday = ptc_weekday_from_day_index(model->day_index);
         draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 264, 350, 74}, "额度已耗（估算）", played,

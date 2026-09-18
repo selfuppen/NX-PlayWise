@@ -1202,12 +1202,6 @@ static void draw_support_event_overlay(uint32_t *pixels, uint32_t stride, const 
                        UI_ACCENT, UI_ON_ACCENT, false);
 }
 
-static void draw_detail_metric(uint32_t *pixels, uint32_t stride, int x, int y,
-                               const char *label, const char *value, uint32_t color)
-{
-    draw_text(pixels, stride, x, y, label, 17, UI_MUTED);
-    draw_text(pixels, stride, x, y + 36, value, 28, color);
-}
 
 
 
@@ -1225,23 +1219,23 @@ static void format_decision_rule(const PtcUiDecisionStep *step, char *out, size_
 }
 
 static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, int y, int total_w,
-                                   const PtcUiTodayDecision *decision)
+                                    const PtcUiTodayDecision *decision)
 {
-    const char *titles[] = {"今日调整", "临时计划", "节假日", "周常规"};
+    const char *titles[] = {"01 今日调整", "02 计划特例", "03 假日调休", "04 基础周计划"};
     const PtcUiDecisionStep *steps[] = {
         &decision->today_override,
         &decision->scheduled_override,
         &decision->holiday,
         &decision->weekly
     };
-    int node_w = 106;
-    int node_h = 106;
     int count = 4;
+    int node_w = 216;
+    int node_h = 136;
     int gap = (total_w - node_w * count) / (count - 1);
     bool hit_found = false;
 
-    draw_text(pixels, stride, x, y + 14, "额度决策流（优先级自高向低，遇命中阻断）", 13, UI_INK);
-    int cards_y = y + 24;
+    draw_text(pixels, stride, x, y + 6, "额度决策流水线（优先级自高向低，命中即阻断后续）", 14, UI_INK);
+    int cards_y = y + 26;
 
     for (int i = 0; i < count; ++i) {
         int node_x = x + i * (node_w + gap);
@@ -1254,43 +1248,53 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
 
         /* Card background & outline */
         if (is_selected) {
-            fill_round_rect(pixels, stride, card, 10, UI_SUCCESS_SOFT);
-            draw_rect_outline(pixels, stride, card, 10, 2, UI_SUCCESS);
+            fill_round_rect(pixels, stride, card, 12, UI_SUCCESS_SOFT);
+            draw_rect_outline(pixels, stride, card, 12, 2, UI_SUCCESS);
         } else if (is_overridden) {
-            fill_round_rect(pixels, stride, card, 10, UI_RAISED);
-            draw_rect_outline(pixels, stride, card, 10, 1, UI_BORDER);
+            fill_round_rect(pixels, stride, card, 12, UI_RAISED);
+            draw_rect_outline(pixels, stride, card, 12, 1, UI_BORDER);
         } else {
-            fill_round_rect(pixels, stride, card, 10, UI_PAGE);
-            draw_rect_outline(pixels, stride, card, 10, 1, UI_BORDER);
+            fill_round_rect(pixels, stride, card, 12, UI_PAGE);
+            draw_rect_outline(pixels, stride, card, 12, 1, UI_BORDER);
         }
 
         /* 1. Header title */
-        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 6, card.width, 18},
-                         titles[i], 12, is_selected ? UI_SUCCESS : (is_overridden ? UI_INK : UI_MUTED));
+        draw_text(pixels, stride, card.x + 14, card.y + 20, titles[i], 14,
+                  is_selected ? UI_SUCCESS : (is_overridden ? UI_INK : UI_MUTED));
 
         /* 2. Status Badge */
-        UiRect badge = {card.x + 14, card.y + 26, card.width - 28, 20};
+        UiRect badge = {card.x + 12, card.y + 30, card.width - 24, 22};
         if (is_selected) {
             fill_round_rect(pixels, stride, badge, 4, UI_SUCCESS);
-            draw_text_center(pixels, stride, badge, "🎯 生效", 11, UI_ON_ACCENT);
+            draw_text_center(pixels, stride, badge, "🎯 当前生效命中", 11, UI_ON_ACCENT);
         } else if (is_overridden) {
             fill_round_rect(pixels, stride, badge, 4, UI_WARNING_SOFT);
-            draw_text_center(pixels, stride, badge, "🛡️ 已覆盖", 10, UI_WARNING);
+            draw_text_center(pixels, stride, badge, "🛡️ 已被上级覆盖", 11, UI_WARNING);
         } else {
             fill_round_rect(pixels, stride, badge, 4, UI_BORDER);
-            draw_text_center(pixels, stride, badge, ptc_ui_decision_state_label(step->state), 10, UI_MUTED);
+            draw_text_center(pixels, stride, badge, ptc_ui_decision_state_label(step->state), 11, UI_MUTED);
         }
 
         /* 3. Rule Value */
-        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 50, card.width, 22},
-                         rule_val, 14, is_selected ? UI_SUCCESS : (is_overridden ? UI_MUTED : UI_DISABLED));
+        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 60, card.width, 26},
+                         rule_val, 18, is_selected ? UI_SUCCESS : (is_overridden ? UI_MUTED : UI_DISABLED));
 
         /* 4. Subtext explanation */
-        const char *desc = is_selected ? "在此命中 / 阻断" :
-            (is_overridden ? "已被上级覆盖" :
-             (step->state == PTC_UI_DECISION_DISABLED ? "未开启" : "未匹配 / 穿透"));
-        draw_text_center(pixels, stride, (UiRect){card.x + 4, card.y + 74, card.width - 8, 26},
-                         desc, 10, is_selected ? UI_SUCCESS : UI_MUTED);
+        const char *desc;
+        if (is_selected) {
+            desc = "在此命中 / 阻断后续规则";
+        } else if (is_overridden) {
+            desc = "规则已配置，但上级优先";
+        } else if (step->state == PTC_UI_DECISION_DISABLED) {
+            desc = "未开启或未配置";
+        } else if (step->state == PTC_UI_DECISION_CALENDAR_UNCOVERED) {
+            desc = "校准日历未覆盖";
+        } else {
+            desc = (i == 2 ? "今日非假日 / 向下穿透" : "未配置特例 / 向下穿透");
+        }
+        draw_line(pixels, stride, card.x + 12, card.y + 98, card.x + card.width - 12, card.y + 98, 1, UI_BORDER);
+        draw_text_center(pixels, stride, (UiRect){card.x + 6, card.y + 104, card.width - 12, 24},
+                         desc, 11, is_selected ? UI_SUCCESS : UI_MUTED);
 
         /* 5. Connector line between node i and node i+1 */
         if (i < count - 1) {
@@ -1299,15 +1303,15 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
             int line_y = cards_y + node_h / 2;
 
             if (is_selected) {
-                /* Short-circuit stop mark: ─┤ */
+                /* Short-circuit stop mark: ─┤ 阻断 */
                 draw_line(pixels, stride, line_start_x, line_y, line_start_x + gap / 2, line_y, 2, UI_MUTED);
-                draw_line(pixels, stride, line_start_x + gap / 2, line_y - 10, line_start_x + gap / 2, line_y + 10, 3, UI_DANGER);
-                draw_text(pixels, stride, line_start_x + 4, line_y - 18, "阻断", 10, UI_DANGER);
+                draw_line(pixels, stride, line_start_x + gap / 2, line_y - 14, line_start_x + gap / 2, line_y + 14, 3, UI_DANGER);
+                draw_text_center(pixels, stride, (UiRect){line_start_x, line_y - 28, gap, 16}, "阻断", 11, UI_DANGER);
                 hit_found = true;
             } else if (!hit_found) {
                 /* Active flow arrow: ──> */
-                draw_line(pixels, stride, line_start_x, line_y, line_end_x, line_y, 2, UI_ACCENT);
-                draw_text(pixels, stride, line_start_x + gap / 2 - 4, line_y - 8, ">", 12, UI_ACCENT);
+                draw_line(pixels, stride, line_start_x, line_y, line_end_x - 10, line_y, 2, UI_ACCENT);
+                draw_text(pixels, stride, line_end_x - 10, line_y - 7, ">", 13, UI_ACCENT);
             } else {
                 /* Inactive bypassed line: ┄┄ */
                 draw_line(pixels, stride, line_start_x, line_y, line_end_x, line_y, 1, UI_BORDER);
@@ -1324,6 +1328,7 @@ static void draw_home_decision_details(uint32_t *pixels, uint32_t stride,
     bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
     const char *notice = home_runtime_notice(model);
     bool error = strcmp(model->result_status, "error") == 0;
+    bool parent = model->view == PTC_UI_PARENT;
     int played = fresh && model->played_minutes_available ? model->played_minutes : -1;
     const char *runtime = !model->status_loaded ? "等待刷新" :
         model->disable_flag_present ? "控制已停用" : model->recovery_active ? "正在恢复" :
@@ -1346,214 +1351,121 @@ static void draw_home_decision_details(uint32_t *pixels, uint32_t stride,
         snprintf(timer, sizeof(timer), "状态待确认");
     }
 
-    int top_y = dialog.y + 106;
-    int col_w = 524;
+    int top_y = dialog.y + 68;
+    int full_w = 1064;
+    int col_w = 520;
     int x_left = dialog.x + 28;
-    int x_right = dialog.x + 568;
+    int x_right = dialog.x + 572;
 
-    /* ======================== 左栏：额度判定与规则决策链 ======================== */
-    /* 1. Hero Card (524 x 88) */
-    UiRect hero = {x_left, top_y, col_w, 88};
+    /* 1. Hero 看板卡片 (1064 x 80) */
+    UiRect hero = {x_left, top_y, full_w, 80};
     fill_round_rect_gradient(pixels, stride, hero, 12, UI_ACCENT_SOFT,
                              UI_RGB(ui_darken(UI_BLENDED(accent_soft), 5)));
-    draw_text(pixels, stride, hero.x + 16, hero.y + 24, "今天还可玩", 13, UI_MUTED);
-    draw_text(pixels, stride, hero.x + 16, hero.y + 68, remaining, 34, fresh ? UI_ACCENT : UI_MUTED);
-    draw_text(pixels, stride, hero.x + 194, hero.y + 24, "今日总额度", 13, UI_MUTED);
-    draw_text(pixels, stride, hero.x + 194, hero.y + 60, total, 20, UI_INK);
-    draw_text(pixels, stride, hero.x + 350, hero.y + 24, "额度已耗(估算)", 13, UI_MUTED);
+    draw_text(pixels, stride, hero.x + 20, hero.y + 22, "今天还可玩", 13, UI_MUTED);
+    draw_text(pixels, stride, hero.x + 20, hero.y + 64, remaining, 32, fresh ? UI_ACCENT : UI_MUTED);
+
+    draw_text(pixels, stride, hero.x + 210, hero.y + 22, "今日总额度", 13, UI_MUTED);
+    draw_text(pixels, stride, hero.x + 210, hero.y + 56, total, 20, UI_INK);
+
+    draw_text(pixels, stride, hero.x + 370, hero.y + 22, "额度已耗(估算)", 13, UI_MUTED);
     if (fresh && played >= 0) snprintf(line, sizeof(line), "约 %d 分钟", played);
     else snprintf(line, sizeof(line), "暂不可用");
-    draw_text(pixels, stride, hero.x + 350, hero.y + 60, line, 20, UI_INK);
+    draw_text(pixels, stride, hero.x + 370, hero.y + 56, line, 20, UI_INK);
 
-    /* 2. 当前生效规则高亮卡片 (524 x 56) */
-    UiRect active = {x_left, top_y + 96, col_w, 56};
-    fill_round_rect(pixels, stride, active, 10, fresh ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
-    draw_rect_outline(pixels, stride, active, 10, 2, fresh ? UI_SUCCESS : UI_WARNING);
-    draw_text(pixels, stride, active.x + 16, active.y + 22,
-              fresh ? "当前生效规则" : "规则状态待确认", 13, fresh ? UI_SUCCESS : UI_WARNING);
-    draw_text(pixels, stride, active.x + 118, active.y + 22, effective, 15, UI_INK);
-    draw_wrapped_text(pixels, stride, active.x + 16, active.y + 42, decision.final_reason,
-                      12, active.width - 32, 16, 1, UI_MUTED);
+    /* 生效规则指示徽章框 */
+    UiRect active_badge = {hero.x + 540, hero.y + 14, hero.width - 556, 52};
+    fill_round_rect(pixels, stride, active_badge, 8, fresh ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
+    draw_rect_outline(pixels, stride, active_badge, 8, 1, fresh ? UI_SUCCESS : UI_WARNING);
+    draw_text(pixels, stride, active_badge.x + 14, active_badge.y + 20,
+              fresh ? "🎯 当前生效规则" : "规则状态待确认", 12, fresh ? UI_SUCCESS : UI_WARNING);
+    draw_text(pixels, stride, active_badge.x + 120, active_badge.y + 20, effective, 14, UI_INK);
+    draw_wrapped_text(pixels, stride, active_badge.x + 14, active_badge.y + 40, decision.final_reason,
+                      11, active_badge.width - 28, 15, 1, UI_MUTED);
 
-    /* 3. 决策链流式优先级管道 (Option 3A) (524 x 134) */
-    draw_waterfall_pipeline(pixels, stride, x_left, top_y + 158, col_w, &decision);
+    /* 2. 额度决策流水线 (1064 x 164) */
+    draw_waterfall_pipeline(pixels, stride, x_left, top_y + 88, full_w, &decision);
 
-    /* 4. 并行就寝与自主缓冲 (524 x 54) */
-    UiRect bedtime = {x_left, top_y + 300, 256, 54};
-    UiRect autonomy = {x_left + 268, top_y + 300, 256, 54};
+    /* 3. 底部双栏 (520 + 520) */
+    int bottom_y = top_y + 258;
+
+    /* 左下栏：并行就寝与自主缓冲 */
+    UiRect bedtime = {x_left, bottom_y, col_w, 76};
     fill_round_rect(pixels, stride, bedtime, 10, UI_WARNING_SOFT);
     draw_rect_outline(pixels, stride, bedtime, 10, 1, UI_WARNING);
+    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 22, "🌙 并行就寝限制", 13, UI_WARNING);
+    draw_text(pixels, stride, bedtime.x + 130, bedtime.y + 22, decision.bedtime, 14, UI_INK);
+    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 52,
+              "就寝限制独立于时长并行生效；到点后无论剩余额度直接锁定机器。", 11, UI_MUTED);
+
+    UiRect autonomy = {x_left, bottom_y + 84, col_w, 76};
     fill_round_rect(pixels, stride, autonomy, 10, UI_RAISED);
     draw_rect_outline(pixels, stride, autonomy, 10, 1, UI_BORDER);
-    draw_text(pixels, stride, bedtime.x + 12, bedtime.y + 20, "🌙 并行就寝限制", 12, UI_WARNING);
-    draw_text(pixels, stride, bedtime.x + 12, bedtime.y + 42, decision.bedtime, 13, UI_INK);
-    draw_text(pixels, stride, autonomy.x + 12, autonomy.y + 20, "🎁 自主缓冲额度", 12, UI_MUTED);
-    draw_text(pixels, stride, autonomy.x + 12, autonomy.y + 42, decision.autonomy, 13, UI_INK);
+    draw_text(pixels, stride, autonomy.x + 14, autonomy.y + 22, "🎁 自主缓冲额度", 13, UI_MUTED);
+    draw_text(pixels, stride, autonomy.x + 130, autonomy.y + 22, decision.autonomy, 14, UI_INK);
+    draw_text(pixels, stride, autonomy.x + 14, autonomy.y + 52,
+              "由孩子在额度即将耗尽时自主申请，按预设条件追加缓冲时间。", 11, UI_MUTED);
 
-    /* 5. 规则决策说明底注 */
-    draw_text(pixels, stride, x_left, top_y + 372,
-              "规则链决定今日额度；就寝独立并行，自主缓冲按条件追加", 11, UI_MUTED);
+    draw_text(pixels, stride, x_left, bottom_y + 180,
+              "ℹ️ 决策流水线决定今日额度；就寝独立并行，自主缓冲按条件追加。", 11, UI_MUTED);
 
-    /* ======================== 右栏：系统运行、历史趋势与诊断 ======================== */
-    /* 1. 系统运行与计时器状态 (524 x 88) */
-    UiRect sys_card = {x_right, top_y, col_w, 88};
-    fill_round_rect(pixels, stride, sys_card, 12, UI_RAISED);
-    draw_rect_outline(pixels, stride, sys_card, 12, 1, UI_BORDER);
-    draw_text(pixels, stride, sys_card.x + 16, sys_card.y + 22, "今日规则模式", 12, UI_MUTED);
-    draw_text(pixels, stride, sys_card.x + 16, sys_card.y + 48, today, 16, UI_INK);
-    draw_text(pixels, stride, sys_card.x + 180, sys_card.y + 22, "系统计时器", 12, UI_MUTED);
-    draw_text(pixels, stride, sys_card.x + 180, sys_card.y + 48, timer, 16, fresh ? UI_INK : UI_WARNING);
-    draw_text(pixels, stride, sys_card.x + 350, sys_card.y + 22, "PlayWise 守护", 12, UI_MUTED);
-    draw_text(pixels, stride, sys_card.x + 350, sys_card.y + 48, runtime, 16,
+    /* 右下栏：系统运行、审计与健康 */
+    UiRect sys_card = {x_right, bottom_y, col_w, 76};
+    fill_round_rect(pixels, stride, sys_card, 10, UI_RAISED);
+    draw_rect_outline(pixels, stride, sys_card, 10, 1, UI_BORDER);
+
+    draw_text(pixels, stride, sys_card.x + 14, sys_card.y + 20, "今日模式", 11, UI_MUTED);
+    draw_text(pixels, stride, sys_card.x + 14, sys_card.y + 44, today, 14, UI_INK);
+
+    draw_text(pixels, stride, sys_card.x + 130, sys_card.y + 20, "系统计时器", 11, UI_MUTED);
+    draw_text(pixels, stride, sys_card.x + 130, sys_card.y + 44, timer, 14, fresh ? UI_INK : UI_WARNING);
+
+    draw_text(pixels, stride, sys_card.x + 250, sys_card.y + 20, "PlayWise 守护", 11, UI_MUTED);
+    draw_text(pixels, stride, sys_card.x + 250, sys_card.y + 44, runtime, 14,
               notice[0] || !fresh ? UI_WARNING : UI_SUCCESS);
-    if (notice[0]) {
-        fill_round_rect(pixels, stride, (UiRect){sys_card.x + 10, sys_card.y + 60, sys_card.width - 20, 22}, 4, UI_WARNING_SOFT);
-        draw_text(pixels, stride, sys_card.x + 16, sys_card.y + 76, notice, 11, UI_WARNING);
-    }
 
-    /* 2. 近 7 天与近 30 天消耗趋势 (524 x 86) */
-    UiRect card7 = {x_right, top_y + 96, 256, 86};
-    UiRect card30 = {x_right + 268, top_y + 96, 256, 86};
-    fill_round_rect(pixels, stride, card7, 10, UI_RAISED);
-    draw_rect_outline(pixels, stride, card7, 10, 1, UI_BORDER);
-    fill_round_rect(pixels, stride, card30, 10, UI_RAISED);
-    draw_rect_outline(pixels, stride, card30, 10, 1, UI_BORDER);
-
-    draw_text(pixels, stride, card7.x + 14, card7.y + 22, "近 7 天额度消耗估算", 12, UI_MUTED);
+    draw_text(pixels, stride, sys_card.x + 380, sys_card.y + 20, "近 7 天消耗", 11, UI_MUTED);
     if (model->usage_summary_available && model->usage_known_days_7 > 0)
         snprintf(line, sizeof(line), "%u 分钟", model->usage_consumed_minutes_7);
     else snprintf(line, sizeof(line), "暂不可用");
-    draw_text(pixels, stride, card7.x + 14, card7.y + 52, line, 22, UI_INK);
-    snprintf(line, sizeof(line), "可靠记录 %u 天", model->usage_known_days_7);
-    draw_text(pixels, stride, card7.x + 14, card7.y + 74, line, 11, UI_MUTED);
+    draw_text(pixels, stride, sys_card.x + 380, sys_card.y + 44, line, 14, UI_INK);
 
-    draw_text(pixels, stride, card30.x + 14, card30.y + 22, "近 30 天额度消耗估算", 12, UI_MUTED);
-    if (model->usage_summary_available && model->usage_known_days_30 > 0)
-        snprintf(line, sizeof(line), "%u 分钟", model->usage_consumed_minutes_30);
-    else snprintf(line, sizeof(line), "暂不可用");
-    draw_text(pixels, stride, card30.x + 14, card30.y + 52, line, 22, UI_INK);
-    snprintf(line, sizeof(line), "可靠记录 %u 天", model->usage_known_days_30);
-    draw_text(pixels, stride, card30.x + 14, card30.y + 74, line, 11, UI_MUTED);
+    if (parent) {
+        UiRect audit = {x_right, bottom_y + 84, col_w, 76};
+        fill_round_rect(pixels, stride, audit, 10, UI_RAISED);
+        draw_rect_outline(pixels, stride, audit, 10, 1, UI_BORDER);
+        draw_text(pixels, stride, audit.x + 14, audit.y + 18, "最近指令执行审计", 12, UI_INK);
+        snprintf(line, sizeof(line), "%s / %s", model->command_name, model->transport_label);
+        draw_text(pixels, stride, audit.x + 200, audit.y + 18, line, 11, UI_MUTED);
+        draw_line(pixels, stride, audit.x + 14, audit.y + 26, audit.x + audit.width - 14, audit.y + 26, 1, UI_BORDER);
+        draw_wrapped_text(pixels, stride, audit.x + 14, audit.y + 42, model->message,
+                          12, audit.width - 28, 16, 1, error ? UI_DANGER : UI_INK);
+        draw_wrapped_text(pixels, stride, audit.x + 14, audit.y + 60, model->feedback_detail,
+                          10, audit.width - 28, 14, 1, error ? UI_DANGER : UI_MUTED);
+    } else {
+        UiRect child_tip = {x_right, bottom_y + 84, col_w, 76};
+        fill_round_rect(pixels, stride, child_tip, 10, UI_RAISED);
+        draw_rect_outline(pixels, stride, child_tip, 10, 1, UI_BORDER);
+        draw_text(pixels, stride, child_tip.x + 14, child_tip.y + 20, "🌿 健康用机提醒", 12, UI_MUTED);
+        draw_text(pixels, stride, child_tip.x + 14, child_tip.y + 44,
+                  "合理规划游玩与休息时间，保护视力；就寝时间请准时休息。", 13, UI_INK);
+        if (model->usage_summary_available && model->usage_known_days_30 > 0)
+            snprintf(line, sizeof(line), "近 30 天已记录消耗: %u 分钟", model->usage_consumed_minutes_30);
+        else snprintf(line, sizeof(line), "合理安排时间，享受精彩游戏。");
+        draw_text(pixels, stride, child_tip.x + 14, child_tip.y + 64, line, 11, UI_MUTED);
+    }
 
-    /* 3. 家长指令执行审计与反馈 (524 x 146) */
-    UiRect audit = {x_right, top_y + 190, col_w, 146};
-    fill_round_rect(pixels, stride, audit, 10, UI_RAISED);
-    draw_rect_outline(pixels, stride, audit, 10, 1, UI_BORDER);
-    draw_text(pixels, stride, audit.x + 14, audit.y + 22, "最近指令执行审计", 13, UI_INK);
-    snprintf(line, sizeof(line), "%s / %s", model->command_name, model->transport_label);
-    draw_text(pixels, stride, audit.x + 200, audit.y + 22, line, 12, UI_MUTED);
-    draw_line(pixels, stride, audit.x + 14, audit.y + 34, audit.x + audit.width - 14, audit.y + 34, 1, UI_BORDER);
-    draw_wrapped_text(pixels, stride, audit.x + 14, audit.y + 54, model->message,
-                      13, audit.width - 28, 17, 2, error ? UI_DANGER : UI_INK);
-    draw_wrapped_text(pixels, stride, audit.x + 14, audit.y + 96, model->feedback_detail,
-                      11, audit.width - 28, 15, 2, error ? UI_DANGER : UI_MUTED);
-
-    /* 4. 统计口径与系统说明 */
-    draw_text(pixels, stride, x_right, top_y + 356,
-              "本机额度消耗包含 HOME 亮屏使用；游戏明细暂不可用。", 11, UI_MUTED);
-    draw_text(pixels, stride, x_right, top_y + 372,
-              "缺失日期不计入累计；异常请在“支持与恢复”中处理。", 11, UI_MUTED);
+    draw_text(pixels, stride, x_right, bottom_y + 180,
+              "本机额度消耗包含 HOME 亮屏使用；游戏明细暂不可用，缺失日期不计入。", 11, UI_MUTED);
 }
 
 static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
-    char line[256], timer[64], remaining[64], today[64], age[64], total[64];
-    bool parent = model->view == PTC_UI_PARENT;
-    bool error = strcmp(model->result_status, "error") == 0;
-    const char *notice = home_runtime_notice(model);
-    bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
+    char age[64];
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 640);
-    if (parent) {
-        for (int index = 0; index < 2; ++index) {
-            PtcUiRect tab = ptc_ui_home_details_tab_rect(index);
-            bool selected = model->home_details_page == index;
-            draw_candidate_button(pixels, stride, tab,
-                index == 0 ? "今日全景看板" : "使用与状态",
-                selected ? UI_ACCENT : UI_PAGE,
-                selected ? UI_ON_ACCENT : UI_ACCENT, selected, false);
-        }
-        if (model->home_details_page == 0) {
-            draw_home_decision_details(pixels, stride, model, dialog);
-            home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "A / B  返回", false, true, false);
-            return;
-        }
-    }
-    int x = dialog.x + 32, y = dialog.y + (parent ? 108 : 80);
-    UiRect hero = {x, y, 688, 200};
-    UiRect status = {x + 704, y, 352, 200};
-    ptc_ui_format_timer_status(model, timer, sizeof(timer));
-    ptc_ui_format_home_remaining(model, ptc_ui_render_now(), remaining, sizeof(remaining));
-    ptc_ui_format_home_total_value(model, total, sizeof(total));
-    ptc_ui_format_today_mode(model, today, sizeof(today));
     format_status_age(model, age, sizeof(age));
-    if (!fresh) {
-        snprintf(total, sizeof(total), "暂不可用");
-        snprintf(today, sizeof(today), "状态待确认");
-        snprintf(timer, sizeof(timer), "状态待确认");
-    }
     draw_text_center(pixels, stride, (UiRect){dialog.x + 736, dialog.y + 26, 352, 30}, age, 17, status_age_color(model));
-
-    fill_round_rect_gradient(pixels, stride, hero, 16, UI_ACCENT_SOFT,
-                             UI_RGB(ui_darken(UI_BLENDED(accent_soft), 5)));
-    draw_text(pixels, stride, x + 24, y + 32, "今天还可玩", 20, UI_MUTED);
-    draw_text(pixels, stride, x + 24, y + 100, remaining, 56, fresh ? UI_ACCENT : UI_MUTED);
-    draw_detail_metric(pixels, stride, x + 24, y + 142, "今日总额度", total, UI_INK);
-    if (fresh && model->played_minutes_available && model->played_minutes >= 0)
-        snprintf(line, sizeof(line), "约 %d 分钟", model->played_minutes);
-    else snprintf(line, sizeof(line), "暂不可用");
-    draw_detail_metric(pixels, stride, x + 360, y + 142, "今日额度消耗估算", line, UI_INK);
-
-    fill_round_rect(pixels, stride, status, 16, UI_RAISED);
-    const char *runtime = !model->status_loaded ? "等待刷新" :
-        model->disable_flag_present ? "控制已停用" : model->recovery_active ? "正在恢复" :
-        model->apply_pending_confirmation ? "等待生效" : !fresh ? "状态待确认" :
-        strcmp(model->setup_phase, "active") == 0 ? "正常运行" : "需家长确认";
-    const char *labels[] = {"今日规则", "系统计时器", "PlayWise"};
-    const char *values[] = {today, timer, runtime};
-    for (int i = 0; i < 3; ++i) {
-        draw_text(pixels, stride, status.x + 24, y + 28 + i * 60, labels[i], 16, UI_MUTED);
-        fit_text(line, sizeof(line), values[i], 22, status.width - 48);
-        draw_text(pixels, stride, status.x + 24, y + 54 + i * 60, line, 22,
-            i == 2 && (notice[0] || !fresh) ? UI_WARNING : UI_INK);
-    }
-
-    int history_y = y + 216;
-    if (notice[0]) {
-        fill_round_rect(pixels, stride, (UiRect){x, history_y, 1056, 44}, 6,
-            model->disable_flag_present ? UI_DANGER_SOFT : UI_WARNING_SOFT);
-        draw_wrapped_text(pixels, stride, x + 16, history_y + 19, notice, 17, 1024, 20, 2,
-            model->disable_flag_present ? UI_DANGER : UI_WARNING);
-        history_y += 52;
-    }
-    for (int i = 0; i < 2; ++i) {
-        UiRect card = {x + i * 536, history_y, 520, 98};
-        unsigned int days = i ? model->usage_known_days_30 : model->usage_known_days_7;
-        unsigned int minutes = i ? model->usage_consumed_minutes_30 : model->usage_consumed_minutes_7;
-        fill_round_rect(pixels, stride, card, 16, UI_RAISED);
-        if (model->usage_summary_available && days > 0)
-            snprintf(line, sizeof(line), "%u 分钟", minutes);
-        else snprintf(line, sizeof(line), "暂不可用");
-        draw_detail_metric(pixels, stride, card.x + 24, card.y + 28,
-            i ? "近 30 天额度消耗估算" : "近 7 天额度消耗估算", line, UI_INK);
-        if (model->usage_summary_available)
-            snprintf(line, sizeof(line), "可靠记录 %u 天", days);
-        else snprintf(line, sizeof(line), "可靠记录暂不可用");
-        draw_text(pixels, stride, card.x + 24, card.y + 86, line, 15, UI_MUTED);
-    }
-    draw_text(pixels, stride, x, history_y + 122,
-        "本机额度消耗包含 HOME 等亮屏使用；游戏明细暂不可用，缺失日期不计入估算", 16, UI_MUTED);
-    if (parent) {
-        fill_rect(pixels, stride, (UiRect){x, history_y + 140, 1056, 1}, UI_BORDER);
-        snprintf(line, sizeof(line), "最近执行  %s    %s", model->command_name, model->transport_label);
-        fit_text(line, sizeof(line), line, 16, 1056);
-        draw_text(pixels, stride, x, history_y + 162, line, 16, UI_MUTED);
-        draw_wrapped_text(pixels, stride, x, history_y + 187, model->message, 19, 1056, 24, 2,
-            error ? UI_DANGER : UI_INK);
-        /* The last two detail lines reserve the return button's entire column. */
-        draw_wrapped_text(pixels, stride, x, history_y + 231, model->feedback_detail, 16, 600, 20, 2,
-            error ? UI_DANGER : UI_MUTED);
-    }
+    draw_home_decision_details(pixels, stride, model, dialog);
     home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "A / B  返回", false, true, false);
 }
 

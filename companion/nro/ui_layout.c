@@ -336,8 +336,8 @@ PtcUiRect ptc_ui_home_details_rect(bool parent)
 
 PtcUiRect ptc_ui_home_details_tab_rect(int index)
 {
-    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){112 + index * 210, 92, 194, 42};
+    (void)index;
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiOperation ptc_ui_today_operation(int index)
@@ -358,9 +358,9 @@ bool ptc_ui_open_home_details(PtcUiModel *model)
          !(model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_TODAY))) return false;
     /* Keep the underlying focus and execution message intact on open/close. */
     model->overlay = PTC_UI_OVERLAY_HOME_DETAILS;
-    model->home_details_page = model->view == PTC_UI_PARENT ? 0 : 1;
+    model->home_details_page = 0;
     snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
-        model->view == PTC_UI_CHILD ? "使用详情" : "今日详情");
+        model->view == PTC_UI_CHILD ? "使用详情" : "今日调度详情");
     model->overlay_body[0] = '\0';
     return true;
 }
@@ -778,6 +778,8 @@ static int dialog_button_top(PtcUiRect dialog)
 
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 {
+    if (overlay == PTC_UI_OVERLAY_HOME_DETAILS)
+        return (PtcUiRect){0, 0, 0, 0};
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     return rect;
@@ -788,6 +790,8 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     if (overlay == PTC_UI_OVERLAY_GRANT_LOCAL)
         return (PtcUiRect){dialog.x + 42, dialog.y + 588, 210, 44};
+    if (overlay == PTC_UI_OVERLAY_HOME_DETAILS)
+        return (PtcUiRect){dialog.x + dialog.w - 28 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W * 2 - 16, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     return rect;
 }

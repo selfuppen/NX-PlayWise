@@ -1169,6 +1169,17 @@ static void test_release_hit_targets(void)
     check_true(ptc_ui_minute_editor_quick_rect(1).x + ptc_ui_minute_editor_quick_rect(1).w < 716 &&
                ptc_ui_minute_editor_quick_rect(2).w == 0,
                "compact minute editor quick actions stay left of the information panel");
+    model.numpad_return_overlay = PTC_UI_OVERLAY_NONE;
+    ptc_ui_numpad_finish(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_NONE, "numpad finish sets return overlay");
+    check_int(model.numpad_purpose, PTC_UI_NUMPAD_WEEKLY_MINUTES,
+              "numpad finish retains purpose for closing animation");
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_TODAY;
+    ptc_ui_open_home_details(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "open home details sets overlay");
+    check_int(model.home_details_page, 0, "open home details resets page to 0");
+    check_int(ptc_ui_home_details_tab_rect(0).w, 0, "home details tabs are removed");
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     model.credential_kind = 1;
@@ -2096,8 +2107,8 @@ static void test_today_decision_and_plan_review(void)
     model.parent_page = PTC_UI_PARENT_TODAY;
     model.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
     model.home_details_page = 0;
-    check_hit(hit_center(&model, ptc_ui_home_details_tab_rect(1)),
-              PTC_UI_HIT_HOME_DETAILS_TAB, 1, "details usage tab is touchable");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)),
+              PTC_UI_HIT_OVERLAY_CANCEL, 0, "home details cancel button is touchable");
 }
 
 static void test_support_next_step(void)

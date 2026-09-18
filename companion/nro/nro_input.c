@@ -138,13 +138,7 @@ void handle_overlay_input(UiState *ui, u64 down)
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
-        if (ui->model.view == PTC_UI_PARENT &&
-            (down & (HidNpadButton_L | HidNpadButton_Left))) {
-            ui->model.home_details_page = 0;
-        } else if (ui->model.view == PTC_UI_PARENT &&
-                   (down & (HidNpadButton_R | HidNpadButton_Right))) {
-            ui->model.home_details_page = 1;
-        } else if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
+        if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
             ptc_ui_cancel_overlay(&ui->model);
         }
         return;
@@ -816,10 +810,6 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_HOME_DETAILS:
         ptc_ui_open_home_details(&ui->model);
-        break;
-    case PTC_UI_HIT_HOME_DETAILS_TAB:
-        if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS && hit.index >= 0 && hit.index < 2)
-            ui->model.home_details_page = hit.index;
         break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
         if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {

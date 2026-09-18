@@ -1485,10 +1485,7 @@ void ptc_ui_numpad_finish(PtcUiModel *model)
         return;
     }
     model->overlay = model->numpad_return_overlay;
-    model->numpad_purpose = PTC_UI_NUMPAD_NONE;
     model->numpad_replace_on_input = false;
-    model->duration_hours_text[0] = '\0';
-    model->duration_minutes_text[0] = '\0';
     model->duration_hours_replace_on_input = false;
     model->duration_minutes_replace_on_input = false;
     model->duration_step_feedback = 1;
