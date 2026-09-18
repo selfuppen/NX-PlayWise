@@ -1848,7 +1848,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_diagnostic_notice(pixels, stride, model);
     } else if (model->parent_page == PTC_UI_PARENT_TODAY) {
         draw_home_notice(pixels, stride, model);
-    } else if (!plan_subpage && model->parent_page != PTC_UI_PARENT_PLAN) {
+    } else if (!plan_subpage) {
         draw_notice(pixels, stride, model, 522, 128);
     }
     if (model->parent_page == PTC_UI_PARENT_SETTINGS) {

@@ -794,7 +794,8 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
             request->type == PTC_REQUEST_DISABLE_TODAY_LIMIT ||
             request->type == PTC_REQUEST_RESTORE_TODAY_POLICY ||
             request->type == PTC_REQUEST_SET_HOLIDAY_POLICY ||
-            (request->type == PTC_REQUEST_SET_SCHEDULED_OVERRIDE &&
+            ((request->type == PTC_REQUEST_SET_SCHEDULED_OVERRIDE ||
+              request->type == PTC_REQUEST_SET_WEEKLY_TEMPLATE) &&
              (before_active_rule.mode != ptc_rules_today_rule(&rules, now.day_index,
                  ptc_weekday_from_day_index(now.day_index)).mode ||
               before_active_rule.minutes != ptc_rules_today_rule(&rules, now.day_index,
@@ -822,6 +823,9 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
                     ? request->scheduled_override.rule.minutes : 0u;
             } else if (request->type == PTC_REQUEST_SET_AUTONOMY_POLICY) {
                 activity_minutes = request->autonomy_policy.daily_buffer_minutes;
+            } else if (request->type == PTC_REQUEST_SET_WEEKLY_TEMPLATE) {
+                PtcDayRule today_r = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+                activity_minutes = today_r.mode == PTC_RULE_MODE_LIMIT ? today_r.minutes : 0u;
             }
             if (!record_activity(sysmodule, request, now, activity_minutes, activity_minutes)) {
                 append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED,

@@ -2142,6 +2142,28 @@ static void test_daily_enforce_does_not_start_play_timer(void)
         "future weekly rule change is persisted");
     check_int((long)pctl.start_timer_calls, 0,
         "future weekly rule modification never activates the timer");
+
+    long apply_calls_before_today_weekly = (long)pctl.apply_target_calls;
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/today-weekly.json",
+        "{\"version\":1,\"request_id\":\"today-weekly\",\"type\":\"set_weekly_template\","
+        "\"created_at\":3,\"payload\":{\"days\":[{\"mode\":\"limit\",\"minutes\":90},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":45},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}"),
+        "queue a weekly template modifying today's rule from 60 to 45 mins");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1,
+        "today weekly rule change is processed");
+    check_true((long)pctl.apply_target_calls > apply_calls_before_today_weekly,
+        "modifying today's rule via weekly template applies target to PCTL synchronously");
+    check_int((long)pctl.last_target.mode, (long)PTC_PCTL_TARGET_LIMIT,
+        "PCTL target mode reflects updated today limit");
+    check_int((long)pctl.last_target.minutes, 45,
+        "PCTL target minutes reflects updated today limit of 45");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/today-weekly.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") &&
+        strstr(text, "\"remaining_minutes\":45"),
+        "result JSON immediately reflects updated remaining minutes for today");
 }
 
 static void test_bedtime_enforcement_and_overlay_recovery(void)

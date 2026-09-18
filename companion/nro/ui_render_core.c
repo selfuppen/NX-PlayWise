@@ -863,6 +863,8 @@ static bool is_builtin_emoji(uint32_t codepoint)
     case 0x1F4C5: /* 📅 Calendar */
     case 0x1F4A1: /* 💡 Lightbulb */
     case 0x1F525: /* 🔥 Fire */
+    case 0x1F33F: /* 🌿 Herb / Seedling */
+    case 0x2139:  /* ℹ️ Information */
         return true;
     default:
         return false;
@@ -880,9 +882,79 @@ static float dist_to_segment_sq(float px, float py, float x1, float y1, float x2
     return (px - qx) * (px - qx) + (py - qy) * (py - qy);
 }
 
+static bool is_in_leaf(float u, float v, float cx, float cy, float len, float wid, float cos_a, float sin_a)
+{
+    float lx = (u - cx) * cos_a + (v - cy) * sin_a;
+    float ly = -(u - cx) * sin_a + (v - cy) * cos_a;
+    float t = lx / len;
+    if (fabsf(t) <= 1.0f) {
+        float max_w = wid * (1.0f - t * t);
+        if (fabsf(ly) <= max_w) return true;
+    }
+    return false;
+}
+
 static bool sample_emoji_color(uint32_t codepoint, float u, float v, uint32_t *out_rgb)
 {
     switch (codepoint) {
+    case 0x2139: { /* ℹ️ Information */
+        float dx = u - 0.50f, dy = v - 0.50f;
+        if (dx * dx + dy * dy <= 0.40f * 0.40f) {
+            float dot_dy = v - 0.30f;
+            if (dx * dx + dot_dy * dot_dy <= 0.065f * 0.065f) {
+                *out_rgb = 0xFFFFFFu;
+                return true;
+            }
+            if (u >= 0.43f && u <= 0.57f && v >= 0.43f && v <= 0.72f) {
+                *out_rgb = 0xFFFFFFu;
+                return true;
+            }
+            if (u >= 0.37f && u <= 0.50f && v >= 0.43f && v <= 0.50f) {
+                *out_rgb = 0xFFFFFFu;
+                return true;
+            }
+            if (u >= 0.37f && u <= 0.63f && v >= 0.66f && v <= 0.73f) {
+                *out_rgb = 0xFFFFFFu;
+                return true;
+            }
+            *out_rgb = 0x3B82F6u;
+            return true;
+        }
+        return false;
+    }
+    case 0x1F33F: { /* 🌿 Herb / Sprig */
+        float s1 = dist_to_segment_sq(u, v, 0.24f, 0.82f, 0.40f, 0.62f);
+        float s2 = dist_to_segment_sq(u, v, 0.40f, 0.62f, 0.56f, 0.42f);
+        float s3 = dist_to_segment_sq(u, v, 0.56f, 0.42f, 0.70f, 0.22f);
+        float s_min = s1 < s2 ? s1 : s2;
+        if (s3 < s_min) s_min = s3;
+
+        if (is_in_leaf(u, v, 0.76f, 0.16f, 0.14f, 0.07f, 0.7660f, -0.6428f)) {
+            *out_rgb = 0x4ADE80u;
+            return true;
+        }
+        if (is_in_leaf(u, v, 0.42f, 0.36f, 0.15f, 0.08f, -0.8660f, 0.5000f)) {
+            *out_rgb = 0x22C55Eu;
+            return true;
+        }
+        if (is_in_leaf(u, v, 0.74f, 0.38f, 0.16f, 0.085f, 0.9659f, -0.2588f)) {
+            *out_rgb = 0x22C55Eu;
+            return true;
+        }
+        if (is_in_leaf(u, v, 0.25f, 0.58f, 0.16f, 0.085f, -0.7660f, 0.6428f)) {
+            *out_rgb = 0x16A34Au;
+            return true;
+        }
+        if (is_in_leaf(u, v, 0.58f, 0.58f, 0.16f, 0.085f, 0.9848f, -0.1736f)) {
+            *out_rgb = 0x16A34Au;
+            return true;
+        }
+        if (s_min <= 0.038f * 0.038f) {
+            *out_rgb = 0x15803Du;
+            return true;
+        }
+        return false;
+    }
     case 0x1F319: { /* 🌙 Crescent Moon */
         float dx_out = u - 0.48f, dy_out = v - 0.50f;
         float dx_in  = u - 0.64f, dy_in  = v - 0.38f;
