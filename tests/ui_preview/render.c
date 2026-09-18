@@ -67,6 +67,26 @@ static int check_primitives(void)
         for (unsigned int x = 0; x < stride; ++x)
             if ((y == 0 || y == 721 || x < 2 || x >= 1282) && guarded[y * stride + x] != background) ++failed;
     free(guarded);
+    /* Procedural emoji glyphs, variation selectors, and text width measurement */
+    {
+        if (measure_text("🌙", 12) != 12) ++failed;
+        if (measure_text("🎁", 12) != 12) ++failed;
+        if (measure_text("🎯", 12) != 12) ++failed;
+        if (measure_text("🛡️", 12) != 12) ++failed; /* 🛡 (12) + ️ (0) = 12 */
+        if (measure_text("⏰", 12) != 12) ++failed;
+        if (measure_text("🔒", 12) != 12) ++failed;
+        if (measure_text("⭐", 12) != 12) ++failed;
+        /* Verify rendering into pixel buffer blends without crashing or guard corruption */
+        fill_rect_packed(preview_pixels, 1280, (UiRect){0, 0, 100, 50}, background);
+        draw_text(preview_pixels, 1280, 10, 30, "🌙 🎁 🛡️", 12, pack_rgb(0xffffff));
+        int blended_pixels = 0;
+        for (int py = 0; py < 50; ++py) {
+            for (int px = 0; px < 100; ++px) {
+                if (preview_pixels[py * 1280 + px] != background) ++blended_pixels;
+            }
+        }
+        if (blended_pixels < 30) ++failed;
+    }
     printf("%s: UI primitive coverage, symmetry, strokes and clipping\n", failed ? "FAIL" : "PASS");
     return failed ? 1 : 0;
 }

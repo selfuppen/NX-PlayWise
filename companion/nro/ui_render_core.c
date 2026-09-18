@@ -837,16 +837,288 @@ void ui_glyph_cache_clear(void)
     g_glyph_cache_count = 0;
 }
 
+static bool is_builtin_emoji(uint32_t codepoint)
+{
+    switch (codepoint) {
+    case 0x1F319: /* 🌙 Moon */
+    case 0x1F381: /* 🎁 Gift */
+    case 0x1F3AF: /* 🎯 Target / Bullseye */
+    case 0x1F6E1: /* 🛡️ Shield */
+    case 0x26A0:  /* ⚠️ Warning Triangle */
+    case 0x2713:  /* ✓ Checkmark */
+    case 0x2714:  /* ✔️ Heavy Checkmark */
+    case 0x2715:  /* ✕ Cross */
+    case 0x2716:  /* ✖ Heavy Cross */
+    case 0x274C:  /* ❌ Cross Mark */
+    case 0x23F0:  /* ⏰ Alarm Clock */
+    case 0x23F3:  /* ⏳ Hourglass Flowing */
+    case 0x231B:  /* ⌛ Hourglass */
+    case 0x1F512: /* 🔒 Lock */
+    case 0x1F513: /* 🔓 Unlock */
+    case 0x2B50:  /* ⭐ Star */
+    case 0x1F31F: /* 🌟 Glowing Star */
+    case 0x1F4C5: /* 📅 Calendar */
+    case 0x1F4A1: /* 💡 Lightbulb */
+    case 0x1F525: /* 🔥 Fire */
+        return true;
+    default:
+        return false;
+    }
+}
+
+static float dist_to_segment_sq(float px, float py, float x1, float y1, float x2, float y2)
+{
+    float dx = x2 - x1, dy = y2 - y1;
+    float l2 = dx * dx + dy * dy;
+    float t = ((px - x1) * dx + (py - y1) * dy) / (l2 > 1e-6f ? l2 : 1e-6f);
+    if (t < 0.0f) t = 0.0f;
+    else if (t > 1.0f) t = 1.0f;
+    float qx = x1 + t * dx, qy = y1 + t * dy;
+    return (px - qx) * (px - qx) + (py - qy) * (py - qy);
+}
+
+static bool is_inside_emoji_shape(uint32_t codepoint, float u, float v)
+{
+    switch (codepoint) {
+    case 0x1F319: { /* 🌙 Crescent Moon */
+        float dx_out = u - 0.48f, dy_out = v - 0.50f;
+        float dx_in  = u - 0.64f, dy_in  = v - 0.38f;
+        return (dx_out * dx_out + dy_out * dy_out <= 0.42f * 0.42f) &&
+               (dx_in * dx_in + dy_in * dy_in >= 0.36f * 0.36f);
+    }
+    case 0x1F381: { /* 🎁 Wrapped Present */
+        if (u >= 0.22f && u <= 0.78f && v >= 0.46f && v <= 0.88f) {
+            if (!((u >= 0.46f && u <= 0.54f) || (v >= 0.63f && v <= 0.69f))) return true;
+        }
+        if (u >= 0.16f && u <= 0.84f && v >= 0.30f && v <= 0.42f) {
+            if (!(u >= 0.46f && u <= 0.54f)) return true;
+        }
+        {
+            float d1 = (u - 0.36f) * (u - 0.36f) + (v - 0.21f) * (v - 0.21f);
+            if (d1 >= 0.05f * 0.05f && d1 <= 0.13f * 0.13f && v <= 0.30f) return true;
+            float d2 = (u - 0.64f) * (u - 0.64f) + (v - 0.21f) * (v - 0.21f);
+            if (d2 >= 0.05f * 0.05f && d2 <= 0.13f * 0.13f && v <= 0.30f) return true;
+            float dk = (u - 0.50f) * (u - 0.50f) + (v - 0.27f) * (v - 0.27f);
+            if (dk <= 0.06f * 0.06f) return true;
+        }
+        return false;
+    }
+    case 0x1F3AF: { /* 🎯 Target */
+        float d2 = (u - 0.50f) * (u - 0.50f) + (v - 0.50f) * (v - 0.50f);
+        if (d2 <= 0.12f * 0.12f) return true;
+        if (d2 >= 0.22f * 0.22f && d2 <= 0.30f * 0.30f) return true;
+        if (d2 >= 0.40f * 0.40f && d2 <= 0.48f * 0.48f) return true;
+        return false;
+    }
+    case 0x1F6E1: { /* 🛡️ Shield */
+        if (u >= 0.18f && u <= 0.82f && v >= 0.18f && v <= 0.86f) {
+            float arch = 0.20f - 0.04f * (1.0f - ((u - 0.50f) / 0.32f) * ((u - 0.50f) / 0.32f));
+            if (v >= arch) {
+                bool in_shield = false;
+                if (v <= 0.48f) {
+                    in_shield = true;
+                } else {
+                    float dy = (v - 0.48f) / 0.38f;
+                    float max_dx = (1.0f - dy * dy) * 0.32f;
+                    if (fabsf(u - 0.50f) <= max_dx) in_shield = true;
+                }
+                if (in_shield) {
+                    if ((u >= 0.47f && u <= 0.53f && v >= 0.24f && v <= 0.74f) ||
+                        (u >= 0.28f && u <= 0.72f && v >= 0.38f && v <= 0.44f)) {
+                        return false;
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    case 0x26A0: { /* ⚠️ Warning Triangle */
+        if (v >= 0.16f && v <= 0.86f) {
+            float max_w = (v - 0.16f) / 0.70f * 0.40f;
+            if (fabsf(u - 0.50f) <= max_w) {
+                if (fabsf(u - 0.50f) <= 0.05f && v >= 0.38f && v <= 0.62f) return false;
+                if ((u - 0.50f) * (u - 0.50f) + (v - 0.74f) * (v - 0.74f) <= 0.05f * 0.05f) return false;
+                return true;
+            }
+        }
+        return false;
+    }
+    case 0x2713:
+    case 0x2714: { /* ✓ Checkmark */
+        return dist_to_segment_sq(u, v, 0.18f, 0.54f, 0.40f, 0.76f) <= 0.07f * 0.07f ||
+               dist_to_segment_sq(u, v, 0.40f, 0.76f, 0.82f, 0.24f) <= 0.07f * 0.07f;
+    }
+    case 0x2715:
+    case 0x2716:
+    case 0x274C: { /* ✕ Cross */
+        return dist_to_segment_sq(u, v, 0.24f, 0.24f, 0.76f, 0.76f) <= 0.07f * 0.07f ||
+               dist_to_segment_sq(u, v, 0.76f, 0.24f, 0.24f, 0.76f) <= 0.07f * 0.07f;
+    }
+    case 0x23F0: { /* ⏰ Alarm Clock */
+        float d2 = (u - 0.50f) * (u - 0.50f) + (v - 0.54f) * (v - 0.54f);
+        if (d2 >= 0.30f * 0.30f && d2 <= 0.38f * 0.38f) return true;
+        if (d2 <= 0.06f * 0.06f) return true;
+        if (u >= 0.47f && u <= 0.53f && v >= 0.26f && v <= 0.54f) return true;
+        if (u >= 0.50f && u <= 0.68f && v >= 0.51f && v <= 0.57f) return true;
+        {
+            float db1 = (u - 0.26f) * (u - 0.26f) + (v - 0.26f) * (v - 0.26f);
+            if (db1 >= 0.04f * 0.04f && db1 <= 0.10f * 0.10f && u + v < 0.54f) return true;
+            float db2 = (u - 0.74f) * (u - 0.74f) + (v - 0.26f) * (v - 0.26f);
+            if (db2 >= 0.04f * 0.04f && db2 <= 0.10f * 0.10f && v - u < -0.20f) return true;
+        }
+        if ((u >= 0.24f && u <= 0.32f && v >= 0.84f && v <= 0.92f) ||
+            (u >= 0.68f && u <= 0.76f && v >= 0.84f && v <= 0.92f)) return true;
+        return false;
+    }
+    case 0x23F3:
+    case 0x231B: { /* ⏳ Hourglass */
+        if (v >= 0.16f && v <= 0.24f && u >= 0.22f && u <= 0.78f) return true;
+        if (v >= 0.76f && v <= 0.84f && u >= 0.22f && u <= 0.78f) return true;
+        if (v > 0.24f && v < 0.76f) {
+            float dy = fabsf(v - 0.50f) / 0.26f;
+            float max_w = 0.06f + dy * 0.22f;
+            if (fabsf(u - 0.50f) <= max_w) return true;
+        }
+        return false;
+    }
+    case 0x1F512:
+    case 0x1F513: { /* 🔒 / 🔓 Lock */
+        if (u >= 0.24f && u <= 0.76f && v >= 0.46f && v <= 0.86f) {
+            float dkh = (u - 0.50f) * (u - 0.50f) + (v - 0.62f) * (v - 0.62f);
+            if (dkh <= 0.07f * 0.07f || (u >= 0.47f && u <= 0.53f && v >= 0.62f && v <= 0.74f)) return false;
+            return true;
+        }
+        {
+            float scx = (codepoint == 0x1F512) ? 0.50f : 0.44f;
+            float dsh = (u - scx) * (u - scx) + (v - 0.36f) * (v - 0.36f);
+            if (dsh >= 0.12f * 0.12f && dsh <= 0.20f * 0.20f && v <= 0.48f) {
+                if (codepoint == 0x1F512) return true;
+                if (u <= 0.52f || v <= 0.36f) return true;
+            }
+        }
+        return false;
+    }
+    case 0x2B50:
+    case 0x1F31F: { /* ⭐ Star */
+        static const float STAR_PTS[10][2] = {
+            {0.5000f, 0.0500f}, {0.6176f, 0.3382f}, {0.9279f, 0.3610f}, {0.6882f, 0.5543f},
+            {0.7645f, 0.8640f}, {0.5000f, 0.7000f}, {0.2355f, 0.8640f}, {0.3118f, 0.5543f},
+            {0.0721f, 0.3610f}, {0.3824f, 0.3382f}
+        };
+        int crossings = 0;
+        for (int k = 0; k < 10; ++k) {
+            float x1 = STAR_PTS[k][0], y1 = STAR_PTS[k][1];
+            float x2 = STAR_PTS[(k + 1) % 10][0], y2 = STAR_PTS[(k + 1) % 10][1];
+            if (((y1 <= v && v < y2) || (y2 <= v && v < y1)) &&
+                (u < (x2 - x1) * (v - y1) / (y2 - y1) + x1)) {
+                ++crossings;
+            }
+        }
+        return (crossings & 1) != 0;
+    }
+    case 0x1F4C5: { /* 📅 Calendar */
+        if (u >= 0.18f && u <= 0.82f && v >= 0.24f && v <= 0.84f) {
+            if (v >= 0.40f && v <= 0.44f) return false;
+            if (v > 0.44f) {
+                if (((u >= 0.32f && u <= 0.40f) || (u >= 0.46f && u <= 0.54f) || (u >= 0.60f && u <= 0.68f)) &&
+                    ((v >= 0.52f && v <= 0.60f) || (v >= 0.68f && v <= 0.76f))) return false;
+            }
+            return true;
+        }
+        if ((u >= 0.30f && u <= 0.38f && v >= 0.16f && v <= 0.26f) ||
+            (u >= 0.62f && u <= 0.70f && v >= 0.16f && v <= 0.26f)) return true;
+        return false;
+    }
+    case 0x1F4A1: { /* 💡 Lightbulb */
+        float db = (u - 0.50f) * (u - 0.50f) + (v - 0.42f) * (v - 0.42f);
+        if (db <= 0.30f * 0.30f) return true;
+        if (u >= 0.32f && u <= 0.68f && v >= 0.42f && v <= 0.68f &&
+            fabsf(u - 0.50f) <= (0.30f - (v - 0.42f) * 0.46f)) return true;
+        if (u >= 0.38f && u <= 0.62f && v >= 0.70f && v <= 0.84f && !(v >= 0.76f && v <= 0.78f)) return true;
+        return false;
+    }
+    case 0x1F525: { /* 🔥 Fire */
+        float df = (u - 0.50f) * (u - 0.50f) + (v - 0.66f) * (v - 0.66f);
+        bool in_f = false;
+        if (df <= 0.32f * 0.32f) {
+            in_f = true;
+        } else if (u >= 0.30f && u <= 0.70f && v >= 0.20f && v <= 0.66f) {
+            float dy = (v - 0.20f) / 0.46f;
+            if (fabsf(u - (0.50f + 0.08f * (1.0f - dy))) <= dy * 0.28f) in_f = true;
+        }
+        if (in_f) {
+            float df2 = (u - 0.50f) * (u - 0.50f) + (v - 0.70f) * (v - 0.70f);
+            if (df2 <= 0.14f * 0.14f) return false;
+            if (u >= 0.42f && u <= 0.58f && v >= 0.44f && v <= 0.70f) {
+                float dy2 = (v - 0.44f) / 0.26f;
+                if (fabsf(u - 0.50f) <= dy2 * 0.10f) return false;
+            }
+            return true;
+        }
+        return false;
+    }
+    default:
+        return false;
+    }
+}
+
+static uint8_t *ui_render_builtin_emoji(uint32_t codepoint, int size, bool bold,
+                                        int *out_w, int *out_h, int *out_bearing_x,
+                                        int *out_bearing_y, int *out_advance)
+{
+    int extra = bold ? 1 : 0;
+    int w = size + extra;
+    int h = size;
+    uint8_t *copy = (uint8_t *)malloc((size_t)w * h);
+    if (!copy) {
+        return NULL;
+    }
+    float s = (float)size;
+    for (int y = 0; y < size; ++y) {
+        uint8_t *line = copy + (size_t)y * w;
+        for (int x = 0; x < size; ++x) {
+            int cov = 0;
+            for (int sy = 0; sy < 3; ++sy) {
+                float v = ((float)y + ((float)sy + 0.5f) / 3.0f) / s;
+                for (int sx = 0; sx < 3; ++sx) {
+                    float u = ((float)x + ((float)sx + 0.5f) / 3.0f) / s;
+                    if (is_inside_emoji_shape(codepoint, u, v)) {
+                        ++cov;
+                    }
+                }
+            }
+            line[x] = (uint8_t)((cov * 255 + 4) / 9);
+        }
+        if (bold) {
+            line[size] = line[size - 1];
+            for (int x = size - 1; x > 0; --x) {
+                if (line[x - 1] > line[x]) {
+                    line[x] = line[x - 1];
+                }
+            }
+        }
+    }
+    *out_w = w;
+    *out_h = h;
+    *out_bearing_x = 0;
+    *out_bearing_y = (size * 7 + 4) / 8;
+    *out_advance = size + extra;
+    return copy;
+}
+
 static bool set_font_size(int size)
 {
-    if (!g_ui.font_ready || size <= 0) {
+    if (size <= 0) {
         return false;
     }
     if (size == g_font_pixel_size) {
         return true;
     }
-    if (FT_Set_Pixel_Sizes(g_ui.face, 0, (FT_UInt)size) != 0) {
-        return false;
+    if (g_ui.font_ready) {
+        if (FT_Set_Pixel_Sizes(g_ui.face, 0, (FT_UInt)size) != 0) {
+            return false;
+        }
     }
     g_font_pixel_size = size;
     return true;
@@ -874,7 +1146,38 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
         slot = ui_glyph_hash(codepoint, size_key);
         entry = &g_glyph_cache[slot];
     }
-    if (FT_Load_Char(g_ui.face, codepoint, FT_LOAD_RENDER) != 0) {
+    /* 变体选择符（VS16/VS15）直接消费为 0 宽占位项，消除豆腐块。 */
+    if (codepoint == 0xFE0F || codepoint == 0xFE0E) {
+        entry->codepoint = codepoint;
+        entry->size = size_key;
+        entry->bearing_x = 0;
+        entry->bearing_y = 0;
+        entry->advance = 0;
+        entry->width = 0;
+        entry->height = 0;
+        entry->bitmap = NULL;
+        ++g_glyph_cache_count;
+        return entry;
+    }
+    /* 预置常用 Emoji 矢量回退：不依赖外部字体文件，自适应主题着色。 */
+    if (is_builtin_emoji(codepoint)) {
+        int em_w = 0, em_h = 0, em_bx = 0, em_by = 0, em_adv = 0;
+        uint8_t *em_bmp = ui_render_builtin_emoji(codepoint, size, bold,
+                                                  &em_w, &em_h, &em_bx, &em_by, &em_adv);
+        if (em_bmp) {
+            entry->codepoint = codepoint;
+            entry->size = size_key;
+            entry->bearing_x = (int16_t)em_bx;
+            entry->bearing_y = (int16_t)em_by;
+            entry->advance = (int16_t)em_adv;
+            entry->width = (uint16_t)em_w;
+            entry->height = (uint16_t)em_h;
+            entry->bitmap = em_bmp;
+            ++g_glyph_cache_count;
+            return entry;
+        }
+    }
+    if (!g_ui.font_ready || FT_Load_Char(g_ui.face, codepoint, FT_LOAD_RENDER) != 0) {
         return NULL;
     }
     {
@@ -1419,8 +1722,9 @@ int draw_wrapped_text(
             const char *next = end;
             uint32_t codepoint = ui_decode_utf8(&next);
             int advance = 0;
-            if (set_font_size(size) && FT_Load_Char(g_ui.face, codepoint, FT_LOAD_DEFAULT) == 0) {
-                advance = (int)(g_ui.face->glyph->advance.x >> 6);
+            const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, false);
+            if (entry) {
+                advance = (int)entry->advance;
             }
             if (end > cursor && width + advance > max_width) break;
             width += advance;
