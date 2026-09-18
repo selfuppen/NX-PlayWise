@@ -809,6 +809,7 @@ typedef struct {
     int16_t advance;
     uint16_t width;
     uint16_t height;
+    bool is_color;
     uint8_t *bitmap;
 } UiGlyphEntry;
 
@@ -833,6 +834,8 @@ void ui_glyph_cache_clear(void)
         free(g_glyph_cache[i].bitmap);
         g_glyph_cache[i].bitmap = NULL;
         g_glyph_cache[i].codepoint = 0;
+        g_glyph_cache[i].size = 0;
+        g_glyph_cache[i].is_color = false;
     }
     g_glyph_cache_count = 0;
 }
@@ -877,37 +880,64 @@ static float dist_to_segment_sq(float px, float py, float x1, float y1, float x2
     return (px - qx) * (px - qx) + (py - qy) * (py - qy);
 }
 
-static bool is_inside_emoji_shape(uint32_t codepoint, float u, float v)
+static bool sample_emoji_color(uint32_t codepoint, float u, float v, uint32_t *out_rgb)
 {
     switch (codepoint) {
     case 0x1F319: { /* 🌙 Crescent Moon */
         float dx_out = u - 0.48f, dy_out = v - 0.50f;
         float dx_in  = u - 0.64f, dy_in  = v - 0.38f;
-        return (dx_out * dx_out + dy_out * dy_out <= 0.42f * 0.42f) &&
-               (dx_in * dx_in + dy_in * dy_in >= 0.36f * 0.36f);
+        if ((dx_out * dx_out + dy_out * dy_out <= 0.42f * 0.42f) &&
+            (dx_in * dx_in + dy_in * dy_in >= 0.36f * 0.36f)) {
+            float d2 = dx_out * dx_out + dy_out * dy_out;
+            *out_rgb = (d2 > 0.38f * 0.38f) ? 0xF59E0Bu : 0xF6C338u;
+            return true;
+        }
+        return false;
     }
     case 0x1F381: { /* 🎁 Wrapped Present */
-        if (u >= 0.22f && u <= 0.78f && v >= 0.46f && v <= 0.88f) {
-            if (!((u >= 0.46f && u <= 0.54f) || (v >= 0.63f && v <= 0.69f))) return true;
+        float d1 = (u - 0.36f) * (u - 0.36f) + (v - 0.21f) * (v - 0.21f);
+        if (d1 >= 0.05f * 0.05f && d1 <= 0.13f * 0.13f && v <= 0.30f) {
+            *out_rgb = 0xF5C518u;
+            return true;
+        }
+        float d2 = (u - 0.64f) * (u - 0.64f) + (v - 0.21f) * (v - 0.21f);
+        if (d2 >= 0.05f * 0.05f && d2 <= 0.13f * 0.13f && v <= 0.30f) {
+            *out_rgb = 0xF5C518u;
+            return true;
+        }
+        float dk = (u - 0.50f) * (u - 0.50f) + (v - 0.27f) * (v - 0.27f);
+        if (dk <= 0.06f * 0.06f) {
+            *out_rgb = 0xF5C518u;
+            return true;
         }
         if (u >= 0.16f && u <= 0.84f && v >= 0.30f && v <= 0.42f) {
-            if (!(u >= 0.46f && u <= 0.54f)) return true;
+            *out_rgb = (u >= 0.45f && u <= 0.55f) ? 0xF5C518u : 0xDE3535u;
+            return true;
         }
-        {
-            float d1 = (u - 0.36f) * (u - 0.36f) + (v - 0.21f) * (v - 0.21f);
-            if (d1 >= 0.05f * 0.05f && d1 <= 0.13f * 0.13f && v <= 0.30f) return true;
-            float d2 = (u - 0.64f) * (u - 0.64f) + (v - 0.21f) * (v - 0.21f);
-            if (d2 >= 0.05f * 0.05f && d2 <= 0.13f * 0.13f && v <= 0.30f) return true;
-            float dk = (u - 0.50f) * (u - 0.50f) + (v - 0.27f) * (v - 0.27f);
-            if (dk <= 0.06f * 0.06f) return true;
+        if (u >= 0.22f && u <= 0.78f && v >= 0.44f && v <= 0.88f) {
+            if ((u >= 0.45f && u <= 0.55f) || (v >= 0.61f && v <= 0.71f)) {
+                *out_rgb = 0xF5C518u;
+            } else {
+                *out_rgb = 0xE83E48u;
+            }
+            return true;
         }
         return false;
     }
     case 0x1F3AF: { /* 🎯 Target */
         float d2 = (u - 0.50f) * (u - 0.50f) + (v - 0.50f) * (v - 0.50f);
-        if (d2 <= 0.12f * 0.12f) return true;
-        if (d2 >= 0.22f * 0.22f && d2 <= 0.30f * 0.30f) return true;
-        if (d2 >= 0.40f * 0.40f && d2 <= 0.48f * 0.48f) return true;
+        if (d2 <= 0.12f * 0.12f) {
+            *out_rgb = 0xDE3535u;
+            return true;
+        }
+        if (d2 >= 0.22f * 0.22f && d2 <= 0.30f * 0.30f) {
+            *out_rgb = 0xFFFFFFu;
+            return true;
+        }
+        if (d2 >= 0.40f * 0.40f && d2 <= 0.48f * 0.48f) {
+            *out_rgb = 0xDE3535u;
+            return true;
+        }
         return false;
     }
     case 0x1F6E1: { /* 🛡️ Shield */
@@ -923,9 +953,11 @@ static bool is_inside_emoji_shape(uint32_t codepoint, float u, float v)
                     if (fabsf(u - 0.50f) <= max_dx) in_shield = true;
                 }
                 if (in_shield) {
-                    if ((u >= 0.47f && u <= 0.53f && v >= 0.24f && v <= 0.74f) ||
-                        (u >= 0.28f && u <= 0.72f && v >= 0.38f && v <= 0.44f)) {
-                        return false;
+                    if ((u >= 0.46f && u <= 0.54f && v >= 0.22f && v <= 0.76f) ||
+                        (u >= 0.26f && u <= 0.74f && v >= 0.37f && v <= 0.45f)) {
+                        *out_rgb = 0xF5C518u;
+                    } else {
+                        *out_rgb = 0x3B82F6u;
                     }
                     return true;
                 }
@@ -937,8 +969,15 @@ static bool is_inside_emoji_shape(uint32_t codepoint, float u, float v)
         if (v >= 0.16f && v <= 0.86f) {
             float max_w = (v - 0.16f) / 0.70f * 0.40f;
             if (fabsf(u - 0.50f) <= max_w) {
-                if (fabsf(u - 0.50f) <= 0.05f && v >= 0.38f && v <= 0.62f) return false;
-                if ((u - 0.50f) * (u - 0.50f) + (v - 0.74f) * (v - 0.74f) <= 0.05f * 0.05f) return false;
+                if (fabsf(u - 0.50f) <= 0.05f && v >= 0.38f && v <= 0.62f) {
+                    *out_rgb = 0x18181Bu;
+                    return true;
+                }
+                if ((u - 0.50f) * (u - 0.50f) + (v - 0.74f) * (v - 0.74f) <= 0.05f * 0.05f) {
+                    *out_rgb = 0x18181Bu;
+                    return true;
+                }
+                *out_rgb = 0xF59E0Bu;
                 return true;
             }
         }
@@ -946,56 +985,95 @@ static bool is_inside_emoji_shape(uint32_t codepoint, float u, float v)
     }
     case 0x2713:
     case 0x2714: { /* ✓ Checkmark */
-        return dist_to_segment_sq(u, v, 0.18f, 0.54f, 0.40f, 0.76f) <= 0.07f * 0.07f ||
-               dist_to_segment_sq(u, v, 0.40f, 0.76f, 0.82f, 0.24f) <= 0.07f * 0.07f;
+        if (dist_to_segment_sq(u, v, 0.18f, 0.54f, 0.40f, 0.76f) <= 0.07f * 0.07f ||
+            dist_to_segment_sq(u, v, 0.40f, 0.76f, 0.82f, 0.24f) <= 0.07f * 0.07f) {
+            *out_rgb = 0x10B981u;
+            return true;
+        }
+        return false;
     }
     case 0x2715:
     case 0x2716:
     case 0x274C: { /* ✕ Cross */
-        return dist_to_segment_sq(u, v, 0.24f, 0.24f, 0.76f, 0.76f) <= 0.07f * 0.07f ||
-               dist_to_segment_sq(u, v, 0.76f, 0.24f, 0.24f, 0.76f) <= 0.07f * 0.07f;
+        if (dist_to_segment_sq(u, v, 0.24f, 0.24f, 0.76f, 0.76f) <= 0.07f * 0.07f ||
+            dist_to_segment_sq(u, v, 0.76f, 0.24f, 0.24f, 0.76f) <= 0.07f * 0.07f) {
+            *out_rgb = 0xEF4444u;
+            return true;
+        }
+        return false;
     }
     case 0x23F0: { /* ⏰ Alarm Clock */
         float d2 = (u - 0.50f) * (u - 0.50f) + (v - 0.54f) * (v - 0.54f);
-        if (d2 >= 0.30f * 0.30f && d2 <= 0.38f * 0.38f) return true;
-        if (d2 <= 0.06f * 0.06f) return true;
-        if (u >= 0.47f && u <= 0.53f && v >= 0.26f && v <= 0.54f) return true;
-        if (u >= 0.50f && u <= 0.68f && v >= 0.51f && v <= 0.57f) return true;
-        {
-            float db1 = (u - 0.26f) * (u - 0.26f) + (v - 0.26f) * (v - 0.26f);
-            if (db1 >= 0.04f * 0.04f && db1 <= 0.10f * 0.10f && u + v < 0.54f) return true;
-            float db2 = (u - 0.74f) * (u - 0.74f) + (v - 0.26f) * (v - 0.26f);
-            if (db2 >= 0.04f * 0.04f && db2 <= 0.10f * 0.10f && v - u < -0.20f) return true;
+        float db1 = (u - 0.26f) * (u - 0.26f) + (v - 0.26f) * (v - 0.26f);
+        if (db1 >= 0.04f * 0.04f && db1 <= 0.10f * 0.10f && u + v < 0.54f) {
+            *out_rgb = 0xEF4444u;
+            return true;
+        }
+        float db2 = (u - 0.74f) * (u - 0.74f) + (v - 0.26f) * (v - 0.26f);
+        if (db2 >= 0.04f * 0.04f && db2 <= 0.10f * 0.10f && v - u < -0.20f) {
+            *out_rgb = 0xEF4444u;
+            return true;
         }
         if ((u >= 0.24f && u <= 0.32f && v >= 0.84f && v <= 0.92f) ||
-            (u >= 0.68f && u <= 0.76f && v >= 0.84f && v <= 0.92f)) return true;
+            (u >= 0.68f && u <= 0.76f && v >= 0.84f && v <= 0.92f)) {
+            *out_rgb = 0x64748Bu;
+            return true;
+        }
+        if (d2 >= 0.30f * 0.30f && d2 <= 0.38f * 0.38f) {
+            *out_rgb = 0xEF4444u;
+            return true;
+        }
+        if (d2 < 0.30f * 0.30f) {
+            if (d2 <= 0.06f * 0.06f ||
+                (u >= 0.47f && u <= 0.53f && v >= 0.26f && v <= 0.54f) ||
+                (u >= 0.50f && u <= 0.68f && v >= 0.51f && v <= 0.57f)) {
+                *out_rgb = 0x1F2937u;
+            } else {
+                *out_rgb = 0xFFFFFFu;
+            }
+            return true;
+        }
         return false;
     }
     case 0x23F3:
     case 0x231B: { /* ⏳ Hourglass */
-        if (v >= 0.16f && v <= 0.24f && u >= 0.22f && u <= 0.78f) return true;
-        if (v >= 0.76f && v <= 0.84f && u >= 0.22f && u <= 0.78f) return true;
+        if ((v >= 0.16f && v <= 0.24f && u >= 0.22f && u <= 0.78f) ||
+            (v >= 0.76f && v <= 0.84f && u >= 0.22f && u <= 0.78f)) {
+            *out_rgb = 0x854D0Eu;
+            return true;
+        }
         if (v > 0.24f && v < 0.76f) {
             float dy = fabsf(v - 0.50f) / 0.26f;
             float max_w = 0.06f + dy * 0.22f;
-            if (fabsf(u - 0.50f) <= max_w) return true;
+            if (fabsf(u - 0.50f) <= max_w) {
+                if (v >= 0.58f || (v <= 0.38f && fabsf(u - 0.50f) <= max_w * 0.7f)) {
+                    *out_rgb = 0xF59E0Bu;
+                } else {
+                    *out_rgb = 0xBAE6FDu;
+                }
+                return true;
+            }
         }
         return false;
     }
     case 0x1F512:
     case 0x1F513: { /* 🔒 / 🔓 Lock */
+        float scx = (codepoint == 0x1F512) ? 0.50f : 0.44f;
+        float dsh = (u - scx) * (u - scx) + (v - 0.36f) * (v - 0.36f);
+        if (dsh >= 0.12f * 0.12f && dsh <= 0.20f * 0.20f && v <= 0.48f) {
+            if (codepoint == 0x1F512 || u <= 0.52f || v <= 0.36f) {
+                *out_rgb = 0x94A3B8u;
+                return true;
+            }
+        }
         if (u >= 0.24f && u <= 0.76f && v >= 0.46f && v <= 0.86f) {
             float dkh = (u - 0.50f) * (u - 0.50f) + (v - 0.62f) * (v - 0.62f);
-            if (dkh <= 0.07f * 0.07f || (u >= 0.47f && u <= 0.53f && v >= 0.62f && v <= 0.74f)) return false;
-            return true;
-        }
-        {
-            float scx = (codepoint == 0x1F512) ? 0.50f : 0.44f;
-            float dsh = (u - scx) * (u - scx) + (v - 0.36f) * (v - 0.36f);
-            if (dsh >= 0.12f * 0.12f && dsh <= 0.20f * 0.20f && v <= 0.48f) {
-                if (codepoint == 0x1F512) return true;
-                if (u <= 0.52f || v <= 0.36f) return true;
+            if (dkh <= 0.07f * 0.07f || (u >= 0.47f && u <= 0.53f && v >= 0.62f && v <= 0.74f)) {
+                *out_rgb = 0x1E293Bu;
+            } else {
+                *out_rgb = 0xF59E0Bu;
             }
+            return true;
         }
         return false;
     }
@@ -1015,27 +1093,47 @@ static bool is_inside_emoji_shape(uint32_t codepoint, float u, float v)
                 ++crossings;
             }
         }
-        return (crossings & 1) != 0;
+        if ((crossings & 1) != 0) {
+            *out_rgb = 0xFBBF24u;
+            return true;
+        }
+        return false;
     }
     case 0x1F4C5: { /* 📅 Calendar */
+        if ((u >= 0.30f && u <= 0.38f && v >= 0.16f && v <= 0.26f) ||
+            (u >= 0.62f && u <= 0.70f && v >= 0.16f && v <= 0.26f)) {
+            *out_rgb = 0x94A3B8u;
+            return true;
+        }
         if (u >= 0.18f && u <= 0.82f && v >= 0.24f && v <= 0.84f) {
-            if (v >= 0.40f && v <= 0.44f) return false;
-            if (v > 0.44f) {
+            if (v <= 0.40f) {
+                *out_rgb = 0xDC2626u;
+            } else if (v >= 0.40f && v <= 0.44f) {
+                return false;
+            } else {
                 if (((u >= 0.32f && u <= 0.40f) || (u >= 0.46f && u <= 0.54f) || (u >= 0.60f && u <= 0.68f)) &&
-                    ((v >= 0.52f && v <= 0.60f) || (v >= 0.68f && v <= 0.76f))) return false;
+                    ((v >= 0.52f && v <= 0.60f) || (v >= 0.68f && v <= 0.76f))) {
+                    *out_rgb = 0x475569u;
+                } else {
+                    *out_rgb = 0xFFFFFFu;
+                }
             }
             return true;
         }
-        if ((u >= 0.30f && u <= 0.38f && v >= 0.16f && v <= 0.26f) ||
-            (u >= 0.62f && u <= 0.70f && v >= 0.16f && v <= 0.26f)) return true;
         return false;
     }
     case 0x1F4A1: { /* 💡 Lightbulb */
         float db = (u - 0.50f) * (u - 0.50f) + (v - 0.42f) * (v - 0.42f);
-        if (db <= 0.30f * 0.30f) return true;
-        if (u >= 0.32f && u <= 0.68f && v >= 0.42f && v <= 0.68f &&
-            fabsf(u - 0.50f) <= (0.30f - (v - 0.42f) * 0.46f)) return true;
-        if (u >= 0.38f && u <= 0.62f && v >= 0.70f && v <= 0.84f && !(v >= 0.76f && v <= 0.78f)) return true;
+        if (db <= 0.30f * 0.30f ||
+            (u >= 0.32f && u <= 0.68f && v >= 0.42f && v <= 0.68f &&
+             fabsf(u - 0.50f) <= (0.30f - (v - 0.42f) * 0.46f))) {
+            *out_rgb = 0xFACC15u;
+            return true;
+        }
+        if (u >= 0.38f && u <= 0.62f && v >= 0.70f && v <= 0.84f && !(v >= 0.76f && v <= 0.78f)) {
+            *out_rgb = 0x94A3B8u;
+            return true;
+        }
         return false;
     }
     case 0x1F525: { /* 🔥 Fire */
@@ -1049,10 +1147,12 @@ static bool is_inside_emoji_shape(uint32_t codepoint, float u, float v)
         }
         if (in_f) {
             float df2 = (u - 0.50f) * (u - 0.50f) + (v - 0.70f) * (v - 0.70f);
-            if (df2 <= 0.14f * 0.14f) return false;
-            if (u >= 0.42f && u <= 0.58f && v >= 0.44f && v <= 0.70f) {
-                float dy2 = (v - 0.44f) / 0.26f;
-                if (fabsf(u - 0.50f) <= dy2 * 0.10f) return false;
+            if (df2 <= 0.14f * 0.14f ||
+                (u >= 0.42f && u <= 0.58f && v >= 0.44f && v <= 0.70f &&
+                 fabsf(u - 0.50f) <= ((v - 0.44f) / 0.26f) * 0.10f)) {
+                *out_rgb = 0xFDE047u;
+            } else {
+                *out_rgb = 0xF97316u;
             }
             return true;
         }
@@ -1063,37 +1163,53 @@ static bool is_inside_emoji_shape(uint32_t codepoint, float u, float v)
     }
 }
 
-static uint8_t *ui_render_builtin_emoji(uint32_t codepoint, int size, bool bold,
-                                        int *out_w, int *out_h, int *out_bearing_x,
-                                        int *out_bearing_y, int *out_advance)
+static uint32_t *ui_render_builtin_emoji(uint32_t codepoint, int size, bool bold,
+                                         int *out_w, int *out_h, int *out_bearing_x,
+                                         int *out_bearing_y, int *out_advance)
 {
     int extra = bold ? 1 : 0;
     int w = size + extra;
     int h = size;
-    uint8_t *copy = (uint8_t *)malloc((size_t)w * h);
+    uint32_t *copy = (uint32_t *)malloc((size_t)w * h * sizeof(uint32_t));
     if (!copy) {
         return NULL;
     }
     float s = (float)size;
     for (int y = 0; y < size; ++y) {
-        uint8_t *line = copy + (size_t)y * w;
+        uint32_t *line = copy + (size_t)y * w;
         for (int x = 0; x < size; ++x) {
             int cov = 0;
+            int total_r = 0, total_g = 0, total_b = 0;
             for (int sy = 0; sy < 3; ++sy) {
                 float v = ((float)y + ((float)sy + 0.5f) / 3.0f) / s;
                 for (int sx = 0; sx < 3; ++sx) {
                     float u = ((float)x + ((float)sx + 0.5f) / 3.0f) / s;
-                    if (is_inside_emoji_shape(codepoint, u, v)) {
+                    uint32_t s_rgb = 0;
+                    if (sample_emoji_color(codepoint, u, v, &s_rgb)) {
                         ++cov;
+                        total_r += (int)((s_rgb >> 16) & 0xff);
+                        total_g += (int)((s_rgb >> 8) & 0xff);
+                        total_b += (int)(s_rgb & 0xff);
                     }
                 }
             }
-            line[x] = (uint8_t)((cov * 255 + 4) / 9);
+            if (cov > 0) {
+                int avg_r = total_r / cov;
+                int avg_g = total_g / cov;
+                int avg_b = total_b / cov;
+                uint8_t alpha = (uint8_t)((cov * 255 + 4) / 9);
+                uint32_t packed = pack_rgb(((uint32_t)avg_r << 16) | ((uint32_t)avg_g << 8) | (uint32_t)avg_b);
+                line[x] = (packed & 0x00ffffffu) | ((uint32_t)alpha << 24);
+            } else {
+                line[x] = 0;
+            }
         }
         if (bold) {
             line[size] = line[size - 1];
             for (int x = size - 1; x > 0; --x) {
-                if (line[x - 1] > line[x]) {
+                uint8_t a_cur = (uint8_t)(line[x] >> 24);
+                uint8_t a_prev = (uint8_t)(line[x - 1] >> 24);
+                if (a_prev > a_cur) {
                     line[x] = line[x - 1];
                 }
             }
@@ -1155,15 +1271,16 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
         entry->advance = 0;
         entry->width = 0;
         entry->height = 0;
+        entry->is_color = false;
         entry->bitmap = NULL;
         ++g_glyph_cache_count;
         return entry;
     }
-    /* 预置常用 Emoji 矢量回退：不依赖外部字体文件，自适应主题着色。 */
+    /* 预置常用 Emoji 矢量回退：自带丰富固定色彩。 */
     if (is_builtin_emoji(codepoint)) {
         int em_w = 0, em_h = 0, em_bx = 0, em_by = 0, em_adv = 0;
-        uint8_t *em_bmp = ui_render_builtin_emoji(codepoint, size, bold,
-                                                  &em_w, &em_h, &em_bx, &em_by, &em_adv);
+        uint32_t *em_bmp = ui_render_builtin_emoji(codepoint, size, bold,
+                                                   &em_w, &em_h, &em_bx, &em_by, &em_adv);
         if (em_bmp) {
             entry->codepoint = codepoint;
             entry->size = size_key;
@@ -1172,7 +1289,8 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
             entry->advance = (int16_t)em_adv;
             entry->width = (uint16_t)em_w;
             entry->height = (uint16_t)em_h;
-            entry->bitmap = em_bmp;
+            entry->is_color = true;
+            entry->bitmap = (uint8_t *)em_bmp;
             ++g_glyph_cache_count;
             return entry;
         }
@@ -1220,6 +1338,7 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
             entry->advance = (int16_t)(glyph->advance.x >> 6);
             entry->width = 0;
             entry->height = 0;
+            entry->is_color = false;
             entry->bitmap = NULL;
             ++g_glyph_cache_count;
             return entry;
@@ -1229,6 +1348,7 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
         entry->advance = (int16_t)(glyph->advance.x >> 6);
         entry->width = (uint16_t)((int)glyph->bitmap.width + extra);
         entry->height = (uint16_t)glyph->bitmap.rows;
+        entry->is_color = false;
         entry->bitmap = copy;
         ++g_glyph_cache_count;
         return entry;
@@ -1267,18 +1387,38 @@ static void draw_text_impl(uint32_t *pixels, uint32_t stride, int x, int baselin
         if (!entry) {
             continue;
         }
-        for (row = 0; row < entry->height; ++row) {
-            const uint8_t *line = entry->bitmap + (size_t)row * entry->width;
-            int column;
-            for (column = 0; column < entry->width; ++column) {
-                if (line[column]) {
-                    blend_pixel(
-                        pixels,
-                        stride,
-                        pen_x + entry->bearing_x + column,
-                        baseline - entry->bearing_y + row,
-                        resolved,
-                        line[column]);
+        if (entry->is_color) {
+            const uint32_t *src_pixels = (const uint32_t *)entry->bitmap;
+            for (row = 0; row < entry->height; ++row) {
+                int column;
+                for (column = 0; column < entry->width; ++column) {
+                    uint32_t px = src_pixels[(size_t)row * entry->width + column];
+                    uint8_t a = (uint8_t)(px >> 24);
+                    if (a > 0) {
+                        blend_pixel(
+                            pixels,
+                            stride,
+                            pen_x + entry->bearing_x + column,
+                            baseline - entry->bearing_y + row,
+                            px & 0x00FFFFFFu,
+                            a);
+                    }
+                }
+            }
+        } else {
+            for (row = 0; row < entry->height; ++row) {
+                const uint8_t *line = entry->bitmap + (size_t)row * entry->width;
+                int column;
+                for (column = 0; column < entry->width; ++column) {
+                    if (line[column]) {
+                        blend_pixel(
+                            pixels,
+                            stride,
+                            pen_x + entry->bearing_x + column,
+                            baseline - entry->bearing_y + row,
+                            resolved,
+                            line[column]);
+                    }
                 }
             }
         }

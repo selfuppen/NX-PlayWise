@@ -86,6 +86,21 @@ static int check_primitives(void)
             }
         }
         if (blended_pixels < 30) ++failed;
+        /* Verify multi-color emoji pixels retain distinct chromatic components (not monochrome) */
+        int has_gold = 0, has_blue = 0;
+        for (int py = 0; py < 50; ++py) {
+            for (int px = 0; px < 100; ++px) {
+                uint32_t p = preview_pixels[py * 1280 + px];
+                if (p != background) {
+                    uint8_t r = p & 0xff;
+                    uint8_t g = (p >> 8) & 0xff;
+                    uint8_t b = (p >> 16) & 0xff;
+                    if (r > 180 && g > 140 && b < 100) has_gold = 1;
+                    if (b > 160 && r < 120) has_blue = 1;
+                }
+            }
+        }
+        if (!has_gold || !has_blue) ++failed;
     }
     printf("%s: UI primitive coverage, symmetry, strokes and clipping\n", failed ? "FAIL" : "PASS");
     return failed ? 1 : 0;
