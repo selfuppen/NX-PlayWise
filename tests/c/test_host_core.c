@@ -2116,6 +2116,20 @@ static void test_daily_enforce_does_not_start_play_timer(void)
     check_int((long)pctl.start_timer_calls, 0,
         "unchanged today rule never activates the timer");
 
+    /* Drifted or reset PCTL status (e.g. emulator restart or external reset) must be re-enforced */
+    pctl.status.unrestricted_today = true;
+    pctl.status.limited_today = false;
+    pctl.status.configured_minutes = 0;
+    pctl.status.remaining_available = false;
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 1,
+        "drifted PCTL status triggers re-synchronization even on same day");
+    check_int((long)pctl.apply_target_calls, 2,
+        "drifted PCTL status writes target again");
+    check_true(pctl.status.limited_today && pctl.status.configured_minutes == 60,
+        "PCTL status is restored to today configured limit");
+    check_int(ptc_sysmodule_enforce_tick(&sysmodule), 0,
+        "restored PCTL status needs no further synchronization");
+
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
         "app/inbox/pending/future-weekly.json",
         "{\"version\":1,\"request_id\":\"future-weekly\",\"type\":\"set_weekly_template\","

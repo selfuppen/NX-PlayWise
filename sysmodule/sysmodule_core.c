@@ -82,7 +82,11 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         runtime_state.last_enforced_minutes == target_minutes &&
         runtime_state.bedtime_enforced == bedtime_should_enforce &&
         (!bedtime_should_enforce || runtime_state.bedtime_window_instance_id == bedtime.window_instance_id)) {
-        return 0;
+        if (sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+                ptc_weekday_from_day_index(now.day_index), &observed_status) != PTC_ERR_OK ||
+            target_settings_observed(target_mode, target_minutes, &observed_status)) {
+            return 0;
+        }
     }
     if (bedtime_should_enforce && !runtime_state.bedtime_enforced) {
         PtcPctlSettingsSnapshot bedtime_snapshot;
