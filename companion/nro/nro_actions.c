@@ -510,6 +510,9 @@ void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_SAVE_HOLIDAY:
         submit_holiday_policy(ui);
         break;
+    case PTC_UI_OPERATION_SAVE_BEDTIME:
+        submit_bedtime_policy(ui);
+        break;
     case PTC_UI_OPERATION_DISABLE_TODAY_LIMIT:
         submit_transport_empty(ui, "disable_today_limit", "正在解除当前限制...", "解除当前限制失败");
         break;
@@ -743,6 +746,7 @@ void apply_pending_navigation(UiState *ui)
             ui->model.selected_index = previous == PTC_UI_PLAN_PAGE_WEEKLY ? 2 :
             (previous == PTC_UI_PLAN_PAGE_HOLIDAY ? 1 : 3);
         ui->model.parent_footer_focused = false;
+        submit_status(ui);
     } else if (ui->pending_leave_parent) {
         ui->model.view = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
             ? PTC_UI_SETUP : PTC_UI_CHILD;
@@ -823,6 +827,25 @@ void save_bedtime_from_page(UiState *ui)
         submit_bedtime_confirmation(ui);
         return;
     }
+    {
+        time_t raw_now = time(NULL);
+        struct tm *tm_now = localtime(&raw_now);
+        uint16_t minute_of_day = tm_now ? (uint16_t)(tm_now->tm_hour * 60 + tm_now->tm_min) : 0;
+        PtcRules eval_rules;
+        memset(&eval_rules, 0, sizeof(eval_rules));
+        eval_rules.bedtime = *draft;
+        PtcBedtimeEvaluation eval = ptc_bedtime_evaluate(
+            &eval_rules, ui->model.day_index, ptc_weekday_from_day_index(ui->model.day_index), minute_of_day);
+        bool will_restrict_now = draft->enabled && eval.active &&
+            !(ui->model.bedtime_active && !ui->model.bedtime_skipped);
+        if (will_restrict_now) {
+            open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_BEDTIME,
+                "立即进入就寝限制？",
+                "当前时间处于设定的就寝时段内。保存后将立即暂停游戏并限制游玩（立断）。\n是否确认立即生效？");
+            ui->model.confirm_hold_required = false;
+            return;
+        }
+    }
     submit_bedtime_policy(ui);
 }
 
@@ -840,12 +863,13 @@ void select_bedtime_section(UiState *ui, int section)
 void open_bedtime_window_editor(UiState *ui, int weekday)
 {
     if (!ui || weekday < 0 || weekday >= 7) return;
+    static const char *WEEKDAY_NAMES[] = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
     ui->model.bedtime_editor_day = weekday;
     ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
     ui->model.overlay_selection = 0;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "编辑每周就寝窗口");
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s就寝时间窗口", WEEKDAY_NAMES[weekday]);
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-        "选择开始或结束时间后打开双栏编辑器，可精调、长推加速或直接输入。");
+        "设定当晚至次日清晨的禁玩时段（必须跨越午夜）；到达开始时间立即强制暂停软件。");
 }
 
 void open_bedtime_special_editor(UiState *ui, int kind)

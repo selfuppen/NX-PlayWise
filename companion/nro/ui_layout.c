@@ -157,6 +157,10 @@ void ptc_ui_format_home_remaining(const PtcUiModel *model, int64_t now, char *ou
     if (!model || !model->status_loaded) snprintf(out, out_size, "等待刷新");
     else if (!ptc_ui_status_is_fresh(model, now))
         snprintf(out, out_size, "状态待确认");
+    else if (model->bedtime_active && !model->bedtime_skipped)
+        snprintf(out, out_size, "就寝限制中");
+    else if (model->blocked_today == 1 || model->restricted_now == 1)
+        snprintf(out, out_size, "禁止游玩");
     else ptc_ui_format_quota_remaining(model, out, out_size);
 }
 

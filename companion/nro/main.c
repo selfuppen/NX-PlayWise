@@ -457,7 +457,7 @@ int main(int argc, char **argv)
                     ptc_ui_move_bedtime_focus(&ui.model, -1, 0);
                 } else if (down & HidNpadButton_Right) {
                     ptc_ui_move_bedtime_focus(&ui.model, 1, 0);
-                } else if (down & HidNpadButton_Y) {
+                } else if (down & HidNpadButton_Minus) {
                     if (!ui.model.disable_flag_present) {
                         draft->enabled = !draft->enabled;
                         update_bedtime_dirty(&ui);

@@ -40,6 +40,26 @@ void handle_overlay_input(UiState *ui, u64 down)
         } else if ((down & HidNpadButton_A) && ui->model.overlay_selection >= 1) {
             open_bedtime_time_editor(ui, ui->model.overlay_selection == 1
                 ? PTC_UI_BEDTIME_TIME_START : PTC_UI_BEDTIME_TIME_END);
+        } else if (down & HidNpadButton_Y) {
+            static const struct { uint16_t start; uint16_t end; } PRESETS[] = {
+                {21 * 60, 7 * 60},
+                {21 * 60 + 30, 7 * 60},
+                {22 * 60, 7 * 60},
+                {22 * 60 + 30, 7 * 60 + 30},
+                {23 * 60, 8 * 60}
+            };
+            int cur_p = -1;
+            for (int p = 0; p < 5; ++p) {
+                if (window->start_minute == PRESETS[p].start && window->end_minute == PRESETS[p].end) {
+                    cur_p = p;
+                    break;
+                }
+            }
+            int next_p = (cur_p + 1) % 5;
+            window->start_minute = PRESETS[next_p].start;
+            window->end_minute = PRESETS[next_p].end;
+            window->enabled = true;
+            update_bedtime_dirty(ui);
         } else if (down & HidNpadButton_Plus) {
             ptc_ui_cancel_overlay(&ui->model);
         }
@@ -64,6 +84,27 @@ void handle_overlay_input(UiState *ui, u64 down)
         } else if ((down & HidNpadButton_A) && ui->model.overlay_selection >= 1) {
             open_bedtime_time_editor(ui, ui->model.overlay_selection == 1
                 ? PTC_UI_BEDTIME_TIME_START : PTC_UI_BEDTIME_TIME_END);
+        } else if (down & HidNpadButton_Y) {
+            static const struct { uint16_t start; uint16_t end; } PRESETS[] = {
+                {21 * 60, 7 * 60},
+                {21 * 60 + 30, 7 * 60},
+                {22 * 60, 7 * 60},
+                {22 * 60 + 30, 7 * 60 + 30},
+                {23 * 60, 8 * 60}
+            };
+            int cur_p = -1;
+            for (int p = 0; p < 5; ++p) {
+                if (rule->window.start_minute == PRESETS[p].start && rule->window.end_minute == PRESETS[p].end) {
+                    cur_p = p;
+                    break;
+                }
+            }
+            int next_p = (cur_p + 1) % 5;
+            rule->mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+            rule->window.start_minute = PRESETS[next_p].start;
+            rule->window.end_minute = PRESETS[next_p].end;
+            rule->window.enabled = true;
+            update_bedtime_dirty(ui);
         } else if (down & HidNpadButton_Plus) {
             ptc_ui_cancel_overlay(&ui->model);
         }

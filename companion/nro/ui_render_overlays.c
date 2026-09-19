@@ -469,9 +469,22 @@ static void draw_autonomy_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
 {
     UiRect dialog;
     static const uint16_t OPTIONS[] = {0, 5, 10, 15};
+    static const char *SUBTITLES[] = {"不开放缓冲", "快速存盘", "收尾推荐", "充裕退出"};
     int index;
     char label[48];
     draw_dialog_shell(pixels, stride, model, &dialog, 760, 420);
+
+    /* 详细用途与机制说明 */
+    draw_text(pixels, stride, dialog.x + 48, dialog.y + 88,
+        "用途说明：在额度耗尽时允许孩子自主启用缓冲用于存盘收尾，避免强退丢失进度。",
+        14, UI_INK);
+    draw_text(pixels, stride, dialog.x + 48, dialog.y + 112,
+        "规则机制：每天限领 1 次（00:00 重置）；仅在限额日可用；无需输入加时码。",
+        14, UI_MUTED);
+    draw_text(pixels, stride, dialog.x + 48, dialog.y + 136,
+        "推荐设置：建议 5 到 15 分钟；既能从容存盘，又保持健康作息规律。",
+        14, UI_ACCENT);
+
     for (index = 0; index < 4; ++index) {
         UiRect option = to_uirect(ptc_ui_autonomy_option_rect(index));
         bool selected = model->draft_autonomy_policy.daily_buffer_minutes == OPTIONS[index];
@@ -482,12 +495,23 @@ static void draw_autonomy_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
         }
         fill_round_rect(pixels, stride, option, 12, selected ? UI_SUCCESS_SOFT : UI_RAISED);
         draw_rect_outline(pixels, stride, option, 12, selected ? 2 : 1, selected ? UI_SUCCESS : UI_BORDER);
-        draw_text_center(pixels, stride, option, label, 21,
-            selected ? UI_SUCCESS : UI_INK);
+        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 12, option.width, 32},
+                         label, 20, selected ? UI_SUCCESS : UI_INK);
+        draw_text_center(pixels, stride, (UiRect){option.x, option.y + 46, option.width, 24},
+                         SUBTITLES[index], 13, selected ? UI_SUCCESS : UI_MUTED);
     }
-    draw_text(pixels, stride, dialog.x + 48, dialog.y + 284,
-        "孩子每天仅可领取一次，只在限时日可用；失败不会消耗领取资格。",
-        16, UI_MUTED);
+
+    /* 底部保障与生效提示卡片 */
+    UiRect tip_box = {dialog.x + 48, dialog.y + 270, dialog.width - 96, 56};
+    fill_round_rect(pixels, stride, tip_box, 8, UI_PAGE);
+    draw_rect_outline(pixels, stride, tip_box, 8, 1, UI_BORDER);
+    draw_text(pixels, stride, tip_box.x + 16, tip_box.y + 22,
+        "提示：自主缓冲由孩子端发起；若因系统或网络原因领取失败，不会扣除资格。",
+        13, UI_MUTED);
+    draw_text(pixels, stride, tip_box.x + 16, tip_box.y + 42,
+        "领取的缓冲时间直接增加到今日额度中，并同步延后就寝与立断生效时间。",
+        13, UI_MUTED);
+
     draw_overlay_actions(pixels, stride, model, "+  保存缓冲设置");
 }
 
@@ -549,22 +573,88 @@ static void draw_bedtime_overlay(uint32_t *pixels, uint32_t stride, const PtcUiM
         UI_WARNING, UI_ON_ACCENT, false);
 }
 
+/* 24 小时可视化时间轴带状图渲染器 */
+static void draw_bedtime_timeline_strip(
+    uint32_t *pixels, uint32_t stride,
+    UiRect bar, uint16_t start_m, uint16_t end_m, bool enabled)
+{
+    fill_round_rect(pixels, stride, bar, 6, UI_PAGE);
+    draw_rect_outline(pixels, stride, bar, 6, 1, UI_BORDER);
+
+    if (!enabled) {
+        draw_text_center(pixels, stride, bar, "本日就寝限制未开启（全天夜间不设强制立断）", 13, UI_MUTED);
+    } else {
+        int x_morn_end = bar.x + (int)((float)end_m / 1440.0f * (float)bar.width + 0.5f);
+        int x_eve_start = bar.x + (int)((float)start_m / 1440.0f * (float)bar.width + 0.5f);
+        if (x_morn_end < bar.x) x_morn_end = bar.x;
+        if (x_morn_end > bar.x + bar.width) x_morn_end = bar.x + bar.width;
+        if (x_eve_start < bar.x) x_eve_start = bar.x;
+        if (x_eve_start > bar.x + bar.width) x_eve_start = bar.x + bar.width;
+
+        /* 清晨就寝区间 [bar.x, x_morn_end] */
+        if (x_morn_end > bar.x) {
+            UiRect morn_rect = {bar.x, bar.y, x_morn_end - bar.x, bar.height};
+            fill_round_rect(pixels, stride, morn_rect, 6, UI_RGB(0x403264));
+            if (morn_rect.width > 44) {
+                draw_text_center(pixels, stride, morn_rect, "清晨就寝", 11, UI_RGB(0xdfd8f5));
+            }
+        }
+
+        /* 晚间就寝区间 [x_eve_start, bar.x + bar.width] */
+        if (x_eve_start < bar.x + bar.width) {
+            UiRect eve_rect = {x_eve_start, bar.y, bar.x + bar.width - x_eve_start, bar.height};
+            fill_round_rect(pixels, stride, eve_rect, 6, UI_RGB(0x403264));
+            if (eve_rect.width > 44) {
+                draw_text_center(pixels, stride, eve_rect, "夜间就寝", 11, UI_RGB(0xdfd8f5));
+            }
+        }
+
+        /* 白昼允许游玩区间 [x_morn_end, x_eve_start] */
+        if (x_eve_start > x_morn_end) {
+            UiRect day_rect = {x_morn_end, bar.y, x_eve_start - x_morn_end, bar.height};
+            draw_text_center(pixels, stride, day_rect, "白昼允许游玩时段", 12, UI_RGB(UI_BLENDED(text_primary)));
+        }
+
+        /* 立断与解禁指示线 */
+        if (x_eve_start >= bar.x && x_eve_start <= bar.x + bar.width) {
+            fill_rect(pixels, stride, (UiRect){x_eve_start - 1, bar.y, 2, bar.height}, UI_DANGER);
+        }
+        if (x_morn_end >= bar.x && x_morn_end <= bar.x + bar.width) {
+            fill_rect(pixels, stride, (UiRect){x_morn_end - 1, bar.y, 2, bar.height}, UI_SUCCESS);
+        }
+    }
+}
+
+static const struct {
+    const char *name;
+    uint16_t start;
+    uint16_t end;
+} PTC_BEDTIME_PRESETS[] = {
+    {"早睡型", 21 * 60, 7 * 60},
+    {"标准型", 21 * 60 + 30, 7 * 60},
+    {"均衡型", 22 * 60, 7 * 60},
+    {"周末型", 22 * 60 + 30, 7 * 60 + 30},
+    {"宽松型", 23 * 60, 8 * 60}
+};
+
 static void draw_bedtime_window_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
     const PtcBedtimeWindow *window = &model->draft_bedtime_policy.week[model->bedtime_editor_day];
     char values[3][96];
-    draw_dialog_shell(pixels, stride, model, &dialog, 760, 460);
-    snprintf(values[0], sizeof(values[0]), "本日窗口：%s", window->enabled ? "开启" : "关闭");
-    snprintf(values[1], sizeof(values[1]), "开始时间：%02u:%02u",
+    draw_dialog_shell(pixels, stride, model, &dialog, 760, 420);
+
+    snprintf(values[0], sizeof(values[0]), "本日就寝限制：%s", window->enabled ? "开启" : "关闭");
+    snprintf(values[1], sizeof(values[1]), "就寝开始时间：%02u:%02u（立断）",
         (unsigned int)(window->start_minute / 60), (unsigned int)(window->start_minute % 60));
-    snprintf(values[2], sizeof(values[2]), "次日结束：%02u:%02u",
+    snprintf(values[2], sizeof(values[2]), "次日解禁时间：%02u:%02u（恢复）",
         (unsigned int)(window->end_minute / 60), (unsigned int)(window->end_minute % 60));
+
     for (int i = 0; i < 3; ++i) {
         UiRect row = {dialog.x + 48, dialog.y + 112 + i * 66, dialog.width - 96, 52};
         draw_plan_card(pixels, stride, row, model->overlay_selection == i);
         if (i == 0) {
-            draw_text(pixels, stride, row.x + 18, row.y + 32, "本日就寝窗口", 19, UI_INK);
+            draw_text(pixels, stride, row.x + 18, row.y + 32, "本日就寝限制", 19, UI_INK);
             draw_text(pixels, stride, row.x + 150, row.y + 32, window->enabled ? "开启" : "关闭", 19,
                       window->enabled ? UI_SUCCESS : UI_MUTED);
             UiRect toggle_rect = {row.x + row.width - 76, row.y + (row.height - 28) / 2, 58, 28};
@@ -574,22 +664,47 @@ static void draw_bedtime_window_overlay(uint32_t *pixels, uint32_t stride, const
             draw_text(pixels, stride, row.x + 18, row.y + 32, values[i], 19,
                       window->enabled ? UI_INK : UI_MUTED);
             draw_text(pixels, stride, row.x + row.width - 156, row.y + 32,
-                      window->enabled ? "A 精调时间" : "（已关闭）", 13, UI_MUTED);
+                      window->enabled ? "A 精调时间" : "（未开启）", 13, UI_MUTED);
         }
     }
+
+    /* 24 小时可视化时间轴带状图 */
+    UiRect time_bar = {dialog.x + 48, dialog.y + 306, dialog.width - 96, 24};
+    draw_bedtime_timeline_strip(pixels, stride, time_bar, window->start_minute, window->end_minute, window->enabled);
+
+    /* 匹配方案与时长统计 */
+    const char *matched_preset = "自定义时段";
+    for (size_t p = 0; p < 5; ++p) {
+        if (window->start_minute == PTC_BEDTIME_PRESETS[p].start && window->end_minute == PTC_BEDTIME_PRESETS[p].end) {
+            matched_preset = PTC_BEDTIME_PRESETS[p].name;
+            break;
+        }
+    }
+
+    /* 刻度与状态行 */
+    int tick_y = time_bar.y + time_bar.height + 12;
+    draw_text(pixels, stride, time_bar.x, tick_y, "00:00", 10, UI_MUTED);
+    draw_text(pixels, stride, time_bar.x + time_bar.width / 4 - 12, tick_y, "06:00", 10, UI_MUTED);
+    draw_text(pixels, stride, time_bar.x + time_bar.width / 2 - 12, tick_y, "12:00", 10, UI_MUTED);
+    draw_text(pixels, stride, time_bar.x + time_bar.width * 3 / 4 - 12, tick_y, "18:00", 10, UI_MUTED);
+    draw_text(pixels, stride, time_bar.x + time_bar.width - 28, tick_y, "24:00", 10, UI_MUTED);
+
     if (window->enabled) {
         int dur_m = (int)(window->end_minute + 1440 - window->start_minute) % 1440;
         char dur_str[96];
-        snprintf(dur_str, sizeof(dur_str), "夜间跨度：%02u:%02u 至 次日 %02u:%02u（跨越午夜 %u 小时 %u 分）",
-                 (unsigned int)(window->start_minute / 60), (unsigned int)(window->start_minute % 60),
-                 (unsigned int)(window->end_minute / 60), (unsigned int)(window->end_minute % 60),
-                 (unsigned int)(dur_m / 60), (unsigned int)(dur_m % 60));
-        draw_text(pixels, stride, dialog.x + 48, dialog.y + 324, dur_str, 15, UI_ACCENT);
+        snprintf(dur_str, sizeof(dur_str), "【%s】夜间管控 %u 小时 %u 分（到达立断）",
+                 matched_preset, (unsigned int)(dur_m / 60), (unsigned int)(dur_m % 60));
+        draw_text(pixels, stride, time_bar.x + 160, tick_y, dur_str, 12, UI_ACCENT);
     } else {
-        draw_text(pixels, stride, dialog.x + 48, dialog.y + 324, "本日就寝窗口已关闭，当天不触发就寝限制。", 15, UI_MUTED);
+        draw_text(pixels, stride, time_bar.x + 160, tick_y, "本日就寝限制已关闭，夜间不触发强制立断", 12, UI_MUTED);
     }
-    draw_text(pixels, stride, dialog.x + 48, dialog.y + 352,
-        "方向键选择  |  A / 点按打开时间编辑器；窗口必须跨越午夜  |  + 完成", 14, UI_MUTED);
+
+    /* 底部操作与预设指南 */
+    draw_text(pixels, stride, dialog.x + 48, dialog.y + 372,
+        "方向键选择  |  A 精调时间  |  X 开关  |  Y 轮换预设", 12, UI_MUTED);
+    draw_text(pixels, stride, dialog.x + 48, dialog.y + 392,
+        "预设：早睡(21:00) | 标准(21:30) | 均衡(22:00) | 周末(22:30)", 11, UI_MUTED);
+
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
         UI_RAISED, UI_INK, true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "+  完成",
@@ -605,12 +720,14 @@ static void draw_bedtime_special_overlay(uint32_t *pixels, uint32_t stride, cons
             ? &model->draft_bedtime_policy.makeup_workday_rule
             : &model->draft_bedtime_policy.scheduled_override.rule);
     char values[3][96];
-    draw_dialog_shell(pixels, stride, model, &dialog, 760, 460);
+    draw_dialog_shell(pixels, stride, model, &dialog, 760, 420);
+
     snprintf(values[0], sizeof(values[0]), "规则模式：%s", bedtime_override_label(rule->mode));
-    snprintf(values[1], sizeof(values[1]), "开始时间：%02u:%02u",
+    snprintf(values[1], sizeof(values[1]), "就寝开始时间：%02u:%02u（立断）",
         (unsigned int)(rule->window.start_minute / 60), (unsigned int)(rule->window.start_minute % 60));
-    snprintf(values[2], sizeof(values[2]), "次日结束：%02u:%02u",
+    snprintf(values[2], sizeof(values[2]), "次日解禁时间：%02u:%02u（恢复）",
         (unsigned int)(rule->window.end_minute / 60), (unsigned int)(rule->window.end_minute % 60));
+
     for (int i = 0; i < 3; ++i) {
         UiRect row = {dialog.x + 48, dialog.y + 112 + i * 66, dialog.width - 96, 52};
         draw_plan_card(pixels, stride, row, model->overlay_selection == i);
@@ -627,21 +744,58 @@ static void draw_bedtime_special_overlay(uint32_t *pixels, uint32_t stride, cons
                       rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? "A 精调时间" : "跟随模式", 13, UI_MUTED);
         }
     }
+
     if (rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM) {
+        /* 24 小时可视化时间轴带状图 */
+        UiRect time_bar = {dialog.x + 48, dialog.y + 306, dialog.width - 96, 24};
+        draw_bedtime_timeline_strip(pixels, stride, time_bar, rule->window.start_minute, rule->window.end_minute, true);
+
+        const char *matched_preset = "自定义时段";
+        for (size_t p = 0; p < 5; ++p) {
+            if (rule->window.start_minute == PTC_BEDTIME_PRESETS[p].start &&
+                rule->window.end_minute == PTC_BEDTIME_PRESETS[p].end) {
+                matched_preset = PTC_BEDTIME_PRESETS[p].name;
+                break;
+            }
+        }
+
         int dur_m = (int)(rule->window.end_minute + 1440 - rule->window.start_minute) % 1440;
         char dur_str[96];
-        snprintf(dur_str, sizeof(dur_str), "自定义跨度：%02u:%02u 至 次日 %02u:%02u（跨夜 %u 小时 %u 分）",
-                 (unsigned int)(rule->window.start_minute / 60), (unsigned int)(rule->window.start_minute % 60),
-                 (unsigned int)(rule->window.end_minute / 60), (unsigned int)(rule->window.end_minute % 60),
-                 (unsigned int)(dur_m / 60), (unsigned int)(dur_m % 60));
-        draw_text(pixels, stride, dialog.x + 48, dialog.y + 324, dur_str, 15, UI_ACCENT);
+        snprintf(dur_str, sizeof(dur_str), "【%s】夜间管控 %u 小时 %u 分（到达立断）",
+                 matched_preset, (unsigned int)(dur_m / 60), (unsigned int)(dur_m % 60));
+
+        int tick_y = time_bar.y + time_bar.height + 12;
+        draw_text(pixels, stride, time_bar.x, tick_y, "00:00", 10, UI_MUTED);
+        draw_text(pixels, stride, time_bar.x + time_bar.width / 4 - 12, tick_y, "06:00", 10, UI_MUTED);
+        draw_text(pixels, stride, time_bar.x + time_bar.width / 2 - 12, tick_y, "12:00", 10, UI_MUTED);
+        draw_text(pixels, stride, time_bar.x + time_bar.width * 3 / 4 - 12, tick_y, "18:00", 10, UI_MUTED);
+        draw_text(pixels, stride, time_bar.x + time_bar.width - 28, tick_y, "24:00", 10, UI_MUTED);
+        draw_text(pixels, stride, time_bar.x + 160, tick_y, dur_str, 12, UI_ACCENT);
+
+        draw_text(pixels, stride, dialog.x + 48, dialog.y + 372,
+            "方向键选择  |  A 精调时间  |  A/X 切换模式  |  Y 轮换预设", 12, UI_MUTED);
+        draw_text(pixels, stride, dialog.x + 48, dialog.y + 392,
+            "预设：早睡(21:00) | 标准(21:30) | 均衡(22:00) | 周末(22:30)", 11, UI_MUTED);
     } else if (rule->mode == PTC_BEDTIME_OVERRIDE_DISABLED) {
-        draw_text(pixels, stride, dialog.x + 48, dialog.y + 324, "节假日不设就寝限制，仅按游玩额度控制。", 15, UI_MUTED);
+        UiRect info_card = {dialog.x + 48, dialog.y + 306, dialog.width - 96, 40};
+        fill_round_rect(pixels, stride, info_card, 6, UI_PAGE);
+        draw_rect_outline(pixels, stride, info_card, 6, 1, UI_BORDER);
+        draw_text(pixels, stride, info_card.x + 16, info_card.y + 25,
+            "特殊免控模式：当天夜间不限制就寝时间，仅按全天额度管控。", 13, UI_MUTED);
+
+        draw_text(pixels, stride, dialog.x + 48, dialog.y + 372,
+            "A/X 切换模式（跟随周计划 / 特殊免控 / 自定义窗口）  |  + 完成", 12, UI_MUTED);
     } else {
-        draw_text(pixels, stride, dialog.x + 48, dialog.y + 324, "继承对应自然星期的每周就寝时间窗口设置。", 15, UI_SUCCESS);
+        UiRect info_card = {dialog.x + 48, dialog.y + 306, dialog.width - 96, 40};
+        fill_round_rect(pixels, stride, info_card, 6, UI_PAGE);
+        draw_rect_outline(pixels, stride, info_card, 6, 1, UI_BORDER);
+        draw_text(pixels, stride, info_card.x + 16, info_card.y + 25,
+            "跟随周计划：自动继承对应星期的就寝时间窗口设置。", 13, UI_SUCCESS);
+
+        draw_text(pixels, stride, dialog.x + 48, dialog.y + 372,
+            "A/X 切换模式（跟随周计划 / 特殊免控 / 自定义窗口）  |  + 完成", 12, UI_MUTED);
     }
-    draw_text(pixels, stride, dialog.x + 48, dialog.y + 352,
-        "方向键选择  |  A / 点按打开快速时间编辑器；窗口必须跨越午夜  |  + 完成", 14, UI_MUTED);
+
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
         UI_RAISED, UI_INK, true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "+  完成",
