@@ -89,6 +89,7 @@ typedef enum {
     PTC_UI_HIT_BEDTIME_FIELD,
     PTC_UI_HIT_BEDTIME_MASTER_SWITCH,
     PTC_UI_HIT_BEDTIME_OVERLAY_FIELD,
+    PTC_UI_HIT_BEDTIME_PRESET,
     PTC_UI_HIT_HOME_DETAILS,
     PTC_UI_HIT_HOME_DETAILS_TAB
 } PtcUiHitKind;
@@ -114,6 +115,7 @@ PtcUiRect ptc_ui_setup_zone_rect(int index);
 PtcUiRect ptc_ui_notice_status_icon_rect(int y);
 PtcUiRect ptc_ui_notice_command_text_rect(int y, int height);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
+PtcUiRect ptc_ui_parent_subpage_footer_rect(int index);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_plan_card_rect(int index);
@@ -137,9 +139,13 @@ PtcUiRect ptc_ui_redemption_history_prev_rect(void);
 PtcUiRect ptc_ui_redemption_history_next_rect(void);
 PtcUiRect ptc_ui_scheduled_field_rect(int index);
 PtcUiRect ptc_ui_autonomy_option_rect(int index);
+PtcUiRect ptc_ui_quick_add_option_rect(int index);
 PtcUiRect ptc_ui_bedtime_section_rect(int index);
 PtcUiRect ptc_ui_bedtime_field_rect(int section, int index);
 PtcUiRect ptc_ui_bedtime_master_switch_rect(void);
+PtcUiRect ptc_ui_bedtime_overlay_field_rect(PtcUiOverlay overlay, int index);
+PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index);
+PtcUiRect ptc_ui_bedtime_timeline_rect(PtcUiOverlay overlay);
 PtcUiRect ptc_ui_dialog_rect(int width, int height);
 PtcUiRect ptc_ui_minutes_value_rect(void);
 PtcUiRect ptc_ui_minutes_dec_rect(void);

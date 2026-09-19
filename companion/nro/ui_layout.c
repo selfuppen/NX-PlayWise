@@ -128,12 +128,19 @@ PtcUiRect ptc_ui_parent_footer_rect(int index)
 {
     static const int widths[] = {130, 130, 170, 130, 564};
     static const int xs[] = {54, 196, 338, 520, 662};
-    PtcUiRect rect = {0, 660, 0, 48};
+    PtcUiRect rect = {0, 664, 0, 44};
     if (index >= 0 && index < 5) {
         rect.x = xs[index];
         rect.w = widths[index];
     }
     return rect;
+}
+
+PtcUiRect ptc_ui_parent_subpage_footer_rect(int index)
+{
+    if (index == 0) return (PtcUiRect){54, 664, 170, 44};
+    if (index == 1) return (PtcUiRect){236, 664, 130, 44};
+    return (PtcUiRect){0, 664, 0, 44};
 }
 
 PtcUiRect ptc_ui_parent_tab_rect(int index)
@@ -212,22 +219,54 @@ PtcUiRect ptc_ui_bedtime_section_rect(int index)
 PtcUiRect ptc_ui_bedtime_field_rect(int section, int index)
 {
     if (section == PTC_UI_BEDTIME_WEEKLY) {
-        if (index >= 0 && index < 7) return (PtcUiRect){54 + index * 108, 234, 96, 182};
-        if (index >= 7 && index <= 10) return (PtcUiRect){54 + (index - 7) * 188, 436, 176, 54};
+        if (index >= 0 && index < 7) return (PtcUiRect){54 + index * 108, 234, 96, 218};
+        if (index >= 7 && index <= 10) return (PtcUiRect){54 + (index - 7) * 188, 468, 176, 56};
     } else if (section == PTC_UI_BEDTIME_CALENDAR) {
-        if (index == 0) return (PtcUiRect){54, 234, 752, 68};
-        if (index == 1 || index == 2) return (PtcUiRect){54 + (index - 1) * 376, 318, 364, 112};
-        if (index == 3 || index == 4) return (PtcUiRect){430 + (index - 3) * 188, 446, 176, 54};
+        if (index == 0) return (PtcUiRect){54, 234, 752, 76};
+        if (index == 1 || index == 2) return (PtcUiRect){54 + (index - 1) * 376, 326, 364, 126};
+        if (index == 3 || index == 4) return (PtcUiRect){430 + (index - 3) * 188, 468, 176, 56};
     } else if (section == PTC_UI_BEDTIME_SCHEDULED) {
-        if (index >= 0 && index < 4) return (PtcUiRect){54, 234 + index * 62, 752, 50};
-        if (index == 4 || index == 5) return (PtcUiRect){430 + (index - 4) * 188, 490, 176, 54};
+        if (index >= 0 && index < 4) return (PtcUiRect){54, 234 + index * 68, 752, 58};
+        if (index == 4 || index == 5) return (PtcUiRect){430 + (index - 4) * 188, 520, 176, 56};
     }
     return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_bedtime_master_switch_rect(void)
 {
-    return (PtcUiRect){838, 172, 388, 76};
+    return (PtcUiRect){838, 172, 388, 82};
+}
+
+PtcUiRect ptc_ui_bedtime_overlay_field_rect(PtcUiOverlay overlay, int index)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(overlay);
+    if ((overlay != PTC_UI_OVERLAY_BEDTIME_WINDOW &&
+         overlay != PTC_UI_OVERLAY_BEDTIME_SPECIAL) || index < 0 || index >= 3)
+        return (PtcUiRect){0, 0, 0, 0};
+    if (index == 0) return (PtcUiRect){dialog.x + 44, dialog.y + 104, dialog.w - 88, 58};
+    return (PtcUiRect){dialog.x + 44 + (index - 1) * ((dialog.w - 100) / 2 + 12),
+        dialog.y + 176, (dialog.w - 100) / 2, 66};
+}
+
+PtcUiRect ptc_ui_bedtime_timeline_rect(PtcUiOverlay overlay)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(overlay);
+    if (overlay != PTC_UI_OVERLAY_BEDTIME_WINDOW &&
+        overlay != PTC_UI_OVERLAY_BEDTIME_SPECIAL)
+        return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){dialog.x + 44, dialog.y + 266, dialog.w - 88, 32};
+}
+
+PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(overlay);
+    int gap = 8;
+    int width;
+    if ((overlay != PTC_UI_OVERLAY_BEDTIME_WINDOW &&
+         overlay != PTC_UI_OVERLAY_BEDTIME_SPECIAL) || index < 0 || index >= 5)
+        return (PtcUiRect){0, 0, 0, 0};
+    width = (dialog.w - 88 - gap * 4) / 5;
+    return (PtcUiRect){dialog.x + 44 + index * (width + gap), dialog.y + 352, width, 42};
 }
 
 void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
@@ -506,8 +545,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 640;
         break;
     case PTC_UI_OVERLAY_AUTONOMY:
-        *width = 760;
-        *height = 420;
+        *width = 880;
+        *height = 480;
         break;
     case PTC_UI_OVERLAY_BEDTIME:
         *width = 860;
@@ -574,6 +613,11 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 820;
         *height = 360;
         break;
+    case PTC_UI_OVERLAY_BEDTIME_WINDOW:
+    case PTC_UI_OVERLAY_BEDTIME_SPECIAL:
+        *width = 960;
+        *height = 560;
+        break;
     case PTC_UI_OVERLAY_PIN:
         *width = 1040;
         *height = 620;
@@ -618,6 +662,15 @@ PtcUiRect ptc_ui_scheduled_field_rect(int index)
 PtcUiRect ptc_ui_autonomy_option_rect(int index)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_AUTONOMY);
+    const int gap = 12;
+    const int width = (dialog.w - 96 - gap * 3) / 4;
+    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){dialog.x + 48 + index * (width + gap), dialog.y + 176, width, 96};
+}
+
+PtcUiRect ptc_ui_quick_add_option_rect(int index)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_QUICK_ADD);
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
     return (PtcUiRect){dialog.x + 48 + index * 164, dialog.y + 166, 148, 92};
 }

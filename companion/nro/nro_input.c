@@ -1,5 +1,49 @@
 #include "nro_app_internal.h"
 
+static const struct {
+    uint16_t start;
+    uint16_t end;
+} BEDTIME_PRESETS[] = {
+    {21 * 60, 7 * 60},
+    {21 * 60 + 30, 7 * 60},
+    {22 * 60, 7 * 60},
+    {22 * 60 + 30, 7 * 60 + 30},
+    {23 * 60, 8 * 60}
+};
+
+static void apply_bedtime_preset(UiState *ui, int preset)
+{
+    PtcBedtimeWindow *window = NULL;
+    if (!ui || preset < 0 || preset >= 5) return;
+    if (ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW) {
+        window = &ui->model.draft_bedtime_policy.week[ui->model.bedtime_editor_day];
+    } else if (ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_SPECIAL) {
+        PtcBedtimeSpecialRule *rule = ui->model.bedtime_special_kind == 0
+            ? &ui->model.draft_bedtime_policy.holiday_rule
+            : (ui->model.bedtime_special_kind == 1
+                ? &ui->model.draft_bedtime_policy.makeup_workday_rule
+                : &ui->model.draft_bedtime_policy.scheduled_override.rule);
+        rule->mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+        window = &rule->window;
+    }
+    if (!window) return;
+    window->start_minute = BEDTIME_PRESETS[preset].start;
+    window->end_minute = BEDTIME_PRESETS[preset].end;
+    window->enabled = true;
+    update_bedtime_dirty(ui);
+}
+
+static int next_bedtime_preset(const PtcBedtimeWindow *window)
+{
+    if (!window) return 0;
+    for (int preset = 0; preset < 5; ++preset) {
+        if (window->start_minute == BEDTIME_PRESETS[preset].start &&
+            window->end_minute == BEDTIME_PRESETS[preset].end)
+            return (preset + 1) % 5;
+    }
+    return 0;
+}
+
 void handle_overlay_input(UiState *ui, u64 down)
 {
     if (ui->model.overlay == PTC_UI_OVERLAY_QUICK_ADD) {
@@ -41,25 +85,7 @@ void handle_overlay_input(UiState *ui, u64 down)
             open_bedtime_time_editor(ui, ui->model.overlay_selection == 1
                 ? PTC_UI_BEDTIME_TIME_START : PTC_UI_BEDTIME_TIME_END);
         } else if (down & HidNpadButton_Y) {
-            static const struct { uint16_t start; uint16_t end; } PRESETS[] = {
-                {21 * 60, 7 * 60},
-                {21 * 60 + 30, 7 * 60},
-                {22 * 60, 7 * 60},
-                {22 * 60 + 30, 7 * 60 + 30},
-                {23 * 60, 8 * 60}
-            };
-            int cur_p = -1;
-            for (int p = 0; p < 5; ++p) {
-                if (window->start_minute == PRESETS[p].start && window->end_minute == PRESETS[p].end) {
-                    cur_p = p;
-                    break;
-                }
-            }
-            int next_p = (cur_p + 1) % 5;
-            window->start_minute = PRESETS[next_p].start;
-            window->end_minute = PRESETS[next_p].end;
-            window->enabled = true;
-            update_bedtime_dirty(ui);
+            apply_bedtime_preset(ui, next_bedtime_preset(window));
         } else if (down & HidNpadButton_Plus) {
             ptc_ui_cancel_overlay(&ui->model);
         }
@@ -81,30 +107,12 @@ void handle_overlay_input(UiState *ui, u64 down)
             rule->mode = (PtcBedtimeOverrideMode)((rule->mode + 1) % 3);
             if (rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM) rule->window.enabled = true;
             update_bedtime_dirty(ui);
-        } else if ((down & HidNpadButton_A) && ui->model.overlay_selection >= 1) {
+        } else if ((down & HidNpadButton_A) && ui->model.overlay_selection >= 1 &&
+                   rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM) {
             open_bedtime_time_editor(ui, ui->model.overlay_selection == 1
                 ? PTC_UI_BEDTIME_TIME_START : PTC_UI_BEDTIME_TIME_END);
-        } else if (down & HidNpadButton_Y) {
-            static const struct { uint16_t start; uint16_t end; } PRESETS[] = {
-                {21 * 60, 7 * 60},
-                {21 * 60 + 30, 7 * 60},
-                {22 * 60, 7 * 60},
-                {22 * 60 + 30, 7 * 60 + 30},
-                {23 * 60, 8 * 60}
-            };
-            int cur_p = -1;
-            for (int p = 0; p < 5; ++p) {
-                if (rule->window.start_minute == PRESETS[p].start && rule->window.end_minute == PRESETS[p].end) {
-                    cur_p = p;
-                    break;
-                }
-            }
-            int next_p = (cur_p + 1) % 5;
-            rule->mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
-            rule->window.start_minute = PRESETS[next_p].start;
-            rule->window.end_minute = PRESETS[next_p].end;
-            rule->window.enabled = true;
-            update_bedtime_dirty(ui);
+        } else if ((down & HidNpadButton_Y) && rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM) {
+            apply_bedtime_preset(ui, next_bedtime_preset(&rule->window));
         } else if (down & HidNpadButton_Plus) {
             ptc_ui_cancel_overlay(&ui->model);
         }
@@ -810,6 +818,7 @@ void handle_touch(UiState *ui, int x, int y)
         submit_status(ui);
         break;
     case PTC_UI_HIT_PARENT_STATUS:
+        if (!ptc_ui_parent_status_alert_visible(&ui->model)) break;
         ui->model.parent_footer_focused = true;
         ui->model.parent_footer_selection = 1;
         activate_parent_status(ui);
@@ -1026,6 +1035,9 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_BEDTIME_OVERLAY_FIELD:
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);
+        break;
+    case PTC_UI_HIT_BEDTIME_PRESET:
+        apply_bedtime_preset(ui, hit.index);
         break;
     case PTC_UI_HIT_MINUTES_INC:
         ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 5, ui->model.minimum_minutes, ui->model.maximum_minutes);

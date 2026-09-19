@@ -88,10 +88,24 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         break;
     case PTC_UI_OVERLAY_BEDTIME_WINDOW:
     case PTC_UI_OVERLAY_BEDTIME_SPECIAL: {
-        PtcUiRect dialog = ptc_ui_dialog_for(model->overlay);
         for (i = 0; i < 3; ++i) {
-            PtcUiRect row = {dialog.x + 48, dialog.y + 112 + i * 66, dialog.w - 96, 52};
-            if (ptc_ui_rect_contains(row, x, y)) return make_hit(PTC_UI_HIT_BEDTIME_OVERLAY_FIELD, i);
+            if (ptc_ui_rect_contains(ptc_ui_bedtime_overlay_field_rect(model->overlay, i), x, y))
+                return make_hit(PTC_UI_HIT_BEDTIME_OVERLAY_FIELD, i);
+        }
+        bool presets_enabled = model->overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW;
+        if (model->overlay == PTC_UI_OVERLAY_BEDTIME_SPECIAL) {
+            const PtcBedtimeSpecialRule *rule = model->bedtime_special_kind == 0
+                ? &model->draft_bedtime_policy.holiday_rule
+                : (model->bedtime_special_kind == 1
+                    ? &model->draft_bedtime_policy.makeup_workday_rule
+                    : &model->draft_bedtime_policy.scheduled_override.rule);
+            presets_enabled = rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM;
+        }
+        if (presets_enabled) {
+            for (i = 0; i < 5; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_bedtime_preset_rect(model->overlay, i), x, y))
+                    return make_hit(PTC_UI_HIT_BEDTIME_PRESET, i);
+            }
         }
         break;
     }
@@ -105,7 +119,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     }
     case PTC_UI_OVERLAY_QUICK_ADD:
         for (i = 0; i < 4; ++i) {
-            if (ptc_ui_rect_contains(ptc_ui_autonomy_option_rect(i), x, y)) {
+            if (ptc_ui_rect_contains(ptc_ui_quick_add_option_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_QUICK_ADD_OPTION, i);
             }
         }
@@ -403,13 +417,18 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         ptc_ui_rect_contains(ptc_ui_advanced_back_rect(), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
-    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(2), x, y)) {
+    bool plan_subpage = model->parent_page == PTC_UI_PARENT_PLAN &&
+        model->plan_page != PTC_UI_PLAN_PAGE_ROOT;
+    if (ptc_ui_rect_contains(plan_subpage ? ptc_ui_parent_subpage_footer_rect(0) :
+                             ptc_ui_parent_footer_rect(2), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_BACK, 0);
     }
-    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(3), x, y)) {
+    if (ptc_ui_rect_contains(plan_subpage ? ptc_ui_parent_subpage_footer_rect(1) :
+                             ptc_ui_parent_footer_rect(3), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
     }
-    if (ptc_ui_rect_contains(ptc_ui_parent_footer_rect(4), x, y)) {
+    if (ptc_ui_parent_status_alert_visible(model) &&
+        ptc_ui_rect_contains(ptc_ui_parent_footer_rect(4), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_STATUS, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY) {

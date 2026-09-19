@@ -58,17 +58,9 @@ void submit_status(UiState *ui)
     else set_message(ui, "刷新失败", status);
 }
 
-static bool parent_status_needs_support(const PtcUiModel *model)
-{
-    return strcmp(model->setup_phase, "protection") == 0 ||
-        strcmp(model->setup_phase, "failed") == 0 || model->recovery_active ||
-        model->disable_flag_present ||
-        (model->temporary_unlocked_available && model->temporary_unlocked);
-}
-
 void activate_parent_status(UiState *ui)
 {
-    if (parent_status_needs_support(&ui->model)) {
+    if (ptc_ui_parent_status_alert_visible(&ui->model)) {
         ui->model.parent_page = PTC_UI_PARENT_SUPPORT;
         ui->model.parent_footer_focused = false;
         ui->model.selected_index = ptc_ui_support_recommended_action(&ui->model);

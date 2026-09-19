@@ -341,7 +341,8 @@ int main(int argc, char **argv)
                 } else if (down & HidNpadButton_Left) {
                     ui.model.parent_footer_selection = 0;
                 } else if (down & HidNpadButton_Right) {
-                    ui.model.parent_footer_selection = 1;
+                    ui.model.parent_footer_selection =
+                        ptc_ui_parent_status_alert_visible(&ui.model) ? 1 : 0;
                 } else if (down & HidNpadButton_Y) {
                     refresh_disable_flag(&ui);
                     submit_status(&ui);
@@ -380,7 +381,8 @@ int main(int argc, char **argv)
                     if (ui.model.selected_index != 0) {
                         ui.model.parent_content_selection = ui.model.selected_index;
                         ui.model.parent_footer_focused = true;
-                        ui.model.parent_footer_selection = 1;
+                        ui.model.parent_footer_selection =
+                            ptc_ui_parent_status_alert_visible(&ui.model) ? 1 : 0;
                     } else {
                         ptc_ui_move_weekly_focus(&ui.model, 0, 1);
                     }

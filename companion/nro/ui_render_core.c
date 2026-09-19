@@ -1843,46 +1843,29 @@ void draw_footer_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect, const
     draw_button_label(pixels, stride, to_uirect(rect), label, 18, UI_MUTED);
 }
 
-static bool parent_status_is_exception(const PtcUiModel *model)
-{
-    return strcmp(model->setup_phase, "protection") == 0 ||
-        strcmp(model->setup_phase, "failed") == 0 || model->recovery_active ||
-        model->disable_flag_present ||
-        (model->temporary_unlocked_available && model->temporary_unlocked) ||
-        !ptc_ui_status_is_fresh(model, ptc_ui_render_now());
-}
-
 void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect box = to_uirect(ptc_ui_parent_footer_rect(4));
     char summary[96];
-    bool exception = parent_status_is_exception(model);
-    uint32_t color = exception ? UI_DANGER : UI_ACCENT;
+    uint32_t color = UI_DANGER;
 
-    if (exception) {
-        if (model->disable_flag_present) {
-            snprintf(summary, sizeof(summary), "▲ 控制已停用  |  按 A 查看恢复");
-        } else if (model->recovery_active) {
-            snprintf(summary, sizeof(summary), "▲ 存在待恢复事务  |  按 A 进入排障");
-        } else if (strcmp(model->setup_phase, "protection") == 0) {
-            snprintf(summary, sizeof(summary), "▲ 系统防护已激活  |  按 A 查看详情");
-        } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
-            snprintf(summary, sizeof(summary), "● 临时解除中  |  按 A 管理设置");
-            color = UI_WARNING;
-        } else if (!ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
-            snprintf(summary, sizeof(summary), "▲ 状态待同步  |  按 A 检查更新");
-            color = UI_WARNING;
-        } else {
-            snprintf(summary, sizeof(summary), "▲ 系统异常需处理  |  按 A 进入支持");
-        }
+    if (!ptc_ui_parent_status_alert_visible(model)) return;
+    if (model->disable_flag_present) {
+        snprintf(summary, sizeof(summary), "▲ 控制已停用  |  按 A 查看恢复");
+    } else if (model->recovery_active) {
+        snprintf(summary, sizeof(summary), "▲ 存在待恢复事务  |  按 A 进入排障");
+    } else if (strcmp(model->setup_phase, "protection") == 0) {
+        snprintf(summary, sizeof(summary), "▲ 系统防护已激活  |  按 A 查看详情");
+    } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
+        snprintf(summary, sizeof(summary), "● 临时解除中  |  按 A 管理设置");
+        color = UI_WARNING;
     } else {
-        snprintf(summary, sizeof(summary), "守护控制运行中  |  按 A 查看系统状态");
+        snprintf(summary, sizeof(summary), "▲ 系统异常需处理  |  按 A 进入支持");
     }
 
-    fill_round_rect(pixels, stride, box, 12, UI_RGB(UI_BLENDED(surface)));
-    if (exception) {
-        draw_rect_outline(pixels, stride, box, 12, 1, color);
-    }
+    fill_round_rect(pixels, stride, box, 12,
+        color == UI_WARNING ? UI_WARNING_SOFT : UI_DANGER_SOFT);
+    draw_rect_outline(pixels, stride, box, 12, 1, color);
     if (model->parent_footer_focused && model->parent_footer_selection == 1) {
         fill_round_rect(pixels, stride, box, 12, UI_RGB(UI_BLENDED(focus)));
         fill_round_rect(pixels, stride, (UiRect){box.x + 3, box.y + 3, box.width - 6, box.height - 6},

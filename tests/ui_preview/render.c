@@ -602,16 +602,48 @@ int main(int argc, char **argv)
             snprintf(name, sizeof(name), "bedtime-section-%d", section);
             failed |= save_preview(argv[2], "bedtime", name, &model, dark);
         }
+        snprintf(model.result_status, sizeof(model.result_status), "error");
+        snprintf(model.command_name, sizeof(model.command_name), "保存就寝时间");
+        snprintf(model.message, sizeof(model.message), "保存失败，草稿仍保留，请检查后重试。");
+        model.error_code = 501;
+        failed |= save_preview(argv[2], "bedtime", "bedtime-feedback-error", &model, dark);
+        model.error_code = 0;
+        snprintf(model.result_status, sizeof(model.result_status), "ok");
+        snprintf(model.command_name, sizeof(model.command_name), "刷新状态");
+        snprintf(model.message, sizeof(model.message), "已读取保存的计划");
         model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
         model.bedtime_editor_day = 1;
         model.overlay_selection = 1;
         snprintf(model.overlay_title, sizeof(model.overlay_title), "编辑每周就寝窗口");
         failed |= save_preview(argv[2], "bedtime", "bedtime-window-input", &model, dark);
+        model.overlay = PTC_UI_OVERLAY_BEDTIME_SPECIAL;
+        model.bedtime_special_kind = 2;
+        model.overlay_selection = 0;
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "编辑指定日期就寝规则");
+        model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_INHERIT;
+        failed |= save_preview(argv[2], "bedtime", "bedtime-special-inherit", &model, dark);
+        model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_DISABLED;
+        failed |= save_preview(argv[2], "bedtime", "bedtime-special-closed", &model, dark);
+        model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+        model.draft_bedtime_policy.scheduled_override.rule.window = (PtcBedtimeWindow){true, 1350, 450};
+        model.overlay_selection = 1;
+        failed |= save_preview(argv[2], "bedtime", "bedtime-special-custom", &model, dark);
+        model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
+        model.overlay_selection = 1;
         ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_BEDTIME_TIME, PTC_UI_OVERLAY_BEDTIME_WINDOW,
             "设置就寝开始时间", "选择小时或分钟；右摇杆上下调整，长推加速", 4, 0, 1439, 1327);
         failed |= save_preview(argv[2], "bedtime", "bedtime-time-editor", &model, dark);
         ptc_ui_cancel_overlay(&model);
         ptc_ui_cancel_overlay(&model);
+        {
+            PtcUiModel autonomy = baseline;
+            autonomy.view = PTC_UI_PARENT;
+            autonomy.overlay = PTC_UI_OVERLAY_AUTONOMY;
+            autonomy.overlay_selection = 2;
+            autonomy.draft_autonomy_policy.daily_buffer_minutes = 10;
+            snprintf(autonomy.overlay_title, sizeof(autonomy.overlay_title), "今日自主缓冲");
+            failed |= save_preview(argv[2], "autonomy", "autonomy-policy", &autonomy, dark);
+        }
         model.parent_page = PTC_UI_PARENT_PLAN;
         model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
         model.draft_scheduled_override = model.scheduled_override;

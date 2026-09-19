@@ -868,9 +868,11 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     if (model->parent_footer_focused) {
+        if (!ptc_ui_parent_status_alert_visible(model)) model->parent_footer_selection = 0;
         if (horizontal < 0 && model->parent_footer_selection > 0) {
             --model->parent_footer_selection;
-        } else if (horizontal > 0 && model->parent_footer_selection < 1) {
+        } else if (horizontal > 0 && model->parent_footer_selection < 1 &&
+                   ptc_ui_parent_status_alert_visible(model)) {
             ++model->parent_footer_selection;
         }
         if (vertical < 0) {
@@ -908,7 +910,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         if (vertical > 0 && previous == down[previous]) {
             model->parent_content_selection = previous;
             model->parent_footer_focused = true;
-            model->parent_footer_selection = 1;
+            model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
         }
         return;
     }
@@ -922,7 +924,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             else if (vertical > 0) {
                 model->parent_content_selection = index;
                 model->parent_footer_focused = true;
-                model->parent_footer_selection = 1;
+                model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
             }
         } else {
             int previous = index;
@@ -934,7 +936,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             else if (vertical > 0) {
                 model->parent_content_selection = previous;
                 model->parent_footer_focused = true;
-                model->parent_footer_selection = 1;
+                model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
             }
         }
         model->selected_index = index;
@@ -948,7 +950,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         else if (vertical > 0) {
             model->parent_content_selection = index;
             model->parent_footer_focused = true;
-            model->parent_footer_selection = 1;
+            model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
         }
         model->selected_index = index;
         return;
@@ -966,7 +968,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             else {
                 model->parent_content_selection = previous;
                 model->parent_footer_focused = true;
-                model->parent_footer_selection = 1;
+                model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
             }
         }
         model->selected_index = index;
@@ -995,7 +997,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         if (vertical > 0 && previous_row == row_count - 1) {
             model->parent_content_selection = index;
             model->parent_footer_focused = true;
-            model->parent_footer_selection = 1;
+            model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
         }
     }
 }
@@ -1647,6 +1649,25 @@ bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
     int64_t age = ptc_ui_status_age_seconds(model, now);
     return model && age >= 0 && age <= 120 && model->error_code == 0 &&
         strcmp(model->result_status, "error") != 0;
+}
+
+bool ptc_ui_parent_status_alert_visible(const PtcUiModel *model)
+{
+    if (!model) return false;
+    return strcmp(model->setup_phase, "protection") == 0 ||
+        strcmp(model->setup_phase, "failed") == 0 || model->recovery_active ||
+        model->disable_flag_present ||
+        (model->temporary_unlocked_available && model->temporary_unlocked);
+}
+
+bool ptc_ui_operation_feedback_visible(const PtcUiModel *model)
+{
+    if (!model) return false;
+    if (model->waiting || strcmp(model->result_status, "error") == 0 ||
+        model->feedback_detail[0]) return true;
+    return strcmp(model->result_status, "ok") == 0 && model->message[0] &&
+        strcmp(model->command_name, "刷新状态") != 0 &&
+        strcmp(model->command_name, "未开始") != 0;
 }
 
 void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeProjection *out)

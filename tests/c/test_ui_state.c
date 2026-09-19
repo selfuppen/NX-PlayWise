@@ -100,6 +100,25 @@ static void test_parent_status_summary(void)
                "parent footer prioritizes protection state guidance");
 
     memset(&model, 0, sizeof(model));
+    check_true(!ptc_ui_operation_feedback_visible(&model),
+               "idle pages do not reserve an operation feedback strip");
+    model.waiting = true;
+    check_true(ptc_ui_operation_feedback_visible(&model),
+               "pending operations show the compact feedback strip");
+    model.waiting = false;
+    snprintf(model.result_status, sizeof(model.result_status), "ok");
+    snprintf(model.message, sizeof(model.message), "已读取保存的计划");
+    snprintf(model.command_name, sizeof(model.command_name), "刷新状态");
+    check_true(!ptc_ui_operation_feedback_visible(&model),
+               "routine refresh feedback stays in the page status card");
+    snprintf(model.command_name, sizeof(model.command_name), "保存就寝时间");
+    check_true(ptc_ui_operation_feedback_visible(&model),
+               "successful writes briefly show the compact feedback strip");
+    snprintf(model.result_status, sizeof(model.result_status), "error");
+    check_true(ptc_ui_operation_feedback_visible(&model),
+               "failed operations show the compact feedback strip");
+
+    memset(&model, 0, sizeof(model));
     model.today_override_present = true;
     ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
     check_true(strstr(summary, "今日额度调整覆盖") != NULL,
@@ -906,14 +925,30 @@ static void test_release_hit_targets(void)
     model.parent_page = PTC_UI_PARENT_TODAY;
     check_hit(hit_center(&model, ptc_ui_parent_footer_rect(3)), PTC_UI_HIT_PARENT_REFRESH, 0,
               "parent global refresh occupies the fourth footer slot");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_NONE, 0,
+              "healthy parent footer does not expose a status card");
+    check_true(!ptc_ui_parent_status_alert_visible(&model),
+               "healthy parent state does not request a footer alert");
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "failed");
     check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_PARENT_STATUS, 0,
-              "parent global status occupies the fifth footer slot");
+              "system failure exposes the footer support entry");
+    check_true(ptc_ui_parent_status_alert_visible(&model),
+               "system failure requests a footer alert");
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
+    model.status_loaded = true;
+    model.status_updated_at = 1;
+    check_true(!ptc_ui_parent_status_alert_visible(&model),
+               "stale status remains in the top status bar instead of the footer");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_NONE, 0,
+              "stale status does not create a footer support target");
     check_true(!rects_overlap(ptc_ui_parent_footer_rect(3), ptc_ui_parent_footer_rect(4)),
                "parent status does not overlap global refresh");
     check_int(ptc_ui_parent_footer_rect(0).w, 130, "parent previous-page footer is narrower");
     check_int(ptc_ui_parent_footer_rect(1).w, 130, "parent next-page footer is narrower");
     check_int(ptc_ui_parent_footer_rect(2).w, 170, "parent child-page footer preserves its longer label");
     check_int(ptc_ui_parent_footer_rect(3).w, 130, "parent refresh footer is narrower");
+    check_int(ptc_ui_parent_footer_rect(3).y, 664, "parent footer uses the compressed baseline");
+    check_int(ptc_ui_parent_footer_rect(3).h, 44, "parent footer uses the compressed height");
     check_int(ptc_ui_parent_footer_rect(4).x, 662, "parent status footer starts after the action buttons");
     check_int(ptc_ui_parent_footer_rect(4).w, 564, "parent status footer receives the freed width");
     check_int(ptc_ui_parent_footer_rect(4).x + ptc_ui_parent_footer_rect(4).w, 1226,
@@ -930,10 +965,12 @@ static void test_release_hit_targets(void)
               "unlimited weekly quota remains semantic for an explanatory message");
     check_hit(hit_center(&model, ptc_ui_weekly_day_header_rect(0)), PTC_UI_HIT_WEEKLY_DAY, 1,
               "weekly header only selects the day");
-    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_PARENT_STATUS, 0,
-              "weekly page shares the global status target");
-    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(2)), PTC_UI_HIT_PARENT_BACK, 0,
-              "parent back action occupies the third footer slot");
+    check_hit(hit_center(&model, ptc_ui_parent_footer_rect(4)), PTC_UI_HIT_NONE, 0,
+              "healthy weekly page leaves the right footer empty");
+    check_hit(hit_center(&model, ptc_ui_parent_subpage_footer_rect(0)), PTC_UI_HIT_PARENT_BACK, 0,
+              "plan subpage keeps a stable back action");
+    check_hit(hit_center(&model, ptc_ui_parent_subpage_footer_rect(1)), PTC_UI_HIT_PARENT_REFRESH, 0,
+              "plan subpage keeps a stable refresh action");
     check_hit(hit_center(&model, ptc_ui_weekly_save_rect()), PTC_UI_HIT_WEEKLY_SAVE, 0,
               "weekly save is on the page");
     check_hit(hit_center(&model, ptc_ui_weekly_bulk_rect()), PTC_UI_HIT_WEEKLY_BULK, 0,
@@ -2161,7 +2198,7 @@ static void test_time_menu_modal_touch_guards(void)
     model.parent_page = PTC_UI_PARENT_TODAY;
     model.overlay = PTC_UI_OVERLAY_QUICK_ADD;
     for (int option = 0; option < 4; ++option) {
-        check_hit(hit_center(&model, ptc_ui_autonomy_option_rect(option)),
+        check_hit(hit_center(&model, ptc_ui_quick_add_option_rect(option)),
             PTC_UI_HIT_QUICK_ADD_OPTION, option, "quick-add option is touchable");
     }
     check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)),
@@ -2180,6 +2217,41 @@ static void test_time_menu_modal_touch_guards(void)
         check_hit(ptc_ui_hit_test(&model, 10, 10), PTC_UI_HIT_NONE, 0,
             "bedtime modal empty space cannot reach the page below");
     }
+    model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
+    for (int field = 0; field < 3; ++field) {
+        PtcUiRect field_rect = ptc_ui_bedtime_overlay_field_rect(model.overlay, field);
+        check_hit(hit_center(&model, field_rect), PTC_UI_HIT_BEDTIME_OVERLAY_FIELD, field,
+            "weekly bedtime editor field is touchable");
+        check_true(!rects_overlap(field_rect, ptc_ui_cancel_rect(model.overlay)) &&
+                   !rects_overlap(field_rect, ptc_ui_confirm_rect(model.overlay)),
+            "weekly bedtime fields remain clear of fixed dialog actions");
+    }
+    for (int preset = 0; preset < 5; ++preset) {
+        PtcUiRect preset_rect = ptc_ui_bedtime_preset_rect(model.overlay, preset);
+        check_hit(hit_center(&model, preset_rect), PTC_UI_HIT_BEDTIME_PRESET, preset,
+            "weekly bedtime preset is directly touchable");
+        check_true(!rects_overlap(preset_rect, ptc_ui_bedtime_timeline_rect(model.overlay)) &&
+                   !rects_overlap(preset_rect, ptc_ui_cancel_rect(model.overlay)) &&
+                   !rects_overlap(preset_rect, ptc_ui_confirm_rect(model.overlay)),
+            "weekly bedtime presets do not overlap the timeline or dialog actions");
+        for (int next = preset + 1; next < 5; ++next)
+            check_true(!rects_overlap(preset_rect, ptc_ui_bedtime_preset_rect(model.overlay, next)),
+                "weekly bedtime preset chips do not overlap");
+    }
+    model.overlay = PTC_UI_OVERLAY_BEDTIME_SPECIAL;
+    model.bedtime_special_kind = 2;
+    model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_INHERIT;
+    for (int preset = 0; preset < 5; ++preset)
+        check_hit(hit_center(&model, ptc_ui_bedtime_preset_rect(model.overlay, preset)),
+            PTC_UI_HIT_NONE, 0, "inherited specified-date rule disables preset touch targets");
+    model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_DISABLED;
+    for (int preset = 0; preset < 5; ++preset)
+        check_hit(hit_center(&model, ptc_ui_bedtime_preset_rect(model.overlay, preset)),
+            PTC_UI_HIT_NONE, 0, "closed specified-date rule disables preset touch targets");
+    model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+    for (int preset = 0; preset < 5; ++preset)
+        check_hit(hit_center(&model, ptc_ui_bedtime_preset_rect(model.overlay, preset)),
+            PTC_UI_HIT_BEDTIME_PRESET, preset, "custom specified-date rule enables preset touch targets");
     model.overlay = PTC_UI_OVERLAY_BEDTIME_LEAVE;
     check_hit(hit_center(&model, ptc_ui_discard_rect(model.overlay)),
         PTC_UI_HIT_OVERLAY_DISCARD, 0, "bedtime leave discard is touchable");
@@ -2312,7 +2384,8 @@ static void test_global_time_projection_and_direct_inputs(void)
               "bedtime master switch card is touchable");
 
     model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
-    check_hit(ptc_ui_hit_test(&model, 330, 260), PTC_UI_HIT_BEDTIME_OVERLAY_FIELD, 0,
+    check_hit(hit_center(&model, ptc_ui_bedtime_overlay_field_rect(model.overlay, 0)),
+              PTC_UI_HIT_BEDTIME_OVERLAY_FIELD, 0,
               "bedtime overlay rows are touchable for direct input");
 }
 
