@@ -472,7 +472,9 @@ static void draw_autonomy_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
     static const char *SUBTITLES[] = {"不开放缓冲", "快速存盘", "收尾推荐", "充裕退出"};
     int index;
     char label[48];
-    draw_dialog_shell(pixels, stride, model, &dialog, 880, 480);
+    PtcUiModel shell_model = *model;
+    shell_model.overlay_body[0] = '\0';
+    draw_dialog_shell(pixels, stride, &shell_model, &dialog, 880, 480);
 
     /* 详细用途与机制说明 */
     draw_text(pixels, stride, dialog.x + 48, dialog.y + 92,

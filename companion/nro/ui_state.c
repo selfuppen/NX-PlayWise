@@ -1666,6 +1666,7 @@ bool ptc_ui_operation_feedback_visible(const PtcUiModel *model)
     if (model->waiting || strcmp(model->result_status, "error") == 0 ||
         model->feedback_detail[0]) return true;
     return strcmp(model->result_status, "ok") == 0 && model->message[0] &&
+        model->command_name[0] &&
         strcmp(model->command_name, "刷新状态") != 0 &&
         strcmp(model->command_name, "未开始") != 0;
 }

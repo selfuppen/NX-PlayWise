@@ -269,8 +269,7 @@ void handle_parent_action(UiState *ui)
             ui->model.overlay = PTC_UI_OVERLAY_AUTONOMY;
             ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "今日自主缓冲");
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                "孩子每天只能领取一次，仅限限时日；默认关闭。");
+            ui->model.overlay_body[0] = '\0';
             break;
         default:
             break;

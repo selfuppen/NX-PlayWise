@@ -642,6 +642,8 @@ int main(int argc, char **argv)
             autonomy.overlay_selection = 2;
             autonomy.draft_autonomy_policy.daily_buffer_minutes = 10;
             snprintf(autonomy.overlay_title, sizeof(autonomy.overlay_title), "今日自主缓冲");
+            snprintf(autonomy.overlay_body, sizeof(autonomy.overlay_body),
+                     "孩子每天只能领取一次，仅限限时日；默认关闭。");
             failed |= save_preview(argv[2], "autonomy", "autonomy-policy", &autonomy, dark);
         }
         model.parent_page = PTC_UI_PARENT_PLAN;

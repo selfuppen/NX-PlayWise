@@ -88,39 +88,49 @@ const char *home_runtime_notice(const PtcUiModel *model)
 
 static void draw_home_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    bool expanded = ptc_ui_home_notice_expanded(model) || model->waiting || measure_text(model->message, 20) > 1100;
-    bool error = strcmp(model->result_status, "error") == 0;
     const char *runtime = home_runtime_notice(model);
-    const char *title = runtime[0] ? runtime : (error ? "操作未完成" : (model->waiting ? "正在同步" : ""));
-    UiRect box = {48, 520, 1184, 128};
-    uint32_t accent = error || model->disable_flag_present ? UI_DANGER : UI_WARNING;
-    fill_round_rect(pixels, stride, box, 16, expanded ? (error || model->disable_flag_present ? UI_DANGER_SOFT : UI_WARNING_SOFT) : UI_SURFACE);
-    if (model->waiting) {
-        draw_rect_outline(pixels, stride, box, 16, 1, UI_WARNING);
-    } else {
-        draw_rect_outline(pixels, stride, box, 16, 1, UI_BORDER);
+    bool feedback_visible = ptc_ui_operation_feedback_visible(model);
+    bool expanded_cond = ptc_ui_home_notice_expanded(model);
+    if (!runtime[0] && !feedback_visible && !expanded_cond) {
+        return;
     }
-    int icon_x = 68;
-    int icon_y = 535;
-    int text_x = 100;
-    int baseline = 548;
 
-    if (title[0]) {
-        draw_status_symbol(pixels, stride, icon_x, icon_y, accent, error ? 3 : (model->waiting ? 2 : 1));
-        draw_text(pixels, stride, text_x, baseline, title, 20, accent);
-        int y = baseline + 26;
-        y = draw_wrapped_text(pixels, stride, text_x, y, model->message, 18, 1100, 23, 2, UI_INK);
-        if (model->feedback_detail[0])
-            draw_wrapped_text(pixels, stride, text_x, y, model->feedback_detail, 18, 1100, 23,
-                (644 - y) / 23 + 1, UI_MUTED);
+    bool error = strcmp(model->result_status, "error") == 0;
+    const char *title = runtime[0] ? runtime : (error ? "操作未完成" : (model->waiting ? "正在同步" : ""));
+    uint32_t accent = (error || model->disable_flag_present) ? UI_DANGER :
+        (model->waiting ? UI_WARNING : (runtime[0] ? UI_WARNING : UI_SUCCESS));
+
+    bool two_lines = model->feedback_detail[0] ||
+        (title[0] && model->message[0] && strcmp(title, model->message) != 0);
+    int height = two_lines ? 72 : 56;
+    int y = 586 - height / 2;
+    UiRect box = {48, y, 1184, height};
+
+    uint32_t bg = (error || model->disable_flag_present) ? UI_DANGER_SOFT :
+        (model->waiting ? UI_WARNING_SOFT : UI_SURFACE);
+    fill_round_rect(pixels, stride, box, 14, bg);
+    if (model->waiting) {
+        draw_rect_outline(pixels, stride, box, 14, 1, UI_WARNING);
     } else {
-        draw_status_symbol(pixels, stride, icon_x, icon_y, UI_SUCCESS, 1);
-        const char *msg = model->message[0] ? model->message : "状态会在后台自动同步";
-        uint32_t text_col = model->message[0] ? UI_INK : UI_MUTED;
-        draw_text(pixels, stride, text_x, baseline, msg, 20, text_col);
-        if (model->feedback_detail[0])
-            draw_wrapped_text(pixels, stride, text_x, baseline + 26, model->feedback_detail, 18, 1100, 23,
-                (644 - (baseline + 26)) / 23 + 1, UI_MUTED);
+        draw_rect_outline(pixels, stride, box, 14, 1,
+            (error || model->disable_flag_present) ? UI_DANGER : UI_BORDER);
+    }
+
+    int icon_x = box.x + 20;
+    int icon_y = box.y + (height - 20) / 2;
+    int text_x = box.x + 52;
+    draw_status_symbol(pixels, stride, icon_x, icon_y, accent, error ? 3 : (model->waiting ? 2 : 1));
+
+    if (two_lines) {
+        const char *line1 = title[0] ? title : model->message;
+        const char *line2 = (title[0] && model->message[0] && strcmp(title, model->message) != 0)
+            ? model->message : model->feedback_detail;
+        draw_text(pixels, stride, text_x, box.y + 26, line1, 16, accent);
+        draw_text(pixels, stride, text_x, box.y + 50, line2, 14, UI_MUTED);
+    } else {
+        const char *msg = title[0] ? title : (model->message[0] ? model->message : "状态已更新");
+        uint32_t text_col = error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_INK);
+        draw_text(pixels, stride, text_x, box.y + 35, msg, 18, text_col);
     }
 }
 
@@ -2002,7 +2012,15 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     } else if (model->parent_page == PTC_UI_PARENT_TODAY) {
         draw_home_notice(pixels, stride, model);
     } else if (!plan_subpage) {
-        draw_notice(pixels, stride, model, 522, 128);
+        if (ptc_ui_operation_feedback_visible(model) || ptc_ui_home_notice_expanded(model)) {
+            bool error = strcmp(model->result_status, "error") == 0;
+            bool support = model->parent_page == PTC_UI_PARENT_SUPPORT;
+            bool expanded = error || model->waiting || model->feedback_detail[0] || support ||
+                measure_text(model->message, 20) > 1094;
+            int height = expanded ? 74 : 56;
+            int y = 586 - height / 2;
+            draw_notice(pixels, stride, model, y, height);
+        }
     }
     if (model->parent_page == PTC_UI_PARENT_SETTINGS) {
         UiRect help = {842, 176, 384, 324};
