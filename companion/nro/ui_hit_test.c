@@ -492,7 +492,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     }
     if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
         for (i = 0; i < model->recent_event_count; ++i) {
-            if (rect_contains_row_cell(ptc_ui_support_event_rect(i), 22, x, y)) {
+            if (rect_contains_row_cell(ptc_ui_support_event_rect(i), 42, x, y)) {
                 return make_hit(PTC_UI_HIT_SUPPORT_EVENT, model->recent_event_count - 1 - i);
             }
         }

@@ -38,7 +38,7 @@ PtcUiRect ptc_ui_child_refresh_rect(void)
 
 PtcUiRect ptc_ui_child_buffer_rect(void)
 {
-    PtcUiRect rect = {736, 328, 464, 64};
+    PtcUiRect rect = {736, 326, 464, 68};
     return rect;
 }
 
@@ -154,7 +154,7 @@ PtcUiRect ptc_ui_parent_card_rect(int index)
     if (index == 6) return (PtcUiRect){842, 408, 384, 94};
     int column = index % 2;
     int row = index / 2;
-    PtcUiRect rect = {54 + column * 385, 176 + row * 110, 365, 94};
+    PtcUiRect rect = {54 + column * 385, 176 + row * 154, 365, 138};
     return rect;
 }
 
@@ -194,19 +194,20 @@ void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_siz
 
 PtcUiRect ptc_ui_home_summary_rect(bool parent)
 {
-    return parent ? (PtcUiRect){48, 176, 488, 328} : (PtcUiRect){48, 120, 632, 384};
+    return parent ? (PtcUiRect){48, 176, 488, 452} : (PtcUiRect){48, 120, 632, 496};
 }
 
 PtcUiRect ptc_ui_today_card_rect(int index)
 {
     if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){560 + (index % 2) * 348, 176 + (index / 2) * 110, 324, 94};
+    return (PtcUiRect){560 + (index % 2) * 348, 176 + (index / 2) * 154, 324, 138};
 }
 
 PtcUiRect ptc_ui_plan_card_rect(int index)
 {
-    if (index >= 0 && index < 3) return (PtcUiRect){54, 192 + index * 102, 365, 78};
-    if (index >= 3 && index < 5) return (PtcUiRect){439, 192 + (index - 3) * 102, 365, 78};
+    if (index >= 0 && index < 3) return (PtcUiRect){54, 214 + index * 140, 365, 102};
+    if (index == 3) return (PtcUiRect){439, 214, 365, 102};
+    if (index == 4) return (PtcUiRect){439, 332, 365, 102};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
@@ -374,7 +375,7 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? (PtcUiRect){324, 412, 184, 44} : (PtcUiRect){736, 424, 464, 48};
+    return parent ? (PtcUiRect){84, 490, 416, 48} : (PtcUiRect){736, 418, 464, 56};
 }
 
 PtcUiRect ptc_ui_home_details_tab_rect(int index)
@@ -431,25 +432,25 @@ PtcUiRect ptc_ui_support_card_rect(int index)
     if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
     column = index % 2;
     row = index / 2;
-    return (PtcUiRect){54 + column * 385, 176 + row * 110, 365, 94};
+    return (PtcUiRect){54 + column * 385, 176 + row * 154, 365, 138};
 }
 
 PtcUiRect ptc_ui_holiday_card_rect(int index)
 {
     switch (index) {
-    case 0: return (PtcUiRect){54, 176, 760, 72};
-    case 1: return (PtcUiRect){54, 260, 368, 168};
-    case 2: return (PtcUiRect){446, 260, 368, 168};
-    case 3: return (PtcUiRect){54, 440, 240, 60};
-    case 4: return (PtcUiRect){310, 440, 240, 60};
-    case 5: return (PtcUiRect){566, 440, 248, 60};
+    case 0: return (PtcUiRect){54, 176, 760, 84};
+    case 1: return (PtcUiRect){54, 276, 368, 224};
+    case 2: return (PtcUiRect){446, 276, 368, 224};
+    case 3: return (PtcUiRect){54, 516, 240, 66};
+    case 4: return (PtcUiRect){310, 516, 240, 66};
+    case 5: return (PtcUiRect){566, 516, 248, 66};
     default: return (PtcUiRect){0, 0, 0, 0};
     }
 }
 
 PtcUiRect ptc_ui_holiday_calendar_rect(void)
 {
-    return (PtcUiRect){862, 386, 336, 54};
+    return (PtcUiRect){862, 532, 336, 50};
 }
 
 PtcUiRect ptc_ui_holiday_page_action_rect(int index)
@@ -461,21 +462,21 @@ PtcUiRect ptc_ui_holiday_page_action_rect(int index)
 
 PtcUiRect ptc_ui_holiday_enable_rect(void)
 {
-    return (PtcUiRect){722, 194, 76, 36};
+    return (PtcUiRect){722, 200, 76, 36};
 }
 
 PtcUiRect ptc_ui_holiday_mode_rect(int index)
 {
     PtcUiRect card = ptc_ui_holiday_card_rect(index + 1);
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){card.x + card.w - 92, card.y + 12, 80, 36};
+    return (PtcUiRect){card.x + card.w - 92, card.y + 14, 80, 36};
 }
 
 PtcUiRect ptc_ui_holiday_minutes_rect(int index)
 {
     PtcUiRect card = ptc_ui_holiday_card_rect(index + 1);
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){card.x + 12, card.y + 80, card.w - 24, 76};
+    return (PtcUiRect){card.x + 12, card.y + 80, card.w - 24, 130};
 }
 
 uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback)
@@ -495,7 +496,7 @@ uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallba
 PtcUiRect ptc_ui_support_event_rect(int index)
 {
     if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){868, 427 + index * 22, 332, 20};
+    return (PtcUiRect){868, 478 + index * 42, 332, 36};
 }
 
 PtcUiRect ptc_ui_dialog_rect(int width, int height)
@@ -712,7 +713,7 @@ PtcUiRect ptc_ui_minutes_dec_large_rect(void)
 
 PtcUiRect ptc_ui_weekly_day_rect(int index)
 {
-    PtcUiRect rect = {54 + index * 108, 218, 96, 200};
+    PtcUiRect rect = {54 + index * 108, 208, 98, 280};
     if (index < 0 || index >= 7) rect = (PtcUiRect){0, 0, 0, 0};
     return rect;
 }
@@ -726,19 +727,19 @@ PtcUiRect ptc_ui_weekly_day_header_rect(int index)
 PtcUiRect ptc_ui_weekly_day_mode_rect(int index)
 {
     PtcUiRect card = ptc_ui_weekly_day_rect(index);
-    return (PtcUiRect){card.x + 4, card.y + 42, card.w - 8, 50};
+    return (PtcUiRect){card.x + 4, card.y + 44, card.w - 8, 46};
 }
 
 PtcUiRect ptc_ui_weekly_day_minutes_rect(int index)
 {
     PtcUiRect card = ptc_ui_weekly_day_rect(index);
-    PtcUiRect rect = {card.x + 4, card.y + 92, card.w - 8, 108};
+    PtcUiRect rect = {card.x + 4, card.y + 90, card.w - 8, 186};
     return rect;
 }
 
 PtcUiRect ptc_ui_weekly_bulk_rect(void)
 {
-    return (PtcUiRect){242, 438, 176, 62};
+    return (PtcUiRect){242, 516, 176, 66};
 }
 
 PtcUiRect ptc_ui_numpad_display_rect(void)
@@ -862,13 +863,13 @@ PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay)
 
 PtcUiRect ptc_ui_weekly_save_rect(void)
 {
-    PtcUiRect rect = {618, 438, 196, 62};
+    PtcUiRect rect = {618, 516, 196, 66};
     return rect;
 }
 
 PtcUiRect ptc_ui_weekly_discard_rect(void)
 {
-    PtcUiRect rect = {430, 438, 176, 62};
+    PtcUiRect rect = {430, 516, 176, 66};
     return rect;
 }
 
@@ -1208,7 +1209,7 @@ bool ptc_ui_rect_contains(PtcUiRect rect, int x, int y)
 }
 PtcUiRect ptc_ui_weekly_page_mode_rect(void)
 {
-    PtcUiRect rect = {54, 438, 176, 62};
+    PtcUiRect rect = {54, 516, 176, 66};
     return rect;
 }
 

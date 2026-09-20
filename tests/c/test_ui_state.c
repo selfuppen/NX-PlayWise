@@ -977,30 +977,28 @@ static void test_release_hit_targets(void)
               "weekly bulk action occupies slot seven");
     for (int slot = 0; slot < 7; ++slot) {
         PtcUiRect card = ptc_ui_weekly_day_rect(slot);
-        check_true(card.w == 96 && card.h == 200, "weekly day cards use the seven-column size");
-        check_true(card.x == 54 + slot * 108 && card.y == 218,
+        check_true(card.w == 98 && card.h == 280, "weekly day cards use the seven-column size");
+        check_true(card.x == 54 + slot * 108 && card.y == 208,
                    "weekly day cards use the horizontal Monday-to-Sunday coordinates");
         check_true(ptc_ui_weekly_day_header_rect(slot).h == 42 &&
-                   ptc_ui_weekly_day_mode_rect(slot).h == 50 &&
-                   ptc_ui_weekly_day_minutes_rect(slot).h == 108,
-                   "weekly subregions exactly partition the card height");
+                   ptc_ui_weekly_day_mode_rect(slot).h == 46 &&
+                   ptc_ui_weekly_day_minutes_rect(slot).h == 186,
+                   "weekly subregions partition the card height");
     }
     check_hit(hit_center(&model, ptc_ui_weekly_page_mode_rect()), PTC_UI_HIT_WEEKLY_MODE, 0,
               "weekly page mode switch uses page geometry");
     check_true(ptc_ui_weekly_page_mode_rect().y != ptc_ui_weekly_mode_rect().y,
                "weekly page mode geometry does not move the legacy editor overlay");
     {
-        PtcUiRect notice = {54, 522, 1172, 128};
-        check_true(!rects_overlap(ptc_ui_weekly_page_mode_rect(), notice),
-                   "weekly mode does not overlap recent execution");
-        check_true(!rects_overlap(ptc_ui_weekly_discard_rect(), notice),
-                   "weekly discard does not overlap recent execution");
-        check_true(!rects_overlap(ptc_ui_weekly_save_rect(), notice),
-                   "weekly save does not overlap recent execution");
-        check_true(!rects_overlap(ptc_ui_weekly_bulk_rect(), notice),
-                   "weekly bulk card does not overlap recent execution");
-        check_true(!rects_overlap(notice, ptc_ui_parent_footer_rect(3)),
-                   "full recent execution card does not overlap parent footer");
+        PtcUiRect footer = ptc_ui_parent_subpage_footer_rect(0);
+        check_true(!rects_overlap(ptc_ui_weekly_page_mode_rect(), ptc_ui_weekly_bulk_rect()),
+                   "weekly mode does not overlap bulk button");
+        check_true(!rects_overlap(ptc_ui_weekly_bulk_rect(), ptc_ui_weekly_discard_rect()),
+                   "weekly bulk does not overlap discard button");
+        check_true(!rects_overlap(ptc_ui_weekly_discard_rect(), ptc_ui_weekly_save_rect()),
+                   "weekly discard does not overlap save button");
+        check_true(!rects_overlap(ptc_ui_weekly_save_rect(), footer),
+                   "weekly save does not overlap parent footer");
     }
     model.disable_flag_present = true;
     model.draft_week[1].mode = PTC_RULE_MODE_LIMIT;
@@ -1036,8 +1034,10 @@ static void test_release_hit_targets(void)
                "support event rows do not overlap");
     check_hit(hit_center(&model, ptc_ui_support_card_rect(4)), PTC_UI_HIT_PARENT_CARD, 4,
               "support cards use the top-level layout");
-    check_true(!rects_overlap(ptc_ui_support_card_rect(4), (PtcUiRect){54, 522, 1172, 128}),
-               "support action cards do not overlap recent execution");
+    check_true(!rects_overlap(ptc_ui_support_card_rect(4), ptc_ui_parent_footer_rect(3)),
+               "support action cards do not overlap parent footer");
+    check_true(!rects_overlap(ptc_ui_support_card_rect(4), ptc_ui_support_card_rect(5)),
+               "support row 2 cards do not overlap each other");
     for (int tab = 0; tab < PTC_UI_PARENT_PAGE_COUNT; ++tab)
         check_hit(hit_center(&model, ptc_ui_parent_tab_rect(tab)), PTC_UI_HIT_PARENT_TAB, tab,
                   "support keeps all top-level tab touch targets");
@@ -1061,15 +1061,20 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_holiday_calendar_rect()), PTC_UI_HIT_HOLIDAY_CALENDAR, 0,
               "holiday calendar viewer is in the status column");
     {
-        PtcUiRect notice = {54, 522, 1172, 128};
+        PtcUiRect footer = ptc_ui_parent_subpage_footer_rect(0);
         for (int index = 0; index < 6; ++index) {
-            check_true(!rects_overlap(ptc_ui_holiday_card_rect(index), notice),
-                       "holiday control does not overlap recent execution");
+            check_true(!rects_overlap(ptc_ui_holiday_card_rect(index), footer),
+                       "holiday control does not overlap subpage footer");
         }
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(0), ptc_ui_holiday_card_rect(1)),
                    "holiday header does not overlap rule controls");
         check_true(!rects_overlap(ptc_ui_holiday_card_rect(1), ptc_ui_holiday_card_rect(2)),
                    "holiday rule cards sit side by side without overlap");
+        check_true(!rects_overlap(ptc_ui_holiday_card_rect(1), ptc_ui_holiday_card_rect(3)),
+                   "holiday rule card does not overlap bottom actions");
+        check_true(!rects_overlap(ptc_ui_holiday_card_rect(3), ptc_ui_holiday_card_rect(4)) &&
+                   !rects_overlap(ptc_ui_holiday_card_rect(4), ptc_ui_holiday_card_rect(5)),
+                   "holiday bottom actions do not overlap each other");
         check_true(ptc_ui_holiday_card_rect(3).w == 240 && ptc_ui_holiday_card_rect(4).w == 240 &&
                    ptc_ui_holiday_card_rect(5).w == 248,
                    "holiday bottom actions share the left control width");
