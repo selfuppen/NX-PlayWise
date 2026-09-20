@@ -904,8 +904,8 @@ static void test_release_hit_targets(void)
     model.view = PTC_UI_CHILD;
     code_input = ptc_ui_child_submit_rect();
     refresh = ptc_ui_child_refresh_rect();
-    check_int(code_input.x, 736, "child code input aligns with action panel");
-    check_int(code_input.w, 464, "child code input uses the action panel width");
+    check_int(code_input.x, 684, "child code input aligns with action panel");
+    check_int(code_input.w, 516, "child code input uses the action panel width");
     check_int(refresh.y, 660, "child refresh stays in the footer");
     check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "child code button");
     model.disable_flag_present = true;
@@ -1774,6 +1774,14 @@ static void test_visual_action_boundaries(void)
     model.overlay = PTC_UI_OVERLAY_NONE;
     model.view = PTC_UI_CHILD;
     PtcUiRect code = ptc_ui_child_submit_rect();
+    PtcUiRect summary = ptc_ui_home_summary_rect(false);
+    check_int(summary.w, 580, "child task board uses a balanced left column");
+    check_int(code.x, 684, "child action column aligns inside the balanced right card");
+    check_int(code.w, 516, "child primary action uses the full right-card content width");
+    check_int(ptc_ui_child_buffer_rect().w, code.w, "child actions share one visual column width");
+    check_int(ptc_ui_home_details_rect(false).w, code.w, "child details action shares the action column width");
+    check_true(summary.x + summary.w < code.x,
+               "child task board and action targets keep a visible column gap");
     check_hit(ptc_ui_hit_test(&model, code.x + 1, code.y + code.h / 2),
               PTC_UI_HIT_CHILD_SUBMIT_CODE, 0, "primary action inner edge is touchable");
     check_hit(ptc_ui_hit_test(&model, code.x - 1, code.y + code.h / 2),

@@ -519,6 +519,17 @@ int main(int argc, char **argv)
         model.weekly_dirty = true;
         failed |= save_preview(argv[2], "plan", "plan-draft-today", &model, dark);
         {
+            PtcUiModel panel_state = model;
+            panel_state.status_updated_at = 879;
+            failed |= save_preview(argv[2], "plan", "plan-draft-unknown", &panel_state, dark);
+            panel_state = model;
+            panel_state.waiting = true;
+            failed |= save_preview(argv[2], "plan", "plan-draft-waiting", &panel_state, dark);
+            panel_state = model;
+            panel_state.draft_week[ptc_weekday_from_day_index(panel_state.day_index)].minutes = 30;
+            failed |= save_preview(argv[2], "plan", "plan-draft-danger", &panel_state, dark);
+        }
+        {
             PtcUiModel confirmation = model;
             confirmation.operation = PTC_UI_OPERATION_SAVE_WEEKLY;
             confirmation.overlay = PTC_UI_OVERLAY_CONFIRM;
@@ -571,6 +582,16 @@ int main(int argc, char **argv)
         model.holiday_dirty = true;
         model.selected_index = 1;
         failed |= save_preview(argv[2], "holiday", "holiday-draft", &model, dark);
+        {
+            PtcUiModel panel_state = model;
+            panel_state.waiting = true;
+            failed |= save_preview(argv[2], "holiday", "holiday-waiting", &panel_state, dark);
+            panel_state = model;
+            snprintf(panel_state.result_status, sizeof(panel_state.result_status), "error");
+            snprintf(panel_state.message, sizeof(panel_state.message), "保存失败，草稿仍保留，请检查后重试。");
+            panel_state.error_code = 501;
+            failed |= save_preview(argv[2], "holiday", "holiday-failed", &panel_state, dark);
+        }
         {
             PtcUiModel confirmation = model;
             if (!ptc_day_index_from_date(2026, 1, 1, &confirmation.day_index)) return 1;
