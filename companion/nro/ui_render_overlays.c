@@ -395,15 +395,19 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
             UiRect toggle_rect = {row.x + row.width - 78, row.y + (row.height - 30) / 2, 60, 30};
             draw_toggle_switch(pixels, stride, toggle_rect, draft->enabled,
                                model->overlay_selection == 0, model->disable_flag_present, NULL, NULL);
-            draw_text(pixels, stride, row.x + row.width - 165, row.y + 38, "A/点按切换", 13, UI_MUTED);
         } else if (index == 1 || index == 2) {
             draw_text(pixels, stride, row.x + 130, row.y + 38, values[index], 20, UI_RGB(UI_BLENDED(text_primary)));
-            draw_text(pixels, stride, row.x + 320, row.y + 38, "左右 ±1天 | ZL/ZR ±7天", 13, UI_ACCENT);
-            draw_text(pixels, stride, row.x + row.width - 92, row.y + 38, "A 键盘输入", 12, UI_MUTED);
+            UiRect edit_chip = {row.x + row.width - 86, row.y + (row.height - 28) / 2, 70, 28};
+            fill_round_rect(pixels, stride, edit_chip, 6, UI_RGB(UI_BLENDED(surface)));
+            draw_rect_outline(pixels, stride, edit_chip, 6, 1, UI_BORDER);
+            draw_text_center(pixels, stride, edit_chip, "A 编辑", 13, UI_MUTED);
         } else {
             draw_text(pixels, stride, row.x + 130, row.y + 38, values[index], 20,
                        draft->rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS : UI_ACCENT);
-            draw_text(pixels, stride, row.x + row.width - 180, row.y + 38, "X 模式 | A 键盘输入", 13, UI_MUTED);
+            UiRect edit_chip = {row.x + row.width - 86, row.y + (row.height - 28) / 2, 70, 28};
+            fill_round_rect(pixels, stride, edit_chip, 6, UI_RGB(UI_BLENDED(surface)));
+            draw_rect_outline(pixels, stride, edit_chip, 6, 1, UI_BORDER);
+            draw_text_center(pixels, stride, edit_chip, "A 编辑", 13, UI_MUTED);
         }
     }
 
@@ -433,12 +437,29 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
                   "计划区间计算中，请先设定有效起止日期", 15, UI_MUTED);
     }
 
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 486,
-              "说明：临时额度计划仅改每日额度，就寝时间独立并行。优先级：今日额度调整 > 临时额度计划 > 国家节假日 > 周计划。",
+    /* 规则优先级说明 */
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 482,
+              "规则链优先级：今日额度调整 > 临时额度计划 > 国家节假日 > 周计划（就寝时间独立并行）",
               14, UI_RGB(UI_BLENDED(text_secondary)));
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 512,
-              "操作：方向键上下选择  |  左右键 ±1 天  |  ZL / ZR 键 ±7 天  |  A 键快速输入  |  X 键切换限时模式",
-              14, UI_MUTED);
+
+    /* 动态上下文按键引导栏 (Context-Aware Action Guide Bar) */
+    UiRect guide_bar = {dialog.x + 34, dialog.y + 508, dialog.width - 68, 30};
+    fill_round_rect(pixels, stride, guide_bar, 6, UI_RGB(UI_BLENDED(surface_raised)));
+    draw_rect_outline(pixels, stride, guide_bar, 6, 1, UI_BORDER);
+
+    char guide_text[160];
+    if (model->overlay_selection == 0) {
+        snprintf(guide_text, sizeof(guide_text), "操作：按 A 或点按切换计划开启/停用状态");
+    } else if (model->overlay_selection == 1) {
+        snprintf(guide_text, sizeof(guide_text), "操作：左右键 ±1 天  •  ZL / ZR ±7 天  •  A 键盘输入开始日期");
+    } else if (model->overlay_selection == 2) {
+        snprintf(guide_text, sizeof(guide_text), "操作：左右键 ±1 天  •  ZL / ZR ±7 天  •  A 键盘输入天数 (1~366)");
+    } else if (model->overlay_selection == 3) {
+        snprintf(guide_text, sizeof(guide_text), "操作：X 切换不限时/限时模式  •  A 键盘设定每日分钟数");
+    } else {
+        snprintf(guide_text, sizeof(guide_text), "操作：上下键选择字段  •  + 保存草稿  •  B 返回");
+    }
+    draw_text(pixels, stride, guide_bar.x + 12, guide_bar.y + 20, guide_text, 13, UI_ACCENT);
 
     if (strcmp(model->result_status, "error") == 0) {
         draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 538,
@@ -1676,6 +1697,9 @@ void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         break;
     case PTC_UI_OVERLAY_BEDTIME_BULK:
         draw_bedtime_bulk_overlay(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_NOTICE_DETAILS:
+        draw_notice_details_dialog(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
         draw_shortcut_manager_overlay(pixels, stride, model);

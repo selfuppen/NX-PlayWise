@@ -46,6 +46,12 @@ static int next_bedtime_preset(const PtcBedtimeWindow *window)
 
 void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS) {
+        if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Minus)) {
+            ui->model.overlay = PTC_UI_OVERLAY_NONE;
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_QUICK_ADD) {
         static const uint16_t OPTIONS[] = {15, 30, 60};
         if (down & HidNpadButton_B) {
@@ -1261,6 +1267,12 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_DURATION_FIELD:
         ptc_ui_duration_select_field(&ui->model, (PtcUiDurationField)hit.index);
+        break;
+    case PTC_UI_HIT_NOTICE_DETAILS:
+        if (ui->model.feedback_detail[0] || strcmp(ui->model.result_status, "error") == 0 ||
+            (ui->model.parent_page == PTC_UI_PARENT_SUPPORT)) {
+            ui->model.overlay = PTC_UI_OVERLAY_NOTICE_DETAILS;
+        }
         break;
     case PTC_UI_HIT_NONE:
     default:

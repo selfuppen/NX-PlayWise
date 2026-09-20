@@ -91,7 +91,8 @@ typedef enum {
     PTC_UI_HIT_BEDTIME_OVERLAY_FIELD,
     PTC_UI_HIT_BEDTIME_PRESET,
     PTC_UI_HIT_HOME_DETAILS,
-    PTC_UI_HIT_HOME_DETAILS_TAB
+    PTC_UI_HIT_HOME_DETAILS_TAB,
+    PTC_UI_HIT_NOTICE_DETAILS
 } PtcUiHitKind;
 
 typedef struct {
@@ -112,6 +113,7 @@ PtcUiRect ptc_ui_setup_back_rect(void);
 PtcUiRect ptc_ui_setup_pin_rect(void);
 PtcUiRect ptc_ui_setup_theme_rect(int index);
 PtcUiRect ptc_ui_setup_zone_rect(int index);
+PtcUiRect ptc_ui_notice_rect(void);
 PtcUiRect ptc_ui_notice_status_icon_rect(int y);
 PtcUiRect ptc_ui_notice_command_text_rect(int y, int height);
 PtcUiRect ptc_ui_parent_footer_rect(int index);

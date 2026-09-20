@@ -49,7 +49,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+    if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS || model->overlay == PTC_UI_OVERLAY_NOTICE_DETAILS) {
         return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }
@@ -326,6 +326,11 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     }
     if (model->overlay != PTC_UI_OVERLAY_NONE) {
         return hit_test_overlay(model, x, y);
+    }
+    if (ptc_ui_operation_feedback_visible(model)) {
+        if (ptc_ui_rect_contains(ptc_ui_notice_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_NOTICE_DETAILS, 0);
+        }
     }
     if ((model->view == PTC_UI_CHILD ||
          (model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_TODAY)) &&

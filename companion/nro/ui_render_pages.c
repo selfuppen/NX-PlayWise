@@ -932,9 +932,17 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     bool disabled = state == PTC_UI_ACTION_DISABLED;
     bool recommended = state == PTC_UI_ACTION_RECOMMENDED;
     bool compact = rect.height < 90;
-    int title_size = 22;
-    int content_width = rect.width - 76;
-    int title_width = content_width - reserved_right - (recommended ? 64 : 0);
+    int badge_size = compact ? 34 : 44;
+    int title_size = compact ? 20 : 22;
+    int sub_size = compact ? 15 : 17;
+    int title_line_h = compact ? 23 : 26;
+    int sub_line_h = compact ? 19 : 22;
+
+    int text_x = rect.x + 18 + badge_size + 16;
+    int content_width = rect.width - (text_x - rect.x) - (recommended ? 64 : 16) - reserved_right;
+    if (content_width < 100) content_width = 100;
+    int title_width = content_width;
+
     uint32_t background = disabled ? UI_RAISED : (selected ? UI_ACCENT_SOFT : UI_SURFACE);
     draw_card_shadow(pixels, stride, rect, 16);
     fill_round_rect(pixels, stride, rect, 16, background);
@@ -943,28 +951,44 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     } else {
         draw_rect_outline(pixels, stride, rect, 16, 1, UI_BORDER);
     }
-    /* 左侧精致微图标徽章 */
-    int icon_cx = rect.x + 32;
-    int icon_cy = rect.y + rect.height / 2;
-    UiRect badge_rect = {icon_cx - 17, icon_cy - 17, 34, 34};
+
+    int title_lines = measure_text(action->title, title_size) > title_width ? 2 : 1;
+    bool has_sub = action->subtitle && action->subtitle[0];
+    int sub_lines = has_sub ? (measure_text(action->subtitle, sub_size) > content_width ? 2 : 1) : 0;
+    int text_block_h = title_lines * title_line_h + (has_sub ? (4 + sub_lines * sub_line_h) : 0);
+
+    /* 文本块与图标整体在卡片内光学垂直居中 */
+    int text_top = rect.y + (rect.height - text_block_h) / 2;
+    if (text_top < rect.y + 14) text_top = rect.y + 14;
+
+    /* 图标垂直中心精准对齐文本块的垂直中心 */
+    int icon_cx = rect.x + 18 + badge_size / 2;
+    int icon_cy = text_top + text_block_h / 2;
+    UiRect badge_rect = {icon_cx - badge_size / 2, icon_cy - badge_size / 2, badge_size, badge_size};
     uint32_t badge_bg = disabled ? UI_PAGE :
         (action->accent == UI_SUCCESS ? UI_SUCCESS_SOFT :
         (action->accent == UI_DANGER ? UI_DANGER_SOFT :
         (action->accent == UI_WARNING ? UI_WARNING_SOFT : UI_ACCENT_SOFT)));
-    fill_round_rect(pixels, stride, badge_rect, 10, badge_bg);
-    draw_rect_outline(pixels, stride, badge_rect, 10, 1, UI_BORDER);
+    fill_round_rect(pixels, stride, badge_rect, 12, badge_bg);
+    draw_rect_outline(pixels, stride, badge_rect, 12, 1, UI_BORDER);
     draw_card_action_icon(pixels, stride, icon_cx, icon_cy, action->title,
         disabled ? UI_DISABLED : action->accent, disabled);
 
-    int title_lines = measure_text(action->title, title_size) > title_width ? 2 : 1;
-    int baseline = draw_wrapped_text(pixels, stride, rect.x + 58, rect.y + (compact ? 28 : 32),
-        action->title, title_size, title_width, 25, title_lines, disabled ? UI_DISABLED : UI_INK);
-    draw_wrapped_text(pixels, stride, rect.x + 58, baseline + 3, action->subtitle, 18,
-        content_width, 22, (rect.y + rect.height - baseline - 4) / 22 + 1,
-        disabled ? UI_DISABLED : UI_MUTED);
+    int baseline = draw_wrapped_text(pixels, stride, text_x, text_top + title_line_h - 4,
+        action->title, title_size, title_width, title_line_h, title_lines, disabled ? UI_DISABLED : UI_INK);
+
+    if (has_sub) {
+        draw_wrapped_text(pixels, stride, text_x, baseline + 4, action->subtitle, sub_size,
+            content_width, sub_line_h, sub_lines, disabled ? UI_DISABLED : UI_MUTED);
+    }
+
     if (recommended && !disabled) {
         fill_round_rect(pixels, stride, (UiRect){rect.x + rect.width - 66, rect.y + 8, 56, 24}, 6, UI_SUCCESS);
         draw_text_center(pixels, stride, (UiRect){rect.x + rect.width - 66, rect.y + 8, 56, 24}, "建议", 16, UI_ON_ACCENT);
+    } else if (!compact && reserved_right == 0) {
+        /* 右侧精致的操作引导微符号 */
+        draw_text(pixels, stride, rect.x + rect.width - 24, icon_cy + 7, "›", 22,
+                  selected ? UI_ACCENT : UI_MUTED);
     }
 }
 
@@ -1667,8 +1691,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
     /* 页面状态、预测与风险统一在一张卡片中，避免与全局状态和底部反馈重复。 */
     {
-        bool feedback_visible = ptc_ui_operation_feedback_visible(model);
-        UiRect eval_card = {838, 266, 388, feedback_visible ? 312 : 384};
+        UiRect eval_card = {838, 266, 388, 364};
         uint32_t state_color = strcmp(model->result_status, "error") == 0 ? UI_DANGER :
             (model->waiting || model->bedtime_dirty ? UI_WARNING :
              (bedtime_enforcing ? UI_DANGER : UI_SUCCESS));
@@ -1771,7 +1794,6 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
             int day = ptc_ui_weekday_for_display_slot(slot);
             UiRect card = to_uirect(ptc_ui_bedtime_field_rect(PTC_UI_BEDTIME_WEEKLY, slot));
             char value[64];
-            char day_title[32];
             int diff = day - today_weekday;
             uint16_t slot_day_idx = (uint16_t)(model->day_index + diff);
             uint16_t c_y; uint8_t c_m, c_d;
@@ -1788,19 +1810,21 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 draw_rect_outline(pixels, stride, card, 12, 1, UI_ACCENT);
             }
 
-            if (has_date) {
-                snprintf(day_title, sizeof(day_title), "%s (%u/%u)", DAYS[day], c_m, c_d);
-            } else {
-                snprintf(day_title, sizeof(day_title), "%s", DAYS[day]);
-            }
-            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 12, card.width, 24}, day_title, 16,
-                             is_today ? UI_ACCENT : UI_INK);
-
             if (is_today) {
-                UiRect today_pill = {card.x + card.width - 44, card.y + 8, 38, 18};
-                fill_round_rect(pixels, stride, today_pill, 5, is_active_day ? UI_DANGER_SOFT : UI_ACCENT_SOFT);
+                UiRect today_pill = {card.x + (card.width - 38) / 2, card.y + 6, 38, 16};
+                fill_round_rect(pixels, stride, today_pill, 4, is_active_day ? UI_DANGER_SOFT : UI_ACCENT_SOFT);
                 draw_text_center(pixels, stride, today_pill, is_active_day ? "立断" : "今日", 11,
                                  is_active_day ? UI_DANGER : UI_ACCENT);
+            }
+
+            draw_text_center(pixels, stride, (UiRect){card.x, card.y + (is_today ? 23 : 13), card.width, 20},
+                             DAYS[day], 16, is_today ? UI_ACCENT : UI_INK);
+
+            if (has_date) {
+                char date_str[16];
+                snprintf(date_str, sizeof(date_str), "%02u/%02u", c_m, c_d);
+                draw_text_center(pixels, stride, (UiRect){card.x, card.y + (is_today ? 42 : 33), card.width, 18},
+                                 date_str, 12, is_today ? UI_ACCENT : UI_MUTED);
             }
 
             draw_bedtime_window_value(value, sizeof(value), &draft->week[day]);
@@ -1808,27 +1832,27 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 snprintf(line, sizeof(line), "%02u:%02u",
                     (unsigned int)(draft->week[day].start_minute / 60),
                     (unsigned int)(draft->week[day].start_minute % 60));
-                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 46, card.width, 24}, line, 18,
+                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 64, card.width, 22}, line, 18,
                                  draft->enabled ? (is_active_day ? UI_DANGER : UI_ACCENT) : UI_MUTED);
                 snprintf(line, sizeof(line), "到 %02u:%02u",
                     (unsigned int)(draft->week[day].end_minute / 60),
                     (unsigned int)(draft->week[day].end_minute % 60));
-                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 72, card.width, 20}, line, 13, UI_MUTED);
+                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 88, card.width, 18}, line, 13, UI_MUTED);
 
                 /* 开启状态微标 */
-                UiRect pill = {card.x + (card.width - 48) / 2, card.y + 100, 48, 20};
+                UiRect pill = {card.x + (card.width - 48) / 2, card.y + 114, 48, 20};
                 fill_round_rect(pixels, stride, pill, 6,
                                 is_active_day ? UI_DANGER_SOFT : (draft->enabled ? UI_ACCENT_SOFT : UI_RAISED));
                 draw_text_center(pixels, stride, pill,
                                  is_active_day ? "生效中" : (draft->enabled ? "开启" : "暂停"), 12,
                                  is_active_day ? UI_DANGER : (draft->enabled ? UI_ACCENT : UI_MUTED));
             } else {
-                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 60, card.width, 26}, "关闭", 18, UI_MUTED);
-                UiRect pill = {card.x + (card.width - 48) / 2, card.y + 100, 48, 20};
+                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 74, card.width, 24}, "关闭", 18, UI_MUTED);
+                UiRect pill = {card.x + (card.width - 48) / 2, card.y + 114, 48, 20};
                 fill_round_rect(pixels, stride, pill, 6, UI_RAISED);
                 draw_text_center(pixels, stride, pill, "关闭", 12, UI_MUTED);
             }
-            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 134, card.width, 20}, "A 编辑 | X 切换", 11, UI_MUTED);
+            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 148, card.width, 18}, "A/X 设置", 11, UI_MUTED);
         }
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 7), "复制到工作日",
             UI_PAGE, UI_ACCENT, model->selected_index == 7 && !model->bedtime_section_focused, model->disable_flag_present);
@@ -1839,6 +1863,19 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 10), "+  保存",
             UI_ACCENT, UI_ON_ACCENT, model->selected_index == 10 && !model->bedtime_section_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);
+
+        /* 左下角就寝规则说明面板（与右侧预测卡片底部平齐对齐至 y=630） */
+        UiRect bedtime_guide = {54, 500, 752, 130};
+        fill_round_rect(pixels, stride, bedtime_guide, 12, UI_RGB(UI_BLENDED(surface)));
+        draw_rect_outline(pixels, stride, bedtime_guide, 12, 1, UI_RGB(UI_BLENDED(border_control)));
+        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 26,
+                  "就寝时间并行规则与执行机制", 16, UI_RGB(UI_BLENDED(text_primary)));
+        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 54,
+                  "• 到点立断：进入就寝窗口后立即强制限制，不受今日剩余游玩额度影响", 14, UI_MUTED);
+        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 80,
+                  "• 单次跳过：若今晚有特殊需要，可在今日调度页面选择“跳过今晚就寝”放行一次", 14, UI_MUTED);
+        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 106,
+                  "• 跨日计算：就寝窗口支持跨日（如 22:00 至次日 07:00），到结束时间自动恢复", 14, UI_MUTED);
     } else if (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR) {
         UiRect master = to_uirect(ptc_ui_bedtime_field_rect(1, 0));
         draw_plan_card(pixels, stride, master, model->selected_index == 0 && !model->bedtime_section_focused);

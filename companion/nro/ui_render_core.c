@@ -1348,6 +1348,46 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
         ++g_glyph_cache_count;
         return entry;
     }
+    /* 程序化抗锯齿圆点列表符号回退 (Bullet: U+2022, 实心圆: U+25CF, 连字点: U+2027)
+     * Switch 共享中文字体缺少 U+2022，在此光栅化平滑圆点，继承文字颜色与粗细。 */
+    if (codepoint == 0x2022 || codepoint == 0x25CF || codepoint == 0x2027) {
+        float r = (float)size * 0.16f;
+        if (r < 1.6f) r = 1.6f;
+        if (bold) r *= 1.15f;
+        int d = (int)ceilf(r * 2.0f + 2.0f);
+        int w = d, h = d;
+        uint8_t *dot_bmp = (uint8_t *)malloc((size_t)w * h);
+        if (dot_bmp) {
+            float cx = (float)w / 2.0f;
+            float cy = (float)h / 2.0f;
+            int y_idx, x_idx;
+            for (y_idx = 0; y_idx < h; ++y_idx) {
+                for (x_idx = 0; x_idx < w; ++x_idx) {
+                    float dx = (float)x_idx + 0.5f - cx;
+                    float dy = (float)y_idx + 0.5f - cy;
+                    float dist = sqrtf(dx * dx + dy * dy);
+                    float cov = (r + 0.5f - dist);
+                    if (cov <= 0.0f) dot_bmp[y_idx * w + x_idx] = 0;
+                    else if (cov >= 1.0f) dot_bmp[y_idx * w + x_idx] = 255;
+                    else dot_bmp[y_idx * w + x_idx] = (uint8_t)(cov * 255.0f);
+                }
+            }
+            int adv = (int)((float)size * 0.52f + 0.5f);
+            if (adv < w + 2) adv = w + 2;
+            int center_above_base = (int)((float)size * 0.38f + 0.5f);
+            entry->codepoint = codepoint;
+            entry->size = size_key;
+            entry->bearing_x = (int16_t)((adv - w) / 2);
+            entry->bearing_y = (int16_t)(center_above_base + (int)cy);
+            entry->advance = (int16_t)adv;
+            entry->width = (uint16_t)w;
+            entry->height = (uint16_t)h;
+            entry->is_color = false;
+            entry->bitmap = dot_bmp;
+            ++g_glyph_cache_count;
+            return entry;
+        }
+    }
     /* 预置常用 Emoji 矢量回退：自带丰富固定色彩。 */
     if (is_builtin_emoji(codepoint)) {
         int em_w = 0, em_h = 0, em_bx = 0, em_by = 0, em_adv = 0;
@@ -2033,38 +2073,77 @@ void format_event_time(int64_t timestamp, bool full, char *out, size_t out_size)
 
 void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, int y, int height)
 {
+    (void)y;
+    (void)height;
     bool error = strcmp(model->result_status, "error") == 0;
     bool support = model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_SUPPORT;
-    bool expanded = error || model->waiting || model->feedback_detail[0] || support ||
-        measure_text(model->message, 20) > 1094;
+    bool has_detail = (model->feedback_detail[0] != '\0') || error || support;
     uint32_t accent = error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_SUCCESS);
-    UiRect box = {54, y, 1172, height};
-    fill_round_rect(pixels, stride, box, 16, error ? UI_DANGER_SOFT : (model->waiting ? UI_WARNING_SOFT : UI_SURFACE));
-    if (model->waiting) {
-        draw_rect_outline(pixels, stride, box, 16, 1, UI_WARNING);
-    } else {
-        draw_rect_outline(pixels, stride, box, 16, 1, UI_BORDER);
+
+    /* 右下角紧凑悬浮状态胶囊：绝不遮挡中央主区域与卡片 */
+    PtcUiRect n_rect = ptc_ui_notice_rect();
+    UiRect box = to_uirect(n_rect);
+    draw_round_rect_shadow(pixels, stride, box, 23, 12, 40, 3);
+    fill_round_rect(pixels, stride, box, 23, error ? UI_DANGER_SOFT : (model->waiting ? UI_WARNING_SOFT : UI_SURFACE));
+    draw_rect_outline(pixels, stride, box, 23, 1, error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_BORDER));
+
+    int icon_cx = box.x + 24;
+    int icon_cy = box.y + box.height / 2;
+    draw_status_symbol(pixels, stride, icon_cx, icon_cy, accent, error ? 3 : (model->waiting ? 2 : 1));
+
+    if (has_detail) {
+        UiRect detail_btn = {box.x + box.width - 82, box.y + (box.height - 28) / 2, 70, 28};
+        fill_round_rect(pixels, stride, detail_btn, 8, error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_ACCENT_SOFT));
+        draw_rect_outline(pixels, stride, detail_btn, 8, 1, error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_ACCENT));
+        draw_text_center(pixels, stride, detail_btn, "X 详情", 13, (error || model->waiting) ? UI_ON_ACCENT : UI_ACCENT);
     }
-    PtcUiRect status_icon = ptc_ui_notice_status_icon_rect(y);
-    int baseline = y + 30;
-    draw_status_symbol(pixels, stride, status_icon.x, status_icon.y, accent, error ? 3 : (model->waiting ? 2 : 1));
-    if (expanded) {
-        baseline = draw_wrapped_text(pixels, stride, box.x + 54, baseline,
-            model->message[0] ? model->message : "状态会在后台自动同步", 20, box.width - 78, 26,
-            2, UI_INK);
-        if (model->feedback_detail[0])
-            baseline = draw_wrapped_text(pixels, stride, box.x + 54, baseline + 2,
-                model->feedback_detail, 18, box.width - 78, 24, (y + height - baseline - 4) / 24, UI_MUTED);
-        if (support && baseline + 24 < y + height) {
-            char execution[160];
-            PtcUiRect command = ptc_ui_notice_command_text_rect(y, height);
-            snprintf(execution, sizeof(execution), "命令：%s    %s", model->command_name, model->transport_label);
-            if (baseline <= command.y)
-                draw_wrapped_text(pixels, stride, command.x, command.y + 18, execution, 18, command.w, 24, 1, UI_MUTED);
-        }
+
+    int max_text_w = box.width - 50 - (has_detail ? 88 : 16);
+    const char *msg = model->message[0] ? model->message : "状态会在后台自动同步";
+    char fitted_msg[128];
+    fit_text(fitted_msg, sizeof(fitted_msg), msg, 15, max_text_w);
+    int baseline = box.y + (box.height + 15) / 2 - 2;
+    draw_text(pixels, stride, box.x + 44, baseline, fitted_msg, 15, error ? UI_DANGER : UI_INK);
+}
+
+void draw_notice_details_dialog(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    bool error = strcmp(model->result_status, "error") == 0;
+    bool support = model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_SUPPORT;
+    uint32_t accent = error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_SUCCESS);
+
+    draw_dialog_shell(pixels, stride, model, &dialog, 780, 420);
+
+    int icon_cx = dialog.x + 48;
+    int icon_cy = dialog.y + 70;
+    draw_status_symbol(pixels, stride, icon_cx, icon_cy, accent, error ? 3 : (model->waiting ? 2 : 1));
+
+    const char *msg = model->message[0] ? model->message : "操作状态与反馈";
+    draw_text(pixels, stride, dialog.x + 72, dialog.y + 76, msg, 20, error ? UI_DANGER : UI_INK);
+
+    UiRect card = {dialog.x + 36, dialog.y + 104, dialog.width - 72, 230};
+    fill_round_rect(pixels, stride, card, 12, UI_PAGE);
+    draw_rect_outline(pixels, stride, card, 12, 1, UI_BORDER);
+
+    int card_base = card.y + 36;
+    if (model->feedback_detail[0]) {
+        draw_text(pixels, stride, card.x + 20, card_base, "详细信息与排查指引：", 16, UI_ACCENT);
+        card_base = draw_wrapped_text(pixels, stride, card.x + 20, card_base + 32,
+            model->feedback_detail, 16, card.width - 40, 24, 4, UI_INK);
     } else {
-        const char *msg = model->message[0] ? model->message : "状态会在后台自动同步";
-        uint32_t text_col = model->message[0] ? UI_INK : UI_MUTED;
-        draw_text(pixels, stride, box.x + 54, baseline, msg, 20, text_col);
+        draw_text(pixels, stride, card.x + 20, card_base, "操作已完成，当前没有更多详细日志。", 16, UI_MUTED);
+        card_base += 32;
     }
+
+    if (support || model->command_name[0]) {
+        char execution[256];
+        snprintf(execution, sizeof(execution), "执行命令：%s    传输模式：%s",
+                 model->command_name[0] ? model->command_name : "无",
+                 model->transport_label[0] ? model->transport_label : "默认");
+        draw_text(pixels, stride, card.x + 20, card.y + card.height - 24, execution, 14, UI_MUTED);
+    }
+
+    PtcUiRect btn_rect = ptc_ui_cancel_rect(model->overlay);
+    draw_dialog_button(pixels, stride, btn_rect, "A / B  关闭", UI_ACCENT, UI_ON_ACCENT, false);
 }

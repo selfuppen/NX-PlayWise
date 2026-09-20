@@ -103,6 +103,11 @@ PtcUiRect ptc_ui_setup_theme_rect(int index)
     return rect;
 }
 
+PtcUiRect ptc_ui_notice_rect(void)
+{
+    return (PtcUiRect){806, 584, 420, 48};
+}
+
 PtcUiRect ptc_ui_notice_status_icon_rect(int y)
 {
     return (PtcUiRect){74, y + 16, 20, 20};
@@ -220,8 +225,8 @@ PtcUiRect ptc_ui_bedtime_section_rect(int index)
 PtcUiRect ptc_ui_bedtime_field_rect(int section, int index)
 {
     if (section == PTC_UI_BEDTIME_WEEKLY) {
-        if (index >= 0 && index < 7) return (PtcUiRect){54 + index * 108, 234, 96, 218};
-        if (index >= 7 && index <= 10) return (PtcUiRect){54 + (index - 7) * 188, 468, 176, 56};
+        if (index >= 0 && index < 7) return (PtcUiRect){54 + index * 108, 230, 96, 192};
+        if (index >= 7 && index <= 10) return (PtcUiRect){54 + (index - 7) * 188, 436, 176, 52};
     } else if (section == PTC_UI_BEDTIME_CALENDAR) {
         if (index == 0) return (PtcUiRect){54, 234, 752, 76};
         if (index == 1 || index == 2) return (PtcUiRect){54 + (index - 1) * 376, 326, 364, 126};
@@ -509,6 +514,10 @@ PtcUiRect ptc_ui_dialog_rect(int width, int height)
 static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
 {
     switch (overlay) {
+    case PTC_UI_OVERLAY_NOTICE_DETAILS:
+        *width = 780;
+        *height = 420;
+        break;
     case PTC_UI_OVERLAY_HOME_DETAILS:
         *width = 1120;
         *height = 640;
@@ -836,7 +845,7 @@ static int dialog_button_top(PtcUiRect dialog)
 
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 {
-    if (overlay == PTC_UI_OVERLAY_HOME_DETAILS)
+    if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS)
         return (PtcUiRect){0, 0, 0, 0};
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
@@ -850,6 +859,8 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
         return (PtcUiRect){dialog.x + 42, dialog.y + 588, 210, 44};
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS)
         return (PtcUiRect){dialog.x + dialog.w - 28 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
+    if (overlay == PTC_UI_OVERLAY_NOTICE_DETAILS)
+        return (PtcUiRect){dialog.x + (dialog.w - PTC_UI_DIALOG_BTN_W) / 2, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W * 2 - 16, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     return rect;
 }

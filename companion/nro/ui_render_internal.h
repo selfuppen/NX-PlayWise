@@ -183,6 +183,7 @@ void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
 void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+void draw_notice_details_dialog(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void ui_glyph_cache_clear(void);
 void ui_background_rebuild(void);
