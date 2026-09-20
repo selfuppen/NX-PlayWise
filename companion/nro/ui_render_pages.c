@@ -526,7 +526,7 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     char buffer[128], hint[160], fitted_hint[160];
     bool disabled = model->disable_flag_present || model->waiting;
-    draw_header(pixels, stride, "今天的约定", "合理安排时间，完成今天的约定");
+    draw_header(pixels, stride, "自律即自由", "合理安排时间，做自己时间的主人");
     draw_time_status_bar(pixels, stride, model);
     draw_home_summary(pixels, stride, model, false);
     draw_card_shadow(pixels, stride, (UiRect){652, 120, 580, 496}, 16);

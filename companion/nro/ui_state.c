@@ -605,7 +605,7 @@ static const char *request_success_message(const char *type)
         return "加时码使用记录已全部清空。";
     }
     if (strcmp(type, "claim_daily_buffer") == 0) {
-        return "今日自主缓冲已领取，完成今天的约定后记得休息。";
+        return "今日自主缓冲已领取，记得休息眼睛。";
     }
     if (strcmp(type, "set_scheduled_override") == 0) {
         return "临时额度计划已保存，未来规则预览已更新。";
