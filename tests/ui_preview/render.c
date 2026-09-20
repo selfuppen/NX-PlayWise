@@ -78,6 +78,8 @@ static int check_primitives(void)
         if (measure_text("⭐", 12) != 12) ++failed;
         if (measure_text("🌿", 12) != 12) ++failed;
         if (measure_text("ℹ️", 12) != 12) ++failed; /* ℹ (12) + ️ (0) = 12 */
+        if (measure_text("›", 12) <= 0 || measure_text("‹", 12) <= 0) ++failed;
+        if (measure_text("•", 12) <= 0) ++failed;
         /* Verify rendering into pixel buffer blends without crashing or guard corruption */
         fill_rect_packed(preview_pixels, 1280, (UiRect){0, 0, 100, 50}, background);
         draw_text(preview_pixels, 1280, 10, 30, "🌙 🎁 🛡️", 12, pack_rgb(0xffffff));

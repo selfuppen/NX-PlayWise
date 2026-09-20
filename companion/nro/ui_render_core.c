@@ -764,7 +764,7 @@ void draw_line(
             if (edge <= -half_feather) {
                 set_pixel(pixels, stride, x, y, resolved);
             } else {
-                float s = (edge + half_feather) / feather;
+                float s = (half_feather - edge) / feather;
                 blend_pixel(pixels, stride, x, y, resolved,
                             (uint8_t)(s * s * (3.0f - 2.0f * s) * 255.0f + 0.5f));
             }
@@ -1407,7 +1407,58 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
             return entry;
         }
     }
-    if (!g_ui.font_ready || FT_Load_Char(g_ui.face, codepoint, FT_LOAD_RENDER) != 0) {
+    /* 单角引号/操作微指示符回退 (›: U+203A, ‹: U+2039)
+     * Switch 共享中文字体缺少 U+203A/U+2039，在此光栅化平滑矢量微尖括号，继承文字粗细与高度。 */
+    if (codepoint == 0x203A || codepoint == 0x2039) {
+        float h_f = (float)size * 0.52f;
+        if (h_f < 6.0f) h_f = 6.0f;
+        float w_f = h_f * 0.55f;
+        float th = (float)size * 0.09f;
+        if (th < 1.4f) th = 1.4f;
+        if (bold) th *= 1.25f;
+        int w = (int)ceilf(w_f + th * 2.0f + 2.0f);
+        int h = (int)ceilf(h_f + th * 2.0f + 2.0f);
+        uint8_t *bmp = (uint8_t *)calloc(1, (size_t)w * h);
+        if (bmp) {
+            float cx = (float)w / 2.0f;
+            float cy = (float)h / 2.0f;
+            float x_tip = (codepoint == 0x203A) ? (cx + w_f * 0.5f) : (cx - w_f * 0.5f);
+            float x_base = (codepoint == 0x203A) ? (cx - w_f * 0.5f) : (cx + w_f * 0.5f);
+            float y_top = cy - h_f * 0.5f;
+            float y_mid = cy;
+            float y_bot = cy + h_f * 0.5f;
+            int y_idx, x_idx;
+            for (y_idx = 0; y_idx < h; ++y_idx) {
+                for (x_idx = 0; x_idx < w; ++x_idx) {
+                    float px = (float)x_idx + 0.5f;
+                    float py = (float)y_idx + 0.5f;
+                    float d1 = sqrtf(dist_to_segment_sq(px, py, x_base, y_top, x_tip, y_mid));
+                    float d2 = sqrtf(dist_to_segment_sq(px, py, x_tip, y_mid, x_base, y_bot));
+                    float dist = d1 < d2 ? d1 : d2;
+                    float cov = (th * 0.5f + 0.5f - dist);
+                    if (cov <= 0.0f) bmp[y_idx * w + x_idx] = 0;
+                    else if (cov >= 1.0f) bmp[y_idx * w + x_idx] = 255;
+                    else bmp[y_idx * w + x_idx] = (uint8_t)(cov * 255.0f);
+                }
+            }
+            int adv = (int)((float)size * 0.42f + 0.5f);
+            if (adv < w + 1) adv = w + 1;
+            int center_above_base = (int)((float)size * 0.32f + 0.5f);
+            entry->codepoint = codepoint;
+            entry->size = size_key;
+            entry->bearing_x = (int16_t)((adv - w) / 2);
+            entry->bearing_y = (int16_t)(center_above_base + (int)cy);
+            entry->advance = (int16_t)adv;
+            entry->width = (uint16_t)w;
+            entry->height = (uint16_t)h;
+            entry->is_color = false;
+            entry->bitmap = bmp;
+            ++g_glyph_cache_count;
+            return entry;
+        }
+    }
+    if (!g_ui.font_ready || FT_Get_Char_Index(g_ui.face, codepoint) == 0 ||
+        FT_Load_Char(g_ui.face, codepoint, FT_LOAD_RENDER) != 0) {
         return NULL;
     }
     {

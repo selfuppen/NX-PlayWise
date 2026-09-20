@@ -926,6 +926,13 @@ static void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int
     draw_line(pixels, stride, cx + 7, cy, cx + 9, cy, 2, color);
 }
 
+static void draw_chevron_right(uint32_t *pixels, uint32_t stride, int cx, int cy, int size, int width, uint32_t color)
+{
+    int half_w = (size * 5 + 4) / 8;
+    draw_line(pixels, stride, cx - half_w, cy - size, cx + half_w, cy, width, color);
+    draw_line(pixels, stride, cx + half_w, cy, cx - half_w, cy + size, width, color);
+}
+
 void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     const UiAction *action, bool selected, PtcUiActionState state, int reserved_right)
 {
@@ -939,7 +946,9 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     int sub_line_h = compact ? 19 : 22;
 
     int text_x = rect.x + 18 + badge_size + 16;
-    int content_width = rect.width - (text_x - rect.x) - (recommended ? 64 : 16) - reserved_right;
+    bool show_chevron = !compact && reserved_right == 0 && (!recommended || disabled);
+    int chevron_reserve = show_chevron ? 26 : 0;
+    int content_width = rect.width - (text_x - rect.x) - (recommended ? 64 : 16) - reserved_right - chevron_reserve;
     if (content_width < 100) content_width = 100;
     int title_width = content_width;
 
@@ -985,10 +994,10 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     if (recommended && !disabled) {
         fill_round_rect(pixels, stride, (UiRect){rect.x + rect.width - 66, rect.y + 8, 56, 24}, 6, UI_SUCCESS);
         draw_text_center(pixels, stride, (UiRect){rect.x + rect.width - 66, rect.y + 8, 56, 24}, "建议", 16, UI_ON_ACCENT);
-    } else if (!compact && reserved_right == 0) {
-        /* 右侧精致的操作引导微符号 */
-        draw_text(pixels, stride, rect.x + rect.width - 24, icon_cy + 7, "›", 22,
-                  selected ? UI_ACCENT : UI_MUTED);
+    } else if (show_chevron) {
+        /* 右侧精致的操作引导微符号（矢量抗锯齿绘制，消除 Switch 共享字库缺字乱码与图文粘连） */
+        uint32_t chevron_color = disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_MUTED);
+        draw_chevron_right(pixels, stride, rect.x + rect.width - 20, icon_cy, 6, 2, chevron_color);
     }
 }
 

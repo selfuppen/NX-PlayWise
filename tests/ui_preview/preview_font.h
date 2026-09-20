@@ -39,6 +39,8 @@ static inline int FT_New_Memory_Face(FT_Library lib, const FT_Byte *data, FT_Lon
 }
 static inline int FT_Set_Pixel_Sizes(FT_Face face, unsigned int w, unsigned int h)
 { (void)w; face->scale = stbtt_ScaleForMappingEmToPixels(&face->info, (float)h); return 0; }
+static inline FT_UInt FT_Get_Char_Index(FT_Face face, unsigned long code)
+{ return (FT_UInt)stbtt_FindGlyphIndex(&face->info, (int)code); }
 static inline int FT_Load_Char(FT_Face face, unsigned long code, int flags)
 {
     int advance, bearing, w, h, x, y;
