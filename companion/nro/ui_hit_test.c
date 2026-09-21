@@ -327,8 +327,11 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
     if (model->overlay != PTC_UI_OVERLAY_NONE) {
         return hit_test_overlay(model, x, y);
     }
-    if (ptc_ui_operation_feedback_visible(model)) {
-        if (ptc_ui_rect_contains(ptc_ui_notice_rect(), x, y)) {
+    {
+        PtcUiNoticeProjection notice;
+        ptc_ui_project_notice(model, &notice);
+        if (notice.visible && notice.has_details &&
+            ptc_ui_rect_contains(ptc_ui_notice_details_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_NOTICE_DETAILS, 0);
         }
     }

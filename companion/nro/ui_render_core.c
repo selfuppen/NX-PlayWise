@@ -2122,72 +2122,73 @@ void format_event_time(int64_t timestamp, bool full, char *out, size_t out_size)
     }
 }
 
-void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, int y, int height)
+void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    (void)y;
-    (void)height;
-    bool error = strcmp(model->result_status, "error") == 0;
-    bool support = model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_SUPPORT;
-    bool has_detail = (model->feedback_detail[0] != '\0') || error || support;
-    uint32_t accent = error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_SUCCESS);
+    PtcUiNoticeProjection notice;
+    ptc_ui_project_notice(model, &notice);
+    if (!notice.visible) return;
+    bool danger = notice.level == PTC_UI_NOTICE_DANGER;
+    bool warning = notice.level == PTC_UI_NOTICE_WARNING;
+    uint32_t accent = danger ? UI_DANGER : (warning ? UI_WARNING : UI_SUCCESS);
 
-    /* 右下角紧凑悬浮状态胶囊：绝不遮挡中央主区域与卡片 */
+    /* 共享的右下角状态胶囊只显示摘要，详情由家长主动打开。 */
     PtcUiRect n_rect = ptc_ui_notice_rect();
     UiRect box = to_uirect(n_rect);
-    draw_round_rect_shadow(pixels, stride, box, 23, 12, 40, 3);
-    fill_round_rect(pixels, stride, box, 23, error ? UI_DANGER_SOFT : (model->waiting ? UI_WARNING_SOFT : UI_SURFACE));
-    draw_rect_outline(pixels, stride, box, 23, 1, error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_BORDER));
+    draw_round_rect_shadow(pixels, stride, box, 18, 12, 40, 3);
+    fill_round_rect(pixels, stride, box, 18, danger ? UI_DANGER_SOFT : (warning ? UI_WARNING_SOFT : UI_SURFACE));
+    draw_rect_outline(pixels, stride, box, 18, 1, danger ? UI_DANGER : (warning ? UI_WARNING : UI_BORDER));
 
     int icon_cx = box.x + 24;
     int icon_cy = box.y + box.height / 2;
-    draw_status_symbol(pixels, stride, icon_cx, icon_cy, accent, error ? 3 : (model->waiting ? 2 : 1));
+    draw_status_symbol(pixels, stride, icon_cx, icon_cy, accent, danger ? 3 : (warning ? 2 : 1));
 
-    if (has_detail) {
-        UiRect detail_btn = {box.x + box.width - 82, box.y + (box.height - 28) / 2, 70, 28};
-        fill_round_rect(pixels, stride, detail_btn, 8, error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_ACCENT_SOFT));
-        draw_rect_outline(pixels, stride, detail_btn, 8, 1, error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_ACCENT));
-        draw_text_center(pixels, stride, detail_btn, "X 详情", 13, (error || model->waiting) ? UI_ON_ACCENT : UI_ACCENT);
+    if (notice.has_details) {
+        UiRect detail_btn = to_uirect(ptc_ui_notice_details_rect());
+        fill_round_rect(pixels, stride, detail_btn, 8, danger ? UI_DANGER : (warning ? UI_WARNING : UI_ACCENT_SOFT));
+        draw_rect_outline(pixels, stride, detail_btn, 8, 1, danger ? UI_DANGER : (warning ? UI_WARNING : UI_ACCENT));
+        draw_text_center(pixels, stride, detail_btn, "X 详情", 13, (danger || warning) ? UI_ON_ACCENT : UI_ACCENT);
     }
 
-    int max_text_w = box.width - 50 - (has_detail ? 88 : 16);
-    const char *msg = model->message[0] ? model->message : "状态会在后台自动同步";
+    int max_text_w = box.width - 50 - (notice.has_details ? 88 : 16);
     char fitted_msg[128];
-    fit_text(fitted_msg, sizeof(fitted_msg), msg, 15, max_text_w);
+    fit_text(fitted_msg, sizeof(fitted_msg), notice.summary, 15, max_text_w);
     int baseline = box.y + (box.height + 15) / 2 - 2;
-    draw_text(pixels, stride, box.x + 44, baseline, fitted_msg, 15, error ? UI_DANGER : UI_INK);
+    draw_text(pixels, stride, box.x + 44, baseline, fitted_msg, 15, danger ? UI_DANGER : UI_INK);
 }
 
 void draw_notice_details_dialog(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
-    bool error = strcmp(model->result_status, "error") == 0;
-    bool support = model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_SUPPORT;
-    uint32_t accent = error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_SUCCESS);
+    PtcUiNoticeProjection notice;
+    ptc_ui_project_notice(model, &notice);
+    bool danger = notice.level == PTC_UI_NOTICE_DANGER;
+    bool warning = notice.level == PTC_UI_NOTICE_WARNING;
+    uint32_t accent = danger ? UI_DANGER : (warning ? UI_WARNING : UI_SUCCESS);
 
     draw_dialog_shell(pixels, stride, model, &dialog, 780, 420);
 
     int icon_cx = dialog.x + 48;
     int icon_cy = dialog.y + 70;
-    draw_status_symbol(pixels, stride, icon_cx, icon_cy, accent, error ? 3 : (model->waiting ? 2 : 1));
+    draw_status_symbol(pixels, stride, icon_cx, icon_cy, accent, danger ? 3 : (warning ? 2 : 1));
 
-    const char *msg = model->message[0] ? model->message : "操作状态与反馈";
-    draw_text(pixels, stride, dialog.x + 72, dialog.y + 76, msg, 20, error ? UI_DANGER : UI_INK);
+    const char *msg = notice.summary[0] ? notice.summary : "操作状态与反馈";
+    draw_text(pixels, stride, dialog.x + 72, dialog.y + 76, msg, 20, danger ? UI_DANGER : UI_INK);
 
     UiRect card = {dialog.x + 36, dialog.y + 104, dialog.width - 72, 230};
     fill_round_rect(pixels, stride, card, 12, UI_PAGE);
     draw_rect_outline(pixels, stride, card, 12, 1, UI_BORDER);
 
     int card_base = card.y + 36;
-    if (model->feedback_detail[0]) {
+    if (notice.details[0]) {
         draw_text(pixels, stride, card.x + 20, card_base, "详细信息与排查指引：", 16, UI_ACCENT);
         card_base = draw_wrapped_text(pixels, stride, card.x + 20, card_base + 32,
-            model->feedback_detail, 16, card.width - 40, 24, 4, UI_INK);
+            notice.details, 16, card.width - 40, 24, 4, UI_INK);
     } else {
         draw_text(pixels, stride, card.x + 20, card_base, "操作已完成，当前没有更多详细日志。", 16, UI_MUTED);
         card_base += 32;
     }
 
-    if (support || model->command_name[0]) {
+    if (model->command_name[0]) {
         char execution[256];
         snprintf(execution, sizeof(execution), "执行命令：%s    传输模式：%s",
                  model->command_name[0] ? model->command_name : "无",

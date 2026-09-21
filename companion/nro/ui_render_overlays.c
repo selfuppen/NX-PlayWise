@@ -1492,7 +1492,7 @@ static void draw_home_decision_details(uint32_t *pixels, uint32_t stride,
     PtcUiTodayDecision decision;
     char total[64], remaining[64], effective[96], timer[64], today[64], line[256];
     bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
-    const char *notice = home_runtime_notice(model);
+    const char *notice = ptc_ui_runtime_notice_summary(model);
     bool error = strcmp(model->result_status, "error") == 0;
     bool parent = model->view == PTC_UI_PARENT;
     int played = fresh && model->played_minutes_available ? model->played_minutes : -1;

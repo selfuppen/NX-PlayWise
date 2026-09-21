@@ -141,7 +141,7 @@ void draw_candidate_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
                            bool selected, bool disabled);
 void draw_overlay_actions(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
                           const char *confirm_label);
-void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, int y, int height);
+void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void format_event_time(int64_t timestamp, bool full, char *out, size_t out_size);
 
 void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
@@ -150,6 +150,8 @@ void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
                       PtcUiPlanKind kind, bool dirty, UiRect rect);
+void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                              PtcUiPlanKind kind, UiRect rect);
 uint32_t time_state_accent(bool available, bool unlimited, int minutes);
 uint32_t status_age_color(const PtcUiModel *model);
 void format_status_age(const PtcUiModel *model, char *out, size_t out_size);
@@ -170,7 +172,6 @@ void draw_toggle_switch(
     const char *on_label,
     const char *off_label);
 const char *bedtime_override_label(PtcBedtimeOverrideMode mode);
-const char *home_runtime_notice(const PtcUiModel *model);
 void home_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,
                  const char *label, bool primary, bool selected, bool disabled);
 extern const UiAction GRANT_MANAGER_ACTIONS[];

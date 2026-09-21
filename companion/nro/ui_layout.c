@@ -105,7 +105,13 @@ PtcUiRect ptc_ui_setup_theme_rect(int index)
 
 PtcUiRect ptc_ui_notice_rect(void)
 {
-    return (PtcUiRect){806, 584, 420, 48};
+    return (PtcUiRect){806, 620, 420, 36};
+}
+
+PtcUiRect ptc_ui_notice_details_rect(void)
+{
+    PtcUiRect notice = ptc_ui_notice_rect();
+    return (PtcUiRect){notice.x + notice.w - 82, notice.y + (notice.h - 28) / 2, 70, 28};
 }
 
 PtcUiRect ptc_ui_notice_status_icon_rect(int y)
@@ -411,6 +417,16 @@ bool ptc_ui_open_home_details(PtcUiModel *model)
     snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
         model->view == PTC_UI_CHILD ? "使用详情" : "今日调度详情");
     model->overlay_body[0] = '\0';
+    return true;
+}
+
+bool ptc_ui_open_notice_details(PtcUiModel *model)
+{
+    PtcUiNoticeProjection notice;
+    if (!model || model->overlay != PTC_UI_OVERLAY_NONE) return false;
+    ptc_ui_project_notice(model, &notice);
+    if (!notice.visible || !notice.has_details) return false;
+    model->overlay = PTC_UI_OVERLAY_NOTICE_DETAILS;
     return true;
 }
 
@@ -993,6 +1009,12 @@ PtcUiRect ptc_ui_minute_editor_field_rect(PtcUiDurationField field)
     if (field == PTC_UI_DURATION_HOURS) return (PtcUiRect){dialog.x + 536, dialog.y + 146, 166, 68};
     if (field == PTC_UI_DURATION_MINUTES) return (PtcUiRect){dialog.x + 720, dialog.y + 146, 166, 68};
     return (PtcUiRect){0, 0, 0, 0};
+}
+
+PtcUiRect ptc_ui_minute_editor_summary_rect(void)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
+    return (PtcUiRect){dialog.x + 536, dialog.y + 264, 350, 254};
 }
 
 bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend)

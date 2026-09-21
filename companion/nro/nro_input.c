@@ -1269,10 +1269,7 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_ui_duration_select_field(&ui->model, (PtcUiDurationField)hit.index);
         break;
     case PTC_UI_HIT_NOTICE_DETAILS:
-        if (ui->model.feedback_detail[0] || strcmp(ui->model.result_status, "error") == 0 ||
-            (ui->model.parent_page == PTC_UI_PARENT_SUPPORT)) {
-            ui->model.overlay = PTC_UI_OVERLAY_NOTICE_DETAILS;
-        }
+        ptc_ui_open_notice_details(&ui->model);
         break;
     case PTC_UI_HIT_NONE:
     default:

@@ -79,6 +79,8 @@ int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
 bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now);
 bool ptc_ui_parent_status_alert_visible(const PtcUiModel *model);
 bool ptc_ui_operation_feedback_visible(const PtcUiModel *model);
+const char *ptc_ui_runtime_notice_summary(const PtcUiModel *model);
+void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out);
 void ptc_ui_project_time_status(
     const PtcUiModel *model,
     int64_t now,

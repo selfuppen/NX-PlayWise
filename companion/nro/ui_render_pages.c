@@ -69,71 +69,6 @@ void home_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,
         disabled ? UI_DISABLED : (primary ? UI_ON_ACCENT : UI_ACCENT));
 }
 
-const char *home_runtime_notice(const PtcUiModel *model)
-{
-    if (model->disable_flag_present) return "控制已停用，请家长到支持与恢复处理";
-    if (model->recovery_active) return "正在恢复设置，请等待恢复完成";
-    if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0)
-        return "需要家长处理，请进入支持与恢复";
-    if (model->restriction_enabled_available && !model->restriction_enabled)
-        return "Nintendo 家长控制未启用，请家长检查系统设置";
-    if (model->temporary_unlocked_available && model->temporary_unlocked)
-        return "临时解除期间不计时，进入睡眠后恢复今日限制";
-    if (model->apply_pending_confirmation) return "设置等待确认生效，请稍候";
-    if (model->restricted_now == 1) return "已进入时间限制，可兑换加时码或请家长调整额度";
-    if (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1)
-        return "额度已用完，限制可能即将生效，可兑换加时码";
-    return "";
-}
-
-static void draw_home_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
-{
-    const char *runtime = home_runtime_notice(model);
-    bool feedback_visible = ptc_ui_operation_feedback_visible(model);
-    bool expanded_cond = ptc_ui_home_notice_expanded(model);
-    if (!runtime[0] && !feedback_visible && !expanded_cond) {
-        return;
-    }
-
-    bool error = strcmp(model->result_status, "error") == 0;
-    const char *title = runtime[0] ? runtime : (error ? "操作未完成" : (model->waiting ? "正在同步" : ""));
-    uint32_t accent = (error || model->disable_flag_present) ? UI_DANGER :
-        (model->waiting ? UI_WARNING : (runtime[0] ? UI_WARNING : UI_SUCCESS));
-
-    bool two_lines = model->feedback_detail[0] ||
-        (title[0] && model->message[0] && strcmp(title, model->message) != 0);
-    int height = two_lines ? 72 : 56;
-    int y = 586 - height / 2;
-    UiRect box = {48, y, 1184, height};
-
-    uint32_t bg = (error || model->disable_flag_present) ? UI_DANGER_SOFT :
-        (model->waiting ? UI_WARNING_SOFT : UI_SURFACE);
-    fill_round_rect(pixels, stride, box, 14, bg);
-    if (model->waiting) {
-        draw_rect_outline(pixels, stride, box, 14, 1, UI_WARNING);
-    } else {
-        draw_rect_outline(pixels, stride, box, 14, 1,
-            (error || model->disable_flag_present) ? UI_DANGER : UI_BORDER);
-    }
-
-    int icon_x = box.x + 20;
-    int icon_y = box.y + (height - 20) / 2;
-    int text_x = box.x + 52;
-    draw_status_symbol(pixels, stride, icon_x, icon_y, accent, error ? 3 : (model->waiting ? 2 : 1));
-
-    if (two_lines) {
-        const char *line1 = title[0] ? title : model->message;
-        const char *line2 = (title[0] && model->message[0] && strcmp(title, model->message) != 0)
-            ? model->message : model->feedback_detail;
-        draw_text(pixels, stride, text_x, box.y + 26, line1, 16, accent);
-        draw_text(pixels, stride, text_x, box.y + 50, line2, 14, UI_MUTED);
-    } else {
-        const char *msg = title[0] ? title : (model->message[0] ? model->message : "状态已更新");
-        uint32_t text_col = error ? UI_DANGER : (model->waiting ? UI_WARNING : UI_INK);
-        draw_text(pixels, stride, text_x, box.y + 35, msg, 18, text_col);
-    }
-}
-
 static float child_remaining_fraction(const PtcUiModel *model, bool *available)
 {
     bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
@@ -491,7 +426,7 @@ static void draw_child_action_icon(uint32_t *pixels, uint32_t stride, PtcUiRect 
 static void draw_child_status_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect card = {684, 492, 516, 108};
-    const char *runtime = home_runtime_notice(model);
+    const char *runtime = ptc_ui_runtime_notice_summary(model);
     bool feedback = ptc_ui_operation_feedback_visible(model);
     bool error = strcmp(model->result_status, "error") == 0;
     bool alert = runtime[0] || feedback || ptc_ui_home_notice_expanded(model);
@@ -926,13 +861,6 @@ static void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int
     draw_line(pixels, stride, cx + 7, cy, cx + 9, cy, 2, color);
 }
 
-static void draw_chevron_right(uint32_t *pixels, uint32_t stride, int cx, int cy, int size, int width, uint32_t color)
-{
-    int half_w = (size * 5 + 4) / 8;
-    draw_line(pixels, stride, cx - half_w, cy - size, cx + half_w, cy, width, color);
-    draw_line(pixels, stride, cx + half_w, cy, cx - half_w, cy + size, width, color);
-}
-
 void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     const UiAction *action, bool selected, PtcUiActionState state, int reserved_right)
 {
@@ -946,9 +874,7 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     int sub_line_h = compact ? 19 : 22;
 
     int text_x = rect.x + 18 + badge_size + 16;
-    bool show_chevron = !compact && reserved_right == 0 && (!recommended || disabled);
-    int chevron_reserve = show_chevron ? 26 : 0;
-    int content_width = rect.width - (text_x - rect.x) - (recommended ? 64 : 16) - reserved_right - chevron_reserve;
+    int content_width = rect.width - (text_x - rect.x) - (recommended ? 64 : 16) - reserved_right;
     if (content_width < 100) content_width = 100;
     int title_width = content_width;
 
@@ -994,10 +920,6 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     if (recommended && !disabled) {
         fill_round_rect(pixels, stride, (UiRect){rect.x + rect.width - 66, rect.y + 8, 56, 24}, 6, UI_SUCCESS);
         draw_text_center(pixels, stride, (UiRect){rect.x + rect.width - 66, rect.y + 8, 56, 24}, "建议", 16, UI_ON_ACCENT);
-    } else if (show_chevron) {
-        /* 右侧精致的操作引导微符号（矢量抗锯齿绘制，消除 Switch 共享字库缺字乱码与图文粘连） */
-        uint32_t chevron_color = disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_MUTED);
-        draw_chevron_right(pixels, stride, rect.x + rect.width - 20, icon_cy, 6, 2, chevron_color);
     }
 }
 
@@ -1436,6 +1358,75 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
               age, 13, status_age_color(model));
 }
 
+void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
+                              PtcUiPlanKind kind, UiRect panel)
+{
+    char title[64];
+    char quota[40];
+    char remaining_text[48];
+    char source_text[80];
+    PtcEffectiveRule after = ptc_ui_plan_rule(model, kind);
+    bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
+    int played = fresh && model->played_minutes_available ? model->played_minutes : -1;
+    bool unlimited = after.rule.mode == PTC_RULE_MODE_UNLIMITED;
+    int remaining = unlimited ? -1 : (played >= 0 ? (int)after.rule.minutes - played : -1);
+    int changed = 0;
+    if (remaining < 0 && !unlimited && played >= 0) remaining = 0;
+
+    if (kind == PTC_UI_PLAN_WEEKLY) {
+        for (int day = 0; day < 7; ++day) {
+            if (ptc_ui_day_rule_effectively_changed(model->current_week[day], model->draft_week[day])) ++changed;
+        }
+        if (changed > 0) snprintf(title, sizeof(title), "修改草稿 | 已调整 %d 天", changed);
+        else snprintf(title, sizeof(title), "修改草稿 | 待保存");
+    } else {
+        if (model->holiday_enabled != model->draft_holiday_enabled) ++changed;
+        if (ptc_ui_day_rule_effectively_changed(model->holiday_rule, model->draft_holiday_rule)) ++changed;
+        if (ptc_ui_day_rule_effectively_changed(model->makeup_workday_rule, model->draft_makeup_workday_rule)) ++changed;
+        if (changed > 0) snprintf(title, sizeof(title), "修改草稿 | 已调整 %d 项", changed);
+        else snprintf(title, sizeof(title), "修改草稿 | 待保存");
+    }
+
+    draw_plan_card(pixels, stride, panel, false);
+    draw_text(pixels, stride, panel.x + 20, panel.y + 32, title, 18, UI_WARNING);
+
+    UiRect result = {panel.x + 20, panel.y + 50, panel.width - 40, 104};
+    UiRect left = {result.x + 8, result.y + 8, 132, result.height - 16};
+    UiRect right = {result.x + result.width - 140, result.y + 8, 132, result.height - 16};
+    fill_round_rect(pixels, stride, result, 12, UI_RGB(UI_BLENDED(surface_raised)));
+    draw_rect_outline(pixels, stride, result, 12, 1, UI_RGB(UI_BLENDED(border_control)));
+    draw_text_center(pixels, stride, (UiRect){left.x, left.y, left.width, 22}, "今日规划额度", 12, UI_MUTED);
+    if (unlimited) snprintf(quota, sizeof(quota), "不限时");
+    else snprintf(quota, sizeof(quota), "%u 分钟", (unsigned int)after.rule.minutes);
+    draw_text_center(pixels, stride, (UiRect){left.x, left.y + 28, left.width, 34}, quota, 19,
+                     unlimited ? UI_SUCCESS : UI_ACCENT);
+
+    {
+        int arrow_x = result.x + result.width / 2;
+        int arrow_y = result.y + 54;
+        draw_line(pixels, stride, arrow_x - 11, arrow_y, arrow_x + 9, arrow_y, 2, UI_MUTED);
+        draw_line(pixels, stride, arrow_x + 4, arrow_y - 5, arrow_x + 9, arrow_y, 2, UI_MUTED);
+        draw_line(pixels, stride, arrow_x + 4, arrow_y + 5, arrow_x + 9, arrow_y, 2, UI_MUTED);
+    }
+
+    draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, "预计剩余时间", 12, UI_MUTED);
+    if (unlimited) snprintf(remaining_text, sizeof(remaining_text), "不限时");
+    else if (played < 0) snprintf(remaining_text, sizeof(remaining_text), "待确认");
+    else if (remaining == 0) snprintf(remaining_text, sizeof(remaining_text), "0 分钟");
+    else snprintf(remaining_text, sizeof(remaining_text), "%d 分钟", remaining);
+    draw_text_center(pixels, stride, (UiRect){right.x, right.y + 28, right.width, 34}, remaining_text, 19,
+                     unlimited ? UI_SUCCESS : (played < 0 ? UI_MUTED : (remaining == 0 ? UI_DANGER : UI_SUCCESS)));
+
+    snprintf(source_text, sizeof(source_text), "今天来源  %s", ptc_ui_effective_rule_label(after.source));
+    {
+        int source_width = measure_text(source_text, 12) + 24;
+        if (source_width > panel.width - 40) source_width = panel.width - 40;
+        UiRect source = {panel.x + 20, panel.y + 174, source_width, 26};
+        fill_round_rect(pixels, stride, source, 13, UI_ACCENT_SOFT);
+        draw_text_center(pixels, stride, source, source_text, 12, UI_ACCENT);
+    }
+}
+
 static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
@@ -1516,7 +1507,6 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
                            model->disable_flag_present ? "只读" : (model->waiting ? "保存中" : (model->weekly_dirty ? (weekly_hold ? "长按 + 保存" : "+  保存草稿") : "已保存")),
                            weekly_hold ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, model->selected_index == 4,
                            !model->weekly_dirty || model->disable_flag_present || model->waiting);
-    if (ptc_ui_operation_feedback_visible(model)) draw_notice(pixels, stride, model, 594, 56);
 }
 
 void draw_toggle_switch(
@@ -1636,7 +1626,6 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_plan_impact(pixels, stride, model, PTC_UI_PLAN_HOLIDAY, model->holiday_dirty, panel);
     draw_candidate_button(pixels, stride, ptc_ui_holiday_calendar_rect(), "查看节假日安排",
                            UI_ACCENT_SOFT, UI_ACCENT, model->selected_index == 6, false);
-    if (ptc_ui_operation_feedback_visible(model)) draw_notice(pixels, stride, model, 594, 56);
 }
 
 const char *bedtime_override_label(PtcBedtimeOverrideMode mode)
@@ -1961,7 +1950,6 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
             UI_ACCENT, UI_ON_ACCENT, model->selected_index == 5 && !model->bedtime_section_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);
     }
-    if (ptc_ui_operation_feedback_visible(model)) draw_notice(pixels, stride, model, 594, 56);
 }
 
 
@@ -2356,22 +2344,6 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     } else if (model->parent_page == PTC_UI_PARENT_PLAN) {
         draw_time_plan_preview(pixels, stride, model);
     }
-    if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
-        model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
-        draw_diagnostic_notice(pixels, stride, model);
-    } else if (model->parent_page == PTC_UI_PARENT_TODAY) {
-        draw_home_notice(pixels, stride, model);
-    } else if (!plan_subpage) {
-        if (ptc_ui_operation_feedback_visible(model) || ptc_ui_home_notice_expanded(model)) {
-            bool error = strcmp(model->result_status, "error") == 0;
-            bool support = model->parent_page == PTC_UI_PARENT_SUPPORT;
-            bool expanded = error || model->waiting || model->feedback_detail[0] || support ||
-                measure_text(model->message, 20) > 1094;
-            int height = expanded ? 74 : 56;
-            int y = 586 - height / 2;
-            draw_notice(pixels, stride, model, y, height);
-        }
-    }
     if (model->parent_page == PTC_UI_PARENT_SETTINGS) {
         UiRect help = {842, 176, 384, 452};
         draw_plan_card(pixels, stride, help, false);
@@ -2392,6 +2364,12 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_text(pixels, stride, 866, help.y + help.height - 20, "按 B 返回孩子页  |  Y 刷新设备状态", 13, UI_MUTED);
     }
     draw_settings_badge(pixels, stride, model);
+    if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
+        model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
+        draw_diagnostic_notice(pixels, stride, model);
+    } else {
+        draw_notice(pixels, stride, model);
+    }
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0),
                        plan_subpage ? "" : "L  上一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1),

@@ -837,8 +837,8 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             } else {
                 preview.draft_makeup_workday_rule.minutes = entered;
             }
-            draw_plan_impact(pixels, stride, &preview, PTC_UI_PLAN_HOLIDAY, true,
-                             (UiRect){dialog.x + 536, dialog.y + 264, 350, 254});
+            draw_plan_impact_compact(pixels, stride, &preview, PTC_UI_PLAN_HOLIDAY,
+                                     to_uirect(ptc_ui_minute_editor_summary_rect()));
         } else {
             draw_text(pixels, stride, dialog.x + 558, dialog.y + 310, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
         }
@@ -846,8 +846,8 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         PtcUiModel preview = *model;
         if (entered_valid) {
             preview.draft_week[model->editor_index].minutes = entered;
-            draw_plan_impact(pixels, stride, &preview, PTC_UI_PLAN_WEEKLY, true,
-                             (UiRect){dialog.x + 536, dialog.y + 264, 350, 254});
+            draw_plan_impact_compact(pixels, stride, &preview, PTC_UI_PLAN_WEEKLY,
+                                     to_uirect(ptc_ui_minute_editor_summary_rect()));
         } else {
             draw_text(pixels, stride, dialog.x + 558, dialog.y + 310, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
         }

@@ -329,6 +329,30 @@ int main(int argc, char **argv)
         model.forecast[0].rule_source = "weekly";
         snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
         failed |= save_preview(argv[2], "parent", "today-cleared", &model, dark);
+        {
+            PtcUiModel notice_model = baseline;
+            notice_model.view = PTC_UI_PARENT;
+            notice_model.parent_page = PTC_UI_PARENT_TODAY;
+            notice_model.waiting = true;
+            snprintf(notice_model.message, sizeof(notice_model.message), "正在同步，请稍候");
+            failed |= save_preview(argv[2], "parent", "parent-notice-waiting", &notice_model, dark);
+            notice_model = baseline;
+            notice_model.view = PTC_UI_PARENT;
+            notice_model.parent_page = PTC_UI_PARENT_TODAY;
+            notice_model.remaining_minutes = 0;
+            failed |= save_preview(argv[2], "parent", "parent-notice-exhausted", &notice_model, dark);
+            notice_model = baseline;
+            notice_model.view = PTC_UI_PARENT;
+            notice_model.parent_page = PTC_UI_PARENT_TODAY;
+            snprintf(notice_model.result_status, sizeof(notice_model.result_status), "error");
+            snprintf(notice_model.command_name, sizeof(notice_model.command_name), "设置今日总额度");
+            snprintf(notice_model.message, sizeof(notice_model.message), "今日额度保存失败，请检查后重试");
+            snprintf(notice_model.feedback_detail, sizeof(notice_model.feedback_detail),
+                     "草稿仍然保留；可先刷新状态，仍失败时进入支持与恢复查看诊断。");
+            failed |= save_preview(argv[2], "parent", "parent-notice-failed", &notice_model, dark);
+            if (!ptc_ui_open_notice_details(&notice_model)) return 1;
+            failed |= save_preview(argv[2], "parent", "parent-notice-details", &notice_model, dark);
+        }
         model.today_override_cleared_in_session = false;
         model.bedtime_policy.enabled = true;
         model.bedtime_active = true;
@@ -569,6 +593,19 @@ int main(int argc, char **argv)
             "调整周计划额度", "完成输入后更新草稿，保存计划后才会应用。", 4, 1, 1440, 90);
         failed |= save_preview(argv[2], "plan", "plan-minute-editor", &model, dark);
         ptc_ui_cancel_overlay(&model);
+        {
+            PtcUiModel friday_editor = model;
+            if (!ptc_day_index_from_date(2026, 9, 18, &friday_editor.day_index)) return 1;
+            friday_editor.scheduled_override.enabled = false;
+            friday_editor.editor_index = 5;
+            memcpy(friday_editor.draft_week, friday_editor.current_week, sizeof(friday_editor.draft_week));
+            friday_editor.current_week[5] = (PtcDayRule){PTC_RULE_MODE_LIMIT, 120};
+            friday_editor.draft_week[5] = friday_editor.current_week[5];
+            snprintf(friday_editor.rule_source, sizeof(friday_editor.rule_source), "weekly");
+            ptc_ui_numpad_open(&friday_editor, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
+                "设置周五额度", "完成输入后更新草稿，保存计划后才会应用。", 4, 1, 1440, 90);
+            failed |= save_preview(argv[2], "plan", "weekly-friday-duration-editor", &friday_editor, dark);
+        }
         snprintf(model.result_status, sizeof(model.result_status), "error");
         snprintf(model.message, sizeof(model.message), "计划保存失败，修改仍保留，请检查后重试。");
         model.error_code = 501;
@@ -593,6 +630,20 @@ int main(int argc, char **argv)
             snprintf(panel_state.message, sizeof(panel_state.message), "保存失败，草稿仍保留，请检查后重试。");
             panel_state.error_code = 501;
             failed |= save_preview(argv[2], "holiday", "holiday-failed", &panel_state, dark);
+        }
+        {
+            PtcUiModel makeup_editor = model;
+            if (!ptc_day_index_from_date(2026, 9, 20, &makeup_editor.day_index)) return 1;
+            makeup_editor.holiday_enabled = makeup_editor.draft_holiday_enabled = true;
+            makeup_editor.holiday_rule = makeup_editor.draft_holiday_rule;
+            makeup_editor.makeup_workday_rule = makeup_editor.draft_makeup_workday_rule;
+            makeup_editor.current_week[ptc_weekday_from_day_index(makeup_editor.day_index)] =
+                (PtcDayRule){PTC_RULE_MODE_LIMIT, 120};
+            makeup_editor.draft_week[ptc_weekday_from_day_index(makeup_editor.day_index)] =
+                makeup_editor.current_week[ptc_weekday_from_day_index(makeup_editor.day_index)];
+            ptc_ui_numpad_open(&makeup_editor, PTC_UI_NUMPAD_MAKEUP_MINUTES, PTC_UI_OVERLAY_NONE,
+                "设置调休工作日额度", "完成输入后更新草稿，保存计划后才会应用。", 4, 1, 1440, 75);
+            failed |= save_preview(argv[2], "holiday", "holiday-makeup-duration-editor", &makeup_editor, dark);
         }
         {
             PtcUiModel confirmation = model;

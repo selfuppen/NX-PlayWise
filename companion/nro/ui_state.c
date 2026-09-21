@@ -1671,6 +1671,84 @@ bool ptc_ui_operation_feedback_visible(const PtcUiModel *model)
         strcmp(model->command_name, "未开始") != 0;
 }
 
+const char *ptc_ui_runtime_notice_summary(const PtcUiModel *model)
+{
+    if (!model) return "";
+    if (model->disable_flag_present) return "控制已停用，请家长到支持与恢复处理";
+    if (model->recovery_active) return "正在恢复设置，请等待恢复完成";
+    if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0)
+        return "需要家长处理，请进入支持与恢复";
+    if (model->restriction_enabled_available && !model->restriction_enabled)
+        return "Nintendo 家长控制未启用，请家长检查系统设置";
+    if (model->temporary_unlocked_available && model->temporary_unlocked)
+        return "临时解除期间不计时，进入睡眠后恢复今日限制";
+    if (model->apply_pending_confirmation) return "设置等待确认生效，请稍候";
+    if (model->restricted_now == 1) return "已进入时间限制，可兑换加时码或请家长调整额度";
+    if (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1)
+        return "额度已用完，限制可能即将生效，可兑换加时码";
+    return "";
+}
+
+void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out)
+{
+    const char *runtime;
+    bool error;
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    out->level = PTC_UI_NOTICE_SUCCESS;
+    if (!model || model->view != PTC_UI_PARENT) return;
+
+    runtime = ptc_ui_runtime_notice_summary(model);
+    error = strcmp(model->result_status, "error") == 0;
+    out->visible = runtime[0] || ptc_ui_operation_feedback_visible(model) ||
+        ptc_ui_home_notice_expanded(model);
+    if (!out->visible) return;
+
+    if (runtime[0]) snprintf(out->summary, sizeof(out->summary), "%s", runtime);
+    else if (model->message[0]) snprintf(out->summary, sizeof(out->summary), "%s", model->message);
+    else if (error) snprintf(out->summary, sizeof(out->summary), "操作未完成");
+    else if (model->waiting) snprintf(out->summary, sizeof(out->summary), "正在同步，请稍候");
+    else snprintf(out->summary, sizeof(out->summary), "状态已更新");
+
+    if (error || model->disable_flag_present || model->restricted_now == 1 ||
+        (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1) ||
+        strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
+        out->level = PTC_UI_NOTICE_DANGER;
+    } else if (model->waiting || runtime[0]) {
+        out->level = PTC_UI_NOTICE_WARNING;
+    }
+
+    if (model->feedback_detail[0]) {
+        snprintf(out->details, sizeof(out->details), "%s", model->feedback_detail);
+    } else if (error) {
+        snprintf(out->details, sizeof(out->details),
+                 "可先按 Y 刷新状态；如果仍然失败，请进入支持与恢复查看当前问题和诊断信息。");
+    } else if (model->disable_flag_present) {
+        snprintf(out->details, sizeof(out->details),
+                 "新的控制写入已停止。请进入支持与恢复，完成安全检查后解除停用并重新接管。");
+    } else if (model->recovery_active) {
+        snprintf(out->details, sizeof(out->details),
+                 "后台正在恢复此前设置。恢复完成前请勿重复提交，状态和诊断仍可继续刷新。");
+    } else if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
+        snprintf(out->details, sizeof(out->details),
+                 "请进入支持与恢复查看当前问题，并按页面建议重新检测、修复或导出诊断。");
+    } else if (model->restriction_enabled_available && !model->restriction_enabled) {
+        snprintf(out->details, sizeof(out->details),
+                 "请检查 Nintendo 系统家长控制是否已启用，再返回 PlayWise 刷新状态。");
+    } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
+        snprintf(out->details, sizeof(out->details),
+                 "系统临时解除期间不会累计今日计时；主机进入睡眠后会恢复今日限制。");
+    } else if (model->apply_pending_confirmation) {
+        snprintf(out->details, sizeof(out->details),
+                 "后台正在确认设置是否已经生效。完成前请勿重复提交，可稍后按 Y 刷新。");
+    } else if (model->restricted_now == 1 ||
+               (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1)) {
+        snprintf(out->details, sizeof(out->details),
+                 "可以兑换加时码，或由家长调整今日额度、临时加时或设为今日不限时。");
+    }
+    out->has_details = out->details[0] != '\0';
+}
+
 void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeProjection *out)
 {
     time_t clock_value = (time_t)now;

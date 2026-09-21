@@ -601,10 +601,7 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_Y) {
                 refresh_disable_flag(&ui);
                 submit_status(&ui);
-            } else if ((down & HidNpadButton_X) && ptc_ui_operation_feedback_visible(&ui.model) &&
-                       (ui.model.feedback_detail[0] || strcmp(ui.model.result_status, "error") == 0 ||
-                        ui.model.parent_page == PTC_UI_PARENT_SUPPORT)) {
-                ui.model.overlay = PTC_UI_OVERLAY_NOTICE_DETAILS;
+            } else if ((down & HidNpadButton_X) && ptc_ui_open_notice_details(&ui.model)) {
             } else if (down & HidNpadButton_X && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 if (ui.model.disable_flag_present) {

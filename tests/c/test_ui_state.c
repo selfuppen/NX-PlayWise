@@ -49,6 +49,7 @@ static bool rects_overlap(PtcUiRect left, PtcUiRect right)
 static void test_parent_status_summary(void)
 {
     PtcUiModel model;
+    PtcUiNoticeProjection notice;
     char summary[160];
     char today[32];
     char remaining[32];
@@ -117,6 +118,53 @@ static void test_parent_status_summary(void)
     snprintf(model.result_status, sizeof(model.result_status), "error");
     check_true(ptc_ui_operation_feedback_visible(&model),
                "failed operations show the compact feedback strip");
+
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_CHILD;
+    model.waiting = true;
+    ptc_ui_project_notice(&model, &notice);
+    check_true(!notice.visible, "parent notice projection never creates a hidden child-page hit target");
+    model.view = PTC_UI_PARENT;
+    ptc_ui_project_notice(&model, &notice);
+    check_true(notice.visible && !notice.has_details && notice.level == PTC_UI_NOTICE_WARNING,
+               "waiting parent operation uses a compact summary without a fake details action");
+    check_int(model.overlay, PTC_UI_OVERLAY_NONE, "projecting a notice never opens its details dialog");
+    check_hit(hit_center(&model, ptc_ui_notice_details_rect()), PTC_UI_HIT_NONE, 0,
+              "notice without details has no hidden touch action");
+
+    model.waiting = false;
+    snprintf(model.result_status, sizeof(model.result_status), "ok");
+    snprintf(model.command_name, sizeof(model.command_name), "保存每周计划");
+    snprintf(model.message, sizeof(model.message), "周计划已保存");
+    ptc_ui_project_notice(&model, &notice);
+    check_true(notice.visible && !notice.has_details && notice.level == PTC_UI_NOTICE_SUCCESS,
+               "ordinary successful writes show only the compact summary");
+    snprintf(model.feedback_detail, sizeof(model.feedback_detail), "今天继续由临时额度计划覆盖。");
+    ptc_ui_project_notice(&model, &notice);
+    check_true(notice.has_details && strstr(notice.details, "临时额度计划") != NULL,
+               "operation guidance enables the explicit details action");
+    check_hit(hit_center(&model, ptc_ui_notice_details_rect()), PTC_UI_HIT_NOTICE_DETAILS, 0,
+              "visible details button owns its exact touch target");
+    check_hit(ptc_ui_hit_test(&model, ptc_ui_notice_rect().x + 20, ptc_ui_notice_rect().y + 24),
+              PTC_UI_HIT_NONE, 0, "notice text does not masquerade as the details button");
+    check_true(ptc_ui_open_notice_details(&model), "details dialog opens only after an explicit action");
+    check_int(model.overlay, PTC_UI_OVERLAY_NOTICE_DETAILS, "details action opens the notice dialog");
+
+    model.overlay = PTC_UI_OVERLAY_NONE;
+    model.feedback_detail[0] = '\0';
+    snprintf(model.result_status, sizeof(model.result_status), "error");
+    ptc_ui_project_notice(&model, &notice);
+    check_true(notice.has_details && notice.level == PTC_UI_NOTICE_DANGER,
+               "errors provide fallback guidance and danger styling");
+    model.result_status[0] = '\0';
+    model.command_name[0] = '\0';
+    model.message[0] = '\0';
+    model.remaining_available = true;
+    model.remaining_minutes = 0;
+    ptc_ui_project_notice(&model, &notice);
+    check_true(notice.visible && notice.has_details && notice.level == PTC_UI_NOTICE_DANGER &&
+               strstr(notice.summary, "额度已用完") != NULL,
+               "runtime exhaustion uses the same actionable parent notice projection");
 
     memset(&model, 0, sizeof(model));
     model.today_override_present = true;
@@ -1211,6 +1259,25 @@ static void test_release_hit_targets(void)
     check_true(ptc_ui_minute_editor_quick_rect(1).x + ptc_ui_minute_editor_quick_rect(1).w < 716 &&
                ptc_ui_minute_editor_quick_rect(2).w == 0,
                "compact minute editor quick actions stay left of the information panel");
+    {
+        PtcUiRect summary_rect = ptc_ui_minute_editor_summary_rect();
+        PtcUiRect hours_rect = ptc_ui_minute_editor_field_rect(PTC_UI_DURATION_HOURS);
+        PtcUiRect notice_rect = ptc_ui_notice_rect();
+        PtcUiRect details_rect = ptc_ui_notice_details_rect();
+        PtcUiRect footer_rect = ptc_ui_parent_footer_rect(4);
+        check_true(summary_rect.x == hours_rect.x && summary_rect.w == 350 && summary_rect.h == 254 &&
+                   summary_rect.y > hours_rect.y + hours_rect.h,
+                   "compact plan summary uses the reserved right-side editor panel");
+        check_true(!rects_overlap(summary_rect, ptc_ui_cancel_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)) &&
+                   !rects_overlap(summary_rect, ptc_ui_confirm_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)),
+                   "compact plan summary stays clear of editor actions");
+        check_true(notice_rect.y + notice_rect.h < footer_rect.y,
+                   "parent notice capsule stays above the footer");
+        check_true(details_rect.x >= notice_rect.x && details_rect.y >= notice_rect.y &&
+                   details_rect.x + details_rect.w <= notice_rect.x + notice_rect.w &&
+                   details_rect.y + details_rect.h <= notice_rect.y + notice_rect.h,
+                   "notice details button stays inside the visible capsule");
+    }
     model.numpad_return_overlay = PTC_UI_OVERLAY_NONE;
     ptc_ui_numpad_finish(&model);
     check_int(model.overlay, PTC_UI_OVERLAY_NONE, "numpad finish sets return overlay");

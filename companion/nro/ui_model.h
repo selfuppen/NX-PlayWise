@@ -185,6 +185,20 @@ typedef struct {
 } PtcUiTimeProjection;
 
 typedef enum {
+    PTC_UI_NOTICE_SUCCESS = 0,
+    PTC_UI_NOTICE_WARNING,
+    PTC_UI_NOTICE_DANGER
+} PtcUiNoticeLevel;
+
+typedef struct {
+    bool visible;
+    bool has_details;
+    PtcUiNoticeLevel level;
+    char summary[192];
+    char details[256];
+} PtcUiNoticeProjection;
+
+typedef enum {
     PTC_UI_DURATION_HOURS = 0,
     PTC_UI_DURATION_MINUTES = 1
 } PtcUiDurationField;
