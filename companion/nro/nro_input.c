@@ -997,8 +997,8 @@ void handle_touch(UiState *ui, int x, int y)
         if (!ui->model.disable_flag_present) {
             ui->model.draft_bedtime_policy.enabled = !ui->model.draft_bedtime_policy.enabled;
             update_bedtime_dirty(ui);
-            snprintf(ui->model.message, sizeof(ui->model.message), "就寝时间总开关已%s；保存后生效。",
-                     ui->model.draft_bedtime_policy.enabled ? "开启" : "关闭");
+            snprintf(ui->model.message, sizeof(ui->model.message), "就寝管控总闸已%s；保存后生效。",
+                     ui->model.draft_bedtime_policy.enabled ? "接通" : "切断");
         }
         break;
     case PTC_UI_HIT_BEDTIME_FIELD:

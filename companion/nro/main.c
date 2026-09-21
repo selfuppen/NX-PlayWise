@@ -322,7 +322,8 @@ int main(int argc, char **argv)
                 enter_child_area(&ui);
             }
         } else {
-            if ((down & HidNpadButton_Plus) && ui.model.parent_page == PTC_UI_PARENT_TODAY) {
+            if ((down & HidNpadButton_X) && ptc_ui_open_notice_details(&ui.model)) {
+            } else if ((down & HidNpadButton_Plus) && ui.model.parent_page == PTC_UI_PARENT_TODAY) {
                 ptc_ui_open_home_details(&ui.model);
             } else if (ui.model.parent_footer_focused) {
                 if (down & HidNpadButton_B) {
@@ -463,8 +464,8 @@ int main(int argc, char **argv)
                     if (!ui.model.disable_flag_present) {
                         draft->enabled = !draft->enabled;
                         update_bedtime_dirty(&ui);
-                        snprintf(ui.model.message, sizeof(ui.model.message), "就寝时间总开关已%s；保存后生效。",
-                            draft->enabled ? "开启" : "关闭");
+                        snprintf(ui.model.message, sizeof(ui.model.message), "就寝管控总闸已%s；保存后生效。",
+                            draft->enabled ? "接通" : "切断");
                     }
                 } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
                            !ui.model.bedtime_section_focused &&
@@ -496,34 +497,6 @@ int main(int argc, char **argv)
                             next = UINT16_MAX - draft->scheduled_override.start_day_index + 1;
                         draft->scheduled_override.end_day_index =
                             (uint16_t)(draft->scheduled_override.start_day_index + next - 1);
-                        update_bedtime_dirty(&ui);
-                    }
-                } else if ((down & HidNpadButton_X) && !ui.model.bedtime_section_focused) {
-                    if (ui.model.disable_flag_present) {
-                        snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，就寝时间设置暂时只读。");
-                    } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_WEEKLY &&
-                               ui.model.selected_index < 7) {
-                        int day = ptc_ui_weekday_for_display_slot(ui.model.selected_index);
-                        draft->week[day].enabled = !draft->week[day].enabled;
-                        ui.model.bedtime_editor_day = day;
-                        update_bedtime_dirty(&ui);
-                    } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_CALENDAR &&
-                               ui.model.selected_index == 0) {
-                        draft->calendar_enabled = !draft->calendar_enabled;
-                        update_bedtime_dirty(&ui);
-                    } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
-                               ui.model.selected_index == 0) {
-                        draft->scheduled_override.present = !draft->scheduled_override.present;
-                        if (draft->scheduled_override.start_day_index < ui.model.day_index) {
-                            draft->scheduled_override.start_day_index = ui.model.day_index;
-                            draft->scheduled_override.end_day_index = ui.model.day_index;
-                        }
-                        update_bedtime_dirty(&ui);
-                    } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
-                               ui.model.selected_index == 3) {
-                        PtcBedtimeSpecialRule *rule = &draft->scheduled_override.rule;
-                        rule->mode = (PtcBedtimeOverrideMode)((rule->mode + 1) % 3);
-                        if (rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM) rule->window.enabled = true;
                         update_bedtime_dirty(&ui);
                     }
                 } else if ((down & HidNpadButton_A) && !ui.model.bedtime_section_focused) {
@@ -601,7 +574,6 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_Y) {
                 refresh_disable_flag(&ui);
                 submit_status(&ui);
-            } else if ((down & HidNpadButton_X) && ptc_ui_open_notice_details(&ui.model)) {
             } else if (down & HidNpadButton_X && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 if (ui.model.disable_flag_present) {

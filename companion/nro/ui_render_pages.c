@@ -1857,7 +1857,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
     bool bedtime_enforcing = model->bedtime_active && !model->bedtime_skipped;
 
-    /* 独立醒目的就寝时间总开关卡片 (Bedtime Master Switch Card) */
+    /* 独立醒目的就寝管控总闸卡片 (Bedtime Master Circuit Breaker Card) */
     UiRect master_card = to_uirect(ptc_ui_bedtime_master_switch_rect());
     draw_card_shadow(pixels, stride, master_card, 16);
     fill_round_rect(pixels, stride, master_card, 16, UI_RGB(UI_BLENDED(surface)));
@@ -1868,22 +1868,22 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     } else {
         draw_rect_outline(pixels, stride, master_card, 16, 1, UI_RGB(UI_BLENDED(border_control)));
     }
-    draw_text(pixels, stride, master_card.x + 18, master_card.y + 28, "就寝时间总开关", 20, UI_INK);
+    draw_text(pixels, stride, master_card.x + 18, master_card.y + 28, "就寝管控总闸", 20, UI_INK);
     if (bedtime_enforcing) {
         draw_text(pixels, stride, master_card.x + 18, master_card.y + 54,
-                  "生效中 (夜间立断限制执行中)", 13, UI_DANGER);
+                  "立断执行中 (夜间就寝时段)", 13, UI_DANGER);
         UiRect active_pill = {master_card.x + 175, master_card.y + 12, 96, 20};
         fill_round_rect(pixels, stride, active_pill, 6, UI_DANGER_SOFT);
         draw_text_center(pixels, stride, active_pill, "● 立断生效中", 12, UI_DANGER);
     } else {
         draw_text(pixels, stride, master_card.x + 18, master_card.y + 54,
-                  draft->enabled ? "开启 (到点自动执行就寝限制)" : "关闭 (停用全部就寝限制)", 13,
+                  draft->enabled ? "已接通 (按每周/节假日/指定日期执行)" : "已切断 (停用全部就寝限制，含特殊日期)", 13,
                   draft->enabled ? UI_SUCCESS : UI_MUTED);
     }
     UiRect toggle_rect = {master_card.x + master_card.width - 76, master_card.y + (master_card.height - 30) / 2, 60, 30};
     draw_toggle_switch(pixels, stride, toggle_rect, draft->enabled, false, model->disable_flag_present, NULL, NULL);
     draw_text(pixels, stride, master_card.x + master_card.width - 92, master_card.y + master_card.height - 8,
-              "- / 点按切换", 11, UI_MUTED);
+              "- / 点按切换总闸", 11, UI_MUTED);
 
     /* 页面状态、预测与风险统一在一张卡片中，避免与全局状态和底部反馈重复。 */
     {
@@ -1920,7 +1920,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         uint32_t f1_color = UI_RGB(UI_BLENDED(text_primary));
 
         if (!draft->enabled) {
-            snprintf(forecast_line1, sizeof(forecast_line1), "当前预测：总开关关闭，夜间不设就寝限制");
+            snprintf(forecast_line1, sizeof(forecast_line1), "当前预测：总闸已切断，全部就寝规则休眠，夜间不限制");
             f1_color = UI_MUTED;
         } else if (eval.active) {
             snprintf(forecast_line1, sizeof(forecast_line1), "! 立即生效：当前处于就寝时段，保存后将立断！");
@@ -1952,13 +1952,22 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 total_span_m += (int)(draft->week[d].end_minute + 1440 - draft->week[d].start_minute) % 1440;
             }
         }
-        snprintf(forecast_line2, sizeof(forecast_line2), "每周统计：开启 %d/7 天  |  周总就寝管控 %u 小时",
-                 enabled_count, (unsigned int)(total_span_m / 60));
+        if (draft->enabled) {
+            snprintf(forecast_line2, sizeof(forecast_line2), "每周统计：开启 %d/7 天  |  周总就寝管控 %u 小时",
+                     enabled_count, (unsigned int)(total_span_m / 60));
+        } else {
+            snprintf(forecast_line2, sizeof(forecast_line2), "每周统计：休眠中 (预设 %d/7 天，总闸切断不生效)",
+                     enabled_count);
+        }
         draw_text(pixels, stride, eval_card.x + 16, eval_card.y + 150,
                   forecast_line2, 13, UI_MUTED);
 
-        const char *cal_str = draft->calendar_enabled ? "节假日日历开启" : "节假日跟随周计划";
-        const char *sch_str = draft->scheduled_override.present ? "指定日期生效中" : "指定日期未设置";
+        const char *cal_str = draft->calendar_enabled
+            ? (draft->enabled ? "节假日日历开启" : "节假日日历(休眠)")
+            : "节假日跟随周计划";
+        const char *sch_str = draft->scheduled_override.present
+            ? (draft->enabled ? "指定日期生效中" : "指定日期生效(休眠)")
+            : "指定日期未设置";
         char special_line[128];
         snprintf(special_line, sizeof(special_line), "特殊规则：%s  |  %s", cal_str, sch_str);
         draw_wrapped_text(pixels, stride, eval_card.x + 16, eval_card.y + 178,
@@ -1980,7 +1989,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
         draw_text(pixels, stride, eval_card.x + 16,
                   eval_card.y + eval_card.height - 18,
-                  "L/R 切换区段，- 总开关，+ 保存，ZL 放弃",
+                  "L/R 切换区段，- 总闸，+ 保存，ZL 放弃",
                   12, UI_ACCENT);
     }
 
@@ -2048,7 +2057,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 fill_round_rect(pixels, stride, pill, 6, UI_RAISED);
                 draw_text_center(pixels, stride, pill, "关闭", 12, UI_MUTED);
             }
-            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 148, card.width, 18}, "A/X 设置", 11, UI_MUTED);
+            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 148, card.width, 18}, "A 设置", 11, UI_MUTED);
         }
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 7), "复制到工作日",
             UI_PAGE, UI_ACCENT, model->selected_index == 7 && !model->bedtime_section_focused, model->disable_flag_present);
@@ -2076,13 +2085,19 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         UiRect master = to_uirect(ptc_ui_bedtime_field_rect(1, 0));
         draw_plan_card(pixels, stride, master, model->selected_index == 0 && !model->bedtime_section_focused);
         draw_text(pixels, stride, master.x + 20, master.y + 40, "国家节假日日历", 20, UI_INK);
-        draw_text(pixels, stride, master.x + 190, master.y + 40,
-            draft->calendar_enabled ? "开启" : "关闭", 18,
-            draft->calendar_enabled ? UI_SUCCESS : UI_MUTED);
+        if (!draft->enabled) {
+            draw_text(pixels, stride, master.x + 190, master.y + 40,
+                draft->calendar_enabled ? "已开启 (休眠)" : "已关闭", 18, UI_MUTED);
+        } else {
+            draw_text(pixels, stride, master.x + 190, master.y + 40,
+                draft->calendar_enabled ? "开启" : "关闭", 18,
+                draft->calendar_enabled ? UI_SUCCESS : UI_MUTED);
+        }
         UiRect cal_toggle = {master.x + master.width - 76, master.y + (master.height - 28) / 2, 58, 28};
         draw_toggle_switch(pixels, stride, cal_toggle, draft->calendar_enabled,
-                           model->selected_index == 0 && !model->bedtime_section_focused, false, NULL, NULL);
-        draw_text(pixels, stride, master.x + master.width - 165, master.y + 39, "A/X 切换", 13, UI_MUTED);
+                           model->selected_index == 0 && !model->bedtime_section_focused,
+                           !draft->enabled || model->disable_flag_present, NULL, NULL);
+        draw_text(pixels, stride, master.x + master.width - 165, master.y + 39, "A 切换", 13, UI_MUTED);
 
         for (int i = 0; i < 2; ++i) {
             const PtcBedtimeSpecialRule *rule = i == 0 ? &draft->holiday_rule : &draft->makeup_workday_rule;
@@ -2092,8 +2107,13 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
             draw_text(pixels, stride, card.x + 18, card.y + 30,
                 i == 0 ? "法定休假" : "调休工作日", 19, UI_INK);
             draw_bedtime_window_value(value, sizeof(value), &rule->window);
-            snprintf(line, sizeof(line), "%s  |  %s", bedtime_override_label(rule->mode),
-                rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? value : "使用对应模式");
+            if (!draft->enabled) {
+                snprintf(line, sizeof(line), "%s  |  %s (总闸休眠)", bedtime_override_label(rule->mode),
+                    rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? value : "使用对应模式");
+            } else {
+                snprintf(line, sizeof(line), "%s  |  %s", bedtime_override_label(rule->mode),
+                    rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? value : "使用对应模式");
+            }
             draw_text(pixels, stride, card.x + 18, card.y + 72, line, 15, UI_MUTED);
         }
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 3), "ZL  放弃",
@@ -2101,13 +2121,39 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 4), "+  保存",
             UI_ACCENT, UI_ON_ACCENT, model->selected_index == 4 && !model->bedtime_section_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);
+
+        /* 节假日日历规则与总闸状态指引面板（底部与右侧预测卡平齐至 y=630） */
+        UiRect cal_guide = {54, 536, 752, 94};
+        fill_round_rect(pixels, stride, cal_guide, 12,
+                        !draft->enabled ? UI_WARNING_SOFT : UI_RGB(UI_BLENDED(surface)));
+        draw_rect_outline(pixels, stride, cal_guide, 12, 1,
+                          !draft->enabled ? UI_WARNING : UI_RGB(UI_BLENDED(border_control)));
+        if (!draft->enabled) {
+            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 24,
+                      "⚠️ 就寝管控总闸已切断 (休眠状态)", 15, UI_WARNING);
+            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 48,
+                      "• 总闸切断时，所有节假日日历和调休就寝均暂停执行，夜间不设任何就寝限制。", 13, UI_MUTED);
+            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 70,
+                      "• 您可在此配置规则，按 [-] 键或触摸右侧“就寝管控总闸”接通后即按计划生效。", 13, UI_MUTED);
+        } else {
+            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 24,
+                      "国家节假日日历与规则优先级", 15, UI_RGB(UI_BLENDED(text_primary)));
+            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 48,
+                      "• 开启日历后，国家法定休假与调休工作日将自动优先于每周基础计划生效。", 13, UI_MUTED);
+            draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 70,
+                      "• 调休工作日建议设为严格就寝；法定休假可根据需要放宽或免除就寝限制。", 13, UI_MUTED);
+        }
     } else {
         const PtcBedtimeScheduledOverride *scheduled = &draft->scheduled_override;
         uint32_t duration = scheduled->end_day_index >= scheduled->start_day_index
             ? (uint32_t)scheduled->end_day_index - scheduled->start_day_index + 1u : 1u;
         const char *labels[] = {"指定日期就寝", "开始日期", "持续天数", "就寝规则"};
         char values[4][96];
-        snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? "开启" : "关闭");
+        if (!draft->enabled) {
+            snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? "开启 (休眠)" : "关闭");
+        } else {
+            snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? "开启" : "关闭");
+        }
         {
             uint16_t year;
             uint8_t month, day;
@@ -2119,21 +2165,32 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         if (scheduled->rule.mode == PTC_BEDTIME_OVERRIDE_CUSTOM) {
             char value[64];
             draw_bedtime_window_value(value, sizeof(value), &scheduled->rule.window);
-            snprintf(values[3], sizeof(values[3]), "%s  %s",
-                bedtime_override_label(scheduled->rule.mode), value);
-        } else snprintf(values[3], sizeof(values[3]), "%s", bedtime_override_label(scheduled->rule.mode));
+            snprintf(values[3], sizeof(values[3]), "%s  %s%s",
+                bedtime_override_label(scheduled->rule.mode), value,
+                draft->enabled ? "" : " (总闸休眠)");
+        } else {
+            snprintf(values[3], sizeof(values[3]), "%s%s",
+                bedtime_override_label(scheduled->rule.mode),
+                draft->enabled ? "" : " (总闸休眠)");
+        }
         for (int i = 0; i < 4; ++i) {
             UiRect row = to_uirect(ptc_ui_bedtime_field_rect(2, i));
             draw_plan_card(pixels, stride, row, model->selected_index == i && !model->bedtime_section_focused);
             if (i == 0) {
                 draw_text(pixels, stride, row.x + 18, row.y + 31, labels[0], 17, UI_MUTED);
-                draw_text(pixels, stride, row.x + 150, row.y + 31,
-                          scheduled->present ? "开启" : "关闭", 18,
-                          scheduled->present ? UI_SUCCESS : UI_MUTED);
+                if (!draft->enabled) {
+                    draw_text(pixels, stride, row.x + 150, row.y + 31,
+                              scheduled->present ? "开启 (休眠)" : "关闭", 18, UI_MUTED);
+                } else {
+                    draw_text(pixels, stride, row.x + 150, row.y + 31,
+                              scheduled->present ? "开启" : "关闭", 18,
+                              scheduled->present ? UI_SUCCESS : UI_MUTED);
+                }
                 UiRect sched_toggle = {row.x + row.width - 76, row.y + (row.height - 28) / 2, 58, 28};
                 draw_toggle_switch(pixels, stride, sched_toggle, scheduled->present,
-                                   model->selected_index == 0 && !model->bedtime_section_focused, false, NULL, NULL);
-                draw_text(pixels, stride, row.x + row.width - 165, row.y + 31, "A/X 切换", 13, UI_MUTED);
+                                   model->selected_index == 0 && !model->bedtime_section_focused,
+                                   !draft->enabled || model->disable_flag_present, NULL, NULL);
+                draw_text(pixels, stride, row.x + row.width - 165, row.y + 31, "A 切换", 13, UI_MUTED);
             } else {
                 draw_text(pixels, stride, row.x + 18, row.y + 31, labels[i], 17, UI_MUTED);
                 draw_text(pixels, stride, row.x + 240, row.y + 31, values[i], 18, UI_INK);
@@ -2142,6 +2199,25 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                               "A 输入 | ZL/ZR ±7 天", 11, UI_MUTED);
             }
         }
+
+        /* 指定日期规则与总闸状态指引面板（与保存/放弃按钮同高对齐） */
+        UiRect sched_guide = {54, 520, 360, 56};
+        fill_round_rect(pixels, stride, sched_guide, 12,
+                        !draft->enabled ? UI_WARNING_SOFT : UI_RGB(UI_BLENDED(surface)));
+        draw_rect_outline(pixels, stride, sched_guide, 12, 1,
+                          !draft->enabled ? UI_WARNING : UI_RGB(UI_BLENDED(border_control)));
+        if (!draft->enabled) {
+            draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 22,
+                      "⚠️ 管控总闸已切断 (休眠)", 13, UI_WARNING);
+            draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 42,
+                      "规则当前休眠；按 [-] 键接通总闸生效", 12, UI_MUTED);
+        } else {
+            draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 22,
+                      "指定日期就寝独立优先级", 13, UI_RGB(UI_BLENDED(text_primary)));
+            draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 42,
+                      "设定区间内优先于节假日与周计划执行", 12, UI_MUTED);
+        }
+
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 4), "ZL  放弃",
             UI_PAGE, UI_INK, model->selected_index == 4 && !model->bedtime_section_focused, !model->bedtime_dirty);
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 5), "+  保存",
