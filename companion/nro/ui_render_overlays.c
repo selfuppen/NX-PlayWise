@@ -1385,7 +1385,7 @@ static void format_decision_rule(const PtcUiDecisionStep *step, char *out, size_
 }
 
 static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, int y, int total_w,
-                                    const PtcUiTodayDecision *decision)
+                                    const PtcUiTodayDecision *decision, bool bedtime_enforcing)
 {
     const char *titles[] = {"01 今日调整", "02 计划特例", "03 假日调休", "04 基础周计划"};
     const PtcUiDecisionStep *steps[] = {
@@ -1401,6 +1401,12 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
     bool hit_found = false;
 
     draw_text(pixels, stride, x, y + 6, "额度决策流水线（优先级自高向低，命中即阻断后续）", 14, UI_INK);
+    if (bedtime_enforcing) {
+        UiRect pill = {x + total_w - 290, y, 290, 24};
+        fill_round_rect(pixels, stride, pill, 6, UI_DANGER_SOFT);
+        draw_rect_outline(pixels, stride, pill, 6, 1, UI_DANGER);
+        draw_text_center(pixels, stride, pill, "🌙 就寝限制生效中 / 最终强制锁定", 12, UI_DANGER);
+    }
     int cards_y = y + 26;
 
     for (int i = 0; i < count; ++i) {
@@ -1414,8 +1420,13 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
 
         /* Card background & outline */
         if (is_selected) {
-            fill_round_rect(pixels, stride, card, 12, UI_SUCCESS_SOFT);
-            draw_rect_outline(pixels, stride, card, 12, 2, UI_SUCCESS);
+            if (bedtime_enforcing) {
+                fill_round_rect(pixels, stride, card, 12, UI_RGB(ui_mix_rgb(UI_BLENDED(surface), UI_BLENDED(danger), 14)));
+                draw_rect_outline(pixels, stride, card, 12, 2, UI_DANGER);
+            } else {
+                fill_round_rect(pixels, stride, card, 12, UI_SUCCESS_SOFT);
+                draw_rect_outline(pixels, stride, card, 12, 2, UI_SUCCESS);
+            }
         } else if (is_overridden) {
             fill_round_rect(pixels, stride, card, 12, UI_RAISED);
             draw_rect_outline(pixels, stride, card, 12, 1, UI_BORDER);
@@ -1426,13 +1437,18 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
 
         /* 1. Header title */
         draw_text(pixels, stride, card.x + 14, card.y + 20, titles[i], 14,
-                  is_selected ? UI_SUCCESS : (is_overridden ? UI_INK : UI_MUTED));
+                  is_selected ? (bedtime_enforcing ? UI_DANGER : UI_SUCCESS) : (is_overridden ? UI_INK : UI_MUTED));
 
         /* 2. Status Badge */
         UiRect badge = {card.x + 12, card.y + 30, card.width - 24, 22};
         if (is_selected) {
-            fill_round_rect(pixels, stride, badge, 4, UI_SUCCESS);
-            draw_text_center(pixels, stride, badge, "🎯 当前生效命中", 11, UI_ON_ACCENT);
+            if (bedtime_enforcing) {
+                fill_round_rect(pixels, stride, badge, 4, UI_DANGER);
+                draw_text_center(pixels, stride, badge, "🎯 额度命中 (🌙就寝锁定)", 11, UI_ON_ACCENT);
+            } else {
+                fill_round_rect(pixels, stride, badge, 4, UI_SUCCESS);
+                draw_text_center(pixels, stride, badge, "🎯 当前生效命中", 11, UI_ON_ACCENT);
+            }
         } else if (is_overridden) {
             fill_round_rect(pixels, stride, badge, 4, UI_WARNING_SOFT);
             draw_text_center(pixels, stride, badge, "🛡️ 已被上级覆盖", 11, UI_WARNING);
@@ -1443,12 +1459,12 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
 
         /* 3. Rule Value */
         draw_text_center(pixels, stride, (UiRect){card.x, card.y + 60, card.width, 26},
-                         rule_val, 18, is_selected ? UI_SUCCESS : (is_overridden ? UI_MUTED : UI_DISABLED));
+                         rule_val, 18, is_selected ? (bedtime_enforcing ? UI_DANGER : UI_SUCCESS) : (is_overridden ? UI_MUTED : UI_DISABLED));
 
         /* 4. Subtext explanation */
         const char *desc;
         if (is_selected) {
-            desc = "在此命中 / 阻断后续规则";
+            desc = bedtime_enforcing ? "额度已生效 / 🌙就寝立断中" : "在此命中 / 阻断后续规则";
         } else if (is_overridden) {
             desc = "规则已配置，但上级优先";
         } else if (step->state == PTC_UI_DECISION_DISABLED) {
@@ -1461,7 +1477,7 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
         }
         draw_line(pixels, stride, card.x + 12, card.y + 98, card.x + card.width - 12, card.y + 98, 1, UI_BORDER);
         draw_text_center(pixels, stride, (UiRect){card.x + 6, card.y + 104, card.width - 12, 24},
-                         desc, 11, is_selected ? UI_SUCCESS : UI_MUTED);
+                         desc, 11, is_selected ? (bedtime_enforcing ? UI_DANGER : UI_SUCCESS) : UI_MUTED);
 
         /* 5. Connector line between node i and node i+1 */
         if (i < count - 1) {
@@ -1476,9 +1492,11 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
                 draw_text_center(pixels, stride, (UiRect){line_start_x, line_y - 28, gap, 16}, "阻断", 11, UI_DANGER);
                 hit_found = true;
             } else if (!hit_found) {
-                /* Active flow arrow: ──> */
-                draw_line(pixels, stride, line_start_x, line_y, line_end_x - 10, line_y, 2, UI_ACCENT);
-                draw_text(pixels, stride, line_end_x - 10, line_y - 7, ">", 13, UI_ACCENT);
+                /* Active flow arrow: ──> (geometric vector arrow, perfectly aligned to line_y) */
+                int arrow_tip_x = line_end_x - 6;
+                draw_line(pixels, stride, line_start_x, line_y, arrow_tip_x, line_y, 2, UI_ACCENT);
+                draw_line(pixels, stride, arrow_tip_x - 6, line_y - 5, arrow_tip_x, line_y, 2, UI_ACCENT);
+                draw_line(pixels, stride, arrow_tip_x - 6, line_y + 5, arrow_tip_x, line_y, 2, UI_ACCENT);
             } else {
                 /* Inactive bypassed line: ┄┄ */
                 draw_line(pixels, stride, line_start_x, line_y, line_end_x, line_y, 1, UI_BORDER);
@@ -1541,28 +1559,38 @@ static void draw_home_decision_details(uint32_t *pixels, uint32_t stride,
 
     /* 生效规则指示徽章框 */
     UiRect active_badge = {hero.x + 540, hero.y + 14, hero.width - 556, 52};
-    fill_round_rect(pixels, stride, active_badge, 8, fresh ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
-    draw_rect_outline(pixels, stride, active_badge, 8, 1, fresh ? UI_SUCCESS : UI_WARNING);
+    bool bedtime_enforcing = model->bedtime_active && !model->bedtime_skipped;
+    uint32_t badge_bg = !fresh ? UI_WARNING_SOFT : (bedtime_enforcing ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
+    uint32_t badge_border = !fresh ? UI_WARNING : (bedtime_enforcing ? UI_DANGER : UI_SUCCESS);
+    fill_round_rect(pixels, stride, active_badge, 8, badge_bg);
+    draw_rect_outline(pixels, stride, active_badge, 8, 1, badge_border);
+    const char *badge_title = !fresh ? "规则状态待确认" :
+        (bedtime_enforcing ? "🎯 基础额度生效 (🌙就寝限制中)" : "🎯 当前生效规则");
     draw_text(pixels, stride, active_badge.x + 14, active_badge.y + 20,
-              fresh ? "🎯 当前生效规则" : "规则状态待确认", 12, fresh ? UI_SUCCESS : UI_WARNING);
-    draw_text(pixels, stride, active_badge.x + 120, active_badge.y + 20, effective, 14, UI_INK);
-    draw_wrapped_text(pixels, stride, active_badge.x + 14, active_badge.y + 40, decision.final_reason,
+              badge_title, 12, badge_border);
+    draw_text(pixels, stride, active_badge.x + (bedtime_enforcing ? 200 : 120), active_badge.y + 20, effective, 14, UI_INK);
+    const char *final_desc = bedtime_enforcing
+        ? "基础额度已就绪；当前处于就寝窗口，强制立断锁定" : decision.final_reason;
+    draw_wrapped_text(pixels, stride, active_badge.x + 14, active_badge.y + 40, final_desc,
                       11, active_badge.width - 28, 15, 1, UI_MUTED);
 
     /* 2. 额度决策流水线 (1064 x 164) */
-    draw_waterfall_pipeline(pixels, stride, x_left, top_y + 88, full_w, &decision);
+    draw_waterfall_pipeline(pixels, stride, x_left, top_y + 88, full_w, &decision, bedtime_enforcing);
 
     /* 3. 底部双栏 (520 + 520) */
     int bottom_y = top_y + 258;
 
     /* 左下栏：并行就寝与自主缓冲 */
     UiRect bedtime = {x_left, bottom_y, col_w, 76};
-    fill_round_rect(pixels, stride, bedtime, 10, UI_WARNING_SOFT);
-    draw_rect_outline(pixels, stride, bedtime, 10, 1, UI_WARNING);
-    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 22, "🌙 并行就寝限制", 13, UI_WARNING);
-    draw_text(pixels, stride, bedtime.x + 130, bedtime.y + 22, decision.bedtime, 14, UI_INK);
+    fill_round_rect(pixels, stride, bedtime, 10, bedtime_enforcing ? UI_DANGER_SOFT : UI_WARNING_SOFT);
+    draw_rect_outline(pixels, stride, bedtime, 10, 1, bedtime_enforcing ? UI_DANGER : UI_WARNING);
+    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 22,
+              bedtime_enforcing ? "🌙 并行就寝限制（强制立断生效中）" : "🌙 并行就寝限制", 13,
+              bedtime_enforcing ? UI_DANGER : UI_WARNING);
+    draw_text(pixels, stride, bedtime.x + (bedtime_enforcing ? 200 : 130), bedtime.y + 22, decision.bedtime, 14, UI_INK);
     draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 52,
-              "就寝限制独立于时长并行生效；到点后无论剩余额度直接锁定机器。", 11, UI_MUTED);
+              bedtime_enforcing ? "当前处于就寝窗口，独立于今日额度直接强制锁定机器。"
+                                : "就寝限制独立于时长并行生效；到点后无论剩余额度直接锁定机器。", 11, UI_MUTED);
 
     UiRect autonomy = {x_left, bottom_y + 84, col_w, 76};
     fill_round_rect(pixels, stride, autonomy, 10, UI_RAISED);
@@ -1713,7 +1741,8 @@ static void draw_forecast_day_details(uint32_t *pixels, uint32_t stride, const P
                       11, active_badge.width - 28, 15, 1, UI_MUTED);
 
     /* 2. 额度决策流水线 (1064 x 164) */
-    draw_waterfall_pipeline(pixels, stride, x_left, top_y + 88, full_w, &decision);
+    draw_waterfall_pipeline(pixels, stride, x_left, top_y + 88, full_w, &decision,
+                            is_today && model->bedtime_active && !model->bedtime_skipped);
 
     /* 3. 底部双栏 (520 + 520) */
     int bottom_y = top_y + 258;

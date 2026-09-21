@@ -2214,6 +2214,18 @@ static void test_today_decision_and_plan_review(void)
     check_true(strcmp(badge, "生效中") == 0 && strstr(detail, "90") != NULL,
                "active today adjustment exposes its quota");
 
+    model.bedtime_active = true;
+    model.bedtime_skipped = false;
+    ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
+    check_true(strcmp(badge, "就寝立断") == 0 && strstr(detail, "就寝限制中") != NULL,
+               "active bedtime indicates restriction on today card even with override");
+    model.today_override_present = false;
+    ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
+    check_true(strstr(detail, "就寝限制中") != NULL && strstr(detail, "周计划") != NULL,
+               "active bedtime indicates restriction when falling back to weekly plan");
+    model.bedtime_active = false;
+    model.today_override_present = true;
+
     model.apply_pending_confirmation = true;
     ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
     check_true(strcmp(badge, "等待生效") == 0, "pending apply is not advertised as already active");

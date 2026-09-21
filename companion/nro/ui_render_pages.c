@@ -849,9 +849,9 @@ static void draw_infinity_smooth(uint32_t *pixels, uint32_t stride, int cx, int 
 
 static void draw_restore_arc(uint32_t *pixels, uint32_t stride, int cx, int cy, float radius, int stroke, uint32_t color)
 {
-    const int N = 20;
-    const float start_angle = 0.5f;
-    const float end_angle = 5.25f;
+    const int N = 24;
+    const float start_angle = 0.6f;
+    const float end_angle = 4.65f;
     float prev_x = (float)cx + radius * cosf(start_angle);
     float prev_y = (float)cy + radius * sinf(start_angle);
     for (int i = 1; i <= N; ++i) {
@@ -863,10 +863,15 @@ static void draw_restore_arc(uint32_t *pixels, uint32_t stride, int cx, int cy, 
         prev_x = x;
         prev_y = y;
     }
-    int ax = (int)(prev_x + 0.5f);
-    int ay = (int)(prev_y + 0.5f);
-    draw_line(pixels, stride, ax, ay, ax + 5, ay - 2, stroke, color);
-    draw_line(pixels, stride, ax, ay, ax - 2, ay + 5, stroke, color);
+    /* Solid, crisp counter-clockwise arrowhead at the top pointing left */
+    int tip_x = cx - 3;
+    int tip_y = cy - (int)radius;
+    int base_x = cx + 2;
+    draw_line(pixels, stride, tip_x, tip_y, base_x, tip_y - 5, stroke, color);
+    draw_line(pixels, stride, tip_x, tip_y, base_x, tip_y + 5, stroke, color);
+    draw_line(pixels, stride, base_x, tip_y - 5, base_x, tip_y + 5, stroke, color);
+    draw_line(pixels, stride, tip_x + 2, tip_y - 2, tip_x + 2, tip_y + 2, stroke, color);
+    draw_line(pixels, stride, tip_x + 4, tip_y - 3, tip_x + 4, tip_y + 3, stroke, color);
 }
 
 static void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int cy,
@@ -1090,10 +1095,12 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     bool compact = rect.height < 90;
     int badge_size = compact ? 34 : 44;
     int title_size = compact ? 20 : 22;
-    int sub_size = compact ? 15 : 17;
+    int sub_size = compact ? 14 : 15;
     int text_x = rect.x + 18 + badge_size + 16;
-    int content_width = rect.width - (text_x - rect.x) - (recommended ? 64 : 16) - reserved_right;
-    if (content_width < 100) content_width = 100;
+    int title_width = rect.width - (text_x - rect.x) - (recommended ? 64 : 16) - reserved_right;
+    int sub_width = rect.width - (text_x - rect.x) - 16;
+    if (title_width < 100) title_width = 100;
+    if (sub_width < 100) sub_width = 100;
 
     uint32_t background = disabled ? UI_RAISED : (selected ? UI_ACCENT_SOFT : UI_SURFACE);
     draw_card_shadow(pixels, stride, rect, 16);
@@ -1122,16 +1129,16 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
                           disabled ? UI_DISABLED : action->accent);
 
     char fitted[128];
-    fit_text(fitted, sizeof(fitted), action->title, title_size, content_width);
+    fit_text(fitted, sizeof(fitted), action->title, title_size, title_width);
     draw_text(pixels, stride, text_x, text_top + title_size, fitted, title_size,
               disabled ? UI_DISABLED : UI_INK);
 
     if (has_visual) {
         draw_action_visual(pixels, stride,
-            (UiRect){text_x, text_top + title_size + 8, content_width, compact ? 24 : 28},
+            (UiRect){text_x, text_top + title_size + 8, sub_width, compact ? 24 : 28},
             action, disabled);
     } else if (has_sub) {
-        fit_text(fitted, sizeof(fitted), action->subtitle, sub_size, content_width);
+        fit_text(fitted, sizeof(fitted), action->subtitle, sub_size, sub_width);
         draw_text(pixels, stride, text_x, text_top + title_size + sub_size + 7, fitted, sub_size,
                   disabled ? UI_DISABLED : UI_MUTED);
     }
@@ -1215,15 +1222,22 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
             if (!model->status_loaded) {
                 subtitle = "刷新后显示当前或下次窗口";
             } else if (model->bedtime_active) {
-                snprintf(dynamic, sizeof(dynamic), "%02u:%02u 至次日 %02u:%02u，%s",
-                    (unsigned int)(model->bedtime_start_minute / 60),
-                    (unsigned int)(model->bedtime_start_minute % 60),
-                    (unsigned int)(model->bedtime_end_minute / 60),
-                    (unsigned int)(model->bedtime_end_minute % 60),
-                    model->bedtime_skipped ? "已跳过" : "生效中");
+                if (model->bedtime_skipped) {
+                    snprintf(dynamic, sizeof(dynamic), "%02u:%02u 至次日 %02u:%02u（已跳过）",
+                        (unsigned int)(model->bedtime_start_minute / 60),
+                        (unsigned int)(model->bedtime_start_minute % 60),
+                        (unsigned int)(model->bedtime_end_minute / 60),
+                        (unsigned int)(model->bedtime_end_minute % 60));
+                } else {
+                    snprintf(dynamic, sizeof(dynamic), "%02u:%02u 至次日 %02u:%02u",
+                        (unsigned int)(model->bedtime_start_minute / 60),
+                        (unsigned int)(model->bedtime_start_minute % 60),
+                        (unsigned int)(model->bedtime_end_minute / 60),
+                        (unsigned int)(model->bedtime_end_minute % 60));
+                }
                 subtitle = dynamic;
             } else if (model->bedtime_skipped_window_available) {
-                snprintf(dynamic, sizeof(dynamic), "%02u:%02u 至次日 %02u:%02u，已跳过",
+                snprintf(dynamic, sizeof(dynamic), "%02u:%02u 至次日 %02u:%02u（已跳过）",
                     (unsigned int)(model->bedtime_skipped_start_minute / 60),
                     (unsigned int)(model->bedtime_skipped_start_minute % 60),
                     (unsigned int)(model->bedtime_skipped_end_minute / 60),
@@ -1259,10 +1273,11 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
         if (index == 0) {
             UiRect tbadge = {box.x + box.width - 86, box.y + 10, 74, 22};
             uint32_t badge_color = strcmp(adjustment_badge, "生效中") == 0 ? UI_SUCCESS :
+                (strcmp(adjustment_badge, "就寝立断") == 0 ? UI_WARNING :
                 (strcmp(adjustment_badge, "控制停用") == 0 || strcmp(adjustment_badge, "恢复中") == 0
                     ? UI_DANGER :
                  (strcmp(adjustment_badge, "等待生效") == 0 || strcmp(adjustment_badge, "待确认") == 0
-                    ? UI_WARNING : UI_MUTED));
+                    ? UI_WARNING : UI_MUTED)));
             fill_round_rect(pixels, stride, tbadge, 6,
                             badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
                             (badge_color == UI_DANGER ? UI_DANGER_SOFT :
@@ -1564,6 +1579,10 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
             if (ptc_ui_day_rule_effectively_changed(model->current_week[day], model->draft_week[day])) ++changed;
         }
         if (changed > 0) snprintf(title, sizeof(title), "修改草稿 | 已调整 %d 天", changed);
+        else snprintf(title, sizeof(title), "修改草稿 | 待保存");
+    } else if (kind == PTC_UI_PLAN_SCHEDULED) {
+        if (ptc_ui_scheduled_dirty(model)) ++changed;
+        if (changed > 0) snprintf(title, sizeof(title), "修改草稿 | 临时计划已调整");
         else snprintf(title, sizeof(title), "修改草稿 | 待保存");
     } else {
         if (model->holiday_enabled != model->draft_holiday_enabled) ++changed;
@@ -2450,17 +2469,20 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 0) {
                 dynamic_action = *action;
                 bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
+                bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
                 dynamic_action.subtitle = scheduled_active
-                    ? "当前生效中，覆盖每天可玩额度"
+                    ? (bedtime_enforcing ? "计划生效中（当前就寝限制中）" : "当前生效中，覆盖每天可玩额度")
                     : (model->scheduled_override.enabled ? "已启用，今日未在计划日期范围内" : "当前关闭");
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 1) {
                 dynamic_action = *action;
                 bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
                                        strcmp(model->rule_source, "makeup_workday") == 0);
+                bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
                 dynamic_action.subtitle = holiday_active
-                    ? (strcmp(model->rule_source, "statutory_holiday") == 0
-                        ? "当前生效中，国家法定休假日" : "当前生效中，国家调休工作日")
+                    ? (bedtime_enforcing ? "节假日生效中（当前就寝限制中）" :
+                       (strcmp(model->rule_source, "statutory_holiday") == 0
+                        ? "当前生效中，国家法定休假日" : "当前生效中，国家调休工作日"))
                     : (model->holiday_enabled ? "已启用，今日非节假日" : "当前关闭，可预设规则");
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 2) {
@@ -2469,6 +2491,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
                                        strcmp(model->rule_source, "makeup_workday") == 0);
                 bool today_active = (strcmp(model->rule_source, "today_override") == 0);
+                bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
                 if (today_active) {
                     dynamic_action.subtitle = "今日已被临时调整覆盖";
                 } else if (scheduled_active) {
@@ -2476,7 +2499,8 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 } else if (holiday_active) {
                     dynamic_action.subtitle = "今日已被国家节假日规则覆盖";
                 } else {
-                    dynamic_action.subtitle = "当前生效中，周一到周日基础额度";
+                    dynamic_action.subtitle = bedtime_enforcing
+                        ? "周额度生效中（当前就寝限制中）" : "当前生效中，周一到周日基础额度";
                 }
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 3) {

@@ -1045,19 +1045,27 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         } else {
             draw_text(pixels, stride, dialog.x + 558, dialog.y + 310, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
         }
-    } else if (scheduled || grant) {
+    } else if (scheduled) {
+        PtcUiModel preview = *model;
+        if (entered_valid) {
+            preview.draft_scheduled_override.rule.mode = PTC_RULE_MODE_LIMIT;
+            preview.draft_scheduled_override.rule.minutes = entered;
+            draw_plan_impact_compact(pixels, stride, &preview, PTC_UI_PLAN_SCHEDULED,
+                                     to_uirect(ptc_ui_minute_editor_summary_rect()));
+        } else {
+            draw_text(pixels, stride, dialog.x + 558, dialog.y + 310, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
+        }
+    } else if (grant) {
         PtcUiTimeProjection current_status;
         ptc_ui_project_time_status(model, ptc_ui_render_now(), &current_status);
         draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 264, 350, 74},
                              "当前状态", current_status.remaining_text,
                              time_projection_color(current_status.state));
         draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 350, 350, 74},
-                             scheduled ? "临时计划每天额度" : "下一枚代码时长", value,
+                             "下一枚代码时长", value,
                              entered_valid ? UI_ACCENT : UI_DANGER);
         draw_wrapped_text(pixels, stride, dialog.x + 548, dialog.y + 458,
-            scheduled
-                ? "只修改所选日期范围的每天额度；今日额度调整仍优先，就寝规则并行生效。"
-                : "只影响下一枚新代码；已生成代码保留签发时长。非法协议面额不会生成。",
+            "只影响下一枚新代码；已生成代码保留签发时长。非法协议面额不会生成。",
             15, 326, 21, 3, UI_MUTED);
     } else if (clock) {
         draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 278, 350, 74},

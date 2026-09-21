@@ -401,18 +401,33 @@ void ptc_ui_format_today_adjustment_status(const PtcUiModel *model, int64_t now,
         snprintf(detail, detail_size, "规则已保留；临时解除期间不计时");
     } else if (model->today_override_present &&
                decision.effective.source == PTC_RULE_SOURCE_TODAY_OVERRIDE) {
-        snprintf(badge, badge_size, "生效中");
-        if (model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED)
-            snprintf(detail, detail_size, "今日额度调整：不限时");
-        else
-            snprintf(detail, detail_size, "今日额度调整：%u 分钟",
-                     (unsigned int)model->today_override_rule.minutes);
+        if (model->bedtime_active && !model->bedtime_skipped) {
+            snprintf(badge, badge_size, "就寝立断");
+            if (model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED)
+                snprintf(detail, detail_size, "就寝限制中，调整不限时已保留");
+            else
+                snprintf(detail, detail_size, "就寝限制中，调整%u分钟已保留",
+                         (unsigned int)model->today_override_rule.minutes);
+        } else {
+            snprintf(badge, badge_size, "生效中");
+            if (model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED)
+                snprintf(detail, detail_size, "今日额度调整：不限时");
+            else
+                snprintf(detail, detail_size, "今日额度调整：%u 分钟",
+                         (unsigned int)model->today_override_rule.minutes);
+        }
     } else if (model->today_override_cleared_in_session) {
         snprintf(badge, badge_size, "已清除");
-        snprintf(detail, detail_size, "当前改由%s生效", source);
+        if (model->bedtime_active && !model->bedtime_skipped)
+            snprintf(detail, detail_size, "就寝限制中，额度由%s生效", source);
+        else
+            snprintf(detail, detail_size, "当前改由%s生效", source);
     } else {
         snprintf(badge, badge_size, "未设置");
-        snprintf(detail, detail_size, "当前由%s生效", source);
+        if (model->bedtime_active && !model->bedtime_skipped)
+            snprintf(detail, detail_size, "就寝限制中，额度由%s生效", source);
+        else
+            snprintf(detail, detail_size, "当前由%s生效", source);
     }
 }
 
