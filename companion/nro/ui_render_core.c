@@ -2164,20 +2164,25 @@ void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 void draw_notice_details_dialog(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
+    PtcUiModel shell_model = *model;
+    shell_model.overlay_title[0] = '\0';
+    shell_model.overlay_body[0] = '\0';
     PtcUiNoticeProjection notice;
     ptc_ui_project_notice(model, &notice);
     bool danger = notice.level == PTC_UI_NOTICE_DANGER;
     bool warning = notice.level == PTC_UI_NOTICE_WARNING;
     uint32_t accent = danger ? UI_DANGER : (warning ? UI_WARNING : UI_SUCCESS);
 
-    draw_dialog_shell(pixels, stride, model, &dialog, 780, 420);
+    draw_dialog_shell(pixels, stride, &shell_model, &dialog, 780, 420);
 
     int icon_cx = dialog.x + 48;
     int icon_cy = dialog.y + 70;
     draw_status_symbol(pixels, stride, icon_cx, icon_cy, accent, danger ? 3 : (warning ? 2 : 1));
 
     const char *msg = notice.summary[0] ? notice.summary : "操作状态与反馈";
-    draw_text(pixels, stride, dialog.x + 72, dialog.y + 76, msg, 20, danger ? UI_DANGER : UI_INK);
+    char fitted_msg[192];
+    fit_text(fitted_msg, sizeof(fitted_msg), msg, 20, dialog.width - 108);
+    draw_text(pixels, stride, dialog.x + 72, dialog.y + 76, fitted_msg, 20, danger ? UI_DANGER : UI_INK);
 
     UiRect card = {dialog.x + 36, dialog.y + 104, dialog.width - 72, 230};
     fill_round_rect(pixels, stride, card, 12, UI_PAGE);

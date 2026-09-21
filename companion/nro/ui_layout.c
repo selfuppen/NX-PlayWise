@@ -435,6 +435,8 @@ bool ptc_ui_open_notice_details(PtcUiModel *model)
     ptc_ui_project_notice(model, &notice);
     if (!notice.visible || !notice.has_details) return false;
     model->overlay = PTC_UI_OVERLAY_NOTICE_DETAILS;
+    model->overlay_title[0] = '\0';
+    model->overlay_body[0] = '\0';
     return true;
 }
 

@@ -63,8 +63,10 @@ void draw_dialog_shell(
 {
     bool numeric = model->overlay == PTC_UI_OVERLAY_NUMPAD || model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR;
     bool pin = model->overlay == PTC_UI_OVERLAY_PIN;
-    const char *title = numeric ? model->numpad_title : (pin ? model->pin_title : model->overlay_title);
-    const char *description = numeric ? model->numpad_guide : (pin ? model->pin_guide : model->overlay_body);
+    bool custom_header = model->overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
+                         model->overlay == PTC_UI_OVERLAY_DAY_DECISION;
+    const char *title = custom_header ? "" : (numeric ? model->numpad_title : (pin ? model->pin_title : model->overlay_title));
+    const char *description = custom_header ? "" : (numeric ? model->numpad_guide : (pin ? model->pin_guide : model->overlay_body));
     *dialog = to_uirect(ptc_ui_dialog_rect(width, height));
     float open_progress = ui_ease_out((float)model->overlay_open_frames / (float)PTC_UI_OVERLAY_OPEN_FRAMES);
     int y_offset = (int)(((float)PTC_UI_OVERLAY_OPEN_FRAMES - open_progress * (float)PTC_UI_OVERLAY_OPEN_FRAMES) * 2.0f + 0.5f);
@@ -81,8 +83,10 @@ void draw_dialog_shell(
                              UI_RGB(ui_darken(UI_BLENDED(surface), 4)));
     draw_rect_outline(pixels, stride, *dialog, 16, 1, UI_BORDER);
     fill_round_rect(pixels, stride, (UiRect){dialog->x + 34, dialog->y + 15, 36, 5}, 2, UI_CORAL);
-    draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
-    if (description[0]) {
+    if (title && title[0]) {
+        draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
+    }
+    if (description && description[0]) {
         draw_wrapped_text(pixels, stride, dialog->x + 34, dialog->y + 88, description,
                           18, dialog->width - 68, 26, 6, UI_MUTED);
     }

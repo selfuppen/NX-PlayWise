@@ -147,8 +147,12 @@ static void test_parent_status_summary(void)
               "visible details button owns its exact touch target");
     check_hit(ptc_ui_hit_test(&model, ptc_ui_notice_rect().x + 20, ptc_ui_notice_rect().y + 24),
               PTC_UI_HIT_NONE, 0, "notice text does not masquerade as the details button");
+    snprintf(model.overlay_title, sizeof(model.overlay_title), "临时额度计划");
+    snprintf(model.overlay_body, sizeof(model.overlay_body), "旧描述");
     check_true(ptc_ui_open_notice_details(&model), "details dialog opens only after an explicit action");
     check_int(model.overlay, PTC_UI_OVERLAY_NOTICE_DETAILS, "details action opens the notice dialog");
+    check_true(model.overlay_title[0] == '\0' && model.overlay_body[0] == '\0',
+               "details dialog clears any stale overlay title and body to prevent text overlap");
 
     model.overlay = PTC_UI_OVERLAY_NONE;
     model.feedback_detail[0] = '\0';
@@ -945,6 +949,14 @@ static void test_candidate_navigation(void)
     snprintf(model.pending_code, sizeof(model.pending_code), "10514680");
     check_true(ptc_ui_cancel_overlay(&model), "code confirmation can be cancelled");
     check_true(model.pending_code[0] == '\0', "cancelled code confirmation forgets the full code");
+
+    model.overlay = PTC_UI_OVERLAY_SCHEDULED;
+    snprintf(model.overlay_title, sizeof(model.overlay_title), "临时额度计划");
+    snprintf(model.overlay_body, sizeof(model.overlay_body), "草稿说明");
+    check_true(ptc_ui_cancel_overlay(&model), "scheduled overlay can be cancelled");
+    check_int(model.overlay, PTC_UI_OVERLAY_NONE, "cancelled overlay resets to NONE");
+    check_true(model.overlay_title[0] == '\0' && model.overlay_body[0] == '\0',
+               "cancelling overlay clears overlay title and body");
 }
 
 static void test_release_hit_targets(void)

@@ -2312,6 +2312,8 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
         model->confirm_return_overlay = PTC_UI_OVERLAY_NONE;
         model->confirm_return_title[0] = '\0';
         model->confirm_return_body[0] = '\0';
+        model->overlay_title[0] = '\0';
+        model->overlay_body[0] = '\0';
         model->operation = PTC_UI_OPERATION_NONE;
     }
     if (clear_pending_code) model->pending_code[0] = '\0';
@@ -2329,6 +2331,8 @@ PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model)
     model->confirm_return_overlay = PTC_UI_OVERLAY_NONE;
     model->confirm_return_title[0] = '\0';
     model->confirm_return_body[0] = '\0';
+    model->overlay_title[0] = '\0';
+    model->overlay_body[0] = '\0';
     model->operation = PTC_UI_OPERATION_NONE;
     return operation;
 }

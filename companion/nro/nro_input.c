@@ -49,6 +49,8 @@ void handle_overlay_input(UiState *ui, u64 down)
     if (ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS) {
         if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Minus)) {
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
+            ui->model.overlay_title[0] = '\0';
+            ui->model.overlay_body[0] = '\0';
         }
         return;
     }
@@ -876,7 +878,9 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_ui_open_home_details(&ui->model);
         break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
-        if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS || ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {
+        if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS ||
+            ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
+            ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {
             handle_overlay_input(ui, HidNpadButton_B);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY) {
             handle_overlay_input(ui, HidNpadButton_B);
