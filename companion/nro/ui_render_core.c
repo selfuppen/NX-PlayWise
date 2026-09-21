@@ -151,7 +151,7 @@ static void set_pixel(uint32_t *pixels, uint32_t stride, int x, int y, uint32_t 
     pixels[(uint32_t)y * stride + (uint32_t)x] = color;
 }
 
-static void blend_pixel(uint32_t *pixels, uint32_t stride, int x, int y, uint32_t color, uint8_t alpha)
+void blend_pixel(uint32_t *pixels, uint32_t stride, int x, int y, uint32_t color, uint8_t alpha)
 {
     uint32_t *destination;
     uint32_t red;

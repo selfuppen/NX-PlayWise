@@ -221,14 +221,15 @@ static void set_decision_step(PtcUiDecisionStep *step, PtcUiDecisionState state,
     snprintf(step->reason, sizeof(step->reason), "%s", reason ? reason : "");
 }
 
-void ptc_ui_build_today_decision(const PtcUiModel *model, PtcUiPlanKind kind, int64_t now,
-                                 PtcUiTodayDecision *decision)
+void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint16_t day_index, int64_t now,
+                               PtcUiTodayDecision *decision)
 {
     PtcRules rules;
     PtcCalendarDayType day_type;
     bool calendar_covered = false;
     bool scheduled_matches;
     bool holiday_matches;
+    bool is_today;
     uint8_t weekday;
     PtcDayRule empty = {PTC_RULE_MODE_LIMIT, 0};
     if (!decision) return;
@@ -238,23 +239,27 @@ void ptc_ui_build_today_decision(const PtcUiModel *model, PtcUiPlanKind kind, in
         set_decision_step(&decision->scheduled_override, PTC_UI_DECISION_UNKNOWN, empty, "尚无可靠状态");
         set_decision_step(&decision->holiday, PTC_UI_DECISION_UNKNOWN, empty, "尚无可靠状态");
         set_decision_step(&decision->weekly, PTC_UI_DECISION_UNKNOWN, empty, "尚无可靠状态");
-        snprintf(decision->final_reason, sizeof(decision->final_reason), "刷新后确认今天的规则决策");
+        snprintf(decision->final_reason, sizeof(decision->final_reason), "刷新后确认规则决策");
         snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：状态待确认");
         snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：状态待确认");
         return;
     }
+    is_today = (day_index == model->day_index);
     build_plan_rules(model, kind, &rules);
-    weekday = ptc_weekday_from_day_index(model->day_index);
-    decision->effective = ptc_rules_resolve(&rules, model->day_index, weekday);
-    day_type = ptc_holiday_calendar_classify(model->day_index, &calendar_covered);
+    weekday = ptc_weekday_from_day_index(day_index);
+    decision->effective = ptc_rules_resolve(&rules, day_index, weekday);
+    day_type = ptc_holiday_calendar_classify(day_index, &calendar_covered);
     scheduled_matches = rules.scheduled_override.enabled &&
-        model->day_index >= rules.scheduled_override.start_day_index &&
-        model->day_index <= rules.scheduled_override.end_day_index;
+        day_index >= rules.scheduled_override.start_day_index &&
+        day_index <= rules.scheduled_override.end_day_index;
     holiday_matches = rules.holiday_enabled && calendar_covered &&
         (day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY ||
          day_type == PTC_CALENDAR_DAY_MAKEUP_WORKDAY);
 
-    if (!rules.today_override.present) {
+    if (!is_today) {
+        set_decision_step(&decision->today_override, PTC_UI_DECISION_NOT_CONFIGURED, empty,
+                          "仅限当天生效，不作用于未来日期");
+    } else if (!rules.today_override.present) {
         set_decision_step(&decision->today_override, PTC_UI_DECISION_NOT_CONFIGURED, empty,
                           model->today_override_cleared_in_session ? "本次会话已清除" : "今天没有单独额度调整");
     } else {
@@ -269,14 +274,14 @@ void ptc_ui_build_today_decision(const PtcUiModel *model, PtcUiPlanKind kind, in
                           "没有启用临时额度计划");
     } else if (!scheduled_matches) {
         set_decision_step(&decision->scheduled_override, PTC_UI_DECISION_NOT_MATCHED,
-                          rules.scheduled_override.rule, "今天不在计划日期范围内");
+                          rules.scheduled_override.rule, is_today ? "今天不在计划日期范围内" : "当天不在计划日期范围内");
     } else {
         set_decision_step(&decision->scheduled_override,
             decision->effective.source == PTC_RULE_SOURCE_SCHEDULED_OVERRIDE
                 ? PTC_UI_DECISION_SELECTED : PTC_UI_DECISION_OVERRIDDEN,
             rules.scheduled_override.rule,
             decision->effective.source == PTC_RULE_SOURCE_TODAY_OVERRIDE
-                ? "日期命中，但被今日额度调整覆盖" : "今天命中临时额度计划");
+                ? "日期命中，但被今日额度调整覆盖" : (is_today ? "今天命中临时额度计划" : "当天命中临时额度计划"));
     }
 
     if (!rules.holiday_enabled) {
@@ -284,10 +289,10 @@ void ptc_ui_build_today_decision(const PtcUiModel *model, PtcUiPlanKind kind, in
                           "国家节假日总开关未开启");
     } else if (!calendar_covered) {
         set_decision_step(&decision->holiday, PTC_UI_DECISION_CALENDAR_UNCOVERED, empty,
-                          "内置日历未覆盖今天");
+                          is_today ? "内置日历未覆盖今天" : "内置日历未覆盖当天");
     } else if (!holiday_matches) {
         set_decision_step(&decision->holiday, PTC_UI_DECISION_NOT_MATCHED, empty,
-                          "今天是普通日期");
+                          is_today ? "今天是普通日期" : "当天是普通日期");
     } else {
         PtcDayRule holiday_rule = day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY
             ? rules.holiday_rule : rules.makeup_workday_rule;
@@ -307,33 +312,65 @@ void ptc_ui_build_today_decision(const PtcUiModel *model, PtcUiPlanKind kind, in
         decision->effective.source == PTC_RULE_SOURCE_WEEKLY
             ? PTC_UI_DECISION_SELECTED : PTC_UI_DECISION_OVERRIDDEN,
         rules.week[weekday], decision->effective.source == PTC_RULE_SOURCE_WEEKLY
-            ? "没有更高优先级规则命中" : "作为今天的基础规则保留");
+            ? "没有更高优先级规则命中" : (is_today ? "作为今天的基础规则保留" : "作为当天的基础规则保留"));
 
     snprintf(decision->final_reason, sizeof(decision->final_reason), "最终采用%s%s",
              effective_rule_label(decision->effective.source),
-             decision->effective.rule.mode == PTC_RULE_MODE_UNLIMITED ? "，今天不限时" : "");
-    if (!model->bedtime_policy.enabled) {
-        snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：未开启");
-    } else if (model->bedtime_active && model->bedtime_skipped) {
-        snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：当前窗口已跳过");
-    } else if (model->bedtime_active) {
-        snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：当前并行限制中");
-    } else if (model->bedtime_next_available) {
-        snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：已开启，等待下次窗口");
+             decision->effective.rule.mode == PTC_RULE_MODE_UNLIMITED ? (is_today ? "，今天不限时" : "，当天不限时") : "");
+
+    if (is_today) {
+        if (!model->bedtime_policy.enabled) {
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：未开启");
+        } else if (model->bedtime_active && model->bedtime_skipped) {
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：当前窗口已跳过");
+        } else if (model->bedtime_active) {
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：当前并行限制中");
+        } else if (model->bedtime_next_available) {
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：已开启，等待下次窗口");
+        } else {
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：已开启，今天无可用窗口");
+        }
+        if (model->daily_buffer_minutes == 0) {
+            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：未开启");
+        } else if (model->daily_buffer_claimed) {
+            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：今日已领取 %u 分钟",
+                     (unsigned int)model->daily_buffer_minutes);
+        } else if (model->daily_buffer_available) {
+            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：今日可领取 %u 分钟",
+                     (unsigned int)model->daily_buffer_minutes);
+        } else {
+            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：已配置，但今天暂不可领取");
+        }
     } else {
-        snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：已开启，今天无可用窗口");
+        PtcEffectiveBedtime bt = ptc_bedtime_resolve_start_day(&rules, day_index, weekday);
+        if (!rules.bedtime.enabled || !bt.window.enabled) {
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：当天无就寝限制");
+        } else {
+            const char *src_label = bt.source == PTC_BEDTIME_SOURCE_SCHEDULED_OVERRIDE ? "临时特例" :
+                (bt.source == PTC_BEDTIME_SOURCE_STATUTORY_HOLIDAY ? "法定节假日" :
+                 (bt.source == PTC_BEDTIME_SOURCE_MAKEUP_WORKDAY ? "调休工作日" : "每周常规"));
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：%02u:%02u 开始（来源：%s）",
+                     (unsigned int)(bt.window.start_minute / 60),
+                     (unsigned int)(bt.window.start_minute % 60),
+                     src_label);
+        }
+        if (model->daily_buffer_minutes == 0) {
+            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：未开启");
+        } else {
+            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：每日 %u 分钟（当天有效）",
+                     (unsigned int)model->daily_buffer_minutes);
+        }
     }
-    if (model->daily_buffer_minutes == 0) {
-        snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：未开启");
-    } else if (model->daily_buffer_claimed) {
-        snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：今日已领取 %u 分钟",
-                 (unsigned int)model->daily_buffer_minutes);
-    } else if (model->daily_buffer_available) {
-        snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：今日可领取 %u 分钟",
-                 (unsigned int)model->daily_buffer_minutes);
-    } else {
-        snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：已配置，但今天暂不可领取");
+}
+
+void ptc_ui_build_today_decision(const PtcUiModel *model, PtcUiPlanKind kind, int64_t now,
+                                 PtcUiTodayDecision *decision)
+{
+    if (!model) {
+        if (decision) memset(decision, 0, sizeof(*decision));
+        return;
     }
+    ptc_ui_build_day_decision(model, kind, model->day_index, now, decision);
 }
 
 void ptc_ui_format_today_adjustment_status(const PtcUiModel *model, int64_t now,
@@ -943,7 +980,9 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     if (index < 0 ||
         (model->parent_page == PTC_UI_PARENT_SUPPORT
             ? index >= count + model->recent_event_count
-            : index >= count)) {
+            : (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT && model->forecast_available
+                ? index >= count + 7
+                : index >= count))) {
         index = 0;
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
@@ -1010,16 +1049,37 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         static const int left_target[5] = {0, 1, 2, 0, 1};
         static const int right_target[5] = {3, 4, 4, 3, 4};
         int previous = index;
-        if (horizontal < 0 && index >= 3) index = left_target[index];
-        else if (horizontal > 0 && index < 3) index = right_target[index];
-        else if (vertical < 0) {
-            if (index == 1 || index == 2 || index == 4) --index;
-        } else if (vertical > 0) {
-            if (index == 0 || index == 1 || index == 3) ++index;
-            else {
-                model->parent_content_selection = previous;
-                model->parent_footer_focused = true;
-                model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
+        if (index >= 5 && index <= 11) {
+            if (horizontal < 0) {
+                index = index <= 6 ? 3 : 4;
+            } else if (vertical < 0) {
+                if (index > 5) --index;
+            } else if (vertical > 0) {
+                if (index < 11) ++index;
+                else {
+                    model->parent_content_selection = previous;
+                    model->parent_footer_focused = true;
+                    model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
+                }
+            }
+        } else {
+            if (horizontal < 0 && index >= 3) {
+                index = left_target[index];
+            } else if (horizontal > 0) {
+                if (index < 3) {
+                    index = right_target[index];
+                } else if (model->forecast_available) {
+                    index = (index == 3) ? 5 : 7;
+                }
+            } else if (vertical < 0) {
+                if (index == 1 || index == 2 || index == 4) --index;
+            } else if (vertical > 0) {
+                if (index == 0 || index == 1 || index == 3) ++index;
+                else {
+                    model->parent_content_selection = previous;
+                    model->parent_footer_focused = true;
+                    model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
+                }
             }
         }
         model->selected_index = index;

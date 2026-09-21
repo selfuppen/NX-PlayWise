@@ -192,7 +192,7 @@ void handle_overlay_input(UiState *ui, u64 down)
         else if (down & HidNpadButton_A) ptc_ui_discard_scheduled(&ui->model);
         return;
     }
-    if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS || ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {
         if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
             ptc_ui_cancel_overlay(&ui->model);
         }
@@ -864,11 +864,19 @@ void handle_touch(UiState *ui, int x, int y)
                      "家长区已通过 PIN 验证；这里显示完整诊断字段，但不会显示 PIN、密钥或可复用授权材料。");
         }
         break;
+    case PTC_UI_HIT_FORECAST_DAY:
+        if (hit.index >= 0 && hit.index < 7 && ui->model.forecast_available) {
+            ui->model.selected_index = 5 + hit.index;
+            ui->model.forecast_detail_day_offset = hit.index;
+            ui->model.overlay = PTC_UI_OVERLAY_DAY_DECISION;
+            ui->model.overlay_selection = hit.index;
+        }
+        break;
     case PTC_UI_HIT_HOME_DETAILS:
         ptc_ui_open_home_details(&ui->model);
         break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
-        if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+        if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS || ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {
             handle_overlay_input(ui, HidNpadButton_B);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY) {
             handle_overlay_input(ui, HidNpadButton_B);

@@ -49,7 +49,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS || model->overlay == PTC_UI_OVERLAY_NOTICE_DETAILS) {
+    if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS || model->overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || model->overlay == PTC_UI_OVERLAY_DAY_DECISION) {
         return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }
@@ -497,6 +497,14 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
             }
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT &&
+        model->forecast_available) {
+        for (i = 0; i < 7; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_forecast_day_row_rect(i), x, y)) {
+                return make_hit(PTC_UI_HIT_FORECAST_DAY, i);
+            }
+        }
     }
     if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
         for (i = 0; i < model->recent_event_count; ++i) {

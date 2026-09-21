@@ -131,6 +131,7 @@ int64_t ptc_ui_render_now(void);
 uint32_t pack_rgb(uint32_t rgb);
 uint32_t ui_mix_rgb(uint32_t base, uint32_t target, int percent);
 uint32_t resolve_color(uint32_t source);
+void blend_pixel(uint32_t *pixels, uint32_t stride, int x, int y, uint32_t color, uint8_t alpha);
 void fill_rect_packed(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t color);
 void fill_rect(uint32_t *pixels, uint32_t stride, UiRect rect, uint32_t color);
 void fill_round_rect(uint32_t *pixels, uint32_t stride, UiRect rect, int radius, uint32_t color);

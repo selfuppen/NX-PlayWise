@@ -91,7 +91,8 @@ typedef enum {
     PTC_UI_OVERLAY_BEDTIME_SPECIAL = 32,
     PTC_UI_OVERLAY_BEDTIME_LEAVE = 33,
     PTC_UI_OVERLAY_BEDTIME_BULK = 34,
-    PTC_UI_OVERLAY_NOTICE_DETAILS = 35
+    PTC_UI_OVERLAY_NOTICE_DETAILS = 35,
+    PTC_UI_OVERLAY_DAY_DECISION = 36
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -439,6 +440,7 @@ typedef struct {
     char album_restriction_detail[160];
     char rule_source[32];
     int home_details_page;
+    int forecast_detail_day_offset;
     int editor_index;
     char overlay_title[64];
     char overlay_body[320];

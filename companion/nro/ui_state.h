@@ -36,6 +36,8 @@ bool ptc_ui_touch_after_entry_allowed(bool *ignore_until_release, bool touch_act
 uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int required_samples);
 int ptc_ui_migrate_setup_step(int step, int wizard_version);
 PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model);
+void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint16_t day_index, int64_t now,
+                                PtcUiTodayDecision *decision);
 void ptc_ui_build_today_decision(const PtcUiModel *model, PtcUiPlanKind kind, int64_t now,
                                  PtcUiTodayDecision *decision);
 const char *ptc_ui_decision_state_label(PtcUiDecisionState state);

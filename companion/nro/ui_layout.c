@@ -224,6 +224,12 @@ PtcUiRect ptc_ui_plan_card_rect(int index)
     return (PtcUiRect){0, 0, 0, 0};
 }
 
+PtcUiRect ptc_ui_forecast_day_row_rect(int index)
+{
+    if (index < 0 || index >= 7) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){834, 210 + index * 51, 382, 44};
+}
+
 PtcUiRect ptc_ui_bedtime_section_rect(int index)
 {
     if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
@@ -569,6 +575,7 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 650;
         break;
     case PTC_UI_OVERLAY_SCHEDULED:
+    case PTC_UI_OVERLAY_DAY_DECISION:
         *width = 1120;
         *height = 640;
         break;
@@ -875,7 +882,7 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     if (overlay == PTC_UI_OVERLAY_GRANT_LOCAL)
         return (PtcUiRect){dialog.x + 42, dialog.y + 588, 210, 44};
-    if (overlay == PTC_UI_OVERLAY_HOME_DETAILS)
+    if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_DAY_DECISION)
         return (PtcUiRect){dialog.x + dialog.w - 28 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_NOTICE_DETAILS)
         return (PtcUiRect){dialog.x + (dialog.w - PTC_UI_DIALOG_BTN_W) / 2, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};

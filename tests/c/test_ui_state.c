@@ -2555,6 +2555,73 @@ static void test_global_time_projection_and_direct_inputs(void)
               "bedtime overlay rows are touchable for direct input");
 }
 
+static void test_forecast_day_decision_and_navigation(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+    model.forecast_available = true;
+    model.status_loaded = true;
+    model.day_index = 2450; /* Arbitrary valid day index */
+    model.status_updated_at = 1000;
+    for (int i = 0; i < 7; ++i) {
+        model.current_week[i].mode = PTC_RULE_MODE_LIMIT;
+        model.current_week[i].minutes = 60 + i * 10;
+        model.draft_week[i] = model.current_week[i];
+        model.forecast[i].day_index = model.day_index + i;
+        model.forecast[i].mode = PTC_RULE_MODE_LIMIT;
+        model.forecast[i].minutes = 60 + i * 10;
+        model.forecast[i].rule_source = "weekly";
+    }
+
+    /* 1. Hit testing for all 7 forecast rows */
+    for (int i = 0; i < 7; ++i) {
+        PtcUiRect row = ptc_ui_forecast_day_row_rect(i);
+        check_true(row.w > 0 && row.h > 0, "forecast row has non-zero size");
+        check_hit(hit_center(&model, row), PTC_UI_HIT_FORECAST_DAY, i,
+                  "forecast row hit test matches index");
+    }
+
+    /* 2. D-pad navigation between cards and forecast rows */
+    model.selected_index = 3;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 5, "move right from card 3 to forecast day 0");
+
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "move down within forecast rows to day 1");
+
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 3, "move left from upper forecast row back to card 3");
+
+    model.selected_index = 4;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 7, "move right from card 4 to forecast day 2");
+
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 4, "move left from lower forecast row back to card 4");
+
+    /* 3. Decision building for today and future days */
+    PtcUiTodayDecision decision_today;
+    ptc_ui_build_day_decision(&model, PTC_UI_PLAN_SAVED, model.day_index, 1000, &decision_today);
+    check_true(decision_today.effective.rule.minutes > 0, "today decision resolves a positive quota");
+
+    PtcUiTodayDecision decision_future;
+    ptc_ui_build_day_decision(&model, PTC_UI_PLAN_SAVED, model.day_index + 2, 1000, &decision_future);
+    check_true(decision_future.today_override.state == PTC_UI_DECISION_NOT_CONFIGURED,
+               "future day has today_override as not configured");
+    check_true(strstr(decision_future.today_override.reason, "仅限当天生效") != NULL,
+               "future day today_override reason explains today-only scope");
+
+    /* 4. Overlay cancel button hit test */
+    model.overlay = PTC_UI_OVERLAY_DAY_DECISION;
+    PtcUiRect cancel_btn = ptc_ui_cancel_rect(model.overlay);
+    check_true(cancel_btn.w > 0 && cancel_btn.h > 0, "day decision cancel button has non-zero size");
+    check_hit(hit_center(&model, cancel_btn), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+               "day decision cancel button hit test");
+}
+
 int main(void)
 {
     test_global_time_projection_and_direct_inputs();
@@ -2579,6 +2646,7 @@ int main(void)
     test_user_state_mapping();
     test_redemption_history_state();
     test_balanced_feature_state();
+    test_forecast_day_decision_and_navigation();
     if (failures) return 1;
     puts("PTC release UI state tests passed");
     return 0;

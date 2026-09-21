@@ -271,6 +271,19 @@ void handle_parent_action(UiState *ui)
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "今日自主缓冲");
             ui->model.overlay_body[0] = '\0';
             break;
+        case 5:
+        case 6:
+        case 7:
+        case 8:
+        case 9:
+        case 10:
+        case 11:
+            if (ui->model.forecast_available) {
+                ui->model.forecast_detail_day_offset = index - 5;
+                ui->model.overlay = PTC_UI_OVERLAY_DAY_DECISION;
+                ui->model.overlay_selection = index - 5;
+            }
+            break;
         default:
             break;
         }

@@ -1456,7 +1456,8 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
         } else if (step->state == PTC_UI_DECISION_CALENDAR_UNCOVERED) {
             desc = "校准日历未覆盖";
         } else {
-            desc = (i == 2 ? "今日非假日 / 向下穿透" : "未配置特例 / 向下穿透");
+            desc = (i == 0 ? "未配置调整 / 向下穿透" :
+                   (i == 2 ? "非假日调休 / 向下穿透" : "未命中特例 / 向下穿透"));
         }
         draw_line(pixels, stride, card.x + 12, card.y + 98, card.x + card.width - 12, card.y + 98, 1, UI_BORDER);
         draw_text_center(pixels, stride, (UiRect){card.x + 6, card.y + 104, card.width - 12, 24},
@@ -1635,11 +1636,118 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
     home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "A / B  返回", false, true, false);
 }
 
+static void draw_forecast_day_details(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    static const char *WEEKDAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    UiRect dialog;
+    PtcUiTodayDecision decision;
+    int offset = model->forecast_detail_day_offset;
+    if (offset < 0 || offset >= (int)PTC_RESULT_FORECAST_DAYS) offset = 0;
+    uint16_t target_day_index = model->day_index + offset;
+    uint8_t weekday = ptc_weekday_from_day_index(target_day_index);
+    bool is_today = (offset == 0);
+    bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
+    char total[64], title_buf[96], age_buf[64], eff_label[96], date_buf[32];
+
+    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 640);
+    format_status_age(model, age_buf, sizeof(age_buf));
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 736, dialog.y + 26, 352, 30},
+                     age_buf, 17, status_age_color(model));
+
+    ptc_ui_build_day_decision(model, PTC_UI_PLAN_SAVED, target_day_index, ptc_ui_render_now(), &decision);
+
+    if (is_today) {
+        snprintf(title_buf, sizeof(title_buf), "计算规则生效逻辑 - 今天 %s", WEEKDAYS[weekday]);
+    } else if (offset == 1) {
+        snprintf(title_buf, sizeof(title_buf), "计算规则生效逻辑 - 明天 %s", WEEKDAYS[weekday]);
+    } else {
+        snprintf(title_buf, sizeof(title_buf), "计算规则生效逻辑 - %s (D+%d)", WEEKDAYS[weekday], offset);
+    }
+    draw_text(pixels, stride, dialog.x + 36, dialog.y + 44, title_buf, 23, UI_INK);
+
+    int top_y = dialog.y + 68;
+    int full_w = 1064;
+    int col_w = 520;
+    int x_left = dialog.x + 28;
+
+    /* 1. Hero 看板卡片 (1064 x 80) */
+    UiRect hero = {x_left, top_y, full_w, 80};
+    fill_round_rect_gradient(pixels, stride, hero, 12, UI_ACCENT_SOFT,
+                             UI_RGB(ui_darken(UI_BLENDED(accent_soft), 5)));
+
+    if (decision.effective.rule.mode == PTC_RULE_MODE_UNLIMITED) {
+        snprintf(total, sizeof(total), "不限时");
+    } else {
+        snprintf(total, sizeof(total), "%u 分钟", (unsigned int)decision.effective.rule.minutes);
+    }
+
+    draw_text(pixels, stride, hero.x + 20, hero.y + 22, "当天总额度", 13, UI_MUTED);
+    draw_text(pixels, stride, hero.x + 20, hero.y + 60, total, 28, UI_INK);
+
+    bool covered = false;
+    PtcCalendarDayType day_type = ptc_holiday_calendar_classify(target_day_index, &covered);
+    const char *type_label = (covered && day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY) ? "法定休假日" :
+        ((covered && day_type == PTC_CALENDAR_DAY_MAKEUP_WORKDAY) ? "调休工作日" :
+         ((weekday == 0 || weekday == 6) ? "普通周末" : "普通工作日"));
+
+    draw_text(pixels, stride, hero.x + 190, hero.y + 22, "日历属性", 13, UI_MUTED);
+    draw_text(pixels, stride, hero.x + 190, hero.y + 58, type_label, 20,
+              (covered && day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY) ? UI_WARNING :
+              ((covered && day_type == PTC_CALENDAR_DAY_MAKEUP_WORKDAY) ? UI_ACCENT : UI_INK));
+
+    draw_text(pixels, stride, hero.x + 340, hero.y + 22, "所属日期", 13, UI_MUTED);
+    ptc_format_date(target_day_index, date_buf);
+    draw_text(pixels, stride, hero.x + 340, hero.y + 58, date_buf, 20, UI_INK);
+
+    /* 生效规则指示徽章框 */
+    UiRect active_badge = {hero.x + 500, hero.y + 14, hero.width - 516, 52};
+    fill_round_rect(pixels, stride, active_badge, 8, fresh ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
+    draw_rect_outline(pixels, stride, active_badge, 8, 1, fresh ? UI_SUCCESS : UI_WARNING);
+
+    snprintf(eff_label, sizeof(eff_label), "%s  |  %s",
+             ptc_ui_effective_rule_label(decision.effective.source), total);
+    draw_text(pixels, stride, active_badge.x + 14, active_badge.y + 20,
+              fresh ? "最终生效规则" : "规则状态待确认", 12, fresh ? UI_SUCCESS : UI_WARNING);
+    draw_text(pixels, stride, active_badge.x + 120, active_badge.y + 20, eff_label, 14, UI_INK);
+    draw_wrapped_text(pixels, stride, active_badge.x + 14, active_badge.y + 40, decision.final_reason,
+                      11, active_badge.width - 28, 15, 1, UI_MUTED);
+
+    /* 2. 额度决策流水线 (1064 x 164) */
+    draw_waterfall_pipeline(pixels, stride, x_left, top_y + 88, full_w, &decision);
+
+    /* 3. 底部双栏 (520 + 520) */
+    int bottom_y = top_y + 258;
+
+    /* 左下栏：就寝预测 */
+    UiRect bedtime = {x_left, bottom_y, col_w, 94};
+    fill_round_rect(pixels, stride, bedtime, 10, UI_WARNING_SOFT);
+    draw_rect_outline(pixels, stride, bedtime, 10, 1, UI_WARNING);
+    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 24, "并行就寝预测", 14, UI_WARNING);
+    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 52, decision.bedtime, 15, UI_INK);
+    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 78,
+              "就寝时间并行生效；到点后即使有剩余额度也会锁定机器。", 11, UI_MUTED);
+
+    /* 右下栏：规则裁决链条说明 */
+    UiRect rule_info = {x_left + col_w + 24, bottom_y, col_w, 94};
+    fill_round_rect(pixels, stride, rule_info, 10, UI_RAISED);
+    draw_rect_outline(pixels, stride, rule_info, 10, 1, UI_BORDER);
+    draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 24, "规则优先级裁决机制", 14, UI_INK);
+    draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 52,
+              "今日调整(最高) -> 临时特例 -> 假日调休 -> 周常规(兜底)", 12, UI_ACCENT);
+    draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 78,
+              "自高向低顺序求值，命中有效规则后立即阻断后续判定。", 11, UI_MUTED);
+
+    home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "A / B  返回", false, true, false);
+}
+
 void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     switch (model->overlay) {
     case PTC_UI_OVERLAY_HOME_DETAILS:
         draw_home_details(pixels, stride, model);
+        break;
+    case PTC_UI_OVERLAY_DAY_DECISION:
+        draw_forecast_day_details(pixels, stride, model);
         break;
     case PTC_UI_OVERLAY_MINUTES:
         draw_minutes_overlay(pixels, stride, model);

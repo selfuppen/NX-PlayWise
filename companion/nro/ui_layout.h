@@ -92,7 +92,8 @@ typedef enum {
     PTC_UI_HIT_BEDTIME_PRESET,
     PTC_UI_HIT_HOME_DETAILS,
     PTC_UI_HIT_HOME_DETAILS_TAB,
-    PTC_UI_HIT_NOTICE_DETAILS
+    PTC_UI_HIT_NOTICE_DETAILS,
+    PTC_UI_HIT_FORECAST_DAY
 } PtcUiHitKind;
 
 typedef struct {
@@ -122,6 +123,7 @@ PtcUiRect ptc_ui_parent_subpage_footer_rect(int index);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
 PtcUiRect ptc_ui_plan_card_rect(int index);
+PtcUiRect ptc_ui_forecast_day_row_rect(int index);
 PtcUiRect ptc_ui_today_card_rect(int index);
 PtcUiRect ptc_ui_home_summary_rect(bool parent);
 PtcUiRect ptc_ui_home_details_rect(bool parent);
