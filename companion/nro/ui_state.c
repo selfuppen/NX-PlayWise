@@ -386,29 +386,80 @@ bool ptc_ui_plan_save_requires_hold(const PtcUiModel *model, PtcUiPlanKind kind,
     if (!model) return false;
     before = ptc_ui_plan_rule(model, PTC_UI_PLAN_SAVED);
     after = ptc_ui_plan_rule(model, kind);
-    if (before.source == after.source && !ptc_ui_day_rule_effectively_changed(before.rule, after.rule)) return false;
+    /* A source-only change with the same effective quota cannot newly restrict today. */
+    if (!ptc_ui_day_rule_effectively_changed(before.rule, after.rule)) return false;
     if (after.rule.mode == PTC_RULE_MODE_UNLIMITED) return false;
     if (!ptc_ui_status_is_fresh(model, now) || !model->played_minutes_available || model->played_minutes < 0) return true;
     return ptc_ui_day_rule_would_restrict(model, after.rule);
 }
 
+void ptc_ui_project_plan_impact(const PtcUiModel *model, PtcUiPlanKind kind,
+                                bool dirty, int64_t now, PtcUiPlanImpactProjection *out)
+{
+    int remaining;
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    if (!model) {
+        out->state = PTC_UI_PLAN_IMPACT_UNKNOWN;
+        return;
+    }
+    out->before = ptc_ui_plan_rule(model, PTC_UI_PLAN_SAVED);
+    out->after = ptc_ui_plan_rule(model, kind);
+    out->quota_changes_today = ptc_ui_day_rule_effectively_changed(out->before.rule, out->after.rule);
+    out->source_changes_today = out->before.source != out->after.source;
+    if (!dirty) {
+        out->state = PTC_UI_PLAN_IMPACT_CURRENT;
+    } else if (!out->quota_changes_today) {
+        out->state = PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE;
+    } else if (out->after.rule.mode == PTC_RULE_MODE_UNLIMITED) {
+        out->state = PTC_UI_PLAN_IMPACT_CHANGES_TODAY;
+    } else if (!ptc_ui_status_is_fresh(model, now) ||
+               !model->played_minutes_available || model->played_minutes < 0) {
+        out->state = PTC_UI_PLAN_IMPACT_UNKNOWN;
+    } else {
+        remaining = (int)out->after.rule.minutes - model->played_minutes;
+        if (remaining < 0) remaining = 0;
+        out->remaining_available = true;
+        out->remaining_minutes = remaining;
+        out->state = remaining == 0 ? PTC_UI_PLAN_IMPACT_EXHAUSTED :
+            PTC_UI_PLAN_IMPACT_CHANGES_TODAY;
+    }
+
+    if (out->state == PTC_UI_PLAN_IMPACT_CURRENT &&
+        out->after.rule.mode == PTC_RULE_MODE_LIMIT &&
+        ptc_ui_status_is_fresh(model, now) && model->played_minutes_available &&
+        model->played_minutes >= 0) {
+        remaining = (int)out->after.rule.minutes - model->played_minutes;
+        out->remaining_available = true;
+        out->remaining_minutes = remaining > 0 ? remaining : 0;
+    }
+}
+
 void ptc_ui_format_plan_impact(const PtcUiModel *model, PtcUiPlanKind kind,
                              int64_t now, char *out, size_t out_size)
 {
-    PtcEffectiveRule before = ptc_ui_plan_rule(model, PTC_UI_PLAN_SAVED);
-    PtcEffectiveRule after = ptc_ui_plan_rule(model, kind);
+    PtcUiPlanImpactProjection impact;
+    PtcEffectiveRule after;
+    ptc_ui_project_plan_impact(model, kind, true, now, &impact);
+    after = impact.after;
     if (!ptc_ui_status_is_fresh(model, now)) {
-        snprintf(out, out_size, "状态待确认，刷新后查看对今天的影响。");
-    } else if (before.source == after.source && !ptc_ui_day_rule_effectively_changed(before.rule, after.rule)) {
-        if (kind == PTC_UI_PLAN_WEEKLY) {
+        if (!impact.quota_changes_today)
+            snprintf(out, out_size, "今天额度不变，继续按%s执行。", effective_rule_label(after.source));
+        else
+            snprintf(out, out_size, "状态待确认，刷新后查看对今天的影响。");
+    } else if (!impact.quota_changes_today) {
+        if (impact.source_changes_today) {
+            snprintf(out, out_size, "今天额度不变；保存后规则来源切换为%s。",
+                     effective_rule_label(after.source));
+        } else if (kind == PTC_UI_PLAN_WEEKLY) {
             snprintf(out, out_size, "今天不变，继续按%s执行；新规则将在对应星期且无更高优先级覆盖时生效。",
                      effective_rule_label(after.source));
         } else if (kind == PTC_UI_PLAN_HOLIDAY) {
             snprintf(out, out_size, "今天不变，继续按%s执行；新规则将在开关开启且内置日历命中时生效。",
                      effective_rule_label(after.source));
-        } else {
-            snprintf(out, out_size, "今天不变，继续按%s执行。", effective_rule_label(after.source));
-        }
+        } else
+            snprintf(out, out_size, "今天不变，继续按%s执行；临时额度将在日期范围命中且无今日调整覆盖时生效。",
+                     effective_rule_label(after.source));
     } else if (after.rule.mode == PTC_RULE_MODE_UNLIMITED) {
         snprintf(out, out_size, "保存后今天按%s：不限时。", effective_rule_label(after.source));
     } else if (!model->played_minutes_available) {

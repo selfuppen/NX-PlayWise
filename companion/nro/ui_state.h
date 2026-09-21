@@ -3,6 +3,24 @@
 
 #include "ui_model.h"
 
+typedef enum {
+    PTC_UI_PLAN_IMPACT_CURRENT = 0,
+    PTC_UI_PLAN_IMPACT_CHANGES_TODAY,
+    PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE,
+    PTC_UI_PLAN_IMPACT_UNKNOWN,
+    PTC_UI_PLAN_IMPACT_EXHAUSTED
+} PtcUiPlanImpactState;
+
+typedef struct {
+    PtcUiPlanImpactState state;
+    PtcEffectiveRule before;
+    PtcEffectiveRule after;
+    bool quota_changes_today;
+    bool source_changes_today;
+    bool remaining_available;
+    int remaining_minutes;
+} PtcUiPlanImpactProjection;
+
 int ptc_ui_parent_action_count(PtcUiParentPage page);
 const char *ptc_ui_settings_status_label(const PtcUiModel *model);
 PtcUiActionState ptc_ui_settings_support_state(const PtcUiModel *model);
@@ -115,6 +133,8 @@ void ptc_ui_format_today_limit_confirmation(
     size_t recovery_size);
 bool ptc_ui_day_rule_would_restrict(const PtcUiModel *model, PtcDayRule rule);
 bool ptc_ui_plan_save_requires_hold(const PtcUiModel *model, PtcUiPlanKind kind, int64_t now);
+void ptc_ui_project_plan_impact(const PtcUiModel *model, PtcUiPlanKind kind,
+                                bool dirty, int64_t now, PtcUiPlanImpactProjection *out);
 bool ptc_ui_setup_takeover_complete(const PtcUiModel *model);
 bool ptc_ui_runtime_fingerprint_reconfirmation_needed(const PtcUiModel *model);
 void ptc_ui_weekly_leave_move(PtcUiModel *model, int direction);

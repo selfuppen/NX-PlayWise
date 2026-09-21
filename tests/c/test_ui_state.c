@@ -866,9 +866,13 @@ static void test_theme_resolution(void)
     }
     {
         PtcUiRect icon = ptc_ui_notice_status_icon_rect(530);
+        PtcUiRect notice = ptc_ui_notice_rect();
         PtcUiRect command = ptc_ui_notice_command_text_rect(530, 100);
         check_true(!rects_overlap(icon, command), "compact notice icon does not overlap command text");
-        check_int(icon.w, 20, "notice status icon is compact");
+        check_true(icon.w == 20 && icon.h == 20, "all notice status symbols share a 20x20 boundary");
+        check_true(icon.x + icon.w / 2 == notice.x + 24 &&
+                   icon.y + icon.h / 2 == notice.y + notice.h / 2,
+                   "notice status symbol is positioned by its visual center");
     }
 }
 
@@ -1718,12 +1722,31 @@ static void test_home_redesign(void)
         PtcUiRect rect = ptc_ui_today_card_rect(i);
         check_int(ptc_ui_today_operation(i), expected[i], "today card maps to its named operation");
         check_hit(hit_center(&model, rect), PTC_UI_HIT_PARENT_CARD, i, "today card hit matches render position");
-        check_true(rect.h >= 48 && !rects_overlap(rect, ptc_ui_home_summary_rect(true)), "card is large enough and clear of summary");
+        check_true(rect.h == 120 && !rects_overlap(rect, ptc_ui_home_summary_rect(true)),
+                   "today cards use the compact height and stay clear of the summary");
+        check_true(rect.y + rect.h < ptc_ui_notice_rect().y,
+                   "every today card leaves room above the status capsule");
         for (int j = i + 1; j < 6; ++j)
             check_true(!rects_overlap(rect, ptc_ui_today_card_rect(j)), "today cards do not overlap");
         model.disable_flag_present = true;
         check_hit(hit_center(&model, rect), PTC_UI_HIT_NONE, 0, "disabled today action has no touch target");
         model.disable_flag_present = false;
+    }
+    {
+        const int counts[] = {5, 4, 5, 6};
+        for (int group = 0; group < 4; ++group) {
+            for (int index = 0; index < counts[group]; ++index) {
+                PtcUiRect rect = group == 0 ? ptc_ui_plan_card_rect(index) :
+                    (group == 3 ? ptc_ui_support_card_rect(index) : ptc_ui_parent_card_rect(index));
+                check_true(rect.h == 120 && rect.y + rect.h < ptc_ui_notice_rect().y,
+                           "every top-level action card uses the compact height and clears the status capsule");
+                for (int next = index + 1; next < counts[group]; ++next) {
+                    PtcUiRect other = group == 0 ? ptc_ui_plan_card_rect(next) :
+                        (group == 3 ? ptc_ui_support_card_rect(next) : ptc_ui_parent_card_rect(next));
+                    check_true(!rects_overlap(rect, other), "top-level action cards keep separate hit areas");
+                }
+            }
+        }
     }
     check_int(ptc_ui_today_operation(-1), PTC_UI_OPERATION_NONE, "invalid action cannot dispatch");
     check_int(ptc_ui_today_operation(4), PTC_UI_OPERATION_SKIP_BEDTIME, "fifth action dispatches bedtime skip");
@@ -1978,6 +2001,7 @@ static void test_grant_flow_polish(void)
 static void test_plan_polish(void)
 {
     PtcUiModel model = {0};
+    PtcUiPlanImpactProjection impact_projection;
     PtcRules rules;
     char text[512];
     char detail[512];
@@ -2018,8 +2042,70 @@ static void test_plan_polish(void)
     model.draft_scheduled_override.rule.minutes = 10;
     ptc_ui_format_plan_impact(&model, PTC_UI_PLAN_SCHEDULED, 1000, text, sizeof(text));
     check_true(strstr(text, "还可玩 0 分钟") != NULL, "exhausted draft never shows negative remaining");
+    ptc_ui_project_plan_impact(&model, PTC_UI_PLAN_SCHEDULED, true, 1000, &impact_projection);
+    check_int(impact_projection.state, PTC_UI_PLAN_IMPACT_EXHAUSTED,
+              "exhausted plan change has a dedicated impact state");
     ptc_ui_format_plan_impact(&model, PTC_UI_PLAN_SCHEDULED, 1121, text, sizeof(text));
     check_true(strstr(text, "状态待确认") != NULL, "stale plan impact does not claim current balance");
+    ptc_ui_project_plan_impact(&model, PTC_UI_PLAN_SCHEDULED, true, 1121, &impact_projection);
+    check_int(impact_projection.state, PTC_UI_PLAN_IMPACT_UNKNOWN,
+              "stale plan change keeps its estimate unknown");
+    {
+        PtcUiModel projection_model = {0};
+        uint8_t weekday;
+        ptc_rules_default(&rules);
+        projection_model.status_loaded = projection_model.played_minutes_available = true;
+        projection_model.status_updated_at = 1000;
+        projection_model.day_index = 2380;
+        projection_model.played_minutes = 20;
+        memcpy(projection_model.current_week, rules.week, sizeof(rules.week));
+        memcpy(projection_model.draft_week, rules.week, sizeof(rules.week));
+        weekday = ptc_weekday_from_day_index(projection_model.day_index);
+
+        projection_model.draft_week[(weekday + 1u) % 7u].minutes = 95;
+        ptc_ui_project_plan_impact(&projection_model, PTC_UI_PLAN_WEEKLY, true, 1000, &impact_projection);
+        check_int(impact_projection.state, PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE,
+                  "editing another weekday suppresses today's prediction");
+
+        projection_model.draft_week[weekday].minutes = 90;
+        projection_model.today_override_present = true;
+        projection_model.today_override_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 75};
+        ptc_ui_project_plan_impact(&projection_model, PTC_UI_PLAN_WEEKLY, true, 1000, &impact_projection);
+        check_int(impact_projection.state, PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE,
+                  "a today override suppresses a covered weekly prediction");
+
+        projection_model.today_override_present = false;
+        projection_model.draft_week[weekday] = projection_model.current_week[weekday];
+        projection_model.draft_scheduled_override = (PtcScheduledOverride){
+            true, projection_model.day_index, projection_model.day_index,
+            projection_model.current_week[weekday]};
+        ptc_ui_project_plan_impact(&projection_model, PTC_UI_PLAN_SCHEDULED, true, 1000, &impact_projection);
+        check_true(impact_projection.state == PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE &&
+                   impact_projection.source_changes_today,
+                   "same-quota source changes do not display a numeric prediction");
+
+        projection_model.draft_scheduled_override = (PtcScheduledOverride){
+            true, (uint16_t)(projection_model.day_index + 2u),
+            (uint16_t)(projection_model.day_index + 4u), {PTC_RULE_MODE_LIMIT, 30}};
+        ptc_ui_project_plan_impact(&projection_model, PTC_UI_PLAN_SCHEDULED, true, 1000, &impact_projection);
+        check_int(impact_projection.state, PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE,
+                  "a future scheduled range suppresses today's prediction");
+
+        projection_model.draft_scheduled_override = (PtcScheduledOverride){
+            true, projection_model.day_index, projection_model.day_index,
+            {PTC_RULE_MODE_UNLIMITED, 0}};
+        ptc_ui_project_plan_impact(&projection_model, PTC_UI_PLAN_SCHEDULED, true, 1000, &impact_projection);
+        check_int(impact_projection.state, PTC_UI_PLAN_IMPACT_CHANGES_TODAY,
+                  "an unlimited draft remains a real same-day change");
+
+        projection_model.draft_scheduled_override.enabled = false;
+        projection_model.holiday_enabled = false;
+        projection_model.draft_holiday_enabled = true;
+        projection_model.draft_holiday_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 30};
+        ptc_ui_project_plan_impact(&projection_model, PTC_UI_PLAN_HOLIDAY, true, 1000, &impact_projection);
+        check_int(impact_projection.state, PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE,
+                  "a holiday rule on an ordinary date suppresses today's prediction");
+    }
     model.overlay = PTC_UI_OVERLAY_SCHEDULED;
     for (int i = 0; i < 4; ++i) {
         check_hit(hit_center(&model, ptc_ui_scheduled_field_rect(i)), PTC_UI_HIT_SCHEDULED_FIELD, i,

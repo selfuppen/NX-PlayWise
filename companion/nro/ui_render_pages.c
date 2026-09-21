@@ -3,60 +3,62 @@
 static const char *rule_source_label(const char *source);
 
 static const UiAction TODAY_ACTIONS[] = {
-    {"设置今日总额度", "指定今天全天可玩的分钟数", UI_ACCENT},
-    {"快速加时", "+15、+30、+60 分钟或自定义", UI_SUCCESS},
-    {"今日不限时", "今天不设时间上限", UI_SUCCESS},
-    {"清除今日额度调整", "只清除今日临时额度，恢复下级规则", UI_MUTED},
-    {"当前 / 下次就寝", "查看并跳过最近一次就寝窗口", UI_WARNING},
-    {"自主缓冲领取状态", "只读显示今天是否仍可领取", UI_MUTED},
+    {"今日额度", "当前由规则计划决定", UI_ACCENT, UI_ACTION_ICON_CLOCK, UI_ACTION_VISUAL_NONE},
+    {"快速加时", "", UI_SUCCESS, UI_ACTION_ICON_ADD_TIME, UI_ACTION_VISUAL_QUICK_ADD},
+    {"今日不限时", "今天不设时间上限", UI_SUCCESS, UI_ACTION_ICON_INFINITY, UI_ACTION_VISUAL_NONE},
+    {"清除今日调整", "恢复下级额度规则", UI_MUTED, UI_ACTION_ICON_RESTORE, UI_ACTION_VISUAL_NONE},
+    {"就寝窗口", "当前关闭", UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
+    {"自主缓冲", "当前关闭", UI_MUTED, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction PLAN_ACTIONS[] = {
-    {"临时额度计划", "指定日期范围的每天额度，最多 366 天", UI_ACCENT},
-    {"国家节假日", "法定休假和调休工作日额度", UI_SUCCESS},
-    {"每周计划", "设置周一到周日的基础额度", UI_ACCENT},
-    {"就寝时间", "独立设置每周、节假日和指定日期就寝", UI_WARNING},
-    {"自主缓冲", "孩子每天可自主领取的小额时间", UI_SUCCESS},
+    {"临时额度", "当前关闭", UI_ACCENT, UI_ACTION_ICON_CALENDAR_RANGE, UI_ACTION_VISUAL_NONE},
+    {"节假日额度", "当前关闭", UI_SUCCESS, UI_ACTION_ICON_HOLIDAY, UI_ACTION_VISUAL_NONE},
+    {"每周额度", "当前生效", UI_ACCENT, UI_ACTION_ICON_WEEKLY, UI_ACTION_VISUAL_NONE},
+    {"就寝时间", "当前关闭", UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
+    {"自主缓冲", "当前关闭", UI_SUCCESS, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction GRANT_ACTIONS[] = {
-    {"立即生成加时码", "选时长、生成、告诉孩子", UI_SUCCESS},
-    {"手机/电脑生成加时码", "优先使用完整交付包中的离线网页", UI_ACCENT},
-    {"加时码生成管理", "管理配对信息与导出配置", UI_MUTED},
-    {"加时码使用记录", "查看最近 100 条成功兑换", UI_MUTED},
+    {"主机生成", "本机签名 / 8 位码", UI_SUCCESS, UI_ACTION_ICON_CONSOLE, UI_ACTION_VISUAL_NONE},
+    {"手机 / 电脑生成", "跨设备离线可用", UI_ACCENT, UI_ACTION_ICON_DEVICE, UI_ACTION_VISUAL_NONE},
+    {"生成设置", "设备与密钥已配置", UI_MUTED, UI_ACTION_ICON_SLIDERS, UI_ACTION_VISUAL_NONE},
+    {"使用记录", "最近 100 条", UI_MUTED, UI_ACTION_ICON_HISTORY, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction SETTINGS_ACTIONS[] = {
-    {"外观主题", "跟随系统、浅色或暗色", UI_ACCENT},
-    {"修改任我玩PIN", "验证当前 PIN 后设置新 PIN", UI_ACCENT},
-    {"家长区快捷键管理", "选择组合并管理孩子区提示", UI_ACCENT},
-    {"自制程序菜单\n高级入口", "改变 hbmenu 启动方式，不提供防篡改保护", UI_DANGER},
-    {"家庭活动记录", "规则、加时和保护事件，最多 200 条", UI_MUTED},
+    {"外观主题", "", UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_THEME},
+    {"修改 PIN", "当前已启用", UI_ACCENT, UI_ACTION_ICON_KEY, UI_ACTION_VISUAL_NONE},
+    {"家长区快捷键", "当前：Minus", UI_ACCENT, UI_ACTION_ICON_CONTROLLER, UI_ACTION_VISUAL_NONE},
+    {"自制程序高级入口", "未开启", UI_DANGER, UI_ACTION_ICON_HOMEBREW, UI_ACTION_VISUAL_NONE},
+    {"家庭活动", "最近 200 条", UI_MUTED, UI_ACTION_ICON_ACTIVITY, UI_ACTION_VISUAL_NONE},
 };
 
 const UiAction GRANT_MANAGER_ACTIONS[] = {
-    {"管理加时码设备名", "查看、输入或随机生成设备名", UI_ACCENT},
-    {"管理加时码密钥", "查看、输入或随机生成签名密钥", UI_DANGER},
-    {"导出手机/电脑配置", "导出供手机或电脑使用的配置文件", UI_SUCCESS},
-    {"编辑二维码跳转地址", "修改扫码后打开的网页地址", UI_ACCENT},
-    {"恢复二维码跳转默认地址", "恢复项目提供的默认网页地址", UI_MUTED},
+    {"管理加时码设备名", "查看、输入或随机生成设备名", UI_ACCENT, UI_ACTION_ICON_DEVICE, UI_ACTION_VISUAL_NONE},
+    {"管理加时码密钥", "查看、输入或随机生成签名密钥", UI_DANGER, UI_ACTION_ICON_KEY, UI_ACTION_VISUAL_NONE},
+    {"导出手机/电脑配置", "导出供手机或电脑使用的配置文件", UI_SUCCESS, UI_ACTION_ICON_EXPORT, UI_ACTION_VISUAL_NONE},
+    {"编辑二维码跳转地址", "修改扫码后打开的网页地址", UI_ACCENT, UI_ACTION_ICON_DEVICE, UI_ACTION_VISUAL_NONE},
+    {"恢复二维码跳转默认地址", "恢复项目提供的默认网页地址", UI_MUTED, UI_ACTION_ICON_RESTORE, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction SUPPORT_ACTIONS[] = {
-    {"确认接管系统控制", "预检、保存快照后启用额度管理", UI_ACCENT},
-    {"重试修复", "重新检查并恢复安全前置条件", UI_SUCCESS},
-    {"紧急停用控制", "停止新的控制写入，仍可诊断与恢复", UI_DANGER},
-    {"恢复安装前状态", "恢复原始设置并停用 任我玩", UI_DANGER},
-    {"导出诊断包", "导出诊断，不含密钥、PIN 或离线码", UI_MUTED},
-    {"软件信息", "查看版本、项目仓库和家长网页", UI_ACCENT},
+    {"接管系统控制", "安全预检后启用额度管理", UI_ACCENT, UI_ACTION_ICON_SHIELD, UI_ACTION_VISUAL_NONE},
+    {"重试修复", "重新检查安全前置条件", UI_SUCCESS, UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE},
+    {"紧急停用", "停止新的控制写入", UI_DANGER, UI_ACTION_ICON_STOP, UI_ACTION_VISUAL_NONE},
+    {"恢复安装前状态", "恢复原始设置并停用", UI_DANGER, UI_ACTION_ICON_RESTORE, UI_ACTION_VISUAL_NONE},
+    {"导出诊断", "不含密钥、PIN 或离线码", UI_MUTED, UI_ACTION_ICON_EXPORT, UI_ACTION_VISUAL_NONE},
+    {"软件信息", "版本、项目仓库和家长网页", UI_ACCENT, UI_ACTION_ICON_INFO, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction RESUME_CONTROL_ACTION = {
-    "解除停用并重新接管", "安全预检通过后恢复后台控制", UI_SUCCESS
+    "解除停用并重新接管", "安全预检后恢复后台控制", UI_SUCCESS,
+    UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE
 };
 
 static const UiAction RECONFIRM_ENVIRONMENT_ACTION = {
-    "重新检测并接管", "系统环境变化，确认兼容后恢复控制", UI_WARNING
+    "重新检测并接管", "环境变化，确认兼容后恢复控制", UI_WARNING,
+    UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE
 };
 void home_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,
     const char *label, bool primary, bool selected, bool disabled)
@@ -782,67 +784,126 @@ static void draw_settings_badge(uint32_t *pixels, uint32_t stride, const PtcUiMo
     draw_text_center(pixels, stride, badge, label, 11, UI_ON_ACCENT);
 }
 
-static void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int cy, const char *title, uint32_t color, bool disabled)
+static void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int cy,
+                                  UiActionIcon icon, uint32_t color)
 {
-    (void)disabled;
-    if (!title) return;
-
-    /* 1. 时钟/时间类：包含 "额度", "加时", "时间", "缓冲" */
-    if (strstr(title, "额度") || strstr(title, "加时") || strstr(title, "时间") || strstr(title, "缓冲")) {
+    switch (icon) {
+    case UI_ACTION_ICON_CLOCK:
         draw_circle_outline(pixels, stride, cx, cy, 10, 2, color);
         draw_line(pixels, stride, cx, cy, cx, cy - 5, 2, color);
         draw_line(pixels, stride, cx, cy, cx + 4, cy + 1, 2, color);
-        return;
-    }
-
-    /* 2. 日历/休假类：包含 "日历", "节假日", "休假", "调休", "计划" */
-    if (strstr(title, "日历") || strstr(title, "节假日") || strstr(title, "休假") ||
-        strstr(title, "调休") || strstr(title, "计划")) {
+        break;
+    case UI_ACTION_ICON_ADD_TIME:
+        draw_circle_outline(pixels, stride, cx, cy, 10, 2, color);
+        draw_line(pixels, stride, cx - 5, cy, cx + 5, cy, 2, color);
+        draw_line(pixels, stride, cx, cy - 5, cx, cy + 5, 2, color);
+        break;
+    case UI_ACTION_ICON_INFINITY:
+        draw_circle_outline(pixels, stride, cx - 5, cy, 6, 2, color);
+        draw_circle_outline(pixels, stride, cx + 5, cy, 6, 2, color);
+        break;
+    case UI_ACTION_ICON_RESTORE:
+        draw_line(pixels, stride, cx - 8, cy - 5, cx - 3, cy - 9, 2, color);
+        draw_line(pixels, stride, cx - 8, cy - 5, cx - 2, cy - 2, 2, color);
+        draw_line(pixels, stride, cx - 7, cy - 5, cx + 4, cy - 5, 2, color);
+        draw_line(pixels, stride, cx + 4, cy - 5, cx + 9, cy, 2, color);
+        draw_line(pixels, stride, cx + 9, cy, cx + 4, cy + 7, 2, color);
+        draw_line(pixels, stride, cx + 4, cy + 7, cx - 5, cy + 7, 2, color);
+        break;
+    case UI_ACTION_ICON_MOON:
+        draw_line(pixels, stride, cx - 1, cy - 10, cx - 7, cy - 5, 2, color);
+        draw_line(pixels, stride, cx - 7, cy - 5, cx - 7, cy + 3, 2, color);
+        draw_line(pixels, stride, cx - 7, cy + 3, cx - 2, cy + 8, 2, color);
+        draw_line(pixels, stride, cx - 2, cy + 8, cx + 6, cy + 7, 2, color);
+        draw_line(pixels, stride, cx + 6, cy + 7, cx + 10, cy + 3, 2, color);
+        draw_line(pixels, stride, cx + 10, cy + 3, cx + 3, cy + 3, 2, color);
+        draw_line(pixels, stride, cx + 3, cy + 3, cx - 1, cy - 10, 2, color);
+        break;
+    case UI_ACTION_ICON_BUFFER:
+        draw_circle_outline(pixels, stride, cx, cy, 9, 2, color);
+        draw_line(pixels, stride, cx, cy - 5, cx, cy + 5, 2, color);
+        draw_line(pixels, stride, cx - 5, cy, cx + 5, cy, 2, color);
+        draw_line(pixels, stride, cx - 12, cy, cx - 9, cy, 2, color);
+        draw_line(pixels, stride, cx + 9, cy, cx + 12, cy, 2, color);
+        break;
+    case UI_ACTION_ICON_CALENDAR_RANGE:
+    case UI_ACTION_ICON_HOLIDAY:
+    case UI_ACTION_ICON_WEEKLY:
         draw_rect_outline(pixels, stride, (UiRect){cx - 9, cy - 8, 18, 16}, 3, 2, color);
         draw_line(pixels, stride, cx - 9, cy - 2, cx + 9, cy - 2, 2, color);
         draw_line(pixels, stride, cx - 4, cy - 10, cx - 4, cy - 7, 2, color);
         draw_line(pixels, stride, cx + 4, cy - 10, cx + 4, cy - 7, 2, color);
-        return;
-    }
-
-    /* 3. 钥匙/安全类：包含 "PIN", "密钥" */
-    if (strstr(title, "PIN") || strstr(title, "密钥")) {
+        if (icon == UI_ACTION_ICON_CALENDAR_RANGE) {
+            draw_line(pixels, stride, cx - 5, cy + 3, cx + 5, cy + 3, 2, color);
+            draw_line(pixels, stride, cx - 5, cy + 3, cx - 2, cy + 1, 2, color);
+            draw_line(pixels, stride, cx + 5, cy + 3, cx + 2, cy + 5, 2, color);
+        } else if (icon == UI_ACTION_ICON_HOLIDAY) {
+            draw_line(pixels, stride, cx, cy, cx, cy + 6, 2, color);
+            draw_line(pixels, stride, cx - 5, cy + 3, cx + 5, cy + 3, 2, color);
+        } else {
+            fill_rect(pixels, stride, (UiRect){cx - 5, cy + 1, 3, 3}, color);
+            fill_rect(pixels, stride, (UiRect){cx - 1, cy + 1, 3, 3}, color);
+            fill_rect(pixels, stride, (UiRect){cx + 3, cy + 1, 3, 3}, color);
+        }
+        break;
+    case UI_ACTION_ICON_KEY:
         draw_circle_outline(pixels, stride, cx - 4, cy - 4, 6, 2, color);
         draw_line(pixels, stride, cx, cy, cx + 7, cy + 7, 2, color);
         draw_line(pixels, stride, cx + 4, cy + 4, cx + 7, cy + 1, 2, color);
-        return;
-    }
-
-    /* 4. 设备/二维码类：包含 "二维码", "手机", "电脑", "设备" */
-    if (strstr(title, "二维码") || strstr(title, "手机") || strstr(title, "电脑") || strstr(title, "设备")) {
+        break;
+    case UI_ACTION_ICON_DEVICE:
         draw_rect_outline(pixels, stride, (UiRect){cx - 8, cy - 9, 16, 18}, 3, 2, color);
         draw_line(pixels, stride, cx - 3, cy + 4, cx + 3, cy + 4, 2, color);
         fill_rect(pixels, stride, (UiRect){cx - 1, cy - 6, 2, 2}, color);
-        return;
-    }
-
-    /* 5. 外观主题：包含 "主题", "外观" */
-    if (strstr(title, "主题") || strstr(title, "外观")) {
+        break;
+    case UI_ACTION_ICON_CONSOLE:
+        draw_rect_outline(pixels, stride, (UiRect){cx - 11, cy - 7, 22, 14}, 5, 2, color);
+        draw_line(pixels, stride, cx - 7, cy, cx - 1, cy, 2, color);
+        draw_line(pixels, stride, cx - 4, cy - 3, cx - 4, cy + 3, 2, color);
+        fill_rect(pixels, stride, (UiRect){cx + 4, cy - 3, 3, 3}, color);
+        fill_rect(pixels, stride, (UiRect){cx + 7, cy + 1, 3, 3}, color);
+        break;
+    case UI_ACTION_ICON_SLIDERS:
+        draw_line(pixels, stride, cx - 10, cy - 6, cx + 10, cy - 6, 2, color);
+        draw_line(pixels, stride, cx - 10, cy, cx + 10, cy, 2, color);
+        draw_line(pixels, stride, cx - 10, cy + 6, cx + 10, cy + 6, 2, color);
+        draw_circle_outline(pixels, stride, cx - 4, cy - 6, 2, 2, color);
+        draw_circle_outline(pixels, stride, cx + 5, cy, 2, 2, color);
+        draw_circle_outline(pixels, stride, cx - 1, cy + 6, 2, 2, color);
+        break;
+    case UI_ACTION_ICON_HISTORY:
+        draw_circle_outline(pixels, stride, cx, cy, 9, 2, color);
+        draw_line(pixels, stride, cx, cy, cx, cy - 5, 2, color);
+        draw_line(pixels, stride, cx, cy, cx + 5, cy, 2, color);
+        draw_line(pixels, stride, cx - 12, cy - 6, cx - 8, cy - 9, 2, color);
+        break;
+    case UI_ACTION_ICON_THEME:
         draw_circle_outline(pixels, stride, cx, cy, 9, 2, color);
         fill_rect(pixels, stride, (UiRect){cx - 4, cy - 4, 3, 3}, color);
         fill_rect(pixels, stride, (UiRect){cx + 1, cy - 3, 3, 3}, color);
         fill_rect(pixels, stride, (UiRect){cx - 2, cy + 2, 3, 3}, color);
-        return;
-    }
-
-    /* 6. 快捷键/程序入口：包含 "快捷键", "自制程序" */
-    if (strstr(title, "快捷键") || strstr(title, "自制程序")) {
+        break;
+    case UI_ACTION_ICON_CONTROLLER:
         draw_rect_outline(pixels, stride, (UiRect){cx - 10, cy - 6, 20, 13}, 4, 2, color);
         draw_line(pixels, stride, cx - 5, cy, cx - 1, cy, 2, color);
         draw_line(pixels, stride, cx - 3, cy - 2, cx - 3, cy + 2, 2, color);
         fill_rect(pixels, stride, (UiRect){cx + 3, cy - 2, 2, 2}, color);
         fill_rect(pixels, stride, (UiRect){cx + 5, cy + 1, 2, 2}, color);
-        return;
-    }
-
-    /* 7. 安全/恢复/接管：包含 "接管", "重试", "停用", "恢复", "诊断", "支持" */
-    if (strstr(title, "接管") || strstr(title, "重试") || strstr(title, "停用") ||
-        strstr(title, "恢复") || strstr(title, "诊断") || strstr(title, "支持")) {
+        break;
+    case UI_ACTION_ICON_HOMEBREW:
+        draw_rect_outline(pixels, stride, (UiRect){cx - 10, cy - 9, 20, 18}, 3, 2, color);
+        fill_rect(pixels, stride, (UiRect){cx - 6, cy - 5, 4, 4}, color);
+        fill_rect(pixels, stride, (UiRect){cx + 2, cy - 5, 4, 4}, color);
+        fill_rect(pixels, stride, (UiRect){cx - 6, cy + 2, 4, 4}, color);
+        fill_rect(pixels, stride, (UiRect){cx + 2, cy + 2, 4, 4}, color);
+        break;
+    case UI_ACTION_ICON_ACTIVITY:
+        draw_line(pixels, stride, cx - 10, cy + 8, cx + 10, cy + 8, 2, color);
+        fill_rect(pixels, stride, (UiRect){cx - 8, cy + 1, 4, 7}, color);
+        fill_rect(pixels, stride, (UiRect){cx - 2, cy - 5, 4, 13}, color);
+        fill_rect(pixels, stride, (UiRect){cx + 4, cy - 1, 4, 9}, color);
+        break;
+    case UI_ACTION_ICON_SHIELD:
         draw_line(pixels, stride, cx - 8, cy - 8, cx + 8, cy - 8, 2, color);
         draw_line(pixels, stride, cx - 8, cy - 8, cx - 8, cy, 2, color);
         draw_line(pixels, stride, cx - 8, cy, cx, cy + 9, 2, color);
@@ -850,15 +911,62 @@ static void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int
         draw_line(pixels, stride, cx + 8, cy, cx, cy + 9, 2, color);
         draw_line(pixels, stride, cx - 3, cy, cx - 1, cy + 3, 2, color);
         draw_line(pixels, stride, cx - 1, cy + 3, cx + 4, cy - 3, 2, color);
-        return;
+        break;
+    case UI_ACTION_ICON_REPAIR:
+        draw_circle_outline(pixels, stride, cx - 5, cy - 5, 5, 2, color);
+        draw_line(pixels, stride, cx - 1, cy - 1, cx + 8, cy + 8, 3, color);
+        draw_line(pixels, stride, cx + 5, cy + 8, cx + 8, cy + 5, 2, color);
+        break;
+    case UI_ACTION_ICON_STOP:
+        draw_rect_outline(pixels, stride, (UiRect){cx - 9, cy - 9, 18, 18}, 5, 2, color);
+        draw_line(pixels, stride, cx - 5, cy - 5, cx + 5, cy + 5, 3, color);
+        break;
+    case UI_ACTION_ICON_EXPORT:
+        draw_rect_outline(pixels, stride, (UiRect){cx - 9, cy - 3, 18, 12}, 3, 2, color);
+        draw_line(pixels, stride, cx, cy - 10, cx, cy + 3, 2, color);
+        draw_line(pixels, stride, cx - 5, cy - 5, cx, cy - 10, 2, color);
+        draw_line(pixels, stride, cx + 5, cy - 5, cx, cy - 10, 2, color);
+        break;
+    case UI_ACTION_ICON_INFO:
+        draw_circle_outline(pixels, stride, cx, cy, 10, 2, color);
+        fill_rect(pixels, stride, (UiRect){cx - 1, cy - 5, 3, 3}, color);
+        fill_rect(pixels, stride, (UiRect){cx - 1, cy, 3, 7}, color);
+        break;
+    default:
+        draw_circle_outline(pixels, stride, cx, cy, 7, 2, color);
+        break;
     }
+}
 
-    /* 8. 默认：齿轮/设置/记录 */
-    draw_circle_outline(pixels, stride, cx, cy, 7, 2, color);
-    draw_line(pixels, stride, cx, cy - 9, cx, cy - 7, 2, color);
-    draw_line(pixels, stride, cx, cy + 7, cx, cy + 9, 2, color);
-    draw_line(pixels, stride, cx - 9, cy, cx - 7, cy, 2, color);
-    draw_line(pixels, stride, cx + 7, cy, cx + 9, cy, 2, color);
+static void draw_action_visual(uint32_t *pixels, uint32_t stride, UiRect area,
+                               const UiAction *action, bool disabled)
+{
+    uint32_t ink = disabled ? UI_DISABLED : action->accent;
+    if (action->visual == UI_ACTION_VISUAL_QUICK_ADD) {
+        static const char *LABELS[] = {"+15", "+30", "+60", "自定义"};
+        int gap = 4;
+        int width = (area.width - gap * 3) / 4;
+        for (int index = 0; index < 4; ++index) {
+            UiRect chip = {area.x + index * (width + gap), area.y, width, area.height};
+            fill_round_rect(pixels, stride, chip, 6, disabled ? UI_PAGE : UI_SUCCESS_SOFT);
+            draw_rect_outline(pixels, stride, chip, 6, 1, disabled ? UI_DISABLED : UI_SUCCESS);
+            draw_text_center(pixels, stride, chip, LABELS[index], index == 3 ? 11 : 13, ink);
+        }
+    } else if (action->visual == UI_ACTION_VISUAL_THEME) {
+        static const char *LABELS[] = {"系统", "浅色", "暗色"};
+        const char *selected = action->subtitle ? action->subtitle : "";
+        int gap = 5;
+        int width = (area.width - gap * 2) / 3;
+        for (int index = 0; index < 3; ++index) {
+            bool active = strstr(selected, LABELS[index]) != NULL;
+            UiRect chip = {area.x + index * (width + gap), area.y, width, area.height};
+            fill_round_rect(pixels, stride, chip, 6, active ? UI_ACCENT_SOFT : UI_RAISED);
+            draw_rect_outline(pixels, stride, chip, 6, active ? 2 : 1,
+                              disabled ? UI_DISABLED : (active ? UI_ACCENT : UI_BORDER));
+            draw_text_center(pixels, stride, chip, LABELS[index], 12,
+                             disabled ? UI_DISABLED : (active ? UI_ACCENT : UI_MUTED));
+        }
+    }
 }
 
 void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
@@ -870,13 +978,9 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     int badge_size = compact ? 34 : 44;
     int title_size = compact ? 20 : 22;
     int sub_size = compact ? 15 : 17;
-    int title_line_h = compact ? 23 : 26;
-    int sub_line_h = compact ? 19 : 22;
-
     int text_x = rect.x + 18 + badge_size + 16;
     int content_width = rect.width - (text_x - rect.x) - (recommended ? 64 : 16) - reserved_right;
     if (content_width < 100) content_width = 100;
-    int title_width = content_width;
 
     uint32_t background = disabled ? UI_RAISED : (selected ? UI_ACCENT_SOFT : UI_SURFACE);
     draw_card_shadow(pixels, stride, rect, 16);
@@ -887,16 +991,11 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
         draw_rect_outline(pixels, stride, rect, 16, 1, UI_BORDER);
     }
 
-    int title_lines = measure_text(action->title, title_size) > title_width ? 2 : 1;
     bool has_sub = action->subtitle && action->subtitle[0];
-    int sub_lines = has_sub ? (measure_text(action->subtitle, sub_size) > content_width ? 2 : 1) : 0;
-    int text_block_h = title_lines * title_line_h + (has_sub ? (4 + sub_lines * sub_line_h) : 0);
-
-    /* 文本块与图标整体在卡片内光学垂直居中 */
+    bool has_visual = action->visual != UI_ACTION_VISUAL_NONE;
+    int text_block_h = title_size + ((has_sub || has_visual) ? (compact ? 31 : 36) : 0);
     int text_top = rect.y + (rect.height - text_block_h) / 2;
-    if (text_top < rect.y + 14) text_top = rect.y + 14;
-
-    /* 图标垂直中心精准对齐文本块的垂直中心 */
+    if (text_top < rect.y + 12) text_top = rect.y + 12;
     int icon_cx = rect.x + 18 + badge_size / 2;
     int icon_cy = text_top + text_block_h / 2;
     UiRect badge_rect = {icon_cx - badge_size / 2, icon_cy - badge_size / 2, badge_size, badge_size};
@@ -906,15 +1005,22 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
         (action->accent == UI_WARNING ? UI_WARNING_SOFT : UI_ACCENT_SOFT)));
     fill_round_rect(pixels, stride, badge_rect, 12, badge_bg);
     draw_rect_outline(pixels, stride, badge_rect, 12, 1, UI_BORDER);
-    draw_card_action_icon(pixels, stride, icon_cx, icon_cy, action->title,
-        disabled ? UI_DISABLED : action->accent, disabled);
+    draw_card_action_icon(pixels, stride, icon_cx, icon_cy, action->icon,
+                          disabled ? UI_DISABLED : action->accent);
 
-    int baseline = draw_wrapped_text(pixels, stride, text_x, text_top + title_line_h - 4,
-        action->title, title_size, title_width, title_line_h, title_lines, disabled ? UI_DISABLED : UI_INK);
+    char fitted[128];
+    fit_text(fitted, sizeof(fitted), action->title, title_size, content_width);
+    draw_text(pixels, stride, text_x, text_top + title_size, fitted, title_size,
+              disabled ? UI_DISABLED : UI_INK);
 
-    if (has_sub) {
-        draw_wrapped_text(pixels, stride, text_x, baseline + 4, action->subtitle, sub_size,
-            content_width, sub_line_h, sub_lines, disabled ? UI_DISABLED : UI_MUTED);
+    if (has_visual) {
+        draw_action_visual(pixels, stride,
+            (UiRect){text_x, text_top + title_size + 8, content_width, compact ? 24 : 28},
+            action, disabled);
+    } else if (has_sub) {
+        fit_text(fitted, sizeof(fitted), action->subtitle, sub_size, content_width);
+        draw_text(pixels, stride, text_x, text_top + title_size + sub_size + 7, fitted, sub_size,
+                  disabled ? UI_DISABLED : UI_MUTED);
     }
 
     if (recommended && !disabled) {
@@ -996,34 +1102,15 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
             if (!model->status_loaded) {
                 subtitle = "刷新后显示当前或下次窗口";
             } else if (model->bedtime_active) {
-                uint16_t year;
-                uint8_t month, day;
-                if (ptc_date_from_day_index(model->bedtime_start_day_index, &year, &month, &day))
-                    snprintf(dynamic, sizeof(dynamic), "%04u-%02u-%02u %02u:%02u 到次日 %02u:%02u%s",
-                        year, month, day,
-                        (unsigned int)(model->bedtime_start_minute / 60),
-                        (unsigned int)(model->bedtime_start_minute % 60),
-                        (unsigned int)(model->bedtime_end_minute / 60),
-                        (unsigned int)(model->bedtime_end_minute % 60),
-                        model->bedtime_skipped ? "，已跳过" : "，生效中");
-                else snprintf(dynamic, sizeof(dynamic), "%02u:%02u 到次日 %02u:%02u%s",
+                snprintf(dynamic, sizeof(dynamic), "%02u:%02u 至次日 %02u:%02u，%s",
                     (unsigned int)(model->bedtime_start_minute / 60),
                     (unsigned int)(model->bedtime_start_minute % 60),
                     (unsigned int)(model->bedtime_end_minute / 60),
                     (unsigned int)(model->bedtime_end_minute % 60),
-                    model->bedtime_skipped ? "，已跳过" : "，生效中");
+                    model->bedtime_skipped ? "已跳过" : "生效中");
                 subtitle = dynamic;
             } else if (model->bedtime_skipped_window_available) {
-                uint16_t year;
-                uint8_t month, day;
-                if (ptc_date_from_day_index(model->bedtime_skipped_start_day_index, &year, &month, &day))
-                    snprintf(dynamic, sizeof(dynamic), "%04u-%02u-%02u %02u:%02u 到次日 %02u:%02u，已跳过",
-                        year, month, day,
-                        (unsigned int)(model->bedtime_skipped_start_minute / 60),
-                        (unsigned int)(model->bedtime_skipped_start_minute % 60),
-                        (unsigned int)(model->bedtime_skipped_end_minute / 60),
-                        (unsigned int)(model->bedtime_skipped_end_minute % 60));
-                else snprintf(dynamic, sizeof(dynamic), "%02u:%02u 到次日 %02u:%02u，已跳过",
+                snprintf(dynamic, sizeof(dynamic), "%02u:%02u 至次日 %02u:%02u，已跳过",
                     (unsigned int)(model->bedtime_skipped_start_minute / 60),
                     (unsigned int)(model->bedtime_skipped_start_minute % 60),
                     (unsigned int)(model->bedtime_skipped_end_minute / 60),
@@ -1033,7 +1120,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 uint16_t year;
                 uint8_t month, day;
                 if (ptc_date_from_day_index(model->bedtime_next_start_day_index, &year, &month, &day))
-                    snprintf(dynamic, sizeof(dynamic), "%04u-%02u-%02u %02u:%02u 到次日 %02u:%02u", year, month, day,
+                    snprintf(dynamic, sizeof(dynamic), "%02u-%02u %02u:%02u 至 %02u:%02u", month, day,
                         (unsigned int)(model->bedtime_next_start_minute / 60),
                         (unsigned int)(model->bedtime_next_start_minute % 60),
                         (unsigned int)(model->bedtime_next_end_minute / 60),
@@ -1204,32 +1291,22 @@ void draw_plan_card(uint32_t *pixels, uint32_t stride, UiRect card, bool focused
 void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
                       PtcUiPlanKind kind, bool dirty, UiRect panel)
 {
-    char impact[256];
-    char age[80];
-    char title[64];
-    char quota[40];
-    char quota_note[64];
-    char remaining_text[48];
-    char remaining_note[64];
-    char source_text[80];
-    PtcEffectiveRule before = ptc_ui_plan_rule(model, PTC_UI_PLAN_SAVED);
-    PtcEffectiveRule after = ptc_ui_plan_rule(model, kind);
+    char impact[256], age[80], title[64], left_value[40], right_value[48];
+    char left_note[64], right_note[64], source_text[80];
+    PtcUiPlanImpactProjection projection;
     bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
     int played = fresh && model->played_minutes_available ? model->played_minutes : -1;
-    bool unlimited = after.rule.mode == PTC_RULE_MODE_UNLIMITED;
-    int remaining = unlimited ? -999 : (played >= 0 ? (int)after.rule.minutes - played : -1);
     bool requires_hold = dirty && ptc_ui_plan_save_requires_hold(model, kind, ptc_ui_render_now());
     bool error = strcmp(model->result_status, "error") == 0;
     const char *state_message = NULL;
     uint32_t state_color = UI_MUTED;
     uint32_t state_background = UI_RGB(UI_BLENDED(surface_raised));
     int changed = 0;
-    if (remaining < 0 && !unlimited && played >= 0) remaining = 0;
+    ptc_ui_project_plan_impact(model, kind, dirty, ptc_ui_render_now(), &projection);
 
     if (kind == PTC_UI_PLAN_WEEKLY) {
-        for (int d = 0; d < 7; ++d) {
+        for (int d = 0; d < 7; ++d)
             if (ptc_ui_day_rule_effectively_changed(model->current_week[d], model->draft_week[d])) ++changed;
-        }
     } else if (kind == PTC_UI_PLAN_HOLIDAY) {
         if (model->holiday_enabled != model->draft_holiday_enabled) ++changed;
         if (ptc_ui_day_rule_effectively_changed(model->holiday_rule, model->draft_holiday_rule)) ++changed;
@@ -1238,22 +1315,17 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
 
     draw_plan_card(pixels, stride, panel, false);
     if (dirty) {
-        if (changed > 0) {
+        if (changed > 0)
             snprintf(title, sizeof(title), kind == PTC_UI_PLAN_WEEKLY ? "修改草稿 | 已调整 %d 天" : "修改草稿 | 已调整 %d 项", changed);
-        } else {
-            snprintf(title, sizeof(title), "修改草稿 | 待保存");
-        }
-    } else {
-        snprintf(title, sizeof(title), "计划已保存 | 正常生效");
-    }
+        else snprintf(title, sizeof(title), "修改草稿 | 待保存");
+    } else snprintf(title, sizeof(title), "计划已保存 | 正常生效");
     draw_text(pixels, stride, panel.x + 20, panel.y + 34, title, 19,
               dirty ? (requires_hold ? UI_DANGER : UI_WARNING) : UI_SUCCESS);
     const char *sub = model->disable_flag_present ? "控制已停用，计划只读" :
         (model->waiting ? "正在保存中，请稍候..." :
          (model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR ? "按 + 完成输入，再保存计划" :
-           (requires_hold ? (fresh ? "⚠️ 保存后今日额度将耗尽；长按保存" :
-            "⚠️ 今日状态待确认；长按保存") :
-            (dirty ? "按 + 保存后应用到主机" : "已与主机策略同步"))));
+          (requires_hold ? (fresh ? "保存后今日额度将耗尽；长按保存" : "今日状态待确认；长按保存") :
+           (dirty ? "按 + 保存后应用到主机" : "已与主机策略同步"))));
     draw_text(pixels, stride, panel.x + 20, panel.y + 58, sub, 13,
               requires_hold ? UI_DANGER : UI_RGB(UI_BLENDED(text_secondary)));
 
@@ -1262,50 +1334,60 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
     UiRect right = {result.x + result.width - 148, result.y + 8, 138, result.height - 16};
     fill_round_rect(pixels, stride, result, 12, UI_RGB(UI_BLENDED(surface_raised)));
     draw_rect_outline(pixels, stride, result, 12, 1, UI_RGB(UI_BLENDED(border_control)));
-    draw_text_center(pixels, stride, (UiRect){left.x, left.y, left.width, 22}, "今日规划额度", 13, UI_MUTED);
-    if (unlimited) {
-        snprintf(quota, sizeof(quota), "不限时");
-    } else {
-        snprintf(quota, sizeof(quota), "%u 分钟", (unsigned int)after.rule.minutes);
-    }
-    if (dirty && ptc_ui_day_rule_effectively_changed(before.rule, after.rule)) {
-        if (before.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(quota_note, sizeof(quota_note), "原为不限时");
-        else snprintf(quota_note, sizeof(quota_note), "原为 %u 分钟", (unsigned int)before.rule.minutes);
-    } else if (before.source != after.source) {
-        snprintf(quota_note, sizeof(quota_note), "来源发生变化");
-    } else {
-        snprintf(quota_note, sizeof(quota_note), "今天额度不变");
-    }
-    draw_text_center(pixels, stride, (UiRect){left.x, left.y + 24, left.width, 30}, quota, 19,
-                     unlimited ? UI_SUCCESS : UI_ACCENT);
-    draw_text_center(pixels, stride, (UiRect){left.x, left.y + 55, left.width, 20}, quota_note, 11, UI_MUTED);
 
-    {
-        int arrow_x = result.x + result.width / 2;
-        int arrow_y = result.y + 48;
-        draw_line(pixels, stride, arrow_x - 13, arrow_y, arrow_x + 10, arrow_y, 2, UI_MUTED);
-        draw_line(pixels, stride, arrow_x + 5, arrow_y - 5, arrow_x + 10, arrow_y, 2, UI_MUTED);
-        draw_line(pixels, stride, arrow_x + 5, arrow_y + 5, arrow_x + 10, arrow_y, 2, UI_MUTED);
-    }
-    draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, "预计剩余时间", 13, UI_MUTED);
-    if (unlimited) {
-        snprintf(remaining_text, sizeof(remaining_text), "不限时");
-        snprintf(remaining_note, sizeof(remaining_note), "无时间限制");
-    } else if (played >= 0) {
-        if (remaining > 0) snprintf(remaining_text, sizeof(remaining_text), "%d 分钟", remaining);
-        else snprintf(remaining_text, sizeof(remaining_text), "0 分钟（立断）");
-        snprintf(remaining_note, sizeof(remaining_note), "已用约 %d 分钟", played);
+    if (projection.state == PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE) {
+        ptc_ui_format_plan_impact(model, kind, ptc_ui_render_now(), impact, sizeof(impact));
+        draw_status_symbol(pixels, stride, result.x + 24, result.y + 48, UI_MUTED, 1);
+        draw_text(pixels, stride, result.x + 44, result.y + 30, "今天额度不变", 16, UI_INK);
+        draw_wrapped_text(pixels, stride, result.x + 44, result.y + 54, impact,
+                          12, result.width - 58, 17, 2, UI_MUTED);
     } else {
-        snprintf(remaining_text, sizeof(remaining_text), "待确认");
-        snprintf(remaining_note, sizeof(remaining_note), "刷新后计算");
-    }
-    draw_text_center(pixels, stride, (UiRect){right.x, right.y + 24, right.width, 30}, remaining_text,
-                     strstr(remaining_text, "立断") ? 15 : 19,
-                     unlimited ? UI_SUCCESS : (remaining == 0 && played >= 0 ? UI_DANGER :
-                     (remaining > 0 && remaining <= 15 ? UI_WARNING : (played >= 0 ? UI_SUCCESS : UI_MUTED))));
-    draw_text_center(pixels, stride, (UiRect){right.x, right.y + 55, right.width, 20}, remaining_note, 11, UI_MUTED);
+        bool current_state = projection.state == PTC_UI_PLAN_IMPACT_CURRENT;
+        PtcDayRule left_rule = current_state ? projection.after.rule : projection.before.rule;
+        PtcDayRule right_rule = projection.after.rule;
+        draw_text_center(pixels, stride, (UiRect){left.x, left.y, left.width, 22},
+                         current_state ? "今日额度" : "当前额度", 13, UI_MUTED);
+        if (left_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(left_value, sizeof(left_value), "不限时");
+        else snprintf(left_value, sizeof(left_value), "%u 分钟", (unsigned int)left_rule.minutes);
+        snprintf(left_note, sizeof(left_note), "%s",
+                 ptc_ui_effective_rule_label(current_state ? projection.after.source : projection.before.source));
+        draw_text_center(pixels, stride, (UiRect){left.x, left.y + 24, left.width, 30}, left_value, 19,
+                         left_rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS : UI_ACCENT);
+        draw_text_center(pixels, stride, (UiRect){left.x, left.y + 55, left.width, 20}, left_note, 11, UI_MUTED);
 
-    snprintf(source_text, sizeof(source_text), "今天来源  %s", ptc_ui_effective_rule_label(after.source));
+        if (!current_state) {
+            int arrow_x = result.x + result.width / 2;
+            int arrow_y = result.y + 40;
+            draw_line(pixels, stride, arrow_x - 13, arrow_y, arrow_x + 10, arrow_y, 2, UI_MUTED);
+            draw_line(pixels, stride, arrow_x + 5, arrow_y - 5, arrow_x + 10, arrow_y, 2, UI_MUTED);
+            draw_line(pixels, stride, arrow_x + 5, arrow_y + 5, arrow_x + 10, arrow_y, 2, UI_MUTED);
+        }
+
+        if (current_state) {
+            draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, "今天还可玩", 13, UI_MUTED);
+            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "不限时");
+            else if (projection.remaining_available) snprintf(right_value, sizeof(right_value), "%d 分钟", projection.remaining_minutes);
+            else snprintf(right_value, sizeof(right_value), "待确认");
+            if (played >= 0) snprintf(right_note, sizeof(right_note), "已用约 %d 分钟", played);
+            else snprintf(right_note, sizeof(right_note), "刷新后显示");
+        } else {
+            draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, "保存后额度", 13, UI_MUTED);
+            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "不限时");
+            else snprintf(right_value, sizeof(right_value), "%u 分钟", (unsigned int)right_rule.minutes);
+            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_note, sizeof(right_note), "预计还可玩：不限时");
+            else if (projection.remaining_available) snprintf(right_note, sizeof(right_note), "预计还可玩 %d 分钟", projection.remaining_minutes);
+            else snprintf(right_note, sizeof(right_note), "剩余待刷新确认");
+        }
+        draw_text_center(pixels, stride, (UiRect){right.x, right.y + 24, right.width, 30}, right_value, 19,
+                         right_rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS :
+                         (projection.state == PTC_UI_PLAN_IMPACT_EXHAUSTED ? UI_DANGER :
+                          (projection.state == PTC_UI_PLAN_IMPACT_UNKNOWN ? UI_MUTED : UI_SUCCESS)));
+        draw_text_center(pixels, stride, (UiRect){right.x, right.y + 55, right.width, 20}, right_note, 11,
+                         projection.state == PTC_UI_PLAN_IMPACT_EXHAUSTED ? UI_DANGER : UI_MUTED);
+    }
+
+    snprintf(source_text, sizeof(source_text), "%s  %s", dirty ? "保存后来源" : "今天来源",
+             ptc_ui_effective_rule_label(projection.after.source));
     {
         int source_width = measure_text(source_text, 12) + 24;
         if (source_width > panel.width - 40) source_width = panel.width - 40;
@@ -1316,29 +1398,23 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
 
     if (error) {
         state_message = "保存失败，草稿已保留；检查后可重新保存。";
-        state_color = UI_DANGER;
-        state_background = UI_DANGER_SOFT;
+        state_color = UI_DANGER; state_background = UI_DANGER_SOFT;
     } else if (model->disable_flag_present) {
         state_message = "紧急停用中，计划保持只读。";
-        state_color = UI_DANGER;
-        state_background = UI_DANGER_SOFT;
+        state_color = UI_DANGER; state_background = UI_DANGER_SOFT;
     } else if (model->waiting) {
         state_message = "正在保存草稿，请稍候。";
-        state_color = UI_WARNING;
-        state_background = UI_WARNING_SOFT;
+        state_color = UI_WARNING; state_background = UI_WARNING_SOFT;
     } else if (model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
         state_message = "先完成额度输入，再返回保存计划。";
-        state_color = UI_WARNING;
-        state_background = UI_WARNING_SOFT;
-    } else if (!fresh) {
+        state_color = UI_WARNING; state_background = UI_WARNING_SOFT;
+    } else if (!fresh && projection.quota_changes_today) {
         state_message = requires_hold ? "状态待确认；保存时会再次核对今天的影响，请长按保存。" :
             "状态待确认，保存时会再次核对今天的影响。";
-        state_color = UI_WARNING;
-        state_background = UI_WARNING_SOFT;
+        state_color = UI_WARNING; state_background = UI_WARNING_SOFT;
     } else if (requires_hold) {
         state_message = "保存后今天的时间将立即用尽，请长按保存。";
-        state_color = UI_DANGER;
-        state_background = UI_DANGER_SOFT;
+        state_color = UI_DANGER; state_background = UI_DANGER_SOFT;
     }
 
     UiRect conclusion = {panel.x + 20, panel.y + 222, panel.width - 40, 58};
@@ -1346,7 +1422,11 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         fill_round_rect(pixels, stride, conclusion, 10, state_background);
         draw_wrapped_text(pixels, stride, conclusion.x + 12, conclusion.y + 24, state_message,
                           13, conclusion.width - 24, 18, 2, state_color);
-    } else {
+    } else if (projection.state == PTC_UI_PLAN_IMPACT_CURRENT) {
+        draw_text(pixels, stride, conclusion.x, conclusion.y + 16, "当前状态", 13, UI_MUTED);
+        draw_text(pixels, stride, conclusion.x, conclusion.y + 39,
+                  "计划已保存，没有等待应用的额度草稿。", 13, UI_RGB(UI_BLENDED(text_secondary)));
+    } else if (projection.state != PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE) {
         draw_text(pixels, stride, conclusion.x, conclusion.y + 16, "保存后的今天", 13, UI_MUTED);
         ptc_ui_format_plan_impact(model, kind, ptc_ui_render_now(), impact, sizeof(impact));
         draw_wrapped_text(pixels, stride, conclusion.x, conclusion.y + 39, impact,
@@ -1361,17 +1441,10 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
 void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
                               PtcUiPlanKind kind, UiRect panel)
 {
-    char title[64];
-    char quota[40];
-    char remaining_text[48];
-    char source_text[80];
-    PtcEffectiveRule after = ptc_ui_plan_rule(model, kind);
-    bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
-    int played = fresh && model->played_minutes_available ? model->played_minutes : -1;
-    bool unlimited = after.rule.mode == PTC_RULE_MODE_UNLIMITED;
-    int remaining = unlimited ? -1 : (played >= 0 ? (int)after.rule.minutes - played : -1);
+    char title[64], impact[256], left_value[40], right_value[48], source_text[80];
+    PtcUiPlanImpactProjection projection;
     int changed = 0;
-    if (remaining < 0 && !unlimited && played >= 0) remaining = 0;
+    ptc_ui_project_plan_impact(model, kind, true, ptc_ui_render_now(), &projection);
 
     if (kind == PTC_UI_PLAN_WEEKLY) {
         for (int day = 0; day < 7; ++day) {
@@ -1395,29 +1468,41 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
     UiRect right = {result.x + result.width - 140, result.y + 8, 132, result.height - 16};
     fill_round_rect(pixels, stride, result, 12, UI_RGB(UI_BLENDED(surface_raised)));
     draw_rect_outline(pixels, stride, result, 12, 1, UI_RGB(UI_BLENDED(border_control)));
-    draw_text_center(pixels, stride, (UiRect){left.x, left.y, left.width, 22}, "今日规划额度", 12, UI_MUTED);
-    if (unlimited) snprintf(quota, sizeof(quota), "不限时");
-    else snprintf(quota, sizeof(quota), "%u 分钟", (unsigned int)after.rule.minutes);
-    draw_text_center(pixels, stride, (UiRect){left.x, left.y + 28, left.width, 34}, quota, 19,
-                     unlimited ? UI_SUCCESS : UI_ACCENT);
+    if (projection.state == PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE) {
+        ptc_ui_format_plan_impact(model, kind, ptc_ui_render_now(), impact, sizeof(impact));
+        draw_status_symbol(pixels, stride, result.x + 24, result.y + 52, UI_MUTED, 1);
+        draw_text(pixels, stride, result.x + 44, result.y + 34, "今天额度不变", 15, UI_INK);
+        draw_wrapped_text(pixels, stride, result.x + 44, result.y + 58, impact,
+                          12, result.width - 56, 17, 2, UI_MUTED);
+    } else {
+        draw_text_center(pixels, stride, (UiRect){left.x, left.y, left.width, 22}, "当前额度", 12, UI_MUTED);
+        if (projection.before.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(left_value, sizeof(left_value), "不限时");
+        else snprintf(left_value, sizeof(left_value), "%u 分钟", (unsigned int)projection.before.rule.minutes);
+        draw_text_center(pixels, stride, (UiRect){left.x, left.y + 24, left.width, 34}, left_value, 19,
+                         projection.before.rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS : UI_ACCENT);
+        draw_text_center(pixels, stride, (UiRect){left.x, left.y + 61, left.width, 18},
+                         ptc_ui_effective_rule_label(projection.before.source), 11, UI_MUTED);
 
-    {
         int arrow_x = result.x + result.width / 2;
-        int arrow_y = result.y + 54;
+        int arrow_y = result.y + 42;
         draw_line(pixels, stride, arrow_x - 11, arrow_y, arrow_x + 9, arrow_y, 2, UI_MUTED);
         draw_line(pixels, stride, arrow_x + 4, arrow_y - 5, arrow_x + 9, arrow_y, 2, UI_MUTED);
         draw_line(pixels, stride, arrow_x + 4, arrow_y + 5, arrow_x + 9, arrow_y, 2, UI_MUTED);
+
+        draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, "保存后额度", 12, UI_MUTED);
+        if (projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "不限时");
+        else snprintf(right_value, sizeof(right_value), "%u 分钟", (unsigned int)projection.after.rule.minutes);
+        draw_text_center(pixels, stride, (UiRect){right.x, right.y + 24, right.width, 34}, right_value, 19,
+                         projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS :
+                         (projection.state == PTC_UI_PLAN_IMPACT_EXHAUSTED ? UI_DANGER : UI_ACCENT));
+        if (projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "预计还可玩：不限时");
+        else if (projection.remaining_available) snprintf(right_value, sizeof(right_value), "预计还可玩 %d 分钟", projection.remaining_minutes);
+        else snprintf(right_value, sizeof(right_value), "剩余待刷新确认");
+        draw_text_center(pixels, stride, (UiRect){right.x, right.y + 61, right.width, 18}, right_value, 11,
+                         projection.state == PTC_UI_PLAN_IMPACT_EXHAUSTED ? UI_DANGER : UI_MUTED);
     }
 
-    draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, "预计剩余时间", 12, UI_MUTED);
-    if (unlimited) snprintf(remaining_text, sizeof(remaining_text), "不限时");
-    else if (played < 0) snprintf(remaining_text, sizeof(remaining_text), "待确认");
-    else if (remaining == 0) snprintf(remaining_text, sizeof(remaining_text), "0 分钟");
-    else snprintf(remaining_text, sizeof(remaining_text), "%d 分钟", remaining);
-    draw_text_center(pixels, stride, (UiRect){right.x, right.y + 28, right.width, 34}, remaining_text, 19,
-                     unlimited ? UI_SUCCESS : (played < 0 ? UI_MUTED : (remaining == 0 ? UI_DANGER : UI_SUCCESS)));
-
-    snprintf(source_text, sizeof(source_text), "今天来源  %s", ptc_ui_effective_rule_label(after.source));
+    snprintf(source_text, sizeof(source_text), "保存后来源  %s", ptc_ui_effective_rule_label(projection.after.source));
     {
         int source_width = measure_text(source_text, 12) + 24;
         if (source_width > panel.width - 40) source_width = panel.width - 40;
@@ -2112,14 +2197,14 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             draw_text(pixels, stride, 524, 195, "独立于额度规则链生效", 13, UI_MUTED);
 
             /* 并行与补充下方对称说明卡片 */
-            UiRect info_card = {439, 450, 365, 166};
+            UiRect info_card = {439, 484, 365, 132};
             fill_round_rect(pixels, stride, info_card, 16, UI_PAGE);
             draw_rect_outline(pixels, stride, info_card, 16, 1, UI_BORDER);
-            draw_text(pixels, stride, 457, 476, "规则独立生效机制", 15, UI_INK);
-            draw_text(pixels, stride, 457, 506, "• 就寝时间：到点强制限制，不受额度多寡影响", 12, UI_MUTED);
-            draw_text(pixels, stride, 457, 532, "• 自主缓冲：仅限时日额度耗尽前由孩子申请", 12, UI_MUTED);
-            draw_text(pixels, stride, 457, 558, "• 优先顺序：临时计划 > 国家法定节假日 > 周计划", 12, UI_MUTED);
-            draw_text(pixels, stride, 457, 584, "• 异常防护：支持离线运行，断网断电保护", 12, UI_MUTED);
+            draw_text(pixels, stride, 457, 508, "规则独立生效机制", 14, UI_INK);
+            draw_text(pixels, stride, 457, 534, "• 就寝时间：到点限制，不受额度影响", 11, UI_MUTED);
+            draw_text(pixels, stride, 457, 556, "• 自主缓冲：限时日耗尽前由孩子申请", 11, UI_MUTED);
+            draw_text(pixels, stride, 457, 578, "• 优先顺序：临时计划 > 节假日 > 周计划", 11, UI_MUTED);
+            draw_text(pixels, stride, 457, 600, "• 异常防护：离线运行，断网断电保护", 11, UI_MUTED);
         }
         if (model->parent_page == PTC_UI_PARENT_GRANT) {
             UiRect grant_banner = {54, 484, 750, 144};
@@ -2150,16 +2235,16 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                     ? &RECONFIRM_ENVIRONMENT_ACTION : &RESUME_CONTROL_ACTION;
             }
             if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
-                const char *detail = "重新检查后才能修改";
+                const char *detail = "状态未知，请重新检测";
                 dynamic_action = *action;
                 if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
-                    detail = "自制程序菜单高级入口未配置";
+                    detail = "当前未开启";
                 } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
-                    detail = "需按住 X，再按 A 进入自制程序菜单";
+                    detail = "当前已开启，按住 X 再按 A 进入";
                 } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
-                    detail = "检测到 PlayWise 事务异常，请查看详情";
+                    detail = "需要处理，请查看详情";
                 } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
-                    detail = "入口已可用，但不是由 PlayWise 配置";
+                    detail = "外部配置，入口可用";
                 }
                 /* Use the card's single subtitle row; a second row at the same y overlaps it. */
                 dynamic_action.subtitle = detail;
@@ -2219,9 +2304,22 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 dynamic_action = *action;
                 dynamic_action.subtitle = ptc_ui_theme_preference_label(g_theme.preference);
                 action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 2) {
+                static char shortcut_detail[112];
+                dynamic_action = *action;
+                if (model->custom_shortcut_enabled && model->custom_shortcut_label[0]) {
+                    snprintf(shortcut_detail, sizeof(shortcut_detail), "当前：%s",
+                             model->custom_shortcut_label);
+                } else {
+                    snprintf(shortcut_detail, sizeof(shortcut_detail), "当前：Minus");
+                }
+                dynamic_action.subtitle = shortcut_detail;
+                action = &dynamic_action;
             }
-            int reserved_right = (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) ? 100 :
-                                 (model->parent_page == PTC_UI_PARENT_PLAN ? 80 : 0);
+            /* Status badges live in the card's top-right corner.  The one-line
+             * title/status block is vertically centered below that corner, so
+             * it can use the full remaining width without being truncated. */
+            int reserved_right = 0;
             draw_action_card(pixels, stride, card, action, index == model->selected_index && !model->parent_footer_focused, astate,
                              reserved_right);
             if (model->parent_page == PTC_UI_PARENT_PLAN) {

@@ -58,6 +58,38 @@ typedef struct {
     int height;
 } UiRect;
 
+typedef enum {
+    UI_ACTION_ICON_CLOCK = 0,
+    UI_ACTION_ICON_ADD_TIME,
+    UI_ACTION_ICON_INFINITY,
+    UI_ACTION_ICON_RESTORE,
+    UI_ACTION_ICON_MOON,
+    UI_ACTION_ICON_BUFFER,
+    UI_ACTION_ICON_CALENDAR_RANGE,
+    UI_ACTION_ICON_HOLIDAY,
+    UI_ACTION_ICON_WEEKLY,
+    UI_ACTION_ICON_CONSOLE,
+    UI_ACTION_ICON_DEVICE,
+    UI_ACTION_ICON_SLIDERS,
+    UI_ACTION_ICON_HISTORY,
+    UI_ACTION_ICON_THEME,
+    UI_ACTION_ICON_KEY,
+    UI_ACTION_ICON_CONTROLLER,
+    UI_ACTION_ICON_HOMEBREW,
+    UI_ACTION_ICON_ACTIVITY,
+    UI_ACTION_ICON_SHIELD,
+    UI_ACTION_ICON_REPAIR,
+    UI_ACTION_ICON_STOP,
+    UI_ACTION_ICON_EXPORT,
+    UI_ACTION_ICON_INFO
+} UiActionIcon;
+
+typedef enum {
+    UI_ACTION_VISUAL_NONE = 0,
+    UI_ACTION_VISUAL_QUICK_ADD,
+    UI_ACTION_VISUAL_THEME
+} UiActionVisual;
+
 typedef struct {
     Framebuffer framebuffer;
     FT_Library library;
@@ -71,6 +103,8 @@ typedef struct {
     const char *title;
     const char *subtitle;
     uint32_t accent;
+    UiActionIcon icon;
+    UiActionVisual visual;
 } UiAction;
 
 extern UiRuntime g_ui;

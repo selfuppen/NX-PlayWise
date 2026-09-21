@@ -106,6 +106,21 @@ static int check_primitives(void)
         }
         if (!has_gold || !has_blue) ++failed;
     }
+    /* Success, waiting and error status symbols all use the same centered
+     * 20x20 boundary and must not paint outside it. */
+    for (int kind = 1; kind <= 3; ++kind) {
+        fill_rect_packed(preview_pixels, 1280, (UiRect){70, 70, 60, 60}, background);
+        draw_status_symbol(preview_pixels, 1280, 100, 100, UI_RGB(0xe0c0a0), kind);
+        int painted = 0;
+        for (int y = 70; y < 130; ++y) {
+            for (int x = 70; x < 130; ++x) {
+                if (preview_pixels[y * 1280 + x] == background) continue;
+                ++painted;
+                if (x < 90 || x >= 110 || y < 90 || y >= 110) ++failed;
+            }
+        }
+        if (!painted) ++failed;
+    }
     printf("%s: UI primitive coverage, symmetry, strokes and clipping\n", failed ? "FAIL" : "PASS");
     return failed ? 1 : 0;
 }
@@ -502,6 +517,31 @@ int main(int argc, char **argv)
         snprintf(model.overlay_title, sizeof(model.overlay_title), "设置后可能立即限制");
         snprintf(model.overlay_body, sizeof(model.overlay_body), "全天总额度包含今日额度消耗。新额度可能已经耗尽，保存后可能立即进入时间限制。可通过临时加时、今日不限时或兑换加时码解除。");
         failed |= save_preview(argv[2], "parent", "confirmation", &model, dark);
+        {
+            PtcUiModel quick_add = model;
+            quick_add.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
+            quick_add.draft_minutes = 30;
+            quick_add.confirm_hold_required = false;
+            snprintf(quick_add.overlay_title, sizeof(quick_add.overlay_title), "确认快速加时");
+            snprintf(quick_add.overlay_body, sizeof(quick_add.overlay_body), "增加今天额度前核对剩余时间。");
+            failed |= save_preview(argv[2], "parent", "quick-add-confirm", &quick_add, dark);
+
+            PtcUiModel unlimited = model;
+            unlimited.operation = PTC_UI_OPERATION_DISABLE_TODAY_LIMIT;
+            unlimited.confirm_hold_required = false;
+            snprintf(unlimited.overlay_title, sizeof(unlimited.overlay_title), "确认今日不限时");
+            snprintf(unlimited.overlay_body, sizeof(unlimited.overlay_body), "今天将不再受每日额度限制。");
+            failed |= save_preview(argv[2], "parent", "unlimited-confirm", &unlimited, dark);
+
+            PtcUiModel unchanged = model;
+            PtcEffectiveRule current = ptc_ui_plan_rule(&unchanged, PTC_UI_PLAN_SAVED);
+            unchanged.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
+            unchanged.draft_minutes = current.rule.minutes;
+            unchanged.confirm_hold_required = false;
+            snprintf(unchanged.overlay_title, sizeof(unchanged.overlay_title), "确认今日额度");
+            snprintf(unchanged.overlay_body, sizeof(unchanged.overlay_body), "输入值与当前额度相同。");
+            failed |= save_preview(argv[2], "parent", "quota-unchanged-confirm", &unchanged, dark);
+        }
         ptc_ui_cancel_overlay(&model);
     }
     for (int dark = 0; dark <= 1; ++dark) {

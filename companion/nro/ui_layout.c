@@ -116,7 +116,9 @@ PtcUiRect ptc_ui_notice_details_rect(void)
 
 PtcUiRect ptc_ui_notice_status_icon_rect(int y)
 {
-    return (PtcUiRect){74, y + 16, 20, 20};
+    PtcUiRect notice = ptc_ui_notice_rect();
+    (void)y;
+    return (PtcUiRect){notice.x + 14, notice.y + (notice.h - 20) / 2, 20, 20};
 }
 
 PtcUiRect ptc_ui_notice_command_text_rect(int y, int height)
@@ -165,7 +167,7 @@ PtcUiRect ptc_ui_parent_card_rect(int index)
     if (index == 6) return (PtcUiRect){842, 408, 384, 94};
     int column = index % 2;
     int row = index / 2;
-    PtcUiRect rect = {54 + column * 385, 176 + row * 154, 365, 138};
+    PtcUiRect rect = {54 + column * 385, 176 + row * 136, 365, 120};
     return rect;
 }
 
@@ -211,14 +213,14 @@ PtcUiRect ptc_ui_home_summary_rect(bool parent)
 PtcUiRect ptc_ui_today_card_rect(int index)
 {
     if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){560 + (index % 2) * 348, 176 + (index / 2) * 154, 324, 138};
+    return (PtcUiRect){560 + (index % 2) * 348, 176 + (index / 2) * 136, 324, 120};
 }
 
 PtcUiRect ptc_ui_plan_card_rect(int index)
 {
-    if (index >= 0 && index < 3) return (PtcUiRect){54, 214 + index * 140, 365, 102};
-    if (index == 3) return (PtcUiRect){439, 214, 365, 102};
-    if (index == 4) return (PtcUiRect){439, 332, 365, 102};
+    if (index >= 0 && index < 3) return (PtcUiRect){54, 212 + index * 136, 365, 120};
+    if (index == 3) return (PtcUiRect){439, 212, 365, 120};
+    if (index == 4) return (PtcUiRect){439, 348, 365, 120};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
@@ -453,7 +455,7 @@ PtcUiRect ptc_ui_support_card_rect(int index)
     if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
     column = index % 2;
     row = index / 2;
-    return (PtcUiRect){54 + column * 385, 176 + row * 154, 365, 138};
+    return (PtcUiRect){54 + column * 385, 176 + row * 136, 365, 120};
 }
 
 PtcUiRect ptc_ui_holiday_card_rect(int index)

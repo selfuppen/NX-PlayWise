@@ -780,19 +780,23 @@ void draw_status_symbol(
     uint32_t color,
     int kind)
 {
-    draw_rect_outline(pixels, stride, (UiRect){x, y, 20, 20}, 4, 2, color);
+    /* Callers pass the visual center; keep every status glyph inside one
+     * shared 20x20 box so the symbol aligns with the capsule text baseline. */
+    int left = x - 10;
+    int top = y - 10;
+    draw_rect_outline(pixels, stride, (UiRect){left, top, 20, 20}, 4, 2, color);
     if (kind == 1) {
-        draw_line(pixels, stride, x + 4, y + 11, x + 8, y + 15, 2, color);
-        draw_line(pixels, stride, x + 8, y + 15, x + 16, y + 5, 2, color);
+        draw_line(pixels, stride, left + 4, top + 11, left + 8, top + 15, 2, color);
+        draw_line(pixels, stride, left + 8, top + 15, left + 16, top + 5, 2, color);
     } else if (kind == 2) {
-        fill_rect(pixels, stride, (UiRect){x + 8, y + 4, 4, 9}, color);
-        fill_rect(pixels, stride, (UiRect){x + 8, y + 15, 4, 3}, color);
+        fill_rect(pixels, stride, (UiRect){left + 8, top + 4, 4, 9}, color);
+        fill_rect(pixels, stride, (UiRect){left + 8, top + 15, 4, 3}, color);
     } else if (kind == 3) {
-        draw_line(pixels, stride, x + 5, y + 5, x + 15, y + 15, 2, color);
-        draw_line(pixels, stride, x + 15, y + 5, x + 5, y + 15, 2, color);
+        draw_line(pixels, stride, left + 5, top + 5, left + 15, top + 15, 2, color);
+        draw_line(pixels, stride, left + 15, top + 5, left + 5, top + 15, 2, color);
     } else {
-        fill_rect(pixels, stride, (UiRect){x + 8, y + 4, 4, 3}, color);
-        fill_rect(pixels, stride, (UiRect){x + 8, y + 9, 4, 8}, color);
+        fill_rect(pixels, stride, (UiRect){left + 8, top + 4, 4, 3}, color);
+        fill_rect(pixels, stride, (UiRect){left + 8, top + 9, 4, 8}, color);
     }
 }
 
@@ -2138,8 +2142,9 @@ void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     fill_round_rect(pixels, stride, box, 18, danger ? UI_DANGER_SOFT : (warning ? UI_WARNING_SOFT : UI_SURFACE));
     draw_rect_outline(pixels, stride, box, 18, 1, danger ? UI_DANGER : (warning ? UI_WARNING : UI_BORDER));
 
-    int icon_cx = box.x + 24;
-    int icon_cy = box.y + box.height / 2;
+    PtcUiRect icon_rect = ptc_ui_notice_status_icon_rect(n_rect.y);
+    int icon_cx = icon_rect.x + icon_rect.w / 2;
+    int icon_cy = icon_rect.y + icon_rect.h / 2;
     draw_status_symbol(pixels, stride, icon_cx, icon_cy, accent, danger ? 3 : (warning ? 2 : 1));
 
     if (notice.has_details) {
