@@ -1,4 +1,4 @@
-#include "lab_session.h"
+#include "lab_session_internal.h"
 
 #ifdef PLAYWISE_DEVICE_LAB
 
@@ -12,13 +12,6 @@
 #include "../common/version.h"
 #include "../platform/switch/play_timer_settings_layout.h"
 
-#define LAB_PHASE_SECONDS 75LL
-#define LAB_ACTIVATION_PHASE_SECONDS 90LL
-#define LAB_RESTRICTION_SECONDS 15LL
-#define LAB_RESTRICTION_EVENT_POLL_MS 100U
-#define LAB_REPORT_BUFFER 32768U
-#define LAB_MINIMUM_REMAINING_NS 600000000000LL
-
 static const char *const LAB_PHASES[] = {
     "home_stopped", "home_started", "game_foreground",
     "game_suspended", "sleep_wake", "restriction_effect"
@@ -29,55 +22,6 @@ static const char *const LAB_ACTIVATION_AB_PHASES[] = {
     "ab_restriction_settings_only", "ab_grant_settings_only",
     "ab_restriction_before_unlimited", "ab_unlimited_settings_only"
 };
-
-typedef struct {
-    char run_id[80];
-    char mode[32];
-    char campaign_id[48];
-    char campaign_slot[40];
-    char game_slot[8];
-    char official_pause_expected[16];
-    int campaign_attempt;
-    char state[32];
-    int next_phase;
-    char active_phase[32];
-    int64_t started_at;
-    int64_t deadline;
-    char observation[32];
-    char runtime_effect[32];
-    bool baseline_all_zero;
-    bool activation_preconditions_met;
-    int64_t baseline_remaining_ns;
-    int home_awake_counted;
-    int sleep_excluded;
-    int limited_settings_only_runtime_ready;
-    int grant_settings_only_runtime_ready;
-    int unlimited_settings_only_runtime_ready;
-    int limited_fallback_called;
-    int grant_fallback_called;
-    int unlimited_fallback_called;
-    int limited_fallback_succeeded;
-    int grant_fallback_succeeded;
-    int unlimited_fallback_succeeded;
-    bool event_armed;
-    int restriction_weekday;
-    bool restored;
-    char restore_verdict[32];
-    PtcPctlSettingsSnapshot original;
-    PtcPctlForensicSample before;
-} LabState;
-
-#define LAB_CAMPAIGN_SLOT_COUNT 4
-
-typedef struct {
-    char campaign_id[48];
-    char state[16];
-    char original_pause_state[8];
-    char entry_method[16];
-    int next_slot;
-    int attempts[LAB_CAMPAIGN_SLOT_COUNT];
-    char accepted_run_ids[LAB_CAMPAIGN_SLOT_COUNT][80];
-} LabCampaign;
 
 static const char *const LAB_CAMPAIGN_SLOTS[LAB_CAMPAIGN_SLOT_COUNT] = {
     "timer_activation_ab", "pause_on_game_a", "pause_on_game_b", "pause_off_game_b"
@@ -200,8 +144,6 @@ static void state_path(PtcSysmodule *sysmodule, char *out, size_t size)
     snprintf(out, size, "%s/lab/session.json", sysmodule->app_root);
 }
 
-static bool read_fragment(PtcSysmodule *sysmodule, const char *relative, char *out, size_t size);
-
 static void campaign_path(PtcSysmodule *sysmodule, char *out, size_t size)
 {
     snprintf(out, size, "%s/lab/campaign.json", sysmodule->app_root);
@@ -258,15 +200,15 @@ static bool load_campaign(PtcSysmodule *sysmodule, LabCampaign *campaign)
     return campaign->next_slot >= 0 && campaign->next_slot <= LAB_CAMPAIGN_SLOT_COUNT;
 }
 
-static void activation_method(PtcSysmodule *sysmodule, char out[16])
+void lab_activation_method(PtcSysmodule *sysmodule, char out[16])
 {
     char text[1024];
     snprintf(out, 16, "reboot");
-    if (read_fragment(sysmodule, "lab/activation.json", text, sizeof(text)))
+    if (lab_read_fragment(sysmodule, "lab/activation.json", text, sizeof(text)))
         (void)json_string(text, "entry_method", out, 16);
 }
 
-static void id_suffix(const char *value, char out[13])
+void lab_id_suffix(const char *value, char out[13])
 {
     PtcSha256Ctx ctx;
     uint8_t digest[PTC_SHA256_DIGEST_SIZE];
@@ -277,24 +219,6 @@ static void id_suffix(const char *value, char out[13])
     bytes_hex(digest, sizeof(digest), hex, sizeof(hex));
     memcpy(out, hex, 12U);
     out[12] = '\0';
-}
-
-static void final_report_path(PtcSysmodule *sysmodule, const LabState *state, char *out, size_t size)
-{
-    snprintf(out, size, "%s/reports/%s.json", sysmodule->app_root, state->run_id);
-}
-
-static void draft_report_path(PtcSysmodule *sysmodule, const LabState *state, char *out, size_t size)
-{
-    snprintf(out, size, "%s/lab/report-%s.draft.json", sysmodule->app_root, state->run_id);
-}
-
-static unsigned int required_phase_count(const LabState *state)
-{
-    if (strcmp(state->mode, "restriction_quick") == 0) return 1U;
-    if (strcmp(state->mode, "timer_activation_ab") == 0)
-        return (unsigned int)(sizeof(LAB_ACTIVATION_AB_PHASES) / sizeof(LAB_ACTIVATION_AB_PHASES[0]));
-    return 6U;
 }
 
 static int active_phase_slot(const LabState *state)
@@ -308,14 +232,9 @@ static const char *expected_phase(const LabState *state)
         return state->next_phase == 0 ? "restriction_effect" : NULL;
     if (strcmp(state->mode, "timer_activation_ab") == 0)
         return state->next_phase >= 0 &&
-            (unsigned int)state->next_phase < required_phase_count(state)
+            (unsigned int)state->next_phase < lab_required_phase_count(state)
             ? LAB_ACTIVATION_AB_PHASES[state->next_phase] : NULL;
     return state->next_phase >= 0 && state->next_phase < 6 ? LAB_PHASES[state->next_phase] : NULL;
-}
-
-static const char *tri_state_json(int value)
-{
-    return value < 0 ? "null" : (value ? "true" : "false");
 }
 
 static void reset_activation_results(LabState *state)
@@ -476,9 +395,9 @@ static bool write_result(PtcSysmodule *sysmodule, const PtcRequest *request,
     }
     used = strlen(json);
     if (used >= 2U && json[used - 1U] == '\n' && json[used - 2U] == '}') json[used - 2U] = '\0';
-    final_report_path(sysmodule, state, report, sizeof(report));
+    lab_final_report_path(sysmodule, state, report, sizeof(report));
     if (!sysmodule->storage->vtable->exists(sysmodule->storage, report))
-        draft_report_path(sysmodule, state, report, sizeof(report));
+        lab_draft_report_path(sysmodule, state, report, sizeof(report));
     snprintf(json + strlen(json), sizeof(json) - strlen(json),
         ",\"lab_session\":{\"run_id\":\"%s\",\"mode\":\"%s\",\"state\":\"%s\",\"next_phase\":%d,"
         "\"active_phase\":\"%s\",\"deadline\":%lld,\"restored\":%s,"
@@ -496,196 +415,6 @@ static bool write_result(PtcSysmodule *sysmodule, const PtcRequest *request,
     }
     snprintf(path, sizeof(path), "%s/results/%s.json", sysmodule->app_root, request->request_id);
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, json);
-}
-
-static bool write_public_evidence(PtcSysmodule *sysmodule, const LabState *state,
-    const PtcPctlPublicParity *parity, bool same_value_write, bool same_value_restored)
-{
-    char path[320];
-    char text[3072];
-    bool comparable_1006 = parity->raw_temporary_unlocked_result == 0 &&
-        parity->libnx_temporary_unlocked_result == 0;
-    bool comparable_1031 = parity->raw_restriction_enabled_result == 0 &&
-        parity->libnx_restriction_enabled_result == 0;
-    bool comparable_1035 = parity->raw_current_settings_result == 0 &&
-        parity->libnx_current_settings_result == 0;
-    bool comparable_1457 = parity->raw_suspend_event_result == 0 &&
-        parity->libnx_suspend_event_result == 0;
-    bool comparable_1458 = parity->raw_alarm_disabled_result == 0 &&
-        parity->libnx_alarm_disabled_result == 0;
-    snprintf(path, sizeof(path), "%s/lab/public.json", sysmodule->app_root);
-    snprintf(text, sizeof(text),
-        "{\"commands\":{"
-        "\"1006\":{\"raw_result\":%u,\"libnx_result\":%u,\"comparable\":%s,\"value_equal\":%s},"
-        "\"1031\":{\"raw_result\":%u,\"libnx_result\":%u,\"comparable\":%s,\"value_equal\":%s},"
-        "\"1035\":{\"raw_result\":%u,\"libnx_result\":%u,\"comparable\":%s,\"structure_equal\":%s},"
-        "\"1457\":{\"raw_result\":%u,\"libnx_result\":%u,\"comparable\":%s,\"raw_handle_valid\":%s,\"libnx_handle_valid\":%s},"
-        "\"1458\":{\"raw_result\":%u,\"libnx_result\":%u,\"comparable\":%s,\"value_equal\":%s}},"
-        "\"settings_0x44\":{\"same_value_write_succeeded\":%s,\"exactly_restored\":%s},"
-        "\"verdicts\":{\"ipc_callable\":%s,\"wire_shape_confirmed\":%s,\"product_semantics\":\"evidence_only\"}}",
-        parity->raw_temporary_unlocked_result, parity->libnx_temporary_unlocked_result,
-        comparable_1006 ? "true" : "false",
-        comparable_1006 && parity->raw_temporary_unlocked == parity->libnx_temporary_unlocked ? "true" : "false",
-        parity->raw_restriction_enabled_result, parity->libnx_restriction_enabled_result,
-        comparable_1031 ? "true" : "false",
-        comparable_1031 && parity->raw_restriction_enabled == parity->libnx_restriction_enabled ? "true" : "false",
-        parity->raw_current_settings_result, parity->libnx_current_settings_result,
-        comparable_1035 ? "true" : "false", comparable_1035 && parity->current_settings_equal ? "true" : "false",
-        parity->raw_suspend_event_result, parity->libnx_suspend_event_result,
-        comparable_1457 ? "true" : "false",
-        parity->raw_suspend_event_valid ? "true" : "false", parity->libnx_suspend_event_valid ? "true" : "false",
-        parity->raw_alarm_disabled_result, parity->libnx_alarm_disabled_result,
-        comparable_1458 ? "true" : "false",
-        comparable_1458 && parity->raw_alarm_disabled == parity->libnx_alarm_disabled ? "true" : "false",
-        same_value_write ? "true" : "false", same_value_restored ? "true" : "false",
-        parity->raw_temporary_unlocked_result == 0 && parity->raw_restriction_enabled_result == 0 ? "true" : "false",
-        comparable_1035 && parity->current_settings_equal && same_value_write && same_value_restored ? "true" : "false");
-    (void)state;
-    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text);
-}
-
-static bool read_fragment(PtcSysmodule *sysmodule, const char *relative, char *out, size_t size)
-{
-    char path[320];
-    snprintf(path, sizeof(path), "%s/%s", sysmodule->app_root, relative);
-    return sysmodule->storage->vtable->read_text(sysmodule->storage, path, out, size);
-}
-
-static bool append_text(char *out, size_t out_size, const char *value)
-{
-    size_t used = strlen(out);
-    size_t added = strlen(value);
-    if (used >= out_size || added >= out_size - used) return false;
-    memcpy(out + used, value, added + 1U);
-    return true;
-}
-
-static bool rebuild_report(PtcSysmodule *sysmodule, const LabState *state)
-{
-    char report[LAB_REPORT_BUFFER];
-    char fragment[6144];
-    char path[320];
-    size_t i;
-    unsigned int completed_phases = 0;
-    unsigned int required_phases = required_phase_count(state);
-    unsigned int report_phase_slots = strcmp(state->mode, "timer_activation_ab") == 0
-        ? required_phases : 6U;
-    bool manual_required = strcmp(state->mode, "timer_activation_ab") != 0;
-    bool observation_recorded = state->observation[0] != '\0';
-    bool runtime_effect_recorded = state->runtime_effect[0] != '\0';
-    int activation_evidence_complete = -1;
-    int lifecycle_evidence_complete = -1;
-    bool complete;
-    char entry_method[16];
-    char campaign_fragment[384];
-    activation_method(sysmodule, entry_method);
-    if (state->campaign_id[0]) {
-        snprintf(campaign_fragment, sizeof(campaign_fragment),
-            "{\"campaign_id\":\"%s\",\"slot\":\"%s\",\"attempt\":%d,"
-            "\"game_slot\":\"%s\",\"official_pause_expected\":\"%s\","
-            "\"context_confirmed\":true}",
-            state->campaign_id, state->campaign_slot, state->campaign_attempt,
-            state->game_slot, state->official_pause_expected);
-    } else {
-        snprintf(campaign_fragment, sizeof(campaign_fragment), "null");
-    }
-    if (strcmp(state->mode, "timer_activation_ab") == 0) {
-        activation_evidence_complete = state->home_awake_counted >= 0 && state->sleep_excluded >= 0 &&
-            state->limited_settings_only_runtime_ready >= 0 && state->grant_settings_only_runtime_ready >= 0 &&
-            state->unlimited_settings_only_runtime_ready >= 0 &&
-            ((state->limited_settings_only_runtime_ready == 1 && state->limited_fallback_called == 0) ||
-             (state->limited_settings_only_runtime_ready == 0 && state->limited_fallback_called == 1 && state->limited_fallback_succeeded == 1)) &&
-            ((state->grant_settings_only_runtime_ready == 1 && state->grant_fallback_called == 0) ||
-             (state->grant_settings_only_runtime_ready == 0 && state->grant_fallback_called == 1 && state->grant_fallback_succeeded == 1)) &&
-            ((state->unlimited_settings_only_runtime_ready == 1 && state->unlimited_fallback_called == 0) ||
-             (state->unlimited_settings_only_runtime_ready == 0 && state->unlimited_fallback_called == 1 && state->unlimited_fallback_succeeded == 1));
-    }
-    int written = snprintf(report, sizeof(report),
-        "{\"version\":2,\"schema_version\":2,\"run_id\":\"%s\",\"mode\":\"%s\",\"report_status\":\"draft\","
-        "\"entry_method\":\"%s\",\"campaign\":%s,"
-        "\"baseline\":{\"settings_all_zero\":%s,\"activation_preconditions_met\":%s,"
-        "\"remaining_ns\":%lld,\"minimum_remaining_ns\":%lld},"
-        "\"environment\":{\"title_id\":\"%s\","
-        "\"ipc_service\":\"%s\",\"sd_root\":\"%s\",\"runtime\":",
-        state->run_id, state->mode, entry_method, campaign_fragment,
-        state->baseline_all_zero ? "true" : "false",
-        state->activation_preconditions_met ? "true" : "false",
-        (long long)state->baseline_remaining_ns, (long long)LAB_MINIMUM_REMAINING_NS,
-        PLAYWISE_TITLE_ID, PLAYWISE_IPC_SERVICE, PLAYWISE_SD_ROOT);
-    if (written < 0 || (size_t)written >= sizeof(report)) return false;
-    if (!read_fragment(sysmodule, "environment.json", fragment, sizeof(fragment))) return false;
-    if (!append_text(report, sizeof(report), fragment) ||
-        !append_text(report, sizeof(report), ",\"build\":")) return false;
-    if (!read_fragment(sysmodule, "build.json", fragment, sizeof(fragment))) return false;
-    if (!append_text(report, sizeof(report), fragment) ||
-        !append_text(report, sizeof(report), "},\"durations\":{\"phase_seconds\":75,"
-            "\"activation_home_sleep_seconds\":90,"
-            "\"restriction_restore_seconds\":15},\"public_parity\":")) return false;
-    if (!read_fragment(sysmodule, "lab/public.json", fragment, sizeof(fragment))) snprintf(fragment, sizeof(fragment), "null");
-    if (!append_text(report, sizeof(report), fragment) ||
-        !append_text(report, sizeof(report), ",\"phases\":[")) return false;
-    for (i = 0; i < report_phase_slots; ++i) {
-        char relative[96];
-        bool phase_present;
-        if (i && !append_text(report, sizeof(report), ",")) return false;
-        snprintf(relative, sizeof(relative), "lab/phase-%u.json", (unsigned int)i);
-        phase_present = read_fragment(sysmodule, relative, fragment, sizeof(fragment));
-        if (!phase_present) snprintf(fragment, sizeof(fragment), "null");
-        else ++completed_phases;
-        if (!append_text(report, sizeof(report), fragment)) return false;
-    }
-    if (strcmp(state->mode, "full") == 0) {
-        /* A full run may finish collecting and restoring an all-zero baseline,
-           but those lifecycle phases remain evidence-incomplete. */
-        lifecycle_evidence_complete = !state->baseline_all_zero && completed_phases == required_phases;
-    }
-    complete = completed_phases == required_phases &&
-        (!manual_required || (observation_recorded && runtime_effect_recorded)) && state->restored &&
-        strcmp(state->restore_verdict, "exact_restore_proved") == 0 &&
-        strcmp(state->state, "complete") == 0 && activation_evidence_complete != 0;
-    snprintf(fragment, sizeof(fragment),
-        "],\"timer_activation_ab\":{\"home_awake_counted\":%s,\"sleep_excluded\":%s,"
-        "\"fallback_cases\":["
-        "{\"target\":\"limited\",\"settings_only_runtime_ready\":%s,\"fallback_called\":%s,\"fallback_succeeded\":%s},"
-        "{\"target\":\"grant\",\"settings_only_runtime_ready\":%s,\"fallback_called\":%s,\"fallback_succeeded\":%s},"
-        "{\"target\":\"unlimited\",\"settings_only_runtime_ready\":%s,\"fallback_called\":%s,\"fallback_succeeded\":%s}]},"
-        "\"manual_observation\":%s%s%s,\"manual_runtime_effect\":%s%s%s,"
-        "\"restoration\":{\"proved\":%s,\"verdict\":\"%s\"},"
-        "\"summary\":{\"automated_phases_completed\":%u,\"required_automated_phases\":%u,"
-        "\"manual_observation_recorded\":%s,\"manual_runtime_effect_recorded\":%s,"
-        "\"activation_evidence_complete\":%s,\"lifecycle_evidence_complete\":%s,"
-        "\"complete\":%s,\"ipc_callable\":\"see_commands\",\"wire_shape_confirmed\":\"see_commands\","
-        "\"product_semantics\":\"evidence_only_until_review\"}}\n",
-        tri_state_json(state->home_awake_counted), tri_state_json(state->sleep_excluded),
-        tri_state_json(state->limited_settings_only_runtime_ready),
-        tri_state_json(state->limited_fallback_called), tri_state_json(state->limited_fallback_succeeded),
-        tri_state_json(state->grant_settings_only_runtime_ready),
-        tri_state_json(state->grant_fallback_called), tri_state_json(state->grant_fallback_succeeded),
-        tri_state_json(state->unlimited_settings_only_runtime_ready),
-        tri_state_json(state->unlimited_fallback_called), tri_state_json(state->unlimited_fallback_succeeded),
-        state->observation[0] ? "\"" : "", state->observation[0] ? state->observation : "null",
-        state->observation[0] ? "\"" : "",
-        state->runtime_effect[0] ? "\"" : "", state->runtime_effect[0] ? state->runtime_effect : "null",
-        state->runtime_effect[0] ? "\"" : "",
-        state->restored ? "true" : "false", state->restore_verdict,
-        completed_phases, required_phases, observation_recorded ? "true" : "false",
-        runtime_effect_recorded ? "true" : "false", tri_state_json(activation_evidence_complete),
-        tri_state_json(lifecycle_evidence_complete),
-        complete ? "true" : "false");
-    if (!append_text(report, sizeof(report), fragment)) return false;
-    if (complete) {
-        char draft_path[320];
-        char *status = strstr(report, "\"report_status\":\"draft\"");
-        if (status) memcpy(status + strlen("\"report_status\":\""), "final", 5U);
-        final_report_path(sysmodule, state, path, sizeof(path));
-        if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, report)) return false;
-        draft_report_path(sysmodule, state, draft_path, sizeof(draft_path));
-        if (sysmodule->storage->vtable->exists(sysmodule->storage, draft_path))
-            (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, draft_path);
-        return true;
-    }
-    draft_report_path(sysmodule, state, path, sizeof(path));
-    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, report);
 }
 
 static bool campaign_slot_observed(const LabState *state, int slot)
@@ -748,7 +477,7 @@ static bool campaign_accept_completed(PtcSysmodule *sysmodule, const LabState *s
     if (slot < 0 || slot >= LAB_CAMPAIGN_SLOT_COUNT ||
         strcmp(state->campaign_slot, LAB_CAMPAIGN_SLOTS[slot]) != 0 ||
         !campaign_slot_observed(state, slot)) return true;
-    final_report_path(sysmodule, state, report_path, sizeof(report_path));
+    lab_final_report_path(sysmodule, state, report_path, sizeof(report_path));
     if (!sysmodule->storage->vtable->exists(sysmodule->storage, report_path)) return true;
     snprintf(campaign.accepted_run_ids[slot], sizeof(campaign.accepted_run_ids[slot]), "%s", state->run_id);
     ++campaign.next_slot;
@@ -771,13 +500,13 @@ static PtcErrorCode start_campaign(PtcSysmodule *sysmodule, const PtcRequest *re
             strcmp(session.restore_verdict, "exact_restore_proved") != 0))
         return PTC_ERR_BAD_REQUEST;
     memset(&campaign, 0, sizeof(campaign));
-    id_suffix(request->request_id, suffix);
+    lab_id_suffix(request->request_id, suffix);
     snprintf(campaign.campaign_id, sizeof(campaign.campaign_id), "campaign-%lld-%s",
         (long long)now.unix_seconds, suffix);
     snprintf(campaign.state, sizeof(campaign.state), "active");
     snprintf(campaign.original_pause_state, sizeof(campaign.original_pause_state), "%s",
         request->original_pause_state);
-    activation_method(sysmodule, campaign.entry_method);
+    lab_activation_method(sysmodule, campaign.entry_method);
     return save_campaign(sysmodule, &campaign) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
 }
 
@@ -841,7 +570,7 @@ static void enter_restore_required(PtcSysmodule *sysmodule, LabState *state)
     snprintf(path, sizeof(path), "%s/flags/disable.flag", sysmodule->app_root);
     (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, "device_lab_restore_not_proved\n");
     (void)save_state(sysmodule, state);
-    (void)rebuild_report(sysmodule, state);
+    (void)lab_rebuild_report(sysmodule, state);
 }
 
 static bool format_settings_offsets(const uint8_t *original, const uint8_t *active,
@@ -1183,15 +912,15 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, cons
     }
     state->restriction_weekday = -1;
     reset_activation_results(state);
-    id_suffix(request->request_id, suffix);
+    lab_id_suffix(request->request_id, suffix);
     snprintf(state->run_id, sizeof(state->run_id), "%lld-%.16s-%s",
         (long long)now.unix_seconds, sysmodule->boot_id, suffix);
     snprintf(state->state, sizeof(state->state), "ready");
     snprintf(state->restore_verdict, sizeof(state->restore_verdict), "pending");
     /* A final Lab report is only useful when it remains bound to the runtime
        fingerprint and exact Device Lab build that produced the evidence. */
-    if (!read_fragment(sysmodule, "environment.json", identity_fragment, sizeof(identity_fragment)) ||
-        !read_fragment(sysmodule, "build.json", identity_fragment, sizeof(identity_fragment)))
+    if (!lab_read_fragment(sysmodule, "environment.json", identity_fragment, sizeof(identity_fragment)) ||
+        !lab_read_fragment(sysmodule, "build.json", identity_fragment, sizeof(identity_fragment)))
         return PTC_ERR_STORAGE_READ_FAILED;
     for (i = 0; i < sizeof(LAB_ACTIVATION_AB_PHASES) / sizeof(LAB_ACTIVATION_AB_PHASES[0]); ++i) {
         char old_path[320];
@@ -1226,13 +955,13 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, cons
     restored_ok = write_ok && sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &verified) == PTC_ERR_OK &&
         verified.size == state->original.size && verified.timer_enabled == state->original.timer_enabled &&
         memcmp(verified.data, state->original.data, PTC_PCTL_OPAQUE_SETTINGS_SIZE) == 0;
-    if (!write_public_evidence(sysmodule, state, &parity, write_ok, restored_ok)) return PTC_ERR_STORAGE_WRITE_FAILED;
+    if (!lab_write_public_evidence(sysmodule, state, &parity, write_ok, restored_ok)) return PTC_ERR_STORAGE_WRITE_FAILED;
     if (!restored_ok) return PTC_ERR_PCTL_RESTORE_FAILED;
     if (strcmp(state->mode, "timer_activation_ab") != 0) {
         err = sysmodule->pctl->vtable->stop_timer(sysmodule->pctl);
         if (err != PTC_ERR_OK) return err;
     }
-    if (!save_state(sysmodule, state) || !rebuild_report(sysmodule, state)) return PTC_ERR_STORAGE_WRITE_FAILED;
+    if (!save_state(sysmodule, state) || !lab_rebuild_report(sysmodule, state)) return PTC_ERR_STORAGE_WRITE_FAILED;
     return PTC_ERR_OK;
 }
 
@@ -1387,10 +1116,10 @@ bool ptc_lab_process_request(PtcSysmodule *sysmodule, const PtcRequest *request)
             snprintf(state.observation, sizeof(state.observation), "%s", request->observation);
             snprintf(state.runtime_effect, sizeof(state.runtime_effect), "%s", request->runtime_effect);
             snprintf(state.state, sizeof(state.state), "complete");
-            state.next_phase = (int)required_phase_count(&state);
+            state.next_phase = (int)lab_required_phase_count(&state);
             state.active_phase[0] = '\0';
             state.deadline = 0;
-            if (!save_state(sysmodule, &state) || !rebuild_report(sysmodule, &state) ||
+            if (!save_state(sysmodule, &state) || !lab_rebuild_report(sysmodule, &state) ||
                 !campaign_accept_completed(sysmodule, &state)) err = PTC_ERR_STORAGE_WRITE_FAILED;
         }
         break;
@@ -1409,7 +1138,7 @@ bool ptc_lab_process_request(PtcSysmodule *sysmodule, const PtcRequest *request)
             state.deadline = 0;
             if (sysmodule->storage->vtable->exists(sysmodule->storage, disable_path))
                 (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, disable_path);
-            if (!save_state(sysmodule, &state) || !rebuild_report(sysmodule, &state) ||
+            if (!save_state(sysmodule, &state) || !lab_rebuild_report(sysmodule, &state) ||
                 !campaign_accept_completed(sysmodule, &state)) err = PTC_ERR_STORAGE_WRITE_FAILED;
         }
         break;
@@ -1449,7 +1178,7 @@ int ptc_lab_scheduler_tick(PtcSysmodule *sysmodule)
     if (sysmodule->pctl->vtable->forensic_sample(sysmodule->pctl, &after) != PTC_ERR_OK) {
         if (!restore_original(sysmodule, &state)) enter_restore_required(sysmodule, &state);
         else { snprintf(state.state, sizeof(state.state), "error"); (void)save_state(sysmodule, &state); }
-        (void)rebuild_report(sysmodule, &state);
+        (void)lab_rebuild_report(sysmodule, &state);
         return 1;
     }
     memset(&fallback_after, 0, sizeof(fallback_after));
@@ -1482,7 +1211,7 @@ int ptc_lab_scheduler_tick(PtcSysmodule *sysmodule)
             !settings_phase_runtime_ready(state.active_phase, &fallback_after, weekday))) {
         if (!restore_original(sysmodule, &state)) enter_restore_required(sysmodule, &state);
         else { snprintf(state.state, sizeof(state.state), "error"); (void)save_state(sysmodule, &state); }
-        (void)rebuild_report(sysmodule, &state);
+        (void)lab_rebuild_report(sysmodule, &state);
         return 1;
     }
     if (strcmp(state.active_phase, "home_started") == 0) (void)sysmodule->pctl->vtable->stop_timer(sysmodule->pctl);
@@ -1493,7 +1222,7 @@ int ptc_lab_scheduler_tick(PtcSysmodule *sysmodule)
         }
         snprintf(state.state, sizeof(state.state), "awaiting_observation");
     } else if (strcmp(state.mode, "timer_activation_ab") == 0 &&
-        state.next_phase + 1 >= (int)required_phase_count(&state)) {
+        state.next_phase + 1 >= (int)lab_required_phase_count(&state)) {
         if (!restore_original(sysmodule, &state)) {
             enter_restore_required(sysmodule, &state);
             return 1;
@@ -1506,7 +1235,7 @@ int ptc_lab_scheduler_tick(PtcSysmodule *sysmodule)
     state.active_phase[0] = '\0';
     state.deadline = 0;
     (void)save_state(sysmodule, &state);
-    (void)rebuild_report(sysmodule, &state);
+    (void)lab_rebuild_report(sysmodule, &state);
     (void)campaign_accept_completed(sysmodule, &state);
     return 1;
 }

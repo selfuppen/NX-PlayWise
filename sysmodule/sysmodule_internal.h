@@ -203,6 +203,17 @@ void write_disable_flag(PtcSysmodule *sysmodule, const char *reason);
 PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *request,
     const PtcRules *rules,
     PtcRuntimeState *runtime_state, PtcClockSnapshot now);
+bool process_grant_request_surface(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    const PtcRuntimeConfig *config,
+    bool disable_flag,
+    PtcClockSnapshot now);
+bool process_recovery_request_surface(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    bool disable_flag,
+    PtcClockSnapshot now);
 void process_request_text(PtcSysmodule *sysmodule, const char *request_text, const char *expected_request_id);
 
 #endif

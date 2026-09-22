@@ -48,11 +48,16 @@ export DEPSDIR := $(CURDIR)/$(BUILD)
 SYSMODULE_CFILES := \
 	ipc_server.c \
 	lab_session.c \
+	lab_session_report.c \
 	sysmodule_storage.c \
+	sysmodule_audit.c \
 	sysmodule_history.c \
+	sysmodule_results.c \
 	sysmodule_control.c \
 	sysmodule_setup.c \
 	sysmodule_requests.c \
+	sysmodule_request_grants.c \
+	sysmodule_request_recovery.c \
 	sysmodule_core.c
 CFILES := $(foreach dir,$(filter-out .,$(SOURCES)),$(notdir $(wildcard $(dir)/*.c))) $(SYSMODULE_CFILES)
 SFILES := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))

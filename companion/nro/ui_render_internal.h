@@ -183,6 +183,8 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_error(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+bool draw_parent_plan_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+const char *ui_rule_source_label(const char *source);
 void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
                       PtcUiPlanKind kind, bool dirty, UiRect rect);
 void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
@@ -193,6 +195,20 @@ void format_status_age(const PtcUiModel *model, char *out, size_t out_size);
 void format_duration(int minutes, char *out, size_t out_size);
 void draw_time_state_card(uint32_t *pixels, uint32_t stride, UiRect rect,
                           const char *label, const char *value, uint32_t accent);
+void draw_transition_arrow(
+    uint32_t *pixels, uint32_t stride, int cx, int cy, uint32_t color);
+void draw_remaining_transition(
+    uint32_t *pixels,
+    uint32_t stride,
+    UiRect rect,
+    const char *before_label,
+    const char *before_value,
+    uint32_t before_accent,
+    const char *after_label,
+    const char *after_value,
+    uint32_t after_accent);
+void draw_unchanged_quota_card(
+    uint32_t *pixels, uint32_t stride, UiRect rect, const char *reason);
 void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
                       const UiAction *action, bool selected, PtcUiActionState state,
                       int reserved_right);
@@ -220,6 +236,9 @@ void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
 void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_notice_details_dialog(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+bool draw_account_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+bool draw_plan_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
+bool draw_support_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void draw_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
 void ui_glyph_cache_clear(void);
 void ui_background_rebuild(void);

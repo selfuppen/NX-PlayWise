@@ -33,7 +33,11 @@ LIBS := -L$(DEVKITPRO)/libnx/lib $(FREETYPE_LIBS) -lnx
 OBJS := \
 	$(BUILD)/main.o \
 	$(BUILD)/nro_runtime.o \
+	$(BUILD)/nro_input_dialogs.o \
+	$(BUILD)/nro_preferences.o \
 	$(BUILD)/nro_requests.o \
+	$(BUILD)/nro_redemption.o \
+	$(BUILD)/nro_result_poll.o \
 	$(BUILD)/nro_setup.o \
 	$(BUILD)/nro_security.o \
 	$(BUILD)/nro_pairing.o \
@@ -41,18 +45,35 @@ OBJS := \
 	$(BUILD)/nro_policy_requests.o \
 	$(BUILD)/nro_support.o \
 	$(BUILD)/nro_actions.o \
+	$(BUILD)/nro_action_dispatch.o \
+	$(BUILD)/nro_plan_actions.o \
 	$(BUILD)/nro_input.o \
 	$(BUILD)/nro_touch_input.o \
 	$(BUILD)/hot_reload.o \
 	$(BUILD)/hot_reload_guard.o \
 	$(BUILD)/album_restriction.o \
 	$(BUILD)/ui_graphics.o \
+	$(BUILD)/ui_render_primitives.o \
+	$(BUILD)/ui_render_text.o \
 	$(BUILD)/ui_render_core.o \
+	$(BUILD)/ui_render_components.o \
+	$(BUILD)/ui_render_action_card.o \
+	$(BUILD)/ui_render_child.o \
+	$(BUILD)/ui_render_setup.o \
+	$(BUILD)/ui_render_plan.o \
 	$(BUILD)/ui_render_pages.o \
 	$(BUILD)/ui_render_dialogs.o \
+	$(BUILD)/ui_render_dialog_policy.o \
+	$(BUILD)/ui_render_dialog_input.o \
+	$(BUILD)/ui_render_overlay_account.o \
+	$(BUILD)/ui_render_overlay_plan.o \
+	$(BUILD)/ui_render_overlay_support.o \
 	$(BUILD)/ui_render_overlays.o \
 	$(BUILD)/ui_theme.o \
 	$(BUILD)/ui_state.o \
+	$(BUILD)/ui_plan_state.o \
+	$(BUILD)/ui_navigation_state.o \
+	$(BUILD)/ui_status_state.o \
 	$(BUILD)/ui_input_state.o \
 	$(BUILD)/ui_result_state.o \
 	$(BUILD)/ui_layout.o \
@@ -91,10 +112,14 @@ OBJS += \
 	$(BUILD)/eden_runtime.o \
 	$(BUILD)/pctl_stub.o \
 	$(BUILD)/sysmodule_storage.o \
+	$(BUILD)/sysmodule_audit.o \
 	$(BUILD)/sysmodule_history.o \
+	$(BUILD)/sysmodule_results.o \
 	$(BUILD)/sysmodule_control.o \
 	$(BUILD)/sysmodule_setup.o \
 	$(BUILD)/sysmodule_requests.o \
+	$(BUILD)/sysmodule_request_grants.o \
+	$(BUILD)/sysmodule_request_recovery.o \
 	$(BUILD)/sysmodule_core.o \
 	$(BUILD)/play_timer_settings_layout.o \
 	$(BUILD)/token_v1.o
@@ -115,7 +140,19 @@ $(BUILD)/main.o: main.c | $(BUILD)
 $(BUILD)/nro_runtime.o: nro_runtime.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/nro_input_dialogs.o: nro_input_dialogs.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_preferences.o: nro_preferences.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/nro_requests.o: nro_requests.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_redemption.o: nro_redemption.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_result_poll.o: nro_result_poll.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/nro_setup.o: nro_setup.c nro_app_internal.h | $(BUILD)
@@ -139,6 +176,12 @@ $(BUILD)/nro_support.o: nro_support.c nro_app_internal.h | $(BUILD)
 $(BUILD)/nro_actions.o: nro_actions.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/nro_action_dispatch.o: nro_action_dispatch.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_plan_actions.o: nro_plan_actions.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/nro_input.o: nro_input.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -157,13 +200,49 @@ $(BUILD)/album_restriction.o: ../album_restriction.c ../album_restriction.h | $(
 $(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h ui_model.h ui_state.h ui_layout.h ui_theme.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/ui_render_primitives.o: ui_render_primitives.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_text.o: ui_render_text.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/ui_render_core.o: ui_render_core.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_components.o: ui_render_components.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_action_card.o: ui_render_action_card.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_child.o: ui_render_child.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_setup.o: ui_render_setup.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_plan.o: ui_render_plan.c ui_render_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_render_pages.o: ui_render_pages.c ui_render_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_render_dialogs.o: ui_render_dialogs.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_dialog_policy.o: ui_render_dialog_policy.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_dialog_input.o: ui_render_dialog_input.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_overlay_account.o: ui_render_overlay_account.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_overlay_plan.o: ui_render_overlay_plan.c ui_render_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_render_overlay_support.o: ui_render_overlay_support.c ui_render_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_render_overlays.o: ui_render_overlays.c ui_render_internal.h | $(BUILD)
@@ -173,6 +252,15 @@ $(BUILD)/ui_theme.o: ui_theme.c ui_theme.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_state.o: ui_state.c ui_state.h ui_model.h ui_layout.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_plan_state.o: ui_plan_state.c ui_state.h ui_model.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_navigation_state.o: ui_navigation_state.c ui_state.h ui_model.h ui_layout.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_status_state.o: ui_status_state.c ui_state.h ui_model.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_input_state.o: ui_input_state.c ui_input_state.h ui_model.h | $(BUILD)
@@ -268,7 +356,13 @@ $(BUILD)/sysmodule_core.o: ../../sysmodule/sysmodule_core.c ../../sysmodule/sysm
 $(BUILD)/sysmodule_storage.o: ../../sysmodule/sysmodule_storage.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/sysmodule_audit.o: ../../sysmodule/sysmodule_audit.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/sysmodule_history.o: ../../sysmodule/sysmodule_history.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sysmodule_results.o: ../../sysmodule/sysmodule_results.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sysmodule_control.o: ../../sysmodule/sysmodule_control.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
@@ -278,6 +372,12 @@ $(BUILD)/sysmodule_setup.o: ../../sysmodule/sysmodule_setup.c ../../sysmodule/sy
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sysmodule_requests.o: ../../sysmodule/sysmodule_requests.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sysmodule_request_grants.o: ../../sysmodule/sysmodule_request_grants.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sysmodule_request_recovery.o: ../../sysmodule/sysmodule_request_recovery.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/play_timer_settings_layout.o: ../../platform/switch/play_timer_settings_layout.c ../../platform/switch/play_timer_settings_layout.h | $(BUILD)

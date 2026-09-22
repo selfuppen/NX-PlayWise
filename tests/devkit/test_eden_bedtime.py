@@ -19,7 +19,11 @@ def main() -> None:
         for name in (
             "main.c",
             "nro_runtime.c",
+            "nro_input_dialogs.c",
+            "nro_preferences.c",
             "nro_requests.c",
+            "nro_redemption.c",
+            "nro_result_poll.c",
             "nro_setup.c",
             "nro_security.c",
             "nro_pairing.c",
@@ -27,6 +31,8 @@ def main() -> None:
             "nro_policy_requests.c",
             "nro_support.c",
             "nro_actions.c",
+            "nro_action_dispatch.c",
+            "nro_plan_actions.c",
             "nro_input.c",
             "nro_touch_input.c",
         )
@@ -35,9 +41,21 @@ def main() -> None:
         (ROOT / "companion/nro" / name).read_text(encoding="utf-8")
         for name in (
             "ui_graphics.c",
+            "ui_render_primitives.c",
+            "ui_render_text.c",
             "ui_render_core.c",
+            "ui_render_components.c",
+            "ui_render_action_card.c",
+            "ui_render_child.c",
+            "ui_render_setup.c",
+            "ui_render_plan.c",
             "ui_render_pages.c",
             "ui_render_dialogs.c",
+            "ui_render_dialog_policy.c",
+            "ui_render_dialog_input.c",
+            "ui_render_overlay_account.c",
+            "ui_render_overlay_plan.c",
+            "ui_render_overlay_support.c",
             "ui_render_overlays.c",
         )
     )
@@ -45,10 +63,14 @@ def main() -> None:
         (ROOT / "sysmodule" / name).read_text(encoding="utf-8")
         for name in (
             "sysmodule_storage.c",
+            "sysmodule_audit.c",
             "sysmodule_history.c",
+            "sysmodule_results.c",
             "sysmodule_control.c",
             "sysmodule_setup.c",
             "sysmodule_requests.c",
+            "sysmodule_request_grants.c",
+            "sysmodule_request_recovery.c",
             "sysmodule_core.c",
         )
     )
