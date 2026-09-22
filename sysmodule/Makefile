@@ -51,6 +51,7 @@ SYSMODULE_CFILES := \
 	sysmodule_storage.c \
 	sysmodule_history.c \
 	sysmodule_control.c \
+	sysmodule_setup.c \
 	sysmodule_requests.c \
 	sysmodule_core.c
 CFILES := $(foreach dir,$(filter-out .,$(SOURCES)),$(notdir $(wildcard $(dir)/*.c))) $(SYSMODULE_CFILES)

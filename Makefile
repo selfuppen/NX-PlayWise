@@ -41,6 +41,7 @@ ORCH_SRCS := \
 	sysmodule/sysmodule_storage.c \
 	sysmodule/sysmodule_history.c \
 	sysmodule/sysmodule_control.c \
+	sysmodule/sysmodule_setup.c \
 	sysmodule/sysmodule_requests.c \
 	sysmodule/sysmodule_core.c \
 	companion/auth.c \
@@ -52,7 +53,7 @@ ORCH_SRCS := \
 	companion/overlay/bridge.c
 
 TEST_SRCS := tests/c/test_host_core.c
-UI_STATE_SRCS := companion/nro/ui_state.c companion/nro/ui_layout.c companion/nro/ui_hit_test.c
+UI_STATE_SRCS := companion/nro/ui_state.c companion/nro/ui_input_state.c companion/nro/ui_result_state.c companion/nro/ui_layout.c companion/nro/ui_hit_test.c
 UI_RENDER_SRCS := companion/nro/ui_graphics.c companion/nro/ui_render_core.c companion/nro/ui_render_pages.c companion/nro/ui_render_dialogs.c companion/nro/ui_render_overlays.c
 UI_TEST_SRCS := $(UI_STATE_SRCS) companion/nro/ui_theme.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/activity_history.c common/protocol/redemption_history.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c common/usage/daily_summary.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 

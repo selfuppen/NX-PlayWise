@@ -21,8 +21,14 @@ def main() -> None:
             "nro_runtime.c",
             "nro_requests.c",
             "nro_setup.c",
+            "nro_security.c",
+            "nro_pairing.c",
+            "nro_history.c",
+            "nro_policy_requests.c",
+            "nro_support.c",
             "nro_actions.c",
             "nro_input.c",
+            "nro_touch_input.c",
         )
     )
     graphics = "\n".join(
@@ -41,6 +47,7 @@ def main() -> None:
             "sysmodule_storage.c",
             "sysmodule_history.c",
             "sysmodule_control.c",
+            "sysmodule_setup.c",
             "sysmodule_requests.c",
             "sysmodule_core.c",
         )

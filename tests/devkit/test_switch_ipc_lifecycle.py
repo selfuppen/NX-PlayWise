@@ -31,8 +31,14 @@ def main() -> None:
             "nro_runtime.c",
             "nro_requests.c",
             "nro_setup.c",
+            "nro_security.c",
+            "nro_pairing.c",
+            "nro_history.c",
+            "nro_policy_requests.c",
+            "nro_support.c",
             "nro_actions.c",
             "nro_input.c",
+            "nro_touch_input.c",
             "nro_app_internal.h",
         )
     )

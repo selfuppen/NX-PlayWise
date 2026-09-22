@@ -35,8 +35,14 @@ OBJS := \
 	$(BUILD)/nro_runtime.o \
 	$(BUILD)/nro_requests.o \
 	$(BUILD)/nro_setup.o \
+	$(BUILD)/nro_security.o \
+	$(BUILD)/nro_pairing.o \
+	$(BUILD)/nro_history.o \
+	$(BUILD)/nro_policy_requests.o \
+	$(BUILD)/nro_support.o \
 	$(BUILD)/nro_actions.o \
 	$(BUILD)/nro_input.o \
+	$(BUILD)/nro_touch_input.o \
 	$(BUILD)/hot_reload.o \
 	$(BUILD)/hot_reload_guard.o \
 	$(BUILD)/album_restriction.o \
@@ -47,6 +53,8 @@ OBJS := \
 	$(BUILD)/ui_render_overlays.o \
 	$(BUILD)/ui_theme.o \
 	$(BUILD)/ui_state.o \
+	$(BUILD)/ui_input_state.o \
+	$(BUILD)/ui_result_state.o \
 	$(BUILD)/ui_layout.o \
 	$(BUILD)/ui_hit_test.o \
 	$(BUILD)/auth.o \
@@ -85,6 +93,7 @@ OBJS += \
 	$(BUILD)/sysmodule_storage.o \
 	$(BUILD)/sysmodule_history.o \
 	$(BUILD)/sysmodule_control.o \
+	$(BUILD)/sysmodule_setup.o \
 	$(BUILD)/sysmodule_requests.o \
 	$(BUILD)/sysmodule_core.o \
 	$(BUILD)/play_timer_settings_layout.o \
@@ -112,10 +121,28 @@ $(BUILD)/nro_requests.o: nro_requests.c nro_app_internal.h | $(BUILD)
 $(BUILD)/nro_setup.o: nro_setup.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/nro_security.o: nro_security.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_pairing.o: nro_pairing.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_history.o: nro_history.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_policy_requests.o: nro_policy_requests.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_support.o: nro_support.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/nro_actions.o: nro_actions.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/nro_input.o: nro_input.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_touch_input.o: nro_touch_input.c nro_app_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/hot_reload.o: hot_reload.c hot_reload.h ../hot_reload_guard.h | $(BUILD)
@@ -146,6 +173,12 @@ $(BUILD)/ui_theme.o: ui_theme.c ui_theme.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_state.o: ui_state.c ui_state.h ui_model.h ui_layout.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_input_state.o: ui_input_state.c ui_input_state.h ui_model.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_result_state.o: ui_result_state.c ui_state.h ui_model.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_layout.o: ui_layout.c ui_layout.h ui_state.h ui_model.h | $(BUILD)
@@ -239,6 +272,9 @@ $(BUILD)/sysmodule_history.o: ../../sysmodule/sysmodule_history.c ../../sysmodul
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sysmodule_control.o: ../../sysmodule/sysmodule_control.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/sysmodule_setup.o: ../../sysmodule/sysmodule_setup.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/sysmodule_requests.o: ../../sysmodule/sysmodule_requests.c ../../sysmodule/sysmodule_internal.h | $(BUILD)

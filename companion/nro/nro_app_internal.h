@@ -258,6 +258,7 @@ void open_bedtime_time_editor(UiState *ui, PtcUiBedtimeTimeTarget target);
 void request_bedtime_leave(UiState *ui, int target_page, bool leave_parent);
 void request_parent_navigation(UiState *ui, int target_page, bool leave_parent);
 void close_code_result(UiState *ui);
+void apply_bedtime_preset(UiState *ui, int preset);
 void handle_overlay_input(UiState *ui, u64 down);
 void handle_touch(UiState *ui, int x, int y);
 void draw(UiState *ui);

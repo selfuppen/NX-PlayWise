@@ -2,6 +2,7 @@
 #define PTC_COMPANION_UI_STATE_H
 
 #include "ui_model.h"
+#include "ui_input_state.h"
 
 typedef enum {
     PTC_UI_PLAN_IMPACT_CURRENT = 0,
@@ -24,16 +25,10 @@ typedef struct {
 int ptc_ui_parent_action_count(PtcUiParentPage page);
 const char *ptc_ui_settings_status_label(const PtcUiModel *model);
 PtcUiActionState ptc_ui_settings_support_state(const PtcUiModel *model);
-const char *ptc_ui_shortcut_common_label(int index);
 void ptc_ui_format_custom_shortcut_hint(
     const char *shortcut_label,
     char *out,
     size_t out_size);
-bool ptc_ui_shortcut_mask_held(uint64_t configured_mask, uint64_t buttons);
-bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held, int required_samples);
-bool ptc_ui_confirm_hold_update(PtcUiConfirmHoldState *state, bool held, int required_samples);
-bool ptc_ui_touch_after_entry_allowed(bool *ignore_until_release, bool touch_active);
-uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int required_samples);
 bool ptc_ui_bedtime_save_will_restrict(const PtcUiModel *model, uint16_t minute_of_day);
 int ptc_ui_migrate_setup_step(int step, int wizard_version);
 PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model);
@@ -53,47 +48,7 @@ void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, s
 int ptc_ui_weekday_for_display_slot(int slot);
 void ptc_ui_change_parent_page(PtcUiModel *model, int direction);
 void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertical);
-uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
 uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback);
-bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out);
-bool ptc_ui_parse_date_yyyymmdd(const char *text, uint16_t today_day_index, uint16_t *out_day_index);
-bool ptc_ui_parse_time_hhmm(const char *text, uint16_t *out_minute_of_day);
-bool ptc_ui_parse_span_days(const char *text, uint16_t *out_days);
-bool ptc_ui_grant_minutes_legal(uint16_t minutes, uint16_t maximum);
-bool ptc_ui_duration_value(const PtcUiModel *model, uint16_t *out_value);
-void ptc_ui_duration_select_field(PtcUiModel *model, PtcUiDurationField field);
-void ptc_ui_duration_toggle_field(PtcUiModel *model);
-bool ptc_ui_duration_step_field(PtcUiModel *model, int step);
-int ptc_ui_value_repeat_update(
-    PtcUiValueRepeatState *state,
-    int direction,
-    bool hour_field,
-    int64_t now_ms);
-void ptc_ui_pin_open(PtcUiModel *model, const char *title, const char *guide);
-bool ptc_ui_pin_append(PtcUiModel *model, int digit);
-bool ptc_ui_pin_backspace(PtcUiModel *model);
-bool ptc_ui_pin_validate(PtcUiModel *model);
-void ptc_ui_pin_finish(PtcUiModel *model);
-int ptc_ui_pin_digit_from_vector(int x, int y, int deadzone);
-int ptc_ui_pin_digit_from_button(int direction);
-void ptc_ui_pin_format_mask(const PtcUiModel *model, char *out, size_t out_size);
-void ptc_ui_numpad_open(
-    PtcUiModel *model,
-    PtcUiNumpadPurpose purpose,
-    PtcUiOverlay return_overlay,
-    const char *title,
-    const char *guide,
-    uint8_t max_digits,
-    uint16_t minimum,
-    uint16_t maximum,
-    uint16_t current);
-void ptc_ui_numpad_move(PtcUiModel *model, int horizontal, int vertical);
-void ptc_ui_numpad_activate(PtcUiModel *model);
-void ptc_ui_numpad_backspace(PtcUiModel *model);
-void ptc_ui_numpad_clear(PtcUiModel *model);
-void ptc_ui_numpad_adjust(PtcUiModel *model, int delta);
-bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value);
-void ptc_ui_numpad_finish(PtcUiModel *model);
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);

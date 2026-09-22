@@ -144,6 +144,13 @@ bool process_status(PtcSysmodule *sysmodule, const PtcRequest *request,
     PtcClockSnapshot now);
 int usage_summary_tick(PtcSysmodule *sysmodule, PtcClockSnapshot now);
 bool request_file_path(char *out, size_t out_size, const PtcSysmodule *sysmodule, const char *queue, const char *name);
+PtcErrorCode ptc_backup_before_write(
+    PtcSysmodule *sysmodule,
+    const PtcRequest *request,
+    const char *mode);
+bool ptc_pctl_settings_snapshot_equal(
+    const PtcPctlSettingsSnapshot *a,
+    const PtcPctlSettingsSnapshot *b);
 PtcErrorCode apply_target(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
