@@ -443,6 +443,21 @@ def test_parse_args_previews() -> None:
         require(args.previews is True, "parse_args must accept --previews")
 
 
+def test_parse_args_eden() -> None:
+    with mock.patch.object(sys, "argv", ["package_remote.py"]):
+        args = package_remote.parse_args()
+        require(args.with_eden is True, "parse_args must default with_eden to True")
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--no-eden"]):
+        args = package_remote.parse_args()
+        require(args.with_eden is False, "parse_args must accept --no-eden")
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--without-eden"]):
+        args = package_remote.parse_args()
+        require(args.with_eden is False, "parse_args must accept --without-eden")
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--with-eden"]):
+        args = package_remote.parse_args()
+        require(args.with_eden is True, "parse_args must accept --with-eden")
+
+
 def test_sync_doc_previews(tmp_path: Path | None = None) -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)
@@ -470,6 +485,7 @@ def main() -> int:
     test_clean_package_safety()
     test_public_package_selection()
     test_parse_args_previews()
+    test_parse_args_eden()
     test_sync_doc_previews()
     print("Container package helper tests passed")
     return 0

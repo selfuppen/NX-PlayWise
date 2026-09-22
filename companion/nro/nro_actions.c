@@ -144,11 +144,13 @@ void handle_today_action_ready(UiState *ui, int index)
         char basis[256];
         ptc_ui_format_restore_today_basis(&ui->model, basis, sizeof(basis));
         snprintf(body, sizeof(body), "%s\n%s", date, basis);
-        open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, "清除今日额度调整", body);
-        if (restored.rule.mode == PTC_RULE_MODE_LIMIT) {
-            ui->model.confirm_hold_required = !ui->model.played_minutes_available ||
-                ui->model.played_minutes < 0 || (int)restored.rule.minutes - ui->model.played_minutes <= 0;
-        }
+        bool requires_hold = restored.rule.mode == PTC_RULE_MODE_LIMIT &&
+            (!ui->model.played_minutes_available || ui->model.played_minutes < 0 ||
+             (int)restored.rule.minutes - ui->model.played_minutes <= 0);
+        if (requires_hold)
+            open_danger_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, "清除今日额度调整", body);
+        else
+            open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, "清除今日额度调整", body);
         break;
     }
     case PTC_UI_OPERATION_SKIP_BEDTIME: {
@@ -714,10 +716,9 @@ void save_weekly_from_page(UiState *ui)
     before = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_SAVED);
     after = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_WEEKLY);
     snprintf(body, sizeof(body), "保存前请核对今天的最终规则、预计剩余时间和覆盖原因。");
-    open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY,
+    open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY,
         (before.source != after.source || ptc_ui_day_rule_effectively_changed(before.rule, after.rule))
             ? "周计划将影响今天" : "确认保存每周计划", body);
-    ui->model.confirm_hold_required = true;
 }
 
 void save_holiday_from_page(UiState *ui)
@@ -742,11 +743,10 @@ void save_holiday_from_page(UiState *ui)
     }
     before = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_SAVED);
     after = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_HOLIDAY);
-    open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_HOLIDAY,
+    open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_HOLIDAY,
         (before.source != after.source || ptc_ui_day_rule_effectively_changed(before.rule, after.rule))
             ? "国家节假日设置将影响今天" : "确认保存国家节假日设置",
         "保存前请核对今天的最终规则、预计剩余时间和覆盖原因。");
-    ui->model.confirm_hold_required = true;
 }
 
 void apply_pending_navigation(UiState *ui)
@@ -843,18 +843,10 @@ void save_bedtime_from_page(UiState *ui)
         time_t raw_now = time(NULL);
         struct tm *tm_now = localtime(&raw_now);
         uint16_t minute_of_day = tm_now ? (uint16_t)(tm_now->tm_hour * 60 + tm_now->tm_min) : 0;
-        PtcRules eval_rules;
-        memset(&eval_rules, 0, sizeof(eval_rules));
-        eval_rules.bedtime = *draft;
-        PtcBedtimeEvaluation eval = ptc_bedtime_evaluate(
-            &eval_rules, ui->model.day_index, ptc_weekday_from_day_index(ui->model.day_index), minute_of_day);
-        bool will_restrict_now = draft->enabled && eval.active &&
-            !(ui->model.bedtime_active && !ui->model.bedtime_skipped);
-        if (will_restrict_now) {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_BEDTIME,
+        if (ptc_ui_bedtime_save_will_restrict(&ui->model, minute_of_day)) {
+            open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_BEDTIME,
                 "立即进入就寝限制？",
-                "当前时间处于设定的就寝时段内。保存后将立即暂停游戏并限制游玩（立断）。\n是否确认立即生效？");
-            ui->model.confirm_hold_required = false;
+                "当前时间处于设定的就寝时段内。保存后将立即暂停游戏并限制游玩（立断）。\n请长按 A 或持续按住确认按钮 1 秒。");
             return;
         }
     }

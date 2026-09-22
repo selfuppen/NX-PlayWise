@@ -405,6 +405,17 @@ int main(int argc, char **argv)
         model.parent_page = PTC_UI_PARENT_TODAY;
         ptc_ui_open_home_details(&model);
         failed |= save_preview(argv[2], "parent", "parent-details-decision", &model, dark);
+        {
+            PtcUiModel active_details = model;
+            active_details.bedtime_policy.enabled = true;
+            active_details.bedtime_active = true;
+            active_details.bedtime_skipped = false;
+            active_details.bedtime_start_day_index = active_details.day_index;
+            active_details.bedtime_start_minute = 1260;
+            active_details.bedtime_end_minute = 420;
+            snprintf(active_details.bedtime_source, sizeof(active_details.bedtime_source), "weekly");
+            failed |= save_preview(argv[2], "parent", "parent-details-bedtime-active", &active_details, dark);
+        }
         model.home_details_page = 1;
         failed |= save_preview(argv[2], "parent", "parent-details-usage", &model, dark);
         ptc_ui_cancel_overlay(&model);
@@ -715,6 +726,36 @@ int main(int argc, char **argv)
             model.selected_index = 0;
             snprintf(name, sizeof(name), "bedtime-section-%d", section);
             failed |= save_preview(argv[2], "bedtime", name, &model, dark);
+        }
+        {
+            PtcUiModel danger = model;
+            time_t preview_now = time(NULL);
+            struct tm *preview_tm = localtime(&preview_now);
+            uint16_t preview_minute = preview_tm
+                ? (uint16_t)(preview_tm->tm_hour * 60 + preview_tm->tm_min)
+                : 0;
+            PtcBedtimeWindow danger_window = {true, 1260, 600};
+            /* Keep the preview inside a valid bedtime window at any build time. */
+            if (preview_minute >= 600 && preview_minute < 1260)
+                danger_window = (PtcBedtimeWindow){true, (uint16_t)(preview_minute - 1), 480};
+            danger.draft_bedtime_policy.enabled = true;
+            danger.draft_bedtime_policy.calendar_enabled = false;
+            danger.draft_bedtime_policy.scheduled_override.present = false;
+            for (int day = 0; day < 7; ++day)
+                danger.draft_bedtime_policy.week[day] = danger_window;
+            danger.bedtime_dirty = true;
+            danger.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
+            danger.selected_index = 10;
+            if (!ptc_ui_bedtime_save_will_restrict(&danger, preview_minute)) return 1;
+            failed |= save_preview(argv[2], "bedtime", "bedtime-save-danger", &danger, dark);
+            danger.overlay = PTC_UI_OVERLAY_CONFIRM;
+            danger.operation = PTC_UI_OPERATION_SAVE_BEDTIME;
+            danger.confirm_hold_required = true;
+            danger.overlay_selection = 1;
+            snprintf(danger.overlay_title, sizeof(danger.overlay_title), "立即进入就寝限制？");
+            snprintf(danger.overlay_body, sizeof(danger.overlay_body),
+                "当前时间处于设定的就寝时段内。保存后将立即暂停游戏并限制游玩（立断）。\n请长按 A 或持续按住确认按钮 1 秒。");
+            failed |= save_preview(argv[2], "bedtime", "bedtime-save-danger-confirm", &danger, dark);
         }
         snprintf(model.result_status, sizeof(model.result_status), "error");
         snprintf(model.command_name, sizeof(model.command_name), "保存就寝时间");

@@ -884,6 +884,8 @@ def main() -> int:
         print(f"PASS: container previews -> {ROOT / 'build' / 'ui-previews'}")
     else:
         print(f"PASS: container packages -> {ROOT / 'build' / 'packages'}")
+        if args.with_eden and only in ("all", "eden"):
+            print(f"PASS: Eden test app -> {ROOT / 'build' / 'eden-test' / EDEN_NRO}")
     return 0
 
 

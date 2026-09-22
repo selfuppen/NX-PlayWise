@@ -7,7 +7,7 @@ static const UiAction TODAY_ACTIONS[] = {
     {"快速加时", "", UI_SUCCESS, UI_ACTION_ICON_ADD_TIME, UI_ACTION_VISUAL_QUICK_ADD},
     {"今日不限时", "今天不设时间上限", UI_SUCCESS, UI_ACTION_ICON_INFINITY, UI_ACTION_VISUAL_NONE},
     {"清除今日调整", "恢复下级额度规则", UI_MUTED, UI_ACTION_ICON_RESTORE, UI_ACTION_VISUAL_NONE},
-    {"就寝窗口", "当前关闭", UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
+    {"跳过本次就寝", "当前关闭", UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
     {"自主缓冲", "当前关闭", UI_MUTED, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
 };
 
@@ -1866,6 +1866,9 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
     const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
     char line[128];
+    time_t raw_now = time(NULL);
+    struct tm *tm_now = localtime(&raw_now);
+    uint16_t minute_of_day = tm_now ? (uint16_t)(tm_now->tm_hour * 60 + tm_now->tm_min) : 0;
     for (int i = 0; i < 3; ++i) {
         UiRect rect = to_uirect(ptc_ui_bedtime_section_rect(i));
         bool selected = model->bedtime_section == (PtcUiBedtimeSection)i;
@@ -1875,6 +1878,8 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     }
 
     bool bedtime_enforcing = model->bedtime_active && !model->bedtime_skipped;
+    bool bedtime_will_restrict = ptc_ui_bedtime_save_will_restrict(model, minute_of_day);
+    bool bedtime_save_danger = model->bedtime_dirty && bedtime_will_restrict;
 
     /* 独立醒目的就寝管控总闸卡片 (Bedtime Master Circuit Breaker Card) */
     UiRect master_card = to_uirect(ptc_ui_bedtime_master_switch_rect());
@@ -1925,9 +1930,6 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_rect_outline(pixels, stride, state_pill, 9, 1, state_color);
         draw_text_center(pixels, stride, state_pill, state_text, 14, state_color);
 
-        time_t raw_now = time(NULL);
-        struct tm *tm_now = localtime(&raw_now);
-        uint16_t minute_of_day = tm_now ? (uint16_t)(tm_now->tm_hour * 60 + tm_now->tm_min) : 0;
         PtcRules eval_rules;
         memset(&eval_rules, 0, sizeof(eval_rules));
         eval_rules.bedtime = *draft;
@@ -1941,8 +1943,11 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         if (!draft->enabled) {
             snprintf(forecast_line1, sizeof(forecast_line1), "当前预测：总闸已切断，全部就寝规则休眠，夜间不限制");
             f1_color = UI_MUTED;
-        } else if (eval.active) {
+        } else if (bedtime_will_restrict) {
             snprintf(forecast_line1, sizeof(forecast_line1), "! 立即生效：当前处于就寝时段，保存后将立断！");
+            f1_color = UI_DANGER;
+        } else if (eval.active) {
+            snprintf(forecast_line1, sizeof(forecast_line1), "当前状态：就寝限制正在生效");
             f1_color = UI_DANGER;
         } else {
             PtcEffectiveBedtime eff_today = ptc_bedtime_resolve_start_day(
@@ -2084,8 +2089,10 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
             UI_PAGE, UI_ACCENT, model->selected_index == 8 && !model->bedtime_section_focused, model->disable_flag_present);
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 9), "ZL  放弃",
             UI_PAGE, UI_INK, model->selected_index == 9 && !model->bedtime_section_focused, !model->bedtime_dirty);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 10), "+  保存",
-            UI_ACCENT, UI_ON_ACCENT, model->selected_index == 10 && !model->bedtime_section_focused,
+        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 10),
+            bedtime_save_danger ? "+  保存（将立断）" : "+  保存",
+            bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
+            model->selected_index == 10 && !model->bedtime_section_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);
 
         /* 左下角就寝规则说明面板（与右侧预测卡片底部平齐对齐至 y=630） */
@@ -2137,8 +2144,10 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         }
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 3), "ZL  放弃",
             UI_PAGE, UI_INK, model->selected_index == 3 && !model->bedtime_section_focused, !model->bedtime_dirty);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 4), "+  保存",
-            UI_ACCENT, UI_ON_ACCENT, model->selected_index == 4 && !model->bedtime_section_focused,
+        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 4),
+            bedtime_save_danger ? "+  保存（将立断）" : "+  保存",
+            bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
+            model->selected_index == 4 && !model->bedtime_section_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);
 
         /* 节假日日历规则与总闸状态指引面板（底部与右侧预测卡平齐至 y=630） */
@@ -2239,8 +2248,10 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 4), "ZL  放弃",
             UI_PAGE, UI_INK, model->selected_index == 4 && !model->bedtime_section_focused, !model->bedtime_dirty);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 5), "+  保存",
-            UI_ACCENT, UI_ON_ACCENT, model->selected_index == 5 && !model->bedtime_section_focused,
+        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 5),
+            bedtime_save_danger ? "+  保存（将立断）" : "+  保存",
+            bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
+            model->selected_index == 5 && !model->bedtime_section_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);
     }
 }

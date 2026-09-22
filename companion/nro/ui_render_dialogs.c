@@ -695,6 +695,7 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     bool unlimited_change = model->operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT;
     bool direct_quota_change = add_change || unlimited_change;
     bool code_preview = model->operation == PTC_UI_OPERATION_REDEEM_OFFLINE_CODE;
+    bool bedtime_save = model->operation == PTC_UI_OPERATION_SAVE_BEDTIME;
     bool restore_keeps_quota = false;
     bool limit_keeps_quota = false;
     bool code_keeps_quota = false;
@@ -708,9 +709,9 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
                   model->operation == PTC_UI_OPERATION_SAVE_HOLIDAY ||
                   model->operation == PTC_UI_OPERATION_EMERGENCY_DISABLE ||
                   model->operation == PTC_UI_OPERATION_RESUME_CONTROL ||
-                  model->operation == PTC_UI_OPERATION_COMPLETE_SETUP ||
-                  model->operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT ||
-                  code_preview;
+                   model->operation == PTC_UI_OPERATION_COMPLETE_SETUP ||
+                   model->operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT ||
+                   code_preview || bedtime_save;
     if (model->operation == PTC_UI_OPERATION_SAVE_WEEKLY ||
         model->operation == PTC_UI_OPERATION_SAVE_HOLIDAY) {
         draw_plan_save_confirmation(pixels, stride, model);
@@ -840,6 +841,14 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
                 time_state_accent(unlimited_change || after_minutes >= 0,
                                   unlimited_change, after_minutes));
         }
+    } else if (bedtime_save) {
+        UiRect bedtime_risk = {dialog.x + 54, dialog.y + 218, 652, 92};
+        fill_round_rect(pixels, stride, bedtime_risk, 16, UI_DANGER_SOFT);
+        draw_rect_outline(pixels, stride, bedtime_risk, 16, 2, UI_DANGER);
+        draw_text_center(pixels, stride, (UiRect){bedtime_risk.x, bedtime_risk.y + 10, bedtime_risk.width, 34},
+                         "保存后立即进入就寝限制", 24, UI_DANGER);
+        draw_text_center(pixels, stride, (UiRect){bedtime_risk.x, bedtime_risk.y + 48, bedtime_risk.width, 28},
+                         "游戏会暂停；之后仅可通过 Overlay 恢复", 17, UI_DANGER);
     } else if (model->confirm_hold_required && model->played_minutes_available) {
         snprintf(comparison, sizeof(comparison), "额度已耗 %d 分钟       还剩 0 分钟",
                  model->played_minutes);
@@ -906,7 +915,8 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
                                 : (limit_change && model->unrestricted_today == 1 ? "不限时将改为限时，请确认状态变化" : "请确认状态变化"),
                              19, model->confirm_hold_required ? UI_DANGER : UI_WARNING);
         }
-    } else if (!album_change && (!model->confirm_hold_required || !model->played_minutes_available)) {
+    } else if (!album_change && !bedtime_save &&
+               (!model->confirm_hold_required || !model->played_minutes_available)) {
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 230, 620, 72}, 16, danger ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
         draw_text_center(pixels, stride, (UiRect){dialog.x + 70, dialog.y + 230, 620, 72},
                          danger ? "请确认已了解这项操作的影响" : "确认执行这项操作", 22,

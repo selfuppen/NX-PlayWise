@@ -235,11 +235,15 @@ static void open_code_preview_confirm(UiState *ui, bool refreshed)
     const char *body = refreshed
         ? "实时状态发生了重要变化，已重新计算预览。\n确认后才会生效并消费这枚加时码。"
         : "请核对当前状态和兑换后的预计结果。\n确认前不会消费这枚加时码。";
-    open_confirm_overlay(ui, PTC_UI_OPERATION_REDEEM_OFFLINE_CODE,
-                         refreshed ? "状态已变化，请再次确认" : "确认兑换加时码", body);
-    ui->model.confirm_hold_required = !ui->model.code_preview_after_available ||
+    bool requires_hold = !ui->model.code_preview_after_available ||
         ui->model.code_preview_after_minutes == 0 ||
         ui->model.code_preview_converts_unlimited;
+    if (requires_hold)
+        open_danger_confirm_overlay(ui, PTC_UI_OPERATION_REDEEM_OFFLINE_CODE,
+                                    refreshed ? "状态已变化，请再次确认" : "确认兑换加时码", body);
+    else
+        open_confirm_overlay(ui, PTC_UI_OPERATION_REDEEM_OFFLINE_CODE,
+                             refreshed ? "状态已变化，请再次确认" : "确认兑换加时码", body);
 }
 
 void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minutes)

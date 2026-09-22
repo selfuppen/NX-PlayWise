@@ -323,6 +323,62 @@ static void test_shortcut_hold_and_setup_migration(void)
     check_int(ptc_ui_migrate_setup_step(5, 4), PTC_UI_SETUP_ZONE, "v4 zone step is stable");
 }
 
+static void test_bedtime_save_restriction_projection(void)
+{
+    PtcUiModel model = {0};
+    PtcRules rules;
+    uint16_t holiday_day = 0;
+    int weekday;
+
+    ptc_rules_default(&rules);
+    model.day_index = 2380;
+    model.draft_bedtime_policy = rules.bedtime;
+    model.draft_bedtime_policy.enabled = true;
+    model.draft_bedtime_policy.calendar_enabled = false;
+    model.draft_bedtime_policy.scheduled_override.present = false;
+    for (int day = 0; day < 7; ++day) model.draft_bedtime_policy.week[day].enabled = false;
+    weekday = ptc_weekday_from_day_index(model.day_index);
+    model.draft_bedtime_policy.week[weekday] = (PtcBedtimeWindow){true, 1260, 420};
+
+    check_true(ptc_ui_bedtime_save_will_restrict(&model, 1320),
+               "bedtime save detects an active weekly window");
+    check_true(!ptc_ui_bedtime_save_will_restrict(&model, 1200),
+               "bedtime save stays ordinary outside the window");
+    model.draft_bedtime_policy.enabled = false;
+    check_true(!ptc_ui_bedtime_save_will_restrict(&model, 1320),
+               "disabled bedtime master switch cannot immediately restrict");
+    model.draft_bedtime_policy.enabled = true;
+    model.bedtime_active = true;
+    model.bedtime_skipped = false;
+    check_true(!ptc_ui_bedtime_save_will_restrict(&model, 1320),
+               "already enforced bedtime is not advertised as a new immediate restriction");
+    model.bedtime_skipped = true;
+    check_true(ptc_ui_bedtime_save_will_restrict(&model, 1320),
+               "editing a skipped active window keeps the immediate restriction warning");
+    model.bedtime_active = false;
+    model.bedtime_skipped = false;
+
+    model.draft_bedtime_policy.scheduled_override.present = true;
+    model.draft_bedtime_policy.scheduled_override.start_day_index = model.day_index;
+    model.draft_bedtime_policy.scheduled_override.end_day_index = model.day_index;
+    model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+    model.draft_bedtime_policy.scheduled_override.rule.window = (PtcBedtimeWindow){true, 1380, 360};
+    check_true(ptc_ui_bedtime_save_will_restrict(&model, 1390),
+               "bedtime save resolves an active specified-date window");
+
+    check_true(ptc_day_index_from_date(2026, 10, 1, &holiday_day),
+               "bedtime holiday projection date converts");
+    model.day_index = holiday_day;
+    model.draft_bedtime_policy.scheduled_override.present = false;
+    model.draft_bedtime_policy.calendar_enabled = true;
+    model.draft_bedtime_policy.holiday_rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+    model.draft_bedtime_policy.holiday_rule.window = (PtcBedtimeWindow){true, 1320, 420};
+    check_true(ptc_ui_bedtime_save_will_restrict(&model, 1330),
+               "bedtime save resolves an active statutory-holiday window");
+    check_true(!ptc_ui_bedtime_save_will_restrict(&model, 1440),
+               "bedtime save rejects an invalid minute of day");
+}
+
 static void test_rule_result_guidance(void)
 {
     PtcUiModel model;
@@ -2661,6 +2717,7 @@ int main(void)
     test_parent_status_summary();
     test_release_navigation();
     test_shortcut_hold_and_setup_migration();
+    test_bedtime_save_restriction_projection();
     test_rule_result_guidance();
     test_numeric_input();
     test_pin_input();

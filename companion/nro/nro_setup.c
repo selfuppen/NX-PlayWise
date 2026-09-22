@@ -380,6 +380,12 @@ void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *tit
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", body);
 }
 
+void open_danger_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body)
+{
+    open_confirm_overlay(ui, operation, title, body);
+    ui->model.confirm_hold_required = true;
+}
+
 void open_weekly_page(UiState *ui)
 {
     PtcDayRule saved_draft[7];
@@ -631,10 +637,9 @@ void request_clear_redemption_history(UiState *ui)
     }
     ui->auth_retry_action = AUTH_RETRY_CLEAR_REDEMPTION_HISTORY;
     if (!verify_sensitive_pin(ui, "清空全部加时码使用记录前，请再次输入本应用 PIN")) return;
-    open_confirm_overlay(ui, PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY,
+    open_danger_confirm_overlay(ui, PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY,
         "清空全部加时码使用记录？",
         "此操作不可撤销，但不会清除防重复兑换账本；已经使用的加时码仍然不能再次使用。请长按确认。");
-    ui->model.confirm_hold_required = true;
 }
 
 void submit_scheduled_override(UiState *ui)
@@ -748,10 +753,9 @@ void request_clear_activity_history(UiState *ui)
     }
     ui->auth_retry_action = AUTH_RETRY_CLEAR_ACTIVITY_HISTORY;
     if (!verify_sensitive_pin(ui, "清空全部家庭活动记录前，请再次输入本应用 PIN")) return;
-    open_confirm_overlay(ui, PTC_UI_OPERATION_CLEAR_ACTIVITY_HISTORY,
+    open_danger_confirm_overlay(ui, PTC_UI_OPERATION_CLEAR_ACTIVITY_HISTORY,
         "清空全部家庭活动记录？",
         "此操作不可撤销；加时码防重复兑换账本和控制规则保持不变。请长按确认。");
-    ui->model.confirm_hold_required = true;
 }
 
 bool commit_credential(UiState *ui)

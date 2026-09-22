@@ -34,6 +34,7 @@ bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held,
 bool ptc_ui_confirm_hold_update(PtcUiConfirmHoldState *state, bool held, int required_samples);
 bool ptc_ui_touch_after_entry_allowed(bool *ignore_until_release, bool touch_active);
 uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int required_samples);
+bool ptc_ui_bedtime_save_will_restrict(const PtcUiModel *model, uint16_t minute_of_day);
 int ptc_ui_migrate_setup_step(int step, int wizard_version);
 PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model);
 void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint16_t day_index, int64_t now,

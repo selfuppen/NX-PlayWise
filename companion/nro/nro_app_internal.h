@@ -200,6 +200,7 @@ void setup_previous(UiState *ui);
 void setup_primary(UiState *ui);
 void handle_setup_input(UiState *ui, u64 down, u64 held);
 void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
+void open_danger_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
 void open_weekly_page(UiState *ui);
 void refresh_security_state(UiState *ui);
 bool verify_sensitive_pin(UiState *ui, const char *action);

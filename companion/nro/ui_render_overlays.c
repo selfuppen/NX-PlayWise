@@ -1585,9 +1585,16 @@ static void draw_home_decision_details(uint32_t *pixels, uint32_t stride,
     fill_round_rect(pixels, stride, bedtime, 10, bedtime_enforcing ? UI_DANGER_SOFT : UI_WARNING_SOFT);
     draw_rect_outline(pixels, stride, bedtime, 10, 1, bedtime_enforcing ? UI_DANGER : UI_WARNING);
     draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 22,
-              bedtime_enforcing ? "🌙 并行就寝限制（强制立断生效中）" : "🌙 并行就寝限制", 13,
-              bedtime_enforcing ? UI_DANGER : UI_WARNING);
-    draw_text(pixels, stride, bedtime.x + (bedtime_enforcing ? 200 : 130), bedtime.y + 22, decision.bedtime, 14, UI_INK);
+              "🌙 并行就寝限制", 13, bedtime_enforcing ? UI_DANGER : UI_WARNING);
+    if (bedtime_enforcing) {
+        UiRect enforcing_pill = {bedtime.x + bedtime.width - 112, bedtime.y + 8, 98, 24};
+        fill_round_rect(pixels, stride, enforcing_pill, 6, UI_DANGER);
+        draw_text_center(pixels, stride, enforcing_pill, "立断生效中", 12, UI_ON_ACCENT);
+    } else {
+        char bedtime_status[128];
+        fit_text(bedtime_status, sizeof(bedtime_status), decision.bedtime, 14, bedtime.width - 158);
+        draw_text(pixels, stride, bedtime.x + 130, bedtime.y + 22, bedtime_status, 14, UI_INK);
+    }
     draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 52,
               bedtime_enforcing ? "当前处于就寝窗口，独立于今日额度直接强制锁定机器。"
                                 : "就寝限制独立于时长并行生效；到点后无论剩余额度直接锁定机器。", 11, UI_MUTED);

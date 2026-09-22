@@ -114,6 +114,26 @@ uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int re
     return (uint16_t)(progress > 1000 ? 1000 : progress);
 }
 
+bool ptc_ui_bedtime_save_will_restrict(const PtcUiModel *model, uint16_t minute_of_day)
+{
+    PtcRules rules;
+    PtcBedtimeEvaluation evaluation;
+    if (!model || minute_of_day >= 1440 ||
+        !ptc_bedtime_policy_is_valid(&model->draft_bedtime_policy) ||
+        !model->draft_bedtime_policy.enabled ||
+        (model->bedtime_active && !model->bedtime_skipped)) {
+        return false;
+    }
+    memset(&rules, 0, sizeof(rules));
+    rules.bedtime = model->draft_bedtime_policy;
+    evaluation = ptc_bedtime_evaluate(
+        &rules,
+        model->day_index,
+        ptc_weekday_from_day_index(model->day_index),
+        minute_of_day);
+    return evaluation.active;
+}
+
 int ptc_ui_migrate_setup_step(int step, int wizard_version)
 {
     if (step <= 0) return 0;
