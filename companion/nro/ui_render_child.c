@@ -183,8 +183,11 @@ static void draw_child_action_icon(uint32_t *pixels, uint32_t stride, PtcUiRect 
 {
     int cx = target.x + 34;
     int cy = target.y + target.h / 2;
-    uint32_t color = disabled ? UI_DISABLED : (primary ? UI_ON_ACCENT : UI_ACCENT);
-    uint32_t background = disabled ? UI_PAGE : (primary ? UI_RGB(ui_mix_rgb(UI_BLENDED(accent), 0xFFFFFF, 28)) : UI_SURFACE);
+    bool completed = kind == 3;
+    uint32_t color = completed ? UI_SUCCESS :
+        (disabled ? UI_DISABLED : (primary ? UI_ON_ACCENT : UI_ACCENT));
+    uint32_t background = completed ? UI_SUCCESS_SOFT :
+        (disabled ? UI_PAGE : (primary ? UI_RGB(ui_mix_rgb(UI_BLENDED(accent), 0xFFFFFF, 28)) : UI_SURFACE));
     fill_round_rect(pixels, stride, (UiRect){cx - 18, cy - 18, 36, 36}, 12, background);
     if (kind == 0) {
         draw_rect_outline(pixels, stride, (UiRect){cx - 10, cy - 8, 20, 16}, 4, 2, color);
@@ -195,6 +198,10 @@ static void draw_child_action_icon(uint32_t *pixels, uint32_t stride, PtcUiRect 
         draw_circle_outline(pixels, stride, cx - 2, cy - 1, 9, 2, color);
         draw_line(pixels, stride, cx - 7, cy + 7, cx + 8, cy - 8, 2, color);
         draw_line(pixels, stride, cx - 2, cy + 2, cx - 8, cy - 2, 2, color);
+    } else if (kind == 3) {
+        draw_circle_outline(pixels, stride, cx, cy, 10, 2, color);
+        draw_line(pixels, stride, cx - 5, cy, cx - 1, cy + 4, 2, color);
+        draw_line(pixels, stride, cx - 1, cy + 4, cx + 6, cy - 5, 2, color);
     } else {
         draw_child_calendar_icon(pixels, stride, cx, cy, color);
     }
@@ -254,7 +261,8 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         (model->daily_buffer_minutes == 0 ? "今日自主缓冲未开启" : "自主缓冲仅可在限时日领取"));
     home_button(pixels, stride, ptc_ui_child_buffer_rect(), buffer, false, false,
         disabled || !model->daily_buffer_available);
-    draw_child_action_icon(pixels, stride, ptc_ui_child_buffer_rect(), 1, false,
+    draw_child_action_icon(pixels, stride, ptc_ui_child_buffer_rect(),
+                           model->daily_buffer_claimed ? 3 : 1, false,
                            disabled || !model->daily_buffer_available);
     home_button(pixels, stride, ptc_ui_home_details_rect(false), "+  使用详情", false, false, model->waiting);
     draw_child_action_icon(pixels, stride, ptc_ui_home_details_rect(false), 2, false, model->waiting);

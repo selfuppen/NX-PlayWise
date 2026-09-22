@@ -6,9 +6,10 @@
 const char *ptc_ui_shortcut_common_label(int index);
 bool ptc_ui_shortcut_mask_held(uint64_t configured_mask, uint64_t buttons);
 bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held, int required_samples);
-bool ptc_ui_confirm_hold_update(PtcUiConfirmHoldState *state, bool held, int required_samples);
+bool ptc_ui_confirm_hold_update(PtcUiConfirmHoldState *state, bool held, int64_t now_ms, int required_ms);
 bool ptc_ui_touch_after_entry_allowed(bool *ignore_until_release, bool touch_active);
-uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int required_samples);
+uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int64_t now_ms, int required_ms);
+bool ptc_ui_overlay_primary_uses_plus(PtcUiOverlay overlay);
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
 bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out);
 bool ptc_ui_parse_date_yyyymmdd(const char *text, uint16_t today_day_index, uint16_t *out_day_index);

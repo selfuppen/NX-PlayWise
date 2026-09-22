@@ -178,14 +178,8 @@ void handle_overlay_input(UiState *ui, u64 down)
             open_bedtime_time_editor(ui, ui->model.overlay_selection == 1
                 ? PTC_UI_BEDTIME_TIME_START : PTC_UI_BEDTIME_TIME_END);
         } else if (down & HidNpadButton_Plus) {
-            if (!ptc_bedtime_policy_is_valid(draft)) {
-                snprintf(ui->model.message, sizeof(ui->model.message),
-                    "就寝窗口必须跨越午夜，开始时间需要晚于结束时间。");
-            } else if (draft->enabled && !ui->model.bedtime_official_setting_confirmed) {
-                submit_bedtime_confirmation(ui);
-            } else {
-                submit_bedtime_policy(ui);
-            }
+            update_bedtime_dirty(ui);
+            save_bedtime_from_page(ui);
         }
         return;
     }

@@ -541,7 +541,8 @@ typedef struct {
 } PtcUiShortcutHoldState;
 
 typedef struct {
-    int held_samples;
+    int64_t started_ms;
+    bool holding;
     bool completed;
 } PtcUiConfirmHoldState;
 

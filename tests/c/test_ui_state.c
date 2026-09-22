@@ -299,12 +299,25 @@ static void test_shortcut_hold_and_setup_migration(void)
                !ptc_ui_shortcut_hold_update(&hold, true, 4) &&
                ptc_ui_shortcut_hold_update(&hold, true, 4),
                "shortcut can trigger again after complete release");
-    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, true, 3), "confirm hold starts without completing");
-    check_int(ptc_ui_confirm_hold_progress(&confirm_hold, 3), 333, "confirm hold exposes deterministic progress");
-    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, true, 3), "confirm hold waits for threshold");
-    check_true(ptc_ui_confirm_hold_update(&confirm_hold, true, 3), "confirm hold completes at threshold");
-    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, true, 3), "completed hold submits only once");
-    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, false, 3), "release resets confirm hold");
+    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, true, 1000, 1000),
+               "confirm hold starts without completing");
+    check_int(ptc_ui_confirm_hold_progress(&confirm_hold, 1500, 1000), 500,
+              "confirm hold exposes elapsed-time progress");
+    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, true, 1999, 1000),
+               "confirm hold waits through 999ms");
+    check_true(ptc_ui_confirm_hold_update(&confirm_hold, true, 2000, 1000),
+               "confirm hold completes at exactly one second");
+    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, true, 2200, 1000),
+               "completed hold submits only once");
+    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, false, 2201, 1000),
+               "release resets confirm hold");
+    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, true, 5000, 1000) &&
+               !ptc_ui_confirm_hold_update(&confirm_hold, true, 4999, 1000) &&
+               !ptc_ui_confirm_hold_update(&confirm_hold, true, 5998, 1000) &&
+               ptc_ui_confirm_hold_update(&confirm_hold, true, 5999, 1000),
+               "clock rollback restarts the one-second hold safely");
+    check_true(!ptc_ui_confirm_hold_update(&confirm_hold, false, 6000, 1000),
+               "release resets confirm hold after clock rollback");
     {
         bool ignore_touch_until_release = true;
         check_true(!ptc_ui_touch_after_entry_allowed(&ignore_touch_until_release, true),
@@ -315,7 +328,23 @@ static void test_shortcut_hold_and_setup_migration(void)
         check_true(ptc_ui_touch_after_entry_allowed(&ignore_touch_until_release, true),
                    "a new touch after release is accepted by PIN");
     }
-    check_int(ptc_ui_confirm_hold_progress(&confirm_hold, 3), 0, "released confirm hold clears progress");
+    check_int(ptc_ui_confirm_hold_progress(&confirm_hold, 6000, 1000), 0,
+              "released confirm hold clears progress");
+    check_true(ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_MINUTES) &&
+               ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_NUMPAD) &&
+               ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_MINUTE_EDITOR) &&
+               ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_CREDENTIAL) &&
+               ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_SHORTCUT_MANAGER) &&
+               ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_SCHEDULED) &&
+               ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_AUTONOMY) &&
+               ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_BEDTIME) &&
+               ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_BEDTIME_WINDOW) &&
+               ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_BEDTIME_SPECIAL),
+               "touch primary actions share the visible Plus save shortcut");
+    check_true(!ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_CONFIRM) &&
+               !ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_QUICK_ADD) &&
+               !ptc_ui_overlay_primary_uses_plus(PTC_UI_OVERLAY_BEDTIME_BULK),
+               "A-labelled primary actions keep their matching touch dispatch");
 
     check_int(ptc_ui_migrate_setup_step(0, 3), 0, "completed older wizard remains complete");
     check_int(ptc_ui_migrate_setup_step(3, 3), PTC_UI_SETUP_SHORTCUT, "unfinished older wizard restarts safely");
@@ -1337,8 +1366,8 @@ static void test_release_hit_targets(void)
         PtcUiRect notice_rect = ptc_ui_notice_rect();
         PtcUiRect details_rect = ptc_ui_notice_details_rect();
         PtcUiRect footer_rect = ptc_ui_parent_footer_rect(4);
-        check_true(summary_rect.x == hours_rect.x && summary_rect.w == 350 && summary_rect.h == 254 &&
-                   summary_rect.y > hours_rect.y + hours_rect.h,
+        check_true(summary_rect.x > hours_rect.x + hours_rect.w &&
+                   summary_rect.w == 366 && summary_rect.h == 254,
                    "compact plan summary uses the reserved right-side editor panel");
         check_true(!rects_overlap(summary_rect, ptc_ui_cancel_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)) &&
                    !rects_overlap(summary_rect, ptc_ui_confirm_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)),
@@ -2418,6 +2447,21 @@ static void test_support_next_step(void)
 
 static void test_time_menu_modal_touch_guards(void)
 {
+    static const PtcUiOverlay plus_primary_modals[] = {
+        PTC_UI_OVERLAY_MINUTES,
+        PTC_UI_OVERLAY_WEEKLY,
+        PTC_UI_OVERLAY_NUMPAD,
+        PTC_UI_OVERLAY_CREDENTIAL,
+        PTC_UI_OVERLAY_WEEKLY_LEAVE,
+        PTC_UI_OVERLAY_SHORTCUT_MANAGER,
+        PTC_UI_OVERLAY_WEEKLY_BULK,
+        PTC_UI_OVERLAY_MINUTE_EDITOR,
+        PTC_UI_OVERLAY_SCHEDULED,
+        PTC_UI_OVERLAY_AUTONOMY,
+        PTC_UI_OVERLAY_BEDTIME,
+        PTC_UI_OVERLAY_BEDTIME_WINDOW,
+        PTC_UI_OVERLAY_BEDTIME_SPECIAL,
+    };
     static const PtcUiOverlay bedtime_modals[] = {
         PTC_UI_OVERLAY_BEDTIME_WINDOW,
         PTC_UI_OVERLAY_BEDTIME_SPECIAL,
@@ -2453,6 +2497,39 @@ static void test_time_menu_modal_touch_guards(void)
         PTC_UI_HIT_OVERLAY_CONFIRM, 0, "quick-add continue is touchable");
     check_hit(ptc_ui_hit_test(&model, 10, 10), PTC_UI_HIT_NONE, 0,
         "quick-add empty space cannot reach the page below");
+
+    for (size_t index = 0; index < sizeof(plus_primary_modals) / sizeof(plus_primary_modals[0]); ++index) {
+        PtcUiRect primary;
+        model.overlay = plus_primary_modals[index];
+        model.waiting = false;
+        primary = ptc_ui_confirm_rect(model.overlay);
+        check_hit(hit_center(&model, primary), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+            "visible Plus primary action is touchable");
+        check_hit(ptc_ui_hit_test(&model, primary.x, primary.y),
+            PTC_UI_HIT_OVERLAY_CONFIRM, 0, "Plus primary action includes its top-left boundary");
+        check_hit(ptc_ui_hit_test(&model, primary.x + primary.w - 1, primary.y + primary.h - 1),
+            PTC_UI_HIT_OVERLAY_CONFIRM, 0, "Plus primary action includes its bottom-right boundary");
+        check_hit(ptc_ui_hit_test(&model, primary.x - 1, primary.y - 1),
+            PTC_UI_HIT_NONE, 0, "Plus primary action excludes outside space");
+    }
+
+    model.overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
+    for (int field = 0; field < 2; ++field) {
+        PtcUiRect field_rect = ptc_ui_minute_editor_field_rect((PtcUiDurationField)field);
+        check_hit(hit_center(&model, field_rect), PTC_UI_HIT_DURATION_FIELD, field,
+            "duration value field next to the keypad is touchable");
+        for (int key = 0; key < 12; ++key)
+            check_true(!rects_overlap(field_rect, ptc_ui_minute_editor_key_rect(key)),
+                "duration value fields do not overlap keypad keys");
+    }
+    for (int quick = 0; quick < 2; ++quick) {
+        PtcUiRect quick_rect = ptc_ui_minute_editor_quick_rect(quick);
+        check_hit(hit_center(&model, quick_rect), PTC_UI_HIT_NUMPAD_QUICK, quick,
+            "duration quick adjustment is touchable beside the input value");
+        for (int key = 0; key < 12; ++key)
+            check_true(!rects_overlap(quick_rect, ptc_ui_minute_editor_key_rect(key)),
+                "duration quick adjustments do not overlap keypad keys");
+    }
 
     for (size_t index = 0; index < sizeof(bedtime_modals) / sizeof(bedtime_modals[0]); ++index) {
         model.overlay = bedtime_modals[index];

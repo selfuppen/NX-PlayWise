@@ -433,17 +433,20 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         quota_unchanged = !ptc_ui_day_rule_effectively_changed(current_rule.rule, requested_rule);
     }
 
-    /* The compact editor keeps the keypad on the left and puts the two-part value on the right. */
-    int guide_y = dialog.y + 116;
-    draw_r_stick_glyph(pixels, stride, dialog.x + 548, guide_y - 11, 20, model->duration_scroll_dir);
-    draw_text(pixels, stride, dialog.x + 576, guide_y + 4, "上下调整", 15, UI_MUTED);
+    /* Keep the editable value, quick steps and keypad in one continuous input
+     * column. The right column is reserved for consequences and validation. */
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 112,
+              clock ? "输入时刻" : "输入时长", 15, UI_MUTED);
     {
         char step_hint[32];
         if (model->duration_field == PTC_UI_DURATION_HOURS)
             snprintf(step_hint, sizeof(step_hint), "每步 1 小时");
         else snprintf(step_hint, sizeof(step_hint), "当前 ±%u", (unsigned)model->duration_step_feedback);
-        draw_text(pixels, stride, dialog.x + 676, guide_y + 4, step_hint, 14, UI_ACCENT);
-        draw_text(pixels, stride, dialog.x + 790, guide_y + 4, "L / R 选栏", 14, UI_MUTED);
+        draw_r_stick_glyph(pixels, stride, dialog.x + 524, dialog.y + 112, 20,
+                           model->duration_scroll_dir);
+        draw_text(pixels, stride, dialog.x + 552, dialog.y + 127, "上下调整", 14, UI_MUTED);
+        draw_text(pixels, stride, dialog.x + 650, dialog.y + 127, step_hint, 14, UI_ACCENT);
+        draw_text(pixels, stride, dialog.x + 776, dialog.y + 127, "L / R 选栏", 14, UI_MUTED);
     }
 
     for (int field = 0; field < 2; ++field) {
@@ -470,7 +473,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
                              down_active ? UI_ACCENT : UI_MUTED);
         }
     }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 218, 350, 28},
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 192, 432, 24},
                      total_value, 19, entered_valid ? UI_ACCENT : UI_DANGER);
     if (holiday) {
         PtcUiModel preview = *model;
@@ -483,7 +486,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             draw_plan_impact_compact(pixels, stride, &preview, PTC_UI_PLAN_HOLIDAY,
                                      to_uirect(ptc_ui_minute_editor_summary_rect()));
         } else {
-            draw_text(pixels, stride, dialog.x + 558, dialog.y + 310, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
+            draw_text(pixels, stride, dialog.x + 542, dialog.y + 250, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
         }
     } else if (weekly) {
         PtcUiModel preview = *model;
@@ -492,7 +495,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             draw_plan_impact_compact(pixels, stride, &preview, PTC_UI_PLAN_WEEKLY,
                                      to_uirect(ptc_ui_minute_editor_summary_rect()));
         } else {
-            draw_text(pixels, stride, dialog.x + 558, dialog.y + 310, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
+            draw_text(pixels, stride, dialog.x + 542, dialog.y + 250, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
         }
     } else if (scheduled) {
         PtcUiModel preview = *model;
@@ -502,45 +505,49 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             draw_plan_impact_compact(pixels, stride, &preview, PTC_UI_PLAN_SCHEDULED,
                                      to_uirect(ptc_ui_minute_editor_summary_rect()));
         } else {
-            draw_text(pixels, stride, dialog.x + 558, dialog.y + 310, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
+            draw_text(pixels, stride, dialog.x + 542, dialog.y + 250, "请先输入有效额度", 18, UI_RGB(UI_BLENDED(danger)));
         }
     } else if (grant) {
         PtcUiTimeProjection current_status;
         ptc_ui_project_time_status(model, ptc_ui_render_now(), &current_status);
-        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 264, 350, 74},
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 520, dialog.y + 176, 366, 74},
                              "当前状态", current_status.remaining_text,
                              time_projection_color(current_status.state));
-        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 350, 350, 74},
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 520, dialog.y + 264, 366, 74},
                              "下一枚代码时长", value,
                              entered_valid ? UI_ACCENT : UI_DANGER);
-        draw_wrapped_text(pixels, stride, dialog.x + 548, dialog.y + 458,
+        draw_wrapped_text(pixels, stride, dialog.x + 536, dialog.y + 372,
             "只影响下一枚新代码；已生成代码保留签发时长。非法协议面额不会生成。",
-            15, 326, 21, 3, UI_MUTED);
+            15, 334, 21, 4, UI_MUTED);
     } else if (clock) {
-        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 278, 350, 74},
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 520, dialog.y + 176, 366, 74},
                              "时刻范围", "00:00 - 23:59", UI_ACCENT);
-        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 364, 350, 74},
-                             "快速调整", "ZL -15 分钟   ZR +15 分钟", UI_ACCENT);
-        draw_wrapped_text(pixels, stride, dialog.x + 548, dialog.y + 472,
-            "时间可跨过 00:00 循环；完成后仍会检查就寝窗口是否跨越午夜及是否与相邻日期冲突。",
-            15, 326, 21, 3, UI_MUTED);
+        fill_round_rect(pixels, stride, (UiRect){dialog.x + 520, dialog.y + 266, 366, 154},
+                        14, UI_RAISED);
+        draw_rect_outline(pixels, stride, (UiRect){dialog.x + 520, dialog.y + 266, 366, 154},
+                          14, 1, UI_BORDER);
+        draw_text(pixels, stride, dialog.x + 538, dialog.y + 294,
+                  "完成输入后检查", 17, UI_INK);
+        draw_wrapped_text(pixels, stride, dialog.x + 538, dialog.y + 326,
+            "时间可跨过 00:00 循环；返回就寝窗口时会检查是否跨越午夜，以及是否与相邻日期冲突。",
+            15, 330, 22, 4, UI_MUTED);
     } else if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
-        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 264, 350, 74}, "额度已耗（估算）", played,
+        draw_time_state_card(pixels, stride, (UiRect){dialog.x + 520, dialog.y + 176, 366, 74}, "额度已耗（估算）", played,
                              model->played_minutes_available ? UI_ACCENT : UI_WARNING);
         if (quota_unchanged) {
             draw_unchanged_quota_card(pixels, stride,
-                (UiRect){dialog.x + 536, dialog.y + 350, 350, 74},
+                (UiRect){dialog.x + 520, dialog.y + 264, 366, 74},
                 "输入值与当前今日额度相同。");
         } else {
             draw_remaining_transition(pixels, stride,
-                (UiRect){dialog.x + 536, dialog.y + 350, 350, 74},
+                (UiRect){dialog.x + 520, dialog.y + 264, 366, 74},
                 "当前剩余", remaining,
                 time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
                                   model->unrestricted_today == 1, model->remaining_minutes),
                 "操作后剩余", after,
                 time_state_accent(after_minutes >= 0, false, after_minutes));
         }
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 536, dialog.y + 438, 350, 28}, freshness, 16,
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 520, dialog.y + 352, 366, 28}, freshness, 16,
                          status_age_color(model));
     }
 
@@ -559,11 +566,10 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         draw_text_center(pixels, stride, key, KEY_LABELS[index], index == 9 || index == 11 ? 18 : 28,
                          selected ? UI_ACCENT : UI_INK);
     }
-    if (model->numpad_error[0]) {
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 488, 450, 28},
-                         model->numpad_error, 18, UI_DANGER);
-    }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 518, 450, 24},
-                     "使用方向键与 A 键输入数字，或直接触摸", 16, UI_MUTED);
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 514, 432, 24},
+                     model->numpad_error[0] ? model->numpad_error :
+                         "方向键与 A 输入数字，也可直接触摸",
+                     model->numpad_error[0] ? 15 : 16,
+                     model->numpad_error[0] ? UI_DANGER : UI_MUTED);
     draw_overlay_actions(pixels, stride, model, "+  完成输入");
 }

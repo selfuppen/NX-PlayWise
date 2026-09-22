@@ -38,17 +38,30 @@ bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held,
     return true;
 }
 
-bool ptc_ui_confirm_hold_update(PtcUiConfirmHoldState *state, bool held, int required_samples)
+bool ptc_ui_confirm_hold_update(PtcUiConfirmHoldState *state, bool held, int64_t now_ms, int required_ms)
 {
-    if (!state || required_samples <= 0) return false;
+    int64_t elapsed;
+    if (!state || required_ms <= 0) return false;
     if (!held) {
-        state->held_samples = 0;
+        state->started_ms = 0;
+        state->holding = false;
         state->completed = false;
         return false;
     }
     if (state->completed) return false;
-    if (state->held_samples < required_samples) ++state->held_samples;
-    if (state->held_samples < required_samples) return false;
+    if (!state->holding) {
+        state->started_ms = now_ms;
+        state->holding = true;
+        return false;
+    }
+    if (now_ms < state->started_ms) {
+        /* A monotonic clock should not move backwards. Restart safely if the
+         * platform clock is replaced or reset while the button is held. */
+        state->started_ms = now_ms;
+        return false;
+    }
+    elapsed = now_ms - state->started_ms;
+    if (elapsed < required_ms) return false;
     state->completed = true;
     return true;
 }
@@ -63,12 +76,38 @@ bool ptc_ui_touch_after_entry_allowed(bool *ignore_until_release, bool touch_act
     return true;
 }
 
-uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int required_samples)
+uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int64_t now_ms, int required_ms)
 {
-    int progress;
-    if (!state || required_samples <= 0 || state->held_samples <= 0) return 0;
-    progress = state->held_samples * 1000 / required_samples;
+    int64_t elapsed;
+    int64_t progress;
+    if (!state || required_ms <= 0 || !state->holding) return 0;
+    if (state->completed) return 1000;
+    if (now_ms < state->started_ms) return 0;
+    elapsed = now_ms - state->started_ms;
+    progress = elapsed * 1000 / required_ms;
     return (uint16_t)(progress > 1000 ? 1000 : progress);
+}
+
+bool ptc_ui_overlay_primary_uses_plus(PtcUiOverlay overlay)
+{
+    switch (overlay) {
+    case PTC_UI_OVERLAY_MINUTES:
+    case PTC_UI_OVERLAY_WEEKLY:
+    case PTC_UI_OVERLAY_NUMPAD:
+    case PTC_UI_OVERLAY_CREDENTIAL:
+    case PTC_UI_OVERLAY_WEEKLY_LEAVE:
+    case PTC_UI_OVERLAY_SHORTCUT_MANAGER:
+    case PTC_UI_OVERLAY_WEEKLY_BULK:
+    case PTC_UI_OVERLAY_MINUTE_EDITOR:
+    case PTC_UI_OVERLAY_SCHEDULED:
+    case PTC_UI_OVERLAY_AUTONOMY:
+    case PTC_UI_OVERLAY_BEDTIME:
+    case PTC_UI_OVERLAY_BEDTIME_WINDOW:
+    case PTC_UI_OVERLAY_BEDTIME_SPECIAL:
+        return true;
+    default:
+        return false;
+    }
 }
 
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum)

@@ -116,6 +116,13 @@ static void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int
     case UI_ACTION_ICON_RESTORE:
         draw_restore_arc(pixels, stride, cx, cy, 9.5f, 2, color);
         break;
+    case UI_ACTION_ICON_CLEAR_OVERRIDE:
+        /* Two rule layers with the foreground override being removed. */
+        draw_rect_outline(pixels, stride, (UiRect){cx - 8, cy - 9, 16, 12}, 3, 2, color);
+        draw_rect_outline(pixels, stride, (UiRect){cx - 11, cy - 4, 16, 12}, 3, 2, color);
+        fill_circle_mini(pixels, stride, (float)(cx + 7), (float)(cy + 6), 5.0f, color);
+        draw_line(pixels, stride, cx + 4, cy + 6, cx + 10, cy + 6, 2, UI_ON_ACCENT);
+        break;
     case UI_ACTION_ICON_MOON:
         draw_crescent_moon(pixels, stride, cx - 1, cy, 10.5f, 9.0f, 4.0f, -2.5f, color);
         draw_line(pixels, stride, cx + 5, cy - 5, cx + 5, cy - 1, 1, color);

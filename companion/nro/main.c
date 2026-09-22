@@ -207,26 +207,27 @@ int main(int argc, char **argv)
 
         if (ui.model.overlay != PTC_UI_OVERLAY_NONE) {
             if (ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required) {
+                int64_t confirm_now_ms = ptc_ui_anim_now_ms();
                 bool pad_confirm_held = (held & HidNpadButton_A) && ui.model.overlay_selection == 1;
                 bool touch_confirm_held = touch_active &&
                     ptc_ui_rect_contains(ptc_ui_confirm_rect(ui.model.overlay), touch_x, touch_y);
                 if (touch_confirm_held) touch_down = true;
                 if (down & HidNpadButton_B) {
-                    ptc_ui_confirm_hold_update(&ui.confirm_hold, false, DANGER_CONFIRM_HOLD_TICKS);
+                    ptc_ui_confirm_hold_update(&ui.confirm_hold, false, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
                     handle_overlay_input(&ui, down);
                 } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
-                    ptc_ui_confirm_hold_update(&ui.confirm_hold, false, DANGER_CONFIRM_HOLD_TICKS);
+                    ptc_ui_confirm_hold_update(&ui.confirm_hold, false, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
                     handle_overlay_input(&ui, down);
                 } else {
                     if (ptc_ui_confirm_hold_update(&ui.confirm_hold,
-                            pad_confirm_held || touch_confirm_held, DANGER_CONFIRM_HOLD_TICKS)) {
+                            pad_confirm_held || touch_confirm_held, confirm_now_ms, DANGER_CONFIRM_HOLD_MS)) {
                         confirm_operation(&ui);
                     }
                 }
                 ui.model.confirm_hold_progress = ptc_ui_confirm_hold_progress(
-                    &ui.confirm_hold, DANGER_CONFIRM_HOLD_TICKS);
+                    &ui.confirm_hold, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
             } else {
-                ptc_ui_confirm_hold_update(&ui.confirm_hold, false, DANGER_CONFIRM_HOLD_TICKS);
+                ptc_ui_confirm_hold_update(&ui.confirm_hold, false, ptc_ui_anim_now_ms(), DANGER_CONFIRM_HOLD_MS);
                 ui.model.confirm_hold_progress = 0;
                 handle_overlay_input(&ui, down);
             }

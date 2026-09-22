@@ -326,6 +326,12 @@ int main(int argc, char **argv)
         model = baseline;
         model.view = PTC_UI_CHILD;
         failed |= save_preview(argv[2], "child", "child", &model, dark);
+        {
+            PtcUiModel claimed = model;
+            claimed.daily_buffer_available = false;
+            claimed.daily_buffer_claimed = true;
+            failed |= save_preview(argv[2], "child", "child-buffer-claimed", &claimed, dark);
+        }
         ptc_ui_open_home_details(&model);
         failed |= save_preview(argv[2], "child", "child-details", &model, dark);
         ptc_ui_cancel_overlay(&model);

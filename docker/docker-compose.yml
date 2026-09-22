@@ -13,8 +13,8 @@ services:
     volumes:
       - playwise-ssh-keys:/root/.ssh
       - /data/sshdata:/root/data
-      # - /h/workspace/codes/switch:/ws
-      - /D/workspace/codes/nintendo-switch:/ws
+      - /h/workspace/codes/switch:/ws
+      # - /D/workspace/codes/nintendo-switch:/ws
     restart: unless-stopped
 
 volumes:

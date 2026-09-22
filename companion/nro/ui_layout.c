@@ -1001,7 +1001,7 @@ PtcUiRect ptc_ui_minute_editor_key_rect(int index)
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
     int row = index / 3;
     int column = index % 3;
-    PtcUiRect rect = {dialog.x + 34 + column * 138, dialog.y + 214 + row * 66, 126, 54};
+    PtcUiRect rect = {dialog.x + 34 + column * 145, dialog.y + 278 + row * 58, 133, 52};
     if (index < 0 || index >= 12) return (PtcUiRect){0, 0, 0, 0};
     return rect;
 }
@@ -1009,7 +1009,7 @@ PtcUiRect ptc_ui_minute_editor_key_rect(int index)
 PtcUiRect ptc_ui_minute_editor_quick_rect(int index)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
-    PtcUiRect rect = {dialog.x + 34 + index * 226, dialog.y + 154, 208, 48};
+    PtcUiRect rect = {dialog.x + 34 + index * 226, dialog.y + 220, 206, 46};
     if (index < 0 || index >= 2) return (PtcUiRect){0, 0, 0, 0};
     return rect;
 }
@@ -1017,15 +1017,15 @@ PtcUiRect ptc_ui_minute_editor_quick_rect(int index)
 PtcUiRect ptc_ui_minute_editor_field_rect(PtcUiDurationField field)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
-    if (field == PTC_UI_DURATION_HOURS) return (PtcUiRect){dialog.x + 536, dialog.y + 146, 166, 68};
-    if (field == PTC_UI_DURATION_MINUTES) return (PtcUiRect){dialog.x + 720, dialog.y + 146, 166, 68};
+    if (field == PTC_UI_DURATION_HOURS) return (PtcUiRect){dialog.x + 34, dialog.y + 126, 206, 64};
+    if (field == PTC_UI_DURATION_MINUTES) return (PtcUiRect){dialog.x + 260, dialog.y + 126, 206, 64};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_minute_editor_summary_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
-    return (PtcUiRect){dialog.x + 536, dialog.y + 264, 350, 254};
+    return (PtcUiRect){dialog.x + 520, dialog.y + 160, 366, 254};
 }
 
 bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend)

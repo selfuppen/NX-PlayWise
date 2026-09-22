@@ -192,18 +192,8 @@ void handle_touch(UiState *ui, int x, int y)
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "为避免误操作，请长按手柄 A 或持续按住触摸确认按钮。");
         } else {
-            handle_overlay_input(ui,
-                ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ||
-                ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR ||
-                ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL ||
-                ui->model.overlay == PTC_UI_OVERLAY_SHORTCUT_MANAGER ||
-                ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE ||
-                ui->model.overlay == PTC_UI_OVERLAY_SCHEDULED ||
-                ui->model.overlay == PTC_UI_OVERLAY_AUTONOMY ||
-                ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW ||
-                ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_SPECIAL ||
-                ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_BULK
-                    ? HidNpadButton_Plus : HidNpadButton_A);
+            handle_overlay_input(ui, ptc_ui_overlay_primary_uses_plus(ui->model.overlay)
+                ? HidNpadButton_Plus : HidNpadButton_A);
         }
         break;
     case PTC_UI_HIT_OVERLAY_DISCARD:

@@ -300,10 +300,11 @@ void poll_result(UiState *ui, bool force)
         }
         if (strcmp(ui->model.result_type, "confirm_bedtime_requirements") == 0) {
             if (strcmp(ui->model.result_status, "ok") == 0 && ui->model.bedtime_dirty) {
-                /* First enablement is one guarded save operation: after the
-                 * environment acknowledgement is persisted, submit the
-                 * unchanged full draft before honoring pending navigation. */
-                submit_bedtime_policy(ui);
+                /* Re-enter the common save gate after the environment
+                 * acknowledgement. The current minute may now be inside the
+                 * draft window, so first enablement must still show the
+                 * immediate-restriction confirmation before it submits. */
+                save_bedtime_from_page(ui);
                 if (!ui->waiting) {
                     ui->pending_parent_page = -1;
                     ui->pending_leave_parent = false;
