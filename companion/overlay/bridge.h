@@ -54,4 +54,24 @@ bool ptc_overlay_bridge_status_succeeded(const PtcOverlayBridge *bridge);
 bool ptc_overlay_bridge_offline_code_succeeded(const PtcOverlayBridge *bridge);
 bool ptc_overlay_bridge_preview_succeeded(const PtcOverlayBridge *bridge);
 
+const char *ptc_overlay_rule_source_label(const char *source);
+void ptc_overlay_format_child_quota_parts(
+    const PtcCompanionResultSummary *summary,
+    char *label_out, size_t label_size,
+    char *val_out, size_t val_size,
+    char *note_out, size_t note_size);
+void ptc_overlay_format_child_restriction_guidance(
+    const PtcCompanionResultSummary *summary,
+    char *out, size_t out_size);
+void ptc_overlay_format_child_restriction_summary(
+    const PtcCompanionResultSummary *summary,
+    char *out, size_t out_size);
+void ptc_overlay_format_child_restriction_detail(
+    const PtcCompanionResultSummary *summary,
+    char *out, size_t out_size);
+void ptc_overlay_format_child_buffer_status(
+    const PtcCompanionResultSummary *summary,
+    char *out, size_t out_size);
+
 #endif
+

@@ -1226,13 +1226,19 @@ public:
                      remaining_refresh_pending ? 2 : 1,
                      remaining_refresh_pending ? WAITING_COLOR : FOCUS_BORDER);
 
-        renderer->drawString("额度已耗（估算）", false, cx + 10, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
-        if (summary.valid && summary.played_minutes_available) {
-            std::snprintf(line, sizeof(line), "%d 分钟", summary.played_minutes);
-        } else {
-            std::snprintf(line, sizeof(line), "-- 分钟");
+        char quota_label[32];
+        char quota_val[32];
+        char quota_note[32];
+        ptc_overlay_format_child_quota_parts(&summary,
+            quota_label, sizeof(quota_label),
+            quota_val, sizeof(quota_val),
+            quota_note, sizeof(quota_note));
+
+        renderer->drawString(quota_label, false, cx + 10, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
+        renderer->drawString(quota_val, false, cx + 70, top_banner_y + 23, 15, renderer->a(TEXT_COLOR));
+        if (quota_note[0]) {
+            renderer->drawString(quota_note, false, cx + 124, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
         }
-        renderer->drawString(line, false, cx + 78, top_banner_y + 23, 16, renderer->a(TEXT_COLOR));
 
         renderer->drawString(success_visible_ ? "修改后还可玩" : "今天还可玩", false,
                               cx + 10, top_banner_y + 51, 11, renderer->a(MUTED_COLOR));
@@ -1271,17 +1277,15 @@ public:
                              renderer->a(remaining_refresh_pending ? WAITING_COLOR :
                                          (status_is_stale() ? ERROR_COLOR : MUTED_COLOR)));
 
-        // --- 1. Header Prompt & Guidance (护眼提醒) ---
-        if (summary.valid && summary.bedtime_next_available) {
-            std::snprintf(line, sizeof(line), "下次 bedtime：第 %d 日 %02d:%02d - 次日 %02d:%02d",
-                summary.bedtime_next_start_day_index,
-                summary.bedtime_next_start_minute / 60, summary.bedtime_next_start_minute % 60,
-                summary.bedtime_next_end_minute / 60, summary.bedtime_next_end_minute % 60);
-            renderer->drawString(line, false, cx + 5, cy + 94, 12,
-                renderer->a(summary.bedtime_overlay_verified ? FOCUS_BORDER : ERROR_COLOR), 320);
-        } else {
-            renderer->drawString("提示：加时前记得向窗外远眺 5 分钟！", false, cx + 5, cy + 94, 14, renderer->a(FOCUS_BORDER));
-        }
+        // --- 1. Header Prompt & Guidance (受限时间与护眼提醒) ---
+        char restriction_guidance[128];
+        ptc_overlay_format_child_restriction_guidance(&summary, restriction_guidance, sizeof(restriction_guidance));
+        const bool restriction_urgent = (summary.valid &&
+            ((summary.bedtime_active && !summary.bedtime_skipped) ||
+             summary.daily_restriction_active ||
+             (summary.remaining_available && summary.remaining_minutes == 0)));
+        renderer->drawString(restriction_guidance, false, cx + 5, cy + 94, 12,
+            renderer->a(restriction_urgent ? ERROR_COLOR : FOCUS_BORDER), 350);
 
         // --- 2. Code Display Slots (8位卡片槽 - 增大更醒目) ---
         const s32 slot_y = cy + PTC_OVERLAY_SLOT_Y;
@@ -1398,7 +1402,9 @@ public:
             } else if (success_visible_) {
                 renderer->drawString("[-] 加时成功！（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(SUCCESS_COLOR));
             } else if (has_status_snapshot_) {
-                renderer->drawString("[-] 状态已刷新（按 - 展开）", false, cx + 12, status_y + 21, 12,
+                char restriction_summary[128];
+                ptc_overlay_format_child_restriction_summary(&summary, restriction_summary, sizeof(restriction_summary));
+                renderer->drawString(restriction_summary, false, cx + 12, status_y + 21, 12,
                                      renderer->a(MUTED_COLOR));
             } else {
                 renderer->drawString("[-] 命令与状态（点击或按 - / L / R）", false, cx + 12, status_y + 21, 12, renderer->a(MUTED_COLOR));
@@ -1409,17 +1415,11 @@ public:
             renderer->drawRect(cx, status_y, status_w, expanded_h, renderer->a(PANEL_COLOR));
             draw_outline(renderer, cx, status_y, status_w, expanded_h, 2, FOCUS_BORDER);
 
-            renderer->drawString("[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
-            std::snprintf(line, sizeof(line), "%s命令：%s", bridge_->waiting ? "当前" : "最近", request_label());
-            renderer->drawString(line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
-            renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(MUTED_COLOR));
-
-            const char *stage = transport_stage(bridge_);
-            if (stage[0]) {
-                renderer->drawString(stage, false, cx + 12, status_y + 72, 12, renderer->a(FOCUS_BORDER));
-            }
-
             if (error_) {
+                renderer->drawString("[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
+                std::snprintf(line, sizeof(line), "%s命令：%s", bridge_->waiting ? "当前" : "最近", request_label());
+                renderer->drawString(line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
+                renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(MUTED_COLOR));
                 const char *message = ptc_overlay_bridge_error_message_zh(bridge_);
                 renderer->drawString(message, false, cx + 12, status_y + 72, 12, renderer->a(ERROR_COLOR), 290);
                 const bool code_error = last_request_kind_ == OverlayRequestKind::OfflineCode ||
@@ -1433,6 +1433,10 @@ public:
                                          false, cx + 12, status_y + 108, 11, renderer->a(ERROR_COLOR));
                 }
             } else if (success_visible_) {
+                renderer->drawString("[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
+                std::snprintf(line, sizeof(line), "%s命令：%s", bridge_->waiting ? "当前" : "最近", request_label());
+                renderer->drawString(line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
+                renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(MUTED_COLOR));
                 renderer->drawString("加时成功！", false, cx + 12, status_y + 74, 16, renderer->a(SUCCESS_COLOR));
                 std::snprintf(line, sizeof(line), "修改后还可玩 %d 分钟", summary.remaining_minutes);
                 renderer->drawString(line, false, cx + 12, status_y + 96, 15, renderer->a(SUCCESS_COLOR));
@@ -1442,10 +1446,53 @@ public:
                 } else {
                     renderer->drawString("状态已刷新，即将自动关闭...", false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));
                 }
-            } else if (!bridge_->waiting && has_status_snapshot_) {
-                renderer->drawString("状态刷新完成", false, cx + 12, status_y + 74, 15, renderer->a(SUCCESS_COLOR));
+            } else if (bridge_->waiting) {
+                renderer->drawString("[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
+                std::snprintf(line, sizeof(line), "%s命令：%s", "当前", request_label());
+                renderer->drawString(line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
+                renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(MUTED_COLOR));
+                const char *stage = transport_stage(bridge_);
+                if (stage[0]) {
+                    renderer->drawString(stage, false, cx + 12, status_y + 72, 12, renderer->a(FOCUS_BORDER));
+                }
+            } else if (has_status_snapshot_) {
+                renderer->drawString("[-] 今日额度与受限详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
+                char total_str[32];
+                if (summary.unrestricted_today == 1) {
+                    std::snprintf(total_str, sizeof(total_str), "不限时");
+                } else if (summary.remaining_available && summary.played_minutes_available &&
+                           summary.remaining_minutes >= 0 && summary.played_minutes >= 0) {
+                    std::snprintf(total_str, sizeof(total_str), "%d 分钟",
+                        summary.remaining_minutes + summary.played_minutes);
+                } else if (summary.remaining_available && summary.remaining_minutes >= 0) {
+                    std::snprintf(total_str, sizeof(total_str), "%d 分钟", summary.remaining_minutes);
+                } else {
+                    std::snprintf(total_str, sizeof(total_str), "-- 分钟");
+                }
+                const char *rule_lbl = ptc_overlay_rule_source_label(summary.rule_source);
+                if (summary.played_minutes_available && summary.played_minutes >= 0) {
+                    std::snprintf(line, sizeof(line), "今日总额度：%s（%s）  |  已玩约 %d 分钟",
+                        total_str, rule_lbl, summary.played_minutes);
+                } else {
+                    std::snprintf(line, sizeof(line), "今日总额度：%s（%s）", total_str, rule_lbl);
+                }
+                renderer->drawString(line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
+
+                char restriction[96];
+                ptc_overlay_format_child_restriction_detail(&summary, restriction, sizeof(restriction));
+                std::snprintf(line, sizeof(line), "受限：%s", restriction);
+                renderer->drawString(line, false, cx + 12, status_y + 54, 12, renderer->a(FOCUS_BORDER), 340);
+
+                char buffer_buf[64];
+                ptc_overlay_format_child_buffer_status(&summary, buffer_buf, sizeof(buffer_buf));
+                std::snprintf(line, sizeof(line), "自主缓冲：%s  |  %s", buffer_buf, ptc_overlay_bridge_transport_label(bridge_));
+                renderer->drawString(line, false, cx + 12, status_y + 72, 11, renderer->a(MUTED_COLOR));
+            } else {
+                renderer->drawString("[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
+                renderer->drawString("尚未获取状态，请按 Y 刷新", false, cx + 12, status_y + 36, 12, renderer->a(MUTED_COLOR));
             }
         }
+
     }
 
 private:

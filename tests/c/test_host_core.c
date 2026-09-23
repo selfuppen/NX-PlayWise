@@ -943,6 +943,120 @@ static void test_overlay_layout_geometry(void)
         PTC_OVERLAY_PREVIEW_DANGER, "danger styling takes priority over a capped warning");
 }
 
+static void test_overlay_child_quota_and_restriction_details(void)
+{
+    char label[32], val[32], note[32], line[128];
+    PtcCompanionResultSummary summary;
+
+    /* 1. 规则来源友好标签映射 */
+    check_true(strcmp(ptc_overlay_rule_source_label("weekly"), "周计划") == 0,
+        "rule source weekly maps to 周计划");
+    check_true(strcmp(ptc_overlay_rule_source_label("today_override"), "今日调整") == 0,
+        "rule source today_override maps to 今日调整");
+    check_true(strcmp(ptc_overlay_rule_source_label("scheduled_override"), "临时计划") == 0,
+        "rule source scheduled_override maps to 临时计划");
+    check_true(strcmp(ptc_overlay_rule_source_label("statutory_holiday"), "法定假日") == 0,
+        "rule source statutory_holiday maps to 法定假日");
+    check_true(strcmp(ptc_overlay_rule_source_label("makeup_workday"), "调休工作日") == 0,
+        "rule source makeup_workday maps to 调休工作日");
+    check_true(strcmp(ptc_overlay_rule_source_label(""), "常规计划") == 0,
+        "empty rule source fallback to 常规计划");
+
+    /* 2. 今日总额度拆分展示 (用于顶部横幅) */
+    memset(&summary, 0, sizeof(summary));
+    ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), val, sizeof(val), note, sizeof(note));
+    check_true(strcmp(label, "今日总额度") == 0 && strcmp(val, "-- 分钟") == 0,
+        "invalid summary shows fallback total quota");
+
+    summary.valid = true;
+    summary.unrestricted_today = 1;
+    summary.played_minutes_available = true;
+    summary.played_minutes = 25;
+    ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), val, sizeof(val), note, sizeof(note));
+    check_true(strcmp(val, "不限时") == 0 && strstr(note, "25") != NULL,
+        "unrestricted today shows 不限时 with played note");
+
+    summary.unrestricted_today = 0;
+    summary.remaining_available = true;
+    summary.remaining_minutes = 45;
+    summary.played_minutes = 15;
+    ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), val, sizeof(val), note, sizeof(note));
+    check_true(strcmp(val, "60 分钟") == 0 && strstr(note, "15") != NULL,
+        "total quota derives from remaining plus played minutes");
+
+    /* 3. 受限时间与护眼提醒 (用于 cy + 94 引导行) */
+    memset(&summary, 0, sizeof(summary));
+    summary.valid = true;
+    summary.day_index = 2380;
+    summary.bedtime_active = true;
+    summary.bedtime_skipped = false;
+    ptc_overlay_format_child_restriction_guidance(&summary, line, sizeof(line));
+    check_true(strstr(line, "就寝限制生效中") != NULL,
+        "bedtime active shows prominent restriction guidance");
+
+    summary.bedtime_active = false;
+    summary.bedtime_skipped = true;
+    ptc_overlay_format_child_restriction_guidance(&summary, line, sizeof(line));
+    check_true(strstr(line, "今晚就寝限制已跳过") != NULL,
+        "bedtime skipped notes that bedtime restriction will not trigger tonight");
+
+    summary.bedtime_skipped = false;
+    summary.remaining_available = true;
+    summary.remaining_minutes = 0;
+    summary.daily_restriction_active = true;
+    summary.daily_buffer_available = true;
+    summary.daily_buffer_minutes = 15;
+    ptc_overlay_format_child_restriction_guidance(&summary, line, sizeof(line));
+    check_true(strstr(line, "今日额度已耗尽") != NULL && strstr(line, "15 分钟") != NULL,
+        "exhausted allowance with available buffer guides child to claim buffer");
+
+    summary.daily_restriction_active = false;
+    summary.remaining_minutes = 40;
+    summary.bedtime_next_available = true;
+    summary.bedtime_next_start_day_index = 2380;
+    summary.bedtime_next_start_minute = 21 * 60 + 30;
+    ptc_overlay_format_child_restriction_guidance(&summary, line, sizeof(line));
+    check_true(strstr(line, "今晚 21:30") != NULL && strstr(line, "就寝立断") != NULL,
+        "tonight bedtime informs child of exact cutoff time");
+
+    summary.bedtime_next_start_day_index = 2381;
+    ptc_overlay_format_child_restriction_guidance(&summary, line, sizeof(line));
+    check_true(strstr(line, "明晚 21:30") != NULL,
+        "tomorrow bedtime indicates 明晚");
+
+    /* 4. 折叠状态栏精简受限提炼 */
+    summary.bedtime_next_start_day_index = 2380;
+    ptc_overlay_format_child_restriction_summary(&summary, line, sizeof(line));
+    check_true(strstr(line, "今晚 21:30 就寝立断") != NULL,
+        "collapsed status bar highlights tonight bedtime restriction");
+
+    summary.bedtime_next_available = false;
+    summary.unrestricted_today = 1;
+    ptc_overlay_format_child_restriction_summary(&summary, line, sizeof(line));
+    check_true(strstr(line, "今日不限时") != NULL,
+        "collapsed status bar notes unrestricted status when no bedtime configured");
+
+    /* 5. 展开状态栏详细受限规则与缓冲状态 */
+    summary.unrestricted_today = 0;
+    summary.bedtime_next_available = true;
+    summary.bedtime_next_start_day_index = 2380;
+    summary.bedtime_next_start_minute = 21 * 60;
+    ptc_overlay_format_child_restriction_detail(&summary, line, sizeof(line));
+    check_true(strstr(line, "今晚 21:00 就寝立断") != NULL && strstr(line, "额度玩完后暂停") != NULL,
+        "expanded detail explains both allowance exhaustion and bedtime cutoff");
+
+    ptc_overlay_format_child_buffer_status(&summary, line, sizeof(line));
+    check_true(strstr(line, "+15 分钟可用") != NULL,
+        "buffer status shows available minutes");
+
+    summary.daily_buffer_available = false;
+    summary.daily_buffer_claimed = true;
+    ptc_overlay_format_child_buffer_status(&summary, line, sizeof(line));
+    check_true(strstr(line, "今日已使用") != NULL,
+        "buffer status notes already claimed today");
+}
+
+
 static void seed_release_setup(PtcMemStorage *mem)
 {
     const char *rules =
@@ -2533,6 +2647,7 @@ int main(void)
     test_overlay_request_action_gate();
     test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();
+    test_overlay_child_quota_and_restriction_details();
     test_setup_preflight_and_recovery();
     test_daily_buffer_transactions();
     test_daily_buffer_failure_rollbacks();
