@@ -1478,8 +1478,8 @@ static void test_release_hit_targets(void)
         check_true(!rects_overlap(summary_rect, ptc_ui_cancel_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)) &&
                    !rects_overlap(summary_rect, ptc_ui_confirm_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)),
                    "compact plan summary stays clear of editor actions");
-        check_true(notice_rect.y + notice_rect.h < footer_rect.y,
-                   "parent notice capsule stays above the footer");
+        check_true(notice_rect.y == footer_rect.y && notice_rect.h == footer_rect.h,
+                   "parent notice capsule aligns with the footer");
         check_true(details_rect.x >= notice_rect.x && details_rect.y >= notice_rect.y &&
                    details_rect.x + details_rect.w <= notice_rect.x + notice_rect.w &&
                    details_rect.y + details_rect.h <= notice_rect.y + notice_rect.h,

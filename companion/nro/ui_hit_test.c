@@ -436,6 +436,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_PARENT_REFRESH, 0);
     }
     if (ptc_ui_parent_status_alert_visible(model) &&
+        !ptc_ui_operation_feedback_visible(model) &&
         ptc_ui_rect_contains(ptc_ui_parent_footer_rect(4), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_STATUS, 0);
     }

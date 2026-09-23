@@ -105,7 +105,7 @@ PtcUiRect ptc_ui_setup_theme_rect(int index)
 
 PtcUiRect ptc_ui_notice_rect(void)
 {
-    return (PtcUiRect){806, 620, 420, 36};
+    return (PtcUiRect){806, 664, 420, 44};
 }
 
 PtcUiRect ptc_ui_notice_details_rect(void)

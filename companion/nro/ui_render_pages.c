@@ -778,7 +778,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
         model->diagnostic_status != PTC_UI_DIAGNOSTIC_IDLE) {
         draw_diagnostic_notice(pixels, stride, model);
-    } else {
+    } else if (ptc_ui_operation_feedback_visible(model) || !ptc_ui_parent_status_alert_visible(model)) {
         draw_notice(pixels, stride, model);
     }
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0),
@@ -796,5 +796,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             plan_subpage ? ptc_ui_parent_subpage_footer_rect(1) : ptc_ui_parent_footer_rect(3)),
             12, 3, UI_ACCENT);
     }
-    draw_parent_status_footer(pixels, stride, model);
+    if (!ptc_ui_operation_feedback_visible(model)) {
+        draw_parent_status_footer(pixels, stride, model);
+    }
 }

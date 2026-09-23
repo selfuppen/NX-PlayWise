@@ -321,6 +321,7 @@ void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiMod
     uint32_t color = UI_DANGER;
 
     if (!ptc_ui_parent_status_alert_visible(model)) return;
+    if (ptc_ui_operation_feedback_visible(model)) return;
     if (model->disable_flag_present) {
         snprintf(summary, sizeof(summary), "▲ 控制已停用  |  按 A 查看恢复");
     } else if (model->recovery_active) {
@@ -465,9 +466,10 @@ void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     /* 共享的右下角状态胶囊只显示摘要，详情由家长主动打开。 */
     PtcUiRect n_rect = ptc_ui_notice_rect();
     UiRect box = to_uirect(n_rect);
-    draw_round_rect_shadow(pixels, stride, box, 18, 12, 40, 3);
-    fill_round_rect(pixels, stride, box, 18, danger ? UI_DANGER_SOFT : (warning ? UI_WARNING_SOFT : UI_SURFACE));
-    draw_rect_outline(pixels, stride, box, 18, 1, danger ? UI_DANGER : (warning ? UI_WARNING : UI_BORDER));
+    int radius = box.height / 2;
+    draw_round_rect_shadow(pixels, stride, box, radius, 12, 40, 3);
+    fill_round_rect(pixels, stride, box, radius, danger ? UI_DANGER_SOFT : (warning ? UI_WARNING_SOFT : UI_SURFACE));
+    draw_rect_outline(pixels, stride, box, radius, 1, danger ? UI_DANGER : (warning ? UI_WARNING : UI_BORDER));
 
     PtcUiRect icon_rect = ptc_ui_notice_status_icon_rect(n_rect.y);
     int icon_cx = icon_rect.x + icon_rect.w / 2;
