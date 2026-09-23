@@ -89,7 +89,8 @@ void handle_today_action_ready(UiState *ui, int index)
         ptc_ui_format_restore_today_basis(&ui->model, basis, sizeof(basis));
         snprintf(body, sizeof(body), "%s\n%s", date, basis);
         bool requires_hold = restored.rule.mode == PTC_RULE_MODE_LIMIT &&
-            (!ui->model.played_minutes_available || ui->model.played_minutes < 0 ||
+            (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
+             !ui->model.played_minutes_available || ui->model.played_minutes < 0 ||
              (int)restored.rule.minutes - ui->model.played_minutes <= 0);
         if (requires_hold)
             open_danger_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, "清除今日额度调整", body);
@@ -206,6 +207,7 @@ void handle_parent_action(UiState *ui)
         case 3:
             ui->model.draft_bedtime_policy = ui->model.bedtime_policy;
             ui->model.bedtime_dirty = false;
+            ui->model.bedtime_switch_pending = false;
             ui->model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
             ui->model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
             ui->model.selected_index = 0;
@@ -405,6 +407,7 @@ void confirm_operation(UiState *ui)
 {
     PtcCompanionStatus status;
     PtcUiOverlay return_overlay = ui->model.confirm_return_overlay;
+    bool held_danger_confirmation = ui->model.confirm_hold_required;
     PtcUiOperation operation = ptc_ui_take_confirmed_operation(&ui->model);
     switch (operation) {
 #ifndef PLAYWISE_EDEN
@@ -457,6 +460,13 @@ void confirm_operation(UiState *ui)
         break;
     }
     case PTC_UI_OPERATION_SET_TODAY_LIMIT:
+        if (!held_danger_confirmation &&
+            (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
+             ptc_ui_today_limit_requires_hold(&ui->model, ui->model.draft_minutes))) {
+            open_danger_confirm_overlay(ui, operation, "设置后可能立即限制",
+                "当前额度消耗估算或状态已变化，请长按确认。");
+            break;
+        }
         submit_minutes(ui, operation, ui->model.draft_minutes);
         break;
     case PTC_UI_OPERATION_ADD_TODAY_MINUTES:
@@ -468,14 +478,53 @@ void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_SAVE_HOLIDAY:
         submit_holiday_policy(ui);
         break;
+    case PTC_UI_OPERATION_SAVE_SCHEDULED:
+        if (ptc_scheduled_override_is_valid(&ui->model.draft_scheduled_override))
+            submit_scheduled_override(ui);
+        break;
     case PTC_UI_OPERATION_SAVE_BEDTIME:
-        submit_bedtime_policy(ui);
+        {
+        PtcBedtimePolicy policy = ptc_ui_bedtime_section_policy(&ui->model,
+            ui->model.bedtime_section);
+        time_t raw_now = time(NULL);
+        struct tm *tm_now = localtime(&raw_now);
+        uint16_t minute_of_day = tm_now ? (uint16_t)(tm_now->tm_hour * 60 + tm_now->tm_min) : 0;
+        /* Re-evaluate the current window after the hold and environment check. */
+        PtcUiBedtimeImpact impact = ptc_ui_bedtime_save_impact(&ui->model,
+            minute_of_day, (int64_t)raw_now);
+        if (!held_danger_confirmation &&
+            (impact == PTC_UI_BEDTIME_IMPACT_RESTRICT ||
+             impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN)) {
+            open_danger_confirm_overlay(ui, operation, "可能立即进入就寝限制？",
+                "当前就寝窗口或状态已变化，请长按确认。");
+            break;
+        }
+        if (ptc_bedtime_policy_is_valid(&policy))
+            submit_bedtime_policy(ui);
+        else {
+            cancel_bedtime_navigation(ui);
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                "就寝时间草稿已变化，请检查当前子页面后重新保存。");
+        }
+        }
         break;
     case PTC_UI_OPERATION_DISABLE_TODAY_LIMIT:
         submit_transport_empty(ui, "disable_today_limit", "正在解除当前限制...", "解除当前限制失败");
         break;
     case PTC_UI_OPERATION_RESTORE_TODAY_POLICY:
+        {
+        PtcEffectiveRule restored = ptc_ui_rule_after_today_restore(&ui->model);
+        bool restricts = restored.rule.mode == PTC_RULE_MODE_LIMIT &&
+            (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
+             !ui->model.played_minutes_available || ui->model.played_minutes < 0 ||
+             (int)restored.rule.minutes <= ui->model.played_minutes);
+        if (restricts && !held_danger_confirmation) {
+            open_danger_confirm_overlay(ui, operation, "清除后可能立即限制",
+                "当前状态已变化，请核对下级规则并长按确认。");
+            break;
+        }
         submit_transport_empty(ui, "restore_today_policy", "正在清除今日额度调整...", "清除今日额度调整失败");
+        }
         break;
     case PTC_UI_OPERATION_SKIP_BEDTIME:
         submit_bedtime_skip(ui);

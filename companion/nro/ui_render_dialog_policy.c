@@ -150,7 +150,8 @@ static void draw_plan_save_confirmation(uint32_t *pixels, uint32_t stride, const
 {
     UiRect dialog;
     PtcUiPlanKind kind = model->operation == PTC_UI_OPERATION_SAVE_HOLIDAY
-        ? PTC_UI_PLAN_HOLIDAY : PTC_UI_PLAN_WEEKLY;
+        ? PTC_UI_PLAN_HOLIDAY : (model->operation == PTC_UI_OPERATION_SAVE_SCHEDULED
+            ? PTC_UI_PLAN_SCHEDULED : PTC_UI_PLAN_WEEKLY);
     PtcUiPlanImpactProjection projection;
     PtcEffectiveRule before;
     PtcEffectiveRule after;
@@ -168,11 +169,13 @@ static void draw_plan_save_confirmation(uint32_t *pixels, uint32_t stride, const
         for (int day = 0; day < 7; ++day)
             if (ptc_ui_day_rule_effectively_changed(model->current_week[day], model->draft_week[day])) ++changed;
         snprintf(change, sizeof(change), "本次修改：调整了 %d 天的周计划", changed);
-    } else {
+    } else if (kind == PTC_UI_PLAN_HOLIDAY) {
         if (model->holiday_enabled != model->draft_holiday_enabled) ++changed;
         if (ptc_ui_day_rule_effectively_changed(model->holiday_rule, model->draft_holiday_rule)) ++changed;
         if (ptc_ui_day_rule_effectively_changed(model->makeup_workday_rule, model->draft_makeup_workday_rule)) ++changed;
         snprintf(change, sizeof(change), "本次修改：%d 项节假日设置", changed);
+    } else {
+        snprintf(change, sizeof(change), "本次修改：临时额度计划");
     }
     if (after.rule.mode == PTC_RULE_MODE_UNLIMITED) {
         snprintf(remaining, sizeof(remaining), "不限时");
@@ -263,13 +266,15 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
                   model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT ||
                   model->operation == PTC_UI_OPERATION_SAVE_WEEKLY ||
                   model->operation == PTC_UI_OPERATION_SAVE_HOLIDAY ||
+                  model->operation == PTC_UI_OPERATION_SAVE_SCHEDULED ||
                   model->operation == PTC_UI_OPERATION_EMERGENCY_DISABLE ||
                   model->operation == PTC_UI_OPERATION_RESUME_CONTROL ||
                    model->operation == PTC_UI_OPERATION_COMPLETE_SETUP ||
                    model->operation == PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT ||
                    code_preview || bedtime_save;
     if (model->operation == PTC_UI_OPERATION_SAVE_WEEKLY ||
-        model->operation == PTC_UI_OPERATION_SAVE_HOLIDAY) {
+        model->operation == PTC_UI_OPERATION_SAVE_HOLIDAY ||
+        model->operation == PTC_UI_OPERATION_SAVE_SCHEDULED) {
         draw_plan_save_confirmation(pixels, stride, model);
         return;
     }
@@ -399,10 +404,16 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         }
     } else if (bedtime_save) {
         UiRect bedtime_risk = {dialog.x + 54, dialog.y + 218, 652, 92};
+        time_t raw_now = time(NULL);
+        struct tm *tm_now = localtime(&raw_now);
+        uint16_t minute_of_day = tm_now ? (uint16_t)(tm_now->tm_hour * 60 + tm_now->tm_min) : 0;
+        PtcUiBedtimeImpact impact = ptc_ui_bedtime_save_impact(model,
+            minute_of_day, (int64_t)raw_now);
         fill_round_rect(pixels, stride, bedtime_risk, 16, UI_DANGER_SOFT);
         draw_rect_outline(pixels, stride, bedtime_risk, 16, 2, UI_DANGER);
         draw_text_center(pixels, stride, (UiRect){bedtime_risk.x, bedtime_risk.y + 10, bedtime_risk.width, 34},
-                         "保存后立即进入就寝限制", 24, UI_DANGER);
+                         impact == PTC_UI_BEDTIME_IMPACT_RESTRICT
+                             ? "保存后立即进入就寝限制" : "保存后可能立即进入就寝限制", 24, UI_DANGER);
         draw_text_center(pixels, stride, (UiRect){bedtime_risk.x, bedtime_risk.y + 48, bedtime_risk.width, 28},
                          "游戏会暂停；之后仅可通过 Overlay 恢复", 17, UI_DANGER);
     } else if (model->confirm_hold_required && model->played_minutes_available) {
@@ -481,4 +492,3 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     draw_overlay_actions(pixels, stride, model,
                          model->confirm_hold_required ? "长按 A / 触摸按住" : "A  确认执行");
 }
-

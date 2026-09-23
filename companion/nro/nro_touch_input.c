@@ -149,6 +149,10 @@ void handle_touch(UiState *ui, int x, int y)
         } else if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
                    ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE) {
             handle_overlay_input(ui, HidNpadButton_B);
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM &&
+                   (ui->model.operation == PTC_UI_OPERATION_SAVE_BEDTIME ||
+                    ui->model.operation == PTC_UI_OPERATION_SAVE_WEEKLY)) {
+            handle_overlay_input(ui, HidNpadButton_B);
         } else {
             ptc_ui_cancel_overlay(&ui->model);
             snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改。");

@@ -140,8 +140,7 @@ void poll_result(UiState *ui, bool force)
         saved_holiday_rule = ui->model.draft_holiday_rule;
         saved_makeup_rule = ui->model.draft_makeup_workday_rule;
         if (!ptc_ui_apply_result_json(&ui->model, ui->last_result)) {
-            ui->pending_parent_page = -1;
-            ui->pending_leave_parent = false;
+            cancel_bedtime_navigation(ui);
             set_message(ui, "读取结果失败", PTC_COMPANION_RESULT_INVALID);
             if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
             return;
@@ -168,10 +167,10 @@ void poll_result(UiState *ui, bool force)
             !(strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&
               strcmp(ui->model.result_status, "ok") == 0)) {
             ui->model.draft_bedtime_policy = saved_bedtime_draft;
-            ui->model.bedtime_dirty = memcmp(&ui->model.draft_bedtime_policy,
-                &ui->model.bedtime_policy, sizeof(PtcBedtimePolicy)) != 0;
+            update_bedtime_dirty(ui);
         } else if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&
                    strcmp(ui->model.result_status, "ok") == 0) {
+            ui->model.draft_bedtime_policy = ui->model.bedtime_policy;
             ui->model.bedtime_dirty = false;
         }
         if (ui->model.status_loaded && strcmp(ui->model.result_status, "ok") == 0) {
@@ -278,7 +277,8 @@ void poll_result(UiState *ui, bool force)
             strcmp(ui->model.result_type, "offline_code") != 0) {
             ui->model.view = PTC_UI_ERROR;
         }
-        if (ui->pending_parent_page >= 0 || ui->pending_leave_parent) {
+        if (ui->pending_parent_page >= 0 || ui->pending_leave_parent ||
+            ui->pending_bedtime_section >= 0) {
             if (strcmp(ui->model.result_type, "set_weekly_template") == 0 &&
                 strcmp(ui->model.result_status, "ok") == 0) {
                 apply_pending_navigation(ui);
@@ -290,13 +290,19 @@ void poll_result(UiState *ui, bool force)
             } else if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&
                        strcmp(ui->model.result_status, "ok") == 0) {
                 ui->model.bedtime_dirty = false;
-                apply_pending_navigation(ui);
+                finish_bedtime_navigation(ui);
             } else if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0) {
-                ui->pending_parent_page = -1;
-                ui->pending_leave_parent = false;
+                cancel_bedtime_navigation(ui);
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         "就寝时间保存未完成，修改仍保留，请重试。");
+                         "当前就寝子页面保存未完成，草稿仍保留，请重试。");
             }
+        }
+        if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&
+            strcmp(ui->model.result_status, "ok") == 0) {
+            static const char *NAMES[] = {"每周就寝", "节假日就寝", "指定日期就寝"};
+            int section = ui->bedtime_saved_section;
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s已保存并生效。",
+                section >= 0 && section < 3 ? NAMES[section] : "就寝时间");
         }
         if (strcmp(ui->model.result_type, "confirm_bedtime_requirements") == 0) {
             if (strcmp(ui->model.result_status, "ok") == 0 && ui->model.bedtime_dirty) {
@@ -305,17 +311,16 @@ void poll_result(UiState *ui, bool force)
                  * draft window, so first enablement must still show the
                  * immediate-restriction confirmation before it submits. */
                 save_bedtime_from_page(ui);
-                if (!ui->waiting) {
-                    ui->pending_parent_page = -1;
-                    ui->pending_leave_parent = false;
-                }
+                if (!ui->waiting && ui->model.overlay != PTC_UI_OVERLAY_CONFIRM)
+                    cancel_bedtime_navigation(ui);
                 return;
             }
             if (strcmp(ui->model.result_status, "ok") != 0) {
-                ui->pending_parent_page = -1;
-                ui->pending_leave_parent = false;
+                cancel_bedtime_navigation(ui);
                 snprintf(ui->model.message, sizeof(ui->model.message),
                     "就寝限制环境确认未完成，草稿仍保留，请检查后重试。");
+            } else if (!ui->model.bedtime_dirty) {
+                cancel_bedtime_navigation(ui);
             }
         }
         if (strcmp(ui->model.result_type, "skip_bedtime") == 0 &&
@@ -327,10 +332,8 @@ void poll_result(UiState *ui, bool force)
         }
         return;
     }
-    if (ui->pending_parent_page >= 0 || ui->pending_leave_parent) {
-        ui->pending_parent_page = -1;
-        ui->pending_leave_parent = false;
-    }
+    if (ui->pending_parent_page >= 0 || ui->pending_leave_parent ||
+        ui->pending_bedtime_section >= 0) cancel_bedtime_navigation(ui);
     if (ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
         ui->model.grant_status_refresh_failed = true;
     }

@@ -11,24 +11,104 @@
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
 
-bool ptc_ui_bedtime_save_will_restrict(const PtcUiModel *model, uint16_t minute_of_day)
+bool ptc_ui_bedtime_section_dirty(const PtcUiModel *model, PtcUiBedtimeSection section)
+{
+    const PtcBedtimePolicy *draft;
+    const PtcBedtimePolicy *saved;
+    if (!model) return false;
+    draft = &model->draft_bedtime_policy;
+    saved = &model->bedtime_policy;
+    if (draft->enabled != saved->enabled) return true;
+    switch (section) {
+    case PTC_UI_BEDTIME_WEEKLY:
+        return memcmp(draft->week, saved->week, sizeof(saved->week)) != 0;
+    case PTC_UI_BEDTIME_CALENDAR:
+        return draft->calendar_enabled != saved->calendar_enabled ||
+            memcmp(&draft->holiday_rule, &saved->holiday_rule, sizeof(saved->holiday_rule)) != 0 ||
+            memcmp(&draft->makeup_workday_rule, &saved->makeup_workday_rule,
+                sizeof(saved->makeup_workday_rule)) != 0;
+    case PTC_UI_BEDTIME_SCHEDULED:
+        return memcmp(&draft->scheduled_override, &saved->scheduled_override,
+            sizeof(saved->scheduled_override)) != 0;
+    default:
+        return false;
+    }
+}
+
+PtcBedtimePolicy ptc_ui_bedtime_section_policy(const PtcUiModel *model,
+    PtcUiBedtimeSection section)
+{
+    PtcBedtimePolicy policy = model->bedtime_policy;
+    const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
+    policy.enabled = draft->enabled;
+    switch (section) {
+    case PTC_UI_BEDTIME_WEEKLY:
+        memcpy(policy.week, draft->week, sizeof(policy.week));
+        break;
+    case PTC_UI_BEDTIME_CALENDAR:
+        policy.calendar_enabled = draft->calendar_enabled;
+        policy.holiday_rule = draft->holiday_rule;
+        policy.makeup_workday_rule = draft->makeup_workday_rule;
+        break;
+    case PTC_UI_BEDTIME_SCHEDULED:
+        policy.scheduled_override = draft->scheduled_override;
+        break;
+    default:
+        break;
+    }
+    return policy;
+}
+
+void ptc_ui_bedtime_discard_section(PtcUiModel *model, PtcUiBedtimeSection section)
+{
+    PtcBedtimePolicy *draft;
+    const PtcBedtimePolicy *saved;
+    if (!model) return;
+    draft = &model->draft_bedtime_policy;
+    saved = &model->bedtime_policy;
+    draft->enabled = saved->enabled;
+    switch (section) {
+    case PTC_UI_BEDTIME_WEEKLY:
+        memcpy(draft->week, saved->week, sizeof(saved->week));
+        break;
+    case PTC_UI_BEDTIME_CALENDAR:
+        draft->calendar_enabled = saved->calendar_enabled;
+        draft->holiday_rule = saved->holiday_rule;
+        draft->makeup_workday_rule = saved->makeup_workday_rule;
+        break;
+    case PTC_UI_BEDTIME_SCHEDULED:
+        draft->scheduled_override = saved->scheduled_override;
+        break;
+    default:
+        break;
+    }
+}
+
+PtcUiBedtimeImpact ptc_ui_bedtime_save_impact(const PtcUiModel *model,
+    uint16_t minute_of_day, int64_t now)
 {
     PtcRules rules;
     PtcBedtimeEvaluation evaluation;
-    if (!model || minute_of_day >= 1440 ||
-        !ptc_bedtime_policy_is_valid(&model->draft_bedtime_policy) ||
-        !model->draft_bedtime_policy.enabled ||
-        (model->bedtime_active && !model->bedtime_skipped)) {
-        return false;
-    }
+    if (!model || minute_of_day >= 1440) return PTC_UI_BEDTIME_IMPACT_NONE;
     memset(&rules, 0, sizeof(rules));
-    rules.bedtime = model->draft_bedtime_policy;
+    rules.bedtime = ptc_ui_bedtime_section_policy(model, model->bedtime_section);
+    if (!ptc_bedtime_policy_is_valid(&rules.bedtime) || !rules.bedtime.enabled)
+        return PTC_UI_BEDTIME_IMPACT_NONE;
     evaluation = ptc_bedtime_evaluate(
         &rules,
         model->day_index,
         ptc_weekday_from_day_index(model->day_index),
         minute_of_day);
-    return evaluation.active;
+    if (!evaluation.active) return PTC_UI_BEDTIME_IMPACT_NONE;
+    if (!ptc_ui_status_is_fresh(model, now)) return PTC_UI_BEDTIME_IMPACT_UNKNOWN;
+    if (model->bedtime_active && !model->bedtime_skipped) return PTC_UI_BEDTIME_IMPACT_NONE;
+    if (model->bedtime_skipped_window_available &&
+        model->bedtime_skipped_window_instance_id == evaluation.window_instance_id)
+        return PTC_UI_BEDTIME_IMPACT_SKIPPED;
+    if (model->bedtime_active && model->bedtime_skipped &&
+        model->bedtime_window_instance_id == evaluation.window_instance_id)
+        return PTC_UI_BEDTIME_IMPACT_SKIPPED;
+    return PTC_UI_BEDTIME_IMPACT_RESTRICT;
 }
 
 const char *ptc_ui_effective_rule_label(PtcRuleSource source)

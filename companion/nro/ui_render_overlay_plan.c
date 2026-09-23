@@ -26,6 +26,8 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
     static const char *LABELS[] = {"计划状态", "开始日期", "持续天数", "每天额度"};
     char values[4][128];
     char banner_text[192];
+    bool save_danger = ptc_ui_scheduled_dirty(model) &&
+        ptc_ui_plan_save_requires_hold(model, PTC_UI_PLAN_SCHEDULED, ptc_ui_render_now());
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 640);
 
     snprintf(values[0], sizeof(values[0]), "%s",
@@ -131,8 +133,9 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
 
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回", UI_RAISED, UI_INK, true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay),
-                       model->waiting ? "正在保存..." : (ptc_ui_scheduled_dirty(model) ? "+  保存草稿" : "已保存"),
-                       UI_ACCENT, UI_ON_ACCENT, false);
+                       model->waiting ? "正在保存..." : (ptc_ui_scheduled_dirty(model)
+                           ? (save_danger ? "+  保存（可能阻断）" : "+  保存草稿") : "已保存"),
+                       save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, false);
 }
 
 static void draw_scheduled_leave(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -485,12 +488,14 @@ static void draw_bedtime_leave_overlay(uint32_t *pixels, uint32_t stride, const 
     draw_dialog_shell(pixels, stride, model, &dialog, 780, 390);
     draw_text(pixels, stride, dialog.x + 48, dialog.y + 164,
         "草稿会一直保留到保存或明确放弃；保存失败时仍留在编辑页。", 17, UI_MUTED);
-    draw_candidate_button(pixels, stride, ptc_ui_discard_rect(model->overlay), "X  放弃并离开",
+    draw_candidate_button(pixels, stride, ptc_ui_discard_rect(model->overlay),
+        model->bedtime_switch_pending ? "X  放弃并切换" : "X  放弃并离开",
         UI_DANGER_SOFT, UI_DANGER, model->overlay_selection == 1, false);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  继续编辑",
         UI_RAISED, UI_INK, true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay),
-        model->disable_flag_present ? "紧急停用中不可保存" : "A  保存并离开",
+        model->disable_flag_present ? "紧急停用中不可保存" :
+            (model->bedtime_switch_pending ? "A  保存并切换" : "A  保存并离开"),
         UI_ACCENT, UI_ON_ACCENT, model->disable_flag_present);
 }
 

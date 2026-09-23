@@ -46,12 +46,15 @@ void submit_bedtime_confirmation(UiState *ui)
 void submit_bedtime_policy(UiState *ui)
 {
     PtcCompanionStatus status;
+    PtcBedtimePolicy policy = ptc_ui_bedtime_section_policy(&ui->model,
+        ui->model.bedtime_section);
+    ui->bedtime_saved_section = (int)ui->model.bedtime_section;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_set_bedtime_policy(&ui->transport,
-        ui->active_request_id, time(NULL), &ui->model.draft_bedtime_policy, true);
+        ui->active_request_id, time(NULL), &policy, true);
     set_command_name(ui, "set_bedtime_policy");
     sync_transport_label(ui);
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_bedtime_policy", "正在保存就寝计划...");
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_bedtime_policy", "正在保存当前就寝子页面...");
     else set_message(ui, "就寝计划提交失败", status);
 }
 void submit_bedtime_skip(UiState *ui)

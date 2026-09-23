@@ -69,6 +69,24 @@ void save_holiday_from_page(UiState *ui)
         "保存前请核对今天的最终规则、预计剩余时间和覆盖原因。");
 }
 
+void save_scheduled_from_overlay(UiState *ui)
+{
+    if (!ui || ui->waiting || ui->model.disable_flag_present ||
+        !ptc_ui_scheduled_dirty(&ui->model)) return;
+    if (!ptc_scheduled_override_is_valid(&ui->model.draft_scheduled_override)) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+            "临时额度计划无效，请检查 1 到 366 天范围和额度。");
+        return;
+    }
+    if (ptc_ui_plan_save_requires_hold(&ui->model, PTC_UI_PLAN_SCHEDULED, (int64_t)time(NULL))) {
+        open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_SCHEDULED,
+            "临时额度计划可能立即阻断",
+            "保存前请核对今天的最终额度、预计剩余时间和覆盖原因。");
+        return;
+    }
+    submit_scheduled_override(ui);
+}
+
 void apply_pending_navigation(UiState *ui)
 {
     if (ui->pending_leave_parent && ui->model.parent_page == PTC_UI_PARENT_PLAN &&
@@ -123,21 +141,59 @@ void discard_holiday_draft(UiState *ui)
 void update_bedtime_dirty(UiState *ui)
 {
     if (!ui) return;
-    ui->model.bedtime_dirty = memcmp(&ui->model.draft_bedtime_policy,
-        &ui->model.bedtime_policy, sizeof(PtcBedtimePolicy)) != 0;
+    ui->model.bedtime_dirty = ptc_ui_bedtime_section_dirty(&ui->model,
+        ui->model.bedtime_section);
 }
 
 void discard_bedtime_draft(UiState *ui)
 {
     if (!ui) return;
-    ui->model.draft_bedtime_policy = ui->model.bedtime_policy;
+    ptc_ui_bedtime_discard_section(&ui->model, ui->model.bedtime_section);
     update_bedtime_dirty(ui);
-    snprintf(ui->model.message, sizeof(ui->model.message), "已放弃未保存的就寝时间修改。");
+    snprintf(ui->model.message, sizeof(ui->model.message), "已放弃当前就寝子页面的修改。");
+}
+
+static const char *bedtime_section_name(PtcUiBedtimeSection section)
+{
+    switch (section) {
+    case PTC_UI_BEDTIME_WEEKLY: return "每周就寝";
+    case PTC_UI_BEDTIME_CALENDAR: return "节假日就寝";
+    case PTC_UI_BEDTIME_SCHEDULED: return "指定日期就寝";
+    default: return "就寝时间";
+    }
+}
+
+void cancel_bedtime_navigation(UiState *ui)
+{
+    if (!ui) return;
+    ui->pending_bedtime_section = -1;
+    ui->model.bedtime_switch_pending = false;
+    ui->pending_parent_page = -1;
+    ui->pending_leave_parent = false;
+}
+
+void finish_bedtime_navigation(UiState *ui)
+{
+    int section;
+    if (!ui) return;
+    section = ui->pending_bedtime_section;
+    ui->pending_bedtime_section = -1;
+    ui->model.bedtime_switch_pending = false;
+    if (section >= PTC_UI_BEDTIME_WEEKLY && section <= PTC_UI_BEDTIME_SCHEDULED) {
+        ui->model.bedtime_section = (PtcUiBedtimeSection)section;
+        ui->model.selected_index = 0;
+        ui->model.bedtime_section_focused = false;
+        ui->model.parent_footer_focused = false;
+        update_bedtime_dirty(ui);
+    } else if (ui->pending_parent_page >= 0 || ui->pending_leave_parent) {
+        apply_pending_navigation(ui);
+    }
 }
 
 void save_bedtime_from_page(UiState *ui)
 {
-    PtcBedtimePolicy *draft;
+    PtcBedtimePolicy draft;
+    PtcUiBedtimeImpact impact;
     if (!ui || ui->waiting) return;
     if (ui->model.disable_flag_present) {
         snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，就寝时间设置暂时只读。");
@@ -147,13 +203,13 @@ void save_bedtime_from_page(UiState *ui)
         snprintf(ui->model.message, sizeof(ui->model.message), "就寝时间没有修改。");
         return;
     }
-    draft = &ui->model.draft_bedtime_policy;
-    if (!ptc_bedtime_policy_is_valid(draft)) {
+    draft = ptc_ui_bedtime_section_policy(&ui->model, ui->model.bedtime_section);
+    if (!ptc_bedtime_policy_is_valid(&draft)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
             "无法保存：请检查跨夜窗口、相邻日期重叠、特殊规则冲突和日期长度。");
         return;
     }
-    if (draft->enabled && !ui->model.bedtime_official_setting_confirmed) {
+    if (draft.enabled && !ui->model.bedtime_official_setting_confirmed) {
         submit_bedtime_confirmation(ui);
         return;
     }
@@ -161,10 +217,13 @@ void save_bedtime_from_page(UiState *ui)
         time_t raw_now = time(NULL);
         struct tm *tm_now = localtime(&raw_now);
         uint16_t minute_of_day = tm_now ? (uint16_t)(tm_now->tm_hour * 60 + tm_now->tm_min) : 0;
-        if (ptc_ui_bedtime_save_will_restrict(&ui->model, minute_of_day)) {
+        impact = ptc_ui_bedtime_save_impact(&ui->model, minute_of_day, (int64_t)raw_now);
+        if (impact == PTC_UI_BEDTIME_IMPACT_RESTRICT || impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN) {
             open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_BEDTIME,
-                "立即进入就寝限制？",
-                "当前时间处于设定的就寝时段内。保存后将立即暂停游戏并限制游玩（立断）。\n请长按 A 或持续按住确认按钮 1 秒。");
+                impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN ? "可能立即进入就寝限制？" : "立即进入就寝限制？",
+                impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN
+                    ? "当前状态待确认，保存后可能立即暂停游戏。请长按确认。"
+                    : "保存后将立即暂停游戏并限制游玩。请长按确认。");
             return;
         }
     }
@@ -176,10 +235,24 @@ void select_bedtime_section(UiState *ui, int section)
     if (!ui) return;
     if (section < PTC_UI_BEDTIME_WEEKLY) section = PTC_UI_BEDTIME_SCHEDULED;
     if (section > PTC_UI_BEDTIME_SCHEDULED) section = PTC_UI_BEDTIME_WEEKLY;
+    if (section == (int)ui->model.bedtime_section) return;
+    update_bedtime_dirty(ui);
+    if (ui->model.bedtime_dirty) {
+        ui->pending_bedtime_section = section;
+        ui->model.bedtime_switch_pending = true;
+        ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_LEAVE;
+        ui->model.overlay_selection = ui->model.disable_flag_present ? 2 : 0;
+        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "保存%s草稿后切换？",
+            bedtime_section_name(ui->model.bedtime_section));
+        snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+            "保存并切换、放弃并切换，或继续编辑当前子页面。");
+        return;
+    }
     ui->model.bedtime_section = (PtcUiBedtimeSection)section;
     ui->model.selected_index = 0;
     ui->model.bedtime_section_focused = false;
     ui->model.parent_footer_focused = false;
+    update_bedtime_dirty(ui);
 }
 
 void open_bedtime_window_editor(UiState *ui, int weekday)
@@ -246,13 +319,15 @@ void request_bedtime_leave(UiState *ui, int target_page, bool leave_parent)
     }
     ui->pending_parent_page = target_page;
     ui->pending_leave_parent = leave_parent;
+    ui->model.bedtime_switch_pending = false;
     ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_LEAVE;
     ui->model.overlay_selection = ui->model.disable_flag_present ? 2 : 0;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "离开就寝时间编辑？");
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "离开%s编辑？",
+        bedtime_section_name(ui->model.bedtime_section));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
         ui->model.disable_flag_present
             ? "紧急停用期间不能保存；可继续编辑或放弃草稿后离开。"
-            : "请选择保存并离开、放弃修改，或继续编辑。");
+            : "请选择保存当前子页面并离开、放弃修改并离开，或继续编辑。");
 }
 
 void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)

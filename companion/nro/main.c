@@ -92,6 +92,8 @@ int main(int argc, char **argv)
     memset(&ui, 0, sizeof(ui));
     ui.pending_today_action = -1;
     ui.pending_parent_page = -1;
+    ui.pending_bedtime_section = -1;
+    ui.bedtime_saved_section = -1;
     ui.model.view = PTC_UI_CHILD;
     ui.model.parent_page = PTC_UI_PARENT_TODAY;
     ui.model.remaining_minutes = -1;

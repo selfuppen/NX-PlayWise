@@ -361,6 +361,9 @@ static void test_bedtime_save_restriction_projection(void)
 
     ptc_rules_default(&rules);
     model.day_index = 2380;
+    model.status_loaded = true;
+    model.status_updated_at = 1000;
+    model.bedtime_policy = rules.bedtime;
     model.draft_bedtime_policy = rules.bedtime;
     model.draft_bedtime_policy.enabled = true;
     model.draft_bedtime_policy.calendar_enabled = false;
@@ -369,43 +372,142 @@ static void test_bedtime_save_restriction_projection(void)
     weekday = ptc_weekday_from_day_index(model.day_index);
     model.draft_bedtime_policy.week[weekday] = (PtcBedtimeWindow){true, 1260, 420};
 
-    check_true(ptc_ui_bedtime_save_will_restrict(&model, 1320),
+    check_int(ptc_ui_bedtime_save_impact(&model, 1320, 1000), PTC_UI_BEDTIME_IMPACT_RESTRICT,
                "bedtime save detects an active weekly window");
-    check_true(!ptc_ui_bedtime_save_will_restrict(&model, 1200),
+    check_int(ptc_ui_bedtime_save_impact(&model, 1200, 1000), PTC_UI_BEDTIME_IMPACT_NONE,
                "bedtime save stays ordinary outside the window");
     model.draft_bedtime_policy.enabled = false;
-    check_true(!ptc_ui_bedtime_save_will_restrict(&model, 1320),
+    check_int(ptc_ui_bedtime_save_impact(&model, 1320, 1000), PTC_UI_BEDTIME_IMPACT_NONE,
                "disabled bedtime master switch cannot immediately restrict");
     model.draft_bedtime_policy.enabled = true;
     model.bedtime_active = true;
     model.bedtime_skipped = false;
-    check_true(!ptc_ui_bedtime_save_will_restrict(&model, 1320),
+    check_int(ptc_ui_bedtime_save_impact(&model, 1320, 1000), PTC_UI_BEDTIME_IMPACT_NONE,
                "already enforced bedtime is not advertised as a new immediate restriction");
     model.bedtime_skipped = true;
-    check_true(ptc_ui_bedtime_save_will_restrict(&model, 1320),
-               "editing a skipped active window keeps the immediate restriction warning");
+    model.bedtime_skipped_window_available = true;
+    model.bedtime_skipped_window_instance_id = ptc_bedtime_window_instance_id(model.day_index, 1260);
+    check_int(ptc_ui_bedtime_save_impact(&model, 1320, 1000), PTC_UI_BEDTIME_IMPACT_SKIPPED,
+               "same skipped window stays skipped after save");
+    model.bedtime_skipped_window_available = false;
+    model.bedtime_window_instance_id = ptc_bedtime_window_instance_id(model.day_index, 1260);
+    check_int(ptc_ui_bedtime_save_impact(&model, 1320, 1000), PTC_UI_BEDTIME_IMPACT_SKIPPED,
+               "current skipped instance also prevents a false restriction warning");
+    model.bedtime_skipped_window_available = true;
+    model.draft_bedtime_policy.week[weekday].start_minute = 1290;
+    check_int(ptc_ui_bedtime_save_impact(&model, 1320, 1000), PTC_UI_BEDTIME_IMPACT_RESTRICT,
+               "changing the skipped window instance can immediately restrict");
+    model.draft_bedtime_policy.week[weekday].start_minute = 1260;
+    check_int(ptc_ui_bedtime_save_impact(&model, 1320, 100000), PTC_UI_BEDTIME_IMPACT_UNKNOWN,
+               "stale skip status gives an uncertain warning");
     model.bedtime_active = false;
     model.bedtime_skipped = false;
+    model.bedtime_skipped_window_available = false;
 
+    model.bedtime_section = PTC_UI_BEDTIME_SCHEDULED;
     model.draft_bedtime_policy.scheduled_override.present = true;
     model.draft_bedtime_policy.scheduled_override.start_day_index = model.day_index;
     model.draft_bedtime_policy.scheduled_override.end_day_index = model.day_index;
     model.draft_bedtime_policy.scheduled_override.rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
     model.draft_bedtime_policy.scheduled_override.rule.window = (PtcBedtimeWindow){true, 1380, 360};
-    check_true(ptc_ui_bedtime_save_will_restrict(&model, 1390),
+    check_int(ptc_ui_bedtime_save_impact(&model, 1390, 1000), PTC_UI_BEDTIME_IMPACT_RESTRICT,
                "bedtime save resolves an active specified-date window");
 
     check_true(ptc_day_index_from_date(2026, 10, 1, &holiday_day),
                "bedtime holiday projection date converts");
     model.day_index = holiday_day;
+    model.bedtime_section = PTC_UI_BEDTIME_CALENDAR;
     model.draft_bedtime_policy.scheduled_override.present = false;
     model.draft_bedtime_policy.calendar_enabled = true;
     model.draft_bedtime_policy.holiday_rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
     model.draft_bedtime_policy.holiday_rule.window = (PtcBedtimeWindow){true, 1320, 420};
-    check_true(ptc_ui_bedtime_save_will_restrict(&model, 1330),
+    check_int(ptc_ui_bedtime_save_impact(&model, 1330, 1000), PTC_UI_BEDTIME_IMPACT_RESTRICT,
                "bedtime save resolves an active statutory-holiday window");
-    check_true(!ptc_ui_bedtime_save_will_restrict(&model, 1440),
+    check_int(ptc_ui_bedtime_save_impact(&model, 1440, 1000), PTC_UI_BEDTIME_IMPACT_NONE,
                "bedtime save rejects an invalid minute of day");
+
+    model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
+    model.bedtime_policy.calendar_enabled = false;
+    model.bedtime_policy.scheduled_override.present = false;
+    model.draft_bedtime_policy.scheduled_override.present = true;
+    check_true(ptc_ui_bedtime_section_dirty(&model, PTC_UI_BEDTIME_WEEKLY),
+        "weekly section includes the shared master switch");
+    check_true(ptc_ui_bedtime_section_dirty(&model, PTC_UI_BEDTIME_CALENDAR),
+        "calendar section detects its own edits");
+    {
+        PtcBedtimePolicy merged = ptc_ui_bedtime_section_policy(&model, PTC_UI_BEDTIME_WEEKLY);
+        check_true(!merged.calendar_enabled && !merged.scheduled_override.present,
+            "saving weekly bedtime does not include other section drafts");
+        merged = ptc_ui_bedtime_section_policy(&model, PTC_UI_BEDTIME_CALENDAR);
+        check_true(merged.calendar_enabled && !merged.scheduled_override.present,
+            "saving holiday bedtime includes only holiday section draft");
+        merged = ptc_ui_bedtime_section_policy(&model, PTC_UI_BEDTIME_SCHEDULED);
+        check_true(!merged.calendar_enabled && merged.scheduled_override.present,
+            "saving specified-date bedtime preserves the saved holiday section");
+    }
+    {
+        PtcUiModel scoped = {0};
+        scoped.bedtime_policy = rules.bedtime;
+        scoped.draft_bedtime_policy = rules.bedtime;
+        scoped.draft_bedtime_policy.week[0].start_minute += 15;
+        check_true(ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_WEEKLY) &&
+                   !ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_CALENDAR) &&
+                   !ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_SCHEDULED),
+                   "editing weekly bedtime dirties only the weekly page");
+        scoped.draft_bedtime_policy = scoped.bedtime_policy;
+        scoped.draft_bedtime_policy.calendar_enabled = !scoped.bedtime_policy.calendar_enabled;
+        check_true(!ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_WEEKLY) &&
+                   ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_CALENDAR) &&
+                   !ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_SCHEDULED),
+                   "editing holiday bedtime dirties only the holiday page");
+        scoped.draft_bedtime_policy = scoped.bedtime_policy;
+        scoped.draft_bedtime_policy.scheduled_override.present =
+            !scoped.bedtime_policy.scheduled_override.present;
+        check_true(!ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_WEEKLY) &&
+                   !ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_CALENDAR) &&
+                   ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_SCHEDULED),
+                   "editing specified-date bedtime dirties only that page");
+        scoped.draft_bedtime_policy.week[0].start_minute += 15;
+        ptc_ui_bedtime_discard_section(&scoped, PTC_UI_BEDTIME_SCHEDULED);
+        check_true(!ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_SCHEDULED) &&
+                   ptc_ui_bedtime_section_dirty(&scoped, PTC_UI_BEDTIME_WEEKLY),
+                   "discarding one bedtime page preserves another page's draft");
+    }
+}
+
+static void test_plan_blocking_save_gates(void)
+{
+    PtcUiModel model = {0};
+    PtcRules defaults;
+    uint16_t holiday_day = 0;
+    ptc_rules_default(&defaults);
+    check_true(ptc_day_index_from_date(2026, 10, 1, &holiday_day),
+        "blocking gate holiday date converts");
+    model.day_index = holiday_day;
+    model.status_loaded = true;
+    model.status_updated_at = 1000;
+    model.played_minutes_available = true;
+    model.played_minutes = 20;
+    memcpy(model.current_week, defaults.week, sizeof(model.current_week));
+    memcpy(model.draft_week, defaults.week, sizeof(model.draft_week));
+    model.draft_holiday_enabled = true;
+    model.draft_holiday_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 10};
+    check_true(ptc_ui_plan_save_requires_hold(&model, PTC_UI_PLAN_HOLIDAY, 1000),
+        "holiday save requires confirmation when its quota is exhausted");
+    model.draft_scheduled_override = (PtcScheduledOverride){true, holiday_day,
+        holiday_day, {PTC_RULE_MODE_LIMIT, 10}};
+    check_true(ptc_ui_plan_save_requires_hold(&model, PTC_UI_PLAN_SCHEDULED, 1000),
+        "temporary plan requires confirmation when its quota is exhausted");
+    model.today_override_present = true;
+    model.today_override_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 90};
+    check_true(!ptc_ui_plan_save_requires_hold(&model, PTC_UI_PLAN_HOLIDAY, 1000) &&
+               !ptc_ui_plan_save_requires_hold(&model, PTC_UI_PLAN_SCHEDULED, 1000),
+        "today override prevents false immediate-block warnings");
+    model.today_override_present = false;
+    model.status_updated_at = 0;
+    model.draft_scheduled_override.rule.minutes = 45;
+    check_true(ptc_ui_plan_save_requires_hold(&model, PTC_UI_PLAN_SCHEDULED, 1000),
+        "unknown usage state requires confirmation when today's quota changes");
 }
 
 static void test_rule_result_guidance(void)
@@ -2795,6 +2897,7 @@ int main(void)
     test_release_navigation();
     test_shortcut_hold_and_setup_migration();
     test_bedtime_save_restriction_projection();
+    test_plan_blocking_save_gates();
     test_rule_result_guidance();
     test_numeric_input();
     test_pin_input();

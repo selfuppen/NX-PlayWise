@@ -426,6 +426,7 @@ typedef struct {
     int holiday_calendar_page;
     int holiday_last_rule;
     bool bedtime_dirty;
+    bool bedtime_switch_pending;
     bool bedtime_section_focused;
     int bedtime_editor_day;
     int bedtime_special_kind;

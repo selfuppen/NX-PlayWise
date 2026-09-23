@@ -752,7 +752,12 @@ int main(int argc, char **argv)
             danger.bedtime_dirty = true;
             danger.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
             danger.selected_index = 10;
-            if (!ptc_ui_bedtime_save_will_restrict(&danger, preview_minute)) return 1;
+            danger.status_loaded = true;
+            danger.status_updated_at = (int64_t)preview_now;
+            danger.bedtime_active = false;
+            danger.bedtime_skipped = false;
+            if (ptc_ui_bedtime_save_impact(&danger, preview_minute, (int64_t)preview_now) !=
+                PTC_UI_BEDTIME_IMPACT_RESTRICT) return 1;
             failed |= save_preview(argv[2], "bedtime", "bedtime-save-danger", &danger, dark);
             danger.overlay = PTC_UI_OVERLAY_CONFIRM;
             danger.operation = PTC_UI_OPERATION_SAVE_BEDTIME;

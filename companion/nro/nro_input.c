@@ -149,16 +149,17 @@ void handle_overlay_input(UiState *ui, u64 down)
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE) {
         if (down & HidNpadButton_B) {
-            ui->pending_parent_page = -1;
-            ui->pending_leave_parent = false;
+            cancel_bedtime_navigation(ui);
             ptc_ui_cancel_overlay(&ui->model);
         } else if (down & HidNpadButton_X) {
             discard_bedtime_draft(ui);
             ptc_ui_cancel_overlay(&ui->model);
-            apply_pending_navigation(ui);
+            finish_bedtime_navigation(ui);
         } else if ((down & (HidNpadButton_A | HidNpadButton_Plus)) && !ui->model.disable_flag_present) {
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
             save_bedtime_from_page(ui);
+            if (!ui->waiting && ui->model.overlay != PTC_UI_OVERLAY_CONFIRM)
+                cancel_bedtime_navigation(ui);
         }
         return;
     }
@@ -234,13 +235,7 @@ void handle_overlay_input(UiState *ui, u64 down)
             }
             draft->end_day_index = (uint16_t)(draft->start_day_index + next - 1);
         } else if (down & HidNpadButton_Plus) {
-            if (ui->model.disable_flag_present || !ptc_ui_scheduled_dirty(&ui->model)) {
-                return;
-            } else if (!ptc_scheduled_override_is_valid(draft)) {
-                snprintf(ui->model.message, sizeof(ui->model.message), "临时额度计划无效，请检查 1 到 366 天范围和额度。");
-            } else {
-                submit_scheduled_override(ui);
-            }
+            save_scheduled_from_overlay(ui);
         }
         return;
     }
@@ -459,8 +454,8 @@ void handle_overlay_input(UiState *ui, u64 down)
             if (ui->model.disable_flag_present) {
                 apply_pending_navigation(ui);
             } else {
-                submit_weekly(ui);
-                if (!ui->waiting) {
+                save_weekly_from_page(ui);
+                if (!ui->waiting && ui->model.overlay != PTC_UI_OVERLAY_CONFIRM) {
                     ui->pending_parent_page = -1;
                     ui->pending_leave_parent = false;
                 }
@@ -617,13 +612,15 @@ void handle_overlay_input(UiState *ui, u64 down)
             accept_numpad(ui);
             if (purpose == PTC_UI_NUMPAD_MINUTES) {
                 if (operation == PTC_UI_OPERATION_SET_TODAY_LIMIT &&
-                    ptc_ui_today_limit_requires_hold(&ui->model, value)) {
+                    (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
+                     ptc_ui_today_limit_requires_hold(&ui->model, value))) {
                     char body[192];
                     const char *title;
-                    if (!ui->model.played_minutes_available || ui->model.played_minutes < 0) {
+                    if (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
+                        !ui->model.played_minutes_available || ui->model.played_minutes < 0) {
                         title = "无法确认是否立即限制";
                         snprintf(body, sizeof(body),
-                                 "额度消耗估算不可用；设置总额度 %u 分钟。", (unsigned int)value);
+                                 "实时状态待确认；设置总额度 %u 分钟后可能立即限制。", (unsigned int)value);
                     } else {
                         title = ui->model.unrestricted_today == 1
                             ? "不限时将改为限时" : "新额度不高于额度消耗估算";
@@ -658,9 +655,14 @@ void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             PtcUiOperation operation = ui->model.operation;
             if (operation == PTC_UI_OPERATION_SET_TODAY_LIMIT &&
-                ptc_ui_today_limit_requires_hold(&ui->model, ui->model.draft_minutes)) {
+                (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
+                 ptc_ui_today_limit_requires_hold(&ui->model, ui->model.draft_minutes))) {
                 char body[192];
-                if (ui->model.unrestricted_today == 1) {
+                if (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL))) {
+                    snprintf(body, sizeof(body), "实时状态待确认；设置总额度 %u 分钟后可能立即限制。",
+                             (unsigned int)ui->model.draft_minutes);
+                    open_danger_confirm_overlay(ui, operation, "无法确认是否立即限制", body);
+                } else if (ui->model.unrestricted_today == 1) {
                     if (ui->model.played_minutes_available && ui->model.played_minutes >= 0) {
                         int preview = (int)ui->model.draft_minutes - ui->model.played_minutes;
                         if (preview < 0) preview = 0;
@@ -721,6 +723,12 @@ void handle_overlay_input(UiState *ui, u64 down)
                             ui->model.operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||
                             ui->model.operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY;
         if (down & HidNpadButton_B) {
+            if (ui->model.operation == PTC_UI_OPERATION_SAVE_BEDTIME)
+                cancel_bedtime_navigation(ui);
+            if (ui->model.operation == PTC_UI_OPERATION_SAVE_WEEKLY) {
+                ui->pending_parent_page = -1;
+                ui->pending_leave_parent = false;
+            }
             ptc_ui_cancel_overlay(&ui->model);
         } else if (album_change && (down & (HidNpadButton_Left | HidNpadButton_Right))) {
             ui->model.overlay_selection = 1 - ui->model.overlay_selection;

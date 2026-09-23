@@ -22,6 +22,13 @@ typedef struct {
     int remaining_minutes;
 } PtcUiPlanImpactProjection;
 
+typedef enum {
+    PTC_UI_BEDTIME_IMPACT_NONE = 0,
+    PTC_UI_BEDTIME_IMPACT_SKIPPED,
+    PTC_UI_BEDTIME_IMPACT_RESTRICT,
+    PTC_UI_BEDTIME_IMPACT_UNKNOWN
+} PtcUiBedtimeImpact;
+
 int ptc_ui_parent_action_count(PtcUiParentPage page);
 const char *ptc_ui_settings_status_label(const PtcUiModel *model);
 PtcUiActionState ptc_ui_settings_support_state(const PtcUiModel *model);
@@ -29,7 +36,12 @@ void ptc_ui_format_custom_shortcut_hint(
     const char *shortcut_label,
     char *out,
     size_t out_size);
-bool ptc_ui_bedtime_save_will_restrict(const PtcUiModel *model, uint16_t minute_of_day);
+PtcUiBedtimeImpact ptc_ui_bedtime_save_impact(const PtcUiModel *model,
+    uint16_t minute_of_day, int64_t now);
+bool ptc_ui_bedtime_section_dirty(const PtcUiModel *model, PtcUiBedtimeSection section);
+PtcBedtimePolicy ptc_ui_bedtime_section_policy(const PtcUiModel *model,
+    PtcUiBedtimeSection section);
+void ptc_ui_bedtime_discard_section(PtcUiModel *model, PtcUiBedtimeSection section);
 int ptc_ui_migrate_setup_step(int step, int wizard_version);
 PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model);
 void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint16_t day_index, int64_t now,
