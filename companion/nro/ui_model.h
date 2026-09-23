@@ -178,6 +178,7 @@ typedef enum {
 
 typedef struct {
     char clock_text[6];
+    char date_text[32];
     char remaining_text[48];
     char freshness_text[48];
     bool progress_available;

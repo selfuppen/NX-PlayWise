@@ -127,6 +127,11 @@ PtcUiRect ptc_ui_notice_command_text_rect(int y, int height)
     return (PtcUiRect){108, y + height - 28, 1094, 22};
 }
 
+PtcUiRect ptc_ui_time_status_bar_rect(void)
+{
+    return (PtcUiRect){754, 24, 472, 66};
+}
+
 PtcUiRect ptc_ui_setup_zone_rect(int index)
 {
     PtcUiRect rect = {204 + index * 448, 286, 400, 190};

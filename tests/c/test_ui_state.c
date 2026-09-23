@@ -2699,6 +2699,10 @@ static void test_global_time_projection_and_direct_inputs(void)
     ptc_ui_project_time_status(&model, 1000, &status);
     check_true(strlen(status.clock_text) == 5 && status.clock_text[2] == ':',
                "global status formats the current clock as HH:mm");
+    check_true(strstr(status.date_text, "月") != NULL &&
+               strstr(status.date_text, "日") != NULL &&
+               strstr(status.date_text, "周") != NULL,
+               "global status formats the current date with month, day, and weekday");
     check_true(status.progress_available && status.progress_per_mille == 500 &&
                status.state == PTC_UI_TIME_NORMAL,
                "global status uses forecast total for the remaining ratio");

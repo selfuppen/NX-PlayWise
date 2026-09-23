@@ -118,6 +118,7 @@ PtcUiRect ptc_ui_notice_rect(void);
 PtcUiRect ptc_ui_notice_details_rect(void);
 PtcUiRect ptc_ui_notice_status_icon_rect(int y);
 PtcUiRect ptc_ui_notice_command_text_rect(int y, int height);
+PtcUiRect ptc_ui_time_status_bar_rect(void);
 PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_subpage_footer_rect(int index);
 PtcUiRect ptc_ui_parent_tab_rect(int index);

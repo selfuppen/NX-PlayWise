@@ -105,8 +105,7 @@ static UiActiveRuleBadge get_active_rule_badge(const PtcUiModel *model)
 void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     PtcUiTimeProjection status;
-    UiRect box = {754, 24, 472, 66};
-    char fitted[64];
+    UiRect box = to_uirect(ptc_ui_time_status_bar_rect());
     char fitted_fresh[64];
     uint32_t color;
     UiActiveRuleBadge badge;
@@ -118,39 +117,66 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     fill_round_rect(pixels, stride, box, 14, UI_SURFACE);
     draw_rect_outline(pixels, stride, box, 14, 1, UI_BORDER);
 
-    /* 时钟显示 */
-    draw_text(pixels, stride, box.x + 14, box.y + 26, status.clock_text, 17, UI_INK);
+    /* --- 第一层：时钟、日期星期、生效规则胶囊徽章、更新时效 --- */
+    /* 1. 时钟显示 (突出粗体) */
+    draw_text_bold(pixels, stride, box.x + 14, box.y + 21, status.clock_text, 16, UI_INK);
+    int clock_w = measure_text(status.clock_text, 16);
 
-    /* 当前生效规则胶囊徽章 */
-    UiRect pill = {box.x + 68, box.y + 11, 74, 22};
-    fill_round_rect(pixels, stride, pill, 6, badge.bg_color);
-    draw_rect_outline(pixels, stride, pill, 6, 1, badge.color);
-    fill_round_rect(pixels, stride, (UiRect){pill.x + 6, pill.y + 8, 6, 6}, 3, badge.color);
-    draw_text(pixels, stride, pill.x + 16, box.y + 26, badge.label, 12, badge.color);
+    /* 2. 微细竖向分隔线 */
+    int div_x = box.x + 14 + clock_w + 9;
+    draw_line(pixels, stride, div_x, box.y + 10, div_x, box.y + 22, 1, UI_BORDER);
 
-    /* 剩余/状态文本 */
-    fit_text(fitted, sizeof(fitted), status.remaining_text, 16, 185);
-    draw_text(pixels, stride, box.x + 150, box.y + 26, fitted, 16, color);
+    /* 3. 日期与星期显示 */
+    int date_x = div_x + 9;
+    draw_text(pixels, stride, date_x, box.y + 21, status.date_text, 13, UI_MUTED);
+    int date_w = measure_text(status.date_text, 13);
 
-    /* 更新时效 */
+    /* 4. 当前生效规则胶囊徽章 (随日期动态自适应排版) */
+    int badge_text_w = measure_text(badge.label, 11);
+    int pill_w = badge_text_w + 22;
+    if (pill_w < 64) pill_w = 64;
+    UiRect pill = {date_x + date_w + 10, box.y + 7, pill_w, 19};
+    fill_round_rect(pixels, stride, pill, 5, badge.bg_color);
+    draw_rect_outline(pixels, stride, pill, 5, 1, badge.color);
+    fill_round_rect(pixels, stride, (UiRect){pill.x + 6, pill.y + 6, 5, 5}, 2, badge.color);
+    draw_text(pixels, stride, pill.x + 15, box.y + 21, badge.label, 11, badge.color);
+
+    /* 5. 数据更新时效 (右对齐) */
     fit_text(fitted_fresh, sizeof(fitted_fresh), status.freshness_text, 12, 110);
     int fresh_w = measure_text(fitted_fresh, 12);
-    draw_text(pixels, stride, box.x + box.width - 14 - fresh_w, box.y + 26, fitted_fresh, 12, UI_MUTED);
+    draw_text(pixels, stride, box.x + box.width - 14 - fresh_w, box.y + 21, fitted_fresh, 12, UI_MUTED);
 
-    /* 额度进度槽 */
-    int demo_w = model->demo_secret_enabled ? 46 : 0;
-    UiRect track = {box.x + 14, box.y + 46, box.width - 28 - demo_w, 6};
-    fill_round_rect(pixels, stride, track, 3, UI_RAISED);
+    /* --- 第二层：核心游玩额度状态 (前缀次级色与数值高亮加粗) 与 演示模式徽章 --- */
+    const char *pfx = "今天还可玩：";
+    size_t pfx_len = strlen(pfx);
+    int rem_max_w = box.width - 28 - (model->demo_secret_enabled ? 48 : 0);
+    if (strncmp(status.remaining_text, pfx, pfx_len) == 0) {
+        char fitted_rem[64];
+        const char *val = status.remaining_text + pfx_len;
+        int pfx_w = measure_text(pfx, 15);
+        draw_text(pixels, stride, box.x + 14, box.y + 43, pfx, 15, UI_MUTED);
+        fit_text(fitted_rem, sizeof(fitted_rem), val, 15, rem_max_w - pfx_w);
+        draw_text_bold(pixels, stride, box.x + 14 + pfx_w, box.y + 43, fitted_rem, 15, color);
+    } else {
+        char fitted_rem[64];
+        fit_text(fitted_rem, sizeof(fitted_rem), status.remaining_text, 15, rem_max_w);
+        draw_text_bold(pixels, stride, box.x + 14, box.y + 43, fitted_rem, 15, color);
+    }
+
+    if (model->demo_secret_enabled) {
+        UiRect dbadge = {box.x + box.width - 14 - 38, box.y + 30, 38, 18};
+        fill_round_rect(pixels, stride, dbadge, 5, UI_DANGER_SOFT);
+        draw_text_center(pixels, stride, dbadge, "演示", 11, UI_DANGER);
+    }
+
+    /* --- 第三层：全宽精致圆角额度进度槽 (置于卡片下沿基线) --- */
+    UiRect track = {box.x + 14, box.y + 53, box.width - 28, 5};
+    fill_round_rect(pixels, stride, track, 2, UI_RAISED);
     if (status.progress_available && status.progress_per_mille > 0) {
         int width = track.width * status.progress_per_mille / 1000;
         if (width < 4) width = 4;
         if (width > track.width) width = track.width;
-        fill_round_rect(pixels, stride, (UiRect){track.x, track.y, width, track.height}, 3, color);
-    }
-    if (model->demo_secret_enabled) {
-        UiRect dbadge = {box.x + box.width - 14 - 38, box.y + 40, 38, 18};
-        fill_round_rect(pixels, stride, dbadge, 5, UI_DANGER_SOFT);
-        draw_text_center(pixels, stride, dbadge, "演示", 11, UI_DANGER);
+        fill_round_rect(pixels, stride, (UiRect){track.x, track.y, width, track.height}, 2, color);
     }
 }
 

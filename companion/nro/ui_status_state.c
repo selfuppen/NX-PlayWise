@@ -173,13 +173,31 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
     if (!out) return;
     memset(out, 0, sizeof(*out));
     snprintf(out->clock_text, sizeof(out->clock_text), "--:--");
+    snprintf(out->date_text, sizeof(out->date_text), "--月--日");
     snprintf(out->remaining_text, sizeof(out->remaining_text), "状态待确认");
     snprintf(out->freshness_text, sizeof(out->freshness_text), "等待刷新");
     out->state = PTC_UI_TIME_UNKNOWN;
     local = localtime(&clock_value);
     if (local) {
+        static const char *const WEEKDAYS[7] = {
+            "周日", "周一", "周二", "周三", "周四", "周五", "周六"
+        };
+        int wday = (local->tm_wday >= 0 && local->tm_wday < 7) ? local->tm_wday : 0;
         snprintf(out->clock_text, sizeof(out->clock_text), "%02d:%02d",
                  local->tm_hour, local->tm_min);
+        snprintf(out->date_text, sizeof(out->date_text), "%d月%d日 %s",
+                 local->tm_mon + 1, local->tm_mday, WEEKDAYS[wday]);
+    } else if (model && model->status_loaded && model->day_index > 0) {
+        static const char *const WEEKDAYS[7] = {
+            "周日", "周一", "周二", "周三", "周四", "周五", "周六"
+        };
+        uint16_t y = 0;
+        uint8_t m = 0, d = 0;
+        if (ptc_date_from_day_index(model->day_index, &y, &m, &d)) {
+            uint8_t w = ptc_weekday_from_day_index(model->day_index);
+            snprintf(out->date_text, sizeof(out->date_text), "%u月%u日 %s",
+                     (unsigned int)m, (unsigned int)d, WEEKDAYS[w % 7]);
+        }
     }
     if (!model) return;
 
