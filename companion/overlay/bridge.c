@@ -176,6 +176,15 @@ PtcCompanionStatus ptc_overlay_bridge_restore_install_snapshot(PtcOverlayBridge 
             created_at, "restore_install_snapshot"));
 }
 
+PtcCompanionStatus ptc_overlay_bridge_claim_daily_buffer(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16)
+{
+    if (!prepare_request(bridge, created_at, random16)) return PTC_COMPANION_BAD_ARGUMENT;
+    return begin_request(bridge,
+        ptc_companion_transport_submit_empty(&bridge->transport, bridge->request_id,
+            created_at, "claim_daily_buffer"));
+}
+
 PtcCompanionStatus ptc_overlay_bridge_poll(PtcOverlayBridge *bridge, int elapsed_ms, int timeout_ms)
 {
     PtcCompanionStatus status;

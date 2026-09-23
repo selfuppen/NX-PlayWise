@@ -43,6 +43,9 @@ PtcCompanionStatus ptc_overlay_bridge_disable_today_limit(PtcOverlayBridge *brid
     int64_t created_at, uint16_t random16);
 PtcCompanionStatus ptc_overlay_bridge_restore_install_snapshot(PtcOverlayBridge *bridge,
     int64_t created_at, uint16_t random16);
+PtcCompanionStatus ptc_overlay_bridge_claim_daily_buffer(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16);
+
 PtcCompanionStatus ptc_overlay_bridge_poll(PtcOverlayBridge *bridge, int elapsed_ms, int timeout_ms);
 PtcCompanionTransportRoute ptc_overlay_bridge_transport_state(const PtcOverlayBridge *bridge);
 const char *ptc_overlay_bridge_transport_label(const PtcOverlayBridge *bridge);

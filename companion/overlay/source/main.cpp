@@ -106,6 +106,7 @@ enum class OverlayRequestKind {
     OverlayReady,
     PreviewOfflineCode,
     OfflineCode,
+    ClaimDailyBuffer,
     AddTodayMinutes,
     DisableTodayLimit,
     SkipBedtime,
@@ -629,11 +630,33 @@ public:
 
     static bool is_access_recovery_request(OverlayRequestKind kind)
     {
-        return kind == OverlayRequestKind::AddTodayMinutes ||
+        return kind == OverlayRequestKind::ClaimDailyBuffer ||
+            kind == OverlayRequestKind::AddTodayMinutes ||
             kind == OverlayRequestKind::DisableTodayLimit ||
             kind == OverlayRequestKind::SkipBedtime ||
             kind == OverlayRequestKind::DisableBedtime ||
             kind == OverlayRequestKind::RestoreInstallSnapshot;
+    }
+
+    bool begin_claim_daily_buffer()
+    {
+        if (!bridge_ || bridge_->waiting) return false;
+        const int64_t now = static_cast<int64_t>(std::time(nullptr));
+        PtcCompanionStatus status = ptc_overlay_bridge_claim_daily_buffer(
+            bridge_, now, ++request_nonce_);
+        if (status != PTC_COMPANION_OK) {
+            error_ = true;
+            last_request_kind_ = OverlayRequestKind::ClaimDailyBuffer;
+            bedtime_recovery_view_ = BedtimeRecoveryView::Result;
+            bedtime_recovery_succeeded_ = false;
+            return false;
+        }
+        active_request_kind_ = OverlayRequestKind::ClaimDailyBuffer;
+        last_request_kind_ = OverlayRequestKind::ClaimDailyBuffer;
+        request_started_tick_ = armGetSystemTick();
+        last_elapsed_ms_ = 0;
+        error_ = false;
+        return true;
     }
 
     bool access_recovery_visible() const
@@ -694,10 +717,17 @@ public:
         if (left.y > STICK_DEADZONE) keysDown |= HidNpadButton_Up;
         if (left.y < -STICK_DEADZONE) keysDown |= HidNpadButton_Down;
         if (bedtime_recovery_view_ == BedtimeRecoveryView::Landing) {
+            const bool bedtime_restricted = displayed_summary_.bedtime_active &&
+                !displayed_summary_.bedtime_skipped;
             if ((keysDown & HidNpadButton_A) && displayed_summary_.daily_restriction_active &&
-                !(displayed_summary_.bedtime_active && !displayed_summary_.bedtime_skipped)) {
+                !bedtime_restricted) {
                 daily_code_entry_ = true;
                 ptc_overlay_input_init(input_);
+            } else if ((keysDown & HidNpadButton_Plus) && displayed_summary_.daily_restriction_active &&
+                       !bedtime_restricted) {
+                if (displayed_summary_.daily_buffer_available && !bridge_->waiting) {
+                    (void)begin_claim_daily_buffer();
+                }
             } else if (keysDown & HidNpadButton_X) {
                 bedtime_recovery_view_ = BedtimeRecoveryView::Pin;
                 pin_[0] = '\0';
@@ -778,10 +808,15 @@ public:
             bedtime_recovery_view_ = BedtimeRecoveryView::Landing;
             error_ = false;
         } else if ((keysDown & HidNpadButton_Y) && !bridge_->waiting) {
-            bedtime_recovery_view_ = BedtimeRecoveryView::Pin;
-            pin_[0] = '\0';
-            pin_length_ = 0;
-            pin_message_[0] = '\0';
+            if (last_request_kind_ == OverlayRequestKind::ClaimDailyBuffer) {
+                bedtime_recovery_view_ = BedtimeRecoveryView::Landing;
+                error_ = false;
+            } else {
+                bedtime_recovery_view_ = BedtimeRecoveryView::Pin;
+                pin_[0] = '\0';
+                pin_length_ = 0;
+                pin_message_[0] = '\0';
+            }
         }
         return true;
     }
@@ -878,6 +913,7 @@ public:
         if (kind == OverlayRequestKind::Status) return "刷新今日状态";
         if (kind == OverlayRequestKind::PreviewOfflineCode) return "预览今日加时";
         if (kind == OverlayRequestKind::OfflineCode) return "提交今日加时";
+        if (kind == OverlayRequestKind::ClaimDailyBuffer) return "领取自主缓冲";
         return "未开始";
     }
 
@@ -1043,15 +1079,31 @@ public:
 
         if (bedtime_recovery_view_ == BedtimeRecoveryView::Landing) {
             renderer->drawString("限制期间仅可操作 PlayWise Overlay 与任天堂原生弹窗。",
-                false, cx + 14, cy + 168, 14, renderer->a(TEXT_COLOR), 300);
-            if (!bedtime_restricted) renderer->drawString("A  输入8位加时码", false,
-                cx + 14, cy + 210, 15, renderer->a(FOCUS_BORDER));
+                false, cx + 14, cy + 160, 13, renderer->a(TEXT_COLOR), 300);
+            if (!bedtime_restricted) {
+                renderer->drawString("A  输入8位加时码", false,
+                    cx + 14, cy + 200, 15, renderer->a(FOCUS_BORDER));
+                if (displayed_summary_.daily_buffer_available) {
+                    std::snprintf(line, sizeof(line), "+  领取自主缓冲  +%d 分钟",
+                        displayed_summary_.daily_buffer_minutes);
+                    renderer->drawString(line, false, cx + 14, cy + 234, 15, renderer->a(FOCUS_BORDER));
+                } else if (displayed_summary_.daily_buffer_claimed) {
+                    renderer->drawString("今日已使用自主缓冲（明日恢复）", false,
+                        cx + 14, cy + 234, 13, renderer->a(MUTED_COLOR));
+                } else if (displayed_summary_.daily_buffer_minutes == 0) {
+                    renderer->drawString("今日自主缓冲未开启", false,
+                        cx + 14, cy + 234, 13, renderer->a(MUTED_COLOR));
+                } else {
+                    renderer->drawString("自主缓冲暂不可领取", false,
+                        cx + 14, cy + 234, 13, renderer->a(MUTED_COLOR));
+                }
+            }
             renderer->drawString("X  输入家长 PIN 并选择恢复动作", false,
-                cx + 14, cy + (bedtime_restricted ? 224 : 246), 15, renderer->a(FOCUS_BORDER));
+                cx + 14, cy + (bedtime_restricted ? 214 : 268), 15, renderer->a(FOCUS_BORDER));
             renderer->drawString("任天堂家长控制 PIN 可在原生弹窗中临时解锁。", false,
-                cx + 14, cy + 282, 12, renderer->a(WAITING_COLOR), 300);
+                cx + 14, cy + (bedtime_restricted ? 260 : 304), 12, renderer->a(WAITING_COLOR), 300);
             renderer->drawString("Y  刷新状态    B  关闭浮窗", false,
-                cx + 14, cy + 322, 13, renderer->a(MUTED_COLOR));
+                cx + 14, cy + (bedtime_restricted ? 300 : 344), 13, renderer->a(MUTED_COLOR));
             return;
         }
         if (bedtime_recovery_view_ == BedtimeRecoveryView::Pin) {
@@ -1105,12 +1157,23 @@ public:
                 (bedtime_recovery_succeeded_ ? SUCCESS_COLOR : ERROR_COLOR)));
         if (!bridge_->waiting && bedtime_recovery_succeeded_) {
             const bool fully_unblocked = !displayed_summary_.access_recovery_required;
-            renderer->drawString(fully_unblocked ? "已重读 PCTL：限制原因已全部消失，弹窗应解除" :
-                (displayed_summary_.daily_restriction_active ?
-                    "就寝限制已移除，但仍受每日额度限制" :
-                    "已重读 PCTL；仍需根据限制原因确认弹窗状态"),
-                false, cx + 14, cy + 220, 13,
-                renderer->a(fully_unblocked ? SUCCESS_COLOR : WAITING_COLOR), 300);
+            if (last_request_kind_ == OverlayRequestKind::ClaimDailyBuffer) {
+                std::snprintf(line, sizeof(line), "自主缓冲已领取，已增加 %d 分钟",
+                    displayed_summary_.daily_buffer_minutes);
+                renderer->drawString(line, false, cx + 14, cy + 220, 14,
+                    renderer->a(SUCCESS_COLOR), 300);
+                renderer->drawString(fully_unblocked ? "已重读 PCTL：限制原因已全部消失，弹窗应解除" :
+                    "已重读 PCTL；仍需根据限制原因确认弹窗状态",
+                    false, cx + 14, cy + 250, 13,
+                    renderer->a(fully_unblocked ? SUCCESS_COLOR : WAITING_COLOR), 300);
+            } else {
+                renderer->drawString(fully_unblocked ? "已重读 PCTL：限制原因已全部消失，弹窗应解除" :
+                    (displayed_summary_.daily_restriction_active ?
+                        "就寝限制已移除，但仍受每日额度限制" :
+                        "已重读 PCTL；仍需根据限制原因确认弹窗状态"),
+                    false, cx + 14, cy + 220, 13,
+                    renderer->a(fully_unblocked ? SUCCESS_COLOR : WAITING_COLOR), 300);
+            }
         } else if (!bridge_->waiting) {
             const char *message = ptc_overlay_bridge_error_message_zh(bridge_);
             renderer->drawString(message, false, cx + 14, cy + 220, 13,
@@ -1124,8 +1187,13 @@ public:
             renderer->drawString("请重试、升级为完整快照恢复，或从 SD/外部环境恢复。",
                 false, cx + 14, cy + 344, 12, renderer->a(MUTED_COLOR), 300);
         }
-        renderer->drawString("Y  重新验证 PIN 后重试    B  返回", false,
-            cx + 14, cy + 430, 13, renderer->a(FOCUS_BORDER));
+        if (last_request_kind_ == OverlayRequestKind::ClaimDailyBuffer) {
+            renderer->drawString("B  返回", false,
+                cx + 14, cy + 430, 13, renderer->a(FOCUS_BORDER));
+        } else {
+            renderer->drawString("Y  重新验证 PIN 后重试    B  返回", false,
+                cx + 14, cy + 430, 13, renderer->a(FOCUS_BORDER));
+        }
     }
 
     void draw_overlay(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw, s32 ch)

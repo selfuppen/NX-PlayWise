@@ -666,6 +666,19 @@ static void test_result_summary_access_recovery(void)
     check_true(ptc_companion_result_summary_parse(bedtime_locked, &summary) &&
         !summary.bedtime_skipped_window_available,
         "older results without skipped_window remain valid and treat it as unavailable");
+    {
+        const char *autonomy_json =
+            "{\"version\":1,\"request_id\":\"status-autonomy\",\"type\":\"status\",\"status\":\"ok\","
+            "\"state\":{\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+            "\"remaining_available\":true,\"remaining_minutes\":0,\"played_minutes_available\":true,"
+            "\"played_minutes\":60,\"play_timer_enabled\":1,\"restricted_now\":1,"
+            "\"autonomy\":{\"daily_buffer_minutes\":10,\"claimed_today\":false,\"available\":true,\"reason\":\"available\"}},"
+            "\"completed_at\":1}";
+        check_true(ptc_companion_result_summary_parse(autonomy_json, &summary) &&
+            summary.daily_buffer_minutes == 10 && !summary.daily_buffer_claimed &&
+            summary.daily_buffer_available && strcmp(summary.daily_buffer_reason, "available") == 0,
+            "result summary projects autonomy daily buffer fields");
+    }
 }
 
 static void test_install_defaults_preserve_runtime_data(void)
@@ -780,6 +793,25 @@ static void test_auth_and_queue(void)
         strstr(text, "\"type\":\"status\"") != NULL, "queued request has release type");
     check_int(ptc_companion_set_disable_flag(&client, true), PTC_COMPANION_OK, "emergency disable enabled");
     check_int(ptc_companion_set_disable_flag(&client, false), PTC_COMPANION_OK, "emergency disable cleared");
+}
+
+static void test_overlay_bridge_claim_daily_buffer(void)
+{
+    PtcMemStorage mem;
+    PtcOverlayBridge bridge;
+    char text[1024];
+    char path[128];
+    ptc_mem_storage_init(&mem);
+    ptc_overlay_bridge_init(&bridge, "app", &mem.storage);
+    check_int(ptc_overlay_bridge_claim_daily_buffer(&bridge, 100, 1), PTC_COMPANION_OK,
+              "overlay bridge submits claim_daily_buffer");
+    check_true(bridge.waiting, "bridge marks request waiting");
+    snprintf(path, sizeof(path), "app/inbox/pending/%s.json", bridge.request_id);
+    check_true(mem.storage.vtable->read_text(&mem.storage, path, text, sizeof(text)),
+               "claim_daily_buffer request file exists");
+    check_true(strstr(text, "\"type\":\"claim_daily_buffer\"") != NULL,
+               "claim_daily_buffer request type matches");
+    ptc_overlay_bridge_exit(&bridge);
 }
 
 static void test_overlay_result_classification(void)
@@ -2496,6 +2528,7 @@ int main(void)
     test_support_redaction();
     test_install_defaults_preserve_runtime_data();
     test_auth_and_queue();
+    test_overlay_bridge_claim_daily_buffer();
     test_overlay_result_classification();
     test_overlay_request_action_gate();
     test_pending_redemption_recovery_marker();

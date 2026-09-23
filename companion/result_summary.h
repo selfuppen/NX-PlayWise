@@ -55,6 +55,10 @@ typedef struct {
     char bedtime_source[32];
     char bedtime_recovery_phase[32];
     char rule_source[32];
+    int daily_buffer_minutes;
+    bool daily_buffer_claimed;
+    bool daily_buffer_available;
+    char daily_buffer_reason[32];
     char status[8];
     char type[48];
     char reason[64];

@@ -100,6 +100,14 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->access_recovery_required =
         (out->daily_restriction_active || (out->bedtime_active && !out->bedtime_skipped)) &&
         !(out->temporary_unlocked_available && out->temporary_unlocked);
+    {
+        const cJSON *autonomy = cJSON_GetObjectItemCaseSensitive(state, "autonomy");
+        out->daily_buffer_minutes = number_value(autonomy, "daily_buffer_minutes", 0);
+        out->daily_buffer_claimed = bool_value(autonomy, "claimed_today", false);
+        out->daily_buffer_available = bool_value(autonomy, "available", false);
+        snprintf(out->daily_buffer_reason, sizeof(out->daily_buffer_reason), "%s",
+            string_value(autonomy, "reason"));
+    }
     preview = cJSON_GetObjectItemCaseSensitive(root, "preview");
     out->preview_available = cJSON_IsObject(preview);
     out->grant_minutes = number_value(preview, "grant_minutes", 0);
