@@ -137,6 +137,7 @@ def detect_local_docker_identity(container_name: str) -> tuple[str | None, str |
             text=True,
             capture_output=True,
             check=True,
+            timeout=5,
         )
     except (OSError, subprocess.SubprocessError):
         return None, None
@@ -853,7 +854,7 @@ def parse_args() -> argparse.Namespace:
         "--jobs",
         type=int,
         default=None,
-        help="Number of parallel make compilation jobs. Default: automatic multi-core parallel.",
+        help="Number of parallel make compilation jobs. Default: 2.",
     )
     return parser.parse_args()
 
@@ -861,6 +862,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     only = "previews" if args.previews else args.only
+    jobs = args.jobs if args.jobs is not None else 2
     try:
         build_and_verify(
             args.host,
@@ -872,7 +874,7 @@ def main() -> int:
             with_eden=args.with_eden,
             clean=args.clean,
             run_tests=not args.skip_tests,
-            jobs=args.jobs,
+            jobs=jobs,
             build_image=args.build_image,
             build_image_digest=args.build_image_digest,
             docker_container=args.docker_container,

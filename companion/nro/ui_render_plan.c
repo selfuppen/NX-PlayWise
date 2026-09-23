@@ -180,8 +180,9 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_text(pixels, stride, panel.x + 20, panel.y + 32, title, 18, UI_WARNING);
 
     UiRect result = {panel.x + 20, panel.y + 50, panel.width - 40, 104};
-    UiRect left = {result.x + 8, result.y + 8, 132, result.height - 16};
-    UiRect right = {result.x + result.width - 140, result.y + 8, 132, result.height - 16};
+    int col_w = panel.width >= 440 ? 168 : 132;
+    UiRect left = {result.x + 10, result.y + 8, col_w, result.height - 16};
+    UiRect right = {result.x + result.width - 10 - col_w, result.y + 8, col_w, result.height - 16};
     fill_round_rect(pixels, stride, result, 12, UI_RGB(UI_BLENDED(surface_raised)));
     draw_rect_outline(pixels, stride, result, 12, 1, UI_RGB(UI_BLENDED(border_control)));
     if (projection.state == PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE) {

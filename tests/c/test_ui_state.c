@@ -1351,15 +1351,11 @@ static void test_release_hit_targets(void)
               "duration minute field is touchable");
     check_hit(hit_center(&model, ptc_ui_minute_editor_key_rect(10)), PTC_UI_HIT_NUMPAD_KEY, 10,
               "compact minute editor zero key is touchable");
-    check_hit(hit_center(&model, ptc_ui_minute_editor_quick_rect(0)), PTC_UI_HIT_NUMPAD_QUICK, 0,
-              "compact minute editor quick adjustment is touchable");
-    check_hit(hit_center(&model, ptc_ui_minute_editor_quick_rect(1)), PTC_UI_HIT_NUMPAD_QUICK, 1,
-              "compact minute editor opposite quick adjustment is touchable");
+    check_true(ptc_ui_minute_editor_quick_rect(0).w == 0 &&
+               ptc_ui_minute_editor_quick_rect(1).w == 0,
+               "compact minute editor no longer renders quick adjust buttons");
     check_true(ptc_ui_minute_editor_key_rect(2).x + ptc_ui_minute_editor_key_rect(2).w < 716,
                "compact minute editor keypad stays left of the right-side information panel");
-    check_true(ptc_ui_minute_editor_quick_rect(1).x + ptc_ui_minute_editor_quick_rect(1).w < 716 &&
-               ptc_ui_minute_editor_quick_rect(2).w == 0,
-               "compact minute editor quick actions stay left of the information panel");
     {
         PtcUiRect summary_rect = ptc_ui_minute_editor_summary_rect();
         PtcUiRect hours_rect = ptc_ui_minute_editor_field_rect(PTC_UI_DURATION_HOURS);
@@ -1367,7 +1363,7 @@ static void test_release_hit_targets(void)
         PtcUiRect details_rect = ptc_ui_notice_details_rect();
         PtcUiRect footer_rect = ptc_ui_parent_footer_rect(4);
         check_true(summary_rect.x > hours_rect.x + hours_rect.w &&
-                   summary_rect.w == 366 && summary_rect.h == 254,
+                   summary_rect.w == 470 && summary_rect.h == 350,
                    "compact plan summary uses the reserved right-side editor panel");
         check_true(!rects_overlap(summary_rect, ptc_ui_cancel_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)) &&
                    !rects_overlap(summary_rect, ptc_ui_confirm_rect(PTC_UI_OVERLAY_MINUTE_EDITOR)),
@@ -2523,12 +2519,8 @@ static void test_time_menu_modal_touch_guards(void)
                 "duration value fields do not overlap keypad keys");
     }
     for (int quick = 0; quick < 2; ++quick) {
-        PtcUiRect quick_rect = ptc_ui_minute_editor_quick_rect(quick);
-        check_hit(hit_center(&model, quick_rect), PTC_UI_HIT_NUMPAD_QUICK, quick,
-            "duration quick adjustment is touchable beside the input value");
-        for (int key = 0; key < 12; ++key)
-            check_true(!rects_overlap(quick_rect, ptc_ui_minute_editor_key_rect(key)),
-                "duration quick adjustments do not overlap keypad keys");
+        check_true(ptc_ui_minute_editor_quick_rect(quick).w == 0,
+            "duration quick adjustments are removed");
     }
 
     for (size_t index = 0; index < sizeof(bedtime_modals) / sizeof(bedtime_modals[0]); ++index) {

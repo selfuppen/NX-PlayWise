@@ -595,10 +595,6 @@ void handle_overlay_input(UiState *ui, u64 down)
         ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
         if (ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR && (down & HidNpadButton_Minus)) {
             ptc_ui_duration_toggle_field(&ui->model);
-        } else if (ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR && (down & HidNpadButton_L)) {
-            ptc_ui_duration_select_field(&ui->model, PTC_UI_DURATION_HOURS);
-        } else if (ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR && (down & HidNpadButton_R)) {
-            ptc_ui_duration_select_field(&ui->model, PTC_UI_DURATION_MINUTES);
         } else if (down & HidNpadButton_Left) {
             ptc_ui_numpad_move(&ui->model, -1, 0);
         } else if (down & HidNpadButton_Right) {
@@ -611,10 +607,6 @@ void handle_overlay_input(UiState *ui, u64 down)
             ptc_ui_numpad_backspace(&ui->model);
         } else if (down & HidNpadButton_Y) {
             ptc_ui_numpad_clear(&ui->model);
-        } else if (down & HidNpadButton_ZL) {
-            ptc_ui_numpad_adjust(&ui->model, -15);
-        } else if (down & HidNpadButton_ZR) {
-            ptc_ui_numpad_adjust(&ui->model, 15);
         } else if (down & HidNpadButton_A) {
             ptc_ui_numpad_activate(&ui->model);
         } else if (down & HidNpadButton_Plus) {
