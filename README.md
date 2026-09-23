@@ -58,6 +58,10 @@
 
 具体页面使用说明，参见[使用指南](docs/使用指南.md)。
 
+## 常见问题
+
+**设置今日总额度后显示“已到限制”、还可玩 0 分钟，但游戏仍能打开？** 先确认 Nintendo 官方家长控制已启用“时间到了暂停软件”，且没有临时解除限制；再尝试联网校准 Switch 时间，例如使用 DBI 的“工具 → NTP 时间同步”或 [QuickNTP（Tesla 时间同步工具）](https://github.com/ppkantorski/QuickNTP)。同步成功后刷新 PlayWise 状态，并用非关键游戏重新验证是否实际暂停。校时是一个可能的解决方法，不能保证修复所有计时或限制故障。详见[使用指南的常见问题](docs/使用指南.md#常见问题)和[相关 Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1)。
+
 ## 推荐环境与验证状态
 
 当前候选的资格目标为 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2。2026-08-10 的记录是早于当前 PCTL 改动的历史证据。候选默认是 `pending`；只有发布 Zip 的 SHA-256 与同目录 `qualification.json` 完全匹配，才表示该原包在记录环境通过资格验证。其他构建或系统版本均视为未验证。
