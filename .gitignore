@@ -27,7 +27,7 @@ node_modules/
 *.log
 .env
 
-# Optional local UI-preview font; never commit or distribute it.
+# Legacy local preview font; current builds use pinned third_party font.
 /build/ui-preview-font.ttf
 
 # Switch build and packaging artifacts

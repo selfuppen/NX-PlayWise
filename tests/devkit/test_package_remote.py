@@ -17,6 +17,7 @@ TOOLS = ROOT / "tools"
 sys.path.insert(0, str(TOOLS))
 
 import package_remote  # noqa: E402
+import sync_doc_previews  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:
@@ -99,8 +100,8 @@ def test_container_command() -> None:
     command = package_remote.container_command()
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     require("/ws/playwise" in command, "container command must use the mounted repository")
-    require("make -j test && make -j packages" in command,
-            "container command must finish tests before generating package manifests")
+    require("make -j test && python3 tools/sync_doc_previews.py && make -j packages" in command,
+            "container command must synchronize fresh previews before package manifests")
     require("packages: package-complete device-lab-package" in makefile,
             "packages target must verify the isolated Device Lab target")
     require("make clean" not in command, "the default build must reuse valid intermediates")
@@ -119,11 +120,13 @@ def test_container_command() -> None:
 
     incremental = package_remote.container_command(clean=False)
     require("make clean" not in incremental, "incremental build must omit make clean")
-    require("make -j test && make -j packages" in incremental,
-            "incremental build must still finish tests before compiling packages")
+    require("make -j test && python3 tools/sync_doc_previews.py && make -j packages" in incremental,
+            "incremental build must synchronize previews before compiling packages")
 
     skip_tests = package_remote.container_command(run_tests=False)
     require("test" not in skip_tests.split("make -j ")[1].split(), "skip_tests must omit test target")
+    require("make -j ui-previews && python3 tools/sync_doc_previews.py && make -j packages" in skip_tests,
+            "skipping tests must still refresh documentation previews")
 
     only_lab = package_remote.container_command(only="device-lab")
     require("device-lab-package" in only_lab, "only=device-lab must target device-lab-package")
@@ -131,6 +134,8 @@ def test_container_command() -> None:
 
     only_previews = package_remote.container_command(only="previews")
     require("ui-previews" in only_previews, "only=previews must target ui-previews")
+    require("python3 tools/sync_doc_previews.py" in only_previews,
+            "only=previews must synchronize selected documentation scenes")
     require("make -j test &&" not in only_previews, "only=previews must skip redundant make test")
     require("packages" not in only_previews, "only=previews must omit package targets")
 
@@ -458,20 +463,37 @@ def test_parse_args_eden() -> None:
         require(args.with_eden is True, "parse_args must accept --with-eden")
 
 
-def test_sync_doc_previews(tmp_path: Path | None = None) -> None:
+def test_sync_doc_previews() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)
         preview_dir = root / "build" / "ui-previews"
-        doc_images_dir = root / "docs" / "images"
+        doc_images_dir = root / "docs" / "images" / "usage"
         (preview_dir / "child").mkdir(parents=True)
         (preview_dir / "child" / "child-light.png").write_bytes(b"NEW_CHILD")
-        (doc_images_dir / "usage" / "child").mkdir(parents=True)
-        target_mod = doc_images_dir / "usage" / "child" / "child-light.png"
+        (doc_images_dir / "child").mkdir(parents=True)
+        target_mod = doc_images_dir / "child" / "child-light.png"
         target_mod.write_bytes(b"OLD_CHILD")
-
-        synced = package_remote.sync_doc_previews(preview_dir, doc_images_dir)
-        require(synced == 1, f"expected 1 synced image, got {synced}")
-        require(target_mod.read_bytes() == b"NEW_CHILD", "target module preview must be updated")
+        with mock.patch.object(sync_doc_previews, "PREVIEW_FILES", ("child/child-light.png", "parent/parent-dark.png")):
+            try:
+                sync_doc_previews.synchronize(preview_dir, doc_images_dir)
+            except FileNotFoundError:
+                pass
+            else:
+                raise AssertionError("a missing selected scene must fail before copying")
+            require(target_mod.read_bytes() == b"OLD_CHILD", "missing scene must not partly synchronize")
+            (preview_dir / "parent").mkdir()
+            (preview_dir / "parent" / "parent-dark.png").write_bytes(b"PARENT")
+            try:
+                sync_doc_previews.synchronize(preview_dir, doc_images_dir, check=True)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("stale documentation image must fail the check")
+            synced = sync_doc_previews.synchronize(preview_dir, doc_images_dir)
+            require(synced == 2, f"expected 2 synced images, got {synced}")
+            require(target_mod.read_bytes() == b"NEW_CHILD", "selected scene must be updated")
+            require(sync_doc_previews.synchronize(preview_dir, doc_images_dir, check=True) == 0,
+                    "unchanged previews must pass the freshness check")
 
 
 def main() -> int:

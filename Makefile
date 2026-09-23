@@ -106,21 +106,19 @@ test-ui-primitives: $(HOST_BUILD_DIR)/ui_preview
 
 test-host: test-ui-primitives
 
-# UI preview generation with a local, untracked font; nothing enters release Zips.
+# UI preview generation with the pinned, redistributable documentation font.
 .PHONY: ui-previews
 ui-previews: $(HOST_BUILD_DIR)/ui_preview
-	@if [ ! -f build/ui-preview-font.ttf ]; then \
-		echo "ERROR: missing build/ui-preview-font.ttf" >&2; \
-		echo "Please place a valid Chinese TTF font at build/ui-preview-font.ttf to generate UI previews." >&2; \
+	@if [ ! -f third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf ]; then \
+		echo "ERROR: missing pinned preview font" >&2; \
 		exit 1; \
 	fi
+	rm -rf build/ui-previews
 	mkdir -p build/ui-previews
-	$(STAGE_TIMER) playwise ui-previews -- $(HOST_BUILD_DIR)/ui_preview build/ui-preview-font.ttf build/ui-previews
+	$(STAGE_TIMER) playwise ui-previews -- $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews
 	$(STAGE_TIMER) playwise convert-previews -- python3 tools/convert_ui_previews.py
 
-ifneq ($(wildcard build/ui-preview-font.ttf),)
 test-host: ui-previews
-endif
 
 test-python:
 	$(STAGE_TIMER) global test-python -- python3 tools/test.py

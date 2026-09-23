@@ -27,6 +27,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 from playwise_version import read_playwise_version
 import stage_timer
+from sync_doc_previews import PREVIEW_FILES, synchronize
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -497,6 +498,8 @@ def container_command(
 
     targets_str = f"make {job_flag}{' '.join(targets)}"
     test_cmd = f"make {job_flag}test && " if (run_tests and only != "previews") else ""
+    preview_cmd = f"make {job_flag}ui-previews && " if not test_cmd else ""
+    sync_cmd = "python3 tools/sync_doc_previews.py && "
     identity_exports = ""
     if build_image:
         identity_exports += f" PLAYWISE_BUILD_IMAGE={shlex.quote(build_image)}"
@@ -508,7 +511,7 @@ def container_command(
         "DEVKITA64=/opt/devkitpro/devkitA64 "
         f"PATH={shlex.quote(path)}{identity_exports} "
         f"&& cd {shlex.quote(container_path)} "
-        f"&& {clean_cmd}{test_cmd}{targets_str}"
+        f"&& {clean_cmd}{test_cmd}{preview_cmd}{sync_cmd}{targets_str if only != 'previews' else 'true'}"
     )
     return f"sh -lc {shlex.quote(container_script)}"
 
@@ -604,23 +607,6 @@ def clean_package_results(package_dir: Path) -> None:
     package_dir.mkdir(parents=True)
 
 
-def sync_doc_previews(preview_dir: Path, doc_images_dir: Path) -> int:
-    """Synchronize generated UI preview images to the documentation images directory."""
-    usage_dir = doc_images_dir / "usage"
-    if not usage_dir.is_dir():
-        return 0
-
-    count = 0
-    for target_file in usage_dir.rglob("*.png"):
-        rel = target_file.relative_to(usage_dir)
-        source_file = preview_dir / rel
-        if source_file.is_file():
-            shutil.copy2(source_file, target_file)
-            count += 1
-
-    return count
-
-
 def build_and_verify(
     host: str = DEFAULT_SSH_HOST,
     port: int = DEFAULT_SSH_PORT,
@@ -708,19 +694,19 @@ def build_and_verify(
     else:
         raise PackageError(f"unknown package target: {only}")
 
+    preview_dir = ROOT / "build" / "ui-previews"
+    synchronize(preview_dir, ROOT / "docs" / "images" / "usage", check=True)
+
     if only == "previews":
         t0 = time.perf_counter()
-        preview_dir = ROOT / "build" / "ui-previews"
         if not preview_dir.is_dir():
             raise PackageError(f"missing preview directory: {preview_dir}")
         png_files = sorted(preview_dir.rglob("*.png"))
         if not png_files:
             raise PackageError(f"no preview PNG images found in {preview_dir}")
-        synced = sync_doc_previews(preview_dir, ROOT / "docs" / "images")
         stage_timer.write_timing_record("playwise", "verify-previews", time.perf_counter() - t0)
         print(f"PASS: verified {len(png_files)} UI preview PNGs in {preview_dir}")
-        if synced:
-            print(f"PASS: synchronized {synced} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage'}")
+        print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage'}")
     else:
         packages = latest_packages(package_dir, target_pkgs)
 
@@ -773,7 +759,7 @@ def build_and_verify(
     metadata = {
         "目标": target_desc,
         "清理模式": "增量复用 (Incremental)" if not clean else "完整清理 (Clean)",
-        "单元测试": "跳过" if not run_tests else "已执行",
+        "单元测试": "跳过" if only == "previews" or not run_tests else "已执行",
         "并行机制": parallel_mode,
     }
     print("\n" + stage_timer.format_timing_report(records, metadata, wall_clock_duration=overall_wall_time) + "\n")
@@ -879,7 +865,7 @@ def main() -> int:
             build_image_digest=args.build_image_digest,
             docker_container=args.docker_container,
         )
-    except (OSError, PackageError, subprocess.SubprocessError, zipfile.BadZipFile) as exc:
+    except (OSError, ValueError, PackageError, subprocess.SubprocessError, zipfile.BadZipFile) as exc:
         print(f"FAIL: container packages: {exc}")
         return 1
     if only == "previews":
