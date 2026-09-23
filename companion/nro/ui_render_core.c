@@ -216,10 +216,11 @@ void draw_arrow_glyph(uint32_t *pixels, uint32_t stride, int cx, int cy, bool up
     }
 }
 
-void draw_r_stick_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int size, int dir)
+void draw_r_stick_axis_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int size, bool vertical, int dir)
 {
     int r = size / 2;
     int cx = x + r;
+    int cy = y + r;
     uint32_t bg_col = UI_KEY_GLYPH_BG;
     uint32_t border_col = UI_KEY_GLYPH_BORDER;
     uint32_t fg_col = UI_INK;
@@ -227,11 +228,22 @@ void draw_r_stick_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int siz
     fill_round_rect(pixels, stride, (UiRect){x, y, size, size}, r, bg_col);
     draw_rect_outline(pixels, stride, (UiRect){x, y, size, size}, r, 1, border_col);
 
-    int offset_y = dir > 0 ? -1 : (dir < 0 ? 1 : 0);
-    draw_text_center(pixels, stride, (UiRect){x, y + offset_y, size, size}, "R", 12, fg_col);
+    if (vertical) {
+        int offset_y = dir > 0 ? -1 : (dir < 0 ? 1 : 0);
+        draw_text_center(pixels, stride, (UiRect){x, y + offset_y, size, size}, "R", 12, fg_col);
+        draw_line(pixels, stride, cx, y - 4, cx, y - 2, 1, dir > 0 ? UI_ACCENT : UI_MUTED);
+        draw_line(pixels, stride, cx, y + size + 2, cx, y + size + 4, 1, dir < 0 ? UI_ACCENT : UI_MUTED);
+    } else {
+        int offset_x = dir > 0 ? 1 : (dir < 0 ? -1 : 0);
+        draw_text_center(pixels, stride, (UiRect){x + offset_x, y, size, size}, "R", 12, fg_col);
+        draw_line(pixels, stride, x - 4, cy, x - 2, cy, 1, dir < 0 ? UI_ACCENT : UI_MUTED);
+        draw_line(pixels, stride, x + size + 2, cy, x + size + 4, cy, 1, dir > 0 ? UI_ACCENT : UI_MUTED);
+    }
+}
 
-    draw_line(pixels, stride, cx, y - 4, cx, y - 2, 1, dir > 0 ? UI_ACCENT : UI_MUTED);
-    draw_line(pixels, stride, cx, y + size + 2, cx, y + size + 4, 1, dir < 0 ? UI_ACCENT : UI_MUTED);
+void draw_r_stick_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int size, int dir)
+{
+    draw_r_stick_axis_glyph(pixels, stride, x, y, size, true, dir);
 }
 
 void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char *label, int size, uint32_t color)

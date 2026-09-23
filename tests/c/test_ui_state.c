@@ -507,9 +507,17 @@ static void test_numeric_input(void)
               "hour repeat changes immediately");
     check_int(ptc_ui_value_repeat_update(&repeat, -1, true, 4400), -1,
               "hour repeat accelerates frequency without changing magnitude");
+    model.confirm_hold_required = true;
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_MINUTES,
         "输入额度", "1 到 1440 分钟", 4, 1, 1440, 60);
+    check_true(!model.confirm_hold_required, "numpad open resets confirm_hold_required");
     check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR, "quota opens the shared duration editor");
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    model.confirm_hold_required = true;
+    ptc_ui_cancel_overlay(&model);
+    check_true(!model.confirm_hold_required, "cancel overlay resets confirm_hold_required");
+    ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_MINUTES,
+        "输入额度", "1 到 1440 分钟", 4, 1, 1440, 60);
     check_true(strcmp(model.duration_hours_text, "1") == 0 &&
                strcmp(model.duration_minutes_text, "0") == 0 &&
                model.duration_field == PTC_UI_DURATION_MINUTES,

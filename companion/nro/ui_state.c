@@ -148,6 +148,7 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
         model->confirm_return_title[0] = '\0';
         model->confirm_return_body[0] = '\0';
         model->operation = PTC_UI_OPERATION_NONE;
+        model->confirm_hold_required = false;
     } else if (model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
         model->overlay = PTC_UI_OVERLAY_CREDENTIAL;
         snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
@@ -164,6 +165,7 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
         model->overlay_title[0] = '\0';
         model->overlay_body[0] = '\0';
         model->operation = PTC_UI_OPERATION_NONE;
+        model->confirm_hold_required = false;
     }
     if (clear_pending_code) model->pending_code[0] = '\0';
     return true;
@@ -183,6 +185,7 @@ PtcUiOperation ptc_ui_take_confirmed_operation(PtcUiModel *model)
     model->overlay_title[0] = '\0';
     model->overlay_body[0] = '\0';
     model->operation = PTC_UI_OPERATION_NONE;
+    model->confirm_hold_required = false;
     return operation;
 }
 

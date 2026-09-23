@@ -189,6 +189,7 @@ void open_bedtime_window_editor(UiState *ui, int weekday)
     ui->model.bedtime_editor_day = weekday;
     ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
     ui->model.overlay_selection = 0;
+    ui->model.confirm_hold_required = false;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s就寝时间窗口", WEEKDAY_NAMES[weekday]);
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
         "设定当晚至次日清晨的禁玩时段（必须跨越午夜）；到达开始时间立即强制暂停软件。");
@@ -200,6 +201,7 @@ void open_bedtime_special_editor(UiState *ui, int kind)
     ui->model.bedtime_special_kind = kind;
     ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_SPECIAL;
     ui->model.overlay_selection = 0;
+    ui->model.confirm_hold_required = false;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
         kind == 0 ? "法定休假就寝规则" :
         (kind == 1 ? "调休工作日就寝规则" : "指定日期就寝规则"));

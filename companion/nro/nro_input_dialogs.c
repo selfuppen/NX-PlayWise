@@ -317,7 +317,7 @@ void edit_weekly_minutes(UiState *ui)
         char title[64];
         char guide[128];
         snprintf(title, sizeof(title), "设置%s的周计划额度", WEEKDAYS[ui->model.editor_index]);
-        snprintf(guide, sizeof(guide), "分别输入小时和分钟，总计 1 到 1440 分钟\n仅修改%s的周计划模板", WEEKDAYS[ui->model.editor_index]);
+        snprintf(guide, sizeof(guide), "分别输入小时和分钟，总计 1 到 1440 分钟");
         ptc_ui_numpad_open(
             &ui->model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
             title, guide, 4, 1, 1440, day->minutes);

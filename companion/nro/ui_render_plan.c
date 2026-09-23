@@ -36,7 +36,7 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
     const char *sub = model->disable_flag_present ? "控制已停用，计划只读" :
         (model->waiting ? "正在保存中，请稍候..." :
          (model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR ? "按 + 完成输入，再保存计划" :
-          (requires_hold ? (fresh ? "保存后今日额度将耗尽；长按保存" : "今日状态待确认；长按保存") :
+          (requires_hold ? (fresh ? "保存后今日额度将耗尽；需长按 A 确认" : "今日状态待确认；保存需长按 A 确认") :
            (dirty ? "按 + 保存后应用到主机" : "已与主机策略同步"))));
     draw_text(pixels, stride, panel.x + 20, panel.y + 58, sub, 13,
               requires_hold ? UI_DANGER : UI_RGB(UI_BLENDED(text_secondary)));
@@ -121,11 +121,11 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         state_message = "先完成额度输入，再返回保存计划。";
         state_color = UI_WARNING; state_background = UI_WARNING_SOFT;
     } else if (!fresh && projection.quota_changes_today) {
-        state_message = requires_hold ? "状态待确认；保存时会再次核对今天的影响，请长按保存。" :
+        state_message = requires_hold ? "状态待确认；保存时需长按 A 确认今天的影响。" :
             "状态待确认，保存时会再次核对今天的影响。";
         state_color = UI_WARNING; state_background = UI_WARNING_SOFT;
     } else if (requires_hold) {
-        state_message = "保存后今天的时间将立即用尽，请长按保存。";
+        state_message = "保存后今天的时间将立即用尽，需长按 A 确认。";
         state_color = UI_DANGER; state_background = UI_DANGER_SOFT;
     }
 
@@ -306,7 +306,7 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
                            !model->weekly_dirty);
     bool weekly_hold = model->weekly_dirty && ptc_ui_plan_save_requires_hold(model, PTC_UI_PLAN_WEEKLY, ptc_ui_render_now());
     draw_candidate_button(pixels, stride, ptc_ui_weekly_save_rect(),
-                           model->disable_flag_present ? "只读" : (model->waiting ? "保存中" : (model->weekly_dirty ? (weekly_hold ? "长按 + 保存" : "+  保存草稿") : "已保存")),
+                           model->disable_flag_present ? "只读" : (model->waiting ? "保存中" : (model->weekly_dirty ? (weekly_hold ? "+  保存（需确认）" : "+  保存草稿") : "已保存")),
                            weekly_hold ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, model->selected_index == 4,
                            !model->weekly_dirty || model->disable_flag_present || model->waiting);
 }
@@ -369,7 +369,7 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     bool holiday_hold = model->holiday_dirty && ptc_ui_plan_save_requires_hold(model, PTC_UI_PLAN_HOLIDAY, ptc_ui_render_now());
     draw_candidate_button(pixels, stride, ptc_ui_holiday_card_rect(5),
                            disabled ? "紧急停用中，设置只读" : (model->waiting ? "正在保存..." :
-                           (model->holiday_dirty ? (holiday_hold ? "长按 + 保存" : "+  保存草稿") : "已保存")),
+                           (model->holiday_dirty ? (holiday_hold ? "+  保存（需确认）" : "+  保存草稿") : "已保存")),
                            holiday_hold ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, model->selected_index == 5,
                            disabled || model->waiting || !model->holiday_dirty);
     draw_plan_impact(pixels, stride, model, PTC_UI_PLAN_HOLIDAY, model->holiday_dirty, panel);
@@ -565,27 +565,25 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
             draw_plan_card(pixels, stride, card,
                 model->selected_index == slot && !model->bedtime_section_focused && !model->parent_footer_focused);
 
-            if (is_active_day) {
-                draw_rect_outline(pixels, stride, card, 12, 2, UI_DANGER);
-            } else if (is_today) {
-                draw_rect_outline(pixels, stride, card, 12, 1, UI_ACCENT);
-            }
-
             if (is_today) {
-                UiRect today_pill = {card.x + (card.width - 38) / 2, card.y + 6, 38, 16};
-                fill_round_rect(pixels, stride, today_pill, 4, is_active_day ? UI_DANGER_SOFT : UI_ACCENT_SOFT);
-                draw_text_center(pixels, stride, today_pill, is_active_day ? "立断" : "今日", 11,
-                                 is_active_day ? UI_DANGER : UI_ACCENT);
+                fill_round_rect(pixels, stride, card, 16, is_active_day ? UI_DANGER_SOFT : UI_ACCENT_SOFT);
+                draw_rect_outline(pixels, stride, card, 16, 2, is_active_day ? UI_DANGER : UI_ACCENT);
+                if (model->selected_index == slot && !model->bedtime_section_focused && !model->parent_footer_focused) {
+                    draw_focus_ring(pixels, stride, card, 16);
+                }
+                UiRect today_pill = {card.x + (card.width - 50) / 2, card.y + 6, 50, 18};
+                fill_round_rect(pixels, stride, today_pill, 5, is_active_day ? UI_DANGER : UI_ACCENT);
+                draw_text_center(pixels, stride, today_pill, is_active_day ? "● 立断" : "★ 今日", 12, UI_ON_ACCENT);
             }
 
-            draw_text_center(pixels, stride, (UiRect){card.x, card.y + (is_today ? 23 : 13), card.width, 20},
-                             DAYS[day], 16, is_today ? UI_ACCENT : UI_INK);
+            draw_text_center(pixels, stride, (UiRect){card.x, card.y + (is_today ? 25 : 13), card.width, 20},
+                             DAYS[day], is_today ? 17 : 16, is_today ? (is_active_day ? UI_DANGER : UI_ACCENT) : UI_INK);
 
             if (has_date) {
                 char date_str[16];
                 snprintf(date_str, sizeof(date_str), "%02u/%02u", c_m, c_d);
-                draw_text_center(pixels, stride, (UiRect){card.x, card.y + (is_today ? 42 : 33), card.width, 18},
-                                 date_str, 12, is_today ? UI_ACCENT : UI_MUTED);
+                draw_text_center(pixels, stride, (UiRect){card.x, card.y + (is_today ? 44 : 33), card.width, 18},
+                                 date_str, 12, is_today ? (is_active_day ? UI_DANGER : UI_ACCENT) : UI_MUTED);
             }
 
             draw_bedtime_window_value(value, sizeof(value), &draft->week[day]);

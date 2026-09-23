@@ -377,6 +377,7 @@ void ptc_ui_numpad_open(
     model->duration_scroll_dir = 0;
     model->duration_scroll_anim_ticks = 0;
     model->duration_step_feedback = 1;
+    model->confirm_hold_required = false;
     if (duration_purpose(purpose)) {
         set_duration_value(model, current);
         model->duration_field = PTC_UI_DURATION_MINUTES;

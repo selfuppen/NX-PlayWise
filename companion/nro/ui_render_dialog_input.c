@@ -394,7 +394,8 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         if (clock) {
             snprintf(value, sizeof(value), "%02u:%02u", (unsigned int)(entered / 60u),
                      (unsigned int)(entered % 60u));
-            snprintf(total_value, sizeof(total_value), "设定时间  %02u:%02u",
+            snprintf(total_value, sizeof(total_value), "设定时间  %02u 点 %02u 分 (%02u:%02u)",
+                     (unsigned int)(entered / 60u), (unsigned int)(entered % 60u),
                      (unsigned int)(entered / 60u), (unsigned int)(entered % 60u));
         } else {
             snprintf(value, sizeof(value), "%u 分钟", (unsigned int)entered);
@@ -402,11 +403,11 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         }
     } else {
         snprintf(value, sizeof(value), "暂不可用");
-        snprintf(total_value, sizeof(total_value), "总计 -- 分钟");
+        snprintf(total_value, sizeof(total_value), clock ? "设定时间  -- 点 -- 分" : "总计 -- 分钟");
     }
-    snprintf(hours_value, sizeof(hours_value), "%s 小时",
+    snprintf(hours_value, sizeof(hours_value), clock ? "%s 点" : "%s 小时",
              model->duration_hours_text[0] ? model->duration_hours_text : "--");
-    snprintf(minutes_value, sizeof(minutes_value), "%s 分钟",
+    snprintf(minutes_value, sizeof(minutes_value), clock ? "%s 分" : "%s 分钟",
              model->duration_minutes_text[0] ? model->duration_minutes_text : "--");
     format_duration(model->played_minutes_available ? model->played_minutes : -1, played, sizeof(played));
     if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "不限时");
@@ -438,14 +439,16 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     {
         char step_hint[32];
         if (model->duration_field == PTC_UI_DURATION_HOURS)
-            snprintf(step_hint, sizeof(step_hint), "每步 1 小时");
-        else snprintf(step_hint, sizeof(step_hint), "当前 ±%u", (unsigned)model->duration_step_feedback);
-        draw_r_stick_glyph(pixels, stride, dialog.x + 36, dialog.y + 96, 18,
-                           model->duration_scroll_dir);
-        draw_text(pixels, stride, dialog.x + 60, dialog.y + 110, "左右 选栏", 14, UI_MUTED);
-        draw_text(pixels, stride, dialog.x + 138, dialog.y + 110, "|", 14, UI_CONTROL);
-        draw_text(pixels, stride, dialog.x + 154, dialog.y + 110, "上下 调整", 14, UI_MUTED);
-        draw_text(pixels, stride, dialog.x + 234, dialog.y + 110, step_hint, 14, UI_ACCENT);
+            snprintf(step_hint, sizeof(step_hint), clock ? "每步 1 点" : "每步 1 小时");
+        else snprintf(step_hint, sizeof(step_hint), clock ? "当前 ±%u分" : "当前 ±%u", (unsigned)model->duration_step_feedback);
+        draw_r_stick_axis_glyph(pixels, stride, dialog.x + 36, dialog.y + 98, 18,
+                                false, 0);
+        draw_text(pixels, stride, dialog.x + 60, dialog.y + 112, "左右 选栏", 13, UI_MUTED);
+        draw_text(pixels, stride, dialog.x + 128, dialog.y + 112, "|", 13, UI_CONTROL);
+        draw_r_stick_axis_glyph(pixels, stride, dialog.x + 142, dialog.y + 98, 18,
+                                true, model->duration_scroll_dir);
+        draw_text(pixels, stride, dialog.x + 166, dialog.y + 112, "上下 调整", 13, UI_MUTED);
+        draw_text(pixels, stride, dialog.x + 236, dialog.y + 112, step_hint, 13, UI_ACCENT);
     }
 
     for (int field = 0; field < 2; ++field) {

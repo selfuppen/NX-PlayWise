@@ -188,7 +188,7 @@ void handle_touch(UiState *ui, int x, int y)
         } else if (ui->model.overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
             ui->model.overlay_selection = 1;
         }
-        if (ui->model.confirm_hold_required) {
+        if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM && ui->model.confirm_hold_required) {
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "为避免误操作，请长按手柄 A 或持续按住触摸确认按钮。");
         } else {

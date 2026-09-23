@@ -163,6 +163,7 @@ void draw_shoulder_key_glyph(uint32_t *pixels, uint32_t stride, int x, int y,
                              int width, int height, const char *key_str, bool disabled);
 void draw_arrow_glyph(uint32_t *pixels, uint32_t stride, int cx, int cy, bool up, uint32_t color);
 void draw_r_stick_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int size, int direction);
+void draw_r_stick_axis_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int size, bool vertical, int direction);
 void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char *label, int size, uint32_t color);
 void draw_footer_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect, const char *label);
 void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiModel *model);
