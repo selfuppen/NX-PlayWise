@@ -90,6 +90,10 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (disable_flag) {
         return finish_with_error(sysmodule, request, "release", true, PTC_ERR_DISABLED, now.day_index);
     }
+    if (request->type == PTC_REQUEST_ADD_TODAY_MINUTES && bedtime_blocks_grants(sysmodule, now)) {
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_BEDTIME_ACTIVE, now.day_index);
+    }
     if (!load_rules(sysmodule, &rules)) {
         return finish_with_error(sysmodule, request, "release", true, PTC_ERR_RULES_INVALID, now.day_index);
     }

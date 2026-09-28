@@ -11,6 +11,10 @@ SWITCH_UI_ROOTS = [
     ROOT / "device_lab",
 ]
 SOURCE_SUFFIXES = {".c", ".cpp", ".h", ".hpp"}
+OVERLAY_TEXT_FILES = [
+    ROOT / "companion" / "overlay" / "bridge.c",
+    ROOT / "companion" / "overlay" / "source" / "main.cpp",
+]
 FORBIDDEN = {
     "−": "use ASCII '-'",
     "－": "use ASCII '-'",
@@ -35,6 +39,15 @@ def main() -> int:
                 for glyph, guidance in FORBIDDEN.items():
                     if glyph in line:
                         failures.append(f"{path.relative_to(ROOT)}:{line_number}: {glyph!r}: {guidance}")
+    for path in OVERLAY_TEXT_FILES:
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for character in line:
+                codepoint = ord(character)
+                if codepoint >= 0x1F000 or codepoint in {0x23F1, 0x26A0, 0xFE0F}:
+                    failures.append(
+                        f"{path.relative_to(ROOT)}:{line_number}: {character!r}: "
+                        "overlay text must not depend on emoji glyphs"
+                    )
     if failures:
         raise AssertionError("Switch UI contains unverified glyphs:\n" + "\n".join(failures))
     print("PASS: Switch UI glyph gate")

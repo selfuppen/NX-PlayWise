@@ -20,6 +20,19 @@ typedef struct {
     PtcCompanionStatus last_status;
 } PtcOverlayBridge;
 
+typedef enum {
+    PTC_OVERLAY_PARENT_ADD_MINUTES = 0,
+    PTC_OVERLAY_PARENT_UNLIMITED,
+    PTC_OVERLAY_PARENT_SKIP_BEDTIME,
+    PTC_OVERLAY_PARENT_DISABLE_BEDTIME,
+    PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT,
+    PTC_OVERLAY_PARENT_ACTION_COUNT
+} PtcOverlayParentAction;
+
+const char *ptc_overlay_parent_action_unavailable_reason(
+    const PtcCompanionResultSummary *summary, PtcOverlayParentAction action);
+uint64_t ptc_overlay_parent_skip_instance_id(const PtcCompanionResultSummary *summary);
+
 void ptc_overlay_bridge_init(PtcOverlayBridge *bridge, const char *app_root, PtcStorage *storage);
 void ptc_overlay_bridge_exit(PtcOverlayBridge *bridge);
 PtcCompanionStatus ptc_overlay_bridge_submit(

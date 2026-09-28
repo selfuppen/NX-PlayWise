@@ -871,7 +871,7 @@ def parse_args() -> argparse.Namespace:
         "--jobs",
         type=int,
         default=None,
-        help="Number of parallel make compilation jobs. Default: 2.",
+        help="Number of parallel make compilation jobs. Default: 8.",
     )
     args = parser.parse_args()
     values = (args.verified_model, args.verified_hos, args.verified_atmosphere)
@@ -891,7 +891,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     only = "previews" if args.previews else args.only
-    jobs = args.jobs if args.jobs is not None else 2
+    jobs = args.jobs if args.jobs is not None else 8
     try:
         build_and_verify(
             args.host,

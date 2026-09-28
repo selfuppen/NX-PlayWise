@@ -117,4 +117,14 @@ static inline PtcOverlayRect ptc_overlay_status_rect(
     return ptc_overlay_rect(origin_x, origin_y + PTC_OVERLAY_STATUS_Y, width, height);
 }
 
+static inline PtcOverlayRect ptc_overlay_child_buffer_rect(int origin_x, int origin_y)
+{
+    return ptc_overlay_rect(origin_x, origin_y + 462, 176, 42);
+}
+
+static inline PtcOverlayRect ptc_overlay_child_parent_rect(int origin_x, int origin_y, int width)
+{
+    return ptc_overlay_rect(origin_x + 184, origin_y + 462, width - 184, 42);
+}
+
 #endif

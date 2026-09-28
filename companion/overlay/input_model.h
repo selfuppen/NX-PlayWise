@@ -9,8 +9,8 @@
 #define PTC_OVERLAY_KEY_COLUMNS 3
 #define PTC_OVERLAY_KEY_ROWS 4
 #define PTC_OVERLAY_REQUEST_TIMEOUT_MS 60000
-#define PTC_OVERLAY_REPEAT_DELAY_MS 350
-#define PTC_OVERLAY_REPEAT_INTERVAL_MS 90
+#define PTC_OVERLAY_REPEAT_DELAY_MS 400
+#define PTC_OVERLAY_REPEAT_INTERVAL_MS 180
 
 typedef enum {
     PTC_OVERLAY_BUTTON_UP = 1u << 0,
@@ -28,13 +28,23 @@ typedef enum {
 } PtcOverlayButton;
 
 typedef struct {
-    char symbols[PTC_OVERLAY_CODE_SYMBOLS + 1];
-    unsigned int length;
-    unsigned int cursor;
     unsigned int repeat_direction;
     int repeat_elapsed_ms;
     bool repeat_started;
+} PtcOverlayDirectionRepeat;
+
+typedef struct {
+    char symbols[PTC_OVERLAY_CODE_SYMBOLS + 1];
+    unsigned int length;
+    unsigned int cursor;
+    PtcOverlayDirectionRepeat direction_repeat;
 } PtcOverlayInput;
+
+unsigned int ptc_overlay_direction_step(
+    PtcOverlayDirectionRepeat *repeat,
+    unsigned int buttons_down,
+    unsigned int buttons_held,
+    int elapsed_ms);
 
 void ptc_overlay_input_init(PtcOverlayInput *input);
 bool ptc_overlay_input_handle(
@@ -45,6 +55,9 @@ bool ptc_overlay_input_handle(
 bool ptc_overlay_input_format(const PtcOverlayInput *input, char *out, size_t out_size);
 bool ptc_overlay_input_can_submit(const PtcOverlayInput *input);
 const char *ptc_overlay_input_charset(void);
+bool ptc_overlay_pin_mask(size_t length, char *out, size_t out_size);
+int ptc_overlay_pin_digit_from_vector(int x, int y, int deadzone);
+int ptc_overlay_pin_digit_from_direction(unsigned int buttons_down);
 bool ptc_overlay_request_action_enabled(bool waiting);
 
 #endif

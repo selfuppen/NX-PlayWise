@@ -15,6 +15,42 @@ const char *ptc_overlay_input_charset(void)
     return CHARSET;
 }
 
+bool ptc_overlay_pin_mask(size_t length, char *out, size_t out_size)
+{
+    if (!out || length >= out_size) return false;
+    memset(out, '*', length);
+    out[length] = '\0';
+    return true;
+}
+
+int ptc_overlay_pin_digit_from_vector(int x, int y, int deadzone)
+{
+    int ax = x < 0 ? -x : x;
+    int ay = y < 0 ? -y : y;
+    long long radius = (long long)x * x + (long long)y * y;
+    if (deadzone < 0) deadzone = 0;
+    if (radius < (long long)deadzone * deadzone) return -1;
+    if ((long long)ax * 1000 < (long long)ay * 414) return y > 0 ? 1 : 5;
+    if ((long long)ay * 1000 < (long long)ax * 414) return x > 0 ? 3 : 7;
+    if (x > 0 && y > 0) return 2;
+    if (x > 0 && y < 0) return 4;
+    if (x < 0 && y < 0) return 6;
+    if (x < 0 && y > 0) return 8;
+    return y > 0 ? 1 : 5;
+}
+
+int ptc_overlay_pin_digit_from_direction(unsigned int buttons_down)
+{
+    /* Only one cardinal direction can produce a PIN digit. */
+    unsigned int direction = buttons_down & (PTC_OVERLAY_BUTTON_UP |
+        PTC_OVERLAY_BUTTON_RIGHT | PTC_OVERLAY_BUTTON_DOWN | PTC_OVERLAY_BUTTON_LEFT);
+    if (!direction || (direction & (direction - 1u))) return -1;
+    if (direction == PTC_OVERLAY_BUTTON_UP) return 1;
+    if (direction == PTC_OVERLAY_BUTTON_RIGHT) return 3;
+    if (direction == PTC_OVERLAY_BUTTON_DOWN) return 5;
+    return 7;
+}
+
 bool ptc_overlay_request_action_enabled(bool waiting)
 {
     return !waiting;
@@ -55,11 +91,11 @@ static bool is_single_direction(unsigned int buttons)
     return buttons != 0u && (buttons & (buttons - 1u)) == 0u;
 }
 
-static void reset_repeat(PtcOverlayInput *input)
+static void reset_repeat(PtcOverlayDirectionRepeat *repeat)
 {
-    input->repeat_direction = 0u;
-    input->repeat_elapsed_ms = 0;
-    input->repeat_started = false;
+    repeat->repeat_direction = 0u;
+    repeat->repeat_elapsed_ms = 0;
+    repeat->repeat_started = false;
 }
 
 static void move_in_direction(PtcOverlayInput *input, unsigned int direction)
@@ -82,8 +118,8 @@ static void move_in_direction(PtcOverlayInput *input, unsigned int direction)
     }
 }
 
-static bool handle_direction_repeat(
-    PtcOverlayInput *input,
+unsigned int ptc_overlay_direction_step(
+    PtcOverlayDirectionRepeat *repeat,
     unsigned int buttons_down,
     unsigned int buttons_held,
     int elapsed_ms)
@@ -91,50 +127,50 @@ static bool handle_direction_repeat(
     unsigned int down = buttons_down & DIRECTION_BUTTONS;
     unsigned int held = buttons_held & DIRECTION_BUTTONS;
 
+    if (!repeat) return 0u;
     if (down == 0u && held == 0u) {
-        reset_repeat(input);
-        return false;
+        reset_repeat(repeat);
+        return 0u;
     }
 
     /* Ambiguous diagonals/opposing directions are consumed without moving. */
     if ((down != 0u && !is_single_direction(down)) ||
         (held != 0u && !is_single_direction(held)) ||
         (down != 0u && held != 0u && down != held)) {
-        reset_repeat(input);
-        return true;
+        reset_repeat(repeat);
+        return 0u;
     }
 
     if (down != 0u) {
-        move_in_direction(input, down);
-        input->repeat_direction = down;
-        input->repeat_elapsed_ms = 0;
-        input->repeat_started = false;
-        return true;
+        repeat->repeat_direction = down;
+        repeat->repeat_elapsed_ms = 0;
+        repeat->repeat_started = false;
+        return down;
     }
 
-    if (input->repeat_direction != held) {
-        input->repeat_direction = held;
-        input->repeat_elapsed_ms = 0;
-        input->repeat_started = false;
-        return true;
+    if (repeat->repeat_direction != held) {
+        repeat->repeat_direction = held;
+        repeat->repeat_elapsed_ms = 0;
+        repeat->repeat_started = false;
+        return 0u;
     }
 
     if (elapsed_ms > 0) {
-        input->repeat_elapsed_ms += elapsed_ms;
+        repeat->repeat_elapsed_ms += elapsed_ms;
     }
-    if (!input->repeat_started) {
-        if (input->repeat_elapsed_ms < PTC_OVERLAY_REPEAT_DELAY_MS) {
-            return true;
+    if (!repeat->repeat_started) {
+        if (repeat->repeat_elapsed_ms < PTC_OVERLAY_REPEAT_DELAY_MS) {
+            return 0u;
         }
-        input->repeat_elapsed_ms -= PTC_OVERLAY_REPEAT_DELAY_MS;
-        input->repeat_started = true;
-        move_in_direction(input, held);
+        repeat->repeat_elapsed_ms -= PTC_OVERLAY_REPEAT_DELAY_MS;
+        repeat->repeat_started = true;
+        return held;
     }
-    while (input->repeat_elapsed_ms >= PTC_OVERLAY_REPEAT_INTERVAL_MS) {
-        input->repeat_elapsed_ms -= PTC_OVERLAY_REPEAT_INTERVAL_MS;
-        move_in_direction(input, held);
+    if (repeat->repeat_elapsed_ms >= PTC_OVERLAY_REPEAT_INTERVAL_MS) {
+        repeat->repeat_elapsed_ms %= PTC_OVERLAY_REPEAT_INTERVAL_MS;
+        return held;
     }
-    return true;
+    return 0u;
 }
 
 bool ptc_overlay_input_handle(
@@ -146,7 +182,12 @@ bool ptc_overlay_input_handle(
     if (!input) {
         return false;
     }
-    if (handle_direction_repeat(input, buttons_down, buttons_held, elapsed_ms)) {
+    unsigned int direction = ptc_overlay_direction_step(
+        &input->direction_repeat, buttons_down, buttons_held, elapsed_ms);
+    if (direction) {
+        move_in_direction(input, direction);
+    }
+    if ((buttons_down | buttons_held) & DIRECTION_BUTTONS) {
         return true;
     }
     if (buttons_down & PTC_OVERLAY_BUTTON_X) {

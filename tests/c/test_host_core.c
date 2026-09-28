@@ -842,6 +842,106 @@ static void test_overlay_request_action_gate(void)
                "overlay blocks overlapping requests while preserving local input");
 }
 
+static void test_overlay_parent_actions_and_input(void)
+{
+    PtcCompanionResultSummary summary;
+    PtcOverlayInput code;
+    PtcOverlayInput pin;
+    PtcOverlayDirectionRepeat repeat = {0};
+    char masked[65];
+    memset(&summary, 0, sizeof(summary));
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_ADD_MINUTES) != NULL,
+        "parent quick add waits for current status");
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT) == NULL,
+        "parent snapshot recovery remains available without status");
+    summary.valid = true;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_ADD_MINUTES) == NULL &&
+        ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_UNLIMITED) == NULL,
+        "parent daily actions are available before exhaustion");
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_SKIP_BEDTIME) != NULL &&
+        ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_DISABLE_BEDTIME) != NULL,
+        "parent bedtime actions explain disabled state");
+    summary.bedtime_enabled = true;
+    summary.bedtime_next_available = true;
+    summary.bedtime_next_window_instance_id = 101;
+    check_int((long)ptc_overlay_parent_skip_instance_id(&summary), 101,
+        "parent can skip the next bedtime window");
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_SKIP_BEDTIME) == NULL &&
+        ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_DISABLE_BEDTIME) == NULL,
+        "both bedtime actions become available with a plan");
+    summary.bedtime_active = true;
+    summary.bedtime_window_instance_id = 202;
+    summary.daily_restriction_active = true;
+    check_int((long)ptc_overlay_parent_skip_instance_id(&summary), 202,
+        "current restriction takes precedence over next window");
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_ADD_MINUTES) != NULL &&
+        ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_UNLIMITED) != NULL,
+        "daily actions wait until bedtime restriction is removed");
+    summary.bedtime_skipped = true;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_ADD_MINUTES) == NULL,
+        "daily actions become available after bedtime skip");
+    summary.unrestricted_today = 1;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_ADD_MINUTES) != NULL,
+        "quick add cannot replace an unlimited day with a limit");
+
+    ptc_overlay_input_init(&code);
+    ptc_overlay_input_init(&pin);
+    (void)ptc_overlay_input_handle(&code, PTC_OVERLAY_BUTTON_A, 0, 0);
+    (void)ptc_overlay_input_handle(&pin, PTC_OVERLAY_BUTTON_A, 0, 0);
+    (void)ptc_overlay_input_handle(&pin, PTC_OVERLAY_BUTTON_Y, 0, 0);
+    check_int(code.length, 1, "opening parent PIN preserves the code entry");
+    check_int(pin.length, 0, "PIN input has an independent buffer");
+    check_true(ptc_overlay_pin_mask(3, masked, sizeof(masked)) &&
+        strcmp(masked, "***") == 0,
+        "PIN display contains only masked input");
+    check_true(!ptc_overlay_pin_mask(65, masked, sizeof(masked)),
+        "PIN masking rejects an undersized output buffer");
+    check_int(ptc_overlay_pin_digit_from_vector(0, 20000, 16000), 1,
+        "overlay PIN stick up enters one");
+    check_int(ptc_overlay_pin_digit_from_vector(20000, 20000, 16000), 2,
+        "overlay PIN stick diagonal enters two");
+    check_int(ptc_overlay_pin_digit_from_vector(-20000, -20000, 16000), 6,
+        "overlay PIN stick diagonal enters six");
+    check_int(ptc_overlay_pin_digit_from_vector(0, 1000, 16000), -1,
+        "overlay PIN stick deadzone prevents accidental entry");
+    check_int(ptc_overlay_pin_digit_from_direction(PTC_OVERLAY_BUTTON_LEFT), 7,
+        "overlay PIN dpad left enters seven");
+    check_int(ptc_overlay_pin_digit_from_direction(
+        PTC_OVERLAY_BUTTON_UP | PTC_OVERLAY_BUTTON_RIGHT), -1,
+        "overlay PIN ambiguous dpad direction enters nothing");
+
+    check_int(ptc_overlay_direction_step(&repeat, PTC_OVERLAY_BUTTON_DOWN,
+        PTC_OVERLAY_BUTTON_DOWN, 0), PTC_OVERLAY_BUTTON_DOWN,
+        "stick first push moves once");
+    check_int(ptc_overlay_direction_step(&repeat, 0, PTC_OVERLAY_BUTTON_DOWN, 399), 0,
+        "stick hold waits before repeating");
+    check_int(ptc_overlay_direction_step(&repeat, 0, PTC_OVERLAY_BUTTON_DOWN, 1),
+        PTC_OVERLAY_BUTTON_DOWN, "stick repeats after 400 ms");
+    check_int(ptc_overlay_direction_step(&repeat, 0, PTC_OVERLAY_BUTTON_DOWN, 179), 0,
+        "stick repeat waits for its interval");
+    check_int(ptc_overlay_direction_step(&repeat, 0, PTC_OVERLAY_BUTTON_DOWN, 1),
+        PTC_OVERLAY_BUTTON_DOWN, "stick repeats after 180 ms");
+    check_int(ptc_overlay_direction_step(&repeat, 0, PTC_OVERLAY_BUTTON_DOWN, 1000),
+        PTC_OVERLAY_BUTTON_DOWN, "a delayed frame causes only one navigation step");
+    check_int(ptc_overlay_direction_step(&repeat, 0, 0, 0), 0,
+        "releasing stick clears repeat state");
+    check_int(ptc_overlay_direction_step(&repeat, PTC_OVERLAY_BUTTON_UP | PTC_OVERLAY_BUTTON_RIGHT,
+        PTC_OVERLAY_BUTTON_UP | PTC_OVERLAY_BUTTON_RIGHT, 0), 0,
+        "diagonal stick movement cannot jump focus");
+}
+
 static void test_pending_redemption_recovery_marker(void)
 {
     PtcMemStorage mem;
@@ -897,6 +997,10 @@ static void test_overlay_layout_geometry(void)
         PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, true, false);
     PtcOverlayRect detail = ptc_overlay_status_rect(
         PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, true, true);
+    PtcOverlayRect buffer = ptc_overlay_child_buffer_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y);
+    PtcOverlayRect parent = ptc_overlay_child_parent_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
     int slot_group_width = PTC_OVERLAY_CODE_SYMBOLS * PTC_OVERLAY_SLOT_W +
         (PTC_OVERLAY_CODE_SYMBOLS - 1) * PTC_OVERLAY_SLOT_GAP;
     int slot_left = PTC_OVERLAY_CONTENT_X + (PTC_OVERLAY_CONTENT_W - slot_group_width) / 2;
@@ -923,6 +1027,10 @@ static void test_overlay_layout_geometry(void)
     check_int(detail.y + detail.h, 646, "expanded error and success details fill the content area");
     check_true(detail.y + detail.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
         "expanded overlay status remains inside content bounds");
+    check_true(buffer.x + buffer.w < parent.x &&
+        parent.x + parent.w == PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W &&
+        buffer.y == parent.y && parent.y + parent.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
+        "buffer and parent touch targets fit below collapsed status");
     check_true(ptc_overlay_remaining_refresh_pending(true, true),
         "submitted overlay code uses a pending remaining-time presentation");
     check_true(!ptc_overlay_remaining_refresh_pending(true, false),
@@ -2454,6 +2562,30 @@ static void test_bedtime_enforcement_and_overlay_recovery(void)
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger.json"),
         "bedtime rejection does not create or consume a nonce ledger");
 
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-quick-add.json",
+        "{\"version\":1,\"request_id\":\"bedtime-quick-add\",\"type\":\"add_today_minutes\","
+        "\"created_at\":4,\"payload\":{\"minutes\":15}}"),
+        "queue parent quick add during bedtime");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1,
+        "quick add during bedtime is processed without a write");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-quick-add.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"bedtime_active\""),
+        "bedtime rejects parent quick add before modifying daily rules");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-unlimited.json",
+        "{\"version\":1,\"request_id\":\"bedtime-unlimited\",\"type\":\"disable_today_limit\","
+        "\"created_at\":4,\"payload\":{}}"),
+        "queue parent unlimited action during bedtime");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1,
+        "unlimited action during bedtime is processed without a write");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-unlimited.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"bedtime_active\"") &&
+        pctl.last_target.mode == PTC_PCTL_TARGET_BLOCKED,
+        "bedtime rejects unlimited action and preserves the PCTL block");
+
     instance = ptc_bedtime_evaluate(&rules, 2380,
         ptc_weekday_from_day_index(2380), 1400).window_instance_id;
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/flags/disable.flag",
@@ -2645,6 +2777,7 @@ int main(void)
     test_overlay_bridge_claim_daily_buffer();
     test_overlay_result_classification();
     test_overlay_request_action_gate();
+    test_overlay_parent_actions_and_input();
     test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();
     test_overlay_child_quota_and_restriction_details();
