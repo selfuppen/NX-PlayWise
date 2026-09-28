@@ -51,13 +51,44 @@ def test_candidate_defaults_to_pending() -> None:
             mock.patch.object(manifest, "toolchain_identity", return_value="gcc 15.2.0"), \
             mock.patch.object(manifest, "libnx_identity", return_value="libnx 4.12.0-1"), \
             mock.patch.object(manifest, "libtesla_commit", return_value="b" * 40), \
-            mock.patch.dict(os.environ, {"PLAYWISE_BUILD_IMAGE": "devkitpro:v1"}, clear=False):
+            mock.patch.dict(os.environ, {"PLAYWISE_BUILD_IMAGE": "devkitpro:v1"}, clear=True):
         data = manifest.make_manifest("release")
     require(data["qualification"]["status"] == "pending", "candidate must not claim qualification")
     require(data["verified_environment"]["result"] == "pending", "baseline must await current evidence")
     require(data["build"]["libnx"] == "libnx 4.12.0-1", "libnx package identity must be recorded")
     require(data["build"]["container_image"] == "devkitpro:v1", "Docker image tag must be recorded")
     require(data["build"]["source_dirty"] is False, "tracked dirty state must be recorded")
+
+
+def test_manual_device_verification_is_explicit_and_scoped() -> None:
+    verification = {
+        "PLAYWISE_MANUAL_DEVICE_VERIFIED": "1",
+        "PLAYWISE_VERIFIED_MODEL": "Nintendo Switch OLED",
+        "PLAYWISE_VERIFIED_HOS": "22.5.0",
+        "PLAYWISE_VERIFIED_ATMOSPHERE": "1.11.2",
+    }
+    with mock.patch.dict(os.environ, verification, clear=True):
+        release = manifest.make_manifest("release")
+        lab = manifest.make_manifest("device-lab")
+        eden = manifest.make_manifest("eden-test")
+    require(release["qualification"]["status"] == "manual_verified", "release must record manual verification")
+    require(release["qualification"]["artifact_binding"] == "embedded-manifest",
+            "manual declaration must identify its package binding")
+    require(release["qualification"]["method"] == "manual" and
+            release["qualification"]["scope"] == "main_features", "manual verification scope must be explicit")
+    require(release["verified_environment"] == {
+        "model": "Nintendo Switch OLED", "hos": "22.5.0", "atmosphere": "1.11.2",
+        "result": "manual_verified",
+    }, "release must record the stated device environment")
+    require(lab["qualification"]["status"] == "pending" and
+            eden["qualification"]["status"] == "pending", "manual status must not leak into test profiles")
+    with mock.patch.dict(os.environ, {"PLAYWISE_MANUAL_DEVICE_VERIFIED": "1"}, clear=True):
+        try:
+            manifest.make_manifest("release")
+        except ValueError as exc:
+            require("requires model" in str(exc), "missing manual environment must fail clearly")
+        else:
+            raise AssertionError("manual verification without environment must fail")
 
 
 def test_tracked_dirty_uses_content_diff() -> None:
@@ -74,6 +105,7 @@ def main() -> int:
     test_libnx_pkgconfig_fallback()
     test_libnx_devkitpro_package_database_fallback()
     test_candidate_defaults_to_pending()
+    test_manual_device_verification_is_explicit_and_scoped()
     test_tracked_dirty_uses_content_diff()
     print("Release manifest tests passed")
     return 0

@@ -212,6 +212,19 @@ def test_verify_and_promote_byte_identical_packages() -> None:
             require(verifier.sha256_file(output / name) == digest, "promoted package bytes must be unchanged")
 
 
+def test_manual_status_can_still_enter_full_qualification() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        build_path = packages / "playwise" / "switch" / "playwise" / "build.json"
+        build = json.loads(build_path.read_text(encoding="utf-8"))
+        build["qualification"].update({"status": "manual_verified", "method": "manual", "scope": "main_features"})
+        build_path.write_text(json.dumps(build), encoding="utf-8")
+        reports = prepare_reports(root)
+        require(verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")["status"] == "passed",
+                "manual status must not block later full qualification")
+
+
 def test_old_report_and_changed_package_are_rejected() -> None:
     with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
         root = Path(tmp_dir)
@@ -317,6 +330,7 @@ def test_multiple_campaigns_require_explicit_selection() -> None:
 
 def main() -> int:
     test_verify_and_promote_byte_identical_packages()
+    test_manual_status_can_still_enter_full_qualification()
     test_old_report_and_changed_package_are_rejected()
     test_missing_runtime_identity_is_rejected_explicitly()
     test_incomplete_bedtime_recovery_is_rejected()

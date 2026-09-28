@@ -70,7 +70,8 @@ def package_identity(packages: Path) -> tuple[dict, dict, dict[str, str], dict[s
     for key in ("commit", "release_id", "playwise_version"):
         require(standard_manifest.get(key) == lab_manifest.get(key), f"双包 manifest 的 {key} 不一致")
     require(standard_manifest.get("playwise_version") == VERSION, "候选包版本与源码版本不一致")
-    require(standard_manifest.get("qualification", {}).get("status") == "pending", "候选包必须以 pending 状态验机")
+    require(standard_manifest.get("qualification", {}).get("status") in ("pending", "manual_verified"),
+            "候选包资格状态必须是 pending 或 manual_verified")
     require(standard_manifest.get("build", {}).get("source_dirty") is False, "资格候选包含未提交的 tracked 修改")
     require(standard_manifest.get("build", {}).get("libnx") not in (None, "", "unknown"), "候选包缺少 libnx 身份")
     require(standard_manifest.get("build", {}).get("container_image") not in (None, "", "unknown"),

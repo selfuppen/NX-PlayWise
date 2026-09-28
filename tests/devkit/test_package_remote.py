@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import shlex
 import struct
 import subprocess
 import sys
@@ -150,6 +151,17 @@ def test_container_command() -> None:
             "container command must explicitly export the image tag")
     require("PLAYWISE_BUILD_IMAGE_DIGEST=sha256:" + "a" * 64 in identified,
             "container command must explicitly export the immutable image ID")
+    manual = package_remote.container_command(
+        manual_verification=("Nintendo Switch OLED", "22.5.0", "1.11.2"))
+    manual_script = shlex.split(manual)[2]
+    require("PLAYWISE_MANUAL_DEVICE_VERIFIED=1" in manual_script, "manual status must reach manifest generation")
+    require(manual_script.index("make -j test") < manual_script.index("PLAYWISE_MANUAL_DEVICE_VERIFIED=1"),
+            "manual status must apply after the default regression tests")
+    require("PLAYWISE_VERIFIED_MODEL='Nintendo Switch OLED'" in manual_script and
+            "PLAYWISE_VERIFIED_HOS=22.5.0" in manual_script and
+            "PLAYWISE_VERIFIED_ATMOSPHERE=1.11.2" in manual_script,
+            "manual device environment must reach manifest generation")
+    require("PLAYWISE_MANUAL_DEVICE_VERIFIED" not in command, "default packaging must remain pending")
 
 
 def test_build_identity_detection() -> None:

@@ -89,7 +89,13 @@ def make_manifest(profile: str) -> dict:
     libnx = libnx_identity()
     build_image = os.environ.get("PLAYWISE_BUILD_IMAGE", "unknown")
     build_image_digest = os.environ.get("PLAYWISE_BUILD_IMAGE_DIGEST", "unknown")
-    return {
+    manual_verified = profile == "release" and os.environ.get("PLAYWISE_MANUAL_DEVICE_VERIFIED") == "1"
+    device_model = os.environ.get("PLAYWISE_VERIFIED_MODEL", "").strip()
+    hos = os.environ.get("PLAYWISE_VERIFIED_HOS", "").strip()
+    atmosphere = os.environ.get("PLAYWISE_VERIFIED_ATMOSPHERE", "").strip()
+    if manual_verified and not all((device_model, hos, atmosphere)):
+        raise ValueError("manual device verification requires model, HOS and Atmosphère versions")
+    data = {
         "schema_version": 1,
         "playwise_version": VERSION,
         "commit": commit,
@@ -107,16 +113,19 @@ def make_manifest(profile: str) -> dict:
             "source_dirty": git_tracked_dirty(),
         },
         "qualification": {
-            "status": "pending",
-            "artifact_binding": "detached-sha256",
+            "status": "manual_verified" if manual_verified else "pending",
+            "artifact_binding": "embedded-manifest" if manual_verified else "detached-sha256",
         },
         "verified_environment": {
-            "model": "Nintendo Switch OLED",
-            "hos": "22.5.0",
-            "atmosphere": "1.11.2",
-            "result": "pending",
+            "model": device_model if manual_verified else "Nintendo Switch OLED",
+            "hos": hos if manual_verified else "22.5.0",
+            "atmosphere": atmosphere if manual_verified else "1.11.2",
+            "result": "manual_verified" if manual_verified else "pending",
         },
     }
+    if manual_verified:
+        data["qualification"].update({"method": "manual", "scope": "main_features"})
+    return data
 
 
 def c_string(text: str) -> str:

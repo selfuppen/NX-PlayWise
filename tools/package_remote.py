@@ -469,6 +469,7 @@ def container_command(
     jobs: int | None = None,
     build_image: str | None = None,
     build_image_digest: str | None = None,
+    manual_verification: tuple[str, str, str] | None = None,
 ) -> str:
     path = "/opt/devkitpro/devkitA64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     job_flag = f"-j{jobs} " if jobs else "-j "
@@ -505,6 +506,16 @@ def container_command(
         identity_exports += f" PLAYWISE_BUILD_IMAGE={shlex.quote(build_image)}"
     if build_image_digest:
         identity_exports += f" PLAYWISE_BUILD_IMAGE_DIGEST={shlex.quote(build_image_digest)}"
+    verification_exports = ""
+    if manual_verification is not None:
+        model, hos, atmosphere = manual_verification
+        verification_exports = (
+            "PLAYWISE_MANUAL_DEVICE_VERIFIED=1 "
+            f"PLAYWISE_VERIFIED_MODEL={shlex.quote(model)} "
+            f"PLAYWISE_VERIFIED_HOS={shlex.quote(hos)} "
+            f"PLAYWISE_VERIFIED_ATMOSPHERE={shlex.quote(atmosphere)} "
+        )
+    targets_str = verification_exports + targets_str
     container_script = (
         "export DEVKITPRO=/opt/devkitpro "
         "DEVKITARM=/opt/devkitpro/devkitARM "
@@ -530,6 +541,7 @@ def ssh_command(
     jobs: int | None = None,
     build_image: str | None = None,
     build_image_digest: str | None = None,
+    manual_verification: tuple[str, str, str] | None = None,
 ) -> list[str]:
     command = ["ssh", "-p", str(port), "-o", "ConnectTimeout=10"]
     if host in {"127.0.0.1", "localhost", "::1"}:
@@ -548,6 +560,7 @@ def ssh_command(
             jobs=jobs,
             build_image=build_image,
             build_image_digest=build_image_digest,
+            manual_verification=manual_verification,
         ),
     ])
     return command
@@ -567,6 +580,7 @@ def run_container(
     jobs: int | None = None,
     build_image: str | None = None,
     build_image_digest: str | None = None,
+    manual_verification: tuple[str, str, str] | None = None,
 ) -> None:
     process = subprocess.run(
         ssh_command(
@@ -582,6 +596,7 @@ def run_container(
             jobs=jobs,
             build_image=build_image,
             build_image_digest=build_image_digest,
+            manual_verification=manual_verification,
         ),
         cwd=ROOT,
         stdin=None,
@@ -622,7 +637,11 @@ def build_and_verify(
     build_image: str | None = None,
     build_image_digest: str | None = None,
     docker_container: str | None = DEFAULT_DOCKER_CONTAINER,
+    manual_verification: tuple[str, str, str] | None = None,
 ) -> None:
+    if manual_verification is not None:
+        if only not in ("all", "playwise", "complete") or not all(value.strip() for value in manual_verification):
+            raise PackageError("manual device verification requires a release package and nonempty model, HOS and Atmosphère")
     overall_t0 = time.perf_counter()
     package_dir = ROOT / "build" / "packages"
     device_lab_dir = ROOT / "build" / "device-lab"
@@ -671,6 +690,7 @@ def build_and_verify(
         jobs=jobs,
         build_image=build_image,
         build_image_digest=build_image_digest,
+        manual_verification=manual_verification,
     )
 
     if only == "all":
@@ -790,6 +810,14 @@ def parse_args() -> argparse.Namespace:
         help=f"Local container inspected for build identity. Default: {DEFAULT_DOCKER_CONTAINER}",
     )
     parser.add_argument(
+        "--manual-device-verified",
+        action="store_true",
+        help="Record manual verification of the main features in the release manifest.",
+    )
+    parser.add_argument("--verified-model", help="Switch model used for manual verification.")
+    parser.add_argument("--verified-hos", help="HOS version used for manual verification.")
+    parser.add_argument("--verified-atmosphere", help="Atmosphère version used for manual verification.")
+    parser.add_argument(
         "--only",
         choices=["all", "playwise", "complete", "device-lab", "eden", "previews"],
         default="all",
@@ -842,7 +870,16 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Number of parallel make compilation jobs. Default: 2.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    values = (args.verified_model, args.verified_hos, args.verified_atmosphere)
+    if args.manual_device_verified:
+        if not all(value and value.strip() for value in values):
+            parser.error("--manual-device-verified requires --verified-model, --verified-hos and --verified-atmosphere")
+        if args.previews or args.only not in ("all", "playwise", "complete"):
+            parser.error("--manual-device-verified requires a release package target")
+    elif any(value is not None for value in values):
+        parser.error("--verified-model, --verified-hos and --verified-atmosphere require --manual-device-verified")
+    return args
 
 
 def main() -> int:
@@ -864,6 +901,8 @@ def main() -> int:
             build_image=args.build_image,
             build_image_digest=args.build_image_digest,
             docker_container=args.docker_container,
+            manual_verification=(args.verified_model, args.verified_hos, args.verified_atmosphere)
+            if args.manual_device_verified else None,
         )
     except (OSError, ValueError, PackageError, subprocess.SubprocessError, zipfile.BadZipFile) as exc:
         print(f"FAIL: container packages: {exc}")
