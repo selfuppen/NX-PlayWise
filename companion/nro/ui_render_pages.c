@@ -323,13 +323,16 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     char adjustment_badge[32];
     char adjustment_detail[128];
     int64_t now = ptc_ui_render_now();
+    bool fresh = ptc_ui_status_is_fresh(model, now);
+    bool bedtime_skip_matches = fresh && ptc_ui_bedtime_skip_matches_policy(
+        model, &model->bedtime_policy);
     ptc_ui_format_today_adjustment_status(model, now, adjustment_badge, sizeof(adjustment_badge),
                                           adjustment_detail, sizeof(adjustment_detail));
     draw_parent_home_summary(pixels, stride, model);
     for (int index = 0; index < 6; ++index) {
         UiRect box = to_uirect(ptc_ui_today_card_rect(index));
         bool focused = !model->parent_footer_focused && model->selected_index == index;
-        bool clear_unavailable = index == 3 && ptc_ui_status_is_fresh(model, now) &&
+        bool clear_unavailable = index == 3 && fresh &&
                                  !model->today_override_present;
         bool disabled = model->disable_flag_present || model->waiting || clear_unavailable;
         const char *title = TODAY_ACTIONS[index].title;
@@ -342,7 +345,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
             subtitle = model->today_override_cleared_in_session
                 ? "本次会话已清除，当前使用下级规则" : "今天没有单独额度调整，无需清除";
         } else if (index == 4) {
-            if (!model->status_loaded) {
+            if (!fresh) {
                 subtitle = "刷新后显示当前或下次窗口";
             } else if (model->bedtime_active) {
                 if (model->bedtime_skipped) {
@@ -359,7 +362,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                         (unsigned int)(model->bedtime_end_minute % 60));
                 }
                 subtitle = dynamic;
-            } else if (model->bedtime_skipped_window_available) {
+            } else if (bedtime_skip_matches) {
                 snprintf(dynamic, sizeof(dynamic), "%02u:%02u 至次日 %02u:%02u（已跳过）",
                     (unsigned int)(model->bedtime_skipped_start_minute / 60),
                     (unsigned int)(model->bedtime_skipped_start_minute % 60),
@@ -381,7 +384,8 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 subtitle = model->bedtime_policy.enabled ? "没有可跳过的近期窗口" : "当前关闭";
             }
         } else if (index == 5) {
-            if (model->daily_buffer_minutes == 0) subtitle = "当前关闭，可在时间计划中设置";
+            if (!fresh) subtitle = "按 Y 刷新确认领取状态";
+            else if (model->daily_buffer_minutes == 0) subtitle = "当前关闭，可在时间计划中设置";
             else if (model->daily_buffer_claimed) subtitle = "今日已领取，明天恢复资格";
             else if (model->daily_buffer_available) {
                 snprintf(dynamic, sizeof(dynamic), "今日可领取 %u 分钟", (unsigned int)model->daily_buffer_minutes);
@@ -395,7 +399,8 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                          (index == 0 || index == 4) ? 82 : 0);
         if (index == 0) {
             UiRect tbadge = {box.x + box.width - 86, box.y + 10, 74, 22};
-            uint32_t badge_color = strcmp(adjustment_badge, "生效中") == 0 ? UI_SUCCESS :
+            uint32_t badge_color = (strcmp(adjustment_badge, "生效中") == 0 ||
+                                    strcmp(adjustment_badge, "不限时") == 0) ? UI_SUCCESS :
                 (strcmp(adjustment_badge, "就寝立断") == 0 ? UI_WARNING :
                 (strcmp(adjustment_badge, "控制停用") == 0 || strcmp(adjustment_badge, "恢复中") == 0
                     ? UI_DANGER :
@@ -407,10 +412,25 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                              (badge_color == UI_WARNING ? UI_WARNING_SOFT : UI_PAGE)));
             draw_rect_outline(pixels, stride, tbadge, 6, 1, badge_color);
             draw_text_center(pixels, stride, tbadge, adjustment_badge, 12, badge_color);
-        } else if (index == 4 && model->bedtime_active && !model->bedtime_skipped) {
-            UiRect tbadge = {box.x + box.width - 78, box.y + 10, 66, 20};
-            fill_round_rect(pixels, stride, tbadge, 5, UI_DANGER);
-            draw_text_center(pixels, stride, tbadge, "限制中", 12, UI_ON_ACCENT);
+        } else if (index >= 2) {
+            const char *badge = !fresh ? "待确认" :
+                (index == 2 ? (model->today_override_present &&
+                               model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED ? "已启用" : "未启用") :
+                 index == 3 ? (model->today_override_cleared_in_session &&
+                               !model->today_override_present ? "已清除" : "未清除") :
+                 index == 4 ? (model->bedtime_active && !model->bedtime_skipped ? "限制中" :
+                               (bedtime_skip_matches ? "本次已跳过" : "未跳过")) :
+                              (model->daily_buffer_claimed ? "已领取" :
+                               (model->daily_buffer_available ? "可领取" : "未领取")));
+            uint32_t color = !fresh ? UI_WARNING :
+                (index == 4 && model->bedtime_active && !model->bedtime_skipped ? UI_DANGER :
+                 (strcmp(badge, "已启用") == 0 || strcmp(badge, "本次已跳过") == 0 ||
+                  strcmp(badge, "已领取") == 0 ? UI_SUCCESS : UI_MUTED));
+            UiRect tbadge = {box.x + box.width - 96, box.y + 10, 84, 22};
+            fill_round_rect(pixels, stride, tbadge, 6, color == UI_DANGER ? UI_DANGER_SOFT :
+                            (color == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
+            draw_rect_outline(pixels, stride, tbadge, 6, 1, color);
+            draw_text_center(pixels, stride, tbadge, badge, 12, color);
         }
     }
     home_button(pixels, stride, ptc_ui_home_details_rect(true), "+  查看详情", false, false, model->waiting);
@@ -635,6 +655,12 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 dynamic_action.subtitle = shortcut_detail;
                 action = &dynamic_action;
             }
+            if (model->parent_page == PTC_UI_PARENT_PLAN &&
+                !ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
+                dynamic_action = *action;
+                dynamic_action.subtitle = "按 Y 刷新确认开启和生效状态";
+                action = &dynamic_action;
+            }
             /* Status badges live in the card's top-right corner.  The one-line
              * title/status block is vertically centered below that corner, so
              * it can use the full remaining width without being truncated. */
@@ -642,6 +668,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             draw_action_card(pixels, stride, card, action, index == model->selected_index && !model->parent_footer_focused, astate,
                              reserved_right);
             if (model->parent_page == PTC_UI_PARENT_PLAN) {
+                bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
                 bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
                 bool holiday_active = (strcmp(model->rule_source, "statutory_holiday") == 0 ||
                                        strcmp(model->rule_source, "makeup_workday") == 0);
@@ -654,63 +681,37 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                                       (index == 3 && bedtime_enforcing);
 
                 /* 当前生效规则的高亮描边（非聚焦时呈现） */
-                if (is_active_rule && !(index == model->selected_index && !model->parent_footer_focused)) {
+                if (fresh && is_active_rule && !(index == model->selected_index && !model->parent_footer_focused)) {
                     uint32_t active_border = (index == 3 ? UI_DANGER : (index == 1 ? UI_SUCCESS : UI_ACCENT));
                     draw_rect_outline(pixels, stride, card, 16, 2, active_border);
                 }
 
-                UiRect pbadge = {card.x + card.width - 86, card.y + 8, 74, 22};
-                if (index == 0) {
-                    if (scheduled_active) {
-                        fill_round_rect(pixels, stride, pbadge, 6, UI_ACCENT);
-                        draw_text_center(pixels, stride, pbadge, "当前生效", 12, UI_ON_ACCENT);
-                    } else {
-                        fill_round_rect(pixels, stride, pbadge, 6, UI_ACCENT_SOFT);
-                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_ACCENT);
-                        draw_text_center(pixels, stride, pbadge, "优先 1", 12, UI_ACCENT);
-                    }
-                } else if (index == 1) {
-                    if (holiday_active) {
-                        fill_round_rect(pixels, stride, pbadge, 6, UI_SUCCESS);
-                        draw_text_center(pixels, stride, pbadge, "当前生效", 12, UI_ON_ACCENT);
-                    } else {
-                        fill_round_rect(pixels, stride, pbadge, 6, UI_SUCCESS_SOFT);
-                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_SUCCESS);
-                        draw_text_center(pixels, stride, pbadge, "优先 2", 12, UI_SUCCESS);
-                    }
-                } else if (index == 2) {
-                    if (weekly_active) {
-                        fill_round_rect(pixels, stride, pbadge, 6, UI_ACCENT);
-                        draw_text_center(pixels, stride, pbadge, "当前生效", 12, UI_ON_ACCENT);
-                    } else {
-                        fill_round_rect(pixels, stride, pbadge, 6, UI_PAGE);
-                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_BORDER);
-                        draw_text_center(pixels, stride, pbadge, "基础规则", 12, UI_MUTED);
-                    }
-                } else if (index == 3) {
-                    if (bedtime_enforcing) {
-                        fill_round_rect(pixels, stride, pbadge, 6, UI_DANGER);
-                        draw_text_center(pixels, stride, pbadge, "限制中", 12, UI_ON_ACCENT);
-                    } else {
-                        fill_round_rect(pixels, stride, pbadge, 6, UI_WARNING_SOFT);
-                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING);
-                        draw_text_center(pixels, stride, pbadge, "独立并行", 12, UI_WARNING);
-                    }
-                } else if (index == 4) {
-                    if (model->daily_buffer_claimed) {
-                        fill_round_rect(pixels, stride, pbadge, 6, UI_PAGE);
-                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_BORDER);
-                        draw_text_center(pixels, stride, pbadge, "今日已领", 12, UI_MUTED);
-                    } else if (model->daily_buffer_available) {
-                        fill_round_rect(pixels, stride, pbadge, 6, UI_SUCCESS_SOFT);
-                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_SUCCESS);
-                        draw_text_center(pixels, stride, pbadge, "今日可领", 12, UI_SUCCESS);
-                    } else {
-                        fill_round_rect(pixels, stride, pbadge, 6, UI_PAGE);
-                        draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_BORDER);
-                        draw_text_center(pixels, stride, pbadge, "限时追加", 12, UI_MUTED);
-                    }
-                }
+                UiRect pbadge = {card.x + card.width - 96, card.y + 8, 84, 22};
+                const char *badge_label = !fresh ? "待确认" :
+                    index == 0 ? (scheduled_active ? "当前生效" :
+                                  (model->scheduled_override.enabled ? "已开启" : "已关闭")) :
+                    index == 1 ? (holiday_active ? "当前生效" :
+                                  (model->holiday_enabled ? "已开启" : "已关闭")) :
+                    index == 2 ? (weekly_active ? "当前生效" : "今日被覆盖") :
+                    index == 3 ? (bedtime_enforcing ? "限制中" :
+                                  (ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy) ? "本次已跳过" :
+                                   (model->bedtime_policy.enabled ? "已开启" : "已关闭"))) :
+                    (model->autonomy_policy.daily_buffer_minutes == 0 ? "已关闭" :
+                     (model->daily_buffer_claimed ? "今日已领" :
+                      (model->daily_buffer_available ? "今日可领" : "已开启")));
+                uint32_t badge_color = !fresh ? UI_WARNING :
+                    bedtime_enforcing && index == 3 ? UI_DANGER :
+                    (strcmp(badge_label, "当前生效") == 0 ||
+                     strcmp(badge_label, "今日可领") == 0 ||
+                     strcmp(badge_label, "本次已跳过") == 0 ? UI_SUCCESS :
+                     (strcmp(badge_label, "已关闭") == 0 ||
+                      strcmp(badge_label, "今日被覆盖") == 0 ? UI_MUTED : UI_ACCENT));
+                fill_round_rect(pixels, stride, pbadge, 6,
+                                badge_color == UI_DANGER ? UI_DANGER_SOFT :
+                                (badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
+                                 (badge_color == UI_WARNING ? UI_WARNING_SOFT : UI_PAGE)));
+                draw_rect_outline(pixels, stride, pbadge, 6, 1, badge_color);
+                draw_text_center(pixels, stride, pbadge, badge_label, 12, badge_color);
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
                 const char *state_label = "状态未知";
                 uint32_t state_color = UI_DANGER;

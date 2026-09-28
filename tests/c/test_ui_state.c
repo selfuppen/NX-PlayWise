@@ -387,6 +387,10 @@ static void test_bedtime_save_restriction_projection(void)
     model.bedtime_skipped = true;
     model.bedtime_skipped_window_available = true;
     model.bedtime_skipped_window_instance_id = ptc_bedtime_window_instance_id(model.day_index, 1260);
+    model.bedtime_skipped_start_day_index = model.day_index;
+    model.bedtime_skipped_start_minute = 1260;
+    check_true(ptc_ui_bedtime_skip_matches_policy(&model, &model.draft_bedtime_policy),
+               "saved skip matches the same policy window");
     check_int(ptc_ui_bedtime_save_impact(&model, 1320, 1000), PTC_UI_BEDTIME_IMPACT_SKIPPED,
                "same skipped window stays skipped after save");
     model.bedtime_skipped_window_available = false;
@@ -395,6 +399,8 @@ static void test_bedtime_save_restriction_projection(void)
                "current skipped instance also prevents a false restriction warning");
     model.bedtime_skipped_window_available = true;
     model.draft_bedtime_policy.week[weekday].start_minute = 1290;
+    check_true(!ptc_ui_bedtime_skip_matches_policy(&model, &model.draft_bedtime_policy),
+               "a changed window no longer shows an old skip badge");
     check_int(ptc_ui_bedtime_save_impact(&model, 1320, 1000), PTC_UI_BEDTIME_IMPACT_RESTRICT,
                "changing the skipped window instance can immediately restrict");
     model.draft_bedtime_policy.week[weekday].start_minute = 1260;
@@ -1876,6 +1882,19 @@ static void test_balanced_feature_state(void)
     model.overlay = PTC_UI_OVERLAY_AUTONOMY;
     check_hit(hit_center(&model, ptc_ui_autonomy_option_rect(3)),
         PTC_UI_HIT_AUTONOMY_OPTION, 3, "fifteen-minute autonomy option is touchable");
+    model.overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
+    model.numpad_purpose = PTC_UI_NUMPAD_MINUTES;
+    model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
+    check_hit(hit_center(&model, ptc_ui_today_mode_rect(0)),
+        PTC_UI_HIT_TODAY_MODE, 0, "today limit mode is touchable");
+    check_hit(hit_center(&model, ptc_ui_today_mode_rect(1)),
+        PTC_UI_HIT_TODAY_MODE, 1, "today unlimited mode is touchable");
+    model.today_limit_unlimited_draft = true;
+    check_hit(hit_center(&model, ptc_ui_minute_editor_key_rect(0)),
+        PTC_UI_HIT_NONE, 0, "unlimited draft disables minute input");
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    check_hit(hit_center(&model, ptc_ui_quota_refresh_rect()),
+        PTC_UI_HIT_QUOTA_REFRESH, 0, "quota confirmation refresh is touchable");
 
     memset(&model, 0, sizeof(model));
     memset(&record, 0, sizeof(record));
@@ -2404,6 +2423,11 @@ static void test_today_decision_and_plan_review(void)
     ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
     check_true(strcmp(badge, "生效中") == 0 && strstr(detail, "90") != NULL,
                "active today adjustment exposes its quota");
+    model.today_override_rule.mode = PTC_RULE_MODE_UNLIMITED;
+    ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
+    check_true(strcmp(badge, "不限时") == 0 && strstr(detail, "不限时") != NULL,
+               "unlimited today adjustment has its own status");
+    model.today_override_rule.mode = PTC_RULE_MODE_LIMIT;
 
     model.bedtime_active = true;
     model.bedtime_skipped = false;
@@ -2738,9 +2762,35 @@ static void test_global_time_projection_and_direct_inputs(void)
                strstr(status.remaining_text, "状态待确认"),
                "zero forecast total is treated as unknown rather than exhausted");
     model.forecast[0].minutes = 1440;
+    model.limited_today = 1;
     ptc_ui_project_time_status(&model, 1121, &status);
-    check_true(!status.progress_available && strstr(status.freshness_text, "状态待确认"),
-               "stale state clears the effective progress");
+    check_true(!status.progress_available && strstr(status.freshness_text, "确认") &&
+               strstr(status.remaining_text, "上次确认：限时") &&
+               strstr(status.remaining_text, "按 Y 刷新确认") &&
+               strstr(status.remaining_text, "1440") == NULL,
+               "stale state explains the last rule without repeating old minutes");
+    model.unrestricted_today = 1;
+    ptc_ui_project_time_status(&model, 1121, &status);
+    check_true(strstr(status.remaining_text, "上次确认：不限时") != NULL,
+               "stale unlimited state keeps its last confirmed category");
+    model.bedtime_active = true;
+    ptc_ui_project_time_status(&model, 1121, &status);
+    check_true(strstr(status.remaining_text, "上次确认：就寝限制") != NULL,
+               "stale bedtime state takes priority over the quota category");
+    model.bedtime_active = false;
+    model.unrestricted_today = 0;
+    snprintf(model.result_status, sizeof(model.result_status), "error");
+    ptc_ui_project_time_status(&model, 1001, &status);
+    check_true(strstr(status.remaining_text, "上次确认：限时") != NULL &&
+               strstr(status.freshness_text, "刷新失败") != NULL,
+               "failed refresh keeps the old category explicitly stale");
+    snprintf(model.result_status, sizeof(model.result_status), "ok");
+    model.status_loaded = false;
+    ptc_ui_project_time_status(&model, 1001, &status);
+    check_true(strstr(status.remaining_text, "尚未获取状态") != NULL &&
+               strstr(status.remaining_text, "按 Y 刷新") != NULL,
+               "first load provides a refresh action without a guessed balance");
+    model.status_loaded = true;
     model.waiting = true;
     ptc_ui_project_time_status(&model, 1000, &status);
     check_int(status.state, PTC_UI_TIME_WAITING, "pending refresh projects a waiting state");
@@ -2811,6 +2861,14 @@ static void test_global_time_projection_and_direct_inputs(void)
     PtcUiRect master_switch = ptc_ui_bedtime_master_switch_rect();
     check_hit(hit_center(&model, master_switch), PTC_UI_HIT_BEDTIME_MASTER_SWITCH, 0,
               "bedtime master switch card is touchable");
+    model.bedtime_section_focused = true;
+    model.bedtime_section = PTC_UI_BEDTIME_SCHEDULED;
+    ptc_ui_move_bedtime_focus(&model, 1, 0);
+    check_true(model.bedtime_master_focused && !model.bedtime_section_focused,
+               "right from last bedtime tab reaches master switch");
+    ptc_ui_move_bedtime_focus(&model, -1, 0);
+    check_true(!model.bedtime_master_focused && model.bedtime_section_focused,
+               "left from master switch returns to tabs");
 
     model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
     check_hit(hit_center(&model, ptc_ui_bedtime_overlay_field_rect(model.overlay, 0)),
@@ -2885,8 +2943,61 @@ static void test_forecast_day_decision_and_navigation(void)
                "day decision cancel button hit test");
 }
 
+static void test_quota_recheck_decisions(void)
+{
+    PtcUiModel model = {0};
+    PtcUiQuotaRecheckSnapshot before;
+    bool hold = false;
+    model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
+    model.status_loaded = true;
+    model.status_updated_at = 1000;
+    model.remaining_available = true;
+    model.played_minutes_available = true;
+    model.remaining_minutes = 60;
+    model.played_minutes = 30;
+    model.draft_minutes = 120;
+    snprintf(model.result_status, sizeof(model.result_status), "ok");
+    ptc_ui_quota_recheck_snapshot(&model, &before);
+    check_int(ptc_ui_quota_recheck_decide(&before, &model, true, false, 1001, &hold),
+              PTC_UI_QUOTA_RECHECK_SUBMIT,
+              "unchanged positive estimate can submit after automatic recheck");
+    check_true(!hold, "positive estimate needs no hold");
+    check_int(ptc_ui_quota_recheck_decide(&before, &model, true, true, 1001, &hold),
+              PTC_UI_QUOTA_RECHECK_CONFIRM_AGAIN,
+              "manual refresh always asks for renewed confirmation");
+    model.remaining_minutes = 50;
+    model.played_minutes = 40;
+    check_int(ptc_ui_quota_recheck_decide(&before, &model, true, false, 1001, &hold),
+              PTC_UI_QUOTA_RECHECK_CONFIRM_AGAIN,
+              "positive estimate changed while open requires renewed confirmation");
+    ptc_ui_quota_recheck_snapshot(&model, &before);
+    model.remaining_minutes = 0;
+    model.played_minutes = 120;
+    check_int(ptc_ui_quota_recheck_decide(&before, &model, true, false, 1001, &hold),
+              PTC_UI_QUOTA_RECHECK_CONFIRM_AGAIN,
+              "estimate reaching zero blocks automatic submit");
+    check_true(hold, "zero estimate changes the risk to a hold");
+    model.confirm_hold_required = true;
+    ptc_ui_quota_recheck_snapshot(&model, &before);
+    check_int(ptc_ui_quota_recheck_decide(&before, &model, true, false, 1001, &hold),
+              PTC_UI_QUOTA_RECHECK_SUBMIT,
+              "unchanged zero estimate can submit only after the new hold");
+    check_int(ptc_ui_quota_recheck_decide(&before, &model, false, false, 1001, &hold),
+              PTC_UI_QUOTA_RECHECK_BLOCK,
+              "refresh failure never authorizes a write");
+    snprintf(model.result_status, sizeof(model.result_status), "error");
+    check_int(ptc_ui_quota_recheck_decide(&before, &model, true, false, 1001, &hold),
+              PTC_UI_QUOTA_RECHECK_BLOCK,
+              "error result never authorizes a write even with old status data");
+    snprintf(model.result_status, sizeof(model.result_status), "ok");
+    check_int(ptc_ui_quota_recheck_decide(&before, &model, true, false, 1121, &hold),
+              PTC_UI_QUOTA_RECHECK_BLOCK,
+              "expired recheck result cannot authorize a write");
+}
+
 int main(void)
 {
+    test_quota_recheck_decisions();
     test_global_time_projection_and_direct_inputs();
     test_time_menu_modal_touch_guards();
     test_visual_action_boundaries();

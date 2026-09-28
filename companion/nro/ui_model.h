@@ -179,7 +179,7 @@ typedef enum {
 typedef struct {
     char clock_text[6];
     char date_text[32];
-    char remaining_text[48];
+    char remaining_text[96];
     char freshness_text[48];
     bool progress_available;
     uint16_t progress_per_mille;
@@ -403,6 +403,7 @@ typedef struct {
     PtcUiOperation operation;
     int overlay_selection;
     uint16_t draft_minutes;
+    bool today_limit_unlimited_draft;
     uint16_t minimum_minutes;
     uint16_t maximum_minutes;
     PtcDayRule draft_week[7];
@@ -429,6 +430,7 @@ typedef struct {
     bool bedtime_dirty;
     bool bedtime_switch_pending;
     bool bedtime_section_focused;
+    bool bedtime_master_focused;
     int bedtime_editor_day;
     int bedtime_special_kind;
     PtcUiBedtimeTimeTarget bedtime_editor_time_target;
@@ -447,6 +449,7 @@ typedef struct {
     char overlay_title[64];
     char overlay_body[320];
     bool confirm_hold_required;
+    bool quota_refresh_failed;
     uint16_t confirm_hold_progress;
     PtcUiNumpadPurpose numpad_purpose;
     PtcUiOverlay numpad_return_overlay;

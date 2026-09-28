@@ -111,6 +111,25 @@ PtcUiBedtimeImpact ptc_ui_bedtime_save_impact(const PtcUiModel *model,
     return PTC_UI_BEDTIME_IMPACT_RESTRICT;
 }
 
+bool ptc_ui_bedtime_skip_matches_policy(const PtcUiModel *model,
+    const PtcBedtimePolicy *policy)
+{
+    PtcRules rules;
+    PtcEffectiveBedtime effective;
+    uint16_t start_day;
+    if (!model || !policy || !policy->enabled ||
+        !model->bedtime_skipped_window_available) return false;
+    start_day = model->bedtime_skipped_start_day_index;
+    memset(&rules, 0, sizeof(rules));
+    rules.bedtime = *policy;
+    effective = ptc_bedtime_resolve_start_day(&rules, start_day,
+        ptc_weekday_from_day_index(start_day));
+    return effective.window.enabled &&
+        model->bedtime_skipped_window_instance_id ==
+            ptc_bedtime_window_instance_id(start_day, effective.window.start_minute) &&
+        model->bedtime_skipped_start_minute == effective.window.start_minute;
+}
+
 const char *ptc_ui_effective_rule_label(PtcRuleSource source)
 {
     switch (source) {
@@ -399,7 +418,8 @@ void ptc_ui_format_today_adjustment_status(const PtcUiModel *model, int64_t now,
                 snprintf(detail, detail_size, "就寝限制中，调整%u分钟已保留",
                          (unsigned int)model->today_override_rule.minutes);
         } else {
-            snprintf(badge, badge_size, "生效中");
+            snprintf(badge, badge_size, "%s",
+                     model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED ? "不限时" : "生效中");
             if (model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED)
                 snprintf(detail, detail_size, "今日额度调整：不限时");
             else

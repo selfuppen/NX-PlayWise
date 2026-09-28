@@ -429,10 +429,12 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     } else {
         draw_rect_outline(pixels, stride, master_card, 16, 1, UI_RGB(UI_BLENDED(border_control)));
     }
+    if (model->bedtime_master_focused) draw_focus_ring(pixels, stride, master_card, 16);
     draw_text(pixels, stride, master_card.x + 18, master_card.y + 28, "就寝管控总闸", 20, UI_INK);
     if (bedtime_enforcing) {
         draw_text(pixels, stride, master_card.x + 18, master_card.y + 54,
-                  "立断执行中 (夜间就寝时段)", 13, UI_DANGER);
+                  draft->enabled ? "当前限制中 (夜间就寝时段)" :
+                  "当前仍限制中；保存关闭后才解除", 13, UI_DANGER);
         UiRect active_pill = {master_card.x + 175, master_card.y + 12, 96, 20};
         fill_round_rect(pixels, stride, active_pill, 6, UI_DANGER_SOFT);
         draw_text_center(pixels, stride, active_pill, "● 立断生效中", 12, UI_DANGER);
@@ -443,8 +445,8 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     }
     UiRect toggle_rect = {master_card.x + master_card.width - 76, master_card.y + (master_card.height - 30) / 2, 60, 30};
     draw_toggle_switch(pixels, stride, toggle_rect, draft->enabled, false, model->disable_flag_present, NULL, NULL);
-    draw_text(pixels, stride, master_card.x + master_card.width - 92, master_card.y + master_card.height - 8,
-              "- / 点按切换总闸", 11, UI_MUTED);
+    draw_text(pixels, stride, master_card.x + master_card.width - 174, master_card.y + master_card.height - 8,
+              "- / A / 点按切换", 15, UI_ACCENT);
 
     /* 页面状态、预测与风险统一在一张卡片中，避免与全局状态和底部反馈重复。 */
     {
@@ -455,15 +457,15 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         uint32_t state_bg = state_color == UI_DANGER ? UI_DANGER_SOFT :
             (state_color == UI_WARNING ? UI_WARNING_SOFT : UI_SUCCESS_SOFT);
         char state_text[96];
-        snprintf(state_text, sizeof(state_text), "%s：%s", section_name,
-            strcmp(model->result_status, "error") == 0 ? "保存失败，草稿仍保留" :
-            (model->waiting ? "正在保存并等待后台确认" :
-             (model->bedtime_dirty ? "草稿尚未保存" :
-              (bedtime_enforcing ? "就寝限制正在生效" : "计划已保存"))));
+        snprintf(state_text, sizeof(state_text), "已保存总闸：%s｜%s",
+            model->bedtime_policy.enabled ? "开" : "关",
+            strcmp(model->result_status, "error") == 0 ? "保存失败，草稿保留" :
+            (model->waiting ? "正在保存" :
+             (model->bedtime_dirty ? "草稿待保存" : "规则已保存")));
         fill_round_rect(pixels, stride, eval_card, 12, UI_RGB(UI_BLENDED(surface)));
         draw_rect_outline(pixels, stride, eval_card, 12, 1, UI_RGB(UI_BLENDED(border_control)));
         draw_text(pixels, stride, eval_card.x + 16, eval_card.y + 28,
-                  "计划状态与今晚预测", 17, UI_RGB(UI_BLENDED(text_primary)));
+                  section_name, 17, UI_RGB(UI_BLENDED(text_primary)));
         UiRect state_pill = {eval_card.x + 16, eval_card.y + 42, eval_card.width - 32, 34};
         fill_round_rect(pixels, stride, state_pill, 9, state_bg);
         draw_rect_outline(pixels, stride, state_pill, 9, 1, state_color);
@@ -488,8 +490,16 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         } else if (bedtime_impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN) {
             snprintf(forecast_line1, sizeof(forecast_line1), "状态待确认：保存后可能立即限制，请长按确认");
             f1_color = UI_DANGER;
-        } else if (bedtime_impact == PTC_UI_BEDTIME_IMPACT_SKIPPED) {
-            snprintf(forecast_line1, sizeof(forecast_line1), "本次就寝已跳过；保存后暂不触发此窗口");
+        } else if (ptc_ui_status_is_fresh(model, raw_now) &&
+                   (bedtime_impact == PTC_UI_BEDTIME_IMPACT_SKIPPED ||
+                    ptc_ui_bedtime_skip_matches_policy(model, draft))) {
+            uint16_t skipped_start = model->bedtime_skipped_window_available
+                ? model->bedtime_skipped_start_minute : eval.start_minute;
+            uint16_t skipped_end = model->bedtime_skipped_window_available
+                ? model->bedtime_skipped_end_minute : eval.end_minute;
+            snprintf(forecast_line1, sizeof(forecast_line1), "本次已跳过：%02u:%02u 至次日 %02u:%02u",
+                (unsigned int)(skipped_start / 60), (unsigned int)(skipped_start % 60),
+                (unsigned int)(skipped_end / 60), (unsigned int)(skipped_end % 60));
             f1_color = UI_SUCCESS;
         } else if (eval.active) {
             snprintf(forecast_line1, sizeof(forecast_line1), "当前状态：就寝限制正在生效");
@@ -558,8 +568,8 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
         draw_text(pixels, stride, eval_card.x + 16,
                   eval_card.y + eval_card.height - 18,
-                  "L/R 切换区段，- 总闸，+ 保存，ZL 放弃",
-                  12, UI_ACCENT);
+                  "L 上一页 / R 下一页   - 总闸   + 保存   ZL 放弃",
+                  14, UI_ACCENT);
     }
 
     if (model->bedtime_section == PTC_UI_BEDTIME_WEEKLY) {

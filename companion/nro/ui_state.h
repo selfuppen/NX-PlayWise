@@ -29,6 +29,26 @@ typedef enum {
     PTC_UI_BEDTIME_IMPACT_UNKNOWN
 } PtcUiBedtimeImpact;
 
+typedef struct {
+    PtcUiOperation operation;
+    bool hold_required;
+    int remaining_minutes;
+    int played_minutes;
+    int unrestricted_today;
+    bool remaining_available;
+    bool played_available;
+    uint16_t day_index;
+    bool today_override_present;
+    PtcDayRule today_override_rule;
+    char rule_source[32];
+} PtcUiQuotaRecheckSnapshot;
+
+typedef enum {
+    PTC_UI_QUOTA_RECHECK_BLOCK = 0,
+    PTC_UI_QUOTA_RECHECK_CONFIRM_AGAIN,
+    PTC_UI_QUOTA_RECHECK_SUBMIT
+} PtcUiQuotaRecheckDecision;
+
 int ptc_ui_parent_action_count(PtcUiParentPage page);
 const char *ptc_ui_settings_status_label(const PtcUiModel *model);
 PtcUiActionState ptc_ui_settings_support_state(const PtcUiModel *model);
@@ -38,6 +58,8 @@ void ptc_ui_format_custom_shortcut_hint(
     size_t out_size);
 PtcUiBedtimeImpact ptc_ui_bedtime_save_impact(const PtcUiModel *model,
     uint16_t minute_of_day, int64_t now);
+bool ptc_ui_bedtime_skip_matches_policy(const PtcUiModel *model,
+    const PtcBedtimePolicy *policy);
 bool ptc_ui_bedtime_section_dirty(const PtcUiModel *model, PtcUiBedtimeSection section);
 PtcBedtimePolicy ptc_ui_bedtime_section_policy(const PtcUiModel *model,
     PtcUiBedtimeSection section);
@@ -65,6 +87,11 @@ int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
 bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now);
+void ptc_ui_quota_recheck_snapshot(const PtcUiModel *model,
+    PtcUiQuotaRecheckSnapshot *out);
+PtcUiQuotaRecheckDecision ptc_ui_quota_recheck_decide(
+    const PtcUiQuotaRecheckSnapshot *before, const PtcUiModel *after,
+    bool refresh_succeeded, bool manual, int64_t now, bool *hold_required);
 bool ptc_ui_parent_status_alert_visible(const PtcUiModel *model);
 bool ptc_ui_operation_feedback_visible(const PtcUiModel *model);
 const char *ptc_ui_runtime_notice_summary(const PtcUiModel *model);

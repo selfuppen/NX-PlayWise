@@ -311,12 +311,24 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
     field_count = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY ? 11 :
         (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
 
+    if (model->bedtime_master_focused) {
+        if (horizontal < 0) model->bedtime_section_focused = true;
+        else if (vertical > 0) model->bedtime_section_focused = false;
+        else return;
+        model->bedtime_master_focused = false;
+        if (vertical > 0) model->selected_index = 0;
+        return;
+    }
+
     if (model->bedtime_section_focused) {
         if (horizontal != 0) {
             int next = (int)model->bedtime_section + (horizontal > 0 ? 1 : -1);
             if (next >= PTC_UI_BEDTIME_WEEKLY && next <= PTC_UI_BEDTIME_SCHEDULED) {
                 model->bedtime_section = (PtcUiBedtimeSection)next;
                 model->selected_index = 0;
+            } else if (horizontal > 0) {
+                model->bedtime_section_focused = false;
+                model->bedtime_master_focused = true;
             }
         } else if (vertical > 0) {
             PtcUiRect tab = ptc_ui_bedtime_section_rect(model->bedtime_section);
@@ -393,6 +405,10 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
         }
     }
 
+    if (horizontal > 0 && best_index < 0 && current_x > 600 && current_y < 440) {
+        model->bedtime_master_focused = true;
+        return;
+    }
     if (best_index >= 0) model->selected_index = best_index;
     else if (best_index == -2) model->bedtime_section_focused = true;
 }
@@ -1029,6 +1045,19 @@ PtcUiRect ptc_ui_minute_editor_summary_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
     return (PtcUiRect){dialog.x + 414, dialog.y + 116, 470, 350};
+}
+
+PtcUiRect ptc_ui_today_mode_rect(int index)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){dialog.x + 414 + index * 239, dialog.y + 410, 231, 38};
+}
+
+PtcUiRect ptc_ui_quota_refresh_rect(void)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_CONFIRM);
+    return (PtcUiRect){dialog.x + 54, dialog.y + 310, dialog.w - 108, 28};
 }
 
 bool ptc_ui_apply_weekly_bulk(PtcUiModel *model, bool weekend)

@@ -528,6 +528,9 @@ int main(int argc, char **argv)
         ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
             "设置今日总额度", "全天总额度包含今日额度消耗；右侧显示调整前后的可玩时间。", 4, 1, 1440, 1440);
         failed |= save_preview(argv[2], "parent", "quota-editor", &model, dark);
+        model.today_limit_unlimited_draft = true;
+        failed |= save_preview(argv[2], "parent", "quota-unlimited-editor", &model, dark);
+        model.today_limit_unlimited_draft = false;
         ptc_ui_cancel_overlay(&model);
         model.overlay = PTC_UI_OVERLAY_CONFIRM;
         model.confirm_hold_required = true;
@@ -535,6 +538,14 @@ int main(int argc, char **argv)
         snprintf(model.overlay_body, sizeof(model.overlay_body), "全天总额度包含今日额度消耗。新额度可能已经耗尽，保存后可能立即进入时间限制。可通过临时加时、今日不限时或兑换加时码解除。");
         failed |= save_preview(argv[2], "parent", "confirmation", &model, dark);
         {
+            PtcUiModel positive = model;
+            positive.draft_minutes = 150;
+            positive.confirm_hold_required = false;
+            snprintf(positive.overlay_title, sizeof(positive.overlay_title), "确认今日额度");
+            failed |= save_preview(argv[2], "parent", "quota-positive-confirm", &positive, dark);
+            positive.quota_refresh_failed = true;
+            failed |= save_preview(argv[2], "parent", "quota-refresh-failed", &positive, dark);
+
             PtcUiModel quick_add = model;
             quick_add.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
             quick_add.draft_minutes = 30;

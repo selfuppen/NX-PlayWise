@@ -233,6 +233,7 @@ void save_bedtime_from_page(UiState *ui)
 void select_bedtime_section(UiState *ui, int section)
 {
     if (!ui) return;
+    ui->model.bedtime_master_focused = false;
     if (section < PTC_UI_BEDTIME_WEEKLY) section = PTC_UI_BEDTIME_SCHEDULED;
     if (section > PTC_UI_BEDTIME_SCHEDULED) section = PTC_UI_BEDTIME_WEEKLY;
     if (section == (int)ui->model.bedtime_section) return;

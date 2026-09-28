@@ -126,6 +126,11 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     ptc_ui_project_time_status(model, ptc_ui_render_now(), &status);
     color = time_projection_color(status.state);
     badge = get_active_rule_badge(model);
+    if (!ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
+        badge.label = "待确认";
+        badge.color = UI_MUTED;
+        badge.bg_color = UI_PAGE;
+    }
 
     fill_round_rect(pixels, stride, box, 14, UI_SURFACE);
     draw_rect_outline(pixels, stride, box, 14, 1, UI_BORDER);

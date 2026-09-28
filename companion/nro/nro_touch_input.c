@@ -230,9 +230,12 @@ void handle_touch(UiState *ui, int x, int y)
         handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_BEDTIME_SECTION:
+        ui->model.bedtime_master_focused = false;
         select_bedtime_section(ui, hit.index);
         break;
     case PTC_UI_HIT_BEDTIME_MASTER_SWITCH:
+        ui->model.bedtime_master_focused = true;
+        ui->model.bedtime_section_focused = false;
         if (!ui->model.disable_flag_present) {
             ui->model.draft_bedtime_policy.enabled = !ui->model.draft_bedtime_policy.enabled;
             update_bedtime_dirty(ui);
@@ -241,6 +244,7 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_BEDTIME_FIELD:
+        ui->model.bedtime_master_focused = false;
         ui->model.bedtime_section_focused = false;
         ui->model.selected_index = hit.index;
         if (ui->model.parent_page == PTC_UI_PARENT_PLAN &&
@@ -518,6 +522,12 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_DURATION_FIELD:
         ptc_ui_duration_select_field(&ui->model, (PtcUiDurationField)hit.index);
+        break;
+    case PTC_UI_HIT_TODAY_MODE:
+        ui->model.today_limit_unlimited_draft = hit.index == 1;
+        break;
+    case PTC_UI_HIT_QUOTA_REFRESH:
+        start_quota_recheck(ui, true);
         break;
     case PTC_UI_HIT_NOTICE_DETAILS:
         ptc_ui_open_notice_details(&ui->model);

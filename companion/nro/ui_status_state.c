@@ -65,6 +65,55 @@ bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
         strcmp(model->result_status, "error") != 0;
 }
 
+void ptc_ui_quota_recheck_snapshot(const PtcUiModel *model,
+    PtcUiQuotaRecheckSnapshot *out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    if (!model) return;
+    out->operation = model->operation;
+    out->hold_required = model->confirm_hold_required;
+    out->remaining_minutes = model->remaining_minutes;
+    out->played_minutes = model->played_minutes;
+    out->unrestricted_today = model->unrestricted_today;
+    out->remaining_available = model->remaining_available;
+    out->played_available = model->played_minutes_available;
+    out->day_index = model->day_index;
+    out->today_override_present = model->today_override_present;
+    out->today_override_rule = model->today_override_rule;
+    snprintf(out->rule_source, sizeof(out->rule_source), "%s", model->rule_source);
+}
+
+PtcUiQuotaRecheckDecision ptc_ui_quota_recheck_decide(
+    const PtcUiQuotaRecheckSnapshot *before, const PtcUiModel *after,
+    bool refresh_succeeded, bool manual, int64_t now, bool *hold_required)
+{
+    bool changed;
+    bool hold;
+    if (!before || !after || !refresh_succeeded ||
+        !ptc_ui_status_is_fresh(after, now) ||
+        after->operation != before->operation) return PTC_UI_QUOTA_RECHECK_BLOCK;
+    changed = before->remaining_minutes != after->remaining_minutes ||
+        before->played_minutes != after->played_minutes ||
+        before->unrestricted_today != after->unrestricted_today ||
+        before->remaining_available != after->remaining_available ||
+        before->played_available != after->played_minutes_available ||
+        before->day_index != after->day_index ||
+        before->today_override_present != after->today_override_present ||
+        before->today_override_rule.mode != after->today_override_rule.mode ||
+        before->today_override_rule.minutes != after->today_override_rule.minutes ||
+        strcmp(before->rule_source, after->rule_source) != 0;
+    hold = after->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT
+        ? ptc_ui_today_limit_requires_hold(after, after->draft_minutes) :
+        (after->operation == PTC_UI_OPERATION_RESTORE_TODAY_POLICY &&
+         ptc_ui_rule_after_today_restore(after).rule.mode == PTC_RULE_MODE_LIMIT &&
+         (!after->played_minutes_available ||
+          ptc_ui_rule_after_today_restore(after).rule.minutes <= after->played_minutes));
+    if (hold_required) *hold_required = hold;
+    return changed || hold != before->hold_required || manual
+        ? PTC_UI_QUOTA_RECHECK_CONFIRM_AGAIN : PTC_UI_QUOTA_RECHECK_SUBMIT;
+}
+
 bool ptc_ui_parent_status_alert_visible(const PtcUiModel *model)
 {
     if (!model) return false;
@@ -206,13 +255,20 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
         snprintf(out->freshness_text, sizeof(out->freshness_text), "正在同步");
         out->state = PTC_UI_TIME_WAITING;
     } else if (!model->status_loaded) {
+        snprintf(out->remaining_text, sizeof(out->remaining_text), "尚未获取状态｜按 Y 刷新");
         snprintf(out->freshness_text, sizeof(out->freshness_text),
                  model->error_code || strcmp(model->result_status, "error") == 0
                      ? "暂不可用" : "等待刷新");
     } else if (!ptc_ui_status_is_fresh(model, now)) {
         snprintf(out->freshness_text, sizeof(out->freshness_text),
                  model->error_code || strcmp(model->result_status, "error") == 0
-                     ? "暂不可用" : "状态待确认");
+                     ? "刷新失败" : "状态待确认");
+        if (age >= 0 && !(model->error_code || strcmp(model->result_status, "error") == 0)) {
+            if (age < 3600) snprintf(out->freshness_text, sizeof(out->freshness_text),
+                                     "%lld 分前确认", (long long)(age / 60));
+            else snprintf(out->freshness_text, sizeof(out->freshness_text),
+                          "%lld 小时前确认", (long long)(age / 3600));
+        }
     } else if (age <= 0) {
         snprintf(out->freshness_text, sizeof(out->freshness_text), "刚刚更新");
     } else {
@@ -220,6 +276,13 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
                  (long long)age);
     }
 
+    if (model->status_loaded && !ptc_ui_status_is_fresh(model, now)) {
+        const char *last = model->bedtime_active && !model->bedtime_skipped ? "就寝限制" :
+            (model->unrestricted_today == 1 ? "不限时" :
+             (model->limited_today == 1 ? "限时" : "状态未知"));
+        snprintf(out->remaining_text, sizeof(out->remaining_text),
+                 "上次确认：%s｜按 Y 刷新确认", last);
+    }
     if (ptc_ui_status_is_fresh(model, now)) {
         if (model->unrestricted_today == 1) {
             snprintf(out->remaining_text, sizeof(out->remaining_text), "今天还可玩：不限时");

@@ -364,12 +364,14 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
 
 void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body)
 {
+    ui->quota_recheck_ready = false;
     ui->model.confirm_return_overlay = ui->model.overlay;
     snprintf(ui->model.confirm_return_title, sizeof(ui->model.confirm_return_title), "%s", ui->model.overlay_title);
     snprintf(ui->model.confirm_return_body, sizeof(ui->model.confirm_return_body), "%s", ui->model.overlay_body);
     ui->model.overlay = PTC_UI_OVERLAY_CONFIRM;
     ui->model.operation = operation;
     ui->model.confirm_hold_required = false;
+    ui->model.quota_refresh_failed = false;
     ui->model.overlay_selection = 1;
     if (operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
         operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||

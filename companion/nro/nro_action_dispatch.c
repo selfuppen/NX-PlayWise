@@ -54,6 +54,7 @@ void handle_today_action_ready(UiState *ui, int index)
     else snprintf(remaining, sizeof(remaining), "暂不可用");
     switch (index) {
     case PTC_UI_OPERATION_SET_TODAY_LIMIT:
+        ui->model.today_limit_unlimited_draft = ui->model.unrestricted_today == 1;
         ui->model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
         ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
             "设置今日总额度",
@@ -403,9 +404,73 @@ void handle_parent_action(UiState *ui)
     }
 }
 
+bool quota_operation_needs_recheck(PtcUiOperation operation)
+{
+    return operation == PTC_UI_OPERATION_SET_TODAY_LIMIT ||
+        operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES ||
+        operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT ||
+        operation == PTC_UI_OPERATION_RESTORE_TODAY_POLICY;
+}
+
+void start_quota_recheck(UiState *ui, bool manual)
+{
+    const PtcUiModel *model = &ui->model;
+    if (ui->waiting || model->overlay != PTC_UI_OVERLAY_CONFIRM ||
+        !quota_operation_needs_recheck(model->operation)) return;
+    ui->quota_recheck_pending = true;
+    ui->quota_recheck_manual = manual;
+    ui->quota_recheck_ready = false;
+    ui->model.quota_refresh_failed = false;
+    ptc_ui_quota_recheck_snapshot(model, &ui->quota_before);
+    ptc_ui_confirm_hold_update(&ui->confirm_hold, false, ptc_ui_anim_now_ms(), DANGER_CONFIRM_HOLD_MS);
+    ui->model.confirm_hold_progress = 0;
+    submit_status(ui);
+    if (!ui->waiting) finish_quota_recheck(ui, false);
+}
+
+void finish_quota_recheck(UiState *ui, bool success)
+{
+    PtcUiModel *model = &ui->model;
+    PtcUiQuotaRecheckDecision decision;
+    bool hold;
+    if (!ui->quota_recheck_pending) return;
+    ui->quota_recheck_pending = false;
+    if (model->overlay != PTC_UI_OVERLAY_CONFIRM ||
+        model->operation != ui->quota_before.operation) return;
+    decision = ptc_ui_quota_recheck_decide(&ui->quota_before, model, success,
+        ui->quota_recheck_manual, (int64_t)time(NULL), &hold);
+    if (decision == PTC_UI_QUOTA_RECHECK_BLOCK) {
+        ui->quota_recheck_ready = false;
+        model->quota_refresh_failed = true;
+        snprintf(model->message, sizeof(model->message), "刷新失败，未提交；按 Y 刷新重算后重试。");
+        return;
+    }
+    model->quota_refresh_failed = false;
+    model->confirm_hold_required = hold;
+    if (decision == PTC_UI_QUOTA_RECHECK_CONFIRM_AGAIN) {
+        ui->quota_recheck_ready = false;
+        snprintf(model->overlay_title, sizeof(model->overlay_title),
+                 ui->quota_recheck_manual ? "预估已刷新，请确认" : "状态已变化，请重新确认");
+        snprintf(model->message, sizeof(model->message),
+                 "已用最新状态重算剩余；请核对后再次确认。");
+        return;
+    }
+    ui->quota_recheck_ready = true;
+    confirm_operation(ui);
+}
+
 void confirm_operation(UiState *ui)
 {
     PtcCompanionStatus status;
+    if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM &&
+        quota_operation_needs_recheck(ui->model.operation)) {
+        if (ui->quota_recheck_pending || ui->waiting) return;
+        if (!ui->quota_recheck_ready) {
+            start_quota_recheck(ui, false);
+            return;
+        }
+        ui->quota_recheck_ready = false;
+    }
     PtcUiOverlay return_overlay = ui->model.confirm_return_overlay;
     bool held_danger_confirmation = ui->model.confirm_hold_required;
     PtcUiOperation operation = ptc_ui_take_confirmed_operation(&ui->model);

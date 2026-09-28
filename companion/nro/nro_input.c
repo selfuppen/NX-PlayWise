@@ -588,7 +588,18 @@ void handle_overlay_input(UiState *ui, u64 down)
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ||
         ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
-        if (ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR && (down & HidNpadButton_Minus)) {
+        bool today_mode = ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR &&
+            ui->model.numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
+            ui->model.operation == PTC_UI_OPERATION_SET_TODAY_LIMIT;
+        if (today_mode && (down & (HidNpadButton_ZL | HidNpadButton_ZR))) {
+            ui->model.today_limit_unlimited_draft = (down & HidNpadButton_ZR) != 0;
+        } else if (today_mode && ui->model.today_limit_unlimited_draft &&
+                   (down & (HidNpadButton_A | HidNpadButton_Plus))) {
+            open_confirm_overlay(ui, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT,
+                "将今天设为不限时", "今天不设每日额度上限；就寝时间仍独立生效。确认前可刷新重算。");
+        } else if (today_mode && ui->model.today_limit_unlimited_draft) {
+            /* Keep the previously entered limited value for a mode switch back. */
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR && (down & HidNpadButton_Minus)) {
             ptc_ui_duration_toggle_field(&ui->model);
         } else if (down & HidNpadButton_Left) {
             ptc_ui_numpad_move(&ui->model, -1, 0);
@@ -722,7 +733,11 @@ void handle_overlay_input(UiState *ui, u64 down)
         bool album_change = ui->model.operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
                             ui->model.operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||
                             ui->model.operation == PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY;
-        if (down & HidNpadButton_B) {
+        if ((down & HidNpadButton_Y) &&
+            quota_operation_needs_recheck(ui->model.operation)) {
+            start_quota_recheck(ui, true);
+        } else if (down & HidNpadButton_B) {
+            ui->quota_recheck_ready = false;
             if (ui->model.operation == PTC_UI_OPERATION_SAVE_BEDTIME)
                 cancel_bedtime_navigation(ui);
             if (ui->model.operation == PTC_UI_OPERATION_SAVE_WEEKLY) {

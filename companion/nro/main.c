@@ -220,6 +220,10 @@ int main(int argc, char **argv)
                 } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
                     ptc_ui_confirm_hold_update(&ui.confirm_hold, false, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
                     handle_overlay_input(&ui, down);
+                } else if ((down & HidNpadButton_Y) &&
+                           quota_operation_needs_recheck(ui.model.operation)) {
+                    ptc_ui_confirm_hold_update(&ui.confirm_hold, false, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
+                    handle_overlay_input(&ui, down);
                 } else {
                     if (ptc_ui_confirm_hold_update(&ui.confirm_hold,
                             pad_confirm_held || touch_confirm_held, confirm_now_ms, DANGER_CONFIRM_HOLD_MS)) {
@@ -501,6 +505,13 @@ int main(int argc, char **argv)
                         draft->scheduled_override.end_day_index =
                             (uint16_t)(draft->scheduled_override.start_day_index + next - 1);
                         update_bedtime_dirty(&ui);
+                    }
+                } else if ((down & HidNpadButton_A) && ui.model.bedtime_master_focused) {
+                    if (!ui.model.disable_flag_present) {
+                        draft->enabled = !draft->enabled;
+                        update_bedtime_dirty(&ui);
+                        snprintf(ui.model.message, sizeof(ui.model.message),
+                                 "就寝管控总闸已%s；保存后生效。", draft->enabled ? "接通" : "切断");
                     }
                 } else if ((down & HidNpadButton_A) && !ui.model.bedtime_section_focused) {
                     if (ui.model.bedtime_section == PTC_UI_BEDTIME_WEEKLY) {

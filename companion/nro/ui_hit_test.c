@@ -61,6 +61,13 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
+    if (model->overlay == PTC_UI_OVERLAY_CONFIRM &&
+        (model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT ||
+         model->operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES ||
+         model->operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT ||
+         model->operation == PTC_UI_OPERATION_RESTORE_TODAY_POLICY) &&
+        ptc_ui_rect_contains(ptc_ui_quota_refresh_rect(), x, y))
+        return make_hit(PTC_UI_HIT_QUOTA_REFRESH, 0);
     if (model->overlay != PTC_UI_OVERLAY_ALBUM_MANAGER &&
         ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y)) {
         return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
@@ -139,6 +146,15 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         break;
     case PTC_UI_OVERLAY_MINUTE_EDITOR:
+        if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
+            model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) {
+            for (i = 0; i < 2; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_today_mode_rect(i), x, y))
+                    return make_hit(PTC_UI_HIT_TODAY_MODE, i);
+            }
+        }
+        if (model->today_limit_unlimited_draft &&
+            model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) break;
         for (i = 0; i < 2; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_minute_editor_field_rect((PtcUiDurationField)i), x, y)) {
                 return make_hit(PTC_UI_HIT_DURATION_FIELD, i);

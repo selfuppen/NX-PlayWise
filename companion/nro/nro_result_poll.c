@@ -142,6 +142,7 @@ void poll_result(UiState *ui, bool force)
         if (!ptc_ui_apply_result_json(&ui->model, ui->last_result)) {
             cancel_bedtime_navigation(ui);
             set_message(ui, "读取结果失败", PTC_COMPANION_RESULT_INVALID);
+            if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
             if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
             return;
         }
@@ -330,6 +331,9 @@ void poll_result(UiState *ui, bool force)
             snprintf(ui->model.message, sizeof(ui->model.message),
                 "就寝窗口已变化，正在刷新；不会自动跳过另一个窗口。");
         }
+        if (ui->quota_recheck_pending && strcmp(ui->model.result_type, "status") == 0) {
+            finish_quota_recheck(ui, strcmp(ui->model.result_status, "ok") == 0);
+        }
         return;
     }
     if (ui->pending_parent_page >= 0 || ui->pending_leave_parent ||
@@ -345,5 +349,6 @@ void poll_result(UiState *ui, bool force)
         return;
     }
     set_message(ui, "读取结果失败", status);
+    if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
     if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
 }
