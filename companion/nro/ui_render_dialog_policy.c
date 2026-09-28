@@ -404,9 +404,8 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         }
     } else if (bedtime_save) {
         UiRect bedtime_risk = {dialog.x + 54, dialog.y + 218, 652, 92};
-        time_t raw_now = time(NULL);
-        struct tm *tm_now = localtime(&raw_now);
-        uint16_t minute_of_day = tm_now ? (uint16_t)(tm_now->tm_hour * 60 + tm_now->tm_min) : 0;
+        int64_t raw_now = ptc_ui_render_now();
+        uint16_t minute_of_day = ptc_ui_render_minute_of_day(raw_now);
         PtcUiBedtimeImpact impact = ptc_ui_bedtime_save_impact(model,
             minute_of_day, (int64_t)raw_now);
         fill_round_rect(pixels, stride, bedtime_risk, 16, UI_DANGER_SOFT);

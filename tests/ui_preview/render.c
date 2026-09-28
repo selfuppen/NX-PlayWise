@@ -735,11 +735,8 @@ int main(int argc, char **argv)
         }
         {
             PtcUiModel danger = model;
-            time_t preview_now = time(NULL);
-            struct tm *preview_tm = localtime(&preview_now);
-            uint16_t preview_minute = preview_tm
-                ? (uint16_t)(preview_tm->tm_hour * 60 + preview_tm->tm_min)
-                : 0;
+            int64_t preview_now = ptc_ui_render_now();
+            uint16_t preview_minute = ptc_ui_render_minute_of_day(preview_now);
             PtcBedtimeWindow danger_window = {true, 1260, 600};
             /* Keep the preview inside a valid bedtime window at any build time. */
             if (preview_minute >= 600 && preview_minute < 1260)

@@ -129,6 +129,7 @@ uint32_t ui_theme_mix(uint32_t from_rgb, uint32_t to_rgb);
 
 bool is_docked_mode(void);
 int64_t ptc_ui_render_now(void);
+uint16_t ptc_ui_render_minute_of_day(int64_t now);
 uint32_t pack_rgb(uint32_t rgb);
 uint32_t ui_mix_rgb(uint32_t base, uint32_t target, int percent);
 uint32_t resolve_color(uint32_t source);

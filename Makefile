@@ -98,7 +98,7 @@ test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST)
 
 UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/preview_font.c tests/ui_preview/render.c
 $(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro/ui_graphics.h companion/nro/ui_render_internal.h $(wildcard tests/ui_preview/*.h) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -D_POSIX_C_SOURCE=200809L -DPTC_UI_PREVIEW_ANIM_CLOCK_MS=1024000 -DPTC_UI_PREVIEW_WALL_TIME=1000 -Itests/ui_preview -o $@ $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) -lm
+	$(HOST_CC) $(HOST_CFLAGS) -D_POSIX_C_SOURCE=200809L -DPTC_UI_PREVIEW_ANIM_CLOCK_MS=1024000 -DPTC_UI_PREVIEW_WALL_TIME=1000 -DPTC_UI_PREVIEW_MINUTE_OF_DAY=496 -Itests/ui_preview -o $@ $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) -lm
 
 .PHONY: test-ui-primitives
 test-ui-primitives: $(HOST_BUILD_DIR)/ui_preview

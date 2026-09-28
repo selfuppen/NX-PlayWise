@@ -18,6 +18,19 @@ int64_t ptc_ui_render_now(void)
 #endif
 }
 
+uint16_t ptc_ui_render_minute_of_day(int64_t now)
+{
+#ifdef PTC_UI_PREVIEW_MINUTE_OF_DAY
+    (void)now;
+    /* Match the fixed 08:16 clock shown in host preview headers. */
+    return PTC_UI_PREVIEW_MINUTE_OF_DAY;
+#else
+    time_t clock_value = (time_t)now;
+    struct tm *local = localtime(&clock_value);
+    return local ? (uint16_t)(local->tm_hour * 60 + local->tm_min) : 0;
+#endif
+}
+
 
 bool is_docked_mode(void)
 {

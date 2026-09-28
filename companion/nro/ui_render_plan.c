@@ -398,9 +398,8 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
     const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
     char line[128];
-    time_t raw_now = time(NULL);
-    struct tm *tm_now = localtime(&raw_now);
-    uint16_t minute_of_day = tm_now ? (uint16_t)(tm_now->tm_hour * 60 + tm_now->tm_min) : 0;
+    int64_t raw_now = ptc_ui_render_now();
+    uint16_t minute_of_day = ptc_ui_render_minute_of_day(raw_now);
     for (int i = 0; i < 3; ++i) {
         UiRect rect = to_uirect(ptc_ui_bedtime_section_rect(i));
         bool selected = model->bedtime_section == (PtcUiBedtimeSection)i;
