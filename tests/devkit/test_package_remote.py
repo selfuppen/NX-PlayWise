@@ -475,6 +475,38 @@ def test_parse_args_eden() -> None:
         require(args.with_eden is True, "parse_args must accept --with-eden")
 
 
+def test_parse_args_manual_verification() -> None:
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--clean", "--manual-device-verified"]):
+        args = package_remote.parse_args()
+        require((args.verified_model, args.verified_hos, args.verified_atmosphere) ==
+                ("Nintendo Switch OLED", "22.5.0", "1.11.2"),
+                "manual verification must use the default device environment")
+    with mock.patch.object(sys, "argv", [
+        "package_remote.py", "--manual-device-verified", "--verified-model", "Nintendo Switch Lite",
+        "--verified-hos", "21.0.0", "--verified-atmosphere", "1.10.0",
+    ]):
+        args = package_remote.parse_args()
+        require((args.verified_model, args.verified_hos, args.verified_atmosphere) ==
+                ("Nintendo Switch Lite", "21.0.0", "1.10.0"),
+                "explicit device environment must override defaults")
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--verified-model", "Nintendo Switch Lite"]):
+        with mock.patch.object(sys, "stderr"):
+            try:
+                package_remote.parse_args()
+            except SystemExit as exc:
+                require(exc.code == 2, "device fields without manual verification must fail")
+            else:
+                raise AssertionError("device fields without manual verification must fail")
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--manual-device-verified", "--verified-hos", " "]):
+        with mock.patch.object(sys, "stderr"):
+            try:
+                package_remote.parse_args()
+            except SystemExit as exc:
+                require(exc.code == 2, "blank explicit device fields must fail")
+            else:
+                raise AssertionError("blank explicit device fields must fail")
+
+
 def test_sync_doc_previews() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)
@@ -520,6 +552,7 @@ def main() -> int:
     test_public_package_selection()
     test_parse_args_previews()
     test_parse_args_eden()
+    test_parse_args_manual_verification()
     test_sync_doc_previews()
     print("Container package helper tests passed")
     return 0

@@ -36,6 +36,9 @@ DEFAULT_SSH_PORT = 1888
 DEFAULT_SSH_USER = "root"
 DEFAULT_CONTAINER_PATH = "/ws/playwise"
 DEFAULT_DOCKER_CONTAINER = "devkitpro-ssh-v1"
+DEFAULT_VERIFIED_MODEL = "Nintendo Switch OLED"
+DEFAULT_VERIFIED_HOS = "22.5.0"
+DEFAULT_VERIFIED_ATMOSPHERE = "1.11.2"
 APP_DEFAULTS = "switch/playwise/defaults"
 APP_BUILD = "switch/playwise/build.json"
 APP_ARTIFACTS = "switch/playwise/package-artifacts.json"
@@ -814,9 +817,9 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Record manual verification of the main features in the release manifest.",
     )
-    parser.add_argument("--verified-model", help="Switch model used for manual verification.")
-    parser.add_argument("--verified-hos", help="HOS version used for manual verification.")
-    parser.add_argument("--verified-atmosphere", help="Atmosphère version used for manual verification.")
+    parser.add_argument("--verified-model", help=f"Switch model used for manual verification. Default: {DEFAULT_VERIFIED_MODEL}")
+    parser.add_argument("--verified-hos", help=f"HOS version used for manual verification. Default: {DEFAULT_VERIFIED_HOS}")
+    parser.add_argument("--verified-atmosphere", help=f"Atmosphère version used for manual verification. Default: {DEFAULT_VERIFIED_ATMOSPHERE}")
     parser.add_argument(
         "--only",
         choices=["all", "playwise", "complete", "device-lab", "eden", "previews"],
@@ -873,10 +876,13 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     values = (args.verified_model, args.verified_hos, args.verified_atmosphere)
     if args.manual_device_verified:
-        if not all(value and value.strip() for value in values):
-            parser.error("--manual-device-verified requires --verified-model, --verified-hos and --verified-atmosphere")
+        if any(value is not None and not value.strip() for value in values):
+            parser.error("--verified-model, --verified-hos and --verified-atmosphere must be nonempty")
         if args.previews or args.only not in ("all", "playwise", "complete"):
             parser.error("--manual-device-verified requires a release package target")
+        args.verified_model = args.verified_model or DEFAULT_VERIFIED_MODEL
+        args.verified_hos = args.verified_hos or DEFAULT_VERIFIED_HOS
+        args.verified_atmosphere = args.verified_atmosphere or DEFAULT_VERIFIED_ATMOSPHERE
     elif any(value is not None for value in values):
         parser.error("--verified-model, --verified-hos and --verified-atmosphere require --manual-device-verified")
     return args

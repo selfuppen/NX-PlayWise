@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -13,6 +14,7 @@ sys.path.insert(0, str(TOOLS))
 
 from playwise_version import read_playwise_version  # noqa: E402
 from release_version import next_alpha_version, release  # noqa: E402
+import release_version  # noqa: E402
 
 
 def git(root: Path, *args: str) -> str:
@@ -95,11 +97,34 @@ def test_existing_tag_is_not_moved() -> None:
         require(read_playwise_version(root) == "0.1.4", "collision must not edit version sources")
 
 
+def test_manual_verification_reaches_clean_package_build() -> None:
+    with mock.patch.object(sys, "argv", ["release_version.py", "1.0.0", "--manual-device-verified"]):
+        require(release_version.parse_args().manual_device_verified,
+                "release CLI must accept the manual verification flag")
+    with tempfile.TemporaryDirectory(prefix="playwise-release-") as tmp_dir:
+        root = Path(tmp_dir)
+        make_repository(root)
+        real_run = subprocess.run
+        package_commands: list[list[str]] = []
+
+        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            if len(command) > 1 and command[1] == "tools/package_remote.py":
+                package_commands.append(command)
+                return subprocess.CompletedProcess(command, 0)
+            return real_run(command, **kwargs)
+
+        with mock.patch.object(release_version.subprocess, "run", side_effect=run):
+            release("1.0.0", root=root, manual_device_verified=True)
+        require(package_commands == [[sys.executable, "tools/package_remote.py", "--clean", "--manual-device-verified"]],
+                "manual release must forward the flag to the authoritative clean package build")
+
+
 def main() -> int:
     test_next_alpha_version()
     test_release_creates_commit_and_annotated_tag()
     test_current_version_tags_head_without_empty_release_commit()
     test_existing_tag_is_not_moved()
+    test_manual_verification_reaches_clean_package_build()
     print("Release version script tests passed")
     return 0
 

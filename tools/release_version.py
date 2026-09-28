@@ -86,7 +86,8 @@ def next_alpha_version(version: str) -> str:
     return f"{major}.{minor}.{patch + 1}-alpha"
 
 
-def release(version: str, *, root: Path = ROOT, verify: bool = True) -> str:
+def release(version: str, *, root: Path = ROOT, verify: bool = True,
+            manual_device_verified: bool = False) -> str:
     version = validate_playwise_version(version)
     tag = f"v{version}"
     require_clean_worktree(root)
@@ -95,7 +96,10 @@ def release(version: str, *, root: Path = ROOT, verify: bool = True) -> str:
         write_playwise_version(version, root)
 
     if verify:
-        subprocess.run([sys.executable, "tools/package_remote.py", "--clean"], cwd=root, check=True)
+        command = [sys.executable, "tools/package_remote.py", "--clean"]
+        if manual_device_verified:
+            command.append("--manual-device-verified")
+        subprocess.run(command, cwd=root, check=True)
 
     refresh_verification_outputs(root)
 
@@ -115,6 +119,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Update the PlayWise version, verify, commit, and create an annotated tag.")
     parser.add_argument("version", help="Release version without the v prefix, for example 1.0.0")
     parser.add_argument(
+        "--manual-device-verified", action="store_true",
+        help="Record manual verification with the package tool's default Switch model, HOS and Atmosphère versions.",
+    )
+    parser.add_argument(
         "--no-verify", action="store_true",
         help="Skip the authoritative remote package verification (intended only for isolated script tests).",
     )
@@ -123,7 +131,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    tag = release(args.version, verify=not args.no_verify)
+    tag = release(args.version, verify=not args.no_verify,
+                  manual_device_verified=args.manual_device_verified)
     print(f"released {tag}; development version is now {read_playwise_version()}")
     return 0
 
