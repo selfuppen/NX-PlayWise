@@ -1176,7 +1176,7 @@ public:
             false, cx + 14, cy + 56, 21, renderer->a(TEXT_COLOR));
         const char *state = (!has_status_snapshot_ || status_is_stale()) ? "状态待刷新" :
             (bedtime_restricted() ? "就寝限制生效中" :
-             (displayed_summary_.daily_restriction_active ? "今日额度已耗尽" : "当前未阻断"));
+             (displayed_summary_.daily_restriction_active ? "今日额度已耗尽" : "当前可正常使用"));
         renderer->drawString(state, false, cx + 14, cy + 88, 13,
             renderer->a(bedtime_restricted() ? ERROR_COLOR : MUTED_COLOR));
 
@@ -1221,7 +1221,7 @@ public:
         if (parent_view_ == ParentView::Actions) {
             static constexpr const char *LABELS[PTC_OVERLAY_PARENT_ACTION_COUNT] = {
                 "快速加时", "今日不限时", "跳过本次就寝", "关闭就寝计划",
-                "恢复安装前快照并停用 PlayWise"
+                "恢复安装前设置并停用 PlayWise"
             };
             renderer->drawRect(cx + 246, cy + 58, cw - 258, 46,
                 renderer->a(bridge_->waiting ? DISABLED_COLOR : CARD_COLOR));

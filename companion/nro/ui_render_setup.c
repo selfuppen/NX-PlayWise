@@ -20,7 +20,7 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             i < step ? UI_ACCENT : UI_RAISED);
     if (grace_remaining >= 0) {
         draw_text(pixels, stride, 204, 190, "环境检查已通过", 31, UI_SUCCESS);
-        snprintf(phase_line, sizeof(phase_line), "当前状态：正在同步    安装前快照：%s",
+        snprintf(phase_line, sizeof(phase_line), "当前状态：正在同步    安装前设置：%s",
                  model->setup_snapshot_available ? "已保存" : "不可用");
         draw_text(pixels, stride, 204, 248, phase_line, 22, UI_MUTED);
         if (grace_remaining > 0) {
@@ -70,11 +70,11 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             bool reconfirming_environment = ptc_ui_runtime_fingerprint_reconfirmation_needed(model);
             bool takeover_complete = ptc_ui_setup_takeover_complete(model);
             draw_text(pixels, stride, 204, 218,
-                      takeover_complete ? "系统控制接管已完成" :
+                      takeover_complete ? "额度管理已启用" :
                       (reconfirming_environment ? "系统环境已变化" :
-                       (resuming_restored_setup ? "解除停用并重新接管" : "确认接管系统控制")),
+                       (resuming_restored_setup ? "解除停用并重新启用" : "确认启用额度管理")),
                       30, takeover_complete ? UI_SUCCESS : UI_INK);
-            snprintf(phase_line, sizeof(phase_line), "当前状态：%s    安装前快照：%s",
+            snprintf(phase_line, sizeof(phase_line), "当前状态：%s    安装前设置：%s",
                      takeover_complete ? (strcmp(phase, "active") == 0 ? "正常运行" : "正在同步") :
                      (strcmp(phase, "protection") == 0 ? "保护模式" :
                      (strcmp(phase, "failed") == 0 ? "检查失败" :
@@ -97,12 +97,12 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                            ? "检查通过后保留现有计划，恢复游玩时间管理。"
                            : resuming_restored_setup
                             ? "保留现有计划；需要撤销时可到“支持与恢复”操作。"
-                            : "首次接管会原样保留今天的总额度和剩余时间，不会先临时解限。",
+                            : "首次启用会保留今天的总额度和剩余时间，不会先临时解除限制。",
                       21, UI_INK);
             draw_dialog_button(pixels, stride, ptc_ui_setup_primary_rect(),
                                takeover_complete ? "A / 点击  继续到第 5 步" :
-                               (reconfirming_environment ? "A / 点击  重新检测并接管" :
-                                (resuming_restored_setup ? "A / 点击  解除停用并重新接管" : "A / 点击  确认接管")),
+                               (reconfirming_environment ? "A / 点击  重新检查并启用" :
+                                (resuming_restored_setup ? "A / 点击  解除停用并重新启用" : "A / 点击  确认启用")),
                                takeover_complete ? UI_SUCCESS : UI_ACCENT,
                                UI_ON_ACCENT, false);
         } else if (step == PTC_UI_SETUP_THEME) {

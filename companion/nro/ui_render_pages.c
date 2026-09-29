@@ -41,8 +41,8 @@ const UiAction GRANT_MANAGER_ACTIONS[] = {
 };
 
 static const UiAction SUPPORT_ACTIONS[] = {
-    {"接管系统控制", "安全预检后启用额度管理", UI_ACCENT, UI_ACTION_ICON_SHIELD, UI_ACTION_VISUAL_NONE},
-    {"重试修复", "重新检查安全前置条件", UI_SUCCESS, UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE},
+    {"启用额度管理", "安全检查后启用", UI_ACCENT, UI_ACTION_ICON_SHIELD, UI_ACTION_VISUAL_NONE},
+    {"重试修复", "重新检查是否可以安全启用", UI_SUCCESS, UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE},
     {"紧急停用", "停止新的控制写入", UI_DANGER, UI_ACTION_ICON_STOP, UI_ACTION_VISUAL_NONE},
     {"恢复安装前状态", "恢复原始设置并停用", UI_DANGER, UI_ACTION_ICON_RESTORE, UI_ACTION_VISUAL_NONE},
     {"导出诊断", "不含密钥、PIN 或离线码", UI_MUTED, UI_ACTION_ICON_EXPORT, UI_ACTION_VISUAL_NONE},
@@ -50,12 +50,12 @@ static const UiAction SUPPORT_ACTIONS[] = {
 };
 
 static const UiAction RESUME_CONTROL_ACTION = {
-    "解除停用并重新接管", "安全预检后恢复后台控制", UI_SUCCESS,
+    "解除停用并重新启用", "安全检查后恢复额度管理", UI_SUCCESS,
     UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE
 };
 
 static const UiAction RECONFIRM_ENVIRONMENT_ACTION = {
-    "重新检测并接管", "环境变化，确认兼容后恢复控制", UI_WARNING,
+    "重新检查并启用", "环境变化，确认兼容后恢复额度管理", UI_WARNING,
     UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE
 };
 static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -77,7 +77,7 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
                           UI_RGB(ui_mix_rgb(UI_BLENDED(danger), 0xFF9A8A, phase * 4)));
     }
     draw_text(pixels, stride, x, box.y + 42,
-              bedtime_enforcing ? "今天还可玩（就寝立断）" : "今天还可玩",
+              bedtime_enforcing ? "今天还可玩（就寝限制中）" : "今天还可玩",
               22, UI_RGB(UI_BLENDED(hero_secondary)));
     /* 环形额度表：弧长由缓动后的剩余分钟驱动，颜色沿用今日额度健康色；
      * 数据不可用时只画弱化轨道环。 */
@@ -176,7 +176,7 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     }
 
     if (bedtime_enforcing) {
-        snprintf(line, sizeof(line), "就寝时间生效中（立断暂停游戏）  /  %s",
+        snprintf(line, sizeof(line), "就寝时间生效中（限制使用）  /  %s",
             model->status_loaded ? ui_rule_source_label(model->rule_source) : "待确认规则");
     } else {
         snprintf(line, sizeof(line), "今日%s  /  %s", today,
@@ -282,7 +282,7 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
     draw_text(pixels, stride, panel.x + 26, panel.y + 36, "当前问题", 23, UI_INK);
     draw_wrapped_text(pixels, stride, panel.x + 26, panel.y + 70, ptc_ui_support_problem(model),
                       18, panel.width - 52, 25, 2, UI_RGB(UI_BLENDED(text_primary)));
-    const char *next = recommended == 0 ? (model->disable_flag_present ? "建议：解除停用并重新接管" : "建议：重新检测并接管") :
+    const char *next = recommended == 0 ? (model->disable_flag_present ? "建议：解除停用并重新启用" : "建议：重新检查并启用") :
                        recommended == 1 ? "建议：选择重试修复" :
                        recommended == 4 ? "建议：导出诊断包，保留问题记录" :
                        (model->waiting || model->apply_pending_confirmation ? "请等待结果，再刷新状态" : "无需恢复操作，可按 B 返回设置");
@@ -411,7 +411,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
             UiRect tbadge = {box.x + box.width - 86, box.y + 10, 74, 22};
             uint32_t badge_color = (strcmp(adjustment_badge, "生效中") == 0 ||
                                     strcmp(adjustment_badge, "不限时") == 0) ? UI_SUCCESS :
-                (strcmp(adjustment_badge, "就寝立断") == 0 ? UI_WARNING :
+                (strcmp(adjustment_badge, "就寝限制中") == 0 ? UI_WARNING :
                 (strcmp(adjustment_badge, "控制停用") == 0 || strcmp(adjustment_badge, "恢复中") == 0
                     ? UI_DANGER :
                  (strcmp(adjustment_badge, "等待生效") == 0 || strcmp(adjustment_badge, "待确认") == 0
@@ -516,7 +516,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     }
     draw_header(pixels, stride, title,
         model->parent_page == PTC_UI_PARENT_SUPPORT ? "兼容状态、诊断与安全恢复" :
-        (model->parent_page == PTC_UI_PARENT_PLAN ? "额度规则与并行就寝计划" :
+         (model->parent_page == PTC_UI_PARENT_PLAN ? "额度规则与就寝计划" :
          (model->parent_page == PTC_UI_PARENT_TODAY ? "今天的额度调整与单次措施" :
           "本地规则与设备安全设置")));
     draw_time_status_bar(pixels, stride, model);
@@ -539,14 +539,14 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             UiRect pbadge = {440, 178, 76, 22};
             fill_round_rect(pixels, stride, pbadge, 6, UI_WARNING_SOFT);
             draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING);
-            draw_text_center(pixels, stride, pbadge, "并行补充", 12, UI_WARNING);
-            draw_text(pixels, stride, 524, 195, "独立于额度规则链生效", 13, UI_MUTED);
+            draw_text_center(pixels, stride, pbadge, "单独生效", 12, UI_WARNING);
+            draw_text(pixels, stride, 524, 195, "就寝限制单独生效", 13, UI_MUTED);
 
             /* 并行与补充下方对称说明卡片 */
             UiRect info_card = {439, 484, 365, 132};
             fill_round_rect(pixels, stride, info_card, 16, UI_PAGE);
             draw_rect_outline(pixels, stride, info_card, 16, 1, UI_BORDER);
-            draw_text(pixels, stride, 457, 508, "规则独立生效机制", 14, UI_INK);
+            draw_text(pixels, stride, 457, 508, "就寝时间与额度", 14, UI_INK);
             draw_text(pixels, stride, 457, 534, "• 就寝时间：到点限制，不受额度影响", 11, UI_MUTED);
             draw_text(pixels, stride, 457, 556, "• 自主缓冲：限时日耗尽前由孩子申请", 11, UI_MUTED);
             draw_text(pixels, stride, 457, 578, "• 优先顺序：临时计划 > 节假日 > 周计划", 11, UI_MUTED);
@@ -600,7 +600,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
                 bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
                 dynamic_action.subtitle = scheduled_active
-                    ? (bedtime_enforcing ? "计划生效中（当前就寝限制中）" : "当前生效中，覆盖每天可玩额度")
+                    ? (bedtime_enforcing ? "计划生效中（当前就寝限制中）" : "当前采用此计划确定每日额度")
                     : (model->scheduled_override.enabled ? "已启用，今日未在计划日期范围内" : "当前关闭");
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 1) {
@@ -622,11 +622,11 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 bool today_active = (strcmp(model->rule_source, "today_override") == 0);
                 bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
                 if (today_active) {
-                    dynamic_action.subtitle = "今日已被临时调整覆盖";
+                    dynamic_action.subtitle = "今天优先采用今日调整";
                 } else if (scheduled_active) {
-                    dynamic_action.subtitle = "今日已被临时额度计划覆盖";
+                    dynamic_action.subtitle = "今天优先采用临时额度计划";
                 } else if (holiday_active) {
-                    dynamic_action.subtitle = "今日已被国家节假日规则覆盖";
+                    dynamic_action.subtitle = "今天优先采用节假日设置";
                 } else {
                     dynamic_action.subtitle = bedtime_enforcing
                         ? "周额度生效中（当前就寝限制中）" : "当前生效中，周一到周日基础额度";
@@ -704,7 +704,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                                   (model->scheduled_override.enabled ? "已开启" : "已关闭")) :
                     index == 1 ? (holiday_active ? "当前生效" :
                                   (model->holiday_enabled ? "已开启" : "已关闭")) :
-                    index == 2 ? (weekly_active ? "当前生效" : "今日被覆盖") :
+                    index == 2 ? (weekly_active ? "当前生效" : "今天未采用") :
                     index == 3 ? (bedtime_enforcing ? "限制中" :
                                   (ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy) ? "本次已跳过" :
                                    (model->bedtime_policy.enabled ? "已开启" : "已关闭"))) :
@@ -717,7 +717,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                      strcmp(badge_label, "今日可领") == 0 ||
                      strcmp(badge_label, "本次已跳过") == 0 ? UI_SUCCESS :
                      (strcmp(badge_label, "已关闭") == 0 ||
-                      strcmp(badge_label, "今日被覆盖") == 0 ? UI_MUTED : UI_ACCENT));
+                       strcmp(badge_label, "今天未采用") == 0 ? UI_MUTED : UI_ACCENT));
                 fill_round_rect(pixels, stride, pbadge, 6,
                                 badge_color == UI_DANGER ? UI_DANGER_SOFT :
                                 (badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT :

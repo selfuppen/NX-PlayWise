@@ -1159,7 +1159,7 @@ static void test_overlay_child_quota_and_restriction_details(void)
     summary.bedtime_next_start_day_index = 2380;
     summary.bedtime_next_start_minute = 21 * 60 + 30;
     ptc_overlay_format_child_restriction_guidance(&summary, line, sizeof(line));
-    check_true(strstr(line, "今晚 21:30") != NULL && strstr(line, "就寝立断") != NULL,
+    check_true(strstr(line, "今晚 21:30") != NULL && strstr(line, "限制使用") != NULL,
         "tonight bedtime informs child of exact cutoff time");
 
     summary.bedtime_next_start_day_index = 2381;
@@ -1170,7 +1170,7 @@ static void test_overlay_child_quota_and_restriction_details(void)
     /* 4. 折叠状态栏精简受限提炼 */
     summary.bedtime_next_start_day_index = 2380;
     ptc_overlay_format_child_restriction_summary(&summary, line, sizeof(line));
-    check_true(strstr(line, "今晚 21:30 就寝立断") != NULL,
+    check_true(strstr(line, "今晚 21:30 起限制使用") != NULL,
         "collapsed status bar highlights tonight bedtime restriction");
 
     summary.bedtime_next_available = false;
@@ -1185,7 +1185,7 @@ static void test_overlay_child_quota_and_restriction_details(void)
     summary.bedtime_next_start_day_index = 2380;
     summary.bedtime_next_start_minute = 21 * 60;
     ptc_overlay_format_child_restriction_detail(&summary, line, sizeof(line));
-    check_true(strstr(line, "今晚 21:00 就寝立断") != NULL && strstr(line, "额度玩完后暂停") != NULL,
+    check_true(strstr(line, "今晚 21:00 起限制使用") != NULL && strstr(line, "额度用完后限制使用") != NULL,
         "expanded detail explains both allowance exhaustion and bedtime cutoff");
 
     ptc_overlay_format_child_buffer_status(&summary, line, sizeof(line));

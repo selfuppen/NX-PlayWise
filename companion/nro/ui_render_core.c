@@ -369,7 +369,7 @@ void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiMod
     if (model->disable_flag_present) {
         snprintf(summary, sizeof(summary), "▲ 控制已停用  |  按 A 查看恢复");
     } else if (model->recovery_active) {
-        snprintf(summary, sizeof(summary), "▲ 存在待恢复事务  |  按 A 进入排障");
+        snprintf(summary, sizeof(summary), "▲ 恢复尚未完成  |  按 A 查看处理方法");
     } else if (strcmp(model->setup_phase, "protection") == 0) {
         snprintf(summary, sizeof(summary), "▲ 系统防护已激活  |  按 A 查看详情");
     } else if (model->temporary_unlocked_available && model->temporary_unlocked) {

@@ -361,25 +361,25 @@ void handle_parent_action(UiState *ui)
     switch (index) {
     case 0:
         if (ptc_ui_runtime_fingerprint_reconfirmation_needed(&ui->model)) {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "系统环境已变化，重新检测并接管",
-                                 "系统版本或运行环境与上次确认时不同。将执行只读兼容预检；通过后保留现有配置并恢复额度管理。");
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "系统环境已变化，请重新检查并启用",
+                                 "系统版本或运行环境与上次确认时不同。检查兼容性后会保留现有设置并恢复额度管理。");
         } else if (ui->model.disable_flag_present) {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新接管",
-                                 "重新执行只读兼容预检；仅预检通过后才解除停用并恢复额度管理。");
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新启用",
+                                 "重新检查系统兼容性；通过后才解除停用并恢复额度管理。");
         } else {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "确认接管系统控制",
-                                 "先执行只读兼容预检；通过后保存安装快照并启用额度管理。");
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "确认启用额度管理",
+                                 "先检查系统兼容性；通过后保存安装前设置并启用额度管理。");
         }
         break;
     case 1:
         open_confirm_overlay(ui, PTC_UI_OPERATION_RETRY_SETUP_RELEASE, "重试修复",
-                             "重新执行安全前置检查，并在可恢复时继续首次设置。");
+                             "重新进行安全检查，并在可恢复时继续首次设置。");
         break;
     case 2:
         refresh_disable_flag(ui);
         if (ui->model.disable_flag_present) {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新接管",
-                                 "功能：重新执行只读安全预检，通过后解除 disable.flag 并恢复控制。\n适用：故障已排除且确认当前规则配置安全。");
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新启用",
+                                 "功能：重新进行安全检查，通过后解除紧急停用并恢复额度管理。\n适用：故障已排除且确认当前规则设置安全。");
         } else {
             open_confirm_overlay(ui, PTC_UI_OPERATION_EMERGENCY_DISABLE, "紧急停用控制",
                                  "功能：创建 disable.flag，立即停止正常控制写入。\n适用：异常限制、写入故障或需要保留现场。");
@@ -529,7 +529,7 @@ void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_HOT_RELOAD:
         if (ui->waiting || ui->model.recovery_active) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                "当前请求或恢复事务尚未完成，暂不能热加载。");
+                "当前操作或恢复尚未完成，暂不能加载新版。");
         } else if (ptc_hot_reload_begin(&ui->hot_reload)) {
             ui->hot_reload_terminal_handled = false;
             ui->waiting = true;
@@ -540,7 +540,7 @@ void confirm_operation(UiState *ui)
         } else {
             sync_hot_reload_model(ui);
             snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-                ui->hot_reload.detail[0] ? ui->hot_reload.detail : "热加载前置检查未通过");
+                ui->hot_reload.detail[0] ? ui->hot_reload.detail : "加载新版前的检查未通过");
         }
         break;
 #endif

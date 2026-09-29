@@ -80,7 +80,7 @@ void save_scheduled_from_overlay(UiState *ui)
     }
     if (ptc_ui_plan_save_requires_hold(&ui->model, PTC_UI_PLAN_SCHEDULED, (int64_t)time(NULL))) {
         open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_SCHEDULED,
-            "临时额度计划可能立即阻断",
+            "保存后可能立即限制使用",
             "保存前请核对今天的最终额度、预计剩余时间和覆盖原因。");
         return;
     }

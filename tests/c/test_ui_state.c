@@ -173,22 +173,22 @@ static void test_parent_status_summary(void)
     memset(&model, 0, sizeof(model));
     model.today_override_present = true;
     ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
-    check_true(strstr(summary, "今日额度调整覆盖") != NULL,
+    check_true(strstr(summary, "优先采用今日额度调整") != NULL,
                "holiday priority summary identifies the highest-priority override");
     model.today_override_present = false;
     model.holiday_enabled = false;
     ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
-    check_true(strstr(summary, "预设未开启") != NULL && strstr(summary, "回退周计划") != NULL,
+    check_true(strstr(summary, "设置未开启") != NULL && strstr(summary, "改用周计划") != NULL,
                "holiday priority summary explains the disabled fallback");
     model.holiday_enabled = true;
     model.calendar_covered = false;
     ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
-    check_true(strstr(summary, "日历未覆盖") != NULL,
+    check_true(strstr(summary, "不在内置日历范围内") != NULL,
                "holiday priority summary explains uncovered years");
     model.calendar_covered = true;
     snprintf(model.rule_source, sizeof(model.rule_source), "statutory_holiday");
     ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
-    check_true(strstr(summary, "法定休假日命中") != NULL,
+    check_true(strstr(summary, "法定休假日") != NULL && strstr(summary, "采用节假日设置") != NULL,
                "holiday priority summary identifies an active statutory holiday");
     snprintf(model.rule_source, sizeof(model.rule_source), "week");
     ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
@@ -2450,7 +2450,7 @@ static void test_today_decision_and_plan_review(void)
     model.bedtime_active = true;
     model.bedtime_skipped = false;
     ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));
-    check_true(strcmp(badge, "就寝立断") == 0 && strstr(detail, "就寝限制中") != NULL,
+    check_true(strcmp(badge, "就寝限制中") == 0 && strstr(detail, "就寝限制中") != NULL,
                "active bedtime indicates restriction on today card even with override");
     model.today_override_present = false;
     ptc_ui_format_today_adjustment_status(&model, 1000, badge, sizeof(badge), detail, sizeof(detail));

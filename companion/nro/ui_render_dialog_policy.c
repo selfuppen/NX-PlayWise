@@ -237,7 +237,7 @@ static void draw_plan_save_confirmation(uint32_t *pixels, uint32_t stride, const
                     model->confirm_hold_required ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
     draw_text_center(pixels, stride, (UiRect){dialog.x + 46, dialog.y + 306, dialog.width - 92, 38},
                      model->confirm_hold_required
-                        ? "保存后可能立即耗尽；请长按确认" : decision.final_reason,
+                        ? "保存后可能立即限制使用；请长按确认" : decision.final_reason,
                      15, model->confirm_hold_required ? UI_DANGER : UI_SUCCESS);
     draw_overlay_actions(pixels, stride, model,
                          model->confirm_hold_required ? "长按 A / 触摸按住" : "A  确认保存");
@@ -460,7 +460,7 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 218, 652, 92}, 16, UI_DANGER_SOFT);
         draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 226, 652, 34}, comparison, 25, UI_DANGER);
         draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 264, 652, 34},
-                         "新额度不高于额度消耗估算，保存后会马上限制儿童使用", 20, UI_DANGER);
+                         "新额度不高于已使用时间，保存后会立即限制使用", 20, UI_DANGER);
     }
     if (restore || limit_change || code_preview || direct_quota_change) {
         uint32_t impact_background = (limit_keeps_quota || restore_keeps_quota)

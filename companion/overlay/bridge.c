@@ -397,9 +397,9 @@ void ptc_overlay_format_child_restriction_guidance(
         int start_h = summary->bedtime_next_start_minute / 60;
         int start_m = summary->bedtime_next_start_minute % 60;
         if (summary->bedtime_next_start_day_index == summary->day_index) {
-            snprintf(out, out_size, "今晚 %02d:%02d 就寝立断（到点强制暂停游戏）", start_h, start_m);
+            snprintf(out, out_size, "今晚 %02d:%02d 起限制使用", start_h, start_m);
         } else if (summary->bedtime_next_start_day_index == summary->day_index + 1) {
-            snprintf(out, out_size, "明晚 %02d:%02d 就寝立断（到点强制暂停游戏）", start_h, start_m);
+            snprintf(out, out_size, "明晚 %02d:%02d 起限制使用", start_h, start_m);
         } else {
             snprintf(out, out_size, "下次就寝 %02d:%02d（到点强制暂停游戏）", start_h, start_m);
         }
@@ -441,7 +441,7 @@ void ptc_overlay_format_child_restriction_summary(
     if (summary->bedtime_next_available && summary->bedtime_next_start_day_index == summary->day_index) {
         int start_h = summary->bedtime_next_start_minute / 60;
         int start_m = summary->bedtime_next_start_minute % 60;
-        snprintf(out, out_size, "[-] 限制提醒：今晚 %02d:%02d 就寝立断（按 - 展开详情）", start_h, start_m);
+        snprintf(out, out_size, "[-] 提醒：今晚 %02d:%02d 起限制使用（按 - 查看详情）", start_h, start_m);
         return;
     }
     if (summary->bedtime_skipped) {
@@ -471,13 +471,13 @@ void ptc_overlay_format_child_restriction_detail(
         return;
     }
     if (summary->bedtime_active && !summary->bedtime_skipped) {
-        snprintf(out, out_size, "就寝限制生效中（游戏已暂停，独立于额度立断锁定）");
+        snprintf(out, out_size, "就寝限制生效中；即使还有额度也不能继续玩");
         return;
     }
     if (summary->daily_restriction_active ||
         (summary->remaining_available && summary->remaining_minutes == 0)) {
         if (summary->bedtime_next_available && summary->bedtime_next_start_day_index == summary->day_index) {
-            snprintf(out, out_size, "额度已用尽 ｜ 今晚 %02d:%02d 就寝立断",
+            snprintf(out, out_size, "额度已用尽 ｜ 今晚 %02d:%02d 起限制使用",
                 summary->bedtime_next_start_minute / 60, summary->bedtime_next_start_minute % 60);
         } else {
             snprintf(out, out_size, "今日额度已耗尽暂停 ｜ 可输入加时码继续游玩");
@@ -494,10 +494,10 @@ void ptc_overlay_format_child_restriction_detail(
         int start_h = summary->bedtime_next_start_minute / 60;
         int start_m = summary->bedtime_next_start_minute % 60;
         if (summary->unrestricted_today == 1) {
-            snprintf(out, out_size, "今日额度不限时 ｜ %s %02d:%02d 就寝立断暂停",
+            snprintf(out, out_size, "今日额度不限时 ｜ %s %02d:%02d 起限制使用",
                 prefix, start_h, start_m);
         } else {
-            snprintf(out, out_size, "额度玩完后暂停 ｜ %s %02d:%02d 就寝立断暂停",
+            snprintf(out, out_size, "额度用完后限制使用 ｜ %s %02d:%02d 起限制使用",
                 prefix, start_h, start_m);
         }
         return;

@@ -64,7 +64,7 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     } else if (model->hot_reload_status == PTC_UI_HOT_RELOAD_RUNNING) {
         status = "正在加载"; status_color = UI_WARNING;
     } else if (model->hot_reload_status == PTC_UI_HOT_RELOAD_UNAVAILABLE) {
-        status = "热加载不可用"; status_color = UI_WARNING;
+        status = "暂不能加载新版"; status_color = UI_WARNING;
     }
     draw_text(pixels, stride, details.x + 24, details.y + 126, "加载状态", 18, UI_MUTED);
     draw_text(pixels, stride, details.x + 180, details.y + 126, status, 20, status_color);
@@ -152,7 +152,7 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
     }
     draw_text(pixels, stride, dialog.x + 40, dialog.y + 294,
               !g_theme.system_theme_available && model->overlay_selection == PTC_UI_THEME_SYSTEM
-                  ? "系统主题暂不可用，将安全回退为浅色。" : "方向键选择  |  A 立即应用并保存  |  B 取消",
+                  ? "系统主题暂不可用，将改用浅色。" : "方向键选择  |  A 立即应用并保存  |  B 取消",
               16, !g_theme.system_theme_available ? UI_WARNING : UI_MUTED);
 }
 
@@ -213,12 +213,12 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
     int gap = (total_w - node_w * count) / (count - 1);
     bool hit_found = false;
 
-    draw_text(pixels, stride, x, y + 6, "额度决策流水线（优先级自高向低，命中即阻断后续）", 14, UI_INK);
+    draw_text(pixels, stride, x, y + 6, "当天额度按以下顺序确定，优先采用第一条适用的规则", 14, UI_INK);
     if (bedtime_enforcing) {
         UiRect pill = {x + total_w - 290, y, 290, 24};
         fill_round_rect(pixels, stride, pill, 6, UI_DANGER_SOFT);
         draw_rect_outline(pixels, stride, pill, 6, 1, UI_DANGER);
-        draw_text_center(pixels, stride, pill, "🌙 就寝限制生效中 / 最终强制锁定", 12, UI_DANGER);
+        draw_text_center(pixels, stride, pill, "🌙 就寝限制生效中", 12, UI_DANGER);
     }
     int cards_y = y + 26;
 
@@ -257,14 +257,14 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
         if (is_selected) {
             if (bedtime_enforcing) {
                 fill_round_rect(pixels, stride, badge, 4, UI_DANGER);
-                draw_text_center(pixels, stride, badge, "🎯 额度命中 (🌙就寝锁定)", 11, UI_ON_ACCENT);
+                draw_text_center(pixels, stride, badge, "当天额度采用此规则", 11, UI_ON_ACCENT);
             } else {
                 fill_round_rect(pixels, stride, badge, 4, UI_SUCCESS);
-                draw_text_center(pixels, stride, badge, "🎯 当前生效命中", 11, UI_ON_ACCENT);
+                draw_text_center(pixels, stride, badge, "当天额度采用此规则", 11, UI_ON_ACCENT);
             }
         } else if (is_overridden) {
             fill_round_rect(pixels, stride, badge, 4, UI_WARNING_SOFT);
-            draw_text_center(pixels, stride, badge, "🛡️ 已被上级覆盖", 11, UI_WARNING);
+            draw_text_center(pixels, stride, badge, "优先采用前面的规则", 11, UI_WARNING);
         } else {
             fill_round_rect(pixels, stride, badge, 4, UI_BORDER);
             draw_text_center(pixels, stride, badge, ptc_ui_decision_state_label(step->state), 11, UI_MUTED);
@@ -277,16 +277,16 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
         /* 4. Subtext explanation */
         const char *desc;
         if (is_selected) {
-            desc = bedtime_enforcing ? "额度已生效 / 🌙就寝立断中" : "在此命中 / 阻断后续规则";
+            desc = bedtime_enforcing ? "额度已确定；就寝限制中" : "后面的规则不再采用";
         } else if (is_overridden) {
-            desc = "规则已配置，但上级优先";
+            desc = "已设置，但前面的规则优先";
         } else if (step->state == PTC_UI_DECISION_DISABLED) {
             desc = "未开启或未配置";
         } else if (step->state == PTC_UI_DECISION_CALENDAR_UNCOVERED) {
-            desc = "校准日历未覆盖";
+            desc = "日期不在内置日历范围";
         } else {
-            desc = (i == 0 ? "未配置调整 / 向下穿透" :
-                   (i == 2 ? "非假日调休 / 向下穿透" : "未命中特例 / 向下穿透"));
+            desc = (i == 0 ? "无单独调整，继续看下一项" :
+                   (i == 2 ? "不是节假日，继续看下一项" : "当天不适用，继续看下一项"));
         }
         draw_line(pixels, stride, card.x + 12, card.y + 98, card.x + card.width - 12, card.y + 98, 1, UI_BORDER);
         draw_text_center(pixels, stride, (UiRect){card.x + 6, card.y + 104, card.width - 12, 24},
@@ -302,7 +302,7 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
                 /* Short-circuit stop mark: ─┤ 阻断 */
                 draw_line(pixels, stride, line_start_x, line_y, line_start_x + gap / 2, line_y, 2, UI_MUTED);
                 draw_line(pixels, stride, line_start_x + gap / 2, line_y - 14, line_start_x + gap / 2, line_y + 14, 3, UI_DANGER);
-                draw_text_center(pixels, stride, (UiRect){line_start_x, line_y - 28, gap, 16}, "阻断", 11, UI_DANGER);
+                draw_text_center(pixels, stride, (UiRect){line_start_x, line_y - 28, gap, 16}, "采用", 11, UI_DANGER);
                 hit_found = true;
             } else if (!hit_found) {
                 /* Active flow arrow: ──> (geometric vector arrow, perfectly aligned to line_y) */
@@ -378,12 +378,12 @@ static void draw_home_decision_details(uint32_t *pixels, uint32_t stride,
     fill_round_rect(pixels, stride, active_badge, 8, badge_bg);
     draw_rect_outline(pixels, stride, active_badge, 8, 1, badge_border);
     const char *badge_title = !fresh ? "规则状态待确认" :
-        (bedtime_enforcing ? "🎯 基础额度生效 (🌙就寝限制中)" : "🎯 当前生效规则");
+        (bedtime_enforcing ? "今日额度（就寝限制中）" : "今日采用的规则");
     draw_text(pixels, stride, active_badge.x + 14, active_badge.y + 20,
               badge_title, 12, badge_border);
     draw_text(pixels, stride, active_badge.x + (bedtime_enforcing ? 200 : 120), active_badge.y + 20, effective, 14, UI_INK);
     const char *final_desc = bedtime_enforcing
-        ? "基础额度已就绪；当前处于就寝窗口，强制立断锁定" : decision.final_reason;
+        ? "今日额度已确定；当前就寝限制正在生效" : decision.final_reason;
     draw_wrapped_text(pixels, stride, active_badge.x + 14, active_badge.y + 40, final_desc,
                       11, active_badge.width - 28, 15, 1, UI_MUTED);
 
@@ -397,20 +397,20 @@ static void draw_home_decision_details(uint32_t *pixels, uint32_t stride,
     UiRect bedtime = {x_left, bottom_y, col_w, 76};
     fill_round_rect(pixels, stride, bedtime, 10, bedtime_enforcing ? UI_DANGER_SOFT : UI_WARNING_SOFT);
     draw_rect_outline(pixels, stride, bedtime, 10, 1, bedtime_enforcing ? UI_DANGER : UI_WARNING);
-    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 22,
-              "🌙 并行就寝限制", 13, bedtime_enforcing ? UI_DANGER : UI_WARNING);
+        draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 22,
+              "🌙 就寝限制", 13, bedtime_enforcing ? UI_DANGER : UI_WARNING);
     if (bedtime_enforcing) {
         UiRect enforcing_pill = {bedtime.x + bedtime.width - 112, bedtime.y + 8, 98, 24};
         fill_round_rect(pixels, stride, enforcing_pill, 6, UI_DANGER);
-        draw_text_center(pixels, stride, enforcing_pill, "立断生效中", 12, UI_ON_ACCENT);
+        draw_text_center(pixels, stride, enforcing_pill, "限制使用中", 12, UI_ON_ACCENT);
     } else {
         char bedtime_status[128];
         fit_text(bedtime_status, sizeof(bedtime_status), decision.bedtime, 14, bedtime.width - 158);
         draw_text(pixels, stride, bedtime.x + 130, bedtime.y + 22, bedtime_status, 14, UI_INK);
     }
     draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 52,
-              bedtime_enforcing ? "当前处于就寝窗口，独立于今日额度直接强制锁定机器。"
-                                : "就寝限制独立于时长并行生效；到点后无论剩余额度直接锁定机器。", 11, UI_MUTED);
+              bedtime_enforcing ? "当前处于就寝时段，即使今日还有额度也会限制使用。"
+                                : "到就寝时间后，即使今日还有额度也会限制使用。", 11, UI_MUTED);
 
     UiRect autonomy = {x_left, bottom_y + 84, col_w, 76};
     fill_round_rect(pixels, stride, autonomy, 10, UI_RAISED);
@@ -421,7 +421,7 @@ static void draw_home_decision_details(uint32_t *pixels, uint32_t stride,
               "由孩子在额度即将耗尽时自主申请，按预设条件追加缓冲时间。", 11, UI_MUTED);
 
     draw_text(pixels, stride, x_left, bottom_y + 180,
-              "ℹ️ 决策流水线决定今日额度；就寝独立并行，自主缓冲按条件追加。", 11, UI_MUTED);
+              "ℹ️ 上方规则决定今日额度；就寝限制单独生效，缓冲时间符合条件时可领取。", 11, UI_MUTED);
 
     /* 右下栏：系统运行、审计与健康 */
     UiRect sys_card = {x_right, bottom_y, col_w, 76};
@@ -448,7 +448,7 @@ static void draw_home_decision_details(uint32_t *pixels, uint32_t stride,
         UiRect audit = {x_right, bottom_y + 84, col_w, 76};
         fill_round_rect(pixels, stride, audit, 10, UI_RAISED);
         draw_rect_outline(pixels, stride, audit, 10, 1, UI_BORDER);
-        draw_text(pixels, stride, audit.x + 14, audit.y + 18, "最近指令执行审计", 12, UI_INK);
+        draw_text(pixels, stride, audit.x + 14, audit.y + 18, "最近操作", 12, UI_INK);
         snprintf(line, sizeof(line), "%s / %s", model->command_name, model->transport_label);
         draw_text(pixels, stride, audit.x + 200, audit.y + 18, line, 11, UI_MUTED);
         draw_line(pixels, stride, audit.x + 14, audit.y + 26, audit.x + audit.width - 14, audit.y + 26, 1, UI_BORDER);
@@ -571,20 +571,20 @@ static void draw_forecast_day_details(uint32_t *pixels, uint32_t stride, const P
     UiRect bedtime = {x_left, bottom_y, col_w, 94};
     fill_round_rect(pixels, stride, bedtime, 10, UI_WARNING_SOFT);
     draw_rect_outline(pixels, stride, bedtime, 10, 1, UI_WARNING);
-    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 24, "并行就寝预测", 14, UI_WARNING);
+    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 24, "就寝时间", 14, UI_WARNING);
     draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 52, decision.bedtime, 15, UI_INK);
     draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 78,
-              "就寝时间并行生效；到点后即使有剩余额度也会锁定机器。", 11, UI_MUTED);
+              "到就寝时间后，即使有剩余额度也会限制使用。", 11, UI_MUTED);
 
     /* 右下栏：规则裁决链条说明 */
     UiRect rule_info = {x_left + col_w + 24, bottom_y, col_w, 94};
     fill_round_rect(pixels, stride, rule_info, 10, UI_RAISED);
     draw_rect_outline(pixels, stride, rule_info, 10, 1, UI_BORDER);
-    draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 24, "规则优先级裁决机制", 14, UI_INK);
+    draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 24, "当天额度按什么确定", 14, UI_INK);
     draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 52,
-              "今日调整(最高) -> 临时特例 -> 假日调休 -> 周常规(兜底)", 12, UI_ACCENT);
+              "今日调整、临时计划、节假日、每周计划", 12, UI_ACCENT);
     draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 78,
-              "自高向低顺序求值，命中有效规则后立即阻断后续判定。", 11, UI_MUTED);
+              "从左到右，优先采用第一条适用的规则。", 11, UI_MUTED);
 
     home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "A / B  返回", false, true, false);
 }

@@ -103,7 +103,7 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
 
     /* 规则优先级说明 */
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 482,
-              "规则链优先级：今日额度调整 > 临时额度计划 > 国家节假日 > 周计划（就寝时间独立并行）",
+              "今日额度依次采用：今日调整 > 临时计划 > 节假日 > 周计划；就寝限制单独生效",
               14, UI_RGB(UI_BLENDED(text_secondary)));
 
     /* 动态上下文按键引导栏 (Context-Aware Action Guide Bar) */
@@ -134,7 +134,7 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回", UI_RAISED, UI_INK, true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay),
                        model->waiting ? "正在保存..." : (ptc_ui_scheduled_dirty(model)
-                           ? (save_danger ? "+  保存（可能阻断）" : "+  保存草稿") : "已保存"),
+                           ? (save_danger ? "+  保存（可能立即限制使用）" : "+  保存草稿") : "已保存"),
                        save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, false);
 }
 
@@ -267,7 +267,7 @@ static void draw_bedtime_timeline_strip(
     draw_rect_outline(pixels, stride, bar, 6, 1, UI_BORDER);
 
     if (!enabled) {
-        draw_text_center(pixels, stride, bar, "本日就寝限制未开启（全天夜间不设强制立断）", 13, UI_MUTED);
+        draw_text_center(pixels, stride, bar, "本日就寝限制未开启，夜间不会因此限制使用", 13, UI_MUTED);
     } else {
         int x_morn_end = bar.x + (int)((float)end_m / 1440.0f * (float)bar.width + 0.5f);
         int x_eve_start = bar.x + (int)((float)start_m / 1440.0f * (float)bar.width + 0.5f);
@@ -348,7 +348,7 @@ static void draw_bedtime_editor_fields(
         char value[32];
         draw_plan_card(pixels, stride, row, model->overlay_selection == field);
         draw_text(pixels, stride, row.x + 18, row.y + 24,
-            field == 1 ? "就寝开始，到点立断" : "次日结束，恢复使用",
+            field == 1 ? "就寝开始，到点限制使用" : "次日结束，恢复使用",
             13, custom ? UI_MUTED : UI_DISABLED);
         snprintf(value, sizeof(value), "%02u:%02u", minute / 60, minute % 60);
         draw_text(pixels, stride, row.x + 18, row.y + 52, value, 22,
@@ -381,7 +381,7 @@ static void draw_bedtime_editor_timeline(
                 matched >= 0 ? PTC_BEDTIME_PRESETS[matched].name : "自定义时段",
                 (unsigned int)(duration / 60), (unsigned int)(duration % 60));
         } else {
-            snprintf(summary, sizeof(summary), "本日关闭，夜间不触发强制立断");
+            snprintf(summary, sizeof(summary), "本日关闭，夜间不会因此限制使用");
         }
         draw_text_center(pixels, stride,
             (UiRect){bar.x + 150, tick_y - 14, bar.width - 300, 28},
@@ -423,7 +423,7 @@ static void draw_bedtime_window_overlay(uint32_t *pixels, uint32_t stride, const
     draw_text(pixels, stride, dialog.x + 44, dialog.y + 424,
         "方向键选择字段，A 精调或切换，X 开关，Y 轮换预设，也可直接触摸预设", 13, UI_MUTED);
     draw_text(pixels, stride, dialog.x + 44, dialog.y + 450,
-        "就寝窗口必须跨越午夜；到达开始时间会立即按计划限制。", 13, UI_WARNING);
+        "就寝时段必须跨越午夜；到开始时间会立即限制使用。", 13, UI_WARNING);
 
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
         UI_RAISED, UI_INK, true);
@@ -443,8 +443,8 @@ static void draw_bedtime_special_overlay(uint32_t *pixels, uint32_t stride, cons
     uint32_t mode_color = custom ? UI_ACCENT :
         (rule->mode == PTC_BEDTIME_OVERRIDE_DISABLED ? UI_MUTED : UI_SUCCESS);
     const char *neutral = rule->mode == PTC_BEDTIME_OVERRIDE_DISABLED
-        ? "特殊免控：当天夜间不设置就寝限制，仅按全天额度管控"
-        : "跟随周计划：自动继承对应星期的就寝时间窗口";
+        ? "当天夜间不设就寝限制，只按每日额度管理"
+        : "跟随周计划：使用对应星期的就寝时段";
     draw_dialog_shell(pixels, stride, model, &dialog, 960, 560);
     draw_bedtime_editor_fields(pixels, stride, model, &rule->window,
         bedtime_override_label(rule->mode), mode_color, custom, false);
@@ -667,7 +667,7 @@ static void draw_weekly_bulk_overlay(uint32_t *pixels, uint32_t stride, const Pt
     ptc_ui_weekly_bulk_stats(model, model->overlay_selection == 1, &stats);
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 490, dialog.y + 148, 510, 270}, 16, UI_RAISED);
     draw_rect_outline(pixels, stride, (UiRect){dialog.x + 490, dialog.y + 148, 510, 270}, 16, 1, UI_BORDER);
-    draw_text(pixels, stride, dialog.x + 516, dialog.y + 180, "2. 覆盖预览", 20, UI_INK);
+    draw_text(pixels, stride, dialog.x + 516, dialog.y + 180, "2. 对今天的影响", 20, UI_INK);
     snprintf(line, sizeof(line), "目标 %d 天；会改变 %d 天；相同跳过 %d 天",
              stats.target_count, stats.changed_count, stats.unchanged_count);
     draw_text(pixels, stride, dialog.x + 516, dialog.y + 218, line, 17, UI_ACCENT);

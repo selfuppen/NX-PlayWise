@@ -211,11 +211,11 @@ const char *ptc_ui_decision_state_label(PtcUiDecisionState state)
 {
     switch (state) {
     case PTC_UI_DECISION_SELECTED: return "当前生效";
-    case PTC_UI_DECISION_OVERRIDDEN: return "命中但被覆盖";
+    case PTC_UI_DECISION_OVERRIDDEN: return "适用但未采用";
     case PTC_UI_DECISION_NOT_CONFIGURED: return "未设置";
-    case PTC_UI_DECISION_NOT_MATCHED: return "未命中";
+    case PTC_UI_DECISION_NOT_MATCHED: return "当天不适用";
     case PTC_UI_DECISION_DISABLED: return "未开启";
-    case PTC_UI_DECISION_CALENDAR_UNCOVERED: return "日历未覆盖";
+    case PTC_UI_DECISION_CALENDAR_UNCOVERED: return "不在日历范围";
     case PTC_UI_DECISION_UNKNOWN:
     default: return "状态待确认";
     }
@@ -248,7 +248,7 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
         set_decision_step(&decision->scheduled_override, PTC_UI_DECISION_UNKNOWN, empty, "尚无可靠状态");
         set_decision_step(&decision->holiday, PTC_UI_DECISION_UNKNOWN, empty, "尚无可靠状态");
         set_decision_step(&decision->weekly, PTC_UI_DECISION_UNKNOWN, empty, "尚无可靠状态");
-        snprintf(decision->final_reason, sizeof(decision->final_reason), "刷新后确认规则决策");
+        snprintf(decision->final_reason, sizeof(decision->final_reason), "刷新后确认采用哪条规则");
         snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：状态待确认");
         snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：状态待确认");
         return;
@@ -270,7 +270,7 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
                           "仅限当天生效，不作用于未来日期");
     } else if (!rules.today_override.present) {
         set_decision_step(&decision->today_override, PTC_UI_DECISION_NOT_CONFIGURED, empty,
-                          model->today_override_cleared_in_session ? "本次会话已清除" : "今天没有单独额度调整");
+                           model->today_override_cleared_in_session ? "刚刚已清除" : "今天没有单独额度调整");
     } else {
         set_decision_step(&decision->today_override,
             decision->effective.source == PTC_RULE_SOURCE_TODAY_OVERRIDE
@@ -290,7 +290,7 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
                 ? PTC_UI_DECISION_SELECTED : PTC_UI_DECISION_OVERRIDDEN,
             rules.scheduled_override.rule,
             decision->effective.source == PTC_RULE_SOURCE_TODAY_OVERRIDE
-                ? "日期命中，但被今日额度调整覆盖" : (is_today ? "今天命中临时额度计划" : "当天命中临时额度计划"));
+                ? "日期适用，但优先采用今日调整" : (is_today ? "今天适用临时额度计划" : "当天适用临时额度计划"));
     }
 
     if (!rules.holiday_enabled) {
@@ -298,7 +298,7 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
                           "国家节假日总开关未开启");
     } else if (!calendar_covered) {
         set_decision_step(&decision->holiday, PTC_UI_DECISION_CALENDAR_UNCOVERED, empty,
-                          is_today ? "内置日历未覆盖今天" : "内置日历未覆盖当天");
+                          is_today ? "今天不在内置日历范围内" : "当天不在内置日历范围内");
     } else if (!holiday_matches) {
         set_decision_step(&decision->holiday, PTC_UI_DECISION_NOT_MATCHED, empty,
                           is_today ? "今天是普通日期" : "当天是普通日期");
@@ -306,14 +306,14 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
         PtcDayRule holiday_rule = day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY
             ? rules.holiday_rule : rules.makeup_workday_rule;
         const char *hit = day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY
-            ? "命中法定休假日" : "命中调休工作日";
+            ? "适用法定休假日规则" : "适用调休工作日规则";
         set_decision_step(&decision->holiday,
             decision->effective.source == PTC_RULE_SOURCE_STATUTORY_HOLIDAY ||
             decision->effective.source == PTC_RULE_SOURCE_MAKEUP_WORKDAY
                 ? PTC_UI_DECISION_SELECTED : PTC_UI_DECISION_OVERRIDDEN,
             holiday_rule, hit);
         if (decision->holiday.state == PTC_UI_DECISION_OVERRIDDEN) {
-            snprintf(decision->holiday.reason, sizeof(decision->holiday.reason), "%s，但被更高优先级规则覆盖", hit);
+            snprintf(decision->holiday.reason, sizeof(decision->holiday.reason), "%s，但优先采用其他规则", hit);
         }
     }
 
@@ -321,7 +321,7 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
         decision->effective.source == PTC_RULE_SOURCE_WEEKLY
             ? PTC_UI_DECISION_SELECTED : PTC_UI_DECISION_OVERRIDDEN,
         rules.week[weekday], decision->effective.source == PTC_RULE_SOURCE_WEEKLY
-            ? "没有更高优先级规则命中" : (is_today ? "作为今天的基础规则保留" : "作为当天的基础规则保留"));
+            ? "没有其他规则优先适用" : (is_today ? "作为今天的基础规则保留" : "作为当天的基础规则保留"));
 
     snprintf(decision->final_reason, sizeof(decision->final_reason), "最终采用%s%s",
              effective_rule_label(decision->effective.source),
@@ -333,7 +333,7 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
         } else if (model->bedtime_active && model->bedtime_skipped) {
             snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：当前窗口已跳过");
         } else if (model->bedtime_active) {
-            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：当前并行限制中");
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：正在限制使用");
         } else if (model->bedtime_next_available) {
             snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：已开启，等待下次窗口");
         } else {
@@ -411,7 +411,7 @@ void ptc_ui_format_today_adjustment_status(const PtcUiModel *model, int64_t now,
     } else if (model->today_override_present &&
                decision.effective.source == PTC_RULE_SOURCE_TODAY_OVERRIDE) {
         if (model->bedtime_active && !model->bedtime_skipped) {
-            snprintf(badge, badge_size, "就寝立断");
+            snprintf(badge, badge_size, "就寝限制中");
             if (model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED)
                 snprintf(detail, detail_size, "就寝限制中，调整不限时已保留");
             else
@@ -514,13 +514,13 @@ void ptc_ui_format_plan_impact(const PtcUiModel *model, PtcUiPlanKind kind,
             snprintf(out, out_size, "今天额度不变；保存后规则来源切换为%s。",
                      effective_rule_label(after.source));
         } else if (kind == PTC_UI_PLAN_WEEKLY) {
-            snprintf(out, out_size, "今天不变，继续按%s执行；新规则将在对应星期且无更高优先级覆盖时生效。",
+            snprintf(out, out_size, "今天不变，继续按%s执行；到对应星期且没有其他规则优先适用时，新规则才会生效。",
                      effective_rule_label(after.source));
         } else if (kind == PTC_UI_PLAN_HOLIDAY) {
-            snprintf(out, out_size, "今天不变，继续按%s执行；新规则将在开关开启且内置日历命中时生效。",
+            snprintf(out, out_size, "今天不变，继续按%s执行；开启开关且日期在内置日历范围内时，新规则才会生效。",
                      effective_rule_label(after.source));
         } else
-            snprintf(out, out_size, "今天不变，继续按%s执行；临时额度将在日期范围命中且无今日调整覆盖时生效。",
+            snprintf(out, out_size, "今天不变，继续按%s执行；日期在计划范围内且没有今日调整时，临时额度才会生效。",
                      effective_rule_label(after.source));
     } else if (after.rule.mode == PTC_RULE_MODE_UNLIMITED) {
         snprintf(out, out_size, "保存后今天按%s：不限时。", effective_rule_label(after.source));
@@ -620,7 +620,7 @@ void ptc_ui_format_weekly_save_result(const PtcUiModel *model, char *message, si
         snprintf(detail, detail_size, "今天继续按临时额度计划：%s。", current_basis);
     } else if (strcmp(model->rule_source, "statutory_holiday") == 0 ||
                strcmp(model->rule_source, "makeup_workday") == 0) {
-        snprintf(message, message_size, "周计划已保存；今天由%s覆盖，当前不变。",
+        snprintf(message, message_size, "周计划已保存；今天优先采用%s，当前不变。",
                  strcmp(model->rule_source, "statutory_holiday") == 0 ? "国家法定休假日" : "国家调休工作日");
         snprintf(detail, detail_size, "当前按%s：%s；今天对应的周计划已更新为：%s。",
                  current_source, current_basis, basis);
@@ -667,14 +667,14 @@ void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, s
         snprintf(message, message_size, "国家节假日预设已保存但未启用；今天不受影响。");
         snprintf(detail, detail_size, "原因：国家节假日总开关未开启。");
     } else if (!model->calendar_covered) {
-        snprintf(message, message_size, "国家节假日设置已保存；内置日历未覆盖今天，今天不受影响。");
-        snprintf(detail, detail_size, "原因：今天不在内置日历覆盖范围内，继续使用周计划。");
+        snprintf(message, message_size, "国家节假日设置已保存；今天不在内置日历范围内，当前不变。");
+        snprintf(detail, detail_size, "原因：今天不在内置日历范围内，继续使用周计划。");
     } else if (strcmp(model->rule_source, "statutory_holiday") == 0 ||
                strcmp(model->rule_source, "makeup_workday") == 0) {
         snprintf(message, message_size, "国家节假日设置已保存并生效，已影响今天。");
         snprintf(detail, detail_size, "今天按%s执行：%s。", source, basis);
     } else {
         snprintf(message, message_size, "国家节假日设置已保存；今天是普通日期，不受影响。");
-        snprintf(detail, detail_size, "原因：今天未命中国家节假日安排，继续使用周计划。");
+        snprintf(detail, detail_size, "原因：今天不是已设置的节假日或调休日，继续使用周计划。");
     }
 }

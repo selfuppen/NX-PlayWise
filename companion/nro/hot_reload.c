@@ -200,7 +200,7 @@ static void fail(PtcHotReloadController *controller, const char *detail)
         ? PTC_HOT_RELOAD_RECOVERY_REQUIRED : PTC_HOT_RELOAD_UNAVAILABLE;
     snprintf(controller->detail, sizeof(controller->detail), "%s",
         restore_failed ? "启动标志恢复失败；请勿关闭应用并检查 SD 卡" :
-        (cleanup_failed ? "热加载事务清理失败；启动标志已恢复，请完整重启主机" : detail));
+        (cleanup_failed ? "加载新版后的清理未完成；启动设置已恢复，请完整重启主机" : detail));
 }
 
 static bool ack_ready(const PtcHotReloadController *controller)
@@ -276,7 +276,7 @@ void ptc_hot_reload_recover_startup(PtcHotReloadController *controller)
         ptc_hot_reload_restore_boot(&PATHS, &journal) != PTC_HOT_RELOAD_FLAG_OK) {
         controller->status = PTC_HOT_RELOAD_RECOVERY_REQUIRED;
         controller->phase = PTC_HOT_RELOAD_PHASE_FAILED;
-        snprintf(controller->detail, sizeof(controller->detail), "热加载事务或启动标志存在冲突，请完整重启并检查安装");
+        snprintf(controller->detail, sizeof(controller->detail), "加载新版的记录或启动设置有冲突，请完整重启并检查安装");
         return;
     }
     clear_handoff();
@@ -335,7 +335,7 @@ void ptc_hot_reload_inspect(PtcHotReloadController *controller)
     if (exists(JOURNAL_PATH) || exists(JOURNAL_TEMP_PATH) || exists(BOOT_FLAG_BACKUP_PATH) ||
         exists(INTENT_PATH) || exists(READY_PATH)) {
         controller->status = PTC_HOT_RELOAD_RECOVERY_REQUIRED;
-        snprintf(controller->detail, sizeof(controller->detail), "检测到冲突的交接事务，未覆盖现有文件");
+        snprintf(controller->detail, sizeof(controller->detail), "检测到冲突的升级记录，现有文件未改动");
     } else if (!empty_file(BOOT_FLAG_PATH)) {
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
         snprintf(controller->detail, sizeof(controller->detail), "标准 boot2.flag 缺失或非空，需重启主机加载后台");
@@ -359,18 +359,18 @@ bool ptc_hot_reload_begin(PtcHotReloadController *controller)
     if (!controller || controller->status != PTC_HOT_RELOAD_PENDING) return false;
     (void)mkdir(PLAYWISE_RELEASE_SD_ROOT "/handover", 0777);
     if (exists(RECOVERY_PATH)) {
-        snprintf(controller->detail, sizeof(controller->detail), "后台恢复事务尚未完成，暂不能热加载");
+        snprintf(controller->detail, sizeof(controller->detail), "后台恢复尚未完成，暂不能加载新版");
         return false;
     }
     if (exists(JOURNAL_PATH) || exists(JOURNAL_TEMP_PATH) || exists(BOOT_FLAG_BACKUP_PATH) ||
         exists(INTENT_PATH) || exists(READY_PATH)) {
         controller->status = PTC_HOT_RELOAD_RECOVERY_REQUIRED;
-        snprintf(controller->detail, sizeof(controller->detail), "检测到冲突的交接事务，未覆盖现有文件");
+        snprintf(controller->detail, sizeof(controller->detail), "检测到冲突的升级记录，现有文件未改动");
         return false;
     }
     if (!empty_file(BOOT_FLAG_PATH)) {
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
-        snprintf(controller->detail, sizeof(controller->detail), "标准 boot2.flag 缺失或非空，未开始热加载");
+        snprintf(controller->detail, sizeof(controller->detail), "标准 boot2.flag 缺失或非空，未开始加载新版");
         return false;
     }
     if (!verify_artifacts(controller->detail, sizeof(controller->detail))) {
@@ -383,14 +383,14 @@ bool ptc_hot_reload_begin(PtcHotReloadController *controller)
     rc = pmshellGetProcessId(&pid, RELEASE_PROGRAM_ID);
     if (R_FAILED(rc) || pid != controller->journal.source_pid || !current_identity(pid, &identity) ||
         strcmp(identity.release_id, controller->journal.source_release_id) != 0) {
-        fail(controller, "后台身份已变化，未开始热加载");
+        fail(controller, "后台已变化，未开始加载新版");
         return false;
     }
     snprintf(controller->journal.transaction_id, sizeof(controller->journal.transaction_id), "%016llx%016llx",
         (unsigned long long)randomGet64(), (unsigned long long)randomGet64());
     snprintf(controller->journal.phase, sizeof(controller->journal.phase), "prepared");
     if (!ptc_hot_reload_write_journal(&PATHS, &controller->journal)) {
-        fail(controller, "无法保存热加载事务，旧后台保持运行");
+        fail(controller, "无法保存加载新版的记录，旧版本继续运行");
         return false;
     }
     snprintf(intent, sizeof(intent),
@@ -431,7 +431,7 @@ void ptc_hot_reload_tick(PtcHotReloadController *controller)
             return;
         }
         elapsed = armTicksToNs(armGetSystemTick() - controller->deadline_tick);
-        if (elapsed >= HANDOFF_TIMEOUT_NS) fail(controller, "旧后台不支持安全热加载；旧版本继续运行，请重启主机生效");
+        if (elapsed >= HANDOFF_TIMEOUT_NS) fail(controller, "旧版本无法直接加载新版；请重启主机使新版生效");
         return;
     }
     if (controller->phase == PTC_HOT_RELOAD_PHASE_WAIT_SOURCE_EXIT) {
@@ -464,7 +464,7 @@ void ptc_hot_reload_tick(PtcHotReloadController *controller)
             ptc_hot_reload_identity_matches(&identity, actual_pid, "release", PLAYWISE_BUILD_RELEASE_ID) &&
             strcmp(identity.boot_id, controller->source_boot_id) != 0) {
             if (!ptc_hot_reload_finish_journal(&PATHS)) {
-                fail(controller, "新版后台已启动，但热加载事务清理失败；请完整重启主机");
+                fail(controller, "新版已启动，但升级记录清理失败；请完整重启主机");
                 return;
             }
             close_pm(controller);

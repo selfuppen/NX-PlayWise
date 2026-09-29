@@ -134,7 +134,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     draw_card_shadow(pixels, stride, box, 16);
     fill_round_rect(pixels, stride, box, 16, UI_RGB(UI_BLENDED(hero)));
     draw_text(pixels, stride, box.x + 28, box.y + 42,
-              bedtime_enforcing ? "今天还可玩（就寝立断）" : "今天还可玩",
+              bedtime_enforcing ? "今天还可玩（就寝限制中）" : "今天还可玩",
               22, UI_RGB(UI_BLENDED(hero_secondary)));
     {
         char *unit = strstr(remaining, " 分钟");

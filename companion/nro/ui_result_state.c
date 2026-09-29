@@ -26,7 +26,7 @@ static const char *event_label(const char *event)
     if (strcmp(event, "effect_restore") == 0) return "设置已恢复";
     if (strcmp(event, "effect_restore_failed") == 0) return "设置恢复失败";
     if (strcmp(event, "handover_preserved") == 0) return "已保留今天的额度";
-    if (strcmp(event, "handover_restore") == 0) return "已恢复接管前额度";
+    if (strcmp(event, "handover_restore") == 0) return "已恢复启用前额度";
     return event && event[0] ? event : "未知事件";
 }
 
@@ -81,10 +81,10 @@ static const char *request_success_message(const char *type)
         return "家庭活动记录已清空。";
     }
     if (strcmp(type, "complete_setup") == 0) {
-        return "首次设置已完成，已保留当前额度并接管控制。";
+        return "首次设置已完成，已保留当前额度并启用额度管理。";
     }
     if (strcmp(type, "retry_setup_release") == 0) {
-        return "接管状态已重新验证。";
+        return "额度管理状态已重新确认。";
     }
     if (strcmp(type, "restore_install_snapshot") == 0) {
         return "安装前家长控制状态已恢复，任我玩 已停用。";
@@ -119,7 +119,7 @@ static const char *request_success_guidance(const char *type)
         return "接下来：进入第 5 步选择家长区或孩子区。";
     }
     if (strcmp(type, "retry_setup_release") == 0) {
-        return "接下来：刷新状态；显示正常运行即已完成接管。";
+        return "接下来：刷新状态；显示正常运行即表示额度管理已启用。";
     }
     if (strcmp(type, "restore_install_snapshot") == 0) {
         return "任我玩 已停用。解除停用后选择【启用自动控制】即可重新完成设置。";
@@ -149,7 +149,7 @@ static void fill_error_guidance(char *out, size_t out_size, const char *type, in
     }
     if (error_code == 313) {
         snprintf(out, out_size,
-                 "反馈码：313。任我玩未改写今天的系统额度；请保留当前设置，稍后重新检测或明天再接管。");
+                 "反馈码：313。任我玩未改写今天的系统额度；请保留当前设置，稍后重新检查或明天再启用。");
         return;
     }
     if (strcmp(type, "complete_setup") == 0) {
@@ -158,7 +158,7 @@ static void fill_error_guidance(char *out, size_t out_size, const char *type, in
                  error_code, reason[0] ? reason : "unknown");
     } else if (strcmp(type, "retry_setup_release") == 0) {
         snprintf(out, out_size,
-                 "反馈码：%d %s。当前状态无法安全接管；可稍后重试或恢复安装前状态。",
+                 "反馈码：%d %s。当前状态下无法安全启用额度管理；可稍后重试或恢复安装前设置。",
                  error_code, reason[0] ? reason : "unknown");
     } else if (strcmp(type, "restore_install_snapshot") == 0) {
         snprintf(out, out_size,

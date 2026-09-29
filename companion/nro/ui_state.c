@@ -289,17 +289,17 @@ const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index)
     }
     switch (index) {
     case 0:
-        return strcmp(model->setup_phase, "active") == 0 ? "额度管理已启用。" : "预检通过后保存快照并接管系统控制。";
+        return strcmp(model->setup_phase, "active") == 0 ? "额度管理已启用。" : "检查通过后保存安装前设置，再启用额度管理。";
     case 1:
         return strcmp(model->setup_phase, "active") == 0
             ? "当前运行正常，无需执行修复。"
-            : "重新执行兼容、快照和恢复前置检查。";
+            : "重新检查系统兼容性、安装前设置和恢复条件。";
     case 2:
         return model->disable_flag_present
             ? "解除停用后才允许新的控制写入；状态和恢复始终可用。"
             : "只停止新的控制写入；状态、诊断和恢复仍可使用。";
     case 3:
-        return model->setup_snapshot_available ? "精确恢复安装前状态。" : "安装前快照不可用。";
+        return model->setup_snapshot_available ? "恢复安装前设置。" : "没有可恢复的安装前设置。";
     case 4:
         return "导出时自动排除 secret、PIN、离线码和完整 nonce。";
     case 5:

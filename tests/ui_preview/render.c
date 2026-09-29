@@ -773,7 +773,7 @@ int main(int argc, char **argv)
             danger.overlay_selection = 1;
             snprintf(danger.overlay_title, sizeof(danger.overlay_title), "立即进入就寝限制？");
             snprintf(danger.overlay_body, sizeof(danger.overlay_body),
-                "当前时间处于设定的就寝时段内。保存后将立即暂停游戏并限制游玩（立断）。\n请长按 A 或持续按住确认按钮 1 秒。");
+                "当前时间处于设定的就寝时段内。保存后将立即限制使用。\n请长按 A 或持续按住确认按钮 1 秒。");
             failed |= save_preview(argv[2], "bedtime", "bedtime-save-danger-confirm", &danger, dark);
         }
         snprintf(model.result_status, sizeof(model.result_status), "error");

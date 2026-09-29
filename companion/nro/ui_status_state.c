@@ -188,7 +188,7 @@ void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out)
                  "可先按 Y 刷新状态；如果仍然失败，请进入支持与恢复查看当前问题和诊断信息。");
     } else if (model->disable_flag_present) {
         snprintf(out->details, sizeof(out->details),
-                 "新的控制写入已停止。请进入支持与恢复，完成安全检查后解除停用并重新接管。");
+                 "已停止更新额度设置。请进入支持与恢复，完成安全检查后解除停用并重新启用。");
     } else if (model->recovery_active) {
         snprintf(out->details, sizeof(out->details),
                  "后台正在恢复此前设置。恢复完成前请勿重复提交，状态和诊断仍可继续刷新。");
@@ -464,7 +464,7 @@ void ptc_ui_format_parent_status_summary(
         return;
     }
     if (model->recovery_active) {
-        snprintf(out, out_size, "! 恢复事务待处理  |  查看详情");
+        snprintf(out, out_size, "! 恢复尚未完成  |  查看详情");
         return;
     }
     if (model->disable_flag_present) {
@@ -514,18 +514,18 @@ void ptc_ui_format_holiday_priority_summary(const PtcUiModel *model, char *out, 
     if (!model) {
         snprintf(out, out_size, "当前原因：状态尚未刷新");
     } else if (model->today_override_present) {
-        snprintf(out, out_size, "当前原因：今日额度调整覆盖其他规则");
+        snprintf(out, out_size, "当前原因：优先采用今日额度调整");
     } else if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        snprintf(out, out_size, "当前原因：临时额度计划覆盖国家节假日规则");
+        snprintf(out, out_size, "当前原因：优先采用临时额度计划");
     } else if (!model->holiday_enabled) {
-        snprintf(out, out_size, "当前原因：节假日预设未开启，回退周计划");
+        snprintf(out, out_size, "当前原因：节假日设置未开启，改用周计划");
     } else if (!model->calendar_covered) {
-        snprintf(out, out_size, "当前原因：内置日历未覆盖，回退周计划");
+        snprintf(out, out_size, "当前原因：日期不在内置日历范围内，改用周计划");
     } else if (strcmp(model->rule_source, "statutory_holiday") == 0) {
-        snprintf(out, out_size, "当前原因：法定休假日命中节假日规则");
+        snprintf(out, out_size, "当前原因：今天是法定休假日，采用节假日设置");
     } else if (strcmp(model->rule_source, "makeup_workday") == 0) {
-        snprintf(out, out_size, "当前原因：调休工作日命中节假日规则");
+        snprintf(out, out_size, "当前原因：今天是调休工作日，采用节假日设置");
     } else {
-        snprintf(out, out_size, "当前原因：普通日期，回退周计划");
+        snprintf(out, out_size, "当前原因：今天是普通日期，采用周计划");
     }
 }
