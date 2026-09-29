@@ -252,7 +252,7 @@ PtcUiRect ptc_ui_bedtime_field_rect(int section, int index)
         if (index == 3 || index == 4) return (PtcUiRect){430 + (index - 3) * 188, 470, 176, 50};
     } else if (section == PTC_UI_BEDTIME_SCHEDULED) {
         if (index >= 0 && index < 4) return (PtcUiRect){54, 276 + index * 60, 752, 52};
-        if (index == 4 || index == 5) return (PtcUiRect){430 + (index - 4) * 188, 492, 176, 50};
+        if (index == 4 || index == 5) return (PtcUiRect){430 + (index - 4) * 188, 526, 176, 50};
     }
     return (PtcUiRect){0, 0, 0, 0};
 }
@@ -1022,7 +1022,7 @@ PtcUiRect ptc_ui_minute_editor_key_rect(int index)
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
     int row = index / 3;
     int column = index % 3;
-    PtcUiRect rect = {dialog.x + 36 + column * 116, dialog.y + 246 + row * 52, 106, 44};
+    PtcUiRect rect = {dialog.x + 36 + column * 116, dialog.y + 280 + row * 52, 106, 44};
     if (index < 0 || index >= 12) return (PtcUiRect){0, 0, 0, 0};
     return rect;
 }
@@ -1036,15 +1036,15 @@ PtcUiRect ptc_ui_minute_editor_quick_rect(int index)
 PtcUiRect ptc_ui_minute_editor_field_rect(PtcUiDurationField field)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
-    if (field == PTC_UI_DURATION_HOURS) return (PtcUiRect){dialog.x + 36, dialog.y + 132, 162, 56};
-    if (field == PTC_UI_DURATION_MINUTES) return (PtcUiRect){dialog.x + 212, dialog.y + 132, 162, 56};
+    if (field == PTC_UI_DURATION_HOURS) return (PtcUiRect){dialog.x + 36, dialog.y + 166, 162, 56};
+    if (field == PTC_UI_DURATION_MINUTES) return (PtcUiRect){dialog.x + 212, dialog.y + 166, 162, 56};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_minute_editor_summary_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
-    return (PtcUiRect){dialog.x + 414, dialog.y + 116, 470, 350};
+    return (PtcUiRect){dialog.x + 414, dialog.y + 150, 470, 350};
 }
 
 PtcUiRect ptc_ui_today_mode_rect(int index)
@@ -1052,7 +1052,13 @@ PtcUiRect ptc_ui_today_mode_rect(int index)
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
     int w = 848;
-    return (PtcUiRect){dialog.x + 36 + 4 + index * ((w - 8) / 2), dialog.y + 56 + 4, (w - 8) / 2, 36};
+    return (PtcUiRect){dialog.x + 36 + 4 + index * ((w - 8) / 2), dialog.y + 76 + 4, (w - 8) / 2, 36};
+}
+
+PtcUiRect ptc_ui_today_limit_refresh_rect(void)
+{
+    PtcUiRect summary = ptc_ui_minute_editor_summary_rect();
+    return (PtcUiRect){summary.x, summary.y + 196, summary.w, 44};
 }
 
 PtcUiRect ptc_ui_quota_refresh_rect(void)

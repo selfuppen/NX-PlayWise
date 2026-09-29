@@ -64,6 +64,10 @@ void handle_today_action_ready(UiState *ui, int index)
                     ? "全天总额度包含今日额度消耗；保存后今天将从不限时改为限时。"
                     : "全天总额度包含今日额度消耗；右侧显示调整前后的可玩时间。"),
             4, 1, 1440, current_today_limit_value(ui));
+        if (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
+            !ui->model.played_minutes_available || ui->model.played_minutes < 0 ||
+            (!ui->model.remaining_available && ui->model.unrestricted_today != 1))
+            refresh_today_limit_editor(ui, false);
         break;
     case PTC_UI_OPERATION_ADD_TODAY_MINUTES:
         if (ui->model.unrestricted_today == 1) {
@@ -161,7 +165,9 @@ void handle_parent_action(UiState *ui)
                      "今天没有可清除的额度调整；当前继续使用下级规则。");
             return;
         }
-        if (ptc_ui_today_operation(index) != PTC_UI_OPERATION_NONE) {
+        if (index == 0) {
+            handle_today_action_ready(ui, PTC_UI_OPERATION_SET_TODAY_LIMIT);
+        } else if (ptc_ui_today_operation(index) != PTC_UI_OPERATION_NONE) {
             submit_status(ui);
             /* A failed submit must not leave an action for a later auto-refresh. */
             ui->pending_today_action = ui->waiting ? (int)ptc_ui_today_operation(index) : -1;
@@ -410,6 +416,50 @@ bool quota_operation_needs_recheck(PtcUiOperation operation)
         operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES ||
         operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT ||
         operation == PTC_UI_OPERATION_RESTORE_TODAY_POLICY;
+}
+
+void refresh_today_limit_editor(UiState *ui, bool save_after_refresh)
+{
+    if (!ui || ui->waiting || ui->model.overlay != PTC_UI_OVERLAY_MINUTE_EDITOR ||
+        ui->model.operation != PTC_UI_OPERATION_SET_TODAY_LIMIT) return;
+    ui->today_limit_refresh_pending = true;
+    ui->today_limit_save_pending = save_after_refresh;
+    ui->model.quota_refresh_failed = false;
+    submit_status(ui);
+    if (!ui->waiting) finish_today_limit_refresh(ui, false);
+}
+
+void finish_today_limit_refresh(UiState *ui, bool success)
+{
+    PtcUiModel *model = &ui->model;
+    bool save;
+    if (!ui->today_limit_refresh_pending) return;
+    save = ui->today_limit_save_pending;
+    ui->today_limit_refresh_pending = false;
+    ui->today_limit_save_pending = false;
+    if (model->overlay != PTC_UI_OVERLAY_MINUTE_EDITOR ||
+        model->operation != PTC_UI_OPERATION_SET_TODAY_LIMIT) return;
+    if (!success || !ptc_ui_status_is_fresh(model, (int64_t)time(NULL)) ||
+        !model->played_minutes_available || model->played_minutes < 0) {
+        model->quota_refresh_failed = true;
+        snprintf(model->message, sizeof(model->message),
+                 "状态刷新失败或已玩时间不可用；未保存，请点按刷新后重试。");
+        return;
+    }
+    model->quota_refresh_failed = false;
+    if (!save) return;
+    if (ptc_ui_limit_minutes_would_restrict(model, model->draft_minutes)) {
+        char body[192];
+        snprintf(body, sizeof(body),
+                 "额度已耗约 %d 分钟（估算）；新额度 %u 分钟。保存后可能立即限制使用，请长按确认。",
+                 model->played_minutes, (unsigned int)model->draft_minutes);
+        open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SET_TODAY_LIMIT,
+                                    "设置后可能立即限制", body);
+        return;
+    }
+    ptc_ui_numpad_finish(model);
+    model->operation = PTC_UI_OPERATION_NONE;
+    submit_minutes(ui, PTC_UI_OPERATION_SET_TODAY_LIMIT, model->draft_minutes);
 }
 
 void start_quota_recheck(UiState *ui, bool manual)

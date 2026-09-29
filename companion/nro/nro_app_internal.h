@@ -128,6 +128,8 @@ typedef struct {
     bool quota_recheck_pending;
     bool quota_recheck_manual;
     bool quota_recheck_ready;
+    bool today_limit_refresh_pending;
+    bool today_limit_save_pending;
     PtcUiQuotaRecheckSnapshot quota_before;
     PtcPendingRedemption pending_redemption;
     bool recovering_redemption;
@@ -248,6 +250,8 @@ void confirm_operation(UiState *ui);
 bool quota_operation_needs_recheck(PtcUiOperation operation);
 void start_quota_recheck(UiState *ui, bool manual);
 void finish_quota_recheck(UiState *ui, bool success);
+void refresh_today_limit_editor(UiState *ui, bool save_after_refresh);
+void finish_today_limit_refresh(UiState *ui, bool success);
 void accept_numpad(UiState *ui);
 void update_weekly_dirty(UiState *ui);
 void update_holiday_dirty(UiState *ui);

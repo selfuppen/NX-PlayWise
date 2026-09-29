@@ -683,14 +683,14 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         UiRect bedtime_guide = {54, 526, 752, 100};
         fill_round_rect(pixels, stride, bedtime_guide, 12, UI_RGB(UI_BLENDED(surface)));
         draw_rect_outline(pixels, stride, bedtime_guide, 12, 1, UI_RGB(UI_BLENDED(border_control)));
-        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 26,
-                  "就寝时间并行规则与执行机制", 16, UI_RGB(UI_BLENDED(text_primary)));
-        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 54,
-                  "• 到点立断：进入就寝窗口后立即强制限制，不受今日剩余游玩额度影响", 14, UI_MUTED);
-        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 80,
-                  "• 单次跳过：若今晚有特殊需要，可在今日调度页面选择“跳过今晚就寝”放行一次", 14, UI_MUTED);
-        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 106,
-                  "• 跨日计算：就寝窗口支持跨日（如 22:00 至次日 07:00），到结束时间自动恢复", 14, UI_MUTED);
+        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 22,
+                  "就寝时间并行规则与执行机制", 15, UI_RGB(UI_BLENDED(text_primary)));
+        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 44,
+                  "• 到点立断：进入就寝窗口后立即强制限制，不受今日剩余游玩额度影响", 13, UI_MUTED);
+        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 66,
+                  "• 单次跳过：若今晚有特殊需要，可在今日调度页面选择“跳过今晚就寝”放行一次", 13, UI_MUTED);
+        draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 88,
+                  "• 跨日计算：就寝窗口支持跨日（如 22:00 至次日 07:00），到结束时间自动恢复", 13, UI_MUTED);
     } else if (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR) {
         UiRect master = to_uirect(ptc_ui_bedtime_field_rect(1, 0));
         draw_plan_card(pixels, stride, master, model->selected_index == 0 && !model->bedtime_section_focused && !model->bedtime_master_focused);
@@ -815,7 +815,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         }
 
         /* 指定日期规则与总闸状态指引面板（与保存/放弃按钮同高对齐） */
-        UiRect sched_guide = {54, 492, 360, 50};
+        UiRect sched_guide = {54, 526, 360, 50};
         fill_round_rect(pixels, stride, sched_guide, 12,
                         !draft->enabled ? UI_WARNING_SOFT : UI_RGB(UI_BLENDED(surface)));
         draw_rect_outline(pixels, stride, sched_guide, 12, 1,

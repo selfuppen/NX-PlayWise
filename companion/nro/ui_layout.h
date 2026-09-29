@@ -57,6 +57,7 @@ typedef enum {
     PTC_UI_HIT_DURATION_FIELD,
     PTC_UI_HIT_TODAY_MODE,
     PTC_UI_HIT_QUOTA_REFRESH,
+    PTC_UI_HIT_TODAY_LIMIT_REFRESH,
     PTC_UI_HIT_WEEKLY_SAVE,
     PTC_UI_HIT_WEEKLY_DISCARD,
     PTC_UI_HIT_WEEKLY_BULK,
@@ -186,6 +187,7 @@ PtcUiRect ptc_ui_minute_editor_key_rect(int index);
 PtcUiRect ptc_ui_minute_editor_quick_rect(int index);
 PtcUiRect ptc_ui_minute_editor_field_rect(PtcUiDurationField field);
 PtcUiRect ptc_ui_today_mode_rect(int index);
+PtcUiRect ptc_ui_today_limit_refresh_rect(void);
 PtcUiRect ptc_ui_quota_refresh_rect(void);
 PtcUiRect ptc_ui_minute_editor_summary_rect(void);
 PtcUiRect ptc_ui_code_slot_rect(int index);

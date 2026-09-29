@@ -529,6 +529,9 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_QUOTA_REFRESH:
         start_quota_recheck(ui, true);
         break;
+    case PTC_UI_HIT_TODAY_LIMIT_REFRESH:
+        refresh_today_limit_editor(ui, false);
+        break;
     case PTC_UI_HIT_NOTICE_DETAILS:
         ptc_ui_open_notice_details(&ui->model);
         break;

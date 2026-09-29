@@ -582,6 +582,8 @@ void handle_overlay_input(UiState *ui, u64 down)
         return;
     }
     if (down & HidNpadButton_B) {
+        ui->today_limit_refresh_pending = false;
+        ui->today_limit_save_pending = false;
         ptc_ui_cancel_overlay(&ui->model);
         snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改。");
         return;
@@ -591,7 +593,10 @@ void handle_overlay_input(UiState *ui, u64 down)
         bool today_mode = ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR &&
             ui->model.numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
             ui->model.operation == PTC_UI_OPERATION_SET_TODAY_LIMIT;
-        if (today_mode && (down & (HidNpadButton_ZL | HidNpadButton_ZR | HidNpadButton_L | HidNpadButton_R))) {
+        if (today_mode && ui->today_limit_refresh_pending) return;
+        if (today_mode && (down & HidNpadButton_StickR)) {
+            refresh_today_limit_editor(ui, false);
+        } else if (today_mode && (down & (HidNpadButton_ZL | HidNpadButton_ZR | HidNpadButton_L | HidNpadButton_R))) {
             ui->model.today_limit_unlimited_draft = (down & (HidNpadButton_ZR | HidNpadButton_R)) != 0;
         } else if (today_mode && ui->model.today_limit_unlimited_draft &&
                    (down & (HidNpadButton_X | HidNpadButton_Left))) {
@@ -623,6 +628,11 @@ void handle_overlay_input(UiState *ui, u64 down)
             PtcUiOperation operation = ui->model.operation;
             uint16_t value = 0;
             if (!ptc_ui_numpad_validate(&ui->model, &value)) return;
+            if (today_mode) {
+                ui->model.draft_minutes = value;
+                refresh_today_limit_editor(ui, true);
+                return;
+            }
             accept_numpad(ui);
             if (purpose == PTC_UI_NUMPAD_MINUTES) {
                 if (operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) {

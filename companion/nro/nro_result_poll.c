@@ -143,6 +143,7 @@ void poll_result(UiState *ui, bool force)
             cancel_bedtime_navigation(ui);
             set_message(ui, "读取结果失败", PTC_COMPANION_RESULT_INVALID);
             if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
+            if (ui->today_limit_refresh_pending) finish_today_limit_refresh(ui, false);
             if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
             return;
         }
@@ -334,6 +335,8 @@ void poll_result(UiState *ui, bool force)
         if (ui->quota_recheck_pending && strcmp(ui->model.result_type, "status") == 0) {
             finish_quota_recheck(ui, strcmp(ui->model.result_status, "ok") == 0);
         }
+        if (ui->today_limit_refresh_pending && strcmp(ui->model.result_type, "status") == 0)
+            finish_today_limit_refresh(ui, strcmp(ui->model.result_status, "ok") == 0);
         return;
     }
     if (ui->pending_parent_page >= 0 || ui->pending_leave_parent ||
@@ -350,5 +353,6 @@ void poll_result(UiState *ui, bool force)
     }
     set_message(ui, "读取结果失败", status);
     if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
+    if (ui->today_limit_refresh_pending) finish_today_limit_refresh(ui, false);
     if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
 }

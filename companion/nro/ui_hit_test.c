@@ -148,6 +148,8 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     case PTC_UI_OVERLAY_MINUTE_EDITOR:
         if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
             model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) {
+            if (ptc_ui_rect_contains(ptc_ui_today_limit_refresh_rect(), x, y))
+                return make_hit(PTC_UI_HIT_TODAY_LIMIT_REFRESH, 0);
             for (i = 0; i < 2; ++i) {
                 if (ptc_ui_rect_contains(ptc_ui_today_mode_rect(i), x, y))
                     return make_hit(PTC_UI_HIT_TODAY_MODE, i);

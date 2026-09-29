@@ -901,8 +901,8 @@ static void test_time_previews(void)
     model.played_minutes = 20;
     model.unrestricted_today = 1;
     model.draft_minutes = 60;
-    check_true(ptc_ui_today_limit_requires_hold(&model, 60),
-               "unlimited-to-limited change requires hold even with a positive estimate");
+    check_true(!ptc_ui_today_limit_requires_hold(&model, 60),
+               "safe unlimited-to-limited change does not require hold");
     ptc_ui_format_today_limit_confirmation(&model, risk, sizeof(risk), recovery, sizeof(recovery));
     check_true(strstr(risk, "从不限时改为限时") != NULL &&
                strstr(risk, "立即进入时间限制") == NULL,
@@ -1889,6 +1889,14 @@ static void test_balanced_feature_state(void)
         PTC_UI_HIT_TODAY_MODE, 0, "today limit mode is touchable");
     check_hit(hit_center(&model, ptc_ui_today_mode_rect(1)),
         PTC_UI_HIT_TODAY_MODE, 1, "today unlimited mode is touchable");
+    check_hit(hit_center(&model, ptc_ui_today_limit_refresh_rect()),
+        PTC_UI_HIT_TODAY_LIMIT_REFRESH, 0, "today limit editor refresh is touchable");
+    model.overlay = PTC_UI_OVERLAY_CONFIRM;
+    model.confirm_return_overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
+    check_true(ptc_ui_cancel_overlay(&model) &&
+               model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR &&
+               model.operation == PTC_UI_OPERATION_SET_TODAY_LIMIT,
+               "cancelled danger confirmation restores the limit editor");
     model.today_limit_unlimited_draft = true;
     check_hit(hit_center(&model, ptc_ui_minute_editor_key_rect(0)),
         PTC_UI_HIT_NONE, 0, "unlimited draft disables minute input");

@@ -12,6 +12,9 @@ void draw_dialog_shell(
     bool pin = model->overlay == PTC_UI_OVERLAY_PIN;
     bool custom_header = model->overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
                          model->overlay == PTC_UI_OVERLAY_DAY_DECISION;
+    bool today_limit_editor = model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR &&
+        model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
+        model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT;
     const char *title = custom_header ? "" : (numeric ? model->numpad_title : (pin ? model->pin_title : model->overlay_title));
     const char *description = custom_header ? "" : (numeric ? model->numpad_guide : (pin ? model->pin_guide : model->overlay_body));
     *dialog = to_uirect(ptc_ui_dialog_rect(width, height));
@@ -33,7 +36,7 @@ void draw_dialog_shell(
     if (title && title[0]) {
         draw_text(pixels, stride, dialog->x + 34, dialog->y + 54, title, 29, UI_INK);
     }
-    if (description && description[0]) {
+    if (!today_limit_editor && description && description[0]) {
         draw_wrapped_text(pixels, stride, dialog->x + 34, dialog->y + 88, description,
                           18, dialog->width - 68, 26, 6, UI_MUTED);
     }

@@ -391,10 +391,11 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     bool today_mode = model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
         model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT;
     bool unlimited_draft = today_mode && model->today_limit_unlimited_draft;
+    bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
     bool quota_unchanged = false;
     draw_dialog_shell(pixels, stride, model, &dialog, 920, 620);
     if (today_mode) {
-        UiRect tab_bg = {dialog.x + 36, dialog.y + 56, 848, 42};
+        UiRect tab_bg = {dialog.x + 36, dialog.y + 76, 848, 44};
         fill_round_rect(pixels, stride, tab_bg, 12, UI_RGB(UI_BLENDED(surface_raised)));
         draw_rect_outline(pixels, stride, tab_bg, 12, 1, UI_RGB(UI_BLENDED(border_control)));
         for (int mode = 0; mode < 2; ++mode) {
@@ -431,26 +432,27 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
              model->duration_hours_text[0] ? model->duration_hours_text : "--");
     snprintf(minutes_value, sizeof(minutes_value), clock ? "%s 分" : "%s 分钟",
              model->duration_minutes_text[0] ? model->duration_minutes_text : "--");
-    format_duration(model->played_minutes_available ? model->played_minutes : -1, played, sizeof(played));
-    if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "不限时");
-    else format_duration(model->remaining_available ? model->remaining_minutes : -1, remaining, sizeof(remaining));
+    format_duration(fresh && model->played_minutes_available ? model->played_minutes : -1, played, sizeof(played));
+    if (fresh && model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "不限时");
+    else format_duration(fresh && model->remaining_available ? model->remaining_minutes : -1, remaining, sizeof(remaining));
     if (weekly) {
         uint8_t weekday = ptc_weekday_from_day_index(model->day_index);
         if (entered_valid && model->editor_index == weekday && model->played_minutes_available) {
             after_minutes = (int)entered - model->played_minutes;
         }
-    } else if (entered_valid && model->numpad_purpose == PTC_UI_NUMPAD_MINUTES && model->played_minutes_available) {
+    } else if (entered_valid && model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
+               fresh && model->played_minutes_available) {
         after_minutes = model->operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES && model->remaining_available
             ? model->remaining_minutes + entered : (int)entered - model->played_minutes;
     }
-    if (after_minutes < 0 && model->played_minutes_available &&
+    if (after_minutes < 0 && fresh && model->played_minutes_available &&
         (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES ||
          (model->numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES &&
           model->editor_index == ptc_weekday_from_day_index(model->day_index)))) after_minutes = 0;
     if (unlimited_draft) snprintf(after, sizeof(after), "不限时");
     else format_duration(after_minutes, after, sizeof(after));
     format_status_age(model, freshness, sizeof(freshness));
-    if (entered_valid && model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
+    if (fresh && entered_valid && model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
         model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) {
         PtcEffectiveRule current_rule = ptc_ui_plan_rule(model, PTC_UI_PLAN_SAVED);
         PtcDayRule requested_rule = {unlimited_draft ? PTC_RULE_MODE_UNLIMITED : PTC_RULE_MODE_LIMIT, entered};
@@ -459,7 +461,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
 
     /* When in unlimited mode for today, replace keypad and adjuster with explanation panel */
     if (today_mode && unlimited_draft) {
-        UiRect panel = {dialog.x + 36, dialog.y + 116, 338, 360};
+        UiRect panel = {dialog.x + 36, dialog.y + 150, 338, 350};
         fill_round_rect(pixels, stride, panel, 16, UI_RGB(UI_BLENDED(surface_raised)));
         draw_rect_outline(pixels, stride, panel, 16, 1, UI_RGB(UI_BLENDED(border_control)));
         draw_text_center(pixels, stride, (UiRect){panel.x, panel.y + 36, panel.width, 32},
@@ -487,14 +489,14 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             if (model->duration_field == PTC_UI_DURATION_HOURS)
                 snprintf(step_hint, sizeof(step_hint), clock ? "每步 1 点" : "每步 1 小时");
             else snprintf(step_hint, sizeof(step_hint), clock ? "当前 ±%u分" : "当前 ±%u", (unsigned)model->duration_step_feedback);
-            draw_r_stick_axis_glyph(pixels, stride, dialog.x + 36, dialog.y + 98, 18,
+            draw_r_stick_axis_glyph(pixels, stride, dialog.x + 36, dialog.y + 132, 18,
                                     false, 0);
-            draw_text(pixels, stride, dialog.x + 60, dialog.y + 112, "左右 选栏", 13, UI_MUTED);
-            draw_text(pixels, stride, dialog.x + 128, dialog.y + 112, "|", 13, UI_CONTROL);
-            draw_r_stick_axis_glyph(pixels, stride, dialog.x + 142, dialog.y + 98, 18,
+            draw_text(pixels, stride, dialog.x + 60, dialog.y + 146, "左右 选栏", 13, UI_MUTED);
+            draw_text(pixels, stride, dialog.x + 128, dialog.y + 146, "|", 13, UI_CONTROL);
+            draw_r_stick_axis_glyph(pixels, stride, dialog.x + 142, dialog.y + 132, 18,
                                     true, model->duration_scroll_dir);
-            draw_text(pixels, stride, dialog.x + 166, dialog.y + 112, "上下 调整", 13, UI_MUTED);
-            draw_text(pixels, stride, dialog.x + 236, dialog.y + 112, step_hint, 13, UI_ACCENT);
+            draw_text(pixels, stride, dialog.x + 166, dialog.y + 146, "上下 调整", 13, UI_MUTED);
+            draw_text(pixels, stride, dialog.x + 236, dialog.y + 146, step_hint, 13, UI_ACCENT);
         }
 
         for (int field = 0; field < 2; ++field) {
@@ -519,7 +521,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         }
 
         {
-            UiRect total_box = {dialog.x + 36, dialog.y + 202, 338, 32};
+            UiRect total_box = {dialog.x + 36, dialog.y + 236, 338, 32};
             fill_round_rect(pixels, stride, total_box, 8, UI_RGB(UI_BLENDED(surface_raised)));
             draw_rect_outline(pixels, stride, total_box, 8, 1, UI_RGB(UI_BLENDED(border_control)));
             draw_text_center(pixels, stride, total_box, total_value, 16,
@@ -534,7 +536,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             draw_text_center(pixels, stride, key, KEY_LABELS[index], index == 9 || index == 11 ? 15 : 24,
                              selected ? UI_ACCENT : UI_INK);
         }
-        draw_text_center(pixels, stride, (UiRect){dialog.x + 36, dialog.y + 458, 338, 22},
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 36, dialog.y + 492, 338, 22},
                          model->numpad_error[0] ? model->numpad_error : "方向键与 A 输入数字，也可直接触摸",
                          14, model->numpad_error[0] ? UI_DANGER : UI_MUTED);
     }
@@ -599,7 +601,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             15, summary.width - 40, 24, 4, UI_MUTED);
     } else if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES) {
         draw_time_state_card(pixels, stride, (UiRect){summary.x, summary.y, summary.width, 76}, "额度已耗（估算）", played,
-                             model->played_minutes_available ? UI_ACCENT : UI_WARNING);
+                             fresh && model->played_minutes_available ? UI_ACCENT : UI_WARNING);
         if (quota_unchanged) {
             draw_unchanged_quota_card(pixels, stride,
                 (UiRect){summary.x, summary.y + 90, summary.width, 92},
@@ -607,7 +609,7 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         } else {
             char before_formula[64] = "";
             char after_formula[64] = "";
-            if (model->played_minutes_available && model->played_minutes >= 0) {
+            if (fresh && model->played_minutes_available && model->played_minutes >= 0) {
                 snprintf(before_formula, sizeof(before_formula), "今日已玩约 %d 分钟", model->played_minutes);
                 if (unlimited_draft) {
                     snprintf(after_formula, sizeof(after_formula), "不设每日额度上限");
@@ -618,18 +620,28 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             }
             draw_quota_transition_detailed(pixels, stride,
                 (UiRect){summary.x, summary.y + 90, summary.width, 92},
-                "当前剩余", ui_rule_source_label(model->rule_source),
+                "当前剩余", fresh ? ui_rule_source_label(model->rule_source) : "待确认",
                 remaining, before_formula,
-                time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
+                time_state_accent(fresh && (model->unrestricted_today == 1 || model->remaining_available),
                                   model->unrestricted_today == 1, model->remaining_minutes),
                 "操作后剩余", unlimited_draft ? "不限时模式" : "今日额度调整",
                 after, after_formula,
                 time_state_accent(unlimited_draft || after_minutes >= 0, unlimited_draft, after_minutes));
         }
-        draw_text_center(pixels, stride, (UiRect){summary.x, summary.y + 196, summary.width, 28}, freshness, 15,
-                         status_age_color(model));
+        if (today_mode) {
+            UiRect refresh = to_uirect(ptc_ui_today_limit_refresh_rect());
+            fill_round_rect(pixels, stride, refresh, 10, UI_ACCENT_SOFT);
+            draw_rect_outline(pixels, stride, refresh, 10, 1, UI_ACCENT);
+            draw_text_center(pixels, stride, refresh,
+                model->waiting ? "正在刷新主机状态" : "点按刷新最新状态  |  R3 刷新", 15, UI_ACCENT);
+        }
+        draw_text_center(pixels, stride, (UiRect){summary.x, summary.y + 248, summary.width, 26},
+                         model->quota_refresh_failed ? "刷新失败，请点按重试" :
+                         (fresh ? freshness : "状态待确认，请刷新"), 15,
+                         model->quota_refresh_failed ? UI_DANGER : (fresh ? status_age_color(model) : UI_WARNING));
     }
 
     draw_overlay_actions(pixels, stride, model,
-        today_mode && unlimited_draft ? "A / +  确认今天不限时" : "+  完成输入");
+        today_mode && unlimited_draft ? "A / +  确认今天不限时" :
+        (today_mode ? "+  保存今日总额度" : "+  完成输入"));
 }

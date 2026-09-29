@@ -56,8 +56,7 @@ bool ptc_ui_limit_minutes_would_restrict(const PtcUiModel *model, uint16_t minut
 
 bool ptc_ui_today_limit_requires_hold(const PtcUiModel *model, uint16_t minutes)
 {
-    return model && (model->unrestricted_today == 1 ||
-        !model->played_minutes_available || model->played_minutes < 0 ||
+    return model && (!model->played_minutes_available || model->played_minutes < 0 ||
         ptc_ui_limit_minutes_would_restrict(model, minutes));
 }
 
@@ -141,13 +140,17 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
         ptc_ui_numpad_finish(model);
     } else if (model->overlay == PTC_UI_OVERLAY_CONFIRM &&
                model->confirm_return_overlay != PTC_UI_OVERLAY_NONE) {
+        bool return_to_today_limit = model->confirm_return_overlay == PTC_UI_OVERLAY_MINUTE_EDITOR &&
+            (model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT ||
+             model->operation == PTC_UI_OPERATION_DISABLE_TODAY_LIMIT);
         model->overlay = model->confirm_return_overlay;
         model->confirm_return_overlay = PTC_UI_OVERLAY_NONE;
         snprintf(model->overlay_title, sizeof(model->overlay_title), "%s", model->confirm_return_title);
         snprintf(model->overlay_body, sizeof(model->overlay_body), "%s", model->confirm_return_body);
         model->confirm_return_title[0] = '\0';
         model->confirm_return_body[0] = '\0';
-        model->operation = PTC_UI_OPERATION_NONE;
+        model->operation = return_to_today_limit
+            ? PTC_UI_OPERATION_SET_TODAY_LIMIT : PTC_UI_OPERATION_NONE;
         model->confirm_hold_required = false;
     } else if (model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
         model->overlay = PTC_UI_OVERLAY_CREDENTIAL;
