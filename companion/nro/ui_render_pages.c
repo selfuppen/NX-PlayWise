@@ -783,18 +783,15 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_notice(pixels, stride, model);
     }
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0),
-                       plan_subpage ? "" : "L  上一页");
+                       "L  上一页");
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1),
-                       plan_subpage ? "" : "R  下一页");
-    draw_footer_button(pixels, stride,
-                       plan_subpage ? ptc_ui_parent_subpage_footer_rect(0) : ptc_ui_parent_footer_rect(2),
+                       "R  下一页");
+    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(2),
                        plan_subpage ? "B  返回计划" : "B  返回孩子页");
-    draw_footer_button(pixels, stride,
-                       plan_subpage ? ptc_ui_parent_subpage_footer_rect(1) : ptc_ui_parent_footer_rect(3),
+    draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(3),
                        "Y  刷新");
     if (model->parent_footer_focused && model->parent_footer_selection == 0) {
-        draw_rect_outline(pixels, stride, to_uirect(
-            plan_subpage ? ptc_ui_parent_subpage_footer_rect(1) : ptc_ui_parent_footer_rect(3)),
+        draw_rect_outline(pixels, stride, to_uirect(ptc_ui_parent_footer_rect(3)),
             12, 3, UI_ACCENT);
     }
     if (!ptc_ui_operation_feedback_visible(model)) {

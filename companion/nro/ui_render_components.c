@@ -131,6 +131,69 @@ void draw_transition_arrow(
     draw_line(pixels, stride, cx + 8, cy, cx + 3, cy + 5, 2, color);
 }
 
+void draw_quota_metric_card(
+    uint32_t *pixels, uint32_t stride, UiRect rect,
+    const char *label, const char *source_badge,
+    const char *value, const char *formula, uint32_t accent)
+{
+    fill_round_rect(pixels, stride, rect, 16, UI_RGB(UI_BLENDED(surface_raised)));
+    draw_rect_outline(pixels, stride, rect, 16, 1, UI_RGB(UI_BLENDED(border_control)));
+
+    int top_y = rect.y + 10;
+    if (source_badge && source_badge[0]) {
+        char title_line[96];
+        snprintf(title_line, sizeof(title_line), "%s (%s)", label, source_badge);
+        draw_text_center(pixels, stride, (UiRect){rect.x + 8, top_y, rect.width - 16, 20},
+                         title_line, 14, UI_MUTED);
+    } else {
+        draw_text_center(pixels, stride, (UiRect){rect.x + 8, top_y, rect.width - 16, 20},
+                         label, 15, UI_MUTED);
+    }
+
+    int mid_y = rect.y + 32;
+    int val_size = 23;
+    while (val_size > 17 && measure_text(value, val_size) > rect.width - 16) --val_size;
+    draw_text_center(pixels, stride, (UiRect){rect.x + 8, mid_y, rect.width - 16, 32},
+                     value, val_size, accent);
+
+    if (formula && formula[0]) {
+        int bot_y = rect.y + rect.height - 24;
+        char fitted_formula[96];
+        fit_text(fitted_formula, sizeof(fitted_formula), formula, 12, rect.width - 16);
+        draw_text_center(pixels, stride, (UiRect){rect.x + 8, bot_y, rect.width - 16, 18},
+                         fitted_formula, 12, UI_MUTED);
+    }
+}
+
+void draw_quota_transition_detailed(
+    uint32_t *pixels,
+    uint32_t stride,
+    UiRect rect,
+    const char *before_label,
+    const char *before_source,
+    const char *before_value,
+    const char *before_formula,
+    uint32_t before_accent,
+    const char *after_label,
+    const char *after_source,
+    const char *after_value,
+    const char *after_formula,
+    uint32_t after_accent)
+{
+    int arrow_width = rect.width >= 500 ? 52 : 34;
+    int card_width = (rect.width - arrow_width) / 2;
+    UiRect before = {rect.x, rect.y, card_width, rect.height};
+    UiRect after = {rect.x + card_width + arrow_width, rect.y,
+                    rect.width - card_width - arrow_width, rect.height};
+    draw_quota_metric_card(pixels, stride, before, before_label, before_source,
+                           before_value, before_formula, before_accent);
+    draw_transition_arrow(pixels, stride,
+        before.x + before.width + arrow_width / 2,
+        rect.y + rect.height / 2, UI_MUTED);
+    draw_quota_metric_card(pixels, stride, after, after_label, after_source,
+                           after_value, after_formula, after_accent);
+}
+
 void draw_remaining_transition(
     uint32_t *pixels,
     uint32_t stride,
@@ -142,16 +205,9 @@ void draw_remaining_transition(
     const char *after_value,
     uint32_t after_accent)
 {
-    int arrow_width = rect.width >= 500 ? 52 : 34;
-    int card_width = (rect.width - arrow_width) / 2;
-    UiRect before = {rect.x, rect.y, card_width, rect.height};
-    UiRect after = {rect.x + card_width + arrow_width, rect.y,
-                    rect.width - card_width - arrow_width, rect.height};
-    draw_time_state_card(pixels, stride, before, before_label, before_value, before_accent);
-    draw_transition_arrow(pixels, stride,
-        before.x + before.width + arrow_width / 2,
-        rect.y + rect.height / 2, UI_MUTED);
-    draw_time_state_card(pixels, stride, after, after_label, after_value, after_accent);
+    draw_quota_transition_detailed(pixels, stride, rect,
+        before_label, NULL, before_value, NULL, before_accent,
+        after_label, NULL, after_value, NULL, after_accent);
 }
 
 void draw_unchanged_quota_card(

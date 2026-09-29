@@ -303,15 +303,23 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
             !model->code_preview_converts_unlimited && model->code_effective_add_minutes == 0;
         if (code_keeps_quota) {
             draw_unchanged_quota_card(pixels, stride,
-                (UiRect){dialog.x + 54, dialog.y + 142, 652, 104},
+                (UiRect){dialog.x + 54, dialog.y + 142, 652, 100},
                 "已达到每日额度上限，本次兑换不会增加今天额度。");
         } else {
-            draw_remaining_transition(pixels, stride,
-                (UiRect){dialog.x + 54, dialog.y + 142, 652, 104},
-                "当前剩余", current_value,
+            char before_formula[64] = "";
+            char after_formula[64] = "";
+            if (fresh && model->played_minutes_available) {
+                snprintf(before_formula, sizeof(before_formula), "今日已玩 %d 分钟", model->played_minutes);
+            }
+            snprintf(after_formula, sizeof(after_formula), "当前剩余 + %d 分钟", model->code_grant_minutes);
+            draw_quota_transition_detailed(pixels, stride,
+                (UiRect){dialog.x + 54, dialog.y + 142, 652, 100},
+                "当前剩余", fresh ? ui_rule_source_label(model->rule_source) : "待确认",
+                current_value, before_formula,
                 time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
                                   model->unrestricted_today == 1, model->remaining_minutes),
-                "操作后剩余", after_value,
+                "操作后剩余", "加时码兑换",
+                after_value, after_formula,
                 time_state_accent(model->code_preview_after_available, false,
                                   model->code_preview_after_minutes));
         }
@@ -336,15 +344,29 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         restore_keeps_quota = !ptc_ui_day_rule_effectively_changed(current, after);
         if (restore_keeps_quota) {
             draw_unchanged_quota_card(pixels, stride,
-                (UiRect){dialog.x + 54, dialog.y + 142, 652, 104},
+                (UiRect){dialog.x + 54, dialog.y + 142, 652, 100},
                 "清除后继续采用相同额度的下级规则，仅规则来源变化。");
         } else {
-            draw_remaining_transition(pixels, stride,
-                (UiRect){dialog.x + 54, dialog.y + 142, 652, 104},
-                "当前剩余", current_value,
+            char before_formula[64] = "";
+            char after_formula[64] = "";
+            if (fresh && current.mode == PTC_RULE_MODE_LIMIT && model->played_minutes_available) {
+                snprintf(before_formula, sizeof(before_formula), "总额 %u分 - 已玩 %d分",
+                         (unsigned int)current.minutes, model->played_minutes);
+            }
+            if (fresh && after.mode == PTC_RULE_MODE_LIMIT && model->played_minutes_available) {
+                snprintf(after_formula, sizeof(after_formula), "下级 %u分 - 已玩 %d分",
+                         (unsigned int)after.minutes, model->played_minutes);
+            } else if (after.mode == PTC_RULE_MODE_UNLIMITED) {
+                snprintf(after_formula, sizeof(after_formula), "不设每日额度上限");
+            }
+            draw_quota_transition_detailed(pixels, stride,
+                (UiRect){dialog.x + 54, dialog.y + 142, 652, 100},
+                "当前剩余", fresh ? ui_rule_source_label(model->rule_source) : "待确认",
+                current_value, before_formula,
                 time_state_accent(current.mode == PTC_RULE_MODE_UNLIMITED || current_minutes >= 0,
                                   current.mode == PTC_RULE_MODE_UNLIMITED, current_minutes),
-                "操作后剩余", after_value,
+                "清除后剩余", fresh ? ptc_ui_effective_rule_label(restored.source) : "待确认",
+                after_value, after_formula,
                 time_state_accent(after.mode == PTC_RULE_MODE_UNLIMITED || after_minutes >= 0,
                                   after.mode == PTC_RULE_MODE_UNLIMITED, after_minutes));
         }
@@ -361,15 +383,24 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         limit_keeps_quota = !ptc_ui_day_rule_effectively_changed(current_rule.rule, requested_rule);
         if (limit_keeps_quota) {
             draw_unchanged_quota_card(pixels, stride,
-                (UiRect){dialog.x + 54, dialog.y + 142, 652, 104},
+                (UiRect){dialog.x + 54, dialog.y + 142, 652, 100},
                 "输入值与当前额度相同，仅建立相同额度的今日调整。");
         } else {
-            draw_remaining_transition(pixels, stride,
-                (UiRect){dialog.x + 54, dialog.y + 142, 652, 104},
-                "当前剩余", current_value,
+            char before_formula[64] = "";
+            char after_formula[64] = "";
+            if (fresh && model->played_minutes_available) {
+                snprintf(before_formula, sizeof(before_formula), "今日已玩 %d 分钟", model->played_minutes);
+                snprintf(after_formula, sizeof(after_formula), "新总额 %u分 - 已玩 %d分",
+                         (unsigned int)model->draft_minutes, model->played_minutes);
+            }
+            draw_quota_transition_detailed(pixels, stride,
+                (UiRect){dialog.x + 54, dialog.y + 142, 652, 100},
+                "当前剩余", fresh ? ui_rule_source_label(model->rule_source) : "待确认",
+                current_value, before_formula,
                 time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
                                   model->unrestricted_today == 1, model->remaining_minutes),
-                "操作后剩余", after_value,
+                "操作后剩余", "今日额度调整",
+                after_value, after_formula,
                 time_state_accent(after_minutes >= 0, false, after_minutes));
         }
     } else if (direct_quota_change) {
@@ -385,15 +416,27 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
             model->remaining_available && after_minutes == model->remaining_minutes;
         if (direct_keeps_quota) {
             draw_unchanged_quota_card(pixels, stride,
-                (UiRect){dialog.x + 54, dialog.y + 142, 652, 104},
+                (UiRect){dialog.x + 54, dialog.y + 142, 652, 100},
                 "已达到每日额度上限，本次加时不会增加今天额度。");
         } else {
-            draw_remaining_transition(pixels, stride,
-                (UiRect){dialog.x + 54, dialog.y + 142, 652, 104},
-                "当前剩余", current_value,
+            char before_formula[64] = "";
+            char after_formula[64] = "";
+            if (fresh && model->played_minutes_available) {
+                snprintf(before_formula, sizeof(before_formula), "今日已玩 %d 分钟", model->played_minutes);
+            }
+            if (unlimited_change) {
+                snprintf(after_formula, sizeof(after_formula), "不设每日额度上限");
+            } else if (add_change) {
+                snprintf(after_formula, sizeof(after_formula), "当前剩余 + 快捷增加");
+            }
+            draw_quota_transition_detailed(pixels, stride,
+                (UiRect){dialog.x + 54, dialog.y + 142, 652, 100},
+                "当前剩余", fresh ? ui_rule_source_label(model->rule_source) : "待确认",
+                current_value, before_formula,
                 time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
                                   model->unrestricted_today == 1, model->remaining_minutes),
-                "操作后剩余", after_value,
+                "操作后剩余", unlimited_change ? "不限时调整" : "快速加时",
+                after_value, after_formula,
                 time_state_accent(unlimited_change || after_minutes >= 0,
                                   unlimited_change, after_minutes));
         }
@@ -418,31 +461,6 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 226, 652, 34}, comparison, 25, UI_DANGER);
         draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 264, 652, 34},
                          "新额度不高于额度消耗估算，保存后会马上限制儿童使用", 20, UI_DANGER);
-    }
-    if ((restore || limit_change || code_preview || direct_quota_change) &&
-        !restore_keeps_quota && !limit_keeps_quota && !code_keeps_quota && !direct_keeps_quota) {
-        UiRect left = {dialog.x + 54, dialog.y + 217, 300, 14};
-        UiRect right = {dialog.x + 406, dialog.y + 217, 300, 14};
-        char source_note[80];
-        char after_note[80];
-        snprintf(source_note, sizeof(source_note), "%s", fresh ? ui_rule_source_label(model->rule_source) :
-                 "来源待刷新确认");
-        snprintf(after_note, sizeof(after_note), "%s", !fresh ? "来源待刷新确认" :
-                 restore ? ptc_ui_effective_rule_label(ptc_ui_rule_after_today_restore(model).source) :
-                 code_preview ? "加时码兑换" : "今日额度调整");
-        draw_text_center(pixels, stride, left, source_note, 11, UI_MUTED);
-        draw_text_center(pixels, stride, right, after_note, 11, UI_MUTED);
-        if (fresh && model->played_minutes_available) {
-            char used[48];
-            snprintf(used, sizeof(used), "已耗约 %d 分钟", model->played_minutes);
-            draw_text_center(pixels, stride, (UiRect){left.x, left.y + 14, left.width, 13}, used, 11, UI_MUTED);
-        }
-        draw_text_center(pixels, stride, (UiRect){right.x, right.y + 14, right.width, 13},
-                         restore ? "预计：下级总额减已耗" :
-                         limit_change ? "预计：今日总额减已耗" :
-                         add_change ? "预计：当前剩余加本次时长" :
-                         unlimited_change ? "预计：今天不设额度上限" : "预计：以后端结果为准",
-                         11, UI_MUTED);
     }
     if (restore || limit_change || code_preview || direct_quota_change) {
         uint32_t impact_background = (limit_keeps_quota || restore_keeps_quota)

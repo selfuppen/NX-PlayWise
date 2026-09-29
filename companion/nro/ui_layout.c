@@ -238,28 +238,28 @@ PtcUiRect ptc_ui_forecast_day_row_rect(int index)
 PtcUiRect ptc_ui_bedtime_section_rect(int index)
 {
     if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){54 + index * 250, 172, 230, 44};
+    return (PtcUiRect){54 + index * 240, 230, 224, 38};
 }
 
 PtcUiRect ptc_ui_bedtime_field_rect(int section, int index)
 {
     if (section == PTC_UI_BEDTIME_WEEKLY) {
-        if (index >= 0 && index < 7) return (PtcUiRect){54 + index * 108, 230, 96, 192};
-        if (index >= 7 && index <= 10) return (PtcUiRect){54 + (index - 7) * 188, 436, 176, 52};
+        if (index >= 0 && index < 7) return (PtcUiRect){54 + index * 108, 276, 96, 186};
+        if (index >= 7 && index <= 10) return (PtcUiRect){54 + (index - 7) * 188, 470, 176, 50};
     } else if (section == PTC_UI_BEDTIME_CALENDAR) {
-        if (index == 0) return (PtcUiRect){54, 234, 752, 76};
-        if (index == 1 || index == 2) return (PtcUiRect){54 + (index - 1) * 376, 326, 364, 126};
-        if (index == 3 || index == 4) return (PtcUiRect){430 + (index - 3) * 188, 468, 176, 56};
+        if (index == 0) return (PtcUiRect){54, 276, 752, 68};
+        if (index == 1 || index == 2) return (PtcUiRect){54 + (index - 1) * 376, 352, 364, 110};
+        if (index == 3 || index == 4) return (PtcUiRect){430 + (index - 3) * 188, 470, 176, 50};
     } else if (section == PTC_UI_BEDTIME_SCHEDULED) {
-        if (index >= 0 && index < 4) return (PtcUiRect){54, 234 + index * 68, 752, 58};
-        if (index == 4 || index == 5) return (PtcUiRect){430 + (index - 4) * 188, 520, 176, 56};
+        if (index >= 0 && index < 4) return (PtcUiRect){54, 276 + index * 60, 752, 52};
+        if (index == 4 || index == 5) return (PtcUiRect){430 + (index - 4) * 188, 492, 176, 50};
     }
     return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_bedtime_master_switch_rect(void)
 {
-    return (PtcUiRect){838, 172, 388, 82};
+    return (PtcUiRect){54, 168, 1172, 54};
 }
 
 PtcUiRect ptc_ui_bedtime_overlay_field_rect(PtcUiOverlay overlay, int index)
@@ -312,15 +312,19 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
         (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR ? 5 : 6);
 
     if (model->bedtime_master_focused) {
-        if (horizontal < 0) model->bedtime_section_focused = true;
-        else if (vertical > 0) model->bedtime_section_focused = false;
-        else return;
-        model->bedtime_master_focused = false;
-        if (vertical > 0) model->selected_index = 0;
+        if (horizontal < 0 || vertical > 0) {
+            model->bedtime_master_focused = false;
+            model->bedtime_section_focused = true;
+        }
         return;
     }
 
     if (model->bedtime_section_focused) {
+        if (vertical < 0) {
+            model->bedtime_section_focused = false;
+            model->bedtime_master_focused = true;
+            return;
+        }
         if (horizontal != 0) {
             int next = (int)model->bedtime_section + (horizontal > 0 ? 1 : -1);
             if (next >= PTC_UI_BEDTIME_WEEKLY && next <= PTC_UI_BEDTIME_SCHEDULED) {
@@ -405,10 +409,6 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
         }
     }
 
-    if (horizontal > 0 && best_index < 0 && current_x > 600 && current_y < 440) {
-        model->bedtime_master_focused = true;
-        return;
-    }
     if (best_index >= 0) model->selected_index = best_index;
     else if (best_index == -2) model->bedtime_section_focused = true;
 }
@@ -1051,7 +1051,8 @@ PtcUiRect ptc_ui_today_mode_rect(int index)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_MINUTE_EDITOR);
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){dialog.x + 414 + index * 239, dialog.y + 410, 231, 38};
+    int w = 848;
+    return (PtcUiRect){dialog.x + 36 + 4 + index * ((w - 8) / 2), dialog.y + 56 + 4, (w - 8) / 2, 36};
 }
 
 PtcUiRect ptc_ui_quota_refresh_rect(void)

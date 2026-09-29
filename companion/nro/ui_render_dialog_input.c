@@ -394,14 +394,22 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
     bool quota_unchanged = false;
     draw_dialog_shell(pixels, stride, model, &dialog, 920, 620);
     if (today_mode) {
-        draw_text(pixels, stride, dialog.x + 414, dialog.y + 394,
-                  "今日模式", 15, UI_MUTED);
+        UiRect tab_bg = {dialog.x + 36, dialog.y + 56, 848, 42};
+        fill_round_rect(pixels, stride, tab_bg, 12, UI_RGB(UI_BLENDED(surface_raised)));
+        draw_rect_outline(pixels, stride, tab_bg, 12, 1, UI_RGB(UI_BLENDED(border_control)));
         for (int mode = 0; mode < 2; ++mode) {
             UiRect mode_rect = to_uirect(ptc_ui_today_mode_rect(mode));
             bool selected = (mode == 1) == unlimited_draft;
-            fill_round_rect(pixels, stride, mode_rect, 9, selected ? UI_ACCENT : UI_RAISED);
-            draw_text_center(pixels, stride, mode_rect, mode == 0 ? "ZL 限时" : "ZR 不限时",
-                             17, selected ? UI_ON_ACCENT : UI_INK);
+            if (selected) {
+                fill_round_rect(pixels, stride, mode_rect, 9, UI_ACCENT);
+                draw_text_center(pixels, stride, mode_rect,
+                                 mode == 0 ? "⏱️ 限时模式 (自定义今日额度)" : "♾️ 不限时模式 (全天自由游玩)",
+                                 16, UI_ON_ACCENT);
+            } else {
+                draw_text_center(pixels, stride, mode_rect,
+                                 mode == 0 ? "⏱️ 限时模式" : "♾️ 不限时模式",
+                                 15, UI_MUTED);
+            }
         }
     }
     if (entered_valid) {
@@ -449,50 +457,86 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
         quota_unchanged = !ptc_ui_day_rule_effectively_changed(current_rule.rule, requested_rule);
     }
 
-    /* Keep the editable value and keypad in one continuous left
-     * column (338px). The right column (470px) is reserved for consequences and validation. */
-    {
-        char step_hint[32];
-        if (model->duration_field == PTC_UI_DURATION_HOURS)
-            snprintf(step_hint, sizeof(step_hint), clock ? "每步 1 点" : "每步 1 小时");
-        else snprintf(step_hint, sizeof(step_hint), clock ? "当前 ±%u分" : "当前 ±%u", (unsigned)model->duration_step_feedback);
-        draw_r_stick_axis_glyph(pixels, stride, dialog.x + 36, dialog.y + 98, 18,
-                                false, 0);
-        draw_text(pixels, stride, dialog.x + 60, dialog.y + 112, "左右 选栏", 13, UI_MUTED);
-        draw_text(pixels, stride, dialog.x + 128, dialog.y + 112, "|", 13, UI_CONTROL);
-        draw_r_stick_axis_glyph(pixels, stride, dialog.x + 142, dialog.y + 98, 18,
-                                true, model->duration_scroll_dir);
-        draw_text(pixels, stride, dialog.x + 166, dialog.y + 112, "上下 调整", 13, UI_MUTED);
-        draw_text(pixels, stride, dialog.x + 236, dialog.y + 112, step_hint, 13, UI_ACCENT);
-    }
+    /* When in unlimited mode for today, replace keypad and adjuster with explanation panel */
+    if (today_mode && unlimited_draft) {
+        UiRect panel = {dialog.x + 36, dialog.y + 116, 338, 360};
+        fill_round_rect(pixels, stride, panel, 16, UI_RGB(UI_BLENDED(surface_raised)));
+        draw_rect_outline(pixels, stride, panel, 16, 1, UI_RGB(UI_BLENDED(border_control)));
+        draw_text_center(pixels, stride, (UiRect){panel.x, panel.y + 36, panel.width, 32},
+                         "♾️ 今日不限时模式", 22, UI_SUCCESS);
+        draw_text_center(pixels, stride, (UiRect){panel.x, panel.y + 78, panel.width, 22},
+                         "全天自由游玩，不设每日额度上限", 14, UI_MUTED);
 
-    for (int field = 0; field < 2; ++field) {
-        UiRect rect = to_uirect(ptc_ui_minute_editor_field_rect((PtcUiDurationField)field));
-        bool selected = model->duration_field == (PtcUiDurationField)field;
-        fill_round_rect(pixels, stride, rect, 14, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, rect, 14, selected ? 2 : 1, selected ? UI_ACCENT : UI_CONTROL);
+        UiRect tip = {panel.x + 18, panel.y + 120, panel.width - 36, 126};
+        fill_round_rect(pixels, stride, tip, 12, UI_RGB(UI_BLENDED(surface)));
+        draw_rect_outline(pixels, stride, tip, 12, 1, UI_RGB(UI_BLENDED(border_control)));
+        draw_text(pixels, stride, tip.x + 16, tip.y + 24, "生效与保护机制", 15, UI_RGB(UI_BLENDED(text_primary)));
+        draw_text(pixels, stride, tip.x + 16, tip.y + 50, "• 仅影响今天，次日自动恢复常规周计划", 13, UI_MUTED);
+        draw_text(pixels, stride, tip.x + 16, tip.y + 74, "• 就寝时间仍独立生效，到点强制锁机休息", 13, UI_MUTED);
+        draw_text(pixels, stride, tip.x + 16, tip.y + 98, "• 随时可在今日调度页面重新设回限时", 13, UI_MUTED);
 
-        draw_text_center(pixels, stride, rect,
-                         field == PTC_UI_DURATION_HOURS ? hours_value : minutes_value,
-                         24, selected ? UI_ACCENT : UI_INK);
-
-        if (selected) {
-            int arrow_cx = rect.x + rect.width / 2;
-            bool up_active = model->duration_scroll_anim_ticks > 0 && model->duration_scroll_dir > 0;
-            bool down_active = model->duration_scroll_anim_ticks > 0 && model->duration_scroll_dir < 0;
-            draw_arrow_glyph(pixels, stride, arrow_cx, rect.y - 7 + (up_active ? -2 : 0), true,
-                             up_active ? UI_ACCENT : UI_MUTED);
-            draw_arrow_glyph(pixels, stride, arrow_cx, rect.y + rect.height + 7 + (down_active ? 2 : 0), false,
-                             down_active ? UI_ACCENT : UI_MUTED);
+        draw_text_center(pixels, stride, (UiRect){panel.x, panel.y + 276, panel.width, 24},
+                         "按 A 或 + 确认将今天设为不限时", 15, UI_ACCENT);
+        draw_text_center(pixels, stride, (UiRect){panel.x, panel.y + 308, panel.width, 20},
+                         "按 X 或触屏上方可切回限时模式", 13, UI_MUTED);
+    } else {
+        /* Keep the editable value and keypad in one continuous left
+         * column (338px). The right column (470px) is reserved for consequences and validation. */
+        {
+            char step_hint[32];
+            if (model->duration_field == PTC_UI_DURATION_HOURS)
+                snprintf(step_hint, sizeof(step_hint), clock ? "每步 1 点" : "每步 1 小时");
+            else snprintf(step_hint, sizeof(step_hint), clock ? "当前 ±%u分" : "当前 ±%u", (unsigned)model->duration_step_feedback);
+            draw_r_stick_axis_glyph(pixels, stride, dialog.x + 36, dialog.y + 98, 18,
+                                    false, 0);
+            draw_text(pixels, stride, dialog.x + 60, dialog.y + 112, "左右 选栏", 13, UI_MUTED);
+            draw_text(pixels, stride, dialog.x + 128, dialog.y + 112, "|", 13, UI_CONTROL);
+            draw_r_stick_axis_glyph(pixels, stride, dialog.x + 142, dialog.y + 98, 18,
+                                    true, model->duration_scroll_dir);
+            draw_text(pixels, stride, dialog.x + 166, dialog.y + 112, "上下 调整", 13, UI_MUTED);
+            draw_text(pixels, stride, dialog.x + 236, dialog.y + 112, step_hint, 13, UI_ACCENT);
         }
-    }
 
-    {
-        UiRect total_box = {dialog.x + 36, dialog.y + 202, 338, 32};
-        fill_round_rect(pixels, stride, total_box, 8, UI_RGB(UI_BLENDED(surface_raised)));
-        draw_rect_outline(pixels, stride, total_box, 8, 1, UI_RGB(UI_BLENDED(border_control)));
-        draw_text_center(pixels, stride, total_box, total_value, 16,
-                         entered_valid ? UI_ACCENT : UI_DANGER);
+        for (int field = 0; field < 2; ++field) {
+            UiRect rect = to_uirect(ptc_ui_minute_editor_field_rect((PtcUiDurationField)field));
+            bool selected = model->duration_field == (PtcUiDurationField)field;
+            fill_round_rect(pixels, stride, rect, 14, selected ? UI_ACCENT_SOFT : UI_RAISED);
+            draw_rect_outline(pixels, stride, rect, 14, selected ? 2 : 1, selected ? UI_ACCENT : UI_CONTROL);
+
+            draw_text_center(pixels, stride, rect,
+                             field == PTC_UI_DURATION_HOURS ? hours_value : minutes_value,
+                             24, selected ? UI_ACCENT : UI_INK);
+
+            if (selected) {
+                int arrow_cx = rect.x + rect.width / 2;
+                bool up_active = model->duration_scroll_anim_ticks > 0 && model->duration_scroll_dir > 0;
+                bool down_active = model->duration_scroll_anim_ticks > 0 && model->duration_scroll_dir < 0;
+                draw_arrow_glyph(pixels, stride, arrow_cx, rect.y - 7 + (up_active ? -2 : 0), true,
+                                 up_active ? UI_ACCENT : UI_MUTED);
+                draw_arrow_glyph(pixels, stride, arrow_cx, rect.y + rect.height + 7 + (down_active ? 2 : 0), false,
+                                 down_active ? UI_ACCENT : UI_MUTED);
+            }
+        }
+
+        {
+            UiRect total_box = {dialog.x + 36, dialog.y + 202, 338, 32};
+            fill_round_rect(pixels, stride, total_box, 8, UI_RGB(UI_BLENDED(surface_raised)));
+            draw_rect_outline(pixels, stride, total_box, 8, 1, UI_RGB(UI_BLENDED(border_control)));
+            draw_text_center(pixels, stride, total_box, total_value, 16,
+                             entered_valid ? UI_ACCENT : UI_DANGER);
+        }
+
+        for (int index = 0; index < 12; ++index) {
+            UiRect key = to_uirect(ptc_ui_minute_editor_key_rect(index));
+            bool selected = index == model->numpad_cursor;
+            fill_round_rect(pixels, stride, key, 10, selected ? UI_ACCENT_SOFT : UI_RAISED);
+            draw_rect_outline(pixels, stride, key, 10, selected ? 2 : 1, selected ? UI_ACCENT : UI_CONTROL);
+            draw_text_center(pixels, stride, key, KEY_LABELS[index], index == 9 || index == 11 ? 15 : 24,
+                             selected ? UI_ACCENT : UI_INK);
+        }
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 36, dialog.y + 458, 338, 22},
+                         model->numpad_error[0] ? model->numpad_error : "方向键与 A 输入数字，也可直接触摸",
+                         14, model->numpad_error[0] ? UI_DANGER : UI_MUTED);
     }
 
     UiRect summary = to_uirect(ptc_ui_minute_editor_summary_rect());
@@ -558,33 +602,34 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
                              model->played_minutes_available ? UI_ACCENT : UI_WARNING);
         if (quota_unchanged) {
             draw_unchanged_quota_card(pixels, stride,
-                (UiRect){summary.x, summary.y + 90, summary.width, 84},
+                (UiRect){summary.x, summary.y + 90, summary.width, 92},
                 unlimited_draft ? "今天已经不限时，额度不会变化。" : "输入值与当前今日额度相同。");
         } else {
-            draw_remaining_transition(pixels, stride,
-                (UiRect){summary.x, summary.y + 90, summary.width, 84},
-                "当前剩余", remaining,
+            char before_formula[64] = "";
+            char after_formula[64] = "";
+            if (model->played_minutes_available && model->played_minutes >= 0) {
+                snprintf(before_formula, sizeof(before_formula), "今日已玩约 %d 分钟", model->played_minutes);
+                if (unlimited_draft) {
+                    snprintf(after_formula, sizeof(after_formula), "不设每日额度上限");
+                } else if (entered_valid) {
+                    snprintf(after_formula, sizeof(after_formula), "输入 %u分 - 已玩 %d分",
+                             (unsigned int)entered, model->played_minutes);
+                }
+            }
+            draw_quota_transition_detailed(pixels, stride,
+                (UiRect){summary.x, summary.y + 90, summary.width, 92},
+                "当前剩余", ui_rule_source_label(model->rule_source),
+                remaining, before_formula,
                 time_state_accent(model->unrestricted_today == 1 || model->remaining_available,
                                   model->unrestricted_today == 1, model->remaining_minutes),
-                "操作后剩余", after,
+                "操作后剩余", unlimited_draft ? "不限时模式" : "今日额度调整",
+                after, after_formula,
                 time_state_accent(unlimited_draft || after_minutes >= 0, unlimited_draft, after_minutes));
         }
-        draw_text_center(pixels, stride, (UiRect){summary.x, summary.y + 192, summary.width, 28}, freshness, 15,
+        draw_text_center(pixels, stride, (UiRect){summary.x, summary.y + 196, summary.width, 28}, freshness, 15,
                          status_age_color(model));
     }
 
-    for (int index = 0; index < 12; ++index) {
-        UiRect key = to_uirect(ptc_ui_minute_editor_key_rect(index));
-        bool selected = !unlimited_draft && index == model->numpad_cursor;
-        fill_round_rect(pixels, stride, key, 10, selected ? UI_ACCENT_SOFT : UI_RAISED);
-        draw_rect_outline(pixels, stride, key, 10, selected ? 2 : 1, selected ? UI_ACCENT : UI_CONTROL);
-        draw_text_center(pixels, stride, key, KEY_LABELS[index], index == 9 || index == 11 ? 15 : 24,
-                         unlimited_draft ? UI_MUTED : (selected ? UI_ACCENT : UI_INK));
-    }
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 36, dialog.y + 458, 338, 22},
-                     model->numpad_error[0] ? model->numpad_error :
-                         (unlimited_draft ? "不限时模式，无需输入分钟数" : "方向键与 A 输入数字，也可直接触摸"),
-                     model->numpad_error[0] ? 14 : 14,
-                     model->numpad_error[0] ? UI_DANGER : UI_MUTED);
-    draw_overlay_actions(pixels, stride, model, "+  完成输入");
+    draw_overlay_actions(pixels, stride, model,
+        today_mode && unlimited_draft ? "A / +  确认今天不限时" : "+  完成输入");
 }

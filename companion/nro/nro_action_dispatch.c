@@ -526,10 +526,9 @@ void confirm_operation(UiState *ui)
     }
     case PTC_UI_OPERATION_SET_TODAY_LIMIT:
         if (!held_danger_confirmation &&
-            (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
-             ptc_ui_today_limit_requires_hold(&ui->model, ui->model.draft_minutes))) {
-            open_danger_confirm_overlay(ui, operation, "设置后可能立即限制",
-                "当前额度消耗估算或状态已变化，请长按确认。");
+            ptc_ui_limit_minutes_would_restrict(&ui->model, ui->model.draft_minutes)) {
+            open_danger_confirm_overlay(ui, operation, "设置后会立即限制",
+                "新额度不高于当前已耗时间，请长按确认。");
             break;
         }
         submit_minutes(ui, operation, ui->model.draft_minutes);

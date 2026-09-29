@@ -198,6 +198,10 @@ void format_status_age(const PtcUiModel *model, char *out, size_t out_size);
 void format_duration(int minutes, char *out, size_t out_size);
 void draw_time_state_card(uint32_t *pixels, uint32_t stride, UiRect rect,
                           const char *label, const char *value, uint32_t accent);
+void draw_quota_metric_card(
+    uint32_t *pixels, uint32_t stride, UiRect rect,
+    const char *label, const char *source_badge,
+    const char *value, const char *formula, uint32_t accent);
 void draw_transition_arrow(
     uint32_t *pixels, uint32_t stride, int cx, int cy, uint32_t color);
 void draw_remaining_transition(
@@ -209,6 +213,20 @@ void draw_remaining_transition(
     uint32_t before_accent,
     const char *after_label,
     const char *after_value,
+    uint32_t after_accent);
+void draw_quota_transition_detailed(
+    uint32_t *pixels,
+    uint32_t stride,
+    UiRect rect,
+    const char *before_label,
+    const char *before_source,
+    const char *before_value,
+    const char *before_formula,
+    uint32_t before_accent,
+    const char *after_label,
+    const char *after_source,
+    const char *after_value,
+    const char *after_formula,
     uint32_t after_accent);
 void draw_unchanged_quota_card(
     uint32_t *pixels, uint32_t stride, UiRect rect, const char *reason);
