@@ -1,10 +1,10 @@
 #include "ui_render_internal.h"
 
 static const UiAction TODAY_ACTIONS[] = {
-    {"今日额度", "当前由规则计划决定", UI_ACCENT, UI_ACTION_ICON_CLOCK, UI_ACTION_VISUAL_NONE},
+    {"设置今日额度", "当前由规则计划决定", UI_ACCENT, UI_ACTION_ICON_CLOCK, UI_ACTION_VISUAL_NONE},
     {"快速加时", "", UI_SUCCESS, UI_ACTION_ICON_ADD_TIME, UI_ACTION_VISUAL_QUICK_ADD},
-    {"今日不限时", "今天不设时间上限", UI_SUCCESS, UI_ACTION_ICON_INFINITY, UI_ACTION_VISUAL_NONE},
-    {"清除今日调整", "恢复下级额度规则", UI_MUTED, UI_ACTION_ICON_CLEAR_OVERRIDE, UI_ACTION_VISUAL_NONE},
+    {"今日不限时", "仅今天不限时；就寝照常", UI_SUCCESS, UI_ACTION_ICON_INFINITY, UI_ACTION_VISUAL_NONE},
+    {"清除今日调整", "移除今日调整，恢复原计划", UI_MUTED, UI_ACTION_ICON_CLEAR_OVERRIDE, UI_ACTION_VISUAL_NONE},
     {"跳过本次就寝", "当前关闭", UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
     {"自主缓冲", "当前关闭", UI_MUTED, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
 };
@@ -329,6 +329,16 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     ptc_ui_format_today_adjustment_status(model, now, adjustment_badge, sizeof(adjustment_badge),
                                           adjustment_detail, sizeof(adjustment_detail));
     draw_parent_home_summary(pixels, stride, model);
+    UiRect quota_group = {548, 176, 696, 264};
+    UiRect other_group = {548, 446, 696, 182};
+    fill_round_rect(pixels, stride, quota_group, 16, UI_RAISED);
+    draw_rect_outline(pixels, stride, quota_group, 16, 1, UI_BORDER);
+    draw_text(pixels, stride, 574, 195, "今日额度调整（仅今天）", 16, UI_ACCENT);
+    draw_text(pixels, stride, 850, 195, "明日恢复原计划", 13, UI_MUTED);
+    fill_round_rect(pixels, stride, other_group, 16, UI_RAISED);
+    draw_rect_outline(pixels, stride, other_group, 16, 1, UI_BORDER);
+    draw_text(pixels, stride, 574, 466, "就寝与自主缓冲", 16, UI_WARNING);
+    draw_text(pixels, stride, 778, 466, "就寝独立生效；缓冲按条件追加今日额度", 13, UI_MUTED);
     for (int index = 0; index < 6; ++index) {
         UiRect box = to_uirect(ptc_ui_today_card_rect(index));
         bool focused = !model->parent_footer_focused && model->selected_index == index;
@@ -506,7 +516,9 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     }
     draw_header(pixels, stride, title,
         model->parent_page == PTC_UI_PARENT_SUPPORT ? "兼容状态、诊断与安全恢复" :
-        (model->parent_page == PTC_UI_PARENT_PLAN ? "额度规则与并行就寝计划" : "本地规则与设备安全设置"));
+        (model->parent_page == PTC_UI_PARENT_PLAN ? "额度规则与并行就寝计划" :
+         (model->parent_page == PTC_UI_PARENT_TODAY ? "今天的额度调整与单次措施" :
+          "本地规则与设备安全设置")));
     draw_time_status_bar(pixels, stride, model);
     draw_tabs(pixels, stride, model);
     if (!plan_subpage && model->parent_page != PTC_UI_PARENT_TODAY) {

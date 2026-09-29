@@ -350,22 +350,22 @@ public:
                 preview_ready_ = false;
                 preview_changed_ = false;
                 pending_code_[0] = '\0';
-                confirm_hold_ms_ = 0;
+                ptc_overlay_hold_reset(&confirm_hold_);
                 ptc_overlay_input_init(input_);
             } else if (touch_confirm && dangerous) {
                 touch_hold_warning_ = true;
+                ptc_overlay_hold_reset(&confirm_hold_);
             } else if ((!dangerous && ((keysDown & (HidNpadButton_A | HidNpadButton_Plus)) || touch_confirm))) {
                 touch_hold_warning_ = false;
+                ptc_overlay_hold_reset(&confirm_hold_);
                 (void)begin_preview_request(true);
             } else if (dangerous && (keysHeld & HidNpadButton_A)) {
-                confirm_hold_ms_ += input_elapsed_ms > 0 ? input_elapsed_ms : 0;
-                if (confirm_hold_ms_ >= 1000) {
-                    confirm_hold_ms_ = 0;
+                if (ptc_overlay_hold_update(&confirm_hold_, true, input_elapsed_ms, 1000)) {
                     touch_hold_warning_ = false;
                     (void)begin_preview_request(true);
                 }
             } else {
-                confirm_hold_ms_ = 0;
+                ptc_overlay_hold_reset(&confirm_hold_);
             }
             prev_touch_down_ = touch_down;
             return true;
@@ -698,6 +698,7 @@ public:
     void open_parent_pin()
     {
         parent_view_ = ParentView::Pin;
+        ptc_overlay_hold_reset(&confirm_hold_);
         parent_authorized_ = false;
         std::memset(pin_, 0, sizeof(pin_));
         pin_length_ = 0;
@@ -755,7 +756,7 @@ public:
         last_request_kind_ = kind;
         parent_view_ = ParentView::Result;
         parent_action_succeeded_ = false;
-        confirm_hold_ms_ = 0;
+        ptc_overlay_hold_reset(&confirm_hold_);
         request_started_tick_ = armGetSystemTick();
         last_elapsed_ms_ = 0;
         error_ = status != PTC_COMPANION_OK;
@@ -843,6 +844,7 @@ public:
             return true;
         }
         if (parent_view_ == ParentView::Actions) {
+            bool action_changed = false;
             if (touch_pressed && tx >= cx + 246 && tx < cx + PTC_OVERLAY_CONTENT_W - 12 &&
                 ty >= cy + 58 && ty < cy + 104) keysDown |= HidNpadButton_Y;
             if ((keysDown & HidNpadButton_Y) && !bridge_->waiting)
@@ -855,7 +857,8 @@ public:
                         ty >= cy + 150 + index * 57 && ty < cy + 200 + index * 57) {
                         const bool was_selected = parent_action_ == index;
                         parent_action_ = index;
-                        confirm_hold_ms_ = 0;
+                        ptc_overlay_hold_reset(&confirm_hold_);
+                        action_changed = true;
                         if (was_selected && (index == PTC_OVERLAY_PARENT_ADD_MINUTES ||
                             index == PTC_OVERLAY_PARENT_SKIP_BEDTIME)) keysDown |= HidNpadButton_A;
                         break;
@@ -870,15 +873,18 @@ public:
             if (direction & PTC_OVERLAY_BUTTON_UP) {
                 parent_action_ = (parent_action_ + PTC_OVERLAY_PARENT_ACTION_COUNT - 1) %
                     PTC_OVERLAY_PARENT_ACTION_COUNT;
-                confirm_hold_ms_ = 0;
+                ptc_overlay_hold_reset(&confirm_hold_);
+                action_changed = true;
             }
             if (direction & PTC_OVERLAY_BUTTON_DOWN) {
                 parent_action_ = (parent_action_ + 1) % PTC_OVERLAY_PARENT_ACTION_COUNT;
-                confirm_hold_ms_ = 0;
+                ptc_overlay_hold_reset(&confirm_hold_);
+                action_changed = true;
             }
             if (keysDown & HidNpadButton_B) {
                 parent_authorized_ = false;
                 parent_view_ = ParentView::Child;
+                ptc_overlay_hold_reset(&confirm_hold_);
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        (parent_action_ == PTC_OVERLAY_PARENT_ADD_MINUTES ||
                         parent_action_ == PTC_OVERLAY_PARENT_SKIP_BEDTIME) &&
@@ -887,11 +893,11 @@ public:
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        (parent_action_ != PTC_OVERLAY_PARENT_ADD_MINUTES &&
                         parent_action_ != PTC_OVERLAY_PARENT_SKIP_BEDTIME) &&
-                       (keysHeld & HidNpadButton_A)) {
-                confirm_hold_ms_ += elapsed_ms > 0 ? elapsed_ms : 0;
-                if (confirm_hold_ms_ >= 1000) (void)submit_parent_action();
+                       !action_changed && (keysHeld & HidNpadButton_A)) {
+                if (ptc_overlay_hold_update(&confirm_hold_, true, elapsed_ms, 1000))
+                    (void)submit_parent_action();
             } else {
-                confirm_hold_ms_ = 0;
+                ptc_overlay_hold_reset(&confirm_hold_);
             }
             return true;
         }
@@ -1113,6 +1119,14 @@ public:
         draw_outline(renderer, cx + 170, cy + 500, 160, 50, 2, FOCUS_BORDER);
         renderer->drawString(dangerous ? "长按 A 确认" : "A 确认", false,
                              cx + 202, cy + 530, 14, renderer->a(TEXT_COLOR));
+        if (dangerous) {
+            const int progress = confirm_hold_.fired ? 0 :
+                ptc_overlay_hold_progress(&confirm_hold_, 1000);
+            renderer->drawRect(cx + 176, cy + 541, 148, 4, renderer->a(CARD_COLOR));
+            if (progress > 0)
+                renderer->drawRect(cx + 176, cy + 541, 148 * progress / 1000, 4,
+                    renderer->a(ERROR_COLOR));
+        }
     }
 
     void draw_code_success(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw)
@@ -1231,6 +1245,14 @@ public:
                     renderer->a(reason ? MUTED_COLOR : TEXT_COLOR), 310);
                 if (reason) renderer->drawString(reason, false, cx + 24, y + 40, 11,
                     renderer->a(WAITING_COLOR), 305);
+                if (selected && !reason && i != PTC_OVERLAY_PARENT_ADD_MINUTES &&
+                    i != PTC_OVERLAY_PARENT_SKIP_BEDTIME) {
+                    const int progress = ptc_overlay_hold_progress(&confirm_hold_, 1000);
+                    renderer->drawRect(cx + 20, y + 44, cw - 40, 3, renderer->a(CARD_COLOR));
+                    if (progress > 0)
+                        renderer->drawRect(cx + 20, y + 44, (cw - 40) * progress / 1000, 3,
+                            renderer->a(ERROR_COLOR));
+                }
             }
             const auto selected = static_cast<PtcOverlayParentAction>(parent_action_);
             const char *reason = parent_action_reason(selected);
@@ -1635,7 +1657,7 @@ private:
     bool result_failed_ = false;
     bool recovery_active_ = false;
     bool touch_hold_warning_ = false;
-    int confirm_hold_ms_ = 0;
+    PtcOverlayHoldState confirm_hold_{};
     char pending_code_[9]{};
     PtcPendingRedemption pending_redemption_{};
     u64 recovery_last_poll_tick_ = 0;

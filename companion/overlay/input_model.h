@@ -40,6 +40,15 @@ typedef struct {
     PtcOverlayDirectionRepeat direction_repeat;
 } PtcOverlayInput;
 
+typedef struct {
+    int elapsed_ms;
+    bool fired;
+} PtcOverlayHoldState;
+
+void ptc_overlay_hold_reset(PtcOverlayHoldState *hold);
+bool ptc_overlay_hold_update(PtcOverlayHoldState *hold, bool held, int elapsed_ms, int required_ms);
+int ptc_overlay_hold_progress(const PtcOverlayHoldState *hold, int required_ms);
+
 unsigned int ptc_overlay_direction_step(
     PtcOverlayDirectionRepeat *repeat,
     unsigned int buttons_down,

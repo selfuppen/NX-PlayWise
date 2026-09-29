@@ -842,6 +842,41 @@ static void test_overlay_request_action_gate(void)
                "overlay blocks overlapping requests while preserving local input");
 }
 
+static void test_overlay_hold_progress(void)
+{
+    PtcOverlayHoldState hold = {0};
+    check_int(ptc_overlay_hold_progress(&hold, 1000), 0, "hold starts with an empty progress bar");
+    check_true(!ptc_overlay_hold_update(&hold, true, 250, 1000),
+               "a short hold does not submit");
+    check_int(ptc_overlay_hold_progress(&hold, 1000), 250,
+              "hold progress follows elapsed milliseconds");
+    check_true(!ptc_overlay_hold_update(&hold, true, 749, 1000),
+               "hold remains incomplete before one second");
+    check_int(ptc_overlay_hold_progress(&hold, 1000), 999,
+              "progress does not reach full before the threshold");
+    check_true(ptc_overlay_hold_update(&hold, true, 1, 1000),
+               "hold submits exactly at one second");
+    check_int(ptc_overlay_hold_progress(&hold, 1000), 1000,
+              "completed progress fills the button");
+    check_true(!ptc_overlay_hold_update(&hold, true, 1000, 1000),
+               "continued hold cannot submit a second time");
+    check_true(!ptc_overlay_hold_update(&hold, false, 0, 1000),
+               "release clears the one-shot latch");
+    check_int(ptc_overlay_hold_progress(&hold, 1000), 0,
+              "release clears visible progress");
+    check_true(!ptc_overlay_hold_update(&hold, true, 600, 1000),
+               "a new hold can begin after release");
+    ptc_overlay_hold_reset(&hold);
+    check_int(ptc_overlay_hold_progress(&hold, 1000), 0,
+              "cancel or action switch clears visible progress");
+    check_true(!ptc_overlay_hold_update(&hold, false, 500, 1000),
+               "a disabled action cannot accumulate hold time");
+    check_true(ptc_overlay_hold_update(&hold, true, 2000, 1000),
+               "a delayed input frame still completes the hold once");
+    check_int(ptc_overlay_hold_progress(&hold, 1000), 1000,
+              "a delayed frame never overfills the button");
+}
+
 static void test_overlay_parent_actions_and_input(void)
 {
     PtcCompanionResultSummary summary;
@@ -2777,6 +2812,7 @@ int main(void)
     test_overlay_bridge_claim_daily_buffer();
     test_overlay_result_classification();
     test_overlay_request_action_gate();
+    test_overlay_hold_progress();
     test_overlay_parent_actions_and_input();
     test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();

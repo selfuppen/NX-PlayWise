@@ -1948,12 +1948,22 @@ static void test_home_redesign(void)
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
+    const PtcUiRect quota_group = {548, 176, 696, 264};
+    const PtcUiRect other_group = {548, 446, 696, 182};
+    check_true(!rects_overlap(quota_group, other_group) &&
+               !rects_overlap(quota_group, ptc_ui_home_summary_rect(true)) &&
+               !rects_overlap(other_group, ptc_ui_home_summary_rect(true)),
+               "today section backgrounds do not overlap each other or the summary");
     for (int i = 0; i < 6; ++i) {
         PtcUiRect rect = ptc_ui_today_card_rect(i);
+        PtcUiRect group = i < 4 ? quota_group : other_group;
         check_int(ptc_ui_today_operation(i), expected[i], "today card maps to its named operation");
         check_hit(hit_center(&model, rect), PTC_UI_HIT_PARENT_CARD, i, "today card hit matches render position");
-        check_true(rect.h == 120 && !rects_overlap(rect, ptc_ui_home_summary_rect(true)),
-                   "today cards use the compact height and stay clear of the summary");
+        check_true(rect.h == (i < 4 ? 106 : 120) &&
+                   rect.x >= group.x && rect.x + rect.w <= group.x + group.w &&
+                   rect.y >= group.y + 24 && rect.y + rect.h <= group.y + group.h &&
+                   !rects_overlap(rect, ptc_ui_home_summary_rect(true)),
+                   "today cards fit below their section headings and stay clear of the summary");
         check_true(rect.y + rect.h < ptc_ui_notice_rect().y,
                    "every today card leaves room above the status capsule");
         for (int j = i + 1; j < 6; ++j)

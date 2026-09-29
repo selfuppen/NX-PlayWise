@@ -1,5 +1,6 @@
 #include "input_model.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -13,6 +14,37 @@ static const unsigned int DIRECTION_BUTTONS =
 const char *ptc_overlay_input_charset(void)
 {
     return CHARSET;
+}
+
+void ptc_overlay_hold_reset(PtcOverlayHoldState *hold)
+{
+    if (!hold) return;
+    hold->elapsed_ms = 0;
+    hold->fired = false;
+}
+
+bool ptc_overlay_hold_update(PtcOverlayHoldState *hold, bool held, int elapsed_ms, int required_ms)
+{
+    if (!hold) return false;
+    if (!held || required_ms <= 0) {
+        ptc_overlay_hold_reset(hold);
+        return false;
+    }
+    if (hold->fired) return false;
+    if (elapsed_ms > 0 && hold->elapsed_ms < required_ms) {
+        int remaining_ms = required_ms - hold->elapsed_ms;
+        hold->elapsed_ms += elapsed_ms >= remaining_ms ? remaining_ms : elapsed_ms;
+    }
+    if (hold->elapsed_ms < required_ms) return false;
+    hold->fired = true;
+    return true;
+}
+
+int ptc_overlay_hold_progress(const PtcOverlayHoldState *hold, int required_ms)
+{
+    if (!hold || required_ms <= 0 || hold->elapsed_ms <= 0) return 0;
+    if (hold->elapsed_ms >= required_ms) return 1000;
+    return (int)((int64_t)hold->elapsed_ms * 1000 / required_ms);
 }
 
 bool ptc_overlay_pin_mask(size_t length, char *out, size_t out_size)
