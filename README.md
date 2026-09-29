@@ -72,7 +72,7 @@
 
 具体页面使用说明，参见[使用指南](docs/使用指南.md)。
 
-<details>
+<details open>
 <summary>查看家长区今日调度与今日决策详情预览</summary>
 
 ![家长区今日调度预览](docs/images/usage/parent/parent-dark.png)
