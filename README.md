@@ -31,12 +31,11 @@
 
 每日额度耗尽后，Nintendo 原生弹窗可能阻断 Homebrew 和 PlayWise 主机应用。用预先设置的 Ultrahand/Tesla 快捷键打开浮窗管理器，选择“任我玩”（`playwise.ovl`）；输入家长给的 8 位码，核对预计结果并确认兑换。家长还可在浮窗中输入 PlayWise PIN，单次授权增加分钟或设为今日不限时。就寝限制可跳过本次、关闭计划或恢复安装前快照。
 
-<details>
+<details open>
 <summary>查看游戏内浮窗操作示意</summary>
 
-![历史真机示意：在 Ultrahand 中选择任我玩浮窗](docs/images/usage/overlay/ultrahand-entry.jpg)
-
-![历史真机示意：在 HOME 上打开 PlayWise 浮窗输入加时码](docs/images/usage/overlay/playwise-code-entry-legacy.jpg)
+| ![历史真机示意：在 Ultrahand 中选择任我玩浮窗](docs/images/usage/overlay/ultrahand-entry.jpg) | ![历史真机示意：在 HOME 上打开 PlayWise 浮窗输入加时码](docs/images/usage/overlay/playwise-code-entry-legacy.jpg) |
+| :---: | :---: |
 
 </details>
 
@@ -50,12 +49,11 @@
 
 在 Switch 家长区打开“离线加时 → 手机/电脑生成”，验证 PlayWise PIN 后显示配对二维码。用可信的家长手机或电脑扫码，在打开的[家长网页](https://selfuppen.github.io/NX-PlayWise/)确认“导入此设备”；选好与 Switch 本地日期一致的日期和加时分钟数，即可在浏览器中生成 8 位码并告诉孩子。网页在浏览器本地计算代码，不向 PlayWise 业务后端提交密钥或代码，不用每次扫码，可反复生成。
 
-<details>
+<details open>
 <summary>查看手机扫码配对与家长网页示意</summary>
 
-![手机或电脑扫码配对页面，二维码使用公开演示配置](docs/images/usage/parent/pairing-qr-demo.png)
-
-![家长网页生成加时码的历史界面示意](docs/images/usage/parent/web-code-demo.jpg)
+| ![手机或电脑扫码配对页面，二维码使用公开演示配置](docs/images/usage/parent/pairing-qr-demo.png) | ![家长网页生成加时码的历史界面示意](docs/images/usage/parent/web-code-demo.jpg) |
+| :---: | :---: |
 
 </details>
 
