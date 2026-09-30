@@ -66,7 +66,7 @@ static const char *request_success_message(const char *type)
         return "今日自主缓冲已领取，记得休息眼睛。";
     }
     if (strcmp(type, "set_scheduled_override") == 0) {
-        return "临时额度计划已保存，未来规则预览已更新。";
+        return "指定日期额度已保存，未来规则预览已更新。";
     }
     if (strcmp(type, "set_autonomy_policy") == 0) {
         return "今日自主缓冲设置已保存。";
@@ -76,6 +76,9 @@ static const char *request_success_message(const char *type)
     }
     if (strcmp(type, "set_bedtime_policy") == 0) {
         return "就寝计划已保存；限制生效后请使用 Overlay 恢复。";
+    }
+    if (strcmp(type, "clear_bedtime_skip") == 0) {
+        return "本次就寝跳过已清除，限制状态已重新读取。";
     }
     if (strcmp(type, "clear_activity_history") == 0) {
         return "家庭活动记录已清空。";

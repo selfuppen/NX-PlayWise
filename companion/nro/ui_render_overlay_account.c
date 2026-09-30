@@ -286,7 +286,7 @@ static const char *activity_label(const char *action)
     if (strcmp(action, "today_restore") == 0) return "恢复今日计划";
     if (strcmp(action, "weekly_update") == 0) return "修改周计划";
     if (strcmp(action, "holiday_update") == 0) return "修改节假日规则";
-    if (strcmp(action, "scheduled_update") == 0) return "修改临时额度计划";
+    if (strcmp(action, "scheduled_update") == 0) return "修改指定日期额度";
     if (strcmp(action, "autonomy_update") == 0) return "修改自主缓冲";
     if (strcmp(action, "offline_grant") == 0) return "兑换加时码";
     if (strcmp(action, "daily_buffer") == 0) return "领取自主缓冲";

@@ -582,7 +582,7 @@ static void draw_forecast_day_details(uint32_t *pixels, uint32_t stride, const P
     draw_rect_outline(pixels, stride, rule_info, 10, 1, UI_BORDER);
     draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 24, "当天额度按什么确定", 14, UI_INK);
     draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 52,
-              "今日调整、临时计划、节假日、每周计划", 12, UI_ACCENT);
+              "今日调整、指定日期额度、节假日、每周计划", 12, UI_ACCENT);
     draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 78,
               "从左到右，优先采用第一条适用的规则。", 11, UI_MUTED);
 

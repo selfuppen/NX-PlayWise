@@ -516,7 +516,7 @@ void ptc_ui_format_holiday_priority_summary(const PtcUiModel *model, char *out, 
     } else if (model->today_override_present) {
         snprintf(out, out_size, "当前原因：优先采用今日额度调整");
     } else if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        snprintf(out, out_size, "当前原因：优先采用临时额度计划");
+        snprintf(out, out_size, "当前原因：优先采用指定日期额度");
     } else if (!model->holiday_enabled) {
         snprintf(out, out_size, "当前原因：节假日设置未开启，改用周计划");
     } else if (!model->calendar_covered) {

@@ -245,6 +245,8 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     char buffer[128], hint[160], fitted_hint[160];
     bool disabled = model->disable_flag_present || model->waiting;
+    bool code_unavailable = ptc_ui_status_is_fresh(model, ptc_ui_render_now()) &&
+        model->unrestricted_today == 1;
     draw_header(pixels, stride, "自律即自由", "合理安排时间，做自己时间的主人");
     draw_time_status_bar(pixels, stride, model);
     draw_child_task_summary(pixels, stride, model);
@@ -253,8 +255,10 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     draw_text(pixels, stride, 684, 164, "今天可以做什么？", 28, UI_RGB(UI_BLENDED(text_primary)));
     draw_text(pixels, stride, 684, 195, "需要更多时间时，从这里开始", 18, UI_RGB(UI_BLENDED(text_secondary)));
     home_button(pixels, stride, ptc_ui_child_submit_rect(),
-        model->disable_flag_present ? "兑换暂不可用" : "A  输入加时码", true, false, disabled);
-    draw_child_action_icon(pixels, stride, ptc_ui_child_submit_rect(), 0, true, disabled);
+        model->disable_flag_present ? "兑换暂不可用" :
+        (code_unavailable ? "今日不限时，加时码不可用" : "A  输入加时码"),
+        true, false, disabled || code_unavailable);
+    draw_child_action_icon(pixels, stride, ptc_ui_child_submit_rect(), 0, true, disabled || code_unavailable);
     if (model->daily_buffer_available)
         snprintf(buffer, sizeof(buffer), "X  领取自主缓冲  +%u 分钟", (unsigned int)model->daily_buffer_minutes);
     else snprintf(buffer, sizeof(buffer), "%s", model->daily_buffer_claimed ? "今日已使用缓冲" :

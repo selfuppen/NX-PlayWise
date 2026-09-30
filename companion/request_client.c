@@ -167,6 +167,15 @@ int ptc_companion_skip_bedtime_request_json(char *out, size_t out_size,
         request_id, (long long)created_at, (unsigned long long)window_instance_id);
 }
 
+int ptc_companion_clear_bedtime_skip_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, uint64_t window_instance_id)
+{
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"clear_bedtime_skip\","
+        "\"created_at\":%lld,\"payload\":{\"window_instance_id\":%llu}}\n",
+        request_id, (long long)created_at, (unsigned long long)window_instance_id);
+}
+
 int ptc_companion_confirm_bedtime_requirements_request_json(char *out, size_t out_size,
     const char *request_id, int64_t created_at, bool official_setting_confirmed,
     bool overlay_risk_accepted, uint16_t confirmation_version, const char *environment_fingerprint)

@@ -139,15 +139,15 @@ static void test_parent_status_summary(void)
     ptc_ui_project_notice(&model, &notice);
     check_true(notice.visible && !notice.has_details && notice.level == PTC_UI_NOTICE_SUCCESS,
                "ordinary successful writes show only the compact summary");
-    snprintf(model.feedback_detail, sizeof(model.feedback_detail), "今天继续由临时额度计划覆盖。");
+    snprintf(model.feedback_detail, sizeof(model.feedback_detail), "今天继续由指定日期额度覆盖。");
     ptc_ui_project_notice(&model, &notice);
-    check_true(notice.has_details && strstr(notice.details, "临时额度计划") != NULL,
+    check_true(notice.has_details && strstr(notice.details, "指定日期额度") != NULL,
                "operation guidance enables the explicit details action");
     check_hit(hit_center(&model, ptc_ui_notice_details_rect()), PTC_UI_HIT_NOTICE_DETAILS, 0,
               "visible details button owns its exact touch target");
     check_hit(ptc_ui_hit_test(&model, ptc_ui_notice_rect().x + 20, ptc_ui_notice_rect().y + 24),
               PTC_UI_HIT_NONE, 0, "notice text does not masquerade as the details button");
-    snprintf(model.overlay_title, sizeof(model.overlay_title), "临时额度计划");
+    snprintf(model.overlay_title, sizeof(model.overlay_title), "指定日期额度");
     snprintf(model.overlay_body, sizeof(model.overlay_body), "旧描述");
     check_true(ptc_ui_open_notice_details(&model), "details dialog opens only after an explicit action");
     check_int(model.overlay, PTC_UI_OVERLAY_NOTICE_DETAILS, "details action opens the notice dialog");
@@ -409,6 +409,18 @@ static void test_bedtime_save_restriction_projection(void)
     model.bedtime_active = false;
     model.bedtime_skipped = false;
     model.bedtime_skipped_window_available = false;
+    model.bedtime_next_available = true;
+    model.bedtime_next_start_day_index = model.day_index;
+    model.bedtime_next_start_minute = 21 * 60;
+    ptc_ui_format_bedtime_quota_notice(&model, 1000, text, sizeof(text));
+    check_true(strstr(text, "今晚 21:00 起受就寝限制") != NULL,
+        "quota estimate names tonight's independent bedtime restriction");
+    model.bedtime_active = true;
+    ptc_ui_format_bedtime_quota_notice(&model, 1000, text, sizeof(text));
+    check_true(strstr(text, "调整额度不会立即解除限制") != NULL,
+        "active bedtime warning overrides the daily quota estimate");
+    model.bedtime_active = false;
+    model.bedtime_next_available = false;
 
     model.bedtime_section = PTC_UI_BEDTIME_SCHEDULED;
     model.draft_bedtime_policy.scheduled_override.present = true;
@@ -729,7 +741,7 @@ static void test_numeric_input(void)
               "makeup workday quota uses the compact minute editor");
 
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_SCHEDULED_MINUTES, PTC_UI_OVERLAY_SCHEDULED,
-        "设置临时额度计划", "输入 1 到 1440 分钟", 4, 1, 1440, 90);
+        "设置指定日期额度", "输入 1 到 1440 分钟", 4, 1, 1440, 90);
     check_int(model.overlay, PTC_UI_OVERLAY_MINUTE_EDITOR,
               "scheduled quota uses the compact minute editor");
     ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_GRANT_MINUTES, PTC_UI_OVERLAY_GRANT_LOCAL,
@@ -1152,7 +1164,7 @@ static void test_candidate_navigation(void)
     check_true(model.pending_code[0] == '\0', "cancelled code confirmation forgets the full code");
 
     model.overlay = PTC_UI_OVERLAY_SCHEDULED;
-    snprintf(model.overlay_title, sizeof(model.overlay_title), "临时额度计划");
+    snprintf(model.overlay_title, sizeof(model.overlay_title), "指定日期额度");
     snprintf(model.overlay_body, sizeof(model.overlay_body), "草稿说明");
     check_true(ptc_ui_cancel_overlay(&model), "scheduled overlay can be cancelled");
     check_int(model.overlay, PTC_UI_OVERLAY_NONE, "cancelled overlay resets to NONE");
@@ -1872,6 +1884,14 @@ static void test_balanced_feature_state(void)
     model.parent_page = PTC_UI_PARENT_PLAN;
     model.plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
     model.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
+    check_hit(hit_center(&model, ptc_ui_bedtime_manage_rect(0)),
+        PTC_UI_HIT_BEDTIME_MANAGE, 0, "bedtime skip shortcut is touchable");
+    check_hit(hit_center(&model, ptc_ui_bedtime_manage_rect(1)),
+        PTC_UI_HIT_BEDTIME_MANAGE, 1, "bedtime skip restore is touchable");
+    check_true(!rects_overlap(ptc_ui_bedtime_manage_rect(0), ptc_ui_bedtime_manage_rect(1)) &&
+               !rects_overlap(ptc_ui_bedtime_manage_rect(0), ptc_ui_bedtime_master_switch_rect()) &&
+               !rects_overlap(ptc_ui_bedtime_manage_rect(1), ptc_ui_bedtime_master_switch_rect()),
+        "bedtime management buttons have separate touch targets");
     check_hit(hit_center(&model, ptc_ui_bedtime_section_rect(2)),
         PTC_UI_HIT_BEDTIME_SECTION, 2, "bedtime sections are touchable");
     check_hit(hit_center(&model, ptc_ui_bedtime_field_rect(PTC_UI_BEDTIME_WEEKLY, 0)),
@@ -2260,7 +2280,7 @@ static void test_plan_polish(void)
     check_int(ptc_ui_plan_rule(&model, PTC_UI_PLAN_WEEKLY).source, PTC_RULE_SOURCE_SCHEDULED_OVERRIDE,
               "scheduled plan overrides weekly preview");
     ptc_ui_format_plan_impact(&model, PTC_UI_PLAN_WEEKLY, 1000, text, sizeof(text));
-    check_true(strstr(text, "今天不变") && strstr(text, "临时额度计划"), "covered weekly edit does not promise a change today");
+    check_true(strstr(text, "今天不变") && strstr(text, "指定日期额度"), "covered weekly edit does not promise a change today");
     model.holiday_enabled = model.draft_holiday_enabled = true;
     model.holiday_rule = rules.holiday_rule;
     model.makeup_workday_rule = rules.makeup_workday_rule;
@@ -2269,9 +2289,9 @@ static void test_plan_polish(void)
               "scheduled plan also overrides holiday draft");
     snprintf(model.rule_source, sizeof(model.rule_source), "scheduled_override");
     ptc_ui_format_weekly_save_result(&model, text, sizeof(text), detail, sizeof(detail));
-    check_true(strstr(text, "当前不变") && strstr(text, "临时额度计划"), "weekly success preserves scheduled explanation");
+    check_true(strstr(text, "当前不变") && strstr(text, "指定日期额度"), "weekly success preserves scheduled explanation");
     ptc_ui_format_holiday_save_result(&model, text, sizeof(text), detail, sizeof(detail));
-    check_true(strstr(text, "当前不变") && strstr(text, "临时额度计划"), "holiday success preserves scheduled explanation");
+    check_true(strstr(text, "当前不变") && strstr(text, "指定日期额度"), "holiday success preserves scheduled explanation");
     model.today_override_present = true;
     model.today_override_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 30};
     check_int(ptc_ui_plan_rule(&model, PTC_UI_PLAN_SCHEDULED).source, PTC_RULE_SOURCE_TODAY_OVERRIDE,

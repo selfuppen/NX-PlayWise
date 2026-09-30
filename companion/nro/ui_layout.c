@@ -264,6 +264,12 @@ PtcUiRect ptc_ui_bedtime_master_switch_rect(void)
     return (PtcUiRect){54, 168, 1172, 54};
 }
 
+PtcUiRect ptc_ui_bedtime_manage_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){784 + index * 224, 230, 218, 38};
+}
+
 PtcUiRect ptc_ui_bedtime_overlay_field_rect(PtcUiOverlay overlay, int index)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);

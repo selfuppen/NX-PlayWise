@@ -8,8 +8,8 @@ void submit_scheduled_override(UiState *ui)
         ui->active_request_id, time(NULL), &ui->model.draft_scheduled_override);
     set_command_name(ui, "set_scheduled_override");
     sync_transport_label(ui);
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_scheduled_override", "正在保存临时额度计划...");
-    else set_message(ui, "临时额度计划提交失败", status);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_scheduled_override", "正在保存指定日期额度...");
+    else set_message(ui, "指定日期额度提交失败", status);
 }
 void submit_autonomy_policy(UiState *ui)
 {
@@ -72,4 +72,17 @@ void submit_bedtime_skip(UiState *ui)
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) begin_wait(ui, "skip_bedtime", "正在跳过这一次就寝时间...");
     else set_message(ui, "跳过就寝时间提交失败", status);
+}
+void submit_clear_bedtime_skip(UiState *ui)
+{
+    PtcCompanionStatus status;
+    uint64_t instance_id = ui->model.pending_bedtime_skip_instance_id;
+    if (instance_id == 0) return;
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_clear_bedtime_skip(&ui->transport,
+        ui->active_request_id, time(NULL), instance_id);
+    set_command_name(ui, "clear_bedtime_skip");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "clear_bedtime_skip", "正在恢复这一次就寝限制...");
+    else set_message(ui, "恢复就寝限制提交失败", status);
 }

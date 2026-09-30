@@ -421,6 +421,7 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     }
     if (strcmp(value, "set_bedtime_policy") == 0) return PTC_REQUEST_SET_BEDTIME_POLICY;
     if (strcmp(value, "skip_bedtime") == 0) return PTC_REQUEST_SKIP_BEDTIME;
+    if (strcmp(value, "clear_bedtime_skip") == 0) return PTC_REQUEST_CLEAR_BEDTIME_SKIP;
     if (strcmp(value, "disable_bedtime") == 0) return PTC_REQUEST_DISABLE_BEDTIME;
     if (strcmp(value, "confirm_bedtime_requirements") == 0) return PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS;
     if (strcmp(value, "overlay_ready") == 0) return PTC_REQUEST_OVERLAY_READY;
@@ -479,6 +480,7 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "clear_activity_history";
     case PTC_REQUEST_SET_BEDTIME_POLICY: return "set_bedtime_policy";
     case PTC_REQUEST_SKIP_BEDTIME: return "skip_bedtime";
+    case PTC_REQUEST_CLEAR_BEDTIME_SKIP: return "clear_bedtime_skip";
     case PTC_REQUEST_DISABLE_BEDTIME: return "disable_bedtime";
     case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS: return "confirm_bedtime_requirements";
     case PTC_REQUEST_OVERLAY_READY: return "overlay_ready";
@@ -581,6 +583,7 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         return PTC_ERR_OK;
     }
     case PTC_REQUEST_SKIP_BEDTIME:
+    case PTC_REQUEST_CLEAR_BEDTIME_SKIP:
         return json_u64(text, "window_instance_id", &out->bedtime_window_instance_id)
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_DISABLE_BEDTIME:

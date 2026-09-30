@@ -75,7 +75,7 @@ void save_scheduled_from_overlay(UiState *ui)
         !ptc_ui_scheduled_dirty(&ui->model)) return;
     if (!ptc_scheduled_override_is_valid(&ui->model.draft_scheduled_override)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            "临时额度计划无效，请检查 1 到 366 天范围和额度。");
+            "指定日期额度无效，请检查 1 到 366 天范围和额度。");
         return;
     }
     if (ptc_ui_plan_save_requires_hold(&ui->model, PTC_UI_PLAN_SCHEDULED, (int64_t)time(NULL))) {

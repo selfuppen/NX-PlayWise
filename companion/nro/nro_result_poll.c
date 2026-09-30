@@ -229,7 +229,12 @@ void poll_result(UiState *ui, bool force)
             } else {
                 ui->code_preview_recheck = false;
                 ui->model.pending_code[0] = '\0';
-                if (code_error_stays_in_input(ui->model.error_code)) {
+                if (ui->model.error_code == PTC_ERR_UNLIMITED_NOT_ALLOWED) {
+                    ui->model.view = PTC_UI_CHILD;
+                    ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                    snprintf(ui->model.message, sizeof(ui->model.message),
+                        "今日不限时，加时码不可用；这枚代码未消费。");
+                } else if (code_error_stays_in_input(ui->model.error_code)) {
                     char error[96];
                     snprintf(error, sizeof(error), "%.95s", ui->model.message);
                     open_offline_code_input(ui);
@@ -248,6 +253,12 @@ void poll_result(UiState *ui, bool force)
             if (strcmp(ui->model.result_status, "ok") == 0) {
                 ui->model.overlay = PTC_UI_OVERLAY_CODE_RESULT;
                 ui->model.operation = PTC_UI_OPERATION_NONE;
+            } else if (ui->model.error_code == PTC_ERR_UNLIMITED_NOT_ALLOWED) {
+                ui->model.view = PTC_UI_CHILD;
+                ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                    "今日不限时，加时码不可用；这枚代码未消费。");
+                (void)ptc_companion_pending_redemption_clear(&ui->client);
             } else if (code_error_stays_in_input(ui->model.error_code)) {
                 char error[96];
                 snprintf(error, sizeof(error), "%.95s", ui->model.message);
@@ -325,12 +336,13 @@ void poll_result(UiState *ui, bool force)
                 cancel_bedtime_navigation(ui);
             }
         }
-        if (strcmp(ui->model.result_type, "skip_bedtime") == 0 &&
+        if ((strcmp(ui->model.result_type, "skip_bedtime") == 0 ||
+             strcmp(ui->model.result_type, "clear_bedtime_skip") == 0) &&
             strcmp(ui->model.result_status, "error") == 0 && ui->model.error_code == 318) {
             ui->model.pending_bedtime_skip_instance_id = 0;
             submit_status(ui);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                "就寝窗口已变化，正在刷新；不会自动跳过另一个窗口。");
+                "就寝窗口已变化，正在刷新；不会自动操作另一个窗口。");
         }
         if (ui->quota_recheck_pending && strcmp(ui->model.result_type, "status") == 0) {
             finish_quota_recheck(ui, strcmp(ui->model.result_status, "ok") == 0);

@@ -130,13 +130,33 @@ bool ptc_ui_bedtime_skip_matches_policy(const PtcUiModel *model,
         model->bedtime_skipped_start_minute == effective.window.start_minute;
 }
 
+void ptc_ui_format_bedtime_quota_notice(const PtcUiModel *model, int64_t now,
+    char *out, size_t out_size)
+{
+    if (!out || out_size == 0) return;
+    out[0] = '\0';
+    if (!model) return;
+    if (!ptc_ui_status_is_fresh(model, now)) {
+        snprintf(out, out_size, "就寝状态待确认，暂不能判断额度调整后能否使用");
+    } else if (model->bedtime_active && !model->bedtime_skipped) {
+        snprintf(out, out_size, "当前就寝限制中，调整额度不会立即解除限制");
+    } else if (model->bedtime_active && model->bedtime_skipped) {
+        snprintf(out, out_size, "本次就寝已跳过，当前按每日额度使用");
+    } else if (model->bedtime_next_available &&
+               model->bedtime_next_start_day_index == model->day_index) {
+        snprintf(out, out_size, "今晚 %02u:%02u 起受就寝限制",
+            (unsigned)(model->bedtime_next_start_minute / 60),
+            (unsigned)(model->bedtime_next_start_minute % 60));
+    }
+}
+
 const char *ptc_ui_effective_rule_label(PtcRuleSource source)
 {
     switch (source) {
     case PTC_RULE_SOURCE_STATUTORY_HOLIDAY: return "国家法定休假日";
     case PTC_RULE_SOURCE_MAKEUP_WORKDAY: return "国家调休工作日";
     case PTC_RULE_SOURCE_TODAY_OVERRIDE: return "今日额度调整";
-    case PTC_RULE_SOURCE_SCHEDULED_OVERRIDE: return "临时额度计划";
+    case PTC_RULE_SOURCE_SCHEDULED_OVERRIDE: return "指定日期额度";
     case PTC_RULE_SOURCE_WEEKLY:
     default: return "周计划";
     }
@@ -280,7 +300,7 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
 
     if (!rules.scheduled_override.enabled) {
         set_decision_step(&decision->scheduled_override, PTC_UI_DECISION_NOT_CONFIGURED, empty,
-                          "没有启用临时额度计划");
+                          "没有启用指定日期额度");
     } else if (!scheduled_matches) {
         set_decision_step(&decision->scheduled_override, PTC_UI_DECISION_NOT_MATCHED,
                           rules.scheduled_override.rule, is_today ? "今天不在计划日期范围内" : "当天不在计划日期范围内");
@@ -290,7 +310,7 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
                 ? PTC_UI_DECISION_SELECTED : PTC_UI_DECISION_OVERRIDDEN,
             rules.scheduled_override.rule,
             decision->effective.source == PTC_RULE_SOURCE_TODAY_OVERRIDE
-                ? "日期适用，但优先采用今日调整" : (is_today ? "今天适用临时额度计划" : "当天适用临时额度计划"));
+                ? "日期适用，但优先采用今日调整" : (is_today ? "今天适用指定日期额度" : "当天适用指定日期额度"));
     }
 
     if (!rules.holiday_enabled) {
@@ -520,7 +540,7 @@ void ptc_ui_format_plan_impact(const PtcUiModel *model, PtcUiPlanKind kind,
             snprintf(out, out_size, "今天不变，继续按%s执行；开启开关且日期在内置日历范围内时，新规则才会生效。",
                      effective_rule_label(after.source));
         } else
-            snprintf(out, out_size, "今天不变，继续按%s执行；日期在计划范围内且没有今日调整时，临时额度才会生效。",
+            snprintf(out, out_size, "今天不变，继续按%s执行；日期在计划范围内且没有今日调整时，指定日期额度才会生效。",
                      effective_rule_label(after.source));
     } else if (after.rule.mode == PTC_RULE_MODE_UNLIMITED) {
         snprintf(out, out_size, "保存后今天按%s：不限时。", effective_rule_label(after.source));
@@ -616,8 +636,8 @@ void ptc_ui_format_weekly_save_result(const PtcUiModel *model, char *message, si
                      effective_rule_label(restored.source));
         }
     } else if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        snprintf(message, message_size, "周计划已保存；今天仍按临时额度计划执行，当前不变。");
-        snprintf(detail, detail_size, "今天继续按临时额度计划：%s。", current_basis);
+        snprintf(message, message_size, "周计划已保存；今天仍按指定日期额度执行，当前不变。");
+        snprintf(detail, detail_size, "今天继续按指定日期额度：%s。", current_basis);
     } else if (strcmp(model->rule_source, "statutory_holiday") == 0 ||
                strcmp(model->rule_source, "makeup_workday") == 0) {
         snprintf(message, message_size, "周计划已保存；今天优先采用%s，当前不变。",
@@ -641,8 +661,8 @@ void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, s
     detail[0] = '\0';
     weekday = ptc_weekday_from_day_index(model->day_index);
     if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        snprintf(message, message_size, "国家节假日设置已保存；今天仍按临时额度计划执行，当前不变。");
-        snprintf(detail, detail_size, "原因：临时额度计划优先于国家节假日规则。");
+        snprintf(message, message_size, "国家节假日设置已保存；今天仍按指定日期额度执行，当前不变。");
+        snprintf(detail, detail_size, "原因：指定日期额度优先于国家节假日规则。");
         return;
     }
     if (strcmp(model->rule_source, "today_override") == 0) {

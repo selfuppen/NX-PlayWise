@@ -171,7 +171,7 @@ const char *ptc_companion_request_command_label_zh(const char *type)
     if (strcmp(type, "preview_offline_code") == 0) return "预览今日加时";
     if (strcmp(type, "offline_code") == 0) return "提交今日加时";
     if (strcmp(type, "clear_redemption_history") == 0) return "清空加时码使用记录";
-    if (strcmp(type, "set_scheduled_override") == 0) return "设置临时额度计划";
+    if (strcmp(type, "set_scheduled_override") == 0) return "设置指定日期额度";
     if (strcmp(type, "set_autonomy_policy") == 0) return "设置今日自主缓冲";
     if (strcmp(type, "claim_daily_buffer") == 0) return "领取今日自主缓冲";
     if (strcmp(type, "clear_activity_history") == 0) return "清空家庭活动记录";
@@ -186,6 +186,7 @@ const char *ptc_companion_request_command_label_zh(const char *type)
     if (strcmp(type, "restore_install_snapshot") == 0) return "恢复安装前状态";
     if (strcmp(type, "set_bedtime_policy") == 0) return "保存就寝计划";
     if (strcmp(type, "skip_bedtime") == 0) return "跳过本次就寝限制";
+    if (strcmp(type, "clear_bedtime_skip") == 0) return "恢复本次就寝限制";
     if (strcmp(type, "disable_bedtime") == 0) return "关闭就寝计划";
     if (strcmp(type, "confirm_bedtime_requirements") == 0) return "确认就寝限制风险";
     if (strcmp(type, "overlay_ready") == 0) return "验证浮窗恢复通道";
@@ -281,6 +282,16 @@ PtcCompanionStatus ptc_companion_transport_submit_skip_bedtime(PtcCompanionTrans
 {
     char json[512];
     int written = ptc_companion_skip_bedtime_request_json(
+        json, sizeof(json), request_id, created_at, window_instance_id);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_clear_bedtime_skip(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint64_t window_instance_id)
+{
+    char json[512];
+    int written = ptc_companion_clear_bedtime_skip_request_json(
         json, sizeof(json), request_id, created_at, window_instance_id);
     if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
     return ptc_companion_transport_submit_json(client, request_id, json);

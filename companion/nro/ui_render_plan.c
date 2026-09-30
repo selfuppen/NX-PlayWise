@@ -3,7 +3,7 @@
 void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
                       PtcUiPlanKind kind, bool dirty, UiRect panel)
 {
-    char impact[256], age[80], title[64], left_value[40], right_value[48];
+    char impact[256], age[80], bedtime_notice[128], title[64], left_value[40], right_value[48];
     char left_note[64], right_note[64], source_text[80];
     PtcUiPlanImpactProjection projection;
     bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
@@ -145,9 +145,11 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
                           13, conclusion.width, 18, 2, UI_RGB(UI_BLENDED(text_secondary)));
     }
 
+    ptc_ui_format_bedtime_quota_notice(model, ptc_ui_render_now(), bedtime_notice, sizeof(bedtime_notice));
     format_status_age(model, age, sizeof(age));
     draw_text(pixels, stride, panel.x + 20, panel.y + panel.height - 20,
-              age, 13, status_age_color(model));
+              bedtime_notice[0] ? bedtime_notice : age, 13,
+              bedtime_notice[0] ? UI_DANGER : status_age_color(model));
 }
 
 void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
@@ -166,7 +168,7 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
         else snprintf(title, sizeof(title), "修改草稿 | 待保存");
     } else if (kind == PTC_UI_PLAN_SCHEDULED) {
         if (ptc_ui_scheduled_dirty(model)) ++changed;
-        if (changed > 0) snprintf(title, sizeof(title), "修改草稿 | 临时计划已调整");
+        if (changed > 0) snprintf(title, sizeof(title), "修改草稿 | 指定日期额度已调整");
         else snprintf(title, sizeof(title), "修改草稿 | 待保存");
     } else {
         if (model->holiday_enabled != model->draft_holiday_enabled) ++changed;
@@ -459,13 +461,18 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_text(pixels, stride, master_card.x + master_card.width - 200, master_card.y + 25,
                "- / A 切换开关", 13, UI_ACCENT);
 
-    /* 若处于跳过本次就寝状态，在选项卡同一排右侧显示醒目的放行横幅 */
-    if (is_skipped_active) {
-        UiRect skip_banner = {784, 230, 442, 38};
-        fill_round_rect(pixels, stride, skip_banner, 10, UI_SUCCESS_SOFT);
-        draw_rect_outline(pixels, stride, skip_banner, 10, 1, UI_SUCCESS);
-        draw_text_center(pixels, stride, skip_banner,
-                          "✓ 已跳过本次就寝限制，今晚可按额度继续使用", 14, UI_SUCCESS);
+    {
+        bool fresh = ptc_ui_status_is_fresh(model, raw_now);
+        bool can_skip = fresh && !model->bedtime_skipped &&
+            ((model->bedtime_active && model->bedtime_window_instance_id != 0) ||
+             model->bedtime_next_available);
+        bool can_restore = fresh && ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy);
+        draw_candidate_button(pixels, stride, ptc_ui_bedtime_manage_rect(0),
+            "Y  跳过本次", UI_PAGE, UI_ACCENT, false,
+            !can_skip || model->waiting || model->disable_flag_present);
+        draw_candidate_button(pixels, stride, ptc_ui_bedtime_manage_rect(1),
+            "X  恢复本次", UI_PAGE, can_restore ? UI_DANGER : UI_INK, false,
+            !can_restore || model->waiting || model->disable_flag_present);
     }
 
     /* 页面状态、预测与风险统一在右侧卡片中 */

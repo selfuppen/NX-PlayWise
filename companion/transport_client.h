@@ -72,6 +72,8 @@ PtcCompanionStatus ptc_companion_transport_submit_set_bedtime_policy(PtcCompanio
     const char *request_id, int64_t created_at, const PtcBedtimePolicy *policy, bool apply_immediately);
 PtcCompanionStatus ptc_companion_transport_submit_skip_bedtime(PtcCompanionTransportClient *client,
     const char *request_id, int64_t created_at, uint64_t window_instance_id);
+PtcCompanionStatus ptc_companion_transport_submit_clear_bedtime_skip(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint64_t window_instance_id);
 PtcCompanionStatus ptc_companion_transport_submit_confirm_bedtime_requirements(PtcCompanionTransportClient *client,
     const char *request_id, int64_t created_at, bool official_setting_confirmed,
     bool overlay_risk_accepted, uint16_t confirmation_version, const char *environment_fingerprint);

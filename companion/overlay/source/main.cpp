@@ -110,6 +110,7 @@ enum class OverlayRequestKind {
     AddTodayMinutes,
     DisableTodayLimit,
     SkipBedtime,
+    ClearBedtimeSkip,
     DisableBedtime,
     RestoreInstallSnapshot,
 };
@@ -657,6 +658,7 @@ public:
             kind == OverlayRequestKind::AddTodayMinutes ||
             kind == OverlayRequestKind::DisableTodayLimit ||
             kind == OverlayRequestKind::SkipBedtime ||
+            kind == OverlayRequestKind::ClearBedtimeSkip ||
             kind == OverlayRequestKind::DisableBedtime ||
             kind == OverlayRequestKind::RestoreInstallSnapshot;
     }
@@ -717,6 +719,15 @@ public:
         return ptc_overlay_parent_action_unavailable_reason(&displayed_summary_, action);
     }
 
+    bool parent_action_requires_hold(PtcOverlayParentAction action) const
+    {
+        if (action == PTC_OVERLAY_PARENT_ADD_MINUTES ||
+            action == PTC_OVERLAY_PARENT_SKIP_BEDTIME) return false;
+        if (action == PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP)
+            return displayed_summary_.bedtime_active && displayed_summary_.bedtime_skipped;
+        return true;
+    }
+
     bool submit_parent_action()
     {
         if (!bridge_ || bridge_->waiting || !parent_authorized_) return false;
@@ -740,6 +751,11 @@ public:
             kind = OverlayRequestKind::SkipBedtime;
             status = ptc_overlay_bridge_skip_bedtime(bridge_, now, ++request_nonce_,
                 ptc_overlay_parent_skip_instance_id(&displayed_summary_));
+            break;
+        case PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP:
+            kind = OverlayRequestKind::ClearBedtimeSkip;
+            status = ptc_overlay_bridge_clear_bedtime_skip(bridge_, now, ++request_nonce_,
+                displayed_summary_.bedtime_skipped_window_instance_id);
             break;
         case PTC_OVERLAY_PARENT_DISABLE_BEDTIME:
             kind = OverlayRequestKind::DisableBedtime;
@@ -854,13 +870,13 @@ public:
             if (touch_pressed) {
                 for (int index = 0; index < PTC_OVERLAY_PARENT_ACTION_COUNT; ++index) {
                     if (tx >= cx + 12 && tx < cx + PTC_OVERLAY_CONTENT_W - 12 &&
-                        ty >= cy + 150 + index * 57 && ty < cy + 200 + index * 57) {
+                        ty >= cy + 135 + index * 52 && ty < cy + 181 + index * 52) {
                         const bool was_selected = parent_action_ == index;
                         parent_action_ = index;
                         ptc_overlay_hold_reset(&confirm_hold_);
                         action_changed = true;
-                        if (was_selected && (index == PTC_OVERLAY_PARENT_ADD_MINUTES ||
-                            index == PTC_OVERLAY_PARENT_SKIP_BEDTIME)) keysDown |= HidNpadButton_A;
+                        if (was_selected && !parent_action_requires_hold(
+                                static_cast<PtcOverlayParentAction>(index))) keysDown |= HidNpadButton_A;
                         break;
                     }
                 }
@@ -886,13 +902,11 @@ public:
                 parent_view_ = ParentView::Child;
                 ptc_overlay_hold_reset(&confirm_hold_);
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
-                       (parent_action_ == PTC_OVERLAY_PARENT_ADD_MINUTES ||
-                        parent_action_ == PTC_OVERLAY_PARENT_SKIP_BEDTIME) &&
+                       !parent_action_requires_hold(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        (keysDown & HidNpadButton_A)) {
                 (void)submit_parent_action();
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
-                       (parent_action_ != PTC_OVERLAY_PARENT_ADD_MINUTES &&
-                        parent_action_ != PTC_OVERLAY_PARENT_SKIP_BEDTIME) &&
+                       parent_action_requires_hold(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        !action_changed && (keysHeld & HidNpadButton_A)) {
                 if (ptc_overlay_hold_update(&confirm_hold_, true, elapsed_ms, 1000))
                     (void)submit_parent_action();
@@ -925,6 +939,8 @@ public:
     {
         char code[32];
         if (bedtime_restricted()) return false;
+        if (has_status_snapshot_ && !status_is_stale() &&
+            displayed_summary_.unrestricted_today == 1) return false;
         if (recovery_active_) {
             result_pending_ = true;
             success_visible_ = true;
@@ -1016,6 +1032,7 @@ public:
         if (kind == OverlayRequestKind::PreviewOfflineCode) return "预览今日加时";
         if (kind == OverlayRequestKind::OfflineCode) return "提交今日加时";
         if (kind == OverlayRequestKind::ClaimDailyBuffer) return "领取自主缓冲";
+        if (kind == OverlayRequestKind::ClearBedtimeSkip) return "恢复本次就寝";
         return "未开始";
     }
 
@@ -1220,7 +1237,7 @@ public:
 
         if (parent_view_ == ParentView::Actions) {
             static constexpr const char *LABELS[PTC_OVERLAY_PARENT_ACTION_COUNT] = {
-                "快速加时", "今日不限时", "跳过本次就寝", "关闭就寝计划",
+                "快速加时", "今日不限时", "跳过本次就寝", "恢复本次就寝", "关闭就寝计划",
                 "恢复安装前设置并停用 PlayWise"
             };
             renderer->drawRect(cx + 246, cy + 58, cw - 258, 46,
@@ -1228,13 +1245,13 @@ public:
             renderer->drawString("Y 刷新", false, cx + 264, cy + 87, 13,
                 renderer->a(bridge_->waiting ? MUTED_COLOR : FOCUS_BORDER));
             for (int i = 0; i < PTC_OVERLAY_PARENT_ACTION_COUNT; ++i) {
-                const s32 y = cy + 150 + i * 57;
+                const s32 y = cy + 135 + i * 52;
                 const bool selected = i == parent_action_;
                 const char *reason = parent_action_reason(
                     static_cast<PtcOverlayParentAction>(i));
-                renderer->drawRect(cx + 12, y, cw - 24, 50,
+                renderer->drawRect(cx + 12, y, cw - 24, 46,
                     renderer->a(selected ? FOCUS_BG : CARD_COLOR));
-                draw_outline(renderer, cx + 12, y, cw - 24, 50,
+                draw_outline(renderer, cx + 12, y, cw - 24, 46,
                     selected ? 2 : 1, selected ? FOCUS_BORDER : MUTED_COLOR);
                 if (i == PTC_OVERLAY_PARENT_ADD_MINUTES)
                     std::snprintf(line, sizeof(line), "快速加时 +%d 分钟（左右调整）",
@@ -1243,21 +1260,19 @@ public:
                     std::snprintf(line, sizeof(line), "%s", LABELS[i]);
                 renderer->drawString(line, false, cx + 24, y + 20, 13,
                     renderer->a(reason ? MUTED_COLOR : TEXT_COLOR), 310);
-                if (reason) renderer->drawString(reason, false, cx + 24, y + 40, 11,
+                if (reason) renderer->drawString(reason, false, cx + 24, y + 38, 11,
                     renderer->a(WAITING_COLOR), 305);
-                if (selected && !reason && i != PTC_OVERLAY_PARENT_ADD_MINUTES &&
-                    i != PTC_OVERLAY_PARENT_SKIP_BEDTIME) {
+                if (selected && !reason && parent_action_requires_hold(static_cast<PtcOverlayParentAction>(i))) {
                     const int progress = ptc_overlay_hold_progress(&confirm_hold_, 1000);
-                    renderer->drawRect(cx + 20, y + 44, cw - 40, 3, renderer->a(CARD_COLOR));
+                    renderer->drawRect(cx + 20, y + 42, cw - 40, 3, renderer->a(CARD_COLOR));
                     if (progress > 0)
-                        renderer->drawRect(cx + 20, y + 44, (cw - 40) * progress / 1000, 3,
+                        renderer->drawRect(cx + 20, y + 42, (cw - 40) * progress / 1000, 3,
                             renderer->a(ERROR_COLOR));
                 }
             }
             const auto selected = static_cast<PtcOverlayParentAction>(parent_action_);
             const char *reason = parent_action_reason(selected);
-            const bool hold = selected != PTC_OVERLAY_PARENT_ADD_MINUTES &&
-                selected != PTC_OVERLAY_PARENT_SKIP_BEDTIME;
+            const bool hold = parent_action_requires_hold(selected);
             renderer->drawString(reason ? "该动作当前不可用；B 返回" :
                 (hold ? "长按 A 1 秒；Y 刷新；B 返回" : "A 执行；Y 刷新；B 返回"),
                 false, cx + 14, cy + 470, 13,
@@ -1472,7 +1487,9 @@ public:
         renderer->drawString("点按清空", false, clear.x + 23, clear.y + 26, 12, renderer->a(CLEAR_BORDER));
 
         // --- 4. Control & Submit Bar (操作与提交栏) ---
-        const bool can_submit = !bedtime_restricted() &&
+        const bool code_unavailable = has_status_snapshot_ && !status_is_stale() &&
+            summary.unrestricted_today == 1;
+        const bool can_submit = !bedtime_restricted() && !code_unavailable &&
             ptc_overlay_request_action_enabled(bridge_->waiting) &&
             ptc_overlay_input_can_submit(input_);
         const s32 submit_y = cy + PTC_OVERLAY_SUBMIT_Y;
@@ -1487,6 +1504,9 @@ public:
         } else if (bedtime_restricted()) {
             renderer->drawString("请家长先解除就寝限制；可继续输入加时码", false,
                 cx + 32, submit_y + 24, 13, renderer->a(WAITING_COLOR));
+        } else if (code_unavailable) {
+            renderer->drawString("今日不限时，加时码不可用", false,
+                cx + 65, submit_y + 24, 13, renderer->a(WAITING_COLOR));
         } else if (bridge_->waiting) {
             renderer->drawString("后台处理中，可继续编辑输入", false, cx + 66, submit_y + 24, 13,
                                  renderer->a(MUTED_COLOR));

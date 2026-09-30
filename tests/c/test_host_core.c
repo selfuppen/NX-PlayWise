@@ -522,6 +522,12 @@ static void test_bedtime_rules_and_protocol(void)
         ptc_request_parse(json, &request) == PTC_ERR_OK &&
         request.bedtime_window_instance_id == instance,
         "skip request binds exactly one stable window instance");
+    check_true(ptc_companion_clear_bedtime_skip_request_json(
+        json, sizeof(json), "bedtime-clear-1", 1, instance) > 0 &&
+        ptc_request_parse(json, &request) == PTC_ERR_OK &&
+        request.type == PTC_REQUEST_CLEAR_BEDTIME_SKIP &&
+        request.bedtime_window_instance_id == instance,
+        "clear-skip request binds the skipped window instance");
     check_true(ptc_companion_confirm_bedtime_requirements_request_json(
         json, sizeof(json), "bedtime-confirm-1", 1, true, true, 1, "environment-1") > 0 &&
         ptc_request_parse(json, &request) == PTC_ERR_OK &&
@@ -923,6 +929,11 @@ static void test_overlay_parent_actions_and_input(void)
         PTC_OVERLAY_PARENT_UNLIMITED) != NULL,
         "daily actions wait until bedtime restriction is removed");
     summary.bedtime_skipped = true;
+    summary.bedtime_skipped_window_available = true;
+    summary.bedtime_skipped_window_instance_id = 202;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP) == NULL,
+        "parent can restore the saved skipped bedtime window");
     check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
         PTC_OVERLAY_PARENT_ADD_MINUTES) == NULL,
         "daily actions become available after bedtime skip");
@@ -1096,8 +1107,8 @@ static void test_overlay_child_quota_and_restriction_details(void)
         "rule source weekly maps to 周计划");
     check_true(strcmp(ptc_overlay_rule_source_label("today_override"), "今日调整") == 0,
         "rule source today_override maps to 今日调整");
-    check_true(strcmp(ptc_overlay_rule_source_label("scheduled_override"), "临时计划") == 0,
-        "rule source scheduled_override maps to 临时计划");
+    check_true(strcmp(ptc_overlay_rule_source_label("scheduled_override"), "指定日期额度") == 0,
+        "rule source scheduled_override maps to 指定日期额度");
     check_true(strcmp(ptc_overlay_rule_source_label("statutory_holiday"), "法定假日") == 0,
         "rule source statutory_holiday maps to 法定假日");
     check_true(strcmp(ptc_overlay_rule_source_label("makeup_workday"), "调休工作日") == 0,
@@ -1945,6 +1956,34 @@ static void test_offline_code_preview_is_non_consuming(void)
     check_true(!mem.storage.vtable->exists(&mem.storage, "app/ledger/redemption-history.jsonl"),
         "preview does not create redemption history");
 
+    pctl.status.limited_today = false;
+    pctl.status.unrestricted_today = true;
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"preview-unlimited\",\"type\":\"preview_offline_code\","
+        "\"created_at\":1,\"payload\":{\"code\":\"%s\"}}", code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/preview-unlimited.json", request), "queue unlimited-day preview");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unlimited-day preview processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/preview-unlimited.json", result, sizeof(result)) &&
+        strstr(result, "\"reason\":\"unlimited_not_allowed\""),
+        "unlimited day rejects preview without consuming code");
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"redeem-unlimited\",\"type\":\"offline_code\","
+        "\"created_at\":1,\"payload\":{\"code\":\"%s\"}}", code);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/redeem-unlimited.json", request), "queue unlimited-day redemption");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unlimited-day redemption processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/redeem-unlimited.json", result, sizeof(result)) &&
+        strstr(result, "\"reason\":\"unlimited_not_allowed\"") &&
+        !mem.storage.vtable->exists(&mem.storage, "app/ledger/used_nonces.jsonl"),
+        "unlimited day rejects commit without consuming nonce");
+    check_int((int)pctl.apply_target_calls, (int)apply_calls,
+        "unlimited code rejection does not write PCTL");
+    pctl.status.limited_today = true;
+    pctl.status.unrestricted_today = false;
+
     snprintf(request, sizeof(request),
         "{\"version\":1,\"request_id\":\"redeem-code\",\"type\":\"offline_code\","
         "\"created_at\":2,\"payload\":{\"code\":\"%s\"}}", code);
@@ -2467,6 +2506,7 @@ static void test_bedtime_enforcement_and_overlay_recovery(void)
     char fingerprint[65];
     uint64_t instance;
     unsigned int start_timer_calls_before_enforce;
+    unsigned int apply_calls;
     static const char ENVIRONMENT[] =
         "{\"read_ok\":true,\"hos\":\"22.5.0\",\"firmware_hash\":\"test-hash\","
         "\"model\":\"mariko-oled\",\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\"}";
@@ -2644,6 +2684,123 @@ static void test_bedtime_enforcement_and_overlay_recovery(void)
     check_true(!mem.storage.vtable->exists(&mem.storage,
         "app/flags/restore_install_snapshot.flag"),
         "overlay recovery never creates an automatic startup restore flag");
+
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"bedtime-clear-disabled\",\"type\":\"clear_bedtime_skip\","
+        "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
+        (unsigned long long)instance);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-clear-disabled.json", request),
+        "queue clear-skip while control is disabled");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "disabled clear-skip processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-clear-disabled.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"disabled\""),
+        "disabled control refuses a new bedtime restriction write");
+    check_true(mem.storage.vtable->remove_path(&mem.storage, "app/flags/disable.flag"),
+        "enable control before restoring skipped bedtime");
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"bedtime-clear-stale\",\"type\":\"clear_bedtime_skip\","
+        "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
+        (unsigned long long)(instance + 1));
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-clear-stale.json", request), "queue stale clear-skip");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "stale clear-skip processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-clear-stale.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"bedtime_instance_not_active\""),
+        "stale instance cannot clear the saved skip");
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"bedtime-clear-fail\",\"type\":\"clear_bedtime_skip\","
+        "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
+        (unsigned long long)instance);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-clear-fail.json", request), "queue failing clear-skip");
+    pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "failing clear-skip processed");
+    pctl.write_error = PTC_ERR_OK;
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-clear-fail.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"error\"") &&
+        strstr(text, "\"skipped\":true"),
+        "failed restriction write retains the skipped window");
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"bedtime-clear-state-fail\",\"type\":\"clear_bedtime_skip\","
+        "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
+        (unsigned long long)instance);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-clear-state-fail.json", request),
+        "queue clear-skip with a state write failure");
+    mem.fail_write_path_contains_once = "app/state.json";
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "state-write failure processed");
+    mem.fail_write_path_contains_once = NULL;
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-clear-state-fail.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"error\"") &&
+        strstr(text, "\"skipped\":true") && !pctl.status.blocked_today,
+        "state write failure preserves skip without a PCTL write");
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"bedtime-clear\",\"type\":\"clear_bedtime_skip\","
+        "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
+        (unsigned long long)instance);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-clear.json", request), "queue clear-skip retry");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "clear-skip retry processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-clear.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") &&
+        strstr(text, "\"skipped\":false") && pctl.status.blocked_today,
+        "current window becomes restricted before clear-skip succeeds");
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"bedtime-reskip\",\"type\":\"skip_bedtime\","
+        "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
+        (unsigned long long)instance);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-reskip.json", request), "queue skip after restore");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "skip after restore processed");
+    fake_time.snapshot.minute_of_day = 1200;
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"bedtime-clear-future\",\"type\":\"clear_bedtime_skip\","
+        "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
+        (unsigned long long)instance);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/bedtime-clear-future.json", request),
+        "queue clear-skip before the same bedtime window begins");
+    apply_calls = pctl.apply_target_calls;
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "future clear-skip processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/results/bedtime-clear-future.json", text, sizeof(text)) &&
+        strstr(text, "\"status\":\"ok\"") &&
+        (unsigned int)pctl.apply_target_calls == apply_calls,
+        "future-window clear-skip updates eligibility without writing PCTL early");
+
+    {
+        PtcEffectiveBedtime later = ptc_bedtime_resolve_start_day(
+            &rules, 2381, ptc_weekday_from_day_index(2381));
+        uint64_t later_instance = ptc_bedtime_window_instance_id(2381, later.window.start_minute);
+        check_true(later.window.enabled, "following bedtime window is available");
+        snprintf(request, sizeof(request),
+            "{\"version\":1,\"request_id\":\"bedtime-skip-later\",\"type\":\"skip_bedtime\","
+            "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
+            (unsigned long long)later_instance);
+        check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+            "app/inbox/pending/bedtime-skip-later.json", request),
+            "queue skip for the window after tonight");
+        check_int(ptc_sysmodule_process_all(&sysmodule), 1, "later skip processed");
+        snprintf(request, sizeof(request),
+            "{\"version\":1,\"request_id\":\"bedtime-clear-later\",\"type\":\"clear_bedtime_skip\","
+            "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
+            (unsigned long long)later_instance);
+        check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+            "app/inbox/pending/bedtime-clear-later.json", request),
+            "queue clear for the window after tonight");
+        check_int(ptc_sysmodule_process_all(&sysmodule), 1, "later clear processed");
+        check_true(mem.storage.vtable->read_text(&mem.storage,
+            "app/results/bedtime-clear-later.json", text, sizeof(text)) &&
+            strstr(text, "\"status\":\"ok\"") &&
+            (unsigned int)pctl.apply_target_calls == apply_calls,
+            "a later skipped window can be restored without a premature PCTL write");
+    }
 
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
         "app/inbox/pending/bedtime-full-restore.json",

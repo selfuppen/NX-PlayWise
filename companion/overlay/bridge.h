@@ -24,6 +24,7 @@ typedef enum {
     PTC_OVERLAY_PARENT_ADD_MINUTES = 0,
     PTC_OVERLAY_PARENT_UNLIMITED,
     PTC_OVERLAY_PARENT_SKIP_BEDTIME,
+    PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP,
     PTC_OVERLAY_PARENT_DISABLE_BEDTIME,
     PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT,
     PTC_OVERLAY_PARENT_ACTION_COUNT
@@ -47,6 +48,8 @@ PtcCompanionStatus ptc_overlay_bridge_submit_overlay_ready(PtcOverlayBridge *bri
     int64_t created_at, uint16_t random16, const char *release_id,
     const char *boot_id, const char *environment_fingerprint);
 PtcCompanionStatus ptc_overlay_bridge_skip_bedtime(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, uint64_t window_instance_id);
+PtcCompanionStatus ptc_overlay_bridge_clear_bedtime_skip(PtcOverlayBridge *bridge,
     int64_t created_at, uint16_t random16, uint64_t window_instance_id);
 PtcCompanionStatus ptc_overlay_bridge_disable_bedtime(PtcOverlayBridge *bridge,
     int64_t created_at, uint16_t random16);

@@ -10,7 +10,7 @@ static const UiAction TODAY_ACTIONS[] = {
 };
 
 static const UiAction PLAN_ACTIONS[] = {
-    {"临时额度", "当前关闭", UI_ACCENT, UI_ACTION_ICON_CALENDAR_RANGE, UI_ACTION_VISUAL_NONE},
+    {"指定日期额度", "当前关闭", UI_ACCENT, UI_ACTION_ICON_CALENDAR_RANGE, UI_ACTION_VISUAL_NONE},
     {"节假日额度", "当前关闭", UI_SUCCESS, UI_ACTION_ICON_HOLIDAY, UI_ACTION_VISUAL_NONE},
     {"每周额度", "当前生效", UI_ACCENT, UI_ACTION_ICON_WEEKLY, UI_ACTION_VISUAL_NONE},
     {"就寝时间", "当前关闭", UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
@@ -549,7 +549,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             draw_text(pixels, stride, 457, 508, "就寝时间与额度", 14, UI_INK);
             draw_text(pixels, stride, 457, 534, "• 就寝时间：到点限制，不受额度影响", 11, UI_MUTED);
             draw_text(pixels, stride, 457, 556, "• 自主缓冲：限时日耗尽前由孩子申请", 11, UI_MUTED);
-            draw_text(pixels, stride, 457, 578, "• 优先顺序：临时计划 > 节假日 > 周计划", 11, UI_MUTED);
+            draw_text(pixels, stride, 457, 578, "• 优先顺序：指定日期额度 > 节假日 > 周计划", 11, UI_MUTED);
             draw_text(pixels, stride, 457, 600, "• 异常防护：离线运行，断网断电保护", 11, UI_MUTED);
         }
         if (model->parent_page == PTC_UI_PARENT_GRANT) {
@@ -624,7 +624,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 if (today_active) {
                     dynamic_action.subtitle = "今天优先采用今日调整";
                 } else if (scheduled_active) {
-                    dynamic_action.subtitle = "今天优先采用临时额度计划";
+                    dynamic_action.subtitle = "今天优先采用指定日期额度";
                 } else if (holiday_active) {
                     dynamic_action.subtitle = "今天优先采用节假日设置";
                 } else {

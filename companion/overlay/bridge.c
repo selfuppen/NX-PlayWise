@@ -139,6 +139,16 @@ PtcCompanionStatus ptc_overlay_bridge_skip_bedtime(PtcOverlayBridge *bridge,
             created_at, window_instance_id));
 }
 
+PtcCompanionStatus ptc_overlay_bridge_clear_bedtime_skip(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, uint64_t window_instance_id)
+{
+    if (window_instance_id == 0 || !prepare_request(bridge, created_at, random16))
+        return PTC_COMPANION_BAD_ARGUMENT;
+    return begin_request(bridge,
+        ptc_companion_transport_submit_clear_bedtime_skip(&bridge->transport, bridge->request_id,
+            created_at, window_instance_id));
+}
+
 PtcCompanionStatus ptc_overlay_bridge_disable_bedtime(PtcOverlayBridge *bridge,
     int64_t created_at, uint16_t random16)
 {
@@ -282,7 +292,7 @@ const char *ptc_overlay_rule_source_label(const char *source)
 {
     if (!source || !source[0]) return "常规计划";
     if (strcmp(source, "today_override") == 0) return "今日调整";
-    if (strcmp(source, "scheduled_override") == 0) return "临时计划";
+    if (strcmp(source, "scheduled_override") == 0) return "指定日期额度";
     if (strcmp(source, "statutory_holiday") == 0) return "法定假日";
     if (strcmp(source, "makeup_workday") == 0) return "调休工作日";
     if (strcmp(source, "weekly") == 0) return "周计划";
@@ -359,6 +369,8 @@ const char *ptc_overlay_parent_action_unavailable_reason(
         return NULL;
     case PTC_OVERLAY_PARENT_SKIP_BEDTIME:
         return ptc_overlay_parent_skip_instance_id(summary) ? NULL : "没有可跳过的就寝窗口";
+    case PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP:
+        return summary->bedtime_skipped_window_available ? NULL : "本次就寝未跳过";
     case PTC_OVERLAY_PARENT_DISABLE_BEDTIME:
         return summary->bedtime_enabled ? NULL : "就寝计划未开启";
     default:

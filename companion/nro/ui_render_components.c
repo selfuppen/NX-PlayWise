@@ -57,7 +57,7 @@ const char *ui_rule_source_label(const char *source)
 {
     if (!source || !source[0]) return "尚未刷新";
     if (strcmp(source, "today_override") == 0) return "今日额度调整";
-    if (strcmp(source, "scheduled_override") == 0) return "临时额度计划";
+    if (strcmp(source, "scheduled_override") == 0) return "指定日期额度";
     if (strcmp(source, "statutory_holiday") == 0) return "国家法定休假日";
     if (strcmp(source, "makeup_workday") == 0) return "国家调休工作日";
     return "周计划";

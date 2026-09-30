@@ -23,6 +23,8 @@ int ptc_companion_set_bedtime_policy_request_json(char *out, size_t out_size,
     const char *request_id, int64_t created_at, const PtcBedtimePolicy *policy, bool apply_immediately);
 int ptc_companion_skip_bedtime_request_json(char *out, size_t out_size,
     const char *request_id, int64_t created_at, uint64_t window_instance_id);
+int ptc_companion_clear_bedtime_skip_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, uint64_t window_instance_id);
 int ptc_companion_confirm_bedtime_requirements_request_json(char *out, size_t out_size,
     const char *request_id, int64_t created_at, bool official_setting_confirmed,
     bool overlay_risk_accepted, uint16_t confirmation_version, const char *environment_fingerprint);

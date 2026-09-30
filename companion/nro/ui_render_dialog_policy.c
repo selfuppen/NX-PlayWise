@@ -22,6 +22,7 @@ void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     char current_value[64];
     char date_line[64];
     char freshness[64];
+    char bedtime_notice[128];
     uint16_t year = 0;
     uint8_t month = 0;
     uint8_t day = 0;
@@ -67,6 +68,7 @@ void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         snprintf(after_value, sizeof(after_value), "保存后刷新确认");
     }
     format_status_age(model, freshness, sizeof(freshness));
+    ptc_ui_format_bedtime_quota_notice(model, ptc_ui_render_now(), bedtime_notice, sizeof(bedtime_notice));
     if (model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) {
         PtcEffectiveRule current_rule = ptc_ui_plan_rule(model, PTC_UI_PLAN_SAVED);
         PtcDayRule requested_rule = {PTC_RULE_MODE_LIMIT, model->draft_minutes};
@@ -94,7 +96,8 @@ void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     draw_text_center(pixels, stride, (UiRect){dialog.x + 40, dialog.y + 448, 640, 22}, freshness, 16,
                      status_age_color(model));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 50, dialog.y + 472, 620, 22},
-                     "本次修改只影响今天  |  Y 或点击数值手动输入", 16, UI_MUTED);
+                     bedtime_notice[0] ? bedtime_notice : "本次修改只影响今天  |  Y 或点击数值手动输入",
+                     16, bedtime_notice[0] ? UI_DANGER : UI_MUTED);
     draw_overlay_actions(pixels, stride, model, "A / +  提交并刷新");
 }
 
@@ -156,7 +159,7 @@ static void draw_plan_save_confirmation(uint32_t *pixels, uint32_t stride, const
     PtcEffectiveRule before;
     PtcEffectiveRule after;
     PtcUiTodayDecision decision;
-    char before_value[48], after_value[48], impact[256], change[96], remaining[48];
+    char before_value[48], after_value[48], impact[256], change[96], remaining[48], bedtime_notice[128];
     int changed = 0;
     ptc_ui_project_plan_impact(model, kind, true, ptc_ui_render_now(), &projection);
     before = projection.before;
@@ -165,6 +168,7 @@ static void draw_plan_save_confirmation(uint32_t *pixels, uint32_t stride, const
     format_plan_rule_value(before, before_value, sizeof(before_value));
     format_plan_rule_value(after, after_value, sizeof(after_value));
     ptc_ui_format_plan_impact(model, kind, ptc_ui_render_now(), impact, sizeof(impact));
+    ptc_ui_format_bedtime_quota_notice(model, ptc_ui_render_now(), bedtime_notice, sizeof(bedtime_notice));
     if (kind == PTC_UI_PLAN_WEEKLY) {
         for (int day = 0; day < 7; ++day)
             if (ptc_ui_day_rule_effectively_changed(model->current_week[day], model->draft_week[day])) ++changed;
@@ -175,7 +179,7 @@ static void draw_plan_save_confirmation(uint32_t *pixels, uint32_t stride, const
         if (ptc_ui_day_rule_effectively_changed(model->makeup_workday_rule, model->draft_makeup_workday_rule)) ++changed;
         snprintf(change, sizeof(change), "本次修改：%d 项节假日设置", changed);
     } else {
-        snprintf(change, sizeof(change), "本次修改：临时额度计划");
+        snprintf(change, sizeof(change), "本次修改：指定日期额度");
     }
     if (after.rule.mode == PTC_RULE_MODE_UNLIMITED) {
         snprintf(remaining, sizeof(remaining), "不限时");
@@ -235,10 +239,13 @@ static void draw_plan_save_confirmation(uint32_t *pixels, uint32_t stride, const
                       15, dialog.width - 68, 20, 2, UI_MUTED);
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 306, dialog.width - 68, 38}, 10,
                     model->confirm_hold_required ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 46, dialog.y + 306, dialog.width - 92, 38},
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 46, dialog.y + 306, dialog.width - 92, bedtime_notice[0] ? 20 : 38},
                      model->confirm_hold_required
                         ? "保存后可能立即限制使用；请长按确认" : decision.final_reason,
-                     15, model->confirm_hold_required ? UI_DANGER : UI_SUCCESS);
+                     bedtime_notice[0] ? 13 : 15, model->confirm_hold_required ? UI_DANGER : UI_SUCCESS);
+    if (bedtime_notice[0])
+        draw_text_center(pixels, stride, (UiRect){dialog.x + 46, dialog.y + 325, dialog.width - 92, 18},
+            bedtime_notice, 12, UI_DANGER);
     draw_overlay_actions(pixels, stride, model,
                          model->confirm_hold_required ? "长按 A / 触摸按住" : "A  确认保存");
 }

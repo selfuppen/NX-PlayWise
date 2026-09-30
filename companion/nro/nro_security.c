@@ -75,9 +75,10 @@ void dispatch_auth_retry(UiState *ui, AuthRetryAction action)
     case AUTH_RETRY_CLEAR_REDEMPTION_HISTORY: request_clear_redemption_history(ui); break;
     case AUTH_RETRY_CLEAR_ACTIVITY_HISTORY: request_clear_activity_history(ui); break;
     case AUTH_RETRY_SKIP_BEDTIME:
-        ui->model.parent_page = PTC_UI_PARENT_TODAY;
-        ui->model.selected_index = 4;
-        handle_parent_action(ui);
+        handle_today_action_ready(ui, PTC_UI_OPERATION_SKIP_BEDTIME);
+        break;
+    case AUTH_RETRY_CLEAR_BEDTIME_SKIP:
+        request_clear_bedtime_skip(ui);
         break;
     case AUTH_RETRY_NONE:
     default:

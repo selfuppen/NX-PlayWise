@@ -224,6 +224,10 @@ static bool process_preview_offline_code(
         return finish_with_error(sysmodule, request, "release", true,
             err, now.day_index);
     }
+    if (pctl_status.unrestricted_today) {
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_UNLIMITED_NOT_ALLOWED, now.day_index);
+    }
     if (!load_rules(sysmodule, &rules)) {
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_RULES_INVALID, now.day_index);
@@ -294,6 +298,10 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, "release", true, err, now.day_index);
+    }
+    if (pctl_status.unrestricted_today) {
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_UNLIMITED_NOT_ALLOWED, now.day_index);
     }
     {
         uint16_t new_minutes;

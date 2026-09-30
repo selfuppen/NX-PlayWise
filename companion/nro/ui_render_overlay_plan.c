@@ -23,7 +23,7 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
     uint8_t s_month = 0, s_day = 0, e_month = 0, e_day = 0;
     bool s_ok = ptc_date_from_day_index(draft->start_day_index, &s_year, &s_month, &s_day);
     bool e_ok = ptc_date_from_day_index(draft->end_day_index, &e_year, &e_month, &e_day);
-    static const char *LABELS[] = {"计划状态", "开始日期", "持续天数", "每天额度"};
+    static const char *LABELS[] = {"计划状态", "开始日期", "持续天数", "每日总额度"};
     char values[4][128];
     char banner_text[192];
     bool save_danger = ptc_ui_scheduled_dirty(model) &&
@@ -103,7 +103,7 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
 
     /* 规则优先级说明 */
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 482,
-              "今日额度依次采用：今日调整 > 临时计划 > 节假日 > 周计划；就寝限制单独生效",
+              "今日额度依次采用：今日调整 > 指定日期额度 > 节假日 > 周计划；就寝限制单独生效",
               14, UI_RGB(UI_BLENDED(text_secondary)));
 
     /* 动态上下文按键引导栏 (Context-Aware Action Guide Bar) */
@@ -142,7 +142,7 @@ static void draw_scheduled_leave(uint32_t *pixels, uint32_t stride, const PtcUiM
 {
     UiRect dialog;
     PtcUiModel copy = *model;
-    snprintf(copy.overlay_title, sizeof(copy.overlay_title), "放弃临时额度计划草稿？");
+    snprintf(copy.overlay_title, sizeof(copy.overlay_title), "放弃指定日期额度草稿？");
     snprintf(copy.overlay_body, sizeof(copy.overlay_body), "尚未保存的修改会丢失，已保存的计划不变。");
     draw_dialog_shell(pixels, stride, &copy, &dialog, 720, 300);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  继续编辑",

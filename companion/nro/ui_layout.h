@@ -91,6 +91,7 @@ typedef enum {
     PTC_UI_HIT_BEDTIME_SECTION,
     PTC_UI_HIT_BEDTIME_FIELD,
     PTC_UI_HIT_BEDTIME_MASTER_SWITCH,
+    PTC_UI_HIT_BEDTIME_MANAGE,
     PTC_UI_HIT_BEDTIME_OVERLAY_FIELD,
     PTC_UI_HIT_BEDTIME_PRESET,
     PTC_UI_HIT_HOME_DETAILS,
@@ -153,6 +154,7 @@ PtcUiRect ptc_ui_quick_add_option_rect(int index);
 PtcUiRect ptc_ui_bedtime_section_rect(int index);
 PtcUiRect ptc_ui_bedtime_field_rect(int section, int index);
 PtcUiRect ptc_ui_bedtime_master_switch_rect(void);
+PtcUiRect ptc_ui_bedtime_manage_rect(int index);
 PtcUiRect ptc_ui_bedtime_overlay_field_rect(PtcUiOverlay overlay, int index);
 PtcUiRect ptc_ui_bedtime_preset_rect(PtcUiOverlay overlay, int index);
 PtcUiRect ptc_ui_bedtime_timeline_rect(PtcUiOverlay overlay);

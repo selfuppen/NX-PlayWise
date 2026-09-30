@@ -175,7 +175,7 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
         "加时码生成管理", "手机和电脑配对", "保留周计划草稿？", "家长区快捷键", "本机生成加时码",
         "保留密钥更改？", "兑换结果", "验证未通过", "软件信息", "节假日安排", "保留节假日草稿？",
         "支持事件详情", "批量设置", "自制程序菜单高级入口", "调整时长", "外观主题", "输入家长 PIN",
-        "加时码使用记录", "临时额度计划", "今日自主缓冲", "家庭活动记录", "今日详情", "保留临时额度计划草稿？",
+        "加时码使用记录", "指定日期额度", "今日自主缓冲", "家庭活动记录", "今日详情", "保留指定日期额度草稿？",
         "就寝时间", "快速加时", "编辑每周就寝窗口", "编辑特殊就寝规则",
         "离开就寝时间编辑？", "复制每周就寝窗口"
     };
@@ -826,11 +826,11 @@ int main(int argc, char **argv)
         model.draft_scheduled_override.rule.minutes = 90;
         model.overlay = PTC_UI_OVERLAY_SCHEDULED;
         model.overlay_selection = 1;
-        snprintf(model.overlay_title, sizeof(model.overlay_title), "临时额度计划");
+        snprintf(model.overlay_title, sizeof(model.overlay_title), "指定日期额度");
         snprintf(model.overlay_body, sizeof(model.overlay_body), "安排一段时间的每日额度，保存后应用；一次保留一个日期区间。");
         failed |= save_preview(argv[2], "scheduled", "scheduled-draft", &model, dark);
         ptc_ui_numpad_open(&model, PTC_UI_NUMPAD_SCHEDULED_MINUTES, PTC_UI_OVERLAY_SCHEDULED,
-            "设置临时额度计划", "分别输入小时和分钟", 4, 1, 1440, 90);
+            "设置指定日期额度", "分别输入小时和分钟", 4, 1, 1440, 90);
         failed |= save_preview(argv[2], "scheduled", "scheduled-duration-editor", &model, dark);
         ptc_ui_cancel_overlay(&model);
         model.draft_scheduled_override.end_day_index = 2745;

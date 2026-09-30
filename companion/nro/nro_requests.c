@@ -159,7 +159,7 @@ void edit_scheduled_minutes(UiState *ui)
         return;
     }
     ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_SCHEDULED_MINUTES,
-        PTC_UI_OVERLAY_SCHEDULED, "设置临时额度计划",
+        PTC_UI_OVERLAY_SCHEDULED, "设置指定日期额度",
         "分别输入小时和分钟，总计 1 到 1440 分钟", 4, 1, 1440,
         draft->rule.minutes);
 }

@@ -60,6 +60,8 @@ PtcUiBedtimeImpact ptc_ui_bedtime_save_impact(const PtcUiModel *model,
     uint16_t minute_of_day, int64_t now);
 bool ptc_ui_bedtime_skip_matches_policy(const PtcUiModel *model,
     const PtcBedtimePolicy *policy);
+void ptc_ui_format_bedtime_quota_notice(const PtcUiModel *model, int64_t now,
+    char *out, size_t out_size);
 bool ptc_ui_bedtime_section_dirty(const PtcUiModel *model, PtcUiBedtimeSection section);
 PtcBedtimePolicy ptc_ui_bedtime_section_policy(const PtcUiModel *model,
     PtcUiBedtimeSection section);

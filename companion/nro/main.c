@@ -214,7 +214,9 @@ int main(int argc, char **argv)
                 bool touch_confirm_held = touch_active &&
                     ptc_ui_rect_contains(ptc_ui_confirm_rect(ui.model.overlay), touch_x, touch_y);
                 if (touch_confirm_held) touch_down = true;
-                if (down & HidNpadButton_B) {
+                if (ui.waiting || ui.quota_recheck_pending) {
+                    ptc_ui_confirm_hold_update(&ui.confirm_hold, false, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
+                } else if (down & HidNpadButton_B) {
                     ptc_ui_confirm_hold_update(&ui.confirm_hold, false, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
                     handle_overlay_input(&ui, down);
                 } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
@@ -228,6 +230,7 @@ int main(int argc, char **argv)
                     if (ptc_ui_confirm_hold_update(&ui.confirm_hold,
                             pad_confirm_held || touch_confirm_held, confirm_now_ms, DANGER_CONFIRM_HOLD_MS)) {
                         confirm_operation(&ui);
+                        ptc_ui_confirm_hold_update(&ui.confirm_hold, false, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
                     }
                 }
                 ui.model.confirm_hold_progress = ptc_ui_confirm_hold_progress(
@@ -455,6 +458,10 @@ int main(int argc, char **argv)
                         "请等待就寝时间设置保存完成后再继续编辑。");
                 } else if (down & HidNpadButton_B) {
                     request_bedtime_leave(&ui, -1, true);
+                } else if (down & HidNpadButton_Y) {
+                    handle_today_action_ready(&ui, PTC_UI_OPERATION_SKIP_BEDTIME);
+                } else if (down & HidNpadButton_X) {
+                    request_clear_bedtime_skip(&ui);
                 } else if (down & HidNpadButton_L) {
                     select_bedtime_section(&ui, ui.model.bedtime_section - 1);
                 } else if (down & HidNpadButton_R) {

@@ -87,7 +87,8 @@ typedef enum {
     AUTH_RETRY_REVEAL_CREDENTIAL,
     AUTH_RETRY_CLEAR_REDEMPTION_HISTORY,
     AUTH_RETRY_CLEAR_ACTIVITY_HISTORY,
-    AUTH_RETRY_SKIP_BEDTIME
+    AUTH_RETRY_SKIP_BEDTIME,
+    AUTH_RETRY_CLEAR_BEDTIME_SKIP
 } AuthRetryAction;
 
 typedef struct {
@@ -220,6 +221,8 @@ void submit_autonomy_policy(UiState *ui);
 void submit_bedtime_confirmation(UiState *ui);
 void submit_bedtime_policy(UiState *ui);
 void submit_bedtime_skip(UiState *ui);
+void submit_clear_bedtime_skip(UiState *ui);
+void request_clear_bedtime_skip(UiState *ui);
 void open_activity_history(UiState *ui);
 void request_clear_activity_history(UiState *ui);
 bool commit_credential(UiState *ui);

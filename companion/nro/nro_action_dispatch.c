@@ -39,6 +39,33 @@ static uint16_t current_today_limit_value(const UiState *ui)
     return ptc_ui_today_limit_start_value(&ui->model, fallback);
 }
 
+void request_clear_bedtime_skip(UiState *ui)
+{
+    char body[256];
+    bool current;
+    if (ui->model.disable_flag_present || ui->waiting) return;
+    if (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
+        !ptc_ui_bedtime_skip_matches_policy(&ui->model, &ui->model.bedtime_policy)) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+            "没有可恢复的本次就寝跳过；请刷新状态后重试。");
+        return;
+    }
+    current = ui->model.bedtime_active && ui->model.bedtime_skipped &&
+        ui->model.bedtime_window_instance_id == ui->model.bedtime_skipped_window_instance_id;
+    ui->model.pending_bedtime_skip_instance_id = ui->model.bedtime_skipped_window_instance_id;
+    ui->auth_retry_action = AUTH_RETRY_CLEAR_BEDTIME_SKIP;
+    if (!verify_sensitive_pin(ui, "恢复本次就寝限制前，请再次输入本应用 PIN")) return;
+    snprintf(body, sizeof(body),
+        current ? "当前仍在已跳过的就寝窗口内。恢复后会立即限制使用并暂停游戏。" :
+                  "将清除这一次就寝跳过；到达该窗口时按原计划限制使用。");
+    if (current)
+        open_danger_confirm_overlay(ui, PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP,
+            "立即恢复本次就寝限制？", body);
+    else
+        open_confirm_overlay(ui, PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP,
+            "恢复本次就寝限制？", body);
+}
+
 
 void handle_today_action_ready(UiState *ui, int index)
 {
@@ -107,6 +134,7 @@ void handle_today_action_ready(UiState *ui, int index)
         uint64_t instance_id = 0;
         uint16_t start_day = 0, start_minute = 0, end_minute = 0;
         char start_date[64];
+        if (ui->model.disable_flag_present || ui->waiting) break;
         if (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL))) {
             snprintf(ui->model.message, sizeof(ui->model.message),
                 "就寝状态仍待确认，请刷新后重试。");
@@ -200,9 +228,9 @@ void handle_parent_action(UiState *ui)
             }
             ui->model.overlay = PTC_UI_OVERLAY_SCHEDULED;
             ui->model.overlay_selection = 0;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "临时额度计划");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "指定日期额度");
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                "只改每天可玩额度；指定日期就寝只改开始和结束，两者可同时生效。");
+                "指定日期内替换每天的总额度，已用时间仍计入；不是额外加时。就寝限制独立生效。");
             break;
         case 1:
             ui->model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
@@ -642,6 +670,9 @@ void confirm_operation(UiState *ui)
         break;
     case PTC_UI_OPERATION_SKIP_BEDTIME:
         submit_bedtime_skip(ui);
+        break;
+    case PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP:
+        submit_clear_bedtime_skip(ui);
         break;
     case PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY:
         submit_transport_empty(ui, "clear_redemption_history", "正在清空加时码使用记录...", "清空使用记录失败");

@@ -96,7 +96,7 @@ static UiActiveRuleBadge get_active_rule_badge(const PtcUiModel *model)
         badge.color = UI_ACCENT;
         badge.bg_color = UI_ACCENT_SOFT;
     } else if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        badge.label = "临时计划";
+        badge.label = "指定日期额度";
         badge.color = UI_ACCENT;
         badge.bg_color = UI_ACCENT_SOFT;
     } else if (strcmp(model->rule_source, "statutory_holiday") == 0) {

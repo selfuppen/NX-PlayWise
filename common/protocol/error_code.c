@@ -22,7 +22,7 @@ static const PtcErrorInfo PTC_ERROR_TABLE[] = {
     {PTC_ERR_MINUTES_EXCEED_LIMIT, "minutes_exceed_limit", "授权分钟数超过上限"},
     {PTC_ERR_CODE_COOLDOWN, "code_cooldown", "短码错误次数过多，请稍后再试"},
     {PTC_ERR_DISABLED, "disabled", "后台当前已禁用"},
-    {PTC_ERR_UNLIMITED_NOT_ALLOWED, "unlimited_not_allowed", "当前无限制状态不允许改为有限制"},
+    {PTC_ERR_UNLIMITED_NOT_ALLOWED, "unlimited_not_allowed", "今日不限时，加时码不可用"},
 #ifdef PLAYWISE_DEVICE_LAB
     {PTC_ERR_RAW_BLOCK_NOT_VERIFIED, "raw_block_not_verified", "禁玩能力尚未验证"},
     {PTC_ERR_SUSPEND_NOT_VERIFIED, "suspend_not_verified", "1457 辅助事件尚未验证（不代表暂停能力）"},

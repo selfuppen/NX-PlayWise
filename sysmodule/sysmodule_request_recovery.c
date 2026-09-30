@@ -160,7 +160,8 @@ static bool bedtime_instance_is_upcoming(const PtcRules *rules, PtcClockSnapshot
         PtcEffectiveBedtime next = ptc_bedtime_resolve_start_day(
             rules, day, ptc_weekday_from_day_index(day));
         if (!next.window.enabled || (offset == 0u && now.minute_of_day >= next.window.start_minute)) continue;
-        return ptc_bedtime_window_instance_id(day, next.window.start_minute) == instance_id;
+        if (ptc_bedtime_window_instance_id(day, next.window.start_minute) == instance_id)
+            return true;
     }
     return false;
 }
@@ -178,6 +179,45 @@ static bool process_bedtime_recovery_request(PtcSysmodule *sysmodule, const PtcR
     }
     current = ptc_bedtime_evaluate(
         &rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
+    if (request->type == PTC_REQUEST_CLEAR_BEDTIME_SKIP) {
+        PtcRuntimeState before = state;
+        bool active_window = current.active &&
+            current.window_instance_id == request->bedtime_window_instance_id;
+        PtcRuntimeState enforced;
+        if (state.bedtime_skipped_instance_id != request->bedtime_window_instance_id ||
+            !bedtime_instance_is_upcoming(&rules, now, request->bedtime_window_instance_id)) {
+            return finish_with_error(sysmodule, request, "release", false,
+                PTC_ERR_BEDTIME_INSTANCE_NOT_ACTIVE, now.day_index);
+        }
+        if (active_window && !recovery_begin(sysmodule, request, now)) {
+            return finish_with_error(sysmodule, request, "release", false,
+                PTC_ERR_PCTL_BACKUP_FAILED, now.day_index);
+        }
+        state.bedtime_skipped_instance_id = 0;
+        if (!save_state(sysmodule, &state, now.unix_seconds)) {
+            if (active_window) recovery_clear(sysmodule);
+            return finish_with_error(sysmodule, request, "release", false,
+                PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
+        }
+        if (active_window) {
+            int applied = ptc_sysmodule_enforce_tick(sysmodule);
+            bool confirmed = applied > 0 && load_state(sysmodule, &enforced) &&
+                enforced.bedtime_enforced && !enforced.apply_pending_confirmation &&
+                enforced.bedtime_window_instance_id == request->bedtime_window_instance_id;
+            if (!confirmed) {
+                /* Enforce may already have rolled back and cleared the transaction. */
+                bool rolled_back = !recovery_path_exists(sysmodule) || recovery_rollback(sysmodule);
+                if (rolled_back) clear_bedtime_snapshot(sysmodule);
+                if (!rolled_back || !save_state(sysmodule, &before, now.unix_seconds))
+                    write_disable_flag(sysmodule, "bedtime_skip_restore_failed\n");
+                return finish_with_error(sysmodule, request, "release", false,
+                    PTC_ERR_BEDTIME_RECOVERY_FAILED, now.day_index);
+            }
+        }
+        (void)record_activity(sysmodule, request, now, 0, 0);
+        return write_current_status_result(sysmodule, request, "release",
+            false, now, recovery_path_exists(sysmodule));
+    }
     if (request->type == PTC_REQUEST_SKIP_BEDTIME) {
         if (!bedtime_instance_is_upcoming(&rules, now, request->bedtime_window_instance_id)) {
             return finish_with_error(sysmodule, request, "release", false,
@@ -248,7 +288,13 @@ bool process_recovery_request_surface(
         (void)process_disable_today_limit(sysmodule, request, disable_flag, now);
         return true;
     case PTC_REQUEST_SKIP_BEDTIME:
+    case PTC_REQUEST_CLEAR_BEDTIME_SKIP:
     case PTC_REQUEST_DISABLE_BEDTIME:
+        if (request->type == PTC_REQUEST_CLEAR_BEDTIME_SKIP && disable_flag) {
+            (void)finish_with_error(sysmodule, request, "release", true,
+                PTC_ERR_DISABLED, now.day_index);
+            return true;
+        }
         (void)process_bedtime_recovery_request(sysmodule, request, now);
         return true;
     case PTC_REQUEST_OVERLAY_READY:

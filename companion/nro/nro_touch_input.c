@@ -233,6 +233,10 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.bedtime_master_focused = false;
         select_bedtime_section(ui, hit.index);
         break;
+    case PTC_UI_HIT_BEDTIME_MANAGE:
+        if (hit.index == 0) handle_today_action_ready(ui, PTC_UI_OPERATION_SKIP_BEDTIME);
+        else request_clear_bedtime_skip(ui);
+        break;
     case PTC_UI_HIT_BEDTIME_MASTER_SWITCH:
         ui->model.bedtime_master_focused = true;
         ui->model.bedtime_section_focused = false;

@@ -11,6 +11,12 @@ void open_offline_code_input(UiState *ui)
                  "紧急停用已开启，当前不能兑换加时码；状态和恢复仍可使用。");
         return;
     }
+    if (ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) &&
+        ui->model.unrestricted_today == 1) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+                 "今日不限时，加时码不可用；代码仍可留待有效的限时日使用。");
+        return;
+    }
     ptc_ui_numpad_open(
         &ui->model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
         "输入加时码", "输入家长给你的 8 位码，确认前会先显示加时预览。", 8, 0, 0, 0);
