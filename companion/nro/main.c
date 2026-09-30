@@ -254,6 +254,7 @@ int main(int argc, char **argv)
                     if (h_dir > 0) ptc_ui_duration_select_field(&ui.model, PTC_UI_DURATION_MINUTES);
                     else ptc_ui_duration_select_field(&ui.model, PTC_UI_DURATION_HOURS);
                     (void)ptc_ui_value_repeat_update(&ui.r_stick_repeat, 0, false, 0);
+                    ptc_audio_play(PTC_SE_FOCUS);
                 }
                 ui.r_stick_prev_h_dir = h_dir;
 
@@ -264,7 +265,9 @@ int main(int argc, char **argv)
                     if (step != 0) {
                         int magnitude = step < 0 ? -step : step;
                         ui.model.duration_step_feedback = (uint8_t)magnitude;
-                        ptc_ui_duration_step_field(&ui.model, step);
+                        if (ptc_ui_duration_step_field(&ui.model, step)) {
+                            ptc_audio_play(PTC_SE_FOCUS);
+                        }
                         ui.model.duration_scroll_anim_ticks = 6;
                     }
                 } else {

@@ -606,9 +606,11 @@ void handle_overlay_input(UiState *ui, u64 down)
             refresh_today_limit_editor(ui, false);
         } else if (today_mode && (down & (HidNpadButton_ZL | HidNpadButton_ZR | HidNpadButton_L | HidNpadButton_R))) {
             ui->model.today_limit_unlimited_draft = (down & (HidNpadButton_ZR | HidNpadButton_R)) != 0;
+            ptc_audio_play(PTC_SE_FOCUS);
         } else if (today_mode && ui->model.today_limit_unlimited_draft &&
                    (down & (HidNpadButton_X | HidNpadButton_Left))) {
             ui->model.today_limit_unlimited_draft = false;
+            ptc_audio_play(PTC_SE_FOCUS);
         } else if (today_mode && ui->model.today_limit_unlimited_draft &&
                    (down & (HidNpadButton_A | HidNpadButton_Plus))) {
             open_confirm_overlay(ui, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT,
@@ -617,6 +619,7 @@ void handle_overlay_input(UiState *ui, u64 down)
             /* Keep the previously entered limited value for a mode switch back. */
         } else if (ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR && (down & HidNpadButton_Minus)) {
             ptc_ui_duration_toggle_field(&ui->model);
+            ptc_audio_play(PTC_SE_FOCUS);
         } else if (down & HidNpadButton_Left) {
             ptc_ui_numpad_move(&ui->model, -1, 0);
         } else if (down & HidNpadButton_Right) {

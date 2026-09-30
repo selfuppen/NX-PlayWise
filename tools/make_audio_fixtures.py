@@ -9,30 +9,38 @@ from pathlib import Path
 SAMPLE_RATE = 48000
 
 def generate_focus() -> list[int]:
-    """Short crisp click (pitch glide 2200Hz -> 700Hz, ~25ms)."""
-    duration = 0.025
+    """Warm, gentle Switch-style micro-tick / dial wheel click (~24ms).
+    
+    Soft marimba/bubble tick with warm harmonic body and smooth cosine attack.
+    Ideal for rapid navigation and dial wheel stepping without auditory fatigue.
+    """
+    duration = 0.024
     total_samples = int(SAMPLE_RATE * duration)
     samples: list[int] = []
     phase = 0.0
     for i in range(total_samples):
         t = i / SAMPLE_RATE
         progress = i / total_samples
-        # Exponential pitch drop
-        freq = 2200.0 * math.exp(-3.5 * progress) + 700.0
+        # Warm, organic pitch glide from ~1100 Hz down to ~720 Hz
+        freq = 1100.0 * math.exp(-2.8 * progress) + 720.0
         phase += 2.0 * math.pi * freq / SAMPLE_RATE
-        # Envelope: 1ms linear attack, fast exponential decay
-        if t < 0.001:
-            env = t / 0.001
+        # Smooth cosine attack (1.5ms) followed by natural exponential decay
+        if t < 0.0015:
+            env = 0.5 * (1.0 - math.cos(math.pi * t / 0.0015))
         else:
-            env = math.exp(-120.0 * (t - 0.001))
-        # Sine wave with subtle harmonic
-        val = 0.85 * math.sin(phase) + 0.15 * math.sin(2.0 * phase)
-        sample = int(val * env * 24000.0)
+            env = math.exp(-125.0 * (t - 0.0015))
+        # Warm harmonic richness: fundamental + warm 2nd harmonic + subtle body
+        val = 0.78 * math.sin(phase) + 0.18 * math.sin(2.0 * phase) + 0.04 * math.sin(3.0 * phase)
+        sample = int(val * env * 14000.0)
         samples.append(max(-32767, min(32767, sample)))
     return samples
 
 def generate_confirm() -> list[int]:
-    """Bright two-tone chime (C6 -> E6, ~85ms)."""
+    """Warm, uplifting dual-tone chime (C6 -> E6, ~85ms).
+    
+    Switch-style pleasant acoustic chime with smooth attack, rich layered overtones
+    and warm rounded resonance.
+    """
     duration = 0.085
     total_samples = int(SAMPLE_RATE * duration)
     samples: list[int] = []
@@ -40,29 +48,38 @@ def generate_confirm() -> list[int]:
     phase2 = 0.0
     for i in range(total_samples):
         t = i / SAMPLE_RATE
-        # Tone 1: C6 (1046.5 Hz), start at 0
+        # Tone 1: C6 (1046.5 Hz) with warm harmonics
         freq1 = 1046.5
         phase1 += 2.0 * math.pi * freq1 / SAMPLE_RATE
-        env1 = math.exp(-45.0 * t) if t >= 0 else 0.0
-        val1 = 0.7 * math.sin(phase1) + 0.3 * math.sin(2.0 * phase1)
+        if t < 0.002:
+            env1 = 0.5 * (1.0 - math.cos(math.pi * t / 0.002))
+        else:
+            env1 = math.exp(-38.0 * (t - 0.002))
+        val1 = 0.72 * math.sin(phase1) + 0.22 * math.sin(2.0 * phase1) + 0.06 * math.sin(3.0 * phase1)
 
-        # Tone 2: E6 (1318.5 Hz), start at 0.018s
+        # Tone 2: E6 (1318.5 Hz) starting at t = 18ms with subtle G6 shimmer
         t2 = t - 0.018
         if t2 >= 0:
             freq2 = 1318.5
             phase2 += 2.0 * math.pi * freq2 / SAMPLE_RATE
-            env2 = math.exp(-35.0 * t2)
-            val2 = 0.75 * math.sin(phase2) + 0.25 * math.sin(2.0 * phase2)
+            if t2 < 0.002:
+                env2 = 0.5 * (1.0 - math.cos(math.pi * t2 / 0.002))
+            else:
+                env2 = math.exp(-28.0 * (t2 - 0.002))
+            val2 = 0.70 * math.sin(phase2) + 0.24 * math.sin(2.0 * phase2) + 0.06 * math.sin(3.0 * phase2)
         else:
             val2 = 0.0
             env2 = 0.0
 
-        sample = int((val1 * env1 * 0.5 + val2 * env2 * 0.6) * 26000.0)
+        sample = int((val1 * env1 * 0.48 + val2 * env2 * 0.58) * 22000.0)
         samples.append(max(-32767, min(32767, sample)))
     return samples
 
 def generate_cancel() -> list[int]:
-    """Gentle descending tone (880Hz -> 440Hz, ~70ms)."""
+    """Gentle descending warm tone (G5 -> E5, ~70ms).
+    
+    Soft, rounded dismissal sound with cozy acoustic decay.
+    """
     duration = 0.070
     total_samples = int(SAMPLE_RATE * duration)
     samples: list[int] = []
@@ -70,44 +87,60 @@ def generate_cancel() -> list[int]:
     for i in range(total_samples):
         t = i / SAMPLE_RATE
         progress = i / total_samples
-        freq = 880.0 * (1.0 - 0.5 * progress)
+        # Gentle glide from G5 (784 Hz) to E5 (659 Hz)
+        freq = 784.0 * (1.0 - 0.16 * progress)
         phase += 2.0 * math.pi * freq / SAMPLE_RATE
-        if t < 0.003:
-            env = t / 0.003
+        if t < 0.002:
+            env = 0.5 * (1.0 - math.cos(math.pi * t / 0.002))
         else:
-            env = math.exp(-40.0 * (t - 0.003))
-        val = 0.9 * math.sin(phase) + 0.1 * math.sin(2.0 * phase)
-        sample = int(val * env * 22000.0)
+            env = math.exp(-34.0 * (t - 0.002))
+        val = 0.82 * math.sin(phase) + 0.15 * math.sin(2.0 * phase) + 0.03 * math.sin(3.0 * phase)
+        sample = int(val * env * 18000.0)
         samples.append(max(-32767, min(32767, sample)))
     return samples
 
 def generate_error() -> list[int]:
-    """Double low buzz (220Hz + 330Hz, ~130ms)."""
-    duration = 0.130
+    """Polite, low-frequency double wood-tap warning (~115ms).
+    
+    Soft muted double bump without harsh distortion or aggressive buzz.
+    """
+    duration = 0.115
     total_samples = int(SAMPLE_RATE * duration)
     samples: list[int] = []
     phase1 = 0.0
     phase2 = 0.0
     for i in range(total_samples):
         t = i / SAMPLE_RATE
-        # Gap between 0.045 and 0.065
-        in_pulse1 = (t < 0.045)
-        in_pulse2 = (t >= 0.065 and t < 0.125)
+        # Two soft, polite pulses
+        in_pulse1 = (t < 0.040)
+        in_pulse2 = (t >= 0.055 and t < 0.105)
         if not (in_pulse1 or in_pulse2):
             samples.append(0)
             continue
-        pulse_t = t if in_pulse1 else (t - 0.065)
-        env = math.exp(-15.0 * pulse_t)
-        phase1 += 2.0 * math.pi * 220.0 / SAMPLE_RATE
-        phase2 += 2.0 * math.pi * 330.0 / SAMPLE_RATE
-        # Richer waveform with odd harmonics for buzz character
-        val = 0.6 * math.sin(phase1) + 0.25 * math.sin(3.0 * phase1) + 0.3 * math.sin(phase2)
-        sample = int(val * env * 20000.0)
+        pulse_t = t if in_pulse1 else (t - 0.055)
+        # Soft pitch drop 280Hz -> 200Hz
+        freq = 280.0 * math.exp(-8.0 * pulse_t) + 200.0
+        if in_pulse1:
+            phase1 += 2.0 * math.pi * freq / SAMPLE_RATE
+            phase = phase1
+        else:
+            phase2 += 2.0 * math.pi * freq / SAMPLE_RATE
+            phase = phase2
+
+        if pulse_t < 0.0025:
+            env = 0.5 * (1.0 - math.cos(math.pi * pulse_t / 0.0025))
+        else:
+            env = math.exp(-36.0 * (pulse_t - 0.0025))
+        val = 0.76 * math.sin(phase) + 0.19 * math.sin(2.0 * phase) + 0.05 * math.sin(3.0 * phase)
+        sample = int(val * env * 17000.0)
         samples.append(max(-32767, min(32767, sample)))
     return samples
 
 def generate_popup() -> list[int]:
-    """Bright notification bell (1568Hz + 2093Hz, ~110ms)."""
+    """Elegant crystalline notification bell (E6 + A6, ~110ms).
+    
+    Airy, clear modal chime with gentle sparkle decay.
+    """
     duration = 0.110
     total_samples = int(SAMPLE_RATE * duration)
     samples: list[int] = []
@@ -115,33 +148,46 @@ def generate_popup() -> list[int]:
     phase2 = 0.0
     for i in range(total_samples):
         t = i / SAMPLE_RATE
-        phase1 += 2.0 * math.pi * 1568.0 / SAMPLE_RATE
-        env1 = math.exp(-30.0 * t)
-        val1 = 0.8 * math.sin(phase1) + 0.2 * math.sin(2.0 * phase1)
+        # Bell 1: E6 (1318.5 Hz)
+        freq1 = 1318.5
+        phase1 += 2.0 * math.pi * freq1 / SAMPLE_RATE
+        if t < 0.002:
+            env1 = 0.5 * (1.0 - math.cos(math.pi * t / 0.002))
+        else:
+            env1 = math.exp(-28.0 * (t - 0.002))
+        val1 = 0.75 * math.sin(phase1) + 0.20 * math.sin(2.0 * phase1) + 0.05 * math.sin(3.0 * phase1)
 
-        t2 = t - 0.025
+        # Bell 2: A6 (1760.0 Hz) starting at t = 20ms
+        t2 = t - 0.020
         if t2 >= 0:
-            phase2 += 2.0 * math.pi * 2093.0 / SAMPLE_RATE
-            env2 = math.exp(-25.0 * t2)
-            val2 = 0.85 * math.sin(phase2) + 0.15 * math.sin(2.0 * phase2)
+            freq2 = 1760.0
+            phase2 += 2.0 * math.pi * freq2 / SAMPLE_RATE
+            if t2 < 0.002:
+                env2 = 0.5 * (1.0 - math.cos(math.pi * t2 / 0.002))
+            else:
+                env2 = math.exp(-22.0 * (t2 - 0.002))
+            val2 = 0.78 * math.sin(phase2) + 0.18 * math.sin(2.0 * phase2) + 0.04 * math.sin(3.0 * phase2)
         else:
             val2 = 0.0
             env2 = 0.0
 
-        sample = int((val1 * env1 * 0.45 + val2 * env2 * 0.55) * 25000.0)
+        sample = int((val1 * env1 * 0.45 + val2 * env2 * 0.55) * 21000.0)
         samples.append(max(-32767, min(32767, sample)))
     return samples
 
 def generate_success() -> list[int]:
-    """Ascending major triad arpeggio (C6, E6, G6, C7, ~240ms)."""
-    duration = 0.240
+    """Rich ascending major triad arpeggio (C6, E6, G6, C7, ~250ms).
+    
+    Warm, layered celebratory chime with natural harmonic sustain and sparkle.
+    """
+    duration = 0.250
     total_samples = int(SAMPLE_RATE * duration)
     samples: list[int] = []
     notes = [
-        (0.000, 1046.5, 35.0, 0.4), # C6
-        (0.040, 1318.5, 30.0, 0.45), # E6
-        (0.080, 1568.0, 22.0, 0.5), # G6
-        (0.120, 2093.0, 15.0, 0.55), # C7
+        (0.000, 1046.5, 28.0, 0.38), # C6
+        (0.035, 1318.5, 24.0, 0.42), # E6
+        (0.070, 1568.0, 20.0, 0.46), # G6
+        (0.105, 2093.0, 12.0, 0.54), # C7 (lingering shimmering tail)
     ]
     phases = [0.0] * len(notes)
     for i in range(total_samples):
@@ -151,10 +197,13 @@ def generate_success() -> list[int]:
             if t >= start_t:
                 dt = t - start_t
                 phases[n_idx] += 2.0 * math.pi * freq / SAMPLE_RATE
-                env = math.exp(-decay * dt)
-                tone = 0.8 * math.sin(phases[n_idx]) + 0.2 * math.sin(2.0 * phases[n_idx])
+                if dt < 0.0025:
+                    env = 0.5 * (1.0 - math.cos(math.pi * dt / 0.0025))
+                else:
+                    env = math.exp(-decay * (dt - 0.0025))
+                tone = 0.74 * math.sin(phases[n_idx]) + 0.20 * math.sin(2.0 * phases[n_idx]) + 0.06 * math.sin(3.0 * phases[n_idx])
                 total_val += tone * env * weight
-        sample = int(total_val * 24000.0)
+        sample = int(total_val * 21000.0)
         samples.append(max(-32767, min(32767, sample)))
     return samples
 
