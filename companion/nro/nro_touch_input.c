@@ -13,58 +13,77 @@ void handle_touch(UiState *ui, int x, int y)
     switch (hit.kind) {
     case PTC_UI_HIT_CHILD_SUBMIT_CODE:
         if (ui->waiting) {
+            ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message), "请等待当前操作完成后再提交加时码。");
         } else {
+            ptc_audio_play(PTC_SE_CONFIRM);
             open_offline_code_input(ui);
         }
         break;
     case PTC_UI_HIT_CHILD_REFRESH:
+        ptc_audio_play(PTC_SE_CONFIRM);
         submit_status(ui);
         break;
     case PTC_UI_HIT_CHILD_BUFFER:
         if (!ui->waiting && ui->model.daily_buffer_available) {
+            ptc_audio_play(PTC_SE_CONFIRM);
             submit_transport_empty(ui, "claim_daily_buffer",
                 "正在领取今日自主缓冲...", "领取今日自主缓冲失败");
+        } else {
+            ptc_audio_play(PTC_SE_ERROR);
         }
         break;
     case PTC_UI_HIT_CHILD_PARENT:
+        ptc_audio_play(PTC_SE_CONFIRM);
         enter_parent_area(ui);
         break;
     case PTC_UI_HIT_CHILD_EXIT:
+        ptc_audio_play(PTC_SE_CANCEL);
         ui->exit_requested = true;
         break;
     case PTC_UI_HIT_ERROR_RETRY:
+        ptc_audio_play(PTC_SE_CONFIRM);
         retry_error(ui);
         break;
     case PTC_UI_HIT_ERROR_BACK:
+        ptc_audio_play(PTC_SE_CANCEL);
         enter_child_area(ui);
         break;
     case PTC_UI_HIT_SETUP_SHORTCUT_CARD:
+        ptc_audio_play(PTC_SE_FOCUS);
         select_setup_shortcut(ui, hit.index);
         break;
     case PTC_UI_HIT_SETUP_PRIMARY:
+        ptc_audio_play(PTC_SE_CONFIRM);
         setup_primary(ui);
         break;
     case PTC_UI_HIT_SETUP_BACK:
+        ptc_audio_play(PTC_SE_CANCEL);
         setup_previous(ui);
         break;
     case PTC_UI_HIT_SETUP_PIN:
+        ptc_audio_play(PTC_SE_CONFIRM);
         setup_pin(ui);
         break;
     case PTC_UI_HIT_SETUP_CHILD_ZONE:
+        ptc_audio_play(PTC_SE_FOCUS);
         ui->model.setup_zone_index = 0;
         break;
     case PTC_UI_HIT_SETUP_PARENT_ZONE:
+        ptc_audio_play(PTC_SE_FOCUS);
         ui->model.setup_zone_index = 1;
         break;
     case PTC_UI_HIT_PARENT_PREV_PAGE:
+        ptc_audio_play(PTC_SE_FOCUS);
         request_parent_navigation(ui,
             (ui->model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
         break;
     case PTC_UI_HIT_PARENT_NEXT_PAGE:
+        ptc_audio_play(PTC_SE_FOCUS);
         request_parent_navigation(ui, (ui->model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
         break;
     case PTC_UI_HIT_PARENT_REFRESH:
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.parent_footer_focused = true;
         ui->model.parent_footer_selection = 0;
         refresh_disable_flag(ui);
@@ -72,20 +91,25 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_PARENT_STATUS:
         if (!ptc_ui_parent_status_alert_visible(&ui->model)) break;
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.parent_footer_focused = true;
         ui->model.parent_footer_selection = 1;
         activate_parent_status(ui);
         break;
     case PTC_UI_HIT_PARENT_BACK:
+        ptc_audio_play(PTC_SE_CANCEL);
         request_parent_navigation(ui, -1, true);
         break;
     case PTC_UI_HIT_PARENT_TAB:
+        ptc_audio_play(PTC_SE_FOCUS);
         request_parent_navigation(ui, hit.index, false);
         break;
     case PTC_UI_HIT_PARENT_CARD:
         if (ui->waiting) {
+            ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message), "请等待当前操作完成后再执行其他设置。");
         } else {
+            ptc_audio_play(PTC_SE_CONFIRM);
             ui->model.selected_index = hit.index;
             if (!(ui->model.parent_page == PTC_UI_PARENT_PLAN &&
                   ui->model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) || hit.index >= 3) {
@@ -103,6 +127,7 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_SUPPORT_EVENT:
         if (hit.index >= 0 && hit.index < ui->model.recent_event_count) {
+            ptc_audio_play(PTC_SE_POPUP);
             ui->model.selected_index = 6 + (ui->model.recent_event_count - 1 - hit.index);
             ui->model.overlay = PTC_UI_OVERLAY_SUPPORT_EVENT;
             ui->model.overlay_selection = hit.index;
@@ -113,6 +138,7 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_FORECAST_DAY:
         if (hit.index >= 0 && hit.index < 7 && ui->model.forecast_available) {
+            ptc_audio_play(PTC_SE_POPUP);
             ui->model.selected_index = 5 + hit.index;
             ui->model.forecast_detail_day_offset = hit.index;
             ui->model.overlay = PTC_UI_OVERLAY_DAY_DECISION;
@@ -120,9 +146,11 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_HOME_DETAILS:
+        ptc_audio_play(PTC_SE_POPUP);
         ptc_ui_open_home_details(&ui->model);
         break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
+        ptc_audio_play(PTC_SE_CANCEL);
         if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS ||
             ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
             ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {

@@ -1,4 +1,5 @@
 #include "ui_input_state.h"
+#include "ptc_audio.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -388,6 +389,7 @@ void ptc_ui_numpad_open(
     model->numpad_error[0] = '\0';
     snprintf(model->numpad_title, sizeof(model->numpad_title), "%s", title ? title : "数字输入");
     snprintf(model->numpad_guide, sizeof(model->numpad_guide), "%s", guide ? guide : "使用方向键或摇杆选择数字");
+    ptc_audio_play(PTC_SE_POPUP);
 }
 
 void ptc_ui_numpad_move(PtcUiModel *model, int horizontal, int vertical)

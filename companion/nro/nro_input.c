@@ -46,6 +46,14 @@ static int next_bedtime_preset(const PtcBedtimeWindow *window)
 
 void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (down & (HidNpadButton_Up | HidNpadButton_Down | HidNpadButton_Left | HidNpadButton_Right)) {
+        ptc_audio_play(PTC_SE_FOCUS);
+    } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+        ptc_audio_play(PTC_SE_CONFIRM);
+    } else if (down & HidNpadButton_B) {
+        ptc_audio_play(PTC_SE_CANCEL);
+    }
+
     if (ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS) {
         if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Minus)) {
             ui->model.overlay = PTC_UI_OVERLAY_NONE;

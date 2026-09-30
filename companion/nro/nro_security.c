@@ -21,6 +21,7 @@ bool verify_sensitive_pin(UiState *ui, const char *action)
     }
     status = ptc_companion_auth_verify_pin(&ui->auth, pin, (int64_t)time(NULL), &retry_after);
     if (status != PTC_AUTH_OK) {
+        ptc_audio_play(PTC_SE_ERROR);
         if (status == PTC_AUTH_COOLDOWN && retry_after > 0) {
             show_auth_error(ui, "PIN 暂时锁定", "PIN 错误次数过多，请等待倒计时结束后重试。", retry_after);
             return false;
@@ -45,14 +46,18 @@ void change_parent_pin(UiState *ui)
         return;
     }
     if (strcmp(pin, confirm) != 0) {
+        ptc_audio_play(PTC_SE_ERROR);
         ui->auth_retry_action = AUTH_RETRY_CHANGE_PIN;
         show_auth_error(ui, "两次 PIN 不一致", "两次输入的新 PIN 不一致，已全部清空，请重新开始。", 0);
         return;
     }
     status = ptc_companion_auth_set_pin(&ui->auth, pin, time(NULL), switch_random, NULL);
-    if (status == PTC_AUTH_OK) snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-        strlen(pin) < 4U ? "PlayWise PIN 已更新；当前 PIN 少于 4 位，冷却也无法提供可靠保护。" : "PlayWise PIN 已更新。");
-    else {
+    if (status == PTC_AUTH_OK) {
+        ptc_audio_play(PTC_SE_SUCCESS);
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+            strlen(pin) < 4U ? "PlayWise PIN 已更新；当前 PIN 少于 4 位，冷却也无法提供可靠保护。" : "PlayWise PIN 已更新。");
+    } else {
+        ptc_audio_play(PTC_SE_ERROR);
         ui->auth_retry_action = AUTH_RETRY_CHANGE_PIN;
         show_auth_error(ui, "PIN 修改失败", auth_status_zh(status), 0);
     }

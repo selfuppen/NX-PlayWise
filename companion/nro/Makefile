@@ -52,6 +52,8 @@ OBJS := \
 	$(BUILD)/hot_reload.o \
 	$(BUILD)/hot_reload_guard.o \
 	$(BUILD)/album_restriction.o \
+	$(BUILD)/ptc_audio.o \
+	$(BUILD)/ptc_audio_data.o \
 	$(BUILD)/ui_graphics.o \
 	$(BUILD)/ui_render_primitives.o \
 	$(BUILD)/ui_render_text.o \
@@ -195,6 +197,12 @@ $(BUILD)/hot_reload_guard.o: ../hot_reload_guard.c ../hot_reload_guard.h | $(BUI
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/album_restriction.o: ../album_restriction.c ../album_restriction.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ptc_audio.o: ptc_audio.c ptc_audio.h ptc_audio_data.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ptc_audio_data.o: ptc_audio_data.c ptc_audio_data.h ptc_audio.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h ui_model.h ui_state.h ui_layout.h ui_theme.h | $(BUILD)

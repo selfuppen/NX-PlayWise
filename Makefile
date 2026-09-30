@@ -57,7 +57,7 @@ ORCH_SRCS := \
 	companion/overlay/bridge.c
 
 TEST_SRCS := tests/c/test_host_core.c
-UI_STATE_SRCS := companion/nro/ui_state.c companion/nro/ui_plan_state.c companion/nro/ui_navigation_state.c companion/nro/ui_status_state.c companion/nro/ui_input_state.c companion/nro/ui_result_state.c companion/nro/ui_layout.c companion/nro/ui_hit_test.c
+UI_STATE_SRCS := companion/nro/ui_state.c companion/nro/ui_plan_state.c companion/nro/ui_navigation_state.c companion/nro/ui_status_state.c companion/nro/ui_input_state.c companion/nro/ui_result_state.c companion/nro/ui_layout.c companion/nro/ui_hit_test.c companion/nro/ptc_audio.c companion/nro/ptc_audio_data.c
 UI_RENDER_SRCS := companion/nro/ui_graphics.c companion/nro/ui_render_primitives.c companion/nro/ui_render_text.c companion/nro/ui_render_core.c companion/nro/ui_render_components.c companion/nro/ui_render_action_card.c companion/nro/ui_render_child.c companion/nro/ui_render_setup.c companion/nro/ui_render_plan.c companion/nro/ui_render_pages.c companion/nro/ui_render_dialogs.c companion/nro/ui_render_dialog_policy.c companion/nro/ui_render_dialog_input.c companion/nro/ui_render_overlay_account.c companion/nro/ui_render_overlay_plan.c companion/nro/ui_render_overlay_support.c companion/nro/ui_render_overlays.c
 UI_TEST_SRCS := $(UI_STATE_SRCS) companion/nro/ui_theme.c companion/file_protocol.c companion/request_client.c companion/result_summary.c common/protocol/activity_history.c common/protocol/redemption_history.c common/protocol/request_schema.c common/protocol/result_builder.c common/protocol/error_code.c common/rules/rules.c common/rules/holiday_calendar.c common/time/ptc_time.c common/usage/daily_summary.c third_party/cjson/cJSON.c tests/c/test_ui_state.c
 

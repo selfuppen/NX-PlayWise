@@ -79,6 +79,7 @@ int main(int argc, char **argv)
         run_console_fallback();
         return 1;
     }
+    ptc_audio_init();
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&pad);
     /* PIN entry reuses the application's active pad while it runs its modal
@@ -291,30 +292,40 @@ int main(int argc, char **argv)
                 /* Do not let buttons from an in-progress custom chord reach
                  * ordinary child-area actions before its hold decision. */
             } else if (down & HidNpadButton_B) {
+                ptc_audio_play(PTC_SE_CANCEL);
                 running = false;
             } else if (ui.minus_pending && !(held & HidNpadButton_Minus)) {
                 ui.minus_pending = false;
+                ptc_audio_play(PTC_SE_CONFIRM);
                 enter_parent_area(&ui);
             } else if (down & HidNpadButton_A) {
                 if (ui.waiting) {
+                    ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再提交加时码。");
                 } else {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     open_offline_code_input(&ui);
                 }
             } else if (down & HidNpadButton_Y) {
+                ptc_audio_play(PTC_SE_CONFIRM);
                 submit_status(&ui);
             } else if (down & HidNpadButton_Plus) {
+                ptc_audio_play(PTC_SE_POPUP);
                 ptc_ui_open_home_details(&ui.model);
             } else if (down & HidNpadButton_X) {
                 if (ui.model.disable_flag_present) {
+                    ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message), "控制已停用，自主缓冲暂不可领取。");
                 } else if (ui.model.daily_buffer_available && !ui.waiting) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     submit_transport_empty(&ui, "claim_daily_buffer",
                         "正在领取今日自主缓冲...", "领取今日自主缓冲失败");
                 } else if (ui.model.daily_buffer_claimed) {
+                    ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message),
                         "今日已使用缓冲，明天可以再次领取。");
                 } else {
+                    ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message),
                         "今天没有可领取的自主缓冲。");
                 }
@@ -337,27 +348,35 @@ int main(int argc, char **argv)
                 ptc_ui_open_home_details(&ui.model);
             } else if (ui.model.parent_footer_focused) {
                 if (down & HidNpadButton_B) {
+                    ptc_audio_play(PTC_SE_CANCEL);
                     request_parent_navigation(&ui, -1, true);
                 } else if (down & HidNpadButton_L &&
                            !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     request_parent_navigation(&ui,
                         (ui.model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
                 } else if (down & HidNpadButton_R &&
                            !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     request_parent_navigation(&ui,
                         (ui.model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
                 } else if (down & HidNpadButton_Up) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     ui.model.parent_footer_focused = false;
                     ui.model.selected_index = ui.model.parent_content_selection;
                 } else if (down & HidNpadButton_Left) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     ui.model.parent_footer_selection = 0;
                 } else if (down & HidNpadButton_Right) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     ui.model.parent_footer_selection =
                         ptc_ui_parent_status_alert_visible(&ui.model) ? 1 : 0;
                 } else if (down & HidNpadButton_Y) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     refresh_disable_flag(&ui);
                     submit_status(&ui);
                 } else if (down & HidNpadButton_A) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     if (ui.model.parent_footer_selection == 0) submit_status(&ui);
                     else activate_parent_status(&ui);
                 }
@@ -575,57 +594,73 @@ int main(int argc, char **argv)
                              "请等待国家节假日设置保存完成后再继续编辑。");
                 }
             } else if (down & HidNpadButton_B) {
+                ptc_audio_play(PTC_SE_CANCEL);
                 request_parent_navigation(&ui, -1, true);
             } else if (down & HidNpadButton_L &&
                        !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
+                ptc_audio_play(PTC_SE_FOCUS);
                 request_parent_navigation(&ui,
                     (ui.model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
             } else if (down & HidNpadButton_R &&
                        !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
+                ptc_audio_play(PTC_SE_FOCUS);
                 request_parent_navigation(&ui,
                     (ui.model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
             } else if (down & HidNpadButton_Left) {
+                ptc_audio_play(PTC_SE_FOCUS);
                 ptc_ui_move_parent_selection(&ui.model, -1, 0);
             } else if (down & HidNpadButton_Right) {
+                ptc_audio_play(PTC_SE_FOCUS);
                 ptc_ui_move_parent_selection(&ui.model, 1, 0);
             } else if (down & HidNpadButton_Up) {
+                ptc_audio_play(PTC_SE_FOCUS);
                 ptc_ui_move_parent_selection(&ui.model, 0, -1);
             } else if (down & HidNpadButton_Down) {
+                ptc_audio_play(PTC_SE_FOCUS);
                 ptc_ui_move_parent_selection(&ui.model, 0, 1);
             } else if (down & HidNpadButton_Y) {
+                ptc_audio_play(PTC_SE_CONFIRM);
                 refresh_disable_flag(&ui);
                 submit_status(&ui);
             } else if (down & HidNpadButton_X && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 if (ui.model.disable_flag_present) {
+                    ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，规则暂时只读。");
                 } else if (ui.model.selected_index == 1 ||
                            (ui.model.selected_index != 2 && ui.model.holiday_last_rule == 0)) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     ui.model.holiday_last_rule = 0;
                     ui.model.draft_holiday_rule.mode = ptc_ui_next_rule_mode(ui.model.draft_holiday_rule.mode);
                     update_holiday_dirty(&ui);
                 } else {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     ui.model.holiday_last_rule = 1;
                     ui.model.draft_makeup_workday_rule.mode = ptc_ui_next_rule_mode(ui.model.draft_makeup_workday_rule.mode);
                     update_holiday_dirty(&ui);
                 }
             } else if (down & HidNpadButton_Plus && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
+                ptc_audio_play(PTC_SE_CONFIRM);
                 ui.model.selected_index = 5;
                 save_holiday_from_page(&ui);
             } else if (down & HidNpadButton_ZL && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
+                ptc_audio_play(PTC_SE_CANCEL);
                 ui.model.selected_index = 4;
                 discard_holiday_draft(&ui);
             } else if (down & HidNpadButton_A) {
                 if (ui.waiting) {
+                    ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再执行其他设置。");
                 } else if (ui.model.parent_footer_focused) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     activate_parent_status(&ui);
                 } else if (ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.model.selected_index >= 6) {
                     int visible_index = ui.model.selected_index - 6;
                     int event_index = ui.model.recent_event_count - 1 - visible_index;
                     if (event_index >= 0 && event_index < ui.model.recent_event_count) {
+                        ptc_audio_play(PTC_SE_POPUP);
                         ui.model.overlay = PTC_UI_OVERLAY_SUPPORT_EVENT;
                         ui.model.overlay_selection = event_index;
                         snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "最近事件详情");
@@ -633,6 +668,7 @@ int main(int argc, char **argv)
                                  "家长区已通过 PIN 验证；这里显示完整诊断字段，但不会显示 PIN、密钥或可复用授权材料。");
                     }
                 } else {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     handle_parent_action(&ui);
                 }
             }
@@ -676,6 +712,7 @@ int main(int argc, char **argv)
     }
 
     appletUnhook(&hook_cookie);
+    ptc_audio_exit();
     ptc_ui_graphics_exit();
 #ifndef PLAYWISE_EDEN
     ptc_hot_reload_exit(&ui.hot_reload);

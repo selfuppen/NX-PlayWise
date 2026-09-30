@@ -194,9 +194,11 @@ bool pin_input(UiState *ui, const char *title, const char *guide,
         if (right_digit < 0) right_latched = -1;
         if (left_digit >= 0 && left_latched < 0) {
             ptc_ui_pin_append(&ui->model, left_digit);
+            ptc_audio_play(PTC_SE_FOCUS);
             left_latched = left_digit;
         } else if (left_digit < 0 && right_digit >= 0 && right_latched < 0) {
             ptc_ui_pin_append(&ui->model, right_digit);
+            ptc_audio_play(PTC_SE_FOCUS);
             right_latched = right_digit;
         }
         digit = -1;
@@ -204,11 +206,24 @@ bool pin_input(UiState *ui, const char *title, const char *guide,
         else if (buttons_down & HidNpadButton_Right) digit = ptc_ui_pin_digit_from_button(1);
         else if (buttons_down & HidNpadButton_Down) digit = ptc_ui_pin_digit_from_button(2);
         else if (buttons_down & HidNpadButton_Left) digit = ptc_ui_pin_digit_from_button(3);
-        if (digit >= 0) ptc_ui_pin_append(&ui->model, digit);
-        if (buttons_down & HidNpadButton_X) ptc_ui_pin_append(&ui->model, 0);
-        if (buttons_down & HidNpadButton_Y) ptc_ui_pin_append(&ui->model, 9);
-        if (buttons_down & HidNpadButton_ZL) ptc_ui_pin_backspace(&ui->model);
+        if (digit >= 0) {
+            ptc_ui_pin_append(&ui->model, digit);
+            ptc_audio_play(PTC_SE_FOCUS);
+        }
+        if (buttons_down & HidNpadButton_X) {
+            ptc_ui_pin_append(&ui->model, 0);
+            ptc_audio_play(PTC_SE_FOCUS);
+        }
+        if (buttons_down & HidNpadButton_Y) {
+            ptc_ui_pin_append(&ui->model, 9);
+            ptc_audio_play(PTC_SE_FOCUS);
+        }
+        if (buttons_down & HidNpadButton_ZL) {
+            ptc_ui_pin_backspace(&ui->model);
+            ptc_audio_play(PTC_SE_CANCEL);
+        }
         if (buttons_down & HidNpadButton_B) {
+            ptc_audio_play(PTC_SE_CANCEL);
             ptc_ui_pin_finish(&ui->model);
             return false;
         }
@@ -223,9 +238,12 @@ bool pin_input(UiState *ui, const char *title, const char *guide,
         } else {
             if (plus_was_held && !plus_keyboard) {
                 if (ptc_ui_pin_validate(&ui->model)) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     snprintf(out, out_size, "%s", ui->model.pin_text);
                     ptc_ui_pin_finish(&ui->model);
                     return true;
+                } else {
+                    ptc_audio_play(PTC_SE_ERROR);
                 }
             }
             plus_samples = 0;

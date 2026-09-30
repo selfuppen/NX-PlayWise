@@ -1,4 +1,5 @@
 #include "ui_state.h"
+#include "ptc_audio.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -493,6 +494,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         }
     }
     if (status && strcmp(status, "error") == 0) {
+        ptc_audio_play(PTC_SE_ERROR);
         const char *message = summary.message[0] ? summary.message : NULL;
         snprintf(model->message, sizeof(model->message), "%s", message ? message : "后台拒绝了本次操作。");
         if (summary.error_code > 0) {
@@ -511,8 +513,12 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
             }
         }
     } else if (setup_activated) {
+        ptc_audio_play(PTC_SE_SUCCESS);
         snprintf(model->message, sizeof(model->message), "自动控制已启用，首次设置完成。");
     } else {
+        if (type && strcmp(type, "status") != 0) {
+            ptc_audio_play(PTC_SE_SUCCESS);
+        }
         const char *guidance = request_success_guidance(type);
         if (type && strcmp(type, "set_weekly_template") == 0) {
             ptc_ui_format_weekly_save_result(model, model->message, sizeof(model->message),

@@ -380,6 +380,7 @@ void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *tit
     }
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", title);
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", body);
+    ptc_audio_play(PTC_SE_POPUP);
 }
 
 void open_danger_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body)

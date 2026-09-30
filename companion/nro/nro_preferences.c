@@ -167,6 +167,12 @@ void load_ui_preferences(UiState *ui)
             ui->theme_preference = preference;
         }
     }
+    item = cJSON_GetObjectItemCaseSensitive(root, "sound_effects_enabled");
+    if (cJSON_IsBool(item)) {
+        ptc_audio_set_enabled(cJSON_IsTrue(item));
+    } else {
+        ptc_audio_set_enabled(true);
+    }
     ui->theme_view = ptc_ui_theme_make_view(ui->theme_preference, ui->system_theme);
     item = cJSON_GetObjectItemCaseSensitive(root, "setup_wizard_step");
     if (cJSON_IsNumber(item)) {
@@ -217,6 +223,8 @@ bool save_ui_preferences(UiState *ui)
     cJSON_AddBoolToObject(root, "show_parent_shortcut_hint", ui->model.show_parent_shortcut_hint);
     cJSON_DeleteItemFromObject(root, "theme");
     cJSON_AddStringToObject(root, "theme", ptc_ui_theme_preference_name(ui->theme_preference));
+    cJSON_DeleteItemFromObject(root, "sound_effects_enabled");
+    cJSON_AddBoolToObject(root, "sound_effects_enabled", ptc_audio_is_enabled());
     cJSON_DeleteItemFromObject(root, "setup_wizard_step");
     cJSON_AddNumberToObject(root, "setup_wizard_step", ui->model.setup_step);
     cJSON_DeleteItemFromObject(root, "setup_wizard_version");

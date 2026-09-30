@@ -30,6 +30,7 @@
 #include "ui_graphics.h"
 #include "ui_state.h"
 #include "ui_layout.h"
+#include "ptc_audio.h"
 #ifndef PLAYWISE_EDEN
 #include "hot_reload.h"
 #endif
