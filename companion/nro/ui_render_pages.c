@@ -325,7 +325,11 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     int64_t now = ptc_ui_render_now();
     bool fresh = ptc_ui_status_is_fresh(model, now);
     bool bedtime_skip_matches = fresh && ptc_ui_bedtime_skip_matches_policy(
-        model, &model->bedtime_policy);
+        model, &model->bedtime_policy) &&
+        (model->bedtime_active
+            ? model->bedtime_window_instance_id == model->bedtime_skipped_window_instance_id
+            : (!model->bedtime_next_available ||
+               model->bedtime_next_window_instance_id == model->bedtime_skipped_window_instance_id));
     ptc_ui_format_today_adjustment_status(model, now, adjustment_badge, sizeof(adjustment_badge),
                                           adjustment_detail, sizeof(adjustment_detail));
     draw_parent_home_summary(pixels, stride, model);
@@ -344,18 +348,25 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
         bool focused = !model->parent_footer_focused && model->selected_index == index;
         bool clear_unavailable = index == 3 && fresh &&
                                  !model->today_override_present;
-        bool disabled = model->disable_flag_present || model->waiting || clear_unavailable;
+        const char *unavailable = ptc_ui_today_action_unavailable_reason(model, index, now);
+        bool disabled = model->disable_flag_present || model->waiting ||
+                        clear_unavailable || unavailable != NULL;
         const char *title = TODAY_ACTIONS[index].title;
         const char *subtitle = TODAY_ACTIONS[index].subtitle;
         char dynamic[128];
         UiAction action = TODAY_ACTIONS[index];
         if (index == 0) {
             subtitle = adjustment_detail;
+        } else if (index == 1 && unavailable) {
+            subtitle = unavailable;
+            action.visual = UI_ACTION_VISUAL_NONE;
         } else if (index == 3 && clear_unavailable) {
             subtitle = model->today_override_cleared_in_session
                 ? "本次会话已清除，当前使用下级规则" : "今天没有单独额度调整，无需清除";
         } else if (index == 4) {
-            if (!fresh) {
+            if (unavailable) {
+                subtitle = unavailable;
+            } else if (!fresh) {
                 subtitle = "刷新后显示当前或下次窗口";
             } else if (model->bedtime_active) {
                 if (model->bedtime_skipped) {
@@ -407,6 +418,9 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_action_card(pixels, stride, box, &action, focused,
                          disabled ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE,
                          (index == 0 || index == 4) ? 82 : 0);
+        if (index == 1 && unavailable)
+            draw_text(pixels, stride, box.x + 78, box.y + 88,
+                      "恢复限时请用“设置今日额度”", 12, UI_DISABLED);
         if (index == 0) {
             UiRect tbadge = {box.x + box.width - 86, box.y + 10, 74, 22};
             uint32_t badge_color = (strcmp(adjustment_badge, "生效中") == 0 ||

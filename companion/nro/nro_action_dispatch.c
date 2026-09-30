@@ -73,6 +73,13 @@ void handle_today_action_ready(UiState *ui, int index)
     char body[320];
     char played[32];
     char remaining[32];
+    const char *unavailable = ptc_ui_today_action_unavailable_reason(
+        &ui->model, index == PTC_UI_OPERATION_ADD_TODAY_MINUTES ? 1 :
+        (index == PTC_UI_OPERATION_SKIP_BEDTIME ? 4 : -1), (int64_t)time(NULL));
+    if (unavailable) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", unavailable);
+        return;
+    }
     format_today_label(ui->model.day_index, date, sizeof(date));
     if (ui->model.played_minutes_available) snprintf(played, sizeof(played), "约 %d 分钟", ui->model.played_minutes);
     else snprintf(played, sizeof(played), "暂不可用");
@@ -187,6 +194,12 @@ void handle_parent_action(UiState *ui)
     }
     if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
         if (ui->waiting) return;
+        const char *unavailable = ptc_ui_today_action_unavailable_reason(
+            &ui->model, index, (int64_t)time(NULL));
+        if (unavailable) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", unavailable);
+            return;
+        }
         if (index == 3 && ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) &&
             !ui->model.today_override_present) {
             snprintf(ui->model.message, sizeof(ui->model.message),
@@ -483,6 +496,16 @@ void finish_today_limit_refresh(UiState *ui, bool success)
                  model->played_minutes, (unsigned int)model->draft_minutes);
         open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SET_TODAY_LIMIT,
                                     "设置后可能立即限制", body);
+        return;
+    }
+    if (model->unrestricted_today == 1) {
+        char body[192];
+        snprintf(body, sizeof(body),
+                 "今天当前不限时；设置总额度 %u 分钟后将恢复限时。\n预计还可玩 %d 分钟，请确认后保存。",
+                 (unsigned int)model->draft_minutes,
+                 (int)model->draft_minutes - model->played_minutes);
+        open_confirm_overlay(ui, PTC_UI_OPERATION_SET_TODAY_LIMIT,
+                             "不限时将改为限时", body);
         return;
     }
     ptc_ui_numpad_finish(model);

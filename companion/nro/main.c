@@ -478,7 +478,7 @@ int main(int argc, char **argv)
                     if (!ui.model.disable_flag_present) {
                         draft->enabled = !draft->enabled;
                         update_bedtime_dirty(&ui);
-                        snprintf(ui.model.message, sizeof(ui.model.message), "就寝计划开关已%s；保存后生效。",
+                        snprintf(ui.model.message, sizeof(ui.model.message), "就寝计划总开关草稿已%s；保存后生效。",
                             draft->enabled ? "开启" : "关闭");
                     }
                 } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
@@ -518,7 +518,7 @@ int main(int argc, char **argv)
                         draft->enabled = !draft->enabled;
                         update_bedtime_dirty(&ui);
                         snprintf(ui.model.message, sizeof(ui.model.message),
-                                 "就寝计划开关已%s；保存后生效。", draft->enabled ? "开启" : "关闭");
+                                 "就寝计划总开关草稿已%s；保存后生效。", draft->enabled ? "开启" : "关闭");
                     }
                 } else if ((down & HidNpadButton_A) && !ui.model.bedtime_section_focused) {
                     if (ui.model.bedtime_section == PTC_UI_BEDTIME_WEEKLY) {

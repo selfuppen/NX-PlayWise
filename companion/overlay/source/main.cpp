@@ -119,6 +119,7 @@ enum class ParentView {
     Child,
     Pin,
     Actions,
+    Confirm,
     Result,
 };
 
@@ -722,9 +723,8 @@ public:
     bool parent_action_requires_hold(PtcOverlayParentAction action) const
     {
         if (action == PTC_OVERLAY_PARENT_ADD_MINUTES ||
-            action == PTC_OVERLAY_PARENT_SKIP_BEDTIME) return false;
-        if (action == PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP)
-            return displayed_summary_.bedtime_active && displayed_summary_.bedtime_skipped;
+            action == PTC_OVERLAY_PARENT_SKIP_BEDTIME ||
+            action == PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP) return false;
         return true;
     }
 
@@ -904,10 +904,39 @@ public:
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        !parent_action_requires_hold(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        (keysDown & HidNpadButton_A)) {
-                (void)submit_parent_action();
+                if (parent_action_ == PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP) {
+                    parent_view_ = ParentView::Confirm;
+                    parent_confirm_armed_ = false;
+                    ptc_overlay_hold_reset(&confirm_hold_);
+                } else {
+                    (void)submit_parent_action();
+                }
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        parent_action_requires_hold(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        !action_changed && (keysHeld & HidNpadButton_A)) {
+                if (ptc_overlay_hold_update(&confirm_hold_, true, elapsed_ms, 1000))
+                    (void)submit_parent_action();
+            } else {
+                ptc_overlay_hold_reset(&confirm_hold_);
+            }
+            return true;
+        }
+        if (parent_view_ == ParentView::Confirm) {
+            const bool immediate = displayed_summary_.bedtime_active &&
+                displayed_summary_.bedtime_skipped;
+            if (!(keysHeld & HidNpadButton_A)) parent_confirm_armed_ = true;
+            if (touch_pressed && ty >= cy + 480 && ty < cy + 540) {
+                if (tx < cx + 184) keysDown |= HidNpadButton_B;
+                else if (!immediate && parent_confirm_armed_) keysDown |= HidNpadButton_A;
+            }
+            if (keysDown & HidNpadButton_B) {
+                parent_view_ = ParentView::Actions;
+                ptc_overlay_hold_reset(&confirm_hold_);
+            } else if (!parent_action_reason(PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP) &&
+                       !immediate && parent_confirm_armed_ && (keysDown & HidNpadButton_A)) {
+                (void)submit_parent_action();
+            } else if (!parent_action_reason(PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP) &&
+                       immediate && parent_confirm_armed_ && (keysHeld & HidNpadButton_A)) {
                 if (ptc_overlay_hold_update(&confirm_hold_, true, elapsed_ms, 1000))
                     (void)submit_parent_action();
             } else {
@@ -1189,7 +1218,8 @@ public:
         renderer->drawRect(cx, cy + 18, cw, 548, renderer->a(PANEL_COLOR));
         draw_outline(renderer, cx, cy + 18, cw, 548, 2, FOCUS_BORDER);
         renderer->drawString(parent_view_ == ParentView::Pin ? "家长 PIN 验证" :
-            (parent_view_ == ParentView::Actions ? "家长区" : "操作结果"),
+            (parent_view_ == ParentView::Actions ? "家长区" :
+             (parent_view_ == ParentView::Confirm ? "确认恢复限制" : "操作结果")),
             false, cx + 14, cy + 56, 21, renderer->a(TEXT_COLOR));
         const char *state = (!has_status_snapshot_ || status_is_stale()) ? "状态待刷新" :
             (bedtime_restricted() ? "就寝限制生效中" :
@@ -1277,6 +1307,35 @@ public:
                 (hold ? "长按 A 1 秒；Y 刷新；B 返回" : "A 执行；Y 刷新；B 返回"),
                 false, cx + 14, cy + 470, 13,
                 renderer->a(reason ? WAITING_COLOR : (hold ? ERROR_COLOR : FOCUS_BORDER)));
+            return;
+        }
+
+        if (parent_view_ == ParentView::Confirm) {
+            const bool immediate = displayed_summary_.bedtime_active &&
+                displayed_summary_.bedtime_skipped;
+            const char *reason = parent_action_reason(PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP);
+            renderer->drawString("恢复本次就寝限制？", false, cx + 14, cy + 158, 19,
+                renderer->a(TEXT_COLOR), 330);
+            renderer->drawString(immediate ?
+                "当前仍在就寝时段，确认后会立即限制使用并暂停游戏。" :
+                "将清除本次跳过；到达该就寝时段后按原计划限制使用。",
+                false, cx + 14, cy + 212, 13,
+                renderer->a(immediate ? ERROR_COLOR : MUTED_COLOR), 330);
+            if (reason) renderer->drawString(reason, false, cx + 14, cy + 270, 13,
+                renderer->a(WAITING_COLOR), 330);
+            renderer->drawRect(cx + 12, cy + 480, 155, 58, renderer->a(CARD_COLOR));
+            renderer->drawString("B 取消", false, cx + 35, cy + 515, 13,
+                renderer->a(TEXT_COLOR));
+            renderer->drawRect(cx + 184, cy + 480, cw - 196, 58,
+                renderer->a(immediate ? DISABLED_COLOR : FOCUS_BG));
+            renderer->drawString(immediate ? "长按 A 1 秒恢复" : "A 确认恢复", false,
+                cx + 202, cy + 515, 13,
+                renderer->a(immediate ? ERROR_COLOR : TEXT_COLOR));
+            if (immediate) {
+                const int progress = ptc_overlay_hold_progress(&confirm_hold_, 1000);
+                renderer->drawRect(cx + 194, cy + 533, (cw - 216) * progress / 1000, 3,
+                    renderer->a(ERROR_COLOR));
+            }
             return;
         }
 
@@ -1685,6 +1744,7 @@ private:
     u64 prev_stick_keys_ = 0;
     ParentView parent_view_ = ParentView::Child;
     bool parent_authorized_ = false;
+    bool parent_confirm_armed_ = false;
     bool parent_action_succeeded_ = false;
     int parent_action_ = 0;
     int daily_add_minutes_ = 15;

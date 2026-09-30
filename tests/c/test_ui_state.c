@@ -1994,6 +1994,52 @@ static void test_home_redesign(void)
         model.disable_flag_present = false;
     }
     {
+        PtcUiModel state = model;
+        const char *reason;
+        state.status_loaded = true;
+        state.status_updated_at = 1000;
+        state.unrestricted_today = 1;
+        reason = ptc_ui_today_action_unavailable_reason(&state, 1, 1000);
+        check_true(reason && strstr(reason, "不限时") != NULL,
+                   "unlimited day explains why quick add is unavailable");
+        state.unrestricted_today = 0;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 1, state.status_updated_at) == NULL,
+                   "limited day keeps quick add available");
+
+        reason = ptc_ui_today_action_unavailable_reason(&state, 4, 1000);
+        check_true(reason && strstr(reason, "已关闭") != NULL,
+                   "closed bedtime plan explains why skip is unavailable");
+        state.bedtime_policy.enabled = true;
+        reason = ptc_ui_today_action_unavailable_reason(&state, 4, 1000);
+        check_true(reason && strstr(reason, "没有可跳过") != NULL,
+                   "enabled plan without a window explains why skip is unavailable");
+        state.bedtime_next_available = true;
+        state.bedtime_next_window_instance_id = 42;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 4, state.status_updated_at) == NULL,
+                   "upcoming bedtime window enables skip");
+        state.bedtime_skipped_window_available = true;
+        state.bedtime_skipped_window_instance_id = 41;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 4, 1000) == NULL,
+                   "previous skipped window does not disable the next window");
+        state.bedtime_skipped_window_instance_id = 42;
+        reason = ptc_ui_today_action_unavailable_reason(&state, 4, 1000);
+        check_true(reason && strstr(reason, "已跳过") != NULL,
+                   "the same upcoming window cannot be skipped twice");
+        state.bedtime_skipped_window_available = false;
+        state.bedtime_next_available = false;
+        state.bedtime_active = true;
+        state.bedtime_window_instance_id = 42;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 4, state.status_updated_at) == NULL,
+                   "active unskipped bedtime window enables skip");
+        state.bedtime_skipped = true;
+        reason = ptc_ui_today_action_unavailable_reason(&state, 4, 1000);
+        check_true(reason && strstr(reason, "已跳过") != NULL,
+                   "skipped bedtime window cannot be skipped twice");
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 1, 1121) == NULL &&
+                   ptc_ui_today_action_unavailable_reason(&state, 4, 1121) == NULL,
+                   "stale state defers unavailable decisions until refresh");
+    }
+    {
         const int counts[] = {5, 4, 5, 6};
         for (int group = 0; group < 4; ++group) {
             for (int index = 0; index < counts[group]; ++index) {

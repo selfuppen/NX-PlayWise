@@ -65,6 +65,31 @@ bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
         strcmp(model->result_status, "error") != 0;
 }
 
+const char *ptc_ui_today_action_unavailable_reason(const PtcUiModel *model,
+    int index, int64_t now)
+{
+    if (!ptc_ui_status_is_fresh(model, now)) return NULL;
+    if (index == 1 && model->unrestricted_today == 1)
+        return "今日不限时，无需加时";
+    if (index != 4) return NULL;
+    if (!model->bedtime_policy.enabled)
+        return "就寝计划已关闭，无可跳过时段";
+    if (model->bedtime_active) {
+        if (model->bedtime_skipped) return "本次就寝已跳过";
+        return model->bedtime_window_instance_id != 0 ? NULL :
+            "当前没有可跳过的就寝时段";
+    }
+    if (model->bedtime_next_available && model->bedtime_next_window_instance_id != 0) {
+        if (model->bedtime_skipped_window_available &&
+            model->bedtime_next_window_instance_id == model->bedtime_skipped_window_instance_id)
+            return "本次就寝已跳过";
+        return NULL;
+    }
+    if (ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy))
+        return "本次就寝已跳过";
+    return "当前没有可跳过的就寝时段";
+}
+
 void ptc_ui_quota_recheck_snapshot(const PtcUiModel *model,
     PtcUiQuotaRecheckSnapshot *out)
 {

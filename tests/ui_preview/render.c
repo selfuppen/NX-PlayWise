@@ -745,6 +745,13 @@ int main(int argc, char **argv)
             failed |= save_preview(argv[2], "bedtime", name, &model, dark);
         }
         {
+            PtcUiModel pending_off = model;
+            pending_off.bedtime_section = PTC_UI_BEDTIME_WEEKLY;
+            pending_off.draft_bedtime_policy.enabled = false;
+            pending_off.bedtime_dirty = true;
+            failed |= save_preview(argv[2], "bedtime", "bedtime-master-pending-off", &pending_off, dark);
+        }
+        {
             PtcUiModel danger = model;
             int64_t preview_now = ptc_ui_render_now();
             uint16_t preview_minute = ptc_ui_render_minute_of_day(preview_now);

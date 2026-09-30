@@ -89,6 +89,8 @@ int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
 bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now);
+const char *ptc_ui_today_action_unavailable_reason(const PtcUiModel *model,
+    int index, int64_t now);
 void ptc_ui_quota_recheck_snapshot(const PtcUiModel *model,
     PtcUiQuotaRecheckSnapshot *out);
 PtcUiQuotaRecheckDecision ptc_ui_quota_recheck_decide(

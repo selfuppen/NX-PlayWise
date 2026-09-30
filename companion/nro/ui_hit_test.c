@@ -544,7 +544,8 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         if (model->parent_page == PTC_UI_PARENT_TODAY &&
             (model->disable_flag_present || model->waiting ||
              (i == 3 && ptc_ui_status_is_fresh(model, (int64_t)time(NULL)) &&
-              !model->today_override_present))) continue;
+              !model->today_override_present) ||
+             ptc_ui_today_action_unavailable_reason(model, i, (int64_t)time(NULL)))) continue;
         if ((model->parent_page != PTC_UI_PARENT_SUPPORT ||
              (ptc_ui_safety_action_visible(model, i) &&
               ptc_ui_safety_action_available(model, i) != PTC_UI_ACTION_DISABLED)) &&
