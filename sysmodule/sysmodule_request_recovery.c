@@ -215,8 +215,14 @@ static bool process_bedtime_recovery_request(PtcSysmodule *sysmodule, const PtcR
             }
         }
         (void)record_activity(sysmodule, request, now, 0, 0);
-        return write_current_status_result(sysmodule, request, "release",
-            false, now, recovery_path_exists(sysmodule));
+        {
+            bool committed = write_current_status_result(sysmodule, request, "release",
+                false, now, recovery_path_exists(sysmodule));
+            if (committed) recovery_clear(sysmodule);
+            else if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule))
+                write_disable_flag(sysmodule, "bedtime_skip_restore_failed\n");
+            return committed;
+        }
     }
     if (request->type == PTC_REQUEST_SKIP_BEDTIME) {
         if (!bedtime_instance_is_upcoming(&rules, now, request->bedtime_window_instance_id)) {
@@ -242,8 +248,14 @@ static bool process_bedtime_recovery_request(PtcSysmodule *sysmodule, const PtcR
             PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     }
     (void)record_activity(sysmodule, request, now, 0, 0);
-    return write_current_status_result(sysmodule, request, "release",
-        false, now, recovery_path_exists(sysmodule));
+    {
+        bool committed = write_current_status_result(sysmodule, request, "release",
+            false, now, recovery_path_exists(sysmodule));
+        if (committed) recovery_clear(sysmodule);
+        else if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule))
+            write_disable_flag(sysmodule, "bedtime_restore_failed\n");
+        return committed;
+    }
 }
 
 static bool process_overlay_ready(PtcSysmodule *sysmodule, const PtcRequest *request,

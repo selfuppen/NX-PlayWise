@@ -358,6 +358,7 @@ static void test_bedtime_save_restriction_projection(void)
     PtcRules rules;
     uint16_t holiday_day = 0;
     int weekday;
+    char text[128];
 
     ptc_rules_default(&rules);
     model.day_index = 2380;

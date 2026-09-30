@@ -2721,9 +2721,13 @@ static void test_bedtime_enforcement_and_overlay_recovery(void)
     pctl.write_error = PTC_ERR_OK;
     check_true(mem.storage.vtable->read_text(&mem.storage,
         "app/results/bedtime-clear-fail.json", text, sizeof(text)) &&
-        strstr(text, "\"status\":\"error\"") &&
-        strstr(text, "\"skipped\":true"),
-        "failed restriction write retains the skipped window");
+        strstr(text, "\"status\":\"error\""),
+        "failed restriction write reports an error");
+    snprintf(request, sizeof(request), "\"bedtime_skipped_instance_id\":%llu",
+        (unsigned long long)instance);
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/state.json", text, sizeof(text)) && strstr(text, request),
+        "failed restriction write retains the skipped window in durable state");
     snprintf(request, sizeof(request),
         "{\"version\":1,\"request_id\":\"bedtime-clear-state-fail\",\"type\":\"clear_bedtime_skip\","
         "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
@@ -2736,9 +2740,13 @@ static void test_bedtime_enforcement_and_overlay_recovery(void)
     mem.fail_write_path_contains_once = NULL;
     check_true(mem.storage.vtable->read_text(&mem.storage,
         "app/results/bedtime-clear-state-fail.json", text, sizeof(text)) &&
-        strstr(text, "\"status\":\"error\"") &&
-        strstr(text, "\"skipped\":true") && !pctl.status.blocked_today,
-        "state write failure preserves skip without a PCTL write");
+        strstr(text, "\"status\":\"error\"") && !pctl.status.blocked_today,
+        "state write failure reports an error without a PCTL write");
+    snprintf(request, sizeof(request), "\"bedtime_skipped_instance_id\":%llu",
+        (unsigned long long)instance);
+    check_true(mem.storage.vtable->read_text(&mem.storage,
+        "app/state.json", text, sizeof(text)) && strstr(text, request),
+        "state write failure preserves the saved skip");
     snprintf(request, sizeof(request),
         "{\"version\":1,\"request_id\":\"bedtime-clear\",\"type\":\"clear_bedtime_skip\","
         "\"created_at\":5,\"payload\":{\"window_instance_id\":%llu}}",
