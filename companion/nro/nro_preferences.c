@@ -132,6 +132,7 @@ void load_ui_preferences(UiState *ui)
     ui->theme_preference = PTC_UI_THEME_SYSTEM;
     ui->system_theme = PTC_UI_SYSTEM_THEME_UNAVAILABLE;
     ui->theme_view = ptc_ui_theme_make_view(ui->theme_preference, ui->system_theme);
+    ptc_audio_set_enabled(true);
     ui->model.shortcut_draft_mask = ui->model.custom_shortcut_mask;
     ui->model.shortcut_draft_enabled = false;
     ui->model.shortcut_draft_show_hint = true;

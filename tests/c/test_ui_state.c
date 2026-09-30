@@ -5,6 +5,7 @@
 #include "../../companion/nro/ui_model.h"
 #include "../../companion/nro/ui_state.h"
 #include "../../companion/nro/ui_layout.h"
+#include "../../companion/nro/ptc_audio.h"
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
 
@@ -204,8 +205,24 @@ static void test_release_navigation(void)
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 6, "today exposes quota, bedtime and buffer cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 5, "time plan root exposes five direct cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 4, "grant page exposes generation, management and history");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 5, "settings page exposes preferences and security");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 6, "settings page exposes preferences, audio and security");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support is a top-level six-action page");
+
+    ptc_audio_set_enabled(true);
+    check_true(ptc_audio_is_enabled(), "audio initially enabled");
+    ptc_audio_set_enabled(false);
+    check_true(!ptc_audio_is_enabled(), "audio toggles to disabled");
+    ptc_audio_set_enabled(true);
+    check_true(ptc_audio_is_enabled(), "audio restores to enabled");
+
+    model.parent_page = PTC_UI_PARENT_SETTINGS;
+    model.selected_index = 0;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 1, "settings selection moves right");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 3, "settings selection moves down to second row");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 5, "settings selection moves down to audio card in third row");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
     ptc_ui_change_parent_page(&model, -1);

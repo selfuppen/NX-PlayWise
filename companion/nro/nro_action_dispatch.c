@@ -389,6 +389,17 @@ void handle_parent_action(UiState *ui)
         case 4:
             open_activity_history(ui);
             break;
+        case 5: {
+            bool new_state = !ptc_audio_is_enabled();
+            ptc_audio_set_enabled(new_state);
+            if (new_state) {
+                ptc_audio_play(PTC_SE_CONFIRM);
+            }
+            save_ui_preferences(ui);
+            snprintf(ui->model.message, sizeof(ui->model.message),
+                     new_state ? "已开启按键与交互音效。" : "已静音按键与交互音效。");
+            break;
+        }
         default: break;
         }
         return;

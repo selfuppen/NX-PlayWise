@@ -30,6 +30,7 @@ static const UiAction SETTINGS_ACTIONS[] = {
     {"家长区快捷键", "当前：Minus", UI_ACCENT, UI_ACTION_ICON_CONTROLLER, UI_ACTION_VISUAL_NONE},
     {"自制程序高级入口", "未开启", UI_DANGER, UI_ACTION_ICON_HOMEBREW, UI_ACTION_VISUAL_NONE},
     {"家庭活动", "最近 200 条", UI_MUTED, UI_ACTION_ICON_ACTIVITY, UI_ACTION_VISUAL_NONE},
+    {"按键与交互音效", "", UI_SUCCESS, UI_ACTION_ICON_AUDIO, UI_ACTION_VISUAL_AUDIO},
 };
 
 const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -680,6 +681,11 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 }
                 dynamic_action.subtitle = shortcut_detail;
                 action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
+                dynamic_action = *action;
+                dynamic_action.subtitle = ptc_audio_is_enabled() ? "开启" : "静音";
+                dynamic_action.accent = ptc_audio_is_enabled() ? UI_SUCCESS : UI_MUTED;
+                action = &dynamic_action;
             }
             if (model->parent_page == PTC_UI_PARENT_PLAN &&
                 !ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
@@ -757,6 +763,13 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 UiRect badge = {card.x + card.width - 104, card.y + 10, 88, 28};
                 fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
                 draw_text_center(pixels, stride, badge, state_label, 13, state_color);
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
+                bool enabled = ptc_audio_is_enabled();
+                const char *state_label = enabled ? "已开启" : "已静音";
+                uint32_t state_color = enabled ? UI_SUCCESS : UI_MUTED;
+                UiRect badge = {card.x + card.width - 84, card.y + 10, 68, 28};
+                fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
+                draw_text_center(pixels, stride, badge, state_label, 13, state_color);
             }
         }
         if (model->parent_page == PTC_UI_PARENT_PLAN) {
@@ -787,7 +800,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_plan_card(pixels, stride, help, false);
         draw_text(pixels, stride, 866, 216, "系统安全与个人偏好", 24, UI_RGB(UI_BLENDED(text_primary)));
         draw_text(pixels, stride, 866, 258, "时间规则已集中到时间计划", 16, UI_RGB(UI_BLENDED(text_secondary)));
-        draw_text(pixels, stride, 866, 292, "在此统一管理外观、PIN、快捷键", 16, UI_RGB(UI_BLENDED(text_secondary)));
+        draw_text(pixels, stride, 866, 292, "在此统一管理外观、PIN、快捷键、音效", 16, UI_RGB(UI_BLENDED(text_secondary)));
         draw_text(pixels, stride, 866, 326, "自制程序入口与家庭活动记录", 16, UI_RGB(UI_BLENDED(text_secondary)));
 
         UiRect tip_card = {862, 370, help.width - 40, 170};

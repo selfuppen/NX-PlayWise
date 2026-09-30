@@ -4,6 +4,7 @@
 #include "ui_graphics.h"
 #include "ui_layout.h"
 #include "ui_state.h"
+#include "ptc_audio.h"
 #include "../album_restriction.h"
 
 #include <switch.h>
@@ -82,13 +83,15 @@ typedef enum {
     UI_ACTION_ICON_REPAIR,
     UI_ACTION_ICON_STOP,
     UI_ACTION_ICON_EXPORT,
-    UI_ACTION_ICON_INFO
+    UI_ACTION_ICON_INFO,
+    UI_ACTION_ICON_AUDIO
 } UiActionIcon;
 
 typedef enum {
     UI_ACTION_VISUAL_NONE = 0,
     UI_ACTION_VISUAL_QUICK_ADD,
-    UI_ACTION_VISUAL_THEME
+    UI_ACTION_VISUAL_THEME,
+    UI_ACTION_VISUAL_AUDIO
 } UiActionVisual;
 
 typedef struct {

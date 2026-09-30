@@ -37,7 +37,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_GRANT:
         return 4;
     case PTC_UI_PARENT_SETTINGS:
-        return 5;
+        return 6;
     case PTC_UI_PARENT_SUPPORT:
         return 6;
     case PTC_UI_PARENT_TODAY:

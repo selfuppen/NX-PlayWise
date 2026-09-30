@@ -273,6 +273,16 @@ static void draw_card_action_icon(uint32_t *pixels, uint32_t stride, int cx, int
         draw_line(pixels, stride, cx - 2, cy - 1, cx, cy - 1, 2, color);
         draw_line(pixels, stride, cx - 3, cy + 6, cx + 3, cy + 6, 2, color);
         break;
+    case UI_ACTION_ICON_AUDIO:
+        draw_rect_outline(pixels, stride, (UiRect){cx - 8, cy - 4, 5, 8}, 1, 2, color);
+        draw_line(pixels, stride, cx - 4, cy - 4, cx - 1, cy - 8, 2, color);
+        draw_line(pixels, stride, cx - 4, cy + 3, cx - 1, cy + 7, 2, color);
+        draw_line(pixels, stride, cx - 1, cy - 8, cx - 1, cy + 8, 2, color);
+        draw_line(pixels, stride, cx + 3, cy - 3, cx + 5, cy, 2, color);
+        draw_line(pixels, stride, cx + 5, cy, cx + 3, cy + 3, 2, color);
+        draw_line(pixels, stride, cx + 7, cy - 6, cx + 10, cy, 2, color);
+        draw_line(pixels, stride, cx + 10, cy, cx + 7, cy + 6, 2, color);
+        break;
     default:
         draw_circle_outline(pixels, stride, cx, cy, 8, 2, color);
         break;
@@ -306,6 +316,23 @@ static void draw_action_visual(uint32_t *pixels, uint32_t stride, UiRect area,
                               disabled ? UI_DISABLED : (active ? UI_ACCENT : UI_BORDER));
             draw_text_center(pixels, stride, chip, LABELS[index], 12,
                              disabled ? UI_DISABLED : (active ? UI_ACCENT : UI_MUTED));
+        }
+    } else if (action->visual == UI_ACTION_VISUAL_AUDIO) {
+        static const char *LABELS[] = {"开启", "静音"};
+        const char *selected = action->subtitle ? action->subtitle : "";
+        int gap = 6;
+        int width = (area.width - gap) / 2;
+        for (int index = 0; index < 2; ++index) {
+            bool active = strstr(selected, LABELS[index]) != NULL;
+            UiRect chip = {area.x + index * (width + gap), area.y, width, area.height};
+            uint32_t active_bg = index == 0 ? UI_SUCCESS_SOFT : UI_RAISED;
+            uint32_t active_border = index == 0 ? UI_SUCCESS : UI_MUTED;
+            uint32_t active_ink = index == 0 ? UI_SUCCESS : UI_MUTED;
+            fill_round_rect(pixels, stride, chip, 6, active ? active_bg : UI_PAGE);
+            draw_rect_outline(pixels, stride, chip, 6, active ? 2 : 1,
+                              disabled ? UI_DISABLED : (active ? active_border : UI_BORDER));
+            draw_text_center(pixels, stride, chip, LABELS[index], 12,
+                             disabled ? UI_DISABLED : (active ? active_ink : UI_MUTED));
         }
     }
 }
