@@ -4,7 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#if defined(__SWITCH__) && !defined(PLAYWISE_EDEN)
+#if defined(__SWITCH__)
 #include <switch.h>
 #endif
 
@@ -14,7 +14,7 @@
 static bool g_audio_initialized = false;
 static bool g_audio_enabled = true;
 
-#if defined(__SWITCH__) && !defined(PLAYWISE_EDEN)
+#if defined(__SWITCH__)
 static u8 g_audio_pcm_pools[PTC_AUDIO_BUFFER_COUNT][PTC_AUDIO_BUFFER_SIZE] __attribute__((aligned(0x1000)));
 static AudioOutBuffer g_audio_buffers[PTC_AUDIO_BUFFER_COUNT];
 static bool g_audio_buffer_busy[PTC_AUDIO_BUFFER_COUNT];
@@ -23,7 +23,7 @@ static int g_current_buffer_idx = 0;
 
 bool ptc_audio_init(void)
 {
-#if defined(__SWITCH__) && !defined(PLAYWISE_EDEN)
+#if defined(__SWITCH__)
     Result rc = audoutInitialize();
     if (R_FAILED(rc)) {
         g_audio_initialized = false;
@@ -51,7 +51,7 @@ bool ptc_audio_init(void)
 
 void ptc_audio_exit(void)
 {
-#if defined(__SWITCH__) && !defined(PLAYWISE_EDEN)
+#if defined(__SWITCH__)
     if (g_audio_initialized) {
         audoutStopAudioOut();
         audoutExit();
@@ -78,7 +78,7 @@ void ptc_audio_play(PtcSoundEffect se)
         return;
     }
 
-#if defined(__SWITCH__) && !defined(PLAYWISE_EDEN)
+#if defined(__SWITCH__)
     const PtcAudioPcmClip *clip = ptc_audio_get_clip((int)se);
     if (!clip || !clip->samples || clip->sample_count == 0) {
         return;
