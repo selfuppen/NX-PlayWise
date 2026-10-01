@@ -451,7 +451,7 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 178,
               "1. 解压完整交付包，取得 playwise-offline.html", 15, UI_INK);
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 208,
-              "2. 返回“加时码生成管理”，导出手机/电脑配置", 15, UI_INK);
+              "2. 按 A 导出配置；导出前 SD 卡没有此文件", 15, UI_INK);
     draw_text(pixels, stride, dialog.x + 488, dialog.y + 234,
               PLAYWISE_SD_ROOT "/parent-import.json", 15, UI_ACCENT);
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 266,
@@ -471,8 +471,38 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     draw_text(pixels, stride, dialog.x + 486, next_y + 104,
               "配置文件包含加时码密钥，请勿发送给他人。", 15, UI_DANGER);
 
+    UiRect export_button = to_uirect(ptc_ui_qr_export_rect());
+    fill_round_rect(pixels, stride, export_button, 12, UI_ACCENT);
+    draw_text_center(pixels, stride, export_button, "A  导出配置文件", 18, UI_ON_ACCENT);
+
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
                        UI_RAISED, UI_INK, true);
+}
+
+static void draw_parent_export_result_overlay(
+    uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    draw_dialog_shell(pixels, stride, model, &dialog, 800, 420);
+    if (model->parent_export_succeeded) {
+        draw_text(pixels, stride, dialog.x + 42, dialog.y + 134,
+            "配置文件已写入 Switch 的 SD 卡：", 20, UI_SUCCESS);
+        draw_text(pixels, stride, dialog.x + 42, dialog.y + 176,
+            PLAYWISE_SD_ROOT "/parent-import.json", 19, UI_ACCENT);
+        draw_text(pixels, stride, dialog.x + 42, dialog.y + 220,
+            "从 SD 卡的 /switch/playwise/ 目录复制到家长设备。", 17, UI_INK);
+        draw_text(pixels, stride, dialog.x + 42, dialog.y + 254,
+            "在离线家长网页选择“导入配置文件”，然后确认设备。", 17, UI_INK);
+        draw_text(pixels, stride, dialog.x + 42, dialog.y + 294,
+            "文件包含加时码密钥，请勿发送给孩子或上传到不可信站点。", 15, UI_DANGER);
+    } else {
+        draw_text(pixels, stride, dialog.x + 42, dialog.y + 150,
+            "配置文件没有导出", 22, UI_DANGER);
+        draw_wrapped_text(pixels, stride, dialog.x + 42, dialog.y + 204,
+            model->message, 18, dialog.width - 84, 28, 3, UI_INK);
+    }
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),
+        "A / B  返回", UI_RAISED, UI_INK, true);
 }
 
 static void draw_credential_leave_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -509,6 +539,9 @@ bool draw_account_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUi
         return true;
     case PTC_UI_OVERLAY_QR:
         draw_qr_overlay(pixels, stride, model);
+        return true;
+    case PTC_UI_OVERLAY_PARENT_EXPORT_RESULT:
+        draw_parent_export_result_overlay(pixels, stride, model);
         return true;
     case PTC_UI_OVERLAY_CREDENTIAL_LEAVE:
         draw_credential_leave_overlay(pixels, stride, model);

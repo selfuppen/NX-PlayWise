@@ -323,6 +323,23 @@ void handle_overlay_input(UiState *ui, u64 down)
         }
         return;
     }
+    if (ui->model.overlay == PTC_UI_OVERLAY_LANGUAGE) {
+        if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
+        else if (down & HidNpadButton_Left)
+            ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 2 : ui->model.overlay_selection - 1;
+        else if (down & HidNpadButton_Right)
+            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 3;
+        else if (down & HidNpadButton_A) {
+            PtcUiLanguagePreference preference = (PtcUiLanguagePreference)ui->model.overlay_selection;
+            if (apply_language_preference(ui, preference)) {
+                ptc_ui_cancel_overlay(&ui->model);
+                snprintf(ui->model.message, sizeof(ui->model.message), "界面语言已设为%s。",
+                    ptc_ui_language_preference_label(preference));
+            } else snprintf(ui->model.message, sizeof(ui->model.message),
+                "语言设置未保存，请确认 SD 卡可写。");
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_BULK) {
         if (down & HidNpadButton_B) {
             ptc_ui_cancel_overlay(&ui->model);
@@ -617,6 +634,14 @@ void handle_overlay_input(UiState *ui, u64 down)
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_QR) {
         if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
+        else if (down & HidNpadButton_A) export_parent_import(ui);
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_PARENT_EXPORT_RESULT) {
+        if (down & (HidNpadButton_A | HidNpadButton_B)) {
+            ui->model.overlay = ui->export_return_overlay;
+            ui->model.overlay_selection = PTC_UI_GRANT_MANAGER_EXPORT;
+        }
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {

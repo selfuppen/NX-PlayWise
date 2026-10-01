@@ -30,6 +30,7 @@
 #include "ui_graphics.h"
 #include "ui_state.h"
 #include "ui_layout.h"
+#include "../ui_language.h"
 #include "ptc_audio.h"
 #ifndef PLAYWISE_EDEN
 #include "hot_reload.h"
@@ -101,6 +102,8 @@ typedef struct {
     PtcUiThemePreference theme_preference;
     PtcUiSystemTheme system_theme;
     PtcUiThemeView theme_view;
+    PtcUiLanguagePreference language_preference;
+    PtcUiSystemLanguage system_language;
     volatile bool theme_refresh_pending;
     volatile bool status_refresh_pending;
     char active_request_id[PTC_COMPANION_REQUEST_ID_SIZE];
@@ -137,6 +140,7 @@ typedef struct {
     bool recovering_redemption;
     AuthRetryAction auth_retry_action;
     PtcUiOverlay auth_return_overlay;
+    PtcUiOverlay export_return_overlay;
     int64_t auth_cooldown_until;
 #ifndef PLAYWISE_EDEN
     PtcHotReloadController hot_reload;
@@ -245,6 +249,8 @@ void reveal_current_credential(UiState *ui);
 void dispatch_auth_retry(UiState *ui, AuthRetryAction action);
 void export_diagnostics(UiState *ui);
 void refresh_theme(UiState *ui);
+void refresh_language(UiState *ui);
+bool apply_language_preference(UiState *ui, PtcUiLanguagePreference preference);
 void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms);
 void applet_hook(AppletHookType hook, void *param);
 bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference);

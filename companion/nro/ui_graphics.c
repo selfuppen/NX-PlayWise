@@ -27,6 +27,10 @@ bool ptc_ui_graphics_init(void)
         return false;
     }
     g_ui.font_ready = true;
+    if (R_SUCCEEDED(plGetSharedFontByType(&font_data, PlSharedFontType_ChineseTraditional))) {
+        (void)FT_New_Memory_Face(g_ui.library, (const FT_Byte *)font_data.address,
+            (FT_Long)font_data.size, 0, &g_ui.traditional_face);
+    }
     result = framebufferCreate(
         &g_ui.framebuffer,
         nwindowGetDefault(),
@@ -47,6 +51,11 @@ bool ptc_ui_graphics_init(void)
     return true;
 }
 
+void ptc_ui_graphics_language_changed(void)
+{
+    ui_glyph_cache_clear();
+}
+
 void ptc_ui_graphics_exit(void)
 {
     ui_glyph_cache_clear();
@@ -60,6 +69,7 @@ void ptc_ui_graphics_exit(void)
     if (g_ui.font_ready) {
         FT_Done_Face(g_ui.face);
     }
+    if (g_ui.traditional_face) FT_Done_Face(g_ui.traditional_face);
     if (g_ui.library) {
         FT_Done_FreeType(g_ui.library);
     }

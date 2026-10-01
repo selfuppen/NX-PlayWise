@@ -513,6 +513,10 @@ namespace tsl {
         public:
             Renderer& operator=(Renderer&) = delete;
 
+            void setPreferTraditionalChinese(bool prefer) {
+                this->m_preferTraditionalChinese = prefer;
+            }
+
             friend class tsl::Overlay;
 
             /**
@@ -789,7 +793,10 @@ namespace tsl {
                         continue;
                     }
 
-                    u64 key = (static_cast<u64>(currCharacter) << 32) | static_cast<u64>(monospace) << 31 | static_cast<u64>(std::bit_cast<u32>(fontSize));
+                    u64 key = (static_cast<u64>(currCharacter) << 32) |
+                        (static_cast<u64>(monospace) << 31) |
+                        (static_cast<u64>(this->m_preferTraditionalChinese) << 30) |
+                        static_cast<u64>(fontSize * 16.0f);
 
                     Glyph *glyph = nullptr;
 
@@ -798,12 +805,7 @@ namespace tsl {
                         /* Cache glyph */
                         glyph = &s_glyphCache.emplace(key, Glyph()).first->second;
 
-                        if (stbtt_FindGlyphIndex(&this->m_extFont, currCharacter))
-                            glyph->currFont = &this->m_extFont;
-                        else if(this->m_hasLocalFont && stbtt_FindGlyphIndex(&this->m_stdFont, currCharacter)==0)
-                            glyph->currFont = &this->m_localFont;
-                        else
-                            glyph->currFont = &this->m_stdFont;
+                        glyph->currFont = this->fontForCharacter(currCharacter);
 
                         glyph->currFontSize = stbtt_ScaleForPixelHeight(glyph->currFont, fontSize);
 
@@ -872,12 +874,7 @@ namespace tsl {
 
                     stbtt_fontinfo *currFont = nullptr;
 
-                    if (stbtt_FindGlyphIndex(&this->m_extFont, currCharacter))
-                        currFont = &this->m_extFont;
-                    else if(this->m_hasLocalFont && stbtt_FindGlyphIndex(&this->m_stdFont, currCharacter)==0)
-                        currFont = &this->m_localFont;
-                    else
-                        currFont = &this->m_stdFont;
+                    currFont = this->fontForCharacter(currCharacter);
 
                     float currFontSize = stbtt_ScaleForPixelHeight(currFont, fontSize);
 
@@ -895,6 +892,19 @@ namespace tsl {
             }
 
         private:
+            stbtt_fontinfo *fontForCharacter(int character) {
+                if (stbtt_FindGlyphIndex(&this->m_extFont, character)) return &this->m_extFont;
+                if (stbtt_FindGlyphIndex(&this->m_stdFont, character)) return &this->m_stdFont;
+                stbtt_fontinfo *preferred = this->m_preferTraditionalChinese
+                    ? &this->m_traditionalFont : &this->m_simplifiedFont;
+                stbtt_fontinfo *secondary = this->m_preferTraditionalChinese
+                    ? &this->m_simplifiedFont : &this->m_traditionalFont;
+                if (stbtt_FindGlyphIndex(preferred, character)) return preferred;
+                if (stbtt_FindGlyphIndex(secondary, character)) return secondary;
+                if (this->m_hasLocalFont && stbtt_FindGlyphIndex(&this->m_localFont, character))
+                    return &this->m_localFont;
+                return &this->m_stdFont;
+            }
             Renderer() {}
 
             /**
@@ -930,8 +940,9 @@ namespace tsl {
 
             std::stack<ScissoringConfig> m_scissoringStack;
 
-            stbtt_fontinfo m_stdFont, m_localFont, m_extFont;
+            stbtt_fontinfo m_stdFont, m_localFont, m_extFont, m_simplifiedFont, m_traditionalFont;
             bool m_hasLocalFont = false;
+            bool m_preferTraditionalChinese = false;
 
             static inline float s_opacity = 1.0F;
 
@@ -1093,7 +1104,7 @@ namespace tsl {
              * @return Result
              */
             Result initFonts() {
-                static PlFontData stdFontData, localFontData, extFontData;
+                static PlFontData stdFontData, localFontData, extFontData, simplifiedFontData, traditionalFontData;
 
                 // Nintendo's default font
                 TSL_R_TRY(plGetSharedFontByType(&stdFontData, PlSharedFontType_Standard));
@@ -1101,32 +1112,28 @@ namespace tsl {
                 u8 *fontBuffer = reinterpret_cast<u8*>(stdFontData.address);
                 stbtt_InitFont(&this->m_stdFont, fontBuffer, stbtt_GetFontOffsetForIndex(fontBuffer, 0));
 
-#ifdef TESLA_FORCE_CHINESE_SIMPLIFIED_FONT
-                this->m_hasLocalFont = true;
-                TSL_R_TRY(plGetSharedFontByType(&localFontData, PlSharedFontType_ChineseSimplified));
-                fontBuffer = reinterpret_cast<u8*>(localFontData.address);
-                stbtt_InitFont(&this->m_localFont, fontBuffer, stbtt_GetFontOffsetForIndex(fontBuffer, 0));
-#else
+                TSL_R_TRY(plGetSharedFontByType(&simplifiedFontData, PlSharedFontType_ChineseSimplified));
+                fontBuffer = reinterpret_cast<u8*>(simplifiedFontData.address);
+                stbtt_InitFont(&this->m_simplifiedFont, fontBuffer, stbtt_GetFontOffsetForIndex(fontBuffer, 0));
+                TSL_R_TRY(plGetSharedFontByType(&traditionalFontData, PlSharedFontType_ChineseTraditional));
+                fontBuffer = reinterpret_cast<u8*>(traditionalFontData.address);
+                stbtt_InitFont(&this->m_traditionalFont, fontBuffer, stbtt_GetFontOffsetForIndex(fontBuffer, 0));
+#ifndef TESLA_FORCE_CHINESE_SIMPLIFIED_FONT
                 u64 languageCode;
                 if (R_SUCCEEDED(setGetSystemLanguage(&languageCode))) {
                     // Check if need localization font
                     SetLanguage setLanguage;
                     TSL_R_TRY(setMakeLanguage(languageCode, &setLanguage));
-                    this->m_hasLocalFont = true;
                     switch (setLanguage) {
-                    case SetLanguage_ZHCN:
-                    case SetLanguage_ZHHANS:
-                        TSL_R_TRY(plGetSharedFontByType(&localFontData, PlSharedFontType_ChineseSimplified));
-                        break;
                     case SetLanguage_KO:
+                        this->m_hasLocalFont = true;
                         TSL_R_TRY(plGetSharedFontByType(&localFontData, PlSharedFontType_KO));
                         break;
                     case SetLanguage_ZHTW:
                     case SetLanguage_ZHHANT:
-                        TSL_R_TRY(plGetSharedFontByType(&localFontData, PlSharedFontType_ChineseTraditional));
+                        this->m_preferTraditionalChinese = true;
                         break;
                     default:
-                        this->m_hasLocalFont = false;
                         break;
                     }
 

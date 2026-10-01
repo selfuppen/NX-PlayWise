@@ -12,6 +12,7 @@ uint16_t ptc_ui_confirm_hold_progress(const PtcUiConfirmHoldState *state, int64_
 bool ptc_ui_overlay_primary_uses_plus(PtcUiOverlay overlay);
 uint16_t ptc_ui_adjust_minutes(uint16_t value, int delta, uint16_t minimum, uint16_t maximum);
 bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, uint16_t *out);
+uint16_t ptc_ui_clamp_persisted_rule_minutes(int value);
 bool ptc_ui_parse_date_yyyymmdd(const char *text, uint16_t today_day_index, uint16_t *out_day_index);
 bool ptc_ui_parse_time_hhmm(const char *text, uint16_t *out_minute_of_day);
 bool ptc_ui_parse_span_days(const char *text, uint16_t *out_days);

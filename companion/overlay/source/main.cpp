@@ -13,6 +13,8 @@ extern "C" {
 #include "../bridge.h"
 #include "../../auth.h"
 #include "../input_model.h"
+#include "../../ui_language.h"
+#include "third_party/cjson/cJSON.h"
 #include "common/crypto/sha256.h"
 #include "common/time/ptc_time.h"
 #include "platform/switch/fs_storage.h"
@@ -39,6 +41,41 @@ constexpr tsl::Color DANGER_BG{ 0x3, 0x1, 0x1, 0xF };
 constexpr tsl::Color WARNING_BG{ 0x3, 0x2, 0x1, 0xF };
 constexpr tsl::Color BACKSPACE_BORDER{ 0xC, 0x7, 0x2, 0xF };
 constexpr tsl::Color CLEAR_BORDER{ 0xC, 0x3, 0x3, 0xF };
+
+static std::pair<u32, u32> draw_localized(tsl::gfx::Renderer *renderer,
+    const char *value, bool monospace, s32 x, s32 y, float font_size,
+    tsl::Color color, ssize_t max_width = 0)
+{
+    char localized[2048];
+    return renderer->drawString(ptc_ui_localize(value, localized, sizeof(localized)),
+        monospace, x, y, font_size, color, max_width);
+}
+
+static void load_overlay_language(PtcStorage *storage)
+{
+    char config[8192];
+    PtcUiLanguagePreference preference = PTC_UI_LANGUAGE_SYSTEM;
+    PtcUiSystemLanguage system_language = PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
+    u64 code;
+    SetLanguage language;
+    if (storage && storage->vtable->read_text(storage, "sdmc:/switch/playwise/config.json",
+        config, sizeof(config))) {
+        cJSON *root = cJSON_Parse(config);
+        const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, "ui_language");
+        if (cJSON_IsString(item))
+            (void)ptc_ui_language_parse_preference(item->valuestring, &preference);
+        cJSON_Delete(root);
+    }
+    if (R_SUCCEEDED(setInitialize())) {
+        Result result = setGetSystemLanguage(&code);
+        if (R_SUCCEEDED(result)) result = setMakeLanguage(code, &language);
+        setExit();
+        if (R_SUCCEEDED(result))
+            system_language = language == SetLanguage_ZHTW || language == SetLanguage_ZHHANT
+                ? PTC_UI_SYSTEM_LANGUAGE_TRADITIONAL : PTC_UI_SYSTEM_LANGUAGE_SIMPLIFIED;
+    }
+    ptc_ui_language_set_resolved(ptc_ui_language_resolve(preference, system_language));
+}
 
 static unsigned int to_overlay_buttons(u64 keys)
 {
@@ -151,11 +188,16 @@ public:
 
     tsl::elm::Element *createUI() override
     {
-        auto frame = new PlayWiseOverlayFrame("自律约定", "额度与就寝恢复");
+        char title[64], subtitle[64];
+        auto frame = new PlayWiseOverlayFrame(
+            ptc_ui_localize("自律约定", title, sizeof(title)),
+            ptc_ui_localize("额度与就寝恢复", subtitle, sizeof(subtitle)));
         if (!restore_pending_redemption()) {
             (void)begin_overlay_ready();
         }
         frame->setContent(new tsl::elm::CustomDrawer([this](tsl::gfx::Renderer *renderer, s32 x, s32 y, s32 w, s32 h) {
+            renderer->setPreferTraditionalChinese(
+                ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_TRADITIONAL);
             draw_overlay(renderer, x, y, w, h);
         }));
         return frame;
@@ -1102,32 +1144,32 @@ public:
         char line[128];
         renderer->drawRect(cx, cy + 18, cw, 540, renderer->a(PANEL_COLOR));
         draw_outline(renderer, cx, cy + 18, cw, 540, 2, FOCUS_BORDER);
-        renderer->drawString(preview_changed_ ? "状态已变化，请再次确认" : "确认兑换加时码",
+        draw_localized(renderer, preview_changed_ ? "状态已变化，请再次确认" : "确认兑换加时码",
                              false, cx + 14, cy + 52, 18, renderer->a(TEXT_COLOR));
         std::snprintf(line, sizeof(line), "本次增加 %d 分钟", preview_summary_.grant_minutes);
-        renderer->drawString(line, false, cx + 14, cy + 84, 15, renderer->a(FOCUS_BORDER));
-        renderer->drawString("今天有效，成功兑换后只能使用一次", false,
+        draw_localized(renderer, line, false, cx + 14, cy + 84, 15, renderer->a(FOCUS_BORDER));
+        draw_localized(renderer, "今天有效，成功兑换后只能使用一次", false,
                              cx + 14, cy + 110, 12, renderer->a(MUTED_COLOR));
 
         renderer->drawRect(cx + 12, cy + 142, cw - 24, 86, renderer->a(CARD_COLOR));
-        renderer->drawString("今天还可玩", false, cx + 24, cy + 168, 12, renderer->a(MUTED_COLOR));
+        draw_localized(renderer, "今天还可玩", false, cx + 24, cy + 168, 12, renderer->a(MUTED_COLOR));
         if (preview_summary_.converts_unlimited_to_limited) {
-            renderer->drawString("不限时", false, cx + 155, cy + 171, 19, renderer->a(SUCCESS_COLOR));
+            draw_localized(renderer, "不限时", false, cx + 155, cy + 171, 19, renderer->a(SUCCESS_COLOR));
         } else if (preview_summary_.remaining_available) {
             std::snprintf(line, sizeof(line), "%d 分钟", preview_summary_.remaining_minutes);
-            renderer->drawString(line, false, cx + 155, cy + 171, 19, renderer->a(SUCCESS_COLOR));
+            draw_localized(renderer, line, false, cx + 155, cy + 171, 19, renderer->a(SUCCESS_COLOR));
         } else {
-            renderer->drawString("暂不可用", false, cx + 155, cy + 171, 16, renderer->a(MUTED_COLOR));
+            draw_localized(renderer, "暂不可用", false, cx + 155, cy + 171, 16, renderer->a(MUTED_COLOR));
         }
 
         renderer->drawRect(cx + 12, cy + 244, cw - 24, 86, renderer->a(CARD_COLOR));
-        renderer->drawString("兑换后预计还可玩", false, cx + 24, cy + 270, 12, renderer->a(MUTED_COLOR));
+        draw_localized(renderer, "兑换后预计还可玩", false, cx + 24, cy + 270, 12, renderer->a(MUTED_COLOR));
         if (preview_summary_.remaining_after_available) {
             std::snprintf(line, sizeof(line), "%d 分钟", preview_summary_.remaining_after_minutes);
-            renderer->drawString(line, false, cx + 155, cy + 273, 19,
+            draw_localized(renderer, line, false, cx + 155, cy + 273, 19,
                                  renderer->a(preview_summary_.remaining_after_minutes == 0 ? ERROR_COLOR : SUCCESS_COLOR));
         } else {
-            renderer->drawString("暂不可用", false, cx + 155, cy + 273, 16, renderer->a(ERROR_COLOR));
+            draw_localized(renderer, "暂不可用", false, cx + 155, cy + 273, 16, renderer->a(ERROR_COLOR));
         }
 
         const PtcOverlayPreviewVisualLevel preview_level = ptc_overlay_preview_visual_level(
@@ -1143,27 +1185,27 @@ public:
             draw_outline(renderer, cx + 12, cy + 342, cw - 24, 50, 2, alert_accent);
         }
         if (preview_summary_.converts_unlimited_to_limited) {
-            renderer->drawString("警告：兑换后将从不限时改为限时", false, cx + 22, cy + 372, 13, renderer->a(ERROR_COLOR));
+            draw_localized(renderer, "警告：兑换后将从不限时改为限时", false, cx + 22, cy + 372, 13, renderer->a(ERROR_COLOR));
         } else if (!preview_summary_.remaining_after_available) {
-            renderer->drawString("警告：暂时无法确认兑换后的可玩时间", false, cx + 22, cy + 372, 13, renderer->a(ERROR_COLOR));
+            draw_localized(renderer, "警告：暂时无法确认兑换后的可玩时间", false, cx + 22, cy + 372, 13, renderer->a(ERROR_COLOR));
         } else if (preview_summary_.remaining_after_minutes == 0) {
-            renderer->drawString("警告：兑换后预计没有可玩时间", false, cx + 22, cy + 372, 13, renderer->a(ERROR_COLOR));
+            draw_localized(renderer, "警告：兑换后预计没有可玩时间", false, cx + 22, cy + 372, 13, renderer->a(ERROR_COLOR));
         } else if (preview_summary_.preview_capped) {
             std::snprintf(line, sizeof(line), "受每日上限影响，实际增加 %d 分钟", preview_summary_.effective_add_minutes);
-            renderer->drawString(line, false, cx + 22, cy + 372, 13, renderer->a(WAITING_COLOR));
+            draw_localized(renderer, line, false, cx + 22, cy + 372, 13, renderer->a(WAITING_COLOR));
         } else {
-            renderer->drawString("确认前不会消费这枚加时码", false, cx + 16, cy + 366, 13, renderer->a(MUTED_COLOR));
+            draw_localized(renderer, "确认前不会消费这枚加时码", false, cx + 16, cy + 366, 13, renderer->a(MUTED_COLOR));
         }
-        renderer->drawString(touch_hold_warning_ ? "请使用手柄长按 A 确认" :
+        draw_localized(renderer, touch_hold_warning_ ? "请使用手柄长按 A 确认" :
                              (dangerous ? "长按 A 1 秒确认；B 取消" : "A / + 确认；B 取消"),
                              false, cx + 16, cy + 414, 13,
                              renderer->a(dangerous ? ERROR_COLOR : FOCUS_BORDER));
         renderer->drawRect(cx, cy + 500, 145, 50, renderer->a(CARD_COLOR));
         draw_outline(renderer, cx, cy + 500, 145, 50, 1, MUTED_COLOR);
-        renderer->drawString("B 取消", false, cx + 45, cy + 530, 14, renderer->a(TEXT_COLOR));
+        draw_localized(renderer, "B 取消", false, cx + 45, cy + 530, 14, renderer->a(TEXT_COLOR));
         renderer->drawRect(cx + 170, cy + 500, 160, 50, renderer->a(FOCUS_BG));
         draw_outline(renderer, cx + 170, cy + 500, 160, 50, 2, FOCUS_BORDER);
-        renderer->drawString(dangerous ? "长按 A 确认" : "A 确认", false,
+        draw_localized(renderer, dangerous ? "长按 A 确认" : "A 确认", false,
                              cx + 202, cy + 530, 14, renderer->a(TEXT_COLOR));
         if (dangerous) {
             const int progress = confirm_hold_.fired ? 0 :
@@ -1181,35 +1223,35 @@ public:
         renderer->drawRect(cx, cy + 36, cw, 460, renderer->a(PANEL_COLOR));
         const tsl::Color accent = result_failed_ ? ERROR_COLOR : SUCCESS_COLOR;
         draw_outline(renderer, cx, cy + 36, cw, 460, 2, accent);
-        renderer->drawString(result_pending_ ? "加时结果确认中" : (result_failed_ ? "兑换未成功" : "加时成功"),
+        draw_localized(renderer, result_pending_ ? "加时结果确认中" : (result_failed_ ? "兑换未成功" : "加时成功"),
                              false, cx + 14, cy + 74, 22, renderer->a(accent));
         std::snprintf(line, sizeof(line), result_pending_ ? "预计增加 %d 分钟" :
                       (result_failed_ ? "原计划增加 %d 分钟" : "已增加 %d 分钟"),
                       preview_summary_.grant_minutes);
-        renderer->drawString(line, false, cx + 14, cy + 108, 15, renderer->a(TEXT_COLOR));
-        renderer->drawString(result_pending_ ? "正在核对最终结果，请勿重复输入这枚加时码" :
+        draw_localized(renderer, line, false, cx + 14, cy + 108, 15, renderer->a(TEXT_COLOR));
+        draw_localized(renderer, result_pending_ ? "正在核对最终结果，请勿重复输入这枚加时码" :
                              (result_failed_ ? "后台已确认失败；该码未消费，可重新输入" :
                               "该加时码已经使用，不能再次使用"),
                              false, cx + 14, cy + 136, 12, renderer->a(MUTED_COLOR));
-        renderer->drawString("兑换前", false, cx + 18, cy + 190, 12, renderer->a(MUTED_COLOR));
+        draw_localized(renderer, "兑换前", false, cx + 18, cy + 190, 12, renderer->a(MUTED_COLOR));
         if (redemption_before_.converts_unlimited_to_limited) std::snprintf(line, sizeof(line), "不限时");
         else if (redemption_before_.remaining_available) std::snprintf(line, sizeof(line), "%d 分钟", redemption_before_.remaining_minutes);
         else std::snprintf(line, sizeof(line), "暂不可用");
-        renderer->drawString(line, false, cx + 130, cy + 193, 18, renderer->a(TEXT_COLOR));
-        renderer->drawString(result_pending_ ? "预览兑换后" : "实际兑换后", false, cx + 18, cy + 254, 12, renderer->a(MUTED_COLOR));
+        draw_localized(renderer, line, false, cx + 130, cy + 193, 18, renderer->a(TEXT_COLOR));
+        draw_localized(renderer, result_pending_ ? "预览兑换后" : "实际兑换后", false, cx + 18, cy + 254, 12, renderer->a(MUTED_COLOR));
         const PtcCompanionResultSummary &after = result_pending_ ? preview_summary_ : displayed_summary_;
         if (result_pending_ ? after.remaining_after_available : after.remaining_available) {
             std::snprintf(line, sizeof(line), "%d 分钟",
                           result_pending_ ? after.remaining_after_minutes : after.remaining_minutes);
         }
         else std::snprintf(line, sizeof(line), "暂不可用");
-        renderer->drawString(line, false, cx + 130, cy + 257, 18, renderer->a(accent));
-        renderer->drawString(result_pending_ ? "可关闭界面；下次打开会继续确认" :
+        draw_localized(renderer, line, false, cx + 130, cy + 257, 18, renderer->a(accent));
+        draw_localized(renderer, result_pending_ ? "可关闭界面；下次打开会继续确认" :
                              (result_failed_ ? "失败结果已确认" : "结果已确认并保存"),
                              false, cx + 18, cy + 324, 14, renderer->a(accent));
         renderer->drawRect(cx + 30, cy + 392, cw - 60, 56, renderer->a(FOCUS_BG));
         draw_outline(renderer, cx + 30, cy + 392, cw - 60, 56, 2, FOCUS_BORDER);
-        renderer->drawString("A / B  返回空白输入页", false, cx + 82, cy + 426, 14, renderer->a(TEXT_COLOR));
+        draw_localized(renderer, "A / B  返回空白输入页", false, cx + 82, cy + 426, 14, renderer->a(TEXT_COLOR));
     }
 
     void draw_parent_page(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw)
@@ -1217,14 +1259,14 @@ public:
         char line[160];
         renderer->drawRect(cx, cy + 18, cw, 548, renderer->a(PANEL_COLOR));
         draw_outline(renderer, cx, cy + 18, cw, 548, 2, FOCUS_BORDER);
-        renderer->drawString(parent_view_ == ParentView::Pin ? "家长 PIN 验证" :
+        draw_localized(renderer, parent_view_ == ParentView::Pin ? "家长 PIN 验证" :
             (parent_view_ == ParentView::Actions ? "家长区" :
              (parent_view_ == ParentView::Confirm ? "确认恢复限制" : "操作结果")),
             false, cx + 14, cy + 56, 21, renderer->a(TEXT_COLOR));
         const char *state = (!has_status_snapshot_ || status_is_stale()) ? "状态待刷新" :
             (bedtime_restricted() ? "就寝限制生效中" :
              (displayed_summary_.daily_restriction_active ? "今日额度已耗尽" : "当前可正常使用"));
-        renderer->drawString(state, false, cx + 14, cy + 88, 13,
+        draw_localized(renderer, state, false, cx + 14, cy + 88, 13,
             renderer->a(bedtime_restricted() ? ERROR_COLOR : MUTED_COLOR));
 
         if (parent_view_ == ParentView::Pin) {
@@ -1232,8 +1274,8 @@ public:
             (void)ptc_overlay_pin_mask(pin_length_, masked, sizeof(masked));
             std::snprintf(line, sizeof(line), "已输入 %u 位  %s",
                 static_cast<unsigned int>(pin_length_), masked);
-            renderer->drawString(line, false, cx + 14, cy + 152, 15, renderer->a(TEXT_COLOR), 330);
-            renderer->drawString("摇杆八方向输入 1 到 8；十字键输入 1/3/5/7", false,
+            draw_localized(renderer, line, false, cx + 14, cy + 152, 15, renderer->a(TEXT_COLOR), 330);
+            draw_localized(renderer, "摇杆八方向输入 1 到 8；十字键输入 1/3/5/7", false,
                 cx + 14, cy + 180, 12, renderer->a(MUTED_COLOR));
             renderer->drawRect(cx, cy + PTC_OVERLAY_KEYPAD_Y, cw,
                 PTC_OVERLAY_KEYPAD_H, renderer->a(CARD_COLOR));
@@ -1247,20 +1289,20 @@ public:
                 const s32 x = cx + 12 + COLS[i] * 117;
                 const s32 y = cy + PTC_OVERLAY_KEYPAD_Y + 4 + ROWS[i] * 44;
                 renderer->drawRect(x, y, 105, 42, renderer->a(KEY_COLOR));
-                renderer->drawString(DIRECTIONS[i], false, x + 12, y + 27, 13,
+                draw_localized(renderer, DIRECTIONS[i], false, x + 12, y + 27, 13,
                     renderer->a(TEXT_COLOR));
             }
-            renderer->drawString("X 0    Y 9", false, cx + 142, cy + 267, 15,
+            draw_localized(renderer, "X 0    Y 9", false, cx + 142, cy + 267, 15,
                 renderer->a(TEXT_COLOR));
             const PtcOverlayRect backspace = ptc_overlay_backspace_rect(cx, cy);
-            renderer->drawString("ZL 退格", false, backspace.x + 14, backspace.y + 27, 13,
+            draw_localized(renderer, "ZL 退格", false, backspace.x + 14, backspace.y + 27, 13,
                 renderer->a(BACKSPACE_BORDER));
             renderer->drawRect(cx, cy + 390, cw, 46, renderer->a(FOCUS_BG));
-            renderer->drawString("+ 验证 PIN", false, cx + 125, cy + 420, 16,
+            draw_localized(renderer, "+ 验证 PIN", false, cx + 125, cy + 420, 16,
                 renderer->a(TEXT_COLOR));
-            if (pin_message_[0]) renderer->drawString(pin_message_, false,
+            if (pin_message_[0]) draw_localized(renderer, pin_message_, false,
                 cx + 14, cy + 468, 13, renderer->a(ERROR_COLOR), 330);
-            renderer->drawString("B 返回加时码页", false, cx + 14, cy + 532, 14,
+            draw_localized(renderer, "B 返回加时码页", false, cx + 14, cy + 532, 14,
                 renderer->a(MUTED_COLOR));
             return;
         }
@@ -1272,7 +1314,7 @@ public:
             };
             renderer->drawRect(cx + 246, cy + 58, cw - 258, 46,
                 renderer->a(bridge_->waiting ? DISABLED_COLOR : CARD_COLOR));
-            renderer->drawString("Y 刷新", false, cx + 264, cy + 87, 13,
+            draw_localized(renderer, "Y 刷新", false, cx + 264, cy + 87, 13,
                 renderer->a(bridge_->waiting ? MUTED_COLOR : FOCUS_BORDER));
             for (int i = 0; i < PTC_OVERLAY_PARENT_ACTION_COUNT; ++i) {
                 const s32 y = cy + 135 + i * 52;
@@ -1288,9 +1330,9 @@ public:
                         daily_add_minutes_);
                 else
                     std::snprintf(line, sizeof(line), "%s", LABELS[i]);
-                renderer->drawString(line, false, cx + 24, y + 20, 13,
+                draw_localized(renderer, line, false, cx + 24, y + 20, 13,
                     renderer->a(reason ? MUTED_COLOR : TEXT_COLOR), 310);
-                if (reason) renderer->drawString(reason, false, cx + 24, y + 38, 11,
+                if (reason) draw_localized(renderer, reason, false, cx + 24, y + 38, 11,
                     renderer->a(WAITING_COLOR), 305);
                 if (selected && !reason && parent_action_requires_hold(static_cast<PtcOverlayParentAction>(i))) {
                     const int progress = ptc_overlay_hold_progress(&confirm_hold_, 1000);
@@ -1303,7 +1345,7 @@ public:
             const auto selected = static_cast<PtcOverlayParentAction>(parent_action_);
             const char *reason = parent_action_reason(selected);
             const bool hold = parent_action_requires_hold(selected);
-            renderer->drawString(reason ? "该动作当前不可用；B 返回" :
+            draw_localized(renderer, reason ? "该动作当前不可用；B 返回" :
                 (hold ? "长按 A 1 秒；Y 刷新；B 返回" : "A 执行；Y 刷新；B 返回"),
                 false, cx + 14, cy + 470, 13,
                 renderer->a(reason ? WAITING_COLOR : (hold ? ERROR_COLOR : FOCUS_BORDER)));
@@ -1314,21 +1356,21 @@ public:
             const bool immediate = displayed_summary_.bedtime_active &&
                 displayed_summary_.bedtime_skipped;
             const char *reason = parent_action_reason(PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP);
-            renderer->drawString("恢复本次就寝限制？", false, cx + 14, cy + 158, 19,
+            draw_localized(renderer, "恢复本次就寝限制？", false, cx + 14, cy + 158, 19,
                 renderer->a(TEXT_COLOR), 330);
-            renderer->drawString(immediate ?
+            draw_localized(renderer, immediate ?
                 "当前仍在就寝时段，确认后会立即限制使用并暂停游戏。" :
                 "将清除本次跳过；到达该就寝时段后按原计划限制使用。",
                 false, cx + 14, cy + 212, 13,
                 renderer->a(immediate ? ERROR_COLOR : MUTED_COLOR), 330);
-            if (reason) renderer->drawString(reason, false, cx + 14, cy + 270, 13,
+            if (reason) draw_localized(renderer, reason, false, cx + 14, cy + 270, 13,
                 renderer->a(WAITING_COLOR), 330);
             renderer->drawRect(cx + 12, cy + 480, 155, 58, renderer->a(CARD_COLOR));
-            renderer->drawString("B 取消", false, cx + 35, cy + 515, 13,
+            draw_localized(renderer, "B 取消", false, cx + 35, cy + 515, 13,
                 renderer->a(TEXT_COLOR));
             renderer->drawRect(cx + 184, cy + 480, cw - 196, 58,
                 renderer->a(immediate ? DISABLED_COLOR : FOCUS_BG));
-            renderer->drawString(immediate ? "长按 A 1 秒恢复" : "A 确认恢复", false,
+            draw_localized(renderer, immediate ? "长按 A 1 秒恢复" : "A 确认恢复", false,
                 cx + 202, cy + 515, 13,
                 renderer->a(immediate ? ERROR_COLOR : TEXT_COLOR));
             if (immediate) {
@@ -1339,7 +1381,7 @@ public:
             return;
         }
 
-        renderer->drawString(bridge_->waiting ? "请求处理中..." :
+        draw_localized(renderer, bridge_->waiting ? "请求处理中..." :
             (parent_action_succeeded_ ? "操作已完成" : "操作未完成"),
             false, cx + 14, cy + 180, 19,
             renderer->a(bridge_->waiting ? WAITING_COLOR :
@@ -1348,7 +1390,7 @@ public:
             if (last_request_kind_ == OverlayRequestKind::ClaimDailyBuffer) {
                 std::snprintf(line, sizeof(line), "自主缓冲已领取，增加 %d 分钟",
                     displayed_summary_.daily_buffer_minutes);
-                renderer->drawString(line, false, cx + 14, cy + 225, 14,
+                draw_localized(renderer, line, false, cx + 14, cy + 225, 14,
                     renderer->a(SUCCESS_COLOR), 320);
             }
             const char *result = !displayed_summary_.access_recovery_required ?
@@ -1356,28 +1398,28 @@ public:
                 (bedtime_restricted() ? "仍受就寝限制" :
                  (displayed_summary_.daily_restriction_active ?
                   "仍受每日额度限制" : "请核对当前限制状态"));
-            renderer->drawString(result, false, cx + 14, cy + 270, 14,
+            draw_localized(renderer, result, false, cx + 14, cy + 270, 14,
                 renderer->a(displayed_summary_.access_recovery_required ?
                     WAITING_COLOR : SUCCESS_COLOR), 320);
         } else if (!bridge_->waiting) {
-            renderer->drawString(ptc_overlay_bridge_error_message_zh(bridge_), false,
+            draw_localized(renderer, ptc_overlay_bridge_error_message_zh(bridge_), false,
                 cx + 14, cy + 225, 13, renderer->a(ERROR_COLOR), 320);
             if (bridge_->summary.valid && bridge_->summary.error_code > 0) {
                 std::snprintf(line, sizeof(line), "错误码：%d", bridge_->summary.error_code);
-                renderer->drawString(line, false, cx + 14, cy + 270, 12,
+                draw_localized(renderer, line, false, cx + 14, cy + 270, 12,
                     renderer->a(ERROR_COLOR));
             }
-            renderer->drawString("后台不可用时请从 SD 或外部环境恢复。", false,
+            draw_localized(renderer, "后台不可用时请从 SD 或外部环境恢复。", false,
                 cx + 14, cy + 324, 12, renderer->a(MUTED_COLOR), 320);
         }
         if (last_request_kind_ != OverlayRequestKind::ClaimDailyBuffer) {
             renderer->drawRect(cx + 12, cy + 480, 155, 58, renderer->a(CARD_COLOR));
-            renderer->drawString("Y 重新验证", false, cx + 26, cy + 515, 13,
+            draw_localized(renderer, "Y 重新验证", false, cx + 26, cy + 515, 13,
                 renderer->a(FOCUS_BORDER));
         }
         renderer->drawRect(cx + 184, cy + 480, cw - 196, 58,
             renderer->a(CARD_COLOR));
-        renderer->drawString("B 返回", false, cx + 223, cy + 515, 13,
+        draw_localized(renderer, "B 返回", false, cx + 223, cy + 515, 13,
             renderer->a(FOCUS_BORDER));
     }
     void draw_overlay(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw, s32 ch)
@@ -1418,13 +1460,13 @@ public:
             quota_val, sizeof(quota_val),
             quota_note, sizeof(quota_note));
 
-        renderer->drawString(quota_label, false, cx + 10, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
-        renderer->drawString(quota_val, false, cx + 70, top_banner_y + 23, 15, renderer->a(TEXT_COLOR));
+        draw_localized(renderer, quota_label, false, cx + 10, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
+        draw_localized(renderer, quota_val, false, cx + 70, top_banner_y + 23, 15, renderer->a(TEXT_COLOR));
         if (quota_note[0]) {
-            renderer->drawString(quota_note, false, cx + 124, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
+            draw_localized(renderer, quota_note, false, cx + 124, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
         }
 
-        renderer->drawString(success_visible_ ? "修改后还可玩" : "今天还可玩", false,
+        draw_localized(renderer, success_visible_ ? "修改后还可玩" : "今天还可玩", false,
                               cx + 10, top_banner_y + 51, 11, renderer->a(MUTED_COLOR));
         const bool unlimited_today = summary.valid && summary.unrestricted_today == 1;
         const tsl::Color remaining_accent = remaining_refresh_pending ? WAITING_COLOR :
@@ -1432,15 +1474,15 @@ public:
         renderer->drawRect(cx + 108, top_banner_y + 34, 104, 34, renderer->a(KEY_COLOR));
         renderer->drawRect(cx + 108, top_banner_y + 66, 104, 2, renderer->a(remaining_accent));
         if (remaining_refresh_pending) {
-            renderer->drawString("正在刷新...", false, cx + 116, top_banner_y + 58, 14,
+            draw_localized(renderer, "正在刷新...", false, cx + 116, top_banner_y + 58, 14,
                                  renderer->a(WAITING_COLOR));
         } else if (unlimited_today) {
-            renderer->drawString("不限时", false, cx + 126, top_banner_y + 62, 22, renderer->a(SUCCESS_COLOR));
+            draw_localized(renderer, "不限时", false, cx + 126, top_banner_y + 62, 22, renderer->a(SUCCESS_COLOR));
         } else if (summary.valid && summary.remaining_available) {
             std::snprintf(line, sizeof(line), "%d 分钟", summary.remaining_minutes);
-            renderer->drawString(line, false, cx + 114, top_banner_y + 62, 22, renderer->a(SUCCESS_COLOR));
+            draw_localized(renderer, line, false, cx + 114, top_banner_y + 62, 22, renderer->a(SUCCESS_COLOR));
         } else {
-            renderer->drawString("暂不可用", false, cx + 116, top_banner_y + 58, 14, renderer->a(MUTED_COLOR));
+            draw_localized(renderer, "暂不可用", false, cx + 116, top_banner_y + 58, 14, renderer->a(MUTED_COLOR));
         }
 
         const bool busy = bridge_->waiting;
@@ -1450,12 +1492,12 @@ public:
         draw_outline(renderer, cx + PTC_OVERLAY_REFRESH_X, cy + PTC_OVERLAY_REFRESH_Y,
                      PTC_OVERLAY_REFRESH_W, PTC_OVERLAY_REFRESH_H, 1,
                      remaining_refresh_pending ? WAITING_COLOR : (busy ? MUTED_COLOR : FOCUS_BORDER));
-        renderer->drawString(remaining_refresh_pending ? "确认中" : (busy ? "刷新中" : "Y  刷新"),
+        draw_localized(renderer, remaining_refresh_pending ? "确认中" : (busy ? "刷新中" : "Y  刷新"),
                              false, cx + PTC_OVERLAY_REFRESH_X + 18,
                              cy + PTC_OVERLAY_REFRESH_Y + 20, 12,
                              renderer->a(remaining_refresh_pending ? WAITING_COLOR :
                                          (busy ? MUTED_COLOR : TEXT_COLOR)));
-        renderer->drawString(remaining_refresh_pending ? "提交后等待结果" :
+        draw_localized(renderer, remaining_refresh_pending ? "提交后等待结果" :
                              (status_is_stale() ? "数据可能已过期" : age),
                              false, cx + PTC_OVERLAY_REFRESH_X, top_banner_y + 64, 11,
                              renderer->a(remaining_refresh_pending ? WAITING_COLOR :
@@ -1468,7 +1510,7 @@ public:
             ((summary.bedtime_active && !summary.bedtime_skipped) ||
              summary.daily_restriction_active ||
              (summary.remaining_available && summary.remaining_minutes == 0)));
-        renderer->drawString(restriction_guidance, false, cx + 5, cy + 94, 12,
+        draw_localized(renderer, restriction_guidance, false, cx + 5, cy + 94, 12,
             renderer->a(restriction_urgent ? ERROR_COLOR : FOCUS_BORDER), 350);
 
         // --- 2. Code Display Slots (8位卡片槽 - 增大更醒目) ---
@@ -1499,9 +1541,9 @@ public:
             } else {
                 std::snprintf(symbol, sizeof(symbol), " | ");
             }
-            const auto symbol_size = renderer->drawString(
+            const auto symbol_size = draw_localized(renderer,
                 symbol, false, 0, 0, 30, tsl::style::color::ColorTransparent);
-            renderer->drawString(symbol, false,
+            draw_localized(renderer, symbol, false,
                 sx + (slot_w - static_cast<s32>(symbol_size.first)) / 2,
                 slot_y + 36, 30,
                 renderer->a(index < input_->length ? TEXT_COLOR : (is_cursor ? FOCUS_BORDER : MUTED_COLOR)));
@@ -1511,7 +1553,7 @@ public:
         format_console_date(summary, console_date, sizeof(console_date));
         std::snprintf(line, sizeof(line), "已输入 %u/8 位  高亮：%c  %s", input_->length,
                       ptc_overlay_input_charset()[input_->cursor], console_date);
-        renderer->drawString(line, false, cx + 5, cy + 180, 14, renderer->a(MUTED_COLOR));
+        draw_localized(renderer, line, false, cx + 5, cy + 180, 14, renderer->a(MUTED_COLOR));
 
         // --- 3. Keypad 3x4 Grid (软键盘放大) ---
         const char *charset = ptc_overlay_input_charset();
@@ -1528,9 +1570,9 @@ public:
 
             renderer->drawRect(key.x, key.y, key.w, key.h, renderer->a(focused ? FOCUS_BG : KEY_COLOR));
             draw_outline(renderer, key.x, key.y, key.w, key.h, focused ? 3 : 1, focused ? FOCUS_BORDER : MUTED_COLOR);
-            const auto key_text_size = renderer->drawString(
+            const auto key_text_size = draw_localized(renderer,
                 symbol, false, 0, 0, 24, tsl::style::color::ColorTransparent);
-            renderer->drawString(symbol, false, key.x + (key.w - static_cast<s32>(key_text_size.first)) / 2,
+            draw_localized(renderer, symbol, false, key.x + (key.w - static_cast<s32>(key_text_size.first)) / 2,
                                  key.y + 30, 24, renderer->a(focused ? FOCUS_BORDER : TEXT_COLOR));
         }
 
@@ -1538,12 +1580,12 @@ public:
         const PtcOverlayRect backspace = ptc_overlay_backspace_rect(cx, cy);
         renderer->drawRect(backspace.x, backspace.y, backspace.w, backspace.h, renderer->a(KEY_COLOR));
         draw_outline(renderer, backspace.x, backspace.y, backspace.w, backspace.h, 1, BACKSPACE_BORDER);
-        renderer->drawString("X 退格", false, backspace.x + 28, backspace.y + 26, 12, renderer->a(BACKSPACE_BORDER));
+        draw_localized(renderer, "X 退格", false, backspace.x + 28, backspace.y + 26, 12, renderer->a(BACKSPACE_BORDER));
 
         const PtcOverlayRect clear = ptc_overlay_clear_rect(cx, cy);
         renderer->drawRect(clear.x, clear.y, clear.w, clear.h, renderer->a(KEY_COLOR));
         draw_outline(renderer, clear.x, clear.y, clear.w, clear.h, 1, CLEAR_BORDER);
-        renderer->drawString("点按清空", false, clear.x + 23, clear.y + 26, 12, renderer->a(CLEAR_BORDER));
+        draw_localized(renderer, "点按清空", false, clear.x + 23, clear.y + 26, 12, renderer->a(CLEAR_BORDER));
 
         // --- 4. Control & Submit Bar (操作与提交栏) ---
         const bool code_unavailable = has_status_snapshot_ && !status_is_stale() &&
@@ -1559,18 +1601,18 @@ public:
         draw_outline(renderer, cx, submit_y, cw, submit_h, can_submit ? 3 : 1, can_submit ? FOCUS_BORDER : MUTED_COLOR);
 
         if (can_submit) {
-            renderer->drawString("+ 提交加时奖励（点击或按 +）", false, cx + 50, submit_y + 24, 14, renderer->a(TEXT_COLOR));
+            draw_localized(renderer, "+ 提交加时奖励（点击或按 +）", false, cx + 50, submit_y + 24, 14, renderer->a(TEXT_COLOR));
         } else if (bedtime_restricted()) {
-            renderer->drawString("请家长先解除就寝限制；可继续输入加时码", false,
+            draw_localized(renderer, "请家长先解除就寝限制；可继续输入加时码", false,
                 cx + 32, submit_y + 24, 13, renderer->a(WAITING_COLOR));
         } else if (code_unavailable) {
-            renderer->drawString("今日不限时，加时码不可用", false,
+            draw_localized(renderer, "今日不限时，加时码不可用", false,
                 cx + 65, submit_y + 24, 13, renderer->a(WAITING_COLOR));
         } else if (bridge_->waiting) {
-            renderer->drawString("后台处理中，可继续编辑输入", false, cx + 66, submit_y + 24, 13,
+            draw_localized(renderer, "后台处理中，可继续编辑输入", false, cx + 66, submit_y + 24, 13,
                                  renderer->a(MUTED_COLOR));
         } else {
-            renderer->drawString("+ 提交加时（需输满 8 位数字）", false, cx + 58, submit_y + 24, 13, renderer->a(MUTED_COLOR));
+            draw_localized(renderer, "+ 提交加时（需输满 8 位数字）", false, cx + 58, submit_y + 24, 13, renderer->a(MUTED_COLOR));
         }
 
         // --- 5. Collapsible Status Panel (可折叠命令与状态栏) ---
@@ -1582,25 +1624,25 @@ public:
             draw_outline(renderer, cx, status_y, status_w, PTC_OVERLAY_STATUS_COLLAPSED_H, 1, MUTED_COLOR);
 
             if (bridge_->waiting && active_request_kind_ == OverlayRequestKind::Status) {
-                renderer->drawString("[-] 正在刷新状态...（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
+                draw_localized(renderer, "[-] 正在刷新状态...（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
             } else if (bridge_->waiting) {
-                renderer->drawString("[-] 正在处理加时...（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
+                draw_localized(renderer, "[-] 正在处理加时...（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(FOCUS_BORDER));
             } else if (error_) {
-                renderer->drawString(
+                draw_localized(renderer,
                     (last_request_kind_ == OverlayRequestKind::OfflineCode ||
                      last_request_kind_ == OverlayRequestKind::PreviewOfflineCode)
                         ? "[-] 请求失败（按 - 展开，请重新输入）"
                         : "[-] 请求失败（按 - 展开，Y 重试）",
                     false, cx + 12, status_y + 21, 12, renderer->a(ERROR_COLOR));
             } else if (success_visible_) {
-                renderer->drawString("[-] 加时成功！（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(SUCCESS_COLOR));
+                draw_localized(renderer, "[-] 加时成功！（按 - 展开）", false, cx + 12, status_y + 21, 12, renderer->a(SUCCESS_COLOR));
             } else if (has_status_snapshot_) {
                 char restriction_summary[128];
                 ptc_overlay_format_child_restriction_summary(&summary, restriction_summary, sizeof(restriction_summary));
-                renderer->drawString(restriction_summary, false, cx + 12, status_y + 21, 12,
+                draw_localized(renderer, restriction_summary, false, cx + 12, status_y + 21, 12,
                                      renderer->a(MUTED_COLOR));
             } else {
-                renderer->drawString("[-] 命令与状态（点击或按 -）", false, cx + 12, status_y + 21, 12, renderer->a(MUTED_COLOR));
+                draw_localized(renderer, "[-] 命令与状态（点击或按 -）", false, cx + 12, status_y + 21, 12, renderer->a(MUTED_COLOR));
             }
         } else {
             const s32 expanded_h = status_needs_detail()
@@ -1609,47 +1651,47 @@ public:
             draw_outline(renderer, cx, status_y, status_w, expanded_h, 2, FOCUS_BORDER);
 
             if (error_) {
-                renderer->drawString("[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
+                draw_localized(renderer, "[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
                 std::snprintf(line, sizeof(line), "%s命令：%s", bridge_->waiting ? "当前" : "最近", request_label());
-                renderer->drawString(line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
-                renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(MUTED_COLOR));
+                draw_localized(renderer, line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
+                draw_localized(renderer, ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(MUTED_COLOR));
                 const char *message = ptc_overlay_bridge_error_message_zh(bridge_);
-                renderer->drawString(message, false, cx + 12, status_y + 72, 12, renderer->a(ERROR_COLOR), 290);
+                draw_localized(renderer, message, false, cx + 12, status_y + 72, 12, renderer->a(ERROR_COLOR), 290);
                 const bool code_error = last_request_kind_ == OverlayRequestKind::OfflineCode ||
                     last_request_kind_ == OverlayRequestKind::PreviewOfflineCode;
                 if (bridge_->summary.valid && bridge_->summary.error_code > 0) {
                     std::snprintf(line, sizeof(line), code_error ? "错误码：%d  |  请重新输入" :
                                   "错误码：%d  |  按 Y 重试", bridge_->summary.error_code);
-                    renderer->drawString(line, false, cx + 12, status_y + 108, 11, renderer->a(ERROR_COLOR));
+                    draw_localized(renderer, line, false, cx + 12, status_y + 108, 11, renderer->a(ERROR_COLOR));
                 } else {
-                    renderer->drawString(code_error ? "请重新输入；Y 返回输入" : "按 Y 重试",
+                    draw_localized(renderer, code_error ? "请重新输入；Y 返回输入" : "按 Y 重试",
                                          false, cx + 12, status_y + 108, 11, renderer->a(ERROR_COLOR));
                 }
             } else if (success_visible_) {
-                renderer->drawString("[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
+                draw_localized(renderer, "[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
                 std::snprintf(line, sizeof(line), "%s命令：%s", bridge_->waiting ? "当前" : "最近", request_label());
-                renderer->drawString(line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
-                renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(MUTED_COLOR));
-                renderer->drawString("加时成功！", false, cx + 12, status_y + 74, 16, renderer->a(SUCCESS_COLOR));
+                draw_localized(renderer, line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
+                draw_localized(renderer, ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(MUTED_COLOR));
+                draw_localized(renderer, "加时成功！", false, cx + 12, status_y + 74, 16, renderer->a(SUCCESS_COLOR));
                 std::snprintf(line, sizeof(line), "修改后还可玩 %d 分钟", summary.remaining_minutes);
-                renderer->drawString(line, false, cx + 12, status_y + 96, 15, renderer->a(SUCCESS_COLOR));
+                draw_localized(renderer, line, false, cx + 12, status_y + 96, 15, renderer->a(SUCCESS_COLOR));
                 if (summary.played_minutes_available) {
                     std::snprintf(line, sizeof(line), "额度已耗约 %d 分钟（估算），即将自动关闭...", summary.played_minutes);
-                    renderer->drawString(line, false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));
+                    draw_localized(renderer, line, false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));
                 } else {
-                    renderer->drawString("状态已刷新，即将自动关闭...", false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));
+                    draw_localized(renderer, "状态已刷新，即将自动关闭...", false, cx + 12, status_y + 116, 12, renderer->a(SUCCESS_COLOR));
                 }
             } else if (bridge_->waiting) {
-                renderer->drawString("[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
+                draw_localized(renderer, "[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
                 std::snprintf(line, sizeof(line), "%s命令：%s", "当前", request_label());
-                renderer->drawString(line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
-                renderer->drawString(ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(MUTED_COLOR));
+                draw_localized(renderer, line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
+                draw_localized(renderer, ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(MUTED_COLOR));
                 const char *stage = transport_stage(bridge_);
                 if (stage[0]) {
-                    renderer->drawString(stage, false, cx + 12, status_y + 72, 12, renderer->a(FOCUS_BORDER));
+                    draw_localized(renderer, stage, false, cx + 12, status_y + 72, 12, renderer->a(FOCUS_BORDER));
                 }
             } else if (has_status_snapshot_) {
-                renderer->drawString("[-] 今日额度与受限详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
+                draw_localized(renderer, "[-] 今日额度与受限详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
                 char total_str[32];
                 if (summary.unrestricted_today == 1) {
                     std::snprintf(total_str, sizeof(total_str), "不限时");
@@ -1669,20 +1711,20 @@ public:
                 } else {
                     std::snprintf(line, sizeof(line), "今日总额度：%s（%s）", total_str, rule_lbl);
                 }
-                renderer->drawString(line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
+                draw_localized(renderer, line, false, cx + 12, status_y + 36, 12, renderer->a(TEXT_COLOR));
 
                 char restriction[96];
                 ptc_overlay_format_child_restriction_detail(&summary, restriction, sizeof(restriction));
                 std::snprintf(line, sizeof(line), "受限：%s", restriction);
-                renderer->drawString(line, false, cx + 12, status_y + 54, 12, renderer->a(FOCUS_BORDER), 340);
+                draw_localized(renderer, line, false, cx + 12, status_y + 54, 12, renderer->a(FOCUS_BORDER), 340);
 
                 char buffer_buf[64];
                 ptc_overlay_format_child_buffer_status(&summary, buffer_buf, sizeof(buffer_buf));
                 std::snprintf(line, sizeof(line), "自主缓冲：%s  |  %s", buffer_buf, ptc_overlay_bridge_transport_label(bridge_));
-                renderer->drawString(line, false, cx + 12, status_y + 72, 11, renderer->a(MUTED_COLOR));
+                draw_localized(renderer, line, false, cx + 12, status_y + 72, 11, renderer->a(MUTED_COLOR));
             } else {
-                renderer->drawString("[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
-                renderer->drawString("尚未获取状态，请按 Y 刷新", false, cx + 12, status_y + 36, 12, renderer->a(MUTED_COLOR));
+                draw_localized(renderer, "[-] 命令与状态详情（按 - 收起）", false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
+                draw_localized(renderer, "尚未获取状态，请按 Y 刷新", false, cx + 12, status_y + 36, 12, renderer->a(MUTED_COLOR));
             }
         }
         if (!status_expanded_) {
@@ -1694,13 +1736,13 @@ public:
                 renderer->a(buffer_ready ? FOCUS_BG : CARD_COLOR));
             draw_outline(renderer, buffer.x, buffer.y, buffer.w, buffer.h, 1,
                 buffer_ready ? FOCUS_BORDER : MUTED_COLOR);
-            renderer->drawString(buffer_ready ? "L 领取自主缓冲" :
+            draw_localized(renderer, buffer_ready ? "L 领取自主缓冲" :
                 (summary.daily_buffer_claimed ? "缓冲今日已领" : "缓冲暂不可领"),
                 false, buffer.x + 9, buffer.y + 27, 12,
                 renderer->a(buffer_ready ? TEXT_COLOR : MUTED_COLOR));
             renderer->drawRect(parent.x, parent.y, parent.w, parent.h, renderer->a(FOCUS_BG));
             draw_outline(renderer, parent.x, parent.y, parent.w, parent.h, 1, FOCUS_BORDER);
-            renderer->drawString("R 家长区", false, parent.x + 29, parent.y + 27, 13,
+            draw_localized(renderer, "R 家长区", false, parent.x + 29, parent.y + 27, 13,
                 renderer->a(TEXT_COLOR));
         }
 
@@ -1762,6 +1804,7 @@ public:
     {
         fsdevMountSdmc();
         ptc_fs_storage_init(&storage_);
+        load_overlay_language(ptc_fs_storage_as_storage(&storage_));
         ptc_overlay_bridge_init(&bridge_, APP_ROOT, ptc_fs_storage_as_storage(&storage_));
         ptc_overlay_input_init(&input_);
     }

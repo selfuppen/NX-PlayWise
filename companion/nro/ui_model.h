@@ -10,6 +10,7 @@
 #include "../../common/protocol/result_builder.h"
 #include "../../common/rules/rules.h"
 #include "ui_theme.h"
+#include "../ui_language.h"
 #include "../../common/security/credential_policy.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
 
@@ -92,7 +93,9 @@ typedef enum {
     PTC_UI_OVERLAY_BEDTIME_LEAVE = 33,
     PTC_UI_OVERLAY_BEDTIME_BULK = 34,
     PTC_UI_OVERLAY_NOTICE_DETAILS = 35,
-    PTC_UI_OVERLAY_DAY_DECISION = 36
+    PTC_UI_OVERLAY_DAY_DECISION = 36,
+    PTC_UI_OVERLAY_LANGUAGE = 37,
+    PTC_UI_OVERLAY_PARENT_EXPORT_RESULT = 38
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -387,6 +390,8 @@ typedef struct {
     int setup_step;
     int setup_shortcut_index;
     int setup_theme_index;
+    PtcUiLanguagePreference language_preference;
+    bool parent_export_succeeded;
     int setup_zone_index;
     uint64_t custom_shortcut_mask;
     bool custom_shortcut_enabled;

@@ -6,6 +6,7 @@
 
 bool ptc_ui_graphics_init(void);
 void ptc_ui_graphics_exit(void);
+void ptc_ui_graphics_language_changed(void);
 void ptc_ui_graphics_draw(const PtcUiModel *model, const PtcUiThemeView *theme);
 
 /* 单调动画时钟（毫秒）。预览构建通过 PTC_UI_PREVIEW_ANIM_CLOCK_MS 固定，

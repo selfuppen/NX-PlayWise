@@ -146,6 +146,13 @@ bool ptc_ui_parse_minutes(const char *text, uint16_t minimum, uint16_t maximum, 
     return true;
 }
 
+uint16_t ptc_ui_clamp_persisted_rule_minutes(int value)
+{
+    if (value < 1) return 1;
+    if (value > 1440) return 1440;
+    return (uint16_t)value;
+}
+
 static bool parse_fixed_digits(const char *text, size_t length, unsigned long *out)
 {
     size_t index;

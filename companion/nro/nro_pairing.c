@@ -415,13 +415,28 @@ void export_parent_import(UiState *ui)
     cJSON *root;
     char *json;
     bool ok;
+    if (ui->model.overlay == PTC_UI_OVERLAY_QR ||
+        ui->model.overlay == PTC_UI_OVERLAY_GRANT_MANAGER)
+        ui->export_return_overlay = ui->model.overlay;
+    if (ui->export_return_overlay == PTC_UI_OVERLAY_NONE)
+        ui->export_return_overlay = PTC_UI_OVERLAY_GRANT_MANAGER;
     ui->auth_retry_action = AUTH_RETRY_EXPORT_CONFIG;
     if (!verify_sensitive_pin(ui, "导出包含加时码密钥的配置前，请再次输入本应用 PIN")) return;
+    ui->model.parent_export_succeeded = false;
+    ui->model.overlay = PTC_UI_OVERLAY_PARENT_EXPORT_RESULT;
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "导出手机/电脑配置");
+    ui->model.overlay_body[0] = '\0';
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret))) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "读取家长网页导入信息失败。");
+        snprintf(ui->model.message, sizeof(ui->model.message),
+            "读取设备名或加时码密钥失败；配置文件没有导出。");
         return;
     }
     root = cJSON_CreateObject();
+    if (!root) {
+        snprintf(ui->model.message, sizeof(ui->model.message),
+            "内存不足，配置文件没有导出。");
+        return;
+    }
     cJSON_AddNumberToObject(root, "version", 1);
     cJSON_AddStringToObject(root, "device_id", device);
     cJSON_AddStringToObject(root, "grant_secret", secret);
@@ -430,10 +445,9 @@ void export_parent_import(UiState *ui)
     ok = json && ui->client.storage->vtable->write_text_atomic(
         ui->client.storage, APP_ROOT "/parent-import.json", json);
     free(json);
-    show_grant_manager(ui, PTC_UI_GRANT_MANAGER_EXPORT);
+    ui->model.parent_export_succeeded = ok;
     snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-             ok ? "已导出到 " APP_ROOT "/parent-import.json；把文件导入家长网页。文件包含密钥，请妥善保管。"
-                : "生成家长网页导入文件失败。");
+        ok ? "配置文件已导出。" : "写入 SD 卡失败；配置文件没有导出，请检查 SD 卡是否可写。");
 }
 void reveal_current_credential(UiState *ui)
 {

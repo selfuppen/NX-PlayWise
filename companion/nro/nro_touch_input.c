@@ -154,7 +154,8 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_CANCEL);
         if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS ||
             ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
-            ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {
+            ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION ||
+            ui->model.overlay == PTC_UI_OVERLAY_PARENT_EXPORT_RESULT) {
             handle_overlay_input(ui, HidNpadButton_B);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_REDEMPTION_HISTORY) {
             handle_overlay_input(ui, HidNpadButton_B);
@@ -610,6 +611,15 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);
+        break;
+    case PTC_UI_HIT_LANGUAGE_OPTION:
+        ptc_audio_play(PTC_SE_CONFIRM);
+        ui->model.overlay_selection = hit.index;
+        handle_overlay_input(ui, HidNpadButton_A);
+        break;
+    case PTC_UI_HIT_QR_EXPORT:
+        ptc_audio_play(PTC_SE_CONFIRM);
+        export_parent_import(ui);
         break;
     case PTC_UI_HIT_SETUP_THEME_OPTION:
         ptc_audio_play(PTC_SE_CONFIRM);

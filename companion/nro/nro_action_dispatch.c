@@ -400,6 +400,13 @@ void handle_parent_action(UiState *ui)
                      new_state ? "已开启按键与交互音效。" : "已静音按键与交互音效。");
             break;
         }
+        case 6:
+            ui->model.overlay = PTC_UI_OVERLAY_LANGUAGE;
+            ui->model.overlay_selection = (int)ui->language_preference;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "界面语言");
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                "主机应用与浮窗共用此设置；跟随系统时，繁体中文系统显示繁体。");
+            break;
         default: break;
         }
         return;

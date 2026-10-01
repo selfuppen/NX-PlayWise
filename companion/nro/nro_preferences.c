@@ -130,6 +130,9 @@ void load_ui_preferences(UiState *ui)
     ui->model.setup_theme_index = PTC_UI_THEME_SYSTEM;
     ui->model.setup_zone_index = 1;
     ui->theme_preference = PTC_UI_THEME_SYSTEM;
+    ui->language_preference = PTC_UI_LANGUAGE_SYSTEM;
+    ui->model.language_preference = PTC_UI_LANGUAGE_SYSTEM;
+    ui->system_language = PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
     ui->system_theme = PTC_UI_SYSTEM_THEME_UNAVAILABLE;
     ui->theme_view = ptc_ui_theme_make_view(ui->theme_preference, ui->system_theme);
     ptc_audio_set_enabled(true);
@@ -168,6 +171,13 @@ void load_ui_preferences(UiState *ui)
             ui->theme_preference = preference;
         }
     }
+    item = cJSON_GetObjectItemCaseSensitive(root, "ui_language");
+    if (cJSON_IsString(item)) {
+        PtcUiLanguagePreference preference;
+        if (ptc_ui_language_parse_preference(item->valuestring, &preference))
+            ui->language_preference = preference;
+    }
+    ui->model.language_preference = ui->language_preference;
     item = cJSON_GetObjectItemCaseSensitive(root, "sound_effects_enabled");
     if (cJSON_IsBool(item)) {
         ptc_audio_set_enabled(cJSON_IsTrue(item));
@@ -224,6 +234,9 @@ bool save_ui_preferences(UiState *ui)
     cJSON_AddBoolToObject(root, "show_parent_shortcut_hint", ui->model.show_parent_shortcut_hint);
     cJSON_DeleteItemFromObject(root, "theme");
     cJSON_AddStringToObject(root, "theme", ptc_ui_theme_preference_name(ui->theme_preference));
+    cJSON_DeleteItemFromObject(root, "ui_language");
+    cJSON_AddStringToObject(root, "ui_language",
+        ptc_ui_language_preference_name(ui->language_preference));
     cJSON_DeleteItemFromObject(root, "sound_effects_enabled");
     cJSON_AddBoolToObject(root, "sound_effects_enabled", ptc_audio_is_enabled());
     cJSON_DeleteItemFromObject(root, "setup_wizard_step");

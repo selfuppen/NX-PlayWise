@@ -54,6 +54,7 @@ OBJS := \
 	$(BUILD)/album_restriction.o \
 	$(BUILD)/ptc_audio.o \
 	$(BUILD)/ptc_audio_data.o \
+	$(BUILD)/ui_language.o \
 	$(BUILD)/ui_graphics.o \
 	$(BUILD)/ui_render_primitives.o \
 	$(BUILD)/ui_render_text.o \
@@ -203,6 +204,9 @@ $(BUILD)/ptc_audio.o: ptc_audio.c ptc_audio.h ptc_audio_data.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ptc_audio_data.o: ptc_audio_data.c ptc_audio_data.h ptc_audio.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ui_language.o: ../ui_language.c ../ui_language.h ../ui_language_map.inc | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h ui_model.h ui_state.h ui_layout.h ui_theme.h | $(BUILD)

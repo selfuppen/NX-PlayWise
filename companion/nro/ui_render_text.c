@@ -1,4 +1,5 @@
 #include "ui_render_internal.h"
+#include "../ui_language.h"
 
 static uint32_t ui_decode_utf8(const char **text)
 {
@@ -540,6 +541,8 @@ static bool set_font_size(int size)
         if (FT_Set_Pixel_Sizes(g_ui.face, 0, (FT_UInt)size) != 0) {
             return false;
         }
+        if (g_ui.traditional_face &&
+            FT_Set_Pixel_Sizes(g_ui.traditional_face, 0, (FT_UInt)size) != 0) return false;
     }
     g_font_pixel_size = size;
     return true;
@@ -690,12 +693,20 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
             return entry;
         }
     }
-    if (!g_ui.font_ready || FT_Get_Char_Index(g_ui.face, codepoint) == 0 ||
-        FT_Load_Char(g_ui.face, codepoint, FT_LOAD_RENDER) != 0) {
+    FT_Face face = g_ui.face;
+    if (g_ui.traditional_face &&
+        ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_TRADITIONAL &&
+        FT_Get_Char_Index(g_ui.traditional_face, codepoint) != 0)
+        face = g_ui.traditional_face;
+    else if (g_ui.font_ready && FT_Get_Char_Index(g_ui.face, codepoint) == 0 &&
+        g_ui.traditional_face && FT_Get_Char_Index(g_ui.traditional_face, codepoint) != 0)
+        face = g_ui.traditional_face;
+    if (!g_ui.font_ready || FT_Get_Char_Index(face, codepoint) == 0 ||
+        FT_Load_Char(face, codepoint, FT_LOAD_RENDER) != 0) {
         return NULL;
     }
     {
-        FT_GlyphSlot glyph = g_ui.face->glyph;
+        FT_GlyphSlot glyph = face->glyph;
         uint8_t *copy = NULL;
         int extra = bold ? 1 : 0;
         if (glyph->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY && glyph->bitmap.rows > 0 &&
@@ -754,10 +765,12 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
 int measure_text(const char *text, int size)
 {
     int width = 0;
-    const char *cursor = text;
+    char localized[4096];
+    const char *cursor;
     if (!text) {
         return 0;
     }
+    cursor = ptc_ui_localize(text, localized, sizeof(localized));
     while (*cursor) {
         uint32_t codepoint = ui_decode_utf8(&cursor);
         const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, false);
@@ -770,12 +783,14 @@ int measure_text(const char *text, int size)
 
 static void draw_text_impl(uint32_t *pixels, uint32_t stride, int x, int baseline, const char *text, int size, uint32_t color, bool bold)
 {
-    const char *cursor = text;
+    char localized[4096];
+    const char *cursor;
     int pen_x = x;
     uint32_t resolved = resolve_color(color);
     if (!text) {
         return;
     }
+    cursor = ptc_ui_localize(text, localized, sizeof(localized));
     while (*cursor) {
         uint32_t codepoint = ui_decode_utf8(&cursor);
         const UiGlyphEntry *entry = ui_glyph_fetch(codepoint, size, bold);
@@ -843,6 +858,7 @@ void draw_text_center(uint32_t *pixels, uint32_t stride, UiRect rect, const char
 void fit_text(char *out, size_t out_size, const char *text, int size, int max_width)
 {
     char source_copy[512];
+    char localized[4096];
     const char *source = text ? text : "";
     const char *cursor;
     const char *end;
@@ -856,6 +872,7 @@ void fit_text(char *out, size_t out_size, const char *text, int size, int max_wi
         snprintf(source_copy, sizeof(source_copy), "%s", source);
         source = source_copy;
     }
+    source = ptc_ui_localize(source, localized, sizeof(localized));
     cursor = source;
     end = cursor;
     out[0] = '\0';
@@ -905,7 +922,8 @@ int draw_wrapped_text(
     int max_lines,
     uint32_t color)
 {
-    const char *cursor = text ? text : "";
+    char localized[4096];
+    const char *cursor = ptc_ui_localize(text ? text : "", localized, sizeof(localized));
     int line = 0;
     while (*cursor && line < max_lines) {
         const char *end = cursor;

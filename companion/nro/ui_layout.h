@@ -78,6 +78,8 @@ typedef enum {
     PTC_UI_HIT_SHORTCUT_HINT,
     PTC_UI_HIT_GRANT_ADJUST,
     PTC_UI_HIT_THEME_OPTION,
+    PTC_UI_HIT_LANGUAGE_OPTION,
+    PTC_UI_HIT_QR_EXPORT,
     PTC_UI_HIT_PIN_KEY,
     PTC_UI_HIT_PIN_BACKSPACE,
     PTC_UI_HIT_PIN_CONFIRM,
@@ -127,6 +129,7 @@ PtcUiRect ptc_ui_parent_footer_rect(int index);
 PtcUiRect ptc_ui_parent_subpage_footer_rect(int index);
 PtcUiRect ptc_ui_parent_tab_rect(int index);
 PtcUiRect ptc_ui_parent_card_rect(int index);
+PtcUiRect ptc_ui_qr_export_rect(void);
 PtcUiRect ptc_ui_plan_card_rect(int index);
 PtcUiRect ptc_ui_forecast_day_row_rect(int index);
 PtcUiRect ptc_ui_today_card_rect(int index);

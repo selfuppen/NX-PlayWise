@@ -205,7 +205,7 @@ static void test_release_navigation(void)
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 6, "today exposes quota, bedtime and buffer cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 5, "time plan root exposes five direct cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 4, "grant page exposes generation, management and history");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 6, "settings page exposes preferences, audio and security");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 7, "settings page exposes language, audio and security");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support is a top-level six-action page");
 
     ptc_audio_set_enabled(true);
@@ -3097,8 +3097,43 @@ static void test_quota_recheck_decisions(void)
               "expired recheck result cannot authorize a write");
 }
 
+static void test_language_and_short_weekly_limits(void)
+{
+    PtcUiLanguagePreference preference = PTC_UI_LANGUAGE_SYSTEM;
+    char localized[256];
+    uint16_t minutes = 0;
+    PtcUiModel model;
+    check_true(ptc_ui_language_parse_preference("zh-Hant", &preference) &&
+        preference == PTC_UI_LANGUAGE_TRADITIONAL, "traditional preference parses");
+    check_true(!ptc_ui_language_parse_preference("invalid", &preference),
+        "invalid language preference rejected");
+    check_int(ptc_ui_language_resolve(PTC_UI_LANGUAGE_SYSTEM,
+        PTC_UI_SYSTEM_LANGUAGE_TRADITIONAL), PTC_UI_LANGUAGE_TRADITIONAL,
+        "system preference follows traditional Switch language");
+    check_int(ptc_ui_language_resolve(PTC_UI_LANGUAGE_SIMPLIFIED,
+        PTC_UI_SYSTEM_LANGUAGE_TRADITIONAL), PTC_UI_LANGUAGE_SIMPLIFIED,
+        "manual simplified language overrides Switch language");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
+    check_true(strcmp(ptc_ui_localize("时间计划，配置文件", localized, sizeof(localized)),
+        "時間計畫，設定檔") == 0, "traditional text and Taiwanese terminology");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+    check_true(strcmp(ptc_ui_localize("时间计划", localized, sizeof(localized)),
+        "时间计划") == 0, "simplified text stays unchanged");
+    check_int(ptc_ui_clamp_persisted_rule_minutes(1), 1, "one minute survives reload");
+    check_int(ptc_ui_clamp_persisted_rule_minutes(14), 14, "fourteen minutes survive reload");
+    check_int(ptc_ui_clamp_persisted_rule_minutes(15), 15, "fifteen minutes survive reload");
+    check_true(!ptc_ui_parse_minutes("0", 1, 1440, &minutes) &&
+        !ptc_ui_parse_minutes("1441", 1, 1440, &minutes),
+        "weekly editor rejects zero and values over one day");
+    memset(&model, 0, sizeof(model));
+    model.overlay = PTC_UI_OVERLAY_QR;
+    check_hit(hit_center(&model, ptc_ui_qr_export_rect()), PTC_UI_HIT_QR_EXPORT, 0,
+        "QR instructions provide touch export button");
+}
+
 int main(void)
 {
+    test_language_and_short_weekly_limits();
     test_quota_recheck_decisions();
     test_global_time_projection_and_direct_inputs();
     test_time_menu_modal_touch_guards();

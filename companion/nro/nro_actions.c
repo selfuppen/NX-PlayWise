@@ -13,6 +13,30 @@ static PtcUiSystemTheme read_system_theme(void)
     return PTC_UI_SYSTEM_THEME_UNAVAILABLE;
 }
 
+static PtcUiSystemLanguage read_system_language(void)
+{
+    u64 language_code;
+    SetLanguage language;
+    if (R_FAILED(setInitialize())) return PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
+    Result result = setGetSystemLanguage(&language_code);
+    if (R_SUCCEEDED(result)) result = setMakeLanguage(language_code, &language);
+    setExit();
+    if (R_FAILED(result)) return PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
+    return language == SetLanguage_ZHTW || language == SetLanguage_ZHHANT
+        ? PTC_UI_SYSTEM_LANGUAGE_TRADITIONAL : PTC_UI_SYSTEM_LANGUAGE_SIMPLIFIED;
+}
+
+void refresh_language(UiState *ui)
+{
+    PtcUiLanguagePreference previous;
+    if (!ui) return;
+    previous = ptc_ui_language_get_resolved();
+    ui->system_language = read_system_language();
+    ptc_ui_language_set_resolved(ptc_ui_language_resolve(
+        ui->language_preference, ui->system_language));
+    if (ptc_ui_language_get_resolved() != previous) ptc_ui_graphics_language_changed();
+}
+
 void refresh_theme(UiState *ui)
 {
     if (!ui) return;
@@ -55,6 +79,22 @@ bool apply_theme_preference(UiState *ui, PtcUiThemePreference preference)
     ui->theme_preference = previous;
     ui->theme_view = ptc_ui_theme_make_view(previous, ui->system_theme);
     return false;
+}
+
+bool apply_language_preference(UiState *ui, PtcUiLanguagePreference preference)
+{
+    PtcUiLanguagePreference previous;
+    if (!ui) return false;
+    previous = ui->language_preference;
+    ui->language_preference = preference;
+    ui->model.language_preference = preference;
+    if (!save_ui_preferences(ui)) {
+        ui->language_preference = previous;
+        ui->model.language_preference = previous;
+        return false;
+    }
+    refresh_language(ui);
+    return true;
 }
 
 

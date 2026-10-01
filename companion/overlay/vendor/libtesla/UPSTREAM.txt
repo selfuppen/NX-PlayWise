@@ -8,3 +8,7 @@ internal forensic overlay load Nintendo's Simplified Chinese shared font even
 when the console language is not Chinese. Normal overlay builds do not define it.
 Local correctness patch: List focus traversal uses an underflow-safe reverse
 loop for its unsigned focused index.
+Local PlayWise font patch: load both Nintendo Chinese shared fonts, select each
+glyph from the available faces, and include the chosen language in the glyph
+cache key. This supports Simplified and Traditional UI text on either system
+language without changing the upstream commit recorded above.

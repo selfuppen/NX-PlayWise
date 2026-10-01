@@ -176,6 +176,12 @@ PtcUiRect ptc_ui_parent_card_rect(int index)
     return rect;
 }
 
+PtcUiRect ptc_ui_qr_export_rect(void)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_QR);
+    return (PtcUiRect){dialog.x + 470, dialog.y + 510, 352, 48};
+}
+
 void ptc_ui_format_home_remaining(const PtcUiModel *model, int64_t now, char *out, size_t out_size)
 {
     if (!out || out_size == 0) return;
@@ -676,8 +682,13 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 560;
         break;
     case PTC_UI_OVERLAY_THEME:
+    case PTC_UI_OVERLAY_LANGUAGE:
         *width = 820;
         *height = 360;
+        break;
+    case PTC_UI_OVERLAY_PARENT_EXPORT_RESULT:
+        *width = 800;
+        *height = 420;
         break;
     case PTC_UI_OVERLAY_BEDTIME_WINDOW:
     case PTC_UI_OVERLAY_BEDTIME_SPECIAL:

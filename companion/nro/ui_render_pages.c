@@ -31,6 +31,7 @@ static const UiAction SETTINGS_ACTIONS[] = {
     {"自制程序高级入口", "未开启", UI_DANGER, UI_ACTION_ICON_HOMEBREW, UI_ACTION_VISUAL_NONE},
     {"家庭活动", "最近 200 条", UI_MUTED, UI_ACTION_ICON_ACTIVITY, UI_ACTION_VISUAL_NONE},
     {"按键与交互音效", "", UI_SUCCESS, UI_ACTION_ICON_AUDIO, UI_ACTION_VISUAL_AUDIO},
+    {"界面语言", "跟随系统", UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_NONE},
 };
 
 const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -686,6 +687,10 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 dynamic_action.subtitle = ptc_audio_is_enabled() ? "开启" : "静音";
                 dynamic_action.accent = ptc_audio_is_enabled() ? UI_SUCCESS : UI_MUTED;
                 action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 6) {
+                dynamic_action = *action;
+                dynamic_action.subtitle = ptc_ui_language_preference_label(model->language_preference);
+                action = &dynamic_action;
             }
             if (model->parent_page == PTC_UI_PARENT_PLAN &&
                 !ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
@@ -800,19 +805,14 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_plan_card(pixels, stride, help, false);
         draw_text(pixels, stride, 866, 216, "系统安全与个人偏好", 24, UI_RGB(UI_BLENDED(text_primary)));
         draw_text(pixels, stride, 866, 258, "时间规则已集中到时间计划", 16, UI_RGB(UI_BLENDED(text_secondary)));
-        draw_text(pixels, stride, 866, 292, "在此统一管理外观、PIN、快捷键、音效", 16, UI_RGB(UI_BLENDED(text_secondary)));
-        draw_text(pixels, stride, 866, 326, "自制程序入口与家庭活动记录", 16, UI_RGB(UI_BLENDED(text_secondary)));
-
-        UiRect tip_card = {862, 370, help.width - 40, 170};
-        fill_round_rect(pixels, stride, tip_card, 12, UI_RAISED);
-        draw_rect_outline(pixels, stride, tip_card, 12, 1, UI_BORDER);
-        draw_text(pixels, stride, tip_card.x + 16, tip_card.y + 26, "安全防护提示", 16, UI_INK);
-        draw_text(pixels, stride, tip_card.x + 16, tip_card.y + 56, "• 修改 PIN 前需验证原 PIN 确保家长权限", 13, UI_MUTED);
-        draw_text(pixels, stride, tip_card.x + 16, tip_card.y + 84, "• 自制程序高级入口仅供进阶玩家便利使用", 13, UI_MUTED);
-        draw_text(pixels, stride, tip_card.x + 16, tip_card.y + 112, "• 遇到任何策略或主机异常可直接使用支持与恢复", 13, UI_WARNING);
-        draw_text(pixels, stride, tip_card.x + 16, tip_card.y + 140, "• 离开时请按 B 返回孩子页以锁定家长控制", 13, UI_MUTED);
-
-        draw_text(pixels, stride, 866, help.y + help.height - 20, "按 B 返回孩子页  |  Y 刷新设备状态", 13, UI_MUTED);
+        draw_text(pixels, stride, 866, 292, "在此管理语言、外观、PIN 与快捷键", 16, UI_RGB(UI_BLENDED(text_secondary)));
+        draw_text(pixels, stride, 866, 326, "语言设置也适用于游戏内浮窗", 16, UI_RGB(UI_BLENDED(text_secondary)));
+        UiAction language_action = SETTINGS_ACTIONS[6];
+        language_action.subtitle = ptc_ui_language_preference_label(model->language_preference);
+        draw_action_card(pixels, stride, to_uirect(ptc_ui_parent_card_rect(6)),
+            &language_action, model->selected_index == 6, PTC_UI_ACTION_AVAILABLE, 0);
+        draw_text(pixels, stride, 866, 556, "离开时按 B 返回孩子页，以锁定家长控制。", 13, UI_MUTED);
+        draw_text(pixels, stride, 866, help.y + help.height - 20, "按 Y 刷新设备状态", 13, UI_MUTED);
     }
     draw_settings_badge(pixels, stride, model);
     if (model->parent_page == PTC_UI_PARENT_SUPPORT &&

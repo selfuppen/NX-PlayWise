@@ -117,6 +117,7 @@ int main(int argc, char **argv)
     ptc_companion_file_client_init(&ui.client, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     load_ui_preferences(&ui);
     refresh_theme(&ui);
+    refresh_language(&ui);
     appletHook(&hook_cookie, applet_hook, &ui);
     refresh_disable_flag(&ui);
 #ifdef PLAYWISE_EDEN
@@ -168,7 +169,10 @@ int main(int argc, char **argv)
         bool touch_active;
         int touch_x = -1;
         int touch_y = -1;
-        if (ui.theme_refresh_pending) refresh_theme(&ui);
+        if (ui.theme_refresh_pending) {
+            refresh_theme(&ui);
+            refresh_language(&ui);
+        }
         if (ui.status_refresh_pending) trigger_resume_status_refresh(&ui, &background_poll_elapsed_ms);
         padUpdate(&pad);
         down = padGetButtonsDown(&pad);

@@ -317,7 +317,17 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             }
         }
         break;
+    case PTC_UI_OVERLAY_LANGUAGE:
+        for (i = 0; i < 3; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_theme_option_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_LANGUAGE_OPTION, i);
+        }
+        break;
     case PTC_UI_OVERLAY_QR:
+        if (ptc_ui_rect_contains(ptc_ui_qr_export_rect(), x, y))
+            return make_hit(PTC_UI_HIT_QR_EXPORT, 0);
+        break;
+    case PTC_UI_OVERLAY_PARENT_EXPORT_RESULT:
     case PTC_UI_OVERLAY_WEEKLY_LEAVE:
     case PTC_UI_OVERLAY_CREDENTIAL_LEAVE:
     case PTC_UI_OVERLAY_CODE_RESULT:

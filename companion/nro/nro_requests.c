@@ -192,17 +192,6 @@ static int rule_json_int(const cJSON *object, const char *name, int fallback)
     return cJSON_IsNumber(item) ? item->valueint : fallback;
 }
 
-static uint16_t clamp_rule_minutes(int value)
-{
-    if (value < 15) {
-        return 15;
-    }
-    if (value > 1440) {
-        return 1440;
-    }
-    return (uint16_t)value;
-}
-
 void load_rule_drafts(UiState *ui)
 {
     PtcRules rules;
@@ -249,7 +238,7 @@ void load_rule_drafts(UiState *ui)
         for (index = 0; index < 7; ++index) {
             const cJSON *day = cJSON_GetArrayItem(week, (int)index);
             rules.week[index].mode = parse_rule_mode(rule_json_string(day, "mode"));
-            rules.week[index].minutes = clamp_rule_minutes(rule_json_int(day, "minutes", rules.week[index].minutes));
+            rules.week[index].minutes = ptc_ui_clamp_persisted_rule_minutes(rule_json_int(day, "minutes", rules.week[index].minutes));
         }
     }
     override_present = cJSON_GetObjectItemCaseSensitive(root, "today_override_present");
@@ -260,14 +249,14 @@ void load_rule_drafts(UiState *ui)
         override_day->valueint == (int)ui->model.day_index) {
         ui->model.today_override_present = true;
         ui->model.today_override_rule.mode = parse_rule_mode(cJSON_GetStringValue(override_mode));
-        ui->model.today_override_rule.minutes = clamp_rule_minutes(
+        ui->model.today_override_rule.minutes = ptc_ui_clamp_persisted_rule_minutes(
             cJSON_IsNumber(override_minutes) ? override_minutes->valueint : 60);
     }
     rules.holiday_enabled = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "holiday_enabled"));
     rules.holiday_rule.mode = parse_rule_mode(rule_json_string(root, "holiday_mode"));
-    rules.holiday_rule.minutes = clamp_rule_minutes(rule_json_int(root, "holiday_minutes", rules.holiday_rule.minutes));
+    rules.holiday_rule.minutes = ptc_ui_clamp_persisted_rule_minutes(rule_json_int(root, "holiday_minutes", rules.holiday_rule.minutes));
     rules.makeup_workday_rule.mode = parse_rule_mode(rule_json_string(root, "makeup_workday_mode"));
-    rules.makeup_workday_rule.minutes = clamp_rule_minutes(
+    rules.makeup_workday_rule.minutes = ptc_ui_clamp_persisted_rule_minutes(
         rule_json_int(root, "makeup_workday_minutes", rules.makeup_workday_rule.minutes));
     rules.scheduled_override.enabled = cJSON_IsTrue(
         cJSON_GetObjectItemCaseSensitive(root, "scheduled_override_enabled"));
@@ -277,7 +266,7 @@ void load_rule_drafts(UiState *ui)
         root, "scheduled_override_end_day_index", 0);
     rules.scheduled_override.rule.mode = parse_rule_mode(
         rule_json_string(root, "scheduled_override_mode"));
-    rules.scheduled_override.rule.minutes = clamp_rule_minutes(rule_json_int(
+    rules.scheduled_override.rule.minutes = ptc_ui_clamp_persisted_rule_minutes(rule_json_int(
         root, "scheduled_override_minutes", rules.scheduled_override.rule.minutes));
     if (!ptc_scheduled_override_is_valid(&rules.scheduled_override)) {
         rules.scheduled_override.enabled = false;
