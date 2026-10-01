@@ -541,6 +541,8 @@ static bool set_font_size(int size)
         if (FT_Set_Pixel_Sizes(g_ui.face, 0, (FT_UInt)size) != 0) {
             return false;
         }
+        if (g_ui.standard_face &&
+            FT_Set_Pixel_Sizes(g_ui.standard_face, 0, (FT_UInt)size) != 0) return false;
         if (g_ui.traditional_face &&
             FT_Set_Pixel_Sizes(g_ui.traditional_face, 0, (FT_UInt)size) != 0) return false;
     }
@@ -694,10 +696,16 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
         }
     }
     FT_Face face = g_ui.face;
-    if (g_ui.traditional_face &&
-        ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_TRADITIONAL &&
+    PtcUiLanguagePreference lang = ptc_ui_language_get_resolved();
+    if (lang == PTC_UI_LANGUAGE_ENGLISH && g_ui.standard_face &&
+        FT_Get_Char_Index(g_ui.standard_face, codepoint) != 0)
+        face = g_ui.standard_face;
+    else if (lang == PTC_UI_LANGUAGE_TRADITIONAL && g_ui.traditional_face &&
         FT_Get_Char_Index(g_ui.traditional_face, codepoint) != 0)
         face = g_ui.traditional_face;
+    else if (g_ui.standard_face && codepoint < 0x80 &&
+        FT_Get_Char_Index(g_ui.standard_face, codepoint) != 0)
+        face = g_ui.standard_face;
     else if (g_ui.font_ready && FT_Get_Char_Index(g_ui.face, codepoint) == 0 &&
         g_ui.traditional_face && FT_Get_Char_Index(g_ui.traditional_face, codepoint) != 0)
         face = g_ui.traditional_face;

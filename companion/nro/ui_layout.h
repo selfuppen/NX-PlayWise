@@ -207,6 +207,7 @@ PtcUiRect ptc_ui_weekly_bulk_target_rect(int index);
 PtcUiRect ptc_ui_album_action_rect(int index);
 PtcUiRect ptc_ui_album_refresh_rect(void);
 PtcUiRect ptc_ui_theme_option_rect(int index);
+PtcUiRect ptc_ui_language_option_rect(int index);
 PtcUiRect ptc_ui_credential_input_rect(void);
 PtcUiRect ptc_ui_credential_random_rect(void);
 PtcUiRect ptc_ui_credential_reveal_rect(void);

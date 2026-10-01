@@ -70,9 +70,16 @@ static void load_overlay_language(PtcStorage *storage)
         Result result = setGetSystemLanguage(&code);
         if (R_SUCCEEDED(result)) result = setMakeLanguage(code, &language);
         setExit();
-        if (R_SUCCEEDED(result))
-            system_language = language == SetLanguage_ZHTW || language == SetLanguage_ZHHANT
-                ? PTC_UI_SYSTEM_LANGUAGE_TRADITIONAL : PTC_UI_SYSTEM_LANGUAGE_SIMPLIFIED;
+        if (R_SUCCEEDED(result)) {
+            if (language == SetLanguage_ZHCN || language == SetLanguage_ZHHANS)
+                system_language = PTC_UI_SYSTEM_LANGUAGE_SIMPLIFIED;
+            else if (language == SetLanguage_ZHTW || language == SetLanguage_ZHHANT)
+                system_language = PTC_UI_SYSTEM_LANGUAGE_TRADITIONAL;
+            else if (language == SetLanguage_ENUS || language == SetLanguage_ENGB)
+                system_language = PTC_UI_SYSTEM_LANGUAGE_ENGLISH;
+            else
+                system_language = PTC_UI_SYSTEM_LANGUAGE_ENGLISH;
+        }
     }
     ptc_ui_language_set_resolved(ptc_ui_language_resolve(preference, system_language));
 }
@@ -1146,7 +1153,7 @@ public:
         draw_outline(renderer, cx, cy + 18, cw, 540, 2, FOCUS_BORDER);
         draw_localized(renderer, preview_changed_ ? "状态已变化，请再次确认" : "确认兑换加时码",
                              false, cx + 14, cy + 52, 18, renderer->a(TEXT_COLOR));
-        std::snprintf(line, sizeof(line), "本次增加 %d 分钟", preview_summary_.grant_minutes);
+        ptc_ui_format_actual_added(preview_summary_.grant_minutes, line, sizeof(line));
         draw_localized(renderer, line, false, cx + 14, cy + 84, 15, renderer->a(FOCUS_BORDER));
         draw_localized(renderer, "今天有效，成功兑换后只能使用一次", false,
                              cx + 14, cy + 110, 12, renderer->a(MUTED_COLOR));
@@ -1156,7 +1163,7 @@ public:
         if (preview_summary_.converts_unlimited_to_limited) {
             draw_localized(renderer, "不限时", false, cx + 155, cy + 171, 19, renderer->a(SUCCESS_COLOR));
         } else if (preview_summary_.remaining_available) {
-            std::snprintf(line, sizeof(line), "%d 分钟", preview_summary_.remaining_minutes);
+            ptc_ui_format_minutes(preview_summary_.remaining_minutes, line, sizeof(line));
             draw_localized(renderer, line, false, cx + 155, cy + 171, 19, renderer->a(SUCCESS_COLOR));
         } else {
             draw_localized(renderer, "暂不可用", false, cx + 155, cy + 171, 16, renderer->a(MUTED_COLOR));
@@ -1165,7 +1172,7 @@ public:
         renderer->drawRect(cx + 12, cy + 244, cw - 24, 86, renderer->a(CARD_COLOR));
         draw_localized(renderer, "兑换后预计还可玩", false, cx + 24, cy + 270, 12, renderer->a(MUTED_COLOR));
         if (preview_summary_.remaining_after_available) {
-            std::snprintf(line, sizeof(line), "%d 分钟", preview_summary_.remaining_after_minutes);
+            ptc_ui_format_minutes(preview_summary_.remaining_after_minutes, line, sizeof(line));
             draw_localized(renderer, line, false, cx + 155, cy + 273, 19,
                                  renderer->a(preview_summary_.remaining_after_minutes == 0 ? ERROR_COLOR : SUCCESS_COLOR));
         } else {
@@ -1191,7 +1198,7 @@ public:
         } else if (preview_summary_.remaining_after_minutes == 0) {
             draw_localized(renderer, "警告：兑换后预计没有可玩时间", false, cx + 22, cy + 372, 13, renderer->a(ERROR_COLOR));
         } else if (preview_summary_.preview_capped) {
-            std::snprintf(line, sizeof(line), "受每日上限影响，实际增加 %d 分钟", preview_summary_.effective_add_minutes);
+            ptc_ui_format_daily_cap_applied(preview_summary_.effective_add_minutes, line, sizeof(line));
             draw_localized(renderer, line, false, cx + 22, cy + 372, 13, renderer->a(WAITING_COLOR));
         } else {
             draw_localized(renderer, "确认前不会消费这枚加时码", false, cx + 16, cy + 366, 13, renderer->a(MUTED_COLOR));
@@ -1225,9 +1232,15 @@ public:
         draw_outline(renderer, cx, cy + 36, cw, 460, 2, accent);
         draw_localized(renderer, result_pending_ ? "加时结果确认中" : (result_failed_ ? "兑换未成功" : "加时成功"),
                              false, cx + 14, cy + 74, 22, renderer->a(accent));
-        std::snprintf(line, sizeof(line), result_pending_ ? "预计增加 %d 分钟" :
-                      (result_failed_ ? "原计划增加 %d 分钟" : "已增加 %d 分钟"),
-                      preview_summary_.grant_minutes);
+        if (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH) {
+            std::snprintf(line, sizeof(line), result_pending_ ? "Estimated +%d min" :
+                          (result_failed_ ? "Planned +%d min" : "+%d min added"),
+                          preview_summary_.grant_minutes);
+        } else {
+            std::snprintf(line, sizeof(line), result_pending_ ? "预计增加 %d 分钟" :
+                          (result_failed_ ? "原计划增加 %d 分钟" : "已增加 %d 分钟"),
+                          preview_summary_.grant_minutes);
+        }
         draw_localized(renderer, line, false, cx + 14, cy + 108, 15, renderer->a(TEXT_COLOR));
         draw_localized(renderer, result_pending_ ? "正在核对最终结果，请勿重复输入这枚加时码" :
                              (result_failed_ ? "后台已确认失败；该码未消费，可重新输入" :
@@ -1235,14 +1248,13 @@ public:
                              false, cx + 14, cy + 136, 12, renderer->a(MUTED_COLOR));
         draw_localized(renderer, "兑换前", false, cx + 18, cy + 190, 12, renderer->a(MUTED_COLOR));
         if (redemption_before_.converts_unlimited_to_limited) std::snprintf(line, sizeof(line), "不限时");
-        else if (redemption_before_.remaining_available) std::snprintf(line, sizeof(line), "%d 分钟", redemption_before_.remaining_minutes);
+        else if (redemption_before_.remaining_available) ptc_ui_format_minutes(redemption_before_.remaining_minutes, line, sizeof(line));
         else std::snprintf(line, sizeof(line), "暂不可用");
         draw_localized(renderer, line, false, cx + 130, cy + 193, 18, renderer->a(TEXT_COLOR));
         draw_localized(renderer, result_pending_ ? "预览兑换后" : "实际兑换后", false, cx + 18, cy + 254, 12, renderer->a(MUTED_COLOR));
         const PtcCompanionResultSummary &after = result_pending_ ? preview_summary_ : displayed_summary_;
         if (result_pending_ ? after.remaining_after_available : after.remaining_available) {
-            std::snprintf(line, sizeof(line), "%d 分钟",
-                          result_pending_ ? after.remaining_after_minutes : after.remaining_minutes);
+            ptc_ui_format_minutes(result_pending_ ? after.remaining_after_minutes : after.remaining_minutes, line, sizeof(line));
         }
         else std::snprintf(line, sizeof(line), "暂不可用");
         draw_localized(renderer, line, false, cx + 130, cy + 257, 18, renderer->a(accent));
@@ -1272,8 +1284,13 @@ public:
         if (parent_view_ == ParentView::Pin) {
             char masked[PTC_AUTH_PIN_MAX_LEN + 1];
             (void)ptc_overlay_pin_mask(pin_length_, masked, sizeof(masked));
-            std::snprintf(line, sizeof(line), "已输入 %u 位  %s",
-                static_cast<unsigned int>(pin_length_), masked);
+            if (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH) {
+                std::snprintf(line, sizeof(line), "Entered %u digits  %s",
+                    static_cast<unsigned int>(pin_length_), masked);
+            } else {
+                std::snprintf(line, sizeof(line), "已输入 %u 位  %s",
+                    static_cast<unsigned int>(pin_length_), masked);
+            }
             draw_localized(renderer, line, false, cx + 14, cy + 152, 15, renderer->a(TEXT_COLOR), 330);
             draw_localized(renderer, "摇杆八方向输入 1 到 8；十字键输入 1/3/5/7", false,
                 cx + 14, cy + 180, 12, renderer->a(MUTED_COLOR));
@@ -1325,11 +1342,14 @@ public:
                     renderer->a(selected ? FOCUS_BG : CARD_COLOR));
                 draw_outline(renderer, cx + 12, y, cw - 24, 46,
                     selected ? 2 : 1, selected ? FOCUS_BORDER : MUTED_COLOR);
-                if (i == PTC_OVERLAY_PARENT_ADD_MINUTES)
-                    std::snprintf(line, sizeof(line), "快速加时 +%d 分钟（左右调整）",
-                        daily_add_minutes_);
-                else
+                if (i == PTC_OVERLAY_PARENT_ADD_MINUTES) {
+                    if (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH)
+                        std::snprintf(line, sizeof(line), "Quick Grant +%d min (D-Pad adjust)", daily_add_minutes_);
+                    else
+                        std::snprintf(line, sizeof(line), "快速加时 +%d 分钟（左右调整）", daily_add_minutes_);
+                } else {
                     std::snprintf(line, sizeof(line), "%s", LABELS[i]);
+                }
                 draw_localized(renderer, line, false, cx + 24, y + 20, 13,
                     renderer->a(reason ? MUTED_COLOR : TEXT_COLOR), 310);
                 if (reason) draw_localized(renderer, reason, false, cx + 24, y + 38, 11,
@@ -1388,8 +1408,12 @@ public:
                 (parent_action_succeeded_ ? SUCCESS_COLOR : ERROR_COLOR)));
         if (!bridge_->waiting && parent_action_succeeded_) {
             if (last_request_kind_ == OverlayRequestKind::ClaimDailyBuffer) {
-                std::snprintf(line, sizeof(line), "自主缓冲已领取，增加 %d 分钟",
-                    displayed_summary_.daily_buffer_minutes);
+                if (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH)
+                    std::snprintf(line, sizeof(line), "Emergency buffer claimed: +%d min",
+                        displayed_summary_.daily_buffer_minutes);
+                else
+                    std::snprintf(line, sizeof(line), "自主缓冲已领取，增加 %d 分钟",
+                        displayed_summary_.daily_buffer_minutes);
                 draw_localized(renderer, line, false, cx + 14, cy + 225, 14,
                     renderer->a(SUCCESS_COLOR), 320);
             }
@@ -1405,7 +1429,10 @@ public:
             draw_localized(renderer, ptc_overlay_bridge_error_message_zh(bridge_), false,
                 cx + 14, cy + 225, 13, renderer->a(ERROR_COLOR), 320);
             if (bridge_->summary.valid && bridge_->summary.error_code > 0) {
-                std::snprintf(line, sizeof(line), "错误码：%d", bridge_->summary.error_code);
+                if (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH)
+                    std::snprintf(line, sizeof(line), "Error code: %d", bridge_->summary.error_code);
+                else
+                    std::snprintf(line, sizeof(line), "错误码：%d", bridge_->summary.error_code);
                 draw_localized(renderer, line, false, cx + 14, cy + 270, 12,
                     renderer->a(ERROR_COLOR));
             }

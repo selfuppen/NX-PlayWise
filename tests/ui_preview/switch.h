@@ -9,6 +9,7 @@ typedef struct { const void *address; size_t size; } PlFontData;
 #define PlServiceType_User 0
 #define PlSharedFontType_ChineseSimplified 0
 #define PlSharedFontType_ChineseTraditional 1
+#define PlSharedFontType_Standard 2
 #define PIXEL_FORMAT_RGBA_8888 0
 #define R_FAILED(value) ((value) != 0)
 #define R_SUCCEEDED(value) ((value) == 0)

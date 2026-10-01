@@ -322,19 +322,28 @@ void handle_overlay_input(UiState *ui, u64 down)
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_LANGUAGE) {
-        if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
-        else if (down & HidNpadButton_Left)
-            ui->model.overlay_selection = ui->model.overlay_selection <= 0 ? 2 : ui->model.overlay_selection - 1;
-        else if (down & HidNpadButton_Right)
-            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 3;
-        else if (down & HidNpadButton_A) {
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+            int col = ui->model.overlay_selection % 2;
+            int row = ui->model.overlay_selection / 2;
+            col = (col + 1) % 2;
+            ui->model.overlay_selection = row * 2 + col;
+        } else if (down & (HidNpadButton_Up | HidNpadButton_Down)) {
+            int col = ui->model.overlay_selection % 2;
+            int row = ui->model.overlay_selection / 2;
+            row = (row + 1) % 2;
+            ui->model.overlay_selection = row * 2 + col;
+        } else if (down & HidNpadButton_A) {
             PtcUiLanguagePreference preference = (PtcUiLanguagePreference)ui->model.overlay_selection;
             if (apply_language_preference(ui, preference)) {
                 ptc_ui_cancel_overlay(&ui->model);
                 snprintf(ui->model.message, sizeof(ui->model.message), "界面语言已设为%s。",
                     ptc_ui_language_preference_label(preference));
-            } else snprintf(ui->model.message, sizeof(ui->model.message),
-                "语言设置未保存，请确认 SD 卡可写。");
+            } else {
+                snprintf(ui->model.message, sizeof(ui->model.message),
+                    "语言设置未保存，请确认 SD 卡可写。");
+            }
         }
         return;
     }

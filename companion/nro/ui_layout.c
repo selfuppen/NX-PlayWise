@@ -1348,3 +1348,13 @@ PtcUiRect ptc_ui_theme_option_rect(int index)
     if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
     return (PtcUiRect){dialog.x + 40 + index * 250, dialog.y + 154, 230, 100};
 }
+
+PtcUiRect ptc_ui_language_option_rect(int index)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_LANGUAGE);
+    int col, row;
+    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    col = index % 2;
+    row = index / 2;
+    return (PtcUiRect){dialog.x + 40 + col * 390, dialog.y + 110 + row * 94, 350, 76};
+}

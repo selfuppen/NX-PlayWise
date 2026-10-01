@@ -3112,24 +3112,90 @@ static void test_language_and_short_weekly_limits(void)
 {
     PtcUiLanguagePreference preference = PTC_UI_LANGUAGE_SYSTEM;
     char localized[256];
+    char formatted[128];
     uint16_t minutes = 0;
     PtcUiModel model;
+    PtcUiRect opt0, opt1, opt2, opt3;
     check_true(ptc_ui_language_parse_preference("zh-Hant", &preference) &&
         preference == PTC_UI_LANGUAGE_TRADITIONAL, "traditional preference parses");
+    check_true(ptc_ui_language_parse_preference("en", &preference) &&
+        preference == PTC_UI_LANGUAGE_ENGLISH, "english preference parses");
     check_true(!ptc_ui_language_parse_preference("invalid", &preference),
         "invalid language preference rejected");
+    check_true(strcmp(ptc_ui_language_preference_name(PTC_UI_LANGUAGE_ENGLISH), "en") == 0,
+        "english preference name is en");
+    check_true(strcmp(ptc_ui_language_preference_label(PTC_UI_LANGUAGE_ENGLISH), "English") == 0,
+        "english preference label is English");
+
+    /* Resolution matrix */
     check_int(ptc_ui_language_resolve(PTC_UI_LANGUAGE_SYSTEM,
         PTC_UI_SYSTEM_LANGUAGE_TRADITIONAL), PTC_UI_LANGUAGE_TRADITIONAL,
         "system preference follows traditional Switch language");
+    check_int(ptc_ui_language_resolve(PTC_UI_LANGUAGE_SYSTEM,
+        PTC_UI_SYSTEM_LANGUAGE_ENGLISH), PTC_UI_LANGUAGE_ENGLISH,
+        "system preference follows english Switch language");
+    check_int(ptc_ui_language_resolve(PTC_UI_LANGUAGE_SYSTEM,
+        PTC_UI_SYSTEM_LANGUAGE_UNKNOWN), PTC_UI_LANGUAGE_SIMPLIFIED,
+        "system preference defaults to simplified when unknown");
     check_int(ptc_ui_language_resolve(PTC_UI_LANGUAGE_SIMPLIFIED,
         PTC_UI_SYSTEM_LANGUAGE_TRADITIONAL), PTC_UI_LANGUAGE_SIMPLIFIED,
         "manual simplified language overrides Switch language");
+    check_int(ptc_ui_language_resolve(PTC_UI_LANGUAGE_ENGLISH,
+        PTC_UI_SYSTEM_LANGUAGE_SIMPLIFIED), PTC_UI_LANGUAGE_ENGLISH,
+        "manual english language overrides Switch language");
+
+    /* Localize strings */
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
     check_true(strcmp(ptc_ui_localize("时间计划，配置文件", localized, sizeof(localized)),
         "時間計畫，設定檔") == 0, "traditional text and Taiwanese terminology");
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
     check_true(strcmp(ptc_ui_localize("时间计划", localized, sizeof(localized)),
         "时间计划") == 0, "simplified text stays unchanged");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_ENGLISH);
+    check_true(strcmp(ptc_ui_localize("自律约定", localized, sizeof(localized)),
+        "PlayWise") == 0, "english overlay title");
+    check_true(strcmp(ptc_ui_localize("跟随系统", localized, sizeof(localized)),
+        "Follow System") == 0, "english follow system option");
+    check_true(strcmp(ptc_ui_localize("加时成功", localized, sizeof(localized)),
+        "Grant Successful") == 0, "english grant successful text");
+
+    /* Formatted helpers */
+    ptc_ui_format_minutes(1, formatted, sizeof(formatted));
+    check_true(strcmp(formatted, "1 min") == 0, "english 1 min");
+    ptc_ui_format_minutes(30, formatted, sizeof(formatted));
+    check_true(strcmp(formatted, "30 min") == 0, "english 30 min");
+    ptc_ui_format_actual_added(15, formatted, sizeof(formatted));
+    check_true(strcmp(formatted, "Actual time added: 15 min") == 0, "english actual added");
+    ptc_ui_format_time_ago(25, formatted, sizeof(formatted));
+    check_true(strcmp(formatted, "25 seconds ago") == 0, "english 25 seconds ago");
+
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+    ptc_ui_format_minutes(30, formatted, sizeof(formatted));
+    check_true(strcmp(formatted, "30 分钟") == 0, "simplified 30 minutes");
+    ptc_ui_format_actual_added(15, formatted, sizeof(formatted));
+    check_true(strcmp(formatted, "本次增加 15 分钟") == 0, "simplified actual added");
+
+    /* 2x2 Language overlay options layout and hit tests */
+    opt0 = ptc_ui_language_option_rect(0);
+    opt1 = ptc_ui_language_option_rect(1);
+    opt2 = ptc_ui_language_option_rect(2);
+    opt3 = ptc_ui_language_option_rect(3);
+    check_true(opt0.w == 350 && opt0.h == 76, "option 0 size");
+    check_true(opt1.w == 350 && opt1.h == 76, "option 1 size");
+    check_true(opt2.w == 350 && opt2.h == 76, "option 2 size");
+    check_true(opt3.w == 350 && opt3.h == 76, "option 3 size");
+    check_true(!rects_overlap(opt0, opt1), "opt0 and opt1 do not overlap");
+    check_true(!rects_overlap(opt0, opt2), "opt0 and opt2 do not overlap");
+    check_true(!rects_overlap(opt1, opt3), "opt1 and opt3 do not overlap");
+    check_true(!rects_overlap(opt2, opt3), "opt2 and opt3 do not overlap");
+
+    memset(&model, 0, sizeof(model));
+    model.overlay = PTC_UI_OVERLAY_LANGUAGE;
+    check_hit(hit_center(&model, opt0), PTC_UI_HIT_LANGUAGE_OPTION, 0, "hit language opt 0");
+    check_hit(hit_center(&model, opt1), PTC_UI_HIT_LANGUAGE_OPTION, 1, "hit language opt 1");
+    check_hit(hit_center(&model, opt2), PTC_UI_HIT_LANGUAGE_OPTION, 2, "hit language opt 2");
+    check_hit(hit_center(&model, opt3), PTC_UI_HIT_LANGUAGE_OPTION, 3, "hit language opt 3");
+
     check_int(ptc_ui_clamp_persisted_rule_minutes(1), 1, "one minute survives reload");
     check_int(ptc_ui_clamp_persisted_rule_minutes(14), 14, "fourteen minutes survive reload");
     check_int(ptc_ui_clamp_persisted_rule_minutes(15), 15, "fifteen minutes survive reload");

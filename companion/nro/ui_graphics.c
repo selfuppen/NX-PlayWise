@@ -27,6 +27,10 @@ bool ptc_ui_graphics_init(void)
         return false;
     }
     g_ui.font_ready = true;
+    if (R_SUCCEEDED(plGetSharedFontByType(&font_data, PlSharedFontType_Standard))) {
+        (void)FT_New_Memory_Face(g_ui.library, (const FT_Byte *)font_data.address,
+            (FT_Long)font_data.size, 0, &g_ui.standard_face);
+    }
     if (R_SUCCEEDED(plGetSharedFontByType(&font_data, PlSharedFontType_ChineseTraditional))) {
         (void)FT_New_Memory_Face(g_ui.library, (const FT_Byte *)font_data.address,
             (FT_Long)font_data.size, 0, &g_ui.traditional_face);
@@ -69,6 +73,7 @@ void ptc_ui_graphics_exit(void)
     if (g_ui.font_ready) {
         FT_Done_Face(g_ui.face);
     }
+    if (g_ui.standard_face) FT_Done_Face(g_ui.standard_face);
     if (g_ui.traditional_face) FT_Done_Face(g_ui.traditional_face);
     if (g_ui.library) {
         FT_Done_FreeType(g_ui.library);

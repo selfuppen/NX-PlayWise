@@ -158,22 +158,24 @@ static void draw_theme_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
 static void draw_language_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    static const char *LABELS[] = {"跟随系统", "简体中文", "繁体中文"};
-    static const char *DETAILS[] = {"使用 Switch 系统语言", "始终显示简体", "始终显示繁体"};
+    static const char *LABELS[] = {"跟随系统", "简体中文", "繁体中文", "English"};
+    static const char *DETAILS[] = {
+        "使用 Switch 系统语言", "始终显示简体", "始终显示繁体", "Always use English"
+    };
     UiRect dialog;
     draw_dialog_shell(pixels, stride, model, &dialog, 820, 360);
-    for (int index = 0; index < 3; ++index) {
-        UiRect option = to_uirect(ptc_ui_theme_option_rect(index));
+    for (int index = 0; index < 4; ++index) {
+        UiRect option = to_uirect(ptc_ui_language_option_rect(index));
         bool selected = index == model->overlay_selection;
         fill_round_rect(pixels, stride, option, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
         draw_rect_outline(pixels, stride, option, 12, selected ? 3 : 1,
             selected ? UI_ACCENT : UI_CONTROL);
         draw_text_center(pixels, stride,
-            (UiRect){option.x, option.y + 14, option.width, 34}, LABELS[index], 22, UI_INK);
+            (UiRect){option.x, option.y + 12, option.width, 30}, LABELS[index], 20, UI_INK);
         draw_text_center(pixels, stride,
-            (UiRect){option.x, option.y + 52, option.width, 26}, DETAILS[index], 15, UI_MUTED);
+            (UiRect){option.x, option.y + 44, option.width, 24}, DETAILS[index], 14, UI_MUTED);
     }
-    draw_text(pixels, stride, dialog.x + 40, dialog.y + 294,
+    draw_text(pixels, stride, dialog.x + 40, dialog.y + 306,
         "方向键选择  |  A 立即应用并保存  |  B 取消", 16, UI_MUTED);
 }
 

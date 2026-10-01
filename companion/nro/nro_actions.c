@@ -22,8 +22,13 @@ static PtcUiSystemLanguage read_system_language(void)
     if (R_SUCCEEDED(result)) result = setMakeLanguage(language_code, &language);
     setExit();
     if (R_FAILED(result)) return PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
-    return language == SetLanguage_ZHTW || language == SetLanguage_ZHHANT
-        ? PTC_UI_SYSTEM_LANGUAGE_TRADITIONAL : PTC_UI_SYSTEM_LANGUAGE_SIMPLIFIED;
+    if (language == SetLanguage_ZHCN || language == SetLanguage_ZHHANS)
+        return PTC_UI_SYSTEM_LANGUAGE_SIMPLIFIED;
+    if (language == SetLanguage_ZHTW || language == SetLanguage_ZHHANT)
+        return PTC_UI_SYSTEM_LANGUAGE_TRADITIONAL;
+    if (language == SetLanguage_ENUS || language == SetLanguage_ENGB)
+        return PTC_UI_SYSTEM_LANGUAGE_ENGLISH;
+    return PTC_UI_SYSTEM_LANGUAGE_ENGLISH;
 }
 
 void refresh_language(UiState *ui)

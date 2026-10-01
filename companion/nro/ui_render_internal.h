@@ -99,6 +99,7 @@ typedef struct {
     FT_Library library;
     FT_Face face;
     FT_Face traditional_face;
+    FT_Face standard_face;
     bool framebuffer_ready;
     bool font_ready;
     bool pl_ready;
