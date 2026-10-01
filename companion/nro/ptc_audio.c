@@ -9,7 +9,7 @@
 #endif
 
 #define PTC_AUDIO_BUFFER_COUNT 3
-#define PTC_AUDIO_BUFFER_SIZE  0x10000 /* 64 KiB, page aligned */
+#define PTC_AUDIO_BUFFER_SIZE  0x40000 /* 256 KiB, page aligned */
 
 static bool g_audio_initialized = false;
 static bool g_audio_enabled = true;
@@ -100,6 +100,19 @@ void ptc_audio_set_enabled(bool enabled)
 bool ptc_audio_is_enabled(void)
 {
     return g_audio_enabled;
+}
+
+void ptc_audio_stop(void)
+{
+#if defined(__SWITCH__)
+    if (g_audio_initialized) {
+        audoutStopAudioOut();
+        bool flushed = false;
+        audoutFlushAudioOutBuffers(&flushed);
+        reap_audio_buffers();
+        audoutStartAudioOut();
+    }
+#endif
 }
 
 void ptc_audio_play(PtcSoundEffect se)

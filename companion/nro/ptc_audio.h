@@ -23,7 +23,8 @@ typedef enum {
     PTC_SE_SUCCESS = 10,       /* Policy saved / Time granted / PIN updated */
     PTC_SE_CLAIM_BUFFER = 11,  /* Daily buffer claimed */
     PTC_SE_ERROR = 12,         /* PIN error / Prohibited / Locked action / Blocked input */
-    PTC_SE_HOLD_CONFIRM = 13   /* Hold to confirm completed / High-risk action executed */
+    PTC_SE_HOLD_CONFIRM = 13,  /* Hold to confirm completed / High-risk action executed */
+    PTC_SE_HOLD_CHARGE = 14    /* Continuous rising charge-up cue for hold confirmation */
 } PtcSoundEffect;
 
 /**
@@ -43,6 +44,11 @@ void ptc_audio_exit(void);
  * @param se Sound effect identifier.
  */
 void ptc_audio_play(PtcSoundEffect se);
+
+/**
+ * Stop any active audio playback and flush queued audio buffers immediately.
+ */
+void ptc_audio_stop(void);
 
 /**
  * Enable or disable sound effects.

@@ -210,8 +210,10 @@ static void test_release_navigation(void)
 
     ptc_audio_set_enabled(true);
     check_true(ptc_audio_is_enabled(), "audio initially enabled");
+    ptc_audio_stop();
     ptc_audio_set_enabled(false);
     check_true(!ptc_audio_is_enabled(), "audio toggles to disabled");
+    ptc_audio_stop();
     ptc_audio_set_enabled(true);
     check_true(ptc_audio_is_enabled(), "audio restores to enabled");
 

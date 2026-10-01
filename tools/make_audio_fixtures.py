@@ -385,6 +385,45 @@ def generate_hold_confirm() -> list[int]:
         samples.append(max(-32767, min(32767, sample)))
     return samples
 
+def generate_hold_charge() -> list[int]:
+    """Continuous ascending energy charge-up cue for press-and-hold confirmation (~1050ms).
+
+    Provides an immediate warm tactile onset, followed by a smooth, pure musical pitch
+    glide from C4 (261.63Hz) to C5 (523.25Hz) with continuous phase integration, warm
+    harmonic balance, and ample headroom to prevent any speaker resonance or distortion.
+    """
+    duration = 1.050
+    total_samples = int(SAMPLE_RATE * duration)
+    samples: list[int] = []
+    phase_fund = 0.0
+    phase_oct = 0.0
+    for i in range(total_samples):
+        t = i / SAMPLE_RATE
+        prog = min(1.0, t / 1.000)
+
+        # Smooth warm musical pitch glide: C4 (261.63Hz) -> C5 (523.25Hz)
+        freq = 261.63 * math.pow(2.0, prog ** 1.15)
+        freq_oct = freq * 2.0
+
+        phase_fund += 2.0 * math.pi * freq / SAMPLE_RATE
+        phase_oct += 2.0 * math.pi * freq_oct / SAMPLE_RATE
+
+        # Envelope: 12ms smooth cosine attack, gentle linear crescendo from 0.50 to 0.75
+        if t < 0.012:
+            env = 0.5 * (1.0 - math.cos(math.pi * t / 0.012)) * 0.50
+        elif t <= 1.000:
+            env = 0.50 + 0.25 * prog
+        else:
+            fade_prog = (t - 1.000) / 0.050
+            env = 0.75 * max(0.0, 1.0 - fade_prog)
+
+        # Pure, warm harmonic blend: 92% fundamental sine + 8% soft second harmonic
+        val = 0.92 * math.sin(phase_fund) + 0.08 * math.sin(phase_oct)
+
+        sample = int(val * env * 8500.0)
+        samples.append(max(-32767, min(32767, sample)))
+    return samples
+
 def build_c_source(dest_header: Path, dest_source: Path) -> None:
     sound_generators = [
         ("FOCUS", generate_focus()),
@@ -400,6 +439,7 @@ def build_c_source(dest_header: Path, dest_source: Path) -> None:
         ("CLAIM_BUFFER", generate_claim_buffer()),
         ("ERROR", generate_error()),
         ("HOLD_CONFIRM", generate_hold_confirm()),
+        ("HOLD_CHARGE", generate_hold_charge()),
     ]
 
     header_lines = [
@@ -461,8 +501,9 @@ def build_c_source(dest_header: Path, dest_source: Path) -> None:
         "        {g_ptc_audio_claim_buffer_samples, sizeof(g_ptc_audio_claim_buffer_samples) / sizeof(int16_t)},",
         "        {g_ptc_audio_error_samples, sizeof(g_ptc_audio_error_samples) / sizeof(int16_t)},",
         "        {g_ptc_audio_hold_confirm_samples, sizeof(g_ptc_audio_hold_confirm_samples) / sizeof(int16_t)},",
+        "        {g_ptc_audio_hold_charge_samples, sizeof(g_ptc_audio_hold_charge_samples) / sizeof(int16_t)},",
         "    };",
-        "    if (sound_id <= PTC_SE_NONE || sound_id > PTC_SE_HOLD_CONFIRM) {",
+        "    if (sound_id <= PTC_SE_NONE || sound_id > PTC_SE_HOLD_CHARGE) {",
         "        return NULL;",
         "    }",
         "    return &clips[sound_id];",

@@ -23,6 +23,7 @@ from make_audio_fixtures import (  # noqa: E402
     generate_claim_buffer,
     generate_error,
     generate_hold_confirm,
+    generate_hold_charge,
 )
 
 
@@ -41,8 +42,9 @@ def main() -> int:
         ("CLAIM_BUFFER", generate_claim_buffer()),
         ("ERROR", generate_error()),
         ("HOLD_CONFIRM", generate_hold_confirm()),
+        ("HOLD_CHARGE", generate_hold_charge()),
     ]
-    assert len(generators) == 13, f"expected 13 sounds, got {len(generators)}"
+    assert len(generators) == 14, f"expected 14 sounds, got {len(generators)}"
     for name, samples in generators:
         assert len(samples) > 0, f"{name} has no samples"
         for sample in samples:
@@ -51,6 +53,11 @@ def main() -> int:
     hold_samples = dict(generators)["HOLD_CONFIRM"]
     hold_rms = math.sqrt(sum(sample * sample for sample in hold_samples) / len(hold_samples))
     assert hold_rms >= 3000, f"HOLD_CONFIRM is too quiet: RMS={hold_rms:.1f}"
+
+    charge_samples = dict(generators)["HOLD_CHARGE"]
+    charge_rms = math.sqrt(sum(sample * sample for sample in charge_samples) / len(charge_samples))
+    assert charge_rms >= 3000, f"HOLD_CHARGE is too quiet: RMS={charge_rms:.1f}"
+    assert len(charge_samples) >= 48000, f"HOLD_CHARGE must cover 1.0s hold duration: len={len(charge_samples)}"
 
     header_path = ROOT / "companion" / "nro" / "ptc_audio_data.h"
     source_path = ROOT / "companion" / "nro" / "ptc_audio_data.c"
@@ -64,10 +71,14 @@ def main() -> int:
         "audout PCM data must be flushed before submission"
     assert "Never mutate a descriptor or PCM pool that audout still owns" in audio_source, \
         "audio queue must not overwrite a busy audout buffer"
+    assert "void ptc_audio_stop(void)" in audio_source, \
+        "ptc_audio must provide a dedicated playback flush/stop routine"
     assert "ptc_audio_play(PTC_SE_HOLD_CONFIRM);" in main_source, \
         "completed danger holds must play the dedicated confirmation cue"
-    assert "ptc_audio_play(PTC_SE_STEP);" in main_source, \
-        "danger hold progress must play audio feedback during press-and-hold"
+    assert "ptc_audio_play(PTC_SE_HOLD_CHARGE);" in main_source, \
+        "danger hold onset must play the continuous charging cue"
+    assert "ptc_audio_stop();" in main_source, \
+        "releasing or aborting danger hold must stop active charge playback"
 
     print("PASS: audio fixtures verified")
     return 0
