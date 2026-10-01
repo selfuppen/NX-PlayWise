@@ -12,16 +12,28 @@ typedef struct {
 
 extern const int16_t g_ptc_audio_focus_samples[];
 extern const size_t g_ptc_audio_focus_sample_count;
+extern const int16_t g_ptc_audio_step_samples[];
+extern const size_t g_ptc_audio_step_sample_count;
+extern const int16_t g_ptc_audio_toggle_samples[];
+extern const size_t g_ptc_audio_toggle_sample_count;
+extern const int16_t g_ptc_audio_keystroke_samples[];
+extern const size_t g_ptc_audio_keystroke_sample_count;
+extern const int16_t g_ptc_audio_tab_samples[];
+extern const size_t g_ptc_audio_tab_sample_count;
 extern const int16_t g_ptc_audio_confirm_samples[];
 extern const size_t g_ptc_audio_confirm_sample_count;
 extern const int16_t g_ptc_audio_cancel_samples[];
 extern const size_t g_ptc_audio_cancel_sample_count;
-extern const int16_t g_ptc_audio_error_samples[];
-extern const size_t g_ptc_audio_error_sample_count;
 extern const int16_t g_ptc_audio_popup_samples[];
 extern const size_t g_ptc_audio_popup_sample_count;
+extern const int16_t g_ptc_audio_danger_samples[];
+extern const size_t g_ptc_audio_danger_sample_count;
 extern const int16_t g_ptc_audio_success_samples[];
 extern const size_t g_ptc_audio_success_sample_count;
+extern const int16_t g_ptc_audio_claim_buffer_samples[];
+extern const size_t g_ptc_audio_claim_buffer_sample_count;
+extern const int16_t g_ptc_audio_error_samples[];
+extern const size_t g_ptc_audio_error_sample_count;
 
 const PtcAudioPcmClip *ptc_audio_get_clip(int sound_id);
 

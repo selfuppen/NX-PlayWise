@@ -26,7 +26,7 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_CHILD_BUFFER:
         if (!ui->waiting && ui->model.daily_buffer_available) {
-            ptc_audio_play(PTC_SE_CONFIRM);
+            ptc_audio_play(PTC_SE_CLAIM_BUFFER);
             submit_transport_empty(ui, "claim_daily_buffer",
                 "正在领取今日自主缓冲...", "领取今日自主缓冲失败");
         } else {
@@ -74,12 +74,12 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.setup_zone_index = 1;
         break;
     case PTC_UI_HIT_PARENT_PREV_PAGE:
-        ptc_audio_play(PTC_SE_FOCUS);
+        ptc_audio_play(PTC_SE_TAB);
         request_parent_navigation(ui,
             (ui->model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
         break;
     case PTC_UI_HIT_PARENT_NEXT_PAGE:
-        ptc_audio_play(PTC_SE_FOCUS);
+        ptc_audio_play(PTC_SE_TAB);
         request_parent_navigation(ui, (ui->model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
         break;
     case PTC_UI_HIT_PARENT_REFRESH:
@@ -101,7 +101,7 @@ void handle_touch(UiState *ui, int x, int y)
         request_parent_navigation(ui, -1, true);
         break;
     case PTC_UI_HIT_PARENT_TAB:
-        ptc_audio_play(PTC_SE_FOCUS);
+        ptc_audio_play(PTC_SE_TAB);
         request_parent_navigation(ui, hit.index, false);
         break;
     case PTC_UI_HIT_PARENT_CARD:
@@ -118,6 +118,7 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_HOLIDAY_CALENDAR:
+        ptc_audio_play(PTC_SE_POPUP);
         ui->model.selected_index = 6;
         handle_parent_action(ui);
         break;
@@ -229,6 +230,7 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_OVERLAY_DISCARD:
+        ptc_audio_play(PTC_SE_CANCEL);
         if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_LEAVE ||
             ui->model.overlay == PTC_UI_OVERLAY_BEDTIME_LEAVE) {
             handle_overlay_input(ui, HidNpadButton_X);
@@ -240,32 +242,40 @@ void handle_touch(UiState *ui, int x, int y)
         handle_overlay_input(ui, HidNpadButton_X);
         break;
     case PTC_UI_HIT_HISTORY_PREV:
+        ptc_audio_play(PTC_SE_TAB);
         handle_overlay_input(ui, HidNpadButton_Left);
         break;
     case PTC_UI_HIT_HISTORY_NEXT:
+        ptc_audio_play(PTC_SE_TAB);
         handle_overlay_input(ui, HidNpadButton_Right);
         break;
     case PTC_UI_HIT_SCHEDULED_FIELD:
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_AUTONOMY_OPTION:
+        ptc_audio_play(PTC_SE_STEP);
         ui->model.overlay_selection = hit.index;
         ui->model.draft_autonomy_policy.daily_buffer_minutes = (uint16_t)(hit.index * 5);
         break;
     case PTC_UI_HIT_QUICK_ADD_OPTION:
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_BEDTIME_SECTION:
+        ptc_audio_play(PTC_SE_TAB);
         ui->model.bedtime_master_focused = false;
         select_bedtime_section(ui, hit.index);
         break;
     case PTC_UI_HIT_BEDTIME_MANAGE:
+        ptc_audio_play(PTC_SE_CONFIRM);
         if (hit.index == 0) handle_today_action_ready(ui, PTC_UI_OPERATION_SKIP_BEDTIME);
         else request_clear_bedtime_skip(ui);
         break;
     case PTC_UI_HIT_BEDTIME_MASTER_SWITCH:
+        ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.bedtime_master_focused = true;
         ui->model.bedtime_section_focused = false;
         if (!ui->model.disable_flag_present) {
@@ -284,9 +294,11 @@ void handle_touch(UiState *ui, int x, int y)
             if (ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY && hit.index < 7) {
                 int day = ptc_ui_weekday_for_display_slot(hit.index);
                 ui->model.bedtime_editor_day = day;
+                ptc_audio_play(PTC_SE_POPUP);
                 open_bedtime_window_editor(ui, day);
             } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY &&
                        (hit.index == 7 || hit.index == 8)) {
+                ptc_audio_play(PTC_SE_POPUP);
                 ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_BULK;
                 ui->model.overlay_selection = hit.index - 7;
                 snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "复制每周就寝窗口");
@@ -295,59 +307,75 @@ void handle_touch(UiState *ui, int x, int y)
             } else if ((ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY && hit.index == 9) ||
                        (ui->model.bedtime_section == PTC_UI_BEDTIME_CALENDAR && hit.index == 3) ||
                        (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 4)) {
+                ptc_audio_play(PTC_SE_CANCEL);
                 discard_bedtime_draft(ui);
             } else if ((ui->model.bedtime_section == PTC_UI_BEDTIME_WEEKLY && hit.index == 10) ||
                        (ui->model.bedtime_section == PTC_UI_BEDTIME_CALENDAR && hit.index == 4) ||
                        (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 5)) {
+                ptc_audio_play(PTC_SE_CONFIRM);
                 save_bedtime_from_page(ui);
             } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_CALENDAR && hit.index == 0) {
+                ptc_audio_play(PTC_SE_TOGGLE);
                 ui->model.draft_bedtime_policy.calendar_enabled =
                     !ui->model.draft_bedtime_policy.calendar_enabled;
                 update_bedtime_dirty(ui);
             } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_CALENDAR && hit.index <= 2) {
+                ptc_audio_play(PTC_SE_POPUP);
                 open_bedtime_special_editor(ui, hit.index - 1);
             } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 0) {
+                ptc_audio_play(PTC_SE_TOGGLE);
                 ui->model.draft_bedtime_policy.scheduled_override.present =
                     !ui->model.draft_bedtime_policy.scheduled_override.present;
                 update_bedtime_dirty(ui);
             } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 1) {
+                ptc_audio_play(PTC_SE_POPUP);
                 if (edit_date_range_start(ui,
                         &ui->model.draft_bedtime_policy.scheduled_override.start_day_index,
                         &ui->model.draft_bedtime_policy.scheduled_override.end_day_index))
                     update_bedtime_dirty(ui);
             } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 2) {
+                ptc_audio_play(PTC_SE_POPUP);
                 if (edit_date_range_span(ui,
                         ui->model.draft_bedtime_policy.scheduled_override.start_day_index,
                         &ui->model.draft_bedtime_policy.scheduled_override.end_day_index))
                     update_bedtime_dirty(ui);
             } else if (ui->model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED && hit.index == 3) {
+                ptc_audio_play(PTC_SE_POPUP);
                 open_bedtime_special_editor(ui, 2);
             }
         }
         break;
     case PTC_UI_HIT_BEDTIME_OVERLAY_FIELD:
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_BEDTIME_PRESET:
+        ptc_audio_play(PTC_SE_STEP);
         apply_bedtime_preset(ui, hit.index);
         break;
     case PTC_UI_HIT_MINUTES_INC:
+        ptc_audio_play(PTC_SE_STEP);
         ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 5, ui->model.minimum_minutes, ui->model.maximum_minutes);
         break;
     case PTC_UI_HIT_MINUTES_DEC:
+        ptc_audio_play(PTC_SE_STEP);
         ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, -5, ui->model.minimum_minutes, ui->model.maximum_minutes);
         break;
     case PTC_UI_HIT_MINUTES_INC_LARGE:
+        ptc_audio_play(PTC_SE_STEP);
         ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, 15, ui->model.minimum_minutes, ui->model.maximum_minutes);
         break;
     case PTC_UI_HIT_MINUTES_DEC_LARGE:
+        ptc_audio_play(PTC_SE_STEP);
         ui->model.draft_minutes = ptc_ui_adjust_minutes(ui->model.draft_minutes, -15, ui->model.minimum_minutes, ui->model.maximum_minutes);
         break;
     case PTC_UI_HIT_MINUTES_VALUE:
+        ptc_audio_play(PTC_SE_POPUP);
         edit_overlay_minutes(ui);
         break;
     case PTC_UI_HIT_WEEKLY_DAY:
+        ptc_audio_play(PTC_SE_FOCUS);
         ui->model.editor_index = hit.index;
         for (int slot = 0; slot < 7; ++slot) {
             if (ptc_ui_weekday_for_display_slot(slot) == hit.index) {
@@ -361,8 +389,10 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_WEEKLY_BULK:
         ui->model.selected_index = 2;
         if (weekly_editing_blocked(ui)) {
+            ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，批量操作暂不可用。");
         } else {
+            ptc_audio_play(PTC_SE_POPUP);
             ui->model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
             ui->model.overlay_selection = 0;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "批量快捷操作");
@@ -370,13 +400,16 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_WEEKLY_BULK_TARGET:
+        ptc_audio_play(PTC_SE_FOCUS);
         ui->model.overlay_selection = hit.index;
         break;
     case PTC_UI_HIT_ALBUM_ACTION:
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_ALBUM_REFRESH:
+        ptc_audio_play(PTC_SE_CONFIRM);
         handle_overlay_input(ui, HidNpadButton_Y);
         break;
     case PTC_UI_HIT_WEEKLY_MODE:
@@ -391,7 +424,11 @@ void handle_touch(UiState *ui, int x, int y)
             }
         }
         ui->model.selected_index = 0;
-        if (weekly_editing_blocked(ui)) break;
+        if (weekly_editing_blocked(ui)) {
+            ptc_audio_play(PTC_SE_ERROR);
+            break;
+        }
+        ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.draft_week[ui->model.editor_index].mode =
             ptc_ui_next_rule_mode(ui->model.draft_week[ui->model.editor_index].mode);
         update_weekly_dirty(ui);
@@ -401,32 +438,48 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_WEEKLY_MIN_UP:
-        if (weekly_editing_blocked(ui)) break;
+        if (weekly_editing_blocked(ui)) {
+            ptc_audio_play(PTC_SE_ERROR);
+            break;
+        }
         if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
+            ptc_audio_play(PTC_SE_STEP);
             ui->model.draft_week[ui->model.editor_index].minutes =
                 ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, 15, 1, 1440);
             update_weekly_dirty(ui);
         }
         break;
     case PTC_UI_HIT_WEEKLY_MIN_DOWN:
-        if (weekly_editing_blocked(ui)) break;
+        if (weekly_editing_blocked(ui)) {
+            ptc_audio_play(PTC_SE_ERROR);
+            break;
+        }
         if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
+            ptc_audio_play(PTC_SE_STEP);
             ui->model.draft_week[ui->model.editor_index].minutes =
                 ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, -15, 1, 1440);
             update_weekly_dirty(ui);
         }
         break;
     case PTC_UI_HIT_WEEKLY_MIN_DEC:
-        if (weekly_editing_blocked(ui)) break;
+        if (weekly_editing_blocked(ui)) {
+            ptc_audio_play(PTC_SE_ERROR);
+            break;
+        }
         if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
+            ptc_audio_play(PTC_SE_STEP);
             ui->model.draft_week[ui->model.editor_index].minutes =
                 ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, -5, 1, 1440);
             update_weekly_dirty(ui);
         }
         break;
     case PTC_UI_HIT_WEEKLY_MIN_INC:
-        if (weekly_editing_blocked(ui)) break;
+        if (weekly_editing_blocked(ui)) {
+            ptc_audio_play(PTC_SE_ERROR);
+            break;
+        }
         if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
+            ptc_audio_play(PTC_SE_STEP);
             ui->model.draft_week[ui->model.editor_index].minutes =
                 ptc_ui_adjust_minutes(ui->model.draft_week[ui->model.editor_index].minutes, 5, 1, 1440);
             update_weekly_dirty(ui);
@@ -444,10 +497,15 @@ void handle_touch(UiState *ui, int x, int y)
             }
         }
         ui->model.selected_index = 0;
-        if (weekly_editing_blocked(ui)) break;
+        if (weekly_editing_blocked(ui)) {
+            ptc_audio_play(PTC_SE_ERROR);
+            break;
+        }
         if (ui->model.draft_week[ui->model.editor_index].mode == PTC_RULE_MODE_LIMIT) {
+            ptc_audio_play(PTC_SE_POPUP);
             edit_weekly_minutes(ui);
         } else {
+            ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message),
                      "当前为不限时模式，请先切换为限时模式。");
         }
@@ -455,8 +513,10 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_HOLIDAY_ENABLE:
         ui->model.selected_index = 0;
         if (ui->model.disable_flag_present) {
+            ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，规则暂时只读。");
         } else {
+            ptc_audio_play(PTC_SE_TOGGLE);
             ui->model.draft_holiday_enabled = !ui->model.draft_holiday_enabled;
             update_holiday_dirty(ui);
         }
@@ -465,11 +525,14 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.selected_index = hit.index + 1;
         ui->model.holiday_last_rule = hit.index;
         if (ui->model.disable_flag_present) {
+            ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，规则暂时只读。");
         } else if (hit.index == 0) {
+            ptc_audio_play(PTC_SE_TOGGLE);
             ui->model.draft_holiday_rule.mode = ptc_ui_next_rule_mode(ui->model.draft_holiday_rule.mode);
             update_holiday_dirty(ui);
         } else if (hit.index == 1) {
+            ptc_audio_play(PTC_SE_TOGGLE);
             ui->model.draft_makeup_workday_rule.mode = ptc_ui_next_rule_mode(ui->model.draft_makeup_workday_rule.mode);
             update_holiday_dirty(ui);
         }
@@ -478,17 +541,21 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.selected_index = hit.index + 1;
         ui->model.holiday_last_rule = hit.index;
         if (ui->model.disable_flag_present) {
+            ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，规则暂时只读。");
         } else {
+            ptc_audio_play(PTC_SE_POPUP);
             handle_parent_action(ui);
         }
         break;
     case PTC_UI_HIT_WEEKLY_SAVE:
         ui->model.selected_index = 4;
+        ptc_audio_play(PTC_SE_CONFIRM);
         save_weekly_from_page(ui);
         break;
     case PTC_UI_HIT_WEEKLY_DISCARD:
         ui->model.selected_index = 3;
+        ptc_audio_play(PTC_SE_CANCEL);
         if (ui->model.weekly_dirty) {
             memcpy(ui->model.draft_week, ui->model.current_week, sizeof(ui->model.draft_week));
             ui->model.weekly_dirty = false;
@@ -498,73 +565,92 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_CREDENTIAL_INPUT:
+        ptc_audio_play(PTC_SE_KEYSTROKE);
         ui->model.overlay_selection = PTC_UI_CREDENTIAL_INPUT;
         handle_overlay_input(ui, HidNpadButton_X);
         break;
     case PTC_UI_HIT_CREDENTIAL_RANDOM:
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = PTC_UI_CREDENTIAL_RANDOM;
         handle_overlay_input(ui, HidNpadButton_Y);
         break;
     case PTC_UI_HIT_CREDENTIAL_REVEAL:
+        ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.overlay_selection = PTC_UI_CREDENTIAL_REVEAL;
         handle_overlay_input(ui, HidNpadButton_ZR);
         break;
     case PTC_UI_HIT_CREDENTIAL_DEMO:
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = PTC_UI_CREDENTIAL_DEMO;
         handle_overlay_input(ui, HidNpadButton_R);
         break;
     case PTC_UI_HIT_GRANT_MANAGER_CARD:
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_GRANT_GENERATE:
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
         generate_local_grant_code(ui);
         break;
     case PTC_UI_HIT_SHORTCUT_OPTION:
+        ptc_audio_play(PTC_SE_FOCUS);
         select_setup_shortcut(ui, hit.index);
         break;
     case PTC_UI_HIT_SHORTCUT_DISABLE:
+        ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.shortcut_draft_enabled = false;
         break;
     case PTC_UI_HIT_SHORTCUT_HINT:
+        ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.shortcut_draft_show_hint = !ui->model.shortcut_draft_show_hint;
         break;
     case PTC_UI_HIT_THEME_OPTION:
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_SETUP_THEME_OPTION:
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.setup_theme_index = hit.index;
         setup_primary(ui);
         break;
     case PTC_UI_HIT_GRANT_ADJUST:
+        ptc_audio_play(PTC_SE_POPUP);
         ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_ADJUST_FIRST;
         edit_grant_minutes(ui);
         break;
     case PTC_UI_HIT_NUMPAD_KEY:
+        ptc_audio_play(PTC_SE_KEYSTROKE);
         ui->model.numpad_cursor = hit.index;
         ptc_ui_numpad_activate(&ui->model);
         break;
     case PTC_UI_HIT_NUMPAD_QUICK:
         if (hit.index >= 0 && hit.index < 2) {
             static const int DELTAS[] = {-15, 15};
+            ptc_audio_play(PTC_SE_STEP);
             ptc_ui_numpad_adjust(&ui->model, DELTAS[hit.index]);
         }
         break;
     case PTC_UI_HIT_DURATION_FIELD:
+        ptc_audio_play(PTC_SE_FOCUS);
         ptc_ui_duration_select_field(&ui->model, (PtcUiDurationField)hit.index);
         break;
     case PTC_UI_HIT_TODAY_MODE:
+        ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.today_limit_unlimited_draft = hit.index == 1;
         break;
     case PTC_UI_HIT_QUOTA_REFRESH:
+        ptc_audio_play(PTC_SE_CONFIRM);
         start_quota_recheck(ui, true);
         break;
     case PTC_UI_HIT_TODAY_LIMIT_REFRESH:
+        ptc_audio_play(PTC_SE_CONFIRM);
         refresh_today_limit_editor(ui, false);
         break;
     case PTC_UI_HIT_NOTICE_DETAILS:
+        ptc_audio_play(PTC_SE_POPUP);
         ptc_ui_open_notice_details(&ui->model);
         break;
     case PTC_UI_HIT_NONE:

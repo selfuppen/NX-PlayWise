@@ -10,24 +10,36 @@ sys.path.insert(0, str(ROOT / "tools"))
 from make_audio_fixtures import (  # noqa: E402
     SAMPLE_RATE,
     generate_focus,
+    generate_step,
+    generate_toggle,
+    generate_keystroke,
+    generate_tab,
     generate_confirm,
     generate_cancel,
-    generate_error,
     generate_popup,
+    generate_danger,
     generate_success,
+    generate_claim_buffer,
+    generate_error,
 )
 
 
 def main() -> int:
     generators = [
         ("FOCUS", generate_focus()),
+        ("STEP", generate_step()),
+        ("TOGGLE", generate_toggle()),
+        ("KEYSTROKE", generate_keystroke()),
+        ("TAB", generate_tab()),
         ("CONFIRM", generate_confirm()),
         ("CANCEL", generate_cancel()),
-        ("ERROR", generate_error()),
         ("POPUP", generate_popup()),
+        ("DANGER", generate_danger()),
         ("SUCCESS", generate_success()),
+        ("CLAIM_BUFFER", generate_claim_buffer()),
+        ("ERROR", generate_error()),
     ]
-    assert len(generators) == 6, f"expected 6 sounds, got {len(generators)}"
+    assert len(generators) == 12, f"expected 12 sounds, got {len(generators)}"
     for name, samples in generators:
         assert len(samples) > 0, f"{name} has no samples"
         for sample in samples:
@@ -46,4 +58,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

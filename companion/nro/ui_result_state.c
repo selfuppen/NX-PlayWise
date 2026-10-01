@@ -516,7 +516,9 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         ptc_audio_play(PTC_SE_SUCCESS);
         snprintf(model->message, sizeof(model->message), "自动控制已启用，首次设置完成。");
     } else {
-        if (type && strcmp(type, "status") != 0) {
+        if (type && strcmp(type, "claim_daily_buffer") == 0) {
+            ptc_audio_play(PTC_SE_CLAIM_BUFFER);
+        } else if (type && strcmp(type, "status") != 0) {
             ptc_audio_play(PTC_SE_SUCCESS);
         }
         const char *guidance = request_success_guidance(type);

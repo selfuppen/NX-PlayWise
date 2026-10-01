@@ -325,39 +325,52 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
         return;
     }
     if (down & HidNpadButton_B) {
+        ptc_audio_play(PTC_SE_CANCEL);
         setup_previous(ui);
         return;
     }
     if (ui->model.setup_step == PTC_UI_SETUP_SHORTCUT) {
         if (down & HidNpadButton_Up) {
+            ptc_audio_play(PTC_SE_FOCUS);
             ui->model.setup_shortcut_index = ui->model.setup_shortcut_index <= 0
                 ? PTC_UI_SHORTCUT_PRESET_COUNT - 1 : ui->model.setup_shortcut_index - 1;
         } else if (down & HidNpadButton_Down) {
+            ptc_audio_play(PTC_SE_FOCUS);
             ui->model.setup_shortcut_index = (ui->model.setup_shortcut_index + 1) % PTC_UI_SHORTCUT_PRESET_COUNT;
         } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+            ptc_audio_play(PTC_SE_FOCUS);
             ui->model.setup_shortcut_index = (ui->model.setup_shortcut_index + 7) % PTC_UI_SHORTCUT_PRESET_COUNT;
         } else if (down & HidNpadButton_A) {
+            ptc_audio_play(PTC_SE_CONFIRM);
             select_setup_shortcut(ui, ui->model.setup_shortcut_index);
         } else if (down & HidNpadButton_Plus) {
+            ptc_audio_play(PTC_SE_CONFIRM);
             setup_primary(ui);
         }
     } else if (ui->model.setup_step == PTC_UI_SETUP_PIN && (down & HidNpadButton_X)) {
+        ptc_audio_play(PTC_SE_CONFIRM);
         setup_pin(ui);
     } else if (ui->model.setup_step == PTC_UI_SETUP_THEME) {
         if (down & HidNpadButton_Left) {
+            ptc_audio_play(PTC_SE_FOCUS);
             ui->model.setup_theme_index = ui->model.setup_theme_index <= 0 ? 2 : ui->model.setup_theme_index - 1;
         } else if (down & HidNpadButton_Right) {
+            ptc_audio_play(PTC_SE_FOCUS);
             ui->model.setup_theme_index = (ui->model.setup_theme_index + 1) % 3;
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+            ptc_audio_play(PTC_SE_CONFIRM);
             setup_primary(ui);
         }
     } else if (ui->model.setup_step == PTC_UI_SETUP_ZONE) {
         if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+            ptc_audio_play(PTC_SE_FOCUS);
             ui->model.setup_zone_index = ui->model.setup_zone_index == 0 ? 1 : 0;
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+            ptc_audio_play(PTC_SE_CONFIRM);
             setup_primary(ui);
         }
     } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
+        ptc_audio_play(PTC_SE_CONFIRM);
         setup_primary(ui);
     }
 }
@@ -387,6 +400,7 @@ void open_danger_confirm_overlay(UiState *ui, PtcUiOperation operation, const ch
 {
     open_confirm_overlay(ui, operation, title, body);
     ui->model.confirm_hold_required = true;
+    ptc_audio_play(PTC_SE_DANGER);
 }
 
 void open_weekly_page(UiState *ui)

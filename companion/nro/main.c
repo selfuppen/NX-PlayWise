@@ -230,6 +230,7 @@ int main(int argc, char **argv)
                 } else {
                     if (ptc_ui_confirm_hold_update(&ui.confirm_hold,
                             pad_confirm_held || touch_confirm_held, confirm_now_ms, DANGER_CONFIRM_HOLD_MS)) {
+                        ptc_audio_play(PTC_SE_CONFIRM);
                         confirm_operation(&ui);
                         ptc_ui_confirm_hold_update(&ui.confirm_hold, false, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
                     }
@@ -254,7 +255,7 @@ int main(int argc, char **argv)
                     if (h_dir > 0) ptc_ui_duration_select_field(&ui.model, PTC_UI_DURATION_MINUTES);
                     else ptc_ui_duration_select_field(&ui.model, PTC_UI_DURATION_HOURS);
                     (void)ptc_ui_value_repeat_update(&ui.r_stick_repeat, 0, false, 0);
-                    ptc_audio_play(PTC_SE_FOCUS);
+                    ptc_audio_play(PTC_SE_TOGGLE);
                 }
                 ui.r_stick_prev_h_dir = h_dir;
 
@@ -266,7 +267,7 @@ int main(int argc, char **argv)
                         int magnitude = step < 0 ? -step : step;
                         ui.model.duration_step_feedback = (uint8_t)magnitude;
                         if (ptc_ui_duration_step_field(&ui.model, step)) {
-                            ptc_audio_play(PTC_SE_FOCUS);
+                            ptc_audio_play(PTC_SE_STEP);
                         }
                         ui.model.duration_scroll_anim_ticks = 6;
                     }
@@ -320,7 +321,7 @@ int main(int argc, char **argv)
                     ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message), "控制已停用，自主缓冲暂不可领取。");
                 } else if (ui.model.daily_buffer_available && !ui.waiting) {
-                    ptc_audio_play(PTC_SE_CONFIRM);
+                    ptc_audio_play(PTC_SE_CLAIM_BUFFER);
                     submit_transport_empty(&ui, "claim_daily_buffer",
                         "正在领取今日自主缓冲...", "领取今日自主缓冲失败");
                 } else if (ui.model.daily_buffer_claimed) {
@@ -335,14 +336,17 @@ int main(int argc, char **argv)
             }
         } else if (ui.model.view == PTC_UI_SETUP) {
             if (down & HidNpadButton_Y) {
+                ptc_audio_play(PTC_SE_CONFIRM);
                 submit_status(&ui);
             } else {
                 handle_setup_input(&ui, down, held);
             }
         } else if (ui.model.view == PTC_UI_ERROR) {
             if (down & HidNpadButton_A) {
+                ptc_audio_play(PTC_SE_CONFIRM);
                 retry_error(&ui);
             } else if (down & (HidNpadButton_B | HidNpadButton_Plus)) {
+                ptc_audio_play(PTC_SE_CANCEL);
                 enter_child_area(&ui);
             }
         } else {
@@ -355,12 +359,12 @@ int main(int argc, char **argv)
                     request_parent_navigation(&ui, -1, true);
                 } else if (down & HidNpadButton_L &&
                            !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
-                    ptc_audio_play(PTC_SE_FOCUS);
+                    ptc_audio_play(PTC_SE_TAB);
                     request_parent_navigation(&ui,
                         (ui.model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
                 } else if (down & HidNpadButton_R &&
                            !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
-                    ptc_audio_play(PTC_SE_FOCUS);
+                    ptc_audio_play(PTC_SE_TAB);
                     request_parent_navigation(&ui,
                         (ui.model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
                 } else if (down & HidNpadButton_Up) {
@@ -388,29 +392,39 @@ int main(int argc, char **argv)
                 PtcDayRule *day = &ui.model.draft_week[ui.model.editor_index];
                 if (ui.waiting) {
                     if (down) {
+                        ptc_audio_play(PTC_SE_ERROR);
                         snprintf(ui.model.message, sizeof(ui.model.message),
                                  "请等待周计划保存完成后再继续编辑。");
                     }
                 } else if (down & HidNpadButton_B) {
+                    ptc_audio_play(PTC_SE_CANCEL);
                     request_parent_navigation(&ui, -1, true);
                 } else if (down & (HidNpadButton_L | HidNpadButton_R)) {
+                    ptc_audio_play(PTC_SE_TAB);
                     request_parent_navigation(&ui, -1, true);
                 } else if (down & HidNpadButton_Left) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     ptc_ui_move_weekly_focus(&ui.model, -1, 0);
                 } else if (down & HidNpadButton_Right) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     ptc_ui_move_weekly_focus(&ui.model, 1, 0);
                 } else if (down & HidNpadButton_X) {
                     if (!weekly_editing_blocked(&ui)) {
+                        ptc_audio_play(PTC_SE_TOGGLE);
                         day->mode = ptc_ui_next_rule_mode(day->mode);
                         update_weekly_dirty(&ui);
+                    } else {
+                        ptc_audio_play(PTC_SE_ERROR);
                     }
                     if (!ui.model.disable_flag_present && day->mode == PTC_RULE_MODE_LIMIT) {
                         snprintf(ui.model.message, sizeof(ui.model.message),
                                  "已恢复此前的每日限额：%u 分钟。", (unsigned int)day->minutes);
                     }
                 } else if (down & HidNpadButton_Up) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     ptc_ui_move_weekly_focus(&ui.model, 0, -1);
                 } else if (down & HidNpadButton_Down) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     if (ui.model.selected_index != 0) {
                         ui.model.parent_content_selection = ui.model.selected_index;
                         ui.model.parent_footer_focused = true;
@@ -420,19 +434,23 @@ int main(int argc, char **argv)
                         ptc_ui_move_weekly_focus(&ui.model, 0, 1);
                     }
                 } else if (down & HidNpadButton_Y) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     refresh_disable_flag(&ui);
                     submit_status(&ui);
                 } else if (down & HidNpadButton_A) {
                     if (ui.model.selected_index == 2) {
                         if (weekly_editing_blocked(&ui)) {
+                            ptc_audio_play(PTC_SE_ERROR);
                             snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，批量操作暂不可用。");
                         } else {
+                            ptc_audio_play(PTC_SE_CONFIRM);
                             ui.model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
                             ui.model.overlay_selection = 0;
                             snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "批量快捷操作");
                             snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body), "把最后选中日期的完整草稿规则复制到一组日期。");
                         }
                     } else if (ui.model.selected_index == 3) {
+                        ptc_audio_play(PTC_SE_CANCEL);
                         if (ui.model.weekly_dirty) {
                             memcpy(ui.model.draft_week, ui.model.current_week, sizeof(ui.model.draft_week));
                             ui.model.weekly_dirty = false;
@@ -442,7 +460,9 @@ int main(int argc, char **argv)
                         }
                     } else if (weekly_editing_blocked(&ui)) {
                         /* Focus remains movable while emergency stop makes the editor read-only. */
+                        ptc_audio_play(PTC_SE_ERROR);
                     } else if (ui.model.selected_index == 1) {
+                        ptc_audio_play(PTC_SE_TOGGLE);
                         day->mode = ptc_ui_next_rule_mode(day->mode);
                         update_weekly_dirty(&ui);
                         if (day->mode == PTC_RULE_MODE_LIMIT) {
@@ -450,19 +470,26 @@ int main(int argc, char **argv)
                                      "已恢复此前的每日限额：%u 分钟。", (unsigned int)day->minutes);
                         }
                     } else if (ui.model.selected_index == 4) {
+                        ptc_audio_play(PTC_SE_CONFIRM);
                         save_weekly_from_page(&ui);
                     } else if (day->mode == PTC_RULE_MODE_LIMIT) {
+                        ptc_audio_play(PTC_SE_CONFIRM);
                         edit_weekly_minutes(&ui);
                     } else {
+                        ptc_audio_play(PTC_SE_ERROR);
                         snprintf(ui.model.message, sizeof(ui.model.message),
                                  "该日为不限时，没有可编辑的分钟数；请选择“切换模式”改为限时。");
                     }
                 } else if (down & HidNpadButton_Plus) {
                     ui.model.selected_index = 4;
                     if (!weekly_editing_blocked(&ui)) {
+                        ptc_audio_play(PTC_SE_CONFIRM);
                         save_weekly_from_page(&ui);
+                    } else {
+                        ptc_audio_play(PTC_SE_ERROR);
                     }
                 } else if (down & HidNpadButton_ZL) {
+                    ptc_audio_play(PTC_SE_CANCEL);
                     ui.model.selected_index = 3;
                     if (ui.model.weekly_dirty) {
                         memcpy(ui.model.draft_week, ui.model.current_week, sizeof(ui.model.draft_week));
@@ -476,38 +503,54 @@ int main(int argc, char **argv)
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_BEDTIME) {
                 PtcBedtimePolicy *draft = &ui.model.draft_bedtime_policy;
                 if (ui.waiting) {
-                    if (down) snprintf(ui.model.message, sizeof(ui.model.message),
-                        "请等待就寝时间设置保存完成后再继续编辑。");
+                    if (down) {
+                        ptc_audio_play(PTC_SE_ERROR);
+                        snprintf(ui.model.message, sizeof(ui.model.message),
+                            "请等待就寝时间设置保存完成后再继续编辑。");
+                    }
                 } else if (down & HidNpadButton_B) {
+                    ptc_audio_play(PTC_SE_CANCEL);
                     request_bedtime_leave(&ui, -1, true);
                 } else if (down & HidNpadButton_Y) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     handle_today_action_ready(&ui, PTC_UI_OPERATION_SKIP_BEDTIME);
                 } else if (down & HidNpadButton_X) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     request_clear_bedtime_skip(&ui);
                 } else if (down & HidNpadButton_L) {
+                    ptc_audio_play(PTC_SE_TAB);
                     select_bedtime_section(&ui, ui.model.bedtime_section - 1);
                 } else if (down & HidNpadButton_R) {
+                    ptc_audio_play(PTC_SE_TAB);
                     select_bedtime_section(&ui, ui.model.bedtime_section + 1);
                 } else if (down & HidNpadButton_Up) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     ptc_ui_move_bedtime_focus(&ui.model, 0, -1);
                 } else if (down & HidNpadButton_Down) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     ptc_ui_move_bedtime_focus(&ui.model, 0, 1);
                 } else if (down & HidNpadButton_Left) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     ptc_ui_move_bedtime_focus(&ui.model, -1, 0);
                 } else if (down & HidNpadButton_Right) {
+                    ptc_audio_play(PTC_SE_FOCUS);
                     ptc_ui_move_bedtime_focus(&ui.model, 1, 0);
                 } else if (down & HidNpadButton_Minus) {
                     if (!ui.model.disable_flag_present) {
+                        ptc_audio_play(PTC_SE_TOGGLE);
                         draft->enabled = !draft->enabled;
                         update_bedtime_dirty(&ui);
                         snprintf(ui.model.message, sizeof(ui.model.message), "就寝计划总开关草稿已%s；保存后生效。",
                             draft->enabled ? "开启" : "关闭");
+                    } else {
+                        ptc_audio_play(PTC_SE_ERROR);
                     }
                 } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
                            !ui.model.bedtime_section_focused &&
                            (down & (HidNpadButton_ZL | HidNpadButton_ZR))) {
                     int direction = down & HidNpadButton_ZR ? 1 : -1;
                     int date_step = 7;
+                    ptc_audio_play(PTC_SE_STEP);
                     if (ui.model.bedtime_section == PTC_UI_BEDTIME_SCHEDULED &&
                         ui.model.selected_index == 1) {
                         uint32_t duration = draft->scheduled_override.end_day_index >=
@@ -537,35 +580,53 @@ int main(int argc, char **argv)
                     }
                 } else if ((down & HidNpadButton_A) && ui.model.bedtime_master_focused) {
                     if (!ui.model.disable_flag_present) {
+                        ptc_audio_play(PTC_SE_TOGGLE);
                         draft->enabled = !draft->enabled;
                         update_bedtime_dirty(&ui);
                         snprintf(ui.model.message, sizeof(ui.model.message),
                                  "就寝计划总开关草稿已%s；保存后生效。", draft->enabled ? "开启" : "关闭");
+                    } else {
+                        ptc_audio_play(PTC_SE_ERROR);
                     }
                 } else if ((down & HidNpadButton_A) && !ui.model.bedtime_section_focused) {
                     if (ui.model.bedtime_section == PTC_UI_BEDTIME_WEEKLY) {
                         if (ui.model.selected_index < 7) {
+                            ptc_audio_play(PTC_SE_CONFIRM);
                             int day = ptc_ui_weekday_for_display_slot(ui.model.selected_index);
                             ui.model.bedtime_editor_day = day;
                             open_bedtime_window_editor(&ui, day);
                         } else if (ui.model.selected_index == 7 || ui.model.selected_index == 8) {
+                            ptc_audio_play(PTC_SE_CONFIRM);
                             ui.model.overlay = PTC_UI_OVERLAY_BEDTIME_BULK;
                             ui.model.overlay_selection = ui.model.selected_index - 7;
                             snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "复制每周就寝窗口");
                             snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body),
                                 "把最后编辑日期的完整开关和时间复制到所选日期组。");
-                        } else if (ui.model.selected_index == 9) discard_bedtime_draft(&ui);
-                        else save_bedtime_from_page(&ui);
+                        } else if (ui.model.selected_index == 9) {
+                            ptc_audio_play(PTC_SE_CANCEL);
+                            discard_bedtime_draft(&ui);
+                        } else {
+                            ptc_audio_play(PTC_SE_CONFIRM);
+                            save_bedtime_from_page(&ui);
+                        }
                     } else if (ui.model.bedtime_section == PTC_UI_BEDTIME_CALENDAR) {
                         if (ui.model.selected_index == 0) {
+                            ptc_audio_play(PTC_SE_TOGGLE);
                             draft->calendar_enabled = !draft->calendar_enabled;
                             update_bedtime_dirty(&ui);
                         } else if (ui.model.selected_index <= 2) {
+                            ptc_audio_play(PTC_SE_CONFIRM);
                             open_bedtime_special_editor(&ui, ui.model.selected_index - 1);
-                        } else if (ui.model.selected_index == 3) discard_bedtime_draft(&ui);
-                        else save_bedtime_from_page(&ui);
+                        } else if (ui.model.selected_index == 3) {
+                            ptc_audio_play(PTC_SE_CANCEL);
+                            discard_bedtime_draft(&ui);
+                        } else {
+                            ptc_audio_play(PTC_SE_CONFIRM);
+                            save_bedtime_from_page(&ui);
+                        }
                     } else {
                         if (ui.model.selected_index == 0) {
+                            ptc_audio_play(PTC_SE_TOGGLE);
                             draft->scheduled_override.present = !draft->scheduled_override.present;
                             if (draft->scheduled_override.start_day_index < ui.model.day_index) {
                                 draft->scheduled_override.start_day_index = ui.model.day_index;
@@ -573,26 +634,37 @@ int main(int argc, char **argv)
                             }
                             update_bedtime_dirty(&ui);
                         } else if (ui.model.selected_index == 1) {
+                            ptc_audio_play(PTC_SE_CONFIRM);
                             if (edit_date_range_start(&ui, &draft->scheduled_override.start_day_index,
                                                       &draft->scheduled_override.end_day_index))
                                 update_bedtime_dirty(&ui);
                         } else if (ui.model.selected_index == 2) {
+                            ptc_audio_play(PTC_SE_CONFIRM);
                             if (edit_date_range_span(&ui, draft->scheduled_override.start_day_index,
                                                      &draft->scheduled_override.end_day_index))
                                 update_bedtime_dirty(&ui);
                         } else if (ui.model.selected_index == 3) {
+                            ptc_audio_play(PTC_SE_CONFIRM);
                             open_bedtime_special_editor(&ui, 2);
-                        } else if (ui.model.selected_index == 4) discard_bedtime_draft(&ui);
-                        else if (ui.model.selected_index == 5) save_bedtime_from_page(&ui);
+                        } else if (ui.model.selected_index == 4) {
+                            ptc_audio_play(PTC_SE_CANCEL);
+                            discard_bedtime_draft(&ui);
+                        } else if (ui.model.selected_index == 5) {
+                            ptc_audio_play(PTC_SE_CONFIRM);
+                            save_bedtime_from_page(&ui);
+                        }
                     }
                 } else if (down & HidNpadButton_Plus) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
                     save_bedtime_from_page(&ui);
                 } else if (down & HidNpadButton_ZL) {
+                    ptc_audio_play(PTC_SE_CANCEL);
                     discard_bedtime_draft(&ui);
                 }
             } else if (ui.waiting && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 if (down) {
+                    ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message),
                              "请等待国家节假日设置保存完成后再继续编辑。");
                 }
@@ -601,12 +673,12 @@ int main(int argc, char **argv)
                 request_parent_navigation(&ui, -1, true);
             } else if (down & HidNpadButton_L &&
                        !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
-                ptc_audio_play(PTC_SE_FOCUS);
+                ptc_audio_play(PTC_SE_TAB);
                 request_parent_navigation(&ui,
                     (ui.model.parent_page + PTC_UI_PARENT_PAGE_COUNT - 1) % PTC_UI_PARENT_PAGE_COUNT, false);
             } else if (down & HidNpadButton_R &&
                        !(ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
-                ptc_audio_play(PTC_SE_FOCUS);
+                ptc_audio_play(PTC_SE_TAB);
                 request_parent_navigation(&ui,
                     (ui.model.parent_page + 1) % PTC_UI_PARENT_PAGE_COUNT, false);
             } else if (down & HidNpadButton_Left) {
@@ -632,12 +704,12 @@ int main(int argc, char **argv)
                     snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，规则暂时只读。");
                 } else if (ui.model.selected_index == 1 ||
                            (ui.model.selected_index != 2 && ui.model.holiday_last_rule == 0)) {
-                    ptc_audio_play(PTC_SE_CONFIRM);
+                    ptc_audio_play(PTC_SE_TOGGLE);
                     ui.model.holiday_last_rule = 0;
                     ui.model.draft_holiday_rule.mode = ptc_ui_next_rule_mode(ui.model.draft_holiday_rule.mode);
                     update_holiday_dirty(&ui);
                 } else {
-                    ptc_audio_play(PTC_SE_CONFIRM);
+                    ptc_audio_play(PTC_SE_TOGGLE);
                     ui.model.holiday_last_rule = 1;
                     ui.model.draft_makeup_workday_rule.mode = ptc_ui_next_rule_mode(ui.model.draft_makeup_workday_rule.mode);
                     update_holiday_dirty(&ui);
