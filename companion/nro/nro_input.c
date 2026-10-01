@@ -284,7 +284,6 @@ void handle_overlay_input(UiState *ui, u64 down)
             ptc_audio_play(PTC_SE_TAB);
             ptc_ui_change_activity_history_page(&ui->model, 1);
         } else if (down & HidNpadButton_X) {
-            ptc_audio_play(PTC_SE_DANGER);
             request_clear_activity_history(ui);
         }
         return;
@@ -299,7 +298,6 @@ void handle_overlay_input(UiState *ui, u64 down)
             ptc_audio_play(PTC_SE_TAB);
             ptc_ui_change_redemption_history_page(&ui->model, 1);
         } else if (down & HidNpadButton_X) {
-            ptc_audio_play(PTC_SE_DANGER);
             request_clear_redemption_history(ui);
         }
         return;

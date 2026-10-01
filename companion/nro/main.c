@@ -234,7 +234,7 @@ int main(int argc, char **argv)
                 } else {
                     if (ptc_ui_confirm_hold_update(&ui.confirm_hold,
                             pad_confirm_held || touch_confirm_held, confirm_now_ms, DANGER_CONFIRM_HOLD_MS)) {
-                        ptc_audio_play(PTC_SE_CONFIRM);
+                        ptc_audio_play(PTC_SE_HOLD_CONFIRM);
                         confirm_operation(&ui);
                         ptc_ui_confirm_hold_update(&ui.confirm_hold, false, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
                     }

@@ -550,7 +550,8 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         PtcUiRect card_rect = model->parent_page == PTC_UI_PARENT_SUPPORT
             ? ptc_ui_support_card_rect(i)
             : (model->parent_page == PTC_UI_PARENT_TODAY ? ptc_ui_today_card_rect(i) :
-               (model->parent_page == PTC_UI_PARENT_PLAN ? ptc_ui_plan_card_rect(i) : ptc_ui_parent_card_rect(i)));
+               (model->parent_page == PTC_UI_PARENT_PLAN ? ptc_ui_plan_card_rect(i) :
+                (model->parent_page == PTC_UI_PARENT_SETTINGS ? ptc_ui_settings_card_rect(i) : ptc_ui_parent_card_rect(i))));
         if (model->parent_page == PTC_UI_PARENT_TODAY &&
             (model->disable_flag_present || model->waiting ||
              (i == 3 && ptc_ui_status_is_fresh(model, (int64_t)time(NULL)) &&

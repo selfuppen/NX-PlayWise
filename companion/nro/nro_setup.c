@@ -375,7 +375,8 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
     }
 }
 
-void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body)
+static void open_confirm_overlay_internal(UiState *ui, PtcUiOperation operation,
+                                         const char *title, const char *body, bool is_danger)
 {
     ui->quota_recheck_ready = false;
     ui->model.confirm_return_overlay = ui->model.overlay;
@@ -383,7 +384,7 @@ void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *tit
     snprintf(ui->model.confirm_return_body, sizeof(ui->model.confirm_return_body), "%s", ui->model.overlay_body);
     ui->model.overlay = PTC_UI_OVERLAY_CONFIRM;
     ui->model.operation = operation;
-    ui->model.confirm_hold_required = false;
+    ui->model.confirm_hold_required = is_danger;
     ui->model.quota_refresh_failed = false;
     ui->model.overlay_selection = 1;
     if (operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
@@ -393,14 +394,17 @@ void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *tit
     }
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", title);
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s", body);
-    ptc_audio_play(PTC_SE_POPUP);
+    ptc_audio_play(is_danger ? PTC_SE_DANGER : PTC_SE_POPUP);
+}
+
+void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body)
+{
+    open_confirm_overlay_internal(ui, operation, title, body, false);
 }
 
 void open_danger_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body)
 {
-    open_confirm_overlay(ui, operation, title, body);
-    ui->model.confirm_hold_required = true;
-    ptc_audio_play(PTC_SE_DANGER);
+    open_confirm_overlay_internal(ui, operation, title, body, true);
 }
 
 void open_weekly_page(UiState *ui)

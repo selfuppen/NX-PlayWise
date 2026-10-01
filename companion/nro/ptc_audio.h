@@ -19,10 +19,11 @@ typedef enum {
     PTC_SE_CONFIRM = 6,        /* Button A / Enter submenu / Apply */
     PTC_SE_CANCEL = 7,         /* Button B / Back / Discard draft / Close overlay */
     PTC_SE_POPUP = 8,          /* Notice popup / Details dialog / Info overlay */
-    PTC_SE_DANGER = 9,         /* Danger confirm dialog / Force restore / High-risk hold */
+    PTC_SE_DANGER = 9,         /* Danger confirm dialog / High-risk alert */
     PTC_SE_SUCCESS = 10,       /* Policy saved / Time granted / PIN updated */
     PTC_SE_CLAIM_BUFFER = 11,  /* Daily buffer claimed */
-    PTC_SE_ERROR = 12          /* PIN error / Prohibited / Locked action / Blocked input */
+    PTC_SE_ERROR = 12,         /* PIN error / Prohibited / Locked action / Blocked input */
+    PTC_SE_HOLD_CONFIRM = 13   /* Hold to confirm completed / High-risk action executed */
 } PtcSoundEffect;
 
 /**

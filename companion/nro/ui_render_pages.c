@@ -581,7 +581,8 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         for (index = 0; index < action_count; ++index) {
             UiRect card = to_uirect(model->parent_page == PTC_UI_PARENT_SUPPORT
                 ? ptc_ui_support_card_rect(index) : (model->parent_page == PTC_UI_PARENT_PLAN
-                    ? ptc_ui_plan_card_rect(index) : ptc_ui_parent_card_rect(index)));
+                    ? ptc_ui_plan_card_rect(index) : (model->parent_page == PTC_UI_PARENT_SETTINGS
+                        ? ptc_ui_settings_card_rect(index) : ptc_ui_parent_card_rect(index))));
             PtcUiActionState astate = PTC_UI_ACTION_AVAILABLE;
             if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
                 if (!ptc_ui_safety_action_visible(model, index)) continue;
@@ -765,16 +766,16 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                     state_label = "外部配置";
                     state_color = UI_ACCENT;
                 }
-                UiRect badge = {card.x + card.width - 104, card.y + 10, 88, 28};
+                UiRect badge = {card.x + card.width - 94, card.y + 8, 80, 24};
                 fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
-                draw_text_center(pixels, stride, badge, state_label, 13, state_color);
+                draw_text_center(pixels, stride, badge, state_label, 12, state_color);
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
                 bool enabled = ptc_audio_is_enabled();
                 const char *state_label = enabled ? "已开启" : "已静音";
                 uint32_t state_color = enabled ? UI_SUCCESS : UI_MUTED;
-                UiRect badge = {card.x + card.width - 84, card.y + 10, 68, 28};
+                UiRect badge = {card.x + card.width - 76, card.y + 8, 62, 24};
                 fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
-                draw_text_center(pixels, stride, badge, state_label, 13, state_color);
+                draw_text_center(pixels, stride, badge, state_label, 12, state_color);
             }
         }
         if (model->parent_page == PTC_UI_PARENT_PLAN) {
@@ -803,16 +804,140 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     if (model->parent_page == PTC_UI_PARENT_SETTINGS) {
         UiRect help = {842, 176, 384, 452};
         draw_plan_card(pixels, stride, help, false);
-        draw_text(pixels, stride, 866, 216, "系统安全与个人偏好", 24, UI_RGB(UI_BLENDED(text_primary)));
-        draw_text(pixels, stride, 866, 258, "时间规则已集中到时间计划", 16, UI_RGB(UI_BLENDED(text_secondary)));
-        draw_text(pixels, stride, 866, 292, "在此管理语言、外观、PIN 与快捷键", 16, UI_RGB(UI_BLENDED(text_secondary)));
-        draw_text(pixels, stride, 866, 326, "语言设置也适用于游戏内浮窗", 16, UI_RGB(UI_BLENDED(text_secondary)));
-        UiAction language_action = SETTINGS_ACTIONS[6];
-        language_action.subtitle = ptc_ui_language_preference_label(model->language_preference);
-        draw_action_card(pixels, stride, to_uirect(ptc_ui_parent_card_rect(6)),
-            &language_action, model->selected_index == 6, PTC_UI_ACTION_AVAILABLE, 0);
-        draw_text(pixels, stride, 866, 556, "离开时按 B 返回孩子页，以锁定家长控制。", 13, UI_MUTED);
-        draw_text(pixels, stride, 866, help.y + help.height - 20, "按 Y 刷新设备状态", 13, UI_MUTED);
+
+        int sel = model->selected_index;
+        const char *tag = "【系统偏好】";
+        const char *title = "外观主题";
+        const char *status_text = "跟随系统";
+        uint32_t status_color = UI_ACCENT;
+        const char *desc1 = "";
+        const char *desc2 = "";
+        const char *desc3 = "";
+        const char *action_hint = "按 A 修改设置";
+
+        switch (sel) {
+        case 0: /* 外观主题 */
+            tag = "【系统偏好】";
+            title = "外观主题";
+            status_text = ptc_ui_theme_preference_label(g_theme.preference);
+            status_color = UI_ACCENT;
+            desc1 = "• 提供浅色、深色及跟随系统三种主题模式。";
+            desc2 = "• 深色模式优化 OLED 屏幕省电与护眼显示。";
+            desc3 = "• 设置即时保存并在所有界面与组件中生效。";
+            action_hint = "按 A 打开主题切换面板";
+            break;
+        case 1: /* 修改 PIN */
+            tag = "【安全管理】";
+            title = "管理密码 (PIN)";
+            status_text = "已启用保护";
+            status_color = UI_SUCCESS;
+            desc1 = "• 用于保护家长区设置、高风险操作与密钥导出。";
+            desc2 = "• 支持 4-8 位数字密码，请妥善保管勿告知孩子。";
+            desc3 = "• 连续输错 3 次将启动防爆破临时冷却保护。";
+            action_hint = "按 A 修改管理密码";
+            break;
+        case 2: /* 家长区快捷键 */
+            tag = "【系统控制】";
+            title = "家长区快捷入口";
+            status_text = (model->custom_shortcut_enabled && model->custom_shortcut_label[0])
+                ? model->custom_shortcut_label : "Minus";
+            status_color = UI_ACCENT;
+            desc1 = "• 在孩子区任意界面长按该键可直接呼出 PIN 验证。";
+            desc2 = "• 支持 Minus、Capture 或手柄组合键自定义配置。";
+            desc3 = "• 方便家长快速进入后台，避免孩子随意翻看。";
+            action_hint = "按 A 更改快捷按键绑定";
+            break;
+        case 3: /* 自制程序高级入口 */
+            tag = "【高级安全】";
+            title = "自制程序高级入口";
+            if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
+                status_text = "当前未开启";
+                status_color = UI_MUTED;
+            } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
+                status_text = "当前已开启";
+                status_color = UI_SUCCESS;
+            } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
+                status_text = "需要处理";
+                status_color = UI_WARNING;
+            } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
+                status_text = "外部配置";
+                status_color = UI_ACCENT;
+            } else {
+                status_text = "状态未知";
+                status_color = UI_DANGER;
+            }
+            desc1 = "• 将相册入口重定向至自制程序菜单（hbmenu）。";
+            desc2 = "• 开启后需在桌面“手柄设置”上按住 X 再按 A 进入。";
+            desc3 = "• 防止孩子直接点开相册图标绕过家长控制限制。";
+            action_hint = "按 A 查看详情与配置向导";
+            break;
+        case 4: /* 家庭活动 */
+            tag = "【安全审计】";
+            title = "家庭活动记录";
+            status_text = "最多 200 条";
+            status_color = UI_MUTED;
+            desc1 = "• 记录额度调整、离线加时、就寝跳过与保护事件。";
+            desc2 = "• 仅保存本地安全审计日志，绝不上传云端。";
+            desc3 = "• 支持手柄 L / R 快捷翻页浏览与一键清空日志。";
+            action_hint = "按 A 查看完整活动记录";
+            break;
+        case 5: /* 按键与交互音效 */
+            tag = "【系统偏好】";
+            title = "按键与交互音效";
+            status_text = ptc_audio_is_enabled() ? "已开启" : "已静音";
+            status_color = ptc_audio_is_enabled() ? UI_SUCCESS : UI_MUTED;
+            desc1 = "• 提供清脆的按键、微齿轮拨轮与弹窗提示音。";
+            desc2 = "• 包含长按确认完成、危险警示与额度耗尽音效。";
+            desc3 = "• 静音不影响 Switch 系统原生声音与游戏声音。";
+            action_hint = ptc_audio_is_enabled() ? "按 A 静音音效" : "按 A 开启音效";
+            break;
+        case 6: /* 界面语言 */
+            tag = "【系统偏好】";
+            title = "界面语言";
+            status_text = ptc_ui_language_preference_label(model->language_preference);
+            status_color = UI_ACCENT;
+            desc1 = "• 设置 PlayWise 主机管理端与游戏内浮窗的语言。";
+            desc2 = "• 支持简体中文、繁體中文、English 等多语言。";
+            desc3 = "• 偏好将持久保存在 SD 卡配置文件中。";
+            action_hint = "按 A 打开语言选择面板";
+            break;
+        default:
+            break;
+        }
+
+        /* Render Tag */
+        draw_text(pixels, stride, help.x + 24, help.y + 36, tag, 14, UI_ACCENT);
+
+        /* Render Title */
+        draw_text(pixels, stride, help.x + 24, help.y + 72, title, 22, UI_RGB(UI_BLENDED(text_primary)));
+
+        /* Render Status Badge */
+        UiRect badge = {help.x + help.width - 130, help.y + 24, 106, 26};
+        fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
+        draw_rect_outline(pixels, stride, badge, 6, 1, status_color);
+        draw_text_center(pixels, stride, badge, status_text, 12, status_color);
+
+        /* Divider line */
+        UiRect div = {help.x + 24, help.y + 92, help.width - 48, 1};
+        fill_round_rect(pixels, stride, div, 0, UI_BORDER);
+
+        /* Descriptions */
+        int desc_y = help.y + 128;
+        draw_text(pixels, stride, help.x + 24, desc_y, desc1, 14, UI_RGB(UI_BLENDED(text_secondary)));
+        draw_text(pixels, stride, help.x + 24, desc_y + 36, desc2, 14, UI_RGB(UI_BLENDED(text_secondary)));
+        draw_text(pixels, stride, help.x + 24, desc_y + 72, desc3, 14, UI_RGB(UI_BLENDED(text_secondary)));
+
+        /* Action Hint Box */
+        UiRect hint_box = {help.x + 24, help.y + 268, help.width - 48, 44};
+        fill_round_rect(pixels, stride, hint_box, 10, UI_PAGE);
+        draw_rect_outline(pixels, stride, hint_box, 10, 1, UI_BORDER);
+        draw_text_center(pixels, stride, hint_box, action_hint, 15, UI_INK);
+
+        /* Bottom guidance */
+        draw_text(pixels, stride, help.x + 24, help.y + help.height - 48,
+                  "离开时按 B 返回孩子页，以锁定家长控制。", 13, UI_MUTED);
+        draw_text(pixels, stride, help.x + 24, help.y + help.height - 22,
+                  "按 Y 刷新设备状态", 13, UI_MUTED);
     }
     draw_settings_badge(pixels, stride, model);
     if (model->parent_page == PTC_UI_PARENT_SUPPORT &&

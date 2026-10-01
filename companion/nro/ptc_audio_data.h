@@ -34,6 +34,8 @@ extern const int16_t g_ptc_audio_claim_buffer_samples[];
 extern const size_t g_ptc_audio_claim_buffer_sample_count;
 extern const int16_t g_ptc_audio_error_samples[];
 extern const size_t g_ptc_audio_error_sample_count;
+extern const int16_t g_ptc_audio_hold_confirm_samples[];
+extern const size_t g_ptc_audio_hold_confirm_sample_count;
 
 const PtcAudioPcmClip *ptc_audio_get_clip(int sound_id);
 

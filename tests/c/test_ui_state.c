@@ -2071,6 +2071,15 @@ static void test_home_redesign(void)
                 }
             }
         }
+        for (int index = 0; index < 7; ++index) {
+            PtcUiRect rect = ptc_ui_settings_card_rect(index);
+            check_true(rect.h == 96 && rect.y + rect.h < ptc_ui_notice_rect().y,
+                       "settings cards use 96px height and clear status capsule");
+            for (int next = index + 1; next < 7; ++next) {
+                PtcUiRect other = ptc_ui_settings_card_rect(next);
+                check_true(!rects_overlap(rect, other), "settings action cards keep separate hit areas");
+            }
+        }
     }
     check_int(ptc_ui_today_operation(-1), PTC_UI_OPERATION_NONE, "invalid action cannot dispatch");
     check_int(ptc_ui_today_operation(4), PTC_UI_OPERATION_SKIP_BEDTIME, "fifth action dispatches bedtime skip");

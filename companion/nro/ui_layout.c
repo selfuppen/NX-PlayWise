@@ -169,10 +169,17 @@ PtcUiRect ptc_ui_parent_tab_rect(int index)
 
 PtcUiRect ptc_ui_parent_card_rect(int index)
 {
-    if (index == 6) return (PtcUiRect){842, 408, 384, 94};
     int column = index % 2;
     int row = index / 2;
     PtcUiRect rect = {54 + column * 385, 176 + row * 136, 365, 120};
+    return rect;
+}
+
+PtcUiRect ptc_ui_settings_card_rect(int index)
+{
+    int column = index % 2;
+    int row = index / 2;
+    PtcUiRect rect = {54 + column * 385, 176 + row * 108, 365, 96};
     return rect;
 }
 

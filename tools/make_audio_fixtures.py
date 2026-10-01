@@ -339,6 +339,52 @@ def generate_error() -> list[int]:
         samples.append(max(-32767, min(32767, sample)))
     return samples
 
+def generate_hold_confirm() -> list[int]:
+    """Rich, powerful resonant lock-in chime for hold-to-confirm completion (~210ms).
+    
+    Features a deep tactile sub-bass foundation (160Hz -> 80Hz) followed by an authoritative
+    ascending crystalline power chime (C5 523.25Hz -> G5 783.99Hz -> C6 1046.5Hz) with rich decay.
+    """
+    duration = 0.210
+    total_samples = int(SAMPLE_RATE * duration)
+    samples: list[int] = []
+    bass_phase = 0.0
+    notes = [
+        (0.015, 523.25, 22.0, 0.35),   # C5
+        (0.040, 783.99, 18.0, 0.38),   # G5
+        (0.065, 1046.50, 14.0, 0.45),  # C6
+        (0.090, 1567.98, 12.0, 0.22),  # G6 shimmer overtone
+    ]
+    phases = [0.0] * len(notes)
+    for i in range(total_samples):
+        t = i / SAMPLE_RATE
+        total_val = 0.0
+
+        if t < 0.045:
+            bass_prog = t / 0.045
+            bass_freq = 160.0 * math.exp(-2.0 * bass_prog) + 70.0
+            bass_phase += 2.0 * math.pi * bass_freq / SAMPLE_RATE
+            if t < 0.003:
+                bass_env = 0.5 * (1.0 - math.cos(math.pi * t / 0.003))
+            else:
+                bass_env = math.exp(-45.0 * (t - 0.003))
+            total_val += math.sin(bass_phase) * bass_env * 0.40
+
+        for n_idx, (start_t, freq, decay, weight) in enumerate(notes):
+            if t >= start_t:
+                dt = t - start_t
+                phases[n_idx] += 2.0 * math.pi * freq / SAMPLE_RATE
+                if dt < 0.0025:
+                    env = 0.5 * (1.0 - math.cos(math.pi * dt / 0.0025))
+                else:
+                    env = math.exp(-decay * (dt - 0.0025))
+                tone = 0.76 * math.sin(phases[n_idx]) + 0.19 * math.sin(2.0 * phases[n_idx]) + 0.05 * math.sin(3.0 * phases[n_idx])
+                total_val += tone * env * weight
+
+        sample = int(total_val * 21500.0)
+        samples.append(max(-32767, min(32767, sample)))
+    return samples
+
 def build_c_source(dest_header: Path, dest_source: Path) -> None:
     sound_generators = [
         ("FOCUS", generate_focus()),
@@ -353,6 +399,7 @@ def build_c_source(dest_header: Path, dest_source: Path) -> None:
         ("SUCCESS", generate_success()),
         ("CLAIM_BUFFER", generate_claim_buffer()),
         ("ERROR", generate_error()),
+        ("HOLD_CONFIRM", generate_hold_confirm()),
     ]
 
     header_lines = [
@@ -413,8 +460,9 @@ def build_c_source(dest_header: Path, dest_source: Path) -> None:
         "        {g_ptc_audio_success_samples, sizeof(g_ptc_audio_success_samples) / sizeof(int16_t)},",
         "        {g_ptc_audio_claim_buffer_samples, sizeof(g_ptc_audio_claim_buffer_samples) / sizeof(int16_t)},",
         "        {g_ptc_audio_error_samples, sizeof(g_ptc_audio_error_samples) / sizeof(int16_t)},",
+        "        {g_ptc_audio_hold_confirm_samples, sizeof(g_ptc_audio_hold_confirm_samples) / sizeof(int16_t)},",
         "    };",
-        "    if (sound_id <= PTC_SE_NONE || sound_id > PTC_SE_ERROR) {",
+        "    if (sound_id <= PTC_SE_NONE || sound_id > PTC_SE_HOLD_CONFIRM) {",
         "        return NULL;",
         "    }",
         "    return &clips[sound_id];",

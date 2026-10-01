@@ -21,6 +21,7 @@ from make_audio_fixtures import (  # noqa: E402
     generate_success,
     generate_claim_buffer,
     generate_error,
+    generate_hold_confirm,
 )
 
 
@@ -38,8 +39,9 @@ def main() -> int:
         ("SUCCESS", generate_success()),
         ("CLAIM_BUFFER", generate_claim_buffer()),
         ("ERROR", generate_error()),
+        ("HOLD_CONFIRM", generate_hold_confirm()),
     ]
-    assert len(generators) == 12, f"expected 12 sounds, got {len(generators)}"
+    assert len(generators) == 13, f"expected 13 sounds, got {len(generators)}"
     for name, samples in generators:
         assert len(samples) > 0, f"{name} has no samples"
         for sample in samples:
