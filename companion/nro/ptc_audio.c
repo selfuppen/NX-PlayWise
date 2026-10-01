@@ -19,6 +19,36 @@ static u8 g_audio_pcm_pools[PTC_AUDIO_BUFFER_COUNT][PTC_AUDIO_BUFFER_SIZE] __att
 static AudioOutBuffer g_audio_buffers[PTC_AUDIO_BUFFER_COUNT];
 static bool g_audio_buffer_busy[PTC_AUDIO_BUFFER_COUNT];
 static int g_current_buffer_idx = 0;
+
+static void reap_audio_buffers(void)
+{
+    AudioOutBuffer *released = NULL;
+    u32 released_count = 0;
+
+    while (R_SUCCEEDED(audoutGetReleasedAudioOutBuffer(&released, &released_count)) &&
+           released_count > 0 && released != NULL) {
+        for (int i = 0; i < PTC_AUDIO_BUFFER_COUNT; ++i) {
+            if (released == &g_audio_buffers[i]) {
+                g_audio_buffer_busy[i] = false;
+                break;
+            }
+        }
+        released = NULL;
+        released_count = 0;
+    }
+
+    /* Some audout implementations report several released tags through a
+       single dequeue.  Querying each remaining slot prevents stale busy bits
+       from eventually forcing a live AudioOutBuffer to be overwritten. */
+    for (int i = 0; i < PTC_AUDIO_BUFFER_COUNT; ++i) {
+        bool contained = true;
+        if (g_audio_buffer_busy[i] &&
+            R_SUCCEEDED(audoutContainsAudioOutBuffer(&g_audio_buffers[i], &contained)) &&
+            !contained) {
+            g_audio_buffer_busy[i] = false;
+        }
+    }
+}
 #endif
 
 bool ptc_audio_init(void)
@@ -84,17 +114,7 @@ void ptc_audio_play(PtcSoundEffect se)
         return;
     }
 
-    /* Reap finished buffers */
-    AudioOutBuffer *released = NULL;
-    u32 released_count = 0;
-    while (R_SUCCEEDED(audoutGetReleasedAudioOutBuffer(&released, &released_count)) && released_count > 0 && released != NULL) {
-        for (int i = 0; i < PTC_AUDIO_BUFFER_COUNT; ++i) {
-            if (released == &g_audio_buffers[i]) {
-                g_audio_buffer_busy[i] = false;
-                break;
-            }
-        }
-    }
+    reap_audio_buffers();
 
     /* Select next buffer slot */
     int buf_idx = -1;
@@ -106,7 +126,8 @@ void ptc_audio_play(PtcSoundEffect se)
         }
     }
     if (buf_idx < 0) {
-        buf_idx = g_current_buffer_idx;
+        /* Never mutate a descriptor or PCM pool that audout still owns. */
+        return;
     }
     g_current_buffer_idx = (buf_idx + 1) % PTC_AUDIO_BUFFER_COUNT;
 
@@ -132,6 +153,10 @@ void ptc_audio_play(PtcSoundEffect se)
     g_audio_buffers[buf_idx].data_size = data_size;
     g_audio_buffers[buf_idx].data_offset = 0;
     g_audio_buffers[buf_idx].next = NULL;
+
+    /* audout consumes the PCM pool outside the application CPU context.  Make
+       the freshly expanded samples visible before handing the buffer over. */
+    armDCacheFlush(g_audio_pcm_pools[buf_idx], (size_t)buffer_size);
 
     Result rc = audoutAppendAudioOutBuffer(&g_audio_buffers[buf_idx]);
     if (R_SUCCEEDED(rc)) {

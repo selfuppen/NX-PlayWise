@@ -232,15 +232,25 @@ int main(int argc, char **argv)
                     ptc_ui_confirm_hold_update(&ui.confirm_hold, false, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
                     handle_overlay_input(&ui, down);
                 } else {
+                    bool holding_now = pad_confirm_held || touch_confirm_held;
+                    uint16_t prev_progress = ui.model.confirm_hold_progress;
                     if (ptc_ui_confirm_hold_update(&ui.confirm_hold,
-                            pad_confirm_held || touch_confirm_held, confirm_now_ms, DANGER_CONFIRM_HOLD_MS)) {
+                            holding_now, confirm_now_ms, DANGER_CONFIRM_HOLD_MS)) {
                         ptc_audio_play(PTC_SE_HOLD_CONFIRM);
                         confirm_operation(&ui);
                         ptc_ui_confirm_hold_update(&ui.confirm_hold, false, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
                     }
+                    uint16_t cur_progress = ptc_ui_confirm_hold_progress(
+                        &ui.confirm_hold, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
+                    ui.model.confirm_hold_progress = cur_progress;
+                    if (holding_now && cur_progress > 0 && cur_progress < 1000) {
+                        int prev_step = prev_progress / 200;
+                        int cur_step = cur_progress / 200;
+                        if (cur_step > prev_step || (prev_progress == 0 && cur_progress > 0)) {
+                            ptc_audio_play(PTC_SE_STEP);
+                        }
+                    }
                 }
-                ui.model.confirm_hold_progress = ptc_ui_confirm_hold_progress(
-                    &ui.confirm_hold, confirm_now_ms, DANGER_CONFIRM_HOLD_MS);
             } else {
                 ptc_ui_confirm_hold_update(&ui.confirm_hold, false, ptc_ui_anim_now_ms(), DANGER_CONFIRM_HOLD_MS);
                 ui.model.confirm_hold_progress = 0;

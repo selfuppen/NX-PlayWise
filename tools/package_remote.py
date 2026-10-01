@@ -610,10 +610,13 @@ def run_container(
 
 
 def remove_path(path: Path) -> None:
-    if path.is_dir():
-        shutil.rmtree(path)
-    elif path.exists():
-        path.unlink()
+    try:
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        elif path.exists():
+            path.unlink()
+    except OSError:
+        pass
 
 
 def clean_package_results(package_dir: Path) -> None:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import math
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,12 +48,26 @@ def main() -> int:
         for sample in samples:
             assert -32768 <= sample <= 32767, f"{name} sample out of bounds: {sample}"
 
+    hold_samples = dict(generators)["HOLD_CONFIRM"]
+    hold_rms = math.sqrt(sum(sample * sample for sample in hold_samples) / len(hold_samples))
+    assert hold_rms >= 3000, f"HOLD_CONFIRM is too quiet: RMS={hold_rms:.1f}"
+
     header_path = ROOT / "companion" / "nro" / "ptc_audio_data.h"
     source_path = ROOT / "companion" / "nro" / "ptc_audio_data.c"
     assert header_path.exists(), "ptc_audio_data.h missing"
     assert source_path.exists(), "ptc_audio_data.c missing"
     assert header_path.stat().st_size > 0, "ptc_audio_data.h is empty"
     assert source_path.stat().st_size > 0, "ptc_audio_data.c is empty"
+    audio_source = (ROOT / "companion" / "nro" / "ptc_audio.c").read_text(encoding="utf-8")
+    main_source = (ROOT / "companion" / "nro" / "main.c").read_text(encoding="utf-8")
+    assert "armDCacheFlush(g_audio_pcm_pools[buf_idx]" in audio_source, \
+        "audout PCM data must be flushed before submission"
+    assert "Never mutate a descriptor or PCM pool that audout still owns" in audio_source, \
+        "audio queue must not overwrite a busy audout buffer"
+    assert "ptc_audio_play(PTC_SE_HOLD_CONFIRM);" in main_source, \
+        "completed danger holds must play the dedicated confirmation cue"
+    assert "ptc_audio_play(PTC_SE_STEP);" in main_source, \
+        "danger hold progress must play audio feedback during press-and-hold"
 
     print("PASS: audio fixtures verified")
     return 0

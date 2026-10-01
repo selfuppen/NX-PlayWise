@@ -2885,6 +2885,46 @@ static void test_restore_exhausted_weekly_limit_accepts_transient_restriction(vo
         "successful exhausted restore clears its recovery transaction");
 }
 
+static void test_pctl_stub_unrestricted_snapshot_round_trip(void)
+{
+    PtcPctlStub pctl;
+    PtcPctlSettingsSnapshot original;
+    PtcPctlSettingsSnapshot restored;
+    PtcPctlStatus status;
+    PtcPctlTarget blocked;
+
+    ptc_pctl_stub_init(&pctl);
+    pctl.model_elapsed_time = true;
+    pctl.played_minutes_today = 30;
+    pctl.status.unrestricted_today = true;
+    pctl.status.remaining_available = false;
+    pctl.status.play_timer_enabled = true;
+
+    memset(&original, 0, sizeof(original));
+    memset(&restored, 0, sizeof(restored));
+    memset(&status, 0, sizeof(status));
+    check_int(pctl.pctl.vtable->snapshot_settings(&pctl.pctl, &original), PTC_ERR_OK,
+        "Eden-like unlimited PCTL state can be snapshotted");
+    blocked.mode = PTC_PCTL_TARGET_BLOCKED;
+    blocked.minutes = 0;
+    blocked.weekday = ptc_weekday_from_day_index(2465);
+    check_int(pctl.pctl.vtable->apply_target(&pctl.pctl, &blocked), PTC_ERR_OK,
+        "bedtime fixture can apply a temporary block");
+    check_int(pctl.pctl.vtable->restore_settings(&pctl.pctl, &original), PTC_ERR_OK,
+        "Eden-like unlimited raw settings restore after bedtime");
+    check_int(pctl.pctl.vtable->start_timer(&pctl.pctl), PTC_ERR_OK,
+        "Eden-like enabled timer state restores after bedtime");
+    check_int(pctl.pctl.vtable->snapshot_settings(&pctl.pctl, &restored), PTC_ERR_OK,
+        "restored Eden-like PCTL state can be verified");
+    check_int(pctl.pctl.vtable->read_status(&pctl.pctl, blocked.weekday, &status), PTC_ERR_OK,
+        "restored Eden-like PCTL status is readable");
+    check_true(original.size == restored.size &&
+        memcmp(original.data, restored.data, original.size) == 0 &&
+        original.timer_enabled == restored.timer_enabled &&
+        status.unrestricted_today && !status.blocked_today && status.play_timer_enabled,
+        "exact bedtime recovery preserves unlimited flags and the enabled timer");
+}
+
 static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
 {
     PtcMemStorage mem;
@@ -2994,6 +3034,7 @@ int main(void)
     test_live_enforce_recovery_is_not_startup_recovery();
     test_played_time_status();
     test_restore_exhausted_weekly_limit_accepts_transient_restriction();
+    test_pctl_stub_unrestricted_snapshot_round_trip();
     test_offline_code_preview_is_non_consuming();
     test_redemption_history_transaction_and_clear();
     test_play_timer_layout();

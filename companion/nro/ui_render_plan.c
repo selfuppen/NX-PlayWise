@@ -697,9 +697,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 9), "ZL  放弃",
             UI_PAGE, UI_INK, model->selected_index == 9 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 10),
-            bedtime_save_danger
-                ? (bedtime_impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN ? "+  保存（需确认）" : "+  保存（将限制使用）")
-                : "+  保存本页",
+            bedtime_save_danger ? "+  保存（需确认）" : "+  保存本页",
             bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
             model->selected_index == 10 && !model->bedtime_section_focused && !model->bedtime_master_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);
@@ -754,9 +752,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 3), "ZL  放弃",
             UI_PAGE, UI_INK, model->selected_index == 3 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 4),
-            bedtime_save_danger
-                ? (bedtime_impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN ? "+  保存（需确认）" : "+  保存（将限制使用）")
-                : "+  保存本页",
+            bedtime_save_danger ? "+  保存（需确认）" : "+  保存本页",
             bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
             model->selected_index == 4 && !model->bedtime_section_focused && !model->bedtime_master_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);
@@ -860,9 +856,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 4), "ZL  放弃",
             UI_PAGE, UI_INK, model->selected_index == 4 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 5),
-            bedtime_save_danger
-                ? (bedtime_impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN ? "+  保存（需确认）" : "+  保存（将限制使用）")
-                : "+  保存本页",
+            bedtime_save_danger ? "+  保存（需确认）" : "+  保存本页",
             bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
             model->selected_index == 5 && !model->bedtime_section_focused && !model->bedtime_master_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);

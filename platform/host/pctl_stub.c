@@ -151,7 +151,11 @@ static PtcErrorCode stub_start_timer(PtcPctl *pctl)
         return stub->start_timer_error;
     }
     stub->timer_started = true;
-    stub->status.play_timer_enabled = !stub->model_elapsed_time || stub->status.remaining_minutes > 0U;
+    /* A successful StartPlayTimer call changes the timer state independently
+       of the remaining allowance.  In particular, exact recovery must be able
+       to restore a captured enabled timer even when the current raw day slot
+       is unlimited or already exhausted. */
+    stub->status.play_timer_enabled = true;
     return PTC_ERR_OK;
 }
 
@@ -209,6 +213,7 @@ static PtcErrorCode stub_restore_settings(PtcPctl *pctl, const PtcPctlSettingsSn
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
     uint16_t words[PTC_PLAY_TIMER_SETTINGS_WORDS];
     uint16_t minutes = 0;
+    bool restricted = false;
     uint8_t weekday = stub->applied ? stub->last_target.weekday : 0U;
     if (stub->restore_error != PTC_ERR_OK) {
         return stub->restore_error;
@@ -218,12 +223,16 @@ static PtcErrorCode stub_restore_settings(PtcPctl *pctl, const PtcPctlSettingsSn
     if (stub->raw_settings_override_enabled)
         memcpy(stub->raw_settings, snapshot->data, sizeof(stub->raw_settings));
     stub->settings_header_initialized = words[0] == 0x0101U && words[1] == 1U;
-    if (!ptc_play_timer_settings_get_minutes(words, PTC_PLAY_TIMER_SETTINGS_WORDS, weekday, &minutes)) {
+    if (!ptc_play_timer_settings_get_day(
+            words, PTC_PLAY_TIMER_SETTINGS_WORDS, weekday, &restricted, &minutes)) {
         return PTC_ERR_PCTL_WRITE_FAILED;
     }
-    stub->status.unrestricted_today = minutes == PTC_PLAY_TIMER_UNLIMITED;
-    stub->status.blocked_today = minutes == 0U;
-    stub->status.limited_today = !stub->status.unrestricted_today && !stub->status.blocked_today;
+    /* Empty/unconfigured day slots are how this host stub serializes an
+       unrestricted target.  Minutes alone cannot distinguish that encoding
+       from a configured zero-minute block; the two flag words must decide. */
+    stub->status.unrestricted_today = !restricted;
+    stub->status.blocked_today = restricted && minutes == 0U;
+    stub->status.limited_today = restricted && minutes > 0U;
     stub->status.remaining_available = !stub->status.unrestricted_today;
     stub->status.configured_minutes_available = stub->status.limited_today;
     stub->status.configured_minutes = stub->status.limited_today ? minutes : 0U;
