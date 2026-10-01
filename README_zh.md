@@ -110,7 +110,7 @@ PlayWise PIN 只保护本项目的家长区，不是 Nintendo 官方家长控制
 
 ## 项目文档
 
-- [使用指南](docs/使用指南.md)
+- [使用指南](docs/使用指南.md) ([English](docs/USER_GUIDE.md))
 - [开发指南](docs/开发指南.md)
 - [开发环境指南](docs/开发环境指南.md)
 - [协议](docs/协议.md)

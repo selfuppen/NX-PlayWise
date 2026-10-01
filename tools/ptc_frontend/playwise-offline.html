@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#126b5b">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Qc8Fh5Af6MLGtaSdoBE/Q6yJ6aNcZ2pi5OjbioMQOak='; style-src 'sha256-OZ5y+PxwCVrcFPmUXibBJ3U1Qgf0zW3nuyOvCgBRLhE='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-byS3DuOz4G8GT9FEwOqRYHsrGMYEOvm5odk0UuVYw5k='; style-src 'sha256-Kj9/UMq48CdY//XmDCPfp3JmQFF33LRHzI7urIxL8JA='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
   <title>任我玩 · PlayWise</title>
   <style>
 :root {
@@ -40,6 +40,22 @@ button { cursor: pointer; }
 
 .site-header strong { font-size: 21px; }
 .eyebrow { margin: 0 0 2px; color: var(--accent); font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.lang-toggle {
+  border: 1px solid #95aaa4;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--accent-dark);
+  padding: 6px 13px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  transition: all 0.15s ease;
+}
+.lang-toggle:hover {
+  background: #e3f3ee;
+  border-color: var(--accent);
+}
 .badge { border-radius: 999px; background: #e3f3ee; color: var(--accent-dark); padding: 7px 11px; font-size: 13px; font-weight: 700; }
 
 main { width: min(100% - 28px, 760px); margin: 36px auto; }
@@ -122,22 +138,25 @@ footer a { color: var(--accent-dark); font-weight: 700; }
 <body>
   <header class="site-header">
     <div>
-      <p class="eyebrow">PlayWise</p>
-      <strong>任我玩</strong>
+      <p class="eyebrow" data-i18n="brand_eyebrow">PlayWise</p>
+      <strong data-i18n="brand_name">任我玩</strong>
     </div>
-    <span id="offlineBadge" class="badge">单文件离线版</span>
+    <div class="header-actions">
+      <button id="langToggle" class="lang-toggle" type="button" aria-label="切换语言 / Switch language" data-i18n="lang_toggle_btn">English</button>
+      <span id="offlineBadge" class="badge" data-i18n="badge_standalone">单文件离线版</span>
+    </div>
   </header>
 
   <main>
     <section class="tool" aria-labelledby="pageTitle">
       <div class="intro">
         <div>
-          <h1 id="pageTitle">生成今日加时码</h1>
-          <p class="slogan">Play Wise. Play More.</p>
-          <p>此单文件完全在当前浏览器中生成加时码，不需要 Python、服务器或网络连接。</p>
+          <h1 id="pageTitle" data-i18n="page_title">生成今日加时码</h1>
+          <p class="slogan" data-i18n="slogan">Play Wise. Play More.</p>
+          <p data-i18n="intro_p">此单文件完全在当前浏览器中生成加时码，不需要 Python、服务器或网络连接。</p>
         </div>
         <div class="intro-actions">
-          <button id="install" class="secondary compact" type="button" hidden>安装到设备</button>
+          <button id="install" class="secondary compact" type="button" hidden data-i18n="install_button">安装到设备</button>
         </div>
       </div>
 
@@ -145,18 +164,18 @@ footer a { color: var(--accent-dark); font-weight: 700; }
       <div id="selfTestError" class="notice danger" role="alert" hidden></div>
       <div id="compatibilityWarning" class="notice warning" role="status" hidden></div>
       <div id="demoWarning" class="notice danger" role="alert" hidden>
-        <strong>当前使用公开演示密钥。</strong>
-        任何人都知道此密钥，且可生成多个加时码，最高可把当天额度累计到 1440 分钟。它只适用于已在 Switch 上主动开启演示模式的设备。
+        <strong data-i18n="demo_warning_title">当前使用公开演示密钥。</strong>
+        <span data-i18n="demo_warning_desc">任何人都知道此密钥，且可生成多个加时码，最高可把当天额度累计到 1440 分钟。它只适用于已在 Switch 上主动开启演示模式的设备。</span>
       </div>
       <div id="importError" class="notice danger" role="alert" hidden></div>
 
       <section class="pairing-tools" aria-labelledby="pairingTitle">
         <div>
-          <h2 id="pairingTitle">配对 Switch</h2>
-          <p>配置文件不随安装包提供。先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证 PIN；成功后从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
+          <h2 id="pairingTitle" data-i18n="pairing_title">配对 Switch</h2>
+          <p data-i18n-html="pairing_p">配置文件不随安装包提供。先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证 PIN；成功后从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
         </div>
         <label class="file-button secondary compact">
-          导入配置文件
+          <span data-i18n="import_file_button">导入配置文件</span>
           <input id="importFile" type="file" accept="application/json,.json" hidden>
         </label>
       </section>
@@ -164,99 +183,99 @@ footer a { color: var(--accent-dark); font-weight: 700; }
       <form id="generator">
         <div class="fields">
           <label>
-            <span>Switch 设备 ID</span>
+            <span data-i18n="label_device">Switch 设备 ID</span>
             <input id="device" name="device" value="kid-switch" maxlength="32" pattern="[A-Za-z0-9_-]{1,32}" autocomplete="off" required>
           </label>
 
           <label>
-            <span>加时密钥</span>
+            <span data-i18n="label_secret">加时密钥</span>
             <span class="secret-field">
               <input id="secret" name="secret" type="password" value="playwise-public-demo-secret-0001" minlength="32" maxlength="64" autocomplete="off" required>
-              <button id="toggleSecret" class="field-action" type="button" aria-pressed="false">显示</button>
+              <button id="toggleSecret" class="field-action" type="button" aria-pressed="false" data-i18n="btn_toggle_secret_show">显示</button>
             </span>
-            <small>会明文保存在当前浏览器中，请仅在可信的家长设备上使用。</small>
+            <small data-i18n="secret_help">会明文保存在当前浏览器中，请仅在可信的家长设备上使用。</small>
           </label>
 
           <label>
-            <span>生效日期（Switch 主机本地日期）</span>
+            <span data-i18n="label_date">生效日期（Switch 主机本地日期）</span>
             <input id="date" name="date" type="date" required>
           </label>
 
           <label>
-            <span>加时时长</span>
+            <span data-i18n="label_tier">加时时长</span>
             <select id="tierMinutes" name="tier_minutes"></select>
           </label>
         </div>
 
-        <button id="generate" class="primary" type="submit">生成 8 位数字加时码</button>
+        <button id="generate" class="primary" type="submit" data-i18n="btn_generate">生成 8 位数字加时码</button>
       </form>
 
       <div id="error" class="notice danger" role="alert" hidden></div>
 
       <section id="result" class="result" aria-live="polite" hidden>
-        <p class="result-label">请把下面的数字告诉孩子</p>
+        <p class="result-label" data-i18n="result_label">请把下面的数字告诉孩子</p>
         <p id="code" class="code"></p>
         <p id="meta" class="meta"></p>
-        <button id="copy" class="secondary" type="button">复制加时码</button>
-        <p class="collision-note">若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。</p>
+        <button id="copy" class="secondary" type="button" data-i18n="btn_copy">复制加时码</button>
+        <p class="collision-note" data-i18n="collision_note">若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。</p>
       </section>
 
       <details class="settings">
-        <summary>本机数据与安全说明</summary>
-        <p>此页面会保存设备 ID、密钥、常用时长，以及当前浏览器当天已经签发的随机编号。清除浏览器站点数据也会删除这些内容。</p>
-        <button id="clearConfig" class="danger-button" type="button">清除本机配置</button>
+        <summary data-i18n="settings_summary">本机数据与安全说明</summary>
+        <p data-i18n="settings_p">此页面会保存设备 ID、密钥、常用时长，以及当前浏览器当天已经签发的随机编号。清除浏览器站点数据也会删除这些内容。</p>
+        <button id="clearConfig" class="danger-button" type="button" data-i18n="btn_clear_config">清除本机配置</button>
       </details>
 
       <details class="settings troubleshooting">
-        <summary>常见排错指南</summary>
-        <h3>无法配对或扫码后没有导入</h3>
-        <p>确认二维码来自当前 Switch，并使用可信的 HTTPS 页面。自定义地址必须实现相同的 <code>#device_id</code> 与 <code>grant_secret</code> 配对参数；页面应在读取后立即清除地址栏参数。也可改用 <code>parent-import.json</code> 导入。</p>
-        <h3>加时码无效或提示已使用</h3>
-        <p>确认设备 ID、密钥、生效日期和 Switch 当前日期一致。修改密钥后，当前浏览器配对和使用原密钥签发的代码都会失效；提示已使用时请重新生成一个。</p>
-        <h3>日期不正确</h3>
-        <p>加时码按 Switch 主机的本地日期生效。请确认家长设备日期与 Switch 主机日期一致，再刷新状态并重新生成；不要继续尝试为错误日期生成的码。</p>
-        <h3>设备没有响应</h3>
-        <p>在 Switch 孩子区或家长区刷新状态，等待正在同步的操作完成。仍无响应时导出诊断信息，并检查 SD 卡中的 PlayWise 文件是否可读。</p>
-        <h3>紧急停用已开启</h3>
-        <p>紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。</p>
-        <h3>进一步诊断</h3>
-        <p>诊断导出只包含白名单状态，不包含密钥、PIN、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。</p>
+        <summary data-i18n="troubleshooting_summary">常见排错指南</summary>
+        <h3 data-i18n="faq_1_title">无法配对或扫码后没有导入</h3>
+        <p data-i18n-html="faq_1_p">确认二维码来自当前 Switch，并使用可信的 HTTPS 页面。自定义地址必须实现相同的 <code>#device_id</code> 与 <code>grant_secret</code> 配对参数；页面应在读取后立即清除地址栏参数。也可改用 <code>parent-import.json</code> 导入。</p>
+        <h3 data-i18n="faq_2_title">加时码无效或提示已使用</h3>
+        <p data-i18n="faq_2_p">确认设备 ID、密钥、生效日期和 Switch 当前日期一致。修改密钥后，当前浏览器配对和使用原密钥签发的代码都会失效；提示已使用时请重新生成一个。</p>
+        <h3 data-i18n="faq_3_title">日期不正确</h3>
+        <p data-i18n="faq_3_p">加时码按 Switch 主机的本地日期生效。请确认家长设备日期与 Switch 主机日期一致，再刷新状态并重新生成；不要继续尝试为错误日期生成的码。</p>
+        <h3 data-i18n="faq_4_title">设备没有响应</h3>
+        <p data-i18n="faq_4_p">在 Switch 孩子区或家长区刷新状态，等待正在同步的操作完成。仍无响应时导出诊断信息，并检查 SD 卡中的 PlayWise 文件是否可读。</p>
+        <h3 data-i18n="faq_5_title">紧急停用已开启</h3>
+        <p data-i18n="faq_5_p">紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。</p>
+        <h3 data-i18n="faq_6_title">进一步诊断</h3>
+        <p data-i18n-html="faq_6_p">诊断导出只包含白名单状态，不包含密钥、PIN、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。</p>
       </details>
     </section>
   </main>
 
   <footer>
-    <p>这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS 家长网页。</p>
-    <nav aria-label="项目链接">
-      <a href="https://github.com/selfuppen" target="_blank" rel="noopener noreferrer">作者 GitHub</a>
+    <p data-i18n="footer_p">这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS 家长网页。</p>
+    <nav aria-label="项目链接" data-i18n-aria="footer_nav_aria">
+      <a href="https://github.com/selfuppen" target="_blank" rel="noopener noreferrer" data-i18n="footer_author">作者 GitHub</a>
       <span aria-hidden="true">·</span>
-      <a href="https://github.com/selfuppen/NX-PlayWise" target="_blank" rel="noopener noreferrer">项目源码</a>
+      <a href="https://github.com/selfuppen/NX-PlayWise" target="_blank" rel="noopener noreferrer" data-i18n="footer_source">项目源码</a>
     </nav>
   </footer>
 
   <dialog id="pairingDialog" aria-labelledby="pairingDialogTitle">
     <form method="dialog" class="dialog-card">
-      <h2 id="pairingDialogTitle">导入此设备？</h2>
+      <h2 id="pairingDialogTitle" data-i18n="pairing_dialog_title">导入此设备？</h2>
       <p id="pairingSource"></p>
       <dl>
-        <div><dt>设备 ID</dt><dd id="pairingDevice"></dd></div>
-        <div><dt>加时密钥</dt><dd id="pairingSecret"></dd></div>
+        <div><dt data-i18n="pairing_dialog_device">设备 ID</dt><dd id="pairingDevice"></dd></div>
+        <div><dt data-i18n="pairing_dialog_secret">加时密钥</dt><dd id="pairingSecret"></dd></div>
       </dl>
-      <p id="pairingReplace" class="notice danger" hidden>确认后将替换当前浏览器保存的设备配置，已有 nonce 历史会保留。</p>
+      <p id="pairingReplace" class="notice danger" hidden data-i18n="pairing_dialog_replace">确认后将替换当前浏览器保存的设备配置，已有 nonce 历史会保留。</p>
       <div class="dialog-actions">
-        <button id="cancelPairing" class="secondary" value="cancel">取消</button>
-        <button id="confirmPairing" class="primary no-margin" value="confirm">导入此设备</button>
+        <button id="cancelPairing" class="secondary" value="cancel" data-i18n="btn_cancel">取消</button>
+        <button id="confirmPairing" class="primary no-margin" value="confirm" data-i18n="btn_confirm_import">导入此设备</button>
       </div>
     </form>
   </dialog>
 
   <dialog id="demoDialog" aria-labelledby="demoDialogTitle">
     <form method="dialog" class="dialog-card">
-      <h2 id="demoDialogTitle">确认使用公开演示密钥</h2>
-      <p>任何知道设备名的人都能生成多个有效加时码，并可把当天额度累计到 1440 分钟。请仅在 Switch 已主动启用演示模式时继续。</p>
+      <h2 id="demoDialogTitle" data-i18n="demo_dialog_title">确认使用公开演示密钥</h2>
+      <p data-i18n="demo_dialog_p">任何知道设备名的人都能生成多个有效加时码，并可把当天额度累计到 1440 分钟。请仅在 Switch 已主动启用演示模式时继续。</p>
       <div class="dialog-actions">
-        <button class="secondary" value="cancel">取消</button>
-        <button class="primary no-margin" value="confirm">了解风险并继续</button>
+        <button class="secondary" value="cancel" data-i18n="btn_cancel">取消</button>
+        <button class="primary no-margin" value="confirm" data-i18n="btn_understand_risk">了解风险并继续</button>
       </div>
     </form>
   </dialog>
@@ -536,6 +555,7 @@ function maskedSecret(secret) {
 const CONFIG_KEY = "ptc.frontend.config.v1";
 const NONCES_KEY = "ptc.frontend.nonces.v1";
 const DEMO_ACK_KEY = "ptc.frontend.demo-ack.v1";
+const LANG_KEY = "ptc.frontend.lang.v1";
 
 const DEFAULT_CONFIG = Object.freeze({
   deviceId: "kid-switch",
@@ -612,6 +632,209 @@ function acknowledgeDemoRisk(storage) {
   storage.setItem(DEMO_ACK_KEY, "yes");
 }
 
+function loadLanguage(storage) {
+  const saved = storage.getItem(LANG_KEY);
+  if (saved === "zh" || saved === "en") return saved;
+  return null;
+}
+
+function saveLanguage(storage, lang) {
+  if (lang === "zh" || lang === "en") {
+    storage.setItem(LANG_KEY, lang);
+  }
+}
+
+// i18n.js
+const SUPPORTED_LANGS = ["zh", "en"];
+const DEFAULT_LANG = "zh";
+
+const TRANSLATIONS = {
+  zh: {
+    brand_eyebrow: "PlayWise",
+    brand_name: "任我玩",
+    badge_offline: "可离线使用",
+    badge_standalone: "单文件离线版",
+    lang_toggle_btn: "English",
+    lang_toggle_aria: "切换语言 / Switch language",
+
+    page_title: "生成今日加时码",
+    slogan: "Play Wise. Play More.",
+    intro_p_online: "加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。",
+    intro_p_standalone: "此单文件完全在当前浏览器中生成加时码，不需要 Python、服务器或网络连接。",
+    download_standalone: "下载单文件离线版",
+    install_button: "安装到设备",
+
+    demo_warning_title: "当前使用公开演示密钥。",
+    demo_warning_desc: "任何人都知道此密钥，且可生成多个加时码，最高可把当天额度累计到 1440 分钟。它只适用于已在 Switch 上主动开启演示模式的设备。",
+    err_browser_capability: "当前浏览器缺少生成加时码所需的基础能力，请升级浏览器。",
+    err_web_crypto: "当前页面无法使用 Web Crypto，请通过 HTTPS 或 localhost 打开。",
+    err_selftest: "加时码算法自检失败，已停止生成：",
+    warn_compat_subtle: "当前浏览器无法使用 Web Crypto，已启用内置 HMAC-SHA256 兼容实现；加时码协议和校验结果不变。",
+    warn_compat_random: "当前浏览器无法使用安全随机源，将从当天尚未签发的编号中顺序选择；若 Switch 提示代码已使用，请重新生成。",
+    warn_compat_storage: "当前打开方式不允许持久保存配置；关闭页面后需要重新导入，且旧代码发生编号碰撞时请重新生成。",
+
+    pairing_title: "配对 Switch",
+    pairing_p_online: "可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证 PIN；导出成功后，从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。",
+    pairing_p_standalone: "配置文件不随安装包提供。先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证 PIN；成功后从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。",
+    import_file_button: "导入配置文件",
+
+    pairing_dialog_title: "导入此设备？",
+    pairing_dialog_device: "设备 ID",
+    pairing_dialog_secret: "加时密钥",
+    pairing_dialog_replace: "确认后将替换当前浏览器保存的设备配置，已有 nonce 历史会保留。",
+    btn_cancel: "取消",
+    btn_confirm_import: "导入此设备",
+    pairing_source_qr: "检测到 Switch 二维码中的设备配置，请确认后导入。",
+    pairing_source_file: "来自文件：{name}",
+    err_import_size: "配置文件过大，预期为小于 16 KiB 的 parent-import.json",
+
+    label_device: "Switch 设备 ID",
+    label_secret: "加时密钥",
+    secret_help: "会明文保存在当前浏览器中，请仅在可信的家长设备上使用。",
+    btn_toggle_secret_show: "显示",
+    btn_toggle_secret_hide: "隐藏",
+    label_date: "生效日期（Switch 主机本地日期）",
+    label_tier: "加时时长",
+    btn_generate: "生成 8 位数字加时码",
+    minutes_unit: "{m} 分钟",
+
+    demo_dialog_title: "确认使用公开演示密钥",
+    demo_dialog_p: "任何知道设备名的人都能生成多个有效加时码，并可把当天额度累计到 1440 分钟。请仅在 Switch 已主动启用演示模式时继续。",
+    btn_understand_risk: "了解风险并继续",
+
+    result_label: "请把下面的数字告诉孩子",
+    result_meta: "{date} · {minutes} 分钟 · v2",
+    btn_copy: "复制加时码",
+    btn_copied: "已复制",
+    err_copy_failed: "复制失败，请长按或选中加时码手动复制",
+    collision_note: "若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。",
+
+    settings_summary: "本机数据与安全说明",
+    settings_p: "此页面会保存设备 ID、密钥、常用时长，以及当前浏览器当天已经签发的随机编号。清除浏览器站点数据也会删除这些内容。",
+    btn_clear_config: "清除本机配置",
+
+    troubleshooting_summary: "常见排错指南",
+    faq_1_title: "无法配对或扫码后没有导入",
+    faq_1_p: "确认二维码来自当前 Switch，并使用可信的 HTTPS 页面。自定义地址必须实现相同的 <code>#device_id</code> 与 <code>grant_secret</code> 配对参数；页面应在读取后立即清除地址栏参数。也可改用 <code>parent-import.json</code> 导入。",
+    faq_2_title: "加时码无效或提示已使用",
+    faq_2_p: "确认设备 ID、密钥、生效日期和 Switch 当前日期一致。修改密钥后，当前浏览器配对和使用原密钥签发的代码都会失效；提示已使用时请重新生成一个。",
+    faq_3_title: "日期不正确",
+    faq_3_p: "加时码按 Switch 主机的本地日期生效。请确认家长设备日期与 Switch 主机日期一致，再刷新状态并重新生成；不要继续尝试为错误日期生成的码。",
+    faq_4_title: "设备没有响应",
+    faq_4_p: "在 Switch 孩子区或家长区刷新状态，等待正在同步的操作完成。仍无响应时导出诊断信息，并检查 SD 卡中的 PlayWise 文件是否可读。",
+    faq_5_title: "紧急停用已开启",
+    faq_5_p: "紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。",
+    faq_6_title: "进一步诊断",
+    faq_6_p: "诊断导出只包含白名单状态，不包含密钥、PIN、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。",
+
+    footer_p_online: "正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。",
+    footer_p_standalone: "这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS 家长网页。",
+    footer_nav_aria: "项目链接",
+    footer_author: "作者 GitHub",
+    footer_source: "项目源码",
+  },
+  en: {
+    brand_eyebrow: "PlayWise",
+    brand_name: "PlayWise",
+    badge_offline: "Offline Ready",
+    badge_standalone: "Standalone Offline",
+    lang_toggle_btn: "中文",
+    lang_toggle_aria: "Switch language / 切换语言",
+
+    page_title: "Generate Daily Grant Code",
+    slogan: "Play Wise. Play More.",
+    intro_p_online: "Grant codes are generated locally in your browser. Inputs are never submitted to any backend server.",
+    intro_p_standalone: "This standalone file generates grant codes entirely within your browser, requiring no Python, server, or internet connection.",
+    download_standalone: "Download Standalone HTML",
+    install_button: "Install App",
+
+    demo_warning_title: "Public demo secret in use.",
+    demo_warning_desc: "Anyone who knows this secret can generate valid grant codes, potentially accumulating up to 1440 minutes today. Use only on devices with Demo Mode explicitly enabled.",
+    err_browser_capability: "Your browser lacks essential cryptographic features required to generate grant codes. Please upgrade your browser.",
+    err_web_crypto: "Web Crypto is unavailable on this page. Please open via HTTPS or localhost.",
+    err_selftest: "Grant code algorithm self-test failed; generation aborted: ",
+    warn_compat_subtle: "Web Crypto is unavailable in this environment; using built-in HMAC-SHA256 fallback. Protocol and verification remain identical.",
+    warn_compat_random: "Secure random generator is unavailable; sequential nonce selection active. If Switch reports code already used, generate a new one.",
+    warn_compat_storage: "Persistent storage is not allowed in this environment. Configuration will not be saved across sessions.",
+
+    pairing_title: "Pair Switch",
+    pairing_p_online: "Scan the Switch QR code to pair. Config files are not bundled with installation packages: in Switch Parent Zone, navigate to \"Offline Grants → Phone/PC Generator\", press A to \"Export Config File\" and verify PIN; then copy <code>/switch/playwise/parent-import.json</code> from SD card to your device and import here.",
+    pairing_p_standalone: "Config files are not bundled with installation packages. In Switch Parent Zone, open \"Offline Grants → Phone/PC Generator\", press A to \"Export Config File\" and verify PIN; then copy <code>/switch/playwise/parent-import.json</code> from SD card to your device and import here.",
+    import_file_button: "Import Config File",
+
+    pairing_dialog_title: "Import this device?",
+    pairing_dialog_device: "Device ID",
+    pairing_dialog_secret: "Grant Secret",
+    pairing_dialog_replace: "Confirming will overwrite the currently saved device configuration. Existing nonce history will be preserved.",
+    btn_cancel: "Cancel",
+    btn_confirm_import: "Import This Device",
+    pairing_source_qr: "Detected device configuration from Switch QR code. Please confirm to import.",
+    pairing_source_file: "From file: {name}",
+    err_import_size: "Config file too large. Expected parent-import.json under 16 KiB.",
+
+    label_device: "Switch Device ID",
+    label_secret: "Grant Secret",
+    secret_help: "Saved in plaintext in this browser. Use only on trusted parental devices.",
+    btn_toggle_secret_show: "Show",
+    btn_toggle_secret_hide: "Hide",
+    label_date: "Effective Date (Switch Local Date)",
+    label_tier: "Grant Duration",
+    btn_generate: "Generate 8-digit Grant Code",
+    minutes_unit: "{m} min",
+
+    demo_dialog_title: "Confirm Using Public Demo Secret",
+    demo_dialog_p: "Anyone knowing this device ID can generate valid grant codes, potentially accumulating up to 1440 minutes today. Continue only if Demo Mode is explicitly enabled on your Switch.",
+    btn_understand_risk: "Accept Risk & Continue",
+
+    result_label: "Share this code with your child",
+    result_meta: "{date} · {minutes} min · v2",
+    btn_copy: "Copy Grant Code",
+    btn_copied: "Copied!",
+    err_copy_failed: "Copy failed. Please long-press or select the code to copy manually.",
+    collision_note: "If the Switch indicates \"Grant code already used\", another device issued the same nonce. Simply generate a new code on this page.",
+
+    settings_summary: "Local Data & Security",
+    settings_p: "This page saves device ID, secret, selected duration, and nonces issued today. Clearing browser site data will remove this information.",
+    btn_clear_config: "Clear Local Config",
+
+    troubleshooting_summary: "Troubleshooting Guide",
+    faq_1_title: "Pairing failed or QR code did not import",
+    faq_1_p: "Ensure the QR code originates from your Switch and is opened via a trusted HTTPS page. Custom URLs must implement identical <code>#device_id</code> and <code>grant_secret</code> hash parameters; parameters should be cleared from the address bar immediately. Alternatively, import via <code>parent-import.json</code>.",
+    faq_2_title: "Grant code invalid or already used",
+    faq_2_p: "Verify that device ID, secret, effective date, and Switch system date match exactly. After changing the secret, existing pairings and codes signed with the old secret become invalid; generate a new one if marked as already used.",
+    faq_3_title: "Incorrect date",
+    faq_3_p: "Grant codes take effect based on the Switch console's local date. Confirm that your parental device date matches the Switch date, refresh status, and regenerate. Do not attempt to redeem codes generated for an incorrect date.",
+    faq_4_title: "Console not responding",
+    faq_4_p: "Refresh status in Switch Child or Parent Zone and wait for synchronization to finish. If still unresponsive, export diagnostic logs and verify that SD card files are readable.",
+    faq_5_title: "Emergency disable active",
+    faq_5_p: "Emergency disable prevents new playtime, schedule, and grant code writes, while status, diagnostics, and recovery remain accessible. Parents can deactivate emergency disable in \"Support & Recovery\" after resolving issues.",
+    faq_6_title: "Further diagnostics",
+    faq_6_p: "Diagnostic exports contain only allowlisted status info, excluding secrets, PINs, 8-digit codes, full nonces, or pre-install snapshots. For advanced troubleshooting, check <code>sdmc:/switch/playwise/logs/</code>, <code>flags/disable.flag</code>, and recovery states; never disclose <code>credentials.json</code>, <code>auth.json</code>, or ledger.",
+
+    footer_p_online: "For production deployment, use a trusted HTTPS static site; for local desktop preview, localhost may be used.",
+    footer_p_standalone: "This is a standalone offline file. If mobile browsers restrict local HTML execution, please use a trusted HTTPS parent web page.",
+    footer_nav_aria: "Project Links",
+    footer_author: "Author GitHub",
+    footer_source: "Source Code",
+  },
+};
+
+function t(key, params = {}, lang = DEFAULT_LANG) {
+  const dict = TRANSLATIONS[lang] || TRANSLATIONS[DEFAULT_LANG];
+  let text = dict[key] || TRANSLATIONS[DEFAULT_LANG][key] || key;
+  for (const [paramKey, paramVal] of Object.entries(params)) {
+    text = text.replaceAll(`{${paramKey}}`, String(paramVal));
+  }
+  return text;
+}
+
+function detectBrowserLanguage() {
+  const navLang = (globalThis.navigator?.language || "").toLowerCase();
+  if (navLang.startsWith("zh")) return "zh";
+  if (navLang.startsWith("en")) return "en";
+  return DEFAULT_LANG;
+}
+
 // app.js
 const form = document.getElementById("generator");
 const deviceInput = document.getElementById("device");
@@ -633,8 +856,12 @@ const importFile = document.getElementById("importFile");
 const pairingDialog = document.getElementById("pairingDialog");
 const demoDialog = document.getElementById("demoDialog");
 const compatibilityWarning = document.getElementById("compatibilityWarning");
+const langToggle = document.getElementById("langToggle");
 const standaloneMode = document.documentElement.dataset.standalone === "true";
 let installPrompt = null;
+
+let lastResultDate = "";
+let lastResultMinutes = 0;
 
 function createMemoryStorage() {
   const values = new Map();
@@ -660,6 +887,9 @@ function selectStorage() {
 const selectedStorage = selectStorage();
 const frontendStorage = selectedStorage.storage;
 
+let currentLang = loadLanguage(frontendStorage) || detectBrowserLanguage();
+if (!SUPPORTED_LANGS.includes(currentLang)) currentLang = DEFAULT_LANG;
+
 const tierOptions = [1, 2, 3, 4];
 for (let minutes = 5; minutes <= 120; minutes += 5) {
   tierOptions.push(minutes);
@@ -668,8 +898,71 @@ tierOptions.push(150, 180, 210, 240);
 for (const minutes of tierOptions) {
   const option = document.createElement("option");
   option.value = String(minutes);
-  option.textContent = `${minutes} 分钟`;
+  option.textContent = t("minutes_unit", {m: minutes}, currentLang);
   tierInput.append(option);
+}
+
+function applyTranslations(lang) {
+  currentLang = lang;
+  saveLanguage(frontendStorage, lang);
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+
+  document.querySelectorAll("[data-i18n]").forEach(element => {
+    const key = element.dataset.i18n;
+    if (!key) return;
+    if (key === "intro_p") {
+      element.textContent = t(standaloneMode ? "intro_p_standalone" : "intro_p_online", {}, lang);
+    } else if (key === "badge_offline") {
+      element.textContent = t(standaloneMode ? "badge_standalone" : "badge_offline", {}, lang);
+    } else if (key === "footer_p") {
+      element.textContent = t(standaloneMode ? "footer_p_standalone" : "footer_p_online", {}, lang);
+    } else if (key === "btn_toggle_secret_show" || key === "btn_toggle_secret_hide") {
+      const visible = secretInput.type === "text";
+      element.textContent = t(visible ? "btn_toggle_secret_hide" : "btn_toggle_secret_show", {}, lang);
+    } else if (key === "btn_copy" || key === "btn_copied") {
+      element.textContent = t(copyButton.dataset.copied === "true" ? "btn_copied" : "btn_copy", {}, lang);
+    } else {
+      element.textContent = t(key, {}, lang);
+    }
+  });
+
+  document.querySelectorAll("[data-i18n-html]").forEach(element => {
+    const key = element.dataset.i18nHtml;
+    if (!key) return;
+    if (key === "pairing_p") {
+      element.innerHTML = t(standaloneMode ? "pairing_p_standalone" : "pairing_p_online", {}, lang);
+    } else {
+      element.innerHTML = t(key, {}, lang);
+    }
+  });
+
+  document.querySelectorAll("[data-i18n-aria]").forEach(element => {
+    const key = element.dataset.i18nAria;
+    if (key) element.setAttribute("aria-label", t(key, {}, lang));
+  });
+
+  if (langToggle) {
+    langToggle.textContent = t("lang_toggle_btn", {}, lang);
+    langToggle.setAttribute("aria-label", t("lang_toggle_aria", {}, lang));
+  }
+
+  const currentTier = tierInput.value;
+  for (const option of tierInput.options) {
+    const mins = Number(option.value);
+    option.textContent = t("minutes_unit", {m: mins}, lang);
+  }
+  tierInput.value = currentTier;
+
+  if (!result.hidden && lastResultDate && lastResultMinutes) {
+    metaOutput.textContent = t("result_meta", {date: lastResultDate, minutes: lastResultMinutes}, lang);
+  }
+}
+
+if (langToggle) {
+  langToggle.addEventListener("click", () => {
+    const nextLang = currentLang === "zh" ? "en" : "zh";
+    applyTranslations(nextLang);
+  });
 }
 
 function showError(target, message) {
@@ -746,6 +1039,7 @@ function loadSavedForm() {
 
 async function initialize() {
   loadSavedForm();
+  applyTranslations(currentLang);
   let fragmentPairing = null;
   try {
     fragmentPairing = pairingFromFragment(globalThis.location.hash);
@@ -757,34 +1051,34 @@ async function initialize() {
     }
   }
   if (typeof TextEncoder !== "function" || typeof DataView !== "function") {
-    showError(securityError, "当前浏览器缺少生成加时码所需的基础能力，请升级浏览器。");
+    showError(securityError, t("err_browser_capability", {}, currentLang));
     generateButton.disabled = true;
     return;
   }
   const hasSecureRandom = typeof globalThis.crypto?.getRandomValues === "function";
   if (!standaloneMode && (!globalThis.isSecureContext || !globalThis.crypto?.subtle || !hasSecureRandom)) {
-    showError(securityError, "当前页面无法使用 Web Crypto，请通过 HTTPS 或 localhost 打开。");
+    showError(securityError, t("err_web_crypto", {}, currentLang));
     generateButton.disabled = true;
     return;
   }
   if (standaloneMode && !globalThis.crypto?.subtle) {
-    addCompatibilityWarning("当前浏览器无法使用 Web Crypto，已启用内置 HMAC-SHA256 兼容实现；加时码协议和校验结果不变。");
+    addCompatibilityWarning(t("warn_compat_subtle", {}, currentLang));
   }
   if (standaloneMode && !hasSecureRandom) {
-    addCompatibilityWarning("当前浏览器无法使用安全随机源，将从当天尚未签发的编号中顺序选择；若 Switch 提示代码已使用，请重新生成。");
+    addCompatibilityWarning(t("warn_compat_random", {}, currentLang));
   }
   if (!selectedStorage.persistent) {
-    addCompatibilityWarning("当前打开方式不允许持久保存配置；关闭页面后需要重新导入，且旧代码发生编号碰撞时请重新生成。");
+    addCompatibilityWarning(t("warn_compat_storage", {}, currentLang));
   }
   try {
     await runSelfTest();
   } catch (error) {
-    showError(selfTestError, `加时码算法自检失败，已停止生成：${error instanceof Error ? error.message : String(error)}`);
+    showError(selfTestError, `${t("err_selftest", {}, currentLang)}${error instanceof Error ? error.message : String(error)}`);
     generateButton.disabled = true;
     return;
   }
   if (fragmentPairing) {
-    await confirmPairing(fragmentPairing, "检测到 Switch 二维码中的设备配置，请确认后导入。");
+    await confirmPairing(fragmentPairing, t("pairing_source_qr", {}, currentLang));
   }
 }
 
@@ -809,7 +1103,9 @@ form.addEventListener("submit", async event => {
     saveConfig(frontendStorage, {deviceId, secret, tierMinutes});
     rememberNonce(frontendStorage, deviceId, dateText, nonce);
     codeOutput.textContent = code;
-    metaOutput.textContent = `${dateText} · ${tierMinutes} 分钟 · v2`;
+    lastResultDate = dateText;
+    lastResultMinutes = tierMinutes;
+    metaOutput.textContent = t("result_meta", {date: dateText, minutes: tierMinutes}, currentLang);
     result.hidden = false;
   } catch (error) {
     showError(errorOutput, error instanceof Error ? error.message : String(error));
@@ -822,7 +1118,7 @@ document.getElementById("toggleSecret").addEventListener("click", event => {
   const button = event.currentTarget;
   const visible = secretInput.type === "text";
   secretInput.type = visible ? "password" : "text";
-  button.textContent = visible ? "显示" : "隐藏";
+  button.textContent = t(visible ? "btn_toggle_secret_show" : "btn_toggle_secret_hide", {}, currentLang);
   button.setAttribute("aria-pressed", visible ? "false" : "true");
 });
 
@@ -833,9 +1129,9 @@ importFile.addEventListener("change", async () => {
   const [file] = importFile.files || [];
   if (!file) return;
   try {
-    if (file.size > 16384) throw new Error("配置文件过大，预期为小于 16 KiB 的 parent-import.json");
+    if (file.size > 16384) throw new Error(t("err_import_size", {}, currentLang));
     const pairing = pairingFromImportText(await file.text());
-    await confirmPairing(pairing, `来自文件：${file.name}`);
+    await confirmPairing(pairing, t("pairing_source_file", {name: file.name}, currentLang));
   } catch (error) {
     showError(importError, error instanceof Error ? error.message : String(error));
   } finally {
@@ -846,10 +1142,14 @@ importFile.addEventListener("change", async () => {
 copyButton.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(codeOutput.textContent || "");
-    copyButton.textContent = "已复制";
-    setTimeout(() => { copyButton.textContent = "复制加时码"; }, 1500);
+    copyButton.dataset.copied = "true";
+    copyButton.textContent = t("btn_copied", {}, currentLang);
+    setTimeout(() => {
+      copyButton.dataset.copied = "false";
+      copyButton.textContent = t("btn_copy", {}, currentLang);
+    }, 1500);
   } catch {
-    showError(errorOutput, "复制失败，请长按或选中加时码手动复制");
+    showError(errorOutput, t("err_copy_failed", {}, currentLang));
   }
 });
 

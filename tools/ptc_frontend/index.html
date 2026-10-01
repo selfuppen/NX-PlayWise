@@ -14,23 +14,26 @@
 <body>
   <header class="site-header">
     <div>
-      <p class="eyebrow">PlayWise</p>
-      <strong>任我玩</strong>
+      <p class="eyebrow" data-i18n="brand_eyebrow">PlayWise</p>
+      <strong data-i18n="brand_name">任我玩</strong>
     </div>
-    <span id="offlineBadge" class="badge" hidden>可离线使用</span>
+    <div class="header-actions">
+      <button id="langToggle" class="lang-toggle" type="button" aria-label="切换语言 / Switch language" data-i18n="lang_toggle_btn">English</button>
+      <span id="offlineBadge" class="badge" hidden data-i18n="badge_offline">可离线使用</span>
+    </div>
   </header>
 
   <main>
     <section class="tool" aria-labelledby="pageTitle">
       <div class="intro">
         <div>
-          <h1 id="pageTitle">生成今日加时码</h1>
-          <p class="slogan">Play Wise. Play More.</p>
-          <p>加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。</p>
+          <h1 id="pageTitle" data-i18n="page_title">生成今日加时码</h1>
+          <p class="slogan" data-i18n="slogan">Play Wise. Play More.</p>
+          <p data-i18n="intro_p">加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。</p>
         </div>
         <div class="intro-actions">
-          <a id="downloadStandalone" class="secondary compact" href="./playwise-offline.html" download>下载单文件离线版</a>
-          <button id="install" class="secondary compact" type="button" hidden>安装到设备</button>
+          <a id="downloadStandalone" class="secondary compact" href="./playwise-offline.html" download data-i18n="download_standalone">下载单文件离线版</a>
+          <button id="install" class="secondary compact" type="button" hidden data-i18n="install_button">安装到设备</button>
         </div>
       </div>
 
@@ -38,18 +41,18 @@
       <div id="selfTestError" class="notice danger" role="alert" hidden></div>
       <div id="compatibilityWarning" class="notice warning" role="status" hidden></div>
       <div id="demoWarning" class="notice danger" role="alert" hidden>
-        <strong>当前使用公开演示密钥。</strong>
-        任何人都知道此密钥，且可生成多个加时码，最高可把当天额度累计到 1440 分钟。它只适用于已在 Switch 上主动开启演示模式的设备。
+        <strong data-i18n="demo_warning_title">当前使用公开演示密钥。</strong>
+        <span data-i18n="demo_warning_desc">任何人都知道此密钥，且可生成多个加时码，最高可把当天额度累计到 1440 分钟。它只适用于已在 Switch 上主动开启演示模式的设备。</span>
       </div>
       <div id="importError" class="notice danger" role="alert" hidden></div>
 
       <section class="pairing-tools" aria-labelledby="pairingTitle">
         <div>
-          <h2 id="pairingTitle">配对 Switch</h2>
-          <p>可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证 PIN；导出成功后，从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
+          <h2 id="pairingTitle" data-i18n="pairing_title">配对 Switch</h2>
+          <p data-i18n-html="pairing_p">可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证 PIN；导出成功后，从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
         </div>
         <label class="file-button secondary compact">
-          导入配置文件
+          <span data-i18n="import_file_button">导入配置文件</span>
           <input id="importFile" type="file" accept="application/json,.json" hidden>
         </label>
       </section>
@@ -57,99 +60,99 @@
       <form id="generator">
         <div class="fields">
           <label>
-            <span>Switch 设备 ID</span>
+            <span data-i18n="label_device">Switch 设备 ID</span>
             <input id="device" name="device" value="kid-switch" maxlength="32" pattern="[A-Za-z0-9_-]{1,32}" autocomplete="off" required>
           </label>
 
           <label>
-            <span>加时密钥</span>
+            <span data-i18n="label_secret">加时密钥</span>
             <span class="secret-field">
               <input id="secret" name="secret" type="password" value="playwise-public-demo-secret-0001" minlength="32" maxlength="64" autocomplete="off" required>
-              <button id="toggleSecret" class="field-action" type="button" aria-pressed="false">显示</button>
+              <button id="toggleSecret" class="field-action" type="button" aria-pressed="false" data-i18n="btn_toggle_secret_show">显示</button>
             </span>
-            <small>会明文保存在当前浏览器中，请仅在可信的家长设备上使用。</small>
+            <small data-i18n="secret_help">会明文保存在当前浏览器中，请仅在可信的家长设备上使用。</small>
           </label>
 
           <label>
-            <span>生效日期（Switch 主机本地日期）</span>
+            <span data-i18n="label_date">生效日期（Switch 主机本地日期）</span>
             <input id="date" name="date" type="date" required>
           </label>
 
           <label>
-            <span>加时时长</span>
+            <span data-i18n="label_tier">加时时长</span>
             <select id="tierMinutes" name="tier_minutes"></select>
           </label>
         </div>
 
-        <button id="generate" class="primary" type="submit">生成 8 位数字加时码</button>
+        <button id="generate" class="primary" type="submit" data-i18n="btn_generate">生成 8 位数字加时码</button>
       </form>
 
       <div id="error" class="notice danger" role="alert" hidden></div>
 
       <section id="result" class="result" aria-live="polite" hidden>
-        <p class="result-label">请把下面的数字告诉孩子</p>
+        <p class="result-label" data-i18n="result_label">请把下面的数字告诉孩子</p>
         <p id="code" class="code"></p>
         <p id="meta" class="meta"></p>
-        <button id="copy" class="secondary" type="button">复制加时码</button>
-        <p class="collision-note">若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。</p>
+        <button id="copy" class="secondary" type="button" data-i18n="btn_copy">复制加时码</button>
+        <p class="collision-note" data-i18n="collision_note">若 Switch 提示“加时码已使用”，说明手机与电脑随机到了相同编号，请在本页重新生成一个。</p>
       </section>
 
       <details class="settings">
-        <summary>本机数据与安全说明</summary>
-        <p>此页面会保存设备 ID、密钥、常用时长，以及当前浏览器当天已经签发的随机编号。清除浏览器站点数据也会删除这些内容。</p>
-        <button id="clearConfig" class="danger-button" type="button">清除本机配置</button>
+        <summary data-i18n="settings_summary">本机数据与安全说明</summary>
+        <p data-i18n="settings_p">此页面会保存设备 ID、密钥、常用时长，以及当前浏览器当天已经签发的随机编号。清除浏览器站点数据也会删除这些内容。</p>
+        <button id="clearConfig" class="danger-button" type="button" data-i18n="btn_clear_config">清除本机配置</button>
       </details>
 
       <details class="settings troubleshooting">
-        <summary>常见排错指南</summary>
-        <h3>无法配对或扫码后没有导入</h3>
-        <p>确认二维码来自当前 Switch，并使用可信的 HTTPS 页面。自定义地址必须实现相同的 <code>#device_id</code> 与 <code>grant_secret</code> 配对参数；页面应在读取后立即清除地址栏参数。也可改用 <code>parent-import.json</code> 导入。</p>
-        <h3>加时码无效或提示已使用</h3>
-        <p>确认设备 ID、密钥、生效日期和 Switch 当前日期一致。修改密钥后，当前浏览器配对和使用原密钥签发的代码都会失效；提示已使用时请重新生成一个。</p>
-        <h3>日期不正确</h3>
-        <p>加时码按 Switch 主机的本地日期生效。请确认家长设备日期与 Switch 主机日期一致，再刷新状态并重新生成；不要继续尝试为错误日期生成的码。</p>
-        <h3>设备没有响应</h3>
-        <p>在 Switch 孩子区或家长区刷新状态，等待正在同步的操作完成。仍无响应时导出诊断信息，并检查 SD 卡中的 PlayWise 文件是否可读。</p>
-        <h3>紧急停用已开启</h3>
-        <p>紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。</p>
-        <h3>进一步诊断</h3>
-        <p>诊断导出只包含白名单状态，不包含密钥、PIN、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。</p>
+        <summary data-i18n="troubleshooting_summary">常见排错指南</summary>
+        <h3 data-i18n="faq_1_title">无法配对或扫码后没有导入</h3>
+        <p data-i18n-html="faq_1_p">确认二维码来自当前 Switch，并使用可信的 HTTPS 页面。自定义地址必须实现相同的 <code>#device_id</code> 与 <code>grant_secret</code> 配对参数；页面应在读取后立即清除地址栏参数。也可改用 <code>parent-import.json</code> 导入。</p>
+        <h3 data-i18n="faq_2_title">加时码无效或提示已使用</h3>
+        <p data-i18n="faq_2_p">确认设备 ID、密钥、生效日期和 Switch 当前日期一致。修改密钥后，当前浏览器配对和使用原密钥签发的代码都会失效；提示已使用时请重新生成一个。</p>
+        <h3 data-i18n="faq_3_title">日期不正确</h3>
+        <p data-i18n="faq_3_p">加时码按 Switch 主机的本地日期生效。请确认家长设备日期与 Switch 主机日期一致，再刷新状态并重新生成；不要继续尝试为错误日期生成的码。</p>
+        <h3 data-i18n="faq_4_title">设备没有响应</h3>
+        <p data-i18n="faq_4_p">在 Switch 孩子区或家长区刷新状态，等待正在同步的操作完成。仍无响应时导出诊断信息，并检查 SD 卡中的 PlayWise 文件是否可读。</p>
+        <h3 data-i18n="faq_5_title">紧急停用已开启</h3>
+        <p data-i18n="faq_5_p">紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。</p>
+        <h3 data-i18n="faq_6_title">进一步诊断</h3>
+        <p data-i18n-html="faq_6_p">诊断导出只包含白名单状态，不包含密钥、PIN、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。</p>
       </details>
     </section>
   </main>
 
   <footer>
-    <p>正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。</p>
-    <nav aria-label="项目链接">
-      <a href="https://github.com/selfuppen" target="_blank" rel="noopener noreferrer">作者 GitHub</a>
+    <p data-i18n="footer_p">正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。</p>
+    <nav aria-label="项目链接" data-i18n-aria="footer_nav_aria">
+      <a href="https://github.com/selfuppen" target="_blank" rel="noopener noreferrer" data-i18n="footer_author">作者 GitHub</a>
       <span aria-hidden="true">·</span>
-      <a href="https://github.com/selfuppen/NX-PlayWise" target="_blank" rel="noopener noreferrer">项目源码</a>
+      <a href="https://github.com/selfuppen/NX-PlayWise" target="_blank" rel="noopener noreferrer" data-i18n="footer_source">项目源码</a>
     </nav>
   </footer>
 
   <dialog id="pairingDialog" aria-labelledby="pairingDialogTitle">
     <form method="dialog" class="dialog-card">
-      <h2 id="pairingDialogTitle">导入此设备？</h2>
+      <h2 id="pairingDialogTitle" data-i18n="pairing_dialog_title">导入此设备？</h2>
       <p id="pairingSource"></p>
       <dl>
-        <div><dt>设备 ID</dt><dd id="pairingDevice"></dd></div>
-        <div><dt>加时密钥</dt><dd id="pairingSecret"></dd></div>
+        <div><dt data-i18n="pairing_dialog_device">设备 ID</dt><dd id="pairingDevice"></dd></div>
+        <div><dt data-i18n="pairing_dialog_secret">加时密钥</dt><dd id="pairingSecret"></dd></div>
       </dl>
-      <p id="pairingReplace" class="notice danger" hidden>确认后将替换当前浏览器保存的设备配置，已有 nonce 历史会保留。</p>
+      <p id="pairingReplace" class="notice danger" hidden data-i18n="pairing_dialog_replace">确认后将替换当前浏览器保存的设备配置，已有 nonce 历史会保留。</p>
       <div class="dialog-actions">
-        <button id="cancelPairing" class="secondary" value="cancel">取消</button>
-        <button id="confirmPairing" class="primary no-margin" value="confirm">导入此设备</button>
+        <button id="cancelPairing" class="secondary" value="cancel" data-i18n="btn_cancel">取消</button>
+        <button id="confirmPairing" class="primary no-margin" value="confirm" data-i18n="btn_confirm_import">导入此设备</button>
       </div>
     </form>
   </dialog>
 
   <dialog id="demoDialog" aria-labelledby="demoDialogTitle">
     <form method="dialog" class="dialog-card">
-      <h2 id="demoDialogTitle">确认使用公开演示密钥</h2>
-      <p>任何知道设备名的人都能生成多个有效加时码，并可把当天额度累计到 1440 分钟。请仅在 Switch 已主动启用演示模式时继续。</p>
+      <h2 id="demoDialogTitle" data-i18n="demo_dialog_title">确认使用公开演示密钥</h2>
+      <p data-i18n="demo_dialog_p">任何知道设备名的人都能生成多个有效加时码，并可把当天额度累计到 1440 分钟。请仅在 Switch 已主动启用演示模式时继续。</p>
       <div class="dialog-actions">
-        <button class="secondary" value="cancel">取消</button>
-        <button class="primary no-margin" value="confirm">了解风险并继续</button>
+        <button class="secondary" value="cancel" data-i18n="btn_cancel">取消</button>
+        <button class="primary no-margin" value="confirm" data-i18n="btn_understand_risk">了解风险并继续</button>
       </div>
     </form>
   </dialog>

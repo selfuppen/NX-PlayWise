@@ -25,7 +25,7 @@ def replace_once(value: str, old: str, new: str, label: str) -> str:
 
 def inline_javascript() -> str:
     parts: list[str] = []
-    for filename in ["token.js", "pairing.js", "storage.js", "app.js"]:
+    for filename in ["token.js", "pairing.js", "storage.js", "i18n.js", "app.js"]:
         source = (FRONTEND_ROOT / filename).read_text(encoding="utf-8")
         source = IMPORT_PATTERN.sub("", source)
         source = re.sub(r"^export\s+", "", source, flags=re.MULTILINE)
@@ -78,14 +78,18 @@ def render_standalone() -> str:
     page = replace_once(page, '  <link rel="manifest" href="./manifest.webmanifest">\n', "", "manifest link")
     page = replace_once(page, '  <link rel="icon" href="./icon.svg" type="image/svg+xml">\n', "", "icon link")
     page = replace_once(page, '  <link rel="stylesheet" href="./styles.css">', f"  <style>{style_content}</style>", "stylesheet")
-    page = replace_once(page, '  <script type="module" src="./app.js"></script>', f"  <script>{script_content}</script>", "module script")
     page = replace_once(
         page,
-        '          <a id="downloadStandalone" class="secondary compact" href="./playwise-offline.html" download>下载单文件离线版</a>\n',
+        '          <a id="downloadStandalone" class="secondary compact" href="./playwise-offline.html" download data-i18n="download_standalone">下载单文件离线版</a>\n',
         "",
         "standalone download link",
     )
-    page = replace_once(page, '<span id="offlineBadge" class="badge" hidden>可离线使用</span>', '<span id="offlineBadge" class="badge">单文件离线版</span>', "offline badge")
+    page = replace_once(
+        page,
+        '<span id="offlineBadge" class="badge" hidden data-i18n="badge_offline">可离线使用</span>',
+        '<span id="offlineBadge" class="badge" data-i18n="badge_standalone">单文件离线版</span>',
+        "offline badge",
+    )
     page = replace_once(
         page,
         "加时码由当前设备的浏览器本地生成，本项目不会把生成输入提交给业务后端。",
@@ -104,6 +108,7 @@ def render_standalone() -> str:
         "这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS 家长网页。",
         "standalone footer",
     )
+    page = replace_once(page, '  <script type="module" src="./app.js"></script>', f"  <script>{script_content}</script>", "module script")
     return page.rstrip() + "\n"
 
 

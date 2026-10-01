@@ -46,6 +46,7 @@ def test_static_assets_and_copy() -> None:
     token = (STATIC_ROOT / "token.js").read_text(encoding="utf-8")
     storage = (STATIC_ROOT / "storage.js").read_text(encoding="utf-8")
     pairing = (STATIC_ROOT / "pairing.js").read_text(encoding="utf-8")
+    i18n = (STATIC_ROOT / "i18n.js").read_text(encoding="utf-8")
     worker = (STATIC_ROOT / "sw.js").read_text(encoding="utf-8")
     manifest = json.loads((STATIC_ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
     standalone = (STATIC_ROOT / "playwise-offline.html").read_text(encoding="utf-8")
@@ -53,7 +54,7 @@ def test_static_assets_and_copy() -> None:
     for path, (filename, _) in STATIC_ASSETS.items():
         assert_true((STATIC_ROOT / filename).is_file(), f"asset for {path}")
     assert_true("/api/token" not in index + app + worker, "removed token API is not referenced")
-    runtime = app + token + storage + pairing + worker
+    runtime = app + token + storage + pairing + i18n + worker
     assert_true("https://" not in runtime, "no external HTTPS runtime dependency")
     assert_true("http://" not in index + runtime, "no external HTTP dependency")
     assert_equal(index.count("https://"), 2, "only the two approved HTTPS links")
@@ -64,6 +65,8 @@ def test_static_assets_and_copy() -> None:
     assert_true("device_id" in app + pairing and "grant_secret" in app + pairing, "fragment pairing fields")
     assert_true("history.replaceState" in app, "fragment is cleared after parsing")
     assert_true("importFile" in index + app, "configuration file import")
+    assert_true("langToggle" in index and "data-i18n" in index, "i18n language toggle and attributes")
+    assert_true("Generate Daily Grant Code" in i18n, "English translation presence")
     assert_true("生成 8 位数字加时码" in index, "v2 generation copy")
     assert_true("常见排错指南" in index and "紧急停用已开启" in index, "PWA troubleshooting guide")
     assert_true("任我玩" in index and "PlayWise" in index, "bilingual product name")
@@ -76,6 +79,7 @@ def test_static_assets_and_copy() -> None:
     assert_true("10514680" in token, "fixed vector self-test")
     assert_true("ptc.frontend.config.v1" in storage, "versioned config storage key")
     assert_true("ptc.frontend.nonces.v1" in storage, "versioned nonce storage key")
+    assert_true("ptc.frontend.lang.v1" in storage, "versioned language storage key")
     assert_true("navigator.serviceWorker.register" in app, "service worker registration")
     assert_true("caches.open" in worker and "localStorage" not in worker, "worker caches only assets")
     assert_true('"./playwise-offline.html"' in worker, "offline download is available from the PWA cache")
@@ -93,7 +97,7 @@ def test_static_assets_and_copy() -> None:
         assert_true("/switch/playwise/parent-import.json" in page, f"{label} SD card path")
     assert_true("connect-src 'none'" in standalone, "standalone blocks network requests")
     assert_true("script-src 'sha256-" in standalone and "style-src 'sha256-" in standalone, "hashed inline CSP")
-    for external_asset in ["./app.js", "./token.js", "./storage.js", "./pairing.js", "./styles.css", "./sw.js", "./manifest.webmanifest"]:
+    for external_asset in ["./app.js", "./token.js", "./storage.js", "./pairing.js", "./i18n.js", "./styles.css", "./sw.js", "./manifest.webmanifest"]:
         assert_true(external_asset not in standalone, f"standalone omits {external_asset}")
     assert_true('<script src=' not in standalone and 'type="module"' not in standalone, "standalone script is inline classic JS")
 

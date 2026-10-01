@@ -30,6 +30,22 @@ button { cursor: pointer; }
 
 .site-header strong { font-size: 21px; }
 .eyebrow { margin: 0 0 2px; color: var(--accent); font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.header-actions { display: flex; align-items: center; gap: 10px; }
+.lang-toggle {
+  border: 1px solid #95aaa4;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--accent-dark);
+  padding: 6px 13px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  transition: all 0.15s ease;
+}
+.lang-toggle:hover {
+  background: #e3f3ee;
+  border-color: var(--accent);
+}
 .badge { border-radius: 999px; background: #e3f3ee; color: var(--accent-dark); padding: 7px 11px; font-size: 13px; font-weight: 700; }
 
 main { width: min(100% - 28px, 760px); margin: 36px auto; }

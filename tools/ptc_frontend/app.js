@@ -5,8 +5,10 @@ import {
   clearFrontendState,
   demoRiskAcknowledged,
   loadConfig,
+  loadLanguage,
   rememberNonce,
   saveConfig,
+  saveLanguage,
   usedNoncesFor,
 } from "./storage.js";
 import {
@@ -16,6 +18,12 @@ import {
   pairingFromImportText,
   validatePairing,
 } from "./pairing.js";
+import {
+  DEFAULT_LANG,
+  SUPPORTED_LANGS,
+  detectBrowserLanguage,
+  t,
+} from "./i18n.js";
 
 const form = document.getElementById("generator");
 const deviceInput = document.getElementById("device");
@@ -37,8 +45,12 @@ const importFile = document.getElementById("importFile");
 const pairingDialog = document.getElementById("pairingDialog");
 const demoDialog = document.getElementById("demoDialog");
 const compatibilityWarning = document.getElementById("compatibilityWarning");
+const langToggle = document.getElementById("langToggle");
 const standaloneMode = document.documentElement.dataset.standalone === "true";
 let installPrompt = null;
+
+let lastResultDate = "";
+let lastResultMinutes = 0;
 
 function createMemoryStorage() {
   const values = new Map();
@@ -64,6 +76,9 @@ function selectStorage() {
 const selectedStorage = selectStorage();
 const frontendStorage = selectedStorage.storage;
 
+let currentLang = loadLanguage(frontendStorage) || detectBrowserLanguage();
+if (!SUPPORTED_LANGS.includes(currentLang)) currentLang = DEFAULT_LANG;
+
 const tierOptions = [1, 2, 3, 4];
 for (let minutes = 5; minutes <= 120; minutes += 5) {
   tierOptions.push(minutes);
@@ -72,8 +87,71 @@ tierOptions.push(150, 180, 210, 240);
 for (const minutes of tierOptions) {
   const option = document.createElement("option");
   option.value = String(minutes);
-  option.textContent = `${minutes} 分钟`;
+  option.textContent = t("minutes_unit", {m: minutes}, currentLang);
   tierInput.append(option);
+}
+
+function applyTranslations(lang) {
+  currentLang = lang;
+  saveLanguage(frontendStorage, lang);
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+
+  document.querySelectorAll("[data-i18n]").forEach(element => {
+    const key = element.dataset.i18n;
+    if (!key) return;
+    if (key === "intro_p") {
+      element.textContent = t(standaloneMode ? "intro_p_standalone" : "intro_p_online", {}, lang);
+    } else if (key === "badge_offline") {
+      element.textContent = t(standaloneMode ? "badge_standalone" : "badge_offline", {}, lang);
+    } else if (key === "footer_p") {
+      element.textContent = t(standaloneMode ? "footer_p_standalone" : "footer_p_online", {}, lang);
+    } else if (key === "btn_toggle_secret_show" || key === "btn_toggle_secret_hide") {
+      const visible = secretInput.type === "text";
+      element.textContent = t(visible ? "btn_toggle_secret_hide" : "btn_toggle_secret_show", {}, lang);
+    } else if (key === "btn_copy" || key === "btn_copied") {
+      element.textContent = t(copyButton.dataset.copied === "true" ? "btn_copied" : "btn_copy", {}, lang);
+    } else {
+      element.textContent = t(key, {}, lang);
+    }
+  });
+
+  document.querySelectorAll("[data-i18n-html]").forEach(element => {
+    const key = element.dataset.i18nHtml;
+    if (!key) return;
+    if (key === "pairing_p") {
+      element.innerHTML = t(standaloneMode ? "pairing_p_standalone" : "pairing_p_online", {}, lang);
+    } else {
+      element.innerHTML = t(key, {}, lang);
+    }
+  });
+
+  document.querySelectorAll("[data-i18n-aria]").forEach(element => {
+    const key = element.dataset.i18nAria;
+    if (key) element.setAttribute("aria-label", t(key, {}, lang));
+  });
+
+  if (langToggle) {
+    langToggle.textContent = t("lang_toggle_btn", {}, lang);
+    langToggle.setAttribute("aria-label", t("lang_toggle_aria", {}, lang));
+  }
+
+  const currentTier = tierInput.value;
+  for (const option of tierInput.options) {
+    const mins = Number(option.value);
+    option.textContent = t("minutes_unit", {m: mins}, lang);
+  }
+  tierInput.value = currentTier;
+
+  if (!result.hidden && lastResultDate && lastResultMinutes) {
+    metaOutput.textContent = t("result_meta", {date: lastResultDate, minutes: lastResultMinutes}, lang);
+  }
+}
+
+if (langToggle) {
+  langToggle.addEventListener("click", () => {
+    const nextLang = currentLang === "zh" ? "en" : "zh";
+    applyTranslations(nextLang);
+  });
 }
 
 function showError(target, message) {
@@ -150,6 +228,7 @@ function loadSavedForm() {
 
 async function initialize() {
   loadSavedForm();
+  applyTranslations(currentLang);
   let fragmentPairing = null;
   try {
     fragmentPairing = pairingFromFragment(globalThis.location.hash);
@@ -161,29 +240,29 @@ async function initialize() {
     }
   }
   if (typeof TextEncoder !== "function" || typeof DataView !== "function") {
-    showError(securityError, "当前浏览器缺少生成加时码所需的基础能力，请升级浏览器。");
+    showError(securityError, t("err_browser_capability", {}, currentLang));
     generateButton.disabled = true;
     return;
   }
   const hasSecureRandom = typeof globalThis.crypto?.getRandomValues === "function";
   if (!standaloneMode && (!globalThis.isSecureContext || !globalThis.crypto?.subtle || !hasSecureRandom)) {
-    showError(securityError, "当前页面无法使用 Web Crypto，请通过 HTTPS 或 localhost 打开。");
+    showError(securityError, t("err_web_crypto", {}, currentLang));
     generateButton.disabled = true;
     return;
   }
   if (standaloneMode && !globalThis.crypto?.subtle) {
-    addCompatibilityWarning("当前浏览器无法使用 Web Crypto，已启用内置 HMAC-SHA256 兼容实现；加时码协议和校验结果不变。");
+    addCompatibilityWarning(t("warn_compat_subtle", {}, currentLang));
   }
   if (standaloneMode && !hasSecureRandom) {
-    addCompatibilityWarning("当前浏览器无法使用安全随机源，将从当天尚未签发的编号中顺序选择；若 Switch 提示代码已使用，请重新生成。");
+    addCompatibilityWarning(t("warn_compat_random", {}, currentLang));
   }
   if (!selectedStorage.persistent) {
-    addCompatibilityWarning("当前打开方式不允许持久保存配置；关闭页面后需要重新导入，且旧代码发生编号碰撞时请重新生成。");
+    addCompatibilityWarning(t("warn_compat_storage", {}, currentLang));
   }
   try {
     await runSelfTest();
   } catch (error) {
-    showError(selfTestError, `加时码算法自检失败，已停止生成：${error instanceof Error ? error.message : String(error)}`);
+    showError(selfTestError, `${t("err_selftest", {}, currentLang)}${error instanceof Error ? error.message : String(error)}`);
     generateButton.disabled = true;
     return;
   }
@@ -196,7 +275,7 @@ async function initialize() {
     }
   }
   if (fragmentPairing) {
-    await confirmPairing(fragmentPairing, "检测到 Switch 二维码中的设备配置，请确认后导入。");
+    await confirmPairing(fragmentPairing, t("pairing_source_qr", {}, currentLang));
   }
 }
 
@@ -221,7 +300,9 @@ form.addEventListener("submit", async event => {
     saveConfig(frontendStorage, {deviceId, secret, tierMinutes});
     rememberNonce(frontendStorage, deviceId, dateText, nonce);
     codeOutput.textContent = code;
-    metaOutput.textContent = `${dateText} · ${tierMinutes} 分钟 · v2`;
+    lastResultDate = dateText;
+    lastResultMinutes = tierMinutes;
+    metaOutput.textContent = t("result_meta", {date: dateText, minutes: tierMinutes}, currentLang);
     result.hidden = false;
   } catch (error) {
     showError(errorOutput, error instanceof Error ? error.message : String(error));
@@ -234,7 +315,7 @@ document.getElementById("toggleSecret").addEventListener("click", event => {
   const button = event.currentTarget;
   const visible = secretInput.type === "text";
   secretInput.type = visible ? "password" : "text";
-  button.textContent = visible ? "显示" : "隐藏";
+  button.textContent = t(visible ? "btn_toggle_secret_show" : "btn_toggle_secret_hide", {}, currentLang);
   button.setAttribute("aria-pressed", visible ? "false" : "true");
 });
 
@@ -245,9 +326,9 @@ importFile.addEventListener("change", async () => {
   const [file] = importFile.files || [];
   if (!file) return;
   try {
-    if (file.size > 16384) throw new Error("配置文件过大，预期为小于 16 KiB 的 parent-import.json");
+    if (file.size > 16384) throw new Error(t("err_import_size", {}, currentLang));
     const pairing = pairingFromImportText(await file.text());
-    await confirmPairing(pairing, `来自文件：${file.name}`);
+    await confirmPairing(pairing, t("pairing_source_file", {name: file.name}, currentLang));
   } catch (error) {
     showError(importError, error instanceof Error ? error.message : String(error));
   } finally {
@@ -258,10 +339,14 @@ importFile.addEventListener("change", async () => {
 copyButton.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(codeOutput.textContent || "");
-    copyButton.textContent = "已复制";
-    setTimeout(() => { copyButton.textContent = "复制加时码"; }, 1500);
+    copyButton.dataset.copied = "true";
+    copyButton.textContent = t("btn_copied", {}, currentLang);
+    setTimeout(() => {
+      copyButton.dataset.copied = "false";
+      copyButton.textContent = t("btn_copy", {}, currentLang);
+    }, 1500);
   } catch {
-    showError(errorOutput, "复制失败，请长按或选中加时码手动复制");
+    showError(errorOutput, t("err_copy_failed", {}, currentLang));
   }
 });
 

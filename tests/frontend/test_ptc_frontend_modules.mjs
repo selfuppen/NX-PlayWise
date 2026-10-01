@@ -14,11 +14,14 @@ import {
   CONFIG_KEY,
   DEMO_ACK_KEY,
   DEFAULT_CONFIG,
+  LANG_KEY,
   NONCES_KEY,
   clearFrontendState,
   loadConfig,
+  loadLanguage,
   rememberNonce,
   saveConfig,
+  saveLanguage,
   usedNoncesFor,
 } from "../../tools/ptc_frontend/storage.js";
 import {
@@ -29,6 +32,12 @@ import {
   pairingFromImportText,
   validatePairing,
 } from "../../tools/ptc_frontend/pairing.js";
+import {
+  DEFAULT_LANG,
+  SUPPORTED_LANGS,
+  detectBrowserLanguage,
+  t,
+} from "../../tools/ptc_frontend/i18n.js";
 
 class MemoryStorage {
   constructor() { this.values = new Map(); }
@@ -130,6 +139,20 @@ assert.deepEqual(loadConfig(storage), DEFAULT_CONFIG);
 saveConfig(storage, {deviceId: "family-switch", secret: "family-secret", tierMinutes: 45});
 assert.deepEqual(loadConfig(storage), {deviceId: "family-switch", secret: "family-secret", tierMinutes: 45});
 assert.ok(storage.getItem(CONFIG_KEY).includes("family-secret"));
+
+assert.equal(loadLanguage(storage), null);
+saveLanguage(storage, "en");
+assert.equal(loadLanguage(storage), "en");
+assert.equal(storage.getItem(LANG_KEY), "en");
+saveLanguage(storage, "zh");
+assert.equal(loadLanguage(storage), "zh");
+
+assert.equal(t("page_title", {}, "zh"), "生成今日加时码");
+assert.equal(t("page_title", {}, "en"), "Generate Daily Grant Code");
+assert.equal(t("minutes_unit", {m: 30}, "zh"), "30 分钟");
+assert.equal(t("minutes_unit", {m: 30}, "en"), "30 min");
+assert.equal(DEFAULT_LANG, "zh");
+assert.deepEqual(SUPPORTED_LANGS, ["zh", "en"]);
 
 rememberNonce(storage, "family-switch", "2026-07-08", 7);
 rememberNonce(storage, "family-switch", "2026-07-08", 7);

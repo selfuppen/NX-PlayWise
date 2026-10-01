@@ -3,6 +3,7 @@ import {DEMO_SECRET} from "./pairing.js";
 export const CONFIG_KEY = "ptc.frontend.config.v1";
 export const NONCES_KEY = "ptc.frontend.nonces.v1";
 export const DEMO_ACK_KEY = "ptc.frontend.demo-ack.v1";
+export const LANG_KEY = "ptc.frontend.lang.v1";
 
 export const DEFAULT_CONFIG = Object.freeze({
   deviceId: "kid-switch",
@@ -78,3 +79,16 @@ export function demoRiskAcknowledged(storage) {
 export function acknowledgeDemoRisk(storage) {
   storage.setItem(DEMO_ACK_KEY, "yes");
 }
+
+export function loadLanguage(storage) {
+  const saved = storage.getItem(LANG_KEY);
+  if (saved === "zh" || saved === "en") return saved;
+  return null;
+}
+
+export function saveLanguage(storage, lang) {
+  if (lang === "zh" || lang === "en") {
+    storage.setItem(LANG_KEY, lang);
+  }
+}
+
