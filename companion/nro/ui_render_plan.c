@@ -440,32 +440,33 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
     {
         bool switch_dirty = draft->enabled != model->bedtime_policy.enabled;
-        UiRect saved_pill = {master_card.x + 235, master_card.y + 8, 128, 22};
-        UiRect draft_pill = {master_card.x + 374, master_card.y + 8, 140, 22};
+        UiRect saved_pill = {master_card.x + 215, master_card.y + 8, 126, 22};
+        UiRect draft_pill = {master_card.x + 351, master_card.y + 8, 185, 22};
         fill_round_rect(pixels, stride, saved_pill, 6, UI_RAISED);
         draw_text_center(pixels, stride, saved_pill,
-                         model->bedtime_policy.enabled ? "已保存：开启" : "已保存：关闭",
+                         model->bedtime_policy.enabled ? "当前生效：开启" : "当前生效：关闭",
                          12, UI_INK);
-        fill_round_rect(pixels, stride, draft_pill, 6,
-                        switch_dirty ? UI_WARNING_SOFT : UI_RAISED);
-        draw_text_center(pixels, stride, draft_pill,
-                         switch_dirty ? (draft->enabled ? "待保存：开启" : "待保存：关闭") :
-                                        (draft->enabled ? "草稿：开启" : "草稿：关闭"),
-                         12, switch_dirty ? UI_WARNING : UI_MUTED);
+        if (switch_dirty) {
+            fill_round_rect(pixels, stride, draft_pill, 6, UI_WARNING_SOFT);
+            draw_text_center(pixels, stride, draft_pill,
+                             draft->enabled ? "未保存：开启 (按 + 生效)" : "未保存：关闭 (按 + 生效)",
+                             12, UI_WARNING);
+        }
         if (bedtime_enforcing) {
-            UiRect active_pill = {master_card.x + 525, master_card.y + 8, 110, 22};
+            int active_x = switch_dirty ? (draft_pill.x + draft_pill.width + 10) : (saved_pill.x + saved_pill.width + 10);
+            UiRect active_pill = {active_x, master_card.y + 8, 110, 22};
             fill_round_rect(pixels, stride, active_pill, 6, UI_DANGER_SOFT);
             draw_text_center(pixels, stride, active_pill, "● 限制使用中", 12, UI_DANGER);
         }
         draw_text(pixels, stride, master_card.x + 18, master_card.y + 45,
                   bedtime_enforcing && !draft->enabled
-                      ? "保存关闭后解除当前就寝限制；所有就寝规则暂停，已保存时段保留"
+                      ? "已改为关闭（草稿），按 + 保存后解除当前就寝限制；所有就寝规则暂停"
                       : (draft->enabled
                           ? (switch_dirty
-                              ? "保存开启后，每周、节假日和指定日期的就寝规则按计划生效"
+                              ? "已改为开启（草稿），按 + 键保存后按计划生效；按 ZL 撤销"
                               : "总开关开启：每周、节假日和指定日期的就寝规则按计划生效")
                           : (switch_dirty
-                              ? "保存关闭后，所有就寝规则暂停；已保存时段保留"
+                              ? "已改为关闭（草稿），按 + 键保存后所有就寝规则暂停；按 ZL 撤销"
                               : "总开关关闭：所有就寝规则暂停；已保存时段保留")),
                   13, bedtime_enforcing ? UI_DANGER : UI_MUTED);
     }
@@ -497,7 +498,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         uint32_t state_bg = state_color == UI_DANGER ? UI_DANGER_SOFT :
             (state_color == UI_WARNING ? UI_WARNING_SOFT : UI_SUCCESS_SOFT);
         char state_text[96];
-        snprintf(state_text, sizeof(state_text), "已保存的开关：%s｜%s",
+        snprintf(state_text, sizeof(state_text), "当前生效：%s｜%s",
             model->bedtime_policy.enabled ? "开" : "关",
             strcmp(model->result_status, "error") == 0 ? "保存失败，草稿保留" :
             (model->waiting ? "正在保存" :
