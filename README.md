@@ -97,15 +97,20 @@ The PlayWise PIN protects only this project's Parent Portal and is completely di
 
 ## Roadmap
 
-| Feature | Status |
-| :--- | :--- |
-| Chinese statutory holiday calendar | Implemented (built-in 2026 calendar) |
-| Date schedules, rule preview, daily self-buffer | Implemented (self-buffer disabled by default) |
-| Family activity history & 7/30-day allowance analytics | Implemented |
-| Main app dark mode / 3-state theme | Implemented (overlay retains fixed dark theme) |
-| Custom shortcut recording | In validation (presets available, recording entry unreleased) |
-| Bedtime schedule | Implemented (overnight schedules, background restriction, overlay recovery; disabled by default) |
-| Per-title playtime statistics | TODO (`pdm:qry` hardware verification gated; currently marked unavailable) |
+| Feature | Status | Implementation Date |
+| :--- | :--- | :--- |
+| Chinese statutory holiday calendar | Implemented (built-in 2026 calendar) | 2026-08-11 |
+| Main app dark mode / 3-state theme | Implemented (overlay retains fixed dark theme) | 2026-08-13 |
+| Date schedules, rule preview, daily self-buffer | Implemented (self-buffer disabled by default) | 2026-08-24 |
+| Family activity history & 7/30-day allowance analytics | Implemented (missing dates marked as unknown) | 2026-08-24 |
+| Bedtime schedule | Implemented (overnight schedules, background restriction, overlay recovery; disabled by default) | 2026-09-11 |
+| In-game overlay: child redemption & parent quick actions | Implemented (redeem grant codes, claim self-buffer, and quick unlock via overlay) | 2026-09-28 |
+| Daily dispatch dashboard & decision breakdown preview | Implemented (card grouping, temporary quota preview, decision flow drill-down) | 2026-09-29 |
+| Switch-native interactive sound effects (audout engine) | Implemented (12 Switch-style sound effects, dial audio, and sound toggle) | 2026-10-01 |
+| Multi-language internationalization (Traditional Chinese & English) | Implemented (bilingual interface & docs, language decoupling) | 2026-10-02 |
+| Destructive action long-press charge-up & safety protection | Implemented (charge-up confirmation with continuous audio feedback, instant cancel) | 2026-10-02 |
+| Custom shortcut recording | In validation (presets available, recording entry unreleased) | TBD |
+| Per-title playtime statistics | TODO (`pdm:qry` hardware verification gated; currently marked unavailable) | TBD |
 
 Once daily limit or bedtime takes effect, the in-game overlay remains PlayWise's only on-console interactive entry: for daily limits, users can redeem grant codes, or parents can grant temporary minutes or unlimited play for today; for bedtime, users can skip the session, disable the schedule, or restore pre-installation settings. Temporary bypass via Nintendo master PIN in the native dialog remains handled by Nintendo. If the overlay or sysmodule is unavailable, PlayWise does not provide an on-console recovery fallback or auto-write recovery flags.
 
