@@ -932,6 +932,31 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
     return failed;
 }
 
+static int render_eye_care_previews(const char *directory, const PtcUiModel *baseline)
+{
+    int failed = 0;
+    for (int dark = 0; dark <= 1; ++dark) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_TODAY;
+        model.eye_care_policy.enabled = true;
+        model.eye_care_policy.play_minutes = 40;
+        model.eye_care_policy.rest_minutes = 10;
+        model.eye_care_used_minutes = 12;
+        snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "playing");
+        if (!ptc_ui_open_home_details(&model)) return 1;
+        failed |= save_preview(directory, "parent", "parent-details-eye-care-playing", &model, dark);
+        ptc_ui_cancel_overlay(&model);
+        snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "resting");
+        model.eye_care_break_id = 123;
+        model.eye_care_rest_remaining_seconds = 94;
+        failed |= save_preview(directory, "parent", "eye-care-resting", &model, dark);
+        if (!ptc_ui_open_home_details(&model)) return 1;
+        failed |= save_preview(directory, "parent", "parent-details-eye-care-resting", &model, dark);
+    }
+    return failed;
+}
+
 static void localize_preview_baseline(PtcUiModel *model)
 {
     snprintf(model->command_name, sizeof(model->command_name), "%s", ptc_ui_text(PTC_UI_T_REFRESH_STATUS));
@@ -990,6 +1015,7 @@ int main(int argc, char **argv)
     localize_preview_baseline(&model);
     ptc_mkdir(argv[2]);
     failed |= render_all_previews(argv[2], &model);
+    failed |= render_eye_care_previews(argv[2], &model);
 
     /* Pass 2: English previews */
     char en_dir[1024];
@@ -998,6 +1024,14 @@ int main(int argc, char **argv)
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_ENGLISH);
     localize_preview_baseline(&model);
     failed |= render_all_previews(en_dir, &model);
+    failed |= render_eye_care_previews(en_dir, &model);
+    /* The focused eye care surfaces also receive traditional Chinese visual QA. */
+    char zh_hant_dir[1024];
+    snprintf(zh_hant_dir, sizeof(zh_hant_dir), "%s/zh_hant", argv[2]);
+    ptc_mkdir(zh_hant_dir);
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
+    localize_preview_baseline(&model);
+    failed |= render_eye_care_previews(zh_hant_dir, &model);
     FT_Done_Face(g_ui.face);
     free(bytes);
     return failed;

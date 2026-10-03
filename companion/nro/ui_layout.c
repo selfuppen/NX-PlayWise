@@ -244,10 +244,11 @@ PtcUiRect ptc_ui_home_summary_rect(bool parent)
 
 PtcUiRect ptc_ui_today_card_rect(int index)
 {
-    if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
+    if (index < 0 || index >= 7) return (PtcUiRect){0, 0, 0, 0};
+    if (index == 6) return (PtcUiRect){560, 554, 672, 68};
+    if (index >= 4) return (PtcUiRect){560 + (index - 4) * 348, 480, 324, 68};
     return (PtcUiRect){560 + (index % 2) * 348,
-                       index < 4 ? 202 + (index / 2) * 118 : 480,
-                       324, index < 4 ? 106 : 120};
+                       202 + (index / 2) * 118, 324, 106};
 }
 
 PtcUiRect ptc_ui_plan_card_rect(int index)
@@ -466,9 +467,10 @@ PtcUiOperation ptc_ui_today_operation(int index)
     static const PtcUiOperation actions[] = {
         PTC_UI_OPERATION_SET_TODAY_LIMIT, PTC_UI_OPERATION_ADD_TODAY_MINUTES,
         PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, PTC_UI_OPERATION_RESTORE_TODAY_POLICY,
-        PTC_UI_OPERATION_SKIP_BEDTIME, PTC_UI_OPERATION_NONE
+        PTC_UI_OPERATION_SKIP_BEDTIME, PTC_UI_OPERATION_NONE,
+        PTC_UI_OPERATION_SKIP_EYE_CARE
     };
-    return index >= 0 && index < 6 ? actions[index] : PTC_UI_OPERATION_NONE;
+    return index >= 0 && index < 7 ? actions[index] : PTC_UI_OPERATION_NONE;
 }
 
 bool ptc_ui_open_home_details(PtcUiModel *model)

@@ -351,7 +351,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     return make_hit(PTC_UI_HIT_NONE, 0);
 }
 
-PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
+PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
 {
     int i;
     int count;
@@ -560,9 +560,9 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
                 (model->parent_page == PTC_UI_PARENT_SETTINGS ? ptc_ui_settings_card_rect(i) : ptc_ui_parent_card_rect(i))));
         if (model->parent_page == PTC_UI_PARENT_TODAY &&
             (model->disable_flag_present || model->waiting ||
-             (i == 3 && ptc_ui_status_is_fresh(model, (int64_t)time(NULL)) &&
+             (i == 3 && ptc_ui_status_is_fresh(model, now) &&
               !model->today_override_present) ||
-             ptc_ui_today_action_unavailable_reason(model, i, (int64_t)time(NULL)))) continue;
+             ptc_ui_today_action_unavailable_reason(model, i, now))) continue;
         if ((model->parent_page != PTC_UI_PARENT_SUPPORT ||
              (ptc_ui_safety_action_visible(model, i) &&
               ptc_ui_safety_action_available(model, i) != PTC_UI_ACTION_DISABLED)) &&
@@ -571,4 +571,9 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
         }
     }
     return make_hit(PTC_UI_HIT_NONE, 0);
+}
+
+PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y)
+{
+    return ptc_ui_hit_test_at(model, x, y, (int64_t)time(NULL));
 }

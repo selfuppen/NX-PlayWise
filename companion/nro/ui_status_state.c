@@ -66,9 +66,80 @@ bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
         strcmp(model->result_status, "error") != 0;
 }
 
+void ptc_ui_format_eye_care_cycle(const PtcUiModel *model, int64_t now,
+    char *out, size_t out_size)
+{
+    int64_t age;
+    PtcUiTextId id;
+    PtcUiTextArg arg;
+    if (!out || out_size == 0) return;
+    out[0] = '\0';
+    if (!ptc_ui_status_is_fresh(model, now)) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH));
+        return;
+    }
+    if (!model->eye_care_policy.enabled || strcmp(model->eye_care_phase, "off") == 0) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_OFF));
+        return;
+    }
+    if (strcmp(model->eye_care_phase, "paused") == 0) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_PAUSED));
+        return;
+    }
+    if (strcmp(model->eye_care_phase, "playing") == 0) {
+        unsigned remaining = model->eye_care_used_minutes >= model->eye_care_policy.play_minutes
+            ? 0u : (unsigned)(model->eye_care_policy.play_minutes - model->eye_care_used_minutes);
+        if (remaining == 0) {
+            snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH));
+            return;
+        }
+        id = PTC_UI_T_EYE_CARE_PLAY_COUNTDOWN_NAMED;
+        arg = PTC_UI_TEXT_NUMBER("minutes", remaining);
+        (void)ptc_ui_text_format(id, out, out_size, &arg, 1);
+        return;
+    }
+    if (strcmp(model->eye_care_phase, "resting") == 0) {
+        int64_t remaining;
+        age = ptc_ui_status_age_seconds(model, now);
+        remaining = (int64_t)model->eye_care_rest_remaining_seconds - age;
+        if (remaining <= 0 || model->eye_care_break_id == 0) {
+            snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH));
+            return;
+        }
+        id = PTC_UI_T_EYE_CARE_REST_COUNTDOWN_NAMED;
+        char seconds[3];
+        snprintf(seconds, sizeof(seconds), "%02u", (unsigned)(remaining % 60));
+        PtcUiTextArg args[] = {
+            PTC_UI_TEXT_NUMBER("minutes", remaining / 60),
+            PTC_UI_TEXT_STRING("seconds", seconds)
+        };
+        (void)ptc_ui_text_format(id, out, out_size, args, 2);
+        return;
+    }
+    snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_UNKNOWN));
+}
+
 const char *ptc_ui_today_action_unavailable_reason(const PtcUiModel *model,
     int index, int64_t now)
 {
+    if (index == 6) {
+        int64_t age;
+        if (!ptc_ui_status_is_fresh(model, now))
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH);
+        if (!model->eye_care_policy.enabled)
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_OFF);
+        if (strcmp(model->eye_care_phase, "resting") != 0)
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_NOT_RESTING);
+        age = ptc_ui_status_age_seconds(model, now);
+        if (model->eye_care_break_id == 0 ||
+            (int64_t)model->eye_care_rest_remaining_seconds <= age)
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH);
+        if ((model->bedtime_active && !model->bedtime_skipped) ||
+            model->blocked_today == 1 ||
+            (model->remaining_available && model->remaining_minutes <= 0))
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_LIMIT_PRIORITY);
+        return NULL;
+    }
     if (!ptc_ui_status_is_fresh(model, now)) return NULL;
     if (index == 1 && model->unrestricted_today == 1)
         return ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_NO_GRANT_REQUIRED);

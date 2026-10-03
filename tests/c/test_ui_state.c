@@ -202,7 +202,7 @@ static void test_release_navigation(void)
     PtcUiModel model;
     char shortcut_hint[160];
     memset(&model, 0, sizeof(model));
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 6, "today exposes quota, bedtime and buffer cards");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 7, "today exposes quota, bedtime, buffer and eye care cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 6, "time plan root exposes six direct cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 4, "grant page exposes generation, management and history");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 7, "settings page exposes language, audio and security");
@@ -1984,7 +1984,7 @@ static void test_home_redesign(void)
     const PtcUiOperation expected[] = {PTC_UI_OPERATION_SET_TODAY_LIMIT,
         PTC_UI_OPERATION_ADD_TODAY_MINUTES, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT,
         PTC_UI_OPERATION_RESTORE_TODAY_POLICY, PTC_UI_OPERATION_SKIP_BEDTIME,
-        PTC_UI_OPERATION_NONE};
+        PTC_UI_OPERATION_NONE, PTC_UI_OPERATION_SKIP_EYE_CARE};
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
@@ -1994,23 +1994,40 @@ static void test_home_redesign(void)
                !rects_overlap(quota_group, ptc_ui_home_summary_rect(true)) &&
                !rects_overlap(other_group, ptc_ui_home_summary_rect(true)),
                "today section backgrounds do not overlap each other or the summary");
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 7; ++i) {
         PtcUiRect rect = ptc_ui_today_card_rect(i);
         PtcUiRect group = i < 4 ? quota_group : other_group;
+        if (i == 6) {
+            model.status_loaded = true;
+            model.status_updated_at = 1000;
+            model.eye_care_policy.enabled = true;
+            snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "resting");
+            model.eye_care_break_id = 123;
+            model.eye_care_rest_remaining_seconds = 90;
+        }
         check_int(ptc_ui_today_operation(i), expected[i], "today card maps to its named operation");
-        check_hit(hit_center(&model, rect), PTC_UI_HIT_PARENT_CARD, i, "today card hit matches render position");
-        check_true(rect.h == (i < 4 ? 106 : 120) &&
+        check_hit(i == 6 ? ptc_ui_hit_test_at(&model, rect.x + rect.w / 2,
+                      rect.y + rect.h / 2, 1000) : hit_center(&model, rect),
+                  PTC_UI_HIT_PARENT_CARD, i, "today card hit matches render position");
+        check_true(rect.h == (i < 4 ? 106 : 68) &&
                    rect.x >= group.x && rect.x + rect.w <= group.x + group.w &&
                    rect.y >= group.y + 24 && rect.y + rect.h <= group.y + group.h &&
                    !rects_overlap(rect, ptc_ui_home_summary_rect(true)),
                    "today cards fit below their section headings and stay clear of the summary");
         check_true(rect.y + rect.h < ptc_ui_notice_rect().y,
                    "every today card leaves room above the status capsule");
-        for (int j = i + 1; j < 6; ++j)
+        for (int j = i + 1; j < 7; ++j)
             check_true(!rects_overlap(rect, ptc_ui_today_card_rect(j)), "today cards do not overlap");
         model.disable_flag_present = true;
-        check_hit(hit_center(&model, rect), PTC_UI_HIT_NONE, 0, "disabled today action has no touch target");
+        check_hit(i == 6 ? ptc_ui_hit_test_at(&model, rect.x + rect.w / 2,
+                      rect.y + rect.h / 2, 1000) : hit_center(&model, rect),
+                  PTC_UI_HIT_NONE, 0, "disabled today action has no touch target");
         model.disable_flag_present = false;
+        if (i == 6) {
+            model.status_loaded = false;
+            model.status_updated_at = 0;
+            model.eye_care_policy.enabled = false;
+        }
     }
     {
         PtcUiModel state = model;
@@ -2057,6 +2074,49 @@ static void test_home_redesign(void)
         check_true(ptc_ui_today_action_unavailable_reason(&state, 1, 1121) == NULL &&
                    ptc_ui_today_action_unavailable_reason(&state, 4, 1121) == NULL,
                    "stale state defers unavailable decisions until refresh");
+
+        state.bedtime_active = false;
+        state.bedtime_skipped = false;
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1000);
+        check_true(reason && strstr(reason, "已关闭") != NULL,
+            "eye care skip explains disabled policy");
+        state.eye_care_policy.enabled = true;
+        state.eye_care_policy.play_minutes = 40;
+        state.eye_care_used_minutes = 12;
+        snprintf(state.eye_care_phase, sizeof(state.eye_care_phase), "playing");
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1000);
+        check_true(reason && strstr(reason, "不在护眼休息") != NULL,
+            "eye care skip is unavailable while playing");
+        ptc_ui_format_eye_care_cycle(&state, 1000, text, sizeof(text));
+        check_true(strstr(text, "28") != NULL && strstr(text, "约") != NULL,
+            "playing preview uses minute precision without a fabricated seconds timer");
+        snprintf(state.eye_care_phase, sizeof(state.eye_care_phase), "resting");
+        state.eye_care_break_id = 99;
+        state.eye_care_rest_remaining_seconds = 90;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 6, 1001) == NULL,
+            "fresh active eye care break can be skipped");
+        ptc_ui_format_eye_care_cycle(&state, 1001, text, sizeof(text));
+        check_true(strstr(text, "1:29") != NULL,
+            "resting preview counts down elapsed seconds");
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1090);
+        ptc_ui_format_eye_care_cycle(&state, 1090, text, sizeof(text));
+        check_true(reason && strstr(reason, "刷新") != NULL && strstr(text, "刷新") != NULL,
+            "expired eye care countdown requires refresh and blocks skip");
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1121);
+        check_true(reason && strstr(reason, "刷新") != NULL,
+            "stale eye care state cannot submit a skip");
+        state.status_updated_at = 1100;
+        state.bedtime_active = true;
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1101);
+        check_true(reason && strstr(reason, "就寝") != NULL,
+            "bedtime takes precedence over eye care skip");
+        state.bedtime_active = false;
+        snprintf(state.eye_care_phase, sizeof(state.eye_care_phase), "paused");
+        ptc_ui_format_eye_care_cycle(&state, 1101, text, sizeof(text));
+        check_true(strstr(text, "暂停") != NULL, "paused eye care phase is explicit");
+        snprintf(state.eye_care_phase, sizeof(state.eye_care_phase), "unknown");
+        ptc_ui_format_eye_care_cycle(&state, 1101, text, sizeof(text));
+        check_true(strstr(text, "未知") != NULL, "unknown eye care reading is explicit");
     }
     {
         const int counts[] = {5, 4, 5, 6};
@@ -2086,11 +2146,19 @@ static void test_home_redesign(void)
     check_int(ptc_ui_today_operation(-1), PTC_UI_OPERATION_NONE, "invalid action cannot dispatch");
     check_int(ptc_ui_today_operation(4), PTC_UI_OPERATION_SKIP_BEDTIME, "fifth action dispatches bedtime skip");
     check_int(ptc_ui_today_operation(5), PTC_UI_OPERATION_NONE, "buffer status card does not dispatch a write");
+    check_int(ptc_ui_today_operation(6), PTC_UI_OPERATION_SKIP_EYE_CARE, "seventh action dispatches eye care skip");
     model.selected_index = 5;
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(model.parent_footer_focused && model.parent_content_selection == 5, "footer remembers last card");
+    check_true(!model.parent_footer_focused && model.selected_index == 6,
+        "down from buffer reaches eye care skip");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_true(!model.parent_footer_focused && model.selected_index == 5, "up restores card focus");
+    check_true(!model.parent_footer_focused && model.selected_index == 4,
+        "up from eye care reaches bedtime");
+    model.selected_index = 6;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused && model.parent_content_selection == 6, "footer remembers last card");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_true(!model.parent_footer_focused && model.selected_index == 6, "up restores card focus");
     snprintf(model.message, sizeof(model.message), "keep result");
     for (int parent = 0; parent <= 1; ++parent) {
         model.view = parent ? PTC_UI_PARENT : PTC_UI_CHILD;
@@ -2099,7 +2167,7 @@ static void test_home_redesign(void)
         check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "details block underlying input");
         check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_NONE, 0, "details have no hidden confirm action");
         check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0, "details return is touchable");
-        check_true(ptc_ui_cancel_overlay(&model) && model.selected_index == 5 && strcmp(model.message, "keep result") == 0,
+        check_true(ptc_ui_cancel_overlay(&model) && model.selected_index == 6 && strcmp(model.message, "keep result") == 0,
             "details close preserves focus and result");
     }
     model.waiting = true;

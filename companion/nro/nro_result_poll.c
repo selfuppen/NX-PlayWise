@@ -352,6 +352,13 @@ void poll_result(UiState *ui, bool force)
             snprintf(ui->model.message, sizeof(ui->model.message),
                 ptc_ui_text(PTC_UI_T_THE_BEDTIME_WINDOW_HAS_CHANGED_AND_IS));
         }
+        if (strcmp(ui->model.result_type, "skip_eye_care_break") == 0 &&
+            strcmp(ui->model.result_status, "error") == 0 && ui->model.error_code == 322) {
+            ui->model.pending_eye_care_break_id = 0;
+            submit_status(ui);
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CHANGED));
+        }
         if (ui->quota_recheck_pending && strcmp(ui->model.result_type, "status") == 0) {
             finish_quota_recheck(ui, strcmp(ui->model.result_status, "ok") == 0);
         }

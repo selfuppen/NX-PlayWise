@@ -10,7 +10,7 @@
 
 In the parent's Time Plan, enable Eye Care and set 1–240 minutes of use and 1–60 minutes of rest. Tap ±1 or ±10 minute buttons, or use the controller's left/right buttons for one-minute steps and ZL/ZR for ten-minute steps. It is off by default, with 40 minutes of use and 10 minutes of rest preset. The Time Plan card's badge shows the Eye Care switch state. Before first enablement, confirm Nintendo's “Suspend Software” on time limit setting and verify that the overlay is available. PlayWise does not change that Nintendo setting.
 
-Enabling starts a new cycle at current usage. Reducing the use period may start a break immediately; disabling releases the eye care restriction immediately. Awake HOME use counts, sleep pauses usage accumulation, and sleep counts toward a break. The child view and overlay show remaining use or break time; an unavailable reading is shown as unknown. During a break, a parent can verify their PIN in the overlay and choose “Skip this eye care break”; this applies only to the current break. Daily allowance and bedtime restrictions take precedence and reset the eye care cycle.
+Enabling starts a new cycle at current usage. Reducing the use period may start a break immediately; disabling releases the eye care restriction immediately. Awake HOME use counts, sleep pauses usage accumulation, and sleep counts toward a break. The child view and overlay show remaining use or break time; an unavailable reading is shown as unknown. During a break, a parent can verify their PIN in the overlay or Today's Schedule and choose “Skip this eye care break”; this applies only to the current break and starts a new cycle. Daily allowance and bedtime restrictions take precedence and reset the eye care cycle.
 
 An originally unlimited day temporarily uses a 1440-minute PCTL limit for counting while eye care is enabled. The UI still identifies the original rule and temporary cap; disabling restores unlimited mode. Hardware A/B checks of the 1440-minute reading, sleep behavior, and actual pause and resume remain pending. See the [Testing Guide](TESTING_GUIDE.md) before release.
 
@@ -89,7 +89,7 @@ Parent Zone consists of five top-level tabs: **Today's Schedule, Time Plans, Off
 
 Daily playtime limits and bedtime restrictions operate independently: setting "Unlimited Play Today" or adding minutes does not bypass bedtime limits; clearing today's adjustment reinstates underlying plans, which may decrease remaining time. Review the rule origin and projected outcome on the confirmation dialog before submitting.
 
-The Today's Schedule tab features six quick-action cards and a full-screen details view. The first four cards pertain to "Today's Limit Adjustments (Today Only)" and reset the next day; the latter two pertain to "Bedtime & Autonomy Buffer" (bedtime applies independently, and autonomy buffer adds playtime today only when eligible).
+The Today's Schedule tab features seven quick-action cards and a full-screen details view. The first four cards pertain to "Today's Limit Adjustments (Today Only)" and reset the next day; the latter three cover bedtime, autonomy buffer, and eye care. Bedtime and eye care restrict independently, while autonomy buffer adds playtime today only when eligible.
 
 1. **Set Today's Limit (Total Playtime for Today)**:
    - **Status Badge**: The top-right badge indicates current limit status: "Active", "Unlimited", "Unset" (determined by long-term schedule), "Cleared" (temporary adjustment just removed), "Pending", "Awaiting Confirmation", "Bedtime Restricted", or "Disabled".
@@ -122,13 +122,16 @@ The Today's Schedule tab features six quick-action cards and a full-screen detai
 6. **Autonomy Buffer**:
    - Displays the status of today's autonomy bonus (configured by parents in "Time Plans → Autonomy Buffer", offering a once-daily 5, 10, or 15-minute claim).
    - The dynamic subtitle indicates: "Eligible for X min today", "Claimed today, eligible again tomorrow", "Currently disabled, configure in Time Plans", or "Currently not eligible today". When eligible, children can independently claim this buffer from the in-game overlay; the daily 1440-minute cap may result in fewer added minutes or 0, but a successful claim consumes today's eligibility. Claims cannot be made during active bedtime restrictions.
+7. **Skip This Eye Care Break**:
+   - Available only while the current eye care break is active. Selecting it refreshes status, locks the current break instance, verifies the PlayWise parent PIN again, and asks for confirmation. A successful skip ends only this break; eye care remains enabled and a new cycle begins.
+   - The card explains why it cannot submit when eye care is off, no break is active, status is older than 120 seconds, the countdown reaches zero, or daily quota or bedtime takes priority. Press `Y` to refresh status.
 
 #### Viewing Today's Rule Details
 
 On the Today's Schedule tab, press controller `+` button or tap "+ View Details" to open the full-screen details sheet to inspect system decision logic:
 
-- **How Today's Limit is Determined**: Evaluated in strict priority order: "Today's Adjustments → Scheduled Date Limits → National Holidays → Weekly Schedule", adopting the first applicable rule. Bedtime limits and autonomy buffer status are also displayed; bedtime takes effect independently, restricting software when the time arrives even if playtime remains.
-- **Usage & Status**: Displays on-device playtime estimates for today, 7-day and 30-day usage estimates (missing dates are not padded with zeroes), status update timestamps, and recent operations.
+- **How Today's Limit is Determined**: Evaluated in strict priority order: "Today's Adjustments → Scheduled Date Limits → National Holidays → Weekly Schedule", adopting the first applicable rule. Bedtime and eye care run independently of this quota priority; exhausted daily quota and bedtime restrictions take precedence.
+- **Usage & Status**: Displays on-device playtime estimates for today, 7-day usage estimates, status update timestamps, and recent operations. The eye care preview shows approximate minutes until the next break while playing and a minutes-and-seconds countdown during a break. Unknown or expired readings prompt a refresh.
 
 ![Today's rule details preview](images/usage-en/parent/parent-details-decision-light.png)
 ![Recent usage statistics & records preview](images/usage-en/parent/parent-details-usage-light.png)

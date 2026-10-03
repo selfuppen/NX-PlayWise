@@ -248,7 +248,8 @@ typedef enum {
     PTC_UI_OPERATION_SKIP_BEDTIME = 24,
     PTC_UI_OPERATION_SAVE_HOLIDAY = 25,
     PTC_UI_OPERATION_SAVE_BEDTIME = 26,
-    PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP = 27
+    PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP = 27,
+    PTC_UI_OPERATION_SKIP_EYE_CARE = 28
 } PtcUiOperation;
 
 typedef enum {
@@ -358,6 +359,7 @@ typedef struct {
     uint16_t eye_care_used_minutes;
     int eye_care_rest_remaining_seconds;
     uint64_t eye_care_break_id;
+    uint64_t pending_eye_care_break_id;
     bool eye_care_unlimited_capped;
     PtcBedtimePolicy bedtime_policy;
     PtcBedtimePolicy draft_bedtime_policy;

@@ -75,7 +75,8 @@ void handle_today_action_ready(UiState *ui, int index)
     char remaining[32];
     const char *unavailable = ptc_ui_today_action_unavailable_reason(
         &ui->model, index == PTC_UI_OPERATION_ADD_TODAY_MINUTES ? 1 :
-        (index == PTC_UI_OPERATION_SKIP_BEDTIME ? 4 : -1), (int64_t)time(NULL));
+        (index == PTC_UI_OPERATION_SKIP_BEDTIME ? 4 :
+         (index == PTC_UI_OPERATION_SKIP_EYE_CARE ? 6 : -1)), (int64_t)time(NULL));
     if (unavailable) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", unavailable);
         return;
@@ -179,6 +180,14 @@ void handle_today_action_ready(UiState *ui, int index)
         open_confirm_overlay(ui, PTC_UI_OPERATION_SKIP_BEDTIME, ptc_ui_text(PTC_UI_T_SKIP_BEDTIME_THIS_TIME), body);
         break;
     }
+    case PTC_UI_OPERATION_SKIP_EYE_CARE:
+        ui->model.pending_eye_care_break_id = ui->model.eye_care_break_id;
+        ui->auth_retry_action = AUTH_RETRY_SKIP_EYE_CARE;
+        if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_VERIFY_PIN))) break;
+        open_confirm_overlay(ui, PTC_UI_OPERATION_SKIP_EYE_CARE,
+            ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM),
+            ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM_BODY));
+        break;
     default:
         break;
     }
@@ -719,6 +728,9 @@ void confirm_operation(UiState *ui)
         break;
     case PTC_UI_OPERATION_SKIP_BEDTIME:
         submit_bedtime_skip(ui);
+        break;
+    case PTC_UI_OPERATION_SKIP_EYE_CARE:
+        submit_eye_care_skip(ui);
         break;
     case PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP:
         submit_clear_bedtime_skip(ui);

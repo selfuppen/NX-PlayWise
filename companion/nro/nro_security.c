@@ -82,6 +82,9 @@ void dispatch_auth_retry(UiState *ui, AuthRetryAction action)
     case AUTH_RETRY_SKIP_BEDTIME:
         handle_today_action_ready(ui, PTC_UI_OPERATION_SKIP_BEDTIME);
         break;
+    case AUTH_RETRY_SKIP_EYE_CARE:
+        handle_today_action_ready(ui, PTC_UI_OPERATION_SKIP_EYE_CARE);
+        break;
     case AUTH_RETRY_CLEAR_BEDTIME_SKIP:
         request_clear_bedtime_skip(ui);
         break;

@@ -222,6 +222,7 @@ PtcUiRect ptc_ui_shortcut_hint_rect(void);
 PtcUiRect ptc_ui_grant_adjust_rect(int index);
 bool ptc_ui_rect_contains(PtcUiRect rect, int x, int y);
 PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y);
+PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now);
 
 
 #endif

@@ -90,7 +90,8 @@ typedef enum {
     AUTH_RETRY_CLEAR_REDEMPTION_HISTORY,
     AUTH_RETRY_CLEAR_ACTIVITY_HISTORY,
     AUTH_RETRY_SKIP_BEDTIME,
-    AUTH_RETRY_CLEAR_BEDTIME_SKIP
+    AUTH_RETRY_CLEAR_BEDTIME_SKIP,
+    AUTH_RETRY_SKIP_EYE_CARE
 } AuthRetryAction;
 
 typedef struct {
@@ -225,6 +226,7 @@ void request_clear_redemption_history(UiState *ui);
 void submit_scheduled_override(UiState *ui);
 void submit_autonomy_policy(UiState *ui);
 void submit_eye_care_policy(UiState *ui);
+void submit_eye_care_skip(UiState *ui);
 void submit_bedtime_confirmation(UiState *ui);
 void submit_bedtime_policy(UiState *ui);
 void submit_bedtime_skip(UiState *ui);

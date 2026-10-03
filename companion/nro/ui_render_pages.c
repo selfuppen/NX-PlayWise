@@ -7,6 +7,7 @@ static const UiAction TODAY_ACTIONS[] = {
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_CLEAR_TODAY_LIMIT), PTC_UI_TEXT_REFERENCE(PTC_UI_T_RESET_TO_REGULAR_PLAN), UI_MUTED, UI_ACTION_ICON_CLEAR_OVERRIDE, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SKIP_BEDTIME), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_AUTONOMY_BUFFER_2), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_MUTED, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_EYE_CARE_SKIP), PTC_UI_TEXT_REFERENCE(PTC_UI_T_EYE_CARE_SKIP_NOT_RESTING), UI_WARNING, UI_ACTION_ICON_CLOCK, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction PLAN_ACTIONS[] = {
@@ -355,12 +356,14 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_text(pixels, stride, 574, 466, title2, 16, UI_WARNING);
     int title2_w = measure_text(title2, 16);
     draw_text(pixels, stride, 574 + title2_w + 14, 466, hint2, 13, UI_MUTED);
-    for (int index = 0; index < 6; ++index) {
+    for (int index = 0; index < 7; ++index) {
         UiRect box = to_uirect(ptc_ui_today_card_rect(index));
         bool focused = !model->parent_footer_focused && model->selected_index == index;
         bool clear_unavailable = index == 3 && fresh &&
                                  !model->today_override_present;
         const char *unavailable = ptc_ui_today_action_unavailable_reason(model, index, now);
+        bool eye_needs_refresh = index == 6 && unavailable &&
+            strcmp(unavailable, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH)) == 0;
         bool disabled = model->disable_flag_present || model->waiting ||
                         clear_unavailable || unavailable != NULL;
         const char *title = TODAY_ACTIONS[index].title;
@@ -425,6 +428,12 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 snprintf(dynamic, sizeof(dynamic), ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_U_MIN), (unsigned int)model->daily_buffer_minutes);
                 subtitle = dynamic;
             } else subtitle = ptc_ui_text(PTC_UI_T_NOT_AVAILABLE_TODAY);
+        } else if (index == 6) {
+            if (unavailable) subtitle = unavailable;
+            else {
+                ptc_ui_format_eye_care_cycle(model, now, dynamic, sizeof(dynamic));
+                subtitle = dynamic;
+            }
         }
         action.title = title;
         action.subtitle = subtitle;
@@ -455,17 +464,21 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
             draw_rect_outline(pixels, stride, tbadge, 6, 1, badge_color);
             draw_text_center(pixels, stride, tbadge, adjustment_badge, 12, badge_color);
         } else if (index >= 2) {
-            const char *badge = !fresh ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING)) :
+            const char *badge = (!fresh || eye_needs_refresh) ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING)) :
                 (index == 2 ? (model->today_override_present &&
                                 model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED ? (ptc_ui_text(PTC_UI_T_ENABLED_2)) : (ptc_ui_text(PTC_UI_T_DISABLED))) :
                  index == 3 ? (model->today_override_cleared_in_session &&
                                !model->today_override_present ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_CLEARED)) : (ptc_ui_text(PTC_UI_T_ACTIVE))) :
                  index == 4 ? (model->bedtime_active && !model->bedtime_skipped ? (ptc_ui_text(PTC_UI_T_RESTRICTED)) :
                                (bedtime_skip_matches ? (ptc_ui_text(PTC_UI_T_SKIPPED)) : (ptc_ui_text(PTC_UI_T_NOT_SKIPPED)))) :
-                              (model->daily_buffer_claimed ? (ptc_ui_text(PTC_UI_T_CLAIMED)) :
-                               (model->daily_buffer_available ? (ptc_ui_text(PTC_UI_T_AVAILABLE)) : (ptc_ui_text(PTC_UI_T_UNCLAIMED)))));
-            uint32_t color = !fresh ? UI_WARNING :
-                (index == 4 && model->bedtime_active && !model->bedtime_skipped ? UI_DANGER :
+                 index == 5 ? (model->daily_buffer_claimed ? (ptc_ui_text(PTC_UI_T_CLAIMED)) :
+                               (model->daily_buffer_available ? (ptc_ui_text(PTC_UI_T_AVAILABLE)) : (ptc_ui_text(PTC_UI_T_UNCLAIMED)))) :
+                 (!model->eye_care_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED) :
+                  (strcmp(model->eye_care_phase, "resting") == 0 ? ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_RESTING) :
+                   ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_IDLE))));
+            uint32_t color = (!fresh || eye_needs_refresh) ? UI_WARNING :
+                ((index == 4 && model->bedtime_active && !model->bedtime_skipped) ||
+                 (index == 6 && strcmp(model->eye_care_phase, "resting") == 0) ? UI_DANGER :
                  (strcmp(badge, ptc_ui_text(PTC_UI_T_ENABLED_2)) == 0 || strcmp(badge, ptc_ui_text(PTC_UI_T_SKIPPED)) == 0 ||
                   strcmp(badge, ptc_ui_text(PTC_UI_T_CLAIMED)) == 0 || strcmp(badge, "Enabled") == 0 ||
                   strcmp(badge, "Skipped") == 0 || strcmp(badge, "Claimed") == 0 ? UI_SUCCESS : UI_MUTED));

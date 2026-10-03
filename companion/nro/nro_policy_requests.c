@@ -34,6 +34,31 @@ void submit_eye_care_policy(UiState *ui)
     if (status == PTC_COMPANION_OK) begin_wait(ui, "set_eye_care_policy", ptc_ui_text(PTC_UI_T_EYE_CARE_SAVE));
     else set_message(ui, ptc_ui_text(PTC_UI_T_EYE_CARE_SAVE), status);
 }
+void submit_eye_care_skip(UiState *ui)
+{
+    PtcCompanionStatus status;
+    uint64_t break_id;
+    const char *unavailable;
+    if (!ui || ui->waiting) return;
+    break_id = ui->model.pending_eye_care_break_id;
+    unavailable = ptc_ui_today_action_unavailable_reason(&ui->model, 6, (int64_t)time(NULL));
+    if (break_id == 0 || break_id != ui->model.eye_care_break_id || unavailable) {
+        ui->model.pending_eye_care_break_id = 0;
+        if (!ui->waiting) submit_status(ui);
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+            unavailable ? unavailable : ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CHANGED));
+        return;
+    }
+    ui->model.pending_eye_care_break_id = 0;
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_skip_eye_care_break(&ui->transport,
+        ui->active_request_id, time(NULL), break_id);
+    set_command_name(ui, "skip_eye_care_break");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK)
+        begin_wait(ui, "skip_eye_care_break", ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_SUBMITTING));
+    else set_message(ui, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_SUBMIT_FAILED), status);
+}
 void submit_bedtime_confirmation(UiState *ui)
 {
     char fingerprint[65];

@@ -480,8 +480,15 @@ static void draw_home_decision_details(uint32_t *pixels, uint32_t stride,
                       ptc_ui_text(PTC_UI_T_THE_CHILD_APPLIES_INDEPENDENTLY_WHEN_THE_QUOTA),
                       11, autonomy.width - 28, 12, 2, UI_MUTED);
 
-    draw_wrapped_text(pixels, stride, x_left, bottom_y + 172,
-                      ptc_ui_text(PTC_UI_T_THE_RULES_ABOVE_DETERMINE_TODAY_S_QUOTA), 10, col_w, 14, 2, UI_MUTED);
+    /* Eye care is parallel to quota selection, so explain it outside the waterfall. */
+    UiRect eye_rule = {x_left, bottom_y + 166, col_w, 64};
+    fill_round_rect(pixels, stride, eye_rule, 10, UI_WARNING_SOFT);
+    draw_rect_outline(pixels, stride, eye_rule, 10, 1, UI_WARNING);
+    draw_text(pixels, stride, eye_rule.x + 14, eye_rule.y + 18,
+        ptc_ui_text(PTC_UI_T_EYE_CARE), 12, UI_WARNING);
+    draw_wrapped_text(pixels, stride, eye_rule.x + 14, eye_rule.y + 36,
+        ptc_ui_text(PTC_UI_T_EYE_CARE_INDEPENDENT_RULE), 10,
+        eye_rule.width - 28, 13, 2, UI_MUTED);
 
     /* 右下栏：系统运行、审计与健康 */
     UiRect sys_card = {x_right, bottom_y, col_w, 76};
@@ -532,8 +539,15 @@ static void draw_home_decision_details(uint32_t *pixels, uint32_t stride,
         draw_text(pixels, stride, child_tip.x + 14, child_tip.y + 64, line, 11, UI_MUTED);
     }
 
-    draw_wrapped_text(pixels, stride, x_right, bottom_y + 172,
-                      ptc_ui_text(PTC_UI_T_THE_LOCAL_CREDIT_CONSUMPTION_INCLUDES_HOME_BRIGHT), 10, col_w, 14, 2, UI_MUTED);
+    UiRect eye_status = {x_right, bottom_y + 166, col_w, 64};
+    char eye_cycle[160];
+    ptc_ui_format_eye_care_cycle(model, ptc_ui_render_now(), eye_cycle, sizeof(eye_cycle));
+    fill_round_rect(pixels, stride, eye_status, 10, UI_RAISED);
+    draw_rect_outline(pixels, stride, eye_status, 10, 1, UI_BORDER);
+    draw_text(pixels, stride, eye_status.x + 14, eye_status.y + 19,
+        ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_LABEL), 12, UI_MUTED);
+    draw_text(pixels, stride, eye_status.x + 14, eye_status.y + 46,
+        eye_cycle, 17, fresh ? UI_INK : UI_WARNING);
 }
 
 static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
