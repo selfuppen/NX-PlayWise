@@ -50,6 +50,7 @@ typedef enum {
 } PtcUiQuotaRecheckDecision;
 
 int ptc_ui_parent_action_count(PtcUiParentPage page);
+const char *ptc_ui_eye_care_plan_badge_label(const PtcUiModel *model);
 const char *ptc_ui_settings_status_label(const PtcUiModel *model);
 PtcUiActionState ptc_ui_settings_support_state(const PtcUiModel *model);
 void ptc_ui_format_custom_shortcut_hint(

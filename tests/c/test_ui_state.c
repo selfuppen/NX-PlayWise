@@ -2771,7 +2771,17 @@ static void test_time_menu_modal_touch_guards(void)
     }
 
     model.overlay = PTC_UI_OVERLAY_EYE_CARE;
-    for (int field = 0; field < 5; ++field) {
+    model.autonomy_policy.daily_buffer_minutes = 0;
+    model.eye_care_policy.enabled = true;
+    check_true(strcmp(ptc_ui_eye_care_plan_badge_label(&model),
+        ptc_ui_text(PTC_UI_T_ENABLED)) == 0,
+        "eye care badge stays enabled when autonomy buffer is off");
+    model.autonomy_policy.daily_buffer_minutes = 10;
+    model.eye_care_policy.enabled = false;
+    check_true(strcmp(ptc_ui_eye_care_plan_badge_label(&model),
+        ptc_ui_text(PTC_UI_T_DISABLED_2)) == 0,
+        "eye care badge stays disabled when autonomy buffer is on");
+    for (int field = 0; field < 9; ++field) {
         PtcUiRect rect = ptc_ui_eye_care_field_rect(field);
         check_true(rect.w > 0 && rect.h > 0, "eye care editor control has a visible hit area");
         check_hit(hit_center(&model, rect), PTC_UI_HIT_EYE_CARE_FIELD, field,
@@ -2779,6 +2789,9 @@ static void test_time_menu_modal_touch_guards(void)
         check_true(!rects_overlap(rect, ptc_ui_cancel_rect(model.overlay)) &&
                    !rects_overlap(rect, ptc_ui_confirm_rect(model.overlay)),
             "eye care controls do not overlap dialog actions");
+        for (int other = 0; other < field; ++other)
+            check_true(!rects_overlap(rect, ptc_ui_eye_care_field_rect(other)),
+                "eye care controls do not overlap each other");
     }
     check_hit(ptc_ui_hit_test(&model, 10, 10), PTC_UI_HIT_NONE, 0,
         "eye care dialog blocks touch input from the plan below");

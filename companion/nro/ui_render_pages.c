@@ -773,9 +773,10 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                     index == 3 ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_RESTRICTED) :
                                   (ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy) ? ptc_ui_text(PTC_UI_T_SKIPPED) :
                                    (model->bedtime_policy.enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2)))) :
-                    (model->autonomy_policy.daily_buffer_minutes == 0 ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
-                     (model->daily_buffer_claimed ? ptc_ui_text(PTC_UI_T_RECEIVED_TODAY) :
-                      (model->daily_buffer_available ? ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY) : ptc_ui_text(PTC_UI_T_ENABLED))));
+                    index == 4 ? (model->autonomy_policy.daily_buffer_minutes == 0 ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
+                                  (model->daily_buffer_claimed ? ptc_ui_text(PTC_UI_T_RECEIVED_TODAY) :
+                                   (model->daily_buffer_available ? ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY) : ptc_ui_text(PTC_UI_T_ENABLED)))) :
+                    ptc_ui_eye_care_plan_badge_label(model);
                 int p_width = measure_text(badge_label, 12) + 16;
                 if (p_width < 76) p_width = 76;
                 UiRect pbadge = {card.x + card.width - p_width - 12, card.y + 8, p_width, 22};

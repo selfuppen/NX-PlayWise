@@ -242,12 +242,16 @@ static void draw_eye_care_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
         else snprintf(value, sizeof(value), "%u %s",
             (unsigned)(row == 1 ? model->draft_eye_care_policy.play_minutes :
                 model->draft_eye_care_policy.rest_minutes), ptc_ui_text(PTC_UI_T_MIN));
-        draw_text(pixels, stride, rect.x + 480, rect.y + 38, value, 18, UI_ACCENT);
-        if (row > 0) {
-            draw_candidate_button(pixels, stride, ptc_ui_eye_care_field_rect(row == 1 ? 1 : 3),
-                "-", UI_PAGE, UI_INK, focused, false);
-            draw_candidate_button(pixels, stride, ptc_ui_eye_care_field_rect(row == 1 ? 2 : 4),
-                "+", UI_PAGE, UI_INK, focused, false);
+        if (row == 0) draw_text(pixels, stride, rect.x + 480, rect.y + 38, value, 18, UI_ACCENT);
+        else {
+            static const char *steps[] = {"-10", "-1", "+1", "+10"};
+            int first = row == 1 ? 1 : 5;
+            draw_text_center(pixels, stride,
+                (UiRect){rect.x + 464, rect.y + 14, 96, 36}, value, 18, UI_ACCENT);
+            for (int step = 0; step < 4; ++step)
+                draw_candidate_button(pixels, stride,
+                    ptc_ui_eye_care_field_rect(first + step), steps[step],
+                    UI_PAGE, UI_INK, focused, false);
         }
     }
     draw_text(pixels, stride, dialog.x + 48, dialog.y + 370,

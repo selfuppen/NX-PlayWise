@@ -772,8 +772,12 @@ PtcUiRect ptc_ui_eye_care_field_rect(int index)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_EYE_CARE);
     if (index == 0) return (PtcUiRect){dialog.x + 48, dialog.y + 120, dialog.w - 96, 64};
-    if (index == 1 || index == 2) return (PtcUiRect){dialog.x + 48 + (index == 2 ? 690 : 610), dialog.y + 194, 72, 64};
-    if (index == 3 || index == 4) return (PtcUiRect){dialog.x + 48 + (index == 4 ? 690 : 610), dialog.y + 268, 72, 64};
+    if (index >= 1 && index <= 8) {
+        static const int offsets[] = {300, 382, 564, 646};
+        int row = index <= 4 ? 0 : 1;
+        return (PtcUiRect){dialog.x + 48 + offsets[(index - 1) % 4],
+            dialog.y + 194 + row * 74, 72, 64};
+    }
     return (PtcUiRect){0, 0, 0, 0};
 }
 

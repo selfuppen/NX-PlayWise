@@ -8,7 +8,7 @@
 
 ## Eye care breaks (device validation pending)
 
-In the parent's Time Plan, enable Eye Care and set 1–240 minutes of use and 1–60 minutes of rest in one-minute steps. It is off by default, with 40 minutes of use and 10 minutes of rest preset. Before first enablement, confirm Nintendo's “Suspend Software” on time limit setting and verify that the overlay is available. PlayWise does not change that Nintendo setting.
+In the parent's Time Plan, enable Eye Care and set 1–240 minutes of use and 1–60 minutes of rest. Tap ±1 or ±10 minute buttons, or use the controller's left/right buttons for one-minute steps and ZL/ZR for ten-minute steps. It is off by default, with 40 minutes of use and 10 minutes of rest preset. The Time Plan card's badge shows the Eye Care switch state. Before first enablement, confirm Nintendo's “Suspend Software” on time limit setting and verify that the overlay is available. PlayWise does not change that Nintendo setting.
 
 Enabling starts a new cycle at current usage. Reducing the use period may start a break immediately; disabling releases the eye care restriction immediately. Awake HOME use counts, sleep pauses usage accumulation, and sleep counts toward a break. The child view and overlay show remaining use or break time; an unavailable reading is shown as unknown. During a break, a parent can verify their PIN in the overlay and choose “Skip this eye care break”; this applies only to the current break. Daily allowance and bedtime restrictions take precedence and reset the eye care cycle.
 

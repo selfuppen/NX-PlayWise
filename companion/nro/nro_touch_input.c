@@ -266,11 +266,12 @@ void handle_touch(UiState *ui, int x, int y)
             ui->model.overlay_selection = 0;
             ui->model.draft_eye_care_policy.enabled = !ui->model.draft_eye_care_policy.enabled;
         } else {
-            uint16_t *value = hit.index <= 2 ? &ui->model.draft_eye_care_policy.play_minutes
+            static const int deltas[] = {-10, -1, 1, 10};
+            uint16_t *value = hit.index <= 4 ? &ui->model.draft_eye_care_policy.play_minutes
                 : &ui->model.draft_eye_care_policy.rest_minutes;
-            ui->model.overlay_selection = hit.index <= 2 ? 1 : 2;
-            *value = ptc_ui_adjust_minutes(*value, (hit.index & 1) ? -1 : 1,
-                1u, hit.index <= 2 ? 240u : 60u);
+            ui->model.overlay_selection = hit.index <= 4 ? 1 : 2;
+            *value = ptc_ui_adjust_minutes(*value, deltas[(hit.index - 1) % 4],
+                1u, hit.index <= 4 ? 240u : 60u);
         }
         break;
     case PTC_UI_HIT_QUICK_ADD_OPTION:

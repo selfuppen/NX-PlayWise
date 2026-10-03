@@ -179,11 +179,11 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
         ptc_ui_text(PTC_UI_T_BEDTIME), ptc_ui_text(PTC_UI_T_QUICK_GRANT), ptc_ui_text(PTC_UI_T_EDIT_WEEKLY_BEDTIME_WINDOWS), ptc_ui_text(PTC_UI_T_EDIT_SPECIAL_BEDTIME_RULES),
         ptc_ui_text(PTC_UI_T_LEAVE_BEDTIME_EDITING), ptc_ui_text(PTC_UI_T_COPY_WEEKLY_BEDTIME_WINDOW),
         ptc_ui_text(PTC_UI_T_TODAY_DETAILS), ptc_ui_text(PTC_UI_T_TODAY_DETAILS), ptc_ui_text(PTC_UI_T_UI_LANGUAGE),
-        ptc_ui_text(PTC_UI_T_EXPORT_CONFIGURATION_FILES_FOR_USE_ON_MOBILE)
+        ptc_ui_text(PTC_UI_T_EXPORT_CONFIGURATION_FILES_FOR_USE_ON_MOBILE), ptc_ui_text(PTC_UI_T_EYE_CARE)
     };
     int failed = 0;
     for (int dark = 0; dark < 2; ++dark) {
-        for (int overlay = PTC_UI_OVERLAY_MINUTES; overlay <= PTC_UI_OVERLAY_PARENT_EXPORT_RESULT; ++overlay) {
+        for (int overlay = PTC_UI_OVERLAY_MINUTES; overlay <= PTC_UI_OVERLAY_EYE_CARE; ++overlay) {
             PtcUiModel model = *baseline;
             char name[48];
             PtcRules rules;
@@ -199,6 +199,8 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
             model.numpad_max_digits = 8;
             model.daily_buffer_minutes = 10;
             model.draft_autonomy_policy.daily_buffer_minutes = 10;
+            model.draft_eye_care_policy.play_minutes = 40;
+            model.draft_eye_care_policy.rest_minutes = 10;
             model.draft_scheduled_override = (PtcScheduledOverride){true, 2380, 2386, {PTC_RULE_MODE_LIMIT, 120}};
             model.bedtime_policy = rules.bedtime;
             model.draft_bedtime_policy = rules.bedtime;
