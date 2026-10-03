@@ -43,7 +43,7 @@ Upon launching PlayWise for the first time, follow the 5-step onboarding wizard.
 5. **Select Destination Zone**: Enter Parent Zone to configure schedules, or enter Child Zone to view today's plan.
 
 <details>
-<summary>View 5-Step Console Interface Preview</summary>
+<summary>View 5-Step Console Interface and Child Zone Previews</summary>
 
 ![Parent zone entry setup preview](images/usage-en/setup/setup-step-1-light.png)
 ![PlayWise PIN setup preview](images/usage-en/setup/setup-step-2-light.png)
@@ -53,6 +53,8 @@ Upon launching PlayWise for the first time, follow the 5-step onboarding wizard.
 
 Child Zone home screen preview:
 ![Child Zone home screen preview](images/usage-en/child/child-light.png)
+![Child Zone details panel preview](images/usage-en/child/child-details-light.png)
+![Child Zone claimed autonomy buffer preview](images/usage-en/child/child-buffer-claimed-light.png)
 
 Parent Zone today schedule preview:
 ![Parent Zone today schedule preview](images/usage-en/parent/parent-dark.png)
@@ -85,13 +87,22 @@ The Today's Schedule tab features six quick-action cards and a full-screen detai
    - **Status Badge**: The top-right badge indicates current limit status: "Active", "Unlimited", "Unset" (determined by long-term schedule), "Cleared" (temporary adjustment just removed), "Pending", "Awaiting Confirmation", "Bedtime Restricted", or "Disabled".
    - **Underlying Inheritance Explanation**: When no temporary limit is set today, the dynamic subtitle clearly explains which rule layer governs today (e.g. "Determined by weekly schedule", "Determined by national holiday", or "Determined by scheduled date limit").
    - **Adjustment & Safe Confirmation**: Press `A` or tap to enter the editor. Choose "Limited" to set total minutes, or choose "Unlimited Today"; switch modes using `ZL/ZR`. When opening the limit editor, if status is older than 120 seconds or unconfirmed, it automatically refreshes; you can also tap "Refresh Latest Status" or click right stick `R3` to refresh manually. Pressing `+` to save re-reads console status: if transitioning from unlimited back to limited today, a confirmation dialog appears first; if the new limit is less than or equal to already played time, the confirmation requires a 1-second deliberate hold. If already limited and the new limit exceeds played time, it submits directly. If refresh fails or played time is unavailable, inputs are preserved without submitting. Unlimited play, quick grants, and clearing adjustments follow their respective confirmation workflows.
+
+   ![Set today's total limit numeric keypad preview](images/usage-en/parent/quota-editor-light.png)
+   ![Set today's total limit confirmation preview](images/usage-en/parent/quota-positive-confirm-light.png)
+
 2. **Quick Grant**:
    - Designed for temporary rewards or granting bonus playtime. Provides `+15 min`, `+30 min`, `+60 min` quick options, plus a `Custom` minute stepper (1–120 minutes).
    - Selecting an option opens a secondary confirmation panel comparing current remaining time against projected time after grant; if truncated by the daily maximum ceiling (1440 min), actual added minutes and an amber notice are shown before confirming.
    - When today is already unlimited, the card is grayed out and displays "Unlimited today, grant not needed"; use "Set Today's Limit" to restore limits. In this state, neither controller confirmation nor touch will initiate a grant request.
+
+   ![Quick grant confirmation preview](images/usage-en/parent/quick-add-confirm-dark.png)
+
 3. **Unlimited Play Today**:
    - Ideal for weekend gatherings, holiday celebrations, or special reward days.
    - Once confirmed, daily playtime limits are removed for today and status displays "Unlimited"; bedtime schedules remain independently active. At 00:00 midnight, this adjustment expires and normal routines resume.
+
+   ![Unlimited play today confirmation preview](images/usage-en/parent/unlimited-confirm-dark.png)
 4. **Clear Today's Adjustments**:
    - One-click rollback of all temporary adjustments for today (including total limit, quick grants, and unlimited mode), reverting to the underlying schedule (e.g. Friday plan or holiday schedule).
    - If no temporary adjustments exist today, this card is automatically disabled and will not submit redundant requests; if cleared during the current console session, the subtitle indicates "Cleared in this session, using underlying rule".
@@ -112,6 +123,7 @@ On the Today's Schedule tab, press controller `+` button or tap "+ View Details"
 - **Usage & Status**: Displays on-device playtime estimates for today, 7-day and 30-day usage estimates (missing dates are not padded with zeroes), status update timestamps, and recent operations.
 
 ![Today's rule details preview](images/usage-en/parent/parent-details-decision-light.png)
+![Recent usage statistics & records preview](images/usage-en/parent/parent-details-usage-light.png)
 
 ### Long-Term & Date Plans
 
@@ -122,13 +134,23 @@ Bedtime schedules can be configured across weekly, holiday, and scheduled date t
 The "Master Bedtime Switch" controls all bedtime rules across weekly, holiday, and scheduled date tiers. Turning it off and saving suspends all bedtime restrictions while preserving saved time windows for future reactivation. The interface displays the "Currently active" state by default and only presents an "Unsaved (press + to apply)" badge when the switch is toggled; toggling the switch modifies only the draft until saved with `+`. Use D-pad to highlight the master switch and press `A` to toggle, press `-`, or tap. `L/R` flips between sub-pages. After skipping tonight's bedtime, both Today's Schedule and Bedtime tabs display "Skipped tonight" with timestamps. On the Bedtime tab, press `Y` to skip or `X` to restore tonight's session, or tap corresponding buttons; restoring requires verifying PlayWise PIN and reviewing impact in a confirmation dialog. If currently within the bedtime window, a deliberate hold confirmation is required, immediately re-enforcing restrictions upon success. The in-game overlay's "Restore Tonight's Bedtime" action also displays a confirmation sheet, requiring a 1-second hold on `A` when currently inside the window.
 
 <details>
-<summary>View Time Plans Preview</summary>
+<summary>View Time Plans & Editor Previews</summary>
 
 ![Time plans root preview](images/usage-en/plan/plan-root-light.png)
 ![Weekly plan draft preview](images/usage-en/plan/plan-draft-today-light.png)
+![Weekly plan minute adjustment preview](images/usage-en/plan/plan-minute-editor-light.png)
+![Weekly plan save confirmation preview](images/usage-en/plan/weekly-confirm-change-light.png)
 ![National holidays preview](images/usage-en/holiday/holiday-draft-light.png)
+![Holiday makeup workday minute adjustment preview](images/usage-en/holiday/holiday-makeup-duration-editor-light.png)
+![Holiday plan save confirmation preview](images/usage-en/holiday/holiday-confirm-light.png)
 ![Scheduled date limits preview](images/usage-en/scheduled/scheduled-draft-light.png)
-![Bedtime schedule preview](images/usage-en/bedtime/bedtime-section-0-dark.png)
+![Scheduled date limit minute adjustment preview](images/usage-en/scheduled/scheduled-duration-editor-light.png)
+![Weekly bedtime schedule preview](images/usage-en/bedtime/bedtime-section-0-dark.png)
+![Holiday bedtime schedule preview](images/usage-en/bedtime/bedtime-section-1-dark.png)
+![Scheduled date bedtime schedule preview](images/usage-en/bedtime/bedtime-section-2-dark.png)
+![Weekly bedtime window editor preview](images/usage-en/bedtime/bedtime-window-input-dark.png)
+![Bedtime start/end time editor preview](images/usage-en/bedtime/bedtime-time-editor-dark.png)
+![Scheduled date custom bedtime rule preview](images/usage-en/bedtime/bedtime-special-custom-dark.png)
 ![Autonomy buffer policy preview](images/usage-en/autonomy/autonomy-policy-light.png)
 
 </details>
@@ -156,6 +178,7 @@ Grant codes are 8-digit numbers determined by parents and valid only for the cur
 3. If generation fails, follow on-screen hints to inspect configuration, SD card, and system clock. Never assume previous codes are revoked.
 
 ![Console generation entry preview](images/usage-en/grant/grant-entry-light.png)
+![Grant code duration editor preview](images/usage-en/grant/grant-duration-editor-light.png)
 ![Issued grant code preview (sample data)](images/usage-en/grant/grant-issued-light.png)
 
 ### Generating on Phone or PC
@@ -188,10 +211,11 @@ The standalone offline file requires no installed apps, Python, frontend toolcha
 When unrestricted and Homebrew Menu can still be launched, open PlayWise, enter Child Zone, select "Enter Grant Code", and type the 8-digit code. Compare current and projected playtime before confirming; high-risk operations will require a deliberate hold. The success screen shows actual added minutes and confirmed remaining playtime. If the result is still pending confirmation, wait or reopen to review the transaction rather than submitting repeatedly.
 
 <details>
-<summary>View Input, Confirmation, and Success Previews</summary>
+<summary>View Input, Confirmation, Hold-to-Confirm, and Success Previews</summary>
 
 ![Enter grant code preview](images/usage-en/redeem/redeem-input-light.png)
 ![Redeem confirmation preview](images/usage-en/redeem/redeem-confirm-light.png)
+![High-risk redeem hold-to-confirm preview](images/usage-en/redeem/redeem-confirm-hold-dark.png)
 ![Redeem success preview](images/usage-en/redeem/redeem-success-light.png)
 
 </details>
@@ -283,17 +307,46 @@ High-risk grant redemptions and parental actions requiring a 1-second hold on co
 
 Always refer to buttons and prompts in your installed version. This guide does not retain outdated overlay screenshots. If overlay or sysmodule becomes unreachable, PlayWise has no reliable on-device self-recovery path; troubleshoot via SD card or external environment. Removing overlay files does not stop background sysmodule schedules.
 
+## Security & Preferences
+
+"Security & Preferences" safeguards management authority on the console, customizes interaction preferences, and provides audit tracking:
+
+- **Change PlayWise PIN**: Modify the dedicated PIN used to enter Parent Zone and authorize sensitive operations;
+- **Theme**: Switch between Follow System, Light, and Dark modes;
+- **Interface Language**: Switch between Follow System, Simplified Chinese (简体中文), Traditional Chinese (繁體中文), and English;
+- **Parent Zone Entry**: Customize the shortcut held in Child Zone to enter Parent Zone directly (default `-` Minus button);
+- **Album & Capture Restrictions**: Restrict children from directly injecting or launching unrestricted homebrew via the Photo Album applet;
+- **Family Activity History**: Audit the most recent 200 playtime adjustments, offline grants, and protection events on this console;
+- **Offline Grant Redemption History**: View the most recent 100 offline grant redemption records on this console;
+- **Offline Grant Generation Settings**: Manage console device ID, signing secret, and pairing QR code target URL;
+- **Software Information**: Inspect current installed version, build identifier, and live reload status.
+
+<details>
+<summary>View Security & Preferences Previews</summary>
+
+![Security & preferences root preview](images/usage-en/settings/settings-root-dark.png)
+![Change PlayWise PIN preview](images/usage-en/settings/settings-pin-dark.png)
+![Theme settings preview](images/usage-en/settings/settings-theme-dark.png)
+![Language preferences preview](images/usage-en/settings/settings-language-dark.png)
+![Parent Zone entry and shortcut settings preview](images/usage-en/settings/settings-shortcut-dark.png)
+![Album and capture restriction preview](images/usage-en/settings/settings-album-dark.png)
+![Family activity history preview](images/usage-en/settings/settings-activity-dark.png)
+![Offline grant redemption history preview](images/usage-en/settings/settings-redemption-dark.png)
+![Offline grant generation manager preview](images/usage-en/settings/settings-grant-manager-dark.png)
+![Software info and version check preview](images/usage-en/settings/settings-software-info-dark.png)
+
+</details>
+
 ## Support & Recovery
 
 Parent Zone "Support & Recovery" displays active issues and recommended remedies; emergency disable halts new playtime and schedule writes, but permits viewing status, exporting diagnostics, and restoring backups. After firmware updates, if "System environment changed" appears, follow on-screen instructions to re-detect and resume takeover; successful takeover preserves your PIN, secrets, and rules. When "Syncing" appears, wait for completion before refreshing to verify.
 
-![Security and preferences entry preview](images/usage-en/settings/settings-root-dark.png)
-
 <details>
-<summary>View Healthy vs. Fault State Previews</summary>
+<summary>View Healthy, Fault, and Event Details Previews</summary>
 
 ![Support and recovery healthy state preview](images/usage-en/support/support-healthy-dark.png)
 ![Support and recovery fault state preview](images/usage-en/support/support-failed-light.png)
+![Support events and fault details preview](images/usage-en/support/support-event-details-light.png)
 
 </details>
 
@@ -333,7 +386,7 @@ Documentation images fall into two categories, with paths relative to repository
 
 | Source | Image Paths | Update Method |
 | --- | --- | --- |
-| Automatically Generated Console UI Previews | 23 PNG files under `docs/images/usage-en/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support}/` (English) and `docs/images/usage/` (Chinese) listed in `tools/sync_doc_previews.py` | Run `python tools/package_remote.py --only previews --clean` to re-render `build/ui-previews/` and synchronize to documentation paths. Omit `--clean` for incremental updates. |
+| Automatically Generated Console UI Previews | 51 PNG files under `docs/images/usage-en/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support}/` (English) and `docs/images/usage/` (Chinese) listed in `tools/sync_doc_previews.py` | Run `python tools/package_remote.py --only previews --clean` to re-render `build/ui-previews/` and synchronize to documentation paths. Omit `--clean` for incremental updates. |
 | Manually Captured Hardware, Pairing & Web Previews | `docs/images/usage/overlay/ultrahand-entry.jpg`, `docs/images/usage/overlay/playwise-code-entry-legacy.jpg`, `docs/images/usage/parent/pairing-qr-demo.png`, `docs/images/usage/parent/web-code-demo.jpg`, `docs/images/usage/parent-offline-demo.png` | Re-capture, verify, and update against physical devices or browser interfaces; pairing QR codes must use public demo configurations. The command above does not replace these images. |
 
 Automated previews are generated from production C rendering code, fixed sample states, and the vendored Noto Sans SC font, marked with `HOST PREVIEW / SAMPLE DATA`. They serve layout reading purposes and do not substitute hardware controller, font, and PCTL validation. `--only previews` does not run full test suites or build distribution packages; run `python tools/package_remote.py` when full release gating is required. See [Testing Guide](测试指南.md) for details.

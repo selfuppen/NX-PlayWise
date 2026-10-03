@@ -89,7 +89,7 @@ First, ensure that Nintendo official Parental Controls has **"Suspend Software"*
 
 ## Recommended Environment & Verification Status
 
-The current baseline qualification target is Nintendo Switch OLED, HOS 22.5.0, and Atmosphère 1.11.2. The 2026-08-10 record is historical evidence prior to current PCTL modifications. Build candidates default to `pending`; when the maintainer verifies primary features on real hardware, specifying device model, HOS, and Atmosphère in the packaging command records `manual_verified` in `build.json`. This represents a manual testing declaration; only when the released Zip's SHA-256 matches `qualification.json` in the same directory has the exact build package passed full qualification testing in the documented environment. Packaging details are described in the [Development Environment Guide](docs/开发环境指南.md#switch-完整构建).
+The current baseline qualification target is Nintendo Switch OLED, HOS 22.5.0, and Atmosphère 1.11.2. The 2026-08-10 record is historical evidence prior to current PCTL modifications. Build candidates default to `pending`; when the maintainer verifies primary features on real hardware, specifying device model, HOS, and Atmosphère in the packaging command records `manual_verified` in `build.json`. This represents a manual testing declaration; only when the released Zip's SHA-256 matches `qualification.json` in the same directory has the exact build package passed full qualification testing in the documented environment. Packaging details are described in the [Development Environment Guide](docs/DEVELOPMENT_ENVIRONMENT_GUIDE.md#full-switch-build).
 
 We recommend using [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) to manage the PlayWise in-game overlay. You may also refer to community CFW guides such as the [Atmosphère Installation & Setup Guide](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP); related community group: "switch大气层超频折腾群" (QQ Group `1051287661`). These external resources and communities are not bundled with PlayWise packages and do not imply official endorsement.
 
@@ -117,11 +117,11 @@ Once daily limit or bedtime takes effect, the in-game overlay remains PlayWise's
 ## Documentation
 
 - [User Guide](docs/USER_GUIDE.md) ([简体中文](docs/使用指南.md))
-- [Developer Guide](docs/开发指南.md) (Chinese)
-- [Development Environment Guide](docs/开发环境指南.md) (Chinese)
-- [Protocol Specification](docs/协议.md) (Chinese)
-- [Testing Guide](docs/测试指南.md) (Chinese)
-- [PCTL Integration Architecture](docs/PCTL集成架构.md) (Chinese)
+- [Developer Guide](docs/DEVELOPER_GUIDE.md) ([简体中文](docs/开发指南.md))
+- [Development Environment Guide](docs/DEVELOPMENT_ENVIRONMENT_GUIDE.md) ([简体中文](docs/开发环境指南.md))
+- [Protocol Specification](docs/PROTOCOL.md) ([简体中文](docs/协议.md))
+- [Testing Guide](docs/TESTING_GUIDE.md) ([简体中文](docs/测试指南.md))
+- [PCTL Integration Architecture](docs/PCTL_ARCHITECTURE.md) ([简体中文](docs/PCTL集成架构.md))
 
 ## Acknowledgements & License
 

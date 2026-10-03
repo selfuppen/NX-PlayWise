@@ -116,11 +116,11 @@
 ## 项目文档
 
 - [使用指南](docs/使用指南.md) ([English](docs/USER_GUIDE.md))
-- [开发指南](docs/开发指南.md)
-- [开发环境指南](docs/开发环境指南.md)
-- [协议](docs/协议.md)
-- [测试指南](docs/测试指南.md)
-- [PCTL 集成架构](docs/PCTL集成架构.md)
+- [开发指南](docs/开发指南.md) ([English](docs/DEVELOPER_GUIDE.md))
+- [开发环境指南](docs/开发环境指南.md) ([English](docs/DEVELOPMENT_ENVIRONMENT_GUIDE.md))
+- [协议](docs/协议.md) ([English](docs/PROTOCOL.md))
+- [测试指南](docs/测试指南.md) ([English](docs/TESTING_GUIDE.md))
+- [PCTL 集成架构](docs/PCTL集成架构.md) ([English](docs/PCTL_ARCHITECTURE.md))
 
 ## 致谢与许可
 

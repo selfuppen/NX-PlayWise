@@ -1,0 +1,217 @@
+<div align="center">
+
+  [English](TESTING_GUIDE.md) | [简体中文](测试指南.md)
+
+</div>
+
+# Testing Guide
+
+## Console Application Visual Refresh Acceptance
+
+The Companion NRO's light, dark, and follow-system themes use a unified semantic color palette covering both homepages, five parent tabs, secondary settings pages, first-time setup, and all modals. The visual refresh does not alter the web frontend, Overlay, Device Lab, or the control protocol. `python tools/test.py` provides fast local regressions, while authoritative C/Python/UI, text catalog, and package gates are executed via `python tools/package_remote.py`.
+
+- **Palette Testing**: Verify that both light and dark themes maintain at least 4.5:1 text contrast and at least 3:1 focus and control border contrast against all background layers. Focus specifically on primary buttons, the main time card, and success, warning, and error banners.
+- **Touch Testing**: Verify inner and outer hit boundaries of primary controls, button spacing, submission blocking during synchronization or disabled states, and modal dialogs preventing click-through to background elements. All visible "+ Save / Complete Input" buttons must trigger the same action as the physical controller `Plus` button. Controller navigation retains existing pagination, selection order, and shortcuts.
+- **Unified Gate**: Uses the vendored Noto Sans SC font in the repository to generate structured preview subdirectories under `build/ui-previews/` (including `child/`, `parent/`, `grant/`, `redeem/`, `plan/`, `holiday/`, `scheduled/`, `bedtime/`, `autonomy/`, `settings/`, `support/`, `setup/`, `matrix/`, and `error/`). `matrix-overlay-01` through `matrix-overlay-34` cover all modal dialogs (including standard bedtime configuration); indices 0 to 5 of `matrix-child-state-*` and `matrix-parent-state-*` represent unknown, zero quota, unlimited, expired, syncing, and maximum quota states respectively. Dedicated previews also cover today's adjustments active/cleared/unset, both tabs of detailed status, weekly plan changed/overridden/hazardous/unknown confirmation, holiday confirmation, bedtime main page/error feedback/scheduled date modes, autonomous grace buffer, and child claimed buffer states across light and dark themes.
+- **Visual Inspection**: Check 1280x720 layout, title and digit hierarchy, text wrapping, focus margins, button boundaries, and feedback regions for all previews. QR codes must always render black-on-white; secrets remain masked per existing security rules. All previews are explicitly watermarked with `HOST PREVIEW / SAMPLE DATA`.
+- **Physical Console Acceptance Needed**: Handheld touch controls, controller navigation and long-press confirmation, TV viewing distance readability, shared OS font rendering, immediate theme switching, and UI refresh smoothness during timer/redemption processing. Host previews and emulators cannot substitute for these checks, nor do they serve as PCTL qualification evidence.
+
+Testing is split into deterministic host regression, devkitPro container builds, and physical device qualification. Standard distribution builds run automated tests covering full safety and recovery capabilities, but the console does not execute cyclic write/rollback self-tests.
+
+## Local Regression
+
+```bash
+python tools/test.py
+```
+
+A passing run concludes with `PASS: local tests`. This entry point covers:
+
+- Token v1/v2, 8-character codes, calendar dates, signatures, replay prevention, nonce submission ordering, and cooldown periods;
+- Request/result schemas, atomic request queue, IPC deduplication, and stuck request recovery;
+- First-time setup pre-flight check, installation snapshot, 5-second grace period, compatibility states, and recovery priorities;
+- Standard PCTL transactions, failure injection, rollback, and result/ledger failure handling;
+- Scheduled date quota 1/366-day boundaries, cross-week/month/year rules, priority hierarchy, and 7-day forecast; daily autonomous grace buffer disable/unlimited rejection, one-time claiming, day transitions, 1440-minute truncation, and PCTL/state/activity/result failure rollbacks;
+- Family activity log capped at 200 entries, clear-history failure rollbacks, and offline code nonce preservation upon activity write failures; daily summary reliable balance, 7/30-day unique date aggregation, missing-date non-interpolation, future/duplicate/out-of-order records, and clock-rollback tolerance;
+- Standalone read-only statistics adapter fixed to unavailable prior to evidence gate clearance, strictly scoped to local console without synthetic game entries;
+- Enforce deduplication, `applied_pending_confirmation`, 30-second confirmation/rollback window, exact settings read-back submission when played time exceeds recovered weekly quota with 1455 already restored to false, UI/diagnostic retention of 306 error real runtime snapshots, and separation between active recovery and boot legacy transactions;
+- PIN, rules, and setup template idempotent initialization, data retention across direct overwrite upgrades, and diagnostic sanitization;
+- Standard hot-reload identity verification, journal phases with `.tmp` atomic recovery, empty flag staging/restoration, unknown backup/conflicting journal error handling, and static lifecycle contract forbidding process termination and dual-daemon concurrency;
+- Isolation of contracts across standard package, complete package, and Device Lab, `package-artifacts.json` component sizes and SHA-256 hashes, and package helper failure branches;
+- `version.h` and `version.mk` consistency, PWA official links, and external link security attributes;
+- Single-file offline page consistency with modular source, inline CSP, zero runtime network dependencies, Web Crypto/built-in HMAC test vectors, and graceful degradation without persistent storage.
+
+Tests must use fixed timestamps, deterministic fixtures, and host mock adapters without depending on real Switch system services.
+
+## Authoritative Container Verification
+
+Whenever C, C++, Makefile, NRO, Overlay, sysmodule, or packaging logic is modified, run:
+
+```bash
+python tools/package_remote.py
+```
+
+The script cleans existing build artifacts in a single SSH session, executes C host, UI, and Python regressions, compiles the three standard distribution binaries, and generates the standard install package and complete delivery package.
+
+Distribution gate assertions:
+
+- `build/packages/` contains only the current version's standard install package `playwise-v<version>.zip` and complete delivery package `playwise-complete-v<version>.zip`;
+- Standard install Zip contains only standard distribution sysmodule, NRO, Overlay, `boot2.flag`, `build.json`, `package-artifacts.json`, immutable `defaults/*.json`, and empty runtime directories. It must not contain the six mutable root seeds, installers, or the offline web page; the manifest must match exact sizes and SHA-256 hashes of the three runtime binaries;
+- Device Lab Zip retains the `atmosphere/contents/4200000000BD23F0/flags/` directory entry without including `boot2.flag`; first-time long-press toggle must atomically create the Lab flag even if the directory does not initially exist. When simulating an interrupted state with `standard_disabled` journal, standard flag staged, and Lab flag not yet created, Lab NRO does not connect to `pwtl:u` and displays recovery, while standard NRO does not connect to `pctc:u` when its flag is missing; neither may black-screen;
+- Complete delivery Zip contains only the byte-identical standard package and `playwise-offline.html`, rejecting missing, duplicate, extra, path-traversal, or inconsistent entries;
+- `build.json` in the Zip matches the externally generated release manifest byte-for-byte with profile `release`;
+- All three binaries embed the same manifest; NRO and Overlay display the current build version; NRO embeds repository and PWA links;
+- No LAB handlers, non-standard protocol requests, runtime control modes, `capabilities.json`, or placeholder secrets;
+- Never seed `credentials.json`; first boot must generate a unique random secret; missing runtime files are created atomically from `defaults/`; existing files are never overwritten even if invalid;
+- Merging the new package over an existing installation or using `tools/install_package_to_sd.ps1` / DBI MTP `tools/install_package_via_dbi_mtp.ps1` replaces binaries and manifest while preserving credentials, PIN, rules, state, ledger, logs, and backups byte-for-byte; installer scripts are not included in the runtime Zip. DBI MTP script rejects NSP/XCI installation paths and verifies SHA-256 read-backs via MTP;
+- The Switch state adapter must first query `1455 restricted_now` via `pctl`; only when unavailable may it fall back to a short-lived `pctl:s` session reading private settings. It must never treat unknown as `false` due to primary query failure, nor skip runtime confirmation and rollback after direct writes.
+
+Manual SSH, `docker exec`, or copying files manually must not replace this entry point.
+
+## Standard In-Place Overwrite and Hot Reload
+
+Host C/UI/package tests cover: matching and non-matching `release_id`, target profile/PID/boot ID mismatches, parent confirmation consumed only once, non-pending states without hidden buttons, no triggering buttons in child mode, pending states blocking other configuration changes, active recovery blocking reload, handover timeouts, source PID not exiting, flag/backup conflicts, journal phase recovery, missing/mismatched components, and at most one retry on missing target. Source code contracts must verify absence of `pmshellTerminateProcess`, proving source PID exit and flag restoration precede target process launch.
+
+Physical console verification on OLED / HOS 22.5.0 / Atmosphère 1.11.2 using package tied to candidate commit hash:
+
+1. Close NRO and Overlay with console powered on; overwrite `atmosphere` and `switch` using DBI/MTP, FTP, or USB.
+2. Re-open NRO; verify child area only prompts "Enter Parent Zone to Resolve"; authenticating PIN presents hot-reload confirmation; canceling allows re-entry from "Software Info".
+3. Upon confirmation, record old/new PID, release ID, and boot ID; concurrent requests during handover return `QUIESCING`; UI continuously displays phases 1/4 to 4/4 and blocks other settings submissions.
+4. Upon completion, verify configuration, PIN, secrets, rules, nonces, balances, history, and recovery data are intact; open Overlay and confirm automatic reconnection to new IPC service.
+5. Interrupt NRO at `prepared`, `boot_disabled`, `boot_restored`, and `target_launched` stages; verify empty flag restoration, current background daemon startup, and single PCTL owner invariant.
+6. Inject unsupported quiesce, source process failure to exit, target identity mismatch, and target launch failure. The old process must remain active while still present; post-exit failures must preserve empty boot flags, prompt for a full reboot, and never auto-reboot or force-terminate.
+
+Card reader removal/re-insertion requires shutdown and reboot, which is outside hot-reload acceptance. Device Lab remains independently tested per the next section.
+
+## Device Lab Isolated Qualification
+
+Developers run in the devkitPro environment:
+
+```bash
+make device-lab-package
+```
+
+Verify:
+
+- Output resides only in `build/device-lab/`, never in `build/packages/`;
+- Title ID is `4200000000BD23F0`, IPC service is `pwtl:u`, SD directory is `switch/playwise-device-lab`;
+- Manifest profile is `device-lab`;
+- NRO features a Chinese 3-step card wizard recommending "Enable Lab Daemon", "Continue Overlay Forensics", "Restore Standard Daemon", or recovery based on boot journal, Lab service, session, and reports; all boot flag toggles require holding ZL+ZR+A; page refreshes during recovery waiting; boot flag toggles use persistent journals, execute idempotently, and avoid overwriting unknown files on conflict; host tests simulate Switch `rename` non-overwrite and journal recovery across existing/clean/corrupted `.tmp` states;
+- First launch of NRO without Lab boot flag enabled does not query `pwtl:u`, rendering the home screen immediately; Lab Overlay uses persistent SD queue from boot, preventing blocks if the daemon service has not yet registered;
+- Overlay uses a fixed dark Chinese interface offering "Focused Restriction Retest", "Timer Activation A/B (7 Stages)", and "Advanced Full Forensics (6 Stages)"; displays mode, stage progress, next action, countdown timer, auto-verdict, restoration status, and report path. General operations, 2-tier manual observation, and recovery support touch; restriction-writing stages strictly require holding physical controller A for 2 seconds; Simplified Chinese system shared font is enforced even under non-Chinese system locales;
+- Zip contains `switch/playwise-device-lab/playwise-device-lab.nro`, `switch/.overlays/playwise-device-lab.ovl`, Lab sysmodule, and device-lab manifest;
+- Package does not contain `boot2.flag` by default;
+- `make packages` neither builds nor bundles any LAB artifacts.
+
+### Guided Console Forensics
+
+Qualification baseline is Nintendo Switch OLED, HOS 22.5.0, Atmosphère 1.11.2, with Tesla/Ultrahand installed. Configure an active non-empty schedule in Nintendo Parental Controls with at least 10 minutes remaining; prepare two non-critical games that tolerate brief interruptions without unsaved progress:
+
+1. Install Device Lab Zip and launch `playwise-device-lab.nro`. Confirm the home screen shows "Prepare to Enable Lab Daemon" and hold `ZL+ZR+A` for 1 second. NRO checks the source process read-only via `pm:shell`. When seamless handover is possible, it transitions without rebooting; otherwise, it configures boot flags and requests a single reboot. Follow on-screen guidance on conflicts.
+2. Open `playwise-device-lab.ovl` from Tesla/Ultrahand. Default selection is "Qualification Campaign". Record Nintendo's "Suspend Software when Time's Up" toggle state. Free focus, Timer A/B, and Advanced Forensics remain individually selectable. When the campaign starts, Overlay displays 4-step progress, anonymous games A/B, next action, countdown, verdict/recovery status, and report path; pressing `Minus` expands machine values, request IDs, and error codes.
+3. Focused mode enters `restriction_effect` directly. Full mode executes `home_stopped`, `home_started`, `game_foreground`, `game_suspended`, `sleep_wake`, sampling each for 75 seconds. If the initial 0x44 buffer is all zeroes, stages 3–5 will warn of insufficient baseline prerequisites.
+4. Under a safe game, enter "Observe Time Restriction Effect", verify no unsaved progress, and hold physical controller `A` for 2 seconds (touch only displays safety warnings). Close Overlay and observe within ~15 seconds whether time restriction prompts appear and whether the game continues, pauses/suspends, or exits. The background daemon auto-recovers without requiring Overlay to stay open. Re-open Overlay to record prompt visibility, then record actual game behavior.
+5. Only when Overlay displays `exact_restore_proved` is recovery considered proven. If `restore_required` is shown, press `A` immediately to retry; Lab `disable.flag` blocks all subsequent forensic writes.
+6. Before manual observations are submitted, only `lab/report-<run-id>.draft.json` is generated. Once final and `exact_restore_proved`, proceed to the next item. The four steps are Timer A/B, Game A with Suspend ON, Game B with Suspend ON, and Game B with Suspend OFF. Restore original Nintendo suspend toggle upon completion and retain four accepted reports plus `reports/<campaign-id>.campaign.json`. Closing Overlay or sleeping does not discard progress. Finally restore the standard daemon from NRO.
+
+A/B mode requires an active Nintendo schedule with >=10 minutes remaining. HOME must stay illuminated for >=90 seconds; standby must last >=90 seconds, reopening Overlay immediately upon wake. Execute settings-only targets for restricted, extended, and unlimited in sequence. Reports record pre-state, settings-only results, fallback invocations, and readouts; correlation must not be reported as causality. If screen illumination time cannot be ruled out after wake, standby conclusions must be marked `inconclusive`.
+
+Fault injection covers SD mount/mkdir failure, `pm:shell` unavailable, source process refusing exit, NRO interruption, target launch failure, stale/mismatched runtime-ready status, recovery timeout, missing reports, failure error codes, corrupted `session.json`, v1/v2 journal interruptions, and unknown flag/backup conflicts. Assert no second PCTL owner is ever started.
+
+Reports must adhere to `schema_version:2` (retaining `version:2`), containing raw nanoseconds/booleans and Results for `1453/1454/1455/1952`, full 0x44 hex/hash before and after, `1006/1031/1035/1457/1458` raw vs libnx comparison, target-bound fallback, restriction event auxiliary evidence, environment/build identity, and byte-for-byte recovery proofs; focused/full modes include 2-tier manual observations.
+
+## PDM and Bedtime Evidence Gates
+
+Before per-game statistics can be released, standalone read-only `pdm:qry` experiments must execute A/B runs across HOME, foreground game, suspended, standby, day transition, manual clock change, multi-account, and unknown titles. Reports must prove deduplication, reordering, missing events, and clock rollback degradation semantics, confirming statistics represent local console usage. If evidence is insufficient, the Release adapter remains unavailable and cannot display today's/7-day Top 3. The experiment must never invoke PCTL `1952`, write rules/state, or alter control states.
+
+Bedtime is shipped disabled by default in standard packages and requires Device Lab evidence for qualification. Qualification gates must prove: triggers occur within 60 seconds of schedule arrival or within-window wake; modals block Game, Homebrew, HOME, System Settings, and PlayWise NRO; Overlay remains operable, sharing NRO PIN/attempts/cooldown, executing one-time authorization, skipping current window, disabling bedtime, or performing full install snapshot restoration. Each recovery action must submit a request, re-read PCTL, and dismiss modals; if daily quota remains exhausted, it must display "still restricted by daily quota" rather than misreporting failure or clearing all limits.
+
+Standard extensions and autonomous grace buffers must be rejected within the bedtime window without consuming nonces/eligibility; balance recovery on the same day, new quotas on day transition, persistence across reboot, immediate recalculation on clock changes, entry/exit write failure handling, and recovery whitelisting under `disable.flag` must be verified. When the daemon is unreachable, Overlay displays "Request Unconfirmed" and external recovery instructions, and `restore_install_snapshot.flag` must not appear. If Overlay is missing or unhandshaked, standard NRO must require confirming official Nintendo suspension settings with clear risk warnings before first enablement.
+
+Bedtime time boundaries must be verified on a physical console with official Nintendo Parental Controls enabled. Official "Suspend Software when Time's Up" must be manually inspected with both ON and OFF states recorded; PlayWise does not alter this switch. PlayWise PIN cannot replace official Nintendo PIN. Adjusting system clock across boundaries with official PIN must trigger daemon logging and immediate re-evaluation; the report must note that v1 does not maintain a trusted clock nor prevent clock-manipulation bypass.
+
+## Qualification Verification
+
+Target baseline:
+
+- Nintendo Switch OLED;
+- HOS 22.5.0;
+- Atmosphère 1.11.2.
+
+Authoritative qualification commands:
+
+```powershell
+python tools/test.py
+python tools/package_remote.py
+python tools/make_bedtime_qualification_template.py `
+  --commit <candidate-commit> `
+  --release-id <candidate-release-id> `
+  --output .\device-reports\bedtime-qualification.json
+.\tools\prepare_device_lab_sd.ps1 -SourceFolder .\build\packages -Drive E -WipeAll
+.\tools\prepare_device_lab_sd.ps1 -SourceFolder .\build\packages -Drive E -WipeAll -Apply
+python tools/verify_device_qualification.py `
+  --packages .\build\packages `
+  --reports .\device-reports `
+  --expected-model oled `
+  --expected-hos 22.5.0 `
+  --expected-atmosphere 1.11.2
+python tools/promote_qualified_build.py `
+  --packages .\build\packages `
+  --verification .\build\qualification\verification.json `
+  --out .\build\qualified
+```
+
+The SD script defaults to dry-run; verify drive letter and console backup directory before `-Apply`. Device Lab qualification input includes the complete historical campaign plus the final `bedtime-qualification.json`. Template `null` values must be replaced by real console observations. Promotion copies original verified Zips matching calculated hashes without recompiling.
+
+The standard package must then execute the 17-step verification workflow:
+
+1. Install on a console with official time limits enabled and reboot.
+2. Confirm initial read-only pre-flight check succeeds with zero PCTL writes.
+3. Create a PIN of chosen length, confirm generated secret is non-placeholder, and confirm 7-day schedule.
+4. Confirm handover, verify install snapshot, clear current restriction, 5-second sync, and Active state.
+5. Test status, daily total quota, quick grant fixed/custom values, unlimited today, clear daily adjustment, and weekly schedule saving; confirm clearing only removes `today_override` without affecting scheduled dates or bedtime skips. Temporarily unlock from Nintendo system settings, confirm limits and quotas persist, and verify restriction resumes after sleep/wake.
+6. Redeem a candidate-generated 15-minute v2 grant code, confirming timer, remaining balance, and nonce commit exactly once.
+7. Inject state sync latency, verify "Syncing" banner, and confirm resolution or contract rollback within 30 seconds.
+8. Reboot to verify setup, rules, state, ledger, and in-flight transaction recovery.
+9. Create `disable.flag`, confirm write kill-switch, verify diagnostics and install snapshot recovery.
+10. Restore pre-install snapshot, verify exact raw/timer state restoration, and enter `restored` state.
+11. In `restored`, verify Step 3 shows "Re-enable and Retake Control"; confirming runs pre-flight, deletes `disable.flag` on success, enters `active` after 5 seconds grace, or preserves disabled flag and `restored` state on failure without overwriting snapshot.
+12. Inject Enforce propagation delay, verify scheduler in same process does not misidentify active recovery as boot legacy transaction within 30-second window; reboot within window, verify legacy transaction recovery, `disable.flag` creation, and safe recovery from `active` via "Re-enable and Retake Control".
+13. Set next day to 60 minutes, leave console on HOME before day-end and sleep; keep screen and game off for >=90 minutes on next day. Verify `pctl_debug.jsonl` contains only Enforce `apply_target` without `stage:"start_timer"`, 1454 balance does not decrease from background day sync, and UI does not display false 60-minute quota consumption.
+14. Record 1454/1952 A/B across HOME, System Settings, foreground game, suspended game, standby, and wake. Confirm HOME/Settings screen illumination counts toward official Nintendo usage semantics, standby does not accumulate, and wake resumes accumulation.
+15. Configure scheduled date quotas across week, month, and year boundaries; verify 7-day preview and priority hierarchy "Today Adjustment > Scheduled Date > National Holidays > Weekly Plan"; rules persist across reboot.
+16. Claim autonomous grace buffer once via controller and once via touch on limited days, verifying second attempt rejection, day transition reset, and 1440-minute truncation; confirm eligibility and PCTL pre-state recovery under failure injection.
+17. In light and dark themes, verify family activity pagination/clear, 7/30-day reliable days, child zone today/tomorrow rule sources; verify statistics failures or corrupted logs do not impact time control.
+
+## Failure Forensics
+
+Export sanitized diagnostic bundles from the Support page. If NRO fails to boot, preserve:
+
+- `build.json`, `setup.json`, `compatibility.json`, `environment.json`;
+- `backups/install_pctl_snapshot.json`;
+- `recovery/active/`;
+- `results/`, `logs/`, and relevant crash reports.
+- When Overlay or NRO reports SD transport, inspect `logs/YYYY-MM-DD/ipc-client.log`; verify entries contain `client`, `stage`, `rc`, `module`, `description`, `version`, and `expected`, without logging request bodies, PINs, secrets, or 8-character codes. A working connection records `client=overlay stage=connected` and displays "Transport: IPC".
+- Open Overlay under normal, quota exhausted, bedtime active, and bedtime lifted but daily quota exhausted states: always displays grant code page first; `L` only submits buffer when available and not under bedtime; `R`/touch enters PIN page, `-` expands status; codes can be edited but not submitted during bedtime. Bedtime page allows skipping or restoring current window via `Y/X` and touch. PIN page supports joystick 8-direction `1`–`8`, deadzones, D-pad, `X/Y` for `0/9`, `ZL` backspace, `+` confirm, and `B` cancel. Touch supports backspace, confirm, and cancel only.
+
+Never transmit `credentials.json`, `auth.json`, full ledger, or raw offline codes. To stop auto-boot, remove `atmosphere/contents/4200000000BD2300/flags/boot2.flag`.
+
+## Console Home Visual Regression
+
+- **Parent Dashboard Layout**: The first four cards on the right correspond to "Today Quota Adjustment (Today Only)", while the last two correspond to "Bedtime & Autonomous Buffer". Both light and dark themes must maintain non-overlapping focus/touch hitboxes, and group headers must be non-interactive. Unlimited today must clearly state that bedtime remains independently enforced.
+- **Child Dashboard**: Remaining time readable at a glance; `A` one-step input, `X` buffer, `Y` refresh, `B` exit, and parent shortcut combo retain existing behaviors. Check buffer disabled, available, claimed, and deactivated states.
+- **Parent Schedule Page**: Six unified action cards: Today Quota, Quick Grant, Unlimited Today, Clear Today Adjustment, Skip Current Bedtime, and Autonomous Buffer. "Skip Current Bedtime" acts as a quick shortcut to skip the current or next upcoming window once. Today Quota card covers active, cleared in session, unset, pending, unconfirmed, disabled, recovering, and temporary unlock states. Quick grant fixed and custom values require confirmation via "Current Balance -> Balance After Operation" summary.
+- **Unlimited Today Interaction**: Quick grant card is grayed out, displaying reason and re-enable prompt; neither `A` nor touch may initiate status refresh or grant requests. When bedtime is disabled, has no upcoming window, or current window is already skipped, "Skip Current Bedtime" is grayed out. Stale states (>120 seconds) must refresh first before determining button availability.
+- **Modals and Editors**: `+` and touch open details; parent details default to "Today Decision", switchable via touch or `L/R` to "Usage & Status". Decision chain covers all 4 rule levels, bedtime window, and buffer status. Today quota editor supports `ZL` limited, `ZR` unlimited, and touch mode toggle; unlimited mode rejects minute input and submits unlimited request. Bedtime page verifies D-pad navigation, `A` toggle, `-` shortcut, touch, and `L/R` tabs; shared status bar prompts `Y` at 120/121-second boundary.
+- **Preview Generation**: Console layout previews use vendored `third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf` with a fixed sample clock (08:16). `python tools/package_remote.py` runs tests and host previews in a single SSH session, syncing 51 images from `build/ui-previews/` to `docs/images/usage/` via `tools/sync_doc_previews.py`. To only regenerate previews, use `python tools/package_remote.py --only previews --clean`.
+
+## Console UI Details and Curve Rendering Regression
+
+- Bedtime full editor covers 7-day independent load/save, weekday/weekend copying, calendar toggles, statutory holiday/workday rules, scheduled date 1/366-day boundaries, `HHMM` direct input, 15/60-minute steps, overnight and adjacent overlap rejections.
+- Bedtime skip covers current, tonight, future, already skipped, no schedule, stale status (>120s), PIN error/cancel, and stale daemon instance rejection. The confirmation modal displays the calendar date and exact time of the locked instance.
+- Detail pages use key statistics and grouped cards; parent zone supports `L/R`, D-pad, and touch switching between "Today Decision" and "Usage & Status".
+- Weekly schedule, national holidays, and bedtime top-level editor pages hide top-level tabs; `B` returns to the 5-card hub and restores source card focus. Support & Recovery is directly reachable via `L/R`.
+- `test-host` runs `ui_preview --check-primitives` without fonts, validating anti-aliased rounded corners and rings, mirror symmetry, designated radii, stroke clipping, and 4x4 coverage sampling.
+- Unified package gate generates real renderer previews: inspect `details-*`, `parent-details-*`, `child-details-*`, `settings-advanced-*`, `support-*`, and all modal matrices.
+- Open console application and Overlay under System Traditional Chinese, Manual Simplified Chinese, Manual Traditional Chinese, and English; verify titles, decision reasons, plan save results, PIN error/cooldown countdowns, and confirmations use the selected locale without glyph corruption or clipping. `tests/devkit/test_ui_text_catalog.py` verifies all keyed messages across all three language catalogs.
+- Weekly quota set to 1, 14, 15 minutes saves, persists across exit/re-entry, and rejects 0 or 1441 minutes.
+- Conclude by running `python tools/test.py` and `python tools/package_remote.py`; physical console verification further inspects handheld and docked display edge rendering, controller/touch navigation hierarchy, and overall interaction smoothness.

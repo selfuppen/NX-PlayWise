@@ -177,11 +177,13 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
         ptc_ui_text(PTC_UI_T_SUPPORT_EVENT_DETAILS), ptc_ui_text(PTC_UI_T_BATCH_SETTINGS), ptc_ui_text(PTC_UI_T_ADVANCED_ENTRY_TO_HOMEBREW_MENU), ptc_ui_text(PTC_UI_T_ADJUST_DURATION), ptc_ui_text(PTC_UI_T_APPEARANCE_THEME), ptc_ui_text(PTC_UI_T_ENTER_PARENT_PIN),
         ptc_ui_text(PTC_UI_T_EXTRA_TIME_CODE_USAGE_RECORD), ptc_ui_text(PTC_UI_T_SPECIFIED_DATE_QUOTA), ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING), ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORD), ptc_ui_text(PTC_UI_T_TODAY_DETAILS), ptc_ui_text(PTC_UI_T_KEEP_SCHEDULED_QUOTA_DRAFT),
         ptc_ui_text(PTC_UI_T_BEDTIME), ptc_ui_text(PTC_UI_T_QUICK_GRANT), ptc_ui_text(PTC_UI_T_EDIT_WEEKLY_BEDTIME_WINDOWS), ptc_ui_text(PTC_UI_T_EDIT_SPECIAL_BEDTIME_RULES),
-        ptc_ui_text(PTC_UI_T_LEAVE_BEDTIME_EDITING), ptc_ui_text(PTC_UI_T_COPY_WEEKLY_BEDTIME_WINDOW)
+        ptc_ui_text(PTC_UI_T_LEAVE_BEDTIME_EDITING), ptc_ui_text(PTC_UI_T_COPY_WEEKLY_BEDTIME_WINDOW),
+        ptc_ui_text(PTC_UI_T_TODAY_DETAILS), ptc_ui_text(PTC_UI_T_TODAY_DETAILS), ptc_ui_text(PTC_UI_T_UI_LANGUAGE),
+        ptc_ui_text(PTC_UI_T_EXPORT_CONFIGURATION_FILES_FOR_USE_ON_MOBILE)
     };
     int failed = 0;
     for (int dark = 0; dark < 2; ++dark) {
-        for (int overlay = PTC_UI_OVERLAY_MINUTES; overlay <= PTC_UI_OVERLAY_BEDTIME_BULK; ++overlay) {
+        for (int overlay = PTC_UI_OVERLAY_MINUTES; overlay <= PTC_UI_OVERLAY_PARENT_EXPORT_RESULT; ++overlay) {
             PtcUiModel model = *baseline;
             char name[48];
             PtcRules rules;
@@ -811,6 +813,76 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.parent_page = PTC_UI_PARENT_SETTINGS;
         model.selected_index = 3;
         failed |= save_preview(directory, "settings", "settings-root", &model, dark);
+        {
+            PtcUiModel settings_dlg = model;
+            settings_dlg.overlay = PTC_UI_OVERLAY_PIN;
+            snprintf(settings_dlg.pin_title, sizeof(settings_dlg.pin_title), "%s", ptc_ui_text(PTC_UI_T_CHANGE_PIN));
+            snprintf(settings_dlg.pin_guide, sizeof(settings_dlg.pin_guide), "%s", ptc_ui_text(PTC_UI_T_CONTINUE_CURRENT_OPERATION_AFTER_VERIFICATION));
+            snprintf(settings_dlg.pin_text, sizeof(settings_dlg.pin_text), "1234");
+            failed |= save_preview(directory, "settings", "settings-pin", &settings_dlg, dark);
+
+            settings_dlg = model;
+            settings_dlg.overlay = PTC_UI_OVERLAY_THEME;
+            settings_dlg.overlay_selection = 1;
+            snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_APPEARANCE_THEME));
+            failed |= save_preview(directory, "settings", "settings-theme", &settings_dlg, dark);
+
+            settings_dlg = model;
+            settings_dlg.overlay = PTC_UI_OVERLAY_LANGUAGE;
+            settings_dlg.overlay_selection = 0;
+            snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
+            failed |= save_preview(directory, "settings", "settings-language", &settings_dlg, dark);
+
+            settings_dlg = model;
+            settings_dlg.overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
+            settings_dlg.setup_shortcut_index = 0;
+            settings_dlg.shortcut_draft_enabled = true;
+            settings_dlg.shortcut_draft_show_hint = true;
+            snprintf(settings_dlg.shortcut_draft_label, sizeof(settings_dlg.shortcut_draft_label), "Minus");
+            snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_PARENT_SHORTCUT));
+            failed |= save_preview(directory, "settings", "settings-shortcut", &settings_dlg, dark);
+
+            settings_dlg = model;
+            settings_dlg.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
+            settings_dlg.album_restriction_state = 1;
+            snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_HOMEBREW_ACCESS));
+            failed |= save_preview(directory, "settings", "settings-album", &settings_dlg, dark);
+
+            settings_dlg = model;
+            settings_dlg.overlay = PTC_UI_OVERLAY_ACTIVITY_HISTORY;
+            settings_dlg.activity_history_available = true;
+            settings_dlg.activity_history_count = 3;
+            settings_dlg.activity_history[0] = (PtcActivityHistoryRecord){.occurred_at = 998, .day_index = 2380, .action = "today_limit", .minutes = 120, .effective_minutes = 120};
+            settings_dlg.activity_history[1] = (PtcActivityHistoryRecord){.occurred_at = 950, .day_index = 2380, .action = "offline_grant", .minutes = 30, .effective_minutes = 30};
+            settings_dlg.activity_history[2] = (PtcActivityHistoryRecord){.occurred_at = 900, .day_index = 2380, .action = "today_unlimited", .minutes = 0, .effective_minutes = 0};
+            snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITIES));
+            failed |= save_preview(directory, "settings", "settings-activity", &settings_dlg, dark);
+
+            settings_dlg = model;
+            settings_dlg.overlay = PTC_UI_OVERLAY_REDEMPTION_HISTORY;
+            settings_dlg.redemption_history_available = true;
+            settings_dlg.redemption_history_count = 2;
+            settings_dlg.redemption_history[0] = (PtcRedemptionHistoryRecord){.redeemed_at = 998, .day_index = 2380, .token_version = 1, .grant_minutes = 30, .effective_add_minutes = 30, .remaining_after_available = true, .remaining_after_minutes = 60};
+            settings_dlg.redemption_history[1] = (PtcRedemptionHistoryRecord){.redeemed_at = 950, .day_index = 2379, .token_version = 1, .grant_minutes = 60, .effective_add_minutes = 45, .remaining_after_available = true, .remaining_after_minutes = 45};
+            snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_USAGE_HISTORY));
+            failed |= save_preview(directory, "settings", "settings-redemption", &settings_dlg, dark);
+
+            settings_dlg = model;
+            settings_dlg.overlay = PTC_UI_OVERLAY_GRANT_MANAGER;
+            snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_GRANT_SETTINGS));
+            failed |= save_preview(directory, "settings", "settings-grant-manager", &settings_dlg, dark);
+
+            settings_dlg = model;
+            settings_dlg.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
+            snprintf(settings_dlg.software_version, sizeof(settings_dlg.software_version), "v0.9.0");
+            snprintf(settings_dlg.app_release_id, sizeof(settings_dlg.app_release_id), "playwise-nro-release");
+            snprintf(settings_dlg.backend_release_id, sizeof(settings_dlg.backend_release_id), "playwise-sysmodule-release");
+            snprintf(settings_dlg.repository_url, sizeof(settings_dlg.repository_url), "https://github.com/selfuppen/NX-PlayWise");
+            snprintf(settings_dlg.pwa_url, sizeof(settings_dlg.pwa_url), "https://selfuppen.github.io/NX-PlayWise/");
+            settings_dlg.hot_reload_status = PTC_UI_HOT_RELOAD_CURRENT;
+            snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SOFTWARE_INFO));
+            failed |= save_preview(directory, "settings", "settings-software-info", &settings_dlg, dark);
+        }
         model.parent_page = PTC_UI_PARENT_SUPPORT;
         model.selected_index = 4;
         failed |= save_preview(directory, "support", "support-healthy", &model, dark);
@@ -826,6 +898,12 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             model.recent_event_timestamps[i] = 998;
         }
         failed |= save_preview(directory, "support", "support-failed", &model, dark);
+        {
+            PtcUiModel support_dlg = model;
+            support_dlg.overlay = PTC_UI_OVERLAY_SUPPORT_EVENT;
+            snprintf(support_dlg.overlay_title, sizeof(support_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SUPPORT_EVENT_DETAILS));
+            failed |= save_preview(directory, "support", "support-event-details", &support_dlg, dark);
+        }
         model.waiting = true;
         failed |= save_preview(directory, "support", "support-waiting", &model, dark);
         model = baseline;

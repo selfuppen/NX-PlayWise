@@ -1,3 +1,9 @@
+<div align="center">
+
+  [English](PCTL_ARCHITECTURE.md) | [简体中文](PCTL集成架构.md)
+
+</div>
+
 # PCTL 集成架构
 
 PCTL 是 Nintendo Switch 的系统家长控制服务。PlayWise 标准分发构建管理 Nintendo 的主机使用额度、系统计时和提醒；它不把私有强制锁屏、暂停或退出作为产品承诺。官方说明明确指出，即使没有运行游戏，只要正在使用主机，时间仍会累计；到时只通知还是暂停软件由 Nintendo 官方“时间到了暂停软件”设置决定。PlayWise 不修改该设置，参见[任天堂计时说明](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html)和[Nintendo 暂停设置说明](https://en-americas-support.nintendo.com/app/answers/detail/a_id/22447)。

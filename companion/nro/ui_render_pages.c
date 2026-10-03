@@ -853,7 +853,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             tag = ptc_ui_text(PTC_UI_T_SYSTEM_CONTROL);
             title = ptc_ui_text(PTC_UI_T_QUICK_ENTRANCE_TO_PARENT_AREA);
             status_text = (model->custom_shortcut_enabled && model->custom_shortcut_label[0])
-                ? model->custom_shortcut_label : "Minus";
+                ? model->custom_shortcut_label : ptc_ui_text(PTC_UI_T_DEFAULT_SHORTCUT_LABEL);
             status_color = UI_ACCENT;
             desc1 = ptc_ui_text(PTC_UI_T_LONG_PRESS_THIS_KEY_ON_ANY_INTERFACE);
             desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_CUSTOM_CONFIGURATION_OF_MINUS_CAPTURE_OR);
