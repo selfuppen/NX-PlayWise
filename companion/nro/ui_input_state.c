@@ -102,6 +102,7 @@ bool ptc_ui_overlay_primary_uses_plus(PtcUiOverlay overlay)
     case PTC_UI_OVERLAY_MINUTE_EDITOR:
     case PTC_UI_OVERLAY_SCHEDULED:
     case PTC_UI_OVERLAY_AUTONOMY:
+    case PTC_UI_OVERLAY_EYE_CARE:
     case PTC_UI_OVERLAY_BEDTIME:
     case PTC_UI_OVERLAY_BEDTIME_WINDOW:
     case PTC_UI_OVERLAY_BEDTIME_SPECIAL:

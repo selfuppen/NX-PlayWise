@@ -68,6 +68,14 @@ typedef struct {
     bool bedtime_overlay_verified;
     const char *bedtime_recovery_phase;
     bool daily_restriction_active;
+    bool eye_care_enabled;
+    uint16_t eye_care_play_minutes;
+    uint16_t eye_care_rest_minutes;
+    const char *eye_care_phase;
+    uint16_t eye_care_used_minutes;
+    int64_t eye_care_rest_remaining_seconds;
+    uint64_t eye_care_break_id;
+    bool eye_care_unlimited_capped;
 } PtcResultState;
 
 typedef struct {

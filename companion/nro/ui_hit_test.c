@@ -145,6 +145,12 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             }
         }
         break;
+    case PTC_UI_OVERLAY_EYE_CARE:
+        for (i = 0; i < 5; ++i) {
+            if (ptc_ui_rect_contains(ptc_ui_eye_care_field_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_EYE_CARE_FIELD, i);
+        }
+        break;
     case PTC_UI_OVERLAY_MINUTE_EDITOR:
         if (model->numpad_purpose == PTC_UI_NUMPAD_MINUTES &&
             model->operation == PTC_UI_OPERATION_SET_TODAY_LIMIT) {

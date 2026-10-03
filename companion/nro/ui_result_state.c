@@ -381,6 +381,14 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
             summary.bedtime_skipped_source);
         model->bedtime_official_setting_confirmed = summary.bedtime_official_setting_confirmed;
         model->bedtime_overlay_verified = summary.bedtime_overlay_verified;
+        model->eye_care_policy.enabled = summary.eye_care_enabled;
+        model->eye_care_policy.play_minutes = (uint16_t)summary.eye_care_play_minutes;
+        model->eye_care_policy.rest_minutes = (uint16_t)summary.eye_care_rest_minutes;
+        model->eye_care_used_minutes = (uint16_t)summary.eye_care_used_minutes;
+        model->eye_care_rest_remaining_seconds = summary.eye_care_rest_remaining_seconds;
+        model->eye_care_break_id = summary.eye_care_break_id;
+        model->eye_care_unlimited_capped = summary.eye_care_unlimited_capped;
+        snprintf(model->eye_care_phase, sizeof(model->eye_care_phase), "%s", summary.eye_care_phase);
         model->calendar_covered = summary.calendar_covered;
         model->calendar_update_warning = summary.calendar_update_warning;
         snprintf(model->rule_source, sizeof(model->rule_source), "%s", summary.rule_source);

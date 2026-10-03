@@ -154,6 +154,7 @@ enum class OverlayRequestKind {
     AddTodayMinutes,
     DisableTodayLimit,
     SkipBedtime,
+    SkipEyeCare,
     ClearBedtimeSkip,
     DisableBedtime,
     RestoreInstallSnapshot,
@@ -443,7 +444,8 @@ public:
             if (!status_expanded_ && ptc_overlay_rect_contains(
                     ptc_overlay_child_buffer_rect(cx, cy), rel_x, rel_y)) {
                 if (request_actions_enabled && displayed_summary_.valid &&
-                    displayed_summary_.daily_buffer_available && !bedtime_restricted())
+                    displayed_summary_.daily_buffer_available && !bedtime_restricted() &&
+                    !eye_care_restricted())
                     (void)begin_claim_daily_buffer();
                 prev_touch_down_ = touch_down;
                 return true;
@@ -514,7 +516,8 @@ public:
 
         if (keysDown & HidNpadButton_L) {
             if (request_actions_enabled && displayed_summary_.valid &&
-                displayed_summary_.daily_buffer_available && !bedtime_restricted())
+                displayed_summary_.daily_buffer_available && !bedtime_restricted() &&
+                !eye_care_restricted())
                 (void)begin_claim_daily_buffer();
             return true;
         }
@@ -708,6 +711,7 @@ public:
             kind == OverlayRequestKind::AddTodayMinutes ||
             kind == OverlayRequestKind::DisableTodayLimit ||
             kind == OverlayRequestKind::SkipBedtime ||
+            kind == OverlayRequestKind::SkipEyeCare ||
             kind == OverlayRequestKind::ClearBedtimeSkip ||
             kind == OverlayRequestKind::DisableBedtime ||
             kind == OverlayRequestKind::RestoreInstallSnapshot;
@@ -742,6 +746,12 @@ public:
             !displayed_summary_.bedtime_skipped;
     }
 
+    bool eye_care_restricted() const
+    {
+        return displayed_summary_.valid && displayed_summary_.eye_care_enabled &&
+            std::strcmp(displayed_summary_.eye_care_phase, "resting") == 0;
+    }
+
     bool access_recovery_visible() const
     {
         return parent_view_ != ParentView::Child;
@@ -773,6 +783,7 @@ public:
     {
         if (action == PTC_OVERLAY_PARENT_ADD_MINUTES ||
             action == PTC_OVERLAY_PARENT_SKIP_BEDTIME ||
+            action == PTC_OVERLAY_PARENT_SKIP_EYE_CARE ||
             action == PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP) return false;
         return true;
     }
@@ -800,6 +811,11 @@ public:
             kind = OverlayRequestKind::SkipBedtime;
             status = ptc_overlay_bridge_skip_bedtime(bridge_, now, ++request_nonce_,
                 ptc_overlay_parent_skip_instance_id(&displayed_summary_));
+            break;
+        case PTC_OVERLAY_PARENT_SKIP_EYE_CARE:
+            kind = OverlayRequestKind::SkipEyeCare;
+            status = ptc_overlay_bridge_skip_eye_care(bridge_, now, ++request_nonce_,
+                displayed_summary_.eye_care_break_id);
             break;
         case PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP:
             kind = OverlayRequestKind::ClearBedtimeSkip;
@@ -920,7 +936,7 @@ public:
             if (touch_pressed) {
                 for (int index = 0; index < PTC_OVERLAY_PARENT_ACTION_COUNT; ++index) {
                     if (tx >= cx + 12 && tx < cx + PTC_OVERLAY_CONTENT_W - 12 &&
-                        ty >= cy + 135 + index * 52 && ty < cy + 181 + index * 52) {
+                        ty >= cy + 125 + index * 46 && ty < cy + 169 + index * 46) {
                         const bool was_selected = parent_action_ == index;
                         parent_action_ = index;
                         ptc_overlay_hold_reset(&confirm_hold_);
@@ -1017,9 +1033,10 @@ public:
     bool begin_code_preview()
     {
         char code[32];
-        if (bedtime_restricted()) return false;
+        if (bedtime_restricted() || eye_care_restricted()) return false;
         if (has_status_snapshot_ && !status_is_stale() &&
-            displayed_summary_.unrestricted_today == 1) return false;
+            (displayed_summary_.unrestricted_today == 1 ||
+             displayed_summary_.eye_care_unlimited_capped)) return false;
         if (recovery_active_) {
             result_pending_ = true;
             success_visible_ = true;
@@ -1272,7 +1289,9 @@ public:
             false, cx + 14, cy + 56, 21, renderer->a(TEXT_COLOR));
         const char *state = (!has_status_snapshot_ || status_is_stale()) ? ptc_ui_text(PTC_UI_T_STATUS_PENDING_REFRESH) :
             (bedtime_restricted() ? ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_3) :
-             (displayed_summary_.daily_restriction_active ? ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED_2) : ptc_ui_text(PTC_UI_T_NORMAL_PLAY_AVAILABLE)));
+             (displayed_summary_.daily_restriction_active ? ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED_2) :
+              (eye_care_restricted() ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) :
+               ptc_ui_text(PTC_UI_T_NORMAL_PLAY_AVAILABLE))));
         draw_localized(renderer, state, false, cx + 14, cy + 88, 13,
             renderer->a(bedtime_restricted() ? ERROR_COLOR : MUTED_COLOR));
 
@@ -1316,7 +1335,7 @@ public:
 
         if (parent_view_ == ParentView::Actions) {
             const char *LABELS[PTC_OVERLAY_PARENT_ACTION_COUNT] = {
-                ptc_ui_text(PTC_UI_T_QUICK_GRANT), ptc_ui_text(PTC_UI_T_NO_LIMIT_TODAY), ptc_ui_text(PTC_UI_T_SKIP_BEDTIME), ptc_ui_text(PTC_UI_T_RESTORE_THIS_BEDTIME), ptc_ui_text(PTC_UI_T_TURN_OFF_BEDTIME_PLAN),
+                ptc_ui_text(PTC_UI_T_QUICK_GRANT), ptc_ui_text(PTC_UI_T_NO_LIMIT_TODAY), ptc_ui_text(PTC_UI_T_SKIP_BEDTIME), ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP), ptc_ui_text(PTC_UI_T_RESTORE_THIS_BEDTIME), ptc_ui_text(PTC_UI_T_TURN_OFF_BEDTIME_PLAN),
                 ptc_ui_text(PTC_UI_T_RESTORE_PRE_INSTALL_SETTINGS_DEACTIVATE)
             };
             renderer->drawRect(cx + 246, cy + 58, cw - 258, 46,
@@ -1324,22 +1343,22 @@ public:
             draw_localized(renderer, ptc_ui_text(PTC_UI_T_Y_REFRESH_2), false, cx + 264, cy + 87, 13,
                 renderer->a(bridge_->waiting ? MUTED_COLOR : FOCUS_BORDER));
             for (int i = 0; i < PTC_OVERLAY_PARENT_ACTION_COUNT; ++i) {
-                const s32 y = cy + 135 + i * 52;
+                const s32 y = cy + 125 + i * 46;
                 const bool selected = i == parent_action_;
                 const char *reason = parent_action_reason(
                     static_cast<PtcOverlayParentAction>(i));
-                renderer->drawRect(cx + 12, y, cw - 24, 46,
+                renderer->drawRect(cx + 12, y, cw - 24, 44,
                     renderer->a(selected ? FOCUS_BG : CARD_COLOR));
-                draw_outline(renderer, cx + 12, y, cw - 24, 46,
+                draw_outline(renderer, cx + 12, y, cw - 24, 44,
                     selected ? 2 : 1, selected ? FOCUS_BORDER : MUTED_COLOR);
                 if (i == PTC_OVERLAY_PARENT_ADD_MINUTES) {
                     std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_QUICK_GRANT_D_MIN_LEFT_RIGHT_TO), daily_add_minutes_);
                 } else {
                     std::snprintf(line, sizeof(line), "%s", LABELS[i]);
                 }
-                draw_localized(renderer, line, false, cx + 24, y + 20, 13,
+                draw_localized(renderer, line, false, cx + 24, y + 19, 13,
                     renderer->a(reason ? MUTED_COLOR : TEXT_COLOR), 310);
-                if (reason) draw_localized(renderer, reason, false, cx + 24, y + 38, 11,
+                if (reason) draw_localized(renderer, reason, false, cx + 24, y + 36, 11,
                     renderer->a(WAITING_COLOR), 305);
                 if (selected && !reason && parent_action_requires_hold(static_cast<PtcOverlayParentAction>(i))) {
                     const int progress = ptc_overlay_hold_progress(&confirm_hold_, 1000);
@@ -1446,7 +1465,14 @@ public:
         }
         char line[128];
         char age[32];
-        const PtcCompanionResultSummary &summary = displayed_summary_;
+        PtcCompanionResultSummary summary = displayed_summary_;
+        if (summary.valid && summary.eye_care_enabled &&
+            std::strcmp(summary.eye_care_phase, "resting") == 0 && last_refresh_tick_ != 0) {
+            const u64 elapsed = armTicksToNs(armGetSystemTick() - last_refresh_tick_) / 1000000000ULL;
+            summary.eye_care_rest_remaining_seconds = elapsed >=
+                static_cast<u64>(summary.eye_care_rest_remaining_seconds)
+                ? 0 : summary.eye_care_rest_remaining_seconds - static_cast<int>(elapsed);
+        }
         format_refresh_age(age, sizeof(age));
         const bool remaining_refresh_pending = ptc_overlay_remaining_refresh_pending(
             bridge_->waiting, active_request_kind_ == OverlayRequestKind::OfflineCode);
@@ -1516,7 +1542,8 @@ public:
         const bool restriction_urgent = (summary.valid &&
             ((summary.bedtime_active && !summary.bedtime_skipped) ||
              summary.daily_restriction_active ||
-             (summary.remaining_available && summary.remaining_minutes == 0)));
+             (summary.eye_care_enabled &&
+              std::strcmp(summary.eye_care_phase, "resting") == 0)));
         draw_localized(renderer, restriction_guidance, false, cx + 5, cy + 94, 12,
             renderer->a(restriction_urgent ? ERROR_COLOR : FOCUS_BORDER), 350);
 
@@ -1596,8 +1623,8 @@ public:
 
         // --- 4. Control & Submit Bar (操作与提交栏) ---
         const bool code_unavailable = has_status_snapshot_ && !status_is_stale() &&
-            summary.unrestricted_today == 1;
-        const bool can_submit = !bedtime_restricted() && !code_unavailable &&
+            (summary.unrestricted_today == 1 || summary.eye_care_unlimited_capped);
+        const bool can_submit = !bedtime_restricted() && !eye_care_restricted() && !code_unavailable &&
             ptc_overlay_request_action_enabled(bridge_->waiting) &&
             ptc_overlay_input_can_submit(input_);
         const s32 submit_y = cy + PTC_OVERLAY_SUBMIT_Y;

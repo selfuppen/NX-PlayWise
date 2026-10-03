@@ -98,6 +98,8 @@ int main(int argc, char **argv)
     ui.model.view = PTC_UI_CHILD;
     ui.model.parent_page = PTC_UI_PARENT_TODAY;
     ui.model.remaining_minutes = -1;
+    ui.model.eye_care_policy.play_minutes = 40;
+    ui.model.eye_care_policy.rest_minutes = 10;
     ui.model.play_timer_enabled = -1;
     ui.model.restricted_now = -1;
     ptc_ui_set_execution(&ui.model, NULL, NULL);

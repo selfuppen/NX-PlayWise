@@ -302,6 +302,22 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
         state->usage_consumed_minutes_30 = aggregate.consumed_minutes_30;
     }
     fill_bedtime_result_state(sysmodule, state, rules, runtime_state, pctl_status, now);
+    state->eye_care_enabled = rules->eye_care.enabled;
+    state->eye_care_play_minutes = rules->eye_care.play_minutes;
+    state->eye_care_rest_minutes = rules->eye_care.rest_minutes;
+    state->eye_care_unlimited_capped = rules->eye_care.enabled &&
+        ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index)).mode ==
+            PTC_RULE_MODE_UNLIMITED;
+    state->eye_care_used_minutes = runtime_state->eye_care_accumulated_minutes;
+    state->eye_care_break_id = runtime_state->eye_care_resting ? runtime_state->eye_care_break_id : 0;
+    state->eye_care_rest_remaining_seconds = runtime_state->eye_care_resting &&
+        runtime_state->eye_care_rest_deadline > now.unix_seconds
+        ? runtime_state->eye_care_rest_deadline - now.unix_seconds : 0;
+    if (!rules->eye_care.enabled) state->eye_care_phase = "off";
+    else if (runtime_state->eye_care_resting) state->eye_care_phase = "resting";
+    else if (state->bedtime_active && !state->bedtime_skipped) state->eye_care_phase = "paused";
+    else if (!runtime_state->eye_care_usage_known) state->eye_care_phase = "unknown";
+    else state->eye_care_phase = "playing";
 }
 
 bool write_current_status_result(

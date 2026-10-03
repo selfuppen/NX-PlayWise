@@ -22,6 +22,18 @@ void submit_autonomy_policy(UiState *ui)
     if (status == PTC_COMPANION_OK) begin_wait(ui, "set_autonomy_policy", ptc_ui_text(PTC_UI_T_SAVING_AUTONOMOUS_BUFFER_SETTINGS));
     else set_message(ui, ptc_ui_text(PTC_UI_T_AUTONOMOUS_BUFFER_SETTING_SUBMISSION_FAILED), status);
 }
+void submit_eye_care_policy(UiState *ui)
+{
+    PtcCompanionStatus status;
+    if (!ui || ui->waiting) return;
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_set_eye_care_policy(&ui->transport,
+        ui->active_request_id, time(NULL), &ui->model.draft_eye_care_policy);
+    set_command_name(ui, "set_eye_care_policy");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_eye_care_policy", ptc_ui_text(PTC_UI_T_EYE_CARE_SAVE));
+    else set_message(ui, ptc_ui_text(PTC_UI_T_EYE_CARE_SAVE), status);
+}
 void submit_bedtime_confirmation(UiState *ui)
 {
     char fingerprint[65];

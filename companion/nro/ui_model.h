@@ -95,7 +95,8 @@ typedef enum {
     PTC_UI_OVERLAY_NOTICE_DETAILS = 35,
     PTC_UI_OVERLAY_DAY_DECISION = 36,
     PTC_UI_OVERLAY_LANGUAGE = 37,
-    PTC_UI_OVERLAY_PARENT_EXPORT_RESULT = 38
+    PTC_UI_OVERLAY_PARENT_EXPORT_RESULT = 38,
+    PTC_UI_OVERLAY_EYE_CARE = 39
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -351,6 +352,13 @@ typedef struct {
     PtcScheduledOverride draft_scheduled_override;
     PtcAutonomyPolicy autonomy_policy;
     PtcAutonomyPolicy draft_autonomy_policy;
+    PtcEyeCarePolicy eye_care_policy;
+    PtcEyeCarePolicy draft_eye_care_policy;
+    char eye_care_phase[20];
+    uint16_t eye_care_used_minutes;
+    int eye_care_rest_remaining_seconds;
+    uint64_t eye_care_break_id;
+    bool eye_care_unlimited_capped;
     PtcBedtimePolicy bedtime_policy;
     PtcBedtimePolicy draft_bedtime_policy;
     bool bedtime_active;

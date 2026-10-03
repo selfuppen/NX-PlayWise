@@ -21,6 +21,9 @@ void ptc_rules_default(PtcRules *rules)
     rules->scheduled_override.rule.mode = PTC_RULE_MODE_LIMIT;
     rules->scheduled_override.rule.minutes = 60;
     rules->autonomy_policy.daily_buffer_minutes = 0;
+    rules->eye_care.enabled = false;
+    rules->eye_care.play_minutes = 40;
+    rules->eye_care.rest_minutes = 10;
     rules->holiday_enabled = false;
     rules->holiday_rule.mode = PTC_RULE_MODE_UNLIMITED;
     rules->holiday_rule.minutes = 120;
@@ -122,6 +125,12 @@ bool ptc_autonomy_policy_is_valid(const PtcAutonomyPolicy *policy)
     return policy && (policy->daily_buffer_minutes == 0u ||
         policy->daily_buffer_minutes == 5u || policy->daily_buffer_minutes == 10u ||
         policy->daily_buffer_minutes == 15u);
+}
+
+bool ptc_eye_care_policy_is_valid(const PtcEyeCarePolicy *policy)
+{
+    return policy && policy->play_minutes >= 1u && policy->play_minutes <= 240u &&
+        policy->rest_minutes >= 1u && policy->rest_minutes <= 60u;
 }
 
 bool ptc_bedtime_window_is_valid(const PtcBedtimeWindow *window)

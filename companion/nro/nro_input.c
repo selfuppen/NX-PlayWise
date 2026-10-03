@@ -275,6 +275,38 @@ void handle_overlay_input(UiState *ui, u64 down)
         }
         return;
     }
+    if (ui->model.overlay == PTC_UI_OVERLAY_EYE_CARE) {
+        uint16_t *minutes = ui->model.overlay_selection == 1
+            ? &ui->model.draft_eye_care_policy.play_minutes
+            : &ui->model.draft_eye_care_policy.rest_minutes;
+        uint16_t maximum = ui->model.overlay_selection == 1 ? 240u : 60u;
+        if (down & HidNpadButton_B) {
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & HidNpadButton_Up) {
+            ui->model.overlay_selection = (ui->model.overlay_selection + 2) % 3;
+        } else if (down & HidNpadButton_Down) {
+            ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 3;
+        } else if (down & (HidNpadButton_Left | HidNpadButton_Right | HidNpadButton_ZL | HidNpadButton_ZR)) {
+            int delta = (down & (HidNpadButton_ZL | HidNpadButton_ZR)) ? 10 : 1;
+            if (down & (HidNpadButton_Left | HidNpadButton_ZL)) delta = -delta;
+            if (ui->model.overlay_selection == 0) {
+                ui->model.draft_eye_care_policy.enabled = !ui->model.draft_eye_care_policy.enabled;
+            } else {
+                *minutes = ptc_ui_adjust_minutes(*minutes, delta, 1u, maximum);
+            }
+        } else if (down & HidNpadButton_A && ui->model.overlay_selection == 0) {
+            ui->model.draft_eye_care_policy.enabled = !ui->model.draft_eye_care_policy.enabled;
+        } else if (down & HidNpadButton_Plus) {
+            if (ui->model.draft_eye_care_policy.enabled && !ui->model.bedtime_official_setting_confirmed) {
+                ui->pending_eye_care_save = true;
+                submit_bedtime_confirmation(ui);
+            } else {
+                ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                submit_eye_care_policy(ui);
+            }
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_ACTIVITY_HISTORY) {
         if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
         else if (down & (HidNpadButton_L | HidNpadButton_Left)) {

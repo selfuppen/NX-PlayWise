@@ -318,6 +318,14 @@ void poll_result(UiState *ui, bool force)
                 section >= 0 && section < 3 ? NAMES[section] : ptc_ui_text(PTC_UI_T_BEDTIME));
         }
         if (strcmp(ui->model.result_type, "confirm_bedtime_requirements") == 0) {
+            if (ui->pending_eye_care_save) {
+                ui->pending_eye_care_save = false;
+                if (strcmp(ui->model.result_status, "ok") == 0) {
+                    ui->model.overlay = PTC_UI_OVERLAY_NONE;
+                    submit_eye_care_policy(ui);
+                }
+                return;
+            }
             if (strcmp(ui->model.result_status, "ok") == 0 && ui->model.bedtime_dirty) {
                 /* Re-enter the common save gate after the environment
                  * acknowledgement. The current minute may now be inside the

@@ -35,6 +35,10 @@ static bool process_disable_today_limit(
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_BEDTIME_ACTIVE, now.day_index);
     }
+    if (eye_care_blocks_grants(sysmodule)) {
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
+    }
     if (!load_rules(sysmodule, &original_rules)) {
         return finish_with_error(sysmodule, request, "release", true, PTC_ERR_RULES_INVALID, now.day_index);
     }
@@ -59,10 +63,13 @@ static bool process_disable_today_limit(
     rules_existed = sysmodule->storage->vtable->exists(sysmodule->storage, rules_path);
 
     pctl_changed = true;
-    err = apply_target(sysmodule, request, now, "release", PTC_PCTL_TARGET_UNLIMITED, 0);
+    err = apply_target(sysmodule, request, now, "release",
+        updated_rules.eye_care.enabled ? PTC_PCTL_TARGET_LIMIT : PTC_PCTL_TARGET_UNLIMITED,
+        updated_rules.eye_care.enabled ? 1440u : 0u);
     if (err == PTC_ERR_OK) {
         err = observe_target_with_optional_activation(sysmodule, request, now,
-            "release", PTC_PCTL_TARGET_UNLIMITED, 0,
+            "release", updated_rules.eye_care.enabled ? PTC_PCTL_TARGET_LIMIT : PTC_PCTL_TARGET_UNLIMITED,
+            updated_rules.eye_care.enabled ? 1440u : 0u,
             "disable_today_limit", &observed_status);
     }
     if (err != PTC_ERR_OK) {
@@ -128,11 +135,15 @@ PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *req
     } else {
         PtcDayRule base = ptc_rules_today_rule(
             rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+        PtcPctlTargetMode base_mode = rules->eye_care.enabled && base.mode == PTC_RULE_MODE_UNLIMITED
+            ? PTC_PCTL_TARGET_LIMIT : target_from_day_rule(base);
+        uint16_t base_minutes = rules->eye_care.enabled && base.mode == PTC_RULE_MODE_UNLIMITED
+            ? 1440u : base.minutes;
         err = apply_target(sysmodule, request, now, "release",
-            target_from_day_rule(base), base.minutes);
+            base_mode, base_minutes);
         if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
         err = observe_target_with_optional_activation(sysmodule, request, now,
-            "release", target_from_day_rule(base), base.minutes,
+            "release", base_mode, base_minutes,
             "bedtime_restore_base", &observed);
         if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
     }

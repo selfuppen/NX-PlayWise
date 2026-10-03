@@ -6,6 +6,14 @@
 
 # User Guide
 
+## Eye care breaks (device validation pending)
+
+In the parent's Time Plan, enable Eye Care and set 1–240 minutes of use and 1–60 minutes of rest in one-minute steps. It is off by default, with 40 minutes of use and 10 minutes of rest preset. Before first enablement, confirm Nintendo's “Suspend Software” on time limit setting and verify that the overlay is available. PlayWise does not change that Nintendo setting.
+
+Enabling starts a new cycle at current usage. Reducing the use period may start a break immediately; disabling releases the eye care restriction immediately. Awake HOME use counts, sleep pauses usage accumulation, and sleep counts toward a break. The child view and overlay show remaining use or break time; an unavailable reading is shown as unknown. During a break, a parent can verify their PIN in the overlay and choose “Skip this eye care break”; this applies only to the current break. Daily allowance and bedtime restrictions take precedence and reset the eye care cycle.
+
+An originally unlimited day temporarily uses a 1440-minute PCTL limit for counting while eye care is enabled. The UI still identifies the original rule and temporary cap; disabling restores unlimited mode. Hardware A/B checks of the 1440-minute reading, sleep behavior, and actual pause and resume remain pending. See the [Testing Guide](TESTING_GUIDE.md) before release.
+
 This guide is intended for parents and children using **PlayWise** (Repository: `NX-PlayWise`, Chinese name: 任我玩) on a Nintendo Switch running Custom Firmware. For first-time installation, using the complete delivery bundle is recommended; when parents generate grant codes on a phone or PC, pairing via network QR code scan as described below is recommended.
 
 > [!IMPORTANT]

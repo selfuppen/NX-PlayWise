@@ -15,6 +15,7 @@ static const UiAction PLAN_ACTIONS[] = {
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_WEEKLY_QUOTA), PTC_UI_TEXT_REFERENCE(PTC_UI_T_ACTIVE_2), UI_ACCENT, UI_ACTION_ICON_WEEKLY, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_BEDTIME), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_AUTONOMY_BUFFER_2), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_SUCCESS, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_EYE_CARE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_WARNING, UI_ACTION_ICON_CLOCK, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction GRANT_ACTIONS[] = {
@@ -588,15 +589,6 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             draw_text_center(pixels, stride, pbadge, p_text, 12, UI_WARNING);
             draw_text(pixels, stride, 440 + pw + 8, 195, ptc_ui_text(PTC_UI_T_OPERATES_INDEPENDENTLY), 13, UI_MUTED);
 
-            /* 并行与补充下方对称说明卡片 */
-            UiRect info_card = {439, 484, 365, 132};
-            fill_round_rect(pixels, stride, info_card, 16, UI_PAGE);
-            draw_rect_outline(pixels, stride, info_card, 16, 1, UI_BORDER);
-            draw_text(pixels, stride, 457, 508, ptc_ui_text(PTC_UI_T_BEDTIME_AND_QUOTA), 14, UI_INK);
-            draw_text(pixels, stride, 457, 534, ptc_ui_text(PTC_UI_T_BEDTIME_TIME_RESTRICTION_INDEPENDENT_OF_QUOTA), 11, UI_MUTED);
-            draw_text(pixels, stride, 457, 556, ptc_ui_text(PTC_UI_T_AUTONOMY_CLAIMED_BY_CHILD_BEFORE_LIMIT_ENDS), 11, UI_MUTED);
-            draw_text(pixels, stride, 457, 578, ptc_ui_text(PTC_UI_T_PRIORITY_SPECIFIC_DATE_HOLIDAY_WEEKLY_PLAN), 11, UI_MUTED);
-            draw_text(pixels, stride, 457, 600, ptc_ui_text(PTC_UI_T_OFFLINE_SAFE_WORKS_OFFLINE_WITH_PROTECTION), 11, UI_MUTED);
         }
         if (model->parent_page == PTC_UI_PARENT_GRANT) {
             UiRect grant_banner = {54, 484, 750, 144};
@@ -703,6 +695,17 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                     snprintf(autonomy_detail, sizeof(autonomy_detail), ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
                 }
                 dynamic_action.subtitle = autonomy_detail;
+                action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 5) {
+                static char eye_detail[80];
+                dynamic_action = *action;
+                if (model->eye_care_policy.enabled) {
+                    snprintf(eye_detail, sizeof(eye_detail), "%u / %u %s",
+                        (unsigned)model->eye_care_policy.play_minutes,
+                        (unsigned)model->eye_care_policy.rest_minutes,
+                        ptc_ui_text(PTC_UI_T_MIN));
+                } else snprintf(eye_detail, sizeof(eye_detail), "%s", ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
+                dynamic_action.subtitle = eye_detail;
                 action = &dynamic_action;
             }
             if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 0) {

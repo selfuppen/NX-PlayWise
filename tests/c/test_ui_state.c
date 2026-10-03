@@ -203,7 +203,7 @@ static void test_release_navigation(void)
     char shortcut_hint[160];
     memset(&model, 0, sizeof(model));
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 6, "today exposes quota, bedtime and buffer cards");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 5, "time plan root exposes five direct cards");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 6, "time plan root exposes six direct cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 4, "grant page exposes generation, management and history");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 7, "settings page exposes language, audio and security");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support is a top-level six-action page");
@@ -2770,6 +2770,19 @@ static void test_time_menu_modal_touch_guards(void)
             "duration quick adjustments are removed");
     }
 
+    model.overlay = PTC_UI_OVERLAY_EYE_CARE;
+    for (int field = 0; field < 5; ++field) {
+        PtcUiRect rect = ptc_ui_eye_care_field_rect(field);
+        check_true(rect.w > 0 && rect.h > 0, "eye care editor control has a visible hit area");
+        check_hit(hit_center(&model, rect), PTC_UI_HIT_EYE_CARE_FIELD, field,
+            "eye care switch and minute adjustments are touchable");
+        check_true(!rects_overlap(rect, ptc_ui_cancel_rect(model.overlay)) &&
+                   !rects_overlap(rect, ptc_ui_confirm_rect(model.overlay)),
+            "eye care controls do not overlap dialog actions");
+    }
+    check_hit(ptc_ui_hit_test(&model, 10, 10), PTC_UI_HIT_NONE, 0,
+        "eye care dialog blocks touch input from the plan below");
+
     for (size_t index = 0; index < sizeof(bedtime_modals) / sizeof(bedtime_modals[0]); ++index) {
         model.overlay = bedtime_modals[index];
         check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)),
@@ -3021,17 +3034,17 @@ static void test_forecast_day_decision_and_navigation(void)
     /* 2. D-pad navigation between cards and forecast rows */
     model.selected_index = 3;
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 5, "move right from card 3 to forecast day 0");
+    check_int(model.selected_index, 6, "move right from card 3 to forecast day 0");
 
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 6, "move down within forecast rows to day 1");
+    check_int(model.selected_index, 7, "move down within forecast rows to day 1");
 
     ptc_ui_move_parent_selection(&model, -1, 0);
     check_int(model.selected_index, 3, "move left from upper forecast row back to card 3");
 
     model.selected_index = 4;
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 7, "move right from card 4 to forecast day 2");
+    check_int(model.selected_index, 8, "move right from card 4 to forecast day 2");
 
     ptc_ui_move_parent_selection(&model, -1, 0);
     check_int(model.selected_index, 4, "move left from lower forecast row back to card 4");

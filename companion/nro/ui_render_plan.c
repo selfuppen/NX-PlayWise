@@ -927,7 +927,7 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
         UiRect row = {panel.x + 10, panel.y + 38 + index * 51, panel.width - 20, 44};
         bool is_today = (index == 0);
 
-        bool is_focused = (!model->parent_footer_focused && model->selected_index == index + 5);
+        bool is_focused = (!model->parent_footer_focused && model->selected_index == index + 6);
 
         if (is_focused) {
             fill_round_rect(pixels, stride, row, 8, UI_ACCENT_SOFT);

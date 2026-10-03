@@ -18,10 +18,16 @@ static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
         sysmodule, request, "release", true,
         PTC_ERR_BEDTIME_ACTIVE, now.day_index);
+    if (eye_care_blocks_grants(sysmodule)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
     if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_RULES_INVALID, now.day_index);
     }
+    if (ptc_rules_today_rule(&rules, now.day_index,
+            ptc_weekday_from_day_index(now.day_index)).mode == PTC_RULE_MODE_UNLIMITED)
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_DAILY_BUFFER_LIMITED_ONLY, now.day_index);
     grant = rules.autonomy_policy.daily_buffer_minutes;
     if (grant == 0u) return finish_with_error(sysmodule, request, "release",
         true, PTC_ERR_AUTONOMY_DISABLED, now.day_index);
@@ -208,6 +214,8 @@ static bool process_preview_offline_code(
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
         sysmodule, request, "release", true,
         PTC_ERR_BEDTIME_ACTIVE, now.day_index);
+    if (eye_care_blocks_grants(sysmodule)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
 
     if (disable_flag) {
         return finish_with_error(sysmodule, request, "release", true,
@@ -232,6 +240,10 @@ static bool process_preview_offline_code(
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_RULES_INVALID, now.day_index);
     }
+    if (ptc_rules_today_rule(&rules, now.day_index,
+            ptc_weekday_from_day_index(now.day_index)).mode == PTC_RULE_MODE_UNLIMITED)
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_UNLIMITED_NOT_ALLOWED, now.day_index);
     preview_rules = rules;
     played_for_apply = ptc_pctl_played_minutes(&pctl_status);
     {
@@ -287,6 +299,8 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
         sysmodule, request, "release", true,
         PTC_ERR_BEDTIME_ACTIVE, now.day_index);
+    if (eye_care_blocks_grants(sysmodule)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
 
     if (disable_flag) {
         return finish_with_error(sysmodule, request, "release", true, PTC_ERR_DISABLED, now.day_index);
@@ -308,8 +322,11 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
         uint16_t played_minutes = ptc_pctl_played_minutes(&pctl_status);
         uint16_t base_minutes;
         PtcDayRule active_rule;
-        (void)load_rules(sysmodule, &rules);
+        if (!load_rules(sysmodule, &rules)) return finish_with_error(sysmodule, request,
+            "release", true, PTC_ERR_RULES_INVALID, now.day_index);
         active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+        if (active_rule.mode == PTC_RULE_MODE_UNLIMITED) return finish_with_error(
+            sysmodule, request, "release", true, PTC_ERR_UNLIMITED_NOT_ALLOWED, now.day_index);
         base_minutes = active_rule.mode == PTC_RULE_MODE_LIMIT ? active_rule.minutes : 0u;
         if (played_minutes > base_minutes) base_minutes = played_minutes;
         /* Stack the granted minutes onto today's existing limit or played time rather than

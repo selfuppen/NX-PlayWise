@@ -220,6 +220,44 @@ static void draw_autonomy_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
     draw_overlay_actions(pixels, stride, model, ptc_ui_text(PTC_UI_T_SAVE_BUFFER_SETTINGS));
 }
 
+static void draw_eye_care_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    char value[64];
+    int row;
+    PtcUiModel shell_model = *model;
+    shell_model.overlay_body[0] = '\0';
+    draw_dialog_shell(pixels, stride, &shell_model, &dialog, 880, 480);
+    for (row = 0; row < 3; ++row) {
+        UiRect rect = {dialog.x + 48, dialog.y + 120 + row * 74, dialog.width - 96, 64};
+        bool focused = model->overlay_selection == row;
+        fill_round_rect(pixels, stride, rect, 10, focused ? UI_ACCENT_SOFT : UI_RAISED);
+        draw_rect_outline(pixels, stride, rect, 10, focused ? 2 : 1, focused ? UI_ACCENT : UI_BORDER);
+        draw_text(pixels, stride, rect.x + 16, rect.y + 38,
+            row == 0 ? ptc_ui_text(PTC_UI_T_EYE_CARE) :
+            (row == 1 ? ptc_ui_text(PTC_UI_T_EYE_CARE_PLAY) : ptc_ui_text(PTC_UI_T_EYE_CARE_REST)),
+            18, UI_INK);
+        if (row == 0) snprintf(value, sizeof(value), "%s",
+            model->draft_eye_care_policy.enabled ? ptc_ui_text(PTC_UI_T_ON) : ptc_ui_text(PTC_UI_T_OFF));
+        else snprintf(value, sizeof(value), "%u %s",
+            (unsigned)(row == 1 ? model->draft_eye_care_policy.play_minutes :
+                model->draft_eye_care_policy.rest_minutes), ptc_ui_text(PTC_UI_T_MIN));
+        draw_text(pixels, stride, rect.x + 480, rect.y + 38, value, 18, UI_ACCENT);
+        if (row > 0) {
+            draw_candidate_button(pixels, stride, ptc_ui_eye_care_field_rect(row == 1 ? 1 : 3),
+                "-", UI_PAGE, UI_INK, focused, false);
+            draw_candidate_button(pixels, stride, ptc_ui_eye_care_field_rect(row == 1 ? 2 : 4),
+                "+", UI_PAGE, UI_INK, focused, false);
+        }
+    }
+    draw_text(pixels, stride, dialog.x + 48, dialog.y + 370,
+        ptc_ui_text(PTC_UI_T_EYE_CARE_GUIDE), 14, UI_MUTED);
+    if (model->draft_eye_care_policy.enabled && !model->bedtime_official_setting_confirmed)
+        draw_text(pixels, stride, dialog.x + 48, dialog.y + 397,
+            ptc_ui_text(PTC_UI_T_EYE_CARE_ENABLE_CONFIRM), 12, UI_WARNING);
+    draw_overlay_actions(pixels, stride, model, ptc_ui_text(PTC_UI_T_EYE_CARE_SAVE));
+}
+
 static void draw_quick_add_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
@@ -731,6 +769,9 @@ bool draw_plan_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiMod
         return true;
     case PTC_UI_OVERLAY_AUTONOMY:
         draw_autonomy_overlay(pixels, stride, model);
+        return true;
+    case PTC_UI_OVERLAY_EYE_CARE:
+        draw_eye_care_overlay(pixels, stride, model);
         return true;
     case PTC_UI_OVERLAY_QUICK_ADD:
         draw_quick_add_overlay(pixels, stride, model);

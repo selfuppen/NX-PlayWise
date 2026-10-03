@@ -140,6 +140,16 @@ PtcCompanionStatus ptc_overlay_bridge_skip_bedtime(PtcOverlayBridge *bridge,
             created_at, window_instance_id));
 }
 
+PtcCompanionStatus ptc_overlay_bridge_skip_eye_care(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, uint64_t break_id)
+{
+    if (break_id == 0 || !prepare_request(bridge, created_at, random16))
+        return PTC_COMPANION_BAD_ARGUMENT;
+    return begin_request(bridge,
+        ptc_companion_transport_submit_skip_eye_care_break(&bridge->transport,
+            bridge->request_id, created_at, break_id));
+}
+
 PtcCompanionStatus ptc_overlay_bridge_clear_bedtime_skip(PtcOverlayBridge *bridge,
     int64_t created_at, uint16_t random16, uint64_t window_instance_id)
 {
@@ -314,11 +324,15 @@ void ptc_overlay_format_child_quota_parts(
         if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_MINUTES_3));
         return;
     }
-    if (summary->unrestricted_today == 1) {
+    if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped) {
         if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
         if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
-        if (note_out && note_size > 0 && summary->played_minutes_available && summary->played_minutes >= 0) {
-            snprintf(note_out, note_size, ptc_ui_text(PTC_UI_T_PLAYED_ABOUT_D_MIN), summary->played_minutes);
+        if (note_out && note_size > 0) {
+            if (summary->eye_care_unlimited_capped)
+                snprintf(note_out, note_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_UNLIMITED_CAP));
+            else if (summary->played_minutes_available && summary->played_minutes >= 0)
+                snprintf(note_out, note_size, ptc_ui_text(PTC_UI_T_PLAYED_ABOUT_D_MIN),
+                    summary->played_minutes);
         }
         return;
     }
@@ -364,12 +378,19 @@ const char *ptc_overlay_parent_action_unavailable_reason(
     switch (action) {
     case PTC_OVERLAY_PARENT_ADD_MINUTES:
     case PTC_OVERLAY_PARENT_UNLIMITED:
+        if (summary->eye_care_enabled && strcmp(summary->eye_care_phase, "resting") == 0)
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING);
         if (summary->bedtime_active && !summary->bedtime_skipped)
             return ptc_ui_text(PTC_UI_T_PLEASE_DEAL_WITH_BEDTIME_RESTRICTIONS_FIRST);
-        if (summary->unrestricted_today == 1) return ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY);
+        if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped)
+            return ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY);
         return NULL;
     case PTC_OVERLAY_PARENT_SKIP_BEDTIME:
         return ptc_overlay_parent_skip_instance_id(summary) ? NULL : ptc_ui_text(PTC_UI_T_NO_SKIPPABLE_BEDTIME_WINDOW);
+    case PTC_OVERLAY_PARENT_SKIP_EYE_CARE:
+        return summary->eye_care_enabled && strcmp(summary->eye_care_phase, "resting") == 0 &&
+            summary->eye_care_break_id != 0 && summary->eye_care_rest_remaining_seconds > 0
+            ? NULL : ptc_ui_text(PTC_UI_T_EYE_CARE_STATUS_UNKNOWN);
     case PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP:
         return summary->bedtime_skipped_window_available ? NULL : ptc_ui_text(PTC_UI_T_THIS_BEDTIME_WAS_NOT_SKIPPED);
     case PTC_OVERLAY_PARENT_DISABLE_BEDTIME:
@@ -392,14 +413,24 @@ void ptc_overlay_format_child_restriction_guidance(
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTIONS_ARE_IN_EFFECT_PARENTS_PLEASE));
         return;
     }
-    if (summary->daily_restriction_active ||
-        (summary->remaining_available && summary->remaining_minutes == 0)) {
+    if (summary->daily_restriction_active) {
         if (summary->daily_buffer_available) {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_QUOTA_EXHAUSTED_CLAIM_D_MIN_SELF),
                 summary->daily_buffer_minutes);
         } else {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_HAS_BEEN_EXHAUSTED_PLEASE));
         }
+        return;
+    }
+    if (summary->eye_care_enabled && strcmp(summary->eye_care_phase, "resting") == 0) {
+        snprintf(out, out_size, "%s: %d %s", ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING),
+            (summary->eye_care_rest_remaining_seconds + 59) / 60, ptc_ui_text(PTC_UI_T_MIN));
+        return;
+    }
+    if (summary->eye_care_enabled && strcmp(summary->eye_care_phase, "playing") == 0) {
+        int remaining = summary->eye_care_play_minutes - summary->eye_care_used_minutes;
+        snprintf(out, out_size, "%s: %d %s", ptc_ui_text(PTC_UI_T_EYE_CARE),
+            remaining > 0 ? remaining : 0, ptc_ui_text(PTC_UI_T_MIN));
         return;
     }
     if (summary->bedtime_skipped) {
@@ -418,7 +449,7 @@ void ptc_overlay_format_child_restriction_guidance(
         }
         return;
     }
-    if (summary->unrestricted_today == 1) {
+    if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_NO_BEDTIME_RESTRICTIONS));
         return;
     }
@@ -442,13 +473,17 @@ void ptc_overlay_format_child_restriction_summary(
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_BEDTIME_ACTIVE_PRESS_FOR_DETAILS));
         return;
     }
-    if (summary->daily_restriction_active ||
-        (summary->remaining_available && summary->remaining_minutes == 0)) {
+    if (summary->daily_restriction_active) {
         if (summary->daily_buffer_available) {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_DAILY_LIMIT_REACHED_BUFFER_READY_PRESS));
         } else {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_DAILY_LIMIT_REACHED_PRESS_FOR_DETAILS));
         }
+        return;
+    }
+    if (summary->eye_care_enabled && strcmp(summary->eye_care_phase, "resting") == 0) {
+        snprintf(out, out_size, "%s: %d %s", ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING),
+            (summary->eye_care_rest_remaining_seconds + 59) / 60, ptc_ui_text(PTC_UI_T_MIN));
         return;
     }
     if (summary->bedtime_next_available && summary->bedtime_next_start_day_index == summary->day_index) {
@@ -461,7 +496,7 @@ void ptc_overlay_format_child_restriction_summary(
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_TONIGHT_S_BEDTIME_SKIPPED_PRESS));
         return;
     }
-    if (summary->unrestricted_today == 1) {
+    if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RULES_NO_LIMIT_TODAY_NO_BEDTIME_PRESS));
         return;
     }
@@ -487,14 +522,18 @@ void ptc_overlay_format_child_restriction_detail(
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_PLAY_RESTRICTED_EVEN_IF_LIMIT));
         return;
     }
-    if (summary->daily_restriction_active ||
-        (summary->remaining_available && summary->remaining_minutes == 0)) {
+    if (summary->daily_restriction_active) {
         if (summary->bedtime_next_available && summary->bedtime_next_start_day_index == summary->day_index) {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_QUOTA_EXHAUSTED_RESTRICTION_STARTS_TONIGHT_AT_02D),
                 summary->bedtime_next_start_minute / 60, summary->bedtime_next_start_minute % 60);
         } else {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED_ENTER_GRANT_CODE_TO));
         }
+        return;
+    }
+    if (summary->eye_care_enabled && strcmp(summary->eye_care_phase, "resting") == 0) {
+        snprintf(out, out_size, "%s: %d %s", ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING),
+            (summary->eye_care_rest_remaining_seconds + 59) / 60, ptc_ui_text(PTC_UI_T_MIN));
         return;
     }
     if (summary->bedtime_skipped) {
@@ -506,7 +545,7 @@ void ptc_overlay_format_child_restriction_detail(
             (summary->bedtime_next_start_day_index == summary->day_index + 1 ? ptc_ui_text(PTC_UI_T_TOMORROW_NIGHT) : ptc_ui_text(PTC_UI_T_NEXT_TIME));
         int start_h = summary->bedtime_next_start_minute / 60;
         int start_m = summary->bedtime_next_start_minute % 60;
-        if (summary->unrestricted_today == 1) {
+        if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped) {
             snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_UNLIMITED_RESTRICTION_STARTS_S_02D_02D),
                 prefix, start_h, start_m);
         } else {
@@ -515,7 +554,7 @@ void ptc_overlay_format_child_restriction_detail(
         }
         return;
     }
-    if (summary->unrestricted_today == 1) {
+    if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NO_DAILY_LIMIT_TODAY_BEDTIME_SCHEDULE_DISABLED));
     } else {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_GAME_SUSPENDS_AFTER_DAILY_LIMIT_BEDTIME_SCHEDULE));

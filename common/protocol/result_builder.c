@@ -152,7 +152,10 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"start_day_index\":%u,\"start_minute\":%u,\"end_minute\":%u,\"source\":\"%s\"},"
         "\"official_setting_confirmed\":%s,"
         "\"overlay_verified\":%s,\"recovery_phase\":\"%s\"},"
-        "\"restriction_reasons\":{\"bedtime\":%s,\"daily_allowance\":%s}}",
+        "\"eye_care\":{\"enabled\":%s,\"play_minutes\":%u,\"rest_minutes\":%u,"
+        "\"phase\":\"%s\",\"used_minutes\":%u,\"rest_remaining_seconds\":%lld,"
+        "\"break_id\":%llu,\"unlimited_capped\":%s},"
+        "\"restriction_reasons\":{\"bedtime\":%s,\"daily_allowance\":%s,\"eye_care\":%s}}",
         state->daily_buffer_minutes,
         json_bool(state->daily_buffer_claimed),
         json_bool(state->daily_buffer_available),
@@ -177,8 +180,14 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         json_bool(state->bedtime_official_setting_confirmed),
         json_bool(state->bedtime_overlay_verified),
         state->bedtime_recovery_phase ? state->bedtime_recovery_phase : "idle",
+        json_bool(state->eye_care_enabled), state->eye_care_play_minutes,
+        state->eye_care_rest_minutes, state->eye_care_phase ? state->eye_care_phase : "off",
+        state->eye_care_used_minutes, (long long)state->eye_care_rest_remaining_seconds,
+        (unsigned long long)state->eye_care_break_id,
+        json_bool(state->eye_care_unlimited_capped),
         json_bool(state->bedtime_active && !state->bedtime_skipped),
-        json_bool(state->daily_restriction_active));
+        json_bool(state->daily_restriction_active),
+        json_bool(state->eye_care_enabled && state->eye_care_phase && strcmp(state->eye_care_phase, "resting") == 0));
 }
 
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
@@ -240,6 +249,14 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->bedtime_overlay_verified = false;
     state->bedtime_recovery_phase = "idle";
     state->daily_restriction_active = false;
+    state->eye_care_enabled = false;
+    state->eye_care_play_minutes = 40;
+    state->eye_care_rest_minutes = 10;
+    state->eye_care_phase = "off";
+    state->eye_care_used_minutes = 0;
+    state->eye_care_rest_remaining_seconds = 0;
+    state->eye_care_break_id = 0;
+    state->eye_care_unlimited_capped = false;
 }
 
 PtcErrorCode ptc_result_validate(const char *text)

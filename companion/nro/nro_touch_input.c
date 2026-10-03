@@ -260,6 +260,19 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.overlay_selection = hit.index;
         ui->model.draft_autonomy_policy.daily_buffer_minutes = (uint16_t)(hit.index * 5);
         break;
+    case PTC_UI_HIT_EYE_CARE_FIELD:
+        ptc_audio_play(PTC_SE_STEP);
+        if (hit.index == 0) {
+            ui->model.overlay_selection = 0;
+            ui->model.draft_eye_care_policy.enabled = !ui->model.draft_eye_care_policy.enabled;
+        } else {
+            uint16_t *value = hit.index <= 2 ? &ui->model.draft_eye_care_policy.play_minutes
+                : &ui->model.draft_eye_care_policy.rest_minutes;
+            ui->model.overlay_selection = hit.index <= 2 ? 1 : 2;
+            *value = ptc_ui_adjust_minutes(*value, (hit.index & 1) ? -1 : 1,
+                1u, hit.index <= 2 ? 240u : 60u);
+        }
+        break;
     case PTC_UI_HIT_QUICK_ADD_OPTION:
         ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.overlay_selection = hit.index;

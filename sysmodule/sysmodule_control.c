@@ -203,6 +203,37 @@ PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest 
     case PTC_REQUEST_SET_AUTONOMY_POLICY:
         rules->autonomy_policy = request->autonomy_policy;
         return save_rules(sysmodule, rules) ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+    case PTC_REQUEST_SET_EYE_CARE_POLICY: {
+        bool was_enabled = rules->eye_care.enabled;
+        uint16_t old_rest_minutes = rules->eye_care.rest_minutes;
+        if (request->eye_care_policy.enabled && !was_enabled) {
+#ifndef PLAYWISE_EDEN
+            char fingerprint[65];
+            if (rules->bedtime.confirmation_version == 0 ||
+                rules->bedtime.official_setting_confirmed_at <= 0 ||
+                !sysmodule_environment_fingerprint(sysmodule, fingerprint) ||
+                strcmp(fingerprint, rules->bedtime.confirmed_environment) != 0 ||
+                (!bedtime_overlay_verified(sysmodule) &&
+                 !rules->bedtime.unverified_overlay_risk_accepted))
+                return PTC_ERR_EYE_CARE_CONFIRMATION_REQUIRED;
+#endif
+        }
+        rules->eye_care = request->eye_care_policy;
+        if (!rules->eye_care.enabled || !was_enabled) {
+            runtime_state->eye_care_day_index = now.day_index;
+            runtime_state->eye_care_accumulated_minutes = 0;
+            runtime_state->eye_care_last_used_minutes = 0;
+            runtime_state->eye_care_usage_known = false;
+            runtime_state->eye_care_resting = false;
+            runtime_state->eye_care_rest_deadline = 0;
+            runtime_state->eye_care_break_id = 0;
+        } else if (runtime_state->eye_care_resting) {
+            runtime_state->eye_care_rest_deadline +=
+                ((int64_t)rules->eye_care.rest_minutes - old_rest_minutes) * 60;
+        }
+        return save_rules(sysmodule, rules) && save_state(sysmodule, runtime_state, now.unix_seconds)
+            ? PTC_ERR_OK : PTC_ERR_STORAGE_WRITE_FAILED;
+    }
     case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS:
     {
         char fingerprint[65];
@@ -317,6 +348,14 @@ bool bedtime_blocks_grants(PtcSysmodule *sysmodule, PtcClockSnapshot now)
     evaluation = ptc_bedtime_evaluate(
         &rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
     return evaluation.active && state.bedtime_skipped_instance_id != evaluation.window_instance_id;
+}
+
+bool eye_care_blocks_grants(PtcSysmodule *sysmodule)
+{
+    PtcRules rules;
+    PtcRuntimeState state;
+    return load_rules(sysmodule, &rules) && load_state(sysmodule, &state) &&
+        rules.eye_care.enabled && state.eye_care_resting;
 }
 
 bool target_settings_observed(

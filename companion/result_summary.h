@@ -51,6 +51,14 @@ typedef struct {
     bool bedtime_official_setting_confirmed;
     bool bedtime_overlay_verified;
     bool daily_restriction_active;
+    bool eye_care_enabled;
+    int eye_care_play_minutes;
+    int eye_care_rest_minutes;
+    int eye_care_used_minutes;
+    int eye_care_rest_remaining_seconds;
+    unsigned long long eye_care_break_id;
+    bool eye_care_unlimited_capped;
+    char eye_care_phase[20];
     bool access_recovery_required;
     char bedtime_source[32];
     char bedtime_recovery_phase[32];

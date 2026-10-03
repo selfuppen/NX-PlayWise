@@ -255,6 +255,7 @@ PtcUiRect ptc_ui_plan_card_rect(int index)
     if (index >= 0 && index < 3) return (PtcUiRect){54, 212 + index * 136, 365, 120};
     if (index == 3) return (PtcUiRect){439, 212, 365, 120};
     if (index == 4) return (PtcUiRect){439, 348, 365, 120};
+    if (index == 5) return (PtcUiRect){439, 484, 365, 120};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
@@ -638,6 +639,7 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 640;
         break;
     case PTC_UI_OVERLAY_AUTONOMY:
+    case PTC_UI_OVERLAY_EYE_CARE:
         *width = 880;
         *height = 480;
         break;
@@ -764,6 +766,15 @@ PtcUiRect ptc_ui_autonomy_option_rect(int index)
     const int width = (dialog.w - 96 - gap * 3) / 4;
     if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
     return (PtcUiRect){dialog.x + 48 + index * (width + gap), dialog.y + 176, width, 96};
+}
+
+PtcUiRect ptc_ui_eye_care_field_rect(int index)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_EYE_CARE);
+    if (index == 0) return (PtcUiRect){dialog.x + 48, dialog.y + 120, dialog.w - 96, 64};
+    if (index == 1 || index == 2) return (PtcUiRect){dialog.x + 48 + (index == 2 ? 690 : 610), dialog.y + 194, 72, 64};
+    if (index == 3 || index == 4) return (PtcUiRect){dialog.x + 48 + (index == 4 ? 690 : 610), dialog.y + 268, 72, 64};
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 PtcUiRect ptc_ui_quick_add_option_rect(int index)

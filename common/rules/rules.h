@@ -33,6 +33,12 @@ typedef struct {
 
 typedef struct {
     bool enabled;
+    uint16_t play_minutes;
+    uint16_t rest_minutes;
+} PtcEyeCarePolicy;
+
+typedef struct {
+    bool enabled;
     uint16_t start_minute;
     uint16_t end_minute;
 } PtcBedtimeWindow;
@@ -95,6 +101,7 @@ typedef struct {
     PtcTodayOverride today_override;
     PtcScheduledOverride scheduled_override;
     PtcAutonomyPolicy autonomy_policy;
+    PtcEyeCarePolicy eye_care;
     bool holiday_enabled;
     PtcDayRule holiday_rule;
     PtcDayRule makeup_workday_rule;
@@ -121,6 +128,7 @@ PtcEffectiveRule ptc_rules_resolve(const PtcRules *rules, uint16_t day_index, ui
 const char *ptc_rule_source_name(PtcRuleSource source);
 bool ptc_scheduled_override_is_valid(const PtcScheduledOverride *override_rule);
 bool ptc_autonomy_policy_is_valid(const PtcAutonomyPolicy *policy);
+bool ptc_eye_care_policy_is_valid(const PtcEyeCarePolicy *policy);
 bool ptc_bedtime_window_is_valid(const PtcBedtimeWindow *window);
 bool ptc_bedtime_policy_is_valid(const PtcBedtimePolicy *policy);
 PtcEffectiveBedtime ptc_bedtime_resolve_start_day(

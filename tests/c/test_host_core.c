@@ -941,6 +941,20 @@ static void test_overlay_parent_actions_and_input(void)
     check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
         PTC_OVERLAY_PARENT_ADD_MINUTES) != NULL,
         "quick add cannot replace an unlimited day with a limit");
+    summary.unrestricted_today = 0;
+    summary.eye_care_enabled = true;
+    snprintf(summary.eye_care_phase, sizeof(summary.eye_care_phase), "resting");
+    summary.eye_care_break_id = 123;
+    summary.eye_care_rest_remaining_seconds = 59;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_SKIP_EYE_CARE) == NULL &&
+        ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_ADD_MINUTES) != NULL,
+        "PIN-authorized eye care skip is available only during the break and grants stay blocked");
+    summary.eye_care_break_id = 0;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_SKIP_EYE_CARE) != NULL,
+        "overlay never offers a skip without the current break instance");
 
     ptc_overlay_input_init(&code);
     ptc_overlay_input_init(&pin);
@@ -1099,7 +1113,7 @@ static void test_overlay_layout_geometry(void)
 
 static void test_overlay_child_quota_and_restriction_details(void)
 {
-    char label[32], val[32], note[32], line[128];
+    char label[32], val[32], note[128], line[128];
     PtcCompanionResultSummary summary;
 
     /* 1. 规则来源友好标签映射 */
@@ -1131,6 +1145,13 @@ static void test_overlay_child_quota_and_restriction_details(void)
         "unrestricted today shows 不限时 with played note");
 
     summary.unrestricted_today = 0;
+    summary.eye_care_unlimited_capped = true;
+    ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), val, sizeof(val), note, sizeof(note));
+    check_true(strcmp(val, "不限时") == 0 && strstr(note, "24 小时") != NULL,
+        "eye care temporary 1440-minute target retains original unlimited label");
+    summary.eye_care_unlimited_capped = false;
+
+    summary.unrestricted_today = 0;
     summary.remaining_available = true;
     summary.remaining_minutes = 45;
     summary.played_minutes = 15;
@@ -1149,6 +1170,20 @@ static void test_overlay_child_quota_and_restriction_details(void)
         "bedtime active shows prominent restriction guidance");
 
     summary.bedtime_active = false;
+    summary.eye_care_enabled = true;
+    summary.eye_care_rest_remaining_seconds = 119;
+    snprintf(summary.eye_care_phase, sizeof(summary.eye_care_phase), "resting");
+    ptc_overlay_format_child_restriction_guidance(&summary, line, sizeof(line));
+    check_true(strstr(line, "正在护眼休息") != NULL && strstr(line, "2 分钟") != NULL,
+        "eye care break guidance shows rounded remaining time");
+    summary.remaining_available = true;
+    summary.remaining_minutes = 0;
+    ptc_overlay_format_child_restriction_detail(&summary, line, sizeof(line));
+    check_true(strstr(line, "正在护眼休息") != NULL && strstr(line, "今日额度") == NULL,
+        "eye care restriction detail does not mislabel a blocked PCTL day as daily exhaustion");
+    summary.eye_care_enabled = false;
+    summary.remaining_available = false;
+
     summary.bedtime_skipped = true;
     ptc_overlay_format_child_restriction_guidance(&summary, line, sizeof(line));
     check_true(strstr(line, "今晚就寝限制已跳过") != NULL,
@@ -2406,6 +2441,118 @@ static void test_album_restriction_transaction(void)
                "forced restore never overwrites an existing conflict rescue file");
 }
 
+static void test_eye_care_cycle_and_stale_skip(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime clock;
+    PtcSysmodule sysmodule;
+    char request[512];
+    char result[8192];
+    PtcEyeCarePolicy invalid = {true, 0, 10};
+    unsigned long long current_break_id = 0;
+
+    check_true(!ptc_eye_care_policy_is_valid(&invalid), "eye care rejects zero play minutes");
+    invalid.play_minutes = 40;
+    invalid.rest_minutes = 61;
+    check_true(!ptc_eye_care_policy_is_valid(&invalid), "eye care rejects rest over 60 minutes");
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 60;
+    pctl.status.limited_today = true;
+    pctl.status.unrestricted_today = false;
+    pctl.status.remaining_available = true;
+    pctl.status.remaining_minutes = 60;
+    pctl.status.configured_minutes_available = true;
+    pctl.status.configured_minutes = 60;
+    pctl.status.play_timer_enabled = true;
+    ptc_fake_time_init(&clock, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &clock.provider);
+    seed_release_setup(&mem);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
+        "{\"version\":1,\"phase\":\"active\",\"compatibility_status\":\"verified\","
+        "\"restriction_cleared\":true,\"snapshot_available\":true,\"activate_after\":0,\"last_error\":\"\"}"),
+        "seed active setup for eye care");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60}],\"eye_care_enabled\":true,"
+        "\"eye_care_play_minutes\":2,\"eye_care_rest_minutes\":1}"),
+        "seed eye care rule");
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    pctl.played_minutes_today = 2;
+    pctl.status.remaining_minutes = 58;
+    clock.snapshot.unix_seconds += 120;
+    pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(!pctl.status.blocked_today, "failed eye care write keeps previous target");
+    pctl.write_error = PTC_ERR_OK;
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(pctl.status.blocked_today && pctl.last_target.mode == PTC_PCTL_TARGET_BLOCKED,
+        "eye care blocks after configured host usage");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", result, sizeof(result)) &&
+        strstr(result, "\"eye_care_resting\":true"), "eye care break persists across restart");
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &clock.provider);
+    check_true(ptc_companion_skip_eye_care_break_request_json(request, sizeof(request),
+        "stale-eye-skip", clock.snapshot.unix_seconds, 999) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/stale-eye-skip.json", request),
+        "queue stale eye care skip");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "stale eye care skip is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/stale-eye-skip.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"error\""), "stale eye care skip is rejected");
+    check_true(pctl.status.blocked_today, "stale skip never releases restriction");
+    clock.snapshot.unix_seconds += 60;
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(pctl.status.limited_today && !pctl.status.blocked_today &&
+        pctl.last_target.minutes == 60, "elapsed rest restores daily target");
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    clock.snapshot.unix_seconds += 600;
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(!pctl.status.blocked_today,
+        "sleep without PCTL usage change does not consume eye care play time");
+    pctl.played_minutes_today = 4;
+    pctl.status.remaining_minutes = 56;
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(pctl.status.blocked_today, "eye care starts the next break after more usage");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", result, sizeof(result)) &&
+        strstr(result, "\"eye_care_break_id\":") &&
+        sscanf(strstr(result, "\"eye_care_break_id\":"),
+            "\"eye_care_break_id\":%llu", &current_break_id) == 1 && current_break_id != 0,
+        "new eye care break has a persisted nonzero instance id");
+    check_true(ptc_companion_skip_eye_care_break_request_json(request, sizeof(request),
+        "current-eye-skip", clock.snapshot.unix_seconds, current_break_id) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/current-eye-skip.json", request),
+        "queue current eye care skip");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "current eye care skip is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/current-eye-skip.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"ok\""), "current eye care skip succeeds once");
+    check_true(pctl.status.limited_today && !pctl.status.blocked_today,
+        "successful eye care skip begins a new play cycle");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0}],"
+        "\"eye_care_enabled\":true,\"eye_care_play_minutes\":2,\"eye_care_rest_minutes\":1}"),
+        "change original rule to unlimited while eye care is active");
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(pctl.status.limited_today && pctl.last_target.minutes == 1440,
+        "unlimited rule uses temporary 1440 minute target during eye care");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0},"
+        "{\"mode\":\"unlimited\",\"minutes\":0},{\"mode\":\"unlimited\",\"minutes\":0}],"
+        "\"eye_care_enabled\":false,\"eye_care_play_minutes\":2,\"eye_care_rest_minutes\":1}"),
+        "disable eye care on original unlimited rule");
+    (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    check_true(pctl.status.unrestricted_today && pctl.last_target.mode == PTC_PCTL_TARGET_UNLIMITED,
+        "disabling eye care restores original unlimited target");
+}
+
 static void test_daily_enforce_does_not_start_play_timer(void)
 {
     PtcMemStorage mem;
@@ -3029,6 +3176,7 @@ int main(void)
     test_setup_direct_takeover_recovers_exhausted_failed_release();
     test_setup_refuses_unknown_handover_total();
     test_runtime_fingerprint_change_can_be_reconfirmed();
+    test_eye_care_cycle_and_stale_skip();
     test_daily_enforce_does_not_start_play_timer();
     test_bedtime_enforcement_and_overlay_recovery();
     test_live_enforce_recovery_is_not_startup_recovery();

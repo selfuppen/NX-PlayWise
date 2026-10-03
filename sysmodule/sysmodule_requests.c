@@ -85,7 +85,8 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
         request->type == PTC_REQUEST_SET_HOLIDAY_POLICY ||
         request->type == PTC_REQUEST_SET_SCHEDULED_OVERRIDE ||
         request->type == PTC_REQUEST_SET_AUTONOMY_POLICY ||
-        request->type == PTC_REQUEST_SET_BEDTIME_POLICY;
+        request->type == PTC_REQUEST_SET_BEDTIME_POLICY ||
+        request->type == PTC_REQUEST_SET_EYE_CARE_POLICY;
     PtcDayRule before_active_rule;
     if (disable_flag) {
         return finish_with_error(sysmodule, request, "release", true, PTC_ERR_DISABLED, now.day_index);
@@ -93,6 +94,10 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (request->type == PTC_REQUEST_ADD_TODAY_MINUTES && bedtime_blocks_grants(sysmodule, now)) {
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_BEDTIME_ACTIVE, now.day_index);
+    }
+    if (request->type == PTC_REQUEST_ADD_TODAY_MINUTES && eye_care_blocks_grants(sysmodule)) {
+        return finish_with_error(sysmodule, request, "release", true,
+            PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
     }
     if (!load_rules(sysmodule, &rules)) {
         return finish_with_error(sysmodule, request, "release", true, PTC_ERR_RULES_INVALID, now.day_index);
@@ -137,6 +142,7 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
             request->type == PTC_REQUEST_DISABLE_TODAY_LIMIT ||
             request->type == PTC_REQUEST_RESTORE_TODAY_POLICY ||
             request->type == PTC_REQUEST_SET_HOLIDAY_POLICY ||
+            request->type == PTC_REQUEST_SET_EYE_CARE_POLICY ||
             ((request->type == PTC_REQUEST_SET_SCHEDULED_OVERRIDE ||
               request->type == PTC_REQUEST_SET_WEEKLY_TEMPLATE) &&
              (before_active_rule.mode != ptc_rules_today_rule(&rules, now.day_index,
@@ -144,13 +150,23 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
               before_active_rule.minutes != ptc_rules_today_rule(&rules, now.day_index,
                  ptc_weekday_from_day_index(now.day_index)).minutes))) {
             active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-            err = apply_target(sysmodule, request, now, "release", target_from_day_rule(active_rule), active_rule.minutes);
+            PtcPctlTargetMode request_target = target_from_day_rule(active_rule);
+            uint16_t request_minutes = active_rule.minutes;
+            if (rules.eye_care.enabled && active_rule.mode == PTC_RULE_MODE_UNLIMITED) {
+                request_target = PTC_PCTL_TARGET_LIMIT;
+                request_minutes = 1440u;
+            }
+            if (runtime_state.bedtime_enforced || runtime_state.eye_care_resting) {
+                request_target = PTC_PCTL_TARGET_BLOCKED;
+                request_minutes = 0u;
+            }
+            err = apply_target(sysmodule, request, now, "release", request_target, request_minutes);
             if (err != PTC_ERR_OK) {
                 return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
             }
             err = observe_target_with_optional_activation(sysmodule, request, now,
-                "release", target_from_day_rule(active_rule),
-                active_rule.minutes, "rule_request", &observed_status);
+                "release", request_target,
+                request_minutes, "rule_request", &observed_status);
             if (err != PTC_ERR_OK) {
                 if (!recovery_rollback(sysmodule)) {
                     write_disable_flag(sysmodule, "transaction_restore_failed\n");
@@ -185,11 +201,72 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     {
         bool ok = write_current_status_result(sysmodule, request, "release",
             false, now, pctl_request && recovery_path_exists(sysmodule));
-        if (ok) recovery_clear(sysmodule);
+        if (ok) {
+            recovery_clear(sysmodule);
+            if (request->type == PTC_REQUEST_SET_EYE_CARE_POLICY && !rules.eye_care.enabled)
+                clear_eye_care_snapshot(sysmodule);
+        }
         else if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule))
             write_disable_flag(sysmodule, "transaction_restore_failed\n");
         return ok;
     }
+}
+
+static bool process_eye_care_skip(PtcSysmodule *sysmodule, const PtcRequest *request,
+    PtcClockSnapshot now)
+{
+    PtcRules rules;
+    PtcRuntimeState state;
+    PtcDayRule day_rule;
+    PtcPctlTargetMode mode;
+    PtcPctlStatus observed;
+    uint16_t minutes;
+    PtcErrorCode err;
+    char disable_path[320];
+    join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, disable_path))
+        return finish_with_error(sysmodule, request, "release", false, PTC_ERR_DISABLED, now.day_index);
+    if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &state))
+        return finish_with_error(sysmodule, request, "release", false, PTC_ERR_RULES_INVALID, now.day_index);
+    if (!rules.eye_care.enabled || !state.eye_care_resting ||
+        state.eye_care_break_id != request->eye_care_break_id ||
+        state.eye_care_rest_deadline <= now.unix_seconds ||
+        bedtime_blocks_grants(sysmodule, now))
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_EYE_CARE_BREAK_NOT_ACTIVE, now.day_index);
+    day_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+    if (day_rule.mode == PTC_RULE_MODE_LIMIT && state.eye_care_usage_known &&
+        state.eye_care_last_used_minutes >= day_rule.minutes)
+        return finish_with_error(sysmodule, request, "release", false,
+            PTC_ERR_EYE_CARE_BREAK_NOT_ACTIVE, now.day_index);
+    mode = day_rule.mode == PTC_RULE_MODE_UNLIMITED ? PTC_PCTL_TARGET_LIMIT : target_from_day_rule(day_rule);
+    minutes = day_rule.mode == PTC_RULE_MODE_UNLIMITED ? 1440u : day_rule.minutes;
+    err = apply_target(sysmodule, request, now, "release", mode, minutes);
+    if (err == PTC_ERR_OK)
+        err = observe_target_with_optional_activation(sysmodule, request, now, "release",
+            mode, minutes, "eye_care_skip", &observed);
+    if (err != PTC_ERR_OK) {
+        if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "eye_care_skip_restore_failed\n");
+        return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
+    }
+    state.eye_care_resting = false;
+    state.eye_care_rest_deadline = 0;
+    state.eye_care_break_id = 0;
+    state.eye_care_accumulated_minutes = 0;
+    state.eye_care_usage_known = false;
+    state.eye_care_last_used_minutes = 0;
+    state.eye_care_day_index = now.day_index;
+    state.last_enforced_mode = mode;
+    state.last_enforced_minutes = minutes;
+    state.last_enforced_day_index = now.day_index;
+    if (!save_state(sysmodule, &state, now.unix_seconds) ||
+        !write_current_status_result(sysmodule, request, "release", false, now, true)) {
+        if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "eye_care_skip_restore_failed\n");
+        return false;
+    }
+    recovery_clear(sysmodule);
+    clear_eye_care_snapshot(sysmodule);
+    return true;
 }
 
 void process_request_text(PtcSysmodule *sysmodule, const char *request_text, const char *expected_request_id)
@@ -233,6 +310,7 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
         request.type != PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT &&
         request.type != PTC_REQUEST_SKIP_BEDTIME &&
         request.type != PTC_REQUEST_DISABLE_BEDTIME &&
+        request.type != PTC_REQUEST_SKIP_EYE_CARE_BREAK &&
         request.type != PTC_REQUEST_OVERLAY_READY) {
         PtcSetupState setup;
         if (!load_setup_state(sysmodule, &setup) || strcmp(setup.phase, "active") != 0) {
@@ -277,6 +355,9 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
     case PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT:
         (void)process_restore_install_snapshot(sysmodule, &request, now);
         break;
+    case PTC_REQUEST_SKIP_EYE_CARE_BREAK:
+        (void)process_eye_care_skip(sysmodule, &request, now);
+        break;
     case PTC_REQUEST_SET_TODAY_LIMIT:
     case PTC_REQUEST_ADD_TODAY_MINUTES:
     case PTC_REQUEST_RESTORE_TODAY_POLICY:
@@ -284,6 +365,7 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
     case PTC_REQUEST_SET_HOLIDAY_POLICY:
     case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
     case PTC_REQUEST_SET_AUTONOMY_POLICY:
+    case PTC_REQUEST_SET_EYE_CARE_POLICY:
     case PTC_REQUEST_SET_BEDTIME_POLICY:
     case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS:
         (void)process_rule_request(sysmodule, &request, disable_flag, now);

@@ -21,6 +21,8 @@ typedef struct {
     PtcDayRule makeup_workday_rule;
     PtcScheduledOverride scheduled_override;
     PtcAutonomyPolicy autonomy_policy;
+    PtcEyeCarePolicy eye_care_policy;
+    uint64_t eye_care_break_id;
     PtcBedtimePolicy bedtime_policy;
     uint64_t bedtime_window_instance_id;
     bool bedtime_apply_immediately;

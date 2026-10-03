@@ -9,7 +9,7 @@ static float child_remaining_fraction(const PtcUiModel *model, bool *available)
         *available = true;
         return 0.0f;
     }
-    if (model->unrestricted_today == 1) {
+    if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
         *available = true;
         return 1.0f;
     }
@@ -50,7 +50,8 @@ static void draw_child_day_card(uint32_t *pixels, uint32_t stride, const PtcUiMo
     draw_rect_outline(pixels, stride, card, 12, 1, UI_RGB(UI_BLENDED(border_control)));
     draw_child_calendar_icon(pixels, stride, card.x + 20, card.y + 22, UI_ACCENT);
     draw_text(pixels, stride, card.x + 38, card.y + 28, title, 16, UI_MUTED);
-    if (available && forecast_index == 0 && model->unrestricted_today == 1) {
+    if (available && forecast_index == 0 &&
+        (model->unrestricted_today == 1 || model->eye_care_unlimited_capped)) {
         snprintf(value, sizeof(value), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
         snprintf(source, sizeof(source), "%s", ui_rule_source_label(model->rule_source));
     } else if (available) {
@@ -84,7 +85,7 @@ static void draw_child_budget_bar(uint32_t *pixels, uint32_t stride, const PtcUi
     } else if (!fresh) {
         snprintf(left, sizeof(left), ptc_ui_text(PTC_UI_T_TODAY_S_TIME_PENDING));
         snprintf(right, sizeof(right), ptc_ui_text(PTC_UI_T_SHOWS_AFTER_REFRESH));
-    } else if (model->unrestricted_today == 1) {
+    } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
         fill_round_rect(pixels, stride, slot, 5, UI_SUCCESS);
         snprintf(left, sizeof(left), ptc_ui_text(PTC_UI_T_UNLIMITED_TODAY));
         snprintf(right, sizeof(right), ptc_ui_text(PTC_UI_T_REST_AS_PLANNED));
@@ -248,14 +249,35 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     char buffer[128], hint[160], fitted_hint[160];
     bool disabled = model->disable_flag_present || model->waiting;
     bool code_unavailable = ptc_ui_status_is_fresh(model, ptc_ui_render_now()) &&
-        model->unrestricted_today == 1;
+        (model->unrestricted_today == 1 || model->eye_care_unlimited_capped);
     draw_header(pixels, stride, ptc_ui_text(PTC_UI_T_SELF_DISCIPLINE_IS_FREEDOM), ptc_ui_text(PTC_UI_T_ARRANGE_TIME_REASONABLY_AND_BE_THE_MASTER));
     draw_time_status_bar(pixels, stride, model);
     draw_child_task_summary(pixels, stride, model);
     draw_card_shadow(pixels, stride, (UiRect){652, 120, 580, 496}, 16);
     fill_round_rect(pixels, stride, (UiRect){652, 120, 580, 496}, 16, UI_RGB(UI_BLENDED(surface)));
     draw_text(pixels, stride, 684, 164, ptc_ui_text(PTC_UI_T_WHAT_CAN_YOU_DO_TODAY), 28, UI_RGB(UI_BLENDED(text_primary)));
-    draw_text(pixels, stride, 684, 195, ptc_ui_text(PTC_UI_T_START_HERE_WHEN_YOU_NEED_MORE_TIME), 18, UI_RGB(UI_BLENDED(text_secondary)));
+    if (model->eye_care_policy.enabled) {
+        char eye_line[128];
+        if (strcmp(model->eye_care_phase, "resting") == 0) {
+            int64_t age = ptc_ui_status_age_seconds(model, ptc_ui_render_now());
+            int remaining = model->eye_care_rest_remaining_seconds - (age > 0 && age < 3600 ? (int)age : 0);
+            if (remaining < 0) remaining = 0;
+            snprintf(eye_line, sizeof(eye_line), "%s: %u %s",
+                ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING), (unsigned)((remaining + 59) / 60),
+                ptc_ui_text(PTC_UI_T_MIN));
+        } else if (strcmp(model->eye_care_phase, "playing") == 0) {
+            unsigned remaining = model->eye_care_used_minutes >= model->eye_care_policy.play_minutes
+                ? 0u : (unsigned)(model->eye_care_policy.play_minutes - model->eye_care_used_minutes);
+            snprintf(eye_line, sizeof(eye_line), "%s: %u %s",
+                ptc_ui_text(PTC_UI_T_EYE_CARE), remaining, ptc_ui_text(PTC_UI_T_MIN));
+        } else snprintf(eye_line, sizeof(eye_line), "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_STATUS_UNKNOWN));
+        draw_text(pixels, stride, 684, 194, eye_line, 13, UI_WARNING);
+        if (model->eye_care_unlimited_capped)
+            draw_text(pixels, stride, 684, 210,
+                ptc_ui_text(PTC_UI_T_EYE_CARE_UNLIMITED_CAP), 10, UI_MUTED);
+    } else draw_text(pixels, stride, 684, 195,
+        ptc_ui_text(PTC_UI_T_START_HERE_WHEN_YOU_NEED_MORE_TIME), 18,
+        UI_RGB(UI_BLENDED(text_secondary)));
     home_button(pixels, stride, ptc_ui_child_submit_rect(),
         model->disable_flag_present ? ptc_ui_text(PTC_UI_T_REDEMPTION_IS_CURRENTLY_UNAVAILABLE) :
         (code_unavailable ? ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_GRANT_CODES_ARE) : ptc_ui_text(PTC_UI_T_A_ENTER_CODE)),

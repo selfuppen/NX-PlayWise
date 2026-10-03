@@ -6,6 +6,14 @@
 
 # Protocol Specification
 
+## Eye care breaks (candidate: pending)
+
+Optional `rules.json` fields are `eye_care_enabled` (default `false`), `eye_care_play_minutes` (default 40, range 1–240), and `eye_care_rest_minutes` (default 10, range 1–60). Older files use these defaults. `state.json` persists `eye_care_day_index`, `eye_care_accumulated_minutes`, `eye_care_last_used_minutes`, `eye_care_usage_known`, `eye_care_resting`, `eye_care_rest_deadline` (Unix seconds), and `eye_care_break_id`. Usage is derived from PCTL configured minutes minus remaining minutes; unavailable readings pause accumulation and report phase `unknown`. Wall time, including sleep, counts toward a break.
+
+`set_eye_care_policy` accepts `enabled`, `play_minutes`, and `rest_minutes`. Initial enablement requires recorded confirmation of Nintendo's pause-on-limit setting and overlay availability. `skip_eye_care_break` accepts the active nonzero `break_id` and rejects stale or expired instances. Result `state.eye_care` contains `enabled`, `play_minutes`, `rest_minutes`, `phase` (`off|playing|resting|paused|unknown`), `used_minutes`, `rest_remaining_seconds`, `break_id`, and `unlimited_capped`. `state.restriction_reasons` lists `bedtime`, `daily_allowance`, and `eye_care`. Errors 322, 323, and 324 mean invalid break instance, missing enablement confirmation, and grants blocked during a break, respectively.
+
+Daily allowance and bedtime restrictions take precedence and reset the eye care cycle. An unlimited day temporarily writes a 1440-minute PCTL limit for a usage reading; disabling eye care restores the unlimited target. PCTL writes use backup, readback, and transactional recovery. The release sysmodule does not initiate `StartPlayTimer (1451)`. Nintendo's pause-on-limit setting remains under parental control. Hardware A/B evidence for 1440-minute readings and actual pause behavior is still pending.
+
 This document serves as the authoritative contract for the standard distribution release profile. File schemas are version 1 (`schema_version: 1`); offline tokens decode v1/v2, with the user interface utilizing v2 8-digit numeric codes. Device Lab employs an isolated profile and root directory; its high-risk requests do not belong to the standard release protocol.
 
 ## Runtime Directory Structure

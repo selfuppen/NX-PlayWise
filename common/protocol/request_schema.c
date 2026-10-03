@@ -425,6 +425,8 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "disable_bedtime") == 0) return PTC_REQUEST_DISABLE_BEDTIME;
     if (strcmp(value, "confirm_bedtime_requirements") == 0) return PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS;
     if (strcmp(value, "overlay_ready") == 0) return PTC_REQUEST_OVERLAY_READY;
+    if (strcmp(value, "set_eye_care_policy") == 0) return PTC_REQUEST_SET_EYE_CARE_POLICY;
+    if (strcmp(value, "skip_eye_care_break") == 0) return PTC_REQUEST_SKIP_EYE_CARE_BREAK;
     if (strcmp(value, "complete_setup") == 0) {
         return PTC_REQUEST_COMPLETE_SETUP;
     }
@@ -484,6 +486,8 @@ const char *ptc_request_type_name(PtcRequestType type)
     case PTC_REQUEST_DISABLE_BEDTIME: return "disable_bedtime";
     case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS: return "confirm_bedtime_requirements";
     case PTC_REQUEST_OVERLAY_READY: return "overlay_ready";
+    case PTC_REQUEST_SET_EYE_CARE_POLICY: return "set_eye_care_policy";
+    case PTC_REQUEST_SKIP_EYE_CARE_BREAK: return "skip_eye_care_break";
     case PTC_REQUEST_COMPLETE_SETUP:
         return "complete_setup";
     case PTC_REQUEST_RETRY_SETUP_RELEASE:
@@ -572,6 +576,15 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
     case PTC_REQUEST_SET_AUTONOMY_POLICY:
         return json_u16(text, "daily_buffer_minutes", &out->autonomy_policy.daily_buffer_minutes) &&
             ptc_autonomy_policy_is_valid(&out->autonomy_policy)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_SET_EYE_CARE_POLICY:
+        return json_bool_required(text, "enabled", &out->eye_care_policy.enabled) &&
+            json_u16(text, "play_minutes", &out->eye_care_policy.play_minutes) &&
+            json_u16(text, "rest_minutes", &out->eye_care_policy.rest_minutes) &&
+            ptc_eye_care_policy_is_valid(&out->eye_care_policy)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_SKIP_EYE_CARE_BREAK:
+        return json_u64(text, "break_id", &out->eye_care_break_id) && out->eye_care_break_id != 0
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_BEDTIME_POLICY: {
         char activation[16];

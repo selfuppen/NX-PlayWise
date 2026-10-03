@@ -89,6 +89,7 @@ typedef enum {
     PTC_UI_HIT_HISTORY_NEXT,
     PTC_UI_HIT_SCHEDULED_FIELD,
     PTC_UI_HIT_AUTONOMY_OPTION,
+    PTC_UI_HIT_EYE_CARE_FIELD,
     PTC_UI_HIT_QUICK_ADD_OPTION,
     PTC_UI_HIT_BEDTIME_SECTION,
     PTC_UI_HIT_BEDTIME_FIELD,
@@ -154,6 +155,7 @@ PtcUiRect ptc_ui_redemption_history_prev_rect(void);
 PtcUiRect ptc_ui_redemption_history_next_rect(void);
 PtcUiRect ptc_ui_scheduled_field_rect(int index);
 PtcUiRect ptc_ui_autonomy_option_rect(int index);
+PtcUiRect ptc_ui_eye_care_field_rect(int index);
 PtcUiRect ptc_ui_quick_add_option_rect(int index);
 PtcUiRect ptc_ui_bedtime_section_rect(int index);
 PtcUiRect ptc_ui_bedtime_field_rect(int section, int index);

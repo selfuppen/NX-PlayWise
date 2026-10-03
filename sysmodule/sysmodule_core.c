@@ -1,5 +1,27 @@
 #include "sysmodule_internal.h"
 
+static PtcPctlTargetMode eye_care_base_target(const PtcRules *rules, PtcDayRule day_rule,
+    uint16_t *minutes)
+{
+    if (rules->eye_care.enabled && day_rule.mode == PTC_RULE_MODE_UNLIMITED) {
+        *minutes = 1440u;
+        return PTC_PCTL_TARGET_LIMIT;
+    }
+    *minutes = day_rule.minutes;
+    return target_from_day_rule(day_rule);
+}
+
+static void reset_eye_care_cycle(PtcRuntimeState *state, uint16_t day_index)
+{
+    state->eye_care_day_index = day_index;
+    state->eye_care_accumulated_minutes = 0;
+    state->eye_care_last_used_minutes = 0;
+    state->eye_care_usage_known = false;
+    state->eye_care_resting = false;
+    state->eye_care_rest_deadline = 0;
+    state->eye_care_break_id = 0;
+}
+
 int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
 {
     PtcRuntimeConfig config;
@@ -15,6 +37,13 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     PtcSetupState setup;
     PtcErrorCode err;
     bool bedtime_should_enforce;
+    bool eye_state_changed = false;
+    bool eye_enter = false;
+    bool eye_exit = false;
+    bool bedtime_snapshot_transferred = false;
+    PtcRuntimeState previous_eye_state;
+    uint16_t base_minutes = 0;
+    PtcPctlTargetMode base_mode;
 
     if (!load_config(sysmodule, &config)) {
         return 0;
@@ -64,6 +93,73 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         &rules, now.day_index, ptc_weekday_from_day_index(now.day_index), now.minute_of_day);
     bedtime_should_enforce = bedtime.active &&
         runtime_state.bedtime_skipped_instance_id != bedtime.window_instance_id;
+    previous_eye_state = runtime_state;
+    base_mode = eye_care_base_target(&rules, active_rule, &base_minutes);
+    if (!rules.eye_care.enabled || runtime_state.eye_care_day_index != now.day_index ||
+        bedtime_should_enforce ||
+        (active_rule.mode == PTC_RULE_MODE_LIMIT && runtime_state.eye_care_usage_known &&
+         runtime_state.eye_care_last_used_minutes >= active_rule.minutes)) {
+        eye_exit = runtime_state.eye_care_resting;
+        reset_eye_care_cycle(&runtime_state, now.day_index);
+        eye_state_changed = memcmp(&previous_eye_state, &runtime_state, sizeof(runtime_state)) != 0;
+    } else if (runtime_state.eye_care_resting) {
+        if (now.unix_seconds >= runtime_state.eye_care_rest_deadline) {
+            eye_exit = true;
+            reset_eye_care_cycle(&runtime_state, now.day_index);
+            eye_state_changed = true;
+        }
+    } else {
+        PtcPctlStatus usage;
+        if (sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+                ptc_weekday_from_day_index(now.day_index), &usage) == PTC_ERR_OK &&
+            usage.limited_today && usage.configured_minutes_available &&
+            usage.configured_minutes == base_minutes && usage.remaining_available &&
+            usage.remaining_minutes <= base_minutes &&
+            usage.play_timer_enabled_available && usage.play_timer_enabled) {
+            uint16_t used = (uint16_t)(base_minutes - usage.remaining_minutes);
+            if (runtime_state.eye_care_usage_known && used >= runtime_state.eye_care_last_used_minutes) {
+                uint32_t total = (uint32_t)runtime_state.eye_care_accumulated_minutes +
+                    used - runtime_state.eye_care_last_used_minutes;
+                runtime_state.eye_care_accumulated_minutes = total > 240u ? 240u : (uint16_t)total;
+            }
+            runtime_state.eye_care_last_used_minutes = used;
+            runtime_state.eye_care_usage_known = true;
+            if (active_rule.mode == PTC_RULE_MODE_LIMIT && used >= active_rule.minutes) {
+                reset_eye_care_cycle(&runtime_state, now.day_index);
+            } else if (runtime_state.eye_care_accumulated_minutes >= rules.eye_care.play_minutes) {
+                eye_enter = true;
+                runtime_state.eye_care_resting = true;
+                runtime_state.eye_care_rest_deadline = now.unix_seconds +
+                    (int64_t)rules.eye_care.rest_minutes * 60;
+                runtime_state.eye_care_break_id =
+                    ((uint64_t)now.day_index << 32) | ((uint64_t)now.unix_seconds & 0xffffffffu);
+                if (!runtime_state.eye_care_break_id) runtime_state.eye_care_break_id = 1;
+            }
+        } else {
+            runtime_state.eye_care_usage_known = false;
+        }
+        eye_state_changed = memcmp(&previous_eye_state, &runtime_state, sizeof(runtime_state)) != 0;
+    }
+    if (eye_enter) {
+        PtcPctlSettingsSnapshot eye_snapshot;
+        if (!sysmodule->pctl->vtable->snapshot_settings ||
+            sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &eye_snapshot) != PTC_ERR_OK ||
+            !save_eye_care_snapshot(sysmodule, &eye_snapshot, now.unix_seconds)) {
+            append_event(sysmodule, NULL, "pctl_backup_failed", PTC_ERR_PCTL_BACKUP_FAILED, "eye_care_entry");
+            runtime_state = previous_eye_state;
+            return 0;
+        }
+    }
+    if (eye_exit && bedtime_should_enforce) {
+        PtcPctlSettingsSnapshot eye_snapshot;
+        if (!load_eye_care_snapshot(sysmodule, &eye_snapshot) ||
+            !save_bedtime_snapshot(sysmodule, &eye_snapshot, &bedtime, now.unix_seconds)) {
+            append_event(sysmodule, NULL, "pctl_backup_failed", PTC_ERR_PCTL_BACKUP_FAILED,
+                "eye_care_bedtime_handover");
+            return 0;
+        }
+        bedtime_snapshot_transferred = true;
+    }
     if (runtime_state.bedtime_enforced &&
         (!bedtime_should_enforce || runtime_state.bedtime_window_instance_id != bedtime.window_instance_id)) {
         err = restore_bedtime_base(sysmodule, NULL, &rules, &runtime_state, now);
@@ -75,8 +171,9 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         }
         recovery_clear(sysmodule);
     }
-    target_mode = bedtime_should_enforce ? PTC_PCTL_TARGET_BLOCKED : target_from_day_rule(active_rule);
-    target_minutes = bedtime_should_enforce ? 0u : active_rule.minutes;
+    target_mode = bedtime_should_enforce || runtime_state.eye_care_resting
+        ? PTC_PCTL_TARGET_BLOCKED : base_mode;
+    target_minutes = target_mode == PTC_PCTL_TARGET_BLOCKED ? 0u : base_minutes;
     if (runtime_state.last_enforced_day_index == now.day_index &&
         runtime_state.last_enforced_mode == target_mode &&
         runtime_state.last_enforced_minutes == target_minutes &&
@@ -85,10 +182,14 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         if (sysmodule->pctl->vtable->read_status(sysmodule->pctl,
                 ptc_weekday_from_day_index(now.day_index), &observed_status) != PTC_ERR_OK ||
             target_settings_observed(target_mode, target_minutes, &observed_status)) {
+            if (eye_state_changed && !save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+                write_disable_flag(sysmodule, "eye_care_state_failed\n");
+                return 0;
+            }
             return 0;
         }
     }
-    if (bedtime_should_enforce && !runtime_state.bedtime_enforced) {
+    if (bedtime_should_enforce && !runtime_state.bedtime_enforced && !bedtime_snapshot_transferred) {
         PtcPctlSettingsSnapshot bedtime_snapshot;
         if (!sysmodule->pctl->vtable->snapshot_settings ||
             sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &bedtime_snapshot) != PTC_ERR_OK ||
@@ -101,6 +202,7 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     err = apply_target(sysmodule, NULL, now, "release", target_mode, target_minutes);
     if (err != PTC_ERR_OK) {
         if (bedtime_should_enforce && !runtime_state.bedtime_enforced) clear_bedtime_snapshot(sysmodule);
+        if (eye_enter) clear_eye_care_snapshot(sysmodule);
         return 0;
     }
     {
@@ -148,6 +250,7 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "enforce_restore_failed\n");
         return 0;
     }
+    if (eye_exit) clear_eye_care_snapshot(sysmodule);
     append_event(sysmodule, NULL, "state_persisted", PTC_ERR_OK, "enforce");
     if (!runtime_state.apply_pending_confirmation) recovery_clear(sysmodule);
     return 1;
@@ -429,7 +532,7 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     actions += processed;
     minute_changed = !sysmodule->minute_initialized || sysmodule->last_minute_day_index != now.day_index ||
         sysmodule->last_minute_of_day != now.minute_of_day;
-    if (minute_changed || reload || storage_notified || disable_changed) {
+    if (minute_changed || reload || storage_notified || disable_changed || processed > 0) {
 #ifndef PLAYWISE_DEVICE_LAB
         if (sysmodule->minute_initialized) {
             uint32_t previous = (uint32_t)sysmodule->last_minute_day_index * 1440u +

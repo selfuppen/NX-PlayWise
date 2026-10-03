@@ -112,6 +112,27 @@ int ptc_companion_set_autonomy_policy_request_json(char *out, size_t out_size,
         request_id, (long long)created_at, policy->daily_buffer_minutes);
 }
 
+int ptc_companion_set_eye_care_policy_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, const PtcEyeCarePolicy *policy)
+{
+    if (!policy || !ptc_eye_care_policy_is_valid(policy)) return -1;
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"set_eye_care_policy\","
+        "\"created_at\":%lld,\"payload\":{\"enabled\":%s,\"play_minutes\":%u,"
+        "\"rest_minutes\":%u}}\n", request_id, (long long)created_at,
+        policy->enabled ? "true" : "false", policy->play_minutes, policy->rest_minutes);
+}
+
+int ptc_companion_skip_eye_care_break_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, uint64_t break_id)
+{
+    if (!break_id) return -1;
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"skip_eye_care_break\","
+        "\"created_at\":%lld,\"payload\":{\"break_id\":%llu}}\n",
+        request_id, (long long)created_at, (unsigned long long)break_id);
+}
+
 int ptc_companion_set_bedtime_policy_request_json(char *out, size_t out_size,
     const char *request_id, int64_t created_at, const PtcBedtimePolicy *policy, bool apply_immediately)
 {

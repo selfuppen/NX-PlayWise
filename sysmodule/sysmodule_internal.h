@@ -46,6 +46,13 @@ typedef struct {
     uint64_t bedtime_window_instance_id;
     uint16_t bedtime_start_day_index;
     uint64_t bedtime_skipped_instance_id;
+    uint16_t eye_care_day_index;
+    uint16_t eye_care_accumulated_minutes;
+    uint16_t eye_care_last_used_minutes;
+    bool eye_care_usage_known;
+    bool eye_care_resting;
+    int64_t eye_care_rest_deadline;
+    uint64_t eye_care_break_id;
 } PtcRuntimeState;
 
 typedef struct {
@@ -87,6 +94,10 @@ bool save_bedtime_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapsho
 bool load_bedtime_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot,
     uint64_t *window_instance_id, uint16_t *start_day_index);
 void clear_bedtime_snapshot(PtcSysmodule *sysmodule);
+bool save_eye_care_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapshot *snapshot,
+    int64_t captured_at);
+bool load_eye_care_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot);
+void clear_eye_care_snapshot(PtcSysmodule *sysmodule);
 bool recovery_path_exists(PtcSysmodule *sysmodule);
 bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClockSnapshot now);
 void recovery_clear(PtcSysmodule *sysmodule);
@@ -172,6 +183,7 @@ uint16_t accumulate_today_limit(PtcRules *rules, uint16_t day_index, uint8_t wee
 PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest *request, PtcRules *rules, PtcRuntimeState *runtime_state, PtcClockSnapshot now, uint16_t played_minutes);
 void effect_wait(PtcSysmodule *sysmodule, uint32_t milliseconds);
 bool bedtime_blocks_grants(PtcSysmodule *sysmodule, PtcClockSnapshot now);
+bool eye_care_blocks_grants(PtcSysmodule *sysmodule);
 bool target_settings_observed(
     PtcPctlTargetMode mode,
     uint16_t minutes,

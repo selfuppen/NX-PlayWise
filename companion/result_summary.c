@@ -39,6 +39,7 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     const cJSON *error;
     const cJSON *preview;
     const cJSON *bedtime;
+    const cJSON *eye_care;
     const cJSON *restriction_reasons;
     const char *status;
     if (!out || !result_json || ptc_result_validate(result_json) != PTC_ERR_OK) {
@@ -98,8 +99,18 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
         string_value(bedtime, "recovery_phase"));
     restriction_reasons = cJSON_GetObjectItemCaseSensitive(state, "restriction_reasons");
     out->daily_restriction_active = bool_value(restriction_reasons, "daily_allowance", false);
+    eye_care = cJSON_GetObjectItemCaseSensitive(state, "eye_care");
+    out->eye_care_enabled = bool_value(eye_care, "enabled", false);
+    out->eye_care_play_minutes = number_value(eye_care, "play_minutes", 40);
+    out->eye_care_rest_minutes = number_value(eye_care, "rest_minutes", 10);
+    out->eye_care_used_minutes = number_value(eye_care, "used_minutes", 0);
+    out->eye_care_rest_remaining_seconds = number_value(eye_care, "rest_remaining_seconds", 0);
+    out->eye_care_break_id = u64_value(eye_care, "break_id");
+    out->eye_care_unlimited_capped = bool_value(eye_care, "unlimited_capped", false);
+    snprintf(out->eye_care_phase, sizeof(out->eye_care_phase), "%s", string_value(eye_care, "phase"));
     out->access_recovery_required =
-        (out->daily_restriction_active || (out->bedtime_active && !out->bedtime_skipped)) &&
+        (out->daily_restriction_active || (out->bedtime_active && !out->bedtime_skipped) ||
+         strcmp(out->eye_care_phase, "resting") == 0) &&
         !(out->temporary_unlocked_available && out->temporary_unlocked);
     {
         const cJSON *autonomy = cJSON_GetObjectItemCaseSensitive(state, "autonomy");

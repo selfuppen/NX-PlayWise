@@ -259,6 +259,8 @@ static const char *activity_action_for_request(PtcRequestType type)
     case PTC_REQUEST_SET_SCHEDULED_OVERRIDE: return "scheduled_update";
     case PTC_REQUEST_SET_AUTONOMY_POLICY: return "autonomy_update";
     case PTC_REQUEST_SET_BEDTIME_POLICY: return "bedtime_update";
+    case PTC_REQUEST_SET_EYE_CARE_POLICY: return "eye_care_update";
+    case PTC_REQUEST_SKIP_EYE_CARE_BREAK: return "eye_care_skip";
     case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS: return "bedtime_confirm";
     case PTC_REQUEST_SKIP_BEDTIME: return "bedtime_skip";
     case PTC_REQUEST_CLEAR_BEDTIME_SKIP: return "bedtime_skip_cleared";

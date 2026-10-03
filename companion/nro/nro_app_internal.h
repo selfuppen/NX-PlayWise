@@ -125,6 +125,7 @@ typedef struct {
     bool pending_leave_parent;
     int pending_bedtime_section;
     int bedtime_saved_section;
+    bool pending_eye_care_save;
     bool code_preview_recheck;
     bool code_previous_after_available;
     bool code_previous_after_zero;
@@ -223,6 +224,7 @@ void open_redemption_history(UiState *ui);
 void request_clear_redemption_history(UiState *ui);
 void submit_scheduled_override(UiState *ui);
 void submit_autonomy_policy(UiState *ui);
+void submit_eye_care_policy(UiState *ui);
 void submit_bedtime_confirmation(UiState *ui);
 void submit_bedtime_policy(UiState *ui);
 void submit_bedtime_skip(UiState *ui);

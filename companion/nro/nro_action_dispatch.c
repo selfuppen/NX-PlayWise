@@ -268,16 +268,24 @@ void handle_parent_action(UiState *ui)
             ui->model.overlay_body[0] = '\0';
             break;
         case 5:
+            ui->model.draft_eye_care_policy = ui->model.eye_care_policy;
+            ui->model.overlay = PTC_UI_OVERLAY_EYE_CARE;
+            ui->model.overlay_selection = 0;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
+                ptc_ui_text(PTC_UI_T_EYE_CARE));
+            ui->model.overlay_body[0] = '\0';
+            break;
         case 6:
         case 7:
         case 8:
         case 9:
         case 10:
         case 11:
+        case 12:
             if (ui->model.forecast_available) {
-                ui->model.forecast_detail_day_offset = index - 5;
+                ui->model.forecast_detail_day_offset = index - 6;
                 ui->model.overlay = PTC_UI_OVERLAY_DAY_DECISION;
-                ui->model.overlay_selection = index - 5;
+                ui->model.overlay_selection = index - 6;
             }
             break;
         default:

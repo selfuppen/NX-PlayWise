@@ -33,7 +33,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
 {
     switch (page) {
     case PTC_UI_PARENT_PLAN:
-        return 5;
+        return 6;
     case PTC_UI_PARENT_GRANT:
         return 4;
     case PTC_UI_PARENT_SETTINGS:
@@ -182,16 +182,16 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT) {
-        static const int left_target[5] = {0, 1, 2, 0, 1};
-        static const int right_target[5] = {3, 4, 4, 3, 4};
+        static const int left_target[6] = {0, 1, 2, 0, 1, 2};
+        static const int right_target[6] = {3, 4, 5, 3, 4, 5};
         int previous = index;
-        if (index >= 5 && index <= 11) {
+        if (index >= 6 && index <= 12) {
             if (horizontal < 0) {
-                index = index <= 6 ? 3 : 4;
+                index = index <= 7 ? 3 : (index <= 9 ? 4 : 5);
             } else if (vertical < 0) {
-                if (index > 5) --index;
+                if (index > 6) --index;
             } else if (vertical > 0) {
-                if (index < 11) ++index;
+                if (index < 12) ++index;
                 else {
                     model->parent_content_selection = previous;
                     model->parent_footer_focused = true;
@@ -205,12 +205,12 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
                 if (index < 3) {
                     index = right_target[index];
                 } else if (model->forecast_available) {
-                    index = (index == 3) ? 5 : 7;
+                    index = index == 3 ? 6 : (index == 4 ? 8 : 10);
                 }
             } else if (vertical < 0) {
-                if (index == 1 || index == 2 || index == 4) --index;
+                if (index == 1 || index == 2 || index == 4 || index == 5) --index;
             } else if (vertical > 0) {
-                if (index == 0 || index == 1 || index == 3) ++index;
+                if (index == 0 || index == 1 || index == 3 || index == 4) ++index;
                 else {
                     model->parent_content_selection = previous;
                     model->parent_footer_focused = true;

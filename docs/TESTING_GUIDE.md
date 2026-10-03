@@ -6,6 +6,12 @@
 
 # Testing Guide
 
+## Eye care candidate checks
+
+Host regression should cover default-off legacy rules, the 1–240/1–60 bounds, 40/10 cycles, unchanged usage during sleep, breaks spanning sleep and restart, day rollover, daily and bedtime priority, immediate policy changes, the 1440-minute unlimited mapping, current and stale `break_id` skips, and PCTL write, readback, and recovery failures. Run `python tools/test.py` and `python tools/package_remote.py`; the latter builds and validates `build/eden-test/pctc-eden.nro` by default.
+
+For hardware A/B, record package hash, HOS/CFW, game, Nintendo pause-on-limit setting, and PCTL configured/remaining readings before and after awake HOME use and sleep. Compare original unlimited mode with the temporary 1440-minute mode; verify sleep does not consume use time. Observe actual software pause and resume when a break begins and ends, PIN-authorized overlay skip, handoff to daily allowance and bedtime restrictions, and restoration of the original unlimited rule after disabling. Keep the candidate `pending` until this evidence is complete.
+
 ## Console Application Visual Refresh Acceptance
 
 The Companion NRO's light, dark, and follow-system themes use a unified semantic color palette covering both homepages, five parent tabs, secondary settings pages, first-time setup, and all modals. The visual refresh does not alter the web frontend, Overlay, Device Lab, or the control protocol. `python tools/test.py` provides fast local regressions, while authoritative C/Python/UI, text catalog, and package gates are executed via `python tools/package_remote.py`.

@@ -401,6 +401,24 @@ void clear_bedtime_snapshot(PtcSysmodule *sysmodule)
     (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, path);
 }
 
+bool save_eye_care_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapshot *snapshot,
+    int64_t captured_at)
+{
+    return save_snapshot_file(sysmodule, "backups/eye_care_pctl_snapshot.json", snapshot, captured_at);
+}
+
+bool load_eye_care_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot)
+{
+    return load_snapshot_file(sysmodule, "backups/eye_care_pctl_snapshot.json", snapshot);
+}
+
+void clear_eye_care_snapshot(PtcSysmodule *sysmodule)
+{
+    char path[320];
+    join_path(path, sizeof(path), sysmodule->app_root, "backups/eye_care_pctl_snapshot.json");
+    (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, path);
+}
+
 bool recovery_path_exists(PtcSysmodule *sysmodule)
 {
     char path[320];
@@ -746,6 +764,12 @@ bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
     }
     if (json_u16(text, "daily_buffer_minutes", &rules->autonomy_policy.daily_buffer_minutes) &&
         !ptc_autonomy_policy_is_valid(&rules->autonomy_policy)) return false;
+    if (find_key(text, "eye_care_enabled")) {
+        if (!json_bool_value(text, "eye_care_enabled", &rules->eye_care.enabled) ||
+            !json_u16(text, "eye_care_play_minutes", &rules->eye_care.play_minutes) ||
+            !json_u16(text, "eye_care_rest_minutes", &rules->eye_care.rest_minutes) ||
+            !ptc_eye_care_policy_is_valid(&rules->eye_care)) return false;
+    }
     (void)json_bool_value(text, "holiday_enabled", &rules->holiday_enabled);
     if (json_string(text, "holiday_mode", mode, sizeof(mode))) {
         (void)parse_rule_mode(mode, &rules->holiday_rule.mode);
@@ -815,6 +839,7 @@ bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
         "\"scheduled_override_enabled\":%s,\"scheduled_override_start_day_index\":%u,"
         "\"scheduled_override_end_day_index\":%u,\"scheduled_override_mode\":\"%s\","
         "\"scheduled_override_minutes\":%u,\"daily_buffer_minutes\":%u,"
+        "\"eye_care_enabled\":%s,\"eye_care_play_minutes\":%u,\"eye_care_rest_minutes\":%u,"
         "\"holiday_enabled\":%s,\"holiday_mode\":\"%s\",\"holiday_minutes\":%u,"
         "\"makeup_workday_mode\":\"%s\",\"makeup_workday_minutes\":%u,"
         "\"bedtime_enabled\":%s,\"bedtime_week\":[",
@@ -828,6 +853,9 @@ bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
         rule_mode_name(rules->scheduled_override.rule.mode),
         rules->scheduled_override.rule.minutes,
         rules->autonomy_policy.daily_buffer_minutes,
+        rules->eye_care.enabled ? "true" : "false",
+        rules->eye_care.play_minutes,
+        rules->eye_care.rest_minutes,
         rules->holiday_enabled ? "true" : "false",
         rule_mode_name(rules->holiday_rule.mode),
         rules->holiday_rule.minutes,
@@ -911,6 +939,13 @@ bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     state->bedtime_window_instance_id = 0;
     state->bedtime_start_day_index = 0;
     state->bedtime_skipped_instance_id = 0;
+    state->eye_care_day_index = 0;
+    state->eye_care_accumulated_minutes = 0;
+    state->eye_care_last_used_minutes = 0;
+    state->eye_care_usage_known = false;
+    state->eye_care_resting = false;
+    state->eye_care_rest_deadline = 0;
+    state->eye_care_break_id = 0;
     join_path(path, sizeof(path), sysmodule->app_root, "state.json");
     if (!read_cached_text(sysmodule, "state.json", sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text),
             &sysmodule->state_meta, &sysmodule->state_cache_valid, text, sizeof(text), true) || text[0] == '\0') {
@@ -939,6 +974,13 @@ bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     (void)json_u64(text, "bedtime_window_instance_id", &state->bedtime_window_instance_id);
     (void)json_u16(text, "bedtime_start_day_index", &state->bedtime_start_day_index);
     (void)json_u64(text, "bedtime_skipped_instance_id", &state->bedtime_skipped_instance_id);
+    (void)json_u16(text, "eye_care_day_index", &state->eye_care_day_index);
+    (void)json_u16(text, "eye_care_accumulated_minutes", &state->eye_care_accumulated_minutes);
+    (void)json_u16(text, "eye_care_last_used_minutes", &state->eye_care_last_used_minutes);
+    (void)json_bool_value(text, "eye_care_usage_known", &state->eye_care_usage_known);
+    (void)json_bool_value(text, "eye_care_resting", &state->eye_care_resting);
+    (void)json_i64(text, "eye_care_rest_deadline", &state->eye_care_rest_deadline);
+    (void)json_u64(text, "eye_care_break_id", &state->eye_care_break_id);
     {
         uint16_t mode = 0;
         if (json_u16(text, "last_enforced_mode", &mode)) {
@@ -965,6 +1007,9 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
         "\"summary_day_index\":%u,\"summary_grant_minutes\":%u,"
         "\"bedtime_enforced\":%s,\"bedtime_window_instance_id\":%llu,"
         "\"bedtime_start_day_index\":%u,\"bedtime_skipped_instance_id\":%llu,"
+        "\"eye_care_day_index\":%u,\"eye_care_accumulated_minutes\":%u,"
+        "\"eye_care_last_used_minutes\":%u,\"eye_care_usage_known\":%s,"
+        "\"eye_care_resting\":%s,\"eye_care_rest_deadline\":%lld,\"eye_care_break_id\":%llu,"
         "\"updated_at\":%lld}\n",
         state->last_enforced_day_index,
         (unsigned int)state->last_enforced_mode,
@@ -985,6 +1030,13 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
         (unsigned long long)state->bedtime_window_instance_id,
         state->bedtime_start_day_index,
         (unsigned long long)state->bedtime_skipped_instance_id,
+        state->eye_care_day_index,
+        state->eye_care_accumulated_minutes,
+        state->eye_care_last_used_minutes,
+        state->eye_care_usage_known ? "true" : "false",
+        state->eye_care_resting ? "true" : "false",
+        (long long)state->eye_care_rest_deadline,
+        (unsigned long long)state->eye_care_break_id,
         (long long)updated_at);
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
     snprintf(sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text), "%s", text);

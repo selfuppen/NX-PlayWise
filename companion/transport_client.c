@@ -268,6 +268,26 @@ PtcCompanionStatus ptc_companion_transport_submit_set_autonomy_policy(PtcCompani
     return ptc_companion_transport_submit_json(client, request_id, json);
 }
 
+PtcCompanionStatus ptc_companion_transport_submit_set_eye_care_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcEyeCarePolicy *policy)
+{
+    char json[512];
+    int written = ptc_companion_set_eye_care_policy_request_json(
+        json, sizeof(json), request_id, created_at, policy);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_skip_eye_care_break(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint64_t break_id)
+{
+    char json[512];
+    int written = ptc_companion_skip_eye_care_break_request_json(
+        json, sizeof(json), request_id, created_at, break_id);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
 PtcCompanionStatus ptc_companion_transport_submit_set_bedtime_policy(PtcCompanionTransportClient *client,
     const char *request_id, int64_t created_at, const PtcBedtimePolicy *policy, bool apply_immediately)
 {
