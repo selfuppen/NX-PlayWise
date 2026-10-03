@@ -48,25 +48,34 @@ static void draw_scheduled_overlay(uint32_t *pixels, uint32_t stride, const PtcU
                  (unsigned int)draft->rule.minutes % 60);
     }
 
+    int max_label_w = 0;
+    for (int i = 0; i < 4; ++i) {
+        int lw = measure_text(LABELS[i], 16);
+        if (lw > max_label_w) max_label_w = lw;
+    }
+
     for (int index = 0; index < 4; ++index) {
         UiRect row = to_uirect(ptc_ui_scheduled_field_rect(index));
         draw_plan_card(pixels, stride, row, model->overlay_selection == index);
         draw_text(pixels, stride, row.x + 18, row.y + 38, LABELS[index], 16, UI_MUTED);
 
+        int val_x = row.x + 18 + max_label_w + 16;
+        if (val_x < row.x + 130) val_x = row.x + 130;
+
         if (index == 0) {
-            draw_text(pixels, stride, row.x + 130, row.y + 38, values[0], 20,
+            draw_text(pixels, stride, val_x, row.y + 38, values[0], 20,
                        draft->enabled ? UI_SUCCESS : UI_MUTED);
             UiRect toggle_rect = {row.x + row.width - 78, row.y + (row.height - 30) / 2, 60, 30};
             draw_toggle_switch(pixels, stride, toggle_rect, draft->enabled,
-                               model->overlay_selection == 0, model->disable_flag_present, NULL, NULL);
+                                model->overlay_selection == 0, model->disable_flag_present, NULL, NULL);
         } else if (index == 1 || index == 2) {
-            draw_text(pixels, stride, row.x + 130, row.y + 38, values[index], 20, UI_RGB(UI_BLENDED(text_primary)));
+            draw_text(pixels, stride, val_x, row.y + 38, values[index], 20, UI_RGB(UI_BLENDED(text_primary)));
             UiRect edit_chip = {row.x + row.width - 86, row.y + (row.height - 28) / 2, 70, 28};
             fill_round_rect(pixels, stride, edit_chip, 6, UI_RGB(UI_BLENDED(surface)));
             draw_rect_outline(pixels, stride, edit_chip, 6, 1, UI_BORDER);
             draw_text_center(pixels, stride, edit_chip, ptc_ui_text(PTC_UI_T_A_EDITOR), 13, UI_MUTED);
         } else {
-            draw_text(pixels, stride, row.x + 130, row.y + 38, values[index], 20,
+            draw_text(pixels, stride, val_x, row.y + 38, values[index], 20,
                        draft->rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS : UI_ACCENT);
             UiRect edit_chip = {row.x + row.width - 86, row.y + (row.height - 28) / 2, 70, 28};
             fill_round_rect(pixels, stride, edit_chip, 6, UI_RGB(UI_BLENDED(surface)));
@@ -163,15 +172,21 @@ static void draw_autonomy_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
     draw_dialog_shell(pixels, stride, &shell_model, &dialog, 880, 480);
 
     /* 详细用途与机制说明 */
-    draw_text(pixels, stride, dialog.x + 48, dialog.y + 92,
-        ptc_ui_text(PTC_UI_T_PURPOSE_WHEN_THE_QUOTA_IS_EXHAUSTED_CHILDREN),
-        14, UI_INK);
-    draw_text(pixels, stride, dialog.x + 48, dialog.y + 118,
-        ptc_ui_text(PTC_UI_T_CAN_ONLY_BE_COLLECTED_ONCE_A_DAY),
-        14, UI_MUTED);
-    draw_text(pixels, stride, dialog.x + 48, dialog.y + 144,
-        ptc_ui_text(PTC_UI_T_RECOMMENDED_SETTINGS_5_TO_15_MINUTES_ARE),
-        14, UI_ACCENT);
+    char fitted_buf[256];
+    fit_text(fitted_buf, sizeof(fitted_buf),
+             ptc_ui_text(PTC_UI_T_PURPOSE_WHEN_THE_QUOTA_IS_EXHAUSTED_CHILDREN),
+             14, dialog.width - 96);
+    draw_text(pixels, stride, dialog.x + 48, dialog.y + 92, fitted_buf, 14, UI_INK);
+
+    fit_text(fitted_buf, sizeof(fitted_buf),
+             ptc_ui_text(PTC_UI_T_CAN_ONLY_BE_COLLECTED_ONCE_A_DAY),
+             14, dialog.width - 96);
+    draw_text(pixels, stride, dialog.x + 48, dialog.y + 118, fitted_buf, 14, UI_MUTED);
+
+    fit_text(fitted_buf, sizeof(fitted_buf),
+             ptc_ui_text(PTC_UI_T_RECOMMENDED_SETTINGS_5_TO_15_MINUTES_ARE),
+             14, dialog.width - 96);
+    draw_text(pixels, stride, dialog.x + 48, dialog.y + 144, fitted_buf, 14, UI_ACCENT);
 
     for (index = 0; index < 4; ++index) {
         UiRect option = to_uirect(ptc_ui_autonomy_option_rect(index));
@@ -193,10 +208,14 @@ static void draw_autonomy_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
     UiRect tip_box = {dialog.x + 48, dialog.y + 296, dialog.width - 96, 76};
     fill_round_rect(pixels, stride, tip_box, 8, UI_PAGE);
     draw_rect_outline(pixels, stride, tip_box, 8, 1, UI_BORDER);
-    draw_text(pixels, stride, tip_box.x + 16, tip_box.y + 28,
-        ptc_ui_text(PTC_UI_T_THE_BUFFER_ONLY_INCREASES_TODAY_S_QUOTA), 14, UI_INK);
-    draw_text(pixels, stride, tip_box.x + 16, tip_box.y + 54,
-        ptc_ui_text(PTC_UI_T_BEDTIME_TIME_REMAINS_AS_SCHEDULED), 14, UI_WARNING);
+    fit_text(fitted_buf, sizeof(fitted_buf),
+             ptc_ui_text(PTC_UI_T_THE_BUFFER_ONLY_INCREASES_TODAY_S_QUOTA),
+             14, tip_box.width - 32);
+    draw_text(pixels, stride, tip_box.x + 16, tip_box.y + 28, fitted_buf, 14, UI_INK);
+    fit_text(fitted_buf, sizeof(fitted_buf),
+             ptc_ui_text(PTC_UI_T_BEDTIME_TIME_REMAINS_AS_SCHEDULED),
+             14, tip_box.width - 32);
+    draw_text(pixels, stride, tip_box.x + 16, tip_box.y + 54, fitted_buf, 14, UI_WARNING);
 
     draw_overlay_actions(pixels, stride, model, ptc_ui_text(PTC_UI_T_SAVE_BUFFER_SETTINGS));
 }

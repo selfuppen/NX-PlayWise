@@ -47,15 +47,31 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     details = (UiRect){dialog.x + 34, dialog.y + 106, dialog.width - 68, 326};
     fill_round_rect(pixels, stride, details, 16, UI_RAISED);
     draw_rect_outline(pixels, stride, details, 16, 1, UI_BORDER);
-    draw_text(pixels, stride, details.x + 24, details.y + 38, ptc_ui_text(PTC_UI_T_HOST_APPLICATION), 18, UI_MUTED);
+    const char *lbl_host = ptc_ui_text(PTC_UI_T_HOST_APPLICATION);
+    const char *lbl_bg = ptc_ui_text(PTC_UI_T_CURRENT_BACKGROUND);
+    const char *lbl_status = ptc_ui_text(PTC_UI_T_LOADING_STATUS);
+    const char *lbl_repo = ptc_ui_text(PTC_UI_T_PROJECT_WAREHOUSE);
+    const char *lbl_parent = ptc_ui_text(PTC_UI_T_PARENT_PAGE);
+
+    int max_lbl_w = measure_text(lbl_host, 18);
+    int w = measure_text(lbl_bg, 18); if (w > max_lbl_w) max_lbl_w = w;
+    w = measure_text(lbl_status, 18); if (w > max_lbl_w) max_lbl_w = w;
+    w = measure_text(lbl_repo, 18); if (w > max_lbl_w) max_lbl_w = w;
+    w = measure_text(lbl_parent, 18); if (w > max_lbl_w) max_lbl_w = w;
+
+    int val_offset = 24 + max_lbl_w + 16;
+    if (val_offset < 180) val_offset = 180;
+    int val_max_w = details.width - val_offset - 20;
+
+    draw_text(pixels, stride, details.x + 24, details.y + 38, lbl_host, 18, UI_MUTED);
     snprintf(value, sizeof(value), "%.24s  (%.88s)", model->software_version,
              model->app_release_id[0] ? model->app_release_id : ptc_ui_text(PTC_UI_T_UNKNOWN_IDENTITY));
-    fit_text(value, sizeof(value), value, 18, details.width - 220);
-    draw_text(pixels, stride, details.x + 180, details.y + 38, value, 18, UI_ACCENT);
-    draw_text(pixels, stride, details.x + 24, details.y + 82, ptc_ui_text(PTC_UI_T_CURRENT_BACKGROUND), 18, UI_MUTED);
+    fit_text(value, sizeof(value), value, 18, val_max_w);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 38, value, 18, UI_ACCENT);
+    draw_text(pixels, stride, details.x + 24, details.y + 82, lbl_bg, 18, UI_MUTED);
     fit_text(value, sizeof(value), model->backend_release_id[0] ? model->backend_release_id : ptc_ui_text(PTC_UI_T_UNABLE_TO_TRUSTWORTHY_CONFIRMATION), 18,
-             details.width - 220);
-    draw_text(pixels, stride, details.x + 180, details.y + 82, value, 18, UI_INK);
+             val_max_w);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 82, value, 18, UI_INK);
     if (model->hot_reload_status == PTC_UI_HOT_RELOAD_CURRENT ||
         model->hot_reload_status == PTC_UI_HOT_RELOAD_SUCCESS) {
         status = ptc_ui_text(PTC_UI_T_LOADED); status_color = UI_SUCCESS;
@@ -70,14 +86,16 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     } else if (model->hot_reload_status == PTC_UI_HOT_RELOAD_UNAVAILABLE) {
         status = ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_CANNOT_BE_LOADED_YET); status_color = UI_WARNING;
     }
-    draw_text(pixels, stride, details.x + 24, details.y + 126, ptc_ui_text(PTC_UI_T_LOADING_STATUS), 18, UI_MUTED);
-    draw_text(pixels, stride, details.x + 180, details.y + 126, status, 20, status_color);
-    draw_wrapped_text(pixels, stride, details.x + 180, details.y + 154,
-        model->hot_reload_detail, 15, details.width - 210, 20, 2, UI_MUTED);
-    draw_text(pixels, stride, details.x + 24, details.y + 216, ptc_ui_text(PTC_UI_T_PROJECT_WAREHOUSE), 18, UI_MUTED);
-    draw_text(pixels, stride, details.x + 180, details.y + 216, model->repository_url, 17, UI_ACCENT);
-    draw_text(pixels, stride, details.x + 24, details.y + 266, ptc_ui_text(PTC_UI_T_PARENT_PAGE), 18, UI_MUTED);
-    draw_text(pixels, stride, details.x + 180, details.y + 266, model->pwa_url, 17, UI_SUCCESS);
+    draw_text(pixels, stride, details.x + 24, details.y + 126, lbl_status, 18, UI_MUTED);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 126, status, 20, status_color);
+    draw_wrapped_text(pixels, stride, details.x + val_offset, details.y + 154,
+        model->hot_reload_detail, 15, val_max_w, 20, 2, UI_MUTED);
+    draw_text(pixels, stride, details.x + 24, details.y + 216, lbl_repo, 18, UI_MUTED);
+    fit_text(value, sizeof(value), model->repository_url, 17, val_max_w);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 216, value, 17, UI_ACCENT);
+    draw_text(pixels, stride, details.x + 24, details.y + 266, lbl_parent, 18, UI_MUTED);
+    fit_text(value, sizeof(value), model->pwa_url, 17, val_max_w);
+    draw_text(pixels, stride, details.x + val_offset, details.y + 266, value, 17, UI_SUCCESS);
     if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING) {
         draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_NOT_YET),
                            UI_RAISED, UI_INK, false);
@@ -96,9 +114,12 @@ static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const 
                         model->album_restriction_state == 1 ? ptc_ui_text(PTC_UI_T_ENABLED) :
                         model->album_restriction_state == 2 ? ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_2) :
                         model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL ? ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURED) : ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
+    const char *status_lbl = ptc_ui_text(PTC_UI_T_CURRENT_STATUS);
+    int status_lbl_w = measure_text(status_lbl, 17);
+    int state_x = dialog.x + 38 + status_lbl_w + 12;
     draw_dialog_shell(pixels, stride, model, &dialog, 980, 560);
-    draw_text(pixels, stride, dialog.x + 38, dialog.y + 126, ptc_ui_text(PTC_UI_T_CURRENT_STATUS), 17, UI_MUTED);
-    draw_text(pixels, stride, dialog.x + 136, dialog.y + 126, state, 19,
+    draw_text(pixels, stride, dialog.x + 38, dialog.y + 126, status_lbl, 17, UI_MUTED);
+    draw_text(pixels, stride, state_x, dialog.y + 126, state, 19,
               model->album_restriction_state == 1 ? UI_SUCCESS :
               model->album_restriction_state == 2 ? UI_WARNING :
               model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL ? UI_ACCENT : UI_MUTED);
@@ -113,18 +134,19 @@ static void draw_album_manager_overlay(uint32_t *pixels, uint32_t stride, const 
         fill_round_rect(pixels, stride, card, 16, enabled && selected ? UI_ACCENT_SOFT :
                         (enabled ? UI_SURFACE : UI_PAGE));
         draw_rect_outline(pixels, stride, card, 16, enabled && selected ? 3 : 1, enabled && selected ? UI_ACCENT : UI_BORDER);
-        draw_text(pixels, stride, card.x + 24, card.y + 42,
-                  index == 0 ? (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL
-                                  ? ptc_ui_text(PTC_UI_T_NO_NEED_TO_REPEAT_CONFIGURATION) : ptc_ui_text(PTC_UI_T_CONFIGURE_ADVANCED_ENTRY_OF_HOMEBREW_MENU)) :
-                  (model->album_restriction_state == 2 && model->album_backup_valid ? ptc_ui_text(PTC_UI_T_FORCE_RECOVERY_OF_TRUSTED_BACKUPS) : ptc_ui_text(PTC_UI_T_RESTORE_THE_ORIGINAL_STARTUP_MODE)),
-                  21, enabled ? UI_INK : UI_DISABLED);
-        draw_wrapped_text(pixels, stride, card.x + 24, card.y + 84,
-                          index == 0
-                            ? (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL
-                                ? ptc_ui_text(PTC_UI_T_THE_CURRENT_DISK_CONFIGURATION_ALREADY_PROVIDES_THE)
-                                : ptc_ui_text(PTC_UI_T_FIRST_MAKE_A_COMPLETE_BACKUP_OF_RELEVANT))
-                            : ptc_ui_text(PTC_UI_T_RESTORE_THE_ORIGINAL_CONFIGURATION_ACCORDING_TO_THE),
-                          16, card.width - 48, 25, 5, enabled ? UI_MUTED : UI_DISABLED);
+        const char *card_title = index == 0 ? (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL
+                                                ? ptc_ui_text(PTC_UI_T_NO_NEED_TO_REPEAT_CONFIGURATION) : ptc_ui_text(PTC_UI_T_CONFIGURE_ADVANCED_ENTRY_OF_HOMEBREW_MENU)) :
+                                (model->album_restriction_state == 2 && model->album_backup_valid ? ptc_ui_text(PTC_UI_T_FORCE_RECOVERY_OF_TRUSTED_BACKUPS) : ptc_ui_text(PTC_UI_T_RESTORE_THE_ORIGINAL_STARTUP_MODE));
+        int title_size = 21;
+        while (title_size > 16 && measure_text(card_title, title_size) > card.width - 48) --title_size;
+        draw_text(pixels, stride, card.x + 24, card.y + 40, card_title, title_size, enabled ? UI_INK : UI_DISABLED);
+        const char *card_desc = index == 0
+            ? (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL
+                ? ptc_ui_text(PTC_UI_T_THE_CURRENT_DISK_CONFIGURATION_ALREADY_PROVIDES_THE)
+                : ptc_ui_text(PTC_UI_T_FIRST_MAKE_A_COMPLETE_BACKUP_OF_RELEVANT))
+            : ptc_ui_text(PTC_UI_T_RESTORE_THE_ORIGINAL_CONFIGURATION_ACCORDING_TO_THE);
+        draw_wrapped_text(pixels, stride, card.x + 24, card.y + 76, card_desc,
+                          14, card.width - 48, 20, 3, enabled ? UI_MUTED : UI_DISABLED);
         draw_text(pixels, stride, card.x + 24, card.y + 194,
                   enabled ? ptc_ui_text(PTC_UI_T_A_CONTINUE) : ptc_ui_text(PTC_UI_T_CURRENT_STATUS_IS_NOT_AVAILABLE), 16,
                   enabled ? UI_ACCENT : UI_DISABLED);
@@ -174,10 +196,15 @@ static void draw_language_overlay(uint32_t *pixels, uint32_t stride, const PtcUi
         fill_round_rect(pixels, stride, option, 12, selected ? UI_ACCENT_SOFT : UI_RAISED);
         draw_rect_outline(pixels, stride, option, 12, selected ? 3 : 1,
             selected ? UI_ACCENT : UI_CONTROL);
+        int label_size = 20;
+        while (label_size > 14 && measure_text(LABELS[index], label_size) > option.width - 16) --label_size;
         draw_text_center(pixels, stride,
-            (UiRect){option.x, option.y + 12, option.width, 30}, LABELS[index], 20, UI_INK);
+            (UiRect){option.x, option.y + 12, option.width, 30}, LABELS[index], label_size, UI_INK);
+
+        int detail_size = 14;
+        while (detail_size > 11 && measure_text(DETAILS[index], detail_size) > option.width - 16) --detail_size;
         draw_text_center(pixels, stride,
-            (UiRect){option.x, option.y + 44, option.width, 24}, DETAILS[index], 14, UI_MUTED);
+            (UiRect){option.x, option.y + 44, option.width, 24}, DETAILS[index], detail_size, UI_MUTED);
     }
     draw_text(pixels, stride, dialog.x + 40, dialog.y + 306,
         ptc_ui_text(PTC_UI_T_D_PAD_SELECT_A_APPLY_SAVE_B), 16, UI_MUTED);

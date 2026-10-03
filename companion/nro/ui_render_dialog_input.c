@@ -491,14 +491,21 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             if (model->duration_field == PTC_UI_DURATION_HOURS)
                 snprintf(step_hint, sizeof(step_hint), clock ? ptc_ui_text(PTC_UI_T_1_POINT_PER_STEP) : ptc_ui_text(PTC_UI_T_1_HOUR_PER_STEP));
             else snprintf(step_hint, sizeof(step_hint), clock ? ptc_ui_text(PTC_UI_T_CURRENT_U_MIN) : ptc_ui_text(PTC_UI_T_CURRENT_U), (unsigned)model->duration_step_feedback);
-            draw_r_stick_axis_glyph(pixels, stride, dialog.x + 36, dialog.y + 132, 18,
-                                    false, 0);
-            draw_text(pixels, stride, dialog.x + 60, dialog.y + 146, ptc_ui_text(PTC_UI_T_LEFT_AND_RIGHT_SELECT_COLUMN), 13, UI_MUTED);
-            draw_text(pixels, stride, dialog.x + 128, dialog.y + 146, "|", 13, UI_CONTROL);
-            draw_r_stick_axis_glyph(pixels, stride, dialog.x + 142, dialog.y + 132, 18,
-                                    true, model->duration_scroll_dir);
-            draw_text(pixels, stride, dialog.x + 166, dialog.y + 146, ptc_ui_text(PTC_UI_T_UP_AND_DOWN_ADJUSTMENT), 13, UI_MUTED);
-            draw_text(pixels, stride, dialog.x + 236, dialog.y + 146, step_hint, 13, UI_ACCENT);
+
+            const char *col_txt = ptc_ui_text(PTC_UI_T_LEFT_AND_RIGHT_SELECT_COLUMN);
+            const char *adj_txt = ptc_ui_text(PTC_UI_T_UP_AND_DOWN_ADJUSTMENT);
+            int cur_x = dialog.x + 36;
+            draw_r_stick_axis_glyph(pixels, stride, cur_x, dialog.y + 132, 18, false, 0);
+            cur_x += 22;
+            draw_text(pixels, stride, cur_x, dialog.y + 146, col_txt, 13, UI_MUTED);
+            cur_x += measure_text(col_txt, 13) + 8;
+            draw_text(pixels, stride, cur_x, dialog.y + 146, "|", 13, UI_CONTROL);
+            cur_x += measure_text("|", 13) + 8;
+            draw_r_stick_axis_glyph(pixels, stride, cur_x, dialog.y + 132, 18, true, model->duration_scroll_dir);
+            cur_x += 22;
+            draw_text(pixels, stride, cur_x, dialog.y + 146, adj_txt, 13, UI_MUTED);
+            cur_x += measure_text(adj_txt, 13) + 6;
+            draw_text(pixels, stride, cur_x, dialog.y + 146, step_hint, 13, UI_ACCENT);
         }
 
         for (int field = 0; field < 2; ++field) {
@@ -538,9 +545,11 @@ void draw_minute_editor_overlay(uint32_t *pixels, uint32_t stride, const PtcUiMo
             draw_text_center(pixels, stride, key, KEY_LABELS[index], index == 9 || index == 11 ? 15 : 24,
                              selected ? UI_ACCENT : UI_INK);
         }
+        const char *hint_text = model->numpad_error[0] ? model->numpad_error : ptc_ui_text(PTC_UI_T_USE_THE_DIRECTION_KEYS_AND_A_TO);
+        int hint_size = 14;
+        while (hint_size > 11 && measure_text(hint_text, hint_size) > 338) --hint_size;
         draw_text_center(pixels, stride, (UiRect){dialog.x + 36, dialog.y + 492, 338, 22},
-                         model->numpad_error[0] ? model->numpad_error : ptc_ui_text(PTC_UI_T_USE_THE_DIRECTION_KEYS_AND_A_TO),
-                         14, model->numpad_error[0] ? UI_DANGER : UI_MUTED);
+                         hint_text, hint_size, model->numpad_error[0] ? UI_DANGER : UI_MUTED);
     }
 
     UiRect summary = to_uirect(ptc_ui_minute_editor_summary_rect());

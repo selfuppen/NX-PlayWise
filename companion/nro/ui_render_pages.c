@@ -313,9 +313,12 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
                       latest, 14, event_index + 6 == model->selected_index ? UI_ACCENT : UI_MUTED);
         }
     } else {
-        draw_text(pixels, stride, panel.x + 26, panel.y + 288,
-                  model->recent_events_available ? ptc_ui_text(PTC_UI_T_THERE_ARE_NO_RECENT_EVENTS_REQUIRING_ATTENTION) : ptc_ui_text(PTC_UI_T_TEMPORARILY_UNABLE_TO_READ_RECENT_EVENTS_PLEASE),
-                  15, model->recent_events_available ? UI_MUTED : UI_DANGER);
+        const char *no_events_msg = model->recent_events_available
+            ? ptc_ui_text(PTC_UI_T_THERE_ARE_NO_RECENT_EVENTS_REQUIRING_ATTENTION)
+            : ptc_ui_text(PTC_UI_T_TEMPORARILY_UNABLE_TO_READ_RECENT_EVENTS_PLEASE);
+        draw_wrapped_text(pixels, stride, panel.x + 26, panel.y + 288,
+                          no_events_msg, 14, panel.width - 52, 20, 2,
+                          model->recent_events_available ? UI_MUTED : UI_DANGER);
     }
 }
 
@@ -484,7 +487,11 @@ static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     fill_round_rect(pixels, stride, panel, 16, UI_RGB(UI_BLENDED(surface)));
     draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
     draw_text(pixels, stride, 868, 222, ptc_ui_text(PTC_UI_T_GRANT_CODE_GUIDE), 24, UI_RGB(UI_BLENDED(text_primary)));
-    draw_text(pixels, stride, 868, 258, ptc_ui_text(PTC_UI_T_NO_HOST_NETWORKING_REQUIRED_OFFLINE_SECURE_SIGNATURE), 15, UI_MUTED);
+    char fitted_grant_sub[128];
+    fit_text(fitted_grant_sub, sizeof(fitted_grant_sub),
+             ptc_ui_text(PTC_UI_T_NO_HOST_NETWORKING_REQUIRED_OFFLINE_SECURE_SIGNATURE),
+             14, panel.width - 52);
+    draw_text(pixels, stride, 868, 258, fitted_grant_sub, 14, UI_MUTED);
 
     /* 3 个步骤卡片 */
     const char *STEP_TITLES[] = {ptc_ui_text(PTC_UI_T_1_SELECT_EXTRA_TIME), ptc_ui_text(PTC_UI_T_2_VERIFY_PIN_GENERATE), ptc_ui_text(PTC_UI_T_3_CHILD_ENTERS_8_DIGIT_CODE)};
@@ -494,7 +501,9 @@ static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         fill_round_rect(pixels, stride, step_box, 10, UI_RAISED);
         draw_rect_outline(pixels, stride, step_box, 10, 1, UI_BORDER);
         draw_text(pixels, stride, step_box.x + 14, step_box.y + 24, STEP_TITLES[s], 17, UI_RGB(UI_BLENDED(text_primary)));
-        draw_text(pixels, stride, step_box.x + 14, step_box.y + 48, STEP_HINTS[s], 13, UI_MUTED);
+        char fitted_hint[128];
+        fit_text(fitted_hint, sizeof(fitted_hint), STEP_HINTS[s], 13, step_box.width - 28);
+        draw_text(pixels, stride, step_box.x + 14, step_box.y + 48, fitted_hint, 13, UI_MUTED);
     }
     draw_wrapped_text(pixels, stride, 868, 524, ptc_ui_text(PTC_UI_T_NOTE_THE_EXTRA_TIME_CODE_IS_ONLY), 14, 332, 20, 3, UI_RGB(UI_BLENDED(text_secondary)));
 }
@@ -595,9 +604,16 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             draw_rect_outline(pixels, stride, grant_banner, 16, 1, UI_BORDER);
             fill_round_rect(pixels, stride, (UiRect){grant_banner.x + 16, grant_banner.y + 18, 4, grant_banner.height - 36}, 2, UI_ACCENT);
             draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 36, ptc_ui_text(PTC_UI_T_OFFLINE_GRANT_CODE_USAGE_GUIDE), 18, UI_INK);
-            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 68, ptc_ui_text(PTC_UI_T_PARENTS_CAN_DIRECTLY_SELECT_THE_SHORTCUT_TIME), 15, UI_RGB(UI_BLENDED(text_secondary)));
-            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 96, ptc_ui_text(PTC_UI_T_AFTER_REDEMPTION_IT_WILL_AUTOMATICALLY_BE_INCLUDED), 15, UI_RGB(UI_BLENDED(text_secondary)));
-            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 124, ptc_ui_text(PTC_UI_T_THE_EXTRA_TIME_CODE_INCLUDES_ANTI_REPLAY), 14, UI_MUTED);
+            char fitted_grant[256];
+            fit_text(fitted_grant, sizeof(fitted_grant),
+                     ptc_ui_text(PTC_UI_T_PARENTS_CAN_DIRECTLY_SELECT_THE_SHORTCUT_TIME), 14, grant_banner.width - 48);
+            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 68, fitted_grant, 14, UI_RGB(UI_BLENDED(text_secondary)));
+            fit_text(fitted_grant, sizeof(fitted_grant),
+                     ptc_ui_text(PTC_UI_T_AFTER_REDEMPTION_IT_WILL_AUTOMATICALLY_BE_INCLUDED), 14, grant_banner.width - 48);
+            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 96, fitted_grant, 14, UI_RGB(UI_BLENDED(text_secondary)));
+            fit_text(fitted_grant, sizeof(fitted_grant),
+                     ptc_ui_text(PTC_UI_T_THE_EXTRA_TIME_CODE_INCLUDES_ANTI_REPLAY), 14, grant_banner.width - 48);
+            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 124, fitted_grant, 14, UI_MUTED);
         }
         for (index = 0; index < action_count; ++index) {
             UiRect card = to_uirect(model->parent_page == PTC_UI_PARENT_SUPPORT
@@ -954,12 +970,18 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 
         /* Descriptions */
         int desc_y = help.y + 128;
-        draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc1, 14,
-                          help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary)));
-        draw_wrapped_text(pixels, stride, help.x + 24, desc_y + 36, desc2, 14,
-                          help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary)));
-        draw_wrapped_text(pixels, stride, help.x + 24, desc_y + 72, desc3, 14,
-                          help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary)));
+        if (desc1 && *desc1) {
+            desc_y = draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc1, 14,
+                                      help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary))) + 6;
+        }
+        if (desc2 && *desc2) {
+            desc_y = draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc2, 14,
+                                      help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary))) + 6;
+        }
+        if (desc3 && *desc3) {
+            draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc3, 14,
+                              help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary)));
+        }
 
         /* Action Hint Box */
         UiRect hint_box = {help.x + 24, help.y + 268, help.width - 48, 44};

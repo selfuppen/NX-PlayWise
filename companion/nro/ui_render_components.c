@@ -148,11 +148,15 @@ void draw_quota_metric_card(
         const char *l = ptc_ui_localize(label ? label : "", loc_label, sizeof(loc_label));
         const char *b = ptc_ui_localize(source_badge, loc_badge, sizeof(loc_badge));
         snprintf(title_line, sizeof(title_line), "%s (%s)", l, b);
+        int title_size = 14;
+        while (title_size > 11 && measure_text(title_line, title_size) > rect.width - 16) --title_size;
         draw_text_center(pixels, stride, (UiRect){rect.x + 8, top_y, rect.width - 16, 20},
-                         title_line, 14, UI_MUTED);
+                         title_line, title_size, UI_MUTED);
     } else {
+        int title_size = 15;
+        while (title_size > 11 && measure_text(label, title_size) > rect.width - 16) --title_size;
         draw_text_center(pixels, stride, (UiRect){rect.x + 8, top_y, rect.width - 16, 20},
-                         label, 15, UI_MUTED);
+                         label, title_size, UI_MUTED);
     }
 
     int mid_y = rect.y + 32;

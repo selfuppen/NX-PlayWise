@@ -137,26 +137,26 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         state_color = UI_DANGER; state_background = UI_DANGER_SOFT;
     }
 
-    UiRect conclusion = {panel.x + 20, panel.y + 222, panel.width - 40, 58};
+    UiRect conclusion = {panel.x + 20, panel.y + 216, panel.width - 40, 58};
     if (state_message) {
         fill_round_rect(pixels, stride, conclusion, 10, state_background);
-        draw_wrapped_text(pixels, stride, conclusion.x + 12, conclusion.y + 24, state_message,
-                          13, conclusion.width - 24, 18, 2, state_color);
+        draw_wrapped_text(pixels, stride, conclusion.x + 12, conclusion.y + 22, state_message,
+                          12, conclusion.width - 24, 16, 2, state_color);
     } else if (projection.state == PTC_UI_PLAN_IMPACT_CURRENT) {
-        draw_text(pixels, stride, conclusion.x, conclusion.y + 16, ptc_ui_text(PTC_UI_T_CURRENT_STATUS_2), 13, UI_MUTED);
-        draw_text(pixels, stride, conclusion.x, conclusion.y + 39,
-                  ptc_ui_text(PTC_UI_T_PLAN_IS_SAVED_NO_PENDING_QUOTA_DRAFTS), 13, UI_RGB(UI_BLENDED(text_secondary)));
+        draw_text(pixels, stride, conclusion.x, conclusion.y + 14, ptc_ui_text(PTC_UI_T_CURRENT_STATUS_2), 12, UI_MUTED);
+        draw_text(pixels, stride, conclusion.x, conclusion.y + 34,
+                  ptc_ui_text(PTC_UI_T_PLAN_IS_SAVED_NO_PENDING_QUOTA_DRAFTS), 12, UI_RGB(UI_BLENDED(text_secondary)));
     } else if (projection.state != PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE) {
-        draw_text(pixels, stride, conclusion.x, conclusion.y + 16, ptc_ui_text(PTC_UI_T_TODAY_AFTER_SAVE), 13, UI_MUTED);
+        draw_text(pixels, stride, conclusion.x, conclusion.y + 14, ptc_ui_text(PTC_UI_T_TODAY_AFTER_SAVE), 12, UI_MUTED);
         ptc_ui_format_plan_impact(model, kind, ptc_ui_render_now(), impact, sizeof(impact));
-        draw_wrapped_text(pixels, stride, conclusion.x, conclusion.y + 39, impact,
-                          13, conclusion.width, 18, 2, UI_RGB(UI_BLENDED(text_secondary)));
+        draw_wrapped_text(pixels, stride, conclusion.x, conclusion.y + 34, impact,
+                          12, conclusion.width, 16, 2, UI_RGB(UI_BLENDED(text_secondary)));
     }
 
     ptc_ui_format_bedtime_quota_notice(model, ptc_ui_render_now(), bedtime_notice, sizeof(bedtime_notice));
     format_status_age(model, age, sizeof(age));
-    draw_text(pixels, stride, panel.x + 20, panel.y + panel.height - 20,
-              bedtime_notice[0] ? bedtime_notice : age, 13,
+    draw_text(pixels, stride, panel.x + 20, panel.y + panel.height - 14,
+              bedtime_notice[0] ? bedtime_notice : age, 12,
               bedtime_notice[0] ? UI_DANGER : status_age_color(model));
 }
 
