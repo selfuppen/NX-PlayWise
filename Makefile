@@ -36,6 +36,7 @@ PLATFORM_HOST_SRCS := \
 	platform/switch/play_timer_settings_layout.c
 
 ORCH_SRCS := \
+    companion/ui_language.c \
 	companion/album_restriction.c \
 	companion/hot_reload_guard.c \
 	sysmodule/sysmodule_storage.c \
@@ -140,7 +141,7 @@ companion-overlay: manifest
 eden-test-nro: eden-test-manifest
 	$(STAGE_TIMER) eden-test nro -- $(MAKE) -C companion/nro TARGET=pctc-eden BUILD=build-eden APP_TITLE="PlayWise Eden Test" APP_AUTHOR="PlayWise internal" MANIFEST_INCLUDE=../../build/eden-test/generated DEFINES=-DPLAYWISE_EDEN EDEN_BUILD=1
 	mkdir -p build/eden-test
-	cp companion/nro/pctc-eden.nro build/eden-test/pctc-eden.nro
+	rm -f build/eden-test/pctc-eden.nro && cp companion/nro/pctc-eden.nro build/eden-test/pctc-eden.nro
 
 sysmodule-nsp: manifest
 	$(STAGE_TIMER) playwise sysmodule -- sh -c '$(MAKE) -C sysmodule && mkdir -p build/switch && cp sysmodule/pctc-sysmodule.nsp build/switch/exefs.nsp && $(DEVKITA64)/bin/aarch64-none-elf-objcopy -O binary sysmodule/pctc-sysmodule.elf build/switch/pctc-sysmodule.bin'

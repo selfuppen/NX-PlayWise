@@ -70,20 +70,20 @@ void ptc_ui_format_today_limit_confirmation(
     if (risk && risk_size > 0) {
         if (!model || !model->played_minutes_available || model->played_minutes < 0) {
             snprintf(risk, risk_size,
-                     "风险：无法取得额度消耗估算，设置后可能立即进入时间限制");
+                     ptc_ui_text(PTC_UI_T_RISK_UNABLE_TO_OBTAIN_QUOTA_CONSUMPTION_ESTIMATE));
         } else if (ptc_ui_limit_minutes_would_restrict(model, model->draft_minutes)) {
             snprintf(risk, risk_size,
-                     "风险：新额度不高于额度消耗估算，设置后会立即进入时间限制");
+                     ptc_ui_text(PTC_UI_T_RISK_THE_NEW_QUOTA_IS_NOT_HIGHER));
         } else if (model->unrestricted_today == 1) {
             snprintf(risk, risk_size,
-                     "提示：今天将从不限时改为限时，请确认修改后剩余时间");
+                     ptc_ui_text(PTC_UI_T_TIP_TODAY_WILL_BE_CHANGED_FROM_NO));
         } else {
-            snprintf(risk, risk_size, "提示：请确认今天的实时状态和修改结果");
+            snprintf(risk, risk_size, ptc_ui_text(PTC_UI_T_TIP_PLEASE_CONFIRM_TODAY_S_REAL_TIME));
         }
     }
     if (recovery && recovery_size > 0) {
         snprintf(recovery, recovery_size,
-                 "解除：选择“今日不限时”“临时加时”，或兑换加时码");
+                 ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK_2));
     }
 }
 
@@ -155,11 +155,11 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
     } else if (model->overlay == PTC_UI_OVERLAY_CREDENTIAL_LEAVE) {
         model->overlay = PTC_UI_OVERLAY_CREDENTIAL;
         snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
-                 model->credential_kind == 1 ? "管理加时码设备名" : "管理加时码密钥");
+                 model->credential_kind == 1 ? ptc_ui_text(PTC_UI_T_MANAGES_THE_TIME_CODE_DEVICE_NAME) : ptc_ui_text(PTC_UI_T_MANAGE_GRANT_CODE_KEYS));
         snprintf(model->overlay_body, sizeof(model->overlay_body), "%s",
                  model->credential_kind == 1
-                    ? "当前值只读；可手工输入或随机生成新设备名。"
-                    : "当前密钥默认遮挡；建议使用随机生成的 64 位十六进制密钥。");
+                    ? ptc_ui_text(PTC_UI_T_THE_CURRENT_VALUE_IS_READ_ONLY_A)
+                    : ptc_ui_text(PTC_UI_T_THE_CURRENT_KEY_IS_BLOCKED_BY_DEFAULT));
     } else {
         model->overlay = PTC_UI_OVERLAY_NONE;
         model->confirm_return_overlay = PTC_UI_OVERLAY_NONE;
@@ -203,12 +203,12 @@ void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const cha
         command_copy,
         sizeof(command_copy),
         "%s",
-        command_name && command_name[0] ? command_name : "未开始");
+        command_name && command_name[0] ? command_name : ptc_ui_text(PTC_UI_T_NOT_STARTED));
     snprintf(
         transport_copy,
         sizeof(transport_copy),
         "%s",
-        transport_label && transport_label[0] ? transport_label : "传输：未开始");
+        transport_label && transport_label[0] ? transport_label : ptc_ui_text(PTC_UI_T_TRANSFER_NOT_STARTED));
     snprintf(
         model->command_name,
         sizeof(model->command_name),
@@ -223,16 +223,16 @@ void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const cha
 
 const char *ptc_ui_support_problem(const PtcUiModel *model)
 {
-    if (model->waiting || model->apply_pending_confirmation) return "正在确认当前操作";
-    if (model->recovery_active) return "有未完成的恢复，需要处理";
-    if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model)) return "系统环境已变化，需要重新检测";
+    if (model->waiting || model->apply_pending_confirmation) return ptc_ui_text(PTC_UI_T_CONFIRMING_CURRENT_OPERATION);
+    if (model->recovery_active) return ptc_ui_text(PTC_UI_T_THERE_ARE_UNFINISHED_RESTORES_THAT_NEED_TO);
+    if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model)) return ptc_ui_text(PTC_UI_T_THE_SYSTEM_ENVIRONMENT_HAS_CHANGED_AND_NEEDS);
     if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0)
-        return "安全检查未通过，控制需要修复";
-    if (model->disable_flag_present) return "控制已停用";
-    if (!model->status_loaded) return "状态尚未读取";
-    if (model->error_code) return "最近一次操作未完成";
-    if (strcmp(model->setup_phase, "active") != 0) return "首次设置尚未完成";
-    return "当前没有待处理的问题";
+        return ptc_ui_text(PTC_UI_T_SECURITY_CHECK_FAILED_CONTROL_NEEDS_TO_BE);
+    if (model->disable_flag_present) return ptc_ui_text(PTC_UI_T_CONTROL_IS_DISABLED);
+    if (!model->status_loaded) return ptc_ui_text(PTC_UI_T_STATUS_HAS_NOT_BEEN_READ_YET);
+    if (model->error_code) return ptc_ui_text(PTC_UI_T_THE_LAST_OPERATION_WAS_NOT_COMPLETED);
+    if (strcmp(model->setup_phase, "active") != 0) return ptc_ui_text(PTC_UI_T_FIRST_TIME_SETUP_NOT_COMPLETED_YET);
+    return ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_PENDING_ISSUES);
 }
 
 int ptc_ui_support_recommended_action(const PtcUiModel *model)
@@ -289,21 +289,21 @@ const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index)
     }
     switch (index) {
     case 0:
-        return strcmp(model->setup_phase, "active") == 0 ? "额度管理已启用。" : "检查通过后保存安装前设置，再启用额度管理。";
+        return strcmp(model->setup_phase, "active") == 0 ? ptc_ui_text(PTC_UI_T_QUOTA_MANAGEMENT_IS_ENABLED) : ptc_ui_text(PTC_UI_T_AFTER_PASSING_THE_CHECK_SAVE_THE_PRE);
     case 1:
         return strcmp(model->setup_phase, "active") == 0
-            ? "当前运行正常，无需执行修复。"
-            : "重新检查系统兼容性、安装前设置和恢复条件。";
+            ? ptc_ui_text(PTC_UI_T_IS_CURRENTLY_FUNCTIONING_NORMALLY_AND_NO_REPAIR)
+            : ptc_ui_text(PTC_UI_T_RECHECK_SYSTEM_COMPATIBILITY_PRE_INSTALLATION_SETUP_AND);
     case 2:
         return model->disable_flag_present
-            ? "解除停用后才允许新的控制写入；状态和恢复始终可用。"
-            : "只停止新的控制写入；状态、诊断和恢复仍可使用。";
+            ? ptc_ui_text(PTC_UI_T_NEW_CONTROL_WRITES_ARE_NOT_ALLOWED_UNTIL)
+            : ptc_ui_text(PTC_UI_T_MESSAGE_5);
     case 3:
-        return model->setup_snapshot_available ? "恢复安装前设置。" : "没有可恢复的安装前设置。";
+        return model->setup_snapshot_available ? ptc_ui_text(PTC_UI_T_RESTORE_PRE_INSTALLATION_SETTINGS) : ptc_ui_text(PTC_UI_T_THERE_ARE_NO_RESTOREABLE_PRE_INSTALLATION_SETTINGS);
     case 4:
-        return "导出时自动排除 secret、PIN、离线码和完整 nonce。";
+        return ptc_ui_text(PTC_UI_T_AUTOMATICALLY_EXCLUDE_SECRETS_PINS_OFFLINE_CODES_AND);
     case 5:
-        return "查看 PlayWise 版本、项目仓库和家长网页地址。";
+        return ptc_ui_text(PTC_UI_T_VIEW_THE_PLAYWISE_VERSION_PROJECT_REPOSITORY_AND);
     default:
         return "";
     }

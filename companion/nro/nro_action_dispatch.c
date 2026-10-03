@@ -2,14 +2,14 @@
 
 static void format_today_label(uint16_t day_index, char *out, size_t out_size)
 {
-    static const char *WEEKDAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    const char *WEEKDAYS[] = {ptc_ui_text(PTC_UI_T_SUNDAY), ptc_ui_text(PTC_UI_T_MONDAY), ptc_ui_text(PTC_UI_T_TUESDAY), ptc_ui_text(PTC_UI_T_WEDNESDAY), ptc_ui_text(PTC_UI_T_THURSDAY), ptc_ui_text(PTC_UI_T_FRIDAY), ptc_ui_text(PTC_UI_T_SATURDAY)};
     uint16_t year;
     uint8_t month;
     uint8_t day;
     if (ptc_date_from_day_index(day_index, &year, &month, &day)) {
-        snprintf(out, out_size, "%u 月 %u 日（%s，今天）", month, day, WEEKDAYS[ptc_weekday_from_day_index(day_index)]);
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_U_U_S_TODAY), month, day, WEEKDAYS[ptc_weekday_from_day_index(day_index)]);
     } else {
-        snprintf(out, out_size, "今天");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_6));
     }
 }
 
@@ -47,23 +47,23 @@ void request_clear_bedtime_skip(UiState *ui)
     if (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
         !ptc_ui_bedtime_skip_matches_policy(&ui->model, &ui->model.bedtime_policy)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            "没有可恢复的本次就寝跳过；请刷新状态后重试。");
+            ptc_ui_text(PTC_UI_T_THERE_IS_NO_RECOVERABLE_SKIP_FOR_THIS));
         return;
     }
     current = ui->model.bedtime_active && ui->model.bedtime_skipped &&
         ui->model.bedtime_window_instance_id == ui->model.bedtime_skipped_window_instance_id;
     ui->model.pending_bedtime_skip_instance_id = ui->model.bedtime_skipped_window_instance_id;
     ui->auth_retry_action = AUTH_RETRY_CLEAR_BEDTIME_SKIP;
-    if (!verify_sensitive_pin(ui, "恢复本次就寝限制前，请再次输入本应用 PIN")) return;
+    if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THIS_APPLICATION_PIN_AGAIN_BEFORE))) return;
     snprintf(body, sizeof(body),
-        current ? "当前仍在已跳过的就寝窗口内。恢复后会立即限制使用并暂停游戏。" :
-                  "将清除这一次就寝跳过；到达该窗口时按原计划限制使用。");
+        current ? ptc_ui_text(PTC_UI_T_IS_STILL_WITHIN_THE_SKIPPED_BEDTIME_WINDOW) :
+                  ptc_ui_text(PTC_UI_T_WILL_CLEAR_THIS_BEDTIME_SKIP_LIMIT_USAGE));
     if (current)
         open_danger_confirm_overlay(ui, PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP,
-            "立即恢复本次就寝限制？", body);
+            ptc_ui_text(PTC_UI_T_RESTORE_THIS_BEDTIME_RESTRICTION_NOW), body);
     else
         open_confirm_overlay(ui, PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP,
-            "恢复本次就寝限制？", body);
+            ptc_ui_text(PTC_UI_T_RESTORE_BEDTIME_LIMIT), body);
 }
 
 
@@ -81,22 +81,22 @@ void handle_today_action_ready(UiState *ui, int index)
         return;
     }
     format_today_label(ui->model.day_index, date, sizeof(date));
-    if (ui->model.played_minutes_available) snprintf(played, sizeof(played), "约 %d 分钟", ui->model.played_minutes);
-    else snprintf(played, sizeof(played), "暂不可用");
-    if (ui->model.unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "不限时");
-    else if (ui->model.remaining_available) snprintf(remaining, sizeof(remaining), "%d 分钟", ui->model.remaining_minutes);
-    else snprintf(remaining, sizeof(remaining), "暂不可用");
+    if (ui->model.played_minutes_available) snprintf(played, sizeof(played), ptc_ui_text(PTC_UI_T_ABOUT_D_MIN), ui->model.played_minutes);
+    else snprintf(played, sizeof(played), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+    if (ui->model.unrestricted_today == 1) snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+    else if (ui->model.remaining_available) snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_D_MIN), ui->model.remaining_minutes);
+    else snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
     switch (index) {
     case PTC_UI_OPERATION_SET_TODAY_LIMIT:
         ui->model.today_limit_unlimited_draft = ui->model.unrestricted_today == 1;
         ui->model.operation = PTC_UI_OPERATION_SET_TODAY_LIMIT;
         ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_NONE,
-            "设置今日总额度",
+            ptc_ui_text(PTC_UI_T_SET_TODAY_S_TOTAL_QUOTA),
             !ui->model.played_minutes_available || ui->model.played_minutes < 0
-                ? "全天总额度包含今日额度消耗；当前消耗估算未知，设置后可能立即限制。"
+                ? ptc_ui_text(PTC_UI_T_THE_TOTAL_QUOTA_FOR_THE_WHOLE_DAY)
                 : (ui->model.unrestricted_today == 1
-                    ? "全天总额度包含今日额度消耗；保存后今天将从不限时改为限时。"
-                    : "全天总额度包含今日额度消耗；右侧显示调整前后的可玩时间。"),
+                    ? ptc_ui_text(PTC_UI_T_THE_TOTAL_QUOTA_FOR_THE_WHOLE_DAY_2)
+                    : ptc_ui_text(PTC_UI_T_THE_TOTAL_QUOTA_FOR_THE_WHOLE_DAY_3)),
             4, 1, 1440, current_today_limit_value(ui));
         if (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) ||
             !ui->model.played_minutes_available || ui->model.played_minutes < 0 ||
@@ -106,21 +106,21 @@ void handle_today_action_ready(UiState *ui, int index)
     case PTC_UI_OPERATION_ADD_TODAY_MINUTES:
         if (ui->model.unrestricted_today == 1) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     "今天已不限时，无需加时；如需恢复限时，请使用“设置今日总额度”。");
+                     ptc_ui_text(PTC_UI_T_TODAY_IS_ALREADY_UNLIMITED_USE_SET_TODAY));
         } else {
             ui->model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
             ui->model.draft_minutes = 15;
             ui->model.overlay = PTC_UI_OVERLAY_QUICK_ADD;
             ui->model.overlay_selection = 0;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "快速加时");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_QUICK_GRANT));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                "选择常用时长或自定义；确认前不会修改今天的额度。");
+                ptc_ui_text(PTC_UI_T_SELECT_A_COMMONLY_USED_DURATION_OR_CUSTOMIZE));
         }
         break;
     case PTC_UI_OPERATION_DISABLE_TODAY_LIMIT:
-        snprintf(body, sizeof(body), "%s：额度已耗（估算）%s，今天还可玩 %s。\n设置后今天不限时；明天继续使用每周计划。",
+        snprintf(body, sizeof(body), ptc_ui_text(PTC_UI_T_S_ESTIMATED_USAGE_S_S_LEFT_TODAY),
                  date, played, remaining);
-        open_confirm_overlay(ui, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, "将今天设为不限时", body);
+        open_confirm_overlay(ui, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, ptc_ui_text(PTC_UI_T_MAKE_TODAY_UNLIMITED), body);
         break;
     case PTC_UI_OPERATION_RESTORE_TODAY_POLICY: {
         PtcEffectiveRule restored = ptc_ui_rule_after_today_restore(&ui->model);
@@ -132,9 +132,9 @@ void handle_today_action_ready(UiState *ui, int index)
              !ui->model.played_minutes_available || ui->model.played_minutes < 0 ||
              (int)restored.rule.minutes - ui->model.played_minutes <= 0);
         if (requires_hold)
-            open_danger_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, "清除今日额度调整", body);
+            open_danger_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, ptc_ui_text(PTC_UI_T_CLEAR_TODAY_S_QUOTA_ADJUSTMENT), body);
         else
-            open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, "清除今日额度调整", body);
+            open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_TODAY_POLICY, ptc_ui_text(PTC_UI_T_CLEAR_TODAY_S_QUOTA_ADJUSTMENT), body);
         break;
     }
     case PTC_UI_OPERATION_SKIP_BEDTIME: {
@@ -144,7 +144,7 @@ void handle_today_action_ready(UiState *ui, int index)
         if (ui->model.disable_flag_present || ui->waiting) break;
         if (!ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL))) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                "就寝状态仍待确认，请刷新后重试。");
+                ptc_ui_text(PTC_UI_T_THE_BEDTIME_STATUS_IS_STILL_TO_BE));
             break;
         }
         if (ui->model.bedtime_active) {
@@ -163,7 +163,7 @@ void handle_today_action_ready(UiState *ui, int index)
         if (instance_id == 0) {
             snprintf(ui->model.message, sizeof(ui->model.message),
                 ui->model.bedtime_skipped_window_available
-                    ? "最近一次就寝窗口已经跳过。" : "当前没有可跳过的就寝窗口。");
+                    ? ptc_ui_text(PTC_UI_T_THE_MOST_RECENT_BEDTIME_WINDOW_HAS_BEEN) : ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_SKIPPABLE_BEDTIME_WINDOWS));
             break;
         }
         ui->model.pending_bedtime_skip_instance_id = instance_id;
@@ -171,12 +171,12 @@ void handle_today_action_ready(UiState *ui, int index)
         ui->model.pending_bedtime_skip_start_minute = start_minute;
         ui->model.pending_bedtime_skip_end_minute = end_minute;
         ui->auth_retry_action = AUTH_RETRY_SKIP_BEDTIME;
-        if (!verify_sensitive_pin(ui, "跳过最近一次就寝窗口前，请再次输入本应用 PIN")) break;
+        if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_PLEASE_ENTER_YOUR_APP_PIN_AGAIN_BEFORE))) break;
         format_today_label(start_day, start_date, sizeof(start_date));
-        snprintf(body, sizeof(body), "%s %02u:%02u 到次日 %02u:%02u。\n只跳过这一次；后续就寝计划不变。",
+        snprintf(body, sizeof(body), ptc_ui_text(PTC_UI_T_S_02U_02U_TO_NEXT_DAY_02U),
             start_date, (unsigned int)(start_minute / 60), (unsigned int)(start_minute % 60),
             (unsigned int)(end_minute / 60), (unsigned int)(end_minute % 60));
-        open_confirm_overlay(ui, PTC_UI_OPERATION_SKIP_BEDTIME, "跳过这一次就寝时间？", body);
+        open_confirm_overlay(ui, PTC_UI_OPERATION_SKIP_BEDTIME, ptc_ui_text(PTC_UI_T_SKIP_BEDTIME_THIS_TIME), body);
         break;
     }
     default:
@@ -189,7 +189,7 @@ void handle_parent_action(UiState *ui)
     int index = ui->model.selected_index;
     if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "紧急停用已开启，此项控制写入不可用；请到支持与恢复解除停用。");
+                 ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_THIS_CONTROL_WRITE));
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_TODAY) {
@@ -203,7 +203,7 @@ void handle_parent_action(UiState *ui)
         if (index == 3 && ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) &&
             !ui->model.today_override_present) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     "今天没有可清除的额度调整；当前继续使用下级规则。");
+                     ptc_ui_text(PTC_UI_T_THERE_ARE_NO_CREDIT_ADJUSTMENTS_TO_CLEAR));
             return;
         }
         if (index == 0) {
@@ -213,17 +213,17 @@ void handle_parent_action(UiState *ui)
             /* A failed submit must not leave an action for a later auto-refresh. */
             ui->pending_today_action = ui->waiting ? (int)ptc_ui_today_operation(index) : -1;
             if (ui->waiting)
-                snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新额度消耗估算和今天还可玩...");
+                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_IS_REFRESHING_THE_CREDIT_CONSUMPTION_ESTIMATE_AND));
         } else if (index == 5) {
             if (ui->model.daily_buffer_minutes == 0) {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    "自主缓冲当前关闭；可到时间计划中设置。");
+                    ptc_ui_text(PTC_UI_T_AUTONOMOUS_BUFFERING_IS_CURRENTLY_CLOSED_IT_CAN));
             } else if (ui->model.daily_buffer_claimed) {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    "孩子今天已经领取自主缓冲，明天恢复资格。");
+                    ptc_ui_text(PTC_UI_T_THE_CHILD_HAS_RECEIVED_INDEPENDENT_BUFFER_TODAY));
             } else {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    "自主缓冲为只读状态；领取操作仍在孩子页。");
+                    ptc_ui_text(PTC_UI_T_THE_AUTONOMOUS_BUFFER_IS_READ_ONLY_THE));
             }
         }
         return;
@@ -241,9 +241,9 @@ void handle_parent_action(UiState *ui)
             }
             ui->model.overlay = PTC_UI_OVERLAY_SCHEDULED;
             ui->model.overlay_selection = 0;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "指定日期额度");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_SPECIFIED_DATE_QUOTA));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                "指定日期内替换每天的总额度，已用时间仍计入；不是额外加时。就寝限制独立生效。");
+                ptc_ui_text(PTC_UI_T_REPLACES_THE_TOTAL_DAILY_QUOTA_WITHIN_THE));
             break;
         case 1:
             ui->model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
@@ -264,7 +264,7 @@ void handle_parent_action(UiState *ui)
             ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
             ui->model.overlay = PTC_UI_OVERLAY_AUTONOMY;
             ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "今日自主缓冲");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING));
             ui->model.overlay_body[0] = '\0';
             break;
         case 5:
@@ -287,7 +287,7 @@ void handle_parent_action(UiState *ui)
     }
     if (ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
         if (ui->model.disable_flag_present && index != 4 && index != 6) {
-            snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，国家节假日设置暂时只读。");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_NATIONAL_HOLIDAY_SETTINGS_ARE_TEMPORARI));
             return;
         }
         switch (index) {
@@ -298,19 +298,19 @@ void handle_parent_action(UiState *ui)
         case 1:
             ui->model.holiday_last_rule = 0;
             if (ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(ui->model.message, sizeof(ui->model.message), "当前为不限时模式，请先切换为限时模式。");
+                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_CURRENT_MODE_IS_UNLIMITED_PLEASE_SWITCH));
             } else {
                 ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_HOLIDAY_MINUTES, PTC_UI_OVERLAY_NONE,
-                    "设置法定休假日额度", "分别输入小时和分钟，总计 1 到 1440 分钟", 4, 1, 1440, ui->model.draft_holiday_rule.minutes);
+                    ptc_ui_text(PTC_UI_T_SET_LEGAL_HOLIDAY_QUOTA), ptc_ui_text(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY_TOTALING_1), 4, 1, 1440, ui->model.draft_holiday_rule.minutes);
             }
             break;
         case 2:
             ui->model.holiday_last_rule = 1;
             if (ui->model.draft_makeup_workday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(ui->model.message, sizeof(ui->model.message), "当前为不限时模式，请先切换为限时模式。");
+                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_CURRENT_MODE_IS_UNLIMITED_PLEASE_SWITCH));
             } else {
                 ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MAKEUP_MINUTES, PTC_UI_OVERLAY_NONE,
-                    "设置调休工作日额度", "分别输入小时和分钟，总计 1 到 1440 分钟", 4, 1, 1440,
+                    ptc_ui_text(PTC_UI_T_SET_THE_AMOUNT_OF_REST_WORK_DAYS), ptc_ui_text(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY_TOTALING_1), 4, 1, 1440,
                     ui->model.draft_makeup_workday_rule.minutes);
             }
             break;
@@ -328,24 +328,24 @@ void handle_parent_action(UiState *ui)
             char holiday_rule[48];
             char makeup_rule[48];
             if (ui->model.draft_holiday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(holiday_rule, sizeof(holiday_rule), "不限时");
+                snprintf(holiday_rule, sizeof(holiday_rule), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
             } else {
-                snprintf(holiday_rule, sizeof(holiday_rule), "%u 分钟",
+                snprintf(holiday_rule, sizeof(holiday_rule), ptc_ui_text(PTC_UI_T_U_MIN),
                          (unsigned int)ui->model.draft_holiday_rule.minutes);
             }
             if (ui->model.draft_makeup_workday_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                snprintf(makeup_rule, sizeof(makeup_rule), "不限时");
+                snprintf(makeup_rule, sizeof(makeup_rule), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
             } else {
-                snprintf(makeup_rule, sizeof(makeup_rule), "%u 分钟",
+                snprintf(makeup_rule, sizeof(makeup_rule), ptc_ui_text(PTC_UI_T_U_MIN),
                          (unsigned int)ui->model.draft_makeup_workday_rule.minutes);
             }
             ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_CALENDAR;
             ui->model.holiday_calendar_page = 0;
             ui->model.overlay_selection = 2;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "内置节假日安排");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_BUILT_IN_HOLIDAY_SCHEDULE));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     "当前%s  |  法定休假：%s  |  调休工作日：%s",
-                     ui->model.draft_holiday_enabled ? "已开启" : "未开启",
+                     ptc_ui_text(PTC_UI_T_CURRENT_S_STATUTORY_HOLIDAY_S_MAKEUP_WORKDAY),
+                     ui->model.draft_holiday_enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_NOT_ENABLED),
                      holiday_rule, makeup_rule);
             break;
         }
@@ -372,9 +372,9 @@ void handle_parent_action(UiState *ui)
         case 0:
             ui->model.overlay = PTC_UI_OVERLAY_THEME;
             ui->model.overlay_selection = (int)ui->theme_preference;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "外观主题");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_APPEARANCE_THEME));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     "仅改变任我玩主机应用的绘制外观；计时、请求和后台控制不会重启或改变。");
+                     ptc_ui_text(PTC_UI_T_ONLY_CHANGES_THE_DRAWING_APPEARANCE_OF_THE));
             break;
         case 1: change_parent_pin(ui); break;
         case 2: open_shortcut_manager(ui); break;
@@ -382,9 +382,9 @@ void handle_parent_action(UiState *ui)
             refresh_album_restriction(ui);
             ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单高级入口");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_ADVANCED_ENTRY_TO_HOMEBREW_MENU));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                     "此功能只改变 hbmenu 启动方式，不提供防篡改保护。");
+                     ptc_ui_text(PTC_UI_T_THIS_FUNCTION_ONLY_CHANGES_THE_HBMENU_STARTUP));
             break;
         case 4:
             open_activity_history(ui);
@@ -397,15 +397,15 @@ void handle_parent_action(UiState *ui)
             }
             save_ui_preferences(ui);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     new_state ? "已开启按键与交互音效。" : "已静音按键与交互音效。");
+                     new_state ? ptc_ui_text(PTC_UI_T_BUTTON_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN) : ptc_ui_text(PTC_UI_T_KEYSTROKES_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN));
             break;
         }
         case 6:
             ui->model.overlay = PTC_UI_OVERLAY_LANGUAGE;
             ui->model.overlay_selection = (int)ui->language_preference;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "界面语言");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                "主机应用与浮窗共用此设置；跟随系统时，繁体中文系统显示繁体。");
+                ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
             break;
         default: break;
         }
@@ -420,37 +420,37 @@ void handle_parent_action(UiState *ui)
     switch (index) {
     case 0:
         if (ptc_ui_runtime_fingerprint_reconfirmation_needed(&ui->model)) {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "系统环境已变化，请重新检查并启用",
-                                 "系统版本或运行环境与上次确认时不同。检查兼容性后会保留现有设置并恢复额度管理。");
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, ptc_ui_text(PTC_UI_T_THE_SYSTEM_ENVIRONMENT_HAS_CHANGED_PLEASE_RECHECK),
+                                 ptc_ui_text(PTC_UI_T_THE_SYSTEM_VERSION_OR_OPERATING_ENVIRONMENT_IS));
         } else if (ui->model.disable_flag_present) {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新启用",
-                                 "重新检查系统兼容性；通过后才解除停用并恢复额度管理。");
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, ptc_ui_text(PTC_UI_T_RE_ENABLE_CONTROLS),
+                                 ptc_ui_text(PTC_UI_T_RECHECK_SYSTEM_COMPATIBILITY_ONLY_AFTER_PASSING_IT));
         } else {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "确认启用额度管理",
-                                 "先检查系统兼容性；通过后保存安装前设置并启用额度管理。");
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, ptc_ui_text(PTC_UI_T_CONFIRM_ENABLE_CONTROLS),
+                                 ptc_ui_text(PTC_UI_T_FIRST_CHECK_SYSTEM_COMPATIBILITY_AFTER_PASSING_SAVE));
         }
         break;
     case 1:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_RETRY_SETUP_RELEASE, "重试修复",
-                             "重新进行安全检查，并在可恢复时继续首次设置。");
+        open_confirm_overlay(ui, PTC_UI_OPERATION_RETRY_SETUP_RELEASE, ptc_ui_text(PTC_UI_T_RETRY_REPAIR),
+                             ptc_ui_text(PTC_UI_T_RERUN_THE_SECURITY_CHECK_AND_CONTINUE_FIRST));
         break;
     case 2:
         refresh_disable_flag(ui);
         if (ui->model.disable_flag_present) {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新启用",
-                                 "功能：重新进行安全检查，通过后解除紧急停用并恢复额度管理。\n适用：故障已排除且确认当前规则设置安全。");
+            open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, ptc_ui_text(PTC_UI_T_RE_ENABLE_CONTROLS),
+                                 ptc_ui_text(PTC_UI_T_RERUNS_SAFETY_CHECKS_THEN_RESUMES_QUOTA_CONTROL));
         } else {
-            open_confirm_overlay(ui, PTC_UI_OPERATION_EMERGENCY_DISABLE, "紧急停用控制",
-                                 "功能：创建 disable.flag，立即停止正常控制写入。\n适用：异常限制、写入故障或需要保留现场。");
+            open_confirm_overlay(ui, PTC_UI_OPERATION_EMERGENCY_DISABLE, ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_CONTROL),
+                                 ptc_ui_text(PTC_UI_T_CREATES_DISABLE_FLAG_AND_STOPS_NORMAL_CONTROL));
         }
         break;
     case 3:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT, "恢复安装前状态",
-                             "恢复原始家长控制设置与计时器，并停止新的控制写入。");
+        open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT, ptc_ui_text(PTC_UI_T_RESTORE_ORIGINAL_STATE),
+                             ptc_ui_text(PTC_UI_T_RESTORES_ORIGINAL_PARENTAL_CONTROL_SETTINGS_AND_TIMERS));
         break;
     case 4:
-        open_confirm_overlay(ui, PTC_UI_OPERATION_EXPORT_DIAGNOSTICS, "导出诊断包？",
-            "诊断文件可能包含设备标识和文件路径信息，请只发送给可信的支持人员。\nPIN、加时码密钥和可复用授权材料不会导出。");
+        open_confirm_overlay(ui, PTC_UI_OPERATION_EXPORT_DIAGNOSTICS, ptc_ui_text(PTC_UI_T_EXPORT_DIAGNOSTIC_PACKAGE),
+            ptc_ui_text(PTC_UI_T_DIAGNOSTICS_MAY_CONTAIN_DEVICE_IDS_AND_FILE));
         break;
     case 5:
 #ifndef PLAYWISE_EDEN
@@ -458,7 +458,7 @@ void handle_parent_action(UiState *ui)
         sync_hot_reload_model(ui);
 #endif
         ui->model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
-        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "软件信息");
+        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_SOFTWARE_INFO));
         ui->model.overlay_body[0] = '\0';
         snprintf(ui->model.software_version, sizeof(ui->model.software_version), "%s", PLAYWISE_VERSION);
         snprintf(ui->model.repository_url, sizeof(ui->model.repository_url), "%s", PLAYWISE_REPOSITORY_URL);
@@ -502,7 +502,7 @@ void finish_today_limit_refresh(UiState *ui, bool success)
         !model->played_minutes_available || model->played_minutes < 0) {
         model->quota_refresh_failed = true;
         snprintf(model->message, sizeof(model->message),
-                 "状态刷新失败或已玩时间不可用；未保存，请点按刷新后重试。");
+                 ptc_ui_text(PTC_UI_T_STATUS_REFRESH_FAILED_OR_THE_PLAYED_TIME));
         return;
     }
     model->quota_refresh_failed = false;
@@ -510,20 +510,20 @@ void finish_today_limit_refresh(UiState *ui, bool success)
     if (ptc_ui_limit_minutes_would_restrict(model, model->draft_minutes)) {
         char body[192];
         snprintf(body, sizeof(body),
-                 "额度已耗约 %d 分钟（估算）；新额度 %u 分钟。保存后可能立即限制使用，请长按确认。",
+                 ptc_ui_text(PTC_UI_T_ESTIMATED_USAGE_ABOUT_D_MIN_NEW_QUOTA),
                  model->played_minutes, (unsigned int)model->draft_minutes);
         open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SET_TODAY_LIMIT,
-                                    "设置后可能立即限制", body);
+                                    ptc_ui_text(PTC_UI_T_MAY_BE_RESTRICTED_IMMEDIATELY_AFTER_SETTING), body);
         return;
     }
     if (model->unrestricted_today == 1) {
         char body[192];
         snprintf(body, sizeof(body),
-                 "今天当前不限时；设置总额度 %u 分钟后将恢复限时。\n预计还可玩 %d 分钟，请确认后保存。",
+                 ptc_ui_text(PTC_UI_T_TODAY_IS_UNLIMITED_A_U_MIN_TOTAL),
                  (unsigned int)model->draft_minutes,
                  (int)model->draft_minutes - model->played_minutes);
         open_confirm_overlay(ui, PTC_UI_OPERATION_SET_TODAY_LIMIT,
-                             "不限时将改为限时", body);
+                             ptc_ui_text(PTC_UI_T_UNLIMITED_TIME_WILL_BE_CHANGED_TO_LIMITED_2), body);
         return;
     }
     ptc_ui_numpad_finish(model);
@@ -561,7 +561,7 @@ void finish_quota_recheck(UiState *ui, bool success)
     if (decision == PTC_UI_QUOTA_RECHECK_BLOCK) {
         ui->quota_recheck_ready = false;
         model->quota_refresh_failed = true;
-        snprintf(model->message, sizeof(model->message), "刷新失败，未提交；按 Y 刷新重算后重试。");
+        snprintf(model->message, sizeof(model->message), ptc_ui_text(PTC_UI_T_REFRESH_FAILED_AND_WAS_NOT_SUBMITTED_PRESS));
         return;
     }
     model->quota_refresh_failed = false;
@@ -569,9 +569,9 @@ void finish_quota_recheck(UiState *ui, bool success)
     if (decision == PTC_UI_QUOTA_RECHECK_CONFIRM_AGAIN) {
         ui->quota_recheck_ready = false;
         snprintf(model->overlay_title, sizeof(model->overlay_title),
-                 ui->quota_recheck_manual ? "预估已刷新，请确认" : "状态已变化，请重新确认");
+                 ui->quota_recheck_manual ? ptc_ui_text(PTC_UI_T_THE_ESTIMATE_HAS_BEEN_REFRESHED_PLEASE_CONFIRM) : ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_CHANGED_PLEASE_RECONFIRM));
         snprintf(model->message, sizeof(model->message),
-                 "已用最新状态重算剩余；请核对后再次确认。");
+                 ptc_ui_text(PTC_UI_T_THE_REMAINING_VALUE_HAS_BEEN_RECALCULATED_USING));
         return;
     }
     ui->quota_recheck_ready = true;
@@ -598,7 +598,7 @@ void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_HOT_RELOAD:
         if (ui->waiting || ui->model.recovery_active) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                "当前操作或恢复尚未完成，暂不能加载新版。");
+                ptc_ui_text(PTC_UI_T_THE_CURRENT_OPERATION_OR_RECOVERY_HAS_NOT));
         } else if (ptc_hot_reload_begin(&ui->hot_reload)) {
             ui->hot_reload_terminal_handled = false;
             ui->waiting = true;
@@ -609,7 +609,7 @@ void confirm_operation(UiState *ui)
         } else {
             sync_hot_reload_model(ui);
             snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-                ui->hot_reload.detail[0] ? ui->hot_reload.detail : "加载新版前的检查未通过");
+                ui->hot_reload.detail[0] ? ui->hot_reload.detail : ptc_ui_text(PTC_UI_T_THE_CHECK_BEFORE_LOADING_THE_NEW_VERSION));
         }
         break;
 #endif
@@ -629,25 +629,25 @@ void confirm_operation(UiState *ui)
         if (return_overlay == PTC_UI_OVERLAY_ALBUM_MANAGER) {
             ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "自制程序菜单高级入口");
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "状态已重新检测；配置变更需重启主机后生效。");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_ADVANCED_ENTRY_TO_HOMEBREW_MENU));
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_BEEN_RECHECKED_CONFIGURATION_CHANGES));
         }
         if (ok) {
             snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                      operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION
-                       ? "已开启保护。重启后，在桌面‘手柄设置’图标上按住 X，再按 A，进入自制程序菜单（hbmenu）。"
-                       : "已恢复原来的自制程序菜单入口方式，请重启主机后确认。");
+                       ? ptc_ui_text(PTC_UI_T_PROTECTION_HAS_BEEN_TURNED_ON_AFTER_RESTARTING)
+                       : ptc_ui_text(PTC_UI_T_THE_ORIGINAL_HOMEBREW_MENU_ENTRY_METHOD_HAS));
         } else {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     "设置没有更改：%s", error[0] ? error : "请稍后重试");
+                     ptc_ui_text(PTC_UI_T_NO_SETTING_CHANGED_S), error[0] ? error : ptc_ui_text(PTC_UI_T_PLEASE_TRY_AGAIN_LATER));
         }
         break;
     }
     case PTC_UI_OPERATION_SET_TODAY_LIMIT:
         if (!held_danger_confirmation &&
             ptc_ui_limit_minutes_would_restrict(&ui->model, ui->model.draft_minutes)) {
-            open_danger_confirm_overlay(ui, operation, "设置后会立即限制",
-                "新额度不高于当前已耗时间，请长按确认。");
+            open_danger_confirm_overlay(ui, operation, ptc_ui_text(PTC_UI_T_WILL_BE_RESTRICTED_IMMEDIATELY_AFTER_SETTING),
+                ptc_ui_text(PTC_UI_T_THE_NEW_AMOUNT_IS_NOT_HIGHER_THAN));
             break;
         }
         submit_minutes(ui, operation, ui->model.draft_minutes);
@@ -678,8 +678,8 @@ void confirm_operation(UiState *ui)
         if (!held_danger_confirmation &&
             (impact == PTC_UI_BEDTIME_IMPACT_RESTRICT ||
              impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN)) {
-            open_danger_confirm_overlay(ui, operation, "可能立即进入就寝限制？",
-                "当前就寝窗口或状态已变化，请长按确认。");
+            open_danger_confirm_overlay(ui, operation, ptc_ui_text(PTC_UI_T_POSSIBLY_ENTER_BEDTIME_RESTRICTION_IMMEDIATELY),
+                ptc_ui_text(PTC_UI_T_THE_CURRENT_BEDTIME_WINDOW_OR_STATUS_HAS));
             break;
         }
         if (ptc_bedtime_policy_is_valid(&policy))
@@ -687,12 +687,12 @@ void confirm_operation(UiState *ui)
         else {
             cancel_bedtime_navigation(ui);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                "就寝时间草稿已变化，请检查当前子页面后重新保存。");
+                ptc_ui_text(PTC_UI_T_THE_BEDTIME_DRAFT_HAS_CHANGED_PLEASE_CHECK));
         }
         }
         break;
     case PTC_UI_OPERATION_DISABLE_TODAY_LIMIT:
-        submit_transport_empty(ui, "disable_today_limit", "正在解除当前限制...", "解除当前限制失败");
+        submit_transport_empty(ui, "disable_today_limit", ptc_ui_text(PTC_UI_T_LIFTING_CURRENT_RESTRICTIONS), ptc_ui_text(PTC_UI_T_FAILED_TO_LIFT_CURRENT_RESTRICTION));
         break;
     case PTC_UI_OPERATION_RESTORE_TODAY_POLICY:
         {
@@ -702,11 +702,11 @@ void confirm_operation(UiState *ui)
              !ui->model.played_minutes_available || ui->model.played_minutes < 0 ||
              (int)restored.rule.minutes <= ui->model.played_minutes);
         if (restricts && !held_danger_confirmation) {
-            open_danger_confirm_overlay(ui, operation, "清除后可能立即限制",
-                "当前状态已变化，请核对下级规则并长按确认。");
+            open_danger_confirm_overlay(ui, operation, ptc_ui_text(PTC_UI_T_MAY_BE_RESTRICTED_IMMEDIATELY_AFTER_CLEARING),
+                ptc_ui_text(PTC_UI_T_THE_CURRENT_STATUS_HAS_CHANGED_PLEASE_CHECK));
             break;
         }
-        submit_transport_empty(ui, "restore_today_policy", "正在清除今日额度调整...", "清除今日额度调整失败");
+        submit_transport_empty(ui, "restore_today_policy", ptc_ui_text(PTC_UI_T_CLEARING_TODAY_S_QUOTA_ADJUSTMENT), ptc_ui_text(PTC_UI_T_FAILED_TO_CLEAR_TODAY_S_QUOTA_ADJUSTMENT));
         }
         break;
     case PTC_UI_OPERATION_SKIP_BEDTIME:
@@ -716,10 +716,10 @@ void confirm_operation(UiState *ui)
         submit_clear_bedtime_skip(ui);
         break;
     case PTC_UI_OPERATION_CLEAR_REDEMPTION_HISTORY:
-        submit_transport_empty(ui, "clear_redemption_history", "正在清空加时码使用记录...", "清空使用记录失败");
+        submit_transport_empty(ui, "clear_redemption_history", ptc_ui_text(PTC_UI_T_CLEARING_GRANT_CODE_USAGE_RECORDS), ptc_ui_text(PTC_UI_T_FAILED_TO_CLEAR_USAGE_RECORDS));
         break;
     case PTC_UI_OPERATION_CLEAR_ACTIVITY_HISTORY:
-        submit_transport_empty(ui, "clear_activity_history", "正在清空家庭活动记录...", "清空家庭活动记录失败");
+        submit_transport_empty(ui, "clear_activity_history", ptc_ui_text(PTC_UI_T_CLEARING_FAMILY_ACTIVITY_RECORDS), ptc_ui_text(PTC_UI_T_FAILED_TO_CLEAR_FAMILY_ACTIVITY_RECORDS));
         break;
     case PTC_UI_OPERATION_REDEEM_OFFLINE_CODE:
         ui->code_previous_after_available = ui->model.code_preview_after_available;
@@ -731,44 +731,44 @@ void confirm_operation(UiState *ui)
         submit_preview_offline_code(ui, ui->model.pending_code);
         break;
     case PTC_UI_OPERATION_SAVE_CREDENTIAL:
-        if (!commit_credential(ui)) snprintf(ui->model.message, sizeof(ui->model.message), "保存加时码密钥失败。");
+        if (!commit_credential(ui)) snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_EXTRA_TIME_CODE_KEY));
         break;
     case PTC_UI_OPERATION_RESET_PAIRING_URL:
         apply_default_pairing_base_url(ui);
         break;
     case PTC_UI_OPERATION_COMPLETE_SETUP:
-        submit_transport_empty(ui, "complete_setup", "正在完成首次设置...", "启用自动控制失败");
+        submit_transport_empty(ui, "complete_setup", ptc_ui_text(PTC_UI_T_COMPLETING_FIRST_TIME_SETUP), ptc_ui_text(PTC_UI_T_FAILED_TO_ENABLE_AUTOMATIC_CONTROL));
         break;
     case PTC_UI_OPERATION_RETRY_SETUP_RELEASE:
-        submit_transport_empty(ui, "retry_setup_release", "正在重试解除当前限制...", "重试前置解限失败");
+        submit_transport_empty(ui, "retry_setup_release", ptc_ui_text(PTC_UI_T_RETRYING_TO_LIFT_CURRENT_RESTRICTIONS), ptc_ui_text(PTC_UI_T_RETRY_PRE_DELIMITATION_FAILED));
         break;
     case PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT:
-        submit_transport_empty(ui, "restore_install_snapshot", "正在恢复安装前状态...", "恢复安装前状态失败");
+        submit_transport_empty(ui, "restore_install_snapshot", ptc_ui_text(PTC_UI_T_RESTORING_TO_PRE_INSTALLATION_STATE), ptc_ui_text(PTC_UI_T_FAILED_TO_RESTORE_PRE_INSTALLATION_STATE));
         break;
     case PTC_UI_OPERATION_EMERGENCY_DISABLE:
-        set_local_sd_command(ui, "紧急停用控制");
+        set_local_sd_command(ui, ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_CONTROL));
         status = ptc_companion_set_disable_flag(&ui->client, true);
         (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
         ui->model.feedback_detail[0] = '\0';
         if (status == PTC_COMPANION_OK) {
             ui->model.disable_flag_present = true;
             snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
-            snprintf(ui->model.message, sizeof(ui->model.message), "后台控制已紧急停用。");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_BACKGROUND_CONTROL_HAS_BEEN_EMERGENCY_DEACTIVATED));
         } else {
-            set_message(ui, "紧急停用失败", status);
+            set_message(ui, ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_FAILED), status);
         }
         break;
     case PTC_UI_OPERATION_RESUME_CONTROL:
-        set_local_sd_command(ui, "解除紧急停用");
+        set_local_sd_command(ui, ptc_ui_text(PTC_UI_T_RELEASE_EMERGENCY_DISABLE));
         status = ptc_companion_set_disable_flag(&ui->client, false);
         (void)ptc_companion_transport_notify_storage_changed(&ui->transport);
         ui->model.feedback_detail[0] = '\0';
         if (status == PTC_COMPANION_OK) {
             ui->model.disable_flag_present = false;
             snprintf(ui->model.result_status, sizeof(ui->model.result_status), "ok");
-            snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用已解除，后台控制已恢复。");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DISABLEMENT_HAS_BEEN_LIFTED_AND_BACKGROUND));
         } else {
-            set_message(ui, "解除紧急停用失败", status);
+            set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_RELEASE_EMERGENCY_DEACTIVATION), status);
         }
         break;
     default:
@@ -853,12 +853,12 @@ void close_code_result(UiState *ui)
     if (terminal) {
         if (ptc_companion_pending_redemption_clear(&ui->client) != PTC_COMPANION_OK) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     "兑换结果已显示，但恢复标记暂未清除；下次打开可能再次显示同一结果。");
+                     ptc_ui_text(PTC_UI_T_THE_REDEMPTION_RESULT_HAS_BEEN_DISPLAYED_BUT));
         }
         memset(&ui->pending_redemption, 0, sizeof(ui->pending_redemption));
         ui->model.code_result_failed = false;
     } else {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "加时结果仍在确认中；可继续使用其他页面，下次打开也会继续确认。");
+                 ptc_ui_text(PTC_UI_T_THE_GRANT_RESULT_IS_STILL_BEING_CONFIRMED));
     }
 }

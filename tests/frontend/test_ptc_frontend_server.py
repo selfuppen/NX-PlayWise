@@ -93,7 +93,7 @@ def test_static_assets_and_copy() -> None:
     assert_true("单文件离线版" in standalone and "parent-import.json" in standalone, "standalone guidance")
     for label, page in (("online", index), ("offline", standalone)):
         assert_true("配置文件不随安装包提供" in page, f"{label} export prerequisite")
-        assert_true("按 A“导出配置文件”并验证 PIN" in page, f"{label} Switch export action")
+        assert_true("按 A“导出配置文件”并验证家长密码" in page, f"{label} Switch export action")
         assert_true("/switch/playwise/parent-import.json" in page, f"{label} SD card path")
     assert_true("connect-src 'none'" in standalone, "standalone blocks network requests")
     assert_true("script-src 'sha256-" in standalone and "style-src 'sha256-" in standalone, "hashed inline CSP")

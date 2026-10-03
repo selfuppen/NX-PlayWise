@@ -6,6 +6,7 @@
 #include "ui_state.h"
 #include "ptc_audio.h"
 #include "../album_restriction.h"
+#include "../ui_language.h"
 
 #include <switch.h>
 #include <ft2build.h>

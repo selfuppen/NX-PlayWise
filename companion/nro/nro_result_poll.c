@@ -21,7 +21,7 @@ static void submit_offline_code(UiState *ui, const char *code)
     if (status != PTC_COMPANION_OK) {
         ui->waiting = false;
         ui->model.pending_code[0] = '\0';
-        set_message(ui, "无法保存兑换恢复信息；加时码未提交，仍可使用", status);
+        set_message(ui, ptc_ui_text(PTC_UI_T_THE_REDEMPTION_RECOVERY_INFORMATION_CANNOT_BE_SAVED), status);
         return;
     }
     status = ptc_companion_transport_submit_offline_code(&ui->transport, ui->active_request_id, time(NULL), code);
@@ -31,13 +31,13 @@ static void submit_offline_code(UiState *ui, const char *code)
         pending.submitted = true;
         (void)ptc_companion_pending_redemption_save(&ui->client, &pending);
         ui->pending_redemption = pending;
-        begin_wait(ui, "offline_code", "加时码已提交，正在等待后台确认...");
+        begin_wait(ui, "offline_code", ptc_ui_text(PTC_UI_T_THE_GRANT_CODE_HAS_BEEN_SUBMITTED_AND));
         return;
     }
     (void)ptc_companion_pending_redemption_clear(&ui->client);
     ui->model.pending_code[0] = '\0';
     ui->waiting = false;
-    set_message(ui, "加时码提交失败；该码未消费，仍可使用", status);
+    set_message(ui, ptc_ui_text(PTC_UI_T_THE_GRANT_CODE_SUBMISSION_FAILED_THE_CODE), status);
 }
 
 static bool code_error_stays_in_input(int error_code)
@@ -48,17 +48,17 @@ static bool code_error_stays_in_input(int error_code)
 static void open_code_preview_confirm(UiState *ui, bool refreshed)
 {
     const char *body = refreshed
-        ? "实时状态发生了重要变化，已重新计算预览。\n确认后才会生效并消费这枚加时码。"
-        : "请核对当前状态和兑换后的预计结果。\n确认前不会消费这枚加时码。";
+        ? ptc_ui_text(PTC_UI_T_THE_LIVE_STATE_CHANGED_THE_PREVIEW_WAS)
+        : ptc_ui_text(PTC_UI_T_CHECK_CURRENT_STATUS_AND_THE_ESTIMATED_RESULT);
     bool requires_hold = !ui->model.code_preview_after_available ||
         ui->model.code_preview_after_minutes == 0 ||
         ui->model.code_preview_converts_unlimited;
     if (requires_hold)
         open_danger_confirm_overlay(ui, PTC_UI_OPERATION_REDEEM_OFFLINE_CODE,
-                                    refreshed ? "状态已变化，请再次确认" : "确认兑换加时码", body);
+                                    refreshed ? ptc_ui_text(PTC_UI_T_STATUS_CHANGED_PLEASE_CONFIRM_AGAIN) : ptc_ui_text(PTC_UI_T_CONFIRM_PLAYTIME_GRANT), body);
     else
         open_confirm_overlay(ui, PTC_UI_OPERATION_REDEEM_OFFLINE_CODE,
-                             refreshed ? "状态已变化，请再次确认" : "确认兑换加时码", body);
+                             refreshed ? ptc_ui_text(PTC_UI_T_STATUS_CHANGED_PLEASE_CONFIRM_AGAIN) : ptc_ui_text(PTC_UI_T_CONFIRM_PLAYTIME_GRANT), body);
 }
 
 static void sync_setup_wizard(UiState *ui)
@@ -120,7 +120,7 @@ void poll_result(UiState *ui, bool force)
         sizeof(ui->last_result));
     sync_transport_label(ui);
     if (status == PTC_COMPANION_PENDING) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "后台正在处理，请稍候...");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_BEING_PROCESSED_PLEASE_WAIT));
         return;
     }
     ui->waiting = false;
@@ -141,7 +141,7 @@ void poll_result(UiState *ui, bool force)
         saved_makeup_rule = ui->model.draft_makeup_workday_rule;
         if (!ptc_ui_apply_result_json(&ui->model, ui->last_result)) {
             cancel_bedtime_navigation(ui);
-            set_message(ui, "读取结果失败", PTC_COMPANION_RESULT_INVALID);
+            set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_RESULT), PTC_COMPANION_RESULT_INVALID);
             if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
             if (ui->today_limit_refresh_pending) finish_today_limit_refresh(ui, false);
             if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
@@ -197,15 +197,15 @@ void poll_result(UiState *ui, bool force)
             bool cleared = strcmp(ui->model.result_status, "ok") == 0;
             open_redemption_history(ui);
             snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-                     cleared ? "加时码使用记录已清空；防重复兑换账本保持不变。"
-                             : "清空加时码使用记录失败，原记录已保留。");
+                     cleared ? ptc_ui_text(PTC_UI_T_THE_GRANT_CODE_USAGE_RECORD_HAS_BEEN)
+                             : ptc_ui_text(PTC_UI_T_FAILED_TO_CLEAR_THE_GRANT_CODE_USAGE));
         }
         if (strcmp(ui->model.result_type, "clear_activity_history") == 0) {
             bool cleared = strcmp(ui->model.result_status, "ok") == 0;
             open_activity_history(ui);
             snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-                cleared ? "家庭活动记录已清空；规则和加时码防重复账本保持不变。"
-                        : "清空家庭活动记录失败，原记录已保留。");
+                cleared ? ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORDS_HAVE_BEEN_CLEARED_RULES)
+                        : ptc_ui_text(PTC_UI_T_FAILED_TO_CLEAR_FAMILY_ACTIVITY_RECORDS_THE));
         }
         if (strcmp(ui->model.result_type, "preview_offline_code") == 0) {
             if (strcmp(ui->model.result_status, "ok") == 0) {
@@ -233,7 +233,7 @@ void poll_result(UiState *ui, bool force)
                     ui->model.view = PTC_UI_CHILD;
                     ui->model.overlay = PTC_UI_OVERLAY_NONE;
                     snprintf(ui->model.message, sizeof(ui->model.message),
-                        "今日不限时，加时码不可用；这枚代码未消费。");
+                        ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY_AND_3));
                 } else if (code_error_stays_in_input(ui->model.error_code)) {
                     char error[96];
                     snprintf(error, sizeof(error), "%.95s", ui->model.message);
@@ -257,7 +257,7 @@ void poll_result(UiState *ui, bool force)
                 ui->model.view = PTC_UI_CHILD;
                 ui->model.overlay = PTC_UI_OVERLAY_NONE;
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    "今日不限时，加时码不可用；这枚代码未消费。");
+                    ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY_AND_3));
                 (void)ptc_companion_pending_redemption_clear(&ui->client);
             } else if (code_error_stays_in_input(ui->model.error_code)) {
                 char error[96];
@@ -269,7 +269,7 @@ void poll_result(UiState *ui, bool force)
                 char original[192];
                 snprintf(original, sizeof(original), "%s", ui->model.message);
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         "兑换未成功，加时码仍可使用。");
+                         ptc_ui_text(PTC_UI_T_THE_REDEMPTION_WAS_UNSUCCESSFUL_AND_THE_GRANT));
                 snprintf(ui->model.feedback_detail, sizeof(ui->model.feedback_detail), "%s", original);
                 ui->model.view = PTC_UI_ERROR;
                 (void)ptc_companion_pending_redemption_clear(&ui->client);
@@ -282,7 +282,7 @@ void poll_result(UiState *ui, bool force)
                 handle_today_action_ready(ui, action);
             } else {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         "无法刷新当前状态，已取消本次时间调整。请重试。");
+                         ptc_ui_text(PTC_UI_T_THE_CURRENT_STATUS_CANNOT_BE_REFRESHED_AND));
             }
         }
         if (ui->request_view == PTC_UI_CHILD && strcmp(ui->model.result_status, "error") == 0 &&
@@ -299,7 +299,7 @@ void poll_result(UiState *ui, bool force)
                 ui->pending_parent_page = -1;
                 ui->pending_leave_parent = false;
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         "周计划保存未完成，修改仍保留，请重试。");
+                         ptc_ui_text(PTC_UI_T_WEEKLY_PLAN_SAVING_IS_NOT_COMPLETED_MODIFICATIONS));
             } else if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&
                        strcmp(ui->model.result_status, "ok") == 0) {
                 ui->model.bedtime_dirty = false;
@@ -307,15 +307,15 @@ void poll_result(UiState *ui, bool force)
             } else if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0) {
                 cancel_bedtime_navigation(ui);
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         "当前就寝子页面保存未完成，草稿仍保留，请重试。");
+                         ptc_ui_text(PTC_UI_T_THE_CURRENT_BEDTIME_SUBPAGE_HAS_NOT_BEEN));
             }
         }
         if (strcmp(ui->model.result_type, "set_bedtime_policy") == 0 &&
             strcmp(ui->model.result_status, "ok") == 0) {
-            static const char *NAMES[] = {"每周就寝", "节假日就寝", "指定日期就寝"};
+            const char *NAMES[] = {ptc_ui_text(PTC_UI_T_WEEKLY_BEDTIME), ptc_ui_text(PTC_UI_T_GOING_TO_BED_ON_HOLIDAYS), ptc_ui_text(PTC_UI_T_GO_TO_BED_ON_THE_SPECIFIED_DATE)};
             int section = ui->bedtime_saved_section;
-            snprintf(ui->model.message, sizeof(ui->model.message), "%s已保存并生效。",
-                section >= 0 && section < 3 ? NAMES[section] : "就寝时间");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_S_SAVED_AND_APPLIED),
+                section >= 0 && section < 3 ? NAMES[section] : ptc_ui_text(PTC_UI_T_BEDTIME));
         }
         if (strcmp(ui->model.result_type, "confirm_bedtime_requirements") == 0) {
             if (strcmp(ui->model.result_status, "ok") == 0 && ui->model.bedtime_dirty) {
@@ -331,7 +331,7 @@ void poll_result(UiState *ui, bool force)
             if (strcmp(ui->model.result_status, "ok") != 0) {
                 cancel_bedtime_navigation(ui);
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                    "就寝限制环境确认未完成，草稿仍保留，请检查后重试。");
+                    ptc_ui_text(PTC_UI_T_THE_BEDTIME_RESTRICTION_ENVIRONMENT_CONFIRMATION_HAS_NOT));
             } else if (!ui->model.bedtime_dirty) {
                 cancel_bedtime_navigation(ui);
             }
@@ -342,7 +342,7 @@ void poll_result(UiState *ui, bool force)
             ui->model.pending_bedtime_skip_instance_id = 0;
             submit_status(ui);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                "就寝窗口已变化，正在刷新；不会自动操作另一个窗口。");
+                ptc_ui_text(PTC_UI_T_THE_BEDTIME_WINDOW_HAS_CHANGED_AND_IS));
         }
         if (ui->quota_recheck_pending && strcmp(ui->model.result_type, "status") == 0) {
             finish_quota_recheck(ui, strcmp(ui->model.result_status, "ok") == 0);
@@ -363,7 +363,7 @@ void poll_result(UiState *ui, bool force)
         show_pending_redemption(ui);
         return;
     }
-    set_message(ui, "读取结果失败", status);
+    set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_RESULT), status);
     if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
     if (ui->today_limit_refresh_pending) finish_today_limit_refresh(ui, false);
     if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;

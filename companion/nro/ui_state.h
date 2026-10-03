@@ -111,6 +111,7 @@ void ptc_ui_format_code(const char *code, char *out, size_t out_size);
 void ptc_ui_format_today_mode(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_quota_remaining(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_home_remaining(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
+bool ptc_ui_home_remaining_minutes(const PtcUiModel *model, int64_t now, int *minutes);
 void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_home_total_value(const PtcUiModel *model, char *out, size_t out_size);
 void ptc_ui_format_timer_status(const PtcUiModel *model, char *out, size_t out_size);

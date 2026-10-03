@@ -1,4 +1,5 @@
 #include "bridge.h"
+#include "../ui_language.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -228,25 +229,25 @@ const char *ptc_overlay_bridge_transport_label(const PtcOverlayBridge *bridge)
 
 const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge)
 {
-    if (!bridge) return "请求参数无效";
+    if (!bridge) return ptc_ui_text(PTC_UI_T_INVALID_REQUEST_PARAMETERS);
     if (bridge->summary.valid) {
         if (!bridge->summary.ok) {
             if (bridge->summary.message[0]) return bridge->summary.message;
             if (bridge->summary.error_code > 0)
                 return ptc_error_message_zh((PtcErrorCode)bridge->summary.error_code);
-            return "请求失败，请稍后重试";
+            return ptc_ui_text(PTC_UI_T_REQUEST_FAILED_PLEASE_TRY_AGAIN_LATER);
         }
-        return "请求成功";
+        return ptc_ui_text(PTC_UI_T_REQUEST_SUCCESSFUL);
     }
     switch (bridge->last_status) {
-    case PTC_COMPANION_TIMEOUT: return "后台响应超时，请重试";
+    case PTC_COMPANION_TIMEOUT: return ptc_ui_text(PTC_UI_T_BACKGROUND_SERVICE_TIMED_OUT_PLEASE_RETRY);
     case PTC_COMPANION_WRITE_FAILED:
-    case PTC_COMPANION_RENAME_FAILED: return "请求写入失败，请检查 SD 卡";
+    case PTC_COMPANION_RENAME_FAILED: return ptc_ui_text(PTC_UI_T_FAILED_TO_WRITE_REQUEST_PLEASE_CHECK_SD);
     case PTC_COMPANION_RESULT_INVALID:
-    case PTC_COMPANION_RESULT_MISMATCH: return "后台返回的结果无效";
-    case PTC_COMPANION_BAD_ARGUMENT: return "请求被后台拒绝";
-    case PTC_COMPANION_QUIESCING: return "后台正在安全切换，请稍后重试";
-    default: return "无法连接后台服务，请重试";
+    case PTC_COMPANION_RESULT_MISMATCH: return ptc_ui_text(PTC_UI_T_INVALID_RESULT_RETURNED_FROM_BACKGROUND);
+    case PTC_COMPANION_BAD_ARGUMENT: return ptc_ui_text(PTC_UI_T_REQUEST_REJECTED_BY_BACKGROUND_SERVICE);
+    case PTC_COMPANION_QUIESCING: return ptc_ui_text(PTC_UI_T_BACKGROUND_IS_SWITCHING_SAFELY_PLEASE_RETRY_LATER);
+    default: return ptc_ui_text(PTC_UI_T_CANNOT_CONNECT_TO_BACKGROUND_SERVICE_PLEASE_RETRY);
     }
 }
 
@@ -290,12 +291,12 @@ bool ptc_overlay_bridge_preview_succeeded(const PtcOverlayBridge *bridge)
 
 const char *ptc_overlay_rule_source_label(const char *source)
 {
-    if (!source || !source[0]) return "常规计划";
-    if (strcmp(source, "today_override") == 0) return "今日调整";
-    if (strcmp(source, "scheduled_override") == 0) return "指定日期额度";
-    if (strcmp(source, "statutory_holiday") == 0) return "法定假日";
-    if (strcmp(source, "makeup_workday") == 0) return "调休工作日";
-    if (strcmp(source, "weekly") == 0) return "周计划";
+    if (!source || !source[0]) return ptc_ui_text(PTC_UI_T_GENERAL_PLAN);
+    if (strcmp(source, "today_override") == 0) return ptc_ui_text(PTC_UI_T_TODAY_S_ADJUSTMENT);
+    if (strcmp(source, "scheduled_override") == 0) return ptc_ui_text(PTC_UI_T_SPECIFIED_DATE_QUOTA);
+    if (strcmp(source, "statutory_holiday") == 0) return ptc_ui_text(PTC_UI_T_LEGAL_HOLIDAYS);
+    if (strcmp(source, "makeup_workday") == 0) return ptc_ui_text(PTC_UI_T_ADJUSTED_WORKING_DAYS);
+    if (strcmp(source, "weekly") == 0) return ptc_ui_text(PTC_UI_T_RULE_WEEKLY);
     return source;
 }
 
@@ -309,40 +310,40 @@ void ptc_overlay_format_child_quota_parts(
     if (val_out && val_size > 0) val_out[0] = '\0';
     if (note_out && note_size > 0) note_out[0] = '\0';
     if (!summary || !summary->valid) {
-        if (label_out && label_size > 0) snprintf(label_out, label_size, "今日总额度");
-        if (val_out && val_size > 0) snprintf(val_out, val_size, "-- 分钟");
+        if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
+        if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_MINUTES_3));
         return;
     }
     if (summary->unrestricted_today == 1) {
-        if (label_out && label_size > 0) snprintf(label_out, label_size, "今日总额度");
-        if (val_out && val_size > 0) snprintf(val_out, val_size, "不限时");
+        if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
+        if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
         if (note_out && note_size > 0 && summary->played_minutes_available && summary->played_minutes >= 0) {
-            snprintf(note_out, note_size, "(已玩约 %d 分)", summary->played_minutes);
+            snprintf(note_out, note_size, ptc_ui_text(PTC_UI_T_PLAYED_ABOUT_D_MIN), summary->played_minutes);
         }
         return;
     }
     if (summary->remaining_available && summary->played_minutes_available &&
         summary->remaining_minutes >= 0 && summary->played_minutes >= 0) {
         int total = summary->remaining_minutes + summary->played_minutes;
-        if (label_out && label_size > 0) snprintf(label_out, label_size, "今日总额度");
-        if (val_out && val_size > 0) snprintf(val_out, val_size, "%d 分钟", total);
+        if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
+        if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_D_MIN), total);
         if (note_out && note_size > 0) {
-            snprintf(note_out, note_size, "(已玩约 %d 分)", summary->played_minutes);
+            snprintf(note_out, note_size, ptc_ui_text(PTC_UI_T_PLAYED_ABOUT_D_MIN), summary->played_minutes);
         }
         return;
     }
     if (summary->played_minutes_available && summary->played_minutes >= 0) {
-        if (label_out && label_size > 0) snprintf(label_out, label_size, "额度已耗(估算)");
-        if (val_out && val_size > 0) snprintf(val_out, val_size, "%d 分钟", summary->played_minutes);
+        if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_USED_QUOTA_EST));
+        if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_D_MIN), summary->played_minutes);
         return;
     }
     if (summary->remaining_available && summary->remaining_minutes >= 0) {
-        if (label_out && label_size > 0) snprintf(label_out, label_size, "今日总额度");
-        if (val_out && val_size > 0) snprintf(val_out, val_size, "%d 分钟", summary->remaining_minutes);
+        if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
+        if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_D_MIN), summary->remaining_minutes);
         return;
     }
-    if (label_out && label_size > 0) snprintf(label_out, label_size, "今日总额度");
-    if (val_out && val_size > 0) snprintf(val_out, val_size, "-- 分钟");
+    if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
+    if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_MINUTES_3));
 }
 
 uint64_t ptc_overlay_parent_skip_instance_id(const PtcCompanionResultSummary *summary)
@@ -359,22 +360,22 @@ const char *ptc_overlay_parent_action_unavailable_reason(
     const PtcCompanionResultSummary *summary, PtcOverlayParentAction action)
 {
     if (action == PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT) return NULL;
-    if (!summary || !summary->valid) return "请先刷新状态";
+    if (!summary || !summary->valid) return ptc_ui_text(PTC_UI_T_PLEASE_REFRESH_THE_STATUS_FIRST);
     switch (action) {
     case PTC_OVERLAY_PARENT_ADD_MINUTES:
     case PTC_OVERLAY_PARENT_UNLIMITED:
         if (summary->bedtime_active && !summary->bedtime_skipped)
-            return "请先处理就寝限制";
-        if (summary->unrestricted_today == 1) return "今日已不限时";
+            return ptc_ui_text(PTC_UI_T_PLEASE_DEAL_WITH_BEDTIME_RESTRICTIONS_FIRST);
+        if (summary->unrestricted_today == 1) return ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY);
         return NULL;
     case PTC_OVERLAY_PARENT_SKIP_BEDTIME:
-        return ptc_overlay_parent_skip_instance_id(summary) ? NULL : "没有可跳过的就寝窗口";
+        return ptc_overlay_parent_skip_instance_id(summary) ? NULL : ptc_ui_text(PTC_UI_T_NO_SKIPPABLE_BEDTIME_WINDOW);
     case PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP:
-        return summary->bedtime_skipped_window_available ? NULL : "本次就寝未跳过";
+        return summary->bedtime_skipped_window_available ? NULL : ptc_ui_text(PTC_UI_T_THIS_BEDTIME_WAS_NOT_SKIPPED);
     case PTC_OVERLAY_PARENT_DISABLE_BEDTIME:
-        return summary->bedtime_enabled ? NULL : "就寝计划未开启";
+        return summary->bedtime_enabled ? NULL : ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE_IS_NOT_ENABLED);
     default:
-        return "动作不可用";
+        return ptc_ui_text(PTC_UI_T_ACTION_NOT_AVAILABLE);
     }
 }
 
@@ -384,48 +385,48 @@ void ptc_overlay_format_child_restriction_guidance(
 {
     if (!out || out_size == 0) return;
     if (!summary || !summary->valid) {
-        snprintf(out, out_size, "正在获取额度与受限信息...");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_OBTAINING_QUOTA_AND_RESTRICTION_INFORMATION));
         return;
     }
     if (summary->bedtime_active && !summary->bedtime_skipped) {
-        snprintf(out, out_size, "就寝限制生效中：请家长先解除就寝限制");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTIONS_ARE_IN_EFFECT_PARENTS_PLEASE));
         return;
     }
     if (summary->daily_restriction_active ||
         (summary->remaining_available && summary->remaining_minutes == 0)) {
         if (summary->daily_buffer_available) {
-            snprintf(out, out_size, "今日额度已耗尽，可领 %d 分钟自主缓冲",
+            snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_QUOTA_EXHAUSTED_CLAIM_D_MIN_SELF),
                 summary->daily_buffer_minutes);
         } else {
-            snprintf(out, out_size, "今日额度已耗尽，请输入加时码继续游玩");
+            snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_HAS_BEEN_EXHAUSTED_PLEASE));
         }
         return;
     }
     if (summary->bedtime_skipped) {
-        snprintf(out, out_size, "今晚就寝限制已跳过，额度用完后将暂停游戏");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_THE_BEDTIME_LIMIT_HAS_BEEN_SKIPPED_TONIGHT));
         return;
     }
     if (summary->bedtime_next_available) {
         int start_h = summary->bedtime_next_start_minute / 60;
         int start_m = summary->bedtime_next_start_minute % 60;
         if (summary->bedtime_next_start_day_index == summary->day_index) {
-            snprintf(out, out_size, "今晚 %02d:%02d 起限制使用", start_h, start_m);
+            snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RESTRICTION_STARTS_TONIGHT_AT_02D_02D), start_h, start_m);
         } else if (summary->bedtime_next_start_day_index == summary->day_index + 1) {
-            snprintf(out, out_size, "明晚 %02d:%02d 起限制使用", start_h, start_m);
+            snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RESTRICTION_STARTS_TOMORROW_NIGHT_AT_02D_02D), start_h, start_m);
         } else {
-            snprintf(out, out_size, "下次就寝 %02d:%02d（到点强制暂停游戏）", start_h, start_m);
+            snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NEXT_BEDTIME_02D_02D_SOFTWARE_PAUSES_THEN), start_h, start_m);
         }
         return;
     }
     if (summary->unrestricted_today == 1) {
-        snprintf(out, out_size, "今日不限时，未设就寝限制");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_NO_BEDTIME_RESTRICTIONS));
         return;
     }
     if (summary->remaining_available) {
-        snprintf(out, out_size, "额度玩完后将暂停，今日未设就寝限制");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_WILL_BE_SUSPENDED_AFTER_THE_QUOTA_IS));
         return;
     }
-    snprintf(out, out_size, "提示：加时前记得向窗外远眺 5 分钟！");
+    snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TIP_REMEMBER_TO_LOOK_OUT_THE_WINDOW));
 }
 
 void ptc_overlay_format_child_restriction_summary(
@@ -434,43 +435,43 @@ void ptc_overlay_format_child_restriction_summary(
 {
     if (!out || out_size == 0) return;
     if (!summary || !summary->valid) {
-        snprintf(out, out_size, "[-] 命令与状态（点击或按 - / L / R 展开）");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_COMMANDS_STATUS_CLICK_OR_PRESS_L_R));
         return;
     }
     if (summary->bedtime_active && !summary->bedtime_skipped) {
-        snprintf(out, out_size, "[-] 限制提醒：就寝限制生效中（按 - 展开详情）");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_BEDTIME_ACTIVE_PRESS_FOR_DETAILS));
         return;
     }
     if (summary->daily_restriction_active ||
         (summary->remaining_available && summary->remaining_minutes == 0)) {
         if (summary->daily_buffer_available) {
-            snprintf(out, out_size, "[-] 限制提醒：额度已耗尽，可领缓冲（按 - 展开详情）");
+            snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_DAILY_LIMIT_REACHED_BUFFER_READY_PRESS));
         } else {
-            snprintf(out, out_size, "[-] 限制提醒：今日额度已耗尽（按 - 展开详情）");
+            snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_DAILY_LIMIT_REACHED_PRESS_FOR_DETAILS));
         }
         return;
     }
     if (summary->bedtime_next_available && summary->bedtime_next_start_day_index == summary->day_index) {
         int start_h = summary->bedtime_next_start_minute / 60;
         int start_m = summary->bedtime_next_start_minute % 60;
-        snprintf(out, out_size, "[-] 提醒：今晚 %02d:%02d 起限制使用（按 - 查看详情）", start_h, start_m);
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_REMINDER_RESTRICTION_STARTS_TONIGHT_AT_02D_02D), start_h, start_m);
         return;
     }
     if (summary->bedtime_skipped) {
-        snprintf(out, out_size, "[-] 限制提醒：今晚就寝已跳过（按 - 展开详情）");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ALERT_TONIGHT_S_BEDTIME_SKIPPED_PRESS));
         return;
     }
     if (summary->unrestricted_today == 1) {
-        snprintf(out, out_size, "[-] 规则详情：今日不限时，无就寝限制（按 - 展开）");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RULES_NO_LIMIT_TODAY_NO_BEDTIME_PRESS));
         return;
     }
     if (summary->remaining_available && summary->played_minutes_available &&
         summary->remaining_minutes >= 0 && summary->played_minutes >= 0) {
         int total = summary->remaining_minutes + summary->played_minutes;
-        snprintf(out, out_size, "[-] 规则详情：今日总额度 %d 分钟（按 - 展开详情）", total);
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RULE_DETAILS_TODAY_QUOTA_D_MIN_PRESS), total);
         return;
     }
-    snprintf(out, out_size, "[-] 规则与状态详情（按 - / L / R 展开）");
+    snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RULES_STATUS_DETAILS_PRESS_L_R));
 }
 
 void ptc_overlay_format_child_restriction_detail(
@@ -479,45 +480,45 @@ void ptc_overlay_format_child_restriction_detail(
 {
     if (!out || out_size == 0) return;
     if (!summary || !summary->valid) {
-        snprintf(out, out_size, "规则状态待确认");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RULES_PENDING_CONFIRMATION));
         return;
     }
     if (summary->bedtime_active && !summary->bedtime_skipped) {
-        snprintf(out, out_size, "就寝限制生效中；即使还有额度也不能继续玩");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_PLAY_RESTRICTED_EVEN_IF_LIMIT));
         return;
     }
     if (summary->daily_restriction_active ||
         (summary->remaining_available && summary->remaining_minutes == 0)) {
         if (summary->bedtime_next_available && summary->bedtime_next_start_day_index == summary->day_index) {
-            snprintf(out, out_size, "额度已用尽 ｜ 今晚 %02d:%02d 起限制使用",
+            snprintf(out, out_size, ptc_ui_text(PTC_UI_T_QUOTA_EXHAUSTED_RESTRICTION_STARTS_TONIGHT_AT_02D),
                 summary->bedtime_next_start_minute / 60, summary->bedtime_next_start_minute % 60);
         } else {
-            snprintf(out, out_size, "今日额度已耗尽暂停 ｜ 可输入加时码继续游玩");
+            snprintf(out, out_size, ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED_ENTER_GRANT_CODE_TO));
         }
         return;
     }
     if (summary->bedtime_skipped) {
-        snprintf(out, out_size, "今晚就寝已跳过 ｜ 额度玩完后将暂停游戏");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TONIGHT_S_BEDTIME_SKIPPED_GAME_SUSPENDS_AFTER));
         return;
     }
     if (summary->bedtime_next_available) {
-        const char *prefix = summary->bedtime_next_start_day_index == summary->day_index ? "今晚" :
-            (summary->bedtime_next_start_day_index == summary->day_index + 1 ? "明晚" : "下次");
+        const char *prefix = summary->bedtime_next_start_day_index == summary->day_index ? ptc_ui_text(PTC_UI_T_TONIGHT) :
+            (summary->bedtime_next_start_day_index == summary->day_index + 1 ? ptc_ui_text(PTC_UI_T_TOMORROW_NIGHT) : ptc_ui_text(PTC_UI_T_NEXT_TIME));
         int start_h = summary->bedtime_next_start_minute / 60;
         int start_m = summary->bedtime_next_start_minute % 60;
         if (summary->unrestricted_today == 1) {
-            snprintf(out, out_size, "今日额度不限时 ｜ %s %02d:%02d 起限制使用",
+            snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_UNLIMITED_RESTRICTION_STARTS_S_02D_02D),
                 prefix, start_h, start_m);
         } else {
-            snprintf(out, out_size, "额度用完后限制使用 ｜ %s %02d:%02d 起限制使用",
+            snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RESTRICTION_AFTER_QUOTA_STARTS_S_02D_02D),
                 prefix, start_h, start_m);
         }
         return;
     }
     if (summary->unrestricted_today == 1) {
-        snprintf(out, out_size, "今日额度不限时 ｜ 未开启就寝限制");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NO_DAILY_LIMIT_TODAY_BEDTIME_SCHEDULE_DISABLED));
     } else {
-        snprintf(out, out_size, "额度玩完后暂停 ｜ 未开启就寝限制");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_GAME_SUSPENDS_AFTER_DAILY_LIMIT_BEDTIME_SCHEDULE));
     }
 }
 
@@ -527,17 +528,17 @@ void ptc_overlay_format_child_buffer_status(
 {
     if (!out || out_size == 0) return;
     if (!summary || !summary->valid) {
-        snprintf(out, out_size, "暂不可用");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_UNAVAILABLE));
         return;
     }
     if (summary->daily_buffer_available) {
-        snprintf(out, out_size, "+%d 分钟可用（应急）", summary->daily_buffer_minutes);
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_D_MIN_AVAILABLE_EMERGENCY), summary->daily_buffer_minutes);
     } else if (summary->daily_buffer_claimed) {
-        snprintf(out, out_size, "今日已使用（明日恢复）");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_USED_TODAY_RESETS_TOMORROW));
     } else if (summary->daily_buffer_minutes == 0) {
-        snprintf(out, out_size, "今日未开启");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_DISABLED_TODAY));
     } else {
-        snprintf(out, out_size, "暂不可领取");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_CURRENTLY_UNAVAILABLE));
     }
 }
 

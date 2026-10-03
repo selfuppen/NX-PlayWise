@@ -27,7 +27,7 @@ static void enter_parent_area_unlocked(UiState *ui)
         ? PTC_UI_PARENT_SUPPORT : PTC_UI_PARENT_TODAY;
     ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
     ui->model.selected_index = 0;
-    snprintf(ui->model.message, sizeof(ui->model.message), "家长区已解锁。进入孩子区请按 B。");
+    snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PARENTAL_AREA_UNLOCKED_TO_ENTER_THE_KIDS));
 #ifndef PLAYWISE_EDEN
     ptc_hot_reload_inspect(&ui->hot_reload);
     sync_hot_reload_model(ui);
@@ -49,48 +49,48 @@ void enter_parent_area(UiState *ui)
     PtcAuthStatus state = ptc_companion_auth_state(&ui->auth);
     ui->auth_retry_action = AUTH_RETRY_ENTER_PARENT;
     if (state == PTC_AUTH_EMPTY) {
-        if (!pin_input(ui, "设置 任我玩 PIN", "摇杆方向输入；X=0，Y=9；输入内容只显示为圆点。", pin, sizeof(pin)) ||
-            !pin_input(ui, "确认 任我玩 PIN", "请再次输入相同的 PIN；输入内容只显示为圆点。", pin_confirm, sizeof(pin_confirm))) {
+        if (!pin_input(ui, ptc_ui_text(PTC_UI_T_SET_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_JOYSTICK_DIRECTION_INPUT_X_0_Y_9_2), pin, sizeof(pin)) ||
+            !pin_input(ui, ptc_ui_text(PTC_UI_T_CONFIRM_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_SAME_PIN_AGAIN_YOUR), pin_confirm, sizeof(pin_confirm))) {
             ui->auth_retry_action = AUTH_RETRY_NONE;
-            snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 设置。");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PIN_SETUP_CANCELED));
             return;
         }
         if (strcmp(pin, pin_confirm) != 0) {
-            show_auth_error(ui, "两次 PIN 不一致", "两次输入的 PIN 不一致，已全部清空，请重新设置。", 0);
+            show_auth_error(ui, ptc_ui_text(PTC_UI_T_TWO_PINS_ARE_INCONSISTENT), ptc_ui_text(PTC_UI_T_THE_PINS_ENTERED_TWICE_ARE_INCONSISTENT_AND), 0);
             return;
         }
         state = ptc_companion_auth_set_pin(&ui->auth, pin, time(NULL), switch_random, NULL);
         if (state != PTC_AUTH_OK) {
-            show_auth_error(ui, "PIN 设置失败", auth_status_zh(state), 0);
+            show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_SETTING_FAILED), auth_status_zh(state), 0);
             return;
         }
     } else if (state != PTC_AUTH_OK) {
-        show_auth_error(ui, "无法进入家长区", auth_status_zh(state), 0);
+        show_auth_error(ui, ptc_ui_text(PTC_UI_T_UNABLE_TO_ENTER_PARENT_AREA), auth_status_zh(state), 0);
         return;
     }
-    if (!pin_input(ui, "任我玩 PIN", "摇杆方向输入；X=0，Y=9；输入内容只显示为圆点。", pin, sizeof(pin))) {
+    if (!pin_input(ui, ptc_ui_text(PTC_UI_T_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_JOYSTICK_DIRECTION_INPUT_X_0_Y_9_2), pin, sizeof(pin))) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
-        snprintf(ui->model.message, sizeof(ui->model.message), "已取消进入家长区。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_ACCESS_TO_THE_PARENT_AREA_HAS_BEEN));
         return;
     }
     {
         int64_t retry_after = 0;
         state = ptc_companion_auth_verify_pin(&ui->auth, pin, (int64_t)time(NULL), &retry_after);
         if (state == PTC_AUTH_COOLDOWN && retry_after > 0) {
-            show_auth_error(ui, "PIN 暂时锁定", "PIN 错误次数过多，请等待倒计时结束后重试。", retry_after);
+            show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_TEMPORARILY_LOCKED), ptc_ui_text(PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR), retry_after);
             return;
         }
     }
     if (state != PTC_AUTH_OK) {
-        show_auth_error(ui, "PIN 验证未通过",
-                        state == PTC_AUTH_DENIED ? "PIN 不正确，请重试。" : auth_status_zh(state), 0);
+        show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_FAILED),
+                        state == PTC_AUTH_DENIED ? ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN) : auth_status_zh(state), 0);
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_NONE;
     enter_parent_area_unlocked(ui);
     if (strlen(pin) < 4U) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "家长区已解锁；当前 PIN 少于 4 位，很容易被猜到，建议尽快修改。");
+                 ptc_ui_text(PTC_UI_T_THE_PARENT_AREA_HAS_BEEN_UNLOCKED_THE));
     }
 }
 
@@ -103,7 +103,7 @@ void select_setup_shortcut(UiState *ui, int index)
     ui->model.shortcut_draft_mask = shortcut_preset_mask(index);
     ui->model.shortcut_draft_enabled = true;
     refresh_shortcut_draft_label(ui);
-    snprintf(ui->model.message, sizeof(ui->model.message), "待确认组合：%s。按 + 确认后才会生效。",
+    snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_SHORTCUT_TO_CONFIRM_S_PRESS_TO_APPLY),
              ui->model.shortcut_draft_label);
 }
 
@@ -136,9 +136,9 @@ void open_shortcut_manager(UiState *ui)
     ui->model.shortcut_draft_show_hint = ui->model.show_parent_shortcut_hint;
     refresh_shortcut_draft_label(ui);
     ui->model.overlay = PTC_UI_OVERLAY_SHORTCUT_MANAGER;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "家长区快捷键管理");
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_PARENT_AREA_SHORTCUT_KEY_MANAGEMENT));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "自定义组合需长按约 400ms；固定 Minus 松开即可进入，无需长按。所有修改按 + 确认后才生效。");
+             ptc_ui_text(PTC_UI_T_THE_CUSTOM_COMBINATION_REQUIRES_LONG_PRESSING_FOR));
 }
 
 void setup_pin(UiState *ui)
@@ -152,55 +152,55 @@ void setup_pin(UiState *ui)
     ui->auth_retry_action = AUTH_RETRY_SETUP_PIN;
     state = ptc_companion_auth_state(&ui->auth);
     if (state == PTC_AUTH_OK) {
-        if (!pin_input(ui, "修改默认 PIN", "输入新的 1到64 位数字；保留当前 PIN 可按 B 取消。",
+        if (!pin_input(ui, ptc_ui_text(PTC_UI_T_MODIFY_DEFAULT_PIN), ptc_ui_text(PTC_UI_T_ENTER_NEW_1_TO_64_DIGIT_NUMBER),
                        pin, sizeof(pin)) ||
-            !pin_input(ui, "确认新 PIN", "请再次输入相同的 PIN；输入内容只显示为圆点。",
+            !pin_input(ui, ptc_ui_text(PTC_UI_T_CONFIRM_NEW_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_SAME_PIN_AGAIN_YOUR),
                        pin_confirm, sizeof(pin_confirm))) {
             ui->auth_retry_action = AUTH_RETRY_NONE;
-            snprintf(ui->model.message, sizeof(ui->model.message), "已保留当前 PIN。");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_CURRENT_PIN_RESERVED));
             return;
         }
         if (strcmp(pin, pin_confirm) != 0) {
-            show_auth_error(ui, "两次 PIN 不一致", "两次输入的新 PIN 不一致，已全部清空，请重新设置。", 0);
+            show_auth_error(ui, ptc_ui_text(PTC_UI_T_TWO_PINS_ARE_INCONSISTENT), ptc_ui_text(PTC_UI_T_THE_NEW_PINS_ENTERED_TWICE_ARE_INCONSISTENT_2), 0);
             return;
         }
         state = ptc_companion_auth_set_pin(&ui->auth, pin, time(NULL), switch_random, NULL);
         if (state != PTC_AUTH_OK) {
-            show_auth_error(ui, "PIN 修改失败", auth_status_zh(state), 0);
+            show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_MODIFICATION_FAILED), auth_status_zh(state), 0);
             return;
         }
         ui->auth_retry_action = AUTH_RETRY_NONE;
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-                 strlen(pin) < 4U ? "PIN 已修改；当前仍属于弱保护，建议使用更长 PIN。" : "PIN 已修改。");
+                 strlen(pin) < 4U ? ptc_ui_text(PTC_UI_T_PIN_HAS_BEEN_MODIFIED_CURRENTLY_STILL_WEAK) : ptc_ui_text(PTC_UI_T_PIN_HAS_BEEN_MODIFIED));
         return;
     }
     if (state != PTC_AUTH_EMPTY) {
-        show_auth_error(ui, "无法设置 任我玩 PIN", auth_status_zh(state), 0);
+        show_auth_error(ui, ptc_ui_text(PTC_UI_T_UNABLE_TO_SET_PLAYWISE_PIN), auth_status_zh(state), 0);
         return;
     }
-    if (!pin_input(ui, "设置 任我玩 PIN", "输入 1到64 位数字；短 PIN 仅提示风险，不会阻止保存。",
+    if (!pin_input(ui, ptc_ui_text(PTC_UI_T_SET_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_ENTER_A_NUMBER_FROM_1_TO_64),
                    pin, sizeof(pin)) ||
-        !pin_input(ui, "确认 任我玩 PIN", "请再次输入相同的 PIN；输入内容只显示为圆点。",
+        !pin_input(ui, ptc_ui_text(PTC_UI_T_CONFIRM_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_SAME_PIN_AGAIN_YOUR),
                    pin_confirm, sizeof(pin_confirm))) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
-        snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 设置。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PIN_SETUP_CANCELED));
         return;
     }
     if (strcmp(pin, pin_confirm) != 0) {
-        show_auth_error(ui, "两次 PIN 不一致", "两次输入的 PIN 不一致，已全部清空，请重新设置。", 0);
+        show_auth_error(ui, ptc_ui_text(PTC_UI_T_TWO_PINS_ARE_INCONSISTENT), ptc_ui_text(PTC_UI_T_THE_PINS_ENTERED_TWICE_ARE_INCONSISTENT_AND), 0);
         return;
     }
     state = ptc_companion_auth_set_pin(&ui->auth, pin, time(NULL), switch_random, NULL);
     if (state != PTC_AUTH_OK) {
-        show_auth_error(ui, "PIN 设置失败", auth_status_zh(state), 0);
+        show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_SETTING_FAILED), auth_status_zh(state), 0);
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_NONE;
     if (save_setup_step(ui, PTC_UI_SETUP_THEME)) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                  strlen(pin) < 4U
-                     ? "PIN 已保存；当前 PIN 少于 4 位，容易被猜到，建议修改。"
-                     : "PIN 已保存；下一步选择外观主题。");
+                     ? ptc_ui_text(PTC_UI_T_PIN_HAS_BEEN_SAVED_THE_CURRENT_PIN)
+                     : ptc_ui_text(PTC_UI_T_PIN_SAVED_NEXT_SELECT_A_THEME));
     }
 }
 
@@ -215,18 +215,18 @@ bool ensure_default_setup_pin(UiState *ui)
     }
     if (state != PTC_AUTH_EMPTY) {
         ui->auth_retry_action = AUTH_RETRY_DEFAULT_SETUP_PIN;
-        show_auth_error(ui, "无法创建默认 PIN", auth_status_zh(state), 0);
+        show_auth_error(ui, ptc_ui_text(PTC_UI_T_UNABLE_TO_CREATE_DEFAULT_PIN), auth_status_zh(state), 0);
         return false;
     }
     state = ptc_companion_auth_set_pin(&ui->auth, "110", time(NULL), switch_random, NULL);
     if (state != PTC_AUTH_OK) {
         ui->auth_retry_action = AUTH_RETRY_DEFAULT_SETUP_PIN;
-        show_auth_error(ui, "默认 PIN 设置失败", auth_status_zh(state), 0);
+        show_auth_error(ui, ptc_ui_text(PTC_UI_T_DEFAULT_PIN_SETUP_FAILED), auth_status_zh(state), 0);
         return false;
     }
     ui->auth_retry_action = AUTH_RETRY_NONE;
     snprintf(ui->model.message, sizeof(ui->model.message),
-             "已创建默认 PIN 110；这是弱保护，建议在此修改。");
+             ptc_ui_text(PTC_UI_T_DEFAULT_PIN_110_HAS_BEEN_CREATED_THIS));
     return true;
 }
 
@@ -268,13 +268,13 @@ void setup_primary(UiState *ui)
     switch (ui->model.setup_step) {
     case PTC_UI_SETUP_SHORTCUT:
         if (!commit_shortcut_preferences(ui)) {
-            snprintf(ui->model.message, sizeof(ui->model.message), "快捷键设置未保存，请确认 SD 卡可写。");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_SHORTCUT_KEY_SETTINGS_ARE_NOT_SAVED));
             break;
         }
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                  ui->model.custom_shortcut_enabled
-                    ? "快捷键已确认启用；固定 Minus - 仍然有效。"
-                    : "未启用自定义组合；当前只保留固定 Minus -。");
+                    ? ptc_ui_text(PTC_UI_T_SHORTCUT_KEYS_CONFIRMED_TO_BE_ENABLED_FIXED)
+                    : ptc_ui_text(PTC_UI_T_CUSTOM_COMBINATIONS_ARE_NOT_ENABLED_CURRENTLY_ONLY));
         if (save_setup_step(ui, PTC_UI_SETUP_PIN)) (void)ensure_default_setup_pin(ui);
         break;
     case PTC_UI_SETUP_PIN:
@@ -286,27 +286,27 @@ void setup_primary(UiState *ui)
     case PTC_UI_SETUP_THEME:
         if (apply_theme_preference(ui, (PtcUiThemePreference)ui->model.setup_theme_index)) {
             (void)save_setup_step(ui, PTC_UI_SETUP_TAKEOVER);
-            snprintf(ui->model.message, sizeof(ui->model.message), "外观主题已保存；下一步确认启用额度管理。");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_APPEARANCE_THEME_HAS_BEEN_SAVED_NEXT));
         } else {
-            snprintf(ui->model.message, sizeof(ui->model.message), "主题设置未保存，已恢复原外观；请确认 SD 卡可写。");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_THEME_SETTINGS_ARE_NOT_SAVED_AND));
         }
         break;
     case PTC_UI_SETUP_TAKEOVER:
         if (ptc_ui_setup_takeover_complete(&ui->model)) {
             ui->model.setup_zone_index = 1;
             if (save_setup_step(ui, PTC_UI_SETUP_ZONE)) {
-                snprintf(ui->model.message, sizeof(ui->model.message), "额度管理已启用；请选择进入区域。");
+                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_QUOTA_MANAGEMENT_HAS_BEEN_ENABLED_PLEASE_SELECT));
             }
         } else if (!ui->waiting) {
             if (ptc_ui_runtime_fingerprint_reconfirmation_needed(&ui->model)) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "系统环境已变化，请重新检查并启用",
-                                     "系统版本或运行环境与上次确认时不同。检查兼容性后会保留现有设置并恢复额度管理。");
+                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, ptc_ui_text(PTC_UI_T_THE_SYSTEM_ENVIRONMENT_HAS_CHANGED_PLEASE_RECHECK),
+                                     ptc_ui_text(PTC_UI_T_THE_SYSTEM_VERSION_OR_OPERATING_ENVIRONMENT_IS));
             } else if (ui->model.disable_flag_present && strcmp(ui->model.setup_phase, "restored") == 0) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "解除停用并重新启用",
-                                     "将重新检查系统兼容性；通过后才解除紧急停用并重新启用额度管理。");
+                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, ptc_ui_text(PTC_UI_T_RE_ENABLE_CONTROLS),
+                                     ptc_ui_text(PTC_UI_T_WILL_RECHECK_SYSTEM_COMPATIBILITY_EMERGENCY_SUSPENSION_WILL));
             } else {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, "确认启用额度管理",
-                                     "先检查系统兼容性；通过后保存安装前设置并启用额度管理。");
+                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, ptc_ui_text(PTC_UI_T_CONFIRM_ENABLE_CONTROLS),
+                                     ptc_ui_text(PTC_UI_T_FIRST_CHECK_SYSTEM_COMPATIBILITY_AFTER_PASSING_SAVE));
             }
         }
         break;
@@ -434,5 +434,5 @@ void open_weekly_page(UiState *ui)
         }
     }
     submit_status(ui);
-    snprintf(ui->model.message, sizeof(ui->model.message), "正在刷新周计划；选择日期后按 A 或点按卡片编辑。");
+    snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_REFRESHING_WEEKLY_PLANNER_PRESS_A_AFTER_SELECTING));
 }

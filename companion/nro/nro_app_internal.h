@@ -250,6 +250,7 @@ void dispatch_auth_retry(UiState *ui, AuthRetryAction action);
 void export_diagnostics(UiState *ui);
 void refresh_theme(UiState *ui);
 void refresh_language(UiState *ui);
+void ptc_ui_refresh_recent_event_labels(PtcUiModel *model);
 bool apply_language_preference(UiState *ui, PtcUiLanguagePreference preference);
 void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms);
 void applet_hook(AppletHookType hook, void *param);

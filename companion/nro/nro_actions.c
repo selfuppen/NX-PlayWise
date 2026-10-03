@@ -39,7 +39,22 @@ void refresh_language(UiState *ui)
     ui->system_language = read_system_language();
     ptc_ui_language_set_resolved(ptc_ui_language_resolve(
         ui->language_preference, ui->system_language));
-    if (ptc_ui_language_get_resolved() != previous) ptc_ui_graphics_language_changed();
+    if (ptc_ui_language_get_resolved() != previous) {
+        ptc_ui_graphics_language_changed();
+        /* Feedback is formatted at result time; discard it after a language change. */
+        ui->model.message[0] = '\0';
+        ui->model.feedback_detail[0] = '\0';
+        ptc_ui_refresh_recent_event_labels(&ui->model);
+        ui->model.grant_notice[0] = '\0';
+        ui->model.album_restriction_detail[0] = '\0';
+        if (ui->model.overlay == PTC_UI_OVERLAY_LANGUAGE) {
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s", ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
+                     ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
+        } else if (ui->model.overlay != PTC_UI_OVERLAY_NONE) {
+            ptc_ui_cancel_overlay(&ui->model);
+        }
+    }
 }
 
 void refresh_theme(UiState *ui)
@@ -112,7 +127,7 @@ void refresh_album_restriction(UiState *ui)
         ui->model.album_backup_valid = false;
         snprintf(ui->model.album_restriction_detail,
                  sizeof(ui->model.album_restriction_detail),
-                 "状态读取失败，请重新检测");
+                 ptc_ui_text(PTC_UI_T_STATUS_READING_FAILED_PLEASE_CHECK_AGAIN));
         return;
     }
     ui->model.album_restriction_state = (int)status.state;

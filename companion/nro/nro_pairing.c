@@ -171,10 +171,10 @@ bool commit_credential(UiState *ui)
     refresh_security_state(ui);
     if (ui->model.credential_kind == 1) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "设备名已更新；使用更新前设备名签发的加时码不可用，请重新生成配对二维码。");
+                 ptc_ui_text(PTC_UI_T_THE_DEVICE_NAME_HAS_BEEN_UPDATED_THE));
     } else {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "加时码密钥已更新；当前网页配对和使用原密钥签发的加时码已失效，请重新配对。");
+                 ptc_ui_text(PTC_UI_T_THE_GRANT_CODE_KEY_HAS_BEEN_UPDATED));
     }
     return true;
 }
@@ -183,7 +183,7 @@ void open_credential_manager(UiState *ui, int kind)
     char device[PTC_DEVICE_ID_MAX_LEN + 1];
     char secret[PTC_GRANT_SECRET_MAX_LEN + 1];
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret))) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "读取当前设备配对信息失败。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_READ_CURRENT_DEVICE_PAIRING_INFORMATION));
         return;
     }
     ui->model.credential_kind = kind;
@@ -194,18 +194,18 @@ void open_credential_manager(UiState *ui, int kind)
     ui->model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     ui->model.overlay_selection = PTC_UI_CREDENTIAL_INPUT;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
-             kind == 1 ? "管理加时码设备名" : "管理加时码密钥");
+             kind == 1 ? ptc_ui_text(PTC_UI_T_MANAGES_THE_TIME_CODE_DEVICE_NAME) : ptc_ui_text(PTC_UI_T_MANAGE_GRANT_CODE_KEYS));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
-             kind == 1 ? "当前值只读；可手工输入或随机生成新设备名。" :
-                         "当前密钥默认遮挡；建议使用随机生成的 64 位十六进制密钥。");
+             kind == 1 ? ptc_ui_text(PTC_UI_T_THE_CURRENT_VALUE_IS_READ_ONLY_A) :
+                         ptc_ui_text(PTC_UI_T_THE_CURRENT_KEY_IS_BLOCKED_BY_DEFAULT));
 }
 void edit_credential_input(UiState *ui)
 {
     char value[80];
-    const char *header = ui->model.credential_kind == 1 ? "输入新设备名" : "输入新加时码密钥";
+    const char *header = ui->model.credential_kind == 1 ? ptc_ui_text(PTC_UI_T_ENTER_NEW_DEVICE_NAME) : ptc_ui_text(PTC_UI_T_ENTER_NEW_PLUS_TIME_CODE_KEY);
     const char *guide = ui->model.credential_kind == 1
-        ? "1到32 位：字母、数字、-、_"
-        : "建议随机生成；手工输入 32到64 个非空白 ASCII 字符";
+        ? ptc_ui_text(PTC_UI_T_1_TO_32_DIGITS_LETTERS_NUMBERS)
+        : ptc_ui_text(PTC_UI_T_RECOMMENDED_RANDOM_GENERATION_MANUALLY_ENTER_32_TO);
     if (!keyboard_input(header, guide, value, sizeof(value), ui->model.credential_kind == 2, false, false)) return;
     snprintf(ui->model.credential_new, sizeof(ui->model.credential_new), "%s", value);
 }
@@ -228,30 +228,30 @@ void request_save_credential(UiState *ui)
     if (!valid) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                  ui->model.credential_kind == 1
-                    ? "设备名必须为 1到32 位，只能包含字母、数字、- 和 _。"
-                    : "密钥必须为 32到64 个非空白可打印 ASCII 字符；建议使用随机生成。");
+                    ? ptc_ui_text(PTC_UI_T_THE_DEVICE_NAME_MUST_BE_1_TO)
+                    : ptc_ui_text(PTC_UI_T_THE_KEY_MUST_BE_32_TO_64));
         return;
     }
     if (strcmp(ui->model.credential_current, ui->model.credential_new) == 0) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "新值与当前值相同，无需保存。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_NEW_VALUE_IS_THE_SAME_AS));
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_SAVE_CREDENTIAL;
-    if (!verify_sensitive_pin(ui, "保存设备配对信息前，请再次输入本应用 PIN")) return;
+    if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THIS_APPLICATION_PIN_AGAIN_BEFORE_3))) return;
     if (ui->model.credential_kind == 2 && ptc_grant_secret_is_demo(ui->model.credential_new)) {
-        open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_CREDENTIAL, "启用公共演示密钥",
-            "任何知道设备名的人都能生成多个有效加时码，并可把当天额度累计到 1440 分钟。\n启用后家长页面会持续显示红色警告。");
+        open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_CREDENTIAL, ptc_ui_text(PTC_UI_T_ENABLE_PUBLIC_DEMO_KEY),
+            ptc_ui_text(PTC_UI_T_ANYONE_WHO_KNOWS_THE_DEVICE_NAME_CAN));
         return;
     }
-    if (!commit_credential(ui)) snprintf(ui->model.message, sizeof(ui->model.message), "保存配对信息失败。");
+    if (!commit_credential(ui)) snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_PAIRING_INFORMATION));
 }
 void show_grant_manager(UiState *ui, int selection)
 {
     ui->model.overlay = PTC_UI_OVERLAY_GRANT_MANAGER;
     ui->model.overlay_selection = selection >= 0 && selection < PTC_UI_GRANT_MANAGER_COUNT ? selection : 0;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "加时码生成管理");
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_EXTRA_TIME_CODE_GENERATION_MANAGEMENT));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "管理生成加时码所需的设备信息、导出配置和二维码网页地址。");
+             ptc_ui_text(PTC_UI_T_MANAGES_THE_DEVICE_INFORMATION_EXPORT_CONFIGURATION_AND));
 }
 void open_grant_manager(UiState *ui)
 {
@@ -262,7 +262,7 @@ void open_local_grant(UiState *ui)
 {
     uint16_t maximum = PTC_TOKEN_V2_MAX_MINUTES;
     if (!read_pairing_config(ui, ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), &maximum)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "读取本机生成器配置失败。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_READ_NATIVE_GENERATOR_CONFIGURATION));
         return;
     }
     ui->model.grant_max_minutes = maximum;
@@ -280,9 +280,9 @@ void open_local_grant(UiState *ui)
     ui->model.overlay = PTC_UI_OVERLAY_GRANT_LOCAL;
     ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
     ui->model.grant_status_refresh_failed = false;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "本机生成 8 位加时码");
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_NATIVELY_GENERATES_8_BIT_PLUS_TIME_CODE));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "选时长、生成，再把代码告诉孩子。");
+             ptc_ui_text(PTC_UI_T_CHOOSE_THE_DURATION_GENERATE_IT_AND_TELL_2));
     submit_status(ui);
     if (!ui->waiting) ui->model.grant_status_refresh_failed = true;
 }
@@ -290,29 +290,29 @@ void edit_pairing_base_url(UiState *ui)
 {
     char value[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     ui->auth_retry_action = AUTH_RETRY_EDIT_URL;
-    if (!verify_sensitive_pin(ui, "修改二维码跳转地址前，请再次输入本应用 PIN")) return;
-    if (!keyboard_input("二维码跳转地址", "填写官方或可信的家长网页；自定义页面可读取加时码密钥",
+    if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_BEFORE_MODIFYING_THE_QR_CODE_JUMP_ADDRESS))) return;
+    if (!keyboard_input(ptc_ui_text(PTC_UI_T_QR_CODE_JUMP_ADDRESS), ptc_ui_text(PTC_UI_T_FILL_IN_THE_OFFICIAL_OR_TRUSTED_PARENT),
                         value, sizeof(value), false, false, false)) return;
     if (!ptc_pairing_base_url_valid(value)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "地址无效：最长 256 字符，不得含账号、控制字符或 #；HTTP 仅限本机和私有网络。");
+                 ptc_ui_text(PTC_UI_T_INVALID_ADDRESS_256_CHARACTERS_MAXIMUM_NO_ACCOUNT));
         return;
     }
     if (!save_pairing_base_url(ui, value)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "保存二维码跳转地址失败。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_THE_QR_CODE_JUMP));
         return;
     }
     snprintf(ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), "%s", value);
     snprintf(ui->model.message, sizeof(ui->model.message),
-             "二维码跳转地址已更新；页面须支持二维码配对和导入配置文件，请仅使用可信的家长网页。");
+             ptc_ui_text(PTC_UI_T_THE_QR_CODE_JUMP_ADDRESS_HAS_BEEN));
 }
 void apply_default_pairing_base_url(UiState *ui)
 {
     if (!save_pairing_base_url(ui, PTC_PAIRING_BASE_URL)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "恢复官方二维码地址失败。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_RESTORE_THE_OFFICIAL_QR_CODE));
     } else {
         snprintf(ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), "%s", PTC_PAIRING_BASE_URL);
-        snprintf(ui->model.message, sizeof(ui->model.message), "已恢复二维码跳转默认地址。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_DEFAULT_ADDRESS_FOR_QR_CODE_JUMP));
     }
     show_grant_manager(ui, PTC_UI_GRANT_MANAGER_RESET_URL);
 }
@@ -320,10 +320,10 @@ void request_reset_pairing_base_url(UiState *ui)
 {
     char body[320];
     ui->auth_retry_action = AUTH_RETRY_RESET_URL;
-    if (!verify_sensitive_pin(ui, "恢复二维码跳转默认地址前，请再次输入本应用 PIN")) return;
-    snprintf(body, sizeof(body), "将当前二维码跳转地址恢复为默认地址：\n%s", PTC_PAIRING_BASE_URL);
+    if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_BEFORE_RESTORING_THE_DEFAULT_ADDRESS_FOR_QR))) return;
+    snprintf(body, sizeof(body), ptc_ui_text(PTC_UI_T_RESTORE_THE_QR_DESTINATION_TO_ITS_DEFAULT), PTC_PAIRING_BASE_URL);
     open_confirm_overlay(ui, PTC_UI_OPERATION_RESET_PAIRING_URL,
-                         "恢复二维码跳转默认地址", body);
+                         ptc_ui_text(PTC_UI_T_RESTORE_THE_DEFAULT_ADDRESS_OF_QR_CODE), body);
 }
 void generate_local_grant_code(UiState *ui)
 {
@@ -339,36 +339,36 @@ void generate_local_grant_code(UiState *ui)
     if (ui->waiting) return;
     ui->model.grant_notice[0] = '\0';
     if (!ui->model.status_loaded) {
-        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "无法确认设备日期，请先关闭弹层并刷新设备状态。");
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), ptc_ui_text(PTC_UI_T_UNABLE_TO_CONFIRM_THE_DEVICE_DATE_PLEASE));
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_GENERATE_CODE;
-    if (!verify_sensitive_pin(ui, "本机生成加时码前，请再次输入本应用 PIN")) return;
+    if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_APPLICATION_PIN_AGAIN_BEFORE))) return;
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret)) ||
         ptc_token_v2_tier_for_minutes(ui->model.grant_minutes, &tier) != PTC_ERR_OK) {
-        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "配对信息无效，请返回加时码生成管理检查配置。");
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), ptc_ui_text(PTC_UI_T_THE_PAIRING_INFORMATION_IS_INVALID_PLEASE_RETURN));
         return;
     }
     load_consumed_nonces(ui->model.day_index, consumed);
     if (!load_issued_nonces(ui, ui->model.day_index, issued)) {
-        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "读取签发记录失败，请返回检查 SD 卡后重试。");
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_ISSUANCE_RECORD_PLEASE));
         return;
     }
     randomGet(&start, sizeof(start));
     found = ptc_token_v2_find_available_nonce(consumed, issued, start, &nonce);
     if (!found) {
         snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice),
-                 "今日已达 512 枚上限，请明日再试；旧码未撤销。");
+                 ptc_ui_text(PTC_UI_T_THE_UPPER_LIMIT_OF_512_COINS_HAS));
         return;
     }
     if (ptc_token_v2_encode(tier, nonce, device, secret, ui->model.day_index, next_code) != PTC_ERR_OK) {
-        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), "生成失败，请返回检查配置后重试。");
+        snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice), ptc_ui_text(PTC_UI_T_GENERATION_FAILED_PLEASE_GO_BACK_AND_CHECK));
         return;
     }
     issued[nonce] = true;
     if (!save_issued_nonces(ui, ui->model.day_index, issued)) {
         snprintf(ui->model.grant_notice, sizeof(ui->model.grant_notice),
-                 "保存失败，请返回检查 SD 卡空间后重试；旧码未撤销。");
+                 ptc_ui_text(PTC_UI_T_FAILED_TO_SAVE_PLEASE_GO_BACK_AND));
         return;
     }
     snprintf(ui->model.grant_code, sizeof(ui->model.grant_code), "%s", next_code);
@@ -382,7 +382,7 @@ void generate_local_grant_code(UiState *ui)
     ui->model.grant_estimate_unrestricted = ui->model.unrestricted_today == 1;
     ui->model.grant_estimated_at = (int64_t)time(NULL);
     ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_GENERATE;
-    snprintf(ui->model.message, sizeof(ui->model.message), "已在本机生成今天有效的 %u 分钟加时码。",
+    snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_GENERATED_A_U_MIN_CODE_VALID_TODAY),
              (unsigned int)ui->model.grant_minutes);
 }
 void show_pairing_qr(UiState *ui)
@@ -392,7 +392,7 @@ void show_pairing_qr(UiState *ui)
     uint8_t temp[qrcodegen_BUFFER_LEN_MAX];
     uint16_t maximum;
     ui->auth_retry_action = AUTH_RETRY_SHOW_QR;
-    if (!verify_sensitive_pin(ui, "显示包含加时码密钥的二维码前，请再次输入本应用 PIN")) return;
+    if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_APPLICATION_PIN_AGAIN_BEFORE_2))) return;
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret)) ||
         !read_pairing_config(ui, ui->model.pairing_base_url, sizeof(ui->model.pairing_base_url), &maximum) ||
         !ptc_build_pairing_url_with_base(ui->model.pairing_base_url, device, secret,
@@ -400,13 +400,13 @@ void show_pairing_qr(UiState *ui)
         !qrcodegen_encodeText(ui->model.pairing_url, temp, ui->model.qr_code,
             qrcodegen_Ecc_MEDIUM, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX,
             qrcodegen_Mask_AUTO, true)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "生成配对二维码失败。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_GENERATE_MATCHING_QR_CODE));
         return;
     }
     ui->model.overlay = PTC_UI_OVERLAY_QR;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "手机/电脑生成加时码");
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_MOBILE_PHONE_COMPUTER_GENERATES_GRANT_CODE));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-             "可扫描二维码自动配对，也可手动打开当前家长网页并导入配置文件。");
+             ptc_ui_text(PTC_UI_T_YOU_CAN_SCAN_THE_QR_CODE_FOR));
 }
 void export_parent_import(UiState *ui)
 {
@@ -422,21 +422,21 @@ void export_parent_import(UiState *ui)
         ui->export_return_overlay = PTC_UI_OVERLAY_GRANT_MANAGER;
     if (ui->export_return_overlay != PTC_UI_OVERLAY_QR) {
         ui->auth_retry_action = AUTH_RETRY_EXPORT_CONFIG;
-        if (!verify_sensitive_pin(ui, "导出包含加时码密钥的配置前，请再次输入本应用 PIN")) return;
+        if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THIS_APPLICATION_PIN_AGAIN_BEFORE_4))) return;
     }
     ui->model.parent_export_succeeded = false;
     ui->model.overlay = PTC_UI_OVERLAY_PARENT_EXPORT_RESULT;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "导出手机/电脑配置");
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_EXPORT_MOBILE_PHONE_COMPUTER_CONFIGURATION));
     ui->model.overlay_body[0] = '\0';
     if (!read_pairing_values(ui, device, sizeof(device), secret, sizeof(secret))) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            "读取设备名或加时码密钥失败；配置文件没有导出。");
+            ptc_ui_text(PTC_UI_T_FAILED_TO_READ_DEVICE_NAME_OR_TIME));
         return;
     }
     root = cJSON_CreateObject();
     if (!root) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            "内存不足，配置文件没有导出。");
+            ptc_ui_text(PTC_UI_T_INSUFFICIENT_MEMORY_AND_THE_CONFIGURATION_FILE_WAS));
         return;
     }
     cJSON_AddNumberToObject(root, "version", 1);
@@ -449,7 +449,7 @@ void export_parent_import(UiState *ui)
     free(json);
     ui->model.parent_export_succeeded = ok;
     snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-        ok ? "配置文件已导出。" : "写入 SD 卡失败；配置文件没有导出，请检查 SD 卡是否可写。");
+        ok ? ptc_ui_text(PTC_UI_T_CONFIGURATION_FILE_HAS_BEEN_EXPORTED) : ptc_ui_text(PTC_UI_T_FAILED_TO_WRITE_TO_THE_SD_CARD));
 }
 void reveal_current_credential(UiState *ui)
 {
@@ -460,7 +460,7 @@ void reveal_current_credential(UiState *ui)
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_REVEAL_CREDENTIAL;
-    if (!verify_sensitive_pin(ui, "显示当前加时码密钥前，请再次输入本应用 PIN")) return;
+    if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THIS_APPLICATION_PIN_AGAIN_BEFORE_5))) return;
     ui->model.credential_revealed = true;
     ui->model.credential_new_revealed = true;
 }

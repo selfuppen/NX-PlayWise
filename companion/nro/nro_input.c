@@ -73,15 +73,15 @@ void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             if (ui->model.overlay_selection == 3) {
                 ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_QUICK_ADD,
-                    "自定义快速加时", "输入 1 到 120 分钟；完成后仍需确认才会提交。",
+                    ptc_ui_text(PTC_UI_T_CUSTOMIZED_QUICK_GRANT), ptc_ui_text(PTC_UI_T_ENTER_1_TO_120_MINUTES_CONFIRMATION_WILL),
                     3, 1, 120, ui->model.draft_minutes);
                 ui->model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
             } else {
                 char body[192];
                 ui->model.draft_minutes = OPTIONS[ui->model.overlay_selection];
-                snprintf(body, sizeof(body), "将在今天当前额度上增加 %u 分钟。\n确认前不会修改额度。",
+                snprintf(body, sizeof(body), ptc_ui_text(PTC_UI_T_ADD_U_MIN_TO_TODAY_S_CURRENT),
                     (unsigned int)ui->model.draft_minutes);
-                open_confirm_overlay(ui, PTC_UI_OPERATION_ADD_TODAY_MINUTES, "确认快速加时", body);
+                open_confirm_overlay(ui, PTC_UI_OPERATION_ADD_TODAY_MINUTES, ptc_ui_text(PTC_UI_T_CONFIRM_RAPID_GRANT), body);
             }
         }
         return;
@@ -154,8 +154,8 @@ void handle_overlay_input(UiState *ui, u64 down)
             }
             update_bedtime_dirty(ui);
             ptc_ui_cancel_overlay(&ui->model);
-            snprintf(ui->model.message, sizeof(ui->model.message), "已复制到%s；保存前仍可放弃。",
-                target == 0 ? "周一至周五" : "周六、周日");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_COPIED_TO_S_YOU_CAN_DISCARD_BEFORE),
+                target == 0 ? ptc_ui_text(PTC_UI_T_MONDAY_TO_FRIDAY) : ptc_ui_text(PTC_UI_T_SATURDAY_SUNDAY));
         }
         return;
     }
@@ -313,10 +313,10 @@ void handle_overlay_input(UiState *ui, u64 down)
             PtcUiThemePreference preference = (PtcUiThemePreference)ui->model.overlay_selection;
             if (apply_theme_preference(ui, preference)) {
                 ptc_ui_cancel_overlay(&ui->model);
-                snprintf(ui->model.message, sizeof(ui->model.message), "外观主题已切换为%s。",
+                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THEME_CHANGED_TO_S),
                          ptc_ui_theme_preference_label(preference));
             } else {
-                snprintf(ui->model.message, sizeof(ui->model.message), "主题设置未保存，已恢复原外观；请确认 SD 卡可写。");
+                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_THEME_SETTINGS_ARE_NOT_SAVED_AND));
             }
         }
         return;
@@ -338,11 +338,15 @@ void handle_overlay_input(UiState *ui, u64 down)
             PtcUiLanguagePreference preference = (PtcUiLanguagePreference)ui->model.overlay_selection;
             if (apply_language_preference(ui, preference)) {
                 ptc_ui_cancel_overlay(&ui->model);
-                snprintf(ui->model.message, sizeof(ui->model.message), "界面语言已设为%s。",
-                    ptc_ui_language_preference_label(preference));
+                char localized_label[64];
+                const char *label = ptc_ui_localize(ptc_ui_language_preference_label(preference),
+                    localized_label, sizeof(localized_label));
+                PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("language", label)};
+                (void)ptc_ui_text_format(PTC_UI_T_LANGUAGE_CHANGED, ui->model.message,
+                    sizeof(ui->model.message), args, 1);
             } else {
-                snprintf(ui->model.message, sizeof(ui->model.message),
-                    "语言设置未保存，请确认 SD 卡可写。");
+                snprintf(ui->model.message, sizeof(ui->model.message), "%s",
+                    ptc_ui_text(PTC_UI_T_LANGUAGE_SAVE_FAILED));
             }
         }
         return;
@@ -357,8 +361,8 @@ void handle_overlay_input(UiState *ui, u64 down)
             bool weekend = ui->model.overlay_selection == 1;
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
             snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-                     changed ? (weekend ? "已把来源规则复制到周末草稿；请确认后保存。" : "已把来源规则复制到工作日草稿；请确认后保存。")
-                             : "目标日期已经使用相同草稿规则，没有产生修改。");
+                     changed ? (weekend ? ptc_ui_text(PTC_UI_T_THE_SOURCE_RULE_HAS_BEEN_COPIED_TO) : ptc_ui_text(PTC_UI_T_THE_SOURCE_RULE_HAS_BEEN_COPIED_TO_2))
+                             : ptc_ui_text(PTC_UI_T_THE_TARGET_DATE_IS_ALREADY_USING_THE));
         }
         return;
     }
@@ -369,26 +373,26 @@ void handle_overlay_input(UiState *ui, u64 down)
             ptc_audio_play(PTC_SE_CONFIRM);
             refresh_album_restriction(ui);
             refresh_recovery_state(ui);
-            snprintf(ui->model.message, sizeof(ui->model.message), "自制程序菜单高级入口状态已重新检测。");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_HOMEBREW_MENU_ADVANCED_ENTRY_STATUS_HAS_BEEN));
         } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
             ui->model.overlay_selection = 1 - ui->model.overlay_selection;
         } else if (down & HidNpadButton_A) {
             if (ui->model.overlay_selection == 0 && ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION, "配置自制程序菜单高级入口？",
-                    "当前状态：未配置\n目标状态：高级入口可用\n此功能只改变 hbmenu 启动方式，不提供防篡改保护。将就地备份原文件；重启后，在桌面‘手柄设置’图标上按住 X，再按 A 进入 hbmenu。\n可回到此处恢复原配置。");
+                open_confirm_overlay(ui, PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION, ptc_ui_text(PTC_UI_T_CONFIGURE_ADVANCED_ENTRY_TO_HOMEBREW_MENU),
+                    ptc_ui_text(PTC_UI_T_CURRENT_NOT_CONFIGURED_TARGET_ADVANCED_ENTRY_AVAILABLE));
             } else if (ui->model.overlay_selection == 1 && ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY, "恢复原来的启动方式？",
-                    "将按可信备份恢复原配置。卸载或删除 PlayWise 数据前必须完成恢复；保存后需重启主机生效。");
+                open_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY, ptc_ui_text(PTC_UI_T_RESTORE_THE_ORIGINAL_STARTUP_MODE_2),
+                    ptc_ui_text(PTC_UI_T_WILL_RESTORE_THE_ORIGINAL_CONFIGURATION_ACCORDING_TO));
             } else if (ui->model.overlay_selection == 1 && ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY && ui->model.album_backup_valid) {
                 char body[320];
-                snprintf(body, sizeof(body), "检测到外部修改：%.120s\n继续会放弃这些修改并强制恢复可信备份。请先确认外部修改不再需要。",
-                         ui->model.album_restriction_detail[0] ? ui->model.album_restriction_detail : "配置与记录不一致");
-                open_danger_confirm_overlay(ui, PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, "强制恢复可信备份？", body);
+                snprintf(body, sizeof(body), ptc_ui_text(PTC_UI_T_EXTERNAL_CHANGES_DETECTED_120S_CONTINUING_DISCARDS_THEM),
+                         ui->model.album_restriction_detail[0] ? ui->model.album_restriction_detail : ptc_ui_text(PTC_UI_T_CONFIGURATION_IS_INCONSISTENT_WITH_RECORDS));
+                open_danger_confirm_overlay(ui, PTC_UI_OPERATION_FORCE_RESTORE_ALBUM_ENTRY, ptc_ui_text(PTC_UI_T_FORCE_RESTORE_OF_TRUSTED_BACKUP), body);
             } else if (ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
                 snprintf(ui->model.message, sizeof(ui->model.message),
-                         "入口已由外部配置且可以使用；PlayWise 没有原始备份，因此不会重复开启或自动恢复。");
+                         ptc_ui_text(PTC_UI_T_THE_PORTAL_HAS_BEEN_CONFIGURED_EXTERNALLY_AND));
             } else {
-                snprintf(ui->model.message, sizeof(ui->model.message), "当前状态不允许执行这项操作，请重新检测。");
+                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_CURRENT_STATUS_DOES_NOT_ALLOW_THIS));
             }
         }
         return;
@@ -491,10 +495,10 @@ void handle_overlay_input(UiState *ui, u64 down)
                 ui->model.overlay = PTC_UI_OVERLAY_NONE;
                 snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                          ui->model.custom_shortcut_enabled
-                            ? "家长区快捷键已确认更新。"
-                            : "自定义快捷键已关闭；固定 Minus - 仍然有效。");
+                            ? ptc_ui_text(PTC_UI_T_THE_PARENT_AREA_SHORTCUT_KEYS_HAVE_BEEN)
+                            : ptc_ui_text(PTC_UI_T_CUSTOM_SHORTCUT_KEYS_TURNED_OFF_FIXED_MINUS));
             } else {
-                snprintf(ui->model.message, sizeof(ui->model.message), "快捷键设置未保存，请确认 SD 卡可写。");
+                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_SHORTCUT_KEY_SETTINGS_ARE_NOT_SAVED));
             }
         }
         return;
@@ -539,9 +543,9 @@ void handle_overlay_input(UiState *ui, u64 down)
             if (strcmp(ui->model.credential_current, ui->model.credential_new) != 0) {
                 ui->model.overlay = PTC_UI_OVERLAY_CREDENTIAL_LEAVE;
                 ui->model.overlay_selection = 1;
-                snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "放弃配对信息修改？");
+                snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_GIVE_UP_MODIFYING_PAIRING_INFORMATION));
                 snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                         "手工输入和随机生成只修改草稿，尚未保存。");
+                         ptc_ui_text(PTC_UI_T_MANUAL_INPUT_AND_RANDOM_GENERATION_ONLY_MODIFY));
             } else {
                 show_grant_manager(ui, ui->model.credential_kind == 1
                     ? PTC_UI_GRANT_MANAGER_DEVICE : PTC_UI_GRANT_MANAGER_SECRET);
@@ -589,7 +593,7 @@ void handle_overlay_input(UiState *ui, u64 down)
             if ((down & HidNpadButton_A) && ui->model.overlay_selection == 0) {
                 show_grant_manager(ui, ui->model.credential_kind == 1
                     ? PTC_UI_GRANT_MANAGER_DEVICE : PTC_UI_GRANT_MANAGER_SECRET);
-                snprintf(ui->model.message, sizeof(ui->model.message), "已放弃未保存的配对信息修改。");
+                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNSAVED_PAIRING_INFORMATION_MODIFICATIONS_WERE_ABANDONED));
             } else {
                 ptc_ui_cancel_overlay(&ui->model);
             }
@@ -597,7 +601,7 @@ void handle_overlay_input(UiState *ui, u64 down)
             ptc_audio_play(PTC_SE_CANCEL);
             show_grant_manager(ui, ui->model.credential_kind == 1
                 ? PTC_UI_GRANT_MANAGER_DEVICE : PTC_UI_GRANT_MANAGER_SECRET);
-            snprintf(ui->model.message, sizeof(ui->model.message), "已放弃未保存的配对信息修改。");
+            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNSAVED_PAIRING_INFORMATION_MODIFICATIONS_WERE_ABANDONED));
         }
         return;
     }
@@ -661,7 +665,7 @@ void handle_overlay_input(UiState *ui, u64 down)
         ui->today_limit_refresh_pending = false;
         ui->today_limit_save_pending = false;
         ptc_ui_cancel_overlay(&ui->model);
-        snprintf(ui->model.message, sizeof(ui->model.message), "已取消修改。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_MODIFICATION_CANCELED));
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_NUMPAD ||
@@ -683,7 +687,7 @@ void handle_overlay_input(UiState *ui, u64 down)
         } else if (today_mode && ui->model.today_limit_unlimited_draft &&
                    (down & (HidNpadButton_A | HidNpadButton_Plus))) {
             open_confirm_overlay(ui, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT,
-                "将今天设为不限时", "今天不设每日额度上限；就寝时间仍独立生效。确认前可刷新重算。");
+                ptc_ui_text(PTC_UI_T_MAKE_TODAY_UNLIMITED), ptc_ui_text(PTC_UI_T_THERE_IS_NO_DAILY_QUOTA_LIMIT_TODAY));
         } else if (today_mode && ui->model.today_limit_unlimited_draft) {
             /* Keep the previously entered limited value for a mode switch back. */
         } else if (ui->model.overlay == PTC_UI_OVERLAY_MINUTE_EDITOR && (down & HidNpadButton_Minus)) {
@@ -722,32 +726,32 @@ void handle_overlay_input(UiState *ui, u64 down)
                     if (ptc_ui_limit_minutes_would_restrict(&ui->model, value)) {
                         char body[192];
                         snprintf(body, sizeof(body),
-                                 "额度已耗约 %d 分钟（估算）；设置总额度 %u 分钟。\n新额度不高于已玩时间，设置后将立即进入时间限制。",
+                                 ptc_ui_text(PTC_UI_T_ESTIMATED_USAGE_ABOUT_D_MIN_SET_TOTAL),
                                  ui->model.played_minutes, (unsigned int)value);
-                        open_danger_confirm_overlay(ui, operation, "新额度不高于额度消耗估算", body);
+                        open_danger_confirm_overlay(ui, operation, ptc_ui_text(PTC_UI_T_THE_NEW_QUOTA_IS_NOT_HIGHER_THAN), body);
                     } else if (!ui->model.played_minutes_available || ui->model.played_minutes < 0) {
                         char body[192];
                         snprintf(body, sizeof(body),
-                                 "额度消耗估算不可用；设置总额度 %u 分钟。\n暂时无法估算修改后剩余，设置后可能立即限制。",
+                                 ptc_ui_text(PTC_UI_T_USAGE_ESTIMATE_UNAVAILABLE_SET_TOTAL_QUOTA_U),
                                  (unsigned int)value);
-                        open_danger_confirm_overlay(ui, operation, "无法确认是否立即限制", body);
+                        open_danger_confirm_overlay(ui, operation, ptc_ui_text(PTC_UI_T_UNABLE_TO_CONFIRM_WHETHER_TO_LIMIT_IMMEDIATELY), body);
                     } else if (ui->model.unrestricted_today == 1) {
                         char body[192];
                         int preview = (int)value - ui->model.played_minutes;
                         if (preview < 0) preview = 0;
                         snprintf(body, sizeof(body),
-                                 "今天当前为不限时；设置总额度 %u 分钟后将恢复限时。\n修改后还剩 %d 分钟可玩。",
+                                 ptc_ui_text(PTC_UI_T_TODAY_IS_UNLIMITED_A_U_MIN_TOTAL_2),
                                  (unsigned int)value, preview);
-                        open_confirm_overlay(ui, operation, "不限时将改为限时", body);
+                        open_confirm_overlay(ui, operation, ptc_ui_text(PTC_UI_T_UNLIMITED_TIME_WILL_BE_CHANGED_TO_LIMITED_2), body);
                     } else {
                         ui->model.operation = PTC_UI_OPERATION_NONE;
                         submit_minutes(ui, operation, value);
                     }
                 } else if (operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES) {
                     char body[192];
-                    snprintf(body, sizeof(body), "将在今天当前额度上增加 %u 分钟。\n确认前不会修改额度。",
+                    snprintf(body, sizeof(body), ptc_ui_text(PTC_UI_T_ADD_U_MIN_TO_TODAY_S_CURRENT),
                         (unsigned int)value);
-                    open_confirm_overlay(ui, operation, "确认快速加时", body);
+                    open_confirm_overlay(ui, operation, ptc_ui_text(PTC_UI_T_CONFIRM_RAPID_GRANT), body);
                 } else {
                     ui->model.operation = PTC_UI_OPERATION_NONE;
                     submit_minutes(ui, operation, value);
@@ -778,23 +782,23 @@ void handle_overlay_input(UiState *ui, u64 down)
                 if (ptc_ui_limit_minutes_would_restrict(&ui->model, ui->model.draft_minutes)) {
                     char body[192];
                     snprintf(body, sizeof(body),
-                             "额度已耗约 %d 分钟（估算）；设置总额度 %u 分钟。\n调整后将立即没有可玩时间。",
+                             ptc_ui_text(PTC_UI_T_ESTIMATED_USAGE_ABOUT_D_MIN_SET_TOTAL_2),
                              ui->model.played_minutes, (unsigned int)ui->model.draft_minutes);
-                    open_danger_confirm_overlay(ui, operation, "新额度不高于额度消耗估算", body);
+                    open_danger_confirm_overlay(ui, operation, ptc_ui_text(PTC_UI_T_THE_NEW_QUOTA_IS_NOT_HIGHER_THAN), body);
                 } else if (!ui->model.played_minutes_available || ui->model.played_minutes < 0) {
                     char body[192];
                     snprintf(body, sizeof(body),
-                             "额度消耗估算不可用；设置总额度 %u 分钟。\n暂时无法估算修改后剩余，设置后可能立即限制。",
+                             ptc_ui_text(PTC_UI_T_USAGE_ESTIMATE_UNAVAILABLE_SET_TOTAL_QUOTA_U),
                              (unsigned int)ui->model.draft_minutes);
-                    open_danger_confirm_overlay(ui, operation, "无法确认是否立即限制", body);
+                    open_danger_confirm_overlay(ui, operation, ptc_ui_text(PTC_UI_T_UNABLE_TO_CONFIRM_WHETHER_TO_LIMIT_IMMEDIATELY), body);
                 } else if (ui->model.unrestricted_today == 1) {
                     char body[192];
                     int preview = (int)ui->model.draft_minutes - ui->model.played_minutes;
                     if (preview < 0) preview = 0;
                     snprintf(body, sizeof(body),
-                             "额度已耗 %d 分钟（估算）；新额度 %u 分钟。\n修改后还剩 %d 分钟可玩。",
+                             ptc_ui_text(PTC_UI_T_ESTIMATED_USAGE_D_MIN_NEW_QUOTA_U),
                              ui->model.played_minutes, (unsigned int)ui->model.draft_minutes, preview);
-                    open_confirm_overlay(ui, operation, "不限时将改为限时", body);
+                    open_confirm_overlay(ui, operation, ptc_ui_text(PTC_UI_T_UNLIMITED_TIME_WILL_BE_CHANGED_TO_LIMITED_2), body);
                 } else {
                     ui->model.overlay = PTC_UI_OVERLAY_NONE;
                     ui->model.operation = PTC_UI_OPERATION_NONE;

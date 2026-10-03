@@ -19,8 +19,8 @@ void ptc_ui_format_custom_shortcut_hint(
     if (!out || out_size == 0) {
         return;
     }
-    snprintf(out, out_size, "长按约 400ms：%s 进入家长区",
-             shortcut_label && shortcut_label[0] ? shortcut_label : "自定义组合");
+    snprintf(out, out_size, ptc_ui_text(PTC_UI_T_HOLD_ABOUT_400_MS_S_TO_OPEN),
+             shortcut_label && shortcut_label[0] ? shortcut_label : ptc_ui_text(PTC_UI_T_CUSTOM_COMBINATION));
 }
 
 int ptc_ui_weekday_for_display_slot(int slot)
@@ -52,9 +52,9 @@ const char *ptc_ui_settings_status_label(const PtcUiModel *model)
     if (!model) return NULL;
     if (model->disable_flag_present || model->recovery_active ||
         strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
-        return "需处理";
+        return ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED);
     }
-    if (model->setup_phase[0] && strcmp(model->setup_phase, "active") != 0) return "待完成";
+    if (model->setup_phase[0] && strcmp(model->setup_phase, "active") != 0) return ptc_ui_text(PTC_UI_T_TO_BE_COMPLETED);
     return NULL;
 }
 

@@ -858,9 +858,22 @@ void draw_text_bold(uint32_t *pixels, uint32_t stride, int x, int baseline, cons
 
 void draw_text_center(uint32_t *pixels, uint32_t stride, UiRect rect, const char *text, int size, uint32_t color)
 {
-    int width = measure_text(text, size);
-    int baseline = rect.y + (rect.height + size) / 2 - 3;
-    draw_text(pixels, stride, rect.x + (rect.width - width) / 2, baseline, text, size, color);
+    if (!text || !*text) return;
+    int cur_size = size;
+    int width = measure_text(text, cur_size);
+    while (width > rect.width - 6 && cur_size > 11) {
+        cur_size--;
+        width = measure_text(text, cur_size);
+    }
+    char fitted[256];
+    const char *to_draw = text;
+    if (width > rect.width - 4) {
+        fit_text(fitted, sizeof(fitted), text, cur_size, rect.width - 4);
+        to_draw = fitted;
+        width = measure_text(to_draw, cur_size);
+    }
+    int baseline = rect.y + (rect.height + cur_size) / 2 - 3;
+    draw_text(pixels, stride, rect.x + (rect.width - width) / 2, baseline, to_draw, cur_size, color);
 }
 
 void fit_text(char *out, size_t out_size, const char *text, int size, int max_width)
@@ -881,9 +894,15 @@ void fit_text(char *out, size_t out_size, const char *text, int size, int max_wi
         source = source_copy;
     }
     source = ptc_ui_localize(source, localized, sizeof(localized));
+    if (measure_text(source, size) <= max_width) {
+        snprintf(out, out_size, "%s", source);
+        return;
+    }
     cursor = source;
     end = cursor;
     out[0] = '\0';
+    int ellipsis_width = measure_text("...", size);
+    if (ellipsis_width < 10) ellipsis_width = 10;
     while (*cursor) {
         const char *next = cursor;
         uint32_t codepoint = ui_decode_utf8(&next);
@@ -892,7 +911,7 @@ void fit_text(char *out, size_t out_size, const char *text, int size, int max_wi
         if (entry) {
             advance = entry->advance;
         }
-        if (width + advance > max_width || (*next && width + advance + 28 > max_width)) {
+        if (width + advance > max_width || (*next && width + advance + ellipsis_width > max_width)) {
             truncated = true;
             break;
         }
@@ -936,9 +955,11 @@ int draw_wrapped_text(
     while (*cursor && line < max_lines) {
         const char *end = cursor;
         const char *newline = strchr(cursor, '\n');
+        const char *last_space = NULL;
         int width = 0;
         char buffer[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
         while (*end && end != newline) {
+            if (*end == ' ') last_space = end;
             const char *next = end;
             uint32_t codepoint = ui_decode_utf8(&next);
             int advance = 0;
@@ -946,7 +967,12 @@ int draw_wrapped_text(
             if (entry) {
                 advance = (int)entry->advance;
             }
-            if (end > cursor && width + advance > max_width) break;
+            if (end > cursor && width + advance > max_width) {
+                if (last_space && last_space > cursor) {
+                    end = last_space;
+                }
+                break;
+            }
             width += advance;
             end = next;
         }
@@ -962,7 +988,7 @@ int draw_wrapped_text(
             buffer[bytes] = '\0';
         }
         draw_text(pixels, stride, x, baseline + line * line_height, buffer, size, color);
-        cursor = *end == '\n' ? end + 1 : end;
+        cursor = *end == '\n' ? end + 1 : (*end == ' ' ? end + 1 : end);
         ++line;
     }
     return baseline + line * line_height;

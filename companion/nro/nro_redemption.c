@@ -8,18 +8,18 @@ void open_offline_code_input(UiState *ui)
     }
     if (ui->model.disable_flag_present) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "紧急停用已开启，当前不能兑换加时码；状态和恢复仍可使用。");
+                 ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ON_GRANT_CODES_CANNOT));
         return;
     }
     if (ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL)) &&
         ui->model.unrestricted_today == 1) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "今日不限时，加时码不可用；代码仍可留待有效的限时日使用。");
+                 ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIME_LIMIT_TODAY_AND_2));
         return;
     }
     ptc_ui_numpad_open(
         &ui->model, PTC_UI_NUMPAD_OFFLINE_CODE, PTC_UI_OVERLAY_NONE,
-        "输入加时码", "输入家长给你的 8 位码，确认前会先显示加时预览。", 8, 0, 0, 0);
+        ptc_ui_text(PTC_UI_T_ENTER_THE_EXTRA_TIME_CODE), ptc_ui_text(PTC_UI_T_ENTER_THE_8_DIGIT_CODE_GIVEN_TO), 8, 0, 0, 0);
 }
 
 static void apply_pending_redemption_preview(UiState *ui, const PtcPendingRedemption *pending)
@@ -43,7 +43,7 @@ void show_pending_redemption(UiState *ui)
     ui->model.code_result_pending = true;
     ui->model.code_result_failed = false;
     snprintf(ui->model.message, sizeof(ui->model.message),
-             "已恢复上次确认的加时请求，结果确认中；请勿重复输入这枚加时码。");
+             ptc_ui_text(PTC_UI_T_THE_LAST_CONFIRMED_GRANT_REQUEST_HAS_BEEN));
     snprintf(ui->model.result_status, sizeof(ui->model.result_status), "pending");
     snprintf(ui->active_request_id, sizeof(ui->active_request_id), "%s", ui->pending_redemption.request_id);
     set_command_name(ui, "offline_code");
@@ -59,14 +59,14 @@ void poll_pending_redemption(UiState *ui)
     if (status != PTC_COMPANION_OK) {
         if (status == PTC_COMPANION_RESULT_INVALID || status == PTC_COMPANION_RESULT_MISMATCH) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                     "兑换结果正在确认，已读取到的结果尚不能安全核对；请勿重复输入这枚加时码。");
+                     ptc_ui_text(PTC_UI_T_THE_REDEMPTION_RESULT_IS_BEING_CONFIRMED_AND));
         }
         return;
     }
     if (!ptc_ui_apply_result_json(&ui->model, ui->last_result) ||
         strcmp(ui->model.result_type, "offline_code") != 0) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "兑换结果正在确认，后台返回内容尚不能安全核对；请勿重复输入这枚加时码。");
+                 ptc_ui_text(PTC_UI_T_THE_REDEMPTION_RESULT_IS_BEING_CONFIRMED_AND_2));
         return;
     }
     ui->recovering_redemption = false;
@@ -83,7 +83,7 @@ void poll_pending_redemption(UiState *ui)
                  "%s", ptc_ui_code_failure_guidance(ui->model.error_code));
     } else {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "已恢复并确认上次兑换成功；这枚加时码已经使用，不能再次使用。");
+                 ptc_ui_text(PTC_UI_T_HAS_BEEN_RESTORED_AND_CONFIRMED_THAT_THE));
     }
 }
 
@@ -95,14 +95,14 @@ bool restore_pending_redemption(UiState *ui)
     if (status != PTC_COMPANION_OK) {
         ui->model.view = PTC_UI_ERROR;
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "上次加时的恢复信息无法读取。为避免重复兑换，请暂勿再次输入该码。");
+                 ptc_ui_text(PTC_UI_T_THE_RECOVERY_INFORMATION_FROM_THE_LAST_GRANT));
         return found;
     }
     if (!found) return false;
     if (!ptc_companion_pending_redemption_has_submission(&ui->client, &ui->pending_redemption)) {
         (void)ptc_companion_pending_redemption_clear(&ui->client);
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "上次确认在提交前中断，加时码未消费；请重新输入。");
+                 ptc_ui_text(PTC_UI_T_THE_LAST_CONFIRMATION_WAS_INTERRUPTED_BEFORE_SUBMISSION_2));
         return true;
     }
     ui->recovering_redemption = true;
@@ -120,9 +120,9 @@ void submit_preview_offline_code(UiState *ui, const char *code)
     set_command_name(ui, "preview_offline_code");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "preview_offline_code", "正在验证加时码并计算生效预览...");
+        begin_wait(ui, "preview_offline_code", ptc_ui_text(PTC_UI_T_IS_VERIFYING_THE_GRANT_CODE_AND_CALCULATING));
         return;
     }
     ui->waiting = false;
-    set_message(ui, "加时码预览失败", status);
+    set_message(ui, ptc_ui_text(PTC_UI_T_GRANT_CODE_PREVIEW_FAILED), status);
 }

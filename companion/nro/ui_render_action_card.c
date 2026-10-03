@@ -293,18 +293,21 @@ static void draw_action_visual(uint32_t *pixels, uint32_t stride, UiRect area,
                                const UiAction *action, bool disabled)
 {
     uint32_t ink = disabled ? UI_DISABLED : action->accent;
+    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
     if (action->visual == UI_ACTION_VISUAL_QUICK_ADD) {
-        static const char *LABELS[] = {"+15", "+30", "+60", "自定义"};
+        const char *LABELS[] = {"+15", "+30", "+60", ptc_ui_text(PTC_UI_T_CUSTOM)};
         int gap = 4;
         int width = (area.width - gap * 3) / 4;
         for (int index = 0; index < 4; ++index) {
             UiRect chip = {area.x + index * (width + gap), area.y, width, area.height};
             fill_round_rect(pixels, stride, chip, 6, disabled ? UI_PAGE : UI_SUCCESS_SOFT);
             draw_rect_outline(pixels, stride, chip, 6, 1, disabled ? UI_DISABLED : UI_SUCCESS);
-            draw_text_center(pixels, stride, chip, LABELS[index], index == 3 ? 11 : 13, ink);
+            const char *label = LABELS[index];
+            int font_size = index == 3 ? (is_en ? 10 : 11) : 13;
+            draw_text_center(pixels, stride, chip, label, font_size, ink);
         }
     } else if (action->visual == UI_ACTION_VISUAL_THEME) {
-        static const char *LABELS[] = {"系统", "浅色", "暗色"};
+        const char *LABELS[] = {ptc_ui_text(PTC_UI_T_SYSTEM), ptc_ui_text(PTC_UI_T_LIGHT), ptc_ui_text(PTC_UI_T_DARK)};
         const char *selected = action->subtitle ? action->subtitle : "";
         int gap = 5;
         int width = (area.width - gap * 2) / 3;
@@ -314,11 +317,11 @@ static void draw_action_visual(uint32_t *pixels, uint32_t stride, UiRect area,
             fill_round_rect(pixels, stride, chip, 6, active ? UI_ACCENT_SOFT : UI_RAISED);
             draw_rect_outline(pixels, stride, chip, 6, active ? 2 : 1,
                               disabled ? UI_DISABLED : (active ? UI_ACCENT : UI_BORDER));
-            draw_text_center(pixels, stride, chip, LABELS[index], 12,
+            draw_text_center(pixels, stride, chip, LABELS[index], is_en ? 11 : 12,
                              disabled ? UI_DISABLED : (active ? UI_ACCENT : UI_MUTED));
         }
     } else if (action->visual == UI_ACTION_VISUAL_AUDIO) {
-        static const char *LABELS[] = {"开启", "静音"};
+        const char *LABELS[] = {ptc_ui_text(PTC_UI_T_ON), ptc_ui_text(PTC_UI_T_MUTE)};
         const char *selected = action->subtitle ? action->subtitle : "";
         int gap = 6;
         int width = (area.width - gap) / 2;
@@ -340,17 +343,28 @@ static void draw_action_visual(uint32_t *pixels, uint32_t stride, UiRect area,
 void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     const UiAction *action, bool selected, PtcUiActionState state, int reserved_right)
 {
+    UiAction translated = *action;
+    translated.title = ptc_ui_text_resolve(action->title);
+    translated.subtitle = ptc_ui_text_resolve(action->subtitle);
+    action = &translated;
     bool disabled = state == PTC_UI_ACTION_DISABLED;
     bool recommended = state == PTC_UI_ACTION_RECOMMENDED;
+    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
     bool compact = rect.height < 90;
     int badge_size = compact ? 34 : 44;
     int title_size = compact ? 20 : 22;
     int sub_size = compact ? 14 : 15;
     int text_x = rect.x + 18 + badge_size + 16;
-    int title_width = rect.width - (text_x - rect.x) - (recommended ? 64 : 16) - reserved_right;
+    int rec_reserve = recommended ? (is_en ? 56 : 64) : (reserved_right > 0 ? 0 : 16);
+    int title_width = rect.width - (text_x - rect.x) - rec_reserve - reserved_right;
     int sub_width = rect.width - (text_x - rect.x) - 16;
     if (title_width < 100) title_width = 100;
     if (sub_width < 100) sub_width = 100;
+
+    int min_title_size = is_en ? 12 : 14;
+    while (title_size > min_title_size && measure_text(action->title, title_size) > title_width) {
+        title_size--;
+    }
 
     uint32_t background = disabled ? UI_RAISED : (selected ? UI_ACCENT_SOFT : UI_SURFACE);
     draw_card_shadow(pixels, stride, rect, 16);
@@ -394,7 +408,12 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     }
 
     if (recommended && !disabled) {
-        fill_round_rect(pixels, stride, (UiRect){rect.x + rect.width - 66, rect.y + 8, 56, 24}, 6, UI_SUCCESS);
-        draw_text_center(pixels, stride, (UiRect){rect.x + rect.width - 66, rect.y + 8, 56, 24}, "建议", 16, UI_ON_ACCENT);
+        const char *badge_text = ptc_ui_text(PTC_UI_T_REC);
+        int badge_w = is_en ? 50 : 56;
+        UiRect rec_pill = {rect.x + rect.width - badge_w - 10, rect.y + 8, badge_w, 24};
+        fill_round_rect(pixels, stride, rec_pill, 6, UI_SUCCESS);
+        draw_text_center(pixels, stride, rec_pill, badge_text, is_en ? 14 : 16, UI_ON_ACCENT);
     }
 }
+
+\n

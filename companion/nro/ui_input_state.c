@@ -9,12 +9,12 @@
 
 const char *ptc_ui_shortcut_common_label(int index)
 {
-    static const char *labels[] = {
-        "L + R", "L + R + 上", "L + R + 下", "L + R + 左", "L + R + 右", "L + R + Plus(+)", "L + R + Minus(-)",
-        "ZL + ZR", "ZL + ZR + 上", "ZL + ZR + 下", "ZL + ZR + 左", "ZL + ZR + 右", "ZL + ZR + Plus(+)", "ZL + ZR + Minus(-)"
+    const char *labels[] = {
+        "L + R", ptc_ui_text(PTC_UI_T_L_R_UP), ptc_ui_text(PTC_UI_T_L_R_DOWN), ptc_ui_text(PTC_UI_T_L_R_LEFT), ptc_ui_text(PTC_UI_T_L_R_RIGHT), "L + R + Plus(+)", "L + R + Minus(-)",
+        "ZL + ZR", ptc_ui_text(PTC_UI_T_ZL_ZR_UP), ptc_ui_text(PTC_UI_T_ZL_ZR_DOWN), ptc_ui_text(PTC_UI_T_ZL_ZR_LEFT), ptc_ui_text(PTC_UI_T_ZL_ZR_RIGHT), "ZL + ZR + Plus(+)", "ZL + ZR + Minus(-)"
     };
     if (index < 0 || index >= PTC_UI_SHORTCUT_PRESET_COUNT) {
-        return "未选择";
+        return ptc_ui_text(PTC_UI_T_NOT_SELECTED);
     }
     return labels[index];
 }
@@ -394,8 +394,8 @@ void ptc_ui_numpad_open(
         model->overlay = PTC_UI_OVERLAY_MINUTE_EDITOR;
     }
     model->numpad_error[0] = '\0';
-    snprintf(model->numpad_title, sizeof(model->numpad_title), "%s", title ? title : "数字输入");
-    snprintf(model->numpad_guide, sizeof(model->numpad_guide), "%s", guide ? guide : "使用方向键或摇杆选择数字");
+    snprintf(model->numpad_title, sizeof(model->numpad_title), "%s", title ? title : ptc_ui_text(PTC_UI_T_DIGITAL_INPUT));
+    snprintf(model->numpad_guide, sizeof(model->numpad_guide), "%s", guide ? guide : ptc_ui_text(PTC_UI_T_USE_THE_ARROW_KEYS_OR_JOYSTICK_TO));
     ptc_audio_play(PTC_SE_POPUP);
 }
 
@@ -545,7 +545,7 @@ void ptc_ui_numpad_activate(PtcUiModel *model)
     if ((duration_purpose(model->numpad_purpose) && length >= 2U) ||
         length + 1 >= capacity ||
         (!duration_purpose(model->numpad_purpose) && length >= model->numpad_max_digits)) {
-        snprintf(model->numpad_error, sizeof(model->numpad_error), "当前输入项最多输入 %u 位数字",
+        snprintf(model->numpad_error, sizeof(model->numpad_error), ptc_ui_text(PTC_UI_T_THIS_FIELD_ACCEPTS_AT_MOST_U_DIGITS),
                  duration_purpose(model->numpad_purpose) ? 2U : (unsigned int)model->numpad_max_digits);
         return;
     }
@@ -566,7 +566,7 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
     length = strlen(model->numpad_text);
     if (model->numpad_purpose == PTC_UI_NUMPAD_OFFLINE_CODE) {
         if (length != 8) {
-            snprintf(model->numpad_error, sizeof(model->numpad_error), "加时码必须为 8 位数字");
+            snprintf(model->numpad_error, sizeof(model->numpad_error), ptc_ui_text(PTC_UI_T_THE_ADDITIONAL_TIME_CODE_MUST_BE_8));
             return false;
         }
         return true;
@@ -575,9 +575,9 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
         if (!ptc_ui_duration_value(model, &value)) {
             if (model->numpad_purpose == PTC_UI_NUMPAD_BEDTIME_TIME) {
                 snprintf(model->numpad_error, sizeof(model->numpad_error),
-                         "请输入有效时间：小时 0-23，分钟 0-59");
+                         ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_VALID_TIME_HOURS_0));
             } else {
-                snprintf(model->numpad_error, sizeof(model->numpad_error), "请输入完整时长，总计范围为 %u 到 %u 分钟",
+                snprintf(model->numpad_error, sizeof(model->numpad_error), ptc_ui_text(PTC_UI_T_ENTER_A_COMPLETE_DURATION_U_TO_U),
                          (unsigned int)model->numpad_minimum, (unsigned int)model->numpad_maximum);
             }
             return false;
@@ -585,7 +585,7 @@ bool ptc_ui_numpad_validate(PtcUiModel *model, uint16_t *out_value)
         if (model->numpad_purpose == PTC_UI_NUMPAD_GRANT_MINUTES &&
             !ptc_ui_grant_minutes_legal(value, model->numpad_maximum)) {
             snprintf(model->numpad_error, sizeof(model->numpad_error),
-                     "支持 1-4、5-120 的 5 分钟档，以及 150/180/210/240 分钟");
+                     ptc_ui_text(PTC_UI_T_SUPPORTS_5_MINUTE_INTERVALS_OF_1_4));
             return false;
         }
     } else {
@@ -621,8 +621,8 @@ void ptc_ui_pin_open(PtcUiModel *model, const char *title, const char *guide)
     model->pin_error[0] = '\0';
     model->pin_keyboard_mode = false;
     model->pin_focus = 1;
-    snprintf(model->pin_title, sizeof(model->pin_title), "%s", title ? title : "任我玩 PIN");
-    snprintf(model->pin_guide, sizeof(model->pin_guide), "%s", guide ? guide : "摇杆方向输入；X=0，Y=9");
+    snprintf(model->pin_title, sizeof(model->pin_title), "%s", title ? title : ptc_ui_text(PTC_UI_T_PLAYWISE_PIN));
+    snprintf(model->pin_guide, sizeof(model->pin_guide), "%s", guide ? guide : ptc_ui_text(PTC_UI_T_JOYSTICK_DIRECTION_INPUT_X_0_Y_9));
 }
 
 bool ptc_ui_pin_append(PtcUiModel *model, int digit)
@@ -631,7 +631,7 @@ bool ptc_ui_pin_append(PtcUiModel *model, int digit)
     if (!model || model->overlay != PTC_UI_OVERLAY_PIN || digit < 0 || digit > 9) return false;
     length = strlen(model->pin_text);
     if (length >= PTC_UI_PIN_MAX_DIGITS) {
-        snprintf(model->pin_error, sizeof(model->pin_error), "最多输入 %u 位数字", PTC_UI_PIN_MAX_DIGITS);
+        snprintf(model->pin_error, sizeof(model->pin_error), ptc_ui_text(PTC_UI_T_ENTER_AT_MOST_U_DIGITS), PTC_UI_PIN_MAX_DIGITS);
         return false;
     }
     model->pin_text[length] = (char)('0' + digit);
@@ -657,7 +657,7 @@ bool ptc_ui_pin_validate(PtcUiModel *model)
     if (!model || model->overlay != PTC_UI_OVERLAY_PIN) return false;
     length = strlen(model->pin_text);
     if (length == 0 || length > PTC_UI_PIN_MAX_DIGITS) {
-        snprintf(model->pin_error, sizeof(model->pin_error), "请输入 1 到 %u 位数字", PTC_UI_PIN_MAX_DIGITS);
+        snprintf(model->pin_error, sizeof(model->pin_error), ptc_ui_text(PTC_UI_T_ENTER_1_TO_U_DIGITS), PTC_UI_PIN_MAX_DIGITS);
         return false;
     }
     model->pin_error[0] = '\0';

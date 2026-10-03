@@ -1,5 +1,6 @@
 #include "ui_state.h"
 #include "ui_layout.h"
+#include "../ui_language.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -11,6 +12,24 @@
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
 
+static void copy_ui_text(PtcUiTextId id, char *out, size_t size)
+{
+    if (out && size) snprintf(out, size, "%s", ptc_ui_text(id));
+}
+
+static void format_ui_text_number(PtcUiTextId id, const char *name, int value,
+                                  char *out, size_t size)
+{
+    PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER(name, value)};
+    (void)ptc_ui_text_format(id, out, size, args, 1);
+}
+
+static void format_ui_text_string(PtcUiTextId id, const char *name, const char *value,
+                                  char *out, size_t size)
+{
+    PtcUiTextArg args[] = {PTC_UI_TEXT_STRING(name, value)};
+    (void)ptc_ui_text_format(id, out, size, args, 1);
+}
 bool ptc_ui_bedtime_section_dirty(const PtcUiModel *model, PtcUiBedtimeSection section)
 {
     const PtcBedtimePolicy *draft;
@@ -137,28 +156,31 @@ void ptc_ui_format_bedtime_quota_notice(const PtcUiModel *model, int64_t now,
     out[0] = '\0';
     if (!model) return;
     if (!ptc_ui_status_is_fresh(model, now)) {
-        snprintf(out, out_size, "就寝状态待确认，暂不能判断额度调整后能否使用");
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_BEDTIME_NOTICE_PENDING));
     } else if (model->bedtime_active && !model->bedtime_skipped) {
-        snprintf(out, out_size, "当前就寝限制中，调整额度不会立即解除限制");
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_BEDTIME_NOTICE_ACTIVE));
     } else if (model->bedtime_active && model->bedtime_skipped) {
-        snprintf(out, out_size, "本次就寝已跳过，当前按每日额度使用");
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_BEDTIME_NOTICE_SKIPPED));
     } else if (model->bedtime_next_available &&
                model->bedtime_next_start_day_index == model->day_index) {
-        snprintf(out, out_size, "今晚 %02u:%02u 起受就寝限制",
+        char time_text[8];
+        snprintf(time_text, sizeof(time_text), "%02u:%02u",
             (unsigned)(model->bedtime_next_start_minute / 60),
             (unsigned)(model->bedtime_next_start_minute % 60));
+        PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("time", time_text)};
+        (void)ptc_ui_text_format(PTC_UI_T_BEDTIME_NOTICE_TONIGHT, out, out_size, args, 1);
     }
 }
 
 const char *ptc_ui_effective_rule_label(PtcRuleSource source)
 {
     switch (source) {
-    case PTC_RULE_SOURCE_STATUTORY_HOLIDAY: return "国家法定休假日";
-    case PTC_RULE_SOURCE_MAKEUP_WORKDAY: return "国家调休工作日";
-    case PTC_RULE_SOURCE_TODAY_OVERRIDE: return "今日额度调整";
-    case PTC_RULE_SOURCE_SCHEDULED_OVERRIDE: return "指定日期额度";
+    case PTC_RULE_SOURCE_STATUTORY_HOLIDAY: return ptc_ui_text(PTC_UI_T_RULE_HOLIDAY);
+    case PTC_RULE_SOURCE_MAKEUP_WORKDAY: return ptc_ui_text(PTC_UI_T_RULE_MAKEUP);
+    case PTC_RULE_SOURCE_TODAY_OVERRIDE: return ptc_ui_text(PTC_UI_T_RULE_TODAY);
+    case PTC_RULE_SOURCE_SCHEDULED_OVERRIDE: return ptc_ui_text(PTC_UI_T_RULE_SCHEDULED);
     case PTC_RULE_SOURCE_WEEKLY:
-    default: return "周计划";
+    default: return ptc_ui_text(PTC_UI_T_RULE_WEEKLY);
     }
 }
 #define effective_rule_label ptc_ui_effective_rule_label
@@ -169,15 +191,19 @@ static void format_rule_basis(PtcDayRule rule, int played_minutes, bool played_a
     int remaining;
     if (!out || out_size == 0) return;
     if (rule.mode == PTC_RULE_MODE_UNLIMITED) {
-        snprintf(out, out_size, "不限时");
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     } else if (!played_available || played_minutes < 0) {
-        snprintf(out, out_size, "额度 %u 分钟；额度消耗估算不可用，暂不能估算剩余",
-                 (unsigned int)rule.minutes);
+        PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("quota", rule.minutes)};
+        (void)ptc_ui_text_format(PTC_UI_T_BASIS_UNKNOWN, out, out_size, args, 1);
     } else {
         remaining = (int)rule.minutes - played_minutes;
         if (remaining < 0) remaining = 0;
-        snprintf(out, out_size, "额度 %u 分钟 - 已耗 %d 分钟 = 预计剩余 %d 分钟",
-                 (unsigned int)rule.minutes, played_minutes, remaining);
+        PtcUiTextArg args[] = {
+            PTC_UI_TEXT_NUMBER("quota", rule.minutes),
+            PTC_UI_TEXT_NUMBER("used", played_minutes),
+            PTC_UI_TEXT_NUMBER("remaining", remaining)
+        };
+        (void)ptc_ui_text_format(PTC_UI_T_BASIS_REMAINING, out, out_size, args, 3);
     }
 }
 
@@ -230,14 +256,14 @@ PtcEffectiveRule ptc_ui_plan_rule(const PtcUiModel *model, PtcUiPlanKind kind)
 const char *ptc_ui_decision_state_label(PtcUiDecisionState state)
 {
     switch (state) {
-    case PTC_UI_DECISION_SELECTED: return "当前生效";
-    case PTC_UI_DECISION_OVERRIDDEN: return "适用但未采用";
-    case PTC_UI_DECISION_NOT_CONFIGURED: return "未设置";
-    case PTC_UI_DECISION_NOT_MATCHED: return "当天不适用";
-    case PTC_UI_DECISION_DISABLED: return "未开启";
-    case PTC_UI_DECISION_CALENDAR_UNCOVERED: return "不在日历范围";
+    case PTC_UI_DECISION_SELECTED: return ptc_ui_text(PTC_UI_T_DECISION_SELECTED);
+    case PTC_UI_DECISION_OVERRIDDEN: return ptc_ui_text(PTC_UI_T_DECISION_OVERRIDDEN);
+    case PTC_UI_DECISION_NOT_CONFIGURED: return ptc_ui_text(PTC_UI_T_DECISION_NOT_CONFIGURED);
+    case PTC_UI_DECISION_NOT_MATCHED: return ptc_ui_text(PTC_UI_T_DECISION_NOT_MATCHED);
+    case PTC_UI_DECISION_DISABLED: return ptc_ui_text(PTC_UI_T_DECISION_DISABLED);
+    case PTC_UI_DECISION_CALENDAR_UNCOVERED: return ptc_ui_text(PTC_UI_T_DECISION_UNCOVERED);
     case PTC_UI_DECISION_UNKNOWN:
-    default: return "状态待确认";
+    default: return ptc_ui_text(PTC_UI_T_DECISION_UNKNOWN);
     }
 }
 
@@ -264,13 +290,15 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
     if (!decision) return;
     memset(decision, 0, sizeof(*decision));
     if (!model || !ptc_ui_status_is_fresh(model, now)) {
-        set_decision_step(&decision->today_override, PTC_UI_DECISION_UNKNOWN, empty, "尚无可靠状态");
-        set_decision_step(&decision->scheduled_override, PTC_UI_DECISION_UNKNOWN, empty, "尚无可靠状态");
-        set_decision_step(&decision->holiday, PTC_UI_DECISION_UNKNOWN, empty, "尚无可靠状态");
-        set_decision_step(&decision->weekly, PTC_UI_DECISION_UNKNOWN, empty, "尚无可靠状态");
-        snprintf(decision->final_reason, sizeof(decision->final_reason), "刷新后确认采用哪条规则");
-        snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：状态待确认");
-        snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：状态待确认");
+        const char *reason = ptc_ui_text(PTC_UI_T_REASON_NO_STATUS);
+        set_decision_step(&decision->today_override, PTC_UI_DECISION_UNKNOWN, empty, reason);
+        set_decision_step(&decision->scheduled_override, PTC_UI_DECISION_UNKNOWN, empty, reason);
+        set_decision_step(&decision->holiday, PTC_UI_DECISION_UNKNOWN, empty, reason);
+        set_decision_step(&decision->weekly, PTC_UI_DECISION_UNKNOWN, empty, reason);
+        snprintf(decision->final_reason, sizeof(decision->final_reason), "%s",
+                 ptc_ui_text(PTC_UI_T_REASON_REFRESH));
+        copy_ui_text(PTC_UI_T_BEDTIME_STATUS_PENDING, decision->bedtime, sizeof(decision->bedtime));
+        copy_ui_text(PTC_UI_T_AUTONOMY_STATUS_PENDING, decision->autonomy, sizeof(decision->autonomy));
         return;
     }
     is_today = (day_index == model->day_index);
@@ -287,107 +315,130 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
 
     if (!is_today) {
         set_decision_step(&decision->today_override, PTC_UI_DECISION_NOT_CONFIGURED, empty,
-                          "仅限当天生效，不作用于未来日期");
+                          ptc_ui_text(PTC_UI_T_REASON_TODAY_ONLY));
     } else if (!rules.today_override.present) {
         set_decision_step(&decision->today_override, PTC_UI_DECISION_NOT_CONFIGURED, empty,
-                           model->today_override_cleared_in_session ? "刚刚已清除" : "今天没有单独额度调整");
+                           ptc_ui_text(model->today_override_cleared_in_session
+                               ? PTC_UI_T_REASON_JUST_CLEARED : PTC_UI_T_REASON_NO_TODAY));
     } else {
         set_decision_step(&decision->today_override,
             decision->effective.source == PTC_RULE_SOURCE_TODAY_OVERRIDE
                 ? PTC_UI_DECISION_SELECTED : PTC_UI_DECISION_OVERRIDDEN,
-            rules.today_override.rule, "今天存在单独额度调整");
+            rules.today_override.rule, ptc_ui_text(PTC_UI_T_REASON_HAS_TODAY));
     }
 
     if (!rules.scheduled_override.enabled) {
         set_decision_step(&decision->scheduled_override, PTC_UI_DECISION_NOT_CONFIGURED, empty,
-                          "没有启用指定日期额度");
+                          ptc_ui_text(PTC_UI_T_REASON_SCHEDULE_DISABLED));
     } else if (!scheduled_matches) {
         set_decision_step(&decision->scheduled_override, PTC_UI_DECISION_NOT_MATCHED,
-                          rules.scheduled_override.rule, is_today ? "今天不在计划日期范围内" : "当天不在计划日期范围内");
+                          rules.scheduled_override.rule, ptc_ui_text(is_today
+                              ? PTC_UI_T_REASON_SCHEDULE_OUT_TODAY : PTC_UI_T_REASON_SCHEDULE_OUT_DAY));
     } else {
         set_decision_step(&decision->scheduled_override,
             decision->effective.source == PTC_RULE_SOURCE_SCHEDULED_OVERRIDE
                 ? PTC_UI_DECISION_SELECTED : PTC_UI_DECISION_OVERRIDDEN,
             rules.scheduled_override.rule,
-            decision->effective.source == PTC_RULE_SOURCE_TODAY_OVERRIDE
-                ? "日期适用，但优先采用今日调整" : (is_today ? "今天适用指定日期额度" : "当天适用指定日期额度"));
+            ptc_ui_text(decision->effective.source == PTC_RULE_SOURCE_TODAY_OVERRIDE
+                ? PTC_UI_T_REASON_SCHEDULE_OVERRIDDEN : (is_today
+                    ? PTC_UI_T_REASON_SCHEDULE_MATCH_TODAY : PTC_UI_T_REASON_SCHEDULE_MATCH_DAY)));
     }
 
     if (!rules.holiday_enabled) {
         set_decision_step(&decision->holiday, PTC_UI_DECISION_DISABLED, empty,
-                          "国家节假日总开关未开启");
+                          ptc_ui_text(PTC_UI_T_REASON_HOLIDAY_DISABLED));
     } else if (!calendar_covered) {
         set_decision_step(&decision->holiday, PTC_UI_DECISION_CALENDAR_UNCOVERED, empty,
-                          is_today ? "今天不在内置日历范围内" : "当天不在内置日历范围内");
+                          ptc_ui_text(is_today ? PTC_UI_T_REASON_CALENDAR_OUT_TODAY
+                                               : PTC_UI_T_REASON_CALENDAR_OUT_DAY));
     } else if (!holiday_matches) {
         set_decision_step(&decision->holiday, PTC_UI_DECISION_NOT_MATCHED, empty,
-                          is_today ? "今天是普通日期" : "当天是普通日期");
+                          ptc_ui_text(is_today ? PTC_UI_T_REASON_NORMAL_TODAY
+                                               : PTC_UI_T_REASON_NORMAL_DAY));
     } else {
         PtcDayRule holiday_rule = day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY
             ? rules.holiday_rule : rules.makeup_workday_rule;
         const char *hit = day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY
-            ? "适用法定休假日规则" : "适用调休工作日规则";
+            ? ptc_ui_text(PTC_UI_T_REASON_HOLIDAY_MATCH)
+            : ptc_ui_text(PTC_UI_T_REASON_MAKEUP_MATCH);
         set_decision_step(&decision->holiday,
             decision->effective.source == PTC_RULE_SOURCE_STATUTORY_HOLIDAY ||
             decision->effective.source == PTC_RULE_SOURCE_MAKEUP_WORKDAY
                 ? PTC_UI_DECISION_SELECTED : PTC_UI_DECISION_OVERRIDDEN,
             holiday_rule, hit);
         if (decision->holiday.state == PTC_UI_DECISION_OVERRIDDEN) {
-            snprintf(decision->holiday.reason, sizeof(decision->holiday.reason), "%s，但优先采用其他规则", hit);
+            PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("rule", hit)};
+            (void)ptc_ui_text_format(PTC_UI_T_REASON_OVERRIDDEN,
+                decision->holiday.reason, sizeof(decision->holiday.reason), args, 1);
         }
     }
 
     set_decision_step(&decision->weekly,
         decision->effective.source == PTC_RULE_SOURCE_WEEKLY
             ? PTC_UI_DECISION_SELECTED : PTC_UI_DECISION_OVERRIDDEN,
-        rules.week[weekday], decision->effective.source == PTC_RULE_SOURCE_WEEKLY
-            ? "没有其他规则优先适用" : (is_today ? "作为今天的基础规则保留" : "作为当天的基础规则保留"));
+        rules.week[weekday], ptc_ui_text(decision->effective.source == PTC_RULE_SOURCE_WEEKLY
+            ? PTC_UI_T_REASON_WEEKLY_SELECTED : (is_today
+                ? PTC_UI_T_REASON_WEEKLY_BASE_TODAY : PTC_UI_T_REASON_WEEKLY_BASE_DAY)));
 
-    snprintf(decision->final_reason, sizeof(decision->final_reason), "最终采用%s%s",
-             effective_rule_label(decision->effective.source),
-             decision->effective.rule.mode == PTC_RULE_MODE_UNLIMITED ? (is_today ? "，今天不限时" : "，当天不限时") : "");
+    PtcUiTextId final_id = decision->effective.rule.mode == PTC_RULE_MODE_UNLIMITED
+        ? (is_today ? PTC_UI_T_REASON_FINAL_UNLIMITED_TODAY : PTC_UI_T_REASON_FINAL_UNLIMITED_DAY)
+        : PTC_UI_T_REASON_FINAL;
+    PtcUiTextArg final_args[] = {
+        PTC_UI_TEXT_STRING("source", effective_rule_label(decision->effective.source))
+    };
+    (void)ptc_ui_text_format(final_id, decision->final_reason,
+                              sizeof(decision->final_reason), final_args, 1);
 
     if (is_today) {
+        PtcUiTextId bedtime_id;
         if (!model->bedtime_policy.enabled) {
-            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：未开启");
+            bedtime_id = PTC_UI_T_BEDTIME_STATUS_OFF;
         } else if (model->bedtime_active && model->bedtime_skipped) {
-            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：当前窗口已跳过");
+            bedtime_id = PTC_UI_T_BEDTIME_STATUS_SKIPPED;
         } else if (model->bedtime_active) {
-            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：正在限制使用");
+            bedtime_id = PTC_UI_T_BEDTIME_STATUS_ACTIVE;
         } else if (model->bedtime_next_available) {
-            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：已开启，等待下次窗口");
+            bedtime_id = PTC_UI_T_BEDTIME_STATUS_WAITING;
         } else {
-            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：已开启，今天无可用窗口");
+            bedtime_id = PTC_UI_T_BEDTIME_STATUS_NO_WINDOW;
         }
+        copy_ui_text(bedtime_id, decision->bedtime, sizeof(decision->bedtime));
         if (model->daily_buffer_minutes == 0) {
-            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：未开启");
+            copy_ui_text(PTC_UI_T_AUTONOMY_STATUS_OFF, decision->autonomy, sizeof(decision->autonomy));
         } else if (model->daily_buffer_claimed) {
-            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：今日已领取 %u 分钟",
-                     (unsigned int)model->daily_buffer_minutes);
+            format_ui_text_number(PTC_UI_T_AUTONOMY_STATUS_CLAIMED, "minutes",
+                model->daily_buffer_minutes, decision->autonomy, sizeof(decision->autonomy));
         } else if (model->daily_buffer_available) {
-            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：今日可领取 %u 分钟",
-                     (unsigned int)model->daily_buffer_minutes);
+            format_ui_text_number(PTC_UI_T_AUTONOMY_STATUS_AVAILABLE, "minutes",
+                model->daily_buffer_minutes, decision->autonomy, sizeof(decision->autonomy));
         } else {
-            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：已配置，但今天暂不可领取");
+            copy_ui_text(PTC_UI_T_AUTONOMY_STATUS_UNAVAILABLE, decision->autonomy, sizeof(decision->autonomy));
         }
     } else {
         PtcEffectiveBedtime bt = ptc_bedtime_resolve_start_day(&rules, day_index, weekday);
         if (!rules.bedtime.enabled || !bt.window.enabled) {
-            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：当天无就寝限制");
+            copy_ui_text(PTC_UI_T_BEDTIME_STATUS_NONE_DAY, decision->bedtime, sizeof(decision->bedtime));
         } else {
-            const char *src_label = bt.source == PTC_BEDTIME_SOURCE_SCHEDULED_OVERRIDE ? "临时特例" :
-                (bt.source == PTC_BEDTIME_SOURCE_STATUTORY_HOLIDAY ? "法定节假日" :
-                 (bt.source == PTC_BEDTIME_SOURCE_MAKEUP_WORKDAY ? "调休工作日" : "每周常规"));
-            snprintf(decision->bedtime, sizeof(decision->bedtime), "就寝时间：%02u:%02u 开始（来源：%s）",
-                     (unsigned int)(bt.window.start_minute / 60),
-                     (unsigned int)(bt.window.start_minute % 60),
-                     src_label);
+            PtcUiTextId source_id = bt.source == PTC_BEDTIME_SOURCE_SCHEDULED_OVERRIDE
+                ? PTC_UI_T_BEDTIME_SOURCE_SPECIAL : bt.source == PTC_BEDTIME_SOURCE_STATUTORY_HOLIDAY
+                ? PTC_UI_T_BEDTIME_SOURCE_HOLIDAY : bt.source == PTC_BEDTIME_SOURCE_MAKEUP_WORKDAY
+                ? PTC_UI_T_BEDTIME_SOURCE_WORKDAY : PTC_UI_T_BEDTIME_SOURCE_WEEKLY;
+            char time_text[8];
+            snprintf(time_text, sizeof(time_text), "%02u:%02u",
+                (unsigned int)(bt.window.start_minute / 60),
+                (unsigned int)(bt.window.start_minute % 60));
+            PtcUiTextArg args[] = {
+                PTC_UI_TEXT_STRING("time", time_text),
+                PTC_UI_TEXT_STRING("source", ptc_ui_text(source_id))
+            };
+            (void)ptc_ui_text_format(PTC_UI_T_BEDTIME_STATUS_START,
+                decision->bedtime, sizeof(decision->bedtime), args, 2);
         }
         if (model->daily_buffer_minutes == 0) {
-            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：未开启");
+            copy_ui_text(PTC_UI_T_AUTONOMY_STATUS_OFF, decision->autonomy, sizeof(decision->autonomy));
         } else {
-            snprintf(decision->autonomy, sizeof(decision->autonomy), "自主缓冲：每日 %u 分钟（当天有效）",
-                     (unsigned int)model->daily_buffer_minutes);
+            format_ui_text_number(PTC_UI_T_AUTONOMY_STATUS_DAILY, "minutes",
+                model->daily_buffer_minutes, decision->autonomy, sizeof(decision->autonomy));
         }
     }
 }
@@ -410,54 +461,54 @@ void ptc_ui_format_today_adjustment_status(const PtcUiModel *model, int64_t now,
     const char *source;
     if (!badge || badge_size == 0 || !detail || detail_size == 0) return;
     if (!model || !ptc_ui_status_is_fresh(model, now)) {
-        snprintf(badge, badge_size, "待确认");
-        snprintf(detail, detail_size, "状态待确认，刷新后判断今日额度调整");
+        copy_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING, badge, badge_size);
+        copy_ui_text(PTC_UI_T_ADJUST_DETAIL_PENDING, detail, detail_size);
         return;
     }
     ptc_ui_build_today_decision(model, PTC_UI_PLAN_SAVED, now, &decision);
     source = effective_rule_label(decision.effective.source);
     if (model->disable_flag_present) {
-        snprintf(badge, badge_size, "控制停用");
-        snprintf(detail, detail_size, "规则仍保留，但控制已停用");
+        copy_ui_text(PTC_UI_T_ADJUST_BADGE_DISABLED, badge, badge_size);
+        copy_ui_text(PTC_UI_T_ADJUST_DETAIL_DISABLED, detail, detail_size);
     } else if (model->recovery_active) {
-        snprintf(badge, badge_size, "恢复中");
-        snprintf(detail, detail_size, "正在恢复设置，暂不判断是否生效");
+        copy_ui_text(PTC_UI_T_ADJUST_BADGE_RECOVERING, badge, badge_size);
+        copy_ui_text(PTC_UI_T_ADJUST_DETAIL_RECOVERING, detail, detail_size);
     } else if (model->apply_pending_confirmation) {
-        snprintf(badge, badge_size, "等待生效");
-        snprintf(detail, detail_size, "设置已提交，等待后台确认");
+        copy_ui_text(PTC_UI_T_ADJUST_BADGE_WAITING, badge, badge_size);
+        copy_ui_text(PTC_UI_T_ADJUST_DETAIL_WAITING, detail, detail_size);
     } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
-        snprintf(badge, badge_size, "暂不计时");
-        snprintf(detail, detail_size, "规则已保留；临时解除期间不计时");
+        copy_ui_text(PTC_UI_T_ADJUST_BADGE_PAUSED, badge, badge_size);
+        copy_ui_text(PTC_UI_T_ADJUST_DETAIL_PAUSED, detail, detail_size);
     } else if (model->today_override_present &&
                decision.effective.source == PTC_RULE_SOURCE_TODAY_OVERRIDE) {
         if (model->bedtime_active && !model->bedtime_skipped) {
-            snprintf(badge, badge_size, "就寝限制中");
+            copy_ui_text(PTC_UI_T_ADJUST_BADGE_BEDTIME, badge, badge_size);
             if (model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED)
-                snprintf(detail, detail_size, "就寝限制中，调整不限时已保留");
+                copy_ui_text(PTC_UI_T_ADJUST_DETAIL_BEDTIME_UNLIMITED, detail, detail_size);
             else
-                snprintf(detail, detail_size, "就寝限制中，调整%u分钟已保留",
-                         (unsigned int)model->today_override_rule.minutes);
+                format_ui_text_number(PTC_UI_T_ADJUST_DETAIL_BEDTIME_MINUTES, "minutes",
+                    model->today_override_rule.minutes, detail, detail_size);
         } else {
-            snprintf(badge, badge_size, "%s",
-                     model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED ? "不限时" : "生效中");
+            copy_ui_text(model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED
+                ? PTC_UI_T_ADJUST_BADGE_UNLIMITED : PTC_UI_T_ADJUST_BADGE_ACTIVE, badge, badge_size);
             if (model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED)
-                snprintf(detail, detail_size, "今日额度调整：不限时");
+                copy_ui_text(PTC_UI_T_ADJUST_DETAIL_UNLIMITED, detail, detail_size);
             else
-                snprintf(detail, detail_size, "今日额度调整：%u 分钟",
-                         (unsigned int)model->today_override_rule.minutes);
+                format_ui_text_number(PTC_UI_T_ADJUST_DETAIL_MINUTES, "minutes",
+                    model->today_override_rule.minutes, detail, detail_size);
         }
     } else if (model->today_override_cleared_in_session) {
-        snprintf(badge, badge_size, "已清除");
+        copy_ui_text(PTC_UI_T_ADJUST_BADGE_CLEARED, badge, badge_size);
         if (model->bedtime_active && !model->bedtime_skipped)
-            snprintf(detail, detail_size, "就寝限制中，额度由%s生效", source);
+            format_ui_text_string(PTC_UI_T_ADJUST_DETAIL_BEDTIME_SOURCE, "source", source, detail, detail_size);
         else
-            snprintf(detail, detail_size, "当前改由%s生效", source);
+            format_ui_text_string(PTC_UI_T_ADJUST_DETAIL_NOW_SOURCE, "source", source, detail, detail_size);
     } else {
-        snprintf(badge, badge_size, "未设置");
+        copy_ui_text(PTC_UI_T_ADJUST_BADGE_NOT_SET, badge, badge_size);
         if (model->bedtime_active && !model->bedtime_skipped)
-            snprintf(detail, detail_size, "就寝限制中，额度由%s生效", source);
+            format_ui_text_string(PTC_UI_T_ADJUST_DETAIL_BEDTIME_SOURCE, "source", source, detail, detail_size);
         else
-            snprintf(detail, detail_size, "当前由%s生效", source);
+            format_ui_text_string(PTC_UI_T_ADJUST_DETAIL_SOURCE, "source", source, detail, detail_size);
     }
 }
 
@@ -522,36 +573,39 @@ void ptc_ui_format_plan_impact(const PtcUiModel *model, PtcUiPlanKind kind,
 {
     PtcUiPlanImpactProjection impact;
     PtcEffectiveRule after;
+    PtcUiTextId text_id;
+    int remaining = 0;
+    if (!out || out_size == 0) return;
     ptc_ui_project_plan_impact(model, kind, true, now, &impact);
     after = impact.after;
     if (!ptc_ui_status_is_fresh(model, now)) {
         if (!impact.quota_changes_today)
-            snprintf(out, out_size, "今天额度不变，继续按%s执行。", effective_rule_label(after.source));
+            text_id = PTC_UI_T_IMPACT_UNCHANGED_STALE;
         else
-            snprintf(out, out_size, "状态待确认，刷新后查看对今天的影响。");
+            text_id = PTC_UI_T_IMPACT_PENDING;
     } else if (!impact.quota_changes_today) {
         if (impact.source_changes_today) {
-            snprintf(out, out_size, "今天额度不变；保存后规则来源切换为%s。",
-                     effective_rule_label(after.source));
+            text_id = PTC_UI_T_IMPACT_SOURCE_SWITCH;
         } else if (kind == PTC_UI_PLAN_WEEKLY) {
-            snprintf(out, out_size, "今天不变，继续按%s执行；到对应星期且没有其他规则优先适用时，新规则才会生效。",
-                     effective_rule_label(after.source));
+            text_id = PTC_UI_T_IMPACT_WEEKLY_LATER;
         } else if (kind == PTC_UI_PLAN_HOLIDAY) {
-            snprintf(out, out_size, "今天不变，继续按%s执行；开启开关且日期在内置日历范围内时，新规则才会生效。",
-                     effective_rule_label(after.source));
-        } else
-            snprintf(out, out_size, "今天不变，继续按%s执行；日期在计划范围内且没有今日调整时，指定日期额度才会生效。",
-                     effective_rule_label(after.source));
+            text_id = PTC_UI_T_IMPACT_HOLIDAY_LATER;
+        } else text_id = PTC_UI_T_IMPACT_SCHEDULE_LATER;
     } else if (after.rule.mode == PTC_RULE_MODE_UNLIMITED) {
-        snprintf(out, out_size, "保存后今天按%s：不限时。", effective_rule_label(after.source));
+        text_id = PTC_UI_T_IMPACT_UNLIMITED;
     } else if (!model->played_minutes_available) {
-        snprintf(out, out_size, "保存后今天按%s：%u 分钟；剩余暂不可用。",
-                 effective_rule_label(after.source), (unsigned int)after.rule.minutes);
+        text_id = PTC_UI_T_IMPACT_REMAINING_UNKNOWN;
     } else {
-        int remaining = (int)after.rule.minutes - model->played_minutes;
-        snprintf(out, out_size, "保存后今天按%s：总额度 %u 分钟，预计还可玩 %d 分钟。",
-                 effective_rule_label(after.source), (unsigned int)after.rule.minutes, remaining > 0 ? remaining : 0);
+        remaining = (int)after.rule.minutes - model->played_minutes;
+        if (remaining < 0) remaining = 0;
+        text_id = PTC_UI_T_IMPACT_REMAINING;
     }
+    PtcUiTextArg args[] = {
+        PTC_UI_TEXT_STRING("source", effective_rule_label(after.source)),
+        PTC_UI_TEXT_NUMBER("quota", after.rule.minutes),
+        PTC_UI_TEXT_NUMBER("remaining", remaining)
+    };
+    (void)ptc_ui_text_format(text_id, out, out_size, args, 3);
 }
 
 static PtcDayRule active_rule_for_source(const PtcUiModel *model)
@@ -590,7 +644,7 @@ void ptc_ui_format_restore_today_basis(const PtcUiModel *model, char *out, size_
     char restored[112];
     if (!out || out_size == 0) return;
     if (!model) {
-        snprintf(out, out_size, "当前状态不可用，恢复后请刷新确认。");
+        copy_ui_text(PTC_UI_T_RESTORE_NO_STATUS, out, out_size);
         return;
     }
     after = ptc_ui_rule_after_today_restore(model);
@@ -598,8 +652,12 @@ void ptc_ui_format_restore_today_basis(const PtcUiModel *model, char *out, size_
                       current, sizeof(current));
     format_rule_basis(after.rule, model->played_minutes, model->played_minutes_available,
                       restored, sizeof(restored));
-    snprintf(out, out_size, "今日额度调整当前值：%s\n清除后按%s：%s",
-             current, effective_rule_label(after.source), restored);
+    PtcUiTextArg args[] = {
+        PTC_UI_TEXT_STRING("current", current),
+        PTC_UI_TEXT_STRING("source", effective_rule_label(after.source)),
+        PTC_UI_TEXT_STRING("restored", restored)
+    };
+    (void)ptc_ui_text_format(PTC_UI_T_RESTORE_BASIS, out, out_size, args, 3);
 }
 
 void ptc_ui_format_weekly_save_result(const PtcUiModel *model, char *message, size_t message_size,
@@ -609,6 +667,9 @@ void ptc_ui_format_weekly_save_result(const PtcUiModel *model, char *message, si
     char basis[112];
     char current_basis[112];
     const char *current_source;
+    const char *detail_source;
+    PtcUiTextId message_id;
+    PtcUiTextId detail_id;
     bool today_changed;
     if (!model || !message || message_size == 0 || !detail || detail_size == 0) return;
     weekday = ptc_weekday_from_day_index(model->day_index);
@@ -622,32 +683,37 @@ void ptc_ui_format_weekly_save_result(const PtcUiModel *model, char *message, si
         strcmp(model->rule_source, "makeup_workday") == 0 ? PTC_RULE_SOURCE_MAKEUP_WORKDAY : PTC_RULE_SOURCE_WEEKLY);
     format_rule_basis(active_rule_for_source(model), model->played_minutes, model->played_minutes_available,
                       current_basis, sizeof(current_basis));
+    detail_source = current_source;
     if (!today_changed) {
-        snprintf(message, message_size, "周计划已保存；本次只修改其他日期，今天不受影响。");
-        snprintf(detail, detail_size, "今天继续按%s执行：%s。", current_source, current_basis);
+        message_id = PTC_UI_T_WEEKLY_SAVED_OTHER_DAYS;
+        detail_id = PTC_UI_T_WEEKLY_DETAIL_CONTINUE;
     } else if (strcmp(model->rule_source, "today_override") == 0) {
         PtcEffectiveRule restored = ptc_ui_rule_after_today_restore(model);
-        snprintf(message, message_size, "周计划已保存；今天仍按临时设置执行，当前不变。");
+        message_id = PTC_UI_T_WEEKLY_SAVED_TODAY_OVERRIDE;
         if (restored.source == PTC_RULE_SOURCE_WEEKLY) {
-            snprintf(detail, detail_size, "当前按今日额度调整：%s；清除今日额度调整后：%s。",
-                     current_basis, basis);
+            detail_id = PTC_UI_T_WEEKLY_DETAIL_AFTER_CLEAR;
         } else {
-            snprintf(detail, detail_size, "清除今日额度调整后仍按%s执行；本次只更新周计划。",
-                     effective_rule_label(restored.source));
+            detail_id = PTC_UI_T_WEEKLY_DETAIL_RESTORED_SOURCE;
+            detail_source = effective_rule_label(restored.source);
         }
     } else if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        snprintf(message, message_size, "周计划已保存；今天仍按指定日期额度执行，当前不变。");
-        snprintf(detail, detail_size, "今天继续按指定日期额度：%s。", current_basis);
+        message_id = PTC_UI_T_WEEKLY_SAVED_SCHEDULED;
+        detail_id = PTC_UI_T_WEEKLY_DETAIL_SCHEDULED;
     } else if (strcmp(model->rule_source, "statutory_holiday") == 0 ||
                strcmp(model->rule_source, "makeup_workday") == 0) {
-        snprintf(message, message_size, "周计划已保存；今天优先采用%s，当前不变。",
-                 strcmp(model->rule_source, "statutory_holiday") == 0 ? "国家法定休假日" : "国家调休工作日");
-        snprintf(detail, detail_size, "当前按%s：%s；今天对应的周计划已更新为：%s。",
-                 current_source, current_basis, basis);
+        message_id = PTC_UI_T_WEEKLY_SAVED_HOLIDAY;
+        detail_id = PTC_UI_T_WEEKLY_DETAIL_HOLIDAY;
     } else {
-        snprintf(message, message_size, "周计划已保存并生效，已影响今天。");
-        snprintf(detail, detail_size, "今天按新周计划执行：%s。", basis);
+        message_id = PTC_UI_T_WEEKLY_SAVED_EFFECTIVE;
+        detail_id = PTC_UI_T_WEEKLY_DETAIL_EFFECTIVE;
     }
+    PtcUiTextArg args[] = {
+        PTC_UI_TEXT_STRING("source", detail_source),
+        PTC_UI_TEXT_STRING("current", current_basis),
+        PTC_UI_TEXT_STRING("basis", basis)
+    };
+    (void)ptc_ui_text_format(message_id, message, message_size, args, 3);
+    (void)ptc_ui_text_format(detail_id, detail, detail_size, args, 3);
 }
 
 void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, size_t message_size,
@@ -657,44 +723,52 @@ void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, s
     PtcDayRule active;
     char basis[112];
     uint8_t weekday;
+    PtcUiTextId message_id;
+    PtcUiTextId detail_id;
     if (!model || !message || message_size == 0 || !detail || detail_size == 0) return;
     detail[0] = '\0';
     weekday = ptc_weekday_from_day_index(model->day_index);
     if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        snprintf(message, message_size, "国家节假日设置已保存；今天仍按指定日期额度执行，当前不变。");
-        snprintf(detail, detail_size, "原因：指定日期额度优先于国家节假日规则。");
+        copy_ui_text(PTC_UI_T_HOLIDAY_SAVED_SCHEDULED, message, message_size);
+        copy_ui_text(PTC_UI_T_HOLIDAY_DETAIL_SCHEDULED, detail, detail_size);
         return;
     }
     if (strcmp(model->rule_source, "today_override") == 0) {
         format_rule_basis(model->today_override_rule, model->played_minutes,
                           model->played_minutes_available, basis, sizeof(basis));
-        snprintf(message, message_size, "国家节假日设置已保存；今天仍按临时设置执行，当前不变。");
-        snprintf(detail, detail_size, "原因：今日额度调整优先于国家节假日规则。");
+        copy_ui_text(PTC_UI_T_HOLIDAY_SAVED_TODAY, message, message_size);
+        copy_ui_text(PTC_UI_T_HOLIDAY_DETAIL_TODAY, detail, detail_size);
         return;
     }
     if (strcmp(model->rule_source, "statutory_holiday") == 0) {
-        source = "国家法定休假日";
+        source = ptc_ui_text(PTC_UI_T_RULE_HOLIDAY);
         active = model->draft_holiday_rule;
     } else if (strcmp(model->rule_source, "makeup_workday") == 0) {
-        source = "国家调休工作日";
+        source = ptc_ui_text(PTC_UI_T_RULE_MAKEUP);
         active = model->draft_makeup_workday_rule;
     } else {
-        source = "周计划";
+        source = ptc_ui_text(PTC_UI_T_RULE_WEEKLY);
         active = model->draft_week[weekday];
     }
     format_rule_basis(active, model->played_minutes, model->played_minutes_available, basis, sizeof(basis));
     if (!model->draft_holiday_enabled) {
-        snprintf(message, message_size, "国家节假日预设已保存但未启用；今天不受影响。");
-        snprintf(detail, detail_size, "原因：国家节假日总开关未开启。");
+        message_id = PTC_UI_T_HOLIDAY_SAVED_DISABLED;
+        detail_id = PTC_UI_T_HOLIDAY_DETAIL_DISABLED;
     } else if (!model->calendar_covered) {
-        snprintf(message, message_size, "国家节假日设置已保存；今天不在内置日历范围内，当前不变。");
-        snprintf(detail, detail_size, "原因：今天不在内置日历范围内，继续使用周计划。");
+        message_id = PTC_UI_T_HOLIDAY_SAVED_UNCOVERED;
+        detail_id = PTC_UI_T_HOLIDAY_DETAIL_UNCOVERED;
     } else if (strcmp(model->rule_source, "statutory_holiday") == 0 ||
                strcmp(model->rule_source, "makeup_workday") == 0) {
-        snprintf(message, message_size, "国家节假日设置已保存并生效，已影响今天。");
-        snprintf(detail, detail_size, "今天按%s执行：%s。", source, basis);
+        message_id = PTC_UI_T_HOLIDAY_SAVED_EFFECTIVE;
+        detail_id = PTC_UI_T_HOLIDAY_DETAIL_EFFECTIVE;
     } else {
-        snprintf(message, message_size, "国家节假日设置已保存；今天是普通日期，不受影响。");
-        snprintf(detail, detail_size, "原因：今天不是已设置的节假日或调休日，继续使用周计划。");
+        message_id = PTC_UI_T_HOLIDAY_SAVED_REGULAR;
+        detail_id = PTC_UI_T_HOLIDAY_DETAIL_REGULAR;
     }
+    PtcUiTextArg args[] = {
+        PTC_UI_TEXT_STRING("source", source),
+        PTC_UI_TEXT_STRING("basis", basis)
+    };
+    (void)ptc_ui_text_format(message_id, message, message_size, args, 2);
+    (void)ptc_ui_text_format(detail_id, detail, detail_size, args, 2);
 }

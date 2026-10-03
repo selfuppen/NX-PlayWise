@@ -8,8 +8,8 @@ void submit_scheduled_override(UiState *ui)
         ui->active_request_id, time(NULL), &ui->model.draft_scheduled_override);
     set_command_name(ui, "set_scheduled_override");
     sync_transport_label(ui);
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_scheduled_override", "正在保存指定日期额度...");
-    else set_message(ui, "指定日期额度提交失败", status);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_scheduled_override", ptc_ui_text(PTC_UI_T_SAVING_THE_QUOTA_FOR_THE_SPECIFIED_DATE));
+    else set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_SUBMIT_THE_QUOTA_ON_THE), status);
 }
 void submit_autonomy_policy(UiState *ui)
 {
@@ -19,8 +19,8 @@ void submit_autonomy_policy(UiState *ui)
         ui->active_request_id, time(NULL), &ui->model.draft_autonomy_policy);
     set_command_name(ui, "set_autonomy_policy");
     sync_transport_label(ui);
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_autonomy_policy", "正在保存自主缓冲设置...");
-    else set_message(ui, "自主缓冲设置提交失败", status);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_autonomy_policy", ptc_ui_text(PTC_UI_T_SAVING_AUTONOMOUS_BUFFER_SETTINGS));
+    else set_message(ui, ptc_ui_text(PTC_UI_T_AUTONOMOUS_BUFFER_SETTING_SUBMISSION_FAILED), status);
 }
 void submit_bedtime_confirmation(UiState *ui)
 {
@@ -29,7 +29,7 @@ void submit_bedtime_confirmation(UiState *ui)
     current_environment_fingerprint(ui, fingerprint);
     if (strcmp(fingerprint, "environment-unavailable") == 0) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            "无法读取当前环境指纹，不能确认就寝限制环境。");
+            ptc_ui_text(PTC_UI_T_THE_CURRENT_ENVIRONMENT_FINGERPRINT_CANNOT_BE_READ));
         return;
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
@@ -38,9 +38,9 @@ void submit_bedtime_confirmation(UiState *ui)
     set_command_name(ui, "confirm_bedtime_requirements");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "confirm_bedtime_requirements", "正在确认任天堂家长控制与当前环境...");
+        begin_wait(ui, "confirm_bedtime_requirements", ptc_ui_text(PTC_UI_T_CONFIRMING_NINTENDO_PARENTAL_CONTROLS_AND_CURRENT_ENVIRONMENT));
     } else {
-        set_message(ui, "就寝限制环境确认失败", status);
+        set_message(ui, ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTION_ENVIRONMENT_CONFIRMATION_FAILED), status);
     }
 }
 void submit_bedtime_policy(UiState *ui)
@@ -54,15 +54,15 @@ void submit_bedtime_policy(UiState *ui)
         ui->active_request_id, time(NULL), &policy, true);
     set_command_name(ui, "set_bedtime_policy");
     sync_transport_label(ui);
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_bedtime_policy", "正在保存当前就寝子页面...");
-    else set_message(ui, "就寝计划提交失败", status);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_bedtime_policy", ptc_ui_text(PTC_UI_T_SAVING_THE_CURRENT_BEDTIME_SUBPAGE));
+    else set_message(ui, ptc_ui_text(PTC_UI_T_BEDTIME_PLAN_SUBMISSION_FAILED), status);
 }
 void submit_bedtime_skip(UiState *ui)
 {
     PtcCompanionStatus status;
     uint64_t instance_id = ui->model.pending_bedtime_skip_instance_id;
     if (instance_id == 0) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "没有可提交的就寝窗口。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THERE_IS_NO_BEDTIME_WINDOW_TO_SUBMIT));
         return;
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
@@ -70,8 +70,8 @@ void submit_bedtime_skip(UiState *ui)
         ui->active_request_id, time(NULL), instance_id);
     set_command_name(ui, "skip_bedtime");
     sync_transport_label(ui);
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "skip_bedtime", "正在跳过这一次就寝时间...");
-    else set_message(ui, "跳过就寝时间提交失败", status);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "skip_bedtime", ptc_ui_text(PTC_UI_T_SKIPPING_BEDTIME_THIS_TIME));
+    else set_message(ui, ptc_ui_text(PTC_UI_T_SKIP_BEDTIME_COMMIT_FAILED), status);
 }
 void submit_clear_bedtime_skip(UiState *ui)
 {
@@ -83,6 +83,6 @@ void submit_clear_bedtime_skip(UiState *ui)
         ui->active_request_id, time(NULL), instance_id);
     set_command_name(ui, "clear_bedtime_skip");
     sync_transport_label(ui);
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "clear_bedtime_skip", "正在恢复这一次就寝限制...");
-    else set_message(ui, "恢复就寝限制提交失败", status);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "clear_bedtime_skip", ptc_ui_text(PTC_UI_T_RESTORING_THIS_BEDTIME_LIMIT));
+    else set_message(ui, ptc_ui_text(PTC_UI_T_RESTORE_BEDTIME_LIMIT_SUBMISSION_FAILED), status);
 }

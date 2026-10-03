@@ -61,7 +61,7 @@ static void append_shortcut_token(char *out, size_t out_size, bool *first, const
 
 static void format_shortcut_label(u64 mask, char *out, size_t out_size)
 {
-    static const struct {
+    const struct {
         u64 mask;
         const char *label;
     } buttons[] = {
@@ -70,10 +70,10 @@ static void format_shortcut_label(u64 mask, char *out, size_t out_size)
         {HidNpadButton_ZL, "ZL"},
         {HidNpadButton_R, "R"},
         {HidNpadButton_ZR, "ZR"},
-        {HidNpadButton_Up, "上"},
-        {HidNpadButton_Down, "下"},
-        {HidNpadButton_Left, "左"},
-        {HidNpadButton_Right, "右"},
+        {HidNpadButton_Up, ptc_ui_text(PTC_UI_T_ON_3)},
+        {HidNpadButton_Down, ptc_ui_text(PTC_UI_T_NEXT)},
+        {HidNpadButton_Left, ptc_ui_text(PTC_UI_T_LEFT)},
+        {HidNpadButton_Right, ptc_ui_text(PTC_UI_T_RIGHT)},
         {HidNpadButton_X, "X"},
         {HidNpadButton_Y, "Y"},
         {HidNpadButton_Plus, "Plus(+)"},
@@ -91,7 +91,7 @@ static void format_shortcut_label(u64 mask, char *out, size_t out_size)
         }
     }
     if (first) {
-        snprintf(out, out_size, "未设置");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NOT_SET));
     }
 }
 
@@ -262,6 +262,6 @@ bool save_setup_step(UiState *ui, int step)
         return true;
     }
     ui->model.setup_step = previous;
-    snprintf(ui->model.message, sizeof(ui->model.message), "无法保存首次设置进度，请确认 SD 卡可写。");
+    snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNABLE_TO_SAVE_FIRST_TIME_SETUP_PROGRESS));
     return false;
 }

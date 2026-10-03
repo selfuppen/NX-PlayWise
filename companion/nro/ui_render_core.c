@@ -50,7 +50,9 @@ void draw_header(uint32_t *pixels, uint32_t stride, const char *title, const cha
     draw_circle_outline(pixels, stride, 90, 44, 3, 3, UI_ON_ACCENT);
     draw_circle_outline(pixels, stride, 86, 55, 3, 3, UI_ON_ACCENT);
     draw_text(pixels, stride, 124, 49, title, 30, UI_INK);
-    draw_text(pixels, stride, 124, 77, subtitle, 18, UI_MUTED);
+    char fitted_sub[256];
+    fit_text(fitted_sub, sizeof(fitted_sub), subtitle, 18, 615);
+    draw_text(pixels, stride, 124, 77, fitted_sub, 18, UI_MUTED);
 }
 
 uint32_t time_projection_color(PtcUiTimeState state)
@@ -80,35 +82,35 @@ static UiActiveRuleBadge get_active_rule_badge(const PtcUiModel *model)
 {
     UiActiveRuleBadge badge;
     if (model->bedtime_active && !model->bedtime_skipped) {
-        badge.label = "就寝限制";
+        badge.label = ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTIONS);
         badge.color = UI_DANGER;
         badge.bg_color = UI_DANGER_SOFT;
         return badge;
     }
     if (!model->status_loaded) {
-        badge.label = "待确认";
+        badge.label = ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED);
         badge.color = UI_MUTED;
         badge.bg_color = UI_PAGE;
         return badge;
     }
     if (strcmp(model->rule_source, "today_override") == 0) {
-        badge.label = "今日调整";
+        badge.label = ptc_ui_text(PTC_UI_T_TODAY_S_ADJUSTMENT);
         badge.color = UI_ACCENT;
         badge.bg_color = UI_ACCENT_SOFT;
     } else if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        badge.label = "指定日期额度";
+        badge.label = ptc_ui_text(PTC_UI_T_SPECIFIED_DATE_QUOTA);
         badge.color = UI_ACCENT;
         badge.bg_color = UI_ACCENT_SOFT;
     } else if (strcmp(model->rule_source, "statutory_holiday") == 0) {
-        badge.label = "法定假日";
+        badge.label = ptc_ui_text(PTC_UI_T_LEGAL_HOLIDAYS);
         badge.color = UI_SUCCESS;
         badge.bg_color = UI_SUCCESS_SOFT;
     } else if (strcmp(model->rule_source, "makeup_workday") == 0) {
-        badge.label = "调休工作";
+        badge.label = ptc_ui_text(PTC_UI_T_COMPENSATION_WORK);
         badge.color = UI_SUCCESS;
         badge.bg_color = UI_SUCCESS_SOFT;
     } else {
-        badge.label = "周计划";
+        badge.label = ptc_ui_text(PTC_UI_T_RULE_WEEKLY);
         badge.color = UI_ACCENT;
         badge.bg_color = UI_ACCENT_SOFT;
     }
@@ -127,7 +129,7 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     color = time_projection_color(status.state);
     badge = get_active_rule_badge(model);
     if (!ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
-        badge.label = "待确认";
+        badge.label = ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED);
         badge.color = UI_MUTED;
         badge.bg_color = UI_PAGE;
     }
@@ -154,6 +156,10 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     int pill_w = badge_text_w + 22;
     if (pill_w < 64) pill_w = 64;
     UiRect pill = {date_x + date_w + 10, box.y + 7, pill_w, 19};
+    int right_limit = box.x + box.width - 14 - 110;
+    if (pill.x + pill.width > right_limit && pill.width > 50) {
+        pill.width = right_limit - pill.x;
+    }
     fill_round_rect(pixels, stride, pill, 5, badge.bg_color);
     draw_rect_outline(pixels, stride, pill, 5, 1, badge.color);
     fill_round_rect(pixels, stride, (UiRect){pill.x + 6, pill.y + 6, 5, 5}, 2, badge.color);
@@ -165,10 +171,14 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     draw_text(pixels, stride, box.x + box.width - 14 - fresh_w, box.y + 21, fitted_fresh, 12, UI_MUTED);
 
     /* --- 第二层：核心游玩额度状态 (前缀次级色与数值高亮加粗) 与 演示模式徽章 --- */
-    const char *pfx = "今天还可玩：";
-    size_t pfx_len = strlen(pfx);
+    const char *pfx_zh = ptc_ui_text(PTC_UI_T_ALSO_AVAILABLE_TO_PLAY_TODAY);
+    const char *pfx_en = "Available today: ";
+    bool is_pfx_zh = strncmp(status.remaining_text, pfx_zh, strlen(pfx_zh)) == 0;
+    bool is_pfx_en = strncmp(status.remaining_text, pfx_en, strlen(pfx_en)) == 0;
     int rem_max_w = box.width - 28 - (model->demo_secret_enabled ? 48 : 0);
-    if (strncmp(status.remaining_text, pfx, pfx_len) == 0) {
+    if (is_pfx_zh || is_pfx_en) {
+        const char *pfx = is_pfx_zh ? pfx_zh : pfx_en;
+        size_t pfx_len = strlen(pfx);
         char fitted_rem[64];
         const char *val = status.remaining_text + pfx_len;
         int pfx_w = measure_text(pfx, 15);
@@ -184,7 +194,7 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     if (model->demo_secret_enabled) {
         UiRect dbadge = {box.x + box.width - 14 - 38, box.y + 30, 38, 18};
         fill_round_rect(pixels, stride, dbadge, 5, UI_DANGER_SOFT);
-        draw_text_center(pixels, stride, dbadge, "演示", 11, UI_DANGER);
+        draw_text_center(pixels, stride, dbadge, ptc_ui_text(PTC_UI_T_DEMO), 11, UI_DANGER);
     }
 
     /* --- 第三层：全宽精致圆角额度进度槽 (置于卡片下沿基线) --- */
@@ -292,25 +302,41 @@ void draw_r_stick_glyph(uint32_t *pixels, uint32_t stride, int x, int y, int siz
 
 void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char *label, int size, uint32_t color)
 {
+    char localized[512];
     if (!label || !*label) return;
+    label = ptc_ui_localize(label, localized, sizeof(localized));
 
     bool disabled = (color == UI_DISABLED);
 
     /* 匹配复合肩键 "L/R  " 或 "L/R " */
     if (strncmp(label, "L/R  ", 5) == 0 || strncmp(label, "L/R ", 4) == 0) {
         const char *rest = strncmp(label, "L/R  ", 5) == 0 ? label + 5 : label + 4;
-        int rest_w = measure_text(rest, size);
         int slash_w = measure_text("/", 14);
-        int total_w = 24 + 4 + slash_w + 4 + 24 + 8 + rest_w;
+        int key_w = 24 + 4 + slash_w + 4 + 24 + 8;
+        int cur_size = size;
+        int rest_w = measure_text(rest, cur_size);
+        int total_w = key_w + rest_w;
+        while (total_w > box.width - 8 && cur_size > 11) {
+            cur_size--;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
+        char fitted_rest[128];
+        if (total_w > box.width - 6) {
+            fit_text(fitted_rest, sizeof(fitted_rest), rest, cur_size, box.width - key_w - 6);
+            rest = fitted_rest;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
         int start_x = box.x + (box.width - total_w) / 2;
         if (start_x < box.x + 2) start_x = box.x + 2;
         int gly_y = box.y + (box.height - 20) / 2;
-        int baseline = box.y + (box.height + size - 4) / 2;
+        int baseline = box.y + (box.height + cur_size - 4) / 2;
 
         draw_shoulder_key_glyph(pixels, stride, start_x, gly_y, 24, 20, "L", disabled);
         draw_text(pixels, stride, start_x + 28, baseline, "/", 14, color);
         draw_shoulder_key_glyph(pixels, stride, start_x + 28 + slash_w + 4, gly_y, 24, 20, "R", disabled);
-        draw_text(pixels, stride, start_x + 28 + slash_w + 4 + 24 + 8, baseline, rest, size, color);
+        draw_text(pixels, stride, start_x + key_w, baseline, rest, cur_size, color);
         return;
     }
 
@@ -320,15 +346,29 @@ void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char
         memcpy(key_buf, label, 2);
         key_buf[2] = '\0';
         const char *rest = label + 4;
-        int rest_w = measure_text(rest, size);
-        int total_w = 32 + 8 + rest_w;
+        int key_w = 32 + 8;
+        int cur_size = size;
+        int rest_w = measure_text(rest, cur_size);
+        int total_w = key_w + rest_w;
+        while (total_w > box.width - 8 && cur_size > 11) {
+            cur_size--;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
+        char fitted_rest[128];
+        if (total_w > box.width - 6) {
+            fit_text(fitted_rest, sizeof(fitted_rest), rest, cur_size, box.width - key_w - 6);
+            rest = fitted_rest;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
         int start_x = box.x + (box.width - total_w) / 2;
         if (start_x < box.x + 2) start_x = box.x + 2;
         int gly_y = box.y + (box.height - 20) / 2;
-        int baseline = box.y + (box.height + size - 4) / 2;
+        int baseline = box.y + (box.height + cur_size - 4) / 2;
 
         draw_shoulder_key_glyph(pixels, stride, start_x, gly_y, 32, 20, key_buf, disabled);
-        draw_text(pixels, stride, start_x + 32 + 8, baseline, rest, size, color);
+        draw_text(pixels, stride, start_x + key_w, baseline, rest, cur_size, color);
         return;
     }
 
@@ -337,15 +377,29 @@ void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char
          label[0] == '+' || label[0] == '-') && (label[1] == ' ' && label[2] == ' ')) {
         char key_buf[2] = {label[0], '\0'};
         const char *rest = label + 3;
-        int rest_w = measure_text(rest, size);
-        int total_w = 22 + 8 + rest_w;
+        int key_w = 22 + 8;
+        int cur_size = size;
+        int rest_w = measure_text(rest, cur_size);
+        int total_w = key_w + rest_w;
+        while (total_w > box.width - 8 && cur_size > 11) {
+            cur_size--;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
+        char fitted_rest[128];
+        if (total_w > box.width - 6) {
+            fit_text(fitted_rest, sizeof(fitted_rest), rest, cur_size, box.width - key_w - 6);
+            rest = fitted_rest;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
         int start_x = box.x + (box.width - total_w) / 2;
         if (start_x < box.x + 2) start_x = box.x + 2;
         int gly_y = box.y + (box.height - 22) / 2;
-        int baseline = box.y + (box.height + size - 4) / 2;
+        int baseline = box.y + (box.height + cur_size - 4) / 2;
 
         draw_single_key_glyph(pixels, stride, start_x, gly_y, 22, key_buf, disabled);
-        draw_text(pixels, stride, start_x + 22 + 8, baseline, rest, size, color);
+        draw_text(pixels, stride, start_x + key_w, baseline, rest, cur_size, color);
         return;
     }
 
@@ -367,16 +421,16 @@ void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiMod
     if (!ptc_ui_parent_status_alert_visible(model)) return;
     if (ptc_ui_operation_feedback_visible(model)) return;
     if (model->disable_flag_present) {
-        snprintf(summary, sizeof(summary), "▲ 控制已停用  |  按 A 查看恢复");
+        snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_CONTROLS_DISABLED_PRESS_A_FOR_RECOVERY));
     } else if (model->recovery_active) {
-        snprintf(summary, sizeof(summary), "▲ 恢复尚未完成  |  按 A 查看处理方法");
+        snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_RECOVERY_INCOMPLETE_PRESS_A_FOR_ACTIONS));
     } else if (strcmp(model->setup_phase, "protection") == 0) {
-        snprintf(summary, sizeof(summary), "▲ 系统防护已激活  |  按 A 查看详情");
+        snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_PROTECTION_ACTIVE_PRESS_A_FOR_DETAILS));
     } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
-        snprintf(summary, sizeof(summary), "● 临时解除中  |  按 A 管理设置");
+        snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_TEMPORARILY_UNLOCKED_PRESS_A_TO_MANAGE));
         color = UI_WARNING;
     } else {
-        snprintf(summary, sizeof(summary), "▲ 系统异常需处理  |  按 A 进入支持");
+        snprintf(summary, sizeof(summary), ptc_ui_text(PTC_UI_T_SYSTEM_ALERT_PRESS_A_FOR_SUPPORT));
     }
 
     fill_round_rect(pixels, stride, box, 12,
@@ -434,20 +488,20 @@ void draw_overlay_actions(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
             UiRect progress = button;
             progress.width = progress.width * model->confirm_hold_progress / 1000;
             fill_round_rect(pixels, stride, progress, 12, UI_SUCCESS);
-            snprintf(progress_label, sizeof(progress_label), "A  继续按住  %u%%",
+            snprintf(progress_label, sizeof(progress_label), ptc_ui_text(PTC_UI_T_A_KEEP_HOLDING_U),
                      (unsigned int)(model->confirm_hold_progress / 10));
         } else {
-            snprintf(progress_label, sizeof(progress_label), "A  按住 1 秒确认");
+            snprintf(progress_label, sizeof(progress_label), ptc_ui_text(PTC_UI_T_A_PRESS_AND_HOLD_FOR_1_SECOND));
         }
         draw_text_center(pixels, stride, button,
-                         model->confirm_hold_progress >= 1000 ? "A  确认完成" : progress_label,
+                         model->confirm_hold_progress >= 1000 ? ptc_ui_text(PTC_UI_T_A_CONFIRMATION_COMPLETED) : progress_label,
                          20, UI_ON_ACCENT);
         draw_rect_outline(pixels, stride, button, 12, 2,
                           model->confirm_hold_progress > 0 ? UI_SUCCESS : UI_ACCENT);
     } else {
         draw_dialog_button(pixels, stride, confirm, confirm_label, UI_ACCENT, UI_ON_ACCENT, false);
     }
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  取消", UI_RAISED, UI_INK, true);
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_CANCEL), UI_RAISED, UI_INK, true);
     if (model->overlay == PTC_UI_OVERLAY_CONFIRM &&
         (model->operation == PTC_UI_OPERATION_ENABLE_ALBUM_RESTRICTION ||
          model->operation == PTC_UI_OPERATION_RESTORE_ALBUM_ENTRY ||
@@ -467,9 +521,9 @@ void format_event_time(int64_t timestamp, bool full, char *out, size_t out_size)
     uint16_t today;
     uint16_t minute;
     if (!out || out_size == 0) return;
-    snprintf(out, out_size, "时间未知");
+    snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TIME_UNKNOWN));
     if (timestamp <= 0) {
-        snprintf(out, out_size, "时间未知");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TIME_UNKNOWN));
         return;
     }
     {
@@ -488,13 +542,13 @@ void format_event_time(int64_t timestamp, bool full, char *out, size_t out_size)
     if (full && ptc_date_from_day_index(event_day, &year, &month, &day)) {
         snprintf(out, out_size, "%u-%02u-%02u %02u:%02u", year, month, day, minute / 60, minute % 60);
     } else if (event_day == today) {
-        snprintf(out, out_size, "今天 %02u:%02u", minute / 60, minute % 60);
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TODAY_02U_02U), minute / 60, minute % 60);
     } else if ((uint16_t)(event_day + 1u) == today) {
-        snprintf(out, out_size, "昨天 %02u:%02u", minute / 60, minute % 60);
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_YESTERDAY_02U_02U), minute / 60, minute % 60);
     } else if (ptc_date_from_day_index(event_day, &year, &month, &day)) {
         snprintf(out, out_size, "%u-%02u-%02u %02u:%02u", year, month, day, minute / 60, minute % 60);
     } else {
-        snprintf(out, out_size, "时间未知");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TIME_UNKNOWN));
     }
 }
 
@@ -524,7 +578,7 @@ void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         UiRect detail_btn = to_uirect(ptc_ui_notice_details_rect());
         fill_round_rect(pixels, stride, detail_btn, 8, danger ? UI_DANGER : (warning ? UI_WARNING : UI_ACCENT_SOFT));
         draw_rect_outline(pixels, stride, detail_btn, 8, 1, danger ? UI_DANGER : (warning ? UI_WARNING : UI_ACCENT));
-        draw_text_center(pixels, stride, detail_btn, "X 详情", 13, (danger || warning) ? UI_ON_ACCENT : UI_ACCENT);
+        draw_text_center(pixels, stride, detail_btn, ptc_ui_text(PTC_UI_T_X_DETAILS), 13, (danger || warning) ? UI_ON_ACCENT : UI_ACCENT);
     }
 
     int max_text_w = box.width - 50 - (notice.has_details ? 88 : 16);
@@ -552,7 +606,7 @@ void draw_notice_details_dialog(uint32_t *pixels, uint32_t stride, const PtcUiMo
     int icon_cy = dialog.y + 70;
     draw_status_symbol(pixels, stride, icon_cx, icon_cy, accent, danger ? 3 : (warning ? 2 : 1));
 
-    const char *msg = notice.summary[0] ? notice.summary : "操作状态与反馈";
+    const char *msg = notice.summary[0] ? notice.summary : ptc_ui_text(PTC_UI_T_OPERATION_STATUS_AND_FEEDBACK);
     char fitted_msg[192];
     fit_text(fitted_msg, sizeof(fitted_msg), msg, 20, dialog.width - 108);
     draw_text(pixels, stride, dialog.x + 72, dialog.y + 76, fitted_msg, 20, danger ? UI_DANGER : UI_INK);
@@ -563,24 +617,25 @@ void draw_notice_details_dialog(uint32_t *pixels, uint32_t stride, const PtcUiMo
 
     int card_base = card.y + 36;
     if (notice.details[0]) {
-        draw_text(pixels, stride, card.x + 20, card_base, "详细信息与排查指引：", 16, UI_ACCENT);
+        draw_text(pixels, stride, card.x + 20, card_base, ptc_ui_text(PTC_UI_T_DETAILED_INFORMATION_AND_TROUBLESHOOTING_GUIDELINES), 16, UI_ACCENT);
         card_base = draw_wrapped_text(pixels, stride, card.x + 20, card_base + 32,
             notice.details, 16, card.width - 40, 24, 4, UI_INK);
     } else {
-        draw_text(pixels, stride, card.x + 20, card_base, "操作已完成，当前没有更多详细日志。", 16, UI_MUTED);
+        draw_text(pixels, stride, card.x + 20, card_base, ptc_ui_text(PTC_UI_T_OPERATION_COMPLETED_NO_FURTHER_DETAILS_AVAILABLE), 16, UI_MUTED);
         card_base += 32;
     }
 
     if (model->command_name[0]) {
         char execution[256];
-        snprintf(execution, sizeof(execution), "执行命令：%s    传输模式：%s",
-                 model->command_name[0] ? model->command_name : "无",
-                 model->transport_label[0] ? model->transport_label : "默认");
+        char cmd_buf[128], tr_buf[128];
+        const char *cmd = model->command_name[0] ? ptc_ui_localize(model->command_name, cmd_buf, sizeof(cmd_buf)) : ptc_ui_text(PTC_UI_T_NONE);
+        const char *tr = model->transport_label[0] ? ptc_ui_localize(model->transport_label, tr_buf, sizeof(tr_buf)) : ptc_ui_text(PTC_UI_T_DEFAULT);
+        snprintf(execution, sizeof(execution), ptc_ui_text(PTC_UI_T_COMMAND_S_TRANSPORT_S), cmd, tr);
         draw_text(pixels, stride, card.x + 20, card.y + card.height - 24, execution, 14, UI_MUTED);
     }
 
     PtcUiRect btn_rect = ptc_ui_cancel_rect(model->overlay);
-    draw_dialog_button(pixels, stride, btn_rect, "A / B  关闭", UI_ACCENT, UI_ON_ACCENT, false);
+    draw_dialog_button(pixels, stride, btn_rect, ptc_ui_text(PTC_UI_T_A_B_CLOSE), UI_ACCENT, UI_ON_ACCENT, false);
 }
 
 void home_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,

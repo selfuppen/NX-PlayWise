@@ -1,6 +1,7 @@
 #include "ui_state.h"
 #include "ui_layout.h"
 #include "ui_layout_internal.h"
+#include "../ui_language.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -192,14 +193,26 @@ PtcUiRect ptc_ui_qr_export_rect(void)
 void ptc_ui_format_home_remaining(const PtcUiModel *model, int64_t now, char *out, size_t out_size)
 {
     if (!out || out_size == 0) return;
-    if (!model || !model->status_loaded) snprintf(out, out_size, "等待刷新");
+    if (!model || !model->status_loaded) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_AWAITING_REFRESH));
     else if (!ptc_ui_status_is_fresh(model, now))
-        snprintf(out, out_size, "状态待确认");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
     else if (model->bedtime_active && !model->bedtime_skipped)
-        snprintf(out, out_size, "就寝限制中");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE));
     else if (model->blocked_today == 1 || model->restricted_now == 1)
-        snprintf(out, out_size, "禁止游玩");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_PLAY_BLOCKED));
     else ptc_ui_format_quota_remaining(model, out, out_size);
+}
+
+bool ptc_ui_home_remaining_minutes(const PtcUiModel *model, int64_t now, int *minutes)
+{
+    if (!model || !minutes || !model->status_loaded || !ptc_ui_status_is_fresh(model, now) ||
+        (model->bedtime_active && !model->bedtime_skipped) ||
+        model->blocked_today == 1 || model->restricted_now == 1 ||
+        model->unrestricted_today == 1 || !model->remaining_available ||
+        model->remaining_minutes < 0)
+        return false;
+    *minutes = model->remaining_minutes;
+    return true;
 }
 
 void ptc_ui_format_home_total_value(const PtcUiModel *model, char *out, size_t out_size)
@@ -207,12 +220,12 @@ void ptc_ui_format_home_total_value(const PtcUiModel *model, char *out, size_t o
     if (!out || out_size == 0) return;
     /* Only the backend's current-day forecast supplies the displayed total;
        do not reconstruct it from remaining time or consumption estimates. */
-    if (!model || !model->status_loaded) snprintf(out, out_size, "待刷新");
-    else if (model->unrestricted_today == 1) snprintf(out, out_size, "不限时");
+    if (!model || !model->status_loaded) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_PENDING));
+    else if (model->unrestricted_today == 1) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
     else if (model->forecast_available && model->forecast[0].day_index == model->day_index &&
              model->forecast[0].mode == PTC_RULE_MODE_LIMIT)
-        snprintf(out, out_size, "%u 分钟", (unsigned int)model->forecast[0].minutes);
-    else snprintf(out, out_size, "暂不可用");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)model->forecast[0].minutes);
+    else snprintf(out, out_size, ptc_ui_text(PTC_UI_T_UNAVAILABLE));
 }
 
 void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_size)
@@ -220,8 +233,9 @@ void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_siz
     char value[64];
     if (!out || out_size == 0) return;
     ptc_ui_format_home_total_value(model, value, sizeof(value));
-    snprintf(out, out_size, "今日总额度  %s", value);
+    snprintf(out, out_size, ptc_ui_text(PTC_UI_T_DAILY_QUOTA_S), value);
 }
+
 
 PtcUiRect ptc_ui_home_summary_rect(bool parent)
 {
@@ -465,7 +479,7 @@ bool ptc_ui_open_home_details(PtcUiModel *model)
     model->overlay = PTC_UI_OVERLAY_HOME_DETAILS;
     model->home_details_page = 0;
     snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
-        model->view == PTC_UI_CHILD ? "使用详情" : "今日调度详情");
+        model->view == PTC_UI_CHILD ? ptc_ui_text(PTC_UI_T_USAGE_DETAILS) : ptc_ui_text(PTC_UI_T_TODAY_S_SCHEDULE_DETAILS));
     model->overlay_body[0] = '\0';
     return true;
 }

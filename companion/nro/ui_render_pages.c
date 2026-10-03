@@ -1,63 +1,63 @@
 #include "ui_render_internal.h"
 
 static const UiAction TODAY_ACTIONS[] = {
-    {"设置今日额度", "当前由规则计划决定", UI_ACCENT, UI_ACTION_ICON_CLOCK, UI_ACTION_VISUAL_NONE},
-    {"快速加时", "", UI_SUCCESS, UI_ACTION_ICON_ADD_TIME, UI_ACTION_VISUAL_QUICK_ADD},
-    {"今日不限时", "仅今天不限时；就寝照常", UI_SUCCESS, UI_ACTION_ICON_INFINITY, UI_ACTION_VISUAL_NONE},
-    {"清除今日调整", "移除今日调整，恢复原计划", UI_MUTED, UI_ACTION_ICON_CLEAR_OVERRIDE, UI_ACTION_VISUAL_NONE},
-    {"跳过本次就寝", "当前关闭", UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
-    {"自主缓冲", "当前关闭", UI_MUTED, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SET_TODAY_LIMIT), PTC_UI_TEXT_REFERENCE(PTC_UI_T_CONTROLLED_BY_RULES), UI_ACCENT, UI_ACTION_ICON_CLOCK, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_QUICK_GRANT), "", UI_SUCCESS, UI_ACTION_ICON_ADD_TIME, UI_ACTION_VISUAL_QUICK_ADD},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_NO_LIMIT_TODAY), PTC_UI_TEXT_REFERENCE(PTC_UI_T_TODAY_ONLY_BEDTIME_STAYS_ON), UI_SUCCESS, UI_ACTION_ICON_INFINITY, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_CLEAR_TODAY_LIMIT), PTC_UI_TEXT_REFERENCE(PTC_UI_T_RESET_TO_REGULAR_PLAN), UI_MUTED, UI_ACTION_ICON_CLEAR_OVERRIDE, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SKIP_BEDTIME), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_AUTONOMY_BUFFER_2), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_MUTED, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction PLAN_ACTIONS[] = {
-    {"指定日期额度", "当前关闭", UI_ACCENT, UI_ACTION_ICON_CALENDAR_RANGE, UI_ACTION_VISUAL_NONE},
-    {"节假日额度", "当前关闭", UI_SUCCESS, UI_ACTION_ICON_HOLIDAY, UI_ACTION_VISUAL_NONE},
-    {"每周额度", "当前生效", UI_ACCENT, UI_ACTION_ICON_WEEKLY, UI_ACTION_VISUAL_NONE},
-    {"就寝时间", "当前关闭", UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
-    {"自主缓冲", "当前关闭", UI_SUCCESS, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SPECIFIED_DATE_QUOTA), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_ACCENT, UI_ACTION_ICON_CALENDAR_RANGE, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_HOLIDAY_QUOTA), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_SUCCESS, UI_ACTION_ICON_HOLIDAY, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_WEEKLY_QUOTA), PTC_UI_TEXT_REFERENCE(PTC_UI_T_ACTIVE_2), UI_ACCENT, UI_ACTION_ICON_WEEKLY, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_BEDTIME), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_AUTONOMY_BUFFER_2), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_SUCCESS, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction GRANT_ACTIONS[] = {
-    {"主机生成", "本机签名 / 8 位码", UI_SUCCESS, UI_ACTION_ICON_CONSOLE, UI_ACTION_VISUAL_NONE},
-    {"手机 / 电脑生成", "跨设备离线可用", UI_ACCENT, UI_ACTION_ICON_DEVICE, UI_ACTION_VISUAL_NONE},
-    {"生成设置", "设备与密钥已配置", UI_MUTED, UI_ACTION_ICON_SLIDERS, UI_ACTION_VISUAL_NONE},
-    {"使用记录", "最近 100 条", UI_MUTED, UI_ACTION_ICON_HISTORY, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_HOST_GENERATION), PTC_UI_TEXT_REFERENCE(PTC_UI_T_NATIVE_SIGNATURE_8_BIT_CODE), UI_SUCCESS, UI_ACTION_ICON_CONSOLE, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_MOBILE_PC_GENERATOR), PTC_UI_TEXT_REFERENCE(PTC_UI_T_AVAILABLE_OFFLINE_ACROSS_DEVICES), UI_ACCENT, UI_ACTION_ICON_DEVICE, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_GRANT_SETTINGS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_DEVICE_AND_KEY_CONFIGURED), UI_MUTED, UI_ACTION_ICON_SLIDERS, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_USAGE_HISTORY), PTC_UI_TEXT_REFERENCE(PTC_UI_T_LAST_100), UI_MUTED, UI_ACTION_ICON_HISTORY, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction SETTINGS_ACTIONS[] = {
-    {"外观主题", "", UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_THEME},
-    {"修改 PIN", "当前已启用", UI_ACCENT, UI_ACTION_ICON_KEY, UI_ACTION_VISUAL_NONE},
-    {"家长区快捷键", "当前：Minus", UI_ACCENT, UI_ACTION_ICON_CONTROLLER, UI_ACTION_VISUAL_NONE},
-    {"自制程序高级入口", "未开启", UI_DANGER, UI_ACTION_ICON_HOMEBREW, UI_ACTION_VISUAL_NONE},
-    {"家庭活动", "最近 200 条", UI_MUTED, UI_ACTION_ICON_ACTIVITY, UI_ACTION_VISUAL_NONE},
-    {"按键与交互音效", "", UI_SUCCESS, UI_ACTION_ICON_AUDIO, UI_ACTION_VISUAL_AUDIO},
-    {"界面语言", "跟随系统", UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_APPEARANCE_THEME), "", UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_THEME},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_CHANGE_PIN), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_ENABLED), UI_ACCENT, UI_ACTION_ICON_KEY, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_PARENT_SHORTCUT), PTC_UI_TEXT_REFERENCE(PTC_UI_T_CURRENT_MINUS_2), UI_ACCENT, UI_ACTION_ICON_CONTROLLER, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_HOMEBREW_ACCESS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_NOT_ENABLED), UI_DANGER, UI_ACTION_ICON_HOMEBREW, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_FAMILY_ACTIVITIES), PTC_UI_TEXT_REFERENCE(PTC_UI_T_LAST_200), UI_MUTED, UI_ACTION_ICON_ACTIVITY, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SOUND_EFFECTS), "", UI_SUCCESS, UI_ACTION_ICON_AUDIO, UI_ACTION_VISUAL_AUDIO},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_UI_LANGUAGE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_FOLLOW_SYSTEM), UI_ACCENT, UI_ACTION_ICON_THEME, UI_ACTION_VISUAL_NONE},
 };
 
 const UiAction GRANT_MANAGER_ACTIONS[] = {
-    {"管理加时码设备名", "查看、输入或随机生成设备名", UI_ACCENT, UI_ACTION_ICON_DEVICE, UI_ACTION_VISUAL_NONE},
-    {"管理加时码密钥", "查看、输入或随机生成签名密钥", UI_DANGER, UI_ACTION_ICON_KEY, UI_ACTION_VISUAL_NONE},
-    {"导出手机/电脑配置", "导出供手机或电脑使用的配置文件", UI_SUCCESS, UI_ACTION_ICON_EXPORT, UI_ACTION_VISUAL_NONE},
-    {"编辑二维码跳转地址", "修改扫码后打开的网页地址", UI_ACCENT, UI_ACTION_ICON_DEVICE, UI_ACTION_VISUAL_NONE},
-    {"恢复二维码跳转默认地址", "恢复项目提供的默认网页地址", UI_MUTED, UI_ACTION_ICON_RESTORE, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_MANAGES_THE_TIME_CODE_DEVICE_NAME), PTC_UI_TEXT_REFERENCE(PTC_UI_T_VIEW_ENTER_OR_RANDOMLY_GENERATE_DEVICE_NAMES), UI_ACCENT, UI_ACTION_ICON_DEVICE, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_MANAGE_GRANT_CODE_KEYS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_VIEW_ENTER_OR_RANDOMLY_GENERATE_A_SIGNING), UI_DANGER, UI_ACTION_ICON_KEY, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_EXPORT_MOBILE_PHONE_COMPUTER_CONFIGURATION), PTC_UI_TEXT_REFERENCE(PTC_UI_T_EXPORT_CONFIGURATION_FILES_FOR_USE_ON_MOBILE), UI_SUCCESS, UI_ACTION_ICON_EXPORT, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_EDIT_QR_CODE_JUMP_ADDRESS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_MODIFY_THE_WEB_PAGE_ADDRESS_OPENED_AFTER), UI_ACCENT, UI_ACTION_ICON_DEVICE, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_RESTORE_THE_DEFAULT_ADDRESS_OF_QR_CODE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_RESTORES_THE_DEFAULT_WEB_PAGE_ADDRESS_PROVIDED), UI_MUTED, UI_ACTION_ICON_RESTORE, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction SUPPORT_ACTIONS[] = {
-    {"启用额度管理", "安全检查后启用", UI_ACCENT, UI_ACTION_ICON_SHIELD, UI_ACTION_VISUAL_NONE},
-    {"重试修复", "重新检查是否可以安全启用", UI_SUCCESS, UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE},
-    {"紧急停用", "停止新的控制写入", UI_DANGER, UI_ACTION_ICON_STOP, UI_ACTION_VISUAL_NONE},
-    {"恢复安装前状态", "恢复原始设置并停用", UI_DANGER, UI_ACTION_ICON_RESTORE, UI_ACTION_VISUAL_NONE},
-    {"导出诊断", "不含密钥、PIN 或离线码", UI_MUTED, UI_ACTION_ICON_EXPORT, UI_ACTION_VISUAL_NONE},
-    {"软件信息", "版本、项目仓库和家长网页", UI_ACCENT, UI_ACTION_ICON_INFO, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_ENABLE_QUOTA_CONTROL), PTC_UI_TEXT_REFERENCE(PTC_UI_T_ENABLED_AFTER_SECURITY_CHECK), UI_ACCENT, UI_ACTION_ICON_SHIELD, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_RETRY_REPAIR), PTC_UI_TEXT_REFERENCE(PTC_UI_T_RECHECK_IF_IT_IS_SAFE_TO_ENABLE), UI_SUCCESS, UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_EMERGENCY_DEACTIVATION), PTC_UI_TEXT_REFERENCE(PTC_UI_T_STOP_NEW_CONTROL_WRITES), UI_DANGER, UI_ACTION_ICON_STOP, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_RESTORE_ORIGINAL_STATE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_RESTORE_ORIGINAL_SETTINGS_AND_DEACTIVATE), UI_DANGER, UI_ACTION_ICON_RESTORE, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_EXPORT_DIAGNOSTICS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_NO_KEY_PIN_OR_OFFLINE_CODE), UI_MUTED, UI_ACTION_ICON_EXPORT, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SOFTWARE_INFO), PTC_UI_TEXT_REFERENCE(PTC_UI_T_VERSION_PROJECT_REPOSITORY_AND_PARENT_PAGE), UI_ACCENT, UI_ACTION_ICON_INFO, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction RESUME_CONTROL_ACTION = {
-    "解除停用并重新启用", "安全检查后恢复额度管理", UI_SUCCESS,
+    PTC_UI_TEXT_REFERENCE(PTC_UI_T_RE_ENABLE_CONTROLS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_RESTORE_QUOTA_MANAGEMENT_AFTER_SECURITY_CHECK), UI_SUCCESS,
     UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE
 };
 
 static const UiAction RECONFIRM_ENVIRONMENT_ACTION = {
-    "重新检查并启用", "环境变化，确认兼容后恢复额度管理", UI_WARNING,
+    PTC_UI_TEXT_REFERENCE(PTC_UI_T_RECHECK_AND_ENABLE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_ENVIRONMENT_CHANGES_RESUME_QUOTA_MANAGEMENT_AFTER_CONFIRMING), UI_WARNING,
     UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE
 };
 static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -79,7 +79,7 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
                           UI_RGB(ui_mix_rgb(UI_BLENDED(danger), 0xFF9A8A, phase * 4)));
     }
     draw_text(pixels, stride, x, box.y + 42,
-              bedtime_enforcing ? "今天还可玩（就寝限制中）" : "今天还可玩",
+              bedtime_enforcing ? ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY_BEDTIME_ACTIVE) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY),
               22, UI_RGB(UI_BLENDED(hero_secondary)));
     /* 环形额度表：弧长由缓动后的剩余分钟驱动，颜色沿用今日额度健康色；
      * 数据不可用时只画弱化轨道环。 */
@@ -117,24 +117,22 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         draw_ring_progress(pixels, stride, box.x + box.width - 46, box.y + 40, 16, 5, fraction,
                            UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0xFFFFFF, 20)), ring_fill);
     }
-    /* Split only the existing numeric formatter output. Unknown/stale states
-     * retain their words and are never converted to a numeric zero. */
-    char *unit = strstr(remaining, " 分钟");
-    if (unit) {
-        *unit = '\0';
-        int minutes = atoi(remaining);
+    /* Keep the numeric presentation independent from localized wording. */
+    int minutes;
+    if (ptc_ui_home_remaining_minutes(model, ptc_ui_render_now(), &minutes)) {
+        snprintf(remaining, sizeof(remaining), "%d", minutes);
         int num_w = measure_text(remaining, 80);
         draw_text_bold(pixels, stride, x, box.y + 133, remaining, 80, UI_RGB(UI_BLENDED(on_hero)));
         int unit_x = x + num_w + 12;
-        draw_text(pixels, stride, unit_x, box.y + 130, "分钟", 24, UI_RGB(UI_BLENDED(hero_secondary)));
+        const char *unit_label = ptc_ui_text(PTC_UI_T_MIN);
+        draw_text(pixels, stride, unit_x, box.y + 130, unit_label, 24, UI_RGB(UI_BLENDED(hero_secondary)));
         if (minutes >= 60) {
             char duration_str[64];
-            if (minutes % 60 == 0) {
-                snprintf(duration_str, sizeof(duration_str), "（%d 小时）", minutes / 60);
-            } else {
-                snprintf(duration_str, sizeof(duration_str), "（%d 小时 %d 分钟）", minutes / 60, minutes % 60);
-            }
-            int dur_x = unit_x + measure_text("分钟", 24) + 12;
+            if (minutes % 60 == 0)
+                snprintf(duration_str, sizeof(duration_str), ptc_ui_text(PTC_UI_T_D_HR_2), minutes / 60);
+            else
+                snprintf(duration_str, sizeof(duration_str), ptc_ui_text(PTC_UI_T_D_HR_D_MIN_2), minutes / 60, minutes % 60);
+            int dur_x = unit_x + measure_text(unit_label, 24) + 12;
             draw_text(pixels, stride, dur_x, box.y + 130, duration_str, 20, UI_RGB(UI_BLENDED(hero_secondary)));
         }
     } else {
@@ -178,11 +176,11 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     }
 
     if (bedtime_enforcing) {
-        snprintf(line, sizeof(line), "就寝时间生效中（限制使用）  /  %s",
-            model->status_loaded ? ui_rule_source_label(model->rule_source) : "待确认规则");
+        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_PLAY_RESTRICTED_S),
+            model->status_loaded ? ui_rule_source_label(model->rule_source) : (ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM)));
     } else {
-        snprintf(line, sizeof(line), "今日%s  /  %s", today,
-            model->status_loaded ? ui_rule_source_label(model->rule_source) : "待确认规则");
+        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_TODAY_S_S), today,
+            model->status_loaded ? ui_rule_source_label(model->rule_source) : (ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM)));
     }
     draw_text(pixels, stride, x, box.y + 176, line, 18, UI_RGB(UI_BLENDED(hero_secondary)));
     /* Supporting information sits on a separate surface, below the hero. */
@@ -191,8 +189,8 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     ptc_ui_format_home_total(model, line, sizeof(line));
     draw_text(pixels, stride, x, box.y + 236, line, 22, UI_INK);
     if (model->played_minutes_available && model->played_minutes >= 0)
-        snprintf(line, sizeof(line), "额度消耗估算  约 %d 分钟", model->played_minutes);
-    else snprintf(line, sizeof(line), "额度消耗估算  暂不可用");
+        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_USED_QUOTA_ESTIMATE_D_MIN), model->played_minutes);
+    else snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_USED_QUOTA_ESTIMATE_UNAVAILABLE));
     draw_text(pixels, stride, x, box.y + 272, line, 18, UI_MUTED);
     format_status_age(model, age, sizeof(age));
     draw_text(pixels, stride, x, box.y + box.height - 26, age, 16, UI_MUTED);
@@ -222,18 +220,19 @@ static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
 
 static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    static const char *LABELS[] = {"今日调度", "时间计划", "离线加时", "安全与偏好", "支持与恢复"};
+    const char *LABELS[] = {ptc_ui_text(PTC_UI_T_TODAY_SCHEDULE), ptc_ui_text(PTC_UI_T_TIME_PLANS), ptc_ui_text(PTC_UI_T_OFFLINE_GRANTS), ptc_ui_text(PTC_UI_T_SECURITY_PREFS), ptc_ui_text(PTC_UI_T_SUPPORT_RECOVERY)};
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page != PTC_UI_PLAN_PAGE_ROOT) {
-        const char *name = model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY ? "每周计划" :
-            (model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY ? "国家节假日" : "就寝时间");
-        home_button(pixels, stride, ptc_ui_advanced_back_rect(), "B  返回时间计划", false, false, false);
+        const char *name = model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY ? (ptc_ui_text(PTC_UI_T_WEEKLY_PLAN)) :
+            (model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY ? (ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAYS)) : (ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE)));
+        home_button(pixels, stride, ptc_ui_advanced_back_rect(), ptc_ui_text(PTC_UI_T_B_BACK_TO_PLANS), false, false, false);
         {
             char path[96];
-            snprintf(path, sizeof(path), "时间计划 / %s", name);
+            snprintf(path, sizeof(path), ptc_ui_text(PTC_UI_T_TIME_PLANS_S), name);
             draw_text(pixels, stride, 278, 140, path, 22, UI_MUTED);
         }
         return;
     }
+
     int index;
     for (index = 0; index < PTC_UI_PARENT_PAGE_COUNT; ++index) {
         UiRect tab = to_uirect(ptc_ui_parent_tab_rect(index));
@@ -260,13 +259,13 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         bool active = index == (int)model->parent_page;
         draw_text_center(pixels, stride, tab, LABELS[index], 18, active ? UI_ON_ACCENT : UI_INK);
     }
-    draw_text(pixels, stride, 1038, 140, "L / R 切换", 19, UI_MUTED);
+    draw_text(pixels, stride, 1038, 140, ptc_ui_text(PTC_UI_T_L_R_SWITCH), 19, UI_MUTED);
 }
 
 static void draw_settings_badge(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const char *label = ptc_ui_settings_status_label(model);
-    uint32_t color = label && strcmp(label, "需处理") == 0 ? UI_DANGER : UI_WARNING;
+    uint32_t color = label && strcmp(label, ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED)) == 0 ? UI_DANGER : UI_WARNING;
     UiRect badge;
     if (!label) return;
     badge = (UiRect){54 + PTC_UI_PARENT_SUPPORT * 174 + 96, 113, 56, 24};
@@ -281,13 +280,13 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
     fill_round_rect(pixels, stride, panel, 16, UI_SURFACE);
     draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
     int recommended = ptc_ui_support_recommended_action(model);
-    draw_text(pixels, stride, panel.x + 26, panel.y + 36, "当前问题", 23, UI_INK);
+    draw_text(pixels, stride, panel.x + 26, panel.y + 36, ptc_ui_text(PTC_UI_T_CURRENT_ISSUE), 23, UI_INK);
     draw_wrapped_text(pixels, stride, panel.x + 26, panel.y + 70, ptc_ui_support_problem(model),
                       18, panel.width - 52, 25, 2, UI_RGB(UI_BLENDED(text_primary)));
-    const char *next = recommended == 0 ? (model->disable_flag_present ? "建议：解除停用并重新启用" : "建议：重新检查并启用") :
-                       recommended == 1 ? "建议：选择重试修复" :
-                       recommended == 4 ? "建议：导出诊断包，保留问题记录" :
-                       (model->waiting || model->apply_pending_confirmation ? "请等待结果，再刷新状态" : "无需恢复操作，可按 B 返回设置");
+    const char *next = recommended == 0 ? (model->disable_flag_present ? ptc_ui_text(PTC_UI_T_RECOMMENDATION_UNDEACTIVATE_AND_RE_ENABLE) : ptc_ui_text(PTC_UI_T_RECOMMENDATION_RECHECK_AND_ENABLE)) :
+                       recommended == 1 ? ptc_ui_text(PTC_UI_T_SUGGESTION_SELECT_RETRY_REPAIR) :
+                       recommended == 4 ? ptc_ui_text(PTC_UI_T_SUGGESTION_EXPORT_DIAGNOSTIC_PACKAGE_AND_KEEP_PROBLEM) :
+                       (model->waiting || model->apply_pending_confirmation ? ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_RESULT_AND_THEN) : ptc_ui_text(PTC_UI_T_NO_NEED_TO_RESTORE_THE_OPERATION_YOU));
     draw_wrapped_text(pixels, stride, panel.x + 26, panel.y + 130, next, 16,
                       panel.width - 52, 23, 2, UI_RGB(UI_BLENDED(accent)));
     char age[80];
@@ -295,10 +294,10 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
     draw_text(pixels, stride, panel.x + 26, panel.y + 188, age, 15, status_age_color(model));
     if (model->environment_available)
         snprintf(troubleshoot, sizeof(troubleshoot), "HOS %s  |  %s", model->environment_hos, model->environment_model);
-    else snprintf(troubleshoot, sizeof(troubleshoot), "环境详情暂不可用，可导出诊断");
+    else snprintf(troubleshoot, sizeof(troubleshoot), ptc_ui_text(PTC_UI_T_ENVIRONMENT_DETAILS_ARE_TEMPORARILY_UNAVAILABLE_DIAGNOSTICS_CA));
     fit_text(troubleshoot, sizeof(troubleshoot), troubleshoot, 15, panel.width - 52);
     draw_text(pixels, stride, panel.x + 26, panel.y + 214, troubleshoot, 15, UI_RGB(UI_BLENDED(text_secondary)));
-    draw_text(pixels, stride, panel.x + 26, panel.y + 252, "最近事件", 18, UI_MUTED);
+    draw_text(pixels, stride, panel.x + 26, panel.y + 252, ptc_ui_text(PTC_UI_T_RECENT_EVENTS), 18, UI_MUTED);
     if (model->recent_event_count > 0) {
         for (int event_index = 0; event_index < model->recent_event_count; ++event_index) {
             char latest[192];
@@ -315,7 +314,7 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
         }
     } else {
         draw_text(pixels, stride, panel.x + 26, panel.y + 288,
-                  model->recent_events_available ? "最近没有需要注意的事件" : "暂时无法读取最近事件，可刷新后重试",
+                  model->recent_events_available ? ptc_ui_text(PTC_UI_T_THERE_ARE_NO_RECENT_EVENTS_REQUIRING_ATTENTION) : ptc_ui_text(PTC_UI_T_TEMPORARILY_UNABLE_TO_READ_RECENT_EVENTS_PLEASE),
                   15, model->recent_events_available ? UI_MUTED : UI_DANGER);
     }
 }
@@ -335,16 +334,23 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     ptc_ui_format_today_adjustment_status(model, now, adjustment_badge, sizeof(adjustment_badge),
                                           adjustment_detail, sizeof(adjustment_detail));
     draw_parent_home_summary(pixels, stride, model);
+    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
     UiRect quota_group = {548, 176, 696, 264};
     UiRect other_group = {548, 446, 696, 182};
     fill_round_rect(pixels, stride, quota_group, 16, UI_RAISED);
     draw_rect_outline(pixels, stride, quota_group, 16, 1, UI_BORDER);
-    draw_text(pixels, stride, 574, 195, "今日额度调整（仅今天）", 16, UI_ACCENT);
-    draw_text(pixels, stride, 850, 195, "明日恢复原计划", 13, UI_MUTED);
+    const char *title1 = ptc_ui_text(PTC_UI_T_TODAY_S_LIMIT_ADJUSTMENT_TODAY_ONLY);
+    const char *hint1 = ptc_ui_text(PTC_UI_T_ORIGINAL_PLAN_RESUMES_TOMORROW);
+    draw_text(pixels, stride, 574, 195, title1, 16, UI_ACCENT);
+    int title1_w = measure_text(title1, 16);
+    draw_text(pixels, stride, 574 + title1_w + 14, 195, hint1, 13, UI_MUTED);
     fill_round_rect(pixels, stride, other_group, 16, UI_RAISED);
     draw_rect_outline(pixels, stride, other_group, 16, 1, UI_BORDER);
-    draw_text(pixels, stride, 574, 466, "就寝与自主缓冲", 16, UI_WARNING);
-    draw_text(pixels, stride, 778, 466, "就寝独立生效；缓冲按条件追加今日额度", 13, UI_MUTED);
+    const char *title2 = ptc_ui_text(PTC_UI_T_BEDTIME_AUTONOMY_BUFFER);
+    const char *hint2 = ptc_ui_text(PTC_UI_T_BEDTIME_OPERATES_INDEPENDENTLY);
+    draw_text(pixels, stride, 574, 466, title2, 16, UI_WARNING);
+    int title2_w = measure_text(title2, 16);
+    draw_text(pixels, stride, 574 + title2_w + 14, 466, hint2, 13, UI_MUTED);
     for (int index = 0; index < 6; ++index) {
         UiRect box = to_uirect(ptc_ui_today_card_rect(index));
         bool focused = !model->parent_footer_focused && model->selected_index == index;
@@ -364,21 +370,22 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
             action.visual = UI_ACTION_VISUAL_NONE;
         } else if (index == 3 && clear_unavailable) {
             subtitle = model->today_override_cleared_in_session
-                ? "本次会话已清除，当前使用下级规则" : "今天没有单独额度调整，无需清除";
+                ? (ptc_ui_text(PTC_UI_T_CLEARED_IN_SESSION_LOWER_RULE_APPLIES))
+                : (ptc_ui_text(PTC_UI_T_NO_TODAY_LIMIT_SET));
         } else if (index == 4) {
             if (unavailable) {
                 subtitle = unavailable;
             } else if (!fresh) {
-                subtitle = "刷新后显示当前或下次窗口";
+                subtitle = ptc_ui_text(PTC_UI_T_REFRESH_TO_SHOW_NEXT_WINDOW);
             } else if (model->bedtime_active) {
                 if (model->bedtime_skipped) {
-                    snprintf(dynamic, sizeof(dynamic), "%02u:%02u 至次日 %02u:%02u（已跳过）",
+                    snprintf(dynamic, sizeof(dynamic), ptc_ui_text(PTC_UI_T_02U_02U_TO_NEXT_DAY_02U_02U),
                         (unsigned int)(model->bedtime_start_minute / 60),
                         (unsigned int)(model->bedtime_start_minute % 60),
                         (unsigned int)(model->bedtime_end_minute / 60),
                         (unsigned int)(model->bedtime_end_minute % 60));
                 } else {
-                    snprintf(dynamic, sizeof(dynamic), "%02u:%02u 至次日 %02u:%02u",
+                    snprintf(dynamic, sizeof(dynamic), ptc_ui_text(PTC_UI_T_02U_02U_TO_NEXT_DAY_02U_02U_2),
                         (unsigned int)(model->bedtime_start_minute / 60),
                         (unsigned int)(model->bedtime_start_minute % 60),
                         (unsigned int)(model->bedtime_end_minute / 60),
@@ -386,7 +393,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 }
                 subtitle = dynamic;
             } else if (bedtime_skip_matches) {
-                snprintf(dynamic, sizeof(dynamic), "%02u:%02u 至次日 %02u:%02u（已跳过）",
+                snprintf(dynamic, sizeof(dynamic), ptc_ui_text(PTC_UI_T_02U_02U_TO_NEXT_DAY_02U_02U),
                     (unsigned int)(model->bedtime_skipped_start_minute / 60),
                     (unsigned int)(model->bedtime_skipped_start_minute % 60),
                     (unsigned int)(model->bedtime_skipped_end_minute / 60),
@@ -396,42 +403,45 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 uint16_t year;
                 uint8_t month, day;
                 if (ptc_date_from_day_index(model->bedtime_next_start_day_index, &year, &month, &day))
-                    snprintf(dynamic, sizeof(dynamic), "%02u-%02u %02u:%02u 至 %02u:%02u", month, day,
+                    snprintf(dynamic, sizeof(dynamic), ptc_ui_text(PTC_UI_T_02U_02U_02U_02U_TO_02U_02U), month, day,
                         (unsigned int)(model->bedtime_next_start_minute / 60),
                         (unsigned int)(model->bedtime_next_start_minute % 60),
                         (unsigned int)(model->bedtime_next_end_minute / 60),
                         (unsigned int)(model->bedtime_next_end_minute % 60));
-                else snprintf(dynamic, sizeof(dynamic), "已开启，等待下次窗口");
+                else snprintf(dynamic, sizeof(dynamic), ptc_ui_text(PTC_UI_T_ENABLED_WAITING_FOR_WINDOW));
                 subtitle = dynamic;
             } else {
-                subtitle = model->bedtime_policy.enabled ? "没有可跳过的近期窗口" : "当前关闭";
+                subtitle = model->bedtime_policy.enabled ? (ptc_ui_text(PTC_UI_T_NO_UPCOMING_WINDOW_TO_SKIP)) : (ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
             }
         } else if (index == 5) {
-            if (!fresh) subtitle = "按 Y 刷新确认领取状态";
-            else if (model->daily_buffer_minutes == 0) subtitle = "当前关闭，可在时间计划中设置";
-            else if (model->daily_buffer_claimed) subtitle = "今日已领取，明天恢复资格";
+            if (!fresh) subtitle = ptc_ui_text(PTC_UI_T_PRESS_Y_TO_REFRESH_STATUS);
+            else if (model->daily_buffer_minutes == 0) subtitle = ptc_ui_text(PTC_UI_T_CURRENTLY_OFF_CONFIGURE_IN_PLANS);
+            else if (model->daily_buffer_claimed) subtitle = ptc_ui_text(PTC_UI_T_CLAIMED_TODAY_RESUMES_TOMORROW);
             else if (model->daily_buffer_available) {
-                snprintf(dynamic, sizeof(dynamic), "今日可领取 %u 分钟", (unsigned int)model->daily_buffer_minutes);
+                snprintf(dynamic, sizeof(dynamic), ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_U_MIN), (unsigned int)model->daily_buffer_minutes);
                 subtitle = dynamic;
-            } else subtitle = "今天暂不可领取";
+            } else subtitle = ptc_ui_text(PTC_UI_T_NOT_AVAILABLE_TODAY);
         }
         action.title = title;
         action.subtitle = subtitle;
         draw_action_card(pixels, stride, box, &action, focused,
                          disabled ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE,
-                         (index == 0 || index == 4) ? 82 : 0);
+                         (index == 0 || index >= 2) ? (is_en ? 76 : 82) : 0);
         if (index == 1 && unavailable)
             draw_text(pixels, stride, box.x + 78, box.y + 88,
-                      "恢复限时请用“设置今日额度”", 12, UI_DISABLED);
+                      ptc_ui_text(PTC_UI_T_TO_RESTORE_LIMIT_USE_SET_TODAY_LIMIT), 12, UI_DISABLED);
         if (index == 0) {
-            UiRect tbadge = {box.x + box.width - 86, box.y + 10, 74, 22};
-            uint32_t badge_color = (strcmp(adjustment_badge, "生效中") == 0 ||
-                                    strcmp(adjustment_badge, "不限时") == 0) ? UI_SUCCESS :
-                (strcmp(adjustment_badge, "就寝限制中") == 0 ? UI_WARNING :
-                (strcmp(adjustment_badge, "控制停用") == 0 || strcmp(adjustment_badge, "恢复中") == 0
-                    ? UI_DANGER :
-                 (strcmp(adjustment_badge, "等待生效") == 0 || strcmp(adjustment_badge, "待确认") == 0
-                    ? UI_WARNING : UI_MUTED)));
+            UiRect tbadge = {box.x + box.width - (is_en ? 78 : 86), box.y + 10, is_en ? 68 : 74, 22};
+            uint32_t badge_color = (strcmp(adjustment_badge, ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE)) == 0 ||
+                                    strcmp(adjustment_badge, ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED)) == 0 ||
+                                    strcmp(adjustment_badge, "Active") == 0 ||
+                                    strcmp(adjustment_badge, "Unlimited") == 0) ? UI_SUCCESS :
+                (strcmp(adjustment_badge, ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE)) == 0 ||
+                 strcmp(adjustment_badge, "Bedtime") == 0 ? UI_WARNING :
+                (strcmp(adjustment_badge, ptc_ui_text(PTC_UI_T_CONTROL_DEACTIVATION)) == 0 || strcmp(adjustment_badge, ptc_ui_text(PTC_UI_T_ADJUST_BADGE_RECOVERING)) == 0 ||
+                 strcmp(adjustment_badge, "Disabled") == 0 ? UI_DANGER :
+                 (strcmp(adjustment_badge, ptc_ui_text(PTC_UI_T_WAITING_FOR_EFFECT)) == 0 || strcmp(adjustment_badge, ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED)) == 0 ||
+                  strcmp(adjustment_badge, "Pending") == 0 ? UI_WARNING : UI_MUTED)));
             fill_round_rect(pixels, stride, tbadge, 6,
                             badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
                             (badge_color == UI_DANGER ? UI_DANGER_SOFT :
@@ -439,27 +449,29 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
             draw_rect_outline(pixels, stride, tbadge, 6, 1, badge_color);
             draw_text_center(pixels, stride, tbadge, adjustment_badge, 12, badge_color);
         } else if (index >= 2) {
-            const char *badge = !fresh ? "待确认" :
+            const char *badge = !fresh ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING)) :
                 (index == 2 ? (model->today_override_present &&
-                               model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED ? "已启用" : "未启用") :
+                                model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED ? (ptc_ui_text(PTC_UI_T_ENABLED_2)) : (ptc_ui_text(PTC_UI_T_DISABLED))) :
                  index == 3 ? (model->today_override_cleared_in_session &&
-                               !model->today_override_present ? "已清除" : "未清除") :
-                 index == 4 ? (model->bedtime_active && !model->bedtime_skipped ? "限制中" :
-                               (bedtime_skip_matches ? "本次已跳过" : "未跳过")) :
-                              (model->daily_buffer_claimed ? "已领取" :
-                               (model->daily_buffer_available ? "可领取" : "未领取")));
+                               !model->today_override_present ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_CLEARED)) : (ptc_ui_text(PTC_UI_T_ACTIVE))) :
+                 index == 4 ? (model->bedtime_active && !model->bedtime_skipped ? (ptc_ui_text(PTC_UI_T_RESTRICTED)) :
+                               (bedtime_skip_matches ? (ptc_ui_text(PTC_UI_T_SKIPPED)) : (ptc_ui_text(PTC_UI_T_NOT_SKIPPED)))) :
+                              (model->daily_buffer_claimed ? (ptc_ui_text(PTC_UI_T_CLAIMED)) :
+                               (model->daily_buffer_available ? (ptc_ui_text(PTC_UI_T_AVAILABLE)) : (ptc_ui_text(PTC_UI_T_UNCLAIMED)))));
             uint32_t color = !fresh ? UI_WARNING :
                 (index == 4 && model->bedtime_active && !model->bedtime_skipped ? UI_DANGER :
-                 (strcmp(badge, "已启用") == 0 || strcmp(badge, "本次已跳过") == 0 ||
-                  strcmp(badge, "已领取") == 0 ? UI_SUCCESS : UI_MUTED));
-            UiRect tbadge = {box.x + box.width - 96, box.y + 10, 84, 22};
+                 (strcmp(badge, ptc_ui_text(PTC_UI_T_ENABLED_2)) == 0 || strcmp(badge, ptc_ui_text(PTC_UI_T_SKIPPED)) == 0 ||
+                  strcmp(badge, ptc_ui_text(PTC_UI_T_CLAIMED)) == 0 || strcmp(badge, "Enabled") == 0 ||
+                  strcmp(badge, "Skipped") == 0 || strcmp(badge, "Claimed") == 0 ? UI_SUCCESS : UI_MUTED));
+            int b_width = is_en ? 72 : 84;
+            UiRect tbadge = {box.x + box.width - b_width - 10, box.y + 10, b_width, 22};
             fill_round_rect(pixels, stride, tbadge, 6, color == UI_DANGER ? UI_DANGER_SOFT :
                             (color == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
             draw_rect_outline(pixels, stride, tbadge, 6, 1, color);
             draw_text_center(pixels, stride, tbadge, badge, 12, color);
         }
     }
-    home_button(pixels, stride, ptc_ui_home_details_rect(true), "+  查看详情", false, false, model->waiting);
+    home_button(pixels, stride, ptc_ui_home_details_rect(true), ptc_ui_text(PTC_UI_T_VIEW_DETAILS), false, false, model->waiting);
 }
 
 static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -468,12 +480,12 @@ static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     (void)model;
     fill_round_rect(pixels, stride, panel, 16, UI_RGB(UI_BLENDED(surface)));
     draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
-    draw_text(pixels, stride, 868, 222, "加时码使用指南", 24, UI_RGB(UI_BLENDED(text_primary)));
-    draw_text(pixels, stride, 868, 258, "无需主机联网，离线安全签名", 15, UI_MUTED);
+    draw_text(pixels, stride, 868, 222, ptc_ui_text(PTC_UI_T_GRANT_CODE_GUIDE), 24, UI_RGB(UI_BLENDED(text_primary)));
+    draw_text(pixels, stride, 868, 258, ptc_ui_text(PTC_UI_T_NO_HOST_NETWORKING_REQUIRED_OFFLINE_SECURE_SIGNATURE), 15, UI_MUTED);
 
     /* 3 个步骤卡片 */
-    static const char *STEP_TITLES[] = {"1  选择要增加的时长", "2  验证 PIN 生成加时码", "3  孩子输入代码确认加时"};
-    static const char *STEP_HINTS[] = {"支持 15/30/60 分钟或自定义时长", "签名密钥本地计算，有效防篡改", "孩子在掌机输入 8 位纯数字离线兑换"};
+    const char *STEP_TITLES[] = {ptc_ui_text(PTC_UI_T_1_SELECT_EXTRA_TIME), ptc_ui_text(PTC_UI_T_2_VERIFY_PIN_GENERATE), ptc_ui_text(PTC_UI_T_3_CHILD_ENTERS_8_DIGIT_CODE)};
+    const char *STEP_HINTS[] = {ptc_ui_text(PTC_UI_T_SUPPORTS_15_30_60_MINUTES_OR_CUSTOM), ptc_ui_text(PTC_UI_T_THE_SIGNATURE_KEY_IS_CALCULATED_LOCALLY_EFFECTIVELY), ptc_ui_text(PTC_UI_T_CHILDREN_ENTER_8_DIGIT_PURE_NUMBERS_ON)};
     for (int s = 0; s < 3; ++s) {
         UiRect step_box = {864, 280 + s * 72, panel.width - 44, 62};
         fill_round_rect(pixels, stride, step_box, 10, UI_RAISED);
@@ -481,7 +493,7 @@ static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         draw_text(pixels, stride, step_box.x + 14, step_box.y + 24, STEP_TITLES[s], 17, UI_RGB(UI_BLENDED(text_primary)));
         draw_text(pixels, stride, step_box.x + 14, step_box.y + 48, STEP_HINTS[s], 13, UI_MUTED);
     }
-    draw_wrapped_text(pixels, stride, 868, 524, "说明：加时码仅当天有效，单次兑换后立即失效。家长可通过手机或电脑离线生成。", 14, 332, 20, 3, UI_RGB(UI_BLENDED(text_secondary)));
+    draw_wrapped_text(pixels, stride, 868, 524, ptc_ui_text(PTC_UI_T_NOTE_THE_EXTRA_TIME_CODE_IS_ONLY), 14, 332, 20, 3, UI_RGB(UI_BLENDED(text_secondary)));
 }
 
 static void draw_diagnostic_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -496,28 +508,29 @@ static void draw_diagnostic_notice(uint32_t *pixels, uint32_t stride, const PtcU
     draw_rect_outline(pixels, stride, rect, 16, 1, UI_BORDER);
     fill_round_rect(pixels, stride, (UiRect){rect.x + 12, rect.y + 20, 4, rect.height - 40}, 2, accent);
     if (model->diagnostic_status == PTC_UI_DIAGNOSTIC_EXPORTING) {
-        draw_text(pixels, stride, rect.x + 24, rect.y + 36, "正在导出诊断包...", 21, accent);
+        draw_text(pixels, stride, rect.x + 24, rect.y + 36, ptc_ui_text(PTC_UI_T_EXPORTING_DIAGNOSTIC_PACKAGE), 21, accent);
         draw_text(pixels, stride, rect.x + 24, rect.y + 76,
-                  "诊断包会排除密钥、PIN、离线码和完整 nonce。", 17, UI_MUTED);
+                  ptc_ui_text(PTC_UI_T_THE_DIAGNOSTIC_PACKAGE_EXCLUDES_KEYS_PINS_OFFLINE), 17, UI_MUTED);
         return;
     }
     if (model->diagnostic_status == PTC_UI_DIAGNOSTIC_ERROR) {
-        draw_text(pixels, stride, rect.x + 24, rect.y + 36, "诊断包导出失败。", 21, accent);
+        draw_text(pixels, stride, rect.x + 24, rect.y + 36, ptc_ui_text(PTC_UI_T_DIAGNOSTIC_PACKAGE_EXPORT_FAILED), 21, accent);
         draw_text(pixels, stride, rect.x + 24, rect.y + 76,
-                  "请确认 SD 卡可写后重试。", 17, UI_MUTED);
+                  ptc_ui_text(PTC_UI_T_PLEASE_CONFIRM_THAT_THE_SD_CARD_IS), 17, UI_MUTED);
         return;
     }
-    snprintf(line, sizeof(line), "诊断包导出成功：%s", model->diagnostic_path);
+    snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_DIAGNOSTIC_BUNDLE_EXPORTED_S), model->diagnostic_path);
     draw_text(pixels, stride, rect.x + 24, rect.y + 32, line, 17, UI_INK);
     draw_text(pixels, stride, rect.x + 24, rect.y + 66,
-              "如遇到问题，提交 GitHub Issue 时请附上此文件。", 17, UI_INK);
+              ptc_ui_text(PTC_UI_T_IF_YOU_ENCOUNTER_PROBLEMS_PLEASE_ATTACH_THIS), 17, UI_INK);
     draw_text(pixels, stride, rect.x + 24, rect.y + 100,
-              "GitHub 地址：https://github.com/selfuppen/NX-PlayWise/issues", 17, accent);
+              ptc_ui_text(PTC_UI_T_GITHUB_ADDRESS_HTTPS_GITHUB_COM_SELFUPPEN_NX), 17, accent);
 }
 
 void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    static const char *TITLES[] = {"今日调度", "时间计划", "离线加时", "安全与偏好", "支持与恢复"};
+    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
+    const char *TITLES[] = {ptc_ui_text(PTC_UI_T_TODAY_SCHEDULE), ptc_ui_text(PTC_UI_T_TIME_PLANS), ptc_ui_text(PTC_UI_T_OFFLINE_GRANTS), ptc_ui_text(PTC_UI_T_SECURITY_PREFS), ptc_ui_text(PTC_UI_T_SUPPORT_RECOVERY)};
     const UiAction *actions;
     int action_count;
     int index;
@@ -526,15 +539,15 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     const char *title = TITLES[model->parent_page >= 0 && model->parent_page < PTC_UI_PARENT_PAGE_COUNT
         ? model->parent_page : 0];
     if (model->parent_page == PTC_UI_PARENT_PLAN) {
-        if (model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY) title = "每周计划";
-        else if (model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) title = "国家节假日";
-        else if (model->plan_page == PTC_UI_PLAN_PAGE_BEDTIME) title = "就寝时间";
+        if (model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY) title = ptc_ui_text(PTC_UI_T_WEEKLY_PLAN);
+        else if (model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) title = ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAYS);
+        else if (model->plan_page == PTC_UI_PLAN_PAGE_BEDTIME) title = ptc_ui_text(PTC_UI_T_BEDTIME);
     }
     draw_header(pixels, stride, title,
-        model->parent_page == PTC_UI_PARENT_SUPPORT ? "兼容状态、诊断与安全恢复" :
-         (model->parent_page == PTC_UI_PARENT_PLAN ? "额度规则与就寝计划" :
-         (model->parent_page == PTC_UI_PARENT_TODAY ? "今天的额度调整与单次措施" :
-          "本地规则与设备安全设置")));
+        model->parent_page == PTC_UI_PARENT_SUPPORT ? ptc_ui_text(PTC_UI_T_COMPATIBILITY_STATUS_DIAGNOSTICS_AND_SAFE_RECOVERY) :
+         (model->parent_page == PTC_UI_PARENT_PLAN ? ptc_ui_text(PTC_UI_T_CREDIT_RULES_AND_BEDTIME_PLAN) :
+         (model->parent_page == PTC_UI_PARENT_TODAY ? ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_ADJUSTMENT_AND_SINGLE_MEASURES) :
+          ptc_ui_text(PTC_UI_T_LOCAL_RULES_AND_DEVICE_SECURITY_SETTINGS))));
     draw_time_status_bar(pixels, stride, model);
     draw_tabs(pixels, stride, model);
     if (!plan_subpage && model->parent_page != PTC_UI_PARENT_TODAY) {
@@ -547,36 +560,36 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             UiRect qbadge = {54, 178, 76, 22};
             fill_round_rect(pixels, stride, qbadge, 6, UI_ACCENT_SOFT);
             draw_rect_outline(pixels, stride, qbadge, 6, 1, UI_ACCENT);
-            draw_text_center(pixels, stride, qbadge, "额度规则", 12, UI_ACCENT);
-            draw_text(pixels, stride, 138, 195, "优先级自上而下逐级生效", 13, UI_MUTED);
+            draw_text_center(pixels, stride, qbadge, ptc_ui_text(PTC_UI_T_QUOTA_RULES), 12, UI_ACCENT);
+            draw_text(pixels, stride, 138, 195, ptc_ui_text(PTC_UI_T_APPLIES_FROM_TOP_TO_BOTTOM), 13, UI_MUTED);
 
             fill_round_rect(pixels, stride, parallel_zone, 16, UI_RAISED);
             draw_rect_outline(pixels, stride, parallel_zone, 16, 1, UI_BORDER);
             UiRect pbadge = {440, 178, 76, 22};
             fill_round_rect(pixels, stride, pbadge, 6, UI_WARNING_SOFT);
             draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING);
-            draw_text_center(pixels, stride, pbadge, "单独生效", 12, UI_WARNING);
-            draw_text(pixels, stride, 524, 195, "就寝限制单独生效", 13, UI_MUTED);
+            draw_text_center(pixels, stride, pbadge, ptc_ui_text(PTC_UI_T_SEPARATE), 12, UI_WARNING);
+            draw_text(pixels, stride, 524, 195, ptc_ui_text(PTC_UI_T_OPERATES_INDEPENDENTLY), 13, UI_MUTED);
 
             /* 并行与补充下方对称说明卡片 */
             UiRect info_card = {439, 484, 365, 132};
             fill_round_rect(pixels, stride, info_card, 16, UI_PAGE);
             draw_rect_outline(pixels, stride, info_card, 16, 1, UI_BORDER);
-            draw_text(pixels, stride, 457, 508, "就寝时间与额度", 14, UI_INK);
-            draw_text(pixels, stride, 457, 534, "• 就寝时间：到点限制，不受额度影响", 11, UI_MUTED);
-            draw_text(pixels, stride, 457, 556, "• 自主缓冲：限时日耗尽前由孩子申请", 11, UI_MUTED);
-            draw_text(pixels, stride, 457, 578, "• 优先顺序：指定日期额度 > 节假日 > 周计划", 11, UI_MUTED);
-            draw_text(pixels, stride, 457, 600, "• 异常防护：离线运行，断网断电保护", 11, UI_MUTED);
+            draw_text(pixels, stride, 457, 508, ptc_ui_text(PTC_UI_T_BEDTIME_AND_QUOTA), 14, UI_INK);
+            draw_text(pixels, stride, 457, 534, ptc_ui_text(PTC_UI_T_BEDTIME_TIME_RESTRICTION_INDEPENDENT_OF_QUOTA), 11, UI_MUTED);
+            draw_text(pixels, stride, 457, 556, ptc_ui_text(PTC_UI_T_AUTONOMY_CLAIMED_BY_CHILD_BEFORE_LIMIT_ENDS), 11, UI_MUTED);
+            draw_text(pixels, stride, 457, 578, ptc_ui_text(PTC_UI_T_PRIORITY_SPECIFIC_DATE_HOLIDAY_WEEKLY_PLAN), 11, UI_MUTED);
+            draw_text(pixels, stride, 457, 600, ptc_ui_text(PTC_UI_T_OFFLINE_SAFE_WORKS_OFFLINE_WITH_PROTECTION), 11, UI_MUTED);
         }
         if (model->parent_page == PTC_UI_PARENT_GRANT) {
             UiRect grant_banner = {54, 484, 750, 144};
             fill_round_rect(pixels, stride, grant_banner, 16, UI_SURFACE);
             draw_rect_outline(pixels, stride, grant_banner, 16, 1, UI_BORDER);
             fill_round_rect(pixels, stride, (UiRect){grant_banner.x + 16, grant_banner.y + 18, 4, grant_banner.height - 36}, 2, UI_ACCENT);
-            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 36, "离线加时码使用指南", 18, UI_INK);
-            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 68, "• 家长可直接在上方选择快捷时长或自定义分钟生成 8 位加时码", 15, UI_RGB(UI_BLENDED(text_secondary)));
-            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 96, "• 兑换后自动计入今日额度；若主机处于离线或外出状态同样支持校验", 15, UI_RGB(UI_BLENDED(text_secondary)));
-            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 124, "• 加时码包含防重放与天数校验，当日有效，不可跨日或重复兑换", 14, UI_MUTED);
+            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 36, ptc_ui_text(PTC_UI_T_OFFLINE_GRANT_CODE_USAGE_GUIDE), 18, UI_INK);
+            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 68, ptc_ui_text(PTC_UI_T_PARENTS_CAN_DIRECTLY_SELECT_THE_SHORTCUT_TIME), 15, UI_RGB(UI_BLENDED(text_secondary)));
+            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 96, ptc_ui_text(PTC_UI_T_AFTER_REDEMPTION_IT_WILL_AUTOMATICALLY_BE_INCLUDED), 15, UI_RGB(UI_BLENDED(text_secondary)));
+            draw_text(pixels, stride, grant_banner.x + 32, grant_banner.y + 124, ptc_ui_text(PTC_UI_T_THE_EXTRA_TIME_CODE_INCLUDES_ANTI_REPLAY), 14, UI_MUTED);
         }
         for (index = 0; index < action_count; ++index) {
             UiRect card = to_uirect(model->parent_page == PTC_UI_PARENT_SUPPORT
@@ -598,16 +611,16 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                     ? &RECONFIRM_ENVIRONMENT_ACTION : &RESUME_CONTROL_ACTION;
             }
             if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
-                const char *detail = "状态未知，请重新检测";
+                const char *detail = ptc_ui_text(PTC_UI_T_STATUS_IS_UNKNOWN_PLEASE_CHECK_AGAIN);
                 dynamic_action = *action;
                 if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
-                    detail = "当前未开启";
+                    detail = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_NOT_ENABLED);
                 } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
-                    detail = "当前已开启，按住 X 再按 A 进入";
+                    detail = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_ON_HOLD_DOWN_X_AND);
                 } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
-                    detail = "需要处理，请查看详情";
+                    detail = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_PLEASE_VIEW_DETAILS);
                 } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
-                    detail = "外部配置，入口可用";
+                    detail = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION_ENTRY_AVAILABLE);
                 }
                 /* Use the card's single subtitle row; a second row at the same y overlaps it. */
                 dynamic_action.subtitle = detail;
@@ -617,8 +630,8 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 bool scheduled_active = (strcmp(model->rule_source, "scheduled_override") == 0);
                 bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
                 dynamic_action.subtitle = scheduled_active
-                    ? (bedtime_enforcing ? "计划生效中（当前就寝限制中）" : "当前采用此计划确定每日额度")
-                    : (model->scheduled_override.enabled ? "已启用，今日未在计划日期范围内" : "当前关闭");
+                    ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_THE_PLAN_IS_IN_EFFECT_WITH_CURRENT) : ptc_ui_text(PTC_UI_T_THIS_PLAN_IS_CURRENTLY_USED_TO_DETERMINE))
+                    : (model->scheduled_override.enabled ? ptc_ui_text(PTC_UI_T_IS_ENABLED_TODAY_IS_NOT_WITHIN_THE) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED));
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 1) {
                 dynamic_action = *action;
@@ -626,10 +639,10 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                                        strcmp(model->rule_source, "makeup_workday") == 0);
                 bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
                 dynamic_action.subtitle = holiday_active
-                    ? (bedtime_enforcing ? "节假日生效中（当前就寝限制中）" :
+                    ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_IS_IN_EFFECT_DURING_HOLIDAYS_CURRENTLY_UNDER) :
                        (strcmp(model->rule_source, "statutory_holiday") == 0
-                        ? "当前生效中，国家法定休假日" : "当前生效中，国家调休工作日"))
-                    : (model->holiday_enabled ? "已启用，今日非节假日" : "当前关闭，可预设规则");
+                        ? ptc_ui_text(PTC_UI_T_IS_CURRENTLY_IN_EFFECT_AND_IS_A) : ptc_ui_text(PTC_UI_T_CURRENTLY_IN_EFFECT_THE_NATIONAL_REST_DAYS)))
+                    : (model->holiday_enabled ? ptc_ui_text(PTC_UI_T_IS_ENABLED_TODAY_IS_NOT_A_HOLIDAY) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED_RULES_CAN_BE_PRESET));
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 2) {
                 dynamic_action = *action;
@@ -639,31 +652,31 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 bool today_active = (strcmp(model->rule_source, "today_override") == 0);
                 bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
                 if (today_active) {
-                    dynamic_action.subtitle = "今天优先采用今日调整";
+                    dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_TODAY_S_ADJUSTMENT_WILL_BE_USED_FIRST);
                 } else if (scheduled_active) {
-                    dynamic_action.subtitle = "今天优先采用指定日期额度";
+                    dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_THE_SPECIFIED_DATE_QUOTA_WILL_BE_USED);
                 } else if (holiday_active) {
-                    dynamic_action.subtitle = "今天优先采用节假日设置";
+                    dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_HOLIDAY_SETTINGS_WILL_BE_USED_FIRST_TODAY);
                 } else {
                     dynamic_action.subtitle = bedtime_enforcing
-                        ? "周额度生效中（当前就寝限制中）" : "当前生效中，周一到周日基础额度";
+                        ? ptc_ui_text(PTC_UI_T_WEEKLY_QUOTA_IS_IN_EFFECT_CURRENT_BEDTIME) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_IN_EFFECT_BASIC_QUOTA_FROM);
                 }
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 3) {
                 dynamic_action = *action;
                 bool bedtime_enforcing = (model->bedtime_active && !model->bedtime_skipped);
                 dynamic_action.subtitle = model->bedtime_policy.enabled
-                    ? (bedtime_enforcing ? "当前限制生效中" : "当前已开启，等待下次窗口")
-                    : "当前关闭";
+                    ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_THE_CURRENT_RESTRICTION_IS_IN_EFFECT) : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_OPEN_WAITING_FOR_THE_NEXT))
+                    : ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED);
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 4) {
                 static char autonomy_detail[64];
                 dynamic_action = *action;
                 if (model->autonomy_policy.daily_buffer_minutes > 0u) {
-                    snprintf(autonomy_detail, sizeof(autonomy_detail), "当前每天 %u 分钟",
+                    snprintf(autonomy_detail, sizeof(autonomy_detail), ptc_ui_text(PTC_UI_T_CURRENTLY_U_MIN_DAY),
                         (unsigned int)model->autonomy_policy.daily_buffer_minutes);
                 } else {
-                    snprintf(autonomy_detail, sizeof(autonomy_detail), "当前关闭");
+                    snprintf(autonomy_detail, sizeof(autonomy_detail), ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
                 }
                 dynamic_action.subtitle = autonomy_detail;
                 action = &dynamic_action;
@@ -676,16 +689,16 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 static char shortcut_detail[112];
                 dynamic_action = *action;
                 if (model->custom_shortcut_enabled && model->custom_shortcut_label[0]) {
-                    snprintf(shortcut_detail, sizeof(shortcut_detail), "当前：%s",
+                    snprintf(shortcut_detail, sizeof(shortcut_detail), ptc_ui_text(PTC_UI_T_CURRENT_S),
                              model->custom_shortcut_label);
                 } else {
-                    snprintf(shortcut_detail, sizeof(shortcut_detail), "当前：Minus");
+                    snprintf(shortcut_detail, sizeof(shortcut_detail), ptc_ui_text(PTC_UI_T_CURRENT_MINUS));
                 }
                 dynamic_action.subtitle = shortcut_detail;
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
                 dynamic_action = *action;
-                dynamic_action.subtitle = ptc_audio_is_enabled() ? "开启" : "静音";
+                dynamic_action.subtitle = ptc_audio_is_enabled() ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_MUTED));
                 dynamic_action.accent = ptc_audio_is_enabled() ? UI_SUCCESS : UI_MUTED;
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 6) {
@@ -696,7 +709,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             if (model->parent_page == PTC_UI_PARENT_PLAN &&
                 !ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
                 dynamic_action = *action;
-                dynamic_action.subtitle = "按 Y 刷新确认开启和生效状态";
+                dynamic_action.subtitle = ptc_ui_text(PTC_UI_T_PRESS_Y_TO_REFRESH_TO_CONFIRM_THE);
                 action = &dynamic_action;
             }
             /* Status badges live in the card's top-right corner.  The one-line
@@ -725,25 +738,25 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 }
 
                 UiRect pbadge = {card.x + card.width - 96, card.y + 8, 84, 22};
-                const char *badge_label = !fresh ? "待确认" :
-                    index == 0 ? (scheduled_active ? "当前生效" :
-                                  (model->scheduled_override.enabled ? "已开启" : "已关闭")) :
-                    index == 1 ? (holiday_active ? "当前生效" :
-                                  (model->holiday_enabled ? "已开启" : "已关闭")) :
-                    index == 2 ? (weekly_active ? "当前生效" : "今天未采用") :
-                    index == 3 ? (bedtime_enforcing ? "限制中" :
-                                  (ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy) ? "本次已跳过" :
-                                   (model->bedtime_policy.enabled ? "已开启" : "已关闭"))) :
-                    (model->autonomy_policy.daily_buffer_minutes == 0 ? "已关闭" :
-                     (model->daily_buffer_claimed ? "今日已领" :
-                      (model->daily_buffer_available ? "今日可领" : "已开启")));
+                const char *badge_label = !fresh ? ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED) :
+                    index == 0 ? (scheduled_active ? ptc_ui_text(PTC_UI_T_ACTIVE_2) :
+                                  (model->scheduled_override.enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2))) :
+                    index == 1 ? (holiday_active ? ptc_ui_text(PTC_UI_T_ACTIVE_2) :
+                                  (model->holiday_enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2))) :
+                    index == 2 ? (weekly_active ? ptc_ui_text(PTC_UI_T_ACTIVE_2) : ptc_ui_text(PTC_UI_T_NOT_ACTIVE)) :
+                    index == 3 ? (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_RESTRICTED) :
+                                  (ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy) ? ptc_ui_text(PTC_UI_T_SKIPPED) :
+                                   (model->bedtime_policy.enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2)))) :
+                    (model->autonomy_policy.daily_buffer_minutes == 0 ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
+                     (model->daily_buffer_claimed ? ptc_ui_text(PTC_UI_T_RECEIVED_TODAY) :
+                      (model->daily_buffer_available ? ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY) : ptc_ui_text(PTC_UI_T_ENABLED))));
                 uint32_t badge_color = !fresh ? UI_WARNING :
                     bedtime_enforcing && index == 3 ? UI_DANGER :
-                    (strcmp(badge_label, "当前生效") == 0 ||
-                     strcmp(badge_label, "今日可领") == 0 ||
-                     strcmp(badge_label, "本次已跳过") == 0 ? UI_SUCCESS :
-                     (strcmp(badge_label, "已关闭") == 0 ||
-                       strcmp(badge_label, "今天未采用") == 0 ? UI_MUTED : UI_ACCENT));
+                    (strcmp(badge_label, ptc_ui_text(PTC_UI_T_ACTIVE_2)) == 0 ||
+                     strcmp(badge_label, ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY)) == 0 ||
+                     strcmp(badge_label, ptc_ui_text(PTC_UI_T_SKIPPED)) == 0 ? UI_SUCCESS :
+                     (strcmp(badge_label, ptc_ui_text(PTC_UI_T_DISABLED_2)) == 0 ||
+                       strcmp(badge_label, ptc_ui_text(PTC_UI_T_NOT_ACTIVE)) == 0 ? UI_MUTED : UI_ACCENT));
                 fill_round_rect(pixels, stride, pbadge, 6,
                                 badge_color == UI_DANGER ? UI_DANGER_SOFT :
                                 (badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
@@ -751,19 +764,19 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 draw_rect_outline(pixels, stride, pbadge, 6, 1, badge_color);
                 draw_text_center(pixels, stride, pbadge, badge_label, 12, badge_color);
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 3) {
-                const char *state_label = "状态未知";
+                const char *state_label = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
                 uint32_t state_color = UI_DANGER;
                 if (model->album_restriction_state == 0) {
-                    state_label = "未开启";
+                    state_label = ptc_ui_text(PTC_UI_T_NOT_ENABLED);
                     state_color = UI_MUTED;
                 } else if (model->album_restriction_state == 1) {
-                    state_label = "已开启";
+                    state_label = ptc_ui_text(PTC_UI_T_ENABLED);
                     state_color = UI_SUCCESS;
                 } else if (model->album_restriction_state == 2) {
-                    state_label = "需要处理";
+                    state_label = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_2);
                     state_color = UI_WARNING;
                 } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
-                    state_label = "外部配置";
+                    state_label = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION);
                     state_color = UI_ACCENT;
                 }
                 UiRect badge = {card.x + card.width - 94, card.y + 8, 80, 24};
@@ -771,7 +784,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 draw_text_center(pixels, stride, badge, state_label, 12, state_color);
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
                 bool enabled = ptc_audio_is_enabled();
-                const char *state_label = enabled ? "已开启" : "已静音";
+                const char *state_label = enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_MUTED_2);
                 uint32_t state_color = enabled ? UI_SUCCESS : UI_MUTED;
                 UiRect badge = {card.x + card.width - 76, card.y + 8, 62, 24};
                 fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
@@ -780,16 +793,16 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         }
         if (model->parent_page == PTC_UI_PARENT_PLAN) {
             /* 胶囊 1: 优先于节假日规则 (位于卡片 0 底部 316 与卡片 1 顶部 354 之间，y=325) */
-            UiRect pill0 = {54 + 20, 325, 160, 20};
+            UiRect pill0 = {54 + 20, 325, is_en ? 180 : 160, 20};
             fill_round_rect(pixels, stride, pill0, 10, UI_PAGE);
             draw_rect_outline(pixels, stride, pill0, 10, 1, UI_BORDER);
-            draw_text_center(pixels, stride, pill0, "▼ 优先于节假日规则", 11, UI_ACCENT);
+            draw_text_center(pixels, stride, pill0, ptc_ui_text(PTC_UI_T_OVERRIDES_HOLIDAYS), 11, UI_ACCENT);
 
             /* 胶囊 2: 优先于每周常规计划 (位于卡片 1 底部 456 与卡片 2 顶部 494 之间，y=465) */
-            UiRect pill1 = {54 + 20, 465, 160, 20};
+            UiRect pill1 = {54 + 20, 465, is_en ? 180 : 160, 20};
             fill_round_rect(pixels, stride, pill1, 10, UI_PAGE);
             draw_rect_outline(pixels, stride, pill1, 10, 1, UI_BORDER);
-            draw_text_center(pixels, stride, pill1, "▼ 优先于每周常规计划", 11, UI_SUCCESS);
+            draw_text_center(pixels, stride, pill1, ptc_ui_text(PTC_UI_T_OVERRIDES_WEEKLY_PLAN), 11, UI_SUCCESS);
         }
     }
     if (draw_parent_plan_surface(pixels, stride, model)) {
@@ -806,100 +819,100 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_plan_card(pixels, stride, help, false);
 
         int sel = model->selected_index;
-        const char *tag = "【系统偏好】";
-        const char *title = "外观主题";
-        const char *status_text = "跟随系统";
+        const char *tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
+        const char *title = ptc_ui_text(PTC_UI_T_APPEARANCE_THEME);
+        const char *status_text = ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM);
         uint32_t status_color = UI_ACCENT;
         const char *desc1 = "";
         const char *desc2 = "";
         const char *desc3 = "";
-        const char *action_hint = "按 A 修改设置";
+        const char *action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_MODIFY_SETTINGS);
 
         switch (sel) {
         case 0: /* 外观主题 */
-            tag = "【系统偏好】";
-            title = "外观主题";
+            tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
+            title = ptc_ui_text(PTC_UI_T_APPEARANCE_THEME);
             status_text = ptc_ui_theme_preference_label(g_theme.preference);
             status_color = UI_ACCENT;
-            desc1 = "• 提供浅色、深色及跟随系统三种主题模式。";
-            desc2 = "• 深色模式优化 OLED 屏幕省电与护眼显示。";
-            desc3 = "• 设置即时保存并在所有界面与组件中生效。";
-            action_hint = "按 A 打开主题切换面板";
+            desc1 = ptc_ui_text(PTC_UI_T_PROVIDES_THREE_THEME_MODES_LIGHT_DARK_AND);
+            desc2 = ptc_ui_text(PTC_UI_T_DARK_MODE_OPTIMIZES_OLED_SCREEN_POWER_SAVING);
+            desc3 = ptc_ui_text(PTC_UI_T_SETTINGS_ARE_SAVED_INSTANTLY_AND_TAKE_EFFECT);
+            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_OPEN_THE_THEME_SWITCHING);
             break;
         case 1: /* 修改 PIN */
-            tag = "【安全管理】";
-            title = "管理密码 (PIN)";
-            status_text = "已启用保护";
+            tag = ptc_ui_text(PTC_UI_T_SAFETY_MANAGEMENT);
+            title = ptc_ui_text(PTC_UI_T_PARENT_PIN);
+            status_text = ptc_ui_text(PTC_UI_T_PROTECTION_ENABLED);
             status_color = UI_SUCCESS;
-            desc1 = "• 用于保护家长区设置、高风险操作与密钥导出。";
-            desc2 = "• 支持 4-8 位数字密码，请妥善保管勿告知孩子。";
-            desc3 = "• 连续输错 3 次将启动防爆破临时冷却保护。";
-            action_hint = "按 A 修改管理密码";
+            desc1 = ptc_ui_text(PTC_UI_T_USED_TO_PROTECT_PARENTAL_ZONE_SETTINGS_HIGH);
+            desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_4_8_DIGIT_PASSWORD_PLEASE_KEEP);
+            desc3 = ptc_ui_text(PTC_UI_T_ENTERING_INCORRECTLY_THREE_TIMES_IN_A_ROW);
+            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_CHANGE_THE_MANAGEMENT_PASSWORD);
             break;
         case 2: /* 家长区快捷键 */
-            tag = "【系统控制】";
-            title = "家长区快捷入口";
+            tag = ptc_ui_text(PTC_UI_T_SYSTEM_CONTROL);
+            title = ptc_ui_text(PTC_UI_T_QUICK_ENTRANCE_TO_PARENT_AREA);
             status_text = (model->custom_shortcut_enabled && model->custom_shortcut_label[0])
                 ? model->custom_shortcut_label : "Minus";
             status_color = UI_ACCENT;
-            desc1 = "• 在孩子区任意界面长按该键可直接呼出 PIN 验证。";
-            desc2 = "• 支持 Minus、Capture 或手柄组合键自定义配置。";
-            desc3 = "• 方便家长快速进入后台，避免孩子随意翻看。";
-            action_hint = "按 A 更改快捷按键绑定";
+            desc1 = ptc_ui_text(PTC_UI_T_LONG_PRESS_THIS_KEY_ON_ANY_INTERFACE);
+            desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_CUSTOM_CONFIGURATION_OF_MINUS_CAPTURE_OR);
+            desc3 = ptc_ui_text(PTC_UI_T_IT_IS_CONVENIENT_FOR_PARENTS_TO_QUICKLY);
+            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_CHANGE_SHORTCUT_KEY_BINDINGS);
             break;
         case 3: /* 自制程序高级入口 */
-            tag = "【高级安全】";
-            title = "自制程序高级入口";
+            tag = ptc_ui_text(PTC_UI_T_ADVANCED_SECURITY);
+            title = ptc_ui_text(PTC_UI_T_HOMEBREW_ACCESS);
             if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_OFF) {
-                status_text = "当前未开启";
+                status_text = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_NOT_ENABLED);
                 status_color = UI_MUTED;
             } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_CONFIGURED) {
-                status_text = "当前已开启";
+                status_text = ptc_ui_text(PTC_UI_T_IS_CURRENTLY_ON);
                 status_color = UI_SUCCESS;
             } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_ANOMALY) {
-                status_text = "需要处理";
+                status_text = ptc_ui_text(PTC_UI_T_NEEDS_TO_BE_PROCESSED_2);
                 status_color = UI_WARNING;
             } else if (model->album_restriction_state == PTC_ALBUM_RESTRICTION_EXTERNAL) {
-                status_text = "外部配置";
+                status_text = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION);
                 status_color = UI_ACCENT;
             } else {
-                status_text = "状态未知";
+                status_text = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
                 status_color = UI_DANGER;
             }
-            desc1 = "• 将相册入口重定向至自制程序菜单（hbmenu）。";
-            desc2 = "• 开启后需在桌面“手柄设置”上按住 X 再按 A 进入。";
-            desc3 = "• 防止孩子直接点开相册图标绕过家长控制限制。";
-            action_hint = "按 A 查看详情与配置向导";
+            desc1 = ptc_ui_text(PTC_UI_T_REDIRECT_PHOTO_ALBUM_ENTRY_TO_HOMEBREW_MENU);
+            desc2 = ptc_ui_text(PTC_UI_T_ONCE_ENABLED_HOLD_X_THEN_PRESS_A);
+            desc3 = ptc_ui_text(PTC_UI_T_PREVENT_CHILDREN_FROM_BYPASSING_PARENTAL_CONTROL_RESTRICTIONS);
+            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_VIEW_DETAILS_AND_CONFIGURATION);
             break;
         case 4: /* 家庭活动 */
-            tag = "【安全审计】";
-            title = "家庭活动记录";
-            status_text = "最多 200 条";
+            tag = ptc_ui_text(PTC_UI_T_SECURITY_AUDIT);
+            title = ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORD);
+            status_text = ptc_ui_text(PTC_UI_T_UP_TO_200_ITEMS);
             status_color = UI_MUTED;
-            desc1 = "• 记录额度调整、离线加时、就寝跳过与保护事件。";
-            desc2 = "• 仅保存本地安全审计日志，绝不上传云端。";
-            desc3 = "• 支持手柄 L / R 快捷翻页浏览与一键清空日志。";
-            action_hint = "按 A 查看完整活动记录";
+            desc1 = ptc_ui_text(PTC_UI_T_RECORDS_CREDIT_ADJUSTMENT_OFFLINE_GRANT_BEDTIME_SKIP);
+            desc2 = ptc_ui_text(PTC_UI_T_ONLY_SAVE_LOCAL_SECURITY_AUDIT_LOGS_AND);
+            desc3 = ptc_ui_text(PTC_UI_T_SUPPORTS_HANDLE_L_R_FOR_QUICK_PAGE);
+            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_SEE_FULL_ACTIVITY_LOG);
             break;
         case 5: /* 按键与交互音效 */
-            tag = "【系统偏好】";
-            title = "按键与交互音效";
-            status_text = ptc_audio_is_enabled() ? "已开启" : "已静音";
+            tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
+            title = ptc_ui_text(PTC_UI_T_SOUND_EFFECTS);
+            status_text = ptc_audio_is_enabled() ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_MUTED_2);
             status_color = ptc_audio_is_enabled() ? UI_SUCCESS : UI_MUTED;
-            desc1 = "• 提供清脆的按键、微齿轮拨轮与弹窗提示音。";
-            desc2 = "• 包含长按确认完成、危险警示与额度耗尽音效。";
-            desc3 = "• 静音不影响 Switch 系统原生声音与游戏声音。";
-            action_hint = ptc_audio_is_enabled() ? "按 A 静音音效" : "按 A 开启音效";
+            desc1 = ptc_ui_text(PTC_UI_T_PROVIDES_CRISP_BUTTONS_MICRO_GEAR_WHEEL_AND);
+            desc2 = ptc_ui_text(PTC_UI_T_CONTAINS_LONG_PRESS_TO_CONFIRM_COMPLETION_DANGER);
+            desc3 = ptc_ui_text(PTC_UI_T_MUTE_DOES_NOT_AFFECT_THE_SWITCH_SYSTEM);
+            action_hint = ptc_audio_is_enabled() ? ptc_ui_text(PTC_UI_T_PRESS_A_TO_MUTE_SOUND_EFFECTS) : ptc_ui_text(PTC_UI_T_PRESS_A_TO_TURN_ON_SOUND_EFFECTS);
             break;
         case 6: /* 界面语言 */
-            tag = "【系统偏好】";
-            title = "界面语言";
+            tag = ptc_ui_text(PTC_UI_T_SYSTEM_PREFERENCES);
+            title = ptc_ui_text(PTC_UI_T_UI_LANGUAGE);
             status_text = ptc_ui_language_preference_label(model->language_preference);
             status_color = UI_ACCENT;
-            desc1 = "• 设置 PlayWise 主机管理端与游戏内浮窗的语言。";
-            desc2 = "• 支持简体中文、繁體中文、English 等多语言。";
-            desc3 = "• 偏好将持久保存在 SD 卡配置文件中。";
-            action_hint = "按 A 打开语言选择面板";
+            desc1 = ptc_ui_text(PTC_UI_T_SET_THE_LANGUAGE_FOR_PLAYWISE_CONSOLE_MANAGEMENT);
+            desc2 = ptc_ui_text(PTC_UI_T_SUPPORTS_SIMPLIFIED_CHINESE_TRADITIONAL_CHINESE_ENGLISH_AND);
+            desc3 = ptc_ui_text(PTC_UI_T_PREFERENCES_ARE_PERSISTED_IN_THE_SD_CARD);
+            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_OPEN_THE_LANGUAGE_SELECTION);
             break;
         default:
             break;
@@ -923,9 +936,12 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 
         /* Descriptions */
         int desc_y = help.y + 128;
-        draw_text(pixels, stride, help.x + 24, desc_y, desc1, 14, UI_RGB(UI_BLENDED(text_secondary)));
-        draw_text(pixels, stride, help.x + 24, desc_y + 36, desc2, 14, UI_RGB(UI_BLENDED(text_secondary)));
-        draw_text(pixels, stride, help.x + 24, desc_y + 72, desc3, 14, UI_RGB(UI_BLENDED(text_secondary)));
+        draw_wrapped_text(pixels, stride, help.x + 24, desc_y, desc1, 14,
+                          help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary)));
+        draw_wrapped_text(pixels, stride, help.x + 24, desc_y + 36, desc2, 14,
+                          help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary)));
+        draw_wrapped_text(pixels, stride, help.x + 24, desc_y + 72, desc3, 14,
+                          help.width - 48, 16, 2, UI_RGB(UI_BLENDED(text_secondary)));
 
         /* Action Hint Box */
         UiRect hint_box = {help.x + 24, help.y + 268, help.width - 48, 44};
@@ -934,10 +950,12 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_text_center(pixels, stride, hint_box, action_hint, 15, UI_INK);
 
         /* Bottom guidance */
-        draw_text(pixels, stride, help.x + 24, help.y + help.height - 48,
-                  "离开时按 B 返回孩子页，以锁定家长控制。", 13, UI_MUTED);
-        draw_text(pixels, stride, help.x + 24, help.y + help.height - 22,
-                  "按 Y 刷新设备状态", 13, UI_MUTED);
+        draw_wrapped_text(pixels, stride, help.x + 24, help.y + help.height - 68,
+                          ptc_ui_text(PTC_UI_T_PRESS_B_WHILE_AWAY_TO_RETURN_TO), 13,
+                          help.width - 48, 17, 2, UI_MUTED);
+        draw_wrapped_text(pixels, stride, help.x + 24, help.y + help.height - 30,
+                          ptc_ui_text(PTC_UI_T_PRESS_Y_TO_REFRESH_DEVICE_STATUS), 13,
+                          help.width - 48, 17, 2, UI_MUTED);
     }
     draw_settings_badge(pixels, stride, model);
     if (model->parent_page == PTC_UI_PARENT_SUPPORT &&
@@ -947,13 +965,13 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_notice(pixels, stride, model);
     }
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(0),
-                       "L  上一页");
+                       ptc_ui_text(PTC_UI_T_L_PREVIOUS_PAGE));
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(1),
-                       "R  下一页");
+                       ptc_ui_text(PTC_UI_T_R_NEXT_PAGE));
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(2),
-                       plan_subpage ? "B  返回计划" : "B  返回孩子页");
+                       plan_subpage ? ptc_ui_text(PTC_UI_T_B_BACK_TO_PLANS_2) : ptc_ui_text(PTC_UI_T_B_RETURN_TO_CHILD_PAGE));
     draw_footer_button(pixels, stride, ptc_ui_parent_footer_rect(3),
-                       "Y  刷新");
+                       ptc_ui_text(PTC_UI_T_Y_REFRESH));
     if (model->parent_footer_focused && model->parent_footer_selection == 0) {
         draw_rect_outline(pixels, stride, to_uirect(ptc_ui_parent_footer_rect(3)),
             12, 3, UI_ACCENT);

@@ -1,4 +1,5 @@
 #include "result_summary.h"
+#include "ui_language.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -137,23 +138,23 @@ bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summar
         return false;
     }
     if (summary->unrestricted_today == 1) {
-        snprintf(remaining, sizeof(remaining), "不限时");
+        snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     } else if (summary->remaining_available && summary->remaining_minutes >= 0) {
-        snprintf(remaining, sizeof(remaining), "%d 分钟", summary->remaining_minutes);
+        snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_D_MIN), summary->remaining_minutes);
     } else {
-        snprintf(remaining, sizeof(remaining), "暂不可用");
+        snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
     }
-    timer = summary->play_timer_enabled == 1 ? "已启动" :
-        (summary->play_timer_enabled == 0 ? "未启动" : "未确认");
-    restriction = summary->restricted_now == 1 ? "已报告" :
-        (summary->restricted_now == 0 ? "未报告" : "未确认");
-    written = snprintf(out, out_size, "%s  %s\n额度剩余：%s  额度已耗（估算）：%s%d%s\n计时器：%s  系统瞬时限制：%s",
-        summary->ok ? "成功" : "失败",
-        summary->ok ? "" : (summary->reason[0] ? summary->reason : "后台拒绝"),
+    timer = summary->play_timer_enabled == 1 ? ptc_ui_text(PTC_UI_T_STARTED) :
+        (summary->play_timer_enabled == 0 ? ptc_ui_text(PTC_UI_T_NOT_STARTED_2) : ptc_ui_text(PTC_UI_T_UNCONFIRMED));
+    restriction = summary->restricted_now == 1 ? ptc_ui_text(PTC_UI_T_REPORTED) :
+        (summary->restricted_now == 0 ? ptc_ui_text(PTC_UI_T_NOT_REPORTED) : ptc_ui_text(PTC_UI_T_UNCONFIRMED));
+    written = snprintf(out, out_size, ptc_ui_text(PTC_UI_T_S_S_REMAINING_S_ESTIMATED_USED_S),
+        summary->ok ? ptc_ui_text(PTC_UI_T_SUCCESS) : ptc_ui_text(PTC_UI_T_FAILED),
+        summary->ok ? "" : (summary->reason[0] ? summary->reason : ptc_ui_text(PTC_UI_T_BACKGROUND_REJECTION)),
         remaining,
-        summary->played_minutes_available ? "约 " : "",
+        summary->played_minutes_available ? ptc_ui_text(PTC_UI_T_APPROX) : "",
         summary->played_minutes_available ? summary->played_minutes : -1,
-        summary->played_minutes_available ? " 分钟" : "（不可用）",
+        summary->played_minutes_available ? ptc_ui_text(PTC_UI_T_MINUTES) : ptc_ui_text(PTC_UI_T_NOT_AVAILABLE),
         timer,
         restriction);
     return written >= 0 && (size_t)written < out_size;

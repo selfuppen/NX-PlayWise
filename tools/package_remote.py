@@ -722,6 +722,7 @@ def build_and_verify(
 
     preview_dir = ROOT / "build" / "ui-previews"
     synchronize(preview_dir, ROOT / "docs" / "images" / "usage", check=True)
+    synchronize(preview_dir / "en", ROOT / "docs" / "images" / "usage-en", check=True)
 
     if only == "previews":
         t0 = time.perf_counter()
@@ -733,6 +734,7 @@ def build_and_verify(
         stage_timer.write_timing_record("playwise", "verify-previews", time.perf_counter() - t0)
         print(f"PASS: verified {len(png_files)} UI preview PNGs in {preview_dir}")
         print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage'}")
+        print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage-en'}")
     else:
         packages = latest_packages(package_dir, target_pkgs)
 

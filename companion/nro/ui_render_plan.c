@@ -27,17 +27,24 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
 
     draw_plan_card(pixels, stride, panel, false);
     if (dirty) {
-        if (changed > 0)
-            snprintf(title, sizeof(title), kind == PTC_UI_PLAN_WEEKLY ? "修改草稿 | 已调整 %d 天" : "修改草稿 | 已调整 %d 项", changed);
-        else snprintf(title, sizeof(title), "修改草稿 | 待保存");
-    } else snprintf(title, sizeof(title), "计划已保存 | 正常生效");
+        if (changed == 1)
+            snprintf(title, sizeof(title), "%s", ptc_ui_text(kind == PTC_UI_PLAN_WEEKLY ?
+                PTC_UI_T_DRAFT_ONE_DAY_CHANGED : PTC_UI_T_DRAFT_ONE_ITEM_CHANGED));
+        else if (changed > 1) {
+            PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("count", changed)};
+            (void)ptc_ui_text_format(kind == PTC_UI_PLAN_WEEKLY ? PTC_UI_T_DRAFT_DAYS_CHANGED_NAMED :
+                PTC_UI_T_DRAFT_ITEMS_CHANGED_NAMED, title, sizeof(title), args, 1);
+        } else snprintf(title, sizeof(title), "%s", ptc_ui_text(PTC_UI_T_DRAFT_UNSAVED));
+    } else snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_PLAN_SAVED_ACTIVE));
     draw_text(pixels, stride, panel.x + 20, panel.y + 34, title, 19,
               dirty ? (requires_hold ? UI_DANGER : UI_WARNING) : UI_SUCCESS);
-    const char *sub = model->disable_flag_present ? "控制已停用，计划只读" :
-        (model->waiting ? "正在保存中，请稍候..." :
-         (model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR ? "按 + 完成输入，再保存计划" :
-          (requires_hold ? (fresh ? "保存后今日额度将耗尽；需长按 A 确认" : "今日状态待确认；保存需长按 A 确认") :
-           (dirty ? "按 + 保存后应用到主机" : "已与主机策略同步"))));
+    const char *sub = model->disable_flag_present ? (ptc_ui_text(PTC_UI_T_CONTROL_DISABLED_PLAN_READ_ONLY)) :
+        (model->waiting ? (ptc_ui_text(PTC_UI_T_SAVING_PLEASE_WAIT)) :
+         (model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR ? (ptc_ui_text(PTC_UI_T_PRESS_TO_FINISH_THEN_SAVE)) :
+          (requires_hold ? (fresh ? (ptc_ui_text(PTC_UI_T_QUOTA_WILL_EXHAUST_HOLD_A_TO_CONFIRM))
+                                  : (ptc_ui_text(PTC_UI_T_STATUS_PENDING_HOLD_A_TO_CONFIRM))) :
+           (dirty ? (ptc_ui_text(PTC_UI_T_PRESS_TO_SAVE_AND_APPLY_TO_CONSOLE))
+                  : (ptc_ui_text(PTC_UI_T_SYNCHRONIZED_WITH_CONSOLE_POLICY))))));
     draw_text(pixels, stride, panel.x + 20, panel.y + 58, sub, 13,
               requires_hold ? UI_DANGER : UI_RGB(UI_BLENDED(text_secondary)));
 
@@ -50,7 +57,7 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
     if (projection.state == PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE) {
         ptc_ui_format_plan_impact(model, kind, ptc_ui_render_now(), impact, sizeof(impact));
         draw_status_symbol(pixels, stride, result.x + 24, result.y + 48, UI_MUTED, 1);
-        draw_text(pixels, stride, result.x + 44, result.y + 30, "今天额度不变", 16, UI_INK);
+        draw_text(pixels, stride, result.x + 44, result.y + 30, ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_UNCHANGED), 16, UI_INK);
         draw_wrapped_text(pixels, stride, result.x + 44, result.y + 54, impact,
                           12, result.width - 58, 17, 2, UI_MUTED);
     } else {
@@ -58,9 +65,9 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         PtcDayRule left_rule = current_state ? projection.after.rule : projection.before.rule;
         PtcDayRule right_rule = projection.after.rule;
         draw_text_center(pixels, stride, (UiRect){left.x, left.y, left.width, 22},
-                         current_state ? "今日额度" : "当前额度", 13, UI_MUTED);
-        if (left_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(left_value, sizeof(left_value), "不限时");
-        else snprintf(left_value, sizeof(left_value), "%u 分钟", (unsigned int)left_rule.minutes);
+                         current_state ? (ptc_ui_text(PTC_UI_T_TODAY_QUOTA)) : (ptc_ui_text(PTC_UI_T_CURRENT_QUOTA_2)), 13, UI_MUTED);
+        if (left_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(left_value, sizeof(left_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+        else snprintf(left_value, sizeof(left_value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)left_rule.minutes);
         snprintf(left_note, sizeof(left_note), "%s",
                  ptc_ui_effective_rule_label(current_state ? projection.after.source : projection.before.source));
         draw_text_center(pixels, stride, (UiRect){left.x, left.y + 24, left.width, 30}, left_value, 19,
@@ -76,19 +83,19 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         }
 
         if (current_state) {
-            draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, "今天还可玩", 13, UI_MUTED);
-            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "不限时");
-            else if (projection.remaining_available) snprintf(right_value, sizeof(right_value), "%d 分钟", projection.remaining_minutes);
-            else snprintf(right_value, sizeof(right_value), "待确认");
-            if (played >= 0) snprintf(right_note, sizeof(right_note), "已用约 %d 分钟", played);
-            else snprintf(right_note, sizeof(right_note), "刷新后显示");
+            draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, ptc_ui_text(PTC_UI_T_REMAINING_TODAY), 13, UI_MUTED);
+            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+            else if (projection.remaining_available) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_D_MIN), projection.remaining_minutes);
+            else snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING));
+            if (played >= 0) snprintf(right_note, sizeof(right_note), ptc_ui_text(PTC_UI_T_USED_D_MIN), played);
+            else snprintf(right_note, sizeof(right_note), ptc_ui_text(PTC_UI_T_SHOWN_AFTER_REFRESH));
         } else {
-            draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, "保存后额度", 13, UI_MUTED);
-            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "不限时");
-            else snprintf(right_value, sizeof(right_value), "%u 分钟", (unsigned int)right_rule.minutes);
-            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_note, sizeof(right_note), "预计还可玩：不限时");
-            else if (projection.remaining_available) snprintf(right_note, sizeof(right_note), "预计还可玩 %d 分钟", projection.remaining_minutes);
-            else snprintf(right_note, sizeof(right_note), "剩余待刷新确认");
+            draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, ptc_ui_text(PTC_UI_T_QUOTA_AFTER_SAVE), 13, UI_MUTED);
+            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+            else snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)right_rule.minutes);
+            if (right_rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_note, sizeof(right_note), ptc_ui_text(PTC_UI_T_EST_REMAINING_NO_LIMIT));
+            else if (projection.remaining_available) snprintf(right_note, sizeof(right_note), ptc_ui_text(PTC_UI_T_EST_REMAINING_D_MIN), projection.remaining_minutes);
+            else snprintf(right_note, sizeof(right_note), ptc_ui_text(PTC_UI_T_REMAINING_PENDING_REFRESH));
         }
         draw_text_center(pixels, stride, (UiRect){right.x, right.y + 24, right.width, 30}, right_value, 19,
                          right_rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS :
@@ -98,7 +105,8 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
                          projection.state == PTC_UI_PLAN_IMPACT_EXHAUSTED ? UI_DANGER : UI_MUTED);
     }
 
-    snprintf(source_text, sizeof(source_text), "%s  %s", dirty ? "保存后来源" : "今天来源",
+    snprintf(source_text, sizeof(source_text), "%s  %s", dirty ? (ptc_ui_text(PTC_UI_T_SOURCE_AFTER_SAVE))
+                                                               : (ptc_ui_text(PTC_UI_T_TODAY_SOURCE)),
              ptc_ui_effective_rule_label(projection.after.source));
     {
         int source_width = measure_text(source_text, 12) + 24;
@@ -109,23 +117,23 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
     }
 
     if (error) {
-        state_message = "保存失败，草稿已保留；检查后可重新保存。";
+        state_message = ptc_ui_text(PTC_UI_T_SAVE_FAILED_DRAFT_KEPT_VERIFY_AND_RETRY);
         state_color = UI_DANGER; state_background = UI_DANGER_SOFT;
     } else if (model->disable_flag_present) {
-        state_message = "紧急停用中，计划保持只读。";
+        state_message = ptc_ui_text(PTC_UI_T_EMERGENCY_STOP_ACTIVE_PLAN_READ_ONLY);
         state_color = UI_DANGER; state_background = UI_DANGER_SOFT;
     } else if (model->waiting) {
-        state_message = "正在保存草稿，请稍候。";
+        state_message = ptc_ui_text(PTC_UI_T_SAVING_DRAFT_PLEASE_WAIT);
         state_color = UI_WARNING; state_background = UI_WARNING_SOFT;
     } else if (model->overlay == PTC_UI_OVERLAY_MINUTE_EDITOR) {
-        state_message = "先完成额度输入，再返回保存计划。";
+        state_message = ptc_ui_text(PTC_UI_T_COMPLETE_MINUTE_INPUT_BEFORE_SAVING);
         state_color = UI_WARNING; state_background = UI_WARNING_SOFT;
     } else if (!fresh && projection.quota_changes_today) {
-        state_message = requires_hold ? "状态待确认；保存时需长按 A 确认今天的影响。" :
-            "状态待确认，保存时会再次核对今天的影响。";
+        state_message = requires_hold ? (ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED_HOLD_A_TO_CONFIRM_TODAY)) :
+            (ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED_WILL_RECHECK_IMPACT_UPON_SAVING));
         state_color = UI_WARNING; state_background = UI_WARNING_SOFT;
     } else if (requires_hold) {
-        state_message = "保存后今天的时间将立即用尽，需长按 A 确认。";
+        state_message = ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_WILL_EXPIRE_IMMEDIATELY_HOLD);
         state_color = UI_DANGER; state_background = UI_DANGER_SOFT;
     }
 
@@ -135,11 +143,11 @@ void draw_plan_impact(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         draw_wrapped_text(pixels, stride, conclusion.x + 12, conclusion.y + 24, state_message,
                           13, conclusion.width - 24, 18, 2, state_color);
     } else if (projection.state == PTC_UI_PLAN_IMPACT_CURRENT) {
-        draw_text(pixels, stride, conclusion.x, conclusion.y + 16, "当前状态", 13, UI_MUTED);
+        draw_text(pixels, stride, conclusion.x, conclusion.y + 16, ptc_ui_text(PTC_UI_T_CURRENT_STATUS_2), 13, UI_MUTED);
         draw_text(pixels, stride, conclusion.x, conclusion.y + 39,
-                  "计划已保存，没有等待应用的额度草稿。", 13, UI_RGB(UI_BLENDED(text_secondary)));
+                  ptc_ui_text(PTC_UI_T_PLAN_IS_SAVED_NO_PENDING_QUOTA_DRAFTS), 13, UI_RGB(UI_BLENDED(text_secondary)));
     } else if (projection.state != PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE) {
-        draw_text(pixels, stride, conclusion.x, conclusion.y + 16, "保存后的今天", 13, UI_MUTED);
+        draw_text(pixels, stride, conclusion.x, conclusion.y + 16, ptc_ui_text(PTC_UI_T_TODAY_AFTER_SAVE), 13, UI_MUTED);
         ptc_ui_format_plan_impact(model, kind, ptc_ui_render_now(), impact, sizeof(impact));
         draw_wrapped_text(pixels, stride, conclusion.x, conclusion.y + 39, impact,
                           13, conclusion.width, 18, 2, UI_RGB(UI_BLENDED(text_secondary)));
@@ -164,18 +172,26 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
         for (int day = 0; day < 7; ++day) {
             if (ptc_ui_day_rule_effectively_changed(model->current_week[day], model->draft_week[day])) ++changed;
         }
-        if (changed > 0) snprintf(title, sizeof(title), "修改草稿 | 已调整 %d 天", changed);
-        else snprintf(title, sizeof(title), "修改草稿 | 待保存");
+        if (changed == 1) snprintf(title, sizeof(title), "%s", ptc_ui_text(PTC_UI_T_DRAFT_ONE_DAY_CHANGED));
+        else if (changed > 1) {
+            PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("count", changed)};
+            (void)ptc_ui_text_format(PTC_UI_T_DRAFT_DAYS_CHANGED_NAMED, title, sizeof(title), args, 1);
+        }
+        else snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_DRAFT_UNSAVED));
     } else if (kind == PTC_UI_PLAN_SCHEDULED) {
         if (ptc_ui_scheduled_dirty(model)) ++changed;
-        if (changed > 0) snprintf(title, sizeof(title), "修改草稿 | 指定日期额度已调整");
-        else snprintf(title, sizeof(title), "修改草稿 | 待保存");
+        if (changed > 0) snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_DRAFT_SPECIFIC_DATE_QUOTA_CHANGED));
+        else snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_DRAFT_UNSAVED));
     } else {
         if (model->holiday_enabled != model->draft_holiday_enabled) ++changed;
         if (ptc_ui_day_rule_effectively_changed(model->holiday_rule, model->draft_holiday_rule)) ++changed;
         if (ptc_ui_day_rule_effectively_changed(model->makeup_workday_rule, model->draft_makeup_workday_rule)) ++changed;
-        if (changed > 0) snprintf(title, sizeof(title), "修改草稿 | 已调整 %d 项", changed);
-        else snprintf(title, sizeof(title), "修改草稿 | 待保存");
+        if (changed == 1) snprintf(title, sizeof(title), "%s", ptc_ui_text(PTC_UI_T_DRAFT_ONE_ITEM_CHANGED));
+        else if (changed > 1) {
+            PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("count", changed)};
+            (void)ptc_ui_text_format(PTC_UI_T_DRAFT_ITEMS_CHANGED_NAMED, title, sizeof(title), args, 1);
+        }
+        else snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_DRAFT_UNSAVED));
     }
 
     draw_plan_card(pixels, stride, panel, false);
@@ -190,13 +206,13 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
     if (projection.state == PTC_UI_PLAN_IMPACT_NO_TODAY_CHANGE) {
         ptc_ui_format_plan_impact(model, kind, ptc_ui_render_now(), impact, sizeof(impact));
         draw_status_symbol(pixels, stride, result.x + 24, result.y + 52, UI_MUTED, 1);
-        draw_text(pixels, stride, result.x + 44, result.y + 34, "今天额度不变", 15, UI_INK);
+        draw_text(pixels, stride, result.x + 44, result.y + 34, ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_UNCHANGED), 15, UI_INK);
         draw_wrapped_text(pixels, stride, result.x + 44, result.y + 58, impact,
                           12, result.width - 56, 17, 2, UI_MUTED);
     } else {
-        draw_text_center(pixels, stride, (UiRect){left.x, left.y, left.width, 22}, "当前额度", 12, UI_MUTED);
-        if (projection.before.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(left_value, sizeof(left_value), "不限时");
-        else snprintf(left_value, sizeof(left_value), "%u 分钟", (unsigned int)projection.before.rule.minutes);
+        draw_text_center(pixels, stride, (UiRect){left.x, left.y, left.width, 22}, ptc_ui_text(PTC_UI_T_CURRENT_QUOTA_2), 12, UI_MUTED);
+        if (projection.before.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(left_value, sizeof(left_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+        else snprintf(left_value, sizeof(left_value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)projection.before.rule.minutes);
         draw_text_center(pixels, stride, (UiRect){left.x, left.y + 24, left.width, 34}, left_value, 19,
                          projection.before.rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS : UI_ACCENT);
         draw_text_center(pixels, stride, (UiRect){left.x, left.y + 61, left.width, 18},
@@ -208,20 +224,20 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_line(pixels, stride, arrow_x + 4, arrow_y - 5, arrow_x + 9, arrow_y, 2, UI_MUTED);
         draw_line(pixels, stride, arrow_x + 4, arrow_y + 5, arrow_x + 9, arrow_y, 2, UI_MUTED);
 
-        draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, "保存后额度", 12, UI_MUTED);
-        if (projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "不限时");
-        else snprintf(right_value, sizeof(right_value), "%u 分钟", (unsigned int)projection.after.rule.minutes);
+        draw_text_center(pixels, stride, (UiRect){right.x, right.y, right.width, 22}, ptc_ui_text(PTC_UI_T_QUOTA_AFTER_SAVE), 12, UI_MUTED);
+        if (projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+        else snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)projection.after.rule.minutes);
         draw_text_center(pixels, stride, (UiRect){right.x, right.y + 24, right.width, 34}, right_value, 19,
                          projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED ? UI_SUCCESS :
                          (projection.state == PTC_UI_PLAN_IMPACT_EXHAUSTED ? UI_DANGER : UI_ACCENT));
-        if (projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), "预计还可玩：不限时");
-        else if (projection.remaining_available) snprintf(right_value, sizeof(right_value), "预计还可玩 %d 分钟", projection.remaining_minutes);
-        else snprintf(right_value, sizeof(right_value), "剩余待刷新确认");
+        if (projection.after.rule.mode == PTC_RULE_MODE_UNLIMITED) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_EST_REMAINING_NO_LIMIT));
+        else if (projection.remaining_available) snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_EST_REMAINING_D_MIN_2), projection.remaining_minutes);
+        else snprintf(right_value, sizeof(right_value), ptc_ui_text(PTC_UI_T_REMAINING_PENDING_REFRESH));
         draw_text_center(pixels, stride, (UiRect){right.x, right.y + 61, right.width, 18}, right_value, 11,
                          projection.state == PTC_UI_PLAN_IMPACT_EXHAUSTED ? UI_DANGER : UI_MUTED);
     }
 
-    snprintf(source_text, sizeof(source_text), "保存后来源  %s", ptc_ui_effective_rule_label(projection.after.source));
+    snprintf(source_text, sizeof(source_text), "%s  %s", ptc_ui_text(PTC_UI_T_SOURCE_AFTER_SAVE), ptc_ui_effective_rule_label(projection.after.source));
     {
         int source_width = measure_text(source_text, 12) + 24;
         if (source_width > panel.width - 40) source_width = panel.width - 40;
@@ -233,7 +249,6 @@ void draw_plan_impact_compact(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
 static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
     int slot;
     char detail[64];
     char freshness[64];
@@ -243,7 +258,7 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
     draw_line(pixels, stride, 54, 186, 80, 186, 2, UI_ACCENT);
     draw_line(pixels, stride, 61, 174, 61, 181, 3, UI_ACCENT);
     draw_line(pixels, stride, 73, 174, 73, 181, 3, UI_ACCENT);
-    draw_text(pixels, stride, 92, 198, "周一到周日基础规划  |  点按模式或额度区直接修改", 17, UI_MUTED);
+    draw_text(pixels, stride, 92, 198, ptc_ui_text(PTC_UI_T_WEEKLY_BASE_PLAN_CLICK_MODE_OR_QUOTA), 17, UI_MUTED);
     for (slot = 0; slot < 7; ++slot) {
         int day = ptc_ui_weekday_for_display_slot(slot);
         bool selected = slot == model->weekly_grid_slot && model->selected_index == 0;
@@ -254,28 +269,28 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
         UiRect minutes = to_uirect(ptc_ui_weekly_day_minutes_rect(slot));
         bool limited = model->draft_week[day].mode == PTC_RULE_MODE_LIMIT;
         draw_plan_card(pixels, stride, card, selected && !model->parent_footer_focused);
-        draw_text_center(pixels, stride, header, DAYS[day], 19, UI_INK);
+        draw_text_center(pixels, stride, header, ptc_ui_weekday_label((unsigned)day), 19, UI_INK);
         fill_round_rect(pixels, stride, (UiRect){mode.x + 6, mode.y + 6, mode.width - 12, 32}, 14,
                         model->disable_flag_present ? UI_BORDER :
                         (limited ? UI_ACCENT : UI_SUCCESS));
         draw_text_center(pixels, stride, (UiRect){mode.x + 6, mode.y + 6, mode.width - 12, 32},
-                         limited ? "限时" : "不限时", 15,
+                         limited ? (ptc_ui_text(PTC_UI_T_LIMIT)) : (ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED)), 15,
                          model->disable_flag_present ? UI_DISABLED : UI_ON_ACCENT);
         UiRect today_rect = {card.x, minutes.y + 8, card.width, 22};
         draw_text_center(pixels, stride, today_rect,
-                         today ? "● 今天" : " ", 13, today ? UI_SUCCESS : UI_MUTED);
+                         today ? (ptc_ui_text(PTC_UI_T_TODAY_3)) : " ", 13, today ? UI_SUCCESS : UI_MUTED);
         if (limited) {
             snprintf(detail, sizeof(detail), "%u", (unsigned int)model->draft_week[day].minutes);
             draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 36, minutes.width, 46}, detail, 30,
                              model->disable_flag_present ? UI_DISABLED : UI_ACCENT);
-            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 84, minutes.width, 24}, "分钟", 14, UI_MUTED);
-            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 124, minutes.width, 22}, "A / 点按修改", 12,
+            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 84, minutes.width, 24}, ptc_ui_text(PTC_UI_T_MIN), 14, UI_MUTED);
+            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 124, minutes.width, 22}, ptc_ui_text(PTC_UI_T_A_CLICK_EDIT), 12,
                              model->disable_flag_present ? UI_DISABLED : UI_MUTED);
         } else {
-            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 50, minutes.width, 36}, "不限时间", 18,
+            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 50, minutes.width, 36}, ptc_ui_text(PTC_UI_T_NO_LIMIT), 18,
                              model->disable_flag_present ? UI_DISABLED : UI_SUCCESS);
-            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 94, minutes.width, 24}, "全天无限制", 13, UI_MUTED);
-            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 124, minutes.width, 22}, "点按看提示", 11, UI_DISABLED);
+            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 94, minutes.width, 24}, ptc_ui_text(PTC_UI_T_ALL_DAY_ACCESS), 13, UI_MUTED);
+            draw_text_center(pixels, stride, (UiRect){minutes.x, minutes.y + 124, minutes.width, 22}, ptc_ui_text(PTC_UI_T_CLICK_FOR_TIP), 11, UI_DISABLED);
         }
         /* 每日容量柱状直方图 (Weekly Capacity Histogram Bar) */
         int bar_w = card.width - 24;
@@ -297,18 +312,18 @@ static void draw_weekly_page(uint32_t *pixels, uint32_t stride, const PtcUiModel
     }
     draw_plan_impact(pixels, stride, model, PTC_UI_PLAN_WEEKLY, model->weekly_dirty,
                      (UiRect){838, 176, 388, 452});
-    draw_candidate_button(pixels, stride, ptc_ui_weekly_page_mode_rect(), "X  切换模式",
+    draw_candidate_button(pixels, stride, ptc_ui_weekly_page_mode_rect(), ptc_ui_text(PTC_UI_T_X_TOGGLE_MODE),
                            UI_PAGE, UI_ACCENT, model->selected_index == 1,
                            model->disable_flag_present);
-    draw_candidate_button(pixels, stride, ptc_ui_weekly_bulk_rect(), "批量设置",
+    draw_candidate_button(pixels, stride, ptc_ui_weekly_bulk_rect(), ptc_ui_text(PTC_UI_T_BATCH_SETUP),
                           UI_PAGE, UI_ACCENT, model->selected_index == 2,
                           model->disable_flag_present);
-    draw_candidate_button(pixels, stride, ptc_ui_weekly_discard_rect(), "ZL  放弃",
+    draw_candidate_button(pixels, stride, ptc_ui_weekly_discard_rect(), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
                            UI_PAGE, UI_INK, model->selected_index == 3,
                            !model->weekly_dirty);
     bool weekly_hold = model->weekly_dirty && ptc_ui_plan_save_requires_hold(model, PTC_UI_PLAN_WEEKLY, ptc_ui_render_now());
     draw_candidate_button(pixels, stride, ptc_ui_weekly_save_rect(),
-                           model->disable_flag_present ? "只读" : (model->waiting ? "保存中" : (model->weekly_dirty ? (weekly_hold ? "+  保存（需确认）" : "+  保存草稿") : "已保存")),
+                           model->disable_flag_present ? (ptc_ui_text(PTC_UI_T_READ_ONLY)) : (model->waiting ? (ptc_ui_text(PTC_UI_T_SAVING_2)) : (model->weekly_dirty ? (weekly_hold ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_DRAFT_2))) : (ptc_ui_text(PTC_UI_T_SAVED)))),
                            weekly_hold ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, model->selected_index == 4,
                            !model->weekly_dirty || model->disable_flag_present || model->waiting);
 }
@@ -317,20 +332,23 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 {
     UiRect panel = {838, 176, 388, 340};
     UiRect top_card = to_uirect(ptc_ui_holiday_card_rect(0));
-    const char *titles[] = {"法定休假", "调休工作日"};
-    const char *descriptions[] = {"主要法定节假日的休假日期", "节假日调休产生的补班日期"};
+    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
+    const char *titles[] = {ptc_ui_text(PTC_UI_T_STATUTORY_VACATION), ptc_ui_text(PTC_UI_T_ADJUSTED_WORKING_DAYS)};
+    const char *descriptions[] = {ptc_ui_text(PTC_UI_T_VACATION_DATES_FOR_MAJOR_STATUTORY_HOLIDAYS), ptc_ui_text(PTC_UI_T_THE_MAKE_UP_DATE_DUE_TO_HOLIDAYS)};
     char line[160];
     char minutes_str[64];
     bool disabled = model->disable_flag_present;
     bool top_selected = model->selected_index == 0;
     fill_round_rect(pixels, stride, top_card, 16, disabled ? UI_PAGE : (top_selected ? UI_ACCENT_SOFT : UI_SURFACE));
     draw_rect_outline(pixels, stride, top_card, 16, top_selected ? 3 : 1, top_selected ? UI_ACCENT : UI_BORDER);
-    draw_text(pixels, stride, top_card.x + 20, top_card.y + 32, "国家节假日规则", 22, UI_INK);
-    draw_text(pixels, stride, top_card.x + 20, top_card.y + 60, "开启后自动应用法定休假与调休工作日规则", 14, UI_MUTED);
+    draw_text(pixels, stride, top_card.x + 20, top_card.y + 32, ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_RULES), 22, UI_INK);
+    draw_text(pixels, stride, top_card.x + 20, top_card.y + 60,
+              ptc_ui_text(PTC_UI_T_AUTOMATICALLY_APPLY_STATUTORY_HOLIDAY_MAKEUP_WORKDAY_RULES), 14, UI_MUTED);
     {
         const PtcHolidayCalendarInfo *info = ptc_holiday_calendar_info();
-        snprintf(line, sizeof(line), "内置日历：%u  |  v%u", (unsigned int)info->last_year, (unsigned int)info->version);
-        draw_text(pixels, stride, top_card.x + 498, top_card.y + 34, line, 14,
+        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_BUILT_IN_U_V_U),
+                 (unsigned int)info->last_year, (unsigned int)info->version);
+        draw_text(pixels, stride, top_card.x + (is_en ? 450 : 498), top_card.y + 34, line, 14,
                   model->calendar_update_warning ? UI_DANGER : UI_SUCCESS);
     }
     draw_toggle_switch(pixels, stride, to_uirect(ptc_ui_holiday_enable_rect()), model->draft_holiday_enabled,
@@ -348,56 +366,56 @@ static void draw_holiday_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_text(pixels, stride, card.x + 18, card.y + 62, descriptions[index], 13, UI_MUTED);
         fill_round_rect(pixels, stride, mode, 18,
                         disabled ? UI_BORDER : (limited ? UI_ACCENT : UI_SUCCESS));
-        draw_text_center(pixels, stride, mode, limited ? "限时" : "不限时", 14,
+        draw_text_center(pixels, stride, mode, limited ? (ptc_ui_text(PTC_UI_T_LIMIT)) : (ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED)), 14,
                          disabled ? UI_DISABLED : UI_ON_ACCENT);
         fill_round_rect(pixels, stride, minutes, 12, disabled || !limited ? UI_RAISED : UI_RAISED);
         if (limited) {
-            snprintf(minutes_str, sizeof(minutes_str), "%u 分钟（%u小时%u分）", (unsigned int)rule.minutes,
+            snprintf(minutes_str, sizeof(minutes_str), ptc_ui_text(PTC_UI_T_U_MIN_U_HR_U_MIN), (unsigned int)rule.minutes,
                      (unsigned int)rule.minutes / 60, (unsigned int)rule.minutes % 60);
             draw_text(pixels, stride, minutes.x + 16, minutes.y + 46, minutes_str, 22,
                       disabled ? UI_DISABLED : UI_RGB(UI_BLENDED(accent)));
-            draw_text(pixels, stride, minutes.x + 16, minutes.y + 88, "A / 点按修改额度", 14,
+            draw_text(pixels, stride, minutes.x + 16, minutes.y + 88, ptc_ui_text(PTC_UI_T_A_CLICK_TO_EDIT_QUOTA), 14,
                       disabled ? UI_DISABLED : UI_MUTED);
         } else {
-            draw_text(pixels, stride, minutes.x + 16, minutes.y + 46, "不限时间", 22, UI_DISABLED);
-            draw_text(pixels, stride, minutes.x + 16, minutes.y + 88, "点按后提示先切换为限时", 14, UI_DISABLED);
+            draw_text(pixels, stride, minutes.x + 16, minutes.y + 46, ptc_ui_text(PTC_UI_T_NO_LIMIT), 22, UI_DISABLED);
+            draw_text(pixels, stride, minutes.x + 16, minutes.y + 88, ptc_ui_text(PTC_UI_T_CLICK_TIP_SWITCH_TO_LIMIT_FIRST), 14, UI_DISABLED);
         }
     }
-    draw_candidate_button(pixels, stride, ptc_ui_holiday_card_rect(3), "X  切换模式",
+    draw_candidate_button(pixels, stride, ptc_ui_holiday_card_rect(3), ptc_ui_text(PTC_UI_T_X_TOGGLE_MODE),
                            UI_PAGE, UI_ACCENT, model->selected_index == 3, disabled);
-    draw_candidate_button(pixels, stride, ptc_ui_holiday_card_rect(4), "ZL  放弃",
+    draw_candidate_button(pixels, stride, ptc_ui_holiday_card_rect(4), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
                            UI_PAGE, UI_INK, model->selected_index == 4,
                            !model->holiday_dirty);
     bool holiday_hold = model->holiday_dirty && ptc_ui_plan_save_requires_hold(model, PTC_UI_PLAN_HOLIDAY, ptc_ui_render_now());
     draw_candidate_button(pixels, stride, ptc_ui_holiday_card_rect(5),
-                           disabled ? "紧急停用中，设置只读" : (model->waiting ? "正在保存..." :
-                           (model->holiday_dirty ? (holiday_hold ? "+  保存（需确认）" : "+  保存草稿") : "已保存")),
+                           disabled ? (ptc_ui_text(PTC_UI_T_DISABLED_READ_ONLY)) : (model->waiting ? (ptc_ui_text(PTC_UI_T_SAVING)) :
+                           (model->holiday_dirty ? (holiday_hold ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_DRAFT_2))) : (ptc_ui_text(PTC_UI_T_SAVED)))),
                            holiday_hold ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT, model->selected_index == 5,
                            disabled || model->waiting || !model->holiday_dirty);
     draw_plan_impact(pixels, stride, model, PTC_UI_PLAN_HOLIDAY, model->holiday_dirty, panel);
-    draw_candidate_button(pixels, stride, ptc_ui_holiday_calendar_rect(), "查看节假日安排",
+    draw_candidate_button(pixels, stride, ptc_ui_holiday_calendar_rect(), ptc_ui_text(PTC_UI_T_VIEW_HOLIDAY_CALENDAR),
                            UI_ACCENT_SOFT, UI_ACCENT, model->selected_index == 6, false);
 }
 
 const char *bedtime_override_label(PtcBedtimeOverrideMode mode)
 {
-    if (mode == PTC_BEDTIME_OVERRIDE_DISABLED) return "关闭";
-    if (mode == PTC_BEDTIME_OVERRIDE_CUSTOM) return "自定义";
-    return "继承";
+    if (mode == PTC_BEDTIME_OVERRIDE_DISABLED) return ptc_ui_text(PTC_UI_T_OFF);
+    if (mode == PTC_BEDTIME_OVERRIDE_CUSTOM) return ptc_ui_text(PTC_UI_T_CUSTOM);
+    return ptc_ui_text(PTC_UI_T_INHERIT);
 }
 
 static void draw_bedtime_window_value(char *out, size_t out_size, const PtcBedtimeWindow *window)
 {
-    if (!window->enabled) snprintf(out, out_size, "关闭");
-    else snprintf(out, out_size, "%02u:%02u - 次日 %02u:%02u",
+    if (!window->enabled) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_OFF));
+    else snprintf(out, out_size, ptc_ui_text(PTC_UI_T_02U_02U_NEXT_DAY_02U_02U),
         (unsigned int)(window->start_minute / 60), (unsigned int)(window->start_minute % 60),
         (unsigned int)(window->end_minute / 60), (unsigned int)(window->end_minute % 60));
 }
 
 static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    static const char *SECTIONS[] = {"每周", "节假日", "指定日期就寝"};
-    static const char *DAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
+    const char *SECTIONS[] = {ptc_ui_text(PTC_UI_T_WEEKLY_2), ptc_ui_text(PTC_UI_T_HOLIDAYS), ptc_ui_text(PTC_UI_T_GO_TO_BED_ON_THE_SPECIFIED_DATE)};
     const PtcBedtimePolicy *draft = &model->draft_bedtime_policy;
     char line[128];
     int64_t raw_now = ptc_ui_render_now();
@@ -417,8 +435,8 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         (bedtime_impact == PTC_UI_BEDTIME_IMPACT_RESTRICT ||
          bedtime_impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN);
     const char *section_name = model->bedtime_section == PTC_UI_BEDTIME_WEEKLY
-        ? "每周就寝" : (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR
-            ? "节假日就寝" : "指定日期就寝");
+        ? (ptc_ui_text(PTC_UI_T_WEEKLY_BEDTIME)) : (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR
+            ? (ptc_ui_text(PTC_UI_T_HOLIDAY_BEDTIME)) : (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_BEDTIME)));
 
     /* 独立醒目的就寝管控总闸卡片 (Bedtime Master Circuit Breaker Card) */
     UiRect master_card = to_uirect(ptc_ui_bedtime_master_switch_rect());
@@ -432,7 +450,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_rect_outline(pixels, stride, master_card, 14, 1, UI_RGB(UI_BLENDED(border_control)));
     }
     if (model->bedtime_master_focused) draw_focus_ring(pixels, stride, master_card, 14);
-    draw_text(pixels, stride, master_card.x + 18, master_card.y + 24, "就寝计划总开关", 20, UI_INK);
+    draw_text(pixels, stride, master_card.x + 18, master_card.y + 24, ptc_ui_text(PTC_UI_T_BEDTIME_SWITCH), 20, UI_INK);
 
     bool is_skipped_active = ptc_ui_status_is_fresh(model, raw_now) &&
         (bedtime_impact == PTC_UI_BEDTIME_IMPACT_SKIPPED ||
@@ -440,40 +458,46 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
     {
         bool switch_dirty = draft->enabled != model->bedtime_policy.enabled;
-        UiRect saved_pill = {master_card.x + 215, master_card.y + 8, 126, 22};
-        UiRect draft_pill = {master_card.x + 351, master_card.y + 8, 185, 22};
+        int saved_w = is_en ? 134 : 126;
+        int draft_w = is_en ? 208 : 185;
+        UiRect saved_pill = {master_card.x + 205, master_card.y + 8, saved_w, 22};
+        UiRect draft_pill = {master_card.x + 205 + saved_w + 10, master_card.y + 8, draft_w, 22};
         fill_round_rect(pixels, stride, saved_pill, 6, UI_RAISED);
         draw_text_center(pixels, stride, saved_pill,
-                         model->bedtime_policy.enabled ? "当前生效：开启" : "当前生效：关闭",
+                         model->bedtime_policy.enabled ? (ptc_ui_text(PTC_UI_T_ACTIVE_ON))
+                                                       : (ptc_ui_text(PTC_UI_T_ACTIVE_OFF)),
                          12, UI_INK);
         if (switch_dirty) {
             fill_round_rect(pixels, stride, draft_pill, 6, UI_WARNING_SOFT);
             draw_text_center(pixels, stride, draft_pill,
-                             draft->enabled ? "未保存：开启 (按 + 生效)" : "未保存：关闭 (按 + 生效)",
+                             draft->enabled ? (ptc_ui_text(PTC_UI_T_DRAFT_ON_PRESS))
+                                            : (ptc_ui_text(PTC_UI_T_DRAFT_OFF_PRESS)),
                              12, UI_WARNING);
         }
         if (bedtime_enforcing) {
             int active_x = switch_dirty ? (draft_pill.x + draft_pill.width + 10) : (saved_pill.x + saved_pill.width + 10);
-            UiRect active_pill = {active_x, master_card.y + 8, 110, 22};
+            int active_w = is_en ? 130 : 110;
+            UiRect active_pill = {active_x, master_card.y + 8, active_w, 22};
             fill_round_rect(pixels, stride, active_pill, 6, UI_DANGER_SOFT);
-            draw_text_center(pixels, stride, active_pill, "● 限制使用中", 12, UI_DANGER);
+            draw_text_center(pixels, stride, active_pill, ptc_ui_text(PTC_UI_T_RESTRICTING), 12, UI_DANGER);
         }
+
         draw_text(pixels, stride, master_card.x + 18, master_card.y + 45,
                   bedtime_enforcing && !draft->enabled
-                      ? "已改为关闭（草稿），按 + 保存后解除当前就寝限制；所有就寝规则暂停"
+                      ? (ptc_ui_text(PTC_UI_T_SET_TO_OFF_DRAFT_SAVE_WITH_TO))
                       : (draft->enabled
                           ? (switch_dirty
-                              ? "已改为开启（草稿），按 + 键保存后按计划生效；按 ZL 撤销"
-                              : "总开关开启：每周、节假日和指定日期的就寝规则按计划生效")
+                              ? (ptc_ui_text(PTC_UI_T_SET_TO_ON_DRAFT_SAVE_WITH_TO))
+                              : (ptc_ui_text(PTC_UI_T_MASTER_ON_WEEKLY_HOLIDAY_AND_SPECIFIC_DATE)))
                           : (switch_dirty
-                              ? "已改为关闭（草稿），按 + 键保存后所有就寝规则暂停；按 ZL 撤销"
-                              : "总开关关闭：所有就寝规则暂停；已保存时段保留")),
+                              ? (ptc_ui_text(PTC_UI_T_SET_TO_OFF_DRAFT_SAVE_WITH_TO_2))
+                              : (ptc_ui_text(PTC_UI_T_MASTER_OFF_ALL_BEDTIME_RULES_PAUSED_SAVED)))),
                   13, bedtime_enforcing ? UI_DANGER : UI_MUTED);
     }
     UiRect toggle_rect = {master_card.x + master_card.width - 76, master_card.y + (master_card.height - 30) / 2, 60, 30};
     draw_toggle_switch(pixels, stride, toggle_rect, draft->enabled, false, model->disable_flag_present, NULL, NULL);
-    draw_text(pixels, stride, master_card.x + master_card.width - 196, master_card.y + 24,
-               "- / A 切换", 13, UI_ACCENT);
+    draw_text(pixels, stride, master_card.x + master_card.width - (is_en ? 206 : 196), master_card.y + 24,
+               ptc_ui_text(PTC_UI_T_A_TOGGLE), 13, UI_ACCENT);
 
     {
         bool fresh = ptc_ui_status_is_fresh(model, raw_now);
@@ -482,10 +506,10 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
              model->bedtime_next_available);
         bool can_restore = fresh && ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy);
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_manage_rect(0),
-            "Y  跳过本次", UI_PAGE, UI_ACCENT, false,
+            ptc_ui_text(PTC_UI_T_Y_SKIP_ONCE), UI_PAGE, UI_ACCENT, false,
             !can_skip || model->waiting || model->disable_flag_present);
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_manage_rect(1),
-            "X  恢复本次", UI_PAGE, can_restore ? UI_DANGER : UI_INK, false,
+            ptc_ui_text(PTC_UI_T_X_RESTORE_ONCE), UI_PAGE, can_restore ? UI_DANGER : UI_INK, false,
             !can_restore || model->waiting || model->disable_flag_present);
     }
 
@@ -498,16 +522,16 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         uint32_t state_bg = state_color == UI_DANGER ? UI_DANGER_SOFT :
             (state_color == UI_WARNING ? UI_WARNING_SOFT : UI_SUCCESS_SOFT);
         char state_text[96];
-        snprintf(state_text, sizeof(state_text), "当前生效：%s｜%s",
-            model->bedtime_policy.enabled ? "开" : "关",
-            strcmp(model->result_status, "error") == 0 ? "保存失败，草稿保留" :
-            (model->waiting ? "正在保存" :
-             (model->bedtime_dirty ? "草稿待保存" : "规则已保存")));
+        snprintf(state_text, sizeof(state_text), ptc_ui_text(PTC_UI_T_CURRENTLY_ACTIVE_S_S),
+            model->bedtime_policy.enabled ? ptc_ui_text(PTC_UI_T_ON_2) : ptc_ui_text(PTC_UI_T_CLOSE),
+            strcmp(model->result_status, "error") == 0 ? ptc_ui_text(PTC_UI_T_SAVE_FAILED_DRAFT_RETAINED) :
+            (model->waiting ? ptc_ui_text(PTC_UI_T_SAVING_3) :
+             (model->bedtime_dirty ? ptc_ui_text(PTC_UI_T_DRAFT_TO_BE_SAVED) : ptc_ui_text(PTC_UI_T_RULE_SAVED))));
         fill_round_rect(pixels, stride, eval_card, 12, UI_RGB(UI_BLENDED(surface)));
         draw_rect_outline(pixels, stride, eval_card, 12, 1, UI_RGB(UI_BLENDED(border_control)));
         char preview_title[64];
         snprintf(preview_title, sizeof(preview_title), "%s%s",
-                 model->bedtime_dirty ? "草稿预览 / " : "", section_name);
+                 model->bedtime_dirty ? (ptc_ui_text(PTC_UI_T_DRAFT_PREVIEW)) : "", section_name);
         draw_text(pixels, stride, eval_card.x + 16, eval_card.y + 24,
                   preview_title, 17, UI_RGB(UI_BLENDED(text_primary)));
         UiRect state_pill = {eval_card.x + 16, eval_card.y + 36, eval_card.width - 32, 32};
@@ -526,26 +550,27 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         uint32_t f1_color = UI_RGB(UI_BLENDED(text_primary));
 
         if (!draft->enabled) {
-            snprintf(forecast_line1, sizeof(forecast_line1), "%s：就寝计划关闭，夜间不会因此限制使用",
-                     model->bedtime_dirty ? "保存后预计" : "当前状态");
+            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_S_BEDTIME_DISABLED_NO_NIGHTTIME_LIMITS),
+                     model->bedtime_dirty ? (ptc_ui_text(PTC_UI_T_FORECAST_AFTER_SAVE))
+                                          : (ptc_ui_text(PTC_UI_T_CURRENT_STATE)));
             f1_color = UI_MUTED;
         } else if (bedtime_impact == PTC_UI_BEDTIME_IMPACT_RESTRICT) {
-            snprintf(forecast_line1, sizeof(forecast_line1), "! 当前在就寝时段，保存后将立即限制使用！");
+            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_IN_BEDTIME_HOURS_SAVING_WILL_RESTRICT_IMMEDIATELY));
             f1_color = UI_DANGER;
         } else if (bedtime_impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN) {
-            snprintf(forecast_line1, sizeof(forecast_line1), "状态待确认：保存后可能立即限制，请长按确认");
+            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED_MAY_RESTRICT_IMMEDIATELY_HOLD_TO));
             f1_color = UI_DANGER;
         } else if (is_skipped_active) {
             uint16_t skipped_start = model->bedtime_skipped_window_available
                 ? model->bedtime_skipped_start_minute : eval.start_minute;
             uint16_t skipped_end = model->bedtime_skipped_window_available
                 ? model->bedtime_skipped_end_minute : eval.end_minute;
-            snprintf(forecast_line1, sizeof(forecast_line1), "本次已跳过：%02u:%02u 至次日 %02u:%02u",
+            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_SKIPPED_THIS_TIME_02U_02U_TO_NEXT),
                 (unsigned int)(skipped_start / 60), (unsigned int)(skipped_start % 60),
                 (unsigned int)(skipped_end / 60), (unsigned int)(skipped_end % 60));
             f1_color = UI_SUCCESS;
         } else if (eval.active) {
-            snprintf(forecast_line1, sizeof(forecast_line1), "当前状态：就寝限制正在生效");
+            snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_CURRENT_BEDTIME_RESTRICTION_ACTIVE));
             f1_color = UI_DANGER;
         } else {
             PtcEffectiveBedtime eff_today = ptc_bedtime_resolve_start_day(
@@ -553,13 +578,13 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
             if (eff_today.window.enabled) {
                 int diff_m = (int)eff_today.window.start_minute - (int)minute_of_day;
                 if (diff_m < 0) diff_m += 1440;
-                snprintf(forecast_line1, sizeof(forecast_line1), "今晚 %02u:%02u 开始就寝（距现在约 %u 小时 %u 分）",
+                snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_BEDTIME_STARTS_AT_02U_02U_TONIGHT_ABOUT),
                          (unsigned int)(eff_today.window.start_minute / 60),
                          (unsigned int)(eff_today.window.start_minute % 60),
                          (unsigned int)(diff_m / 60), (unsigned int)(diff_m % 60));
                 f1_color = UI_SUCCESS;
             } else {
-                snprintf(forecast_line1, sizeof(forecast_line1), "今晚安排：本日就寝窗口已关闭，不限制");
+                snprintf(forecast_line1, sizeof(forecast_line1), ptc_ui_text(PTC_UI_T_TONIGHT_WINDOW_CLOSED_NO_LIMITS));
                 f1_color = UI_MUTED;
             }
         }
@@ -575,24 +600,27 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
             }
         }
         if (draft->enabled) {
-            snprintf(forecast_line2, sizeof(forecast_line2), "每周统计：开启 %d/7 天  |  周总管控 %u 小时",
+            snprintf(forecast_line2, sizeof(forecast_line2), ptc_ui_text(PTC_UI_T_WEEKLY_STATS_D_7_DAYS_ON_U),
                      enabled_count, (unsigned int)(total_span_m / 60));
         } else {
-            snprintf(forecast_line2, sizeof(forecast_line2), "%s（预设 %d/7 天）",
-                     model->bedtime_dirty ? "保存后每周暂停" : "每周设置：已关闭，当前不生效",
+            snprintf(forecast_line2, sizeof(forecast_line2), ptc_ui_text(PTC_UI_T_S_D_7_DAYS_PRESET),
+                     model->bedtime_dirty ? (ptc_ui_text(PTC_UI_T_PAUSED_WEEKLY_AFTER_SAVE))
+                                          : (ptc_ui_text(PTC_UI_T_WEEKLY_DISABLED_INACTIVE)),
                      enabled_count);
         }
         draw_text(pixels, stride, eval_card.x + 16, eval_card.y + 138,
                   forecast_line2, 13, UI_MUTED);
 
         const char *cal_str = draft->calendar_enabled
-            ? (draft->enabled ? "节假日日历开启" : "节假日日历暂不生效")
-            : "节假日跟随周计划";
+            ? (draft->enabled ? (ptc_ui_text(PTC_UI_T_HOLIDAY_CALENDAR_ON))
+                              : (ptc_ui_text(PTC_UI_T_HOLIDAY_CALENDAR_INACTIVE)))
+            : (ptc_ui_text(PTC_UI_T_HOLIDAYS_FOLLOW_WEEKLY_PLAN));
         const char *sch_str = draft->scheduled_override.present
-            ? (draft->enabled ? "指定日期生效中" : "指定日期暂不生效")
-            : "指定日期未设置";
+            ? (draft->enabled ? (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_ACTIVE))
+                              : (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_INACTIVE)))
+            : (ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_NOT_SET));
         char special_line[128];
-        snprintf(special_line, sizeof(special_line), "特殊规则：%s  |  %s", cal_str, sch_str);
+        snprintf(special_line, sizeof(special_line), ptc_ui_text(PTC_UI_T_SPECIAL_RULES_S_S), cal_str, sch_str);
         draw_wrapped_text(pixels, stride, eval_card.x + 16, eval_card.y + 166,
                           special_line, 12, eval_card.width - 32, 18, 2, UI_MUTED);
 
@@ -603,16 +631,16 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_wrapped_text(pixels, stride, risk.x + 12, risk.y + 20,
             model->bedtime_official_setting_confirmed
                 ? (model->bedtime_overlay_verified
-                    ? "官方暂停设置已确认，Overlay 已验证。"
-                    : "官方暂停设置已确认；保存即接受 Overlay 尚未验证的恢复风险。")
-                : "首次启用前请确认 Nintendo 家长控制已开启“时间到了暂停软件”，并接受 Overlay 恢复风险。",
+                    ? (ptc_ui_text(PTC_UI_T_OFFICIAL_SUSPEND_SETTING_CONFIRMED_OVERLAY_VERIFIED))
+                    : (ptc_ui_text(PTC_UI_T_OFFICIAL_SUSPEND_CONFIRMED_SAVE_ACCEPTS_UNVERIFIED_OVERLAY)))
+                : (ptc_ui_text(PTC_UI_T_BEFORE_ENABLING_CONFIRM_NINTENDO_PARENTAL_CONTROLS_HAS)),
             12, risk.width - 24, 18, 2,
             model->bedtime_official_setting_confirmed && model->bedtime_overlay_verified
                 ? UI_SUCCESS : UI_WARNING);
 
         draw_text(pixels, stride, eval_card.x + 16,
                   eval_card.y + eval_card.height - 18,
-                   "- 开关   + 保存   ZL 放弃",
+                  ptc_ui_text(PTC_UI_T_TOGGLE_SAVE_ZL_DISCARD),
                   14, UI_ACCENT);
     }
 
@@ -644,16 +672,16 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                     !model->parent_footer_focused && !model->bedtime_master_focused) {
                     draw_focus_ring(pixels, stride, card, 16);
                 }
-                UiRect today_pill = {card.x + (card.width - (is_skipped_active ? 74 : 50)) / 2, card.y + 6,
-                                     is_skipped_active ? 74 : 50, 18};
+                int pill_w = is_en ? (is_skipped_active ? 88 : (is_active_day ? 58 : 50)) : (is_skipped_active ? 74 : 50);
+                UiRect today_pill = {card.x + (card.width - pill_w) / 2, card.y + 6, pill_w, 18};
                 fill_round_rect(pixels, stride, today_pill, 5, today_color);
                 draw_text_center(pixels, stride, today_pill,
-                                 is_active_day ? "● 限制中" : (is_skipped_active ? "★ 今日(跳过)" : "★ 今日"),
+                                 is_active_day ? (ptc_ui_text(PTC_UI_T_ACTIVE_3)) : (is_skipped_active ? (ptc_ui_text(PTC_UI_T_SKIP)) : (ptc_ui_text(PTC_UI_T_TODAY_4))),
                                  11, UI_ON_ACCENT);
             }
 
             draw_text_center(pixels, stride, (UiRect){card.x, card.y + (is_today ? 25 : 13), card.width, 20},
-                             DAYS[day], is_today ? 17 : 16,
+                             ptc_ui_weekday_label((unsigned)day), is_today ? 17 : 16,
                              is_today ? (is_active_day ? UI_DANGER : (is_skipped_active ? UI_SUCCESS : UI_ACCENT)) : UI_INK);
 
             if (has_date) {
@@ -671,7 +699,7 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                     (unsigned int)(draft->week[day].start_minute % 60));
                 draw_text_center(pixels, stride, (UiRect){card.x, card.y + 64, card.width, 22}, line, 18,
                                  draft->enabled ? (is_active_day ? UI_DANGER : (is_skipped_active && is_today ? UI_SUCCESS : UI_ACCENT)) : UI_MUTED);
-                snprintf(line, sizeof(line), "到 %02u:%02u",
+                snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_TO_02U_02U),
                     (unsigned int)(draft->week[day].end_minute / 60),
                     (unsigned int)(draft->week[day].end_minute % 60));
                 draw_text_center(pixels, stride, (UiRect){card.x, card.y + 88, card.width, 18}, line, 13, UI_MUTED);
@@ -681,24 +709,24 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 fill_round_rect(pixels, stride, pill, 6,
                                 is_active_day ? UI_DANGER_SOFT : (draft->enabled ? (is_skipped_active && is_today ? UI_SUCCESS_SOFT : UI_ACCENT_SOFT) : UI_RAISED));
                 draw_text_center(pixels, stride, pill,
-                                 is_active_day ? "生效中" : (is_skipped_active && is_today ? "已跳过" : (draft->enabled ? "开启" : "暂停")), 12,
+                                 is_active_day ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE)) : (is_skipped_active && is_today ? (ptc_ui_text(PTC_UI_T_SKIPPED_2)) : (draft->enabled ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_PAUSED)))), 12,
                                  is_active_day ? UI_DANGER : (is_skipped_active && is_today ? UI_SUCCESS : (draft->enabled ? UI_ACCENT : UI_MUTED)));
             } else {
-                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 74, card.width, 24}, "关闭", 18, UI_MUTED);
+                draw_text_center(pixels, stride, (UiRect){card.x, card.y + 74, card.width, 24}, ptc_ui_text(PTC_UI_T_OFF), 18, UI_MUTED);
                 UiRect pill = {card.x + (card.width - 48) / 2, card.y + 114, 48, 20};
                 fill_round_rect(pixels, stride, pill, 6, UI_RAISED);
-                draw_text_center(pixels, stride, pill, "关闭", 12, UI_MUTED);
+                draw_text_center(pixels, stride, pill, ptc_ui_text(PTC_UI_T_OFF), 12, UI_MUTED);
             }
-            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 148, card.width, 18}, "A 设置", 11, UI_MUTED);
+            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 148, card.width, 18}, ptc_ui_text(PTC_UI_T_A_SET), 11, UI_MUTED);
         }
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 7), "复制到工作日",
+        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 7), ptc_ui_text(PTC_UI_T_COPY_TO_WEEKDAYS),
             UI_PAGE, UI_ACCENT, model->selected_index == 7 && !model->bedtime_section_focused && !model->bedtime_master_focused, model->disable_flag_present);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 8), "复制到周末",
+        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 8), ptc_ui_text(PTC_UI_T_COPY_TO_WEEKENDS),
             UI_PAGE, UI_ACCENT, model->selected_index == 8 && !model->bedtime_section_focused && !model->bedtime_master_focused, model->disable_flag_present);
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 9), "ZL  放弃",
+        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 9), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
             UI_PAGE, UI_INK, model->selected_index == 9 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(0, 10),
-            bedtime_save_danger ? "+  保存（需确认）" : "+  保存本页",
+            bedtime_save_danger ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_PAGE)),
             bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
             model->selected_index == 10 && !model->bedtime_section_focused && !model->bedtime_master_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);
@@ -708,30 +736,30 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
         fill_round_rect(pixels, stride, bedtime_guide, 12, UI_RGB(UI_BLENDED(surface)));
         draw_rect_outline(pixels, stride, bedtime_guide, 12, 1, UI_RGB(UI_BLENDED(border_control)));
         draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 22,
-                   "就寝时间如何生效", 15, UI_RGB(UI_BLENDED(text_primary)));
+                   ptc_ui_text(PTC_UI_T_HOW_BEDTIME_WORKS), 15, UI_RGB(UI_BLENDED(text_primary)));
         draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 44,
-                   "• 到就寝时间后立即限制使用，即使今日还有额度也一样", 13, UI_MUTED);
+                   ptc_ui_text(PTC_UI_T_RESTRICTS_IMMEDIATELY_AT_BEDTIME_EVEN_IF_QUOTA), 13, UI_MUTED);
         draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 66,
-                   "• 如需例外，可在今日调度中选择“跳过今晚就寝”，只跳过这一次", 13, UI_MUTED);
+                   ptc_ui_text(PTC_UI_T_FOR_EXCEPTIONS_SELECT_SKIP_TONIGHT_BEDTIME_IN), 13, UI_MUTED);
         draw_text(pixels, stride, bedtime_guide.x + 18, bedtime_guide.y + 88,
-                   "• 就寝时间可跨日（如 22:00 至次日 07:00），结束后自动恢复", 13, UI_MUTED);
+                   ptc_ui_text(PTC_UI_T_CAN_SPAN_OVERNIGHT_E_G_22_00), 13, UI_MUTED);
     } else if (model->bedtime_section == PTC_UI_BEDTIME_CALENDAR) {
         UiRect master = to_uirect(ptc_ui_bedtime_field_rect(1, 0));
         draw_plan_card(pixels, stride, master, model->selected_index == 0 && !model->bedtime_section_focused && !model->bedtime_master_focused);
-        draw_text(pixels, stride, master.x + 20, master.y + 40, "国家节假日日历", 20, UI_INK);
+        draw_text(pixels, stride, master.x + 20, master.y + 40, ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_CALENDAR), 20, UI_INK);
         if (!draft->enabled) {
-            draw_text(pixels, stride, master.x + 190, master.y + 40,
-                draft->calendar_enabled ? "已开启（暂不生效）" : "已关闭", 18, UI_MUTED);
+            draw_text(pixels, stride, master.x + (is_en ? 260 : 190), master.y + 40,
+                draft->calendar_enabled ? (ptc_ui_text(PTC_UI_T_ON_INACTIVE)) : (ptc_ui_text(PTC_UI_T_OFF_2)), 18, UI_MUTED);
         } else {
-            draw_text(pixels, stride, master.x + 190, master.y + 40,
-                draft->calendar_enabled ? "开启" : "关闭", 18,
+            draw_text(pixels, stride, master.x + (is_en ? 260 : 190), master.y + 40,
+                draft->calendar_enabled ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_OFF)), 18,
                 draft->calendar_enabled ? UI_SUCCESS : UI_MUTED);
         }
         UiRect cal_toggle = {master.x + master.width - 76, master.y + (master.height - 28) / 2, 58, 28};
         draw_toggle_switch(pixels, stride, cal_toggle, draft->calendar_enabled,
                            model->selected_index == 0 && !model->bedtime_section_focused && !model->bedtime_master_focused,
                            !draft->enabled || model->disable_flag_present, NULL, NULL);
-        draw_text(pixels, stride, master.x + master.width - 165, master.y + 39, "A 切换", 13, UI_MUTED);
+        draw_text(pixels, stride, master.x + master.width - (is_en ? 180 : 165), master.y + 39, ptc_ui_text(PTC_UI_T_A_TOGGLE_2), 13, UI_MUTED);
 
         for (int i = 0; i < 2; ++i) {
             const PtcBedtimeSpecialRule *rule = i == 0 ? &draft->holiday_rule : &draft->makeup_workday_rule;
@@ -739,21 +767,22 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
             char value[64];
             draw_plan_card(pixels, stride, card, model->selected_index == i + 1 && !model->bedtime_section_focused && !model->bedtime_master_focused);
             draw_text(pixels, stride, card.x + 18, card.y + 30,
-                i == 0 ? "法定休假" : "调休工作日", 19, UI_INK);
+                i == 0 ? (ptc_ui_text(PTC_UI_T_STATUTORY_HOLIDAY)) : (ptc_ui_text(PTC_UI_T_MAKEUP_WORKDAY)), 19, UI_INK);
             draw_bedtime_window_value(value, sizeof(value), &rule->window);
             if (!draft->enabled) {
-                snprintf(line, sizeof(line), "%s  |  %s（暂不生效）", bedtime_override_label(rule->mode),
-                    rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? value : "使用对应模式");
+                snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_S_S_INACTIVE),
+                    bedtime_override_label(rule->mode),
+                    rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? value : (ptc_ui_text(PTC_UI_T_USE_MATCHING_MODE)));
             } else {
                 snprintf(line, sizeof(line), "%s  |  %s", bedtime_override_label(rule->mode),
-                    rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? value : "使用对应模式");
+                    rule->mode == PTC_BEDTIME_OVERRIDE_CUSTOM ? value : (ptc_ui_text(PTC_UI_T_USE_MATCHING_MODE)));
             }
             draw_text(pixels, stride, card.x + 18, card.y + 72, line, 15, UI_MUTED);
         }
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 3), "ZL  放弃",
+        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 3), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
             UI_PAGE, UI_INK, model->selected_index == 3 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(1, 4),
-            bedtime_save_danger ? "+  保存（需确认）" : "+  保存本页",
+            bedtime_save_danger ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_PAGE)),
             bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
             model->selected_index == 4 && !model->bedtime_section_focused && !model->bedtime_master_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);
@@ -766,48 +795,48 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                           !draft->enabled ? UI_WARNING : UI_RGB(UI_BLENDED(border_control)));
         if (!draft->enabled) {
             draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 24,
-                      "⚠️ 就寝计划开关已关闭", 15, UI_WARNING);
+                      ptc_ui_text(PTC_UI_T_BEDTIME_SWITCH_IS_OFF), 15, UI_WARNING);
             draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 48,
-                      "• 开关关闭时，节假日和调休的就寝设置暂不生效。", 13, UI_MUTED);
+                      ptc_ui_text(PTC_UI_T_WHEN_DISABLED_HOLIDAY_AND_MAKEUP_BEDTIME_RULES), 13, UI_MUTED);
             draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 70,
-                      "• 设置仍会保存；按 [-] 键或打开上方“就寝计划总开关”后按计划生效。", 13, UI_MUTED);
+                      ptc_ui_text(PTC_UI_T_SETTINGS_ARE_SAVED_PRESS_OR_TURN_ON), 13, UI_MUTED);
         } else {
             draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 24,
-                      "国家节假日日历与规则优先级", 15, UI_RGB(UI_BLENDED(text_primary)));
+                      ptc_ui_text(PTC_UI_T_HOLIDAY_CALENDAR_RULE_PRIORITIES), 15, UI_RGB(UI_BLENDED(text_primary)));
             draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 48,
-                      "• 开启日历后，国家法定休假与调休工作日将自动优先于每周基础计划生效。", 13, UI_MUTED);
+                      ptc_ui_text(PTC_UI_T_WHEN_ENABLED_HOLIDAYS_AND_WORKDAYS_TAKE_PRIORITY), 13, UI_MUTED);
             draw_text(pixels, stride, cal_guide.x + 18, cal_guide.y + 70,
-                      "• 调休工作日建议设为严格就寝；法定休假可根据需要放宽或免除就寝限制。", 13, UI_MUTED);
+                      ptc_ui_text(PTC_UI_T_SUGGEST_STRICT_BEDTIME_ON_MAKEUP_WORKDAYS_RELAX), 13, UI_MUTED);
         }
     } else {
         const PtcBedtimeScheduledOverride *scheduled = &draft->scheduled_override;
         uint32_t duration = scheduled->end_day_index >= scheduled->start_day_index
             ? (uint32_t)scheduled->end_day_index - scheduled->start_day_index + 1u : 1u;
-        const char *labels[] = {"指定日期就寝", "开始日期", "持续天数", "就寝规则"};
+        const char *labels[] = {ptc_ui_text(PTC_UI_T_GO_TO_BED_ON_THE_SPECIFIED_DATE), ptc_ui_text(PTC_UI_T_START_DATE), ptc_ui_text(PTC_UI_T_NUMBER_OF_DAYS_TO_LAST), ptc_ui_text(PTC_UI_T_BEDTIME_RULES)};
         char values[4][96];
         if (!draft->enabled) {
-            snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? "开启（暂不生效）" : "关闭");
+            snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? (ptc_ui_text(PTC_UI_T_ON_INACTIVE_2)) : (ptc_ui_text(PTC_UI_T_OFF)));
         } else {
-            snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? "开启" : "关闭");
+            snprintf(values[0], sizeof(values[0]), "%s", scheduled->present ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_OFF)));
         }
         {
             uint16_t year;
             uint8_t month, day;
             if (ptc_date_from_day_index(scheduled->start_day_index, &year, &month, &day))
                 snprintf(values[1], sizeof(values[1]), "%04u-%02u-%02u", year, month, day);
-            else snprintf(values[1], sizeof(values[1]), "等待有效日期");
+            else snprintf(values[1], sizeof(values[1]), ptc_ui_text(PTC_UI_T_WAITING_FOR_DATE));
         }
-        snprintf(values[2], sizeof(values[2]), "%u 天", (unsigned int)duration);
+        snprintf(values[2], sizeof(values[2]), ptc_ui_text(PTC_UI_T_U_DAYS), (unsigned int)duration);
         if (scheduled->rule.mode == PTC_BEDTIME_OVERRIDE_CUSTOM) {
             char value[64];
             draw_bedtime_window_value(value, sizeof(value), &scheduled->rule.window);
             snprintf(values[3], sizeof(values[3]), "%s  %s%s",
                 bedtime_override_label(scheduled->rule.mode), value,
-                draft->enabled ? "" : "（暂不生效）");
+                draft->enabled ? "" : (ptc_ui_text(PTC_UI_T_INACTIVE)));
         } else {
             snprintf(values[3], sizeof(values[3]), "%s%s",
                 bedtime_override_label(scheduled->rule.mode),
-                draft->enabled ? "" : "（暂不生效）");
+                draft->enabled ? "" : (ptc_ui_text(PTC_UI_T_INACTIVE)));
         }
         for (int i = 0; i < 4; ++i) {
             UiRect row = to_uirect(ptc_ui_bedtime_field_rect(2, i));
@@ -815,24 +844,24 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
             if (i == 0) {
                 draw_text(pixels, stride, row.x + 18, row.y + 31, labels[0], 17, UI_MUTED);
                 if (!draft->enabled) {
-                    draw_text(pixels, stride, row.x + 150, row.y + 31,
-                              scheduled->present ? "开启（暂不生效）" : "关闭", 18, UI_MUTED);
+                    draw_text(pixels, stride, row.x + (is_en ? 200 : 150), row.y + 31,
+                              scheduled->present ? (ptc_ui_text(PTC_UI_T_ON_INACTIVE_2)) : (ptc_ui_text(PTC_UI_T_OFF)), 18, UI_MUTED);
                 } else {
-                    draw_text(pixels, stride, row.x + 150, row.y + 31,
-                              scheduled->present ? "开启" : "关闭", 18,
+                    draw_text(pixels, stride, row.x + (is_en ? 200 : 150), row.y + 31,
+                              scheduled->present ? (ptc_ui_text(PTC_UI_T_ON)) : (ptc_ui_text(PTC_UI_T_OFF)), 18,
                               scheduled->present ? UI_SUCCESS : UI_MUTED);
                 }
                 UiRect sched_toggle = {row.x + row.width - 76, row.y + (row.height - 28) / 2, 58, 28};
                 draw_toggle_switch(pixels, stride, sched_toggle, scheduled->present,
                                    model->selected_index == 0 && !model->bedtime_section_focused && !model->bedtime_master_focused,
                                    !draft->enabled || model->disable_flag_present, NULL, NULL);
-                draw_text(pixels, stride, row.x + row.width - 165, row.y + 31, "A 切换", 13, UI_MUTED);
+                draw_text(pixels, stride, row.x + row.width - (is_en ? 180 : 165), row.y + 31, ptc_ui_text(PTC_UI_T_A_TOGGLE_2), 13, UI_MUTED);
             } else {
                 draw_text(pixels, stride, row.x + 18, row.y + 31, labels[i], 17, UI_MUTED);
-                draw_text(pixels, stride, row.x + 240, row.y + 31, values[i], 18, UI_INK);
+                draw_text(pixels, stride, row.x + (is_en ? 200 : 240), row.y + 31, values[i], 18, UI_INK);
                 if (i == 1 || i == 2)
-                    draw_text(pixels, stride, row.x + 484, row.y + 31,
-                              "A 输入 | ZL/ZR ±7 天", 11, UI_MUTED);
+                    draw_text(pixels, stride, row.x + (is_en ? 450 : 484), row.y + 31,
+                              ptc_ui_text(PTC_UI_T_A_EDIT_ZL_ZR_7_DAYS), 11, UI_MUTED);
             }
         }
 
@@ -844,20 +873,20 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
                           !draft->enabled ? UI_WARNING : UI_RGB(UI_BLENDED(border_control)));
         if (!draft->enabled) {
             draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 20,
-                      "⚠️ 就寝计划开关已关闭", 13, UI_WARNING);
+                      ptc_ui_text(PTC_UI_T_BEDTIME_SWITCH_IS_OFF), 13, UI_WARNING);
             draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 38,
-                      "当前不生效；打开开关后按计划生效", 12, UI_MUTED);
+                      ptc_ui_text(PTC_UI_T_CURRENTLY_INACTIVE_ACTIVATES_WHEN_BEDTIME_SWITCH_IS), 12, UI_MUTED);
         } else {
             draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 20,
-                      "指定日期就寝独立优先级", 13, UI_RGB(UI_BLENDED(text_primary)));
+                      ptc_ui_text(PTC_UI_T_SPECIFIC_DATE_BEDTIME_PRIORITY), 13, UI_RGB(UI_BLENDED(text_primary)));
             draw_text(pixels, stride, sched_guide.x + 14, sched_guide.y + 38,
-                      "设定区间内优先于节假日与周计划执行", 12, UI_MUTED);
+                      ptc_ui_text(PTC_UI_T_TAKES_PRIORITY_OVER_HOLIDAYS_AND_WEEKLY_PLANS), 12, UI_MUTED);
         }
 
-        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 4), "ZL  放弃",
+        draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 4), ptc_ui_text(PTC_UI_T_ZL_DISCARD),
             UI_PAGE, UI_INK, model->selected_index == 4 && !model->bedtime_section_focused && !model->bedtime_master_focused, !model->bedtime_dirty);
         draw_candidate_button(pixels, stride, ptc_ui_bedtime_field_rect(2, 5),
-            bedtime_save_danger ? "+  保存（需确认）" : "+  保存本页",
+            bedtime_save_danger ? (ptc_ui_text(PTC_UI_T_SAVE_CONFIRM)) : (ptc_ui_text(PTC_UI_T_SAVE_PAGE)),
             bedtime_save_danger ? UI_DANGER : UI_ACCENT, UI_ON_ACCENT,
             model->selected_index == 5 && !model->bedtime_section_focused && !model->bedtime_master_focused,
             !model->bedtime_dirty || model->disable_flag_present || model->waiting);
@@ -867,25 +896,25 @@ static void draw_bedtime_page(uint32_t *pixels, uint32_t stride, const PtcUiMode
 static const char *bedtime_source_short(PtcBedtimeSource source)
 {
     switch (source) {
-    case PTC_BEDTIME_SOURCE_SCHEDULED_OVERRIDE: return "日期";
-    case PTC_BEDTIME_SOURCE_STATUTORY_HOLIDAY: return "休假";
-    case PTC_BEDTIME_SOURCE_MAKEUP_WORKDAY: return "调休";
+    case PTC_BEDTIME_SOURCE_SCHEDULED_OVERRIDE: return ptc_ui_text(PTC_UI_T_DATE);
+    case PTC_BEDTIME_SOURCE_STATUTORY_HOLIDAY: return ptc_ui_text(PTC_UI_T_HOL);
+    case PTC_BEDTIME_SOURCE_MAKEUP_WORKDAY: return ptc_ui_text(PTC_UI_T_WORK);
     case PTC_BEDTIME_SOURCE_WEEKLY:
-    default: return "每周";
+    default: return ptc_ui_text(PTC_UI_T_WKLY);
     }
 }
 
 static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    static const char *WEEKDAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
     UiRect panel = {824, 172, 402, 452};
     int index;
     fill_round_rect(pixels, stride, panel, 16, UI_RAISED);
     draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
-    draw_text(pixels, stride, panel.x + 16, panel.y + 26, "未来 7 天计划与就寝预测", 17, UI_INK);
+    draw_text(pixels, stride, panel.x + 16, panel.y + 26, ptc_ui_text(PTC_UI_T_7_DAY_PLAN_BEDTIME_FORECAST), 17, UI_INK);
 
     if (!model->forecast_available) {
-        draw_text(pixels, stride, panel.x + 16, panel.y + 110, "刷新状态后显示预测数据", 15, UI_MUTED);
+        draw_text(pixels, stride, panel.x + 16, panel.y + 110, ptc_ui_text(PTC_UI_T_REFRESH_STATUS_TO_VIEW_FORECAST_DATA), 15, UI_MUTED);
         return;
     }
 
@@ -914,23 +943,23 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
         /* 1. 日期与星期 */
         char date_label[32];
         if (is_today) {
-            snprintf(date_label, sizeof(date_label), "今天 %s", WEEKDAYS[weekday]);
+            snprintf(date_label, sizeof(date_label), ptc_ui_text(PTC_UI_T_TODAY_S), ptc_ui_weekday_label(weekday));
         } else if (index == 1) {
-            snprintf(date_label, sizeof(date_label), "明天 %s", WEEKDAYS[weekday]);
+            snprintf(date_label, sizeof(date_label), ptc_ui_text(PTC_UI_T_TMRW_S), ptc_ui_weekday_label(weekday));
         } else {
-            snprintf(date_label, sizeof(date_label), "%s (D+%d)", WEEKDAYS[weekday], index);
+            snprintf(date_label, sizeof(date_label), "%s (D+%d)", ptc_ui_weekday_label(weekday), index);
         }
         draw_text(pixels, stride, row.x + 10, row.y + 27, date_label, 14,
                   is_today ? UI_ACCENT : UI_INK);
 
         /* 2. 额度与微进度条 */
-        int quota_x = row.x + 100;
+        int quota_x = row.x + (is_en ? 104 : 100);
         if (day->mode == PTC_RULE_MODE_UNLIMITED) {
-            draw_text(pixels, stride, quota_x, row.y + 20, "不限时", 14, UI_SUCCESS);
+            draw_text(pixels, stride, quota_x, row.y + 20, ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED), 14, UI_SUCCESS);
             fill_round_rect(pixels, stride, (UiRect){quota_x, row.y + 28, 64, 4}, 2, UI_SUCCESS);
         } else {
             char q_str[24];
-            snprintf(q_str, sizeof(q_str), "%u 分钟", (unsigned int)day->minutes);
+            snprintf(q_str, sizeof(q_str), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned int)day->minutes);
             draw_text(pixels, stride, quota_x, row.y + 20, q_str, 14, UI_INK);
             int bar_w = 64;
             int fill_w = (int)((int64_t)bar_w * (day->minutes > 180 ? 180 : day->minutes) / 180);
@@ -944,23 +973,23 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
 
         /* 3. 规则来源胶囊徽标 */
         UiRect badge = {row.x + 178, row.y + 11, 56, 22};
-        const char *badge_label = "周常规";
+        const char *badge_label = ptc_ui_text(PTC_UI_T_WEEKLY);
         uint32_t badge_bg = UI_RAISED;
         uint32_t badge_color = UI_MUTED;
         if (day->rule_source && strcmp(day->rule_source, "statutory_holiday") == 0) {
-            badge_label = "节假日";
+            badge_label = ptc_ui_text(PTC_UI_T_HOLIDAY);
             badge_bg = UI_WARNING_SOFT;
             badge_color = UI_WARNING;
         } else if (day->rule_source && strcmp(day->rule_source, "makeup_workday") == 0) {
-            badge_label = "调休";
+            badge_label = ptc_ui_text(PTC_UI_T_MAKEUP);
             badge_bg = UI_ACCENT_SOFT;
             badge_color = UI_ACCENT;
         } else if (day->rule_source && strcmp(day->rule_source, "scheduled_override") == 0) {
-            badge_label = "临时";
+            badge_label = ptc_ui_text(PTC_UI_T_CUSTOM_2);
             badge_bg = UI_SUCCESS_SOFT;
             badge_color = UI_SUCCESS;
         } else if (day->rule_source && strcmp(day->rule_source, "today_override") == 0) {
-            badge_label = "今日调";
+            badge_label = ptc_ui_text(PTC_UI_T_TODAY_5);
             badge_bg = UI_WARNING_SOFT;
             badge_color = UI_WARNING;
         }
@@ -970,7 +999,7 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
         /* 4. 就寝窗口 */
         int bt_x = row.x + 244;
         if (!model->bedtime_policy.enabled || !bedtime.window.enabled) {
-            draw_text(pixels, stride, bt_x + 12, row.y + 27, "无就寝", 13, UI_MUTED);
+            draw_text(pixels, stride, bt_x + 12, row.y + 27, ptc_ui_text(PTC_UI_T_NO_BEDTIME), 13, UI_MUTED);
         } else {
             char bt_buf[48];
             snprintf(bt_buf, sizeof(bt_buf), "🌙 %02u:%02u %s",
@@ -986,7 +1015,7 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
     }
 
     draw_text(pixels, stride, panel.x + 14, panel.y + panel.height - 16,
-              "按 A 键或点击查看单日规则生效逻辑", 11, UI_MUTED);
+              ptc_ui_text(PTC_UI_T_PRESS_A_OR_CLICK_TO_VIEW_DAILY), 11, UI_MUTED);
 }
 
 bool draw_parent_plan_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

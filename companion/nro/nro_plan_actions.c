@@ -24,7 +24,7 @@ void save_weekly_from_page(UiState *ui)
         return;
     }
     if (!ui->model.weekly_dirty) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "周计划没有修改。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_WEEKLY_PLAN_HAS_NOT_BEEN_MODIFIED));
         return;
     }
     hold = ptc_ui_plan_save_requires_hold(
@@ -35,10 +35,10 @@ void save_weekly_from_page(UiState *ui)
     }
     before = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_SAVED);
     after = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_WEEKLY);
-    snprintf(body, sizeof(body), "保存前请核对今天的最终规则、预计剩余时间和覆盖原因。");
+    snprintf(body, sizeof(body), ptc_ui_text(PTC_UI_T_PLEASE_CHECK_TODAY_S_FINAL_RULES_ESTIMATED));
     open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_WEEKLY,
         (before.source != after.source || ptc_ui_day_rule_effectively_changed(before.rule, after.rule))
-            ? "周计划将影响今天" : "确认保存每周计划", body);
+            ? ptc_ui_text(PTC_UI_T_WEEKLY_PLANS_WILL_AFFECT_TODAY) : ptc_ui_text(PTC_UI_T_CONFIRM_TO_SAVE_WEEKLY_PLAN), body);
 }
 
 void save_holiday_from_page(UiState *ui)
@@ -48,11 +48,11 @@ void save_holiday_from_page(UiState *ui)
     bool hold;
     if (!ui || ui->model.disable_flag_present) {
         if (ui) snprintf(ui->model.message, sizeof(ui->model.message),
-                         "紧急停用中，国家节假日设置暂时只读。");
+                         ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_NATIONAL_HOLIDAY_SETTINGS_ARE_TEMPORARI));
         return;
     }
     if (!ui->model.holiday_dirty) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "国家节假日设置没有修改。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTINGS_HAVE_NOT_BEEN_MODIFIED));
         return;
     }
     hold = ptc_ui_plan_save_requires_hold(
@@ -65,8 +65,8 @@ void save_holiday_from_page(UiState *ui)
     after = ptc_ui_plan_rule(&ui->model, PTC_UI_PLAN_HOLIDAY);
     open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_HOLIDAY,
         (before.source != after.source || ptc_ui_day_rule_effectively_changed(before.rule, after.rule))
-            ? "国家节假日设置将影响今天" : "确认保存国家节假日设置",
-        "保存前请核对今天的最终规则、预计剩余时间和覆盖原因。");
+            ? ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTING_WILL_AFFECT_TODAY) : ptc_ui_text(PTC_UI_T_CONFIRM_TO_SAVE_NATIONAL_HOLIDAY_SETTINGS),
+        ptc_ui_text(PTC_UI_T_PLEASE_CHECK_TODAY_S_FINAL_RULES_ESTIMATED));
 }
 
 void save_scheduled_from_overlay(UiState *ui)
@@ -75,13 +75,13 @@ void save_scheduled_from_overlay(UiState *ui)
         !ptc_ui_scheduled_dirty(&ui->model)) return;
     if (!ptc_scheduled_override_is_valid(&ui->model.draft_scheduled_override)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            "指定日期额度无效，请检查 1 到 366 天范围和额度。");
+            ptc_ui_text(PTC_UI_T_THE_SPECIFIED_DATE_QUOTA_IS_INVALID_PLEASE));
         return;
     }
     if (ptc_ui_plan_save_requires_hold(&ui->model, PTC_UI_PLAN_SCHEDULED, (int64_t)time(NULL))) {
         open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_SCHEDULED,
-            "保存后可能立即限制使用",
-            "保存前请核对今天的最终额度、预计剩余时间和覆盖原因。");
+            ptc_ui_text(PTC_UI_T_MAY_RESTRICT_USE_IMMEDIATELY_AFTER_SAVING),
+            ptc_ui_text(PTC_UI_T_PLEASE_CHECK_TODAY_S_FINAL_AMOUNT_ESTIMATED));
         return;
     }
     submit_scheduled_override(ui);
@@ -100,7 +100,7 @@ void apply_pending_navigation(UiState *ui)
     } else if (ui->pending_leave_parent) {
         ui->model.view = ui->model.setup_phase[0] && strcmp(ui->model.setup_phase, "active") != 0
             ? PTC_UI_SETUP : PTC_UI_CHILD;
-        snprintf(ui->model.message, sizeof(ui->model.message), "已返回主页面。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_HAS_RETURNED_TO_THE_MAIN_PAGE));
         if (ui->model.view == PTC_UI_CHILD) {
             submit_status(ui);
         }
@@ -150,16 +150,16 @@ void discard_bedtime_draft(UiState *ui)
     if (!ui) return;
     ptc_ui_bedtime_discard_section(&ui->model, ui->model.bedtime_section);
     update_bedtime_dirty(ui);
-    snprintf(ui->model.message, sizeof(ui->model.message), "已放弃当前就寝子页面的修改。");
+    snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_MODIFICATION_OF_THE_CURRENT_BEDTIME_SUBPAGE));
 }
 
 static const char *bedtime_section_name(PtcUiBedtimeSection section)
 {
     switch (section) {
-    case PTC_UI_BEDTIME_WEEKLY: return "每周就寝";
-    case PTC_UI_BEDTIME_CALENDAR: return "节假日就寝";
-    case PTC_UI_BEDTIME_SCHEDULED: return "指定日期就寝";
-    default: return "就寝时间";
+    case PTC_UI_BEDTIME_WEEKLY: return ptc_ui_text(PTC_UI_T_WEEKLY_BEDTIME);
+    case PTC_UI_BEDTIME_CALENDAR: return ptc_ui_text(PTC_UI_T_GOING_TO_BED_ON_HOLIDAYS);
+    case PTC_UI_BEDTIME_SCHEDULED: return ptc_ui_text(PTC_UI_T_GO_TO_BED_ON_THE_SPECIFIED_DATE);
+    default: return ptc_ui_text(PTC_UI_T_BEDTIME);
     }
 }
 
@@ -196,17 +196,17 @@ void save_bedtime_from_page(UiState *ui)
     PtcUiBedtimeImpact impact;
     if (!ui || ui->waiting) return;
     if (ui->model.disable_flag_present) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，就寝时间设置暂时只读。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_BEDTIME_SETTING_IS));
         return;
     }
     if (!ui->model.bedtime_dirty) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "就寝时间没有修改。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_BEDTIME_HAS_NOT_BEEN_MODIFIED));
         return;
     }
     draft = ptc_ui_bedtime_section_policy(&ui->model, ui->model.bedtime_section);
     if (!ptc_bedtime_policy_is_valid(&draft)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-            "无法保存：请检查跨夜窗口、相邻日期重叠、特殊规则冲突和日期长度。");
+            ptc_ui_text(PTC_UI_T_UNABLE_TO_SAVE_PLEASE_CHECK_FOR_OVERNIGHT));
         return;
     }
     if (draft.enabled && !ui->model.bedtime_official_setting_confirmed) {
@@ -220,10 +220,10 @@ void save_bedtime_from_page(UiState *ui)
         impact = ptc_ui_bedtime_save_impact(&ui->model, minute_of_day, (int64_t)raw_now);
         if (impact == PTC_UI_BEDTIME_IMPACT_RESTRICT || impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN) {
             open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_BEDTIME,
-                impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN ? "可能立即进入就寝限制？" : "立即进入就寝限制？",
+                impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN ? ptc_ui_text(PTC_UI_T_POSSIBLY_ENTER_BEDTIME_RESTRICTION_IMMEDIATELY) : ptc_ui_text(PTC_UI_T_ENTER_BEDTIME_RESTRICTION_NOW),
                 impact == PTC_UI_BEDTIME_IMPACT_UNKNOWN
-                    ? "当前状态待确认，保存后可能立即暂停游戏。请长按确认。"
-                    : "保存后将立即暂停游戏并限制游玩。请长按确认。");
+                    ? ptc_ui_text(PTC_UI_T_THE_CURRENT_STATUS_NEEDS_TO_BE_CONFIRMED)
+                    : ptc_ui_text(PTC_UI_T_SAVE_WILL_IMMEDIATELY_PAUSE_THE_GAME_AND));
             return;
         }
     }
@@ -243,10 +243,10 @@ void select_bedtime_section(UiState *ui, int section)
         ui->model.bedtime_switch_pending = true;
         ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_LEAVE;
         ui->model.overlay_selection = ui->model.disable_flag_present ? 2 : 0;
-        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "保存%s草稿后切换？",
+        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_SAVE_S_DRAFT_BEFORE_SWITCHING),
             bedtime_section_name(ui->model.bedtime_section));
         snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-            "保存并切换、放弃并切换，或继续编辑当前子页面。");
+            ptc_ui_text(PTC_UI_T_SAVE_AND_SWITCH_ABANDON_AND_SWITCH_OR));
         return;
     }
     ui->model.bedtime_section = (PtcUiBedtimeSection)section;
@@ -259,14 +259,14 @@ void select_bedtime_section(UiState *ui, int section)
 void open_bedtime_window_editor(UiState *ui, int weekday)
 {
     if (!ui || weekday < 0 || weekday >= 7) return;
-    static const char *WEEKDAY_NAMES[] = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+    const char *WEEKDAY_NAMES[] = {ptc_ui_text(PTC_UI_T_MONDAY), ptc_ui_text(PTC_UI_T_TUESDAY), ptc_ui_text(PTC_UI_T_WEDNESDAY), ptc_ui_text(PTC_UI_T_THURSDAY), ptc_ui_text(PTC_UI_T_FRIDAY), ptc_ui_text(PTC_UI_T_SATURDAY), ptc_ui_text(PTC_UI_T_SUNDAY)};
     ui->model.bedtime_editor_day = weekday;
     ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_WINDOW;
     ui->model.overlay_selection = 0;
     ui->model.confirm_hold_required = false;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s就寝时间窗口", WEEKDAY_NAMES[weekday]);
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_S_BEDTIME_WINDOW), WEEKDAY_NAMES[weekday]);
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-        "设定当晚至次日清晨的禁玩时段（必须跨越午夜）；到达开始时间立即强制暂停软件。");
+        ptc_ui_text(PTC_UI_T_SET_THE_NO_PLAY_PERIOD_FROM_THAT));
 }
 
 void open_bedtime_special_editor(UiState *ui, int kind)
@@ -277,10 +277,10 @@ void open_bedtime_special_editor(UiState *ui, int kind)
     ui->model.overlay_selection = 0;
     ui->model.confirm_hold_required = false;
     snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
-        kind == 0 ? "法定休假就寝规则" :
-        (kind == 1 ? "调休工作日就寝规则" : "指定日期就寝规则"));
+        kind == 0 ? ptc_ui_text(PTC_UI_T_LEGAL_VACATION_BEDTIME_RULES) :
+        (kind == 1 ? ptc_ui_text(PTC_UI_T_BEDTIME_RULES_FOR_REST_DAYS) : ptc_ui_text(PTC_UI_T_BEDTIME_RULES_ON_SPECIFIED_DAYS)));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-        "选择继承、关闭或自定义；自定义窗口必须跨越午夜且不能与相邻窗口重叠。");
+        ptc_ui_text(PTC_UI_T_SELECT_INHERIT_CLOSE_OR_CUSTOM_CUSTOM_WINDOWS));
 }
 
 void open_bedtime_time_editor(UiState *ui, PtcUiBedtimeTimeTarget target)
@@ -305,9 +305,9 @@ void open_bedtime_time_editor(UiState *ui, PtcUiBedtimeTimeTarget target)
         return;
     }
     ui->model.bedtime_editor_time_target = target;
-    title = target == PTC_UI_BEDTIME_TIME_START ? "设置就寝开始时间" : "设置次日结束时间";
+    title = target == PTC_UI_BEDTIME_TIME_START ? ptc_ui_text(PTC_UI_T_SET_BEDTIME_START_TIME) : ptc_ui_text(PTC_UI_T_SET_THE_END_TIME_OF_THE_NEXT);
     ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_BEDTIME_TIME, return_overlay,
-        title, "选择小时或分钟；右摇杆上下调整，长推加速", 4, 0, 1439,
+        title, ptc_ui_text(PTC_UI_T_SELECT_HOURS_OR_MINUTES_ADJUST_THE_RIGHT), 4, 0, 1439,
         target == PTC_UI_BEDTIME_TIME_START ? window->start_minute : window->end_minute);
 }
 
@@ -323,19 +323,19 @@ void request_bedtime_leave(UiState *ui, int target_page, bool leave_parent)
     ui->model.bedtime_switch_pending = false;
     ui->model.overlay = PTC_UI_OVERLAY_BEDTIME_LEAVE;
     ui->model.overlay_selection = ui->model.disable_flag_present ? 2 : 0;
-    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "离开%s编辑？",
+    snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_LEAVE_S_EDITING),
         bedtime_section_name(ui->model.bedtime_section));
     snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
         ui->model.disable_flag_present
-            ? "紧急停用期间不能保存；可继续编辑或放弃草稿后离开。"
-            : "请选择保存当前子页面并离开、放弃修改并离开，或继续编辑。");
+            ? ptc_ui_text(PTC_UI_T_CANNOT_SAVE_DURING_EMERGENCY_SHUTDOWN_YOU_CAN)
+            : ptc_ui_text(PTC_UI_T_PLEASE_CHOOSE_TO_SAVE_THE_CURRENT_SUBPAGE));
 }
 
 void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
 {
     if (ui->waiting) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "请等待当前设置保存完成后再离开页面。");
+                 ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_SETTINGS_ARE));
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_SUPPORT &&
@@ -351,17 +351,17 @@ void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
         refresh_disable_flag(ui);
         ui->model.weekly_leave_selection = ui->model.disable_flag_present ? 2 : 1;
         if (!leave_parent && target_page == PTC_UI_PARENT_PLAN) {
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "刷新周计划？");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_REFRESH_WEEKLY_PLAN));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
                      ui->model.disable_flag_present
-                       ? "紧急停用期间不能保存；请选择保留草稿并刷新、放弃草稿并刷新，或返回。"
-                       : "刷新会读取已保存的周计划；请选择先保存、放弃草稿并刷新，或返回编辑。");
+                       ? ptc_ui_text(PTC_UI_T_CANNOT_SAVE_DURING_EMERGENCY_SHUTDOWN_CHOOSE_TO)
+                       : ptc_ui_text(PTC_UI_T_REFRESH_WILL_READ_THE_SAVED_WEEKLY_PLAN));
         } else {
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "离开周计划？");
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_AWAY_WEEK_PLANS));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body), "%s",
                      ui->model.disable_flag_present
-                       ? "紧急停用期间不能保存；请选择保留草稿并离开、放弃草稿并离开，或返回。"
-                       : "请选择保存修改、放弃修改，或返回继续编辑。");
+                       ? ptc_ui_text(PTC_UI_T_CANNOT_SAVE_DURING_EMERGENCY_SHUTDOWN_CHOOSE_TO_2)
+                       : ptc_ui_text(PTC_UI_T_PLEASE_CHOOSE_TO_SAVE_CHANGES_ABANDON_CHANGES));
         }
         return;
     }
@@ -371,9 +371,9 @@ void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
         ui->pending_leave_parent = leave_parent;
         ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_LEAVE;
         ui->model.holiday_leave_selection = 1;
-        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "离开国家节假日设置？");
+        snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_LEAVE_COUNTRY_HOLIDAY_SETTINGS));
         snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                 "这里还有尚未保存的更改。继续编辑可以保留内容；放弃更改后再离开。");
+                 ptc_ui_text(PTC_UI_T_THERE_ARE_UNSAVED_CHANGES_HERE_CONTINUE_EDITING));
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_PLAN &&

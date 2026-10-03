@@ -1,5 +1,6 @@
 #include "ui_state.h"
 #include "ui_layout.h"
+#include "../ui_language.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -70,24 +71,24 @@ const char *ptc_ui_today_action_unavailable_reason(const PtcUiModel *model,
 {
     if (!ptc_ui_status_is_fresh(model, now)) return NULL;
     if (index == 1 && model->unrestricted_today == 1)
-        return "今日不限时，无需加时";
+        return ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_NO_GRANT_REQUIRED);
     if (index != 4) return NULL;
     if (!model->bedtime_policy.enabled)
-        return "就寝计划已关闭，无可跳过时段";
+        return ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE_IS_TURNED_OFF_NO_SKIP);
     if (model->bedtime_active) {
-        if (model->bedtime_skipped) return "本次就寝已跳过";
+        if (model->bedtime_skipped) return ptc_ui_text(PTC_UI_T_THIS_BEDTIME_HAS_BEEN_SKIPPED);
         return model->bedtime_window_instance_id != 0 ? NULL :
-            "当前没有可跳过的就寝时段";
+            ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_SKIPPABLE_BEDTIME_PERIODS);
     }
     if (model->bedtime_next_available && model->bedtime_next_window_instance_id != 0) {
         if (model->bedtime_skipped_window_available &&
             model->bedtime_next_window_instance_id == model->bedtime_skipped_window_instance_id)
-            return "本次就寝已跳过";
+            return ptc_ui_text(PTC_UI_T_THIS_BEDTIME_HAS_BEEN_SKIPPED);
         return NULL;
     }
     if (ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy))
-        return "本次就寝已跳过";
-    return "当前没有可跳过的就寝时段";
+        return ptc_ui_text(PTC_UI_T_THIS_BEDTIME_HAS_BEEN_SKIPPED);
+    return ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_SKIPPABLE_BEDTIME_PERIODS);
 }
 
 void ptc_ui_quota_recheck_snapshot(const PtcUiModel *model,
@@ -155,25 +156,25 @@ bool ptc_ui_operation_feedback_visible(const PtcUiModel *model)
         model->feedback_detail[0]) return true;
     return strcmp(model->result_status, "ok") == 0 && model->message[0] &&
         model->command_name[0] &&
-        strcmp(model->command_name, "刷新状态") != 0 &&
-        strcmp(model->command_name, "未开始") != 0;
+        strcmp(model->command_name, ptc_ui_text(PTC_UI_T_REFRESH_STATUS)) != 0 &&
+        strcmp(model->command_name, ptc_ui_text(PTC_UI_T_NOT_STARTED)) != 0;
 }
 
 const char *ptc_ui_runtime_notice_summary(const PtcUiModel *model)
 {
     if (!model) return "";
-    if (model->disable_flag_present) return "控制已停用，请家长到支持与恢复处理";
-    if (model->recovery_active) return "正在恢复设置，请等待恢复完成";
+    if (model->disable_flag_present) return ptc_ui_text(PTC_UI_T_CONTROL_HAS_BEEN_DEACTIVATED_PLEASE_CONTACT_SUPPORT);
+    if (model->recovery_active) return ptc_ui_text(PTC_UI_T_SETTINGS_ARE_BEING_RESTORED_PLEASE_WAIT_FOR);
     if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0)
-        return "需要家长处理，请进入支持与恢复";
+        return ptc_ui_text(PTC_UI_T_NEEDS_PARENTAL_PROCESSING_PLEASE_ENTER_SUPPORT_AND);
     if (model->restriction_enabled_available && !model->restriction_enabled)
-        return "Nintendo 家长控制未启用，请家长检查系统设置";
+        return ptc_ui_text(PTC_UI_T_NINTENDO_PARENTAL_CONTROLS_ARE_NOT_ENABLED_PLEASE);
     if (model->temporary_unlocked_available && model->temporary_unlocked)
-        return "临时解除期间不计时，进入睡眠后恢复今日限制";
-    if (model->apply_pending_confirmation) return "设置等待确认生效，请稍候";
-    if (model->restricted_now == 1) return "已进入时间限制，可兑换加时码或请家长调整额度";
+        return ptc_ui_text(PTC_UI_T_THERE_IS_NO_TIMER_DURING_THE_TEMPORARY);
+    if (model->apply_pending_confirmation) return ptc_ui_text(PTC_UI_T_THE_SETTING_IS_WAITING_FOR_CONFIRMATION_TO);
+    if (model->restricted_now == 1) return ptc_ui_text(PTC_UI_T_HAS_ENTERED_THE_TIME_LIMIT_YOU_CAN);
     if (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1)
-        return "额度已用完，限制可能即将生效，可兑换加时码";
+        return ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_USED_UP_RESTRICTIONS);
     return "";
 }
 
@@ -194,9 +195,9 @@ void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out)
 
     if (runtime[0]) snprintf(out->summary, sizeof(out->summary), "%s", runtime);
     else if (model->message[0]) snprintf(out->summary, sizeof(out->summary), "%s", model->message);
-    else if (error) snprintf(out->summary, sizeof(out->summary), "操作未完成");
-    else if (model->waiting) snprintf(out->summary, sizeof(out->summary), "正在同步，请稍候");
-    else snprintf(out->summary, sizeof(out->summary), "状态已更新");
+    else if (error) snprintf(out->summary, sizeof(out->summary), ptc_ui_text(PTC_UI_T_OPERATION_INCOMPLETE));
+    else if (model->waiting) snprintf(out->summary, sizeof(out->summary), ptc_ui_text(PTC_UI_T_SYNCHRONIZING_PLEASE_WAIT));
+    else snprintf(out->summary, sizeof(out->summary), ptc_ui_text(PTC_UI_T_STATUS_UPDATED));
 
     if (error || model->disable_flag_present || model->restricted_now == 1 ||
         (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1) ||
@@ -210,29 +211,29 @@ void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out)
         snprintf(out->details, sizeof(out->details), "%s", model->feedback_detail);
     } else if (error) {
         snprintf(out->details, sizeof(out->details),
-                 "可先按 Y 刷新状态；如果仍然失败，请进入支持与恢复查看当前问题和诊断信息。");
+                 ptc_ui_text(PTC_UI_T_Y));
     } else if (model->disable_flag_present) {
         snprintf(out->details, sizeof(out->details),
-                 "已停止更新额度设置。请进入支持与恢复，完成安全检查后解除停用并重新启用。");
+                 ptc_ui_text(PTC_UI_T_STOPPED_UPDATING_THE_QUOTA_SETTING_PLEASE_GO));
     } else if (model->recovery_active) {
         snprintf(out->details, sizeof(out->details),
-                 "后台正在恢复此前设置。恢复完成前请勿重复提交，状态和诊断仍可继续刷新。");
+                 ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_RESTORING_PREVIOUS_SETTINGS_PLEASE));
     } else if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
         snprintf(out->details, sizeof(out->details),
-                 "请进入支持与恢复查看当前问题，并按页面建议重新检测、修复或导出诊断。");
+                 ptc_ui_text(PTC_UI_T_PLEASE_GO_TO_SUPPORT_AND_RECOVERY_TO));
     } else if (model->restriction_enabled_available && !model->restriction_enabled) {
         snprintf(out->details, sizeof(out->details),
-                 "请检查 Nintendo 系统家长控制是否已启用，再返回 PlayWise 刷新状态。");
+                 ptc_ui_text(PTC_UI_T_PLEASE_CHECK_WHETHER_NINTENDO_SYSTEM_PARENTAL_CONTROLS));
     } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
         snprintf(out->details, sizeof(out->details),
-                 "系统临时解除期间不会累计今日计时；主机进入睡眠后会恢复今日限制。");
+                 ptc_ui_text(PTC_UI_T_TODAY_S_TIME_WILL_NOT_BE_ACCUMULATED));
     } else if (model->apply_pending_confirmation) {
         snprintf(out->details, sizeof(out->details),
-                 "后台正在确认设置是否已经生效。完成前请勿重复提交，可稍后按 Y 刷新。");
+                 ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_CONFIRMING_WHETHER_THE_SETTINGS));
     } else if (model->restricted_now == 1 ||
                (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1)) {
         snprintf(out->details, sizeof(out->details),
-                 "可以兑换加时码，或由家长调整今日额度、临时加时或设为今日不限时。");
+                 ptc_ui_text(PTC_UI_T_MESSAGE_7));
     }
     out->has_details = out->details[0] != '\0';
 }
@@ -247,70 +248,74 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
     if (!out) return;
     memset(out, 0, sizeof(*out));
     snprintf(out->clock_text, sizeof(out->clock_text), "--:--");
-    snprintf(out->date_text, sizeof(out->date_text), "--月--日");
-    snprintf(out->remaining_text, sizeof(out->remaining_text), "状态待确认");
-    snprintf(out->freshness_text, sizeof(out->freshness_text), "等待刷新");
+    snprintf(out->date_text, sizeof(out->date_text), ptc_ui_text(PTC_UI_T_MESSAGE_6));
+    snprintf(out->remaining_text, sizeof(out->remaining_text), ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+    snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_AWAITING_REFRESH));
     out->state = PTC_UI_TIME_UNKNOWN;
     local = localtime(&clock_value);
     if (local) {
-        static const char *const WEEKDAYS[7] = {
-            "周日", "周一", "周二", "周三", "周四", "周五", "周六"
-        };
         int wday = (local->tm_wday >= 0 && local->tm_wday < 7) ? local->tm_wday : 0;
         snprintf(out->clock_text, sizeof(out->clock_text), "%02d:%02d",
                  local->tm_hour, local->tm_min);
-        snprintf(out->date_text, sizeof(out->date_text), "%d月%d日 %s",
-                 local->tm_mon + 1, local->tm_mday, WEEKDAYS[wday]);
-    } else if (model && model->status_loaded && model->day_index > 0) {
-        static const char *const WEEKDAYS[7] = {
-            "周日", "周一", "周二", "周三", "周四", "周五", "周六"
+        PtcUiTextArg date_args[] = {
+            PTC_UI_TEXT_NUMBER("month", local->tm_mon + 1),
+            PTC_UI_TEXT_NUMBER("day", local->tm_mday),
+            PTC_UI_TEXT_STRING("weekday", ptc_ui_weekday_label((unsigned)wday))
         };
+        (void)ptc_ui_text_format(PTC_UI_T_STATUS_DATE_NAMED, out->date_text,
+                                 sizeof(out->date_text), date_args, 3);
+    } else if (model && model->status_loaded && model->day_index > 0) {
         uint16_t y = 0;
         uint8_t m = 0, d = 0;
         if (ptc_date_from_day_index(model->day_index, &y, &m, &d)) {
             uint8_t w = ptc_weekday_from_day_index(model->day_index);
-            snprintf(out->date_text, sizeof(out->date_text), "%u月%u日 %s",
-                     (unsigned int)m, (unsigned int)d, WEEKDAYS[w % 7]);
+            PtcUiTextArg date_args[] = {
+                PTC_UI_TEXT_NUMBER("month", m), PTC_UI_TEXT_NUMBER("day", d),
+                PTC_UI_TEXT_STRING("weekday", ptc_ui_weekday_label(w % 7))
+            };
+            (void)ptc_ui_text_format(PTC_UI_T_STATUS_DATE_NAMED, out->date_text,
+                                     sizeof(out->date_text), date_args, 3);
         }
     }
     if (!model) return;
 
     age = ptc_ui_status_age_seconds(model, now);
     if (model->waiting) {
-        snprintf(out->freshness_text, sizeof(out->freshness_text), "正在同步");
+        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_SYNCING));
         out->state = PTC_UI_TIME_WAITING;
     } else if (!model->status_loaded) {
-        snprintf(out->remaining_text, sizeof(out->remaining_text), "尚未获取状态｜按 Y 刷新");
+        snprintf(out->remaining_text, sizeof(out->remaining_text), ptc_ui_text(PTC_UI_T_NO_STATUS_YET_PRESS_Y_TO_REFRESH));
         snprintf(out->freshness_text, sizeof(out->freshness_text),
                  model->error_code || strcmp(model->result_status, "error") == 0
-                     ? "暂不可用" : "等待刷新");
+                     ? (ptc_ui_text(PTC_UI_T_UNAVAILABLE)) : (ptc_ui_text(PTC_UI_T_AWAITING_REFRESH)));
     } else if (!ptc_ui_status_is_fresh(model, now)) {
         snprintf(out->freshness_text, sizeof(out->freshness_text),
                  model->error_code || strcmp(model->result_status, "error") == 0
-                     ? "刷新失败" : "状态待确认");
+                     ? (ptc_ui_text(PTC_UI_T_REFRESH_FAILED)) : (ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM)));
         if (age >= 0 && !(model->error_code || strcmp(model->result_status, "error") == 0)) {
             if (age < 3600) snprintf(out->freshness_text, sizeof(out->freshness_text),
-                                     "%lld 分前确认", (long long)(age / 60));
+                                     ptc_ui_text(PTC_UI_T_CONFIRMED_LLDM_AGO), (long long)(age / 60));
             else snprintf(out->freshness_text, sizeof(out->freshness_text),
-                          "%lld 小时前确认", (long long)(age / 3600));
+                          ptc_ui_text(PTC_UI_T_CONFIRMED_LLDH_AGO), (long long)(age / 3600));
         }
     } else if (age <= 0) {
-        snprintf(out->freshness_text, sizeof(out->freshness_text), "刚刚更新");
+        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_JUST_UPDATED));
     } else {
-        snprintf(out->freshness_text, sizeof(out->freshness_text), "%lld 秒前更新",
+        snprintf(out->freshness_text, sizeof(out->freshness_text),
+                 ptc_ui_text(PTC_UI_T_UPDATED_LLDS_AGO),
                  (long long)age);
     }
 
     if (model->status_loaded && !ptc_ui_status_is_fresh(model, now)) {
-        const char *last = model->bedtime_active && !model->bedtime_skipped ? "就寝限制" :
-            (model->unrestricted_today == 1 ? "不限时" :
-             (model->limited_today == 1 ? "限时" : "状态未知"));
+        const char *last = model->bedtime_active && !model->bedtime_skipped ? (ptc_ui_text(PTC_UI_T_BEDTIME_2)) :
+            (model->unrestricted_today == 1 ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED)) :
+             (model->limited_today == 1 ? (ptc_ui_text(PTC_UI_T_LIMITED)) : (ptc_ui_text(PTC_UI_T_UNKNOWN_2))));
         snprintf(out->remaining_text, sizeof(out->remaining_text),
-                 "上次确认：%s｜按 Y 刷新确认", last);
+                 ptc_ui_text(PTC_UI_T_LAST_CONFIRMED_S_PRESS_Y_TO_REFRESH), last);
     }
     if (ptc_ui_status_is_fresh(model, now)) {
         if (model->unrestricted_today == 1) {
-            snprintf(out->remaining_text, sizeof(out->remaining_text), "今天还可玩：不限时");
+            snprintf(out->remaining_text, sizeof(out->remaining_text), ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED));
             out->progress_available = true;
             out->progress_per_mille = 1000;
             out->state = PTC_UI_TIME_UNLIMITED;
@@ -320,7 +325,8 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
             remaining = model->remaining_minutes;
             total = model->forecast[0].minutes;
             if (total > 0) {
-                snprintf(out->remaining_text, sizeof(out->remaining_text), "今天还可玩：%d 分钟", remaining);
+                snprintf(out->remaining_text, sizeof(out->remaining_text),
+                         ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_D_MIN), remaining);
                 out->progress_available = true;
                 if (remaining >= total) out->progress_per_mille = 1000;
                 else out->progress_per_mille = (uint16_t)(remaining * 1000 / total);
@@ -330,7 +336,7 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
                 else out->state = PTC_UI_TIME_NORMAL;
             }
         } else {
-            snprintf(out->remaining_text, sizeof(out->remaining_text), "状态待确认");
+            snprintf(out->remaining_text, sizeof(out->remaining_text), ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
         }
     }
 
@@ -338,17 +344,17 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
        they never manufacture a countdown or a zero value. */
     if (model->recovery_active) {
         out->state = PTC_UI_TIME_RECOVERY;
-        snprintf(out->freshness_text, sizeof(out->freshness_text), "恢复中");
+        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_ADJUST_BADGE_RECOVERING));
     } else if (strcmp(model->setup_phase, "protection") == 0 ||
                strcmp(model->setup_phase, "failed") == 0) {
         out->state = PTC_UI_TIME_PROTECTION;
-        snprintf(out->freshness_text, sizeof(out->freshness_text), "保护中");
+        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_PROTECTION));
     } else if (model->disable_flag_present) {
         out->state = PTC_UI_TIME_DISABLED;
-        snprintf(out->freshness_text, sizeof(out->freshness_text), "控制已停用");
+        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_DISABLED_3));
     } else if (model->temporary_unlocked_available && model->temporary_unlocked) {
         out->state = PTC_UI_TIME_TEMPORARY_UNLOCK;
-        snprintf(out->freshness_text, sizeof(out->freshness_text), "临时解除中");
+        snprintf(out->freshness_text, sizeof(out->freshness_text), ptc_ui_text(PTC_UI_T_UNLOCKED));
     } else if (model->waiting) {
         out->state = PTC_UI_TIME_WAITING;
     }
@@ -358,13 +364,14 @@ void ptc_ui_format_status_age(const PtcUiModel *model, int64_t now, char *out, s
 {
     int64_t age = ptc_ui_status_age_seconds(model, now);
     if (!out || !out_size) return;
-    if (!model || !model->status_loaded) snprintf(out, out_size, "等待刷新");
-    else if (model->waiting) snprintf(out, out_size, "正在刷新状态...");
-    else if (!ptc_ui_status_is_fresh(model, now)) snprintf(out, out_size, "状态待确认，请刷新");
-    else if (age == 0) snprintf(out, out_size, "刚刚刷新");
-    else if (age < 60) snprintf(out, out_size, "上次刷新：%lld 秒前", (long long)age);
-    else snprintf(out, out_size, "上次刷新：%lld 分钟前", (long long)(age / 60));
+    if (!model || !model->status_loaded) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_AWAITING_REFRESH));
+    else if (model->waiting) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_REFRESHING_STATUS));
+    else if (!ptc_ui_status_is_fresh(model, now)) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_PLEASE_REFRESH));
+    else if (age == 0) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_JUST_REFRESHED));
+    else if (age < 60) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_LAST_REFRESHED_LLDS_AGO), (long long)age);
+    else snprintf(out, out_size, ptc_ui_text(PTC_UI_T_LAST_REFRESHED_LLDM_AGO), (long long)(age / 60));
 }
+
 
 void ptc_ui_format_code(const char *code, char *out, size_t out_size)
 {
@@ -379,25 +386,25 @@ const char *ptc_ui_code_failure_guidance(int error_code)
 {
     switch (error_code) {
     case PTC_ERR_USED_TOKEN:
-        return "这枚代码已使用，请家长生成另一枚代码；返回后输入新码。";
+        return ptc_ui_text(PTC_UI_T_THIS_CODE_HAS_BEEN_USED_PLEASE_GENERATE);
     case PTC_ERR_WRONG_DATE:
-        return "代码日期与主机不一致，请刷新主机日期，再请家长按这一天生成新码。";
+        return ptc_ui_text(PTC_UI_T_THE_CODE_DATE_IS_INCONSISTENT_WITH_THE);
     case PTC_ERR_BAD_CLOCK:
-        return "主机日期无法确认，请家长检查系统日期，返回刷新后再试。";
+        return ptc_ui_text(PTC_UI_T_THE_HOST_DATE_CANNOT_BE_CONFIRMED_PARENTS);
     case PTC_ERR_BAD_CODE:
     case PTC_ERR_BAD_TOKEN_VERSION:
     case PTC_ERR_UNSUPPORTED_TOKEN_ACTION:
     case PTC_ERR_BAD_SIGNATURE:
-        return "代码未通过验证，请核对 8 位数字；仍失败时请家长核对设备并生成新码。";
+        return ptc_ui_text(PTC_UI_T_THE_CODE_DOES_NOT_PASS_VERIFICATION_PLEASE);
     case PTC_ERR_MINUTES_EXCEED_LIMIT:
-        return "代码时长超过允许上限，请家长选择较短时长生成新码。";
+        return ptc_ui_text(PTC_UI_T_THE_CODE_DURATION_EXCEEDS_THE_ALLOWED_LIMIT);
     case PTC_ERR_CODE_COOLDOWN:
-        return "输入尝试过多，请稍候再输入；等待期间可返回孩子区。";
+        return ptc_ui_text(PTC_UI_T_TOO_MANY_INPUT_ATTEMPTS_PLEASE_WAIT_AND);
     case PTC_ERR_STORAGE_READ_FAILED:
     case PTC_ERR_STORAGE_WRITE_FAILED:
-        return "读写未完成，请家长检查 SD 卡空间，并到设置的支持与恢复中确认状态。";
+        return ptc_ui_text(PTC_UI_T_READING_AND_WRITING_ARE_NOT_COMPLETED_PLEASE);
     default:
-        return "兑换未完成，请家长到设置的支持与恢复查看原因，恢复正常后再试。";
+        return ptc_ui_text(PTC_UI_T_THE_EXCHANGE_IS_NOT_COMPLETED_PARENTS_PLEASE);
     }
 }
 
@@ -405,18 +412,18 @@ void ptc_ui_format_today_mode(const PtcUiModel *model, char *out, size_t out_siz
 {
     if (!out || out_size == 0) return;
     if (!model || !model->status_loaded) {
-        snprintf(out, out_size, "等待刷新");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_AWAITING_REFRESH));
     } else if (model->blocked_today == 1) {
-        snprintf(out, out_size, "禁止游玩");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_PLAY_BLOCKED));
     } else if (model->unrestricted_today == 1) {
-        snprintf(out, out_size, "不限时");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
     } else if (model->limited_today == 1) {
         snprintf(out, out_size,
                  model->remaining_available && model->remaining_minutes <= 0
-                     ? "限时 | 额度用完"
-                     : "限时");
+                     ? (ptc_ui_text(PTC_UI_T_LIMITED_EXHAUSTED))
+                     : (ptc_ui_text(PTC_UI_T_LIMITED)));
     } else {
-        snprintf(out, out_size, "状态未知");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN));
     }
 }
 
@@ -426,11 +433,11 @@ void ptc_ui_format_quota_remaining(const PtcUiModel *model, char *out, size_t ou
     if (!model || !model->status_loaded) {
         snprintf(out, out_size, "--");
     } else if (model->unrestricted_today == 1) {
-        snprintf(out, out_size, "不限时");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
     } else if (model->remaining_available && model->remaining_minutes >= 0) {
-        snprintf(out, out_size, "%d 分钟", model->remaining_minutes);
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_D_MIN), model->remaining_minutes);
     } else {
-        snprintf(out, out_size, "暂不可用");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_UNAVAILABLE));
     }
 }
 
@@ -438,13 +445,13 @@ void ptc_ui_format_timer_status(const PtcUiModel *model, char *out, size_t out_s
 {
     if (!out || out_size == 0) return;
     if (!model || model->play_timer_enabled < 0) {
-        snprintf(out, out_size, "未确认");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_UNCONFIRMED));
     } else if (model->play_timer_enabled == 1) {
-        snprintf(out, out_size, "已计时");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_TIMING));
     } else if (model->unrestricted_today == 1) {
-        snprintf(out, out_size, "无需计时");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NO_TIMER));
     } else {
-        snprintf(out, out_size, "未计时");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NOT_TIMED));
     }
 }
 
@@ -459,10 +466,10 @@ void ptc_ui_format_console_date(const PtcUiModel *model, char *out, size_t out_s
        sysmodule does not accept. */
     if (!model || !model->status_loaded ||
         !ptc_date_from_day_index(model->day_index, &year, &month, &day)) {
-        snprintf(out, out_size, "主机日期待刷新");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_CONSOLE_DATE_PENDING));
         return;
     }
-    snprintf(out, out_size, "主机今天 %04u-%02u-%02u",
+    snprintf(out, out_size, ptc_ui_text(PTC_UI_T_CONSOLE_TODAY_04U_02U_02U),
              (unsigned int)year, (unsigned int)month, (unsigned int)day);
 }
 
@@ -480,77 +487,81 @@ void ptc_ui_format_parent_status_summary(
     }
     out[0] = '\0';
     if (!model) {
-        snprintf(out, out_size, "? 状态待确认  |  尚无可靠读数");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_NO_RELIABLE_READING));
         return;
     }
     age = ptc_ui_status_age_seconds(model, now);
     if (strcmp(model->setup_phase, "protection") == 0 || strcmp(model->setup_phase, "failed") == 0) {
-        snprintf(out, out_size, "! 保护模式  |  需要处理");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_PROTECTION_MODE_ACTION_REQUIRED));
         return;
     }
     if (model->recovery_active) {
-        snprintf(out, out_size, "! 恢复尚未完成  |  查看详情");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RECOVERY_INCOMPLETE_VIEW_DETAILS));
         return;
     }
     if (model->disable_flag_present) {
-        snprintf(out, out_size, "! 紧急停用  |  控制写入已停止");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_EMERGENCY_DISABLED_CONTROL_WRITING_STOPPED));
         return;
     }
     if (model->restriction_enabled_available && !model->restriction_enabled) {
-        snprintf(out, out_size, "! Nintendo 家长控制未启用");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NINTENDO_PARENTAL_CONTROLS_NOT_ENABLED));
         return;
     }
     if (model->temporary_unlocked_available && model->temporary_unlocked) {
-        snprintf(out, out_size, "! 系统限制临时解除  |  期间不计时，进入睡眠后恢复今日限制");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_SYSTEM_RESTRICTION_UNLOCKED_NO_TIMER_UNTIL_SLEEP));
         return;
     }
     if (model->apply_pending_confirmation) {
-        snprintf(out, out_size, "... 设置等待确认生效");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_SETTINGS_AWAITING_CONFIRMATION));
         return;
     }
     if (model->waiting) {
-        snprintf(out, out_size, "... 正在检测当前状态");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_CHECKING_CURRENT_STATUS));
         return;
     }
     if (!ptc_ui_status_is_fresh(model, now)) {
-        if (age < 0) snprintf(out, out_size, "? 状态待确认  |  尚无可靠读数");
-        else if (age < 3600) snprintf(out, out_size, "? 状态待确认  |  上次成功于 %lld 分钟前", (long long)(age / 60));
-        else if (age < 86400) snprintf(out, out_size, "? 状态待确认  |  上次成功于 %lld 小时前", (long long)(age / 3600));
-        else snprintf(out, out_size, "? 状态待确认  |  上次成功超过一天");
+        if (age < 0) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_NO_RELIABLE_READING));
+        else if (age < 3600) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_LAST_SUCCESS_LLDM_AGO), (long long)(age / 60));
+        else if (age < 86400) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_LAST_SUCCESS_LLDH_AGO), (long long)(age / 3600));
+        else snprintf(out, out_size, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM_LAST_SUCCESS_OVER_1));
         return;
     }
     if (model->restricted_now == 1 || model->blocked_today == 1 ||
         (model->remaining_available && model->remaining_minutes <= 0)) {
-        snprintf(out, out_size, "! 已到限制  |  今日时间已用完  |  刚刚同步");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_LIMIT_REACHED_TODAY_QUOTA_EXHAUSTED_JUST_SYNCED));
         return;
     }
-    if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "今天还可玩：不限时");
-    else if (model->remaining_available) snprintf(remaining, sizeof(remaining), "今天还可玩 %d 分钟", model->remaining_minutes);
-    else snprintf(remaining, sizeof(remaining), "今天还可玩：暂不可用");
-    if (age <= 30) snprintf(freshness, sizeof(freshness), "刚刚同步");
-    else if (age < 60) snprintf(freshness, sizeof(freshness), "%lld 秒前", (long long)age);
-    else snprintf(freshness, sizeof(freshness), "%lld 分钟前", (long long)(age / 60));
-    snprintf(out, out_size, "控制正常  |  %s  |  %s", remaining, freshness);
+    if (model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED));
+    else if (model->remaining_available) snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_D_MIN_AVAILABLE_TODAY), model->remaining_minutes);
+    else snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNAVAILABLE));
+    if (age <= 30) snprintf(freshness, sizeof(freshness), ptc_ui_text(PTC_UI_T_JUST_SYNCED));
+    else if (age < 60) snprintf(freshness, sizeof(freshness), ptc_ui_text(PTC_UI_T_LLDS_AGO), (long long)age);
+    else snprintf(freshness, sizeof(freshness), ptc_ui_text(PTC_UI_T_LLDM_AGO), (long long)(age / 60));
+    snprintf(out, out_size, ptc_ui_text(PTC_UI_T_CONTROL_NORMAL_S_S), remaining, freshness);
 }
 
 void ptc_ui_format_holiday_priority_summary(const PtcUiModel *model, char *out, size_t out_size)
 {
     if (!out || out_size == 0) return;
+    PtcUiTextId text_id;
     if (!model) {
-        snprintf(out, out_size, "当前原因：状态尚未刷新");
+        text_id = PTC_UI_T_HOLIDAY_PRIORITY_PENDING;
     } else if (model->today_override_present) {
-        snprintf(out, out_size, "当前原因：优先采用今日额度调整");
+        text_id = PTC_UI_T_HOLIDAY_PRIORITY_TODAY;
     } else if (strcmp(model->rule_source, "scheduled_override") == 0) {
-        snprintf(out, out_size, "当前原因：优先采用指定日期额度");
+        text_id = PTC_UI_T_HOLIDAY_PRIORITY_SCHEDULED;
     } else if (!model->holiday_enabled) {
-        snprintf(out, out_size, "当前原因：节假日设置未开启，改用周计划");
+        text_id = PTC_UI_T_HOLIDAY_PRIORITY_DISABLED;
     } else if (!model->calendar_covered) {
-        snprintf(out, out_size, "当前原因：日期不在内置日历范围内，改用周计划");
+        text_id = PTC_UI_T_HOLIDAY_PRIORITY_UNCOVERED;
     } else if (strcmp(model->rule_source, "statutory_holiday") == 0) {
-        snprintf(out, out_size, "当前原因：今天是法定休假日，采用节假日设置");
+        text_id = PTC_UI_T_HOLIDAY_PRIORITY_HOLIDAY;
     } else if (strcmp(model->rule_source, "makeup_workday") == 0) {
-        snprintf(out, out_size, "当前原因：今天是调休工作日，采用节假日设置");
+        text_id = PTC_UI_T_HOLIDAY_PRIORITY_MAKEUP;
     } else {
-        snprintf(out, out_size, "当前原因：今天是普通日期，采用周计划");
+        text_id = PTC_UI_T_HOLIDAY_PRIORITY_WEEKLY;
     }
+    snprintf(out, out_size, "%s", ptc_ui_text(text_id));
 }
+
+\n

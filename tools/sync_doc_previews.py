@@ -58,8 +58,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Fail when documented screenshots differ from generated scenes")
     args = parser.parse_args()
-    changed = synchronize(ROOT / "build" / "ui-previews", ROOT / "docs" / "images" / "usage", check=args.check)
-    print(f"PASS: {len(PREVIEW_FILES)} documented UI previews checked; {changed} updated")
+    changed_zh = synchronize(ROOT / "build" / "ui-previews", ROOT / "docs" / "images" / "usage", check=args.check)
+    changed_en = synchronize(ROOT / "build" / "ui-previews" / "en", ROOT / "docs" / "images" / "usage-en", check=args.check)
+    changed = changed_zh + changed_en
+    print(f"PASS: {len(PREVIEW_FILES) * 2} documented UI previews checked ({len(PREVIEW_FILES)} zh + {len(PREVIEW_FILES)} en); {changed} updated")
     return 0
 
 

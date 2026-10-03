@@ -49,7 +49,7 @@
       <section class="pairing-tools" aria-labelledby="pairingTitle">
         <div>
           <h2 id="pairingTitle" data-i18n="pairing_title">配对 Switch</h2>
-          <p data-i18n-html="pairing_p">可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证 PIN；导出成功后，从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
+          <p data-i18n-html="pairing_p">可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证家长密码；导出成功后，从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
         </div>
         <label class="file-button secondary compact">
           <span data-i18n="import_file_button">导入配置文件</span>
@@ -116,7 +116,7 @@
         <h3 data-i18n="faq_5_title">紧急停用已开启</h3>
         <p data-i18n="faq_5_p">紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。</p>
         <h3 data-i18n="faq_6_title">进一步诊断</h3>
-        <p data-i18n-html="faq_6_p">诊断导出只包含白名单状态，不包含密钥、PIN、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。</p>
+        <p data-i18n-html="faq_6_p">诊断导出只包含白名单状态，不包含密钥、家长密码、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。</p>
       </details>
     </section>
   </main>

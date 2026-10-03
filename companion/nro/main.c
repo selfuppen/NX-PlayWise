@@ -34,11 +34,11 @@ static void run_console_fallback(void)
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&pad);
     g_active_pad = &pad;
-    printf("任我玩\n");
+    printf(ptc_ui_text(PTC_UI_T_PLAYWISE_2));
     printf("Play Wise. Play More.\n\n");
-    printf("图形界面初始化失败。\n");
-    printf("请确认系统共享中文字体和 FreeType 运行环境可用。\n\n");
-    printf("按 + 退出。\n");
+    printf(ptc_ui_text(PTC_UI_T_FAILED_TO_INITIALIZE_GRAPHICS));
+    printf(ptc_ui_text(PTC_UI_T_CHECK_THAT_THE_SHARED_SYSTEM_FONT_AND));
+    printf(ptc_ui_text(PTC_UI_T_PRESS_TO_EXIT));
     while (appletMainLoop()) {
         padUpdate(&pad);
         if (padGetButtonsDown(&pad) & HidNpadButton_Plus) {
@@ -101,7 +101,7 @@ int main(int argc, char **argv)
     ui.model.play_timer_enabled = -1;
     ui.model.restricted_now = -1;
     ptc_ui_set_execution(&ui.model, NULL, NULL);
-    snprintf(ui.model.message, sizeof(ui.model.message), "正在读取今天的游玩状态...");
+    snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_READING_TODAY_S_GAME_STATUS));
     ptc_fs_storage_init(&fs);
 #ifndef PLAYWISE_EDEN
     ptc_hot_reload_init(&ui.hot_reload);
@@ -144,14 +144,14 @@ int main(int argc, char **argv)
 #endif
     ) {
         snprintf(ui.model.message, sizeof(ui.model.message),
-                 "安装数据初始化失败，请重新覆盖安装包并确认 SD 卡可写。");
+                 ptc_ui_text(PTC_UI_T_THE_INSTALLATION_DATA_INITIALIZATION_FAILED_PLEASE_OVERWRITE));
     }
 #ifndef PLAYWISE_EDEN
     else if (ui.hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED) {
         snprintf(ui.model.message, sizeof(ui.model.message), "%s", ui.hot_reload.detail);
     } else if (!backend_expected) {
         snprintf(ui.model.message, sizeof(ui.model.message),
-                 "标准后台启动标志当前未启用。请先用 Device Lab 恢复正常后台并完整重启主机。");
+                 ptc_ui_text(PTC_UI_T_THE_STANDARD_BACKGROUND_STARTUP_FLAG_IS_NOT));
     }
 #endif
     else if (!restore_pending_redemption(&ui)) {
@@ -341,7 +341,7 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_A) {
                 if (ui.waiting) {
                     ptc_audio_play(PTC_SE_ERROR);
-                    snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再提交加时码。");
+                    snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_FOR_THE_CURRENT_OPERATION_TO));
                 } else {
                     ptc_audio_play(PTC_SE_CONFIRM);
                     open_offline_code_input(&ui);
@@ -355,19 +355,19 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_X) {
                 if (ui.model.disable_flag_present) {
                     ptc_audio_play(PTC_SE_ERROR);
-                    snprintf(ui.model.message, sizeof(ui.model.message), "控制已停用，自主缓冲暂不可领取。");
+                    snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_CONTROL_HAS_BEEN_DEACTIVATED_AND_AUTONOMOUS_BUFFERING));
                 } else if (ui.model.daily_buffer_available && !ui.waiting) {
                     ptc_audio_play(PTC_SE_CLAIM_BUFFER);
                     submit_transport_empty(&ui, "claim_daily_buffer",
-                        "正在领取今日自主缓冲...", "领取今日自主缓冲失败");
+                        ptc_ui_text(PTC_UI_T_IS_RECEIVING_TODAY_S_INDEPENDENT_BUFFER), ptc_ui_text(PTC_UI_T_FAILED_TO_RECEIVE_TODAY_S_INDEPENDENT_BUFFERING));
                 } else if (ui.model.daily_buffer_claimed) {
                     ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message),
-                        "今日已使用缓冲，明天可以再次领取。");
+                        ptc_ui_text(PTC_UI_T_THE_BUFFER_HAS_BEEN_USED_TODAY_AND));
                 } else {
                     ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message),
-                        "今天没有可领取的自主缓冲。");
+                        ptc_ui_text(PTC_UI_T_THERE_ARE_NO_AUTONOMOUS_BUFFERS_TO_CLAIM));
                 }
             }
         } else if (ui.model.view == PTC_UI_SETUP) {
@@ -430,7 +430,7 @@ int main(int argc, char **argv)
                     if (down) {
                         ptc_audio_play(PTC_SE_ERROR);
                         snprintf(ui.model.message, sizeof(ui.model.message),
-                                 "请等待周计划保存完成后再继续编辑。");
+                                 ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_WEEKLY_PLAN_IS));
                     }
                 } else if (down & HidNpadButton_B) {
                     ptc_audio_play(PTC_SE_CANCEL);
@@ -454,7 +454,7 @@ int main(int argc, char **argv)
                     }
                     if (!ui.model.disable_flag_present && day->mode == PTC_RULE_MODE_LIMIT) {
                         snprintf(ui.model.message, sizeof(ui.model.message),
-                                 "已恢复此前的每日限额：%u 分钟。", (unsigned int)day->minutes);
+                                 ptc_ui_text(PTC_UI_T_PREVIOUS_DAILY_LIMIT_RESTORED_U_MIN), (unsigned int)day->minutes);
                     }
                 } else if (down & HidNpadButton_Up) {
                     ptc_audio_play(PTC_SE_FOCUS);
@@ -477,22 +477,22 @@ int main(int argc, char **argv)
                     if (ui.model.selected_index == 2) {
                         if (weekly_editing_blocked(&ui)) {
                             ptc_audio_play(PTC_SE_ERROR);
-                            snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，批量操作暂不可用。");
+                            snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_IS_IN_EMERGENCY_DEACTIVATION_BATCH_OPERATIONS_ARE));
                         } else {
                             ptc_audio_play(PTC_SE_CONFIRM);
                             ui.model.overlay = PTC_UI_OVERLAY_WEEKLY_BULK;
                             ui.model.overlay_selection = 0;
-                            snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "批量快捷操作");
-                            snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body), "把最后选中日期的完整草稿规则复制到一组日期。");
+                            snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), ptc_ui_text(PTC_UI_T_BATCH_QUICK_OPERATIONS));
+                            snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body), ptc_ui_text(PTC_UI_T_COPIES_THE_COMPLETE_DRAFT_RULE_FOR_THE));
                         }
                     } else if (ui.model.selected_index == 3) {
                         ptc_audio_play(PTC_SE_CANCEL);
                         if (ui.model.weekly_dirty) {
                             memcpy(ui.model.draft_week, ui.model.current_week, sizeof(ui.model.draft_week));
                             ui.model.weekly_dirty = false;
-                            snprintf(ui.model.message, sizeof(ui.model.message), "已放弃未保存的周计划修改。");
+                            snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_UNSAVED_WEEKLY_SCHEDULE_MODIFICATIONS_ABANDONED));
                         } else {
-                            snprintf(ui.model.message, sizeof(ui.model.message), "周计划没有修改。");
+                            snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_THE_WEEKLY_PLAN_HAS_NOT_BEEN_MODIFIED));
                         }
                     } else if (weekly_editing_blocked(&ui)) {
                         /* Focus remains movable while emergency stop makes the editor read-only. */
@@ -503,7 +503,7 @@ int main(int argc, char **argv)
                         update_weekly_dirty(&ui);
                         if (day->mode == PTC_RULE_MODE_LIMIT) {
                             snprintf(ui.model.message, sizeof(ui.model.message),
-                                     "已恢复此前的每日限额：%u 分钟。", (unsigned int)day->minutes);
+                                     ptc_ui_text(PTC_UI_T_PREVIOUS_DAILY_LIMIT_RESTORED_U_MIN), (unsigned int)day->minutes);
                         }
                     } else if (ui.model.selected_index == 4) {
                         ptc_audio_play(PTC_SE_CONFIRM);
@@ -514,7 +514,7 @@ int main(int argc, char **argv)
                     } else {
                         ptc_audio_play(PTC_SE_ERROR);
                         snprintf(ui.model.message, sizeof(ui.model.message),
-                                 "该日为不限时，没有可编辑的分钟数；请选择“切换模式”改为限时。");
+                                 ptc_ui_text(PTC_UI_T_THIS_DAY_IS_UNLIMITED_SELECT_CHANGE_MODE));
                     }
                 } else if (down & HidNpadButton_Plus) {
                     ui.model.selected_index = 4;
@@ -530,9 +530,9 @@ int main(int argc, char **argv)
                     if (ui.model.weekly_dirty) {
                         memcpy(ui.model.draft_week, ui.model.current_week, sizeof(ui.model.draft_week));
                         ui.model.weekly_dirty = false;
-                        snprintf(ui.model.message, sizeof(ui.model.message), "已放弃未保存的周计划修改。");
+                        snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_UNSAVED_WEEKLY_SCHEDULE_MODIFICATIONS_ABANDONED));
                     } else {
-                        snprintf(ui.model.message, sizeof(ui.model.message), "周计划没有修改。");
+                        snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_THE_WEEKLY_PLAN_HAS_NOT_BEEN_MODIFIED));
                     }
                 }
             } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN &&
@@ -542,7 +542,7 @@ int main(int argc, char **argv)
                     if (down) {
                         ptc_audio_play(PTC_SE_ERROR);
                         snprintf(ui.model.message, sizeof(ui.model.message),
-                            "请等待就寝时间设置保存完成后再继续编辑。");
+                            ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_BEDTIME_SETTINGS_ARE));
                     }
                 } else if (down & HidNpadButton_B) {
                     ptc_audio_play(PTC_SE_CANCEL);
@@ -576,8 +576,8 @@ int main(int argc, char **argv)
                         ptc_audio_play(PTC_SE_TOGGLE);
                         draft->enabled = !draft->enabled;
                         update_bedtime_dirty(&ui);
-                        snprintf(ui.model.message, sizeof(ui.model.message), "就寝计划总开关草稿已%s；保存后生效。",
-                            draft->enabled ? "开启" : "关闭");
+                        snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_BEDTIME_MASTER_SWITCH_DRAFT_IS_S_SAVE),
+                            draft->enabled ? ptc_ui_text(PTC_UI_T_ON) : ptc_ui_text(PTC_UI_T_OFF));
                     } else {
                         ptc_audio_play(PTC_SE_ERROR);
                     }
@@ -620,7 +620,7 @@ int main(int argc, char **argv)
                         draft->enabled = !draft->enabled;
                         update_bedtime_dirty(&ui);
                         snprintf(ui.model.message, sizeof(ui.model.message),
-                                 "就寝计划总开关草稿已%s；保存后生效。", draft->enabled ? "开启" : "关闭");
+                                 ptc_ui_text(PTC_UI_T_BEDTIME_MASTER_SWITCH_DRAFT_IS_S_SAVE), draft->enabled ? ptc_ui_text(PTC_UI_T_ON) : ptc_ui_text(PTC_UI_T_OFF));
                     } else {
                         ptc_audio_play(PTC_SE_ERROR);
                     }
@@ -635,9 +635,9 @@ int main(int argc, char **argv)
                             ptc_audio_play(PTC_SE_CONFIRM);
                             ui.model.overlay = PTC_UI_OVERLAY_BEDTIME_BULK;
                             ui.model.overlay_selection = ui.model.selected_index - 7;
-                            snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "复制每周就寝窗口");
+                            snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), ptc_ui_text(PTC_UI_T_COPY_WEEKLY_BEDTIME_WINDOW));
                             snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body),
-                                "把最后编辑日期的完整开关和时间复制到所选日期组。");
+                                ptc_ui_text(PTC_UI_T_COPIES_THE_COMPLETE_SWITCHES_AND_TIME_OF));
                         } else if (ui.model.selected_index == 9) {
                             ptc_audio_play(PTC_SE_CANCEL);
                             discard_bedtime_draft(&ui);
@@ -702,7 +702,7 @@ int main(int argc, char **argv)
                 if (down) {
                     ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message),
-                             "请等待国家节假日设置保存完成后再继续编辑。");
+                             ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_NATIONAL_HOLIDAY_SETTINGS));
                 }
             } else if (down & HidNpadButton_B) {
                 ptc_audio_play(PTC_SE_CANCEL);
@@ -737,7 +737,7 @@ int main(int argc, char **argv)
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 if (ui.model.disable_flag_present) {
                     ptc_audio_play(PTC_SE_ERROR);
-                    snprintf(ui.model.message, sizeof(ui.model.message), "紧急停用中，规则暂时只读。");
+                    snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_IN_EMERGENCY_DEACTIVATION_THE_RULES_ARE_TEMPORARILY));
                 } else if (ui.model.selected_index == 1 ||
                            (ui.model.selected_index != 2 && ui.model.holiday_last_rule == 0)) {
                     ptc_audio_play(PTC_SE_TOGGLE);
@@ -763,7 +763,7 @@ int main(int argc, char **argv)
             } else if (down & HidNpadButton_A) {
                 if (ui.waiting) {
                     ptc_audio_play(PTC_SE_ERROR);
-                    snprintf(ui.model.message, sizeof(ui.model.message), "请等待当前操作完成后再执行其他设置。");
+                    snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
                 } else if (ui.model.parent_footer_focused) {
                     ptc_audio_play(PTC_SE_CONFIRM);
                     activate_parent_status(&ui);
@@ -774,9 +774,9 @@ int main(int argc, char **argv)
                         ptc_audio_play(PTC_SE_POPUP);
                         ui.model.overlay = PTC_UI_OVERLAY_SUPPORT_EVENT;
                         ui.model.overlay_selection = event_index;
-                        snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), "最近事件详情");
+                        snprintf(ui.model.overlay_title, sizeof(ui.model.overlay_title), ptc_ui_text(PTC_UI_T_RECENT_EVENT_DETAILS));
                         snprintf(ui.model.overlay_body, sizeof(ui.model.overlay_body),
-                                 "家长区已通过 PIN 验证；这里显示完整诊断字段，但不会显示 PIN、密钥或可复用授权材料。");
+                                 ptc_ui_text(PTC_UI_T_THE_PARENT_AREA_IS_PIN_AUTHENTICATED_THE));
                     }
                 } else {
                     ptc_audio_play(PTC_SE_CONFIRM);

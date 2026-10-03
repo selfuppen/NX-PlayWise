@@ -45,17 +45,17 @@ Upon launching PlayWise for the first time, follow the 5-step onboarding wizard.
 <details>
 <summary>View 5-Step Console Interface Preview</summary>
 
-![Parent zone entry setup preview](images/usage/setup/setup-step-1-light.png)
-![PlayWise PIN setup preview](images/usage/setup/setup-step-2-light.png)
-![Theme setup preview](images/usage/setup/setup-step-3-light.png)
-![Takeover confirmation preview](images/usage/setup/setup-step-4-light.png)
-![Destination zone selection preview](images/usage/setup/setup-step-5-light.png)
+![Parent zone entry setup preview](images/usage-en/setup/setup-step-1-light.png)
+![PlayWise PIN setup preview](images/usage-en/setup/setup-step-2-light.png)
+![Theme setup preview](images/usage-en/setup/setup-step-3-light.png)
+![Takeover confirmation preview](images/usage-en/setup/setup-step-4-light.png)
+![Destination zone selection preview](images/usage-en/setup/setup-step-5-light.png)
 
 Child Zone home screen preview:
-![Child Zone home screen preview](images/usage/child/child-light.png)
+![Child Zone home screen preview](images/usage-en/child/child-light.png)
 
 Parent Zone today schedule preview:
-![Parent Zone today schedule preview](images/usage/parent/parent-dark.png)
+![Parent Zone today schedule preview](images/usage-en/parent/parent-dark.png)
 </details>
 
 These console images are generated from production drawing code with static mock data and bear the `HOST PREVIEW / SAMPLE DATA` watermark. They are layout previews rather than hardware screenshots, and do not represent hardware controller, touch, font, or PCTL acceptance.
@@ -111,7 +111,7 @@ On the Today's Schedule tab, press controller `+` button or tap "+ View Details"
 - **How Today's Limit is Determined**: Evaluated in strict priority order: "Today's Adjustments → Scheduled Date Limits → National Holidays → Weekly Schedule", adopting the first applicable rule. Bedtime limits and autonomy buffer status are also displayed; bedtime takes effect independently, restricting software when the time arrives even if playtime remains.
 - **Usage & Status**: Displays on-device playtime estimates for today, 7-day and 30-day usage estimates (missing dates are not padded with zeroes), status update timestamps, and recent operations.
 
-![Today's rule details preview](images/usage/parent/parent-details-decision-light.png)
+![Today's rule details preview](images/usage-en/parent/parent-details-decision-light.png)
 
 ### Long-Term & Date Plans
 
@@ -124,12 +124,12 @@ The "Master Bedtime Switch" controls all bedtime rules across weekly, holiday, a
 <details>
 <summary>View Time Plans Preview</summary>
 
-![Time plans root preview](images/usage/plan/plan-root-light.png)
-![Weekly plan draft preview](images/usage/plan/plan-draft-today-light.png)
-![National holidays preview](images/usage/holiday/holiday-draft-light.png)
-![Scheduled date limits preview](images/usage/scheduled/scheduled-draft-light.png)
-![Bedtime schedule preview](images/usage/bedtime/bedtime-section-0-dark.png)
-![Autonomy buffer policy preview](images/usage/autonomy/autonomy-policy-light.png)
+![Time plans root preview](images/usage-en/plan/plan-root-light.png)
+![Weekly plan draft preview](images/usage-en/plan/plan-draft-today-light.png)
+![National holidays preview](images/usage-en/holiday/holiday-draft-light.png)
+![Scheduled date limits preview](images/usage-en/scheduled/scheduled-draft-light.png)
+![Bedtime schedule preview](images/usage-en/bedtime/bedtime-section-0-dark.png)
+![Autonomy buffer policy preview](images/usage-en/autonomy/autonomy-policy-light.png)
 
 </details>
 
@@ -155,8 +155,8 @@ Grant codes are 8-digit numbers determined by parents and valid only for the cur
 2. Verify the valid date and duration, then share the 8-digit code with your child. Generating a new code on the same day does not invalidate previously issued codes; changing "Next Grant Duration" does not modify issued codes.
 3. If generation fails, follow on-screen hints to inspect configuration, SD card, and system clock. Never assume previous codes are revoked.
 
-![Console generation entry preview](images/usage/grant/grant-entry-light.png)
-![Issued grant code preview (sample data)](images/usage/grant/grant-issued-light.png)
+![Console generation entry preview](images/usage-en/grant/grant-entry-light.png)
+![Issued grant code preview (sample data)](images/usage-en/grant/grant-issued-light.png)
 
 ### Generating on Phone or PC
 
@@ -190,9 +190,9 @@ When unrestricted and Homebrew Menu can still be launched, open PlayWise, enter 
 <details>
 <summary>View Input, Confirmation, and Success Previews</summary>
 
-![Enter grant code preview](images/usage/redeem/redeem-input-light.png)
-![Redeem confirmation preview](images/usage/redeem/redeem-confirm-light.png)
-![Redeem success preview](images/usage/redeem/redeem-success-light.png)
+![Enter grant code preview](images/usage-en/redeem/redeem-input-light.png)
+![Redeem confirmation preview](images/usage-en/redeem/redeem-confirm-light.png)
+![Redeem success preview](images/usage-en/redeem/redeem-success-light.png)
 
 </details>
 
@@ -287,13 +287,13 @@ Always refer to buttons and prompts in your installed version. This guide does n
 
 Parent Zone "Support & Recovery" displays active issues and recommended remedies; emergency disable halts new playtime and schedule writes, but permits viewing status, exporting diagnostics, and restoring backups. After firmware updates, if "System environment changed" appears, follow on-screen instructions to re-detect and resume takeover; successful takeover preserves your PIN, secrets, and rules. When "Syncing" appears, wait for completion before refreshing to verify.
 
-![Security and preferences entry preview](images/usage/settings/settings-root-dark.png)
+![Security and preferences entry preview](images/usage-en/settings/settings-root-dark.png)
 
 <details>
 <summary>View Healthy vs. Fault State Previews</summary>
 
-![Support and recovery healthy state preview](images/usage/support/support-healthy-dark.png)
-![Support and recovery fault state preview](images/usage/support/support-failed-light.png)
+![Support and recovery healthy state preview](images/usage-en/support/support-healthy-dark.png)
+![Support and recovery fault state preview](images/usage-en/support/support-failed-light.png)
 
 </details>
 
@@ -333,7 +333,7 @@ Documentation images fall into two categories, with paths relative to repository
 
 | Source | Image Paths | Update Method |
 | --- | --- | --- |
-| Automatically Generated Console UI Previews | 23 PNG files under `docs/images/usage/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support}/` listed in `tools/sync_doc_previews.py` | Run `python tools/package_remote.py --only previews --clean` to re-render `build/ui-previews/` and synchronize to documentation paths. Omit `--clean` for incremental updates. |
+| Automatically Generated Console UI Previews | 23 PNG files under `docs/images/usage-en/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support}/` (English) and `docs/images/usage/` (Chinese) listed in `tools/sync_doc_previews.py` | Run `python tools/package_remote.py --only previews --clean` to re-render `build/ui-previews/` and synchronize to documentation paths. Omit `--clean` for incremental updates. |
 | Manually Captured Hardware, Pairing & Web Previews | `docs/images/usage/overlay/ultrahand-entry.jpg`, `docs/images/usage/overlay/playwise-code-entry-legacy.jpg`, `docs/images/usage/parent/pairing-qr-demo.png`, `docs/images/usage/parent/web-code-demo.jpg`, `docs/images/usage/parent-offline-demo.png` | Re-capture, verify, and update against physical devices or browser interfaces; pairing QR codes must use public demo configurations. The command above does not replace these images. |
 
 Automated previews are generated from production C rendering code, fixed sample states, and the vendored Noto Sans SC font, marked with `HOST PREVIEW / SAMPLE DATA`. They serve layout reading purposes and do not substitute hardware controller, font, and PCTL validation. `--only previews` does not run full test suites or build distribution packages; run `python tools/package_remote.py` when full release gating is required. See [Testing Guide](测试指南.md) for details.

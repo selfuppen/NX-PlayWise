@@ -6,12 +6,12 @@ bool verify_sensitive_pin(UiState *ui, const char *action)
     PtcAuthStatus status;
     int64_t retry_after = 0;
     const PtcUiOverlay return_overlay = ui ? ui->model.overlay : PTC_UI_OVERLAY_NONE;
-    if (!pin_input(ui, "验证 任我玩 管理 PIN", action, pin, sizeof(pin))) {
+    if (!pin_input(ui, ptc_ui_text(PTC_UI_T_VERIFY_PLAYWISE_PIN), action, pin, sizeof(pin))) {
         if (ui && return_overlay != PTC_UI_OVERLAY_NONE && ui->model.overlay == PTC_UI_OVERLAY_NONE) {
             ui->model.overlay = return_overlay;
         }
         ui->auth_retry_action = AUTH_RETRY_NONE;
-        snprintf(ui->model.message, sizeof(ui->model.message), "已取消敏感操作。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_SENSITIVE_OPERATION_CANCELED));
         return false;
     }
     /* pin_input owns the PIN dialog and closes it on return. Sensitive actions
@@ -23,11 +23,11 @@ bool verify_sensitive_pin(UiState *ui, const char *action)
     if (status != PTC_AUTH_OK) {
         ptc_audio_play(PTC_SE_ERROR);
         if (status == PTC_AUTH_COOLDOWN && retry_after > 0) {
-            show_auth_error(ui, "PIN 暂时锁定", "PIN 错误次数过多，请等待倒计时结束后重试。", retry_after);
+            show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_TEMPORARILY_LOCKED), ptc_ui_text(PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR), retry_after);
             return false;
         }
-        show_auth_error(ui, "PIN 验证未通过",
-                        status == PTC_AUTH_DENIED ? "PIN 不正确，请重试。" : auth_status_zh(status), 0);
+        show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_FAILED),
+                        status == PTC_AUTH_DENIED ? ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN) : auth_status_zh(status), 0);
         return false;
     }
     ui->auth_retry_action = AUTH_RETRY_NONE;
@@ -39,27 +39,27 @@ void change_parent_pin(UiState *ui)
     char confirm[PTC_AUTH_PIN_MAX_LEN + 1];
     PtcAuthStatus status;
     ui->auth_retry_action = AUTH_RETRY_CHANGE_PIN;
-    if (!verify_sensitive_pin(ui, "修改 PIN 前，请先输入当前任我玩 PIN")) return;
-    if (!pin_input(ui, "修改 PlayWise PIN", "请输入新的 1到64 位数字。", pin, sizeof(pin)) ||
-        !pin_input(ui, "确认新 PIN", "请再次输入相同的 PIN；输入内容只显示为圆点。", confirm, sizeof(confirm))) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 修改。");
+    if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_BEFORE_CHANGING_YOUR_PIN_PLEASE_ENTER_YOUR))) return;
+    if (!pin_input(ui, ptc_ui_text(PTC_UI_T_CHANGE_PLAYWISE_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_A_NEW_1_TO_64), pin, sizeof(pin)) ||
+        !pin_input(ui, ptc_ui_text(PTC_UI_T_CONFIRM_NEW_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_SAME_PIN_AGAIN_YOUR), confirm, sizeof(confirm))) {
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PIN_CHANGE_CANCELED));
         return;
     }
     if (strcmp(pin, confirm) != 0) {
         ptc_audio_play(PTC_SE_ERROR);
         ui->auth_retry_action = AUTH_RETRY_CHANGE_PIN;
-        show_auth_error(ui, "两次 PIN 不一致", "两次输入的新 PIN 不一致，已全部清空，请重新开始。", 0);
+        show_auth_error(ui, ptc_ui_text(PTC_UI_T_TWO_PINS_ARE_INCONSISTENT), ptc_ui_text(PTC_UI_T_THE_NEW_PINS_ENTERED_TWICE_ARE_INCONSISTENT), 0);
         return;
     }
     status = ptc_companion_auth_set_pin(&ui->auth, pin, time(NULL), switch_random, NULL);
     if (status == PTC_AUTH_OK) {
         ptc_audio_play(PTC_SE_SUCCESS);
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-            strlen(pin) < 4U ? "PlayWise PIN 已更新；当前 PIN 少于 4 位，冷却也无法提供可靠保护。" : "PlayWise PIN 已更新。");
+            strlen(pin) < 4U ? ptc_ui_text(PTC_UI_T_PLAYWISE_PIN_HAS_BEEN_UPDATED_THE_CURRENT) : ptc_ui_text(PTC_UI_T_PLAYWISE_PIN_HAS_BEEN_UPDATED));
     } else {
         ptc_audio_play(PTC_SE_ERROR);
         ui->auth_retry_action = AUTH_RETRY_CHANGE_PIN;
-        show_auth_error(ui, "PIN 修改失败", auth_status_zh(status), 0);
+        show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_MODIFICATION_FAILED), auth_status_zh(status), 0);
     }
 }
 void dispatch_auth_retry(UiState *ui, AuthRetryAction action)

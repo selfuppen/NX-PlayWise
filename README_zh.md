@@ -22,7 +22,7 @@
 1. 在 Switch 的“系统设置 → 家长控制”启用官方家长控制和“时间到了暂停软件”，验证亮屏使用会计入额度、到时会限制使用。
 2. 准备 Atmosphère、Homebrew Menu，以及 Ultrahand 或其他 Tesla 浮窗管理器。PlayWise 安装包不包含浮窗管理器。
 3. 首次使用下载 `playwise-complete-<版本>.zip`：其中的 `playwise-<版本>.zip` 安装 Switch 端，`playwise-offline.html` 是备用的离线家长网页。将标准包内的 `atmosphere` 和 `switch` 目录合并到 SD 卡根目录后重启。
-4. 从 Homebrew Menu 打开“任我玩”，按向导设置家长区入口、PlayWise PIN、主题并确认接管。孩子需要加时时，按下文选择主机应用或游戏内浮窗兑换。
+4. 从 Homebrew Menu 打开“任我玩”，按向导设置家长区入口、任我玩家长密码、主题并确认接管。孩子需要加时时，按下文选择主机应用或游戏内浮窗兑换。
 
 完整的[安装、首次设置、使用与升级步骤](docs/使用指南.md)见使用指南。
 
@@ -32,7 +32,7 @@
 
 > 使用加时码：在 Switch 生成或兑换加时码均无需联网。
 
-每日额度耗尽后，Nintendo 原生弹窗可能使 Homebrew 和 PlayWise 主机应用无法继续使用。用预先设置的 Ultrahand/Tesla 快捷键打开浮窗管理器，选择“任我玩”（`playwise.ovl`）；输入家长给的 8 位码，核对预计结果并确认兑换。家长还可在浮窗中输入 PlayWise PIN，单次授权增加分钟或设为今日不限时。就寝限制可跳过本次、关闭计划或恢复安装前设置。
+每日额度耗尽后，Nintendo 原生弹窗可能使 Homebrew 和 PlayWise 主机应用无法继续使用。用预先设置的 Ultrahand/Tesla 快捷键打开浮窗管理器，选择“任我玩”（`playwise.ovl`）；输入家长给的 8 位码，核对预计结果并确认兑换。家长还可在浮窗中输入任我玩家长密码，单次授权增加分钟或设为今日不限时。就寝限制可跳过本次、关闭计划或恢复安装前设置。
 
 <details open>
 <summary>查看游戏内浮窗操作示意</summary>
@@ -50,7 +50,7 @@
 > 使用公开家长网页扫二维码跳转到生成时码的网页时，家长的手机或电脑需要能访问 github；
 > 也可以使用 `playwise-complete-<版本>.zip` 安装包里面的 `playwise-offline.html` 备用的离线家长网页，此时手机/电脑也无需联网，配置好后可以长期使用（生成加时码需要的 key 和 id 存到浏览器里面了），步骤和密钥保护说明见[使用指南：在手机或电脑上生成](docs/使用指南.md#在手机或电脑上生成)。
 
-在 Switch 家长区打开“离线加时 → 手机/电脑生成”，验证 PlayWise PIN 后显示配对二维码。用可信的家长手机或电脑扫码，在打开的[家长网页](https://selfuppen.github.io/NX-PlayWise/)确认“导入此设备”；选好与 Switch 本地日期一致的日期和加时分钟数，即可在浏览器中生成 8 位码并告诉孩子。网页在浏览器本地计算代码，不向 PlayWise 业务后端提交密钥或代码，不用每次扫码，可反复生成。
+在 Switch 家长区打开“离线加时 → 手机/电脑生成”，验证任我玩家长密码后显示配对二维码。用可信的家长手机或电脑扫码，在打开的[家长网页](https://selfuppen.github.io/NX-PlayWise/)确认“导入此设备”；选好与 Switch 本地日期一致的日期和加时分钟数，即可在浏览器中生成 8 位码并告诉孩子。网页在浏览器本地计算代码，不向 PlayWise 业务后端提交密钥或代码，不用每次扫码，可反复生成。
 
 <details open>
 <summary>查看手机扫码配对与家长网页示意</summary>
@@ -92,7 +92,7 @@
 
 推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理 PlayWise 游戏内浮窗。也可参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境；相关交流群为“switch大气层超频折腾群”（QQ群 `1051287661`）。这些外部项目与社群不包含在 PlayWise 安装包中，也不代表 PlayWise 对其背书。
 
-PlayWise PIN 只保护本项目的家长区，不是 Nintendo 官方家长控制 PIN。PlayWise 不重置官方 PIN，也不解绑官方手机 App。Nintendo 官方计时按主机使用时间累计，HOME 和系统设置等亮屏使用也可能消耗额度，见[官方说明](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html)。
+任我玩家长密码只保护本项目的家长区，不是 Nintendo 官方家长控制密码。PlayWise 不重置官方家长控制密码，也不解绑官方手机 App。Nintendo 官方计时按主机使用时间累计，HOME 和系统设置等亮屏使用也可能消耗额度，见[官方说明](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html)。
 
 ## ROADMAP
 
@@ -111,7 +111,7 @@ PlayWise PIN 只保护本项目的家长区，不是 Nintendo 官方家长控制
 | 自定义快捷键录制 | 验证中；预设组合已开放，录制入口暂未发布 | 待定 |
 | 按游戏时间统计 | TODO；`pdm:qry` 真机证据门禁中，当前显示不可用 | 待定 |
 
-每日额度耗尽和就寝时间生效后，PlayWise 侧只保留浮窗作为主机内操作入口：每日限制可兑换加时码，或由家长单次授权增加分钟、设为今日不限时；就寝限制可跳过本次、关闭计划或恢复安装前设置。Nintendo 原生弹窗的官方 PIN 临时解锁仍由 Nintendo 提供。若浮窗或后台不可用，PlayWise 没有可靠的主机内自救路径，也不会自动写入启动恢复旗标。
+每日额度耗尽和就寝时间生效后，PlayWise 侧只保留浮窗作为主机内操作入口：每日限制可兑换加时码，或由家长单次授权增加分钟、设为今日不限时；就寝限制可跳过本次、关闭计划或恢复安装前设置。Nintendo 原生弹窗的官方家长控制密码临时解锁仍由 Nintendo 提供。若浮窗或后台不可用，PlayWise 没有可靠的主机内自救路径，也不会自动写入启动恢复旗标。
 
 ## 项目文档
 

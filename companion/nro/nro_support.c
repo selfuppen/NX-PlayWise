@@ -13,10 +13,10 @@ void export_diagnostics(UiState *ui)
     bool rejected_sensitive_file = false;
     ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_EXPORTING;
     ui->model.diagnostic_path[0] = '\0';
-    snprintf(ui->model.message, sizeof(ui->model.message), "正在导出诊断包...");
+    snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EXPORTING_DIAGNOSTIC_PACKAGE));
     if (!bundle) {
         ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_ERROR;
-        snprintf(ui->model.message, sizeof(ui->model.message), "生成诊断包失败。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_GENERATE_DIAGNOSTIC_PACKAGE));
         return;
     }
     cJSON_AddNumberToObject(bundle, "version", 1);
@@ -68,10 +68,10 @@ void export_diagnostics(UiState *ui)
         snprintf(ui->model.diagnostic_path, sizeof(ui->model.diagnostic_path),
                  APP_ROOT "/support/diagnostic-%lld.json", (long long)exported_at);
         ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_SUCCESS;
-        snprintf(ui->model.message, sizeof(ui->model.message), "诊断包导出成功。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_DIAGNOSTIC_PACKAGE_WAS_EXPORTED_SUCCESSFULLY));
     } else {
         ui->model.diagnostic_status = PTC_UI_DIAGNOSTIC_ERROR;
-        snprintf(ui->model.message, sizeof(ui->model.message), "生成诊断包失败。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_FAILED_TO_GENERATE_DIAGNOSTIC_PACKAGE));
     }
     free(rendered);
 }

@@ -1,4 +1,5 @@
 #include "ui_theme.h"
+#include "../ui_language.h"
 
 #include <string.h>
 
@@ -87,10 +88,10 @@ const char *ptc_ui_theme_preference_name(PtcUiThemePreference preference)
 const char *ptc_ui_theme_preference_label(PtcUiThemePreference preference)
 {
     switch (preference) {
-    case PTC_UI_THEME_LIGHT: return "浅色";
-    case PTC_UI_THEME_DARK: return "暗色";
+    case PTC_UI_THEME_LIGHT: return ptc_ui_text(PTC_UI_T_LIGHT);
+    case PTC_UI_THEME_DARK: return ptc_ui_text(PTC_UI_T_DARK);
     case PTC_UI_THEME_SYSTEM:
-    default: return "跟随系统";
+    default: return ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM);
     }
 }
 

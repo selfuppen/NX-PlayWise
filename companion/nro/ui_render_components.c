@@ -3,15 +3,15 @@
 void format_duration(int minutes, char *out, size_t out_size)
 {
     if (minutes < 0) {
-        snprintf(out, out_size, "暂不可用");
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_UNAVAILABLE));
         return;
     }
     if (minutes < 60) {
-        snprintf(out, out_size, "%d 分钟", minutes);
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_D_MIN), minutes);
     } else if (minutes % 60 == 0) {
-        snprintf(out, out_size, "%d 小时", minutes / 60);
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_D_HR), minutes / 60);
     } else {
-        snprintf(out, out_size, "%d 小时 %d 分钟", minutes / 60, minutes % 60);
+        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_D_HR_D_MIN), minutes / 60, minutes % 60);
     }
 }
 
@@ -55,13 +55,14 @@ uint32_t status_age_color(const PtcUiModel *model)
 
 const char *ui_rule_source_label(const char *source)
 {
-    if (!source || !source[0]) return "尚未刷新";
-    if (strcmp(source, "today_override") == 0) return "今日额度调整";
-    if (strcmp(source, "scheduled_override") == 0) return "指定日期额度";
-    if (strcmp(source, "statutory_holiday") == 0) return "国家法定休假日";
-    if (strcmp(source, "makeup_workday") == 0) return "国家调休工作日";
-    return "周计划";
+    if (!source || !source[0]) return ptc_ui_text(PTC_UI_T_PENDING_REFRESH);
+    if (strcmp(source, "today_override") == 0) return ptc_ui_text(PTC_UI_T_RULE_TODAY);
+    if (strcmp(source, "scheduled_override") == 0) return ptc_ui_text(PTC_UI_T_RULE_SCHEDULED);
+    if (strcmp(source, "statutory_holiday") == 0) return ptc_ui_text(PTC_UI_T_RULE_HOLIDAY);
+    if (strcmp(source, "makeup_workday") == 0) return ptc_ui_text(PTC_UI_T_RULE_MAKEUP);
+    return ptc_ui_text(PTC_UI_T_RULE_WEEKLY);
 }
+
 
 void draw_plan_card(uint32_t *pixels, uint32_t stride, UiRect card, bool focused)
 {
@@ -142,7 +143,11 @@ void draw_quota_metric_card(
     int top_y = rect.y + 10;
     if (source_badge && source_badge[0]) {
         char title_line[96];
-        snprintf(title_line, sizeof(title_line), "%s (%s)", label, source_badge);
+        char loc_label[64];
+        char loc_badge[64];
+        const char *l = ptc_ui_localize(label ? label : "", loc_label, sizeof(loc_label));
+        const char *b = ptc_ui_localize(source_badge, loc_badge, sizeof(loc_badge));
+        snprintf(title_line, sizeof(title_line), "%s (%s)", l, b);
         draw_text_center(pixels, stride, (UiRect){rect.x + 8, top_y, rect.width - 16, 20},
                          title_line, 14, UI_MUTED);
     } else {
@@ -216,7 +221,7 @@ void draw_unchanged_quota_card(
     char fitted[192];
     fill_round_rect(pixels, stride, rect, 16, UI_RAISED);
     draw_rect_outline(pixels, stride, rect, 16, 1, UI_BORDER);
-    draw_text(pixels, stride, rect.x + 18, rect.y + 30, "今天额度不变", 17, UI_INK);
+    draw_text(pixels, stride, rect.x + 18, rect.y + 30, ptc_ui_text(PTC_UI_T_THE_QUOTA_REMAINS_UNCHANGED_TODAY), 17, UI_INK);
     fit_text(fitted, sizeof(fitted), reason, 14, rect.width - 36);
     draw_text(pixels, stride, rect.x + 18, rect.y + 58, fitted, 14, UI_MUTED);
 }

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#126b5b">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-byS3DuOz4G8GT9FEwOqRYHsrGMYEOvm5odk0UuVYw5k='; style-src 'sha256-Kj9/UMq48CdY//XmDCPfp3JmQFF33LRHzI7urIxL8JA='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-TVgBMmoPu0NfWJKJ3R5fQZMJT4zcT+ruiUx2pYGRccA='; style-src 'sha256-Kj9/UMq48CdY//XmDCPfp3JmQFF33LRHzI7urIxL8JA='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
   <title>任我玩 · PlayWise</title>
   <style>
 :root {
@@ -172,7 +172,7 @@ footer a { color: var(--accent-dark); font-weight: 700; }
       <section class="pairing-tools" aria-labelledby="pairingTitle">
         <div>
           <h2 id="pairingTitle" data-i18n="pairing_title">配对 Switch</h2>
-          <p data-i18n-html="pairing_p">配置文件不随安装包提供。先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证 PIN；成功后从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
+          <p data-i18n-html="pairing_p">配置文件不随安装包提供。先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证家长密码；成功后从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。</p>
         </div>
         <label class="file-button secondary compact">
           <span data-i18n="import_file_button">导入配置文件</span>
@@ -239,7 +239,7 @@ footer a { color: var(--accent-dark); font-weight: 700; }
         <h3 data-i18n="faq_5_title">紧急停用已开启</h3>
         <p data-i18n="faq_5_p">紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。</p>
         <h3 data-i18n="faq_6_title">进一步诊断</h3>
-        <p data-i18n-html="faq_6_p">诊断导出只包含白名单状态，不包含密钥、PIN、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。</p>
+        <p data-i18n-html="faq_6_p">诊断导出只包含白名单状态，不包含密钥、家长密码、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。</p>
       </details>
     </section>
   </main>
@@ -674,8 +674,8 @@ const TRANSLATIONS = {
     warn_compat_storage: "当前打开方式不允许持久保存配置；关闭页面后需要重新导入，且旧代码发生编号碰撞时请重新生成。",
 
     pairing_title: "配对 Switch",
-    pairing_p_online: "可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证 PIN；导出成功后，从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。",
-    pairing_p_standalone: "配置文件不随安装包提供。先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证 PIN；成功后从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。",
+    pairing_p_online: "可扫描 Switch 二维码配对。配置文件不随安装包提供：先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证家长密码；导出成功后，从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。",
+    pairing_p_standalone: "配置文件不随安装包提供。先在 Switch 家长区打开“离线加时 → 手机/电脑生成”，按 A“导出配置文件”并验证家长密码；成功后从 SD 卡 <code>/switch/playwise/parent-import.json</code> 复制到家长设备，再在此导入。",
     import_file_button: "导入配置文件",
 
     pairing_dialog_title: "导入此设备？",
@@ -725,7 +725,7 @@ const TRANSLATIONS = {
     faq_5_title: "紧急停用已开启",
     faq_5_p: "紧急停用会阻止新的额度、周计划和加时码写入，但状态、诊断与恢复仍可使用。由家长在“支持与恢复”确认故障已排除后解除停用。",
     faq_6_title: "进一步诊断",
-    faq_6_p: "诊断导出只包含白名单状态，不包含密钥、PIN、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。",
+    faq_6_p: "诊断导出只包含白名单状态，不包含密钥、家长密码、8 位码、完整 nonce 或恢复前像。高级排查可检查 <code>sdmc:/switch/playwise/logs/</code>、<code>flags/disable.flag</code> 和恢复状态；不要对外发送 <code>credentials.json</code>、<code>auth.json</code> 或 ledger。",
 
     footer_p_online: "正式部署请使用可信的 HTTPS 静态站点；电脑本机预览可使用 localhost。",
     footer_p_standalone: "这是可直接保存和打开的离线文件；移动浏览器若无法执行本地 HTML，请改用可信的 HTTPS 家长网页。",

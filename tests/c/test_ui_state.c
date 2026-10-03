@@ -3111,7 +3111,6 @@ static void test_quota_recheck_decisions(void)
 static void test_language_and_short_weekly_limits(void)
 {
     PtcUiLanguagePreference preference = PTC_UI_LANGUAGE_SYSTEM;
-    char localized[256];
     char formatted[128];
     uint16_t minutes = 0;
     PtcUiModel model;
@@ -3144,20 +3143,91 @@ static void test_language_and_short_weekly_limits(void)
         PTC_UI_SYSTEM_LANGUAGE_SIMPLIFIED), PTC_UI_LANGUAGE_ENGLISH,
         "manual english language overrides Switch language");
 
-    /* Localize strings */
+    /* Static labels resolve by key in each language. */
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
-    check_true(strcmp(ptc_ui_localize("时间计划，配置文件", localized, sizeof(localized)),
-        "時間計畫，設定檔") == 0, "traditional text and Taiwanese terminology");
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_EXPORT_CONFIGURATION_FILES_FOR_USE_ON_MOBILE),
+        "匯出供手機或電腦使用的設定檔") == 0, "traditional terminology uses reviewed catalog text");
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
-    check_true(strcmp(ptc_ui_localize("时间计划", localized, sizeof(localized)),
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_TIME_PLANS),
         "时间计划") == 0, "simplified text stays unchanged");
+    check_true(strcmp(ptc_ui_language_preference_sublabel(PTC_UI_LANGUAGE_ENGLISH),
+        "始终使用英语") == 0, "english option explanation follows the interface language");
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_ENGLISH);
-    check_true(strcmp(ptc_ui_localize("自律约定", localized, sizeof(localized)),
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_PLAYWISE),
         "PlayWise") == 0, "english overlay title");
-    check_true(strcmp(ptc_ui_localize("跟随系统", localized, sizeof(localized)),
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_FOLLOW_SYSTEM),
         "Follow System") == 0, "english follow system option");
-    check_true(strcmp(ptc_ui_localize("加时成功", localized, sizeof(localized)),
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_GRANT_SUCCESSFUL),
         "Grant Successful") == 0, "english grant successful text");
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_PLAYWISE_PIN),
+        "PlayWise PIN") == 0, "english PlayWise PIN terminology");
+    check_true(strcmp(ptc_ui_text_resolve(PTC_UI_TEXT_REFERENCE(PTC_UI_T_PLAYWISE_PIN)),
+        "PlayWise PIN") == 0, "file-scope keyed descriptors resolve at render time");
+    PtcUiTextArg date_args[] = {
+        PTC_UI_TEXT_NUMBER("month", 10), PTC_UI_TEXT_NUMBER("day", 3),
+        PTC_UI_TEXT_STRING("weekday", ptc_ui_weekday_label(6))
+    };
+    check_true(ptc_ui_text_format(PTC_UI_T_STATUS_DATE_NAMED, formatted,
+        sizeof(formatted), date_args, 3) && strcmp(formatted, "10/3 Sat") == 0,
+        "english status date formats named parts");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
+    date_args[2] = PTC_UI_TEXT_STRING("weekday", ptc_ui_weekday_label(6));
+    check_true(ptc_ui_text_format(PTC_UI_T_STATUS_DATE_NAMED, formatted,
+        sizeof(formatted), date_args, 3) && strcmp(formatted, "10月3日 週六") == 0,
+        "traditional status date formats named parts after language change");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_ENGLISH);
+
+    /* Keyed decisions and templates must be rebuilt in the currently selected locale. */
+    memset(&model, 0, sizeof(model));
+    model.day_index = 2380;
+    model.status_loaded = true;
+    model.status_updated_at = 1000;
+    model.played_minutes_available = true;
+    model.played_minutes = 20;
+    model.remaining_available = true;
+    model.remaining_minutes = 40;
+    int numeric_remaining = -1;
+    check_true(ptc_ui_home_remaining_minutes(&model, 1000, &numeric_remaining) &&
+               numeric_remaining == 40, "home remaining exposes numeric minutes without parsing text");
+    model.bedtime_active = true;
+    check_true(!ptc_ui_home_remaining_minutes(&model, 1000, &numeric_remaining),
+               "bedtime restriction keeps a localized status instead of a number");
+    model.bedtime_active = false;
+    snprintf(model.rule_source, sizeof(model.rule_source), "weekly");
+    for (int day = 0; day < 7; ++day) {
+        model.current_week[day] = (PtcDayRule){PTC_RULE_MODE_LIMIT, 60};
+        model.draft_week[day] = model.current_week[day];
+    }
+    model.draft_week[ptc_weekday_from_day_index(model.day_index)].minutes = 90;
+    PtcUiTodayDecision decision;
+    char message[192], detail[192];
+    ptc_ui_build_day_decision(&model, PTC_UI_PLAN_SAVED, model.day_index + 1, 1000, &decision);
+    check_true(strstr(decision.today_override.reason, "Applies only today") != NULL &&
+               strstr(decision.final_reason, "Final rule") != NULL,
+        "english decision reasons use keyed translations");
+    ptc_ui_format_weekly_save_result(&model, message, sizeof(message), detail, sizeof(detail));
+    check_true(strstr(message, "Weekly plan saved") != NULL &&
+               strstr(detail, "Quota 90 min") != NULL,
+        "english weekly save feedback uses named parameters");
+    check_true(!ptc_ui_text_format(PTC_UI_T_REASON_FINAL, formatted, sizeof(formatted), NULL, 0),
+        "keyed formatter rejects a missing named parameter");
+    PtcUiTextArg cooldown_args[] = {PTC_UI_TEXT_NUMBER("seconds", 30)};
+    check_true(ptc_ui_text_format(PTC_UI_T_PIN_COOLDOWN, formatted, sizeof(formatted), cooldown_args, 1) &&
+               strcmp(formatted, "Parent PIN locked; wait 30 seconds") == 0,
+        "english parent PIN cooldown formats its countdown");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
+    check_true(ptc_ui_text_format(PTC_UI_T_PIN_COOLDOWN, formatted, sizeof(formatted), cooldown_args, 1) &&
+               strcmp(formatted, "家長密碼暫時鎖定，請等待 30 秒") == 0,
+        "traditional parent password cooldown formats its countdown");
+    ptc_ui_build_day_decision(&model, PTC_UI_PLAN_SAVED, model.day_index + 1, 1000, &decision);
+    check_true(strstr(decision.today_override.reason, "僅限當天生效") != NULL &&
+               strstr(decision.final_reason, "最終採用") != NULL,
+        "decision reasons are rebuilt in traditional Chinese after language change");
+    ptc_ui_format_weekly_save_result(&model, message, sizeof(message), detail, sizeof(detail));
+    check_true(strstr(message, "週計畫已儲存") != NULL &&
+               strstr(detail, "額度 90 分鐘") != NULL,
+        "traditional weekly save feedback uses named parameters");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_ENGLISH);
 
     /* Formatted helpers */
     ptc_ui_format_minutes(1, formatted, sizeof(formatted));

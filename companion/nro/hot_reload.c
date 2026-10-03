@@ -1,4 +1,5 @@
 #include "hot_reload.h"
+#include "../ui_language.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -123,7 +124,7 @@ static bool verify_artifacts(char *detail, size_t detail_size)
     const cJSON *artifacts;
     size_t index;
     if (!read_text(ARTIFACTS_PATH, text, sizeof(text)) || !(root = cJSON_Parse(text))) {
-        snprintf(detail, detail_size, "缺少或无法读取 package-artifacts.json");
+        snprintf(detail, detail_size, ptc_ui_text(PTC_UI_T_PACKAGE_ARTIFACTS_JSON_IS_MISSING_OR_CANNOT));
         return false;
     }
     release = cJSON_GetObjectItemCaseSensitive(root, "release_id");
@@ -133,7 +134,7 @@ static bool verify_artifacts(char *detail, size_t detail_size)
         !cJSON_IsString(release) || strcmp(release->valuestring, PLAYWISE_BUILD_RELEASE_ID) != 0 ||
         !cJSON_IsObject(artifacts) || cJSON_GetArraySize(artifacts) != 3) {
         cJSON_Delete(root);
-        snprintf(detail, detail_size, "安装包身份与当前主机应用不一致");
+        snprintf(detail, detail_size, ptc_ui_text(PTC_UI_T_THE_IDENTITY_OF_THE_INSTALLATION_PACKAGE_IS));
         return false;
     }
     for (index = 0; index < sizeof(ARTIFACT_PATHS) / sizeof(ARTIFACT_PATHS[0]); ++index) {
@@ -147,7 +148,7 @@ static bool verify_artifacts(char *detail, size_t detail_size)
             (double)(uint64_t)expected_size->valuedouble != expected_size->valuedouble ||
             !hash_file(ARTIFACT_PATHS[index].sd_path, &actual_size, actual_hash) ||
             actual_size != (uint64_t)expected_size->valuedouble || strcmp(actual_hash, expected_hash->valuestring) != 0) {
-            snprintf(detail, detail_size, "组件校验失败：%s", ARTIFACT_PATHS[index].package_name);
+            snprintf(detail, detail_size, ptc_ui_text(PTC_UI_T_COMPONENT_VERIFICATION_FAILED_S), ARTIFACT_PATHS[index].package_name);
             cJSON_Delete(root);
             return false;
         }
@@ -199,8 +200,8 @@ static void fail(PtcHotReloadController *controller, const char *detail)
     controller->status = (restore_failed || cleanup_failed)
         ? PTC_HOT_RELOAD_RECOVERY_REQUIRED : PTC_HOT_RELOAD_UNAVAILABLE;
     snprintf(controller->detail, sizeof(controller->detail), "%s",
-        restore_failed ? "启动标志恢复失败；请勿关闭应用并检查 SD 卡" :
-        (cleanup_failed ? "加载新版后的清理未完成；启动设置已恢复，请完整重启主机" : detail));
+        restore_failed ? ptc_ui_text(PTC_UI_T_LAUNCH_FLAG_RECOVERY_FAILED_DO_NOT_CLOSE) :
+        (cleanup_failed ? ptc_ui_text(PTC_UI_T_THE_CLEANUP_AFTER_LOADING_THE_NEW_VERSION) : detail));
 }
 
 static bool ack_ready(const PtcHotReloadController *controller)
@@ -276,7 +277,7 @@ void ptc_hot_reload_recover_startup(PtcHotReloadController *controller)
         ptc_hot_reload_restore_boot(&PATHS, &journal) != PTC_HOT_RELOAD_FLAG_OK) {
         controller->status = PTC_HOT_RELOAD_RECOVERY_REQUIRED;
         controller->phase = PTC_HOT_RELOAD_PHASE_FAILED;
-        snprintf(controller->detail, sizeof(controller->detail), "加载新版的记录或启动设置有冲突，请完整重启并检查安装");
+        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_THERE_IS_A_CONFLICT_IN_LOADING_THE));
         return;
     }
     clear_handoff();
@@ -284,7 +285,7 @@ void ptc_hot_reload_recover_startup(PtcHotReloadController *controller)
     if (R_FAILED(rc)) {
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
         controller->phase = PTC_HOT_RELOAD_PHASE_FAILED;
-        snprintf(controller->detail, sizeof(controller->detail), "启动标志已恢复，但 pm:shell 不可用");
+        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_STARTUP_FLAG_RESTORED_BUT_PM_SHELL_IS));
         return;
     }
     rc = pmshellGetProcessId(&pid, RELEASE_PROGRAM_ID);
@@ -302,7 +303,7 @@ void ptc_hot_reload_recover_startup(PtcHotReloadController *controller)
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
         controller->phase = PTC_HOT_RELOAD_PHASE_FAILED;
         snprintf(controller->detail, sizeof(controller->detail),
-            "启动标志已恢复，但已安装后台无法启动；请完整重启主机");
+            ptc_ui_text(PTC_UI_T_THE_STARTUP_FLAG_HAS_BEEN_RESTORED_BUT));
     }
 }
 
@@ -317,14 +318,14 @@ void ptc_hot_reload_inspect(PtcHotReloadController *controller)
     rc = pmshellInitialize();
     if (R_FAILED(rc)) {
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
-        snprintf(controller->detail, sizeof(controller->detail), "pm:shell 不可用，需重启主机加载后台");
+        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_PM_SHELL_IS_NOT_AVAILABLE_YOU_NEED));
         return;
     }
     rc = pmshellGetProcessId(&pid, RELEASE_PROGRAM_ID);
     if (R_FAILED(rc) || !current_identity(pid, &identity)) {
         pmshellExit();
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
-        snprintf(controller->detail, sizeof(controller->detail), "无法可信确认当前后台身份");
+        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_UNABLE_TO_RELIABLY_CONFIRM_THE_CURRENT_BACKGROUND));
         return;
     }
     pmshellExit();
@@ -335,18 +336,18 @@ void ptc_hot_reload_inspect(PtcHotReloadController *controller)
     if (exists(JOURNAL_PATH) || exists(JOURNAL_TEMP_PATH) || exists(BOOT_FLAG_BACKUP_PATH) ||
         exists(INTENT_PATH) || exists(READY_PATH)) {
         controller->status = PTC_HOT_RELOAD_RECOVERY_REQUIRED;
-        snprintf(controller->detail, sizeof(controller->detail), "检测到冲突的升级记录，现有文件未改动");
+        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_CONFLICTING_UPGRADE_RECORDS_DETECTED_EXISTING_FILES_UNCHANGED));
     } else if (!empty_file(BOOT_FLAG_PATH)) {
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
-        snprintf(controller->detail, sizeof(controller->detail), "标准 boot2.flag 缺失或非空，需重启主机加载后台");
+        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_THE_STANDARD_BOOT2_FLAG_IS_MISSING_OR));
     } else if (strcmp(identity.release_id, PLAYWISE_BUILD_RELEASE_ID) == 0) {
         controller->status = PTC_HOT_RELOAD_CURRENT;
-        snprintf(controller->detail, sizeof(controller->detail), "后台已加载当前安装版本");
+        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_THE_CURRENT_INSTALLED_VERSION_HAS_BEEN_LOADED));
     } else if (!verify_artifacts(controller->detail, sizeof(controller->detail))) {
         controller->status = PTC_HOT_RELOAD_INCOMPLETE;
     } else {
         controller->status = PTC_HOT_RELOAD_PENDING;
-        snprintf(controller->detail, sizeof(controller->detail), "后台仍为 %s", identity.release_id);
+        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_BACKEND_REMAINS_S), identity.release_id);
     }
 }
 
@@ -359,18 +360,18 @@ bool ptc_hot_reload_begin(PtcHotReloadController *controller)
     if (!controller || controller->status != PTC_HOT_RELOAD_PENDING) return false;
     (void)mkdir(PLAYWISE_RELEASE_SD_ROOT "/handover", 0777);
     if (exists(RECOVERY_PATH)) {
-        snprintf(controller->detail, sizeof(controller->detail), "后台恢复尚未完成，暂不能加载新版");
+        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_THE_BACKGROUND_RECOVERY_HAS_NOT_BEEN_COMPLETED));
         return false;
     }
     if (exists(JOURNAL_PATH) || exists(JOURNAL_TEMP_PATH) || exists(BOOT_FLAG_BACKUP_PATH) ||
         exists(INTENT_PATH) || exists(READY_PATH)) {
         controller->status = PTC_HOT_RELOAD_RECOVERY_REQUIRED;
-        snprintf(controller->detail, sizeof(controller->detail), "检测到冲突的升级记录，现有文件未改动");
+        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_CONFLICTING_UPGRADE_RECORDS_DETECTED_EXISTING_FILES_UNCHANGED));
         return false;
     }
     if (!empty_file(BOOT_FLAG_PATH)) {
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
-        snprintf(controller->detail, sizeof(controller->detail), "标准 boot2.flag 缺失或非空，未开始加载新版");
+        snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_THE_STANDARD_BOOT2_FLAG_IS_MISSING_OR_2));
         return false;
     }
     if (!verify_artifacts(controller->detail, sizeof(controller->detail))) {
@@ -378,32 +379,32 @@ bool ptc_hot_reload_begin(PtcHotReloadController *controller)
         return false;
     }
     rc = pmshellInitialize();
-    if (R_FAILED(rc)) { fail(controller, "pm:shell 不可用，旧后台保持运行"); return false; }
+    if (R_FAILED(rc)) { fail(controller, ptc_ui_text(PTC_UI_T_PM_SHELL_IS_UNAVAILABLE_THE_OLD_BACKGROUND)); return false; }
     controller->pm_initialized = true;
     rc = pmshellGetProcessId(&pid, RELEASE_PROGRAM_ID);
     if (R_FAILED(rc) || pid != controller->journal.source_pid || !current_identity(pid, &identity) ||
         strcmp(identity.release_id, controller->journal.source_release_id) != 0) {
-        fail(controller, "后台已变化，未开始加载新版");
+        fail(controller, ptc_ui_text(PTC_UI_T_THE_BACKGROUND_HAS_CHANGED_AND_THE_NEW));
         return false;
     }
     snprintf(controller->journal.transaction_id, sizeof(controller->journal.transaction_id), "%016llx%016llx",
         (unsigned long long)randomGet64(), (unsigned long long)randomGet64());
     snprintf(controller->journal.phase, sizeof(controller->journal.phase), "prepared");
     if (!ptc_hot_reload_write_journal(&PATHS, &controller->journal)) {
-        fail(controller, "无法保存加载新版的记录，旧版本继续运行");
+        fail(controller, ptc_ui_text(PTC_UI_T_UNABLE_TO_SAVE_THE_RECORD_OF_LOADING));
         return false;
     }
     snprintf(intent, sizeof(intent),
         "{\"version\":1,\"transaction_id\":\"%s\",\"action\":\"quiesce\",\"created_at\":%lld}\n",
         controller->journal.transaction_id, (long long)time(NULL));
     if (!write_atomic(INTENT_PATH, intent)) {
-        fail(controller, "无法写入后台交接请求，旧后台保持运行");
+        fail(controller, ptc_ui_text(PTC_UI_T_UNABLE_TO_WRITE_BACKGROUND_HANDOVER_REQUEST_OLD));
         return false;
     }
     controller->deadline_tick = armGetSystemTick();
     controller->phase = PTC_HOT_RELOAD_PHASE_WAIT_ACK;
     controller->status = PTC_HOT_RELOAD_RUNNING;
-    snprintf(controller->detail, sizeof(controller->detail), "[1/4] 正在等待旧后台安全停止接单...");
+    snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_1_4_WAITING_FOR_THE_OLD_BACKEND));
     return true;
 }
 
@@ -411,13 +412,13 @@ void ptc_hot_reload_confirm_ipc_closed(PtcHotReloadController *controller)
 {
     if (!controller || controller->phase != PTC_HOT_RELOAD_PHASE_NEED_IPC_CLOSE) return;
     if (ptc_hot_reload_disable_boot(&PATHS, &controller->journal) != PTC_HOT_RELOAD_FLAG_OK) {
-        fail(controller, "无法安全暂存启动标志，旧后台保持运行");
+        fail(controller, ptc_ui_text(PTC_UI_T_UNABLE_TO_SAFELY_STAGE_STARTUP_FLAGS_OLD));
         return;
     }
     controller->boot_disabled = true;
     controller->deadline_tick = armGetSystemTick();
     controller->phase = PTC_HOT_RELOAD_PHASE_WAIT_SOURCE_EXIT;
-    snprintf(controller->detail, sizeof(controller->detail), "[2/4] 旧后台正在自行清理并退出...");
+    snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_2_4_THE_OLD_BACKGROUND_IS_CLEANING));
 }
 
 void ptc_hot_reload_tick(PtcHotReloadController *controller)
@@ -427,11 +428,11 @@ void ptc_hot_reload_tick(PtcHotReloadController *controller)
     if (controller->phase == PTC_HOT_RELOAD_PHASE_WAIT_ACK) {
         if (ack_ready(controller)) {
             controller->phase = PTC_HOT_RELOAD_PHASE_NEED_IPC_CLOSE;
-            snprintf(controller->detail, sizeof(controller->detail), "[2/4] 后台已静默，正在关闭旧连接...");
+            snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_2_4_THE_BACKGROUND_HAS_BEEN_SILENT));
             return;
         }
         elapsed = armTicksToNs(armGetSystemTick() - controller->deadline_tick);
-        if (elapsed >= HANDOFF_TIMEOUT_NS) fail(controller, "旧版本无法直接加载新版；请重启主机使新版生效");
+        if (elapsed >= HANDOFF_TIMEOUT_NS) fail(controller, ptc_ui_text(PTC_UI_T_THE_OLD_VERSION_CANNOT_DIRECTLY_LOAD_THE));
         return;
     }
     if (controller->phase == PTC_HOT_RELOAD_PHASE_WAIT_SOURCE_EXIT) {
@@ -439,7 +440,7 @@ void ptc_hot_reload_tick(PtcHotReloadController *controller)
         else controller->absent_samples = 0;
         if (controller->absent_samples >= 3U) {
             if (ptc_hot_reload_restore_boot(&PATHS, &controller->journal) != PTC_HOT_RELOAD_FLAG_OK) {
-                fail(controller, "旧后台已退出，但启动标志恢复失败；请勿关闭应用并检查 SD 卡");
+                fail(controller, ptc_ui_text(PTC_UI_T_THE_OLD_BACKGROUND_HAS_EXITED_BUT_THE));
                 return;
             }
             controller->boot_disabled = false;
@@ -448,12 +449,12 @@ void ptc_hot_reload_tick(PtcHotReloadController *controller)
                 (void)launch_target(controller);
             }
             if (controller->phase != PTC_HOT_RELOAD_PHASE_WAIT_TARGET_READY)
-                fail(controller, "新版后台启动失败，启动标志已恢复，请完整重启主机");
-            else snprintf(controller->detail, sizeof(controller->detail), "[3/4] 新版后台正在启动并校验身份...");
+                fail(controller, ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_OF_THE_BACKGROUND_FAILED));
+            else snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_3_4_THE_NEW_VERSION_OF_THE));
             return;
         }
         elapsed = armTicksToNs(armGetSystemTick() - controller->deadline_tick);
-        if (elapsed >= EXIT_TIMEOUT_NS) fail(controller, "无法证明旧后台已退出；启动标志已恢复，请重启主机生效");
+        if (elapsed >= EXIT_TIMEOUT_NS) fail(controller, ptc_ui_text(PTC_UI_T_UNABLE_TO_PROVE_THAT_THE_OLD_BACKGROUND));
         return;
     }
     if (controller->phase == PTC_HOT_RELOAD_PHASE_WAIT_TARGET_READY) {
@@ -464,7 +465,7 @@ void ptc_hot_reload_tick(PtcHotReloadController *controller)
             ptc_hot_reload_identity_matches(&identity, actual_pid, "release", PLAYWISE_BUILD_RELEASE_ID) &&
             strcmp(identity.boot_id, controller->source_boot_id) != 0) {
             if (!ptc_hot_reload_finish_journal(&PATHS)) {
-                fail(controller, "新版已启动，但升级记录清理失败；请完整重启主机");
+                fail(controller, ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_HAS_BEEN_STARTED_BUT));
                 return;
             }
             close_pm(controller);
@@ -474,15 +475,15 @@ void ptc_hot_reload_tick(PtcHotReloadController *controller)
             snprintf(controller->source_boot_id, sizeof(controller->source_boot_id), "%s", identity.boot_id);
             controller->phase = PTC_HOT_RELOAD_PHASE_COMPLETE;
             controller->status = PTC_HOT_RELOAD_SUCCESS;
-            snprintf(controller->detail, sizeof(controller->detail), "[4/4] 新版后台已启动，正在重新连接...");
+            snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_4_4_THE_NEW_VERSION_OF_THE));
             return;
         }
         elapsed = armTicksToNs(armGetSystemTick() - controller->deadline_tick);
         if (elapsed >= READY_TIMEOUT_NS) {
             if (process_absent() && controller->launch_attempts < 2U && launch_target(controller)) {
-                snprintf(controller->detail, sizeof(controller->detail), "[3/4] 新版后台未就绪，正在进行最后一次启动尝试...");
+                snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_3_4_THE_NEW_VERSION_OF_THE_2));
             } else {
-                fail(controller, "新版后台身份校验超时，启动标志已恢复，请完整重启主机");
+                fail(controller, ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_OF_BACKGROUND_IDENTITY_VERIFICATION));
             }
         }
     }

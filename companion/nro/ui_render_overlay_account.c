@@ -24,7 +24,7 @@ static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const Ptc
     current_box = (UiRect){dialog.x + 42, dialog.y + 132, 600, 56};
     masked_value(model->credential_current, model->credential_kind == 1 || model->credential_revealed, current, sizeof(current));
     masked_value(model->credential_new, model->credential_kind == 1 || model->credential_new_revealed, next, sizeof(next));
-    draw_text(pixels, stride, dialog.x + 42, dialog.y + 122, "当前值", 17, UI_MUTED);
+    draw_text(pixels, stride, dialog.x + 42, dialog.y + 122, ptc_ui_text(PTC_UI_T_CURRENT_VALUE), 17, UI_MUTED);
     fill_round_rect(pixels, stride, current_box, 16, UI_PAGE);
     if (model->credential_kind == 2 && model->credential_revealed) {
         if (strlen(current) > 32U) {
@@ -41,11 +41,11 @@ static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const Ptc
     }
     if (model->credential_kind == 2) {
         draw_candidate_button(pixels, stride, ptc_ui_credential_reveal_rect(),
-                              model->credential_revealed ? "ZR  隐藏当前密钥" : "ZR  显示当前密钥",
+                              model->credential_revealed ? ptc_ui_text(PTC_UI_T_ZR_HIDE_CURRENT_KEY) : ptc_ui_text(PTC_UI_T_ZR_DISPLAYS_THE_CURRENT_KEY),
                               UI_PAGE, UI_ACCENT,
                               model->overlay_selection == PTC_UI_CREDENTIAL_REVEAL, false);
     }
-    draw_text(pixels, stride, dialog.x + 42, dialog.y + 215, "新值", 17, UI_MUTED);
+    draw_text(pixels, stride, dialog.x + 42, dialog.y + 215, ptc_ui_text(PTC_UI_T_NEW_VALUE), 17, UI_MUTED);
     fill_round_rect(pixels, stride, input_box, 12, UI_ACCENT_SOFT);
     draw_rect_outline(pixels, stride, input_box, 12, model->overlay_selection == PTC_UI_CREDENTIAL_INPUT ? 3 : 1, model->overlay_selection == PTC_UI_CREDENTIAL_INPUT ? UI_ACCENT : UI_CONTROL);
     if (model->overlay_selection == PTC_UI_CREDENTIAL_INPUT) {
@@ -64,30 +64,30 @@ static void draw_credential_overlay(uint32_t *pixels, uint32_t stride, const Ptc
     } else {
         draw_text(pixels, stride, input_box.x + 16, input_box.y + 40, next, 18, UI_INK);
     }
-    draw_candidate_button(pixels, stride, ptc_ui_credential_random_rect(), "Y  随机生成",
+    draw_candidate_button(pixels, stride, ptc_ui_credential_random_rect(), ptc_ui_text(PTC_UI_T_Y_RANDOMLY_GENERATED),
                           UI_PAGE, UI_ACCENT,
                           model->overlay_selection == PTC_UI_CREDENTIAL_RANDOM, false);
     if (model->credential_kind == 2) {
         draw_candidate_button(pixels, stride, ptc_ui_credential_demo_rect(),
-                              model->demo_secret_enabled ? "R  退出演示并换新密钥" : "R  使用公共演示密钥",
+                              model->demo_secret_enabled ? ptc_ui_text(PTC_UI_T_R_EXIT_THE_DEMO_AND_CHANGE_THE) : ptc_ui_text(PTC_UI_T_R_USE_PUBLIC_DEMO_KEY),
                               model->demo_secret_enabled ? UI_PAGE : UI_DANGER_SOFT,
                               model->demo_secret_enabled ? UI_ACCENT : UI_DANGER,
                               model->overlay_selection == PTC_UI_CREDENTIAL_DEMO, false);
         draw_text(pixels, stride, dialog.x + 332, dialog.y + 350,
-                  "建议使用随机生成；手工密钥至少 32 个字符。", 17, UI_MUTED);
+                  ptc_ui_text(PTC_UI_T_IT_IS_RECOMMENDED_TO_USE_RANDOM_GENERATION), 17, UI_MUTED);
     }
     valid = model->credential_kind == 1
         ? ptc_device_id_valid(model->credential_new)
         : ptc_grant_secret_valid(model->credential_new);
     dirty = strcmp(model->credential_current, model->credential_new) != 0;
     draw_candidate_button(pixels, stride, ptc_ui_confirm_rect(model->overlay),
-                          dirty ? "+  保存" : "+  没有修改",
+                          dirty ? ptc_ui_text(PTC_UI_T_SAVE) : ptc_ui_text(PTC_UI_T_NO_MODIFICATION),
                           UI_ACCENT, UI_ON_ACCENT,
                           model->overlay_selection == PTC_UI_CREDENTIAL_SAVE, !valid || !dirty);
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
                        UI_RAISED, UI_INK, true);
     draw_text(pixels, stride, dialog.x + 42, dialog.y + 406,
-              "方向键选择  |  A 确定  |  X 手工输入  |  + 保存", 16, UI_MUTED);
+              ptc_ui_text(PTC_UI_T_DIRECTION_KEY_SELECTION_A_OK_X_MANUAL), 16, UI_MUTED);
 }
 
 static void draw_code_result_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -100,36 +100,36 @@ static void draw_code_result_overlay(uint32_t *pixels, uint32_t stride, const Pt
     bool remaining_fresh = !model->code_result_failed && ptc_ui_status_is_fresh(model, ptc_ui_render_now());
     format_duration(model->code_actual_add_minutes, actual_value, sizeof(actual_value));
     if (model->code_result_pending) {
-        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "加时结果确认中");
+        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), ptc_ui_text(PTC_UI_T_CONFIRMING_GRANT_RESULT));
         snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
-                 "已恢复上次确认的兑换请求，正在读取最终结果；请勿重复输入这枚加时码。");
+                 ptc_ui_text(PTC_UI_T_THE_LAST_CONFIRMED_REDEMPTION_REQUEST_HAS_BEEN));
     } else if (model->code_result_failed) {
-        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "兑换未成功");
+        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), ptc_ui_text(PTC_UI_T_GRANT_FAILED));
         snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
                  "%s", ptc_ui_code_failure_guidance(model->error_code));
     } else {
-        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "加时成功");
+        snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), ptc_ui_text(PTC_UI_T_GRANT_SUCCESSFUL));
         snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body),
-                 "该加时码已经使用，不能再次使用。");
+                 ptc_ui_text(PTC_UI_T_THIS_GRANT_CODE_HAS_BEEN_USED_AND));
     }
     draw_dialog_shell(pixels, stride, &shell_model, &dialog, 760, 420);
-    if (model->code_before_unlimited) snprintf(before_value, sizeof(before_value), "不限时");
+    if (model->code_before_unlimited) snprintf(before_value, sizeof(before_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     else format_duration(model->code_before_remaining_available ? model->code_before_remaining_minutes : -1,
                          before_value, sizeof(before_value));
     if (model->code_result_pending) {
         format_duration(model->code_preview_after_available ? model->code_preview_after_minutes : -1,
                         after_value, sizeof(after_value));
-    } else if (!remaining_fresh) snprintf(after_value, sizeof(after_value), "状态待确认");
-    else if (model->unrestricted_today == 1) snprintf(after_value, sizeof(after_value), "不限时");
+    } else if (!remaining_fresh) snprintf(after_value, sizeof(after_value), ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED));
+    else if (model->unrestricted_today == 1) snprintf(after_value, sizeof(after_value), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     else format_duration(model->remaining_available ? model->remaining_minutes : -1,
                          after_value, sizeof(after_value));
     draw_time_state_card(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 142, 300, 92},
-                         model->code_result_pending || model->code_result_failed ? "兑换前" : "实际增加",
+                         model->code_result_pending || model->code_result_failed ? ptc_ui_text(PTC_UI_T_BEFORE_GRANT) : ptc_ui_text(PTC_UI_T_ACTUAL_INCREASE),
                          model->code_result_pending || model->code_result_failed ? before_value :
-                         (model->code_actual_add_available ? actual_value : "暂不可用"),
+                         (model->code_actual_add_available ? actual_value : ptc_ui_text(PTC_UI_T_UNAVAILABLE)),
                          UI_RGB(UI_BLENDED(text_primary)));
     draw_time_state_card(pixels, stride, (UiRect){dialog.x + 406, dialog.y + 142, 300, 92},
-                         model->code_result_pending ? "预览兑换后" : (model->code_result_failed ? "上次剩余读数" : "兑换后剩余"), after_value,
+                         model->code_result_pending ? ptc_ui_text(PTC_UI_T_PREVIEW_AFTER_GRANT) : (model->code_result_failed ? ptc_ui_text(PTC_UI_T_LAST_REMAINING_READING) : ptc_ui_text(PTC_UI_T_REMAINING_AFTER_REDEMPTION)), after_value,
                          time_state_accent(model->code_result_pending ? model->code_preview_after_available :
                                            (remaining_fresh && (model->unrestricted_today == 1 || model->remaining_available)),
                                            model->code_result_pending ? false : model->unrestricted_today == 1,
@@ -142,15 +142,15 @@ static void draw_code_result_overlay(uint32_t *pixels, uint32_t stride, const Pt
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54}, 16, model->code_result_pending ? UI_RGB(UI_BLENDED(surface_raised)) :
                     (model->code_result_failed ? UI_DANGER_SOFT : UI_SUCCESS_SOFT));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54},
-                     model->code_result_pending ? "结果确认期间可关闭；下次打开会继续确认" :
-                     (model->code_result_failed ? "本次未消费代码；已使用或过期的代码仍不可用" : (model->code_actual_add_available && model->code_actual_add_minutes < model->code_grant_minutes
-                         ? "已到每日上限，实际增加少于代码时长" :
-                         (model->code_actual_add_available ? "兑换结果已确认并保存" : "成功已确认；加时明细暂不可核对，请查看使用记录"))),
+                     model->code_result_pending ? ptc_ui_text(PTC_UI_T_CAN_BE_CLOSED_DURING_RESULT_CONFIRMATION_IT) :
+                     (model->code_result_failed ? ptc_ui_text(PTC_UI_T_NO_CODES_WERE_CONSUMED_THIS_TIME_USED) : (model->code_actual_add_available && model->code_actual_add_minutes < model->code_grant_minutes
+                         ? ptc_ui_text(PTC_UI_T_HAS_REACHED_THE_DAILY_LIMIT_AND_THE) :
+                         (model->code_actual_add_available ? ptc_ui_text(PTC_UI_T_THE_EXCHANGE_RESULT_HAS_BEEN_CONFIRMED_AND) : ptc_ui_text(PTC_UI_T_SUCCESS_HAS_BEEN_CONFIRMED_GRANT_DETAILS_CANNOT)))),
                      19, model->code_result_pending ? UI_RGB(UI_BLENDED(text_secondary)) :
                      (model->code_result_failed ? UI_DANGER : UI_SUCCESS));
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回孩子区",
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_RETURN_TO_CHILD_AREA),
                        UI_RAISED, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), model->code_result_pending ? "A  关闭" : "A  完成",
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), model->code_result_pending ? ptc_ui_text(PTC_UI_T_A_CLOSE) : ptc_ui_text(PTC_UI_T_A_COMPLETE),
                        UI_ACCENT, UI_ON_ACCENT, false);
 }
 
@@ -160,22 +160,22 @@ static void draw_auth_error_overlay(uint32_t *pixels, uint32_t stride, const Ptc
     PtcUiModel shell_model = *model;
     char retry_label[64];
     snprintf(shell_model.overlay_title, sizeof(shell_model.overlay_title), "%s",
-             model->auth_error_title[0] ? model->auth_error_title : "PIN 验证未通过");
+             model->auth_error_title[0] ? model->auth_error_title : ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_FAILED));
     snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body), "%s",
-             model->auth_error_message[0] ? model->auth_error_message : "PIN 不正确，请重试。");
+             model->auth_error_message[0] ? model->auth_error_message : ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN));
     draw_dialog_shell(pixels, stride, &shell_model, &dialog, 720, 340);
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 44, dialog.y + 142, dialog.width - 88, 72}, 16, UI_DANGER_SOFT);
     draw_text_center(pixels, stride, (UiRect){dialog.x + 58, dialog.y + 142, dialog.width - 116, 72},
                      model->auth_cooldown_seconds > 0
-                        ? "错误次数过多，倒计时结束后才能重试"
-                        : "错误 PIN 不会保留；重新输入时输入框为空",
+                        ? ptc_ui_text(PTC_UI_T_TOO_MANY_ERRORS_YOU_CAN_TRY_AGAIN)
+                        : ptc_ui_text(PTC_UI_T_ERROR_PIN_WILL_NOT_BE_RETAINED_INPUT),
                      18, UI_DANGER);
     if (model->auth_cooldown_seconds > 0) {
-        snprintf(retry_label, sizeof(retry_label), "请等待 %d 秒", model->auth_cooldown_seconds);
+        snprintf(retry_label, sizeof(retry_label), ptc_ui_text(PTC_UI_T_WAIT_D_SECONDS), model->auth_cooldown_seconds);
     } else {
-        snprintf(retry_label, sizeof(retry_label), "A  重新输入");
+        snprintf(retry_label, sizeof(retry_label), ptc_ui_text(PTC_UI_T_A_RE_ENTER));
     }
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  取消",
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_CANCEL),
                        UI_RAISED, UI_INK, true);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), retry_label,
                        model->auth_cooldown_seconds > 0 ? UI_BORDER : UI_ACCENT,
@@ -200,9 +200,9 @@ static void draw_grant_manager_overlay(uint32_t *pixels, uint32_t stride, const 
     }
     fit_text(fitted, sizeof(fitted), model->message, 16, dialog.width - 330);
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 506,
-              fitted[0] ? fitted : "方向键选择  |  A 确定  |  B 返回加时码", 16,
+              fitted[0] ? fitted : ptc_ui_text(PTC_UI_T_DIRECTION_KEY_SELECTION_A_CONFIRM_B_RETURN), 16,
               fitted[0] ? UI_SUCCESS : UI_MUTED);
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
                        UI_RAISED, UI_INK, true);
 }
 
@@ -217,16 +217,16 @@ static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, c
     if (visible > 6) visible = 6;
     if (visible < 0) visible = 0;
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
-    snprintf(page_text, sizeof(page_text), "最新优先  |  第 %d/%d 页  |  共 %d 条",
+    snprintf(page_text, sizeof(page_text), ptc_ui_text(PTC_UI_T_NEWEST_FIRST_PAGE_D_D_D_ENTRIES),
              model->redemption_history_page + 1, pages, model->redemption_history_count);
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 104, page_text, 16, UI_MUTED);
     if (!model->redemption_history_available) {
         draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
-                         "暂时无法读取使用记录；可重试，或验证 PIN 后清空损坏记录。",
+                         ptc_ui_text(PTC_UI_T_THE_USAGE_RECORD_CANNOT_BE_READ_TEMPORARILY),
                          19, UI_DANGER);
     } else if (model->redemption_history_count == 0) {
         draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
-                         "暂无成功使用记录；升级前的兑换不会回填。",
+                         ptc_ui_text(PTC_UI_T_THERE_IS_NO_RECORD_OF_SUCCESSFUL_USE),
                          19, UI_MUTED);
     } else {
         if (visible > 0) {
@@ -246,21 +246,21 @@ static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, c
             if (record->remaining_after_available) {
                 char value[48];
                 format_duration((int)record->remaining_after_minutes, value, sizeof(value));
-                snprintf(remaining, sizeof(remaining), "兑换后 %s", value);
+                snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_AFTER_REDEMPTION_S), value);
             } else {
-                snprintf(remaining, sizeof(remaining), "兑换后暂不可用");
+                snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_TEMPORARILY_UNAVAILABLE_AFTER_REDEMPTION));
             }
-            snprintf(allowance, sizeof(allowance), "代码 %u 分钟  |  实际计入 %u 分钟%s",
+            snprintf(allowance, sizeof(allowance), ptc_ui_text(PTC_UI_T_CODE_U_MIN_CREDITED_U_MIN_S),
                      (unsigned int)record->grant_minutes,
                      (unsigned int)record->effective_add_minutes,
-                     record->effective_add_minutes < record->grant_minutes ? "（已到每日上限）" : "");
+                     record->effective_add_minutes < record->grant_minutes ? ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED) : "");
             fill_round_rect(pixels, stride, item, 16, UI_RAISED);
             draw_rect_outline(pixels, stride, item, 16, 1, UI_BORDER);
             draw_text(pixels, stride, item.x + 16, item.y + 20, time_text, 15, UI_INK);
             draw_text(pixels, stride, item.x + 250, item.y + 20, allowance, 15, UI_ACCENT);
             draw_text(pixels, stride, item.x + 720, item.y + 20, remaining, 15, UI_INK);
             draw_text(pixels, stride, item.x + item.width - 84, item.y + 20,
-                      record->token_version == 2u ? "v2 成功" : "v1 成功", 14, UI_SUCCESS);
+                      record->token_version == 2u ? ptc_ui_text(PTC_UI_T_V2_SUCCESSFUL) : ptc_ui_text(PTC_UI_T_V1_SUCCESSFUL), 14, UI_SUCCESS);
 
             int cy = item.y + 27;
             int cx = dialog.x + 48;
@@ -268,30 +268,30 @@ static void draw_redemption_history_overlay(uint32_t *pixels, uint32_t stride, c
             fill_round_rect(pixels, stride, (UiRect){cx - 2, cy - 2, 4, 4}, 2, UI_SURFACE);
         }
     }
-    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_prev_rect(), "L / 左  上一页",
+    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_prev_rect(), ptc_ui_text(PTC_UI_T_L_LEFT_PREVIOUS_PAGE),
                        UI_PAGE, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_next_rect(), "R / 右  下一页",
+    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_next_rect(), ptc_ui_text(PTC_UI_T_R_RIGHT_NEXT_PAGE),
                        UI_PAGE, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
                        UI_RAISED, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "X  清空全部",
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(PTC_UI_T_X_CLEAR_ALL),
                        UI_DANGER_SOFT, UI_DANGER, false);
 }
 
 static const char *activity_label(const char *action)
 {
-    if (strcmp(action, "today_limit") == 0) return "修改今日总额度";
-    if (strcmp(action, "today_add") == 0) return "家长临时加时";
-    if (strcmp(action, "today_unlimited") == 0) return "今日改为不限时";
-    if (strcmp(action, "today_restore") == 0) return "恢复今日计划";
-    if (strcmp(action, "weekly_update") == 0) return "修改周计划";
-    if (strcmp(action, "holiday_update") == 0) return "修改节假日规则";
-    if (strcmp(action, "scheduled_update") == 0) return "修改指定日期额度";
-    if (strcmp(action, "autonomy_update") == 0) return "修改自主缓冲";
-    if (strcmp(action, "offline_grant") == 0) return "兑换加时码";
-    if (strcmp(action, "daily_buffer") == 0) return "领取自主缓冲";
-    if (strcmp(action, "protection") == 0) return "保护事件";
-    return "活动记录";
+    if (strcmp(action, "today_limit") == 0) return ptc_ui_text(PTC_UI_T_MODIFY_TODAY_S_TOTAL_QUOTA);
+    if (strcmp(action, "today_add") == 0) return ptc_ui_text(PTC_UI_T_TEMPORARY_EXTRA_TIME_FOR_PARENTS);
+    if (strcmp(action, "today_unlimited") == 0) return ptc_ui_text(PTC_UI_T_CHANGED_TO_UNLIMITED_TIME_TODAY);
+    if (strcmp(action, "today_restore") == 0) return ptc_ui_text(PTC_UI_T_RESTORE_TODAY_S_PLAN);
+    if (strcmp(action, "weekly_update") == 0) return ptc_ui_text(PTC_UI_T_MODIFY_WEEKLY_PLAN);
+    if (strcmp(action, "holiday_update") == 0) return ptc_ui_text(PTC_UI_T_MODIFY_HOLIDAY_RULES);
+    if (strcmp(action, "scheduled_update") == 0) return ptc_ui_text(PTC_UI_T_MODIFY_THE_QUOTA_ON_THE_SPECIFIED_DATE);
+    if (strcmp(action, "autonomy_update") == 0) return ptc_ui_text(PTC_UI_T_MODIFY_AUTONOMOUS_BUFFERING);
+    if (strcmp(action, "offline_grant") == 0) return ptc_ui_text(PTC_UI_T_REDEEM_EXTRA_TIME_CODE);
+    if (strcmp(action, "daily_buffer") == 0) return ptc_ui_text(PTC_UI_T_RECEIVE_INDEPENDENT_BUFFERING);
+    if (strcmp(action, "protection") == 0) return ptc_ui_text(PTC_UI_T_PROTECTION_EVENT);
+    return ptc_ui_text(PTC_UI_T_ACTIVITY_RECORD);
 }
 
 static void draw_activity_history_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -305,15 +305,15 @@ static void draw_activity_history_overlay(uint32_t *pixels, uint32_t stride, con
     if (visible > 8) visible = 8;
     if (visible < 0) visible = 0;
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
-    snprintf(line, sizeof(line), "最新优先  |  第 %d/%d 页  |  共 %d 条  |  不含 PIN、密钥、完整代码或 nonce",
+    snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_NEWEST_FIRST_PAGE_D_D_D_ENTRIES_2),
         model->activity_history_page + 1, pages, model->activity_history_count);
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 104, line, 15, UI_MUTED);
     if (!model->activity_history_available) {
         draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
-            "家庭活动记录暂不可用；控制功能不会因此中断。", 19, UI_DANGER);
+            ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_LOGGING_IS_TEMPORARILY_UNAVAILABLE_CONTROL), 19, UI_DANGER);
     } else if (model->activity_history_count == 0) {
         draw_text_center(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 230, dialog.width - 68, 44},
-            "暂无家庭活动记录。", 19, UI_MUTED);
+            ptc_ui_text(PTC_UI_T_THERE_IS_NO_RECORD_OF_FAMILY_ACTIVITIES), 19, UI_MUTED);
     } else {
         if (visible > 0) {
             int line_x = dialog.x + 48;
@@ -327,7 +327,7 @@ static void draw_activity_history_overlay(uint32_t *pixels, uint32_t stride, con
             UiRect item = {dialog.x + 68, dialog.y + 130 + row * 45, dialog.width - 102, 38};
             char time_text[48];
             format_event_time(record->occurred_at, true, time_text, sizeof(time_text));
-            snprintf(line, sizeof(line), "%s  |  %s  |  计划 %u 分钟，实际 %u 分钟",
+            snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_S_S_PLANNED_U_MIN_ACTUAL_U),
                 time_text, activity_label(record->action), (unsigned int)record->minutes,
                 (unsigned int)record->effective_minutes);
             fill_round_rect(pixels, stride, item, 6, UI_RAISED);
@@ -341,13 +341,13 @@ static void draw_activity_history_overlay(uint32_t *pixels, uint32_t stride, con
             fill_round_rect(pixels, stride, (UiRect){cx - 2, cy - 2, 4, 4}, 2, UI_SURFACE);
         }
     }
-    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_prev_rect(), "L / 左  上一页",
+    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_prev_rect(), ptc_ui_text(PTC_UI_T_L_LEFT_PREVIOUS_PAGE),
         UI_PAGE, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_next_rect(), "R / 右  下一页",
+    draw_dialog_button(pixels, stride, ptc_ui_redemption_history_next_rect(), ptc_ui_text(PTC_UI_T_R_RIGHT_NEXT_PAGE),
         UI_PAGE, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
         UI_RAISED, UI_INK, true);
-    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "X  清空全部",
+    draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(PTC_UI_T_X_CLEAR_ALL),
         UI_DANGER_SOFT, UI_DANGER, false);
 }
 
@@ -360,55 +360,55 @@ static void draw_grant_local_overlay(uint32_t *pixels, uint32_t stride, const Pt
     int expected = reliable ? ptc_ui_grant_estimate_remaining(model, model->grant_minutes, &capped) : -1;
     uint16_t year; uint8_t month, day;
     PtcUiModel shell = *model;
-    snprintf(shell.overlay_body, sizeof(shell.overlay_body), "选时长、生成，再把代码告诉孩子。实际增加以兑换结果为准。");
+    snprintf(shell.overlay_body, sizeof(shell.overlay_body), ptc_ui_text(PTC_UI_T_CHOOSE_THE_DURATION_GENERATE_IT_AND_TELL));
     draw_dialog_shell(pixels, stride, &shell, &dialog, 920, 650);
-    if (reliable && model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), "不限时");
+    if (reliable && model->unrestricted_today == 1) snprintf(remaining, sizeof(remaining), ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
     else format_duration(reliable && model->remaining_available ? model->remaining_minutes : -1, remaining, sizeof(remaining));
     format_duration(expected, estimate, sizeof(estimate));
     format_status_age(model, freshness, sizeof(freshness));
-    if (model->grant_status_refresh_failed) snprintf(freshness, sizeof(freshness), "刷新失败，返回后刷新再试");
-    snprintf(line, sizeof(line), "今天还可玩 %s  |  %s", remaining, freshness);
+    if (model->grant_status_refresh_failed) snprintf(freshness, sizeof(freshness), ptc_ui_text(PTC_UI_T_REFRESH_FAILED_REFRESH_AND_TRY_AGAIN_AFTER));
+    snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_S_LEFT_TODAY_S), remaining, freshness);
     if (model->grant_notice[0]) snprintf(line, sizeof(line), "%s", model->grant_notice);
     draw_text(pixels, stride, dialog.x + 42, dialog.y + 126, line, 18, UI_RGB(UI_BLENDED(text_secondary)));
 
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 144, 852, 192}, 16, UI_RGB(UI_BLENDED(surface_raised)));
-    draw_text(pixels, stride, dialog.x + 54, dialog.y + 176, "下次加时时长", 20, UI_RGB(UI_BLENDED(text_secondary)));
+    draw_text(pixels, stride, dialog.x + 54, dialog.y + 176, ptc_ui_text(PTC_UI_T_THE_NEXT_GRANT_DURATION), 20, UI_RGB(UI_BLENDED(text_secondary)));
     char played[48];
     format_duration(reliable && model->played_minutes_available ? model->played_minutes : -1, played, sizeof(played));
-    snprintf(line, sizeof(line), "额度已耗（估算）%s", played);
+    snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_ESTIMATED_USED_S), played);
     draw_text(pixels, stride, dialog.x + 420, dialog.y + 176, line, 18, UI_RGB(UI_BLENDED(text_secondary)));
-    snprintf(line, sizeof(line), "%u 分钟  |  A 输入", (unsigned)model->grant_minutes);
+    snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_U_MIN_A_ENTER), (unsigned)model->grant_minutes);
     draw_candidate_button(pixels, stride, ptc_ui_grant_adjust_rect(0), line,
         UI_ACCENT_SOFT, UI_ACCENT,
         model->overlay_selection == PTC_UI_GRANT_LOCAL_ADJUST_FIRST, false);
-    snprintf(line, sizeof(line), "兑换后预计 %s%s", estimate, capped ? "（已到每日上限）" : "");
+    snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_EST_AFTER_REDEMPTION_S_S), estimate, capped ? ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED) : "");
     draw_text(pixels, stride, dialog.x + 420, dialog.y + 238, line, 20, UI_RGB(UI_BLENDED(text_secondary)));
-    draw_text(pixels, stride, dialog.x + 54, dialog.y + 320, "调整这里不会改变已生成代码的时长，也不会撤销旧码。", 18, UI_RGB(UI_BLENDED(text_secondary)));
+    draw_text(pixels, stride, dialog.x + 54, dialog.y + 320, ptc_ui_text(PTC_UI_T_ADJUSTING_THIS_WILL_NOT_CHANGE_THE_DURATION), 18, UI_RGB(UI_BLENDED(text_secondary)));
 
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 34, dialog.y + 350, 852, 170}, 16, UI_RGB(UI_BLENDED(surface_raised)));
-    draw_text(pixels, stride, dialog.x + 54, dialog.y + 382, "已生成代码", 20, UI_RGB(UI_BLENDED(text_secondary)));
+    draw_text(pixels, stride, dialog.x + 54, dialog.y + 382, ptc_ui_text(PTC_UI_T_CODE_GENERATED), 20, UI_RGB(UI_BLENDED(text_secondary)));
     if (model->grant_has_code) {
         ptc_ui_format_code(model->grant_code, code, sizeof(code));
         draw_text(pixels, stride, dialog.x + 54, dialog.y + 432, code, 42, UI_RGB(UI_BLENDED(text_primary)));
-        snprintf(line, sizeof(line), "代码时长 %u 分钟", (unsigned)model->grant_issued_minutes);
+        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_CODE_DURATION_U_MIN), (unsigned)model->grant_issued_minutes);
         draw_text(pixels, stride, dialog.x + 420, dialog.y + 426, line, 25, UI_RGB(UI_BLENDED(text_primary)));
         format_duration(model->grant_estimate_available ? model->grant_estimate_minutes : -1, estimate, sizeof(estimate));
-        snprintf(line, sizeof(line), "生成时预计剩余 %s%s", estimate, model->grant_estimate_capped ? "（已到每日上限）" : "");
+        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_EST_REMAINING_WHEN_GENERATED_S_S), estimate, model->grant_estimate_capped ? ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED) : "");
         draw_text(pixels, stride, dialog.x + 54, dialog.y + 466, line, 18, UI_RGB(UI_BLENDED(text_secondary)));
         if (ptc_date_from_day_index(model->grant_day_index, &year, &month, &day))
-            snprintf(line, sizeof(line), "%u-%02u-%02u 有效，成功兑换后仅可使用一次", (unsigned)year, (unsigned)month, (unsigned)day);
-        else snprintf(line, sizeof(line), "签发日期待确认，请返回后刷新状态");
+            snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_VALID_ON_U_02U_02U_ONE_USE), (unsigned)year, (unsigned)month, (unsigned)day);
+        else snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_THE_ISSUANCE_DATE_NEEDS_TO_BE_CONFIRMED));
         draw_text(pixels, stride, dialog.x + 54, dialog.y + 499, line, 18, UI_RGB(UI_BLENDED(text_secondary)));
     } else {
-        draw_text(pixels, stride, dialog.x + 54, dialog.y + 430, "选好时长后，按 + 生成", 28, UI_RGB(UI_BLENDED(text_primary)));
-        draw_text(pixels, stride, dialog.x + 54, dialog.y + 471, "生成前会再次验证 PIN；同日已签发的其他代码仍可能可用。", 18, UI_RGB(UI_BLENDED(text_secondary)));
+        draw_text(pixels, stride, dialog.x + 54, dialog.y + 430, ptc_ui_text(PTC_UI_T_AFTER_SELECTING_THE_DURATION_PRESS_TO_GENERATE), 28, UI_RGB(UI_BLENDED(text_primary)));
+        draw_text(pixels, stride, dialog.x + 54, dialog.y + 471, ptc_ui_text(PTC_UI_T_PIN_WILL_BE_VERIFIED_AGAIN_BEFORE_GENERATION), 18, UI_RGB(UI_BLENDED(text_secondary)));
     }
     draw_candidate_button(pixels, stride, ptc_ui_grant_generate_rect(),
-        model->grant_has_code ? "+  再生成一个" : "+  生成加时码", UI_ACCENT, UI_ON_ACCENT,
+        model->grant_has_code ? ptc_ui_text(PTC_UI_T_GENERATE_ANOTHER_ONE) : ptc_ui_text(PTC_UI_T_GENERATE_EXTRA_TIME_CODE), UI_ACCENT, UI_ON_ACCENT,
         model->overlay_selection == PTC_UI_GRANT_LOCAL_GENERATE, model->waiting);
-    draw_candidate_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
+    draw_candidate_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
         UI_RGB(UI_BLENDED(surface_raised)), UI_RGB(UI_BLENDED(text_primary)), model->overlay_selection == PTC_UI_GRANT_LOCAL_BACK, false);
-    draw_text(pixels, stride, dialog.x + 280, dialog.y + 615, "方向键选择  |  A 编辑代码时长  |  + 生成", 18, UI_RGB(UI_BLENDED(text_secondary)));
+    draw_text(pixels, stride, dialog.x + 280, dialog.y + 615, ptc_ui_text(PTC_UI_T_DIRECTION_KEY_SELECTION_A_EDIT_CODE_DURATION), 18, UI_RGB(UI_BLENDED(text_secondary)));
 }
 
 static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -425,7 +425,7 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     if (scale < 2) scale = 2;
     total = (size + 8) * scale;
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 650);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 142, "推荐方案一：联网扫码", 23, UI_SUCCESS);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 142, ptc_ui_text(PTC_UI_T_RECOMMENDED_SOLUTION_ONE_SCAN_THE_QR_CODE), 23, UI_SUCCESS);
     origin_x = dialog.x + 34;
     origin_y = dialog.y + 164;
     /* QR polarity is functional and intentionally bypasses the active theme. */
@@ -441,41 +441,41 @@ static void draw_qr_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     }
 
     draw_text(pixels, stride, dialog.x + 34, dialog.y + 530,
-              "仅在网页可访问时扫码；地址：", 14, UI_MUTED);
+              ptc_ui_text(PTC_UI_T_SCAN_THE_CODE_ONLY_WHEN_THE_WEB), 14, UI_MUTED);
     next_y = draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 552,
                                model->pairing_base_url, 13, 400, 19, 3, UI_ACCENT);
     draw_text(pixels, stride, dialog.x + 34, next_y + 4,
-              "二维码包含加时码密钥，请仅由家长使用。", 14, UI_DANGER);
+              ptc_ui_text(PTC_UI_T_THE_QR_CODE_CONTAINS_A_TIME_CODE), 14, UI_DANGER);
 
-    draw_text(pixels, stride, dialog.x + 470, dialog.y + 142, "备用方案二：单文件离线版", 23, UI_INK);
+    draw_text(pixels, stride, dialog.x + 470, dialog.y + 142, ptc_ui_text(PTC_UI_T_ALTERNATE_PLAN_TWO_SINGLE_FILE_OFFLINE_VERSION), 23, UI_INK);
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 178,
-              "1. 解压完整交付包，取得 playwise-offline.html", 15, UI_INK);
+              ptc_ui_text(PTC_UI_T_1_UNZIP_THE_COMPLETE_DELIVERY_PACKAGE_AND), 15, UI_INK);
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 208,
-              "2. 按 A 导出配置；导出前 SD 卡没有此文件", 15, UI_INK);
+              ptc_ui_text(PTC_UI_T_2_PRESS_A_TO_EXPORT_THE_CONFIGURATION), 15, UI_INK);
     draw_text(pixels, stride, dialog.x + 488, dialog.y + 234,
               PLAYWISE_SD_ROOT "/parent-import.json", 15, UI_ACCENT);
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 266,
-              "3. 将 HTML 和配置文件传到可信的手机或电脑", 15, UI_INK);
+              ptc_ui_text(PTC_UI_T_3_TRANSFER_HTML_AND_CONFIGURATION_FILES_TO), 15, UI_INK);
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 298,
-              "4. 用系统浏览器打开 HTML，再点击“导入配置文件”", 15, UI_INK);
+              ptc_ui_text(PTC_UI_T_4_OPEN_THE_HTML_IN_A_BROWSER), 15, UI_INK);
     draw_text(pixels, stride, dialog.x + 470, dialog.y + 330,
-              "5. 选择 parent-import.json，再点击“导入此设备”", 15, UI_INK);
+              ptc_ui_text(PTC_UI_T_5_SELECT_PARENT_IMPORT_JSON_THEN_IMPORT), 15, UI_INK);
     next_y = dialog.y + 362;
     draw_text(pixels, stride, dialog.x + 470, next_y + 6,
-              "日常生成无需网络，也无需安装应用或本地服务器。", 14, UI_SUCCESS);
+              ptc_ui_text(PTC_UI_T_NO_NETWORK_REQUIRED_FOR_DAILY_GENERATION_NO), 14, UI_SUCCESS);
     draw_text(pixels, stride, dialog.x + 470, next_y + 32,
-              "手机请先保存文件，再交给系统浏览器打开；", 14, UI_MUTED);
+              ptc_ui_text(PTC_UI_T_PLEASE_SAVE_THE_FILE_ON_YOUR_MOBILE), 14, UI_MUTED);
     draw_text(pixels, stride, dialog.x + 470, next_y + 58,
-              "不要使用聊天软件或网盘的内置预览器。", 14, UI_MUTED);
+              ptc_ui_text(PTC_UI_T_DO_NOT_USE_THE_BUILT_IN_PREVIEWER), 14, UI_MUTED);
     fill_round_rect(pixels, stride, (UiRect){dialog.x + 470, next_y + 74, 610, 48}, 16, UI_DANGER_SOFT);
     draw_text(pixels, stride, dialog.x + 486, next_y + 104,
-              "配置文件包含加时码密钥，请勿发送给他人。", 15, UI_DANGER);
+              ptc_ui_text(PTC_UI_T_THE_CONFIGURATION_FILE_CONTAINS_A_TIME_CODED), 15, UI_DANGER);
 
     UiRect export_button = to_uirect(ptc_ui_qr_export_rect());
     fill_round_rect(pixels, stride, export_button, 12, UI_ACCENT);
-    draw_text_center(pixels, stride, export_button, "A  导出配置文件", 18, UI_ON_ACCENT);
+    draw_text_center(pixels, stride, export_button, ptc_ui_text(PTC_UI_T_A_EXPORT_CONFIGURATION_FILE), 18, UI_ON_ACCENT);
 
-    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), "B  返回",
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_BACK),
                        UI_RAISED, UI_INK, true);
 }
 
@@ -486,23 +486,23 @@ static void draw_parent_export_result_overlay(
     draw_dialog_shell(pixels, stride, model, &dialog, 800, 420);
     if (model->parent_export_succeeded) {
         draw_text(pixels, stride, dialog.x + 42, dialog.y + 134,
-            "配置文件已写入 Switch 的 SD 卡：", 20, UI_SUCCESS);
+            ptc_ui_text(PTC_UI_T_THE_CONFIGURATION_FILE_HAS_BEEN_WRITTEN_TO), 20, UI_SUCCESS);
         draw_text(pixels, stride, dialog.x + 42, dialog.y + 176,
             PLAYWISE_SD_ROOT "/parent-import.json", 19, UI_ACCENT);
         draw_text(pixels, stride, dialog.x + 42, dialog.y + 220,
-            "从 SD 卡的 /switch/playwise/ 目录复制到家长设备。", 17, UI_INK);
+            ptc_ui_text(PTC_UI_T_COPY_FROM_THE_SWITCH_PLAYWISE_DIRECTORY_OF), 17, UI_INK);
         draw_text(pixels, stride, dialog.x + 42, dialog.y + 254,
-            "在离线家长网页选择“导入配置文件”，然后确认设备。", 17, UI_INK);
+            ptc_ui_text(PTC_UI_T_SELECT_IMPORT_CONFIG_ON_THE_OFFLINE_PARENT), 17, UI_INK);
         draw_text(pixels, stride, dialog.x + 42, dialog.y + 294,
-            "文件包含加时码密钥，请勿发送给孩子或上传到不可信站点。", 15, UI_DANGER);
+            ptc_ui_text(PTC_UI_T_FILE_CONTAINS_A_TIME_CODED_KEY_AND), 15, UI_DANGER);
     } else {
         draw_text(pixels, stride, dialog.x + 42, dialog.y + 150,
-            "配置文件没有导出", 22, UI_DANGER);
+            ptc_ui_text(PTC_UI_T_THE_CONFIGURATION_FILE_IS_NOT_EXPORTED), 22, UI_DANGER);
         draw_wrapped_text(pixels, stride, dialog.x + 42, dialog.y + 204,
             model->message, 18, dialog.width - 84, 28, 3, UI_INK);
     }
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),
-        "A / B  返回", UI_RAISED, UI_INK, true);
+        ptc_ui_text(PTC_UI_T_A_B_RETURN), UI_RAISED, UI_INK, true);
 }
 
 static void draw_credential_leave_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -510,11 +510,11 @@ static void draw_credential_leave_overlay(uint32_t *pixels, uint32_t stride, con
     UiRect dialog;
     draw_dialog_shell(pixels, stride, model, &dialog, 720, 300);
     draw_text_center(pixels, stride, (UiRect){dialog.x + 36, dialog.y + 132, dialog.width - 72, 30},
-                     "左右选择  |  A 确定  |  B 继续编辑", 17, UI_MUTED);
-    draw_candidate_button(pixels, stride, ptc_ui_discard_rect(model->overlay), "X  放弃修改",
+                     ptc_ui_text(PTC_UI_T_SELECT_LEFT_AND_RIGHT_A_CONFIRM_B), 17, UI_MUTED);
+    draw_candidate_button(pixels, stride, ptc_ui_discard_rect(model->overlay), ptc_ui_text(PTC_UI_T_MESSAGE),
                           UI_DANGER_SOFT, UI_DANGER,
                           model->overlay_selection == 0, false);
-    draw_candidate_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), "A  继续编辑",
+    draw_candidate_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_CONTINUE_EDITING),
                           UI_PAGE, UI_ACCENT,
                           model->overlay_selection == 1, false);
 }

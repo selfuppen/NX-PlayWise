@@ -53,9 +53,9 @@ void open_hot_reload_confirmation(UiState *ui)
     if (!ui || ui->model.view != PTC_UI_PARENT ||
         ui->hot_reload.status != PTC_HOT_RELOAD_PENDING || ui->waiting) return;
     snprintf(body, sizeof(body),
-        "当前后台：%.88s\n待加载：%.88s\n将短暂停止接单，安全退出旧后台后加载已安装版本；PIN、规则和运行数据保持不变。",
+        ptc_ui_text(PTC_UI_T_CURRENT_BACKEND_88S_TO_LOAD_88S_REQUESTS),
         ui->hot_reload.journal.source_release_id, PLAYWISE_BUILD_RELEASE_ID);
-    open_confirm_overlay(ui, PTC_UI_OPERATION_HOT_RELOAD, "加载已安装的新版本", body);
+    open_confirm_overlay(ui, PTC_UI_OPERATION_HOT_RELOAD, ptc_ui_text(PTC_UI_T_LOADS_THE_NEW_INSTALLED_VERSION), body);
 }
 
 void poll_hot_reload(UiState *ui)
@@ -80,12 +80,12 @@ void poll_hot_reload(UiState *ui)
         ui->model.waiting = false;
         if (ptc_switch_ipc_client_probe(&ui->ipc)) {
             snprintf(ui->model.message, sizeof(ui->model.message),
-                "新版后台已安全加载，正在刷新状态...");
+                ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_OF_THE_BACKGROUND_HAS));
             submit_status(ui);
         } else {
             ui->hot_reload.status = PTC_HOT_RELOAD_UNAVAILABLE;
             snprintf(ui->hot_reload.detail, sizeof(ui->hot_reload.detail),
-                "后台已启动但 IPC 重连失败，请完整重启主机");
+                ptc_ui_text(PTC_UI_T_THE_BACKGROUND_HAS_BEEN_STARTED_BUT_IPC));
             sync_hot_reload_model(ui);
             snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
         }
@@ -105,7 +105,7 @@ void poll_hot_reload(UiState *ui)
         ui->model.overlay == PTC_UI_OVERLAY_NONE && !ui->hot_reload_child_notice_shown) {
         ui->hot_reload_child_notice_shown = true;
         snprintf(ui->model.message, sizeof(ui->model.message),
-            "已安装新版本；请进入家长区，通过 PIN 确认加载。");
+            ptc_ui_text(PTC_UI_T_A_NEW_VERSION_HAS_BEEN_INSTALLED_PLEASE));
     }
 }
 #endif
@@ -200,25 +200,25 @@ static const char *companion_status_zh(PtcCompanionStatus status)
 {
     switch (status) {
     case PTC_COMPANION_OK:
-        return "成功";
+        return ptc_ui_text(PTC_UI_T_SUCCESS);
     case PTC_COMPANION_PENDING:
-        return "后台仍在处理";
+        return ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_STILL_PROCESSING);
     case PTC_COMPANION_TIMEOUT:
-        return "等待后台响应超时";
+        return ptc_ui_text(PTC_UI_T_TIMEOUT_WAITING_FOR_BACKGROUND_RESPONSE);
     case PTC_COMPANION_BAD_ARGUMENT:
-        return "请求参数无效";
+        return ptc_ui_text(PTC_UI_T_INVALID_REQUEST_PARAMETERS);
     case PTC_COMPANION_WRITE_FAILED:
-        return "写入请求失败";
+        return ptc_ui_text(PTC_UI_T_WRITE_REQUEST_FAILED);
     case PTC_COMPANION_RENAME_FAILED:
-        return "提交请求失败";
+        return ptc_ui_text(PTC_UI_T_FAILED_TO_SUBMIT_REQUEST);
     case PTC_COMPANION_RESULT_INVALID:
-        return "后台结果格式无效";
+        return ptc_ui_text(PTC_UI_T_THE_BACKGROUND_RESULT_FORMAT_IS_INVALID);
     case PTC_COMPANION_RESULT_MISMATCH:
-        return "后台结果与本次请求不匹配";
+        return ptc_ui_text(PTC_UI_T_THE_BACKGROUND_RESULT_DOES_NOT_MATCH_THIS);
     case PTC_COMPANION_QUIESCING:
-        return "后台正在安全切换，请稍后重试";
+        return ptc_ui_text(PTC_UI_T_BACKGROUND_IS_SWITCHING_SAFELY_PLEASE_RETRY_LATER);
     default:
-        return "未知错误";
+        return ptc_ui_text(PTC_UI_T_UNKNOWN_ERROR);
     }
 }
 
@@ -226,23 +226,23 @@ const char *auth_status_zh(PtcAuthStatus status)
 {
     switch (status) {
     case PTC_AUTH_OK:
-        return "成功";
+        return ptc_ui_text(PTC_UI_T_SUCCESS);
     case PTC_AUTH_EMPTY:
-        return "尚未设置 任我玩 PIN";
+        return ptc_ui_text(PTC_UI_T_PLAYWISE_PIN_IS_NOT_SET);
     case PTC_AUTH_BAD_ARGUMENT:
-        return "PIN 参数无效";
+        return ptc_ui_text(PTC_UI_T_PIN_PARAMETER_IS_INVALID);
     case PTC_AUTH_READ_FAILED:
-        return "无法读取 PIN 设置";
+        return ptc_ui_text(PTC_UI_T_UNABLE_TO_READ_PIN_SETTINGS);
     case PTC_AUTH_WRITE_FAILED:
-        return "无法保存 PIN 设置";
+        return ptc_ui_text(PTC_UI_T_UNABLE_TO_SAVE_PIN_SETTINGS);
     case PTC_AUTH_INVALID_FILE:
-        return "PIN 设置文件无效";
+        return ptc_ui_text(PTC_UI_T_PIN_SETTINGS_FILE_IS_INVALID);
     case PTC_AUTH_DENIED:
-        return "PIN 不正确";
+        return ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT);
     case PTC_AUTH_COOLDOWN:
-        return "PIN 错误次数过多，暂时锁定";
+        return ptc_ui_text(PTC_UI_T_TOO_MANY_PIN_ERRORS_TEMPORARILY_LOCKED);
     default:
-        return "未知认证错误";
+        return ptc_ui_text(PTC_UI_T_UNKNOWN_AUTHENTICATION_ERROR);
     }
 }
 
@@ -265,9 +265,9 @@ void show_auth_error(UiState *ui, const char *title, const char *message, int64_
     ui->auth_cooldown_until = retry_after > 0 ? (int64_t)time(NULL) + retry_after : 0;
     ui->model.auth_cooldown_seconds = retry_after > 0 ? (int)retry_after : 0;
     snprintf(ui->model.auth_error_title, sizeof(ui->model.auth_error_title), "%s",
-             title ? title : "PIN 验证未通过");
+             title ? title : ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_FAILED));
     snprintf(ui->model.auth_error_message, sizeof(ui->model.auth_error_message), "%s",
-             message ? message : "PIN 不正确，请重试。");
+             message ? message : ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN));
     snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->model.auth_error_message);
     snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
 }
@@ -283,7 +283,7 @@ void close_auth_error(UiState *ui, bool cancelled)
     ui->model.auth_error_message[0] = '\0';
     if (cancelled) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
-        snprintf(ui->model.message, sizeof(ui->model.message), "已取消 PIN 验证。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_CANCELED));
         ui->model.result_status[0] = '\0';
     }
 }
@@ -301,7 +301,7 @@ void sync_transport_label(UiState *ui)
 #ifdef PLAYWISE_EDEN
     /* The emulator build never talks to pctc:u, so name the in-process core
        instead of a transport route it does not use. */
-    ptc_ui_set_execution(&ui->model, ui->model.command_name, "传输：Eden 模拟后台");
+    ptc_ui_set_execution(&ui->model, ui->model.command_name, ptc_ui_text(PTC_UI_T_TRANSMISSION_EDEN_SIMULATION_BACKGROUND));
 #else
     ptc_ui_set_execution(
         &ui->model,
@@ -349,7 +349,7 @@ void refresh_disable_flag(UiState *ui)
         ui->model.numpad_purpose == PTC_UI_NUMPAD_WEEKLY_MINUTES) {
         ptc_ui_numpad_finish(&ui->model);
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "检测到紧急停用，本次未确认的分钟输入已取消；此前周计划草稿仍然保留。");
+                 ptc_ui_text(PTC_UI_T_EMERGENCY_OUTAGE_DETECTED_THIS_UNCONFIRMED_MINUTE_ENTRY));
     }
     if (!was_disabled && ui->model.disable_flag_present &&
         ui->model.overlay == PTC_UI_OVERLAY_WEEKLY_LEAVE) {
@@ -369,7 +369,7 @@ bool weekly_editing_blocked(UiState *ui)
     }
     if (!cancelling_weekly_input) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "紧急停用中，周计划暂时只读；解除停用后才能修改和保存。");
+                 ptc_ui_text(PTC_UI_T_IS_IN_EMERGENCY_DEACTIVATION_AND_THE_WEEKLY));
     }
     return true;
 }

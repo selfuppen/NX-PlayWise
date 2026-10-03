@@ -1,4 +1,5 @@
 #include "transport_client.h"
+#include "ui_language.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -151,46 +152,46 @@ const char *ptc_companion_transport_route_label_zh(PtcCompanionTransportRoute ro
 {
     switch (route) {
     case PTC_TRANSPORT_ROUTE_IPC:
-        return "传输：IPC";
+        return ptc_ui_text(PTC_UI_T_TRANSPORT_IPC);
     case PTC_TRANSPORT_ROUTE_SD_QUEUE:
-        return "传输：SD 文件队列";
+        return ptc_ui_text(PTC_UI_T_TRANSFER_SD_FILE_QUEUE);
     case PTC_TRANSPORT_ROUTE_IPC_SD_RESULT:
-        return "传输：IPC → SD 结果回读";
+        return ptc_ui_text(PTC_UI_T_TRANSMISSION_IPC_SD_RESULT_READBACK);
     case PTC_TRANSPORT_ROUTE_LOCAL_SD_FLAG:
-        return "执行方式：本地 SD 标志文件";
+        return ptc_ui_text(PTC_UI_T_EXECUTION_MODE_LOCAL_SD_FLAG_FILE);
     case PTC_TRANSPORT_ROUTE_NONE:
     default:
-        return "传输：未开始";
+        return ptc_ui_text(PTC_UI_T_TRANSFER_NOT_STARTED);
     }
 }
 
 const char *ptc_companion_request_command_label_zh(const char *type)
 {
-    if (!type) return "后台操作";
-    if (strcmp(type, "status") == 0) return "刷新状态";
-    if (strcmp(type, "preview_offline_code") == 0) return "预览今日加时";
-    if (strcmp(type, "offline_code") == 0) return "提交今日加时";
-    if (strcmp(type, "clear_redemption_history") == 0) return "清空加时码使用记录";
-    if (strcmp(type, "set_scheduled_override") == 0) return "设置指定日期额度";
-    if (strcmp(type, "set_autonomy_policy") == 0) return "设置今日自主缓冲";
-    if (strcmp(type, "claim_daily_buffer") == 0) return "领取今日自主缓冲";
-    if (strcmp(type, "clear_activity_history") == 0) return "清空家庭活动记录";
-    if (strcmp(type, "set_today_limit") == 0) return "设置今日总额度";
-    if (strcmp(type, "add_today_minutes") == 0) return "临时加时";
-    if (strcmp(type, "disable_today_limit") == 0) return "解除当前限制";
-    if (strcmp(type, "restore_today_policy") == 0) return "清除今日额度调整";
-    if (strcmp(type, "set_weekly_template") == 0) return "每周计划";
-    if (strcmp(type, "set_holiday_policy") == 0) return "国家节假日设置";
-    if (strcmp(type, "complete_setup") == 0) return "启用自动控制";
-    if (strcmp(type, "retry_setup_release") == 0) return "重试前置解限";
-    if (strcmp(type, "restore_install_snapshot") == 0) return "恢复安装前状态";
-    if (strcmp(type, "set_bedtime_policy") == 0) return "保存就寝计划";
-    if (strcmp(type, "skip_bedtime") == 0) return "跳过本次就寝限制";
-    if (strcmp(type, "clear_bedtime_skip") == 0) return "恢复本次就寝限制";
-    if (strcmp(type, "disable_bedtime") == 0) return "关闭就寝计划";
-    if (strcmp(type, "confirm_bedtime_requirements") == 0) return "确认就寝限制风险";
-    if (strcmp(type, "overlay_ready") == 0) return "验证浮窗恢复通道";
-    return "后台操作";
+    if (!type) return ptc_ui_text(PTC_UI_T_BACKGROUND_OPERATION);
+    if (strcmp(type, "status") == 0) return ptc_ui_text(PTC_UI_T_REFRESH_STATUS);
+    if (strcmp(type, "preview_offline_code") == 0) return ptc_ui_text(PTC_UI_T_PREVIEW_TODAY_S_GRANT);
+    if (strcmp(type, "offline_code") == 0) return ptc_ui_text(PTC_UI_T_SUBMIT_TODAY_S_GRANT);
+    if (strcmp(type, "clear_redemption_history") == 0) return ptc_ui_text(PTC_UI_T_CLEAR_GRANT_CODE_USAGE_RECORDS);
+    if (strcmp(type, "set_scheduled_override") == 0) return ptc_ui_text(PTC_UI_T_SET_THE_QUOTA_FOR_THE_SPECIFIED_DATE);
+    if (strcmp(type, "set_autonomy_policy") == 0) return ptc_ui_text(PTC_UI_T_SET_TODAY_S_INDEPENDENT_BUFFERING);
+    if (strcmp(type, "claim_daily_buffer") == 0) return ptc_ui_text(PTC_UI_T_GET_TODAY_S_INDEPENDENT_BUFFER);
+    if (strcmp(type, "clear_activity_history") == 0) return ptc_ui_text(PTC_UI_T_CLEAR_FAMILY_ACTIVITY_RECORDS);
+    if (strcmp(type, "set_today_limit") == 0) return ptc_ui_text(PTC_UI_T_SET_TODAY_S_TOTAL_QUOTA);
+    if (strcmp(type, "add_today_minutes") == 0) return ptc_ui_text(PTC_UI_T_TEMPORARY_GRANT);
+    if (strcmp(type, "disable_today_limit") == 0) return ptc_ui_text(PTC_UI_T_LIFT_CURRENT_RESTRICTIONS);
+    if (strcmp(type, "restore_today_policy") == 0) return ptc_ui_text(PTC_UI_T_CLEAR_TODAY_S_QUOTA_ADJUSTMENT);
+    if (strcmp(type, "set_weekly_template") == 0) return ptc_ui_text(PTC_UI_T_WEEKLY_PLAN);
+    if (strcmp(type, "set_holiday_policy") == 0) return ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTINGS);
+    if (strcmp(type, "complete_setup") == 0) return ptc_ui_text(PTC_UI_T_ENABLE_AUTOMATIC_CONTROL);
+    if (strcmp(type, "retry_setup_release") == 0) return ptc_ui_text(PTC_UI_T_RETRY_PRE_LIMITING);
+    if (strcmp(type, "restore_install_snapshot") == 0) return ptc_ui_text(PTC_UI_T_RESTORE_ORIGINAL_STATE);
+    if (strcmp(type, "set_bedtime_policy") == 0) return ptc_ui_text(PTC_UI_T_SAVE_BEDTIME_PLAN);
+    if (strcmp(type, "skip_bedtime") == 0) return ptc_ui_text(PTC_UI_T_SKIP_THIS_BEDTIME_RESTRICTION);
+    if (strcmp(type, "clear_bedtime_skip") == 0) return ptc_ui_text(PTC_UI_T_RESTORE_THIS_BEDTIME_LIMIT);
+    if (strcmp(type, "disable_bedtime") == 0) return ptc_ui_text(PTC_UI_T_TURN_OFF_BEDTIME_PLAN);
+    if (strcmp(type, "confirm_bedtime_requirements") == 0) return ptc_ui_text(PTC_UI_T_IDENTIFY_BEDTIME_RESTRICTION_RISKS);
+    if (strcmp(type, "overlay_ready") == 0) return ptc_ui_text(PTC_UI_T_VERIFY_FLOATING_WINDOW_RECOVERY_CHANNEL);
+    return ptc_ui_text(PTC_UI_T_BACKGROUND_OPERATION);
 }
 
 PtcCompanionStatus ptc_companion_transport_submit_status(PtcCompanionTransportClient *client, const char *request_id, int64_t created_at)

@@ -33,7 +33,7 @@ static bool keyboard_input_initial(
     swkbdConfigSetHeaderText(&keyboard, header);
     swkbdConfigSetGuideText(&keyboard, guide);
     if (initial && initial[0]) swkbdConfigSetInitialText(&keyboard, initial);
-    swkbdConfigSetOkButtonText(&keyboard, "确认");
+    swkbdConfigSetOkButtonText(&keyboard, ptc_ui_text(PTC_UI_T_CONFIRM_2));
     result = swkbdShow(&keyboard, out, out_size);
     swkbdClose(&keyboard);
     return R_SUCCEEDED(result) && out[0] != '\0';
@@ -61,7 +61,7 @@ static bool keyboard_date(UiState *ui, uint16_t current, uint16_t *out_day_index
     if (!ui || !out_day_index || !ui->model.status_loaded ||
         !ptc_date_from_day_index(current, &year, &month, &day)) {
         if (ui) snprintf(ui->model.message, sizeof(ui->model.message),
-                         "主机日期尚未加载，请刷新状态后再输入日期。");
+                         ptc_ui_text(PTC_UI_T_THE_HOST_DATE_HAS_NOT_BEEN_LOADED));
         return false;
     }
     initial[0] = (char)('0' + (year / 1000u) % 10u);
@@ -74,11 +74,11 @@ static bool keyboard_date(UiState *ui, uint16_t current, uint16_t *out_day_index
     initial[7] = (char)('0' + day % 10u);
     initial[8] = '\0';
     snprintf(value, sizeof(value), "%s", initial);
-    if (!keyboard_input_initial("格式：YYYYMMDD", "仅限今天或未来日期（8 位）",
+    if (!keyboard_input_initial(ptc_ui_text(PTC_UI_T_FORMAT_YYYYMMDD), ptc_ui_text(PTC_UI_T_TODAY_OR_FUTURE_DATE_ONLY_8_DIGITS),
                                 value, sizeof(value), false, true, false, initial)) return false;
     if (!ptc_ui_parse_date_yyyymmdd(value, ui->model.day_index, out_day_index)) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "日期无效；请输入今天或未来的 8 位日期 YYYYMMDD。");
+                 ptc_ui_text(PTC_UI_T_INVALID_DATE_PLEASE_ENTER_TODAY_S_OR));
         return false;
     }
     return true;
@@ -93,10 +93,10 @@ static bool keyboard_span(UiState *ui, uint16_t current, uint16_t *out_days)
     if (current > 366u) current = 366u;
     snprintf(initial, sizeof(initial), "%u", (unsigned)current);
     snprintf(value, sizeof(value), "%s", initial);
-    if (!keyboard_input_initial("输入持续天数", "范围 1 到 366 天", value, sizeof(value),
+    if (!keyboard_input_initial(ptc_ui_text(PTC_UI_T_ENTER_THE_DURATION_IN_DAYS), ptc_ui_text(PTC_UI_T_RANGE_1_TO_366_DAYS), value, sizeof(value),
                                 false, true, false, initial)) return false;
     if (!ptc_ui_parse_span_days(value, out_days)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "持续天数必须是 1 到 366。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_DURATION_MUST_BE_1_TO_366));
         return false;
     }
     return true;
@@ -110,7 +110,7 @@ bool edit_date_range_start(UiState *ui, uint16_t *start, uint16_t *end)
     duration = *end >= *start ? (uint32_t)*end - *start + 1u : 1u;
     if (!keyboard_date(ui, *start, &next)) return false;
     if ((uint32_t)next + duration - 1u > UINT16_MAX) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "该开始日期会使结束日期越界，未修改草稿。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THIS_START_DATE_WOULD_PUT_THE_END));
         return false;
     }
     *start = next;
@@ -124,7 +124,7 @@ bool edit_date_range_span(UiState *ui, uint16_t start, uint16_t *end)
     uint16_t next;
     if (!ui || !end || !keyboard_span(ui, (uint16_t)duration, &next)) return false;
     if ((uint32_t)start + next - 1u > UINT16_MAX) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "持续天数超出可用日期范围，未修改草稿。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_DURATION_OF_DAYS_OUTSIDE_OF_AVAILABLE_DATE));
         return false;
     }
     *end = (uint16_t)(start + next - 1u);
@@ -327,7 +327,7 @@ bool pin_input(UiState *ui, const char *title, const char *guide,
 void edit_overlay_minutes(UiState *ui)
 {
     char guide[96];
-    snprintf(guide, sizeof(guide), "分别输入小时和分钟，总计范围 %u 到 %u 分钟",
+    snprintf(guide, sizeof(guide), ptc_ui_text(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY_TOTAL_RANGE),
              (unsigned int)ui->model.minimum_minutes, (unsigned int)ui->model.maximum_minutes);
     ptc_ui_numpad_open(
         &ui->model, PTC_UI_NUMPAD_MINUTES, PTC_UI_OVERLAY_MINUTES,
@@ -337,7 +337,7 @@ void edit_overlay_minutes(UiState *ui)
 
 void edit_weekly_minutes(UiState *ui)
 {
-    static const char *WEEKDAYS[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    const char *WEEKDAYS[] = {ptc_ui_text(PTC_UI_T_SUNDAY), ptc_ui_text(PTC_UI_T_MONDAY), ptc_ui_text(PTC_UI_T_TUESDAY), ptc_ui_text(PTC_UI_T_WEDNESDAY), ptc_ui_text(PTC_UI_T_THURSDAY), ptc_ui_text(PTC_UI_T_FRIDAY), ptc_ui_text(PTC_UI_T_SATURDAY)};
     PtcDayRule *day;
     if (weekly_editing_blocked(ui)) {
         return;
@@ -346,8 +346,8 @@ void edit_weekly_minutes(UiState *ui)
     if (day->mode == PTC_RULE_MODE_LIMIT) {
         char title[64];
         char guide[128];
-        snprintf(title, sizeof(title), "设置%s的周计划额度", WEEKDAYS[ui->model.editor_index]);
-        snprintf(guide, sizeof(guide), "分别输入小时和分钟，总计 1 到 1440 分钟");
+        snprintf(title, sizeof(title), ptc_ui_text(PTC_UI_T_SET_WEEKLY_QUOTA_FOR_S), WEEKDAYS[ui->model.editor_index]);
+        snprintf(guide, sizeof(guide), ptc_ui_text(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY_TOTALING_1));
         ptc_ui_numpad_open(
             &ui->model, PTC_UI_NUMPAD_WEEKLY_MINUTES, PTC_UI_OVERLAY_NONE,
             title, guide, 4, 1, 1440, day->minutes);

@@ -21,14 +21,23 @@ static int64_t json_int64(const cJSON *object, const char *name, int64_t fallbac
 
 static const char *event_label(const char *event)
 {
-    if (strcmp(event, "result_ok") == 0) return "操作已完成";
-    if (strcmp(event, "result_error") == 0) return "操作未完成";
-    if (strcmp(event, "pctl_apply_failed") == 0) return "系统设置未生效";
-    if (strcmp(event, "effect_restore") == 0) return "设置已恢复";
-    if (strcmp(event, "effect_restore_failed") == 0) return "设置恢复失败";
-    if (strcmp(event, "handover_preserved") == 0) return "已保留今天的额度";
-    if (strcmp(event, "handover_restore") == 0) return "已恢复启用前额度";
-    return event && event[0] ? event : "未知事件";
+    if (strcmp(event, "result_ok") == 0) return ptc_ui_text(PTC_UI_T_OPERATION_COMPLETED);
+    if (strcmp(event, "result_error") == 0) return ptc_ui_text(PTC_UI_T_OPERATION_INCOMPLETE);
+    if (strcmp(event, "pctl_apply_failed") == 0) return ptc_ui_text(PTC_UI_T_THE_SYSTEM_SETTING_DOES_NOT_TAKE_EFFECT);
+    if (strcmp(event, "effect_restore") == 0) return ptc_ui_text(PTC_UI_T_SETTINGS_RESTORED);
+    if (strcmp(event, "effect_restore_failed") == 0) return ptc_ui_text(PTC_UI_T_SETTING_RECOVERY_FAILED);
+    if (strcmp(event, "handover_preserved") == 0) return ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_HAS_BEEN_RESERVED);
+    if (strcmp(event, "handover_restore") == 0) return ptc_ui_text(PTC_UI_T_THE_PRE_ACTIVATION_QUOTA_HAS_BEEN_RESTORED);
+    return event && event[0] ? event : ptc_ui_text(PTC_UI_T_UNKNOWN_EVENT);
+}
+
+void ptc_ui_refresh_recent_event_labels(PtcUiModel *model)
+{
+    if (!model) return;
+    for (int i = 0; i < model->recent_event_count && i < 3; ++i)
+        snprintf(model->recent_events[i], sizeof(model->recent_events[i]), "%s  |  %s",
+                 event_label(model->recent_event_names[i]),
+                 model->recent_event_errors[i][0] ? model->recent_event_errors[i] : ptc_ui_text(PTC_UI_T_SUCCESS));
 }
 
 static bool json_bool(const cJSON *object, const char *name, bool fallback)
@@ -46,72 +55,72 @@ static const char *json_string(const cJSON *object, const char *name)
 static const char *localized_mode(const char *mode)
 {
     (void)mode;
-    return "额度管理";
+    return ptc_ui_text(PTC_UI_T_QUOTA_MANAGEMENT);
 }
 
 static const char *request_success_message(const char *type)
 {
     if (!type) {
-        return "后台已完成本次操作。";
+        return ptc_ui_text(PTC_UI_T_THE_BACKGROUND_OPERATION_HAS_BEEN_COMPLETED);
     }
     if (strcmp(type, "status") == 0) {
-        return "今天的游玩状态已刷新。";
+        return ptc_ui_text(PTC_UI_T_TODAY_S_PLAY_STATUS_HAS_BEEN_REFRESHED);
     }
     if (strcmp(type, "offline_code") == 0) {
-        return "加时成功，今天的主机使用额度已更新。";
+        return ptc_ui_text(PTC_UI_T_THE_GRANT_WAS_SUCCESSFUL_AND_TODAY_S);
     }
     if (strcmp(type, "clear_redemption_history") == 0) {
-        return "加时码使用记录已全部清空。";
+        return ptc_ui_text(PTC_UI_T_ALL_GRANT_CODE_USAGE_RECORDS_HAVE_BEEN);
     }
     if (strcmp(type, "claim_daily_buffer") == 0) {
-        return "今日自主缓冲已领取，记得休息眼睛。";
+        return ptc_ui_text(PTC_UI_T_THE_INDEPENDENT_BUFFER_HAS_BEEN_RECEIVED_TODAY);
     }
     if (strcmp(type, "set_scheduled_override") == 0) {
-        return "指定日期额度已保存，未来规则预览已更新。";
+        return ptc_ui_text(PTC_UI_T_THE_QUOTA_FOR_THE_SPECIFIED_DATE_HAS);
     }
     if (strcmp(type, "set_autonomy_policy") == 0) {
-        return "今日自主缓冲设置已保存。";
+        return ptc_ui_text(PTC_UI_T_TODAY_S_AUTONOMOUS_BUFFER_SETTINGS_HAVE_BEEN);
     }
     if (strcmp(type, "confirm_bedtime_requirements") == 0) {
-        return "就寝限制环境已确认，正在保存完整计划。";
+        return ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTED_ENVIRONMENT_CONFIRMED_SAVING_FULL_PLAN);
     }
     if (strcmp(type, "set_bedtime_policy") == 0) {
-        return "就寝计划已保存；限制生效后请使用 Overlay 恢复。";
+        return ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE_SAVED_USE_OVERLAY_TO_RESTORE);
     }
     if (strcmp(type, "clear_bedtime_skip") == 0) {
-        return "本次就寝跳过已清除，限制状态已重新读取。";
+        return ptc_ui_text(PTC_UI_T_THIS_BEDTIME_SKIP_HAS_BEEN_CLEARED_AND);
     }
     if (strcmp(type, "clear_activity_history") == 0) {
-        return "家庭活动记录已清空。";
+        return ptc_ui_text(PTC_UI_T_FAMILY_ACTIVITY_RECORDS_HAVE_BEEN_CLEARED);
     }
     if (strcmp(type, "complete_setup") == 0) {
-        return "首次设置已完成，已保留当前额度并启用额度管理。";
+        return ptc_ui_text(PTC_UI_T_THE_FIRST_SETUP_HAS_BEEN_COMPLETED_THE);
     }
     if (strcmp(type, "retry_setup_release") == 0) {
-        return "额度管理状态已重新确认。";
+        return ptc_ui_text(PTC_UI_T_THE_QUOTA_MANAGEMENT_STATUS_HAS_BEEN_RECONFIRMED);
     }
     if (strcmp(type, "restore_install_snapshot") == 0) {
-        return "安装前家长控制状态已恢复，任我玩 已停用。";
+        return ptc_ui_text(PTC_UI_T_THE_PARENTAL_CONTROL_STATUS_BEFORE_INSTALLATION_HAS);
     }
     if (strcmp(type, "disable_today_limit") == 0) {
-        return "当前限制已解除，今天保持不限时。";
+        return ptc_ui_text(PTC_UI_T_THE_CURRENT_RESTRICTION_HAS_BEEN_LIFTED_AND);
     }
     if (strcmp(type, "set_today_limit") == 0) {
-        return "今日总额度已更新，当前状态已刷新。";
+        return ptc_ui_text(PTC_UI_T_TODAY_S_TOTAL_QUOTA_HAS_BEEN_UPDATED);
     }
     if (strcmp(type, "add_today_minutes") == 0) {
-        return "临时加时已生效，当前状态已刷新。";
+        return ptc_ui_text(PTC_UI_T_THE_TEMPORARY_GRANT_HAS_TAKEN_EFFECT_AND);
     }
     if (strcmp(type, "restore_today_policy") == 0) {
-        return "今日额度调整已清除，已恢复下级规则。";
+        return ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_ADJUSTMENT_HAS_BEEN_CLEARED);
     }
     if (strcmp(type, "set_weekly_template") == 0) {
-        return "周计划已保存。如果今天没有单独设置，今天也会按新计划执行。";
+        return ptc_ui_text(PTC_UI_T_WEEKLY_PLAN_SAVED_IF_THERE_IS_NO);
     }
     if (strcmp(type, "set_holiday_policy") == 0) {
-        return "国家节假日设置已保存。";
+        return ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTINGS_SAVED);
     }
-    return "设置已生效。";
+    return ptc_ui_text(PTC_UI_T_SETTING_HAS_TAKEN_EFFECT);
 }
 
 static const char *request_success_guidance(const char *type)
@@ -120,13 +129,13 @@ static const char *request_success_guidance(const char *type)
         return "";
     }
     if (strcmp(type, "complete_setup") == 0) {
-        return "接下来：进入第 5 步选择家长区或孩子区。";
+        return ptc_ui_text(PTC_UI_T_NEXT_GO_TO_STEP_5_TO_SELECT);
     }
     if (strcmp(type, "retry_setup_release") == 0) {
-        return "接下来：刷新状态；显示正常运行即表示额度管理已启用。";
+        return ptc_ui_text(PTC_UI_T_NEXT_REFRESH_STATUS_DISPLAYING_NORMAL_OPERATION_MEANS);
     }
     if (strcmp(type, "restore_install_snapshot") == 0) {
-        return "任我玩 已停用。解除停用后选择【启用自动控制】即可重新完成设置。";
+        return ptc_ui_text(PTC_UI_T_LET_ME_PLAY_HAS_BEEN_DEACTIVATED_AFTER);
     }
     return "";
 }
@@ -138,35 +147,35 @@ static void fill_error_guidance(char *out, size_t out_size, const char *type, in
     }
     if (error_code == 504) {
         snprintf(out, out_size,
-                 "反馈码：504。请完整重启主机后再试；若仍有问题，请到 GitHub 项目 Issue 页反馈。感谢反馈。");
+                 ptc_ui_text(PTC_UI_T_FEEDBACK_CODE_504_PLEASE_RESTART_THE_HOST));
         return;
     }
     if (error_code == 306) {
         if (strcmp(type, "status") == 0) {
             snprintf(out, out_size,
-                     "反馈码：306。今日时间已用完，但系统没有执行限制；请进入支持与恢复导出诊断信息。");
+                     ptc_ui_text(PTC_UI_T_FEEDBACK_CODE_306));
             return;
         }
         snprintf(out, out_size,
-                 "反馈码：306。可能未手动开启主机家长控制；系统设置到家长控制到开启，返回后选择“重新检测”。");
+                 ptc_ui_text(PTC_UI_T_RESULT_CODE_306_NINTENDO_PARENTAL_CONTROLS_MAY));
         return;
     }
     if (error_code == 313) {
         snprintf(out, out_size,
-                 "反馈码：313。任我玩未改写今天的系统额度；请保留当前设置，稍后重新检查或明天再启用。");
+                 ptc_ui_text(PTC_UI_T_FEEDBACK_CODE_313));
         return;
     }
     if (strcmp(type, "complete_setup") == 0) {
         snprintf(out, out_size,
-                 "反馈码：%d %s。建议：保留当前系统设置并重新检测；不要手工删除停用标记。",
+                 ptc_ui_text(PTC_UI_T_RESULT_CODE_D_S_KEEP_CURRENT_SYSTEM),
                  error_code, reason[0] ? reason : "unknown");
     } else if (strcmp(type, "retry_setup_release") == 0) {
         snprintf(out, out_size,
-                 "反馈码：%d %s。当前状态下无法安全启用额度管理；可稍后重试或恢复安装前设置。",
+                 ptc_ui_text(PTC_UI_T_RESULT_CODE_D_S_QUOTA_CONTROL_CANNOT),
                  error_code, reason[0] ? reason : "unknown");
     } else if (strcmp(type, "restore_install_snapshot") == 0) {
         snprintf(out, out_size,
-                 "反馈码：%d %s。恢复失败请保留日志，联系作者排查。",
+                 ptc_ui_text(PTC_UI_T_RESULT_CODE_D_S_KEEP_LOGS_AND),
                  error_code, reason[0] ? reason : "unknown");
     }
     /* Other types: leave existing feedback_detail as-is (filled by caller). */
@@ -488,7 +497,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                 model->recent_event_timestamps[target] = timestamp;
                 snprintf(model->recent_events[model->recent_event_count],
                          sizeof(model->recent_events[model->recent_event_count]),
-                         "%s  |  %s", event_label(event_name), error_name[0] ? error_name : "成功");
+                         "%s  |  %s", event_label(event_name), error_name[0] ? error_name : ptc_ui_text(PTC_UI_T_SUCCESS));
                 ++model->recent_event_count;
             }
         }
@@ -496,7 +505,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     if (status && strcmp(status, "error") == 0) {
         ptc_audio_play(PTC_SE_ERROR);
         const char *message = summary.message[0] ? summary.message : NULL;
-        snprintf(model->message, sizeof(model->message), "%s", message ? message : "后台拒绝了本次操作。");
+        snprintf(model->message, sizeof(model->message), "%s", message ? message : ptc_ui_text(PTC_UI_T_THE_BACKGROUND_REJECTED_THIS_OPERATION));
         if (summary.error_code > 0) {
             model->error_code = summary.error_code;
             /* Try type-specific guidance first; fall back to generic detail. */
@@ -507,14 +516,14 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                 snprintf(
                     model->feedback_detail,
                     sizeof(model->feedback_detail),
-                    "反馈码：%d %s",
+                    ptc_ui_text(PTC_UI_T_RESULT_CODE_D_S),
                     summary.error_code,
                     summary.reason[0] ? summary.reason : "unknown");
             }
         }
     } else if (setup_activated) {
         ptc_audio_play(PTC_SE_SUCCESS);
-        snprintf(model->message, sizeof(model->message), "自动控制已启用，首次设置完成。");
+        snprintf(model->message, sizeof(model->message), ptc_ui_text(PTC_UI_T_AUTOMATIC_CONTROL_IS_ENABLED_AND_FIRST_TIME));
     } else {
         if (type && strcmp(type, "claim_daily_buffer") == 0) {
             ptc_audio_play(PTC_SE_CLAIM_BUFFER);
@@ -531,15 +540,15 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         } else if (type && strcmp(type, "set_today_limit") == 0 &&
                    (model->restricted_now == 1 || model->blocked_today == 1)) {
             snprintf(model->message, sizeof(model->message),
-                     "今日总额度已更新，当前已进入时间限制。");
+                     ptc_ui_text(PTC_UI_T_TODAY_S_TOTAL_QUOTA_HAS_BEEN_UPDATED_2));
             snprintf(model->feedback_detail, sizeof(model->feedback_detail),
-                     "解除：选择“今日不限时”“临时加时”，或兑换加时码。");
+                     ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK));
         } else if (type && strcmp(type, "set_today_limit") == 0 &&
                    model->remaining_available && model->remaining_minutes <= 0) {
             snprintf(model->message, sizeof(model->message),
-                     "今日总额度已更新，额度已用完，系统限制可能即将生效。");
+                     ptc_ui_text(PTC_UI_T_TODAY_S_TOTAL_QUOTA_HAS_BEEN_UPDATED_3));
             snprintf(model->feedback_detail, sizeof(model->feedback_detail),
-                     "解除：选择“今日不限时”“临时加时”，或兑换加时码。");
+                     ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK));
         } else {
             snprintf(model->message, sizeof(model->message), "%s", request_success_message(type));
         }

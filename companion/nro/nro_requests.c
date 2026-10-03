@@ -38,8 +38,8 @@ void submit_status(UiState *ui)
     status = ptc_companion_transport_submit_status(&ui->transport, ui->active_request_id, time(NULL));
     set_command_name(ui, "status");
     sync_transport_label(ui);
-    if (status == PTC_COMPANION_OK) begin_wait(ui, "status", "正在刷新今天的状态...");
-    else set_message(ui, "刷新失败", status);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "status", ptc_ui_text(PTC_UI_T_REFRESHING_TODAY_S_STATUS));
+    else set_message(ui, ptc_ui_text(PTC_UI_T_REFRESH_FAILED), status);
 }
 
 void activate_parent_status(UiState *ui)
@@ -69,7 +69,7 @@ void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minutes)
     PtcCompanionStatus status;
     const char *type;
     if (ui->model.disable_flag_present) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用已开启，额度修改不可用。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_AND_LIMIT_MODIFICATION));
         return;
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
@@ -81,16 +81,16 @@ void submit_minutes(UiState *ui, PtcUiOperation operation, uint16_t minutes)
         status = ptc_companion_transport_submit_add_today_minutes(&ui->transport, ui->active_request_id, time(NULL), minutes);
     } else {
         ui->waiting = false;
-        snprintf(ui->model.message, sizeof(ui->model.message), "不支持的额度操作。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNSUPPORTED_QUOTA_OPERATION));
         return;
     }
     set_command_name(ui, type);
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, type, "设置已提交，正在等待后台确认...");
+        begin_wait(ui, type, ptc_ui_text(PTC_UI_T_THE_SETTINGS_HAVE_BEEN_SUBMITTED_AND_ARE));
     } else {
         ui->waiting = false;
-        set_message(ui, "设置提交失败", status);
+        set_message(ui, ptc_ui_text(PTC_UI_T_SETTING_SUBMISSION_FAILED), status);
     }
 }
 
@@ -98,7 +98,7 @@ void submit_weekly(UiState *ui)
 {
     PtcCompanionStatus status;
     if (ui->model.disable_flag_present) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用已开启，周计划暂不能保存。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_AND_THE_WEEKLY));
         return;
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
@@ -110,10 +110,10 @@ void submit_weekly(UiState *ui)
     set_command_name(ui, "set_weekly_template");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "set_weekly_template", "正在保存周计划...");
+        begin_wait(ui, "set_weekly_template", ptc_ui_text(PTC_UI_T_SAVING_WEEKLY_PLAN));
     } else {
         ui->waiting = false;
-        set_message(ui, "每周计划提交失败", status);
+        set_message(ui, ptc_ui_text(PTC_UI_T_WEEKLY_PLAN_SUBMISSION_FAILED), status);
     }
 }
 
@@ -121,11 +121,11 @@ void submit_holiday_policy(UiState *ui)
 {
     PtcCompanionStatus status;
     if (ui->model.disable_flag_present) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "紧急停用中，国家节假日设置暂时只读。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_NATIONAL_HOLIDAY_SETTINGS_ARE_TEMPORARI));
         return;
     }
     if (!ui->model.holiday_dirty) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "国家节假日设置没有修改。");
+        snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTINGS_HAVE_NOT_BEEN_MODIFIED));
         return;
     }
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
@@ -134,9 +134,9 @@ void submit_holiday_policy(UiState *ui)
     set_command_name(ui, "set_holiday_policy");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) {
-        begin_wait(ui, "set_holiday_policy", "正在保存国家节假日设置...");
+        begin_wait(ui, "set_holiday_policy", ptc_ui_text(PTC_UI_T_SAVING_NATIONAL_HOLIDAY_SETTINGS));
     } else {
-        set_message(ui, "国家节假日设置提交失败", status);
+        set_message(ui, ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAY_SETTING_SUBMISSION_FAILED), status);
     }
 }
 
@@ -155,12 +155,12 @@ void edit_scheduled_minutes(UiState *ui)
     draft = &ui->model.draft_scheduled_override;
     if (draft->rule.mode != PTC_RULE_MODE_LIMIT) {
         snprintf(ui->model.message, sizeof(ui->model.message),
-                 "当前为不限时；按 X 切换为限时后可编辑额度。");
+                 ptc_ui_text(PTC_UI_T_IS_CURRENTLY_UNLIMITED_PRESS_X_TO_SWITCH));
         return;
     }
     ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_SCHEDULED_MINUTES,
-        PTC_UI_OVERLAY_SCHEDULED, "设置指定日期额度",
-        "分别输入小时和分钟，总计 1 到 1440 分钟", 4, 1, 1440,
+        PTC_UI_OVERLAY_SCHEDULED, ptc_ui_text(PTC_UI_T_SET_THE_QUOTA_FOR_THE_SPECIFIED_DATE),
+        ptc_ui_text(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY_TOTALING_1), 4, 1, 1440,
         draft->rule.minutes);
 }
 
@@ -168,8 +168,8 @@ void edit_grant_minutes(UiState *ui)
 {
     if (!ui) return;
     ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_GRANT_MINUTES,
-        PTC_UI_OVERLAY_GRANT_LOCAL, "设置代码时长",
-        "合法面额：1-4、5-120 每 5 分钟，以及 150/180/210/240", 4, 1,
+        PTC_UI_OVERLAY_GRANT_LOCAL, ptc_ui_text(PTC_UI_T_SET_CODE_DURATION),
+        ptc_ui_text(PTC_UI_T_LEGAL_DENOMINATIONS_1_4_5_120_EVERY), 4, 1,
         ui->model.grant_max_minutes, ui->model.grant_minutes);
 }
 

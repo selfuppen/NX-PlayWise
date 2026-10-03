@@ -19,6 +19,32 @@ typedef enum {
     PTC_UI_SYSTEM_LANGUAGE_ENGLISH = 3
 } PtcUiSystemLanguage;
 
+/* Stable UI message keys; catalog rows are deliberately independent of source text. */
+typedef enum {
+#define PTC_UI_TEXT_KEY(key) key,
+#include "ui_text_keys.inc"
+#undef PTC_UI_TEXT_KEY
+    PTC_UI_TEXT_COUNT
+} PtcUiTextId;
+
+typedef struct {
+    const char *name;
+    const char *text;
+    int64_t number;
+    bool is_number;
+} PtcUiTextArg;
+
+#define PTC_UI_TEXT_STRING(name_, value_) ((PtcUiTextArg){(name_), (value_), 0, false})
+#define PTC_UI_TEXT_NUMBER(name_, value_) ((PtcUiTextArg){(name_), NULL, (int64_t)(value_), true})
+
+const char *ptc_ui_text(PtcUiTextId id);
+/* Allows file-scope UI descriptors to hold compile-time key names. */
+#define PTC_UI_TEXT_REFERENCE(id) #id
+const char *ptc_ui_text_resolve(const char *value);
+const char *ptc_ui_weekday_label(unsigned weekday);
+bool ptc_ui_text_format(PtcUiTextId id, char *out, size_t out_size,
+                        const PtcUiTextArg *args, size_t arg_count);
+
 bool ptc_ui_language_parse_preference(const char *value, PtcUiLanguagePreference *out);
 const char *ptc_ui_language_preference_name(PtcUiLanguagePreference preference);
 const char *ptc_ui_language_preference_label(PtcUiLanguagePreference preference);
