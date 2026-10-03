@@ -137,6 +137,22 @@ Standard NRO performs a read-only check of its empty `boot2.flag` at startup. If
 
 Eden testing relies on a third profile, `eden-test`. It operates through a single NRO: running `sysmodule_core` in-process alongside deterministic mock PCTL, storing data under `sdmc:/switch/playwise-eden`, omitting `pctc:u`, using Title ID `nro-only`, and excluded from `make packages` or Device Lab targets. Built via `make eden-test-nro`, artifacts reside in `build/eden-test/`. This target accelerates iteration across UI, queues, rules, PINs, nonces, bedtime limits, and recovery workflows. Standard releases and Eden share the bedtime configuration interface; because mock PCTL does not suspend NRO, `PLAYWISE_EDEN` conditionally relaxes official setting confirmation and overlay handshake checks at compile time. This relaxation is prohibited in standard or Lab builds, and packaging gates strictly reject Eden markers in release binaries.
 
+### Equivalence Boundaries: Eden vs Production Suite
+
+Using `python tools/package_remote.py --only eden` yields rapid test builds, but its verification boundaries must be recognized:
+
+- **What Eden Validates (High Confidence)**:
+  - **UI & Visual Layout**: Page structures, typography, dark/light themes, text wrapping, and multilingual string catalogs;
+  - **Frontend Navigation & Controls**: Gamepad focus movement, touch hit-testing, modal prompts, and action confirmations;
+  - **Local Algorithm & State Machine**: Timer and eye-care rest countdowns, bedtime schedule calculations, PIN validation, and offline code generation/parsing;
+  - **C Core Syntax & Portability**: Compiled with the exact same devkitA64 toolchain.
+- **What Eden Cannot Validate (Architectural Differences)**:
+  - **Cross-process IPC Communication**: Eden bundles the background core in-process; IPC piping (`pctc:u`), message serialization, concurrency, and timeouts are unexercised.
+  - **Real Horizon PCTL Enforcement**: Eden uses `pctl_stub.c`; private PCTL IPC commands, native popups, and hardware-level sleep/blocking cannot be tested in Eden.
+  - **CFW & Security Preflights**: `-DPLAYWISE_EDEN` relaxes parental controls setup requirements and Overlay handshake checks.
+  - **Other Production Components**: `--only eden` completely omits building the production background Sysmodule (`exefs.nsp`) and Tesla Overlay (`playwise.ovl`).
+- **Tiered Verification Workflow**: Use `python tools/package_remote.py --only eden [--skip-tests]` for frequent UI/logic iterations; execute the default `python tools/package_remote.py` to build and validate the complete release suite before code integration or delivery.
+
 ## Security State Machine
 
 1. Startup initiates read-only validation across build manifests, environment fingerprints, PCTL state, layouts, and pending transactions.

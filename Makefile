@@ -119,8 +119,6 @@ ui-previews: $(HOST_BUILD_DIR)/ui_preview
 	$(STAGE_TIMER) playwise ui-previews -- $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews
 	$(STAGE_TIMER) playwise convert-previews -- python3 tools/convert_ui_previews.py
 
-test-host: ui-previews
-
 test-python:
 	$(STAGE_TIMER) global test-python -- python3 tools/test.py
 

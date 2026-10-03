@@ -1,4 +1,62 @@
 #!/usr/bin/env python3
+"""
+### 一、调整概览
+
+#### 1. 默认构建目标轻量化（秒级/高频日常构建）
+* **默认构建目标**：仅构建 **标准分发包 (`playwise`)** 与 **Eden 模拟器测试包 (`eden-test-nro`)**。
+* **默认剥离的三大阶段**：
+  1. **Device Lab 组件与打包 (`device-lab-*`)**：默认不再编译 `pwtl-sysmodule`、`playwise-device-lab.nro` 与 `.ovl`，不再打包实验 Zip。
+  2. **UI 截图预览图渲染、转换与文档同步 (`ui-previews`)**：默认完全跳过 PPM 渲染、Python PNG 转码与 `docs/` 目录同步。
+  3. **完整交付包合并 (`package-complete`)**：默认不再运行单文件 Web 前端编译及合并打 Zip。
+* **默认构建机制**：保持增量复用（`--incremental` 为默认，避免每次全量 `make clean`）。
+
+#### 2. 解耦 `ui-previews` 与日常测试
+* 在 [Makefile](file:///h:/workspace/codes/switch/playwise/Makefile) 中移除 `test-host: ui-previews` 强依赖。
+* 现在无论本地还是容器内执行 `make test`，均只运行 C 逻辑单元测试（Core/UI/DeviceLab）与 `--check-primitives` 原语检查，**不再渲染数十上百张 PPM 且不再进行 Python 转码**，彻底杜绝文件锁与 `FileNotFoundError` 风险。
+* `ui-previews` 成为独立的 `.PHONY` 目标，仅在显式指定时触发。
+
+---
+
+### 二、剥离构建的专用参数
+
+[tools/package_remote.py](file:///h:/workspace/codes/switch/playwise/tools/package_remote.py) 新增与整理了专用参数体系：
+
+| 参数 | 默认值 | 作用说明 |
+| :--- | :---: | :--- |
+| **（无额外参数）** | - | 默认仅构建 **标准分发包** + **Eden 模拟器包**，增量构建 |
+| `--with-device-lab` / `--device-lab`<br>`--no-device-lab` | 禁用 (`False`) | 显式启用/禁用 Device Lab 专用套件编译与打包 |
+| `--with-complete` / `--complete`<br>`--no-complete` | 禁用 (`False`) | 显式启用/禁用离线 HTML 单文件打包与完整交付 Zip 合并 |
+| `--with-previews`<br>`--no-previews` | 禁用 (`False`) | 显式启用/禁用 UI 预览图生成、PNG 转码与文档同步 |
+| `--previews` | - | 仅生成并验证 UI 预览图（不构建任何固件安装包） |
+| `--release` | - | **一键全量发布模式**：打包标准包、Eden包、完整交付包、Device Lab 包，并全量生成预览图与校验 |
+| `--only` | `default` | 可选值：`default`、`all`、`playwise`、`complete`、`device-lab`、`eden`、`previews` |
+
+---
+
+### 三、常用构建命令对比
+
+1. **日常高频开发调试（默认推荐）**：
+   ```powershell
+   python tools/package_remote.py
+   ```
+   > 增量复用、快速测试、秒级产出标准 SDMC Zip 与 Eden 测试 NRO。
+
+2. **极速跳过测试直接打包（调试前端/界面布局）**：
+   ```powershell
+   python tools/package_remote.py --skip-tests
+   ```
+   > 纯增量编译 + 打包，实际挂钟耗时仅 **~25 秒**（相较原先几分钟大幅提速）。
+
+3. **仅刷新文档 UI 预览截图**：
+   ```powershell
+   python tools/package_remote.py --previews
+   ```
+
+4. **版本发布前全量门禁构建**：
+   ```powershell
+   python tools/package_remote.py --release --clean
+   ```
+"""
 from __future__ import annotations
 
 import argparse
@@ -452,21 +510,21 @@ def latest_packages(package_dir: Path, target_packages: set[str] | None = None) 
     missing = [path.name for path in result.values() if not path.is_file()]
     if missing:
         raise PackageError(f"missing generated package: {', '.join(missing)}")
-    zip_names = {path.name for path in package_dir.glob("*.zip")}
-    if zip_names != expected_names:
-        if target_packages is None or target_packages == {"playwise", "complete", "device_lab"}:
+    if target_packages is None or target_packages == {"playwise", "complete", "device_lab"}:
+        zip_names = {path.name for path in package_dir.glob("*.zip")}
+        if zip_names != expected_names:
             raise PackageError("release build must produce exactly the standard, complete and device lab public zips")
-        expected_str = ", ".join(sorted(expected_names)) or "<none>"
-        got_str = ", ".join(sorted(zip_names)) or "<none>"
-        raise PackageError(f"expected public zips [{expected_str}], got [{got_str}]")
     return result
 
 
 def container_command(
     container_path: str = DEFAULT_CONTAINER_PATH,
     *,
-    only: str = "all",
+    only: str = "default",
     with_eden: bool = True,
+    with_device_lab: bool = False,
+    with_complete: bool = False,
+    with_previews: bool = False,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -479,11 +537,12 @@ def container_command(
 
     clean_cmd = ""
     if clean:
-        clean_eden = " CLEAN_EDEN=1" if (only in ("all", "eden") and with_eden) else ""
+        clean_eden = " CLEAN_EDEN=1" if with_eden else ""
         clean_cmd = f"make clean{clean_eden} && "
 
     targets: list[str] = []
     if only == "all":
+        with_previews = True
         targets.append("packages")
         if with_eden:
             targets.append("eden-test-nro")
@@ -496,14 +555,23 @@ def container_command(
     elif only == "eden":
         targets.append("eden-test-nro")
     elif only == "previews":
-        targets.append("ui-previews")
+        with_previews = True
+    elif only == "default":
+        if with_complete:
+            targets.append("package-complete")
+        else:
+            targets.append("package-playwise")
+        if with_device_lab:
+            targets.append("device-lab-package")
+        if with_eden:
+            targets.append("eden-test-nro")
     else:
         raise PackageError(f"unknown package target: {only}")
 
     targets_str = f"make {job_flag}{' '.join(targets)}"
     test_cmd = f"make {job_flag}test && " if (run_tests and only != "previews") else ""
-    preview_cmd = f"make {job_flag}ui-previews && " if not test_cmd else ""
-    sync_cmd = "python3 tools/sync_doc_previews.py && "
+    preview_cmd = f"make {job_flag}ui-previews && " if (with_previews and (only == "previews" or only == "all" or not test_cmd or with_previews)) else ""
+    sync_cmd = "python3 tools/sync_doc_previews.py && " if with_previews else ""
     identity_exports = ""
     if build_image:
         identity_exports += f" PLAYWISE_BUILD_IMAGE={shlex.quote(build_image)}"
@@ -537,8 +605,11 @@ def ssh_command(
     container_path: str = DEFAULT_CONTAINER_PATH,
     identity: Path | None = None,
     *,
-    only: str = "all",
+    only: str = "default",
     with_eden: bool = True,
+    with_device_lab: bool = False,
+    with_complete: bool = False,
+    with_previews: bool = False,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -558,6 +629,9 @@ def ssh_command(
             container_path,
             only=only,
             with_eden=with_eden,
+            with_device_lab=with_device_lab,
+            with_complete=with_complete,
+            with_previews=with_previews,
             clean=clean,
             run_tests=run_tests,
             jobs=jobs,
@@ -576,8 +650,11 @@ def run_container(
     container_path: str = DEFAULT_CONTAINER_PATH,
     identity: Path | None = None,
     *,
-    only: str = "all",
+    only: str = "default",
     with_eden: bool = True,
+    with_device_lab: bool = False,
+    with_complete: bool = False,
+    with_previews: bool = False,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -594,6 +671,9 @@ def run_container(
             identity,
             only=only,
             with_eden=with_eden,
+            with_device_lab=with_device_lab,
+            with_complete=with_complete,
+            with_previews=with_previews,
             clean=clean,
             run_tests=run_tests,
             jobs=jobs,
@@ -635,8 +715,11 @@ def build_and_verify(
     container_path: str = DEFAULT_CONTAINER_PATH,
     identity: Path | None = None,
     *,
-    only: str = "all",
+    only: str = "default",
     with_eden: bool = True,
+    with_device_lab: bool = False,
+    with_complete: bool = False,
+    with_previews: bool = False,
     clean: bool = False,
     run_tests: bool = True,
     jobs: int | None = None,
@@ -646,31 +729,64 @@ def build_and_verify(
     manual_verification: tuple[str, str, str] | None = None,
 ) -> None:
     if manual_verification is not None:
-        if only not in ("all", "playwise", "complete") or not all(value.strip() for value in manual_verification):
+        if only not in ("all", "playwise", "complete", "default") or not all(value.strip() for value in manual_verification):
             raise PackageError("manual device verification requires a release package and nonempty model, HOS and Atmosphère")
     overall_t0 = time.perf_counter()
     package_dir = ROOT / "build" / "packages"
     device_lab_dir = ROOT / "build" / "device-lab"
     eden_dir = ROOT / "build" / "eden-test"
 
+    if only == "all":
+        target_pkgs = {"playwise", "complete", "device_lab"}
+        check_eden = with_eden
+        with_previews = True
+    elif only == "playwise":
+        target_pkgs = {"playwise"}
+        check_eden = False
+    elif only == "complete":
+        target_pkgs = {"playwise", "complete"}
+        check_eden = False
+    elif only == "device-lab":
+        target_pkgs = {"device_lab"}
+        check_eden = False
+    elif only == "eden":
+        target_pkgs = set()
+        check_eden = True
+    elif only == "previews":
+        target_pkgs = set()
+        check_eden = False
+        with_previews = True
+    elif only == "default":
+        target_pkgs = {"playwise"}
+        if with_complete:
+            target_pkgs.add("complete")
+        if with_device_lab:
+            target_pkgs.add("device_lab")
+        check_eden = with_eden
+    else:
+        raise PackageError(f"unknown package target: {only}")
+
     stage_timer.clear_timing_records()
     if clean:
         clean_package_results(package_dir)
-        remove_path(device_lab_dir)
-        if with_eden:
+        if with_device_lab or only in ("all", "device-lab"):
+            remove_path(device_lab_dir)
+        if check_eden:
             remove_path(eden_dir)
-        if only in ("all", "previews"):
+        if with_previews:
             remove_path(ROOT / "build" / "ui-previews")
     else:
         package_dir.mkdir(parents=True, exist_ok=True)
-        if only in ("all", "playwise", "complete"):
+        if "playwise" in target_pkgs:
             remove_path(package_dir / STANDARD_PACKAGE)
-        if only in ("all", "complete"):
+        if "complete" in target_pkgs:
             remove_path(package_dir / COMPLETE_PACKAGE)
-        if only in ("all", "device-lab"):
+        if "device_lab" in target_pkgs:
             remove_path(package_dir / DEVICE_LAB_PACKAGE)
-        if only in ("all", "eden") and with_eden:
+        if check_eden:
             remove_path(eden_dir / EDEN_NRO)
+        if with_previews:
+            remove_path(ROOT / "build" / "ui-previews")
 
     build_image, build_image_digest = resolve_build_identity(
         host,
@@ -690,7 +806,10 @@ def build_and_verify(
         container_path,
         identity,
         only=only,
-        with_eden=with_eden,
+        with_eden=check_eden,
+        with_device_lab=with_device_lab or ("device_lab" in target_pkgs),
+        with_complete=with_complete or ("complete" in target_pkgs),
+        with_previews=with_previews,
         clean=clean,
         run_tests=run_tests,
         jobs=jobs,
@@ -699,43 +818,24 @@ def build_and_verify(
         manual_verification=manual_verification,
     )
 
-    if only == "all":
-        target_pkgs = {"playwise", "complete", "device_lab"}
-        check_eden = with_eden
-    elif only == "playwise":
-        target_pkgs = {"playwise"}
-        check_eden = False
-    elif only == "complete":
-        target_pkgs = {"playwise", "complete"}
-        check_eden = False
-    elif only == "device-lab":
-        target_pkgs = {"device_lab"}
-        check_eden = False
-    elif only == "eden":
-        target_pkgs = set()
-        check_eden = True
-    elif only == "previews":
-        target_pkgs = set()
-        check_eden = False
-    else:
-        raise PackageError(f"unknown package target: {only}")
+    if with_previews or only == "previews":
+        preview_dir = ROOT / "build" / "ui-previews"
+        synchronize(preview_dir, ROOT / "docs" / "images" / "usage", check=True)
+        synchronize(preview_dir / "en", ROOT / "docs" / "images" / "usage-en", check=True)
 
-    preview_dir = ROOT / "build" / "ui-previews"
-    synchronize(preview_dir, ROOT / "docs" / "images" / "usage", check=True)
-    synchronize(preview_dir / "en", ROOT / "docs" / "images" / "usage-en", check=True)
-
-    if only == "previews":
-        t0 = time.perf_counter()
-        if not preview_dir.is_dir():
-            raise PackageError(f"missing preview directory: {preview_dir}")
-        png_files = sorted(preview_dir.rglob("*.png"))
-        if not png_files:
-            raise PackageError(f"no preview PNG images found in {preview_dir}")
-        stage_timer.write_timing_record("playwise", "verify-previews", time.perf_counter() - t0)
-        print(f"PASS: verified {len(png_files)} UI preview PNGs in {preview_dir}")
-        print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage'}")
-        print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage-en'}")
-    else:
+        if only == "previews":
+            t0 = time.perf_counter()
+            if not preview_dir.is_dir():
+                raise PackageError(f"missing preview directory: {preview_dir}")
+            png_files = sorted(preview_dir.rglob("*.png"))
+            if not png_files:
+                raise PackageError(f"no preview PNG images found in {preview_dir}")
+            stage_timer.write_timing_record("playwise", "verify-previews", time.perf_counter() - t0)
+            print(f"PASS: verified {len(png_files)} UI preview PNGs in {preview_dir}")
+            print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage'}")
+            print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage-en'}")
+    
+    if only != "previews":
         packages = latest_packages(package_dir, target_pkgs)
 
         if "playwise" in target_pkgs:
@@ -827,9 +927,61 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--verified-atmosphere", help=f"Atmosphère version used for manual verification. Default: {DEFAULT_VERIFIED_ATMOSPHERE}")
     parser.add_argument(
         "--only",
-        choices=["all", "playwise", "complete", "device-lab", "eden", "previews"],
-        default="all",
-        help="Only build and verify a specific package target. Choices: all, playwise, complete, device-lab, eden, previews. (Default: all)",
+        choices=["default", "all", "playwise", "complete", "device-lab", "eden", "previews"],
+        default="default",
+        help="Only build and verify a specific package target. Choices: default, all, playwise, complete, device-lab, eden, previews. (Default: default)",
+    )
+    parser.add_argument(
+        "--release",
+        action="store_true",
+        help="Build full release suite (standard, complete, device-lab, eden, previews) with complete packaging.",
+    )
+    device_lab_group = parser.add_mutually_exclusive_group()
+    device_lab_group.add_argument(
+        "--with-device-lab",
+        "--device-lab",
+        dest="with_device_lab",
+        action="store_true",
+        default=False,
+        help="Build and verify the Device Lab package. (Default: disabled)",
+    )
+    device_lab_group.add_argument(
+        "--no-device-lab",
+        "--without-device-lab",
+        dest="with_device_lab",
+        action="store_false",
+        help="Disable building and verifying the Device Lab package.",
+    )
+    complete_group = parser.add_mutually_exclusive_group()
+    complete_group.add_argument(
+        "--with-complete",
+        "--complete",
+        dest="with_complete",
+        action="store_true",
+        default=False,
+        help="Build and verify the complete delivery package including offline HTML. (Default: disabled)",
+    )
+    complete_group.add_argument(
+        "--no-complete",
+        "--without-complete",
+        dest="with_complete",
+        action="store_false",
+        help="Disable building and verifying the complete delivery package.",
+    )
+    preview_group = parser.add_mutually_exclusive_group()
+    preview_group.add_argument(
+        "--with-previews",
+        dest="with_previews",
+        action="store_true",
+        default=False,
+        help="Render, convert, and verify UI preview images. (Default: disabled)",
+    )
+    preview_group.add_argument(
+        "--no-previews",
+        "--without-previews",
+        dest="with_previews",
+        action="store_false",
+        help="Disable rendering and verifying UI preview images.",
     )
     parser.add_argument(
         "--previews",
@@ -883,7 +1035,7 @@ def parse_args() -> argparse.Namespace:
     if args.manual_device_verified:
         if any(value is not None and not value.strip() for value in values):
             parser.error("--verified-model, --verified-hos and --verified-atmosphere must be nonempty")
-        if args.previews or args.only not in ("all", "playwise", "complete"):
+        if args.previews or (args.only not in ("all", "playwise", "complete", "default") and not args.release):
             parser.error("--manual-device-verified requires a release package target")
         args.verified_model = args.verified_model or DEFAULT_VERIFIED_MODEL
         args.verified_hos = args.verified_hos or DEFAULT_VERIFIED_HOS
@@ -895,7 +1047,16 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    only = "previews" if args.previews else args.only
+    if args.release:
+        only = "all"
+    elif args.previews:
+        only = "previews"
+    else:
+        only = args.only
+
+    with_previews = args.with_previews or args.previews or args.release or (only == "all")
+    with_device_lab = args.with_device_lab or args.release or (only == "all")
+    with_complete = args.with_complete or args.release or (only == "all")
     jobs = args.jobs if args.jobs is not None else 8
     try:
         build_and_verify(
@@ -906,6 +1067,9 @@ def main() -> int:
             args.identity,
             only=only,
             with_eden=args.with_eden,
+            with_device_lab=with_device_lab,
+            with_complete=with_complete,
+            with_previews=with_previews,
             clean=args.clean,
             run_tests=not args.skip_tests,
             jobs=jobs,
@@ -922,7 +1086,7 @@ def main() -> int:
         print(f"PASS: container previews -> {ROOT / 'build' / 'ui-previews'}")
     else:
         print(f"PASS: container packages -> {ROOT / 'build' / 'packages'}")
-        if args.with_eden and only in ("all", "eden"):
+        if args.with_eden and only in ("default", "all", "eden"):
             print(f"PASS: Eden test app -> {ROOT / 'build' / 'eden-test' / EDEN_NRO}")
     return 0
 

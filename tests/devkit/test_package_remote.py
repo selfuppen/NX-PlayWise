@@ -101,8 +101,10 @@ def test_container_command() -> None:
     command = package_remote.container_command()
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     require("/ws/playwise" in command, "container command must use the mounted repository")
-    require("make -j test && python3 tools/sync_doc_previews.py && make -j packages" in command,
-            "container command must synchronize fresh previews before package manifests")
+    require("make -j test && make -j package-playwise eden-test-nro" in command,
+            "container command must run fast tests before building default targets")
+    require("python3 tools/sync_doc_previews.py" not in command,
+            "default container command must omit preview synchronization")
     require("packages: package-complete device-lab-package" in makefile,
             "packages target must verify the isolated Device Lab target")
     require("make clean" not in command, "the default build must reuse valid intermediates")
@@ -110,6 +112,12 @@ def test_container_command() -> None:
     require("git " not in command, "mounted local source must not require a git update")
     require("eden-test-nro" in command, "the default build must include the emulator NRO target")
     require("CLEAN_EDEN=1" not in command, "the default build must keep valid Eden intermediates")
+
+    release = package_remote.container_command(only="all")
+    require("packages" in release and "eden-test-nro" in release,
+            "release build must target all packages and Eden")
+    require("python3 tools/sync_doc_previews.py" in release,
+            "release build must synchronize previews before packaging")
 
     clean = package_remote.container_command(clean=True)
     require("make clean" in clean, "explicit clean build must remove stale intermediates first")
@@ -121,13 +129,12 @@ def test_container_command() -> None:
 
     incremental = package_remote.container_command(clean=False)
     require("make clean" not in incremental, "incremental build must omit make clean")
-    require("make -j test && python3 tools/sync_doc_previews.py && make -j packages" in incremental,
-            "incremental build must synchronize previews before compiling packages")
+    require("make -j test && make -j package-playwise eden-test-nro" in incremental,
+            "incremental build must run tests before compiling default packages")
 
     skip_tests = package_remote.container_command(run_tests=False)
     require("test" not in skip_tests.split("make -j ")[1].split(), "skip_tests must omit test target")
-    require("make -j ui-previews && python3 tools/sync_doc_previews.py && make -j packages" in skip_tests,
-            "skipping tests must still refresh documentation previews")
+    require("ui-previews" not in skip_tests, "skipping tests must not run ui-previews by default")
 
     only_lab = package_remote.container_command(only="device-lab")
     require("device-lab-package" in only_lab, "only=device-lab must target device-lab-package")
@@ -540,6 +547,41 @@ def test_sync_doc_previews() -> None:
                     "unchanged previews must pass the freshness check")
 
 
+def test_parse_args_stripped_components() -> None:
+    with mock.patch.object(sys, "argv", ["package_remote.py"]):
+        args = package_remote.parse_args()
+        require(args.only == "default", "default target should be 'default'")
+        require(args.with_device_lab is False, "device lab must be disabled by default")
+        require(args.with_complete is False, "complete package must be disabled by default")
+        require(args.with_previews is False, "previews must be disabled by default")
+        require(args.with_eden is True, "Eden test app must be enabled by default")
+        require(args.clean is False, "incremental build must be enabled by default")
+
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--release"]):
+        args = package_remote.parse_args()
+        require(args.release is True, "parse_args must accept --release")
+
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--with-device-lab"]):
+        args = package_remote.parse_args()
+        require(args.with_device_lab is True, "parse_args must accept --with-device-lab")
+
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--device-lab"]):
+        args = package_remote.parse_args()
+        require(args.with_device_lab is True, "parse_args must accept --device-lab shorthand")
+
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--with-complete"]):
+        args = package_remote.parse_args()
+        require(args.with_complete is True, "parse_args must accept --with-complete")
+
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--complete"]):
+        args = package_remote.parse_args()
+        require(args.with_complete is True, "parse_args must accept --complete shorthand")
+
+    with mock.patch.object(sys, "argv", ["package_remote.py", "--with-previews"]):
+        args = package_remote.parse_args()
+        require(args.with_previews is True, "parse_args must accept --with-previews")
+
+
 def main() -> int:
     test_container_command()
     test_build_identity_detection()
@@ -553,6 +595,7 @@ def main() -> int:
     test_parse_args_previews()
     test_parse_args_eden()
     test_parse_args_manual_verification()
+    test_parse_args_stripped_components()
     test_sync_doc_previews()
     print("Container package helper tests passed")
     return 0
