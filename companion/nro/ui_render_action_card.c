@@ -415,5 +415,3 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
         draw_text_center(pixels, stride, rec_pill, badge_text, is_en ? 14 : 16, UI_ON_ACCENT);
     }
 }
-
-\n

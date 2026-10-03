@@ -12,25 +12,53 @@ VALUE_ROW = re.compile(r'^PTC_UI_TEXT_VALUE\((PTC_UI_T_[A-Z0-9_]+),\s*("(?:\\.|[
 PARAM = re.compile(r"\{([a-z][a-z_0-9]*)\}")
 PRINTF = re.compile(r"%(?:\d+\$)?[-+ #0]*\d*(?:\.\d+)?(?:hh|ll|h|l|z|t)?([diuoxXfFeEgGaAcsp%])")
 QUOTED = re.compile(r'"(?:\\.|[^"\\])*"')
+INCLUDE_ROW = re.compile(r'^#include "ui_text/([a-z_]+)/([a-z_]+)\.inc"$')
+
+
+def catalog_files(name: str, directory: str) -> list[tuple[str, Path]]:
+    files = []
+    for line in (COMPANION / name).read_text(encoding="utf-8").splitlines():
+        match = INCLUDE_ROW.fullmatch(line)
+        assert match and match.group(1) == directory, f"malformed catalog include: {name}: {line}"
+        module = match.group(2)
+        path = COMPANION / "ui_text" / directory / f"{module}.inc"
+        assert path.is_file() and path.read_text(encoding="utf-8").strip(), f"empty catalog module: {path}"
+        files.append((module, path))
+    modules = [module for module, _ in files]
+    assert modules and len(modules) == len(set(modules)), f"duplicate catalog module in {name}"
+    assert {path for _, path in files} == set((COMPANION / "ui_text" / directory).glob("*.inc")), (
+        f"unlisted catalog module in {directory}"
+    )
+    return files
 
 
 def main() -> None:
     keys = []
-    for line in (COMPANION / "ui_text_keys.inc").read_text(encoding="utf-8").splitlines():
-        match = KEY_ROW.fullmatch(line)
-        assert match, f"malformed text key: {line[:80]}"
-        keys.append(match.group(1))
+    key_files = catalog_files("ui_text_keys.inc", "keys")
+    module_keys = {}
+    for module, path in key_files:
+        module_keys[module] = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            match = KEY_ROW.fullmatch(line)
+            assert match, f"malformed text key: {path}: {line[:80]}"
+            module_keys[module].append(match.group(1))
+            keys.append(match.group(1))
     assert keys and len(keys) == len(set(keys)), "text keys must be present and unique"
     locales = []
     for name in ("zh_hans", "zh_hant", "en"):
         values = {}
-        path = COMPANION / f"ui_text_{name}.inc"
-        for line in path.read_text(encoding="utf-8").splitlines():
-            match = VALUE_ROW.fullmatch(line)
-            assert match, f"malformed {name} text row: {line[:80]}"
-            key = match.group(1)
-            assert key not in values, f"duplicate {name} text key: {key}"
-            values[key] = json.loads(match.group(2))
+        files = catalog_files(f"ui_text_{name}.inc", name)
+        assert [module for module, _ in files] == list(module_keys), f"{name} module order mismatch"
+        for module, path in files:
+            file_keys = []
+            for line in path.read_text(encoding="utf-8").splitlines():
+                match = VALUE_ROW.fullmatch(line)
+                assert match, f"malformed {name} text row: {path}: {line[:80]}"
+                key = match.group(1)
+                assert key not in values, f"duplicate {name} text key: {key}"
+                values[key] = json.loads(match.group(2))
+                file_keys.append(key)
+            assert file_keys == module_keys[module], f"{name}/{module} keys differ from catalog"
         assert list(values) == keys, f"missing, extra, or reordered {name} text key"
         locales.append(values)
     for key in keys:

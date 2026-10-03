@@ -563,5 +563,3 @@ void ptc_ui_format_holiday_priority_summary(const PtcUiModel *model, char *out, 
     }
     snprintf(out, out_size, "%s", ptc_ui_text(text_id));
 }
-
-\n

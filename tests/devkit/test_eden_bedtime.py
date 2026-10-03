@@ -84,7 +84,10 @@ def main() -> None:
     require("submit_bedtime_confirmation" in main_source and
             "ptc_companion_transport_submit_confirm_bedtime_requirements" in main_source,
             "standard NRO bedtime enablement must record the official PCTL confirmation")
-    texts = (ROOT / "companion/ui_text_zh_hans.inc").read_text(encoding="utf-8")
+    texts = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / "companion/ui_text/zh_hans").glob("*.inc"))
+    )
     require("PTC_UI_T_IN_EFFECT_CAN_ONLY_BE_RESTORED_FROM" in graphics and
             "仅可从 Overlay" in texts and "就寝时间" in texts,
             "bedtime UI must explain the lockout and recovery surface")

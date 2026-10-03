@@ -206,7 +206,7 @@ $(BUILD)/ptc_audio.o: ptc_audio.c ptc_audio.h ptc_audio_data.h | $(BUILD)
 $(BUILD)/ptc_audio_data.o: ptc_audio_data.c ptc_audio_data.h ptc_audio.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/ui_language.o: ../ui_language.c ../ui_language.h ../ui_text_keys.inc ../ui_text_zh_hans.inc ../ui_text_zh_hant.inc ../ui_text_en.inc | $(BUILD)
+$(BUILD)/ui_language.o: ../ui_language.c ../ui_language.h ../ui_text_keys.inc ../ui_text_zh_hans.inc ../ui_text_zh_hant.inc ../ui_text_en.inc $(wildcard ../ui_text/*/*.inc) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/ui_graphics.o: ui_graphics.c ui_graphics.h ui_model.h ui_state.h ui_layout.h ui_theme.h | $(BUILD)
