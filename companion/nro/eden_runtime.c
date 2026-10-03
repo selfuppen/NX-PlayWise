@@ -203,6 +203,8 @@ bool ptc_eden_runtime_init(PtcEdenRuntime *runtime, PtcStorage *storage)
     runtime->pctl.status.play_timer_enabled = true;
     runtime->time_provider.vtable = &EDEN_TIME_VTABLE;
     runtime->time_provider.ctx = runtime;
+    runtime->usage_day_index = eden_now(&runtime->time_provider).day_index;
+    runtime->last_usage_tick = armGetSystemTick();
     ptc_sysmodule_init(&runtime->sysmodule, PLAYWISE_EDEN_SD_ROOT, storage,
         ptc_pctl_stub_as_pctl(&runtime->pctl), &runtime->time_provider);
     snprintf(boot_id, sizeof(boot_id), "eden-%08llx",
@@ -214,11 +216,26 @@ bool ptc_eden_runtime_init(PtcEdenRuntime *runtime, PtcStorage *storage)
     return true;
 }
 
-void ptc_eden_runtime_tick(PtcEdenRuntime *runtime)
+bool ptc_eden_runtime_tick(PtcEdenRuntime *runtime)
 {
-    if (runtime && runtime->initialized) {
-        (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, false);
+    PtcClockSnapshot now;
+    uint64_t tick;
+    bool usage_changed = false;
+    if (!runtime || !runtime->initialized) return false;
+    now = eden_now(&runtime->time_provider);
+    tick = armGetSystemTick();
+    if (now.day_index != runtime->usage_day_index) {
+        runtime->usage_day_index = now.day_index;
+        runtime->usage_carry_ns = 0;
+        ptc_pctl_stub_reset_daily_usage(&runtime->pctl);
+        usage_changed = true;
+    } else if (tick >= runtime->last_usage_tick) {
+        usage_changed = ptc_pctl_stub_advance_usage_ns(&runtime->pctl,
+            armTicksToNs(tick - runtime->last_usage_tick), &runtime->usage_carry_ns);
     }
+    runtime->last_usage_tick = tick;
+    (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, false);
+    return usage_changed;
 }
 
 const PtcCompanionIpcBackend *ptc_eden_runtime_ipc_backend(void)

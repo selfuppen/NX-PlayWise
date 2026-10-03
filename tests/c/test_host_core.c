@@ -3148,8 +3148,50 @@ static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
         "unrelated protection reason remains disabled");
 }
 
+static void test_eden_simulated_usage_clock(void)
+{
+    PtcPctlStub pctl;
+    uint64_t carry_ns = 0;
+    ptc_pctl_stub_init(&pctl);
+    pctl.model_elapsed_time = true;
+    pctl.configured_minutes = 32;
+    pctl.played_minutes_today = 30;
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = true;
+    pctl.status.play_timer_enabled = true;
+    pctl.status.remaining_minutes = 2;
+
+    check_true(!ptc_pctl_stub_advance_usage_ns(&pctl, 30000000000ULL, &carry_ns) &&
+        pctl.status.remaining_minutes == 2, "Eden partial minute does not spend allowance early");
+    check_true(ptc_pctl_stub_advance_usage_ns(&pctl, 30000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 31 && pctl.status.remaining_minutes == 1,
+        "Eden elapsed minute updates played and remaining time");
+    check_true(ptc_pctl_stub_advance_usage_ns(&pctl, 60000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 32 && pctl.status.remaining_minutes == 0 &&
+        pctl.status.restricted_now, "Eden timer reaches the daily limit");
+    check_true(!ptc_pctl_stub_advance_usage_ns(&pctl, 60000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 32, "Eden exhausted timer stops advancing");
+
+    ptc_pctl_stub_reset_daily_usage(&pctl);
+    check_true(pctl.played_minutes_today == 0 && pctl.status.remaining_minutes == 32 &&
+        !pctl.status.restricted_now, "Eden next day restores the available allowance");
+    pctl.status.play_timer_enabled = false;
+    check_true(!ptc_pctl_stub_advance_usage_ns(&pctl, 60000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 0, "Eden stopped timer does not consume allowance");
+    pctl.status.play_timer_enabled = true;
+    pctl.status.temporary_unlocked = true;
+    check_true(!ptc_pctl_stub_advance_usage_ns(&pctl, 60000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 0, "Eden temporary unlock does not consume allowance");
+    pctl.status.temporary_unlocked = false;
+    pctl.status.limited_today = false;
+    pctl.status.unrestricted_today = true;
+    check_true(!ptc_pctl_stub_advance_usage_ns(&pctl, 60000000000ULL, &carry_ns) &&
+        pctl.played_minutes_today == 0, "Eden unlimited day does not consume allowance");
+}
+
 int main(void)
 {
+    test_eden_simulated_usage_clock();
     test_hot_reload_guard();
     test_result_summary_unlimited_state();
     test_result_summary_access_recovery();

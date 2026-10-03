@@ -66,6 +66,7 @@ int main(int argc, char **argv)
     /* PtcSysmodule alone is ~10 KiB, far too much for the main thread stack. */
     static PtcEdenRuntime eden_runtime;
     bool eden_runtime_ready;
+    bool eden_status_dirty = false;
 #endif
     AppletHookCookie hook_cookie;
     u64 previous_stick_buttons = 0;
@@ -806,13 +807,20 @@ int main(int argc, char **argv)
         background_poll_elapsed_ms += INPUT_LOOP_MS;
         if (background_poll_elapsed_ms >= BACKGROUND_POLL_INTERVAL_MS) {
 #ifdef PLAYWISE_EDEN
-            ptc_eden_runtime_tick(&eden_runtime);
+            if (ptc_eden_runtime_tick(&eden_runtime)) eden_status_dirty = true;
 #else
             poll_hot_reload(&ui);
 #endif
             poll_pending_redemption(&ui);
             poll_result(&ui, false);
             refresh_setup_activation(&ui);
+#ifdef PLAYWISE_EDEN
+            if (eden_status_dirty && !ui.waiting && ui.model.overlay == PTC_UI_OVERLAY_NONE &&
+                ui.model.view != PTC_UI_SETUP) {
+                submit_status(&ui);
+                eden_status_dirty = false;
+            }
+#endif
             background_poll_elapsed_ms = 0;
         }
         draw_elapsed_ms += INPUT_LOOP_MS;

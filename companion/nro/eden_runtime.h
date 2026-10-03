@@ -21,6 +21,9 @@ typedef struct {
     PtcPctlStub pctl;
     PtcTimeProvider time_provider;
     PtcSysmodule sysmodule;
+    uint64_t last_usage_tick;
+    uint64_t usage_carry_ns;
+    uint16_t usage_day_index;
     bool initialized;
 } PtcEdenRuntime;
 
@@ -28,7 +31,8 @@ typedef struct {
    Must run before ptc_install_materialize_defaults so the seeded live files
    make that call succeed without a packaged defaults/ directory. */
 bool ptc_eden_runtime_init(PtcEdenRuntime *runtime, PtcStorage *storage);
-void ptc_eden_runtime_tick(PtcEdenRuntime *runtime);
+/* Returns true when the simulated allowance changed and the UI needs status. */
+bool ptc_eden_runtime_tick(PtcEdenRuntime *runtime);
 const PtcCompanionIpcBackend *ptc_eden_runtime_ipc_backend(void);
 
 #endif

@@ -45,5 +45,8 @@ typedef struct {
 
 void ptc_pctl_stub_init(PtcPctlStub *stub);
 PtcPctl *ptc_pctl_stub_as_pctl(PtcPctlStub *stub);
+/* Advances the Eden-only simulated timer; carry_ns holds a partial minute. */
+bool ptc_pctl_stub_advance_usage_ns(PtcPctlStub *stub, uint64_t elapsed_ns, uint64_t *carry_ns);
+void ptc_pctl_stub_reset_daily_usage(PtcPctlStub *stub);
 
 #endif

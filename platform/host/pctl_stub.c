@@ -394,3 +394,45 @@ PtcPctl *ptc_pctl_stub_as_pctl(PtcPctlStub *stub)
 {
     return &stub->pctl;
 }
+
+static void stub_sync_usage(PtcPctlStub *stub)
+{
+    stub->status.played_minutes_available = true;
+    stub->status.played_minutes = stub->played_minutes_today;
+    if (stub->status.limited_today) {
+        stub->status.remaining_minutes = stub->configured_minutes > stub->played_minutes_today
+            ? stub->configured_minutes - stub->played_minutes_today : 0U;
+        stub->status.restricted_now = stub->status.remaining_minutes == 0U;
+    }
+}
+
+bool ptc_pctl_stub_advance_usage_ns(PtcPctlStub *stub, uint64_t elapsed_ns, uint64_t *carry_ns)
+{
+    const uint64_t minute_ns = 60000000000ULL;
+    uint64_t minutes;
+    uint64_t whole;
+    if (!stub || !carry_ns) return false;
+    if (!stub->model_elapsed_time || !stub->status.limited_today ||
+        !stub->status.play_timer_enabled || stub->status.temporary_unlocked ||
+        stub->played_minutes_today >= stub->configured_minutes) {
+        *carry_ns = 0;
+        return false;
+    }
+    whole = elapsed_ns / minute_ns;
+    *carry_ns += elapsed_ns % minute_ns;
+    minutes = whole + *carry_ns / minute_ns;
+    *carry_ns %= minute_ns;
+    if (minutes == 0) return false;
+    if (minutes > stub->configured_minutes - stub->played_minutes_today)
+        minutes = stub->configured_minutes - stub->played_minutes_today;
+    stub->played_minutes_today += (uint32_t)minutes;
+    stub_sync_usage(stub);
+    return true;
+}
+
+void ptc_pctl_stub_reset_daily_usage(PtcPctlStub *stub)
+{
+    if (!stub || !stub->model_elapsed_time) return;
+    stub->played_minutes_today = 0;
+    stub_sync_usage(stub);
+}
