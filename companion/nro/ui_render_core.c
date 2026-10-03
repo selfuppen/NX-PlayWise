@@ -163,7 +163,11 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     fill_round_rect(pixels, stride, pill, 5, badge.bg_color);
     draw_rect_outline(pixels, stride, pill, 5, 1, badge.color);
     fill_round_rect(pixels, stride, (UiRect){pill.x + 6, pill.y + 6, 5, 5}, 2, badge.color);
-    draw_text(pixels, stride, pill.x + 15, box.y + 21, badge.label, 11, badge.color);
+    char fitted_badge[64];
+    int max_badge_w = pill.width - 20;
+    if (max_badge_w < 10) max_badge_w = 10;
+    fit_text(fitted_badge, sizeof(fitted_badge), badge.label, 11, max_badge_w);
+    draw_text(pixels, stride, pill.x + 15, box.y + 21, fitted_badge, 11, badge.color);
 
     /* 5. 数据更新时效 (右对齐) */
     fit_text(fitted_fresh, sizeof(fitted_fresh), status.freshness_text, 12, 110);
@@ -340,12 +344,13 @@ void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char
         return;
     }
 
-    /* 匹配单肩键 "ZL  " 或 "ZR  " */
-    if (strncmp(label, "ZL  ", 4) == 0 || strncmp(label, "ZR  ", 4) == 0) {
+    /* 匹配单肩键 "ZL  ", "ZR  " 或 "ZL ", "ZR " */
+    if ((strncmp(label, "ZL", 2) == 0 || strncmp(label, "ZR", 2) == 0) && label[2] == ' ') {
         char key_buf[4];
         memcpy(key_buf, label, 2);
         key_buf[2] = '\0';
-        const char *rest = label + 4;
+        int pfx_len = (label[3] == ' ') ? 4 : 3;
+        const char *rest = label + pfx_len;
         int key_w = 32 + 8;
         int cur_size = size;
         int rest_w = measure_text(rest, cur_size);
@@ -372,11 +377,12 @@ void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char
         return;
     }
 
-    /* 匹配单字符圆键 "A  ", "B  ", "X  ", "Y  ", "+  ", "-  " */
+    /* 匹配单字符圆键 "A  ", "B  ", "X  ", "Y  ", "+  ", "-  " 或单空格 "A ", "B ", ... */
     if ((label[0] == 'A' || label[0] == 'B' || label[0] == 'X' || label[0] == 'Y' ||
-         label[0] == '+' || label[0] == '-') && (label[1] == ' ' && label[2] == ' ')) {
+         label[0] == '+' || label[0] == '-') && label[1] == ' ') {
         char key_buf[2] = {label[0], '\0'};
-        const char *rest = label + 3;
+        int pfx_len = (label[2] == ' ') ? 3 : 2;
+        const char *rest = label + pfx_len;
         int key_w = 22 + 8;
         int cur_size = size;
         int rest_w = measure_text(rest, cur_size);
@@ -473,7 +479,14 @@ void draw_candidate_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
     fill_round_rect(pixels, stride, box, 12, fill);
     if (selected) draw_focus_ring(pixels, stride, box, 12);
     else draw_rect_outline(pixels, stride, box, 12, 1, UI_CONTROL);
-    draw_button_label(pixels, stride, box, label, 20, disabled ? UI_DISABLED : foreground);
+
+    int text_size = 20;
+    int tw = measure_text(label, text_size);
+    while (tw > box.width - 16 && text_size > 14) {
+        text_size--;
+        tw = measure_text(label, text_size);
+    }
+    draw_button_label(pixels, stride, box, label, text_size, disabled ? UI_DISABLED : foreground);
 }
 
 void draw_overlay_actions(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, const char *confirm_label)

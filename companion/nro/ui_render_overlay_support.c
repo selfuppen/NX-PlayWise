@@ -16,8 +16,12 @@ static void draw_shortcut_manager_overlay(uint32_t *pixels, uint32_t stride, con
         draw_text(pixels, stride, option.x + 14, option.y + 23,
                   ptc_ui_shortcut_common_label(index), 16,
                   selected ? UI_ACCENT : UI_INK);
-        if (chosen) draw_text(pixels, stride, option.x + option.width - 74, option.y + 23,
-                              ptc_ui_text(PTC_UI_T_PENDING_SAVE), 15, UI_SUCCESS);
+        if (chosen) {
+            const char *save_text = ptc_ui_text(PTC_UI_T_PENDING_SAVE);
+            int tw = measure_text(save_text, 15);
+            draw_text(pixels, stride, option.x + option.width - tw - 16, option.y + 23,
+                      save_text, 15, UI_SUCCESS);
+        }
     }
     draw_dialog_button(pixels, stride, ptc_ui_shortcut_disable_rect(),
                        ptc_ui_text(PTC_UI_T_ZL_CLOSE_CUSTOM_SHORTCUT_KEYS), UI_DANGER_SOFT, UI_DANGER, true);

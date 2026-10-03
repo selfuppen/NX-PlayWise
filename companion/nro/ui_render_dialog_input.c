@@ -338,8 +338,9 @@ void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         draw_text_center(pixels, stride, (UiRect){dialog.x + 198, dialog.y + 402, 112, 16}, ptc_ui_text(PTC_UI_T_KEY_CONFIRM), 12, UI_MUTED);
         draw_text_center(pixels, stride, (UiRect){dialog.x + 198, dialog.y + 422, 112, 14}, ptc_ui_text(PTC_UI_T_LONG_PRESS_SWITCH_KEYBOARD), 11, UI_MUTED);
     }
-    draw_text(pixels, stride, dialog.x + 52, dialog.y + 490,
-              ptc_ui_text(PTC_UI_T_THE_LEFT_AND_RIGHT_JOYSTICKS_HAVE_THE), 13, UI_MUTED);
+    char stick_hint[128];
+    fit_text(stick_hint, sizeof(stick_hint), ptc_ui_text(PTC_UI_T_THE_LEFT_AND_RIGHT_JOYSTICKS_HAVE_THE), 13, 510);
+    draw_text(pixels, stride, dialog.x + 52, dialog.y + 490, stick_hint, 13, UI_MUTED);
 
     draw_text(pixels, stride, dialog.x + 590, dialog.y + 212, ptc_ui_text(PTC_UI_T_TOUCH_NUMERIC_KEYPAD), 20, UI_INK);
     for (row = 0; row < 10; ++row) {
@@ -359,9 +360,10 @@ void draw_pin_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
                        UI_RAISED, UI_INK, true);
     draw_dialog_button(pixels, stride, ptc_ui_pin_keyboard_rect(), ptc_ui_text(PTC_UI_T_LONG_PRESS_TRADITIONAL_KEYBOARD),
                        UI_RAISED, UI_INK, true);
-    draw_text(pixels, stride, dialog.x + 590, dialog.y + 594,
-              model->pin_error[0] ? model->pin_error : ptc_ui_text(PTC_UI_T_SHORT_PRESS_CONFIRM_LONG_PRESS_ABOUT_1),
-              16, model->pin_error[0] ? UI_DANGER : UI_MUTED);
+    char pin_hint[128];
+    const char *hint_src = model->pin_error[0] ? model->pin_error : ptc_ui_text(PTC_UI_T_SHORT_PRESS_CONFIRM_LONG_PRESS_ABOUT_1);
+    fit_text(pin_hint, sizeof(pin_hint), hint_src, 16, 480);
+    draw_text(pixels, stride, dialog.x + 590, dialog.y + 594, pin_hint, 16, model->pin_error[0] ? UI_DANGER : UI_MUTED);
 }
 
 

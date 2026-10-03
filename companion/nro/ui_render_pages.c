@@ -431,7 +431,9 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
             draw_text(pixels, stride, box.x + 78, box.y + 88,
                       ptc_ui_text(PTC_UI_T_TO_RESTORE_LIMIT_USE_SET_TODAY_LIMIT), 12, UI_DISABLED);
         if (index == 0) {
-            UiRect tbadge = {box.x + box.width - (is_en ? 78 : 86), box.y + 10, is_en ? 68 : 74, 22};
+            int t_width = measure_text(adjustment_badge, 12) + 16;
+            if (t_width < 68) t_width = 68;
+            UiRect tbadge = {box.x + box.width - t_width - 10, box.y + 10, t_width, 22};
             uint32_t badge_color = (strcmp(adjustment_badge, ptc_ui_text(PTC_UI_T_ADJUST_BADGE_ACTIVE)) == 0 ||
                                     strcmp(adjustment_badge, ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED)) == 0 ||
                                     strcmp(adjustment_badge, "Active") == 0 ||
@@ -463,7 +465,8 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                  (strcmp(badge, ptc_ui_text(PTC_UI_T_ENABLED_2)) == 0 || strcmp(badge, ptc_ui_text(PTC_UI_T_SKIPPED)) == 0 ||
                   strcmp(badge, ptc_ui_text(PTC_UI_T_CLAIMED)) == 0 || strcmp(badge, "Enabled") == 0 ||
                   strcmp(badge, "Skipped") == 0 || strcmp(badge, "Claimed") == 0 ? UI_SUCCESS : UI_MUTED));
-            int b_width = is_en ? 72 : 84;
+            int b_width = measure_text(badge, 12) + 16;
+            if (b_width < 72) b_width = 72;
             UiRect tbadge = {box.x + box.width - b_width - 10, box.y + 10, b_width, 22};
             fill_round_rect(pixels, stride, tbadge, 6, color == UI_DANGER ? UI_DANGER_SOFT :
                             (color == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
@@ -529,7 +532,6 @@ static void draw_diagnostic_notice(uint32_t *pixels, uint32_t stride, const PtcU
 
 void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
-    bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
     const char *TITLES[] = {ptc_ui_text(PTC_UI_T_TODAY_SCHEDULE), ptc_ui_text(PTC_UI_T_TIME_PLANS), ptc_ui_text(PTC_UI_T_OFFLINE_GRANTS), ptc_ui_text(PTC_UI_T_SECURITY_PREFS), ptc_ui_text(PTC_UI_T_SUPPORT_RECOVERY)};
     const UiAction *actions;
     int action_count;
@@ -557,19 +559,25 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             UiRect parallel_zone = {428, 172, 388, 452};
             fill_round_rect(pixels, stride, quota_zone, 16, UI_RAISED);
             draw_rect_outline(pixels, stride, quota_zone, 16, 1, UI_BORDER);
-            UiRect qbadge = {54, 178, 76, 22};
+            const char *q_text = ptc_ui_text(PTC_UI_T_QUOTA_RULES);
+            int qw = measure_text(q_text, 12) + 16;
+            if (qw < 76) qw = 76;
+            UiRect qbadge = {54, 178, qw, 22};
             fill_round_rect(pixels, stride, qbadge, 6, UI_ACCENT_SOFT);
             draw_rect_outline(pixels, stride, qbadge, 6, 1, UI_ACCENT);
-            draw_text_center(pixels, stride, qbadge, ptc_ui_text(PTC_UI_T_QUOTA_RULES), 12, UI_ACCENT);
-            draw_text(pixels, stride, 138, 195, ptc_ui_text(PTC_UI_T_APPLIES_FROM_TOP_TO_BOTTOM), 13, UI_MUTED);
+            draw_text_center(pixels, stride, qbadge, q_text, 12, UI_ACCENT);
+            draw_text(pixels, stride, 54 + qw + 8, 195, ptc_ui_text(PTC_UI_T_APPLIES_FROM_TOP_TO_BOTTOM), 13, UI_MUTED);
 
             fill_round_rect(pixels, stride, parallel_zone, 16, UI_RAISED);
             draw_rect_outline(pixels, stride, parallel_zone, 16, 1, UI_BORDER);
-            UiRect pbadge = {440, 178, 76, 22};
+            const char *p_text = ptc_ui_text(PTC_UI_T_SEPARATE);
+            int pw = measure_text(p_text, 12) + 16;
+            if (pw < 76) pw = 76;
+            UiRect pbadge = {440, 178, pw, 22};
             fill_round_rect(pixels, stride, pbadge, 6, UI_WARNING_SOFT);
             draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING);
-            draw_text_center(pixels, stride, pbadge, ptc_ui_text(PTC_UI_T_SEPARATE), 12, UI_WARNING);
-            draw_text(pixels, stride, 524, 195, ptc_ui_text(PTC_UI_T_OPERATES_INDEPENDENTLY), 13, UI_MUTED);
+            draw_text_center(pixels, stride, pbadge, p_text, 12, UI_WARNING);
+            draw_text(pixels, stride, 440 + pw + 8, 195, ptc_ui_text(PTC_UI_T_OPERATES_INDEPENDENTLY), 13, UI_MUTED);
 
             /* 并行与补充下方对称说明卡片 */
             UiRect info_card = {439, 484, 365, 132};
@@ -737,7 +745,6 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                     draw_rect_outline(pixels, stride, card, 16, 2, active_border);
                 }
 
-                UiRect pbadge = {card.x + card.width - 96, card.y + 8, 84, 22};
                 const char *badge_label = !fresh ? ptc_ui_text(PTC_UI_T_TO_BE_CONFIRMED) :
                     index == 0 ? (scheduled_active ? ptc_ui_text(PTC_UI_T_ACTIVE_2) :
                                   (model->scheduled_override.enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2))) :
@@ -750,6 +757,9 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                     (model->autonomy_policy.daily_buffer_minutes == 0 ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
                      (model->daily_buffer_claimed ? ptc_ui_text(PTC_UI_T_RECEIVED_TODAY) :
                       (model->daily_buffer_available ? ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY) : ptc_ui_text(PTC_UI_T_ENABLED))));
+                int p_width = measure_text(badge_label, 12) + 16;
+                if (p_width < 76) p_width = 76;
+                UiRect pbadge = {card.x + card.width - p_width - 12, card.y + 8, p_width, 22};
                 uint32_t badge_color = !fresh ? UI_WARNING :
                     bedtime_enforcing && index == 3 ? UI_DANGER :
                     (strcmp(badge_label, ptc_ui_text(PTC_UI_T_ACTIVE_2)) == 0 ||
@@ -779,30 +789,38 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                     state_label = ptc_ui_text(PTC_UI_T_EXTERNAL_CONFIGURATION);
                     state_color = UI_ACCENT;
                 }
-                UiRect badge = {card.x + card.width - 94, card.y + 8, 80, 24};
+                int st_width = measure_text(state_label, 12) + 16;
+                if (st_width < 72) st_width = 72;
+                UiRect badge = {card.x + card.width - st_width - 14, card.y + 8, st_width, 24};
                 fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
                 draw_text_center(pixels, stride, badge, state_label, 12, state_color);
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
                 bool enabled = ptc_audio_is_enabled();
                 const char *state_label = enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_MUTED_2);
                 uint32_t state_color = enabled ? UI_SUCCESS : UI_MUTED;
-                UiRect badge = {card.x + card.width - 76, card.y + 8, 62, 24};
+                int au_width = measure_text(state_label, 12) + 16;
+                if (au_width < 62) au_width = 62;
+                UiRect badge = {card.x + card.width - au_width - 14, card.y + 8, au_width, 24};
                 fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
                 draw_text_center(pixels, stride, badge, state_label, 12, state_color);
             }
         }
         if (model->parent_page == PTC_UI_PARENT_PLAN) {
             /* 胶囊 1: 优先于节假日规则 (位于卡片 0 底部 316 与卡片 1 顶部 354 之间，y=325) */
-            UiRect pill0 = {54 + 20, 325, is_en ? 180 : 160, 20};
+            const char *t0 = ptc_ui_text(PTC_UI_T_OVERRIDES_HOLIDAYS);
+            int w0 = measure_text(t0, 11) + 16;
+            UiRect pill0 = {54 + 20, 325, w0, 20};
             fill_round_rect(pixels, stride, pill0, 10, UI_PAGE);
             draw_rect_outline(pixels, stride, pill0, 10, 1, UI_BORDER);
-            draw_text_center(pixels, stride, pill0, ptc_ui_text(PTC_UI_T_OVERRIDES_HOLIDAYS), 11, UI_ACCENT);
+            draw_text_center(pixels, stride, pill0, t0, 11, UI_ACCENT);
 
             /* 胶囊 2: 优先于每周常规计划 (位于卡片 1 底部 456 与卡片 2 顶部 494 之间，y=465) */
-            UiRect pill1 = {54 + 20, 465, is_en ? 180 : 160, 20};
+            const char *t1 = ptc_ui_text(PTC_UI_T_OVERRIDES_WEEKLY_PLAN);
+            int w1 = measure_text(t1, 11) + 16;
+            UiRect pill1 = {54 + 20, 465, w1, 20};
             fill_round_rect(pixels, stride, pill1, 10, UI_PAGE);
             draw_rect_outline(pixels, stride, pill1, 10, 1, UI_BORDER);
-            draw_text_center(pixels, stride, pill1, ptc_ui_text(PTC_UI_T_OVERRIDES_WEEKLY_PLAN), 11, UI_SUCCESS);
+            draw_text_center(pixels, stride, pill1, t1, 11, UI_SUCCESS);
         }
     }
     if (draw_parent_plan_surface(pixels, stride, model)) {
