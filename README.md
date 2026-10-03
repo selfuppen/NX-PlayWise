@@ -1,128 +1,127 @@
 <div align="center">
-  <img src="tools/ptc_frontend/playwise_logo.svg" alt="PlayWise Logo" width="180">
+  <img src="tools/ptc_frontend/playwise_logo.svg" alt="任我玩 PlayWise" width="180">
 
-  # PlayWise
+  # 任我玩 · PlayWise
 
   **Play Wise. Play More.**
 
-  [English](README.md) | [简体中文](README_zh.md)
+  [English](README_en.md) | [简体中文](README.md)
 </div>
 
-**PlayWise** (Repository: `NX-PlayWise`, Chinese name: 任我玩) is a local playtime management tool for Nintendo Switch consoles running Custom Firmware (Atmosphère recommended). Parents can configure weekly schedules, holiday allowances, and bedtime rules, or generate daily 8-character grant codes for children to redeem on the Switch. Generating and redeeming grant codes requires no internet connection on the Switch, nor any Nintendo Account or PlayWise backend servers.
+任我玩（项目仓库名 NX-PlayWise）是面向已安装自定义固件（推荐 Atmosphère）的 Nintendo Switch 本地游玩时间管理工具。家长可设置每周、节假日等额度计划，也可生成当天有效的 8 位加时码供孩子在 Switch 上兑换。生成和兑换无需 Switch 联网，也不需要 Nintendo Account 或 PlayWise 服务器。
 
-## Design Philosophy
+## 设计理念
 
-Fixed schedules provide clear, predictable routines; temporary adjustments allow flexibility for special occasions. Even when parents are away, extra playtime can be granted as a reward for children to redeem independently without constantly altering long-term rules. Temporary adjustments are valid only for the current day, automatically reverting to regular schedules the next day.
+固定计划让日常安排清晰、可预期；临时调整则为特殊情况留出弹性。即使家长不在身边，也能按约定把额外游玩时间作为奖励交给孩子自主领取，而不必反复修改长期规则。临时调整只在当天生效，次日继续按原计划执行。
 
 > [!WARNING]
-> Stock (unmodified) retail consoles are not supported. PlayWise relies on Nintendo's native Parental Controls for accurate time tracking and requires "Suspend Software" when time runs out to be enabled. Before installing, verify on a non-critical game that playtime limits actually suspend the game. Once a restriction takes effect, the PlayWise homebrew app may not be launchable; make sure to install and test the in-game overlay (Tesla Overlay) beforehand.
+> 未破解的零售主机无法使用。PlayWise 依赖 Nintendo 官方家长控制正常计时，并要求开启“时间到了暂停软件”。安装前请用非关键游戏验证到时确实暂停软件。限制生效后，PlayWise 主机应用可能无法打开；请事先安装并试用游戏内浮窗（Tesla Overlay）。
 
-## Quick Start
+## 快速开始
 
-1. Go to Switch **System Settings → Parental Controls**, enable official Parental Controls and turn on **"Suspend Software"**, then verify that screen-on usage counts toward limits and time limits properly suspend software.
-2. Ensure you have Atmosphère, Homebrew Menu, and Ultrahand Overlay (or another Tesla overlay menu). Note: PlayWise packages do not include overlay loaders.
-3. For first-time installation, download `playwise-complete-<version>.zip`: extract `playwise-<version>.zip` for the Switch, while `playwise-offline.html` serves as a standalone offline parent web tool. Copy and merge the `atmosphere` and `switch` folders from the standard package to the root of your SD card, then reboot.
-4. Launch **PlayWise** from Homebrew Menu, follow the onboarding wizard to configure the parent portal entry, PlayWise PIN, theme, and confirm takeover. When children need extra playtime, redeem codes via the homebrew app or the in-game overlay.
+1. 在 Switch 的“系统设置 → 家长控制”启用官方家长控制和“时间到了暂停软件”，验证亮屏使用会计入额度、到时会限制使用。
+2. 准备 Atmosphère、Homebrew Menu，以及 Ultrahand 或其他 Tesla 浮窗管理器。PlayWise 安装包不包含浮窗管理器。
+3. 首次使用下载 `playwise-complete-<版本>.zip`：其中的 `playwise-<版本>.zip` 安装 Switch 端，`playwise-offline.html` 是备用的离线家长网页。将标准包内的 `atmosphere` 和 `switch` 目录合并到 SD 卡根目录后重启。
+4. 从 Homebrew Menu 打开“任我玩”，按向导设置家长区入口、任我玩家长密码、主题并确认接管。孩子需要加时时，按下文选择主机应用或游戏内浮窗兑换。
 
-See the [User Guide](docs/USER_GUIDE.md) for full instructions on [installation, initial setup, usage, and upgrades](docs/USER_GUIDE.md).
+完整的[安装、首次设置、使用与升级步骤](docs/使用指南.md)见使用指南。
 
-## Grant Code Workflow
+## 加时码操作演示
 
-### Redeeming Grant Codes (Children): In-Game Overlay When Restricted
+### 孩子使用加时码：受限时用游戏内浮窗
 
-> **Grant Codes**: Generating and redeeming grant codes on the Switch does not require any network connection.
+> 使用加时码：在 Switch 生成或兑换加时码均无需联网。
 
-Once the daily limit is reached, Nintendo's native restriction dialog may prevent Homebrew Menu and the PlayWise main app from opening. Press your configured Ultrahand/Tesla shortcut to open the overlay menu, select **PlayWise** (`playwise.ovl`), enter the 8-character code from the parent, verify the previewed result, and confirm redemption. Parents can also enter the PlayWise PIN directly in the overlay to grant one-time minutes or set unlimited play for today. Bedtime restrictions can be skipped for the current session, turned off, or reverted to pre-installation settings.
+每日额度耗尽后，Nintendo 原生弹窗可能使 Homebrew 和 PlayWise 主机应用无法继续使用。用预先设置的 Ultrahand/Tesla 快捷键打开浮窗管理器，选择“任我玩”（`playwise.ovl`）；输入家长给的 8 位码，核对预计结果并确认兑换。家长还可在浮窗中输入任我玩家长密码，单次授权增加分钟或设为今日不限时。就寝限制可跳过本次、关闭计划或恢复安装前设置。
 
 <details open>
-<summary>View In-Game Overlay Preview</summary>
+<summary>查看游戏内浮窗操作示意</summary>
 
-| ![Historical hardware capture: Selecting PlayWise overlay in Ultrahand](docs/images/usage/overlay/ultrahand-entry.jpg) | ![Historical hardware capture: Opening PlayWise overlay on HOME to enter grant code](docs/images/usage/overlay/playwise-code-entry-legacy.jpg) |
+| ![历史真机示意：在 Ultrahand 中选择任我玩浮窗](docs/images/usage/overlay/ultrahand-entry.jpg) | ![历史真机示意：在 HOME 上打开 PlayWise 浮窗输入加时码](docs/images/usage/overlay/playwise-code-entry-legacy.jpg) |
 | :---: | :---: |
 
 </details>
 
-> The two screenshots above are historical hardware reference captures demonstrating overlay menu entry and launching PlayWise overlay over the HOME menu; actual buttons, confirmation dialogs, and available actions depend on the installed release version. See [Using In-Game Overlay When Restricted](docs/USER_GUIDE.md#using-in-game-overlay-when-restricted) for details.
+> 两图是旧版真机操作示意，分别展示浮窗管理器入口和 PlayWise 浮窗可覆盖 HOME 打开；当前按钮、确认页和可用操作以已安装版本为准。它们不是当前候选的真机验收截图。详见[受限时使用游戏内浮窗](docs/使用指南.md#受限时使用游戏内浮窗)。
 
-### Generating Grant Codes (Parents): Mobile QR Code Scan
+### 家长生成加时码：手机扫码
 
-> **Generating Grant Codes**:
-> When scanning the QR code to open the public web generator, the parent's phone or PC needs access to GitHub Pages (`selfuppen.github.io`).
-> Alternatively, you can use the standalone `playwise-offline.html` from `playwise-complete-<version>.zip`. In offline mode, your phone/PC requires no internet connection at all; once configured, the pairing key and device ID are saved locally in browser storage for repeated use. See [User Guide: Generating on Phone or PC](docs/USER_GUIDE.md#generating-on-phone-or-pc) for setup and secret protection guidelines.
+> 生成加时码：
+> 使用公开家长网页扫二维码跳转到生成时码的网页时，家长的手机或电脑需要能访问 github；
+> 也可以使用 `playwise-complete-<版本>.zip` 安装包里面的 `playwise-offline.html` 备用的离线家长网页，此时手机/电脑也无需联网，配置好后可以长期使用（生成加时码需要的 key 和 id 存到浏览器里面了），步骤和密钥保护说明见[使用指南：在手机或电脑上生成](docs/使用指南.md#在手机或电脑上生成)。
 
-In the Switch Parent Portal, navigate to **Offline Grant → Generate on Phone/PC**, verify your PlayWise PIN, and display the pairing QR code. Scan it with a trusted smartphone or computer to open the [Parent Web App](https://selfuppen.github.io/NX-PlayWise/), confirm **Import Device**, select the date (matching your Switch's local date) and grant minutes, and generate the 8-character code locally. The code is calculated entirely inside your browser without uploading secrets or codes to any server, eliminating the need to rescan every time.
+在 Switch 家长区打开“离线加时 → 手机/电脑生成”，验证任我玩家长密码后显示配对二维码。用可信的家长手机或电脑扫码，在打开的[家长网页](https://selfuppen.github.io/NX-PlayWise/)确认“导入此设备”；选好与 Switch 本地日期一致的日期和加时分钟数，即可在浏览器中生成 8 位码并告诉孩子。网页在浏览器本地计算代码，不向 PlayWise 业务后端提交密钥或代码，不用每次扫码，可反复生成。
 
 <details open>
-<summary>View Mobile Pairing & Web App Preview</summary>
+<summary>查看手机扫码配对与家长网页示意</summary>
 
-| ![Mobile/PC QR pairing page, displaying public demo configuration](docs/images/usage/parent/pairing-qr-demo.png) | ![Historical preview of the web code generator](docs/images/usage/parent/web-code-demo.jpg) |
+| ![手机或电脑扫码配对页面，二维码使用公开演示配置](docs/images/usage/parent/pairing-qr-demo.png) | ![家长网页生成加时码的历史界面示意](docs/images/usage/parent/web-code-demo.jpg) |
 | :---: | :---: |
 
 </details>
 
-The QR code in the first screenshot has been replaced with a **public demo configuration** and cannot be used on real home devices. The second image shows a historical web interface preview; actual dates and operations reflect your current device. If the public web app is unreachable under certain network environments, use `playwise-offline.html` from the complete delivery bundle or generate codes directly on the Switch console. Detailed steps and security considerations are documented in [User Guide: Generating on Phone or PC](docs/USER_GUIDE.md#generating-on-phone-or-pc).
+第一张图中的二维码已替换成**公开演示配置**，不能用于真实家庭设备；第二张是家长网页的历史界面示意，实际日期和操作以当前设备为准。公开网页在部分网络环境下可能无法访问；此时可用完整交付包中的 `playwise-offline.html` 导入配置文件，或在 Switch 家长区直接生成。步骤和密钥保护说明见[使用指南：在手机或电脑上生成](docs/使用指南.md#在手机或电脑上生成)。
 
-## Key Features
+## 主要功能
 
-- **Daily Dispatch**: Today's playtime limit, quick grant, unlimited play for today, and reset today's adjustments.
-- **Long-Term Schedules**: Weekly schedules, statutory holidays, specific date overrides, and bedtime schedules.
-- **Self Buffer**: Optional daily once-per-day 5/10/15-minute grace period buffer with detailed rule breakdowns for today and tomorrow.
-- **Offline Grant Codes**: Generate 8-character grant codes on-console or via the web app; invalidated after a single successful redemption. Daily hard limits may cap added minutes below the face value.
-- **Activity History**: Local family activity logs and 7/30-day playtime allowance analytics. Scoped to total console screen time; missing dates remain unknown; per-title breakdown is currently pending.
-- **Support & Recovery**: Diagnostics export, emergency disable, rollback to pre-installation settings, and safe reload after in-place upgrades.
+- **当天调度**：今日额度、快速加时、今日不限时、清除今日调整。
+- **长期计划**：每周计划、国家节假日、指定日期额度和就寝时间。
+- **自主缓冲**：可选的每日一次 5/10/15 分钟自主缓冲，以及今天、明天和规则来源说明。
+- **离线加时**：Switch 本机或家长网页生成离线加时码；成功兑换一次后失效。每日上限可能使实际增加少于代码面额。
+- **活动记录**：本机家庭活动记录和 7/30 天额度消耗估算。统计范围是“本机使用”，缺失日期保持未知；按游戏明细尚不可用。
+- **支持与恢复**：诊断导出、紧急停用、恢复安装前设置，以及完整覆盖安装后的安全加载新版。
 
-For detailed walkthroughs of each page, see the [User Guide](docs/USER_GUIDE.md).
+具体页面使用说明，参见[使用指南](docs/使用指南.md)。
 
 <details open>
-<summary>View Parent Portal Daily Dispatch & Rule Breakdown Preview</summary>
+<summary>查看家长区今日调度与额度规则详情预览</summary>
 
-![Parent portal daily dispatch preview](docs/images/usage/parent/parent-dark.png)
+![家长区今日调度预览](docs/images/usage/parent/parent-dark.png)
 
-![Today's allowance rule breakdown preview](docs/images/usage/parent/parent-details-decision-light.png)
+![今日额度规则详情预览](docs/images/usage/parent/parent-details-decision-light.png)
 
 </details>
 
-## FAQ
+## 常见问题
 
-**Why is the game still playable when PlayWise shows "Limit Reached" / 0 minutes remaining?**
-First, ensure that Nintendo official Parental Controls has **"Suspend Software"** enabled and has not been temporarily unlocked. Next, synchronize the Switch system clock via internet NTP, for example using DBI's "Tools → NTP Time Sync" or [QuickNTP (Tesla time sync tool)](https://github.com/ppkantorski/QuickNTP). After successful clock synchronization, refresh PlayWise status and test with a non-critical game to confirm that software suspension takes effect. Time synchronization is a recommended troubleshooting step, though it may not resolve every edge-case timer inconsistency. See [User Guide: FAQ](docs/USER_GUIDE.md#frequently-asked-questions-faq) and [Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1) for details.
+**设置今日总额度后显示“已到限制”、还可玩 0 分钟，但游戏仍能打开？** 先确认 Nintendo 官方家长控制已启用“时间到了暂停软件”，且没有临时解除限制；再尝试联网校准 Switch 时间，例如使用 DBI 的“工具 → NTP 时间同步”或 [QuickNTP（Tesla 时间同步工具）](https://github.com/ppkantorski/QuickNTP)。同步成功后刷新 PlayWise 状态，并用非关键游戏重新验证是否实际暂停。校时是一个可能的解决方法，不能保证修复所有计时或限制故障。详见[使用指南的常见问题](docs/使用指南.md#常见问题)和[相关 Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1)。
 
-## Recommended Environment & Verification Status
+## 推荐环境与验证状态
 
-The current baseline qualification target is Nintendo Switch OLED, HOS 22.5.0, and Atmosphère 1.11.2. The 2026-08-10 record is historical evidence prior to current PCTL modifications. Build candidates default to `pending`; when the maintainer verifies primary features on real hardware, specifying device model, HOS, and Atmosphère in the packaging command records `manual_verified` in `build.json`. This represents a manual testing declaration; only when the released Zip's SHA-256 matches `qualification.json` in the same directory has the exact build package passed full qualification testing in the documented environment. Packaging details are described in the [Development Environment Guide](docs/DEVELOPMENT_ENVIRONMENT_GUIDE.md#full-switch-build).
+当前候选的资格目标为 Nintendo Switch OLED、HOS 22.5.0 和 Atmosphère 1.11.2。2026-08-10 的记录是早于当前 PCTL 改动的历史证据。候选默认是 `pending`；维护者已用真机验证主要功能时，可在打包命令中指定机型、HOS 和 Atmosphère，令包内 `build.json` 记录 `manual_verified`。它表示人工验机声明；只有发布 Zip 的 SHA-256 与同目录 `qualification.json` 完全匹配，才表示该原包在记录环境通过完整资格验证。打包命令见[开发环境指南](docs/开发环境指南.md#switch-完整构建)。
 
-We recommend using [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) to manage the PlayWise in-game overlay. You may also refer to community CFW guides such as the [Atmosphère Installation & Setup Guide](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP); related community group: "switch大气层超频折腾群" (QQ Group `1051287661`). These external resources and communities are not bundled with PlayWise packages and do not imply official endorsement.
+推荐使用 [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) 管理 PlayWise 游戏内浮窗。也可参考[大气层包安装与使用说明](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP)准备运行环境；相关交流群为“switch大气层超频折腾群”（QQ群 `1051287661`）。这些外部项目与社群不包含在 PlayWise 安装包中，也不代表 PlayWise 对其背书。
 
-The PlayWise PIN protects only this project's Parent Portal and is completely distinct from the Nintendo official Parental Controls master PIN. PlayWise cannot reset Nintendo's master PIN or unpair the official mobile app. Nintendo's native timer tracks total console screen-on time, meaning active time in HOME menu and System Settings also consumes daily allowance, as noted in [Nintendo Support](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html).
+任我玩家长密码只保护本项目的家长区，不是 Nintendo 官方家长控制密码。PlayWise 不重置官方家长控制密码，也不解绑官方手机 App。Nintendo 官方计时按主机使用时间累计，HOME 和系统设置等亮屏使用也可能消耗额度，见[官方说明](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html)。
 
-## Roadmap
+## ROADMAP
 
-| Feature | Status | Implementation Date |
+| 功能特性 | 当前状态 | 实现时间 |
 | :--- | :--- | :--- |
-| Chinese statutory holiday calendar | Implemented (built-in 2026 calendar) | 2026-08-11 |
-| Main app dark mode / 3-state theme | Implemented (overlay retains fixed dark theme) | 2026-08-13 |
-| Date schedules, rule preview, daily self-buffer | Implemented (self-buffer disabled by default) | 2026-08-24 |
-| Family activity history & 7/30-day allowance analytics | Implemented (missing dates marked as unknown) | 2026-08-24 |
-| Bedtime schedule | Implemented (overnight schedules, background restriction, overlay recovery; disabled by default) | 2026-09-11 |
-| In-game overlay: child redemption & parent quick actions | Implemented (redeem grant codes, claim self-buffer, and quick unlock via overlay) | 2026-09-28 |
-| Daily dispatch dashboard & decision breakdown preview | Implemented (card grouping, temporary quota preview, decision flow drill-down) | 2026-09-29 |
-| Switch-native interactive sound effects (audout engine) | Implemented (12 Switch-style sound effects, dial audio, and sound toggle) | 2026-10-01 |
-| Multi-language internationalization (Traditional Chinese & English) | Implemented (bilingual interface & docs, language decoupling) | 2026-10-02 |
-| Destructive action long-press charge-up & safety protection | Implemented (charge-up confirmation with continuous audio feedback, instant cancel) | 2026-10-02 |
-| Custom shortcut recording | In validation (presets available, recording entry unreleased) | TBD |
-| Per-title playtime statistics | TODO (`pdm:qry` hardware verification gated; currently marked unavailable) | TBD |
+| 中国国家法定节假日时间设置 | 已实现，内置 2026 年日历 | 2026-08-11 |
+| 主机应用暗黑模式 | 已实现三态主题；浮窗保持固定暗色 | 2026-08-13 |
+| 日期计划、规则预览、每日自主缓冲 | 已实现；自主缓冲默认关闭 | 2026-08-24 |
+| 家庭活动记录、7/30 天额度消耗估算 | 已实现；缺失日期标为未知 | 2026-08-24 |
+| 就寝时间（bedtime） | 已实现；已提供跨夜计划、后台限制和浮窗恢复；新安装默认关闭 | 2026-09-11 |
+| 浮窗儿童加时兑换与家长快捷操作 | 已实现；受限时支持浮窗兑换加时码、领取缓冲与快捷解限 | 2026-09-28 |
+| 今日调度看板与决策链路即时预览 | 已实现；优化卡片分组、临时额度即时预览与决策流下钻 | 2026-09-29 |
+| 全景操作音效体系 (audout 引擎) | 已实现；内置 12 档原生风格音效、拨轮音与按键音效总开关 | 2026-10-01 |
+| 多语言国际化 (繁体中文 / 英文) | 已实现；支持界面与文档双语切换、系统语言解耦与动态切换 | 2026-10-02 |
+| 危险操作长按充能确认与保护 | 已实现；清除调度与安全重置支持长按充能进度及连续音效反馈 | 2026-10-02 |
+| 自定义快捷键录制 | 验证中；预设组合已开放，录制入口暂未发布 | 待定 |
+| 按游戏时间统计 | TODO；`pdm:qry` 真机证据门禁中，当前显示不可用 | 待定 |
 
-Once daily limit or bedtime takes effect, the in-game overlay remains PlayWise's only on-console interactive entry: for daily limits, users can redeem grant codes, or parents can grant temporary minutes or unlimited play for today; for bedtime, users can skip the session, disable the schedule, or restore pre-installation settings. Temporary bypass via Nintendo master PIN in the native dialog remains handled by Nintendo. If the overlay or sysmodule is unavailable, PlayWise does not provide an on-console recovery fallback or auto-write recovery flags.
+每日额度耗尽和就寝时间生效后，PlayWise 侧只保留浮窗作为主机内操作入口：每日限制可兑换加时码，或由家长单次授权增加分钟、设为今日不限时；就寝限制可跳过本次、关闭计划或恢复安装前设置。Nintendo 原生弹窗的官方家长控制密码临时解锁仍由 Nintendo 提供。若浮窗或后台不可用，PlayWise 没有可靠的主机内自救路径，也不会自动写入启动恢复旗标。
 
-## Documentation
+## 项目文档
 
-- [User Guide](docs/USER_GUIDE.md) ([简体中文](docs/使用指南.md))
-- [Developer Guide](docs/DEVELOPER_GUIDE.md) ([简体中文](docs/开发指南.md))
-- [Development Environment Guide](docs/DEVELOPMENT_ENVIRONMENT_GUIDE.md) ([简体中文](docs/开发环境指南.md))
-- [Protocol Specification](docs/PROTOCOL.md) ([简体中文](docs/协议.md))
-- [Testing Guide](docs/TESTING_GUIDE.md) ([简体中文](docs/测试指南.md))
-- [PCTL Integration Architecture](docs/PCTL_ARCHITECTURE.md) ([简体中文](docs/PCTL集成架构.md))
+- [使用指南](docs/使用指南.md) ([English](docs/USER_GUIDE.md))
+- [开发指南](docs/开发指南.md) ([English](docs/DEVELOPER_GUIDE.md))
+- [开发环境指南](docs/开发环境指南.md) ([English](docs/DEVELOPMENT_ENVIRONMENT_GUIDE.md))
+- [协议](docs/协议.md) ([English](docs/PROTOCOL.md))
+- [测试指南](docs/测试指南.md) ([English](docs/TESTING_GUIDE.md))
+- [PCTL 集成架构](docs/PCTL集成架构.md) ([English](docs/PCTL_ARCHITECTURE.md))
 
-## Acknowledgements & License
+## 致谢与许可
 
-Implementation concepts referenced [gmaitxqqq/switch-pctltcp-remoteandlocal](https://github.com/gmaitxqqq/switch-pctltcp-remoteandlocal) and [tailiang2008/NX-Pctl-Manager](https://github.com/tailiang2008/NX-Pctl-Manager). Released under the Apache License 2.0. PlayWise is an independent project and is not affiliated with or endorsed by Nintendo, Atmosphère, libnx, or Ultrahand Overlay.
+实现思路参考 [gmaitxqqq/switch-pctltcp-remoteandlocal](https://github.com/gmaitxqqq/switch-pctltcp-remoteandlocal) 和 [tailiang2008/NX-Pctl-Manager](https://github.com/tailiang2008/NX-Pctl-Manager)。项目采用 Apache License 2.0，与 Nintendo、Atmosphère、libnx 或 Ultrahand Overlay 无隶属或背书关系。
