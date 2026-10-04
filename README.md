@@ -26,6 +26,7 @@
 
 完整的[安装、首次设置、使用与升级步骤](docs/使用指南.md)见使用指南。
 
+
 ## 加时码操作演示
 
 ### 孩子使用加时码：受限时用游戏内浮窗
@@ -125,3 +126,10 @@
 ## 致谢与许可
 
 实现思路参考 [gmaitxqqq/switch-pctltcp-remoteandlocal](https://github.com/gmaitxqqq/switch-pctltcp-remoteandlocal) 和 [tailiang2008/NX-Pctl-Manager](https://github.com/tailiang2008/NX-Pctl-Manager)。项目采用 Apache License 2.0，与 Nintendo、Atmosphère、libnx 或 Ultrahand Overlay 无隶属或背书关系。
+
+## 下载统计
+
+[![Total Downloads](https://img.shields.io/github/downloads/selfuppen/NX-PlayWise/total?style=flat-square&color=6f42c1)](https://github.com/selfuppen/NX-PlayWise/releases)
+[![Latest Release Downloads](https://img.shields.io/github/downloads/selfuppen/NX-PlayWise/latest/total?style=flat-square&color=blue)](https://github.com/selfuppen/NX-PlayWise/releases/latest)
+[![playwise-complete.zip Downloads](https://img.shields.io/badge/dynamic/json?style=flat-square&color=green&label=playwise-complete.zip&query=$.assets[1].download_count&url=https://api.github.com/repos/selfuppen/NX-PlayWise/releases/latest)](https://github.com/selfuppen/NX-PlayWise/releases/latest)
+[![playwise.zip Downloads](https://img.shields.io/badge/dynamic/json?style=flat-square&color=orange&label=playwise.zip&query=$.assets[0].download_count&url=https://api.github.com/repos/selfuppen/NX-PlayWise/releases/latest)](https://github.com/selfuppen/NX-PlayWise/releases/latest)
