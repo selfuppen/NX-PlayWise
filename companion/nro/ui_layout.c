@@ -352,7 +352,7 @@ PtcUiRect ptc_ui_eye_care_page_save_rect(void)
 
 PtcUiRect ptc_ui_eye_care_page_skip_rect(void)
 {
-    return (PtcUiRect){54, 646, 240, 44};
+    return (PtcUiRect){398, 664, 200, 44};
 }
 
 PtcUiRect ptc_ui_bedtime_manage_rect(int index)
@@ -630,8 +630,8 @@ PtcUiRect ptc_ui_calendar_manager_row_rect(int index)
 
 PtcUiRect ptc_ui_calendar_manager_nav_rect(int index)
 {
-    if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){110 + index * 174, 596, 160, 48};
+    if (index < 0 || index > 5) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){110 + index * 178, 596, 170, 48};
 }
 
 PtcUiRect ptc_ui_holiday_page_action_rect(int index)
@@ -728,8 +728,13 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         break;
     case PTC_UI_OVERLAY_SCHEDULED:
     case PTC_UI_OVERLAY_DAY_DECISION:
+    case PTC_UI_OVERLAY_CALENDAR_MANAGER:
         *width = 1120;
         *height = 640;
+        break;
+    case PTC_UI_OVERLAY_CALENDAR_FORMAT:
+        *width = 1000;
+        *height = 560;
         break;
     case PTC_UI_OVERLAY_AUTONOMY:
     case PTC_UI_OVERLAY_EYE_CARE:
@@ -1055,7 +1060,7 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
         return (PtcUiRect){dialog.x + 42, dialog.y + 588, 210, 44};
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_DAY_DECISION)
         return (PtcUiRect){dialog.x + dialog.w - 28 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
-    if (overlay == PTC_UI_OVERLAY_NOTICE_DETAILS)
+    if (overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT)
         return (PtcUiRect){dialog.x + (dialog.w - PTC_UI_DIALOG_BTN_W) / 2, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W * 2 - 16, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     return rect;

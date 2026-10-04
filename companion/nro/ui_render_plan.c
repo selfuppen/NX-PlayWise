@@ -1226,9 +1226,11 @@ static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
     if (resting) {
         UiRect skip_btn = to_uirect(ptc_ui_eye_care_page_skip_rect());
+        char label[96];
+        snprintf(label, sizeof(label), "X %s", ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP));
         fill_round_rect(pixels, stride, skip_btn, 10, UI_DANGER_SOFT);
         draw_rect_outline(pixels, stride, skip_btn, 10, 1, UI_DANGER);
-        draw_text_center(pixels, stride, skip_btn, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP), 15, UI_DANGER);
+        draw_button_label(pixels, stride, skip_btn, label, 16, UI_DANGER);
         if (model->eye_care_field_focus == 4) draw_focus_ring(pixels, stride, skip_btn, 10);
     }
 }

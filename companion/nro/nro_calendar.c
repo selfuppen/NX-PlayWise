@@ -382,8 +382,25 @@ void calendar_manager_select_row(UiState *ui, int row)
 void calendar_manager_nav(UiState *ui, int action)
 {
     PtcUiModel *model;
-    if (!ui || ui->waiting) return;
+    if (!ui) return;
     model = &ui->model;
+    if (action == 5) {
+        ptc_ui_cancel_overlay(model);
+        return;
+    }
+    if (action == 3) {
+        model->overlay = PTC_UI_OVERLAY_CALENDAR_FORMAT;
+        snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
+            ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_TITLE));
+        model->overlay_body[0] = '\0';
+        return;
+    }
+    if (ui->waiting) return;
+    if (action == 4) {
+        calendar_manager_refresh(ui);
+        submit_status(ui);
+        return;
+    }
     if (action == 0 || action == 1) {
         int page = model->calendar_manager_page + (action == 0 ? -1 : 1);
         if (page < 0 || page * 6 >= model->calendar_manager_count) return;

@@ -123,6 +123,13 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
     if (!model || model->overlay == PTC_UI_OVERLAY_NONE) {
         return false;
     }
+    if (model->overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT) {
+        model->overlay = PTC_UI_OVERLAY_CALENDAR_MANAGER;
+        snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
+            ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER));
+        model->overlay_body[0] = '\0';
+        return true;
+    }
     if (model->overlay == PTC_UI_OVERLAY_SCHEDULED && ptc_ui_scheduled_dirty(model)) {
         model->overlay = PTC_UI_OVERLAY_SCHEDULED_LEAVE;
         return true;

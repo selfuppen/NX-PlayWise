@@ -219,11 +219,12 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
         ptc_ui_text(PTC_UI_T_BEDTIME), ptc_ui_text(PTC_UI_T_QUICK_GRANT), ptc_ui_text(PTC_UI_T_EDIT_WEEKLY_BEDTIME_WINDOWS), ptc_ui_text(PTC_UI_T_EDIT_SPECIAL_BEDTIME_RULES),
         ptc_ui_text(PTC_UI_T_LEAVE_BEDTIME_EDITING), ptc_ui_text(PTC_UI_T_COPY_WEEKLY_BEDTIME_WINDOW),
         ptc_ui_text(PTC_UI_T_TODAY_DETAILS), ptc_ui_text(PTC_UI_T_TODAY_DETAILS), ptc_ui_text(PTC_UI_T_UI_LANGUAGE),
-        ptc_ui_text(PTC_UI_T_EXPORT_CONFIGURATION_FILES_FOR_USE_ON_MOBILE), ptc_ui_text(PTC_UI_T_EYE_CARE)
+        ptc_ui_text(PTC_UI_T_EXPORT_CONFIGURATION_FILES_FOR_USE_ON_MOBILE), ptc_ui_text(PTC_UI_T_EYE_CARE),
+        ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER), ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_TITLE)
     };
     int failed = 0;
     for (int dark = 0; dark < 2; ++dark) {
-        for (int overlay = PTC_UI_OVERLAY_MINUTES; overlay <= PTC_UI_OVERLAY_EYE_CARE; ++overlay) {
+        for (int overlay = PTC_UI_OVERLAY_MINUTES; overlay <= PTC_UI_OVERLAY_CALENDAR_FORMAT; ++overlay) {
             PtcUiModel model = *baseline;
             char name[48];
             PtcRules rules;
@@ -241,6 +242,19 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
             model.draft_autonomy_policy.daily_buffer_minutes = 10;
             model.draft_eye_care_policy.play_minutes = 40;
             model.draft_eye_care_policy.rest_minutes = 10;
+            model.calendar_manager_count = 6;
+            model.calendar_manager_selected = 2;
+            snprintf(model.calendar_pending_option_id, sizeof(model.calendar_pending_option_id), "JP");
+            for (int i = 0; i < 6; ++i) {
+                snprintf(model.calendar_manager_rows[i].title, sizeof(model.calendar_manager_rows[i].title),
+                    "JP-%d", 2026 + i);
+                snprintf(model.calendar_manager_rows[i].detail, sizeof(model.calendar_manager_rows[i].detail),
+                    "%s", ptc_ui_text(PTC_UI_T_CALENDAR_USER_IMPORT));
+            }
+            model.calendar_preview_count = 12;
+            for (int i = 0; i < 12; ++i)
+                snprintf(model.calendar_preview_lines[i], sizeof(model.calendar_preview_lines[i]),
+                    "%s", ptc_ui_text(i == 0 ? PTC_UI_T_CALENDAR_BUILTIN_CHINA : PTC_UI_T_CALENDAR_UNCOVERED));
             model.draft_scheduled_override = (PtcScheduledOverride){true, 2380, 2386, {PTC_RULE_MODE_LIMIT, 120}};
             model.bedtime_policy = rules.bedtime;
             model.draft_bedtime_policy = rules.bedtime;
@@ -1006,6 +1020,13 @@ static int render_eye_care_previews(const char *directory, const PtcUiModel *bas
         model.remaining_minutes = 0;
         model.daily_restriction_active = false;
         failed |= save_preview(directory, "parent", "eye-care-resting", &model, dark);
+        {
+            PtcUiModel editor = model;
+            editor.parent_page = PTC_UI_PARENT_PLAN;
+            editor.plan_page = PTC_UI_PLAN_PAGE_EYE_CARE;
+            editor.eye_care_field_focus = 4;
+            failed |= save_preview(directory, "plan", "eye-care-skip", &editor, dark);
+        }
         if (!ptc_ui_open_home_details(&model)) return 1;
         failed |= save_preview(directory, "parent", "parent-details-eye-care-resting", &model, dark);
     }

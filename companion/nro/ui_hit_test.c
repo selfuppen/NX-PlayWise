@@ -56,10 +56,14 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         for (i = 0; i < 6; ++i)
             if (ptc_ui_rect_contains(ptc_ui_calendar_manager_row_rect(i), x, y))
                 return make_hit(PTC_UI_HIT_CALENDAR_MANAGER_ROW, i);
-        for (i = 0; i < 3; ++i)
+        for (i = 0; i < 6; ++i)
             if (ptc_ui_rect_contains(ptc_ui_calendar_manager_nav_rect(i), x, y))
                 return make_hit(PTC_UI_HIT_CALENDAR_MANAGER_NAV, i);
         return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT) {
+        return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
+            ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
         if (ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y))

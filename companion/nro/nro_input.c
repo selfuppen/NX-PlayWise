@@ -442,12 +442,19 @@ void handle_overlay_input(UiState *ui, u64 down)
         }
         return;
     }
+    if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT) {
+        if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus))
+            ptc_ui_cancel_overlay(&ui->model);
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER) {
-        if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
+        if (down & HidNpadButton_B) calendar_manager_nav(ui, 5);
+        else if (down & HidNpadButton_X) calendar_manager_nav(ui, 3);
+        else if (down & HidNpadButton_Y) calendar_manager_nav(ui, 4);
         else if (down & HidNpadButton_L) calendar_manager_select_tab(ui, 0);
         else if (down & HidNpadButton_R) calendar_manager_select_tab(ui, 1);
-        else if (down & HidNpadButton_Left) calendar_manager_nav(ui, 0);
-        else if (down & HidNpadButton_Right) calendar_manager_nav(ui, 1);
+        else if (down & (HidNpadButton_Left | HidNpadButton_ZL)) calendar_manager_nav(ui, 0);
+        else if (down & (HidNpadButton_Right | HidNpadButton_ZR)) calendar_manager_nav(ui, 1);
         else if ((down & HidNpadButton_Up) && ui->model.calendar_manager_selected > 0) {
             --ui->model.calendar_manager_selected;
             ui->model.calendar_manager_page = ui->model.calendar_manager_selected / 6;

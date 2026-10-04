@@ -778,12 +778,17 @@ static void draw_calendar_manager_overlay(uint32_t *pixels, uint32_t stride, con
     int pages = (model->calendar_manager_count + 5) / 6;
     draw_dialog_shell(pixels, stride, model, &dialog, 1120, 640);
     for (int i = 0; i < 2; ++i) {
+        char label[96];
+        snprintf(label, sizeof(label), "%s %s", i == 0 ? "L" : "R",
+            i == 0 ? ptc_ui_text(PTC_UI_T_SAVED_REGIONS) : ptc_ui_text(PTC_UI_T_IMPORT_FILES));
         draw_candidate_button(pixels, stride, ptc_ui_calendar_manager_tab_rect(i),
-            i == 0 ? ptc_ui_text(PTC_UI_T_SAVED_REGIONS) : ptc_ui_text(PTC_UI_T_IMPORT_FILES),
+            label,
             model->calendar_manager_tab == i ? UI_ACCENT : UI_RAISED,
             model->calendar_manager_tab == i ? UI_ON_ACCENT : UI_INK,
             model->calendar_manager_tab == i, false);
     }
+    draw_wrapped_text(pixels, stride, 650, 140,
+        ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_BRIEF), 13, 520, 16, 2, UI_MUTED);
     for (int i = 0; i < 6; ++i) {
         int index = model->calendar_manager_page * 6 + i;
         UiRect rect = to_uirect(ptc_ui_calendar_manager_row_rect(i));
@@ -813,20 +818,46 @@ static void draw_calendar_manager_overlay(uint32_t *pixels, uint32_t stride, con
     }
     snprintf(page_text, sizeof(page_text), "%d / %d", model->calendar_manager_page + 1,
         pages > 0 ? pages : 1);
-    draw_text(pixels, stride, 650, 611, page_text, 16, UI_MUTED);
-    for (int i = 0; i < 3; ++i) {
+    draw_text(pixels, stride, 110, 665, page_text, 14, UI_MUTED);
+    draw_text(pixels, stride, 250, 665, ptc_ui_text(PTC_UI_T_CALENDAR_MANAGER_HINT), 14, UI_MUTED);
+    for (int i = 0; i < 6; ++i) {
+        char label[96];
         bool disabled = (i == 0 && model->calendar_manager_page == 0) ||
             (i == 1 && model->calendar_manager_page + 1 >= pages) ||
             (i == 2 && (!model->calendar_pending_file[0] && !model->calendar_pending_option_id[0])) ||
-            (i == 2 && model->calendar_manager_tab == 0 && model->disable_flag_present);
-        const char *label = i == 0 ? ptc_ui_text(PTC_UI_T_CALENDAR_PREVIOUS) :
+            (i == 2 && model->calendar_manager_tab == 0 && model->disable_flag_present) ||
+            (model->waiting && i < 3) || (model->waiting && i == 4);
+        const char *caption = i == 0 ? ptc_ui_text(PTC_UI_T_CALENDAR_PREVIOUS) :
             i == 1 ? ptc_ui_text(PTC_UI_T_CALENDAR_NEXT) :
+            i == 3 ? ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_ACTION) :
+            i == 4 ? ptc_ui_text(PTC_UI_T_Y_REFRESH) :
+            i == 5 ? ptc_ui_text(PTC_UI_T_B_BACK) :
             model->calendar_manager_tab == 0 ? ptc_ui_text(PTC_UI_T_CALENDAR_APPLY_ACTION) :
-            ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_ACTION);
+                ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_ACTION);
+        snprintf(label, sizeof(label), "%s%s", i == 0 ? "ZL " :
+            i == 1 ? "ZR " : i == 2 ? "A " : i == 3 ? "X " : "", caption);
         draw_candidate_button(pixels, stride, ptc_ui_calendar_manager_nav_rect(i),
             label, i == 2 ? UI_ACCENT : UI_RAISED,
             i == 2 ? UI_ON_ACCENT : UI_INK, false, disabled);
     }
+}
+
+static void draw_calendar_format_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    static const PtcUiTextId lines[] = {
+        PTC_UI_T_CALENDAR_FORMAT_FILE, PTC_UI_T_CALENDAR_FORMAT_FIELDS,
+        PTC_UI_T_CALENDAR_FORMAT_DATES, PTC_UI_T_CALENDAR_FORMAT_LIMITS,
+        PTC_UI_T_CALENDAR_IMPORT_CONFIRM
+    };
+    draw_dialog_shell(pixels, stride, model, &dialog, 1000, 560);
+    for (int i = 0; i < 5; ++i)
+        draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 104 + i * 62,
+            ptc_ui_text(lines[i]), 18, dialog.width - 68, 24, 2, UI_INK);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 434,
+        ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 16, UI_ACCENT);
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),
+        ptc_ui_text(PTC_UI_T_B_BACK), UI_RAISED, UI_INK, true);
 }
 
 static void draw_weekly_bulk_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -931,6 +962,9 @@ bool draw_plan_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiMod
         return true;
     case PTC_UI_OVERLAY_CALENDAR_MANAGER:
         draw_calendar_manager_overlay(pixels, stride, model);
+        return true;
+    case PTC_UI_OVERLAY_CALENDAR_FORMAT:
+        draw_calendar_format_overlay(pixels, stride, model);
         return true;
     case PTC_UI_OVERLAY_HOLIDAY_LEAVE:
         draw_holiday_leave_overlay(pixels, stride, model);

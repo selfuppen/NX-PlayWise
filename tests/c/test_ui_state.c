@@ -3433,9 +3433,39 @@ static void test_calendar_manager_surface(void)
     for (int i = 0; i < 6; ++i)
         check_hit(hit_center(&model, ptc_ui_calendar_manager_row_rect(i)),
             PTC_UI_HIT_CALENDAR_MANAGER_ROW, i, "calendar row touch target");
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 6; ++i)
         check_hit(hit_center(&model, ptc_ui_calendar_manager_nav_rect(i)),
             PTC_UI_HIT_CALENDAR_MANAGER_NAV, i, "calendar page/action touch target");
+    model.waiting = true;
+    check_hit(hit_center(&model, ptc_ui_calendar_manager_nav_rect(5)),
+        PTC_UI_HIT_CALENDAR_MANAGER_NAV, 5, "calendar back remains touchable while refreshing");
+    model.overlay = PTC_UI_OVERLAY_CALENDAR_FORMAT;
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)),
+        PTC_UI_HIT_OVERLAY_CANCEL, 0, "calendar format help provides touch back");
+    check_hit(hit_center(&model, ptc_ui_calendar_manager_tab_rect(0)),
+        PTC_UI_HIT_NONE, 0, "format help blocks touches on underlying calendar lists");
+    check_true(ptc_ui_cancel_overlay(&model), "format help can close while refreshing");
+    check_int(model.overlay, PTC_UI_OVERLAY_CALENDAR_MANAGER, "format back restores calendar manager");
+    check_int(model.calendar_manager_selected, 7, "format back preserves selected calendar");
+    check_int(model.calendar_manager_page, 1, "format back preserves calendar page");
+    check_true(ptc_ui_cancel_overlay(&model), "calendar manager can close while refreshing");
+    check_int(model.overlay, PTC_UI_OVERLAY_NONE, "calendar back restores holiday editor");
+    model.waiting = false;
+    for (int page = PTC_UI_PLAN_PAGE_WEEKLY; page <= PTC_UI_PLAN_PAGE_EYE_CARE; ++page) {
+        model.plan_page = (PtcUiPlanPage)page;
+        check_hit(hit_center(&model, ptc_ui_parent_subpage_footer_rect(0)),
+            PTC_UI_HIT_PARENT_BACK, 0, "every plan editor has the rendered back target");
+        check_hit(hit_center(&model, ptc_ui_parent_subpage_footer_rect(1)),
+            PTC_UI_HIT_PARENT_REFRESH, 0, "every plan editor has the rendered refresh target");
+    }
+    PtcUiRect skip = ptc_ui_eye_care_page_skip_rect();
+    PtcUiRect refresh = ptc_ui_parent_subpage_footer_rect(1);
+    check_true(skip.x >= refresh.x + refresh.w, "eye care skip does not cover back or refresh");
+    check_int(skip.w, ptc_ui_eye_care_page_save_rect().w, "eye care actions use the same button width");
+    model.eye_care_policy.enabled = true;
+    snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "resting");
+    check_hit(hit_center(&model, skip), PTC_UI_HIT_EYE_CARE_PAGE_SKIP, 0,
+        "resting eye care skip keeps its own touch target");
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
     check_true(strcmp(ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER), "地区日历管理") == 0,
         "simplified region calendar label");

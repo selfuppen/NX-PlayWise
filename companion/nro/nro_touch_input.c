@@ -185,6 +185,8 @@ void handle_touch(UiState *ui, int x, int y)
                 ui->model.overlay_selection = PTC_UI_GRANT_LOCAL_BACK;
             }
             handle_overlay_input(ui, HidNpadButton_B);
+        } else if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT) {
+            handle_overlay_input(ui, HidNpadButton_B);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_CODE_RESULT) {
             close_code_result(ui);
         } else if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM &&
