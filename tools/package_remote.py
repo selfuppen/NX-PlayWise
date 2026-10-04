@@ -785,8 +785,6 @@ def build_and_verify(
             remove_path(package_dir / DEVICE_LAB_PACKAGE)
         if check_eden:
             remove_path(eden_dir / EDEN_NRO)
-        if with_previews:
-            remove_path(ROOT / "build" / "ui-previews")
 
     build_image, build_image_digest = resolve_build_identity(
         host,

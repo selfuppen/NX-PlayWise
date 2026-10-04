@@ -117,7 +117,6 @@ ui-previews: $(HOST_BUILD_DIR)/ui_preview
 		echo "ERROR: missing pinned preview font" >&2; \
 		exit 1; \
 	fi
-	rm -rf build/ui-previews
 	mkdir -p build/ui-previews
 	$(STAGE_TIMER) playwise ui-previews -- $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews
 	$(STAGE_TIMER) playwise convert-previews -- python3 tools/convert_ui_previews.py
@@ -175,4 +174,4 @@ device-lab-package: device-lab-sysmodule device-lab-nro device-lab-overlay
 	$(STAGE_TIMER) device-lab package-zip -- python3 tools/package_device_lab.py --out build/packages/playwise-device-lab --zip build/packages/playwise-device-lab-$(PLAYWISE_VERSION).zip --manifest build/device-lab/generated/release-manifest.json --sysmodule-exefs build/device-lab/switch/exefs.nsp --nro build/device-lab/switch/playwise-device-lab.nro --overlay build/device-lab/switch/playwise-device-lab.ovl
 
 clean:
-	$(STAGE_TIMER) global clean -- sh -c 'rm -rf build/host build/generated build/switch build/packages build/device-lab && if [ "$(CLEAN_EDEN)" = "1" ]; then rm -rf build/eden-test; fi && $(MAKE) -C companion/nro clean || true && rm -rf companion/nro/build-eden companion/nro/pctc-eden.elf companion/nro/pctc-eden.nro companion/nro/pctc-eden.nacp && $(MAKE) -C companion/overlay clean || true && $(MAKE) -C sysmodule clean || true && $(MAKE) -C device_lab/nro clean || true && $(MAKE) -C device_lab/overlay clean || true'
+	$(STAGE_TIMER) global clean -- sh -c 'rm -rf build/host build/generated build/switch build/packages build/device-lab build/ui-previews && if [ "$(CLEAN_EDEN)" = "1" ]; then rm -rf build/eden-test; fi && $(MAKE) -C companion/nro clean || true && rm -rf companion/nro/build-eden companion/nro/pctc-eden.elf companion/nro/pctc-eden.nro companion/nro/pctc-eden.nacp && $(MAKE) -C companion/overlay clean || true && $(MAKE) -C sysmodule clean || true && $(MAKE) -C device_lab/nro clean || true && $(MAKE) -C device_lab/overlay clean || true'

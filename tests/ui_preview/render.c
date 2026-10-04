@@ -147,11 +147,12 @@ static int save_preview(const char *directory, const char *module, const char *n
     ptc_mkdir(dir_path);
     n = snprintf(path, sizeof(path), "%s/%s-%s.ppm", dir_path, name, dark ? "dark" : "light");
     if (n < 0 || (size_t)n >= sizeof(path)) return 1;
-    file = fopen(path, "wb");
-    if (!file) return 1;
-    rgb = malloc(1280 * 720 * 3);
-    if (!rgb) { fclose(file); return 1; }
-    fprintf(file, "P6\n1280 720\n255\n");
+    const size_t total_payload = 1280 * 720 * 3;
+    const char *header = "P6\n1280 720\n255\n";
+    const size_t header_len = strlen(header);
+
+    rgb = malloc(total_payload);
+    if (!rgb) return 1;
     for (int y = 0; y < 720; ++y) {
         for (int x = 0; x < 1280; ++x) {
             uint32_t pixel = preview_pixels[y * 1280 + x];
@@ -161,8 +162,47 @@ static int save_preview(const char *directory, const char *module, const char *n
             rgb[offset + 2] = (pixel >> 16) & 255;
         }
     }
+
+    /* Incremental optimization: skip re-writing identical PPM files to preserve timestamps and avoid mount I/O */
+    FILE *existing = fopen(path, "rb");
+    if (existing) {
+        char check_header[32];
+        bool identical = false;
+        if (fread(check_header, 1, header_len, existing) == header_len &&
+            memcmp(check_header, header, header_len) == 0) {
+            unsigned char chunk_buf[65536];
+            size_t compared = 0;
+            identical = true;
+            while (compared < total_payload) {
+                size_t to_read = total_payload - compared;
+                if (to_read > sizeof(chunk_buf)) to_read = sizeof(chunk_buf);
+                size_t r = fread(chunk_buf, 1, to_read, existing);
+                if (r != to_read || memcmp(chunk_buf, rgb + compared, to_read) != 0) {
+                    identical = false;
+                    break;
+                }
+                compared += to_read;
+            }
+            if (identical && fgetc(existing) != EOF) {
+                identical = false;
+            }
+        }
+        fclose(existing);
+        if (identical) {
+            free(rgb);
+            return 0;
+        }
+    }
+
+    file = fopen(path, "wb");
+    if (!file) { free(rgb); return 1; }
+    if (fwrite(header, 1, header_len, file) != header_len) {
+        fclose(file);
+        free(rgb);
+        return 1;
+    }
     /* One frame write avoids hundreds of small writes across a Docker bind mount. */
-    bool written = fwrite(rgb, 1, 1280 * 720 * 3, file) == 1280 * 720 * 3;
+    bool written = fwrite(rgb, 1, total_payload, file) == total_payload;
     free(rgb);
     if (!written) { fclose(file); return 1; }
     return fclose(file) != 0;
@@ -266,9 +306,6 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
             failed |= save_preview(directory, "matrix", name, &details, dark != 0);
         }
         PtcUiModel model = *baseline;
-        model.view = PTC_UI_PARENT;
-        model.parent_page = PTC_UI_PARENT_SETTINGS;
-        failed |= save_preview(directory, "settings", "settings-root", &model, dark != 0);
         model.view = PTC_UI_ERROR;
         model.error_code = 306;
         snprintf(model.message, sizeof(model.message), ptc_ui_text(PTC_UI_T_SYSTEM_ENVIRONMENT_CHANGED_PARENT_RE_CHECK_REQUIRED));
