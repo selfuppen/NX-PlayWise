@@ -8,7 +8,7 @@
 
 ## Eye care breaks (device validation pending)
 
-In the parent's Time Plan, enable Eye Care and set 1–240 minutes of use and 1–60 minutes of rest. Tap ±1 or ±10 minute buttons, or use the controller's left/right buttons for one-minute steps and ZL/ZR for ten-minute steps. It is off by default, with 40 minutes of use and 10 minutes of rest preset. The Time Plan card's badge shows the Eye Care switch state. Before first enablement, confirm Nintendo's “Suspend Software” on time limit setting and verify that the overlay is available. PlayWise does not change that Nintendo setting.
+In the parent's Time Plan, enable Eye Care and set 1–240 minutes of use and 1–60 minutes of rest. Tap ±1 or ±10 minute buttons, or use the controller's left/right buttons for one-minute steps and ZL/ZR for ten-minute steps. It is off by default, with 40 minutes of use and 10 minutes of rest preset. The Time Plan card's badge shows the Eye Care switch state. Before first enablement, confirm Nintendo Parental Controls is enabled and verify that the overlay is available. Status confirmation checks whether Nintendo Parental Controls is enabled.
 
 Enabling starts a new cycle at current usage. Reducing the use period may start a break immediately; disabling releases the eye care restriction immediately. Awake HOME use counts, sleep pauses usage accumulation, and sleep counts toward a break. The child view and overlay show remaining use or break time; an unavailable reading is shown as unknown. During a break, a parent can verify their PIN in the overlay or Today's Schedule and choose “Skip this eye care break”; this applies only to the current break and starts a new cycle. Daily allowance and bedtime restrictions take precedence and reset the eye care cycle.
 
@@ -17,7 +17,7 @@ An originally unlimited day temporarily uses a 1440-minute PCTL limit for counti
 This guide is intended for parents and children using **PlayWise** (Repository: `NX-PlayWise`, Chinese name: 任我玩) on a Nintendo Switch running Custom Firmware. For first-time installation, using the complete delivery bundle is recommended; when parents generate grant codes on a phone or PC, pairing via network QR code scan as described below is recommended.
 
 > [!IMPORTANT]
-> PlayWise relies on Nintendo's native Parental Controls for "Play Time" tracking and "Suspend Software" when time runs out. Screen-on activities such as HOME menu and System Settings may also consume playtime. Before installation, please verify on a game with no unsaved progress: confirm that official playtime accumulates, and that enabling the software suspension switch actually suspends gameplay when time is up. PlayWise does not alter official system switches on your behalf, nor can it repair underlying system timer anomalies.
+> PlayWise relies on Nintendo's native Parental Controls for playtime tracking and usage restrictions. Screen-on activities such as HOME menu and System Settings may also consume playtime. Before installation, please verify on a game with no unsaved progress: confirm that official playtime accumulates, and that time restrictions take effect as expected. PlayWise does not alter official system switches on your behalf, nor can it repair underlying system timer anomalies.
 
 > [!WARNING]
 > Once daily playtime is exhausted or bedtime restrictions take effect, Nintendo's native lock screen dialog may prevent games, Homebrew Menu, HOME menu, System Settings, and the PlayWise console app from being opened. On the Switch side, PlayWise provides the in-game overlay (Tesla Overlay) as the primary on-device access and recovery interface; make sure to install and test the overlay before configuring strict limits. The native Nintendo dialog can still be temporarily unlocked using your official Nintendo Parental Controls PIN; this is a completely separate authorization from the PlayWise PIN.
@@ -44,7 +44,7 @@ Current release candidates qualify specifically against Nintendo Switch OLED, HO
 
 The wizard has three steps. Check and save errors appear inline and never prevent continuing. Finishing the wizard does not mean controls are active. Saved progress resumes on reopening; settings that could not be saved may need to be entered again.
 
-1. **Environment & preparation**: Choose Follow System (default), 简体中文, 繁體中文, or English. The language selector title and help remain bilingual Chinese/English; the rest of the wizard changes immediately. Compare your console with the reference environment (OLED, HOS 22.5.0, Atmosphère 1.11.2), check Nintendo parental controls and “Suspend Software”, and test the overlay. Disabled or unreadable controls show guidance but allow continuing. Check the displayed date, time and time zone; optional help explains DBI / QuickNTP time sync without requiring a network or a confirmation checkbox.
+1. **Environment & preparation**: Choose Follow System (default), 简体中文, 繁體中文, or English. The language selector title and help remain bilingual Chinese/English; the rest of the wizard changes immediately. Compare your console with the reference environment (OLED, HOS 22.5.0, Atmosphère 1.11.2), check that Nintendo Parental Controls is enabled, and test the overlay. Disabled or unreadable controls offer “Enable Controls Help” with the system settings steps and allow continuing. Check the displayed date, time and time zone; optional help explains DBI / QuickNTP time sync without requiring a network or a confirmation checkbox.
 2. **Parent settings**: Fresh installs use PlayWise PIN `110`; change it if possible. Existing PINs stay unchanged. This is separate from the Nintendo parental control PIN. Defaults are system theme and Minus (-), released without holding, for parent access. “More settings” offers themes and preset chords. Canceling or failing a PIN change preserves the old PIN; save failures allow continuing, with language and preference choices retained for the session.
 3. **Confirm & enter parent area**: Review checks and current quota, then choose “Enable & enter parent area” or “Enter parent area without enabling”. Enabling saves pre-install settings and safely preserves today’s total and remaining allowance. Confirmed success enters Today's Schedule. Skipping, failure or an unconfirmed result enters Support & Recovery with Export diagnostics focused. You can enter Support while activation is pending; the original request keeps being checked without resubmission.
 
@@ -56,6 +56,7 @@ Use left/right to change language, up/down to select actions, A to activate, and
 <summary>Three setup screens and Child Zone preview</summary>
 
 ![Language, environment and preparation](images/usage-en/setup/setup-step-1-light.png)
+![Enable Nintendo Parental Controls help dialog](images/usage-en/setup/setup-pctl-help-light.png)
 ![Parent settings](images/usage-en/setup/setup-step-2-light.png)
 ![Confirmation and diagnostic guidance](images/usage-en/setup/setup-step-3-light.png)
 
@@ -69,6 +70,12 @@ Parent Zone today schedule preview:
 </details>
 
 These console images are generated from production drawing code with static mock data and bear the `HOST PREVIEW / SAMPLE DATA` watermark. They are layout previews rather than hardware screenshots, and do not represent hardware controller, touch, font, or PCTL acceptance.
+
+### Enable Nintendo Parental Controls
+
+Brief path: Settings → Parent Control settings → Parental Controls settings (restrictions set by a parent or guardian) → I do not have a smart device → Next → Next. Complete the system prompts, then return to PlayWise and check that Parental Controls is enabled.
+
+On setup step 1, tap “Enable Controls Help” or select it with the direction buttons and press `A` to open the detail dialog. Press `A` / `B` or tap Return to close it, keeping the current step and selection. Viewing help does not change system settings or treat an unknown status as enabled.
 
 ## Daily Playtime Management
 
@@ -389,8 +396,8 @@ Do not use `-Clean`, `-Full`, or `-CleanAll` flags during standard upgrades. FTP
 
 - **Code displays invalid, date mismatch, or already used**: Verify console local date displayed on Switch, device configuration, and entered numbers. If explicitly reported as already used, have parents generate a fresh code; failed attempts or cancelled previews do not consume codes.
 - **Playtime limit still reflects old numbers**: Wait for background synchronization to finish, then press `Y` to refresh. Status older than 120 seconds or missing readings will display unconfirmed; never infer restriction release from outdated balances.
-- **Set daily limit shows "Limit Reached" and 0 min remaining, but games still launch**: First check that Nintendo official Parental Controls has **"Suspend Software"** enabled and has not been temporarily unlocked via official PIN. If settings are correct, synchronize your Switch system clock via internet NTP: in DBI, choose "Tools → NTP Time Sync", or use [QuickNTP (Tesla time sync tool)](https://github.com/ppkantorski/QuickNTP). After successful clock synchronization, refresh PlayWise status and test with a game with no unsaved progress to confirm software suspension. Clock synchronization is a recommended resolution, see [Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1); if games still open, proceed with troubleshooting and export diagnostics under "Support & Recovery".
-- **Official countdown or software suspension not functioning**: Temporarily pause PlayWise, inspect Nintendo official Parental Controls and "Suspend Software" settings, and re-verify on a non-critical game. PlayWise does not replace native Parental Controls timing and restriction engines.
+- **Set daily limit shows "Limit Reached" and 0 min remaining, but games still launch**: First check that Nintendo official Parental Controls is enabled and has not been temporarily unlocked via official PIN. If settings are correct, synchronize your Switch system clock via internet NTP: in DBI, choose "Tools → NTP Time Sync", or use [QuickNTP (Tesla time sync tool)](https://github.com/ppkantorski/QuickNTP). After successful clock synchronization, refresh PlayWise status and test with a game with no unsaved progress to confirm restriction behavior. Clock synchronization is a recommended resolution, see [Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1); if games still open, proceed with troubleshooting and export diagnostics under "Support & Recovery".
+- **Official countdown or time restrictions not functioning**: Temporarily pause PlayWise, inspect whether Nintendo official Parental Controls is enabled, and re-verify on a non-critical game. PlayWise does not replace native Parental Controls timing and restriction engines.
 - **Parent webpage cannot save configuration**: Open the standalone file in a standard mobile system browser; if the browser restricts local storage, re-import next time. For QR code pairing and desktop installation, use a trusted HTTPS site.
 
 ## Documentation & Screenshot Maintenance

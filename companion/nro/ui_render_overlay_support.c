@@ -996,9 +996,38 @@ static void draw_forecast_day_details(uint32_t *pixels, uint32_t stride, const P
     home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_B_RETURN), false, true, false);
 }
 
+static void draw_setup_pctl_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    static const PtcUiTextId steps[] = {
+        PTC_UI_T_SETUP_PCTL_HELP_STEP_1, PTC_UI_T_SETUP_PCTL_HELP_STEP_2,
+        PTC_UI_T_SETUP_PCTL_HELP_STEP_3, PTC_UI_T_SETUP_PCTL_HELP_STEP_4,
+        PTC_UI_T_SETUP_PCTL_HELP_STEP_5, PTC_UI_T_SETUP_PCTL_HELP_STEP_6
+    };
+    UiRect dialog;
+    draw_dialog_shell(pixels, stride, model, &dialog, 1060, 570);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 91,
+        ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_INTRO), 18, UI_MUTED);
+    for (int i = 0; i < 6; ++i) {
+        char number[8];
+        snprintf(number, sizeof(number), "%d", i + 1);
+        UiRect badge = {dialog.x + 34, dialog.y + 115 + i * 46, 32, 32};
+        fill_round_rect(pixels, stride, badge, 8, UI_ACCENT_SOFT);
+        draw_text_center(pixels, stride, badge, number, 18, UI_ACCENT);
+        draw_wrapped_text(pixels, stride, dialog.x + 82, dialog.y + 138 + i * 46,
+            ptc_ui_text(steps[i]), 18, dialog.width - 116, 22, 2, UI_INK);
+    }
+    draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 432,
+        ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_RETURN), 17, dialog.width - 68, 24, 2, UI_MUTED);
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),
+        ptc_ui_text(PTC_UI_T_A_B_RETURN), UI_ACCENT, UI_ON_ACCENT, false);
+}
+
 bool draw_support_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     switch (model->overlay) {
+    case PTC_UI_OVERLAY_SETUP_PCTL_HELP:
+        draw_setup_pctl_help(pixels, stride, model);
+        return true;
     case PTC_UI_OVERLAY_HOME_DETAILS:
         draw_home_details(pixels, stride, model);
         return true;

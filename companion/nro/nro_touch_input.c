@@ -52,6 +52,7 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_SETUP_LANGUAGE:
     case PTC_UI_HIT_SETUP_TIME_HELP:
+    case PTC_UI_HIT_SETUP_PCTL_HELP:
     case PTC_UI_HIT_SETUP_MORE:
     case PTC_UI_HIT_SETUP_SHORTCUT:
     case PTC_UI_HIT_SETUP_SKIP:
@@ -168,6 +169,7 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_CANCEL);
         if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS ||
             ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
+            ui->model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP ||
             ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION ||
             ui->model.overlay == PTC_UI_OVERLAY_PARENT_EXPORT_RESULT) {
             handle_overlay_input(ui, HidNpadButton_B);

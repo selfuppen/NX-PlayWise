@@ -117,7 +117,8 @@ typedef enum {
     PTC_UI_HIT_HOME_DETAILS,
     PTC_UI_HIT_HOME_DETAILS_TAB,
     PTC_UI_HIT_NOTICE_DETAILS,
-    PTC_UI_HIT_FORECAST_DAY
+    PTC_UI_HIT_FORECAST_DAY,
+    PTC_UI_HIT_SETUP_PCTL_HELP
 } PtcUiHitKind;
 
 typedef struct {
@@ -134,6 +135,7 @@ PtcUiRect ptc_ui_error_retry_rect(void);
 PtcUiRect ptc_ui_error_back_rect(void);
 PtcUiRect ptc_ui_setup_language_rect(int index);
 PtcUiRect ptc_ui_setup_time_help_rect(void);
+PtcUiRect ptc_ui_setup_pctl_help_rect(void);
 PtcUiRect ptc_ui_setup_more_rect(void);
 PtcUiRect ptc_ui_setup_shortcut_rect(void);
 PtcUiRect ptc_ui_setup_skip_rect(void);

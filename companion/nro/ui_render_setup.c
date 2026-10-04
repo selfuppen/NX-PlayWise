@@ -50,6 +50,8 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_text(pixels, stride, 94, 416, ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
             model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF), 19,
             model->restriction_enabled_available && model->restriction_enabled ? UI_SUCCESS : UI_WARNING);
+        setup_button(pixels, stride, ptc_ui_setup_pctl_help_rect(), ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_BUTTON),
+            model->setup_focus == 2, false);
         draw_text(pixels, stride, 94, 444, ptc_ui_text(PTC_UI_T_SETUP_PAUSE_OVERLAY), 18, UI_INK);
         if (!model->restriction_enabled_available || !model->restriction_enabled)
             draw_text(pixels, stride, 94, 469, ptc_ui_text(PTC_UI_T_SETUP_PCTL_PATH), 16, UI_MUTED);
@@ -67,7 +69,7 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 #endif
         draw_text(pixels, stride, 94, 508, text, 22, UI_ACCENT);
         setup_button(pixels, stride, ptc_ui_setup_time_help_rect(), ptc_ui_text(PTC_UI_T_SETUP_TIME_HELP),
-            model->setup_focus == 2, false);
+            model->setup_focus == 3, false);
         draw_wrapped_text(pixels, stride, 94, 534, ptc_ui_text(model->setup_time_help
             ? PTC_UI_T_SETUP_TIME_INSTRUCTIONS : PTC_UI_T_SETUP_TIME_HINT), 16, 1092, 22, 2, UI_MUTED);
     } else if (step == PTC_UI_SETUP_PARENT) {
@@ -97,7 +99,8 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_text(pixels, stride, 94, 287, ptc_ui_text(ptc_ui_setup_reference_matches(model)
             ? PTC_UI_T_SETUP_REFERENCE_MATCH : PTC_UI_T_SETUP_REFERENCE_UNKNOWN), 16, UI_MUTED);
         draw_text(pixels, stride, 94, 313, ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
-            model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF), 16, UI_WARNING);
+            model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF), 16,
+            model->restriction_enabled_available && model->restriction_enabled ? UI_SUCCESS : UI_WARNING);
         draw_text(pixels, stride, 750, 313, ptc_ui_text(model->setup_pin_ready ?
             PTC_UI_T_SETUP_PIN_READY : PTC_UI_T_SETUP_PIN_UNCONFIRMED), 16, model->setup_pin_ready ? UI_MUTED : UI_WARNING);
         draw_wrapped_text(pixels, stride, 94, 345, ptc_ui_text(PTC_UI_T_SETUP_BACKUP_NOTE), 18, 1092, 24, 2, UI_INK);

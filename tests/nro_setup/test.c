@@ -85,6 +85,19 @@ int main(void)
     ptc_ui_cancel_overlay(&ui.model);
     ptc_ui_cancel_overlay(&ui.model);
 
+    handle_setup_input(&ui, HidNpadButton_Down, 0);
+    handle_setup_input(&ui, HidNpadButton_Down, 0);
+    handle_setup_input(&ui, HidNpadButton_A, 0);
+    check(ui.model.setup_focus == 2 && ui.model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP &&
+          ui.model.setup_step == PTC_UI_SETUP_PREPARE && !ui.waiting && !ui.active_request_id[0],
+          "controller opens parental control help without advancing or submitting setup");
+    ptc_ui_cancel_overlay(&ui.model);
+    handle_setup_input(&ui, HidNpadButton_Down, 0);
+    handle_setup_input(&ui, HidNpadButton_A, 0);
+    check(ui.model.setup_focus == 3 && ui.model.setup_time_help,
+          "clock help remains reachable after adding parental control help");
+    ui.model.setup_focus = 0;
+
     refresh_language(&ui);
     for (int i = 0; i < 4; ++i) {
         check(apply_language_preference(&ui, (PtcUiLanguagePreference)i), "language preference saves");

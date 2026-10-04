@@ -80,6 +80,7 @@ PtcUiRect ptc_ui_setup_pin_rect(void) { return (PtcUiRect){94, 284, 520, 58}; }
 PtcUiRect ptc_ui_setup_more_rect(void) { return (PtcUiRect){94, 368, 520, 48}; }
 PtcUiRect ptc_ui_setup_shortcut_rect(void) { return (PtcUiRect){94, 510, 1072, 44}; }
 PtcUiRect ptc_ui_setup_time_help_rect(void) { return (PtcUiRect){934, 480, 252, 36}; }
+PtcUiRect ptc_ui_setup_pctl_help_rect(void) { return (PtcUiRect){934, 408, 252, 36}; }
 PtcUiRect ptc_ui_setup_theme_rect(int index)
 {
     if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
@@ -662,6 +663,10 @@ PtcUiRect ptc_ui_dialog_rect(int width, int height)
 static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
 {
     switch (overlay) {
+    case PTC_UI_OVERLAY_SETUP_PCTL_HELP:
+        *width = 1060;
+        *height = 570;
+        break;
     case PTC_UI_OVERLAY_NOTICE_DETAILS:
         *width = 780;
         *height = 420;
@@ -1018,7 +1023,8 @@ static int dialog_button_top(PtcUiRect dialog)
 
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 {
-    if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS)
+    if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
+        overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP)
         return (PtcUiRect){0, 0, 0, 0};
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
@@ -1032,7 +1038,8 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
         return (PtcUiRect){dialog.x + 42, dialog.y + 588, 210, 44};
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_DAY_DECISION)
         return (PtcUiRect){dialog.x + dialog.w - 28 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
-    if (overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT)
+    if (overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT ||
+        overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP)
         return (PtcUiRect){dialog.x + (dialog.w - PTC_UI_DIALOG_BTN_W) / 2, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W * 2 - 16, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     return rect;

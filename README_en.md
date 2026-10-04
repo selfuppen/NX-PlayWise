@@ -15,11 +15,11 @@
 Fixed schedules provide clear, predictable routines; temporary adjustments allow flexibility for special occasions. Even when parents are away, extra playtime can be granted as a reward for children to redeem independently without constantly altering long-term rules. Temporary adjustments are valid only for the current day, automatically reverting to regular schedules the next day.
 
 > [!WARNING]
-> Stock (unmodified) retail consoles are not supported. PlayWise relies on Nintendo's native Parental Controls for accurate time tracking and requires "Suspend Software" when time runs out to be enabled. Before installing, verify on a non-critical game that playtime limits actually suspend the game. Once a restriction takes effect, the PlayWise homebrew app may not be launchable; make sure to install and test the in-game overlay (Tesla Overlay) beforehand.
+> Stock (unmodified) retail consoles are not supported. PlayWise relies on Nintendo's native Parental Controls for accurate time tracking with Parental Controls enabled. Before installing, verify time tracking and restriction behavior on a non-critical game. Once a restriction takes effect, the PlayWise homebrew app may not be launchable; make sure to install and test the in-game overlay (Tesla Overlay) beforehand.
 
 ## Quick Start
 
-1. Go to Switch **System Settings → Parental Controls**, enable official Parental Controls and turn on **"Suspend Software"**, then verify that screen-on usage counts toward limits and time limits properly suspend software.
+1. Enable Nintendo Parental Controls: Settings → Parent Control settings → Parental Controls settings (restrictions set by a parent or guardian) → I do not have a smart device → Next → Next. Complete the system prompts, then verify time tracking and restriction behavior. The setup wizard also offers “Enable Controls Help” with these steps.
 2. Ensure you have Atmosphère, Homebrew Menu, and Ultrahand Overlay (or another Tesla overlay menu). Note: PlayWise packages do not include overlay loaders.
 3. For first-time installation, download `playwise-complete-<version>.zip`: extract `playwise-<version>.zip` for the Switch, while `playwise-offline.html` serves as a standalone offline parent web tool. Copy and merge the `atmosphere` and `switch` folders from the standard package to the root of your SD card, then reboot.
 4. Launch **PlayWise** from Homebrew Menu, follow the onboarding wizard to configure the parent portal entry, PlayWise PIN, theme, and confirm takeover. When children need extra playtime, redeem codes via the homebrew app or the in-game overlay.
@@ -85,7 +85,7 @@ For detailed walkthroughs of each page, see the [User Guide](docs/USER_GUIDE.md)
 ## FAQ
 
 **Why is the game still playable when PlayWise shows "Limit Reached" / 0 minutes remaining?**
-First, ensure that Nintendo official Parental Controls has **"Suspend Software"** enabled and has not been temporarily unlocked. Next, synchronize the Switch system clock via internet NTP, for example using DBI's "Tools → NTP Time Sync" or [QuickNTP (Tesla time sync tool)](https://github.com/ppkantorski/QuickNTP). After successful clock synchronization, refresh PlayWise status and test with a non-critical game to confirm that software suspension takes effect. Time synchronization is a recommended troubleshooting step, though it may not resolve every edge-case timer inconsistency. See [User Guide: FAQ](docs/USER_GUIDE.md#frequently-asked-questions-faq) and [Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1) for details.
+First, ensure that Nintendo official Parental Controls is enabled and has not been temporarily unlocked. Next, synchronize the Switch system clock via internet NTP, for example using DBI's "Tools → NTP Time Sync" or [QuickNTP (Tesla time sync tool)](https://github.com/ppkantorski/QuickNTP). After successful clock synchronization, refresh PlayWise status and test with a non-critical game to confirm that restrictions take effect. Time synchronization is a recommended troubleshooting step, though it may not resolve every edge-case timer inconsistency. See [User Guide: FAQ](docs/USER_GUIDE.md#frequently-asked-questions-faq) and [Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1) for details.
 
 ## Recommended Environment & Verification Status
 

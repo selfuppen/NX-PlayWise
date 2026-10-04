@@ -54,7 +54,8 @@ void handle_overlay_input(UiState *ui, u64 down)
         ptc_audio_play(PTC_SE_CANCEL);
     }
 
-    if (ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
+        ui->model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP) {
         if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Minus)) {
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
             ui->model.overlay_title[0] = '\0';

@@ -157,6 +157,7 @@ void ptc_ui_move_overlay_selection(PtcUiModel *model, int horizontal, int vertic
 int ptc_ui_grant_estimate_remaining(const PtcUiModel *model, uint16_t grant_minutes, bool *capped);
 int64_t ptc_ui_setup_grace_remaining(const PtcUiModel *model, int64_t now);
 bool ptc_ui_cancel_overlay(PtcUiModel *model);
+void ptc_ui_open_setup_pctl_help(PtcUiModel *model);
 bool ptc_ui_scheduled_dirty(const PtcUiModel *model);
 void ptc_ui_discard_scheduled(PtcUiModel *model);
 void ptc_ui_reconcile_scheduled_result(PtcUiModel *model, const PtcScheduledOverride *draft, bool preserve);

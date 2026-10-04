@@ -320,6 +320,9 @@ void setup_action(UiState *ui, int action, int index)
 {
     if (!ui) return;
     switch (action) {
+    case PTC_UI_HIT_SETUP_PCTL_HELP:
+        ptc_ui_open_setup_pctl_help(&ui->model);
+        break;
     case PTC_UI_HIT_SETUP_LANGUAGE:
         if (index >= 0 && index <= PTC_UI_LANGUAGE_ENGLISH)
             (void)apply_language_preference(ui, (PtcUiLanguagePreference)index);
@@ -351,7 +354,8 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
     (void)held;
     if (!ui || ui->model.view != PTC_UI_SETUP) return;
     if (down & HidNpadButton_B) { setup_previous(ui); return; }
-    max_focus = ui->model.setup_step == PTC_UI_SETUP_CONFIRM ? 1 :
+    max_focus = ui->model.setup_step == PTC_UI_SETUP_PREPARE ? 3 :
+        ui->model.setup_step == PTC_UI_SETUP_CONFIRM ? 1 :
         (ui->model.setup_step == PTC_UI_SETUP_PARENT && ui->model.setup_more ? 4 : 2);
     if (down & HidNpadButton_Down) ui->model.setup_focus = (ui->model.setup_focus + 1) % (max_focus + 1);
     else if (down & HidNpadButton_Up) ui->model.setup_focus = (ui->model.setup_focus + max_focus) % (max_focus + 1);
@@ -372,7 +376,8 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
         int focus = down & HidNpadButton_Plus ? 0 : ui->model.setup_focus;
         if (focus == 0) setup_primary(ui);
         else if (ui->model.setup_step == PTC_UI_SETUP_PREPARE) {
-            if (focus == 2) setup_action(ui, PTC_UI_HIT_SETUP_TIME_HELP, 0);
+            if (focus == 2) setup_action(ui, PTC_UI_HIT_SETUP_PCTL_HELP, 0);
+            else if (focus == 3) setup_action(ui, PTC_UI_HIT_SETUP_TIME_HELP, 0);
         } else if (ui->model.setup_step == PTC_UI_SETUP_PARENT) {
             if (focus == 1) setup_pin(ui);
             else if (focus == 2) setup_action(ui, PTC_UI_HIT_SETUP_MORE, 0);

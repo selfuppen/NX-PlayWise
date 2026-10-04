@@ -347,6 +347,11 @@ static int render_setup_previews(const char *directory, const PtcUiModel *baseli
         failed |= save_preview(directory, "setup", name, &model, dark);
     }
     model.setup_step = PTC_UI_SETUP_PREPARE;
+    model.setup_focus = 2;
+    ptc_ui_open_setup_pctl_help(&model);
+    failed |= save_preview(directory, "setup", "setup-pctl-help", &model, dark);
+    ptc_ui_cancel_overlay(&model);
+    model.setup_focus = 0;
     model.setup_time_help = true;
     model.restriction_enabled_available = false;
     model.environment_available = false;

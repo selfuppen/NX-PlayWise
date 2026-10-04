@@ -6,7 +6,7 @@
 
 # PCTL 集成架构
 
-PCTL 是 Nintendo Switch 的系统家长控制服务。PlayWise 标准分发构建管理 Nintendo 的主机使用额度、系统计时和提醒；它不把私有强制锁屏、暂停或退出作为产品承诺。官方说明明确指出，即使没有运行游戏，只要正在使用主机，时间仍会累计；到时只通知还是暂停软件由 Nintendo 官方“时间到了暂停软件”设置决定。PlayWise 不修改该设置，参见[任天堂计时说明](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html)和[Nintendo 暂停设置说明](https://en-americas-support.nintendo.com/app/answers/detail/a_id/22447)。
+PCTL 是 Nintendo Switch 的系统家长控制服务。PlayWise 标准分发构建管理 Nintendo 的主机使用额度、系统计时和提醒；它不把私有强制锁屏、暂停或退出作为产品承诺。官方说明明确指出，即使没有运行游戏，只要正在使用主机，时间仍会累计；状态确认以 Nintendo 官方家长控制已开启为准，不要求额外的暂停软件开关；到时限制效果须以真机观察为准。参见[任天堂计时说明](https://support.nintendo.com/jp/switch/parentalcontrols/app/setting_change.html)。
 
 ## 隔离边界
 
@@ -116,7 +116,7 @@ NRO 启动切换前先只读探测 `pm:shell` 并确认源 PID。可用时，源
 
 NRO 的状态检查只读取现有 flag、journal 与 session；真正切换仍由原事务函数完成。恢复等待必须异步刷新页面，只有 `exact_restore_proved` 或从未创建过会话时才允许恢复正常 boot flag。中文错误页先说明是否发生过更改和下一步，再按需展开结果码、事务阶段、请求 ID 与路径。
 
-专用 Overlay 只通过 Lab SD 根目录的固定请求队列提交状态机请求。默认资格批次固定依次执行 Timer 激活 A/B、官方暂停开启的匿名游戏 A、官方暂停开启的匿名游戏 B、官方暂停关闭的匿名游戏 B；开始时记录官方暂停原始状态，结束时提示恢复。每份报告完成后可直接继续下一项或关闭浮窗转 NRO 恢复后台，不再切换 flag。失败观察保留报告并重试当前槽位；关闭 Overlay、睡眠或之后重新进入 Lab 都从 `campaign.json` 恢复。自由 `restriction_quick`、`timer_activation_ab` 与高级 `full` 仍可选择。真实限制阶段只在用户长按确认后执行，并设定独立的 15 秒恢复期限；每次会话都独立保存并逐字节恢复完整 `0x44` 和 timer。
+专用 Overlay 只通过 Lab SD 根目录的固定请求队列提交状态机请求。默认资格批次固定依次执行 Timer 激活 A/B、旧实验槽位 `pause_on_game_a`、`pause_on_game_b`、`pause_off_game_b`；开始时记录旧字段 `original_pause_state`，结束时提示核对原始设置。这些字段来自旧的暂停开关假设，不代表当前主机存在额外的暂停软件设置，也不属于标准状态确认要求；前置条件无法在真机证明时不得虚填或宣告批次资格通过。每份报告完成后可直接继续下一项或关闭浮窗转 NRO 恢复后台，不再切换 flag。失败观察保留报告并重试当前槽位；关闭 Overlay、睡眠或之后重新进入 Lab 都从 `campaign.json` 恢复。自由 `restriction_quick`、`timer_activation_ab` 与高级 `full` 仍可选择。真实限制阶段只在用户长按确认后执行，并设定独立的 15 秒恢复期限；每次会话都独立保存并逐字节恢复完整 `0x44` 和 timer。
 
 限制阶段自动恢复成功后，会话保持 `awaiting_observation`：恢复请求不能跳过或清除待提交的人工观察，Overlay 在此状态隐藏立即恢复入口，NRO 只引导操作者返回浮窗。人工观察分别记录提示可见性和游戏实际继续、暂停/挂起、退出或无法确定；`restriction_visible` 只证明提示可见。聚焦模式要求 1/1、完整模式要求 6/6，且两层观察与 `exact_restore_proved` 均齐全时才发布正式报告；A/B 模式要求 schema v2 的 7/7 阶段和精确恢复，不要求无关的限制人工观察。报告的 `summary.complete` 只描述流程完整性；A/B 激活证据和完整模式生命周期证据分别由 `activation_evidence_complete` 与 `lifecycle_evidence_complete` 表达，不适用时为 `null`。全零基线的完整报告可以完成采集和恢复，但生命周期证据必须保持 `false`。schema v1 只保留为历史证据，不能晋级当前候选。
 

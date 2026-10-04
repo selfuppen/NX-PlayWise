@@ -61,7 +61,8 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
                 return make_hit(PTC_UI_HIT_CALENDAR_MANAGER_NAV, i);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (model->overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT) {
+    if (model->overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT ||
+        model->overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP) {
         return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }
@@ -429,6 +430,8 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_PREPARE;
         if (ptc_ui_rect_contains(ptc_ui_setup_back_rect(), x, y)) return make_hit(PTC_UI_HIT_SETUP_BACK, 0);
         if (step == PTC_UI_SETUP_PREPARE) {
+            if (ptc_ui_rect_contains(ptc_ui_setup_pctl_help_rect(), x, y))
+                return make_hit(PTC_UI_HIT_SETUP_PCTL_HELP, 0);
             for (i = 0; i < 4; ++i) {
                 if (ptc_ui_rect_contains(ptc_ui_setup_language_rect(i), x, y))
                     return make_hit(PTC_UI_HIT_SETUP_LANGUAGE, i);

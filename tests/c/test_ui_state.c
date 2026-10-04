@@ -332,6 +332,8 @@ static void test_setup_advisory_state(void)
               PTC_UI_SETUP_PARENT, "diagnostics preserve the failing step");
     check_int(cJSON_GetObjectItemCaseSensitive(root, "parental_control_enabled")->valueint, -1,
               "unknown parental controls are not reported disabled");
+    check_true(!cJSON_GetObjectItemCaseSensitive(root, "official_pause_setting"),
+               "setup diagnostics do not require a separate suspension setting");
     check_true(strstr(text, "language_save") && strstr(text, "501") && !strstr(text, "pin_hash") &&
                !strstr(text, "grant_secret") && !strstr(text, "message"), "summary uses safe categories and stable codes only");
     cJSON_Delete(root);
@@ -346,8 +348,20 @@ static void test_setup_advisory_state(void)
     snprintf(model.environment_model, sizeof(model.environment_model), "mariko-oled");
     snprintf(model.environment_atmosphere_version, sizeof(model.environment_atmosphere_version), "1.11.2");
     check_true(ptc_ui_setup_reference_matches(&model) && !ptc_ui_setup_has_issues(&model), "reference environment check uses all fields");
+    check_true(ptc_ui_setup_diagnostic_json(&model, text, sizeof(text)), "enabled controls diagnostic generated");
+    root = cJSON_Parse(text);
+    check_int(cJSON_GetObjectItemCaseSensitive(root, "parental_control_enabled")->valueint, 1,
+              "enabled parental controls suffice for the control status check");
+    cJSON_Delete(root);
     model.restriction_enabled = false;
     check_true(ptc_ui_setup_has_issues(&model), "disabled controls are advisory issues");
+    check_true(ptc_ui_setup_diagnostic_json(&model, text, sizeof(text)), "disabled controls diagnostic generated");
+    root = cJSON_Parse(text);
+    check_int(cJSON_GetObjectItemCaseSensitive(root, "parental_control_enabled")->valueint, 0,
+              "disabled controls remain distinct from unknown controls");
+    cJSON_Delete(root);
+    model.restriction_enabled_available = false;
+    check_true(ptc_ui_setup_has_issues(&model), "unreadable controls remain advisory issues");
     model.environment_atmosphere_version[0] = '\0';
     check_true(!ptc_ui_setup_reference_matches(&model), "missing Atmosphere version is unconfirmed");
     memset(&model, 0, sizeof(model));
@@ -1479,7 +1493,26 @@ static void test_release_hit_targets(void)
                          "language options do not overlap");
     }
     check_hit(hit_center(&model, ptc_ui_setup_time_help_rect()), PTC_UI_HIT_SETUP_TIME_HELP, 0, "time help target");
+    check_hit(hit_center(&model, ptc_ui_setup_pctl_help_rect()), PTC_UI_HIT_SETUP_PCTL_HELP, 0,
+              "parental control help touch target");
+    check_true(!rects_overlap(ptc_ui_setup_pctl_help_rect(), ptc_ui_setup_time_help_rect()),
+               "parental control and clock help targets do not overlap");
+    model.restriction_enabled_available = false;
+    model.setup_focus = 2;
+    ptc_ui_open_setup_pctl_help(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_SETUP_PCTL_HELP, "unknown controls can open setup instructions");
+    check_true(!model.restriction_enabled_available, "viewing instructions does not fabricate enabled controls");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "setup instructions have a touchable return action");
+    check_hit(hit_center(&model, ptc_ui_setup_primary_rect()), PTC_UI_HIT_NONE, 0,
+              "setup instructions block the underlying continue button");
+    check_true(ptc_ui_confirm_rect(model.overlay).w == 0, "instructions cannot submit a confirmation");
+    check_true(ptc_ui_cancel_overlay(&model) && model.overlay == PTC_UI_OVERLAY_NONE &&
+               model.setup_step == PTC_UI_SETUP_PREPARE && model.setup_focus == 2,
+               "closing instructions preserves wizard step and focus");
     model.setup_step = PTC_UI_SETUP_PARENT;
+    ptc_ui_open_setup_pctl_help(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_NONE, "other wizard steps cannot open preparation help");
     check_hit(hit_center(&model, ptc_ui_setup_pin_rect()), PTC_UI_HIT_SETUP_PIN, 0, "setup PIN guide");
     check_hit(hit_center(&model, ptc_ui_setup_more_rect()), PTC_UI_HIT_SETUP_MORE, 0, "more settings target");
     check_hit(hit_center(&model, ptc_ui_setup_theme_rect(2)), PTC_UI_HIT_NONE, 0, "collapsed theme is inert");

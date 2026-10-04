@@ -19,6 +19,16 @@ int ptc_ui_migrate_setup_step(int step, int wizard_version)
     return PTC_UI_SETUP_PREPARE;
 }
 
+void ptc_ui_open_setup_pctl_help(PtcUiModel *model)
+{
+    if (!model || model->view != PTC_UI_SETUP ||
+        model->setup_step != PTC_UI_SETUP_PREPARE || model->overlay != PTC_UI_OVERLAY_NONE) return;
+    model->overlay = PTC_UI_OVERLAY_SETUP_PCTL_HELP;
+    snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
+        ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_TITLE));
+    model->overlay_body[0] = '\0';
+}
+
 void ptc_ui_setup_sync(PtcUiModel *model)
 {
     if (!model) return;
@@ -90,7 +100,6 @@ bool ptc_ui_setup_diagnostic_json(const PtcUiModel *model, char *out, size_t siz
     cJSON_AddNumberToObject(root, "parental_control_enabled", model->restriction_enabled_available
         ? (model->restriction_enabled ? 1 : 0) : -1);
     cJSON_AddBoolToObject(root, "pin_ready", model->setup_pin_ready);
-    cJSON_AddStringToObject(root, "official_pause_setting", "manual_check_required");
     cJSON_AddStringToObject(root, "clock_sync", "not_detected");
     issues = cJSON_AddArrayToObject(root, "issues");
     for (int i = 0; issues && i < PTC_UI_SETUP_ISSUE_COUNT; ++i) {

@@ -20,6 +20,7 @@ PREVIEW_FILES = (
     "parent/quick-add-confirm-dark.png",
     "parent/unlimited-confirm-dark.png",
     "setup/setup-step-1-light.png",
+    "setup/setup-pctl-help-light.png",
     "setup/setup-step-2-light.png",
     "setup/setup-step-3-light.png",
     "grant/grant-entry-light.png",

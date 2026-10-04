@@ -15,11 +15,11 @@
 固定计划让日常安排清晰、可预期；临时调整则为特殊情况留出弹性。即使家长不在身边，也能按约定把额外游玩时间作为奖励交给孩子自主领取，而不必反复修改长期规则。临时调整只在当天生效，次日继续按原计划执行。
 
 > [!WARNING]
-> 未破解的零售主机无法使用。PlayWise 依赖 Nintendo 官方家长控制正常计时，并要求开启“时间到了暂停软件”。安装前请用非关键游戏验证到时确实暂停软件。限制生效后，PlayWise 主机应用可能无法打开；请事先安装并试用游戏内浮窗（Tesla Overlay）。
+> 未破解的零售主机无法使用。PlayWise 依赖 Nintendo 官方家长控制正常计时，安装前确认官方家长控制已开启，并用非关键游戏验证计时和到时限制效果。限制生效后，PlayWise 主机应用可能无法打开；请事先安装并试用游戏内浮窗（Tesla Overlay）。
 
 ## 快速开始
 
-1. 在 Switch 的“系统设置 → 家长控制”启用官方家长控制和“时间到了暂停软件”，验证亮屏使用会计入额度、到时会限制使用。
+1. 开启官方家长控制：设置 → 家长监护设置（Parent Control 设置）→ Parental Controls设置（监护人实施的使用限制）→ 未持有智能手机 → 下一步 → 下一步。按系统提示完成后，验证亮屏使用会计入额度、到时会限制使用；首次设置也可打开“开启家长控制说明”查看步骤。
 2. 准备 Atmosphère、Homebrew Menu，以及 Ultrahand 或其他 Tesla 浮窗管理器。PlayWise 安装包不包含浮窗管理器。
 3. 首次使用下载 `playwise-complete-<版本>.zip`：其中的 `playwise-<版本>.zip` 安装 Switch 端，`playwise-offline.html` 是备用的离线家长网页。将标准包内的 `atmosphere` 和 `switch` 目录合并到 SD 卡根目录后重启。
 4. 从 Homebrew Menu 打开“任我玩”，按三步向导选择语言并核对环境、设置任我玩家长密码、确认启用或进入支持排障。孩子需要加时时，按下文选择主机应用或游戏内浮窗兑换。
@@ -84,7 +84,7 @@
 
 ## 常见问题
 
-**设置今日总额度后显示“已到限制”、还可玩 0 分钟，但游戏仍能打开？** 先确认 Nintendo 官方家长控制已启用“时间到了暂停软件”，且没有临时解除限制；再尝试联网校准 Switch 时间，例如使用 DBI 的“工具 → NTP 时间同步”或 [QuickNTP（Tesla 时间同步工具）](https://github.com/ppkantorski/QuickNTP)。同步成功后刷新 PlayWise 状态，并用非关键游戏重新验证是否实际暂停。校时是一个可能的解决方法，不能保证修复所有计时或限制故障。详见[使用指南的常见问题](docs/使用指南.md#常见问题)和[相关 Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1)。
+**设置今日总额度后显示“已到限制”、还可玩 0 分钟，但游戏仍能打开？** 先确认 Nintendo 官方家长控制已开启，且没有临时解除限制；再尝试联网校准 Switch 时间，例如使用 DBI 的“工具 → NTP 时间同步”或 [QuickNTP（Tesla 时间同步工具）](https://github.com/ppkantorski/QuickNTP)。同步成功后刷新 PlayWise 状态，并用非关键游戏重新验证限制效果。校时是一个可能的解决方法，不能保证修复所有计时或限制故障。详见[使用指南的常见问题](docs/使用指南.md#常见问题)和[相关 Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1)。
 
 ## 推荐环境与验证状态
 
