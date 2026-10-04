@@ -209,7 +209,7 @@ static bool process_preview_offline_code(
     uint16_t played_for_apply;
     uint16_t base_minutes;
     uint16_t target_minutes;
-    char json[2304];
+    char json[6144];
 
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
         sysmodule, request, "release", true,
@@ -284,7 +284,7 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     PtcRules rules;
     PtcRuntimeState runtime_state;
     PtcResultState state;
-    char json[2048];
+    char json[6144];
     PtcErrorCode err;
     PtcRuntimeConfig active_config;
     PtcVerifiedOfflineCode verified;

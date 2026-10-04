@@ -278,11 +278,10 @@ void handle_parent_action(UiState *ui)
             break;
         case 5:
             ui->model.draft_eye_care_policy = ui->model.eye_care_policy;
-            ui->model.overlay = PTC_UI_OVERLAY_EYE_CARE;
-            ui->model.overlay_selection = 0;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), "%s",
-                ptc_ui_text(PTC_UI_T_EYE_CARE));
-            ui->model.overlay_body[0] = '\0';
+            ui->model.eye_care_dirty = false;
+            ui->model.eye_care_field_focus = 0;
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_EYE_CARE;
+            ui->model.selected_index = 0;
             break;
         case 6:
         case 7:
@@ -303,7 +302,7 @@ void handle_parent_action(UiState *ui)
         return;
     }
     if (ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
-        if (ui->model.disable_flag_present && index != 4 && index != 6) {
+        if (ui->model.disable_flag_present && index != 4 && index != 6 && index != 7) {
             snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_NATIONAL_HOLIDAY_SETTINGS_ARE_TEMPORARI));
             return;
         }
@@ -356,16 +355,16 @@ void handle_parent_action(UiState *ui)
                 snprintf(makeup_rule, sizeof(makeup_rule), ptc_ui_text(PTC_UI_T_U_MIN),
                          (unsigned int)ui->model.draft_makeup_workday_rule.minutes);
             }
-            ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_CALENDAR;
-            ui->model.holiday_calendar_page = 0;
-            ui->model.overlay_selection = 2;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_BUILT_IN_HOLIDAY_SCHEDULE));
+            open_holiday_calendar_view(ui);
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      ptc_ui_text(PTC_UI_T_CURRENT_S_STATUTORY_HOLIDAY_S_MAKEUP_WORKDAY),
                      ui->model.draft_holiday_enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_NOT_ENABLED),
                      holiday_rule, makeup_rule);
             break;
         }
+        case 7:
+            open_calendar_manager(ui);
+            break;
         case 5:
             save_holiday_from_page(ui);
             break;
@@ -611,6 +610,10 @@ void confirm_operation(UiState *ui)
     bool held_danger_confirmation = ui->model.confirm_hold_required;
     PtcUiOperation operation = ptc_ui_take_confirmed_operation(&ui->model);
     switch (operation) {
+    case PTC_UI_OPERATION_IMPORT_CALENDAR:
+    case PTC_UI_OPERATION_ACTIVATE_CALENDAR:
+        submit_calendar_operation(ui, operation);
+        break;
 #ifndef PLAYWISE_EDEN
     case PTC_UI_OPERATION_HOT_RELOAD:
         if (ui->waiting || ui->model.recovery_active) {
@@ -828,6 +831,12 @@ void accept_numpad(UiState *ui)
         ui->model.draft_scheduled_override.rule.minutes = value;
     } else if (purpose == PTC_UI_NUMPAD_GRANT_MINUTES) {
         ui->model.grant_minutes = value;
+    } else if (purpose == PTC_UI_NUMPAD_EYE_CARE_PLAY) {
+        ui->model.draft_eye_care_policy.play_minutes = value > 240 ? 240 : (value < 1 ? 1 : value);
+        ui->model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui->model);
+    } else if (purpose == PTC_UI_NUMPAD_EYE_CARE_REST) {
+        ui->model.draft_eye_care_policy.rest_minutes = value > 60 ? 60 : (value < 1 ? 1 : value);
+        ui->model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui->model);
     } else if (purpose == PTC_UI_NUMPAD_BEDTIME_TIME) {
         PtcBedtimeWindow *window;
         if (ui->model.numpad_return_overlay == PTC_UI_OVERLAY_BEDTIME_WINDOW) {

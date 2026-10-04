@@ -49,7 +49,28 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS || model->overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || model->overlay == PTC_UI_OVERLAY_DAY_DECISION) {
+    if (model->overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER) {
+        for (i = 0; i < 2; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_calendar_manager_tab_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_CALENDAR_MANAGER_TAB, i);
+        for (i = 0; i < 6; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_calendar_manager_row_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_CALENDAR_MANAGER_ROW, i);
+        for (i = 0; i < 3; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_calendar_manager_nav_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_CALENDAR_MANAGER_NAV, i);
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+        if (ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y))
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        if (ptc_ui_rect_contains(ptc_ui_home_details_tab_rect(0), x, y))
+            return make_hit(PTC_UI_HIT_HOME_DETAILS_TAB, 0);
+        if (ptc_ui_rect_contains(ptc_ui_home_details_tab_rect(1), x, y))
+            return make_hit(PTC_UI_HIT_HOME_DETAILS_TAB, 1);
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || model->overlay == PTC_UI_OVERLAY_DAY_DECISION) {
         return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }
@@ -508,6 +529,9 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         if (ptc_ui_rect_contains(ptc_ui_holiday_calendar_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_HOLIDAY_CALENDAR, 0);
         }
+        if (ptc_ui_rect_contains(ptc_ui_holiday_manage_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_CALENDAR_MANAGER, 0);
+        }
         for (i = 0; i < 6; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_holiday_card_rect(i), x, y)) {
                 return make_hit(PTC_UI_HIT_PARENT_CARD, i);
@@ -534,6 +558,34 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
                 return make_hit(PTC_UI_HIT_BEDTIME_FIELD, i);
             }
         }
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_EYE_CARE) {
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_page_master_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_MASTER, 0);
+        for (int p = 0; p < 4; ++p) {
+            if (ptc_ui_rect_contains(ptc_ui_eye_care_play_preset_rect(p), x, y))
+                return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_PLAY_PRESET, p);
+            if (ptc_ui_rect_contains(ptc_ui_eye_care_rest_preset_rect(p), x, y))
+                return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_REST_PRESET, p);
+        }
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_play_dec_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_PLAY_DEC, 0);
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_play_value_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_PLAY_VAL, 0);
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_play_inc_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_PLAY_INC, 0);
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_rest_dec_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_REST_DEC, 0);
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_rest_value_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_REST_VAL, 0);
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_rest_inc_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_REST_INC, 0);
+        if (ptc_ui_rect_contains(ptc_ui_eye_care_page_save_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_SAVE, 0);
+        if (strcmp(model->eye_care_phase, "resting") == 0 &&
+            ptc_ui_rect_contains(ptc_ui_eye_care_page_skip_rect(), x, y))
+            return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_SKIP, 0);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT &&

@@ -21,6 +21,7 @@ SOURCES := \
 	../common/time \
 	../common/token \
 	../common/usage \
+	../third_party/cjson \
 	../platform \
 	../platform/switch
 DATA :=
@@ -56,6 +57,7 @@ SYSMODULE_CFILES := \
 	sysmodule_control.c \
 	sysmodule_setup.c \
 	sysmodule_requests.c \
+	sysmodule_calendar.c \
 	sysmodule_request_grants.c \
 	sysmodule_request_recovery.c \
 	sysmodule_core.c

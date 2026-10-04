@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -30,6 +31,7 @@
 #include "../../platform/host/mem_storage.h"
 #include "../../platform/host/pctl_stub.h"
 #include "../../platform/install_defaults.h"
+#include "../../platform/calendar_store.h"
 #include "../../platform/switch/play_timer_settings_layout.h"
 #include "../../platform/switch/usage_stats_adapter.h"
 #include "../../sysmodule/sysmodule_core.h"
@@ -3189,6 +3191,313 @@ static void test_eden_simulated_usage_clock(void)
         pctl.played_minutes_today == 0, "Eden unlimited day does not consume allowance");
 }
 
+static void test_imported_region_calendar(void)
+{
+    static const char *jp =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2028,\"holidays\":[{\"name\":\"Leap day\",\"from\":\"2028-02-29\","
+        "\"to\":\"2028-02-29\"}],\"workdays\":[\"2028-03-01\"]}";
+    static const char *jp_updated =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2028,\"holidays\":[{\"name\":\"Leap day\",\"from\":\"2028-02-29\","
+        "\"to\":\"2028-03-01\"}],\"workdays\":[]}";
+    static const char *empty =
+        "{\"format_version\":1,\"region_id\":\"US-CA\",\"region_name\":\"California\","
+        "\"year\":2028,\"holidays\":[],\"workdays\":[]}";
+    static const char *invalid_date =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2027,\"holidays\":[{\"name\":\"Bad\",\"from\":\"2027-02-29\","
+        "\"to\":\"2027-02-29\"}],\"workdays\":[]}";
+    static const char *overlap =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2028,\"holidays\":[{\"name\":\"A\",\"from\":\"2028-01-01\","
+        "\"to\":\"2028-01-03\"},{\"name\":\"B\",\"from\":\"2028-01-03\","
+        "\"to\":\"2028-01-04\"}],\"workdays\":[]}";
+    PtcImportedCalendarYear *parsed = malloc(sizeof(*parsed));
+    PtcCalendarRuntime *runtime = malloc(sizeof(*runtime));
+    PtcCalendarIndex *catalog = malloc(sizeof(*catalog));
+    PtcCalendarIndex *selected = malloc(sizeof(*selected));
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    PtcRules rules;
+    PtcEffectiveRule quota;
+    PtcEffectiveBedtime bedtime;
+    uint16_t leap = 0, workday = 0, uncovered = 0;
+    char hash[65], original_hash[65], path[320];
+    bool covered = false;
+    if (!parsed || !runtime || !catalog || !selected || !mem) {
+        check_true(false, "allocate region calendar fixtures");
+        goto done;
+    }
+    check_true(ptc_holiday_calendar_parse_import(jp, strlen(jp), parsed), "accept valid leap-year region calendar");
+    check_int(parsed->holiday_day_count, 1, "count inclusive holiday range");
+    check_int(parsed->workday_count, 1, "count special workday");
+    check_true(ptc_holiday_calendar_parse_import(empty, strlen(empty), parsed), "accept empty date lists");
+    check_true(!ptc_holiday_calendar_parse_import(invalid_date, strlen(invalid_date), parsed),
+        "reject nonexistent leap date");
+    check_true(!ptc_holiday_calendar_parse_import(overlap, strlen(overlap), parsed),
+        "reject overlapping holidays");
+    {
+        static const char *bad_utf8 =
+            "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"\xc0\xaf\","
+            "\"year\":2028,\"holidays\":[],\"workdays\":[]}";
+        check_true(!ptc_holiday_calendar_parse_import(bad_utf8, strlen(bad_utf8), parsed),
+            "reject malformed UTF-8 in otherwise valid calendar");
+    }
+    check_true(!ptc_holiday_calendar_parse_import(
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan\",\"year\":2028,"
+        "\"holidays\":[{\"name\":\"Conflict\",\"from\":\"2028-01-01\",\"to\":\"2028-01-01\"}],"
+        "\"workdays\":[\"2028-01-01\"]}",
+        strlen("{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan\",\"year\":2028,"
+        "\"holidays\":[{\"name\":\"Conflict\",\"from\":\"2028-01-01\",\"to\":\"2028-01-01\"}],"
+        "\"workdays\":[\"2028-01-01\"]}"), parsed), "reject holiday/workday conflict");
+    ptc_mem_storage_init(mem);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/JP-2028.json", jp), "stage region calendar");
+    ptc_calendar_sha256_hex(jp, strlen(jp), hash);
+    snprintf(original_hash, sizeof(original_hash), "%s", hash);
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, NULL) &&
+        ptc_calendar_import_file(&mem->storage, "app", "JP-2028.json", hash, catalog) &&
+        ptc_calendar_index_save(&mem->storage, "app", false, catalog), "import region calendar");
+    check_true(ptc_calendar_build_selection(catalog, "JP", selected) &&
+        ptc_calendar_index_save(&mem->storage, "app", true, selected), "apply imported region snapshot");
+    check_true(ptc_day_index_from_date(2028, 2, 29, &leap) &&
+        ptc_day_index_from_date(2028, 3, 1, &workday) &&
+        ptc_day_index_from_date(2027, 2, 28, &uncovered), "convert region calendar dates");
+    check_true(ptc_calendar_runtime_load(&mem->storage, "app", leap, runtime), "load applied region with hash check");
+    check_int(ptc_holiday_calendar_classify_in(&runtime->set, leap, &covered),
+        PTC_CALENDAR_DAY_STATUTORY_HOLIDAY, "classify imported holiday");
+    check_true(covered, "imported year is covered");
+    check_int(ptc_holiday_calendar_classify_in(&runtime->set, workday, &covered),
+        PTC_CALENDAR_DAY_MAKEUP_WORKDAY, "classify imported special workday");
+    (void)ptc_holiday_calendar_classify_in(&runtime->set, uncovered, &covered);
+    check_true(!covered, "missing selected year is explicitly uncovered");
+    ptc_rules_default(&rules);
+    rules.calendar = &runtime->set;
+    rules.holiday_enabled = true;
+    rules.holiday_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 45};
+    rules.makeup_workday_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 75};
+    rules.bedtime.enabled = true;
+    rules.bedtime.calendar_enabled = true;
+    rules.bedtime.holiday_rule.mode = PTC_BEDTIME_OVERRIDE_DISABLED;
+    rules.bedtime.makeup_workday_rule.mode = PTC_BEDTIME_OVERRIDE_CUSTOM;
+    rules.bedtime.makeup_workday_rule.window = (PtcBedtimeWindow){true, 21 * 60, 7 * 60};
+    quota = ptc_rules_resolve(&rules, leap, ptc_weekday_from_day_index(leap));
+    bedtime = ptc_bedtime_resolve_start_day(&rules, leap, ptc_weekday_from_day_index(leap));
+    check_int(quota.rule.minutes, 45, "holiday quota uses imported classification");
+    check_true(!bedtime.window.enabled, "holiday bedtime uses same classification");
+    quota = ptc_rules_resolve(&rules, workday, ptc_weekday_from_day_index(workday));
+    bedtime = ptc_bedtime_resolve_start_day(&rules, workday, ptc_weekday_from_day_index(workday));
+    check_int(quota.rule.minutes, 75, "workday quota uses imported classification");
+    check_true(bedtime.window.enabled && bedtime.window.start_minute == 21 * 60,
+        "workday bedtime uses same classification");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/JP-2028.json", jp_updated), "stage same-year replacement");
+    ptc_calendar_sha256_hex(jp_updated, strlen(jp_updated), hash);
+    check_true(ptc_calendar_import_file(&mem->storage, "app", "JP-2028.json", hash, catalog) &&
+        ptc_calendar_index_save(&mem->storage, "app", false, catalog), "replace catalog entry without format bump");
+    check_true(strcmp(selected->entries[0].sha256, original_hash) == 0 &&
+        strcmp(catalog->entries[0].sha256, hash) == 0,
+        "catalog replacement does not change applied manifest");
+    snprintf(path, sizeof(path), "app/calendars/library/JP-2028-%s.json", original_hash);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, path, "{}"),
+        "simulate corruption of applied content-addressed file");
+    check_true(!ptc_calendar_runtime_load(&mem->storage, "app", leap, runtime),
+        "corrupt active file fails closed instead of selecting latest catalog entry");
+done:
+    free(mem);
+    free(selected);
+    free(catalog);
+    free(runtime);
+    free(parsed);
+}
+
+static void queue_calendar_import(PtcMemStorage *mem, const char *request_id,
+    const char *file_name, const char *hash)
+{
+    char request[640], path[320];
+    snprintf(path, sizeof(path), "app/inbox/pending/%s.json", request_id);
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"import_holiday_calendar\","
+        "\"created_at\":1,\"payload\":{\"file_name\":\"%s\",\"sha256\":\"%s\"}}",
+        request_id, file_name, hash);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, path, request),
+        "queue calendar import request");
+}
+
+static void queue_calendar_activation(PtcMemStorage *mem, const char *request_id,
+    const char *option_id, const char *digest)
+{
+    char request[640], path[320];
+    snprintf(path, sizeof(path), "app/inbox/pending/%s.json", request_id);
+    snprintf(request, sizeof(request),
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"activate_holiday_calendar\","
+        "\"created_at\":1,\"payload\":{\"option_id\":\"%s\",\"catalog_sha256\":\"%s\"}}",
+        request_id, option_id, digest);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, path, request),
+        "queue calendar activation request");
+}
+
+static void test_calendar_import_activation_transactions(void)
+{
+    static const char *first =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2028,\"holidays\":[{\"name\":\"Leap\",\"from\":\"2028-02-29\","
+        "\"to\":\"2028-02-29\"}],\"workdays\":[]}";
+    static const char *second =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2028,\"holidays\":[],\"workdays\":[\"2028-02-29\"]}";
+    static const char *us =
+        "{\"format_version\":1,\"region_id\":\"US-CA\",\"region_name\":\"California\","
+        "\"year\":2028,\"holidays\":[],\"workdays\":[]}";
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule *sysmodule = malloc(sizeof(*sysmodule));
+    PtcCalendarIndex *catalog = malloc(sizeof(*catalog));
+    PtcCalendarIndex *active = malloc(sizeof(*active));
+    uint16_t leap = 0;
+    char first_hash[65], second_hash[65], us_hash[65], digest[65], result[8192];
+    if (!mem || !sysmodule || !catalog || !active) {
+        check_true(false, "allocate calendar transaction fixtures");
+        goto done;
+    }
+    seed_active_buffer_fixture(mem, &pctl, &fake_time, sysmodule, 120, 0, true);
+    check_true(ptc_day_index_from_date(2028, 2, 29, &leap), "convert transaction day");
+    fake_time.snapshot.day_index = leap;
+    fake_time.snapshot.unix_seconds = 1835395200;
+    pctl.played_minutes_today = 20;
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},"
+        "{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},"
+        "{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120}],"
+        "\"holiday_enabled\":true,\"holiday_mode\":\"limit\",\"holiday_minutes\":10,"
+        "\"makeup_workday_mode\":\"limit\",\"makeup_workday_minutes\":75}"),
+        "seed calendar transaction rules");
+    ptc_calendar_sha256_hex(first, strlen(first), first_hash);
+    ptc_calendar_sha256_hex(second, strlen(second), second_hash);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/JP-2028.json", first), "stage first transaction calendar");
+    queue_calendar_import(mem, "cal-import-one", "JP-2028.json", first_hash);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "calendar import processed");
+    check_true(mem->storage.vtable->read_text(&mem->storage,
+        "app/results/cal-import-one.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"ok\""), "calendar import result succeeds");
+    check_true(!mem->storage.vtable->exists(&mem->storage, "app/calendars/active.json") &&
+        pctl.apply_target_calls == 0, "import does not apply PCTL or active calendar");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, digest),
+        "load catalog digest for activation");
+    queue_calendar_activation(mem, "cal-activate-one", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "calendar activation processed");
+    check_true(mem->storage.vtable->read_text(&mem->storage,
+        "app/results/cal-activate-one.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"ok\""), "calendar activation succeeds");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->option_id, "JP") == 0 &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "activation pins imported digest");
+    check_true(pctl.apply_target_calls > 0 && pctl.last_target.minutes == 10,
+        "activation immediately applies today's holiday quota");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/JP-2028.json", second), "stage current-region update");
+    queue_calendar_import(mem, "cal-import-two", "JP-2028.json", second_hash);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "current-region update imported");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, digest) &&
+        ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(catalog->entries[0].sha256, second_hash) == 0 &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "current-region import remains pending until separately applied");
+    pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    queue_calendar_activation(mem, "cal-activate-fail", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "failed calendar activation processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "PCTL write failure rolls back active manifest");
+    pctl.write_error = PTC_ERR_OK;
+    mem->fail_write_path_contains_once = "activity/history.jsonl";
+    queue_calendar_activation(mem, "cal-activity-fail", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "activity failure activation processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "activity failure rolls back active manifest");
+    mem->fail_write_path_contains_once = "results/cal-result-fail.json";
+    queue_calendar_activation(mem, "cal-result-fail", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "result failure activation processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "result failure rolls back active manifest");
+    mem->fail_write_path_contains_once = "calendars/active.json";
+    queue_calendar_activation(mem, "cal-file-fail", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "active file failure processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->entries[0].sha256, first_hash) == 0,
+        "active file failure retains previous selection");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/flags/disable.flag", "parent_disabled\n"), "set disabled flag for calendar test");
+    queue_calendar_activation(mem, "cal-disabled", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "disabled activation processed");
+    check_true(mem->storage.vtable->read_text(&mem->storage,
+        "app/results/cal-disabled.json", result, sizeof(result)) &&
+        strstr(result, "\"reason\":\"disabled\""), "disabled flag rejects activation");
+    check_true(mem->storage.vtable->remove_path(&mem->storage, "app/flags/disable.flag"),
+        "clear disabled flag for region switch");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/US-CA-2028.json", us), "stage second region");
+    ptc_calendar_sha256_hex(us, strlen(us), us_hash);
+    mem->fail_write_path_contains_once = "calendars/catalog.json";
+    queue_calendar_import(mem, "cal-import-file-fail", "US-CA-2028.json", us_hash);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "catalog write failure import processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, NULL) &&
+        catalog->count == 1, "catalog write failure preserves previous catalog");
+    queue_calendar_import(mem, "cal-import-us", "US-CA-2028.json", us_hash);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "second region import processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, digest),
+        "load catalog with both regions");
+    queue_calendar_activation(mem, "cal-activate-us", "US-CA", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "cross-region activation processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->option_id, "US-CA") == 0 && active->count == 1 &&
+        strcmp(active->entries[0].sha256, us_hash) == 0 &&
+        pctl.last_target.minutes == 120,
+        "cross-region switch applies selected year and weekly fallback");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/rules.json",
+        "{\"version\":2,\"week\":[{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},"
+        "{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120},"
+        "{\"mode\":\"limit\",\"minutes\":120},{\"mode\":\"limit\",\"minutes\":120}],"
+        "\"holiday_enabled\":true,\"holiday_mode\":\"limit\",\"holiday_minutes\":10,"
+        "\"makeup_workday_mode\":\"limit\",\"makeup_workday_minutes\":75,"
+        "\"bedtime_enabled\":true,\"bedtime_week\":["
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0},"
+        "{\"enabled\":false,\"start_minute\":0,\"end_minute\":0}],"
+        "\"bedtime_calendar_enabled\":true,\"bedtime_holiday_mode\":\"inherit\","
+        "\"bedtime_makeup_mode\":\"custom\",\"bedtime_makeup_enabled\":true,"
+        "\"bedtime_makeup_start_minute\":1260,\"bedtime_makeup_end_minute\":420,"
+        "\"bedtime_scheduled_present\":false}"),
+        "seed selected-calendar bedtime window");
+    fake_time.snapshot.minute_of_day = 1380;
+    queue_calendar_activation(mem, "cal-bedtime-jp", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "calendar bedtime switch processed");
+    check_true(pctl.last_target.mode == PTC_PCTL_TARGET_BLOCKED &&
+        mem->storage.vtable->exists(&mem->storage, "app/backups/bedtime_pctl_snapshot.json"),
+        "switching into selected workday starts bedtime restriction with snapshot");
+    queue_calendar_activation(mem, "cal-activate-builtin", "builtin-cn", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "builtin activation processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", true, active, NULL) &&
+        strcmp(active->option_id, "builtin-cn") == 0 && active->count == 0 &&
+        pctl.last_target.mode == PTC_PCTL_TARGET_LIMIT &&
+        !mem->storage.vtable->exists(&mem->storage, "app/backups/bedtime_pctl_snapshot.json"),
+        "built-in calendar remains independent and ends changed bedtime window");
+done:
+    free(active);
+    free(catalog);
+    free(sysmodule);
+    free(mem);
+}
+
 int main(void)
 {
     test_eden_simulated_usage_clock();
@@ -3198,6 +3507,8 @@ int main(void)
     test_tokens();
     test_release_request_contract();
     test_holiday_calendar_and_priority();
+    test_imported_region_calendar();
+    test_calendar_import_activation_transactions();
     test_bedtime_rules_and_protocol();
     test_daily_summary_and_read_only_stats_boundary();
     test_support_redaction();

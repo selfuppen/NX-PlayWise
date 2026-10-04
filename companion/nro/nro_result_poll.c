@@ -193,6 +193,8 @@ void poll_result(UiState *ui, bool force)
             update_holiday_dirty(ui);
         }
         refresh_disable_flag(ui);
+        if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER)
+            calendar_manager_refresh(ui);
         if (strcmp(ui->model.result_type, "clear_redemption_history") == 0) {
             bool cleared = strcmp(ui->model.result_status, "ok") == 0;
             open_redemption_history(ui);

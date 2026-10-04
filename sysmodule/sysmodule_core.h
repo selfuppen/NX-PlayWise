@@ -7,6 +7,7 @@
 #include "../platform/pctl.h"
 #include "../platform/storage.h"
 #include "../platform/time_provider.h"
+#include "../platform/calendar_store.h"
 
 typedef struct {
     char app_root[96];
@@ -32,6 +33,7 @@ typedef struct {
     bool config_cache_valid;
     bool rules_cache_valid;
     bool state_cache_valid;
+    PtcCalendarRuntime calendar_runtime;
 } PtcSysmodule;
 
 void ptc_sysmodule_init(

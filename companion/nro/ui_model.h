@@ -47,7 +47,8 @@ typedef enum {
     PTC_UI_PLAN_PAGE_ROOT = 0,
     PTC_UI_PLAN_PAGE_WEEKLY = 1,
     PTC_UI_PLAN_PAGE_HOLIDAY = 2,
-    PTC_UI_PLAN_PAGE_BEDTIME = 3
+    PTC_UI_PLAN_PAGE_BEDTIME = 3,
+    PTC_UI_PLAN_PAGE_EYE_CARE = 4
 } PtcUiPlanPage;
 
 typedef enum {
@@ -96,7 +97,8 @@ typedef enum {
     PTC_UI_OVERLAY_DAY_DECISION = 36,
     PTC_UI_OVERLAY_LANGUAGE = 37,
     PTC_UI_OVERLAY_PARENT_EXPORT_RESULT = 38,
-    PTC_UI_OVERLAY_EYE_CARE = 39
+    PTC_UI_OVERLAY_EYE_CARE = 39,
+    PTC_UI_OVERLAY_CALENDAR_MANAGER = 40
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -163,7 +165,9 @@ typedef enum {
     PTC_UI_NUMPAD_MAKEUP_MINUTES = 5,
     PTC_UI_NUMPAD_SCHEDULED_MINUTES = 6,
     PTC_UI_NUMPAD_GRANT_MINUTES = 7,
-    PTC_UI_NUMPAD_BEDTIME_TIME = 8
+    PTC_UI_NUMPAD_BEDTIME_TIME = 8,
+    PTC_UI_NUMPAD_EYE_CARE_PLAY = 9,
+    PTC_UI_NUMPAD_EYE_CARE_REST = 10
 } PtcUiNumpadPurpose;
 
 typedef enum {
@@ -249,8 +253,16 @@ typedef enum {
     PTC_UI_OPERATION_SAVE_HOLIDAY = 25,
     PTC_UI_OPERATION_SAVE_BEDTIME = 26,
     PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP = 27,
-    PTC_UI_OPERATION_SKIP_EYE_CARE = 28
+    PTC_UI_OPERATION_SKIP_EYE_CARE = 28,
+    PTC_UI_OPERATION_IMPORT_CALENDAR = 29,
+    PTC_UI_OPERATION_ACTIVATE_CALENDAR = 30
 } PtcUiOperation;
+
+typedef struct {
+    char id[81];
+    char title[96];
+    char detail[112];
+} PtcUiCalendarRow;
 
 typedef enum {
     PTC_UI_DECISION_UNKNOWN = 0,
@@ -441,8 +453,27 @@ typedef struct {
     int holiday_leave_selection;
     bool calendar_covered;
     bool calendar_update_warning;
+    const PtcHolidayCalendarSet *calendar;
+    char calendar_option_id[PTC_CALENDAR_REGION_ID_SIZE];
+    char calendar_region_name[PTC_CALENDAR_REGION_NAME_SIZE];
+    bool calendar_builtin;
     int holiday_calendar_page;
+    const PtcImportedCalendarYear *holiday_calendar_data;
+    uint16_t holiday_calendar_year;
+    bool holiday_calendar_has_previous_year;
+    bool holiday_calendar_has_next_year;
     int holiday_last_rule;
+    int calendar_manager_tab;
+    int calendar_manager_count;
+    int calendar_manager_selected;
+    int calendar_manager_page;
+    PtcUiCalendarRow calendar_manager_rows[96];
+    char calendar_preview_lines[12][144];
+    int calendar_preview_count;
+    char calendar_pending_file[81];
+    char calendar_pending_sha256[65];
+    char calendar_pending_option_id[17];
+    char calendar_pending_catalog_sha256[65];
     bool bedtime_dirty;
     bool bedtime_switch_pending;
     bool bedtime_section_focused;
@@ -455,6 +486,8 @@ typedef struct {
     uint16_t pending_bedtime_skip_start_day_index;
     uint16_t pending_bedtime_skip_start_minute;
     uint16_t pending_bedtime_skip_end_minute;
+    bool eye_care_dirty;
+    int eye_care_field_focus;
     int album_restriction_state;
     bool album_backup_valid;
     char album_restriction_detail[160];

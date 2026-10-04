@@ -35,6 +35,8 @@ typedef struct {
     const char *rule_source;
     bool calendar_covered;
     bool calendar_update_warning;
+    const char *calendar_option_id;
+    const char *calendar_source;
     PtcResultForecastDay forecast[PTC_RESULT_FORECAST_DAYS];
     uint16_t daily_buffer_minutes;
     bool daily_buffer_claimed;

@@ -7,6 +7,7 @@
 void ptc_rules_default(PtcRules *rules)
 {
     unsigned int i;
+    rules->calendar = NULL;
     for (i = 0; i < 7; ++i) {
         rules->week[i].mode = (i == 0 || i == 6) ? PTC_RULE_MODE_UNLIMITED : PTC_RULE_MODE_LIMIT;
         rules->week[i].minutes = (i == 0 || i == 6) ? 120 : 60;
@@ -61,7 +62,7 @@ PtcEffectiveRule ptc_rules_resolve(const PtcRules *rules, uint16_t day_index, ui
 {
     PtcEffectiveRule result;
     bool covered = false;
-    PtcCalendarDayType day_type = ptc_holiday_calendar_classify(day_index, &covered);
+    PtcCalendarDayType day_type = ptc_holiday_calendar_classify_in(rules->calendar, day_index, &covered);
     result.calendar_covered = covered;
     if (rules->today_override.present && rules->today_override.day_index == day_index) {
         result.rule = rules->today_override.rule;
@@ -239,7 +240,7 @@ PtcEffectiveBedtime ptc_bedtime_resolve_start_day(
         return effective_from_special(weekly, &rules->bedtime.scheduled_override.rule,
             PTC_BEDTIME_SOURCE_SCHEDULED_OVERRIDE, false);
     }
-    day_type = ptc_holiday_calendar_classify(start_day_index, &covered);
+    day_type = ptc_holiday_calendar_classify_in(rules->calendar, start_day_index, &covered);
     result.calendar_covered = covered;
     if (!rules->bedtime.calendar_enabled || !covered) return result;
     if (day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY) {

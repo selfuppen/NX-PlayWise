@@ -256,6 +256,7 @@ static const char *activity_action_for_request(PtcRequestType type)
     case PTC_REQUEST_RESTORE_TODAY_POLICY: return "today_restore";
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE: return "weekly_update";
     case PTC_REQUEST_SET_HOLIDAY_POLICY: return "holiday_update";
+    case PTC_REQUEST_ACTIVATE_HOLIDAY_CALENDAR: return "calendar_activate";
     case PTC_REQUEST_SET_SCHEDULED_OVERRIDE: return "scheduled_update";
     case PTC_REQUEST_SET_AUTONOMY_POLICY: return "autonomy_update";
     case PTC_REQUEST_SET_BEDTIME_POLICY: return "bedtime_update";

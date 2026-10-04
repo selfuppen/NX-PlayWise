@@ -44,7 +44,7 @@ static bool fs_read_text(PtcStorage *storage, const char *path, char *out, size_
     read_size = fread(out, 1, out_size - 1, file);
     extra = fgetc(file);
     fclose(file);
-    if (extra != EOF) {
+    if (extra != EOF || memchr(out, '\0', read_size) != NULL) {
         out[0] = '\0';
         return false;
     }

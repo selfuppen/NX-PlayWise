@@ -58,6 +58,8 @@ static const PtcErrorInfo PTC_ERROR_TABLE[] = {
     {PTC_ERR_CONFIG_INVALID, "config_invalid", "配置文件无效"},
     {PTC_ERR_RULES_INVALID, "rules_invalid", "规则文件无效"},
     {PTC_ERR_RELEASE_MANIFEST_INVALID, "release_manifest_invalid", "构建清单损坏或组件不一致"},
+    {PTC_ERR_CALENDAR_INVALID, "calendar_invalid", "节假日日历文件无效或已改变"},
+    {PTC_ERR_CALENDAR_CATALOG_CHANGED, "calendar_catalog_changed", "节假日日历库已更新，请重新预览"},
 };
 
 static const PtcErrorInfo *ptc_error_info(PtcErrorCode code)

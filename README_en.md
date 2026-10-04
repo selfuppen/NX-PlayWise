@@ -99,7 +99,7 @@ The PlayWise PIN protects only this project's Parent Portal and is completely di
 
 | Feature | Status | Implementation Date |
 | :--- | :--- | :--- |
-| Chinese statutory holiday calendar | Implemented (built-in 2026 calendar) | 2026-08-11 |
+| Region holiday calendars | Built-in China 2026 plus [manual JSON import](docs/自制节假日日历格式.md) | 2026-10-04 |
 | Main app dark mode / 3-state theme | Implemented (overlay retains fixed dark theme) | 2026-08-13 |
 | Date schedules, rule preview, daily self-buffer | Implemented (self-buffer disabled by default) | 2026-08-24 |
 | Family activity history & 7/30-day allowance analytics | Implemented (missing dates marked as unknown) | 2026-08-24 |

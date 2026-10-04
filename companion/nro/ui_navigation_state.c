@@ -47,6 +47,14 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     }
 }
 
+bool ptc_ui_eye_care_dirty(const PtcUiModel *model)
+{
+    if (!model) return false;
+    return model->draft_eye_care_policy.enabled != model->eye_care_policy.enabled ||
+           model->draft_eye_care_policy.play_minutes != model->eye_care_policy.play_minutes ||
+           model->draft_eye_care_policy.rest_minutes != model->eye_care_policy.rest_minutes;
+}
+
 const char *ptc_ui_eye_care_plan_badge_label(const PtcUiModel *model)
 {
     return ptc_ui_text(model && model->eye_care_policy.enabled
@@ -113,7 +121,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     }
     count = model->parent_page == PTC_UI_PARENT_PLAN &&
             model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY
-        ? 7 : ptc_ui_parent_action_count(model->parent_page);
+        ? 8 : ptc_ui_parent_action_count(model->parent_page);
     if (count <= 0) {
         model->selected_index = 0;
         return;
@@ -128,10 +136,10 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         index = 0;
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
-        static const int left[7]  = {0, 1, 1, 3, 3, 4, 5};
-        static const int right[7] = {0, 2, 6, 4, 5, 6, 6};
-        static const int up[7]    = {0, 0, 0, 1, 1, 2, 2};
-        static const int down[7]  = {1, 3, 5, 3, 4, 5, 6};
+        static const int left[8]  = {0, 1, 1, 3, 3, 4, 5, 5};
+        static const int right[8] = {0, 2, 6, 4, 5, 6, 6, 7};
+        static const int up[8]    = {0, 0, 0, 1, 1, 2, 2, 6};
+        static const int down[8]  = {1, 3, 5, 3, 4, 5, 7, 7};
         int previous = index;
         if (horizontal < 0) index = left[index];
         else if (horizontal > 0) index = right[index];

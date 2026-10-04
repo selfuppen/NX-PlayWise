@@ -404,6 +404,8 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "set_holiday_policy") == 0) {
         return PTC_REQUEST_SET_HOLIDAY_POLICY;
     }
+    if (strcmp(value, "import_holiday_calendar") == 0) return PTC_REQUEST_IMPORT_HOLIDAY_CALENDAR;
+    if (strcmp(value, "activate_holiday_calendar") == 0) return PTC_REQUEST_ACTIVATE_HOLIDAY_CALENDAR;
     if (strcmp(value, "clear_redemption_history") == 0) {
         return PTC_REQUEST_CLEAR_REDEMPTION_HISTORY;
     }
@@ -470,6 +472,10 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "set_weekly_template";
     case PTC_REQUEST_SET_HOLIDAY_POLICY:
         return "set_holiday_policy";
+    case PTC_REQUEST_IMPORT_HOLIDAY_CALENDAR:
+        return "import_holiday_calendar";
+    case PTC_REQUEST_ACTIVATE_HOLIDAY_CALENDAR:
+        return "activate_holiday_calendar";
     case PTC_REQUEST_CLEAR_REDEMPTION_HISTORY:
         return "clear_redemption_history";
     case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
@@ -557,6 +563,16 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
             parse_named_rule(text, "holiday_rule", &out->holiday_rule) &&
             parse_named_rule(text, "makeup_workday_rule", &out->makeup_workday_rule)
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_IMPORT_HOLIDAY_CALENDAR:
+        return json_string(text, "file_name", out->calendar_file_name,
+            sizeof(out->calendar_file_name)) &&
+            json_string(text, "sha256", out->calendar_sha256,
+            sizeof(out->calendar_sha256)) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_ACTIVATE_HOLIDAY_CALENDAR:
+        return json_string(text, "option_id", out->calendar_option_id,
+            sizeof(out->calendar_option_id)) &&
+            json_string(text, "catalog_sha256", out->calendar_catalog_sha256,
+            sizeof(out->calendar_catalog_sha256)) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_SCHEDULED_OVERRIDE:
         if (!json_bool_required(text, "enabled", &out->scheduled_override.enabled)) {
             return PTC_ERR_BAD_REQUEST;

@@ -235,6 +235,7 @@ void ptc_ui_reconcile_scheduled_result(PtcUiModel *model, const PtcScheduledOver
 static void build_plan_rules(const PtcUiModel *model, PtcUiPlanKind kind, PtcRules *rules)
 {
     ptc_rules_default(rules);
+    rules->calendar = model->calendar;
     memcpy(rules->week, kind == PTC_UI_PLAN_WEEKLY ? model->draft_week : model->current_week,
            sizeof(rules->week));
     rules->today_override = (PtcTodayOverride){model->day_index, model->today_override_present,
@@ -305,7 +306,7 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
     build_plan_rules(model, kind, &rules);
     weekday = ptc_weekday_from_day_index(day_index);
     decision->effective = ptc_rules_resolve(&rules, day_index, weekday);
-    day_type = ptc_holiday_calendar_classify(day_index, &calendar_covered);
+    day_type = ptc_holiday_calendar_classify_in(model->calendar, day_index, &calendar_covered);
     scheduled_matches = rules.scheduled_override.enabled &&
         day_index >= rules.scheduled_override.start_day_index &&
         day_index <= rules.scheduled_override.end_day_index;
@@ -628,6 +629,7 @@ PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model)
     empty.rule.minutes = 60;
     if (!model) return empty;
     ptc_rules_default(&rules);
+    rules.calendar = model->calendar;
     memcpy(rules.week, model->current_week, sizeof(rules.week));
     rules.today_override.present = false;
     rules.scheduled_override = model->scheduled_override;

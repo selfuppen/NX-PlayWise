@@ -464,6 +464,8 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
     bool ledger_existed;
     bool redemption_history_existed;
     bool activity_history_existed;
+    bool calendar_active_existed;
+    bool bedtime_snapshot_existed;
     if (recovery_path_exists(sysmodule)) return true;
     if (!sysmodule->pctl->vtable->snapshot_settings ||
         sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &snapshot) != PTC_ERR_OK ||
@@ -474,7 +476,11 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
         !backup_text_file(sysmodule, "ledger/redemption-history.jsonl",
             "recovery/active/redemption-history.before", &redemption_history_existed) ||
         !backup_text_file(sysmodule, "activity/history.jsonl",
-            "recovery/active/activity-history.before", &activity_history_existed)) {
+            "recovery/active/activity-history.before", &activity_history_existed) ||
+        !backup_text_file(sysmodule, "calendars/active.json",
+            "recovery/active/calendar-active.before", &calendar_active_existed) ||
+        !backup_text_file(sysmodule, "backups/bedtime_pctl_snapshot.json",
+            "recovery/active/bedtime-snapshot.before", &bedtime_snapshot_existed)) {
         recovery_clear(sysmodule);
         return false;
     }
@@ -482,14 +488,17 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
     snprintf(meta, sizeof(meta),
         "{\"version\":1,\"request_id\":\"%s\",\"created_at\":%lld,"
         "\"rules_existed\":%s,\"state_existed\":%s,\"ledger_existed\":%s,"
-        "\"redemption_history_existed\":%s,\"activity_history_existed\":%s}\n",
+        "\"redemption_history_existed\":%s,\"activity_history_existed\":%s,"
+        "\"calendar_active_existed\":%s,\"bedtime_snapshot_existed\":%s}\n",
         request && ptc_request_id_is_valid(request->request_id) ? request->request_id : "enforce",
         (long long)now.unix_seconds,
         rules_existed ? "true" : "false",
         state_existed ? "true" : "false",
         ledger_existed ? "true" : "false",
         redemption_history_existed ? "true" : "false",
-        activity_history_existed ? "true" : "false");
+        activity_history_existed ? "true" : "false",
+        calendar_active_existed ? "true" : "false",
+        bedtime_snapshot_existed ? "true" : "false");
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, meta_path, meta)) {
         recovery_clear(sysmodule);
         return false;
@@ -520,6 +529,10 @@ bool recovery_rollback(PtcSysmodule *sysmodule)
     bool redemption_history_tracked;
     bool activity_history_existed = false;
     bool activity_history_tracked;
+    bool calendar_active_existed = false;
+    bool calendar_active_tracked;
+    bool bedtime_snapshot_existed = false;
+    bool bedtime_snapshot_tracked;
     bool raw_restored = false;
     bool timer_restored = false;
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
@@ -535,6 +548,8 @@ bool recovery_rollback(PtcSysmodule *sysmodule)
         meta, "redemption_history_existed", &redemption_history_existed);
     activity_history_tracked = json_bool_value(
         meta, "activity_history_existed", &activity_history_existed);
+    calendar_active_tracked = json_bool_value(meta, "calendar_active_existed", &calendar_active_existed);
+    bedtime_snapshot_tracked = json_bool_value(meta, "bedtime_snapshot_existed", &bedtime_snapshot_existed);
     ok = restore_snapshot_exact(sysmodule, &original, &restored, &status,
         ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored) == PTC_ERR_OK;
     ok = restore_text_file(sysmodule, "rules.json", "recovery/active/rules.before", rules_existed) && ok;
@@ -547,6 +562,14 @@ bool recovery_rollback(PtcSysmodule *sysmodule)
     if (activity_history_tracked) {
         ok = restore_text_file(sysmodule, "activity/history.jsonl",
             "recovery/active/activity-history.before", activity_history_existed) && ok;
+    }
+    if (calendar_active_tracked) {
+        ok = restore_text_file(sysmodule, "calendars/active.json",
+            "recovery/active/calendar-active.before", calendar_active_existed) && ok;
+    }
+    if (bedtime_snapshot_tracked) {
+        ok = restore_text_file(sysmodule, "backups/bedtime_pctl_snapshot.json",
+            "recovery/active/bedtime-snapshot.before", bedtime_snapshot_existed) && ok;
     }
     invalidate_all_caches(sysmodule);
     if (ok) recovery_clear(sysmodule);
@@ -736,7 +759,12 @@ bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
     char text[6144];
     char mode[24];
     int64_t version;
+    PtcClockSnapshot calendar_now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
     ptc_rules_default(rules);
+    if (!ptc_calendar_runtime_load(sysmodule->storage, sysmodule->app_root,
+            calendar_now.day_index, &sysmodule->calendar_runtime)) return false;
+    rules->calendar = sysmodule->calendar_runtime.builtin
+        ? NULL : &sysmodule->calendar_runtime.set;
     join_path(path, sizeof(path), sysmodule->app_root, "rules.json");
     if (!read_cached_text(sysmodule, "rules.json", sysmodule->rules_cache_text, sizeof(sysmodule->rules_cache_text),
             &sysmodule->rules_meta, &sysmodule->rules_cache_valid, text, sizeof(text), true) || text[0] == '\0') {

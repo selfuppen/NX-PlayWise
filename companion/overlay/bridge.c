@@ -388,9 +388,15 @@ const char *ptc_overlay_parent_action_unavailable_reason(
     case PTC_OVERLAY_PARENT_SKIP_BEDTIME:
         return ptc_overlay_parent_skip_instance_id(summary) ? NULL : ptc_ui_text(PTC_UI_T_NO_SKIPPABLE_BEDTIME_WINDOW);
     case PTC_OVERLAY_PARENT_SKIP_EYE_CARE:
-        return summary->eye_care_enabled && strcmp(summary->eye_care_phase, "resting") == 0 &&
-            summary->eye_care_break_id != 0 && summary->eye_care_rest_remaining_seconds > 0
-            ? NULL : ptc_ui_text(PTC_UI_T_EYE_CARE_STATUS_UNKNOWN);
+        if (!summary->eye_care_enabled)
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_OFF);
+        if (summary->bedtime_active && !summary->bedtime_skipped)
+            return ptc_ui_text(PTC_UI_T_PLEASE_DEAL_WITH_BEDTIME_RESTRICTIONS_FIRST);
+        if (strcmp(summary->eye_care_phase, "resting") != 0)
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_NOT_RESTING);
+        if (summary->eye_care_break_id == 0 || summary->eye_care_rest_remaining_seconds <= 0)
+            return ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH);
+        return NULL;
     case PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP:
         return summary->bedtime_skipped_window_available ? NULL : ptc_ui_text(PTC_UI_T_THIS_BEDTIME_WAS_NOT_SKIPPED);
     case PTC_OVERLAY_PARENT_DISABLE_BEDTIME:

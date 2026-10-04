@@ -700,6 +700,101 @@ int main(int argc, char **argv)
                     ptc_audio_play(PTC_SE_CANCEL);
                     discard_bedtime_draft(&ui);
                 }
+            } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN &&
+                       ui.model.plan_page == PTC_UI_PLAN_PAGE_EYE_CARE) {
+                PtcEyeCarePolicy *draft = &ui.model.draft_eye_care_policy;
+                bool resting = (strcmp(ui.model.eye_care_phase, "resting") == 0);
+                int focus_count = resting ? 5 : 4;
+                if (ui.waiting) {
+                    if (down) {
+                        ptc_audio_play(PTC_SE_ERROR);
+                        snprintf(ui.model.message, sizeof(ui.model.message),
+                                 ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
+                    }
+                } else if (down & HidNpadButton_B) {
+                    ptc_audio_play(PTC_SE_CANCEL);
+                    ui.model.draft_eye_care_policy = ui.model.eye_care_policy;
+                    ui.model.eye_care_dirty = false;
+                    ui.model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+                    ui.model.selected_index = 4;
+                } else if (down & (HidNpadButton_L | HidNpadButton_R)) {
+                    ptc_audio_play(PTC_SE_CANCEL);
+                    ui.model.draft_eye_care_policy = ui.model.eye_care_policy;
+                    ui.model.eye_care_dirty = false;
+                    ui.model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+                    ui.model.selected_index = 4;
+                } else if (down & HidNpadButton_Up) {
+                    ptc_audio_play(PTC_SE_FOCUS);
+                    ui.model.eye_care_field_focus = (ui.model.eye_care_field_focus + focus_count - 1) % focus_count;
+                } else if (down & HidNpadButton_Down) {
+                    ptc_audio_play(PTC_SE_FOCUS);
+                    ui.model.eye_care_field_focus = (ui.model.eye_care_field_focus + 1) % focus_count;
+                } else if (down & (HidNpadButton_Left | HidNpadButton_Right | HidNpadButton_ZL | HidNpadButton_ZR)) {
+                    int delta = 0;
+                    if (down & HidNpadButton_Left) delta = -1;
+                    else if (down & HidNpadButton_Right) delta = 1;
+                    else if (down & HidNpadButton_ZL) delta = -10;
+                    else if (down & HidNpadButton_ZR) delta = 10;
+
+                    if (ui.model.eye_care_field_focus == 0) {
+                        ptc_audio_play(PTC_SE_TOGGLE);
+                        draft->enabled = !draft->enabled;
+                        ui.model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui.model);
+                    } else if (ui.model.eye_care_field_focus == 1) {
+                        ptc_audio_play(PTC_SE_STEP);
+                        draft->play_minutes = ptc_ui_adjust_minutes(draft->play_minutes, delta, 1, 240);
+                        ui.model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui.model);
+                    } else if (ui.model.eye_care_field_focus == 2) {
+                        int rest_delta = delta;
+                        if (down & HidNpadButton_ZL) rest_delta = -5;
+                        else if (down & HidNpadButton_ZR) rest_delta = 5;
+                        ptc_audio_play(PTC_SE_STEP);
+                        draft->rest_minutes = ptc_ui_adjust_minutes(draft->rest_minutes, rest_delta, 1, 60);
+                        ui.model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui.model);
+                    }
+                } else if (down & HidNpadButton_A) {
+                    if (ui.model.eye_care_field_focus == 0) {
+                        ptc_audio_play(PTC_SE_TOGGLE);
+                        draft->enabled = !draft->enabled;
+                        ui.model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui.model);
+                    } else if (ui.model.eye_care_field_focus == 1) {
+                        ptc_audio_play(PTC_SE_POPUP);
+                        ptc_ui_numpad_open(&ui.model, PTC_UI_NUMPAD_EYE_CARE_PLAY, PTC_UI_OVERLAY_NONE,
+                                           ptc_ui_text(PTC_UI_T_EYE_CARE_PLAY),
+                                           ptc_ui_text(PTC_UI_T_EYE_CARE_PLAY_SUBTITLE),
+                                           3, 1, 240, draft->play_minutes);
+                    } else if (ui.model.eye_care_field_focus == 2) {
+                        ptc_audio_play(PTC_SE_POPUP);
+                        ptc_ui_numpad_open(&ui.model, PTC_UI_NUMPAD_EYE_CARE_REST, PTC_UI_OVERLAY_NONE,
+                                           ptc_ui_text(PTC_UI_T_EYE_CARE_REST),
+                                           ptc_ui_text(PTC_UI_T_EYE_CARE_REST_SUBTITLE),
+                                           2, 1, 60, draft->rest_minutes);
+                    } else if (ui.model.eye_care_field_focus == 3) {
+                        ptc_audio_play(PTC_SE_CONFIRM);
+                        submit_eye_care_policy(&ui);
+                    } else if (ui.model.eye_care_field_focus == 4) {
+                        ptc_audio_play(PTC_SE_CONFIRM);
+                        submit_eye_care_skip(&ui);
+                    }
+                } else if (down & HidNpadButton_Minus) {
+                    ptc_audio_play(PTC_SE_TOGGLE);
+                    draft->enabled = !draft->enabled;
+                    ui.model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui.model);
+                } else if (down & HidNpadButton_Plus) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
+                    submit_eye_care_policy(&ui);
+                } else if (down & HidNpadButton_X) {
+                    if (resting) {
+                        ptc_audio_play(PTC_SE_CONFIRM);
+                        submit_eye_care_skip(&ui);
+                    } else {
+                        ptc_audio_play(PTC_SE_ERROR);
+                    }
+                } else if (down & HidNpadButton_Y) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
+                    refresh_disable_flag(&ui);
+                    submit_status(&ui);
+                }
             } else if (ui.waiting && ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
                 if (down) {
@@ -835,6 +930,7 @@ int main(int argc, char **argv)
     appletUnhook(&hook_cookie);
     ptc_audio_exit();
     ptc_ui_graphics_exit();
+    free(ui.calendar_view_data);
 #ifndef PLAYWISE_EDEN
     ptc_hot_reload_exit(&ui.hot_reload);
     ptc_switch_ipc_client_exit(&ui.ipc);

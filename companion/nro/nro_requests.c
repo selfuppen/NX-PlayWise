@@ -205,6 +205,21 @@ void load_rule_drafts(UiState *ui)
     const cJSON *override_day;
     unsigned int index;
     ptc_rules_default(&rules);
+    if (ptc_calendar_runtime_load(ui->client.storage, APP_ROOT, ui->model.day_index,
+            &ui->calendar_runtime)) {
+        ui->model.calendar = ui->calendar_runtime.builtin ? NULL : &ui->calendar_runtime.set;
+        ui->model.calendar_builtin = ui->calendar_runtime.builtin;
+        snprintf(ui->model.calendar_option_id, sizeof(ui->model.calendar_option_id), "%s",
+            ui->calendar_runtime.option_id);
+        snprintf(ui->model.calendar_region_name, sizeof(ui->model.calendar_region_name), "%s",
+            ui->calendar_runtime.region_name);
+    } else {
+        memset(&ui->calendar_runtime, 0, sizeof(ui->calendar_runtime));
+        ui->model.calendar = &ui->calendar_runtime.set;
+        ui->model.calendar_builtin = false;
+        ui->model.calendar_option_id[0] = '\0';
+        ui->model.calendar_region_name[0] = '\0';
+    }
     memcpy(ui->model.draft_week, rules.week, sizeof(rules.week));
     memcpy(ui->model.current_week, rules.week, sizeof(rules.week));
     ui->model.today_override_present = false;

@@ -46,6 +46,10 @@ typedef enum {
     PTC_UI_HIT_HOLIDAY_MODE,
     PTC_UI_HIT_HOLIDAY_MINUTES,
     PTC_UI_HIT_HOLIDAY_CALENDAR,
+    PTC_UI_HIT_CALENDAR_MANAGER,
+    PTC_UI_HIT_CALENDAR_MANAGER_TAB,
+    PTC_UI_HIT_CALENDAR_MANAGER_ROW,
+    PTC_UI_HIT_CALENDAR_MANAGER_NAV,
     PTC_UI_HIT_HOLIDAY_PAGE_ACTION,
     PTC_UI_HIT_WEEKLY_MIN_UP,
     PTC_UI_HIT_WEEKLY_MIN_DOWN,
@@ -97,6 +101,17 @@ typedef enum {
     PTC_UI_HIT_BEDTIME_MANAGE,
     PTC_UI_HIT_BEDTIME_OVERLAY_FIELD,
     PTC_UI_HIT_BEDTIME_PRESET,
+    PTC_UI_HIT_EYE_CARE_PAGE_MASTER,
+    PTC_UI_HIT_EYE_CARE_PAGE_PLAY_PRESET,
+    PTC_UI_HIT_EYE_CARE_PAGE_PLAY_DEC,
+    PTC_UI_HIT_EYE_CARE_PAGE_PLAY_VAL,
+    PTC_UI_HIT_EYE_CARE_PAGE_PLAY_INC,
+    PTC_UI_HIT_EYE_CARE_PAGE_REST_PRESET,
+    PTC_UI_HIT_EYE_CARE_PAGE_REST_DEC,
+    PTC_UI_HIT_EYE_CARE_PAGE_REST_VAL,
+    PTC_UI_HIT_EYE_CARE_PAGE_REST_INC,
+    PTC_UI_HIT_EYE_CARE_PAGE_SAVE,
+    PTC_UI_HIT_EYE_CARE_PAGE_SKIP,
     PTC_UI_HIT_HOME_DETAILS,
     PTC_UI_HIT_HOME_DETAILS_TAB,
     PTC_UI_HIT_NOTICE_DETAILS,
@@ -149,6 +164,10 @@ PtcUiRect ptc_ui_holiday_enable_rect(void);
 PtcUiRect ptc_ui_holiday_mode_rect(int index);
 PtcUiRect ptc_ui_holiday_minutes_rect(int index);
 PtcUiRect ptc_ui_holiday_calendar_rect(void);
+PtcUiRect ptc_ui_holiday_manage_rect(void);
+PtcUiRect ptc_ui_calendar_manager_tab_rect(int index);
+PtcUiRect ptc_ui_calendar_manager_row_rect(int index);
+PtcUiRect ptc_ui_calendar_manager_nav_rect(int index);
 PtcUiRect ptc_ui_holiday_page_action_rect(int index);
 PtcUiRect ptc_ui_support_event_rect(int index);
 PtcUiRect ptc_ui_redemption_history_prev_rect(void);
@@ -156,6 +175,17 @@ PtcUiRect ptc_ui_redemption_history_next_rect(void);
 PtcUiRect ptc_ui_scheduled_field_rect(int index);
 PtcUiRect ptc_ui_autonomy_option_rect(int index);
 PtcUiRect ptc_ui_eye_care_field_rect(int index);
+PtcUiRect ptc_ui_eye_care_page_master_rect(void);
+PtcUiRect ptc_ui_eye_care_play_preset_rect(int index);
+PtcUiRect ptc_ui_eye_care_play_dec_rect(void);
+PtcUiRect ptc_ui_eye_care_play_value_rect(void);
+PtcUiRect ptc_ui_eye_care_play_inc_rect(void);
+PtcUiRect ptc_ui_eye_care_rest_preset_rect(int index);
+PtcUiRect ptc_ui_eye_care_rest_dec_rect(void);
+PtcUiRect ptc_ui_eye_care_rest_value_rect(void);
+PtcUiRect ptc_ui_eye_care_rest_inc_rect(void);
+PtcUiRect ptc_ui_eye_care_page_save_rect(void);
+PtcUiRect ptc_ui_eye_care_page_skip_rect(void);
 PtcUiRect ptc_ui_quick_add_option_rect(int index);
 PtcUiRect ptc_ui_bedtime_section_rect(int index);
 PtcUiRect ptc_ui_bedtime_field_rect(int section, int index);

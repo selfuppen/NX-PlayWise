@@ -45,7 +45,7 @@ static bool action_is_valid(const char *action)
 {
     static const char *const ACTIONS[] = {
         "today_limit", "today_add", "today_unlimited", "today_restore",
-        "weekly_update", "holiday_update", "scheduled_update", "autonomy_update",
+        "weekly_update", "holiday_update", "calendar_activate", "scheduled_update", "autonomy_update",
         "eye_care_update", "eye_care_skip",
         "bedtime_update", "bedtime_confirm", "bedtime_skip", "bedtime_skip_cleared", "bedtime_disable",
         "offline_grant", "daily_buffer", "protection", "activity_cleared"

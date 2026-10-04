@@ -335,10 +335,7 @@ bool write_current_status_result(
     char json[6144];
     PtcErrorCode err;
     PtcEffectiveRule effective;
-    const PtcHolidayCalendarInfo *calendar_info;
-    uint16_t year = 0;
-    uint8_t month = 0;
-    uint8_t day = 0;
+    uint32_t check_day;
     if (!load_rules(sysmodule, &rules)) {
         return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_RULES_INVALID, now.day_index);
     }
@@ -353,11 +350,15 @@ bool write_current_status_result(
     effective = ptc_rules_resolve(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
     state.rule_source = ptc_rule_source_name(effective.source);
     state.calendar_covered = effective.calendar_covered;
-    calendar_info = ptc_holiday_calendar_info();
-    if (ptc_date_from_day_index(now.day_index, &year, &month, &day)) {
-        state.calendar_update_warning = rules.holiday_enabled &&
-            (year > calendar_info->last_year ||
-                (year == calendar_info->last_year && month == 12 && day >= 2));
+    state.calendar_option_id = sysmodule->calendar_runtime.option_id;
+    state.calendar_source = sysmodule->calendar_runtime.builtin ? "builtin" : "user_import";
+    if (rules.holiday_enabled || (rules.bedtime.enabled && rules.bedtime.calendar_enabled)) {
+        for (check_day = now.day_index; check_day <= (uint32_t)now.day_index + 30u &&
+             check_day <= UINT16_MAX; ++check_day) {
+            bool covered = false;
+            (void)ptc_holiday_calendar_classify_in(rules.calendar, (uint16_t)check_day, &covered);
+            if (!covered) { state.calendar_update_warning = true; break; }
+        }
     }
     fill_extended_result_state(sysmodule, &state, &rules, &runtime_state, &pctl_status, now);
     (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);

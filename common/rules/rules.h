@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "holiday_calendar.h"
+
 typedef enum {
     PTC_RULE_MODE_LIMIT = 1,
     PTC_RULE_MODE_UNLIMITED = 2
@@ -106,6 +108,7 @@ typedef struct {
     PtcDayRule holiday_rule;
     PtcDayRule makeup_workday_rule;
     PtcBedtimePolicy bedtime;
+    const PtcHolidayCalendarSet *calendar;
 } PtcRules;
 
 typedef enum {

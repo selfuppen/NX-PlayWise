@@ -17,6 +17,7 @@
 #include "../../companion/transport_client.h"
 #include "../../companion/switch_ipc_client.h"
 #include "../../platform/switch/fs_storage.h"
+#include "../../platform/calendar_store.h"
 #include "../../platform/install_defaults.h"
 #include "../../third_party/cjson/cJSON.h"
 #include "../../common/support/support_export.h"
@@ -100,6 +101,11 @@ typedef struct {
     PtcSwitchIpcClient ipc;
     PtcCompanionAuth auth;
     PtcUiModel model;
+    PtcCalendarRuntime calendar_runtime;
+    PtcImportedCalendarYear *calendar_view_data;
+    uint16_t calendar_view_years[PTC_CALENDAR_MAX_INDEX_ENTRIES];
+    int calendar_view_year_count;
+    int calendar_view_year_index;
     PtcUiThemePreference theme_preference;
     PtcUiSystemTheme system_theme;
     PtcUiThemeView theme_view;
@@ -218,6 +224,15 @@ void handle_setup_input(UiState *ui, u64 down, u64 held);
 void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
 void open_danger_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
 void open_weekly_page(UiState *ui);
+void open_calendar_manager(UiState *ui);
+void open_holiday_calendar_view(UiState *ui);
+void holiday_calendar_view_step(UiState *ui, int direction);
+int holiday_calendar_view_pages(const PtcUiModel *model);
+void calendar_manager_select_tab(UiState *ui, int tab);
+void calendar_manager_select_row(UiState *ui, int row);
+void calendar_manager_nav(UiState *ui, int action);
+void calendar_manager_refresh(UiState *ui);
+void submit_calendar_operation(UiState *ui, PtcUiOperation operation);
 void refresh_security_state(UiState *ui);
 bool verify_sensitive_pin(UiState *ui, const char *action);
 bool load_redemption_history(UiState *ui);

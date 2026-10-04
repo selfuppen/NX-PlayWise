@@ -203,8 +203,21 @@ void handle_overlay_input(UiState *ui, u64 down)
         else if (down & HidNpadButton_A) ptc_ui_discard_scheduled(&ui->model);
         return;
     }
-    if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS || ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {
+    if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
+        if (down & (HidNpadButton_L | HidNpadButton_R | HidNpadButton_Left | HidNpadButton_Right)) {
+            ptc_audio_play(PTC_SE_TAB);
+            ui->model.home_details_page = 1 - ui->model.home_details_page;
+            return;
+        }
         if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ptc_ui_cancel_overlay(&ui->model);
+        }
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {
+        if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
+            ptc_audio_play(PTC_SE_CANCEL);
             ptc_ui_cancel_overlay(&ui->model);
         }
         return;
@@ -429,32 +442,53 @@ void handle_overlay_input(UiState *ui, u64 down)
         }
         return;
     }
-    if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_CALENDAR) {
-        int pages = (int)((ptc_holiday_calendar_arrangement_count(ptc_holiday_calendar_info()->last_year) + 3u) / 4u);
+    if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER) {
         if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
-        else if ((down & HidNpadButton_L) && ui->model.holiday_calendar_page > 0) {
+        else if (down & HidNpadButton_L) calendar_manager_select_tab(ui, 0);
+        else if (down & HidNpadButton_R) calendar_manager_select_tab(ui, 1);
+        else if (down & HidNpadButton_Left) calendar_manager_nav(ui, 0);
+        else if (down & HidNpadButton_Right) calendar_manager_nav(ui, 1);
+        else if ((down & HidNpadButton_Up) && ui->model.calendar_manager_selected > 0) {
+            --ui->model.calendar_manager_selected;
+            ui->model.calendar_manager_page = ui->model.calendar_manager_selected / 6;
+            calendar_manager_select_row(ui, ui->model.calendar_manager_selected % 6);
+        } else if ((down & HidNpadButton_Down) &&
+            ui->model.calendar_manager_selected + 1 < ui->model.calendar_manager_count) {
+            ++ui->model.calendar_manager_selected;
+            ui->model.calendar_manager_page = ui->model.calendar_manager_selected / 6;
+            calendar_manager_select_row(ui, ui->model.calendar_manager_selected % 6);
+        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) calendar_manager_nav(ui, 2);
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_HOLIDAY_CALENDAR) {
+        int pages = holiday_calendar_view_pages(&ui->model);
+        bool has_previous = ui->model.holiday_calendar_page > 0 || ui->calendar_view_year_index > 0;
+        bool has_next = ui->model.holiday_calendar_page + 1 < pages ||
+            ui->calendar_view_year_index + 1 < ui->calendar_view_year_count;
+        if (down & HidNpadButton_B) ptc_ui_cancel_overlay(&ui->model);
+        else if ((down & HidNpadButton_L) && has_previous) {
             ptc_audio_play(PTC_SE_TAB);
-            --ui->model.holiday_calendar_page;
-        } else if ((down & HidNpadButton_R) && ui->model.holiday_calendar_page + 1 < pages) {
+            holiday_calendar_view_step(ui, -1);
+        } else if ((down & HidNpadButton_R) && has_next) {
             ptc_audio_play(PTC_SE_TAB);
-            ++ui->model.holiday_calendar_page;
+            holiday_calendar_view_step(ui, 1);
         } else if (down & HidNpadButton_Left) {
             do {
                 ui->model.overlay_selection = (ui->model.overlay_selection + 2) % 3;
-            } while ((ui->model.overlay_selection == 0 && ui->model.holiday_calendar_page == 0) ||
-                     (ui->model.overlay_selection == 1 && ui->model.holiday_calendar_page + 1 >= pages));
+            } while ((ui->model.overlay_selection == 0 && !has_previous) ||
+                     (ui->model.overlay_selection == 1 && !has_next));
         } else if (down & HidNpadButton_Right) {
             do {
                 ui->model.overlay_selection = (ui->model.overlay_selection + 1) % 3;
-            } while ((ui->model.overlay_selection == 0 && ui->model.holiday_calendar_page == 0) ||
-                     (ui->model.overlay_selection == 1 && ui->model.holiday_calendar_page + 1 >= pages));
+            } while ((ui->model.overlay_selection == 0 && !has_previous) ||
+                     (ui->model.overlay_selection == 1 && !has_next));
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
-            if (ui->model.overlay_selection == 0 && ui->model.holiday_calendar_page > 0) {
+            if (ui->model.overlay_selection == 0 && has_previous) {
                 ptc_audio_play(PTC_SE_TAB);
-                --ui->model.holiday_calendar_page;
-            } else if (ui->model.overlay_selection == 1 && ui->model.holiday_calendar_page + 1 < pages) {
+                holiday_calendar_view_step(ui, -1);
+            } else if (ui->model.overlay_selection == 1 && has_next) {
                 ptc_audio_play(PTC_SE_TAB);
-                ++ui->model.holiday_calendar_page;
+                holiday_calendar_view_step(ui, 1);
             } else if (ui->model.overlay_selection == 2) ptc_ui_cancel_overlay(&ui->model);
         }
         return;

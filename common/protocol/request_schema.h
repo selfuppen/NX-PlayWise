@@ -32,6 +32,10 @@ typedef struct {
     char environment_fingerprint[65];
     char overlay_release_id[65];
     char overlay_boot_id[65];
+    char calendar_file_name[81];
+    char calendar_sha256[65];
+    char calendar_option_id[17];
+    char calendar_catalog_sha256[65];
 #ifdef PLAYWISE_DEVICE_LAB
     char lab_mode[32];
     char phase[32];

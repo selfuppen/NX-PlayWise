@@ -323,7 +323,8 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
     if (process_grant_request_surface(
             sysmodule, &request, &config, disable_flag, now) ||
         process_recovery_request_surface(
-            sysmodule, &request, disable_flag, now)) {
+            sysmodule, &request, disable_flag, now) ||
+        process_calendar_request(sysmodule, &request, disable_flag, now)) {
         return;
     }
 

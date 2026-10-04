@@ -227,5 +227,7 @@ bool process_recovery_request_surface(
     bool disable_flag,
     PtcClockSnapshot now);
 void process_request_text(PtcSysmodule *sysmodule, const char *request_text, const char *expected_request_id);
+bool process_calendar_request(PtcSysmodule *sysmodule, const PtcRequest *request,
+                              bool disable_flag, PtcClockSnapshot now);
 
 #endif

@@ -1353,6 +1353,9 @@ public:
                     selected ? 2 : 1, selected ? FOCUS_BORDER : MUTED_COLOR);
                 if (i == PTC_OVERLAY_PARENT_ADD_MINUTES) {
                     std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_QUICK_GRANT_D_MIN_LEFT_RIGHT_TO), daily_add_minutes_);
+                } else if (i == PTC_OVERLAY_PARENT_SKIP_EYE_CARE && !reason && displayed_summary_.eye_care_rest_remaining_seconds > 0) {
+                    const int rest_min = (displayed_summary_.eye_care_rest_remaining_seconds + 59) / 60;
+                    std::snprintf(line, sizeof(line), "%s (%d %s)", LABELS[i], rest_min, ptc_ui_text(PTC_UI_T_MIN));
                 } else {
                     std::snprintf(line, sizeof(line), "%s", LABELS[i]);
                 }
@@ -1417,6 +1420,9 @@ public:
                 std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_SELF_BUFFER_CLAIMED_ADDED_D_MIN),
                     displayed_summary_.daily_buffer_minutes);
                 draw_localized(renderer, line, false, cx + 14, cy + 225, 14,
+                    renderer->a(SUCCESS_COLOR), 320);
+            } else if (last_request_kind_ == OverlayRequestKind::SkipEyeCare) {
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM_BODY), false, cx + 14, cy + 225, 14,
                     renderer->a(SUCCESS_COLOR), 320);
             }
             const char *result = !displayed_summary_.access_recovery_required ?

@@ -88,7 +88,9 @@ void draw_numpad_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *mo
                                               weekly_no_change_reason, sizeof(weekly_no_change_reason));
             }
         } else if (model->numpad_purpose == PTC_UI_NUMPAD_HOLIDAY_MINUTES ||
-                   model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES) {
+                   model->numpad_purpose == PTC_UI_NUMPAD_MAKEUP_MINUTES ||
+                   model->numpad_purpose == PTC_UI_NUMPAD_EYE_CARE_PLAY ||
+                   model->numpad_purpose == PTC_UI_NUMPAD_EYE_CARE_REST) {
             snprintf(current, sizeof(current), ptc_ui_text(PTC_UI_T_CURRENT_U_MIN_RANGE_U_TO_U_2),
                      (unsigned int)model->numpad_current, (unsigned int)model->numpad_minimum,
                      (unsigned int)model->numpad_maximum);

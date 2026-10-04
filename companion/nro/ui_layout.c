@@ -293,6 +293,63 @@ PtcUiRect ptc_ui_bedtime_master_switch_rect(void)
     return (PtcUiRect){54, 168, 1172, 54};
 }
 
+PtcUiRect ptc_ui_eye_care_page_master_rect(void)
+{
+    return (PtcUiRect){54, 168, 1172, 58};
+}
+
+PtcUiRect ptc_ui_eye_care_play_preset_rect(int index)
+{
+    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){320 + index * 70, 258, 62, 34};
+}
+
+PtcUiRect ptc_ui_eye_care_play_dec_rect(void)
+{
+    return (PtcUiRect){790, 258, 36, 34};
+}
+
+PtcUiRect ptc_ui_eye_care_play_value_rect(void)
+{
+    return (PtcUiRect){832, 258, 130, 34};
+}
+
+PtcUiRect ptc_ui_eye_care_play_inc_rect(void)
+{
+    return (PtcUiRect){968, 258, 36, 34};
+}
+
+PtcUiRect ptc_ui_eye_care_rest_preset_rect(int index)
+{
+    if (index < 0 || index >= 4) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){320 + index * 70, 332, 62, 34};
+}
+
+PtcUiRect ptc_ui_eye_care_rest_dec_rect(void)
+{
+    return (PtcUiRect){790, 332, 36, 34};
+}
+
+PtcUiRect ptc_ui_eye_care_rest_value_rect(void)
+{
+    return (PtcUiRect){832, 332, 130, 34};
+}
+
+PtcUiRect ptc_ui_eye_care_rest_inc_rect(void)
+{
+    return (PtcUiRect){968, 332, 36, 34};
+}
+
+PtcUiRect ptc_ui_eye_care_page_save_rect(void)
+{
+    return (PtcUiRect){1026, 646, 200, 44};
+}
+
+PtcUiRect ptc_ui_eye_care_page_skip_rect(void)
+{
+    return (PtcUiRect){54, 646, 240, 44};
+}
+
 PtcUiRect ptc_ui_bedtime_manage_rect(int index)
 {
     if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
@@ -457,7 +514,13 @@ PtcUiRect ptc_ui_home_details_rect(bool parent)
 
 PtcUiRect ptc_ui_home_details_tab_rect(int index)
 {
-    (void)index;
+    /* Dialog center: x = (1280 - 1120) / 2 = 80, y = (720 - 640) / 2 = 40.
+       Tabs are placed in the dialog header next to the title. */
+    if (index == 0) {
+        return (PtcUiRect){380, 56, 230, 36};
+    } else if (index == 1) {
+        return (PtcUiRect){624, 56, 230, 36};
+    }
     return (PtcUiRect){0, 0, 0, 0};
 }
 
@@ -541,6 +604,29 @@ PtcUiRect ptc_ui_holiday_card_rect(int index)
 PtcUiRect ptc_ui_holiday_calendar_rect(void)
 {
     return (PtcUiRect){862, 532, 336, 50};
+}
+
+PtcUiRect ptc_ui_holiday_manage_rect(void)
+{
+    return (PtcUiRect){862, 590, 336, 48};
+}
+
+PtcUiRect ptc_ui_calendar_manager_tab_rect(int index)
+{
+    if (index < 0 || index > 1) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){110 + index * 250, 113, 236, 42};
+}
+
+PtcUiRect ptc_ui_calendar_manager_row_rect(int index)
+{
+    if (index < 0 || index >= 6) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){110, 176 + index * 68, 520, 60};
+}
+
+PtcUiRect ptc_ui_calendar_manager_nav_rect(int index)
+{
+    if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){110 + index * 174, 596, 160, 48};
 }
 
 PtcUiRect ptc_ui_holiday_page_action_rect(int index)

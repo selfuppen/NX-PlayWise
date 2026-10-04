@@ -106,7 +106,8 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%lld,"
         "\"played_minutes_available\":%s,\"played_minutes\":%lld,"
         "\"play_timer_enabled\":%d,\"restricted_now\":%d,"
-        "\"rule_source\":\"%s\",\"calendar_covered\":%s,\"calendar_update_warning\":%s,",
+        "\"rule_source\":\"%s\",\"calendar_covered\":%s,\"calendar_update_warning\":%s,"
+        "\"calendar_option_id\":\"%s\",\"calendar_source\":\"%s\",",
         state->day_index,
         json_bool(state->restriction_enabled_available),
         json_bool(state->restriction_enabled),
@@ -123,7 +124,9 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         state->restricted_now,
         state->rule_source ? state->rule_source : "weekly",
         json_bool(state->calendar_covered),
-        json_bool(state->calendar_update_warning));
+        json_bool(state->calendar_update_warning),
+        state->calendar_option_id ? state->calendar_option_id : "builtin-cn",
+        state->calendar_source ? state->calendar_source : "builtin");
     used = strlen(out);
     (void)snprintf(out + used, out_size > used ? out_size - used : 0, "\"forecast\":[");
     for (i = 0; i < PTC_RESULT_FORECAST_DAYS; ++i) {
@@ -210,6 +213,8 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->rule_source = "weekly";
     state->calendar_covered = false;
     state->calendar_update_warning = false;
+    state->calendar_option_id = "builtin-cn";
+    state->calendar_source = "builtin";
     for (i = 0; i < PTC_RESULT_FORECAST_DAYS; ++i) {
         state->forecast[i].day_index = (uint16_t)(day_index + i);
         state->forecast[i].mode = 1;

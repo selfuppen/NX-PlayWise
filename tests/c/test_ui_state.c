@@ -184,7 +184,7 @@ static void test_parent_status_summary(void)
     model.holiday_enabled = true;
     model.calendar_covered = false;
     ptc_ui_format_holiday_priority_summary(&model, summary, sizeof(summary));
-    check_true(strstr(summary, "不在内置日历范围内") != NULL,
+    check_true(strstr(summary, "不在所选日历范围内") != NULL,
                "holiday priority summary explains uncovered years");
     model.calendar_covered = true;
     snprintf(model.rule_source, sizeof(model.rule_source), "statutory_holiday");
@@ -1533,7 +1533,9 @@ static void test_release_hit_targets(void)
     ptc_ui_open_home_details(&model);
     check_int(model.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "open home details sets overlay");
     check_int(model.home_details_page, 0, "open home details resets page to 0");
-    check_int(ptc_ui_home_details_tab_rect(0).w, 0, "home details tabs are removed");
+    check_true(ptc_ui_home_details_tab_rect(0).w > 0 && ptc_ui_home_details_tab_rect(1).w > 0, "home details tabs are present");
+    check_hit(hit_center(&model, ptc_ui_home_details_tab_rect(0)), PTC_UI_HIT_HOME_DETAILS_TAB, 0, "home details timeline tab");
+    check_hit(hit_center(&model, ptc_ui_home_details_tab_rect(1)), PTC_UI_HIT_HOME_DETAILS_TAB, 1, "home details metrics tab");
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     model.credential_kind = 1;
@@ -2725,7 +2727,10 @@ static void test_today_decision_and_plan_review(void)
     check_int(model.selected_index, 2, "calendar button moves up to makeup rule");
     model.selected_index = 6;
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(model.parent_footer_focused, "calendar button moves down to footer");
+    check_int(model.selected_index, 7, "calendar button moves down to manage calendars");
+    model.selected_index = 7;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused, "manage calendars moves down to footer");
 
     model.parent_page = PTC_UI_PARENT_TODAY;
     model.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
@@ -3372,8 +3377,48 @@ static void test_language_and_short_weekly_limits(void)
         "QR instructions provide touch export button");
 }
 
+static void test_calendar_manager_surface(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.plan_page = PTC_UI_PLAN_PAGE_HOLIDAY;
+    check_hit(hit_center(&model, ptc_ui_holiday_manage_rect()),
+        PTC_UI_HIT_CALENDAR_MANAGER, 0, "calendar manager is touchable on holiday page");
+    model.overlay = PTC_UI_OVERLAY_CALENDAR_MANAGER;
+    model.calendar_manager_count = 9;
+    model.calendar_manager_page = 1;
+    model.calendar_manager_selected = 7;
+    model.status_loaded = true;
+    model.status_updated_at = 1000;
+    check_true(ptc_ui_status_is_fresh(&model, 1120) &&
+        !ptc_ui_status_is_fresh(&model, 1121),
+        "calendar confirmation requires a fresh status at the 120-second boundary");
+    for (int i = 0; i < 2; ++i)
+        check_hit(hit_center(&model, ptc_ui_calendar_manager_tab_rect(i)),
+            PTC_UI_HIT_CALENDAR_MANAGER_TAB, i, "calendar tab touch target");
+    for (int i = 0; i < 6; ++i)
+        check_hit(hit_center(&model, ptc_ui_calendar_manager_row_rect(i)),
+            PTC_UI_HIT_CALENDAR_MANAGER_ROW, i, "calendar row touch target");
+    for (int i = 0; i < 3; ++i)
+        check_hit(hit_center(&model, ptc_ui_calendar_manager_nav_rect(i)),
+            PTC_UI_HIT_CALENDAR_MANAGER_NAV, i, "calendar page/action touch target");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER), "地区日历管理") == 0,
+        "simplified region calendar label");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER), "地區日曆管理") == 0,
+        "traditional region calendar label");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_ENGLISH);
+    check_true(strcmp(ptc_ui_text(PTC_UI_T_REGION_CALENDAR_MANAGER), "Region calendars") == 0,
+        "english region calendar label");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+}
+
 int main(void)
 {
+    test_calendar_manager_surface();
     test_language_and_short_weekly_limits();
     test_quota_recheck_decisions();
     test_global_time_projection_and_direct_inputs();

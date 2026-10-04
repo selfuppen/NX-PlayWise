@@ -233,6 +233,8 @@ When daily limits or bedtime activate, Nintendo PCTL dialogs block games, Homebr
 
 Built-in holiday calendars, versioning, release dates, and sources are detailed in [Holiday Calendar Data](节假日日历.md). Uncovered years fall back to weekly schedules; `calendar_update_warning:true` triggers 30 days prior to calendar expiration.
 
+Parents can place a UTF-8 [custom region calendar](自制节假日日历格式.md) in SD `/switch/playwise/calendar-import/`. `calendars/library/<region>-<year>-<sha256>.json` stores content-addressed imports, `calendars/catalog.json` records the latest file per region and year, and `calendars/active.json` pins the applied versions. Missing `active.json` selects the separate built-in China 2026 option `builtin-cn`. Import request ID 45, `import_holiday_calendar`, takes `file_name` and lowercase SHA-256; activation request ID 46, `activate_holiday_calendar`, takes `option_id` and the expected `catalog_sha256`. Error 505 is `calendar_invalid`; 506 is `calendar_catalog_changed`. Import is allowed under `disable.flag` and never writes PCTL; activation is blocked while disabled and atomically updates the active manifest, PCTL, state, activity, and result. A missing selected year falls back to weekly rules. Damaged active files stop new control writes rather than silently switching regions. State includes `calendar_option_id`, `calendar_source` (`builtin|user_import`), daily `calendar_covered`, and update warnings. User imports are always labeled as such and are not claimed as officially verified.
+
 ### `state.json`
 
 Key fields:
