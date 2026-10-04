@@ -373,6 +373,7 @@ typedef struct {
     uint64_t eye_care_break_id;
     uint64_t pending_eye_care_break_id;
     bool eye_care_unlimited_capped;
+    bool daily_restriction_active;
     PtcBedtimePolicy bedtime_policy;
     PtcBedtimePolicy draft_bedtime_policy;
     bool bedtime_active;

@@ -386,10 +386,21 @@ static void draw_home_timeline_view(uint32_t *pixels, uint32_t stride,
     bool fresh = ptc_ui_status_is_fresh(model, raw_now);
     int played = fresh && model->played_minutes_available ? model->played_minutes : 0;
     bool bedtime_enforcing = model->bedtime_active && !model->bedtime_skipped;
+    bool eye_resting = model->eye_care_policy.enabled &&
+        strcmp(model->eye_care_phase, "resting") == 0;
 
     ptc_ui_build_today_decision(model, PTC_UI_PLAN_SAVED, raw_now, &decision);
     ptc_ui_format_home_total_value(model, total, sizeof(total));
     ptc_ui_format_home_remaining(model, raw_now, remaining, sizeof(remaining));
+    if (eye_resting) {
+        int64_t seconds = (int64_t)model->eye_care_rest_remaining_seconds -
+            ptc_ui_status_age_seconds(model, raw_now);
+        if (fresh && seconds > 0 && model->eye_care_break_id != 0)
+            snprintf(remaining, sizeof(remaining), "%lld:%02lld",
+                     (long long)(seconds / 60), (long long)(seconds % 60));
+        else snprintf(remaining, sizeof(remaining), "%s",
+                      ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH));
+    }
 
     if (fresh) {
         snprintf(effective, sizeof(effective), "%s  |  %s",
@@ -410,14 +421,19 @@ static void draw_home_timeline_view(uint32_t *pixels, uint32_t stride,
     draw_rect_outline(pixels, stride, hero, 12, 1, UI_ACCENT);
 
     draw_text(pixels, stride, hero.x + 20, hero.y + 20,
-              ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY), 13, UI_MUTED);
-    draw_text(pixels, stride, hero.x + 20, hero.y + 62, remaining, 30, fresh ? UI_ACCENT : UI_MUTED);
+               eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) :
+               ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY), 13, UI_MUTED);
+    char fitted_remaining[64];
+    fit_text(fitted_remaining, sizeof(fitted_remaining), remaining, 30, 170);
+    draw_text(pixels, stride, hero.x + 20, hero.y + 62, fitted_remaining, 30,
+              fresh ? UI_ACCENT : UI_MUTED);
 
     draw_text(pixels, stride, hero.x + 210, hero.y + 20, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE), 13, UI_MUTED);
     draw_text(pixels, stride, hero.x + 210, hero.y + 56, total, 19, UI_INK);
 
     draw_text(pixels, stride, hero.x + 360, hero.y + 20, ptc_ui_text(PTC_UI_T_USED_QUOTA_EST), 13, UI_MUTED);
-    if (fresh && model->played_minutes_available) snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_D_MIN_2), played);
+    if (fresh && model->played_minutes_available && !eye_resting)
+        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_D_MIN_2), played);
     else snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
     draw_text(pixels, stride, hero.x + 360, hero.y + 56, line, 19, UI_INK);
 
@@ -443,16 +459,20 @@ static void draw_home_timeline_view(uint32_t *pixels, uint32_t stride,
 
     /* 右侧主生效规则徽章卡片 */
     UiRect active_badge = {hero.x + 710, hero.y + 12, hero.width - 724, 58};
-    uint32_t badge_bg = !fresh ? UI_WARNING_SOFT : (bedtime_enforcing ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
-    uint32_t badge_border = !fresh ? UI_WARNING : (bedtime_enforcing ? UI_DANGER : UI_SUCCESS);
+    uint32_t badge_bg = !fresh ? UI_WARNING_SOFT :
+        (bedtime_enforcing || eye_resting ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
+    uint32_t badge_border = !fresh ? UI_WARNING :
+        (bedtime_enforcing || eye_resting ? UI_DANGER : UI_SUCCESS);
     fill_round_rect(pixels, stride, active_badge, 8, badge_bg);
     draw_rect_outline(pixels, stride, active_badge, 8, 1, badge_border);
     const char *badge_title = !fresh ? ptc_ui_text(PTC_UI_T_RULES_PENDING_CONFIRMATION) :
-        (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_UNDER_BEDTIME_LIMIT) : ptc_ui_text(PTC_UI_T_RULES_ADOPTED_TODAY));
+        (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_UNDER_BEDTIME_LIMIT) :
+         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) : ptc_ui_text(PTC_UI_T_RULES_ADOPTED_TODAY)));
     draw_text(pixels, stride, active_badge.x + 12, active_badge.y + 18, badge_title, 12, badge_border);
     draw_text(pixels, stride, active_badge.x + 12, active_badge.y + 36, effective, 13, UI_INK);
     const char *final_desc = bedtime_enforcing
-        ? ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_HAS_BEEN_DETERMINED_CURRENT) : decision.final_reason;
+        ? ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_HAS_BEEN_DETERMINED_CURRENT) :
+        (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_GUIDE) : decision.final_reason);
     draw_wrapped_text(pixels, stride, active_badge.x + 12, active_badge.y + 50, final_desc,
                       11, active_badge.width - 24, 14, 1, UI_MUTED);
 
@@ -841,7 +861,12 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
 {
     UiRect dialog;
     char age[64];
-    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 640);
+    PtcUiModel shell_model = *model;
+    shell_model.overlay_title[0] = '\0';
+    draw_dialog_shell(pixels, stride, &shell_model, &dialog, 1120, 640);
+    char fitted_title[128];
+    fit_text(fitted_title, sizeof(fitted_title), model->overlay_title, 21, 250);
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 54, fitted_title, 21, UI_INK);
     format_status_age(model, age, sizeof(age));
     draw_text_center(pixels, stride, (UiRect){dialog.x + 880, dialog.y + 26, 200, 30}, age, 15, status_age_color(model));
 

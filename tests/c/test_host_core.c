@@ -2495,6 +2495,14 @@ static void test_eye_care_cycle_and_stale_skip(void)
     (void)ptc_sysmodule_enforce_tick(&sysmodule);
     check_true(pctl.status.blocked_today && pctl.last_target.mode == PTC_PCTL_TARGET_BLOCKED,
         "eye care blocks after configured host usage");
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+        "app/inbox/pending/eye-rest-status.json",
+        "{\"version\":1,\"request_id\":\"eye-rest-status\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
+        "queue eye care rest status");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "eye care rest status is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/eye-rest-status.json", result, sizeof(result)) &&
+        strstr(result, "\"daily_allowance\":false") && strstr(result, "\"eye_care\":true"),
+        "eye care break is not reported as exhausted daily allowance");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", result, sizeof(result)) &&
         strstr(result, "\"eye_care_resting\":true"), "eye care break persists across restart");
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &clock.provider);

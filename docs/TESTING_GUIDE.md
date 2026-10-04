@@ -8,6 +8,8 @@
 
 ## Eye care candidate checks
 
+During a break, verify `daily_allowance:false` and `eye_care:true`, no false quota exhaustion in today's status or `X Details`, the break and cycle in the left preview, and the cycle in the persistent header. The temporary PCTL block must not disable skipping the current break. The Time Plan eye care switch should appear as a capsule slider with the same controller and touch action.
+
 Host regression should cover default-off legacy rules, the 1–240/1–60 bounds, 40/10 cycles, unchanged usage during sleep, breaks spanning sleep and restart, day rollover, daily and bedtime priority, immediate policy changes, the 1440-minute unlimited mapping, current and stale `break_id` skips, and PCTL write, readback, and recovery failures. Run `python tools/test.py` and `python tools/package_remote.py`; the latter builds and validates `build/eden-test/pctc-eden.nro` by default.
 
 > [!NOTE]

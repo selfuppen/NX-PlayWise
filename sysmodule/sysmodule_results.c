@@ -215,7 +215,8 @@ static void fill_bedtime_result_state(PtcSysmodule *sysmodule, PtcResultState *s
         strcmp(fingerprint, rules->bedtime.confirmed_environment) == 0;
     state->bedtime_overlay_verified = bedtime_overlay_verified(sysmodule);
     state->bedtime_recovery_phase = runtime_state->bedtime_enforced ? "restricted" : "idle";
-    state->daily_restriction_active = (!evaluation.active || state->bedtime_skipped) &&
+    state->daily_restriction_active = !runtime_state->eye_care_resting &&
+        (!evaluation.active || state->bedtime_skipped) &&
         pctl_status->limited_today &&
         pctl_status->remaining_available && pctl_status->remaining_minutes == 0u;
     if (!rules->bedtime.enabled) return;

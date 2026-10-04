@@ -2095,8 +2095,40 @@ static void test_home_redesign(void)
         snprintf(state.eye_care_phase, sizeof(state.eye_care_phase), "resting");
         state.eye_care_break_id = 99;
         state.eye_care_rest_remaining_seconds = 90;
+        state.blocked_today = 1;
+        state.restricted_now = 1;
+        state.remaining_available = true;
+        state.remaining_minutes = 0;
+        state.daily_restriction_active = false;
         check_true(ptc_ui_today_action_unavailable_reason(&state, 6, 1001) == NULL,
-            "fresh active eye care break can be skipped");
+            "eye care PCTL block does not disable the current break skip");
+        ptc_ui_format_today_mode(&state, text, sizeof(text));
+        check_true(strstr(text, "护眼") != NULL && strstr(text, "禁止游玩") == NULL,
+            "today mode distinguishes an eye care break from a daily block");
+        ptc_ui_format_parent_status_summary(&state, 1001, text, sizeof(text));
+        check_true(strstr(text, "休息") != NULL && strstr(text, "额度") == NULL,
+            "today detail summary shows eye care countdown instead of exhausted quota");
+        ptc_ui_format_home_remaining(&state, 1001, text, sizeof(text));
+        check_true(strstr(text, "护眼") != NULL && strstr(text, "禁止游玩") == NULL,
+            "left preview names the eye care break");
+        {
+            PtcUiTimeProjection header;
+            PtcUiNoticeProjection notice;
+            state.view = PTC_UI_PARENT;
+            ptc_ui_project_time_status(&state, 1001, &header);
+            check_true(strstr(header.remaining_text, "护眼") != NULL &&
+                !header.progress_available,
+                "persistent header does not show the temporary PCTL zero as daily quota");
+            ptc_ui_project_notice(&state, &notice);
+            check_true(strstr(notice.summary, "护眼") != NULL &&
+                strstr(notice.details, "独立周期") != NULL,
+                "X details explain the eye care restriction instead of exhausted quota");
+        }
+        state.daily_restriction_active = true;
+        reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1001);
+        check_true(reason && strstr(reason, "每日额度") != NULL,
+            "real daily restriction still prevents eye care skip");
+        state.daily_restriction_active = false;
         ptc_ui_format_eye_care_cycle(&state, 1001, text, sizeof(text));
         check_true(strstr(text, "1:29") != NULL,
             "resting preview counts down elapsed seconds");

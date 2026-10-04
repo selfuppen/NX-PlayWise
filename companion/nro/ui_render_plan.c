@@ -1065,14 +1065,22 @@ static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiMod
                              12, UI_WARNING);
         }
         int phase_x = switch_dirty ? (draft_pill.x + draft_pill.width + 12) : (saved_pill.x + saved_pill.width + 12);
-        UiRect phase_pill = {phase_x, master_card.y + 12, master_card.width - (phase_x - master_card.x) - 18, 24};
+        UiRect phase_pill = {phase_x, master_card.y + 12, master_card.width - (phase_x - master_card.x) - 200, 24};
         char phase_text[128];
         ptc_ui_format_eye_care_cycle(model, raw_now, phase_text, sizeof(phase_text));
         uint32_t phase_bg = resting ? UI_DANGER_SOFT : (playing ? UI_SUCCESS_SOFT : (paused ? UI_WARNING_SOFT : UI_RAISED));
         uint32_t phase_fg = resting ? UI_DANGER : (playing ? UI_SUCCESS : (paused ? UI_WARNING : UI_MUTED));
         fill_round_rect(pixels, stride, phase_pill, 6, phase_bg);
-        draw_text_center(pixels, stride, phase_pill, phase_text, 12, phase_fg);
+        char fitted_phase[128];
+        fit_text(fitted_phase, sizeof(fitted_phase), phase_text, 12, phase_pill.width - 12);
+        draw_text_center(pixels, stride, phase_pill, fitted_phase, 12, phase_fg);
     }
+    UiRect toggle_rect = {master_card.x + master_card.width - 76,
+                          master_card.y + (master_card.height - 30) / 2, 60, 30};
+    draw_toggle_switch(pixels, stride, toggle_rect, draft->enabled, false,
+                       model->disable_flag_present, NULL, NULL);
+    draw_text(pixels, stride, toggle_rect.x - 92, master_card.y + 34,
+              ptc_ui_text(PTC_UI_T_A_TOGGLE), 13, UI_ACCENT);
 
     /* 2. 时长配置卡片 (Time Configuration Card) */
     UiRect time_card = {54, 238, 1172, 160};

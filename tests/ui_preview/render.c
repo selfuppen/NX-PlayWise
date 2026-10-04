@@ -944,12 +944,30 @@ static int render_eye_care_previews(const char *directory, const PtcUiModel *bas
         model.eye_care_policy.rest_minutes = 10;
         model.eye_care_used_minutes = 12;
         snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "playing");
+        model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_EYE_CARE;
+        model.draft_eye_care_policy = model.eye_care_policy;
+        model.eye_care_field_focus = 0;
+        failed |= save_preview(directory, "plan", "eye-care-switch-on", &model, dark);
+        {
+            PtcUiModel off = model;
+            off.eye_care_policy.enabled = false;
+            off.draft_eye_care_policy.enabled = false;
+            snprintf(off.eye_care_phase, sizeof(off.eye_care_phase), "off");
+            failed |= save_preview(directory, "plan", "eye-care-switch-off", &off, dark);
+        }
+        model.parent_page = PTC_UI_PARENT_TODAY;
         if (!ptc_ui_open_home_details(&model)) return 1;
         failed |= save_preview(directory, "parent", "parent-details-eye-care-playing", &model, dark);
         ptc_ui_cancel_overlay(&model);
         snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "resting");
         model.eye_care_break_id = 123;
         model.eye_care_rest_remaining_seconds = 94;
+        model.blocked_today = 1;
+        model.restricted_now = 1;
+        model.remaining_available = true;
+        model.remaining_minutes = 0;
+        model.daily_restriction_active = false;
         failed |= save_preview(directory, "parent", "eye-care-resting", &model, dark);
         if (!ptc_ui_open_home_details(&model)) return 1;
         failed |= save_preview(directory, "parent", "parent-details-eye-care-resting", &model, dark);

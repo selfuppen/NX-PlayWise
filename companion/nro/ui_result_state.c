@@ -388,6 +388,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->eye_care_rest_remaining_seconds = summary.eye_care_rest_remaining_seconds;
         model->eye_care_break_id = summary.eye_care_break_id;
         model->eye_care_unlimited_capped = summary.eye_care_unlimited_capped;
+        model->daily_restriction_active = summary.daily_restriction_active;
         snprintf(model->eye_care_phase, sizeof(model->eye_care_phase), "%s", summary.eye_care_phase);
         model->calendar_covered = summary.calendar_covered;
         model->calendar_update_warning = summary.calendar_update_warning;

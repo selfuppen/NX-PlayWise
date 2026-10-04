@@ -122,10 +122,12 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     PtcUiTimeProjection status;
     UiRect box = to_uirect(ptc_ui_time_status_bar_rect());
     char fitted_fresh[64];
+    bool show_eye_cycle = model && model->eye_care_policy.enabled;
     uint32_t color;
     UiActiveRuleBadge badge;
 
     ptc_ui_project_time_status(model, ptc_ui_render_now(), &status);
+    if (show_eye_cycle) box.height = 78;
     color = time_projection_color(status.state);
     badge = get_active_rule_badge(model);
     if (!ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
@@ -202,7 +204,14 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     }
 
     /* --- 第三层：全宽精致圆角额度进度槽 (置于卡片下沿基线) --- */
-    UiRect track = {box.x + 14, box.y + 53, box.width - 28, 5};
+    if (show_eye_cycle) {
+        char cycle[128], fitted_cycle[128];
+        ptc_ui_format_eye_care_cycle(model, ptc_ui_render_now(), cycle, sizeof(cycle));
+        fit_text(fitted_cycle, sizeof(fitted_cycle), cycle, 11, box.width - 28);
+        draw_text(pixels, stride, box.x + 14, box.y + 61, fitted_cycle, 11,
+                  strcmp(model->eye_care_phase, "resting") == 0 ? UI_DANGER : UI_ACCENT);
+    }
+    UiRect track = {box.x + 14, box.y + (show_eye_cycle ? 69 : 53), box.width - 28, 5};
     fill_round_rect(pixels, stride, track, 2, UI_RAISED);
     if (status.progress_available && status.progress_per_mille > 0) {
         int width = track.width * status.progress_per_mille / 1000;

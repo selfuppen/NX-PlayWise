@@ -72,16 +72,19 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     draw_card_shadow(pixels, stride, box, 16);
     fill_round_rect(pixels, stride, box, 16, UI_RGB(UI_BLENDED(hero)));
     bool bedtime_enforcing = model->bedtime_active && !model->bedtime_skipped;
+    bool eye_resting = model->eye_care_policy.enabled &&
+        strcmp(model->eye_care_phase, "resting") == 0;
     /* 剩余告急或就寝生效时描边随呼吸相位脉冲。 */
     if ((model->remaining_available && model->unrestricted_today != 1 &&
          model->remaining_minutes >= 0 && model->remaining_minutes <= 10) ||
-        bedtime_enforcing) {
+         bedtime_enforcing || eye_resting) {
         int phase = get_breathing_phase();
         draw_rect_outline(pixels, stride, box, 16, 2,
                           UI_RGB(ui_mix_rgb(UI_BLENDED(danger), 0xFF9A8A, phase * 4)));
     }
     draw_text(pixels, stride, x, box.y + 42,
-              bedtime_enforcing ? ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY_BEDTIME_ACTIVE) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY),
+               bedtime_enforcing ? ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY_BEDTIME_ACTIVE) :
+               (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY)),
               22, UI_RGB(UI_BLENDED(hero_secondary)));
     /* 环形额度表：弧长由缓动后的剩余分钟驱动，颜色沿用今日额度健康色；
      * 数据不可用时只画弱化轨道环。 */
@@ -89,11 +92,11 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         float fraction = 0.0f;
         uint32_t ring_fill = UI_SUCCESS;
         bool has_fraction = false;
-        if (bedtime_enforcing) {
+        if (bedtime_enforcing || eye_resting) {
             fraction = 0.0f;
             ring_fill = UI_DANGER;
             has_fraction = true;
-        } else if (model->unrestricted_today == 1) {
+        } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
             fraction = 1.0f;
             ring_fill = UI_SUCCESS;
             has_fraction = true;
@@ -109,7 +112,8 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
             fraction = (float)shown / 120.0f;
             has_fraction = true;
         }
-        if (has_fraction && model->unrestricted_today != 1 && !bedtime_enforcing) {
+        if (has_fraction && model->unrestricted_today != 1 &&
+            !model->eye_care_unlimited_capped && !bedtime_enforcing && !eye_resting) {
             if (model->remaining_available && model->remaining_minutes <= 10) ring_fill = UI_DANGER;
             else if (model->remaining_available && model->remaining_minutes <= 30) ring_fill = UI_WARNING;
             else ring_fill = UI_SUCCESS;
@@ -138,7 +142,16 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
             draw_text(pixels, stride, dur_x, box.y + 130, duration_str, 20, UI_RGB(UI_BLENDED(hero_secondary)));
         }
     } else {
-        draw_wrapped_text(pixels, stride, x, box.y + 124, remaining, 40, box.width - 56, 48, 2, UI_RGB(UI_BLENDED(on_hero)));
+        if (eye_resting) {
+            char cycle[128], fitted_cycle[128];
+            ptc_ui_format_eye_care_cycle(model, ptc_ui_render_now(), cycle, sizeof(cycle));
+            fit_text(fitted_cycle, sizeof(fitted_cycle), cycle, 30, box.width - 56);
+            draw_text_bold(pixels, stride, x, box.y + 125, fitted_cycle, 30,
+                           UI_RGB(UI_BLENDED(on_hero)));
+        } else {
+            draw_wrapped_text(pixels, stride, x, box.y + 124, remaining, 40,
+                              box.width - 56, 48, 2, UI_RGB(UI_BLENDED(on_hero)));
+        }
     }
     /* 今日额度胶囊进度槽 (Time Progress Gauge) */
     UiRect gauge_bg = {box.x + 28, box.y + 150, box.width - 56, 8};
@@ -147,7 +160,7 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
 
     uint32_t health_color = UI_SUCCESS;
     int remaining_mins = model->remaining_available ? model->remaining_minutes : -1;
-    if (bedtime_enforcing) {
+    if (bedtime_enforcing || eye_resting) {
         health_color = UI_DANGER;
     } else if (remaining_mins >= 0) {
         if (remaining_mins <= 10) health_color = UI_DANGER;
@@ -155,9 +168,9 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         else health_color = UI_SUCCESS;
     }
 
-    if (bedtime_enforcing) {
+    if (bedtime_enforcing || eye_resting) {
         /* 就寝生效时进度槽为空并呈红框 */
-    } else if (model->unrestricted_today == 1) {
+    } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
         fill_round_rect(pixels, stride, gauge_bg, 4, UI_SUCCESS);
     } else if (model->remaining_available && model->played_minutes_available &&
                (model->remaining_minutes + model->played_minutes > 0)) {
@@ -184,16 +197,26 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_TODAY_S_S), today,
             model->status_loaded ? ui_rule_source_label(model->rule_source) : (ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM)));
     }
-    draw_text(pixels, stride, x, box.y + 176, line, 18, UI_RGB(UI_BLENDED(hero_secondary)));
+    char fitted_line[192];
+    fit_text(fitted_line, sizeof(fitted_line), line, 18, box.width - 56);
+    draw_text(pixels, stride, x, box.y + 176, fitted_line, 18,
+              UI_RGB(UI_BLENDED(hero_secondary)));
     /* Supporting information sits on a separate surface, below the hero. */
     UiRect lower = {box.x + 12, box.y + 200, box.width - 24, box.height - 212};
     fill_round_rect(pixels, stride, lower, 16, UI_SURFACE);
     ptc_ui_format_home_total(model, line, sizeof(line));
     draw_text(pixels, stride, x, box.y + 236, line, 22, UI_INK);
-    if (model->played_minutes_available && model->played_minutes >= 0)
+    if (!eye_resting && model->played_minutes_available && model->played_minutes >= 0)
         snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_USED_QUOTA_ESTIMATE_D_MIN), model->played_minutes);
     else snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_USED_QUOTA_ESTIMATE_UNAVAILABLE));
     draw_text(pixels, stride, x, box.y + 272, line, 18, UI_MUTED);
+    if (model->eye_care_policy.enabled) {
+        char cycle[128], fitted_cycle[128];
+        ptc_ui_format_eye_care_cycle(model, ptc_ui_render_now(), cycle, sizeof(cycle));
+        fit_text(fitted_cycle, sizeof(fitted_cycle), cycle, 17, box.width - 56);
+        draw_text(pixels, stride, x, box.y + 312, fitted_cycle, 17,
+                  eye_resting ? UI_DANGER : UI_ACCENT);
+    }
     format_status_age(model, age, sizeof(age));
     draw_text(pixels, stride, x, box.y + box.height - 26, age, 16, UI_MUTED);
 }

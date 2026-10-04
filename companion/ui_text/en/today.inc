@@ -387,6 +387,7 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_EYE_CARE_LOGIC_DESC_1, "Eye care operates independent
 PTC_UI_TEXT_VALUE(PTC_UI_T_EYE_CARE_LOGIC_DESC_2, "Playing and HOME screen accumulate playtime. Sleep counts toward rest.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_EYE_CARE_LOGIC_DESC_3, "When unlimited, system temporarily sets 1440m limit for HOS timer.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_EYE_CARE_LOGIC_DESC_4, "Confirm Suspend Software is enabled in Parental Controls to block play.")
+PTC_UI_TEXT_VALUE(PTC_UI_T_EYE_CARE_NO_QUOTA, "Eye care breaks do not use daily quota")
 PTC_UI_TEXT_VALUE(PTC_UI_T_HOME_DETAILS_TAB_TIMELINE, "[L] Daily Timeline")
 PTC_UI_TEXT_VALUE(PTC_UI_T_HOME_DETAILS_TAB_METRICS, "[R] Metrics & Pipeline")
 PTC_UI_TEXT_VALUE(PTC_UI_T_TIMELINE_TITLE, "24-Hour Schedule & Control Timeline")
