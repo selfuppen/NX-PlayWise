@@ -1514,11 +1514,13 @@ static void test_release_hit_targets(void)
     ptc_ui_open_setup_pctl_help(&model);
     check_int(model.overlay, PTC_UI_OVERLAY_NONE, "other wizard steps cannot open preparation help");
     check_hit(hit_center(&model, ptc_ui_setup_pin_rect()), PTC_UI_HIT_SETUP_PIN, 0, "setup PIN guide");
-    check_hit(hit_center(&model, ptc_ui_setup_more_rect()), PTC_UI_HIT_SETUP_MORE, 0, "more settings target");
-    check_hit(hit_center(&model, ptc_ui_setup_theme_rect(2)), PTC_UI_HIT_NONE, 0, "collapsed theme is inert");
-    model.setup_more = true;
     check_hit(hit_center(&model, ptc_ui_setup_theme_rect(2)), PTC_UI_HIT_SETUP_THEME_OPTION, 2,
-              "expanded theme option matches touch target");
+              "theme option matches touch target");
+    check_hit(hit_center(&model, ptc_ui_setup_shortcut_rect()), PTC_UI_HIT_SETUP_SHORTCUT, 0, "setup shortcut target");
+    check_hit(hit_center(&model, ptc_ui_setup_eye_care_rect()), PTC_UI_HIT_SETUP_EYE_CARE, 0, "eye care toggle target");
+    check_hit(hit_center(&model, ptc_ui_setup_bedtime_rect()), PTC_UI_HIT_SETUP_BEDTIME, 0, "bedtime toggle target");
+    check_true(!rects_overlap(ptc_ui_setup_pin_rect(), ptc_ui_setup_shortcut_rect()), "columns do not overlap");
+    check_true(!rects_overlap(ptc_ui_setup_eye_care_rect(), ptc_ui_setup_bedtime_rect()), "switches do not overlap");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
     check_true(!ptc_ui_setup_takeover_complete(&model), "pending takeover still requires confirmation");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "restored");

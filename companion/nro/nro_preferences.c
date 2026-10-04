@@ -131,6 +131,8 @@ void load_ui_preferences(UiState *ui)
     ui->model.setup_legacy_completed_candidate = false;
     ui->model.setup_shortcut_index = PTC_UI_SHORTCUT_PRESET_LR;
     ui->model.setup_theme_index = PTC_UI_THEME_SYSTEM;
+    ui->model.setup_eye_care_enabled = false;
+    ui->model.setup_bedtime_enabled = false;
     ui->theme_preference = PTC_UI_THEME_SYSTEM;
     ui->language_preference = PTC_UI_LANGUAGE_SYSTEM;
     ui->model.language_preference = PTC_UI_LANGUAGE_SYSTEM;

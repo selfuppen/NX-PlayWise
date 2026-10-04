@@ -438,6 +438,8 @@ typedef struct {
     int setup_issue_codes[PTC_UI_SETUP_ISSUE_COUNT];
     int setup_shortcut_index;
     int setup_theme_index;
+    bool setup_eye_care_enabled;
+    bool setup_bedtime_enabled;
     PtcUiLanguagePreference language_preference;
     bool parent_export_succeeded;
     uint64_t custom_shortcut_mask;

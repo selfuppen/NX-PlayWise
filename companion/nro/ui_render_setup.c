@@ -25,36 +25,54 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         fill_round_rect(pixels, stride, (UiRect){94 + i * 372, 165, 340, 4}, 2, i < step ? UI_ACCENT : UI_RAISED);
     }
     if (step == PTC_UI_SETUP_PREPARE) {
-        draw_text(pixels, stride, 94, 200, ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_BILINGUAL), 22, UI_INK);
-        draw_text(pixels, stride, 94, 224, ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HINT_ZH), 16, UI_MUTED);
-        draw_text(pixels, stride, 94, 246, ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HINT_EN), 16, UI_MUTED);
+        /* Card 1: Interface Language */
+        UiRect lang_card = {74, 185, 1132, 106};
+        fill_round_rect(pixels, stride, lang_card, 12, UI_RAISED);
+        draw_rect_outline(pixels, stride, lang_card, 12, 1, UI_BORDER);
+        draw_text(pixels, stride, 94, 203, ptc_ui_text(PTC_UI_T_SETUP_CARD_LANG), 17, UI_INK);
+        draw_text(pixels, stride, 200, 204, ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HINT_ZH), 13, UI_MUTED);
+        draw_text(pixels, stride, 480, 204, ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HINT_EN), 13, UI_MUTED);
         for (int i = 0; i < 4; ++i) {
             PtcUiRect r = ptc_ui_setup_language_rect(i);
             bool chosen = model->language_preference == (PtcUiLanguagePreference)i;
-            fill_round_rect(pixels, stride, to_uirect(r), 10, chosen ? UI_ACCENT_SOFT : UI_RAISED);
+            fill_round_rect(pixels, stride, to_uirect(r), 10, chosen ? UI_ACCENT_SOFT : UI_SURFACE);
             draw_rect_outline(pixels, stride, to_uirect(r), 10, chosen ? 2 : 1, chosen ? UI_ACCENT : UI_BORDER);
             if (chosen && model->setup_focus == 1) draw_focus_ring(pixels, stride, to_uirect(r), 10);
             draw_text_center(pixels, stride, to_uirect(r), i == 0 ? ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_SYSTEM) :
                 i == 1 ? ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HANS) :
                 i == 2 ? ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HANT) : "English", 16, chosen ? UI_ACCENT : UI_INK);
         }
+
+        /* Card 2: Environment and Console Time */
+        UiRect env_card = {74, 305, 1132, 310};
+        fill_round_rect(pixels, stride, env_card, 12, UI_RAISED);
+        draw_rect_outline(pixels, stride, env_card, 12, 1, UI_BORDER);
+        draw_text(pixels, stride, 94, 323, ptc_ui_text(PTC_UI_T_SETUP_CARD_ENV), 17, UI_INK);
         snprintf(text, sizeof(text), "HOS %s  |  Atmosphère %s  |  %s",
             model->environment_available && model->environment_hos[0] ? model->environment_hos : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED),
             model->environment_available && model->environment_atmosphere_version[0] ? model->environment_atmosphere_version : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED),
             model->environment_available && model->environment_model[0] ?
                 (strcmp(model->environment_model, "mariko-oled") == 0 ? "OLED" : model->environment_model) : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED));
-        draw_text(pixels, stride, 94, 332, text, 18, UI_INK);
-        draw_text(pixels, stride, 94, 358, ptc_ui_text(PTC_UI_T_SETUP_REFERENCE), 18, UI_MUTED);
-        draw_text(pixels, stride, 94, 382, ptc_ui_text(ptc_ui_setup_reference_matches(model)
-            ? PTC_UI_T_SETUP_REFERENCE_MATCH : PTC_UI_T_SETUP_REFERENCE_UNKNOWN), 16, UI_MUTED);
-        draw_text(pixels, stride, 94, 416, ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
-            model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF), 19,
+        draw_text(pixels, stride, 94, 349, text, 17, UI_INK);
+        draw_text(pixels, stride, 94, 372, ptc_ui_text(PTC_UI_T_SETUP_REFERENCE), 14, UI_MUTED);
+        draw_text(pixels, stride, 460, 372, ptc_ui_text(ptc_ui_setup_reference_matches(model)
+            ? PTC_UI_T_SETUP_REFERENCE_MATCH : PTC_UI_T_SETUP_REFERENCE_UNKNOWN), 14, UI_MUTED);
+
+        /* Separator line */
+        fill_round_rect(pixels, stride, (UiRect){94, 396, 1092, 1}, 0, UI_BORDER);
+
+        /* Parental Control row */
+        draw_text(pixels, stride, 94, 417, ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
+            model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF), 18,
             model->restriction_enabled_available && model->restriction_enabled ? UI_SUCCESS : UI_WARNING);
         setup_button(pixels, stride, ptc_ui_setup_pctl_help_rect(), ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_BUTTON),
             model->setup_focus == 2, false);
-        draw_text(pixels, stride, 94, 444, ptc_ui_text(PTC_UI_T_SETUP_PAUSE_OVERLAY), 18, UI_INK);
-        if (!model->restriction_enabled_available || !model->restriction_enabled)
-            draw_text(pixels, stride, 94, 469, ptc_ui_text(PTC_UI_T_SETUP_PCTL_PATH), 16, UI_MUTED);
+        draw_text(pixels, stride, 94, 442, ptc_ui_text(PTC_UI_T_SETUP_PAUSE_OVERLAY), 14, UI_MUTED);
+
+        /* Separator line */
+        fill_round_rect(pixels, stride, (UiRect){94, 468, 1092, 1}, 0, UI_BORDER);
+
+        /* Console Time & Direct Time Guide */
 #ifdef PTC_UI_PREVIEW_WALL_TIME
         uint16_t year, minute = ptc_ui_render_minute_of_day(ptc_ui_render_now());
         uint8_t month, day;
@@ -67,44 +85,121 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         if (local) strftime(text, sizeof(text), "%Y-%m-%d  %H:%M", local);
         else snprintf(text, sizeof(text), "%s", ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED));
 #endif
-        draw_text(pixels, stride, 94, 508, text, 22, UI_ACCENT);
-        setup_button(pixels, stride, ptc_ui_setup_time_help_rect(), ptc_ui_text(PTC_UI_T_SETUP_TIME_HELP),
-            model->setup_focus == 3, false);
-        draw_wrapped_text(pixels, stride, 94, 534, ptc_ui_text(model->setup_time_help
-            ? PTC_UI_T_SETUP_TIME_INSTRUCTIONS : PTC_UI_T_SETUP_TIME_HINT), 16, 1092, 22, 2, UI_MUTED);
+        draw_text(pixels, stride, 94, 506, text, 24, UI_ACCENT);
+        draw_wrapped_text(pixels, stride, 340, 488, ptc_ui_text(PTC_UI_T_SETUP_TIME_HINT), 14, 840, 20, 1, UI_INK);
+        draw_wrapped_text(pixels, stride, 340, 514, ptc_ui_text(PTC_UI_T_SETUP_TIME_INSTRUCTIONS), 13, 840, 20, 2, UI_MUTED);
+        if (model->setup_focus == 3) {
+            draw_focus_ring(pixels, stride, (UiRect){90, 480, 1100, 68}, 8);
+        }
     } else if (step == PTC_UI_SETUP_PARENT) {
-        draw_text(pixels, stride, 94, 218, ptc_ui_text(PTC_UI_T_SETUP_PARENT), 28, UI_INK);
-        draw_wrapped_text(pixels, stride, 94, 248, ptc_ui_text(PTC_UI_T_SETUP_PASSWORD_NOTE), 19, 1092, 24, 1, UI_WARNING);
+        /* Left Card: Security & PIN */
+        UiRect sec_card = {74, 185, 550, 432};
+        fill_round_rect(pixels, stride, sec_card, 12, UI_RAISED);
+        draw_rect_outline(pixels, stride, sec_card, 12, 1, UI_BORDER);
+        draw_text(pixels, stride, 94, 212, ptc_ui_text(PTC_UI_T_SETUP_CARD_SECURITY), 20, UI_INK);
+        draw_wrapped_text(pixels, stride, 94, 240, ptc_ui_text(PTC_UI_T_SETUP_PIN_DESC), 14, 510, 20, 2, UI_MUTED);
+
+        /* Status badge */
+        UiRect pin_badge = {94, 286, 510, 36};
+        bool pin_ok = model->setup_pin_ready;
+        fill_round_rect(pixels, stride, pin_badge, 8, pin_ok ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
+        draw_rect_outline(pixels, stride, pin_badge, 8, 1, pin_ok ? UI_SUCCESS : UI_WARNING);
+        draw_text_center(pixels, stride, pin_badge, ptc_ui_text(pin_ok ? PTC_UI_T_SETUP_PIN_STATUS_CUSTOM : PTC_UI_T_SETUP_PIN_STATUS_DEFAULT), 15, pin_ok ? UI_SUCCESS : UI_WARNING);
+
+        /* PIN modification button */
         setup_button(pixels, stride, ptc_ui_setup_pin_rect(), ptc_ui_text(PTC_UI_T_X_CLICK_CHANGE_PIN),
-            model->setup_focus == 1, false);
-        draw_text(pixels, stride, 94, 360, ptc_ui_text(PTC_UI_T_USED_FOR_PARENT_ZONE_SEPARATE_FROM_NINTENDO), 16, UI_MUTED);
-        setup_button(pixels, stride, ptc_ui_setup_more_rect(), ptc_ui_text(PTC_UI_T_SETUP_MORE), model->setup_focus == 2, false);
-        if (model->setup_more) {
-            for (int i = 0; i < 3; ++i)
-                setup_button(pixels, stride, ptc_ui_setup_theme_rect(i), ptc_ui_theme_preference_label((PtcUiThemePreference)i),
-                    model->setup_theme_index == i, false);
-            if (model->setup_focus == 3)
-                draw_focus_ring(pixels, stride, to_uirect(ptc_ui_setup_theme_rect(model->setup_theme_index)), 10);
-            setup_button(pixels, stride, ptc_ui_setup_shortcut_rect(), ptc_ui_text(PTC_UI_T_PARENT_AREA_SHORTCUT_KEY_MANAGEMENT),
-                model->setup_focus == 4, false);
-        } else draw_wrapped_text(pixels, stride, 94, 452, ptc_ui_text(PTC_UI_T_SETUP_DEFAULT_PREFS), 20, 1092, 30, 2, UI_MUTED);
+            model->setup_focus == 1, model->setup_focus == 1);
+
+        /* Hint note */
+        draw_wrapped_text(pixels, stride, 94, 400, ptc_ui_text(PTC_UI_T_ENTER_A_NUMBER_FROM_1_TO_64), 14, 510, 22, 2, UI_MUTED);
+        draw_wrapped_text(pixels, stride, 94, 448, ptc_ui_text(PTC_UI_T_ENTER_NEW_1_TO_64_DIGIT_NUMBER), 13, 510, 20, 2, UI_MUTED);
+
+        /* Right Card: Preferences & Feature Toggles */
+        UiRect pref_card = {656, 185, 550, 432};
+        fill_round_rect(pixels, stride, pref_card, 12, UI_RAISED);
+        draw_rect_outline(pixels, stride, pref_card, 12, 1, UI_BORDER);
+        draw_text(pixels, stride, 676, 212, ptc_ui_text(PTC_UI_T_SETUP_CARD_PREFS), 20, UI_INK);
+
+        /* 1. Theme */
+        draw_text(pixels, stride, 676, 238, ptc_ui_text(PTC_UI_T_SETUP_THEME_LABEL), 14, UI_MUTED);
+        for (int i = 0; i < 3; ++i) {
+            bool selected = model->setup_theme_index == i;
+            setup_button(pixels, stride, ptc_ui_setup_theme_rect(i), ptc_ui_theme_preference_label((PtcUiThemePreference)i),
+                selected, false);
+            if (selected && model->setup_focus == 2)
+                draw_focus_ring(pixels, stride, to_uirect(ptc_ui_setup_theme_rect(i)), 10);
+        }
+
+        /* 2. Shortcut */
+        draw_text(pixels, stride, 676, 298, ptc_ui_text(PTC_UI_T_SETUP_SHORTCUT_LABEL), 14, UI_MUTED);
+        snprintf(text, sizeof(text), "%s: %s  [%s]", ptc_ui_text(PTC_UI_T_SETUP_SHORTCUT_LABEL),
+            model->custom_shortcut_label[0] ? model->custom_shortcut_label : "(-)",
+            ptc_ui_text(PTC_UI_T_SETUP_SHORTCUT_CHANGE));
+        setup_button(pixels, stride, ptc_ui_setup_shortcut_rect(), text, model->setup_focus == 3, false);
+
+        /* 3. Eye Care Toggle */
+        draw_text(pixels, stride, 676, 374, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_LABEL), 14, UI_MUTED);
+        bool eye_on = model->setup_eye_care_enabled || model->draft_eye_care_policy.enabled;
+        setup_button(pixels, stride, ptc_ui_setup_eye_care_rect(),
+            ptc_ui_text(eye_on ? PTC_UI_T_SETUP_EYE_CARE_ON : PTC_UI_T_SETUP_EYE_CARE_OFF),
+            model->setup_focus == 4, eye_on);
+        draw_text(pixels, stride, 676, 440, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_HINT), 13, UI_MUTED);
+
+        /* 4. Bedtime Toggle */
+        draw_text(pixels, stride, 676, 468, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_LABEL), 14, UI_MUTED);
+        bool bed_on = model->setup_bedtime_enabled || model->draft_bedtime_policy.enabled;
+        setup_button(pixels, stride, ptc_ui_setup_bedtime_rect(),
+            ptc_ui_text(bed_on ? PTC_UI_T_SETUP_BEDTIME_ON : PTC_UI_T_SETUP_BEDTIME_OFF),
+            model->setup_focus == 5, bed_on);
+        draw_text(pixels, stride, 676, 520, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_HINT), 13, UI_MUTED);
     } else {
-        draw_text(pixels, stride, 94, 215, ptc_ui_text(PTC_UI_T_SETUP_CONFIRM), 28, UI_INK);
+        /* Card 1: Configuration Summary Board */
+        UiRect sum_card = {74, 185, 1132, 230};
+        fill_round_rect(pixels, stride, sum_card, 12, UI_RAISED);
+        draw_rect_outline(pixels, stride, sum_card, 12, 1, UI_BORDER);
+        draw_text(pixels, stride, 94, 212, ptc_ui_text(PTC_UI_T_SETUP_CARD_SUMMARY), 20, UI_INK);
+
+        /* Row 1: Environment & Today's Quota */
+        snprintf(text, sizeof(text), "HOS %s | AMS %s | %s",
+            model->environment_available && model->environment_hos[0] ? model->environment_hos : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED),
+            model->environment_available && model->environment_atmosphere_version[0] ? model->environment_atmosphere_version : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED),
+            model->environment_available && model->environment_model[0] ?
+                (strcmp(model->environment_model, "mariko-oled") == 0 ? "OLED" : model->environment_model) : ptc_ui_text(PTC_UI_T_STATUS_UNCONFIRMED));
+        draw_text(pixels, stride, 94, 246, text, 16, UI_INK);
+        draw_text(pixels, stride, 94, 268, ptc_ui_text(ptc_ui_setup_reference_matches(model)
+            ? PTC_UI_T_SETUP_REFERENCE_MATCH : PTC_UI_T_SETUP_REFERENCE_UNKNOWN), 13, UI_MUTED);
+
         if (model->status_loaded) {
             ptc_ui_format_today_mode(model, text, sizeof(text));
-            draw_text(pixels, stride, 94, 252, text, 21, UI_INK);
+            draw_text(pixels, stride, 676, 246, text, 16, UI_INK);
             ptc_ui_format_quota_remaining(model, text, sizeof(text));
-            draw_text(pixels, stride, 750, 252, text, 21, UI_ACCENT);
-        } else draw_text(pixels, stride, 94, 252, ptc_ui_text(PTC_UI_T_SETUP_STATUS_UNKNOWN), 21, UI_WARNING);
-        draw_text(pixels, stride, 94, 287, ptc_ui_text(ptc_ui_setup_reference_matches(model)
-            ? PTC_UI_T_SETUP_REFERENCE_MATCH : PTC_UI_T_SETUP_REFERENCE_UNKNOWN), 16, UI_MUTED);
-        draw_text(pixels, stride, 94, 313, ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
+            draw_text(pixels, stride, 920, 246, text, 16, UI_ACCENT);
+        } else {
+            draw_text(pixels, stride, 676, 246, ptc_ui_text(PTC_UI_T_SETUP_STATUS_UNKNOWN), 16, UI_WARNING);
+        }
+
+        /* Row 2: Parental Control & PlayWise PIN */
+        draw_text(pixels, stride, 94, 304, ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
             model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF), 16,
             model->restriction_enabled_available && model->restriction_enabled ? UI_SUCCESS : UI_WARNING);
-        draw_text(pixels, stride, 750, 313, ptc_ui_text(model->setup_pin_ready ?
-            PTC_UI_T_SETUP_PIN_READY : PTC_UI_T_SETUP_PIN_UNCONFIRMED), 16, model->setup_pin_ready ? UI_MUTED : UI_WARNING);
-        draw_wrapped_text(pixels, stride, 94, 345, ptc_ui_text(PTC_UI_T_SETUP_BACKUP_NOTE), 18, 1092, 24, 2, UI_INK);
-        draw_wrapped_text(pixels, stride, 94, 394, ptc_ui_text(PTC_UI_T_SETUP_CHECK_NOTICE), 16, 1092, 22, 1, UI_MUTED);
+        draw_text(pixels, stride, 676, 304, ptc_ui_text(model->setup_pin_ready ?
+            PTC_UI_T_SETUP_PIN_READY : PTC_UI_T_SETUP_PIN_UNCONFIRMED), 16, model->setup_pin_ready ? UI_SUCCESS : UI_WARNING);
+
+        /* Row 3: Eye Care & Bedtime toggles status */
+        bool eye_on = model->setup_eye_care_enabled || model->draft_eye_care_policy.enabled;
+        draw_text(pixels, stride, 94, 348, ptc_ui_text(eye_on ? PTC_UI_T_SETUP_EYE_CARE_ON : PTC_UI_T_SETUP_EYE_CARE_SUMMARY_OFF),
+            16, eye_on ? UI_SUCCESS : UI_MUTED);
+        bool bed_on = model->setup_bedtime_enabled || model->draft_bedtime_policy.enabled;
+        draw_text(pixels, stride, 676, 348, ptc_ui_text(bed_on ? PTC_UI_T_SETUP_BEDTIME_ON : PTC_UI_T_SETUP_BEDTIME_SUMMARY_OFF),
+            16, bed_on ? UI_SUCCESS : UI_MUTED);
+
+        /* Card 2: Protection and Safety Notes */
+        UiRect note_card = {74, 428, 1132, 185};
+        fill_round_rect(pixels, stride, note_card, 12, UI_RAISED);
+        draw_rect_outline(pixels, stride, note_card, 12, 1, UI_BORDER);
+        draw_text(pixels, stride, 94, 452, ptc_ui_text(PTC_UI_T_SETUP_CARD_TAKEOVER), 18, UI_INK);
+        draw_wrapped_text(pixels, stride, 94, 478, ptc_ui_text(PTC_UI_T_SETUP_BACKUP_NOTE), 15, 1092, 22, 2, UI_INK);
+        draw_wrapped_text(pixels, stride, 94, 528, ptc_ui_text(PTC_UI_T_SETUP_CHECK_NOTICE), 14, 1092, 20, 1, UI_MUTED);
         if (ptc_ui_setup_has_issues(model)) {
             int count = 0;
             for (int i = 0; i < PTC_UI_SETUP_ISSUE_COUNT; ++i) if (model->setup_issue_mask & (1U << i)) ++count;
@@ -114,12 +209,12 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 if (model->setup_issue_mask & save_issues)
                     snprintf(text, sizeof(text), "%s", ptc_ui_text(PTC_UI_T_SETUP_SAVE_PROBLEM));
                 else snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_SETUP_ISSUE_COUNT), count);
-                draw_text(pixels, stride, 94, 435, text, 18, UI_WARNING);
+                draw_text(pixels, stride, 94, 552, text, 15, UI_WARNING);
             }
-            draw_wrapped_text(pixels, stride, 94, 466, ptc_ui_text(PTC_UI_T_SETUP_DIAGNOSTIC_GUIDE), 18, 1092, 24, 3, UI_WARNING);
+        } else {
+            draw_wrapped_text(pixels, stride, 94, 552, ptc_ui_text(model->setup_activation_pending
+                ? PTC_UI_T_SETUP_ACTIVATING : PTC_UI_T_SETUP_CONTROLS_INACTIVE), 14, 1092, 20, 1, UI_MUTED);
         }
-        draw_wrapped_text(pixels, stride, 94, 550, ptc_ui_text(model->setup_activation_pending
-            ? PTC_UI_T_SETUP_ACTIVATING : PTC_UI_T_SETUP_CONTROLS_INACTIVE), 16, 1092, 22, 1, UI_MUTED);
         setup_button(pixels, stride, ptc_ui_setup_skip_rect(), ptc_ui_text(PTC_UI_T_SETUP_SKIP), model->setup_focus == 1, false);
     }
     if (model->message[0]) draw_wrapped_text(pixels, stride, 94, 589, model->message, 16, 1092, 21, 2, UI_WARNING);

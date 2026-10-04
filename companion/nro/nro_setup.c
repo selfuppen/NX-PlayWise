@@ -265,7 +265,17 @@ void finish_setup(UiState *ui, bool activated)
     /* An unreadable/missing PIN opens diagnostics only, never privileged pages. */
     ui->model.setup_pin_ready = ptc_companion_auth_state(&ui->auth) == PTC_AUTH_OK;
     ui->model.parent_support_only = !ui->setup_parent_authorized || !ui->model.setup_pin_ready;
-    if (activated && !ui->model.parent_support_only) enter_parent_area_unlocked(ui);
+    if (activated && !ui->model.parent_support_only) {
+        if (ui->model.setup_eye_care_enabled) {
+            ui->model.draft_eye_care_policy.enabled = true;
+            if (ui->model.draft_eye_care_policy.play_minutes == 0) ui->model.draft_eye_care_policy.play_minutes = 40;
+            if (ui->model.draft_eye_care_policy.rest_minutes == 0) ui->model.draft_eye_care_policy.rest_minutes = 10;
+        }
+        if (ui->model.setup_bedtime_enabled) {
+            ui->model.draft_bedtime_policy.enabled = true;
+        }
+        enter_parent_area_unlocked(ui);
+    }
     else enter_support_area(ui);
 }
 
@@ -340,6 +350,28 @@ void setup_action(UiState *ui, int action, int index)
         ui->model.setup_theme_index = index;
         (void)apply_theme_preference(ui, (PtcUiThemePreference)index);
         break;
+    case PTC_UI_HIT_SETUP_EYE_CARE:
+        ui->model.setup_eye_care_enabled = !ui->model.setup_eye_care_enabled;
+        ui->model.draft_eye_care_policy.enabled = ui->model.setup_eye_care_enabled;
+        if (ui->model.setup_eye_care_enabled) {
+            if (ui->model.draft_eye_care_policy.play_minutes == 0) ui->model.draft_eye_care_policy.play_minutes = 40;
+            if (ui->model.draft_eye_care_policy.rest_minutes == 0) ui->model.draft_eye_care_policy.rest_minutes = 10;
+        }
+        break;
+    case PTC_UI_HIT_SETUP_BEDTIME:
+        ui->model.setup_bedtime_enabled = !ui->model.setup_bedtime_enabled;
+        ui->model.draft_bedtime_policy.enabled = ui->model.setup_bedtime_enabled;
+        if (ui->model.setup_bedtime_enabled) {
+            for (int d = 0; d < 7; ++d) {
+                if (ui->model.draft_bedtime_policy.week[d].start_minute == 0 &&
+                    ui->model.draft_bedtime_policy.week[d].end_minute == 0) {
+                    ui->model.draft_bedtime_policy.week[d].enabled = true;
+                    ui->model.draft_bedtime_policy.week[d].start_minute = (d == 5 || d == 6) ? 1320 : 1260;
+                    ui->model.draft_bedtime_policy.week[d].end_minute = (d == 5 || d == 6) ? 480 : 420;
+                }
+            }
+        }
+        break;
     case PTC_UI_HIT_SETUP_SKIP:
         finish_setup(ui, false);
         break;
@@ -355,8 +387,7 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
     if (!ui || ui->model.view != PTC_UI_SETUP) return;
     if (down & HidNpadButton_B) { setup_previous(ui); return; }
     max_focus = ui->model.setup_step == PTC_UI_SETUP_PREPARE ? 3 :
-        ui->model.setup_step == PTC_UI_SETUP_CONFIRM ? 1 :
-        (ui->model.setup_step == PTC_UI_SETUP_PARENT && ui->model.setup_more ? 4 : 2);
+        ui->model.setup_step == PTC_UI_SETUP_CONFIRM ? 1 : 5;
     if (down & HidNpadButton_Down) ui->model.setup_focus = (ui->model.setup_focus + 1) % (max_focus + 1);
     else if (down & HidNpadButton_Up) ui->model.setup_focus = (ui->model.setup_focus + max_focus) % (max_focus + 1);
     else if (down & HidNpadButton_X) {
@@ -368,9 +399,18 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
         if (ui->model.setup_step == PTC_UI_SETUP_PREPARE) {
             ui->model.setup_focus = 1;
             setup_action(ui, PTC_UI_HIT_SETUP_LANGUAGE, ((int)ui->language_preference + direction + 4) % 4);
-        } else if (ui->model.setup_step == PTC_UI_SETUP_PARENT && ui->model.setup_more) {
-            ui->model.setup_focus = 3;
-            setup_action(ui, PTC_UI_HIT_SETUP_THEME_OPTION, ((int)ui->theme_preference + direction + 3) % 3);
+        } else if (ui->model.setup_step == PTC_UI_SETUP_PARENT) {
+            if (ui->model.setup_focus == 1 && direction > 0) {
+                ui->model.setup_focus = 2;
+            } else if (ui->model.setup_focus == 2) {
+                if (direction < 0 && (int)ui->theme_preference == 0) {
+                    ui->model.setup_focus = 1;
+                } else {
+                    setup_action(ui, PTC_UI_HIT_SETUP_THEME_OPTION, ((int)ui->theme_preference + direction + 3) % 3);
+                }
+            } else if (ui->model.setup_focus >= 3 && direction < 0) {
+                ui->model.setup_focus = 1;
+            }
         } else if (ui->model.setup_step == PTC_UI_SETUP_CONFIRM) ui->model.setup_focus ^= 1;
     } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
         int focus = down & HidNpadButton_Plus ? 0 : ui->model.setup_focus;
@@ -380,8 +420,10 @@ void handle_setup_input(UiState *ui, u64 down, u64 held)
             else if (focus == 3) setup_action(ui, PTC_UI_HIT_SETUP_TIME_HELP, 0);
         } else if (ui->model.setup_step == PTC_UI_SETUP_PARENT) {
             if (focus == 1) setup_pin(ui);
-            else if (focus == 2) setup_action(ui, PTC_UI_HIT_SETUP_MORE, 0);
-            else if (focus == 4) setup_action(ui, PTC_UI_HIT_SETUP_SHORTCUT, 0);
+            else if (focus == 2) setup_action(ui, PTC_UI_HIT_SETUP_THEME_OPTION, ((int)ui->theme_preference + 1) % 3);
+            else if (focus == 3) setup_action(ui, PTC_UI_HIT_SETUP_SHORTCUT, 0);
+            else if (focus == 4) setup_action(ui, PTC_UI_HIT_SETUP_EYE_CARE, 0);
+            else if (focus == 5) setup_action(ui, PTC_UI_HIT_SETUP_BEDTIME, 0);
         } else finish_setup(ui, false);
     }
 }
