@@ -2086,8 +2086,8 @@ static void test_home_redesign(void)
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
-    const PtcUiRect quota_group = {548, 176, 696, 264};
-    const PtcUiRect other_group = {548, 446, 696, 182};
+    const PtcUiRect quota_group = {548, 176, 696, 230};
+    const PtcUiRect other_group = {548, 416, 696, 212};
     check_true(!rects_overlap(quota_group, other_group) &&
                !rects_overlap(quota_group, ptc_ui_home_summary_rect(true)) &&
                !rects_overlap(other_group, ptc_ui_home_summary_rect(true)),
@@ -2107,10 +2107,7 @@ static void test_home_redesign(void)
         check_hit(i == 6 ? ptc_ui_hit_test_at(&model, rect.x + rect.w / 2,
                       rect.y + rect.h / 2, 1000) : hit_center(&model, rect),
                   PTC_UI_HIT_PARENT_CARD, i, "today card hit matches render position");
-        if (i == 6)
-            check_hit(ptc_ui_hit_test_at(&model, 1070, rect.y + rect.h / 2, 1000),
-                PTC_UI_HIT_NONE, 0, "empty space beside shortened skip card cannot activate it");
-        check_true(rect.h == (i < 4 ? 106 : 68) &&
+        check_true(rect.h == (i < 4 ? 90 : 82) &&
                    rect.x >= group.x && rect.x + rect.w <= group.x + group.w &&
                    rect.y >= group.y + 24 && rect.y + rect.h <= group.y + group.h &&
                    !rects_overlap(rect, ptc_ui_home_summary_rect(true)),
@@ -2280,18 +2277,25 @@ static void test_home_redesign(void)
     check_int(ptc_ui_today_operation(4), PTC_UI_OPERATION_SKIP_BEDTIME, "fifth action dispatches bedtime skip");
     check_int(ptc_ui_today_operation(5), PTC_UI_OPERATION_NONE, "buffer status card does not dispatch a write");
     check_int(ptc_ui_today_operation(6), PTC_UI_OPERATION_SKIP_EYE_CARE, "seventh action dispatches eye care skip");
-    model.selected_index = 5;
-    ptc_ui_move_parent_selection(&model, 0, 1);
+    model.selected_index = 4;
+    ptc_ui_move_parent_selection(&model, 1, 0);
     check_true(!model.parent_footer_focused && model.selected_index == 6,
-        "down from buffer reaches eye care skip");
-    ptc_ui_move_parent_selection(&model, 0, -1);
+        "right from bedtime reaches eye care skip");
+    ptc_ui_move_parent_selection(&model, -1, 0);
     check_true(!model.parent_footer_focused && model.selected_index == 4,
-        "up from eye care reaches bedtime");
+        "left from eye care reaches bedtime");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(!model.parent_footer_focused && model.selected_index == 5,
+        "down from bedtime reaches buffer");
     model.selected_index = 6;
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(model.parent_footer_focused && model.parent_content_selection == 6, "footer remembers last card");
+    check_true(!model.parent_footer_focused && model.selected_index == 5,
+        "down from eye care reaches buffer");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused && model.parent_content_selection == 5, "footer remembers last card");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_true(!model.parent_footer_focused && model.selected_index == 6, "up restores card focus");
+    check_true(!model.parent_footer_focused && model.selected_index == 5, "up restores card focus");
+    model.selected_index = 6;
     snprintf(model.message, sizeof(model.message), "keep result");
     for (int parent = 0; parent <= 1; ++parent) {
         model.view = parent ? PTC_UI_PARENT : PTC_UI_CHILD;

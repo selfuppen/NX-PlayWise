@@ -233,10 +233,11 @@ PtcUiRect ptc_ui_home_summary_rect(bool parent)
 PtcUiRect ptc_ui_today_card_rect(int index)
 {
     if (index < 0 || index >= 7) return (PtcUiRect){0, 0, 0, 0};
-    if (index == 6) return (PtcUiRect){560, 554, 324, 68};
-    if (index >= 4) return (PtcUiRect){560 + (index - 4) * 348, 480, 324, 68};
+    if (index == 5) return (PtcUiRect){560, 536, 672, 82};
+    if (index == 4) return (PtcUiRect){560, 444, 324, 82};
+    if (index == 6) return (PtcUiRect){908, 444, 324, 82};
     return (PtcUiRect){560 + (index % 2) * 348,
-                       202 + (index / 2) * 118, 324, 106};
+                       204 + (index / 2) * 100, 324, 90};
 }
 
 PtcUiRect ptc_ui_plan_card_rect(int index)
@@ -497,7 +498,7 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? (PtcUiRect){84, 490, 416, 48} : (PtcUiRect){684, 412, 516, 64};
+    return parent ? (PtcUiRect){74, 560, 436, 46} : (PtcUiRect){684, 412, 516, 64};
 }
 
 PtcUiRect ptc_ui_home_details_tab_rect(int index)

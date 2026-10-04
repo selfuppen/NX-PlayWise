@@ -183,22 +183,42 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
-        if (index == 6) {
-            if (vertical < 0) index = 4;
-            else if (vertical > 0) {
-                model->parent_content_selection = index;
+        if (vertical < 0) {
+            if (index == 5) {
+                index = (model->parent_content_selection == 6) ? 6 : 4;
+            } else if (index == 4) {
+                index = 2;
+            } else if (index == 6) {
+                index = 3;
+            } else if (index == 2) {
+                index = 0;
+            } else if (index == 3) {
+                index = 1;
+            }
+        } else if (vertical > 0) {
+            if (index == 0) {
+                index = 2;
+            } else if (index == 1) {
+                index = 3;
+            } else if (index == 2) {
+                index = 4;
+            } else if (index == 3) {
+                index = 6;
+            } else if (index == 4 || index == 6) {
+                index = 5;
+            } else if (index == 5) {
+                model->parent_content_selection = 5;
                 model->parent_footer_focused = true;
                 model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
             }
-        } else if (horizontal < 0 && index % 2 == 1) --index;
-        else if (horizontal > 0 && index % 2 == 0) ++index;
-        else if (vertical < 0 && index >= 2) index -= 2;
-        else if (vertical > 0 && index < 4) index += 2;
-        else if (vertical > 0 && index < 6) index = 6;
-        else if (vertical > 0) {
-            model->parent_content_selection = index;
-            model->parent_footer_focused = true;
-            model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
+        } else if (horizontal < 0) {
+            if (index == 1) index = 0;
+            else if (index == 3) index = 2;
+            else if (index == 6) index = 4;
+        } else if (horizontal > 0) {
+            if (index == 0) index = 1;
+            else if (index == 2) index = 3;
+            else if (index == 4) index = 6;
         }
         model->selected_index = index;
         return;

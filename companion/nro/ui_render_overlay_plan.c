@@ -809,29 +809,79 @@ static void draw_calendar_manager_overlay(uint32_t *pixels, uint32_t stride, con
         draw_text(pixels, stride, 130, 230, ptc_ui_text(PTC_UI_T_CALENDAR_EMPTY), 19, UI_MUTED);
     fill_round_rect(pixels, stride, (UiRect){650, 176, 520, 405}, 12, UI_RAISED);
     draw_rect_outline(pixels, stride, (UiRect){650, 176, 520, 405}, 12, 1, UI_BORDER);
-    int preview_y = 206, preview_step = 30;
-    int preview_title_size = 18, preview_detail_size = 15;
     if (model->calendar_manager_tab == 1) {
-        draw_wrapped_text(pixels, stride, 670, 198,
-            ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_GUIDE), 14, 480, 19, 3, UI_INK);
-        draw_wrapped_text(pixels, stride, 670, 262,
-            ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_FILE), 13, 480, 18, 2, UI_MUTED);
-        draw_wrapped_text(pixels, stride, 670, 304,
-            ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_CONFIRM), 13, 480, 18, 2, UI_WARNING);
-        draw_wrapped_text(pixels, stride, 670, 344,
-            ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 11, 480, 15, 3, UI_ACCENT);
-        preview_y = 394;
-        preview_step = 16;
-        preview_title_size = 16;
-        preview_detail_size = 12;
-    }
-    for (int i = 0; i < model->calendar_preview_count && i < 12; ++i) {
-        char fitted[144];
-        int size = i == 0 ? preview_title_size : preview_detail_size;
-        fit_text(fitted, sizeof(fitted), model->calendar_preview_lines[i],
-            size, 480);
-        draw_text(pixels, stride, 670, preview_y + i * preview_step,
-            fitted, size, i == 0 ? UI_INK : UI_MUTED);
+        bool has_preview = model->calendar_manager_count > 0 && model->calendar_preview_count > 0;
+        if (!has_preview) {
+            /* 状态一：导入向导与路径卡 (未选中文件或空列表) */
+            draw_wrapped_text(pixels, stride, 672, 202,
+                ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_GUIDE), 15, 476, 20, 2, UI_INK);
+
+            /* 步骤 1：SD卡目录卡片 */
+            UiRect step1 = {672, 250, 476, 68};
+            fill_round_rect(pixels, stride, step1, 8, UI_SURFACE);
+            draw_rect_outline(pixels, stride, step1, 8, 1, UI_BORDER);
+            draw_text(pixels, stride, step1.x + 14, step1.y + 24,
+                      ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_FILE), 13, UI_INK);
+            UiRect chip = {step1.x + 14, step1.y + 36, step1.width - 28, 24};
+            fill_round_rect(pixels, stride, chip, 6, UI_ACCENT_SOFT);
+            draw_text(pixels, stride, chip.x + 10, chip.y + 17,
+                      "/switch/playwise/calendar-import/", 13, UI_ACCENT);
+
+            /* 步骤 2：格式说明卡片 */
+            UiRect step2 = {672, 328, 476, 56};
+            fill_round_rect(pixels, stride, step2, 8, UI_SURFACE);
+            draw_rect_outline(pixels, stride, step2, 8, 1, UI_BORDER);
+            draw_wrapped_text(pixels, stride, step2.x + 14, step2.y + 24,
+                              ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_FIELDS), 13, step2.width - 28, 18, 2, UI_MUTED);
+
+            /* 步骤 3：导入与应用提醒 */
+            UiRect step3 = {672, 394, 476, 56};
+            fill_round_rect(pixels, stride, step3, 8, UI_SURFACE);
+            draw_rect_outline(pixels, stride, step3, 8, 1, UI_BORDER);
+            draw_wrapped_text(pixels, stride, step3.x + 14, step3.y + 24,
+                              ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_CONFIRM), 13, step3.width - 28, 18, 2, UI_WARNING);
+
+            /* 底部文档网址与按键说明 */
+            draw_wrapped_text(pixels, stride, 672, 476,
+                              ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 12, 476, 17, 3, UI_ACCENT);
+        } else {
+            /* 状态二：完整大字日历数据详情看板 (选中具体日历文件) */
+            UiRect top_header = {668, 192, 484, 68};
+            fill_round_rect(pixels, stride, top_header, 10, UI_SURFACE);
+            draw_rect_outline(pixels, stride, top_header, 10, 1, UI_BORDER);
+            char fitted_head[144];
+            fit_text(fitted_head, sizeof(fitted_head), model->calendar_preview_lines[0], 20, top_header.width - 110);
+            draw_text_bold(pixels, stride, top_header.x + 16, top_header.y + 30, fitted_head, 20, UI_INK);
+            if (model->calendar_preview_count > 1) {
+                fit_text(fitted_head, sizeof(fitted_head), model->calendar_preview_lines[1], 14, top_header.width - 110);
+                draw_text(pixels, stride, top_header.x + 16, top_header.y + 54, fitted_head, 14, UI_ACCENT);
+            }
+            UiRect format_badge = {top_header.x + top_header.width - 92, top_header.y + 12, 80, 22};
+            fill_round_rect(pixels, stride, format_badge, 6, UI_ACCENT_SOFT);
+            draw_rect_outline(pixels, stride, format_badge, 6, 1, UI_ACCENT);
+            draw_text_center(pixels, stride, format_badge, "UTF-8 JSON", 11, UI_ACCENT);
+
+            int list_start_y = 286;
+            int list_step = 25;
+            for (int i = 2; i < model->calendar_preview_count && i < 13; ++i) {
+                char fitted_item[144];
+                fit_text(fitted_item, sizeof(fitted_item), model->calendar_preview_lines[i], 15, 480);
+                draw_text(pixels, stride, 684, list_start_y + (i - 2) * list_step, fitted_item, 15, UI_INK);
+            }
+            draw_text(pixels, stride, 672, 564,
+                      ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_CONFIRM), 12, UI_WARNING);
+        }
+    } else {
+        int preview_y = 206, preview_step = 30;
+        int preview_title_size = 18, preview_detail_size = 15;
+        for (int i = 0; i < model->calendar_preview_count && i < 12; ++i) {
+            char fitted[144];
+            int size = i == 0 ? preview_title_size : preview_detail_size;
+            fit_text(fitted, sizeof(fitted), model->calendar_preview_lines[i],
+                size, 480);
+            draw_text(pixels, stride, 670, preview_y + i * preview_step,
+                fitted, size, i == 0 ? UI_INK : UI_MUTED);
+        }
     }
     snprintf(page_text, sizeof(page_text), "%d / %d", model->calendar_manager_page + 1,
         pages > 0 ? pages : 1);

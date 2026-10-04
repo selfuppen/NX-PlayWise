@@ -66,7 +66,7 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
 {
     UiRect box = to_uirect(ptc_ui_home_summary_rect(true));
     char remaining[64], today[64], line[192], age[64];
-    int x = box.x + 28;
+    int x = box.x + 24;
     ptc_ui_format_home_remaining(model, ptc_ui_render_now(), remaining, sizeof(remaining));
     ptc_ui_format_today_mode(model, today, sizeof(today));
     draw_card_shadow(pixels, stride, box, 16);
@@ -82,79 +82,59 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         draw_rect_outline(pixels, stride, box, 16, 2,
                           UI_RGB(ui_mix_rgb(UI_BLENDED(danger), 0xFF9A8A, phase * 4)));
     }
-    draw_text(pixels, stride, x, box.y + 42,
-               bedtime_enforcing ? ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY_BEDTIME_ACTIVE) :
-               (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY)),
-              22, UI_RGB(UI_BLENDED(hero_secondary)));
-    /* 环形额度表：弧长由缓动后的剩余分钟驱动，颜色沿用今日额度健康色；
-     * 数据不可用时只画弱化轨道环。 */
-    {
-        float fraction = 0.0f;
-        uint32_t ring_fill = UI_SUCCESS;
-        bool has_fraction = false;
-        if (bedtime_enforcing || eye_resting) {
-            fraction = 0.0f;
-            ring_fill = UI_DANGER;
-            has_fraction = true;
-        } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
-            fraction = 1.0f;
-            ring_fill = UI_SUCCESS;
-            has_fraction = true;
-        } else if (model->remaining_available && model->played_minutes_available &&
-                   model->remaining_minutes >= 0 && model->played_minutes >= 0 &&
-                   model->remaining_minutes + model->played_minutes > 0) {
-            int total = model->remaining_minutes + model->played_minutes;
-            /* 与下方额度条同语义：弧长表示剩余占比，随消耗缩小。 */
-            fraction = (float)model->displayed_remaining_minutes / (float)total;
-            has_fraction = true;
-        } else if (model->remaining_available && model->remaining_minutes > 0) {
-            int shown = model->remaining_minutes > 120 ? 120 : model->remaining_minutes;
-            fraction = (float)shown / 120.0f;
-            has_fraction = true;
-        }
-        if (has_fraction && model->unrestricted_today != 1 &&
-            !model->eye_care_unlimited_capped && !bedtime_enforcing && !eye_resting) {
-            if (model->remaining_available && model->remaining_minutes <= 10) ring_fill = UI_DANGER;
-            else if (model->remaining_available && model->remaining_minutes <= 30) ring_fill = UI_WARNING;
-            else ring_fill = UI_SUCCESS;
-        }
-        if (fraction < 0) fraction = 0;
-        if (fraction > 1) fraction = 1;
-        draw_ring_progress(pixels, stride, box.x + box.width - 46, box.y + 40, 16, 5, fraction,
-                           UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0xFFFFFF, 20)), ring_fill);
+    const char *header_title = bedtime_enforcing ? ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY_BEDTIME_ACTIVE) :
+        (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY));
+    draw_text(pixels, stride, x, box.y + 36, header_title, 20, UI_RGB(UI_BLENDED(hero_secondary)));
+
+    /* 规则胶囊徽标：取代多余的环形圈，清晰展示当前生效规则来源 */
+    char rule_label[64];
+    if (bedtime_enforcing) {
+        snprintf(rule_label, sizeof(rule_label), "%s", ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE));
+    } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
+        snprintf(rule_label, sizeof(rule_label), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
+    } else {
+        snprintf(rule_label, sizeof(rule_label), "%s",
+                 model->status_loaded ? ui_rule_source_label(model->rule_source) : ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM));
     }
-    /* Keep the numeric presentation independent from localized wording. */
+    int rw = measure_text(rule_label, 12) + 16;
+    if (rw < 64) rw = 64;
+    UiRect rule_badge = {box.x + box.width - rw - 24, box.y + 18, rw, 24};
+    fill_round_rect(pixels, stride, rule_badge, 6, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, rule_badge, 6, 1, UI_ACCENT);
+    draw_text_center(pixels, stride, rule_badge, rule_label, 12, UI_ACCENT);
+
+    /* 主数值：剩余分钟数 */
     int minutes;
     if (ptc_ui_home_remaining_minutes(model, ptc_ui_render_now(), &minutes)) {
         snprintf(remaining, sizeof(remaining), "%d", minutes);
-        int num_w = measure_text(remaining, 80);
-        draw_text_bold(pixels, stride, x, box.y + 133, remaining, 80, UI_RGB(UI_BLENDED(on_hero)));
-        int unit_x = x + num_w + 12;
+        int num_w = measure_text(remaining, 76);
+        draw_text_bold(pixels, stride, x, box.y + 104, remaining, 76, UI_RGB(UI_BLENDED(on_hero)));
+        int unit_x = x + num_w + 10;
         const char *unit_label = ptc_ui_text(PTC_UI_T_MIN);
-        draw_text(pixels, stride, unit_x, box.y + 130, unit_label, 24, UI_RGB(UI_BLENDED(hero_secondary)));
+        draw_text(pixels, stride, unit_x, box.y + 100, unit_label, 22, UI_RGB(UI_BLENDED(hero_secondary)));
         if (minutes >= 60) {
             char duration_str[64];
             if (minutes % 60 == 0)
                 snprintf(duration_str, sizeof(duration_str), ptc_ui_text(PTC_UI_T_D_HR_2), minutes / 60);
             else
                 snprintf(duration_str, sizeof(duration_str), ptc_ui_text(PTC_UI_T_D_HR_D_MIN_2), minutes / 60, minutes % 60);
-            int dur_x = unit_x + measure_text(unit_label, 24) + 12;
-            draw_text(pixels, stride, dur_x, box.y + 130, duration_str, 20, UI_RGB(UI_BLENDED(hero_secondary)));
+            int dur_x = unit_x + measure_text(unit_label, 22) + 12;
+            draw_text(pixels, stride, dur_x, box.y + 100, duration_str, 18, UI_RGB(UI_BLENDED(hero_secondary)));
         }
     } else {
         if (eye_resting) {
             char cycle[128], fitted_cycle[128];
             ptc_ui_format_eye_care_cycle(model, ptc_ui_render_now(), cycle, sizeof(cycle));
-            fit_text(fitted_cycle, sizeof(fitted_cycle), cycle, 30, box.width - 56);
-            draw_text_bold(pixels, stride, x, box.y + 125, fitted_cycle, 30,
+            fit_text(fitted_cycle, sizeof(fitted_cycle), cycle, 26, box.width - 48);
+            draw_text_bold(pixels, stride, x, box.y + 98, fitted_cycle, 26,
                            UI_RGB(UI_BLENDED(on_hero)));
         } else {
-            draw_wrapped_text(pixels, stride, x, box.y + 124, remaining, 40,
-                              box.width - 56, 48, 2, UI_RGB(UI_BLENDED(on_hero)));
+            draw_wrapped_text(pixels, stride, x, box.y + 98, remaining, 36,
+                              box.width - 48, 44, 2, UI_RGB(UI_BLENDED(on_hero)));
         }
     }
-    /* 今日额度胶囊进度槽 (Time Progress Gauge) */
-    UiRect gauge_bg = {box.x + 28, box.y + 150, box.width - 56, 8};
+    /* 今日额度进度槽 (Time Progress Gauge) */
+    UiRect gauge_bg = {box.x + 24, box.y + 122, box.width - 48, 8};
     fill_round_rect(pixels, stride, gauge_bg, 4, UI_GAUGE_SLOT);
     draw_rect_outline(pixels, stride, gauge_bg, 4, 1, UI_GAUGE_SLOT_BORDER);
 
@@ -169,13 +149,12 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     }
 
     if (bedtime_enforcing || eye_resting) {
-        /* 就寝生效时进度槽为空并呈红框 */
+        /* 就寝或休息生效时进度槽为空 */
     } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
         fill_round_rect(pixels, stride, gauge_bg, 4, UI_SUCCESS);
     } else if (model->remaining_available && model->played_minutes_available &&
                (model->remaining_minutes + model->played_minutes > 0)) {
         int total_mins = model->remaining_minutes + model->played_minutes;
-        /* 填充宽度用缓动后的剩余分钟，随数字一起滚动。 */
         int remain_w = (int)((int64_t)gauge_bg.width * model->displayed_remaining_minutes / total_mins);
         if (remain_w < 6 && model->remaining_minutes > 0) remain_w = 6;
         if (remain_w > gauge_bg.width) remain_w = gauge_bg.width;
@@ -190,35 +169,60 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         fill_round_rect(pixels, stride, (UiRect){gauge_bg.x, gauge_bg.y, fill_w, gauge_bg.height}, 4, health_color);
     }
 
-    if (bedtime_enforcing) {
-        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_PLAY_RESTRICTED_S),
-            model->status_loaded ? ui_rule_source_label(model->rule_source) : (ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM)));
-    } else {
-        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_TODAY_S_S), today,
-            model->status_loaded ? ui_rule_source_label(model->rule_source) : (ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM)));
-    }
-    char fitted_line[192];
-    fit_text(fitted_line, sizeof(fitted_line), line, 18, box.width - 56);
-    draw_text(pixels, stride, x, box.y + 176, fitted_line, 18,
-              UI_RGB(UI_BLENDED(hero_secondary)));
-    /* Supporting information sits on a separate surface, below the hero. */
-    UiRect lower = {box.x + 12, box.y + 200, box.width - 24, box.height - 212};
+    /* 下方信息承载面板 (Lower surface) */
+    UiRect lower = {box.x + 12, box.y + 144, box.width - 24, box.height - 156};
     fill_round_rect(pixels, stride, lower, 16, UI_SURFACE);
-    ptc_ui_format_home_total(model, line, sizeof(line));
-    draw_text(pixels, stride, x, box.y + 236, line, 22, UI_INK);
+    draw_rect_outline(pixels, stride, lower, 16, 1, UI_BORDER);
+
+    /* 双列指标卡 (Dual metric statistic cards) */
+    UiRect left_card = {lower.x + 12, lower.y + 14, 214, 76};
+    UiRect right_card = {lower.x + 238, lower.y + 14, 214, 76};
+    fill_round_rect(pixels, stride, left_card, 10, UI_RAISED);
+    draw_rect_outline(pixels, stride, left_card, 10, 1, UI_BORDER);
+    fill_round_rect(pixels, stride, right_card, 10, UI_RAISED);
+    draw_rect_outline(pixels, stride, right_card, 10, 1, UI_BORDER);
+
+    /* 左指标：今日总额度 */
+    draw_text(pixels, stride, left_card.x + 14, left_card.y + 24, ptc_ui_text(PTC_UI_T_TODAY_QUOTA), 13, UI_MUTED);
+    char total_str[64];
+    ptc_ui_format_home_total_value(model, total_str, sizeof(total_str));
+    draw_text(pixels, stride, left_card.x + 14, left_card.y + 58, total_str, 20, UI_INK);
+
+    /* 右指标：已消耗估算 */
+    draw_text(pixels, stride, right_card.x + 14, right_card.y + 24, ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_CONSUMED_ESTIMATED), 13, UI_MUTED);
+    char played_str[64];
     if (!eye_resting && model->played_minutes_available && model->played_minutes >= 0)
-        snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_USED_QUOTA_ESTIMATE_D_MIN), model->played_minutes);
-    else snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_USED_QUOTA_ESTIMATE_UNAVAILABLE));
-    draw_text(pixels, stride, x, box.y + 272, line, 18, UI_MUTED);
+        snprintf(played_str, sizeof(played_str), ptc_ui_text(PTC_UI_T_ABOUT_D_MIN), model->played_minutes);
+    else
+        snprintf(played_str, sizeof(played_str), "%s", ptc_ui_text(PTC_UI_T_NOT_AVAILABLE));
+    draw_text(pixels, stride, right_card.x + 14, right_card.y + 58, played_str, 20, UI_INK);
+
+    /* 中部状态行：护眼周期或今日规则说明 */
     if (model->eye_care_policy.enabled) {
+        UiRect eye_card = {lower.x + 12, lower.y + 98, lower.width - 24, 38};
+        fill_round_rect(pixels, stride, eye_card, 8, UI_RAISED);
+        draw_rect_outline(pixels, stride, eye_card, 8, 1, UI_BORDER);
         char cycle[128], fitted_cycle[128];
         ptc_ui_format_eye_care_cycle(model, ptc_ui_render_now(), cycle, sizeof(cycle));
-        fit_text(fitted_cycle, sizeof(fitted_cycle), cycle, 17, box.width - 56);
-        draw_text(pixels, stride, x, box.y + 312, fitted_cycle, 17,
+        fit_text(fitted_cycle, sizeof(fitted_cycle), cycle, 14, eye_card.width - 24);
+        draw_text(pixels, stride, eye_card.x + 14, eye_card.y + 24, fitted_cycle, 14,
                   eye_resting ? UI_DANGER : UI_ACCENT);
+    } else {
+        if (bedtime_enforcing) {
+            snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_PLAY_RESTRICTED_S),
+                model->status_loaded ? ui_rule_source_label(model->rule_source) : (ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM)));
+        } else {
+            snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_TODAY_S_S), today,
+                model->status_loaded ? ui_rule_source_label(model->rule_source) : (ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM)));
+        }
+        char fitted_line[192];
+        fit_text(fitted_line, sizeof(fitted_line), line, 14, lower.width - 28);
+        draw_text(pixels, stride, lower.x + 14, lower.y + 120, fitted_line, 14, UI_MUTED);
     }
+
+    /* 底部刷新年龄提示 */
     format_status_age(model, age, sizeof(age));
-    draw_text(pixels, stride, x, box.y + box.height - 26, age, 16, UI_MUTED);
+    draw_text(pixels, stride, lower.x + 16, lower.y + lower.height - 62, age, 13, UI_MUTED);
 }
 
 static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
@@ -365,8 +369,8 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                                           adjustment_detail, sizeof(adjustment_detail));
     draw_parent_home_summary(pixels, stride, model);
     bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
-    UiRect quota_group = {548, 176, 696, 264};
-    UiRect other_group = {548, 446, 696, 182};
+    UiRect quota_group = {548, 176, 696, 230};
+    UiRect other_group = {548, 416, 696, 212};
     fill_round_rect(pixels, stride, quota_group, 16, UI_RAISED);
     draw_rect_outline(pixels, stride, quota_group, 16, 1, UI_BORDER);
     const char *title1 = ptc_ui_text(PTC_UI_T_TODAY_S_LIMIT_ADJUSTMENT_TODAY_ONLY);
@@ -378,9 +382,9 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_rect_outline(pixels, stride, other_group, 16, 1, UI_BORDER);
     const char *title2 = ptc_ui_text(PTC_UI_T_BEDTIME_AUTONOMY_BUFFER);
     const char *hint2 = ptc_ui_text(PTC_UI_T_BEDTIME_OPERATES_INDEPENDENTLY);
-    draw_text(pixels, stride, 574, 466, title2, 16, UI_WARNING);
+    draw_text(pixels, stride, 574, 435, title2, 16, UI_WARNING);
     int title2_w = measure_text(title2, 16);
-    draw_text(pixels, stride, 574 + title2_w + 14, 466, hint2, 13, UI_MUTED);
+    draw_text(pixels, stride, 574 + title2_w + 14, 435, hint2, 13, UI_MUTED);
     for (int index = 0; index < 7; ++index) {
         UiRect box = to_uirect(ptc_ui_today_card_rect(index));
         bool focused = !model->parent_footer_focused && model->selected_index == index;
