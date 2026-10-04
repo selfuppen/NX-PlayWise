@@ -320,8 +320,30 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
     if (!rules->eye_care.enabled) state->eye_care_phase = "off";
     else if (runtime_state->eye_care_resting) state->eye_care_phase = "resting";
     else if (state->bedtime_active && !state->bedtime_skipped) state->eye_care_phase = "paused";
-    else if (!runtime_state->eye_care_usage_known) state->eye_care_phase = "unknown";
-    else state->eye_care_phase = "playing";
+    else {
+        PtcDayRule day_rule = ptc_rules_today_rule(rules, now.day_index,
+            ptc_weekday_from_day_index(now.day_index));
+        uint16_t base_minutes = day_rule.mode == PTC_RULE_MODE_UNLIMITED
+            ? 1440u : day_rule.minutes;
+        state->eye_care_phase = "unknown";
+        /* Status precedes the scheduler tick. Project this read without
+           persisting a new baseline or triggering any control writes. */
+        if (!runtime_state->apply_pending_confirmation && pctl_status->limited_today &&
+            pctl_status->configured_minutes_available &&
+            pctl_status->configured_minutes == base_minutes &&
+            pctl_status->remaining_available && pctl_status->remaining_minutes <= base_minutes &&
+            pctl_status->play_timer_enabled_available && pctl_status->play_timer_enabled) {
+            uint16_t used = (uint16_t)(base_minutes - pctl_status->remaining_minutes);
+            uint32_t accumulated = runtime_state->eye_care_day_index == now.day_index
+                ? runtime_state->eye_care_accumulated_minutes : 0u;
+            if (runtime_state->eye_care_day_index == now.day_index &&
+                runtime_state->eye_care_usage_known && used >= runtime_state->eye_care_last_used_minutes)
+                accumulated += used - runtime_state->eye_care_last_used_minutes;
+            state->eye_care_used_minutes = accumulated > 240u ? 240u : (uint16_t)accumulated;
+            if (day_rule.mode == PTC_RULE_MODE_UNLIMITED || used < day_rule.minutes)
+                state->eye_care_phase = "playing";
+        }
+    }
 }
 
 bool write_current_status_result(

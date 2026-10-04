@@ -2483,8 +2483,56 @@ static void test_eye_care_cycle_and_stale_skip(void)
         "{\"mode\":\"limit\",\"minutes\":60}],\"eye_care_enabled\":true,"
         "\"eye_care_play_minutes\":2,\"eye_care_rest_minutes\":1}"),
         "seed eye care rule");
+    for (int sample = 0; sample < 4; ++sample) {
+        PtcCompanionResultSummary summary;
+        char pending[128], completed[128];
+        pctl.status.remaining_available = sample != 1;
+        pctl.status.play_timer_enabled = sample != 2;
+        pctl.configured_minutes = sample == 3 ? 90 : 60;
+        snprintf(pending, sizeof(pending), "app/inbox/pending/eye-first-%d.json", sample);
+        snprintf(completed, sizeof(completed), "app/results/eye-first-%d.json", sample);
+        snprintf(request, sizeof(request),
+            "{\"version\":1,\"request_id\":\"eye-first-%d\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}",
+            sample);
+        check_true(mem.storage.vtable->write_text_atomic(&mem.storage, pending, request),
+            "queue first eye care status before scheduler baseline");
+        check_int(ptc_sysmodule_process_all(&sysmodule), 1, "process first eye care status");
+        check_true(mem.storage.vtable->read_text(&mem.storage, completed, result, sizeof(result)) &&
+            ptc_companion_result_summary_parse(result, &summary) &&
+            strcmp(summary.eye_care_phase, sample == 0 ? "playing" : "unknown") == 0 &&
+            summary.eye_care_used_minutes == 0,
+            "first refresh projects reliable usage; missing or mismatched reads stay unknown");
+        check_int((int)pctl.apply_target_calls, 0, "status projection never applies PCTL targets");
+        check_int((int)pctl.start_timer_calls, 0, "status projection never starts the timer");
+    }
+    pctl.status.remaining_available = true;
+    pctl.status.play_timer_enabled = true;
+    pctl.configured_minutes = 60;
     (void)ptc_sysmodule_enforce_tick(&sysmodule);
     (void)ptc_sysmodule_enforce_tick(&sysmodule);
+    {
+        PtcCompanionResultSummary summary;
+        char baseline[8192];
+        unsigned int writes = pctl.apply_target_calls;
+        check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", baseline,
+            sizeof(baseline)), "capture established eye care baseline");
+        pctl.played_minutes_today = 1;
+        pctl.status.remaining_minutes = 59;
+        check_true(mem.storage.vtable->write_text_atomic(&mem.storage,
+            "app/inbox/pending/eye-fresh-delta.json",
+            "{\"version\":1,\"request_id\":\"eye-fresh-delta\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
+            "queue fresh usage before the next scheduler tick");
+        check_int(ptc_sysmodule_process_all(&sysmodule), 1, "fresh usage status is processed");
+        check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/eye-fresh-delta.json",
+            result, sizeof(result)) && ptc_companion_result_summary_parse(result, &summary) &&
+            strcmp(summary.eye_care_phase, "playing") == 0 && summary.eye_care_used_minutes == 1,
+            "fresh result includes the usage delta before the scheduler persists it");
+        check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", result,
+            sizeof(result)) && strcmp(result, baseline) == 0,
+            "status projection preserves the persisted cycle baseline");
+        check_int((int)pctl.apply_target_calls, (int)writes,
+            "fresh usage projection does not apply a control target");
+    }
     pctl.played_minutes_today = 2;
     pctl.status.remaining_minutes = 58;
     clock.snapshot.unix_seconds += 120;

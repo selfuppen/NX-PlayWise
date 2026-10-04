@@ -272,6 +272,27 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
                     qrcodegen_Ecc_LOW, 1, 20, qrcodegen_Mask_AUTO, true)) return 1;
             snprintf(name, sizeof(name), "matrix-overlay-%02d", overlay);
             failed |= save_preview(directory, "matrix", name, &model, dark != 0);
+            if (overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER) {
+                model.calendar_manager_tab = 1;
+                model.calendar_preview_count = 12;
+                snprintf(model.calendar_preview_lines[0], sizeof(model.calendar_preview_lines[0]),
+                    "JP (JP) - 2028");
+                snprintf(model.calendar_preview_lines[1], sizeof(model.calendar_preview_lines[1]),
+                    ptc_ui_text(PTC_UI_T_CALENDAR_DATES_SUMMARY), 14u, 2u);
+                for (int i = 2; i < 12; ++i)
+                    snprintf(model.calendar_preview_lines[i], sizeof(model.calendar_preview_lines[i]),
+                        "2028-%02d-01 - 2028-%02d-02", i, i);
+                for (int i = 0; i < 6; ++i) {
+                    snprintf(model.calendar_manager_rows[i].title,
+                        sizeof(model.calendar_manager_rows[i].title), "JP-%d.json", 2026 + i);
+                    snprintf(model.calendar_manager_rows[i].detail,
+                        sizeof(model.calendar_manager_rows[i].detail), "%s",
+                        ptc_ui_text(PTC_UI_T_CALENDAR_USER_IMPORT));
+                }
+                failed |= save_preview(directory, "holiday", "calendar-import", &model, dark != 0);
+                model.calendar_manager_count = model.calendar_preview_count = 0;
+                failed |= save_preview(directory, "holiday", "calendar-import-empty", &model, dark != 0);
+            }
         }
         for (int parent = 0; parent < 2; ++parent) {
             for (int state = 0; state < 6; ++state) {

@@ -1,4 +1,5 @@
 #include "nro_app_internal.h"
+#include <limits.h>
 
 int holiday_calendar_view_pages(const PtcUiModel *model)
 {
@@ -59,6 +60,7 @@ void open_holiday_calendar_view(UiState *ui)
     if (ui->model.calendar_builtin) {
         ui->calendar_view_years[ui->calendar_view_year_count++] = 2026;
     } else {
+        int nearest_year_distance = INT_MAX;
         active = malloc(sizeof(*active));
         if (!active || !ptc_calendar_index_load(ui->client.storage, APP_ROOT, true, active, NULL) ||
             !ptc_calendar_selection_validate(ui->client.storage, APP_ROOT, active)) goto done;
@@ -73,15 +75,32 @@ void open_holiday_calendar_view(UiState *ui)
             }
             ui->calendar_view_years[j] = value;
         }
-        for (i = 0; i < (size_t)ui->calendar_view_year_count; ++i)
-            if (ui->calendar_view_years[i] == current_year) {
+        for (i = 0; i < (size_t)ui->calendar_view_year_count; ++i) {
+            int distance = abs((int)ui->calendar_view_years[i] - current_year);
+            if (distance <= nearest_year_distance) {
                 ui->calendar_view_year_index = (int)i;
-                break;
+                nearest_year_distance = distance;
             }
+        }
     }
 done:
     free(active);
+    {
+        int best_distance = INT_MAX, best_year_index = ui->calendar_view_year_index;
+        for (i = 0; i < (size_t)ui->calendar_view_year_count; ++i) {
+            int distance;
+            ui->calendar_view_year_index = (int)i;
+            load_calendar_view_year(ui);
+            (void)ptc_ui_holiday_calendar_nearest_page(&ui->model, &distance);
+            if (distance <= best_distance && distance != INT_MAX) {
+                best_distance = distance;
+                best_year_index = (int)i;
+            }
+        }
+        ui->calendar_view_year_index = best_year_index;
+    }
     load_calendar_view_year(ui);
+    ui->model.holiday_calendar_page = ptc_ui_holiday_calendar_nearest_page(&ui->model, NULL);
     ui->model.overlay = PTC_UI_OVERLAY_HOLIDAY_CALENDAR;
     ui->model.overlay_selection = 2;
     {

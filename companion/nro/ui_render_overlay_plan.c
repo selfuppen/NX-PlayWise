@@ -809,12 +809,29 @@ static void draw_calendar_manager_overlay(uint32_t *pixels, uint32_t stride, con
         draw_text(pixels, stride, 130, 230, ptc_ui_text(PTC_UI_T_CALENDAR_EMPTY), 19, UI_MUTED);
     fill_round_rect(pixels, stride, (UiRect){650, 176, 520, 405}, 12, UI_RAISED);
     draw_rect_outline(pixels, stride, (UiRect){650, 176, 520, 405}, 12, 1, UI_BORDER);
+    int preview_y = 206, preview_step = 30;
+    int preview_title_size = 18, preview_detail_size = 15;
+    if (model->calendar_manager_tab == 1) {
+        draw_wrapped_text(pixels, stride, 670, 198,
+            ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_GUIDE), 14, 480, 19, 3, UI_INK);
+        draw_wrapped_text(pixels, stride, 670, 262,
+            ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_FILE), 13, 480, 18, 2, UI_MUTED);
+        draw_wrapped_text(pixels, stride, 670, 304,
+            ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_CONFIRM), 13, 480, 18, 2, UI_WARNING);
+        draw_wrapped_text(pixels, stride, 670, 344,
+            ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 11, 480, 15, 3, UI_ACCENT);
+        preview_y = 394;
+        preview_step = 16;
+        preview_title_size = 16;
+        preview_detail_size = 12;
+    }
     for (int i = 0; i < model->calendar_preview_count && i < 12; ++i) {
         char fitted[144];
+        int size = i == 0 ? preview_title_size : preview_detail_size;
         fit_text(fitted, sizeof(fitted), model->calendar_preview_lines[i],
-            i == 0 ? 18 : 15, 480);
-        draw_text(pixels, stride, 670, 206 + i * 30,
-            fitted, i == 0 ? 18 : 15, i == 0 ? UI_INK : UI_MUTED);
+            size, 480);
+        draw_text(pixels, stride, 670, preview_y + i * preview_step,
+            fitted, size, i == 0 ? UI_INK : UI_MUTED);
     }
     snprintf(page_text, sizeof(page_text), "%d / %d", model->calendar_manager_page + 1,
         pages > 0 ? pages : 1);
@@ -854,8 +871,8 @@ static void draw_calendar_format_overlay(uint32_t *pixels, uint32_t stride, cons
     for (int i = 0; i < 5; ++i)
         draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 104 + i * 62,
             ptc_ui_text(lines[i]), 18, dialog.width - 68, 24, 2, UI_INK);
-    draw_text(pixels, stride, dialog.x + 34, dialog.y + 434,
-        ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 16, UI_ACCENT);
+    draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 434,
+        ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT), 15, dialog.width - 68, 20, 2, UI_ACCENT);
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),
         ptc_ui_text(PTC_UI_T_B_BACK), UI_RAISED, UI_INK, true);
 }

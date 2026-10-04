@@ -577,4 +577,5 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_FILE, "将 UTF-8 .json 文件放入 S
 PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_FIELDS, "必填：format_version=1、region_id、region_name、year、holidays、workdays。空列表也须保留。")
 PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_DATES, "日期用 YYYY-MM-DD。holidays 每项含 name/from/to（含首尾）；workdays 填日期。日期须在同一年且不能重叠。")
 PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_LIMITS, "年份 2020 到 2198，文件不超过 16 KiB。日历只定义日期；额度和就寝时间在时间计划中设置。")
-PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT, "完整字段、文件名要求与示例：docs/自制节假日日历格式.md")
+PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT, "https://github.com/selfuppen/NX-PlayWise/blob/main/docs/自制节假日日历格式.md")
+PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_IMPORT_GUIDE, "自制一个地区的一年假日与调休安排；选中文件后确认导入。X 查看说明，完整格式与示例见下方网址。")

@@ -223,7 +223,7 @@ PtcUiRect ptc_ui_home_summary_rect(bool parent)
 PtcUiRect ptc_ui_today_card_rect(int index)
 {
     if (index < 0 || index >= 7) return (PtcUiRect){0, 0, 0, 0};
-    if (index == 6) return (PtcUiRect){560, 554, 672, 68};
+    if (index == 6) return (PtcUiRect){560, 554, 324, 68};
     if (index >= 4) return (PtcUiRect){560 + (index - 4) * 348, 480, 324, 68};
     return (PtcUiRect){560 + (index % 2) * 348,
                        202 + (index / 2) * 118, 324, 106};

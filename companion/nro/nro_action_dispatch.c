@@ -185,7 +185,7 @@ void handle_today_action_ready(UiState *ui, int index)
         ui->auth_retry_action = AUTH_RETRY_SKIP_EYE_CARE;
         if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_VERIFY_PIN))) break;
         open_confirm_overlay(ui, PTC_UI_OPERATION_SKIP_EYE_CARE,
-            ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM),
+            ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP),
             ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM_BODY));
         break;
     default:

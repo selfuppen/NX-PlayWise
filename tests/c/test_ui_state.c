@@ -2105,6 +2105,9 @@ static void test_home_redesign(void)
         check_hit(i == 6 ? ptc_ui_hit_test_at(&model, rect.x + rect.w / 2,
                       rect.y + rect.h / 2, 1000) : hit_center(&model, rect),
                   PTC_UI_HIT_PARENT_CARD, i, "today card hit matches render position");
+        if (i == 6)
+            check_hit(ptc_ui_hit_test_at(&model, 1070, rect.y + rect.h / 2, 1000),
+                PTC_UI_HIT_NONE, 0, "empty space beside shortened skip card cannot activate it");
         check_true(rect.h == (i < 4 ? 106 : 68) &&
                    rect.x >= group.x && rect.x + rect.w <= group.x + group.w &&
                    rect.y >= group.y + 24 && rect.y + rect.h <= group.y + group.h &&
@@ -3572,8 +3575,60 @@ static void test_calendar_manager_surface(void)
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
 }
 
+static void test_calendar_nearest_page(void)
+{
+    PtcUiModel model;
+    PtcImportedCalendarYear data;
+    uint16_t jan1;
+    int distance;
+    memset(&model, 0, sizeof(model));
+    model.calendar_builtin = true;
+    ptc_day_index_from_date(2026, 10, 4, &model.day_index);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, &distance), 1,
+        "October opens the page containing the current National Day holiday");
+    check_int(distance, 0, "current holiday has zero distance");
+    ptc_day_index_from_date(2026, 5, 9, &model.day_index);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, &distance), 0,
+        "makeup workday selects its holiday arrangement row");
+    check_int(distance, 0, "builtin makeup day counts as a current arrangement");
+    ptc_day_index_from_date(2027, 1, 1, &model.day_index);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 1,
+        "after coverage opens the closest final arrangement");
+    model.calendar_builtin = false;
+    memset(&data, 0, sizeof(data));
+    data.year = 2028;
+    model.holiday_calendar_data = &data;
+    ptc_day_index_from_date(2028, 1, 1, &jan1);
+    data.group_count = 5;
+    for (int i = 0; i < 5; ++i) {
+        data.groups[i].first_day_index = (uint16_t)(jan1 + i * 20);
+        data.groups[i].last_day_index = (uint16_t)(jan1 + i * 20 + 2);
+    }
+    model.day_index = (uint16_t)(jan1 + 81);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 1,
+        "imported current holiday selects its displayed page");
+    data.days[10] = PTC_CALENDAR_DAY_MAKEUP_WORKDAY;
+    model.day_index = (uint16_t)(jan1 + 10);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 1,
+        "imported workdays follow holiday groups in the displayed row order");
+    data.days[10] = PTC_CALENDAR_DAY_ORDINARY;
+    model.day_index = (uint16_t)(jan1 + 71);
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 1,
+        "equal date distances prefer the upcoming holiday");
+    memset(&data, 0, sizeof(data));
+    data.year = 2028;
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 0,
+        "empty imported calendar opens its empty first page");
+    model.holiday_calendar_data = NULL;
+    check_int(ptc_ui_holiday_calendar_nearest_page(&model, NULL), 0,
+        "unreadable calendar has a safe first page");
+    check_int(ptc_ui_today_card_rect(6).w, ptc_ui_today_card_rect(4).w,
+        "today eye care skip has the same width as its neighboring actions");
+}
+
 int main(void)
 {
+    test_calendar_nearest_page();
     test_calendar_manager_surface();
     test_language_and_short_weekly_limits();
     test_quota_recheck_decisions();

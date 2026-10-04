@@ -12,6 +12,63 @@
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
 
+/* Match the displayed row order; imported workdays follow holiday groups. */
+static void nearest_calendar_row(uint16_t today, uint16_t first, uint16_t last,
+    size_t row, int *best_distance, uint16_t *best_day, int *page)
+{
+    uint16_t nearest = today < first ? first : today > last ? last : today;
+    int distance = abs((int)nearest - today);
+    if (distance < *best_distance ||
+        (distance == *best_distance && nearest > *best_day)) {
+        *best_distance = distance;
+        *best_day = nearest;
+        *page = (int)(row / 4u);
+    }
+}
+
+int ptc_ui_holiday_calendar_nearest_page(const PtcUiModel *model, int *out_distance)
+{
+    int distance = INT_MAX, page = 0;
+    uint16_t best_day = 0, jan1;
+    size_t i;
+    if (out_distance) *out_distance = INT_MAX;
+    if (!model) return 0;
+    if (model->holiday_calendar_data) {
+        const PtcImportedCalendarYear *data = model->holiday_calendar_data;
+        size_t row = data->group_count;
+        for (i = 0; i < data->group_count; ++i)
+            nearest_calendar_row(model->day_index, data->groups[i].first_day_index,
+                data->groups[i].last_day_index, i, &distance, &best_day, &page);
+        if (!ptc_day_index_from_date(data->year, 1, 1, &jan1)) return page;
+        for (i = 0; i < 366u; ++i) {
+            if (data->days[i] != PTC_CALENDAR_DAY_MAKEUP_WORKDAY) continue;
+            nearest_calendar_row(model->day_index, (uint16_t)(jan1 + i),
+                (uint16_t)(jan1 + i), row++, &distance, &best_day, &page);
+        }
+    } else if (model->calendar_builtin) {
+        uint16_t year = ptc_holiday_calendar_info()->last_year;
+        PtcHolidayCalendarMatch match;
+        for (i = 0; i < ptc_holiday_calendar_arrangement_count(year); ++i) {
+            const PtcHolidayArrangement *entry = ptc_holiday_calendar_arrangement(year, i);
+            uint16_t first, last;
+            if (ptc_day_index_from_date(year, entry->start_month, entry->start_day, &first) &&
+                ptc_day_index_from_date(year, entry->end_month, entry->end_day, &last))
+                nearest_calendar_row(model->day_index, first, last, i,
+                    &distance, &best_day, &page);
+        }
+        if (!ptc_day_index_from_date(year, 1, 1, &jan1)) return page;
+        while (ptc_holiday_calendar_find(PTC_CALENDAR_DAY_MAKEUP_WORKDAY, jan1, &match)) {
+            for (i = 0; i < ptc_holiday_calendar_arrangement_count(year); ++i)
+                if (match.arrangement == ptc_holiday_calendar_arrangement(year, i))
+                    nearest_calendar_row(model->day_index, match.day_index, match.day_index,
+                        i, &distance, &best_day, &page);
+            if (match.day_index == UINT16_MAX) break;
+            jan1 = (uint16_t)(match.day_index + 1u);
+        }
+    }
+    if (out_distance) *out_distance = distance;
+    return page;
+}
 static void copy_ui_text(PtcUiTextId id, char *out, size_t size)
 {
     if (out && size) snprintf(out, size, "%s", ptc_ui_text(id));

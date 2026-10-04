@@ -8,6 +8,8 @@ Create one UTF-8 JSON file per region and year. Save it in SD `/switch/playwise/
 
 ## Fields
 
+Import Files always shows brief steps, the SD directory, the separate apply step, and the full format-document URL, including when no files are available. Full field rules and JSON examples remain in this document: https://github.com/selfuppen/NX-PlayWise/blob/main/docs/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md
+
 | Field | Requirement |
 | --- | --- |
 | `format_version` | Integer `1`; this is a format version, not a content revision. |

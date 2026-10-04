@@ -2,7 +2,10 @@
 #define PTC_COMPANION_UI_STATE_H
 
 #include "ui_model.h"
+
 #include "ui_input_state.h"
+
+int ptc_ui_holiday_calendar_nearest_page(const PtcUiModel *model, int *distance);
 
 typedef enum {
     PTC_UI_PLAN_IMPACT_CURRENT = 0,

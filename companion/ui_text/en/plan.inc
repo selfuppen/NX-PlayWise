@@ -577,4 +577,5 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_FILE, "Save a UTF-8 .json file in /sw
 PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_FIELDS, "Required: format_version=1, region_id, region_name, year, holidays, workdays. Keep empty arrays.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_DATES, "Use YYYY-MM-DD. Each holiday has name/from/to (inclusive); workdays lists dates. Use valid dates in the same year without overlaps.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_LIMITS, "Years: 2020 to 2198. Maximum file size: 16 KiB. Set quota and bedtime rules separately in Time Plans.")
-PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT, "Full field rules, filenames and examples: docs/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md")
+PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_FORMAT_DOCUMENT, "https://github.com/selfuppen/NX-PlayWise/blob/main/docs/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md")
+PTC_UI_TEXT_VALUE(PTC_UI_T_CALENDAR_IMPORT_GUIDE, "Create one year of holidays and makeup workdays for a region. Select a file and confirm import. X opens help; full rules and examples are at the URL below.")
