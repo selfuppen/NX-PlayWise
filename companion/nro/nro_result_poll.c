@@ -63,25 +63,8 @@ static void open_code_preview_confirm(UiState *ui, bool refreshed)
 
 static void sync_setup_wizard(UiState *ui)
 {
-    bool active;
-    if (!ui) {
-        return;
-    }
-    active = strcmp(ui->model.setup_phase, "active") == 0;
-    if (!active) {
-        if (strcmp(ui->model.setup_phase, "restored") == 0) {
-            if (ui->model.setup_step != PTC_UI_SETUP_TAKEOVER) {
-                (void)save_setup_step(ui, PTC_UI_SETUP_TAKEOVER);
-            }
-        } else if (ui->model.setup_step == 0) {
-            (void)save_setup_step(ui, PTC_UI_SETUP_SHORTCUT);
-        }
-        ui->model.view = PTC_UI_SETUP;
-    } else if (ui->model.setup_step > 0) {
-        ui->model.view = PTC_UI_SETUP;
-    } else if (ui->model.view == PTC_UI_SETUP) {
-        ui->model.view = PTC_UI_CHILD;
-    }
+    if (!ui) return;
+    ptc_ui_setup_sync(&ui->model);
 }
 
 void poll_result(UiState *ui, bool force)
@@ -115,16 +98,34 @@ void poll_result(UiState *ui, bool force)
     status = ptc_companion_transport_poll(
         &ui->transport,
         BACKGROUND_POLL_INTERVAL_MS,
-        REQUEST_TIMEOUT_MS,
+        ui->model.setup_activation_pending ? -1 : REQUEST_TIMEOUT_MS,
         ui->last_result,
         sizeof(ui->last_result));
     sync_transport_label(ui);
     if (status == PTC_COMPANION_PENDING) {
+        if (ui->model.setup_activation_pending && ui->elapsed_ms >= REQUEST_TIMEOUT_MS) {
+            if (!(ui->model.setup_issue_mask & (1U << PTC_UI_SETUP_ISSUE_ACTIVATION)))
+                ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_ACTIVATION, PTC_ERR_SETUP_PENDING);
+            if (!ui->model.setup_wizard_completed) finish_setup(ui, false);
+            return;
+        }
         snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_BACKGROUND_IS_BEING_PROCESSED_PLEASE_WAIT));
         return;
     }
     ui->waiting = false;
     if (status == PTC_COMPANION_OK) {
+        if (ui->model.setup_activation_pending) {
+            cJSON *result = cJSON_Parse(ui->last_result);
+            const cJSON *type = cJSON_GetObjectItemCaseSensitive(result, "type");
+            bool activation_result = cJSON_IsString(type) && strcmp(type->valuestring, "complete_setup") == 0;
+            cJSON_Delete(result);
+            if (!activation_result) {
+                ui->waiting = true;
+                ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_ACTIVATION, PTC_ERR_BAD_REQUEST);
+                if (!ui->model.setup_wizard_completed) finish_setup(ui, false);
+                return;
+            }
+        }
         saved_scheduled_draft = ui->model.draft_scheduled_override;
         preserve_scheduled_draft = ptc_ui_scheduled_dirty(&ui->model);
         saved_bedtime_draft = ui->model.draft_bedtime_policy;
@@ -140,6 +141,13 @@ void poll_result(UiState *ui, bool force)
         saved_holiday_rule = ui->model.draft_holiday_rule;
         saved_makeup_rule = ui->model.draft_makeup_workday_rule;
         if (!ptc_ui_apply_result_json(&ui->model, ui->last_result)) {
+            if (ui->model.setup_activation_pending) {
+                ui->waiting = true;
+                ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_ACTIVATION, PTC_ERR_BAD_REQUEST);
+                if (!ui->model.setup_wizard_completed) finish_setup(ui, false);
+                return;
+            }
+            ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_BAD_REQUEST);
             cancel_bedtime_navigation(ui);
             set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_RESULT), PTC_COMPANION_RESULT_INVALID);
             if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
@@ -151,11 +159,21 @@ void poll_result(UiState *ui, bool force)
             ui->model.overlay == PTC_UI_OVERLAY_GRANT_LOCAL) {
             ui->model.grant_status_refresh_failed = strcmp(ui->model.result_status, "ok") != 0;
         }
-        if (strcmp(ui->model.result_type, "complete_setup") == 0 &&
-            strcmp(ui->model.result_status, "ok") == 0) {
-            ui->model.setup_zone_index = 1;
-            (void)save_setup_step(ui, PTC_UI_SETUP_ZONE);
+        if (ui->model.setup_activation_pending && strcmp(ui->model.result_type, "complete_setup") == 0) {
+            ui->model.setup_activation_pending = false;
+            cJSON *result = cJSON_Parse(ui->last_result);
+            const cJSON *setup = cJSON_GetObjectItemCaseSensitive(result, "setup");
+            const cJSON *phase = cJSON_GetObjectItemCaseSensitive(setup, "phase");
+            bool activated = strcmp(ui->model.result_status, "ok") == 0 && cJSON_IsString(phase) &&
+                strcmp(phase->valuestring, "active") == 0 && !ui->model.disable_flag_present;
+            cJSON_Delete(result);
+            if (!activated) ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_ACTIVATION,
+                ui->model.error_code ? ui->model.error_code : PTC_ERR_SETUP_PENDING);
+            if (!ui->model.setup_wizard_completed) finish_setup(ui, activated);
+            /* If already in Support, keep its current focus and diagnostic result. */
         }
+        if (strcmp(ui->model.result_type, "status") == 0 && strcmp(ui->model.result_status, "ok") != 0)
+            ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, ui->model.error_code);
         sync_setup_wizard(ui);
         load_rule_drafts(ui);
         if (strcmp(ui->model.result_status, "ok") == 0 &&
@@ -380,6 +398,13 @@ void poll_result(UiState *ui, bool force)
         show_pending_redemption(ui);
         return;
     }
+    if (ui->model.setup_activation_pending) {
+        ui->waiting = true;
+        ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_ACTIVATION, PTC_ERR_SETUP_PENDING);
+        if (!ui->model.setup_wizard_completed) finish_setup(ui, false);
+        return;
+    }
+    ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_PCTL_READ_FAILED);
     set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_RESULT), status);
     if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
     if (ui->today_limit_refresh_pending) finish_today_limit_refresh(ui, false);

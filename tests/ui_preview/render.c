@@ -328,6 +328,41 @@ static int render_visual_matrix(const char *directory, const PtcUiModel *baselin
     return failed;
 }
 
+static int render_setup_previews(const char *directory, const PtcUiModel *baseline, bool dark)
+{
+    int failed = 0;
+    PtcUiModel model = *baseline;
+    model.view = PTC_UI_SETUP;
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
+    model.message[0] = '\0';
+    model.setup_pin_ready = true;
+    model.environment_available = model.environment_atmosphere = true;
+    snprintf(model.environment_hos, sizeof(model.environment_hos), "22.5.0");
+    snprintf(model.environment_model, sizeof(model.environment_model), "mariko-oled");
+    snprintf(model.environment_atmosphere_version, sizeof(model.environment_atmosphere_version), "1.11.2");
+    for (int step = 1; step <= PTC_UI_SETUP_CONFIRM; ++step) {
+        char name[32];
+        model.setup_step = step;
+        snprintf(name, sizeof(name), "setup-step-%d", step);
+        failed |= save_preview(directory, "setup", name, &model, dark);
+    }
+    model.setup_step = PTC_UI_SETUP_PREPARE;
+    model.setup_time_help = true;
+    model.restriction_enabled_available = false;
+    model.environment_available = false;
+    failed |= save_preview(directory, "setup", "setup-time-help", &model, dark);
+    model.setup_step = PTC_UI_SETUP_PARENT;
+    model.setup_more = true;
+    model.setup_focus = 3;
+    failed |= save_preview(directory, "setup", "setup-more", &model, dark);
+    model.setup_step = PTC_UI_SETUP_CONFIRM;
+    model.setup_pin_ready = model.status_loaded = false;
+    ptc_ui_setup_record_issue(&model, PTC_UI_SETUP_ISSUE_PROGRESS, PTC_ERR_STORAGE_WRITE_FAILED);
+    snprintf(model.message, sizeof(model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_SAVE_SESSION_ONLY));
+    failed |= save_preview(directory, "setup", "setup-error", &model, dark);
+    return failed;
+}
+
 static int render_all_previews(const char *directory, const PtcUiModel *baseline_ptr)
 {
     PtcUiModel model;
@@ -959,16 +994,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         }
         model.waiting = true;
         failed |= save_preview(directory, "support", "support-waiting", &model, dark);
-        model = baseline;
-        model.view = PTC_UI_SETUP;
-        snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
-        model.message[0] = '\0';
-        for (int step = 1; step <= PTC_UI_SETUP_ZONE; ++step) {
-            char name[32];
-            model.setup_step = step;
-            snprintf(name, sizeof(name), "setup-step-%d", step);
-            failed |= save_preview(directory, "setup", name, &model, dark);
-        }
+        failed |= render_setup_previews(directory, &baseline, dark);
     }
     model = baseline;
     model.view = PTC_UI_CHILD;
@@ -1108,6 +1134,7 @@ int main(int argc, char **argv)
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
     localize_preview_baseline(&model);
     failed |= render_eye_care_previews(zh_hant_dir, &model);
+    for (int dark = 0; dark < 2; ++dark) failed |= render_setup_previews(zh_hant_dir, &model, dark);
     FT_Done_Face(g_ui.face);
     free(bytes);
     return failed;

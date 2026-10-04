@@ -67,41 +67,23 @@ PtcUiRect ptc_ui_error_back_rect(void)
     return rect;
 }
 
-PtcUiRect ptc_ui_setup_shortcut_card_rect(int index)
+PtcUiRect ptc_ui_setup_language_rect(int index)
 {
-    int column = index / 7;
-    int row = index % 7;
-    PtcUiRect rect = {204 + column * 438, 278 + row * 34, 410, 29};
-    if (index < 0 || index >= PTC_UI_SHORTCUT_PRESET_COUNT) {
-        rect.w = 0;
-        rect.h = 0;
-    }
-    return rect;
+    if (index < 0 || index > 3) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){94 + index * 274, 258, 262, 42};
 }
 
-PtcUiRect ptc_ui_setup_primary_rect(void)
-{
-    PtcUiRect rect = {896, 570, 330, 62};
-    return rect;
-}
-
-PtcUiRect ptc_ui_setup_back_rect(void)
-{
-    PtcUiRect rect = {54, 570, 230, 62};
-    return rect;
-}
-
-PtcUiRect ptc_ui_setup_pin_rect(void)
-{
-    PtcUiRect rect = {204, 300, 520, 78};
-    return rect;
-}
-
+PtcUiRect ptc_ui_setup_primary_rect(void) { return (PtcUiRect){794, 646, 432, 52}; }
+PtcUiRect ptc_ui_setup_back_rect(void) { return (PtcUiRect){54, 646, 210, 52}; }
+PtcUiRect ptc_ui_setup_skip_rect(void) { return (PtcUiRect){276, 646, 506, 52}; }
+PtcUiRect ptc_ui_setup_pin_rect(void) { return (PtcUiRect){94, 284, 520, 58}; }
+PtcUiRect ptc_ui_setup_more_rect(void) { return (PtcUiRect){94, 368, 520, 48}; }
+PtcUiRect ptc_ui_setup_shortcut_rect(void) { return (PtcUiRect){94, 510, 1072, 44}; }
+PtcUiRect ptc_ui_setup_time_help_rect(void) { return (PtcUiRect){934, 480, 252, 36}; }
 PtcUiRect ptc_ui_setup_theme_rect(int index)
 {
-    PtcUiRect rect = {204 + index * 292, 270, 268, 132};
-    if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
-    return rect;
+    if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){94 + index * 368, 442, 352, 48};
 }
 
 PtcUiRect ptc_ui_notice_rect(void)
@@ -131,16 +113,6 @@ PtcUiRect ptc_ui_notice_command_text_rect(int y, int height)
 PtcUiRect ptc_ui_time_status_bar_rect(void)
 {
     return (PtcUiRect){754, 24, 472, 66};
-}
-
-PtcUiRect ptc_ui_setup_zone_rect(int index)
-{
-    PtcUiRect rect = {204 + index * 448, 286, 400, 190};
-    if (index < 0 || index > 1) {
-        rect.w = 0;
-        rect.h = 0;
-    }
-    return rect;
 }
 
 PtcUiRect ptc_ui_parent_footer_rect(int index)

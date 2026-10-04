@@ -126,9 +126,11 @@ void load_ui_preferences(UiState *ui)
     ui->model.custom_shortcut_enabled = false;
     ui->model.show_parent_shortcut_hint = true;
     ui->model.setup_step = 0;
+    ui->model.setup_completion_known = false;
+    ui->model.setup_wizard_completed = false;
+    ui->model.setup_legacy_completed_candidate = false;
     ui->model.setup_shortcut_index = PTC_UI_SHORTCUT_PRESET_LR;
     ui->model.setup_theme_index = PTC_UI_THEME_SYSTEM;
-    ui->model.setup_zone_index = 1;
     ui->theme_preference = PTC_UI_THEME_SYSTEM;
     ui->language_preference = PTC_UI_LANGUAGE_SYSTEM;
     ui->model.language_preference = PTC_UI_LANGUAGE_SYSTEM;
@@ -186,10 +188,25 @@ void load_ui_preferences(UiState *ui)
     }
     ui->theme_view = ptc_ui_theme_make_view(ui->theme_preference, ui->system_theme);
     item = cJSON_GetObjectItemCaseSensitive(root, "setup_wizard_step");
+    ui->model.setup_theme_index = ui->theme_preference;
     if (cJSON_IsNumber(item)) {
+        ui->model.setup_legacy_completed_candidate = item->valueint == 0;
         cJSON *wizard_version = cJSON_GetObjectItemCaseSensitive(root, "setup_wizard_version");
         ui->model.setup_step = ptc_ui_migrate_setup_step(
             item->valueint, cJSON_IsNumber(wizard_version) ? wizard_version->valueint : 1);
+        /* An explicitly completed old wizard remains completed even if its
+           backend is unavailable or has since entered protection. */
+        if (item->valueint == 0 && cJSON_IsNumber(wizard_version) &&
+            wizard_version->valueint > 0 && wizard_version->valueint < 5) {
+            ui->model.setup_completion_known = true;
+            ui->model.setup_wizard_completed = true;
+        }
+    }
+    item = cJSON_GetObjectItemCaseSensitive(root, "setup_wizard_completed");
+    if (cJSON_IsBool(item)) {
+        ui->model.setup_completion_known = true;
+        ui->model.setup_wizard_completed = cJSON_IsTrue(item);
+        if (ui->model.setup_wizard_completed) ui->model.setup_step = 0;
     }
     for (int index = 0; index < PTC_UI_SHORTCUT_PRESET_COUNT; ++index) {
         if (ui->model.custom_shortcut_mask == shortcut_preset_mask(index)) {
@@ -242,7 +259,11 @@ bool save_ui_preferences(UiState *ui)
     cJSON_DeleteItemFromObject(root, "setup_wizard_step");
     cJSON_AddNumberToObject(root, "setup_wizard_step", ui->model.setup_step);
     cJSON_DeleteItemFromObject(root, "setup_wizard_version");
-    cJSON_AddNumberToObject(root, "setup_wizard_version", 4);
+    cJSON_AddNumberToObject(root, "setup_wizard_version", 5);
+    if (ui->model.setup_completion_known) {
+        cJSON_DeleteItemFromObject(root, "setup_wizard_completed");
+        cJSON_AddBoolToObject(root, "setup_wizard_completed", ui->model.setup_wizard_completed);
+    }
     rendered = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     ok = rendered && ui->client.storage->vtable->write_text_atomic(ui->client.storage, CONFIG_PATH, rendered);
@@ -252,16 +273,17 @@ bool save_ui_preferences(UiState *ui)
 
 bool save_setup_step(UiState *ui, int step)
 {
-    int previous;
-    if (!ui || step < 0 || step > PTC_UI_SETUP_ZONE) {
+    int previous_step;
+    if (!ui || step < 0 || step > PTC_UI_SETUP_CONFIRM) {
         return false;
     }
-    previous = ui->model.setup_step;
+    previous_step = ui->model.setup_step;
     ui->model.setup_step = step;
     if (save_ui_preferences(ui)) {
         return true;
     }
-    ui->model.setup_step = previous;
+    ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_PROGRESS, PTC_ERR_STORAGE_WRITE_FAILED);
+    ui->model.setup_issue_steps[PTC_UI_SETUP_ISSUE_PROGRESS] = previous_step;
     snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_UNABLE_TO_SAVE_FIRST_TIME_SETUP_PROGRESS));
     return false;
 }

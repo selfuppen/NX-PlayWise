@@ -196,6 +196,10 @@ void handle_today_action_ready(UiState *ui, int index)
 void handle_parent_action(UiState *ui)
 {
     int index = ui->model.selected_index;
+    if (ui->model.parent_support_only && !ptc_ui_parent_read_only_action(&ui->model, index)) {
+        enter_parent_area(ui);
+        return;
+    }
     if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY) {
         snprintf(ui->model.message, sizeof(ui->model.message),
                  ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_THIS_CONTROL_WRITE));
@@ -597,6 +601,11 @@ void finish_quota_recheck(UiState *ui, bool success)
 void confirm_operation(UiState *ui)
 {
     PtcCompanionStatus status;
+    if (ui->model.parent_support_only && ui->model.operation != PTC_UI_OPERATION_EXPORT_DIAGNOSTICS) {
+        ptc_ui_cancel_overlay(&ui->model);
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_READ_ONLY_SUPPORT));
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_CONFIRM &&
         quota_operation_needs_recheck(ui->model.operation)) {
         if (ui->quota_recheck_pending || ui->waiting) return;

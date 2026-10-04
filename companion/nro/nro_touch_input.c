@@ -6,7 +6,8 @@ void handle_touch(UiState *ui, int x, int y)
 {
     PtcUiHit hit = ptc_ui_hit_test(&ui->model, x, y);
     if (ui->waiting && ui->model.view == PTC_UI_PARENT &&
-        ui->model.overlay == PTC_UI_OVERLAY_NONE) {
+        ui->model.overlay == PTC_UI_OVERLAY_NONE &&
+        !(hit.kind == PTC_UI_HIT_PARENT_CARD && ptc_ui_parent_read_only_action(&ui->model, hit.index))) {
         snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS_2));
         return;
     }
@@ -49,9 +50,13 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_CANCEL);
         enter_child_area(ui);
         break;
-    case PTC_UI_HIT_SETUP_SHORTCUT_CARD:
-        ptc_audio_play(PTC_SE_FOCUS);
-        select_setup_shortcut(ui, hit.index);
+    case PTC_UI_HIT_SETUP_LANGUAGE:
+    case PTC_UI_HIT_SETUP_TIME_HELP:
+    case PTC_UI_HIT_SETUP_MORE:
+    case PTC_UI_HIT_SETUP_SHORTCUT:
+    case PTC_UI_HIT_SETUP_SKIP:
+        ptc_audio_play(PTC_SE_CONFIRM);
+        setup_action(ui, hit.kind, hit.index);
         break;
     case PTC_UI_HIT_SETUP_PRIMARY:
         ptc_audio_play(PTC_SE_CONFIRM);
@@ -64,14 +69,6 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_SETUP_PIN:
         ptc_audio_play(PTC_SE_CONFIRM);
         setup_pin(ui);
-        break;
-    case PTC_UI_HIT_SETUP_CHILD_ZONE:
-        ptc_audio_play(PTC_SE_FOCUS);
-        ui->model.setup_zone_index = 0;
-        break;
-    case PTC_UI_HIT_SETUP_PARENT_ZONE:
-        ptc_audio_play(PTC_SE_FOCUS);
-        ui->model.setup_zone_index = 1;
         break;
     case PTC_UI_HIT_PARENT_PREV_PAGE:
         ptc_audio_play(PTC_SE_TAB);
@@ -105,7 +102,7 @@ void handle_touch(UiState *ui, int x, int y)
         request_parent_navigation(ui, hit.index, false);
         break;
     case PTC_UI_HIT_PARENT_CARD:
-        if (ui->waiting) {
+        if (ui->waiting && !ptc_ui_parent_read_only_action(&ui->model, hit.index)) {
             ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
         } else {
@@ -738,8 +735,7 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_SETUP_THEME_OPTION:
         ptc_audio_play(PTC_SE_CONFIRM);
-        ui->model.setup_theme_index = hit.index;
-        setup_primary(ui);
+        setup_action(ui, hit.kind, hit.index);
         break;
     case PTC_UI_HIT_GRANT_ADJUST:
         ptc_audio_play(PTC_SE_POPUP);

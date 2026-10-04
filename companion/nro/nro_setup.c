@@ -3,7 +3,8 @@
 void refresh_setup_activation(UiState *ui)
 {
     int64_t now;
-    if (!ui || ui->waiting || ui->model.view != PTC_UI_SETUP) {
+    if (!ui || ui->waiting || (ui->model.view != PTC_UI_SETUP &&
+        !(ui->model.setup_wizard_completed && strcmp(ui->model.setup_phase, "released") == 0))) {
         return;
     }
     now = (int64_t)time(NULL);
@@ -20,6 +21,7 @@ static void enter_parent_area_unlocked(UiState *ui)
     if (!ui) {
         return;
     }
+    ui->model.parent_support_only = false;
     refresh_disable_flag(ui);
     refresh_security_state(ui);
     ui->model.view = PTC_UI_PARENT;
@@ -87,6 +89,7 @@ void enter_parent_area(UiState *ui)
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_NONE;
+    ui->setup_parent_authorized = true;
     enter_parent_area_unlocked(ui);
     if (strlen(pin) < 4U) {
         snprintf(ui->model.message, sizeof(ui->model.message),
@@ -121,6 +124,12 @@ bool commit_shortcut_preferences(UiState *ui)
     ui->model.show_parent_shortcut_hint = ui->model.shortcut_draft_show_hint;
     refresh_custom_shortcut_label(ui);
     if (save_ui_preferences(ui)) return true;
+    if (ui->model.view == PTC_UI_SETUP) {
+        ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_SHORTCUT, PTC_ERR_STORAGE_WRITE_FAILED);
+        ui->model.overlay = PTC_UI_OVERLAY_NONE;
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_SAVE_SESSION_ONLY));
+        return false;
+    }
     ui->model.custom_shortcut_mask = old_mask;
     ui->model.custom_shortcut_enabled = old_enabled;
     ui->model.show_parent_shortcut_hint = old_hint;
@@ -151,7 +160,11 @@ void setup_pin(UiState *ui)
     }
     ui->auth_retry_action = AUTH_RETRY_SETUP_PIN;
     state = ptc_companion_auth_state(&ui->auth);
+    ui->model.setup_pin_ready = state == PTC_AUTH_OK;
     if (state == PTC_AUTH_OK) {
+        if (!ui->setup_parent_authorized &&
+            !verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_BEFORE_CHANGING_YOUR_PIN_PLEASE_ENTER_YOUR))) return;
+        ui->setup_parent_authorized = true;
         if (!pin_input(ui, ptc_ui_text(PTC_UI_T_MODIFY_DEFAULT_PIN), ptc_ui_text(PTC_UI_T_ENTER_NEW_1_TO_64_DIGIT_NUMBER),
                        pin, sizeof(pin)) ||
             !pin_input(ui, ptc_ui_text(PTC_UI_T_CONFIRM_NEW_PIN), ptc_ui_text(PTC_UI_T_PLEASE_ENTER_THE_SAME_PIN_AGAIN_YOUR),
@@ -169,6 +182,7 @@ void setup_pin(UiState *ui)
             show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_MODIFICATION_FAILED), auth_status_zh(state), 0);
             return;
         }
+        ui->model.setup_pin_ready = true;
         ui->auth_retry_action = AUTH_RETRY_NONE;
         snprintf(ui->model.message, sizeof(ui->model.message), "%s",
                  strlen(pin) < 4U ? ptc_ui_text(PTC_UI_T_PIN_HAS_BEEN_MODIFIED_CURRENTLY_STILL_WEAK) : ptc_ui_text(PTC_UI_T_PIN_HAS_BEEN_MODIFIED));
@@ -196,12 +210,9 @@ void setup_pin(UiState *ui)
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_NONE;
-    if (save_setup_step(ui, PTC_UI_SETUP_THEME)) {
-        snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-                 strlen(pin) < 4U
-                     ? ptc_ui_text(PTC_UI_T_PIN_HAS_BEEN_SAVED_THE_CURRENT_PIN)
-                     : ptc_ui_text(PTC_UI_T_PIN_SAVED_NEXT_SELECT_A_THEME));
-    }
+    ui->model.setup_pin_ready = true;
+    ui->setup_parent_authorized = true;
+    snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PIN_HAS_BEEN_MODIFIED));
 }
 
 bool ensure_default_setup_pin(UiState *ui)
@@ -209,6 +220,7 @@ bool ensure_default_setup_pin(UiState *ui)
     PtcAuthStatus state;
     if (!ui) return false;
     state = ptc_companion_auth_state(&ui->auth);
+    ui->model.setup_pin_ready = state == PTC_AUTH_OK;
     if (state == PTC_AUTH_OK) {
         ui->auth_retry_action = AUTH_RETRY_NONE;
         return true;
@@ -225,93 +237,108 @@ bool ensure_default_setup_pin(UiState *ui)
         return false;
     }
     ui->auth_retry_action = AUTH_RETRY_NONE;
+    ui->model.setup_pin_ready = true;
+    ui->setup_parent_authorized = true;
     snprintf(ui->model.message, sizeof(ui->model.message),
              ptc_ui_text(PTC_UI_T_DEFAULT_PIN_110_HAS_BEEN_CREATED_THIS));
     return true;
 }
 
-static void finish_setup(UiState *ui)
+void enter_support_area(UiState *ui)
 {
-    int zone;
-    if (!ui || strcmp(ui->model.setup_phase, "active") != 0) {
-        return;
-    }
-    zone = ui->model.setup_zone_index;
-    if (!save_setup_step(ui, 0)) {
-        return;
-    }
-    ui->model.setup_zone_index = zone;
-    if (zone == 1) {
-        enter_parent_area_unlocked(ui);
-    } else {
-        enter_child_area(ui);
-    }
+    if (!ui) return;
+    ui->model.view = PTC_UI_PARENT;
+    ui->model.parent_page = PTC_UI_PARENT_SUPPORT;
+    ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+    ui->model.selected_index = 4;
+    ui->model.parent_footer_focused = false;
+    ui->model.overlay = PTC_UI_OVERLAY_NONE;
+    snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_SETUP_DIAGNOSTIC_GUIDE));
+}
+
+void finish_setup(UiState *ui, bool activated)
+{
+    if (!ui) return;
+    ui->model.setup_wizard_completed = true;
+    ui->model.setup_completion_known = true;
+    (void)save_setup_step(ui, 0);
+    /* An unreadable/missing PIN opens diagnostics only, never privileged pages. */
+    ui->model.setup_pin_ready = ptc_companion_auth_state(&ui->auth) == PTC_AUTH_OK;
+    ui->model.parent_support_only = !ui->setup_parent_authorized || !ui->model.setup_pin_ready;
+    if (activated && !ui->model.parent_support_only) enter_parent_area_unlocked(ui);
+    else enter_support_area(ui);
 }
 
 void setup_previous(UiState *ui)
 {
-    if (!ui) {
-        return;
-    }
-    if (ui->model.setup_step <= PTC_UI_SETUP_SHORTCUT) {
-        ui->exit_requested = true;
-        return;
-    }
-    (void)save_setup_step(ui, ui->model.setup_step - 1);
+    if (!ui) return;
+    if (ui->model.setup_step <= PTC_UI_SETUP_PREPARE) ui->exit_requested = true;
+    else (void)save_setup_step(ui, ui->model.setup_step - 1);
+    ui->model.setup_focus = 0;
 }
 
 void setup_primary(UiState *ui)
 {
-    if (!ui) {
-        return;
-    }
-    switch (ui->model.setup_step) {
-    case PTC_UI_SETUP_SHORTCUT:
-        if (!commit_shortcut_preferences(ui)) {
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_SHORTCUT_KEY_SETTINGS_ARE_NOT_SAVED));
-            break;
+    if (!ui) return;
+    if (ui->model.setup_step == PTC_UI_SETUP_PREPARE) {
+        (void)save_setup_step(ui, PTC_UI_SETUP_PARENT);
+        (void)ensure_default_setup_pin(ui);
+    } else if (ui->model.setup_step == PTC_UI_SETUP_PARENT) {
+        (void)save_setup_step(ui, PTC_UI_SETUP_CONFIRM);
+    } else if (ui->model.setup_step == PTC_UI_SETUP_CONFIRM) {
+        if (ui->model.setup_activation_pending) return;
+        if (!ui->waiting && ptc_companion_auth_state(&ui->auth) != PTC_AUTH_OK) {
+            ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_PIN, PTC_ERR_SETUP_PENDING);
+            finish_setup(ui, false);
+            return;
         }
-        snprintf(ui->model.message, sizeof(ui->model.message), "%s",
-                 ui->model.custom_shortcut_enabled
-                    ? ptc_ui_text(PTC_UI_T_SHORTCUT_KEYS_CONFIRMED_TO_BE_ENABLED_FIXED)
-                    : ptc_ui_text(PTC_UI_T_CUSTOM_COMBINATIONS_ARE_NOT_ENABLED_CURRENTLY_ONLY));
-        if (save_setup_step(ui, PTC_UI_SETUP_PIN)) (void)ensure_default_setup_pin(ui);
-        break;
-    case PTC_UI_SETUP_PIN:
-        if (ensure_default_setup_pin(ui)) {
-            ui->model.setup_theme_index = (int)ui->theme_preference;
-            (void)save_setup_step(ui, PTC_UI_SETUP_THEME);
-        }
-        break;
-    case PTC_UI_SETUP_THEME:
-        if (apply_theme_preference(ui, (PtcUiThemePreference)ui->model.setup_theme_index)) {
-            (void)save_setup_step(ui, PTC_UI_SETUP_TAKEOVER);
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_APPEARANCE_THEME_HAS_BEEN_SAVED_NEXT));
-        } else {
-            snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_THE_THEME_SETTINGS_ARE_NOT_SAVED_AND));
-        }
-        break;
-    case PTC_UI_SETUP_TAKEOVER:
-        if (ptc_ui_setup_takeover_complete(&ui->model)) {
-            ui->model.setup_zone_index = 1;
-            if (save_setup_step(ui, PTC_UI_SETUP_ZONE)) {
-                snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_QUOTA_MANAGEMENT_HAS_BEEN_ENABLED_PLEASE_SELECT));
+        if (!ui->waiting && !ui->setup_parent_authorized) {
+            if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_SETUP_ACTIVATE))) {
+                ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_PIN, PTC_ERR_SETUP_PENDING);
+                finish_setup(ui, false);
+                return;
             }
+            ui->setup_parent_authorized = true;
+        }
+        if (strcmp(ui->model.setup_phase, "active") == 0 && !ui->model.disable_flag_present) {
+            finish_setup(ui, true);
         } else if (!ui->waiting) {
-            if (ptc_ui_runtime_fingerprint_reconfirmation_needed(&ui->model)) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, ptc_ui_text(PTC_UI_T_THE_SYSTEM_ENVIRONMENT_HAS_CHANGED_PLEASE_RECHECK),
-                                     ptc_ui_text(PTC_UI_T_THE_SYSTEM_VERSION_OR_OPERATING_ENVIRONMENT_IS));
-            } else if (ui->model.disable_flag_present && strcmp(ui->model.setup_phase, "restored") == 0) {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, ptc_ui_text(PTC_UI_T_RE_ENABLE_CONTROLS),
-                                     ptc_ui_text(PTC_UI_T_WILL_RECHECK_SYSTEM_COMPATIBILITY_EMERGENCY_SUSPENSION_WILL));
-            } else {
-                open_confirm_overlay(ui, PTC_UI_OPERATION_COMPLETE_SETUP, ptc_ui_text(PTC_UI_T_CONFIRM_ENABLE_CONTROLS),
-                                     ptc_ui_text(PTC_UI_T_FIRST_CHECK_SYSTEM_COMPATIBILITY_AFTER_PASSING_SAVE));
+            ui->model.setup_activation_pending = true;
+            submit_transport_empty(ui, "complete_setup", ptc_ui_text(PTC_UI_T_SETUP_ACTIVATING),
+                ptc_ui_text(PTC_UI_T_FAILED_TO_ENABLE_AUTOMATIC_CONTROL));
+            if (!ui->waiting) {
+                ui->model.setup_activation_pending = false;
+                ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_ACTIVATION, PTC_ERR_SETUP_PENDING);
+                finish_setup(ui, false);
             }
         }
+    }
+    ui->model.setup_focus = 0;
+}
+
+void setup_action(UiState *ui, int action, int index)
+{
+    if (!ui) return;
+    switch (action) {
+    case PTC_UI_HIT_SETUP_LANGUAGE:
+        if (index >= 0 && index <= PTC_UI_LANGUAGE_ENGLISH)
+            (void)apply_language_preference(ui, (PtcUiLanguagePreference)index);
         break;
-    case PTC_UI_SETUP_ZONE:
-        finish_setup(ui);
+    case PTC_UI_HIT_SETUP_TIME_HELP:
+        ui->model.setup_time_help = !ui->model.setup_time_help;
+        break;
+    case PTC_UI_HIT_SETUP_MORE:
+        ui->model.setup_more = !ui->model.setup_more;
+        break;
+    case PTC_UI_HIT_SETUP_SHORTCUT:
+        open_shortcut_manager(ui);
+        break;
+    case PTC_UI_HIT_SETUP_THEME_OPTION:
+        ui->model.setup_theme_index = index;
+        (void)apply_theme_preference(ui, (PtcUiThemePreference)index);
+        break;
+    case PTC_UI_HIT_SETUP_SKIP:
+        finish_setup(ui, false);
         break;
     default:
         break;
@@ -320,58 +347,37 @@ void setup_primary(UiState *ui)
 
 void handle_setup_input(UiState *ui, u64 down, u64 held)
 {
+    int max_focus;
     (void)held;
-    if (!ui || ui->model.view != PTC_UI_SETUP || ui->waiting) {
-        return;
-    }
-    if (down & HidNpadButton_B) {
-        ptc_audio_play(PTC_SE_CANCEL);
-        setup_previous(ui);
-        return;
-    }
-    if (ui->model.setup_step == PTC_UI_SETUP_SHORTCUT) {
-        if (down & HidNpadButton_Up) {
-            ptc_audio_play(PTC_SE_FOCUS);
-            ui->model.setup_shortcut_index = ui->model.setup_shortcut_index <= 0
-                ? PTC_UI_SHORTCUT_PRESET_COUNT - 1 : ui->model.setup_shortcut_index - 1;
-        } else if (down & HidNpadButton_Down) {
-            ptc_audio_play(PTC_SE_FOCUS);
-            ui->model.setup_shortcut_index = (ui->model.setup_shortcut_index + 1) % PTC_UI_SHORTCUT_PRESET_COUNT;
-        } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
-            ptc_audio_play(PTC_SE_FOCUS);
-            ui->model.setup_shortcut_index = (ui->model.setup_shortcut_index + 7) % PTC_UI_SHORTCUT_PRESET_COUNT;
-        } else if (down & HidNpadButton_A) {
-            ptc_audio_play(PTC_SE_CONFIRM);
-            select_setup_shortcut(ui, ui->model.setup_shortcut_index);
-        } else if (down & HidNpadButton_Plus) {
-            ptc_audio_play(PTC_SE_CONFIRM);
-            setup_primary(ui);
-        }
-    } else if (ui->model.setup_step == PTC_UI_SETUP_PIN && (down & HidNpadButton_X)) {
-        ptc_audio_play(PTC_SE_CONFIRM);
-        setup_pin(ui);
-    } else if (ui->model.setup_step == PTC_UI_SETUP_THEME) {
-        if (down & HidNpadButton_Left) {
-            ptc_audio_play(PTC_SE_FOCUS);
-            ui->model.setup_theme_index = ui->model.setup_theme_index <= 0 ? 2 : ui->model.setup_theme_index - 1;
-        } else if (down & HidNpadButton_Right) {
-            ptc_audio_play(PTC_SE_FOCUS);
-            ui->model.setup_theme_index = (ui->model.setup_theme_index + 1) % 3;
-        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
-            ptc_audio_play(PTC_SE_CONFIRM);
-            setup_primary(ui);
-        }
-    } else if (ui->model.setup_step == PTC_UI_SETUP_ZONE) {
-        if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
-            ptc_audio_play(PTC_SE_FOCUS);
-            ui->model.setup_zone_index = ui->model.setup_zone_index == 0 ? 1 : 0;
-        } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
-            ptc_audio_play(PTC_SE_CONFIRM);
-            setup_primary(ui);
-        }
+    if (!ui || ui->model.view != PTC_UI_SETUP) return;
+    if (down & HidNpadButton_B) { setup_previous(ui); return; }
+    max_focus = ui->model.setup_step == PTC_UI_SETUP_CONFIRM ? 1 :
+        (ui->model.setup_step == PTC_UI_SETUP_PARENT && ui->model.setup_more ? 4 : 2);
+    if (down & HidNpadButton_Down) ui->model.setup_focus = (ui->model.setup_focus + 1) % (max_focus + 1);
+    else if (down & HidNpadButton_Up) ui->model.setup_focus = (ui->model.setup_focus + max_focus) % (max_focus + 1);
+    else if (down & HidNpadButton_X) {
+        if (ui->model.setup_step == PTC_UI_SETUP_PARENT) setup_pin(ui);
+        else if (ui->model.setup_step == PTC_UI_SETUP_CONFIRM) finish_setup(ui, false);
+        else setup_action(ui, PTC_UI_HIT_SETUP_TIME_HELP, 0);
+    } else if (down & (HidNpadButton_Left | HidNpadButton_Right)) {
+        int direction = down & HidNpadButton_Right ? 1 : -1;
+        if (ui->model.setup_step == PTC_UI_SETUP_PREPARE) {
+            ui->model.setup_focus = 1;
+            setup_action(ui, PTC_UI_HIT_SETUP_LANGUAGE, ((int)ui->language_preference + direction + 4) % 4);
+        } else if (ui->model.setup_step == PTC_UI_SETUP_PARENT && ui->model.setup_more) {
+            ui->model.setup_focus = 3;
+            setup_action(ui, PTC_UI_HIT_SETUP_THEME_OPTION, ((int)ui->theme_preference + direction + 3) % 3);
+        } else if (ui->model.setup_step == PTC_UI_SETUP_CONFIRM) ui->model.setup_focus ^= 1;
     } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
-        ptc_audio_play(PTC_SE_CONFIRM);
-        setup_primary(ui);
+        int focus = down & HidNpadButton_Plus ? 0 : ui->model.setup_focus;
+        if (focus == 0) setup_primary(ui);
+        else if (ui->model.setup_step == PTC_UI_SETUP_PREPARE) {
+            if (focus == 2) setup_action(ui, PTC_UI_HIT_SETUP_TIME_HELP, 0);
+        } else if (ui->model.setup_step == PTC_UI_SETUP_PARENT) {
+            if (focus == 1) setup_pin(ui);
+            else if (focus == 2) setup_action(ui, PTC_UI_HIT_SETUP_MORE, 0);
+            else if (focus == 4) setup_action(ui, PTC_UI_HIT_SETUP_SHORTCUT, 0);
+        } else finish_setup(ui, false);
     }
 }
 

@@ -22,12 +22,22 @@ typedef enum {
 } PtcUiView;
 
 typedef enum {
-    PTC_UI_SETUP_SHORTCUT = 1,
-    PTC_UI_SETUP_PIN = 2,
-    PTC_UI_SETUP_THEME = 3,
-    PTC_UI_SETUP_TAKEOVER = 4,
-    PTC_UI_SETUP_ZONE = 5
+    PTC_UI_SETUP_PREPARE = 1,
+    PTC_UI_SETUP_PARENT = 2,
+    PTC_UI_SETUP_CONFIRM = 3
 } PtcUiSetupStep;
+
+typedef enum {
+    PTC_UI_SETUP_ISSUE_LANGUAGE = 0,
+    PTC_UI_SETUP_ISSUE_PIN,
+    PTC_UI_SETUP_ISSUE_THEME,
+    PTC_UI_SETUP_ISSUE_SHORTCUT,
+    PTC_UI_SETUP_ISSUE_PROGRESS,
+    PTC_UI_SETUP_ISSUE_STATUS,
+    PTC_UI_SETUP_ISSUE_ACTIVATION,
+    PTC_UI_SETUP_ISSUE_DEFAULTS,
+    PTC_UI_SETUP_ISSUE_COUNT
+} PtcUiSetupIssueKind;
 
 typedef enum {
     PTC_UI_SHORTCUT_PRESET_LR = 0,
@@ -335,6 +345,7 @@ typedef struct {
     char apply_status[48];
     char disable_reason[48];
     char environment_hos[32];
+    char environment_atmosphere_version[32];
     char environment_model[32];
     bool environment_available;
     bool environment_atmosphere;
@@ -412,11 +423,22 @@ typedef struct {
     char result_status[24];
     char result_type[48];
     int setup_step;
+    bool setup_wizard_completed;
+    bool setup_completion_known;
+    bool setup_legacy_completed_candidate;
+    bool setup_more;
+    bool setup_time_help;
+    bool setup_pin_ready;
+    bool parent_support_only;
+    bool setup_activation_pending;
+    int setup_focus;
+    unsigned setup_issue_mask;
+    int setup_issue_steps[PTC_UI_SETUP_ISSUE_COUNT];
+    int setup_issue_codes[PTC_UI_SETUP_ISSUE_COUNT];
     int setup_shortcut_index;
     int setup_theme_index;
     PtcUiLanguagePreference language_preference;
     bool parent_export_succeeded;
-    int setup_zone_index;
     uint64_t custom_shortcut_mask;
     bool custom_shortcut_enabled;
     uint64_t shortcut_draft_mask;

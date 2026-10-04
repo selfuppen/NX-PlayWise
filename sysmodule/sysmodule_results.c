@@ -67,6 +67,7 @@ static bool write_result_with_setup(
     char text[1024];
     char disable_reason[48] = "";
     char hos[32] = "";
+    char atmosphere_version[32] = "";
     char model[32] = "";
     bool atmosphere = false;
     bool environment_available = false;
@@ -88,6 +89,7 @@ static bool write_result_with_setup(
         (void)json_string(text, "hos", hos, sizeof(hos));
         (void)json_string(text, "model", model, sizeof(model));
         (void)json_bool_value(text, "atmosphere", &atmosphere);
+        (void)json_string(text, "atmosphere_version", atmosphere_version, sizeof(atmosphere_version));
     }
     join_path(path, sizeof(path), sysmodule->app_root, "recovery/active/meta.json");
     recovery_active = sysmodule->storage->vtable->exists(sysmodule->storage, path);
@@ -122,7 +124,7 @@ static bool write_result_with_setup(
         "\"snapshot_available\":%s,\"activate_after\":%lld,\"last_error\":\"%s\","
         "\"apply_status\":\"%s\",\"apply_pending_confirmation\":%s,\"recovery_active\":%s,"
         "\"disable_reason\":\"%s\"},"
-        "\"environment\":{\"available\":%s,\"hos\":\"%s\",\"model\":\"%s\",\"atmosphere\":%s},"
+        "\"environment\":{\"available\":%s,\"hos\":\"%s\",\"model\":\"%s\",\"atmosphere\":%s,\"atmosphere_version\":\"%s\"},"
         "\"recent_events\":%s,%s",
         (int)(completed_at - base), base,
         setup.phase,
@@ -139,6 +141,7 @@ static bool write_result_with_setup(
         hos,
         model,
         atmosphere ? "true" : "false",
+        atmosphere_version,
         recent_json,
         completed_at);
     return write_result(sysmodule, request_id, json);

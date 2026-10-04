@@ -333,6 +333,10 @@ void request_bedtime_leave(UiState *ui, int target_page, bool leave_parent)
 
 void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
 {
+    if (ui->model.parent_support_only && !leave_parent && target_page != PTC_UI_PARENT_SUPPORT) {
+        enter_parent_area(ui);
+        return;
+    }
     if (ui->waiting) {
         snprintf(ui->model.message, sizeof(ui->model.message),
                  ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_SETTINGS_ARE));

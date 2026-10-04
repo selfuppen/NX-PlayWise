@@ -10,12 +10,105 @@
 #include "../../common/protocol/error_code.h"
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
+#include "../../third_party/cjson/cJSON.h"
 
 int ptc_ui_migrate_setup_step(int step, int wizard_version)
 {
     if (step <= 0) return 0;
-    if (wizard_version >= 4) return step <= PTC_UI_SETUP_ZONE ? step : PTC_UI_SETUP_SHORTCUT;
-    return PTC_UI_SETUP_SHORTCUT;
+    if (wizard_version >= 5) return step <= PTC_UI_SETUP_CONFIRM ? step : PTC_UI_SETUP_PREPARE;
+    return PTC_UI_SETUP_PREPARE;
+}
+
+void ptc_ui_setup_sync(PtcUiModel *model)
+{
+    if (!model) return;
+    /* Older completed installs have no independent completion marker. Only a
+       confirmed active backend can migrate their zero progress to completed. */
+    if (!model->setup_completion_known && (model->setup_step == 0 || model->setup_legacy_completed_candidate) &&
+        strcmp(model->setup_phase, "active") == 0) {
+        model->setup_wizard_completed = true;
+        model->setup_completion_known = true;
+        model->setup_step = 0;
+        if (model->view == PTC_UI_SETUP) model->view = PTC_UI_CHILD;
+    }
+    if (model->setup_wizard_completed) return;
+    if (model->setup_step == 0) model->setup_step = PTC_UI_SETUP_PREPARE;
+    if (model->view != PTC_UI_PARENT) model->view = PTC_UI_SETUP;
+}
+
+void ptc_ui_setup_record_issue(PtcUiModel *model, PtcUiSetupIssueKind kind, int code)
+{
+    if (!model || kind < 0 || kind >= PTC_UI_SETUP_ISSUE_COUNT) return;
+    model->setup_issue_mask |= 1U << kind;
+    model->setup_issue_steps[kind] = model->setup_step;
+    model->setup_issue_codes[kind] = code;
+}
+
+bool ptc_ui_setup_reference_matches(const PtcUiModel *model)
+{
+    return model && model->environment_available && model->environment_atmosphere &&
+        strcmp(model->environment_hos, "22.5.0") == 0 &&
+        strcmp(model->environment_model, "mariko-oled") == 0 &&
+        strcmp(model->environment_atmosphere_version, "1.11.2") == 0;
+}
+
+bool ptc_ui_setup_has_issues(const PtcUiModel *model)
+{
+    return !model || model->setup_issue_mask || !model->status_loaded ||
+        !ptc_ui_setup_reference_matches(model) || !model->setup_pin_ready ||
+        !model->restriction_enabled_available || !model->restriction_enabled ||
+        (model->temporary_unlocked_available && model->temporary_unlocked) ||
+        model->disable_flag_present || strcmp(model->setup_phase, "failed") == 0 ||
+        strcmp(model->setup_phase, "protection") == 0;
+}
+
+bool ptc_ui_parent_read_only_action(const PtcUiModel *model, int index)
+{
+    return model && model->parent_page == PTC_UI_PARENT_SUPPORT && (index == 4 || index == 5);
+}
+
+bool ptc_ui_setup_diagnostic_json(const PtcUiModel *model, char *out, size_t size)
+{
+    static const char *const categories[] = {
+        "language_save", "pin_setup", "theme_save", "shortcut_save",
+        "progress_save", "status_read", "activation", "install_defaults"
+    };
+    cJSON *root;
+    cJSON *issues;
+    char *text;
+    bool ok;
+    if (!model || !out || size == 0) return false;
+    root = cJSON_CreateObject();
+    if (!root) return false;
+    cJSON_AddNumberToObject(root, "version", 1);
+    cJSON_AddBoolToObject(root, "wizard_completed", model->setup_wizard_completed);
+    cJSON_AddNumberToObject(root, "step", model->setup_step);
+    cJSON_AddBoolToObject(root, "activation_pending", model->setup_activation_pending);
+    cJSON_AddBoolToObject(root, "status_loaded", model->status_loaded);
+    cJSON_AddBoolToObject(root, "environment_available", model->environment_available);
+    cJSON_AddBoolToObject(root, "reference_environment_matches", ptc_ui_setup_reference_matches(model));
+    cJSON_AddNumberToObject(root, "parental_control_enabled", model->restriction_enabled_available
+        ? (model->restriction_enabled ? 1 : 0) : -1);
+    cJSON_AddBoolToObject(root, "pin_ready", model->setup_pin_ready);
+    cJSON_AddStringToObject(root, "official_pause_setting", "manual_check_required");
+    cJSON_AddStringToObject(root, "clock_sync", "not_detected");
+    issues = cJSON_AddArrayToObject(root, "issues");
+    for (int i = 0; issues && i < PTC_UI_SETUP_ISSUE_COUNT; ++i) {
+        if (model->setup_issue_mask & (1U << i)) {
+            cJSON *issue = cJSON_CreateObject();
+            if (!issue) continue;
+            cJSON_AddStringToObject(issue, "category", categories[i]);
+            cJSON_AddNumberToObject(issue, "step", model->setup_issue_steps[i]);
+            cJSON_AddNumberToObject(issue, "code", model->setup_issue_codes[i]);
+            cJSON_AddItemToArray(issues, issue);
+        }
+    }
+    text = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    ok = text && strlen(text) < size;
+    if (ok) snprintf(out, size, "%s", text);
+    free(text);
+    return ok;
 }
 
 PtcRuleMode ptc_ui_next_rule_mode(PtcRuleMode mode)
@@ -230,6 +323,7 @@ void ptc_ui_set_execution(PtcUiModel *model, const char *command_name, const cha
 
 const char *ptc_ui_support_problem(const PtcUiModel *model)
 {
+    if (model->parent_support_only) return ptc_ui_text(PTC_UI_T_SETUP_READ_ONLY_SUPPORT);
     if (model->waiting || model->apply_pending_confirmation) return ptc_ui_text(PTC_UI_T_CONFIRMING_CURRENT_OPERATION);
     if (model->recovery_active) return ptc_ui_text(PTC_UI_T_THERE_ARE_UNFINISHED_RESTORES_THAT_NEED_TO);
     if (ptc_ui_runtime_fingerprint_reconfirmation_needed(model)) return ptc_ui_text(PTC_UI_T_THE_SYSTEM_ENVIRONMENT_HAS_CHANGED_AND_NEEDS);
@@ -238,13 +332,16 @@ const char *ptc_ui_support_problem(const PtcUiModel *model)
     if (model->disable_flag_present) return ptc_ui_text(PTC_UI_T_CONTROL_IS_DISABLED);
     if (!model->status_loaded) return ptc_ui_text(PTC_UI_T_STATUS_HAS_NOT_BEEN_READ_YET);
     if (model->error_code) return ptc_ui_text(PTC_UI_T_THE_LAST_OPERATION_WAS_NOT_COMPLETED);
-    if (strcmp(model->setup_phase, "active") != 0) return ptc_ui_text(PTC_UI_T_FIRST_TIME_SETUP_NOT_COMPLETED_YET);
+    if (model->setup_wizard_completed && model->setup_issue_mask) return ptc_ui_text(PTC_UI_T_SETUP_RECORDED_PROBLEMS);
+    if (strcmp(model->setup_phase, "active") != 0) return ptc_ui_text(model->setup_wizard_completed
+        ? PTC_UI_T_SETUP_CONTROLS_INACTIVE : PTC_UI_T_FIRST_TIME_SETUP_NOT_COMPLETED_YET);
     return ptc_ui_text(PTC_UI_T_THERE_ARE_CURRENTLY_NO_PENDING_ISSUES);
 }
 
 int ptc_ui_support_recommended_action(const PtcUiModel *model)
 {
     if (model->waiting || model->apply_pending_confirmation) return -1;
+    if (model->parent_support_only || (model->setup_wizard_completed && model->setup_issue_mask)) return 4;
     if (model->recovery_active) {
         return ptc_ui_safety_action_available(model, 1) != PTC_UI_ACTION_DISABLED ? 1 : 4;
     }

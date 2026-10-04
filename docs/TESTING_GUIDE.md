@@ -6,6 +6,12 @@
 
 # Testing Guide
 
+## Three-step setup and diagnostic acceptance
+
+`make test-host` includes `test_nro_setup`, which runs the real NRO preferences, wizard, polling and export code against fixed time, memory storage and host libnx/input shims without including implementation files. Coverage includes four languages and glyph refreshes, session choices after failed writes, default PIN errors allowing progress, mismatched PIN preservation, reopening a skipped/completed guide, read-only Support without valid credentials, offline sanitized export, activation pending after 30 seconds with the original request retained, late success and explicit failure. UI C tests cover three-page hit targets, inert collapsed controls, reference matching and safe diagnostic categories.
+
+Run `python tools/test.py` and `python tools/package_remote.py --with-previews`; the default Eden NRO must still build and validate. Inspect all three pages in both themes and all three languages, expanded preferences, time help and error paths. Hardware checks cover system language, enabled/disabled/unreadable parental controls, current firmware, offline Support/export, touch and controller navigation. Host/Eden do not establish PCTL evidence.
+
 ## Eye care candidate checks
 
 During a break, verify `daily_allowance:false` and `eye_care:true`, no false quota exhaustion in today's status or `X Details`, the break and cycle in the left preview, and the cycle in the persistent header. The temporary PCTL block must not disable skipping the current break. The Time Plan eye care switch should appear as a capsule slider with the same controller and touch action.

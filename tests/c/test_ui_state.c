@@ -8,6 +8,8 @@
 #include "../../companion/nro/ptc_audio.h"
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
+#include "../../common/protocol/error_code.h"
+#include "../../third_party/cjson/cJSON.h"
 
 static int failures;
 
@@ -295,6 +297,71 @@ static void test_release_navigation(void)
                "minus shortcut hint remains unambiguous");
 }
 
+static void test_setup_advisory_state(void)
+{
+    PtcUiModel model;
+    char text[2048];
+    memset(&model, 0, sizeof(model));
+    model.setup_completion_known = true;
+    model.setup_wizard_completed = true;
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_SUPPORT;
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "protection");
+    ptc_ui_setup_sync(&model);
+    check_int(model.view, PTC_UI_PARENT, "completed guide stays in support during protection");
+    model.view = PTC_UI_CHILD;
+    ptc_ui_setup_sync(&model);
+    check_int(model.view, PTC_UI_CHILD, "completed guide does not reopen after leaving support");
+    model.setup_wizard_completed = false;
+    ptc_ui_setup_sync(&model);
+    check_int(model.view, PTC_UI_SETUP, "unfinished guide opens despite failed backend");
+    check_int(model.setup_step, PTC_UI_SETUP_PREPARE, "unfinished guide starts at preparation");
+    ptc_ui_setup_record_issue(&model, PTC_UI_SETUP_ISSUE_LANGUAGE, PTC_ERR_STORAGE_WRITE_FAILED);
+    model.setup_step = PTC_UI_SETUP_PARENT;
+    ptc_ui_setup_record_issue(&model, PTC_UI_SETUP_ISSUE_PIN, PTC_ERR_BAD_REQUEST);
+    model.setup_step = PTC_UI_SETUP_CONFIRM;
+    ptc_ui_setup_record_issue(&model, PTC_UI_SETUP_ISSUE_ACTIVATION, PTC_ERR_PCTL_READ_FAILED);
+    ptc_ui_setup_sync(&model);
+    check_int(model.setup_step, PTC_UI_SETUP_CONFIRM, "errors do not force guide back to preparation");
+    check_true(ptc_ui_setup_has_issues(&model), "unknown checks and save errors require diagnostic guidance");
+    check_true(ptc_ui_setup_diagnostic_json(&model, text, sizeof(text)), "diagnostic summary generated without backend");
+    cJSON *root = cJSON_Parse(text);
+    cJSON *issues = cJSON_GetObjectItemCaseSensitive(root, "issues");
+    check_int(cJSON_GetArraySize(issues), 3, "diagnostics retain each issue category");
+    check_int(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(issues, 1), "step")->valueint,
+              PTC_UI_SETUP_PARENT, "diagnostics preserve the failing step");
+    check_int(cJSON_GetObjectItemCaseSensitive(root, "parental_control_enabled")->valueint, -1,
+              "unknown parental controls are not reported disabled");
+    check_true(strstr(text, "language_save") && strstr(text, "501") && !strstr(text, "pin_hash") &&
+               !strstr(text, "grant_secret") && !strstr(text, "message"), "summary uses safe categories and stable codes only");
+    cJSON_Delete(root);
+    check_true(!ptc_ui_setup_diagnostic_json(&model, text, 8), "small diagnostic buffer rejected");
+    check_true(ptc_ui_parent_read_only_action(&model, 4), "diagnostic export is a read-only action");
+    check_true(!ptc_ui_parent_read_only_action(&model, 0), "activation is never read-only");
+    model.status_loaded = model.setup_pin_ready = model.environment_available = model.environment_atmosphere = true;
+    model.restriction_enabled_available = model.restriction_enabled = true;
+    model.setup_issue_mask = 0;
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
+    snprintf(model.environment_hos, sizeof(model.environment_hos), "22.5.0");
+    snprintf(model.environment_model, sizeof(model.environment_model), "mariko-oled");
+    snprintf(model.environment_atmosphere_version, sizeof(model.environment_atmosphere_version), "1.11.2");
+    check_true(ptc_ui_setup_reference_matches(&model) && !ptc_ui_setup_has_issues(&model), "reference environment check uses all fields");
+    model.restriction_enabled = false;
+    check_true(ptc_ui_setup_has_issues(&model), "disabled controls are advisory issues");
+    model.environment_atmosphere_version[0] = '\0';
+    check_true(!ptc_ui_setup_reference_matches(&model), "missing Atmosphere version is unconfirmed");
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_SETUP;
+    model.setup_step = PTC_UI_SETUP_PREPARE;
+    model.setup_legacy_completed_candidate = true;
+    snprintf(model.setup_phase, sizeof(model.setup_phase), "active");
+    ptc_ui_setup_sync(&model);
+    check_true(model.setup_wizard_completed && model.setup_step == 0 && model.view == PTC_UI_CHILD,
+               "legacy completed install migrates without onboarding");
+    check_int(ptc_ui_migrate_setup_step(2, 5), PTC_UI_SETUP_PARENT, "v5 progress resumes settings");
+    check_int(ptc_ui_migrate_setup_step(5, 5), PTC_UI_SETUP_PREPARE, "invalid v5 progress resets safely");
+}
+
 static void test_shortcut_hold_and_setup_migration(void)
 {
     PtcUiShortcutHoldState hold = {0};
@@ -366,9 +433,9 @@ static void test_shortcut_hold_and_setup_migration(void)
                "A-labelled primary actions keep their matching touch dispatch");
 
     check_int(ptc_ui_migrate_setup_step(0, 3), 0, "completed older wizard remains complete");
-    check_int(ptc_ui_migrate_setup_step(3, 3), PTC_UI_SETUP_SHORTCUT, "unfinished older wizard restarts safely");
-    check_int(ptc_ui_migrate_setup_step(3, 4), PTC_UI_SETUP_THEME, "v4 theme step is stable");
-    check_int(ptc_ui_migrate_setup_step(5, 4), PTC_UI_SETUP_ZONE, "v4 zone step is stable");
+    check_int(ptc_ui_migrate_setup_step(3, 3), PTC_UI_SETUP_PREPARE, "unfinished older wizard restarts safely");
+    check_int(ptc_ui_migrate_setup_step(3, 4), PTC_UI_SETUP_PREPARE, "unfinished v4 theme migrates to preparation");
+    check_int(ptc_ui_migrate_setup_step(5, 4), PTC_UI_SETUP_PREPARE, "unfinished v4 zone migrates to preparation");
 }
 
 static void test_bedtime_save_restriction_projection(void)
@@ -1404,26 +1471,21 @@ static void test_release_hit_targets(void)
 
     model.overlay = PTC_UI_OVERLAY_NONE;
     model.view = PTC_UI_SETUP;
-    model.setup_step = PTC_UI_SETUP_SHORTCUT;
-    check_hit(hit_center(&model, ptc_ui_setup_shortcut_card_rect(0)), PTC_UI_HIT_SETUP_SHORTCUT_CARD, 0,
-               "setup shortcut preset card");
-    {
-        PtcUiRect preset = ptc_ui_setup_shortcut_card_rect(0);
-        check_hit(ptc_ui_hit_test(&model, preset.x + preset.w / 2, preset.y + preset.h + 2),
-                  PTC_UI_HIT_SETUP_SHORTCUT_CARD, 0,
-                  "setup shortcut touch target fills the row gap");
+    model.setup_step = PTC_UI_SETUP_PREPARE;
+    for (int i = 0; i < 4; ++i) {
+        check_hit(hit_center(&model, ptc_ui_setup_language_rect(i)), PTC_UI_HIT_SETUP_LANGUAGE, i,
+                  "setup language touch target");
+        if (i) check_true(!rects_overlap(ptc_ui_setup_language_rect(i-1), ptc_ui_setup_language_rect(i)),
+                         "language options do not overlap");
     }
-    check_hit(ptc_ui_hit_test(&model, 900, 540), PTC_UI_HIT_NONE, 0,
-              "hidden setup shortcut capture area is inert");
-    check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(0), ptc_ui_setup_shortcut_card_rect(1)),
-               "setup shortcut presets do not overlap");
-    check_true(!rects_overlap(ptc_ui_setup_shortcut_card_rect(6), ptc_ui_setup_shortcut_card_rect(13)),
-               "two shortcut preset columns do not overlap");
-    model.setup_step = PTC_UI_SETUP_PIN;
+    check_hit(hit_center(&model, ptc_ui_setup_time_help_rect()), PTC_UI_HIT_SETUP_TIME_HELP, 0, "time help target");
+    model.setup_step = PTC_UI_SETUP_PARENT;
     check_hit(hit_center(&model, ptc_ui_setup_pin_rect()), PTC_UI_HIT_SETUP_PIN, 0, "setup PIN guide");
-    model.setup_step = PTC_UI_SETUP_THEME;
+    check_hit(hit_center(&model, ptc_ui_setup_more_rect()), PTC_UI_HIT_SETUP_MORE, 0, "more settings target");
+    check_hit(hit_center(&model, ptc_ui_setup_theme_rect(2)), PTC_UI_HIT_NONE, 0, "collapsed theme is inert");
+    model.setup_more = true;
     check_hit(hit_center(&model, ptc_ui_setup_theme_rect(2)), PTC_UI_HIT_SETUP_THEME_OPTION, 2,
-              "setup dark theme option has a matching touch target");
+              "expanded theme option matches touch target");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "pending");
     check_true(!ptc_ui_setup_takeover_complete(&model), "pending takeover still requires confirmation");
     snprintf(model.setup_phase, sizeof(model.setup_phase), "restored");
@@ -1444,13 +1506,12 @@ static void test_release_hit_targets(void)
     check_true(!ptc_ui_runtime_fingerprint_reconfirmation_needed(&model),
                "unrelated protection reason does not use runtime reconfirmation copy");
     model.disable_flag_present = false;
-    model.setup_step = PTC_UI_SETUP_ZONE;
-    check_hit(hit_center(&model, ptc_ui_setup_zone_rect(0)), PTC_UI_HIT_SETUP_CHILD_ZONE, 0,
-              "setup child zone choice");
-    check_hit(hit_center(&model, ptc_ui_setup_zone_rect(1)), PTC_UI_HIT_SETUP_PARENT_ZONE, 1,
-              "setup parent zone choice");
-    check_hit(hit_center(&model, ptc_ui_setup_primary_rect()), PTC_UI_HIT_SETUP_PRIMARY, 0,
-              "setup zone confirmation remains a separate action");
+    model.setup_step = PTC_UI_SETUP_CONFIRM;
+    check_hit(hit_center(&model, ptc_ui_setup_skip_rect()), PTC_UI_HIT_SETUP_SKIP, 0, "skip activation target");
+    model.waiting = true;
+    check_hit(hit_center(&model, ptc_ui_setup_skip_rect()), PTC_UI_HIT_SETUP_SKIP, 0, "support remains reachable while waiting");
+    check_hit(hit_center(&model, ptc_ui_setup_primary_rect()), PTC_UI_HIT_SETUP_PRIMARY, 0, "activation target");
+    model.waiting = false;
 
     model.overlay = PTC_UI_OVERLAY_CONFIRM;
     model.operation = PTC_UI_OPERATION_RESTORE_INSTALL_SNAPSHOT;
@@ -1640,7 +1701,7 @@ static void test_user_state_mapping(void)
         "\"activate_after\":0,\"compatibility_status\":\"verified\",\"apply_status\":\"idle\","
         "\"apply_pending_confirmation\":false,\"recovery_active\":false,\"disable_reason\":\"\"},"
         "\"environment\":{\"available\":true,\"hos\":\"22.5.0\",\"model\":\"mariko-oled\","
-        "\"atmosphere\":true},\"recent_events\":[],\"completed_at\":108}";
+        "\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\"},\"recent_events\":[],\"completed_at\":108}";
     const char *release_manifest_invalid =
         "{\"version\":1,\"request_id\":\"setup-error\",\"type\":\"complete_setup\",\"status\":\"error\","
         "\"error\":{\"code\":504,\"reason\":\"release_manifest_invalid\","
@@ -3496,6 +3557,7 @@ int main(void)
     test_parent_status_summary();
     test_release_navigation();
     test_shortcut_hold_and_setup_migration();
+    test_setup_advisory_state();
     test_bedtime_save_restriction_projection();
     test_plan_blocking_save_gates();
     test_rule_result_guidance();

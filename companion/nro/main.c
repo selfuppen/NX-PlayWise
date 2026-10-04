@@ -123,6 +123,10 @@ int main(int argc, char **argv)
     refresh_language(&ui);
     appletHook(&hook_cookie, applet_hook, &ui);
     refresh_disable_flag(&ui);
+    if (!ui.model.setup_wizard_completed) {
+        ui.model.view = PTC_UI_SETUP;
+        if (ui.model.setup_step == 0) ui.model.setup_step = PTC_UI_SETUP_PREPARE;
+    }
 #ifdef PLAYWISE_EDEN
     /* Eden exposes the embedded core through the existing IPC abstraction.
        Its Windows-backed SD implementation cannot reliably claim queue files
@@ -141,11 +145,13 @@ int main(int argc, char **argv)
     ptc_companion_auth_init(&ui.auth, APP_ROOT, ptc_fs_storage_as_storage(&fs));
     ui.last_setup_refresh_second = -1;
     load_rule_drafts(&ui);
+    ui.model.setup_pin_ready = ptc_companion_auth_state(&ui.auth) == PTC_AUTH_OK;
     if (!install_defaults_ready
 #ifdef PLAYWISE_EDEN
         || !eden_runtime_ready
 #endif
     ) {
+        ptc_ui_setup_record_issue(&ui.model, PTC_UI_SETUP_ISSUE_DEFAULTS, PTC_ERR_STORAGE_WRITE_FAILED);
         snprintf(ui.model.message, sizeof(ui.model.message),
                  ptc_ui_text(PTC_UI_T_THE_INSTALLATION_DATA_INITIALIZATION_FAILED_PLEASE_OVERWRITE));
     }
@@ -153,6 +159,7 @@ int main(int argc, char **argv)
     else if (ui.hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED) {
         snprintf(ui.model.message, sizeof(ui.model.message), "%s", ui.hot_reload.detail);
     } else if (!backend_expected) {
+        ptc_ui_setup_record_issue(&ui.model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_PCTL_INIT_FAILED);
         snprintf(ui.model.message, sizeof(ui.model.message),
                  ptc_ui_text(PTC_UI_T_THE_STANDARD_BACKGROUND_STARTUP_FLAG_IS_NOT));
     }
@@ -859,7 +866,7 @@ int main(int argc, char **argv)
                 ui.model.selected_index = 4;
                 discard_holiday_draft(&ui);
             } else if (down & HidNpadButton_A) {
-                if (ui.waiting) {
+                if (ui.waiting && !ptc_ui_parent_read_only_action(&ui.model, ui.model.selected_index)) {
                     ptc_audio_play(PTC_SE_ERROR);
                     snprintf(ui.model.message, sizeof(ui.model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS));
                 } else if (ui.model.parent_footer_focused) {

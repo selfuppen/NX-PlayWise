@@ -69,6 +69,12 @@ PtcBedtimePolicy ptc_ui_bedtime_section_policy(const PtcUiModel *model,
     PtcUiBedtimeSection section);
 void ptc_ui_bedtime_discard_section(PtcUiModel *model, PtcUiBedtimeSection section);
 int ptc_ui_migrate_setup_step(int step, int wizard_version);
+void ptc_ui_setup_sync(PtcUiModel *model);
+void ptc_ui_setup_record_issue(PtcUiModel *model, PtcUiSetupIssueKind kind, int code);
+bool ptc_ui_setup_has_issues(const PtcUiModel *model);
+bool ptc_ui_setup_reference_matches(const PtcUiModel *model);
+bool ptc_ui_parent_read_only_action(const PtcUiModel *model, int index);
+bool ptc_ui_setup_diagnostic_json(const PtcUiModel *model, char *out, size_t size);
 PtcEffectiveRule ptc_ui_rule_after_today_restore(const PtcUiModel *model);
 void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint16_t day_index, int64_t now,
                                 PtcUiTodayDecision *decision);

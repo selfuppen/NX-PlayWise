@@ -42,22 +42,22 @@ Current release candidates qualify specifically against Nintendo Switch OLED, HO
 
 ## Initial Setup
 
-Upon launching PlayWise for the first time, follow the 5-step onboarding wizard. If you exit mid-way, progress is saved and will resume upon next launch. If the interface indicates environment re-detection or protection state, read the explanation on screen; never bypass checks by manually deleting data.
+The wizard has three steps. Check and save errors appear inline and never prevent continuing. Finishing the wizard does not mean controls are active. Saved progress resumes on reopening; settings that could not be saved may need to be entered again.
 
-1. **Parent Zone Entry**: The `-` (Minus) button entry is always available—press and release to enter. Preset button combinations can also be selected. Custom sequence recording is undergoing hardware validation and is not yet available in the wizard.
-2. **PlayWise PIN**: The default PIN on a fresh installation is `110`. We strongly recommend changing it immediately. This PIN protects only PlayWise settings and is distinct from your Nintendo system PIN. You can enter PIN digits via on-screen touchscreen numbers or joystick directions: 8 directional pushes correspond to `1`–`8`, `X` enters `0`, `Y` enters `9`, `ZL` backspaces, short-press `+` confirms, and `B` cancels. Holding `+` for about 1 second temporarily switches to the system numeric keypad.
-3. **Theme**: Choose between Follow System, Light, or Dark. This affects only the console application; the in-game overlay maintains its own appearance.
-4. **Confirm Playtime Management Takeover**: Review the detected environment and current playtime limits. PlayWise preserves pre-installation settings, retaining the current total allowance and remaining time when no changes occur during detection.
-5. **Select Destination Zone**: Enter Parent Zone to configure schedules, or enter Child Zone to view today's plan.
+1. **Environment & preparation**: Choose Follow System (default), 简体中文, 繁體中文, or English. The language selector title and help remain bilingual Chinese/English; the rest of the wizard changes immediately. Compare your console with the reference environment (OLED, HOS 22.5.0, Atmosphère 1.11.2), check Nintendo parental controls and “Suspend Software”, and test the overlay. Disabled or unreadable controls show guidance but allow continuing. Check the displayed date, time and time zone; optional help explains DBI / QuickNTP time sync without requiring a network or a confirmation checkbox.
+2. **Parent settings**: Fresh installs use PlayWise PIN `110`; change it if possible. Existing PINs stay unchanged. This is separate from the Nintendo parental control PIN. Defaults are system theme and Minus (-), released without holding, for parent access. “More settings” offers themes and preset chords. Canceling or failing a PIN change preserves the old PIN; save failures allow continuing, with language and preference choices retained for the session.
+3. **Confirm & enter parent area**: Review checks and current quota, then choose “Enable & enter parent area” or “Enter parent area without enabling”. Enabling saves pre-install settings and safely preserves today’s total and remaining allowance. Confirmed success enters Today's Schedule. Skipping, failure or an unconfirmed result enters Support & Recovery with Export diagnostics focused. You can enter Support while activation is pending; the original request keeps being checked without resubmission.
+
+When there is a problem, select **Support & Recovery → Export diagnostics**, copy the file from the displayed path, and attach it to your issue report. Export works without the background service and marks missing or stale status. Missing PINs or failed authentication still permit read-only Support and sanitized diagnostics; other parent features require valid PIN authorization. A finished wizard never reopens merely because controls remain inactive or protected.
+
+Use left/right to change language, up/down to select actions, A to activate, and Plus to continue. X toggles time help on step 1, edits the PIN on step 2, and enters Support without enabling on step 3. PIN entry retains its existing touch, stick and numeric keyboard controls.
 
 <details>
-<summary>View 5-Step Console Interface and Child Zone Previews</summary>
+<summary>Three setup screens and Child Zone preview</summary>
 
-![Parent zone entry setup preview](images/usage-en/setup/setup-step-1-light.png)
-![PlayWise PIN setup preview](images/usage-en/setup/setup-step-2-light.png)
-![Theme setup preview](images/usage-en/setup/setup-step-3-light.png)
-![Takeover confirmation preview](images/usage-en/setup/setup-step-4-light.png)
-![Destination zone selection preview](images/usage-en/setup/setup-step-5-light.png)
+![Language, environment and preparation](images/usage-en/setup/setup-step-1-light.png)
+![Parent settings](images/usage-en/setup/setup-step-2-light.png)
+![Confirmation and diagnostic guidance](images/usage-en/setup/setup-step-3-light.png)
 
 Child Zone home screen preview:
 ![Child Zone home screen preview](images/usage-en/child/child-light.png)
@@ -399,7 +399,7 @@ Documentation images fall into two categories, with paths relative to repository
 
 | Source | Image Paths | Update Method |
 | --- | --- | --- |
-| Automatically Generated Console UI Previews | 51 PNG files under `docs/images/usage-en/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support}/` (English) and `docs/images/usage/` (Chinese) listed in `tools/sync_doc_previews.py` | Run `python tools/package_remote.py --previews` to re-render `build/ui-previews/` and synchronize to documentation paths. Append `--clean` for a full clean build. |
+| Automatically Generated Console UI Previews | 49 PNG files under `docs/images/usage-en/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support}/` (English) and `docs/images/usage/` (Chinese) listed in `tools/sync_doc_previews.py` | Run `python tools/package_remote.py --previews` to re-render `build/ui-previews/` and synchronize to documentation paths. Append `--clean` for a full clean build. |
 | Manually Captured Hardware, Pairing & Web Previews | `docs/images/usage/overlay/ultrahand-entry.jpg`, `docs/images/usage/overlay/playwise-code-entry-legacy.jpg`, `docs/images/usage/parent/pairing-qr-demo.png`, `docs/images/usage/parent/web-code-demo.jpg`, `docs/images/usage/parent-offline-demo.png` | Re-capture, verify, and update against physical devices or browser interfaces; pairing QR codes must use public demo configurations. The command above does not replace these images. |
 
 Automated previews are generated from production C rendering code, fixed sample states, and the vendored Noto Sans SC font, marked with `HOST PREVIEW / SAMPLE DATA`. They serve layout reading purposes and do not substitute hardware controller, font, and PCTL validation. `--previews` (or `--only previews`) does not run full test suites or build distribution packages; run `python tools/package_remote.py` for standard routine builds, or `python tools/package_remote.py --release` when full release gating is required. See [Testing Guide](TESTING_GUIDE.md) for details.

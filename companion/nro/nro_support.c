@@ -21,6 +21,10 @@ void export_diagnostics(UiState *ui)
     }
     cJSON_AddNumberToObject(bundle, "version", 1);
     cJSON_AddStringToObject(bundle, "redaction", "credentials-auth-codes-and-nonces-omitted");
+    if (ptc_ui_setup_diagnostic_json(&ui->model, text, sizeof(text))) {
+        cJSON *onboarding = cJSON_Parse(text);
+        if (onboarding) cJSON_AddItemToObject(bundle, "onboarding", onboarding);
+    }
     exported_at = (int64_t)time(NULL);
     runtime = cJSON_AddObjectToObject(bundle, "runtime_snapshot");
     if (runtime) {

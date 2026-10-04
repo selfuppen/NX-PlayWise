@@ -426,36 +426,30 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->view == PTC_UI_SETUP) {
-        int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_SHORTCUT;
-        if (ptc_ui_rect_contains(ptc_ui_setup_back_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_SETUP_BACK, 0);
-        }
-        if (step == PTC_UI_SETUP_SHORTCUT) {
-            for (i = 0; i < PTC_UI_SHORTCUT_PRESET_COUNT; ++i) {
-                if (rect_contains_row_cell(ptc_ui_setup_shortcut_card_rect(i), 34, x, y)) {
-                    return make_hit(PTC_UI_HIT_SETUP_SHORTCUT_CARD, i);
+        int step = model->setup_step > 0 ? model->setup_step : PTC_UI_SETUP_PREPARE;
+        if (ptc_ui_rect_contains(ptc_ui_setup_back_rect(), x, y)) return make_hit(PTC_UI_HIT_SETUP_BACK, 0);
+        if (step == PTC_UI_SETUP_PREPARE) {
+            for (i = 0; i < 4; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_setup_language_rect(i), x, y))
+                    return make_hit(PTC_UI_HIT_SETUP_LANGUAGE, i);
+            }
+            if (ptc_ui_rect_contains(ptc_ui_setup_time_help_rect(), x, y))
+                return make_hit(PTC_UI_HIT_SETUP_TIME_HELP, 0);
+        } else if (step == PTC_UI_SETUP_PARENT) {
+            if (ptc_ui_rect_contains(ptc_ui_setup_pin_rect(), x, y)) return make_hit(PTC_UI_HIT_SETUP_PIN, 0);
+            if (ptc_ui_rect_contains(ptc_ui_setup_more_rect(), x, y)) return make_hit(PTC_UI_HIT_SETUP_MORE, 0);
+            if (model->setup_more) {
+                for (i = 0; i < 3; ++i) {
+                    if (ptc_ui_rect_contains(ptc_ui_setup_theme_rect(i), x, y))
+                        return make_hit(PTC_UI_HIT_SETUP_THEME_OPTION, i);
                 }
+                if (ptc_ui_rect_contains(ptc_ui_setup_shortcut_rect(), x, y))
+                    return make_hit(PTC_UI_HIT_SETUP_SHORTCUT, 0);
             }
-        } else if (step == PTC_UI_SETUP_PIN &&
-                   ptc_ui_rect_contains(ptc_ui_setup_pin_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_SETUP_PIN, 0);
-        } else if (step == PTC_UI_SETUP_THEME) {
-            for (i = 0; i < 3; ++i) {
-                if (ptc_ui_rect_contains(ptc_ui_setup_theme_rect(i), x, y)) {
-                    return make_hit(PTC_UI_HIT_SETUP_THEME_OPTION, i);
-                }
-            }
-        } else if (step == PTC_UI_SETUP_ZONE) {
-            if (ptc_ui_rect_contains(ptc_ui_setup_zone_rect(0), x, y)) {
-                return make_hit(PTC_UI_HIT_SETUP_CHILD_ZONE, 0);
-            }
-            if (ptc_ui_rect_contains(ptc_ui_setup_zone_rect(1), x, y)) {
-                return make_hit(PTC_UI_HIT_SETUP_PARENT_ZONE, 1);
-            }
+        } else if (step == PTC_UI_SETUP_CONFIRM && ptc_ui_rect_contains(ptc_ui_setup_skip_rect(), x, y)) {
+            return make_hit(PTC_UI_HIT_SETUP_SKIP, 0);
         }
-        if (ptc_ui_rect_contains(ptc_ui_setup_primary_rect(), x, y)) {
-            return make_hit(PTC_UI_HIT_SETUP_PRIMARY, 0);
-        }
+        if (ptc_ui_rect_contains(ptc_ui_setup_primary_rect(), x, y)) return make_hit(PTC_UI_HIT_SETUP_PRIMARY, 0);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->view == PTC_UI_ERROR) {

@@ -100,6 +100,7 @@ typedef struct {
     PtcCompanionTransportClient transport;
     PtcSwitchIpcClient ipc;
     PtcCompanionAuth auth;
+    bool setup_parent_authorized;
     PtcUiModel model;
     PtcCalendarRuntime calendar_runtime;
     PtcImportedCalendarYear *calendar_view_data;
@@ -220,6 +221,9 @@ void setup_pin(UiState *ui);
 bool ensure_default_setup_pin(UiState *ui);
 void setup_previous(UiState *ui);
 void setup_primary(UiState *ui);
+void finish_setup(UiState *ui, bool activated);
+void setup_action(UiState *ui, int action, int index);
+void enter_support_area(UiState *ui);
 void handle_setup_input(UiState *ui, u64 down, u64 held);
 void open_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);
 void open_danger_confirm_overlay(UiState *ui, PtcUiOperation operation, const char *title, const char *body);

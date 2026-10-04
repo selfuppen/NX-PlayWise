@@ -129,7 +129,7 @@ static const char *request_success_guidance(const char *type)
         return "";
     }
     if (strcmp(type, "complete_setup") == 0) {
-        return ptc_ui_text(PTC_UI_T_NEXT_GO_TO_STEP_5_TO_SELECT);
+        return ptc_ui_text(PTC_UI_T_SETUP_CHECK_NOTICE);
     }
     if (strcmp(type, "retry_setup_release") == 0) {
         return ptc_ui_text(PTC_UI_T_NEXT_REFRESH_STATUS_DISPLAYING_NORMAL_OPERATION_MEANS);
@@ -448,6 +448,10 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->code_preview_converts_unlimited = summary.converts_unlimited_to_limited;
     }
     setup = cJSON_GetObjectItemCaseSensitive(root, "setup");
+    if (status_context && type && strcmp(type, "complete_setup") == 0 && !cJSON_IsObject(setup)) {
+        /* A success envelope without setup evidence cannot confirm activation. */
+        model->setup_phase[0] = '\0';
+    }
     if (status_context && cJSON_IsObject(setup)) {
         bool setup_was_waiting = strcmp(model->setup_phase, "released") == 0 &&
             model->setup_activate_after > 0;
@@ -461,10 +465,10 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->setup_restriction_cleared = json_bool(setup, "restriction_cleared", false);
         model->setup_snapshot_available = json_bool(setup, "snapshot_available", false);
         model->setup_activate_after = json_int(setup, "activate_after", 0);
-        if (type && strcmp(type, "complete_setup") == 0 &&
+        if (!model->setup_wizard_completed && type && strcmp(type, "complete_setup") == 0 &&
             strcmp(model->setup_phase, "released") == 0 && model->setup_activate_after > 0) {
             model->view = PTC_UI_SETUP;
-        } else if (strcmp(model->setup_phase, "active") != 0 && model->view != PTC_UI_PARENT) {
+        } else if (!model->setup_wizard_completed && strcmp(model->setup_phase, "active") != 0 && model->view != PTC_UI_PARENT) {
             model->view = PTC_UI_SETUP;
         } else if (strcmp(model->setup_phase, "active") == 0 && model->view == PTC_UI_SETUP &&
                    model->setup_step == 0) {
@@ -479,6 +483,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
             snprintf(model->environment_hos, sizeof(model->environment_hos), "%s", json_string(environment, "hos"));
             snprintf(model->environment_model, sizeof(model->environment_model), "%s", json_string(environment, "model"));
             model->environment_atmosphere = json_bool(environment, "atmosphere", false);
+            snprintf(model->environment_atmosphere_version, sizeof(model->environment_atmosphere_version), "%s",
+                     json_string(environment, "atmosphere_version"));
         }
     }
     {
@@ -558,6 +564,9 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                      ptc_ui_text(PTC_UI_T_TODAY_S_TOTAL_QUOTA_HAS_BEEN_UPDATED_3));
             snprintf(model->feedback_detail, sizeof(model->feedback_detail),
                      ptc_ui_text(PTC_UI_T_TO_LIFT_CHOOSE_NO_LIMIT_TODAY_QUICK));
+        } else if (type && strcmp(type, "complete_setup") == 0 &&
+                   strcmp(model->setup_phase, "active") != 0) {
+            snprintf(model->message, sizeof(model->message), "%s", ptc_ui_text(PTC_UI_T_SETUP_CONTROLS_INACTIVE));
         } else {
             snprintf(model->message, sizeof(model->message), "%s", request_success_message(type));
         }

@@ -22,7 +22,7 @@
 1. 在 Switch 的“系统设置 → 家长控制”启用官方家长控制和“时间到了暂停软件”，验证亮屏使用会计入额度、到时会限制使用。
 2. 准备 Atmosphère、Homebrew Menu，以及 Ultrahand 或其他 Tesla 浮窗管理器。PlayWise 安装包不包含浮窗管理器。
 3. 首次使用下载 `playwise-complete-<版本>.zip`：其中的 `playwise-<版本>.zip` 安装 Switch 端，`playwise-offline.html` 是备用的离线家长网页。将标准包内的 `atmosphere` 和 `switch` 目录合并到 SD 卡根目录后重启。
-4. 从 Homebrew Menu 打开“任我玩”，按向导设置家长区入口、任我玩家长密码、主题并确认接管。孩子需要加时时，按下文选择主机应用或游戏内浮窗兑换。
+4. 从 Homebrew Menu 打开“任我玩”，按三步向导选择语言并核对环境、设置任我玩家长密码、确认启用或进入支持排障。孩子需要加时时，按下文选择主机应用或游戏内浮窗兑换。
 
 完整的[安装、首次设置、使用与升级步骤](docs/使用指南.md)见使用指南。
 

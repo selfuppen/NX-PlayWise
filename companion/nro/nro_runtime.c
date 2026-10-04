@@ -259,6 +259,20 @@ void set_message(UiState *ui, const char *prefix, PtcCompanionStatus status)
 void show_auth_error(UiState *ui, const char *title, const char *message, int64_t retry_after)
 {
     if (!ui) return;
+    if (ui->auth_retry_action == AUTH_RETRY_ENTER_PARENT && ui->model.view != PTC_UI_SETUP) {
+        ui->model.parent_support_only = true;
+        ui->auth_retry_action = AUTH_RETRY_NONE;
+        enter_support_area(ui);
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", message ? message : title);
+        return;
+    }
+    if (ui->model.view == PTC_UI_SETUP) {
+        ui->model.overlay = PTC_UI_OVERLAY_NONE;
+        ui->auth_retry_action = AUTH_RETRY_NONE;
+        ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_PIN, PTC_ERR_SETUP_PENDING);
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", message ? message : title);
+        return;
+    }
     ui->auth_return_overlay = ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR
         ? ui->auth_return_overlay : ui->model.overlay;
     ui->model.overlay = PTC_UI_OVERLAY_AUTH_ERROR;

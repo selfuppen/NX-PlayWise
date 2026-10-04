@@ -16,6 +16,7 @@ void begin_wait(UiState *ui, const char *type, const char *message)
 void submit_transport_empty(UiState *ui, const char *type, const char *ok_message, const char *fail_prefix)
 {
     PtcCompanionStatus status;
+    if (ui->waiting) return;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_empty(&ui->transport, ui->active_request_id, time(NULL), type);
     set_command_name(ui, type);
@@ -39,7 +40,10 @@ void submit_status(UiState *ui)
     set_command_name(ui, "status");
     sync_transport_label(ui);
     if (status == PTC_COMPANION_OK) begin_wait(ui, "status", ptc_ui_text(PTC_UI_T_REFRESHING_TODAY_S_STATUS));
-    else set_message(ui, ptc_ui_text(PTC_UI_T_REFRESH_FAILED), status);
+    else {
+        ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_PCTL_READ_FAILED);
+        set_message(ui, ptc_ui_text(PTC_UI_T_REFRESH_FAILED), status);
+    }
 }
 
 void activate_parent_status(UiState *ui)

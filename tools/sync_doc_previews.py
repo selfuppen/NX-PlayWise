@@ -22,8 +22,6 @@ PREVIEW_FILES = (
     "setup/setup-step-1-light.png",
     "setup/setup-step-2-light.png",
     "setup/setup-step-3-light.png",
-    "setup/setup-step-4-light.png",
-    "setup/setup-step-5-light.png",
     "grant/grant-entry-light.png",
     "grant/grant-duration-editor-light.png",
     "grant/grant-issued-light.png",

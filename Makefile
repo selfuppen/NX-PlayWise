@@ -5,6 +5,7 @@ HOST_BUILD_DIR := build/host
 HOST_TEST := $(HOST_BUILD_DIR)/test_host_core
 HOST_UI_TEST := $(HOST_BUILD_DIR)/test_ui_state
 HOST_LAB_TEST := $(HOST_BUILD_DIR)/test_device_lab
+HOST_SETUP_TEST := $(HOST_BUILD_DIR)/test_nro_setup
 PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 
 COMMON_SRCS := \
@@ -97,8 +98,13 @@ $(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_model.h companion/nro/ui_state
 $(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c common/protocol/error_code.c common/protocol/request_schema.c common/protocol/result_builder.c common/time/ptc_time.c common/rules/rules.c common/rules/holiday_calendar.c common/rules/holiday_calendar_import.c third_party/cjson/cJSON.c platform/host/mem_storage.c platform/host/pctl_stub.c platform/host/fake_time.c platform/switch/play_timer_settings_layout.c sysmodule/lab_session.c sysmodule/lab_session_report.c device_lab/boot_flags.c device_lab/handoff_guard.c device_lab/ui_model.c tests/c/test_device_lab.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_DEVICE_LAB -o $@ $(filter-out FORCE_HOST_REBUILD,$^)
 
-test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST)
-	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST)'
+# Execute the real NRO orchestration with deterministic host libnx/input shims.
+SETUP_TEST_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) companion/auth.c companion/album_restriction.c companion/transport_client.c common/support/support_export.c common/security/credential_policy.c platform/host/mem_storage.c companion/nro/nro_runtime.c companion/nro/nro_actions.c companion/nro/nro_preferences.c companion/nro/nro_setup.c companion/nro/nro_support.c companion/nro/nro_security.c companion/nro/nro_requests.c companion/nro/nro_result_poll.c tests/nro_setup/test.c
+$(HOST_SETUP_TEST): $(SETUP_TEST_SRCS) tests/nro_setup/switch.h tests/nro_setup/release_manifest.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_EDEN -Itests/nro_setup -Icompanion/nro -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $(SETUP_TEST_SRCS) -lm
+
+test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST)
+	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST)'
 
 UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/preview_font.c tests/ui_preview/render.c
 $(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro/ui_graphics.h companion/nro/ui_render_internal.h $(wildcard tests/ui_preview/*.h) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)

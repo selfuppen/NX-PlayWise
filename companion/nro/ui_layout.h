@@ -19,13 +19,15 @@ typedef enum {
     PTC_UI_HIT_CHILD_EXIT,
     PTC_UI_HIT_ERROR_RETRY,
     PTC_UI_HIT_ERROR_BACK,
-    PTC_UI_HIT_SETUP_SHORTCUT_CARD,
+    PTC_UI_HIT_SETUP_LANGUAGE,
+    PTC_UI_HIT_SETUP_TIME_HELP,
+    PTC_UI_HIT_SETUP_MORE,
+    PTC_UI_HIT_SETUP_SHORTCUT,
+    PTC_UI_HIT_SETUP_SKIP,
     PTC_UI_HIT_SETUP_PRIMARY,
     PTC_UI_HIT_SETUP_BACK,
     PTC_UI_HIT_SETUP_PIN,
     PTC_UI_HIT_SETUP_THEME_OPTION,
-    PTC_UI_HIT_SETUP_CHILD_ZONE,
-    PTC_UI_HIT_SETUP_PARENT_ZONE,
     PTC_UI_HIT_PARENT_PREV_PAGE,
     PTC_UI_HIT_PARENT_NEXT_PAGE,
     PTC_UI_HIT_PARENT_REFRESH,
@@ -130,12 +132,15 @@ PtcUiRect ptc_ui_child_buffer_rect(void);
 PtcUiRect ptc_ui_child_footer_rect(int index);
 PtcUiRect ptc_ui_error_retry_rect(void);
 PtcUiRect ptc_ui_error_back_rect(void);
-PtcUiRect ptc_ui_setup_shortcut_card_rect(int index);
+PtcUiRect ptc_ui_setup_language_rect(int index);
+PtcUiRect ptc_ui_setup_time_help_rect(void);
+PtcUiRect ptc_ui_setup_more_rect(void);
+PtcUiRect ptc_ui_setup_shortcut_rect(void);
+PtcUiRect ptc_ui_setup_skip_rect(void);
 PtcUiRect ptc_ui_setup_primary_rect(void);
 PtcUiRect ptc_ui_setup_back_rect(void);
 PtcUiRect ptc_ui_setup_pin_rect(void);
 PtcUiRect ptc_ui_setup_theme_rect(int index);
-PtcUiRect ptc_ui_setup_zone_rect(int index);
 PtcUiRect ptc_ui_notice_rect(void);
 PtcUiRect ptc_ui_notice_details_rect(void);
 PtcUiRect ptc_ui_notice_status_icon_rect(int y);
