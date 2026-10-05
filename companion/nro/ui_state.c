@@ -74,7 +74,8 @@ bool ptc_ui_setup_has_issues(const PtcUiModel *model)
 
 bool ptc_ui_parent_read_only_action(const PtcUiModel *model, int index)
 {
-    return model && model->parent_page == PTC_UI_PARENT_SUPPORT && (index == 4 || index == 5);
+    return model && model->parent_page == PTC_UI_PARENT_SUPPORT &&
+        (index == 4 || index == 5 || index == 6 + model->recent_event_count);
 }
 
 bool ptc_ui_setup_diagnostic_json(const PtcUiModel *model, char *out, size_t size)

@@ -249,3 +249,9 @@ Never transmit `credentials.json`, `auth.json`, full ledger, or raw offline code
 - Conclude by running `python tools/test.py` and `python tools/package_remote.py`; physical console verification further inspects handheld and docked display edge rendering, controller/touch navigation hierarchy, and overall interaction smoothness.
 
 Calendar UI regression: verify B back, Y refresh, X format help, L/R lists, ZL/ZR paging and matching touch buttons. Help must block touches on the underlying list and preserve selection/page when closed, including during refresh. Verify visible back/refresh geometry on every plan editor and the equal-width eye care skip/save buttons without footer overlap.
+
+## Overlay previews and troubleshooting regression
+
+Run `python tools/test.py` and `python tools/package_remote.py --with-previews`, including standard package and default Eden validation. Each language gets seven 448x720 production Overlay scenes. Support previews cover four help pages plus unknown, disabled and stale parental controls in light/dark themes. Run `python tools/sync_doc_previews.py --check` to check documentation freshness.
+
+Host checks cover guide navigation with zero/three events, touch paging, wraparound, focus preservation, emergency-disable access, input blocking underneath and inactive-guide navigation. Inspect long text, page numbers, check status and buttons in all three languages/themes. Time sync is manual; unknown controls must not appear off. Verify controller/touch and unavailable-backend help on a Switch; manually refresh after DBI/QuickNTP sync and retest restrictions with a non-critical game. Host previews do not prove PCTL effects.

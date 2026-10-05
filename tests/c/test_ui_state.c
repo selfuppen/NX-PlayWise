@@ -277,6 +277,44 @@ static void test_release_navigation(void)
     ptc_ui_move_parent_selection(&model, 0, -1);
     check_int(model.selected_index, 6, "support recent event navigation returns upward");
 
+    model.selected_index = 8;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 9, "last event reaches troubleshooting guide");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 8, "guide returns to last event");
+    model.recent_event_count = 0;
+    model.selected_index = 4;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "guide reachable without events");
+    model.disable_flag_present = true;
+    model.view = PTC_UI_PARENT;
+    check_true(ptc_ui_parent_read_only_action(&model, 6), "guide remains available during active request");
+    ptc_ui_open_support_guide(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_SUPPORT_GUIDE, "guide accessible while disabled");
+    check_int(model.support_guide_page, 0, "guide starts at prerequisite checks");
+    ptc_ui_support_guide_change_page(&model, -1);
+    check_int(model.support_guide_page, 3, "guide previous wraps");
+    ptc_ui_support_guide_change_page(&model, 1);
+    check_int(model.support_guide_page, 0, "guide next wraps");
+    check_hit(hit_center(&model, ptc_ui_support_guide_nav_rect(0)), PTC_UI_HIT_HISTORY_PREV, 0,
+              "guide previous touch");
+    check_hit(hit_center(&model, ptc_ui_support_guide_nav_rect(1)), PTC_UI_HIT_HISTORY_NEXT, 0,
+              "guide next touch");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "guide close touch");
+    check_hit(hit_center(&model, ptc_ui_support_card_rect(4)), PTC_UI_HIT_NONE, 0,
+              "guide prevents touching diagnostics underneath");
+    check_true(!rects_overlap(ptc_ui_support_guide_nav_rect(1), ptc_ui_cancel_rect(model.overlay)),
+               "guide navigation does not overlap close");
+    ptc_ui_cancel_overlay(&model);
+    check_int(model.overlay, PTC_UI_OVERLAY_NONE, "guide closes without a write operation");
+    check_int(model.selected_index, 6, "guide close preserves support focus");
+    ptc_ui_support_guide_change_page(&model, 1);
+    check_int(model.support_guide_page, 0, "hidden guide ignores navigation");
+    check_hit(hit_center(&model, ptc_ui_support_guide_rect()), PTC_UI_HIT_SUPPORT_GUIDE, 0,
+              "disabled support still exposes guide");
+    model.disable_flag_present = false;
+
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_LIMIT), PTC_RULE_MODE_UNLIMITED, "limit toggles to unlimited");
     check_int(ptc_ui_next_rule_mode(PTC_RULE_MODE_UNLIMITED), PTC_RULE_MODE_LIMIT, "unlimited toggles to limit");
     check_int(ptc_ui_weekday_for_display_slot(0), 1, "weekly display starts on Monday");

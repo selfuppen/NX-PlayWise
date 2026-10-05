@@ -7,8 +7,15 @@ void handle_touch(UiState *ui, int x, int y)
     PtcUiHit hit = ptc_ui_hit_test(&ui->model, x, y);
     if (ui->waiting && ui->model.view == PTC_UI_PARENT &&
         ui->model.overlay == PTC_UI_OVERLAY_NONE &&
+        hit.kind != PTC_UI_HIT_SUPPORT_GUIDE &&
         !(hit.kind == PTC_UI_HIT_PARENT_CARD && ptc_ui_parent_read_only_action(&ui->model, hit.index))) {
         snprintf(ui->model.message, sizeof(ui->model.message), ptc_ui_text(PTC_UI_T_PLEASE_WAIT_UNTIL_THE_CURRENT_OPERATION_IS_2));
+        return;
+    }
+    if (ui->model.overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE) {
+        if (hit.kind == PTC_UI_HIT_HISTORY_PREV) handle_overlay_input(ui, HidNpadButton_L);
+        else if (hit.kind == PTC_UI_HIT_HISTORY_NEXT) handle_overlay_input(ui, HidNpadButton_R);
+        else if (hit.kind == PTC_UI_HIT_OVERLAY_CANCEL) handle_overlay_input(ui, HidNpadButton_B);
         return;
     }
     switch (hit.kind) {
@@ -139,6 +146,9 @@ void handle_touch(UiState *ui, int x, int y)
         ui->model.overlay_selection = hit.index;
         handle_overlay_input(ui, HidNpadButton_A);
         break;
+    case PTC_UI_HIT_SUPPORT_GUIDE:
+        ptc_ui_open_support_guide(&ui->model);
+        return;
     case PTC_UI_HIT_SUPPORT_EVENT:
         if (hit.index >= 0 && hit.index < ui->model.recent_event_count) {
             ptc_audio_play(PTC_SE_POPUP);

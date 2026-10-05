@@ -41,6 +41,13 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     int i;
     if (model->waiting && model->overlay == PTC_UI_OVERLAY_SCHEDULED)
         return make_hit(PTC_UI_HIT_NONE, 0);
+    if (model->overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE) {
+        for (i = 0; i < 2; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_support_guide_nav_rect(i), x, y))
+                return make_hit(i == 0 ? PTC_UI_HIT_HISTORY_PREV : PTC_UI_HIT_HISTORY_NEXT, 0);
+        return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
+            ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
+    }
     if (model->overlay == PTC_UI_OVERLAY_HOLIDAY_CALENDAR) {
         for (i = 0; i < 3; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_holiday_page_action_rect(i), x, y)) {
@@ -600,6 +607,8 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         }
     }
     if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
+        if (ptc_ui_rect_contains(ptc_ui_support_guide_rect(), x, y))
+            return make_hit(PTC_UI_HIT_SUPPORT_GUIDE, 0);
         for (i = 0; i < model->recent_event_count; ++i) {
             if (rect_contains_row_cell(ptc_ui_support_event_rect(i), 42, x, y)) {
                 return make_hit(PTC_UI_HIT_SUPPORT_EVENT, model->recent_event_count - 1 - i);

@@ -38,12 +38,12 @@
 <details open>
 <summary>查看游戏内浮窗操作示意</summary>
 
-| ![历史真机示意：在 Ultrahand 中选择任我玩浮窗](docs/images/usage/overlay/ultrahand-entry.jpg) | ![历史真机示意：在 HOME 上打开 PlayWise 浮窗输入加时码](docs/images/usage/overlay/playwise-code-entry-legacy.jpg) |
+| ![历史真机示意：在 Ultrahand 中选择任我玩浮窗](docs/images/usage/overlay/ultrahand-entry.jpg) | ![当前代码生成的浮窗输入预览](docs/images/usage/overlay/overlay-code-entry.png) |
 | :---: | :---: |
 
 </details>
 
-> 两图是旧版真机操作示意，分别展示浮窗管理器入口和 PlayWise 浮窗可覆盖 HOME 打开；当前按钮、确认页和可用操作以已安装版本为准。它们不是当前候选的真机验收截图。详见[受限时使用游戏内浮窗](docs/使用指南.md#受限时使用游戏内浮窗)。
+> 左图是历史真机浮窗管理器入口；右图由当前 Overlay 绘制代码自动生成，带 HOST PREVIEW / SAMPLE DATA 标识，可随代码重新生成。两图均不替代当前候选的真机验收。详见[受限时使用游戏内浮窗](docs/使用指南.md#受限时使用游戏内浮窗)。
 
 ### 家长生成加时码：手机扫码
 

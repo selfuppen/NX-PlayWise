@@ -252,6 +252,22 @@ When daily limits expire or bedtime restrictions take effect, Nintendo's native 
 
 ## In-Game Overlay (Tesla Overlay)
 
+<details>
+<summary>Overlay previews generated from the current code</summary>
+
+| Code entry | Grant confirmation |
+| --- | --- |
+| ![Overlay code entry](images/usage-en/overlay/overlay-code-entry.png) | ![Overlay confirmation](images/usage-en/overlay/overlay-code-confirm.png) |
+
+| Parent actions | Bedtime recovery |
+| --- | --- |
+| ![Overlay parent actions](images/usage-en/overlay/overlay-parent-actions.png) | ![Overlay bedtime recovery](images/usage-en/overlay/overlay-bedtime.png) |
+
+</details>
+
+These use the production Overlay drawings with deterministic sample data and a `HOST PREVIEW / SAMPLE DATA` label. Regenerate with `python tools/package_remote.py --with-previews`, `--release`, or `--previews`. Verify shared fonts, controller/touch input and actual restrictions on a Switch.
+
+
 The in-game overlay resides at `sdmc:/switch/.overlays/playwise.ovl` and requires an independently installed overlay loader such as Tesla Menu or Ultrahand Overlay. During gameplay, it enables status checks, grant code redemption, autonomy buffer claims, and single-instance parental recovery actions.
 
 > [!IMPORTANT]
@@ -365,6 +381,29 @@ Always refer to buttons and prompts in your installed version. This guide does n
 
 ## Support & Recovery
 
+Open **Support & recovery / Troubleshooting & FAQ** in the parent area. Navigate down from the bottom action row through recent events, then press A. Use L/R or left/right to change pages and A/B to return, or tap the navigation buttons. Help remains readable with the backend unavailable, emergency disable active, or read-only support access; it does not change controls, sync time or submit requests.
+
+| Check pending | Verification and action |
+| --- | --- |
+| Nintendo parental controls | On/off/unknown are separate; stale readings are unknown. Close help and press Y. To enable: System Settings / Parental Controls / Parental Controls Settings / If You Do Not Have a Smart Device / Next / Next. Follow system instructions for an existing phone link. Enabled does not prove actual restrictions. |
+| Date, time, time zone and sync | PlayWise does not detect successful clock sync. Check System Settings. Online, use DBI Tools / NTP time sync or QuickNTP, then refresh and test with a non-critical game. Sync is not a guaranteed fix. |
+| Actual expiry restrictions | Rule out temporary Nintendo unlock. Counting stops while temporarily unlocked; sleep restores restrictions. Verify the 0-minute reading and actual game blocking separately. |
+| Environment and overlay | Check model, HOS, Atmosphere and Software info. Recheck controls after environment changes. Test Ultrahand/Tesla access before restrictions. Manual verification differs from full qualification; Host/Eden cannot prove PCTL behavior. |
+
+The four help pages also cover invalid/used/date-mismatched codes, bedtime and eye-care restrictions, backend loading, protection and recovery transactions, and diagnostic exports. Optional clock sync needs network access; offline code generation and redemption remain offline.
+
+![In-app controls and clock checks](images/usage-en/support/support-guide-1-light.png)
+
+<details>
+<summary>In-app FAQ pages</summary>
+
+![0 minutes but games open](images/usage-en/support/support-guide-2-light.png)
+![Grant failures and blocked app](images/usage-en/support/support-guide-3-light.png)
+![Backend and environment troubleshooting](images/usage-en/support/support-guide-4-light.png)
+
+</details>
+
+
 Parent Zone "Support & Recovery" displays active issues and recommended remedies; emergency disable halts new playtime and schedule writes, but permits viewing status, exporting diagnostics, and restoring backups. After firmware updates, if "System environment changed" appears, follow on-screen instructions to re-detect and resume takeover; successful takeover preserves your PIN, secrets, and rules. When "Syncing" appears, wait for completion before refreshing to verify.
 
 <details>
@@ -412,9 +451,9 @@ Documentation images fall into two categories, with paths relative to repository
 
 | Source | Image Paths | Update Method |
 | --- | --- | --- |
-| Automatically Generated Console UI Previews | 49 PNG files under `docs/images/usage-en/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support}/` (English) and `docs/images/usage/` (Chinese) listed in `tools/sync_doc_previews.py` | Run `python tools/package_remote.py --previews` to re-render `build/ui-previews/` and synchronize to documentation paths. Append `--clean` for a full clean build. |
+| Automatically Generated Console and Overlay UI Previews | Selected PNG files under `docs/images/usage-en/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support,overlay}/` (English) and `docs/images/usage/` (Chinese) listed in `tools/sync_doc_previews.py` | Run `python tools/package_remote.py --previews` to re-render `build/ui-previews/` and synchronize to documentation paths. Append `--clean` for a full clean build. |
 | Manually Captured Hardware, Pairing & Web Previews | `docs/images/usage/overlay/ultrahand-entry.jpg`, `docs/images/usage/overlay/playwise-code-entry-legacy.jpg`, `docs/images/usage/parent/pairing-qr-demo.png`, `docs/images/usage/parent/web-code-demo.jpg`, `docs/images/usage/parent-offline-demo.png` | Re-capture, verify, and update against physical devices or browser interfaces; pairing QR codes must use public demo configurations. The command above does not replace these images. |
 
-Automated previews are generated from production C rendering code, fixed sample states, and the vendored Noto Sans SC font, marked with `HOST PREVIEW / SAMPLE DATA`. They serve layout reading purposes and do not substitute hardware controller, font, and PCTL validation. `--previews` (or `--only previews`) does not run full test suites or build distribution packages; run `python tools/package_remote.py` for standard routine builds, or `python tools/package_remote.py --release` when full release gating is required. See [Testing Guide](TESTING_GUIDE.md) for details.
+Automated previews are generated from production C/C++ rendering code, fixed sample states, and the vendored Noto Sans SC font, marked with `HOST PREVIEW / SAMPLE DATA`. They serve layout reading purposes and do not substitute hardware controller, font, and PCTL validation. `--previews` (or `--only previews`) does not run full test suites or build distribution packages; run `python tools/package_remote.py` for standard routine builds, or `python tools/package_remote.py --release` when full release gating is required. See [Testing Guide](TESTING_GUIDE.md) for details.
 
 See also [Development Environment Guide](开发环境指南.md), [Development Guide](开发指南.md), [Protocol Specification](协议.md), and [PCTL Integration Architecture](PCTL集成架构.md).

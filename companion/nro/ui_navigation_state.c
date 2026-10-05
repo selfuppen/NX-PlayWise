@@ -11,6 +11,23 @@
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
 
+void ptc_ui_open_support_guide(PtcUiModel *model)
+{
+    if (!model) return;
+    model->selected_index = 6 + model->recent_event_count;
+    model->parent_footer_focused = false;
+    model->overlay = PTC_UI_OVERLAY_SUPPORT_GUIDE;
+    model->support_guide_page = 0;
+    snprintf(model->overlay_title, sizeof(model->overlay_title), "%s", ptc_ui_text(PTC_UI_T_SUPPORT_GUIDE));
+    model->overlay_body[0] = '\0';
+}
+
+void ptc_ui_support_guide_change_page(PtcUiModel *model, int direction)
+{
+    if (!model || model->overlay != PTC_UI_OVERLAY_SUPPORT_GUIDE) return;
+    model->support_guide_page = (model->support_guide_page + (direction > 0 ? 1 : 3)) % 4;
+}
+
 void ptc_ui_format_custom_shortcut_hint(
     const char *shortcut_label,
     char *out,
@@ -129,7 +146,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     index = model->selected_index;
     if (index < 0 ||
         (model->parent_page == PTC_UI_PARENT_SUPPORT
-            ? index >= count + model->recent_event_count
+            ? index > count + model->recent_event_count
             : (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT && model->forecast_available
                 ? index >= count + 7
                 : index >= count))) {
@@ -156,7 +173,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     }
     if (model->parent_page == PTC_UI_PARENT_SUPPORT) {
         int event_count = model->recent_event_count;
-        int max_index = 5 + event_count;
+        int max_index = 6 + event_count;
         if (index > max_index) index = 0;
         if (index >= 6) {
             if (vertical < 0) index = index == 6 ? 4 : index - 1;
@@ -167,17 +184,11 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
                 model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
             }
         } else {
-            int previous = index;
             if (horizontal < 0 && index % 2 == 1) --index;
             else if (horizontal > 0 && index % 2 == 0) ++index;
             else if (vertical < 0 && index >= 2) index -= 2;
             else if (vertical > 0 && index < 4) index += 2;
-            else if (vertical > 0 && event_count > 0) index = 6;
-            else if (vertical > 0) {
-                model->parent_content_selection = previous;
-                model->parent_footer_focused = true;
-                model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
-            }
+            else if (vertical > 0) index = 6;
         }
         model->selected_index = index;
         return;

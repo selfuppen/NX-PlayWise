@@ -110,7 +110,8 @@ typedef enum {
     PTC_UI_OVERLAY_EYE_CARE = 39,
     PTC_UI_OVERLAY_CALENDAR_MANAGER = 40,
     PTC_UI_OVERLAY_CALENDAR_FORMAT = 41,
-    PTC_UI_OVERLAY_SETUP_PCTL_HELP = 42
+    PTC_UI_OVERLAY_SETUP_PCTL_HELP = 42,
+    PTC_UI_OVERLAY_SUPPORT_GUIDE = 43
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -429,6 +430,7 @@ typedef struct {
     bool setup_legacy_completed_candidate;
     bool setup_more;
     bool setup_time_help;
+    int support_guide_page;
     bool setup_pin_ready;
     bool parent_support_only;
     bool setup_activation_pending;

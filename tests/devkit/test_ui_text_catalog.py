@@ -79,6 +79,7 @@ def main() -> None:
     sources = list(COMPANION.glob("*.c")) + list((COMPANION / "nro").glob("*.c"))
     sources += list((COMPANION / "overlay").glob("*.c"))
     sources += list((COMPANION / "overlay/source").glob("*.cpp"))
+    sources += list((COMPANION / "overlay/source").glob("*.hpp"))
     sources.append(ROOT / "tests/ui_preview/render.c")
     for path in sources:
         source = path.read_text(encoding="utf-8")

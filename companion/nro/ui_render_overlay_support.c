@@ -1022,9 +1022,43 @@ static void draw_setup_pctl_help(uint32_t *pixels, uint32_t stride, const PtcUiM
         ptc_ui_text(PTC_UI_T_A_B_RETURN), UI_ACCENT, UI_ON_ACCENT, false);
 }
 
+static void draw_support_guide(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    static const PtcUiTextId titles[] = {PTC_UI_T_GUIDE_CHECKS, PTC_UI_T_GUIDE_LIMIT,
+        PTC_UI_T_GUIDE_CODES, PTC_UI_T_GUIDE_BACKEND};
+    static const PtcUiTextId bodies[] = {PTC_UI_T_GUIDE_CHECKS_BODY, PTC_UI_T_GUIDE_LIMIT_BODY,
+        PTC_UI_T_GUIDE_CODES_BODY, PTC_UI_T_GUIDE_BACKEND_BODY};
+    UiRect dialog;
+    int page = model->support_guide_page >= 0 && model->support_guide_page < 4
+        ? model->support_guide_page : 0;
+    char heading[192];
+    draw_dialog_shell(pixels, stride, model, &dialog, 1100, 610);
+    snprintf(heading, sizeof(heading), "%d/4  %s", page + 1, ptc_ui_text(titles[page]));
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 104, heading, 23, UI_ACCENT);
+    bool known = model->restriction_enabled_available &&
+        ptc_ui_status_is_fresh(model, ptc_ui_render_now());
+    draw_text(pixels, stride, dialog.x + 34, dialog.y + 145,
+        ptc_ui_text(!known ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
+            model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF),
+        17, known && model->restriction_enabled ? UI_SUCCESS : UI_WARNING);
+    draw_text(pixels, stride, dialog.x + 520, dialog.y + 145,
+        ptc_ui_text(PTC_UI_T_GUIDE_CLOCK_STATUS), 17, UI_WARNING);
+    draw_wrapped_text(pixels, stride, dialog.x + 34, dialog.y + 193,
+        ptc_ui_text(bodies[page]), 18, dialog.width - 68, 28, 12, UI_INK);
+    draw_dialog_button(pixels, stride, ptc_ui_support_guide_nav_rect(0),
+        ptc_ui_text(PTC_UI_T_GUIDE_PREV), UI_RAISED, UI_ACCENT, false);
+    draw_dialog_button(pixels, stride, ptc_ui_support_guide_nav_rect(1),
+        ptc_ui_text(PTC_UI_T_GUIDE_NEXT), UI_RAISED, UI_ACCENT, false);
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),
+        ptc_ui_text(PTC_UI_T_A_B_RETURN), UI_ACCENT, UI_ON_ACCENT, false);
+}
+
 bool draw_support_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     switch (model->overlay) {
+    case PTC_UI_OVERLAY_SUPPORT_GUIDE:
+        draw_support_guide(pixels, stride, model);
+        return true;
     case PTC_UI_OVERLAY_SETUP_PCTL_HELP:
         draw_setup_pctl_help(pixels, stride, model);
         return true;

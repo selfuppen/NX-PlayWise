@@ -5,6 +5,9 @@
 
 #include "ui_input_state.h"
 
+void ptc_ui_open_support_guide(PtcUiModel *model);
+void ptc_ui_support_guide_change_page(PtcUiModel *model, int direction);
+
 int ptc_ui_holiday_calendar_nearest_page(const PtcUiModel *model, int *distance);
 
 typedef enum {

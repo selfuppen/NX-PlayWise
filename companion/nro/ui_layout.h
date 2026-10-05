@@ -120,7 +120,8 @@ typedef enum {
     PTC_UI_HIT_HOME_DETAILS_TAB,
     PTC_UI_HIT_NOTICE_DETAILS,
     PTC_UI_HIT_FORECAST_DAY,
-    PTC_UI_HIT_SETUP_PCTL_HELP
+    PTC_UI_HIT_SETUP_PCTL_HELP,
+    PTC_UI_HIT_SUPPORT_GUIDE
 } PtcUiHitKind;
 
 typedef struct {
@@ -181,6 +182,8 @@ PtcUiRect ptc_ui_calendar_manager_row_rect(int index);
 PtcUiRect ptc_ui_calendar_manager_nav_rect(int index);
 PtcUiRect ptc_ui_holiday_page_action_rect(int index);
 PtcUiRect ptc_ui_support_event_rect(int index);
+PtcUiRect ptc_ui_support_guide_rect(void);
+PtcUiRect ptc_ui_support_guide_nav_rect(int index);
 PtcUiRect ptc_ui_redemption_history_prev_rect(void);
 PtcUiRect ptc_ui_redemption_history_next_rect(void);
 PtcUiRect ptc_ui_scheduled_field_rect(int index);

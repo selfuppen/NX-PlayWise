@@ -397,6 +397,11 @@ static void draw_safety_status(uint32_t *pixels, uint32_t stride, const PtcUiMod
                           no_events_msg, 14, panel.width - 52, 20, 2,
                           model->recent_events_available ? UI_MUTED : UI_DANGER);
     }
+    UiRect guide = to_uirect(ptc_ui_support_guide_rect());
+    bool guide_focused = model->selected_index == 6 + model->recent_event_count && !model->parent_footer_focused;
+    fill_round_rect(pixels, stride, guide, 8, guide_focused ? UI_ACCENT_SOFT : UI_PAGE);
+    draw_rect_outline(pixels, stride, guide, 8, guide_focused ? 2 : 1, UI_ACCENT);
+    draw_text_center(pixels, stride, guide, ptc_ui_text(PTC_UI_T_SUPPORT_GUIDE), 14, UI_ACCENT);
 }
 
 static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

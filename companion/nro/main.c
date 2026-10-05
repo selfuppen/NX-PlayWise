@@ -872,6 +872,9 @@ int main(int argc, char **argv)
                 } else if (ui.model.parent_footer_focused) {
                     ptc_audio_play(PTC_SE_CONFIRM);
                     activate_parent_status(&ui);
+                } else if (ui.model.parent_page == PTC_UI_PARENT_SUPPORT &&
+                           ui.model.selected_index == 6 + ui.model.recent_event_count) {
+                    ptc_ui_open_support_guide(&ui.model);
                 } else if (ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.model.selected_index >= 6) {
                     int visible_index = ui.model.selected_index - 6;
                     int event_index = ui.model.recent_event_count - 1 - visible_index;

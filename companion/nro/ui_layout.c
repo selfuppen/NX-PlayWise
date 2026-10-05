@@ -658,6 +658,14 @@ uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallba
     return 60;
 }
 
+PtcUiRect ptc_ui_support_guide_rect(void) { return (PtcUiRect){868, 602, 332, 26}; }
+
+PtcUiRect ptc_ui_support_guide_nav_rect(int index)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_SUPPORT_GUIDE);
+    return (PtcUiRect){dialog.x + 34 + index * 250, dialog.y + dialog.h - 72, 226, 48};
+}
+
 PtcUiRect ptc_ui_support_event_rect(int index)
 {
     if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
@@ -674,6 +682,10 @@ PtcUiRect ptc_ui_dialog_rect(int width, int height)
 static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
 {
     switch (overlay) {
+    case PTC_UI_OVERLAY_SUPPORT_GUIDE:
+        *width = 1100;
+        *height = 610;
+        break;
     case PTC_UI_OVERLAY_SETUP_PCTL_HELP:
         *width = 1060;
         *height = 570;
@@ -1035,7 +1047,7 @@ static int dialog_button_top(PtcUiRect dialog)
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 {
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
-        overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP)
+        overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP || overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE)
         return (PtcUiRect){0, 0, 0, 0};
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};

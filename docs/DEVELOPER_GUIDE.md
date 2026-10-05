@@ -243,3 +243,9 @@ Maintainer container workflows must not be replaced with ad-hoc SSH, `docker exe
 - Is the standard installation package unique with all three components sharing a single manifest, and does the complete bundle contain only that package and byte-identical offline HTML?
 - Are release binaries free of LAB handlers, runtime control modes, and placeholder secrets?
 - Are documents encoded in UTF-8, with physical hardware qualification status explicitly stated?
+
+## Overlay previews and in-app help
+
+Production Overlay view types/colors and read-only drawing methods live in `companion/overlay/source/render_types.hpp` and `render_methods.hpp`. The GUI and `tests/overlay_preview/render.cpp` share them. A C++17 host adapter renders deterministic sample states with the pinned font. `ui-previews` renders entry, confirmation, success, parent actions, bedtime, eye-care and unknown scenes in three languages; the existing conversion and sync pipeline updates Chinese/English documentation. Font/input/PCTL qualification still needs a Switch. Include shared drawing headers in catalog and glyph gates.
+
+Support & recovery provides four read-only FAQ pages, preserving focus on close. Only fresh backend readings inform controls status; clock sync remains a manual check. Reading help must not change PCTL, time or requests.

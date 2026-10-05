@@ -389,6 +389,30 @@ static int render_setup_previews(const char *directory, const PtcUiModel *baseli
     return failed;
 }
 
+static int render_support_guide_previews(const char *directory, const PtcUiModel *baseline, bool dark)
+{
+    int failed = 0;
+    PtcUiModel guide = *baseline;
+    guide.view = PTC_UI_PARENT;
+    guide.parent_page = PTC_UI_PARENT_SUPPORT;
+    ptc_ui_open_support_guide(&guide);
+    for (int page = 0; page < 4; ++page) {
+        char name[64];
+        snprintf(name, sizeof(name), "support-guide-%d", page + 1);
+        failed |= save_preview(directory, "support", name, &guide, dark);
+        ptc_ui_support_guide_change_page(&guide, 1);
+    }
+    guide.restriction_enabled_available = false;
+    failed |= save_preview(directory, "support", "support-guide-unknown", &guide, dark);
+    guide.restriction_enabled_available = true;
+    guide.restriction_enabled = false;
+    failed |= save_preview(directory, "support", "support-guide-pctl-off", &guide, dark);
+    guide.restriction_enabled = true;
+    guide.status_updated_at = 879;
+    failed |= save_preview(directory, "support", "support-guide-stale", &guide, dark);
+    return failed;
+}
+
 static int render_all_previews(const char *directory, const PtcUiModel *baseline_ptr)
 {
     PtcUiModel model;
@@ -1000,6 +1024,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.parent_page = PTC_UI_PARENT_SUPPORT;
         model.selected_index = 4;
         failed |= save_preview(directory, "support", "support-healthy", &model, dark);
+        failed |= render_support_guide_previews(directory, &model, dark);
         model.disable_flag_present = true;
         model.selected_index = 0;
         failed |= save_preview(directory, "support", "support-disabled", &model, dark);
@@ -1167,7 +1192,10 @@ int main(int argc, char **argv)
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
     localize_preview_baseline(&model);
     failed |= render_eye_care_previews(zh_hant_dir, &model);
-    for (int dark = 0; dark < 2; ++dark) failed |= render_setup_previews(zh_hant_dir, &model, dark);
+    for (int dark = 0; dark < 2; ++dark) {
+        failed |= render_setup_previews(zh_hant_dir, &model, dark);
+        failed |= render_support_guide_previews(zh_hant_dir, &model, dark);
+    }
     FT_Done_Face(g_ui.face);
     free(bytes);
     return failed;

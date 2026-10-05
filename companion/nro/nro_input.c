@@ -54,6 +54,12 @@ void handle_overlay_input(UiState *ui, u64 down)
         ptc_audio_play(PTC_SE_CANCEL);
     }
 
+    if (ui->model.overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE) {
+        if (down & (HidNpadButton_B | HidNpadButton_A)) ptc_ui_cancel_overlay(&ui->model);
+        else if (down & (HidNpadButton_L | HidNpadButton_Left)) ptc_ui_support_guide_change_page(&ui->model, -1);
+        else if (down & (HidNpadButton_R | HidNpadButton_Right)) ptc_ui_support_guide_change_page(&ui->model, 1);
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
         ui->model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP) {
         if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Minus)) {

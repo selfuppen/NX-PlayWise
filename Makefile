@@ -1,4 +1,5 @@
 HOST_CC ?= gcc
+HOST_CXX ?= g++
 HOST_CFLAGS ?= -std=c99 -Wall -Wextra -Werror -I.
 include common/version.mk
 HOST_BUILD_DIR := build/host
@@ -118,14 +119,22 @@ test-ui-primitives: $(HOST_BUILD_DIR)/ui_preview
 test-host: test-ui-primitives
 
 # UI preview generation with the pinned, redistributable documentation font.
+OVERLAY_PREVIEW_C_SRCS := companion/ui_language.c companion/overlay/input_model.c companion/overlay/bridge.c companion/transport_client.c common/time/ptc_time.c common/protocol/error_code.c
+$(HOST_BUILD_DIR)/overlay_preview_core.o: $(OVERLAY_PREVIEW_C_SRCS) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -ffunction-sections -fdata-sections -r -o $@ $(OVERLAY_PREVIEW_C_SRCS)
+
+$(HOST_BUILD_DIR)/overlay_preview: tests/overlay_preview/render.cpp tests/overlay_preview/renderer.hpp companion/overlay/source/render_types.hpp companion/overlay/source/render_methods.hpp $(HOST_BUILD_DIR)/overlay_preview_core.o
+	$(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ tests/overlay_preview/render.cpp $(HOST_BUILD_DIR)/overlay_preview_core.o -lm
+
 .PHONY: ui-previews
-ui-previews: $(HOST_BUILD_DIR)/ui_preview
+ui-previews: $(HOST_BUILD_DIR)/ui_preview $(HOST_BUILD_DIR)/overlay_preview
 	@if [ ! -f third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf ]; then \
 		echo "ERROR: missing pinned preview font" >&2; \
 		exit 1; \
 	fi
 	mkdir -p build/ui-previews
 	$(STAGE_TIMER) playwise ui-previews -- $(HOST_BUILD_DIR)/ui_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews
+	$(STAGE_TIMER) playwise overlay-previews -- $(HOST_BUILD_DIR)/overlay_preview third_party/fonts/noto-sans-sc/NotoSansSC-Regular.ttf build/ui-previews
 	$(STAGE_TIMER) playwise convert-previews -- python3 tools/convert_ui_previews.py
 
 test-python:
