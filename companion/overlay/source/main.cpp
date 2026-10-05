@@ -1486,10 +1486,26 @@ public:
         // --- 0. Top Prominent Status Banner (醒目展示额度消耗估算与修改后/当前可玩时长) ---
         const s32 top_banner_y = cy + PTC_OVERLAY_TOP_BANNER_Y;
         const s32 top_banner_h = PTC_OVERLAY_TOP_BANNER_H;
-        renderer->drawRect(cx, top_banner_y, cw, top_banner_h, renderer->a(CARD_COLOR));
+        const bool bedtime_res = summary.valid && summary.bedtime_active && !summary.bedtime_skipped;
+        const bool eye_res = summary.valid && summary.eye_care_enabled &&
+            std::strcmp(summary.eye_care_phase, "resting") == 0;
+
+        tsl::Color banner_bg = CARD_COLOR;
+        tsl::Color banner_border = FOCUS_BORDER;
+        if (remaining_refresh_pending) {
+            banner_border = WAITING_COLOR;
+        } else if (bedtime_res) {
+            banner_bg = DANGER_BG;
+            banner_border = ERROR_COLOR;
+        } else if (eye_res) {
+            banner_bg = WARNING_BG;
+            banner_border = WAITING_COLOR;
+        }
+
+        renderer->drawRect(cx, top_banner_y, cw, top_banner_h, renderer->a(banner_bg));
         draw_outline(renderer, cx, top_banner_y, cw, top_banner_h,
-                     remaining_refresh_pending ? 2 : 1,
-                     remaining_refresh_pending ? WAITING_COLOR : FOCUS_BORDER);
+                     (remaining_refresh_pending || bedtime_res || eye_res) ? 2 : 1,
+                     banner_border);
 
         char quota_label[32];
         char quota_val[32];
@@ -1505,16 +1521,28 @@ public:
             draw_localized(renderer, quota_note, false, cx + 124, top_banner_y + 21, 11, renderer->a(MUTED_COLOR));
         }
 
-        draw_localized(renderer, success_visible_ ? ptc_ui_text(PTC_UI_T_STILL_PLAYABLE_AFTER_MODIFICATION) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY), false,
-                              cx + 10, top_banner_y + 51, 11, renderer->a(MUTED_COLOR));
+        const char *banner_title = bedtime_res ? ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_2) :
+            (eye_res ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) :
+             (success_visible_ ? ptc_ui_text(PTC_UI_T_STILL_PLAYABLE_AFTER_MODIFICATION) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY)));
+        draw_localized(renderer, banner_title, false,
+                              cx + 10, top_banner_y + 51, 11,
+                              renderer->a(bedtime_res ? ERROR_COLOR : (eye_res ? WAITING_COLOR : MUTED_COLOR)));
+
         const bool unlimited_today = summary.valid && summary.unrestricted_today == 1;
         const tsl::Color remaining_accent = remaining_refresh_pending ? WAITING_COLOR :
-            (summary.valid && (summary.remaining_available || unlimited_today) ? SUCCESS_COLOR : MUTED_COLOR);
+            (bedtime_res ? ERROR_COLOR : (eye_res ? WAITING_COLOR :
+             (summary.valid && (summary.remaining_available || unlimited_today) ? SUCCESS_COLOR : MUTED_COLOR)));
         renderer->drawRect(cx + 108, top_banner_y + 34, 104, 34, renderer->a(KEY_COLOR));
         renderer->drawRect(cx + 108, top_banner_y + 66, 104, 2, renderer->a(remaining_accent));
         if (remaining_refresh_pending) {
             draw_localized(renderer, ptc_ui_text(PTC_UI_T_REFRESHING_2), false, cx + 116, top_banner_y + 58, 14,
                                  renderer->a(WAITING_COLOR));
+        } else if (bedtime_res) {
+            draw_localized(renderer, ptc_ui_text(PTC_UI_T_RESTRICTED), false, cx + 124, top_banner_y + 59, 18, renderer->a(ERROR_COLOR));
+        } else if (eye_res) {
+            int sec = summary.eye_care_rest_remaining_seconds > 0 ? summary.eye_care_rest_remaining_seconds : 0;
+            std::snprintf(line, sizeof(line), "%02d:%02d", sec / 60, sec % 60);
+            draw_localized(renderer, line, false, cx + 114, top_banner_y + 60, 20, renderer->a(WAITING_COLOR));
         } else if (unlimited_today) {
             draw_localized(renderer, ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED), false, cx + 126, top_banner_y + 62, 22, renderer->a(SUCCESS_COLOR));
         } else if (summary.valid && summary.remaining_available) {

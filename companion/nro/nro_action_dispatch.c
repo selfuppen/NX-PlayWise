@@ -274,18 +274,18 @@ void handle_parent_action(UiState *ui)
             ui->model.selected_index = 0;
             break;
         case 4:
-            ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
-            ui->model.overlay = PTC_UI_OVERLAY_AUTONOMY;
-            ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING));
-            ui->model.overlay_body[0] = '\0';
-            break;
-        case 5:
             ui->model.draft_eye_care_policy = ui->model.eye_care_policy;
             ui->model.eye_care_dirty = false;
             ui->model.eye_care_field_focus = 0;
             ui->model.plan_page = PTC_UI_PLAN_PAGE_EYE_CARE;
             ui->model.selected_index = 0;
+            break;
+        case 5:
+            ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
+            ui->model.overlay = PTC_UI_OVERLAY_AUTONOMY;
+            ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING));
+            ui->model.overlay_body[0] = '\0';
             break;
         case 6:
         case 7:
@@ -389,25 +389,29 @@ void handle_parent_action(UiState *ui)
     }
     if (ui->model.parent_page == PTC_UI_PARENT_SETTINGS) {
         switch (index) {
-        case 0:
+        case 0: change_parent_pin(ui); break;
+        case 1:
             ui->model.overlay = PTC_UI_OVERLAY_THEME;
             ui->model.overlay_selection = (int)ui->theme_preference;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_APPEARANCE_THEME));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      ptc_ui_text(PTC_UI_T_ONLY_CHANGES_THE_DRAWING_APPEARANCE_OF_THE));
             break;
-        case 1: change_parent_pin(ui); break;
         case 2: open_shortcut_manager(ui); break;
         case 3:
+            ui->model.overlay = PTC_UI_OVERLAY_LANGUAGE;
+            ui->model.overlay_selection = (int)ui->language_preference;
+            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
+            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
+                ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
+            break;
+        case 4:
             refresh_album_restriction(ui);
             ui->model.overlay = PTC_UI_OVERLAY_ALBUM_MANAGER;
             ui->model.overlay_selection = ui->model.album_restriction_state == PTC_ALBUM_RESTRICTION_OFF ? 0 : 1;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_ADVANCED_ENTRY_TO_HOMEBREW_MENU));
             snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
                      ptc_ui_text(PTC_UI_T_THIS_FUNCTION_ONLY_CHANGES_THE_HBMENU_STARTUP));
-            break;
-        case 4:
-            open_activity_history(ui);
             break;
         case 5: {
             bool new_state = !ptc_audio_is_enabled();
@@ -421,11 +425,7 @@ void handle_parent_action(UiState *ui)
             break;
         }
         case 6:
-            ui->model.overlay = PTC_UI_OVERLAY_LANGUAGE;
-            ui->model.overlay_selection = (int)ui->language_preference;
-            snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_UI_LANGUAGE));
-            snprintf(ui->model.overlay_body, sizeof(ui->model.overlay_body),
-                ptc_ui_text(PTC_UI_T_THE_HOST_APPLICATION_SHARES_THIS_SETTING_WITH));
+            open_activity_history(ui);
             break;
         default: break;
         }

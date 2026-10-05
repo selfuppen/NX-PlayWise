@@ -27,7 +27,7 @@
 
 PtcUiRect ptc_ui_child_submit_rect(void)
 {
-    PtcUiRect rect = {684, 216, 516, 92};
+    PtcUiRect rect = {964, 120, 268, 112};
     return rect;
 }
 
@@ -39,7 +39,7 @@ PtcUiRect ptc_ui_child_refresh_rect(void)
 
 PtcUiRect ptc_ui_child_buffer_rect(void)
 {
-    PtcUiRect rect = {684, 324, 516, 72};
+    PtcUiRect rect = {964, 246, 268, 106};
     return rect;
 }
 
@@ -227,7 +227,7 @@ void ptc_ui_format_home_total(const PtcUiModel *model, char *out, size_t out_siz
 
 PtcUiRect ptc_ui_home_summary_rect(bool parent)
 {
-    return parent ? (PtcUiRect){48, 176, 488, 452} : (PtcUiRect){48, 120, 580, 496};
+    return parent ? (PtcUiRect){48, 176, 488, 452} : (PtcUiRect){48, 120, 896, 496};
 }
 
 PtcUiRect ptc_ui_today_card_rect(int index)
@@ -498,7 +498,7 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? (PtcUiRect){74, 560, 436, 46} : (PtcUiRect){684, 412, 516, 64};
+    return parent ? (PtcUiRect){74, 552, 436, 44} : (PtcUiRect){964, 366, 268, 106};
 }
 
 PtcUiRect ptc_ui_home_details_tab_rect(int index)

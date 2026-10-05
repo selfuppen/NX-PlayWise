@@ -109,7 +109,10 @@ The PlayWise PIN protects only this project's Parent Portal and is completely di
 | Switch-native interactive sound effects (audout engine) | Implemented (12 Switch-style sound effects, dial audio, and sound toggle) | 2026-10-01 |
 | Multi-language internationalization (Traditional Chinese & English) | Implemented (bilingual interface & docs, language decoupling) | 2026-10-02 |
 | Destructive action long-press charge-up & safety protection | Implemented (charge-up confirmation with continuous audio feedback, instant cancel) | 2026-10-02 |
+| Eye protection break | DOING; continuous play/break cycles, overlay & daily dispatch skip, pending hardware qualification | In Progress |
 | Custom shortcut recording | In validation (presets available, recording entry unreleased) | TBD |
+| Multiple restricted time slots | TODO; support configuring multiple blackout/curfew intervals per day (e.g. study & dinner hours) | TBD |
+| Configuration backup & import | TODO; support backing up schedules and parent settings to SD card with easy restore | TBD |
 | Per-title playtime statistics | TODO (`pdm:qry` hardware verification gated; currently marked unavailable) | TBD |
 
 Once daily limit or bedtime takes effect, the in-game overlay remains PlayWise's only on-console interactive entry: for daily limits, users can redeem grant codes, or parents can grant temporary minutes or unlimited play for today; for bedtime, users can skip the session, disable the schedule, or restore pre-installation settings. Temporary bypass via Nintendo master PIN in the native dialog remains handled by Nintendo. If the overlay or sysmodule is unavailable, PlayWise does not provide an on-console recovery fallback or auto-write recovery flags.

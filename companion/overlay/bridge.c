@@ -416,7 +416,13 @@ void ptc_overlay_format_child_restriction_guidance(
         return;
     }
     if (summary->bedtime_active && !summary->bedtime_skipped) {
-        snprintf(out, out_size, ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTIONS_ARE_IN_EFFECT_PARENTS_PLEASE));
+        if (summary->bedtime_end_minute > 0) {
+            snprintf(out, out_size, "%s (%02d:%02d)",
+                ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTIONS_ARE_IN_EFFECT_PARENTS_PLEASE),
+                summary->bedtime_end_minute / 60, summary->bedtime_end_minute % 60);
+        } else {
+            snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTIONS_ARE_IN_EFFECT_PARENTS_PLEASE));
+        }
         return;
     }
     if (summary->daily_restriction_active) {
