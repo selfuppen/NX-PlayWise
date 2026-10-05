@@ -37,6 +37,7 @@
 #include "../../sysmodule/sysmodule_core.h"
 
 static int failures;
+int ptc_test_control_safety(void);
 
 static void check_true(bool value, const char *label)
 {
@@ -3556,6 +3557,7 @@ done:
 
 int main(void)
 {
+    failures += ptc_test_control_safety();
     test_eden_simulated_usage_clock();
     test_hot_reload_guard();
     test_result_summary_unlimited_state();

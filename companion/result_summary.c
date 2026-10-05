@@ -56,6 +56,8 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     snprintf(out->type, sizeof(out->type), "%s", string_value(root, "type"));
     out->ok = strcmp(status, "ok") == 0;
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
+    out->disable_flag_present = bool_value(cJSON_GetObjectItemCaseSensitive(root, "setup"),
+        "disable_flag_present", false);
     out->day_index = number_value(state, "day_index", -1);
     out->remaining_available = bool_value(state, "remaining_available", false);
     out->remaining_minutes = number_value(state, "remaining_minutes", -1);

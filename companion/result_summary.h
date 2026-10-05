@@ -51,6 +51,7 @@ typedef struct {
     bool bedtime_official_setting_confirmed;
     bool bedtime_overlay_verified;
     bool daily_restriction_active;
+    bool disable_flag_present;
     bool eye_care_enabled;
     int eye_care_play_minutes;
     int eye_care_rest_minutes;

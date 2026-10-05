@@ -132,7 +132,7 @@ const char *ptc_ui_today_action_unavailable_reason(const PtcUiModel *model,
             return ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_NOT_RESTING);
         age = ptc_ui_status_age_seconds(model, now);
         if (model->eye_care_break_id == 0 ||
-            (int64_t)model->eye_care_rest_remaining_seconds <= age)
+            (!model->disable_flag_present && (int64_t)model->eye_care_rest_remaining_seconds <= age))
             return ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH);
         if ((model->bedtime_active && !model->bedtime_skipped) ||
             model->daily_restriction_active)

@@ -462,6 +462,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->apply_pending_confirmation = json_bool(setup, "apply_pending_confirmation", false);
         model->recovery_active = json_bool(setup, "recovery_active", false);
         snprintf(model->disable_reason, sizeof(model->disable_reason), "%s", json_string(setup, "disable_reason"));
+        if (cJSON_HasObjectItem(setup, "disable_flag_present"))
+            model->disable_flag_present = json_bool(setup, "disable_flag_present", false);
         model->setup_restriction_cleared = json_bool(setup, "restriction_cleared", false);
         model->setup_snapshot_available = json_bool(setup, "snapshot_available", false);
         model->setup_activate_after = json_int(setup, "activate_after", 0);
@@ -519,7 +521,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     }
     if (status && strcmp(status, "error") == 0) {
         ptc_audio_play(PTC_SE_ERROR);
-        const char *message = summary.message[0] ? summary.message : NULL;
+        const char *message = summary.error_code == 325 ? ptc_ui_text(PTC_UI_T_CONTROL_BUSY) :
+            (summary.message[0] ? summary.message : NULL);
         snprintf(model->message, sizeof(model->message), "%s", message ? message : ptc_ui_text(PTC_UI_T_THE_BACKGROUND_REJECTED_THIS_OPERATION));
         if (summary.error_code > 0) {
             model->error_code = summary.error_code;

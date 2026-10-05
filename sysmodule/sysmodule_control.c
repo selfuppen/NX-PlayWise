@@ -51,7 +51,10 @@ PtcErrorCode apply_target(
     }
     err = ptc_backup_before_write(sysmodule, request, mode_name);
     if (err != PTC_ERR_OK) {
-        recovery_clear(sysmodule);
+        if (!recovery_rollback(sysmodule)) {
+            write_disable_flag(sysmodule, "transaction_restore_failed\n");
+            return PTC_ERR_RECOVERY_FAILED;
+        }
         return err;
     }
     target.mode = mode;
@@ -94,7 +97,7 @@ bool finish_with_error(
 {
     char json[4096];
     PtcResultState state;
-    if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule)) {
+    if (recovery_path_exists(sysmodule) && recovery_owned_by(sysmodule, request) && !recovery_rollback(sysmodule)) {
         write_disable_flag(sysmodule, "transaction_restore_failed\n");
         error = PTC_ERR_RECOVERY_FAILED;
     }
@@ -227,6 +230,7 @@ PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest 
             runtime_state->eye_care_resting = false;
             runtime_state->eye_care_rest_deadline = 0;
             runtime_state->eye_care_break_id = 0;
+            runtime_state->eye_care_idle_since = 0;
         } else if (runtime_state->eye_care_resting) {
             runtime_state->eye_care_rest_deadline +=
                 ((int64_t)rules->eye_care.rest_minutes - old_rest_minutes) * 60;
@@ -427,8 +431,8 @@ bool target_settings_observed(
 
 /* Interactive writes first prove the 0x44 target without touching command 1451.
    A single activation fallback is allowed only after the settings are exact but
-   the current console-use state is not ready yet. Background Enforce never calls
-   this helper and therefore cannot start a timer while nobody is using the console. */
+   the current console-use state is not ready yet. Autonomous callers and BLOCKED
+   targets only verify settings and cannot activate the timer through this helper. */
 PtcErrorCode observe_target_with_optional_activation(
     PtcSysmodule *sysmodule,
     const PtcRequest *request,
@@ -454,7 +458,9 @@ PtcErrorCode observe_target_with_optional_activation(
         err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, target.weekday, observed);
         if (err == PTC_ERR_OK && target_settings_observed(target_mode, minutes, observed)) {
             settings_seen = true;
-            if (target_runtime_ready(target_mode, minutes, observed)) {
+            /* Restriction targets and autonomous recovery never activate 1451. */
+            if (!request || target_mode == PTC_PCTL_TARGET_BLOCKED ||
+                target_runtime_ready(target_mode, minutes, observed)) {
                 append_event(sysmodule, request, "effect_observed", PTC_ERR_OK, event_detail);
                 return PTC_ERR_OK;
             }

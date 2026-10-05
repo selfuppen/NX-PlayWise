@@ -20,9 +20,10 @@ static void reset_eye_care_cycle(PtcRuntimeState *state, uint16_t day_index)
     state->eye_care_resting = false;
     state->eye_care_rest_deadline = 0;
     state->eye_care_break_id = 0;
+    state->eye_care_idle_since = 0;
 }
 
-int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
+int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request)
 {
     PtcRuntimeConfig config;
     PtcRules rules;
@@ -60,6 +61,10 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         return 0;
     }
     if (runtime_state.apply_pending_confirmation) {
+        if (!recovery_path_exists(sysmodule) || !recovery_owned_by(sysmodule, request)) {
+            write_disable_flag(sysmodule, "pending_confirmation_transaction_missing\n");
+            return 0;
+        }
         PtcPctlStatus pending_status;
         PtcErrorCode pending_err = sysmodule->pctl->vtable->read_status(
             sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pending_status);
@@ -82,8 +87,6 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
                 "enforce_pending_confirmation_timeout");
             if (!recovery_rollback(sysmodule)) {
                 write_disable_flag(sysmodule, "pending_confirmation_restore_failed\n");
-            } else if (runtime_state.bedtime_enforced) {
-                clear_bedtime_snapshot(sysmodule);
             }
             return 0;
         }
@@ -95,7 +98,12 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
         runtime_state.bedtime_skipped_instance_id != bedtime.window_instance_id;
     previous_eye_state = runtime_state;
     base_mode = eye_care_base_target(&rules, active_rule, &base_minutes);
-    if (!rules.eye_care.enabled || runtime_state.eye_care_day_index != now.day_index ||
+    /* Daily usage rolls over; the eye-care cycle and rest deadline do not. */
+    if (runtime_state.eye_care_day_index != now.day_index) {
+        runtime_state.eye_care_day_index = now.day_index;
+        runtime_state.eye_care_last_used_minutes = 0;
+    }
+    if (!rules.eye_care.enabled ||
         bedtime_should_enforce ||
         (active_rule.mode == PTC_RULE_MODE_LIMIT && runtime_state.eye_care_usage_known &&
          runtime_state.eye_care_last_used_minutes >= active_rule.minutes)) {
@@ -115,12 +123,25 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
             usage.limited_today && usage.configured_minutes_available &&
             usage.configured_minutes == base_minutes && usage.remaining_available &&
             usage.remaining_minutes <= base_minutes &&
-            usage.play_timer_enabled_available && usage.play_timer_enabled) {
+            usage.play_timer_enabled_available &&
+            (usage.play_timer_enabled || runtime_state.eye_care_usage_known)) {
             uint16_t used = (uint16_t)(base_minutes - usage.remaining_minutes);
             if (runtime_state.eye_care_usage_known && used >= runtime_state.eye_care_last_used_minutes) {
-                uint32_t total = (uint32_t)runtime_state.eye_care_accumulated_minutes +
-                    used - runtime_state.eye_care_last_used_minutes;
-                runtime_state.eye_care_accumulated_minutes = total > 240u ? 240u : (uint16_t)total;
+                if (used == runtime_state.eye_care_last_used_minutes) {
+                    if (runtime_state.eye_care_idle_since == 0 || runtime_state.eye_care_idle_since > now.unix_seconds)
+                        runtime_state.eye_care_idle_since = now.unix_seconds;
+                    if (now.unix_seconds - runtime_state.eye_care_idle_since >= (int64_t)rules.eye_care.rest_minutes * 60)
+                        runtime_state.eye_care_accumulated_minutes = 0;
+                } else {
+                    uint32_t total = (uint32_t)runtime_state.eye_care_accumulated_minutes +
+                        used - runtime_state.eye_care_last_used_minutes;
+                    runtime_state.eye_care_accumulated_minutes = total > 240u ? 240u : (uint16_t)total;
+                    /* Equal readings after wake can prove the intervening rest
+                       even when the scheduler was suspended during sleep. */
+                    runtime_state.eye_care_idle_since = now.unix_seconds;
+                }
+            } else {
+                runtime_state.eye_care_idle_since = now.unix_seconds;
             }
             runtime_state.eye_care_last_used_minutes = used;
             runtime_state.eye_care_usage_known = true;
@@ -136,10 +157,12 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
                 if (!runtime_state.eye_care_break_id) runtime_state.eye_care_break_id = 1;
             }
         } else {
-            runtime_state.eye_care_usage_known = false;
+            /* Retain the reliable baseline; unknown intervals cannot prove rest. */
+            runtime_state.eye_care_idle_since = 0;
         }
         eye_state_changed = memcmp(&previous_eye_state, &runtime_state, sizeof(runtime_state)) != 0;
     }
+    eye_state_changed = memcmp(&previous_eye_state, &runtime_state, sizeof(runtime_state)) != 0;
     if (eye_enter) {
         PtcPctlSettingsSnapshot eye_snapshot;
         if (!sysmodule->pctl->vtable->snapshot_settings ||
@@ -162,14 +185,14 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     }
     if (runtime_state.bedtime_enforced &&
         (!bedtime_should_enforce || runtime_state.bedtime_window_instance_id != bedtime.window_instance_id)) {
-        err = restore_bedtime_base(sysmodule, NULL, &rules, &runtime_state, now);
+        err = restore_bedtime_base(sysmodule, request, &rules, &runtime_state, now);
         if (err != PTC_ERR_OK) {
             write_disable_flag(sysmodule, "bedtime_restore_failed\n");
             append_event(sysmodule, NULL, "pctl_apply_failed", PTC_ERR_BEDTIME_RECOVERY_FAILED,
                 "bedtime_exit");
             return 0;
         }
-        recovery_clear(sysmodule);
+        if (!request) recovery_clear(sysmodule);
     }
     target_mode = bedtime_should_enforce || runtime_state.eye_care_resting
         ? PTC_PCTL_TARGET_BLOCKED : base_mode;
@@ -186,6 +209,7 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
                 write_disable_flag(sysmodule, "eye_care_state_failed\n");
                 return 0;
             }
+            if (eye_exit) clear_eye_care_snapshot(sysmodule);
             return 0;
         }
     }
@@ -199,7 +223,7 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
             return 0;
         }
     }
-    err = apply_target(sysmodule, NULL, now, "release", target_mode, target_minutes);
+    err = apply_target(sysmodule, request, now, "release", target_mode, target_minutes);
     if (err != PTC_ERR_OK) {
         if (bedtime_should_enforce && !runtime_state.bedtime_enforced) clear_bedtime_snapshot(sysmodule);
         if (eye_enter) clear_eye_care_snapshot(sysmodule);
@@ -245,6 +269,12 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     runtime_state.bedtime_enforced = bedtime_should_enforce;
     runtime_state.bedtime_window_instance_id = bedtime_should_enforce ? bedtime.window_instance_id : 0;
     runtime_state.bedtime_start_day_index = bedtime_should_enforce ? bedtime.start_day_index : 0;
+    if (eye_exit && !bedtime_should_enforce && err == PTC_ERR_OK &&
+        observed_status.configured_minutes_available && observed_status.remaining_available &&
+        observed_status.configured_minutes == base_minutes && observed_status.remaining_minutes <= base_minutes) {
+        runtime_state.eye_care_usage_known = true;
+        runtime_state.eye_care_last_used_minutes = (uint16_t)(base_minutes - observed_status.remaining_minutes);
+    }
     if (!save_state(sysmodule, &runtime_state, now.unix_seconds)) {
         append_event(sysmodule, NULL, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED, "enforce_state");
         if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "enforce_restore_failed\n");
@@ -252,8 +282,13 @@ int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
     }
     if (eye_exit) clear_eye_care_snapshot(sysmodule);
     append_event(sysmodule, NULL, "state_persisted", PTC_ERR_OK, "enforce");
-    if (!runtime_state.apply_pending_confirmation) recovery_clear(sysmodule);
+    if (!runtime_state.apply_pending_confirmation && !request) recovery_clear(sysmodule);
     return 1;
+}
+
+int ptc_sysmodule_enforce_tick(PtcSysmodule *sysmodule)
+{
+    return ptc_sysmodule_enforce_request(sysmodule, NULL);
 }
 
 void ptc_sysmodule_init(

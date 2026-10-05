@@ -155,6 +155,10 @@ Using `python tools/package_remote.py --only eden` yields rapid test builds, but
 
 ## Security State Machine
 
+Rules and state reads distinguish confirmed missing files from read failures. Only missing files allow initialization defaults; empty files and truncated reads prevent control writes. Nonce ledgers validate complete lines, never treating corrupt data as unused; transaction preparation removes only expired dates while retaining today's and future records.
+
+Recovery journals isolate request_id owners, with enforce owning background transactions. Other ordinary operations return 325 control_busy instead of reusing or clearing pending readback transactions; parse failures cannot touch another owner's transaction. Recovery requests roll back the earlier transaction first. Bedtime snapshots, instance metadata and eye-care snapshots are backed up and restored with rules/state; interactive requests retain the journal until result commit. BLOCKED and autonomous writes prohibit 1451 fallback. The same eye-care break can be recovered during protection while retaining disable.flag.
+
 1. Startup initiates read-only validation across build manifests, environment fingerprints, PCTL state, layouts, and pending transactions.
 2. `verified` indicates baseline qualification match; `accepted_unknown` denotes structural validity requiring parental confirmation; security preflight failures transition to `protection`.
 3. Only when PIN, secret, and rules are valid and confirmed by parents is the immutable install snapshot written and restrictions lifted.

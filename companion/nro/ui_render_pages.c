@@ -439,7 +439,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
         const char *unavailable = ptc_ui_today_action_unavailable_reason(model, index, now);
         bool eye_needs_refresh = index == 6 && unavailable &&
             strcmp(unavailable, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH)) == 0;
-        bool disabled = model->disable_flag_present || model->waiting ||
+        bool disabled = (model->disable_flag_present && index != 6) || model->waiting ||
                         clear_unavailable || unavailable != NULL;
         const char *title = TODAY_ACTIONS[index].title;
         const char *subtitle = TODAY_ACTIONS[index].subtitle;

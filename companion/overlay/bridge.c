@@ -242,6 +242,7 @@ const char *ptc_overlay_bridge_error_message_zh(const PtcOverlayBridge *bridge)
     if (!bridge) return ptc_ui_text(PTC_UI_T_INVALID_REQUEST_PARAMETERS);
     if (bridge->summary.valid) {
         if (!bridge->summary.ok) {
+            if (bridge->summary.error_code == PTC_ERR_CONTROL_BUSY) return ptc_ui_text(PTC_UI_T_CONTROL_BUSY);
             if (bridge->summary.message[0]) return bridge->summary.message;
             if (bridge->summary.error_code > 0)
                 return ptc_error_message_zh((PtcErrorCode)bridge->summary.error_code);
@@ -394,7 +395,8 @@ const char *ptc_overlay_parent_action_unavailable_reason(
             return ptc_ui_text(PTC_UI_T_PLEASE_DEAL_WITH_BEDTIME_RESTRICTIONS_FIRST);
         if (strcmp(summary->eye_care_phase, "resting") != 0)
             return ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_NOT_RESTING);
-        if (summary->eye_care_break_id == 0 || summary->eye_care_rest_remaining_seconds <= 0)
+        if (summary->eye_care_break_id == 0 ||
+            (!summary->disable_flag_present && summary->eye_care_rest_remaining_seconds <= 0))
             return ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH);
         return NULL;
     case PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP:

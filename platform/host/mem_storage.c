@@ -78,14 +78,15 @@ static bool mem_read_text(PtcStorage *storage, const char *path, char *out, size
 {
     PtcMemStorage *mem = (PtcMemStorage *)storage->ctx;
     int idx;
-    if (mem->fail_reads) {
+    if (mem->fail_reads || (mem->fail_read_path_contains && strstr(path, mem->fail_read_path_contains))) {
         return false;
     }
     idx = find_file(mem, path);
     if (idx < 0) {
         return false;
     }
-    snprintf(out, out_size, "%s", file_text(mem, idx));
+    if (!out || out_size == 0 || strlen(file_text(mem, idx)) >= out_size) return false;
+    memcpy(out, file_text(mem, idx), strlen(file_text(mem, idx)) + 1);
     return true;
 }
 
@@ -215,6 +216,7 @@ static bool mem_metadata(PtcStorage *storage, const char *path, PtcStorageMetada
     size_t path_len;
     if (!out) return false;
     memset(out, 0, sizeof(*out));
+    if (mem->fail_reads || (mem->fail_read_path_contains && strstr(path, mem->fail_read_path_contains))) return false;
     if (idx >= 0) {
         out->type = PTC_STORAGE_ENTRY_FILE;
         out->modified_unix_seconds = mem->files[idx].modified_unix_seconds;
@@ -228,7 +230,8 @@ static bool mem_metadata(PtcStorage *storage, const char *path, PtcStorageMetada
             return true;
         }
     }
-    return false;
+    out->type = PTC_STORAGE_ENTRY_MISSING;
+    return true;
 }
 
 static bool mem_list_entries(PtcStorage *storage, const char *dir, PtcStorageEntry *entries, size_t max, size_t *count)
@@ -317,6 +320,27 @@ static bool mem_list_json(PtcStorage *storage, const char *dir, char names[][128
     return true;
 }
 
+static bool mem_read_lines(PtcStorage *storage, const char *path, char *line, size_t line_size,
+                           PtcStorageLineVisitor visit, void *ctx)
+{
+    PtcMemStorage *mem = (PtcMemStorage *)storage->ctx;
+    int idx = find_file(mem, path);
+    const char *cursor;
+    if (idx < 0 || mem->fail_reads || !line || line_size < 2 || !visit ||
+        (mem->fail_read_path_contains && strstr(path, mem->fail_read_path_contains))) return false;
+    cursor = file_text(mem, idx);
+    while (*cursor) {
+        const char *end = strchr(cursor, '\n');
+        size_t length = end ? (size_t)(end - cursor) : strlen(cursor);
+        if (length >= line_size) return false;
+        memcpy(line, cursor, length);
+        line[length] = '\0';
+        if (!visit(line, ctx)) return false;
+        cursor += length + (end ? 1u : 0u);
+    }
+    return true;
+}
+
 static const PtcStorageVTable MEM_STORAGE_VTABLE = {
     mem_read_text,
     mem_write_text_atomic,
@@ -328,6 +352,7 @@ static const PtcStorageVTable MEM_STORAGE_VTABLE = {
     mem_metadata,
     mem_list_entries,
     mem_remove_tree,
+    mem_read_lines,
 };
 
 void ptc_mem_storage_init(PtcMemStorage *mem)

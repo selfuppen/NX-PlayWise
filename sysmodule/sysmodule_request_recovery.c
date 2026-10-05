@@ -211,7 +211,7 @@ static bool process_bedtime_recovery_request(PtcSysmodule *sysmodule, const PtcR
                 PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
         }
         if (active_window) {
-            int applied = ptc_sysmodule_enforce_tick(sysmodule);
+            int applied = ptc_sysmodule_enforce_request(sysmodule, request);
             bool confirmed = applied > 0 && load_state(sysmodule, &enforced) &&
                 enforced.bedtime_enforced && !enforced.apply_pending_confirmation &&
                 enforced.bedtime_window_instance_id == request->bedtime_window_instance_id;

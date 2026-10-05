@@ -136,6 +136,7 @@ static PtcErrorCode verify_offline_code(
     PtcTokenV2Payload token_v2;
     PtcErrorCode err;
     bool is_v2;
+    bool used;
     if (!sysmodule || !request || !config || !runtime_state || !verified) return PTC_ERR_BAD_REQUEST;
     memset(verified, 0, sizeof(*verified));
     verified->day_index = now.day_index;
@@ -150,12 +151,12 @@ static PtcErrorCode verify_offline_code(
             runtime_state->v2_cooldown_until = 0;
         }
         err = ptc_token_v2_verify(request->code, config->device_id, config->grant_secret, now.day_index,
-            config->max_add_minutes, nonce_used_v2, sysmodule, &token_v2);
+            config->max_add_minutes, NULL, NULL, &token_v2);
         if (err == PTC_ERR_BAD_SIGNATURE) {
             sysmodule->config_cache_valid = false;
             if (load_config(sysmodule, config)) {
                 err = ptc_token_v2_verify(request->code, config->device_id, config->grant_secret, now.day_index,
-                    config->max_add_minutes, nonce_used_v2, sysmodule, &token_v2);
+                    config->max_add_minutes, NULL, NULL, &token_v2);
             }
         }
         if (err == PTC_ERR_BAD_CODE || err == PTC_ERR_BAD_SIGNATURE) {
@@ -166,6 +167,9 @@ static PtcErrorCode verify_offline_code(
             if (!save_state(sysmodule, runtime_state, now.unix_seconds)) return PTC_ERR_STORAGE_WRITE_FAILED;
         }
         if (err == PTC_ERR_OK) {
+            err = check_nonce_used(sysmodule, now.day_index, token_v2.nonce, 2u, &used);
+            if (err != PTC_ERR_OK) return err;
+            if (used) return PTC_ERR_USED_TOKEN;
             verified->minutes = token_v2.minutes;
             verified->nonce = token_v2.nonce;
             verified->version = 2u;
@@ -173,15 +177,18 @@ static PtcErrorCode verify_offline_code(
         return err;
     }
     err = ptc_token_verify(request->code, config->device_id, config->grant_secret, now.day_index,
-        config->max_add_minutes, nonce_used_v1, sysmodule, &token_v1);
+        config->max_add_minutes, NULL, NULL, &token_v1);
     if (err == PTC_ERR_BAD_SIGNATURE) {
         sysmodule->config_cache_valid = false;
         if (load_config(sysmodule, config)) {
             err = ptc_token_verify(request->code, config->device_id, config->grant_secret, now.day_index,
-                config->max_add_minutes, nonce_used_v1, sysmodule, &token_v1);
+                config->max_add_minutes, NULL, NULL, &token_v1);
         }
     }
     if (err == PTC_ERR_OK) {
+        err = check_nonce_used(sysmodule, token_v1.day_index_since_2020, token_v1.nonce, 1u, &used);
+        if (err != PTC_ERR_OK) return err;
+        if (used) return PTC_ERR_USED_TOKEN;
         verified->day_index = token_v1.day_index_since_2020;
         verified->minutes = token_v1.minutes;
         verified->nonce = token_v1.nonce;

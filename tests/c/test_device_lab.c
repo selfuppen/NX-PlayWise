@@ -65,7 +65,7 @@ static void test_session_requires_identity_evidence(void)
     PtcFakeTime time;
     PtcSysmodule sysmodule;
     PtcRequest item;
-    char text[2048];
+    char text[24000];
     ptc_mem_storage_init(&storage);
     ptc_pctl_stub_init(&pctl);
     ptc_fake_time_init(&time, 1999999999LL, 3000, 600);
@@ -155,7 +155,7 @@ static void test_session_timing_order_restart_and_restore_failure(void)
     PtcSysmodule first;
     PtcSysmodule restarted;
     PtcRequest item;
-    char text[8192];
+    char text[24000];
     int phase;
     static const char *const phases[] = {
         "home_stopped", "home_started", "game_foreground", "game_suspended", "sleep_wake", "restriction_effect"

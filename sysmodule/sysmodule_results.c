@@ -72,11 +72,13 @@ static bool write_result_with_setup(
     bool atmosphere = false;
     bool environment_available = false;
     bool recovery_active;
+    bool disable_present;
     char recent[4096] = "";
     char recent_json[4096] = "";
     const char *completed_at;
     if (!load_setup_state(sysmodule, &setup) || !load_state(sysmodule, &runtime_state)) return false;
     join_path(path, sizeof(path), sysmodule->app_root, "flags/disable.flag");
+    disable_present = sysmodule->storage->vtable->exists(sysmodule->storage, path);
     if (sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
         size_t length = strcspn(text, "\r\n");
         if (length >= sizeof(disable_reason)) length = sizeof(disable_reason) - 1;
@@ -123,7 +125,7 @@ static bool write_result_with_setup(
         "%.*s\"setup\":{\"phase\":\"%s\",\"compatibility_status\":\"%s\",\"restriction_cleared\":%s,"
         "\"snapshot_available\":%s,\"activate_after\":%lld,\"last_error\":\"%s\","
         "\"apply_status\":\"%s\",\"apply_pending_confirmation\":%s,\"recovery_active\":%s,"
-        "\"disable_reason\":\"%s\"},"
+        "\"disable_reason\":\"%s\",\"disable_flag_present\":%s},"
         "\"environment\":{\"available\":%s,\"hos\":\"%s\",\"model\":\"%s\",\"atmosphere\":%s,\"atmosphere_version\":\"%s\"},"
         "\"recent_events\":%s,%s",
         (int)(completed_at - base), base,
@@ -137,6 +139,7 @@ static bool write_result_with_setup(
         runtime_state.apply_pending_confirmation ? "true" : "false",
         recovery_active ? "true" : "false",
         disable_reason,
+        disable_present ? "true" : "false",
         environment_available ? "true" : "false",
         hos,
         model,
@@ -334,8 +337,9 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
             pctl_status->remaining_available && pctl_status->remaining_minutes <= base_minutes &&
             pctl_status->play_timer_enabled_available && pctl_status->play_timer_enabled) {
             uint16_t used = (uint16_t)(base_minutes - pctl_status->remaining_minutes);
-            uint32_t accumulated = runtime_state->eye_care_day_index == now.day_index
-                ? runtime_state->eye_care_accumulated_minutes : 0u;
+            uint32_t accumulated = runtime_state->eye_care_accumulated_minutes;
+            if (runtime_state->eye_care_day_index != now.day_index)
+                accumulated += used;
             if (runtime_state->eye_care_day_index == now.day_index &&
                 runtime_state->eye_care_usage_known && used >= runtime_state->eye_care_last_used_minutes)
                 accumulated += used - runtime_state->eye_care_last_used_minutes;

@@ -2119,7 +2119,8 @@ static void test_home_redesign(void)
         model.disable_flag_present = true;
         check_hit(i == 6 ? ptc_ui_hit_test_at(&model, rect.x + rect.w / 2,
                       rect.y + rect.h / 2, 1000) : hit_center(&model, rect),
-                  PTC_UI_HIT_NONE, 0, "disabled today action has no touch target");
+                  i == 6 ? PTC_UI_HIT_PARENT_CARD : PTC_UI_HIT_NONE, i == 6 ? 6 : 0,
+                  "disabled today actions retain only the eye care recovery target");
         model.disable_flag_present = false;
         if (i == 6) {
             model.status_loaded = false;
@@ -2232,6 +2233,18 @@ static void test_home_redesign(void)
         ptc_ui_format_eye_care_cycle(&state, 1090, text, sizeof(text));
         check_true(reason && strstr(reason, "刷新") != NULL && strstr(text, "刷新") != NULL,
             "expired eye care countdown requires refresh and blocks skip");
+        state.disable_flag_present = true;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 6, 1090) == NULL,
+            "protected expired break retains parent recovery action");
+        state.view = PTC_UI_PARENT;
+        state.parent_page = PTC_UI_PARENT_TODAY;
+        {
+            PtcUiRect rect = ptc_ui_today_card_rect(6);
+            check_hit(ptc_ui_hit_test_at(&state, rect.x + rect.w / 2, rect.y + rect.h / 2, 1090),
+                PTC_UI_HIT_PARENT_CARD, 6,
+                "protected expired break remains touchable");
+        }
+        state.disable_flag_present = false;
         reason = ptc_ui_today_action_unavailable_reason(&state, 6, 1121);
         check_true(reason && strstr(reason, "刷新") != NULL,
             "stale eye care state cannot submit a skip");

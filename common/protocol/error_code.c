@@ -48,6 +48,7 @@ static const PtcErrorInfo PTC_ERROR_TABLE[] = {
     {PTC_ERR_EYE_CARE_BREAK_NOT_ACTIVE, "eye_care_break_not_active", "指定的护眼休息已结束或发生变化"},
     {PTC_ERR_EYE_CARE_CONFIRMATION_REQUIRED, "eye_care_confirmation_required", "请先确认官方暂停设置和浮窗恢复入口"},
     {PTC_ERR_EYE_CARE_ACTIVE, "eye_care_active", "当前正在护眼休息，请稍后再加时"},
+    {PTC_ERR_CONTROL_BUSY, "control_busy", "前一项控制设置尚待确认，请刷新状态后重试"},
     {PTC_ERR_PCTL_INIT_FAILED, "pctl_init_failed", "家长控制服务初始化失败"},
     {PTC_ERR_PCTL_READ_FAILED, "pctl_read_failed", "读取家长控制状态失败"},
     {PTC_ERR_PCTL_WRITE_FAILED, "pctl_write_failed", "写入家长控制设置失败"},

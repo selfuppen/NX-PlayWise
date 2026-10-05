@@ -200,7 +200,7 @@ void handle_parent_action(UiState *ui)
         enter_parent_area(ui);
         return;
     }
-    if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY) {
+    if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY && index != 6) {
         snprintf(ui->model.message, sizeof(ui->model.message),
                  ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_THIS_CONTROL_WRITE));
         return;

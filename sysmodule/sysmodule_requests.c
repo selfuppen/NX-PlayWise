@@ -224,18 +224,18 @@ static bool process_eye_care_skip(PtcSysmodule *sysmodule, const PtcRequest *req
     PtcErrorCode err;
     char disable_path[320];
     join_path(disable_path, sizeof(disable_path), sysmodule->app_root, "flags/disable.flag");
-    if (sysmodule->storage->vtable->exists(sysmodule->storage, disable_path))
-        return finish_with_error(sysmodule, request, "release", false, PTC_ERR_DISABLED, now.day_index);
+    bool disabled = sysmodule->storage->vtable->exists(sysmodule->storage, disable_path);
     if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &state))
         return finish_with_error(sysmodule, request, "release", false, PTC_ERR_RULES_INVALID, now.day_index);
     if (!rules.eye_care.enabled || !state.eye_care_resting ||
         state.eye_care_break_id != request->eye_care_break_id ||
-        state.eye_care_rest_deadline <= now.unix_seconds ||
+        (!disabled && state.eye_care_rest_deadline <= now.unix_seconds) ||
         bedtime_blocks_grants(sysmodule, now))
         return finish_with_error(sysmodule, request, "release", false,
             PTC_ERR_EYE_CARE_BREAK_NOT_ACTIVE, now.day_index);
     day_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-    if (day_rule.mode == PTC_RULE_MODE_LIMIT && state.eye_care_usage_known &&
+    if (day_rule.mode == PTC_RULE_MODE_LIMIT && state.eye_care_day_index == now.day_index &&
+        state.eye_care_usage_known &&
         state.eye_care_last_used_minutes >= day_rule.minutes)
         return finish_with_error(sysmodule, request, "release", false,
             PTC_ERR_EYE_CARE_BREAK_NOT_ACTIVE, now.day_index);
@@ -256,6 +256,12 @@ static bool process_eye_care_skip(PtcSysmodule *sysmodule, const PtcRequest *req
     state.eye_care_usage_known = false;
     state.eye_care_last_used_minutes = 0;
     state.eye_care_day_index = now.day_index;
+    state.eye_care_idle_since = 0;
+    if (observed.configured_minutes_available && observed.remaining_available &&
+        observed.configured_minutes == minutes && observed.remaining_minutes <= minutes) {
+        state.eye_care_last_used_minutes = (uint16_t)(minutes - observed.remaining_minutes);
+        state.eye_care_usage_known = true;
+    }
     state.last_enforced_mode = mode;
     state.last_enforced_minutes = minutes;
     state.last_enforced_day_index = now.day_index;
@@ -295,6 +301,23 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
         (void)json_string(request_text, "type", request.type_text, sizeof(request.type_text));
         (void)finish_with_error(sysmodule, &request, "release", true, parse_err, now.day_index);
         return;
+    }
+    if (recovery_path_exists(sysmodule) && !recovery_owned_by(sysmodule, &request) &&
+        request.type != PTC_REQUEST_STATUS && request.type != PTC_REQUEST_OVERLAY_READY) {
+        bool recovery_action = request.type == PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT ||
+            request.type == PTC_REQUEST_SKIP_BEDTIME || request.type == PTC_REQUEST_DISABLE_BEDTIME ||
+            request.type == PTC_REQUEST_SKIP_EYE_CARE_BREAK;
+        if (!recovery_action) {
+            (void)finish_with_error(sysmodule, &request, "release", true, PTC_ERR_CONTROL_BUSY, now.day_index);
+            return;
+        }
+        /* Parent recovery first resolves the existing transaction. Ordinary
+           requests must never commit or roll back another request's writes. */
+        if (!recovery_rollback(sysmodule)) {
+            write_disable_flag(sysmodule, "recovery_action_restore_failed\n");
+            (void)finish_with_error(sysmodule, &request, "release", false, PTC_ERR_RECOVERY_FAILED, now.day_index);
+            return;
+        }
     }
     append_event(sysmodule, &request, "request_received", PTC_ERR_OK, "");
     if (!load_config(sysmodule, &config)) {

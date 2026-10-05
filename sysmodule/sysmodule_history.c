@@ -1,38 +1,118 @@
 #include "sysmodule_internal.h"
+#include "../third_party/cjson/cJSON.h"
 
-static bool ledger_nonce_used(PtcSysmodule *sysmodule, uint16_t day_index, uint32_t nonce, unsigned int token_version)
+typedef struct {
+    uint16_t day_index;
+    uint32_t nonce;
+    unsigned int version;
+    bool used;
+    char *output;
+    size_t length;
+    bool changed;
+} PtcLedgerScan;
+
+static bool ledger_number(const cJSON *root, const char *key, uint32_t max, uint32_t *value)
 {
-    char path[320];
-    char text[4096];
-    char needle[96];
-    const char *line;
-    join_path(path, sizeof(path), sysmodule->app_root, "ledger/used_nonces.jsonl");
-    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) {
-        return false;
-    }
-    snprintf(needle, sizeof(needle), "\"day_index\":%u,\"nonce\":%lu", day_index, (unsigned long)nonce);
-    line = text;
-    while (line && *line) {
-        const char *end = strchr(line, '\n');
-        const char *match = strstr(line, needle);
-        if (match && (!end || match < end)) {
-            const char *version = strstr(line, "\"token_version\":");
-            if ((!version || (end && version >= end)) && token_version == 1u) return true;
-            if (version && (!end || version < end) && strtoul(version + strlen("\"token_version\":"), NULL, 10) == token_version) return true;
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
+    if (!cJSON_IsNumber(item) || item->valuedouble < 0 || item->valuedouble > max) return false;
+    *value = (uint32_t)item->valuedouble;
+    return item->valuedouble == *value;
+}
+
+static bool visit_ledger_line(const char *line, void *ctx)
+{
+    PtcLedgerScan *scan = (PtcLedgerScan *)ctx;
+    cJSON *root;
+    uint32_t day, nonce, version = 1;
+    bool valid;
+    if (*line == '\0' || strcmp(line, "\r") == 0) return true;
+    root = cJSON_ParseWithOpts(line, NULL, true);
+    /* Reject ambiguous duplicate keys before interpreting replay records. */
+    if (cJSON_IsObject(root)) {
+        const cJSON *item, *other;
+        for (item = root->child; item; item = item->next) {
+            for (other = item->next; other; other = other->next) {
+                if (strcmp(item->string, other->string) == 0) {
+                    cJSON_Delete(root);
+                    return false;
+                }
+            }
         }
-        line = end ? end + 1 : NULL;
     }
-    return false;
+    valid = cJSON_IsObject(root) && ledger_number(root, "day_index", UINT16_MAX, &day) &&
+        ledger_number(root, "nonce", PTC_TOKEN_MAX_NONCE, &nonce) &&
+        (!cJSON_HasObjectItem(root, "token_version") || ledger_number(root, "token_version", 2, &version)) &&
+        (version == 1 || version == 2) && (version != 2 || nonce <= PTC_TOKEN_V2_MAX_NONCE);
+    cJSON_Delete(root);
+    if (!valid) return false;
+    if (day == scan->day_index && nonce == scan->nonce && version == scan->version) scan->used = true;
+    if (scan->output) {
+        char normalized[128];
+        int length;
+        /* Only expired dates are discarded. Preserve future records if the
+           clock has moved backwards; never forget a still-redeemable nonce. */
+        if (day < scan->day_index) { scan->changed = true; return true; }
+        length = version == 2
+            ? snprintf(normalized, sizeof(normalized), "{\"day_index\":%u,\"nonce\":%lu,\"token_version\":2}\n",
+                (unsigned)day, (unsigned long)nonce)
+            : snprintf(normalized, sizeof(normalized), "{\"day_index\":%u,\"nonce\":%lu}\n",
+                (unsigned)day, (unsigned long)nonce);
+        if (length < 0 || (size_t)length >= sizeof(normalized)) return false;
+        if (strstr(scan->output, normalized)) { scan->changed = true; return true; }
+        if (strlen(line) != (size_t)length - 1 ||
+            strncmp(line, normalized, (size_t)length - 1) != 0) scan->changed = true;
+        /* Reserve room for the next append so a successful grant remains
+           recoverable even at the bounded same-day legacy ledger limit. */
+        if (length < 0 || scan->length + (size_t)length + 128 >= PTC_ACTIVITY_HISTORY_FILE_SIZE) return false;
+        memcpy(scan->output + scan->length, normalized, (size_t)length);
+        scan->length += (size_t)length;
+        scan->output[scan->length] = '\0';
+    }
+    return true;
 }
 
-bool nonce_used_v1(uint16_t day_index, uint32_t nonce, void *ctx)
+static PtcErrorCode scan_ledger(PtcSysmodule *sysmodule, PtcLedgerScan *scan)
 {
-    return ledger_nonce_used((PtcSysmodule *)ctx, day_index, nonce, 1u);
+    char path[320], line[256];
+    PtcStorageMetadata meta;
+    join_path(path, sizeof(path), sysmodule->app_root, "ledger/used_nonces.jsonl");
+    if (!sysmodule->storage->vtable->metadata ||
+        !sysmodule->storage->vtable->metadata(sysmodule->storage, path, &meta)) return PTC_ERR_STORAGE_READ_FAILED;
+    if (meta.type == PTC_STORAGE_ENTRY_MISSING) return PTC_ERR_OK;
+    if (meta.type != PTC_STORAGE_ENTRY_FILE || !sysmodule->storage->vtable->read_lines ||
+        !sysmodule->storage->vtable->read_lines(sysmodule->storage, path, line, sizeof(line),
+            visit_ledger_line, scan)) return PTC_ERR_STORAGE_READ_FAILED;
+    return PTC_ERR_OK;
 }
 
-bool nonce_used_v2(uint16_t day_index, uint32_t nonce, void *ctx)
+PtcErrorCode check_nonce_used(PtcSysmodule *sysmodule, uint16_t day_index, uint32_t nonce,
+                            unsigned int version, bool *used)
 {
-    return ledger_nonce_used((PtcSysmodule *)ctx, day_index, nonce, 2u);
+    PtcLedgerScan scan = {0};
+    PtcErrorCode error;
+    scan.day_index = day_index; scan.nonce = nonce; scan.version = version;
+    *used = false;
+    error = scan_ledger(sysmodule, &scan);
+    if (error == PTC_ERR_OK) *used = scan.used;
+    return error;
+}
+
+PtcErrorCode compact_nonce_ledger(PtcSysmodule *sysmodule, uint16_t day_index)
+{
+    PtcLedgerScan scan = {0};
+    PtcErrorCode error;
+    char path[320];
+    scan.day_index = day_index;
+    scan.output = (char *)calloc(PTC_ACTIVITY_HISTORY_FILE_SIZE, 1);
+    if (!scan.output) return PTC_ERR_STORAGE_READ_FAILED;
+    error = scan_ledger(sysmodule, &scan);
+    if (error == PTC_ERR_OK && scan.changed) {
+        join_path(path, sizeof(path), sysmodule->app_root, "ledger/used_nonces.jsonl");
+        if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, scan.output))
+            error = PTC_ERR_STORAGE_WRITE_FAILED;
+    }
+    free(scan.output);
+    return error;
 }
 
 bool consume_nonce(PtcSysmodule *sysmodule, const PtcRequest *request, uint16_t day_index, uint32_t nonce, unsigned int token_version)

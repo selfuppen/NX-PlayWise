@@ -435,3 +435,4 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_INPUT_MATCHES_CURRENT_LIMIT, "Input matches current l
 PTC_UI_TEXT_VALUE(PTC_UI_T_UPDATES_DRAFT_ON_INPUT_APPLIED_ONLY_AFTER, "Updates draft on input; applied only after saving the plan.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_SET_FRIDAY_LIMIT, "Set Friday Limit")
 PTC_UI_TEXT_VALUE(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY, "Enter hours and minutes separately")
+PTC_UI_TEXT_VALUE(PTC_UI_T_CONTROL_BUSY, "Previous settings await confirmation. Refresh status and retry.")

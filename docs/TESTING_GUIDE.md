@@ -6,6 +6,12 @@
 
 # Testing Guide
 
+## Eye care, bedtime and allowance safety regression
+
+`tests/c/test_control_safety.c` runs through the C host entry point in `python tools/package_remote.py`, followed by standard package and Eden application builds and validation. Coverage includes exact nonce matching, all 512 v2 nonces, real filesystem oversized-ledger expiry cleanup and current-day normalization/deduplication, read failures, damaged tails, duplicate JSON keys, pending transaction isolation and timeout rollback, orphan pending protection, failed rules/state reads preventing writes, short and complete natural rests, recovered usage deltas, midnight cycles and read-only projections, protected recovery under lower new-day quotas, recovery write failures, bedtime result failures restoring snapshots and instance metadata, and BLOCKED targets avoiding 1451. Both memory and filesystem storage reject truncated reads; Device Lab tests read complete reports.
+
+Additional hardware checks: a fresh cycle after the configured natural rest; a 10-minute break starting at 23:58 ending at 00:08; independent new-day allowance rollover; overlay PIN recovery for expired protected breaks while retaining deactivation. Eden and host tests cannot establish official 1440-minute timing, sleep exclusion or actual suspension semantics; candidate status remains pending.
+
 ## Three-step setup and diagnostic acceptance
 
 Status confirmation checks only whether Nintendo Parental Controls is enabled. Enabled controls do not require a suspension check; disabled and unreadable controls show distinct guidance and allow continuing setup. Diagnostics retain `parental_control_enabled` as `1/0/-1` and omit `official_pause_setting`. Verify consistent setup, bedtime and eye care wording in all three languages. On step 1, controller and touch can open “Enable Controls Help”, showing Settings → Parent Control settings → Parental Controls settings (restrictions set by a parent or guardian) → I do not have a smart device → Next → Next. Closing preserves step and focus; the dialog blocks the underlying Continue action. Viewing help does not write control status or submit requests, and clock help remains reachable.

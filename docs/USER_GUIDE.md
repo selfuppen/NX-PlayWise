@@ -14,6 +14,10 @@ Enabling starts a new cycle at current usage. Reducing the use period may start 
 
 An originally unlimited day temporarily uses a 1440-minute PCTL limit for counting while eye care is enabled. The UI still identifies the original rule and temporary cap; disabling restores unlimited mode. Hardware A/B checks of the 1440-minute reading, sleep behavior, and actual pause and resume remain pending. See the [Testing Guide](TESTING_GUIDE.md) before release.
 
+Ordinary idle time reaching the configured rest duration also begins a new cycle. After 30 minutes of use and a full 10-minute rest, another 10 minutes counts as only 10 minutes in the new cycle; shorter rests retain the previous cycle. Minute polling of official usage may delay recognition by about one minute. Unchanged reliable readings after wake can prove rest even without ticks during sleep; unknown readings cannot prove natural rest. Midnight preserves accumulated usage and unfinished breaks; only the daily allowance changes.
+
+During protection or deactivation, a parent may verify their PIN and skip the same unfinished eye-care break even when its countdown has reached zero. Recovery retains deactivation; resuming management still requires parental confirmation in Support & Recovery. Bedtime and genuine daily allowance restrictions take precedence. New operations awaiting an earlier setting's confirmation prompt a status refresh and retry without replacing that pending setting.
+
 This guide is intended for parents and children using **PlayWise** (Repository: `NX-PlayWise`, Chinese name: 任我玩) on a Nintendo Switch running Custom Firmware. For first-time installation, using the complete delivery bundle is recommended; when parents generate grant codes on a phone or PC, pairing via network QR code scan as described below is recommended.
 
 > [!IMPORTANT]
@@ -131,7 +135,7 @@ The Today's Schedule tab features seven quick-action cards and a full-screen det
    - The dynamic subtitle indicates: "Eligible for X min today", "Claimed today, eligible again tomorrow", "Currently disabled, configure in Time Plans", or "Currently not eligible today". When eligible, children can independently claim this buffer from the in-game overlay; the daily 1440-minute cap may result in fewer added minutes or 0, but a successful claim consumes today's eligibility. Claims cannot be made during active bedtime restrictions.
 7. **Skip This Eye Care Break**:
    - Available only while the current eye care break is active. Selecting it refreshes status, locks the current break instance, verifies the PlayWise parent PIN again, and asks for confirmation. A successful skip ends only this break; eye care remains enabled and a new cycle begins.
-   - The card explains why it cannot submit when eye care is off, no break is active, status is older than 120 seconds, the countdown reaches zero, or daily quota or bedtime takes priority. Press `Y` to refresh status.
+   - The card explains why it cannot submit when eye care is off, no break is active, status is older than 120 seconds, the countdown reaches zero during normal operation, or daily quota or bedtime takes priority. Protection or deactivation retains a recovery entry for the same break. Press `Y` to refresh status.
 
 #### Viewing Today's Rule Details
 

@@ -1,6 +1,7 @@
 #include "fs_storage.h"
 
 #include <dirent.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -43,10 +44,13 @@ static bool fs_read_text(PtcStorage *storage, const char *path, char *out, size_
     }
     read_size = fread(out, 1, out_size - 1, file);
     extra = fgetc(file);
-    fclose(file);
-    if (extra != EOF || memchr(out, '\0', read_size) != NULL) {
-        out[0] = '\0';
-        return false;
+    {
+        bool failed = ferror(file) != 0;
+        if (fclose(file) != 0) failed = true;
+        if (failed || extra != EOF || memchr(out, '\0', read_size) != NULL) {
+            out[0] = '\0';
+            return false;
+        }
     }
     out[read_size] = '\0';
     return true;
@@ -140,7 +144,11 @@ static bool fs_list_json(PtcStorage *storage, const char *dir, char names[][128]
         if (name_len < 5 || strcmp(entry->d_name + name_len - 5, ".json") != 0) {
             continue;
         }
-        snprintf(names[found], 128, "%s", entry->d_name);
+        if (name_len >= 128) {
+            closedir(handle);
+            return false;
+        }
+        memcpy(names[found], entry->d_name, name_len + 1);
         ++found;
     }
     closedir(handle);
@@ -152,8 +160,13 @@ static bool fs_metadata(PtcStorage *storage, const char *path, PtcStorageMetadat
 {
     struct stat info;
     (void)storage;
-    if (!out || stat(path, &info) != 0) return false;
+    if (!out) return false;
     memset(out, 0, sizeof(*out));
+    if (stat(path, &info) != 0) {
+        if (errno != ENOENT) return false;
+        out->type = PTC_STORAGE_ENTRY_MISSING;
+        return true;
+    }
     out->type = S_ISREG(info.st_mode) ? PTC_STORAGE_ENTRY_FILE :
         (S_ISDIR(info.st_mode) ? PTC_STORAGE_ENTRY_DIRECTORY : PTC_STORAGE_ENTRY_UNKNOWN);
     out->modified_unix_seconds = (int64_t)info.st_mtime;
@@ -211,6 +224,31 @@ static bool fs_remove_tree(PtcStorage *storage, const char *path)
     return rmdir(path) == 0;
 }
 
+static bool fs_read_lines(PtcStorage *storage, const char *path, char *line, size_t line_size,
+                          PtcStorageLineVisitor visit, void *ctx)
+{
+    FILE *file;
+    size_t used = 0;
+    int ch;
+    bool ok = true;
+    (void)storage;
+    if (!line || line_size < 2 || !visit || !(file = fopen(path, "rb"))) return false;
+    while ((ch = fgetc(file)) != EOF) {
+        if (ch == '\n') {
+            line[used] = '\0';
+            if (!visit(line, ctx)) { ok = false; break; }
+            used = 0;
+        } else {
+            if (ch == '\0' || used + 1 >= line_size) { ok = false; break; }
+            line[used++] = (char)ch;
+        }
+    }
+    if (ferror(file)) ok = false;
+    if (ok && used) { line[used] = '\0'; ok = visit(line, ctx); }
+    if (fclose(file) != 0) ok = false;
+    return ok;
+}
+
 static const PtcStorageVTable FS_STORAGE_VTABLE = {
     fs_read_text,
     fs_write_text_atomic,
@@ -222,6 +260,7 @@ static const PtcStorageVTable FS_STORAGE_VTABLE = {
     fs_metadata,
     fs_list_entries,
     fs_remove_tree,
+    fs_read_lines,
 };
 
 void ptc_fs_storage_init(PtcFsStorage *fs)

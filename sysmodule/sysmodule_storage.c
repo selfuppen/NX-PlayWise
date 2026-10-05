@@ -28,17 +28,22 @@ static bool read_cached_text(PtcSysmodule *sysmodule, const char *relative, char
     PtcStorageMetadata current;
     join_path(path, sizeof(path), sysmodule->app_root, relative);
     if (!sysmodule->storage->vtable->metadata || !sysmodule->storage->vtable->metadata(sysmodule->storage, path, &current)) {
-        if (missing_is_empty) { cache[0] = '\0'; memset(cached_meta, 0, sizeof(*cached_meta)); *cache_valid = true; out[0] = '\0'; return true; }
         *cache_valid = false;
         return false;
     }
+    if (current.type == PTC_STORAGE_ENTRY_MISSING && missing_is_empty) {
+        cache[0] = '\0'; *cached_meta = current; *cache_valid = true; out[0] = '\0'; return true;
+    }
+    if (current.type != PTC_STORAGE_ENTRY_FILE) { *cache_valid = false; return false; }
     if (*cache_valid && metadata_equal(cached_meta, &current)) {
+        if (strlen(cache) >= out_size) return false;
         snprintf(out, out_size, "%s", cache);
         return true;
     }
     if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, cache, cache_size)) { *cache_valid = false; return false; }
     *cached_meta = current;
     *cache_valid = true;
+    if (strlen(cache) >= out_size) return false;
     snprintf(out, out_size, "%s", cache);
     return true;
 }
@@ -426,14 +431,27 @@ bool recovery_path_exists(PtcSysmodule *sysmodule)
     return sysmodule->storage->vtable->exists(sysmodule->storage, path);
 }
 
+bool recovery_owned_by(PtcSysmodule *sysmodule, const PtcRequest *request)
+{
+    char path[320], meta[1024], owner[80];
+    join_path(path, sizeof(path), sysmodule->app_root, "recovery/active/meta.json");
+    return sysmodule->storage->vtable->read_text(sysmodule->storage, path, meta, sizeof(meta)) &&
+        json_string(meta, "request_id", owner, sizeof(owner)) &&
+        strcmp(owner, request ? request->request_id : "enforce") == 0;
+}
+
 static bool backup_text_file(PtcSysmodule *sysmodule, const char *relative, const char *backup_relative, bool *existed)
 {
     char source[320];
     char backup[320];
     char text[PTC_ACTIVITY_HISTORY_FILE_SIZE];
+    PtcStorageMetadata metadata;
     join_path(source, sizeof(source), sysmodule->app_root, relative);
     join_path(backup, sizeof(backup), sysmodule->app_root, backup_relative);
-    *existed = sysmodule->storage->vtable->exists(sysmodule->storage, source);
+    if (!sysmodule->storage->vtable->metadata ||
+        !sysmodule->storage->vtable->metadata(sysmodule->storage, source, &metadata) ||
+        (metadata.type != PTC_STORAGE_ENTRY_FILE && metadata.type != PTC_STORAGE_ENTRY_MISSING)) return false;
+    *existed = metadata.type == PTC_STORAGE_ENTRY_FILE;
     if (!*existed) text[0] = '\0';
     else if (!sysmodule->storage->vtable->read_text(sysmodule->storage, source, text, sizeof(text))) return false;
     return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, backup, text);
@@ -458,7 +476,7 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
 {
     PtcPctlSettingsSnapshot snapshot;
     char meta_path[320];
-    char meta[512];
+    char meta[1024];
     bool rules_existed;
     bool state_existed;
     bool ledger_existed;
@@ -466,7 +484,10 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
     bool activity_history_existed;
     bool calendar_active_existed;
     bool bedtime_snapshot_existed;
-    if (recovery_path_exists(sysmodule)) return true;
+    bool bedtime_active_existed;
+    bool eye_snapshot_existed;
+    if (recovery_path_exists(sysmodule)) return recovery_owned_by(sysmodule, request);
+    if (compact_nonce_ledger(sysmodule, now.day_index) != PTC_ERR_OK) return false;
     if (!sysmodule->pctl->vtable->snapshot_settings ||
         sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &snapshot) != PTC_ERR_OK ||
         !save_snapshot_file(sysmodule, "recovery/active/pctl_snapshot.json", &snapshot, now.unix_seconds) ||
@@ -480,7 +501,11 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
         !backup_text_file(sysmodule, "calendars/active.json",
             "recovery/active/calendar-active.before", &calendar_active_existed) ||
         !backup_text_file(sysmodule, "backups/bedtime_pctl_snapshot.json",
-            "recovery/active/bedtime-snapshot.before", &bedtime_snapshot_existed)) {
+            "recovery/active/bedtime-snapshot.before", &bedtime_snapshot_existed) ||
+        !backup_text_file(sysmodule, "backups/bedtime_active.json",
+            "recovery/active/bedtime-active.before", &bedtime_active_existed) ||
+        !backup_text_file(sysmodule, "backups/eye_care_pctl_snapshot.json",
+            "recovery/active/eye-snapshot.before", &eye_snapshot_existed)) {
         recovery_clear(sysmodule);
         return false;
     }
@@ -489,7 +514,8 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
         "{\"version\":1,\"request_id\":\"%s\",\"created_at\":%lld,"
         "\"rules_existed\":%s,\"state_existed\":%s,\"ledger_existed\":%s,"
         "\"redemption_history_existed\":%s,\"activity_history_existed\":%s,"
-        "\"calendar_active_existed\":%s,\"bedtime_snapshot_existed\":%s}\n",
+        "\"calendar_active_existed\":%s,\"bedtime_snapshot_existed\":%s,"
+        "\"bedtime_active_existed\":%s,\"eye_snapshot_existed\":%s}\n",
         request && ptc_request_id_is_valid(request->request_id) ? request->request_id : "enforce",
         (long long)now.unix_seconds,
         rules_existed ? "true" : "false",
@@ -498,7 +524,9 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
         redemption_history_existed ? "true" : "false",
         activity_history_existed ? "true" : "false",
         calendar_active_existed ? "true" : "false",
-        bedtime_snapshot_existed ? "true" : "false");
+        bedtime_snapshot_existed ? "true" : "false",
+        bedtime_active_existed ? "true" : "false",
+        eye_snapshot_existed ? "true" : "false");
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, meta_path, meta)) {
         recovery_clear(sysmodule);
         return false;
@@ -533,6 +561,10 @@ bool recovery_rollback(PtcSysmodule *sysmodule)
     bool calendar_active_tracked;
     bool bedtime_snapshot_existed = false;
     bool bedtime_snapshot_tracked;
+    bool bedtime_active_existed = false;
+    bool eye_snapshot_existed = false;
+    bool bedtime_active_tracked;
+    bool eye_snapshot_tracked;
     bool raw_restored = false;
     bool timer_restored = false;
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
@@ -550,6 +582,8 @@ bool recovery_rollback(PtcSysmodule *sysmodule)
         meta, "activity_history_existed", &activity_history_existed);
     calendar_active_tracked = json_bool_value(meta, "calendar_active_existed", &calendar_active_existed);
     bedtime_snapshot_tracked = json_bool_value(meta, "bedtime_snapshot_existed", &bedtime_snapshot_existed);
+    bedtime_active_tracked = json_bool_value(meta, "bedtime_active_existed", &bedtime_active_existed);
+    eye_snapshot_tracked = json_bool_value(meta, "eye_snapshot_existed", &eye_snapshot_existed);
     ok = restore_snapshot_exact(sysmodule, &original, &restored, &status,
         ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored) == PTC_ERR_OK;
     ok = restore_text_file(sysmodule, "rules.json", "recovery/active/rules.before", rules_existed) && ok;
@@ -570,6 +604,14 @@ bool recovery_rollback(PtcSysmodule *sysmodule)
     if (bedtime_snapshot_tracked) {
         ok = restore_text_file(sysmodule, "backups/bedtime_pctl_snapshot.json",
             "recovery/active/bedtime-snapshot.before", bedtime_snapshot_existed) && ok;
+    }
+    if (bedtime_active_tracked) {
+        ok = restore_text_file(sysmodule, "backups/bedtime_active.json",
+            "recovery/active/bedtime-active.before", bedtime_active_existed) && ok;
+    }
+    if (eye_snapshot_tracked) {
+        ok = restore_text_file(sysmodule, "backups/eye_care_pctl_snapshot.json",
+            "recovery/active/eye-snapshot.before", eye_snapshot_existed) && ok;
     }
     invalidate_all_caches(sysmodule);
     if (ok) recovery_clear(sysmodule);
@@ -767,9 +809,8 @@ bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
         ? NULL : &sysmodule->calendar_runtime.set;
     join_path(path, sizeof(path), sysmodule->app_root, "rules.json");
     if (!read_cached_text(sysmodule, "rules.json", sysmodule->rules_cache_text, sizeof(sysmodule->rules_cache_text),
-            &sysmodule->rules_meta, &sysmodule->rules_cache_valid, text, sizeof(text), true) || text[0] == '\0') {
-        return true;
-    }
+            &sysmodule->rules_meta, &sysmodule->rules_cache_valid, text, sizeof(text), true)) return false;
+    if (text[0] == '\0') return sysmodule->rules_meta.type == PTC_STORAGE_ENTRY_MISSING;
     if (!json_i64(text, "version", &version) || (version != 1 && version != 2)) {
         return false;
     }
@@ -947,7 +988,7 @@ bool restore_rules(PtcSysmodule *sysmodule, const PtcRules *rules, bool existed)
 bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
 {
     char path[320];
-    char text[1024];
+    char text[2048];
     int64_t version;
     state->last_enforced_day_index = 0;
     state->last_enforced_mode = 0;
@@ -974,11 +1015,11 @@ bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     state->eye_care_resting = false;
     state->eye_care_rest_deadline = 0;
     state->eye_care_break_id = 0;
+    state->eye_care_idle_since = 0;
     join_path(path, sizeof(path), sysmodule->app_root, "state.json");
     if (!read_cached_text(sysmodule, "state.json", sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text),
-            &sysmodule->state_meta, &sysmodule->state_cache_valid, text, sizeof(text), true) || text[0] == '\0') {
-        return true;
-    }
+            &sysmodule->state_meta, &sysmodule->state_cache_valid, text, sizeof(text), true)) return false;
+    if (text[0] == '\0') return sysmodule->state_meta.type == PTC_STORAGE_ENTRY_MISSING;
     if (!json_i64(text, "version", &version) || version != 1) {
         return false;
     }
@@ -1009,6 +1050,7 @@ bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     (void)json_bool_value(text, "eye_care_resting", &state->eye_care_resting);
     (void)json_i64(text, "eye_care_rest_deadline", &state->eye_care_rest_deadline);
     (void)json_u64(text, "eye_care_break_id", &state->eye_care_break_id);
+    (void)json_i64(text, "eye_care_idle_since", &state->eye_care_idle_since);
     {
         uint16_t mode = 0;
         if (json_u16(text, "last_enforced_mode", &mode)) {
@@ -1038,7 +1080,7 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
         "\"eye_care_day_index\":%u,\"eye_care_accumulated_minutes\":%u,"
         "\"eye_care_last_used_minutes\":%u,\"eye_care_usage_known\":%s,"
         "\"eye_care_resting\":%s,\"eye_care_rest_deadline\":%lld,\"eye_care_break_id\":%llu,"
-        "\"updated_at\":%lld}\n",
+        "\"eye_care_idle_since\":%lld,\"updated_at\":%lld}\n",
         state->last_enforced_day_index,
         (unsigned int)state->last_enforced_mode,
         state->last_enforced_minutes,
@@ -1065,6 +1107,7 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
         state->eye_care_resting ? "true" : "false",
         (long long)state->eye_care_rest_deadline,
         (unsigned long long)state->eye_care_break_id,
+        (long long)state->eye_care_idle_since,
         (long long)updated_at);
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
     snprintf(sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text), "%s", text);

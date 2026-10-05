@@ -53,6 +53,7 @@ typedef struct {
     bool eye_care_resting;
     int64_t eye_care_rest_deadline;
     uint64_t eye_care_break_id;
+    int64_t eye_care_idle_since;
 } PtcRuntimeState;
 
 typedef struct {
@@ -99,6 +100,8 @@ bool save_eye_care_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapsh
 bool load_eye_care_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot);
 void clear_eye_care_snapshot(PtcSysmodule *sysmodule);
 bool recovery_path_exists(PtcSysmodule *sysmodule);
+bool recovery_owned_by(PtcSysmodule *sysmodule, const PtcRequest *request);
+int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request);
 bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClockSnapshot now);
 void recovery_clear(PtcSysmodule *sysmodule);
 bool recovery_rollback(PtcSysmodule *sysmodule);
@@ -123,8 +126,9 @@ void append_pctl_debug(
     uint32_t ipc_result,
     const PtcPctlDebugSnapshot *before,
     const PtcPctlDebugSnapshot *after);
-bool nonce_used_v1(uint16_t day_index, uint32_t nonce, void *ctx);
-bool nonce_used_v2(uint16_t day_index, uint32_t nonce, void *ctx);
+PtcErrorCode check_nonce_used(PtcSysmodule *sysmodule, uint16_t day_index, uint32_t nonce,
+                            unsigned int version, bool *used);
+PtcErrorCode compact_nonce_ledger(PtcSysmodule *sysmodule, uint16_t day_index);
 bool consume_nonce(PtcSysmodule *sysmodule, const PtcRequest *request, uint16_t day_index, uint32_t nonce, unsigned int token_version);
 bool save_redemption_history(
     PtcSysmodule *sysmodule,

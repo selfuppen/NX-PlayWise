@@ -1073,6 +1073,13 @@ static int render_eye_care_previews(const char *directory, const PtcUiModel *bas
         model.daily_restriction_active = false;
         failed |= save_preview(directory, "parent", "eye-care-resting", &model, dark);
         {
+            PtcUiModel protected = model;
+            protected.disable_flag_present = true;
+            protected.eye_care_rest_remaining_seconds = 0;
+            protected.selected_index = 6;
+            failed |= save_preview(directory, "parent", "eye-care-protected-expired", &protected, dark);
+        }
+        {
             PtcUiModel editor = model;
             editor.parent_page = PTC_UI_PARENT_PLAN;
             editor.plan_page = PTC_UI_PLAN_PAGE_EYE_CARE;

@@ -23,6 +23,7 @@ typedef struct {
     char large_text[PTC_MEM_STORAGE_LARGE_FILE_COUNT][PTC_MEM_STORAGE_LARGE_TEXT_SIZE];
     int large_file_indices[PTC_MEM_STORAGE_LARGE_FILE_COUNT];
     bool fail_reads;
+    const char *fail_read_path_contains;
     bool fail_writes;
     bool fail_appends;
     bool fail_renames;
