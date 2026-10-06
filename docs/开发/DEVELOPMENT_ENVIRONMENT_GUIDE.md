@@ -1,3 +1,5 @@
+[Documentation index](../README_en.md)
+
 <div align="center">
 
   [English](DEVELOPMENT_ENVIRONMENT_GUIDE.md) | [简体中文](开发环境指南.md)
@@ -116,7 +118,7 @@ git -C ../Atmosphere describe --tags --always --dirty
 git -C ../Atmosphere status --short
 ```
 
-Conclusions must cite tracked source code under that commit; untracked files may simply be local notes or temporary artifacts and cannot serve as upstream evidence. The Atmosphère checkout explains CFW boot and runtime environment context, but is not an alternative source for Horizon private PCTL protocol, libnx APIs, or libtesla APIs. Reading criteria are detailed in the [Developer Guide](DEVELOPER_GUIDE.md), and PCTL evidence boundaries are documented in [PCTL Integration Architecture](PCTL_ARCHITECTURE.md).
+Conclusions must cite tracked source code under that commit; untracked files may simply be local notes or temporary artifacts and cannot serve as upstream evidence. The Atmosphère checkout explains CFW boot and runtime environment context, but is not an alternative source for Horizon private PCTL protocol, libnx APIs, or libtesla APIs. Reading criteria are detailed in the [Developer Guide](DEVELOPER_GUIDE.md), and PCTL evidence boundaries are documented in [PCTL Integration Architecture](../设计/PCTL_ARCHITECTURE.md).
 
 Upstream research order is: repository documentation and protocol specs, vendored pinned versions, available local upstream checkouts, and finally GitHub. Local checkouts must also bind to recorded commits/tags; remote `main` or `master` branches cannot replace pinned versions or explicit version evidence. Remote queries must comply with repository upstream research rules; finding a newer upstream release does not justify unrequested dependency or qualification baseline upgrades.
 

@@ -24,7 +24,7 @@ Fixed schedules provide clear, predictable routines; temporary adjustments allow
 3. For first-time installation, download `playwise-complete-<version>.zip`: extract `playwise-<version>.zip` for the Switch, while `playwise-offline.html` serves as a standalone offline parent web tool. Copy and merge the `atmosphere` and `switch` folders from the standard package to the root of your SD card, then reboot.
 4. Launch **PlayWise** from Homebrew Menu, follow the onboarding wizard to configure the parent portal entry, PlayWise PIN, theme, and confirm takeover. When children need extra playtime, redeem codes via the homebrew app or the in-game overlay.
 
-See the [User Guide](docs/USER_GUIDE.md) for full instructions on [installation, initial setup, usage, and upgrades](docs/USER_GUIDE.md).
+See the [User Guide](docs/使用/USER_GUIDE.md) for full instructions on [installation, initial setup, usage, and upgrades](docs/使用/USER_GUIDE.md).
 
 ## Grant Code Workflow
 
@@ -42,13 +42,13 @@ Once the daily limit is reached, Nintendo's native restriction dialog may preven
 
 </details>
 
-> The two screenshots above are historical hardware reference captures demonstrating overlay menu entry and launching PlayWise overlay over the HOME menu; actual buttons, confirmation dialogs, and available actions depend on the installed release version. See [Using In-Game Overlay When Restricted](docs/USER_GUIDE.md#using-in-game-overlay-when-restricted) for details.
+> The two screenshots above are historical hardware reference captures demonstrating overlay menu entry and launching PlayWise overlay over the HOME menu; actual buttons, confirmation dialogs, and available actions depend on the installed release version. See [Using In-Game Overlay When Restricted](docs/使用/USER_GUIDE.md#using-in-game-overlay-when-restricted) for details.
 
 ### Generating Grant Codes (Parents): Mobile QR Code Scan
 
 > **Generating Grant Codes**:
 > When scanning the QR code to open the public web generator, the parent's phone or PC needs access to GitHub Pages (`selfuppen.github.io`).
-> Alternatively, you can use the standalone `playwise-offline.html` from `playwise-complete-<version>.zip`. In offline mode, your phone/PC requires no internet connection at all; once configured, the pairing key and device ID are saved locally in browser storage for repeated use. See [User Guide: Generating on Phone or PC](docs/USER_GUIDE.md#generating-on-phone-or-pc) for setup and secret protection guidelines.
+> Alternatively, you can use the standalone `playwise-offline.html` from `playwise-complete-<version>.zip`. In offline mode, your phone/PC requires no internet connection at all; once configured, the pairing key and device ID are saved locally in browser storage for repeated use. See [User Guide: Generating on Phone or PC](docs/使用/USER_GUIDE.md#generating-on-phone-or-pc) for setup and secret protection guidelines.
 
 In the Switch Parent Portal, navigate to **Offline Grant → Generate on Phone/PC**, verify your PlayWise PIN, and display the pairing QR code. Scan it with a trusted smartphone or computer to open the [Parent Web App](https://selfuppen.github.io/NX-PlayWise/), confirm **Import Device**, select the date (matching your Switch's local date) and grant minutes, and generate the 8-character code locally. The code is calculated entirely inside your browser without uploading secrets or codes to any server, eliminating the need to rescan every time.
 
@@ -60,7 +60,7 @@ In the Switch Parent Portal, navigate to **Offline Grant → Generate on Phone/P
 
 </details>
 
-The QR code in the first screenshot has been replaced with a **public demo configuration** and cannot be used on real home devices. The second image shows a historical web interface preview; actual dates and operations reflect your current device. If the public web app is unreachable under certain network environments, use `playwise-offline.html` from the complete delivery bundle or generate codes directly on the Switch console. Detailed steps and security considerations are documented in [User Guide: Generating on Phone or PC](docs/USER_GUIDE.md#generating-on-phone-or-pc).
+The QR code in the first screenshot has been replaced with a **public demo configuration** and cannot be used on real home devices. The second image shows a historical web interface preview; actual dates and operations reflect your current device. If the public web app is unreachable under certain network environments, use `playwise-offline.html` from the complete delivery bundle or generate codes directly on the Switch console. Detailed steps and security considerations are documented in [User Guide: Generating on Phone or PC](docs/使用/USER_GUIDE.md#generating-on-phone-or-pc).
 
 ## Key Features
 
@@ -71,7 +71,7 @@ The QR code in the first screenshot has been replaced with a **public demo confi
 - **Activity History**: Local family activity logs and 7/30-day playtime allowance analytics. Scoped to total console screen time; missing dates remain unknown; per-title breakdown is currently pending.
 - **Support & Recovery**: Diagnostics export, emergency disable, rollback to pre-installation settings, and safe reload after in-place upgrades.
 
-For detailed walkthroughs of each page, see the [User Guide](docs/USER_GUIDE.md).
+For detailed walkthroughs of each page, see the [User Guide](docs/使用/USER_GUIDE.md).
 
 <details open>
 <summary>View Parent Portal Daily Dispatch & Rule Breakdown Preview</summary>
@@ -85,11 +85,11 @@ For detailed walkthroughs of each page, see the [User Guide](docs/USER_GUIDE.md)
 ## FAQ
 
 **Why is the game still playable when PlayWise shows "Limit Reached" / 0 minutes remaining?**
-First, ensure that Nintendo official Parental Controls is enabled and has not been temporarily unlocked. Next, synchronize the Switch system clock via internet NTP, for example using DBI's "Tools → NTP Time Sync" or [QuickNTP (Tesla time sync tool)](https://github.com/ppkantorski/QuickNTP). After successful clock synchronization, refresh PlayWise status and test with a non-critical game to confirm that restrictions take effect. Time synchronization is a recommended troubleshooting step, though it may not resolve every edge-case timer inconsistency. See [User Guide: FAQ](docs/USER_GUIDE.md#frequently-asked-questions-faq) and [Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1) for details.
+First, ensure that Nintendo official Parental Controls is enabled and has not been temporarily unlocked. Next, synchronize the Switch system clock via internet NTP, for example using DBI's "Tools → NTP Time Sync" or [QuickNTP (Tesla time sync tool)](https://github.com/ppkantorski/QuickNTP). After successful clock synchronization, refresh PlayWise status and test with a non-critical game to confirm that restrictions take effect. Time synchronization is a recommended troubleshooting step, though it may not resolve every edge-case timer inconsistency. See [User Guide: FAQ](docs/使用/USER_GUIDE.md#frequently-asked-questions-faq) and [Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1) for details.
 
 ## Recommended Environment & Verification Status
 
-The current baseline qualification target is Nintendo Switch OLED, HOS 22.5.0, and Atmosphère 1.11.2. The 2026-08-10 record is historical evidence prior to current PCTL modifications. Build candidates default to `pending`; when the maintainer verifies primary features on real hardware, specifying device model, HOS, and Atmosphère in the packaging command records `manual_verified` in `build.json`. This represents a manual testing declaration; only when the released Zip's SHA-256 matches `qualification.json` in the same directory has the exact build package passed full qualification testing in the documented environment. Packaging details are described in the [Development Environment Guide](docs/DEVELOPMENT_ENVIRONMENT_GUIDE.md#full-switch-build).
+The current baseline qualification target is Nintendo Switch OLED, HOS 22.5.0, and Atmosphère 1.11.2. The 2026-08-10 record is historical evidence prior to current PCTL modifications. Build candidates default to `pending`; when the maintainer verifies primary features on real hardware, specifying device model, HOS, and Atmosphère in the packaging command records `manual_verified` in `build.json`. This represents a manual testing declaration; only when the released Zip's SHA-256 matches `qualification.json` in the same directory has the exact build package passed full qualification testing in the documented environment. Packaging details are described in the [Development Environment Guide](docs/开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md#full-switch-build).
 
 We recommend using [Ultrahand Overlay](https://github.com/ppkantorski/Ultrahand-Overlay) to manage the PlayWise in-game overlay. You may also refer to community CFW guides such as the [Atmosphère Installation & Setup Guide](https://docs.qq.com/doc/DVW9PVE5sU0FEd0tP); related community group: "switch大气层超频折腾群" (QQ Group `1051287661`). These external resources and communities are not bundled with PlayWise packages and do not imply official endorsement.
 
@@ -99,7 +99,7 @@ The PlayWise PIN protects only this project's Parent Portal and is completely di
 
 | Feature | Status | Implementation Date |
 | :--- | :--- | :--- |
-| Region holiday calendars | Built-in China 2026 plus [manual JSON import](docs/自制节假日日历格式.md) | 2026-10-04 |
+| Region holiday calendars | Built-in China 2026 plus [manual JSON import](docs/使用/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md) | 2026-10-04 |
 | Main app dark mode / 3-state theme | Implemented (overlay retains fixed dark theme) | 2026-08-13 |
 | Date schedules, rule preview, daily self-buffer | Implemented (self-buffer disabled by default) | 2026-08-24 |
 | Family activity history & 7/30-day allowance analytics | Implemented (missing dates marked as unknown) | 2026-08-24 |
@@ -119,12 +119,10 @@ Once daily limit or bedtime takes effect, the in-game overlay remains PlayWise's
 
 ## Documentation
 
-- [User Guide](docs/USER_GUIDE.md) ([简体中文](docs/使用指南.md))
-- [Developer Guide](docs/DEVELOPER_GUIDE.md) ([简体中文](docs/开发指南.md))
-- [Development Environment Guide](docs/DEVELOPMENT_ENVIRONMENT_GUIDE.md) ([简体中文](docs/开发环境指南.md))
-- [Protocol Specification](docs/PROTOCOL.md) ([简体中文](docs/协议.md))
-- [Testing Guide](docs/TESTING_GUIDE.md) ([简体中文](docs/测试指南.md))
-- [PCTL Integration Architecture](docs/PCTL_ARCHITECTURE.md) ([简体中文](docs/PCTL集成架构.md))
+See the [documentation index](docs/README_en.md) ([简体中文](docs/README.md)) for the complete catalog and reading paths, grouped by usage, development, design, and research.
+
+- Installation and daily use: [User Guide](docs/使用/USER_GUIDE.md) ([简体中文](docs/使用/使用指南.md))
+- Getting started with development: [Development Environment Guide](docs/开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md) ([简体中文](docs/开发/开发环境指南.md))
 
 ## Acknowledgements & License
 

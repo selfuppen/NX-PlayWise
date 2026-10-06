@@ -7,13 +7,13 @@
 - `common/`：跨端协议常量与平台无关 C 核心代码，例如 `common/protocol/*.h`、`common/token/*.h`。
 - `tools/`：Python 开发工具与参考实现，包括令牌生成、协议探测、请求队列、前端服务和统一打包入口。
 - `tests/`：主机侧 C/Python/前端测试与 fixtures，覆盖离线加时令牌、请求流、安全状态机、UI 和 package 门禁。
-- `docs/`：架构、协议、开发环境、测试与真实设备验证文档。开始开发前先读根目录 `README.md` 和 `docs/开发环境指南.md`。
+- `docs/`：按使用、开发、设计与调研分类，统一入口为 `docs/README.md`。开始开发前先读根目录 `README.md` 和 `docs/开发/开发环境指南.md`。
 
 维护者机器在仓库相对路径 `../libnx` 提供可选的上游 libnx checkout。涉及 PCTL service/session、公开命令签名或 libnx dispatch 行为时可查阅该目录；实际构建使用 devkitPro 环境中的 libnx。当前调查用源码的 `nx/include/switch/services/pctl.h` 与 `nx/source/services/pctl.c` 不包含 `StartPlayTimer (1451)`、`GetPlayTimerRemainingTime (1454)`、`GetPlayTimerSettings (145601)` 或 `SetPlayTimerSettingsForDebug (195101)` 的公开封装，因此不得用 libnx 缺失的定义推断这些私有命令的参数单位或 0x44 raw layout；相关布局必须以真机 A/B 证据和仓库协议文档为准。
 
 维护者机器在仓库相对路径 `../libtesla` 提供可选的上游 libtesla checkout。涉及 Overlay 生命周期、输入处理、绘制或 libtesla API 行为时可查阅该目录。项目构建必须使用仓库内 `companion/overlay/vendor/libtesla/` 固定的版本，不得依赖工作区外的路径；同步 vendored 文件时同时更新 `companion/overlay/vendor/libtesla/UPSTREAM.txt` 中的上游 commit。
 
-维护者机器在仓库相对路径 `../Atmosphere` 提供可选的 Atmosphère checkout。只有问题涉及 `boot2.flag` 与 `atmosphere/contents` 扫描、sysmodule 自启动、SM/PM 服务和进程行为、hbmenu `override_config.ini` 解析、creport/fatal 取证或 Atmosphère/HOS 资格基线变化时，才把它作为 CFW 环境层参考；它不参与 PlayWise 构建，也不是 libnx、libtesla 或 Horizon PCTL 私有协议的替代来源。调查前必须用 `git -C ../Atmosphere rev-parse HEAD`、`git -C ../Atmosphere describe --tags --always --dirty` 和 `git -C ../Atmosphere status --short` 记录版本与工作树状态，只把绑定到该 commit 的已跟踪源码作为证据。未跟踪文件、当前 checkout 和远端 `main`/`master` 都不得自动视为项目固定依赖或其他版本的行为证明。详细阅读决策见 `docs/开发指南.md`，PCTL 边界见 `docs/PCTL集成架构.md`。
+维护者机器在仓库相对路径 `../Atmosphere` 提供可选的 Atmosphère checkout。只有问题涉及 `boot2.flag` 与 `atmosphere/contents` 扫描、sysmodule 自启动、SM/PM 服务和进程行为、hbmenu `override_config.ini` 解析、creport/fatal 取证或 Atmosphère/HOS 资格基线变化时，才把它作为 CFW 环境层参考；它不参与 PlayWise 构建，也不是 libnx、libtesla 或 Horizon PCTL 私有协议的替代来源。调查前必须用 `git -C ../Atmosphere rev-parse HEAD`、`git -C ../Atmosphere describe --tags --always --dirty` 和 `git -C ../Atmosphere status --short` 记录版本与工作树状态，只把绑定到该 commit 的已跟踪源码作为证据。未跟踪文件、当前 checkout 和远端 `main`/`master` 都不得自动视为项目固定依赖或其他版本的行为证明。详细阅读决策见 `docs/开发/开发指南.md`，PCTL 边界见 `docs/设计/PCTL集成架构.md`。
 
 ## 上游源码与 GitHub 调研
 
@@ -33,7 +33,7 @@ Host Python 回归入口跨平台可用；C host、Companion NRO 和 package 的
 - `python tools/grant_code.py --minutes 30 --device kid-switch --secret replace-with-long-random-secret --day-index 2380 --nonce 4660`：生成离线加时代码示例。
 - `python tools/protocol_probe.py init --root <tmp-dir> --device <id> --secret <secret>`：初始化本地协议目录用于手工探测。
 
-维护者默认 devkitPro profile 通过 `root@127.0.0.1:1888` 访问，仓库挂载为 `/ws/playwise`；host、port、user、容器路径和私钥均可通过脚本参数覆盖。密码只允许由 OpenSSH 交互读取，也可使用已授权私钥。容器脚本使用一次 SSH 会话完成清理、测试和构建；Zip 直接留在挂载工作区，不要维护手工 SSH、`docker exec` 或复制回本地的旁路构建命令。完整说明见 `docs/开发环境指南.md`。
+维护者默认 devkitPro profile 通过 `root@127.0.0.1:1888` 访问，仓库挂载为 `/ws/playwise`；host、port、user、容器路径和私钥均可通过脚本参数覆盖。密码只允许由 OpenSSH 交互读取，也可使用已授权私钥。容器脚本使用一次 SSH 会话完成清理、测试和构建；Zip 直接留在挂载工作区，不要维护手工 SSH、`docker exec` 或复制回本地的旁路构建命令。完整说明见 `docs/开发/开发环境指南.md`。
 
 容器直接读取挂载的当前工作区，因此未提交改动也会参与构建，不需要先提交或推送。除非用户明确只要求本地 Python 快速回归，否则涉及 C、Makefile、NRO 或 package 的最终验证都必须走该入口。
 
@@ -43,7 +43,7 @@ Python 代码使用 4 空格缩进、类型注解和 `from __future__ import ann
 
 ## 注释与文档要求
 
-新增复杂协议逻辑时，在代码附近添加简短注释说明位布局、错误原因或安全边界；不要为显而易见的赋值写注释。对外可见的行为变更应同步更新 `docs/协议.md`、`docs/测试指南.md` 或相关路线图。错误码、请求类型、fixture 字段和稳定性规则必须有文档来源，避免只存在于测试或实现中。
+新增复杂协议逻辑时，在代码附近添加简短注释说明位布局、错误原因或安全边界；不要为显而易见的赋值写注释。对外可见的行为变更应同步更新 `docs/设计/协议.md`、`docs/开发/测试指南.md` 或相关路线图。错误码、请求类型、fixture 字段和稳定性规则必须有文档来源，避免只存在于测试或实现中。
 
 ## 测试指南
 
@@ -61,7 +61,7 @@ Python 代码使用 4 空格缩进、类型注解和 `from __future__ import ann
 
 ## Agent 专用说明
 
-修改前先查看 `docs/开发指南.md`、`docs/协议.md` 和相关测试。优先保持变更小而可验证；不要重写无关文档或回退用户改动。新增行为时同时补测试和必要文档，并在最终回复中列出实际执行过的命令。
+修改前先查看 `docs/开发/开发指南.md`、`docs/设计/协议.md` 和相关测试。优先保持变更小而可验证；不要重写无关文档或回退用户改动。新增行为时同时补测试和必要文档，并在最终回复中列出实际执行过的命令。
 
 本仓库中文文档使用 UTF-8。PowerShell 默认编码或控制台显示可能把中文读成乱码；读取或写入 `AGENTS.md`、`docs/*.md` 等中文文档时，应显式使用 UTF-8，例如 `Get-Content <file> -Encoding utf8`，避免误判编码或把文档写坏。
 

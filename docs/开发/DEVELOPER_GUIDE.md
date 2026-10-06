@@ -1,3 +1,5 @@
+[Documentation index](../README_en.md)
+
 <div align="center">
 
   [English](DEVELOPER_GUIDE.md) | [简体中文](开发指南.md)
@@ -6,7 +8,7 @@
 
 # Developer Guide
 
-PlayWise validates protocols, queues, security state machines, and recovery transactions on the host side first before interacting with physical Switch PCTL. Environment prerequisites and platform specifics are detailed in the [Development Environment Guide](DEVELOPMENT_ENVIRONMENT_GUIDE.md); external behavioral changes must be synchronized with the [Protocol Specification](PROTOCOL.md) and [Testing Guide](TESTING_GUIDE.md).
+PlayWise validates protocols, queues, security state machines, and recovery transactions on the host side first before interacting with physical Switch PCTL. Environment prerequisites and platform specifics are detailed in the [Development Environment Guide](DEVELOPMENT_ENVIRONMENT_GUIDE.md); external behavioral changes must be synchronized with the [Protocol Specification](../设计/PROTOCOL.md) and [Testing Guide](TESTING_GUIDE.md).
 
 ## Architectural Boundaries
 
@@ -198,7 +200,7 @@ Verify that an issue belongs to CFW infrastructure before consulting Atmosphère
 | Sysmodule OOM, unexpected termination, crash report forensics | `stratosphere/pm/`, `stratosphere/creport/`, `stratosphere/fatal/` | Resource pools and crash handling paths, identifying environment evidence to preserve | PlayWise native logs, support export, recovery transactions, and fault injection |
 | Adjusting Atmosphère/HOS qualification baselines | Relevant diffs between tags/commits and `docs/changelog.md` | Evaluating changes in boot2, SM/PM, config parsing, or fatal handling | Physical qualification of candidate release Zips on explicit hardware/HOS/Atmosphère setups |
 
-Atmosphère is not a generic Switch SDK. For libnx wrappers, service dispatching, and version gates, consult `../libnx`; for overlay lifecycle, input, and rendering, inspect vendored libtesla, referencing `../libtesla` as needed; PlayWise tokens, queues, recovery, and stable errors follow repository protocol specifications. Additional PCTL private command constraints are documented in [PCTL Integration Architecture](PCTL_ARCHITECTURE.md).
+Atmosphère is not a generic Switch SDK. For libnx wrappers, service dispatching, and version gates, consult `../libnx`; for overlay lifecycle, input, and rendering, inspect vendored libtesla, referencing `../libtesla` as needed; PlayWise tokens, queues, recovery, and stable errors follow repository protocol specifications. Additional PCTL private command constraints are documented in [PCTL Integration Architecture](../设计/PCTL_ARCHITECTURE.md).
 
 Local regression testing:
 

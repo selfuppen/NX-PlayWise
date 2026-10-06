@@ -1,3 +1,5 @@
+[Documentation index](../README_en.md)
+
 <div align="center">
 
   [English](USER_GUIDE.md) | [简体中文](使用指南.md)
@@ -12,7 +14,7 @@ In the parent's Time Plan, enable Eye Care and set 1–240 minutes of use and 1�
 
 Enabling starts a new cycle at current usage. Reducing the use period may start a break immediately; disabling releases the eye care restriction immediately. Awake HOME use counts, sleep pauses usage accumulation, and sleep counts toward a break. The child view and overlay show remaining use or break time; an unavailable reading is shown as unknown. During a break, a parent can verify their PIN in the overlay or Today's Schedule and choose “Skip this break”; this applies only to the current break and starts a new cycle. Daily allowance and bedtime restrictions take precedence and reset the eye care cycle.
 
-An originally unlimited day temporarily uses a 1440-minute PCTL limit for counting while eye care is enabled. The UI still identifies the original rule and temporary cap; disabling restores unlimited mode. Hardware A/B checks of the 1440-minute reading, sleep behavior, and actual pause and resume remain pending. See the [Testing Guide](TESTING_GUIDE.md) before release.
+An originally unlimited day temporarily uses a 1440-minute PCTL limit for counting while eye care is enabled. The UI still identifies the original rule and temporary cap; disabling restores unlimited mode. Hardware A/B checks of the 1440-minute reading, sleep behavior, and actual pause and resume remain pending. See the [Testing Guide](../开发/TESTING_GUIDE.md) before release.
 
 Ordinary idle time reaching the configured rest duration also begins a new cycle. After 30 minutes of use and a full 10-minute rest, another 10 minutes counts as only 10 minutes in the new cycle; shorter rests retain the previous cycle. Minute polling of official usage may delay recognition by about one minute. Unchanged reliable readings after wake can prove rest even without ticks during sleep; unknown readings cannot prove natural rest. Midnight preserves accumulated usage and unfinished breaks; only the daily allowance changes.
 
@@ -59,18 +61,18 @@ Use left/right to change language, up/down to select actions, A to activate, and
 <details>
 <summary>Three setup screens and Child Zone preview</summary>
 
-![Language, environment and preparation](images/usage-en/setup/setup-step-1-light.png)
-![Enable Nintendo Parental Controls help dialog](images/usage-en/setup/setup-pctl-help-light.png)
-![Parent settings](images/usage-en/setup/setup-step-2-light.png)
-![Confirmation and diagnostic guidance](images/usage-en/setup/setup-step-3-light.png)
+![Language, environment and preparation](../images/usage-en/setup/setup-step-1-light.png)
+![Enable Nintendo Parental Controls help dialog](../images/usage-en/setup/setup-pctl-help-light.png)
+![Parent settings](../images/usage-en/setup/setup-step-2-light.png)
+![Confirmation and diagnostic guidance](../images/usage-en/setup/setup-step-3-light.png)
 
 Child Zone home screen preview:
-![Child Zone home screen preview](images/usage-en/child/child-light.png)
-![Child Zone details panel preview](images/usage-en/child/child-details-light.png)
-![Child Zone claimed autonomy buffer preview](images/usage-en/child/child-buffer-claimed-light.png)
+![Child Zone home screen preview](../images/usage-en/child/child-light.png)
+![Child Zone details panel preview](../images/usage-en/child/child-details-light.png)
+![Child Zone claimed autonomy buffer preview](../images/usage-en/child/child-buffer-claimed-light.png)
 
 Parent Zone today schedule preview:
-![Parent Zone today schedule preview](images/usage-en/parent/parent-dark.png)
+![Parent Zone today schedule preview](../images/usage-en/parent/parent-dark.png)
 </details>
 
 These console images are generated from production drawing code with static mock data and bear the `HOST PREVIEW / SAMPLE DATA` watermark. They are layout previews rather than hardware screenshots, and do not represent hardware controller, touch, font, or PCTL acceptance.
@@ -107,21 +109,21 @@ The Today's Schedule tab features seven quick-action cards and a full-screen det
    - **Underlying Inheritance Explanation**: When no temporary limit is set today, the dynamic subtitle clearly explains which rule layer governs today (e.g. "Determined by weekly schedule", "Determined by national holiday", or "Determined by scheduled date limit").
    - **Adjustment & Safe Confirmation**: Press `A` or tap to enter the editor. Choose "Limited" to set total minutes, or choose "Unlimited Today"; switch modes using `ZL/ZR`. When opening the limit editor, if status is older than 120 seconds or unconfirmed, it automatically refreshes; you can also tap "Refresh Latest Status" or click right stick `R3` to refresh manually. Pressing `+` to save re-reads console status: if transitioning from unlimited back to limited today, a confirmation dialog appears first; if the new limit is less than or equal to already played time, the confirmation requires a 1-second deliberate hold. If already limited and the new limit exceeds played time, it submits directly. If refresh fails or played time is unavailable, inputs are preserved without submitting. Unlimited play, quick grants, and clearing adjustments follow their respective confirmation workflows.
 
-   ![Set today's total limit numeric keypad preview](images/usage-en/parent/quota-editor-light.png)
-   ![Set today's total limit confirmation preview](images/usage-en/parent/quota-positive-confirm-light.png)
+   ![Set today's total limit numeric keypad preview](../images/usage-en/parent/quota-editor-light.png)
+   ![Set today's total limit confirmation preview](../images/usage-en/parent/quota-positive-confirm-light.png)
 
 2. **Quick Grant**:
    - Designed for temporary rewards or granting bonus playtime. Provides `+15 min`, `+30 min`, `+60 min` quick options, plus a `Custom` minute stepper (1–120 minutes).
    - Selecting an option opens a secondary confirmation panel comparing current remaining time against projected time after grant; if truncated by the daily maximum ceiling (1440 min), actual added minutes and an amber notice are shown before confirming.
    - When today is already unlimited, the card is grayed out and displays "Unlimited today, grant not needed"; use "Set Today's Limit" to restore limits. In this state, neither controller confirmation nor touch will initiate a grant request.
 
-   ![Quick grant confirmation preview](images/usage-en/parent/quick-add-confirm-dark.png)
+   ![Quick grant confirmation preview](../images/usage-en/parent/quick-add-confirm-dark.png)
 
 3. **Unlimited Play Today**:
    - Ideal for weekend gatherings, holiday celebrations, or special reward days.
    - Once confirmed, daily playtime limits are removed for today and status displays "Unlimited"; bedtime schedules remain independently active. At 00:00 midnight, this adjustment expires and normal routines resume.
 
-   ![Unlimited play today confirmation preview](images/usage-en/parent/unlimited-confirm-dark.png)
+   ![Unlimited play today confirmation preview](../images/usage-en/parent/unlimited-confirm-dark.png)
 4. **Clear Today's Adjustments**:
    - One-click rollback of all temporary adjustments for today (including total limit, quick grants, and unlimited mode), reverting to the underlying schedule (e.g. Friday plan or holiday schedule).
    - If no temporary adjustments exist today, this card is automatically disabled and will not submit redundant requests; if cleared during the current console session, the subtitle indicates "Cleared in this session, using underlying rule".
@@ -144,14 +146,14 @@ On the Today's Schedule tab, press controller `+` button or tap "+ View Details"
 - **How Today's Limit is Determined**: Evaluated in strict priority order: "Today's Adjustments → Scheduled Date Limits → National Holidays → Weekly Schedule", adopting the first applicable rule. Bedtime and eye care run independently of this quota priority; exhausted daily quota and bedtime restrictions take precedence.
 - **Usage & Status**: Displays on-device playtime estimates for today, 7-day usage estimates, status update timestamps, and recent operations. The eye care preview shows approximate minutes until the next break while playing and a minutes-and-seconds countdown during a break. Unknown or expired readings prompt a refresh.
 
-![Today's rule details preview](images/usage-en/parent/parent-details-decision-light.png)
-![Recent usage statistics & records preview](images/usage-en/parent/parent-details-usage-light.png)
+![Today's rule details preview](../images/usage-en/parent/parent-details-decision-light.png)
+![Recent usage statistics & records preview](../images/usage-en/parent/parent-details-usage-light.png)
 
 ### Long-Term & Date Plans
 
 Weekly schedules are edited day by day; national holidays support official statutory holidays and substitute workdays; scheduled date limits support custom ranges from 1 to 366 days (replacing daily total playtime during the range, with already played time still counting, rather than granting bonus time). Edits form a draft first; review the projected impact on today before saving. If another rule takes priority today, the page explains that today's limit remains unchanged; when saving could immediately restrict gameplay or status is unconfirmed, a deliberate hold confirmation is required. Failed saves preserve drafts.
 
-To import a region calendar, place a UTF-8 JSON file in SD `/switch/playwise/calendar-import/`. In Parent Zone, open Time Plans → Holiday Schedule → Manage Calendars, preview and confirm the import, then select a saved region and hold to apply. Re-importing the active region also requires applying again. The built-in mainland China 2026 calendar remains a separate option. Uncovered years use the weekly plan. Use `B` to return, `Y` to refresh and `X` for brief format help; these buttons also support touch. Help preserves your list selection. See the [custom calendar format, complete example, and invalid example](https://github.com/selfuppen/NX-PlayWise/blob/main/docs/CUSTOM_HOLIDAY_CALENDAR_FORMAT.md).
+To import a region calendar, place a UTF-8 JSON file in SD `/switch/playwise/calendar-import/`. In Parent Zone, open Time Plans → Holiday Schedule → Manage Calendars, preview and confirm the import, then select a saved region and hold to apply. Re-importing the active region also requires applying again. The built-in mainland China 2026 calendar remains a separate option. Uncovered years use the weekly plan. Use `B` to return, `Y` to refresh and `X` for brief format help; these buttons also support touch. Help preserves your list selection. See the [custom calendar format, complete example, and invalid example](CUSTOM_HOLIDAY_CALENDAR_FORMAT.md).
 
 Import Files displays brief steps, the save directory and the complete format-document URL. View Holiday Schedule opens the page nearest the current console date, including makeup days; ties prefer upcoming dates. Manual paging remains available. "Skip this break" matches neighboring Today actions in width and uses the same short confirmation title. The status bar and left summary use the current reliable reading for the next-break preview; unavailable readings still show an unknown state.
 
@@ -162,22 +164,22 @@ The "Master Bedtime Switch" controls all bedtime rules across weekly, holiday, a
 <details>
 <summary>View Time Plans & Editor Previews</summary>
 
-![Time plans root preview](images/usage-en/plan/plan-root-light.png)
-![Weekly plan draft preview](images/usage-en/plan/plan-draft-today-light.png)
-![Weekly plan minute adjustment preview](images/usage-en/plan/plan-minute-editor-light.png)
-![Weekly plan save confirmation preview](images/usage-en/plan/weekly-confirm-change-light.png)
-![National holidays preview](images/usage-en/holiday/holiday-draft-light.png)
-![Holiday makeup workday minute adjustment preview](images/usage-en/holiday/holiday-makeup-duration-editor-light.png)
-![Holiday plan save confirmation preview](images/usage-en/holiday/holiday-confirm-light.png)
-![Scheduled date limits preview](images/usage-en/scheduled/scheduled-draft-light.png)
-![Scheduled date limit minute adjustment preview](images/usage-en/scheduled/scheduled-duration-editor-light.png)
-![Weekly bedtime schedule preview](images/usage-en/bedtime/bedtime-section-0-dark.png)
-![Holiday bedtime schedule preview](images/usage-en/bedtime/bedtime-section-1-dark.png)
-![Scheduled date bedtime schedule preview](images/usage-en/bedtime/bedtime-section-2-dark.png)
-![Weekly bedtime window editor preview](images/usage-en/bedtime/bedtime-window-input-dark.png)
-![Bedtime start/end time editor preview](images/usage-en/bedtime/bedtime-time-editor-dark.png)
-![Scheduled date custom bedtime rule preview](images/usage-en/bedtime/bedtime-special-custom-dark.png)
-![Autonomy buffer policy preview](images/usage-en/autonomy/autonomy-policy-light.png)
+![Time plans root preview](../images/usage-en/plan/plan-root-light.png)
+![Weekly plan draft preview](../images/usage-en/plan/plan-draft-today-light.png)
+![Weekly plan minute adjustment preview](../images/usage-en/plan/plan-minute-editor-light.png)
+![Weekly plan save confirmation preview](../images/usage-en/plan/weekly-confirm-change-light.png)
+![National holidays preview](../images/usage-en/holiday/holiday-draft-light.png)
+![Holiday makeup workday minute adjustment preview](../images/usage-en/holiday/holiday-makeup-duration-editor-light.png)
+![Holiday plan save confirmation preview](../images/usage-en/holiday/holiday-confirm-light.png)
+![Scheduled date limits preview](../images/usage-en/scheduled/scheduled-draft-light.png)
+![Scheduled date limit minute adjustment preview](../images/usage-en/scheduled/scheduled-duration-editor-light.png)
+![Weekly bedtime schedule preview](../images/usage-en/bedtime/bedtime-section-0-dark.png)
+![Holiday bedtime schedule preview](../images/usage-en/bedtime/bedtime-section-1-dark.png)
+![Scheduled date bedtime schedule preview](../images/usage-en/bedtime/bedtime-section-2-dark.png)
+![Weekly bedtime window editor preview](../images/usage-en/bedtime/bedtime-window-input-dark.png)
+![Bedtime start/end time editor preview](../images/usage-en/bedtime/bedtime-time-editor-dark.png)
+![Scheduled date custom bedtime rule preview](../images/usage-en/bedtime/bedtime-special-custom-dark.png)
+![Autonomy buffer policy preview](../images/usage-en/autonomy/autonomy-policy-light.png)
 
 </details>
 
@@ -203,9 +205,9 @@ Grant codes are 8-digit numbers determined by parents and valid only for the cur
 2. Verify the valid date and duration, then share the 8-digit code with your child. Generating a new code on the same day does not invalidate previously issued codes; changing "Next Grant Duration" does not modify issued codes.
 3. If generation fails, follow on-screen hints to inspect configuration, SD card, and system clock. Never assume previous codes are revoked.
 
-![Console generation entry preview](images/usage-en/grant/grant-entry-light.png)
-![Grant code duration editor preview](images/usage-en/grant/grant-duration-editor-light.png)
-![Issued grant code preview (sample data)](images/usage-en/grant/grant-issued-light.png)
+![Console generation entry preview](../images/usage-en/grant/grant-entry-light.png)
+![Grant code duration editor preview](../images/usage-en/grant/grant-duration-editor-light.png)
+![Issued grant code preview (sample data)](../images/usage-en/grant/grant-issued-light.png)
 
 ### Generating on Phone or PC
 
@@ -218,7 +220,7 @@ The parental web generator calculates 8-digit codes locally inside your browser,
 3. Scan the QR code with your parental device to open the web page, verify the device ID, and tap "Import This Device"; if another device configuration exists in the browser, confirm the replacement. The QR code contains your grant secret and must only be scanned by trusted parental devices.
 4. Select the Switch local date and duration, generate the 8-digit code, and share it via phone, message, or in person. Children redeem codes completely offline on the Switch.
 
-![Phone or PC QR code pairing preview (demo secret)](images/usage/parent/pairing-qr-demo.png)
+![Phone or PC QR code pairing preview (demo secret)](../images/usage/parent/pairing-qr-demo.png)
 
 The QR code shown in the image uses a public demo configuration and cannot be used on real home consoles. Scanning simply imports settings into your browser; code calculation is performed entirely client-side. If the webpage is unreachable, use the standalone offline file below or [generate directly on the Switch](#generating-on-switch).
 
@@ -228,7 +230,7 @@ The QR code shown in the image uses a public demo configuration and cannot be us
 2. Copy the exported file from SD card `/switch/playwise/parent-import.json`, and transfer it along with `playwise-offline.html` to your trusted phone or PC. If export failed, inspect SD card write permissions and retry. Save files locally on your phone first, then open HTML in a standard system browser (avoid in-app webviews inside chat apps or cloud drives).
 3. On the webpage, tap "Import Config File", choose `parent-import.json`, verify device ID, and confirm import. Then pick the Switch date and duration to generate 8-digit codes offline; redeeming on the Switch requires no network.
 
-![Standalone offline parental webpage preview (demo secret)](images/usage/parent-offline-demo.png)
+![Standalone offline parental webpage preview (demo secret)](../images/usage/parent-offline-demo.png)
 
 The standalone offline file requires no installed apps, Python, frontend toolchains, or local servers, but cannot serve as a QR code destination URL or be installed as a PWA. If your browser restricts local file persistence, re-import the configuration file next time you open it. Both `parent-import.json` and QR codes contain sensitive cryptographic secrets; never publish them, share them with children, or upload to untrusted sites. If you regenerate or change your grant secret on the Switch, parental devices must be re-paired and codes signed with old secrets will no longer validate.
 
@@ -239,10 +241,10 @@ When unrestricted and Homebrew Menu can still be launched, open PlayWise, enter 
 <details>
 <summary>View Input, Confirmation, Hold-to-Confirm, and Success Previews</summary>
 
-![Enter grant code preview](images/usage-en/redeem/redeem-input-light.png)
-![Redeem confirmation preview](images/usage-en/redeem/redeem-confirm-light.png)
-![High-risk redeem hold-to-confirm preview](images/usage-en/redeem/redeem-confirm-hold-dark.png)
-![Redeem success preview](images/usage-en/redeem/redeem-success-light.png)
+![Enter grant code preview](../images/usage-en/redeem/redeem-input-light.png)
+![Redeem confirmation preview](../images/usage-en/redeem/redeem-confirm-light.png)
+![High-risk redeem hold-to-confirm preview](../images/usage-en/redeem/redeem-confirm-hold-dark.png)
+![Redeem success preview](../images/usage-en/redeem/redeem-success-light.png)
 
 </details>
 
@@ -257,11 +259,11 @@ When daily limits expire or bedtime restrictions take effect, Nintendo's native 
 
 | Code entry | Grant confirmation |
 | --- | --- |
-| ![Overlay code entry](images/usage-en/overlay/overlay-code-entry.png) | ![Overlay confirmation](images/usage-en/overlay/overlay-code-confirm.png) |
+| ![Overlay code entry](../images/usage-en/overlay/overlay-code-entry.png) | ![Overlay confirmation](../images/usage-en/overlay/overlay-code-confirm.png) |
 
 | Parent actions | Bedtime recovery |
 | --- | --- |
-| ![Overlay parent actions](images/usage-en/overlay/overlay-parent-actions.png) | ![Overlay bedtime recovery](images/usage-en/overlay/overlay-bedtime.png) |
+| ![Overlay parent actions](../images/usage-en/overlay/overlay-parent-actions.png) | ![Overlay bedtime recovery](../images/usage-en/overlay/overlay-bedtime.png) |
 
 </details>
 
@@ -366,16 +368,16 @@ Always refer to buttons and prompts in your installed version. This guide does n
 <details>
 <summary>View Security & Preferences Previews</summary>
 
-![Security & preferences root preview](images/usage-en/settings/settings-root-dark.png)
-![Change PlayWise PIN preview](images/usage-en/settings/settings-pin-dark.png)
-![Theme settings preview](images/usage-en/settings/settings-theme-dark.png)
-![Language preferences preview](images/usage-en/settings/settings-language-dark.png)
-![Parent Zone entry and shortcut settings preview](images/usage-en/settings/settings-shortcut-dark.png)
-![Album and capture restriction preview](images/usage-en/settings/settings-album-dark.png)
-![Family activity history preview](images/usage-en/settings/settings-activity-dark.png)
-![Offline grant redemption history preview](images/usage-en/settings/settings-redemption-dark.png)
-![Offline grant generation manager preview](images/usage-en/settings/settings-grant-manager-dark.png)
-![Software info and version check preview](images/usage-en/settings/settings-software-info-dark.png)
+![Security & preferences root preview](../images/usage-en/settings/settings-root-dark.png)
+![Change PlayWise PIN preview](../images/usage-en/settings/settings-pin-dark.png)
+![Theme settings preview](../images/usage-en/settings/settings-theme-dark.png)
+![Language preferences preview](../images/usage-en/settings/settings-language-dark.png)
+![Parent Zone entry and shortcut settings preview](../images/usage-en/settings/settings-shortcut-dark.png)
+![Album and capture restriction preview](../images/usage-en/settings/settings-album-dark.png)
+![Family activity history preview](../images/usage-en/settings/settings-activity-dark.png)
+![Offline grant redemption history preview](../images/usage-en/settings/settings-redemption-dark.png)
+![Offline grant generation manager preview](../images/usage-en/settings/settings-grant-manager-dark.png)
+![Software info and version check preview](../images/usage-en/settings/settings-software-info-dark.png)
 
 </details>
 
@@ -392,14 +394,14 @@ Open **Support & recovery / Troubleshooting & FAQ** in the parent area. Navigate
 
 The four help pages also cover invalid/used/date-mismatched codes, bedtime and eye-care restrictions, backend loading, protection and recovery transactions, and diagnostic exports. Optional clock sync needs network access; offline code generation and redemption remain offline.
 
-![In-app controls and clock checks](images/usage-en/support/support-guide-1-light.png)
+![In-app controls and clock checks](../images/usage-en/support/support-guide-1-light.png)
 
 <details>
 <summary>In-app FAQ pages</summary>
 
-![0 minutes but games open](images/usage-en/support/support-guide-2-light.png)
-![Grant failures and blocked app](images/usage-en/support/support-guide-3-light.png)
-![Backend and environment troubleshooting](images/usage-en/support/support-guide-4-light.png)
+![0 minutes but games open](../images/usage-en/support/support-guide-2-light.png)
+![Grant failures and blocked app](../images/usage-en/support/support-guide-3-light.png)
+![Backend and environment troubleshooting](../images/usage-en/support/support-guide-4-light.png)
 
 </details>
 
@@ -409,9 +411,9 @@ Parent Zone "Support & Recovery" displays active issues and recommended remedies
 <details>
 <summary>View Healthy, Fault, and Event Details Previews</summary>
 
-![Support and recovery healthy state preview](images/usage-en/support/support-healthy-dark.png)
-![Support and recovery fault state preview](images/usage-en/support/support-failed-light.png)
-![Support events and fault details preview](images/usage-en/support/support-event-details-light.png)
+![Support and recovery healthy state preview](../images/usage-en/support/support-healthy-dark.png)
+![Support and recovery fault state preview](../images/usage-en/support/support-failed-light.png)
+![Support events and fault details preview](../images/usage-en/support/support-event-details-light.png)
 
 </details>
 
@@ -435,7 +437,7 @@ On Windows, DBI/MTP data-preserving scripts can be previewed before applying:
 .\tools\install_package_via_dbi_mtp.ps1 -SourceFolder .\build\packages -Apply
 ```
 
-Do not use `-Clean`, `-Full`, or `-CleanAll` flags during standard upgrades. FTP full-clean and Device Lab installations alter existing data and control environments and are reserved strictly for developers following the [Testing Guide](测试指南.md). Standard users should install only standard release packages and never run both background daemons simultaneously.
+Do not use `-Clean`, `-Full`, or `-CleanAll` flags during standard upgrades. FTP full-clean and Device Lab installations alter existing data and control environments and are reserved strictly for developers following the [Testing Guide](../开发/TESTING_GUIDE.md). Standard users should install only standard release packages and never run both background daemons simultaneously.
 
 ## Frequently Asked Questions (FAQ)
 
@@ -454,6 +456,6 @@ Documentation images fall into two categories, with paths relative to repository
 | Automatically Generated Console and Overlay UI Previews | Selected PNG files under `docs/images/usage-en/{child,parent,setup,grant,redeem,plan,holiday,scheduled,bedtime,autonomy,settings,support,overlay}/` (English) and `docs/images/usage/` (Chinese) listed in `tools/sync_doc_previews.py` | Run `python tools/package_remote.py --previews` to re-render `build/ui-previews/` and synchronize to documentation paths. Append `--clean` for a full clean build. |
 | Manually Captured Hardware, Pairing & Web Previews | `docs/images/usage/overlay/ultrahand-entry.jpg`, `docs/images/usage/overlay/playwise-code-entry-legacy.jpg`, `docs/images/usage/parent/pairing-qr-demo.png`, `docs/images/usage/parent/web-code-demo.jpg`, `docs/images/usage/parent-offline-demo.png` | Re-capture, verify, and update against physical devices or browser interfaces; pairing QR codes must use public demo configurations. The command above does not replace these images. |
 
-Automated previews are generated from production C/C++ rendering code, fixed sample states, and the vendored Noto Sans SC font, marked with `HOST PREVIEW / SAMPLE DATA`. They serve layout reading purposes and do not substitute hardware controller, font, and PCTL validation. `--previews` (or `--only previews`) does not run full test suites or build distribution packages; run `python tools/package_remote.py` for standard routine builds, or `python tools/package_remote.py --release` when full release gating is required. See [Testing Guide](TESTING_GUIDE.md) for details.
+Automated previews are generated from production C/C++ rendering code, fixed sample states, and the vendored Noto Sans SC font, marked with `HOST PREVIEW / SAMPLE DATA`. They serve layout reading purposes and do not substitute hardware controller, font, and PCTL validation. `--previews` (or `--only previews`) does not run full test suites or build distribution packages; run `python tools/package_remote.py` for standard routine builds, or `python tools/package_remote.py --release` when full release gating is required. See [Testing Guide](../开发/TESTING_GUIDE.md) for details.
 
-See also [Development Environment Guide](开发环境指南.md), [Development Guide](开发指南.md), [Protocol Specification](协议.md), and [PCTL Integration Architecture](PCTL集成架构.md).
+See also [Development Environment Guide](../开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md), [Development Guide](../开发/DEVELOPER_GUIDE.md), [Protocol Specification](../设计/PROTOCOL.md), and [PCTL Integration Architecture](../设计/PCTL_ARCHITECTURE.md).

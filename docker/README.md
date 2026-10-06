@@ -1,6 +1,6 @@
 # devkitPro 开发容器
 
-本目录提供维护者使用的 Windows + Docker Desktop + OpenSSH 默认环境。它是 `tools/package_remote.py` 的本机连接 profile，不是项目唯一可用的宿主系统。完整的通用要求、覆盖参数和安全边界见[开发环境指南](../docs/开发环境指南.md)。
+本目录提供维护者使用的 Windows + Docker Desktop + OpenSSH 默认环境。它是 `tools/package_remote.py` 的本机连接 profile，不是项目唯一可用的宿主系统。完整的通用要求、覆盖参数和安全边界见[开发环境指南](../docs/开发/开发环境指南.md)。
 
 ## 准备挂载
 

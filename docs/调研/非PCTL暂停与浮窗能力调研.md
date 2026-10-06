@@ -1,3 +1,5 @@
+[文档索引](../README.md) · 调研记录（不代表已发布能力或真机资格）
+
 # 非 PCTL 暂停与浮窗能力调研
 
 调研日期：2026-10-06。本文只记录源码能力与待验证设计，不变更标准分发协议、控制策略或资格状态，也不代表真机验证已经通过。
@@ -31,7 +33,7 @@ Atmosphère 1.11.2 的 PM 实现从进程列表取得普通 handle，再通过 I
 
 ### 接入与恢复边界
 
-- 当前 [sysmodule 权限配置](../sysmodule/sysmodule.json) 不包含 `pm:dmnt` 或 SVC `0x4F`，因此不能直接在现有后台中调用。
+- 当前 [sysmodule 权限配置](../../sysmodule/sysmodule.json) 不包含 `pm:dmnt` 或 SVC `0x4F`，因此不能直接在现有后台中调用。
 - application PID 不等于“当前正在前台运行的游戏”。HOME 上也可能保留 application，游戏接管 hbmenu 时也可能占用该槽位；需要核对程序身份、override 状态，并建立可靠的前台/后台判定。
 - 进程暂停状态不是按调用者计数的锁。源码在重复暂停、恢复未暂停进程时返回 `InvalidState`；不能把这些错误统一当成成功，也不能在暂停失败后无条件恢复。HOME、睡眠和其他进程活动控制者之间的同类状态冲突必须实验验证。
 - `Runnable` 只清除 process suspend 原因。线程还可能处于 debug 或其他挂起状态，因此“恢复调用成功”不能独立证明游戏已经恢复游玩。
@@ -56,14 +58,14 @@ Atmosphère 1.11.2 的 PM 实现从进程列表取得普通 handle，再通过 I
 
 ## 2. 显示浮窗：现有技术不需要 PCTL
 
-仓库固定的 [libtesla](../companion/overlay/vendor/libtesla/UPSTREAM.txt) 已提供必要机制：
+仓库固定的 [libtesla](../../companion/overlay/vendor/libtesla/UPSTREAM.txt) 已提供必要机制：
 
 - `Renderer::init` 使用 `ViServiceType_Manager` 创建 managed layer，将其置于较高 Z 序，并创建 framebuffer；可以在该图层中绘制自定义文字、按钮、倒计时和页面。
 - `requestForeground` 使用 `hid:sys` 命令 503 调整 application 与系统 applet 的输入许可。
 - 该名称在这里表示输入处理；实现没有调用进程暂停或 AM 的前台切换。不能从浮窗已打开推断游戏已停止。
 - Tesla `.ovl` 在此实现中使用 `AppletType_None`，与 Horizon 的 `AppletType_OverlayApplet` 是不同的运行方式。
 
-现有 [PlayWise 浮窗入口](../companion/overlay/source/main.cpp) 通过 `tsl::loop<PctcOverlay>` 运行，状态查询与页面更新属于已加载的浮窗。默认 framebuffer 为 448×720，适合侧边页面；更大的覆盖页面可以通过显示层实现，但需要另行调整布局与资源预算。
+现有 [PlayWise 浮窗入口](../../companion/overlay/source/main.cpp) 通过 `tsl::loop<PctcOverlay>` 运行，状态查询与页面更新属于已加载的浮窗。默认 framebuffer 为 448×720，适合侧边页面；更大的覆盖页面可以通过显示层实现，但需要另行调整布局与资源预算。
 
 ### 自动弹出需要增加常驻接收者
 
@@ -125,7 +127,7 @@ Host/Eden 可以验证控制状态机、失败处理与页面布局，不能证�
 - [Mesosphère：SetProcessActivity 校验与分派](https://github.com/Atmosphere-NX/Atmosphere/blob/5388824be146a89619e8d641acd64599cf1c5f62/libraries/libmesosphere/source/svc/kern_svc_activity.cpp#L62)、[KProcess 的线程挂起/恢复与状态检查](https://github.com/Atmosphere-NX/Atmosphere/blob/5388824be146a89619e8d641acd64599cf1c5f62/libraries/libmesosphere/source/kern_k_process.cpp#L1022)、[线程挂起原因](https://github.com/Atmosphere-NX/Atmosphere/blob/5388824be146a89619e8d641acd64599cf1c5f62/libraries/libmesosphere/include/mesosphere/kern_k_thread.hpp#L53)。
 - [Atmosphère：Cheat 暂停命令](https://github.com/Atmosphere-NX/Atmosphere/blob/5388824be146a89619e8d641acd64599cf1c5f62/stratosphere/dmnt/source/cheat/dmnt_cheat_service.hpp#L24)、[调试暂停/恢复实现](https://github.com/Atmosphere-NX/Atmosphere/blob/5388824be146a89619e8d641acd64599cf1c5f62/stratosphere/dmnt/source/cheat/impl/dmnt_cheat_api.cpp#L340)、[附着与加载 cheats 的流程](https://github.com/Atmosphere-NX/Atmosphere/blob/5388824be146a89619e8d641acd64599cf1c5f62/stratosphere/dmnt/source/cheat/impl/dmnt_cheat_api.cpp#L783)。
 - [nx-ovlloader：同进程 NRO 加载与 NextLoadPath](https://github.com/WerWolv/nx-ovlloader/blob/13295c6d15db23767223f2045c5b3689ea52723b/source/main.c#L151)。
-- 仓库实际使用的 [libtesla 实现](../companion/overlay/vendor/libtesla/include/tesla.hpp)：`requestForeground` 约 282 行、`Renderer::init` 约 1039 行、`setNextOverlay` 约 3514 行、隐藏等待与显示循环约 3535 行。这里以 vendored 文件为准，不能用上游原文件覆盖本地兼容修改。
+- 仓库实际使用的 [libtesla 实现](../../companion/overlay/vendor/libtesla/include/tesla.hpp)：`requestForeground` 约 282 行、`Renderer::init` 约 1039 行、`setNextOverlay` 约 3514 行、隐藏等待与显示循环约 3535 行。这里以 vendored 文件为准，不能用上游原文件覆盖本地兼容修改。
 - [libnx：AM 类型与代理初始化](https://github.com/switchbrew/libnx/blob/dbcc1beafc6b47b5ffbeb8ba82463a7d45da40bb/nx/source/services/applet.c#L139)、[Error Applet 前台调用](https://github.com/switchbrew/libnx/blob/dbcc1beafc6b47b5ffbeb8ba82463a7d45da40bb/nx/source/applets/error.c#L10)、[Web Applet 约束](https://github.com/switchbrew/libnx/blob/dbcc1beafc6b47b5ffbeb8ba82463a7d45da40bb/nx/include/switch/applets/web.h#L305)。
 
 本次实际执行了 `git status --short`、上述上游版本检查、`rg` 源码搜索、UTF-8 文档读取，以及固定 commit 的 GitHub API/raw 源码查询。没有改动运行代码，没有执行设备控制、编译或回归；Eden 应用本次未打包、未校验。
