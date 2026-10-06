@@ -84,6 +84,10 @@ For detailed walkthroughs of each page, see the [User Guide](docs/使用/USER_GU
 
 ## FAQ
 
+> [!IMPORTANT]
+> **If an error occurs, first check whether Nintendo system Parental Controls is enabled and the Switch clock has been synchronized.** Verify Parental Controls, date, time and time zone in System Settings. Enable controls if needed; if clock sync is missing or uncertain, you can use DBI / QuickNTP online. Then refresh PlayWise status and retry. PlayWise does not automatically detect successful clock sync. If the issue persists, record both check results and attach diagnostics.
+> Steps: [Enable Nintendo Parental Controls](docs/使用/USER_GUIDE.md#enable-nintendo-parental-controls) · [Synchronize the Switch Clock](docs/使用/USER_GUIDE.md#synchronize-the-switch-clock).
+
 **Why is the game still playable when PlayWise shows "Limit Reached" / 0 minutes remaining?**
 First, ensure that Nintendo official Parental Controls is enabled and has not been temporarily unlocked. Next, synchronize the Switch system clock via internet NTP, for example using DBI's "Tools → NTP Time Sync" or [QuickNTP (Tesla time sync tool)](https://github.com/ppkantorski/QuickNTP). After successful clock synchronization, refresh PlayWise status and test with a non-critical game to confirm that restrictions take effect. Time synchronization is a recommended troubleshooting step, though it may not resolve every edge-case timer inconsistency. See [User Guide: FAQ](docs/使用/USER_GUIDE.md#frequently-asked-questions-faq) and [Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1) for details.
 

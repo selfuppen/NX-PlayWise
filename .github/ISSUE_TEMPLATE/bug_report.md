@@ -7,6 +7,16 @@ assignees: ''
 
 ---
 
+> [!IMPORTANT]
+> **提交前请先确认：**
+> 1. 系统设置中的 [Nintendo 官方家长控制](https://github.com/selfuppen/NX-PlayWise/blob/main/docs/使用/使用指南.md#开启官方家长控制) 已开启（且未被官方密码临时解除）。
+> 2. Switch 时间与时区已同步（可通过 DBI 或 QuickNTP [校准时间](https://github.com/selfuppen/NX-PlayWise/blob/main/docs/使用/使用指南.md#同步-switch-时间)），并在 PlayWise 中按 `Y` 刷新重试。
+
+**排障记录（无法确认时填“未知”）**
+- 官方家长控制状态：（已开启 / 未开启 / 未知；是否临时解除：是 / 否）
+- 系统时间同步状态：（已同步 / 未同步 / 未知；校时方式：DBI / QuickNTP / 其他）
+- 刷新并重试结果：（按 Y 刷新后的状态，或非关键游戏的到时限制测试表现）
+
 **问题描述**
 请简要描述你遇到的问题是什么。例如：在xxx界面点击xxx后，程序提示xxx错误。
 

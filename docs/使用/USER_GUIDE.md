@@ -79,9 +79,35 @@ These console images are generated from production drawing code with static mock
 
 ### Enable Nintendo Parental Controls
 
-Brief path: Settings → Parent Control settings → Parental Controls settings (restrictions set by a parent or guardian) → I do not have a smart device → Next → Next. Complete the system prompts, then return to PlayWise and check that Parental Controls is enabled.
+If Nintendo Parental Controls has not been configured, set it up on the console:
+
+1. From Switch HOME, open System Settings → Parental Controls → Parental Controls Settings.
+2. Choose “If You Do Not Have a Smart Device”, then select Next → Next.
+3. Follow the system prompts to configure restrictions and a Nintendo Parental Controls PIN, then save. Parents should keep this PIN; it is separate from the PlayWise PIN.
+4. Return to PlayWise, close help and press `Y` to refresh. Check that official Parental Controls is enabled. If status remains unknown, record it and export diagnostics from Support & Recovery.
+5. Confirm controls have not been temporarily unlocked with the official PIN, then test counting and expiry restrictions with a game that has no unsaved progress. An enabled setting alone does not prove actual blocking.
+
+If an official PIN or Nintendo Parental Controls phone app link already exists, follow the system prompts and use the existing PIN or phone app to check settings.
 
 On setup step 1, tap “Enable Controls Help” or select it with the direction buttons and press `A` to open the detail dialog. Press `A` / `B` or tap Return to close it, keeping the current step and selection. Viewing help does not change system settings or treat an unknown status as enabled.
+
+### Synchronize the Switch Clock
+
+From Switch HOME, open System Settings → System → Date and Time. Check that the date, time and time zone match the console's location. Menu names depend on system language; verify the time zone after syncing too. If clock sync is missing or uncertain, choose one of the following online methods.
+
+**Using DBI:**
+
+1. Connect the Switch to a network that can reach an NTP service, then open your installed DBI from Homebrew Menu.
+2. Open Tools → NTP Time Sync, start synchronization and wait for the tool's result.
+3. On success, check date, time and time zone in System Settings, then return to PlayWise, press `Y` to refresh and retry the original action. On failure, record the error and check the network before retrying; an attempted sync is not a successful sync.
+
+**Using the QuickNTP overlay:**
+
+1. Have [QuickNTP](https://github.com/ppkantorski/QuickNTP) and an Ultrahand / Tesla overlay manager installed, and connect the Switch to a network that can reach an NTP service.
+2. Open the overlay manager with its shortcut and select QuickNTP. Follow the tool's prompts to synchronize time and wait for the result; button names depend on the installed version.
+3. On success, close the overlay, check date, time and time zone in System Settings, then return to PlayWise, press `Y` to refresh and retry the original action. On failure, record the tool's message and check the network before retrying.
+
+For counting or expiry restriction issues, retest counting and blocking with a non-critical game after syncing and refreshing. Record the sync method, success and retry results. PlayWise does not automatically detect successful clock sync, and syncing is not a guaranteed fix. Offline code generation and redemption still require no network.
 
 ## Daily Playtime Management
 
@@ -383,6 +409,10 @@ Always refer to buttons and prompts in your installed version. This guide does n
 
 ## Support & Recovery
 
+> [!IMPORTANT]
+> **If an error occurs, first check whether Nintendo system Parental Controls is enabled and the Switch clock has been synchronized.** Complete the first two checks below. Enable controls if needed; if clock sync is missing or uncertain, you can use DBI / QuickNTP online, then return to PlayWise, press `Y` to refresh and retry. PlayWise does not automatically detect successful clock sync. For counting or expiry restriction issues, also retest actual counting and blocking with a non-critical game.
+> Steps: [Enable Nintendo Parental Controls](#enable-nintendo-parental-controls) · [Synchronize the Switch Clock](#synchronize-the-switch-clock).
+
 Open **Support & recovery / Troubleshooting & FAQ** in the parent area. Navigate down from the bottom action row through recent events, then press A. Use L/R or left/right to change pages and A/B to return, or tap the navigation buttons. Help remains readable with the backend unavailable, emergency disable active, or read-only support access; it does not change controls, sync time or submit requests.
 
 | Check pending | Verification and action |
@@ -417,7 +447,7 @@ Parent Zone "Support & Recovery" displays active issues and recommended remedies
 
 </details>
 
-When reporting issues, export diagnostic logs from this page, note reproduction steps, firmware and Atmosphère versions, PlayWise version, and error codes, and submit to [Project Issues](https://github.com/selfuppen/NX-PlayWise/issues). Never publish `credentials.json`, `auth.json`, full ledgers, real grant codes, or parental export files.
+When reporting issues, export diagnostics from this page. **Start your troubleshooting record with whether system Parental Controls is enabled or temporarily unlocked, and whether the clock has been synchronized (method, success, and results after refreshing and retrying); mark anything you cannot confirm as unknown.** Then note reproduction steps, firmware and Atmosphère versions, PlayWise version and error codes, and submit to [Project Issues](https://github.com/selfuppen/NX-PlayWise/issues) with diagnostics attached. Never publish `credentials.json`, `auth.json`, full ledgers, real grant codes, or parental export files.
 
 ## Upgrades
 
@@ -440,6 +470,10 @@ On Windows, DBI/MTP data-preserving scripts can be previewed before applying:
 Do not use `-Clean`, `-Full`, or `-CleanAll` flags during standard upgrades. FTP full-clean and Device Lab installations alter existing data and control environments and are reserved strictly for developers following the [Testing Guide](../开发/TESTING_GUIDE.md). Standard users should install only standard release packages and never run both background daemons simultaneously.
 
 ## Frequently Asked Questions (FAQ)
+
+> [!IMPORTANT]
+> **If an error occurs, first check whether Nintendo system Parental Controls is enabled and the Switch clock has been synchronized.** See [Support & Recovery](#support--recovery) for checks, clock sync methods and troubleshooting record requirements. Refresh status and retry after checking; if the issue persists, record check results and error codes, and export diagnostics.
+> Steps: [Enable Nintendo Parental Controls](#enable-nintendo-parental-controls) · [Synchronize the Switch Clock](#synchronize-the-switch-clock).
 
 - **Code displays invalid, date mismatch, or already used**: Verify console local date displayed on Switch, device configuration, and entered numbers. If explicitly reported as already used, have parents generate a fresh code; failed attempts or cancelled previews do not consume codes.
 - **Playtime limit still reflects old numbers**: Wait for background synchronization to finish, then press `Y` to refresh. Status older than 120 seconds or missing readings will display unconfirmed; never infer restriction release from outdated balances.
