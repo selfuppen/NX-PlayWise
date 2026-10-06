@@ -122,6 +122,13 @@ void ptc_ui_format_eye_care_cycle(const PtcUiModel *model, int64_t now,
 const char *ptc_ui_today_action_unavailable_reason(const PtcUiModel *model,
     int index, int64_t now)
 {
+    if (index == 7) {
+        if (!ptc_ui_status_is_fresh(model, now) || !model->dock_available)
+            return ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM);
+        if (model->dock_waived_today) return ptc_ui_text(PTC_UI_T_DOCK_WAIVED);
+        return model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled
+            ? NULL : ptc_ui_text(PTC_UI_T_DOCK_OFF);
+    }
     if (index == 6) {
         int64_t age;
         if (!ptc_ui_status_is_fresh(model, now))

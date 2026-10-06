@@ -635,7 +635,7 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
                (model->parent_page == PTC_UI_PARENT_PLAN ? ptc_ui_plan_card_rect(i) :
                 (model->parent_page == PTC_UI_PARENT_SETTINGS ? ptc_ui_settings_card_rect(i) : ptc_ui_parent_card_rect(i))));
         if (model->parent_page == PTC_UI_PARENT_TODAY &&
-            ((model->disable_flag_present && i != 6) || model->waiting ||
+            ((model->disable_flag_present && i != 6 && i != 7) || model->waiting ||
              (i == 3 && ptc_ui_status_is_fresh(model, now) &&
               !model->today_override_present) ||
              ptc_ui_today_action_unavailable_reason(model, i, now))) continue;

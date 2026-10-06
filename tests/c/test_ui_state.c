@@ -204,7 +204,7 @@ static void test_release_navigation(void)
     PtcUiModel model;
     char shortcut_hint[160];
     memset(&model, 0, sizeof(model));
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 7, "today exposes quota, bedtime, buffer and eye care cards");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 8, "today exposes quota, bedtime, buffer, eye care and TV waiver cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 7, "time plan root exposes seven direct cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 4, "grant page exposes generation, management and history");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 8, "settings page exposes language, audio and security");
@@ -2120,7 +2120,7 @@ static void test_home_redesign(void)
     const PtcUiOperation expected[] = {PTC_UI_OPERATION_SET_TODAY_LIMIT,
         PTC_UI_OPERATION_ADD_TODAY_MINUTES, PTC_UI_OPERATION_DISABLE_TODAY_LIMIT,
         PTC_UI_OPERATION_RESTORE_TODAY_POLICY, PTC_UI_OPERATION_SKIP_BEDTIME,
-        PTC_UI_OPERATION_NONE, PTC_UI_OPERATION_SKIP_EYE_CARE};
+        PTC_UI_OPERATION_NONE, PTC_UI_OPERATION_SKIP_EYE_CARE, PTC_UI_OPERATION_WAIVE_DOCK};
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_PARENT;
     model.parent_page = PTC_UI_PARENT_TODAY;
@@ -2130,7 +2130,8 @@ static void test_home_redesign(void)
                !rects_overlap(quota_group, ptc_ui_home_summary_rect(true)) &&
                !rects_overlap(other_group, ptc_ui_home_summary_rect(true)),
                "today section backgrounds do not overlap each other or the summary");
-    for (int i = 0; i < 7; ++i) {
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 8, "today has eight actions");
+    for (int i = 0; i < 8; ++i) {
         PtcUiRect rect = ptc_ui_today_card_rect(i);
         PtcUiRect group = i < 4 ? quota_group : other_group;
         if (i == 6) {
@@ -2141,8 +2142,13 @@ static void test_home_redesign(void)
             model.eye_care_break_id = 123;
             model.eye_care_rest_remaining_seconds = 90;
         }
+        if (i == 7) {
+            model.status_loaded = model.dock_available = true;
+            model.status_updated_at = 1000;
+            model.dock_policy.undocked_limit_enabled = true;
+        }
         check_int(ptc_ui_today_operation(i), expected[i], "today card maps to its named operation");
-        check_hit(i == 6 ? ptc_ui_hit_test_at(&model, rect.x + rect.w / 2,
+        check_hit(i >= 6 ? ptc_ui_hit_test_at(&model, rect.x + rect.w / 2,
                       rect.y + rect.h / 2, 1000) : hit_center(&model, rect),
                   PTC_UI_HIT_PARENT_CARD, i, "today card hit matches render position");
         check_true(rect.h == (i < 4 ? 90 : 82) &&
@@ -2152,18 +2158,23 @@ static void test_home_redesign(void)
                    "today cards fit below their section headings and stay clear of the summary");
         check_true(rect.y + rect.h < ptc_ui_notice_rect().y,
                    "every today card leaves room above the status capsule");
-        for (int j = i + 1; j < 7; ++j)
+        for (int j = i + 1; j < 8; ++j)
             check_true(!rects_overlap(rect, ptc_ui_today_card_rect(j)), "today cards do not overlap");
         model.disable_flag_present = true;
-        check_hit(i == 6 ? ptc_ui_hit_test_at(&model, rect.x + rect.w / 2,
+        check_hit(i >= 6 ? ptc_ui_hit_test_at(&model, rect.x + rect.w / 2,
                       rect.y + rect.h / 2, 1000) : hit_center(&model, rect),
-                  i == 6 ? PTC_UI_HIT_PARENT_CARD : PTC_UI_HIT_NONE, i == 6 ? 6 : 0,
-                  "disabled today actions retain only the eye care recovery target");
+                  i >= 6 ? PTC_UI_HIT_PARENT_CARD : PTC_UI_HIT_NONE, i >= 6 ? i : 0,
+                  "disabled today actions retain eye care and TV recovery targets");
         model.disable_flag_present = false;
         if (i == 6) {
             model.status_loaded = false;
             model.status_updated_at = 0;
             model.eye_care_policy.enabled = false;
+        }
+        if (i == 7) {
+            model.status_loaded = model.dock_available = false;
+            model.status_updated_at = 0;
+            model.dock_policy.undocked_limit_enabled = false;
         }
     }
     {
@@ -2328,6 +2339,36 @@ static void test_home_redesign(void)
     check_int(ptc_ui_today_operation(4), PTC_UI_OPERATION_SKIP_BEDTIME, "fifth action dispatches bedtime skip");
     check_int(ptc_ui_today_operation(5), PTC_UI_OPERATION_NONE, "buffer status card does not dispatch a write");
     check_int(ptc_ui_today_operation(6), PTC_UI_OPERATION_SKIP_EYE_CARE, "seventh action dispatches eye care skip");
+    check_int(ptc_ui_today_operation(7), PTC_UI_OPERATION_WAIVE_DOCK, "eighth action dispatches TV waiver");
+    check_int(ptc_ui_today_operation(8), PTC_UI_OPERATION_NONE, "out of range action cannot dispatch");
+    {
+        PtcUiModel state = model;
+        PtcUiRect rect = ptc_ui_today_card_rect(7);
+        state.status_loaded = state.dock_available = true;
+        state.status_updated_at = 1000;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1000) != NULL,
+            "TV waiver explains disabled policy");
+        state.dock_policy.force_docked = true;
+        state.disable_flag_present = true;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1000) == NULL,
+            "TV recovery remains available with disable flag");
+        check_hit(ptc_ui_hit_test_at(&state, rect.x + rect.w / 2, rect.y + rect.h / 2, 1000),
+            PTC_UI_HIT_PARENT_CARD, 7, "TV recovery is touchable with disable flag");
+        state.dock_waived_today = true;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1000) != NULL,
+            "TV waiver cannot be repeated after success");
+        check_hit(ptc_ui_hit_test_at(&state, rect.x + rect.w / 2, rect.y + rect.h / 2, 1000),
+            PTC_UI_HIT_NONE, 0, "already waived TV card has no active hit target");
+        state.dock_waived_today = false;
+        state.dock_policy.force_docked = false;
+        state.dock_policy.undocked_limit_enabled = true;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1120) == NULL &&
+            ptc_ui_today_action_unavailable_reason(&state, 7, 1121) != NULL,
+            "TV waiver requires fresh status within the shared boundary");
+        state.dock_available = false;
+        check_true(ptc_ui_today_action_unavailable_reason(&state, 7, 1000) != NULL,
+            "TV waiver rejects missing dock status");
+    }
     model.selected_index = 4;
     ptc_ui_move_parent_selection(&model, 1, 0);
     check_true(!model.parent_footer_focused && model.selected_index == 6,
@@ -2340,12 +2381,19 @@ static void test_home_redesign(void)
         "down from bedtime reaches buffer");
     model.selected_index = 6;
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(!model.parent_footer_focused && model.selected_index == 5,
-        "down from eye care reaches buffer");
-    ptc_ui_move_parent_selection(&model, 0, 1);
-    check_true(model.parent_footer_focused && model.parent_content_selection == 5, "footer remembers last card");
+    check_true(!model.parent_footer_focused && model.selected_index == 7,
+        "down from eye care reaches TV waiver");
     ptc_ui_move_parent_selection(&model, 0, -1);
-    check_true(!model.parent_footer_focused && model.selected_index == 5, "up restores card focus");
+    check_int(model.selected_index, 6, "up from TV waiver returns to eye care");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 5, "left from TV waiver reaches buffer");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 7, "right from buffer reaches TV waiver");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused && model.parent_content_selection == 7, "footer remembers TV waiver card");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_true(!model.parent_footer_focused && model.selected_index == 7, "up restores TV waiver focus");
     model.selected_index = 6;
     snprintf(model.message, sizeof(model.message), "keep result");
     for (int parent = 0; parent <= 1; ++parent) {
@@ -3298,7 +3346,9 @@ static void test_forecast_day_decision_and_navigation(void)
     /* 1. Hit testing for all 7 forecast rows */
     for (int i = 0; i < 7; ++i) {
         PtcUiRect row = ptc_ui_forecast_day_row_rect(i);
-        check_true(row.w > 0 && row.h > 0, "forecast row has non-zero size");
+        check_true(row.x == 834 && row.y == 210 + i * 51 && row.w == 382 && row.h == 44,
+            "forecast restores the reference commit spacing and row height");
+        check_true(row.y + row.h < 608, "forecast rows leave space for the restored bottom hint");
         check_hit(hit_center(&model, row), PTC_UI_HIT_FORECAST_DAY, i,
                   "forecast row hit test matches index");
     }
@@ -3306,10 +3356,10 @@ static void test_forecast_day_decision_and_navigation(void)
     /* 2. D-pad navigation between cards and forecast rows */
     model.selected_index = 3;
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 8, "move right from card 3 to nearest forecast row");
+    check_int(model.selected_index, 7, "move right from card 3 to nearest forecast row");
 
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 9, "move down within forecast rows");
+    check_int(model.selected_index, 8, "move down within forecast rows");
 
     ptc_ui_move_parent_selection(&model, -1, 0);
     check_int(model.selected_index, 3, "move left from upper forecast row back to card 3");

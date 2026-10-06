@@ -533,6 +533,62 @@ static void test_dock_policy(void)
     free(f.mem);
 }
 
+static void test_dock_daily_total_priority(void)
+{
+    for (int today_override = 0; today_override < 2; ++today_override) {
+        Fixture f;
+        PtcRules rules;
+        PtcRuntimeState state;
+        PtcOperationModeStatus mode = {PTC_OPERATION_MODE_UNDOCKED, true, true};
+        PtcOperationModeProvider provider = {test_operation_mode, &mode};
+        uint64_t carry = 0;
+        init_fixture(&f);
+        f.core.operation_mode_provider = &provider;
+        expect(load_rules(&f.core, &rules), "read daily priority rules");
+        if (today_override) {
+            rules.today_override.present = true;
+            rules.today_override.day_index = f.clock.snapshot.day_index;
+            rules.today_override.rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 30};
+        } else {
+            for (unsigned i = 0; i < 7; ++i) rules.week[i].minutes = 30;
+        }
+        expect(save_rules(&f.core, &rules), "save daily total below non-TV quota");
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        enable_dock_fixture(&f, false, 180);
+        f.core.dock_boot_sampled = true;
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 9ULL * 60000000000ULL, &carry);
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        expect(f.pctl.configured_minutes == 30 && f.pctl.status.remaining_minutes == 1 &&
+            !f.pctl.status.restricted_now, "non-TV use is allowed only within the smaller daily total");
+        (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 60000000000ULL, &carry);
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        expect(f.pctl.status.restricted_now && f.pctl.status.remaining_minutes == 0 &&
+            load_state(&f.core, &state) && !state.dock_enforced &&
+            state.undocked_used_ns == 10ULL * 60000000000ULL,
+            "daily total exhausts while non-TV quota still has 170 minutes");
+        request(&f, "total-exhausted", "status", "{}");
+        expect(result_has(&f, "total-exhausted", "\"daily_allowance\":true") &&
+            result_has(&f, "total-exhausted", "\"dock\":false"),
+            "status attributes exhaustion to the daily total");
+        mode.mode = PTC_OPERATION_MODE_DOCKED;
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        expect(f.pctl.status.restricted_now && f.pctl.status.remaining_minutes == 0,
+            "connecting the dock does not refund exhausted daily total");
+        request(&f, "total-waive", "waive_dock_policy_today", "{\"expected_day_index\":2380}");
+        expect(result_has(&f, "total-waive", "\"status\":\"ok\"") &&
+            load_state(&f.core, &state) && state.dock_waived &&
+            f.pctl.configured_minutes == 30 && f.pctl.status.restricted_now &&
+            f.pctl.status.remaining_minutes == 0,
+            "today TV waiver succeeds without bypassing exhausted daily total");
+        mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        expect(f.pctl.status.restricted_now && f.pctl.played_minutes_today == 30,
+            "returning to non-TV after waiver preserves total consumption");
+        free(f.mem);
+    }
+}
+
 static void confirm_dock_fixture(Fixture *f)
 {
     PtcRules rules;
@@ -719,6 +775,7 @@ int ptc_test_control_safety(void)
     failures = 0;
     test_persisted_eden_mode();
     test_dock_policy();
+    test_dock_daily_total_priority();
     test_dock_accounting_failures();
     test_dock_composition_and_migration();
     test_ledger();

@@ -235,8 +235,9 @@ PtcUiRect ptc_ui_home_summary_rect(bool parent)
 
 PtcUiRect ptc_ui_today_card_rect(int index)
 {
-    if (index < 0 || index >= 7) return (PtcUiRect){0, 0, 0, 0};
-    if (index == 5) return (PtcUiRect){560, 536, 672, 82};
+    if (index < 0 || index >= 8) return (PtcUiRect){0, 0, 0, 0};
+    if (index == 5) return (PtcUiRect){560, 536, 324, 82};
+    if (index == 7) return (PtcUiRect){908, 536, 324, 82};
     if (index == 4) return (PtcUiRect){560, 444, 324, 82};
     if (index == 6) return (PtcUiRect){908, 444, 324, 82};
     return (PtcUiRect){560 + (index % 2) * 348,
@@ -253,7 +254,7 @@ PtcUiRect ptc_ui_plan_card_rect(int index)
 PtcUiRect ptc_ui_forecast_day_row_rect(int index)
 {
     if (index < 0 || index >= 7) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){834, 210 + index * 40, 382, 34};
+    return (PtcUiRect){834, 210 + index * 51, 382, 44};
 }
 
 PtcUiRect ptc_ui_bedtime_section_rect(int index)
@@ -521,9 +522,9 @@ PtcUiOperation ptc_ui_today_operation(int index)
         PTC_UI_OPERATION_SET_TODAY_LIMIT, PTC_UI_OPERATION_ADD_TODAY_MINUTES,
         PTC_UI_OPERATION_DISABLE_TODAY_LIMIT, PTC_UI_OPERATION_RESTORE_TODAY_POLICY,
         PTC_UI_OPERATION_SKIP_BEDTIME, PTC_UI_OPERATION_NONE,
-        PTC_UI_OPERATION_SKIP_EYE_CARE
+        PTC_UI_OPERATION_SKIP_EYE_CARE, PTC_UI_OPERATION_WAIVE_DOCK
     };
-    return index >= 0 && index < 7 ? actions[index] : PTC_UI_OPERATION_NONE;
+    return index >= 0 && index < 8 ? actions[index] : PTC_UI_OPERATION_NONE;
 }
 
 bool ptc_ui_open_home_details(PtcUiModel *model)

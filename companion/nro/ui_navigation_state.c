@@ -58,7 +58,7 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
     case PTC_UI_PARENT_SUPPORT:
         return 6;
     case PTC_UI_PARENT_TODAY:
-        return 7;
+        return 8;
     default:
         return 5;
     }
@@ -196,7 +196,9 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
         if (vertical < 0) {
             if (index == 5) {
-                index = (model->parent_content_selection == 6) ? 6 : 4;
+                index = 4;
+            } else if (index == 7) {
+                index = 6;
             } else if (index == 4) {
                 index = 2;
             } else if (index == 6) {
@@ -215,10 +217,12 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
                 index = 4;
             } else if (index == 3) {
                 index = 6;
-            } else if (index == 4 || index == 6) {
+            } else if (index == 4) {
                 index = 5;
-            } else if (index == 5) {
-                model->parent_content_selection = 5;
+            } else if (index == 6) {
+                index = 7;
+            } else if (index == 5 || index == 7) {
+                model->parent_content_selection = index;
                 model->parent_footer_focused = true;
                 model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
             }
@@ -226,10 +230,12 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             if (index == 1) index = 0;
             else if (index == 3) index = 2;
             else if (index == 6) index = 4;
+            else if (index == 7) index = 5;
         } else if (horizontal > 0) {
             if (index == 0) index = 1;
             else if (index == 2) index = 3;
             else if (index == 4) index = 6;
+            else if (index == 5) index = 7;
         }
         model->selected_index = index;
         return;

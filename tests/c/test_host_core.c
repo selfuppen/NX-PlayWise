@@ -959,6 +959,24 @@ static void test_overlay_parent_actions_and_input(void)
         PTC_OVERLAY_PARENT_SKIP_EYE_CARE) != NULL,
         "overlay never offers a skip without the current break instance");
 
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK) != NULL, "overlay TV waiver requires dock status");
+    summary.dock_available = true;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK) != NULL, "overlay TV waiver explains disabled policy");
+    summary.force_docked = true;
+    summary.disable_flag_present = true;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK) == NULL,
+        "overlay TV recovery remains available alongside other restrictions and disable flag");
+    summary.force_docked = false;
+    summary.undocked_limit_enabled = true;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK) == NULL, "overlay can waive the non-TV quota alone");
+    summary.dock_waived_today = true;
+    check_true(ptc_overlay_parent_action_unavailable_reason(&summary,
+        PTC_OVERLAY_PARENT_WAIVE_DOCK) != NULL, "overlay TV waiver cannot be repeated");
+
     ptc_overlay_input_init(&code);
     ptc_overlay_input_init(&pin);
     (void)ptc_overlay_input_handle(&code, PTC_OVERLAY_BUTTON_A, 0, 0);

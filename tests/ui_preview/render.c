@@ -1139,6 +1139,15 @@ static int render_dock_previews(const char *directory, const PtcUiModel *baselin
         failed |= save_preview(directory, "child", "dock-handheld", &model, dark);
         model.view = PTC_UI_PARENT;
         model.parent_page = PTC_UI_PARENT_TODAY;
+        model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+        model.selected_index = 7;
+        failed |= save_preview(directory, "parent", "dock-today-waiver", &model, dark);
+        model.dock_waived_today = true;
+        failed |= save_preview(directory, "parent", "dock-today-waived", &model, dark);
+        model.dock_waived_today = false;
+        model.dock_available = false;
+        failed |= save_preview(directory, "parent", "dock-today-unknown", &model, dark);
+        model.dock_available = true;
         if (!ptc_ui_open_home_details(&model)) return 1;
         failed |= save_preview(directory, "parent", "dock-today-details", &model, dark);
         ptc_ui_cancel_overlay(&model);

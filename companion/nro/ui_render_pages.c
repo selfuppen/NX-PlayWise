@@ -8,6 +8,7 @@ static const UiAction TODAY_ACTIONS[] = {
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SKIP_BEDTIME), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_AUTONOMY_BUFFER_2), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_MUTED, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_EYE_CARE_SKIP), PTC_UI_TEXT_REFERENCE(PTC_UI_T_EYE_CARE_SKIP_NOT_RESTING), UI_WARNING, UI_ACTION_ICON_CLOCK, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_DOCK_WAIVE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_DOCK_ALLOWANCE), UI_SUCCESS, UI_ACTION_ICON_CONSOLE, UI_ACTION_VISUAL_NONE},
 };
 
 static const UiAction PLAN_ACTIONS[] = {
@@ -438,7 +439,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_text(pixels, stride, 574, 435, title2, 16, UI_WARNING);
     int title2_w = measure_text(title2, 16);
     draw_text(pixels, stride, 574 + title2_w + 14, 435, hint2, 13, UI_MUTED);
-    for (int index = 0; index < 7; ++index) {
+    for (int index = 0; index < 8; ++index) {
         UiRect box = to_uirect(ptc_ui_today_card_rect(index));
         bool focused = !model->parent_footer_focused && model->selected_index == index;
         bool clear_unavailable = index == 3 && fresh &&
@@ -446,7 +447,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
         const char *unavailable = ptc_ui_today_action_unavailable_reason(model, index, now);
         bool eye_needs_refresh = index == 6 && unavailable &&
             strcmp(unavailable, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_REFRESH)) == 0;
-        bool disabled = (model->disable_flag_present && index != 6) || model->waiting ||
+        bool disabled = (model->disable_flag_present && index != 6 && index != 7) || model->waiting ||
                         clear_unavailable || unavailable != NULL;
         const char *title = TODAY_ACTIONS[index].title;
         const char *subtitle = TODAY_ACTIONS[index].subtitle;
@@ -517,11 +518,12 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 subtitle = dynamic;
             }
         }
+        if (index == 7 && unavailable) subtitle = unavailable;
         action.title = title;
         action.subtitle = subtitle;
         draw_action_card(pixels, stride, box, &action, focused,
                          disabled ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE,
-                         (index == 0 || index >= 2) ? (is_en ? 76 : 82) : 0);
+                         (index == 0 || (index >= 2 && index != 7)) ? (is_en ? 76 : 82) : 0);
         if (index == 1 && unavailable)
             draw_text(pixels, stride, box.x + 78, box.y + 88,
                       ptc_ui_text(PTC_UI_T_TO_RESTORE_LIMIT_USE_SET_TODAY_LIMIT), 12, UI_DISABLED);
@@ -545,7 +547,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                              (badge_color == UI_WARNING ? UI_WARNING_SOFT : UI_PAGE)));
             draw_rect_outline(pixels, stride, tbadge, 6, 1, badge_color);
             draw_text_center(pixels, stride, tbadge, adjustment_badge, 12, badge_color);
-        } else if (index >= 2) {
+        } else if (index >= 2 && index != 7) {
             const char *badge = (!fresh || eye_needs_refresh) ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING)) :
                 (index == 2 ? (model->today_override_present &&
                                 model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED ? (ptc_ui_text(PTC_UI_T_ENABLED_2)) : (ptc_ui_text(PTC_UI_T_DISABLED))) :

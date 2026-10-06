@@ -76,7 +76,8 @@ void handle_today_action_ready(UiState *ui, int index)
     const char *unavailable = ptc_ui_today_action_unavailable_reason(
         &ui->model, index == PTC_UI_OPERATION_ADD_TODAY_MINUTES ? 1 :
         (index == PTC_UI_OPERATION_SKIP_BEDTIME ? 4 :
-         (index == PTC_UI_OPERATION_SKIP_EYE_CARE ? 6 : -1)), (int64_t)time(NULL));
+         (index == PTC_UI_OPERATION_SKIP_EYE_CARE ? 6 :
+          (index == PTC_UI_OPERATION_WAIVE_DOCK ? 7 : -1))), (int64_t)time(NULL));
     if (unavailable) {
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", unavailable);
         return;
@@ -180,6 +181,9 @@ void handle_today_action_ready(UiState *ui, int index)
         open_confirm_overlay(ui, PTC_UI_OPERATION_SKIP_BEDTIME, ptc_ui_text(PTC_UI_T_SKIP_BEDTIME_THIS_TIME), body);
         break;
     }
+    case PTC_UI_OPERATION_WAIVE_DOCK:
+        request_dock_waiver(ui);
+        break;
     case PTC_UI_OPERATION_SKIP_EYE_CARE:
         ui->model.pending_eye_care_break_id = ui->model.eye_care_break_id;
         ui->auth_retry_action = AUTH_RETRY_SKIP_EYE_CARE;
@@ -200,7 +204,7 @@ void handle_parent_action(UiState *ui)
         enter_parent_area(ui);
         return;
     }
-    if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY && index != 6) {
+    if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY && index != 6 && index != 7) {
         snprintf(ui->model.message, sizeof(ui->model.message),
                  ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_THIS_CONTROL_WRITE));
         return;

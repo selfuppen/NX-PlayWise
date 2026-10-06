@@ -910,7 +910,7 @@ static const char *bedtime_source_short(PtcBedtimeSource source)
 static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
-    UiRect panel = {824, 172, 402, 328};
+    UiRect panel = {824, 172, 402, 452};
     int index;
     fill_round_rect(pixels, stride, panel, 16, UI_RAISED);
     draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
@@ -1016,8 +1016,8 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
         draw_text(pixels, stride, row.x + row.width - 16, row.y + 26, ">", 13,
                   is_focused ? UI_ACCENT : UI_MUTED);
     }
-
-
+    draw_text(pixels, stride, panel.x + 14, panel.y + panel.height - 16,
+              ptc_ui_text(PTC_UI_T_PRESS_A_OR_CLICK_TO_VIEW_DAILY), 11, UI_MUTED);
 }
 
 static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

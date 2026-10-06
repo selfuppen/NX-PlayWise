@@ -71,6 +71,9 @@ int main(int argc, char **argv) {
                     status.remaining_minutes = 55; status.grant_minutes = 30;
                 } else if (scene == 3) {
                     view.parent_view_ = ParentView::Actions;
+                    status.dock_available = true;
+                    status.undocked_limit_enabled = true;
+                    view.parent_action_ = PTC_OVERLAY_PARENT_WAIVE_DOCK;
                 } else if (scene == 4) {
                     status.bedtime_active = true; status.bedtime_enabled = true;
                     status.bedtime_window_instance_id = 123;
