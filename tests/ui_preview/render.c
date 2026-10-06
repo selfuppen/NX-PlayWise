@@ -1117,6 +1117,54 @@ static int render_eye_care_previews(const char *directory, const PtcUiModel *bas
     return failed;
 }
 
+
+static int render_dock_previews(const char *directory, const PtcUiModel *baseline)
+{
+    int failed = 0;
+    for (int dark = 0; dark < 2; ++dark) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_DOCK;
+        model.dock_available = model.dock_supported_available = model.dock_supported = true;
+        model.undocked_usage_available = true;
+        model.dock_policy.undocked_limit_enabled = true;
+        model.dock_policy.undocked_daily_minutes = 30;
+        model.draft_dock_policy = model.dock_policy;
+        model.undocked_used_minutes = 12;
+        model.undocked_remaining_minutes = 18;
+        snprintf(model.operation_mode, sizeof(model.operation_mode), "undocked");
+        failed |= save_preview(directory, "plan", "dock-policy", &model, dark);
+        model.view = PTC_UI_CHILD;
+        failed |= save_preview(directory, "child", "dock-handheld", &model, dark);
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_TODAY;
+        if (!ptc_ui_open_home_details(&model)) return 1;
+        failed |= save_preview(directory, "parent", "dock-today-details", &model, dark);
+        ptc_ui_cancel_overlay(&model);
+        model.view = PTC_UI_CHILD;
+        model.dock_restriction_active = true;
+        model.blocked_today = model.restricted_now = 1;
+        model.remaining_minutes = 0;
+        model.undocked_used_minutes = 30;
+        model.undocked_remaining_minutes = 0;
+        failed |= save_preview(directory, "child", "dock-restricted", &model, dark);
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_PLAN;
+        model.plan_page = PTC_UI_PLAN_PAGE_DOCK;
+        model.draft_dock_policy.force_docked = model.dock_dirty = true;
+        model.dock_field_focus = 3;
+        failed |= save_preview(directory, "plan", "dock-force-draft", &model, dark);
+        model.dock_supported = false;
+        failed |= save_preview(directory, "plan", "dock-lite", &model, dark);
+        model.dock_supported = true;
+        model.undocked_usage_available = false;
+        snprintf(model.operation_mode, sizeof(model.operation_mode), "unknown");
+        failed |= save_preview(directory, "plan", "dock-unknown", &model, dark);
+    }
+    return failed;
+}
+
 static void localize_preview_baseline(PtcUiModel *model)
 {
     snprintf(model->command_name, sizeof(model->command_name), "%s", ptc_ui_text(PTC_UI_T_REFRESH_STATUS));
@@ -1176,6 +1224,7 @@ int main(int argc, char **argv)
     ptc_mkdir(argv[2]);
     failed |= render_all_previews(argv[2], &model);
     failed |= render_eye_care_previews(argv[2], &model);
+    failed |= render_dock_previews(argv[2], &model);
 
     /* Pass 2: English previews */
     char en_dir[1024];
@@ -1185,6 +1234,7 @@ int main(int argc, char **argv)
     localize_preview_baseline(&model);
     failed |= render_all_previews(en_dir, &model);
     failed |= render_eye_care_previews(en_dir, &model);
+    failed |= render_dock_previews(en_dir, &model);
     /* The focused eye care surfaces also receive traditional Chinese visual QA. */
     char zh_hant_dir[1024];
     snprintf(zh_hant_dir, sizeof(zh_hant_dir), "%s/zh_hant", argv[2]);
@@ -1192,6 +1242,7 @@ int main(int argc, char **argv)
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_TRADITIONAL);
     localize_preview_baseline(&model);
     failed |= render_eye_care_previews(zh_hant_dir, &model);
+    failed |= render_dock_previews(zh_hant_dir, &model);
     for (int dark = 0; dark < 2; ++dark) {
         failed |= render_setup_previews(zh_hant_dir, &model, dark);
         failed |= render_support_guide_previews(zh_hant_dir, &model, dark);

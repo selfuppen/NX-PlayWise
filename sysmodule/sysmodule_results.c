@@ -309,6 +309,35 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
         state->usage_consumed_minutes_30 = aggregate.consumed_minutes_30;
     }
     fill_bedtime_result_state(sysmodule, state, rules, runtime_state, pctl_status, now);
+    {
+        PtcOperationModeStatus mode = ptc_read_operation_mode(sysmodule);
+        uint64_t limit_ns = (uint64_t)rules->dock_policy.undocked_daily_minutes * 60000000000ULL;
+        state->dock_available = true;
+        state->force_docked = rules->dock_policy.force_docked;
+        state->undocked_limit_enabled = rules->dock_policy.undocked_limit_enabled;
+        state->undocked_daily_minutes = rules->dock_policy.undocked_daily_minutes;
+        state->operation_mode = mode.mode == PTC_OPERATION_MODE_DOCKED ? "docked" :
+            mode.mode == PTC_OPERATION_MODE_UNDOCKED ? "undocked" : "unknown";
+        state->dock_supported_available = mode.dock_supported_available;
+        state->dock_supported = mode.dock_supported;
+        state->undocked_usage_available = runtime_state->dock_usage_known && runtime_state->dock_day_index == now.day_index;
+        state->undocked_used_minutes = (uint16_t)(runtime_state->undocked_used_ns / 60000000000ULL);
+        state->undocked_remaining_minutes = runtime_state->undocked_used_ns < limit_ns
+            ? (uint16_t)((limit_ns - runtime_state->undocked_used_ns) / 60000000000ULL) : 0;
+        state->dock_waived_today = runtime_state->dock_waived && runtime_state->dock_waived_day_index == now.day_index;
+        state->dock_restriction_active = dock_policy_blocks(sysmodule, rules, runtime_state, now);
+        state->dock_unlimited_capped = dock_policy_enabled(rules) &&
+            ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index)).mode == PTC_RULE_MODE_UNLIMITED;
+        if (runtime_state->dock_enforced) {
+            PtcDayRule base = ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
+            state->daily_restriction_active = base.mode == PTC_RULE_MODE_LIMIT && runtime_state->dock_baseline_known &&
+                runtime_state->dock_last_used_ns >= (uint64_t)base.minutes * 60000000000ULL;
+        }
+        if (state->dock_restriction_active) {
+            state->daily_buffer_available = false;
+            state->daily_buffer_reason = "dock_active";
+        }
+    }
     state->eye_care_enabled = rules->eye_care.enabled;
     state->eye_care_play_minutes = rules->eye_care.play_minutes;
     state->eye_care_rest_minutes = rules->eye_care.rest_minutes;

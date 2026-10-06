@@ -7,6 +7,7 @@
 #include "../../platform/switch/fs_storage.h"
 #include "../../platform/switch/pctl_adapter.h"
 #include "../../platform/switch/time_provider.h"
+#include "../../platform/switch/operation_mode.h"
 #include "../../platform/switch/usage_stats_adapter.h"
 #include "../../platform/install_defaults.h"
 #include "../../common/time/ptc_time.h"
@@ -59,6 +60,7 @@ void __appInit(void)
 
 void __appExit(void)
 {
+    ptc_switch_operation_mode_exit();
     timeExit();
     fsdevUnmountAll();
     fsExit();
@@ -315,6 +317,9 @@ int main(int argc, char **argv)
         append_boot_log(&sysmodule, "recovered processing requests");
     }
     (void)ptc_sysmodule_cleanup(&sysmodule);
+    PtcOperationModeProvider operation_mode_provider;
+    ptc_switch_operation_mode_init(&operation_mode_provider);
+    sysmodule.operation_mode_provider = &operation_mode_provider;
     (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
     ipc_available = ptc_ipc_server_start(&ipc_server, &sysmodule);
     if (!ipc_available) append_boot_log(&sysmodule, PLAYWISE_IPC_SERVICE " unavailable; using file transport only");

@@ -85,4 +85,10 @@ PtcCompanionStatus ptc_companion_transport_submit_overlay_ready(PtcCompanionTran
     const char *request_id, int64_t created_at, const char *release_id,
     const char *boot_id, const char *environment_fingerprint);
 
+PtcCompanionStatus ptc_companion_transport_submit_set_dock_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcDockPolicy *policy);
+
+PtcCompanionStatus ptc_companion_transport_submit_waive_dock_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint16_t day_index);
+
 #endif

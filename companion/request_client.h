@@ -36,4 +36,9 @@ int ptc_companion_overlay_ready_request_json(char *out, size_t out_size,
     const char *request_id, int64_t created_at, const char *release_id,
     const char *boot_id, const char *environment_fingerprint);
 
+int ptc_companion_set_dock_policy_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, const PtcDockPolicy *policy);
+int ptc_companion_waive_dock_policy_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, uint16_t day_index);
+
 #endif

@@ -148,8 +148,8 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         (model->parent_page == PTC_UI_PARENT_SUPPORT
             ? index > count + model->recent_event_count
             : (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT && model->forecast_available
-                ? index >= count + 7
-                : index >= count))) {
+                ? index > 13
+                : (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT ? index > 13 : index >= count)))) {
         index = 0;
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
@@ -238,6 +238,15 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         static const int left_target[6] = {0, 1, 2, 0, 1, 2};
         static const int right_target[6] = {3, 4, 5, 3, 4, 5};
         int previous = index;
+        if (index == 13) {
+            if (horizontal < 0) index = 5;
+            else if (vertical < 0) index = model->forecast_available ? 12 : 5;
+            else if (vertical > 0) { model->parent_content_selection = 13; model->parent_footer_focused = true; }
+            model->selected_index = index;
+            return;
+        }
+        if (index == 5 && horizontal > 0) { model->selected_index = 13; return; }
+        if (index == 12 && vertical > 0) { model->selected_index = 13; return; }
         if (index >= 6 && index <= 12) {
             if (horizontal < 0) {
                 index = index <= 7 ? 3 : (index <= 9 ? 4 : 5);
@@ -299,5 +308,48 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             model->parent_footer_focused = true;
             model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
         }
+    }
+}
+
+bool ptc_ui_dock_dirty(const PtcUiModel *model)
+{
+    return model && (model->dock_policy.force_docked != model->draft_dock_policy.force_docked ||
+        model->dock_policy.undocked_limit_enabled != model->draft_dock_policy.undocked_limit_enabled ||
+        model->dock_policy.undocked_daily_minutes != model->draft_dock_policy.undocked_daily_minutes);
+}
+
+bool ptc_ui_dock_save_requires_hold(const PtcUiModel *model, int64_t now)
+{
+    const PtcDockPolicy *draft;
+    if (!model) return true;
+    draft = &model->draft_dock_policy;
+    if (!(draft->force_docked || draft->undocked_limit_enabled) || model->dock_waived_today) return false;
+    if (!ptc_ui_status_is_fresh(model, now) || !model->dock_available) return true;
+    if (strcmp(model->operation_mode, "docked") == 0) return false;
+    return draft->force_docked || strcmp(model->operation_mode, "undocked") != 0 ||
+        (draft->undocked_limit_enabled && (!model->undocked_usage_available ||
+         model->undocked_used_minutes >= draft->undocked_daily_minutes));
+}
+
+void ptc_ui_format_dock_usage(const PtcUiModel *model, int64_t now, char *out, size_t out_size)
+{
+    char usage[192];
+    const char *mode;
+    if (!out || !out_size) return;
+    if (!model || !model->dock_available || !ptc_ui_status_is_fresh(model, now))
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+    else {
+        mode = strcmp(model->operation_mode, "docked") == 0 ? ptc_ui_text(PTC_UI_T_DOCK_TV) :
+            strcmp(model->operation_mode, "undocked") == 0 ? ptc_ui_text(PTC_UI_T_DOCK_HANDHELD) :
+            ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM);
+        PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("used", model->undocked_used_minutes),
+            PTC_UI_TEXT_NUMBER("remaining", model->undocked_remaining_minutes)};
+        if (!(model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled))
+            snprintf(usage, sizeof(usage), "%s", ptc_ui_text(PTC_UI_T_DOCK_OFF));
+        else if (!model->undocked_usage_available)
+            snprintf(usage, sizeof(usage), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+        else (void)ptc_ui_text_format(model->dock_policy.undocked_limit_enabled ?
+            PTC_UI_T_DOCK_USAGE_NAMED : PTC_UI_T_DOCK_USAGE_ONLY_NAMED, usage, sizeof(usage), args, 2);
+        snprintf(out, out_size, "%s / %s", mode, usage);
     }
 }

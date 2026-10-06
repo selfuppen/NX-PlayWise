@@ -8,6 +8,15 @@
 
 # Testing Guide
 
+## Dock policy acceptance
+
+Deterministic C tests cover sub-minute consumption, conservative transition attribution, stable TV, sleep, restart, day rollover, zero/disabled allowance, first enable, shared unlimited cap, waiver dates, Lite, prerequisites, nonce/buffer preservation and write/result rollback. UI tests cover controller/touch entry and fields, three languages, missing old status, draft retention and immediate-restriction hold gates. The actual renderer produces `dock-*` dark/light previews in all three languages.
+
+Run `python tools/test.py` and `python tools/package_remote.py`; the latter must build and verify the standard Zip and `build/eden-test/pctc-eden.nro`. Add `--with-previews` for visual QA. Eden reads `sdmc:/switch/playwise-eden/operation-mode.txt`: `docked`, `undocked`, or other text for unknown; a missing file defaults to undocked. Changes are sampled on the next second and provide no hardware evidence.
+
+Hardware acceptance must bind candidate Zip SHA-256 and model/HOS/Atmosphere, exercise dock transitions (begin within two seconds), HOME/game/sleep, fragmented use, midnight/restart, edits, waiver expiry, simultaneous total/bedtime/eye-care limits, grants without bypass, restricted Overlay single-use PIN recovery, unavailable readings, write/readback/restore failures, emergency disable and installation snapshot restore. Keep qualification pending until these pass; Host/Eden never substitute for real-device evidence.
+
+
 ## Eye care, bedtime and allowance safety regression
 
 `tests/c/test_control_safety.c` runs through the C host entry point in `python tools/package_remote.py`, followed by standard package and Eden application builds and validation. Coverage includes exact nonce matching, all 512 v2 nonces, real filesystem oversized-ledger expiry cleanup and current-day normalization/deduplication, read failures, damaged tails, duplicate JSON keys, pending transaction isolation and timeout rollback, orphan pending protection, failed rules/state reads preventing writes, short and complete natural rests, recovered usage deltas, midnight cycles and read-only projections, protected recovery under lower new-day quotas, recovery write failures, bedtime result failures restoring snapshots and instance metadata, and BLOCKED targets avoiding 1451. Both memory and filesystem storage reject truncated reads; Device Lab tests read complete reports.
@@ -254,6 +263,6 @@ Calendar UI regression: verify B back, Y refresh, X format help, L/R lists, ZL/Z
 
 ## Overlay previews and troubleshooting regression
 
-Run `python tools/test.py` and `python tools/package_remote.py --with-previews`, including standard package and default Eden validation. Each language gets seven 448x720 production Overlay scenes. Support previews cover four help pages plus unknown, disabled and stale parental controls in light/dark themes. Run `python tools/sync_doc_previews.py --check` to check documentation freshness.
+Run `python tools/test.py` and `python tools/package_remote.py --with-previews`, including standard package and default Eden validation. Each language gets ten 448x720 production Overlay scenes. Support previews cover four help pages plus unknown, disabled and stale parental controls in light/dark themes. Run `python tools/sync_doc_previews.py --check` to check documentation freshness.
 
 Host checks cover guide navigation with zero/three events, touch paging, wraparound, focus preservation, emergency-disable access, input blocking underneath and inactive-guide navigation. Inspect long text, page numbers, check status and buttons in all three languages/themes. Time sync is manual; unknown controls must not appear off. Verify controller/touch and unavailable-backend help on a Switch; manually refresh after DBI/QuickNTP sync and retest restrictions with a non-critical game. Host previews do not prove PCTL effects.

@@ -95,6 +95,8 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_BEDTIME_ACTIVE, now.day_index);
     }
+    if (request->type == PTC_REQUEST_ADD_TODAY_MINUTES && dock_blocks_grants(sysmodule, now))
+        return finish_with_error(sysmodule, request, "release", true, PTC_ERR_DOCK_ACTIVE, now.day_index);
     if (request->type == PTC_REQUEST_ADD_TODAY_MINUTES && eye_care_blocks_grants(sysmodule)) {
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
@@ -105,6 +107,9 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (!load_state(sysmodule, &runtime_state)) {
         return finish_with_error(sysmodule, request, "release", true, PTC_ERR_BAD_REQUEST, now.day_index);
     }
+    dock_sample_usage(sysmodule, &rules, &runtime_state, now);
+    if (dock_policy_enabled(&rules) && !save_state(sysmodule, &runtime_state, now.unix_seconds))
+        return finish_with_error(sysmodule, request, "release", false, PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     before_active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
@@ -152,11 +157,11 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
             active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
             PtcPctlTargetMode request_target = target_from_day_rule(active_rule);
             uint16_t request_minutes = active_rule.minutes;
-            if (rules.eye_care.enabled && active_rule.mode == PTC_RULE_MODE_UNLIMITED) {
+            if ((rules.eye_care.enabled || dock_policy_enabled(&rules)) && active_rule.mode == PTC_RULE_MODE_UNLIMITED) {
                 request_target = PTC_PCTL_TARGET_LIMIT;
                 request_minutes = 1440u;
             }
-            if (runtime_state.bedtime_enforced || runtime_state.eye_care_resting) {
+            if (runtime_state.bedtime_enforced || runtime_state.eye_care_resting || dock_policy_blocks(sysmodule, &rules, &runtime_state, now)) {
                 request_target = PTC_PCTL_TARGET_BLOCKED;
                 request_minutes = 0u;
             }
@@ -174,6 +179,11 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
                 }
                 return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
             }
+        }
+        if (dock_policy_enabled(&rules)) {
+            dock_rebaseline(sysmodule, &runtime_state, ptc_weekday_from_day_index(now.day_index));
+            if (!save_state(sysmodule, &runtime_state, now.unix_seconds))
+                return finish_with_error(sysmodule, request, "release", false, PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
         }
         {
             uint16_t activity_minutes = request->minutes;
@@ -241,6 +251,7 @@ static bool process_eye_care_skip(PtcSysmodule *sysmodule, const PtcRequest *req
             PTC_ERR_EYE_CARE_BREAK_NOT_ACTIVE, now.day_index);
     mode = day_rule.mode == PTC_RULE_MODE_UNLIMITED ? PTC_PCTL_TARGET_LIMIT : target_from_day_rule(day_rule);
     minutes = day_rule.mode == PTC_RULE_MODE_UNLIMITED ? 1440u : day_rule.minutes;
+    if (dock_policy_blocks(sysmodule, &rules, &state, now)) { mode = PTC_PCTL_TARGET_BLOCKED; minutes = 0; }
     err = apply_target(sysmodule, request, now, "release", mode, minutes);
     if (err == PTC_ERR_OK)
         err = observe_target_with_optional_activation(sysmodule, request, now, "release",
@@ -306,7 +317,8 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
         request.type != PTC_REQUEST_STATUS && request.type != PTC_REQUEST_OVERLAY_READY) {
         bool recovery_action = request.type == PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT ||
             request.type == PTC_REQUEST_SKIP_BEDTIME || request.type == PTC_REQUEST_DISABLE_BEDTIME ||
-            request.type == PTC_REQUEST_SKIP_EYE_CARE_BREAK;
+            request.type == PTC_REQUEST_SKIP_EYE_CARE_BREAK ||
+            request.type == PTC_REQUEST_WAIVE_DOCK_POLICY_TODAY;
         if (!recovery_action) {
             (void)finish_with_error(sysmodule, &request, "release", true, PTC_ERR_CONTROL_BUSY, now.day_index);
             return;
@@ -334,6 +346,7 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
         request.type != PTC_REQUEST_SKIP_BEDTIME &&
         request.type != PTC_REQUEST_DISABLE_BEDTIME &&
         request.type != PTC_REQUEST_SKIP_EYE_CARE_BREAK &&
+        request.type != PTC_REQUEST_WAIVE_DOCK_POLICY_TODAY &&
         request.type != PTC_REQUEST_OVERLAY_READY) {
         PtcSetupState setup;
         if (!load_setup_state(sysmodule, &setup) || strcmp(setup.phase, "active") != 0) {
@@ -342,6 +355,8 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
             return;
         }
     }
+
+    if (process_dock_request(sysmodule, &request, disable_flag, now)) return;
 
     if (process_grant_request_surface(
             sysmodule, &request, &config, disable_flag, now) ||

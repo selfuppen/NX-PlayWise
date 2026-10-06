@@ -340,3 +340,21 @@ PtcCompanionStatus ptc_companion_transport_submit_overlay_ready(PtcCompanionTran
     if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
     return ptc_companion_transport_submit_json(client, request_id, json);
 }
+
+PtcCompanionStatus ptc_companion_transport_submit_set_dock_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, const PtcDockPolicy *policy)
+{
+    char json[512];
+    int written = ptc_companion_set_dock_policy_request_json(json, sizeof(json), request_id, created_at, policy);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}
+
+PtcCompanionStatus ptc_companion_transport_submit_waive_dock_policy(PtcCompanionTransportClient *client,
+    const char *request_id, int64_t created_at, uint16_t day_index)
+{
+    char json[512];
+    int written = ptc_companion_waive_dock_policy_request_json(json, sizeof(json), request_id, created_at, day_index);
+    if (written < 0 || written >= (int)sizeof(json)) return PTC_COMPANION_BAD_ARGUMENT;
+    return ptc_companion_transport_submit_json(client, request_id, json);
+}

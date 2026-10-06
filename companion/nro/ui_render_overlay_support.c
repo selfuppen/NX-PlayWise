@@ -888,6 +888,17 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
     } else {
         draw_home_metrics_view(pixels, stride, model, dialog);
     }
+    if (model->dock_available) {
+        char dock[256];
+        ptc_ui_format_dock_usage(model, ptc_ui_render_now(), dock, sizeof(dock));
+        draw_wrapped_text(pixels, stride, dialog.x + 28, dialog.y + 530,
+            dock, 14, 1064, 18, 1, UI_ACCENT);
+        if (ptc_ui_status_is_fresh(model, ptc_ui_render_now()) &&
+            (model->dock_restriction_active || model->dock_waived_today))
+            draw_wrapped_text(pixels, stride, dialog.x + 28, dialog.y + 554,
+                ptc_ui_text(model->dock_waived_today ? PTC_UI_T_DOCK_WAIVED : PTC_UI_T_DOCK_CONNECT),
+                12, 1064, 18, 1, model->dock_waived_today ? UI_SUCCESS : UI_DANGER);
+    }
     home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_B_RETURN), false, true, false);
 }
 

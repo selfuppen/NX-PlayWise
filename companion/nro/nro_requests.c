@@ -237,6 +237,8 @@ void load_rule_drafts(UiState *ui)
     ui->model.draft_scheduled_override = rules.scheduled_override;
     ui->model.autonomy_policy = rules.autonomy_policy;
     ui->model.draft_autonomy_policy = rules.autonomy_policy;
+    ui->model.dock_policy = rules.dock_policy;
+    if (!ui->model.dock_dirty) ui->model.draft_dock_policy = rules.dock_policy;
     ui->model.bedtime_policy = rules.bedtime;
     ui->model.draft_bedtime_policy = rules.bedtime;
     if (!ui->client.storage->vtable->read_text(ui->client.storage, RULES_PATH, text, sizeof(text))) {
@@ -290,6 +292,10 @@ void load_rule_drafts(UiState *ui)
     if (!ptc_scheduled_override_is_valid(&rules.scheduled_override)) {
         rules.scheduled_override.enabled = false;
     }
+    rules.dock_policy.force_docked = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "force_docked"));
+    rules.dock_policy.undocked_limit_enabled = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "undocked_limit_enabled"));
+    int dock_minutes = rule_json_int(root, "undocked_daily_minutes", 30);
+    rules.dock_policy.undocked_daily_minutes = (uint16_t)(dock_minutes >= 0 && dock_minutes <= 1440 ? dock_minutes : 30);
     rules.autonomy_policy.daily_buffer_minutes = (uint16_t)rule_json_int(
         root, "daily_buffer_minutes", 0);
     if (!ptc_autonomy_policy_is_valid(&rules.autonomy_policy)) {
@@ -372,6 +378,8 @@ void load_rule_drafts(UiState *ui)
     ui->model.draft_scheduled_override = rules.scheduled_override;
     ui->model.autonomy_policy = rules.autonomy_policy;
     ui->model.draft_autonomy_policy = rules.autonomy_policy;
+    ui->model.dock_policy = rules.dock_policy;
+    if (!ui->model.dock_dirty) ui->model.draft_dock_policy = rules.dock_policy;
     ui->model.bedtime_policy = rules.bedtime;
     ui->model.draft_bedtime_policy = rules.bedtime;
     ui->model.holiday_dirty = false;

@@ -24,7 +24,8 @@
     "set:sys",
     "spl:",
     "pctl",
-    "pctl:s"
+    "pctl:s",
+    "omm"
   ],
   "service_host": ["pctc:u"],
   "kernel_capabilities": [

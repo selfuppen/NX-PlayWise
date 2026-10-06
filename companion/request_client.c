@@ -1,4 +1,5 @@
 #include "request_client.h"
+#include "../common/protocol/request_schema.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -221,4 +222,25 @@ int ptc_companion_overlay_ready_request_json(char *out, size_t out_size,
         "\"environment_fingerprint\":\"%s\"}}\n",
         request_id, (long long)created_at, release_id ? release_id : "",
         boot_id ? boot_id : "", environment_fingerprint ? environment_fingerprint : "");
+}
+
+int ptc_companion_set_dock_policy_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, const PtcDockPolicy *policy)
+{
+    if (!out || !ptc_request_id_is_valid(request_id) || !policy || policy->undocked_daily_minutes > 1440u) return -1;
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"set_dock_policy\","
+        "\"created_at\":%lld,\"payload\":{\"force_docked\":%s,\"undocked_limit_enabled\":%s,\"undocked_daily_minutes\":%u}}\n",
+        request_id, (long long)created_at, policy->force_docked ? "true" : "false",
+        policy->undocked_limit_enabled ? "true" : "false", policy->undocked_daily_minutes);
+}
+
+int ptc_companion_waive_dock_policy_request_json(char *out, size_t out_size,
+    const char *request_id, int64_t created_at, uint16_t day_index)
+{
+    if (!out || !ptc_request_id_is_valid(request_id)) return -1;
+    return snprintf(out, out_size,
+        "{\"version\":1,\"request_id\":\"%s\",\"type\":\"waive_dock_policy_today\","
+        "\"created_at\":%lld,\"payload\":{\"expected_day_index\":%u}}\n",
+        request_id, (long long)created_at, day_index);
 }

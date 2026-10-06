@@ -78,6 +78,19 @@ typedef struct {
     int64_t eye_care_rest_remaining_seconds;
     uint64_t eye_care_break_id;
     bool eye_care_unlimited_capped;
+    bool dock_available;
+    bool force_docked;
+    bool undocked_limit_enabled;
+    uint16_t undocked_daily_minutes;
+    const char *operation_mode;
+    bool dock_supported_available;
+    bool dock_supported;
+    bool undocked_usage_available;
+    uint16_t undocked_used_minutes;
+    uint16_t undocked_remaining_minutes;
+    bool dock_waived_today;
+    bool dock_restriction_active;
+    bool dock_unlimited_capped;
 } PtcResultState;
 
 typedef struct {

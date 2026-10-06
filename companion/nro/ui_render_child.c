@@ -10,7 +10,7 @@ static float child_remaining_fraction(const PtcUiModel *model, bool *available)
         *available = true;
         return 0.0f;
     }
-    if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
+    if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped)) {
         *available = true;
         return 1.0f;
     }
@@ -96,7 +96,7 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
         bool available = fresh && model->forecast_available && i < 7 &&
             model->forecast[i].day_index == target_day;
 
-        if (available && i == 0 && (model->unrestricted_today == 1 || model->eye_care_unlimited_capped)) {
+        if (available && i == 0 && (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped))) {
             snprintf(val_str, sizeof(val_str), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
             val_color = UI_SUCCESS;
         } else if (available) {
@@ -129,7 +129,7 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
         /* 规则来源标签 */
         char source[64];
         char fitted_src[64];
-        if (available && i == 0 && (model->unrestricted_today == 1 || model->eye_care_unlimited_capped)) {
+        if (available && i == 0 && (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped))) {
             snprintf(source, sizeof(source), "%s", ui_rule_source_label(model->rule_source));
         } else if (available) {
             snprintf(source, sizeof(source), "%s", ui_rule_source_label(model->forecast[i].rule_source));
@@ -222,7 +222,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     } else if (eye_resting) {
         snprintf(gauge_left, sizeof(gauge_left), "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING));
         snprintf(gauge_right, sizeof(gauge_right), "%s", ptc_ui_text(PTC_UI_T_REST_AS_PLANNED));
-    } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
+    } else if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped)) {
         fill_round_rect(pixels, stride, slot, 4, UI_SUCCESS);
         snprintf(gauge_left, sizeof(gauge_left), "%s", ptc_ui_text(PTC_UI_T_UNLIMITED_TODAY));
         snprintf(gauge_right, sizeof(gauge_right), "%s", ptc_ui_text(PTC_UI_T_REST_AS_PLANNED));
@@ -252,7 +252,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     draw_text(pixels, stride, top_box.x + 28, top_box.y + 196, line, 14, UI_RGB(UI_BLENDED(hero_secondary)));
 
     format_status_age(model, age, sizeof(age));
-    draw_text(pixels, stride, top_box.x + 28, top_box.y + 232, age, 12, UI_RGB(UI_BLENDED(hero_secondary)));
+    draw_text(pixels, stride, top_box.x + 28, top_box.y + (model->dock_available ? 250 : 232), age, 11, UI_RGB(UI_BLENDED(hero_secondary)));
 
     /* 右列 (x: 374, w: 494)：三周期态势卡片（额度流、护眼周期、就寝计划） */
     const int c_x = top_box.x + 360;
@@ -265,7 +265,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     draw_rect_outline(pixels, stride, card1, 10, 1, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0xFFFFFF, 18)));
     draw_text(pixels, stride, card1.x + 14, card1.y + 24, ptc_ui_text(PTC_UI_T_TODAY_QUOTA), 14, UI_RGB(UI_BLENDED(on_hero)));
     char quota_badge[64];
-    if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) snprintf(quota_badge, sizeof(quota_badge), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
+    if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped)) snprintf(quota_badge, sizeof(quota_badge), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
     else snprintf(quota_badge, sizeof(quota_badge), "%s", model->status_loaded ? ui_rule_source_label(model->rule_source) : ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM));
     int qb_w = measure_text(quota_badge, 12) + 14;
     UiRect qb_rect = {card1.x + card1.width - qb_w - 12, card1.y + 8, qb_w, 20};
@@ -354,6 +354,12 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     fit_text(fitted_bed, sizeof(fitted_bed), bed_str, 13, card3.width - 28);
     draw_text(pixels, stride, card3.x + 14, card3.y + 50, fitted_bed, 13, bedtime_enforcing ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
 
+    if (model->dock_available) {
+        char dock_text[192];
+        ptc_ui_format_dock_usage(model, ptc_ui_render_now(), dock_text, sizeof(dock_text));
+        draw_wrapped_text(pixels, stride, top_box.x + 28, top_box.y + 214,
+            dock_text, 12, 304, 15, 2, UI_RGB(UI_BLENDED(on_hero)));
+    }
     /* --- 下半部：未来本周每天额度周历预报 (896x222) --- */
     draw_child_forecast_columns(pixels, stride, model, bottom_box);
 }
@@ -424,6 +430,8 @@ static void draw_child_status_card(uint32_t *pixels, uint32_t stride, const PtcU
         else if (model->waiting) detail = ptc_ui_text(PTC_UI_T_PLEASE_WAIT_AND_CONTINUE_AFTER_COMPLETION);
         else detail = ptc_ui_text(PTC_UI_T_IF_YOU_NEED_HELP_PLEASE_CHECK_SUPPORT);
     }
+    if (model->dock_restriction_active && ptc_ui_status_is_fresh(model, ptc_ui_render_now()))
+        detail = ptc_ui_text(PTC_UI_T_DOCK_CONNECT);
     fill_round_rect(pixels, stride, card, 12, background);
     draw_rect_outline(pixels, stride, card, 12, 1, alert ? accent : UI_BORDER);
     draw_status_symbol(pixels, stride, card.x + 14, card.y + 18, accent,
@@ -440,16 +448,17 @@ static void draw_child_status_card(uint32_t *pixels, uint32_t stride, const PtcU
 void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     char buffer[128], hint[160], fitted_hint[160];
-    bool disabled = model->disable_flag_present || model->waiting;
+    bool dock_blocked = ptc_ui_status_is_fresh(model, ptc_ui_render_now()) && model->dock_restriction_active;
+    bool disabled = model->disable_flag_present || model->waiting || dock_blocked;
     bool code_unavailable = ptc_ui_status_is_fresh(model, ptc_ui_render_now()) &&
-        (model->unrestricted_today == 1 || model->eye_care_unlimited_capped);
+        (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped));
     draw_header(pixels, stride, ptc_ui_text(PTC_UI_T_SELF_DISCIPLINE_IS_FREEDOM), ptc_ui_text(PTC_UI_T_ARRANGE_TIME_REASONABLY_AND_BE_THE_MASTER));
     draw_time_status_bar(pixels, stride, model);
     draw_child_task_summary(pixels, stride, model);
 
     /* 右侧动作栏 (4 个紧凑功能项目) */
     draw_child_action_button(pixels, stride, ptc_ui_child_submit_rect(),
-        model->disable_flag_present ? ptc_ui_text(PTC_UI_T_REDEMPTION_IS_CURRENTLY_UNAVAILABLE) :
+        dock_blocked ? ptc_ui_text(PTC_UI_T_DOCK_BLOCKED) : model->disable_flag_present ? ptc_ui_text(PTC_UI_T_REDEMPTION_IS_CURRENTLY_UNAVAILABLE) :
         (code_unavailable ? ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_GRANT_CODES_ARE) : ptc_ui_text(PTC_UI_T_A_ENTER_CODE)),
         0, true, false, disabled || code_unavailable);
 

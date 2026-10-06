@@ -300,7 +300,7 @@ static void draw_tabs(uint32_t *pixels, uint32_t stride, const PtcUiModel *model
         const char *name = model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY ? (ptc_ui_text(PTC_UI_T_WEEKLY_PLAN)) :
             (model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY ? (ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAYS)) :
             (model->plan_page == PTC_UI_PLAN_PAGE_BEDTIME ? (ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE)) :
-            (ptc_ui_text(PTC_UI_T_EYE_CARE))));
+            (model->plan_page == PTC_UI_PLAN_PAGE_DOCK ? ptc_ui_text(PTC_UI_T_DOCK_TITLE) : ptc_ui_text(PTC_UI_T_EYE_CARE))));
         home_button(pixels, stride, ptc_ui_advanced_back_rect(), ptc_ui_text(PTC_UI_T_B_BACK_TO_PLANS), false, false, false);
         {
             char path[96];
@@ -647,6 +647,7 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         if (model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY) title = ptc_ui_text(PTC_UI_T_WEEKLY_PLAN);
         else if (model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) title = ptc_ui_text(PTC_UI_T_NATIONAL_HOLIDAYS);
         else if (model->plan_page == PTC_UI_PLAN_PAGE_BEDTIME) title = ptc_ui_text(PTC_UI_T_BEDTIME);
+        else if (model->plan_page == PTC_UI_PLAN_PAGE_DOCK) title = ptc_ui_text(PTC_UI_T_DOCK_TITLE);
         else if (model->plan_page == PTC_UI_PLAN_PAGE_EYE_CARE) title = ptc_ui_text(PTC_UI_T_EYE_CARE);
     }
     draw_header(pixels, stride, title,

@@ -35,6 +35,9 @@ static bool process_disable_today_limit(
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_BEDTIME_ACTIVE, now.day_index);
     }
+    if (dock_blocks_grants(sysmodule, now)) {
+        return finish_with_error(sysmodule, request, "release", true, PTC_ERR_DOCK_ACTIVE, now.day_index);
+    }
     if (eye_care_blocks_grants(sysmodule)) {
         return finish_with_error(sysmodule, request, "release", true,
             PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
@@ -64,12 +67,12 @@ static bool process_disable_today_limit(
 
     pctl_changed = true;
     err = apply_target(sysmodule, request, now, "release",
-        updated_rules.eye_care.enabled ? PTC_PCTL_TARGET_LIMIT : PTC_PCTL_TARGET_UNLIMITED,
-        updated_rules.eye_care.enabled ? 1440u : 0u);
+        (updated_rules.eye_care.enabled || dock_policy_enabled(&updated_rules)) ? PTC_PCTL_TARGET_LIMIT : PTC_PCTL_TARGET_UNLIMITED,
+        (updated_rules.eye_care.enabled || dock_policy_enabled(&updated_rules)) ? 1440u : 0u);
     if (err == PTC_ERR_OK) {
         err = observe_target_with_optional_activation(sysmodule, request, now,
-            "release", updated_rules.eye_care.enabled ? PTC_PCTL_TARGET_LIMIT : PTC_PCTL_TARGET_UNLIMITED,
-            updated_rules.eye_care.enabled ? 1440u : 0u,
+            "release", (updated_rules.eye_care.enabled || dock_policy_enabled(&updated_rules)) ? PTC_PCTL_TARGET_LIMIT : PTC_PCTL_TARGET_UNLIMITED,
+            (updated_rules.eye_care.enabled || dock_policy_enabled(&updated_rules)) ? 1440u : 0u,
             "disable_today_limit", &observed_status);
     }
     if (err != PTC_ERR_OK) {
@@ -125,7 +128,17 @@ PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *req
     PtcErrorCode err;
     if (!runtime_state->bedtime_enforced) return PTC_ERR_OK;
     if (!recovery_begin(sysmodule, request, now)) return PTC_ERR_PCTL_BACKUP_FAILED;
-    if (now.day_index == runtime_state->bedtime_start_day_index &&
+    if (dock_policy_blocks(sysmodule, rules, runtime_state, now) || runtime_state->eye_care_resting) {
+        /* Removing bedtime must not transiently reopen another restriction. */
+        err = sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+            ptc_weekday_from_day_index(now.day_index), &observed);
+        if (err != PTC_ERR_OK || !target_settings_observed(PTC_PCTL_TARGET_BLOCKED, 0, &observed))
+            err = apply_target(sysmodule, request, now, "release", PTC_PCTL_TARGET_BLOCKED, 0);
+        if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+        err = observe_target_with_optional_activation(sysmodule, request, now, "release",
+            PTC_PCTL_TARGET_BLOCKED, 0, "bedtime_other_restriction", &observed);
+        if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+    } else if (now.day_index == runtime_state->bedtime_start_day_index &&
         load_bedtime_snapshot(sysmodule, &snapshot, &snapshot_instance, &snapshot_start_day) &&
         snapshot_instance == runtime_state->bedtime_window_instance_id &&
         snapshot_start_day == runtime_state->bedtime_start_day_index) {
@@ -135,9 +148,9 @@ PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *req
     } else {
         PtcDayRule base = ptc_rules_today_rule(
             rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-        PtcPctlTargetMode base_mode = rules->eye_care.enabled && base.mode == PTC_RULE_MODE_UNLIMITED
+        PtcPctlTargetMode base_mode = (rules->eye_care.enabled || dock_policy_enabled(rules)) && base.mode == PTC_RULE_MODE_UNLIMITED
             ? PTC_PCTL_TARGET_LIMIT : target_from_day_rule(base);
-        uint16_t base_minutes = rules->eye_care.enabled && base.mode == PTC_RULE_MODE_UNLIMITED
+        uint16_t base_minutes = (rules->eye_care.enabled || dock_policy_enabled(rules)) && base.mode == PTC_RULE_MODE_UNLIMITED
             ? 1440u : base.minutes;
         err = apply_target(sysmodule, request, now, "release",
             base_mode, base_minutes);

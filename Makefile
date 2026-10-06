@@ -54,6 +54,7 @@ ORCH_SRCS := \
 	sysmodule/sysmodule_calendar.c \
 	sysmodule/sysmodule_request_grants.c \
 	sysmodule/sysmodule_request_recovery.c \
+	sysmodule/sysmodule_dock.c \
 	sysmodule/sysmodule_core.c \
 	companion/auth.c \
 	companion/file_protocol.c \

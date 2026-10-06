@@ -287,6 +287,12 @@ void handle_parent_action(UiState *ui)
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING));
             ui->model.overlay_body[0] = '\0';
             break;
+        case 13:
+            if (!ui->model.dock_dirty) ui->model.draft_dock_policy = ui->model.dock_policy;
+            ui->model.dock_field_focus = 0;
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_DOCK;
+            ui->model.parent_footer_focused = false;
+            break;
         case 6:
         case 7:
         case 8:
@@ -741,6 +747,22 @@ void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_SKIP_BEDTIME:
         submit_bedtime_skip(ui);
         break;
+    case PTC_UI_OPERATION_SAVE_DOCK:
+        submit_dock_policy(ui);
+        break;
+    case PTC_UI_OPERATION_WAIVE_DOCK:
+        submit_dock_waiver(ui);
+        break;
+    case PTC_UI_OPERATION_CONFIRM_DOCK:
+        ui->pending_dock_save = true;
+        submit_bedtime_confirmation(ui);
+        break;
+    case PTC_UI_OPERATION_LEAVE_DOCK:
+        ui->model.draft_dock_policy = ui->model.dock_policy;
+        ui->model.dock_dirty = false;
+        ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+        ui->model.selected_index = 13;
+        break;
     case PTC_UI_OPERATION_SKIP_EYE_CARE:
         submit_eye_care_skip(ui);
         break;
@@ -840,6 +862,9 @@ void accept_numpad(UiState *ui)
         ui->model.draft_scheduled_override.rule.minutes = value;
     } else if (purpose == PTC_UI_NUMPAD_GRANT_MINUTES) {
         ui->model.grant_minutes = value;
+    } else if (purpose == PTC_UI_NUMPAD_DOCK_MINUTES) {
+        ui->model.draft_dock_policy.undocked_daily_minutes = value;
+        ui->model.dock_dirty = ptc_ui_dock_dirty(&ui->model);
     } else if (purpose == PTC_UI_NUMPAD_EYE_CARE_PLAY) {
         ui->model.draft_eye_care_policy.play_minutes = value > 240 ? 240 : (value < 1 ? 1 : value);
         ui->model.eye_care_dirty = ptc_ui_eye_care_dirty(&ui->model);

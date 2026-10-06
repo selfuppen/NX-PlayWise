@@ -707,6 +707,18 @@ int main(int argc, char **argv)
                     ptc_audio_play(PTC_SE_CANCEL);
                     discard_bedtime_draft(&ui);
                 }
+            } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN && ui.model.plan_page == PTC_UI_PLAN_PAGE_DOCK) {
+                if (!ui.waiting) {
+                    if (down & HidNpadButton_B) dock_page_action(&ui, 5, 0);
+                    else if (down & HidNpadButton_Y) dock_page_action(&ui, 6, 0);
+                    else if (down & HidNpadButton_X) dock_page_action(&ui, 4, 0);
+                    else if (down & HidNpadButton_Plus) dock_page_action(&ui, 3, 0);
+                    else if (down & HidNpadButton_Up) ui.model.dock_field_focus = (ui.model.dock_field_focus + 4) % 5;
+                    else if (down & HidNpadButton_Down) ui.model.dock_field_focus = (ui.model.dock_field_focus + 1) % 5;
+                    else if (down & HidNpadButton_A) dock_page_action(&ui, ui.model.dock_field_focus, 0);
+                    else if (ui.model.dock_field_focus == 2 && (down & HidNpadButton_Left)) dock_page_action(&ui, 2, -1);
+                    else if (ui.model.dock_field_focus == 2 && (down & HidNpadButton_Right)) dock_page_action(&ui, 2, 1);
+                }
             } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_EYE_CARE) {
                 PtcEyeCarePolicy *draft = &ui.model.draft_eye_care_policy;

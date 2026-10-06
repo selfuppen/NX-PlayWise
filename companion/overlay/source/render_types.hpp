@@ -55,6 +55,7 @@ enum class OverlayRequestKind {
     DisableTodayLimit,
     SkipBedtime,
     SkipEyeCare,
+    WaiveDock,
     ClearBedtimeSkip,
     DisableBedtime,
     RestoreInstallSnapshot,

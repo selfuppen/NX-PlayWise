@@ -158,7 +158,11 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"eye_care\":{\"enabled\":%s,\"play_minutes\":%u,\"rest_minutes\":%u,"
         "\"phase\":\"%s\",\"used_minutes\":%u,\"rest_remaining_seconds\":%lld,"
         "\"break_id\":%llu,\"unlimited_capped\":%s},"
-        "\"restriction_reasons\":{\"bedtime\":%s,\"daily_allowance\":%s,\"eye_care\":%s}}",
+        "\"dock\":{\"available\":%s,\"force_docked\":%s,\"undocked_limit_enabled\":%s,"
+        "\"undocked_daily_minutes\":%u,\"operation_mode\":\"%s\","
+        "\"dock_supported_available\":%s,\"dock_supported\":%s,\"usage_available\":%s,"
+        "\"used_minutes\":%u,\"remaining_minutes\":%u,\"waived_today\":%s,\"unlimited_capped\":%s},"
+        "\"restriction_reasons\":{\"bedtime\":%s,\"daily_allowance\":%s,\"eye_care\":%s,\"dock\":%s}}",
         state->daily_buffer_minutes,
         json_bool(state->daily_buffer_claimed),
         json_bool(state->daily_buffer_available),
@@ -188,9 +192,17 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         state->eye_care_used_minutes, (long long)state->eye_care_rest_remaining_seconds,
         (unsigned long long)state->eye_care_break_id,
         json_bool(state->eye_care_unlimited_capped),
+        json_bool(state->dock_available), json_bool(state->force_docked),
+        json_bool(state->undocked_limit_enabled), state->undocked_daily_minutes,
+        state->operation_mode ? state->operation_mode : "unknown",
+        json_bool(state->dock_supported_available), json_bool(state->dock_supported),
+        json_bool(state->undocked_usage_available), state->undocked_used_minutes,
+        state->undocked_remaining_minutes, json_bool(state->dock_waived_today),
+        json_bool(state->dock_unlimited_capped),
         json_bool(state->bedtime_active && !state->bedtime_skipped),
         json_bool(state->daily_restriction_active),
-        json_bool(state->eye_care_enabled && state->eye_care_phase && strcmp(state->eye_care_phase, "resting") == 0));
+        json_bool(state->eye_care_enabled && state->eye_care_phase && strcmp(state->eye_care_phase, "resting") == 0),
+        json_bool(state->dock_restriction_active));
 }
 
 void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
@@ -262,6 +274,19 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->eye_care_rest_remaining_seconds = 0;
     state->eye_care_break_id = 0;
     state->eye_care_unlimited_capped = false;
+    state->dock_available = false;
+    state->force_docked = false;
+    state->undocked_limit_enabled = false;
+    state->undocked_daily_minutes = 30;
+    state->operation_mode = "unknown";
+    state->dock_supported_available = false;
+    state->dock_supported = false;
+    state->undocked_usage_available = false;
+    state->undocked_used_minutes = 0;
+    state->undocked_remaining_minutes = 0;
+    state->dock_waived_today = false;
+    state->dock_restriction_active = false;
+    state->dock_unlimited_capped = false;
 }
 
 PtcErrorCode ptc_result_validate(const char *text)

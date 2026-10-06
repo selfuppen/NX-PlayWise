@@ -619,7 +619,7 @@ public:
             kind == OverlayRequestKind::AddTodayMinutes ||
             kind == OverlayRequestKind::DisableTodayLimit ||
             kind == OverlayRequestKind::SkipBedtime ||
-            kind == OverlayRequestKind::SkipEyeCare ||
+            kind == OverlayRequestKind::SkipEyeCare || kind == OverlayRequestKind::WaiveDock ||
             kind == OverlayRequestKind::ClearBedtimeSkip ||
             kind == OverlayRequestKind::DisableBedtime ||
             kind == OverlayRequestKind::RestoreInstallSnapshot;
@@ -685,6 +685,11 @@ public:
             kind = OverlayRequestKind::SkipBedtime;
             status = ptc_overlay_bridge_skip_bedtime(bridge_, now, ++request_nonce_,
                 ptc_overlay_parent_skip_instance_id(&displayed_summary_));
+            break;
+        case PTC_OVERLAY_PARENT_WAIVE_DOCK:
+            kind = OverlayRequestKind::WaiveDock;
+            status = ptc_overlay_bridge_waive_dock(bridge_, now, ++request_nonce_,
+                static_cast<uint16_t>(displayed_summary_.day_index));
             break;
         case PTC_OVERLAY_PARENT_SKIP_EYE_CARE:
             kind = OverlayRequestKind::SkipEyeCare;
@@ -810,7 +815,7 @@ public:
             if (touch_pressed) {
                 for (int index = 0; index < PTC_OVERLAY_PARENT_ACTION_COUNT; ++index) {
                     if (tx >= cx + 12 && tx < cx + PTC_OVERLAY_CONTENT_W - 12 &&
-                        ty >= cy + 125 + index * 46 && ty < cy + 169 + index * 46) {
+                        ty >= cy + 125 + index * 40 && ty < cy + 163 + index * 40) {
                         const bool was_selected = parent_action_ == index;
                         parent_action_ = index;
                         ptc_overlay_hold_reset(&confirm_hold_);
@@ -844,7 +849,8 @@ public:
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        !parent_action_requires_hold(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        (keysDown & HidNpadButton_A)) {
-                if (parent_action_ == PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP) {
+                if (parent_action_ == PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP ||
+                    parent_action_ == PTC_OVERLAY_PARENT_WAIVE_DOCK) {
                     parent_view_ = ParentView::Confirm;
                     parent_confirm_armed_ = false;
                     ptc_overlay_hold_reset(&confirm_hold_);
@@ -862,7 +868,7 @@ public:
             return true;
         }
         if (parent_view_ == ParentView::Confirm) {
-            const bool immediate = displayed_summary_.bedtime_active &&
+            const bool immediate = parent_action_ != PTC_OVERLAY_PARENT_WAIVE_DOCK && displayed_summary_.bedtime_active &&
                 displayed_summary_.bedtime_skipped;
             if (!(keysHeld & HidNpadButton_A)) parent_confirm_armed_ = true;
             if (touch_pressed && ty >= cy + 480 && ty < cy + 540) {
@@ -872,10 +878,10 @@ public:
             if (keysDown & HidNpadButton_B) {
                 parent_view_ = ParentView::Actions;
                 ptc_overlay_hold_reset(&confirm_hold_);
-            } else if (!parent_action_reason(PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP) &&
+            } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        !immediate && parent_confirm_armed_ && (keysDown & HidNpadButton_A)) {
                 (void)submit_parent_action();
-            } else if (!parent_action_reason(PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP) &&
+            } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        immediate && parent_confirm_armed_ && (keysHeld & HidNpadButton_A)) {
                 if (ptc_overlay_hold_update(&confirm_hold_, true, elapsed_ms, 1000))
                     (void)submit_parent_action();
@@ -907,10 +913,10 @@ public:
     bool begin_code_preview()
     {
         char code[32];
-        if (bedtime_restricted() || eye_care_restricted()) return false;
+        if (bedtime_restricted() || eye_care_restricted() || displayed_summary_.dock_restriction_active) return false;
         if (has_status_snapshot_ && !status_is_stale() &&
             (displayed_summary_.unrestricted_today == 1 ||
-             displayed_summary_.eye_care_unlimited_capped)) return false;
+             (displayed_summary_.eye_care_unlimited_capped || displayed_summary_.dock_unlimited_capped))) return false;
         if (recovery_active_) {
             result_pending_ = true;
             success_visible_ = true;

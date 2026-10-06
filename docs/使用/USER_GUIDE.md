@@ -8,6 +8,21 @@
 
 # User Guide
 
+## Docked and handheld rules (device validation pending)
+
+Open Parent → Time plans → Docked and handheld to require TV mode or enable a uniform daily handheld/tabletop allowance of 0–1440 minutes. Both features default off on new installs and upgrades. Disabled means no handheld ceiling; enabled zero means handheld is restricted. Lite cannot require TV mode but supports the allowance. First enable requires Nintendo parental-control and recovery-overlay confirmation. Saves that may restrict immediately require a hold; refreshes and failed saves retain drafts, and leaving offers discard confirmation.
+
+TV mode is the system-reported operation mode. Handheld and tabletop share the undocked ceiling within the daily total: with 120 total and 30 undocked minutes, docking after using 30 lets the child use the remaining daily total. Docking does not clear exhausted total, bedtime or eye-care restrictions. Child view, today details and Overlay show mode and estimated undocked use/remaining, with docking or parent recovery guidance when restricted.
+
+After single-action parent PIN verification, choose “Waive dock rules today” in the dock page or Overlay. This waives TV-only and handheld rules together until the next local day. It adds no total allowance and does not skip bedtime or eye care. Unlimited today, grant codes and self-buffer do not waive these rules. Stale-date requests are rejected.
+
+Use is estimated from Nintendo console time; HOME may count, while sleep is never charged by wall time. First enable starts now. Restart, allowance edits, switches and waivers preserve today's count. Unlimited days needing accounting use the shared 1440-minute timer cap. Unknown readings restrict conservatively; confirmed TV follows the daily total, and parents can waive today. Hardware accounting, dock changes and recovery still require validation; qualification remains pending.
+
+
+![Dock policy / HOST PREVIEW](../images/usage-en/plan/dock-policy-light.png)
+
+![Dock recovery Overlay / HOST PREVIEW](../images/usage-en/overlay/overlay-dock-waiver.png)
+
 ## Eye care breaks (device validation pending)
 
 In the parent's Time Plan, enable Eye Care and set 1–240 minutes of use and 1–60 minutes of rest. Tap ±1 or ±10 minute buttons, or use the controller's left/right buttons for one-minute steps and ZL/ZR for ten-minute steps. It is off by default, with 40 minutes of use and 10 minutes of rest preset. The Time Plan card's badge shows the Eye Care switch state. Before first enablement, confirm Nintendo Parental Controls is enabled and verify that the overlay is available. Status confirmation checks whether Nintendo Parental Controls is enabled.

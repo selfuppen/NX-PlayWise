@@ -392,6 +392,16 @@ static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSet
         return PTC_ERR_STORAGE_WRITE_FAILED;
     }
     rules.bedtime.enabled = false;
+    rules.eye_care.enabled = false;
+    runtime_state.eye_care_resting = false;
+    runtime_state.eye_care_rest_deadline = 0;
+    runtime_state.eye_care_break_id = 0;
+    runtime_state.eye_care_usage_known = false;
+    rules.dock_policy.force_docked = false;
+    rules.dock_policy.undocked_limit_enabled = false;
+    runtime_state.dock_enforced = false;
+    runtime_state.dock_baseline_known = false;
+    runtime_state.dock_interval_unknown = true;
     runtime_state.bedtime_enforced = false;
     runtime_state.bedtime_window_instance_id = 0;
     runtime_state.bedtime_start_day_index = 0;
@@ -406,6 +416,8 @@ static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSet
         return PTC_ERR_STORAGE_WRITE_FAILED;
     }
     clear_bedtime_snapshot(sysmodule);
+    clear_eye_care_snapshot(sysmodule);
+    clear_dock_snapshot(sysmodule);
     snprintf(setup->phase, sizeof(setup->phase), "restored");
     setup->restriction_cleared = false;
     setup->snapshot_available = true;

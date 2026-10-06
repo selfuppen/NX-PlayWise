@@ -115,6 +115,24 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
          strcmp(out->eye_care_phase, "resting") == 0) &&
         !(out->temporary_unlocked_available && out->temporary_unlocked);
     {
+        const cJSON *dock = cJSON_GetObjectItemCaseSensitive(state, "dock");
+        out->dock_available = bool_value(dock, "available", false);
+        out->force_docked = bool_value(dock, "force_docked", false);
+        out->undocked_limit_enabled = bool_value(dock, "undocked_limit_enabled", false);
+        out->undocked_daily_minutes = number_value(dock, "undocked_daily_minutes", 30);
+        snprintf(out->operation_mode, sizeof(out->operation_mode), "%s", string_value(dock, "operation_mode"));
+        out->dock_supported_available = bool_value(dock, "dock_supported_available", false);
+        out->dock_supported = bool_value(dock, "dock_supported", false);
+        out->undocked_usage_available = bool_value(dock, "usage_available", false);
+        out->undocked_used_minutes = number_value(dock, "used_minutes", 0);
+        out->undocked_remaining_minutes = number_value(dock, "remaining_minutes", 0);
+        out->dock_waived_today = bool_value(dock, "waived_today", false);
+        out->dock_restriction_active = bool_value(restriction_reasons, "dock", false);
+        out->dock_unlimited_capped = bool_value(dock, "unlimited_capped", false);
+        if (out->dock_restriction_active && !(out->temporary_unlocked_available && out->temporary_unlocked))
+            out->access_recovery_required = true;
+    }
+    {
         const cJSON *autonomy = cJSON_GetObjectItemCaseSensitive(state, "autonomy");
         out->daily_buffer_minutes = number_value(autonomy, "daily_buffer_minutes", 0);
         out->daily_buffer_claimed = bool_value(autonomy, "claimed_today", false);

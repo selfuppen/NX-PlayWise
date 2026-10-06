@@ -3,7 +3,7 @@
 static PtcPctlTargetMode eye_care_base_target(const PtcRules *rules, PtcDayRule day_rule,
     uint16_t *minutes)
 {
-    if (rules->eye_care.enabled && day_rule.mode == PTC_RULE_MODE_UNLIMITED) {
+    if ((rules->eye_care.enabled || dock_policy_enabled(rules)) && day_rule.mode == PTC_RULE_MODE_UNLIMITED) {
         *minutes = 1440u;
         return PTC_PCTL_TARGET_LIMIT;
     }
@@ -38,6 +38,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     PtcSetupState setup;
     PtcErrorCode err;
     bool bedtime_should_enforce;
+    bool dock_should_enforce;
     bool eye_state_changed = false;
     bool eye_enter = false;
     bool eye_exit = false;
@@ -97,6 +98,15 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     bedtime_should_enforce = bedtime.active &&
         runtime_state.bedtime_skipped_instance_id != bedtime.window_instance_id;
     previous_eye_state = runtime_state;
+    dock_sample_usage(sysmodule, &rules, &runtime_state, now);
+    /* Commit observed usage before taking a control transaction preimage: a
+       failed restriction write must never roll back consumption already seen. */
+    if (memcmp(&previous_eye_state, &runtime_state, sizeof(runtime_state)) != 0 &&
+        !save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+        write_disable_flag(sysmodule, "dock_usage_save_failed\n");
+        return 0;
+    }
+    dock_should_enforce = dock_policy_blocks(sysmodule, &rules, &runtime_state, now);
     base_mode = eye_care_base_target(&rules, active_rule, &base_minutes);
     /* Daily usage rolls over; the eye-care cycle and rest deadline do not. */
     if (runtime_state.eye_care_day_index != now.day_index) {
@@ -116,6 +126,8 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
             reset_eye_care_cycle(&runtime_state, now.day_index);
             eye_state_changed = true;
         }
+    } else if (dock_should_enforce) {
+        runtime_state.eye_care_idle_since = 0;
     } else {
         PtcPctlStatus usage;
         if (sysmodule->pctl->vtable->read_status(sysmodule->pctl,
@@ -173,6 +185,23 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
             return 0;
         }
     }
+    if (dock_should_enforce && !runtime_state.dock_enforced) {
+        PtcPctlSettingsSnapshot snapshot;
+        uint64_t instance;
+        uint16_t start_day;
+        bool snapshot_ok = runtime_state.bedtime_enforced
+            ? load_bedtime_snapshot(sysmodule, &snapshot, &instance, &start_day)
+            : runtime_state.eye_care_resting && !eye_enter
+                ? load_eye_care_snapshot(sysmodule, &snapshot)
+                : sysmodule->pctl->vtable->snapshot_settings &&
+                    sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &snapshot) == PTC_ERR_OK;
+        if (!snapshot_ok || !recovery_begin(sysmodule, request, now) ||
+            !save_dock_snapshot(sysmodule, &snapshot, now.unix_seconds)) {
+            append_event(sysmodule, request, "pctl_backup_failed", PTC_ERR_PCTL_BACKUP_FAILED, "dock_entry");
+            if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "dock_snapshot_restore_failed\n");
+            return 0;
+        }
+    }
     if (eye_exit && bedtime_should_enforce) {
         PtcPctlSettingsSnapshot eye_snapshot;
         if (!load_eye_care_snapshot(sysmodule, &eye_snapshot) ||
@@ -194,13 +223,14 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
         }
         if (!request) recovery_clear(sysmodule);
     }
-    target_mode = bedtime_should_enforce || runtime_state.eye_care_resting
+    target_mode = bedtime_should_enforce || runtime_state.eye_care_resting || dock_should_enforce
         ? PTC_PCTL_TARGET_BLOCKED : base_mode;
     target_minutes = target_mode == PTC_PCTL_TARGET_BLOCKED ? 0u : base_minutes;
     if (runtime_state.last_enforced_day_index == now.day_index &&
         runtime_state.last_enforced_mode == target_mode &&
         runtime_state.last_enforced_minutes == target_minutes &&
         runtime_state.bedtime_enforced == bedtime_should_enforce &&
+        runtime_state.dock_enforced == dock_should_enforce &&
         (!bedtime_should_enforce || runtime_state.bedtime_window_instance_id == bedtime.window_instance_id)) {
         if (sysmodule->pctl->vtable->read_status(sysmodule->pctl,
                 ptc_weekday_from_day_index(now.day_index), &observed_status) != PTC_ERR_OK ||
@@ -215,15 +245,26 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     }
     if (bedtime_should_enforce && !runtime_state.bedtime_enforced && !bedtime_snapshot_transferred) {
         PtcPctlSettingsSnapshot bedtime_snapshot;
-        if (!sysmodule->pctl->vtable->snapshot_settings ||
-            sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &bedtime_snapshot) != PTC_ERR_OK ||
+        bool snapshot_ok = runtime_state.dock_enforced
+            ? load_dock_snapshot(sysmodule, &bedtime_snapshot)
+            : sysmodule->pctl->vtable->snapshot_settings &&
+                sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &bedtime_snapshot) == PTC_ERR_OK;
+        if (!snapshot_ok ||
             !save_bedtime_snapshot(sysmodule, &bedtime_snapshot, &bedtime, now.unix_seconds)) {
             append_event(sysmodule, NULL, "pctl_backup_failed", PTC_ERR_PCTL_BACKUP_FAILED,
                 "bedtime_entry");
             return 0;
         }
     }
-    err = apply_target(sysmodule, request, now, "release", target_mode, target_minutes);
+    /* Reasons can change while the composed target stays BLOCKED. Persist the
+       metadata transaction without rewriting identical PCTL settings. */
+    if (sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+            ptc_weekday_from_day_index(now.day_index), &observed_status) == PTC_ERR_OK &&
+        target_settings_observed(target_mode, target_minutes, &observed_status)) {
+        err = recovery_begin(sysmodule, request, now) ? PTC_ERR_OK : PTC_ERR_PCTL_BACKUP_FAILED;
+    } else {
+        err = apply_target(sysmodule, request, now, "release", target_mode, target_minutes);
+    }
     if (err != PTC_ERR_OK) {
         if (bedtime_should_enforce && !runtime_state.bedtime_enforced) clear_bedtime_snapshot(sysmodule);
         if (eye_enter) clear_eye_care_snapshot(sysmodule);
@@ -263,13 +304,16 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
         runtime_state.pending_mode = 0;
         runtime_state.pending_minutes = 0;
     }
+    if (target_mode != PTC_PCTL_TARGET_BLOCKED && dock_policy_enabled(&rules))
+        dock_rebaseline(sysmodule, &runtime_state, ptc_weekday_from_day_index(now.day_index));
+    runtime_state.dock_enforced = dock_should_enforce;
     runtime_state.last_enforced_day_index = now.day_index;
     runtime_state.last_enforced_mode = target_mode;
     runtime_state.last_enforced_minutes = target_minutes;
     runtime_state.bedtime_enforced = bedtime_should_enforce;
     runtime_state.bedtime_window_instance_id = bedtime_should_enforce ? bedtime.window_instance_id : 0;
     runtime_state.bedtime_start_day_index = bedtime_should_enforce ? bedtime.start_day_index : 0;
-    if (eye_exit && !bedtime_should_enforce && err == PTC_ERR_OK &&
+    if (eye_exit && !bedtime_should_enforce && !dock_should_enforce && err == PTC_ERR_OK &&
         observed_status.configured_minutes_available && observed_status.remaining_available &&
         observed_status.configured_minutes == base_minutes && observed_status.remaining_minutes <= base_minutes) {
         runtime_state.eye_care_usage_known = true;
@@ -281,6 +325,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
         return 0;
     }
     if (eye_exit) clear_eye_care_snapshot(sysmodule);
+    if (!dock_should_enforce) clear_dock_snapshot(sysmodule);
     append_event(sysmodule, NULL, "state_persisted", PTC_ERR_OK, "enforce");
     if (!runtime_state.apply_pending_confirmation && !request) recovery_clear(sysmodule);
     return 1;
@@ -301,6 +346,9 @@ void ptc_sysmodule_init(
     snprintf(sysmodule->app_root, sizeof(sysmodule->app_root), "%s", app_root);
     sysmodule->storage = storage;
     sysmodule->pctl = pctl;
+    sysmodule->operation_mode_provider = NULL;
+    sysmodule->dock_last_sample_at = 0;
+    sysmodule->dock_boot_sampled = false;
     sysmodule->time_provider = time_provider;
     sysmodule->scan_backoff_ms = 500;
     sysmodule->minute_initialized = false;
@@ -407,6 +455,8 @@ uint32_t ptc_sysmodule_current_scan_interval(const PtcSysmodule *sysmodule)
 
 uint32_t ptc_sysmodule_next_wait_ms(PtcSysmodule *sysmodule)
 {
+    PtcRules dock_rules;
+    if (load_rules(sysmodule, &dock_rules) && dock_policy_enabled(&dock_rules)) return 1000u;
     PtcClockSnapshot now;
     int64_t second_of_day;
     uint32_t minute_ms;
@@ -567,7 +617,11 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     actions += processed;
     minute_changed = !sysmodule->minute_initialized || sysmodule->last_minute_day_index != now.day_index ||
         sysmodule->last_minute_of_day != now.minute_of_day;
-    if (minute_changed || reload || storage_notified || disable_changed || processed > 0) {
+    PtcRules dock_rules;
+    bool dock_tick = load_rules(sysmodule, &dock_rules) && dock_policy_enabled(&dock_rules) &&
+        (sysmodule->dock_last_sample_at != now.unix_seconds);
+    if (minute_changed || reload || storage_notified || disable_changed || processed > 0 || dock_tick) {
+        sysmodule->dock_last_sample_at = now.unix_seconds;
 #ifndef PLAYWISE_DEVICE_LAB
         if (sysmodule->minute_initialized) {
             uint32_t previous = (uint32_t)sysmodule->last_minute_day_index * 1440u +
@@ -579,7 +633,8 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
             }
         }
         actions += ptc_sysmodule_enforce_tick(sysmodule);
-        actions += usage_summary_tick(sysmodule, now);
+        if (minute_changed || reload || storage_notified || disable_changed || processed > 0)
+            actions += usage_summary_tick(sysmodule, now);
 #endif
         sysmodule->last_minute_day_index = now.day_index;
         sysmodule->last_minute_of_day = now.minute_of_day;

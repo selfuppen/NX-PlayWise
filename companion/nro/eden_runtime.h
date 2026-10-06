@@ -21,6 +21,7 @@ typedef struct {
     PtcPctlStub pctl;
     PtcTimeProvider time_provider;
     PtcSysmodule sysmodule;
+    PtcOperationModeProvider operation_mode_provider;
     uint64_t last_usage_tick;
     uint64_t usage_carry_ns;
     uint16_t usage_day_index;

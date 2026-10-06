@@ -8,6 +8,30 @@
 
 # Protocol Specification
 
+## Dock policy (candidate: pending)
+
+Optional rules v2 fields are `force_docked=false`, `undocked_limit_enabled=false`, and `undocked_daily_minutes=30` (0–1440). Missing fields keep old installations disabled. A disabled allowance is different from an enabled zero-minute allowance. `PtcRules.dock_policy` contains these three fields.
+
+The read-only platform provider reports TV (`docked`), handheld/tabletop (`undocked`), or `unknown`, plus TV support availability. Switch uses `ommGetOperationMode` with `omm` service permission; Lite rejects force-docked, but accepts an undocked allowance. No 1952 calls are added. Enabled policies sample every second; mode changes aim to begin enforcement/restoration within two seconds. Writes remain serialized and require a target change or mismatched readback.
+
+Undocked allowance is a ceiling within the daily total. Docking and a today-only waiver remove only the dock reason; total allowance, bedtime and eye care still apply. Unlimited today, grant codes and self-buffer do not waive dock rules. A dock-blocked grant returns 326 before consuming a nonce or buffer eligibility.
+
+Accounting uses reliable configured minutes converted to nanoseconds minus 1454 remaining nanoseconds, preserving nanosecond precision and exposing whole-minute estimates. Initial enable starts from that point; sleep is never charged by wall time. A consumption interval with either endpoint not confirmed as TV, a restart gap, or a recoverable read interruption is conservatively charged as undocked. Unprovable gaps, timer resets and configuration mismatches remain unknown. Unlimited days use the shared 1440-minute eye-care timer cap until both features stop requiring it. Temporary BLOCKED settings are never interpreted as base consumption.
+
+Runtime fields: `dock_day_index`, `undocked_used_ns`, `dock_last_used_ns`, `dock_baseline_known`, `dock_usage_known`, `dock_tracking_started`, `dock_interval_unknown`, `dock_last_mode` (0 unknown, 1 undocked, 2 docked), `dock_waived_day_index`, `dock_waived`, `dock_enforced`. Restart, edits, switches and waiver preserve today's use; a new local day starts a new count. Observed use is committed before control transaction preimages. `backups/dock_pctl_snapshot.json` participates in rollback. Full installation restore disables dock policy and clears active baseline metadata while retaining historical use.
+
+| ID / type | Payload |
+| --- | --- |
+| 47 / `set_dock_policy` | `{"force_docked":false,"undocked_limit_enabled":true,"undocked_daily_minutes":30}` |
+| 48 / `waive_dock_policy_today` | `{"expected_day_index":2380}` |
+
+First enable reuses environment-bound Nintendo parental-control and recovery-overlay confirmation. Waivers use single-action parent PIN authorization in NRO/Overlay and reject stale local dates. Errors: 326 `dock_active`, 327 `dock_mode_unavailable`, 328 `dock_confirmation_required`, 329 `dock_date_mismatch`, 330 `dock_unsupported`. A recovery waiver is allowed under disable.flag while preserving the flag and other restrictions; failed saves, writes, readback or results do not commit a waiver.
+
+`state.dock`: `available`, the three policy fields, `operation_mode`, `dock_supported_available`, `dock_supported`, `usage_available`, `used_minutes`, `remaining_minutes`, `waived_today`, `unlimited_capped`. `restriction_reasons.dock` joins the composed target. Missing status is unavailable, never zero. Unknown mode restricts enabled policies; unknown use restricts handheld while confirmed TV remains subject to the daily total. Reliable continuity automatically recovers; an unprovable interval stays unknown until reliable evidence is available, including after docking or a parent waiver. Diagnostic rules/state and runtime snapshots contain these safe fields; secrets, PIN material, nonces and transaction preimages remain excluded.
+
+Hardware dock/undock, HOME/game/sleep, simultaneous restrictions and recovery validation remain pending. The local libnx reference was commit `dbcc1beafc6b47b5ffbeb8ba82463a7d45da40bb`; its public OMM wrapper does not establish private PCTL layout or units. For installed libnx 4.12 without that wrapper, the adapter supplies the same read-only command 0 / byte response contract; no dependency upgrade or mode-policy writes are introduced.
+
+
 ## Eye care breaks (candidate: pending)
 
 Eye-care results project the current reliable PCTL read without waiting for a later Enforce tick. Matching configured quota (1440 minutes for unlimited rules), available remaining time, an enabled timer and no pending confirmation allow an initial playing preview; a known same-day baseline adds the latest usage delta. Across midnight, the accumulated cycle is retained and new-day usage is added. Missing, mismatched or disabled readings remain unknown. Projection does not persist a baseline, write PCTL or start timers. Usage minutes do not decrease with wall time; rest instances and deadlines still come from persisted state.

@@ -25,6 +25,9 @@ void ptc_rules_default(PtcRules *rules)
     rules->eye_care.enabled = false;
     rules->eye_care.play_minutes = 40;
     rules->eye_care.rest_minutes = 10;
+    rules->dock_policy.force_docked = false;
+    rules->dock_policy.undocked_limit_enabled = false;
+    rules->dock_policy.undocked_daily_minutes = 30;
     rules->holiday_enabled = false;
     rules->holiday_rule.mode = PTC_RULE_MODE_UNLIMITED;
     rules->holiday_rule.minutes = 120;

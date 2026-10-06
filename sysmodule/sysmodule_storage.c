@@ -175,7 +175,7 @@ static void setup_state_default(PtcSetupState *setup)
 bool load_setup_state(PtcSysmodule *sysmodule, PtcSetupState *setup)
 {
     char path[320];
-    char text[2048];
+    char text[4096];
     int64_t version;
     setup_state_default(setup);
     join_path(path, sizeof(path), sysmodule->app_root, "setup.json");
@@ -412,6 +412,24 @@ bool save_eye_care_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapsh
     return save_snapshot_file(sysmodule, "backups/eye_care_pctl_snapshot.json", snapshot, captured_at);
 }
 
+bool save_dock_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapshot *snapshot, int64_t captured_at)
+{
+    return save_snapshot_file(sysmodule, "backups/dock_pctl_snapshot.json", snapshot, captured_at);
+}
+
+bool load_dock_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot)
+{
+    return load_snapshot_file(sysmodule, "backups/dock_pctl_snapshot.json", snapshot);
+}
+
+void clear_dock_snapshot(PtcSysmodule *sysmodule)
+{
+    char path[320];
+    join_path(path, sizeof(path), sysmodule->app_root, "backups/dock_pctl_snapshot.json");
+    if (sysmodule->storage->vtable->exists(sysmodule->storage, path))
+        (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, path);
+}
+
 bool load_eye_care_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot)
 {
     return load_snapshot_file(sysmodule, "backups/eye_care_pctl_snapshot.json", snapshot);
@@ -486,6 +504,7 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
     bool bedtime_snapshot_existed;
     bool bedtime_active_existed;
     bool eye_snapshot_existed;
+    bool dock_snapshot_existed;
     if (recovery_path_exists(sysmodule)) return recovery_owned_by(sysmodule, request);
     if (compact_nonce_ledger(sysmodule, now.day_index) != PTC_ERR_OK) return false;
     if (!sysmodule->pctl->vtable->snapshot_settings ||
@@ -505,7 +524,9 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
         !backup_text_file(sysmodule, "backups/bedtime_active.json",
             "recovery/active/bedtime-active.before", &bedtime_active_existed) ||
         !backup_text_file(sysmodule, "backups/eye_care_pctl_snapshot.json",
-            "recovery/active/eye-snapshot.before", &eye_snapshot_existed)) {
+            "recovery/active/eye-snapshot.before", &eye_snapshot_existed) ||
+        !backup_text_file(sysmodule, "backups/dock_pctl_snapshot.json",
+            "recovery/active/dock-snapshot.before", &dock_snapshot_existed)) {
         recovery_clear(sysmodule);
         return false;
     }
@@ -515,7 +536,7 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
         "\"rules_existed\":%s,\"state_existed\":%s,\"ledger_existed\":%s,"
         "\"redemption_history_existed\":%s,\"activity_history_existed\":%s,"
         "\"calendar_active_existed\":%s,\"bedtime_snapshot_existed\":%s,"
-        "\"bedtime_active_existed\":%s,\"eye_snapshot_existed\":%s}\n",
+        "\"bedtime_active_existed\":%s,\"eye_snapshot_existed\":%s,\"dock_snapshot_existed\":%s}\n",
         request && ptc_request_id_is_valid(request->request_id) ? request->request_id : "enforce",
         (long long)now.unix_seconds,
         rules_existed ? "true" : "false",
@@ -526,7 +547,8 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
         calendar_active_existed ? "true" : "false",
         bedtime_snapshot_existed ? "true" : "false",
         bedtime_active_existed ? "true" : "false",
-        eye_snapshot_existed ? "true" : "false");
+        eye_snapshot_existed ? "true" : "false",
+        dock_snapshot_existed ? "true" : "false");
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, meta_path, meta)) {
         recovery_clear(sysmodule);
         return false;
@@ -565,6 +587,8 @@ bool recovery_rollback(PtcSysmodule *sysmodule)
     bool eye_snapshot_existed = false;
     bool bedtime_active_tracked;
     bool eye_snapshot_tracked;
+    bool dock_snapshot_existed = false;
+    bool dock_snapshot_tracked;
     bool raw_restored = false;
     bool timer_restored = false;
     PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
@@ -584,6 +608,7 @@ bool recovery_rollback(PtcSysmodule *sysmodule)
     bedtime_snapshot_tracked = json_bool_value(meta, "bedtime_snapshot_existed", &bedtime_snapshot_existed);
     bedtime_active_tracked = json_bool_value(meta, "bedtime_active_existed", &bedtime_active_existed);
     eye_snapshot_tracked = json_bool_value(meta, "eye_snapshot_existed", &eye_snapshot_existed);
+    dock_snapshot_tracked = json_bool_value(meta, "dock_snapshot_existed", &dock_snapshot_existed);
     ok = restore_snapshot_exact(sysmodule, &original, &restored, &status,
         ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored) == PTC_ERR_OK;
     ok = restore_text_file(sysmodule, "rules.json", "recovery/active/rules.before", rules_existed) && ok;
@@ -613,6 +638,9 @@ bool recovery_rollback(PtcSysmodule *sysmodule)
         ok = restore_text_file(sysmodule, "backups/eye_care_pctl_snapshot.json",
             "recovery/active/eye-snapshot.before", eye_snapshot_existed) && ok;
     }
+    if (dock_snapshot_tracked)
+        ok = restore_text_file(sysmodule, "backups/dock_pctl_snapshot.json",
+            "recovery/active/dock-snapshot.before", dock_snapshot_existed) && ok;
     invalidate_all_caches(sysmodule);
     if (ok) recovery_clear(sysmodule);
     return ok;
@@ -839,6 +867,13 @@ bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
             !json_u16(text, "eye_care_rest_minutes", &rules->eye_care.rest_minutes) ||
             !ptc_eye_care_policy_is_valid(&rules->eye_care)) return false;
     }
+    if ((find_key(text, "force_docked") &&
+         !json_bool_value(text, "force_docked", &rules->dock_policy.force_docked)) ||
+        (find_key(text, "undocked_limit_enabled") &&
+         !json_bool_value(text, "undocked_limit_enabled", &rules->dock_policy.undocked_limit_enabled)) ||
+        (find_key(text, "undocked_daily_minutes") &&
+         (!json_u16(text, "undocked_daily_minutes", &rules->dock_policy.undocked_daily_minutes) ||
+          rules->dock_policy.undocked_daily_minutes > 1440u))) return false;
     (void)json_bool_value(text, "holiday_enabled", &rules->holiday_enabled);
     if (json_string(text, "holiday_mode", mode, sizeof(mode))) {
         (void)parse_rule_mode(mode, &rules->holiday_rule.mode);
@@ -911,6 +946,7 @@ bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
         "\"eye_care_enabled\":%s,\"eye_care_play_minutes\":%u,\"eye_care_rest_minutes\":%u,"
         "\"holiday_enabled\":%s,\"holiday_mode\":\"%s\",\"holiday_minutes\":%u,"
         "\"makeup_workday_mode\":\"%s\",\"makeup_workday_minutes\":%u,"
+        "\"force_docked\":%s,\"undocked_limit_enabled\":%s,\"undocked_daily_minutes\":%u,"
         "\"bedtime_enabled\":%s,\"bedtime_week\":[",
         rules->today_override.present ? "true" : "false",
         rules->today_override.day_index,
@@ -930,6 +966,9 @@ bool save_rules(PtcSysmodule *sysmodule, const PtcRules *rules)
         rules->holiday_rule.minutes,
         rule_mode_name(rules->makeup_workday_rule.mode),
         rules->makeup_workday_rule.minutes,
+        rules->dock_policy.force_docked ? "true" : "false",
+        rules->dock_policy.undocked_limit_enabled ? "true" : "false",
+        rules->dock_policy.undocked_daily_minutes,
         rules->bedtime.enabled ? "true" : "false");
     for (i = 0; i < 7; ++i) {
         used = strlen(text);
@@ -988,8 +1027,9 @@ bool restore_rules(PtcSysmodule *sysmodule, const PtcRules *rules, bool existed)
 bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
 {
     char path[320];
-    char text[2048];
+    char text[4096];
     int64_t version;
+    memset(state, 0, sizeof(*state));
     state->last_enforced_day_index = 0;
     state->last_enforced_mode = 0;
     state->last_enforced_minutes = 0;
@@ -1053,6 +1093,50 @@ bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     (void)json_i64(text, "eye_care_idle_since", &state->eye_care_idle_since);
     {
         uint16_t mode = 0;
+        bool complete = true;
+        if (find_key(text, "dock_day_index")) {
+            if (!json_u16(text, "dock_day_index", &state->dock_day_index)) return false;
+        } else complete = false;
+        if (find_key(text, "undocked_used_ns")) {
+            if (!json_u64(text, "undocked_used_ns", &state->undocked_used_ns)) return false;
+        } else complete = false;
+        if (find_key(text, "dock_last_used_ns")) {
+            if (!json_u64(text, "dock_last_used_ns", &state->dock_last_used_ns)) return false;
+        } else complete = false;
+        if (find_key(text, "dock_baseline_known")) {
+            if (!json_bool_value(text, "dock_baseline_known", &state->dock_baseline_known)) return false;
+        } else complete = false;
+        if (find_key(text, "dock_usage_known")) {
+            if (!json_bool_value(text, "dock_usage_known", &state->dock_usage_known)) return false;
+        } else complete = false;
+        if (find_key(text, "dock_tracking_started")) {
+            if (!json_bool_value(text, "dock_tracking_started", &state->dock_tracking_started)) return false;
+        } else complete = false;
+        if (find_key(text, "dock_interval_unknown")) {
+            if (!json_bool_value(text, "dock_interval_unknown", &state->dock_interval_unknown)) return false;
+        } else complete = false;
+        if (find_key(text, "dock_waived_day_index")) {
+            if (!json_u16(text, "dock_waived_day_index", &state->dock_waived_day_index)) return false;
+        } else complete = false;
+        if (find_key(text, "dock_waived")) {
+            if (!json_bool_value(text, "dock_waived", &state->dock_waived)) return false;
+        } else complete = false;
+        if (find_key(text, "dock_enforced")) {
+            if (!json_bool_value(text, "dock_enforced", &state->dock_enforced)) return false;
+        } else complete = false;
+        if (find_key(text, "dock_last_mode")) {
+            if (!json_u16(text, "dock_last_mode", &mode) || mode > PTC_OPERATION_MODE_DOCKED) return false;
+        } else complete = false;
+        state->dock_last_mode = (PtcOperationMode)mode;
+        if (state->undocked_used_ns > 86400000000000ULL ||
+            state->dock_last_used_ns > 86400000000000ULL) return false;
+        if (!complete) {
+            state->dock_usage_known = false;
+            state->dock_baseline_known = false;
+        }
+    }
+    {
+        uint16_t mode = 0;
         if (json_u16(text, "last_enforced_mode", &mode)) {
             state->last_enforced_mode = (PtcPctlTargetMode)mode;
         }
@@ -1063,7 +1147,7 @@ bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
 bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t updated_at)
 {
     char path[320];
-    char text[2048];
+    char text[4096];
     snprintf(path, sizeof(path), "%s/state.json", sysmodule->app_root);
     snprintf(
         text,
@@ -1080,7 +1164,11 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
         "\"eye_care_day_index\":%u,\"eye_care_accumulated_minutes\":%u,"
         "\"eye_care_last_used_minutes\":%u,\"eye_care_usage_known\":%s,"
         "\"eye_care_resting\":%s,\"eye_care_rest_deadline\":%lld,\"eye_care_break_id\":%llu,"
-        "\"eye_care_idle_since\":%lld,\"updated_at\":%lld}\n",
+        "\"eye_care_idle_since\":%lld,"
+        "\"dock_day_index\":%u,\"undocked_used_ns\":%llu,\"dock_last_used_ns\":%llu,"
+        "\"dock_baseline_known\":%s,\"dock_usage_known\":%s,\"dock_tracking_started\":%s,"
+        "\"dock_interval_unknown\":%s,\"dock_last_mode\":%u,\"dock_waived_day_index\":%u,"
+        "\"dock_waived\":%s,\"dock_enforced\":%s,\"updated_at\":%lld}\n",
         state->last_enforced_day_index,
         (unsigned int)state->last_enforced_mode,
         state->last_enforced_minutes,
@@ -1108,6 +1196,14 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
         (long long)state->eye_care_rest_deadline,
         (unsigned long long)state->eye_care_break_id,
         (long long)state->eye_care_idle_since,
+        state->dock_day_index, (unsigned long long)state->undocked_used_ns,
+        (unsigned long long)state->dock_last_used_ns,
+        state->dock_baseline_known ? "true" : "false",
+        state->dock_usage_known ? "true" : "false",
+        state->dock_tracking_started ? "true" : "false",
+        state->dock_interval_unknown ? "true" : "false",
+        (unsigned int)state->dock_last_mode, state->dock_waived_day_index,
+        state->dock_waived ? "true" : "false", state->dock_enforced ? "true" : "false",
         (long long)updated_at);
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
     snprintf(sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text), "%s", text);

@@ -304,6 +304,9 @@ void handle_touch(UiState *ui, int x, int y)
                 1u, hit.index <= 4 ? 240u : 60u);
         }
         break;
+    case PTC_UI_HIT_DOCK_FIELD:
+        dock_page_action(ui, hit.index, 0);
+        break;
     case PTC_UI_HIT_EYE_CARE_PAGE_MASTER:
         ptc_audio_play(PTC_SE_TOGGLE);
         ui->model.draft_eye_care_policy.enabled = !ui->model.draft_eye_care_policy.enabled;

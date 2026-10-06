@@ -64,6 +64,8 @@ The QR code in the first screenshot has been replaced with a **public demo confi
 
 ## Key Features
 
+- **Docked and handheld rules**: require TV mode, a uniform 0–1440-minute daily undocked ceiling within the total, and a PIN-authorized today waiver. Disabled by default; hardware qualification pending.
+
 - **Daily Dispatch**: Today's playtime limit, quick grant, unlimited play for today, and reset today's adjustments.
 - **Long-Term Schedules**: Weekly schedules, statutory holidays, specific date overrides, and bedtime schedules.
 - **Self Buffer**: Optional daily once-per-day 5/10/15-minute grace period buffer with detailed rule breakdowns for today and tomorrow.

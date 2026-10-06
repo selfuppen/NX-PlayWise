@@ -28,6 +28,7 @@ typedef enum {
     PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP,
     PTC_OVERLAY_PARENT_DISABLE_BEDTIME,
     PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT,
+    PTC_OVERLAY_PARENT_WAIVE_DOCK,
     PTC_OVERLAY_PARENT_ACTION_COUNT
 } PtcOverlayParentAction;
 
@@ -50,6 +51,8 @@ PtcCompanionStatus ptc_overlay_bridge_submit_overlay_ready(PtcOverlayBridge *bri
     const char *boot_id, const char *environment_fingerprint);
 PtcCompanionStatus ptc_overlay_bridge_skip_bedtime(PtcOverlayBridge *bridge,
     int64_t created_at, uint16_t random16, uint64_t window_instance_id);
+PtcCompanionStatus ptc_overlay_bridge_waive_dock(PtcOverlayBridge *bridge,
+    int64_t created_at, uint16_t random16, uint16_t day_index);
 PtcCompanionStatus ptc_overlay_bridge_skip_eye_care(PtcOverlayBridge *bridge,
     int64_t created_at, uint16_t random16, uint64_t break_id);
 PtcCompanionStatus ptc_overlay_bridge_clear_bedtime_skip(PtcOverlayBridge *bridge,
@@ -90,6 +93,8 @@ void ptc_overlay_format_child_restriction_detail(
     char *out, size_t out_size);
 void ptc_overlay_format_child_buffer_status(
     const PtcCompanionResultSummary *summary,
+    char *out, size_t out_size);
+void ptc_overlay_format_dock_usage(const PtcCompanionResultSummary *summary,
     char *out, size_t out_size);
 
 #endif

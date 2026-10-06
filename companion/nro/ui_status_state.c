@@ -140,6 +140,8 @@ const char *ptc_ui_today_action_unavailable_reason(const PtcUiModel *model,
         return NULL;
     }
     if (!ptc_ui_status_is_fresh(model, now)) return NULL;
+    if ((index == 1 || index == 2) && model->dock_restriction_active)
+        return ptc_ui_text(PTC_UI_T_DOCK_CONNECT);
     if (index == 1 && model->unrestricted_today == 1)
         return ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_NO_GRANT_REQUIRED);
     if (index != 4) return NULL;
@@ -244,6 +246,7 @@ const char *ptc_ui_runtime_notice_summary(const PtcUiModel *model)
     if (model->apply_pending_confirmation) return ptc_ui_text(PTC_UI_T_THE_SETTING_IS_WAITING_FOR_CONFIRMATION_TO);
     if (model->eye_care_policy.enabled && strcmp(model->eye_care_phase, "resting") == 0)
         return ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING);
+    if (model->dock_restriction_active) return ptc_ui_text(PTC_UI_T_DOCK_BLOCKED);
     if (model->restricted_now == 1) return ptc_ui_text(PTC_UI_T_HAS_ENTERED_THE_TIME_LIMIT_YOU_CAN);
     if (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1)
         return ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_USED_UP_RESTRICTIONS);
@@ -305,6 +308,8 @@ void ptc_ui_project_notice(const PtcUiModel *model, PtcUiNoticeProjection *out)
     } else if (model->eye_care_policy.enabled && strcmp(model->eye_care_phase, "resting") == 0) {
         snprintf(out->details, sizeof(out->details), "%s",
                  ptc_ui_text(PTC_UI_T_EYE_CARE_INDEPENDENT_RULE));
+    } else if (model->dock_restriction_active) {
+        snprintf(out->details, sizeof(out->details), "%s", ptc_ui_text(PTC_UI_T_DOCK_CONNECT));
     } else if (model->restricted_now == 1 ||
                (model->remaining_available && model->remaining_minutes == 0 && model->unrestricted_today != 1)) {
         snprintf(out->details, sizeof(out->details),
@@ -389,7 +394,7 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
                  ptc_ui_text(PTC_UI_T_LAST_CONFIRMED_S_PRESS_Y_TO_REFRESH), last);
     }
     if (ptc_ui_status_is_fresh(model, now)) {
-        if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
+        if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped)) {
             snprintf(out->remaining_text, sizeof(out->remaining_text), ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED));
             out->progress_available = true;
             out->progress_per_mille = 1000;
@@ -419,6 +424,13 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
         strcmp(model->eye_care_phase, "resting") == 0) {
         snprintf(out->remaining_text, sizeof(out->remaining_text), "%s",
                  ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING));
+        out->progress_available = false;
+        out->state = PTC_UI_TIME_DANGER;
+    }
+    if (ptc_ui_status_is_fresh(model, now) && model->dock_restriction_active &&
+        !(model->bedtime_active && !model->bedtime_skipped) &&
+        !(model->eye_care_policy.enabled && strcmp(model->eye_care_phase, "resting") == 0)) {
+        snprintf(out->remaining_text, sizeof(out->remaining_text), "%s", ptc_ui_text(PTC_UI_T_DOCK_BLOCKED));
         out->progress_available = false;
         out->state = PTC_UI_TIME_DANGER;
     }
@@ -470,6 +482,8 @@ const char *ptc_ui_code_failure_guidance(int error_code)
     switch (error_code) {
     case PTC_ERR_USED_TOKEN:
         return ptc_ui_text(PTC_UI_T_THIS_CODE_HAS_BEEN_USED_PLEASE_GENERATE);
+    case PTC_ERR_DOCK_ACTIVE:
+        return ptc_ui_text(PTC_UI_T_DOCK_CONNECT);
     case PTC_ERR_WRONG_DATE:
         return ptc_ui_text(PTC_UI_T_THE_CODE_DATE_IS_INCONSISTENT_WITH_THE);
     case PTC_ERR_BAD_CLOCK:
@@ -500,7 +514,7 @@ void ptc_ui_format_today_mode(const PtcUiModel *model, char *out, size_t out_siz
         snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING));
     } else if (model->blocked_today == 1) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_PLAY_BLOCKED));
-    } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
+    } else if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped)) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
     } else if (model->limited_today == 1) {
         snprintf(out, out_size,
@@ -517,7 +531,7 @@ void ptc_ui_format_quota_remaining(const PtcUiModel *model, char *out, size_t ou
     if (!out || out_size == 0) return;
     if (!model || !model->status_loaded) {
         snprintf(out, out_size, "--");
-    } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
+    } else if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped)) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
     } else if (model->remaining_available && model->remaining_minutes >= 0) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_D_MIN), model->remaining_minutes);
@@ -613,6 +627,10 @@ void ptc_ui_format_parent_status_summary(
     }
     if (model->eye_care_policy.enabled && strcmp(model->eye_care_phase, "resting") == 0) {
         ptc_ui_format_eye_care_cycle(model, now, out, out_size);
+        return;
+    }
+    if (model->dock_restriction_active) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_DOCK_CONNECT));
         return;
     }
     if (model->restricted_now == 1 || model->blocked_today == 1 ||

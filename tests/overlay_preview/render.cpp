@@ -40,12 +40,13 @@ int main(int argc, char **argv) {
             PTC_UI_LANGUAGE_ENGLISH, PTC_UI_LANGUAGE_TRADITIONAL};
         const char *folders[] = {"", "en/", "zh_hant/"};
         const char *scenes[] = {"overlay-code-entry", "overlay-code-confirm", "overlay-code-success",
-            "overlay-parent-actions", "overlay-bedtime", "overlay-eye-care", "overlay-unknown"};
+            "overlay-parent-actions", "overlay-bedtime", "overlay-eye-care", "overlay-unknown",
+            "overlay-dock-handheld", "overlay-dock-restricted", "overlay-dock-waiver"};
         for (int language = 0; language < 3; ++language) {
             ptc_ui_language_set_resolved(languages[language]);
             auto dir = std::filesystem::path(argv[2]) / folders[language] / "overlay";
             std::filesystem::create_directories(dir);
-            for (int scene = 0; scene < 7; ++scene) {
+            for (int scene = 0; scene < 10; ++scene) {
                 PtcOverlayBridge bridge{};
                 PtcOverlayInput input{};
                 ptc_overlay_input_init(&input);
@@ -80,6 +81,19 @@ int main(int argc, char **argv) {
                 } else if (scene == 6) {
                     status = {}; view.has_status_snapshot_ = false; view.last_refresh_tick_ = 0;
                 }
+                if (scene >= 7) {
+                    status.dock_available = status.undocked_usage_available = true;
+                    status.undocked_limit_enabled = true;
+                    status.undocked_daily_minutes = 30;
+                    status.undocked_used_minutes = scene == 7 ? 12 : 30;
+                    status.undocked_remaining_minutes = scene == 7 ? 18 : 0;
+                    std::snprintf(status.operation_mode, sizeof(status.operation_mode), "undocked");
+                    if (scene >= 8) status.dock_restriction_active = true;
+                    if (scene == 9) {
+                        view.parent_view_ = ParentView::Confirm;
+                        view.parent_action_ = PTC_OVERLAY_PARENT_WAIVE_DOCK;
+                    }
+                }
                 std::fill(renderer.pixels.begin(), renderer.pixels.end(), 17);
                 renderer.drawString(ptc_ui_text(PTC_UI_T_PLAYWISE), false, 20, 50, 30, TEXT_COLOR);
                 renderer.drawString(ptc_ui_text(PTC_UI_T_PLAYTIME_BEDTIME_CONTROLS), false, 20, 70, 15, MUTED_COLOR);
@@ -90,7 +104,7 @@ int main(int argc, char **argv) {
                 renderer.save((dir / (std::string(scenes[scene]) + ".ppm")).string());
             }
         }
-        std::puts("PASS: 21 production Overlay previews (3 languages, 7 sample states)");
+        std::puts("PASS: 30 production Overlay previews (3 languages, 10 sample states)");
         return 0;
     } catch (const std::exception &error) {
         std::fprintf(stderr, "FAIL: %s\n", error.what()); return 1;

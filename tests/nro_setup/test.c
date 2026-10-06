@@ -36,6 +36,8 @@ bool load_redemption_history(UiState *ui) { (void)ui; return false; }
 void handle_today_action_ready(UiState *ui, int index) { (void)ui; (void)index; }
 void apply_pending_navigation(UiState *ui) { (void)ui; }
 void submit_eye_care_policy(UiState *ui) { (void)ui; }
+void save_dock_from_page(UiState *ui) { (void)ui; }
+void request_dock_waiver(UiState *ui) { (void)ui; }
 void save_bedtime_from_page(UiState *ui) { (void)ui; }
 bool pin_input(UiState *ui, const char *title, const char *guide, char *out, size_t size)
 {

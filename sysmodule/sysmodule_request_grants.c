@@ -18,6 +18,8 @@ static bool process_claim_daily_buffer(PtcSysmodule *sysmodule, const PtcRequest
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
         sysmodule, request, "release", true,
         PTC_ERR_BEDTIME_ACTIVE, now.day_index);
+    if (dock_blocks_grants(sysmodule, now)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_DOCK_ACTIVE, now.day_index);
     if (eye_care_blocks_grants(sysmodule)) return finish_with_error(
         sysmodule, request, "release", true, PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
     if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) {
@@ -221,6 +223,8 @@ static bool process_preview_offline_code(
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
         sysmodule, request, "release", true,
         PTC_ERR_BEDTIME_ACTIVE, now.day_index);
+    if (dock_blocks_grants(sysmodule, now)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_DOCK_ACTIVE, now.day_index);
     if (eye_care_blocks_grants(sysmodule)) return finish_with_error(
         sysmodule, request, "release", true, PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
 
@@ -306,6 +310,8 @@ static bool process_offline_code(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (bedtime_blocks_grants(sysmodule, now)) return finish_with_error(
         sysmodule, request, "release", true,
         PTC_ERR_BEDTIME_ACTIVE, now.day_index);
+    if (dock_blocks_grants(sysmodule, now)) return finish_with_error(
+        sysmodule, request, "release", true, PTC_ERR_DOCK_ACTIVE, now.day_index);
     if (eye_care_blocks_grants(sysmodule)) return finish_with_error(
         sysmodule, request, "release", true, PTC_ERR_EYE_CARE_ACTIVE, now.day_index);
 

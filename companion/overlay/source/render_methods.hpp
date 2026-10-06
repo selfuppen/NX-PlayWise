@@ -54,7 +54,7 @@
     {
         if (action == PTC_OVERLAY_PARENT_ADD_MINUTES ||
             action == PTC_OVERLAY_PARENT_SKIP_BEDTIME ||
-            action == PTC_OVERLAY_PARENT_SKIP_EYE_CARE ||
+            action == PTC_OVERLAY_PARENT_SKIP_EYE_CARE || action == PTC_OVERLAY_PARENT_WAIVE_DOCK ||
             action == PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP) return false;
         return true;
     }
@@ -67,6 +67,7 @@
         if (kind == OverlayRequestKind::PreviewOfflineCode) return ptc_ui_text(PTC_UI_T_PREVIEW_TODAY_S_GRANT);
         if (kind == OverlayRequestKind::OfflineCode) return ptc_ui_text(PTC_UI_T_SUBMIT_TODAY_S_GRANT);
         if (kind == OverlayRequestKind::ClaimDailyBuffer) return ptc_ui_text(PTC_UI_T_RECEIVE_INDEPENDENT_BUFFERING);
+        if (kind == OverlayRequestKind::WaiveDock) return ptc_ui_text(PTC_UI_T_DOCK_WAIVE);
         if (kind == OverlayRequestKind::ClearBedtimeSkip) return ptc_ui_text(PTC_UI_T_RESTORE_THIS_BEDTIME);
         return ptc_ui_text(PTC_UI_T_NOT_STARTED);
     }
@@ -224,7 +225,7 @@
         draw_outline(renderer, cx, cy + 18, cw, 548, 2, FOCUS_BORDER);
         draw_localized(renderer, parent_view_ == ParentView::Pin ? ptc_ui_text(PTC_UI_T_PARENT_PIN_VERIFICATION) :
             (parent_view_ == ParentView::Actions ? ptc_ui_text(PTC_UI_T_PARENT_ZONE) :
-             (parent_view_ == ParentView::Confirm ? ptc_ui_text(PTC_UI_T_CONFIRM_RESTORING_LIMIT) : ptc_ui_text(PTC_UI_T_OPERATION_RESULT))),
+             (parent_view_ == ParentView::Confirm ? ptc_ui_text(parent_action_ == PTC_OVERLAY_PARENT_WAIVE_DOCK ? PTC_UI_T_DOCK_WAIVE : PTC_UI_T_CONFIRM_RESTORING_LIMIT) : ptc_ui_text(PTC_UI_T_OPERATION_RESULT))),
             false, cx + 14, cy + 56, 21, renderer->a(TEXT_COLOR));
         const char *state = (!has_status_snapshot_ || status_is_stale()) ? ptc_ui_text(PTC_UI_T_STATUS_PENDING_REFRESH) :
             (bedtime_restricted() ? ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_3) :
@@ -275,20 +276,20 @@
         if (parent_view_ == ParentView::Actions) {
             const char *LABELS[PTC_OVERLAY_PARENT_ACTION_COUNT] = {
                 ptc_ui_text(PTC_UI_T_QUICK_GRANT), ptc_ui_text(PTC_UI_T_NO_LIMIT_TODAY), ptc_ui_text(PTC_UI_T_SKIP_BEDTIME), ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP), ptc_ui_text(PTC_UI_T_RESTORE_THIS_BEDTIME), ptc_ui_text(PTC_UI_T_TURN_OFF_BEDTIME_PLAN),
-                ptc_ui_text(PTC_UI_T_RESTORE_PRE_INSTALL_SETTINGS_DEACTIVATE)
+                ptc_ui_text(PTC_UI_T_RESTORE_PRE_INSTALL_SETTINGS_DEACTIVATE), ptc_ui_text(PTC_UI_T_DOCK_WAIVE)
             };
             renderer->drawRect(cx + 246, cy + 58, cw - 258, 46,
                 renderer->a(bridge_->waiting ? DISABLED_COLOR : CARD_COLOR));
             draw_localized(renderer, ptc_ui_text(PTC_UI_T_Y_REFRESH_2), false, cx + 264, cy + 87, 13,
                 renderer->a(bridge_->waiting ? MUTED_COLOR : FOCUS_BORDER));
             for (int i = 0; i < PTC_OVERLAY_PARENT_ACTION_COUNT; ++i) {
-                const s32 y = cy + 125 + i * 46;
+                const s32 y = cy + 125 + i * 40;
                 const bool selected = i == parent_action_;
                 const char *reason = parent_action_reason(
                     static_cast<PtcOverlayParentAction>(i));
-                renderer->drawRect(cx + 12, y, cw - 24, 44,
+                renderer->drawRect(cx + 12, y, cw - 24, 38,
                     renderer->a(selected ? FOCUS_BG : CARD_COLOR));
-                draw_outline(renderer, cx + 12, y, cw - 24, 44,
+                draw_outline(renderer, cx + 12, y, cw - 24, 38,
                     selected ? 2 : 1, selected ? FOCUS_BORDER : MUTED_COLOR);
                 if (i == PTC_OVERLAY_PARENT_ADD_MINUTES) {
                     std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_QUICK_GRANT_D_MIN_LEFT_RIGHT_TO), daily_add_minutes_);
@@ -304,9 +305,9 @@
                     renderer->a(WAITING_COLOR), 305);
                 if (selected && !reason && parent_action_requires_hold(static_cast<PtcOverlayParentAction>(i))) {
                     const int progress = ptc_overlay_hold_progress(&confirm_hold_, 1000);
-                    renderer->drawRect(cx + 20, y + 42, cw - 40, 3, renderer->a(CARD_COLOR));
+                    renderer->drawRect(cx + 20, y + 35, cw - 40, 3, renderer->a(CARD_COLOR));
                     if (progress > 0)
-                        renderer->drawRect(cx + 20, y + 42, (cw - 40) * progress / 1000, 3,
+                        renderer->drawRect(cx + 20, y + 35, (cw - 40) * progress / 1000, 3,
                             renderer->a(ERROR_COLOR));
                 }
             }
@@ -321,12 +322,13 @@
         }
 
         if (parent_view_ == ParentView::Confirm) {
-            const bool immediate = displayed_summary_.bedtime_active &&
+            const bool waive = parent_action_ == PTC_OVERLAY_PARENT_WAIVE_DOCK;
+            const bool immediate = !waive && displayed_summary_.bedtime_active &&
                 displayed_summary_.bedtime_skipped;
-            const char *reason = parent_action_reason(PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP);
-            draw_localized(renderer, ptc_ui_text(PTC_UI_T_RESTORE_BEDTIME_LIMIT), false, cx + 14, cy + 158, 19,
+            const char *reason = parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_));
+            draw_localized(renderer, ptc_ui_text(waive ? PTC_UI_T_DOCK_WAIVE : PTC_UI_T_RESTORE_BEDTIME_LIMIT), false, cx + 14, cy + 158, 19,
                 renderer->a(TEXT_COLOR), 330);
-            draw_localized(renderer, immediate ?
+            draw_localized(renderer, waive ? ptc_ui_text(PTC_UI_T_DOCK_WAIVE_BODY) : immediate ?
                 ptc_ui_text(PTC_UI_T_CURRENTLY_DURING_BEDTIME_CONFIRMING_WILL_RESTRICT_USE) :
                 ptc_ui_text(PTC_UI_T_SKIP_WILL_BE_CLEARED_BEDTIME_RESTRICTIONS_WILL),
                 false, cx + 14, cy + 212, 13,
@@ -338,7 +340,7 @@
                 renderer->a(TEXT_COLOR));
             renderer->drawRect(cx + 184, cy + 480, cw - 196, 58,
                 renderer->a(immediate ? DISABLED_COLOR : FOCUS_BG));
-            draw_localized(renderer, immediate ? ptc_ui_text(PTC_UI_T_HOLD_A_1S_TO_RESTORE) : ptc_ui_text(PTC_UI_T_A_CONFIRM_RESTORE), false,
+            draw_localized(renderer, immediate ? ptc_ui_text(PTC_UI_T_HOLD_A_1S_TO_RESTORE) : ptc_ui_text(waive ? PTC_UI_T_A_CONFIRM : PTC_UI_T_A_CONFIRM_RESTORE), false,
                 cx + 202, cy + 515, 13,
                 renderer->a(immediate ? ERROR_COLOR : TEXT_COLOR));
             if (immediate) {
@@ -515,11 +517,17 @@
         ptc_overlay_format_child_restriction_guidance(&summary, restriction_guidance, sizeof(restriction_guidance));
         const bool restriction_urgent = (summary.valid &&
             ((summary.bedtime_active && !summary.bedtime_skipped) ||
-             summary.daily_restriction_active ||
+             summary.daily_restriction_active || summary.dock_restriction_active ||
              (summary.eye_care_enabled &&
               std::strcmp(summary.eye_care_phase, "resting") == 0)));
         draw_localized(renderer, restriction_guidance, false, cx + 5, cy + 94, 12,
             renderer->a(restriction_urgent ? ERROR_COLOR : FOCUS_BORDER), 350);
+
+        if (summary.dock_available) {
+            if (status_is_stale()) std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+            else ptc_overlay_format_dock_usage(&summary, line, sizeof(line));
+            draw_localized(renderer, line, false, cx + 5, cy + 164, 11, renderer->a(MUTED_COLOR), 350);
+        }
 
         // --- 2. Code Display Slots (8位卡片槽 - 增大更醒目) ---
         const s32 slot_y = cy + PTC_OVERLAY_SLOT_Y;
@@ -597,8 +605,9 @@
 
         // --- 4. Control & Submit Bar (操作与提交栏) ---
         const bool code_unavailable = has_status_snapshot_ && !status_is_stale() &&
-            (summary.unrestricted_today == 1 || summary.eye_care_unlimited_capped);
-        const bool can_submit = !bedtime_restricted() && !eye_care_restricted() && !code_unavailable &&
+            (summary.unrestricted_today == 1 || summary.eye_care_unlimited_capped || summary.dock_unlimited_capped);
+        const bool dock_restricted = has_status_snapshot_ && !status_is_stale() && summary.dock_restriction_active;
+        const bool can_submit = !bedtime_restricted() && !eye_care_restricted() && !code_unavailable && !dock_restricted &&
             ptc_overlay_request_action_enabled(bridge_->waiting) &&
             ptc_overlay_input_can_submit(input_);
         const s32 submit_y = cy + PTC_OVERLAY_SUBMIT_Y;
@@ -612,6 +621,9 @@
             draw_localized(renderer, ptc_ui_text(PTC_UI_T_SUBMIT_PLAYTIME_GRANT_CLICK_OR_PRESS), false, cx + 50, submit_y + 24, 14, renderer->a(TEXT_COLOR));
         } else if (bedtime_restricted()) {
             draw_localized(renderer, ptc_ui_text(PTC_UI_T_PARENTS_PLEASE_LIFT_THE_BEDTIME_RESTRICTION_FIRST), false,
+                cx + 32, submit_y + 24, 13, renderer->a(WAITING_COLOR));
+        } else if (dock_restricted) {
+            draw_localized(renderer, ptc_ui_text(PTC_UI_T_DOCK_BLOCKED), false,
                 cx + 32, submit_y + 24, 13, renderer->a(WAITING_COLOR));
         } else if (code_unavailable) {
             draw_localized(renderer, ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_GRANT_CODES_ARE), false,
@@ -730,6 +742,10 @@
                 ptc_overlay_format_child_buffer_status(&summary, buffer_buf, sizeof(buffer_buf));
                 std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_SELF_BUFFER_S_S), buffer_buf, ptc_overlay_bridge_transport_label(bridge_));
                 draw_localized(renderer, line, false, cx + 12, status_y + 72, 11, renderer->a(MUTED_COLOR));
+                if (summary.dock_available) {
+                    ptc_overlay_format_dock_usage(&summary, line, sizeof(line));
+                    draw_localized(renderer, line, false, cx + 12, status_y + 90, 11, renderer->a(FOCUS_BORDER), 340);
+                }
             } else {
                 draw_localized(renderer, ptc_ui_text(PTC_UI_T_COMMAND_AND_STATUS_DETAILS_PRESS_TO_CLOSE), false, cx + 12, status_y + 18, 12, renderer->a(FOCUS_BORDER));
                 draw_localized(renderer, ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_NOT_BEEN_OBTAINED_YET), false, cx + 12, status_y + 36, 12, renderer->a(MUTED_COLOR));
@@ -739,7 +755,7 @@
             const PtcOverlayRect buffer = ptc_overlay_child_buffer_rect(cx, cy);
             const PtcOverlayRect parent = ptc_overlay_child_parent_rect(cx, cy, cw);
             const bool buffer_ready = summary.valid && summary.daily_buffer_available &&
-                !bedtime_restricted() && !bridge_->waiting;
+                !bedtime_restricted() && !summary.dock_restriction_active && !bridge_->waiting;
             renderer->drawRect(buffer.x, buffer.y, buffer.w, buffer.h,
                 renderer->a(buffer_ready ? FOCUS_BG : CARD_COLOR));
             draw_outline(renderer, buffer.x, buffer.y, buffer.w, buffer.h, 1,

@@ -58,7 +58,8 @@ typedef enum {
     PTC_UI_PLAN_PAGE_WEEKLY = 1,
     PTC_UI_PLAN_PAGE_HOLIDAY = 2,
     PTC_UI_PLAN_PAGE_BEDTIME = 3,
-    PTC_UI_PLAN_PAGE_EYE_CARE = 4
+    PTC_UI_PLAN_PAGE_EYE_CARE = 4,
+    PTC_UI_PLAN_PAGE_DOCK = 5
 } PtcUiPlanPage;
 
 typedef enum {
@@ -180,7 +181,8 @@ typedef enum {
     PTC_UI_NUMPAD_GRANT_MINUTES = 7,
     PTC_UI_NUMPAD_BEDTIME_TIME = 8,
     PTC_UI_NUMPAD_EYE_CARE_PLAY = 9,
-    PTC_UI_NUMPAD_EYE_CARE_REST = 10
+    PTC_UI_NUMPAD_EYE_CARE_REST = 10,
+    PTC_UI_NUMPAD_DOCK_MINUTES = 11
 } PtcUiNumpadPurpose;
 
 typedef enum {
@@ -268,7 +270,11 @@ typedef enum {
     PTC_UI_OPERATION_CLEAR_BEDTIME_SKIP = 27,
     PTC_UI_OPERATION_SKIP_EYE_CARE = 28,
     PTC_UI_OPERATION_IMPORT_CALENDAR = 29,
-    PTC_UI_OPERATION_ACTIVATE_CALENDAR = 30
+    PTC_UI_OPERATION_ACTIVATE_CALENDAR = 30,
+    PTC_UI_OPERATION_SAVE_DOCK = 31,
+    PTC_UI_OPERATION_WAIVE_DOCK = 32,
+    PTC_UI_OPERATION_LEAVE_DOCK = 33,
+    PTC_UI_OPERATION_CONFIRM_DOCK = 34
 } PtcUiOperation;
 
 typedef struct {
@@ -379,6 +385,21 @@ typedef struct {
     PtcScheduledOverride draft_scheduled_override;
     PtcAutonomyPolicy autonomy_policy;
     PtcAutonomyPolicy draft_autonomy_policy;
+    PtcDockPolicy dock_policy;
+    PtcDockPolicy draft_dock_policy;
+    bool dock_available;
+    bool dock_dirty;
+    int dock_field_focus;
+    bool dock_supported_available;
+    bool dock_supported;
+    char operation_mode[16];
+    bool undocked_usage_available;
+    int undocked_used_minutes;
+    int undocked_remaining_minutes;
+    bool dock_waived_today;
+    bool dock_restriction_active;
+    bool dock_unlimited_capped;
+    uint16_t pending_dock_waiver_day;
     PtcEyeCarePolicy eye_care_policy;
     PtcEyeCarePolicy draft_eye_care_policy;
     char eye_care_phase[20];

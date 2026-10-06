@@ -43,6 +43,20 @@ static const PtcTimeProviderVTable EDEN_TIME_VTABLE = {
     eden_sleep_ms,
 };
 
+static PtcOperationModeStatus eden_operation_mode(void *ctx)
+{
+    PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
+    PtcOperationModeStatus status = {PTC_OPERATION_MODE_UNDOCKED, true, true};
+    char text[64];
+    if (runtime->sysmodule.storage->vtable->read_text(runtime->sysmodule.storage,
+            PLAYWISE_EDEN_SD_ROOT "/operation-mode.txt", text, sizeof(text))) {
+        text[strcspn(text, "\r\n")] = '\0';
+        if (strcmp(text, "docked") == 0) status.mode = PTC_OPERATION_MODE_DOCKED;
+        else if (strcmp(text, "undocked") != 0) status.mode = PTC_OPERATION_MODE_UNKNOWN;
+    }
+    return status;
+}
+
 static bool eden_ipc_connect(void *ctx)
 {
     PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
@@ -211,6 +225,9 @@ bool ptc_eden_runtime_init(PtcEdenRuntime *runtime, PtcStorage *storage)
         (unsigned long long)(randomGet64() & 0xffffffffULL));
     ptc_sysmodule_set_boot_id(&runtime->sysmodule, boot_id);
     (void)ptc_sysmodule_bootstrap_setup(&runtime->sysmodule);
+    runtime->operation_mode_provider.read = eden_operation_mode;
+    runtime->operation_mode_provider.ctx = runtime;
+    runtime->sysmodule.operation_mode_provider = &runtime->operation_mode_provider;
     (void)ptc_sysmodule_scheduler_tick(&runtime->sysmodule, false);
     runtime->initialized = true;
     return true;

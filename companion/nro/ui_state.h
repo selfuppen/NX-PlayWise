@@ -187,4 +187,8 @@ PtcUiActionState ptc_ui_safety_action_available(const PtcUiModel *model, int ind
 bool ptc_ui_safety_action_visible(const PtcUiModel *model, int index);
 const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index);
 
+bool ptc_ui_dock_dirty(const PtcUiModel *model);
+void ptc_ui_format_dock_usage(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
+bool ptc_ui_dock_save_requires_hold(const PtcUiModel *model, int64_t now);
+
 #endif

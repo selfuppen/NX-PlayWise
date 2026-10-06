@@ -92,7 +92,8 @@ typedef enum {
     AUTH_RETRY_CLEAR_ACTIVITY_HISTORY,
     AUTH_RETRY_SKIP_BEDTIME,
     AUTH_RETRY_CLEAR_BEDTIME_SKIP,
-    AUTH_RETRY_SKIP_EYE_CARE
+    AUTH_RETRY_SKIP_EYE_CARE,
+    AUTH_RETRY_WAIVE_DOCK
 } AuthRetryAction;
 
 typedef struct {
@@ -134,6 +135,7 @@ typedef struct {
     int pending_bedtime_section;
     int bedtime_saved_section;
     bool pending_eye_care_save;
+    bool pending_dock_save;
     bool code_preview_recheck;
     bool code_previous_after_available;
     bool code_previous_after_zero;
@@ -244,6 +246,11 @@ void open_redemption_history(UiState *ui);
 void request_clear_redemption_history(UiState *ui);
 void submit_scheduled_override(UiState *ui);
 void submit_autonomy_policy(UiState *ui);
+void submit_dock_policy(UiState *ui);
+void save_dock_from_page(UiState *ui);
+void request_dock_waiver(UiState *ui);
+void submit_dock_waiver(UiState *ui);
+void dock_page_action(UiState *ui, int action, int delta);
 void submit_eye_care_policy(UiState *ui);
 void submit_eye_care_skip(UiState *ui);
 void submit_bedtime_confirmation(UiState *ui);

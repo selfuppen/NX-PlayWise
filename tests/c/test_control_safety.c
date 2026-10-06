@@ -367,9 +367,306 @@ static void test_no_blocked_activation_and_recovery_ui(void)
     free(f.mem);
 }
 
+
+static PtcOperationModeStatus test_operation_mode(void *ctx)
+{
+    return *(PtcOperationModeStatus *)ctx;
+}
+
+static void enable_dock_fixture(Fixture *f, bool force, uint16_t minutes)
+{
+    PtcRules rules;
+    PtcRuntimeState state;
+    expect(load_rules(&f->core, &rules) && load_state(&f->core, &state), "dock fixture read");
+    rules.dock_policy.force_docked = force;
+    rules.dock_policy.undocked_limit_enabled = true;
+    rules.dock_policy.undocked_daily_minutes = minutes;
+    state.dock_tracking_started = true;
+    state.dock_day_index = f->clock.snapshot.day_index;
+    state.dock_usage_known = true;
+    dock_rebaseline(&f->core, &state, ptc_weekday_from_day_index(state.dock_day_index));
+    expect(save_rules(&f->core, &rules) && save_state(&f->core, &state, f->clock.snapshot.unix_seconds), "dock fixture save");
+}
+
+static void test_dock_policy(void)
+{
+    Fixture f;
+    PtcRuntimeState state;
+    PtcRules rules;
+    PtcOperationModeStatus mode = {PTC_OPERATION_MODE_UNDOCKED, true, true};
+    PtcOperationModeProvider provider = {test_operation_mode, &mode};
+    uint64_t carry = 0;
+    init_fixture(&f);
+    f.core.operation_mode_provider = &provider;
+    enable_dock_fixture(&f, false, 1);
+    f.core.dock_boot_sampled = true;
+    expect(ptc_pctl_stub_advance_usage_ns(&f.pctl, 20000000000ULL, &carry) == false, "fraction does not spend a whole minute");
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.undocked_used_ns == 20000000000ULL, "preserve 20 second usage");
+    mode.mode = PTC_OPERATION_MODE_DOCKED;
+    (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 20000000000ULL, &carry);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.undocked_used_ns == 40000000000ULL, "cross-mode interval is charged conservatively");
+    (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 20000000000ULL, &carry);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.undocked_used_ns == 40000000000ULL, "stable TV usage does not charge handheld");
+    mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+    (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 20000000000ULL, &carry);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.dock_enforced && f.pctl.status.blocked_today &&
+        state.undocked_used_ns == 60000000000ULL, "handheld exhausted blocks without rounding refund");
+    request(&f, "dock-buffer", "claim_daily_buffer", "{}");
+    expect(result_has(&f, "dock-buffer", "dock_active") && load_state(&f.core, &state) && !state.buffer_claimed,
+        "dock restriction does not consume buffer");
+    request(&f, "dock-unlimited", "disable_today_limit", "{}");
+    expect(result_has(&f, "dock-unlimited", "dock_active"), "unlimited cannot bypass dock");
+    request(&f, "dock-stale", "waive_dock_policy_today", "{\"expected_day_index\":2379}");
+    expect(result_has(&f, "dock-stale", "dock_date_mismatch"), "stale waiver rejected");
+    mode.mode = PTC_OPERATION_MODE_DOCKED;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && !state.dock_enforced && f.pctl.status.limited_today &&
+        f.pctl.configured_minutes == 120 && f.pctl.played_minutes_today == 21, "TV restores daily total with existing usage");
+    mode.mode = PTC_OPERATION_MODE_UNKNOWN;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.status.blocked_today, "unknown mode restricts");
+    mode.mode = PTC_OPERATION_MODE_DOCKED;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(!f.pctl.status.blocked_today, "mode recovery restores TV");
+    request(&f, "dock-waive", "waive_dock_policy_today", "{\"expected_day_index\":2380}");
+    expect(result_has(&f, "dock-waive", "\"status\":\"ok\"") && load_state(&f.core, &state) &&
+        state.dock_waived && state.undocked_used_ns == 60000000000ULL, "waiver retains use");
+    mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(!f.pctl.status.blocked_today, "today waiver permits handheld");
+    f.clock.snapshot.day_index++;
+    f.clock.snapshot.unix_seconds += 86400;
+    ptc_pctl_stub_reset_daily_usage(&f.pctl);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.undocked_used_ns == 0 &&
+        !state.dock_enforced, "new day resets use");
+    free(f.mem);
+
+    init_fixture(&f);
+    mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+    f.core.operation_mode_provider = &provider;
+    enable_dock_fixture(&f, true, 30);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.status.blocked_today, "force dock immediately blocks handheld");
+    f.pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    request(&f, "dock-failed-waive", "waive_dock_policy_today", "{\"expected_day_index\":2380}");
+    expect(result_has(&f, "dock-failed-waive", "\"status\":\"error\"") && load_state(&f.core, &state) &&
+        !state.dock_waived && state.dock_enforced, "failed waiver rolls back state");
+    f.pctl.write_error = PTC_ERR_OK;
+    expect(load_rules(&f.core, &rules), "load concurrent policy");
+    rules.bedtime.enabled = true;
+    for (unsigned i = 0; i < 7; ++i) { rules.bedtime.week[i].enabled = true; rules.bedtime.week[i].start_minute = 600; rules.bedtime.week[i].end_minute = 500; }
+    expect(save_rules(&f.core, &rules), "save concurrent bedtime");
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    request(&f, "dock-bed-waive", "waive_dock_policy_today", "{\"expected_day_index\":2380}");
+    expect(result_has(&f, "dock-bed-waive", "\"status\":\"ok\"") && f.pctl.status.blocked_today,
+        "waiving dock preserves bedtime");
+    free(f.mem);
+
+    init_fixture(&f);
+    mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+    mode.dock_supported = false;
+    f.core.operation_mode_provider = &provider;
+    request(&f, "dock-lite", "set_dock_policy", "{\"force_docked\":true,\"undocked_limit_enabled\":false,\"undocked_daily_minutes\":30}");
+    expect(result_has(&f, "dock-lite", "dock_unsupported"), "Lite rejects force dock");
+    request(&f, "dock-unconfirmed", "set_dock_policy", "{\"force_docked\":false,\"undocked_limit_enabled\":true,\"undocked_daily_minutes\":30}");
+    expect(result_has(&f, "dock-unconfirmed", "dock_confirmation_required"), "first enable needs confirmation");
+    request(&f, "dock-invalid", "set_dock_policy", "{\"force_docked\":false,\"undocked_limit_enabled\":true,\"undocked_daily_minutes\":1441}");
+    expect(result_has(&f, "dock-invalid", "bad_request"), "out of range policy rejected");
+    free(f.mem);
+}
+
+static void confirm_dock_fixture(Fixture *f)
+{
+    PtcRules rules;
+    char fingerprint[65];
+    expect(f->mem->storage.vtable->write_text_atomic(&f->mem->storage, "app/environment.json",
+        "{\"read_ok\":true,\"hos\":\"22.5.0\",\"model\":\"mariko-oled\",\"atmosphere\":true}"), "dock environment");
+    expect(sysmodule_environment_fingerprint(&f->core, fingerprint) && load_rules(&f->core, &rules), "dock fingerprint");
+    rules.bedtime.confirmation_version = 1;
+    rules.bedtime.official_setting_confirmed_at = 1;
+    rules.bedtime.unverified_overlay_risk_accepted = true;
+    snprintf(rules.bedtime.confirmed_environment, sizeof(rules.bedtime.confirmed_environment), "%s", fingerprint);
+    expect(save_rules(&f->core, &rules), "dock enable confirmation");
+}
+
+static void test_dock_accounting_failures(void)
+{
+    Fixture f;
+    PtcRules rules;
+    PtcRuntimeState state;
+    PtcOperationModeStatus mode = {PTC_OPERATION_MODE_UNDOCKED, true, true};
+    PtcOperationModeProvider provider = {test_operation_mode, &mode};
+    uint64_t carry = 0;
+    char code[16], payload[80];
+    bool used;
+    init_fixture(&f);
+    f.core.operation_mode_provider = &provider;
+    confirm_dock_fixture(&f);
+    request(&f, "dock-first", "set_dock_policy", "{\"force_docked\":false,\"undocked_limit_enabled\":true,\"undocked_daily_minutes\":30}");
+    expect(result_has(&f, "dock-first", "\"status\":\"ok\"") && load_state(&f.core, &state) &&
+        state.undocked_used_ns == 0 && state.dock_baseline_known, "first enable excludes earlier console use");
+    (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 10000000000ULL, &carry);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    f.clock.snapshot.unix_seconds += 3600;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.undocked_used_ns == 10000000000ULL, "sleep wall time is not consumption");
+    ptc_sysmodule_init(&f.core, "app", &f.mem->storage, &f.pctl.pctl, &f.clock.provider);
+    f.core.operation_mode_provider = &provider;
+    (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 20000000000ULL, &carry);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.undocked_used_ns == 30000000000ULL, "restart preserves and charges reliable gap");
+    mode.mode = PTC_OPERATION_MODE_DOCKED;
+    f.pctl.read_error = PTC_ERR_PCTL_READ_FAILED;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && !state.dock_usage_known, "read failure marks quota unknown even on TV");
+    (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 10000000000ULL, &carry);
+    f.pctl.read_error = PTC_ERR_OK;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.dock_usage_known && state.undocked_used_ns == 40000000000ULL,
+        "recovered reliable TV gap charges undocked conservatively");
+    mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+    request(&f, "dock-zero", "set_dock_policy", "{\"force_docked\":false,\"undocked_limit_enabled\":true,\"undocked_daily_minutes\":0}");
+    expect(result_has(&f, "dock-zero", "\"status\":\"ok\"") && f.pctl.status.blocked_today,
+        "zero allowance restricts immediately");
+    expect(ptc_token_v2_encode(3, 12, "kid-switch", SECRET, 2380, code) == PTC_ERR_OK, "encode dock test token");
+    snprintf(payload, sizeof(payload), "{\"code\":\"%s\"}", code);
+    request(&f, "dock-token", "offline_code", payload);
+    expect(result_has(&f, "dock-token", "dock_active") &&
+        check_nonce_used(&f.core, 2380, 12, 2, &used) == PTC_ERR_OK && !used, "dock rejection preserves nonce");
+    f.mem->fail_write_path_contains_once = "results/dock-result-fail.json";
+    request(&f, "dock-result-fail", "waive_dock_policy_today", "{\"expected_day_index\":2380}");
+    expect(load_state(&f.core, &state) && !state.dock_waived && state.undocked_used_ns == 40000000000ULL,
+        "result failure restores waiver and retains all usage");
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/flags/disable.flag", "test\n"), "dock protection flag");
+    request(&f, "dock-protected-waive", "waive_dock_policy_today", "{\"expected_day_index\":2380}");
+    expect(result_has(&f, "dock-protected-waive", "\"status\":\"ok\"") && !f.pctl.status.blocked_today &&
+        f.mem->storage.vtable->exists(&f.mem->storage, "app/flags/disable.flag"), "protected waiver restores only dock target");
+    free(f.mem);
+
+    init_fixture(&f);
+    mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+    f.core.operation_mode_provider = &provider;
+    confirm_dock_fixture(&f);
+    expect(load_rules(&f.core, &rules), "unlimited dock rules");
+    for (unsigned i = 0; i < 7; ++i) rules.week[i].mode = PTC_RULE_MODE_UNLIMITED;
+    expect(save_rules(&f.core, &rules), "seed unlimited dock");
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    request(&f, "dock-unlimited-enable", "set_dock_policy", "{\"force_docked\":false,\"undocked_limit_enabled\":true,\"undocked_daily_minutes\":30}");
+    expect(result_has(&f, "dock-unlimited-enable", "\"status\":\"ok\"") && f.pctl.configured_minutes == 1440 &&
+        load_state(&f.core, &state) && state.dock_usage_known, "unlimited first enable installs reliable timer cap");
+    request(&f, "dock-off", "set_dock_policy", "{\"force_docked\":false,\"undocked_limit_enabled\":false,\"undocked_daily_minutes\":0}");
+    expect(result_has(&f, "dock-off", "\"status\":\"ok\"") && f.pctl.status.unrestricted_today,
+        "turning off last timer feature restores unlimited");
+    free(f.mem);
+}
+
+static void test_dock_composition_and_migration(void)
+{
+    Fixture f;
+    PtcRules rules;
+    PtcRuntimeState state;
+    PtcPctlSettingsSnapshot snapshot;
+    PtcOperationModeStatus mode = {PTC_OPERATION_MODE_DOCKED, true, true};
+    PtcOperationModeProvider provider = {test_operation_mode, &mode};
+    uint64_t carry = 0;
+    init_fixture(&f);
+    f.core.operation_mode_provider = &provider;
+    enable_dock_fixture(&f, true, 30);
+    f.core.dock_boot_sampled = true;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 20000000000ULL, &carry);
+    mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+    f.pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.undocked_used_ns == 20000000000ULL && !state.dock_enforced,
+        "failed mode restriction cannot refund observed usage");
+    f.pctl.write_error = PTC_ERR_OK;
+    mode.mode = PTC_OPERATION_MODE_DOCKED;
+    expect(load_rules(&f.core, &rules) && load_state(&f.core, &state), "composed eye policy");
+    rules.eye_care.enabled = true;
+    state.eye_care_resting = true;
+    state.eye_care_rest_deadline = f.clock.snapshot.unix_seconds + 600;
+    state.eye_care_break_id = 123;
+    expect(f.pctl.pctl.vtable->snapshot_settings(&f.pctl.pctl, &snapshot) == PTC_ERR_OK &&
+        save_eye_care_snapshot(&f.core, &snapshot, f.clock.snapshot.unix_seconds), "composed eye base snapshot");
+    expect(save_rules(&f.core, &rules) && save_state(&f.core, &state, f.clock.snapshot.unix_seconds), "persist eye rest");
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    unsigned int blocked_writes = f.pctl.apply_target_calls;
+    mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.apply_target_calls == blocked_writes, "adding dock reason does not rewrite blocked target");
+    request(&f, "dock-eye-waive", "waive_dock_policy_today", "{\"expected_day_index\":2380}");
+    expect(result_has(&f, "dock-eye-waive", "\"status\":\"ok\"") && f.pctl.status.blocked_today &&
+        load_state(&f.core, &state) && state.eye_care_resting, "dock waiver never ends an eye-care rest");
+    expect(f.pctl.apply_target_calls == blocked_writes, "waiving dock under eye rest does not rewrite blocked target");
+    free(f.mem);
+
+    init_fixture(&f);
+    f.core.operation_mode_provider = &provider;
+    mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+    enable_dock_fixture(&f, false, 1);
+    f.core.dock_boot_sampled = true;
+    carry = 0;
+    (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 60000000000ULL, &carry);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.status.blocked_today, "prior day quota exhausted without waiver");
+    ++f.clock.snapshot.day_index;
+    f.clock.snapshot.unix_seconds += 86400;
+    ptc_pctl_stub_reset_daily_usage(&f.pctl);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.dock_usage_known && state.undocked_used_ns == 0 &&
+        !state.dock_enforced && f.pctl.status.limited_today, "new day restores quota from prior blocked target");
+    (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 10000000000ULL, &carry);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.undocked_used_ns == 10000000000ULL,
+        "new day resumes precise undocked counting");
+    free(f.mem);
+
+    init_fixture(&f);
+    f.core.operation_mode_provider = &provider;
+    mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+    enable_dock_fixture(&f, false, 30);
+    f.pctl.played_minutes_today = 120;
+    f.pctl.status.remaining_minutes = 0;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    mode.mode = PTC_OPERATION_MODE_DOCKED;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.status.restricted_now && f.pctl.status.remaining_minutes == 0,
+        "docking cannot replenish exhausted daily total");
+    expect(load_state(&f.core, &state), "unknown interval state");
+    state.dock_usage_known = state.dock_baseline_known = false;
+    expect(save_state(&f.core, &state, f.clock.snapshot.unix_seconds), "seed unprovable interval");
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && !state.dock_usage_known, "new TV baseline cannot prove lost consumption");
+    free(f.mem);
+
+    init_fixture(&f);
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/rules.json", "{\"version\":2}"), "seed old rules");
+    expect(load_rules(&f.core, &rules) && !rules.dock_policy.force_docked && !rules.dock_policy.undocked_limit_enabled,
+        "old rules default both policies off");
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/rules.json",
+        "{\"version\":2,\"undocked_limit_enabled\":true}"), "seed partial rules");
+    expect(load_rules(&f.core, &rules) && !rules.dock_policy.force_docked &&
+        rules.dock_policy.undocked_daily_minutes == 30, "missing new rule fields retain individual defaults");
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/state.json",
+        "{\"version\":1,\"dock_day_index\":2380,\"undocked_used_ns\":20000000000}"), "seed partial dock state");
+    expect(load_state(&f.core, &state) && !state.dock_usage_known && state.undocked_used_ns == 20000000000ULL,
+        "missing state preserves known counter without claiming reliable allowance");
+    free(f.mem);
+}
+
 int ptc_test_control_safety(void)
 {
     failures = 0;
+    test_dock_policy();
+    test_dock_accounting_failures();
+    test_dock_composition_and_migration();
     test_ledger();
     test_real_storage_ledger();
     test_transaction_and_read_failures();

@@ -3683,8 +3683,62 @@ static void test_calendar_nearest_page(void)
         "today eye care skip has the same width as its neighboring actions");
 }
 
+static void test_dock_ui(void)
+{
+    PtcUiModel model = {0};
+    char text[256];
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_PLAN;
+    model.status_loaded = model.dock_available = model.undocked_usage_available = true;
+    model.status_updated_at = 1000;
+    model.dock_policy.undocked_limit_enabled = true;
+    model.dock_policy.undocked_daily_minutes = 30;
+    model.draft_dock_policy = model.dock_policy;
+    model.undocked_used_minutes = 10;
+    model.undocked_remaining_minutes = 20;
+    snprintf(model.operation_mode, sizeof(model.operation_mode), "undocked");
+    PtcUiRect card = ptc_ui_dock_card_rect();
+    check_hit(ptc_ui_hit_test_at(&model, card.x + 5, card.y + 5, 1000), PTC_UI_HIT_PARENT_CARD, 13, "dock plan card touch");
+    model.selected_index = 5;
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 13, "controller reaches dock plan");
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 5, "controller leaves dock card");
+    model.plan_page = PTC_UI_PLAN_PAGE_DOCK;
+    for (int i = 0; i < 5; ++i) {
+        PtcUiRect field = ptc_ui_dock_field_rect(i);
+        check_hit(ptc_ui_hit_test_at(&model, field.x + 5, field.y + 5, 1000), PTC_UI_HIT_DOCK_FIELD, i, "dock field touch");
+    }
+    check_true(!ptc_ui_dock_save_requires_hold(&model, 1000), "safe quota does not require hold");
+    model.draft_dock_policy.force_docked = true;
+    check_true(ptc_ui_dock_dirty(&model) && ptc_ui_dock_save_requires_hold(&model, 1000), "force requires hold while handheld");
+    snprintf(model.operation_mode, sizeof(model.operation_mode), "docked");
+    check_true(!ptc_ui_dock_save_requires_hold(&model, 1000), "TV mode can save without immediate hold");
+    check_true(ptc_ui_dock_save_requires_hold(&model, 1201), "stale dock status requires conservative hold");
+    model.dock_waived_today = true;
+    check_true(!ptc_ui_dock_save_requires_hold(&model, 1000), "today waiver survives editing rules");
+    model.dock_waived_today = false;
+    for (int lang = PTC_UI_LANGUAGE_SIMPLIFIED; lang <= PTC_UI_LANGUAGE_ENGLISH; ++lang) {
+        ptc_ui_language_set_resolved((PtcUiLanguagePreference)lang);
+        ptc_ui_format_dock_usage(&model, 1000, text, sizeof(text));
+        check_true(strstr(text, "10") && strstr(text, "20"), "three language dock use projection");
+        ptc_ui_format_dock_usage(&model, 1201, text, sizeof(text));
+        check_true(strcmp(text, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM)) == 0, "stale dock usage hidden");
+    }
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+    model.dock_dirty = true;
+    model.draft_dock_policy.undocked_daily_minutes = 15;
+    check_true(ptc_ui_apply_result_json(&model,
+        "{\"version\":1,\"request_id\":\"dock-ui\",\"type\":\"status\",\"status\":\"ok\",\"state\":{\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,\"remaining_available\":true,\"remaining_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0,\"dock\":{\"available\":true,\"force_docked\":false,\"undocked_limit_enabled\":true,\"undocked_daily_minutes\":40}},\"completed_at\":1000}"), "dock refresh parses");
+    check_int(model.draft_dock_policy.undocked_daily_minutes, 15, "status refresh retains draft");
+    check_true(ptc_ui_apply_result_json(&model,
+        "{\"version\":1,\"request_id\":\"old\",\"type\":\"status\",\"status\":\"ok\",\"state\":{\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,\"remaining_available\":true,\"remaining_minutes\":20,\"play_timer_enabled\":1,\"restricted_now\":0},\"completed_at\":1000}"), "old result parses");
+    check_true(!model.dock_available, "missing dock state stays unavailable");
+}
+
 int main(void)
 {
+    test_dock_ui();
     test_calendar_nearest_page();
     test_calendar_manager_surface();
     test_language_and_short_weekly_limits();

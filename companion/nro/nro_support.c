@@ -35,6 +35,17 @@ void export_diagnostics(UiState *ui)
             ui->model.status_loaded && ui->model.status_updated_at > 0 && exported_at >= ui->model.status_updated_at
                 ? (double)(exported_at - ui->model.status_updated_at) : -1.0);
         cJSON_AddNumberToObject(runtime, "day_index", ui->model.day_index);
+        cJSON_AddStringToObject(runtime, "operation_mode", ui->model.operation_mode);
+        cJSON_AddBoolToObject(runtime, "force_docked", ui->model.dock_policy.force_docked);
+        cJSON_AddBoolToObject(runtime, "undocked_limit_enabled", ui->model.dock_policy.undocked_limit_enabled);
+        cJSON_AddNumberToObject(runtime, "undocked_daily_minutes", ui->model.dock_policy.undocked_daily_minutes);
+        cJSON_AddBoolToObject(runtime, "dock_supported_available", ui->model.dock_supported_available);
+        cJSON_AddBoolToObject(runtime, "dock_supported", ui->model.dock_supported);
+        cJSON_AddBoolToObject(runtime, "undocked_usage_available", ui->model.undocked_usage_available);
+        cJSON_AddNumberToObject(runtime, "undocked_used_minutes", ui->model.undocked_used_minutes);
+        cJSON_AddNumberToObject(runtime, "undocked_remaining_minutes", ui->model.undocked_remaining_minutes);
+        cJSON_AddBoolToObject(runtime, "dock_waived_today", ui->model.dock_waived_today);
+        cJSON_AddBoolToObject(runtime, "dock_restriction_active", ui->model.dock_restriction_active);
         cJSON_AddNumberToObject(runtime, "limited_today", ui->model.limited_today);
         cJSON_AddNumberToObject(runtime, "blocked_today", ui->model.blocked_today);
         cJSON_AddNumberToObject(runtime, "unrestricted_today", ui->model.unrestricted_today);

@@ -40,6 +40,12 @@ typedef struct {
 } PtcEyeCarePolicy;
 
 typedef struct {
+    bool force_docked;
+    bool undocked_limit_enabled;
+    uint16_t undocked_daily_minutes;
+} PtcDockPolicy;
+
+typedef struct {
     bool enabled;
     uint16_t start_minute;
     uint16_t end_minute;
@@ -104,6 +110,7 @@ typedef struct {
     PtcScheduledOverride scheduled_override;
     PtcAutonomyPolicy autonomy_policy;
     PtcEyeCarePolicy eye_care;
+    PtcDockPolicy dock_policy;
     bool holiday_enabled;
     PtcDayRule holiday_rule;
     PtcDayRule makeup_workday_rule;

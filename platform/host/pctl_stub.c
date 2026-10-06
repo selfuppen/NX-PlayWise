@@ -55,6 +55,12 @@ static PtcErrorCode stub_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStat
         return stub->read_error;
     }
     *out = stub->status;
+    if (stub->model_elapsed_time && out->limited_today) {
+        uint64_t configured = (uint64_t)stub->configured_minutes * 60000000000ULL;
+        uint64_t used = (uint64_t)stub->played_minutes_today * 60000000000ULL + stub->usage_fraction_ns;
+        out->remaining_ns_available = true;
+        out->remaining_ns = configured > used ? (int64_t)(configured - used) : 0;
+    }
     if (stub->model_elapsed_time) {
         out->played_minutes_available = true;
         out->played_minutes = stub->played_minutes_today;
@@ -422,6 +428,7 @@ bool ptc_pctl_stub_advance_usage_ns(PtcPctlStub *stub, uint64_t elapsed_ns, uint
     *carry_ns += elapsed_ns % minute_ns;
     minutes = whole + *carry_ns / minute_ns;
     *carry_ns %= minute_ns;
+    stub->usage_fraction_ns = *carry_ns;
     if (minutes == 0) return false;
     if (minutes > stub->configured_minutes - stub->played_minutes_today)
         minutes = stub->configured_minutes - stub->played_minutes_today;
@@ -434,5 +441,6 @@ void ptc_pctl_stub_reset_daily_usage(PtcPctlStub *stub)
 {
     if (!stub || !stub->model_elapsed_time) return;
     stub->played_minutes_today = 0;
+    stub->usage_fraction_ns = 0;
     stub_sync_usage(stub);
 }

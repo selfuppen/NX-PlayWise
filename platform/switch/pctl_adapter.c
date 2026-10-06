@@ -208,6 +208,8 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
     }
     if (R_SUCCEEDED(dispatch_out(service, PTC_PCTL_CMD_GET_PLAY_TIMER_REMAINING_TIME, &remaining_ns, sizeof(remaining_ns)))) {
         out->remaining_available = true;
+        out->remaining_ns_available = true;
+        out->remaining_ns = remaining_ns > 0 ? remaining_ns : 0;
         out->remaining_minutes = ptc_nonnegative_minutes_from_nanoseconds(remaining_ns);
     }
     /* Do not use private command 1952 here: device observations show that it can
@@ -262,6 +264,7 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
         out->configured_minutes = configured_minutes;
     }
     if (out->unrestricted_today) {
+        out->remaining_ns_available = false;
         out->remaining_available = false;
         out->remaining_minutes = 0;
     }

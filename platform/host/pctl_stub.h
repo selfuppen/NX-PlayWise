@@ -26,6 +26,7 @@ typedef struct {
     bool hide_restricted_now;
     uint16_t configured_minutes;
     uint32_t played_minutes_today;
+    uint64_t usage_fraction_ns;
     bool expiry_observed;
     bool restore_called;
     int64_t forensic_remaining_ns;

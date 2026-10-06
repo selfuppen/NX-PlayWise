@@ -505,6 +505,13 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         ptc_ui_rect_contains(ptc_ui_parent_footer_rect(4), x, y)) {
         return make_hit(PTC_UI_HIT_PARENT_STATUS, 0);
     }
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK) {
+        for (i = 0; i < 5; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(i), x, y)) return make_hit(PTC_UI_HIT_DOCK_FIELD, i);
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT &&
+        ptc_ui_rect_contains(ptc_ui_dock_card_rect(), x, y)) return make_hit(PTC_UI_HIT_PARENT_CARD, 13);
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY) {
         for (i = 0; i < 7; ++i) {
             int weekday = ptc_ui_weekday_for_display_slot(i);

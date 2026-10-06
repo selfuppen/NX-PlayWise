@@ -24,6 +24,8 @@ typedef struct {
     bool unrestricted_today;
     bool remaining_available;
     uint32_t remaining_minutes;
+    bool remaining_ns_available;
+    int64_t remaining_ns;
     bool played_minutes_available;
     uint32_t played_minutes;
     bool configured_minutes_available;

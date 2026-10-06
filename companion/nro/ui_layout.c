@@ -183,6 +183,8 @@ void ptc_ui_format_home_remaining(const PtcUiModel *model, int64_t now, char *ou
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE));
     else if (model->eye_care_policy.enabled && strcmp(model->eye_care_phase, "resting") == 0)
         snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING));
+    else if (model->dock_restriction_active)
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_DOCK_BLOCKED));
     else if (model->blocked_today == 1 || model->restricted_now == 1)
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_PLAY_BLOCKED));
     else ptc_ui_format_quota_remaining(model, out, out_size);
@@ -193,8 +195,9 @@ bool ptc_ui_home_remaining_minutes(const PtcUiModel *model, int64_t now, int *mi
     if (!model || !minutes || !model->status_loaded || !ptc_ui_status_is_fresh(model, now) ||
         (model->bedtime_active && !model->bedtime_skipped) ||
         (model->eye_care_policy.enabled && strcmp(model->eye_care_phase, "resting") == 0) ||
+        model->dock_restriction_active ||
         model->blocked_today == 1 || model->restricted_now == 1 ||
-        model->unrestricted_today == 1 || model->eye_care_unlimited_capped ||
+        model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped) ||
         !model->remaining_available ||
         model->remaining_minutes < 0)
         return false;
@@ -208,7 +211,7 @@ void ptc_ui_format_home_total_value(const PtcUiModel *model, char *out, size_t o
     /* Only the backend's current-day forecast supplies the displayed total;
        do not reconstruct it from remaining time or consumption estimates. */
     if (!model || !model->status_loaded) snprintf(out, out_size, ptc_ui_text(PTC_UI_T_PENDING));
-    else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped)
+    else if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped))
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
     else if (model->forecast_available && model->forecast[0].day_index == model->day_index &&
              model->forecast[0].mode == PTC_RULE_MODE_LIMIT)
@@ -252,7 +255,7 @@ PtcUiRect ptc_ui_plan_card_rect(int index)
 PtcUiRect ptc_ui_forecast_day_row_rect(int index)
 {
     if (index < 0 || index >= 7) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){834, 210 + index * 51, 382, 44};
+    return (PtcUiRect){834, 210 + index * 40, 382, 34};
 }
 
 PtcUiRect ptc_ui_bedtime_section_rect(int index)
@@ -1486,4 +1489,16 @@ PtcUiRect ptc_ui_language_option_rect(int index)
     col = index % 2;
     row = index / 2;
     return (PtcUiRect){dialog.x + 40 + col * 390, dialog.y + 110 + row * 94, 350, 76};
+}
+
+PtcUiRect ptc_ui_dock_card_rect(void)
+{
+    return (PtcUiRect){834, 512, 382, 120};
+}
+
+PtcUiRect ptc_ui_dock_field_rect(int index)
+{
+    if (index < 0 || index > 4) return (PtcUiRect){0,0,0,0};
+    if (index < 3) return (PtcUiRect){54, 230 + index * 100, 744, 84};
+    return (PtcUiRect){54 + (index - 3) * 380, 550, 364, 58};
 }

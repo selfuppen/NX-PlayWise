@@ -216,7 +216,7 @@ static bool duration_purpose(PtcUiNumpadPurpose purpose)
         purpose == PTC_UI_NUMPAD_GRANT_MINUTES ||
         purpose == PTC_UI_NUMPAD_BEDTIME_TIME ||
         purpose == PTC_UI_NUMPAD_EYE_CARE_PLAY ||
-        purpose == PTC_UI_NUMPAD_EYE_CARE_REST;
+        purpose == PTC_UI_NUMPAD_EYE_CARE_REST || purpose == PTC_UI_NUMPAD_DOCK_MINUTES;
 }
 
 static bool parse_duration_component(const char *text, unsigned int maximum, unsigned int *out)

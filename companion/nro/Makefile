@@ -127,6 +127,7 @@ OBJS += \
 	$(BUILD)/sysmodule_calendar.o \
 	$(BUILD)/sysmodule_request_grants.o \
 	$(BUILD)/sysmodule_request_recovery.o \
+	$(BUILD)/sysmodule_dock.o \
 	$(BUILD)/sysmodule_core.o \
 	$(BUILD)/play_timer_settings_layout.o \
 	$(BUILD)/token_v1.o
@@ -431,3 +432,6 @@ $(TARGET).nro: $(TARGET).elf $(NACP) $(APP_ICON)
 
 clean:
 	rm -rf $(BUILD) $(TARGET).elf $(TARGET).nro $(NACP)
+
+$(BUILD)/sysmodule_dock.o: ../../sysmodule/sysmodule_dock.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@

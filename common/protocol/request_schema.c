@@ -427,6 +427,8 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "disable_bedtime") == 0) return PTC_REQUEST_DISABLE_BEDTIME;
     if (strcmp(value, "confirm_bedtime_requirements") == 0) return PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS;
     if (strcmp(value, "overlay_ready") == 0) return PTC_REQUEST_OVERLAY_READY;
+    if (strcmp(value, "set_dock_policy") == 0) return PTC_REQUEST_SET_DOCK_POLICY;
+    if (strcmp(value, "waive_dock_policy_today") == 0) return PTC_REQUEST_WAIVE_DOCK_POLICY_TODAY;
     if (strcmp(value, "set_eye_care_policy") == 0) return PTC_REQUEST_SET_EYE_CARE_POLICY;
     if (strcmp(value, "skip_eye_care_break") == 0) return PTC_REQUEST_SKIP_EYE_CARE_BREAK;
     if (strcmp(value, "complete_setup") == 0) {
@@ -492,6 +494,8 @@ const char *ptc_request_type_name(PtcRequestType type)
     case PTC_REQUEST_DISABLE_BEDTIME: return "disable_bedtime";
     case PTC_REQUEST_CONFIRM_BEDTIME_REQUIREMENTS: return "confirm_bedtime_requirements";
     case PTC_REQUEST_OVERLAY_READY: return "overlay_ready";
+    case PTC_REQUEST_SET_DOCK_POLICY: return "set_dock_policy";
+    case PTC_REQUEST_WAIVE_DOCK_POLICY_TODAY: return "waive_dock_policy_today";
     case PTC_REQUEST_SET_EYE_CARE_POLICY: return "set_eye_care_policy";
     case PTC_REQUEST_SKIP_EYE_CARE_BREAK: return "skip_eye_care_break";
     case PTC_REQUEST_COMPLETE_SETUP:
@@ -592,6 +596,14 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
     case PTC_REQUEST_SET_AUTONOMY_POLICY:
         return json_u16(text, "daily_buffer_minutes", &out->autonomy_policy.daily_buffer_minutes) &&
             ptc_autonomy_policy_is_valid(&out->autonomy_policy)
+            ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_SET_DOCK_POLICY:
+        return json_bool_required(text, "force_docked", &out->dock_policy.force_docked) &&
+            json_bool_required(text, "undocked_limit_enabled", &out->dock_policy.undocked_limit_enabled) &&
+            json_u16(text, "undocked_daily_minutes", &out->dock_policy.undocked_daily_minutes) &&
+            out->dock_policy.undocked_daily_minutes <= 1440u ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+    case PTC_REQUEST_WAIVE_DOCK_POLICY_TODAY:
+        return json_u16(text, "expected_day_index", &out->dock_expected_day_index)
             ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_EYE_CARE_POLICY:
         return json_bool_required(text, "enabled", &out->eye_care_policy.enabled) &&

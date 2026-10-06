@@ -333,6 +333,10 @@ void request_bedtime_leave(UiState *ui, int target_page, bool leave_parent)
 
 void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
 {
+    if (ui->model.parent_page == PTC_UI_PARENT_PLAN && ui->model.plan_page == PTC_UI_PLAN_PAGE_DOCK) {
+        dock_page_action(ui, 5, 0);
+        return;
+    }
     if (ui->model.parent_support_only && !leave_parent && target_page != PTC_UI_PARENT_SUPPORT) {
         enter_parent_area(ui);
         return;

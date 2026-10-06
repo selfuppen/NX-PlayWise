@@ -60,6 +60,7 @@ SYSMODULE_CFILES := \
 	sysmodule_calendar.c \
 	sysmodule_request_grants.c \
 	sysmodule_request_recovery.c \
+	sysmodule_dock.c \
 	sysmodule_core.c
 CFILES := $(foreach dir,$(filter-out .,$(SOURCES)),$(notdir $(wildcard $(dir)/*.c))) $(SYSMODULE_CFILES)
 SFILES := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))

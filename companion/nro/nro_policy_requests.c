@@ -123,3 +123,94 @@ void submit_clear_bedtime_skip(UiState *ui)
     if (status == PTC_COMPANION_OK) begin_wait(ui, "clear_bedtime_skip", ptc_ui_text(PTC_UI_T_RESTORING_THIS_BEDTIME_LIMIT));
     else set_message(ui, ptc_ui_text(PTC_UI_T_RESTORE_BEDTIME_LIMIT_SUBMISSION_FAILED), status);
 }
+
+void submit_dock_policy(UiState *ui)
+{
+    PtcCompanionStatus status;
+    if (!ui || ui->waiting) return;
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_set_dock_policy(&ui->transport,
+        ui->active_request_id, time(NULL), &ui->model.draft_dock_policy);
+    set_command_name(ui, "set_dock_policy");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "set_dock_policy", ptc_ui_text(PTC_UI_T_DOCK_SAVE));
+    else set_message(ui, ptc_ui_text(PTC_UI_T_DOCK_SAVE), status);
+}
+
+void save_dock_from_page(UiState *ui)
+{
+    if (!ui || ui->waiting || ui->model.disable_flag_present || !ui->model.dock_dirty) return;
+    if (ui->model.draft_dock_policy.force_docked && ui->model.dock_supported_available && !ui->model.dock_supported) {
+        snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_DOCK_LITE));
+        return;
+    }
+    if ((ui->model.draft_dock_policy.force_docked || ui->model.draft_dock_policy.undocked_limit_enabled) &&
+        !ui->model.bedtime_official_setting_confirmed) {
+        open_confirm_overlay(ui, PTC_UI_OPERATION_CONFIRM_DOCK, ptc_ui_text(PTC_UI_T_DOCK_CONFIRM),
+            ptc_ui_text(PTC_UI_T_DOCK_REQUIREMENTS));
+        return;
+    }
+    if (ptc_ui_dock_save_requires_hold(&ui->model, (int64_t)time(NULL)))
+        open_danger_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_DOCK, ptc_ui_text(PTC_UI_T_DOCK_IMMEDIATE),
+            ptc_ui_text(PTC_UI_T_DOCK_CONFIRM_BODY));
+    else open_confirm_overlay(ui, PTC_UI_OPERATION_SAVE_DOCK, ptc_ui_text(PTC_UI_T_DOCK_CONFIRM),
+            ptc_ui_text(PTC_UI_T_DOCK_CONFIRM_BODY));
+}
+
+void request_dock_waiver(UiState *ui)
+{
+    if (!ui || ui->waiting) return;
+    if (!ui->model.dock_available || !ptc_ui_status_is_fresh(&ui->model, (int64_t)time(NULL))) {
+        submit_status(ui);
+        return;
+    }
+    if (ui->model.dock_waived_today || !(ui->model.dock_policy.force_docked || ui->model.dock_policy.undocked_limit_enabled)) return;
+    ui->model.pending_dock_waiver_day = ui->model.day_index;
+    ui->auth_retry_action = AUTH_RETRY_WAIVE_DOCK;
+    if (!verify_sensitive_pin(ui, ptc_ui_text(PTC_UI_T_DOCK_PIN))) return;
+    open_confirm_overlay(ui, PTC_UI_OPERATION_WAIVE_DOCK, ptc_ui_text(PTC_UI_T_DOCK_WAIVE),
+        ptc_ui_text(PTC_UI_T_DOCK_WAIVE_BODY));
+}
+
+void submit_dock_waiver(UiState *ui)
+{
+    PtcCompanionStatus status;
+    if (!ui || ui->waiting) return;
+    make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
+    status = ptc_companion_transport_submit_waive_dock_policy(&ui->transport,
+        ui->active_request_id, time(NULL), ui->model.pending_dock_waiver_day);
+    set_command_name(ui, "waive_dock_policy_today");
+    sync_transport_label(ui);
+    if (status == PTC_COMPANION_OK) begin_wait(ui, "waive_dock_policy_today", ptc_ui_text(PTC_UI_T_DOCK_WAIVE));
+    else set_message(ui, ptc_ui_text(PTC_UI_T_DOCK_WAIVE), status);
+}
+
+void dock_page_action(UiState *ui, int action, int delta)
+{
+    PtcDockPolicy *draft;
+    if (!ui || ui->waiting) return;
+    draft = &ui->model.draft_dock_policy;
+    if (action == 5) {
+        if (ui->model.dock_dirty)
+            open_confirm_overlay(ui, PTC_UI_OPERATION_LEAVE_DOCK, ptc_ui_text(PTC_UI_T_DOCK_LEAVE),
+                ptc_ui_text(PTC_UI_T_DOCK_CONFIRM_BODY));
+        else { ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT; ui->model.selected_index = 13; }
+        return;
+    }
+    if (action == 6) { submit_status(ui); return; }
+    ui->model.dock_field_focus = action;
+    if (action == 4) { request_dock_waiver(ui); return; }
+    if (ui->model.disable_flag_present) return;
+    if (action == 0) {
+        if (!draft->force_docked && ui->model.dock_supported_available && !ui->model.dock_supported) {
+            snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_DOCK_LITE));
+            return;
+        }
+        draft->force_docked = !draft->force_docked;
+    } else if (action == 1) draft->undocked_limit_enabled = !draft->undocked_limit_enabled;
+    else if (action == 2 && delta) draft->undocked_daily_minutes = ptc_ui_adjust_minutes(draft->undocked_daily_minutes, delta, 0, 1440);
+    else if (action == 2) ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_DOCK_MINUTES, PTC_UI_OVERLAY_NONE,
+        ptc_ui_text(PTC_UI_T_DOCK_LIMIT), ptc_ui_text(PTC_UI_T_DOCK_ALLOWANCE), 4, 0, 1440, draft->undocked_daily_minutes);
+    else if (action == 3) { save_dock_from_page(ui); return; }
+    ui->model.dock_dirty = ptc_ui_dock_dirty(&ui->model);
+}

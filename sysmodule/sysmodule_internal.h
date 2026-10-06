@@ -54,7 +54,29 @@ typedef struct {
     int64_t eye_care_rest_deadline;
     uint64_t eye_care_break_id;
     int64_t eye_care_idle_since;
+    uint16_t dock_day_index;
+    uint64_t undocked_used_ns;
+    uint64_t dock_last_used_ns;
+    bool dock_baseline_known;
+    bool dock_usage_known;
+    bool dock_tracking_started;
+    bool dock_interval_unknown;
+    PtcOperationMode dock_last_mode;
+    uint16_t dock_waived_day_index;
+    bool dock_waived;
+    bool dock_enforced;
 } PtcRuntimeState;
+
+PtcOperationModeStatus ptc_read_operation_mode(PtcSysmodule *sysmodule);
+bool dock_policy_enabled(const PtcRules *rules);
+bool dock_policy_blocks(PtcSysmodule *sysmodule, const PtcRules *rules,
+    const PtcRuntimeState *state, PtcClockSnapshot now);
+bool dock_blocks_grants(PtcSysmodule *sysmodule, PtcClockSnapshot now);
+void dock_sample_usage(PtcSysmodule *sysmodule, const PtcRules *rules,
+    PtcRuntimeState *state, PtcClockSnapshot now);
+void dock_rebaseline(PtcSysmodule *sysmodule, PtcRuntimeState *state, uint8_t weekday);
+bool process_dock_request(PtcSysmodule *sysmodule, const PtcRequest *request,
+    bool disabled, PtcClockSnapshot now);
 
 typedef struct {
     char phase[32];
@@ -99,6 +121,9 @@ bool save_eye_care_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapsh
     int64_t captured_at);
 bool load_eye_care_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot);
 void clear_eye_care_snapshot(PtcSysmodule *sysmodule);
+bool save_dock_snapshot(PtcSysmodule *sysmodule, const PtcPctlSettingsSnapshot *snapshot, int64_t captured_at);
+bool load_dock_snapshot(PtcSysmodule *sysmodule, PtcPctlSettingsSnapshot *snapshot);
+void clear_dock_snapshot(PtcSysmodule *sysmodule);
 bool recovery_path_exists(PtcSysmodule *sysmodule);
 bool recovery_owned_by(PtcSysmodule *sysmodule, const PtcRequest *request);
 int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request);
