@@ -109,6 +109,8 @@ The PlayWise PIN protects only this project's Parent Portal and is completely di
 | Switch-native interactive sound effects (audout engine) | Implemented (12 Switch-style sound effects, dial audio, and sound toggle) | 2026-10-01 |
 | Multi-language internationalization (Traditional Chinese & English) | Implemented (bilingual interface & docs, language decoupling) | 2026-10-02 |
 | Destructive action long-press charge-up & safety protection | Implemented (charge-up confirmation with continuous audio feedback, instant cancel) | 2026-10-02 |
+| Configuration backup & import | Feature branch testing (pending release); full backup, 11 selective restore groups, PIN/hold confirmation, transactional rollback, calendar restore, and pairing key rotation | In Branch Testing |
+| TV mode rules | Feature branch testing (pending release); force TV mode, uniform daily non-TV mode limit (0–1440 min), PIN today exemption; disabled by default, non-TV usage counted into daily limit, hardware acceptance pending | In Branch Testing |
 | Custom shortcut recording | In validation (presets available, recording entry unreleased) | TBD |
 | Per-title playtime statistics | TODO (`pdm:qry` hardware verification gated; currently marked unavailable) | TBD |
 
