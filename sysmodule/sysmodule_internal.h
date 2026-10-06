@@ -259,4 +259,7 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
 bool process_calendar_request(PtcSysmodule *sysmodule, const PtcRequest *request,
                               bool disable_flag, PtcClockSnapshot now);
 
+bool config_backup_rollback_files(PtcSysmodule *sysmodule);
+bool process_config_backup_request(PtcSysmodule *sysmodule, const PtcRequest *request, bool disabled, PtcClockSnapshot now);
+
 #endif

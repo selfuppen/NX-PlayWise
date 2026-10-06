@@ -280,30 +280,30 @@ void handle_parent_action(UiState *ui)
             ui->model.plan_page = PTC_UI_PLAN_PAGE_EYE_CARE;
             ui->model.selected_index = 0;
             break;
-        case 5:
+        case 6:
             ui->model.draft_autonomy_policy = ui->model.autonomy_policy;
             ui->model.overlay = PTC_UI_OVERLAY_AUTONOMY;
             ui->model.overlay_selection = ui->model.draft_autonomy_policy.daily_buffer_minutes / 5;
             snprintf(ui->model.overlay_title, sizeof(ui->model.overlay_title), ptc_ui_text(PTC_UI_T_TODAY_S_INDEPENDENT_BUFFERING));
             ui->model.overlay_body[0] = '\0';
             break;
-        case 13:
+        case 5:
             if (!ui->model.dock_dirty) ui->model.draft_dock_policy = ui->model.dock_policy;
             ui->model.dock_field_focus = 0;
             ui->model.plan_page = PTC_UI_PLAN_PAGE_DOCK;
             ui->model.parent_footer_focused = false;
             break;
-        case 6:
         case 7:
         case 8:
         case 9:
         case 10:
         case 11:
         case 12:
+        case 13:
             if (ui->model.forecast_available) {
-                ui->model.forecast_detail_day_offset = index - 6;
+                ui->model.forecast_detail_day_offset = index - 7;
                 ui->model.overlay = PTC_UI_OVERLAY_DAY_DECISION;
-                ui->model.overlay_selection = index - 6;
+                ui->model.overlay_selection = index - 7;
             }
             break;
         default:
@@ -430,6 +430,7 @@ void handle_parent_action(UiState *ui)
                      new_state ? ptc_ui_text(PTC_UI_T_BUTTON_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN) : ptc_ui_text(PTC_UI_T_KEYSTROKES_AND_INTERACTIVE_SOUND_EFFECTS_HAVE_BEEN));
             break;
         }
+        case 7: open_config_backup(ui); break;
         case 6:
             open_activity_history(ui);
             break;
@@ -747,6 +748,10 @@ void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_SKIP_BEDTIME:
         submit_bedtime_skip(ui);
         break;
+    case PTC_UI_OPERATION_CREATE_CONFIG_BACKUP: submit_config_backup(ui, false); break;
+    case PTC_UI_OPERATION_RESTORE_CONFIG_BACKUP: submit_config_backup(ui, true); break;
+    case PTC_UI_OPERATION_CONFIG_REQUIREMENTS:
+        ui->pending_config_restore = true; submit_bedtime_confirmation(ui); break;
     case PTC_UI_OPERATION_SAVE_DOCK:
         submit_dock_policy(ui);
         break;
@@ -761,7 +766,7 @@ void confirm_operation(UiState *ui)
         ui->model.draft_dock_policy = ui->model.dock_policy;
         ui->model.dock_dirty = false;
         ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
-        ui->model.selected_index = 13;
+        ui->model.selected_index = 5;
         break;
     case PTC_UI_OPERATION_SKIP_EYE_CARE:
         submit_eye_care_skip(ui);

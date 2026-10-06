@@ -16,6 +16,7 @@ static const UiAction PLAN_ACTIONS[] = {
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_WEEKLY_QUOTA), PTC_UI_TEXT_REFERENCE(PTC_UI_T_ACTIVE_2), UI_ACCENT, UI_ACTION_ICON_WEEKLY, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_BEDTIME), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_WARNING, UI_ACTION_ICON_MOON, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_EYE_CARE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_WARNING, UI_ACTION_ICON_CLOCK, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_DOCK_TITLE), "", UI_ACCENT, UI_ACTION_ICON_CONSOLE, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_AUTONOMY_BUFFER_2), PTC_UI_TEXT_REFERENCE(PTC_UI_T_IS_CURRENTLY_CLOSED), UI_SUCCESS, UI_ACTION_ICON_BUFFER, UI_ACTION_VISUAL_NONE},
 };
 
@@ -34,6 +35,7 @@ static const UiAction SETTINGS_ACTIONS[] = {
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_HOMEBREW_ACCESS), PTC_UI_TEXT_REFERENCE(PTC_UI_T_NOT_ENABLED), UI_DANGER, UI_ACTION_ICON_HOMEBREW, UI_ACTION_VISUAL_NONE},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_SOUND_EFFECTS), "", UI_SUCCESS, UI_ACTION_ICON_AUDIO, UI_ACTION_VISUAL_AUDIO},
     {PTC_UI_TEXT_REFERENCE(PTC_UI_T_FAMILY_ACTIVITIES), PTC_UI_TEXT_REFERENCE(PTC_UI_T_LAST_200), UI_MUTED, UI_ACTION_ICON_ACTIVITY, UI_ACTION_VISUAL_NONE},
+    {PTC_UI_TEXT_REFERENCE(PTC_UI_T_CONFIG_BACKUP_TITLE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_CONFIG_BACKUP_CARD_NOTE), UI_ACCENT, UI_ACTION_ICON_EXPORT, UI_ACTION_VISUAL_NONE},
 };
 
 const UiAction GRANT_MANAGER_ACTIONS[] = {
@@ -792,6 +794,12 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 dynamic_action.subtitle = eye_detail;
                 action = &dynamic_action;
             } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 5) {
+                static char dock_detail[192];
+                dynamic_action = *action;
+                ptc_ui_format_dock_usage(model, ptc_ui_render_now(), dock_detail, sizeof(dock_detail));
+                dynamic_action.subtitle = dock_detail;
+                action = &dynamic_action;
+            } else if (model->parent_page == PTC_UI_PARENT_PLAN && index == 6) {
                 static char autonomy_detail[64];
                 dynamic_action = *action;
                 if (model->autonomy_policy.daily_buffer_minutes > 0u) {
@@ -869,6 +877,9 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                                   (ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy) ? ptc_ui_text(PTC_UI_T_SKIPPED) :
                                    (model->bedtime_policy.enabled ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2)))) :
                     index == 4 ? ptc_ui_eye_care_plan_badge_label(model) :
+                    index == 5 ? (model->dock_restriction_active ? ptc_ui_text(PTC_UI_T_RESTRICTED) :
+                        model->dock_waived_today ? ptc_ui_text(PTC_UI_T_SKIPPED) :
+                        (model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled) ? ptc_ui_text(PTC_UI_T_ENABLED) : ptc_ui_text(PTC_UI_T_DISABLED_2)) :
                     (model->autonomy_policy.daily_buffer_minutes == 0 ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
                      (model->daily_buffer_claimed ? ptc_ui_text(PTC_UI_T_RECEIVED_TODAY) :
                       (model->daily_buffer_available ? ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY) : ptc_ui_text(PTC_UI_T_ENABLED))));
@@ -1047,6 +1058,14 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             desc3 = ptc_ui_text(PTC_UI_T_SUPPORTS_HANDLE_L_R_FOR_QUICK_PAGE);
             action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_SEE_FULL_ACTIVITY_LOG);
             break;
+        case 7:
+            tag = ptc_ui_text(PTC_UI_T_SAFETY_MANAGEMENT);
+            title = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_TITLE);
+            status_text = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_SELECTION);
+            desc1 = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_CARD_NOTE);
+            desc2 = ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NOTE);
+            action_hint = ptc_ui_text(PTC_UI_T_PRESS_A_TO_VIEW_DETAILS_AND_CONFIGURATION);
+            break;
         default:
             break;
         }
@@ -1055,7 +1074,9 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_text(pixels, stride, help.x + 24, help.y + 36, tag, 14, UI_ACCENT);
 
         /* Render Title */
-        draw_text(pixels, stride, help.x + 24, help.y + 72, title, 22, UI_RGB(UI_BLENDED(text_primary)));
+        char fitted_title[128];
+        fit_text(fitted_title, sizeof(fitted_title), title, 22, help.width - 48);
+        draw_text(pixels, stride, help.x + 24, help.y + 72, fitted_title, 22, UI_RGB(UI_BLENDED(text_primary)));
 
         /* Render Status Badge */
         UiRect badge = {help.x + help.width - 130, help.y + 24, 106, 26};

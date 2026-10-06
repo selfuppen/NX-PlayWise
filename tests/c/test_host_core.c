@@ -3555,8 +3555,11 @@ done:
     free(mem);
 }
 
+ #include "test_config_backup.inc"
+
 int main(void)
 {
+    test_config_backup();
     failures += ptc_test_control_safety();
     test_eden_simulated_usage_clock();
     test_hot_reload_guard();

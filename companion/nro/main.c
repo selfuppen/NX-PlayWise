@@ -114,6 +114,7 @@ int main(int argc, char **argv)
     /* Seeds the live root files, so the materialization below finds them all
        present and succeeds without a packaged defaults/ directory. Keep this
        call ahead of it. */
+    ui.model.eden_mode_controls = true;
     eden_runtime_ready = ptc_eden_runtime_init(&eden_runtime, ptc_fs_storage_as_storage(&fs));
 #endif
     install_defaults_ready = ptc_install_materialize_defaults(ptc_fs_storage_as_storage(&fs), APP_ROOT);
@@ -713,8 +714,18 @@ int main(int argc, char **argv)
                     else if (down & HidNpadButton_Y) dock_page_action(&ui, 6, 0);
                     else if (down & HidNpadButton_X) dock_page_action(&ui, 4, 0);
                     else if (down & HidNpadButton_Plus) dock_page_action(&ui, 3, 0);
-                    else if (down & HidNpadButton_Up) ui.model.dock_field_focus = (ui.model.dock_field_focus + 4) % 5;
-                    else if (down & HidNpadButton_Down) ui.model.dock_field_focus = (ui.model.dock_field_focus + 1) % 5;
+                    else if (down & HidNpadButton_Up) {
+                        int count = ui.model.eden_mode_controls ? 7 : 5;
+                        int focus = ui.model.dock_field_focus >= 7 ? ui.model.dock_field_focus - 2 : ui.model.dock_field_focus;
+                        focus = (focus + count - 1) % count;
+                        ui.model.dock_field_focus = focus >= 5 ? focus + 2 : focus;
+                    }
+                    else if (down & HidNpadButton_Down) {
+                        int count = ui.model.eden_mode_controls ? 7 : 5;
+                        int focus = ui.model.dock_field_focus >= 7 ? ui.model.dock_field_focus - 2 : ui.model.dock_field_focus;
+                        focus = (focus + 1) % count;
+                        ui.model.dock_field_focus = focus >= 5 ? focus + 2 : focus;
+                    }
                     else if (down & HidNpadButton_A) dock_page_action(&ui, ui.model.dock_field_focus, 0);
                     else if (ui.model.dock_field_focus == 2 && (down & HidNpadButton_Left)) dock_page_action(&ui, 2, -1);
                     else if (ui.model.dock_field_focus == 2 && (down & HidNpadButton_Right)) dock_page_action(&ui, 2, 1);
@@ -949,6 +960,7 @@ int main(int argc, char **argv)
         svcSleepThread(ui.animating ? INPUT_LOOP_SLEEP_FAST_NS : INPUT_LOOP_SLEEP_NS);
     }
 
+    if (!ui.waiting && ui.config_stage_id[0]) config_backup_action(&ui, 15);
     appletUnhook(&hook_cookie);
     ptc_audio_exit();
     ptc_ui_graphics_exit();

@@ -122,6 +122,7 @@ typedef enum {
     PTC_UI_HIT_FORECAST_DAY,
     PTC_UI_HIT_SETUP_PCTL_HELP,
     PTC_UI_HIT_SUPPORT_GUIDE,
+    PTC_UI_HIT_CONFIG_BACKUP_FIELD,
     PTC_UI_HIT_DOCK_FIELD
 } PtcUiHitKind;
 
@@ -270,7 +271,7 @@ PtcUiHit ptc_ui_hit_test(const PtcUiModel *model, int x, int y);
 PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now);
 
 
-PtcUiRect ptc_ui_dock_card_rect(void);
+PtcUiRect ptc_ui_config_backup_field_rect(int index);
 PtcUiRect ptc_ui_dock_field_rect(int index);
 
 #endif

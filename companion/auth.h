@@ -36,6 +36,7 @@ typedef struct {
 } PtcCompanionAuth;
 
 void ptc_companion_auth_init(PtcCompanionAuth *auth, const char *app_root, PtcStorage *storage);
+bool ptc_companion_auth_backup_pin_matches(const char *json, const char *pin);
 PtcAuthStatus ptc_companion_auth_state(PtcCompanionAuth *auth);
 PtcAuthStatus ptc_companion_auth_set_pin(
     PtcCompanionAuth *auth,

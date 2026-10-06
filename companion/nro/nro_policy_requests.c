@@ -190,11 +190,22 @@ void dock_page_action(UiState *ui, int action, int delta)
     PtcDockPolicy *draft;
     if (!ui || ui->waiting) return;
     draft = &ui->model.draft_dock_policy;
+#ifdef PLAYWISE_EDEN
+    if (action == 7 || action == 8) {
+        ui->model.dock_field_focus = action;
+        if (ui->client.storage->vtable->write_text_atomic(ui->client.storage, APP_ROOT "/operation-mode.txt",
+                action == 7 ? "docked" : "undocked")) {
+            ptc_companion_transport_notify_storage_changed(&ui->transport);
+            submit_status(ui);
+        } else snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_SAVE_FAILED));
+        return;
+    }
+#endif
     if (action == 5) {
         if (ui->model.dock_dirty)
             open_confirm_overlay(ui, PTC_UI_OPERATION_LEAVE_DOCK, ptc_ui_text(PTC_UI_T_DOCK_LEAVE),
                 ptc_ui_text(PTC_UI_T_DOCK_CONFIRM_BODY));
-        else { ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT; ui->model.selected_index = 13; }
+        else { ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT; ui->model.selected_index = 5; }
         return;
     }
     if (action == 6) { submit_status(ui); return; }

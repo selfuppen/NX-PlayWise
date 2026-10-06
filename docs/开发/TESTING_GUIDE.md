@@ -8,7 +8,11 @@
 
 # Testing Guide
 
-## Dock policy acceptance
+## Config import regression
+
+Run `python tools/test.py` and `python tools/package_remote.py --with-previews` (includes the Eden NRO). Host C regressions cover snapshots, selective merge/defaults, expired dates, PIN/key rotation, calendar restore, atomic overwrite, write/PCTL/readback/result failures and interrupted restart rollback. Check eleven selectors, PIN/hold/cancel/failure flows, eight settings cards and four 90px independent plan cards in three languages and both themes. Eden simulation must preserve use while testing TV-only, exhausted non-TV, combined restrictions and restart. Production package gates must exclude simulation controls.
+
+## TV mode policy acceptance
 
 Deterministic C tests cover sub-minute consumption, conservative transition attribution, stable TV, sleep, restart, day rollover, zero/disabled allowance, first enable, shared unlimited cap, waiver dates, Lite, prerequisites, nonce/buffer preservation and write/result rollback. UI tests cover controller/touch entry and fields, three languages, missing old status, draft retention and immediate-restriction hold gates. The actual renderer produces `dock-*` dark/light previews in all three languages.
 

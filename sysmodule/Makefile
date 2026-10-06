@@ -18,6 +18,7 @@ SOURCES := \
 	../common/crypto \
 	../common/protocol \
 	../common/rules \
+	../common/security \
 	../common/time \
 	../common/token \
 	../common/usage \
@@ -58,6 +59,7 @@ SYSMODULE_CFILES := \
 	sysmodule_setup.c \
 	sysmodule_requests.c \
 	sysmodule_calendar.c \
+	sysmodule_config_backup.c \
 	sysmodule_request_grants.c \
 	sysmodule_request_recovery.c \
 	sysmodule_dock.c \

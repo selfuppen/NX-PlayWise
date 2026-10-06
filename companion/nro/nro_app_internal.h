@@ -18,6 +18,7 @@
 #include "../../companion/switch_ipc_client.h"
 #include "../../platform/switch/fs_storage.h"
 #include "../../platform/calendar_store.h"
+#include "../../platform/config_backup.h"
 #include "../../platform/install_defaults.h"
 #include "../../third_party/cjson/cJSON.h"
 #include "../../common/support/support_export.h"
@@ -136,6 +137,10 @@ typedef struct {
     int bedtime_saved_section;
     bool pending_eye_care_save;
     bool pending_dock_save;
+    bool pending_config_restore;
+    char config_stage_id[80];
+    char config_digest[65];
+    uint16_t config_submitted_groups;
     bool code_preview_recheck;
     bool code_previous_after_available;
     bool code_previous_after_zero;
@@ -192,6 +197,12 @@ u64 shortcut_preset_mask(int index);
 bool shortcut_mask_valid(u64 mask);
 void refresh_custom_shortcut_label(UiState *ui);
 void refresh_shortcut_draft_label(UiState *ui);
+void open_config_backup(UiState *ui);
+void config_backup_action(UiState *ui, int index);
+void config_backup_preview(UiState *ui);
+void request_config_restore(UiState *ui);
+void submit_config_backup(UiState *ui, bool restore);
+void config_backup_result(UiState *ui);
 void load_ui_preferences(UiState *ui);
 bool save_ui_preferences(UiState *ui);
 bool save_setup_step(UiState *ui, int step);

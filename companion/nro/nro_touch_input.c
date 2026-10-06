@@ -19,6 +19,8 @@ void handle_touch(UiState *ui, int x, int y)
         return;
     }
     switch (hit.kind) {
+    case PTC_UI_HIT_CONFIG_BACKUP_FIELD:
+        ui->model.overlay_selection = hit.index; config_backup_action(ui, hit.index); break;
     case PTC_UI_HIT_CHILD_SUBMIT_CODE:
         if (ui->waiting) {
             ptc_audio_play(PTC_SE_ERROR);
@@ -163,7 +165,7 @@ void handle_touch(UiState *ui, int x, int y)
     case PTC_UI_HIT_FORECAST_DAY:
         if (hit.index >= 0 && hit.index < 7 && ui->model.forecast_available) {
             ptc_audio_play(PTC_SE_POPUP);
-            ui->model.selected_index = 5 + hit.index;
+            ui->model.selected_index = 7 + hit.index;
             ui->model.forecast_detail_day_offset = hit.index;
             ui->model.overlay = PTC_UI_OVERLAY_DAY_DECISION;
             ui->model.overlay_selection = hit.index;

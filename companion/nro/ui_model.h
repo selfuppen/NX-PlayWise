@@ -112,7 +112,8 @@ typedef enum {
     PTC_UI_OVERLAY_CALENDAR_MANAGER = 40,
     PTC_UI_OVERLAY_CALENDAR_FORMAT = 41,
     PTC_UI_OVERLAY_SETUP_PCTL_HELP = 42,
-    PTC_UI_OVERLAY_SUPPORT_GUIDE = 43
+    PTC_UI_OVERLAY_SUPPORT_GUIDE = 43,
+    PTC_UI_OVERLAY_CONFIG_BACKUP = 44
 } PtcUiOverlay;
 
 #define PTC_UI_PIN_MAX_DIGITS 64
@@ -274,7 +275,10 @@ typedef enum {
     PTC_UI_OPERATION_SAVE_DOCK = 31,
     PTC_UI_OPERATION_WAIVE_DOCK = 32,
     PTC_UI_OPERATION_LEAVE_DOCK = 33,
-    PTC_UI_OPERATION_CONFIRM_DOCK = 34
+    PTC_UI_OPERATION_CONFIRM_DOCK = 34,
+    PTC_UI_OPERATION_CREATE_CONFIG_BACKUP = 35,
+    PTC_UI_OPERATION_RESTORE_CONFIG_BACKUP = 36,
+    PTC_UI_OPERATION_CONFIG_REQUIREMENTS = 37
 } PtcUiOperation;
 
 typedef struct {
@@ -390,6 +394,14 @@ typedef struct {
     bool dock_available;
     bool dock_dirty;
     int dock_field_focus;
+    bool eden_mode_controls;
+    bool config_backup_ready;
+    bool config_today_available;
+    bool config_pin_available;
+    bool config_needs_confirmation;
+    uint16_t config_groups;
+    char config_metadata[128];
+    char config_preview[512];
     bool dock_supported_available;
     bool dock_supported;
     char operation_mode[16];

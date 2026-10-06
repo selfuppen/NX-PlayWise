@@ -13,6 +13,8 @@
 typedef struct {
     char app_root[96];
     PtcStorage *storage;
+    bool (*config_random)(void *ctx, uint8_t *out, size_t size);
+    void *config_random_ctx;
     PtcPctl *pctl;
     PtcTimeProvider *time_provider;
     PtcOperationModeProvider *operation_mode_provider;

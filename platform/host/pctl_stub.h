@@ -11,6 +11,8 @@ typedef struct {
     bool timer_started;
     bool timer_stopped;
     PtcErrorCode read_error;
+    unsigned int read_status_calls;
+    unsigned int read_status_fail_on_call;
     bool read_fails_after_apply;
     PtcErrorCode backup_error;
     PtcErrorCode write_error;

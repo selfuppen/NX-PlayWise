@@ -396,14 +396,19 @@ bool write_current_status_result(
     PtcEffectiveRule effective;
     uint32_t check_day;
     if (!load_rules(sysmodule, &rules)) {
-        return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_RULES_INVALID, now.day_index);
+        (void)finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_RULES_INVALID, now.day_index);
+        return false;
     }
     if (!load_state(sysmodule, &runtime_state)) {
-        return finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_BAD_REQUEST, now.day_index);
+        (void)finish_with_error(sysmodule, request, mode, dry_run, PTC_ERR_BAD_REQUEST, now.day_index);
+        return false;
     }
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
-        return finish_with_error(sysmodule, request, mode, dry_run, err, now.day_index);
+        /* An error result is not a successful commit. In particular, callers
+           must retain recovery materials when rollback itself failed. */
+        (void)finish_with_error(sysmodule, request, mode, dry_run, err, now.day_index);
+        return false;
     }
     result_state_from_pctl(&state, now.day_index, &pctl_status);
     effective = ptc_rules_resolve(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));

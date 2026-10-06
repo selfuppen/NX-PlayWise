@@ -64,7 +64,8 @@ The QR code in the first screenshot has been replaced with a **public demo confi
 
 ## Key Features
 
-- **Docked and handheld rules**: require TV mode, a uniform 0–1440-minute daily undocked ceiling within the total, and a PIN-authorized today waiver. Disabled by default; hardware qualification pending.
+- **Configuration backup/import**: eleven selective groups, PIN/hold verification, transactional rollback, calendar restore and fresh pairing keys; available in Security & Preferences.
+- **TV mode rules**: require TV mode, a uniform 0–1440-minute daily non-TV ceiling within the total, and a PIN-authorized today waiver. Disabled by default; hardware qualification pending.
 
 - **Daily Dispatch**: Today's playtime limit, quick grant, unlimited play for today, and reset today's adjustments.
 - **Long-Term Schedules**: Weekly schedules, statutory holidays, specific date overrides, and bedtime schedules.
@@ -118,7 +119,7 @@ The PlayWise PIN protects only this project's Parent Portal and is completely di
 | Eye protection break | DOING; continuous play/break cycles, overlay & daily dispatch skip, pending hardware qualification | In Progress |
 | Custom shortcut recording | In validation (presets available, recording entry unreleased) | TBD |
 | Multiple restricted time slots | TODO; support configuring multiple blackout/curfew intervals per day (e.g. study & dinner hours) | TBD |
-| Configuration backup & import | TODO; support backing up schedules and parent settings to SD card with easy restore | TBD |
+| Configuration backup & import | Implemented; complete archive, eleven selective groups, transactional rollback and key rotation; hardware acceptance pending | Current |
 | Per-title playtime statistics | TODO (`pdm:qry` hardware verification gated; currently marked unavailable) | TBD |
 
 Once daily limit or bedtime takes effect, the in-game overlay remains PlayWise's only on-console interactive entry: for daily limits, users can redeem grant codes, or parents can grant temporary minutes or unlimited play for today; for bedtime, users can skip the session, disable the schedule, or restore pre-installation settings. Temporary bypass via Nintendo master PIN in the native dialog remains handled by Nintendo. If the overlay or sysmodule is unavailable, PlayWise does not provide an on-console recovery fallback or auto-write recovery flags.

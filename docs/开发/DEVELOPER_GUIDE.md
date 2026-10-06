@@ -10,6 +10,10 @@
 
 PlayWise validates protocols, queues, security state machines, and recovery transactions on the host side first before interacting with physical Switch PCTL. Environment prerequisites and platform specifics are detailed in the [Development Environment Guide](DEVELOPMENT_ENVIRONMENT_GUIDE.md); external behavioral changes must be synchronized with the [Protocol Specification](../设计/PROTOCOL.md) and [Testing Guide](TESTING_GUIDE.md).
 
+## Config import regression
+
+Run `python tools/test.py` and `python tools/package_remote.py --with-previews` (includes the Eden NRO). Host C regressions cover snapshots, selective merge/defaults, expired dates, PIN/key rotation, calendar restore, atomic overwrite, write/PCTL/readback/result failures and interrupted restart rollback. Check eleven selectors, PIN/hold/cancel/failure flows, eight settings cards and four 90px independent plan cards in three languages and both themes. Eden simulation must preserve use while testing TV-only, exhausted non-TV, combined restrictions and restart. Production package gates must exclude simulation controls.
+
 ## Architectural Boundaries
 
 ```text

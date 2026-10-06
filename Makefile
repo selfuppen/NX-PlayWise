@@ -33,8 +33,10 @@ THIRD_PARTY_SRCS := \
 PLATFORM_HOST_SRCS := \
 	platform/install_defaults.c \
 	platform/calendar_store.c \
+	platform/config_backup.c \
 	platform/host/mem_storage.c \
 	platform/host/pctl_stub.c \
+	platform/host/operation_mode_file.c \
 	platform/host/fake_time.c \
 	platform/switch/fs_storage.c \
 	platform/switch/usage_stats_adapter.c \
@@ -52,6 +54,7 @@ ORCH_SRCS := \
 	sysmodule/sysmodule_setup.c \
 	sysmodule/sysmodule_requests.c \
 	sysmodule/sysmodule_calendar.c \
+	sysmodule/sysmodule_config_backup.c \
 	sysmodule/sysmodule_request_grants.c \
 	sysmodule/sysmodule_request_recovery.c \
 	sysmodule/sysmodule_dock.c \
@@ -102,7 +105,7 @@ $(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c co
 	$(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_DEVICE_LAB -o $@ $(filter-out FORCE_HOST_REBUILD,$^)
 
 # Execute the real NRO orchestration with deterministic host libnx/input shims.
-SETUP_TEST_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) companion/auth.c companion/album_restriction.c companion/transport_client.c common/support/support_export.c common/security/credential_policy.c platform/host/mem_storage.c companion/nro/nro_runtime.c companion/nro/nro_actions.c companion/nro/nro_preferences.c companion/nro/nro_setup.c companion/nro/nro_support.c companion/nro/nro_security.c companion/nro/nro_requests.c companion/nro/nro_result_poll.c tests/nro_setup/test.c
+SETUP_TEST_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) companion/auth.c companion/album_restriction.c companion/transport_client.c common/support/support_export.c common/security/credential_policy.c platform/host/mem_storage.c companion/nro/nro_runtime.c companion/nro/nro_actions.c companion/nro/nro_preferences.c companion/nro/nro_setup.c companion/nro/nro_support.c companion/nro/nro_security.c companion/nro/nro_requests.c companion/nro/nro_result_poll.c companion/nro/nro_config_backup.c platform/config_backup.c tests/nro_setup/test.c
 $(HOST_SETUP_TEST): $(SETUP_TEST_SRCS) tests/nro_setup/switch.h tests/nro_setup/release_manifest.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_EDEN -Itests/nro_setup -Icompanion/nro -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $(SETUP_TEST_SRCS) -lm
 

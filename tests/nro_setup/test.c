@@ -1,4 +1,5 @@
 #include "nro_app_internal.h"
+#include "../../common/protocol/request_schema.h"
 #include "../../platform/host/mem_storage.h"
 
 static int failures;
@@ -65,6 +66,73 @@ static void init(UiState *ui, PtcMemStorage *mem)
     pin_cursor = 0;
     pin_values[0] = pin_values[1] = NULL;
 }
+static void test_config_backup_ui(void)
+{
+    static PtcMemStorage mem; UiState ui; char stage[256], text[8192], path[320];
+    init(&ui,&mem);
+    check(ptc_companion_auth_set_pin(&ui.auth,"1234",fixed_time,switch_random,NULL) == PTC_AUTH_OK,"backup UI PIN");
+    mem.storage.vtable->write_text_atomic(&mem.storage,APP_ROOT "/config.json","{\"version\":1,\"device_id\":\"kid\",\"theme\":\"light\"}");
+    mem.storage.vtable->write_text_atomic(&mem.storage,APP_ROOT "/credentials.json","{\"version\":1,\"grant_secret\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"}");
+    mem.storage.vtable->write_text_atomic(&mem.storage,APP_ROOT "/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60}],\"today_override_day_index\":2}");
+    ui.model.view = PTC_UI_PARENT; ui.model.parent_page = PTC_UI_PARENT_SETTINGS;
+    ui.model.selected_index = 7; ui.model.day_index = 1; ui.model.status_loaded = true;
+    ui.model.status_updated_at = fixed_time;
+    check(ptc_config_stage_path(stage,sizeof(stage),APP_ROOT,"ui-backup") && ptc_config_stage_create(&mem.storage,APP_ROOT,stage,fixed_time) &&
+        ptc_config_archive_save(&mem.storage,stage,APP_ROOT "/backups/config-backup.json"),"UI backup fixture");
+    open_config_backup(&ui);
+    check(ui.model.config_backup_ready && ui.model.config_groups == 507 && !ui.model.config_today_available,"ordinary defaults exclude expired today and security");
+    config_backup_action(&ui,2); check(ui.model.config_groups == 507,"expired today cannot toggle");
+    config_backup_action(&ui,11); check(ui.model.config_groups == 2043,"all selects available groups");
+    config_backup_action(&ui,12); check(ui.model.config_groups == 0,"clear selection");
+    config_backup_action(&ui,14); check(ui.model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP && !ui.waiting,"empty import disabled");
+    config_backup_action(&ui,8);
+    pin_cursor=0; pin_values[0]="1234";
+    request_config_restore(&ui);
+    check(ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required,"import requires hold after current PIN");
+    ptc_ui_cancel_overlay(&ui.model);
+    check(ui.model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP && !ui.waiting,"cancel hold returns to backup without submission");
+    config_backup_action(&ui,9); pin_cursor=0; pin_values[0]="1234"; pin_values[1]="9999";
+    request_config_restore(&ui);
+    check(ui.model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP && !ui.waiting,"incorrect source PIN cannot confirm import");
+    pin_cursor=0; pin_values[0]=pin_values[1]="1234";
+    request_config_restore(&ui);
+    check(ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required,"source PIN authorizes restore");
+    ptc_ui_cancel_overlay(&ui.model);
+    ui.model.recovery_active=true;
+    request_config_restore(&ui); check(!ui.waiting && ui.model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP,"recovery blocks import");
+    ui.model.recovery_active=false;
+    submit_config_backup(&ui,true);
+    snprintf(path,sizeof(path),APP_ROOT "/inbox/pending/%s.json",ui.active_request_id);
+    PtcRequest request;
+    check(mem.storage.vtable->read_text(&mem.storage,path,text,sizeof(text)) && ptc_request_parse(text,&request) == PTC_ERR_OK &&
+        request.type == PTC_REQUEST_RESTORE_CONFIG_BACKUP && !strstr(text,"1234") && !strstr(text,"pin_hash") && !strstr(text,"theme"),"NRO submits only valid metadata IPC");
+    ui.waiting=false; ui.model.waiting=false; config_backup_action(&ui,15);
+    check(ui.model.overlay == PTC_UI_OVERLAY_NONE && ui.model.selected_index == 7,"backup back restores settings card focus");
+
+    snprintf(ui.active_request_id,sizeof(ui.active_request_id),"ui-create-failed");
+    check(ptc_config_stage_path(stage,sizeof(stage),APP_ROOT,ui.active_request_id) &&
+        ptc_config_stage_create(&mem.storage,APP_ROOT,stage,fixed_time),"failed save stage fixture");
+    snprintf(path,sizeof(path),"%s/manifest.json",stage);
+    snprintf(ui.model.result_type,sizeof(ui.model.result_type),"create_config_backup");
+    snprintf(ui.model.result_status,sizeof(ui.model.result_status),"ok");
+    mem.fail_write_path_contains_once="backups/config-backup.json";
+    config_backup_result(&ui);
+    check(!mem.storage.vtable->exists(&mem.storage,path) &&
+        mem.storage.vtable->exists(&mem.storage,APP_ROOT "/backups/config-backup.json"),"failed save removes owned secret stage and retains backup");
+
+    open_config_backup(&ui);
+    ui.config_submitted_groups=PTC_CONFIG_PIN; ui.setup_parent_authorized=true;
+    snprintf(ui.model.result_type,sizeof(ui.model.result_type),"restore_config_backup");
+    check(ptc_config_stage_path(stage,sizeof(stage),APP_ROOT,ui.config_stage_id),"source PIN preview stage");
+    snprintf(path,sizeof(path),"%s/manifest.json",stage);
+    config_backup_result(&ui);
+    check(ui.model.view == PTC_UI_CHILD && ui.model.overlay == PTC_UI_OVERLAY_NONE &&
+        !ui.setup_parent_authorized && !ui.config_stage_id[0] && !mem.storage.vtable->exists(&mem.storage,path),
+        "PIN restore leaves parent session and cleans owned preview");
+}
+
 int main(void)
 {
     static PtcMemStorage mem;
@@ -223,6 +291,7 @@ int main(void)
         check(!ui.waiting && ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.model.setup_phase[0] == '\0',
               "missing activation evidence cannot reuse an old active phase");
     }
+    test_config_backup_ui();
     printf("%s: NRO setup integration\n", failures ? "FAIL" : "PASS");
     return failures ? 1 : 0;
 }

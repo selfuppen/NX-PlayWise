@@ -205,9 +205,9 @@ static void test_release_navigation(void)
     char shortcut_hint[160];
     memset(&model, 0, sizeof(model));
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_TODAY), 7, "today exposes quota, bedtime, buffer and eye care cards");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 6, "time plan root exposes six direct cards");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_PLAN), 7, "time plan root exposes seven direct cards");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_GRANT), 4, "grant page exposes generation, management and history");
-    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 7, "settings page exposes language, audio and security");
+    check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SETTINGS), 8, "settings page exposes language, audio and security");
     check_int(ptc_ui_parent_action_count(PTC_UI_PARENT_SUPPORT), 6, "support is a top-level six-action page");
 
     ptc_audio_set_enabled(true);
@@ -2300,12 +2300,12 @@ static void test_home_redesign(void)
         check_true(strstr(text, "未知") != NULL, "unknown eye care reading is explicit");
     }
     {
-        const int counts[] = {5, 4, 5, 6};
+        const int counts[] = {7, 4, 5, 6};
         for (int group = 0; group < 4; ++group) {
             for (int index = 0; index < counts[group]; ++index) {
                 PtcUiRect rect = group == 0 ? ptc_ui_plan_card_rect(index) :
                     (group == 3 ? ptc_ui_support_card_rect(index) : ptc_ui_parent_card_rect(index));
-                check_true(rect.h == 120 && rect.y + rect.h < ptc_ui_notice_rect().y,
+                check_true(rect.h == (group == 0 && index >= 3 ? 90 : 120) && rect.y + rect.h < ptc_ui_notice_rect().y,
                            "every top-level action card uses the compact height and clears the status capsule");
                 for (int next = index + 1; next < counts[group]; ++next) {
                     PtcUiRect other = group == 0 ? ptc_ui_plan_card_rect(next) :
@@ -3306,17 +3306,17 @@ static void test_forecast_day_decision_and_navigation(void)
     /* 2. D-pad navigation between cards and forecast rows */
     model.selected_index = 3;
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 6, "move right from card 3 to forecast day 0");
+    check_int(model.selected_index, 8, "move right from card 3 to nearest forecast row");
 
     ptc_ui_move_parent_selection(&model, 0, 1);
-    check_int(model.selected_index, 7, "move down within forecast rows to day 1");
+    check_int(model.selected_index, 9, "move down within forecast rows");
 
     ptc_ui_move_parent_selection(&model, -1, 0);
     check_int(model.selected_index, 3, "move left from upper forecast row back to card 3");
 
     model.selected_index = 4;
     ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 8, "move right from card 4 to forecast day 2");
+    check_int(model.selected_index, 10, "move right from card 4 to nearest forecast row");
 
     ptc_ui_move_parent_selection(&model, -1, 0);
     check_int(model.selected_index, 4, "move left from lower forecast row back to card 4");
@@ -3697,13 +3697,13 @@ static void test_dock_ui(void)
     model.undocked_used_minutes = 10;
     model.undocked_remaining_minutes = 20;
     snprintf(model.operation_mode, sizeof(model.operation_mode), "undocked");
-    PtcUiRect card = ptc_ui_dock_card_rect();
-    check_hit(ptc_ui_hit_test_at(&model, card.x + 5, card.y + 5, 1000), PTC_UI_HIT_PARENT_CARD, 13, "dock plan card touch");
-    model.selected_index = 5;
-    ptc_ui_move_parent_selection(&model, 1, 0);
-    check_int(model.selected_index, 13, "controller reaches dock plan");
-    ptc_ui_move_parent_selection(&model, -1, 0);
-    check_int(model.selected_index, 5, "controller leaves dock card");
+    PtcUiRect card = ptc_ui_plan_card_rect(5);
+    check_hit(ptc_ui_hit_test_at(&model, card.x + 5, card.y + 5, 1000), PTC_UI_HIT_PARENT_CARD, 5, "dock plan card touch");
+    model.selected_index = 4;
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 5, "controller reaches dock plan");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 6, "controller reaches buffer after dock");
     model.plan_page = PTC_UI_PLAN_PAGE_DOCK;
     for (int i = 0; i < 5; ++i) {
         PtcUiRect field = ptc_ui_dock_field_rect(i);
@@ -3736,8 +3736,22 @@ static void test_dock_ui(void)
     check_true(!model.dock_available, "missing dock state stays unavailable");
 }
 
+static void test_config_backup_layout(void)
+{
+    PtcUiModel model = {0}; model.view = PTC_UI_PARENT; model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
+    model.config_backup_ready = model.config_today_available = model.config_pin_available = true;
+    for (int i = 0; i < 16; ++i) {
+        PtcUiRect rect = ptc_ui_config_backup_field_rect(i);
+        check_hit(hit_center(&model,rect),PTC_UI_HIT_CONFIG_BACKUP_FIELD,i,"every backup control is touchable");
+        for (int j=i+1; j<16; ++j) check_true(!rects_overlap(rect,ptc_ui_config_backup_field_rect(j)),"backup controls do not overlap");
+    }
+    model.overlay = PTC_UI_OVERLAY_NONE; model.parent_page=PTC_UI_PARENT_SETTINGS;
+    check_hit(hit_center(&model,ptc_ui_settings_card_rect(7)),PTC_UI_HIT_PARENT_CARD,7,"eighth settings card has matching hit area");
+}
+
 int main(void)
 {
+    test_config_backup_layout();
     test_dock_ui();
     test_calendar_nearest_page();
     test_calendar_manager_surface();

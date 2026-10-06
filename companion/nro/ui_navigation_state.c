@@ -50,11 +50,11 @@ int ptc_ui_parent_action_count(PtcUiParentPage page)
 {
     switch (page) {
     case PTC_UI_PARENT_PLAN:
-        return 6;
+        return 7;
     case PTC_UI_PARENT_GRANT:
         return 4;
     case PTC_UI_PARENT_SETTINGS:
-        return 7;
+        return 8;
     case PTC_UI_PARENT_SUPPORT:
         return 6;
     case PTC_UI_PARENT_TODAY:
@@ -149,7 +149,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             ? index > count + model->recent_event_count
             : (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT && model->forecast_available
                 ? index > 13
-                : (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT ? index > 13 : index >= count)))) {
+                : (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT ? index >= 7 : index >= count)))) {
         index = 0;
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
@@ -235,52 +235,25 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT) {
-        static const int left_target[6] = {0, 1, 2, 0, 1, 2};
-        static const int right_target[6] = {3, 4, 5, 3, 4, 5};
         int previous = index;
-        if (index == 13) {
-            if (horizontal < 0) index = 5;
-            else if (vertical < 0) index = model->forecast_available ? 12 : 5;
-            else if (vertical > 0) { model->parent_content_selection = 13; model->parent_footer_focused = true; }
-            model->selected_index = index;
-            return;
+        PtcUiRect current = index < 7 ? ptc_ui_plan_card_rect(index) : ptc_ui_forecast_day_row_rect(index - 7);
+        int best = index, distance = INT_MAX;
+        /* Cross-column moves use the closest vertical center, including forecast rows. */
+        for (int candidate = 0; candidate < (model->forecast_available ? 14 : 7); ++candidate) {
+            PtcUiRect rect = candidate < 7 ? ptc_ui_plan_card_rect(candidate) : ptc_ui_forecast_day_row_rect(candidate - 7);
+            int dx = (rect.x + rect.w / 2) - (current.x + current.w / 2);
+            int dy = (rect.y + rect.h / 2) - (current.y + current.h / 2);
+            bool eligible = horizontal ? (horizontal > 0 ? dx > 0 : dx < 0)
+                : (dx == 0 && (vertical > 0 ? dy > 0 : dy < 0));
+            int score = horizontal ? abs(dx) + abs(dy) * 4 : abs(dy);
+            if (eligible && score < distance) { best = candidate; distance = score; }
         }
-        if (index == 5 && horizontal > 0) { model->selected_index = 13; return; }
-        if (index == 12 && vertical > 0) { model->selected_index = 13; return; }
-        if (index >= 6 && index <= 12) {
-            if (horizontal < 0) {
-                index = index <= 7 ? 3 : (index <= 9 ? 4 : 5);
-            } else if (vertical < 0) {
-                if (index > 6) --index;
-            } else if (vertical > 0) {
-                if (index < 12) ++index;
-                else {
-                    model->parent_content_selection = previous;
-                    model->parent_footer_focused = true;
-                    model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
-                }
-            }
-        } else {
-            if (horizontal < 0 && index >= 3) {
-                index = left_target[index];
-            } else if (horizontal > 0) {
-                if (index < 3) {
-                    index = right_target[index];
-                } else if (model->forecast_available) {
-                    index = index == 3 ? 6 : (index == 4 ? 8 : 10);
-                }
-            } else if (vertical < 0) {
-                if (index == 1 || index == 2 || index == 4 || index == 5) --index;
-            } else if (vertical > 0) {
-                if (index == 0 || index == 1 || index == 3 || index == 4) ++index;
-                else {
-                    model->parent_content_selection = previous;
-                    model->parent_footer_focused = true;
-                    model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
-                }
-            }
+        if (vertical > 0 && best == index) {
+            model->parent_content_selection = previous;
+            model->parent_footer_focused = true;
+            model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
         }
-        model->selected_index = index;
+        model->selected_index = best;
         return;
     }
     column = index % 2;

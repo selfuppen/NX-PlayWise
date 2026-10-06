@@ -210,6 +210,7 @@ void poll_result(UiState *ui, bool force)
             ui->model.draft_makeup_workday_rule = saved_makeup_rule;
             update_holiday_dirty(ui);
         }
+        config_backup_result(ui);
         refresh_disable_flag(ui);
         if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER)
             calendar_manager_refresh(ui);
@@ -338,6 +339,12 @@ void poll_result(UiState *ui, bool force)
                 section >= 0 && section < 3 ? NAMES[section] : ptc_ui_text(PTC_UI_T_BEDTIME));
         }
         if (strcmp(ui->model.result_type, "confirm_bedtime_requirements") == 0) {
+            if (ui->pending_config_restore) {
+                ui->pending_config_restore = false;
+                ui->model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
+                if (strcmp(ui->model.result_status, "ok") == 0) request_config_restore(ui);
+                return;
+            }
             if (ui->pending_dock_save) {
                 ui->pending_dock_save = false;
                 if (strcmp(ui->model.result_status, "ok") == 0) {

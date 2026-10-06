@@ -171,6 +171,9 @@ FORBIDDEN_SECRET_MARKERS = (b"replace-with-long-random-secret",)
 # The emulator build shares its sources with Release, so scan every public
 # artifact for its profile, app root and fixed test secret.
 FORBIDDEN_EDEN_MARKERS = (
+    b"operation-mode.txt",
+    b"Simulate TV mode",
+    b"Simulate non-TV mode",
     b"PLAYWISE_EDEN",
     b"eden-test",
     b"playwise-eden",

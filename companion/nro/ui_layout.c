@@ -246,9 +246,7 @@ PtcUiRect ptc_ui_today_card_rect(int index)
 PtcUiRect ptc_ui_plan_card_rect(int index)
 {
     if (index >= 0 && index < 3) return (PtcUiRect){54, 212 + index * 136, 365, 120};
-    if (index == 3) return (PtcUiRect){439, 212, 365, 120};
-    if (index == 4) return (PtcUiRect){439, 348, 365, 120};
-    if (index == 5) return (PtcUiRect){439, 484, 365, 120};
+    if (index >= 3 && index <= 6) return (PtcUiRect){439, 212 + (index - 3) * 106, 365, 90};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
@@ -1491,14 +1489,19 @@ PtcUiRect ptc_ui_language_option_rect(int index)
     return (PtcUiRect){dialog.x + 40 + col * 390, dialog.y + 110 + row * 94, 350, 76};
 }
 
-PtcUiRect ptc_ui_dock_card_rect(void)
-{
-    return (PtcUiRect){834, 512, 382, 120};
-}
-
 PtcUiRect ptc_ui_dock_field_rect(int index)
 {
+    if (index == 7 || index == 8) return (PtcUiRect){54 + (index - 7) * 380, 620, 364, 44};
     if (index < 0 || index > 4) return (PtcUiRect){0,0,0,0};
     if (index < 3) return (PtcUiRect){54, 230 + index * 100, 744, 84};
     return (PtcUiRect){54 + (index - 3) * 380, 550, 364, 58};
+}
+
+PtcUiRect ptc_ui_config_backup_field_rect(int index)
+{
+    if (index >= 0 && index < 11) return (PtcUiRect){54 + (index % 2) * 385, 196 + (index / 2) * 54, 365, 44};
+    if (index == 11 || index == 12) return (PtcUiRect){54 + (index - 11) * 190, 530, 180, 44};
+    if (index == 13 || index == 14) return (PtcUiRect){54 + (index - 13) * 385, 592, 365, 50};
+    if (index == 15) return (PtcUiRect){54, 664, 200, 44};
+    return (PtcUiRect){0, 0, 0, 0};
 }

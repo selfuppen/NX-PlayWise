@@ -1158,9 +1158,37 @@ static int render_dock_previews(const char *directory, const PtcUiModel *baselin
         model.dock_supported = false;
         failed |= save_preview(directory, "plan", "dock-lite", &model, dark);
         model.dock_supported = true;
+        model.eden_mode_controls = true;
+        failed |= save_preview(directory, "plan", "dock-eden-simulation", &model, dark);
+        model.eden_mode_controls = false;
         model.undocked_usage_available = false;
         snprintf(model.operation_mode, sizeof(model.operation_mode), "unknown");
         failed |= save_preview(directory, "plan", "dock-unknown", &model, dark);
+    }
+    return failed;
+}
+
+static int render_config_backup_previews(const char *directory, const PtcUiModel *baseline)
+{
+    int failed = 0;
+    for (int dark = 0; dark < 2; ++dark) {
+        PtcUiModel model = *baseline;
+        model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SETTINGS;
+        model.overlay = PTC_UI_OVERLAY_NONE; model.selected_index = 7;
+        failed |= save_preview(directory, "settings", "settings-backup-entry", &model, dark);
+        model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP; model.overlay_selection = 14;
+        model.config_backup_ready = model.config_today_available = model.config_pin_available = true;
+        model.config_groups = 511;
+        snprintf(model.config_metadata, sizeof(model.config_metadata), "kid-switch / 2026-10-06 12:00");
+        snprintf(model.config_preview, sizeof(model.config_preview), ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_PREVIEW),
+            120u, ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_APPLY));
+        failed |= save_preview(directory, "settings", "config-backup", &model, dark);
+        model.config_today_available = false; model.config_groups = 2043;
+        snprintf(model.config_preview, sizeof(model.config_preview), "%s", ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NEW_KEY));
+        failed |= save_preview(directory, "settings", "config-backup-security", &model, dark);
+        model.config_backup_ready = false; model.config_groups = 0;
+        snprintf(model.config_preview, sizeof(model.config_preview), "%s", ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_INVALID));
+        failed |= save_preview(directory, "settings", "config-backup-invalid", &model, dark);
     }
     return failed;
 }
@@ -1225,6 +1253,7 @@ int main(int argc, char **argv)
     failed |= render_all_previews(argv[2], &model);
     failed |= render_eye_care_previews(argv[2], &model);
     failed |= render_dock_previews(argv[2], &model);
+    failed |= render_config_backup_previews(argv[2], &model);
 
     /* Pass 2: English previews */
     char en_dir[1024];
@@ -1235,6 +1264,7 @@ int main(int argc, char **argv)
     failed |= render_all_previews(en_dir, &model);
     failed |= render_eye_care_previews(en_dir, &model);
     failed |= render_dock_previews(en_dir, &model);
+    failed |= render_config_backup_previews(en_dir, &model);
     /* The focused eye care surfaces also receive traditional Chinese visual QA. */
     char zh_hant_dir[1024];
     snprintf(zh_hant_dir, sizeof(zh_hant_dir), "%s/zh_hant", argv[2]);
@@ -1243,6 +1273,7 @@ int main(int argc, char **argv)
     localize_preview_baseline(&model);
     failed |= render_eye_care_previews(zh_hant_dir, &model);
     failed |= render_dock_previews(zh_hant_dir, &model);
+    failed |= render_config_backup_previews(zh_hant_dir, &model);
     for (int dark = 0; dark < 2; ++dark) {
         failed |= render_setup_previews(zh_hant_dir, &model, dark);
         failed |= render_support_guide_previews(zh_hant_dir, &model, dark);

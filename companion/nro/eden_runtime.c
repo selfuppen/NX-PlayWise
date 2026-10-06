@@ -12,6 +12,7 @@
 
 #include "../../common/time/ptc_time.h"
 #include "../../common/version.h"
+#include "../../platform/host/operation_mode_file.h"
 #include "release_manifest.h"
 
 /* The emulator has no reliable time service wrapper for the sysmodule path, but
@@ -46,15 +47,8 @@ static const PtcTimeProviderVTable EDEN_TIME_VTABLE = {
 static PtcOperationModeStatus eden_operation_mode(void *ctx)
 {
     PtcEdenRuntime *runtime = (PtcEdenRuntime *)ctx;
-    PtcOperationModeStatus status = {PTC_OPERATION_MODE_UNDOCKED, true, true};
-    char text[64];
-    if (runtime->sysmodule.storage->vtable->read_text(runtime->sysmodule.storage,
-            PLAYWISE_EDEN_SD_ROOT "/operation-mode.txt", text, sizeof(text))) {
-        text[strcspn(text, "\r\n")] = '\0';
-        if (strcmp(text, "docked") == 0) status.mode = PTC_OPERATION_MODE_DOCKED;
-        else if (strcmp(text, "undocked") != 0) status.mode = PTC_OPERATION_MODE_UNKNOWN;
-    }
-    return status;
+    PtcFileOperationMode provider = {runtime->sysmodule.storage, PLAYWISE_EDEN_SD_ROOT};
+    return ptc_file_operation_mode_read(&provider);
 }
 
 static bool eden_ipc_connect(void *ctx)

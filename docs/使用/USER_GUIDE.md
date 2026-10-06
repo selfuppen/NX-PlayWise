@@ -8,18 +8,30 @@
 
 # User Guide
 
-## Docked and handheld rules (device validation pending)
+## Configuration backup and import
 
-Open Parent → Time plans → Docked and handheld to require TV mode or enable a uniform daily handheld/tabletop allowance of 0–1440 minutes. Both features default off on new installs and upgrades. Disabled means no handheld ceiling; enabled zero means handheld is restricted. Lite cannot require TV mode but supports the allowance. First enable requires Nintendo parental-control and recovery-overlay confirmation. Saves that may restrict immediately require a hold; refreshes and failed saves retain drafts, and leaving offers discard confirmation.
+Open Parent → Security & Preferences → Config backup & import. Back up all rules, preferences, PIN/pairing data and saved calendars to `sdmc:/switch/playwise/backups/config-backup.json`. Keep it private: it contains the grant key. Verify the PIN and confirm overwriting an existing backup; a failed write preserves the previous file.
 
-TV mode is the system-reported operation mode. Handheld and tabletop share the undocked ceiling within the daily total: with 120 total and 30 undocked minutes, docking after using 30 lets the child use the remaining daily total. Docking does not clear exhausted total, bedtime or eye-care restrictions. Child view, today details and Overlay show mode and estimated undocked use/remaining, with docking or parent recovery guidance when restricted.
+Preview the timestamp and source device, then choose among eleven groups. Ordinary groups start selected; PIN and pairing do not. Select all/clear are available; expired today adjustments cannot be selected. Unselected settings, played time, non-TV use, buffer eligibility and replay records stay local. Review today's merged allowance/restrictions, verify the current PIN, and hold to import immediately.
 
-After single-action parent PIN verification, choose “Waive dock rules today” in the dock page or Overlay. This waives TV-only and handheld rules together until the next local day. It adds no total allowance and does not skip bedtime or eye care. Unlimited today, grant codes and self-buffer do not waive these rules. Stale-date requests are rejected.
+Selecting PIN also requires the backup PIN and ends the parent session after success. Selecting pairing restores the device name/URL and generates a fresh grant key: pair the phone again; old codes expire. Environment qualifications, setup authorization, PCTL snapshots, external hbmenu configuration and logs do not migrate. First restriction enable requires local Nintendo-control/overlay confirmation. Invalid files change nothing; write/readback failures roll back the whole import, with recovery materials retained in protection if rollback fails.
+
+![Eleven import groups and preview](../images/usage/en/settings/config-backup-light.png)
+
+Time Plan's independent column contains four compact cards: bedtime, eye care, TV rules, buffer. Public modes are TV and non-TV, which includes handheld/tabletop. Eden's TV rules page adds simulation buttons; switching keeps today's usage and the mode file survives restart. Daily allowance, bedtime and eye care still apply.
+
+## TV mode rules (device validation pending)
+
+Open Parent → Time plans → TV mode to require TV mode or enable a uniform daily non-TV allowance of 0–1440 minutes. Both features default off on new installs and upgrades. Disabled means no non-TV ceiling; enabled zero means handheld is restricted. Lite cannot require TV mode but supports the allowance. First enable requires Nintendo parental-control and recovery-overlay confirmation. Saves that may restrict immediately require a hold; refreshes and failed saves retain drafts, and leaving offers discard confirmation.
+
+TV mode is the system-reported operation mode. Handheld and tabletop share the non-TV ceiling within the daily total: with 120 total and 30 non-TV minutes, docking after using 30 lets the child use the remaining daily total. Docking does not clear exhausted total, bedtime or eye-care restrictions. Child view, today details and Overlay show mode and estimated non-TV use/remaining, with docking or parent recovery guidance when restricted.
+
+After single-action parent PIN verification, choose “Waive TV mode rules today” in the dock page or Overlay. This waives TV-only and non-TV rules together until the next local day. It adds no total allowance and does not skip bedtime or eye care. Unlimited today, grant codes and self-buffer do not waive these rules. Stale-date requests are rejected.
 
 Use is estimated from Nintendo console time; HOME may count, while sleep is never charged by wall time. First enable starts now. Restart, allowance edits, switches and waivers preserve today's count. Unlimited days needing accounting use the shared 1440-minute timer cap. Unknown readings restrict conservatively; confirmed TV follows the daily total, and parents can waive today. Hardware accounting, dock changes and recovery still require validation; qualification remains pending.
 
 
-![Dock policy / HOST PREVIEW](../images/usage-en/plan/dock-policy-light.png)
+![TV mode policy / HOST PREVIEW](../images/usage-en/plan/dock-policy-light.png)
 
 ![Dock recovery Overlay / HOST PREVIEW](../images/usage-en/overlay/overlay-dock-waiver.png)
 

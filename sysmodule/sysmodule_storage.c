@@ -505,11 +505,16 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
     bool bedtime_active_existed;
     bool eye_snapshot_existed;
     bool dock_snapshot_existed;
+    bool config_existed, auth_existed, credentials_existed, catalog_existed;
     if (recovery_path_exists(sysmodule)) return recovery_owned_by(sysmodule, request);
     if (compact_nonce_ledger(sysmodule, now.day_index) != PTC_ERR_OK) return false;
     if (!sysmodule->pctl->vtable->snapshot_settings ||
         sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &snapshot) != PTC_ERR_OK ||
         !save_snapshot_file(sysmodule, "recovery/active/pctl_snapshot.json", &snapshot, now.unix_seconds) ||
+        !backup_text_file(sysmodule, "config.json", "recovery/active/config.before", &config_existed) ||
+        !backup_text_file(sysmodule, "auth.json", "recovery/active/auth.before", &auth_existed) ||
+        !backup_text_file(sysmodule, "credentials.json", "recovery/active/credentials.before", &credentials_existed) ||
+        !backup_text_file(sysmodule, "calendars/catalog.json", "recovery/active/catalog.before", &catalog_existed) ||
         !backup_text_file(sysmodule, "rules.json", "recovery/active/rules.before", &rules_existed) ||
         !backup_text_file(sysmodule, "state.json", "recovery/active/state.before", &state_existed) ||
         !backup_text_file(sysmodule, "ledger/used_nonces.jsonl", "recovery/active/ledger.before", &ledger_existed) ||
@@ -536,7 +541,8 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
         "\"rules_existed\":%s,\"state_existed\":%s,\"ledger_existed\":%s,"
         "\"redemption_history_existed\":%s,\"activity_history_existed\":%s,"
         "\"calendar_active_existed\":%s,\"bedtime_snapshot_existed\":%s,"
-        "\"bedtime_active_existed\":%s,\"eye_snapshot_existed\":%s,\"dock_snapshot_existed\":%s}\n",
+        "\"bedtime_active_existed\":%s,\"eye_snapshot_existed\":%s,\"dock_snapshot_existed\":%s,"
+        "\"config_existed\":%s,\"auth_existed\":%s,\"credentials_existed\":%s,\"catalog_existed\":%s}\n",
         request && ptc_request_id_is_valid(request->request_id) ? request->request_id : "enforce",
         (long long)now.unix_seconds,
         rules_existed ? "true" : "false",
@@ -548,7 +554,9 @@ bool recovery_begin(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClock
         bedtime_snapshot_existed ? "true" : "false",
         bedtime_active_existed ? "true" : "false",
         eye_snapshot_existed ? "true" : "false",
-        dock_snapshot_existed ? "true" : "false");
+        dock_snapshot_existed ? "true" : "false",
+        config_existed ? "true" : "false", auth_existed ? "true" : "false",
+        credentials_existed ? "true" : "false", catalog_existed ? "true" : "false");
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, meta_path, meta)) {
         recovery_clear(sysmodule);
         return false;
@@ -641,6 +649,15 @@ bool recovery_rollback(PtcSysmodule *sysmodule)
     if (dock_snapshot_tracked)
         ok = restore_text_file(sysmodule, "backups/dock_pctl_snapshot.json",
             "recovery/active/dock-snapshot.before", dock_snapshot_existed) && ok;
+    const char *names[] = {"config", "auth", "credentials", "catalog"};
+    const char *files[] = {"config.json", "auth.json", "credentials.json", "calendars/catalog.json"};
+    for (unsigned i = 0; i < 4; ++i) {
+        char key[40], before[80]; bool existed;
+        snprintf(key, sizeof(key), "%s_existed", names[i]);
+        snprintf(before, sizeof(before), "recovery/active/%s.before", names[i]);
+        if (json_bool_value(meta, key, &existed)) ok = restore_text_file(sysmodule, files[i], before, existed) && ok;
+    }
+    ok = config_backup_rollback_files(sysmodule) && ok;
     invalidate_all_caches(sysmodule);
     if (ok) recovery_clear(sysmodule);
     return ok;

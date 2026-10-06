@@ -47,6 +47,8 @@ PREVIEW_FILES = (
     "bedtime/bedtime-special-custom-dark.png",
     "autonomy/autonomy-policy-light.png",
     "settings/settings-root-dark.png",
+    "settings/config-backup-light.png",
+    "settings/config-backup-security-dark.png",
     "settings/settings-pin-dark.png",
     "settings/settings-theme-dark.png",
     "settings/settings-language-dark.png",

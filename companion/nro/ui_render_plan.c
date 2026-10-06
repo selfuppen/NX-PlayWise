@@ -916,14 +916,6 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
     draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
     draw_text(pixels, stride, panel.x + 16, panel.y + 26, ptc_ui_text(PTC_UI_T_7_DAY_PLAN_BEDTIME_FORECAST), 17, UI_INK);
 
-    {
-        char usage[192];
-        ptc_ui_format_dock_usage(model, ptc_ui_render_now(), usage, sizeof(usage));
-        UiAction action = {PTC_UI_TEXT_REFERENCE(PTC_UI_T_DOCK_TITLE), usage, UI_ACCENT,
-            UI_ACTION_ICON_CONSOLE, UI_ACTION_VISUAL_NONE};
-        draw_action_card(pixels, stride, to_uirect(ptc_ui_dock_card_rect()), &action,
-            model->selected_index == 13 && !model->parent_footer_focused, PTC_UI_ACTION_AVAILABLE, 0);
-    }
     if (!model->forecast_available) {
         draw_text(pixels, stride, panel.x + 16, panel.y + 110, ptc_ui_text(PTC_UI_T_REFRESH_STATUS_TO_VIEW_FORECAST_DATA), 15, UI_MUTED);
         return;
@@ -938,7 +930,7 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
         UiRect row = to_uirect(ptc_ui_forecast_day_row_rect(index));
         bool is_today = (index == 0);
 
-        bool is_focused = (!model->parent_footer_focused && model->selected_index == index + 6);
+        bool is_focused = (!model->parent_footer_focused && model->selected_index == index + 7);
 
         if (is_focused) {
             fill_round_rect(pixels, stride, row, 8, UI_ACCENT_SOFT);
@@ -1282,6 +1274,14 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
         draw_wrapped_text(pixels, stride, info.x + 18, info.y + 346,
             ptc_ui_text(model->dock_waived_today ? PTC_UI_T_DOCK_WAIVED : PTC_UI_T_DOCK_CONNECT),
             12, info.width - 36, 15, 2, model->dock_waived_today ? UI_SUCCESS : UI_DANGER);
+#if defined(PLAYWISE_EDEN) || defined(PTC_UI_PREVIEW_ANIM_CLOCK_MS)
+    if (model->eden_mode_controls) {
+        home_button(pixels, stride, ptc_ui_dock_field_rect(7), ptc_ui_text(PTC_UI_T_EDEN_SIMULATE_TV),
+            model->dock_field_focus == 7, false, model->waiting);
+        home_button(pixels, stride, ptc_ui_dock_field_rect(8), ptc_ui_text(PTC_UI_T_EDEN_SIMULATE_NON_TV),
+            model->dock_field_focus == 8, false, model->waiting);
+    }
+#endif
     bool hold = ptc_ui_dock_save_requires_hold(model, ptc_ui_render_now());
     home_button(pixels, stride, ptc_ui_dock_field_rect(3),
         ptc_ui_text(model->dock_dirty ? PTC_UI_T_DOCK_SAVE : PTC_UI_T_RULE_SAVED),

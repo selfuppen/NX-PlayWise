@@ -8,13 +8,34 @@
 
 # Protocol Specification
 
-## Dock policy (candidate: pending)
+## Configuration backup and selective import
+
+The fixed production path is `sdmc:/switch/playwise/backups/config-backup.json`; Eden uses its isolated root. Version 1 uses `format:"playwise-config-backup"`, `created_at` (Unix seconds), `source_device`, and `files`. Each entry carries an allowlisted relative `path`, lowercase 64-character `sha256`, `exists`, and a JSON text `content`. The allowlist is config/rules/auth/credentials, calendar catalog/active, and their referenced library documents. Limits: 134 files, 16384 bytes per file, archive below 4 MiB, existing calendar validation and 64-entry catalog limit. Duplicate keys/paths, invalid types/ranges, traversal, unsupported versions, changed hashes and missing references are refused before modification.
+
+Backups include all rules, UI preferences, PIN hash/salt, device ID, pairing URL, grant secret and saved calendars. They exclude PCTL snapshots, environment qualifications/confirmations, setup authorization, external hbmenu config, runtime state, logs and replay ledgers. Keep the archive private: it contains the grant key.
+
+| ID / type | payload | Behavior |
+| --- | --- | --- |
+| 49 / `create_config_backup` | `{}` | Backend serializes a consistent request-owned stage; NRO assembles and atomically saves it after PIN verification and overwrite confirmation |
+| 50 / `restore_config_backup` | `{"groups":511,"stage_id":"request-id","sha256":"64-char digest"}` | NRO validates and splits the archive; backend rechecks it, copies to private transaction input, and rechecks the manifest digest |
+
+The eleven bits are weekly 1, scheduled 2, today 4, buffer 8, holidays/calendars 16, bedtime 32, eye care 64, TV rules 128, UI preferences 256, PIN 512, pairing 1024. Default is 511 excluding expired today; all is 2047. Unselected values stay unchanged. Old missing rule fields use defaults. Today requires the source date to match this console. Requests/results contain no PIN, key or theme fields.
+
+Both actions verify the current PIN; import requires a hold after previewing timestamp, source, selections and today's effect. Selecting PIN requires proving knowledge of the source PIN and ends the parent session on success. Selecting pairing always generates a new random grant key, restores the device ID/URL, and requires phone re-pairing. Without pairing selected, the local key is preserved. Played time, non-TV usage, buffer eligibility and the current replay ledger remain local.
+
+Selected files join the existing persistent recovery transaction, PCTL application/readback, result commit and startup recovery. New calendar files are journaled before publication; existing files are never overwritten. Failure rolls back all preimages/additions; failed rollback keeps recovery materials and enters protection. A durable result commits the transaction. Backend processes files separately within its 512 KiB heap. Stages are cleaned by their owning request. Recovery/hot reload blocks import. Restrictions require local qualification and Nintendo-control/overlay confirmation; source authorization is never accepted. Success reloads rules, preferences, theme, language, audio and pairing and invalidates backend caches.
+
+`507 config_backup_invalid` rejects malformed/unsupported/out-of-range/incomplete archives; `508 config_backup_changed` rejects a changed preview digest. Existing storage, PCTL, qualification, busy and recovery errors still apply.
+
+The Time Plan independent column contains bedtime, eye care, TV rules and buffer, each 90px. Public modes are TV/non-TV (handheld and tabletop); wire values remain `docked/undocked/unknown`. Only Eden exposes simulation buttons, atomically writes its isolated `operation-mode.txt`, notifies the existing mode provider, and preserves usage and mode across restart. Production has no simulation handler or buttons.
+
+## TV mode policy (candidate: pending)
 
 Optional rules v2 fields are `force_docked=false`, `undocked_limit_enabled=false`, and `undocked_daily_minutes=30` (0–1440). Missing fields keep old installations disabled. A disabled allowance is different from an enabled zero-minute allowance. `PtcRules.dock_policy` contains these three fields.
 
 The read-only platform provider reports TV (`docked`), handheld/tabletop (`undocked`), or `unknown`, plus TV support availability. Switch uses `ommGetOperationMode` with `omm` service permission; Lite rejects force-docked, but accepts an undocked allowance. No 1952 calls are added. Enabled policies sample every second; mode changes aim to begin enforcement/restoration within two seconds. Writes remain serialized and require a target change or mismatched readback.
 
-Undocked allowance is a ceiling within the daily total. Docking and a today-only waiver remove only the dock reason; total allowance, bedtime and eye care still apply. Unlimited today, grant codes and self-buffer do not waive dock rules. A dock-blocked grant returns 326 before consuming a nonce or buffer eligibility.
+Undocked allowance is a ceiling within the daily total. Docking and a today-only waiver remove only the dock reason; total allowance, bedtime and eye care still apply. Unlimited today, grant codes and self-buffer do not waive TV mode rules. A dock-blocked grant returns 326 before consuming a nonce or buffer eligibility.
 
 Accounting uses reliable configured minutes converted to nanoseconds minus 1454 remaining nanoseconds, preserving nanosecond precision and exposing whole-minute estimates. Initial enable starts from that point; sleep is never charged by wall time. A consumption interval with either endpoint not confirmed as TV, a restart gap, or a recoverable read interruption is conservatively charged as undocked. Unprovable gaps, timer resets and configuration mismatches remain unknown. Unlimited days use the shared 1440-minute eye-care timer cap until both features stop requiring it. Temporary BLOCKED settings are never interpreted as base consumption.
 

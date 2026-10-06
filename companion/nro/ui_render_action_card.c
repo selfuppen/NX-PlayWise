@@ -350,7 +350,7 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     bool disabled = state == PTC_UI_ACTION_DISABLED;
     bool recommended = state == PTC_UI_ACTION_RECOMMENDED;
     bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
-    bool compact = rect.height < 90;
+    bool compact = rect.height <= 90;
     int badge_size = compact ? 34 : 44;
     int title_size = compact ? 20 : 22;
     int sub_size = compact ? 14 : 15;

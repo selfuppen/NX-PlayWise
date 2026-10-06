@@ -23,6 +23,9 @@ typedef struct {
     PtcAutonomyPolicy autonomy_policy;
     PtcEyeCarePolicy eye_care_policy;
     PtcDockPolicy dock_policy;
+    uint16_t config_groups;
+    char config_stage_id[80];
+    char config_sha256[65];
     uint16_t dock_expected_day_index;
     uint64_t eye_care_break_id;
     PtcBedtimePolicy bedtime_policy;

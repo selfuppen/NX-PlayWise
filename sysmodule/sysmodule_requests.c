@@ -340,6 +340,8 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
     disable_flag = sysmodule->storage->vtable->exists(sysmodule->storage, disable_path);
 
     if (request.type != PTC_REQUEST_STATUS &&
+        request.type != PTC_REQUEST_CREATE_CONFIG_BACKUP &&
+        request.type != PTC_REQUEST_RESTORE_CONFIG_BACKUP &&
         request.type != PTC_REQUEST_COMPLETE_SETUP &&
         request.type != PTC_REQUEST_RETRY_SETUP_RELEASE &&
         request.type != PTC_REQUEST_RESTORE_INSTALL_SNAPSHOT &&
@@ -355,6 +357,8 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
             return;
         }
     }
+
+    if (process_config_backup_request(sysmodule, &request, disable_flag, now)) return;
 
     if (process_dock_request(sysmodule, &request, disable_flag, now)) return;
 

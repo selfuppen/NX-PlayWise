@@ -73,6 +73,11 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }
+    if (model->overlay == PTC_UI_OVERLAY_CONFIG_BACKUP) {
+        for (int i = 0; i < 16; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_config_backup_field_rect(i), x, y)) return make_hit(PTC_UI_HIT_CONFIG_BACKUP_FIELD, i);
+        return make_hit(PTC_UI_HIT_NONE, 0);
+    }
     if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
         if (ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y))
             return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
@@ -508,10 +513,10 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_DOCK) {
         for (i = 0; i < 5; ++i)
             if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(i), x, y)) return make_hit(PTC_UI_HIT_DOCK_FIELD, i);
+        if (model->eden_mode_controls) for (i = 7; i <= 8; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_dock_field_rect(i), x, y)) return make_hit(PTC_UI_HIT_DOCK_FIELD, i);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT &&
-        ptc_ui_rect_contains(ptc_ui_dock_card_rect(), x, y)) return make_hit(PTC_UI_HIT_PARENT_CARD, 13);
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_WEEKLY) {
         for (i = 0; i < 7; ++i) {
             int weekday = ptc_ui_weekday_for_display_slot(i);

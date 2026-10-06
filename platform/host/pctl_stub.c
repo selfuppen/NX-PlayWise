@@ -48,6 +48,8 @@ static PtcErrorCode stub_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStat
 {
     PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
     (void)weekday;
+    ++stub->read_status_calls;
+    if (stub->read_status_fail_on_call == stub->read_status_calls) return PTC_ERR_PCTL_READ_FAILED;
     if (stub->read_error != PTC_ERR_OK || (stub->read_fails_after_apply && stub->applied)) {
         if (stub->read_error == PTC_ERR_OK) {
             return PTC_ERR_PCTL_READ_FAILED;

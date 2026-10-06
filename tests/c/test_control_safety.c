@@ -1,6 +1,7 @@
 #include "../../sysmodule/sysmodule_internal.h"
 #include "../../platform/host/mem_storage.h"
 #include "../../platform/host/pctl_stub.h"
+#include "../../platform/host/operation_mode_file.h"
 #include "../../platform/host/fake_time.h"
 #include "../../platform/switch/fs_storage.h"
 #include "../../companion/result_summary.h"
@@ -388,6 +389,58 @@ static void enable_dock_fixture(Fixture *f, bool force, uint16_t minutes)
     expect(save_rules(&f->core, &rules) && save_state(&f->core, &state, f->clock.snapshot.unix_seconds), "dock fixture save");
 }
 
+static void test_persisted_eden_mode(void)
+{
+    Fixture f;
+    PtcRuntimeState state;
+    PtcRules rules;
+    uint64_t carry = 0;
+    init_fixture(&f);
+    PtcFileOperationMode file_mode = {&f.mem->storage, "eden-app"};
+    PtcOperationModeProvider provider = {ptc_file_operation_mode_read, &file_mode};
+    f.core.operation_mode_provider = &provider;
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage,"app/operation-mode.txt","docked"), "separate production mode fixture");
+    expect(ptc_file_operation_mode_read(&file_mode).mode == PTC_OPERATION_MODE_UNDOCKED, "Eden provider reads isolated root and defaults to non-TV");
+    enable_dock_fixture(&f, false, 1);
+    f.core.dock_boot_sampled = true;
+    (void)ptc_pctl_stub_advance_usage_ns(&f.pctl,60000000000ULL,&carry);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.status.blocked_today && load_state(&f.core,&state) &&
+        state.undocked_used_ns == 60000000000ULL, "persisted provider enforces exhausted non-TV quota");
+    for (int i = 0; i < 6; ++i) {
+        bool tv = !(i % 2);
+        expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage,"eden-app/operation-mode.txt",tv ? "docked" : "undocked"), "persist simulated mode change");
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        expect(f.pctl.status.blocked_today == !tv && f.pctl.played_minutes_today == 21 &&
+            load_state(&f.core,&state) && state.undocked_used_ns == 60000000000ULL, "repeated persisted switches recompute limits without refunding usage");
+    }
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage,"eden-app/operation-mode.txt","docked"), "persist TV before restart");
+    ptc_sysmodule_init(&f.core,"app",&f.mem->storage,&f.pctl.pctl,&f.clock.provider);
+    PtcFileOperationMode reopened = {&f.mem->storage,"eden-app"};
+    provider.ctx = &reopened;
+    f.core.operation_mode_provider = &provider;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(ptc_file_operation_mode_read(&reopened).mode == PTC_OPERATION_MODE_DOCKED &&
+        !f.pctl.status.blocked_today && f.pctl.played_minutes_today == 21 &&
+        load_state(&f.core,&state) && state.undocked_used_ns == 60000000000ULL, "restart retains mode and both usage counters");
+    enable_dock_fixture(&f,true,30);
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage,"eden-app/operation-mode.txt","undocked"), "persist non-TV for forced TV rule");
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.status.blocked_today,"persisted non-TV cannot bypass forced TV");
+    expect(f.mem->storage.vtable->write_text_atomic(&f.mem->storage,"eden-app/operation-mode.txt","docked") &&
+        load_rules(&f.core,&rules), "persist TV with concurrent bedtime");
+    rules.bedtime.enabled = true;
+    for (unsigned i = 0; i < 7; ++i) {
+        rules.bedtime.week[i].enabled = true;
+        rules.bedtime.week[i].start_minute = 600;
+        rules.bedtime.week[i].end_minute = 500;
+    }
+    expect(save_rules(&f.core,&rules),"save concurrent restriction for file provider");
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(f.pctl.status.blocked_today,"simulating TV preserves bedtime restriction");
+    free(f.mem);
+}
+
 static void test_dock_policy(void)
 {
     Fixture f;
@@ -664,6 +717,7 @@ static void test_dock_composition_and_migration(void)
 int ptc_test_control_safety(void)
 {
     failures = 0;
+    test_persisted_eden_mode();
     test_dock_policy();
     test_dock_accounting_failures();
     test_dock_composition_and_migration();

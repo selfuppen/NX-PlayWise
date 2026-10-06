@@ -345,6 +345,8 @@ void ptc_sysmodule_init(
 {
     snprintf(sysmodule->app_root, sizeof(sysmodule->app_root), "%s", app_root);
     sysmodule->storage = storage;
+    sysmodule->config_random = NULL;
+    sysmodule->config_random_ctx = NULL;
     sysmodule->pctl = pctl;
     sysmodule->operation_mode_provider = NULL;
     sysmodule->dock_last_sample_at = 0;

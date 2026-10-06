@@ -6,17 +6,23 @@
 
 static PtcUiLanguagePreference g_resolved_language = PTC_UI_LANGUAGE_SIMPLIFIED;
 
-#define PTC_UI_TEXT_VALUE(key, value) [key] = value,
+#if defined(PLAYWISE_EDEN) || defined(PTC_UI_PREVIEW_ANIM_CLOCK_MS)
+#define PTC_UI_COMPILED_TEXT(key, value) value
+#else
+#define PTC_UI_COMPILED_TEXT(key, value) ((key) == PTC_UI_T_EDEN_SIMULATE_TV || (key) == PTC_UI_T_EDEN_SIMULATE_NON_TV ? "" : (value))
+#endif
+
+#define PTC_UI_TEXT_VALUE(key, value) [key] = PTC_UI_COMPILED_TEXT(key, value),
 static const char *const UI_TEXT_HANS[PTC_UI_TEXT_COUNT] = {
 #include "ui_text_zh_hans.inc"
 };
 #undef PTC_UI_TEXT_VALUE
-#define PTC_UI_TEXT_VALUE(key, value) [key] = value,
+#define PTC_UI_TEXT_VALUE(key, value) [key] = PTC_UI_COMPILED_TEXT(key, value),
 static const char *const UI_TEXT_HANT[PTC_UI_TEXT_COUNT] = {
 #include "ui_text_zh_hant.inc"
 };
 #undef PTC_UI_TEXT_VALUE
-#define PTC_UI_TEXT_VALUE(key, value) [key] = value,
+#define PTC_UI_TEXT_VALUE(key, value) [key] = PTC_UI_COMPILED_TEXT(key, value),
 static const char *const UI_TEXT_EN[PTC_UI_TEXT_COUNT] = {
 #include "ui_text_en.inc"
 };

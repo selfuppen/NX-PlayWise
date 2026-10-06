@@ -37,6 +37,7 @@ OBJS := \
 	$(BUILD)/nro_preferences.o \
 	$(BUILD)/nro_requests.o \
 	$(BUILD)/nro_calendar.o \
+	$(BUILD)/nro_config_backup.o \
 	$(BUILD)/nro_redemption.o \
 	$(BUILD)/nro_result_poll.o \
 	$(BUILD)/nro_setup.o \
@@ -106,7 +107,8 @@ OBJS := \
 	$(BUILD)/cJSON.o \
 	$(BUILD)/install_defaults.o \
 	$(BUILD)/fs_storage.o \
-	$(BUILD)/calendar_store.o
+	$(BUILD)/calendar_store.o \
+	$(BUILD)/config_backup.o
 
 DEPENDS := $(OBJS:.o=.d)
 
@@ -116,6 +118,7 @@ ifeq ($(EDEN_BUILD),1)
 OBJS := $(filter-out $(BUILD)/switch_ipc_client.o $(BUILD)/hot_reload.o $(BUILD)/hot_reload_guard.o,$(OBJS))
 OBJS += \
 	$(BUILD)/eden_runtime.o \
+	$(BUILD)/operation_mode_file.o \
 	$(BUILD)/pctl_stub.o \
 	$(BUILD)/sysmodule_storage.o \
 	$(BUILD)/sysmodule_audit.o \
@@ -125,6 +128,7 @@ OBJS += \
 	$(BUILD)/sysmodule_setup.o \
 	$(BUILD)/sysmodule_requests.o \
 	$(BUILD)/sysmodule_calendar.o \
+	$(BUILD)/sysmodule_config_backup.o \
 	$(BUILD)/sysmodule_request_grants.o \
 	$(BUILD)/sysmodule_request_recovery.o \
 	$(BUILD)/sysmodule_dock.o \
@@ -376,6 +380,9 @@ $(BUILD)/eden_runtime.o: eden_runtime.c eden_runtime.h | $(BUILD)
 $(BUILD)/pctl_stub.o: ../../platform/host/pctl_stub.c ../../platform/host/pctl_stub.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/operation_mode_file.o: ../../platform/host/operation_mode_file.c ../../platform/host/operation_mode_file.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/sysmodule_core.o: ../../sysmodule/sysmodule_core.c ../../sysmodule/sysmodule_core.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -434,4 +441,11 @@ clean:
 	rm -rf $(BUILD) $(TARGET).elf $(TARGET).nro $(NACP)
 
 $(BUILD)/sysmodule_dock.o: ../../sysmodule/sysmodule_dock.c ../../sysmodule/sysmodule_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/nro_config_backup.o: nro_config_backup.c nro_app_internal.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/config_backup.o: ../../platform/config_backup.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD)/sysmodule_config_backup.o: ../../sysmodule/sysmodule_config_backup.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
