@@ -4,9 +4,13 @@ static void setup_button(uint32_t *pixels, uint32_t stride, PtcUiRect rect,
     const char *label, bool selected, bool primary)
 {
     UiRect r = to_uirect(rect);
-    fill_round_rect(pixels, stride, r, 10, primary ? UI_ACCENT : UI_RAISED);
-    draw_rect_outline(pixels, stride, r, 10, selected ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
-    draw_text_center(pixels, stride, r, label, 18, primary ? UI_ON_ACCENT : UI_INK);
+    uint32_t fill = primary ? UI_ACCENT : (selected ? UI_ACCENT_SOFT : UI_SURFACE);
+    uint32_t border = selected ? UI_ACCENT : (primary ? UI_ACCENT : UI_BORDER);
+    uint32_t text_color = primary ? UI_ON_ACCENT : (selected ? UI_ACCENT : UI_INK);
+    fill_round_rect(pixels, stride, r, 10, fill);
+    draw_rect_outline(pixels, stride, r, 10, selected ? 2 : 1, border);
+    if (selected) draw_focus_ring(pixels, stride, r, 10);
+    draw_button_label(pixels, stride, r, label, 18, text_color);
 }
 
 void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
@@ -35,10 +39,12 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         for (int i = 0; i < 4; ++i) {
             PtcUiRect r = ptc_ui_setup_language_rect(i);
             bool chosen = model->language_preference == (PtcUiLanguagePreference)i;
-            fill_round_rect(pixels, stride, to_uirect(r), 10, chosen ? UI_ACCENT_SOFT : UI_SURFACE);
-            draw_rect_outline(pixels, stride, to_uirect(r), 10, chosen ? 2 : 1, chosen ? UI_ACCENT : UI_BORDER);
-            if (chosen && model->setup_focus == 1) draw_focus_ring(pixels, stride, to_uirect(r), 10);
-            draw_text_center(pixels, stride, to_uirect(r), i == 0 ? ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_SYSTEM) :
+            bool focused = (model->setup_focus == 1) && chosen;
+            UiRect ur = to_uirect(r);
+            fill_round_rect(pixels, stride, ur, 10, chosen ? UI_ACCENT_SOFT : UI_SURFACE);
+            draw_rect_outline(pixels, stride, ur, 10, (focused || chosen) ? 2 : 1, chosen ? UI_ACCENT : UI_BORDER);
+            if (focused) draw_focus_ring(pixels, stride, ur, 10);
+            draw_text_center(pixels, stride, ur, i == 0 ? ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_SYSTEM) :
                 i == 1 ? ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HANS) :
                 i == 2 ? ptc_ui_text(PTC_UI_T_SETUP_LANGUAGE_HANT) : "English", 16, chosen ? UI_ACCENT : UI_INK);
         }
@@ -97,10 +103,10 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         fill_round_rect(pixels, stride, sec_card, 12, UI_RAISED);
         draw_rect_outline(pixels, stride, sec_card, 12, 1, UI_BORDER);
         draw_text(pixels, stride, 94, 212, ptc_ui_text(PTC_UI_T_SETUP_CARD_SECURITY), 20, UI_INK);
-        draw_wrapped_text(pixels, stride, 94, 240, ptc_ui_text(PTC_UI_T_SETUP_PIN_DESC), 14, 510, 20, 2, UI_MUTED);
+        draw_wrapped_text(pixels, stride, 94, 238, ptc_ui_text(PTC_UI_T_SETUP_PIN_DESC), 14, 510, 20, 2, UI_MUTED);
 
         /* Status badge */
-        UiRect pin_badge = {94, 286, 510, 36};
+        UiRect pin_badge = {94, 268, 510, 36};
         bool pin_ok = model->setup_pin_ready;
         fill_round_rect(pixels, stride, pin_badge, 8, pin_ok ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
         draw_rect_outline(pixels, stride, pin_badge, 8, 1, pin_ok ? UI_SUCCESS : UI_WARNING);
@@ -108,11 +114,26 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 
         /* PIN modification button */
         setup_button(pixels, stride, ptc_ui_setup_pin_rect(), ptc_ui_text(PTC_UI_T_X_CLICK_CHANGE_PIN),
-            model->setup_focus == 1, model->setup_focus == 1);
+            model->setup_focus == 1, false);
 
-        /* Hint note */
-        draw_wrapped_text(pixels, stride, 94, 400, ptc_ui_text(PTC_UI_T_ENTER_A_NUMBER_FROM_1_TO_64), 14, 510, 22, 2, UI_MUTED);
-        draw_wrapped_text(pixels, stride, 94, 448, ptc_ui_text(PTC_UI_T_ENTER_NEW_1_TO_64_DIGIT_NUMBER), 13, 510, 20, 2, UI_MUTED);
+        /* Security Guide Panel - perfectly balances the card height */
+        UiRect sec_guide = {94, 372, 510, 230};
+        fill_round_rect(pixels, stride, sec_guide, 10, UI_SURFACE);
+        draw_rect_outline(pixels, stride, sec_guide, 10, 1, UI_BORDER);
+        draw_text(pixels, stride, 108, 396, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_TITLE), 15, UI_INK);
+        fill_round_rect(pixels, stride, (UiRect){108, 407, 482, 1}, 0, UI_BORDER);
+
+        draw_text(pixels, stride, 108, 432, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_1_TITLE), 13, UI_ACCENT);
+        draw_text(pixels, stride, 188, 432, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_1_DESC), 13, UI_MUTED);
+
+        draw_text(pixels, stride, 108, 474, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_2_TITLE), 13, UI_ACCENT);
+        draw_text(pixels, stride, 188, 474, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_2_DESC), 13, UI_MUTED);
+
+        draw_text(pixels, stride, 108, 516, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_3_TITLE), 13, UI_ACCENT);
+        draw_text(pixels, stride, 188, 516, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_3_DESC), 13, UI_MUTED);
+
+        draw_text(pixels, stride, 108, 558, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_4_TITLE), 13, UI_ACCENT);
+        draw_text(pixels, stride, 188, 558, ptc_ui_text(PTC_UI_T_SETUP_SEC_GUIDE_4_DESC), 13, UI_MUTED);
 
         /* Right Card: Preferences & Feature Toggles */
         UiRect pref_card = {656, 185, 550, 432};
@@ -124,33 +145,63 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_text(pixels, stride, 676, 238, ptc_ui_text(PTC_UI_T_SETUP_THEME_LABEL), 14, UI_MUTED);
         for (int i = 0; i < 3; ++i) {
             bool selected = model->setup_theme_index == i;
-            setup_button(pixels, stride, ptc_ui_setup_theme_rect(i), ptc_ui_theme_preference_label((PtcUiThemePreference)i),
-                selected, false);
-            if (selected && model->setup_focus == 2)
-                draw_focus_ring(pixels, stride, to_uirect(ptc_ui_setup_theme_rect(i)), 10);
+            bool focused = model->setup_focus == 2 && selected;
+            PtcUiRect tr = ptc_ui_setup_theme_rect(i);
+            UiRect utr = to_uirect(tr);
+            fill_round_rect(pixels, stride, utr, 10, selected ? UI_ACCENT_SOFT : UI_SURFACE);
+            draw_rect_outline(pixels, stride, utr, 10, (focused || selected) ? 2 : 1, selected ? UI_ACCENT : UI_BORDER);
+            if (focused) draw_focus_ring(pixels, stride, utr, 10);
+            draw_text_center(pixels, stride, utr, ptc_ui_theme_preference_label((PtcUiThemePreference)i),
+                16, selected ? UI_ACCENT : UI_INK);
         }
 
         /* 2. Shortcut */
         draw_text(pixels, stride, 676, 298, ptc_ui_text(PTC_UI_T_SETUP_SHORTCUT_LABEL), 14, UI_MUTED);
-        snprintf(text, sizeof(text), "%s: %s  [%s]", ptc_ui_text(PTC_UI_T_SETUP_SHORTCUT_LABEL),
+        UiRect s_rect = to_uirect(ptc_ui_setup_shortcut_rect());
+        bool s_focused = model->setup_focus == 3;
+        fill_round_rect(pixels, stride, s_rect, 10, s_focused ? UI_ACCENT_SOFT : UI_SURFACE);
+        draw_rect_outline(pixels, stride, s_rect, 10, s_focused ? 2 : 1, s_focused ? UI_ACCENT : UI_BORDER);
+        if (s_focused) draw_focus_ring(pixels, stride, s_rect, 10);
+        draw_text(pixels, stride, s_rect.x + 16, s_rect.y + 25, ptc_ui_text(PTC_UI_T_SETUP_SHORTCUT_LABEL), 16, UI_INK);
+        char sc_buf[192];
+        snprintf(sc_buf, sizeof(sc_buf), "%s  [%s]",
             model->custom_shortcut_label[0] ? model->custom_shortcut_label : "(-)",
             ptc_ui_text(PTC_UI_T_SETUP_SHORTCUT_CHANGE));
-        setup_button(pixels, stride, ptc_ui_setup_shortcut_rect(), text, model->setup_focus == 3, false);
+        int sc_w = measure_text(sc_buf, 14);
+        draw_text(pixels, stride, s_rect.x + s_rect.width - sc_w - 16, s_rect.y + 25, sc_buf, 14, s_focused ? UI_ACCENT : UI_MUTED);
 
-        /* 3. Eye Care Toggle */
+        /* 3. Eye Care Toggle with visible Switch and clear setting indication */
         draw_text(pixels, stride, 676, 374, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_LABEL), 14, UI_MUTED);
         bool eye_on = model->setup_eye_care_enabled || model->draft_eye_care_policy.enabled;
-        setup_button(pixels, stride, ptc_ui_setup_eye_care_rect(),
-            ptc_ui_text(eye_on ? PTC_UI_T_SETUP_EYE_CARE_ON : PTC_UI_T_SETUP_EYE_CARE_OFF),
-            model->setup_focus == 4, eye_on);
-        draw_text(pixels, stride, 676, 440, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_HINT), 13, UI_MUTED);
+        UiRect eye_rect = to_uirect(ptc_ui_setup_eye_care_rect());
+        bool eye_focused = model->setup_focus == 4;
+        fill_round_rect(pixels, stride, eye_rect, 10, eye_focused ? UI_ACCENT_SOFT : UI_SURFACE);
+        draw_rect_outline(pixels, stride, eye_rect, 10, (eye_focused || eye_on) ? 2 : 1, eye_focused ? UI_ACCENT : (eye_on ? UI_ACCENT : UI_BORDER));
+        if (eye_focused) draw_focus_ring(pixels, stride, eye_rect, 10);
+        draw_text(pixels, stride, eye_rect.x + 16, eye_rect.y + 25, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_LABEL), 16, UI_INK);
+        draw_text(pixels, stride, eye_rect.x + 90, eye_rect.y + 25, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_DEFAULT_PARAMS), 13, UI_MUTED);
+        UiRect eye_sw = {eye_rect.x + eye_rect.width - 66, eye_rect.y + (eye_rect.height - 24) / 2, 50, 24};
+        draw_toggle_switch(pixels, stride, eye_sw, eye_on, false, false, NULL, NULL);
+        const char *eye_st = eye_on ? ptc_ui_text(PTC_UI_T_ENABLED_2) : ptc_ui_text(PTC_UI_T_DISABLED);
+        int eye_st_w = measure_text(eye_st, 14);
+        draw_text(pixels, stride, eye_sw.x - eye_st_w - 10, eye_rect.y + 25, eye_st, 14, eye_on ? UI_SUCCESS : UI_MUTED);
+        draw_text(pixels, stride, 676, 442, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_HINT), 13, UI_MUTED);
 
-        /* 4. Bedtime Toggle */
+        /* 4. Bedtime Toggle with visible Switch and clear setting indication */
         draw_text(pixels, stride, 676, 468, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_LABEL), 14, UI_MUTED);
         bool bed_on = model->setup_bedtime_enabled || model->draft_bedtime_policy.enabled;
-        setup_button(pixels, stride, ptc_ui_setup_bedtime_rect(),
-            ptc_ui_text(bed_on ? PTC_UI_T_SETUP_BEDTIME_ON : PTC_UI_T_SETUP_BEDTIME_OFF),
-            model->setup_focus == 5, bed_on);
+        UiRect bed_rect = to_uirect(ptc_ui_setup_bedtime_rect());
+        bool bed_focused = model->setup_focus == 5;
+        fill_round_rect(pixels, stride, bed_rect, 10, bed_focused ? UI_ACCENT_SOFT : UI_SURFACE);
+        draw_rect_outline(pixels, stride, bed_rect, 10, (bed_focused || bed_on) ? 2 : 1, bed_focused ? UI_ACCENT : (bed_on ? UI_ACCENT : UI_BORDER));
+        if (bed_focused) draw_focus_ring(pixels, stride, bed_rect, 10);
+        draw_text(pixels, stride, bed_rect.x + 16, bed_rect.y + 25, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_LABEL), 16, UI_INK);
+        draw_text(pixels, stride, bed_rect.x + 90, bed_rect.y + 25, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_DEFAULT_PARAMS), 13, UI_MUTED);
+        UiRect bed_sw = {bed_rect.x + bed_rect.width - 66, bed_rect.y + (bed_rect.height - 24) / 2, 50, 24};
+        draw_toggle_switch(pixels, stride, bed_sw, bed_on, false, false, NULL, NULL);
+        const char *bed_st = bed_on ? ptc_ui_text(PTC_UI_T_ENABLED_2) : ptc_ui_text(PTC_UI_T_DISABLED);
+        int bed_st_w = measure_text(bed_st, 14);
+        draw_text(pixels, stride, bed_sw.x - bed_st_w - 10, bed_rect.y + 25, bed_st, 14, bed_on ? UI_SUCCESS : UI_MUTED);
         draw_text(pixels, stride, 676, 520, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_HINT), 13, UI_MUTED);
     } else {
         /* Card 1: Configuration Summary Board */
@@ -215,12 +266,16 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             draw_wrapped_text(pixels, stride, 94, 552, ptc_ui_text(model->setup_activation_pending
                 ? PTC_UI_T_SETUP_ACTIVATING : PTC_UI_T_SETUP_CONTROLS_INACTIVE), 14, 1092, 20, 1, UI_MUTED);
         }
-        setup_button(pixels, stride, ptc_ui_setup_skip_rect(), ptc_ui_text(PTC_UI_T_SETUP_SKIP), model->setup_focus == 1, false);
+        char skip_label[96];
+        snprintf(skip_label, sizeof(skip_label), "X  %s", ptc_ui_text(PTC_UI_T_SETUP_SKIP));
+        setup_button(pixels, stride, ptc_ui_setup_skip_rect(), skip_label, model->setup_focus == 1, false);
     }
     if (model->message[0]) draw_wrapped_text(pixels, stride, 94, 589, model->message, 16, 1092, 21, 2, UI_WARNING);
     setup_button(pixels, stride, ptc_ui_setup_back_rect(), ptc_ui_text(PTC_UI_T_B_PREVIOUS_STEP), false, false);
-    setup_button(pixels, stride, ptc_ui_setup_primary_rect(), ptc_ui_text(step == PTC_UI_SETUP_PREPARE
-        ? PTC_UI_T_SETUP_NEXT_PREPARE : step == PTC_UI_SETUP_PARENT ? PTC_UI_T_SETUP_NEXT : PTC_UI_T_SETUP_ACTIVATE),
+    char primary_label[96];
+    snprintf(primary_label, sizeof(primary_label), "A  %s", ptc_ui_text(step == PTC_UI_SETUP_PREPARE
+        ? PTC_UI_T_SETUP_NEXT_PREPARE : step == PTC_UI_SETUP_PARENT ? PTC_UI_T_SETUP_NEXT : PTC_UI_T_SETUP_ACTIVATE));
+    setup_button(pixels, stride, ptc_ui_setup_primary_rect(), primary_label,
         model->setup_focus == 0, true);
 }
 

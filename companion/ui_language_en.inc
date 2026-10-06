@@ -405,6 +405,8 @@
     {"今日自主缓冲", "Today's independent buffering"},
     {"今日自主缓冲已领取，记得休息眼睛。", "The independent buffer has been received today, remember to rest your eyes."},
     {"今日自主缓冲未开启", "Autonomous buffering is not enabled today"},
+    {"自主缓冲未开启", "Buffer is off today"},
+    {"仅限时日可领取", "Limited days only"},
     {"今日自主缓冲设置已保存。", "Today's autonomous buffer settings have been saved."},
     {"今日详情", "Today Details"},
     {"今日调", "Today's tune"},

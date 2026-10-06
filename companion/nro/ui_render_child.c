@@ -387,6 +387,22 @@ static void draw_child_action_icon(uint32_t *pixels, uint32_t stride, PtcUiRect 
     }
 }
 
+static void draw_child_action_button(uint32_t *pixels, uint32_t stride, PtcUiRect target,
+                                    const char *label, int kind, bool primary,
+                                    bool selected, bool disabled)
+{
+    UiRect box = to_uirect(target);
+    uint32_t fill = disabled ? UI_RAISED : (primary ? UI_ACCENT : UI_ACCENT_SOFT);
+    fill_round_rect(pixels, stride, box, 12, fill);
+    if (selected) draw_focus_ring(pixels, stride, box, 12);
+    draw_child_action_icon(pixels, stride, target, kind, primary, disabled);
+
+    /* Text content area to the right of the action icon */
+    UiRect label_box = {box.x + 48, box.y, box.width - 54, box.height};
+    draw_button_label(pixels, stride, label_box, label, target.h <= 48 ? 18 : 20,
+                      disabled ? UI_DISABLED : (primary ? UI_ON_ACCENT : UI_ACCENT));
+}
+
 static void draw_child_status_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect card = {964, 486, 268, 130};
@@ -432,11 +448,10 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     draw_child_task_summary(pixels, stride, model);
 
     /* 右侧动作栏 (4 个紧凑功能项目) */
-    home_button(pixels, stride, ptc_ui_child_submit_rect(),
+    draw_child_action_button(pixels, stride, ptc_ui_child_submit_rect(),
         model->disable_flag_present ? ptc_ui_text(PTC_UI_T_REDEMPTION_IS_CURRENTLY_UNAVAILABLE) :
         (code_unavailable ? ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_GRANT_CODES_ARE) : ptc_ui_text(PTC_UI_T_A_ENTER_CODE)),
-        true, false, disabled || code_unavailable);
-    draw_child_action_icon(pixels, stride, ptc_ui_child_submit_rect(), 0, true, disabled || code_unavailable);
+        0, true, false, disabled || code_unavailable);
 
     if (model->daily_buffer_available) {
         snprintf(buffer, sizeof(buffer), ptc_ui_text(PTC_UI_T_X_CLAIM_SELF_BUFFER_U_MIN), (unsigned int)model->daily_buffer_minutes);
@@ -445,14 +460,12 @@ void draw_child(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             (model->daily_buffer_minutes == 0 ? ptc_ui_text(PTC_UI_T_AUTONOMOUS_BUFFERING_IS_NOT_ENABLED_TODAY) : ptc_ui_text(PTC_UI_T_AUTONOMOUS_BUFFERING_CAN_ONLY_BE_COLLECTED_ON)));
     }
 
-    home_button(pixels, stride, ptc_ui_child_buffer_rect(), buffer, false, false,
+    draw_child_action_button(pixels, stride, ptc_ui_child_buffer_rect(), buffer,
+        model->daily_buffer_claimed ? 3 : 1, false, false,
         disabled || !model->daily_buffer_available);
-    draw_child_action_icon(pixels, stride, ptc_ui_child_buffer_rect(),
-                           model->daily_buffer_claimed ? 3 : 1, false,
-                           disabled || !model->daily_buffer_available);
 
-    home_button(pixels, stride, ptc_ui_home_details_rect(false), ptc_ui_text(PTC_UI_T_USAGE_DETAILS_2), false, false, model->waiting);
-    draw_child_action_icon(pixels, stride, ptc_ui_home_details_rect(false), 2, false, model->waiting);
+    draw_child_action_button(pixels, stride, ptc_ui_home_details_rect(false),
+        ptc_ui_text(PTC_UI_T_USAGE_DETAILS_2), 2, false, false, model->waiting);
 
     draw_child_status_card(pixels, stride, model);
 
