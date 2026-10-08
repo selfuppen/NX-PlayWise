@@ -291,20 +291,32 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     } else if (!dock_master) {
         dock_badge = ptc_ui_text(PTC_UI_T_DISABLED_2);
         d_badge_color = UI_MUTED;
-    } else if (strcmp(model->operation_mode, "docked") == 0) {
-        dock_badge = ptc_ui_text(PTC_UI_T_DOCK_TV_BADGE);
-        d_badge_color = UI_SUCCESS;
+    } else if (model->dock_policy.force_docked) {
+        dock_badge = ptc_ui_text(PTC_UI_T_DOCK_FORCE);
+        d_badge_color = UI_ACCENT;
     } else {
-        dock_badge = ptc_ui_text(PTC_UI_T_DOCK_HANDHELD_BADGE);
+        dock_badge = ptc_ui_text(PTC_UI_T_DOCK_LIMIT);
         d_badge_color = UI_ACCENT;
     }
 
-    int db_w = measure_text(dock_badge, 12) + 16;
-    if (db_w < 56) db_w = 56;
-    UiRect db_rect = {dock_card.x + dock_card.width - db_w - 10, dock_card.y + 8, db_w, 20};
-    fill_round_rect(pixels, stride, db_rect, 4, d_badge_color == UI_DANGER ? UI_DANGER_SOFT : (d_badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT : (d_badge_color == UI_ACCENT ? UI_ACCENT_SOFT : UI_PAGE)));
-    draw_rect_outline(pixels, stride, db_rect, 4, 1, d_badge_color);
-    draw_text_center(pixels, stride, db_rect, dock_badge, 12, d_badge_color);
+    int b2_w = measure_text(dock_badge, 12) + 16;
+    if (b2_w < 50) b2_w = 50;
+    UiRect b2_rect = {dock_card.x + dock_card.width - b2_w - 10, dock_card.y + 8, b2_w, 20};
+    fill_round_rect(pixels, stride, b2_rect, 4, d_badge_color == UI_DANGER ? UI_DANGER_SOFT : (d_badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT : (d_badge_color == UI_ACCENT ? UI_ACCENT_SOFT : UI_PAGE)));
+    draw_rect_outline(pixels, stride, b2_rect, 4, 1, d_badge_color);
+    draw_text_center(pixels, stride, b2_rect, dock_badge, 12, d_badge_color);
+
+    if (dock_master || model->dock_waived_today) {
+        bool is_docked = (strcmp(model->operation_mode, "docked") == 0);
+        const char *mode_badge = is_docked ? ptc_ui_text(PTC_UI_T_DOCK_TV_BADGE) : ptc_ui_text(PTC_UI_T_DOCK_HANDHELD_BADGE);
+        uint32_t mode_color = is_docked ? UI_SUCCESS : UI_ACCENT;
+        int b1_w = measure_text(mode_badge, 12) + 16;
+        if (b1_w < 56) b1_w = 56;
+        UiRect b1_rect = {b2_rect.x - b1_w - 6, dock_card.y + 8, b1_w, 20};
+        fill_round_rect(pixels, stride, b1_rect, 4, mode_color == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_ACCENT_SOFT);
+        draw_rect_outline(pixels, stride, b1_rect, 4, 1, mode_color);
+        draw_text_center(pixels, stride, b1_rect, mode_badge, 12, mode_color);
+    }
 
     char d_detail[128], fitted_dock[128];
     if (model->dock_waived_today) {
