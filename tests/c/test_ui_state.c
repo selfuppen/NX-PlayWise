@@ -3790,13 +3790,32 @@ static void test_config_backup_layout(void)
 {
     PtcUiModel model = {0}; model.view = PTC_UI_PARENT; model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
     model.config_backup_ready = model.config_today_available = model.config_pin_available = true;
-    for (int i = 0; i < 16; ++i) {
+    model.config_backup_tab = 1;
+    int tab1_indices[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17};
+    int n_tab1 = sizeof(tab1_indices) / sizeof(tab1_indices[0]);
+    for (int idx = 0; idx < n_tab1; ++idx) {
+        int i = tab1_indices[idx];
         PtcUiRect rect = ptc_ui_config_backup_field_rect(i);
-        check_hit(hit_center(&model,rect),PTC_UI_HIT_CONFIG_BACKUP_FIELD,i,"every backup control is touchable");
-        for (int j=i+1; j<16; ++j) check_true(!rects_overlap(rect,ptc_ui_config_backup_field_rect(j)),"backup controls do not overlap");
+        check_hit(hit_center(&model, rect), PTC_UI_HIT_CONFIG_BACKUP_FIELD, i, "tab 1 backup control is touchable");
+        for (int jdx = idx + 1; jdx < n_tab1; ++jdx) {
+            int j = tab1_indices[jdx];
+            check_true(!rects_overlap(rect, ptc_ui_config_backup_field_rect(j)), "tab 1 backup controls do not overlap");
+        }
     }
-    model.overlay = PTC_UI_OVERLAY_NONE; model.parent_page=PTC_UI_PARENT_SETTINGS;
-    check_hit(hit_center(&model,ptc_ui_settings_card_rect(7)),PTC_UI_HIT_PARENT_CARD,7,"eighth settings card has matching hit area");
+    model.config_backup_tab = 0;
+    int tab0_indices[] = {13, 15, 16, 17};
+    int n_tab0 = sizeof(tab0_indices) / sizeof(tab0_indices[0]);
+    for (int idx = 0; idx < n_tab0; ++idx) {
+        int i = tab0_indices[idx];
+        PtcUiRect rect = ptc_ui_config_backup_field_rect(i);
+        check_hit(hit_center(&model, rect), PTC_UI_HIT_CONFIG_BACKUP_FIELD, i, "tab 0 backup control is touchable");
+        for (int jdx = idx + 1; jdx < n_tab0; ++jdx) {
+            int j = tab0_indices[jdx];
+            check_true(!rects_overlap(rect, ptc_ui_config_backup_field_rect(j)), "tab 0 backup controls do not overlap");
+        }
+    }
+    model.overlay = PTC_UI_OVERLAY_NONE; model.parent_page = PTC_UI_PARENT_SETTINGS;
+    check_hit(hit_center(&model, ptc_ui_settings_card_rect(7)), PTC_UI_HIT_PARENT_CARD, 7, "eighth settings card has matching hit area");
 }
 
 int main(void)

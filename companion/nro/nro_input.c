@@ -54,61 +54,99 @@ void handle_overlay_input(UiState *ui, u64 down)
         } else if (down & HidNpadButton_Y) {
             ptc_audio_play(PTC_SE_CONFIRM);
             open_config_backup(ui);
+        } else if (down & (HidNpadButton_L | HidNpadButton_ZL)) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.config_backup_tab = 0;
+            if (sel != 15 && sel != 16 && sel != 17) ui->model.overlay_selection = 13;
+        } else if (down & (HidNpadButton_R | HidNpadButton_ZR)) {
+            ptc_audio_play(PTC_SE_FOCUS);
+            ui->model.config_backup_tab = 1;
+            if (sel != 15 && sel != 16 && sel != 17) ui->model.overlay_selection = 14;
         } else if (down & HidNpadButton_Up) {
             ptc_audio_play(PTC_SE_FOCUS);
-            if (sel == 0 || sel == 1) ui->model.overlay_selection = 15;
-            else if (sel == 2) ui->model.overlay_selection = 0;
-            else if (sel == 3) ui->model.overlay_selection = 1;
-            else if (sel == 4) ui->model.overlay_selection = 2;
-            else if (sel == 5) ui->model.overlay_selection = 3;
-            else if (sel == 6) ui->model.overlay_selection = 4;
-            else if (sel == 7) ui->model.overlay_selection = 5;
-            else if (sel == 8) ui->model.overlay_selection = 6;
-            else if (sel == 9) ui->model.overlay_selection = 8;
-            else if (sel == 10) ui->model.overlay_selection = 7;
-            else if (sel == 11) ui->model.overlay_selection = 9;
-            else if (sel == 12) ui->model.overlay_selection = 10;
-            else if (sel == 13) ui->model.overlay_selection = 11;
-            else if (sel == 14) ui->model.overlay_selection = 12;
-            else if (sel == 15) ui->model.overlay_selection = 13;
+            if (ui->model.config_backup_tab == 0) {
+                if (sel == 16 || sel == 17) ui->model.overlay_selection = 15;
+                else if (sel == 13) ui->model.overlay_selection = 16;
+                else if (sel == 15) ui->model.overlay_selection = 13;
+                else ui->model.overlay_selection = 13;
+            } else {
+                if (sel == 16 || sel == 17) ui->model.overlay_selection = 15;
+                else if (sel == 0) ui->model.overlay_selection = 16;
+                else if (sel == 1) ui->model.overlay_selection = 17;
+                else if (sel == 2) ui->model.overlay_selection = 0;
+                else if (sel == 3) ui->model.overlay_selection = 1;
+                else if (sel == 4) ui->model.overlay_selection = 2;
+                else if (sel == 5) ui->model.overlay_selection = 3;
+                else if (sel == 6) ui->model.overlay_selection = 4;
+                else if (sel == 7) ui->model.overlay_selection = 5;
+                else if (sel == 8) ui->model.overlay_selection = 6;
+                else if (sel == 9) ui->model.overlay_selection = 8;
+                else if (sel == 10) ui->model.overlay_selection = 7;
+                else if (sel == 11) ui->model.overlay_selection = 9;
+                else if (sel == 12) ui->model.overlay_selection = 10;
+                else if (sel == 14) ui->model.overlay_selection = 11;
+                else if (sel == 15) ui->model.overlay_selection = 14;
+                else ui->model.overlay_selection = 14;
+            }
         } else if (down & HidNpadButton_Down) {
             ptc_audio_play(PTC_SE_FOCUS);
-            if (sel == 0) ui->model.overlay_selection = 2;
-            else if (sel == 1) ui->model.overlay_selection = 3;
-            else if (sel == 2) ui->model.overlay_selection = 4;
-            else if (sel == 3) ui->model.overlay_selection = 5;
-            else if (sel == 4) ui->model.overlay_selection = 6;
-            else if (sel == 5) ui->model.overlay_selection = 7;
-            else if (sel == 6) ui->model.overlay_selection = 8;
-            else if (sel == 7) ui->model.overlay_selection = 10;
-            else if (sel == 8) ui->model.overlay_selection = 9;
-            else if (sel == 9) ui->model.overlay_selection = 11;
-            else if (sel == 10) ui->model.overlay_selection = 12;
-            else if (sel == 11) ui->model.overlay_selection = 13;
-            else if (sel == 12) ui->model.overlay_selection = 14;
-            else if (sel == 13 || sel == 14) ui->model.overlay_selection = 15;
-            else if (sel == 15) ui->model.overlay_selection = 0;
+            if (ui->model.config_backup_tab == 0) {
+                if (sel == 16 || sel == 17) ui->model.overlay_selection = 13;
+                else if (sel == 13) ui->model.overlay_selection = 15;
+                else if (sel == 15) ui->model.overlay_selection = 16;
+                else ui->model.overlay_selection = 13;
+            } else {
+                if (sel == 16) ui->model.overlay_selection = 0;
+                else if (sel == 17) ui->model.overlay_selection = 1;
+                else if (sel == 0) ui->model.overlay_selection = 2;
+                else if (sel == 1) ui->model.overlay_selection = 3;
+                else if (sel == 2) ui->model.overlay_selection = 4;
+                else if (sel == 3) ui->model.overlay_selection = 5;
+                else if (sel == 4) ui->model.overlay_selection = 6;
+                else if (sel == 5) ui->model.overlay_selection = 7;
+                else if (sel == 6) ui->model.overlay_selection = 8;
+                else if (sel == 7) ui->model.overlay_selection = 10;
+                else if (sel == 8) ui->model.overlay_selection = 9;
+                else if (sel == 9) ui->model.overlay_selection = 11;
+                else if (sel == 10) ui->model.overlay_selection = 12;
+                else if (sel == 11 || sel == 12) ui->model.overlay_selection = 14;
+                else if (sel == 14) ui->model.overlay_selection = 15;
+                else if (sel == 15) ui->model.overlay_selection = 16;
+                else ui->model.overlay_selection = 14;
+            }
         } else if (down & HidNpadButton_Left) {
             ptc_audio_play(PTC_SE_FOCUS);
-            if (sel == 1) ui->model.overlay_selection = 0;
-            else if (sel == 3) ui->model.overlay_selection = 2;
-            else if (sel == 5) ui->model.overlay_selection = 4;
-            else if (sel == 7) ui->model.overlay_selection = 6;
-            else if (sel == 10) ui->model.overlay_selection = 9;
-            else if (sel == 12) ui->model.overlay_selection = 11;
-            else if (sel == 14) ui->model.overlay_selection = 13;
+            if (sel == 17) ui->model.overlay_selection = 16;
+            else if (ui->model.config_backup_tab == 1) {
+                if (sel == 1) ui->model.overlay_selection = 0;
+                else if (sel == 3) ui->model.overlay_selection = 2;
+                else if (sel == 5) ui->model.overlay_selection = 4;
+                else if (sel == 7) ui->model.overlay_selection = 6;
+                else if (sel == 10) ui->model.overlay_selection = 9;
+                else if (sel == 12) ui->model.overlay_selection = 11;
+            }
         } else if (down & HidNpadButton_Right) {
             ptc_audio_play(PTC_SE_FOCUS);
-            if (sel == 0) ui->model.overlay_selection = 1;
-            else if (sel == 2) ui->model.overlay_selection = 3;
-            else if (sel == 4) ui->model.overlay_selection = 5;
-            else if (sel == 6) ui->model.overlay_selection = 7;
-            else if (sel == 9) ui->model.overlay_selection = 10;
-            else if (sel == 11) ui->model.overlay_selection = 12;
-            else if (sel == 13) ui->model.overlay_selection = 14;
+            if (sel == 16) ui->model.overlay_selection = 17;
+            else if (ui->model.config_backup_tab == 1) {
+                if (sel == 0) ui->model.overlay_selection = 1;
+                else if (sel == 2) ui->model.overlay_selection = 3;
+                else if (sel == 4) ui->model.overlay_selection = 5;
+                else if (sel == 6) ui->model.overlay_selection = 7;
+                else if (sel == 9) ui->model.overlay_selection = 10;
+                else if (sel == 11) ui->model.overlay_selection = 12;
+            }
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             ptc_audio_play(PTC_SE_CONFIRM);
-            config_backup_action(ui, ui->model.overlay_selection);
+            if (sel == 16) {
+                ui->model.config_backup_tab = 0;
+                ui->model.overlay_selection = 13;
+            } else if (sel == 17) {
+                ui->model.config_backup_tab = 1;
+                ui->model.overlay_selection = 14;
+            } else {
+                config_backup_action(ui, sel);
+            }
         }
         return;
     }

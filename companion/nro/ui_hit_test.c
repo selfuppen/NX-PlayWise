@@ -74,8 +74,15 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_CONFIG_BACKUP) {
-        for (int i = 0; i < 16; ++i)
-            if (ptc_ui_rect_contains(ptc_ui_config_backup_field_rect(i), x, y)) return make_hit(PTC_UI_HIT_CONFIG_BACKUP_FIELD, i);
+        for (int i = 0; i < 18; ++i) {
+            if (model->config_backup_tab == 0) {
+                if (i != 16 && i != 17 && i != 13 && i != 15) continue;
+            } else {
+                if (i == 13) continue;
+            }
+            if (ptc_ui_rect_contains(ptc_ui_config_backup_field_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_CONFIG_BACKUP_FIELD, i);
+        }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS) {

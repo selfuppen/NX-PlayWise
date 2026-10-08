@@ -400,6 +400,7 @@ typedef struct {
     bool config_pin_available;
     bool config_needs_confirmation;
     uint16_t config_groups;
+    int config_backup_tab;
     char config_metadata[128];
     char config_preview[512];
     bool dock_supported_available;

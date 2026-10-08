@@ -66,6 +66,7 @@ void open_config_backup(UiState *ui)
     if (ptc_config_stage_path(stage, sizeof(stage), APP_ROOT, ui->config_stage_id))
         (void)ui->client.storage->vtable->remove_tree(ui->client.storage, stage);
     ui->model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
+    ui->model.config_backup_tab = 0;
     ui->model.overlay_selection = 13;
     ui->model.config_backup_ready = false;
     ui->model.config_today_available = false;
@@ -136,6 +137,20 @@ void request_config_restore(UiState *ui)
 void config_backup_action(UiState *ui, int index)
 {
     if (!ui || ui->waiting) return;
+    if (index == 16) {
+        ui->model.config_backup_tab = 0;
+        if (ui->model.overlay_selection != 15 && ui->model.overlay_selection != 16 && ui->model.overlay_selection != 17) {
+            ui->model.overlay_selection = 13;
+        }
+        return;
+    }
+    if (index == 17) {
+        ui->model.config_backup_tab = 1;
+        if (ui->model.overlay_selection != 15 && ui->model.overlay_selection != 16 && ui->model.overlay_selection != 17) {
+            ui->model.overlay_selection = 14;
+        }
+        return;
+    }
     if (index == 15) {
         char stage[256];
         if (ptc_config_stage_path(stage, sizeof(stage), APP_ROOT, ui->config_stage_id))

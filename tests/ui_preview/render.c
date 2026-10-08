@@ -1209,10 +1209,14 @@ static int render_config_backup_previews(const char *directory, const PtcUiModel
         model.view = PTC_UI_PARENT; model.parent_page = PTC_UI_PARENT_SETTINGS;
         model.overlay = PTC_UI_OVERLAY_NONE; model.selected_index = 7;
         failed |= save_preview(directory, "settings", "settings-backup-entry", &model, dark);
-        model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP; model.overlay_selection = 14;
-        model.config_backup_ready = model.config_today_available = model.config_pin_available = true;
-        model.config_groups = 511;
+        model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
+        model.config_backup_tab = 0; model.overlay_selection = 13;
+        model.config_backup_ready = true;
         snprintf(model.config_metadata, sizeof(model.config_metadata), "kid-switch / 2026-10-06 12:00");
+        failed |= save_preview(directory, "settings", "config-backup-create", &model, dark);
+        model.config_backup_tab = 1; model.overlay_selection = 14;
+        model.config_today_available = model.config_pin_available = true;
+        model.config_groups = 511;
         snprintf(model.config_preview, sizeof(model.config_preview), ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_PREVIEW),
             120u, ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_APPLY));
         failed |= save_preview(directory, "settings", "config-backup", &model, dark);

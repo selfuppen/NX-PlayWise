@@ -1510,12 +1510,15 @@ PtcUiRect ptc_ui_dock_field_rect(int index)
 
 PtcUiRect ptc_ui_config_backup_field_rect(int index)
 {
-    if (index >= 0 && index < 4) return (PtcUiRect){54 + (index % 2) * 385, 180 + (index / 2) * 48, 365, 42};
-    if (index >= 4 && index < 9) return (PtcUiRect){54 + ((index - 4) % 2) * 385, 304 + ((index - 4) / 2) * 48, 365, 42};
-    if (index == 9 || index == 10) return (PtcUiRect){54 + (index - 9) * 385, 476, 365, 42};
-    if (index == 11 || index == 12) return (PtcUiRect){54 + (index - 11) * 190, 536, 175, 42};
-    if (index == 13 || index == 14) return (PtcUiRect){54 + (index - 13) * 385, 592, 365, 48};
-    if (index == 15) return (PtcUiRect){54, 654, 160, 42};
+    if (index == 16) return (PtcUiRect){54, 96, 180, 38};
+    if (index == 17) return (PtcUiRect){244, 96, 180, 38};
+    if (index >= 0 && index < 4) return (PtcUiRect){54 + (index % 2) * 385, 196 + (index / 2) * 48, 365, 42};
+    if (index >= 4 && index < 9) return (PtcUiRect){54 + ((index - 4) % 2) * 385, 316 + ((index - 4) / 2) * 48, 365, 42};
+    if (index == 9 || index == 10) return (PtcUiRect){54 + (index - 9) * 385, 484, 365, 42};
+    if (index == 11 || index == 12) return (PtcUiRect){54 + (index - 11) * 190, 536, 175, 40};
+    if (index == 13) return (PtcUiRect){54, 560, 744, 54};
+    if (index == 14) return (PtcUiRect){54, 588, 750, 48};
+    if (index == 15) return (PtcUiRect){54, 646, 160, 40};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
