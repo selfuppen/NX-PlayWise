@@ -213,15 +213,48 @@ void dock_page_action(UiState *ui, int action, int delta)
     if (action == 4) { request_dock_waiver(ui); return; }
     if (ui->model.disable_flag_present) return;
     if (action == 0) {
+        bool currently_on = draft->force_docked || draft->undocked_limit_enabled;
+        if (!currently_on) {
+            bool lite = ui->model.dock_supported_available && !ui->model.dock_supported;
+            if (lite) {
+                draft->force_docked = false;
+                draft->undocked_limit_enabled = true;
+                if (draft->undocked_daily_minutes == 0) draft->undocked_daily_minutes = 30;
+            } else if (draft->undocked_daily_minutes == 0) {
+                draft->force_docked = true;
+                draft->undocked_limit_enabled = true;
+            } else {
+                draft->force_docked = false;
+                draft->undocked_limit_enabled = true;
+            }
+        } else {
+            draft->force_docked = false;
+            draft->undocked_limit_enabled = false;
+        }
+    } else if (action == 1) {
         if (!draft->force_docked && ui->model.dock_supported_available && !ui->model.dock_supported) {
             snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_DOCK_LITE));
             return;
         }
         draft->force_docked = !draft->force_docked;
-    } else if (action == 1) draft->undocked_limit_enabled = !draft->undocked_limit_enabled;
-    else if (action == 2 && delta) draft->undocked_daily_minutes = ptc_ui_adjust_minutes(draft->undocked_daily_minutes, delta, 0, 1440);
-    else if (action == 2) ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_DOCK_MINUTES, PTC_UI_OVERLAY_NONE,
-        ptc_ui_text(PTC_UI_T_DOCK_LIMIT), ptc_ui_text(PTC_UI_T_DOCK_ALLOWANCE), 4, 0, 1440, draft->undocked_daily_minutes);
-    else if (action == 3) { save_dock_from_page(ui); return; }
+        if (draft->force_docked) {
+            draft->undocked_limit_enabled = true;
+        } else {
+            draft->undocked_limit_enabled = true;
+            if (draft->undocked_daily_minutes == 0) draft->undocked_daily_minutes = 30;
+        }
+    } else if (action == 2 && delta) {
+        draft->undocked_daily_minutes = ptc_ui_adjust_minutes(draft->undocked_daily_minutes, delta, 0, 1440);
+        if (draft->undocked_daily_minutes == 0) {
+            draft->force_docked = true;
+            draft->undocked_limit_enabled = true;
+        } else {
+            draft->force_docked = false;
+            draft->undocked_limit_enabled = true;
+        }
+    } else if (action == 2) {
+        ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_DOCK_MINUTES, PTC_UI_OVERLAY_NONE,
+            ptc_ui_text(PTC_UI_T_DOCK_LIMIT), ptc_ui_text(PTC_UI_T_DOCK_ALLOWANCE), 4, 0, 1440, draft->undocked_daily_minutes);
+    } else if (action == 3) { save_dock_from_page(ui); return; }
     ui->model.dock_dirty = ptc_ui_dock_dirty(&ui->model);
 }

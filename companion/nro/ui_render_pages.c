@@ -269,9 +269,65 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     fit_text(fitted_bedtime, sizeof(fitted_bedtime), b_detail, 12, bedtime_card.width - 24);
     draw_text(pixels, stride, bedtime_card.x + 12, bedtime_card.y + 40, fitted_bedtime, 12, bedtime_enforcing ? UI_DANGER : UI_MUTED);
 
+    /* 周期 4：电视模式规则周期卡 */
+    UiRect dock_card = {lower.x + 10, lower.y + 184, lower.width - 20, 52};
+    fill_round_rect(pixels, stride, dock_card, 8, UI_RAISED);
+    draw_rect_outline(pixels, stride, dock_card, 8, 1, model->dock_restriction_active ? UI_DANGER : UI_BORDER);
+    draw_text(pixels, stride, dock_card.x + 12, dock_card.y + 20, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 14, UI_INK);
+
+    bool dock_master = model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled;
+    const char *dock_badge;
+    uint32_t d_badge_color;
+    if (model->dock_waived_today) {
+        dock_badge = ptc_ui_text(PTC_UI_T_SKIPPED);
+        d_badge_color = UI_SUCCESS;
+    } else if (model->dock_restriction_active) {
+        dock_badge = ptc_ui_text(PTC_UI_T_RESTRICTED);
+        d_badge_color = UI_DANGER;
+    } else if (!dock_master) {
+        dock_badge = ptc_ui_text(PTC_UI_T_DISABLED_2);
+        d_badge_color = UI_MUTED;
+    } else if (strcmp(model->operation_mode, "docked") == 0) {
+        dock_badge = ptc_ui_text(PTC_UI_T_DOCK_TV_BADGE);
+        d_badge_color = UI_SUCCESS;
+    } else {
+        dock_badge = ptc_ui_text(PTC_UI_T_DOCK_HANDHELD_BADGE);
+        d_badge_color = UI_ACCENT;
+    }
+
+    int db_w = measure_text(dock_badge, 12) + 16;
+    if (db_w < 56) db_w = 56;
+    UiRect db_rect = {dock_card.x + dock_card.width - db_w - 10, dock_card.y + 8, db_w, 20};
+    fill_round_rect(pixels, stride, db_rect, 4, d_badge_color == UI_DANGER ? UI_DANGER_SOFT : (d_badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT : (d_badge_color == UI_ACCENT ? UI_ACCENT_SOFT : UI_PAGE)));
+    draw_rect_outline(pixels, stride, db_rect, 4, 1, d_badge_color);
+    draw_text_center(pixels, stride, db_rect, dock_badge, 12, d_badge_color);
+
+    char d_detail[128], fitted_dock[128];
+    if (model->dock_waived_today) {
+        snprintf(d_detail, sizeof(d_detail), "%s", ptc_ui_text(PTC_UI_T_DOCK_CARD_WAIVED));
+    } else if (model->dock_restriction_active) {
+        snprintf(d_detail, sizeof(d_detail), "%s", ptc_ui_text(PTC_UI_T_DOCK_BLOCKED_BANNER));
+    } else if (!dock_master) {
+        snprintf(d_detail, sizeof(d_detail), "%s", ptc_ui_text(PTC_UI_T_DOCK_CARD_OFF));
+    } else if (model->dock_policy.force_docked) {
+        snprintf(d_detail, sizeof(d_detail), "%s", ptc_ui_text(PTC_UI_T_DOCK_CARD_FORCE));
+    } else if (model->dock_policy.undocked_limit_enabled) {
+        if (model->undocked_usage_available) {
+            snprintf(d_detail, sizeof(d_detail), ptc_ui_text(PTC_UI_T_DOCK_CARD_LIMIT),
+                     model->dock_policy.undocked_daily_minutes, model->undocked_used_minutes);
+        } else {
+            snprintf(d_detail, sizeof(d_detail), "%s: %u %s", ptc_ui_text(PTC_UI_T_DOCK_LIMIT),
+                     model->dock_policy.undocked_daily_minutes, ptc_ui_text(PTC_UI_T_MINUTES));
+        }
+    } else {
+        snprintf(d_detail, sizeof(d_detail), "%s", ptc_ui_text(PTC_UI_T_DOCK_CARD_OFF));
+    }
+    fit_text(fitted_dock, sizeof(fitted_dock), d_detail, 12, dock_card.width - 24);
+    draw_text(pixels, stride, dock_card.x + 12, dock_card.y + 40, fitted_dock, 12, model->dock_restriction_active ? UI_DANGER : UI_MUTED);
+
     /* 状态同步年龄提示 */
     format_status_age(model, age, sizeof(age));
-    draw_text(pixels, stride, lower.x + 14, lower.y + 198, age, 12, UI_MUTED);
+    draw_text(pixels, stride, lower.x + 14, lower.y + 248, age, 12, UI_MUTED);
 }
 
 static const UiAction *actions_for_page(PtcUiParentPage page, int *count)
@@ -518,7 +574,16 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                 subtitle = dynamic;
             }
         }
-        if (index == 7 && unavailable) subtitle = unavailable;
+        if (index == 7) {
+            if (unavailable) subtitle = unavailable;
+            else if (model->dock_waived_today) subtitle = ptc_ui_text(PTC_UI_T_DOCK_WAIVED);
+            else if (model->dock_policy.force_docked) subtitle = ptc_ui_text(PTC_UI_T_DOCK_CARD_FORCE);
+            else if (model->dock_policy.undocked_limit_enabled) {
+                snprintf(dynamic, sizeof(dynamic), ptc_ui_text(PTC_UI_T_DOCK_CARD_LIMIT),
+                         model->dock_policy.undocked_daily_minutes, model->undocked_used_minutes);
+                subtitle = dynamic;
+            }
+        }
         action.title = title;
         action.subtitle = subtitle;
         draw_action_card(pixels, stride, box, &action, focused,

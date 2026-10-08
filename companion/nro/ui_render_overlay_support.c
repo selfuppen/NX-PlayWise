@@ -889,10 +889,25 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_home_metrics_view(pixels, stride, model, dialog);
     }
     if (model->dock_available) {
-        char dock[256];
-        ptc_ui_format_dock_usage(model, ptc_ui_render_now(), dock, sizeof(dock));
+        char dock_line[256];
+        bool is_tv = strcmp(model->operation_mode, "docked") == 0;
+        bool is_undocked = strcmp(model->operation_mode, "undocked") == 0;
+        const char *mode_str = is_tv ? ptc_ui_text(PTC_UI_T_DOCK_TV) :
+            (is_undocked ? ptc_ui_text(PTC_UI_T_DOCK_HANDHELD) : ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+
+        if (model->dock_waived_today) {
+            snprintf(dock_line, sizeof(dock_line), "%s / %s", mode_str, ptc_ui_text(PTC_UI_T_DOCK_CARD_WAIVED));
+        } else if (model->dock_restriction_active) {
+            snprintf(dock_line, sizeof(dock_line), "%s / %s", mode_str, ptc_ui_text(PTC_UI_T_DOCK_BLOCKED_BANNER));
+        } else if (!(model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled)) {
+            snprintf(dock_line, sizeof(dock_line), "%s / %s", mode_str, ptc_ui_text(PTC_UI_T_DOCK_CARD_OFF));
+        } else if (model->dock_policy.force_docked) {
+            snprintf(dock_line, sizeof(dock_line), "%s / %s", mode_str, ptc_ui_text(PTC_UI_T_DOCK_CARD_FORCE));
+        } else {
+            ptc_ui_format_dock_usage(model, ptc_ui_render_now(), dock_line, sizeof(dock_line));
+        }
         draw_wrapped_text(pixels, stride, dialog.x + 28, dialog.y + 530,
-            dock, 14, 1064, 18, 1, UI_ACCENT);
+            dock_line, 14, 1064, 18, 1, UI_ACCENT);
         if (ptc_ui_status_is_fresh(model, ptc_ui_render_now()) &&
             (model->dock_restriction_active || model->dock_waived_today))
             draw_wrapped_text(pixels, stride, dialog.x + 28, dialog.y + 554,

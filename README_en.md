@@ -83,6 +83,8 @@ For detailed walkthroughs of each page, see the [User Guide](docs/使用/USER_GU
 
 ![Today's allowance rule breakdown preview](docs/images/usage/parent/parent-details-decision-light.png)
 
+![TV mode eyesight protection rules preview](docs/images/usage/plan/dock-policy-light.png)
+
 </details>
 
 ## FAQ

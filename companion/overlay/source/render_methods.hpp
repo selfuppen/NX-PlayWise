@@ -431,12 +431,13 @@
         const bool bedtime_res = summary.valid && summary.bedtime_active && !summary.bedtime_skipped;
         const bool eye_res = summary.valid && summary.eye_care_enabled &&
             std::strcmp(summary.eye_care_phase, "resting") == 0;
+        const bool dock_res = summary.valid && summary.dock_restriction_active && !bedtime_res && !eye_res;
 
         tsl::Color banner_bg = CARD_COLOR;
         tsl::Color banner_border = FOCUS_BORDER;
         if (remaining_refresh_pending) {
             banner_border = WAITING_COLOR;
-        } else if (bedtime_res) {
+        } else if (bedtime_res || dock_res) {
             banner_bg = DANGER_BG;
             banner_border = ERROR_COLOR;
         } else if (eye_res) {
@@ -446,7 +447,7 @@
 
         renderer->drawRect(cx, top_banner_y, cw, top_banner_h, renderer->a(banner_bg));
         draw_outline(renderer, cx, top_banner_y, cw, top_banner_h,
-                     (remaining_refresh_pending || bedtime_res || eye_res) ? 2 : 1,
+                     (remaining_refresh_pending || bedtime_res || eye_res || dock_res) ? 2 : 1,
                      banner_border);
 
         char quota_label[32];
@@ -465,14 +466,15 @@
 
         const char *banner_title = bedtime_res ? ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_2) :
             (eye_res ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) :
-             (success_visible_ ? ptc_ui_text(PTC_UI_T_STILL_PLAYABLE_AFTER_MODIFICATION) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY)));
+             (dock_res ? ptc_ui_text(PTC_UI_T_DOCK_BLOCKED) :
+              (success_visible_ ? ptc_ui_text(PTC_UI_T_STILL_PLAYABLE_AFTER_MODIFICATION) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY))));
         draw_localized(renderer, banner_title, false,
                               cx + 10, top_banner_y + 51, 11,
-                              renderer->a(bedtime_res ? ERROR_COLOR : (eye_res ? WAITING_COLOR : MUTED_COLOR)));
+                              renderer->a(bedtime_res || dock_res ? ERROR_COLOR : (eye_res ? WAITING_COLOR : MUTED_COLOR)));
 
         const bool unlimited_today = summary.valid && summary.unrestricted_today == 1;
         const tsl::Color remaining_accent = remaining_refresh_pending ? WAITING_COLOR :
-            (bedtime_res ? ERROR_COLOR : (eye_res ? WAITING_COLOR :
+            (bedtime_res || dock_res ? ERROR_COLOR : (eye_res ? WAITING_COLOR :
              (summary.valid && (summary.remaining_available || unlimited_today) ? SUCCESS_COLOR : MUTED_COLOR)));
         renderer->drawRect(cx + 108, top_banner_y + 34, 104, 34, renderer->a(KEY_COLOR));
         renderer->drawRect(cx + 108, top_banner_y + 66, 104, 2, renderer->a(remaining_accent));
@@ -481,6 +483,8 @@
                                  renderer->a(WAITING_COLOR));
         } else if (bedtime_res) {
             draw_localized(renderer, ptc_ui_text(PTC_UI_T_RESTRICTED), false, cx + 124, top_banner_y + 59, 18, renderer->a(ERROR_COLOR));
+        } else if (dock_res) {
+            draw_localized(renderer, ptc_ui_text(PTC_UI_T_DOCK_TV_BADGE), false, cx + 120, top_banner_y + 59, 16, renderer->a(ERROR_COLOR));
         } else if (eye_res) {
             int sec = summary.eye_care_rest_remaining_seconds > 0 ? summary.eye_care_rest_remaining_seconds : 0;
             std::snprintf(line, sizeof(line), "%02d:%02d", sec / 60, sec % 60);

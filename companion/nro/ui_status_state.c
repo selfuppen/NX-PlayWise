@@ -402,7 +402,13 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
     }
     if (ptc_ui_status_is_fresh(model, now)) {
         if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped)) {
-            snprintf(out->remaining_text, sizeof(out->remaining_text), ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED));
+            if (model->dock_policy.undocked_limit_enabled && !model->dock_waived_today &&
+                strcmp(model->operation_mode, "undocked") == 0 && model->undocked_usage_available) {
+                snprintf(out->remaining_text, sizeof(out->remaining_text),
+                         ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED_WITH_UNDOCKED), model->undocked_remaining_minutes);
+            } else {
+                snprintf(out->remaining_text, sizeof(out->remaining_text), ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_UNLIMITED));
+            }
             out->progress_available = true;
             out->progress_per_mille = 1000;
             out->state = PTC_UI_TIME_UNLIMITED;
@@ -412,14 +418,25 @@ void ptc_ui_project_time_status(const PtcUiModel *model, int64_t now, PtcUiTimeP
             remaining = model->remaining_minutes;
             total = model->forecast[0].minutes;
             if (total > 0) {
-                snprintf(out->remaining_text, sizeof(out->remaining_text),
-                         ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_D_MIN), remaining);
+                if (model->dock_policy.undocked_limit_enabled && !model->dock_waived_today &&
+                    strcmp(model->operation_mode, "undocked") == 0 && model->undocked_usage_available &&
+                    model->undocked_remaining_minutes < remaining) {
+                    snprintf(out->remaining_text, sizeof(out->remaining_text),
+                             ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_WITH_UNDOCKED), remaining, model->undocked_remaining_minutes);
+                } else {
+                    snprintf(out->remaining_text, sizeof(out->remaining_text),
+                             ptc_ui_text(PTC_UI_T_AVAILABLE_TODAY_D_MIN), remaining);
+                }
                 out->progress_available = true;
                 if (remaining >= total) out->progress_per_mille = 1000;
                 else out->progress_per_mille = (uint16_t)(remaining * 1000 / total);
                 if (remaining == 0) out->state = PTC_UI_TIME_EXHAUSTED;
-                else if (remaining < 10) out->state = PTC_UI_TIME_DANGER;
-                else if (remaining < 30) out->state = PTC_UI_TIME_REMINDER;
+                else if (remaining < 10 || (model->dock_policy.undocked_limit_enabled && !model->dock_waived_today &&
+                         strcmp(model->operation_mode, "undocked") == 0 && model->undocked_usage_available && model->undocked_remaining_minutes <= 5))
+                    out->state = PTC_UI_TIME_DANGER;
+                else if (remaining < 30 || (model->dock_policy.undocked_limit_enabled && !model->dock_waived_today &&
+                         strcmp(model->operation_mode, "undocked") == 0 && model->undocked_usage_available && model->undocked_remaining_minutes <= 15))
+                    out->state = PTC_UI_TIME_REMINDER;
                 else out->state = PTC_UI_TIME_NORMAL;
             }
         } else {

@@ -636,7 +636,11 @@ void ptc_overlay_format_dock_usage(const PtcCompanionResultSummary *summary,
         ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM);
     PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("used", summary->undocked_used_minutes),
         PTC_UI_TEXT_NUMBER("remaining", summary->undocked_remaining_minutes)};
-    if (!(summary->force_docked || summary->undocked_limit_enabled))
+    if (summary->dock_waived_today)
+        snprintf(usage, sizeof(usage), "%s", ptc_ui_text(PTC_UI_T_DOCK_WAIVED));
+    else if (summary->dock_restriction_active)
+        snprintf(usage, sizeof(usage), "%s", ptc_ui_text(PTC_UI_T_DOCK_BLOCKED_BANNER));
+    else if (!(summary->force_docked || summary->undocked_limit_enabled))
         snprintf(usage, sizeof(usage), "%s", ptc_ui_text(PTC_UI_T_DOCK_OFF));
     else if (!summary->undocked_usage_available)
         snprintf(usage, sizeof(usage), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));

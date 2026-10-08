@@ -31,9 +31,13 @@ Choose “Waive TV mode rules today” in Today's Schedule, the dock page or Ove
 Use is estimated from Nintendo console time; HOME may count, while sleep is never charged by wall time. First enable starts now. Restart, allowance edits, switches and waivers preserve today's count. Unlimited days needing accounting use the shared 1440-minute timer cap. Unknown readings restrict conservatively; confirmed TV follows the daily total, and parents can waive today. Hardware accounting, dock changes and recovery still require validation; qualification remains pending.
 
 
-![TV mode policy / HOST PREVIEW](../images/usage-en/plan/dock-policy-light.png)
+| TV Mode Rules (Eyesight Protection Bento Dashboard) | Child View (Handheld Restricted) |
+| --- | --- |
+| ![TV mode policy](../images/usage-en/plan/dock-policy-light.png) | ![Handheld restricted on child screen](../images/usage-en/child/dock-restricted-light.png) |
 
-![Dock recovery Overlay / HOST PREVIEW](../images/usage-en/overlay/overlay-dock-waiver.png)
+| Overlay Handheld Quota Exhausted | Overlay Parent Waiver |
+| --- | --- |
+| ![Overlay handheld quota exhausted](../images/usage-en/overlay/overlay-dock-restricted.png) | ![Dock recovery Overlay](../images/usage-en/overlay/overlay-dock-waiver.png) |
 
 ## Eye care breaks (device validation pending)
 
@@ -233,6 +237,7 @@ The "Master Bedtime Switch" controls all bedtime rules across weekly, holiday, a
 ![Bedtime start/end time editor preview](../images/usage-en/bedtime/bedtime-time-editor-dark.png)
 ![Scheduled date custom bedtime rule preview](../images/usage-en/bedtime/bedtime-special-custom-dark.png)
 ![Autonomy buffer policy preview](../images/usage-en/autonomy/autonomy-policy-light.png)
+![TV Mode policy preview](../images/usage-en/plan/dock-policy-light.png)
 
 </details>
 

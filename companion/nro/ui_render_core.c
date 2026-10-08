@@ -171,6 +171,27 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     fit_text(fitted_badge, sizeof(fitted_badge), badge.label, 11, max_badge_w);
     draw_text(pixels, stride, pill.x + 15, box.y + 21, fitted_badge, 11, badge.color);
 
+    /* 4b. 屏幕形态胶囊徽章 (电视模式 / 掌机桌面) */
+    if (model && model->dock_available && ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
+        bool is_tv = (strcmp(model->operation_mode, "docked") == 0);
+        bool is_undocked = (strcmp(model->operation_mode, "undocked") == 0);
+        const char *m_label = is_tv ? ptc_ui_text(PTC_UI_T_DOCK_TV_BADGE) :
+            (is_undocked ? ptc_ui_text(PTC_UI_T_DOCK_HANDHELD_BADGE) : NULL);
+        if (m_label) {
+            uint32_t m_color = is_tv ? UI_SUCCESS : (model->dock_restriction_active ? UI_DANGER : UI_ACCENT);
+            uint32_t m_bg = is_tv ? UI_SUCCESS_SOFT : (model->dock_restriction_active ? UI_DANGER_SOFT : UI_ACCENT_SOFT);
+            int m_tw = measure_text(m_label, 11);
+            int m_pw = m_tw + 16;
+            if (m_pw < 48) m_pw = 48;
+            UiRect m_rect = {pill.x + pill.width + 8, box.y + 7, m_pw, 19};
+            if (m_rect.x + m_rect.width <= right_limit) {
+                fill_round_rect(pixels, stride, m_rect, 5, m_bg);
+                draw_rect_outline(pixels, stride, m_rect, 5, 1, m_color);
+                draw_text_center(pixels, stride, m_rect, m_label, 11, m_color);
+            }
+        }
+    }
+
     /* 5. 数据更新时效 (右对齐) */
     fit_text(fitted_fresh, sizeof(fitted_fresh), status.freshness_text, 12, 110);
     int fresh_w = measure_text(fitted_fresh, 12);
