@@ -63,13 +63,29 @@ public:
                 while (extra-- && *p) code = (code << 6) | (*p++ & 63);
             }
             if (code == '\n') { max_x = std::max(max_x, pen); pen = x; baseline += size; continue; }
+            unsigned lookup_code = code;
+            if (stbtt_FindGlyphIndex(&font_, lookup_code) == 0 && code >= 0xE000 && code <= 0xE0FF) {
+                switch (code) {
+                case 0xE0E0: lookup_code = 'A'; break;
+                case 0xE0E1: lookup_code = 'B'; break;
+                case 0xE0E2: lookup_code = 'X'; break;
+                case 0xE0E3: lookup_code = 'Y'; break;
+                case 0xE0E4: lookup_code = 'L'; break;
+                case 0xE0E5: lookup_code = 'R'; break;
+                case 0xE0E6: lookup_code = 'Z'; break;
+                case 0xE0E7: lookup_code = 'Z'; break;
+                case 0xE0EB: lookup_code = '+'; break;
+                case 0xE0EC: lookup_code = '-'; break;
+                default: break;
+                }
+            }
             int advance, bearing;
-            stbtt_GetCodepointHMetrics(&font_, mono ? 'W' : code, &advance, &bearing);
+            stbtt_GetCodepointHMetrics(&font_, mono ? 'W' : lookup_code, &advance, &bearing);
             advance = static_cast<int>(advance * scale);
             // Match vendored libtesla: maxWidth truncates on the next iteration.
             if (color.a) {
                 int w, h, dx, dy;
-                auto bitmap = stbtt_GetCodepointBitmap(&font_, scale, scale, code, &w, &h, &dx, &dy);
+                auto bitmap = stbtt_GetCodepointBitmap(&font_, scale, scale, lookup_code, &w, &h, &dx, &dy);
                 for (int row = 0; row < h; ++row)
                     for (int col = 0; col < w; ++col)
                     {

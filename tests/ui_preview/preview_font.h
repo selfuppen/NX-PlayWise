@@ -39,17 +39,35 @@ static inline int FT_New_Memory_Face(FT_Library lib, const FT_Byte *data, FT_Lon
 }
 static inline int FT_Set_Pixel_Sizes(FT_Face face, unsigned int w, unsigned int h)
 { (void)w; face->scale = stbtt_ScaleForMappingEmToPixels(&face->info, (float)h); return 0; }
+static inline unsigned long preview_map_pua(stbtt_fontinfo *info, unsigned long code)
+{
+    if (stbtt_FindGlyphIndex(info, (int)code) != 0) return code;
+    switch (code) {
+    case 0xE0E0: return 'A';
+    case 0xE0E1: return 'B';
+    case 0xE0E2: return 'X';
+    case 0xE0E3: return 'Y';
+    case 0xE0E4: return 'L';
+    case 0xE0E5: return 'R';
+    case 0xE0E6: return 'Z';
+    case 0xE0E7: return 'Z';
+    case 0xE0EB: return '+';
+    case 0xE0EC: return '-';
+    default: return code;
+    }
+}
 static inline FT_UInt FT_Get_Char_Index(FT_Face face, unsigned long code)
-{ return (FT_UInt)stbtt_FindGlyphIndex(&face->info, (int)code); }
+{ return (FT_UInt)stbtt_FindGlyphIndex(&face->info, (int)preview_map_pua(&face->info, code)); }
 static inline int FT_Load_Char(FT_Face face, unsigned long code, int flags)
 {
+    unsigned long mapped = preview_map_pua(&face->info, code);
     int advance, bearing, w, h, x, y;
     free(face->slot.bitmap.buffer);
     memset(&face->slot, 0, sizeof(face->slot));
-    stbtt_GetCodepointHMetrics(&face->info, (int)code, &advance, &bearing);
+    stbtt_GetCodepointHMetrics(&face->info, (int)mapped, &advance, &bearing);
     face->slot.advance.x = (long)(advance * face->scale + 0.5f) * 64;
     if (flags == FT_LOAD_RENDER) {
-        face->slot.bitmap.buffer = stbtt_GetCodepointBitmap(&face->info, face->scale, face->scale, (int)code, &w, &h, &x, &y);
+        face->slot.bitmap.buffer = stbtt_GetCodepointBitmap(&face->info, face->scale, face->scale, (int)mapped, &w, &h, &x, &y);
         face->slot.bitmap.width = w;
         face->slot.bitmap.rows = h;
         face->slot.bitmap.pitch = w;

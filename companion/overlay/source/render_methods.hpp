@@ -258,7 +258,7 @@
                 draw_localized(renderer, DIRECTIONS[i], false, x + 12, y + 27, 13,
                     renderer->a(TEXT_COLOR));
             }
-            draw_localized(renderer, "X 0    Y 9", false, cx + 142, cy + 267, 15,
+            draw_localized(renderer, "\uE0E2 0    \uE0E3 9", false, cx + 142, cy + 267, 15,
                 renderer->a(TEXT_COLOR));
             const PtcOverlayRect backspace = ptc_overlay_backspace_rect(cx, cy);
             draw_localized(renderer, ptc_ui_text(PTC_UI_T_ZL_BACKSPACE_2), false, backspace.x + 14, backspace.y + 27, 13,
