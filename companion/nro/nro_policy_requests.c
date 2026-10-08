@@ -244,7 +244,13 @@ void dock_page_action(UiState *ui, int action, int delta)
             if (draft->undocked_daily_minutes == 0) draft->undocked_daily_minutes = 30;
         }
     } else if (action == 2 && delta) {
-        draft->undocked_daily_minutes = ptc_ui_adjust_minutes(draft->undocked_daily_minutes, delta, 0, 1440);
+        if (draft->force_docked) {
+            draft->force_docked = false;
+            draft->undocked_limit_enabled = true;
+            draft->undocked_daily_minutes = ptc_ui_adjust_minutes(30, delta, 0, 1440);
+        } else {
+            draft->undocked_daily_minutes = ptc_ui_adjust_minutes(draft->undocked_daily_minutes, delta, 0, 1440);
+        }
         if (draft->undocked_daily_minutes == 0) {
             draft->force_docked = true;
             draft->undocked_limit_enabled = true;
@@ -253,6 +259,11 @@ void dock_page_action(UiState *ui, int action, int delta)
             draft->undocked_limit_enabled = true;
         }
     } else if (action == 2) {
+        if (draft->force_docked) {
+            draft->force_docked = false;
+            draft->undocked_limit_enabled = true;
+            if (draft->undocked_daily_minutes == 0) draft->undocked_daily_minutes = 30;
+        }
         ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_DOCK_MINUTES, PTC_UI_OVERLAY_NONE,
             ptc_ui_text(PTC_UI_T_DOCK_LIMIT), ptc_ui_text(PTC_UI_T_DOCK_ALLOWANCE), 4, 0, 1440, draft->undocked_daily_minutes);
     } else if (action == 3) { save_dock_from_page(ui); return; }

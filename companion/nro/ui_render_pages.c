@@ -89,7 +89,10 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY));
     draw_text(pixels, stride, x, box.y + 36, header_title, 20, UI_RGB(UI_BLENDED(hero_secondary)));
 
-    /* 规则胶囊徽标：取代多余的环形圈，清晰展示当前生效规则来源 */
+    /* 右上操作区：[ 规则徽章 ] 与 [+ 查看详情] 胶囊按钮 */
+    home_button(pixels, stride, ptc_ui_home_details_rect(true),
+                ptc_ui_text(PTC_UI_T_VIEW_DETAILS), false, false, model->waiting);
+
     char rule_label[64];
     if (bedtime_enforcing) {
         snprintf(rule_label, sizeof(rule_label), "%s", ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE));
@@ -101,7 +104,8 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     }
     int rw = measure_text(rule_label, 12) + 16;
     if (rw < 64) rw = 64;
-    UiRect rule_badge = {box.x + box.width - rw - 24, box.y + 18, rw, 24};
+    PtcUiRect dt_rect = ptc_ui_home_details_rect(true);
+    UiRect rule_badge = {dt_rect.x - rw - 8, dt_rect.y, rw, dt_rect.h};
     fill_round_rect(pixels, stride, rule_badge, 6, UI_ACCENT_SOFT);
     draw_rect_outline(pixels, stride, rule_badge, 6, 1, UI_ACCENT);
     draw_text_center(pixels, stride, rule_badge, rule_label, 12, UI_ACCENT);
@@ -640,7 +644,6 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
             draw_text_center(pixels, stride, tbadge, badge, 12, color);
         }
     }
-    home_button(pixels, stride, ptc_ui_home_details_rect(true), ptc_ui_text(PTC_UI_T_VIEW_DETAILS), false, false, model->waiting);
 }
 
 static void draw_grant_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)

@@ -1272,19 +1272,20 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
             draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, master_enabled ? UI_MUTED : UI_DISABLED);
         } else {
             /* 非电视模式每日限额 */
+            bool limit_active = master_enabled && !draft->force_docked;
             draw_text(pixels, stride, row.x + 18, row.y + 30,
-                ptc_ui_text(PTC_UI_T_DOCK_LIMIT), 20, master_enabled ? UI_INK : UI_DISABLED);
+                ptc_ui_text(PTC_UI_T_DOCK_LIMIT), 20, limit_active ? UI_INK : UI_DISABLED);
             if (draft->force_docked) {
                 snprintf(text, sizeof(text), "0 %s", ptc_ui_text(PTC_UI_T_MINUTES));
             } else {
                 snprintf(text, sizeof(text), "%u %s", draft->undocked_daily_minutes, ptc_ui_text(PTC_UI_T_MINUTES));
             }
             draw_text(pixels, stride, row.x + row.width - 180, row.y + 34, text, 22,
-                master_enabled ? UI_ACCENT : UI_DISABLED);
-            const char *note = draft->force_docked ? ptc_ui_text(PTC_UI_T_DOCK_FORCE) : ptc_ui_text(PTC_UI_T_DOCK_ALLOWANCE);
+                limit_active ? UI_ACCENT : UI_DISABLED);
+            const char *note = draft->force_docked ? ptc_ui_text(PTC_UI_T_DOCK_FORCE_HINT) : ptc_ui_text(PTC_UI_T_DOCK_ALLOWANCE);
             char fitted[192];
             fit_text(fitted, sizeof(fitted), note, 13, row.width - 200);
-            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, master_enabled ? UI_MUTED : UI_DISABLED);
+            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, limit_active ? UI_MUTED : UI_DISABLED);
         }
     }
 

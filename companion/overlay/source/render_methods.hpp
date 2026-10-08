@@ -517,126 +517,178 @@
                                          (status_is_stale() ? ERROR_COLOR : MUTED_COLOR)));
 
         // --- 1. Header Prompt & Guidance (受限时间与护眼提醒) ---
-        char restriction_guidance[128];
-        ptc_overlay_format_child_restriction_guidance(&summary, restriction_guidance, sizeof(restriction_guidance));
-        const bool restriction_urgent = (summary.valid &&
-            ((summary.bedtime_active && !summary.bedtime_skipped) ||
-             summary.daily_restriction_active || summary.dock_restriction_active ||
-             (summary.eye_care_enabled &&
-              std::strcmp(summary.eye_care_phase, "resting") == 0)));
-        draw_localized(renderer, restriction_guidance, false, cx + 5, cy + 94, 12,
-            renderer->a(restriction_urgent ? ERROR_COLOR : FOCUS_BORDER), 350);
+        const bool is_dock_res = summary.valid && summary.dock_restriction_active;
+        const bool is_bedtime_res = bedtime_restricted();
+        const bool is_eye_res = eye_care_restricted();
+        const bool is_restricted = has_status_snapshot_ && !status_is_stale() &&
+            (is_dock_res || is_bedtime_res || is_eye_res);
 
-        if (summary.dock_available) {
-            if (status_is_stale()) std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
-            else ptc_overlay_format_dock_usage(&summary, line, sizeof(line));
-            draw_localized(renderer, line, false, cx + 5, cy + 164, 11, renderer->a(MUTED_COLOR), 350);
-        }
+        if (is_restricted) {
+            // --- 场景感知受限全景卡片 (Dynamic Restriction Hero Card) ---
+            const s32 hero_y = cy + 104;
+            const s32 hero_h = 216;
+            const tsl::Color card_bg = is_eye_res ? WARNING_BG : DANGER_BG;
+            const tsl::Color card_border = is_eye_res ? WAITING_COLOR : ERROR_COLOR;
 
-        // --- 2. Code Display Slots (8位卡片槽 - 增大更醒目) ---
-        const s32 slot_y = cy + PTC_OVERLAY_SLOT_Y;
-        const s32 slot_w = PTC_OVERLAY_SLOT_W;
-        const s32 slot_h = PTC_OVERLAY_SLOT_H;
-        const s32 slot_gap = PTC_OVERLAY_SLOT_GAP;
-        const s32 slot_group_w = PTC_OVERLAY_CODE_SYMBOLS * slot_w +
-            (PTC_OVERLAY_CODE_SYMBOLS - 1) * slot_gap;
-        const s32 slot_start_x = cx + (cw - slot_group_w) / 2;
+            renderer->drawRect(cx, hero_y, cw, hero_h, renderer->a(card_bg));
+            draw_outline(renderer, cx, hero_y, cw, hero_h, 2, card_border);
 
-        for (unsigned int index = 0; index < PTC_OVERLAY_CODE_SYMBOLS; ++index) {
-            const s32 sx = slot_start_x + static_cast<s32>(index) * (slot_w + slot_gap);
-            const bool is_cursor = (input_->length < PTC_OVERLAY_CODE_SYMBOLS) && (index == input_->length);
-
-            // 卡片背景与边框
-            renderer->drawRect(sx, slot_y, slot_w, slot_h, renderer->a(is_cursor ? FOCUS_BG : CARD_COLOR));
-            draw_outline(renderer, sx, slot_y, slot_w, slot_h, is_cursor ? 3 : 1, is_cursor ? FOCUS_BORDER : MUTED_COLOR);
-
-            // 文本字符或未输入指示
-            char symbol[8] = {0};
-            if (index < input_->length) {
-                symbol[0] = input_->symbols[index];
-                symbol[1] = '\0';
-            } else if (is_cursor) {
-                symbol[0] = '_';
-                symbol[1] = '\0';
-            } else {
-                std::snprintf(symbol, sizeof(symbol), " | ");
+            if (is_dock_res) {
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_DOCK_TITLE), false, cx + 16, hero_y + 30, 18, renderer->a(ERROR_COLOR));
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_DOCK_BLOCKED_BANNER), false, cx + 16, hero_y + 56, 13, renderer->a(TEXT_COLOR), 330);
+                renderer->drawRect(cx + 16, hero_y + 76, cw - 32, 1, renderer->a(MUTED_COLOR));
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_DOCK_CONNECT), false, cx + 16, hero_y + 106, 12, renderer->a(WAITING_COLOR), 330);
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_DOCK_TV_ACTIVE_NOTE), false, cx + 16, hero_y + 140, 11, renderer->a(MUTED_COLOR), 330);
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_DOCK_RULE_EXPLANATION), false, cx + 16, hero_y + 168, 11, renderer->a(MUTED_COLOR), 330);
+            } else if (is_bedtime_res) {
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_2), false, cx + 16, hero_y + 30, 18, renderer->a(ERROR_COLOR));
+                char bt_window[64];
+                std::snprintf(bt_window, sizeof(bt_window), "%02u:%02u ~ %02u:%02u",
+                    summary.bedtime_start_minute / 60, summary.bedtime_start_minute % 60,
+                    summary.bedtime_end_minute / 60, summary.bedtime_end_minute % 60);
+                std::snprintf(line, sizeof(line), "%s (%s)", ptc_ui_text(PTC_UI_T_BEDTIME_LIMIT), bt_window);
+                draw_localized(renderer, line, false, cx + 16, hero_y + 56, 13, renderer->a(TEXT_COLOR), 330);
+                renderer->drawRect(cx + 16, hero_y + 76, cw - 32, 1, renderer->a(MUTED_COLOR));
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_IT_IS_CURRENTLY_IN_THE_BEDTIME_PERIOD), false, cx + 16, hero_y + 108, 12, renderer->a(WAITING_COLOR), 330);
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_FOR_EXCEPTIONS_SELECT_SKIP_TONIGHT_BEDTIME_IN), false, cx + 16, hero_y + 150, 11, renderer->a(MUTED_COLOR), 330);
+            } else if (is_eye_res) {
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING), false, cx + 16, hero_y + 28, 18, renderer->a(WAITING_COLOR));
+                int sec = summary.eye_care_rest_remaining_seconds > 0 ? summary.eye_care_rest_remaining_seconds : 0;
+                std::snprintf(line, sizeof(line), "%02d:%02d", sec / 60, sec % 60);
+                draw_localized(renderer, line, false, cx + 16, hero_y + 68, 30, renderer->a(WAITING_COLOR));
+                renderer->drawRect(cx + 16, hero_y + 90, cw - 32, 1, renderer->a(MUTED_COLOR));
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_MESSAGE_2), false, cx + 16, hero_y + 120, 12, renderer->a(TEXT_COLOR), 330);
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM_BODY), false, cx + 16, hero_y + 162, 11, renderer->a(MUTED_COLOR), 330);
             }
-            const auto symbol_size = draw_localized(renderer,
-                symbol, false, 0, 0, 30, tsl::style::color::ColorTransparent);
-            draw_localized(renderer, symbol, false,
-                sx + (slot_w - static_cast<s32>(symbol_size.first)) / 2,
-                slot_y + 36, 30,
-                renderer->a(index < input_->length ? TEXT_COLOR : (is_cursor ? FOCUS_BORDER : MUTED_COLOR)));
-        }
 
-        char console_date[48];
-        format_console_date(summary, console_date, sizeof(console_date));
-        std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_ENTERED_U_8_DIGITS_SELECTED_C_S), input_->length,
-                      ptc_overlay_input_charset()[input_->cursor], console_date);
-        draw_localized(renderer, line, false, cx + 5, cy + 180, 14, renderer->a(MUTED_COLOR));
+            // --- 快捷解除/调整操作卡片 (Quick Action Card) ---
+            const s32 action_y = cy + 332;
+            const s32 action_h = 76;
+            renderer->drawRect(cx, action_y, cw, action_h, renderer->a(FOCUS_BG));
+            draw_outline(renderer, cx, action_y, cw, action_h, 2, FOCUS_BORDER);
 
-        // --- 3. Keypad 3x4 Grid (软键盘放大) ---
-        const char *charset = ptc_overlay_input_charset();
-        const s32 panel_y = cy + PTC_OVERLAY_KEYPAD_Y;
-        const s32 panel_h = PTC_OVERLAY_KEYPAD_H;
-        renderer->drawRect(cx, panel_y, cw, panel_h, renderer->a(PANEL_COLOR));
-        draw_outline(renderer, cx, panel_y, cw, panel_h, 1, MUTED_COLOR);
-
-        // 绘制数字键 0-9
-        for (unsigned int index = 0; index < PTC_OVERLAY_KEY_COUNT; ++index) {
-            char symbol[2] = { charset[index], '\0' };
-            const PtcOverlayRect key = ptc_overlay_key_rect(cx, cy, index);
-            const bool focused = (index == input_->cursor);
-
-            renderer->drawRect(key.x, key.y, key.w, key.h, renderer->a(focused ? FOCUS_BG : KEY_COLOR));
-            draw_outline(renderer, key.x, key.y, key.w, key.h, focused ? 3 : 1, focused ? FOCUS_BORDER : MUTED_COLOR);
-            const auto key_text_size = draw_localized(renderer,
-                symbol, false, 0, 0, 24, tsl::style::color::ColorTransparent);
-            draw_localized(renderer, symbol, false, key.x + (key.w - static_cast<s32>(key_text_size.first)) / 2,
-                                 key.y + 30, 24, renderer->a(focused ? FOCUS_BORDER : TEXT_COLOR));
-        }
-
-        // 第四行辅助按键 [X] 退格 和 [Y] 清空
-        const PtcOverlayRect backspace = ptc_overlay_backspace_rect(cx, cy);
-        renderer->drawRect(backspace.x, backspace.y, backspace.w, backspace.h, renderer->a(KEY_COLOR));
-        draw_outline(renderer, backspace.x, backspace.y, backspace.w, backspace.h, 1, BACKSPACE_BORDER);
-        draw_localized(renderer, ptc_ui_text(PTC_UI_T_X_BACKSPACE), false, backspace.x + 28, backspace.y + 26, 12, renderer->a(BACKSPACE_BORDER));
-
-        const PtcOverlayRect clear = ptc_overlay_clear_rect(cx, cy);
-        renderer->drawRect(clear.x, clear.y, clear.w, clear.h, renderer->a(KEY_COLOR));
-        draw_outline(renderer, clear.x, clear.y, clear.w, clear.h, 1, CLEAR_BORDER);
-        draw_localized(renderer, ptc_ui_text(PTC_UI_T_CLICK_TO_CLEAR), false, clear.x + 23, clear.y + 26, 12, renderer->a(CLEAR_BORDER));
-
-        // --- 4. Control & Submit Bar (操作与提交栏) ---
-        const bool code_unavailable = has_status_snapshot_ && !status_is_stale() &&
-            (summary.unrestricted_today == 1 || summary.eye_care_unlimited_capped || summary.dock_unlimited_capped);
-        const bool dock_restricted = has_status_snapshot_ && !status_is_stale() && summary.dock_restriction_active;
-        const bool can_submit = !bedtime_restricted() && !eye_care_restricted() && !code_unavailable && !dock_restricted &&
-            ptc_overlay_request_action_enabled(bridge_->waiting) &&
-            ptc_overlay_input_can_submit(input_);
-        const s32 submit_y = cy + PTC_OVERLAY_SUBMIT_Y;
-        const s32 submit_h = PTC_OVERLAY_SUBMIT_H;
-
-        // 提交加时大按钮
-        renderer->drawRect(cx, submit_y, cw, submit_h, renderer->a(can_submit ? FOCUS_BG : DISABLED_COLOR));
-        draw_outline(renderer, cx, submit_y, cw, submit_h, can_submit ? 3 : 1, can_submit ? FOCUS_BORDER : MUTED_COLOR);
-
-        if (can_submit) {
-            draw_localized(renderer, ptc_ui_text(PTC_UI_T_SUBMIT_PLAYTIME_GRANT_CLICK_OR_PRESS), false, cx + 50, submit_y + 24, 14, renderer->a(TEXT_COLOR));
-        } else if (bedtime_restricted()) {
-            draw_localized(renderer, ptc_ui_text(PTC_UI_T_PARENTS_PLEASE_LIFT_THE_BEDTIME_RESTRICTION_FIRST), false,
-                cx + 32, submit_y + 24, 13, renderer->a(WAITING_COLOR));
-        } else if (dock_restricted) {
-            draw_localized(renderer, ptc_ui_text(PTC_UI_T_DOCK_BLOCKED), false,
-                cx + 32, submit_y + 24, 13, renderer->a(WAITING_COLOR));
-        } else if (code_unavailable) {
-            draw_localized(renderer, ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_GRANT_CODES_ARE), false,
-                cx + 65, submit_y + 24, 13, renderer->a(WAITING_COLOR));
-        } else if (bridge_->waiting) {
-            draw_localized(renderer, ptc_ui_text(PTC_UI_T_BACKGROUND_PROCESSING_YOU_CAN_CONTINUE_TO_EDIT), false, cx + 66, submit_y + 24, 13,
-                                 renderer->a(MUTED_COLOR));
+            if (is_dock_res) {
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_DOCK_WAIVE), false, cx + 16, action_y + 26, 14, renderer->a(TEXT_COLOR));
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_DOCK_WAIVE_BODY), false, cx + 16, action_y + 50, 11, renderer->a(MUTED_COLOR), 330);
+            } else if (is_bedtime_res) {
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_SKIP_BEDTIME), false, cx + 16, action_y + 26, 14, renderer->a(TEXT_COLOR));
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_SKIP_WILL_BE_CLEARED_BEDTIME_RESTRICTIONS_WILL), false, cx + 16, action_y + 50, 11, renderer->a(MUTED_COLOR), 330);
+            } else if (is_eye_res) {
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP), false, cx + 16, action_y + 26, 14, renderer->a(TEXT_COLOR));
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM_BODY), false, cx + 16, action_y + 50, 11, renderer->a(MUTED_COLOR), 330);
+            }
         } else {
-            draw_localized(renderer, ptc_ui_text(PTC_UI_T_SUBMIT_GRANT_NEED_TO_ENTER_8_DIGITS), false, cx + 58, submit_y + 24, 13, renderer->a(MUTED_COLOR));
+            // --- 1. Header Prompt & Guidance (受限时间与护眼提醒) ---
+            char restriction_guidance[128];
+            ptc_overlay_format_child_restriction_guidance(&summary, restriction_guidance, sizeof(restriction_guidance));
+            const bool restriction_urgent = (summary.valid &&
+                ((summary.bedtime_active && !summary.bedtime_skipped) ||
+                 summary.daily_restriction_active || summary.dock_restriction_active ||
+                 (summary.eye_care_enabled &&
+                  std::strcmp(summary.eye_care_phase, "resting") == 0)));
+            draw_localized(renderer, restriction_guidance, false, cx + 5, cy + 94, 12,
+                renderer->a(restriction_urgent ? ERROR_COLOR : FOCUS_BORDER), 350);
+
+            if (summary.dock_available) {
+                if (status_is_stale()) std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+                else ptc_overlay_format_dock_usage(&summary, line, sizeof(line));
+                draw_localized(renderer, line, false, cx + 5, cy + 164, 11, renderer->a(MUTED_COLOR), 350);
+            }
+
+            // --- 2. Code Display Slots (8位卡片槽) ---
+            const s32 slot_y = cy + PTC_OVERLAY_SLOT_Y;
+            const s32 slot_w = PTC_OVERLAY_SLOT_W;
+            const s32 slot_h = PTC_OVERLAY_SLOT_H;
+            const s32 slot_gap = PTC_OVERLAY_SLOT_GAP;
+            const s32 slot_group_w = PTC_OVERLAY_CODE_SYMBOLS * slot_w +
+                (PTC_OVERLAY_CODE_SYMBOLS - 1) * slot_gap;
+            const s32 slot_start_x = cx + (cw - slot_group_w) / 2;
+
+            for (unsigned int index = 0; index < PTC_OVERLAY_CODE_SYMBOLS; ++index) {
+                const s32 sx = slot_start_x + static_cast<s32>(index) * (slot_w + slot_gap);
+                const bool is_cursor = (input_->length < PTC_OVERLAY_CODE_SYMBOLS) && (index == input_->length);
+
+                renderer->drawRect(sx, slot_y, slot_w, slot_h, renderer->a(is_cursor ? FOCUS_BG : CARD_COLOR));
+                draw_outline(renderer, sx, slot_y, slot_w, slot_h, is_cursor ? 3 : 1, is_cursor ? FOCUS_BORDER : MUTED_COLOR);
+
+                char symbol[8] = {0};
+                if (index < input_->length) {
+                    symbol[0] = input_->symbols[index];
+                    symbol[1] = '\0';
+                } else if (is_cursor) {
+                    symbol[0] = '_';
+                    symbol[1] = '\0';
+                } else {
+                    std::snprintf(symbol, sizeof(symbol), " | ");
+                }
+                const auto symbol_size = draw_localized(renderer,
+                    symbol, false, 0, 0, 30, tsl::style::color::ColorTransparent);
+                draw_localized(renderer, symbol, false,
+                    sx + (slot_w - static_cast<s32>(symbol_size.first)) / 2,
+                    slot_y + 36, 30,
+                    renderer->a(index < input_->length ? TEXT_COLOR : (is_cursor ? FOCUS_BORDER : MUTED_COLOR)));
+            }
+
+            char console_date[48];
+            format_console_date(summary, console_date, sizeof(console_date));
+            std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_ENTERED_U_8_DIGITS_SELECTED_C_S), input_->length,
+                          ptc_overlay_input_charset()[input_->cursor], console_date);
+            draw_localized(renderer, line, false, cx + 5, cy + 180, 14, renderer->a(MUTED_COLOR));
+
+            // --- 3. Keypad 3x4 Grid ---
+            const char *charset = ptc_overlay_input_charset();
+            const s32 panel_y = cy + PTC_OVERLAY_KEYPAD_Y;
+            const s32 panel_h = PTC_OVERLAY_KEYPAD_H;
+            renderer->drawRect(cx, panel_y, cw, panel_h, renderer->a(PANEL_COLOR));
+            draw_outline(renderer, cx, panel_y, cw, panel_h, 1, MUTED_COLOR);
+
+            for (unsigned int index = 0; index < PTC_OVERLAY_KEY_COUNT; ++index) {
+                char symbol[2] = { charset[index], '\0' };
+                const PtcOverlayRect key = ptc_overlay_key_rect(cx, cy, index);
+                const bool focused = (index == input_->cursor);
+
+                renderer->drawRect(key.x, key.y, key.w, key.h, renderer->a(focused ? FOCUS_BG : KEY_COLOR));
+                draw_outline(renderer, key.x, key.y, key.w, key.h, focused ? 3 : 1, focused ? FOCUS_BORDER : MUTED_COLOR);
+                const auto key_text_size = draw_localized(renderer,
+                    symbol, false, 0, 0, 24, tsl::style::color::ColorTransparent);
+                draw_localized(renderer, symbol, false, key.x + (key.w - static_cast<s32>(key_text_size.first)) / 2,
+                                     key.y + 30, 24, renderer->a(focused ? FOCUS_BORDER : TEXT_COLOR));
+            }
+
+            const PtcOverlayRect backspace = ptc_overlay_backspace_rect(cx, cy);
+            renderer->drawRect(backspace.x, backspace.y, backspace.w, backspace.h, renderer->a(KEY_COLOR));
+            draw_outline(renderer, backspace.x, backspace.y, backspace.w, backspace.h, 1, BACKSPACE_BORDER);
+            draw_localized(renderer, ptc_ui_text(PTC_UI_T_X_BACKSPACE), false, backspace.x + 28, backspace.y + 26, 12, renderer->a(BACKSPACE_BORDER));
+
+            const PtcOverlayRect clear = ptc_overlay_clear_rect(cx, cy);
+            renderer->drawRect(clear.x, clear.y, clear.w, clear.h, renderer->a(KEY_COLOR));
+            draw_outline(renderer, clear.x, clear.y, clear.w, clear.h, 1, CLEAR_BORDER);
+            draw_localized(renderer, ptc_ui_text(PTC_UI_T_CLICK_TO_CLEAR), false, clear.x + 23, clear.y + 26, 12, renderer->a(CLEAR_BORDER));
+
+            // --- 4. Control & Submit Bar ---
+            const bool code_unavailable = has_status_snapshot_ && !status_is_stale() &&
+                (summary.unrestricted_today == 1 || summary.eye_care_unlimited_capped || summary.dock_unlimited_capped);
+            const bool dock_restricted = has_status_snapshot_ && !status_is_stale() && summary.dock_restriction_active;
+            const bool can_submit = !bedtime_restricted() && !eye_care_restricted() && !code_unavailable && !dock_restricted &&
+                ptc_overlay_request_action_enabled(bridge_->waiting) &&
+                ptc_overlay_input_can_submit(input_);
+            const s32 submit_y = cy + PTC_OVERLAY_SUBMIT_Y;
+            const s32 submit_h = PTC_OVERLAY_SUBMIT_H;
+
+            renderer->drawRect(cx, submit_y, cw, submit_h, renderer->a(can_submit ? FOCUS_BG : DISABLED_COLOR));
+            draw_outline(renderer, cx, submit_y, cw, submit_h, can_submit ? 3 : 1, can_submit ? FOCUS_BORDER : MUTED_COLOR);
+
+            if (can_submit) {
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_SUBMIT_PLAYTIME_GRANT_CLICK_OR_PRESS), false, cx + 50, submit_y + 24, 14, renderer->a(TEXT_COLOR));
+            } else if (code_unavailable) {
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_GRANT_CODES_ARE), false,
+                    cx + 65, submit_y + 24, 13, renderer->a(WAITING_COLOR));
+            } else if (bridge_->waiting) {
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_BACKGROUND_PROCESSING_YOU_CAN_CONTINUE_TO_EDIT), false, cx + 66, submit_y + 24, 13,
+                                     renderer->a(MUTED_COLOR));
+            } else {
+                draw_localized(renderer, ptc_ui_text(PTC_UI_T_SUBMIT_GRANT_NEED_TO_ENTER_8_DIGITS), false, cx + 58, submit_y + 24, 13, renderer->a(MUTED_COLOR));
+            }
         }
 
         // --- 5. Collapsible Status Panel (可折叠命令与状态栏) ---

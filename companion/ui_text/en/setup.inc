@@ -131,7 +131,7 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_SETUP_BEDTIME_HINT, "Restricts play late at night; cu
 PTC_UI_TEXT_VALUE(PTC_UI_T_SETUP_TIME_GUIDE_DIRECT, "Quotas, bedtime, eye care and codes rely on console time. If needed, sync via DBI (Tools -> NTP sync) or QuickNTP; internet is only needed for sync.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_SETUP_EYE_CARE_SUMMARY_OFF, "Eye Care: Disabled")
 PTC_UI_TEXT_VALUE(PTC_UI_T_SETUP_BEDTIME_SUMMARY_OFF, "Bedtime: Disabled")
-PTC_UI_TEXT_VALUE(PTC_UI_T_SETUP_SEC_GUIDE_TITLE, "🛡️ Security Rules & Protection")
+PTC_UI_TEXT_VALUE(PTC_UI_T_SETUP_SEC_GUIDE_TITLE, "Security Rules & Protection")
 PTC_UI_TEXT_VALUE(PTC_UI_T_SETUP_SEC_GUIDE_1_TITLE, "• Independent:")
 PTC_UI_TEXT_VALUE(PTC_UI_T_SETUP_SEC_GUIDE_1_DESC, "Separate from Switch parental PIN; protects all plans")
 PTC_UI_TEXT_VALUE(PTC_UI_T_SETUP_SEC_GUIDE_2_TITLE, "• Input Methods:")

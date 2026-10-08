@@ -356,6 +356,9 @@ public:
             return true;
         }
 
+        const bool is_restricted = has_status_snapshot_ && !status_is_stale() &&
+            (displayed_summary_.dock_restriction_active || bedtime_restricted() || eye_care_restricted());
+
         // 触屏交互处理。
         bool touch_down = (touch.x != 0 || touch.y != 0);
         if (touch_down && !prev_touch_down_) {
@@ -370,6 +373,13 @@ public:
             // 顶部刷新按钮；后台忙碌时只禁用新的请求，本地编辑仍可继续。
             if (ptc_overlay_rect_contains(ptc_overlay_refresh_rect(cx, cy), rel_x, rel_y)) {
                 if (request_actions_enabled) (void)begin_status_refresh();
+                prev_touch_down_ = touch_down;
+                return true;
+            }
+
+            if (is_restricted && !status_expanded_ && ptc_overlay_rect_contains(
+                    ptc_overlay_rect(cx, cy + 332, PTC_OVERLAY_CONTENT_W, 76), rel_x, rel_y)) {
+                open_parent_pin();
                 prev_touch_down_ = touch_down;
                 return true;
             }
@@ -390,39 +400,41 @@ public:
                 return true;
             }
 
-            // 点击小键盘按键
-            const char *charset = ptc_overlay_input_charset();
-            for (unsigned int index = 0; index < PTC_OVERLAY_KEY_COUNT; ++index) {
-                if (ptc_overlay_rect_contains(ptc_overlay_key_rect(cx, cy, index), rel_x, rel_y)) {
-                    input_->cursor = index;
-                    if (input_->length < PTC_OVERLAY_CODE_SYMBOLS) {
-                        input_->symbols[input_->length++] = charset[index];
-                        input_->symbols[input_->length] = '\0';
+            if (!is_restricted) {
+                // 点击小键盘按键
+                const char *charset = ptc_overlay_input_charset();
+                for (unsigned int index = 0; index < PTC_OVERLAY_KEY_COUNT; ++index) {
+                    if (ptc_overlay_rect_contains(ptc_overlay_key_rect(cx, cy, index), rel_x, rel_y)) {
+                        input_->cursor = index;
+                        if (input_->length < PTC_OVERLAY_CODE_SYMBOLS) {
+                            input_->symbols[input_->length++] = charset[index];
+                            input_->symbols[input_->length] = '\0';
+                        }
+                        prev_touch_down_ = touch_down;
+                        return true;
                     }
+                }
+
+                // 点击 [X] 退格 (第四行左侧)
+                if (ptc_overlay_rect_contains(ptc_overlay_backspace_rect(cx, cy), rel_x, rel_y)) {
+                    (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_X, 0, 0);
                     prev_touch_down_ = touch_down;
                     return true;
                 }
-            }
 
-            // 点击 [X] 退格 (第四行左侧)
-            if (ptc_overlay_rect_contains(ptc_overlay_backspace_rect(cx, cy), rel_x, rel_y)) {
-                (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_X, 0, 0);
-                prev_touch_down_ = touch_down;
-                return true;
-            }
+                // 点击清空（物理 Y 保留给状态刷新）。
+                if (ptc_overlay_rect_contains(ptc_overlay_clear_rect(cx, cy), rel_x, rel_y)) {
+                    (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_Y, 0, 0);
+                    prev_touch_down_ = touch_down;
+                    return true;
+                }
 
-            // 点击清空（物理 Y 保留给状态刷新）。
-            if (ptc_overlay_rect_contains(ptc_overlay_clear_rect(cx, cy), rel_x, rel_y)) {
-                (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_Y, 0, 0);
-                prev_touch_down_ = touch_down;
-                return true;
-            }
-
-            // 点击 [+] 提交按钮
-            if (ptc_overlay_rect_contains(ptc_overlay_submit_rect(cx, cy, PTC_OVERLAY_CONTENT_W), rel_x, rel_y)) {
-                if (request_actions_enabled) (void)begin_code_preview();
-                prev_touch_down_ = touch_down;
-                return true;
+                // 点击 [+] 提交按钮
+                if (ptc_overlay_rect_contains(ptc_overlay_submit_rect(cx, cy, PTC_OVERLAY_CONTENT_W), rel_x, rel_y)) {
+                    if (request_actions_enabled) (void)begin_code_preview();
+                    prev_touch_down_ = touch_down;
+                    return true;
+                }
             }
 
             // 点击状态与命令栏
@@ -450,7 +462,7 @@ public:
         if (keysDown & HidNpadButton_L) {
             if (request_actions_enabled && displayed_summary_.valid &&
                 displayed_summary_.daily_buffer_available && !bedtime_restricted() &&
-                !eye_care_restricted())
+                !eye_care_restricted() && !displayed_summary_.dock_restriction_active)
                 (void)begin_claim_daily_buffer();
             return true;
         }
@@ -461,6 +473,10 @@ public:
         }
 
         if (keysDown & HidNpadButton_Plus) {
+            if (is_restricted) {
+                open_parent_pin();
+                return true;
+            }
             if (request_actions_enabled) (void)begin_code_preview();
             return true;
         }
@@ -478,6 +494,14 @@ public:
                 }
             } else {
                 if (request_actions_enabled) (void)begin_status_refresh();
+            }
+            return true;
+        }
+
+        if (is_restricted) {
+            if (keysDown & HidNpadButton_A) {
+                open_parent_pin();
+                return true;
             }
             return true;
         }

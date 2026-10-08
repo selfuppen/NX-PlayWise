@@ -500,7 +500,7 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? (PtcUiRect){74, 552, 436, 44} : (PtcUiRect){964, 366, 268, 106};
+    return parent ? (PtcUiRect){414, 192, 106, 26} : (PtcUiRect){964, 366, 268, 106};
 }
 
 PtcUiRect ptc_ui_home_details_tab_rect(int index)
