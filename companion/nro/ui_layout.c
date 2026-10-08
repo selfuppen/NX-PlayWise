@@ -78,23 +78,23 @@ PtcUiRect ptc_ui_setup_back_rect(void) { return (PtcUiRect){54, 646, 210, 52}; }
 PtcUiRect ptc_ui_setup_skip_rect(void) { return (PtcUiRect){276, 646, 506, 52}; }
 PtcUiRect ptc_ui_setup_pin_rect(void) { return (PtcUiRect){94, 320, 510, 54}; }
 PtcUiRect ptc_ui_setup_more_rect(void) { return (PtcUiRect){0, 0, 0, 0}; }
-PtcUiRect ptc_ui_setup_shortcut_rect(void) { return (PtcUiRect){676, 316, 510, 40}; }
+PtcUiRect ptc_ui_setup_shortcut_rect(void) { return (PtcUiRect){676, 334, 510, 44}; }
 PtcUiRect ptc_ui_setup_time_help_rect(void) { return (PtcUiRect){94, 500, 1092, 100}; }
 PtcUiRect ptc_ui_setup_pctl_help_rect(void) { return (PtcUiRect){914, 404, 272, 38}; }
 PtcUiRect ptc_ui_setup_theme_rect(int index)
 {
     if (index < 0 || index > 2) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){676 + index * 174, 244, 162, 36};
+    return (PtcUiRect){676 + index * 174, 258, 162, 40};
 }
 
 PtcUiRect ptc_ui_setup_eye_care_rect(void)
 {
-    return (PtcUiRect){676, 394, 510, 40};
+    return (PtcUiRect){676, 414, 510, 48};
 }
 
 PtcUiRect ptc_ui_setup_bedtime_rect(void)
 {
-    return (PtcUiRect){676, 472, 510, 40};
+    return (PtcUiRect){676, 516, 510, 48};
 }
 
 PtcUiRect ptc_ui_notice_rect(void)

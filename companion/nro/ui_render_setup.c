@@ -142,7 +142,7 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         draw_text(pixels, stride, 676, 212, ptc_ui_text(PTC_UI_T_SETUP_CARD_PREFS), 20, UI_INK);
 
         /* 1. Theme */
-        draw_text(pixels, stride, 676, 238, ptc_ui_text(PTC_UI_T_SETUP_THEME_LABEL), 14, UI_MUTED);
+        draw_text(pixels, stride, 676, 244, ptc_ui_text(PTC_UI_T_SETUP_THEME_LABEL), 14, UI_MUTED);
         for (int i = 0; i < 3; ++i) {
             bool selected = model->setup_theme_index == i;
             bool focused = model->setup_focus == 2 && selected;
@@ -156,53 +156,51 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         }
 
         /* 2. Shortcut */
-        draw_text(pixels, stride, 676, 298, ptc_ui_text(PTC_UI_T_SETUP_SHORTCUT_LABEL), 14, UI_MUTED);
+        draw_text(pixels, stride, 676, 320, ptc_ui_text(PTC_UI_T_SETUP_SHORTCUT_LABEL), 14, UI_MUTED);
         UiRect s_rect = to_uirect(ptc_ui_setup_shortcut_rect());
         bool s_focused = model->setup_focus == 3;
         fill_round_rect(pixels, stride, s_rect, 10, s_focused ? UI_ACCENT_SOFT : UI_SURFACE);
         draw_rect_outline(pixels, stride, s_rect, 10, s_focused ? 2 : 1, s_focused ? UI_ACCENT : UI_BORDER);
         if (s_focused) draw_focus_ring(pixels, stride, s_rect, 10);
-        draw_text(pixels, stride, s_rect.x + 16, s_rect.y + 25, ptc_ui_text(PTC_UI_T_SETUP_SHORTCUT_LABEL), 16, UI_INK);
         char sc_buf[192];
         snprintf(sc_buf, sizeof(sc_buf), "%s  [%s]",
             model->custom_shortcut_label[0] ? model->custom_shortcut_label : "(-)",
             ptc_ui_text(PTC_UI_T_SETUP_SHORTCUT_CHANGE));
         int sc_w = measure_text(sc_buf, 14);
-        draw_text(pixels, stride, s_rect.x + s_rect.width - sc_w - 16, s_rect.y + 25, sc_buf, 14, s_focused ? UI_ACCENT : UI_MUTED);
+        draw_text(pixels, stride, s_rect.x + 16, s_rect.y + 27, model->custom_shortcut_label[0] ? model->custom_shortcut_label : "(-)", 16, UI_INK);
+        draw_text(pixels, stride, s_rect.x + s_rect.width - sc_w - 16, s_rect.y + 27, sc_buf, 14, s_focused ? UI_ACCENT : UI_MUTED);
 
-        /* 3. Eye Care Toggle with visible Switch and clear setting indication */
-        draw_text(pixels, stride, 676, 374, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_LABEL), 14, UI_MUTED);
+        /* 3. Eye Care Toggle */
+        draw_text(pixels, stride, 676, 398, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_LABEL), 14, UI_MUTED);
         bool eye_on = model->setup_eye_care_enabled || model->draft_eye_care_policy.enabled;
         UiRect eye_rect = to_uirect(ptc_ui_setup_eye_care_rect());
         bool eye_focused = model->setup_focus == 4;
         fill_round_rect(pixels, stride, eye_rect, 10, eye_focused ? UI_ACCENT_SOFT : UI_SURFACE);
         draw_rect_outline(pixels, stride, eye_rect, 10, (eye_focused || eye_on) ? 2 : 1, eye_focused ? UI_ACCENT : (eye_on ? UI_ACCENT : UI_BORDER));
         if (eye_focused) draw_focus_ring(pixels, stride, eye_rect, 10);
-        draw_text(pixels, stride, eye_rect.x + 16, eye_rect.y + 25, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_LABEL), 16, UI_INK);
-        draw_text(pixels, stride, eye_rect.x + 90, eye_rect.y + 25, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_DEFAULT_PARAMS), 13, UI_MUTED);
+        draw_text(pixels, stride, eye_rect.x + 16, eye_rect.y + 29, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_DEFAULT_PARAMS), 15, UI_INK);
         UiRect eye_sw = {eye_rect.x + eye_rect.width - 66, eye_rect.y + (eye_rect.height - 24) / 2, 50, 24};
         draw_toggle_switch(pixels, stride, eye_sw, eye_on, false, false, NULL, NULL);
         const char *eye_st = eye_on ? ptc_ui_text(PTC_UI_T_ENABLED_2) : ptc_ui_text(PTC_UI_T_DISABLED);
         int eye_st_w = measure_text(eye_st, 14);
-        draw_text(pixels, stride, eye_sw.x - eye_st_w - 10, eye_rect.y + 25, eye_st, 14, eye_on ? UI_SUCCESS : UI_MUTED);
-        draw_text(pixels, stride, 676, 442, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_HINT), 13, UI_MUTED);
+        draw_text(pixels, stride, eye_sw.x - eye_st_w - 10, eye_rect.y + 29, eye_st, 14, eye_on ? UI_SUCCESS : UI_MUTED);
+        draw_text(pixels, stride, 676, 478, ptc_ui_text(PTC_UI_T_SETUP_EYE_CARE_HINT), 12, UI_MUTED);
 
-        /* 4. Bedtime Toggle with visible Switch and clear setting indication */
-        draw_text(pixels, stride, 676, 468, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_LABEL), 14, UI_MUTED);
+        /* 4. Bedtime Toggle */
+        draw_text(pixels, stride, 676, 500, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_LABEL), 14, UI_MUTED);
         bool bed_on = model->setup_bedtime_enabled || model->draft_bedtime_policy.enabled;
         UiRect bed_rect = to_uirect(ptc_ui_setup_bedtime_rect());
         bool bed_focused = model->setup_focus == 5;
         fill_round_rect(pixels, stride, bed_rect, 10, bed_focused ? UI_ACCENT_SOFT : UI_SURFACE);
         draw_rect_outline(pixels, stride, bed_rect, 10, (bed_focused || bed_on) ? 2 : 1, bed_focused ? UI_ACCENT : (bed_on ? UI_ACCENT : UI_BORDER));
         if (bed_focused) draw_focus_ring(pixels, stride, bed_rect, 10);
-        draw_text(pixels, stride, bed_rect.x + 16, bed_rect.y + 25, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_LABEL), 16, UI_INK);
-        draw_text(pixels, stride, bed_rect.x + 90, bed_rect.y + 25, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_DEFAULT_PARAMS), 13, UI_MUTED);
+        draw_text(pixels, stride, bed_rect.x + 16, bed_rect.y + 29, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_DEFAULT_PARAMS), 15, UI_INK);
         UiRect bed_sw = {bed_rect.x + bed_rect.width - 66, bed_rect.y + (bed_rect.height - 24) / 2, 50, 24};
         draw_toggle_switch(pixels, stride, bed_sw, bed_on, false, false, NULL, NULL);
         const char *bed_st = bed_on ? ptc_ui_text(PTC_UI_T_ENABLED_2) : ptc_ui_text(PTC_UI_T_DISABLED);
         int bed_st_w = measure_text(bed_st, 14);
-        draw_text(pixels, stride, bed_sw.x - bed_st_w - 10, bed_rect.y + 25, bed_st, 14, bed_on ? UI_SUCCESS : UI_MUTED);
-        draw_text(pixels, stride, 676, 520, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_HINT), 13, UI_MUTED);
+        draw_text(pixels, stride, bed_sw.x - bed_st_w - 10, bed_rect.y + 29, bed_st, 14, bed_on ? UI_SUCCESS : UI_MUTED);
+        draw_text(pixels, stride, 676, 580, ptc_ui_text(PTC_UI_T_SETUP_BEDTIME_HINT), 12, UI_MUTED);
     } else {
         /* Card 1: Configuration Summary Board */
         UiRect sum_card = {74, 185, 1132, 230};
