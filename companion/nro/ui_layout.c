@@ -773,8 +773,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 420;
         break;
     case PTC_UI_OVERLAY_AUTH_ERROR:
-        *width = 720;
-        *height = 340;
+        *width = 760;
+        *height = 360;
         break;
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
         *width = 960;
@@ -1048,10 +1048,12 @@ static int dialog_button_top(PtcUiRect dialog)
 
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 {
+    PtcUiRect dialog = ptc_ui_dialog_for(overlay);
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
         overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP || overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE)
         return (PtcUiRect){0, 0, 0, 0};
-    PtcUiRect dialog = ptc_ui_dialog_for(overlay);
+    if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
+        return (PtcUiRect){dialog.x + dialog.w - 36 - 210, dialog_button_top(dialog), 210, PTC_UI_DIALOG_BTN_H};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     return rect;
 }
@@ -1059,6 +1061,8 @@ PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)
 PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(overlay);
+    if (overlay == PTC_UI_OVERLAY_AUTH_ERROR)
+        return (PtcUiRect){dialog.x + 36, dialog_button_top(dialog), 210, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_GRANT_LOCAL)
         return (PtcUiRect){dialog.x + 42, dialog.y + 588, 210, 44};
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_DAY_DECISION)
@@ -1068,6 +1072,12 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
         return (PtcUiRect){dialog.x + (dialog.w - PTC_UI_DIALOG_BTN_W) / 2, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W * 2 - 16, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     return rect;
+}
+
+PtcUiRect ptc_ui_auth_error_guide_rect(void)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_AUTH_ERROR);
+    return (PtcUiRect){dialog.x + (dialog.w - 210) / 2, dialog_button_top(dialog), 210, PTC_UI_DIALOG_BTN_H};
 }
 
 PtcUiRect ptc_ui_discard_rect(PtcUiOverlay overlay)
@@ -1500,9 +1510,12 @@ PtcUiRect ptc_ui_dock_field_rect(int index)
 
 PtcUiRect ptc_ui_config_backup_field_rect(int index)
 {
-    if (index >= 0 && index < 11) return (PtcUiRect){54 + (index % 2) * 385, 196 + (index / 2) * 54, 365, 44};
-    if (index == 11 || index == 12) return (PtcUiRect){54 + (index - 11) * 190, 530, 180, 44};
-    if (index == 13 || index == 14) return (PtcUiRect){54 + (index - 13) * 385, 592, 365, 50};
-    if (index == 15) return (PtcUiRect){54, 664, 200, 44};
+    if (index >= 0 && index < 4) return (PtcUiRect){54 + (index % 2) * 385, 180 + (index / 2) * 48, 365, 42};
+    if (index >= 4 && index < 9) return (PtcUiRect){54 + ((index - 4) % 2) * 385, 304 + ((index - 4) / 2) * 48, 365, 42};
+    if (index == 9 || index == 10) return (PtcUiRect){54 + (index - 9) * 385, 476, 365, 42};
+    if (index == 11 || index == 12) return (PtcUiRect){54 + (index - 11) * 190, 536, 175, 42};
+    if (index == 13 || index == 14) return (PtcUiRect){54 + (index - 13) * 385, 592, 365, 48};
+    if (index == 15) return (PtcUiRect){54, 654, 160, 42};
     return (PtcUiRect){0, 0, 0, 0};
 }
+

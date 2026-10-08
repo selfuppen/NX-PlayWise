@@ -376,6 +376,9 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     case PTC_UI_OVERLAY_CREDENTIAL_LEAVE:
     case PTC_UI_OVERLAY_CODE_RESULT:
     case PTC_UI_OVERLAY_AUTH_ERROR:
+        if (ptc_ui_rect_contains(ptc_ui_auth_error_guide_rect(), x, y))
+            return make_hit(PTC_UI_HIT_SUPPORT_GUIDE, 0);
+        break;
     case PTC_UI_OVERLAY_SOFTWARE_INFO:
     case PTC_UI_OVERLAY_HOLIDAY_LEAVE:
     case PTC_UI_OVERLAY_SUPPORT_EVENT:

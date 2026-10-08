@@ -87,7 +87,7 @@ void open_config_backup(UiState *ui)
     const cJSON *date = cJSON_GetObjectItemCaseSensitive(rules, "today_override_day_index");
     const char *hash = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(pin, "pin_hash"));
     ui->model.config_today_available = cJSON_IsNumber(date) && date->valueint == ui->model.day_index;
-    ui->model.config_pin_available = hash && hash[0];
+    ui->model.config_pin_available = (hash && hash[0]) || (pin != NULL);
     const cJSON *created = cJSON_GetObjectItemCaseSensitive(manifest, "created_at");
     time_t timestamp = cJSON_IsNumber(created) ? (time_t)created->valuedouble : 0;
     struct tm local;
@@ -96,7 +96,7 @@ void open_config_backup(UiState *ui)
     const char *device = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(manifest, "source_device"));
     snprintf(ui->model.config_metadata, sizeof(ui->model.config_metadata), "%s / %s", device ? device : "", date_text);
     ui->model.config_backup_ready = true;
-    ui->model.config_groups &= available_groups(&ui->model);
+    ui->model.config_groups = PTC_CONFIG_BACKUP_DEFAULT & available_groups(&ui->model);
     cJSON_Delete(manifest); cJSON_Delete(rules); cJSON_Delete(pin);
     config_backup_preview(ui);
 }
@@ -123,7 +123,11 @@ void request_config_restore(UiState *ui)
             ptc_companion_auth_backup_pin_matches(text, pin);
         memset(pin, 0, sizeof(pin)); memset(text, 0, sizeof(text));
         ui->model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
-        if (!matches) { snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_FAILED)); return; }
+        if (!matches) {
+            ptc_audio_play(PTC_SE_ERROR);
+            show_auth_error(ui, ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_PIN), ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN), 0);
+            return;
+        }
     }
     open_danger_confirm_overlay(ui, PTC_UI_OPERATION_RESTORE_CONFIG_BACKUP,
         ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_IMPORT), ui->model.config_preview);

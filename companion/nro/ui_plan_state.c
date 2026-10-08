@@ -289,7 +289,7 @@ void ptc_ui_reconcile_scheduled_result(PtcUiModel *model, const PtcScheduledOver
     if (saved && model->overlay == PTC_UI_OVERLAY_SCHEDULED) model->overlay = PTC_UI_OVERLAY_NONE;
 }
 
-static void build_plan_rules(const PtcUiModel *model, PtcUiPlanKind kind, PtcRules *rules)
+void ptc_ui_build_plan_rules(const PtcUiModel *model, PtcUiPlanKind kind, PtcRules *rules)
 {
     ptc_rules_default(rules);
     rules->calendar = model->calendar;
@@ -302,12 +302,16 @@ static void build_plan_rules(const PtcUiModel *model, PtcUiPlanKind kind, PtcRul
     rules->holiday_enabled = kind == PTC_UI_PLAN_HOLIDAY ? model->draft_holiday_enabled : model->holiday_enabled;
     rules->holiday_rule = kind == PTC_UI_PLAN_HOLIDAY ? model->draft_holiday_rule : model->holiday_rule;
     rules->makeup_workday_rule = kind == PTC_UI_PLAN_HOLIDAY ? model->draft_makeup_workday_rule : model->makeup_workday_rule;
+    rules->autonomy_policy = model->draft_autonomy_policy.daily_buffer_minutes > 0 ? model->draft_autonomy_policy : model->autonomy_policy;
+    rules->dock_policy = model->dock_dirty ? model->draft_dock_policy : model->dock_policy;
+    rules->eye_care = model->eye_care_dirty ? model->draft_eye_care_policy : model->eye_care_policy;
+    rules->bedtime = model->bedtime_dirty ? model->draft_bedtime_policy : model->bedtime_policy;
 }
 
 PtcEffectiveRule ptc_ui_plan_rule(const PtcUiModel *model, PtcUiPlanKind kind)
 {
     PtcRules rules;
-    build_plan_rules(model, kind, &rules);
+    ptc_ui_build_plan_rules(model, kind, &rules);
     return ptc_rules_resolve(&rules, model->day_index, ptc_weekday_from_day_index(model->day_index));
 }
 
@@ -360,7 +364,7 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
         return;
     }
     is_today = (day_index == model->day_index);
-    build_plan_rules(model, kind, &rules);
+    ptc_ui_build_plan_rules(model, kind, &rules);
     weekday = ptc_weekday_from_day_index(day_index);
     decision->effective = ptc_rules_resolve(&rules, day_index, weekday);
     day_type = ptc_holiday_calendar_classify_in(model->calendar, day_index, &calendar_covered);

@@ -95,7 +95,8 @@ static void test_config_backup_ui(void)
     check(ui.model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP && !ui.waiting,"cancel hold returns to backup without submission");
     config_backup_action(&ui,9); pin_cursor=0; pin_values[0]="1234"; pin_values[1]="9999";
     request_config_restore(&ui);
-    check(ui.model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP && !ui.waiting,"incorrect source PIN cannot confirm import");
+    check(ui.model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && !ui.waiting,"incorrect source PIN cannot confirm import");
+    close_auth_error(&ui, true);
     pin_cursor=0; pin_values[0]=pin_values[1]="1234";
     request_config_restore(&ui);
     check(ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required,"source PIN authorizes restore");

@@ -580,19 +580,21 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
         }
         if (index == 7) {
             if (unavailable) subtitle = unavailable;
-            else if (model->dock_waived_today) subtitle = ptc_ui_text(PTC_UI_T_DOCK_WAIVED);
+            else if (model->dock_waived_today) subtitle = ptc_ui_text(PTC_UI_T_DOCK_CARD_WAIVED);
             else if (model->dock_policy.force_docked) subtitle = ptc_ui_text(PTC_UI_T_DOCK_CARD_FORCE);
             else if (model->dock_policy.undocked_limit_enabled) {
                 snprintf(dynamic, sizeof(dynamic), ptc_ui_text(PTC_UI_T_DOCK_CARD_LIMIT),
                          model->dock_policy.undocked_daily_minutes, model->undocked_used_minutes);
                 subtitle = dynamic;
+            } else {
+                subtitle = ptc_ui_text(PTC_UI_T_DOCK_CARD_OFF);
             }
         }
         action.title = title;
         action.subtitle = subtitle;
         draw_action_card(pixels, stride, box, &action, focused,
                          disabled ? PTC_UI_ACTION_DISABLED : PTC_UI_ACTION_AVAILABLE,
-                         (index == 0 || (index >= 2 && index != 7)) ? (is_en ? 76 : 82) : 0);
+                         (index == 0 || index >= 2) ? (is_en ? 76 : 82) : 0);
         if (index == 1 && unavailable)
             draw_text(pixels, stride, box.x + 78, box.y + 88,
                       ptc_ui_text(PTC_UI_T_TO_RESTORE_LIMIT_USE_SET_TODAY_LIMIT), 12, UI_DISABLED);
@@ -616,7 +618,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                              (badge_color == UI_WARNING ? UI_WARNING_SOFT : UI_PAGE)));
             draw_rect_outline(pixels, stride, tbadge, 6, 1, badge_color);
             draw_text_center(pixels, stride, tbadge, adjustment_badge, 12, badge_color);
-        } else if (index >= 2 && index != 7) {
+        } else if (index >= 2) {
             const char *badge = (!fresh || eye_needs_refresh) ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING)) :
                 (index == 2 ? (model->today_override_present &&
                                 model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED ? (ptc_ui_text(PTC_UI_T_ENABLED_2)) : (ptc_ui_text(PTC_UI_T_DISABLED))) :
@@ -626,12 +628,18 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                                (bedtime_skip_matches ? (ptc_ui_text(PTC_UI_T_SKIPPED)) : (ptc_ui_text(PTC_UI_T_NOT_SKIPPED)))) :
                  index == 5 ? (model->daily_buffer_claimed ? (ptc_ui_text(PTC_UI_T_CLAIMED)) :
                                (model->daily_buffer_available ? (ptc_ui_text(PTC_UI_T_AVAILABLE)) : (ptc_ui_text(PTC_UI_T_UNCLAIMED)))) :
-                 (!model->eye_care_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED) :
-                  (strcmp(model->eye_care_phase, "resting") == 0 ? ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_RESTING) :
-                   ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_IDLE))));
+                 index == 6 ? (!model->eye_care_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED) :
+                               (strcmp(model->eye_care_phase, "resting") == 0 ? ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_RESTING) :
+                                ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_IDLE))) :
+                 (model->dock_waived_today ? ptc_ui_text(PTC_UI_T_SKIPPED) :
+                  (model->dock_restriction_active ? ptc_ui_text(PTC_UI_T_RESTRICTED) :
+                   (model->dock_policy.force_docked ? ptc_ui_text(PTC_UI_T_DOCK_FORCE) :
+                    (model->dock_policy.undocked_limit_enabled ? ptc_ui_text(PTC_UI_T_DOCK_LIMIT) :
+                     ptc_ui_text(PTC_UI_T_DISABLED))))));
             uint32_t color = (!fresh || eye_needs_refresh) ? UI_WARNING :
                 ((index == 4 && model->bedtime_active && !model->bedtime_skipped) ||
-                 (index == 6 && strcmp(model->eye_care_phase, "resting") == 0) ? UI_DANGER :
+                 (index == 6 && strcmp(model->eye_care_phase, "resting") == 0) ||
+                 (index == 7 && model->dock_restriction_active && !model->dock_waived_today) ? UI_DANGER :
                  (strcmp(badge, ptc_ui_text(PTC_UI_T_ENABLED_2)) == 0 || strcmp(badge, ptc_ui_text(PTC_UI_T_SKIPPED)) == 0 ||
                   strcmp(badge, ptc_ui_text(PTC_UI_T_CLAIMED)) == 0 || strcmp(badge, "Enabled") == 0 ||
                   strcmp(badge, "Skipped") == 0 || strcmp(badge, "Claimed") == 0 ? UI_SUCCESS : UI_MUTED));

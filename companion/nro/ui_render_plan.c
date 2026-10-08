@@ -923,8 +923,10 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
 
     for (index = 0; index < (int)PTC_RESULT_FORECAST_DAYS; ++index) {
         const PtcResultForecastDay *day = &model->forecast[index];
+        PtcRules rules;
+        ptc_ui_build_plan_rules(model, PTC_UI_PLAN_WEEKLY, &rules);
         PtcEffectiveBedtime bedtime = ptc_bedtime_resolve_start_day(
-            (const PtcRules *)&(PtcRules){.bedtime = model->bedtime_policy},
+            &rules,
             day->day_index, ptc_weekday_from_day_index(day->day_index));
         uint8_t weekday = ptc_weekday_from_day_index(day->day_index);
         UiRect row = to_uirect(ptc_ui_forecast_day_row_rect(index));
@@ -1000,12 +1002,12 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
         draw_text_center(pixels, stride, badge, badge_label, 11, badge_color);
 
         /* 4. 就寝窗口 */
-        int bt_x = row.x + 244;
+        int bt_x = row.x + (is_en ? 240 : 246);
         if (!model->bedtime_policy.enabled || !bedtime.window.enabled) {
-            draw_text(pixels, stride, bt_x + 12, row.y + 27, ptc_ui_text(PTC_UI_T_NO_BEDTIME), 13, UI_MUTED);
+            draw_text(pixels, stride, bt_x, row.y + 27, ptc_ui_text(PTC_UI_T_NO_BEDTIME), 13, UI_MUTED);
         } else {
-            char bt_buf[48];
-            snprintf(bt_buf, sizeof(bt_buf), "🌙 %02u:%02u %s",
+            char bt_buf[32];
+            snprintf(bt_buf, sizeof(bt_buf), "%02u:%02u (%s)",
                      (unsigned int)(bedtime.window.start_minute / 60),
                      (unsigned int)(bedtime.window.start_minute % 60),
                      bedtime_source_short(bedtime.source));
@@ -1016,7 +1018,37 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
         draw_text(pixels, stride, row.x + row.width - 16, row.y + 26, ">", 13,
                   is_focused ? UI_ACCENT : UI_MUTED);
     }
-    draw_text(pixels, stride, panel.x + 14, panel.y + panel.height - 16,
+
+    /* 6. 底部并行策略胶囊条 */
+    UiRect eye_capsule = {panel.x + 14, panel.y + panel.height - 46, (panel.width - 34) / 2, 22};
+    bool eye_on = model->eye_care_policy.enabled;
+    fill_round_rect(pixels, stride, eye_capsule, 4, eye_on ? UI_SUCCESS_SOFT : UI_RGB(UI_BLENDED(surface_raised)));
+    draw_rect_outline(pixels, stride, eye_capsule, 4, 1, eye_on ? UI_SUCCESS : UI_BORDER);
+    char eye_text[48];
+    if (eye_on) {
+        snprintf(eye_text, sizeof(eye_text), ptc_ui_text(PTC_UI_T_EYE_CAPSULE_ACTIVE),
+                 model->eye_care_policy.play_minutes, model->eye_care_policy.rest_minutes);
+    } else {
+        snprintf(eye_text, sizeof(eye_text), "%s", ptc_ui_text(PTC_UI_T_EYE_CAPSULE_OFF));
+    }
+    draw_text_center(pixels, stride, eye_capsule, eye_text, 11, eye_on ? UI_SUCCESS : UI_MUTED);
+
+    UiRect dock_capsule = {panel.x + 14 + (panel.width - 34) / 2 + 6, panel.y + panel.height - 46, (panel.width - 34) / 2, 22};
+    bool dock_on = model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled;
+    fill_round_rect(pixels, stride, dock_capsule, 4, dock_on ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface_raised)));
+    draw_rect_outline(pixels, stride, dock_capsule, 4, 1, dock_on ? UI_ACCENT : UI_BORDER);
+    char dock_text[48];
+    if (model->dock_policy.force_docked) {
+        snprintf(dock_text, sizeof(dock_text), "%s", ptc_ui_text(PTC_UI_T_DOCK_CAPSULE_FORCE));
+    } else if (model->dock_policy.undocked_limit_enabled) {
+        snprintf(dock_text, sizeof(dock_text), ptc_ui_text(PTC_UI_T_DOCK_CAPSULE_LIMIT),
+                 model->dock_policy.undocked_daily_minutes);
+    } else {
+        snprintf(dock_text, sizeof(dock_text), "%s", ptc_ui_text(PTC_UI_T_DOCK_CAPSULE_OFF));
+    }
+    draw_text_center(pixels, stride, dock_capsule, dock_text, 11, dock_on ? UI_ACCENT : UI_MUTED);
+
+    draw_text(pixels, stride, panel.x + 14, panel.y + panel.height - 12,
               ptc_ui_text(PTC_UI_T_PRESS_A_OR_CLICK_TO_VIEW_DAILY), 11, UI_MUTED);
 }
 
@@ -1218,9 +1250,9 @@ static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiMod
     UiRect save_btn = to_uirect(ptc_ui_eye_care_page_save_rect());
     bool dirty = model->eye_care_dirty;
     fill_round_rect(pixels, stride, save_btn, 10, dirty ? UI_SUCCESS : UI_RAISED);
-    draw_text_center(pixels, stride, save_btn,
-                     dirty ? (ptc_ui_text(PTC_UI_T_EYE_CARE_SAVE)) : (ptc_ui_text(PTC_UI_T_RULE_SAVED)),
-                     16, dirty ? UI_ON_ACCENT : UI_MUTED);
+    draw_button_label(pixels, stride, save_btn,
+                      dirty ? (ptc_ui_text(PTC_UI_T_EYE_CARE_SAVE)) : (ptc_ui_text(PTC_UI_T_RULE_SAVED)),
+                      16, dirty ? UI_ON_ACCENT : UI_MUTED);
     if (model->eye_care_field_focus == 3) draw_focus_ring(pixels, stride, save_btn, 10);
 
     if (resting) {

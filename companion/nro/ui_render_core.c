@@ -407,6 +407,37 @@ void draw_button_label(uint32_t *pixels, uint32_t stride, UiRect box, const char
         return;
     }
 
+    /* 匹配单肩键 "L  ", "R  " 或 "L ", "R " */
+    if ((label[0] == 'L' || label[0] == 'R') && label[1] == ' ') {
+        char key_buf[2] = {label[0], '\0'};
+        int pfx_len = (label[2] == ' ') ? 3 : 2;
+        const char *rest = label + pfx_len;
+        int key_w = 24 + 8;
+        int cur_size = size;
+        int rest_w = measure_text(rest, cur_size);
+        int total_w = key_w + rest_w;
+        while (total_w > box.width - 8 && cur_size > 11) {
+            cur_size--;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
+        char fitted_rest[128];
+        if (total_w > box.width - 6) {
+            fit_text(fitted_rest, sizeof(fitted_rest), rest, cur_size, box.width - key_w - 6);
+            rest = fitted_rest;
+            rest_w = measure_text(rest, cur_size);
+            total_w = key_w + rest_w;
+        }
+        int start_x = box.x + (box.width - total_w) / 2;
+        if (start_x < box.x + 2) start_x = box.x + 2;
+        int gly_y = box.y + (box.height - 20) / 2;
+        int baseline = box.y + (box.height + cur_size - 4) / 2;
+
+        draw_shoulder_key_glyph(pixels, stride, start_x, gly_y, 24, 20, key_buf, disabled);
+        draw_text(pixels, stride, start_x + key_w, baseline, rest, cur_size, color);
+        return;
+    }
+
     /* 匹配单字符圆键 "A  ", "B  ", "X  ", "Y  ", "+  ", "-  " 或单空格 "A ", "B ", ... */
     if ((label[0] == 'A' || label[0] == 'B' || label[0] == 'X' || label[0] == 'Y' ||
          label[0] == '+' || label[0] == '-') && label[1] == ' ') {

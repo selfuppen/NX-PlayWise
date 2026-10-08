@@ -163,13 +163,17 @@ static void draw_auth_error_overlay(uint32_t *pixels, uint32_t stride, const Ptc
              model->auth_error_title[0] ? model->auth_error_title : ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_FAILED));
     snprintf(shell_model.overlay_body, sizeof(shell_model.overlay_body), "%s",
              model->auth_error_message[0] ? model->auth_error_message : ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN));
-    draw_dialog_shell(pixels, stride, &shell_model, &dialog, 720, 340);
-    fill_round_rect(pixels, stride, (UiRect){dialog.x + 44, dialog.y + 142, dialog.width - 88, 72}, 16, UI_DANGER_SOFT);
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 58, dialog.y + 142, dialog.width - 116, 72},
+    draw_dialog_shell(pixels, stride, &shell_model, &dialog, 760, 360);
+    fill_round_rect(pixels, stride, (UiRect){dialog.x + 36, dialog.y + 138, dialog.width - 72, 88}, 14, UI_DANGER_SOFT);
+    draw_rect_outline(pixels, stride, (UiRect){dialog.x + 36, dialog.y + 138, dialog.width - 72, 88}, 14, 1, UI_DANGER);
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 46, dialog.y + 144, dialog.width - 92, 36},
                      model->auth_cooldown_seconds > 0
                         ? ptc_ui_text(PTC_UI_T_TOO_MANY_ERRORS_YOU_CAN_TRY_AGAIN)
                         : ptc_ui_text(PTC_UI_T_ERROR_PIN_WILL_NOT_BE_RETAINED_INPUT),
-                     18, UI_DANGER);
+                     17, UI_DANGER);
+    draw_text_center(pixels, stride, (UiRect){dialog.x + 46, dialog.y + 180, dialog.width - 92, 36},
+                     ptc_ui_text(PTC_UI_T_PLEASE_GO_TO_SUPPORT_AND_RECOVERY_TO),
+                     13, UI_MUTED);
     if (model->auth_cooldown_seconds > 0) {
         snprintf(retry_label, sizeof(retry_label), ptc_ui_text(PTC_UI_T_WAIT_D_SECONDS), model->auth_cooldown_seconds);
     } else {
@@ -177,6 +181,8 @@ static void draw_auth_error_overlay(uint32_t *pixels, uint32_t stride, const Ptc
     }
     draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_CANCEL),
                        UI_RAISED, UI_INK, true);
+    draw_dialog_button(pixels, stride, ptc_ui_auth_error_guide_rect(), ptc_ui_text(PTC_UI_T_X_SUPPORT_GUIDE),
+                       UI_WARNING_SOFT, UI_WARNING, false);
     draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), retry_label,
                        model->auth_cooldown_seconds > 0 ? UI_BORDER : UI_ACCENT,
                        model->auth_cooldown_seconds > 0 ? UI_MUTED : UI_ON_ACCENT, false);
