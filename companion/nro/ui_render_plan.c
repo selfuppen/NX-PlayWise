@@ -1269,55 +1269,62 @@ static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiMod
 static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const PtcDockPolicy *draft = &model->draft_dock_policy;
-    char text[192];
-    bool master_enabled = draft->force_docked || draft->undocked_limit_enabled;
-    int64_t now = ptc_ui_render_now();
-    bool fresh = ptc_ui_status_is_fresh(model, now);
+    int current_mode = (draft->force_docked) ? 1 : (draft->undocked_limit_enabled ? 2 : 0);
 
     /* --- 左侧配置卡片 --- */
     for (int i = 0; i < 3; ++i) {
         UiRect row = to_uirect(ptc_ui_dock_field_rect(i));
         bool focus = model->dock_field_focus == i;
-        bool row_disabled = model->disable_flag_present || (i > 0 && !master_enabled);
+        bool selected = (current_mode == i);
+        bool lite_unsupported = (i == 1) && model->dock_supported_available && !model->dock_supported;
+        bool row_disabled = model->disable_flag_present || (i == 1 && lite_unsupported);
         draw_plan_card(pixels, stride, row, focus);
 
+        /* 单选圆圈指示器 (Radio Indicator) */
+        UiRect radio = {row.x + row.width - 48, row.y + (row.height - 24) / 2, 24, 24};
+        fill_round_rect(pixels, stride, radio, 12, selected ? UI_ACCENT : UI_RAISED);
+        draw_rect_outline(pixels, stride, radio, 12, 2, selected ? UI_ACCENT : UI_BORDER);
+        if (selected) {
+            fill_round_rect(pixels, stride, (UiRect){radio.x + 6, radio.y + 6, 12, 12}, 6, UI_ON_ACCENT);
+        }
+
         if (i == 0) {
-            /* 总开关：启用电视模式限制 */
+            /* 选项 0：不限制屏幕形态 */
             draw_text(pixels, stride, row.x + 18, row.y + 30,
-                ptc_ui_text(PTC_UI_T_DOCK_MASTER_ENABLE), 20, UI_INK);
-            draw_toggle_switch(pixels, stride, (UiRect){row.x + row.width - 90, row.y + 20, 64, 30},
-                master_enabled, focus, model->disable_flag_present, NULL, NULL);
-            const char *note = ptc_ui_text(PTC_UI_T_DOCK_MASTER_ENABLE_HINT);
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED), 20, row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK));
+            const char *note = ptc_ui_text(PTC_UI_T_DOCK_MODE_UNRESTRICTED_HINT);
             char fitted[192];
-            fit_text(fitted, sizeof(fitted), note, 13, row.width - 110);
+            fit_text(fitted, sizeof(fitted), note, 13, row.width - 80);
             draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, UI_MUTED);
         } else if (i == 1) {
-            /* 仅允许电视模式开关 */
+            /* 选项 1：仅允许电视大屏 */
             draw_text(pixels, stride, row.x + 18, row.y + 30,
-                ptc_ui_text(PTC_UI_T_DOCK_FORCE), 20, master_enabled ? UI_INK : UI_DISABLED);
-            bool lite_unsupported = model->dock_supported_available && !model->dock_supported;
-            draw_toggle_switch(pixels, stride, (UiRect){row.x + row.width - 90, row.y + 20, 64, 30},
-                draft->force_docked, focus, row_disabled || (lite_unsupported && !draft->force_docked), NULL, NULL);
-            const char *note = lite_unsupported ? ptc_ui_text(PTC_UI_T_DOCK_LITE) : ptc_ui_text(PTC_UI_T_DOCK_FORCE_HINT);
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE), 20, row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK));
+            const char *note = lite_unsupported ? ptc_ui_text(PTC_UI_T_DOCK_LITE) : ptc_ui_text(PTC_UI_T_DOCK_MODE_FORCE_HINT);
             char fitted[192];
-            fit_text(fitted, sizeof(fitted), note, 13, row.width - 110);
-            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, master_enabled ? UI_MUTED : UI_DISABLED);
+            fit_text(fitted, sizeof(fitted), note, 13, row.width - 80);
+            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, row_disabled ? UI_DISABLED : UI_MUTED);
         } else {
-            /* 非电视模式每日限额 */
-            bool limit_active = master_enabled && !draft->force_docked;
+            /* 选项 2：允许少量掌机应急 */
             draw_text(pixels, stride, row.x + 18, row.y + 30,
-                ptc_ui_text(PTC_UI_T_DOCK_LIMIT), 20, limit_active ? UI_INK : UI_DISABLED);
-            if (draft->force_docked) {
-                snprintf(text, sizeof(text), "0 %s", ptc_ui_text(PTC_UI_T_MINUTES));
+                ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT), 20, row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK));
+            
+            uint16_t mins = (draft->undocked_daily_minutes == 0) ? 30 : draft->undocked_daily_minutes;
+            snprintf(text, sizeof(text), "%u %s", mins, ptc_ui_text(PTC_UI_T_MINUTES));
+            int tw = measure_text(text, 18);
+            if (selected) {
+                draw_text(pixels, stride, row.x + row.width - 70 - tw - 20, row.y + 32, "◀", 14, focus ? UI_ACCENT : UI_MUTED);
+                draw_text(pixels, stride, row.x + row.width - 70 - tw, row.y + 32, text, 18, UI_ACCENT);
+                draw_text(pixels, stride, row.x + row.width - 64, row.y + 32, "▶", 14, focus ? UI_ACCENT : UI_MUTED);
             } else {
-                snprintf(text, sizeof(text), "%u %s", draft->undocked_daily_minutes, ptc_ui_text(PTC_UI_T_MINUTES));
+                draw_text(pixels, stride, row.x + row.width - 70 - tw, row.y + 32, text, 18, UI_MUTED);
             }
-            draw_text(pixels, stride, row.x + row.width - 180, row.y + 34, text, 22,
-                limit_active ? UI_ACCENT : UI_DISABLED);
-            const char *note = draft->force_docked ? ptc_ui_text(PTC_UI_T_DOCK_FORCE_HINT) : ptc_ui_text(PTC_UI_T_DOCK_ALLOWANCE);
+
+            char hint_buf[192];
+            snprintf(hint_buf, sizeof(hint_buf), ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT_HINT), mins);
             char fitted[192];
-            fit_text(fitted, sizeof(fitted), note, 13, row.width - 200);
-            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, limit_active ? UI_MUTED : UI_DISABLED);
+            fit_text(fitted, sizeof(fitted), hint_buf, 13, row.width - 80);
+            draw_text(pixels, stride, row.x + 18, row.y + 64, fitted, 13, selected ? UI_ACCENT : UI_MUTED);
         }
     }
 

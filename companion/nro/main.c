@@ -715,20 +715,37 @@ int main(int argc, char **argv)
                     else if (down & HidNpadButton_X) dock_page_action(&ui, 4, 0);
                     else if (down & HidNpadButton_Plus) dock_page_action(&ui, 3, 0);
                     else if (down & HidNpadButton_Up) {
-                        int count = ui.model.eden_mode_controls ? 7 : 5;
-                        int focus = ui.model.dock_field_focus >= 7 ? ui.model.dock_field_focus - 2 : ui.model.dock_field_focus;
-                        focus = (focus + count - 1) % count;
-                        ui.model.dock_field_focus = focus >= 5 ? focus + 2 : focus;
+                        int focus = ui.model.dock_field_focus;
+                        if (focus == 7 || focus == 8) ui.model.dock_field_focus = focus == 7 ? 3 : 4;
+                        else if (focus == 3 || focus == 4) ui.model.dock_field_focus = 2;
+                        else if (focus == 2) ui.model.dock_field_focus = 1;
+                        else if (focus == 1) ui.model.dock_field_focus = 0;
+                        else if (focus == 0) ui.model.dock_field_focus = ui.model.eden_mode_controls ? 7 : 3;
                     }
                     else if (down & HidNpadButton_Down) {
-                        int count = ui.model.eden_mode_controls ? 7 : 5;
-                        int focus = ui.model.dock_field_focus >= 7 ? ui.model.dock_field_focus - 2 : ui.model.dock_field_focus;
-                        focus = (focus + 1) % count;
-                        ui.model.dock_field_focus = focus >= 5 ? focus + 2 : focus;
+                        int focus = ui.model.dock_field_focus;
+                        if (focus == 0) ui.model.dock_field_focus = 1;
+                        else if (focus == 1) ui.model.dock_field_focus = 2;
+                        else if (focus == 2) ui.model.dock_field_focus = 3;
+                        else if (focus == 3 || focus == 4) {
+                            if (ui.model.eden_mode_controls) ui.model.dock_field_focus = focus == 3 ? 7 : 8;
+                            else ui.model.dock_field_focus = 0;
+                        }
+                        else if (focus == 7 || focus == 8) ui.model.dock_field_focus = 0;
+                    }
+                    else if (down & HidNpadButton_Left) {
+                        int focus = ui.model.dock_field_focus;
+                        if (focus == 2) dock_page_action(&ui, 2, -1);
+                        else if (focus == 4) ui.model.dock_field_focus = 3;
+                        else if (focus == 8) ui.model.dock_field_focus = 7;
+                    }
+                    else if (down & HidNpadButton_Right) {
+                        int focus = ui.model.dock_field_focus;
+                        if (focus == 2) dock_page_action(&ui, 2, 1);
+                        else if (focus == 3) ui.model.dock_field_focus = 4;
+                        else if (focus == 7) ui.model.dock_field_focus = 8;
                     }
                     else if (down & HidNpadButton_A) dock_page_action(&ui, ui.model.dock_field_focus, 0);
-                    else if (ui.model.dock_field_focus == 2 && (down & HidNpadButton_Left)) dock_page_action(&ui, 2, -1);
-                    else if (ui.model.dock_field_focus == 2 && (down & HidNpadButton_Right)) dock_page_action(&ui, 2, 1);
                 }
             } else if (ui.model.parent_page == PTC_UI_PARENT_PLAN &&
                        ui.model.plan_page == PTC_UI_PLAN_PAGE_EYE_CARE) {
