@@ -40,6 +40,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 | --- | --- | --- |
 | [Enabling system Parental Controls](调研/开启系统家长控制功能调研.md) | Native PIN registration, handover prerequisites and proposed entry point | 2026-10-06 |
 | [Non-PCTL suspension and overlay capabilities](调研/非PCTL暂停与浮窗能力调研.md) | Source-level display, input, process suspension and recovery capabilities | 2026-10-06 |
+| [Bedtime timer activation diagnosis](调研/就寝恢复误启动计时诊断-2026-10-08.md) | SD evidence, version comparison, recovery boundaries and device retest | 2026-10-08 |
 
 ## Maintenance
 

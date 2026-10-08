@@ -338,6 +338,142 @@ static void test_bedtime_result_rollback(void)
     free(f.mem);
 }
 
+static void enter_bedtime_with_stopped_timer(Fixture *f)
+{
+    PtcRules rules;
+    PtcRuntimeState state;
+    PtcPctlSettingsSnapshot snapshot;
+    uint64_t instance;
+    uint16_t start_day;
+    expect(load_rules(&f->core, &rules), "read timer recovery rules");
+    rules.bedtime.enabled = true;
+    for (unsigned i = 0; i < 7; ++i) {
+        rules.bedtime.week[i].enabled = true;
+        rules.bedtime.week[i].start_minute = 1350;
+        rules.bedtime.week[i].end_minute = 450;
+    }
+    /* Match the affected SD card's October 6 -> 7 scheduled 120-minute day. */
+    rules.scheduled_override.enabled = true;
+    rules.scheduled_override.start_day_index = 2465;
+    rules.scheduled_override.end_day_index = 2474;
+    rules.scheduled_override.rule.mode = PTC_RULE_MODE_LIMIT;
+    rules.scheduled_override.rule.minutes = 120;
+    f->clock.snapshot.day_index = 2470;
+    f->clock.snapshot.minute_of_day = 1350;
+    f->clock.snapshot.unix_seconds = 1791297000;
+    expect(save_rules(&f->core, &rules) && ptc_sysmodule_enforce_tick(&f->core) == 1,
+        "enter bedtime before midnight");
+    expect(load_state(&f->core, &state) && state.bedtime_enforced &&
+        load_bedtime_snapshot(&f->core, &snapshot, &instance, &start_day) && snapshot.timer_enabled,
+        "bedtime records the previously running timer");
+    expect(f->pctl.pctl.vtable->stop_timer(&f->pctl.pctl) == PTC_ERR_OK,
+        "simulate system stopping timer during bedtime");
+}
+
+static void test_cross_night_bedtime_does_not_start_timer(void)
+{
+    for (unsigned scenario = 0; scenario < 3; ++scenario) {
+        Fixture f;
+        PtcRules rules;
+        PtcRuntimeState state;
+        PtcPctlStatus status;
+        uint64_t carry = 0;
+        init_fixture(&f);
+        enter_bedtime_with_stopped_timer(&f);
+        f.clock.snapshot.day_index = 2471;
+        f.clock.snapshot.minute_of_day = 0;
+        f.clock.snapshot.unix_seconds = 1791302403;
+        ptc_pctl_stub_reset_daily_usage(&f.pctl);
+        expect(ptc_sysmodule_enforce_tick(&f.core) == 1 && f.pctl.status.blocked_today,
+            "midnight keeps the cross-night restriction");
+        /* Persistent bedtime state must survive a new backend instance. */
+        ptc_sysmodule_init(&f.core, "app", &f.mem->storage, &f.pctl.pctl, &f.clock.provider);
+        if (scenario == 1) {
+            expect(load_rules(&f.core, &rules), "read unlimited morning rules");
+            rules.scheduled_override.rule.mode = PTC_RULE_MODE_UNLIMITED;
+            expect(save_rules(&f.core, &rules), "set unlimited morning");
+        } else if (scenario == 2) {
+            f.pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+            f.pctl.apply_target_fail_on_call = f.pctl.apply_target_calls + 1;
+        }
+        f.clock.snapshot.minute_of_day = 501;
+        f.clock.snapshot.unix_seconds = 1791332512;
+        int applied = ptc_sysmodule_enforce_tick(&f.core);
+        expect(f.pctl.start_timer_calls == 0 && !f.pctl.status.play_timer_enabled,
+            "autonomous morning recovery never starts 1451");
+        expect(load_state(&f.core, &state), "read morning recovery state");
+        if (scenario == 2) {
+            expect(applied == 0 && state.bedtime_enforced && f.pctl.status.blocked_today &&
+                f.mem->storage.vtable->exists(&f.mem->storage, "app/flags/disable.flag"),
+                "failed morning write retains bedtime and enters protection");
+        } else {
+            expect(applied == 1 && !state.bedtime_enforced && !state.apply_pending_confirmation &&
+                !recovery_path_exists(&f.core), "morning recovery commits without runtime activation");
+            expect(f.pctl.pctl.vtable->read_status(&f.pctl.pctl, 3, &status) == PTC_ERR_OK &&
+                (scenario == 1 ? status.unrestricted_today :
+                 status.limited_today && status.configured_minutes == 120 && status.remaining_minutes == 120),
+                "morning restores the new day's effective rule");
+            expect(!ptc_pctl_stub_advance_usage_ns(&f.pctl, 6ULL * 3600 * 1000000000ULL, &carry),
+                "simulated stopped timer does not charge elapsed morning time");
+            expect(ptc_sysmodule_enforce_tick(&f.core) == 0 && f.pctl.start_timer_calls == 0,
+                "repeated autonomous enforcement cannot reactivate the timer");
+        }
+        free(f.mem);
+    }
+}
+
+static PtcErrorCode restore_with_mismatched_settings(PtcPctl *pctl, const PtcPctlSettingsSnapshot *snapshot)
+{
+    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    PtcPctlStub reference;
+    ptc_pctl_stub_init(&reference);
+    PtcErrorCode err = reference.pctl.vtable->restore_settings(pctl, snapshot);
+    if (err == PTC_ERR_OK) ++stub->configured_minutes;
+    return err;
+}
+
+static void test_same_day_bedtime_timer_recovery(void)
+{
+    for (unsigned scenario = 0; scenario < 4; ++scenario) {
+        Fixture f;
+        PtcRuntimeState state;
+        PtcPctlVTable faulty;
+        init_fixture(&f);
+        enter_bedtime_with_stopped_timer(&f);
+        if (scenario == 3) {
+            request(&f, "parent-bedtime-recovery", "disable_bedtime", "{}");
+            expect(result_has(&f, "parent-bedtime-recovery", "\"status\":\"ok\"") &&
+                f.pctl.start_timer_calls == 1 && f.pctl.status.play_timer_enabled,
+                "explicit parent recovery retains exact timer restoration");
+        } else {
+            /* A same-day clock correction can leave the active night window. */
+            f.clock.snapshot.minute_of_day = 1200;
+            f.clock.snapshot.unix_seconds -= 150 * 60;
+            if (scenario == 1) f.pctl.restore_error = PTC_ERR_PCTL_RESTORE_FAILED;
+            if (scenario == 2) {
+                faulty = *f.pctl.pctl.vtable;
+                faulty.restore_settings = restore_with_mismatched_settings;
+                f.pctl.pctl.vtable = &faulty;
+            }
+            int applied = ptc_sysmodule_enforce_tick(&f.core);
+            expect(f.pctl.start_timer_calls == 0 && !f.pctl.status.play_timer_enabled,
+                "same-day autonomous recovery cannot replay a stale enabled timer");
+            expect(load_state(&f.core, &state), "read same-day recovery state");
+            if (scenario == 0) {
+                expect(applied == 1 && f.pctl.restore_called && !state.bedtime_enforced &&
+                    f.pctl.configured_minutes == 120 && f.pctl.played_minutes_today == 20 &&
+                    f.pctl.status.remaining_minutes == 100 && !recovery_path_exists(&f.core),
+                    "same-day recovery restores settings and preserves existing usage");
+            } else {
+                expect(applied == 0 && state.bedtime_enforced && recovery_path_exists(&f.core) &&
+                    f.mem->storage.vtable->exists(&f.mem->storage, "app/flags/disable.flag"),
+                    "failed restore or mismatched readback retains evidence and enters protection");
+            }
+        }
+        free(f.mem);
+    }
+}
+
 static void test_no_blocked_activation_and_recovery_ui(void)
 {
     Fixture f;
@@ -784,6 +920,8 @@ int ptc_test_control_safety(void)
     test_eye_care_continuity_and_recovery();
     test_sleep_without_scheduler_ticks();
     test_bedtime_result_rollback();
+    test_cross_night_bedtime_does_not_start_timer();
+    test_same_day_bedtime_timer_recovery();
     test_no_blocked_activation_and_recovery_ui();
     return failures;
 }

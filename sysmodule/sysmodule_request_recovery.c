@@ -113,6 +113,32 @@ disable_today_rollback:
     return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
 }
 
+/* A bedtime snapshot can contain an enabled timer captured hours ago. An
+   autonomous exit restores only settings; replaying that historical timer state
+   would issue 1451 while the console may be asleep. Exact transaction rollback
+   and explicit parent recovery keep their separate timer-restoration contract. */
+static PtcErrorCode restore_bedtime_settings_only(PtcSysmodule *sysmodule,
+    const PtcPctlSettingsSnapshot *snapshot)
+{
+    PtcPctlSettingsSnapshot restored;
+    PtcPctlDebugSnapshot before;
+    PtcPctlDebugSnapshot after;
+    PtcErrorCode err;
+    if (!sysmodule->pctl->vtable->restore_settings || !sysmodule->pctl->vtable->snapshot_settings)
+        return PTC_ERR_PCTL_RESTORE_FAILED;
+    take_pctl_debug_snapshot(sysmodule, &before);
+    err = sysmodule->pctl->vtable->restore_settings(sysmodule->pctl, snapshot);
+    if (err == PTC_ERR_OK) {
+        err = sysmodule->pctl->vtable->snapshot_settings(sysmodule->pctl, &restored);
+        if (err == PTC_ERR_OK && !ptc_pctl_settings_snapshot_equal(snapshot, &restored))
+            err = PTC_ERR_PCTL_RESTORE_FAILED;
+    }
+    take_pctl_debug_snapshot(sysmodule, &after);
+    append_pctl_debug(sysmodule, NULL, "bedtime_restore_settings", "release", NULL, err,
+        last_pctl_ipc_result(sysmodule), &before, &after);
+    return err;
+}
+
 PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *request,
     const PtcRules *rules,
     PtcRuntimeState *runtime_state, PtcClockSnapshot now)
@@ -142,9 +168,14 @@ PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *req
         load_bedtime_snapshot(sysmodule, &snapshot, &snapshot_instance, &snapshot_start_day) &&
         snapshot_instance == runtime_state->bedtime_window_instance_id &&
         snapshot_start_day == runtime_state->bedtime_start_day_index) {
-        err = restore_snapshot_exact(sysmodule, &snapshot, &restored, &status,
-            ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored);
-        if (err != PTC_ERR_OK || !raw_restored || !timer_restored) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+        if (!request) {
+            err = restore_bedtime_settings_only(sysmodule, &snapshot);
+            if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+        } else {
+            err = restore_snapshot_exact(sysmodule, &snapshot, &restored, &status,
+                ptc_weekday_from_day_index(now.day_index), &raw_restored, &timer_restored);
+            if (err != PTC_ERR_OK || !raw_restored || !timer_restored) return PTC_ERR_BEDTIME_RECOVERY_FAILED;
+        }
     } else {
         PtcDayRule base = ptc_rules_today_rule(
             rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
