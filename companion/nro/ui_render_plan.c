@@ -1310,6 +1310,7 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
                 ptc_ui_text(PTC_UI_T_DOCK_MODE_LIMIT), 20, row_disabled ? UI_DISABLED : (selected ? UI_ACCENT : UI_INK));
             
             uint16_t mins = (draft->undocked_daily_minutes == 0) ? 30 : draft->undocked_daily_minutes;
+            char text[64];
             snprintf(text, sizeof(text), "%u %s", mins, ptc_ui_text(PTC_UI_T_MINUTES));
             int tw = measure_text(text, 18);
             if (selected) {
@@ -1336,6 +1337,7 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
     fill_round_rect(pixels, stride, bento_top, 12, UI_SURFACE);
     draw_rect_outline(pixels, stride, bento_top, 12, 1, UI_BORDER);
 
+    bool fresh = model->dock_available;
     bool is_docked = fresh && strcmp(model->operation_mode, "docked") == 0;
     bool is_undocked = fresh && strcmp(model->operation_mode, "undocked") == 0;
     const char *mode_title = !fresh ? ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM) :

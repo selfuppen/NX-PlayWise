@@ -1018,8 +1018,8 @@ static void draw_forecast_day_details(uint32_t *pixels, uint32_t stride, const P
     char eye_txt[128];
     if (model->eye_care_policy.enabled) {
         snprintf(eye_txt, sizeof(eye_txt), ptc_ui_text(PTC_UI_T_EYE_CARE_POLICY_FORMAT),
-                 (unsigned)model->eye_care_policy.play_session_minutes,
-                 (unsigned)model->eye_care_policy.rest_duration_minutes);
+                 (unsigned)model->eye_care_policy.play_minutes,
+                 (unsigned)model->eye_care_policy.rest_minutes);
     } else {
         snprintf(eye_txt, sizeof(eye_txt), "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_POLICY_OFF));
     }

@@ -436,7 +436,7 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_UPDATES_DRAFT_ON_INPUT_APPLIED_ONLY_AFTER, "Updates d
 PTC_UI_TEXT_VALUE(PTC_UI_T_SET_FRIDAY_LIMIT, "Set Friday Limit")
 PTC_UI_TEXT_VALUE(PTC_UI_T_ENTER_HOURS_AND_MINUTES_SEPARATELY, "Enter hours and minutes separately")
 PTC_UI_TEXT_VALUE(PTC_UI_T_CONTROL_BUSY, "Previous settings await confirmation. Refresh status and retry.")
-PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_TITLE, "TV mode rules")
+PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_TITLE, "📺 TV mode rules")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_FORCE, "Require TV mode")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_LIMIT, "Daily non-TV allowance")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_ALLOWANCE, "Non-TV use also consumes the daily total")

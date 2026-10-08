@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "../../companion/ui_emoji.h"
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "../../companion/overlay/vendor/libtesla/include/stb_truetype.h"
 using u32 = uint32_t;
@@ -63,6 +64,50 @@ public:
                 while (extra-- && *p) code = (code << 6) | (*p++ & 63);
             }
             if (code == '\n') { max_x = std::max(max_x, pen); pen = x; baseline += size; continue; }
+            if (code == 0xFE0E || code == 0xFE0F) continue;
+            if (is_builtin_emoji(code)) {
+                int em_size = static_cast<int>(size);
+                int em_y = baseline - static_cast<int>(size * 0.82f);
+                float s = static_cast<float>(em_size);
+                if (color.a) {
+                    for (int ey = 0; ey < em_size; ++ey) {
+                        for (int ex = 0; ex < em_size; ++ex) {
+                            int cov = 0;
+                            int total_r = 0, total_g = 0, total_b = 0;
+                            for (int sy = 0; sy < 3; ++sy) {
+                                float v = (static_cast<float>(ey) + (static_cast<float>(sy) + 0.5f) / 3.0f) / s;
+                                for (int sx = 0; sx < 3; ++sx) {
+                                    float u = (static_cast<float>(ex) + (static_cast<float>(sx) + 0.5f) / 3.0f) / s;
+                                    uint32_t s_rgb = 0;
+                                    if (sample_emoji_color(code, u, v, &s_rgb)) {
+                                        ++cov;
+                                        total_r += static_cast<int>((s_rgb >> 16) & 0xff);
+                                        total_g += static_cast<int>((s_rgb >> 8) & 0xff);
+                                        total_b += static_cast<int>(s_rgb & 0xff);
+                                    }
+                                }
+                            }
+                            if (cov > 0) {
+                                int r = total_r / cov;
+                                int g = total_g / cov;
+                                int b = total_b / cov;
+                                int alpha = (color.a * 17) * (cov * 255 / 9) / 255;
+                                int px = pen + ex;
+                                int py = em_y + ey;
+                                if (px >= 0 && px < width && py >= 0 && py < height) {
+                                    for (int c = 0; c < 3; ++c) {
+                                        auto &px_ref = pixels[(py * width + px) * 3 + c];
+                                        int src_c = (c == 0 ? r : c == 1 ? g : b);
+                                        px_ref = static_cast<unsigned char>((src_c * alpha + px_ref * (255 - alpha)) / 255);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                pen += static_cast<int>(size * 1.15f);
+                continue;
+            }
             unsigned lookup_code = code;
             if (stbtt_FindGlyphIndex(&font_, lookup_code) == 0 && code >= 0xE000 && code <= 0xE0FF) {
                 switch (code) {

@@ -18,8 +18,8 @@ static void draw_config_backup(uint32_t *pixels, uint32_t stride, const PtcUiMod
         UiRect rect = to_uirect(ptc_ui_config_backup_field_rect(idx));
         bool active = (model->config_backup_tab == t);
         bool focused = (model->overlay_selection == idx);
-        fill_round_rect(pixels, stride, rect, 6, active ? UI_ACCENT : UI_PANEL);
-        if (focused) draw_rect_outline(pixels, stride, rect, 6, 2, UI_ACCENT_FOCUS);
+        fill_round_rect(pixels, stride, rect, 6, active ? UI_ACCENT : UI_SURFACE);
+        if (focused) draw_rect_outline(pixels, stride, rect, 6, 2, UI_FOCUS);
         draw_text_center(pixels, stride, rect,
             ptc_ui_text(t == 0 ? PTC_UI_T_CONFIG_BACKUP_TAB_CREATE : PTC_UI_T_CONFIG_BACKUP_TAB_RESTORE),
             16, active ? UI_ON_ACCENT : UI_INK);
