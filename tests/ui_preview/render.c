@@ -78,6 +78,30 @@ static int check_primitives(void)
         if (measure_text("⭐", 12) != 12) ++failed;
         if (measure_text("🌿", 12) != 12) ++failed;
         if (measure_text("ℹ️", 12) != 12) ++failed; /* ℹ (12) + ️ (0) = 12 */
+        if (measure_text("🎮", 12) != 12) ++failed;
+        if (measure_text("📺", 12) != 12) ++failed;
+        if (measure_text("⚙️", 12) != 12) ++failed;
+        if (measure_text("🔑", 12) != 12) ++failed;
+        if (measure_text("📱", 12) != 12) ++failed;
+        if (measure_text("📊", 12) != 12) ++failed;
+        if (measure_text("⚡", 12) != 12) ++failed;
+        if (measure_text("🔄", 12) != 12) ++failed;
+        if (measure_text("🛑", 12) != 12) ++failed;
+        if (measure_text("🔧", 12) != 12) ++failed;
+        if (measure_text("📦", 12) != 12) ++failed;
+        if (measure_text("🎨", 12) != 12) ++failed;
+        if (measure_text("🔊", 12) != 12) ++failed;
+        if (measure_text("📋", 12) != 12) ++failed;
+        if (measure_text("🕒", 12) != 12) ++failed;
+        if (measure_text("💤", 12) != 12) ++failed;
+        if (measure_text("✨", 12) != 12) ++failed;
+        if (measure_text("💾", 12) != 12) ++failed;
+        if (measure_text("📜", 12) != 12) ++failed;
+        if (measure_text("🌐", 12) != 12) ++failed;
+        if (measure_text("💡", 12) != 12) ++failed;
+        if (measure_text("🌟", 12) != 12) ++failed;
+        if (measure_text("🔓", 12) != 12) ++failed;
+        if (measure_text("📅", 12) != 12) ++failed;
         if (measure_text("›", 12) <= 0 || measure_text("‹", 12) <= 0) ++failed;
         if (measure_text("•", 12) <= 0) ++failed;
         /* Verify rendering into pixel buffer blends without crashing or guard corruption */
