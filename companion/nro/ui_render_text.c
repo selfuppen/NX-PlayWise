@@ -545,6 +545,8 @@ static bool set_font_size(int size)
             FT_Set_Pixel_Sizes(g_ui.standard_face, 0, (FT_UInt)size) != 0) return false;
         if (g_ui.traditional_face &&
             FT_Set_Pixel_Sizes(g_ui.traditional_face, 0, (FT_UInt)size) != 0) return false;
+        if (g_ui.emoji_ready && g_ui.emoji_face &&
+            FT_Set_Pixel_Sizes(g_ui.emoji_face, 0, (FT_UInt)size) != 0) return false;
     }
     g_font_pixel_size = size;
     return true;
@@ -709,6 +711,9 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
     else if (g_ui.font_ready && FT_Get_Char_Index(g_ui.face, codepoint) == 0 &&
         g_ui.traditional_face && FT_Get_Char_Index(g_ui.traditional_face, codepoint) != 0)
         face = g_ui.traditional_face;
+    else if (g_ui.emoji_ready && g_ui.emoji_face && FT_Get_Char_Index(g_ui.emoji_face, codepoint) != 0 &&
+        (!g_ui.font_ready || FT_Get_Char_Index(g_ui.face, codepoint) == 0))
+        face = g_ui.emoji_face;
     if (!g_ui.font_ready || FT_Get_Char_Index(face, codepoint) == 0 ||
         FT_Load_Char(face, codepoint, FT_LOAD_RENDER) != 0) {
         return NULL;
@@ -717,6 +722,37 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
         FT_GlyphSlot glyph = face->glyph;
         uint8_t *copy = NULL;
         int extra = bold ? 1 : 0;
+        if (glyph->bitmap.pixel_mode == FT_PIXEL_MODE_BGRA && glyph->bitmap.rows > 0 &&
+            glyph->bitmap.width > 0) {
+            int width = (int)glyph->bitmap.width;
+            int height = (int)glyph->bitmap.rows;
+            uint32_t *color_copy = (uint32_t *)malloc((size_t)width * height * sizeof(uint32_t));
+            if (color_copy) {
+                for (int row = 0; row < height; ++row) {
+                    const uint8_t *src_line = glyph->bitmap.buffer + (size_t)row * glyph->bitmap.pitch;
+                    uint32_t *dst_line = color_copy + (size_t)row * width;
+                    for (int col = 0; col < width; ++col) {
+                        uint8_t b = src_line[col * 4 + 0];
+                        uint8_t g = src_line[col * 4 + 1];
+                        uint8_t r = src_line[col * 4 + 2];
+                        uint8_t a = src_line[col * 4 + 3];
+                        uint32_t packed = pack_rgb(((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b);
+                        dst_line[col] = (packed & 0x00ffffffu) | ((uint32_t)a << 24);
+                    }
+                }
+                entry->codepoint = codepoint;
+                entry->size = size_key;
+                entry->bearing_x = (int16_t)glyph->bitmap_left;
+                entry->bearing_y = (int16_t)glyph->bitmap_top;
+                entry->advance = (int16_t)(glyph->advance.x >> 6);
+                entry->width = (uint16_t)width;
+                entry->height = (uint16_t)height;
+                entry->is_color = true;
+                entry->bitmap = (uint8_t *)color_copy;
+                ++g_glyph_cache_count;
+                return entry;
+            }
+        }
         if (glyph->bitmap.pixel_mode == FT_PIXEL_MODE_GRAY && glyph->bitmap.rows > 0 &&
             glyph->bitmap.width > 0) {
             int width = (int)glyph->bitmap.width + extra;

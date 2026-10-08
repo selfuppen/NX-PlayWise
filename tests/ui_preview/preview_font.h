@@ -28,6 +28,7 @@ typedef struct {
 #define FT_LOAD_DEFAULT 0
 #define FT_LOAD_RENDER 1
 #define FT_PIXEL_MODE_GRAY 2
+#define FT_PIXEL_MODE_BGRA 7
 static inline int FT_Init_FreeType(FT_Library *lib) { *lib = (void *)1; return 0; }
 static inline int FT_New_Memory_Face(FT_Library lib, const FT_Byte *data, FT_Long len, long index, FT_Face *out)
 {

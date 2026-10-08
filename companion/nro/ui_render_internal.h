@@ -101,8 +101,12 @@ typedef struct {
     FT_Face face;
     FT_Face traditional_face;
     FT_Face standard_face;
+    FT_Face emoji_face;
+    uint8_t *emoji_buffer;
+    size_t emoji_buffer_size;
     bool framebuffer_ready;
     bool font_ready;
+    bool emoji_ready;
     bool pl_ready;
 } UiRuntime;
 

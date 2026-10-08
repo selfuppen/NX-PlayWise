@@ -903,6 +903,8 @@ namespace tsl {
                 if (stbtt_FindGlyphIndex(secondary, character)) return secondary;
                 if (this->m_hasLocalFont && stbtt_FindGlyphIndex(&this->m_localFont, character))
                     return &this->m_localFont;
+                if (this->m_hasEmojiFont && stbtt_FindGlyphIndex(&this->m_emojiFont, character))
+                    return &this->m_emojiFont;
                 return &this->m_stdFont;
             }
             Renderer() {}
@@ -940,9 +942,50 @@ namespace tsl {
 
             std::stack<ScissoringConfig> m_scissoringStack;
 
-            stbtt_fontinfo m_stdFont, m_localFont, m_extFont, m_simplifiedFont, m_traditionalFont;
+            stbtt_fontinfo m_stdFont, m_localFont, m_extFont, m_simplifiedFont, m_traditionalFont, m_emojiFont;
+            std::vector<u8> m_emojiFontData;
             bool m_hasLocalFont = false;
+            bool m_hasEmojiFont = false;
             bool m_preferTraditionalChinese = false;
+
+            Result loadEmojiFont(const u8 *data, size_t size) {
+                if (!data || size == 0) return -1;
+                this->m_emojiFontData.assign(data, data + size);
+                if (!stbtt_InitFont(&this->m_emojiFont, this->m_emojiFontData.data(), stbtt_GetFontOffsetForIndex(this->m_emojiFontData.data(), 0))) {
+                    this->m_emojiFontData.clear();
+                    this->m_hasEmojiFont = false;
+                    return -1;
+                }
+                this->m_hasEmojiFont = true;
+                return 0;
+            }
+
+            Result loadEmojiFontFile(const char *path) {
+                if (!path) return -1;
+                FILE *f = std::fopen(path, "rb");
+                if (!f) return -1;
+                std::fseek(f, 0, SEEK_END);
+                long sz = std::ftell(f);
+                std::fseek(f, 0, SEEK_SET);
+                if (sz <= 0 || sz >= 16 * 1024 * 1024) {
+                    std::fclose(f);
+                    return -1;
+                }
+                this->m_emojiFontData.resize(static_cast<size_t>(sz));
+                size_t read_bytes = std::fread(this->m_emojiFontData.data(), 1, this->m_emojiFontData.size(), f);
+                std::fclose(f);
+                if (read_bytes != this->m_emojiFontData.size()) {
+                    this->m_emojiFontData.clear();
+                    return -1;
+                }
+                if (!stbtt_InitFont(&this->m_emojiFont, this->m_emojiFontData.data(), stbtt_GetFontOffsetForIndex(this->m_emojiFontData.data(), 0))) {
+                    this->m_emojiFontData.clear();
+                    this->m_hasEmojiFont = false;
+                    return -1;
+                }
+                this->m_hasEmojiFont = true;
+                return 0;
+            }
 
             static inline float s_opacity = 1.0F;
 
@@ -1149,6 +1192,19 @@ namespace tsl {
 
                 fontBuffer = reinterpret_cast<u8*>(extFontData.address);
                 stbtt_InitFont(&this->m_extFont, fontBuffer, stbtt_GetFontOffsetForIndex(fontBuffer, 0));
+
+                // Optional custom / monochrome emoji font on SD card
+                const char *emojiPaths[] = {
+                    "sdmc:/switch/playwise/fonts/emoji.ttf",
+                    "sdmc:/switch/playwise/emoji.ttf",
+                    "sdmc:/switch/playwise/fonts/NotoEmoji-Regular.ttf",
+                    "sdmc:/switch/.overlays/fonts/emoji.ttf"
+                };
+                for (const char *path : emojiPaths) {
+                    if (this->loadEmojiFontFile(path) == 0) {
+                        break;
+                    }
+                }
 
                 return 0;
             }
