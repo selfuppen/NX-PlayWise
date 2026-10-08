@@ -1001,23 +1001,44 @@ static void draw_forecast_day_details(uint32_t *pixels, uint32_t stride, const P
     int bottom_y = top_y + 258;
 
     /* 左下栏：就寝预测 */
-    UiRect bedtime = {x_left, bottom_y, col_w, 94};
+    UiRect bedtime = {x_left, bottom_y, col_w, 180};
     fill_round_rect(pixels, stride, bedtime, 10, UI_WARNING_SOFT);
     draw_rect_outline(pixels, stride, bedtime, 10, 1, UI_WARNING);
-    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 24, ptc_ui_text(PTC_UI_T_BEDTIME), 14, UI_WARNING);
-    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 52, decision.bedtime, 15, UI_INK);
-    draw_text(pixels, stride, bedtime.x + 14, bedtime.y + 78,
-              ptc_ui_text(PTC_UI_T_AFTER_BEDTIME_USAGE_WILL_BE_RESTRICTED_EVEN_2), 11, UI_MUTED);
+    draw_text(pixels, stride, bedtime.x + 16, bedtime.y + 26, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), 15, UI_WARNING);
+    draw_text(pixels, stride, bedtime.x + 16, bedtime.y + 62, decision.bedtime, 17, UI_INK);
+    draw_wrapped_text(pixels, stride, bedtime.x + 16, bedtime.y + 98,
+              ptc_ui_text(PTC_UI_T_AFTER_BEDTIME_USAGE_WILL_BE_RESTRICTED_EVEN_2), 12, bedtime.width - 32, 22, 3, UI_MUTED);
 
-    /* 右下栏：规则裁决链条说明 */
-    UiRect rule_info = {x_left + col_w + 24, bottom_y, col_w, 94};
+    /* 右下栏：健康管控与裁决逻辑说明 */
+    UiRect rule_info = {x_left + col_w + 24, bottom_y, col_w, 180};
     fill_round_rect(pixels, stride, rule_info, 10, UI_RAISED);
     draw_rect_outline(pixels, stride, rule_info, 10, 1, UI_BORDER);
-    draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 24, ptc_ui_text(PTC_UI_T_HOW_IS_THE_DAILY_QUOTA_DETERMINED), 14, UI_INK);
-    draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 52,
-              ptc_ui_text(PTC_UI_T_TODAY_S_ADJUSTMENT_SPECIFIED_DATE_QUOTA_HOLIDAYS), 12, UI_ACCENT);
-    draw_text(pixels, stride, rule_info.x + 14, rule_info.y + 78,
-              ptc_ui_text(PTC_UI_T_FROM_LEFT_TO_RIGHT_THE_FIRST_APPLICABLE), 11, UI_MUTED);
+    draw_text(pixels, stride, rule_info.x + 16, rule_info.y + 26, ptc_ui_text(PTC_UI_T_HEALTH_AND_DECISION_RULES), 15, UI_INK);
+
+    char eye_txt[128];
+    if (model->eye_care_policy.enabled) {
+        snprintf(eye_txt, sizeof(eye_txt), ptc_ui_text(PTC_UI_T_EYE_CARE_POLICY_FORMAT),
+                 (unsigned)model->eye_care_policy.play_session_minutes,
+                 (unsigned)model->eye_care_policy.rest_duration_minutes);
+    } else {
+        snprintf(eye_txt, sizeof(eye_txt), "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_POLICY_OFF));
+    }
+    draw_text(pixels, stride, rule_info.x + 16, rule_info.y + 56, eye_txt, 13, model->eye_care_policy.enabled ? UI_INK : UI_MUTED);
+
+    char dock_txt[128];
+    if (model->dock_policy.force_docked) {
+        snprintf(dock_txt, sizeof(dock_txt), "%s", ptc_ui_text(PTC_UI_T_DOCK_POLICY_FORCE_FORMAT));
+    } else if (model->dock_policy.undocked_limit_enabled) {
+        snprintf(dock_txt, sizeof(dock_txt), ptc_ui_text(PTC_UI_T_DOCK_POLICY_LIMIT_FORMAT),
+                 (unsigned)model->dock_policy.undocked_daily_minutes);
+    } else {
+        snprintf(dock_txt, sizeof(dock_txt), "%s", ptc_ui_text(PTC_UI_T_DOCK_POLICY_OFF));
+    }
+    draw_text(pixels, stride, rule_info.x + 16, rule_info.y + 82, dock_txt, 13, (model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled) ? UI_INK : UI_MUTED);
+
+    draw_text(pixels, stride, rule_info.x + 16, rule_info.y + 114, ptc_ui_text(PTC_UI_T_QUOTA_DECISION_PRIORITY), 12, UI_MUTED);
+    draw_text(pixels, stride, rule_info.x + 16, rule_info.y + 138, ptc_ui_text(PTC_UI_T_QUOTA_DECISION_CHAIN), 13, UI_ACCENT);
+    draw_text(pixels, stride, rule_info.x + 16, rule_info.y + 162, ptc_ui_text(PTC_UI_T_FROM_LEFT_TO_RIGHT_THE_FIRST_APPLICABLE), 11, UI_MUTED);
 
     home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_B_RETURN), false, true, false);
 }

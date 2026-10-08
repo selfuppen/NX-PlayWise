@@ -452,19 +452,46 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
                               sizeof(decision->final_reason), final_args, 1);
 
     if (is_today) {
-        PtcUiTextId bedtime_id;
         if (!model->bedtime_policy.enabled) {
-            bedtime_id = PTC_UI_T_BEDTIME_STATUS_OFF;
+            copy_ui_text(PTC_UI_T_BEDTIME_STATUS_OFF, decision->bedtime, sizeof(decision->bedtime));
         } else if (model->bedtime_active && model->bedtime_skipped) {
-            bedtime_id = PTC_UI_T_BEDTIME_STATUS_SKIPPED;
+            copy_ui_text(PTC_UI_T_BEDTIME_STATUS_SKIPPED, decision->bedtime, sizeof(decision->bedtime));
         } else if (model->bedtime_active) {
-            bedtime_id = PTC_UI_T_BEDTIME_STATUS_ACTIVE;
+            char time_text[64];
+            if (model->bedtime_end_minute < model->bedtime_start_minute) {
+                snprintf(time_text, sizeof(time_text), ptc_ui_text(PTC_UI_T_02U_02U_NEXT_DAY_02U_02U),
+                    (unsigned int)(model->bedtime_start_minute / 60),
+                    (unsigned int)(model->bedtime_start_minute % 60),
+                    (unsigned int)(model->bedtime_end_minute / 60),
+                    (unsigned int)(model->bedtime_end_minute % 60));
+            } else {
+                snprintf(time_text, sizeof(time_text), "%02u:%02u ~ %02u:%02u",
+                    (unsigned int)(model->bedtime_start_minute / 60),
+                    (unsigned int)(model->bedtime_start_minute % 60),
+                    (unsigned int)(model->bedtime_end_minute / 60),
+                    (unsigned int)(model->bedtime_end_minute % 60));
+            }
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "%s (%s)",
+                ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_2), time_text);
         } else if (model->bedtime_next_available) {
-            bedtime_id = PTC_UI_T_BEDTIME_STATUS_WAITING;
+            char time_text[64];
+            if (model->bedtime_next_end_minute < model->bedtime_next_start_minute) {
+                snprintf(time_text, sizeof(time_text), ptc_ui_text(PTC_UI_T_02U_02U_NEXT_DAY_02U_02U),
+                    (unsigned int)(model->bedtime_next_start_minute / 60),
+                    (unsigned int)(model->bedtime_next_start_minute % 60),
+                    (unsigned int)(model->bedtime_next_end_minute / 60),
+                    (unsigned int)(model->bedtime_next_end_minute % 60));
+            } else {
+                snprintf(time_text, sizeof(time_text), "%02u:%02u ~ %02u:%02u",
+                    (unsigned int)(model->bedtime_next_start_minute / 60),
+                    (unsigned int)(model->bedtime_next_start_minute % 60),
+                    (unsigned int)(model->bedtime_next_end_minute / 60),
+                    (unsigned int)(model->bedtime_next_end_minute % 60));
+            }
+            snprintf(decision->bedtime, sizeof(decision->bedtime), "%s", time_text);
         } else {
-            bedtime_id = PTC_UI_T_BEDTIME_STATUS_NO_WINDOW;
+            copy_ui_text(PTC_UI_T_BEDTIME_STATUS_NO_WINDOW, decision->bedtime, sizeof(decision->bedtime));
         }
-        copy_ui_text(bedtime_id, decision->bedtime, sizeof(decision->bedtime));
         if (model->daily_buffer_minutes == 0) {
             copy_ui_text(PTC_UI_T_AUTONOMY_STATUS_OFF, decision->autonomy, sizeof(decision->autonomy));
         } else if (model->daily_buffer_claimed) {
@@ -485,10 +512,20 @@ void ptc_ui_build_day_decision(const PtcUiModel *model, PtcUiPlanKind kind, uint
                 ? PTC_UI_T_BEDTIME_SOURCE_SPECIAL : bt.source == PTC_BEDTIME_SOURCE_STATUTORY_HOLIDAY
                 ? PTC_UI_T_BEDTIME_SOURCE_HOLIDAY : bt.source == PTC_BEDTIME_SOURCE_MAKEUP_WORKDAY
                 ? PTC_UI_T_BEDTIME_SOURCE_WORKDAY : PTC_UI_T_BEDTIME_SOURCE_WEEKLY;
-            char time_text[8];
-            snprintf(time_text, sizeof(time_text), "%02u:%02u",
-                (unsigned int)(bt.window.start_minute / 60),
-                (unsigned int)(bt.window.start_minute % 60));
+            char time_text[64];
+            if (bt.window.end_minute < bt.window.start_minute) {
+                snprintf(time_text, sizeof(time_text), ptc_ui_text(PTC_UI_T_02U_02U_NEXT_DAY_02U_02U),
+                    (unsigned int)(bt.window.start_minute / 60),
+                    (unsigned int)(bt.window.start_minute % 60),
+                    (unsigned int)(bt.window.end_minute / 60),
+                    (unsigned int)(bt.window.end_minute % 60));
+            } else {
+                snprintf(time_text, sizeof(time_text), "%02u:%02u ~ %02u:%02u",
+                    (unsigned int)(bt.window.start_minute / 60),
+                    (unsigned int)(bt.window.start_minute % 60),
+                    (unsigned int)(bt.window.end_minute / 60),
+                    (unsigned int)(bt.window.end_minute % 60));
+            }
             PtcUiTextArg args[] = {
                 PTC_UI_TEXT_STRING("time", time_text),
                 PTC_UI_TEXT_STRING("source", ptc_ui_text(source_id))
