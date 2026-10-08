@@ -62,12 +62,14 @@ def create_package(
     sysmodule_exefs: Path | None,
     toolbox: Path | None,
     overlay: Path | None = None,
+    emoji_font: Path | None = None,
 ) -> None:
     if out.exists():
         shutil.rmtree(out)
     app = out / APP_DIR
     for directory in [
         out / DEFAULTS_DIR,
+        app / "fonts",
         app / "inbox" / "pending",
         app / "inbox" / "processing",
         app / "inbox" / "done",
@@ -208,6 +210,9 @@ def create_package(
     if overlay is not None:
         copy_file(overlay, out / "switch" / ".overlays" / overlay.name)
 
+    if emoji_font is not None:
+        copy_file(emoji_font, app / "fonts" / "emoji.ttf")
+
     if sysmodule_exefs is not None:
         copy_file(sysmodule_exefs, out / ATMOSPHERE_CONTENT_DIR / "exefs.nsp")
 
@@ -249,6 +254,7 @@ def main() -> int:
     parser.add_argument("--sysmodule-exefs", type=Path, help="Optional sysmodule exefs.nsp copied under atmosphere/contents.")
     parser.add_argument("--overlay", type=Path, help="Optional Tesla overlay copied under switch/.overlays.")
     parser.add_argument("--toolbox", type=Path, help="Optional Atmosphere toolbox.json copied beside exefs.nsp.")
+    parser.add_argument("--emoji-font", type=Path, help="Optional emoji font copied under switch/playwise/fonts/emoji.ttf.")
     parser.add_argument("--boot2", action="store_true", help="Include boot2.flag; requires --sysmodule-exefs.")
     args = parser.parse_args()
 
@@ -258,6 +264,7 @@ def main() -> int:
     args.sysmodule_exefs = require_file(parser, "--sysmodule-exefs", args.sysmodule_exefs)
     args.overlay = require_file(parser, "--overlay", args.overlay)
     args.toolbox = require_file(parser, "--toolbox", args.toolbox)
+    args.emoji_font = require_file(parser, "--emoji-font", args.emoji_font)
     args.manifest = require_file(parser, "--manifest", args.manifest)
     if args.boot2 and args.sysmodule_exefs is None:
         parser.error("--boot2 requires --sysmodule-exefs so the package cannot enable an empty boot2 entry")
@@ -273,6 +280,7 @@ def main() -> int:
         sysmodule_exefs=args.sysmodule_exefs,
         overlay=args.overlay,
         toolbox=args.toolbox,
+        emoji_font=args.emoji_font,
     )
     if args.zip_path is not None:
         write_zip(out, Path(args.zip_path))

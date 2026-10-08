@@ -167,7 +167,7 @@ sysmodule-nsp: manifest
 	$(STAGE_TIMER) playwise sysmodule -- sh -c '$(MAKE) -C sysmodule && mkdir -p build/switch && cp sysmodule/pctc-sysmodule.nsp build/switch/exefs.nsp && $(DEVKITA64)/bin/aarch64-none-elf-objcopy -O binary sysmodule/pctc-sysmodule.elf build/switch/pctc-sysmodule.bin'
 
 package-playwise: sysmodule-nsp companion-nro companion-overlay
-	$(STAGE_TIMER) playwise package-zip -- python3 tools/package_sdmc.py --out build/packages/playwise --zip build/packages/playwise-$(PLAYWISE_VERSION).zip --manifest build/generated/release-manifest.json --sysmodule-exefs build/switch/exefs.nsp --nro build/switch/pctc.nro --overlay build/switch/playwise.ovl --boot2
+	$(STAGE_TIMER) playwise package-zip -- python3 tools/package_sdmc.py --out build/packages/playwise --zip build/packages/playwise-$(PLAYWISE_VERSION).zip --manifest build/generated/release-manifest.json --sysmodule-exefs build/switch/exefs.nsp --nro build/switch/pctc.nro --overlay build/switch/playwise.ovl --emoji-font third_party/fonts/noto-emoji/NotoEmoji-Regular.ttf --boot2
 
 package-complete: package-playwise
 	$(STAGE_TIMER) playwise-complete offline-html -- python3 tools/build_ptc_standalone.py --check

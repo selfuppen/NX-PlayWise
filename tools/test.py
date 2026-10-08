@@ -120,10 +120,12 @@ def verify_playwise_package() -> None:
         nro = root / "pctc.nro"
         overlay = root / "playwise.ovl"
         exefs = root / "exefs.nsp"
+        font = root / "emoji.ttf"
         manifest = root / "release-manifest.json"
         nro.write_bytes(b"nro")
         overlay.write_bytes(b"ovl")
         exefs.write_bytes(b"nsp")
+        font.write_bytes(b"emoji_font")
         manifest.write_text(json.dumps({"schema_version": 1, "playwise_version": PLAYWISE_VERSION, "commit": "a" * 40,
             "release_id": f"playwise-{PLAYWISE_VERSION}+aaaaaaaaaaaa", "profile": "release", "protocol_version": 1,
             "recovery_version": 1, "pctl_layout_version": 1, "build": {}, "verified_environment": {}}), encoding="utf-8")
@@ -144,10 +146,13 @@ def verify_playwise_package() -> None:
                 str(exefs),
                 "--manifest",
                 str(manifest),
+                "--emoji-font",
+                str(font),
                 "--boot2",
             ]
         )
         package_app = out / APP_DIR
+        require((package_app / "fonts" / "emoji.ttf").read_bytes() == b"emoji_font", "playwise package missing emoji font")
         for relative in [
             "defaults/config.json",
             "defaults/auth.json",
@@ -210,6 +215,7 @@ def verify_playwise_package() -> None:
         )), "playwise zip must not overwrite live runtime data")
         require(not any(name.startswith("playwise-install/") for name in names), "playwise zip must not contain installer-only files")
         require("switch/.overlays/playwise.ovl" in names, "playwise package must contain the overlay")
+        require("switch/playwise/fonts/emoji.ttf" in names, "playwise zip missing emoji font")
 
         installed = root / "installed"
         (installed / APP_DIR).mkdir(parents=True)
@@ -244,6 +250,8 @@ def verify_playwise_package() -> None:
                 "direct overlay must replace build.json")
         require(read_json(installed / APP_DIR / "package-artifacts.json") == artifacts,
                 "direct overlay must replace package-artifacts.json")
+        require((installed / APP_DIR / "fonts" / "emoji.ttf").read_bytes() == b"emoji_font",
+                "direct overlay must update emoji font")
         require((installed / CONTENT_DIR / "exefs.nsp").read_bytes() == b"nsp",
                 "direct overlay must replace the sysmodule binary")
         require((installed / "switch" / ".overlays" / "playwise.ovl").read_bytes() == b"ovl",
