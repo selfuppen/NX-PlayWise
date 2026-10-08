@@ -488,6 +488,11 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
+    if (model->parent_page == PTC_UI_PARENT_TODAY) {
+        for (i = 8; i <= 10; ++i)
+            if (ptc_ui_rect_contains(ptc_ui_today_status_rect(i), x, y))
+                return make_hit(PTC_UI_HIT_PARENT_CARD, i);
+    }
     if (!(model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page != PTC_UI_PLAN_PAGE_ROOT)) {
         for (i = 0; i < PTC_UI_PARENT_PAGE_COUNT; ++i) {
             if (ptc_ui_rect_contains(ptc_ui_parent_tab_rect(i), x, y)) {

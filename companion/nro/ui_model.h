@@ -324,6 +324,8 @@ typedef struct {
     PtcUiView view;
     PtcUiParentPage parent_page;
     PtcUiPlanPage plan_page;
+    bool today_settings_origin;
+    int today_settings_selection;
     PtcUiBedtimeSection bedtime_section;
     int selected_index;
     bool waiting;

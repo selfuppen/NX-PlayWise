@@ -3774,6 +3774,19 @@ static void test_dock_ui(void)
         check_true(strstr(text, "10") && strstr(text, "20"), "three language dock use projection");
         ptc_ui_format_dock_usage(&model, 1201, text, sizeof(text));
         check_true(strcmp(text, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM)) == 0, "stale dock usage hidden");
+        model.draft_dock_policy.force_docked = false;
+        model.draft_dock_policy.undocked_daily_minutes = 1410;
+        ptc_ui_format_dock_preview(&model, 1000, text, sizeof(text));
+        check_true(strstr(text, "1400") != NULL, "draft preview subtracts recorded non-TV usage");
+        model.draft_dock_policy.undocked_daily_minutes = 5;
+        ptc_ui_format_dock_preview(&model, 1000, text, sizeof(text));
+        check_true(strstr(text, "0") != NULL, "exhausted draft preview clamps to zero");
+        model.undocked_usage_available = false;
+        ptc_ui_format_dock_preview(&model, 1000, text, sizeof(text));
+        check_true(strcmp(text, ptc_ui_text(PTC_UI_T_DOCK_PREVIEW_UNKNOWN)) == 0, "unknown usage never projects a false zero");
+        model.undocked_usage_available = true;
+        ptc_ui_format_dock_preview(&model, 1201, text, sizeof(text));
+        check_true(strcmp(text, ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM)) == 0, "stale draft preview is unknown");
     }
     ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
     model.dock_dirty = true;
@@ -3788,6 +3801,15 @@ static void test_dock_ui(void)
 
 static void test_config_backup_layout(void)
 {
+    for (int i = 0; i < 11; ++i) {
+        int group = i < 4 ? 0 : i < 9 ? 1 : 2;
+        PtcUiRect section = ptc_ui_config_backup_group_rect(group);
+        PtcUiRect field = ptc_ui_config_backup_field_rect(i);
+        check_true(field.y >= section.y + 38 && field.y + field.h <= section.y + section.h,
+            "backup checkbox stays below its section heading and inside card");
+        check_true(!rects_overlap(section, ptc_ui_config_backup_field_rect(14)),
+            "restore action is separate from selection sections");
+    }
     PtcUiModel model = {0}; model.view = PTC_UI_PARENT; model.overlay = PTC_UI_OVERLAY_CONFIG_BACKUP;
     model.config_backup_ready = model.config_today_available = model.config_pin_available = true;
     model.config_backup_tab = 1;
@@ -3818,8 +3840,55 @@ static void test_config_backup_layout(void)
     check_hit(hit_center(&model, ptc_ui_settings_card_rect(7)), PTC_UI_HIT_PARENT_CARD, 7, "eighth settings card has matching hit area");
 }
 
+static void test_today_settings_links(void)
+{
+    PtcUiModel model;
+    memset(&model, 0, sizeof(model));
+    model.view = PTC_UI_PARENT;
+    model.parent_page = PTC_UI_PARENT_TODAY;
+    const PtcUiPlanPage pages[] = {PTC_UI_PLAN_PAGE_EYE_CARE, PTC_UI_PLAN_PAGE_BEDTIME, PTC_UI_PLAN_PAGE_DOCK};
+    for (int i = 8; i <= 10; ++i) {
+        PtcUiRect card = ptc_ui_today_status_rect(i);
+        check_hit(hit_center(&model, card), PTC_UI_HIT_PARENT_CARD, i, "today status touch opens the matching settings");
+        check_int(ptc_ui_today_operation(i), PTC_UI_OPERATION_NONE, "status shortcut never maps to control write");
+        model.selected_index = i;
+        check_true(ptc_ui_open_today_settings(&model, i), "today status opens settings");
+        check_int(model.plan_page, pages[i - 8], "status routes to corresponding policy");
+        check_true(ptc_ui_return_today_settings(&model), "settings back restores today origin");
+        check_int(model.selected_index, i, "back restores original status focus");
+        check_true(!ptc_ui_return_today_settings(&model), "return context consumed once");
+    }
+    model.selected_index = 0;
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 8, "left from quota enters status column");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 9, "down traverses bedtime status");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 10, "down traverses TV status");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_true(model.parent_footer_focused, "status column reaches footer");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 10, "footer returns to last status");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 5, "right returns to adjacent operations");
+    model.dock_dirty = true;
+    model.draft_dock_policy.undocked_daily_minutes = 1410;
+    check_true(ptc_ui_open_today_settings(&model, 10), "open dirty TV settings");
+    check_int(model.draft_dock_policy.undocked_daily_minutes, 1410, "jump preserves unsaved draft");
+    ptc_ui_return_today_settings(&model);
+    model.waiting = true;
+    check_true(!ptc_ui_open_today_settings(&model, 8), "waiting prevents navigation");
+    model.waiting = false;
+    model.parent_support_only = true;
+    check_true(!ptc_ui_open_today_settings(&model, 8), "support-only session cannot open policy shortcut");
+    model.parent_support_only = false;
+    model.view = PTC_UI_CHILD;
+    check_true(!ptc_ui_open_today_settings(&model, 8), "child cannot open parent settings shortcut");
+}
+
 int main(void)
 {
+    test_today_settings_links();
     test_config_backup_layout();
     test_dock_ui();
     test_calendar_nearest_page();

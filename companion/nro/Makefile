@@ -118,6 +118,7 @@ ifeq ($(EDEN_BUILD),1)
 OBJS := $(filter-out $(BUILD)/switch_ipc_client.o $(BUILD)/hot_reload.o $(BUILD)/hot_reload_guard.o,$(OBJS))
 OBJS += \
 	$(BUILD)/eden_runtime.o \
+	$(BUILD)/eden_timer.o \
 	$(BUILD)/operation_mode_file.o \
 	$(BUILD)/pctl_stub.o \
 	$(BUILD)/sysmodule_storage.o \
@@ -375,6 +376,9 @@ $(BUILD)/calendar_store.o: ../../platform/calendar_store.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/eden_runtime.o: eden_runtime.c eden_runtime.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/eden_timer.o: eden_timer.c eden_timer.h ../../sysmodule/sysmodule_internal.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/pctl_stub.o: ../../platform/host/pctl_stub.c ../../platform/host/pctl_stub.h | $(BUILD)

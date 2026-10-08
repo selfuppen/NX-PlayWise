@@ -67,14 +67,12 @@ static void draw_config_backup(uint32_t *pixels, uint32_t stride, const PtcUiMod
         /* Tab 1: Restore Backup */
         draw_text(pixels, stride, 54, 150, model->config_metadata[0] ? model->config_metadata : ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_SELECTION), 15, UI_ACCENT);
 
-        /* 分类 1：基础额度与调整 */
-        draw_text(pixels, stride, 54, 180, ptc_ui_text(PTC_UI_T_QUOTA_RULES), 15, UI_INK);
-
-        /* 分类 2：管控策略与日历 */
-        draw_text(pixels, stride, 54, 300, ptc_ui_text(PTC_UI_T_SYSTEM_CONTROL), 15, UI_INK);
-
-        /* 分类 3：账户与安全凭据 */
-        draw_text(pixels, stride, 54, 468, ptc_ui_text(PTC_UI_T_SAFETY_MANAGEMENT), 15, UI_INK);
+        const PtcUiTextId titles[] = {PTC_UI_T_QUOTA_RULES, PTC_UI_T_CONFIG_SECTION_POLICIES, PTC_UI_T_CONFIG_SECTION_SECURITY};
+        for (int section = 0; section < 3; ++section) {
+            UiRect card = to_uirect(ptc_ui_config_backup_group_rect(section));
+            draw_plan_card(pixels, stride, card, false);
+            draw_text(pixels, stride, 70, card.y + 26, ptc_ui_text(titles[section]), 16, UI_ACCENT);
+        }
 
         for (int i = 0; i < 16; ++i) {
             if (i == 13) continue;
@@ -87,7 +85,7 @@ static void draw_config_backup(uint32_t *pixels, uint32_t stride, const PtcUiMod
                     i == 14 ? PTC_UI_T_CONFIG_BACKUP_IMPORT : PTC_UI_T_B_BACK);
             draw_plan_card(pixels, stride, rect, model->overlay_selection == i);
             if (i < 11) {
-                UiRect box = {rect.x + 12, rect.y + 11, 20, 20};
+                UiRect box = {rect.x + 12, rect.y + 9, 20, 20};
                 fill_round_rect(pixels, stride, box, 4, (model->config_groups & (1u << i)) ? UI_ACCENT : UI_RAISED);
                 draw_rect_outline(pixels, stride, box, 4, 1, disabled ? UI_DISABLED : UI_ACCENT);
                 if (model->config_groups & (1u << i)) {
@@ -102,12 +100,18 @@ static void draw_config_backup(uint32_t *pixels, uint32_t stride, const PtcUiMod
                 draw_text_center(pixels, stride, rect, label, 17, disabled ? UI_DISABLED : UI_ACCENT);
             }
         }
-        UiRect info = {824, 144, 402, 498};
+        UiRect info = {824, 144, 402, 390};
         draw_plan_card(pixels, stride, info, false);
-        draw_wrapped_text(pixels, stride, 842, 174, ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NOTE), 16, 366, 26, 5, UI_WARNING);
-        draw_wrapped_text(pixels, stride, 842, 338, model->config_preview, 16, 366, 26, 8, UI_INK);
-        draw_text(pixels, stride, 842, 570, "backups/config-backup.json", 15, UI_MUTED);
-        draw_text(pixels, stride, 842, 610, ptc_ui_text(PTC_UI_T_Y_REFRESH), 16, UI_MUTED);
+        draw_text(pixels, stride, 842, 178, ptc_ui_text(PTC_UI_T_RESTORE_IMPACT), 19, UI_INK);
+        unsigned int count = 0;
+        for (int i = 0; i < 11; ++i) if (model->config_groups & (1u << i)) ++count;
+        char selected[128];
+        PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("count", count)};
+        (void)ptc_ui_text_format(PTC_UI_T_RESTORE_SELECTED_NAMED, selected, sizeof(selected), args, 1);
+        draw_text(pixels, stride, 842, 210, selected, 16, UI_ACCENT);
+        draw_wrapped_text(pixels, stride, 842, 246, ptc_ui_text(PTC_UI_T_CONFIG_BACKUP_NOTE), 14, 366, 21, 5, UI_WARNING);
+        draw_wrapped_text(pixels, stride, 842, 366, model->config_preview, 14, 366, 21, 7, UI_INK);
+        draw_text(pixels, stride, 842, 636, ptc_ui_text(PTC_UI_T_Y_REFRESH), 16, UI_MUTED);
     }
     char fitted[256]; fit_text(fitted, sizeof(fitted), model->message, 14, 910);
     draw_text(pixels, stride, 300, 692, fitted, 14, UI_MUTED);

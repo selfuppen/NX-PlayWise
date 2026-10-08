@@ -136,8 +136,15 @@ void dock_sample_usage(PtcSysmodule *sysmodule, const PtcRules *rules,
     if (state->last_enforced_mode == PTC_PCTL_TARGET_BLOCKED &&
         state->last_enforced_day_index == now.day_index) return;
     PtcDayRule base = ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-    if (!read_used_ns(sysmodule, ptc_weekday_from_day_index(now.day_index),
-            base.mode == PTC_RULE_MODE_UNLIMITED ? 1440u : base.minutes, &used)) {
+    bool read_ok = read_used_ns(sysmodule, ptc_weekday_from_day_index(now.day_index),
+        base.mode == PTC_RULE_MODE_UNLIMITED ? 1440u : base.minutes, &used);
+    /* Midnight may still expose the previous confirmed allowance until
+       Enforce installs today's target. Never accept an arbitrary mismatch. */
+    if (!read_ok && rollover && state->last_enforced_day_index != now.day_index &&
+        state->last_enforced_mode == PTC_PCTL_TARGET_LIMIT)
+        read_ok = read_used_ns(sysmodule, ptc_weekday_from_day_index(now.day_index),
+            state->last_enforced_minutes, &used);
+    if (!read_ok) {
         PtcPctlStatus status;
         /* A newly enabled unlimited day deliberately has no timer until the
            composed target installs the 1440-minute cap. All other failures

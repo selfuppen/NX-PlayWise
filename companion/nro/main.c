@@ -762,14 +762,18 @@ int main(int argc, char **argv)
                     ptc_audio_play(PTC_SE_CANCEL);
                     ui.model.draft_eye_care_policy = ui.model.eye_care_policy;
                     ui.model.eye_care_dirty = false;
-                    ui.model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
-                    ui.model.selected_index = 4;
+                    if (!ptc_ui_return_today_settings(&ui.model)) {
+                        ui.model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+                        ui.model.selected_index = 4;
+                    }
                 } else if (down & (HidNpadButton_L | HidNpadButton_R)) {
                     ptc_audio_play(PTC_SE_CANCEL);
                     ui.model.draft_eye_care_policy = ui.model.eye_care_policy;
                     ui.model.eye_care_dirty = false;
-                    ui.model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
-                    ui.model.selected_index = 4;
+                    if (!ptc_ui_return_today_settings(&ui.model)) {
+                        ui.model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+                        ui.model.selected_index = 4;
+                    }
                 } else if (down & HidNpadButton_Up) {
                     ptc_audio_play(PTC_SE_FOCUS);
                     ui.model.eye_care_field_focus = (ui.model.eye_care_field_focus + focus_count - 1) % focus_count;

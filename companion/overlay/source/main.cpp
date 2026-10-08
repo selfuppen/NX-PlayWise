@@ -838,8 +838,7 @@ public:
                 to_overlay_buttons(keysDown), to_overlay_buttons(keysHeld), elapsed_ms);
             if (touch_pressed) {
                 for (int index = 0; index < PTC_OVERLAY_PARENT_ACTION_COUNT; ++index) {
-                    if (tx >= cx + 12 && tx < cx + PTC_OVERLAY_CONTENT_W - 12 &&
-                        ty >= cy + 125 + index * 40 && ty < cy + 163 + index * 40) {
+                    if (ptc_overlay_rect_contains(ptc_overlay_parent_action_rect(cx, cy, index), tx, ty)) {
                         const bool was_selected = parent_action_ == index;
                         parent_action_ = index;
                         ptc_overlay_hold_reset(&confirm_hold_);
@@ -849,20 +848,19 @@ public:
                         break;
                     }
                 }
-                if (ty >= cy + 500 && ty < cy + 550) keysDown |= HidNpadButton_B;
+                if (ty >= cy + 526 && ty < cy + 557) keysDown |= HidNpadButton_B;
             }
             if (parent_action_ == PTC_OVERLAY_PARENT_ADD_MINUTES && (direction & PTC_OVERLAY_BUTTON_LEFT))
                 daily_add_minutes_ = daily_add_minutes_ <= 5 ? 5 : daily_add_minutes_ - 5;
             if (parent_action_ == PTC_OVERLAY_PARENT_ADD_MINUTES && (direction & PTC_OVERLAY_BUTTON_RIGHT))
                 daily_add_minutes_ = daily_add_minutes_ >= 120 ? 120 : daily_add_minutes_ + 5;
             if (direction & PTC_OVERLAY_BUTTON_UP) {
-                parent_action_ = (parent_action_ + PTC_OVERLAY_PARENT_ACTION_COUNT - 1) %
-                    PTC_OVERLAY_PARENT_ACTION_COUNT;
+                parent_action_ = ptc_overlay_parent_action_move(parent_action_, -1);
                 ptc_overlay_hold_reset(&confirm_hold_);
                 action_changed = true;
             }
             if (direction & PTC_OVERLAY_BUTTON_DOWN) {
-                parent_action_ = (parent_action_ + 1) % PTC_OVERLAY_PARENT_ACTION_COUNT;
+                parent_action_ = ptc_overlay_parent_action_move(parent_action_, 1);
                 ptc_overlay_hold_reset(&confirm_hold_);
                 action_changed = true;
             }

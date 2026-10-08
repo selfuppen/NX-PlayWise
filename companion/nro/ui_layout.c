@@ -1508,17 +1508,32 @@ PtcUiRect ptc_ui_dock_field_rect(int index)
     return (PtcUiRect){54 + (index - 3) * 380, 550, 364, 58};
 }
 
+PtcUiRect ptc_ui_today_status_rect(int index)
+{
+    PtcUiRect box = ptc_ui_home_summary_rect(true);
+    if (index < 8 || index > 10) return (PtcUiRect){0, 0, 0, 0};
+    return (PtcUiRect){box.x + 22, box.y + 212 + (index - 8) * 58, box.w - 44, 52};
+}
+
 PtcUiRect ptc_ui_config_backup_field_rect(int index)
 {
     if (index == 16) return (PtcUiRect){54, 96, 180, 38};
     if (index == 17) return (PtcUiRect){244, 96, 180, 38};
-    if (index >= 0 && index < 4) return (PtcUiRect){54 + (index % 2) * 385, 196 + (index / 2) * 48, 365, 42};
-    if (index >= 4 && index < 9) return (PtcUiRect){54 + ((index - 4) % 2) * 385, 316 + ((index - 4) / 2) * 48, 365, 42};
-    if (index == 9 || index == 10) return (PtcUiRect){54 + (index - 9) * 385, 484, 365, 42};
-    if (index == 11 || index == 12) return (PtcUiRect){54 + (index - 11) * 190, 536, 175, 40};
+    if (index >= 0 && index < 4) return (PtcUiRect){70 + (index % 2) * 364, 210 + (index / 2) * 44, 348, 38};
+    if (index >= 4 && index < 9) return (PtcUiRect){70 + ((index - 4) % 2) * 364, 354 + ((index - 4) / 2) * 44, 348, 38};
+    if (index == 9 || index == 10) return (PtcUiRect){70 + (index - 9) * 364, 542, 348, 38};
+    if (index == 11 || index == 12) return (PtcUiRect){54 + (index - 11) * 190, 604, 175, 38};
     if (index == 13) return (PtcUiRect){54, 560, 744, 54};
-    if (index == 14) return (PtcUiRect){54, 588, 750, 48};
+    if (index == 14) return (PtcUiRect){824, 550, 402, 58};
     if (index == 15) return (PtcUiRect){54, 646, 160, 40};
+    return (PtcUiRect){0, 0, 0, 0};
+}
+
+PtcUiRect ptc_ui_config_backup_group_rect(int group)
+{
+    if (group == 0) return (PtcUiRect){54, 172, 744, 132};
+    if (group == 1) return (PtcUiRect){54, 316, 744, 176};
+    if (group == 2) return (PtcUiRect){54, 504, 744, 88};
     return (PtcUiRect){0, 0, 0, 0};
 }
 

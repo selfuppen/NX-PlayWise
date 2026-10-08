@@ -1,4 +1,5 @@
 #include "eden_runtime.h"
+#include "eden_timer.h"
 
 #ifdef PLAYWISE_EDEN
 
@@ -202,19 +203,14 @@ bool ptc_eden_runtime_init(PtcEdenRuntime *runtime, PtcStorage *storage)
     if (!runtime || !storage || !seed_files(storage)) return false;
     memset(runtime, 0, sizeof(*runtime));
     ptc_pctl_stub_init(&runtime->pctl);
-    /* Model allowance consumption so 额度已耗（估算）/还可玩 are not trivially zero and the
-       expiry path can be exercised without waiting a real day. */
-    runtime->pctl.model_elapsed_time = true;
-    runtime->pctl.played_minutes_today = 30;
-    runtime->pctl.status.played_minutes_available = true;
-    runtime->pctl.status.played_minutes = 30;
-    runtime->pctl.status.play_timer_enabled = true;
     runtime->time_provider.vtable = &EDEN_TIME_VTABLE;
     runtime->time_provider.ctx = runtime;
     runtime->usage_day_index = eden_now(&runtime->time_provider).day_index;
     runtime->last_usage_tick = armGetSystemTick();
     ptc_sysmodule_init(&runtime->sysmodule, PLAYWISE_EDEN_SD_ROOT, storage,
         ptc_pctl_stub_as_pctl(&runtime->pctl), &runtime->time_provider);
+    if (!ptc_eden_restore_timer(&runtime->sysmodule, &runtime->pctl,
+            eden_now(&runtime->time_provider), &runtime->usage_carry_ns)) return false;
     snprintf(boot_id, sizeof(boot_id), "eden-%08llx",
         (unsigned long long)(randomGet64() & 0xffffffffULL));
     ptc_sysmodule_set_boot_id(&runtime->sysmodule, boot_id);

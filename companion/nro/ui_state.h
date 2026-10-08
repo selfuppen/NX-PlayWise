@@ -98,6 +98,8 @@ void ptc_ui_format_holiday_save_result(const PtcUiModel *model, char *message, s
 int ptc_ui_weekday_for_display_slot(int slot);
 void ptc_ui_change_parent_page(PtcUiModel *model, int direction);
 void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertical);
+bool ptc_ui_open_today_settings(PtcUiModel *model, int index);
+bool ptc_ui_return_today_settings(PtcUiModel *model);
 uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback);
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
@@ -190,6 +192,7 @@ const char *ptc_ui_safety_action_hint(const PtcUiModel *model, int index);
 
 bool ptc_ui_dock_dirty(const PtcUiModel *model);
 void ptc_ui_format_dock_usage(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
+void ptc_ui_format_dock_preview(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
 bool ptc_ui_dock_save_requires_hold(const PtcUiModel *model, int64_t now);
 
 #endif

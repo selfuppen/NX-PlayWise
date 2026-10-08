@@ -6,6 +6,7 @@
 #include "../../platform/switch/fs_storage.h"
 #include "../../companion/result_summary.h"
 #include "../../companion/overlay/bridge.h"
+#include "../../companion/nro/eden_timer.h"
 
 static int failures;
 static const char *SECRET = "control-safety-fixture-secret";
@@ -725,6 +726,74 @@ static void test_dock_daily_total_priority(void)
     }
 }
 
+static void test_dock_quota_preserves_tv_total(void)
+{
+    for (int today_override = 0; today_override < 2; ++today_override) {
+        for (unsigned quota = 0; quota <= 30; quota += 30) {
+            Fixture f;
+            PtcRules rules;
+            PtcRuntimeState state;
+            PtcOperationModeStatus mode = {PTC_OPERATION_MODE_UNDOCKED, true, true};
+            PtcOperationModeProvider provider = {test_operation_mode, &mode};
+            uint64_t carry = 0;
+            init_fixture(&f);
+            f.core.operation_mode_provider = &provider;
+            ptc_pctl_stub_reset_daily_usage(&f.pctl);
+            if (today_override) {
+                expect(load_rules(&f.core, &rules), "read TV total override rules");
+                for (unsigned i = 0; i < 7; ++i) rules.week[i].minutes = 60;
+                rules.today_override.present = true;
+                rules.today_override.day_index = f.clock.snapshot.day_index;
+                rules.today_override.rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 120};
+                expect(save_rules(&f.core, &rules), "save larger TV daily override");
+            }
+            (void)ptc_sysmodule_enforce_tick(&f.core);
+            enable_dock_fixture(&f, false, (uint16_t)quota);
+            f.core.dock_boot_sampled = true;
+            (void)ptc_sysmodule_enforce_tick(&f.core);
+            if (quota > 0) {
+                (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, quota * 60000000000ULL, &carry);
+                (void)ptc_sysmodule_enforce_tick(&f.core);
+            }
+            expect(f.pctl.status.blocked_today && load_state(&f.core, &state) && state.dock_enforced &&
+                state.undocked_used_ns == quota * 60000000000ULL,
+                "zero or exhausted handheld quota restricts handheld");
+            for (unsigned i = 0; i < 2; ++i) {
+                mode.mode = PTC_OPERATION_MODE_DOCKED;
+                (void)ptc_sysmodule_enforce_tick(&f.core);
+                expect(f.pctl.configured_minutes == 120 && f.pctl.status.remaining_minutes == 120 - quota &&
+                    !f.pctl.status.restricted_now && load_state(&f.core, &state) && !state.dock_enforced &&
+                    state.undocked_used_ns == quota * 60000000000ULL,
+                    "docking restores full daily target with only actual use deducted");
+                request(&f, "tv-total-available", "status", "{}");
+                expect(result_has(&f, "tv-total-available", "\"daily_allowance\":false") &&
+                    result_has(&f, "tv-total-available", "\"dock\":false"),
+                    "TV status does not inherit exhausted handheld restriction");
+                mode.mode = PTC_OPERATION_MODE_UNDOCKED;
+                (void)ptc_sysmodule_enforce_tick(&f.core);
+                expect(f.pctl.status.blocked_today && f.pctl.played_minutes_today == quota,
+                    "undocking restores handheld restriction without refunding daily use");
+            }
+            mode.mode = PTC_OPERATION_MODE_DOCKED;
+            (void)ptc_sysmodule_enforce_tick(&f.core);
+            (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, (119 - quota) * 60000000000ULL, &carry);
+            (void)ptc_sysmodule_enforce_tick(&f.core);
+            expect(f.pctl.status.remaining_minutes == 1 && !f.pctl.status.restricted_now &&
+                load_state(&f.core, &state) && state.undocked_used_ns == quota * 60000000000ULL,
+                "TV can use daily total beyond handheld quota without spending handheld time");
+            (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 60000000000ULL, &carry);
+            (void)ptc_sysmodule_enforce_tick(&f.core);
+            request(&f, "tv-total-exhausted", "status", "{}");
+            expect(f.pctl.configured_minutes == 120 && f.pctl.played_minutes_today == 120 &&
+                f.pctl.status.restricted_now && f.pctl.status.remaining_minutes == 0 &&
+                result_has(&f, "tv-total-exhausted", "\"daily_allowance\":true") &&
+                result_has(&f, "tv-total-exhausted", "\"dock\":false"),
+                "TV stops at daily total and reports only daily exhaustion");
+            free(f.mem);
+        }
+    }
+}
+
 static void confirm_dock_fixture(Fixture *f)
 {
     PtcRules rules;
@@ -906,12 +975,91 @@ static void test_dock_composition_and_migration(void)
     free(f.mem);
 }
 
+static void test_dock_midnight_allowance_change(void)
+{
+    for (int unreadable = 0; unreadable < 2; ++unreadable) {
+        Fixture f;
+        PtcRules rules;
+        PtcRuntimeState state;
+        PtcOperationModeStatus mode = {PTC_OPERATION_MODE_UNDOCKED, true, true};
+        PtcOperationModeProvider provider = {test_operation_mode, &mode};
+        uint64_t carry = 0;
+        init_fixture(&f);
+        f.core.operation_mode_provider = &provider;
+        enable_dock_fixture(&f, false, 1410);
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        expect(load_rules(&f.core, &rules), "midnight load rules");
+        rules.week[ptc_weekday_from_day_index(2381)].minutes = 60;
+        expect(save_rules(&f.core, &rules), "midnight different daily total");
+        f.clock.snapshot.day_index++;
+        f.clock.snapshot.unix_seconds += 86400;
+        f.clock.snapshot.minute_of_day = 10;
+        ptc_pctl_stub_reset_daily_usage(&f.pctl);
+        (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 10ULL * 60000000000ULL, &carry);
+        if (unreadable) f.pctl.read_error = PTC_ERR_PCTL_READ_FAILED;
+        (void)ptc_sysmodule_enforce_tick(&f.core);
+        expect(load_state(&f.core, &state), "midnight load state");
+        if (unreadable) {
+            expect(!state.dock_usage_known, "midnight read failure must not invent usage");
+        } else {
+            expect(state.dock_usage_known && state.undocked_used_ns == 10ULL * 60000000000ULL &&
+                !state.dock_enforced && f.pctl.configured_minutes == 60 &&
+                f.pctl.status.remaining_minutes == 50, "00:10 large handheld quota survives daily target change");
+            (void)ptc_sysmodule_enforce_tick(&f.core);
+            expect(load_state(&f.core, &state) && state.undocked_used_ns == 10ULL * 60000000000ULL,
+                "midnight rebaseline does not double count");
+        }
+        free(f.mem);
+    }
+}
+
+static void test_eden_timer_restart(void)
+{
+    Fixture f;
+    PtcRuntimeState state;
+    PtcOperationModeStatus mode = {PTC_OPERATION_MODE_UNDOCKED, true, true};
+    PtcOperationModeProvider provider = {test_operation_mode, &mode};
+    uint64_t carry = 0;
+    init_fixture(&f);
+    f.core.operation_mode_provider = &provider;
+    enable_dock_fixture(&f, false, 1410);
+    f.core.dock_boot_sampled = true;
+    (void)ptc_pctl_stub_advance_usage_ns(&f.pctl, 41ULL * 60000000000ULL + 20000000000ULL, &carry);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.dock_usage_known, "restart sampled baseline");
+    uint64_t used = state.undocked_used_ns;
+    ptc_pctl_stub_init(&f.pctl);
+    expect(ptc_eden_restore_timer(&f.core, &f.pctl, f.clock.snapshot, &carry) &&
+        f.pctl.played_minutes_today == 61 && carry == 20000000000ULL,
+        "Eden resumes sampled total and fractional minutes instead of fixed 30");
+    f.core.dock_boot_sampled = false;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.dock_usage_known && !state.dock_enforced &&
+        state.undocked_used_ns == used, "Eden restart retains handheld allowance");
+    f.mem->fail_read_path_contains = "state.json";
+    expect(!ptc_eden_restore_timer(&f.core, &f.pctl, f.clock.snapshot, &carry),
+        "Eden unreadable state rejects guessed restart");
+    f.mem->fail_read_path_contains = NULL;
+    f.clock.snapshot.day_index++;
+    f.clock.snapshot.minute_of_day = 10;
+    expect(ptc_eden_restore_timer(&f.core, &f.pctl, f.clock.snapshot, &carry) &&
+        f.pctl.played_minutes_today == 10 && carry == 0,
+        "Eden new-day seed cannot exceed minutes since midnight");
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.dock_usage_known && !state.dock_enforced,
+        "Eden 00:10 restart with 1410-minute quota permits play");
+    free(f.mem);
+}
+
 int ptc_test_control_safety(void)
 {
     failures = 0;
+    test_dock_midnight_allowance_change();
+    test_eden_timer_restart();
     test_persisted_eden_mode();
     test_dock_policy();
     test_dock_daily_total_priority();
+    test_dock_quota_preserves_tv_total();
     test_dock_accounting_failures();
     test_dock_composition_and_migration();
     test_ledger();

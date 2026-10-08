@@ -92,9 +92,11 @@ void apply_pending_navigation(UiState *ui)
     if (ui->pending_leave_parent && ui->model.parent_page == PTC_UI_PARENT_PLAN &&
         ui->model.plan_page != PTC_UI_PLAN_PAGE_ROOT) {
         PtcUiPlanPage previous = ui->model.plan_page;
-        ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+        if (!ptc_ui_return_today_settings(&ui->model)) {
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
             ui->model.selected_index = previous == PTC_UI_PLAN_PAGE_WEEKLY ? 2 :
-            (previous == PTC_UI_PLAN_PAGE_HOLIDAY ? 1 : 3);
+                (previous == PTC_UI_PLAN_PAGE_HOLIDAY ? 1 : 3);
+        }
         ui->model.parent_footer_focused = false;
         submit_status(ui);
     } else if (ui->pending_leave_parent) {
@@ -105,6 +107,7 @@ void apply_pending_navigation(UiState *ui)
             submit_status(ui);
         }
     } else if (ui->pending_parent_page >= 0) {
+        ui->model.today_settings_origin = false;
         ui->model.parent_page = (PtcUiParentPage)ui->pending_parent_page;
         ui->model.selected_index = 0;
         if (ui->model.parent_page == PTC_UI_PARENT_PLAN) {
@@ -391,6 +394,7 @@ void request_parent_navigation(UiState *ui, int target_page, bool leave_parent)
     }
     if (leave_parent && ui->model.parent_page == PTC_UI_PARENT_PLAN &&
         ui->model.plan_page != PTC_UI_PLAN_PAGE_ROOT) {
+        if (ptc_ui_return_today_settings(&ui->model)) return;
         PtcUiPlanPage previous = ui->model.plan_page;
         ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
         ui->model.selected_index = previous == PTC_UI_PLAN_PAGE_WEEKLY ? 2 :

@@ -265,12 +265,15 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
         &decision->weekly
     };
     int count = 4;
-    int node_w = 216;
+    int node_w = total_w < 900 ? (total_w - 36) / 4 : 216;
     int node_h = 136;
     int gap = (total_w - node_w * count) / (count - 1);
     bool hit_found = false;
 
-    draw_text(pixels, stride, x, y + 6, ptc_ui_text(PTC_UI_T_THE_DAILY_QUOTA_IS_DETERMINED_IN_THE), 14, UI_INK);
+    char pipeline_title[192];
+    fit_text(pipeline_title, sizeof(pipeline_title), ptc_ui_text(PTC_UI_T_THE_DAILY_QUOTA_IS_DETERMINED_IN_THE),
+        14, total_w - (bedtime_enforcing ? 300 : 0));
+    draw_text(pixels, stride, x, y + 6, pipeline_title, 14, UI_INK);
     if (bedtime_enforcing) {
         UiRect pill = {x + total_w - 290, y, 290, 24};
         fill_round_rect(pixels, stride, pill, 6, UI_DANGER_SOFT);
@@ -306,7 +309,9 @@ static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, in
         }
 
         /* 1. Header title */
-        draw_text(pixels, stride, card.x + 14, card.y + 20, titles[i], 14,
+        char node_title[128];
+        fit_text(node_title, sizeof(node_title), titles[i], 14, card.width - 28);
+        draw_text(pixels, stride, card.x + 14, card.y + 20, node_title, 14,
                   is_selected ? (bedtime_enforcing ? UI_DANGER : UI_SUCCESS) : (is_overridden ? UI_INK : UI_MUTED));
 
         /* 2. Status Badge */
@@ -477,7 +482,8 @@ static void draw_home_timeline_view(uint32_t *pixels, uint32_t stride,
                       11, active_badge.width - 24, 14, 1, UI_MUTED);
 
     /* 2. 24 小时全景作息时间轴 (1064 x 168) */
-    UiRect tl_card = {x_left, top_y + 92, full_w, 168};
+    draw_dock_usage_card(pixels, stride, model, (UiRect){x_left + 716, top_y + 92, 348, 168});
+    UiRect tl_card = {x_left, top_y + 92, 704, 168};
     draw_card_shadow(pixels, stride, tl_card, 16);
     fill_round_rect(pixels, stride, tl_card, 12, UI_RGB(UI_BLENDED(surface)));
     draw_rect_outline(pixels, stride, tl_card, 12, 1, UI_RGB(UI_BLENDED(border_control)));
@@ -726,13 +732,13 @@ static void draw_home_metrics_view(uint32_t *pixels, uint32_t stride,
     ptc_ui_format_today_mode(model, today, sizeof(today));
 
     int top_y = dialog.y + 68;
-    int full_w = 1064;
     int col_w = 520;
     int x_left = dialog.x + 28;
     int x_right = dialog.x + 572;
 
     /* 1. 额度决策流水线 (1064 x 164) */
-    draw_waterfall_pipeline(pixels, stride, x_left, top_y, full_w, &decision, bedtime_enforcing);
+    draw_waterfall_pipeline(pixels, stride, x_left, top_y, 704, &decision, bedtime_enforcing);
+    draw_dock_usage_card(pixels, stride, model, (UiRect){x_left + 716, top_y, 348, 164});
 
     /* 2. 底部双栏 (520 + 520) */
     int bottom_y = top_y + 172;
@@ -887,32 +893,6 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
         draw_home_timeline_view(pixels, stride, model, dialog);
     } else {
         draw_home_metrics_view(pixels, stride, model, dialog);
-    }
-    if (model->dock_available) {
-        char dock_line[256];
-        bool is_tv = strcmp(model->operation_mode, "docked") == 0;
-        bool is_undocked = strcmp(model->operation_mode, "undocked") == 0;
-        const char *mode_str = is_tv ? ptc_ui_text(PTC_UI_T_DOCK_TV) :
-            (is_undocked ? ptc_ui_text(PTC_UI_T_DOCK_HANDHELD) : ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
-
-        if (model->dock_waived_today) {
-            snprintf(dock_line, sizeof(dock_line), "%s / %s", mode_str, ptc_ui_text(PTC_UI_T_DOCK_CARD_WAIVED));
-        } else if (model->dock_restriction_active) {
-            snprintf(dock_line, sizeof(dock_line), "%s / %s", mode_str, ptc_ui_text(PTC_UI_T_DOCK_BLOCKED_BANNER));
-        } else if (!(model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled)) {
-            snprintf(dock_line, sizeof(dock_line), "%s / %s", mode_str, ptc_ui_text(PTC_UI_T_DOCK_CARD_OFF));
-        } else if (model->dock_policy.force_docked) {
-            snprintf(dock_line, sizeof(dock_line), "%s / %s", mode_str, ptc_ui_text(PTC_UI_T_DOCK_CARD_FORCE));
-        } else {
-            ptc_ui_format_dock_usage(model, ptc_ui_render_now(), dock_line, sizeof(dock_line));
-        }
-        draw_wrapped_text(pixels, stride, dialog.x + 28, dialog.y + 530,
-            dock_line, 14, 1064, 18, 1, UI_ACCENT);
-        if (ptc_ui_status_is_fresh(model, ptc_ui_render_now()) &&
-            (model->dock_restriction_active || model->dock_waived_today))
-            draw_wrapped_text(pixels, stride, dialog.x + 28, dialog.y + 554,
-                ptc_ui_text(model->dock_waived_today ? PTC_UI_T_DOCK_WAIVED : PTC_UI_T_DOCK_CONNECT),
-                12, 1064, 18, 1, model->dock_waived_today ? UI_SUCCESS : UI_DANGER);
     }
     home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_B_RETURN), false, true, false);
 }

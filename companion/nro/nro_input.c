@@ -124,6 +124,7 @@ void handle_overlay_input(UiState *ui, u64 down)
                 else if (sel == 7) ui->model.overlay_selection = 6;
                 else if (sel == 10) ui->model.overlay_selection = 9;
                 else if (sel == 12) ui->model.overlay_selection = 11;
+                else if (sel == 14) ui->model.overlay_selection = 10;
             }
         } else if (down & HidNpadButton_Right) {
             ptc_audio_play(PTC_SE_FOCUS);
@@ -135,6 +136,7 @@ void handle_overlay_input(UiState *ui, u64 down)
                 else if (sel == 6) ui->model.overlay_selection = 7;
                 else if (sel == 9) ui->model.overlay_selection = 10;
                 else if (sel == 11) ui->model.overlay_selection = 12;
+                else if (sel == 1 || sel == 3 || sel == 5 || sel == 7 || sel == 8 || sel == 10 || sel == 12) ui->model.overlay_selection = 14;
             }
         } else if (down & (HidNpadButton_A | HidNpadButton_Plus)) {
             ptc_audio_play(PTC_SE_CONFIRM);

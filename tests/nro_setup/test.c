@@ -82,6 +82,8 @@ static void test_config_backup_ui(void)
     check(ptc_config_stage_path(stage,sizeof(stage),APP_ROOT,"ui-backup") && ptc_config_stage_create(&mem.storage,APP_ROOT,stage,fixed_time) &&
         ptc_config_archive_save(&mem.storage,stage,APP_ROOT "/backups/config-backup.json"),"UI backup fixture");
     open_config_backup(&ui);
+    check(ui.model.config_backup_tab == 0 && ui.model.overlay_selection == 13,
+          "backup entry defaults to create tab and create action");
     check(ui.model.config_backup_ready && ui.model.config_groups == 507 && !ui.model.config_today_available,"ordinary defaults exclude expired today and security");
     config_backup_action(&ui,2); check(ui.model.config_groups == 507,"expired today cannot toggle");
     config_backup_action(&ui,11); check(ui.model.config_groups == 2043,"all selects available groups");

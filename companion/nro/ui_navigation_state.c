@@ -107,6 +107,7 @@ void ptc_ui_change_parent_page(PtcUiModel *model, int direction)
         page = 0;
     }
     model->parent_page = (PtcUiParentPage)page;
+    model->today_settings_origin = false;
     if (model->parent_page == PTC_UI_PARENT_PLAN) model->plan_page = PTC_UI_PLAN_PAGE_ROOT;
     if (!model->parent_footer_focused) model->selected_index = 0;
 }
@@ -149,7 +150,8 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             ? index > count + model->recent_event_count
             : (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT && model->forecast_available
                 ? index > 13
-                : (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT ? index >= 7 : index >= count)))) {
+                : (model->parent_page == PTC_UI_PARENT_TODAY ? index > 10 :
+                   (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT ? index >= 7 : index >= count))))) {
         index = 0;
     }
     if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_HOLIDAY) {
@@ -194,6 +196,18 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
         return;
     }
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
+        if (index >= 8) {
+            if (horizontal > 0) index = index == 8 ? 2 : index == 9 ? 4 : 5;
+            else if (vertical < 0 && index > 8) --index;
+            else if (vertical > 0 && index < 10) ++index;
+            else if (vertical > 0) {
+                model->parent_content_selection = index;
+                model->parent_footer_focused = true;
+                model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
+            }
+            model->selected_index = index;
+            return;
+        }
         if (vertical < 0) {
             if (index == 5) {
                 index = 4;
@@ -227,7 +241,10 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
                 model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
             }
         } else if (horizontal < 0) {
-            if (index == 1) index = 0;
+            if (index == 0 || index == 2) index = 8;
+            else if (index == 4) index = 9;
+            else if (index == 5) index = 10;
+            else if (index == 1) index = 0;
             else if (index == 3) index = 2;
             else if (index == 6) index = 4;
             else if (index == 7) index = 5;
@@ -290,6 +307,45 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     }
 }
 
+bool ptc_ui_open_today_settings(PtcUiModel *model, int index)
+{
+    if (!model || model->view != PTC_UI_PARENT || model->parent_page != PTC_UI_PARENT_TODAY ||
+        model->parent_support_only || model->waiting || index < 8 || index > 10) return false;
+    model->today_settings_origin = true;
+    model->today_settings_selection = index;
+    model->parent_page = PTC_UI_PARENT_PLAN;
+    model->parent_footer_focused = false;
+    model->selected_index = 0;
+    if (index == 8) {
+        if (!model->eye_care_dirty) model->draft_eye_care_policy = model->eye_care_policy;
+        model->eye_care_field_focus = 0;
+        model->plan_page = PTC_UI_PLAN_PAGE_EYE_CARE;
+    } else if (index == 9) {
+        if (!model->bedtime_dirty) model->draft_bedtime_policy = model->bedtime_policy;
+        model->bedtime_switch_pending = false;
+        model->bedtime_section = PTC_UI_BEDTIME_WEEKLY;
+        model->bedtime_section_focused = false;
+        model->bedtime_master_focused = false;
+        model->plan_page = PTC_UI_PLAN_PAGE_BEDTIME;
+    } else {
+        if (!model->dock_dirty) model->draft_dock_policy = model->dock_policy;
+        model->dock_field_focus = 0;
+        model->plan_page = PTC_UI_PLAN_PAGE_DOCK;
+    }
+    return true;
+}
+
+bool ptc_ui_return_today_settings(PtcUiModel *model)
+{
+    if (!model || !model->today_settings_origin) return false;
+    model->today_settings_origin = false;
+    model->parent_page = PTC_UI_PARENT_TODAY;
+    model->plan_page = PTC_UI_PLAN_PAGE_ROOT;
+    model->selected_index = model->today_settings_selection;
+    model->parent_footer_focused = false;
+    return true;
+}
+
 bool ptc_ui_dock_dirty(const PtcUiModel *model)
 {
     return model && (model->dock_policy.force_docked != model->draft_dock_policy.force_docked ||
@@ -330,5 +386,28 @@ void ptc_ui_format_dock_usage(const PtcUiModel *model, int64_t now, char *out, s
         else (void)ptc_ui_text_format(model->dock_policy.undocked_limit_enabled ?
             PTC_UI_T_DOCK_USAGE_NAMED : PTC_UI_T_DOCK_USAGE_ONLY_NAMED, usage, sizeof(usage), args, 2);
         snprintf(out, out_size, "%s / %s", mode, usage);
+    }
+}
+
+void ptc_ui_format_dock_preview(const PtcUiModel *model, int64_t now, char *out, size_t out_size)
+{
+    if (!out || !out_size) return;
+    if (!model || !model->dock_available || !ptc_ui_status_is_fresh(model, now)) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+        return;
+    }
+    const PtcDockPolicy *draft = &model->draft_dock_policy;
+    if (model->dock_waived_today) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_DOCK_WAIVED));
+    } else if (draft->force_docked) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_DOCK_FORCE_HINT));
+    } else if (!draft->undocked_limit_enabled) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_DOCK_OFF));
+    } else if (!model->undocked_usage_available) {
+        snprintf(out, out_size, "%s", ptc_ui_text(PTC_UI_T_DOCK_PREVIEW_UNKNOWN));
+    } else {
+        int remaining = (int)draft->undocked_daily_minutes - model->undocked_used_minutes;
+        PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("remaining", remaining > 0 ? remaining : 0)};
+        (void)ptc_ui_text_format(PTC_UI_T_DOCK_PREVIEW_NAMED, out, out_size, args, 1);
     }
 }

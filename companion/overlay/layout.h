@@ -2,6 +2,13 @@
 #define PTC_COMPANION_OVERLAY_LAYOUT_H
 
 #include <stdbool.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include "bridge.h"
+#ifdef __cplusplus
+}
+#endif
 
 typedef struct {
     int x;
@@ -53,6 +60,37 @@ static inline PtcOverlayRect ptc_overlay_rect(int x, int y, int w, int h)
 static inline bool ptc_overlay_rect_contains(PtcOverlayRect rect, int x, int y)
 {
     return x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
+}
+
+/* Visual order differs from the stable action enum; all input uses this map. */
+static inline int ptc_overlay_parent_action_slot(int action)
+{
+    static const int slots[PTC_OVERLAY_PARENT_ACTION_COUNT] = {0, 1, 2, 3, 4, 5, 7, 6};
+    return action >= 0 && action < PTC_OVERLAY_PARENT_ACTION_COUNT ? slots[action] : -1;
+}
+
+static inline int ptc_overlay_parent_action_move(int action, int direction)
+{
+    static const int order[PTC_OVERLAY_PARENT_ACTION_COUNT] = {0, 1, 2, 3, 4, 5, 7, 6};
+    int slot = ptc_overlay_parent_action_slot(action);
+    if (slot < 0) return PTC_OVERLAY_PARENT_ADD_MINUTES;
+    return order[(slot + (direction < 0 ? 7 : 1)) % PTC_OVERLAY_PARENT_ACTION_COUNT];
+}
+
+static inline PtcOverlayRect ptc_overlay_parent_group_rect(int origin_x, int origin_y, int group)
+{
+    if (group == 0) return ptc_overlay_rect(origin_x + 8, origin_y + 110, PTC_OVERLAY_CONTENT_W - 16, 106);
+    if (group == 1) return ptc_overlay_rect(origin_x + 8, origin_y + 224, PTC_OVERLAY_CONTENT_W - 16, 220);
+    if (group == 2) return ptc_overlay_rect(origin_x + 8, origin_y + 452, PTC_OVERLAY_CONTENT_W - 16, 68);
+    return ptc_overlay_rect(0, 0, 0, 0);
+}
+
+static inline PtcOverlayRect ptc_overlay_parent_action_rect(int origin_x, int origin_y, int action)
+{
+    int slot = ptc_overlay_parent_action_slot(action);
+    if (slot < 0) return ptc_overlay_rect(0, 0, 0, 0);
+    int y = slot < 2 ? 138 + slot * 38 : slot < 7 ? 252 + (slot - 2) * 38 : 480;
+    return ptc_overlay_rect(origin_x + 16, origin_y + y, PTC_OVERLAY_CONTENT_W - 32, 36);
 }
 
 static inline bool ptc_overlay_remaining_refresh_pending(bool waiting, bool offline_code_request)

@@ -282,14 +282,23 @@
                 renderer->a(bridge_->waiting ? DISABLED_COLOR : CARD_COLOR));
             draw_localized(renderer, ptc_ui_text(PTC_UI_T_Y_REFRESH_2), false, cx + 264, cy + 87, 13,
                 renderer->a(bridge_->waiting ? MUTED_COLOR : FOCUS_BORDER));
+            const PtcUiTextId group_labels[] = {PTC_UI_T_CARD_QUOTA_ADJUST, PTC_UI_T_CARD_RESTRICTION_ACTIONS, PTC_UI_T_CARD_RECOVERY_ACTIONS};
+            for (int group = 0; group < 3; ++group) {
+                const auto rect = ptc_overlay_parent_group_rect(cx, cy, group);
+                renderer->drawRect(rect.x, rect.y, rect.w, rect.h, renderer->a(PANEL_COLOR));
+                draw_outline(renderer, rect.x, rect.y, rect.w, rect.h, 1, MUTED_COLOR);
+                draw_localized(renderer, ptc_ui_text(group_labels[group]), false, rect.x + 10, rect.y + 20, 12,
+                    renderer->a(group == 2 ? ERROR_COLOR : FOCUS_BORDER));
+            }
             for (int i = 0; i < PTC_OVERLAY_PARENT_ACTION_COUNT; ++i) {
-                const s32 y = cy + 125 + i * 40;
+                const auto rect = ptc_overlay_parent_action_rect(cx, cy, i);
+                const s32 y = rect.y;
                 const bool selected = i == parent_action_;
                 const char *reason = parent_action_reason(
                     static_cast<PtcOverlayParentAction>(i));
-                renderer->drawRect(cx + 12, y, cw - 24, 38,
+                renderer->drawRect(rect.x, y, rect.w, rect.h,
                     renderer->a(selected ? FOCUS_BG : CARD_COLOR));
-                draw_outline(renderer, cx + 12, y, cw - 24, 38,
+                draw_outline(renderer, rect.x, y, rect.w, rect.h,
                     selected ? 2 : 1, selected ? FOCUS_BORDER : MUTED_COLOR);
                 if (i == PTC_OVERLAY_PARENT_ADD_MINUTES) {
                     std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_QUICK_GRANT_D_MIN_LEFT_RIGHT_TO), daily_add_minutes_);
@@ -299,15 +308,15 @@
                 } else {
                     std::snprintf(line, sizeof(line), "%s", LABELS[i]);
                 }
-                draw_localized(renderer, line, false, cx + 24, y + 19, 13,
-                    renderer->a(reason ? MUTED_COLOR : TEXT_COLOR), 310);
-                if (reason) draw_localized(renderer, reason, false, cx + 24, y + 36, 11,
-                    renderer->a(WAITING_COLOR), 305);
+                draw_localized(renderer, line, false, rect.x + 8, y + 17, 13,
+                    renderer->a(reason ? MUTED_COLOR : TEXT_COLOR), rect.w - 16);
+                if (reason) draw_localized(renderer, reason, false, rect.x + 8, y + 32, 10,
+                    renderer->a(WAITING_COLOR), rect.w - 16);
                 if (selected && !reason && parent_action_requires_hold(static_cast<PtcOverlayParentAction>(i))) {
                     const int progress = ptc_overlay_hold_progress(&confirm_hold_, 1000);
-                    renderer->drawRect(cx + 20, y + 35, cw - 40, 3, renderer->a(CARD_COLOR));
+                    renderer->drawRect(rect.x + 4, y + 33, rect.w - 8, 2, renderer->a(CARD_COLOR));
                     if (progress > 0)
-                        renderer->drawRect(cx + 20, y + 35, (cw - 40) * progress / 1000, 3,
+                        renderer->drawRect(rect.x + 4, y + 33, (rect.w - 8) * progress / 1000, 2,
                             renderer->a(ERROR_COLOR));
                 }
             }
@@ -316,7 +325,7 @@
             const bool hold = parent_action_requires_hold(selected);
             draw_localized(renderer, reason ? ptc_ui_text(PTC_UI_T_ACTION_CURRENTLY_UNAVAILABLE_B_BACK) :
                 (hold ? ptc_ui_text(PTC_UI_T_HOLD_A_1S_Y_REFRESH_B_BACK) : ptc_ui_text(PTC_UI_T_A_EXECUTE_Y_REFRESH_B_BACK)),
-                false, cx + 14, cy + 470, 13,
+                false, cx + 14, cy + 542, 11,
                 renderer->a(reason ? WAITING_COLOR : (hold ? ERROR_COLOR : FOCUS_BORDER)));
             return;
         }
@@ -579,6 +588,8 @@
             }
         } else {
             // --- 1. Header Prompt & Guidance (受限时间与护眼提醒) ---
+            renderer->drawRect(cx, cy + 80, cw, 106, renderer->a(PANEL_COLOR));
+            draw_outline(renderer, cx, cy + 80, cw, 106, 1, MUTED_COLOR);
             char restriction_guidance[128];
             ptc_overlay_format_child_restriction_guidance(&summary, restriction_guidance, sizeof(restriction_guidance));
             const bool restriction_urgent = (summary.valid &&

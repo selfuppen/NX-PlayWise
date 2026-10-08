@@ -1070,6 +1070,26 @@ static void test_pending_redemption_recovery_marker(void)
 
 static void test_overlay_layout_geometry(void)
 {
+    int action = PTC_OVERLAY_PARENT_ADD_MINUTES;
+    unsigned int visited = 0;
+    for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
+        PtcOverlayRect rect = ptc_overlay_parent_action_rect(35, 90, action);
+        int group = slot < 2 ? 0 : slot < 7 ? 1 : 2;
+        PtcOverlayRect section = ptc_overlay_parent_group_rect(35, 90, group);
+        check_true(rect.y >= section.y + 28 && rect.y + rect.h <= section.y + section.h,
+            "overlay actions stay below group headings and inside group");
+        check_true(ptc_overlay_rect_contains(rect, rect.x + rect.w / 2, rect.y + rect.h / 2),
+            "overlay touch center uses same action geometry");
+        check_true(!(visited & (1u << action)), "overlay traversal visits each action once");
+        visited |= 1u << action;
+        int next = ptc_overlay_parent_action_move(action, 1);
+        check_int(ptc_overlay_parent_action_move(next, -1), action, "overlay up reverses down in visual order");
+        action = next;
+    }
+    check_int(visited, 255, "all eight overlay actions remain reachable");
+    check_int(action, PTC_OVERLAY_PARENT_ADD_MINUTES, "overlay action traversal wraps");
+    check_int(ptc_overlay_parent_action_move(PTC_OVERLAY_PARENT_WAIVE_DOCK, 1),
+        PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT, "TV waiver precedes dangerous recovery group");
     PtcOverlayRect submit = ptc_overlay_submit_rect(
         PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
     PtcOverlayRect collapsed = ptc_overlay_status_rect(

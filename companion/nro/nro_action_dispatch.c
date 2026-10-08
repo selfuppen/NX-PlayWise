@@ -204,6 +204,7 @@ void handle_parent_action(UiState *ui)
         enter_parent_area(ui);
         return;
     }
+    if (ptc_ui_open_today_settings(&ui->model, index)) return;
     if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY && index != 6 && index != 7) {
         snprintf(ui->model.message, sizeof(ui->model.message),
                  ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_THIS_CONTROL_WRITE));
@@ -769,8 +770,10 @@ void confirm_operation(UiState *ui)
     case PTC_UI_OPERATION_LEAVE_DOCK:
         ui->model.draft_dock_policy = ui->model.dock_policy;
         ui->model.dock_dirty = false;
-        ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
-        ui->model.selected_index = 5;
+        if (!ptc_ui_return_today_settings(&ui->model)) {
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
+            ui->model.selected_index = 5;
+        }
         break;
     case PTC_UI_OPERATION_SKIP_EYE_CARE:
         submit_eye_care_skip(ui);

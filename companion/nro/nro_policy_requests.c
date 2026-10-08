@@ -205,7 +205,9 @@ void dock_page_action(UiState *ui, int action, int delta)
         if (ui->model.dock_dirty)
             open_confirm_overlay(ui, PTC_UI_OPERATION_LEAVE_DOCK, ptc_ui_text(PTC_UI_T_DOCK_LEAVE),
                 ptc_ui_text(PTC_UI_T_DOCK_CONFIRM_BODY));
-        else { ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT; ui->model.selected_index = 5; }
+        else if (!ptc_ui_return_today_settings(&ui->model)) {
+            ui->model.plan_page = PTC_UI_PLAN_PAGE_ROOT; ui->model.selected_index = 5;
+        }
         return;
     }
     if (action == 6) { submit_status(ui); return; }

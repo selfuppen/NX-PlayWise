@@ -1166,6 +1166,16 @@ static int render_dock_previews(const char *directory, const PtcUiModel *baselin
         model.plan_page = PTC_UI_PLAN_PAGE_ROOT;
         model.selected_index = 7;
         failed |= save_preview(directory, "parent", "dock-today-waiver", &model, dark);
+        {
+            const char *names[] = {"today-status-eye", "today-status-bedtime", "today-status-tv"};
+            for (int i = 8; i <= 10; ++i) {
+                PtcUiModel shortcut = model;
+                shortcut.selected_index = i;
+                failed |= save_preview(directory, "parent", names[i - 8], &shortcut, dark);
+                if (!ptc_ui_open_today_settings(&shortcut, i)) return 1;
+                failed |= save_preview(directory, "plan", names[i - 8], &shortcut, dark);
+            }
+        }
         model.dock_waived_today = true;
         failed |= save_preview(directory, "parent", "dock-today-waived", &model, dark);
         model.dock_waived_today = false;

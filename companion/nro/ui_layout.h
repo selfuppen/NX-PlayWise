@@ -274,5 +274,7 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now);
 
 PtcUiRect ptc_ui_config_backup_field_rect(int index);
 PtcUiRect ptc_ui_dock_field_rect(int index);
+PtcUiRect ptc_ui_today_status_rect(int index);
+PtcUiRect ptc_ui_config_backup_group_rect(int group);
 
 #endif

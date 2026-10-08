@@ -1266,6 +1266,76 @@ static void draw_eye_care_page(uint32_t *pixels, uint32_t stride, const PtcUiMod
     }
 }
 
+void draw_dock_usage_card(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, UiRect card)
+{
+    bool status_fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
+    bool fresh = model->dock_available && status_fresh;
+    bool known = fresh && model->undocked_usage_available;
+    bool active = model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled;
+    bool compact = card.height < 200;
+    char value[96], line[192];
+    int step = compact ? 22 : 28;
+    draw_plan_card(pixels, stride, card, false);
+    draw_text(pixels, stride, card.x + 16, card.y + 24, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 16, UI_INK);
+    const char *mode = !fresh ? ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM) :
+        strcmp(model->operation_mode, "docked") == 0 ? ptc_ui_text(PTC_UI_T_DOCK_TV) :
+        strcmp(model->operation_mode, "undocked") == 0 ? ptc_ui_text(PTC_UI_T_DOCK_HANDHELD) : ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM);
+    const char *state = !fresh ? ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM) : model->dock_waived_today ?
+        ptc_ui_text(PTC_UI_T_DOCK_CARD_WAIVED) : model->dock_restriction_active ?
+        ptc_ui_text(PTC_UI_T_DOCK_BLOCKED) : !active ? ptc_ui_text(PTC_UI_T_DOCK_CARD_OFF) :
+        model->dock_policy.force_docked ? ptc_ui_text(PTC_UI_T_DOCK_CARD_FORCE) : ptc_ui_text(PTC_UI_T_DOCK_LIMIT);
+    if (fresh) snprintf(line, sizeof(line), "%s / %s", mode, state);
+    else snprintf(line, sizeof(line), "%s", mode);
+    char fitted[192];
+    fit_text(fitted, sizeof(fitted), line, 12, card.width - 32);
+    draw_text(pixels, stride, card.x + 16, card.y + 46, fitted, 12,
+        fresh && model->dock_restriction_active ? UI_DANGER : UI_ACCENT);
+    const PtcUiTextId labels[] = {PTC_UI_T_DOCK_USED_VALUE_NAMED, PTC_UI_T_DOCK_LEFT_VALUE_NAMED,
+        PTC_UI_T_DOCK_LIMIT_VALUE_NAMED, PTC_UI_T_TOTAL_LEFT_VALUE_NAMED};
+    for (int i = 0; i < 4; ++i) {
+        snprintf(value, sizeof(value), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+        if (i == 0 && known)
+            snprintf(value, sizeof(value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)model->undocked_used_minutes);
+        else if (i == 1 && fresh && !active)
+            snprintf(value, sizeof(value), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
+        else if (i == 1 && fresh && model->dock_policy.force_docked)
+            snprintf(value, sizeof(value), ptc_ui_text(PTC_UI_T_U_MIN), 0u);
+        else if (i == 1 && known && active)
+            snprintf(value, sizeof(value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)(model->undocked_remaining_minutes > 0 ? model->undocked_remaining_minutes : 0));
+        else if (i == 2 && fresh) {
+            if (!active) snprintf(value, sizeof(value), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
+            else snprintf(value, sizeof(value), ptc_ui_text(PTC_UI_T_U_MIN), model->dock_policy.force_docked ? 0u : (unsigned)model->dock_policy.undocked_daily_minutes);
+        } else if (i == 3 && status_fresh) {
+            /* Estimate from the backend's current-day total, never from a temporary BLOCKED timer. */
+            if (model->unrestricted_today == 1 || model->dock_unlimited_capped || model->eye_care_unlimited_capped)
+                snprintf(value, sizeof(value), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
+            else if (model->forecast_available && model->forecast[0].day_index == model->day_index &&
+                     model->forecast[0].mode == PTC_RULE_MODE_LIMIT && model->played_minutes_available && model->played_minutes >= 0) {
+                int left = (int)model->forecast[0].minutes - model->played_minutes;
+                snprintf(value, sizeof(value), ptc_ui_text(PTC_UI_T_U_MIN), (unsigned)(left > 0 ? left : 0));
+            }
+        }
+        PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("value", value)};
+        (void)ptc_ui_text_format(labels[i], line, sizeof(line), args, 1);
+        fit_text(fitted, sizeof(fitted), line, 13, card.width - 32);
+        draw_text(pixels, stride, card.x + 16, card.y + 68 + i * step, fitted, 13, UI_INK);
+    }
+    if (!compact) {
+        UiRect bar = {card.x + 16, card.y + 166, card.width - 32, 6};
+        fill_round_rect(pixels, stride, bar, 3, UI_RAISED);
+        if (known && model->dock_policy.undocked_limit_enabled && !model->dock_policy.force_docked && model->dock_policy.undocked_daily_minutes > 0) {
+            int used = model->undocked_used_minutes;
+            if (used < 0) used = 0;
+            if (used > model->dock_policy.undocked_daily_minutes) used = model->dock_policy.undocked_daily_minutes;
+            int width = bar.width * used / model->dock_policy.undocked_daily_minutes;
+            if (width > 0) fill_round_rect(pixels, stride, (UiRect){bar.x, bar.y, width, bar.height}, 3, UI_ACCENT);
+        }
+    }
+    draw_wrapped_text(pixels, stride, card.x + 16, card.y + (compact ? 151 : 192),
+        ptc_ui_text(compact ? PTC_UI_T_DOCK_TOTAL_RELATION_SHORT : PTC_UI_T_DOCK_TOTAL_RELATION), compact ? 10 : 12, card.width - 32, compact ? 12 : 16,
+        compact ? 1 : 3, UI_MUTED);
+}
+
 static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     const PtcDockPolicy *draft = &model->draft_dock_policy;
@@ -1329,112 +1399,17 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
         }
     }
 
-    /* --- 右侧 Bento 仪表盘 (方案 1) --- */
-    UiRect info = {824, 230, 402, 378};
-
-    /* 1. 顶部 Bento 卡片：屏幕形态与视力健康守护 (824, 230, 402, 74) */
-    UiRect bento_top = {info.x, info.y, info.width, 74};
-    fill_round_rect(pixels, stride, bento_top, 12, UI_SURFACE);
-    draw_rect_outline(pixels, stride, bento_top, 12, 1, UI_BORDER);
-
-    bool fresh = model->dock_available;
-    bool is_docked = fresh && strcmp(model->operation_mode, "docked") == 0;
-    bool is_undocked = fresh && strcmp(model->operation_mode, "undocked") == 0;
-    const char *mode_title = !fresh ? ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM) :
-        (is_docked ? ptc_ui_text(PTC_UI_T_DOCK_TV) : (is_undocked ? ptc_ui_text(PTC_UI_T_DOCK_HANDHELD) : ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM)));
-    uint32_t mode_color = !fresh ? UI_MUTED : (is_docked ? UI_SUCCESS : UI_ACCENT);
-
-    draw_text_bold(pixels, stride, bento_top.x + 16, bento_top.y + 26, mode_title, 17, mode_color);
-
-    /* 视力守护胶囊徽章 */
-    const char *eye_badge_text = ptc_ui_text(PTC_UI_T_DOCK_EYE_CARE_BADGE);
-    int eb_w = measure_text(eye_badge_text, 11) + 16;
-    if (eb_w < 70) eb_w = 70;
-    UiRect eb_rect = {bento_top.x + bento_top.width - eb_w - 14, bento_top.y + 12, eb_w, 20};
-    fill_round_rect(pixels, stride, eb_rect, 5, UI_ACCENT_SOFT);
-    draw_rect_outline(pixels, stride, eb_rect, 5, 1, UI_ACCENT);
-    draw_text_center(pixels, stride, eb_rect, eye_badge_text, 11, UI_ACCENT);
-
-    /* 屏幕使用态势小字 */
-    const char *sub_note = !fresh ? ptc_ui_text(PTC_UI_T_PRESS_Y_TO_REFRESH_STATUS) :
-        (is_docked ? ptc_ui_text(PTC_UI_T_DOCK_TV_ACTIVE_NOTE) : ptc_ui_text(PTC_UI_T_DOCK_HANDHELD_ACTIVE_NOTE));
-    draw_text(pixels, stride, bento_top.x + 16, bento_top.y + 54, sub_note, 12, is_undocked && model->dock_policy.undocked_limit_enabled ? UI_WARNING : UI_MUTED);
-
-    /* 2. 中部 Bento 卡片：掌机小屏额度态势与倒计时 (824, 314, 402, 106) */
-    UiRect bento_mid = {info.x, info.y + 84, info.width, 106};
-    fill_round_rect(pixels, stride, bento_mid, 12, UI_SURFACE);
-    draw_rect_outline(pixels, stride, bento_mid, 12, 1, model->dock_restriction_active ? UI_DANGER : UI_BORDER);
-
-    draw_text(pixels, stride, bento_mid.x + 16, bento_mid.y + 20,
-        ptc_ui_text(PTC_UI_T_DOCK_HANDHELD_REMAINING_NAMED), 13, UI_MUTED);
-
-    if (model->dock_waived_today) {
-        draw_text_bold(pixels, stride, bento_mid.x + 16, bento_mid.y + 50,
-            ptc_ui_text(PTC_UI_T_DOCK_WAIVED), 16, UI_SUCCESS);
-        draw_text(pixels, stride, bento_mid.x + 16, bento_mid.y + 76,
-            ptc_ui_text(PTC_UI_T_DOCK_CARD_WAIVED), 12, UI_MUTED);
-    } else if (model->dock_restriction_active) {
-        draw_text_bold(pixels, stride, bento_mid.x + 16, bento_mid.y + 50,
-            ptc_ui_text(PTC_UI_T_DOCK_BLOCKED_BANNER), 15, UI_DANGER);
-        draw_text(pixels, stride, bento_mid.x + 16, bento_mid.y + 76,
-            ptc_ui_text(PTC_UI_T_DOCK_CONNECT), 11, UI_DANGER);
-    } else if (!model->dock_policy.force_docked && !model->dock_policy.undocked_limit_enabled) {
-        draw_text(pixels, stride, bento_mid.x + 16, bento_mid.y + 50,
-            ptc_ui_text(PTC_UI_T_DOCK_OFF), 15, UI_MUTED);
-        draw_text(pixels, stride, bento_mid.x + 16, bento_mid.y + 76,
-            ptc_ui_text(PTC_UI_T_DOCK_CARD_OFF), 11, UI_MUTED);
-    } else if (model->dock_policy.force_docked) {
-        draw_text_bold(pixels, stride, bento_mid.x + 16, bento_mid.y + 50,
-            ptc_ui_text(PTC_UI_T_DOCK_CARD_FORCE), 14, UI_DANGER);
-        draw_text(pixels, stride, bento_mid.x + 16, bento_mid.y + 76,
-            ptc_ui_text(PTC_UI_T_DOCK_FORCE_HINT), 11, UI_MUTED);
-    } else if (model->undocked_usage_available) {
-        char rem_str[64];
-        snprintf(rem_str, sizeof(rem_str), "%d %s", model->undocked_remaining_minutes, ptc_ui_text(PTC_UI_T_MINUTES));
-        draw_text_bold(pixels, stride, bento_mid.x + 16, bento_mid.y + 52, rem_str, 22,
-            model->undocked_remaining_minutes <= 5 ? UI_DANGER : UI_ACCENT);
-        int rem_w = measure_text(rem_str, 22);
-        char quota_str[64];
-        snprintf(quota_str, sizeof(quota_str), "/ %d %s (%s %d %s)",
-            model->dock_policy.undocked_daily_minutes, ptc_ui_text(PTC_UI_T_MINUTES),
-            ptc_ui_text(PTC_UI_T_PLAYED), model->undocked_used_minutes, ptc_ui_text(PTC_UI_T_MIN));
-        draw_text(pixels, stride, bento_mid.x + 16 + rem_w + 10, bento_mid.y + 50, quota_str, 12, UI_MUTED);
-
-        /* 进度条 */
-        UiRect track = {bento_mid.x + 16, bento_mid.y + 78, bento_mid.width - 32, 6};
-        fill_round_rect(pixels, stride, track, 3, UI_RAISED);
-        if (model->dock_policy.undocked_daily_minutes > 0) {
-            int fill_w = (int)((int64_t)track.width * model->undocked_remaining_minutes / model->dock_policy.undocked_daily_minutes);
-            if (fill_w < 4 && model->undocked_remaining_minutes > 0) fill_w = 4;
-            if (fill_w > track.width) fill_w = track.width;
-            if (fill_w > 0) {
-                fill_round_rect(pixels, stride, (UiRect){track.x, track.y, fill_w, track.height}, 3,
-                    model->undocked_remaining_minutes <= 5 ? UI_DANGER : UI_ACCENT);
-            }
-        }
-    } else {
-        draw_text(pixels, stride, bento_mid.x + 16, bento_mid.y + 50,
-            ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM), 15, UI_MUTED);
-    }
-
-    /* 3. 底部 Bento 卡片：功能初衷与规则说明 (824, 430, 402, 178) */
-    UiRect bento_bot = {info.x, info.y + 200, info.width, 178};
-    fill_round_rect(pixels, stride, bento_bot, 12, UI_SURFACE);
-    draw_rect_outline(pixels, stride, bento_bot, 12, 1, UI_BORDER);
-
-    /* 💡 功能初衷 */
-    draw_text_bold(pixels, stride, bento_bot.x + 16, bento_bot.y + 20,
-        ptc_ui_text(PTC_UI_T_DOCK_INTENT_TITLE), 13, UI_ACCENT);
-    draw_wrapped_text(pixels, stride, bento_bot.x + 16, bento_bot.y + 40,
-        ptc_ui_text(PTC_UI_T_DOCK_EYE_PROTECTION_INTENT), 12,
-        bento_bot.width - 32, 16, 3, UI_MUTED);
-
-    /* ℹ️ 规则说明 */
-    draw_text_bold(pixels, stride, bento_bot.x + 16, bento_bot.y + 98,
-        ptc_ui_text(PTC_UI_T_DOCK_RULE_TITLE), 13, UI_INK);
-    draw_wrapped_text(pixels, stride, bento_bot.x + 16, bento_bot.y + 118,
-        ptc_ui_text(PTC_UI_T_DOCK_RULE_EXPLANATION), 12,
-        bento_bot.width - 32, 16, 3, UI_MUTED);
+    draw_dock_usage_card(pixels, stride, model, (UiRect){824, 230, 402, 240});
+    UiRect rules_panel = {824, 482, 402, 170};
+    draw_plan_card(pixels, stride, rules_panel, false);
+    draw_wrapped_text(pixels, stride, 840, 502, ptc_ui_text(PTC_UI_T_DOCK_EYE_PROTECTION_INTENT),
+        12, 370, 15, 2, UI_INK);
+    draw_text(pixels, stride, 840, 542, ptc_ui_text(PTC_UI_T_DOCK_RULE_TITLE), 13, UI_ACCENT);
+    draw_wrapped_text(pixels, stride, 840, 564, ptc_ui_text(PTC_UI_T_DOCK_RULE_EXPLANATION),
+        12, 370, 15, 4, UI_MUTED);
+    char preview[192];
+    ptc_ui_format_dock_preview(model, ptc_ui_render_now(), preview, sizeof(preview));
+    draw_wrapped_text(pixels, stride, 54, 198, preview, 14, 744, 18, 1, UI_ACCENT);
 
 #if defined(PLAYWISE_EDEN) || defined(PTC_UI_PREVIEW_ANIM_CLOCK_MS)
     if (model->eden_mode_controls) {
