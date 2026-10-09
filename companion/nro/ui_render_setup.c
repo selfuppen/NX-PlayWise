@@ -70,7 +70,7 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         /* Parental Control row */
         draw_text(pixels, stride, 94, 417, ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
             model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF), 18,
-            model->restriction_enabled_available && model->restriction_enabled ? UI_SUCCESS : UI_WARNING);
+            model->restriction_enabled_available && model->restriction_enabled ? UI_SUCCESS : UI_WARNING_TEXT);
         setup_button(pixels, stride, ptc_ui_setup_pctl_help_rect(), ptc_ui_text(PTC_UI_T_SETUP_PCTL_HELP_BUTTON),
             model->setup_focus == 2, false);
         draw_text(pixels, stride, 94, 442, ptc_ui_text(PTC_UI_T_SETUP_PAUSE_OVERLAY), 14, UI_MUTED);
@@ -109,8 +109,8 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         UiRect pin_badge = {94, 268, 510, 36};
         bool pin_ok = model->setup_pin_ready;
         fill_round_rect(pixels, stride, pin_badge, 8, pin_ok ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
-        draw_rect_outline(pixels, stride, pin_badge, 8, 1, pin_ok ? UI_SUCCESS : UI_WARNING);
-        draw_text_center(pixels, stride, pin_badge, ptc_ui_text(pin_ok ? PTC_UI_T_SETUP_PIN_STATUS_CUSTOM : PTC_UI_T_SETUP_PIN_STATUS_DEFAULT), 15, pin_ok ? UI_SUCCESS : UI_WARNING);
+        draw_rect_outline(pixels, stride, pin_badge, 8, 1, pin_ok ? UI_SUCCESS_BORDER : UI_WARNING_BORDER);
+        draw_text_center(pixels, stride, pin_badge, ptc_ui_text(pin_ok ? PTC_UI_T_SETUP_PIN_STATUS_CUSTOM : PTC_UI_T_SETUP_PIN_STATUS_DEFAULT), 15, pin_ok ? UI_SUCCESS : UI_WARNING_TEXT);
 
         /* PIN modification button */
         setup_button(pixels, stride, ptc_ui_setup_pin_rect(), ptc_ui_text(PTC_UI_T_X_CLICK_CHANGE_PIN),
@@ -224,15 +224,15 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             ptc_ui_format_quota_remaining(model, text, sizeof(text));
             draw_text(pixels, stride, 920, 246, text, 16, UI_ACCENT);
         } else {
-            draw_text(pixels, stride, 676, 246, ptc_ui_text(PTC_UI_T_SETUP_STATUS_UNKNOWN), 16, UI_WARNING);
+            draw_text(pixels, stride, 676, 246, ptc_ui_text(PTC_UI_T_SETUP_STATUS_UNKNOWN), 16, UI_WARNING_TEXT);
         }
 
         /* Row 2: Parental Control & PlayWise PIN */
         draw_text(pixels, stride, 94, 304, ptc_ui_text(!model->restriction_enabled_available ? PTC_UI_T_SETUP_PCTL_UNKNOWN :
             model->restriction_enabled ? PTC_UI_T_SETUP_PCTL_ON : PTC_UI_T_SETUP_PCTL_OFF), 16,
-            model->restriction_enabled_available && model->restriction_enabled ? UI_SUCCESS : UI_WARNING);
+            model->restriction_enabled_available && model->restriction_enabled ? UI_SUCCESS : UI_WARNING_TEXT);
         draw_text(pixels, stride, 676, 304, ptc_ui_text(model->setup_pin_ready ?
-            PTC_UI_T_SETUP_PIN_READY : PTC_UI_T_SETUP_PIN_UNCONFIRMED), 16, model->setup_pin_ready ? UI_SUCCESS : UI_WARNING);
+            PTC_UI_T_SETUP_PIN_READY : PTC_UI_T_SETUP_PIN_UNCONFIRMED), 16, model->setup_pin_ready ? UI_SUCCESS : UI_WARNING_TEXT);
 
         /* Row 3: Eye Care & Bedtime toggles status */
         bool eye_on = model->setup_eye_care_enabled || model->draft_eye_care_policy.enabled;
@@ -258,7 +258,7 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 if (model->setup_issue_mask & save_issues)
                     snprintf(text, sizeof(text), "%s", ptc_ui_text(PTC_UI_T_SETUP_SAVE_PROBLEM));
                 else snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_SETUP_ISSUE_COUNT), count);
-                draw_text(pixels, stride, 94, 552, text, 15, UI_WARNING);
+                draw_text(pixels, stride, 94, 552, text, 15, UI_WARNING_TEXT);
             }
         } else {
             draw_wrapped_text(pixels, stride, 94, 552, ptc_ui_text(model->setup_activation_pending
@@ -268,7 +268,7 @@ void draw_setup(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
         snprintf(skip_label, sizeof(skip_label), "X  %s", ptc_ui_text(PTC_UI_T_SETUP_SKIP));
         setup_button(pixels, stride, ptc_ui_setup_skip_rect(), skip_label, model->setup_focus == 1, false);
     }
-    if (model->message[0]) draw_wrapped_text(pixels, stride, 94, 589, model->message, 16, 1092, 21, 2, UI_WARNING);
+    if (model->message[0]) draw_wrapped_text(pixels, stride, 94, 589, model->message, 16, 1092, 21, 2, UI_WARNING_TEXT);
     setup_button(pixels, stride, ptc_ui_setup_back_rect(), ptc_ui_text(PTC_UI_T_B_PREVIOUS_STEP), false, false);
     char primary_label[96];
     snprintf(primary_label, sizeof(primary_label), "A  %s", ptc_ui_text(step == PTC_UI_SETUP_PREPARE

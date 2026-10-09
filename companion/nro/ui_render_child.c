@@ -41,7 +41,7 @@ static void draw_child_calendar_icon(uint32_t *pixels, uint32_t stride, int cx, 
 static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const PtcUiModel *model, UiRect container)
 {
     fill_round_rect(pixels, stride, container, 16, UI_RGB(UI_BLENDED(surface)));
-    draw_rect_outline(pixels, stride, container, 16, 1, UI_RGB(UI_BLENDED(border_control)));
+    draw_rect_outline(pixels, stride, container, 16, 1, UI_BORDER);
 
     /* 顶部标题栏 */
     draw_child_calendar_icon(pixels, stride, container.x + 28, container.y + 20, UI_ACCENT);
@@ -66,8 +66,8 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
         bool is_tomorrow = (i == 1);
         bool is_today = (i == 0);
 
-        uint32_t card_bg = is_tomorrow ? UI_RGB(UI_BLENDED(surface_raised)) : UI_RGB(UI_BLENDED(surface_raised));
-        uint32_t border_col = is_tomorrow ? UI_ACCENT : (is_weekend ? UI_SUCCESS : UI_RGB(UI_BLENDED(border_control)));
+        uint32_t card_bg = is_tomorrow ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface_raised));
+        uint32_t border_col = is_tomorrow ? UI_ACCENT : (is_weekend ? UI_SUCCESS_BORDER : UI_BORDER);
         fill_round_rect(pixels, stride, card, 10, card_bg);
         draw_rect_outline(pixels, stride, card, 10, is_tomorrow ? 2 : 1, border_col);
 
@@ -296,8 +296,9 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     uint32_t eye_b_col = !model->eye_care_policy.enabled ? UI_MUTED : (eye_resting ? UI_DANGER : UI_SUCCESS);
     int eb_w = measure_text(eye_b_label, 12) + 14;
     UiRect eb_rect = {card2.x + card2.width - eb_w - 12, card2.y + 8, eb_w, 20};
+    uint32_t eb_bd = eye_b_col == UI_DANGER ? UI_DANGER_BORDER : (eye_b_col == UI_SUCCESS ? UI_SUCCESS_BORDER : UI_BORDER);
     fill_round_rect(pixels, stride, eb_rect, 4, eye_b_col == UI_DANGER ? UI_DANGER_SOFT : (eye_b_col == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
-    draw_rect_outline(pixels, stride, eb_rect, 4, 1, eye_b_col);
+    draw_rect_outline(pixels, stride, eb_rect, 4, 1, eb_bd);
     draw_text_center(pixels, stride, eb_rect, eye_b_label, 12, eye_b_col);
 
     char eye_str[128], fitted_eye[128];
@@ -323,8 +324,9 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
         (bedtime_enforcing ? UI_DANGER : (bedtime_skip_matches ? UI_SUCCESS : UI_ACCENT));
     int bb_w = measure_text(bed_b_label, 12) + 14;
     UiRect bb_rect = {card3.x + card3.width - bb_w - 12, card3.y + 8, bb_w, 20};
+    uint32_t bb_bd = bed_b_col == UI_DANGER ? UI_DANGER_BORDER : (bed_b_col == UI_SUCCESS ? UI_SUCCESS_BORDER : (bed_b_col == UI_ACCENT ? UI_ACCENT : UI_BORDER));
     fill_round_rect(pixels, stride, bb_rect, 4, bed_b_col == UI_DANGER ? UI_DANGER_SOFT : (bed_b_col == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
-    draw_rect_outline(pixels, stride, bb_rect, 4, 1, bed_b_col);
+    draw_rect_outline(pixels, stride, bb_rect, 4, 1, bb_bd);
     draw_text_center(pixels, stride, bb_rect, bed_b_label, 12, bed_b_col);
 
     char bed_str[128], fitted_bed[128];

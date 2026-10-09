@@ -16,15 +16,15 @@ static const PtcUiPalette LIGHT_PALETTE = {
     .focus = 0x1247A8,
     .on_accent = 0xFFFFFF,
     .success = 0x16734E,
-    .warning = 0x865600,
+    .warning = 0xFA8C16,
     .danger = 0xB92F46,
     .accent_soft = 0xE4EDFF,
     .hero = 0x214EA3,
     .on_hero = 0xFFFFFF,
     .hero_secondary = 0xDCE8FF,
     .coral = 0xF67C73,
-    .success_soft = 0xE5F4EB,
-    .warning_soft = 0xFFF1D8,
+    .success_soft = 0xF6FFED,
+    .warning_soft = 0xFFF7E6,
     .danger_soft = 0xFFE9ED,
     .scrim = 0xD7DFEC,
     .key_glyph_bg = 0xDCE3ED,
@@ -32,6 +32,10 @@ static const PtcUiPalette LIGHT_PALETTE = {
     .gauge_slot = 0xD3DCED,
     .gauge_slot_border = 0x3D5375,
     .shadow_strength = 100,
+    .success_border = 0xB7EB8F,
+    .warning_border = 0xFFD591,
+    .danger_border = 0xFFA39E,
+    .warning_text = 0xD46B08,
 };
 
 static const PtcUiPalette DARK_PALETTE = {
@@ -47,7 +51,7 @@ static const PtcUiPalette DARK_PALETTE = {
     .focus = 0xBCD4FF,
     .on_accent = 0x122344,
     .success = 0x5CCB8A,
-    .warning = 0xF2C14E,
+    .warning = 0xFFA940,
     .danger = 0xFF7A85,
     .accent_soft = 0x273E60,
     .hero = 0x233F6A,
@@ -63,6 +67,10 @@ static const PtcUiPalette DARK_PALETTE = {
     .gauge_slot = 0x19273D,
     .gauge_slot_border = 0x3D5375,
     .shadow_strength = 130,
+    .success_border = 0x274916,
+    .warning_border = 0x874D00,
+    .danger_border = 0x78061A,
+    .warning_text = 0xFFA940,
 };
 
 bool ptc_ui_theme_parse_preference(const char *text, PtcUiThemePreference *out)

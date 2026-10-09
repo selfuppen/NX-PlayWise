@@ -531,7 +531,7 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
     draw_rect_outline(pixels, stride, other_group, 16, 1, UI_BORDER);
     const char *title2 = ptc_ui_text(PTC_UI_T_BEDTIME_AUTONOMY_BUFFER);
     const char *hint2 = ptc_ui_text(PTC_UI_T_BEDTIME_OPERATES_INDEPENDENTLY);
-    draw_text(pixels, stride, 574, 435, title2, 16, UI_WARNING);
+    draw_text(pixels, stride, 574, 435, title2, 16, UI_WARNING_TEXT);
     int title2_w = measure_text(title2, 16);
     draw_text(pixels, stride, 574 + title2_w + 14, 435, hint2, 13, UI_MUTED);
     for (int index = 0; index < 8; ++index) {
@@ -651,14 +651,17 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
                             badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
                             (badge_color == UI_DANGER ? UI_DANGER_SOFT :
                              (badge_color == UI_WARNING ? UI_WARNING_SOFT : UI_PAGE)));
-            draw_rect_outline(pixels, stride, tbadge, 6, 1, badge_color);
+            uint32_t t_bd = badge_color == UI_SUCCESS ? UI_SUCCESS_BORDER :
+                            (badge_color == UI_DANGER ? UI_DANGER_BORDER :
+                             (badge_color == UI_WARNING ? UI_WARNING_BORDER : UI_BORDER));
+            draw_rect_outline(pixels, stride, tbadge, 6, 1, t_bd);
             draw_text_center(pixels, stride, tbadge, adjustment_badge, 12, badge_color);
         } else if (index >= 2) {
             const char *badge = (!fresh || eye_needs_refresh) ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING)) :
                 (index == 2 ? (model->today_override_present &&
                                 model->today_override_rule.mode == PTC_RULE_MODE_UNLIMITED ? (ptc_ui_text(PTC_UI_T_ENABLED_2)) : (ptc_ui_text(PTC_UI_T_DISABLED))) :
                  index == 3 ? (model->today_override_cleared_in_session &&
-                               !model->today_override_present ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_CLEARED)) : (ptc_ui_text(PTC_UI_T_ACTIVE))) :
+                                !model->today_override_present ? (ptc_ui_text(PTC_UI_T_ADJUST_BADGE_CLEARED)) : (ptc_ui_text(PTC_UI_T_ACTIVE))) :
                  index == 4 ? (model->bedtime_active && !model->bedtime_skipped ? (ptc_ui_text(PTC_UI_T_RESTRICTED)) :
                                (bedtime_skip_matches ? (ptc_ui_text(PTC_UI_T_SKIPPED)) : (ptc_ui_text(PTC_UI_T_NOT_SKIPPED)))) :
                  index == 5 ? (model->daily_buffer_claimed ? (ptc_ui_text(PTC_UI_T_CLAIMED)) :
@@ -681,9 +684,13 @@ static void draw_today_status(uint32_t *pixels, uint32_t stride, const PtcUiMode
             int b_width = measure_text(badge, 12) + 16;
             if (b_width < 72) b_width = 72;
             UiRect tbadge = {box.x + box.width - b_width - 10, box.y + 10, b_width, 22};
+            uint32_t b_bd = color == UI_SUCCESS ? UI_SUCCESS_BORDER :
+                            (color == UI_DANGER ? UI_DANGER_BORDER :
+                             (color == UI_WARNING ? UI_WARNING_BORDER : UI_BORDER));
             fill_round_rect(pixels, stride, tbadge, 6, color == UI_DANGER ? UI_DANGER_SOFT :
-                            (color == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
-            draw_rect_outline(pixels, stride, tbadge, 6, 1, color);
+                            (color == UI_SUCCESS ? UI_SUCCESS_SOFT :
+                             (color == UI_WARNING ? UI_WARNING_SOFT : UI_PAGE)));
+            draw_rect_outline(pixels, stride, tbadge, 6, 1, b_bd);
             draw_text_center(pixels, stride, tbadge, badge, 12, color);
         }
     }
@@ -795,8 +802,8 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
             if (pw < 76) pw = 76;
             UiRect pbadge = {440, 178, pw, 22};
             fill_round_rect(pixels, stride, pbadge, 6, UI_WARNING_SOFT);
-            draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING);
-            draw_text_center(pixels, stride, pbadge, p_text, 12, UI_WARNING);
+            draw_rect_outline(pixels, stride, pbadge, 6, 1, UI_WARNING_BORDER);
+            draw_text_center(pixels, stride, pbadge, p_text, 12, UI_WARNING_TEXT);
             draw_text(pixels, stride, 440 + pw + 8, 195, ptc_ui_text(PTC_UI_T_OPERATES_INDEPENDENTLY), 13, UI_MUTED);
 
         }
@@ -1010,7 +1017,10 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                                 badge_color == UI_DANGER ? UI_DANGER_SOFT :
                                 (badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
                                  (badge_color == UI_WARNING ? UI_WARNING_SOFT : UI_PAGE)));
-                draw_rect_outline(pixels, stride, pbadge, 6, 1, badge_color);
+                uint32_t p_bd = badge_color == UI_DANGER ? UI_DANGER_BORDER :
+                                (badge_color == UI_SUCCESS ? UI_SUCCESS_BORDER :
+                                 (badge_color == UI_WARNING ? UI_WARNING_BORDER : UI_BORDER));
+                draw_rect_outline(pixels, stride, pbadge, 6, 1, p_bd);
                 draw_text_center(pixels, stride, pbadge, badge_label, 12, badge_color);
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 4) {
                 const char *state_label = ptc_ui_text(PTC_UI_T_STATUS_UNKNOWN);
@@ -1031,7 +1041,16 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 int st_width = measure_text(state_label, 12) + 16;
                 if (st_width < 72) st_width = 72;
                 UiRect badge = {card.x + card.width - st_width - 14, card.y + 8, st_width, 24};
-                fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
+                uint32_t st_bg = state_color == UI_SUCCESS ? UI_SUCCESS_SOFT :
+                                 (state_color == UI_WARNING ? UI_WARNING_SOFT :
+                                  (state_color == UI_DANGER ? UI_DANGER_SOFT :
+                                   (state_color == UI_ACCENT ? UI_ACCENT_SOFT : UI_PAGE)));
+                uint32_t st_bd = state_color == UI_SUCCESS ? UI_SUCCESS_BORDER :
+                                 (state_color == UI_WARNING ? UI_WARNING_BORDER :
+                                  (state_color == UI_DANGER ? UI_DANGER_BORDER :
+                                   (state_color == UI_ACCENT ? UI_ACCENT : UI_BORDER)));
+                fill_round_rect(pixels, stride, badge, 6, st_bg);
+                draw_rect_outline(pixels, stride, badge, 6, 1, st_bd);
                 draw_text_center(pixels, stride, badge, state_label, 12, state_color);
             } else if (model->parent_page == PTC_UI_PARENT_SETTINGS && index == 5) {
                 bool enabled = ptc_audio_is_enabled();
@@ -1040,7 +1059,10 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
                 int au_width = measure_text(state_label, 12) + 16;
                 if (au_width < 62) au_width = 62;
                 UiRect badge = {card.x + card.width - au_width - 14, card.y + 8, au_width, 24};
-                fill_round_rect(pixels, stride, badge, 6, UI_PAGE);
+                uint32_t au_bg = enabled ? UI_SUCCESS_SOFT : UI_PAGE;
+                uint32_t au_bd = enabled ? UI_SUCCESS_BORDER : UI_BORDER;
+                fill_round_rect(pixels, stride, badge, 6, au_bg);
+                draw_rect_outline(pixels, stride, badge, 6, 1, au_bd);
                 draw_text_center(pixels, stride, badge, state_label, 12, state_color);
             }
         }

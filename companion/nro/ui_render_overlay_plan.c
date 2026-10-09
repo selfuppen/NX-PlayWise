@@ -337,21 +337,25 @@ static void draw_bedtime_timeline_strip(
         if (x_eve_start < bar.x) x_eve_start = bar.x;
         if (x_eve_start > bar.x + bar.width) x_eve_start = bar.x + bar.width;
 
+        bool is_dark = (g_theme.resolved == PTC_UI_RESOLVED_DARK);
+        uint32_t bed_block_bg = is_dark ? UI_RGB(0x2C2140) : UI_RGB(0xEAE6F5);
+        uint32_t bed_block_fg = is_dark ? UI_RGB(0xDFD8F5) : UI_RGB(0x564875);
+
         /* 清晨就寝区间 [bar.x, x_morn_end] */
         if (x_morn_end > bar.x) {
             UiRect morn_rect = {bar.x, bar.y, x_morn_end - bar.x, bar.height};
-            fill_round_rect(pixels, stride, morn_rect, 6, UI_RGB(0x403264));
+            fill_round_rect(pixels, stride, morn_rect, 6, bed_block_bg);
             if (morn_rect.width > 44) {
-                draw_text_center(pixels, stride, morn_rect, ptc_ui_text(PTC_UI_T_GO_TO_BED_EARLY_IN_THE_MORNING), 11, UI_RGB(0xdfd8f5));
+                draw_text_center(pixels, stride, morn_rect, ptc_ui_text(PTC_UI_T_GO_TO_BED_EARLY_IN_THE_MORNING), 11, bed_block_fg);
             }
         }
 
         /* 晚间就寝区间 [x_eve_start, bar.x + bar.width] */
         if (x_eve_start < bar.x + bar.width) {
             UiRect eve_rect = {x_eve_start, bar.y, bar.x + bar.width - x_eve_start, bar.height};
-            fill_round_rect(pixels, stride, eve_rect, 6, UI_RGB(0x403264));
+            fill_round_rect(pixels, stride, eve_rect, 6, bed_block_bg);
             if (eve_rect.width > 44) {
-                draw_text_center(pixels, stride, eve_rect, ptc_ui_text(PTC_UI_T_NIGHTTIME_BEDTIME), 11, UI_RGB(0xdfd8f5));
+                draw_text_center(pixels, stride, eve_rect, ptc_ui_text(PTC_UI_T_NIGHTTIME_BEDTIME), 11, bed_block_fg);
             }
         }
 

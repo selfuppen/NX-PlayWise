@@ -301,7 +301,7 @@ static void draw_action_visual(uint32_t *pixels, uint32_t stride, UiRect area,
         for (int index = 0; index < 4; ++index) {
             UiRect chip = {area.x + index * (width + gap), area.y, width, area.height};
             fill_round_rect(pixels, stride, chip, 6, disabled ? UI_PAGE : UI_SUCCESS_SOFT);
-            draw_rect_outline(pixels, stride, chip, 6, 1, disabled ? UI_DISABLED : UI_SUCCESS);
+            draw_rect_outline(pixels, stride, chip, 6, 1, disabled ? UI_DISABLED : UI_SUCCESS_BORDER);
             const char *label = LABELS[index];
             int font_size = index == 3 ? (is_en ? 10 : 11) : 13;
             draw_text_center(pixels, stride, chip, label, font_size, ink);
@@ -329,7 +329,7 @@ static void draw_action_visual(uint32_t *pixels, uint32_t stride, UiRect area,
             bool active = strstr(selected, LABELS[index]) != NULL;
             UiRect chip = {area.x + index * (width + gap), area.y, width, area.height};
             uint32_t active_bg = index == 0 ? UI_SUCCESS_SOFT : UI_RAISED;
-            uint32_t active_border = index == 0 ? UI_SUCCESS : UI_MUTED;
+            uint32_t active_border = index == 0 ? UI_SUCCESS_BORDER : UI_BORDER;
             uint32_t active_ink = index == 0 ? UI_SUCCESS : UI_MUTED;
             fill_round_rect(pixels, stride, chip, 6, active ? active_bg : UI_PAGE);
             draw_rect_outline(pixels, stride, chip, 6, active ? 2 : 1,
@@ -387,8 +387,12 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
         (action->accent == UI_SUCCESS ? UI_SUCCESS_SOFT :
         (action->accent == UI_DANGER ? UI_DANGER_SOFT :
         (action->accent == UI_WARNING ? UI_WARNING_SOFT : UI_ACCENT_SOFT)));
+    uint32_t badge_bd = disabled ? UI_BORDER :
+        (action->accent == UI_SUCCESS ? UI_SUCCESS_BORDER :
+        (action->accent == UI_DANGER ? UI_DANGER_BORDER :
+        (action->accent == UI_WARNING ? UI_WARNING_BORDER : UI_BORDER)));
     fill_round_rect(pixels, stride, badge_rect, 12, badge_bg);
-    draw_rect_outline(pixels, stride, badge_rect, 12, 1, UI_BORDER);
+    draw_rect_outline(pixels, stride, badge_rect, 12, 1, badge_bd);
     draw_card_action_icon(pixels, stride, icon_cx, icon_cy, action->icon,
                           disabled ? UI_DISABLED : action->accent);
 

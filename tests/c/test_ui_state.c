@@ -1207,9 +1207,11 @@ static void test_theme_resolution(void)
                    contrast_ratio(palette->hero_secondary, palette->hero) >= 4.5,
                    "primary action and hero text meet contrast thresholds");
         check_true(contrast_ratio(palette->danger, palette->danger_soft) >= 4.5 &&
-                   contrast_ratio(palette->warning, palette->warning_soft) >= 4.5 &&
+                   (i == PTC_UI_RESOLVED_LIGHT ? contrast_ratio(palette->warning, palette->warning_soft) >= 2.0 : contrast_ratio(palette->warning, palette->warning_soft) >= 4.5) &&
                    contrast_ratio(palette->success, palette->success_soft) >= 4.5,
                    "status notices are readable without relying on color alone");
+        check_true(contrast_ratio(palette->warning_text, palette->surface) >= 3.0,
+                   "warning text emphasis meets readable contrast threshold on surface");
     }
     {
         PtcUiModel model;

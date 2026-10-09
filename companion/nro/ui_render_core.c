@@ -502,13 +502,14 @@ void draw_parent_status_footer(uint32_t *pixels, uint32_t stride, const PtcUiMod
 
     fill_round_rect(pixels, stride, box, 12,
         color == UI_WARNING ? UI_WARNING_SOFT : UI_DANGER_SOFT);
-    draw_rect_outline(pixels, stride, box, 12, 1, color);
+    draw_rect_outline(pixels, stride, box, 12, 1,
+        color == UI_WARNING ? UI_WARNING_BORDER : UI_DANGER_BORDER);
     if (model->parent_footer_focused && model->parent_footer_selection == 1) {
         fill_round_rect(pixels, stride, box, 12, UI_RGB(UI_BLENDED(focus)));
         fill_round_rect(pixels, stride, (UiRect){box.x + 3, box.y + 3, box.width - 6, box.height - 6},
             9, UI_RGB(UI_BLENDED(surface_raised)));
     }
-    draw_text_center(pixels, stride, box, summary, 17, color);
+    draw_text_center(pixels, stride, box, summary, 17, color == UI_WARNING ? UI_WARNING_TEXT : color);
 }
 
 UiRect to_uirect(PtcUiRect rect)
@@ -641,7 +642,7 @@ void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     int radius = box.height / 2;
     draw_round_rect_shadow(pixels, stride, box, radius, 12, 40, 3);
     fill_round_rect(pixels, stride, box, radius, danger ? UI_DANGER_SOFT : (warning ? UI_WARNING_SOFT : UI_SURFACE));
-    draw_rect_outline(pixels, stride, box, radius, 1, danger ? UI_DANGER : (warning ? UI_WARNING : UI_BORDER));
+    draw_rect_outline(pixels, stride, box, radius, 1, danger ? UI_DANGER_BORDER : (warning ? UI_WARNING_BORDER : UI_BORDER));
 
     PtcUiRect icon_rect = ptc_ui_notice_status_icon_rect(n_rect.y);
     int icon_cx = icon_rect.x + icon_rect.w / 2;
@@ -650,8 +651,8 @@ void draw_notice(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 
     if (notice.has_details) {
         UiRect detail_btn = to_uirect(ptc_ui_notice_details_rect());
-        fill_round_rect(pixels, stride, detail_btn, 8, danger ? UI_DANGER : (warning ? UI_WARNING : UI_ACCENT_SOFT));
-        draw_rect_outline(pixels, stride, detail_btn, 8, 1, danger ? UI_DANGER : (warning ? UI_WARNING : UI_ACCENT));
+        fill_round_rect(pixels, stride, detail_btn, 8, danger ? UI_DANGER_SOFT : (warning ? UI_WARNING_SOFT : UI_ACCENT_SOFT));
+        draw_rect_outline(pixels, stride, detail_btn, 8, 1, danger ? UI_DANGER_BORDER : (warning ? UI_WARNING_BORDER : UI_ACCENT));
         draw_text_center(pixels, stride, detail_btn, ptc_ui_text(PTC_UI_T_X_DETAILS), 13, (danger || warning) ? UI_ON_ACCENT : UI_ACCENT);
     }
 

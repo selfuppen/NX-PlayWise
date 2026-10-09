@@ -82,6 +82,10 @@ uint32_t resolve_color(uint32_t source)
     case UI_KEY_GLYPH_BORDER: return pack_rgb(UI_BLENDED(key_glyph_border));
     case UI_GAUGE_SLOT: return pack_rgb(UI_BLENDED(gauge_slot));
     case UI_GAUGE_SLOT_BORDER: return pack_rgb(UI_BLENDED(gauge_slot_border));
+    case UI_SUCCESS_BORDER: return pack_rgb(UI_BLENDED(success_border));
+    case UI_WARNING_BORDER: return pack_rgb(UI_BLENDED(warning_border));
+    case UI_DANGER_BORDER: return pack_rgb(UI_BLENDED(danger_border));
+    case UI_WARNING_TEXT: return pack_rgb(UI_BLENDED(warning_text));
     default: return pack_rgb(source);
     }
 }
