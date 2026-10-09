@@ -89,10 +89,18 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY));
     draw_text(pixels, stride, x, box.y + 36, header_title, 20, UI_RGB(UI_BLENDED(hero_secondary)));
 
-    /* 右上操作区：[ 规则胶囊按钮 ] 与 [+ 查看详情] 胶囊按钮 */
-    home_button(pixels, stride, ptc_ui_home_details_rect(true),
-                ptc_ui_text(PTC_UI_T_VIEW_DETAILS), false, false, model->waiting);
+    /* 右上操作区：[ 规则状态标签 ] 与 [+ 查看详情] 交互胶囊按钮 */
+    PtcUiRect dt_rect = ptc_ui_home_details_rect(true);
+    UiRect dt_box = to_uirect(dt_rect);
+    bool details_disabled = model->waiting;
 
+    /* 查看详情交互胶囊按钮：高对比度微胶囊、醒目描边与居中图文 */
+    fill_round_rect(pixels, stride, dt_box, 10, details_disabled ? UI_RAISED : UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, dt_box, 10, 2, details_disabled ? UI_BORDER : UI_ACCENT);
+    draw_text_center(pixels, stride, dt_box, ptc_ui_text(PTC_UI_T_VIEW_DETAILS), 14,
+                     details_disabled ? UI_DISABLED : UI_ACCENT);
+
+    /* 规则来源标签：次级信息胶囊，清晰区分于操作按钮 */
     char rule_label[64], rule_btn[96];
     if (bedtime_enforcing) {
         snprintf(rule_label, sizeof(rule_label), "%s", ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE));
@@ -103,13 +111,12 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
                  model->status_loaded ? ui_rule_source_label(model->rule_source) : ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM));
     }
     snprintf(rule_btn, sizeof(rule_btn), "%s ❯", rule_label);
-    int rw = measure_text(rule_btn, 12) + 18;
-    if (rw < 72) rw = 72;
-    PtcUiRect dt_rect = ptc_ui_home_details_rect(true);
-    UiRect rule_badge = {dt_rect.x - rw - 8, dt_rect.y, rw, dt_rect.h};
-    fill_round_rect(pixels, stride, rule_badge, 6, UI_ACCENT_SOFT);
-    draw_rect_outline(pixels, stride, rule_badge, 6, 1, UI_ACCENT);
-    draw_text_center(pixels, stride, rule_badge, rule_btn, 12, UI_ACCENT);
+    int rw = measure_text(rule_btn, 12) + 16;
+    if (rw < 68) rw = 68;
+    UiRect rule_badge = {dt_box.x - rw - 8, dt_box.y + 3, rw, dt_box.height - 6};
+    fill_round_rect(pixels, stride, rule_badge, 6, UI_RGB(UI_BLENDED(surface_raised)));
+    draw_rect_outline(pixels, stride, rule_badge, 6, 1, UI_BORDER);
+    draw_text_center(pixels, stride, rule_badge, rule_btn, 12, UI_RGB(UI_BLENDED(text_secondary)));
 
     /* 主数值：剩余分钟数 */
     int minutes;
@@ -1275,5 +1282,14 @@ void draw_parent(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
     }
     if (!ptc_ui_operation_feedback_visible(model)) {
         draw_parent_status_footer(pixels, stride, model);
+        if (model->parent_page == PTC_UI_PARENT_TODAY &&
+            !ptc_ui_parent_status_alert_visible(model)) {
+            PtcUiNoticeProjection notice;
+            ptc_ui_project_notice(model, &notice);
+            if (!notice.visible) {
+                draw_footer_button(pixels, stride, (PtcUiRect){662, 664, 160, 44},
+                                   ptc_ui_text(PTC_UI_T_VIEW_DETAILS));
+            }
+        }
     }
 }

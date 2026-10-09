@@ -505,13 +505,13 @@ void ptc_ui_move_bedtime_focus(PtcUiModel *model, int horizontal, int vertical)
 
 PtcUiRect ptc_ui_home_details_rect(bool parent)
 {
-    return parent ? (PtcUiRect){414, 192, 106, 26} : (PtcUiRect){964, 366, 268, 106};
+    return parent ? (PtcUiRect){394, 186, 126, 32} : (PtcUiRect){964, 366, 268, 106};
 }
 
 PtcUiRect ptc_ui_home_rules_rect(void)
 {
     PtcUiRect dt_rect = ptc_ui_home_details_rect(true);
-    return (PtcUiRect){dt_rect.x - 128, dt_rect.y - 2, 120, dt_rect.h + 4};
+    return (PtcUiRect){dt_rect.x - 128, dt_rect.y, 120, dt_rect.h};
 }
 
 PtcUiRect ptc_ui_today_quota_card_rect(void)
