@@ -175,6 +175,10 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_POPUP);
         ptc_ui_open_home_details(&ui->model);
         break;
+    case PTC_UI_HIT_HOME_RULES:
+        ptc_audio_play(PTC_SE_POPUP);
+        ptc_ui_open_home_details_page(&ui->model, 1);
+        break;
     case PTC_UI_HIT_HOME_DETAILS_ACTION:
         ui->model.home_details_focus = hit.index;
         if (hit.index == 2) ptc_ui_home_details_back(&ui->model);

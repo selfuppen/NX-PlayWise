@@ -89,11 +89,11 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY));
     draw_text(pixels, stride, x, box.y + 36, header_title, 20, UI_RGB(UI_BLENDED(hero_secondary)));
 
-    /* 右上操作区：[ 规则徽章 ] 与 [+ 查看详情] 胶囊按钮 */
+    /* 右上操作区：[ 规则胶囊按钮 ] 与 [+ 查看详情] 胶囊按钮 */
     home_button(pixels, stride, ptc_ui_home_details_rect(true),
                 ptc_ui_text(PTC_UI_T_VIEW_DETAILS), false, false, model->waiting);
 
-    char rule_label[64];
+    char rule_label[64], rule_btn[96];
     if (bedtime_enforcing) {
         snprintf(rule_label, sizeof(rule_label), "%s", ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE));
     } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
@@ -102,13 +102,14 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         snprintf(rule_label, sizeof(rule_label), "%s",
                  model->status_loaded ? ui_rule_source_label(model->rule_source) : ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM));
     }
-    int rw = measure_text(rule_label, 12) + 16;
-    if (rw < 64) rw = 64;
+    snprintf(rule_btn, sizeof(rule_btn), "%s ❯", rule_label);
+    int rw = measure_text(rule_btn, 12) + 18;
+    if (rw < 72) rw = 72;
     PtcUiRect dt_rect = ptc_ui_home_details_rect(true);
     UiRect rule_badge = {dt_rect.x - rw - 8, dt_rect.y, rw, dt_rect.h};
     fill_round_rect(pixels, stride, rule_badge, 6, UI_ACCENT_SOFT);
     draw_rect_outline(pixels, stride, rule_badge, 6, 1, UI_ACCENT);
-    draw_text_center(pixels, stride, rule_badge, rule_label, 12, UI_ACCENT);
+    draw_text_center(pixels, stride, rule_badge, rule_btn, 12, UI_ACCENT);
 
     /* 主数值：剩余分钟数 */
     int minutes;
@@ -194,6 +195,14 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     char total_str[64];
     ptc_ui_format_home_total_value(model, total_str, sizeof(total_str));
     draw_text(pixels, stride, left_card.x + 12, left_card.y + 42, total_str, 18, UI_INK);
+
+    /* 规则决策快捷标签按钮 */
+    const char *tag_rules = ptc_ui_text(PTC_UI_T_VIEW_RULES);
+    int tr_w = measure_text(tag_rules, 11) + 14;
+    UiRect tag_rect = {left_card.x + left_card.width - tr_w - 10, left_card.y + 14, tr_w, 24};
+    fill_round_rect(pixels, stride, tag_rect, 4, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, tag_rect, 4, 1, UI_ACCENT);
+    draw_text_center(pixels, stride, tag_rect, tag_rules, 11, UI_ACCENT);
 
     /* 右指标：已消耗估算 */
     draw_text(pixels, stride, right_card.x + 12, right_card.y + 18, ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_CONSUMED_ESTIMATED), 12, UI_MUTED);

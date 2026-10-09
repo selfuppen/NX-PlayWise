@@ -916,6 +916,11 @@ static void draw_time_plan_preview(uint32_t *pixels, uint32_t stride, const PtcU
     draw_rect_outline(pixels, stride, panel, 16, 1, UI_BORDER);
     draw_text(pixels, stride, panel.x + 16, panel.y + 26, ptc_ui_text(PTC_UI_T_7_DAY_PLAN_BEDTIME_FORECAST), 17, UI_INK);
 
+    UiRect plan_rule_btn = to_uirect(ptc_ui_plan_today_rules_rect());
+    fill_round_rect(pixels, stride, plan_rule_btn, 4, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, plan_rule_btn, 4, 1, UI_ACCENT);
+    draw_text_center(pixels, stride, plan_rule_btn, ptc_ui_text(PTC_UI_T_PLAN_TODAY_RULES_BTN), 11, UI_ACCENT);
+
     if (!model->forecast_available) {
         draw_text(pixels, stride, panel.x + 16, panel.y + 110, ptc_ui_text(PTC_UI_T_REFRESH_STATUS_TO_VIEW_FORECAST_DATA), 15, UI_MUTED);
         return;

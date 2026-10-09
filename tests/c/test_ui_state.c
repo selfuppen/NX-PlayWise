@@ -1670,6 +1670,11 @@ static void test_release_hit_targets(void)
     check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 0)), PTC_UI_HIT_HOME_DETAILS_ACTION, 0, "details decision entry");
     check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 1)), PTC_UI_HIT_HOME_DETAILS_ACTION, 1, "details refresh entry");
     check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 2)), PTC_UI_HIT_HOME_DETAILS_ACTION, 2, "details back entry");
+    ptc_ui_cancel_overlay(&model);
+    ptc_ui_open_home_details_page(&model, 1);
+    check_int(model.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "open home details page 1 sets overlay");
+    check_int(model.home_details_page, 1, "open home details page 1 sets page to 1");
+    ptc_ui_cancel_overlay(&model);
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     model.credential_kind = 1;
@@ -2399,6 +2404,10 @@ static void test_home_redesign(void)
     for (int parent = 0; parent <= 1; ++parent) {
         model.view = parent ? PTC_UI_PARENT : PTC_UI_CHILD;
         check_hit(hit_center(&model, ptc_ui_home_details_rect(parent)), PTC_UI_HIT_HOME_DETAILS, 0, "details touch entry");
+        if (parent) {
+            check_hit(hit_center(&model, ptc_ui_home_rules_rect()), PTC_UI_HIT_HOME_RULES, 0, "home rules touch entry");
+            check_hit(hit_center(&model, ptc_ui_today_quota_card_rect()), PTC_UI_HIT_HOME_RULES, 0, "quota card rules touch entry");
+        }
         check_true(ptc_ui_open_home_details(&model), "details open without a request");
         check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "details block underlying input");
         check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_NONE, 0, "details have no hidden confirm action");
@@ -3352,6 +3361,8 @@ static void test_forecast_day_decision_and_navigation(void)
         check_hit(hit_center(&model, row), PTC_UI_HIT_FORECAST_DAY, i,
                   "forecast row hit test matches index");
     }
+    check_hit(hit_center(&model, ptc_ui_plan_today_rules_rect()), PTC_UI_HIT_HOME_RULES, 0,
+              "plan today rules hit test");
 
     /* 2. D-pad navigation between cards and forecast rows */
     model.selected_index = 3;

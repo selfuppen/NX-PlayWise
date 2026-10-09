@@ -503,6 +503,23 @@ PtcUiRect ptc_ui_home_details_rect(bool parent)
     return parent ? (PtcUiRect){414, 192, 106, 26} : (PtcUiRect){964, 366, 268, 106};
 }
 
+PtcUiRect ptc_ui_home_rules_rect(void)
+{
+    PtcUiRect dt_rect = ptc_ui_home_details_rect(true);
+    return (PtcUiRect){dt_rect.x - 128, dt_rect.y - 2, 120, dt_rect.h + 4};
+}
+
+PtcUiRect ptc_ui_today_quota_card_rect(void)
+{
+    PtcUiRect box = ptc_ui_home_summary_rect(true);
+    return (PtcUiRect){box.x + 22, box.y + 154, 216, 52};
+}
+
+PtcUiRect ptc_ui_plan_today_rules_rect(void)
+{
+    return (PtcUiRect){1074, 184, 140, 24};
+}
+
 PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){108, 108, 1064, 466}; }
 
 PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
@@ -594,14 +611,16 @@ PtcUiOperation ptc_ui_today_operation(int index)
     return index >= 0 && index < 8 ? actions[index] : PTC_UI_OPERATION_NONE;
 }
 
-bool ptc_ui_open_home_details(PtcUiModel *model)
+bool ptc_ui_open_home_details_page(PtcUiModel *model, int page)
 {
     if (!model || model->waiting || model->overlay != PTC_UI_OVERLAY_NONE ||
         (model->view != PTC_UI_CHILD &&
-         !(model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_TODAY))) return false;
+         !(model->view == PTC_UI_PARENT &&
+           (model->parent_page == PTC_UI_PARENT_TODAY ||
+            (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT))))) return false;
     /* Keep the underlying focus and execution message intact on open/close. */
     model->overlay = PTC_UI_OVERLAY_HOME_DETAILS;
-    model->home_details_page = 0;
+    model->home_details_page = (page == 1) ? 1 : 0;
     model->home_details_focus = 0;
     model->home_details_scroll = 0;
     model->home_details_data_expanded = false;
@@ -609,6 +628,11 @@ bool ptc_ui_open_home_details(PtcUiModel *model)
         model->view == PTC_UI_CHILD ? ptc_ui_text(PTC_UI_T_USAGE_DETAILS) : ptc_ui_text(PTC_UI_T_TODAY_S_SCHEDULE_DETAILS));
     model->overlay_body[0] = '\0';
     return true;
+}
+
+bool ptc_ui_open_home_details(PtcUiModel *model)
+{
+    return ptc_ui_open_home_details_page(model, 0);
 }
 
 bool ptc_ui_open_notice_details(PtcUiModel *model)

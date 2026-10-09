@@ -423,6 +423,11 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
         ptc_ui_rect_contains(ptc_ui_home_details_rect(model->view == PTC_UI_PARENT), x, y)) {
         return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_DETAILS, 0);
     }
+    if (model->view == PTC_UI_PARENT && model->parent_page == PTC_UI_PARENT_TODAY &&
+        (ptc_ui_rect_contains(ptc_ui_home_rules_rect(), x, y) ||
+         ptc_ui_rect_contains(ptc_ui_today_quota_card_rect(), x, y))) {
+        return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_RULES, 0);
+    }
     if (model->view == PTC_UI_CHILD) {
         if (!model->disable_flag_present && !model->waiting && ptc_ui_rect_contains(ptc_ui_child_submit_rect(), x, y)) {
             return make_hit(PTC_UI_HIT_CHILD_SUBMIT_CODE, 0);
@@ -626,11 +631,15 @@ PtcUiHit ptc_ui_hit_test_at(const PtcUiModel *model, int x, int y, int64_t now)
             return make_hit(PTC_UI_HIT_EYE_CARE_PAGE_SKIP, 0);
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT &&
-        model->forecast_available) {
-        for (i = 0; i < 7; ++i) {
-            if (ptc_ui_rect_contains(ptc_ui_forecast_day_row_rect(i), x, y)) {
-                return make_hit(PTC_UI_HIT_FORECAST_DAY, i);
+    if (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT) {
+        if (ptc_ui_rect_contains(ptc_ui_plan_today_rules_rect(), x, y)) {
+            return model->waiting ? make_hit(PTC_UI_HIT_NONE, 0) : make_hit(PTC_UI_HIT_HOME_RULES, 0);
+        }
+        if (model->forecast_available) {
+            for (i = 0; i < 7; ++i) {
+                if (ptc_ui_rect_contains(ptc_ui_forecast_day_row_rect(i), x, y)) {
+                    return make_hit(PTC_UI_HIT_FORECAST_DAY, i);
+                }
             }
         }
     }
