@@ -486,12 +486,21 @@ When reporting issues, export diagnostics from this page. **Start your troublesh
 
 ## Upgrades
 
-### In-Place Data-Preserving Upgrades
+### In-Place Data-Preserving Upgrades & Live Hot-Reload
 
 Standard installation packages overwrite only program binaries and default templates, never overwriting PINs, secrets, rules, ledgers, logs, or pre-installation backup states stored under `switch/playwise/`. Before upgrading, backing up SD card data is still recommended; always merge both `atmosphere` and `switch` folders from the new package completely rather than copying individual binaries.
 
+> [!WARNING]
+> **Never delete existing PlayWise directories on the SD card while the Switch is powered on!**
+> When the Switch is running, the PlayWise background daemon (sysmodule `4200000000000044`) remains resident in memory. Deleting files directly from a connected PC or mobile device turns the running sysmodule into an orphaned process, causing persistent SD card I/O errors and fatal errors like `0x95B (2347-0004)` when launching the NRO. **Always directly merge and overwrite files during upgrades or reinstallation; do not delete them first.** If a clean wipe is truly required, power off the console completely before removing the SD card. If files were accidentally deleted while running, reboot the console immediately to flush the orphan process.
+
+- **Live Hot-Reload (Upgrade without Rebooting)**:
+  PlayWise natively supports reboot-free live reloading via Atmosphère's `pm:shell` process handover protocol:
+  1. Keep the Switch powered on, and transfer the new standard package's `atmosphere` and `switch` folders directly onto the SD card root via DBI (MTP), FTP, or USB, **merging and overwriting** all files.
+  2. Launch the PlayWise console app (NRO) and enter the Parent Zone. The app automatically detects that files on disk differ from the resident background version and offers to load the new version (or navigate to "Support & Recovery → Software Information").
+  3. Select "Load New Version". The app performs a 4-stage smooth handover: orders the old daemon to persist data and unregister -> terminates the old process -> validates new package integrity -> spawns the new daemon via `pm:shell`.
+  4. Once complete, reopen the overlay to resume normal operation—**no console reboot is required**.
 - **Powered-Off Card Reader Upgrade**: Power off Switch, remove SD card, merge and overwrite both folders on your computer, safely eject, and reboot. Follow prompts on first launch to perform safe re-detection.
-- **Live Transfer & Load New Version**: Close PlayWise console app and overlay, transfer the standard package completely via DBI/MTP, FTP, or USB, launch the console app, enter Parent Zone, verify current and pending builds, and confirm "Load New Version". Wait for all four stages to complete before reopening the overlay. If cancelled, re-enter from "Support & Recovery → Software Information".
 
 If prompted that installation is incomplete, re-copy files from the **same** standard package. If older versions cannot live-load new builds, target environments mismatch, or startup fails, perform a full console reboot; PlayWise does not forcibly terminate running sysmodules or trigger automatic reboots. Do not initiate "Load New Version" while file transfers are still underway.
 
@@ -510,6 +519,8 @@ Do not use `-Clean`, `-Full`, or `-CleanAll` flags during standard upgrades. FTP
 > **If an error occurs, first check whether Nintendo system Parental Controls is enabled and the Switch clock has been synchronized.** See [Support & Recovery](#support--recovery) for checks, clock sync methods and troubleshooting record requirements. Refresh status and retry after checking; if the issue persists, record check results and error codes, and export diagnostics.
 > Steps: [Enable Nintendo Parental Controls](#enable-nintendo-parental-controls) · [Synchronize the Switch Clock](#synchronize-the-switch-clock).
 
+- **Console errors or crash after reinstalling/updating**: Verify whether files were deleted while the Switch was powered on. If files belonging to a running background process were deleted, the orphan process causes file I/O faults. To recover, copy the standard release package again directly onto the SD card, then **perform a full console reboot**.
+- **Status displays "Official Parental Controls: Temporarily Unlocked" after reboot/setup**: This is standard Nintendo native Parental Controls (PCTL) behavior. Whenever the official PIN is verified in system settings, parental rules are adjusted, or initial setup completes, the OS enters a temporary unlock state (play timers pause and games are not blocked). **A second reboot is NOT required.** Official Nintendo design specifies that entering sleep mode clears the temporary unlock: simply **press the Switch Power button to put the console into sleep mode (screen off for 3–5 seconds), then press Power again to wake it up**. Parental controls will immediately restore normal supervision and countdown timers.
 - **Code displays invalid, date mismatch, or already used**: Verify console local date displayed on Switch, device configuration, and entered numbers. If explicitly reported as already used, have parents generate a fresh code; failed attempts or cancelled previews do not consume codes.
 - **Playtime limit still reflects old numbers**: Wait for background synchronization to finish, then press `Y` to refresh. Status older than 120 seconds or missing readings will display unconfirmed; never infer restriction release from outdated balances.
 - **Set daily limit shows "Limit Reached" and 0 min remaining, but games still launch**: First check that Nintendo official Parental Controls is enabled and has not been temporarily unlocked via official PIN. If settings are correct, synchronize your Switch system clock via internet NTP: in DBI, choose "Tools → NTP Time Sync", or use [QuickNTP (Tesla time sync tool)](https://github.com/ppkantorski/QuickNTP). After successful clock synchronization, refresh PlayWise status and test with a game with no unsaved progress to confirm restriction behavior. Clock synchronization is a recommended resolution, see [Issue #1](https://github.com/selfuppen/NX-PlayWise/issues/1); if games still open, proceed with troubleshooting and export diagnostics under "Support & Recovery".

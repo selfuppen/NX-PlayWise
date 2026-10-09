@@ -12,3 +12,5 @@ Local PlayWise font patch: load both Nintendo Chinese shared fonts, select each
 glyph from the available faces, and include the chosen language in the glyph
 cache key. This supports Simplified and Traditional UI text on either system
 language without changing the upstream commit recorded above.
+Local overlay memory patch: restrict emoji font search to overlay-specific paths
+and cap maximum file size to 256KB to prevent ovlloader 4MB heap exhaustion.

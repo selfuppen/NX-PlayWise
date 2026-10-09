@@ -967,7 +967,7 @@ namespace tsl {
                 std::fseek(f, 0, SEEK_END);
                 long sz = std::ftell(f);
                 std::fseek(f, 0, SEEK_SET);
-                if (sz <= 0 || sz >= 16 * 1024 * 1024) {
+                if (sz <= 0 || sz > 256 * 1024) {
                     std::fclose(f);
                     return -1;
                 }
@@ -1193,12 +1193,10 @@ namespace tsl {
                 fontBuffer = reinterpret_cast<u8*>(extFontData.address);
                 stbtt_InitFont(&this->m_extFont, fontBuffer, stbtt_GetFontOffsetForIndex(fontBuffer, 0));
 
-                // Optional custom / monochrome emoji font on SD card
+                // Optional custom / monochrome emoji font for overlay on SD card (capped to <= 256KB)
                 const char *emojiPaths[] = {
-                    "sdmc:/switch/playwise/fonts/emoji.ttf",
-                    "sdmc:/switch/playwise/emoji.ttf",
-                    "sdmc:/switch/playwise/fonts/NotoEmoji-Regular.ttf",
-                    "sdmc:/switch/.overlays/fonts/emoji.ttf"
+                    "sdmc:/switch/.overlays/fonts/emoji.ttf",
+                    "sdmc:/switch/.overlays/emoji.ttf"
                 };
                 for (const char *path : emojiPaths) {
                     if (this->loadEmojiFontFile(path) == 0) {

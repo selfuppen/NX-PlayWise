@@ -31,7 +31,7 @@ static PtcUiResolvedTheme s_overlay_theme = PTC_UI_RESOLVED_DARK;
 
 static void load_overlay_config(PtcStorage *storage)
 {
-    char config[8192];
+    char config[2048];
     PtcUiLanguagePreference lang_preference = PTC_UI_LANGUAGE_SYSTEM;
     PtcUiSystemLanguage system_language = PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
     PtcUiThemePreference theme_preference = PTC_UI_THEME_SYSTEM;
