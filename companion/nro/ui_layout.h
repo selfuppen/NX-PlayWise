@@ -124,7 +124,10 @@ typedef enum {
     PTC_UI_HIT_SETUP_PCTL_HELP,
     PTC_UI_HIT_SUPPORT_GUIDE,
     PTC_UI_HIT_CONFIG_BACKUP_FIELD,
-    PTC_UI_HIT_DOCK_FIELD
+    PTC_UI_HIT_DOCK_FIELD,
+    PTC_UI_HIT_DAY_DECISION_REFRESH,
+    PTC_UI_HIT_DAY_DECISION_PREV,
+    PTC_UI_HIT_DAY_DECISION_NEXT
 } PtcUiHitKind;
 
 typedef struct {
@@ -181,6 +184,9 @@ bool ptc_ui_open_home_details_page(PtcUiModel *model, int page);
 PtcUiRect ptc_ui_home_rules_rect(void);
 PtcUiRect ptc_ui_today_quota_card_rect(void);
 PtcUiRect ptc_ui_plan_today_rules_rect(void);
+PtcUiRect ptc_ui_day_decision_refresh_rect(void);
+PtcUiRect ptc_ui_day_decision_prev_rect(void);
+PtcUiRect ptc_ui_day_decision_next_rect(void);
 bool ptc_ui_open_notice_details(PtcUiModel *model);
 bool ptc_ui_home_notice_expanded(const PtcUiModel *model);
 PtcUiRect ptc_ui_advanced_back_rect(void);

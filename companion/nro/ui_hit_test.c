@@ -95,9 +95,20 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
-    if (model->overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || model->overlay == PTC_UI_OVERLAY_DAY_DECISION) {
+    if (model->overlay == PTC_UI_OVERLAY_NOTICE_DETAILS) {
         return ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y)
             ? make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0) : make_hit(PTC_UI_HIT_NONE, 0);
+    }
+    if (model->overlay == PTC_UI_OVERLAY_DAY_DECISION) {
+        if (ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y))
+            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
+        if (ptc_ui_rect_contains(ptc_ui_day_decision_refresh_rect(), x, y))
+            return make_hit(PTC_UI_HIT_DAY_DECISION_REFRESH, 0);
+        if (ptc_ui_rect_contains(ptc_ui_day_decision_prev_rect(), x, y))
+            return make_hit(PTC_UI_HIT_DAY_DECISION_PREV, 0);
+        if (ptc_ui_rect_contains(ptc_ui_day_decision_next_rect(), x, y))
+            return make_hit(PTC_UI_HIT_DAY_DECISION_NEXT, 0);
+        return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
         if (ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y))

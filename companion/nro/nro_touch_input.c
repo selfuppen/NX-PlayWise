@@ -185,6 +185,23 @@ void handle_touch(UiState *ui, int x, int y)
         else if (hit.index == 1) { if (!ui->waiting) submit_status(ui); }
         else { ptc_audio_play(PTC_SE_POPUP); ptc_ui_home_details_activate(&ui->model, 0); }
         break;
+    case PTC_UI_HIT_DAY_DECISION_REFRESH:
+        if (!ui->waiting) submit_status(ui);
+        break;
+    case PTC_UI_HIT_DAY_DECISION_PREV:
+        if (ui->model.forecast_detail_day_offset > 0) {
+            ui->model.forecast_detail_day_offset--;
+            ui->model.overlay_selection = ui->model.forecast_detail_day_offset;
+            ptc_audio_play(PTC_SE_POPUP);
+        }
+        break;
+    case PTC_UI_HIT_DAY_DECISION_NEXT:
+        if (ui->model.forecast_detail_day_offset < (int)PTC_RESULT_FORECAST_DAYS - 1) {
+            ui->model.forecast_detail_day_offset++;
+            ui->model.overlay_selection = ui->model.forecast_detail_day_offset;
+            ptc_audio_play(PTC_SE_POPUP);
+        }
+        break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
         ptc_audio_play(PTC_SE_CANCEL);
         if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS ||

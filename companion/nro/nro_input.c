@@ -337,7 +337,21 @@ void handle_overlay_input(UiState *ui, u64 down)
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_DAY_DECISION) {
-        if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
+        if (down & (HidNpadButton_Left | HidNpadButton_L | HidNpadButton_ZL)) {
+            if (ui->model.forecast_detail_day_offset > 0) {
+                ui->model.forecast_detail_day_offset--;
+                ui->model.overlay_selection = ui->model.forecast_detail_day_offset;
+                ptc_audio_play(PTC_SE_POPUP);
+            }
+        } else if (down & (HidNpadButton_Right | HidNpadButton_R | HidNpadButton_ZR)) {
+            if (ui->model.forecast_detail_day_offset < (int)PTC_RESULT_FORECAST_DAYS - 1) {
+                ui->model.forecast_detail_day_offset++;
+                ui->model.overlay_selection = ui->model.forecast_detail_day_offset;
+                ptc_audio_play(PTC_SE_POPUP);
+            }
+        } else if (down & HidNpadButton_Y) {
+            if (!ui->waiting) submit_status(ui);
+        } else if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
             ptc_audio_play(PTC_SE_CANCEL);
             ptc_ui_cancel_overlay(&ui->model);
         }

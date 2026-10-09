@@ -25,6 +25,11 @@
 #define PTC_UI_DIALOG_BTN_W 210
 #define PTC_UI_DIALOG_BTN_H 52
 
+static int dialog_button_top(PtcUiRect dialog)
+{
+    return dialog.y + dialog.h - PTC_UI_DIALOG_BTN_H - 24;
+}
+
 PtcUiRect ptc_ui_child_submit_rect(void)
 {
     PtcUiRect rect = {964, 120, 268, 112};
@@ -518,6 +523,22 @@ PtcUiRect ptc_ui_today_quota_card_rect(void)
 PtcUiRect ptc_ui_plan_today_rules_rect(void)
 {
     return (PtcUiRect){1074, 184, 140, 24};
+}
+
+PtcUiRect ptc_ui_day_decision_refresh_rect(void)
+{
+    PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_DAY_DECISION);
+    return (PtcUiRect){dialog.x + dialog.w - 28 - PTC_UI_DIALOG_BTN_W - 16 - 160, dialog_button_top(dialog), 160, PTC_UI_DIALOG_BTN_H};
+}
+
+PtcUiRect ptc_ui_day_decision_prev_rect(void)
+{
+    return (PtcUiRect){624, 66, 44, 30};
+}
+
+PtcUiRect ptc_ui_day_decision_next_rect(void)
+{
+    return (PtcUiRect){852, 66, 44, 30};
 }
 
 PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){108, 108, 1064, 466}; }
@@ -1133,11 +1154,6 @@ PtcUiRect ptc_ui_pin_keyboard_rect(void)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_PIN);
     return (PtcUiRect){dialog.x + 794, dialog.y + 516, 210, 48};
-}
-
-static int dialog_button_top(PtcUiRect dialog)
-{
-    return dialog.y + dialog.h - PTC_UI_DIALOG_BTN_H - 24;
 }
 
 PtcUiRect ptc_ui_confirm_rect(PtcUiOverlay overlay)

@@ -3400,6 +3400,21 @@ static void test_forecast_day_decision_and_navigation(void)
     check_true(cancel_btn.w > 0 && cancel_btn.h > 0, "day decision cancel button has non-zero size");
     check_hit(hit_center(&model, cancel_btn), PTC_UI_HIT_OVERLAY_CANCEL, 0,
                "day decision cancel button hit test");
+
+    PtcUiRect refresh_btn = ptc_ui_day_decision_refresh_rect();
+    check_true(refresh_btn.w > 0 && refresh_btn.h > 0, "day decision refresh button has non-zero size");
+    check_hit(hit_center(&model, refresh_btn), PTC_UI_HIT_DAY_DECISION_REFRESH, 0,
+              "day decision refresh button hit test");
+
+    PtcUiRect prev_btn = ptc_ui_day_decision_prev_rect();
+    check_true(prev_btn.w > 0 && prev_btn.h > 0, "day decision prev button has non-zero size");
+    check_hit(hit_center(&model, prev_btn), PTC_UI_HIT_DAY_DECISION_PREV, 0,
+              "day decision prev button hit test");
+
+    PtcUiRect next_btn = ptc_ui_day_decision_next_rect();
+    check_true(next_btn.w > 0 && next_btn.h > 0, "day decision next button has non-zero size");
+    check_hit(hit_center(&model, next_btn), PTC_UI_HIT_DAY_DECISION_NEXT, 0,
+              "day decision next button hit test");
 }
 
 static void test_quota_recheck_decisions(void)

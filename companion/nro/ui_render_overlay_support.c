@@ -254,136 +254,6 @@ static void format_decision_rule(const PtcUiDecisionStep *step, char *out, size_
     }
 }
 
-static void draw_waterfall_pipeline(uint32_t *pixels, uint32_t stride, int x, int y, int total_w,
-                                    const PtcUiTodayDecision *decision, bool bedtime_enforcing, bool compact)
-{
-    const PtcUiTextId titles[] = {PTC_UI_T_TODAY_S_ADJUSTMENT, PTC_UI_T_SPECIFIED_DATE_QUOTA,
-        PTC_UI_T_HOLIDAY, PTC_UI_T_WEEKLY_PLAN};
-    const PtcUiDecisionStep *steps[] = {
-        &decision->today_override,
-        &decision->scheduled_override,
-        &decision->holiday,
-        &decision->weekly
-    };
-    int count = 4;
-    int node_w = total_w < 900 ? (total_w - 36) / 4 : 216;
-    int node_h = compact ? 128 : 136;
-    int gap = (total_w - node_w * count) / (count - 1);
-    bool hit_found = false;
-
-    char pipeline_title[192];
-    fit_text(pipeline_title, sizeof(pipeline_title), ptc_ui_text(PTC_UI_T_THE_DAILY_QUOTA_IS_DETERMINED_IN_THE),
-        14, total_w - (bedtime_enforcing ? 300 : 0));
-    draw_text(pixels, stride, x, y + 6, pipeline_title, 14, UI_INK);
-    if (bedtime_enforcing) {
-        UiRect pill = {x + total_w - 290, y, 290, 24};
-        fill_round_rect(pixels, stride, pill, 6, UI_DANGER_SOFT);
-        draw_rect_outline(pixels, stride, pill, 6, 1, UI_DANGER);
-        draw_text_center(pixels, stride, pill, ptc_ui_text(PTC_UI_T_BEDTIME_RESTRICTIONS_ARE_IN_EFFECT), 12, UI_DANGER);
-    }
-    int cards_y = y + 26;
-
-    for (int i = 0; i < count; ++i) {
-        int node_x = x + i * (node_w + gap);
-        UiRect card = {node_x, cards_y, node_w, node_h};
-        const PtcUiDecisionStep *step = steps[i];
-        bool is_selected = (step->state == PTC_UI_DECISION_SELECTED);
-        bool is_overridden = (step->state == PTC_UI_DECISION_OVERRIDDEN);
-        char rule_val[32];
-        format_decision_rule(step, rule_val, sizeof(rule_val));
-
-        /* Card background & outline */
-        if (is_selected) {
-            if (bedtime_enforcing) {
-                fill_round_rect(pixels, stride, card, 12, UI_RGB(ui_mix_rgb(UI_BLENDED(surface), UI_BLENDED(danger), 14)));
-                draw_rect_outline(pixels, stride, card, 12, 2, UI_DANGER);
-            } else {
-                fill_round_rect(pixels, stride, card, 12, UI_SUCCESS_SOFT);
-                draw_rect_outline(pixels, stride, card, 12, 2, UI_SUCCESS);
-            }
-        } else if (is_overridden) {
-            fill_round_rect(pixels, stride, card, 12, UI_RAISED);
-            draw_rect_outline(pixels, stride, card, 12, 1, UI_BORDER);
-        } else {
-            fill_round_rect(pixels, stride, card, 12, UI_PAGE);
-            draw_rect_outline(pixels, stride, card, 12, 1, UI_BORDER);
-        }
-
-        /* 1. Header title */
-        char node_title[128];
-        snprintf(node_title, sizeof(node_title), "%02d %s", i + 1, ptc_ui_text(titles[i]));
-        fit_text(node_title, sizeof(node_title), node_title, 14, card.width - 28);
-        draw_text(pixels, stride, card.x + 14, card.y + 20, node_title, 14,
-                  is_selected ? (bedtime_enforcing ? UI_DANGER : UI_SUCCESS) : (is_overridden ? UI_INK : UI_MUTED));
-
-        /* 2. Status Badge */
-        UiRect badge = {card.x + 12, card.y + 30, card.width - 24, 22};
-        if (is_selected) {
-            if (bedtime_enforcing) {
-                fill_round_rect(pixels, stride, badge, 4, UI_DANGER);
-                draw_text_center(pixels, stride, badge, ptc_ui_text(PTC_UI_T_THIS_RULE_APPLIES_TO_THE_DAILY_QUOTA), 11, UI_ON_ACCENT);
-            } else {
-                fill_round_rect(pixels, stride, badge, 4, UI_SUCCESS);
-                draw_text_center(pixels, stride, badge, ptc_ui_text(PTC_UI_T_THIS_RULE_APPLIES_TO_THE_DAILY_QUOTA), 11, UI_ON_ACCENT);
-            }
-        } else if (is_overridden) {
-            fill_round_rect(pixels, stride, badge, 4, UI_WARNING_SOFT);
-            draw_text_center(pixels, stride, badge, ptc_ui_text(PTC_UI_T_TAKES_PRECEDENCE_OVER_THE_PREVIOUS_RULES), 11, UI_WARNING);
-        } else {
-            fill_round_rect(pixels, stride, badge, 4, UI_BORDER);
-            draw_text_center(pixels, stride, badge, ptc_ui_decision_state_label(step->state), 11, UI_MUTED);
-        }
-
-        /* 3. Rule Value */
-        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 60, card.width, 26},
-                         rule_val, 18, is_selected ? (bedtime_enforcing ? UI_DANGER : UI_SUCCESS) : (is_overridden ? UI_MUTED : UI_DISABLED));
-
-        /* 4. Subtext explanation */
-        const char *desc;
-        if (is_selected) {
-            desc = bedtime_enforcing ? ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_DETERMINED_SLEEPING_LIMIT) : ptc_ui_text(PTC_UI_T_THE_FOLLOWING_RULES_ARE_NO_LONGER_USED);
-        } else if (is_overridden) {
-            desc = ptc_ui_text(PTC_UI_T_IS_SET_BUT_THE_PREVIOUS_RULE_TAKES);
-        } else if (step->state == PTC_UI_DECISION_UNKNOWN) {
-            desc = ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM);
-        } else if (step->state == PTC_UI_DECISION_DISABLED) {
-            desc = ptc_ui_text(PTC_UI_T_NOT_ENABLED_OR_CONFIGURED);
-        } else if (step->state == PTC_UI_DECISION_CALENDAR_UNCOVERED) {
-            desc = ptc_ui_text(PTC_UI_T_THE_DATE_IS_OUTSIDE_THE_BUILT_IN);
-        } else {
-            desc = (i == 0 ? ptc_ui_text(PTC_UI_T_NO_SEPARATE_ADJUSTMENT_CONTINUE_TO_THE_NEXT) :
-                   (i == 2 ? ptc_ui_text(PTC_UI_T_IT_IS_NOT_A_HOLIDAY_CONTINUE_TO) : ptc_ui_text(PTC_UI_T_NOT_APPLICABLE_TODAY_CONTINUE_TO_THE_NEXT)));
-        }
-        draw_line(pixels, stride, card.x + 12, card.y + 98, card.x + card.width - 12, card.y + 98, 1, UI_BORDER);
-        draw_wrapped_text(pixels, stride, card.x + 12, card.y + 113, desc, 11,
-                          card.width - 24, 12, 2,
-                          is_selected ? (bedtime_enforcing ? UI_DANGER : UI_SUCCESS) : UI_MUTED);
-
-        /* 5. Connector line between node i and node i+1 */
-        if (i < count - 1) {
-            int line_start_x = card.x + card.width;
-            int line_end_x = line_start_x + gap;
-            int line_y = cards_y + node_h / 2;
-
-            if (is_selected) {
-                /* Short-circuit stop mark: ─┤ 阻断 */
-                draw_line(pixels, stride, line_start_x, line_y, line_start_x + gap / 2, line_y, 2, UI_MUTED);
-                draw_line(pixels, stride, line_start_x + gap / 2, line_y - 14, line_start_x + gap / 2, line_y + 14, 3, UI_DANGER);
-                draw_text_center(pixels, stride, (UiRect){line_start_x, line_y - 28, gap, 16}, ptc_ui_text(PTC_UI_T_ADOPTED), 11, UI_DANGER);
-                hit_found = true;
-            } else if (!hit_found) {
-                /* Active flow arrow: ──> (geometric vector arrow, perfectly aligned to line_y) */
-                int arrow_tip_x = line_end_x - 6;
-                draw_line(pixels, stride, line_start_x, line_y, arrow_tip_x, line_y, 2, UI_ACCENT);
-                draw_line(pixels, stride, arrow_tip_x - 6, line_y - 5, arrow_tip_x, line_y, 2, UI_ACCENT);
-                draw_line(pixels, stride, arrow_tip_x - 6, line_y + 5, arrow_tip_x, line_y, 2, UI_ACCENT);
-            } else {
-                /* Inactive bypassed line: ┄┄ */
-                draw_line(pixels, stride, line_start_x, line_y, line_end_x, line_y, 1, UI_BORDER);
-            }
-        }
-    }
-}
 
 static const PtcUiTextId DETAIL_CONDITION_TITLES[] = {
     PTC_UI_T_TOTAL_DAILY_ALLOWANCE, PTC_UI_T_BEDTIME_SCHEDULE,
@@ -978,10 +848,257 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
     }
 }
 
+static void draw_rules_priority_pipeline(uint32_t *pixels, uint32_t stride,
+                                        const PtcUiModel *model,
+                                        const PtcUiTodayDecision *decision,
+                                        int x, int y, int full_w,
+                                        int target_minutes, int played_minutes, int remaining_minutes,
+                                        bool is_today, bool total_known, bool total_unlimited)
+{
+    (void)model;
+    char text[256], value[128];
+    UiRect sec1 = {x, y, full_w, 116};
+    detail_panel(pixels, stride, sec1);
+
+    /* 标题行: ① 今日总额度从哪里来 */
+    support_fill_circle_mini(pixels, stride, (float)(sec1.x + 22), (float)(sec1.y + 19), 8.0f, UI_ACCENT);
+    draw_text_center(pixels, stride, (UiRect){sec1.x + 13, sec1.y + 11, 18, 16}, "1", 11, UI_ON_ACCENT);
+    draw_text_bold(pixels, stride, sec1.x + 38, sec1.y + 23, ptc_ui_text(PTC_UI_T_DETAIL_RULES_SEC1_TITLE), 14, UI_INK);
+    draw_text(pixels, stride, sec1.x + 190, sec1.y + 23, ptc_ui_text(PTC_UI_T_DETAIL_RULES_SEC1_SUB), 11, UI_MUTED);
+
+    /* 左侧 4 张串行卡片 */
+    const PtcUiDecisionStep *steps[] = {
+        &decision->today_override, &decision->scheduled_override,
+        &decision->holiday, &decision->weekly
+    };
+    const PtcUiTextId card_titles[] = {
+        PTC_UI_T_TODAY_S_ADJUSTMENT,
+        PTC_UI_T_SPECIFIED_DATE_QUOTA,
+        PTC_UI_T_HOLIDAY,
+        PTC_UI_T_WEEKLY_PLAN
+    };
+    const PtcUiTextId card_descs[] = {
+        PTC_UI_T_DETAIL_RULES_TEMP_DESC,
+        PTC_UI_T_DETAIL_RULES_SPEC_DESC,
+        PTC_UI_T_DETAIL_RULES_HOLIDAY_DESC,
+        PTC_UI_T_DETAIL_RULES_WEEKLY_PLAN_DESC
+    };
+    int card_y = sec1.y + 36;
+    int card_w = 154;
+    int card_h = 70;
+    int gap = 20;
+
+    for (int i = 0; i < 4; ++i) {
+        int cx = sec1.x + 16 + i * (card_w + gap);
+        UiRect c = {cx, card_y, card_w, card_h};
+        bool is_selected = (steps[i]->state == PTC_UI_DECISION_SELECTED);
+
+        if (is_selected) {
+            fill_round_rect(pixels, stride, c, 8, UI_SUCCESS_SOFT);
+            draw_rect_outline(pixels, stride, c, 8, 2, UI_SUCCESS);
+        } else {
+            fill_round_rect(pixels, stride, c, 8, UI_PAGE);
+            draw_rect_outline(pixels, stride, c, 8, 1, UI_BORDER);
+        }
+
+        if (i == 2) support_draw_gift(pixels, stride, c.x + 18, c.y + 20, 8, UI_MUTED);
+        else support_draw_calendar(pixels, stride, c.x + 18, c.y + 20, 8, is_selected ? UI_SUCCESS : UI_MUTED);
+
+        draw_text_bold(pixels, stride, c.x + 32, c.y + 23, ptc_ui_text(card_titles[i]), 13, UI_INK);
+
+        /* 胶囊状态 */
+        if (is_selected) {
+            UiRect pill = {c.x + 12, c.y + 30, c.width - 24, 18};
+            fill_round_rect(pixels, stride, pill, 4, UI_SUCCESS);
+            char val[32];
+            format_decision_rule(steps[i], val, sizeof(val));
+            char ptxt[48];
+            snprintf(ptxt, sizeof(ptxt), ptc_ui_text(PTC_UI_T_DETAIL_EFFECTIVE_TAG), val);
+            draw_text_center(pixels, stride, pill, ptxt, 10, UI_ON_ACCENT);
+        } else {
+            const char *st_lbl;
+            if (i == 0 && !is_today) {
+                st_lbl = ptc_ui_text(PTC_UI_T_REASON_TODAY_ONLY);
+            } else if (i == 2 && steps[i]->state != PTC_UI_DECISION_SELECTED) {
+                st_lbl = ptc_ui_text(PTC_UI_T_DETAIL_RULES_NOT_HIT);
+            } else {
+                st_lbl = ptc_ui_decision_state_label(steps[i]->state);
+            }
+            draw_text(pixels, stride, c.x + 14, c.y + 44, st_lbl, 11, UI_MUTED);
+        }
+        draw_text(pixels, stride, c.x + 14, c.y + 61, ptc_ui_text(card_descs[i]), 9, UI_MUTED);
+
+        /* 箭头 */
+        if (i < 3) {
+            int ax = c.x + c.width + gap / 2;
+            int ay = c.y + c.height / 2;
+            draw_line(pixels, stride, ax - 5, ay, ax + 5, ay, 2, UI_MUTED);
+            draw_line(pixels, stride, ax + 2, ay - 4, ax + 5, ay, 2, UI_MUTED);
+            draw_line(pixels, stride, ax + 2, ay + 4, ax + 5, ay, 2, UI_MUTED);
+        }
+    }
+
+    /* 右侧结果卡片 (w = 260) */
+    UiRect r_card = {sec1.x + 790, card_y, 258, card_h};
+    fill_round_rect(pixels, stride, r_card, 8, UI_RAISED);
+    draw_rect_outline(pixels, stride, r_card, 8, 1, UI_BORDER);
+    draw_text(pixels, stride, r_card.x + 14, r_card.y + 17, ptc_ui_text(PTC_UI_T_DETAIL_RULES_CONFIRM_TOTAL), 12, UI_MUTED);
+    detail_balance(total_known, total_unlimited, target_minutes, value, sizeof(value));
+    draw_text_bold(pixels, stride, r_card.x + 14, r_card.y + 42, value, 22, UI_ACCENT);
+    if (is_today) {
+        snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_RULES_USED_LEFT_FMT),
+                 (unsigned)played_minutes, (unsigned)remaining_minutes);
+    } else {
+        snprintf(text, sizeof(text), "%s", ptc_ui_effective_rule_label(decision->effective.source));
+    }
+    draw_text(pixels, stride, r_card.x + 14, r_card.y + 55, text, 10, UI_MUTED);
+    draw_text(pixels, stride, r_card.x + 14, r_card.y + 65, ptc_ui_text(PTC_UI_T_DETAIL_RULES_PRIORITY_NOTE), 9, UI_MUTED);
+}
+
+static void draw_rules_conditions_gate(uint32_t *pixels, uint32_t stride,
+                                      const PtcUiModel *model,
+                                      const PtcUiTodayDecision *decision,
+                                      int x, int y, int full_w,
+                                      int target_minutes, int played_minutes, int remaining_minutes,
+                                      uint8_t target_weekday, bool is_today,
+                                      bool total_known, bool total_unlimited,
+                                      const PtcUiCondition *conditions)
+{
+    char text[256], value[128];
+    UiRect sec2 = {x, y, full_w, 180};
+    detail_panel(pixels, stride, sec2);
+
+    /* 标题行: ② 能否使用，由以下条件共同决定 */
+    support_fill_circle_mini(pixels, stride, (float)(sec2.x + 22), (float)(sec2.y + 19), 8.0f, UI_ACCENT);
+    draw_text_center(pixels, stride, (UiRect){sec2.x + 13, sec2.y + 11, 18, 16}, "2", 11, UI_ON_ACCENT);
+    draw_text_bold(pixels, stride, sec2.x + 38, sec2.y + 23, ptc_ui_text(PTC_UI_T_DETAIL_RULES_SEC2_TITLE), 14, UI_INK);
+    draw_text(pixels, stride, sec2.x + 280, sec2.y + 23, ptc_ui_text(PTC_UI_T_DETAIL_RULES_SEC2_SUB), 11, UI_MUTED);
+
+    /* 4 个条件卡片 */
+    int card_y2 = sec2.y + 32;
+    int card_w2 = 246;
+    int card_h2 = 74;
+    int gap2 = 16;
+
+    for (int i = 0; i < 4; ++i) {
+        int cx = sec2.x + 16 + i * (card_w2 + gap2);
+        UiRect c = {cx, card_y2, card_w2, card_h2};
+        fill_round_rect(pixels, stride, c, 8, UI_PAGE);
+        draw_rect_outline(pixels, stride, c, 8, 1, UI_BORDER);
+
+        if (i == 0) support_draw_clock(pixels, stride, c.x + 18, c.y + 18, 8, UI_ACCENT);
+        else if (i == 1) support_draw_crescent_moon(pixels, stride, c.x + 18, c.y + 18, 7.0f, 6.0f, 2.0f, -1.0f, UI_ACCENT);
+        else if (i == 2) support_draw_eye(pixels, stride, c.x + 18, c.y + 18, 8, UI_ACCENT);
+        else support_draw_controller(pixels, stride, c.x + 18, c.y + 18, 8, UI_ACCENT);
+
+        draw_text_bold(pixels, stride, c.x + 32, c.y + 19, ptc_ui_text(DETAIL_CONDITION_TITLES[i]), 12, UI_INK);
+
+        /* 数值 */
+        if (i == 0) {
+            if (is_today) {
+                detail_balance(total_known, total_unlimited, remaining_minutes, value, sizeof(value));
+                char left_msg[64];
+                snprintf(left_msg, sizeof(left_msg), ptc_ui_text(PTC_UI_T_DETAIL_LEFT_LABEL), value);
+                draw_text_bold(pixels, stride, c.x + 14, c.y + 37, left_msg, 14, UI_ACCENT);
+                snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_RULE_USED_TOTAL_SUB),
+                         (unsigned)played_minutes, (unsigned)target_minutes);
+                draw_text(pixels, stride, c.x + 14, c.y + 49, text, 9, UI_MUTED);
+            } else {
+                detail_balance(total_known, total_unlimited, target_minutes, value, sizeof(value));
+                draw_text_bold(pixels, stride, c.x + 14, c.y + 37, value, 14, UI_ACCENT);
+                draw_text(pixels, stride, c.x + 14, c.y + 49, ptc_ui_effective_rule_label(decision->effective.source), 9, UI_MUTED);
+            }
+        } else if (i == 1) {
+            unsigned b_st = model->bedtime_policy.week[target_weekday].start_minute;
+            unsigned b_en = model->bedtime_policy.week[target_weekday].end_minute;
+            char bt_msg[64];
+            snprintf(bt_msg, sizeof(bt_msg), ptc_ui_text(PTC_UI_T_DETAIL_RULE_BEDTIME_START), b_st / 60, b_st % 60);
+            draw_text_bold(pixels, stride, c.x + 14, c.y + 37, bt_msg, 14, UI_ACCENT);
+            snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_RULE_BEDTIME_NEXT), b_en / 60, b_en % 60);
+            draw_text(pixels, stride, c.x + 14, c.y + 49, text, 9, UI_MUTED);
+        } else if (i == 2) {
+            char eye_msg[64];
+            snprintf(eye_msg, sizeof(eye_msg), ptc_ui_text(PTC_UI_T_DETAIL_RULE_EYE_PLAYED),
+                     (unsigned)(is_today ? model->eye_care_used_minutes : 0), (unsigned)model->eye_care_policy.play_minutes);
+            draw_text_bold(pixels, stride, c.x + 14, c.y + 37, eye_msg, 14, UI_ACCENT);
+            unsigned left_p = is_today && model->eye_care_policy.play_minutes > model->eye_care_used_minutes ?
+                (unsigned)(model->eye_care_policy.play_minutes - model->eye_care_used_minutes) : (unsigned)model->eye_care_policy.play_minutes;
+            snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_RULE_EYE_LEFT), left_p, (unsigned)model->eye_care_policy.rest_minutes);
+            draw_text(pixels, stride, c.x + 14, c.y + 49, text, 9, UI_MUTED);
+        } else {
+            const char *dmode = is_today ?
+                ptc_ui_text(strcmp(model->operation_mode, "docked") == 0 ? PTC_UI_T_DETAIL_TAG_DOCKED : PTC_UI_T_DETAIL_TAG_HANDHELD) :
+                ptc_ui_text(model->dock_policy.force_docked ? PTC_UI_T_DETAIL_TAG_DOCKED : PTC_UI_T_DETAIL_TAG_HANDHELD);
+            draw_text_bold(pixels, stride, c.x + 14, c.y + 37, dmode, 14, UI_ACCENT);
+            snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_RULE_DOCK_REMAIN),
+                     (unsigned)(is_today ? model->undocked_remaining_minutes : model->dock_policy.undocked_daily_minutes));
+            draw_text(pixels, stride, c.x + 14, c.y + 49, text, 9, UI_MUTED);
+        }
+
+        /* 胶囊状态 */
+        UiRect pass_pill = {c.x + 14, c.y + 53, c.width - 28, 17};
+        PtcUiCondition cond = conditions[i];
+        bool is_pass = (cond == PTC_UI_CONDITION_PASS || cond == PTC_UI_CONDITION_WAIVED);
+        bool is_block = (cond == PTC_UI_CONDITION_BLOCK);
+        uint32_t p_bg = is_block ? UI_DANGER_SOFT : (is_pass ? UI_SUCCESS_SOFT : UI_RAISED);
+        uint32_t p_bd = is_block ? UI_DANGER : (is_pass ? UI_SUCCESS : UI_BORDER);
+        uint32_t p_fg = is_block ? UI_DANGER : (is_pass ? UI_SUCCESS : UI_MUTED);
+
+        fill_round_rect(pixels, stride, pass_pill, 4, p_bg);
+        draw_rect_outline(pixels, stride, pass_pill, 4, 1, p_bd);
+        if (is_pass) {
+            support_draw_checkmark(pixels, stride, pass_pill.x + 10, pass_pill.y + 8, 4, UI_SUCCESS, UI_ON_ACCENT);
+        }
+        draw_text_center(pixels, stride, pass_pill, detail_condition_label(cond), 10, p_fg);
+
+        /* 汇聚竖折线 */
+        int bx = c.x + c.width / 2;
+        int by1 = c.y + c.height;
+        draw_line(pixels, stride, bx, by1, bx, by1 + 6, 1, UI_BORDER);
+    }
+
+    /* 汇聚横线与下箭头 */
+    int line_y = card_y2 + card_h2 + 6;
+    int lx1 = sec2.x + 16 + card_w2 / 2;
+    int lx2 = sec2.x + 16 + 3 * (card_w2 + gap2) + card_w2 / 2;
+    draw_line(pixels, stride, lx1, line_y, lx2, line_y, 1, UI_BORDER);
+    int mid_x = sec2.x + sec2.width / 2;
+    draw_line(pixels, stride, mid_x, line_y, mid_x, line_y + 6, 1, UI_BORDER);
+
+    /* 居中横条 */
+    UiRect gate = {mid_x - 170, line_y + 6, 340, 22};
+    bool any_block = (conditions[0] == PTC_UI_CONDITION_BLOCK || conditions[1] == PTC_UI_CONDITION_BLOCK ||
+                      conditions[2] == PTC_UI_CONDITION_BLOCK || conditions[3] == PTC_UI_CONDITION_BLOCK);
+    fill_round_rect(pixels, stride, gate, 6, any_block ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
+    draw_rect_outline(pixels, stride, gate, 6, 1, any_block ? UI_DANGER : UI_SUCCESS);
+    if (!any_block) {
+        support_draw_checkmark(pixels, stride, gate.x + 14, gate.y + 11, 5, UI_SUCCESS, UI_ON_ACCENT);
+        draw_text_center(pixels, stride, gate, ptc_ui_text(PTC_UI_T_DETAIL_RULES_GATE_PASS), 11, UI_INK);
+    } else {
+        draw_text_center(pixels, stride, gate, ptc_ui_text(PTC_UI_T_DETAIL_BLOCKED), 11, UI_DANGER);
+    }
+
+    /* 底部说明 */
+    draw_text_center(pixels, stride, (UiRect){sec2.x, line_y + 32, sec2.width, 16},
+                     ptc_ui_text(PTC_UI_T_DETAIL_RULES_CONVERGE_SUB), 10, UI_MUTED);
+}
+
+static void draw_rules_dock_bullet_card(uint32_t *pixels, uint32_t stride, int x, int y, int full_w)
+{
+    UiRect tv_card = {x, y, full_w, 34};
+    fill_round_rect(pixels, stride, tv_card, 6, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, tv_card, 6, 1, UI_BORDER);
+    support_draw_controller(pixels, stride, tv_card.x + 18, tv_card.y + 17, 8, UI_ACCENT);
+    draw_text_bold(pixels, stride, tv_card.x + 34, tv_card.y + 21, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 12, UI_INK);
+    draw_line(pixels, stride, tv_card.x + 130, tv_card.y + 5, tv_card.x + 130, tv_card.y + 29, 1, UI_BORDER);
+    draw_text(pixels, stride, tv_card.x + 144, tv_card.y + 15, ptc_ui_text(PTC_UI_T_DETAIL_RULES_TV_BULLET1), 10, UI_INK);
+    draw_text(pixels, stride, tv_card.x + 144, tv_card.y + 27, ptc_ui_text(PTC_UI_T_DETAIL_RULES_TV_BULLET2), 10, UI_INK);
+}
+
 static void draw_today_rules(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
                              const PtcUiTodayProjection *p, const PtcUiTodayDecision *decision)
 {
-    char text[512], value[128];
+    char text[512];
     int offset = model->home_details_scroll;
     PtcUiRect body = ptc_ui_home_details_body_rect();
     ui_set_vertical_clip(body.y, body.y + body.h);
@@ -996,204 +1113,20 @@ static void draw_today_rules(uint32_t *pixels, uint32_t stride, const PtcUiModel
                        ptc_ui_text(PTC_UI_T_DETAIL_RULES_GLOBAL_BANNER), 13, UI_INK);
     }
 
-    /* 2. 区块 ① 今日总额度从哪里来 (y = 152, h = 134) */
-    {
-        UiRect sec1 = {108, 138 - offset, 1064, 116};
-        detail_panel(pixels, stride, sec1);
+    /* 2. 区块 ① 今日总额度从哪里来 */
+    draw_rules_priority_pipeline(pixels, stride, model, decision, 108, 138 - offset, 1064,
+                                 (int)model->forecast[0].minutes, (int)model->played_minutes,
+                                 p->total_remaining, true, p->total_known, p->total_unlimited);
 
-        /* 标题行: ① 今日总额度从哪里来 */
-        support_fill_circle_mini(pixels, stride, (float)(sec1.x + 22), (float)(sec1.y + 19), 8.0f, UI_ACCENT);
-        draw_text_center(pixels, stride, (UiRect){sec1.x + 13, sec1.y + 11, 18, 16}, "1", 11, UI_ON_ACCENT);
-        draw_text_bold(pixels, stride, sec1.x + 38, sec1.y + 23, ptc_ui_text(PTC_UI_T_DETAIL_RULES_SEC1_TITLE), 14, UI_INK);
-        draw_text(pixels, stride, sec1.x + 190, sec1.y + 23, ptc_ui_text(PTC_UI_T_DETAIL_RULES_SEC1_SUB), 11, UI_MUTED);
-
-        /* 左侧 4 张串行卡片 */
-        const PtcUiDecisionStep *steps[] = {
-            &decision->today_override, &decision->scheduled_override,
-            &decision->holiday, &decision->weekly
-        };
-        const PtcUiTextId card_titles[] = {
-            PTC_UI_T_TODAY_S_ADJUSTMENT,
-            PTC_UI_T_SPECIFIED_DATE_QUOTA,
-            PTC_UI_T_HOLIDAY,
-            PTC_UI_T_WEEKLY_PLAN
-        };
-        const PtcUiTextId card_descs[] = {
-            PTC_UI_T_DETAIL_RULES_TEMP_DESC,
-            PTC_UI_T_DETAIL_RULES_SPEC_DESC,
-            PTC_UI_T_DETAIL_RULES_HOLIDAY_DESC,
-            PTC_UI_T_DETAIL_RULES_WEEKLY_PLAN_DESC
-        };
-        int card_y = sec1.y + 36;
-        int card_w = 154;
-        int card_h = 70;
-        int gap = 20;
-
-        for (int i = 0; i < 4; ++i) {
-            int cx = sec1.x + 16 + i * (card_w + gap);
-            UiRect c = {cx, card_y, card_w, card_h};
-            bool is_selected = (steps[i]->state == PTC_UI_DECISION_SELECTED);
-
-            if (is_selected) {
-                fill_round_rect(pixels, stride, c, 8, UI_SUCCESS_SOFT);
-                draw_rect_outline(pixels, stride, c, 8, 2, UI_SUCCESS);
-            } else {
-                fill_round_rect(pixels, stride, c, 8, UI_PAGE);
-                draw_rect_outline(pixels, stride, c, 8, 1, UI_BORDER);
-            }
-
-            if (i == 2) support_draw_gift(pixels, stride, c.x + 18, c.y + 20, 8, UI_MUTED);
-            else support_draw_calendar(pixels, stride, c.x + 18, c.y + 20, 8, is_selected ? UI_SUCCESS : UI_MUTED);
-
-            draw_text_bold(pixels, stride, c.x + 32, c.y + 23, ptc_ui_text(card_titles[i]), 13, UI_INK);
-
-            /* 胶囊状态 */
-            if (is_selected) {
-                UiRect pill = {c.x + 12, c.y + 30, c.width - 24, 18};
-                fill_round_rect(pixels, stride, pill, 4, UI_SUCCESS);
-                char val[32];
-                format_decision_rule(steps[i], val, sizeof(val));
-                char ptxt[48];
-                snprintf(ptxt, sizeof(ptxt), ptc_ui_text(PTC_UI_T_DETAIL_EFFECTIVE_TAG), val);
-                draw_text_center(pixels, stride, pill, ptxt, 10, UI_ON_ACCENT);
-            } else {
-                const char *st_lbl = (i == 2 && steps[i]->state != PTC_UI_DECISION_SELECTED) ?
-                    ptc_ui_text(PTC_UI_T_DETAIL_RULES_NOT_HIT) : ptc_ui_decision_state_label(steps[i]->state);
-                draw_text(pixels, stride, c.x + 14, c.y + 44, st_lbl, 11, UI_MUTED);
-            }
-            draw_text(pixels, stride, c.x + 14, c.y + 61, ptc_ui_text(card_descs[i]), 9, UI_MUTED);
-
-            /* 箭头 */
-            if (i < 3) {
-                int ax = c.x + c.width + gap / 2;
-                int ay = c.y + c.height / 2;
-                draw_line(pixels, stride, ax - 5, ay, ax + 5, ay, 2, UI_MUTED);
-                draw_line(pixels, stride, ax + 2, ay - 4, ax + 5, ay, 2, UI_MUTED);
-                draw_line(pixels, stride, ax + 2, ay + 4, ax + 5, ay, 2, UI_MUTED);
-            }
-        }
-
-        /* 右侧结果卡片 (w = 260) */
-        UiRect r_card = {sec1.x + 790, card_y, 258, card_h};
-        fill_round_rect(pixels, stride, r_card, 8, UI_RAISED);
-        draw_rect_outline(pixels, stride, r_card, 8, 1, UI_BORDER);
-        draw_text(pixels, stride, r_card.x + 14, r_card.y + 17, ptc_ui_text(PTC_UI_T_DETAIL_RULES_CONFIRM_TOTAL), 12, UI_MUTED);
-        detail_balance(p->total_known, p->total_unlimited, (int)model->forecast[0].minutes, value, sizeof(value));
-        draw_text_bold(pixels, stride, r_card.x + 14, r_card.y + 42, value, 22, UI_ACCENT);
-        snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_RULES_USED_LEFT_FMT),
-                 (unsigned)model->played_minutes, (unsigned)p->total_remaining);
-        draw_text(pixels, stride, r_card.x + 14, r_card.y + 55, text, 10, UI_MUTED);
-        draw_text(pixels, stride, r_card.x + 14, r_card.y + 65, ptc_ui_text(PTC_UI_T_DETAIL_RULES_PRIORITY_NOTE), 9, UI_MUTED);
-    }
-
-    /* 3. 区块 ② 能否使用，由以下条件共同决定 (y = 296, h = 214) */
-    {
-        UiRect sec2 = {108, 260 - offset, 1064, 180};
-        detail_panel(pixels, stride, sec2);
-
-        /* 标题行: ② 能否使用，由以下条件共同决定 */
-        support_fill_circle_mini(pixels, stride, (float)(sec2.x + 22), (float)(sec2.y + 19), 8.0f, UI_ACCENT);
-        draw_text_center(pixels, stride, (UiRect){sec2.x + 13, sec2.y + 11, 18, 16}, "2", 11, UI_ON_ACCENT);
-        draw_text_bold(pixels, stride, sec2.x + 38, sec2.y + 23, ptc_ui_text(PTC_UI_T_DETAIL_RULES_SEC2_TITLE), 14, UI_INK);
-        draw_text(pixels, stride, sec2.x + 280, sec2.y + 23, ptc_ui_text(PTC_UI_T_DETAIL_RULES_SEC2_SUB), 11, UI_MUTED);
-
-        /* 4 个条件卡片 */
-        int card_y2 = sec2.y + 32;
-        int card_w2 = 246;
-        int card_h2 = 74;
-        int gap2 = 16;
-
-        for (int i = 0; i < 4; ++i) {
-            int cx = sec2.x + 16 + i * (card_w2 + gap2);
-            UiRect c = {cx, card_y2, card_w2, card_h2};
-            fill_round_rect(pixels, stride, c, 8, UI_PAGE);
-            draw_rect_outline(pixels, stride, c, 8, 1, UI_BORDER);
-
-            if (i == 0) support_draw_clock(pixels, stride, c.x + 18, c.y + 18, 8, UI_ACCENT);
-            else if (i == 1) support_draw_crescent_moon(pixels, stride, c.x + 18, c.y + 18, 7.0f, 6.0f, 2.0f, -1.0f, UI_ACCENT);
-            else if (i == 2) support_draw_eye(pixels, stride, c.x + 18, c.y + 18, 8, UI_ACCENT);
-            else support_draw_controller(pixels, stride, c.x + 18, c.y + 18, 8, UI_ACCENT);
-
-            draw_text_bold(pixels, stride, c.x + 32, c.y + 19, ptc_ui_text(DETAIL_CONDITION_TITLES[i]), 12, UI_INK);
-
-            /* 数值 */
-            if (i == 0) {
-                detail_balance(p->total_known, p->total_unlimited, p->total_remaining, value, sizeof(value));
-                char left_msg[64];
-                snprintf(left_msg, sizeof(left_msg), ptc_ui_text(PTC_UI_T_DETAIL_LEFT_LABEL), value);
-                draw_text_bold(pixels, stride, c.x + 14, c.y + 37, left_msg, 14, UI_ACCENT);
-                snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_RULE_USED_TOTAL_SUB),
-                         (unsigned)model->played_minutes, (unsigned)model->forecast[0].minutes);
-                draw_text(pixels, stride, c.x + 14, c.y + 49, text, 9, UI_MUTED);
-            } else if (i == 1) {
-                unsigned b_st = model->bedtime_policy.week[ptc_weekday_from_day_index(model->day_index)].start_minute;
-                char bt_msg[64];
-                snprintf(bt_msg, sizeof(bt_msg), ptc_ui_text(PTC_UI_T_DETAIL_RULE_BEDTIME_START), b_st / 60, b_st % 60);
-                draw_text_bold(pixels, stride, c.x + 14, c.y + 37, bt_msg, 14, UI_ACCENT);
-                unsigned b_en = model->bedtime_policy.week[ptc_weekday_from_day_index(model->day_index)].end_minute;
-                snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_RULE_BEDTIME_NEXT), b_en / 60, b_en % 60);
-                draw_text(pixels, stride, c.x + 14, c.y + 49, text, 9, UI_MUTED);
-            } else if (i == 2) {
-                char eye_msg[64];
-                snprintf(eye_msg, sizeof(eye_msg), ptc_ui_text(PTC_UI_T_DETAIL_RULE_EYE_PLAYED),
-                         (unsigned)model->eye_care_used_minutes, (unsigned)model->eye_care_policy.play_minutes);
-                draw_text_bold(pixels, stride, c.x + 14, c.y + 37, eye_msg, 14, UI_ACCENT);
-                unsigned left_p = model->eye_care_policy.play_minutes > model->eye_care_used_minutes ?
-                    (unsigned)(model->eye_care_policy.play_minutes - model->eye_care_used_minutes) : 0;
-                snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_RULE_EYE_LEFT), left_p, (unsigned)model->eye_care_policy.rest_minutes);
-                draw_text(pixels, stride, c.x + 14, c.y + 49, text, 9, UI_MUTED);
-            } else {
-                const char *dmode = ptc_ui_text(strcmp(model->operation_mode, "docked") == 0 ? PTC_UI_T_DETAIL_TAG_DOCKED : PTC_UI_T_DETAIL_TAG_HANDHELD);
-                draw_text_bold(pixels, stride, c.x + 14, c.y + 37, dmode, 14, UI_ACCENT);
-                snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_RULE_DOCK_REMAIN), (unsigned)model->undocked_remaining_minutes);
-                draw_text(pixels, stride, c.x + 14, c.y + 49, text, 9, UI_MUTED);
-            }
-
-            /* 胶囊当前通过 */
-            UiRect pass_pill = {c.x + 14, c.y + 53, c.width - 28, 17};
-            fill_round_rect(pixels, stride, pass_pill, 4, UI_SUCCESS_SOFT);
-            draw_rect_outline(pixels, stride, pass_pill, 4, 1, UI_SUCCESS);
-            support_draw_checkmark(pixels, stride, pass_pill.x + 10, pass_pill.y + 8, 4, UI_SUCCESS, UI_ON_ACCENT);
-            draw_text_center(pixels, stride, pass_pill, detail_condition_label(p->conditions[i]), 10, UI_SUCCESS);
-
-            /* 汇聚竖折线 */
-            int bx = c.x + c.width / 2;
-            int by1 = c.y + c.height;
-            draw_line(pixels, stride, bx, by1, bx, by1 + 6, 1, UI_BORDER);
-        }
-
-        /* 汇聚横线与下箭头 */
-        int line_y = card_y2 + card_h2 + 6;
-        int lx1 = sec2.x + 16 + card_w2 / 2;
-        int lx2 = sec2.x + 16 + 3 * (card_w2 + gap2) + card_w2 / 2;
-        draw_line(pixels, stride, lx1, line_y, lx2, line_y, 1, UI_BORDER);
-        int mid_x = sec2.x + sec2.width / 2;
-        draw_line(pixels, stride, mid_x, line_y, mid_x, line_y + 6, 1, UI_BORDER);
-
-        /* 居中横条 */
-        UiRect gate = {mid_x - 170, line_y + 6, 340, 22};
-        fill_round_rect(pixels, stride, gate, 6, UI_SUCCESS_SOFT);
-        draw_rect_outline(pixels, stride, gate, 6, 1, UI_SUCCESS);
-        support_draw_checkmark(pixels, stride, gate.x + 14, gate.y + 11, 5, UI_SUCCESS, UI_ON_ACCENT);
-        draw_text_center(pixels, stride, gate, ptc_ui_text(PTC_UI_T_DETAIL_RULES_GATE_PASS), 11, UI_INK);
-
-        /* 底部说明 */
-        draw_text_center(pixels, stride, (UiRect){sec2.x, line_y + 32, sec2.width, 16},
-                         ptc_ui_text(PTC_UI_T_DETAIL_RULES_CONVERGE_SUB), 10, UI_MUTED);
-    }
+    /* 3. 区块 ② 能否使用，由以下条件共同决定 */
+    draw_rules_conditions_gate(pixels, stride, model, decision, 108, 260 - offset, 1064,
+                               (int)model->forecast[0].minutes, (int)model->played_minutes,
+                               p->total_remaining, ptc_weekday_from_day_index(model->day_index),
+                               true, p->total_known, p->total_unlimited, p->conditions);
 
     /* 4. 底部说明与列表项 */
     /* 4.1 电视模式与额度说明卡片 */
-    {
-        UiRect tv_card = {108, 446 - offset, 1064, 34};
-        fill_round_rect(pixels, stride, tv_card, 6, UI_ACCENT_SOFT);
-        draw_rect_outline(pixels, stride, tv_card, 6, 1, UI_BORDER);
-        support_draw_controller(pixels, stride, tv_card.x + 18, tv_card.y + 17, 8, UI_ACCENT);
-        draw_text_bold(pixels, stride, tv_card.x + 34, tv_card.y + 21, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 12, UI_INK);
-        draw_line(pixels, stride, tv_card.x + 130, tv_card.y + 5, tv_card.x + 130, tv_card.y + 29, 1, UI_BORDER);
-        draw_text(pixels, stride, tv_card.x + 144, tv_card.y + 15, ptc_ui_text(PTC_UI_T_DETAIL_RULES_TV_BULLET1), 10, UI_INK);
-        draw_text(pixels, stride, tv_card.x + 144, tv_card.y + 27, ptc_ui_text(PTC_UI_T_DETAIL_RULES_TV_BULLET2), 10, UI_INK);
-    }
+    draw_rules_dock_bullet_card(pixels, stride, 108, 446 - offset, 1064);
 
     /* 4.2 自主缓冲列表条 */
     {
@@ -1334,44 +1267,29 @@ static void draw_forecast_day_details(uint32_t *pixels, uint32_t stride, const P
     uint16_t target_day_index = model->day_index + offset;
     uint8_t weekday = ptc_weekday_from_day_index(target_day_index);
     bool is_today = (offset == 0);
-    bool fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
-    char total[64], title_buf[96], age_buf[64], eff_label[96], date_buf[32];
+    int64_t now = ptc_ui_render_now();
+    bool fresh = ptc_ui_status_is_fresh(model, now);
+    char age_buf[64], date_buf[32], sub[128], date_sub[128], cal_desc[256];
 
-    draw_dialog_shell(pixels, stride, model, &dialog, 1120, 640);
-    format_status_age(model, age_buf, sizeof(age_buf));
-    draw_text_center(pixels, stride, (UiRect){dialog.x + 736, dialog.y + 26, 352, 30},
-                     age_buf, 17, status_age_color(model));
+    PtcUiModel shell = *model;
+    shell.overlay_title[0] = shell.overlay_body[0] = '\0';
+    draw_dialog_shell(pixels, stride, &shell, &dialog, 1120, 640);
 
-    ptc_ui_build_day_decision(model, PTC_UI_PLAN_SAVED, target_day_index, ptc_ui_render_now(), &decision);
+    ptc_ui_build_day_decision(model, PTC_UI_PLAN_SAVED, target_day_index, now, &decision);
 
-    PtcUiTextId title_id = is_today ? PTC_UI_T_FORECAST_TITLE_TODAY :
-        offset == 1 ? PTC_UI_T_FORECAST_TITLE_TOMORROW : PTC_UI_T_FORECAST_TITLE_DAY;
-    PtcUiTextArg title_args[] = {
-        PTC_UI_TEXT_STRING("weekday", ptc_ui_weekday_label(weekday)),
-        PTC_UI_TEXT_NUMBER("offset", offset)
-    };
-    (void)ptc_ui_text_format(title_id, title_buf, sizeof(title_buf), title_args, 2);
-    draw_text(pixels, stride, dialog.x + 36, dialog.y + 44, title_buf, 23, UI_INK);
+    /* 1. 顶部标题与面包屑 */
+    draw_text_bold(pixels, stride, 114, 82, ptc_ui_text(PTC_UI_T_DETAIL_RULES), 24, UI_INK);
 
-    int top_y = dialog.y + 68;
-    int full_w = 1064;
-    int col_w = 520;
-    int x_left = dialog.x + 28;
-
-    /* 1. Hero 看板卡片 (1064 x 80) */
-    UiRect hero = {x_left, top_y, full_w, 80};
-    fill_round_rect_gradient(pixels, stride, hero, 12, UI_ACCENT_SOFT,
-                             UI_RGB(ui_darken(UI_BLENDED(accent_soft), 5)));
-
-    if (decision.effective.rule.mode == PTC_RULE_MODE_UNLIMITED) {
-        snprintf(total, sizeof(total), "%s", ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
+    const char *day_prefix = is_today ? ptc_ui_text(PTC_UI_T_TODAY) :
+        (offset == 1 ? ptc_ui_text(PTC_UI_T_TOMORROW) : "");
+    if (day_prefix[0]) {
+        snprintf(sub, sizeof(sub), "%s / %s %s", ptc_ui_text(PTC_UI_T_TIME_PLANS),
+                 day_prefix, ptc_ui_weekday_label(weekday));
     } else {
-        PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("minutes", decision.effective.rule.minutes)};
-        (void)ptc_ui_text_format(PTC_UI_T_SHORT_MINUTES, total, sizeof(total), args, 1);
+        snprintf(sub, sizeof(sub), "%s / %s (D+%d)", ptc_ui_text(PTC_UI_T_TIME_PLANS),
+                 ptc_ui_weekday_label(weekday), offset);
     }
-
-    draw_text(pixels, stride, hero.x + 20, hero.y + 22, ptc_ui_text(PTC_UI_T_TOTAL_QUOTA_FOR_THE_DAY), 13, UI_MUTED);
-    draw_text(pixels, stride, hero.x + 20, hero.y + 60, total, 28, UI_INK);
+    draw_text(pixels, stride, 240, 72, sub, 12, UI_MUTED);
 
     bool covered = false;
     PtcCalendarDayType day_type = ptc_holiday_calendar_classify_in(model->calendar, target_day_index, &covered);
@@ -1379,84 +1297,100 @@ static void draw_forecast_day_details(uint32_t *pixels, uint32_t stride, const P
         ((covered && day_type == PTC_CALENDAR_DAY_MAKEUP_WORKDAY) ? ptc_ui_text(PTC_UI_T_ADJUSTED_WORKING_DAYS) :
          ((weekday == 0 || weekday == 6) ? ptc_ui_text(PTC_UI_T_ORDINARY_WEEKEND) : ptc_ui_text(PTC_UI_T_ORDINARY_WORKING_DAYS)));
 
-    draw_text(pixels, stride, hero.x + 190, hero.y + 22, ptc_ui_text(PTC_UI_T_CALENDAR_ATTRIBUTES), 13, UI_MUTED);
-    int type_size = 20;
-    while (type_size > 12 && measure_text(type_label, type_size) > 136) --type_size;
-    draw_text(pixels, stride, hero.x + 190, hero.y + 58, type_label, type_size,
-              (covered && day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY) ? UI_WARNING :
-              ((covered && day_type == PTC_CALENDAR_DAY_MAKEUP_WORKDAY) ? UI_ACCENT : UI_INK));
-
-    draw_text(pixels, stride, hero.x + 340, hero.y + 22, ptc_ui_text(PTC_UI_T_DATE_OF_OWNERSHIP), 13, UI_MUTED);
     ptc_format_date(target_day_index, date_buf);
-    draw_text(pixels, stride, hero.x + 340, hero.y + 58, date_buf, 20, UI_INK);
+    snprintf(date_sub, sizeof(date_sub), "%s  |  %s", date_buf, type_label);
+    draw_text(pixels, stride, 240, 88, date_sub, 11,
+              (covered && day_type == PTC_CALENDAR_DAY_STATUTORY_HOLIDAY) ? UI_WARNING :
+              ((covered && day_type == PTC_CALENDAR_DAY_MAKEUP_WORKDAY) ? UI_ACCENT : UI_MUTED));
 
-    /* 生效规则指示徽章框 */
-    UiRect active_badge = {hero.x + 500, hero.y + 14, hero.width - 516, 52};
-    fill_round_rect(pixels, stride, active_badge, 8, fresh ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
-    draw_rect_outline(pixels, stride, active_badge, 8, 1, fresh ? UI_SUCCESS : UI_WARNING);
+    /* 顶部 7 天分页胶囊: < D+%d / 7天预测 > */
+    UiRect prev_rect = to_uirect(ptc_ui_day_decision_prev_rect());
+    UiRect next_rect = to_uirect(ptc_ui_day_decision_next_rect());
+    UiRect pag_pill = {prev_rect.x, prev_rect.y, next_rect.x + next_rect.width - prev_rect.x, prev_rect.height};
+    fill_round_rect(pixels, stride, pag_pill, 6, UI_RAISED);
+    draw_rect_outline(pixels, stride, pag_pill, 6, 1, UI_BORDER);
+    draw_text_center(pixels, stride, prev_rect, "<", 14, offset > 0 ? UI_ACCENT : UI_MUTED);
+    char pag_txt[64];
+    snprintf(pag_txt, sizeof(pag_txt), ptc_ui_text(PTC_UI_T_DAY_DECISION_PAGINATION), offset);
+    draw_text_center(pixels, stride, (UiRect){prev_rect.x + prev_rect.width, prev_rect.y,
+                     next_rect.x - (prev_rect.x + prev_rect.width), prev_rect.height}, pag_txt, 11, UI_INK);
+    draw_text_center(pixels, stride, next_rect, ">", 14, offset < (int)PTC_RESULT_FORECAST_DAYS - 1 ? UI_ACCENT : UI_MUTED);
 
-    snprintf(eff_label, sizeof(eff_label), "%s  |  %s",
-             ptc_ui_effective_rule_label(decision.effective.source), total);
-    const char *badge_title = ptc_ui_text(fresh ? PTC_UI_T_FINAL_EFFECTIVE_RULES : PTC_UI_T_RULES_PENDING_CONFIRMATION);
-    int badge_value_x = active_badge.x + 26 + measure_text(badge_title, 12);
-    draw_text(pixels, stride, active_badge.x + 14, active_badge.y + 20,
-              badge_title, 12, fresh ? UI_SUCCESS : UI_WARNING);
-    fit_text(eff_label, sizeof(eff_label), eff_label, 14, active_badge.x + active_badge.width - 14 - badge_value_x);
-    draw_text(pixels, stride, badge_value_x, active_badge.y + 20, eff_label, 14, UI_INK);
-    draw_wrapped_text(pixels, stride, active_badge.x + 14, active_badge.y + 40, decision.final_reason,
-                      11, active_badge.width - 28, 15, 1, UI_MUTED);
+    /* 状态新鲜度 */
+    format_status_age(model, age_buf, sizeof(age_buf));
+    char age_label[128];
+    snprintf(age_label, sizeof(age_label), ptc_ui_text(PTC_UI_T_DETAIL_UPDATED_AGE), age_buf);
+    draw_text_center(pixels, stride, (UiRect){906, 56, 260, 36}, fresh ? age_label :
+        ptc_ui_text(PTC_UI_T_DETAIL_PENDING), 13, fresh ? UI_MUTED : UI_WARNING);
 
-    /* 2. 额度决策流水线 (1064 x 164) */
-    draw_waterfall_pipeline(pixels, stride, x_left, top_y + 88, full_w, &decision,
-                            is_today && model->bedtime_active && !model->bedtime_skipped, false);
-
-    /* 3. 底部双栏 (520 + 520) */
-    int bottom_y = top_y + 258;
-
-    /* 左下栏：就寝预测 */
-    UiRect bedtime = {x_left, bottom_y, col_w, 180};
-    fill_round_rect(pixels, stride, bedtime, 10, UI_WARNING_SOFT);
-    draw_rect_outline(pixels, stride, bedtime, 10, 1, UI_WARNING);
-    draw_text(pixels, stride, bedtime.x + 16, bedtime.y + 26, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), 15, UI_WARNING);
-    draw_text(pixels, stride, bedtime.x + 16, bedtime.y + 62, decision.bedtime, 17, UI_INK);
-    draw_wrapped_text(pixels, stride, bedtime.x + 16, bedtime.y + 98,
-              ptc_ui_text(PTC_UI_T_AFTER_BEDTIME_USAGE_WILL_BE_RESTRICTED_EVEN_2), 12, bedtime.width - 32, 22, 3, UI_MUTED);
-
-    /* 右下栏：健康管控与裁决逻辑说明 */
-    UiRect rule_info = {x_left + col_w + 24, bottom_y, col_w, 180};
-    fill_round_rect(pixels, stride, rule_info, 10, UI_RAISED);
-    draw_rect_outline(pixels, stride, rule_info, 10, 1, UI_BORDER);
-    draw_text(pixels, stride, rule_info.x + 16, rule_info.y + 26, ptc_ui_text(PTC_UI_T_HEALTH_AND_DECISION_RULES), 15, UI_INK);
-
-    char eye_txt[128];
-    if (model->eye_care_policy.enabled) {
-        snprintf(eye_txt, sizeof(eye_txt), ptc_ui_text(PTC_UI_T_EYE_CARE_POLICY_FORMAT),
-                 (unsigned)model->eye_care_policy.play_minutes,
-                 (unsigned)model->eye_care_policy.rest_minutes);
+    /* 2. 顶部全局提示横幅 (y = 106) */
+    UiRect banner = {108, 106, 1064, 28};
+    fill_round_rect(pixels, stride, banner, 8, fresh ? UI_SUCCESS_SOFT : UI_WARNING_SOFT);
+    draw_rect_outline(pixels, stride, banner, 8, 1, fresh ? UI_SUCCESS : UI_WARNING);
+    if (fresh) {
+        support_draw_checkmark(pixels, stride, banner.x + 22, banner.y + 14, 7, UI_SUCCESS, UI_ON_ACCENT);
+        draw_text_bold(pixels, stride, banner.x + 36, banner.y + 19,
+                       ptc_ui_text(is_today ? PTC_UI_T_DETAIL_RULES_GLOBAL_BANNER : PTC_UI_T_DETAIL_RULES_FORECAST_BANNER),
+                       13, UI_INK);
     } else {
-        snprintf(eye_txt, sizeof(eye_txt), "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_POLICY_OFF));
+        support_draw_info(pixels, stride, banner.x + 22, banner.y + 14, 7, UI_WARNING);
+        draw_text_bold(pixels, stride, banner.x + 36, banner.y + 19,
+                       ptc_ui_text(PTC_UI_T_RULES_PENDING_CONFIRMATION), 13, UI_WARNING);
     }
-    draw_text(pixels, stride, rule_info.x + 16, rule_info.y + 56, eye_txt, 13, model->eye_care_policy.enabled ? UI_INK : UI_MUTED);
 
-    char dock_txt[128];
-    if (model->dock_policy.force_docked) {
-        snprintf(dock_txt, sizeof(dock_txt), "%s", ptc_ui_text(PTC_UI_T_DOCK_POLICY_FORCE_FORMAT));
-    } else if (model->dock_policy.undocked_limit_enabled) {
-        snprintf(dock_txt, sizeof(dock_txt), ptc_ui_text(PTC_UI_T_DOCK_POLICY_LIMIT_FORMAT),
-                 (unsigned)model->dock_policy.undocked_daily_minutes);
+    /* 3. 准备额度参数与条件 */
+    int target_minutes = decision.effective.rule.minutes;
+    bool total_unlimited = (decision.effective.rule.mode == PTC_RULE_MODE_UNLIMITED);
+    bool total_known = fresh;
+    int played_minutes = is_today ? model->played_minutes : 0;
+    int remaining_minutes = is_today ? model->remaining_minutes : target_minutes;
+
+    PtcUiCondition conditions[4];
+    if (is_today) {
+        PtcUiTodayProjection p;
+        int second = ptc_ui_render_minute_of_day(now) * 60;
+        ptc_ui_project_today(model, now, model->day_index, second, &p);
+        memcpy(conditions, p.conditions, sizeof(conditions));
     } else {
-        snprintf(dock_txt, sizeof(dock_txt), "%s", ptc_ui_text(PTC_UI_T_DOCK_POLICY_OFF));
+        conditions[0] = (!fresh) ? PTC_UI_CONDITION_UNKNOWN :
+            (total_unlimited || target_minutes > 0 ? PTC_UI_CONDITION_PASS : PTC_UI_CONDITION_BLOCK);
+        conditions[1] = !model->bedtime_policy.enabled ? PTC_UI_CONDITION_OFF : PTC_UI_CONDITION_PASS;
+        conditions[2] = !model->eye_care_policy.enabled ? PTC_UI_CONDITION_OFF : PTC_UI_CONDITION_PASS;
+        conditions[3] = (!model->dock_policy.undocked_limit_enabled && !model->dock_policy.force_docked)
+            ? PTC_UI_CONDITION_OFF : PTC_UI_CONDITION_PASS;
     }
-    draw_text(pixels, stride, rule_info.x + 16, rule_info.y + 82, dock_txt, 13, (model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled) ? UI_INK : UI_MUTED);
 
-    draw_wrapped_text(pixels, stride, rule_info.x + 16, rule_info.y + 108,
-        ptc_ui_text(PTC_UI_T_DETAIL_RELATION), 12, rule_info.width - 32, 16, 2, UI_INK);
-    draw_wrapped_text(pixels, stride, rule_info.x + 16, rule_info.y + 145,
-        ptc_ui_text(PTC_UI_T_DETAIL_RELATION_MORE), 11, rule_info.width - 32, 14, 2, UI_MUTED);
-    draw_wrapped_text(pixels, stride, rule_info.x + 16, rule_info.y + 174,
-        ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_NOTE), 11, rule_info.width - 32, 14, 1, UI_MUTED);
+    /* 4. 区块 ① 当日总额度从哪里来 (y = 138) */
+    draw_rules_priority_pipeline(pixels, stride, model, &decision, 108, 138, 1064,
+                                 target_minutes, played_minutes, remaining_minutes,
+                                 is_today, total_known, total_unlimited);
 
-    home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_B_RETURN), false, true, false);
+    /* 5. 区块 ② 能否使用，由以下条件共同决定 (y = 260) */
+    draw_rules_conditions_gate(pixels, stride, model, &decision, 108, 260, 1064,
+                               target_minutes, played_minutes, remaining_minutes,
+                               weekday, is_today, total_known, total_unlimited, conditions);
+
+    /* 6. 底部说明卡片 */
+    /* 6.1 电视模式规则解读 (y = 446) */
+    draw_rules_dock_bullet_card(pixels, stride, 108, 446, 1064);
+
+    /* 6.2 日历属性解读 (y = 486) */
+    UiRect cal_card = {108, 486, 1064, 28};
+    fill_round_rect(pixels, stride, cal_card, 6, UI_ACCENT_SOFT);
+    draw_rect_outline(pixels, stride, cal_card, 6, 1, UI_BORDER);
+    support_draw_calendar(pixels, stride, cal_card.x + 18, cal_card.y + 14, 7, UI_ACCENT);
+    draw_text_bold(pixels, stride, cal_card.x + 34, cal_card.y + 18, ptc_ui_text(PTC_UI_T_CALENDAR_EXPLAIN_TITLE), 11, UI_INK);
+    draw_line(pixels, stride, cal_card.x + 130, cal_card.y + 4, cal_card.x + 130, cal_card.y + 24, 1, UI_BORDER);
+    snprintf(cal_desc, sizeof(cal_desc), ptc_ui_text(PTC_UI_T_CALENDAR_EXPLAIN_DESC), date_buf, type_label);
+    draw_text(pixels, stride, cal_card.x + 144, cal_card.y + 18, cal_desc, 10, UI_INK);
+
+    /* 7. 底部导航与按钮 (y = 606) */
+    draw_text(pixels, stride, 114, 622, ptc_ui_text(PTC_UI_T_DAY_DECISION_SWITCH_HINT), 11, UI_MUTED);
+
+    home_button(pixels, stride, ptc_ui_day_decision_refresh_rect(), ptc_ui_text(PTC_UI_T_Y_REFRESH),
+                false, false, model->waiting);
+    home_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_B_RETURN),
+                false, true, false);
 }
 
 static void draw_setup_pctl_help(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
