@@ -511,7 +511,7 @@ PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
     if (index == 1) return (PtcUiRect){342, 606, 180, 44};
     if (index == 2) return (PtcUiRect){108, 606, 222, 44};
     if (index == 0 && model->home_details_page == 0) return (PtcUiRect){824, 504, 348, 64};
-    if (index == 0) return (PtcUiRect){108, 522 - model->home_details_scroll, 1064, 44};
+    if (index == 0) return (PtcUiRect){108, 524 - model->home_details_scroll, 1064, 32};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
@@ -527,8 +527,8 @@ void ptc_ui_home_details_scroll(PtcUiModel *model, int pixels)
 PtcUiRect ptc_ui_home_details_data_rect(const PtcUiModel *model, int index)
 {
     static const PtcUiRect rows[] = {
-        {108, 571, 1064, 82}, {108, 653, 1064, 28},
-        {108, 682, 1064, 28}, {108, 717, 1064, 90}
+        {108, 564, 1064, 82}, {108, 646, 1064, 28},
+        {108, 674, 1064, 28}, {108, 709, 1064, 90}
     };
     if (!model || !model->home_details_data_expanded || index < 3 ||
         index > (model->view == PTC_UI_PARENT ? 6 : 5)) return (PtcUiRect){0, 0, 0, 0};
