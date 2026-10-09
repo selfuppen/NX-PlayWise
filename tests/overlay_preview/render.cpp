@@ -14,6 +14,7 @@ namespace {
 #include "../../companion/overlay/source/render_types.hpp"
 class PreviewView {
 public:
+    PtcUiResolvedTheme theme_ = PTC_UI_RESOLVED_DARK;
     PtcOverlayBridge *bridge_;
     PtcOverlayInput *input_;
     PtcCompanionResultSummary displayed_summary_{}, preview_summary_{}, redemption_before_{};

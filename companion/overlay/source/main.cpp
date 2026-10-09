@@ -27,11 +27,15 @@ namespace {
 constexpr char APP_ROOT[] = "sdmc:/switch/playwise";
 #include "render_types.hpp"
 
-static void load_overlay_language(PtcStorage *storage)
+static PtcUiResolvedTheme s_overlay_theme = PTC_UI_RESOLVED_DARK;
+
+static void load_overlay_config(PtcStorage *storage)
 {
     char config[8192];
-    PtcUiLanguagePreference preference = PTC_UI_LANGUAGE_SYSTEM;
+    PtcUiLanguagePreference lang_preference = PTC_UI_LANGUAGE_SYSTEM;
     PtcUiSystemLanguage system_language = PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
+    PtcUiThemePreference theme_preference = PTC_UI_THEME_SYSTEM;
+    PtcUiSystemTheme system_theme = PTC_UI_SYSTEM_THEME_UNAVAILABLE;
     u64 code;
     SetLanguage language;
     if (storage && storage->vtable->read_text(storage, "sdmc:/switch/playwise/config.json",
@@ -39,7 +43,10 @@ static void load_overlay_language(PtcStorage *storage)
         cJSON *root = cJSON_Parse(config);
         const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, "ui_language");
         if (cJSON_IsString(item))
-            (void)ptc_ui_language_parse_preference(item->valuestring, &preference);
+            (void)ptc_ui_language_parse_preference(item->valuestring, &lang_preference);
+        const cJSON *theme_item = cJSON_GetObjectItemCaseSensitive(root, "theme");
+        if (cJSON_IsString(theme_item))
+            (void)ptc_ui_theme_parse_preference(theme_item->valuestring, &theme_preference);
         cJSON_Delete(root);
     }
     if (R_SUCCEEDED(setInitialize())) {
@@ -57,7 +64,17 @@ static void load_overlay_language(PtcStorage *storage)
                 system_language = PTC_UI_SYSTEM_LANGUAGE_ENGLISH;
         }
     }
-    ptc_ui_language_set_resolved(ptc_ui_language_resolve(preference, system_language));
+    ptc_ui_language_set_resolved(ptc_ui_language_resolve(lang_preference, system_language));
+
+    if (R_SUCCEEDED(setsysInitialize())) {
+        ColorSetId color_set;
+        if (R_SUCCEEDED(setsysGetColorSetId(&color_set))) {
+            if (color_set == ColorSetId_Light) system_theme = PTC_UI_SYSTEM_THEME_LIGHT;
+            else if (color_set == ColorSetId_Dark) system_theme = PTC_UI_SYSTEM_THEME_DARK;
+        }
+        setsysExit();
+    }
+    s_overlay_theme = ptc_ui_theme_resolve(theme_preference, system_theme);
 }
 
 static unsigned int to_overlay_buttons(u64 keys)
@@ -122,7 +139,8 @@ public:
 
 class PctcGui final : public tsl::Gui {
 public:
-    PctcGui(PtcOverlayBridge *bridge, PtcOverlayInput *input) : bridge_(bridge), input_(input)
+    PctcGui(PtcOverlayBridge *bridge, PtcOverlayInput *input, PtcUiResolvedTheme theme = s_overlay_theme)
+        : bridge_(bridge), input_(input), theme_(theme)
     {
         ptc_companion_auth_init(&auth_, APP_ROOT, bridge_ ? bridge_->transport.file.storage : nullptr);
     }
@@ -1027,6 +1045,7 @@ public:
 private:
     PtcOverlayBridge *bridge_;
     PtcOverlayInput *input_;
+    PtcUiResolvedTheme theme_ = PTC_UI_RESOLVED_DARK;
     PtcCompanionAuth auth_{};
     PtcCompanionResultSummary displayed_summary_{};
     PtcCompanionResultSummary preview_summary_{};
@@ -1080,7 +1099,7 @@ public:
     {
         fsdevMountSdmc();
         ptc_fs_storage_init(&storage_);
-        load_overlay_language(ptc_fs_storage_as_storage(&storage_));
+        load_overlay_config(ptc_fs_storage_as_storage(&storage_));
         ptc_overlay_bridge_init(&bridge_, APP_ROOT, ptc_fs_storage_as_storage(&storage_));
         ptc_overlay_input_init(&input_);
     }
@@ -1091,7 +1110,7 @@ public:
         fsdevUnmountDevice("sdmc");
     }
 
-    std::unique_ptr<tsl::Gui> loadInitialGui() override { return initially<PctcGui>(&bridge_, &input_); }
+    std::unique_ptr<tsl::Gui> loadInitialGui() override { return initially<PctcGui>(&bridge_, &input_, s_overlay_theme); }
 
 private:
     PtcFsStorage storage_{};

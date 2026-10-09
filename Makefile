@@ -123,7 +123,7 @@ test-ui-primitives: $(HOST_BUILD_DIR)/ui_preview
 test-host: test-ui-primitives
 
 # UI preview generation with the pinned, redistributable documentation font.
-OVERLAY_PREVIEW_C_SRCS := companion/ui_language.c companion/overlay/input_model.c companion/overlay/bridge.c companion/transport_client.c common/time/ptc_time.c common/protocol/error_code.c
+OVERLAY_PREVIEW_C_SRCS := companion/ui_language.c companion/overlay/input_model.c companion/overlay/bridge.c companion/transport_client.c common/time/ptc_time.c common/protocol/error_code.c companion/nro/ui_theme.c
 $(HOST_BUILD_DIR)/overlay_preview_core.o: $(OVERLAY_PREVIEW_C_SRCS) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -ffunction-sections -fdata-sections -r -o $@ $(OVERLAY_PREVIEW_C_SRCS)
 
