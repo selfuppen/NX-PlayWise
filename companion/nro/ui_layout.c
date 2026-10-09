@@ -503,16 +503,83 @@ PtcUiRect ptc_ui_home_details_rect(bool parent)
     return parent ? (PtcUiRect){414, 192, 106, 26} : (PtcUiRect){964, 366, 268, 106};
 }
 
-PtcUiRect ptc_ui_home_details_tab_rect(int index)
+PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){108, 108, 1064, 466}; }
+
+PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
 {
-    /* Dialog center: x = (1280 - 1120) / 2 = 80, y = (720 - 640) / 2 = 40.
-       Tabs are placed in the dialog header next to the title. */
-    if (index == 0) {
-        return (PtcUiRect){380, 56, 230, 36};
-    } else if (index == 1) {
-        return (PtcUiRect){624, 56, 230, 36};
-    }
+    if (!model) return (PtcUiRect){0, 0, 0, 0};
+    if (index == 1) return (PtcUiRect){342, 606, 180, 44};
+    if (index == 2) return (PtcUiRect){108, 606, 222, 44};
+    if (index == 0 && model->home_details_page == 0) return (PtcUiRect){824, 504, 348, 64};
+    if (index == 0) return (PtcUiRect){108, 522 - model->home_details_scroll, 1064, 44};
     return (PtcUiRect){0, 0, 0, 0};
+}
+
+void ptc_ui_home_details_scroll(PtcUiModel *model, int pixels)
+{
+    if (!model || model->home_details_page != 1 || !model->home_details_data_expanded) return;
+    int maximum = model->view == PTC_UI_PARENT ? 280 : 160;
+    model->home_details_scroll += pixels;
+    if (model->home_details_scroll < 0) model->home_details_scroll = 0;
+    if (model->home_details_scroll > maximum) model->home_details_scroll = maximum;
+}
+
+PtcUiRect ptc_ui_home_details_data_rect(const PtcUiModel *model, int index)
+{
+    static const PtcUiRect rows[] = {
+        {108, 571, 1064, 82}, {108, 653, 1064, 28},
+        {108, 682, 1064, 28}, {108, 717, 1064, 90}
+    };
+    if (!model || !model->home_details_data_expanded || index < 3 ||
+        index > (model->view == PTC_UI_PARENT ? 6 : 5)) return (PtcUiRect){0, 0, 0, 0};
+    PtcUiRect row = rows[index - 3];
+    row.y -= model->home_details_scroll;
+    return row;
+}
+
+void ptc_ui_home_details_move(PtcUiModel *model, int direction)
+{
+    if (!model) return;
+    /* Read-only data blocks participate in navigation without gaining actions. */
+    static const int order[] = {0, 3, 4, 5, 6, 1, 2};
+    int count = model->home_details_page == 1 && model->home_details_data_expanded ?
+        (model->view == PTC_UI_PARENT ? 7 : 6) : 3;
+    int position = 0;
+    for (int i = 0; i < count; ++i) {
+        int focus = count == 3 ? i : order[i + (model->view == PTC_UI_CHILD && i >= 4 ? 1 : 0)];
+        if (focus == model->home_details_focus) position = i;
+    }
+    position = (position + (direction < 0 ? -1 : 1) + count) % count;
+    model->home_details_focus = count == 3 ? position :
+        order[position + (model->view == PTC_UI_CHILD && position >= 4 ? 1 : 0)];
+    PtcUiRect row = model->home_details_focus == 0 ? ptc_ui_home_details_action_rect(model, 0) :
+        ptc_ui_home_details_data_rect(model, model->home_details_focus);
+    PtcUiRect body = ptc_ui_home_details_body_rect();
+    if (row.h && row.y < body.y) ptc_ui_home_details_scroll(model, row.y - body.y);
+    else if (row.h && row.y + row.h > body.y + body.h)
+        ptc_ui_home_details_scroll(model, row.y + row.h - body.y - body.h);
+}
+
+void ptc_ui_home_details_activate(PtcUiModel *model, int index)
+{
+    if (!model || model->overlay != PTC_UI_OVERLAY_HOME_DETAILS) return;
+    if (index > 2) return;
+    model->home_details_focus = index;
+    if (index != 0) return;
+    if (model->home_details_page == 0) model->home_details_page = 1;
+    else {
+        model->home_details_data_expanded = !model->home_details_data_expanded;
+        if (!model->home_details_data_expanded) model->home_details_scroll = 0;
+    }
+}
+
+void ptc_ui_home_details_back(PtcUiModel *model)
+{
+    if (!model) return;
+    if (model->home_details_page == 1) {
+        model->home_details_page = 0;
+        model->home_details_focus = 0;
+    } else ptc_ui_cancel_overlay(model);
 }
 
 PtcUiOperation ptc_ui_today_operation(int index)
@@ -535,6 +602,9 @@ bool ptc_ui_open_home_details(PtcUiModel *model)
     /* Keep the underlying focus and execution message intact on open/close. */
     model->overlay = PTC_UI_OVERLAY_HOME_DETAILS;
     model->home_details_page = 0;
+    model->home_details_focus = 0;
+    model->home_details_scroll = 0;
+    model->home_details_data_expanded = false;
     snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
         model->view == PTC_UI_CHILD ? ptc_ui_text(PTC_UI_T_USAGE_DETAILS) : ptc_ui_text(PTC_UI_T_TODAY_S_SCHEDULE_DETAILS));
     model->overlay_body[0] = '\0';

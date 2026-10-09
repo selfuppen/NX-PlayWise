@@ -117,7 +117,7 @@ typedef enum {
     PTC_UI_HIT_EYE_CARE_PAGE_SAVE,
     PTC_UI_HIT_EYE_CARE_PAGE_SKIP,
     PTC_UI_HIT_HOME_DETAILS,
-    PTC_UI_HIT_HOME_DETAILS_TAB,
+    PTC_UI_HIT_HOME_DETAILS_ACTION,
     PTC_UI_HIT_NOTICE_DETAILS,
     PTC_UI_HIT_FORECAST_DAY,
     PTC_UI_HIT_SETUP_PCTL_HELP,
@@ -167,7 +167,13 @@ PtcUiRect ptc_ui_forecast_day_row_rect(int index);
 PtcUiRect ptc_ui_today_card_rect(int index);
 PtcUiRect ptc_ui_home_summary_rect(bool parent);
 PtcUiRect ptc_ui_home_details_rect(bool parent);
-PtcUiRect ptc_ui_home_details_tab_rect(int index);
+PtcUiRect ptc_ui_home_details_body_rect(void);
+PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index);
+PtcUiRect ptc_ui_home_details_data_rect(const PtcUiModel *model, int index);
+void ptc_ui_home_details_activate(PtcUiModel *model, int index);
+void ptc_ui_home_details_move(PtcUiModel *model, int direction);
+void ptc_ui_home_details_scroll(PtcUiModel *model, int pixels);
+void ptc_ui_home_details_back(PtcUiModel *model);
 PtcUiOperation ptc_ui_today_operation(int index);
 bool ptc_ui_open_home_details(PtcUiModel *model);
 bool ptc_ui_open_notice_details(PtcUiModel *model);

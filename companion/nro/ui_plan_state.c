@@ -302,10 +302,10 @@ void ptc_ui_build_plan_rules(const PtcUiModel *model, PtcUiPlanKind kind, PtcRul
     rules->holiday_enabled = kind == PTC_UI_PLAN_HOLIDAY ? model->draft_holiday_enabled : model->holiday_enabled;
     rules->holiday_rule = kind == PTC_UI_PLAN_HOLIDAY ? model->draft_holiday_rule : model->holiday_rule;
     rules->makeup_workday_rule = kind == PTC_UI_PLAN_HOLIDAY ? model->draft_makeup_workday_rule : model->makeup_workday_rule;
-    rules->autonomy_policy = model->draft_autonomy_policy.daily_buffer_minutes > 0 ? model->draft_autonomy_policy : model->autonomy_policy;
-    rules->dock_policy = model->dock_dirty ? model->draft_dock_policy : model->dock_policy;
-    rules->eye_care = model->eye_care_dirty ? model->draft_eye_care_policy : model->eye_care_policy;
-    rules->bedtime = model->bedtime_dirty ? model->draft_bedtime_policy : model->bedtime_policy;
+    rules->autonomy_policy = kind != PTC_UI_PLAN_SAVED && model->draft_autonomy_policy.daily_buffer_minutes > 0 ? model->draft_autonomy_policy : model->autonomy_policy;
+    rules->dock_policy = kind != PTC_UI_PLAN_SAVED && model->dock_dirty ? model->draft_dock_policy : model->dock_policy;
+    rules->eye_care = kind != PTC_UI_PLAN_SAVED && model->eye_care_dirty ? model->draft_eye_care_policy : model->eye_care_policy;
+    rules->bedtime = kind != PTC_UI_PLAN_SAVED && model->bedtime_dirty ? model->draft_bedtime_policy : model->bedtime_policy;
 }
 
 PtcEffectiveRule ptc_ui_plan_rule(const PtcUiModel *model, PtcUiPlanKind kind)

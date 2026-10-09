@@ -315,6 +315,46 @@ typedef struct {
 } PtcUiTodayDecision;
 
 typedef enum {
+    PTC_UI_CONDITION_UNKNOWN, PTC_UI_CONDITION_PASS, PTC_UI_CONDITION_BLOCK,
+    PTC_UI_CONDITION_OFF, PTC_UI_CONDITION_WAIVED
+} PtcUiCondition;
+
+enum {
+    PTC_UI_STOP_DAILY = 1, PTC_UI_STOP_BEDTIME = 2,
+    PTC_UI_STOP_EYE = 4, PTC_UI_STOP_DOCK = 8, PTC_UI_STOP_DAY_END = 16
+};
+
+typedef struct {
+    int start_second, end_second;
+    bool resting;
+} PtcUiUsageSegment;
+
+typedef struct {
+    int start_second, end_second;
+    bool skipped;
+} PtcUiSleepInterval;
+
+/* At most one transition per minute plus the initial partial rest. */
+#define PTC_UI_USAGE_SEGMENTS_MAX 1442
+typedef enum {
+    PTC_UI_ESTIMATE_READINGS, PTC_UI_ESTIMATE_STALE, PTC_UI_ESTIMATE_DATE,
+    PTC_UI_ESTIMATE_REFRESH, PTC_UI_ESTIMATE_RECOVERY, PTC_UI_ESTIMATE_READBACK,
+    PTC_UI_ESTIMATE_RUNTIME
+} PtcUiEstimatePending;
+typedef struct {
+    bool fresh, total_known, total_unlimited, undocked_known, undocked_unlimited;
+    bool simulation_available;
+    int total_remaining, undocked_remaining, continuous_seconds;
+    int now_second, stop_second, total_at_stop;
+    unsigned active_reasons, stop_reasons;
+    PtcUiEstimatePending pending_reason;
+    PtcUiCondition conditions[4]; /* total, bedtime, eye care, dock */
+    PtcUiSleepInterval sleep[2];
+    int sleep_count, segment_count;
+    PtcUiUsageSegment segments[PTC_UI_USAGE_SEGMENTS_MAX];
+} PtcUiTodayProjection;
+
+typedef enum {
     PTC_UI_ACTION_AVAILABLE = 0,
     PTC_UI_ACTION_RECOMMENDED = 1,
     PTC_UI_ACTION_DISABLED = 2
@@ -558,6 +598,13 @@ typedef struct {
     char album_restriction_detail[160];
     char rule_source[32];
     int home_details_page;
+    int home_details_focus;
+    bool home_details_data_expanded;
+    int home_details_scroll;
+    bool home_details_refresh_failed;
+#ifdef PTC_UI_PREVIEW_ANIM_CLOCK_MS
+    int home_details_preview_second;
+#endif
     int forecast_detail_day_offset;
     int editor_index;
     char overlay_title[64];

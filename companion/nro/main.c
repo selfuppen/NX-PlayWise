@@ -57,6 +57,8 @@ int main(int argc, char **argv)
     PadRepeater direction_repeater;
     HidTouchScreenState touch;
     bool touch_down = false;
+    int details_touch_y = -1;
+    bool details_touch_drag = false;
     bool running = true;
     bool install_defaults_ready;
 #ifndef PLAYWISE_EDEN
@@ -939,14 +941,24 @@ int main(int argc, char **argv)
 
         if (touch_active) {
             if (!touch_down) {
+                details_touch_y = -1;
+                details_touch_drag = ui.model.overlay == PTC_UI_OVERLAY_HOME_DETAILS &&
+                    ui.model.home_details_page == 1 && ui.model.home_details_data_expanded &&
+                    ptc_ui_rect_contains(ptc_ui_home_details_body_rect(), touch_x, touch_y) &&
+                    !ptc_ui_rect_contains(ptc_ui_home_details_action_rect(&ui.model, 0), touch_x, touch_y);
+                if (details_touch_drag) details_touch_y = touch_y;
                 touch_down = true;
-                if (!(ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required &&
+                if (!details_touch_drag && !(ui.model.overlay == PTC_UI_OVERLAY_CONFIRM && ui.model.confirm_hold_required &&
                       ptc_ui_rect_contains(ptc_ui_confirm_rect(ui.model.overlay), touch_x, touch_y))) {
                     handle_touch(&ui, touch_x, touch_y);
                 }
+            } else if (details_touch_drag && details_touch_y >= 0) {
+                ptc_ui_home_details_scroll(&ui.model, details_touch_y - touch_y);
+                details_touch_y = touch_y;
             }
         } else {
             touch_down = false;
+            details_touch_drag = false;
         }
 
         if (ui.exit_requested) {

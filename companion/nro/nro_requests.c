@@ -35,6 +35,8 @@ void submit_status(UiState *ui)
     if (!ui || ui->waiting) {
         return;
     }
+    if (ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS)
+        ui->model.home_details_refresh_failed = true;
     make_next_request_id(ui->active_request_id, sizeof(ui->active_request_id));
     status = ptc_companion_transport_submit_status(&ui->transport, ui->active_request_id, time(NULL));
     set_command_name(ui, "status");

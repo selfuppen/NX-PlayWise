@@ -145,6 +145,18 @@ static int check_primitives(void)
         }
         if (!painted) ++failed;
     }
+    fill_rect_packed(preview_pixels, 1280, (UiRect){0, 0, 100, 100}, background);
+    ui_set_vertical_clip(40, 60);
+    fill_round_rect(preview_pixels, 1280, (UiRect){10, 10, 80, 80}, 8, UI_RGB(0xffffff));
+    draw_text(preview_pixels, 1280, 12, 40, "TEST", 12, UI_RGB(0xffffff));
+    ui_set_vertical_clip(0, SCREEN_HEIGHT);
+    int clipped_pixels = 0;
+    for (int y = 0; y < 100; ++y) for (int x = 0; x < 100; ++x) {
+        if (preview_pixels[y * 1280 + x] == background) continue;
+        ++clipped_pixels;
+        if (y < 40 || y >= 60) ++failed;
+    }
+    if (!clipped_pixels) ++failed;
     printf("%s: UI primitive coverage, symmetry, strokes and clipping\n", failed ? "FAIL" : "PASS");
     return failed ? 1 : 0;
 }
@@ -437,6 +449,95 @@ static int render_support_guide_previews(const char *directory, const PtcUiModel
     return failed;
 }
 
+static int render_today_details_previews(const char *directory, const PtcUiModel *baseline, bool dark)
+{
+    int failed = 0;
+    PtcUiModel today = *baseline;
+    today.view = PTC_UI_PARENT;
+    today.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
+    today.home_details_preview_second = 16 * 3600;
+    today.home_details_page = 0;
+    today.home_details_focus = 0;
+    today.dock_policy = (PtcDockPolicy){false, true, 30};
+    today.dock_dirty = false; today.bedtime_dirty = false; today.eye_care_dirty = false;
+    today.dock_available = today.undocked_usage_available = true;
+    today.undocked_used_minutes = 12; today.undocked_remaining_minutes = 18;
+    today.dock_restriction_active = today.dock_waived_today = false;
+    snprintf(today.operation_mode, sizeof(today.operation_mode), "undocked");
+    today.eye_care_policy = (PtcEyeCarePolicy){true, 40, 10};
+    today.eye_care_used_minutes = 25;
+    snprintf(today.eye_care_phase, sizeof(today.eye_care_phase), "playing");
+    today.bedtime_policy.enabled = true;
+    for (int i = 0; i < 7; ++i)
+        today.bedtime_policy.week[i] = (PtcBedtimeWindow){true, 21 * 60 + 30, 7 * 60};
+    today.bedtime_active = today.bedtime_skipped = today.bedtime_skipped_window_available = false;
+    today.bedtime_next_available = true;
+    today.bedtime_next_start_day_index = today.day_index;
+    today.bedtime_next_start_minute = 21 * 60 + 30;
+    today.bedtime_next_end_minute = 7 * 60;
+    failed |= save_preview(directory, "parent", "today-planning", &today, dark);
+    {
+        PtcUiModel variant = today;
+        snprintf(variant.operation_mode, sizeof(variant.operation_mode), "docked");
+        failed |= save_preview(directory, "parent", "today-tv", &variant, dark);
+        variant.forecast[0].mode = PTC_RULE_MODE_UNLIMITED;
+        variant.current_week[ptc_weekday_from_day_index(variant.day_index)].mode = PTC_RULE_MODE_UNLIMITED;
+        variant.unrestricted_today = 1;
+        variant.daily_buffer_available = false;
+        failed |= save_preview(directory, "parent", "today-unlimited-tv", &variant, dark);
+        variant = today;
+        snprintf(variant.eye_care_phase, sizeof(variant.eye_care_phase), "resting");
+        variant.eye_care_rest_remaining_seconds = 600; variant.eye_care_break_id = 99;
+        variant.remaining_minutes = 0; variant.restricted_now = variant.blocked_today = 1;
+        failed |= save_preview(directory, "parent", "today-resting", &variant, dark);
+        variant = today;
+        variant.bedtime_skipped_window_available = true;
+        variant.bedtime_skipped_window_instance_id = ptc_bedtime_window_instance_id(variant.day_index, 21 * 60 + 30);
+        failed |= save_preview(directory, "parent", "today-skipped", &variant, dark);
+        variant = today;
+        variant.recovery_active = true;
+        failed |= save_preview(directory, "parent", "today-recovery", &variant, dark);
+    }
+    today.home_details_page = 1;
+    failed |= save_preview(directory, "parent", "today-rules", &today, dark);
+    today.home_details_data_expanded = true; today.home_details_scroll = 280;
+    failed |= save_preview(directory, "parent", "today-data", &today, dark);
+    today.home_details_focus = 6;
+    failed |= save_preview(directory, "parent", "today-data-focus", &today, dark);
+    today.home_details_focus = 0;
+    today.view = PTC_UI_CHILD; today.home_details_scroll = 160;
+    failed |= save_preview(directory, "parent", "today-child-data", &today, dark);
+    today.view = PTC_UI_PARENT; today.home_details_page = 0;
+    today.status_updated_at = 879;
+    failed |= save_preview(directory, "parent", "today-stale", &today, dark);
+    today.status_updated_at = 998;
+    today.home_details_refresh_failed = true;
+    failed |= save_preview(directory, "parent", "today-refresh-failed", &today, dark);
+    today.home_details_refresh_failed = false;
+    today.daily_restriction_active = today.bedtime_active = today.dock_restriction_active = true;
+    today.played_minutes = today.forecast[0].minutes;
+    today.undocked_used_minutes = today.dock_policy.undocked_daily_minutes;
+    today.undocked_remaining_minutes = 0;
+    today.remaining_minutes = 0; today.restricted_now = today.blocked_today = 1;
+    today.bedtime_start_minute = 16 * 60; today.bedtime_end_minute = 7 * 60;
+    today.bedtime_policy.week[ptc_weekday_from_day_index(today.day_index)].start_minute = 16 * 60;
+    today.bedtime_window_instance_id = ptc_bedtime_window_instance_id(today.day_index, 16 * 60);
+    today.daily_buffer_available = false;
+    snprintf(today.eye_care_phase, sizeof(today.eye_care_phase), "resting");
+    today.eye_care_rest_remaining_seconds = 600; today.eye_care_break_id = 99;
+    failed |= save_preview(directory, "parent", "today-multiple-limits", &today, dark);
+    today.home_details_page = 1;
+    failed |= save_preview(directory, "parent", "today-rules-multiple-limits", &today, dark);
+    today = *baseline;
+    today.view = PTC_UI_PARENT;
+    today.overlay = PTC_UI_OVERLAY_DAY_DECISION;
+    today.forecast_detail_day_offset = 0;
+    failed |= save_preview(directory, "parent", "date-decision-today", &today, dark);
+    today.forecast_detail_day_offset = 1;
+    failed |= save_preview(directory, "parent", "date-decision-tomorrow", &today, dark);
+    return failed;
+}
+
 static int render_all_previews(const char *directory, const PtcUiModel *baseline_ptr)
 {
     PtcUiModel model;
@@ -545,6 +646,8 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         }
         model.home_details_page = 1;
         failed |= save_preview(directory, "parent", "parent-details-usage", &model, dark);
+        failed |= render_today_details_previews(directory, &model, dark);
+
         ptc_ui_cancel_overlay(&model);
         model.parent_page = PTC_UI_PARENT_GRANT;
         failed |= save_preview(directory, "grant", "grant-entry", &model, dark);
@@ -1266,6 +1369,8 @@ int main(int argc, char **argv)
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_CHILD;
     model.status_loaded = model.remaining_available = model.played_minutes_available = true;
+    model.dock_available = true;
+    snprintf(model.operation_mode, sizeof(model.operation_mode), "undocked");
     model.status_updated_at = 998;
     model.remaining_minutes = 51;
     model.played_minutes = 69;
@@ -1312,7 +1417,7 @@ int main(int argc, char **argv)
     failed |= render_eye_care_previews(en_dir, &model);
     failed |= render_dock_previews(en_dir, &model);
     failed |= render_config_backup_previews(en_dir, &model);
-    /* The focused eye care surfaces also receive traditional Chinese visual QA. */
+    /* Traditional Chinese covers the new details and focused health surfaces. */
     char zh_hant_dir[1024];
     snprintf(zh_hant_dir, sizeof(zh_hant_dir), "%s/zh_hant", argv[2]);
     ptc_mkdir(zh_hant_dir);
@@ -1322,6 +1427,7 @@ int main(int argc, char **argv)
     failed |= render_dock_previews(zh_hant_dir, &model);
     failed |= render_config_backup_previews(zh_hant_dir, &model);
     for (int dark = 0; dark < 2; ++dark) {
+        failed |= render_today_details_previews(zh_hant_dir, &model, dark);
         failed |= render_setup_previews(zh_hant_dir, &model, dark);
         failed |= render_support_guide_previews(zh_hant_dir, &model, dark);
     }

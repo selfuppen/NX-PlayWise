@@ -200,11 +200,14 @@ The Today's Schedule tab features eight quick-action cards and a full-screen det
 
 On the Today's Schedule tab, press controller `+` button or tap "+ View Details" to open the full-screen details sheet to inspect system decision logic:
 
-- **How Today's Limit is Determined**: Evaluated in strict priority order: "Today's Adjustments → Scheduled Date Limits → National Holidays → Weekly Schedule", adopting the first applicable rule. Bedtime and eye care run independently of this quota priority; exhausted daily quota and bedtime restrictions take precedence.
-- **Usage & Status**: Displays on-device playtime estimates for today, 7-day usage estimates, status update timestamps, and recent operations. The eye care preview shows approximate minutes until the next break while playing and a minutes-and-seconds countdown during a break. Unknown or expired readings prompt a refresh.
+- **Today: plan and status** shows total remaining, non-TV remaining, continuous-use time and health rules together. The sleep schedule shows actual bedtime windows. Continuous-use estimates keep the current mode and observe prescribed breaks, without assuming TV switching or buffer claiming. Future times are estimates; backend status takes precedence.
+- **Decision and rules** opens with touch or focused A and explains allowance-source priority and the four parallel restrictions: total, bedtime, eye care and TV. Expand Data and runtime status for actual 7/30-day estimates, recorded-day counts and timers; parents also see execution details.
+- Y refreshes either page. B returns from the nested page to planning with entry focus restored, then back to Today. ZL/ZR or touch dragging scrolls expanded data. Child details remain read-only and hide parent execution data.
+- TV counts toward the total; non-TV counts toward both limits. Non-TV is not extra allowance. TV can use the total left; breaks and bedtime still apply. Unlimited use, extra time and buffers do not waive health rules.
 
-![Today's rule details preview](../images/usage-en/parent/parent-details-decision-light.png)
-![Recent usage statistics & records preview](../images/usage-en/parent/parent-details-usage-light.png)
+![Today: plan and status](../images/usage-en/parent/today-planning-light.png)
+![Decision and rules](../images/usage-en/parent/today-rules-light.png)
+![Expanded data and runtime](../images/usage-en/parent/today-data-light.png)
 
 ### Long-Term & Date Plans
 

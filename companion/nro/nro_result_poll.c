@@ -80,6 +80,8 @@ void poll_result(UiState *ui, bool force)
     bool preserve_scheduled_draft;
     PtcBedtimePolicy saved_bedtime_draft;
     bool preserve_bedtime_draft;
+    PtcAutonomyPolicy saved_autonomy_draft;
+    bool preserve_autonomy_draft;
     if (!ui->waiting) {
         if (force) {
             submit_status(ui);
@@ -127,6 +129,9 @@ void poll_result(UiState *ui, bool force)
             }
         }
         saved_scheduled_draft = ui->model.draft_scheduled_override;
+        saved_autonomy_draft = ui->model.draft_autonomy_policy;
+        preserve_autonomy_draft = ui->model.overlay == PTC_UI_OVERLAY_HOME_DETAILS ||
+            saved_autonomy_draft.daily_buffer_minutes != ui->model.autonomy_policy.daily_buffer_minutes;
         preserve_scheduled_draft = ptc_ui_scheduled_dirty(&ui->model);
         saved_bedtime_draft = ui->model.draft_bedtime_policy;
         preserve_bedtime_draft = ui->model.bedtime_dirty ||
@@ -152,7 +157,8 @@ void poll_result(UiState *ui, bool force)
             set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_RESULT), PTC_COMPANION_RESULT_INVALID);
             if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
             if (ui->today_limit_refresh_pending) finish_today_limit_refresh(ui, false);
-            if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
+            if (ui->request_view == PTC_UI_CHILD && ui->model.overlay != PTC_UI_OVERLAY_HOME_DETAILS)
+                ui->model.view = PTC_UI_ERROR;
             return;
         }
         if (strcmp(ui->model.result_type, "status") == 0 &&
@@ -176,6 +182,8 @@ void poll_result(UiState *ui, bool force)
             ptc_ui_setup_record_issue(&ui->model, PTC_UI_SETUP_ISSUE_STATUS, ui->model.error_code);
         sync_setup_wizard(ui);
         load_rule_drafts(ui);
+        if (preserve_autonomy_draft && strcmp(ui->model.result_type, "status") == 0)
+            ui->model.draft_autonomy_policy = saved_autonomy_draft;
         if (strcmp(ui->model.result_status, "ok") == 0 &&
             strcmp(ui->model.result_type, "restore_today_policy") == 0) {
             ui->model.today_override_cleared_in_session = true;
@@ -195,6 +203,7 @@ void poll_result(UiState *ui, bool force)
         }
         if (ui->model.status_loaded && strcmp(ui->model.result_status, "ok") == 0) {
             ptc_ui_mark_status_updated(&ui->model, (int64_t)time(NULL));
+            ui->model.home_details_refresh_failed = false;
         }
         if (preserve_weekly_draft &&
             !(strcmp(ui->model.result_type, "set_weekly_template") == 0 &&
@@ -307,6 +316,7 @@ void poll_result(UiState *ui, bool force)
             }
         }
         if (ui->request_view == PTC_UI_CHILD && strcmp(ui->model.result_status, "error") == 0 &&
+            ui->model.overlay != PTC_UI_OVERLAY_HOME_DETAILS &&
             strcmp(ui->model.result_type, "preview_offline_code") != 0 &&
             strcmp(ui->model.result_type, "offline_code") != 0) {
             ui->model.view = PTC_UI_ERROR;
@@ -423,5 +433,6 @@ void poll_result(UiState *ui, bool force)
     set_message(ui, ptc_ui_text(PTC_UI_T_FAILED_TO_READ_THE_RESULT), status);
     if (ui->quota_recheck_pending) finish_quota_recheck(ui, false);
     if (ui->today_limit_refresh_pending) finish_today_limit_refresh(ui, false);
-    if (ui->request_view == PTC_UI_CHILD) ui->model.view = PTC_UI_ERROR;
+    if (ui->request_view == PTC_UI_CHILD && ui->model.overlay != PTC_UI_OVERLAY_HOME_DETAILS)
+        ui->model.view = PTC_UI_ERROR;
 }

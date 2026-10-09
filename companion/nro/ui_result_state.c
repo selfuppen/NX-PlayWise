@@ -339,7 +339,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
     if (status_context && cJSON_IsObject(state)) {
         bool preserve_played_minutes = model->played_minutes_available &&
-            !summary.played_minutes_available;
+            !summary.played_minutes_available && type && strcmp(type, "status") != 0 &&
+            model->day_index == (uint16_t)json_int(state, "day_index", 0);
 
         model->status_loaded = true;
         model->restriction_enabled_available = json_bool(state, "restriction_enabled_available", false);
@@ -352,8 +353,9 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->unrestricted_today = json_int(state, "unrestricted_today", -1);
         model->remaining_available = summary.remaining_available;
         model->remaining_minutes = summary.remaining_minutes;
-        /* Management results may carry the compatibility fields as unavailable;
-         * retain the last status snapshot instead of displaying a false reset. */
+        /* Same-day management replies may omit compatibility readings. A status
+         * read must replace them, including unknown values, so a refreshed or
+         * next-day estimate cannot inherit consumption from an older snapshot. */
         if (!preserve_played_minutes) {
             model->played_minutes_available = summary.played_minutes_available;
             model->played_minutes = summary.played_minutes;

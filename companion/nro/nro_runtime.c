@@ -251,7 +251,7 @@ void set_message(UiState *ui, const char *prefix, PtcCompanionStatus status)
     ui->model.feedback_detail[0] = '\0';
     snprintf(ui->model.message, sizeof(ui->model.message), "%s：%s", prefix, companion_status_zh(status));
     snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
-    if (ui->model.view == PTC_UI_CHILD) {
+    if (ui->model.view == PTC_UI_CHILD && ui->model.overlay != PTC_UI_OVERLAY_HOME_DETAILS) {
         ui->model.view = PTC_UI_ERROR;
     }
 }

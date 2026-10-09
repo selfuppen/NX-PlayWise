@@ -1667,9 +1667,9 @@ static void test_release_hit_targets(void)
     ptc_ui_open_home_details(&model);
     check_int(model.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "open home details sets overlay");
     check_int(model.home_details_page, 0, "open home details resets page to 0");
-    check_true(ptc_ui_home_details_tab_rect(0).w > 0 && ptc_ui_home_details_tab_rect(1).w > 0, "home details tabs are present");
-    check_hit(hit_center(&model, ptc_ui_home_details_tab_rect(0)), PTC_UI_HIT_HOME_DETAILS_TAB, 0, "home details timeline tab");
-    check_hit(hit_center(&model, ptc_ui_home_details_tab_rect(1)), PTC_UI_HIT_HOME_DETAILS_TAB, 1, "home details metrics tab");
+    check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 0)), PTC_UI_HIT_HOME_DETAILS_ACTION, 0, "details decision entry");
+    check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 1)), PTC_UI_HIT_HOME_DETAILS_ACTION, 1, "details refresh entry");
+    check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 2)), PTC_UI_HIT_HOME_DETAILS_ACTION, 2, "details back entry");
 
     model.overlay = PTC_UI_OVERLAY_CREDENTIAL;
     model.credential_kind = 1;
@@ -2402,7 +2402,7 @@ static void test_home_redesign(void)
         check_true(ptc_ui_open_home_details(&model), "details open without a request");
         check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "details block underlying input");
         check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_NONE, 0, "details have no hidden confirm action");
-        check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0, "details return is touchable");
+        check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 2)), PTC_UI_HIT_HOME_DETAILS_ACTION, 2, "details return is touchable");
         check_true(ptc_ui_cancel_overlay(&model) && model.selected_index == 6 && strcmp(model.message, "keep result") == 0,
             "details close preserves focus and result");
     }
@@ -2969,8 +2969,8 @@ static void test_today_decision_and_plan_review(void)
     model.parent_page = PTC_UI_PARENT_TODAY;
     model.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
     model.home_details_page = 0;
-    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)),
-              PTC_UI_HIT_OVERLAY_CANCEL, 0, "home details cancel button is touchable");
+    check_hit(hit_center(&model, ptc_ui_home_details_action_rect(&model, 2)),
+              PTC_UI_HIT_HOME_DETAILS_ACTION, 2, "home details cancel button is touchable");
 }
 
 static void test_support_next_step(void)
@@ -3886,8 +3886,192 @@ static void test_today_settings_links(void)
     check_true(!ptc_ui_open_today_settings(&model, 8), "child cannot open parent settings shortcut");
 }
 
+static PtcUiModel today_projection_model(void)
+{
+    PtcUiModel m;
+    memset(&m, 0, sizeof(m));
+    m.view = PTC_UI_PARENT; m.parent_page = PTC_UI_PARENT_TODAY;
+    m.status_loaded = m.forecast_available = m.played_minutes_available = true;
+    m.status_updated_at = 1000; m.day_index = 2380;
+    snprintf(m.result_status, sizeof(m.result_status), "ok");
+    snprintf(m.setup_phase, sizeof(m.setup_phase), "active");
+    m.forecast[0] = (PtcResultForecastDay){.day_index = 2380, .mode = PTC_RULE_MODE_LIMIT, .minutes = 120};
+    m.played_minutes = 69;
+    for (int i = 0; i < 7; ++i) m.current_week[i] = (PtcDayRule){PTC_RULE_MODE_LIMIT, 120};
+    m.dock_available = m.undocked_usage_available = true;
+    snprintf(m.operation_mode, sizeof(m.operation_mode), "undocked");
+    m.dock_policy = (PtcDockPolicy){false, true, 30};
+    m.undocked_remaining_minutes = 18; m.undocked_used_minutes = 12;
+    m.eye_care_policy = (PtcEyeCarePolicy){true, 40, 10};
+    snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "playing");
+    m.eye_care_used_minutes = 25;
+    return m;
+}
+
+static void test_today_projection(void)
+{
+    PtcUiModel m = today_projection_model();
+    PtcUiTodayProjection p;
+    const int start = 16 * 3600;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(p.simulation_available && p.total_known && p.undocked_known, "projection has reliable balances");
+    check_int(p.total_remaining, 51, "total balance is independent of timer remaining");
+    check_int(p.continuous_seconds, 15 * 60, "continuous time stops at first break");
+    check_int(p.segment_count, 3, "example has play rest play");
+    check_int(p.segments[0].end_second, start + 15 * 60, "example breaks at 16:15");
+    check_true(p.segments[1].resting, "middle segment is rest");
+    check_int(p.segments[1].end_second, start + 25 * 60, "example resumes at 16:25");
+    check_int(p.stop_second, start + 28 * 60, "example stops at 16:28");
+    check_int(p.stop_reasons, PTC_UI_STOP_DOCK, "example stops only for non-TV");
+    check_int(p.total_at_stop, 33, "rest does not consume either balance");
+    m.eye_care_dirty = m.bedtime_dirty = m.dock_dirty = true;
+    m.draft_eye_care_policy = (PtcEyeCarePolicy){true, 1, 1};
+    m.draft_dock_policy.force_docked = true;
+    m.draft_bedtime_policy.enabled = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.stop_second, start + 28 * 60, "projection ignores unsaved health drafts");
+    check_int(m.undocked_used_minutes, 12, "projection never mutates recorded usage");
+    m = today_projection_model(); snprintf(m.operation_mode, sizeof(m.operation_mode), "docked");
+    m.undocked_usage_available = false;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.stop_reasons, PTC_UI_STOP_DAILY, "TV ignores unavailable non-TV balance");
+    check_int(p.stop_second, start + 61 * 60, "TV consumes only total and observes break");
+    m = today_projection_model(); m.eye_care_policy.enabled = false;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.continuous_seconds, 18 * 60, "no break when eye care is off");
+    m.unrestricted_today = 1; m.forecast[0].mode = PTC_RULE_MODE_UNLIMITED; m.eye_care_policy.enabled = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(p.total_unlimited && p.total_at_stop == -1, "unlimited remains unlimited");
+    check_int(p.stop_reasons, PTC_UI_STOP_DOCK, "unlimited does not waive non-TV limit");
+    m = today_projection_model(); m.dock_waived_today = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.stop_reasons, PTC_UI_STOP_DAILY, "TV waiver removes only mode restriction");
+    m = today_projection_model(); m.played_minutes = 102;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.stop_reasons, PTC_UI_STOP_DAILY | PTC_UI_STOP_DOCK, "simultaneous limits are both retained");
+    m = today_projection_model(); m.eye_care_policy.play_minutes = 1; m.eye_care_policy.rest_minutes = 1;
+    m.eye_care_used_minutes = 0;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.segment_count, 35, "multiple cycles continue until mode budget exhausted");
+    m = today_projection_model(); m.eye_care_policy.enabled = false; m.dock_policy.undocked_limit_enabled = false;
+    m.unrestricted_today = 1; m.forecast[0].mode = PTC_RULE_MODE_UNLIMITED;
+    ptc_ui_project_today(&m, 1000, m.day_index, 86340, &p);
+    check_int(p.stop_reasons, PTC_UI_STOP_DAY_END, "preview never invents next-day balance");
+    m = today_projection_model(); m.unrestricted_today = 1; m.temporary_unlocked = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.total_unlimited && p.total_remaining == 51 && !p.simulation_available,
+        "temporary system unlock does not change backend allowance");
+    m = today_projection_model(); m.bedtime_policy.enabled = true;
+    uint8_t day = ptc_weekday_from_day_index(m.day_index);
+    m.bedtime_policy.week[day] = (PtcBedtimeWindow){true, 16 * 60 + 20, 7 * 60};
+    m.bedtime_policy.week[(day + 6) % 7] = (PtcBedtimeWindow){true, 22 * 60, 8 * 60};
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.sleep_count, 2, "today includes previous night's interval");
+    check_int(p.sleep[0].end_second, 8 * 3600, "morning uses previous day end not tonight's end");
+    check_int(p.sleep[1].start_second, start + 20 * 60, "tonight uses today's own rule");
+    check_int(p.stop_second, start + 20 * 60, "bedtime interrupts a projected rest");
+    check_int(p.total_at_stop, 36, "interrupted rest consumes no quota");
+    check_int(p.stop_reasons, PTC_UI_STOP_BEDTIME, "bedtime terminates simulation");
+    m.bedtime_skipped_window_available = true;
+    m.bedtime_skipped_window_instance_id = ptc_bedtime_window_instance_id(m.day_index, 16 * 60 + 20);
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(p.sleep[1].skipped, "skipped bedtime is visible on schedule");
+    check_int(p.stop_reasons, PTC_UI_STOP_DOCK, "skip does not waive other limits");
+    m = today_projection_model(); snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "resting");
+    m.eye_care_rest_remaining_seconds = 630; m.eye_care_break_id = 7;
+    m.remaining_minutes = 0; m.blocked_today = m.restricted_now = 1;
+    ptc_ui_project_today(&m, 1030, m.day_index, start, &p);
+    check_int(p.total_remaining, 51, "temporary blocked timer is not daily exhaustion");
+    check_int(p.continuous_seconds, 0, "resting has no immediate continuous use");
+    check_int(p.segments[0].end_second, start + 600, "initial rest uses fresh deadline countdown");
+    check_int(p.total_at_stop, 33, "existing rest resumes with preserved budgets");
+    m.daily_restriction_active = m.bedtime_active = m.dock_restriction_active = true;
+    ptc_ui_project_today(&m, 1030, m.day_index, start, &p);
+    check_int(p.active_reasons, 15, "all four backend restriction reasons are displayed");
+    check_int(p.segment_count, 0, "other active limits stop immediately");
+    m = today_projection_model(); m.dock_policy.force_docked = m.dock_restriction_active = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_int(p.undocked_remaining, 0, "TV-only has zero non-TV balance");
+    check_int(p.total_remaining, 51, "TV-only does not change total balance");
+    m = today_projection_model();
+    ptc_ui_project_today(&m, 1121, m.day_index, start, &p);
+    check_true(!p.fresh && !p.total_known && !p.simulation_available, "stale status is never zero or projected");
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_STALE, "stale estimate explains its age");
+    ptc_ui_project_today(&m, 1000, m.day_index + 1, start, &p);
+    check_true(!p.fresh, "cross-day cached state is not today's status");
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_DATE, "estimate explains date mismatch");
+    m.home_details_refresh_failed = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available, "failed refresh suppresses cached estimates");
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_REFRESH, "estimate explains failed refresh");
+    m = today_projection_model(); m.undocked_usage_available = false;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available && !p.undocked_known, "unknown non-TV usage is not zero");
+    m = today_projection_model(); snprintf(m.operation_mode, sizeof(m.operation_mode), "unknown");
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available, "unknown mode is not TV");
+    m = today_projection_model(); snprintf(m.eye_care_phase, sizeof(m.eye_care_phase), "unknown");
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available, "unknown eye-care phase suppresses simulation");
+    m = today_projection_model(); m.recovery_active = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available, "recovery suppresses simulation");
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_RECOVERY, "estimate explains recovery");
+    check_int(p.conditions[0], PTC_UI_CONDITION_UNKNOWN, "recovering quota does not claim a pass");
+    m.recovery_active = false; m.apply_pending_confirmation = true;
+    ptc_ui_project_today(&m, 1000, m.day_index, start, &p);
+    check_true(!p.simulation_available, "pending readback suppresses simulation");
+    check_int(p.pending_reason, PTC_UI_ESTIMATE_READBACK, "estimate explains pending readback");
+}
+
+static void test_today_details_navigation(void)
+{
+    PtcUiModel m = today_projection_model();
+    m.selected_index = 9;
+    check_true(ptc_ui_open_home_details(&m), "open planning view");
+    ptc_ui_home_details_activate(&m, 0);
+    check_int(m.home_details_page, 1, "decision is a nested page");
+    check_true(!m.home_details_data_expanded, "data starts collapsed");
+    ptc_ui_home_details_activate(&m, 0);
+    ptc_ui_home_details_scroll(&m, 1000);
+    check_int(m.home_details_scroll, 280, "parent scroll is bounded");
+    check_hit(ptc_ui_hit_test(&m, 500, 100), PTC_UI_HIT_NONE, 0, "header does not activate offscreen body controls");
+    ptc_ui_home_details_scroll(&m, -1000);
+    check_hit(hit_center(&m, ptc_ui_home_details_action_rect(&m, 0)), PTC_UI_HIT_HOME_DETAILS_ACTION, 0, "expand row has shared geometry");
+    ptc_ui_home_details_move(&m, 1);
+    check_int(m.home_details_focus, 3, "down browses first read-only data block");
+    PtcUiRect body = ptc_ui_home_details_body_rect();
+    PtcUiRect row = ptc_ui_home_details_data_rect(&m, m.home_details_focus);
+    check_true(row.y >= body.y && row.y + row.h <= body.y + body.h, "focused data block scrolls into view");
+    ptc_ui_home_details_activate(&m, 3);
+    check_true(m.home_details_data_expanded && m.home_details_focus == 3, "read-only data focus cannot toggle expansion");
+    for (int i = 0; i < 3; ++i) ptc_ui_home_details_move(&m, 1);
+    check_int(m.home_details_focus, 6, "parent can browse execution details");
+    row = ptc_ui_home_details_data_rect(&m, 6);
+    check_true(row.y >= body.y && row.y + row.h <= body.y + body.h, "parent execution focus scrolls into view");
+    ptc_ui_home_details_back(&m);
+    check_int(m.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "nested back stays in details");
+    check_int(m.home_details_focus, 0, "nested back restores decision entry focus");
+    ptc_ui_home_details_back(&m);
+    check_int(m.selected_index, 9, "closing details preserves parent origin");
+    m.view = PTC_UI_CHILD;
+    check_true(ptc_ui_open_home_details(&m), "child opens same read-only detail");
+    ptc_ui_home_details_activate(&m, 0); ptc_ui_home_details_activate(&m, 0);
+    ptc_ui_home_details_scroll(&m, 1000);
+    check_int(m.home_details_scroll, 160, "child data excludes parent audit height");
+    check_int(ptc_ui_home_details_data_rect(&m, 6).h, 0, "child has no execution data focus");
+    for (int i = 0; i < 4; ++i) ptc_ui_home_details_move(&m, 1);
+    check_int(m.home_details_focus, 1, "child navigation skips parent execution block");
+    m.waiting = true;
+    check_hit(hit_center(&m, ptc_ui_home_details_action_rect(&m, 1)), PTC_UI_HIT_NONE, 0, "waiting disables touch refresh");
+    ptc_ui_home_details_back(&m); ptc_ui_home_details_back(&m);
+    check_int(m.view, PTC_UI_CHILD, "child back preserves child home");
+}
+
 int main(void)
 {
+    test_today_projection();
+    test_today_details_navigation();
     test_today_settings_links();
     test_config_backup_layout();
     test_dock_ui();

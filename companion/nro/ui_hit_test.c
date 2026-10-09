@@ -86,12 +86,13 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_HOME_DETAILS) {
-        if (ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y))
-            return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
-        if (ptc_ui_rect_contains(ptc_ui_home_details_tab_rect(0), x, y))
-            return make_hit(PTC_UI_HIT_HOME_DETAILS_TAB, 0);
-        if (ptc_ui_rect_contains(ptc_ui_home_details_tab_rect(1), x, y))
-            return make_hit(PTC_UI_HIT_HOME_DETAILS_TAB, 1);
+        for (int i = 0; i < 3; ++i) {
+            if (i == 1 && model->waiting) continue;
+            if (i == 0 && model->home_details_page == 1 &&
+                !ptc_ui_rect_contains(ptc_ui_home_details_body_rect(), x, y)) continue;
+            if (ptc_ui_rect_contains(ptc_ui_home_details_action_rect(model, i), x, y))
+                return make_hit(PTC_UI_HIT_HOME_DETAILS_ACTION, i);
+        }
         return make_hit(PTC_UI_HIT_NONE, 0);
     }
     if (model->overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || model->overlay == PTC_UI_OVERLAY_DAY_DECISION) {

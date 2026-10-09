@@ -136,6 +136,91 @@ static void test_config_backup_ui(void)
         "PIN restore leaves parent session and cleans owned preview");
 }
 
+static void test_today_detail_refresh(void)
+{
+    static PtcMemStorage mem;
+    UiState ui;
+    char text[32768], path[320];
+    init(&ui, &mem);
+    ui.model.view = PTC_UI_CHILD;
+    ui.model.setup_wizard_completed = true;
+    ui.model.overlay = PTC_UI_OVERLAY_HOME_DETAILS;
+    ui.model.home_details_page = 1; ui.model.home_details_focus = 1;
+    ui.model.home_details_data_expanded = true; ui.model.home_details_scroll = 160;
+    ui.model.weekly_dirty = ui.model.holiday_dirty = ui.model.bedtime_dirty = ui.model.dock_dirty = ui.model.eye_care_dirty = true;
+    ui.model.draft_week[0] = (PtcDayRule){PTC_RULE_MODE_LIMIT, 111};
+    ui.model.draft_holiday_enabled = true;
+    ui.model.draft_holiday_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 222};
+    ui.model.draft_scheduled_override = (PtcScheduledOverride){.enabled = true, .start_day_index = 1, .end_day_index = 3,
+        .rule = {PTC_RULE_MODE_LIMIT, 333}};
+    ui.model.draft_bedtime_policy.enabled = true;
+    ui.model.draft_dock_policy.undocked_daily_minutes = 444;
+    ui.model.draft_eye_care_policy = (PtcEyeCarePolicy){true, 55, 11};
+    ui.model.draft_autonomy_policy.daily_buffer_minutes = 15;
+    submit_status(&ui);
+    check(ui.waiting && ui.model.home_details_refresh_failed, "detail refresh suspends cached projection");
+    int requests = 0;
+    for (int i = 0; i < PTC_MEM_STORAGE_MAX_FILES; ++i) if (mem.files[i].present && strstr(mem.files[i].path, "/inbox/pending/")) {
+        PtcRequest parsed;
+        check(ptc_request_parse(mem.files[i].text, &parsed) == PTC_ERR_OK && parsed.type == PTC_REQUEST_STATUS,
+            "detail refresh submits only status");
+        ++requests;
+    }
+    check(requests == 1, "one status request submitted");
+    char first_id[80]; snprintf(first_id, sizeof(first_id), "%s", ui.active_request_id);
+    submit_status(&ui);
+    check(strcmp(first_id, ui.active_request_id) == 0, "waiting prevents duplicate status request");
+    PtcResultState state;
+    ptc_result_state_default(&state, 1);
+    state.played_minutes_available = true; state.played_minutes = 69;
+    ptc_result_ok_json(text, sizeof(text), ui.active_request_id, "status", NULL, false, &state, fixed_time);
+    snprintf(path, sizeof(path), APP_ROOT "/results/%s.json", ui.active_request_id);
+    mem.storage.vtable->write_text_atomic(&mem.storage, path, text);
+    poll_result(&ui, false);
+    check(!ui.waiting && !ui.model.home_details_refresh_failed, "successful refresh resumes projection");
+    check(ui.model.played_minutes_available && ui.model.played_minutes == 69,
+        "refresh accepts the new reliable consumption reading");
+    check(ui.model.overlay == PTC_UI_OVERLAY_HOME_DETAILS && ui.model.home_details_page == 1 &&
+        ui.model.home_details_focus == 1 && ui.model.home_details_data_expanded && ui.model.home_details_scroll == 160,
+        "refresh preserves page focus expansion and scroll");
+    check(ui.model.draft_week[0].minutes == 111 && ui.model.draft_holiday_rule.minutes == 222 &&
+        ui.model.draft_scheduled_override.rule.minutes == 333 && ui.model.draft_bedtime_policy.enabled &&
+        ui.model.draft_dock_policy.undocked_daily_minutes == 444 && ui.model.draft_eye_care_policy.play_minutes == 55 &&
+        ui.model.draft_autonomy_policy.daily_buffer_minutes == 15, "detail refresh preserves all unsaved plan drafts");
+    submit_status(&ui);
+    state.played_minutes_available = false; state.played_minutes = -1;
+    ptc_result_ok_json(text, sizeof(text), ui.active_request_id, "status", NULL, false, &state, fixed_time);
+    snprintf(path, sizeof(path), APP_ROOT "/results/%s.json", ui.active_request_id);
+    mem.storage.vtable->write_text_atomic(&mem.storage, path, text);
+    ptc_ui_home_details_back(&ui.model); ptc_ui_home_details_back(&ui.model);
+    poll_result(&ui, false);
+    check(!ui.model.played_minutes_available && ui.model.played_minutes == -1,
+        "refreshed unknown consumption does not inherit a cached reading");
+    check(ui.model.draft_autonomy_policy.daily_buffer_minutes == 15,
+        "leaving details during refresh preserves the unsaved buffer draft");
+    check(ptc_ui_open_home_details(&ui.model), "child can reopen details after refresh");
+    submit_status(&ui);
+    state.day_index = 2;
+    ptc_result_ok_json(text, sizeof(text), ui.active_request_id, "status", NULL, false, &state, fixed_time);
+    snprintf(path, sizeof(path), APP_ROOT "/results/%s.json", ui.active_request_id);
+    mem.storage.vtable->write_text_atomic(&mem.storage, path, text);
+    ui.model.played_minutes_available = true; ui.model.played_minutes = 69;
+    poll_result(&ui, false);
+    check(ui.model.day_index == 2 && !ui.model.played_minutes_available,
+        "next-day refresh never carries yesterday's consumption forward");
+    submit_status(&ui);
+    ptc_result_error_json(text, sizeof(text), ui.active_request_id, "status", NULL, false, PTC_ERR_PCTL_READ_FAILED, &state, fixed_time);
+    snprintf(path, sizeof(path), APP_ROOT "/results/%s.json", ui.active_request_id);
+    mem.storage.vtable->write_text_atomic(&mem.storage, path, text);
+    poll_result(&ui, false);
+    check(ui.model.view == PTC_UI_CHILD && ui.model.overlay == PTC_UI_OVERLAY_HOME_DETAILS &&
+        ui.model.home_details_refresh_failed, "backend failure keeps child detail and invalidates estimates");
+    mem.fail_writes = true;
+    submit_status(&ui);
+    check(!ui.waiting && ui.model.view == PTC_UI_CHILD && ui.model.home_details_refresh_failed,
+        "submission failure keeps child details");
+}
+
 int main(void)
 {
     static PtcMemStorage mem;
@@ -295,6 +380,7 @@ int main(void)
               "missing activation evidence cannot reuse an old active phase");
     }
     test_config_backup_ui();
+    test_today_detail_refresh();
     printf("%s: NRO setup integration\n", failures ? "FAIL" : "PASS");
     return failures ? 1 : 0;
 }

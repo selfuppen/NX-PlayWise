@@ -175,9 +175,11 @@ void handle_touch(UiState *ui, int x, int y)
         ptc_audio_play(PTC_SE_POPUP);
         ptc_ui_open_home_details(&ui->model);
         break;
-    case PTC_UI_HIT_HOME_DETAILS_TAB:
-        ptc_audio_play(PTC_SE_TAB);
-        ui->model.home_details_page = hit.index;
+    case PTC_UI_HIT_HOME_DETAILS_ACTION:
+        ui->model.home_details_focus = hit.index;
+        if (hit.index == 2) ptc_ui_home_details_back(&ui->model);
+        else if (hit.index == 1) { if (!ui->waiting) submit_status(ui); }
+        else { ptc_audio_play(PTC_SE_POPUP); ptc_ui_home_details_activate(&ui->model, 0); }
         break;
     case PTC_UI_HIT_OVERLAY_CANCEL:
         ptc_audio_play(PTC_SE_CANCEL);

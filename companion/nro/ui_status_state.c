@@ -66,6 +66,161 @@ bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
         strcmp(model->result_status, "error") != 0;
 }
 
+static int today_min(int a, int b) { return a < b ? a : b; }
+
+static void today_segment(PtcUiTodayProjection *out, int start, int end, bool resting)
+{
+    if (end <= start || out->segment_count >= PTC_UI_USAGE_SEGMENTS_MAX) return;
+    out->segments[out->segment_count++] = (PtcUiUsageSegment){start, end, resting};
+}
+
+void ptc_ui_project_today(const PtcUiModel *model, int64_t now,
+    uint16_t local_day_index, int second_of_day, PtcUiTodayProjection *out)
+{
+    PtcRules rules;
+    int bedtime_second = 86400, total, dock, eye, cursor, first_rest = 0;
+    bool dock_counts, eye_on;
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    out->continuous_seconds = -1;
+    out->total_at_stop = -1;
+    if (!model || second_of_day < 0 || second_of_day >= 86400) return;
+    out->now_second = out->stop_second = second_of_day;
+    ptc_ui_build_plan_rules(model, PTC_UI_PLAN_SAVED, &rules);
+    out->fresh = ptc_ui_status_is_fresh(model, now) &&
+        !model->home_details_refresh_failed && local_day_index == model->day_index;
+    if (model->home_details_refresh_failed || model->waiting) out->pending_reason = PTC_UI_ESTIMATE_REFRESH;
+    else if (local_day_index != model->day_index) out->pending_reason = PTC_UI_ESTIMATE_DATE;
+    else if (ptc_ui_status_age_seconds(model, now) > 120) out->pending_reason = PTC_UI_ESTIMATE_STALE;
+
+    /* Overnight intervals belong to their start day, including calendar overrides. */
+    if (rules.bedtime.enabled) for (int i = -1; i <= 0; ++i) {
+        if (i == -1 && local_day_index == 0) continue;
+        uint16_t day = (uint16_t)(local_day_index + i);
+        PtcEffectiveBedtime b = ptc_bedtime_resolve_start_day(&rules, day,
+            ptc_weekday_from_day_index(day));
+        if (!b.window.enabled) continue;
+        int start = i * 86400 + b.window.start_minute * 60;
+        int end = (i + 1) * 86400 + b.window.end_minute * 60;
+        uint64_t id = ptc_bedtime_window_instance_id(day, b.window.start_minute);
+        bool skipped = out->fresh && ((model->bedtime_skipped_window_available &&
+            model->bedtime_skipped_window_instance_id == id) ||
+            (model->bedtime_active && model->bedtime_skipped && model->bedtime_window_instance_id == id));
+        start = start < 0 ? 0 : start;
+        end = end > 86400 ? 86400 : end;
+        if (end <= start) continue;
+        out->sleep[out->sleep_count++] = (PtcUiSleepInterval){start, end, skipped};
+        if (!skipped && end > second_of_day)
+            bedtime_second = today_min(bedtime_second, start < second_of_day ? second_of_day : start);
+    }
+    if (!out->fresh) return;
+    /* Forecast carries today's allowance even while the system timer is capped
+       by a health rule or temporarily unlocked. Neither changes that allowance. */
+    out->total_unlimited = model->forecast_available && model->forecast[0].day_index == local_day_index &&
+        model->forecast[0].mode == PTC_RULE_MODE_UNLIMITED;
+    if (out->total_unlimited) out->total_known = true;
+    else if (model->forecast_available && model->forecast[0].day_index == local_day_index &&
+        model->forecast[0].mode == PTC_RULE_MODE_LIMIT &&
+        model->played_minutes_available && model->played_minutes >= 0) {
+        out->total_known = true;
+        out->total_remaining = model->forecast[0].minutes - model->played_minutes;
+        if (out->total_remaining < 0) out->total_remaining = 0;
+    }
+    bool dock_on = rules.dock_policy.force_docked || rules.dock_policy.undocked_limit_enabled;
+    out->undocked_unlimited = !dock_on || model->dock_waived_today;
+    out->undocked_known = out->undocked_unlimited || (model->dock_available &&
+        (rules.dock_policy.force_docked || model->undocked_usage_available));
+    if (!out->undocked_unlimited && out->undocked_known)
+        out->undocked_remaining = rules.dock_policy.force_docked ? 0 :
+            (model->undocked_remaining_minutes > 0 ? model->undocked_remaining_minutes : 0);
+    if (model->daily_restriction_active || (out->total_known && !out->total_unlimited && out->total_remaining == 0))
+        out->active_reasons |= PTC_UI_STOP_DAILY;
+    if (model->bedtime_active && !model->bedtime_skipped) out->active_reasons |= PTC_UI_STOP_BEDTIME;
+    if (rules.eye_care.enabled && strcmp(model->eye_care_phase, "resting") == 0)
+        out->active_reasons |= PTC_UI_STOP_EYE;
+    if (model->dock_restriction_active) out->active_reasons |= PTC_UI_STOP_DOCK;
+    out->conditions[0] = out->active_reasons & PTC_UI_STOP_DAILY ? PTC_UI_CONDITION_BLOCK :
+        !out->total_known ? PTC_UI_CONDITION_UNKNOWN : out->total_unlimited ? PTC_UI_CONDITION_OFF : PTC_UI_CONDITION_PASS;
+    out->conditions[1] = !rules.bedtime.enabled ? PTC_UI_CONDITION_OFF :
+        out->active_reasons & PTC_UI_STOP_BEDTIME ? PTC_UI_CONDITION_BLOCK :
+        model->bedtime_skipped ? PTC_UI_CONDITION_WAIVED : PTC_UI_CONDITION_PASS;
+    out->conditions[2] = !rules.eye_care.enabled ? PTC_UI_CONDITION_OFF :
+        out->active_reasons & PTC_UI_STOP_EYE ? PTC_UI_CONDITION_BLOCK :
+        strcmp(model->eye_care_phase, "playing") == 0 ? PTC_UI_CONDITION_PASS : PTC_UI_CONDITION_UNKNOWN;
+    out->conditions[3] = !dock_on ? PTC_UI_CONDITION_OFF :
+        model->dock_waived_today ? PTC_UI_CONDITION_WAIVED :
+        out->active_reasons & PTC_UI_STOP_DOCK ? PTC_UI_CONDITION_BLOCK :
+        !model->dock_available || strcmp(model->operation_mode, "unknown") == 0 ? PTC_UI_CONDITION_UNKNOWN :
+        strcmp(model->operation_mode, "docked") == 0 || out->undocked_known ? PTC_UI_CONDITION_PASS : PTC_UI_CONDITION_UNKNOWN;
+    if (out->active_reasons) out->continuous_seconds = 0;
+    if (model->recovery_active || model->apply_pending_confirmation || model->disable_flag_present ||
+        model->temporary_unlocked || strcmp(model->setup_phase, "active") != 0) {
+        out->pending_reason = model->recovery_active ? PTC_UI_ESTIMATE_RECOVERY :
+            model->apply_pending_confirmation ? PTC_UI_ESTIMATE_READBACK : PTC_UI_ESTIMATE_RUNTIME;
+        for (int i = 0; i < 4; ++i)
+            if (out->conditions[i] == PTC_UI_CONDITION_PASS) out->conditions[i] = PTC_UI_CONDITION_UNKNOWN;
+        return;
+    }
+    if (model->waiting || !out->total_known || !model->dock_available ||
+        (strcmp(model->operation_mode, "docked") != 0 && strcmp(model->operation_mode, "undocked") != 0)) return;
+    dock_counts = dock_on && !model->dock_waived_today && strcmp(model->operation_mode, "undocked") == 0;
+    if (dock_counts && !out->undocked_known) return;
+    if (out->active_reasons & ~PTC_UI_STOP_EYE) {
+        out->simulation_available = true;
+        out->stop_reasons = out->active_reasons;
+        out->total_at_stop = out->total_unlimited ? -1 : out->total_remaining;
+        return;
+    }
+    eye_on = rules.eye_care.enabled;
+    if (eye_on && rules.eye_care.play_minutes == 0) return;
+    if (eye_on && strcmp(model->eye_care_phase, "resting") == 0) {
+        int64_t remaining = model->eye_care_rest_remaining_seconds - ptc_ui_status_age_seconds(model, now);
+        if (remaining <= 0 || !model->eye_care_break_id) return;
+        first_rest = remaining > 86400 ? 86400 : (int)remaining;
+    } else if (eye_on && (strcmp(model->eye_care_phase, "playing") != 0 ||
+        model->eye_care_used_minutes >= rules.eye_care.play_minutes)) return;
+    if ((model->blocked_today == 1 || model->restricted_now == 1) && !out->active_reasons) return;
+    total = out->total_unlimited ? INT_MAX : out->total_remaining * 60;
+    dock = dock_counts ? out->undocked_remaining * 60 : INT_MAX;
+    eye = eye_on ? (rules.eye_care.play_minutes - (first_rest ? 0 : model->eye_care_used_minutes)) * 60 : INT_MAX;
+    cursor = second_of_day;
+    out->simulation_available = true;
+    if (first_rest) {
+        int end = today_min(cursor + first_rest, bedtime_second);
+        today_segment(out, cursor, end, true);
+        cursor = end;
+    }
+    while (cursor < 86400) {
+        if (total == 0) out->stop_reasons |= PTC_UI_STOP_DAILY;
+        if (dock == 0) out->stop_reasons |= PTC_UI_STOP_DOCK;
+        if (cursor >= bedtime_second && bedtime_second < 86400) out->stop_reasons |= PTC_UI_STOP_BEDTIME;
+        if (out->stop_reasons) break;
+        int duration = today_min(today_min(total, dock), today_min(eye, bedtime_second - cursor));
+        duration = today_min(duration, 86400 - cursor);
+        if (out->continuous_seconds < 0) out->continuous_seconds = duration;
+        today_segment(out, cursor, cursor + duration, false);
+        cursor += duration;
+        if (total != INT_MAX) total -= duration;
+        if (dock != INT_MAX) dock -= duration;
+        if (eye != INT_MAX) eye -= duration;
+        if (!total) out->stop_reasons |= PTC_UI_STOP_DAILY;
+        if (!dock) out->stop_reasons |= PTC_UI_STOP_DOCK;
+        if (cursor >= bedtime_second && bedtime_second < 86400) out->stop_reasons |= PTC_UI_STOP_BEDTIME;
+        if (out->stop_reasons || cursor == 86400) break;
+        if (eye == 0) {
+            int end = today_min(cursor + rules.eye_care.rest_minutes * 60, bedtime_second);
+            end = today_min(end, 86400);
+            if (end == cursor) { out->simulation_available = false; break; }
+            today_segment(out, cursor, end, true);
+            cursor = end;
+            eye = rules.eye_care.play_minutes * 60;
+        }
+    }
+    if (cursor == 86400) out->stop_reasons |= PTC_UI_STOP_DAY_END;
+    out->stop_second = cursor;
+    out->total_at_stop = total == INT_MAX ? -1 : total / 60;
+}
+
 void ptc_ui_format_eye_care_cycle(const PtcUiModel *model, int64_t now,
     char *out, size_t out_size)
 {

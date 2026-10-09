@@ -109,6 +109,8 @@ const char *ptc_ui_today_action_unavailable_reason(const PtcUiModel *model,
     int index, int64_t now);
 void ptc_ui_format_eye_care_cycle(const PtcUiModel *model, int64_t now,
     char *out, size_t out_size);
+void ptc_ui_project_today(const PtcUiModel *model, int64_t now,
+    uint16_t local_day_index, int second_of_day, PtcUiTodayProjection *out);
 void ptc_ui_quota_recheck_snapshot(const PtcUiModel *model,
     PtcUiQuotaRecheckSnapshot *out);
 PtcUiQuotaRecheckDecision ptc_ui_quota_recheck_decide(
