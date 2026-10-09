@@ -1412,15 +1412,13 @@ static void draw_dock_page(uint32_t *pixels, uint32_t stride, const PtcUiModel *
     draw_dock_usage_card(pixels, stride, model, (UiRect){824, 230, 402, 240});
     UiRect rules_panel = {824, 482, 402, 170};
     draw_plan_card(pixels, stride, rules_panel, false);
-    draw_wrapped_text(pixels, stride, 840, 502, ptc_ui_text(PTC_UI_T_DOCK_EYE_PROTECTION_INTENT),
+    draw_wrapped_text(pixels, stride, 840, 500, ptc_ui_text(PTC_UI_T_DOCK_EYE_PROTECTION_INTENT),
         12, 370, 15, 2, UI_INK);
-    draw_text(pixels, stride, 840, 542, ptc_ui_text(PTC_UI_T_DOCK_RULE_TITLE), 13, UI_ACCENT);
-    draw_wrapped_text(pixels, stride, 840, 564, ptc_ui_text(PTC_UI_T_DETAIL_RELATION),
-        12, 370, 15, 2, UI_INK);
-    draw_wrapped_text(pixels, stride, 840, 597, ptc_ui_text(PTC_UI_T_DETAIL_RELATION_MORE),
-        12, 370, 15, 2, UI_MUTED);
-    draw_wrapped_text(pixels, stride, 840, 632, ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_NOTE),
-        11, 370, 14, 2, UI_MUTED);
+    draw_text(pixels, stride, 840, 538, ptc_ui_text(PTC_UI_T_DOCK_RULE_TITLE), 13, UI_ACCENT);
+    draw_wrapped_text(pixels, stride, 840, 558, ptc_ui_text(PTC_UI_T_DETAIL_RELATION),
+        11, 370, 15, 2, UI_MUTED);
+    home_button(pixels, stride, ptc_ui_dock_field_rect(5), ptc_ui_text(PTC_UI_T_DOCK_RULES_EXPLAIN_BTN),
+        model->dock_field_focus == 5, false, false);
     char preview[192];
     ptc_ui_format_dock_preview(model, ptc_ui_render_now(), preview, sizeof(preview));
     draw_wrapped_text(pixels, stride, 54, 198, preview, 14, 744, 18, 1, UI_ACCENT);

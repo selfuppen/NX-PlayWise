@@ -582,6 +582,14 @@ void handle_overlay_input(UiState *ui, u64 down)
             ptc_ui_cancel_overlay(&ui->model);
         return;
     }
+    if (ui->model.overlay == PTC_UI_OVERLAY_DOCK_RULES) {
+        if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ptc_ui_cancel_overlay(&ui->model);
+            ui->model.dock_field_focus = 5;
+        }
+        return;
+    }
     if (ui->model.overlay == PTC_UI_OVERLAY_CALENDAR_MANAGER) {
         if (down & HidNpadButton_B) calendar_manager_nav(ui, 5);
         else if (down & HidNpadButton_X) calendar_manager_nav(ui, 3);

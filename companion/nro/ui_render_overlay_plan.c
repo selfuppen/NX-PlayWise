@@ -913,6 +913,55 @@ static void draw_calendar_manager_overlay(uint32_t *pixels, uint32_t stride, con
     }
 }
 
+static void draw_dock_rules_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
+{
+    UiRect dialog;
+    PtcUiModel shell = *model;
+    snprintf(shell.overlay_title, sizeof(shell.overlay_title), "%s", ptc_ui_text(PTC_UI_T_DOCK_RULES_EXPLAIN_TITLE));
+    shell.overlay_body[0] = '\0';
+    draw_dialog_shell(pixels, stride, &shell, &dialog, 1000, 560);
+
+    const PtcUiTextId titles[] = {
+        PTC_UI_T_TOTAL_DAILY_ALLOWANCE,
+        PTC_UI_T_DOCK_TITLE,
+        PTC_UI_T_BEDTIME_OPERATES_INDEPENDENTLY,
+        PTC_UI_T_DOCK_RULE_TITLE
+    };
+    const PtcUiTextId items[] = {
+        PTC_UI_T_DOCK_RULES_EXPLAIN_CORE1,
+        PTC_UI_T_DOCK_RULES_EXPLAIN_CORE2,
+        PTC_UI_T_DOCK_RULES_EXPLAIN_CORE3,
+        PTC_UI_T_DOCK_RULES_EXPLAIN_CORE4
+    };
+
+    int card_w = (dialog.width - 68 - 18) / 2;
+    int card_h = 160;
+    for (int i = 0; i < 4; ++i) {
+        int col = i % 2;
+        int row = i / 2;
+        int cx = dialog.x + 34 + col * (card_w + 18);
+        int cy = dialog.y + 104 + row * (card_h + 16);
+        UiRect c = {cx, cy, card_w, card_h};
+        fill_round_rect(pixels, stride, c, 12, UI_PAGE);
+        draw_rect_outline(pixels, stride, c, 12, 1, UI_BORDER);
+
+        char num[8];
+        snprintf(num, sizeof(num), "%d", i + 1);
+        UiRect badge = {c.x + 16, c.y + 14, 26, 26};
+        fill_round_rect(pixels, stride, badge, 6, UI_ACCENT_SOFT);
+        draw_text_center(pixels, stride, badge, num, 13, UI_ACCENT);
+
+        draw_text_bold(pixels, stride, c.x + 50, c.y + 32, ptc_ui_text(titles[i]), 15, UI_INK);
+        draw_line(pixels, stride, c.x + 16, c.y + 48, c.x + c.width - 16, c.y + 48, 1, UI_BORDER);
+
+        draw_wrapped_text(pixels, stride, c.x + 16, c.y + 58,
+                          ptc_ui_text(items[i]), 13, c.width - 32, 20, 4, UI_INK);
+    }
+
+    draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay),
+        ptc_ui_text(PTC_UI_T_B_BACK), UI_RAISED, UI_INK, true);
+}
+
 static void draw_calendar_format_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect dialog;
@@ -1036,6 +1085,9 @@ bool draw_plan_overlay_surface(uint32_t *pixels, uint32_t stride, const PtcUiMod
         return true;
     case PTC_UI_OVERLAY_CALENDAR_FORMAT:
         draw_calendar_format_overlay(pixels, stride, model);
+        return true;
+    case PTC_UI_OVERLAY_DOCK_RULES:
+        draw_dock_rules_overlay(pixels, stride, model);
         return true;
     case PTC_UI_OVERLAY_HOLIDAY_LEAVE:
         draw_holiday_leave_overlay(pixels, stride, model);

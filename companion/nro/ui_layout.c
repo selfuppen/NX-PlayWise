@@ -910,6 +910,10 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *width = 960;
         *height = 560;
         break;
+    case PTC_UI_OVERLAY_DOCK_RULES:
+        *width = 1000;
+        *height = 560;
+        break;
     case PTC_UI_OVERLAY_PIN:
         *width = 1040;
         *height = 620;
@@ -1155,7 +1159,7 @@ PtcUiRect ptc_ui_cancel_rect(PtcUiOverlay overlay)
     if (overlay == PTC_UI_OVERLAY_HOME_DETAILS || overlay == PTC_UI_OVERLAY_DAY_DECISION)
         return (PtcUiRect){dialog.x + dialog.w - 28 - PTC_UI_DIALOG_BTN_W, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     if (overlay == PTC_UI_OVERLAY_NOTICE_DETAILS || overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT ||
-        overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP)
+        overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP || overlay == PTC_UI_OVERLAY_DOCK_RULES)
         return (PtcUiRect){dialog.x + (dialog.w - PTC_UI_DIALOG_BTN_W) / 2, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     PtcUiRect rect = {dialog.x + dialog.w - 24 - PTC_UI_DIALOG_BTN_W * 2 - 16, dialog_button_top(dialog), PTC_UI_DIALOG_BTN_W, PTC_UI_DIALOG_BTN_H};
     return rect;
@@ -1590,6 +1594,7 @@ PtcUiRect ptc_ui_language_option_rect(int index)
 PtcUiRect ptc_ui_dock_field_rect(int index)
 {
     if (index == 7 || index == 8) return (PtcUiRect){54 + (index - 7) * 380, 620, 364, 44};
+    if (index == 5) return (PtcUiRect){840, 595, 370, 42};
     if (index < 0 || index > 4) return (PtcUiRect){0,0,0,0};
     if (index < 3) return (PtcUiRect){54, 230 + index * 100, 744, 84};
     return (PtcUiRect){54 + (index - 3) * 380, 550, 364, 58};

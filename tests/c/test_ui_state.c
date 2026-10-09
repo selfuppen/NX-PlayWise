@@ -3783,10 +3783,15 @@ static void test_dock_ui(void)
     ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 6, "controller reaches buffer after dock");
     model.plan_page = PTC_UI_PLAN_PAGE_DOCK;
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 6; ++i) {
         PtcUiRect field = ptc_ui_dock_field_rect(i);
         check_hit(ptc_ui_hit_test_at(&model, field.x + 5, field.y + 5, 1000), PTC_UI_HIT_DOCK_FIELD, i, "dock field touch");
     }
+    model.overlay = PTC_UI_OVERLAY_DOCK_RULES;
+    PtcUiRect dock_rules_cancel = ptc_ui_cancel_rect(model.overlay);
+    check_true(dock_rules_cancel.w > 0 && dock_rules_cancel.h > 0, "dock rules overlay provides cancel button");
+    check_hit(hit_center(&model, dock_rules_cancel), PTC_UI_HIT_OVERLAY_CANCEL, 0, "dock rules overlay cancel is touchable");
+    model.overlay = PTC_UI_OVERLAY_NONE;
     check_true(!ptc_ui_dock_save_requires_hold(&model, 1000), "safe quota does not require hold");
     model.draft_dock_policy.force_docked = true;
     check_true(ptc_ui_dock_dirty(&model) && ptc_ui_dock_save_requires_hold(&model, 1000), "force requires hold while handheld");
