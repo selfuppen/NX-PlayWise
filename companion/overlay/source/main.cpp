@@ -66,15 +66,9 @@ static void load_overlay_config(PtcStorage *storage)
     }
     ptc_ui_language_set_resolved(ptc_ui_language_resolve(lang_preference, system_language));
 
-    if (R_SUCCEEDED(setsysInitialize())) {
-        ColorSetId color_set;
-        if (R_SUCCEEDED(setsysGetColorSetId(&color_set))) {
-            if (color_set == ColorSetId_Light) system_theme = PTC_UI_SYSTEM_THEME_LIGHT;
-            else if (color_set == ColorSetId_Dark) system_theme = PTC_UI_SYSTEM_THEME_DARK;
-        }
-        setsysExit();
-    }
-    s_overlay_theme = ptc_ui_theme_resolve(theme_preference, system_theme);
+    // The Tesla overlay environment is universally a dark sidebar overlay (ColorFrameBackground = 0x000D).
+    // The overlay UI must always adhere to the dark baseline palette for optimal contrast and seamless aesthetics.
+    s_overlay_theme = PTC_UI_RESOLVED_DARK;
 }
 
 static unsigned int to_overlay_buttons(u64 keys)

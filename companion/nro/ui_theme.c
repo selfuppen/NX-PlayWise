@@ -16,7 +16,7 @@ static const PtcUiPalette LIGHT_PALETTE = {
     .focus = 0x1247A8,
     .on_accent = 0xFFFFFF,
     .success = 0x16734E,
-    .warning = 0xFA8C16,
+    .warning = 0xD95A00,
     .danger = 0xB92F46,
     .accent_soft = 0xE4EDFF,
     .hero = 0x214EA3,
@@ -33,9 +33,9 @@ static const PtcUiPalette LIGHT_PALETTE = {
     .gauge_slot_border = 0x3D5375,
     .shadow_strength = 100,
     .success_border = 0xB7EB8F,
-    .warning_border = 0xFFD591,
+    .warning_border = 0xF59E0B,
     .danger_border = 0xFFA39E,
-    .warning_text = 0xD46B08,
+    .warning_text = 0xB24400,
 };
 
 static const PtcUiPalette DARK_PALETTE = {

@@ -549,53 +549,32 @@ PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
     if (index == 1) return (PtcUiRect){342, 606, 180, 44};
     if (index == 2) return (PtcUiRect){108, 606, 222, 44};
     if (index == 0 && model->home_details_page == 0) return (PtcUiRect){824, 504, 348, 64};
-    if (index == 0) return (PtcUiRect){108, 524 - model->home_details_scroll, 1064, 32};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
 void ptc_ui_home_details_scroll(PtcUiModel *model, int pixels)
 {
-    if (!model || model->home_details_page != 1 || !model->home_details_data_expanded) return;
-    int maximum = model->view == PTC_UI_PARENT ? 280 : 160;
-    model->home_details_scroll += pixels;
-    if (model->home_details_scroll < 0) model->home_details_scroll = 0;
-    if (model->home_details_scroll > maximum) model->home_details_scroll = maximum;
+    (void)model;
+    (void)pixels;
 }
 
 PtcUiRect ptc_ui_home_details_data_rect(const PtcUiModel *model, int index)
 {
-    static const PtcUiRect rows[] = {
-        {108, 564, 1064, 82}, {108, 646, 1064, 28},
-        {108, 674, 1064, 28}, {108, 709, 1064, 90}
-    };
-    if (!model || !model->home_details_data_expanded || index < 3 ||
-        index > (model->view == PTC_UI_PARENT ? 6 : 5)) return (PtcUiRect){0, 0, 0, 0};
-    PtcUiRect row = rows[index - 3];
-    row.y -= model->home_details_scroll;
-    return row;
+    (void)model;
+    (void)index;
+    return (PtcUiRect){0, 0, 0, 0};
 }
 
 void ptc_ui_home_details_move(PtcUiModel *model, int direction)
 {
     if (!model) return;
-    /* Read-only data blocks participate in navigation without gaining actions. */
-    static const int order[] = {0, 3, 4, 5, 6, 1, 2};
-    int count = model->home_details_page == 1 && model->home_details_data_expanded ?
-        (model->view == PTC_UI_PARENT ? 7 : 6) : 3;
-    int position = 0;
-    for (int i = 0; i < count; ++i) {
-        int focus = count == 3 ? i : order[i + (model->view == PTC_UI_CHILD && i >= 4 ? 1 : 0)];
-        if (focus == model->home_details_focus) position = i;
+    if (model->home_details_page == 1) {
+        model->home_details_focus = (model->home_details_focus == 2) ? 1 : 2;
+        return;
     }
-    position = (position + (direction < 0 ? -1 : 1) + count) % count;
-    model->home_details_focus = count == 3 ? position :
-        order[position + (model->view == PTC_UI_CHILD && position >= 4 ? 1 : 0)];
-    PtcUiRect row = model->home_details_focus == 0 ? ptc_ui_home_details_action_rect(model, 0) :
-        ptc_ui_home_details_data_rect(model, model->home_details_focus);
-    PtcUiRect body = ptc_ui_home_details_body_rect();
-    if (row.h && row.y < body.y) ptc_ui_home_details_scroll(model, row.y - body.y);
-    else if (row.h && row.y + row.h > body.y + body.h)
-        ptc_ui_home_details_scroll(model, row.y + row.h - body.y - body.h);
+    int count = 3;
+    int position = (model->home_details_focus + (direction < 0 ? -1 : 1) + count) % count;
+    model->home_details_focus = position;
 }
 
 void ptc_ui_home_details_activate(PtcUiModel *model, int index)
@@ -603,11 +582,9 @@ void ptc_ui_home_details_activate(PtcUiModel *model, int index)
     if (!model || model->overlay != PTC_UI_OVERLAY_HOME_DETAILS) return;
     if (index > 2) return;
     model->home_details_focus = index;
-    if (index != 0) return;
-    if (model->home_details_page == 0) model->home_details_page = 1;
-    else {
-        model->home_details_data_expanded = !model->home_details_data_expanded;
-        if (!model->home_details_data_expanded) model->home_details_scroll = 0;
+    if (index == 0 && model->home_details_page == 0) {
+        model->home_details_page = 1;
+        model->home_details_focus = 2;
     }
 }
 
@@ -642,7 +619,7 @@ bool ptc_ui_open_home_details_page(PtcUiModel *model, int page)
     /* Keep the underlying focus and execution message intact on open/close. */
     model->overlay = PTC_UI_OVERLAY_HOME_DETAILS;
     model->home_details_page = (page == 1) ? 1 : 0;
-    model->home_details_focus = 0;
+    model->home_details_focus = (page == 1) ? 2 : 0;
     model->home_details_scroll = 0;
     model->home_details_data_expanded = false;
     snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
