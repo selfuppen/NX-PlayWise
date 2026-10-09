@@ -1,0 +1,1406 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PlayWise 视觉风格与调色板交互预览 | Visual Style Guide Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Tool Meta Colors */
+      --meta-bg: #0d1117;
+      --meta-surface: #161b22;
+      --meta-border: #30363d;
+      --meta-text: #e6edf3;
+      --meta-muted: #8b949e;
+      --meta-accent: #58a6ff;
+
+      /* PlayWise Light Palette */
+      --pw-light-page-bg: #F0F3FA;
+      --pw-light-surface: #FFFFFF;
+      --pw-light-surface-raised: #E8EDF7;
+      --pw-light-border-decorative: #DBE1E9;
+      --pw-light-border-control: #79879D;
+      --pw-light-text-primary: #172640;
+      --pw-light-text-secondary: #53627A;
+      --pw-light-text-disabled: #9199A5;
+      --pw-light-accent: #245BC4;
+      --pw-light-accent-soft: #E4EDFF;
+      --pw-light-focus: #1247A8;
+      --pw-light-on-accent: #FFFFFF;
+      --pw-light-success: #16734E;
+      --pw-light-success-vivid: #52C41A;
+      --pw-light-success-soft: #F6FFED;
+      --pw-light-success-border: #B7EB8F;
+      --pw-light-warning: #FA8C16;
+      --pw-light-warning-deep: #D46B08;
+      --pw-light-warning-soft: #FFF7E6;
+      --pw-light-warning-border: #FFD591;
+      --pw-light-danger: #B92F46;
+      --pw-light-danger-vivid: #F5222D;
+      --pw-light-danger-soft: #FFE9ED;
+      --pw-light-danger-border: #FFA39E;
+
+      /* PlayWise Dark Palette */
+      --pw-dark-page-bg: #0B0F19;
+      --pw-dark-surface: #162032;
+      --pw-dark-surface-raised: #1E2C44;
+      --pw-dark-border-decorative: #2A3B54;
+      --pw-dark-border-control: #7E90AA;
+      --pw-dark-text-primary: #F3F6FD;
+      --pw-dark-text-secondary: #B6C4D9;
+      --pw-dark-text-disabled: #818C98;
+      --pw-dark-accent: #91B9FF;
+      --pw-dark-accent-soft: #273E60;
+      --pw-dark-focus: #BCD4FF;
+      --pw-dark-on-accent: #122344;
+      --pw-dark-success: #5CCB8A;
+      --pw-dark-success-vivid: #49AA19;
+      --pw-dark-success-soft: #193C32;
+      --pw-dark-success-border: #274916;
+      --pw-dark-warning: #FFA940;
+      --pw-dark-warning-deep: #F2C14E;
+      --pw-dark-warning-soft: #40351F;
+      --pw-dark-warning-border: #874D00;
+      --pw-dark-danger: #FF7A85;
+      --pw-dark-danger-vivid: #FF4D4F;
+      --pw-dark-danger-soft: #462936;
+      --pw-dark-danger-border: #78061A;
+
+      /* Active Dynamic Theme Tokens (Default to Light) */
+      --page-bg: var(--pw-light-page-bg);
+      --surface: var(--pw-light-surface);
+      --surface-raised: var(--pw-light-surface-raised);
+      --border-decorative: var(--pw-light-border-decorative);
+      --border-control: var(--pw-light-border-control);
+      --text-primary: var(--pw-light-text-primary);
+      --text-secondary: var(--pw-light-text-secondary);
+      --text-disabled: var(--pw-light-text-disabled);
+      --accent: var(--pw-light-accent);
+      --accent-soft: var(--pw-light-accent-soft);
+      --focus: var(--pw-light-focus);
+      --on-accent: var(--pw-light-on-accent);
+      --success: var(--pw-light-success);
+      --success-vivid: var(--pw-light-success-vivid);
+      --success-soft: var(--pw-light-success-soft);
+      --success-border: var(--pw-light-success-border);
+      --warning: var(--pw-light-warning);
+      --warning-deep: var(--pw-light-warning-deep);
+      --warning-soft: var(--pw-light-warning-soft);
+      --warning-border: var(--pw-light-warning-border);
+      --danger: var(--pw-light-danger);
+      --danger-vivid: var(--pw-light-danger-vivid);
+      --danger-soft: var(--pw-light-danger-soft);
+      --danger-border: var(--pw-light-danger-border);
+    }
+
+    [data-theme="dark"] {
+      --page-bg: var(--pw-dark-page-bg);
+      --surface: var(--pw-dark-surface);
+      --surface-raised: var(--pw-dark-surface-raised);
+      --border-decorative: var(--pw-dark-border-decorative);
+      --border-control: var(--pw-dark-border-control);
+      --text-primary: var(--pw-dark-text-primary);
+      --text-secondary: var(--pw-dark-text-secondary);
+      --text-disabled: var(--pw-dark-text-disabled);
+      --accent: var(--pw-dark-accent);
+      --accent-soft: var(--pw-dark-accent-soft);
+      --focus: var(--pw-dark-focus);
+      --on-accent: var(--pw-dark-on-accent);
+      --success: var(--pw-dark-success);
+      --success-vivid: var(--pw-dark-success-vivid);
+      --success-soft: var(--pw-dark-success-soft);
+      --success-border: var(--pw-dark-success-border);
+      --warning: var(--pw-dark-warning);
+      --warning-deep: var(--pw-dark-warning-deep);
+      --warning-soft: var(--pw-dark-warning-soft);
+      --warning-border: var(--pw-dark-warning-border);
+      --danger: var(--pw-dark-danger);
+      --danger-vivid: var(--pw-dark-danger-vivid);
+      --danger-soft: var(--pw-dark-danger-soft);
+      --danger-border: var(--pw-dark-danger-border);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--meta-bg);
+      color: var(--meta-text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+      padding-bottom: 80px;
+    }
+
+    /* Top Navigation Bar */
+    header.meta-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(13, 17, 23, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--meta-border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-badge {
+      background: linear-gradient(135deg, #1890FF, #52C41A);
+      color: #fff;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 14px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+
+    .brand-name {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      color: #fff;
+    }
+
+    .brand-sub {
+      font-size: 13px;
+      color: var(--meta-muted);
+      margin-left: 4px;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .theme-toggle-group {
+      display: flex;
+      background: #21262d;
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid var(--meta-border);
+    }
+
+    .toggle-btn {
+      background: transparent;
+      border: none;
+      color: var(--meta-muted);
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .toggle-btn.active {
+      background: #30363d;
+      color: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    .mode-tag {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(88, 166, 255, 0.15);
+      color: var(--meta-accent);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      font-weight: 500;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 28px 24px;
+    }
+
+    .section-title-wrap {
+      margin-bottom: 24px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--meta-border);
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+
+    .section-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title-num {
+      background: #21262d;
+      color: var(--meta-accent);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--meta-border);
+    }
+
+    .section-desc {
+      font-size: 14px;
+      color: var(--meta-muted);
+      margin-top: 4px;
+    }
+
+    /* Palettes Grid */
+    .palette-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+
+    .swatch-card {
+      background: var(--meta-surface);
+      border: 1px solid var(--meta-border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .swatch-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      border-color: #58a6ff;
+    }
+
+    .swatch-color-box {
+      height: 90px;
+      width: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding: 12px;
+      position: relative;
+    }
+
+    .swatch-sample-text {
+      font-weight: 700;
+      font-size: 14px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.25);
+      color: #fff;
+      backdrop-filter: blur(4px);
+    }
+
+    .swatch-body {
+      padding: 14px;
+    }
+
+    .swatch-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .swatch-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .swatch-c-name {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--meta-accent);
+      background: #21262d;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .swatch-hex-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .swatch-hex {
+      font-family: 'Fira Code', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      color: #c9d1d9;
+    }
+
+    .copy-hint {
+      font-size: 11px;
+      color: var(--meta-muted);
+    }
+
+    .swatch-desc {
+      font-size: 12px;
+      color: var(--meta-muted);
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    /* Semantic Status Comparison Table */
+    .status-matrix {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    .status-card {
+      background: var(--meta-surface);
+      border: 1px solid var(--meta-border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .status-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--meta-border);
+    }
+
+    .status-pill-demo {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+
+    .status-card-desc {
+      font-size: 13px;
+      color: var(--meta-muted);
+      margin-bottom: 16px;
+    }
+
+    .status-swatch-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .status-swatch-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid;
+    }
+
+    .status-swatch-role {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-swatch-code {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* Interactive Switch Simulator */
+    .simulator-wrapper {
+      background: #000000;
+      border: 1px solid var(--meta-border);
+      border-radius: 18px;
+      padding: 24px;
+      margin-bottom: 40px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    }
+
+    .sim-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .sim-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sim-tag {
+      background: #21262d;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--meta-border);
+    }
+
+    .screen-container {
+      position: relative;
+      width: 100%;
+      background: var(--page-bg);
+      border: 2px solid var(--border-decorative);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: background-color 0.25s ease, border-color 0.25s ease;
+      /* Fixed aspect ratio 16:9 for Switch 1280x720 */
+      aspect-ratio: 16 / 9;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Screen UI Layout according to Guidelines */
+    /* Container left/right padding = 108px out of 1280px (8.4375%) */
+    .switch-ui-canvas {
+      width: 100%;
+      height: 100%;
+      padding: 20px 8.4375%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      color: var(--text-primary);
+      font-family: 'Inter', sans-serif;
+      user-select: none;
+    }
+
+    /* Top Bar in Companion NRO */
+    .ui-top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-decorative);
+    }
+
+    .ui-header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .ui-app-icon {
+      width: 28px;
+      height: 28px;
+      background: var(--accent);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--on-accent);
+      font-weight: 800;
+      font-size: 14px;
+    }
+
+    .ui-page-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.3px;
+    }
+
+    .ui-header-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .ui-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .ui-pill-success {
+      background: var(--success-soft);
+      color: var(--success);
+      border: 1px solid var(--success-border);
+    }
+
+    .ui-pill-warning {
+      background: var(--warning-soft);
+      color: var(--warning-deep);
+      border: 1px solid var(--warning-border);
+    }
+
+    .ui-pill-danger {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border: 1px solid var(--danger-border);
+    }
+
+    .ui-pill-accent {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+
+    /* 4.1 Hero Stat Cards (Top 4 grid) */
+    .hero-stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 12px 0;
+    }
+
+    .hero-stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border-decorative);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .hero-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .hero-stat-value {
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      font-weight: 800;
+      margin: 4px 0 6px 0;
+      line-height: 1.1;
+    }
+
+    .hero-stat-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    /* 4.2 24h Activity Track */
+    .timeline-card {
+      background: var(--surface);
+      border: 1px solid var(--border-decorative);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+
+    .timeline-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .timeline-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .timeline-track-wrap {
+      position: relative;
+      margin: 8px 0 4px 0;
+    }
+
+    .timeline-track {
+      height: 18px;
+      background: var(--surface-raised);
+      border-radius: 9px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      border: 1px solid var(--border-decorative);
+    }
+
+    .track-seg-played {
+      background: var(--accent);
+      width: 25%;
+      height: 100%;
+    }
+
+    .track-seg-available {
+      background: var(--success);
+      opacity: 0.85;
+      width: 35%;
+      height: 100%;
+    }
+
+    .track-seg-bedtime {
+      background: repeating-linear-gradient(
+        45deg,
+        var(--danger-soft),
+        var(--danger-soft) 8px,
+        var(--danger-border) 8px,
+        var(--danger-border) 16px
+      );
+      width: 40%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--danger);
+    }
+
+    .track-cursor {
+      position: absolute;
+      top: -4px;
+      bottom: -4px;
+      left: 25%;
+      width: 3px;
+      background: #FFFFFF;
+      box-shadow: 0 0 6px rgba(0,0,0,0.6);
+      border-radius: 2px;
+      z-index: 2;
+    }
+
+    .track-cursor::before {
+      content: "";
+      position: absolute;
+      top: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid #FFFFFF;
+    }
+
+    .track-time-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-disabled);
+      margin-top: 4px;
+      font-family: 'Fira Code', monospace;
+    }
+
+    /* 4.4 Decision & Rule Matrix */
+    .matrix-section {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 12px;
+    }
+
+    .rules-card {
+      background: var(--surface);
+      border: 1px solid var(--border-decorative);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .rule-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .rule-item.active-rule {
+      background: var(--success-soft);
+      border: 1.5px solid var(--success);
+      color: var(--text-primary);
+    }
+
+    .rule-item.fallback-rule {
+      background: var(--page-bg);
+      border: 1px solid var(--border-decorative);
+      color: var(--text-secondary);
+    }
+
+    .rule-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .rule-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* Bottom Status Bar */
+    .ui-bottom-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-decorative);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .ui-btn-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-right: 12px;
+    }
+
+    .key-glyph {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      background: var(--surface-raised);
+      border: 1px solid var(--border-control);
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1f6feb;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.25s ease;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Checklist Section */
+    .checklist-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 14px;
+    }
+
+    .check-item {
+      background: var(--meta-surface);
+      border: 1px solid var(--meta-border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .check-icon {
+      color: #3fb950;
+      font-size: 16px;
+      margin-top: 2px;
+    }
+
+    .check-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 2px;
+    }
+
+    .check-desc {
+      font-size: 12px;
+      color: var(--meta-muted);
+      line-height: 1.4;
+    }
+
+    /* Focus Highlight Outline Demonstration */
+    .focus-ring {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header with Theme Switcher -->
+  <header class="meta-header">
+    <div class="brand-title">
+      <div class="brand-badge">NX-PlayWise</div>
+      <div class="brand-name">视觉风格与调色板交互预览</div>
+      <div class="brand-sub">Visual Design & Palette Explorer</div>
+    </div>
+    <div class="header-controls">
+      <span class="mode-tag" id="currentModeLabel">浅色模式 (Light Mode)</span>
+      <div class="theme-toggle-group">
+        <button class="toggle-btn active" id="btnLight" onclick="setTheme('light')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+          浅色 (Light)
+        </button>
+        <button class="toggle-btn" id="btnDark" onclick="setTheme('dark')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          深色 (Dark)
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- 1. Live Nintendo Switch UI Simulator -->
+    <div class="section-title-wrap">
+      <div>
+        <h2 class="section-title">
+          <span class="section-title-num">01</span>
+          Switch 真机界面实时模拟 (Live UI Simulator)
+        </h2>
+        <p class="section-desc">基于 1280x720 纯 CPU 软件渲染约束与 1064px (108px 居中留白) 两端对齐规范</p>
+      </div>
+    </div>
+
+    <div class="simulator-wrapper">
+      <div class="sim-toolbar">
+        <div class="sim-info">
+          <span class="sim-tag">720p 掌机 / 1080p 底座适配</span>
+          <span class="sim-tag">软光栅逐像素对齐</span>
+          <span class="sim-tag">Edge-to-Edge 契约</span>
+        </div>
+        <div style="font-size: 13px; color: var(--meta-muted);">
+          点击任意色块或卡片体验交互
+        </div>
+      </div>
+
+      <!-- Simulator Screen Frame -->
+      <div class="screen-container" id="switchScreen">
+        <div class="switch-ui-canvas">
+          
+          <!-- UI Top Bar -->
+          <div class="ui-top-bar">
+            <div class="ui-header-left">
+              <div class="ui-app-icon">PW</div>
+              <div>
+                <div class="ui-page-title">PlayWise 状态仪表盘</div>
+              </div>
+            </div>
+            <div class="ui-header-right">
+              <span>今日作息：标准学期日</span>
+              <span class="ui-pill ui-pill-success">● 防沉迷生效中</span>
+            </div>
+          </div>
+
+          <!-- Hero Stat Cards -->
+          <div class="hero-stat-grid">
+            <div class="hero-stat-card focus-ring">
+              <div class="hero-stat-label">今日总额度</div>
+              <div class="hero-stat-value" style="color: var(--accent);">02:00</div>
+              <div class="hero-stat-footer">
+                <span>基础 90m + 加时 30m</span>
+                <span class="ui-pill ui-pill-accent">已核发</span>
+              </div>
+            </div>
+
+            <div class="hero-stat-card">
+              <div class="hero-stat-label">剩余可用时间</div>
+              <div class="hero-stat-value" style="color: var(--success);">01:15</div>
+              <div class="hero-stat-footer">
+                <span>充足安全 (62%)</span>
+                <span class="ui-pill ui-pill-success">充沛</span>
+              </div>
+            </div>
+
+            <div class="hero-stat-card">
+              <div class="hero-stat-label">单次连续游玩</div>
+              <div class="hero-stat-value" style="color: var(--warning-deep);">25 / 45m</div>
+              <div class="hero-stat-footer">
+                <span>护眼休息倒计时</span>
+                <span class="ui-pill ui-pill-warning">20m 后休息</span>
+              </div>
+            </div>
+
+            <div class="hero-stat-card">
+              <div class="hero-stat-label">就寝强制封锁</div>
+              <div class="hero-stat-value" style="color: var(--danger);">21:30</div>
+              <div class="hero-stat-footer">
+                <span>严格熔断</span>
+                <span class="ui-pill ui-pill-danger">就寝时段</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 24h Activity Track & Forecast -->
+          <div class="timeline-card">
+            <div class="timeline-header">
+              <div class="timeline-title">
+                <span>24 小时全天作息时间轴与推演</span>
+                <span class="ui-pill ui-pill-accent">实时推演</span>
+              </div>
+              <div style="font-size: 11px; color: var(--text-secondary); display: flex; gap: 12px;">
+                <span><span style="color: var(--accent);">■</span> 已游玩 (45m)</span>
+                <span><span style="color: var(--success);">■</span> 可用时段</span>
+                <span><span style="color: var(--danger);">■</span> 就寝封锁 (21:30~07:00)</span>
+              </div>
+            </div>
+
+            <div class="timeline-track-wrap">
+              <div class="timeline-track">
+                <div class="track-seg-played" title="已游玩 45 分钟"></div>
+                <div class="track-seg-available" title="可用时段"></div>
+                <div class="track-seg-bedtime" title="就寝时段">🌙 就寝封锁</div>
+                <div class="track-cursor" title="当前时间 15:45"></div>
+              </div>
+              <div class="track-time-labels">
+                <span>00:00</span>
+                <span>06:00</span>
+                <span>12:00</span>
+                <span>18:00</span>
+                <span>24:00</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Decision & Rule Matrix -->
+          <div class="matrix-section">
+            <div class="rules-card">
+              <div style="font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 2px;">
+                规则决策链路 (Priority Flow)
+              </div>
+              
+              <!-- Active Rule -->
+              <div class="rule-item active-rule">
+                <div class="rule-left">
+                  <span class="rule-badge" style="background: var(--success); color: #fff;">1. 临时加时</span>
+                  <span>家长离线审批 (+30m)</span>
+                </div>
+                <div style="font-weight: 700; color: var(--success);">★ 当前命中生效</div>
+              </div>
+
+              <!-- Fallback Rule -->
+              <div class="rule-item fallback-rule">
+                <div class="rule-left">
+                  <span class="rule-badge" style="background: var(--surface-raised); color: var(--text-secondary);">2. 节假日日历</span>
+                  <span>周五晚间作息 (120m)</span>
+                </div>
+                <div style="font-size: 11px; color: var(--text-disabled);">后备基础规则</div>
+              </div>
+            </div>
+
+            <!-- Edge to Edge Alignment Example -->
+            <div class="rules-card">
+              <div style="font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 2px;">
+                两端对齐与防溢出契约
+              </div>
+              <div style="background: var(--surface-raised); border-radius: 6px; padding: 10px; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span>🎮</span>
+                  <span style="font-weight: 600;">儿童账户：小明</span>
+                  <span class="ui-pill ui-pill-accent" style="padding: 2px 6px; font-size: 10px;">托管</span>
+                </div>
+                <div style="font-family: 'Fira Code', monospace; font-size: 11px; color: var(--text-secondary);">
+                  剩余: 75m
+                </div>
+              </div>
+              <div style="font-size: 11px; color: var(--text-disabled); line-height: 1.3;">
+                pill_x = title_x + measure(title) + 8px<br>
+                desc_x = card_x + card_w - padding - measure(desc)
+              </div>
+            </div>
+          </div>
+
+          <!-- UI Bottom Status Bar -->
+          <div class="ui-bottom-bar">
+            <div>
+              <span class="ui-btn-hint"><span class="key-glyph">A</span> 选择/查看详情</span>
+              <span class="ui-btn-hint"><span class="key-glyph">Y</span> 请求加时</span>
+              <span class="ui-btn-hint"><span class="key-glyph">X</span> 切换主题</span>
+            </div>
+            <div>
+              <span>PlayWise NRO v1.0.0 (Release)</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+
+    <!-- 2. Base Theme Palette (基础层级调色板) -->
+    <div class="section-title-wrap">
+      <div>
+        <h2 class="section-title">
+          <span class="section-title-num">02</span>
+          基础层级调色板 (Base Theme Palette)
+        </h2>
+        <p class="section-desc">定义于 companion/nro/ui_theme.c，点击色卡可快速复制 HEX 颜色值</p>
+      </div>
+    </div>
+
+    <div class="palette-grid" id="basePaletteGrid">
+      <!-- Generated via JS -->
+    </div>
+
+
+    <!-- 3. Semantic Status Colors (状态语义色规范) -->
+    <div class="section-title-wrap">
+      <div>
+        <h2 class="section-title">
+          <span class="section-title-num">03</span>
+          状态语义色规范 (Semantic Status Colors)
+        </h2>
+        <p class="section-desc">严格遵循“高饱和前景 + 超浅柔和软底”的现代设计语言，杜绝发灰脏沉中间调</p>
+      </div>
+    </div>
+
+    <div class="status-matrix">
+
+      <!-- Success Card -->
+      <div class="status-card">
+        <div class="status-card-header">
+          <span class="status-pill-demo" style="background: var(--success-soft); color: var(--success); border: 1.5px solid var(--success-border);">
+            ● 可用 / 生效 / 充沛 (Success)
+          </span>
+        </div>
+        <p class="status-card-desc">额度生效、加时成功、条件全部满足、计划已启用、作息时间进行中。</p>
+        <div class="status-swatch-list">
+          <div class="status-swatch-item" style="background: var(--success-soft); border-color: var(--success-border); color: var(--success);">
+            <span class="status-swatch-role">软底 (UI_SUCCESS_SOFT)</span>
+            <span class="status-swatch-code" id="hexSuccessSoft">#F6FFED</span>
+          </div>
+          <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--success-border); color: var(--text-primary);">
+            <span class="status-swatch-role">边框 (Border 1~2px)</span>
+            <span class="status-swatch-code" id="hexSuccessBorder">#B7EB8F</span>
+          </div>
+          <div class="status-swatch-item" style="background: var(--success); border-color: var(--success); color: #fff;">
+            <span class="status-swatch-role">实体/胶囊/前景 (UI_SUCCESS)</span>
+            <span class="status-swatch-code" id="hexSuccessSolid">#52C41A</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Warning Card -->
+      <div class="status-card">
+        <div class="status-card-header">
+          <span class="status-pill-demo" style="background: var(--warning-soft); color: var(--warning-deep); border: 1.5px solid var(--warning-border);">
+            ▲ 提醒 / 休息 / 暂缓 (Warning)
+          </span>
+        </div>
+        <p class="status-card-desc">护眼休息中、额度即将耗尽、待定生效、就寝倒计时预警。</p>
+        <div class="status-swatch-list">
+          <div class="status-swatch-item" style="background: var(--warning-soft); border-color: var(--warning-border); color: var(--warning-deep);">
+            <span class="status-swatch-role">软底 (UI_WARNING_SOFT)</span>
+            <span class="status-swatch-code" id="hexWarningSoft">#FFF7E6</span>
+          </div>
+          <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--warning-border); color: var(--text-primary);">
+            <span class="status-swatch-role">边框 (Border 1~2px)</span>
+            <span class="status-swatch-code" id="hexWarningBorder">#FFD591</span>
+          </div>
+          <div class="status-swatch-item" style="background: var(--warning); border-color: var(--warning); color: #fff;">
+            <span class="status-swatch-role">实体/胶囊/前景 (UI_WARNING)</span>
+            <span class="status-swatch-code" id="hexWarningSolid">#FA8C16</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Danger Card -->
+      <div class="status-card">
+        <div class="status-card-header">
+          <span class="status-pill-demo" style="background: var(--danger-soft); color: var(--danger); border: 1.5px solid var(--danger-border);">
+            ✖ 限制 / 熔断 / 危险 (Danger)
+          </span>
+        </div>
+        <p class="status-card-desc">已达上限强制锁屏、就寝时段禁用、额度耗尽、安全模式告警。</p>
+        <div class="status-swatch-list">
+          <div class="status-swatch-item" style="background: var(--danger-soft); border-color: var(--danger-border); color: var(--danger);">
+            <span class="status-swatch-role">软底 (UI_DANGER_SOFT)</span>
+            <span class="status-swatch-code" id="hexDangerSoft">#FFE9ED</span>
+          </div>
+          <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--danger-border); color: var(--text-primary);">
+            <span class="status-swatch-role">边框 (Border 1~2px)</span>
+            <span class="status-swatch-code" id="hexDangerBorder">#FFA39E</span>
+          </div>
+          <div class="status-swatch-item" style="background: var(--danger); border-color: var(--danger); color: #fff;">
+            <span class="status-swatch-role">实体/胶囊/前景 (UI_DANGER)</span>
+            <span class="status-swatch-code" id="hexDangerSolid">#B92F46</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Accent Card -->
+      <div class="status-card">
+        <div class="status-card-header">
+          <span class="status-pill-demo" style="background: var(--accent-soft); color: var(--accent); border: 1.5px solid var(--accent);">
+            ◆ 主品牌与信息 (Accent / Info)
+          </span>
+        </div>
+        <p class="status-card-desc">今日规划标题圆点、选中高亮、折线推演关键帧、默认活动段。</p>
+        <div class="status-swatch-list">
+          <div class="status-swatch-item" style="background: var(--accent-soft); border-color: var(--accent); color: var(--accent);">
+            <span class="status-swatch-role">软底 (UI_ACCENT_SOFT)</span>
+            <span class="status-swatch-code" id="hexAccentSoft">#E4EDFF</span>
+          </div>
+          <div class="status-swatch-item" style="background: var(--surface-raised); border-color: var(--accent); color: var(--text-primary);">
+            <span class="status-swatch-role">高亮轮廓 (Focus Outline)</span>
+            <span class="status-swatch-code" id="hexFocus">#1247A8</span>
+          </div>
+          <div class="status-swatch-item" style="background: var(--accent); border-color: var(--accent); color: var(--on-accent);">
+            <span class="status-swatch-role">品牌主色 (UI_ACCENT)</span>
+            <span class="status-swatch-code" id="hexAccentSolid">#245BC4</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- 4. Design & Alignment Checklist (自查清单) -->
+    <div class="section-title-wrap">
+      <div>
+        <h2 class="section-title">
+          <span class="section-title-num">04</span>
+          开发与色彩自查清单 (Engineering Checklist)
+        </h2>
+        <p class="section-desc">在为 Companion NRO 或 Overlay 增加或修改界面时，请逐项比对</p>
+      </div>
+    </div>
+
+    <div class="checklist-grid">
+      <div class="check-item">
+        <span class="check-icon">✓</span>
+        <div>
+          <div class="check-title">双主题适配</div>
+          <div class="check-desc">所有色彩均使用 <code>palette->xxx</code> 或带有亮暗主题自适应三元判断，无硬编码单一模式颜色。</div>
+        </div>
+      </div>
+
+      <div class="check-item">
+        <span class="check-icon">✓</span>
+        <div>
+          <div class="check-title">高可读性明度对比</div>
+          <div class="check-desc">浅色模式正文字色 ≥ <code>#172640</code>，深色模式正文字色 ≥ <code>#F3F6FD</code>，无昏暗发沉现象。</div>
+        </div>
+      </div>
+
+      <div class="check-item">
+        <span class="check-icon">✓</span>
+        <div>
+          <div class="check-title">语义色彩一致性</div>
+          <div class="check-desc">成功用鲜绿，提醒/休息用暖橙，危险用珊瑚红蔷薇，严禁使用旧版脏沉土黄灰 (<code>#865600</code>)。</div>
+        </div>
+      </div>
+
+      <div class="check-item">
+        <span class="check-icon">✓</span>
+        <div>
+          <div class="check-title">动态文本测量</div>
+          <div class="check-desc">胶囊等同行相邻元素通过 <code>measure_text(...)</code> 动态计算起止位置，杜绝写死 X 偏移。</div>
+        </div>
+      </div>
+
+      <div class="check-item">
+        <span class="check-icon">✓</span>
+        <div>
+          <div class="check-title">右侧端对端对齐</div>
+          <div class="check-desc">列表项与卡片内部右侧数值与说明严格按 <code>card_x + card_w - padding - desc_w</code> 动态右对齐。</div>
+        </div>
+      </div>
+
+      <div class="check-item">
+        <span class="check-icon">✓</span>
+        <div>
+          <div class="check-title">焦点交互反馈</div>
+          <div class="check-desc">当前选中项具备清晰的 2~3px <code>UI_ACCENT</code> / <code>UI_FOCUS</code> 轮廓线与背景反馈。</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toast Element -->
+  <div class="toast" id="toast">已复制到剪贴板</div>
+
+  <script>
+    const PALETTE_DATA = {
+      light: [
+        { key: "page_bg", cName: ".page_bg", hex: "#F0F3FA", name: "页面底色", desc: "全局背景色，微偏蓝冷调，衬托前景卡片", textCol: "#172640" },
+        { key: "surface", cName: ".surface", hex: "#FFFFFF", name: "基础表面", desc: "顶级卡片、信息主面板表面", textCol: "#172640" },
+        { key: "surface_raised", cName: ".surface_raised", hex: "#E8EDF7", name: "浮层/次级卡片", desc: "次级容器、结果汇总卡、未激活选项底色", textCol: "#172640" },
+        { key: "border_decorative", cName: ".border_decorative", hex: "#DBE1E9", name: "装饰边框", desc: "面板微细描边、卡片分隔线 (1px)", textCol: "#172640" },
+        { key: "border_control", cName: ".border_control", hex: "#79879D", name: "控件描边", desc: "交互按钮、未激活输入框轮廓", textCol: "#FFFFFF" },
+        { key: "text_primary", cName: ".text_primary", hex: "#172640", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#FFFFFF" },
+        { key: "text_secondary", cName: ".text_secondary", hex: "#53627A", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#FFFFFF" },
+        { key: "text_disabled", cName: ".text_disabled", hex: "#9199A5", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#FFFFFF" },
+        { key: "accent", cName: ".accent", hex: "#245BC4", name: "主品牌强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#FFFFFF" },
+        { key: "accent_soft", cName: ".accent_soft", hex: "#E4EDFF", name: "主色软底", desc: "主色对应浅色软背景", textCol: "#245BC4" },
+        { key: "focus", cName: ".focus", hex: "#1247A8", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#FFFFFF" },
+        { key: "success", cName: ".success", hex: "#16734E", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#FFFFFF" },
+        { key: "success_soft", cName: ".success_soft", hex: "#F6FFED", name: "成功极浅软底", desc: "极浅薄荷浅绿软底", textCol: "#16734E" },
+        { key: "warning", cName: ".warning", hex: "#FA8C16", name: "提醒/休息实体", desc: "护眼休息、额度即将耗尽预警", textCol: "#FFFFFF" },
+        { key: "warning_soft", cName: ".warning_soft", hex: "#FFF7E6", name: "提醒柔和软底", desc: "温暖柔和杏白/米白软底", textCol: "#D46B08" },
+        { key: "danger", cName: ".danger", hex: "#B92F46", name: "危险/熔断实体", desc: "强制锁屏、就寝时段禁用、告警", textCol: "#FFFFFF" },
+        { key: "danger_soft", cName: ".danger_soft", hex: "#FFE9ED", name: "危险粉樱软底", desc: "淡粉樱软底", textCol: "#B92F46" }
+      ],
+      dark: [
+        { key: "page_bg", cName: ".page_bg", hex: "#0B0F19", name: "页面底色", desc: "全局背景色，深邃蓝黑冷调", textCol: "#F3F6FD" },
+        { key: "surface", cName: ".surface", hex: "#162032", name: "基础表面", desc: "顶级卡片、信息主面板表面", textCol: "#F3F6FD" },
+        { key: "surface_raised", cName: ".surface_raised", hex: "#1E2C44", name: "浮层/次级卡片", desc: "次级容器、结果汇总卡、未激活选项底色", textCol: "#F3F6FD" },
+        { key: "border_decorative", cName: ".border_decorative", hex: "#2A3B54", name: "装饰边框", desc: "面板微细描边、卡片分隔线 (1px)", textCol: "#F3F6FD" },
+        { key: "border_control", cName: ".border_control", hex: "#7E90AA", name: "控件描边", desc: "交互按钮、未激活输入框轮廓", textCol: "#0B0F19" },
+        { key: "text_primary", cName: ".text_primary", hex: "#F3F6FD", name: "主要文字", desc: "核心标题、数字大值、高权重正文", textCol: "#0B0F19" },
+        { key: "text_secondary", cName: ".text_secondary", hex: "#B6C4D9", name: "次要文字", desc: "标签说明、副标题、辅助指标", textCol: "#0B0F19" },
+        { key: "text_disabled", cName: ".text_disabled", hex: "#818C98", name: "失效文字", desc: "禁用项、占位说明、未命中规则副文", textCol: "#0B0F19" },
+        { key: "accent", cName: ".accent", hex: "#91B9FF", name: "主品牌强调色", desc: "高亮标题、活动项、关键关键帧", textCol: "#122344" },
+        { key: "accent_soft", cName: ".accent_soft", hex: "#273E60", name: "主色软底", desc: "主色对应暗蓝软背景", textCol: "#91B9FF" },
+        { key: "focus", cName: ".focus", hex: "#BCD4FF", name: "焦点高亮轮廓", desc: "手柄选中高亮外框", textCol: "#122344" },
+        { key: "success", cName: ".success", hex: "#5CCB8A", name: "成功/充沛实体", desc: "可用额度、加时成功、命中规则", textCol: "#0B0F19" },
+        { key: "success_soft", cName: ".success_soft", hex: "#193C32", name: "成功极浅软底", desc: "暗翡翠绿软底", textCol: "#5CCB8A" },
+        { key: "warning", cName: ".warning", hex: "#FFA940", name: "提醒/休息实体", desc: "护眼休息、额度即将耗尽预警", textCol: "#0B0F19" },
+        { key: "warning_soft", cName: ".warning_soft", hex: "#40351F", name: "提醒柔和软底", desc: "深暖褐棕软底", textCol: "#FFA940" },
+        { key: "danger", cName: ".danger", hex: "#FF7A85", name: "危险/熔断实体", desc: "强制锁屏、就寝时段禁用、告警", textCol: "#0B0F19" },
+        { key: "danger_soft", cName: ".danger_soft", hex: "#462936", name: "危险粉樱软底", desc: "暗樱红软底", textCol: "#FF7A85" }
+      ]
+    };
+
+    let currentTheme = 'light';
+
+    function setTheme(theme) {
+      currentTheme = theme;
+      document.documentElement.setAttribute('data-theme', theme);
+      
+      const isDark = theme === 'dark';
+      document.getElementById('btnLight').classList.toggle('active', !isDark);
+      document.getElementById('btnDark').classList.toggle('active', isDark);
+      document.getElementById('currentModeLabel').textContent = isDark ? '深色模式 (Dark Mode)' : '浅色模式 (Light Mode)';
+
+      renderPaletteGrid();
+      updateSemanticCodes();
+    }
+
+    function renderPaletteGrid() {
+      const grid = document.getElementById('basePaletteGrid');
+      const items = PALETTE_DATA[currentTheme];
+      grid.innerHTML = '';
+
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'swatch-card';
+        card.onclick = () => copyText(item.hex, `${item.name} (${item.hex})`);
+
+        card.innerHTML = `
+          <div class="swatch-color-box" style="background-color: ${item.hex};">
+            <span class="swatch-sample-text" style="color: ${item.textCol}; background: ${item.hex}; filter: invert(0.1);">
+              Aa 123
+            </span>
+          </div>
+          <div class="swatch-body">
+            <div class="swatch-header">
+              <div class="swatch-name">${item.name}</div>
+              <div class="swatch-c-name">${item.cName}</div>
+            </div>
+            <div class="swatch-desc">${item.desc}</div>
+            <div class="swatch-hex-row">
+              <span class="swatch-hex">${item.hex}</span>
+              <span class="copy-hint">点击复制</span>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function updateSemanticCodes() {
+      const isDark = currentTheme === 'dark';
+      document.getElementById('hexSuccessSoft').textContent = isDark ? '#193C32' : '#F6FFED';
+      document.getElementById('hexSuccessBorder').textContent = isDark ? '#274916' : '#B7EB8F';
+      document.getElementById('hexSuccessSolid').textContent = isDark ? '#5CCB8A' : '#52C41A';
+
+      document.getElementById('hexWarningSoft').textContent = isDark ? '#40351F' : '#FFF7E6';
+      document.getElementById('hexWarningBorder').textContent = isDark ? '#874D00' : '#FFD591';
+      document.getElementById('hexWarningSolid').textContent = isDark ? '#FFA940' : '#FA8C16';
+
+      document.getElementById('hexDangerSoft').textContent = isDark ? '#462936' : '#FFE9ED';
+      document.getElementById('hexDangerBorder').textContent = isDark ? '#78061A' : '#FFA39E';
+      document.getElementById('hexDangerSolid').textContent = isDark ? '#FF7A85' : '#B92F46';
+
+      document.getElementById('hexAccentSoft').textContent = isDark ? '#273E60' : '#E4EDFF';
+      document.getElementById('hexFocus').textContent = isDark ? '#BCD4FF' : '#1247A8';
+      document.getElementById('hexAccentSolid').textContent = isDark ? '#91B9FF' : '#245BC4';
+    }
+
+    function copyText(text, label) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(`已复制 ${label || text}`);
+      }).catch(() => {
+        showToast(`颜色值: ${text}`);
+      });
+    }
+
+    let toastTimeout;
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2000);
+    }
+
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', () => {
+      renderPaletteGrid();
+      updateSemanticCodes();
+    });
+  </script>
+</body>
+</html>
