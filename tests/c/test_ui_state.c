@@ -4093,8 +4093,21 @@ static void test_today_details_navigation(void)
     check_int(m.home_details_page, 1, "child enters decision page");
     m.waiting = true;
     check_hit(hit_center(&m, ptc_ui_home_details_action_rect(&m, 1)), PTC_UI_HIT_NONE, 0, "waiting disables touch refresh");
+    m.waiting = false;
     ptc_ui_home_details_back(&m); ptc_ui_home_details_back(&m);
     check_int(m.view, PTC_UI_CHILD, "child back preserves child home");
+
+    /* Direct entry into rules page returns directly to parent page */
+    m.view = PTC_UI_PARENT;
+    m.parent_page = PTC_UI_PARENT_TODAY;
+    m.selected_index = 11;
+    check_true(ptc_ui_open_home_details_page(&m, 1), "direct open rules page");
+    check_int(m.overlay, PTC_UI_OVERLAY_HOME_DETAILS, "direct rules open sets overlay");
+    check_int(m.home_details_page, 1, "direct rules open is page 1");
+    check_int(m.home_details_entry_page, 1, "records entry page as 1");
+    ptc_ui_home_details_back(&m);
+    check_int(m.overlay, PTC_UI_OVERLAY_NONE, "direct rules back closes overlay immediately to parent page");
+    check_int(m.selected_index, 11, "parent origin preserved");
 }
 
 int main(void)

@@ -328,7 +328,7 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
     {
         FT_GlyphSlot glyph = face->glyph;
         uint8_t *copy = NULL;
-        int extra = bold ? 1 : 0;
+        int extra = (bold && size >= 15) ? 1 : 0;
         if (glyph->bitmap.pixel_mode == FT_PIXEL_MODE_BGRA && glyph->bitmap.rows > 0 &&
             glyph->bitmap.width > 0) {
             int width = (int)glyph->bitmap.width;
@@ -370,7 +370,7 @@ static const UiGlyphEntry *ui_glyph_fetch(uint32_t codepoint, int size, bool bol
                 for (row = 0; row < height; ++row) {
                     uint8_t *out_line = copy + (size_t)row * width;
                     const uint8_t *src_line = glyph->bitmap.buffer + (size_t)row * glyph->bitmap.pitch;
-                    if (!bold) {
+                    if (!bold || size < 15) {
                         memcpy(out_line, src_line, (size_t)glyph->bitmap.width);
                         continue;
                     }

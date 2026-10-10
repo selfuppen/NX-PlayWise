@@ -599,6 +599,7 @@ typedef struct {
     char album_restriction_detail[160];
     char rule_source[32];
     int home_details_page;
+    int home_details_entry_page;
     int home_details_focus;
     bool home_details_data_expanded;
     int home_details_scroll;

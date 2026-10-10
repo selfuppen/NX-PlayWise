@@ -192,6 +192,7 @@ void dock_page_action(UiState *ui, int action, int delta)
     draft = &ui->model.draft_dock_policy;
 #ifdef PLAYWISE_EDEN
     if (action == 7 || action == 8) {
+        ptc_audio_play(PTC_SE_CONFIRM);
         ui->model.dock_field_focus = action;
         if (ui->client.storage->vtable->write_text_atomic(ui->client.storage, APP_ROOT "/operation-mode.txt",
                 action == 7 ? "docked" : "undocked")) {
@@ -202,6 +203,7 @@ void dock_page_action(UiState *ui, int action, int delta)
     }
 #endif
     if (action == 10) {
+        ptc_audio_play(PTC_SE_CANCEL);
         if (ui->model.dock_dirty)
             open_confirm_overlay(ui, PTC_UI_OPERATION_LEAVE_DOCK, ptc_ui_text(PTC_UI_T_DOCK_LEAVE),
                 ptc_ui_text(PTC_UI_T_DOCK_CONFIRM_BODY));
@@ -216,32 +218,45 @@ void dock_page_action(UiState *ui, int action, int delta)
         ui->model.overlay = PTC_UI_OVERLAY_DOCK_RULES;
         return;
     }
-    if (action == 6) { submit_status(ui); return; }
+    if (action == 6) {
+        ptc_audio_play(PTC_SE_CONFIRM);
+        submit_status(ui);
+        return;
+    }
     ui->model.dock_field_focus = action;
     if (action == 4) { request_dock_waiver(ui); return; }
     if (ui->model.disable_flag_present) return;
     if (action == 0) {
+        ptc_audio_play(PTC_SE_TOGGLE);
         draft->force_docked = false;
         draft->undocked_limit_enabled = false;
     } else if (action == 1) {
         if (ui->model.dock_supported_available && !ui->model.dock_supported) {
+            ptc_audio_play(PTC_SE_ERROR);
             snprintf(ui->model.message, sizeof(ui->model.message), "%s", ptc_ui_text(PTC_UI_T_DOCK_LITE));
             return;
         }
+        ptc_audio_play(PTC_SE_TOGGLE);
         draft->force_docked = true;
         draft->undocked_limit_enabled = true;
         draft->undocked_daily_minutes = 0;
     } else if (action == 2 && delta) {
+        ptc_audio_play(PTC_SE_STEP);
         draft->force_docked = false;
         draft->undocked_limit_enabled = true;
         uint16_t mins = (draft->undocked_daily_minutes == 0) ? 30 : draft->undocked_daily_minutes;
         draft->undocked_daily_minutes = ptc_ui_adjust_minutes(mins, delta, 5, 1440);
     } else if (action == 2) {
+        ptc_audio_play(PTC_SE_POPUP);
         draft->force_docked = false;
         draft->undocked_limit_enabled = true;
         if (draft->undocked_daily_minutes == 0) draft->undocked_daily_minutes = 30;
         ptc_ui_numpad_open(&ui->model, PTC_UI_NUMPAD_DOCK_MINUTES, PTC_UI_OVERLAY_NONE,
             ptc_ui_text(PTC_UI_T_DOCK_LIMIT), ptc_ui_text(PTC_UI_T_DOCK_ALLOWANCE), 4, 5, 1440, draft->undocked_daily_minutes);
-    } else if (action == 3) { save_dock_from_page(ui); return; }
+    } else if (action == 3) {
+        ptc_audio_play(PTC_SE_CONFIRM);
+        save_dock_from_page(ui);
+        return;
+    }
     ui->model.dock_dirty = ptc_ui_dock_dirty(&ui->model);
 }

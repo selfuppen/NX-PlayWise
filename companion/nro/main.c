@@ -717,6 +717,7 @@ int main(int argc, char **argv)
                     else if (down & HidNpadButton_X) dock_page_action(&ui, 4, 0);
                     else if (down & HidNpadButton_Plus) dock_page_action(&ui, 3, 0);
                     else if (down & HidNpadButton_Up) {
+                        int old_focus = ui.model.dock_field_focus;
                         int focus = ui.model.dock_field_focus;
                         if (focus == 7 || focus == 8) ui.model.dock_field_focus = focus == 7 ? 3 : 4;
                         else if (focus == 5) ui.model.dock_field_focus = 4;
@@ -724,8 +725,10 @@ int main(int argc, char **argv)
                         else if (focus == 2) ui.model.dock_field_focus = 1;
                         else if (focus == 1) ui.model.dock_field_focus = 0;
                         else if (focus == 0) ui.model.dock_field_focus = ui.model.eden_mode_controls ? 7 : 5;
+                        if (ui.model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
                     }
                     else if (down & HidNpadButton_Down) {
+                        int old_focus = ui.model.dock_field_focus;
                         int focus = ui.model.dock_field_focus;
                         if (focus == 0) ui.model.dock_field_focus = 1;
                         else if (focus == 1) ui.model.dock_field_focus = 2;
@@ -736,20 +739,25 @@ int main(int argc, char **argv)
                             else ui.model.dock_field_focus = 0;
                         }
                         else if (focus == 7 || focus == 8) ui.model.dock_field_focus = 0;
+                        if (ui.model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
                     }
                     else if (down & HidNpadButton_Left) {
+                        int old_focus = ui.model.dock_field_focus;
                         int focus = ui.model.dock_field_focus;
                         if (focus == 2) dock_page_action(&ui, 2, -1);
                         else if (focus == 4) ui.model.dock_field_focus = 3;
                         else if (focus == 5) ui.model.dock_field_focus = 4;
                         else if (focus == 8) ui.model.dock_field_focus = 7;
+                        if (ui.model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
                     }
                     else if (down & HidNpadButton_Right) {
+                        int old_focus = ui.model.dock_field_focus;
                         int focus = ui.model.dock_field_focus;
                         if (focus == 2) dock_page_action(&ui, 2, 1);
                         else if (focus == 3) ui.model.dock_field_focus = 4;
                         else if (focus == 4) ui.model.dock_field_focus = 5;
                         else if (focus == 7) ui.model.dock_field_focus = 8;
+                        if (ui.model.dock_field_focus != old_focus) ptc_audio_play(PTC_SE_FOCUS);
                     }
                     else if (down & HidNpadButton_A) dock_page_action(&ui, ui.model.dock_field_focus, 0);
                 }
@@ -924,6 +932,7 @@ int main(int argc, char **argv)
                     activate_parent_status(&ui);
                 } else if (ui.model.parent_page == PTC_UI_PARENT_SUPPORT &&
                            ui.model.selected_index == 6 + ui.model.recent_event_count) {
+                    ptc_audio_play(PTC_SE_POPUP);
                     ptc_ui_open_support_guide(&ui.model);
                 } else if (ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.model.selected_index >= 6) {
                     int visible_index = ui.model.selected_index - 6;

@@ -20,7 +20,13 @@ void handle_touch(UiState *ui, int x, int y)
     }
     switch (hit.kind) {
     case PTC_UI_HIT_CONFIG_BACKUP_FIELD:
-        ui->model.overlay_selection = hit.index; config_backup_action(ui, hit.index); break;
+        ui->model.overlay_selection = hit.index;
+        if (hit.index == 15) ptc_audio_play(PTC_SE_CANCEL);
+        else if (hit.index == 16 || hit.index == 17) ptc_audio_play(PTC_SE_TAB);
+        else if (hit.index < 11) ptc_audio_play(PTC_SE_TOGGLE);
+        else ptc_audio_play(PTC_SE_CONFIRM);
+        config_backup_action(ui, hit.index);
+        break;
     case PTC_UI_HIT_CHILD_SUBMIT_CODE:
         if (ui->waiting) {
             ptc_audio_play(PTC_SE_ERROR);
@@ -132,6 +138,7 @@ void handle_touch(UiState *ui, int x, int y)
         handle_parent_action(ui);
         break;
     case PTC_UI_HIT_CALENDAR_MANAGER:
+        ptc_audio_play(PTC_SE_POPUP);
         ui->model.selected_index = 7;
         open_calendar_manager(ui);
         break;
@@ -149,6 +156,7 @@ void handle_touch(UiState *ui, int x, int y)
         handle_overlay_input(ui, HidNpadButton_A);
         break;
     case PTC_UI_HIT_SUPPORT_GUIDE:
+        ptc_audio_play(PTC_SE_POPUP);
         ptc_ui_open_support_guide(&ui->model);
         return;
     case PTC_UI_HIT_SUPPORT_EVENT:
@@ -182,12 +190,24 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_HOME_DETAILS_ACTION:
         ui->model.home_details_focus = hit.index;
-        if (hit.index == 2) ptc_ui_home_details_back(&ui->model);
-        else if (hit.index == 1) { if (!ui->waiting) submit_status(ui); }
-        else { ptc_audio_play(PTC_SE_POPUP); ptc_ui_home_details_activate(&ui->model, 0); }
+        if (hit.index == 2) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ptc_ui_home_details_back(&ui->model);
+        } else if (hit.index == 1) {
+            if (!ui->waiting) {
+                ptc_audio_play(PTC_SE_CONFIRM);
+                submit_status(ui);
+            }
+        } else {
+            ptc_audio_play(PTC_SE_POPUP);
+            ptc_ui_home_details_activate(&ui->model, 0);
+        }
         break;
     case PTC_UI_HIT_DAY_DECISION_REFRESH:
-        if (!ui->waiting) submit_status(ui);
+        if (!ui->waiting) {
+            ptc_audio_play(PTC_SE_CONFIRM);
+            submit_status(ui);
+        }
         break;
     case PTC_UI_HIT_DAY_DECISION_PREV:
         if (ui->model.forecast_detail_day_offset > 0) {

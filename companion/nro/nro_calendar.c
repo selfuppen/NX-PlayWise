@@ -383,6 +383,7 @@ void open_calendar_manager(UiState *ui)
 void calendar_manager_select_tab(UiState *ui, int tab)
 {
     if (!ui || tab < 0 || tab > 1) return;
+    ptc_audio_play(PTC_SE_TAB);
     ui->model.calendar_manager_tab = tab;
     ui->model.calendar_manager_selected = 0;
     calendar_manager_refresh(ui);
@@ -394,6 +395,7 @@ void calendar_manager_select_row(UiState *ui, int row)
     if (!ui || row < 0 || row >= 6) return;
     index = ui->model.calendar_manager_page * 6 + row;
     if (index >= ui->model.calendar_manager_count) return;
+    ptc_audio_play(PTC_SE_FOCUS);
     ui->model.calendar_manager_selected = index;
     calendar_preview(ui);
 }
@@ -404,10 +406,12 @@ void calendar_manager_nav(UiState *ui, int action)
     if (!ui) return;
     model = &ui->model;
     if (action == 5) {
+        ptc_audio_play(PTC_SE_CANCEL);
         ptc_ui_cancel_overlay(model);
         return;
     }
     if (action == 3) {
+        ptc_audio_play(PTC_SE_POPUP);
         model->overlay = PTC_UI_OVERLAY_CALENDAR_FORMAT;
         snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",
             ptc_ui_text(PTC_UI_T_CALENDAR_FORMAT_TITLE));
@@ -416,6 +420,7 @@ void calendar_manager_nav(UiState *ui, int action)
     }
     if (ui->waiting) return;
     if (action == 4) {
+        ptc_audio_play(PTC_SE_CONFIRM);
         calendar_manager_refresh(ui);
         submit_status(ui);
         return;
@@ -423,12 +428,14 @@ void calendar_manager_nav(UiState *ui, int action)
     if (action == 0 || action == 1) {
         int page = model->calendar_manager_page + (action == 0 ? -1 : 1);
         if (page < 0 || page * 6 >= model->calendar_manager_count) return;
+        ptc_audio_play(PTC_SE_STEP);
         model->calendar_manager_page = page;
         model->calendar_manager_selected = page * 6;
         calendar_preview(ui);
         return;
     }
     if (action != 2 || model->calendar_manager_selected < 0) return;
+    ptc_audio_play(PTC_SE_CONFIRM);
     if (model->calendar_manager_tab == 1 && model->calendar_pending_file[0]) {
         open_confirm_overlay(ui, PTC_UI_OPERATION_IMPORT_CALENDAR,
             ptc_ui_text(PTC_UI_T_CALENDAR_IMPORT_ACTION),

@@ -161,14 +161,22 @@ void handle_overlay_input(UiState *ui, u64 down)
     }
 
     if (ui->model.overlay == PTC_UI_OVERLAY_SUPPORT_GUIDE) {
-        if (down & (HidNpadButton_B | HidNpadButton_A)) ptc_ui_cancel_overlay(&ui->model);
-        else if (down & (HidNpadButton_L | HidNpadButton_Left)) ptc_ui_support_guide_change_page(&ui->model, -1);
-        else if (down & (HidNpadButton_R | HidNpadButton_Right)) ptc_ui_support_guide_change_page(&ui->model, 1);
+        if (down & (HidNpadButton_B | HidNpadButton_A)) {
+            ptc_audio_play(PTC_SE_CANCEL);
+            ptc_ui_cancel_overlay(&ui->model);
+        } else if (down & (HidNpadButton_L | HidNpadButton_Left)) {
+            ptc_audio_play(PTC_SE_STEP);
+            ptc_ui_support_guide_change_page(&ui->model, -1);
+        } else if (down & (HidNpadButton_R | HidNpadButton_Right)) {
+            ptc_audio_play(PTC_SE_STEP);
+            ptc_ui_support_guide_change_page(&ui->model, 1);
+        }
         return;
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_NOTICE_DETAILS ||
         ui->model.overlay == PTC_UI_OVERLAY_SETUP_PCTL_HELP) {
         if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_X | HidNpadButton_Minus)) {
+            ptc_audio_play(PTC_SE_CANCEL);
             ui->model.overlay = PTC_UI_OVERLAY_NONE;
             ui->model.overlay_title[0] = '\0';
             ui->model.overlay_body[0] = '\0';
@@ -320,19 +328,39 @@ void handle_overlay_input(UiState *ui, u64 down)
         if (down & (HidNpadButton_B | HidNpadButton_Plus)) {
             ptc_audio_play(PTC_SE_CANCEL);
             ptc_ui_home_details_back(&ui->model);
+        } else if (down & HidNpadButton_X) {
+            if (ui->model.home_details_page == 0) {
+                ptc_audio_play(PTC_SE_POPUP);
+                ptc_ui_home_details_activate(&ui->model, 0);
+            }
         } else if (down & HidNpadButton_Y) {
-            if (!ui->waiting) submit_status(ui);
+            if (!ui->waiting) {
+                ptc_audio_play(PTC_SE_CONFIRM);
+                submit_status(ui);
+            }
         } else if (down & (HidNpadButton_ZL | HidNpadButton_ZR)) {
+            ptc_audio_play(PTC_SE_STEP);
             ptc_ui_home_details_scroll(&ui->model, down & HidNpadButton_ZR ? 200 : -200);
         } else if (down & (HidNpadButton_Up | HidNpadButton_Left)) {
+            ptc_audio_play(PTC_SE_FOCUS);
             ptc_ui_home_details_move(&ui->model, -1);
         } else if (down & (HidNpadButton_Down | HidNpadButton_Right)) {
+            ptc_audio_play(PTC_SE_FOCUS);
             ptc_ui_home_details_move(&ui->model, 1);
         } else if (down & HidNpadButton_A) {
             int focus = ui->model.home_details_focus;
-            if (focus == 2) ptc_ui_home_details_back(&ui->model);
-            else if (focus == 1) { if (!ui->waiting) submit_status(ui); }
-            else if (focus == 0) { ptc_audio_play(PTC_SE_POPUP); ptc_ui_home_details_activate(&ui->model, 0); }
+            if (focus == 2) {
+                ptc_audio_play(PTC_SE_CANCEL);
+                ptc_ui_home_details_back(&ui->model);
+            } else if (focus == 1) {
+                if (!ui->waiting) {
+                    ptc_audio_play(PTC_SE_CONFIRM);
+                    submit_status(ui);
+                }
+            } else if (focus == 0) {
+                ptc_audio_play(PTC_SE_POPUP);
+                ptc_ui_home_details_activate(&ui->model, 0);
+            }
         }
         return;
     }
@@ -350,7 +378,10 @@ void handle_overlay_input(UiState *ui, u64 down)
                 ptc_audio_play(PTC_SE_POPUP);
             }
         } else if (down & HidNpadButton_Y) {
-            if (!ui->waiting) submit_status(ui);
+            if (!ui->waiting) {
+                ptc_audio_play(PTC_SE_CONFIRM);
+                submit_status(ui);
+            }
         } else if (down & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus)) {
             ptc_audio_play(PTC_SE_CANCEL);
             ptc_ui_cancel_overlay(&ui->model);

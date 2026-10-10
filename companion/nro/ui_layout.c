@@ -592,8 +592,12 @@ void ptc_ui_home_details_back(PtcUiModel *model)
 {
     if (!model) return;
     if (model->home_details_page == 1) {
-        model->home_details_page = 0;
-        model->home_details_focus = 0;
+        if (model->home_details_entry_page == 1) {
+            ptc_ui_cancel_overlay(model);
+        } else {
+            model->home_details_page = 0;
+            model->home_details_focus = 0;
+        }
     } else ptc_ui_cancel_overlay(model);
 }
 
@@ -619,6 +623,7 @@ bool ptc_ui_open_home_details_page(PtcUiModel *model, int page)
     /* Keep the underlying focus and execution message intact on open/close. */
     model->overlay = PTC_UI_OVERLAY_HOME_DETAILS;
     model->home_details_page = (page == 1) ? 1 : 0;
+    model->home_details_entry_page = (page == 1) ? 1 : 0;
     model->home_details_focus = (page == 1) ? 2 : 0;
     model->home_details_scroll = 0;
     model->home_details_data_expanded = false;
