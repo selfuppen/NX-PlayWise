@@ -280,6 +280,42 @@ static void test_release_request_contract(void)
         "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
         "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}", &request),
         PTC_ERR_BAD_REQUEST, "blocked weekly rule is rejected");
+    /* A single-day LIMIT quota must be 1..1440; out-of-range or zero is rejected
+       at the inbox so it can never be persisted and then fail every enforce. */
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"limit-max\",\"type\":\"set_today_limit\",\"created_at\":1,"
+        "\"payload\":{\"minutes\":1440}}", &request),
+        PTC_ERR_OK, "set_today_limit of 1440 is accepted");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"limit-zero\",\"type\":\"set_today_limit\",\"created_at\":1,"
+        "\"payload\":{\"minutes\":0}}", &request),
+        PTC_ERR_BAD_REQUEST, "set_today_limit of 0 is rejected");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"limit-over\",\"type\":\"set_today_limit\",\"created_at\":1,"
+        "\"payload\":{\"minutes\":1441}}", &request),
+        PTC_ERR_BAD_REQUEST, "set_today_limit above 1440 is rejected");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"add-over\",\"type\":\"add_today_minutes\",\"created_at\":1,"
+        "\"payload\":{\"minutes\":5000}}", &request),
+        PTC_ERR_BAD_REQUEST, "add_today_minutes above 1440 is rejected");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"weekly-ok\",\"type\":\"set_weekly_template\",\"created_at\":1,"
+        "\"payload\":{\"days\":[{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}", &request),
+        PTC_ERR_OK, "valid weekly template is accepted");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"weekly-zero\",\"type\":\"set_weekly_template\",\"created_at\":1,"
+        "\"payload\":{\"days\":[{\"mode\":\"limit\",\"minutes\":0},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}", &request),
+        PTC_ERR_BAD_REQUEST, "weekly LIMIT day of 0 is rejected");
+    check_int(ptc_request_parse(
+        "{\"version\":1,\"request_id\":\"weekly-over\",\"type\":\"set_weekly_template\",\"created_at\":1,"
+        "\"payload\":{\"days\":[{\"mode\":\"limit\",\"minutes\":1441},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"limit\",\"minutes\":60},"
+        "{\"mode\":\"limit\",\"minutes\":60},{\"mode\":\"unlimited\",\"minutes\":0}]}}", &request),
+        PTC_ERR_BAD_REQUEST, "weekly LIMIT day above 1440 is rejected");
 }
 
 static void test_holiday_calendar_and_priority(void)

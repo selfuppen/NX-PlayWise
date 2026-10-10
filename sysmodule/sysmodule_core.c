@@ -121,6 +121,15 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
         reset_eye_care_cycle(&runtime_state, now.day_index);
         eye_state_changed = memcmp(&previous_eye_state, &runtime_state, sizeof(runtime_state)) != 0;
     } else if (runtime_state.eye_care_resting) {
+        /* A backward clock step must not strand the child in a forced rest:
+           cap the remaining rest at the configured window so a wall-clock that
+           moved back cannot push the deadline arbitrarily far ahead. Mirrors the
+           eye_care_idle_since backward-jump guard below; a no-op in forward time
+           because now never trails the moment the rest began. */
+        int64_t max_deadline = now.unix_seconds + (int64_t)rules.eye_care.rest_minutes * 60;
+        if (runtime_state.eye_care_rest_deadline > max_deadline) {
+            runtime_state.eye_care_rest_deadline = max_deadline;
+        }
         if (now.unix_seconds >= runtime_state.eye_care_rest_deadline) {
             eye_exit = true;
             reset_eye_care_cycle(&runtime_state, now.day_index);
@@ -232,6 +241,11 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
         runtime_state.bedtime_enforced == bedtime_should_enforce &&
         runtime_state.dock_enforced == dock_should_enforce &&
         (!bedtime_should_enforce || runtime_state.bedtime_window_instance_id == bedtime.window_instance_id)) {
+        /* Fast path: the composed target is unchanged from the last tick. A
+           transient read_status failure is treated as "assume still in effect"
+           (do not act on unknown state); if PCTL had actually lost the setting
+           while reads keep failing, the next successful read re-asserts it
+           through the full path below. */
         if (sysmodule->pctl->vtable->read_status(sysmodule->pctl,
                 ptc_weekday_from_day_index(now.day_index), &observed_status) != PTC_ERR_OK ||
             target_settings_observed(target_mode, target_minutes, &observed_status)) {

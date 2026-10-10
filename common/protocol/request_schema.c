@@ -271,6 +271,13 @@ static bool parse_week_template(const char *text, PtcDayRule week[7])
         if (!json_u16(item, "minutes", &week[i].minutes)) {
             week[i].minutes = 0;
         }
+        /* A LIMIT day must carry 1..1440 minutes (same bound as parse_named_rule);
+           UNLIMITED ignores minutes. Reject out-of-range so a template cannot
+           persist a day that later fails enforce. */
+        if (week[i].mode == PTC_RULE_MODE_LIMIT &&
+            (week[i].minutes < 1u || week[i].minutes > 1440u)) {
+            return false;
+        }
         days = obj_end + 1;
     }
     return true;
@@ -563,7 +570,12 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         return json_string(text, "code", out->code, sizeof(out->code)) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_TODAY_LIMIT:
     case PTC_REQUEST_ADD_TODAY_MINUTES:
-        return json_u16(text, "minutes", &out->minutes) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
+        /* Today's quota is a single-day LIMIT: reject 0 and anything the PCTL
+           0x44 day slot cannot hold (>1440). Caught at the inbox, a bad value
+           can no longer be persisted to today_override and then fail every
+           later enforce (LIMIT 0 decodes as BLOCKED; >1440 fails the write). */
+        return json_u16(text, "minutes", &out->minutes) &&
+            out->minutes >= 1u && out->minutes <= 1440u ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_WEEKLY_TEMPLATE:
         return parse_week_template(text, out->week) ? PTC_ERR_OK : PTC_ERR_BAD_REQUEST;
     case PTC_REQUEST_SET_HOLIDAY_POLICY:

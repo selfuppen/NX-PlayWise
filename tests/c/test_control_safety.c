@@ -279,6 +279,66 @@ static void test_eye_care_continuity_and_recovery(void)
     free(f.mem);
 }
 
+static void test_eye_care_rest_deadline_survives_backward_clock(void)
+{
+    Fixture f;
+    PtcRules rules;
+    PtcRuntimeState state;
+    int64_t t0, original_deadline, capped_deadline;
+    init_fixture(&f);
+    expect(load_rules(&f.core, &rules), "read backward-clock fixture rules");
+    rules.eye_care.enabled = true;
+    rules.eye_care.play_minutes = 40;
+    rules.eye_care.rest_minutes = 10;
+    expect(save_rules(&f.core, &rules), "enable eye care for backward-clock test");
+    t0 = f.clock.snapshot.unix_seconds;
+    original_deadline = t0 + 10 * 60;
+    expect(load_state(&f.core, &state), "load state for backward-clock test");
+    state.eye_care_resting = true;
+    state.eye_care_rest_deadline = original_deadline;
+    state.eye_care_break_id = 4242;
+    state.eye_care_day_index = f.clock.snapshot.day_index;
+    expect(save_state(&f.core, &state, t0), "seed active eye-care rest");
+    /* Wall clock steps back an hour; the forced rest must not stretch with it. */
+    f.clock.snapshot.unix_seconds = t0 - 3600;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    capped_deadline = (t0 - 3600) + 10 * 60;
+    expect(load_state(&f.core, &state) && state.eye_care_resting &&
+        state.eye_care_rest_deadline == capped_deadline &&
+        state.eye_care_rest_deadline < original_deadline,
+        "backward clock caps the rest deadline to the configured window");
+    free(f.mem);
+}
+
+static void test_eye_care_grants_unblock_after_deadline(void)
+{
+    Fixture f;
+    PtcRules rules;
+    PtcRuntimeState state;
+    int64_t t0;
+    init_fixture(&f);
+    expect(load_rules(&f.core, &rules), "read grant-deadline fixture rules");
+    rules.eye_care.enabled = true;
+    rules.eye_care.play_minutes = 40;
+    rules.eye_care.rest_minutes = 10;
+    expect(save_rules(&f.core, &rules), "enable eye care for grant-deadline test");
+    t0 = f.clock.snapshot.unix_seconds;
+    expect(load_state(&f.core, &state), "load state for grant-deadline test");
+    state.eye_care_resting = true;
+    state.eye_care_rest_deadline = t0 + 10 * 60;
+    state.eye_care_break_id = 7777;
+    expect(save_state(&f.core, &state, t0), "seed active eye-care rest for grant test");
+    request(&f, "grant-during-rest", "add_today_minutes", "{\"minutes\":15}");
+    expect(result_has(&f, "grant-during-rest", "\"status\":\"error\""),
+        "add-time is rejected while the eye-care rest is active");
+    /* Deadline passes with no enforce tick to clear the stale resting flag. */
+    f.clock.snapshot.unix_seconds = t0 + 10 * 60 + 1;
+    request(&f, "grant-after-rest", "add_today_minutes", "{\"minutes\":15}");
+    expect(result_has(&f, "grant-after-rest", "\"status\":\"ok\""),
+        "add-time is accepted once the rest deadline has passed");
+    free(f.mem);
+}
+
 static void test_sleep_without_scheduler_ticks(void)
 {
     Fixture f;
@@ -1066,6 +1126,8 @@ int ptc_test_control_safety(void)
     test_real_storage_ledger();
     test_transaction_and_read_failures();
     test_eye_care_continuity_and_recovery();
+    test_eye_care_rest_deadline_survives_backward_clock();
+    test_eye_care_grants_unblock_after_deadline();
     test_sleep_without_scheduler_ticks();
     test_bedtime_result_rollback();
     test_cross_night_bedtime_does_not_start_timer();

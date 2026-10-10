@@ -22,6 +22,10 @@ static uint8_t days_in_month(uint16_t year, uint8_t month)
     return MONTH_DAYS[month - 1u];
 }
 
+/* UTC-based day index (raw unix_seconds / seconds-per-day). This diverges from
+   the local-calendar day index near midnight and is used ONLY for retention
+   cleanup thresholds; do not reuse it for quota/rule/day-rollover logic, which
+   must use the local-calendar day index from the time provider. */
 uint16_t ptc_day_index_from_unix(int64_t unix_seconds)
 {
     if (unix_seconds < PTC_DAY_INDEX_EPOCH_UNIX) {

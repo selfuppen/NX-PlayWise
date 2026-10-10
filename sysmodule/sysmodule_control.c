@@ -358,8 +358,17 @@ bool eye_care_blocks_grants(PtcSysmodule *sysmodule)
 {
     PtcRules rules;
     PtcRuntimeState state;
-    return load_rules(sysmodule, &rules) && load_state(sysmodule, &state) &&
-        rules.eye_care.enabled && state.eye_care_resting;
+    PtcClockSnapshot now;
+    if (!load_rules(sysmodule, &rules) || !load_state(sysmodule, &state) ||
+        !rules.eye_care.enabled || !state.eye_care_resting) {
+        return false;
+    }
+    /* Re-evaluate the rest deadline live, like bedtime_blocks_grants and
+       process_eye_care_skip: a stale resting flag whose deadline has already
+       passed must not keep rejecting parent grants until the next enforce
+       tick clears it. */
+    now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    return state.eye_care_rest_deadline > now.unix_seconds;
 }
 
 bool target_settings_observed(

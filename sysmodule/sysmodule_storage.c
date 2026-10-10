@@ -859,7 +859,17 @@ bool load_rules(PtcSysmodule *sysmodule, PtcRules *rules)
     if (!json_i64(text, "version", &version) || (version != 1 && version != 2)) {
         return false;
     }
-    (void)parse_rule_array(text, "week", rules->week);
+    {
+        /* Parse the week into a scratch buffer and commit only on full success.
+           ptc_rules_default() already seeded rules->week, so an empty, missing,
+           or partially-corrupt array keeps the defaults atomically instead of
+           leaving parse_rule_array's half-written days silently mixed with them
+           (which would quietly replace a configured quota). */
+        PtcDayRule parsed_week[7];
+        if (parse_rule_array(text, "week", parsed_week)) {
+            memcpy(rules->week, parsed_week, sizeof(rules->week));
+        }
+    }
     if (json_bool_value(text, "today_override_present", &rules->today_override.present)) {
         (void)json_u16(text, "today_override_day_index", &rules->today_override.day_index);
         if (json_string(text, "today_override_mode", mode, sizeof(mode))) {
