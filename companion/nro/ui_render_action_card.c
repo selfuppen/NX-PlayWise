@@ -296,14 +296,14 @@ static void draw_action_visual(uint32_t *pixels, uint32_t stride, UiRect area,
     bool is_en = (ptc_ui_language_get_resolved() == PTC_UI_LANGUAGE_ENGLISH);
     if (action->visual == UI_ACTION_VISUAL_QUICK_ADD) {
         const char *LABELS[] = {"+15", "+30", "+60", ptc_ui_text(PTC_UI_T_CUSTOM)};
-        int gap = 4;
+        int gap = 5;
         int width = (area.width - gap * 3) / 4;
         for (int index = 0; index < 4; ++index) {
             UiRect chip = {area.x + index * (width + gap), area.y, width, area.height};
-            fill_round_rect(pixels, stride, chip, 6, disabled ? UI_PAGE : UI_SUCCESS_SOFT);
-            draw_rect_outline(pixels, stride, chip, 6, 1, disabled ? UI_DISABLED : UI_SUCCESS_BORDER);
+            fill_round_rect(pixels, stride, chip, 4, disabled ? UI_PAGE : UI_SUCCESS_SOFT);
+            draw_rect_outline(pixels, stride, chip, 4, 1, disabled ? UI_DISABLED : UI_SUCCESS_BORDER);
             const char *label = LABELS[index];
-            int font_size = index == 3 ? (is_en ? 10 : 11) : 13;
+            int font_size = index == 3 ? (is_en ? 11 : 12) : 13;
             draw_text_center(pixels, stride, chip, label, font_size, ink);
         }
     } else if (action->visual == UI_ACTION_VISUAL_THEME) {
@@ -381,7 +381,7 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
     int text_top = rect.y + (rect.height - text_block_h) / 2;
     if (text_top < rect.y + 12) text_top = rect.y + 12;
     int icon_cx = rect.x + 18 + badge_size / 2;
-    int icon_cy = text_top + text_block_h / 2;
+    int icon_cy = rect.y + rect.height / 2;
     UiRect badge_rect = {icon_cx - badge_size / 2, icon_cy - badge_size / 2, badge_size, badge_size};
     uint32_t badge_bg = disabled ? UI_PAGE :
         (action->accent == UI_SUCCESS ? UI_SUCCESS_SOFT :
@@ -407,7 +407,7 @@ void draw_action_card(uint32_t *pixels, uint32_t stride, UiRect rect,
             action, disabled);
     } else if (has_sub) {
         fit_text(fitted, sizeof(fitted), action->subtitle, sub_size, sub_width);
-        draw_text(pixels, stride, text_x, text_top + title_size + sub_size + 7, fitted, sub_size,
+        draw_text(pixels, stride, text_x, text_top + title_size + sub_size + 6, fitted, sub_size,
                   disabled ? UI_DISABLED : UI_MUTED);
     }
 

@@ -529,6 +529,9 @@ void draw_dialog_button(
 {
     UiRect box = to_uirect(rect);
     fill_round_rect(pixels, stride, box, 12, outline ? UI_RGB(UI_BLENDED(surface_raised)) : background);
+    if (outline) {
+        draw_rect_outline(pixels, stride, box, 12, 1, UI_RGB(UI_BLENDED(border_control)));
+    }
     draw_button_label(pixels, stride, box, label, 21, foreground);
 }
 

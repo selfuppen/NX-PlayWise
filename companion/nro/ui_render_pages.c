@@ -113,7 +113,7 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     snprintf(rule_btn, sizeof(rule_btn), "%s ❯", rule_label);
     int rw = measure_text(rule_btn, 12) + 16;
     if (rw < 68) rw = 68;
-    UiRect rule_badge = {dt_box.x - rw - 8, dt_box.y + 3, rw, dt_box.height - 6};
+    UiRect rule_badge = {dt_box.x - rw - 10, dt_box.y + 3, rw, dt_box.height - 6};
     fill_round_rect(pixels, stride, rule_badge, 6, UI_RGB(UI_BLENDED(surface_raised)));
     draw_rect_outline(pixels, stride, rule_badge, 6, 1, UI_BORDER);
     draw_text_center(pixels, stride, rule_badge, rule_btn, 12, UI_RGB(UI_BLENDED(text_secondary)));

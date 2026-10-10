@@ -81,13 +81,13 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
         } else {
             snprintf(day_title, sizeof(day_title), "%s", ptc_ui_weekday_label(w));
         }
-        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 8, card.width, 22}, day_title, 14, title_color);
+        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 10, card.width, 20}, day_title, 14, title_color);
 
         /* 日期 MM/DD */
         char date_str[32];
         if (date_ok) snprintf(date_str, sizeof(date_str), "%02u/%02u", mo, da);
         else snprintf(date_str, sizeof(date_str), "--/--");
-        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 32, card.width, 18}, date_str, 12, UI_MUTED);
+        draw_text_center(pixels, stride, (UiRect){card.x, card.y + 30, card.width, 18}, date_str, 12, UI_MUTED);
 
         /* 额度大数值 */
         char val_str[32];
@@ -120,10 +120,10 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
             int vw = measure_text(val_str, 24);
             int uw = measure_text(unit_str, 13);
             int tx = card.x + (card.width - (vw + uw + 4)) / 2;
-            draw_text_bold(pixels, stride, tx, card.y + 86, val_str, 24, val_color);
-            draw_text(pixels, stride, tx + vw + 4, card.y + 84, unit_str, 13, UI_MUTED);
+            draw_text_bold(pixels, stride, tx, card.y + 82, val_str, 24, val_color);
+            draw_text(pixels, stride, tx + vw + 4, card.y + 80, unit_str, 13, UI_MUTED);
         } else {
-            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 66, card.width, 30}, val_str, 20, val_color);
+            draw_text_center(pixels, stride, (UiRect){card.x, card.y + 64, card.width, 30}, val_str, 20, val_color);
         }
 
         /* 规则来源标签 */
@@ -137,11 +137,11 @@ static void draw_child_forecast_columns(uint32_t *pixels, uint32_t stride, const
             snprintf(source, sizeof(source), "%s", fresh ? ptc_ui_text(PTC_UI_T_UNAVAILABLE) : ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM));
         }
         fit_text(fitted_src, sizeof(fitted_src), source, 11, card.width - 12);
-        draw_text_center(pixels, stride, (UiRect){card.x + 6, card.y + 116, card.width - 12, 20}, fitted_src, 11,
+        draw_text_center(pixels, stride, (UiRect){card.x + 6, card.y + 114, card.width - 12, 20}, fitted_src, 11,
                          available ? (is_tomorrow ? UI_ACCENT : UI_MUTED) : UI_MUTED);
 
         /* 底部装饰指示条 */
-        UiRect pill = {card.x + 14, card.y + card.height - 12, card.width - 28, 4};
+        UiRect pill = {card.x + 14, card.y + card.height - 8, card.width - 28, 4};
         uint32_t pill_col = is_tomorrow ? UI_ACCENT : (is_weekend ? UI_SUCCESS : UI_MUTED);
         fill_round_rect(pixels, stride, pill, 2, pill_col);
     }
@@ -211,7 +211,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     }
 
     /* 今日额度进度槽 (Time Progress Gauge) */
-    UiRect slot = {top_box.x + 28, top_box.y + 128, 290, 8};
+    UiRect slot = {top_box.x + 28, top_box.y + 124, 290, 8};
     fill_round_rect(pixels, stride, slot, 4, UI_GAUGE_SLOT);
     draw_rect_outline(pixels, stride, slot, 4, 1, UI_GAUGE_SLOT_BORDER);
     char gauge_left[64] = "";
@@ -238,8 +238,8 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
         snprintf(gauge_right, sizeof(gauge_right), ptc_ui_text(PTC_UI_T_D_MIN_LEFT), model->remaining_minutes);
     }
     if (gauge_left[0]) {
-        draw_text(pixels, stride, slot.x, slot.y + 20, gauge_left, 12, bedtime_enforcing ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
-        draw_text(pixels, stride, slot.x + slot.width - measure_text(gauge_right, 12), slot.y + 20, gauge_right, 12, bedtime_enforcing ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
+        draw_text(pixels, stride, slot.x, slot.y + 18, gauge_left, 12, bedtime_enforcing ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
+        draw_text(pixels, stride, slot.x + slot.width - measure_text(gauge_right, 12), slot.y + 18, gauge_right, 12, bedtime_enforcing ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
     }
 
     if (bedtime_enforcing) {
@@ -257,10 +257,10 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     /* 右列 (x: 374, w: 494)：三周期态势卡片（额度流、护眼周期、就寝计划） */
     const int c_x = top_box.x + 360;
     const int c_w = top_box.width - 388;
-    const int c_h = 68;
+    const int c_h = 70;
 
     /* 周期卡 1：今日额度流 */
-    UiRect card1 = {c_x, top_box.y + 20, c_w, c_h};
+    UiRect card1 = {c_x, top_box.y + 18, c_w, c_h};
     fill_round_rect(pixels, stride, card1, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
     draw_rect_outline(pixels, stride, card1, 10, 1, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0xFFFFFF, 18)));
     draw_text(pixels, stride, card1.x + 14, card1.y + 24, ptc_ui_text(PTC_UI_T_TODAY_QUOTA), 14, UI_RGB(UI_BLENDED(on_hero)));
@@ -268,7 +268,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped)) snprintf(quota_badge, sizeof(quota_badge), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
     else snprintf(quota_badge, sizeof(quota_badge), "%s", model->status_loaded ? ui_rule_source_label(model->rule_source) : ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM));
     int qb_w = measure_text(quota_badge, 12) + 14;
-    UiRect qb_rect = {card1.x + card1.width - qb_w - 12, card1.y + 8, qb_w, 20};
+    UiRect qb_rect = {card1.x + card1.width - qb_w - 14, card1.y + 8, qb_w, 20};
     fill_round_rect(pixels, stride, qb_rect, 4, UI_ACCENT_SOFT);
     draw_rect_outline(pixels, stride, qb_rect, 4, 1, UI_ACCENT);
     draw_text_center(pixels, stride, qb_rect, quota_badge, 12, UI_ACCENT);
@@ -283,10 +283,10 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     } else {
         snprintf(q_detail, sizeof(q_detail), "%s: %s", ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE), q_total);
     }
-    draw_text(pixels, stride, card1.x + 14, card1.y + 50, q_detail, 13, UI_RGB(UI_BLENDED(hero_secondary)));
+    draw_text(pixels, stride, card1.x + 14, card1.y + 48, q_detail, 13, UI_RGB(UI_BLENDED(hero_secondary)));
 
     /* 周期卡 2：护眼休息周期 */
-    UiRect card2 = {c_x, top_box.y + 98, c_w, c_h};
+    UiRect card2 = {c_x, top_box.y + 96, c_w, c_h};
     fill_round_rect(pixels, stride, card2, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
     draw_rect_outline(pixels, stride, card2, 10, 1, eye_resting ? UI_DANGER : UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0xFFFFFF, 18)));
     draw_text(pixels, stride, card2.x + 14, card2.y + 24, ptc_ui_text(PTC_UI_T_EYE_CARE), 14, UI_RGB(UI_BLENDED(on_hero)));
@@ -295,7 +295,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_RESTING) : ptc_ui_text(PTC_UI_T_ENABLED));
     uint32_t eye_b_col = !model->eye_care_policy.enabled ? UI_MUTED : (eye_resting ? UI_DANGER : UI_SUCCESS);
     int eb_w = measure_text(eye_b_label, 12) + 14;
-    UiRect eb_rect = {card2.x + card2.width - eb_w - 12, card2.y + 8, eb_w, 20};
+    UiRect eb_rect = {card2.x + card2.width - eb_w - 14, card2.y + 8, eb_w, 20};
     uint32_t eb_bd = eye_b_col == UI_DANGER ? UI_DANGER_BORDER : (eye_b_col == UI_SUCCESS ? UI_SUCCESS_BORDER : UI_BORDER);
     fill_round_rect(pixels, stride, eb_rect, 4, eye_b_col == UI_DANGER ? UI_DANGER_SOFT : (eye_b_col == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
     draw_rect_outline(pixels, stride, eb_rect, 4, 1, eb_bd);
@@ -308,10 +308,10 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
         snprintf(eye_str, sizeof(eye_str), "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_OFF));
     }
     fit_text(fitted_eye, sizeof(fitted_eye), eye_str, 13, card2.width - 28);
-    draw_text(pixels, stride, card2.x + 14, card2.y + 50, fitted_eye, 13, eye_resting ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
+    draw_text(pixels, stride, card2.x + 14, card2.y + 48, fitted_eye, 13, eye_resting ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
 
     /* 周期卡 3：就寝计划周期 */
-    UiRect card3 = {c_x, top_box.y + 176, c_w, c_h};
+    UiRect card3 = {c_x, top_box.y + 174, c_w, c_h};
     fill_round_rect(pixels, stride, card3, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
     draw_rect_outline(pixels, stride, card3, 10, 1, bedtime_enforcing ? UI_DANGER : UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0xFFFFFF, 18)));
     draw_text(pixels, stride, card3.x + 14, card3.y + 24, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), 14, UI_RGB(UI_BLENDED(on_hero)));
@@ -323,7 +323,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     uint32_t bed_b_col = !model->bedtime_policy.enabled ? UI_MUTED :
         (bedtime_enforcing ? UI_DANGER : (bedtime_skip_matches ? UI_SUCCESS : UI_ACCENT));
     int bb_w = measure_text(bed_b_label, 12) + 14;
-    UiRect bb_rect = {card3.x + card3.width - bb_w - 12, card3.y + 8, bb_w, 20};
+    UiRect bb_rect = {card3.x + card3.width - bb_w - 14, card3.y + 8, bb_w, 20};
     uint32_t bb_bd = bed_b_col == UI_DANGER ? UI_DANGER_BORDER : (bed_b_col == UI_SUCCESS ? UI_SUCCESS_BORDER : (bed_b_col == UI_ACCENT ? UI_ACCENT : UI_BORDER));
     fill_round_rect(pixels, stride, bb_rect, 4, bed_b_col == UI_DANGER ? UI_DANGER_SOFT : (bed_b_col == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
     draw_rect_outline(pixels, stride, bb_rect, 4, 1, bb_bd);
@@ -354,7 +354,7 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
         snprintf(bed_str, sizeof(bed_str), "%s", ptc_ui_text(PTC_UI_T_ENABLED_WAITING_FOR_WINDOW));
     }
     fit_text(fitted_bed, sizeof(fitted_bed), bed_str, 13, card3.width - 28);
-    draw_text(pixels, stride, card3.x + 14, card3.y + 50, fitted_bed, 13, bedtime_enforcing ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
+    draw_text(pixels, stride, card3.x + 14, card3.y + 48, fitted_bed, 13, bedtime_enforcing ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
 
     if (model->dock_available) {
         char dock_text[192];

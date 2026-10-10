@@ -368,9 +368,11 @@ static void draw_bedtime_timeline_strip(
         /* 立断与解禁指示线 */
         if (x_eve_start >= bar.x && x_eve_start <= bar.x + bar.width) {
             fill_rect(pixels, stride, (UiRect){x_eve_start - 1, bar.y, 2, bar.height}, UI_DANGER);
+            fill_round_rect(pixels, stride, (UiRect){x_eve_start - 3, bar.y, 6, 4}, 1, UI_DANGER);
         }
         if (x_morn_end >= bar.x && x_morn_end <= bar.x + bar.width) {
             fill_rect(pixels, stride, (UiRect){x_morn_end - 1, bar.y, 2, bar.height}, UI_SUCCESS);
+            fill_round_rect(pixels, stride, (UiRect){x_morn_end - 3, bar.y, 6, 4}, 1, UI_SUCCESS);
         }
     }
 }
