@@ -2408,7 +2408,7 @@ static void test_home_redesign(void)
         check_hit(hit_center(&model, ptc_ui_home_details_rect(parent)), PTC_UI_HIT_HOME_DETAILS, 0, "details touch entry");
         if (parent) {
             check_hit(hit_center(&model, ptc_ui_home_rules_rect()), PTC_UI_HIT_HOME_RULES, 0, "home rules touch entry");
-            check_hit(hit_center(&model, ptc_ui_today_quota_card_rect()), PTC_UI_HIT_HOME_RULES, 0, "quota card rules touch entry");
+            check_hit(hit_center(&model, ptc_ui_today_quota_card_rect()), PTC_UI_HIT_NONE, 0, "quota card is read-only telemetry");
         }
         check_true(ptc_ui_open_home_details(&model), "details open without a request");
         check_hit(hit_center(&model, ptc_ui_child_submit_rect()), PTC_UI_HIT_NONE, 0, "details block underlying input");
@@ -3893,7 +3893,16 @@ static void test_today_settings_links(void)
     }
     model.selected_index = 0;
     ptc_ui_move_parent_selection(&model, -1, 0);
-    check_int(model.selected_index, 8, "left from quota enters status column");
+    check_int(model.selected_index, 11, "left from quota enters rule source badge");
+    ptc_ui_move_parent_selection(&model, 1, 0);
+    check_int(model.selected_index, 0, "right from rule badge returns to quota card");
+    model.selected_index = 2;
+    ptc_ui_move_parent_selection(&model, -1, 0);
+    check_int(model.selected_index, 8, "left from unlimited quota enters status column");
+    ptc_ui_move_parent_selection(&model, 0, -1);
+    check_int(model.selected_index, 11, "up from eye care status reaches rule source badge");
+    ptc_ui_move_parent_selection(&model, 0, 1);
+    check_int(model.selected_index, 8, "down from rule badge returns to eye care status");
     ptc_ui_move_parent_selection(&model, 0, 1);
     check_int(model.selected_index, 9, "down traverses bedtime status");
     ptc_ui_move_parent_selection(&model, 0, 1);

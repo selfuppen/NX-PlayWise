@@ -186,7 +186,7 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_RECOMMENDATION_RECHECK_AND_ENABLE, "Recommendation: R
 PTC_UI_TEXT_VALUE(PTC_UI_T_SUGGESTION_SELECT_RETRY_REPAIR, "Suggestion: Select Retry Repair")
 PTC_UI_TEXT_VALUE(PTC_UI_T_PLEASE_WAIT_FOR_THE_RESULT_AND_THEN, "Please wait for the result and then refresh the status")
 PTC_UI_TEXT_VALUE(PTC_UI_T_CONTROL_DEACTIVATION, "Control deactivation")
-PTC_UI_TEXT_VALUE(PTC_UI_T_VIEW_DETAILS, "+  📋 View details")
+PTC_UI_TEXT_VALUE(PTC_UI_T_VIEW_DETAILS, "+  📋 Today's Details")
 PTC_UI_TEXT_VALUE(PTC_UI_T_NO_HOST_NETWORKING_REQUIRED_OFFLINE_SECURE_SIGNATURE, "No network required, signed offline securely")
 PTC_UI_TEXT_VALUE(PTC_UI_T_THE_SIGNATURE_KEY_IS_CALCULATED_LOCALLY_EFFECTIVELY, "Key computed locally to prevent tampering")
 PTC_UI_TEXT_VALUE(PTC_UI_T_PLEASE_CONFIRM_THAT_THE_SD_CARD_IS, "Please confirm that the SD card is writable and try again.")

@@ -177,6 +177,7 @@ void handle_touch(UiState *ui, int x, int y)
         break;
     case PTC_UI_HIT_HOME_RULES:
         ptc_audio_play(PTC_SE_POPUP);
+        ui->model.selected_index = 11;
         ptc_ui_open_home_details_page(&ui->model, 1);
         break;
     case PTC_UI_HIT_HOME_DETAILS_ACTION:

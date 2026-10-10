@@ -65,6 +65,12 @@ static const UiAction RECONFIRM_ENVIRONMENT_ACTION = {
     PTC_UI_TEXT_REFERENCE(PTC_UI_T_RECHECK_AND_ENABLE), PTC_UI_TEXT_REFERENCE(PTC_UI_T_ENVIRONMENT_CHANGES_RESUME_QUOTA_MANAGEMENT_AFTER_CONFIRMING), UI_WARNING,
     UI_ACTION_ICON_REPAIR, UI_ACTION_VISUAL_NONE
 };
+static void draw_chevron_right(uint32_t *pixels, uint32_t stride, int cx, int cy, int size, uint32_t color)
+{
+    draw_line(pixels, stride, cx - size / 2, cy - size, cx + size / 2, cy, 2, color);
+    draw_line(pixels, stride, cx + size / 2, cy, cx - size / 2, cy + size, 2, color);
+}
+
 static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     UiRect box = to_uirect(ptc_ui_home_summary_rect(true));
@@ -89,19 +95,19 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) : ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY));
     draw_text(pixels, stride, x, box.y + 36, header_title, 20, UI_RGB(UI_BLENDED(hero_secondary)));
 
-    /* 右上操作区：[ 规则状态标签 ] 与 [+ 查看详情] 交互胶囊按钮 */
+    /* 右上操作区：[ 规则来源状态标签 ] 与 [+ 今日安排详情] 交互胶囊按钮 */
     PtcUiRect dt_rect = ptc_ui_home_details_rect(true);
     UiRect dt_box = to_uirect(dt_rect);
     bool details_disabled = model->waiting;
 
-    /* 查看详情交互胶囊按钮：高对比度微胶囊、醒目描边与居中图文 */
+    /* 今日安排详情交互胶囊按钮：高对比度微胶囊、醒目描边与居中图文 */
     fill_round_rect(pixels, stride, dt_box, 10, details_disabled ? UI_RAISED : UI_ACCENT_SOFT);
     draw_rect_outline(pixels, stride, dt_box, 10, 2, details_disabled ? UI_BORDER : UI_ACCENT);
     draw_text_center(pixels, stride, dt_box, ptc_ui_text(PTC_UI_T_VIEW_DETAILS), 14,
                      details_disabled ? UI_DISABLED : UI_ACCENT);
 
-    /* 规则来源标签：次级信息胶囊，清晰区分于操作按钮 */
-    char rule_label[64], rule_btn[96];
+    /* 规则来源标签：下钻属性明确，支持手柄焦点与触控直达规则裁决 */
+    char rule_label[64];
     if (bedtime_enforcing) {
         snprintf(rule_label, sizeof(rule_label), "%s", ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE));
     } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
@@ -110,13 +116,15 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         snprintf(rule_label, sizeof(rule_label), "%s",
                  model->status_loaded ? ui_rule_source_label(model->rule_source) : ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM));
     }
-    snprintf(rule_btn, sizeof(rule_btn), "%s ❯", rule_label);
-    int rw = measure_text(rule_btn, 12) + 16;
-    if (rw < 68) rw = 68;
-    UiRect rule_badge = {dt_box.x - rw - 10, dt_box.y + 3, rw, dt_box.height - 6};
-    fill_round_rect(pixels, stride, rule_badge, 6, UI_RGB(UI_BLENDED(surface_raised)));
-    draw_rect_outline(pixels, stride, rule_badge, 6, 1, UI_BORDER);
-    draw_text_center(pixels, stride, rule_badge, rule_btn, 12, UI_RGB(UI_BLENDED(text_secondary)));
+    int rw = measure_text(rule_label, 12) + 26;
+    if (rw < 72) rw = 72;
+    UiRect rule_badge = {dt_box.x - rw - 10, dt_box.y, rw, dt_box.height};
+    bool rule_focused = (model->selected_index == 11 && !model->parent_footer_focused);
+    fill_round_rect(pixels, stride, rule_badge, 8, rule_focused ? UI_ACCENT_SOFT : UI_RGB(UI_BLENDED(surface_raised)));
+    draw_rect_outline(pixels, stride, rule_badge, 8, rule_focused ? 3 : 1, rule_focused ? UI_FOCUS : UI_BORDER);
+    uint32_t rule_fg = rule_focused ? UI_ACCENT : UI_RGB(UI_BLENDED(text_secondary));
+    draw_text(pixels, stride, rule_badge.x + 10, rule_badge.y + (rule_badge.height + 12) / 2 - 2, rule_label, 12, rule_fg);
+    draw_chevron_right(pixels, stride, rule_badge.x + rule_badge.width - 10, rule_badge.y + rule_badge.height / 2, 4, rule_fg);
 
     /* 主数值：剩余分钟数 */
     int minutes;
@@ -189,49 +197,45 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     fill_round_rect(pixels, stride, lower, 16, UI_SURFACE);
     draw_rect_outline(pixels, stride, lower, 16, 1, UI_BORDER);
 
-    /* 周期 1：双列额度流指标卡 */
-    UiRect left_card = {lower.x + 10, lower.y + 10, 216, 52};
-    UiRect right_card = {lower.x + 238, lower.y + 10, 216, 52};
-    fill_round_rect(pixels, stride, left_card, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, left_card, 8, 1, UI_BORDER);
-    fill_round_rect(pixels, stride, right_card, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, right_card, 8, 1, UI_BORDER);
+    /* 周期 1：今日额度与用量看板（一体化纯信息看板，无按钮化独立卡片，不可获焦） */
+    UiRect info_shelf = {lower.x + 10, lower.y + 10, lower.width - 20, 52};
+    fill_round_rect(pixels, stride, info_shelf, 8, UI_RGB(UI_BLENDED(page_bg)));
+    draw_rect_outline(pixels, stride, info_shelf, 8, 1, UI_BORDER);
+
+    int mid_x = info_shelf.x + info_shelf.width / 2;
+    draw_line(pixels, stride, mid_x, info_shelf.y + 10, mid_x, info_shelf.y + info_shelf.height - 10, 1, UI_BORDER);
 
     /* 左指标：今日总额度 */
-    draw_text(pixels, stride, left_card.x + 12, left_card.y + 18, ptc_ui_text(PTC_UI_T_TODAY_QUOTA), 12, UI_MUTED);
+    draw_text(pixels, stride, info_shelf.x + 14, info_shelf.y + 18, ptc_ui_text(PTC_UI_T_TODAY_QUOTA), 12, UI_MUTED);
     char total_str[64];
     ptc_ui_format_home_total_value(model, total_str, sizeof(total_str));
-    draw_text(pixels, stride, left_card.x + 12, left_card.y + 42, total_str, 18, UI_INK);
-
-    /* 规则决策快捷标签按钮 */
-    const char *tag_rules = ptc_ui_text(PTC_UI_T_VIEW_RULES);
-    int tr_w = measure_text(tag_rules, 11) + 14;
-    UiRect tag_rect = {left_card.x + left_card.width - tr_w - 10, left_card.y + 14, tr_w, 24};
-    fill_round_rect(pixels, stride, tag_rect, 4, UI_ACCENT_SOFT);
-    draw_rect_outline(pixels, stride, tag_rect, 4, 1, UI_ACCENT);
-    draw_text_center(pixels, stride, tag_rect, tag_rules, 11, UI_ACCENT);
+    draw_text(pixels, stride, info_shelf.x + 14, info_shelf.y + 42, total_str, 18, UI_INK);
 
     /* 右指标：已消耗估算 */
-    draw_text(pixels, stride, right_card.x + 12, right_card.y + 18, ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_CONSUMED_ESTIMATED), 12, UI_MUTED);
+    draw_text(pixels, stride, mid_x + 14, info_shelf.y + 18, ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_CONSUMED_ESTIMATED), 12, UI_MUTED);
     char played_str[64];
     if (!eye_resting && model->played_minutes_available && model->played_minutes >= 0)
         snprintf(played_str, sizeof(played_str), ptc_ui_text(PTC_UI_T_ABOUT_D_MIN), model->played_minutes);
     else
         snprintf(played_str, sizeof(played_str), "%s", ptc_ui_text(PTC_UI_T_NOT_AVAILABLE));
-    draw_text(pixels, stride, right_card.x + 12, right_card.y + 42, played_str, 18, UI_INK);
+    draw_text(pixels, stride, mid_x + 14, info_shelf.y + 42, played_str, 18, UI_INK);
 
-    /* 周期 2：护眼休息周期卡 */
+    /* 周期 2：护眼休息设置入口卡 */
     UiRect eye_card = to_uirect(ptc_ui_today_status_rect(8));
+    bool eye_focused = (model->selected_index == 8 && !model->parent_footer_focused);
     fill_round_rect(pixels, stride, eye_card, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, eye_card, 8, model->selected_index == 8 && !model->parent_footer_focused ? 3 : 1,
-        model->selected_index == 8 && !model->parent_footer_focused ? UI_FOCUS : eye_resting ? UI_DANGER : UI_BORDER);
+    draw_rect_outline(pixels, stride, eye_card, 8, eye_focused ? 3 : 1,
+        eye_focused ? UI_FOCUS : eye_resting ? UI_DANGER : UI_BORDER);
     draw_text(pixels, stride, eye_card.x + 12, eye_card.y + 20, ptc_ui_text(PTC_UI_T_EYE_CARE), 14, UI_INK);
     const char *eye_badge = !model->eye_care_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_RESTING) : ptc_ui_text(PTC_UI_T_ENABLED));
     uint32_t eye_badge_color = !model->eye_care_policy.enabled ? UI_MUTED : (eye_resting ? UI_DANGER : UI_SUCCESS);
     int eb_w = measure_text(eye_badge, 12) + 16;
     if (eb_w < 56) eb_w = 56;
-    UiRect eb_rect = {eye_card.x + eye_card.width - eb_w - 10, eye_card.y + 8, eb_w, 20};
+    int ch_x = eye_card.x + eye_card.width - 16;
+    int ch_y = eye_card.y + eye_card.height / 2;
+    draw_chevron_right(pixels, stride, ch_x, ch_y, 5, eye_focused ? UI_ACCENT : UI_MUTED);
+    UiRect eb_rect = {ch_x - 12 - eb_w, eye_card.y + 8, eb_w, 20};
     fill_round_rect(pixels, stride, eb_rect, 4, eye_badge_color == UI_DANGER ? UI_DANGER_SOFT : (eye_badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
     draw_rect_outline(pixels, stride, eb_rect, 4, 1, eye_badge_color);
     draw_text_center(pixels, stride, eb_rect, eye_badge, 12, eye_badge_color);
@@ -245,11 +249,12 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     fit_text(fitted_cycle, sizeof(fitted_cycle), cycle, 12, eye_card.width - 24);
     draw_text(pixels, stride, eye_card.x + 12, eye_card.y + 40, fitted_cycle, 12, eye_resting ? UI_DANGER : UI_ACCENT);
 
-    /* 周期 3：就寝计划周期卡 */
+    /* 周期 3：就寝计划设置入口卡 */
     UiRect bedtime_card = to_uirect(ptc_ui_today_status_rect(9));
+    bool bedtime_focused = (model->selected_index == 9 && !model->parent_footer_focused);
     fill_round_rect(pixels, stride, bedtime_card, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, bedtime_card, 8, model->selected_index == 9 && !model->parent_footer_focused ? 3 : 1,
-        model->selected_index == 9 && !model->parent_footer_focused ? UI_FOCUS : bedtime_enforcing ? UI_DANGER : UI_BORDER);
+    draw_rect_outline(pixels, stride, bedtime_card, 8, bedtime_focused ? 3 : 1,
+        bedtime_focused ? UI_FOCUS : bedtime_enforcing ? UI_DANGER : UI_BORDER);
     draw_text(pixels, stride, bedtime_card.x + 12, bedtime_card.y + 20, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), 14, UI_INK);
     bool bedtime_skip_matches = ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy);
     const char *bedtime_badge = !model->bedtime_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
@@ -259,7 +264,10 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         (bedtime_enforcing ? UI_DANGER : (bedtime_skip_matches ? UI_SUCCESS : UI_ACCENT));
     int bb_w = measure_text(bedtime_badge, 12) + 16;
     if (bb_w < 56) bb_w = 56;
-    UiRect bb_rect = {bedtime_card.x + bedtime_card.width - bb_w - 10, bedtime_card.y + 8, bb_w, 20};
+    int b_ch_x = bedtime_card.x + bedtime_card.width - 16;
+    int b_ch_y = bedtime_card.y + bedtime_card.height / 2;
+    draw_chevron_right(pixels, stride, b_ch_x, b_ch_y, 5, bedtime_focused ? UI_ACCENT : UI_MUTED);
+    UiRect bb_rect = {b_ch_x - 12 - bb_w, bedtime_card.y + 8, bb_w, 20};
     fill_round_rect(pixels, stride, bb_rect, 4, b_badge_color == UI_DANGER ? UI_DANGER_SOFT : (b_badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
     draw_rect_outline(pixels, stride, bb_rect, 4, 1, b_badge_color);
     draw_text_center(pixels, stride, bb_rect, bedtime_badge, 12, b_badge_color);
@@ -291,11 +299,12 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     fit_text(fitted_bedtime, sizeof(fitted_bedtime), b_detail, 12, bedtime_card.width - 24);
     draw_text(pixels, stride, bedtime_card.x + 12, bedtime_card.y + 40, fitted_bedtime, 12, bedtime_enforcing ? UI_DANGER : UI_MUTED);
 
-    /* 周期 4：电视模式规则周期卡 */
+    /* 周期 4：电视模式规则设置入口卡 */
     UiRect dock_card = to_uirect(ptc_ui_today_status_rect(10));
+    bool dock_focused = (model->selected_index == 10 && !model->parent_footer_focused);
     fill_round_rect(pixels, stride, dock_card, 8, UI_RAISED);
-    draw_rect_outline(pixels, stride, dock_card, 8, model->selected_index == 10 && !model->parent_footer_focused ? 3 : 1,
-        model->selected_index == 10 && !model->parent_footer_focused ? UI_FOCUS : model->dock_restriction_active ? UI_DANGER : UI_BORDER);
+    draw_rect_outline(pixels, stride, dock_card, 8, dock_focused ? 3 : 1,
+        dock_focused ? UI_FOCUS : model->dock_restriction_active ? UI_DANGER : UI_BORDER);
     draw_text(pixels, stride, dock_card.x + 12, dock_card.y + 20, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 14, UI_INK);
 
     bool dock_master = model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled;
@@ -324,7 +333,10 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
 
     int b2_w = measure_text(dock_badge, 12) + 16;
     if (b2_w < 50) b2_w = 50;
-    UiRect b2_rect = {dock_card.x + dock_card.width - b2_w - 10, dock_card.y + 8, b2_w, 20};
+    int d_ch_x = dock_card.x + dock_card.width - 16;
+    int d_ch_y = dock_card.y + dock_card.height / 2;
+    draw_chevron_right(pixels, stride, d_ch_x, d_ch_y, 5, dock_focused ? UI_ACCENT : UI_MUTED);
+    UiRect b2_rect = {d_ch_x - 12 - b2_w, dock_card.y + 8, b2_w, 20};
     fill_round_rect(pixels, stride, b2_rect, 4, d_badge_color == UI_DANGER ? UI_DANGER_SOFT : (d_badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT : (d_badge_color == UI_ACCENT ? UI_ACCENT_SOFT : UI_PAGE)));
     draw_rect_outline(pixels, stride, b2_rect, 4, 1, d_badge_color);
     draw_text_center(pixels, stride, b2_rect, dock_badge, 12, d_badge_color);

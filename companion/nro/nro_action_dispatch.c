@@ -205,6 +205,12 @@ void handle_parent_action(UiState *ui)
         return;
     }
     if (ptc_ui_open_today_settings(&ui->model, index)) return;
+    if (ui->model.parent_page == PTC_UI_PARENT_TODAY && index == 11) {
+        if (ui->waiting) return;
+        ptc_audio_play(PTC_SE_POPUP);
+        ptc_ui_open_home_details_page(&ui->model, 1);
+        return;
+    }
     if (ui->model.disable_flag_present && ui->model.parent_page == PTC_UI_PARENT_TODAY && index != 6 && index != 7) {
         snprintf(ui->model.message, sizeof(ui->model.message),
                  ptc_ui_text(PTC_UI_T_EMERGENCY_DEACTIVATION_IS_ENABLED_THIS_CONTROL_WRITE));

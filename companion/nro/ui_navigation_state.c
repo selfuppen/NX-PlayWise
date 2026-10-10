@@ -150,7 +150,7 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
             ? index > count + model->recent_event_count
             : (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT && model->forecast_available
                 ? index > 13
-                : (model->parent_page == PTC_UI_PARENT_TODAY ? index > 10 :
+                : (model->parent_page == PTC_UI_PARENT_TODAY ? index > 11 :
                    (model->parent_page == PTC_UI_PARENT_PLAN && model->plan_page == PTC_UI_PLAN_PAGE_ROOT ? index >= 7 : index >= count))))) {
         index = 0;
     }
@@ -197,13 +197,19 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
     }
     if (model->parent_page == PTC_UI_PARENT_TODAY) {
         if (index >= 8) {
-            if (horizontal > 0) index = index == 8 ? 2 : index == 9 ? 4 : 5;
-            else if (vertical < 0 && index > 8) --index;
-            else if (vertical > 0 && index < 10) ++index;
+            if (horizontal > 0) index = (index == 11) ? 0 : (index == 8 ? 2 : (index == 9 ? 4 : 5));
+            else if (vertical < 0) {
+                if (index == 8) index = 11;
+                else if (index > 8 && index <= 10) --index;
+            }
             else if (vertical > 0) {
-                model->parent_content_selection = index;
-                model->parent_footer_focused = true;
-                model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
+                if (index == 11) index = 8;
+                else if (index < 10) ++index;
+                else {
+                    model->parent_content_selection = index;
+                    model->parent_footer_focused = true;
+                    model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
+                }
             }
             model->selected_index = index;
             return;
@@ -241,7 +247,8 @@ void ptc_ui_move_parent_selection(PtcUiModel *model, int horizontal, int vertica
                 model->parent_footer_selection = ptc_ui_parent_status_alert_visible(model) ? 1 : 0;
             }
         } else if (horizontal < 0) {
-            if (index == 0 || index == 2) index = 8;
+            if (index == 0) index = 11;
+            else if (index == 2) index = 8;
             else if (index == 4) index = 9;
             else if (index == 5) index = 10;
             else if (index == 1) index = 0;

@@ -27,6 +27,7 @@
     {"+  再生成一个", "+ generate another one"},
     {"+  完成", "+ Complete"},
     {"+  完成输入", "+ Done"},
+    {"+  今日安排详情", "+ Today's Details"},
     {"+  查看详情", "+ View details"},
     {"+  没有修改", "+ no modification"},
     {"+  生成加时码", "+ generate extra time code"},
