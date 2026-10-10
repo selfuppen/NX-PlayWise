@@ -541,7 +541,7 @@ PtcUiRect ptc_ui_day_decision_next_rect(void)
     return (PtcUiRect){852, 66, 44, 30};
 }
 
-PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){108, 108, 1064, 466}; }
+PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){108, 108, 1064, 480}; }
 
 PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
 {
