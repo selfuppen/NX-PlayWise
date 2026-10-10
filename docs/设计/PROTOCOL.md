@@ -8,6 +8,29 @@
 
 # Protocol Specification
 
+## Threat model and trust boundaries
+
+This section is the authoritative threat model for the standard distribution profile and declares the following two trust boundaries uniformly. Every other security property in this protocol (the `ledger/used_nonces.jsonl` replay ledger, the v2 failure cooldown, `disable.flag` suspension, the recovery allowlist, etc.) holds only while these two boundaries hold. The controlled party is the child using the console, whose normal surface is the no-PIN child area and the restricted overlay.
+
+### Request authentication boundary (SD and IPC)
+
+Offline grant codes are HMAC-SHA256 signed with the device-specific `grant_secret` and are the only cryptographically authenticated input. Every other request — including the `inbox/pending/<request_id>.json` file queue and the `pctc:u` (`pwtl:u` for Device Lab) IPC service — carries no signature or device credential in its envelope; the parent PlayWise PIN is verified only in the Companion/Overlay client and never enters the request, queue, result, logs or backend checks.
+
+The backend therefore **does not defend against control requests dropped directly onto the SD card**: anyone able to write to `inbox/pending/` or connect to `pctc:u` can submit any control request with no PIN (for example `disable_today_limit`, `set_weekly_template`, `disable_bedtime`, `skip_bedtime`, `waive_dock_policy_today`, `set_autonomy_policy`), lifting or loosening all parental controls and rendering the grant code's nonce, replay and signature protections meaningless. The threat model accordingly **assumes the child cannot write SD card data and cannot run arbitrary homebrew to post IPC requests**. Control integrity when that assumption fails (physical SD read/write, or homebrew/CFW file access) is outside this project's commitments; the standard distribution provides no device-key or parent-signature authentication for control requests.
+
+### Clock trust boundary
+
+The backend uses the Switch's current local date and time directly; it keeps no independent trusted clock, no monotonic counter, and implements no system-time-rollback detection. A detected time jump only records a `bedtime_clock_changed` event and immediately recomputes against the new time, with no defense. With Nintendo official Parental Controls enabled, changing the Switch system date and time requires the Nintendo official Parental Controls PIN, which is independent of the PlayWise PIN that only protects the PlayWise parent area. The threat model accordingly **assumes the child cannot change the console date and time through that PIN** — i.e. the system clock cannot be modified by the child easily.
+
+Every date-based or replay-prevention mechanism rests on that assumption and shares this boundary:
+
+- Offline grant-code date binding plus `ledger/used_nonces.jsonl` replay prevention — the ledger prunes only records earlier than the current date before a transaction (keeping today's and future nonces), guaranteeing a code is single-use;
+- The autonomy buffer's once-per-day claim (`buffer_claim_day_index`) and the dock-mode "waive today" same-day validity (`dock_waived_day_index`);
+- The v2 grant-code cooldown after consecutive failures (`v2_cooldown_until`, expiring by wall clock);
+- Bedtime, eye-care and dock-mode day rollover and window evaluation.
+
+If the child can change the system time (for example with Nintendo official Parental Controls disabled, or with homebrew/SD access), these daily-allowance, single-use and cooldown protections weaken accordingly; like the request authentication boundary, that case is out of scope. The first version therefore implements neither system-time-rollback detection nor extra anti-rollback signing of offline codes or calendar packages.
+
 ## Configuration backup and selective import
 
 The fixed production path is `sdmc:/switch/playwise/backups/config-backup.json`; Eden uses its isolated root. Version 1 uses `format:"playwise-config-backup"`, `created_at` (Unix seconds), `source_device`, and `files`. Each entry carries an allowlisted relative `path`, lowercase 64-character `sha256`, `exists`, and a JSON text `content`. The allowlist is config/rules/auth/credentials, calendar catalog/active, and their referenced library documents. Limits: 134 files, 16384 bytes per file, archive below 4 MiB, existing calendar validation and 64-entry catalog limit. Duplicate keys/paths, invalid types/ranges, traversal, unsupported versions, changed hashes and missing references are refused before modification.

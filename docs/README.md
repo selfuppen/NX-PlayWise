@@ -30,7 +30,7 @@
 
 | 文档 | 内容 | English |
 | --- | --- | --- |
-| [协议](设计/协议.md) | 文件、请求、结果、错误码与恢复契约 | [Protocol Specification](设计/PROTOCOL.md) |
+| [协议](设计/协议.md) | 威胁模型与信任边界、文件、请求、结果、错误码与恢复契约 | [Protocol Specification](设计/PROTOCOL.md) |
 | [PCTL 集成架构](设计/PCTL集成架构.md) | 接管、写入事务、私有命令证据与 Device Lab 边界 | [PCTL Integration Architecture](设计/PCTL_ARCHITECTURE.md) |
 | [视觉风格与设计指南](设计/视觉风格与设计指南.md) | 调色板、语义状态色、端对端排版与软渲染约束 | [Visual Style Guide](设计/VISUAL_STYLE_GUIDE.md) |
 | [节假日日历数据](设计/节假日日历.md) | 内置数据版本、日期、官方来源与回退行为 | 暂无英文版 |

@@ -30,7 +30,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 
 | Document | Contents | 简体中文 |
 | --- | --- | --- |
-| [Protocol Specification](设计/PROTOCOL.md) | Files, requests, results, errors and recovery contracts | [协议](设计/协议.md) |
+| [Protocol Specification](设计/PROTOCOL.md) | Threat model and trust boundaries, files, requests, results, errors and recovery contracts | [协议](设计/协议.md) |
 | [PCTL Integration Architecture](设计/PCTL_ARCHITECTURE.md) | Handover, write transactions, private-command evidence and Device Lab boundaries | [PCTL集成架构](设计/PCTL集成架构.md) |
 | [Visual Style Guide](设计/VISUAL_STYLE_GUIDE.md) | Palette, semantic colors, edge-to-edge layout and software rendering rules | [视觉风格与设计指南](设计/视觉风格与设计指南.md) |
 | Holiday Calendar Data (Chinese only) | Built-in data versions, dates, official sources and fallback behavior | [节假日日历数据](设计/节假日日历.md) |
