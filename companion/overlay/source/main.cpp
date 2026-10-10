@@ -117,18 +117,46 @@ public:
     PlayWiseOverlayFrame(const std::string &title, const std::string &subtitle)
         : tsl::elm::OverlayFrame(title, subtitle) {}
 
+    void set_parent_view_predicate(std::function<bool()> is_parent)
+    {
+        is_parent_view_ = std::move(is_parent);
+    }
+
+    void draw(tsl::gfx::Renderer *renderer) override
+    {
+        // Mirror tsl::elm::OverlayFrame::draw, but drop the title and subtitle
+        // banner in parent views so the panel can reclaim the top area.
+        const bool parent = is_parent_view_ && is_parent_view_();
+        renderer->fillScreen(a(tsl::style::color::ColorFrameBackground));
+        renderer->drawRect(tsl::cfg::FramebufferWidth - 1, 0, 1, tsl::cfg::FramebufferHeight, a(0xF222));
+        if (!parent) {
+            renderer->drawString(m_title.c_str(), false, 20, 50, 30, a(tsl::style::color::ColorText));
+            renderer->drawString(m_subtitle.c_str(), false, 20, 70, 15, a(tsl::style::color::ColorDescription));
+        }
+        renderer->drawRect(15, tsl::cfg::FramebufferHeight - 73, tsl::cfg::FramebufferWidth - 30, 1,
+            a(tsl::style::color::ColorText));
+        renderer->drawString("  Back       OK", false, 30, 693, 23, a(tsl::style::color::ColorText));
+        if (m_contentElement != nullptr)
+            m_contentElement->frame(renderer);
+    }
+
     void layout(u16 parent_x, u16 parent_y, u16 parent_width, u16 parent_height) override
     {
         setBoundaries(parent_x, parent_y, parent_width, parent_height);
         if (m_contentElement != nullptr) {
+            const int content_y = (is_parent_view_ && is_parent_view_())
+                ? PTC_OVERLAY_PARENT_CONTENT_Y : PTC_OVERLAY_CONTENT_Y;
             m_contentElement->setBoundaries(
                 parent_x + PTC_OVERLAY_CONTENT_X,
-                parent_y + PTC_OVERLAY_CONTENT_Y,
+                parent_y + content_y,
                 parent_width - 85,
-                parent_height - 73 - PTC_OVERLAY_CONTENT_Y);
+                parent_height - 73 - content_y);
             m_contentElement->invalidate();
         }
     }
+
+private:
+    std::function<bool()> is_parent_view_;
 };
 
 class PctcGui final : public tsl::Gui {
@@ -145,6 +173,9 @@ public:
         auto frame = new PlayWiseOverlayFrame(
             ptc_ui_localize(ptc_ui_text(PTC_UI_T_PLAYWISE), title, sizeof(title)),
             ptc_ui_localize(ptc_ui_text(PTC_UI_T_PLAYTIME_BEDTIME_CONTROLS), subtitle, sizeof(subtitle)));
+        frame_ = frame;
+        frame->set_parent_view_predicate([this] { return access_recovery_visible(); });
+        content_parent_layout_ = access_recovery_visible();
         if (!restore_pending_redemption()) {
             (void)begin_overlay_ready();
         }
@@ -158,6 +189,14 @@ public:
 
     void update() override
     {
+        // Parent views use a raised content top (banner hidden); re-layout the
+        // frame whenever we cross the child<->parent boundary. Runs every frame
+        // before draw, so it must stay ahead of the waiting-only early return.
+        const bool parent_layout = access_recovery_visible();
+        if (frame_ != nullptr && parent_layout != content_parent_layout_) {
+            content_parent_layout_ = parent_layout;
+            frame_->invalidate();
+        }
         if (recovery_active_) {
             poll_pending_redemption();
         }
@@ -777,7 +816,9 @@ public:
         const s32 ty = static_cast<s32>(touch.y);
         prev_touch_down_ = touch_down;
         constexpr s32 cx = PTC_OVERLAY_CONTENT_X;
-        constexpr s32 cy = PTC_OVERLAY_CONTENT_Y;
+        // Parent views raise the content top (banner hidden); hit-testing must
+        // use the same origin the frame lays the content element out with.
+        constexpr s32 cy = PTC_OVERLAY_PARENT_CONTENT_Y;
         if (parent_view_ == ParentView::Pin) {
             const int left_digit = ptc_overlay_pin_digit_from_vector(left.x, left.y, 16000);
             const int right_digit = ptc_overlay_pin_digit_from_vector(right.x, right.y, 16000);
@@ -842,8 +883,8 @@ public:
         }
         if (parent_view_ == ParentView::Actions) {
             bool action_changed = false;
-            if (touch_pressed && tx >= cx + 246 && tx < cx + PTC_OVERLAY_CONTENT_W - 12 &&
-                ty >= cy + 58 && ty < cy + 104) keysDown |= HidNpadButton_Y;
+            if (touch_pressed && ptc_overlay_rect_contains(ptc_overlay_parent_refresh_rect(cx, cy), tx, ty))
+                keysDown |= HidNpadButton_Y;
             if ((keysDown & HidNpadButton_Y) && !bridge_->waiting)
                 (void)begin_status_refresh();
             const unsigned int direction = ptc_overlay_direction_step(&action_repeat_,
@@ -860,7 +901,8 @@ public:
                         break;
                     }
                 }
-                if (ty >= cy + 526 && ty < cy + 557) keysDown |= HidNpadButton_B;
+                if (ptc_overlay_rect_contains(ptc_overlay_parent_back_rect(cx, cy), tx, ty))
+                    keysDown |= HidNpadButton_B;
             }
             if (parent_action_ == PTC_OVERLAY_PARENT_ADD_MINUTES && (direction & PTC_OVERLAY_BUTTON_LEFT))
                 daily_add_minutes_ = daily_add_minutes_ <= 5 ? 5 : daily_add_minutes_ - 5;
@@ -1039,6 +1081,8 @@ public:
 private:
     PtcOverlayBridge *bridge_;
     PtcOverlayInput *input_;
+    PlayWiseOverlayFrame *frame_ = nullptr;
+    bool content_parent_layout_ = false;
     PtcUiResolvedTheme theme_ = PTC_UI_RESOLVED_DARK;
     PtcCompanionAuth auth_{};
     PtcCompanionResultSummary displayed_summary_{};

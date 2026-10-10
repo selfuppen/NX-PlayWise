@@ -99,9 +99,15 @@ int main(int argc, char **argv) {
                     }
                 }
                 std::fill(renderer.pixels.begin(), renderer.pixels.end(), 17);
-                renderer.drawString(ptc_ui_text(PTC_UI_T_PLAYWISE), false, 20, 50, 30, TEXT_COLOR);
-                renderer.drawString(ptc_ui_text(PTC_UI_T_PLAYTIME_BEDTIME_CONTROLS), false, 20, 70, 15, MUTED_COLOR);
-                view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
+                // Parent views hide the title/subtitle banner and raise the
+                // content top; mirror that here so previews match the device.
+                const bool parent_scene = view.access_recovery_visible();
+                const int content_y = parent_scene ? PTC_OVERLAY_PARENT_CONTENT_Y : PTC_OVERLAY_CONTENT_Y;
+                if (!parent_scene) {
+                    renderer.drawString(ptc_ui_text(PTC_UI_T_PLAYWISE), false, 20, 50, 30, TEXT_COLOR);
+                    renderer.drawString(ptc_ui_text(PTC_UI_T_PLAYTIME_BEDTIME_CONTROLS), false, 20, 70, 15, MUTED_COLOR);
+                }
+                view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, content_y,
                     PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
                 renderer.drawRect(0, 678, 448, 42, {0, 0, 0, 15});
                 renderer.drawString("HOST PREVIEW / SAMPLE DATA", false, 20, 699, 18, WAITING_COLOR);

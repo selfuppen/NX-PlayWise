@@ -287,17 +287,17 @@
     {
         const auto &pal = current_palette();
         char line[160];
-        draw_card(renderer, cx, cy + 18, cw, 548, pal.panel_bg, pal.accent, 2);
+        draw_card(renderer, cx, cy + 6, cw, 598, pal.panel_bg, pal.accent, 2);
         draw_localized(renderer, parent_view_ == ParentView::Pin ? ptc_ui_text(PTC_UI_T_PARENT_PIN_VERIFICATION) :
             (parent_view_ == ParentView::Actions ? ptc_ui_text(PTC_UI_T_PARENT_ZONE) :
              (parent_view_ == ParentView::Confirm ? ptc_ui_text(parent_action_ == PTC_OVERLAY_PARENT_WAIVE_DOCK ? PTC_UI_T_DOCK_WAIVE : PTC_UI_T_CONFIRM_RESTORING_LIMIT) : ptc_ui_text(PTC_UI_T_OPERATION_RESULT))),
-            false, cx + 14, cy + 56, 21, renderer->a(pal.text_primary));
+            false, cx + 14, cy + 36, 20, renderer->a(pal.text_primary));
         const char *state = (!has_status_snapshot_ || status_is_stale()) ? ptc_ui_text(PTC_UI_T_STATUS_PENDING_REFRESH) :
             (bedtime_restricted() ? ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_3) :
              (displayed_summary_.daily_restriction_active ? ptc_ui_text(PTC_UI_T_DAILY_LIMIT_REACHED_2) :
               (eye_care_restricted() ? ptc_ui_text(PTC_UI_T_EYE_CARE_RESTING) :
                ptc_ui_text(PTC_UI_T_NORMAL_PLAY_AVAILABLE))));
-        draw_localized(renderer, state, false, cx + 14, cy + 88, 13,
+        draw_localized(renderer, state, false, cx + 14, cy + 62, 12,
             renderer->a(bedtime_restricted() ? pal.danger : pal.text_secondary));
 
         if (parent_view_ == ParentView::Pin) {
@@ -342,12 +342,12 @@
                 ptc_ui_text(PTC_UI_T_QUICK_GRANT), ptc_ui_text(PTC_UI_T_NO_LIMIT_TODAY), ptc_ui_text(PTC_UI_T_SKIP_BEDTIME), ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP), ptc_ui_text(PTC_UI_T_RESTORE_THIS_BEDTIME), ptc_ui_text(PTC_UI_T_TURN_OFF_BEDTIME_PLAN),
                 ptc_ui_text(PTC_UI_T_RESTORE_PRE_INSTALL_SETTINGS_DEACTIVATE), ptc_ui_text(PTC_UI_T_DOCK_WAIVE)
             };
-            const s32 refresh_btn_x = cx + 246;
-            const s32 refresh_btn_w = cw - 258;
-            draw_card(renderer, refresh_btn_x, cy + 58, refresh_btn_w, 46,
+            const auto refresh_btn = ptc_overlay_parent_refresh_rect(cx, cy);
+            draw_card(renderer, refresh_btn.x, refresh_btn.y, refresh_btn.w, refresh_btn.h,
                 bridge_->waiting ? pal.card_raised : pal.accent_soft,
                 bridge_->waiting ? pal.border_control : pal.accent, 1);
-            draw_localized_center(renderer, ptc_ui_text(PTC_UI_T_Y_REFRESH_2), refresh_btn_x, cy + 58, refresh_btn_w, 46, 13,
+            draw_localized_center(renderer, ptc_ui_text(PTC_UI_T_Y_REFRESH_2),
+                refresh_btn.x, refresh_btn.y, refresh_btn.w, refresh_btn.h, 13,
                 bridge_->waiting ? pal.text_secondary : pal.accent);
 
             const PtcUiTextId group_labels[] = {PTC_UI_T_CARD_QUOTA_ADJUST, PTC_UI_T_CARD_RESTRICTION_ACTIONS, PTC_UI_T_CARD_RECOVERY_ACTIONS};
@@ -375,15 +375,15 @@
                 } else {
                     std::snprintf(line, sizeof(line), "%s", LABELS[i]);
                 }
-                draw_localized(renderer, line, false, rect.x + 8, y + 17, 13,
+                draw_localized(renderer, line, false, rect.x + 8, y + 15, 13,
                     renderer->a(reason ? pal.text_disabled : pal.text_primary), rect.w - 16);
-                if (reason) draw_localized(renderer, reason, false, rect.x + 8, y + 32, 10,
+                if (reason) draw_localized(renderer, reason, false, rect.x + 8, y + 30, 10,
                     renderer->a(pal.warning), rect.w - 16);
                 if (selected && !reason && parent_action_requires_hold(static_cast<PtcOverlayParentAction>(i))) {
                     const int progress = ptc_overlay_hold_progress(&confirm_hold_, 1000);
-                    renderer->drawRect(rect.x + 4, y + 33, rect.w - 8, 2, renderer->a(pal.card_bg));
+                    renderer->drawRect(rect.x + 4, y + 40, rect.w - 8, 2, renderer->a(pal.card_bg));
                     if (progress > 0)
-                        renderer->drawRect(rect.x + 4, y + 33, (rect.w - 8) * progress / 1000, 2,
+                        renderer->drawRect(rect.x + 4, y + 40, (rect.w - 8) * progress / 1000, 2,
                             renderer->a(pal.danger));
                 }
             }
@@ -392,7 +392,7 @@
             const bool hold = parent_action_requires_hold(selected);
             draw_localized(renderer, reason ? ptc_ui_text(PTC_UI_T_ACTION_CURRENTLY_UNAVAILABLE_B_BACK) :
                 (hold ? ptc_ui_text(PTC_UI_T_HOLD_A_1S_Y_REFRESH_B_BACK) : ptc_ui_text(PTC_UI_T_A_EXECUTE_Y_REFRESH_B_BACK)),
-                false, cx + 14, cy + 542, 11,
+                false, cx + 14, cy + 586, 11,
                 renderer->a(reason ? pal.warning : (hold ? pal.danger : pal.accent)));
             return;
         }

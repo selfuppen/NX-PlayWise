@@ -28,6 +28,9 @@ enum {
     PTC_OVERLAY_CONTENT_Y = 90,
     PTC_OVERLAY_CONTENT_W = 363,
     PTC_OVERLAY_CONTENT_H = 557,
+    /* Parent views hide the libtesla title/subtitle banner, so their content
+       top is raised to reclaim that whitespace (child views keep 90). */
+    PTC_OVERLAY_PARENT_CONTENT_Y = 40,
     PTC_OVERLAY_TOP_BANNER_Y = 0,
     PTC_OVERLAY_TOP_BANNER_H = 72,
     PTC_OVERLAY_REFRESH_X = 220,
@@ -79,9 +82,12 @@ static inline int ptc_overlay_parent_action_move(int action, int direction)
 
 static inline PtcOverlayRect ptc_overlay_parent_group_rect(int origin_x, int origin_y, int group)
 {
-    if (group == 0) return ptc_overlay_rect(origin_x + 8, origin_y + 110, PTC_OVERLAY_CONTENT_W - 16, 106);
-    if (group == 1) return ptc_overlay_rect(origin_x + 8, origin_y + 224, PTC_OVERLAY_CONTENT_W - 16, 220);
-    if (group == 2) return ptc_overlay_rect(origin_x + 8, origin_y + 452, PTC_OVERLAY_CONTENT_W - 16, 68);
+    /* Group heights are proportional to their action count so the crowded
+       restriction group (5 actions) gets room while quota/recovery stay compact.
+       First action in every group sits at group.y + 28 (below the heading). */
+    if (group == 0) return ptc_overlay_rect(origin_x + 8, origin_y + 84, PTC_OVERLAY_CONTENT_W - 16, 128);
+    if (group == 1) return ptc_overlay_rect(origin_x + 8, origin_y + 220, PTC_OVERLAY_CONTENT_W - 16, 278);
+    if (group == 2) return ptc_overlay_rect(origin_x + 8, origin_y + 506, PTC_OVERLAY_CONTENT_W - 16, 78);
     return ptc_overlay_rect(0, 0, 0, 0);
 }
 
@@ -89,8 +95,19 @@ static inline PtcOverlayRect ptc_overlay_parent_action_rect(int origin_x, int or
 {
     int slot = ptc_overlay_parent_action_slot(action);
     if (slot < 0) return ptc_overlay_rect(0, 0, 0, 0);
-    int y = slot < 2 ? 138 + slot * 38 : slot < 7 ? 252 + (slot - 2) * 38 : 480;
-    return ptc_overlay_rect(origin_x + 16, origin_y + y, PTC_OVERLAY_CONTENT_W - 32, 36);
+    /* 44px card + 6px gap (50 step); first card of each group at group.y + 28. */
+    int y = slot < 2 ? 112 + slot * 50 : slot < 7 ? 248 + (slot - 2) * 50 : 534;
+    return ptc_overlay_rect(origin_x + 16, origin_y + y, PTC_OVERLAY_CONTENT_W - 32, 44);
+}
+
+static inline PtcOverlayRect ptc_overlay_parent_refresh_rect(int origin_x, int origin_y)
+{
+    return ptc_overlay_rect(origin_x + 246, origin_y + 30, PTC_OVERLAY_CONTENT_W - 258, 40);
+}
+
+static inline PtcOverlayRect ptc_overlay_parent_back_rect(int origin_x, int origin_y)
+{
+    return ptc_overlay_rect(origin_x, origin_y + 580, PTC_OVERLAY_CONTENT_W, 22);
 }
 
 static inline bool ptc_overlay_remaining_refresh_pending(bool waiting, bool offline_code_request)
