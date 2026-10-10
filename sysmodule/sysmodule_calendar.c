@@ -91,12 +91,11 @@ static bool process_calendar_activation(PtcSysmodule *sysmodule, const PtcReques
         state.bedtime_skipped_instance_id != bedtime.window_instance_id;
     day_rule = ptc_rules_today_rule(&after_rules, now.day_index,
         ptc_weekday_from_day_index(now.day_index));
-    target = target_from_day_rule(day_rule);
-    minutes = day_rule.minutes;
-    if (after_rules.eye_care.enabled && day_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-        target = PTC_PCTL_TARGET_LIMIT;
-        minutes = 1440u;
-    }
+    /* Match enforce: dock counting, like eye care, needs the official timer on
+       an unlimited day, so include dock_policy_enabled (previously omitted,
+       leaving calendar activation out of step with the enforce tick). */
+    target = ptc_compose_base_target(
+        after_rules.eye_care.enabled || dock_policy_enabled(&after_rules), day_rule, &minutes);
     if (bedtime_active || state.eye_care_resting) {
         target = PTC_PCTL_TARGET_BLOCKED;
         minutes = 0u;

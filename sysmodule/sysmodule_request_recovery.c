@@ -66,13 +66,14 @@ static bool process_disable_today_limit(
     rules_existed = sysmodule->storage->vtable->exists(sysmodule->storage, rules_path);
 
     pctl_changed = true;
-    err = apply_target(sysmodule, request, now, "release",
-        (updated_rules.eye_care.enabled || dock_policy_enabled(&updated_rules)) ? PTC_PCTL_TARGET_LIMIT : PTC_PCTL_TARGET_UNLIMITED,
-        (updated_rules.eye_care.enabled || dock_policy_enabled(&updated_rules)) ? 1440u : 0u);
+    uint16_t disable_minutes;
+    PtcPctlTargetMode disable_mode = ptc_compose_base_target(
+        updated_rules.eye_care.enabled || dock_policy_enabled(&updated_rules),
+        updated_rules.today_override.rule, &disable_minutes);
+    err = apply_target(sysmodule, request, now, "release", disable_mode, disable_minutes);
     if (err == PTC_ERR_OK) {
         err = observe_target_with_optional_activation(sysmodule, request, now,
-            "release", (updated_rules.eye_care.enabled || dock_policy_enabled(&updated_rules)) ? PTC_PCTL_TARGET_LIMIT : PTC_PCTL_TARGET_UNLIMITED,
-            (updated_rules.eye_care.enabled || dock_policy_enabled(&updated_rules)) ? 1440u : 0u,
+            "release", disable_mode, disable_minutes,
             "disable_today_limit", &observed_status);
     }
     if (err != PTC_ERR_OK) {
@@ -179,10 +180,9 @@ PtcErrorCode restore_bedtime_base(PtcSysmodule *sysmodule, const PtcRequest *req
     } else {
         PtcDayRule base = ptc_rules_today_rule(
             rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-        PtcPctlTargetMode base_mode = (rules->eye_care.enabled || dock_policy_enabled(rules)) && base.mode == PTC_RULE_MODE_UNLIMITED
-            ? PTC_PCTL_TARGET_LIMIT : target_from_day_rule(base);
-        uint16_t base_minutes = (rules->eye_care.enabled || dock_policy_enabled(rules)) && base.mode == PTC_RULE_MODE_UNLIMITED
-            ? 1440u : base.minutes;
+        uint16_t base_minutes;
+        PtcPctlTargetMode base_mode = ptc_compose_base_target(
+            rules->eye_care.enabled || dock_policy_enabled(rules), base, &base_minutes);
         err = apply_target(sysmodule, request, now, "release",
             base_mode, base_minutes);
         if (err != PTC_ERR_OK) return PTC_ERR_BEDTIME_RECOVERY_FAILED;

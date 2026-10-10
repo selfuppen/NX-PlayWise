@@ -1,16 +1,5 @@
 #include "sysmodule_internal.h"
 
-static PtcPctlTargetMode eye_care_base_target(const PtcRules *rules, PtcDayRule day_rule,
-    uint16_t *minutes)
-{
-    if ((rules->eye_care.enabled || dock_policy_enabled(rules)) && day_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-        *minutes = 1440u;
-        return PTC_PCTL_TARGET_LIMIT;
-    }
-    *minutes = day_rule.minutes;
-    return target_from_day_rule(day_rule);
-}
-
 static void reset_eye_care_cycle(PtcRuntimeState *state, uint16_t day_index)
 {
     state->eye_care_day_index = day_index;
@@ -107,7 +96,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
         return 0;
     }
     dock_should_enforce = dock_policy_blocks(sysmodule, &rules, &runtime_state, now);
-    base_mode = eye_care_base_target(&rules, active_rule, &base_minutes);
+    base_mode = ptc_compose_base_target(rules.eye_care.enabled || dock_policy_enabled(&rules), active_rule, &base_minutes);
     /* Daily usage rolls over; the eye-care cycle and rest deadline do not. */
     if (runtime_state.eye_care_day_index != now.day_index) {
         runtime_state.eye_care_day_index = now.day_index;

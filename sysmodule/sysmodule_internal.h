@@ -206,7 +206,29 @@ bool finish_with_error(
     bool dry_run,
     PtcErrorCode error,
     uint16_t day_index);
+/* On an unlimited day, eye-care and dock counting borrow the official HOS play
+   timer by installing a full-day (24h) LIMIT purely as a counting proxy; the UI
+   still reports the original unlimited rule. See the protocol design doc. */
+#define PTC_UNLIMITED_PROXY_LIMIT_MINUTES 1440u
+
 PtcPctlTargetMode target_from_day_rule(PtcDayRule rule);
+
+/* Compose the base PCTL target for a day rule. Callers that need the official
+   HOS play timer running on an unlimited day (eye-care or dock counting) pass
+   cap_unlimited=true to install the 24h proxy limit; otherwise the day rule
+   maps straight through. Callers overlay BLOCKED/0 (bedtime, rest) themselves.
+   Single source for the unlimited->proxy rule so enforce, release, recovery and
+   calendar activation cannot drift apart. */
+static inline PtcPctlTargetMode ptc_compose_base_target(bool cap_unlimited,
+    PtcDayRule day_rule, uint16_t *minutes)
+{
+    if (cap_unlimited && day_rule.mode == PTC_RULE_MODE_UNLIMITED) {
+        *minutes = PTC_UNLIMITED_PROXY_LIMIT_MINUTES;
+        return PTC_PCTL_TARGET_LIMIT;
+    }
+    *minutes = day_rule.minutes;
+    return target_from_day_rule(day_rule);
+}
 uint16_t ptc_pctl_played_minutes(const PtcPctlStatus *status);
 uint16_t accumulate_today_limit(PtcRules *rules, uint16_t day_index, uint8_t weekday, uint16_t add_minutes, uint16_t played_minutes);
 PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest *request, PtcRules *rules, PtcRuntimeState *runtime_state, PtcClockSnapshot now, uint16_t played_minutes);

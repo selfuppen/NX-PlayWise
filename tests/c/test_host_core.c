@@ -3629,6 +3629,52 @@ done:
     free(mem);
 }
 
+static void test_calendar_activation_dock_unlimited_timer(void)
+{
+    /* Regression: an unlimited day with only dock policy enabled (eye care off)
+       must install the 24h proxy LIMIT on calendar activation, matching enforce;
+       it previously wrote UNLIMITED because activation omitted the dock check. */
+    static const char *empty =
+        "{\"format_version\":1,\"region_id\":\"JP\",\"region_name\":\"Japan test\","
+        "\"year\":2026,\"holidays\":[],\"workdays\":[]}";
+    PtcMemStorage *mem = malloc(sizeof(*mem));
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule *sysmodule = malloc(sizeof(*sysmodule));
+    PtcCalendarIndex *catalog = malloc(sizeof(*catalog));
+    char hash[65], digest[65], result[8192];
+    if (!mem || !sysmodule || !catalog) {
+        check_true(false, "allocate dock-unlimited calendar fixtures");
+        goto done;
+    }
+    seed_active_buffer_fixture(mem, &pctl, &fake_time, sysmodule, 120, 0, true);
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage, "app/rules.json",
+        "{\"version\":1,\"week\":[{\"mode\":\"unlimited\"},{\"mode\":\"unlimited\"},"
+        "{\"mode\":\"unlimited\"},{\"mode\":\"unlimited\"},{\"mode\":\"unlimited\"},"
+        "{\"mode\":\"unlimited\"},{\"mode\":\"unlimited\"}],"
+        "\"force_docked\":false,\"undocked_limit_enabled\":true,\"undocked_daily_minutes\":30}"),
+        "seed unlimited week with dock policy");
+    check_true(mem->storage.vtable->write_text_atomic(&mem->storage,
+        "app/calendar-import/JP-2026.json", empty), "stage empty dock calendar");
+    ptc_calendar_sha256_hex(empty, strlen(empty), hash);
+    queue_calendar_import(mem, "cal-dock-import", "JP-2026.json", hash);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "dock calendar import processed");
+    check_true(ptc_calendar_index_load(&mem->storage, "app", false, catalog, digest),
+        "load catalog digest for dock activation");
+    queue_calendar_activation(mem, "cal-dock-activate", "JP", digest);
+    check_int(ptc_sysmodule_process_all(sysmodule), 1, "dock calendar activation processed");
+    check_true(mem->storage.vtable->read_text(&mem->storage,
+        "app/results/cal-dock-activate.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"ok\""), "dock calendar activation succeeds");
+    check_true(pctl.last_target.mode == PTC_PCTL_TARGET_LIMIT &&
+        pctl.last_target.minutes == 1440,
+        "unlimited + dock installs 24h proxy timer on calendar activation");
+done:
+    free(catalog);
+    free(sysmodule);
+    free(mem);
+}
+
  #include "test_config_backup.inc"
 
 int main(void)
@@ -3644,6 +3690,7 @@ int main(void)
     test_holiday_calendar_and_priority();
     test_imported_region_calendar();
     test_calendar_import_activation_transactions();
+    test_calendar_activation_dock_unlimited_timer();
     test_bedtime_rules_and_protocol();
     test_daily_summary_and_read_only_stats_boundary();
     test_support_redaction();

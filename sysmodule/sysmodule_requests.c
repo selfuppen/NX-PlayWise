@@ -155,12 +155,9 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
               before_active_rule.minutes != ptc_rules_today_rule(&rules, now.day_index,
                  ptc_weekday_from_day_index(now.day_index)).minutes))) {
             active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-            PtcPctlTargetMode request_target = target_from_day_rule(active_rule);
-            uint16_t request_minutes = active_rule.minutes;
-            if ((rules.eye_care.enabled || dock_policy_enabled(&rules)) && active_rule.mode == PTC_RULE_MODE_UNLIMITED) {
-                request_target = PTC_PCTL_TARGET_LIMIT;
-                request_minutes = 1440u;
-            }
+            uint16_t request_minutes;
+            PtcPctlTargetMode request_target = ptc_compose_base_target(
+                rules.eye_care.enabled || dock_policy_enabled(&rules), active_rule, &request_minutes);
             if (runtime_state.bedtime_enforced || runtime_state.eye_care_resting || dock_policy_blocks(sysmodule, &rules, &runtime_state, now)) {
                 request_target = PTC_PCTL_TARGET_BLOCKED;
                 request_minutes = 0u;
@@ -249,8 +246,7 @@ static bool process_eye_care_skip(PtcSysmodule *sysmodule, const PtcRequest *req
         state.eye_care_last_used_minutes >= day_rule.minutes)
         return finish_with_error(sysmodule, request, "release", false,
             PTC_ERR_EYE_CARE_BREAK_NOT_ACTIVE, now.day_index);
-    mode = day_rule.mode == PTC_RULE_MODE_UNLIMITED ? PTC_PCTL_TARGET_LIMIT : target_from_day_rule(day_rule);
-    minutes = day_rule.mode == PTC_RULE_MODE_UNLIMITED ? 1440u : day_rule.minutes;
+    mode = ptc_compose_base_target(true, day_rule, &minutes);
     if (dock_policy_blocks(sysmodule, &rules, &state, now)) { mode = PTC_PCTL_TARGET_BLOCKED; minutes = 0; }
     err = apply_target(sysmodule, request, now, "release", mode, minutes);
     if (err == PTC_ERR_OK)

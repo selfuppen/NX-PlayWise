@@ -356,7 +356,7 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
         PtcDayRule day_rule = ptc_rules_today_rule(rules, now.day_index,
             ptc_weekday_from_day_index(now.day_index));
         uint16_t base_minutes = day_rule.mode == PTC_RULE_MODE_UNLIMITED
-            ? 1440u : day_rule.minutes;
+            ? PTC_UNLIMITED_PROXY_LIMIT_MINUTES : day_rule.minutes;
         state->eye_care_phase = "unknown";
         /* Status precedes the scheduler tick. Project this read without
            persisting a new baseline or triggering any control writes. */
