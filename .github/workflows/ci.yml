@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-tests:
+    name: Host regression gate (make test)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      # ubuntu-latest ships gcc/g++/make (build-essential), which is all the
+      # host suites need. This is NOT the authoritative device/container gate:
+      # the NRO / Overlay / sysmodule / standard package / Device Lab package
+      # gates still require the devkitPro container and must be run locally via
+      # `python tools/package_remote.py`.
+      - name: Toolchain versions
+        run: gcc --version && g++ --version && make --version && python3 --version
+
+      - name: make test (C host suites + Python regressions)
+        run: make test
+
+  ui-golden:
+    name: UI golden-image diff
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      # Renders the NRO/Overlay previews with the pinned in-repo font and
+      # byte-compares them against the committed baselines under
+      # docs/images/usage. Fails when a UI change silently alters a screenshot.
+      - name: Render previews and compare against committed baselines
+        run: |
+          make ui-previews
+          python3 tools/sync_doc_previews.py --check

@@ -467,6 +467,115 @@ class SwitchFtpClient:
 
         self.ftp.cwd(base)
 
+    def download_file(self, relative_remote_path: str, local_path: Path) -> int:
+        """Downloads a remote file to local_path and returns the byte count.
+
+        Mirrors upload_file's size verification: raises IOError when the
+        FTP-reported SIZE disagrees with the number of bytes written.
+        """
+        rel_norm = relative_remote_path.replace("\\", "/").strip("/")
+        remote_dir = os.path.dirname(rel_norm)
+        filename = os.path.basename(rel_norm)
+        base = self.endpoint.base_path or "/"
+        remote_parent_abs = self._to_remote_abs(remote_dir) if remote_dir else base
+
+        self.ftp.cwd(remote_parent_abs)
+        remote_size = None
+        try:
+            remote_size = self.ftp.size(filename)
+        except Exception:
+            pass
+
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        written = 0
+
+        with open(local_path, "wb") as handle:
+            def _sink(chunk: bytes) -> None:
+                nonlocal written
+                written += len(chunk)
+                handle.write(chunk)
+
+            self.ftp.retrbinary(f"RETR {filename}", _sink)
+        self.ftp.cwd(base)
+
+        if remote_size is not None and remote_size != written:
+            raise IOError(
+                f"Download verification failed for {relative_remote_path}: "
+                f"remote size {remote_size} != written {written}"
+            )
+        return written
+
+    def walk_remote_dir(self, relative_dir_path: str) -> list[tuple[str, int | None]]:
+        """Recursively lists files under a remote directory.
+
+        Returns (path, size) pairs where path is relative to the endpoint
+        base_path (posix, no leading slash) and size comes from MLSD facts when
+        the server provides them. A missing directory yields an empty list
+        rather than raising, so callers can pull optional evidence folders.
+        """
+        rel_root = relative_dir_path.replace("\\", "/").strip("/")
+        abs_root = self._to_remote_abs(rel_root)
+        base = self.endpoint.base_path or "/"
+        files: list[tuple[str, int | None]] = []
+        try:
+            self.ftp.cwd(abs_root)
+        except Exception:
+            try:
+                self.ftp.cwd(base)
+            except Exception:
+                pass
+            return files
+        try:
+            self._walk_current_dir(rel_root, files)
+        finally:
+            try:
+                self.ftp.cwd(base)
+            except Exception:
+                pass
+        return files
+
+    def _walk_current_dir(self, rel_dir: str, out: list[tuple[str, int | None]]) -> None:
+        """Assumes cwd is inside rel_dir; appends files relative to base_path.
+
+        Reuses the same MLSD-with-LIST-fallback traversal as
+        _clean_and_remove_current_dir so odd Switch FTP servers behave alike.
+        """
+        items: list[tuple[str, bool, int | None]] = []
+        try:
+            for name, facts in self.ftp.mlsd():
+                if name in (".", ".."):
+                    continue
+                size_fact = facts.get("size")
+                size = int(size_fact) if size_fact and size_fact.isdigit() else None
+                items.append((name, facts.get("type") == "dir", size))
+        except Exception:
+            lines: list[str] = []
+            try:
+                self.ftp.retrlines("LIST", lines.append)
+            except Exception:
+                lines = []
+            for line in lines:
+                parts = line.split(maxsplit=8)
+                if len(parts) >= 9:
+                    name = parts[-1]
+                    if name in (".", ".."):
+                        continue
+                    items.append((name, parts[0].startswith("d"), None))
+
+        for name, is_dir, size in items:
+            child_rel = f"{rel_dir}/{name}" if rel_dir else name
+            if is_dir:
+                try:
+                    self.ftp.cwd(name)
+                except Exception:
+                    continue
+                self._walk_current_dir(child_rel, out)
+                try:
+                    self.ftp.cwd("..")
+                except Exception:
+                    pass
+            else:
+                out.append((child_rel, size))
 
 # ----------------------------------------------------------------------
 # CLI & Execution

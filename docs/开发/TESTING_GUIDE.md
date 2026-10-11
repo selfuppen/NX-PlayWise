@@ -85,8 +85,14 @@ A passing run concludes with `PASS: local tests`. This entry point covers:
 - Isolation of contracts across standard package, complete package, and Device Lab, `package-artifacts.json` component sizes and SHA-256 hashes, and package helper failure branches;
 - `version.h` and `version.mk` consistency, PWA official links, and external link security attributes;
 - Single-file offline page consistency with modular source, inline CSP, zero runtime network dependencies, Web Crypto/built-in HMAC test vectors, and graceful degradation without persistent storage.
+- Build-timing tool `stage_timer` record read/write, report formatting, and CLI pass-through (previously an orphan test wired into no entry point).
+- Device Lab evidence round-trip `device_lab_roundtrip` (idempotent pull, SHA-256 verification, immutable-evidence tamper guard), machine assertions `assert_device_evidence` (no `start_timer` in `pctl_debug.jsonl`, 8-field/dedup `ipc-client.log`, log redaction, single nonce consumption), and manual-observation capture `capture_device_observations` (produces a gate-acceptable bedtime report, rejects invalid input, adds an eye-care advisory schema).
 
 Tests must use fixed timestamps, deterministic fixtures, and host mock adapters without depending on real Switch system services.
+
+## Continuous Integration Gate
+
+`.github/workflows/ci.yml` runs `make test` on `ubuntu-latest` for push and pull requests: `test-host` builds and runs the four C host suites plus `ui_preview --check-primitives` entirely with gcc/g++ (no devkitPro), and `test-python` runs every `tools/test.py` regression. An optional UI golden-image job runs `make ui-previews` and byte-compares the result against the committed previews via `python3 tools/sync_doc_previews.py --check`. CI has no devkitPro container, so the authoritative gates for the NRO, Overlay, sysmodule, standard package, complete package, and Device Lab package must still run locally through `python tools/package_remote.py`.
 
 ## Authoritative Container Verification
 
@@ -209,6 +215,8 @@ python tools/promote_qualified_build.py `
 ```
 
 The SD script defaults to dry-run; verify drive letter and console backup directory before `-Apply`. Device Lab qualification input includes the complete historical campaign plus the final `bedtime-qualification.json`. Template `null` values must be replaced by real console observations. Promotion copies original verified Zips matching calculated hashes without recompiling.
+
+`python tools/device_lab_roundtrip.py` chains the steps above into a card-swap-free FTP/MTP round-trip: `push` reuses the FTP installer to send the candidate (`--mode preserve` overlays files while keeping runtime data byte-for-byte), `pull` idempotently fetches `switch/playwise-device-lab/{reports,lab,logs,results}` into a flat `device-reports/` (exactly the `--reports` layout) and `switch/playwise/{logs,results,ledger,support}` into `device-reports/standard/`, and `verify`/`promote` chain the existing gate and hash-only promotion; the `all` subcommand prints the irreducibly-manual on-device checklist after push and waits for the operator before pulling. After pulling, `python tools/assert_device_evidence.py --evidence device-reports/standard` machine-checks the decidable acceptance items (step 13 no `start_timer`, 8-field/redacted `ipc-client.log`, single nonce consumption, result state); it is advisory and never changes the authoritative gate. Manual observations are entered through `python tools/capture_device_observations.py bedtime|eye-care|standard`: bedtime produces a report `verify_device_qualification.py` accepts, while eye-care -- which has no template or verifier of its own -- gets a new advisory observation schema (`eye-care-observations.json`). The manual core (restriction visibility and game pause/suspend, long-pressing `ZL+ZR+A` and `A` for two seconds, physical dock replug, official-PIN clock changes) can never be remoted; the automation only moves bytes, asserts machine evidence, and guides data entry.
 
 The standard package must then execute the 17-step verification workflow:
 

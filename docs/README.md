@@ -24,7 +24,7 @@
 | --- | --- | --- |
 | [开发环境指南](开发/开发环境指南.md) | Host、devkitPro、统一构建与依赖环境 | [Development Environment Guide](开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md) |
 | [开发指南](开发/开发指南.md) | 模块职责、安全边界、上游调查与合并要求 | [Developer Guide](开发/DEVELOPER_GUIDE.md) |
-| [测试指南](开发/测试指南.md) | 本地回归、打包门禁、Eden、UI 与真机验收 | [Testing Guide](开发/TESTING_GUIDE.md) |
+| [测试指南](开发/测试指南.md) | 本地回归、持续集成门禁、打包门禁、Eden、UI、真机验收与证据往返 | [Testing Guide](开发/TESTING_GUIDE.md) |
 
 ## 设计
 

@@ -24,7 +24,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 | --- | --- | --- |
 | [Development Environment Guide](开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md) | Host, devkitPro, unified builds and dependencies | [开发环境指南](开发/开发环境指南.md) |
 | [Developer Guide](开发/DEVELOPER_GUIDE.md) | Module responsibilities, safety boundaries, upstream research and merge requirements | [开发指南](开发/开发指南.md) |
-| [Testing Guide](开发/TESTING_GUIDE.md) | Local regression, packaging gates, Eden, UI and hardware acceptance | [测试指南](开发/测试指南.md) |
+| [Testing Guide](开发/TESTING_GUIDE.md) | Local regression, CI gate, packaging gates, Eden, UI, hardware acceptance and evidence round-trip | [测试指南](开发/测试指南.md) |
 
 ## Design — `设计/`
 
