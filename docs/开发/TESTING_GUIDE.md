@@ -234,6 +234,11 @@ python tools/make_bedtime_qualification_template.py `
   --commit <candidate-commit> `
   --release-id <candidate-release-id> `
   --output .\device-reports\bedtime-qualification.json
+# Add when shipping eye-care (candidate pending, not required by default):
+python tools/make_eye_care_qualification_template.py `
+  --commit <candidate-commit> `
+  --release-id <candidate-release-id> `
+  --output .\device-reports\eye-care-qualification.json
 .\tools\prepare_device_lab_sd.ps1 -SourceFolder .\build\packages -Drive E -WipeAll
 .\tools\prepare_device_lab_sd.ps1 -SourceFolder .\build\packages -Drive E -WipeAll -Apply
 python tools/verify_device_qualification.py `
@@ -241,7 +246,8 @@ python tools/verify_device_qualification.py `
   --reports .\device-reports `
   --expected-model oled `
   --expected-hos 22.5.0 `
-  --expected-atmosphere 1.11.2
+  --expected-atmosphere 1.11.2 `
+  # add --require-eye-care when shipping eye-care
 python tools/promote_qualified_build.py `
   --packages .\build\packages `
   --verification .\build\qualification\verification.json `
@@ -250,7 +256,7 @@ python tools/promote_qualified_build.py `
 
 The SD script defaults to dry-run; verify drive letter and console backup directory before `-Apply`. Device Lab qualification input includes the complete historical campaign plus the final `bedtime-qualification.json`. Template `null` values must be replaced by real console observations. Promotion copies original verified Zips matching calculated hashes without recompiling.
 
-`python tools/device_lab_roundtrip.py` chains the steps above into a card-swap-free FTP/MTP round-trip: `push` reuses the FTP installer to send the candidate (`--mode preserve` overlays files while keeping runtime data byte-for-byte), `pull` idempotently fetches `switch/playwise-device-lab/{reports,lab,logs,results}` into a flat `device-reports/` (exactly the `--reports` layout) and `switch/playwise/{logs,results,ledger,support}` into `device-reports/standard/`, and `verify`/`promote` chain the existing gate and hash-only promotion; the `all` subcommand prints the irreducibly-manual on-device checklist after push and waits for the operator before pulling. After pulling, `python tools/assert_device_evidence.py --evidence device-reports/standard` machine-checks the decidable acceptance items (step 13 no `start_timer`, 8-field/redacted `ipc-client.log`, single nonce consumption, result state); it is advisory and never changes the authoritative gate. Manual observations are entered through `python tools/capture_device_observations.py bedtime|eye-care|standard`: bedtime produces a report `verify_device_qualification.py` accepts, while eye-care -- which has no template or verifier of its own -- gets a new advisory observation schema (`eye-care-observations.json`). The manual core (restriction visibility and game pause/suspend, long-pressing `ZL+ZR+A` and `A` for two seconds, physical dock replug, official-PIN clock changes) can never be remoted; the automation only moves bytes, asserts machine evidence, and guides data entry.
+`python tools/device_lab_roundtrip.py` chains the steps above into a card-swap-free FTP/MTP round-trip: `push` reuses the FTP installer to send the candidate (`--mode preserve` overlays files while keeping runtime data byte-for-byte), `pull` idempotently fetches `switch/playwise-device-lab/{reports,lab,logs,results}` into a flat `device-reports/` (exactly the `--reports` layout) and `switch/playwise/{logs,results,ledger,support}` into `device-reports/standard/`, and `verify`/`promote` chain the existing gate and hash-only promotion; the `all` subcommand prints the irreducibly-manual on-device checklist after push and waits for the operator before pulling. After pulling, `python tools/assert_device_evidence.py --evidence device-reports/standard` machine-checks the decidable acceptance items (step 13 no `start_timer`, 8-field/redacted `ipc-client.log`, single nonce consumption, result state); it is advisory and never changes the authoritative gate. Manual observations are entered through `python tools/capture_device_observations.py bedtime|eye-care|standard`: bedtime produces a `bedtime-qualification.json` that `verify_device_qualification.py` accepts, and eye-care now likewise produces an authoritative `eye-care-qualification.json` (template `make_eye_care_qualification_template.py`, verifier `verify_eye_care_report`, opt-in via `--require-eye-care`; eye-care is a candidate feature). A present eye-care report is fail-closed validated whether or not it is required. The manual core (restriction visibility and game pause/suspend, long-pressing `ZL+ZR+A` and `A` for two seconds, physical dock replug, official-PIN clock changes) can never be remoted; the automation only moves bytes, asserts machine evidence, and guides data entry.
 
 The standard package must then execute the 17-step verification workflow:
 

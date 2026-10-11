@@ -9,6 +9,9 @@ import sys
 import zipfile
 
 from playwise_version import read_playwise_version
+# Single source of truth for the eye-care observation contract, shared with the
+# capture tool so the gate and the template can never drift apart.
+import make_eye_care_qualification_template as make_eye_care
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -400,15 +403,64 @@ def verify_bedtime_report(reports_dir: Path, manifest: dict, expected_model: str
     return path
 
 
+def verify_eye_care_report(reports_dir: Path, manifest: dict, expected_model: str,
+                           expected_hos: str, expected_atmosphere: str, *, required: bool) -> Path | None:
+    """Authoritative eye-care gate, mirroring verify_bedtime_report. Eye-care is a
+    candidate (pending) feature, so the gate is opt-in: when `required` it demands
+    the report; otherwise a *present* report is still fail-closed validated (a
+    half-filled report never silently passes), and a missing one is skipped."""
+    path = reports_dir / "eye-care-qualification.json"
+    if not path.is_file():
+        require(not required, "缺少 eye-care-qualification.json；eye-care 仍不得进入标准包")
+        return None
+    report = read_json(path)
+    label = path.name
+    require(report.get("schema_version") == 1 and report.get("report_status") == "final",
+            f"{label}: 只接受 final schema v1")
+    subject = report.get("subject", {})
+    require(subject.get("commit") == manifest.get("commit") and
+            subject.get("release_id") == manifest.get("release_id"),
+            f"{label}: 报告与候选 commit/release_id 不一致")
+    environment = report.get("environment", {})
+    expected_model_value = MODEL_ALIASES.get(expected_model.lower(), expected_model.lower())
+    require(str(environment.get("model", "")).lower() == expected_model_value and
+            environment.get("hos") == expected_hos and
+            environment.get("atmosphere") == expected_atmosphere,
+            f"{label}: eye-care 真机环境不匹配")
+    games = report.get("games")
+    require(isinstance(games, list) and len(games) == 2 and
+            all(isinstance(item, str) and item for item in games) and len(set(games)) == 2,
+            f"{label}: 必须记录两款不同游戏")
+    timing = report.get("timing", {})
+    rest_start = timing.get("rest_start_trigger_seconds")
+    rest_end = timing.get("rest_end_trigger_seconds")
+    require(isinstance(rest_start, (int, float)) and not isinstance(rest_start, bool) and
+            isinstance(rest_end, (int, float)) and not isinstance(rest_end, bool) and
+            0 <= rest_start <= 60 and 0 <= rest_end <= 60,
+            f"{label}: 休息开始或恢复未在 60 秒内触发")
+    observations = report.get("observations", {})
+    for key, _prompt in make_eye_care.OBSERVATION_FIELDS:
+        require(observations.get(key) is True, f"{label}: 未证明 {key}")
+    pctl = report.get("pctl", {})
+    require(pctl.get("settings_exactly_restored") is True and
+            pctl.get("unexpected_raw_offsets") == [] and
+            pctl.get("eye_care_consumed_daily_allowance") is False,
+            f"{label}: PCTL 精确恢复、raw offset 或额度隔离证据失败")
+    return path
+
+
 def verify(packages: Path, reports: Path, expected_model: str,
            expected_hos: str, expected_atmosphere: str, campaign: str | None = None,
-           observation_source: str = "manual") -> dict:
+           observation_source: str = "manual", require_eye_care: bool = False) -> dict:
     manifest, _lab_manifest, zip_hashes, component_hashes = package_identity(packages)
     run_ids, report_paths, campaign_value, attestations = verify_reports(
         reports, manifest, expected_model, expected_hos, expected_atmosphere, campaign,
         observation_source)
     bedtime_report = verify_bedtime_report(
         reports, manifest, expected_model, expected_hos, expected_atmosphere)
+    eye_care_report = verify_eye_care_report(
+        reports, manifest, expected_model, expected_hos, expected_atmosphere,
+        required=require_eye_care)
     checks = [
         "device_lab_schema_v2", "environment_exosphere", "public_raw_libnx_parity",
         "target_bound_activation_fallback", "restriction_matrix", "exact_restore",
@@ -428,6 +480,9 @@ def verify(packages: Path, reports: Path, expected_model: str,
         "artifacts": {"packages": zip_hashes, "release_components": component_hashes},
         "checks": checks,
     }
+    if eye_care_report is not None:
+        result["checks"].extend(["eye_care_rest_cycle", "eye_care_isolation"])
+        result["reports"]["eye_care_path"] = str(eye_care_report.resolve())
     if observation_source == "vision_ai":
         result["checks"].append("vision_attestation")
         result["vision_attestation"] = attestations
@@ -445,12 +500,14 @@ def main() -> int:
     parser.add_argument("--campaign", help="campaign ID 或 *.campaign.json 文件名；只有一个完整批次时可省略")
     parser.add_argument("--observation-source", choices=["manual", "vision_ai"], default="manual",
                         help="限制槽位观察来源；vision_ai 要求每个 restriction_quick run 带哈希绑定的视觉旁证")
+    parser.add_argument("--require-eye-care", action="store_true",
+                        help="要发护眼时启用：强制 eye-care-qualification.json 通过门禁（护眼属候选 pending，默认不要求；但报告若存在仍 fail-closed 校验）")
     parser.add_argument("--output", type=Path, default=ROOT / "build" / "qualification" / "verification.json")
     args = parser.parse_args()
     try:
         result = verify(args.packages.resolve(), args.reports.resolve(), args.expected_model,
                         args.expected_hos, args.expected_atmosphere, args.campaign,
-                        args.observation_source)
+                        args.observation_source, args.require_eye_care)
     except QualificationError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
@@ -466,6 +523,8 @@ def main() -> int:
         "bedtime_full_entry_block": "bedtime 弹窗期间五类应用入口均被阻断",
         "bedtime_overlay_recovery": "Overlay PIN 与三级恢复路径均完成真机验证",
         "bedtime_lifecycle": "bedtime 时限、生命周期、时钟与失败路径完整",
+        "eye_care_rest_cycle": "eye-care 休息开始/恢复、1440 代理与关闭恢复不限时均真机验证",
+        "eye_care_isolation": "eye-care 休息 0 分钟不计入每日额度且 0x44 精确恢复",
         "artifact_identity": "报告、候选 Zip 与 Switch 二进制身份绑定",
         "vision_attestation": "每个限制槽位的 AI 判定均有哈希绑定的截图旁证",
     }

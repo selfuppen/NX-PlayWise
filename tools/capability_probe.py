@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
-"""Autonomous real-device capability probe (lab-only, capture-only).
+"""Autonomous real-device capability probe (lab-only).
 
 Drives the Device Lab session end to end over FTP (tools/lab_wire_client) and
 captures real-device screenshots over sys-botbase (tools/sys_botbase_client),
 with timing synchronized on the device's own lab/session.json state -- never on
-reading the screen. It makes NO judgement during the run: it never submits an
-observation, never seals a verdict, never restores "to prove" anything. It only
-collects evidence and writes a review bundle (tools/probe_report) for a human to
-read once at the end.
+reading the screen. It never submits a lab_observation and never seals a verdict:
+it is a probe, not the authoritative qualification gate
+(verify_device_qualification).
 
-Scope (first cut): preflight, restriction_quick (does the restriction fire --
-screenshots), timer_activation_ab (standby/accrual machine numbers). Bedtime and
-eye-care are P4 (their request payloads must be pinned to request_schema first).
+Scenarios split into two shapes:
+  * restriction_quick / timer_activation_ab -- capture-only: drive lab phases +
+    screenshots, pull the device's own machine JSON, judge nothing.
+  * bedtime / eye_care -- write-and-evaluate: confirm, write the product policy
+    (set_bedtime_policy / set_eye_care_policy), read it back in `status` to prove
+    the sysmodule accepts and *evaluates* it, then disable again (try/finally, so
+    a mid-run failure never leaves the console locked). The lab build compiles out
+    the autonomous enforce tick (sysmodule_core.c:632 #ifndef PLAYWISE_DEVICE_LAB),
+    so the visible block/break never fires here; it enforces via the same PCTL
+    BLOCKED path as restriction_quick (already proven), only under the standard
+    build -- so visible interception is verified by the human-attested gate, not
+    this probe. These two mutate device state and are excluded from
+    --scenario all; select them explicitly.
 
 Lab-only: this drives the safety gates the product requires; run it only against
 a dedicated test console, never a managed child's device.
@@ -457,15 +466,29 @@ def run_eye_care(ctx: ProbeContext, *, play_minutes: int = 1, rest_minutes: int 
         wlog.record(f"baseline capture skipped: {exc}")
     _p(ctx, "确认前置要求（读指纹）")
     _ensure_bedtime_confirmed(ctx, wlog)
-    rid = ctx.wire.submit("set_eye_care_policy", lwc.eye_care_payload(play_minutes, rest_minutes))
-    _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout), "set_eye_care_policy")
-    wlog.record(f"set_eye_care_policy ok (play={play_minutes}m rest={rest_minutes}m)")
-    _p(ctx, "读 status 查看护眼求值")
-    status = _pull_status(ctx, scenario_dir)
-    rid = ctx.wire.submit("set_eye_care_policy", lwc.eye_care_payload(play_minutes, rest_minutes, enabled=False))
-    _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout), "set_eye_care_policy(disable)")
-    wlog.record("set_eye_care_policy disabled (cleanup)")
-    (scenario_dir / "wire.log").write_text(wlog.text(), encoding="utf-8", newline="\n")
+    enabled = False
+    status: dict = {}
+    try:
+        rid = ctx.wire.submit("set_eye_care_policy", lwc.eye_care_payload(play_minutes, rest_minutes))
+        _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout), "set_eye_care_policy")
+        enabled = True
+        wlog.record(f"set_eye_care_policy ok (play={play_minutes}m rest={rest_minutes}m)")
+        _p(ctx, "读 status 查看护眼求值")
+        status = _pull_status(ctx, scenario_dir)
+    finally:
+        # Always disable again so a mid-run failure (FTP drop / timeout) never
+        # leaves the test console with eye-care stuck on. Best-effort: swallow and
+        # log any cleanup failure so it never masks the original error.
+        if enabled:
+            try:
+                rid = ctx.wire.submit("set_eye_care_policy",
+                                      lwc.eye_care_payload(play_minutes, rest_minutes, enabled=False))
+                _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout),
+                            "set_eye_care_policy(disable)")
+                wlog.record("set_eye_care_policy disabled (cleanup)")
+            except Exception as exc:  # noqa: BLE001 - cleanup must not mask the real error
+                wlog.record(f"set_eye_care_policy disable failed (cleanup): {exc}")
+        (scenario_dir / "wire.log").write_text(wlog.text(), encoding="utf-8", newline="\n")
     _p(ctx, "eye_care 完成（已写入并求值；lab 构建不自动执行，探测后已关闭）")
     record = {
         "name": "eye_care", "title": "护眼", "status": "written",
@@ -500,16 +523,30 @@ def run_bedtime(ctx: ProbeContext, *, start_minute: int = 1, end_minute: int = 0
     except Exception as exc:  # noqa: BLE001
         wlog.record(f"baseline capture skipped: {exc}")
     _ensure_bedtime_confirmed(ctx, wlog)
-    rid = ctx.wire.submit("set_bedtime_policy",
-                          lwc.bedtime_payload(start_minute, end_minute, activation="immediate"))
-    _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout), "set_bedtime_policy")
-    wlog.record("set_bedtime_policy ok (immediate, all-day)")
-    _p(ctx, "读 status 查看就寝求值")
-    status = _pull_status(ctx, scenario_dir)
-    rid = ctx.wire.submit("set_bedtime_policy", lwc.bedtime_payload(start_minute, end_minute, enabled=False))
-    _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout), "set_bedtime_policy(disable)")
-    wlog.record("set_bedtime_policy disabled (cleanup)")
-    (scenario_dir / "wire.log").write_text(wlog.text(), encoding="utf-8", newline="\n")
+    enabled = False
+    status: dict = {}
+    try:
+        rid = ctx.wire.submit("set_bedtime_policy",
+                              lwc.bedtime_payload(start_minute, end_minute, activation="immediate"))
+        _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout), "set_bedtime_policy")
+        enabled = True
+        wlog.record("set_bedtime_policy ok (immediate, all-day)")
+        _p(ctx, "读 status 查看就寝求值")
+        status = _pull_status(ctx, scenario_dir)
+    finally:
+        # Always disable again so a mid-run failure never leaves the standard
+        # build locked out by an all-day test window. Best-effort: swallow and log
+        # any cleanup failure so it never masks the original error.
+        if enabled:
+            try:
+                rid = ctx.wire.submit("set_bedtime_policy",
+                                      lwc.bedtime_payload(start_minute, end_minute, enabled=False))
+                _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout),
+                            "set_bedtime_policy(disable)")
+                wlog.record("set_bedtime_policy disabled (cleanup)")
+            except Exception as exc:  # noqa: BLE001 - cleanup must not mask the real error
+                wlog.record(f"set_bedtime_policy disable failed (cleanup): {exc}")
+        (scenario_dir / "wire.log").write_text(wlog.text(), encoding="utf-8", newline="\n")
     _p(ctx, "bedtime 完成（已写入并求值并关闭就寝）")
     record = {
         "name": "bedtime", "title": "就寝", "status": "written",
@@ -557,6 +594,9 @@ def _default_reports_dir(args) -> Path:
 
 def _scenarios_for(selection: str) -> list:
     if selection == "all":
+        # bedtime/eye_care are deliberately NOT in `all`: they are write-and-
+        # evaluate probes that mutate device policy, so they must be selected
+        # explicitly rather than swept in with the capture-only scenarios.
         return ["restriction_quick", "timer_activation_ab"]
     return [selection]
 
@@ -637,7 +677,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_probe = sub.add_parser("probe", help="跑一个或全部场景并产出复核包")
     add_device(p_probe)
     p_probe.add_argument("--scenario", required=True,
-                         choices=["restriction_quick", "timer_activation_ab", "bedtime", "eye_care", "all"])
+                         choices=["restriction_quick", "timer_activation_ab", "bedtime", "eye_care", "all"],
+                         help="bedtime/eye_care 为写入型（改设备策略，结束自动关闭），不含在 all 中，需显式选择")
     p_probe.add_argument("--reports", default=None, help="证据目录（默认 device-reports/probe-<时间戳>）")
     p_probe.add_argument("--sleep-checkpoint", action="store_true",
                          help="在 ab_sleep_wake 停下提示真机睡眠（否则记 inconclusive）")

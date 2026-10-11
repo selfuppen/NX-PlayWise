@@ -11,6 +11,7 @@ sys.path.insert(0, str(TOOLS))
 
 import capture_device_observations as cap  # noqa: E402
 import verify_device_qualification as vq  # noqa: E402
+import make_eye_care_qualification_template as make_eye_care  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:
@@ -69,24 +70,51 @@ def test_invalid_int_is_rejected() -> None:
                 "no report must be written when input is rejected")
 
 
-def test_eye_care_is_advisory() -> None:
+def _eye_care_pass_answers() -> list[str]:
+    return (
+        ["Eye A", "Eye B", "30", "20"]
+        + ["y"] * len(make_eye_care.OBSERVATION_FIELDS)   # observations
+        + ["y", "n"]                                      # 0x44 restored; did not consume allowance
+    )
+
+
+def test_eye_care_capture_is_accepted_by_gate() -> None:
     with tempfile.TemporaryDirectory(prefix="cap-eye-") as tmp:
         reports = Path(tmp) / "device-reports"
-        argv = ["eye-care", "--commit", COMMIT, "--release-id", RELEASE_ID, "--reports", str(reports)]
-        answers = ["Eye A", "Eye B"] + ["y"] * len(cap.EYE_CARE_FIELDS)
-        rc = cap.main(argv, reader=make_reader(answers))
+        argv = ["eye-care", "--commit", COMMIT, "--release-id", RELEASE_ID,
+                "--model", "mariko-oled", "--reports", str(reports)]
+        rc = cap.main(argv, reader=make_reader(_eye_care_pass_answers()))
         require(rc == 0, "eye-care capture must succeed")
-        import json
-        report = json.loads((reports / "eye-care-observations.json").read_text(encoding="utf-8"))
-        require(report.get("advisory") is True, "eye-care schema must be flagged advisory")
-        require(report.get("report_status") == "final", "eye-care report must be final")
-        require(report["observations"]["sleep_excludes_usage"] is True, "sleep-not-counted must be captured")
+        out = reports / "eye-care-qualification.json"
+        require(out.is_file(), "eye-care-qualification.json must be written")
+        manifest = {"commit": COMMIT, "release_id": RELEASE_ID}
+        # Must satisfy the authoritative gate's eye-care verifier.
+        vq.verify_eye_care_report(reports, manifest, "oled", "22.5.0", "1.11.2", required=True)
+
+
+def test_eye_care_consumed_allowance_is_rejected_by_gate() -> None:
+    with tempfile.TemporaryDirectory(prefix="cap-eye-bad-") as tmp:
+        reports = Path(tmp) / "device-reports"
+        argv = ["eye-care", "--commit", COMMIT, "--release-id", RELEASE_ID, "--reports", str(reports)]
+        # Flip only the final answer: the rest DID consume the daily allowance.
+        answers = (["Eye A", "Eye B", "30", "20"]
+                   + ["y"] * len(make_eye_care.OBSERVATION_FIELDS) + ["y", "y"])
+        rc = cap.main(argv, reader=make_reader(answers))
+        require(rc == 0, "capture itself still records the (bad) observation")
+        manifest = {"commit": COMMIT, "release_id": RELEASE_ID}
+        try:
+            vq.verify_eye_care_report(reports, manifest, "oled", "22.5.0", "1.11.2", required=True)
+        except vq.QualificationError as exc:
+            require("额度隔离" in str(exc), "the gate must reject a rest that consumed the daily allowance")
+        else:
+            raise AssertionError("an allowance-consuming eye-care report must not pass the gate")
 
 
 def main() -> int:
     test_bedtime_capture_is_accepted_by_gate()
     test_invalid_int_is_rejected()
-    test_eye_care_is_advisory()
+    test_eye_care_capture_is_accepted_by_gate()
+    test_eye_care_consumed_allowance_is_rejected_by_gate()
     print("Capture observations tests passed")
     return 0
 

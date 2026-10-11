@@ -344,6 +344,46 @@ def test_run_bedtime_confirms_then_applies() -> None:
         check("status" in record["machine"], "bedtime records the status evaluation")
 
 
+def test_run_eye_care_cleans_up_on_failure() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        device: dict = {}
+        wire = FakeWire(device, timeout_on={"status"})
+        ctx = _ctx(Path(tmp), device, FakeSource(device), wire, FakeSbb())
+        ctx.scratch.mkdir(parents=True, exist_ok=True)
+        raised = False
+        try:
+            cp.run_eye_care(ctx, play_minutes=1, rest_minutes=1)
+        except lwc.WireTimeout:
+            raised = True
+        check(raised, "eye_care: a status-read failure propagates (probe fails loudly)")
+        submitted = [t for t, _ in wire.submitted]
+        check(submitted == ["confirm_bedtime_requirements", "set_eye_care_policy", "status",
+                            "set_eye_care_policy"],
+              "eye_care: try/finally still disables after the mid-run failure")
+        check(wire.submitted[-1][1]["enabled"] is False,
+              "eye_care cleanup disables so the console is not left locked")
+
+
+def test_run_bedtime_cleans_up_on_failure() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        device: dict = {}
+        wire = FakeWire(device, timeout_on={"status"})
+        ctx = _ctx(Path(tmp), device, FakeSource(device), wire, FakeSbb())
+        ctx.scratch.mkdir(parents=True, exist_ok=True)
+        raised = False
+        try:
+            cp.run_bedtime(ctx)
+        except lwc.WireTimeout:
+            raised = True
+        check(raised, "bedtime: a status-read failure propagates (probe fails loudly)")
+        submitted = [t for t, _ in wire.submitted]
+        check(submitted == ["confirm_bedtime_requirements", "set_bedtime_policy", "status",
+                            "set_bedtime_policy"],
+              "bedtime: try/finally still disables after the mid-run failure")
+        check(wire.submitted[-1][1]["bedtime_enabled"] is False,
+              "bedtime cleanup disables so no all-day lockout is left behind")
+
+
 def main() -> int:
     test_probe_ftp_port_falls_back()
     test_preflight_passes_and_notes_home()
@@ -354,6 +394,8 @@ def main() -> int:
     test_run_timer_ab_sleep_checkpoint_reconnects()
     test_run_eye_care_writes_policy()
     test_run_bedtime_confirms_then_applies()
+    test_run_eye_care_cleans_up_on_failure()
+    test_run_bedtime_cleans_up_on_failure()
     if FAILURES:
         print(f"{FAILURES} capability_probe test(s) failed", file=sys.stderr)
         return 1

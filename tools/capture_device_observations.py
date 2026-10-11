@@ -6,8 +6,9 @@ can never do itself) and writes structured JSON:
   * bedtime-qualification.json -- fills the make_bedtime template so the
     authoritative gate (verify_device_qualification.verify_bedtime_report) can
     consume it.
-  * eye-care-observations.json -- a NEW advisory schema; eye-care has no gate or
-    template of its own, so this is explicitly advisory and never promoted.
+  * eye-care-qualification.json -- fills the make_eye_care template so the
+    authoritative gate (verify_device_qualification.verify_eye_care_report) can
+    consume it (opt-in via --require-eye-care; eye-care is a candidate feature).
   * standard-observations.json -- advisory eyeball items from the standard
     acceptance checklist.
 """
@@ -21,6 +22,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import make_bedtime_qualification_template as make_bedtime  # noqa: E402
+import make_eye_care_qualification_template as make_eye_care  # noqa: E402
 
 
 class CaptureError(RuntimeError):
@@ -124,20 +126,6 @@ def capture_bedtime(reader, commit: str, release_id: str, model: str, hos: str, 
     missing["schedule_continues_without_handshake"] = ask_bool(reader, "无握手是否仍继续计划（防绕过）？")
     return report
 
-EYE_CARE_FIELDS = (
-    ("sleep_excludes_usage", "睡眠期间是否不扣使用时长？"),
-    ("home_awake_counted", "HOME 亮屏是否计入使用？"),
-    ("unlimited_vs_1440_proxy_compared", "是否对比了原不限时 ↔ 临时 1440 代理？"),
-    ("rest_start_observed", "是否观察到休息开始？"),
-    ("rest_end_observed", "是否观察到休息结束？"),
-    ("overlay_pin_after_rest", "家长 PIN 后浮窗是否正常？"),
-    ("today_schedule_single_skip", "今日调度单次跳过是否生效？"),
-    ("daily_allowance_bedtime_handover", "每日额度与就寝交接是否正确？"),
-    ("disable_eye_care_restores_unlimited", "关闭护眼后是否恢复原不限时？"),
-    ("expired_break_id_reprompts_not_release", "过期 break_id 是否提示重看而不放行？"),
-    ("pctl_settings_exactly_restored", "0x44 是否逐字节精确恢复？"),
-)
-
 STANDARD_FIELDS = (
     ("pin_created", "是否创建数字 PIN 且 secret 非占位值？"),
     ("takeover_confirmed", "家长确认接管后是否进入 Active？"),
@@ -151,17 +139,16 @@ STANDARD_FIELDS = (
 
 
 def capture_eye_care(reader, commit: str, release_id: str, model: str, hos: str, atmosphere: str) -> dict:
-    report = {
-        "schema_version": 1,
-        "report_status": "final",
-        "advisory": True,
-        "subject": {"commit": commit, "release_id": release_id},
-        "environment": {"model": model, "hos": hos, "atmosphere": atmosphere},
-        "games": [ask_text(reader, "游戏 A 名称"), ask_text(reader, "游戏 B 名称")],
-        "observations": {},
-    }
-    for key, prompt in EYE_CARE_FIELDS:
+    report = make_eye_care.template(commit, release_id, model, hos, atmosphere)
+    report["report_status"] = "final"
+    report["games"] = [ask_text(reader, "游戏 A 名称"), ask_text(reader, "游戏 B 名称")]
+    report["timing"]["rest_start_trigger_seconds"] = ask_int(reader, "休息开始触发秒数", 0, 60)
+    report["timing"]["rest_end_trigger_seconds"] = ask_int(reader, "休息恢复触发秒数", 0, 60)
+    for key, prompt in make_eye_care.OBSERVATION_FIELDS:
         report["observations"][key] = ask_bool(reader, prompt)
+    report["pctl"]["settings_exactly_restored"] = ask_bool(reader, "0x44 是否逐字节精确恢复？")
+    report["pctl"]["unexpected_raw_offsets"] = []
+    report["pctl"]["eye_care_consumed_daily_allowance"] = ask_bool(reader, "护眼休息是否消耗了每日额度？（应为否）")
     return report
 
 
@@ -218,7 +205,7 @@ def main(argv: list[str] | None = None, reader=None) -> int:
             out = args.reports / "bedtime-qualification.json"
         elif args.kind == "eye-care":
             report = capture_eye_care(reader, args.commit, args.release_id, args.model, args.hos, args.atmosphere)
-            out = args.reports / "eye-care-observations.json"
+            out = args.reports / "eye-care-qualification.json"
         else:
             report = capture_standard(reader, args.commit, args.release_id)
             out = args.reports / "standard-observations.json"

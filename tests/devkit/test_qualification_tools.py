@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import promote_qualified_build as promoter  # noqa: E402
 import verify_device_qualification as verifier  # noqa: E402
+import make_eye_care_qualification_template as make_eye_care  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:
@@ -431,6 +432,88 @@ def test_vision_rejects_verdict_mismatch() -> None:
             raise AssertionError("a verdict/report mismatch must not qualify")
 
 
+def eye_care_report_payload(**overrides) -> dict:
+    base = {
+        "schema_version": 1,
+        "report_status": "final",
+        "subject": {"commit": "a" * 40,
+                    "release_id": f"playwise-{verifier.VERSION}+aaaaaaaaaaaa"},
+        "environment": {"model": "mariko-oled", "hos": "22.5.0", "atmosphere": "1.11.2"},
+        "games": ["game-a", "game-b"],
+        "timing": {"rest_start_trigger_seconds": 30, "rest_end_trigger_seconds": 20},
+        "observations": {key: True for key, _ in make_eye_care.OBSERVATION_FIELDS},
+        "pctl": {"settings_exactly_restored": True, "unexpected_raw_offsets": [],
+                 "eye_care_consumed_daily_allowance": False},
+    }
+    base.update(overrides)
+    return base
+
+
+def test_eye_care_gate_passes_when_required() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        (reports / "eye-care-qualification.json").write_text(
+            json.dumps(eye_care_report_payload()), encoding="utf-8")
+        result = verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2", require_eye_care=True)
+        require(result["status"] == "passed", "a complete eye-care report must qualify")
+        require("eye_care_rest_cycle" in result["checks"] and "eye_care_isolation" in result["checks"],
+                "eye-care checks are recorded when the report is present")
+        require("eye_care_path" in result["reports"], "verification binds the eye-care report path")
+
+
+def test_eye_care_required_but_missing_is_rejected() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)  # no eye-care report present
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2", require_eye_care=True)
+        except verifier.QualificationError as exc:
+            require("eye-care-qualification.json" in str(exc),
+                    "a missing eye-care report must be named when it is required")
+        else:
+            raise AssertionError("--require-eye-care with no report must not qualify")
+        # ...but with eye-care NOT required, the same reports still qualify (opt-in gate).
+        require(verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")["status"] == "passed",
+                "a missing eye-care report must not block the base qualification")
+
+
+def test_eye_care_present_but_invalid_fails_closed() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        bad = eye_care_report_payload()
+        bad["pctl"]["eye_care_consumed_daily_allowance"] = True  # isolation broken
+        (reports / "eye-care-qualification.json").write_text(json.dumps(bad), encoding="utf-8")
+        # Even without --require-eye-care, a PRESENT report is fail-closed validated.
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
+        except verifier.QualificationError as exc:
+            require("额度隔离" in str(exc), "a present eye-care report that breaks isolation must fail closed")
+        else:
+            raise AssertionError("an eye-care report that consumes the daily allowance must not qualify")
+
+
+def test_eye_care_incomplete_observation_is_rejected() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        bad = eye_care_report_payload()
+        bad["observations"]["disable_eye_care_restores_unlimited"] = False
+        (reports / "eye-care-qualification.json").write_text(json.dumps(bad), encoding="utf-8")
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2", require_eye_care=True)
+        except verifier.QualificationError as exc:
+            require("disable_eye_care_restores_unlimited" in str(exc),
+                    "an incomplete eye-care observation must be named")
+        else:
+            raise AssertionError("an incomplete eye-care observation must not qualify")
+
+
 def main() -> int:
     test_verify_and_promote_byte_identical_packages()
     test_manual_status_can_still_enter_full_qualification()
@@ -444,6 +527,10 @@ def main() -> int:
     test_vision_rejects_tampered_screenshot()
     test_vision_rejects_missing_screenshot()
     test_vision_rejects_verdict_mismatch()
+    test_eye_care_gate_passes_when_required()
+    test_eye_care_required_but_missing_is_rejected()
+    test_eye_care_present_but_invalid_fails_closed()
+    test_eye_care_incomplete_observation_is_rejected()
     print("Qualification verifier and promotion tests passed")
     return 0
 

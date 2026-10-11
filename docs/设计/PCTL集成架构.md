@@ -111,6 +111,7 @@ Enforce、跨日、启动恢复、未来规则修改和今日规则未变化都�
 - **限制生效 = 提示 + 暂停**：`restriction_quick` 向当天写 BLOCKED 后，`1455` 由 false 变 true、`1454` 剩余转负，Nintendo 官方“今日无法继续游戏”遮罩出现，且**游戏音频暂停**（`restriction_visible + paused_or_suspended`）。`1457` 轮询 122 次从未 signaled，再次确认提示与暂停不依赖 `1457`。
 - **规避 1451 StartPlayTimer**：`ab_limited/grant/unlimited_settings_only` 三种日常策略均为 settings-only 即 runtime-ready（`fallback.called=false`），无任何一次触发 1451 fallback。
 - `0x44` 同值写入成功并逐字节精确还原；`1006/1031/1035/1457/1458` raw 与 libnx `comparable` 且相等。
+- **就寝/护眼求值（写入+求值探测）**：`--scenario bedtime`/`eye_care` 为写入型探测（会改设备策略，结束自动关闭，不含在 `all`）——确认前置、写 `set_bedtime_policy`/`set_eye_care_policy`、读 `status` 证明被接受并求值（`restriction_reasons.bedtime=true`、`eye_care.phase=playing`）。Lab 构建编译掉自动 `enforce_tick`（`sysmodule_core.c:632`），故**可见拦截/休息浮窗不在 lab 下出现**；二者经与 `restriction_quick` 相同的 PCTL BLOCKED 执行（已证），其可见自动触发只在标准构建上由人工签署门禁验收（bedtime 的 `verify_bedtime_report`、护眼的 `verify_eye_care_report`，见[测试指南](../开发/测试指南.md)）。
 
 ## Device Lab
 
