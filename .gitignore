@@ -65,3 +65,6 @@ node_modules/
 /device_lab/overlay/playwise-device-lab.elf
 /device_lab/overlay/playwise-device-lab.nacp
 /device_lab/overlay/playwise-device-lab.ovl
+
+# Device Lab evidence pulled from a test console (device_lab_roundtrip pull / input smoke)
+/device-reports/
