@@ -52,6 +52,10 @@ typedef struct {
     char game_slot[8];
     char official_pause_expected[16];
     bool context_confirmed;
+    /* Set only in-process by the lab self-driver when it synthesizes a
+       session_start; never parsed from external request JSON. Redirects the
+       run's report into the advisory lab/selfdrive/ tree. */
+    bool self_driven;
 #endif
 } PtcRequest;
 

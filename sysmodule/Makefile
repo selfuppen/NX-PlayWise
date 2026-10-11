@@ -51,6 +51,7 @@ SYSMODULE_CFILES := \
 	ipc_server.c \
 	lab_session.c \
 	lab_session_report.c \
+	lab_selfdrive.c \
 	sysmodule_storage.c \
 	sysmodule_audit.c \
 	sysmodule_history.c \

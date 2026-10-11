@@ -3,6 +3,7 @@
 
 #include "sysmodule_core.h"
 #include "lab_session.h"
+#include "lab_selfdrive.h"
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -458,6 +458,7 @@ PtcRequestType ptc_request_type_from_string(const char *value)
     if (strcmp(value, "lab_campaign_start") == 0) return PTC_REQUEST_LAB_CAMPAIGN_START;
     if (strcmp(value, "lab_campaign_status") == 0) return PTC_REQUEST_LAB_CAMPAIGN_STATUS;
     if (strcmp(value, "lab_campaign_abandon") == 0) return PTC_REQUEST_LAB_CAMPAIGN_ABANDON;
+    if (strcmp(value, "lab_selfdrive_start") == 0) return PTC_REQUEST_LAB_SELFDRIVE_START;
 #endif
     return PTC_REQUEST_UNKNOWN;
 }
@@ -532,6 +533,8 @@ const char *ptc_request_type_name(PtcRequestType type)
         return "lab_campaign_status";
     case PTC_REQUEST_LAB_CAMPAIGN_ABANDON:
         return "lab_campaign_abandon";
+    case PTC_REQUEST_LAB_SELFDRIVE_START:
+        return "lab_selfdrive_start";
 #endif
     case PTC_REQUEST_UNKNOWN:
     default:
@@ -715,6 +718,15 @@ PtcErrorCode ptc_request_parse(const char *text, PtcRequest *out)
         if (find_key(text, "runtime_effect") &&
             (!json_string(text, "runtime_effect", out->runtime_effect, sizeof(out->runtime_effect)) ||
              !lab_runtime_effect_is_valid(out->runtime_effect))) return PTC_ERR_BAD_REQUEST;
+        return PTC_ERR_OK;
+    case PTC_REQUEST_LAB_SELFDRIVE_START:
+        /* The self-driver only covers machine-decidable scenarios; default to
+           the fully autonomous timer-activation A/B mode. A campaign context is
+           never accepted here -- authoritative campaigns stay human-attested. */
+        snprintf(out->lab_mode, sizeof(out->lab_mode), "timer_activation_ab");
+        if (find_key(text, "mode") &&
+            (!json_string(text, "mode", out->lab_mode, sizeof(out->lab_mode)) ||
+             !lab_mode_is_valid(out->lab_mode))) return PTC_ERR_BAD_REQUEST;
         return PTC_ERR_OK;
 #endif
     case PTC_REQUEST_UNKNOWN:

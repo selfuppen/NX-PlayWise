@@ -87,8 +87,18 @@ A passing run concludes with `PASS: local tests`. This entry point covers:
 - Single-file offline page consistency with modular source, inline CSP, zero runtime network dependencies, Web Crypto/built-in HMAC test vectors, and graceful degradation without persistent storage.
 - Build-timing tool `stage_timer` record read/write, report formatting, and CLI pass-through (previously an orphan test wired into no entry point).
 - Device Lab evidence round-trip `device_lab_roundtrip` (idempotent pull, SHA-256 verification, immutable-evidence tamper guard), machine assertions `assert_device_evidence` (no `start_timer` in `pctl_debug.jsonl`, 8-field/dedup `ipc-client.log`, log redaction, single nonce consumption), and manual-observation capture `capture_device_observations` (produces a gate-acceptable bedtime report, rejects invalid input, adds an eye-care advisory schema).
+- Self-drive advisory assertions `assert_selfdrive_evidence`, the sys-botbase client wire protocol `sys_botbase_client`, and the input-smoke orchestration `input_smoke_harness` (all driven by an in-process fake server / fixtures, never a real device).
 
 Tests must use fixed timestamps, deterministic fixtures, and host mock adapters without depending on real Switch system services.
+
+## Device Automation Regression (advisory, non-authoritative)
+
+Two automation lanes cut manual real-device effort, but both are advisory and never replace authoritative qualification; the human attestation (`context_confirmed`, `manual_observation`, physical dock replug, official-PIN clock changes, eyeball restriction visibility) stays the real-device backstop.
+
+- Device self-drive (Device Lab): drop a `lab_selfdrive_start` request (optional `mode`, default `timer_activation_ab`) into `inbox/pending/` over FTP to start it remotely. The device-lab sysmodule's `lab_selfdrive.c` reuses `ptc_lab_process_request` to walk session→phase×N→observation→restore on the real phase deadlines, writing an advisory stream to `lab/selfdrive/<run_id>.selfdrive.json` and `lab/selfdrive/summary.json` (marked `self_driven`/`advisory`, never touching `reports/`, never setting `context_confirmed`; restriction visibility is honestly `self_driven_unobserved`). `device_lab_roundtrip.py pull` already fetches it with the `lab/` tree, and `python tools/assert_selfdrive_evidence.py` asserts exact restore, no unexpected `0x44` offsets, no fabricated human observation, and no secret leakage.
+- sys-botbase input smoke: the operator installs sys-botbase on the test console themselves (default port 6000; never shipped in any PlayWise package, never run against a managed child's device). `python tools/input_smoke_harness.py --host <ip>` injects input via hiddbg (seen as a real controller, so it can drive the 1s held-A danger confirm; touch is still rejected at a dangerous confirm), optionally `--pull --ftp-url <url>` to fetch SD evidence and run `assert_device_evidence`. The danger "hold vs touch" distinction is expressed exactly on the wire as `clickSeq +A,W1200,-A` versus `touch x y`; the on-device accept/reject is confirmed by a human on real hardware.
+
+The host-side encoding and assertions of both lanes are covered by `tests/devkit/test_sys_botbase_client.py`, `test_input_smoke_harness.py`, and `test_assert_selfdrive_evidence.py`, which need no real device.
 
 ## Continuous Integration Gate
 

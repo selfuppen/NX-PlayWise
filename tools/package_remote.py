@@ -163,6 +163,8 @@ FORBIDDEN_RELEASE_MARKERS = (
     b"lab_session_start",
     b"lab_phase_start",
     b"lab_session_restore",
+    b"lab_selfdrive_start",
+    b"self_driven_unobserved",
     b"restriction_effect",
     b"timer_activation_ab",
     b"GetPlayTimerSpentTimeForTest",

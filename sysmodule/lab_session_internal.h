@@ -28,6 +28,10 @@ typedef struct {
     int64_t deadline;
     char observation[32];
     char runtime_effect[32];
+    /* Set when the lab self-driver (not a human operator) is replaying this
+       run. Redirects the report into the advisory lab/selfdrive/ tree and marks
+       it advisory; a self-driven run never carries a campaign context. */
+    bool self_driven;
     bool baseline_all_zero;
     bool activation_preconditions_met;
     int64_t baseline_remaining_ns;
@@ -69,6 +73,12 @@ unsigned int lab_required_phase_count(const LabState *state);
 bool lab_write_public_evidence(PtcSysmodule *sysmodule, const LabState *state,
     const PtcPctlPublicParity *parity, bool same_value_write, bool same_value_restored);
 bool lab_rebuild_report(PtcSysmodule *sysmodule, const LabState *state);
+
+/* Exposed for the lab self-driver (lab_selfdrive.c), which replays the normal
+   request flow and therefore needs to read the persisted session and know which
+   phase comes next. */
+bool lab_load_state(PtcSysmodule *sysmodule, LabState *state);
+const char *lab_expected_phase(const LabState *state);
 
 #endif
 

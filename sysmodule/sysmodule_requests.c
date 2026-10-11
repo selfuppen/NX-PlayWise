@@ -373,6 +373,10 @@ void process_request_text(PtcSysmodule *sysmodule, const char *request_text, con
     case PTC_REQUEST_LAB_SESSION_STATUS:
     case PTC_REQUEST_LAB_OBSERVATION:
     case PTC_REQUEST_LAB_SESSION_RESTORE:
+    case PTC_REQUEST_LAB_CAMPAIGN_START:
+    case PTC_REQUEST_LAB_CAMPAIGN_STATUS:
+    case PTC_REQUEST_LAB_CAMPAIGN_ABANDON:
+    case PTC_REQUEST_LAB_SELFDRIVE_START:
         (void)ptc_lab_process_request(sysmodule, &request);
         break;
 #endif

@@ -478,6 +478,7 @@ uint32_t ptc_sysmodule_next_wait_ms(PtcSysmodule *sysmodule)
     if (date_ms < wait_ms) wait_ms = date_ms;
 #ifdef PLAYWISE_DEVICE_LAB
     wait_ms = ptc_lab_next_wait_ms(sysmodule, wait_ms);
+    wait_ms = ptc_lab_selfdrive_next_wait_ms(sysmodule, wait_ms);
 #endif
     return wait_ms ? wait_ms : 1u;
 }
@@ -594,6 +595,7 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     if (!sysmodule) return 0;
 #ifdef PLAYWISE_DEVICE_LAB
     actions += ptc_lab_scheduler_tick(sysmodule);
+    actions += ptc_lab_selfdrive_tick(sysmodule);
 #endif
     {
         int setup_actions = ptc_sysmodule_bootstrap_setup(sysmodule);

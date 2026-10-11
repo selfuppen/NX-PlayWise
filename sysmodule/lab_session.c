@@ -11,6 +11,7 @@
 #include "../common/time/ptc_time.h"
 #include "../common/version.h"
 #include "../platform/switch/play_timer_settings_layout.h"
+#include "lab_selfdrive.h"
 
 static const char *const LAB_PHASES[] = {
     "home_stopped", "home_started", "game_foreground",
@@ -266,7 +267,7 @@ static bool save_state(PtcSysmodule *sysmodule, const LabState *state)
         "\"game_slot\":\"%s\",\"official_pause_expected\":\"%s\","
         "\"state\":\"%s\",\"next_phase\":%d,"
         "\"active_phase\":\"%s\",\"started_at\":%lld,\"deadline\":%lld,"
-        "\"observation\":\"%s\",\"runtime_effect\":\"%s\",\"baseline_all_zero\":%s,"
+        "\"observation\":\"%s\",\"runtime_effect\":\"%s\",\"self_driven\":%s,\"baseline_all_zero\":%s,"
         "\"activation_preconditions_met\":%s,\"baseline_remaining_ns\":%lld,"
         "\"home_awake_counted\":%d,\"sleep_excluded\":%d,"
         "\"limited_settings_only_runtime_ready\":%d,"
@@ -286,7 +287,8 @@ static bool save_state(PtcSysmodule *sysmodule, const LabState *state)
         state->campaign_attempt, state->game_slot, state->official_pause_expected,
         state->state, state->next_phase, state->active_phase,
         (long long)state->started_at, (long long)state->deadline, state->observation,
-        state->runtime_effect, state->baseline_all_zero ? "true" : "false",
+        state->runtime_effect, state->self_driven ? "true" : "false",
+        state->baseline_all_zero ? "true" : "false",
         state->activation_preconditions_met ? "true" : "false",
         (long long)state->baseline_remaining_ns,
         state->home_awake_counted, state->sleep_excluded,
@@ -342,6 +344,7 @@ static bool load_state(PtcSysmodule *sysmodule, LabState *state)
         sizeof(state->official_pause_expected));
     if (json_i64(text, "campaign_attempt", &value)) state->campaign_attempt = (int)value;
     (void)json_string(text, "runtime_effect", state->runtime_effect, sizeof(state->runtime_effect));
+    (void)json_bool(text, "self_driven", &state->self_driven);
     (void)json_bool(text, "baseline_all_zero", &state->baseline_all_zero);
     (void)json_bool(text, "activation_preconditions_met", &state->activation_preconditions_met);
     (void)json_i64(text, "baseline_remaining_ns", &state->baseline_remaining_ns);
@@ -898,6 +901,7 @@ static PtcErrorCode start_session(PtcSysmodule *sysmodule, LabState *state, cons
         return PTC_ERR_BAD_REQUEST;
     }
     memset(state, 0, sizeof(*state));
+    state->self_driven = request->self_driven;
     snprintf(state->mode, sizeof(state->mode), "%s",
         request->lab_mode[0] ? request->lab_mode : "full");
     if (campaign_loaded) {
@@ -1059,6 +1063,7 @@ bool ptc_lab_request_type(PtcRequestType type)
     case PTC_REQUEST_LAB_CAMPAIGN_START:
     case PTC_REQUEST_LAB_CAMPAIGN_STATUS:
     case PTC_REQUEST_LAB_CAMPAIGN_ABANDON:
+    case PTC_REQUEST_LAB_SELFDRIVE_START:
         return true;
     default:
         return false;
@@ -1089,6 +1094,10 @@ bool ptc_lab_process_request(PtcSysmodule *sysmodule, const PtcRequest *request)
     case PTC_REQUEST_LAB_CAMPAIGN_ABANDON:
         if (writes_disabled) err = PTC_ERR_DISABLED;
         else err = abandon_campaign(sysmodule);
+        break;
+    case PTC_REQUEST_LAB_SELFDRIVE_START:
+        if (writes_disabled) err = PTC_ERR_DISABLED;
+        else err = ptc_lab_selfdrive_arm(sysmodule, request);
         break;
     case PTC_REQUEST_LAB_SESSION_START:
         if (writes_disabled) {
@@ -1254,6 +1263,16 @@ uint32_t ptc_lab_next_wait_ms(PtcSysmodule *sysmodule, uint32_t current_wait_ms)
          strcmp(state.active_phase, "ab_restriction_before_unlimited") == 0) &&
         remaining_ms > LAB_RESTRICTION_EVENT_POLL_MS) remaining_ms = LAB_RESTRICTION_EVENT_POLL_MS;
     return remaining_ms < current_wait_ms ? (uint32_t)remaining_ms : current_wait_ms;
+}
+
+bool lab_load_state(PtcSysmodule *sysmodule, LabState *state)
+{
+    return load_state(sysmodule, state);
+}
+
+const char *lab_expected_phase(const LabState *state)
+{
+    return expected_phase(state);
 }
 
 #endif

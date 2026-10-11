@@ -17,6 +17,7 @@
 #include "../../platform/host/pctl_stub.h"
 #include "../../platform/switch/play_timer_settings_layout.h"
 #include "../../sysmodule/lab_session.h"
+#include "../../sysmodule/lab_selfdrive.h"
 
 static int failures;
 
@@ -846,6 +847,89 @@ static void test_ui_model(void)
         "NRO touch targets match their visible action cards");
 }
 
+static bool sd_extract_run_id(PtcMemStorage *storage, char *out, size_t out_size)
+{
+    char text[2048];
+    const char *pos;
+    const char *end;
+    if (!storage->storage.vtable->read_text(&storage->storage,
+            "/lab/lab/selfdrive/summary.json", text, sizeof(text)))
+        return false;
+    pos = strstr(text, "\"run_id\":\"");
+    if (!pos) return false;
+    pos += strlen("\"run_id\":\"");
+    end = strchr(pos, '"');
+    if (!end || (size_t)(end - pos) >= out_size) return false;
+    memcpy(out, pos, (size_t)(end - pos));
+    out[end - pos] = '\0';
+    return true;
+}
+
+static void test_selfdrive_refuses_concurrent_arm(void)
+{
+    PtcMemStorage storage;
+    PtcPctlStub pctl;
+    PtcFakeTime time;
+    PtcSysmodule sysmodule;
+    PtcRequest arm;
+    ptc_mem_storage_init(&storage);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&time, 2100000000LL, 2999, 600);
+    init_lab(&sysmodule, &storage, &pctl, &time);
+    arm = request(PTC_REQUEST_LAB_SELFDRIVE_START, "sd-arm-1", NULL, NULL);
+    snprintf(arm.lab_mode, sizeof(arm.lab_mode), "restriction_quick");
+    check(ptc_lab_selfdrive_arm(&sysmodule, &arm) == PTC_ERR_OK, "first self-drive arm succeeds");
+    check(ptc_lab_selfdrive_arm(&sysmodule, &arm) == PTC_ERR_BAD_REQUEST,
+        "a second self-drive arm is refused while one is active");
+}
+static void test_selfdrive_restriction_quick_is_advisory(void)
+{
+    PtcMemStorage storage;
+    PtcPctlStub pctl;
+    PtcFakeTime time;
+    PtcSysmodule sysmodule;
+    PtcRequest arm;
+    char text[20000];
+    char run_id[80];
+    char path[160];
+    int i;
+    ptc_mem_storage_init(&storage);
+    ptc_pctl_stub_init(&pctl);
+    ptc_fake_time_init(&time, 2100000000LL, 2999, 600);
+    pctl.public_parity_override_enabled = true;
+    pctl.public_parity_override.current_settings_equal = true;
+    init_lab(&sysmodule, &storage, &pctl, &time);
+
+    arm = request(PTC_REQUEST_LAB_SELFDRIVE_START, "sd-arm", NULL, NULL);
+    snprintf(arm.lab_mode, sizeof(arm.lab_mode), "restriction_quick");
+    check(ptc_lab_selfdrive_arm(&sysmodule, &arm) == PTC_ERR_OK, "self-drive arms a restriction_quick run");
+
+    /* The driver issues session/phase/observation/restore across scheduler
+       ticks; advancing past the 15s restriction window each pass lets the real
+       deadline-driven phase completion fire. */
+    for (i = 0; i < 12; ++i) {
+        (void)ptc_lab_scheduler_tick(&sysmodule);
+        (void)ptc_lab_selfdrive_tick(&sysmodule);
+        time.snapshot.unix_seconds += 16;
+    }
+
+    check(sd_extract_run_id(&storage, run_id, sizeof(run_id)), "self-drive summary records a run id");
+    check(storage.storage.vtable->read_text(&storage.storage,
+            "/lab/lab/selfdrive/summary.json", text, sizeof(text)) &&
+            strstr(text, "\"verdict\":\"completed\"") && strstr(text, "\"self_driven\":true") &&
+            strstr(text, "\"advisory\":true") && strstr(text, "\"restored\":true"),
+        "self-drive finishes with an advisory, completed, restored summary");
+    snprintf(path, sizeof(path), "/lab/lab/selfdrive/%s.selfdrive.json", run_id);
+    check(storage.storage.vtable->read_text(&storage.storage, path, text, sizeof(text)) &&
+            strstr(text, "\"self_driven\":true") && strstr(text, "\"advisory\":true") &&
+            strstr(text, "\"manual_observation\":\"self_driven_unobserved\"") &&
+            strstr(text, "\"campaign\":null"),
+        "self-drive report is advisory and never fabricates a human observation");
+    snprintf(path, sizeof(path), "/lab/reports/%s.json", run_id);
+    check(!storage.storage.vtable->exists(&storage.storage, path),
+        "self-drive never writes into the authoritative reports/ tree");
+}
+
 int main(void)
 {
     test_atmosphere_version();
@@ -858,6 +942,8 @@ int main(void)
     test_campaign_retry_resume_and_unique_run_ids();
     test_full_zero_baseline_separates_collection_from_evidence();
     test_timer_activation_ab_report();
+    test_selfdrive_refuses_concurrent_arm();
+    test_selfdrive_restriction_quick_is_advisory();
     test_boot_flags();
     test_ui_model();
     if (failures) { fprintf(stderr, "%d Device Lab test(s) failed\n", failures); return 1; }

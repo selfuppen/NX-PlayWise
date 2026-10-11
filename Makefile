@@ -101,7 +101,7 @@ $(HOST_TEST): $(COMMON_SRCS) $(THIRD_PARTY_SRCS) $(PLATFORM_HOST_SRCS) $(ORCH_SR
 $(HOST_UI_TEST): $(UI_TEST_SRCS) companion/nro/ui_model.h companion/nro/ui_state.h companion/nro/ui_layout.h FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(UI_TEST_SRCS) -lm
 
-$(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c common/protocol/error_code.c common/protocol/request_schema.c common/protocol/result_builder.c common/time/ptc_time.c common/rules/rules.c common/rules/holiday_calendar.c common/rules/holiday_calendar_import.c third_party/cjson/cJSON.c platform/host/mem_storage.c platform/host/pctl_stub.c platform/host/fake_time.c platform/switch/play_timer_settings_layout.c sysmodule/lab_session.c sysmodule/lab_session_report.c device_lab/boot_flags.c device_lab/handoff_guard.c device_lab/ui_model.c tests/c/test_device_lab.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+$(HOST_LAB_TEST): common/crypto/sha256.c common/protocol/atmosphere_version.c common/protocol/error_code.c common/protocol/request_schema.c common/protocol/result_builder.c common/time/ptc_time.c common/rules/rules.c common/rules/holiday_calendar.c common/rules/holiday_calendar_import.c third_party/cjson/cJSON.c platform/host/mem_storage.c platform/host/pctl_stub.c platform/host/fake_time.c platform/switch/play_timer_settings_layout.c sysmodule/lab_session.c sysmodule/lab_session_report.c sysmodule/lab_selfdrive.c device_lab/boot_flags.c device_lab/handoff_guard.c device_lab/ui_model.c tests/c/test_device_lab.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -DPLAYWISE_DEVICE_LAB -o $@ $(filter-out FORCE_HOST_REBUILD,$^)
 
 # Execute the real NRO orchestration with deterministic host libnx/input shims.

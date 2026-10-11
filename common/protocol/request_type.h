@@ -53,7 +53,11 @@ typedef enum {
     PTC_REQUEST_LAB_SESSION_RESTORE = 28,
     PTC_REQUEST_LAB_CAMPAIGN_START = 34,
     PTC_REQUEST_LAB_CAMPAIGN_STATUS = 35,
-    PTC_REQUEST_LAB_CAMPAIGN_ABANDON = 36
+    PTC_REQUEST_LAB_CAMPAIGN_ABANDON = 36,
+    /* Lab-only autonomous driver: replays the operator's session/phase/
+       observation/restore steps for machine-decidable scenarios and writes an
+       advisory evidence stream. Never fabricates a human observation. */
+    PTC_REQUEST_LAB_SELFDRIVE_START = 51
 #endif
 } PtcRequestType;
 
