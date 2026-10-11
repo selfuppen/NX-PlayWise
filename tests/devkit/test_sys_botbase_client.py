@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import socket
 import sys
+import tempfile
 import threading
 from pathlib import Path
 
@@ -18,6 +19,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 import sys_botbase_client as sbb  # noqa: E402
 
 FAILURES = 0
+
+# A minimal but structurally real JFIF image (SOI + APP0 + EOI). pixelPeek
+# returns the JPEG as an uppercase hex line; capture_screenshot only trusts the
+# SOI marker, so this stands in for a real device frame in the host tests.
+MINIMAL_JPEG_HEX = "FFD8FFE000104A46494600010100000100010000FFD9"
 
 
 def check(condition: bool, label: str) -> None:
@@ -29,17 +35,19 @@ def check(condition: bool, label: str) -> None:
 
 class FakeSysBotBase:
     """Minimal fake: records every newline-terminated command, and answers the
-    handful of data commands with canned replies."""
+    handful of data commands with canned replies. `pixel_reply` is configurable
+    so a test can simulate the empty capssc/debug-flag failure (pixel_reply="")."""
 
-    REPLIES = {
+    BASE_REPLIES = {
         "getTitleID": "0100000000010000",
         "getSystemLanguage": "en-US",
         "peek": "0011223344",
-        "pixelPeek": "ffd8ffe000",
     }
 
-    def __init__(self) -> None:
+    def __init__(self, pixel_reply: str = MINIMAL_JPEG_HEX) -> None:
         self.commands: list[str] = []
+        self.REPLIES = dict(self.BASE_REPLIES)
+        self.REPLIES["pixelPeek"] = pixel_reply
         self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server.bind(("127.0.0.1", 0))
@@ -110,9 +118,34 @@ def test_input_and_queries() -> None:
     check("peek 0x1000 5" in fake.commands, "peek encodes address and size")
 
 
+def test_capture_screenshot() -> None:
+    with FakeSysBotBase() as fake:
+        with sbb.SysBotBaseClient("127.0.0.1", fake.port, timeout=3.0) as client:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp) / "sub" / "shot.jpg"
+                written = client.capture_screenshot(out)
+                check(out.is_file() and written > 0, "capture_screenshot writes the JPEG")
+                check(out.read_bytes()[:2] == b"\xff\xd8", "captured file starts with JPEG SOI")
+    check("pixelPeek" in fake.commands, "capture_screenshot sends pixelPeek")
+    # An empty pixelPeek (capssc 0x668CE on an unpatched debug flag) must raise
+    # loudly and write nothing, so the pipeline fails before any PCTL mutation.
+    with FakeSysBotBase(pixel_reply="") as fake:
+        with sbb.SysBotBaseClient("127.0.0.1", fake.port, timeout=3.0) as client:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp) / "shot.jpg"
+                raised = False
+                try:
+                    client.capture_screenshot(out)
+                except sbb.SysBotBaseError:
+                    raised = True
+                check(raised, "empty pixelPeek must raise SysBotBaseError")
+                check(not out.exists(), "no file is written when the capture is empty")
+
+
 def main() -> int:
     test_sequence_builders()
     test_input_and_queries()
+    test_capture_screenshot()
     if FAILURES:
         print(f"{FAILURES} sys_botbase_client test(s) failed", file=sys.stderr)
         return 1

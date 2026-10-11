@@ -187,7 +187,8 @@ def select_campaign(reports_dir: Path, campaign: str | None) -> tuple[Path, dict
 
 def verify_reports(reports_dir: Path, manifest: dict, expected_model: str,
                    expected_hos: str, expected_atmosphere: str,
-                   campaign: str | None = None) -> tuple[list[str], list[str], dict]:
+                   campaign: str | None = None,
+                   observation_source: str = "manual") -> tuple[list[str], list[str], dict, list[dict]]:
     campaign_path, campaign_value = select_campaign(reports_dir, campaign)
     require(campaign_value.get("state") == "complete", f"{campaign_path.name}: campaign 尚未完成")
     require(campaign_value.get("entry_method") in ("hot_switch", "reboot"),
@@ -202,6 +203,7 @@ def verify_reports(reports_dir: Path, manifest: dict, expected_model: str,
     ab_runs: list[str] = []
     paused_runs: list[str] = []
     continued_runs: list[str] = []
+    attestations: list[dict] = []
     for slot_index, path in enumerate(paths):
         report = read_json(path)
         label = path.name
@@ -257,16 +259,67 @@ def verify_reports(reports_dir: Path, manifest: dict, expected_model: str,
                 continued_runs.append(run_id)
             else:
                 raise QualificationError(f"{label}: 游戏实际行为不是资格矩阵要求的结果")
+            if observation_source == "vision_ai":
+                attestations.append(
+                    verify_vision_attestation(reports_dir, run_id, report, campaign_meta, label))
         else:
             raise QualificationError(f"{label}: 资格报告集只接受 timer_activation_ab 和 restriction_quick")
     require(len(ab_runs) == 1, "campaign 必须恰好包含一份 Timer 激活 A/B 报告")
     require(len(paused_runs) == 2, "campaign 必须包含游戏 A/B 两份暂停/挂起报告")
     require(len(continued_runs) == 1, "campaign 必须包含一份关闭官方暂停后的继续运行报告")
-    return list(accepted), paths_as_strings(paths), campaign_value
+    return list(accepted), paths_as_strings(paths), campaign_value, attestations
 
 
 def paths_as_strings(paths: list[Path]) -> list[str]:
     return [str(path.resolve()) for path in paths]
+
+
+# Device Lab observation UI enums (device_lab/overlay/source/main.cpp); the
+# vision sidecar verdict must stay inside them.
+VISION_OBSERVATIONS = ("restriction_visible", "no_visible_restriction", "unsure")
+VISION_RUNTIME_EFFECTS = ("continued", "paused_or_suspended", "exited", "unsure")
+
+
+def verify_vision_attestation(reports_dir: Path, run_id: str, report: dict,
+                              campaign_meta: dict, label: str) -> dict:
+    """vision_ai mode: a restriction_quick run must carry a sibling
+    <run_id>.vision.json binding the AI verdict to retained, hash-matching
+    screenshots. This is an integrity/audit binding (the driver set the on-device
+    selection from this verdict, so they agree by construction) -- correctness
+    rests on the retained frames, not on this equality. Fail-closed: no valid
+    sidecar => the run does not qualify. Returns a small attestation summary."""
+    path = reports_dir / f"{run_id}.vision.json"
+    require(path.is_file(), f"{label}: vision_ai 模式缺少视觉旁证 {path.name}")
+    verdict = read_json(path)
+    require(verdict.get("method") == "vision_ai", f"{label}: 旁证 method 必须是 vision_ai")
+    require(verdict.get("observation") in VISION_OBSERVATIONS, f"{label}: 旁证 observation 非法")
+    require(verdict.get("runtime_effect") in VISION_RUNTIME_EFFECTS, f"{label}: 旁证 runtime_effect 非法")
+    require(verdict.get("observation") == report.get("manual_observation"),
+            f"{label}: 旁证 observation 与报告 manual_observation 不一致")
+    require(verdict.get("runtime_effect") == report.get("manual_runtime_effect"),
+            f"{label}: 旁证 runtime_effect 与报告 manual_runtime_effect 不一致")
+    require(verdict.get("context_confirmed") == campaign_meta.get("context_confirmed"),
+            f"{label}: 旁证 context_confirmed 与报告 campaign.context_confirmed 不一致")
+    require(isinstance(verdict.get("sysbotbase_commit"), str) and verdict.get("sysbotbase_commit"),
+            f"{label}: 旁证缺少 sysbotbase_commit")
+    require(isinstance(verdict.get("wire_log_sha256"), str) and verdict.get("wire_log_sha256"),
+            f"{label}: 旁证缺少 wire_log_sha256")
+    screenshots = verdict.get("screenshots")
+    require(isinstance(screenshots, list) and len(screenshots) >= 2,
+            f"{label}: 旁证需至少 2 张截图（基线 + 窗口帧）")
+    bound: list[str] = []
+    for shot in screenshots:
+        require(isinstance(shot, dict), f"{label}: 截图条目必须是对象")
+        rel = shot.get("path")
+        recorded = shot.get("sha256")
+        require(isinstance(rel, str) and bool(rel), f"{label}: 截图缺少 path")
+        require(isinstance(recorded, str) and bool(recorded), f"{label}: 截图缺少 sha256")
+        abs_path = reports_dir / rel
+        require(abs_path.is_file(), f"{label}: 旁证截图缺失 {rel}")
+        require(sha256_file(abs_path) == recorded, f"{label}: 旁证截图哈希不符 {rel}")
+        bound.append(rel)
+    return {"run_id": run_id, "sysbotbase_commit": verdict["sysbotbase_commit"],
+            "wire_log_sha256": verdict["wire_log_sha256"], "screenshots": bound}
 
 
 def verify_bedtime_report(reports_dir: Path, manifest: dict, expected_model: str,
@@ -348,15 +401,24 @@ def verify_bedtime_report(reports_dir: Path, manifest: dict, expected_model: str
 
 
 def verify(packages: Path, reports: Path, expected_model: str,
-           expected_hos: str, expected_atmosphere: str, campaign: str | None = None) -> dict:
+           expected_hos: str, expected_atmosphere: str, campaign: str | None = None,
+           observation_source: str = "manual") -> dict:
     manifest, _lab_manifest, zip_hashes, component_hashes = package_identity(packages)
-    run_ids, report_paths, campaign_value = verify_reports(
-        reports, manifest, expected_model, expected_hos, expected_atmosphere, campaign)
+    run_ids, report_paths, campaign_value, attestations = verify_reports(
+        reports, manifest, expected_model, expected_hos, expected_atmosphere, campaign,
+        observation_source)
     bedtime_report = verify_bedtime_report(
         reports, manifest, expected_model, expected_hos, expected_atmosphere)
-    return {
+    checks = [
+        "device_lab_schema_v2", "environment_exosphere", "public_raw_libnx_parity",
+        "target_bound_activation_fallback", "restriction_matrix", "exact_restore",
+        "bedtime_full_entry_block", "bedtime_overlay_recovery", "bedtime_lifecycle",
+        "artifact_identity",
+    ]
+    result = {
         "schema_version": 1,
         "status": "passed",
+        "observation_source": observation_source,
         "subject": {"commit": manifest["commit"], "release_id": manifest["release_id"]},
         "baseline": {"model": expected_model, "hos": expected_hos, "atmosphere": expected_atmosphere},
         "campaign": {"campaign_id": campaign_value["campaign_id"],
@@ -364,13 +426,12 @@ def verify(packages: Path, reports: Path, expected_model: str,
         "reports": {"run_ids": run_ids, "paths": report_paths,
                     "bedtime_path": str(bedtime_report.resolve())},
         "artifacts": {"packages": zip_hashes, "release_components": component_hashes},
-        "checks": [
-            "device_lab_schema_v2", "environment_exosphere", "public_raw_libnx_parity",
-            "target_bound_activation_fallback", "restriction_matrix", "exact_restore",
-            "bedtime_full_entry_block", "bedtime_overlay_recovery", "bedtime_lifecycle",
-            "artifact_identity",
-        ],
+        "checks": checks,
     }
+    if observation_source == "vision_ai":
+        result["checks"].append("vision_attestation")
+        result["vision_attestation"] = attestations
+    return result
 
 
 def main() -> int:
@@ -382,11 +443,14 @@ def main() -> int:
     parser.add_argument("--expected-hos", required=True)
     parser.add_argument("--expected-atmosphere", required=True)
     parser.add_argument("--campaign", help="campaign ID 或 *.campaign.json 文件名；只有一个完整批次时可省略")
+    parser.add_argument("--observation-source", choices=["manual", "vision_ai"], default="manual",
+                        help="限制槽位观察来源；vision_ai 要求每个 restriction_quick run 带哈希绑定的视觉旁证")
     parser.add_argument("--output", type=Path, default=ROOT / "build" / "qualification" / "verification.json")
     args = parser.parse_args()
     try:
         result = verify(args.packages.resolve(), args.reports.resolve(), args.expected_model,
-                        args.expected_hos, args.expected_atmosphere, args.campaign)
+                        args.expected_hos, args.expected_atmosphere, args.campaign,
+                        args.observation_source)
     except QualificationError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
@@ -403,6 +467,7 @@ def main() -> int:
         "bedtime_overlay_recovery": "Overlay PIN 与三级恢复路径均完成真机验证",
         "bedtime_lifecycle": "bedtime 时限、生命周期、时钟与失败路径完整",
         "artifact_identity": "报告、候选 Zip 与 Switch 二进制身份绑定",
+        "vision_attestation": "每个限制槽位的 AI 判定均有哈希绑定的截图旁证",
     }
     for check_name in result["checks"]:
         print(f"PASS: {labels[check_name]}")

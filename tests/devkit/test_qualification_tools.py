@@ -328,6 +328,109 @@ def test_multiple_campaigns_require_explicit_selection() -> None:
                 "explicit campaign selection must bind the qualification result")
 
 
+def prepare_vision_sidecars(reports: Path) -> None:
+    """Attach a vision_ai sidecar + screenshot bundle to each restriction_quick
+    run, matching the report's observation fields (as the driver would)."""
+    specs = {
+        "pause-a": ("pause_on_game_a", "restriction_visible", "paused_or_suspended"),
+        "pause-b": ("pause_on_game_b", "restriction_visible", "paused_or_suspended"),
+        "continue-b": ("pause_off_game_b", "restriction_visible", "continued"),
+    }
+    for run_id, (slot, observation, effect) in specs.items():
+        run_dir = reports / "vision" / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        shots = []
+        for index in range(2):
+            shot = run_dir / f"{index:02d}.jpg"
+            shot.write_bytes(b"\xff\xd8" + f"{run_id}-{index}".encode("ascii"))
+            shots.append({"checkpoint": f"f{index}", "path": shot.relative_to(reports).as_posix(),
+                          "sha256": verifier.sha256_file(shot), "captured_at": "t"})
+        (reports / f"{run_id}.vision.json").write_text(json.dumps({
+            "schema_version": 1, "method": "vision_ai", "run_id": run_id,
+            "campaign_id": "campaign-test", "slot": slot,
+            "observation": observation, "runtime_effect": effect, "context_confirmed": True,
+            "confidence": "high", "reasoning": "frames show the prompt and the game state",
+            "sysbotbase_commit": "ae13548", "wire_log_sha256": "deadbeef",
+            "screenshots": shots,
+        }), encoding="utf-8")
+
+
+def test_vision_source_requires_and_binds_sidecars() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        # Default (manual) source must pass without any sidecar...
+        require(verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")["status"] == "passed",
+                "manual observation source must not require vision sidecars")
+        # ...but vision_ai must FAIL closed when the sidecars are absent.
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2",
+                            observation_source="vision_ai")
+        except verifier.QualificationError as exc:
+            require("视觉旁证" in str(exc), "vision_ai without a sidecar must fail explicitly")
+        else:
+            raise AssertionError("vision_ai mode must require a sidecar per restriction run")
+        prepare_vision_sidecars(reports)
+        result = verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2",
+                                 observation_source="vision_ai")
+        require(result["status"] == "passed", "valid vision sidecars must qualify")
+        require(result["observation_source"] == "vision_ai", "verification records the observation source")
+        require("vision_attestation" in result["checks"], "vision check is recorded")
+        require(len(result["vision_attestation"]) == 3, "all three restriction slots are attested")
+
+
+def test_vision_rejects_tampered_screenshot() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        prepare_vision_sidecars(reports)
+        (reports / "vision" / "pause-a" / "00.jpg").write_bytes(b"\xff\xd8tampered")
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2",
+                            observation_source="vision_ai")
+        except verifier.QualificationError as exc:
+            require("哈希不符" in str(exc), "a tampered screenshot must fail on hash mismatch")
+        else:
+            raise AssertionError("a tampered screenshot must not qualify")
+
+
+def test_vision_rejects_missing_screenshot() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        prepare_vision_sidecars(reports)
+        (reports / "vision" / "pause-b" / "01.jpg").unlink()
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2",
+                            observation_source="vision_ai")
+        except verifier.QualificationError as exc:
+            require("截图缺失" in str(exc), "a missing screenshot must fail explicitly")
+        else:
+            raise AssertionError("a missing screenshot must not qualify")
+
+
+def test_vision_rejects_verdict_mismatch() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-qualification-") as tmp_dir:
+        root = Path(tmp_dir)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        prepare_vision_sidecars(reports)
+        sidecar = reports / "continue-b.vision.json"
+        verdict = json.loads(sidecar.read_text(encoding="utf-8"))
+        verdict["runtime_effect"] = "paused_or_suspended"  # disagree with the report
+        sidecar.write_text(json.dumps(verdict), encoding="utf-8")
+        try:
+            verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2",
+                            observation_source="vision_ai")
+        except verifier.QualificationError as exc:
+            require("不一致" in str(exc), "a verdict that disagrees with the report must fail")
+        else:
+            raise AssertionError("a verdict/report mismatch must not qualify")
+
+
 def main() -> int:
     test_verify_and_promote_byte_identical_packages()
     test_manual_status_can_still_enter_full_qualification()
@@ -337,6 +440,10 @@ def main() -> int:
     test_incomplete_bedtime_timing_is_rejected_cleanly()
     test_misleading_evidence_summary_is_rejected()
     test_multiple_campaigns_require_explicit_selection()
+    test_vision_source_requires_and_binds_sidecars()
+    test_vision_rejects_tampered_screenshot()
+    test_vision_rejects_missing_screenshot()
+    test_vision_rejects_verdict_mismatch()
     print("Qualification verifier and promotion tests passed")
     return 0
 

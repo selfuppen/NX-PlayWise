@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import ftplib
+import io
 import json
 import os
 from pathlib import Path
@@ -294,6 +295,15 @@ class SwitchFtpClient:
             except Exception:
                 pass
 
+    def reconnect(self) -> None:
+        """Re-establish the control connection after it drops (e.g. the console
+        slept, tearing down FTP). A fresh ftplib.FTP avoids reusing a wedged
+        socket; cached ensured-dirs are cleared since the server CWD resets."""
+        self.close()
+        self._ensured_dirs = set()
+        self.ftp = ftplib.FTP()
+        self.connect()
+
     def __enter__(self) -> SwitchFtpClient:
         self.connect()
         return self
@@ -466,6 +476,51 @@ class SwitchFtpClient:
             )
 
         self.ftp.cwd(base)
+
+    def upload_bytes(self, data: bytes, relative_remote_path: str) -> None:
+        """Uploads in-memory bytes to the remote path with size verification.
+
+        Mirrors upload_file but sources from memory, for small generated control
+        files (e.g. wire request JSON) that are never on disk. Keeps the same
+        SIZE readback so a truncated transfer is caught, not silently claimed.
+        """
+        rel_norm = relative_remote_path.replace("\\", "/").strip("/")
+        remote_dir = os.path.dirname(rel_norm)
+        filename = os.path.basename(rel_norm)
+        base = self.endpoint.base_path or "/"
+
+        if remote_dir:
+            self.ensure_dir(remote_dir)
+            remote_parent_abs = self._to_remote_abs(remote_dir)
+        else:
+            remote_parent_abs = base
+
+        self.ftp.cwd(remote_parent_abs)
+        self.ftp.storbinary(f"STOR {filename}", io.BytesIO(data))
+
+        remote_size = None
+        try:
+            remote_size = self.ftp.size(filename)
+        except Exception:
+            pass
+        self.ftp.cwd(base)
+
+        if remote_size is not None and remote_size != len(data):
+            raise IOError(
+                f"Upload verification failed for {relative_remote_path}: "
+                f"local size {len(data)} != remote size {remote_size}"
+            )
+
+    def rename_path(self, relative_src_path: str, relative_dst_path: str) -> None:
+        """Renames a remote file via RNFR/RNTO (both paths relative to base).
+
+        Used to publish a staged '<id>.json.part' upload atomically to its final
+        '<id>.json' name so the device inbox scanner, which only lists '.json',
+        never claims a half-written request file.
+        """
+        src_abs = self._to_remote_abs(relative_src_path)
+        dst_abs = self._to_remote_abs(relative_dst_path)
+        self.ftp.rename(src_abs, dst_abs)
 
     def download_file(self, relative_remote_path: str, local_path: Path) -> int:
         """Downloads a remote file to local_path and returns the byte count.

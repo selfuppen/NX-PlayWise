@@ -18,8 +18,12 @@ from __future__ import annotations
 
 import argparse
 import socket
+from pathlib import Path
 
 DEFAULT_PORT = 6000
+
+# JPEG start-of-image marker; pixelPeek returns a JFIF image (ff d8 ff ...).
+JPEG_SOI = b"\xff\xd8"
 
 # Button tokens sys-botbase accepts (olliz0r util.c). Used only for client-side
 # help/validation; the device is the authority on what it honours.
@@ -64,6 +68,12 @@ class SysBotBaseClient:
                 self._sock.close()
             finally:
                 self._sock = None
+
+    def reconnect(self) -> None:
+        """Re-open the socket after it drops (e.g. the console slept, tearing
+        down the connection). close() tolerates an already-dead socket."""
+        self.close()
+        self.connect()
 
     def __enter__(self) -> "SysBotBaseClient":
         self.connect()
@@ -137,6 +147,26 @@ class SysBotBaseClient:
             return bytes.fromhex(line)
         except ValueError:
             return b""
+
+    def capture_screenshot(self, path) -> int:
+        """Capture the current screen via pixelPeek and write the JPEG to
+        `path`; returns the number of bytes written.
+
+        Raises SysBotBaseError when the reply is not a JPEG. pixelPeek is
+        capssc command 1204, which fails with 0x668CE on a console whose
+        Atmosphère debug/debugunit flag is not patched -- pixel_peek() then
+        returns b"". Surface that loudly here so the caller fails before
+        touching any PCTL state, rather than sealing an empty screenshot."""
+        data = self.pixel_peek()
+        if len(data) < 2 or data[:2] != JPEG_SOI:
+            raise SysBotBaseError(
+                "pixelPeek 未返回 JPEG（空或过短）。测试机通常是未打 Atmosphère "
+                "debug/debugunit 旗标（capssc 1204 → 0x668CE）；抓图前请先启用 "
+                "debugmode。")
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        return len(data)
 
     def raw(self, command: str, expect_reply: bool = False) -> str | None:
         if expect_reply:

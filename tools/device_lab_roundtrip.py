@@ -255,6 +255,7 @@ def run_verify(args) -> int:
            "--expected-atmosphere", args.expected_atmosphere]
     if args.campaign:
         cmd += ["--campaign", args.campaign]
+    cmd += ["--observation-source", args.observation_source]
     return subprocess.run(cmd).returncode
 
 
@@ -306,6 +307,8 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--expected-hos", default="22.5.0")
         p.add_argument("--expected-atmosphere", default="1.11.2")
         p.add_argument("--campaign", default=None)
+        p.add_argument("--observation-source", choices=["manual", "vision_ai"], default="manual",
+                       help="限制槽位观察来源；vision_ai 要求每个 restriction_quick run 带视觉旁证")
 
     def add_push_args(p: argparse.ArgumentParser) -> None:
         p.add_argument("--package", choices=["standard", "lab", "both"], default="lab")
