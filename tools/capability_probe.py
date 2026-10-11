@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import tempfile
 from dataclasses import dataclass, field
@@ -38,10 +39,48 @@ import probe_report  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 LAB_APP = lwc.LAB_APP
 HOME_TITLE_ID = "0100000000001000"
+ENVIRONMENT_REMOTE = f"switch/{LAB_APP}/environment.json"
 
 
 class ProbeError(RuntimeError):
     pass
+
+
+class Progress:
+    """Live, timestamped step logger with an elapsed counter and an ETA for the
+    next wait, so a long run (timer_activation_ab) shows what it is doing and how
+    long each step should take. Console stamps are LOCAL time (matches your wall
+    clock); the stored evidence JSON stays UTC."""
+
+    def __init__(self, *, clock=time.monotonic) -> None:
+        self._clock = clock
+        self.start = clock()
+
+    def log(self, message: str, *, eta_s: float | None = None) -> None:
+        elapsed = int(self._clock() - self.start)
+        stamp = datetime.datetime.now().strftime("%H:%M:%S")
+        eta = f"  预计 ~{int(eta_s)}s" if eta_s is not None else ""
+        print(f"[{stamp} +{elapsed}s]{eta}  {message}", flush=True)
+
+
+def _p(ctx, message: str, *, eta_s: float | None = None) -> None:
+    progress = getattr(ctx, "progress", None)
+    if progress is not None:
+        progress.log(message, eta_s=eta_s)
+
+
+def estimate_seconds(name: str, *, play_minutes: int = 1, sleep_checkpoint: bool = False) -> int:
+    """Rough wall-clock estimate from the compiled window constants, for the
+    upfront plan print. timer_activation_ab's two 90s legs dominate."""
+    if name == "restriction_quick":
+        return 45
+    if name == "timer_activation_ab":
+        return 90 + 90 + 15 * 5 + 40  # 7 windows + per-phase/setup overhead
+    if name == "eye_care":
+        return 15
+    if name == "bedtime":
+        return 20
+    return 30
 
 
 @dataclass
@@ -78,6 +117,7 @@ class ProbeContext:
     interactive: bool = False
     sleep: object = time.sleep
     clock: object = time.monotonic
+    progress: object = None
 
 
 def now_iso() -> str:
@@ -125,6 +165,65 @@ def _pull_machine(ctx: ProbeContext, scenario_dir: Path, remotes: list) -> dict:
             pulled[rel] = {"_error": str(exc)}
     return pulled
 
+
+def _device_fingerprint(ctx: ProbeContext) -> str:
+    """sha256 of the device's environment.json, matching
+    sysmodule_environment_fingerprint (sysmodule_storage.c:787). Required so a
+    wire-driven confirm_bedtime_requirements is accepted."""
+    dest = ctx.scratch / "environment.json"
+    ctx.ftp.download_file(ENVIRONMENT_REMOTE, dest)
+    return hashlib.sha256(dest.read_bytes()).hexdigest()
+
+
+def _ensure_bedtime_confirmed(ctx: ProbeContext, wlog) -> None:
+    """Both bedtime AND eye-care enablement require the shared bedtime
+    confirmation (sysmodule_control.c:215/277; errors 319/323). Submit
+    confirm_bedtime_requirements with the device fingerprint so the sysmodule
+    records confirmation_version + confirmed_environment + overlay-risk."""
+    fingerprint = _device_fingerprint(ctx)
+    wlog.record("read environment fingerprint")
+    rid = ctx.wire.submit("confirm_bedtime_requirements", lwc.confirm_bedtime_payload(fingerprint))
+    _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout),
+                "confirm_bedtime_requirements")
+    wlog.record("confirm_bedtime_requirements ok")
+
+
+def _pull_status(ctx: ProbeContext, scenario_dir: Path) -> dict:
+    """Submit a product `status` request and save the sysmodule's current view
+    (restriction_reasons / bedtime / eye_care). This is the real evidence in lab
+    mode: the autonomous enforce tick is compiled out of the Device Lab build
+    (sysmodule_core.c:632 `#ifndef PLAYWISE_DEVICE_LAB`), so a written
+    bedtime/eye-care policy is accepted and *evaluated* in status but never
+    applies a block here -- enforcement runs only under the standard build."""
+    rid = ctx.wire.submit("status")
+    res = ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout)
+    status = dict(res.get("raw") if isinstance(res.get("raw"), dict) else {})
+    status.pop("recent_events", None)
+    machine_dir = scenario_dir / "machine"
+    machine_dir.mkdir(parents=True, exist_ok=True)
+    (machine_dir / "status.json").write_text(
+        json.dumps(status, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return status
+
+
+def _capture_burst(ctx: ProbeContext, scenario_dir: Path, *, count: int, interval_s: float,
+                   start_index: int, wlog) -> list:
+    """Blind periodic screenshots for product-feature effects that have no lab
+    session state to gate on (eye-care break, bedtime block). Capture-only."""
+    shots: list = []
+    index = start_index
+    for _ in range(count):
+        abs_path = scenario_dir / f"{index:02d}.jpg"
+        try:
+            ctx.sbb.capture_screenshot(abs_path)
+            shots.append(vcd._shot_record(abs_path, ctx.reports_dir, f"sample-{index:02d}", now_iso()))
+        except Exception as exc:  # noqa: BLE001
+            wlog.record(f"capture {index} skipped: {exc}")
+        index += 1
+        ctx.sleep(interval_s)
+    return shots
+
+
 def preflight(ctx: ProbeContext, *, require_pixelpeek: bool = True) -> PreflightResult:
     """All automatic, hard-fail-and-stop. Side-effecting steps come last."""
     notes: list = []
@@ -132,6 +231,7 @@ def preflight(ctx: ProbeContext, *, require_pixelpeek: bool = True) -> Preflight
     # round-trip works. getTitleID is intentionally NOT the liveness probe --
     # at the HOME menu it legitimately returns empty (that is a foreground note
     # at step 4, not a dead sys-botbase).
+    _p(ctx, "preflight ①/④ 连 sys-botbase（读语言/前台标题）")
     try:
         language = (ctx.sbb.get_system_language() or "").strip()
     except sbb.SysBotBaseError as exc:
@@ -142,6 +242,7 @@ def preflight(ctx: ProbeContext, *, require_pixelpeek: bool = True) -> Preflight
     # 2. Lab sysmodule alive AND claiming the inbox: a no-side-effect status
     # round-trip. A timeout means the standard sysmodule is booted (it does not
     # claim the lab queue) -- tell the operator to switch into lab mode.
+    _p(ctx, "preflight ②/④ 探 Lab sysmodule 是否认领 inbox", eta_s=ctx.result_timeout)
     rid = ctx.wire.submit("lab_session_status")
     try:
         res = ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout)
@@ -157,6 +258,7 @@ def preflight(ctx: ProbeContext, *, require_pixelpeek: bool = True) -> Preflight
             "若为 setup 未完成，请先在设备上完成 lab setup"
         )
     # 3. pixelPeek usable (Atmosphere debug flag). Fail loud before any mutation.
+    _p(ctx, "preflight ③/④ pixelPeek 预检（Atmosphère debug flag）")
     pixelpeek_ok = True
     if require_pixelpeek:
         probe_shot = ctx.scratch / "_preflight.jpg"
@@ -171,6 +273,7 @@ def preflight(ctx: ProbeContext, *, require_pixelpeek: bool = True) -> Preflight
     foreground_is_home = (not title) or title == HOME_TITLE_ID
     if foreground_is_home:
         notes.append("前台无游戏（HOME 菜单或空标题）：限制生效/护眼场景需要前台有游戏在运行")
+    _p(ctx, f"preflight 通过（前台 {title or 'HOME/空'}）")
     return PreflightResult(ctx.ftp.endpoint.port if hasattr(ctx.ftp, "endpoint") else 0,
                            title, True, pixelpeek_ok, foreground_is_home, notes)
 
@@ -186,6 +289,7 @@ def run_restriction(ctx: ProbeContext) -> dict:
     submitted -- the run is left in awaiting_observation and judged later."""
     scenario_dir = ctx.reports_dir / "restriction_quick"
     scenario_dir.mkdir(parents=True, exist_ok=True)
+    _p(ctx, "restriction_quick 开始", eta_s=estimate_seconds("restriction_quick"))
     wlog = vcd.WireLog()
     ctx.wire.reset_session()
     wlog.record("reset_session")
@@ -199,11 +303,13 @@ def run_restriction(ctx: ProbeContext) -> dict:
     rid = ctx.wire.submit("lab_phase_start", {"phase": "restriction_effect"})
     _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout), "lab_phase_start")
     wlog.record("lab_phase_start restriction_effect ok")
+    _p(ctx, "限制已下发，盲抓 15s 采样窗口", eta_s=15)
     vcd.wait_for_state(ctx.session_source, lambda s: s.get("state") == "sampling",
                        timeout_s=ctx.sampling_timeout, sleep=ctx.sleep, clock=ctx.clock)
     shots += vcd.capture_sampling_frames(ctx.sbb, ctx.session_source, scenario_dir, ctx.reports_dir,
                                          start_index=1, sleep=ctx.sleep, clock=ctx.clock, now=now_iso)
     wlog.record(f"captured {len(shots)} frames (no observation submitted)")
+    _p(ctx, f"restriction_quick 完成，抓 {len(shots)} 帧")
     (scenario_dir / "wire.log").write_text(wlog.text(), encoding="utf-8", newline="\n")
     machine = _pull_machine(ctx, scenario_dir, ["lab/phase-5.json", "lab/public.json"])
     record = {
@@ -255,6 +361,8 @@ def run_timer_ab(ctx: ProbeContext, *, sleep_checkpoint: bool = False) -> dict:
     as inconclusive)."""
     scenario_dir = ctx.reports_dir / "timer_activation_ab"
     scenario_dir.mkdir(parents=True, exist_ok=True)
+    _p(ctx, "timer_activation_ab 开始（7 相位，两条 90s 腿为主要耗时）",
+       eta_s=estimate_seconds("timer_activation_ab"))
     wlog = vcd.WireLog()
     ctx.wire.reset_session()
     wlog.record("reset_session")
@@ -295,15 +403,17 @@ def run_timer_ab(ctx: ProbeContext, *, sleep_checkpoint: bool = False) -> dict:
                     f"lab_phase_start {phase}")
         phases_run.append(phase)
         wlog.record(f"phase {phase} -> sampling")
+        window = lwc.phase_window_seconds(phase)
+        _p(ctx, f"相位 {len(phases_run)}/7 {phase}，采样 ~{window}s", eta_s=window)
         # The ab_sleep_wake window must elapse with the console ASLEEP. The phase
         # is submitted FIRST (its before-sample is taken while awake); only then
         # does the operator sleep >=95s and wake. FTP/sys-botbase sockets drop
         # during sleep, so reconnect before polling the result.
         if phase == "ab_sleep_wake" and sleep_checkpoint:
+            _p(ctx, "ab_sleep_wake：看到下方提示请【立刻】让主机睡眠 ≥95s 再唤醒回车")
             _sleep_checkpoint(ctx)
             _reconnect(ctx)
             wlog.record("reconnected after sleep leg")
-        window = lwc.phase_window_seconds(phase)
         vcd.wait_for_state(
             ctx.session_source,
             lambda s, n=current_n: s.get("state") == "complete"
@@ -314,6 +424,7 @@ def run_timer_ab(ctx: ProbeContext, *, sleep_checkpoint: bool = False) -> dict:
     (scenario_dir / "wire.log").write_text(wlog.text(), encoding="utf-8", newline="\n")
     machine = _pull_machine(ctx, scenario_dir,
                             [f"lab/phase-{i}.json" for i in range(7)] + ["lab/public.json"])
+    _p(ctx, f"timer_activation_ab 完成，{len(phases_run)} 相位，已拉机器数字")
     record = {
         "name": "timer_activation_ab", "title": "待机计时 A/B", "status": "complete",
         "note": "7 相位机器证据（1454/1952/0x44/fallback）；睡眠腿未真机休眠时设备记 inconclusive。",
@@ -325,13 +436,93 @@ def run_timer_ab(ctx: ProbeContext, *, sleep_checkpoint: bool = False) -> dict:
     return record
 
 
-def run_bedtime(ctx: ProbeContext) -> dict:
-    raise ProbeError("bedtime 为 P4：set_bedtime_policy/confirm_bedtime_requirements 的 "
-                     "payload 需先对照 request_schema 落地")
+def run_eye_care(ctx: ProbeContext, *, play_minutes: int = 1, rest_minutes: int = 1) -> dict:
+    """Write-and-evaluate probe: confirm, enable a short eye-care policy, read
+    the sysmodule `status` (proves the policy is accepted and evaluated), then
+    disable it again. The lab build compiles out the autonomous enforce tick
+    (sysmodule_core.c:632 #ifndef PLAYWISE_DEVICE_LAB), so the rest break never
+    fires here; it enforces via the same PCTL BLOCKED path as restriction_quick
+    (already proven), only under the standard build."""
+    scenario_dir = ctx.reports_dir / "eye_care"
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+    _p(ctx, "eye_care 开始（写入+求值探测）", eta_s=estimate_seconds("eye_care"))
+    wlog = vcd.WireLog()
+    shots: list = []
+    baseline = scenario_dir / "00-baseline.jpg"
+    try:
+        ctx.sbb.capture_screenshot(baseline)
+        shots.append(vcd._shot_record(baseline, ctx.reports_dir, "baseline", now_iso()))
+        wlog.record("pixelPeek baseline")
+    except Exception as exc:  # noqa: BLE001
+        wlog.record(f"baseline capture skipped: {exc}")
+    _p(ctx, "确认前置要求（读指纹）")
+    _ensure_bedtime_confirmed(ctx, wlog)
+    rid = ctx.wire.submit("set_eye_care_policy", lwc.eye_care_payload(play_minutes, rest_minutes))
+    _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout), "set_eye_care_policy")
+    wlog.record(f"set_eye_care_policy ok (play={play_minutes}m rest={rest_minutes}m)")
+    _p(ctx, "读 status 查看护眼求值")
+    status = _pull_status(ctx, scenario_dir)
+    rid = ctx.wire.submit("set_eye_care_policy", lwc.eye_care_payload(play_minutes, rest_minutes, enabled=False))
+    _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout), "set_eye_care_policy(disable)")
+    wlog.record("set_eye_care_policy disabled (cleanup)")
+    (scenario_dir / "wire.log").write_text(wlog.text(), encoding="utf-8", newline="\n")
+    _p(ctx, "eye_care 完成（已写入并求值；lab 构建不自动执行，探测后已关闭）")
+    record = {
+        "name": "eye_care", "title": "护眼", "status": "written",
+        "note": "已确认并写入护眼策略、读 status 验证求值；lab 构建编译掉了自动 enforce_tick，"
+                "故休息浮窗不会在 lab 下出现。休息经由与 restriction_quick 相同的 PCTL BLOCKED 执行"
+                "（已验证），仅在标准构建下自动触发。探测后已关闭护眼。",
+        "screenshots": shots, "machine": {"status": status},
+        "pending_questions": ["status.eye_care 是否 enabled 且参数正确（求值生效）？",
+                              "（可见休息请在标准构建上验证）"],
+    }
+    _write_scenario(scenario_dir, record)
+    return record
 
 
-def run_eye_care(ctx: ProbeContext) -> dict:
-    raise ProbeError("eye_care 为 P4：set_eye_care_policy 的 payload 需先对照 request_schema 落地")
+def run_bedtime(ctx: ProbeContext, *, start_minute: int = 1, end_minute: int = 0) -> dict:
+    """Write-and-evaluate probe: confirm, apply an immediate always-on bedtime
+    window, read `status` (restriction_reasons.bedtime should be true), then
+    DISABLE bedtime again so a later standard boot is not locked out by the test
+    window. The lab build compiles out enforce_tick (sysmodule_core.c:632), so no
+    block appears here; bedtime enforces via the same PCTL BLOCKED path as
+    restriction_quick (already proven), only under the standard build."""
+    scenario_dir = ctx.reports_dir / "bedtime"
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+    _p(ctx, "bedtime 开始（写入+求值探测，结束会自动关闭就寝）", eta_s=estimate_seconds("bedtime"))
+    wlog = vcd.WireLog()
+    shots: list = []
+    baseline = scenario_dir / "00-baseline.jpg"
+    try:
+        ctx.sbb.capture_screenshot(baseline)
+        shots.append(vcd._shot_record(baseline, ctx.reports_dir, "baseline", now_iso()))
+        wlog.record("pixelPeek baseline")
+    except Exception as exc:  # noqa: BLE001
+        wlog.record(f"baseline capture skipped: {exc}")
+    _ensure_bedtime_confirmed(ctx, wlog)
+    rid = ctx.wire.submit("set_bedtime_policy",
+                          lwc.bedtime_payload(start_minute, end_minute, activation="immediate"))
+    _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout), "set_bedtime_policy")
+    wlog.record("set_bedtime_policy ok (immediate, all-day)")
+    _p(ctx, "读 status 查看就寝求值")
+    status = _pull_status(ctx, scenario_dir)
+    rid = ctx.wire.submit("set_bedtime_policy", lwc.bedtime_payload(start_minute, end_minute, enabled=False))
+    _require_ok(ctx.wire.wait_result(rid, ctx.scratch, timeout_s=ctx.result_timeout), "set_bedtime_policy(disable)")
+    wlog.record("set_bedtime_policy disabled (cleanup)")
+    (scenario_dir / "wire.log").write_text(wlog.text(), encoding="utf-8", newline="\n")
+    _p(ctx, "bedtime 完成（已写入并求值并关闭就寝）")
+    record = {
+        "name": "bedtime", "title": "就寝", "status": "written",
+        "note": "已确认并写入立即生效的全天就寝窗口、读 status 验证求值（restriction_reasons.bedtime）；"
+                "lab 构建编译掉了自动 enforce_tick，故就寝拦截不会在 lab 下出现。就寝经由与 "
+                "restriction_quick 相同的 PCTL BLOCKED 执行（已验证），仅在标准构建下自动触发。"
+                "探测后已关闭就寝，不给标准构建留下全天锁定。",
+        "screenshots": shots, "machine": {"status": status},
+        "pending_questions": ["status.restriction_reasons.bedtime 是否为 true（求值生效）？",
+                              "（可见拦截请在标准构建上验证）"],
+    }
+    _write_scenario(scenario_dir, record)
+    return record
 
 
 SCENARIOS = {
@@ -353,7 +544,8 @@ def _build_context(args, ftp, sbb_client, scratch: Path, reports_dir: Path) -> P
     wire = lwc.LabWireClient(ftp)
     return ProbeContext(wire=wire, sbb=sbb_client, ftp=ftp, session_source=source,
                         reports_dir=reports_dir, scratch=scratch,
-                        interactive=bool(sys.stdin and sys.stdin.isatty()))
+                        interactive=bool(sys.stdin and sys.stdin.isatty()),
+                        progress=Progress())
 
 
 def _default_reports_dir(args) -> Path:
@@ -388,23 +580,27 @@ def run_probe_cmd(args) -> int:
     reports_dir.mkdir(parents=True, exist_ok=True)
     scratch = Path(tempfile.mkdtemp(prefix="playwise-probe-"))
     records: list = []
+    names = _scenarios_for(args.scenario)
+    total = sum(estimate_seconds(n, sleep_checkpoint=args.sleep_checkpoint) for n in names)
+    print(f"计划：{', '.join(names)}；预计合计 ~{total}s（约 {max(1, round(total / 60))} 分钟）。"
+          "下面每步带本机时间戳 + 预计耗时；证据 JSON 内为 UTC。", flush=True)
     with ftp_installer.SwitchFtpClient(endpoint, timeout=args.ftp_timeout) as ftp:
         with sbb.SysBotBaseClient(args.host, args.port, args.timeout) as sbb_client:
             ctx = _build_context(args, ftp, sbb_client, scratch, reports_dir)
             pre = preflight(ctx, require_pixelpeek=not args.no_pixelpeek)
-            for name in _scenarios_for(args.scenario):
-                print(f"-- scenario {name}")
+            for name in names:
                 if name == "timer_activation_ab":
                     records.append(run_timer_ab(ctx, sleep_checkpoint=args.sleep_checkpoint))
                 else:
                     records.append(SCENARIOS[name](ctx))
+            elapsed = int(time.monotonic() - ctx.progress.start)
     (reports_dir / "probe.json").write_text(
         json.dumps({"generated_at": now_iso(), "preflight": pre.as_dict(),
                     "scenarios": [r["name"] for r in records]}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8", newline="\n")
     out = probe_report.render_report_html(reports_dir, records, inline=args.inline,
                                           environment=pre.as_dict())
-    print(f"PASS: 已采集 {len(records)} 个场景；复核包 {out}")
+    print(f"PASS: 已采集 {len(records)} 个场景，实际用时 ~{elapsed}s；复核包 {out}")
     return 0
 
 

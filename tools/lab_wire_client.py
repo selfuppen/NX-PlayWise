@@ -105,6 +105,53 @@ def build_request_json(request_id: str, type_: str, created_at: int,
     return json.dumps(body, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
+def eye_care_payload(play_minutes: int, rest_minutes: int, *, enabled: bool = True) -> dict:
+    """set_eye_care_policy payload (companion/request_client.c:120). Valid ranges
+    (common/rules/rules.c:134): play 1..240, rest 1..60."""
+    return {"enabled": bool(enabled), "play_minutes": int(play_minutes),
+            "rest_minutes": int(rest_minutes)}
+
+
+def bedtime_payload(start_minute: int, end_minute: int, *, enabled: bool = True,
+                    activation: str = "immediate") -> dict:
+    """set_bedtime_policy payload mirroring companion/request_client.c:144-179. All
+    seven days share one window; holiday/makeup/scheduled stay `inherit`. A valid
+    enabled window must wrap midnight (start_minute > end_minute, rules.c:140), so
+    start=1,end=0 is an always-on window that forces an immediate bedtime block."""
+    window = {"enabled": bool(enabled), "start_minute": int(start_minute),
+              "end_minute": int(end_minute)}
+    return {
+        "bedtime_enabled": bool(enabled),
+        "bedtime_days": [dict(window) for _ in range(7)],
+        "bedtime_calendar_enabled": False,
+        "bedtime_holiday_mode": "inherit",
+        "bedtime_holiday_enabled": False,
+        "bedtime_holiday_start_minute": 0,
+        "bedtime_holiday_end_minute": 0,
+        "bedtime_makeup_mode": "inherit",
+        "bedtime_makeup_enabled": False,
+        "bedtime_makeup_start_minute": 0,
+        "bedtime_makeup_end_minute": 0,
+        "bedtime_scheduled_present": False,
+        "bedtime_scheduled_start_day_index": 0,
+        "bedtime_scheduled_end_day_index": 0,
+        "bedtime_scheduled_mode": "inherit",
+        "bedtime_scheduled_enabled": False,
+        "bedtime_scheduled_start_minute": 0,
+        "bedtime_scheduled_end_minute": 0,
+        "activation": activation,
+    }
+
+
+def confirm_bedtime_payload(environment_fingerprint: str, *, confirmation_version: int = 1) -> dict:
+    """confirm_bedtime_requirements payload (companion/request_client.c:201). The
+    sysmodule rejects set_bedtime_policy until this is accepted, and requires the
+    fingerprint to equal sha256(environment.json) (sysmodule_control.c:245)."""
+    return {"official_setting_confirmed": True, "overlay_risk_accepted": True,
+            "confirmation_version": int(confirmation_version),
+            "environment_fingerprint": environment_fingerprint}
+
+
 class LabWireClient:
     """Submits lab_* requests to the device inbox over FTP and reads results.
 

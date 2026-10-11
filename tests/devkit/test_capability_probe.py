@@ -301,6 +301,49 @@ def test_run_timer_ab_sleep_checkpoint_reconnects() -> None:
               "ab_sleep_wake is submitted (before the sleep/reconnect), not skipped")
 
 
+def test_run_eye_care_writes_policy() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        device: dict = {}
+        wire = FakeWire(device)
+        ctx = _ctx(Path(tmp), device, FakeSource(device), wire, FakeSbb())
+        ctx.scratch.mkdir(parents=True, exist_ok=True)
+        record = cp.run_eye_care(ctx, play_minutes=1, rest_minutes=1)
+        submitted = [t for t, _ in wire.submitted]
+        check(submitted == ["confirm_bedtime_requirements", "set_eye_care_policy", "status",
+                            "set_eye_care_policy"],
+              "eye_care: confirm (error 323) -> enable -> status -> disable")
+        check(len(wire.submitted[0][1]["environment_fingerprint"]) == 64,
+              "confirm carries the device fingerprint")
+        check(wire.submitted[1][1] == {"enabled": True, "play_minutes": 1, "rest_minutes": 1},
+              "eye_care enables with the policy payload")
+        check(wire.submitted[3][1]["enabled"] is False, "eye_care disables again (cleanup)")
+        check("lab_observation" not in submitted, "eye_care NEVER submits an observation")
+        check("status" in record["machine"], "eye_care records the status evaluation")
+        check(len(record["screenshots"]) >= 1, "baseline captured")
+
+
+def test_run_bedtime_confirms_then_applies() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        device: dict = {}
+        wire = FakeWire(device)
+        ctx = _ctx(Path(tmp), device, FakeSource(device), wire, FakeSbb())
+        ctx.scratch.mkdir(parents=True, exist_ok=True)
+        record = cp.run_bedtime(ctx)
+        submitted = [t for t, _ in wire.submitted]
+        check(submitted == ["confirm_bedtime_requirements", "set_bedtime_policy", "status",
+                            "set_bedtime_policy"],
+              "bedtime: confirm -> apply -> status -> disable (cleanup), in order")
+        check(len(wire.submitted[0][1]["environment_fingerprint"]) == 64,
+              "confirm carries a 64-hex device fingerprint (sha256 of environment.json)")
+        check(wire.submitted[1][1]["activation"] == "immediate"
+              and wire.submitted[1][1]["bedtime_enabled"] is True,
+              "bedtime applies an immediate enabled window")
+        check(wire.submitted[3][1]["bedtime_enabled"] is False,
+              "bedtime disables again so no all-day lockout is left behind")
+        check("lab_observation" not in submitted, "bedtime NEVER submits an observation")
+        check("status" in record["machine"], "bedtime records the status evaluation")
+
+
 def main() -> int:
     test_probe_ftp_port_falls_back()
     test_preflight_passes_and_notes_home()
@@ -309,6 +352,8 @@ def main() -> int:
     test_run_restriction_captures_without_observation()
     test_run_timer_ab_drives_seven_phases()
     test_run_timer_ab_sleep_checkpoint_reconnects()
+    test_run_eye_care_writes_policy()
+    test_run_bedtime_confirms_then_applies()
     if FAILURES:
         print(f"{FAILURES} capability_probe test(s) failed", file=sys.stderr)
         return 1

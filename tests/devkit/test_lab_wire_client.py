@@ -211,6 +211,31 @@ def test_switchftp_upload_bytes_and_rename() -> None:
     check(raised, "upload_bytes raises on a SIZE mismatch")
 
 
+def test_eye_care_payload() -> None:
+    p = lwc.eye_care_payload(1, 1)
+    check(p == {"enabled": True, "play_minutes": 1, "rest_minutes": 1},
+          "eye_care_payload shapes enabled/play/rest")
+
+
+def test_bedtime_payload() -> None:
+    p = lwc.bedtime_payload(1, 0, activation="immediate")
+    check(p["bedtime_enabled"] is True and p["activation"] == "immediate",
+          "bedtime_payload carries enabled + activation")
+    check(len(p["bedtime_days"]) == 7, "bedtime_payload emits all 7 day windows")
+    first = p["bedtime_days"][0]
+    check(first["enabled"] and first["start_minute"] > first["end_minute"],
+          "an enabled bedtime window wraps midnight (start>end), the validity rule")
+    check(p["bedtime_scheduled_present"] is False and p["bedtime_holiday_mode"] == "inherit",
+          "no scheduled override, specials inherit (minimal valid policy)")
+
+
+def test_confirm_bedtime_payload() -> None:
+    p = lwc.confirm_bedtime_payload("deadbeef")
+    check(p["official_setting_confirmed"] and p["overlay_risk_accepted"], "confirm sets both flags")
+    check(p["confirmation_version"] >= 1 and p["environment_fingerprint"] == "deadbeef",
+          "confirm carries version + fingerprint")
+
+
 def main() -> int:
     test_new_request_id_valid()
     test_expected_phase()
@@ -220,6 +245,9 @@ def main() -> int:
     test_wait_result_timeout()
     test_reset_session_removes_three()
     test_switchftp_upload_bytes_and_rename()
+    test_eye_care_payload()
+    test_bedtime_payload()
+    test_confirm_bedtime_payload()
     if FAILURES:
         print(f"{FAILURES} lab_wire_client test(s) failed", file=sys.stderr)
         return 1
