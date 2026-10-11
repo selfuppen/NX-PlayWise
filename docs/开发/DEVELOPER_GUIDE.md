@@ -190,7 +190,7 @@ Recovery journals isolate request_id owners, with enforce owning background tran
 
 User-visible text in Companion NRO and Overlay must use glyphs validated on physical consoles with project fonts. Mathematical signs use ASCII `+` and `-`, ranges are phrased as "1 to 120", and status transitions use standard terminology; avoid typographic minus signs, full-width symbols, em-dashes, arrows, ellipses, or middle dots that risk missing glyphs. New special symbols require font validation and updating character test gates. Documentation and web text are exempt.
 
-Upstream investigation order: repository specifications, pinned vendored versions, local upstream checkouts, and finally GitHub. Checkouts at `../libnx`, `../libtesla`, and `../Atmosphere` are optional reference sources, not build dependencies. Libnx does not expose commands 1451, 1454, 1952, 145601, or 195101; parameters and layouts must not be inferred from missing definitions.
+Upstream investigation order: repository specifications, pinned vendored versions, local upstream checkouts, and finally GitHub. Checkouts at `../libnx`, `../libtesla`, `../Atmosphere`, and `../sys-botbase` are optional reference sources, not build dependencies. Libnx does not expose commands 1451, 1454, 1952, 145601, or 195101; parameters and layouts must not be inferred from missing definitions.
 
 ### Atmosphère Source Reading Decisions
 
@@ -204,7 +204,7 @@ Verify that an issue belongs to CFW infrastructure before consulting Atmosphère
 | Sysmodule OOM, unexpected termination, crash report forensics | `stratosphere/pm/`, `stratosphere/creport/`, `stratosphere/fatal/` | Resource pools and crash handling paths, identifying environment evidence to preserve | PlayWise native logs, support export, recovery transactions, and fault injection |
 | Adjusting Atmosphère/HOS qualification baselines | Relevant diffs between tags/commits and `docs/changelog.md` | Evaluating changes in boot2, SM/PM, config parsing, or fatal handling | Physical qualification of candidate release Zips on explicit hardware/HOS/Atmosphère setups |
 
-Atmosphère is not a generic Switch SDK. For libnx wrappers, service dispatching, and version gates, consult `../libnx`; for overlay lifecycle, input, and rendering, inspect vendored libtesla, referencing `../libtesla` as needed; PlayWise tokens, queues, recovery, and stable errors follow repository protocol specifications. Additional PCTL private command constraints are documented in [PCTL Integration Architecture](../设计/PCTL_ARCHITECTURE.md).
+Atmosphère is not a generic Switch SDK. For libnx wrappers, service dispatching, and version gates, consult `../libnx`; for overlay lifecycle, input, and rendering, inspect vendored libtesla, referencing `../libtesla` as needed; for Device Lab real-hardware automation techniques such as remote input injection, memory read/write, or screen capture, consult `../sys-botbase`, which is only an external sysmodule example and not a PlayWise dependency, distribution component, or PCTL evidence source; PlayWise tokens, queues, recovery, and stable errors follow repository protocol specifications. Additional PCTL private command constraints are documented in [PCTL Integration Architecture](../设计/PCTL_ARCHITECTURE.md).
 
 Local regression testing:
 

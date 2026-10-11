@@ -17,7 +17,7 @@ This document differentiates general project requirements, the maintainer's defa
 | Host Regression | Python 3, Git, deterministic fixtures | Windows, PowerShell, Docker, and real Switch are all optional |
 | Host C Tests | C99 compiler, Make | Compiler and operating system can be substituted |
 | Full Switch Build | devkitPro, devkitA64, libnx, FreeType, Make, and the repo unified packaging gate | SSH host/port, container name, and host OS can be substituted |
-| Dependency Reproduction | Vendored libtesla and QR Code Generator in repo | `../libnx`, `../libtesla`, `../Atmosphere` are only for optional upstream research |
+| Dependency Reproduction | Vendored libtesla and QR Code Generator in repo | `../libnx`, `../libtesla`, `../Atmosphere`, `../sys-botbase` are only for optional upstream research |
 | Emulator Fast Iteration | devkitPro, and `build/eden-test/pctc-eden.nro` built via `make eden-test-nro` | Completely optional; used only for UI and business workflows, does not produce PCTL evidence |
 | Hardware Qualification | Explicit console model, HOS, Atmosphère, and current candidate Zip | Host, container, and emulator tests cannot substitute |
 
@@ -108,7 +108,7 @@ Actual builds link against:
 - vendored libtesla in `companion/overlay/vendor/libtesla/`;
 - vendored QR Code Generator in `third_party/qrcodegen/`.
 
-The maintainer workstation provides three optional, read-only upstream checkouts in adjacent directories: `../libnx` for verifying services, dispatching, and public APIs; `../libtesla` for verifying Overlay lifecycle, rendering, and input handling; and `../Atmosphere` for verifying CFW boot2/content flags, SM/PM, hbloader configs, crash reporting, and version compatibility. Other developers do not need these checkouts; they do not participate in PlayWise compilation, packaging, or dependency reproduction. Actual builds strictly use devkitPro's libnx and repository vendored dependencies. When synchronizing vendored dependencies, always update the repository, commit/tag, license, and check date in the corresponding `UPSTREAM.txt`.
+The maintainer workstation provides four optional, read-only upstream checkouts in adjacent directories: `../libnx` for verifying services, dispatching, and public APIs; `../libtesla` for verifying Overlay lifecycle, rendering, and input handling; `../Atmosphere` for verifying CFW boot2/content flags, SM/PM, hbloader configs, crash reporting, and version compatibility; and `../sys-botbase` (olliz0r/sys-botbase) as a reference for how a CFW sysmodule remotely injects controller and touch input, reads and writes memory by absolute/main-NSO/heap base address, and captures the screen over sockets, which may be consulted when designing or reviewing Device Lab real-hardware automation and machine assertions (remotely driving a console to collect evidence). Other developers do not need these checkouts; they do not participate in PlayWise compilation, packaging, or dependency reproduction. `../sys-botbase` is likewise not a PlayWise build or runtime dependency, ships in neither the standard distribution nor the Device Lab package, and is not a substitute source for the PCTL protocol or the libnx/libtesla APIs. Actual builds strictly use devkitPro's libnx and repository vendored dependencies. When synchronizing vendored dependencies, always update the repository, commit/tag, license, and check date in the corresponding `UPSTREAM.txt`.
 
 Before drawing conclusions from local Atmosphère source code, record the exact commit, human-readable version, and working tree status:
 
