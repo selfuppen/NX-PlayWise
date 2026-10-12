@@ -128,6 +128,7 @@ static PtcErrorCode stub_apply_target(PtcPctl *pctl, const PtcPctlTarget *target
     stub->status.blocked_today = target->mode == PTC_PCTL_TARGET_BLOCKED ||
         (target->mode == PTC_PCTL_TARGET_LIMIT && target->minutes == 0U);
     stub->status.unrestricted_today = target->mode == PTC_PCTL_TARGET_UNLIMITED;
+    stub->status.today_unconfigured = false;
     stub->status.remaining_available = target->mode != PTC_PCTL_TARGET_UNLIMITED;
     stub->status.configured_minutes_available = target->mode == PTC_PCTL_TARGET_LIMIT;
     stub->status.configured_minutes = target->minutes;
@@ -241,6 +242,8 @@ static PtcErrorCode stub_restore_settings(PtcPctl *pctl, const PtcPctlSettingsSn
     stub->status.unrestricted_today = !restricted;
     stub->status.blocked_today = restricted && minutes == 0U;
     stub->status.limited_today = restricted && minutes > 0U;
+    stub->status.today_unconfigured = ptc_play_timer_settings_day_is_unconfigured(
+        words, PTC_PLAY_TIMER_SETTINGS_WORDS, weekday);
     stub->status.remaining_available = !stub->status.unrestricted_today;
     stub->status.configured_minutes_available = stub->status.limited_today;
     stub->status.configured_minutes = stub->status.limited_today ? minutes : 0U;

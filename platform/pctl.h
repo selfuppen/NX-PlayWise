@@ -22,6 +22,10 @@ typedef struct {
     bool limited_today;
     bool blocked_today;
     bool unrestricted_today;
+    /* Today's play-timer slot is cleanly unconfigured (no native limit set):
+       there is no in-progress Nintendo allowance to preserve. Distinct from the
+       three classified modes above and from an unreadable/garbage slot. */
+    bool today_unconfigured;
     bool remaining_available;
     uint32_t remaining_minutes;
     bool remaining_ns_available;

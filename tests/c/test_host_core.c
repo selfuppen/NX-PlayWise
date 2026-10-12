@@ -1799,6 +1799,79 @@ static void test_setup_refuses_unknown_handover_total(void)
         strstr(text, "\"phase\":\"protection\""), "unknown total enters retryable protection mode");
 }
 
+static void test_setup_takes_over_unconfigured_today_when_restriction_enabled(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char text[8192];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    /* Parental control is ON, but today's native play-timer slot is cleanly
+       unconfigured -- the common CFW case where no numeric limit can be set. */
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = false;
+    pctl.status.blocked_today = false;
+    pctl.status.today_unconfigured = true;
+    pctl.status.remaining_available = false;
+    pctl.status.restricted_now = false;
+    pctl.status.play_timer_enabled = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-unconfigured.json",
+        "{\"version\":1,\"request_id\":\"setup-unconfigured\",\"type\":\"complete_setup\",\"created_at\":1,\"payload\":{}}"),
+        "queue setup over a cleanly unconfigured today slot");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "unconfigured-today setup is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-unconfigured.json", text, sizeof(text)) &&
+        !strstr(text, "\"reason\":\"handover_state_unavailable\""),
+        "enabled-but-unconfigured today no longer refuses takeover");
+    check_true(pctl.apply_target_calls >= 1 && pctl.last_target.mode == PTC_PCTL_TARGET_UNLIMITED,
+        "takeover applies an unlimited baseline for the unconfigured day");
+    check_true(pctl.status.unrestricted_today, "today is left unrestricted after the unlimited-baseline handover");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
+        strstr(text, "\"phase\":\"released\"") && strstr(text, "\"restriction_cleared\":true"),
+        "unconfigured-today takeover reaches released (then activates after the grace)");
+}
+
+static void test_setup_refuses_unknown_handover_when_slot_not_unconfigured(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char text[8192];
+
+    ptc_mem_storage_init(&mem);
+    ptc_pctl_stub_init(&pctl);
+    /* Restriction is enabled but today's slot is unreadable AND not the clean
+       all-zero case: the guard must still refuse, never clobber it as unlimited. */
+    pctl.status.unrestricted_today = false;
+    pctl.status.limited_today = false;
+    pctl.status.blocked_today = false;
+    pctl.status.today_unconfigured = false;
+    pctl.status.remaining_available = false;
+    pctl.status.restricted_now = false;
+    pctl.status.play_timer_enabled = true;
+    ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
+    seed_release_setup(&mem);
+
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-malformed.json",
+        "{\"version\":1,\"request_id\":\"setup-malformed\",\"type\":\"complete_setup\",\"created_at\":1,\"payload\":{}}"),
+        "queue setup over an unreadable, non-unconfigured today slot");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "malformed-today setup is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/setup-malformed.json", text, sizeof(text)) &&
+        strstr(text, "\"reason\":\"handover_state_unavailable\""),
+        "an unreadable, non-unconfigured today still refuses takeover");
+    check_int((int)pctl.apply_target_calls, 0, "unreadable today leaves the current PCTL allowance untouched");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
+        strstr(text, "\"phase\":\"protection\""), "unreadable today stays in retryable protection");
+}
+
 static void test_live_enforce_recovery_is_not_startup_recovery(void)
 {
     PtcMemStorage mem;
@@ -3710,6 +3783,8 @@ int main(void)
     test_activity_history_retention_and_clear_rollback();
     test_setup_direct_takeover_recovers_exhausted_failed_release();
     test_setup_refuses_unknown_handover_total();
+    test_setup_takes_over_unconfigured_today_when_restriction_enabled();
+    test_setup_refuses_unknown_handover_when_slot_not_unconfigured();
     test_runtime_fingerprint_change_can_be_reconfirmed();
     test_eye_care_cycle_and_stale_skip();
     test_daily_enforce_does_not_start_play_timer();

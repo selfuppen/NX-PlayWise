@@ -83,6 +83,22 @@ bool ptc_play_timer_settings_get_mode(
     return true;
 }
 
+bool ptc_play_timer_settings_day_is_unconfigured(
+    const uint16_t *words,
+    size_t word_count,
+    uint8_t weekday)
+{
+    size_t base;
+    if (weekday >= PTC_PLAY_TIMER_DAY_COUNT ||
+        !ptc_play_timer_settings_valid(words, word_count)) {
+        return false;
+    }
+    base = day_base(weekday);
+    return words[base + PTC_PLAY_TIMER_DAY_FLAG_WORD] == 0U &&
+        words[base + PTC_PLAY_TIMER_DAY_ENABLE_WORD] == 0U &&
+        words[base + PTC_PLAY_TIMER_DAY_MINUTES_WORD] == 0U;
+}
+
 bool ptc_play_timer_settings_set_day(
     uint16_t *words,
     size_t word_count,

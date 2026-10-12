@@ -249,6 +249,8 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
                 weekday,
                 &day_mode,
                 &configured_minutes);
+            out->today_unconfigured = ptc_play_timer_settings_day_is_unconfigured(
+                timer_settings.words, PTC_PLAY_TIMER_SETTINGS_WORDS, weekday);
         }
         close_session(&settings_session);
     }

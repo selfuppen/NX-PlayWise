@@ -25,6 +25,23 @@ static PtcErrorCode capture_handover_today(PtcSetupState *setup, const PtcPctlSt
         return PTC_ERR_OK;
     }
     if (!status->limited_today && !status->blocked_today) {
+        /* An all-zero / unconfigured today slot means Nintendo is not limiting
+           play today -- there is no in-progress allowance to preserve.  On
+           Atmosphere/CFW the parent often has no way to set a native numeric
+           limit, which is precisely the gap PlayWise exists to fill, so when the
+           parental-control restriction is enabled and today's slot is cleanly
+           unconfigured (and nothing is restricting play right now), do NOT refuse:
+           leave handover_today_pending false and return OK so setup takes the
+           normal release-and-apply path (which writes an unlimited baseline and
+           snapshots the original for restore), rather than the preserve-in-place
+           adopt path that expects an already-readable allowance.  Any OTHER
+           unreadable state still returns 313 so a real but unreadable allowance
+           is never silently clobbered. */
+        if (status->restriction_enabled_available && status->restriction_enabled &&
+            status->today_unconfigured &&
+            status->restricted_now_available && !status->restricted_now) {
+            return PTC_ERR_OK;
+        }
         return PTC_ERR_HANDOVER_STATE_UNAVAILABLE;
     }
     if (status->blocked_today) {

@@ -36,6 +36,14 @@ bool ptc_play_timer_settings_get_day(
     uint8_t weekday,
     bool *restricted,
     uint16_t *minutes);
+/* True only when the weekday's day block is cleanly empty (flag/enable/minutes
+   all zero): Nintendo has no play-timer configuration for that day. This is a
+   distinct, benign "no limit configured" state, not the 0xffff unlimited
+   sentinel and not a partially-written/garbage slot. */
+bool ptc_play_timer_settings_day_is_unconfigured(
+    const uint16_t *words,
+    size_t word_count,
+    uint8_t weekday);
 bool ptc_play_timer_settings_get_mode(
     const uint16_t *words,
     size_t word_count,
