@@ -53,6 +53,124 @@
         return get_overlay_palette(theme_);
     }
 
+    static bool same_color(tsl::Color left, tsl::Color right)
+    {
+        return left.r == right.r && left.g == right.g && left.b == right.b;
+    }
+
+    tsl::Color policy_color(const PtcPolicyDisplay &policy) const
+    {
+        const auto &pal = current_palette();
+        if (policy.state == PTC_POLICY_ACTIVE) return pal.danger;
+        if (policy.state == PTC_POLICY_UNKNOWN || policy.state == PTC_POLICY_WAITING ||
+            policy.state == PTC_POLICY_EXHAUSTED ||
+            (policy.state == PTC_POLICY_PENDING && policy.minutes <= 15)) return pal.warning;
+        if (policy.state == PTC_POLICY_AVAILABLE || policy.state == PTC_POLICY_TV_ONLY ||
+            policy.state == PTC_POLICY_SKIPPED || policy.state == PTC_POLICY_WAIVED) return pal.success;
+        return pal.text_secondary;
+    }
+
+    tsl::Color dashboard_soft(tsl::Color color) const
+    {
+        const auto &pal = current_palette();
+        if (same_color(color, pal.danger)) return pal.danger_soft;
+        if (same_color(color, pal.warning)) return pal.warning_soft;
+        if (same_color(color, pal.success)) return pal.success_soft;
+        return pal.accent_soft;
+    }
+
+    // Small chamfered surfaces use only Tesla's drawRect surface. Decoration
+    // stays inside the published rectangle and needs no textures or font glyphs.
+    void draw_dashboard_surface(tsl::gfx::Renderer *renderer, PtcOverlayRect rect,
+        tsl::Color bg, tsl::Color border, bool emphasized = false)
+    {
+        const int edge = emphasized ? 2 : 1;
+        renderer->drawRect(rect.x, rect.y + 3, rect.w, rect.h - 6, renderer->a(border));
+        renderer->drawRect(rect.x + edge, rect.y + 4, rect.w - edge * 2,
+            rect.h - 8, renderer->a(bg));
+        // Overlapping stair steps connect horizontal and vertical strokes at
+        // every corner, including a 1px outline (no diagonal-only pixel gaps).
+        for (int row = 0; row <= 3; ++row) {
+            const int inset = 3 - row;
+            for (const int y : {rect.y + row, rect.y + rect.h - 1 - row}) {
+                renderer->drawRect(rect.x + inset, y, rect.w - inset * 2, 1, renderer->a(border));
+                if (row >= edge) {
+                    const int inner = inset + edge + 1;
+                    renderer->drawRect(rect.x + inner, y, rect.w - inner * 2, 1, renderer->a(bg));
+                }
+            }
+        }
+        renderer->drawRect(rect.x + 6, rect.y + edge, rect.w - 12, 1,
+            renderer->a(current_palette().border_decorative));
+    }
+
+    void draw_child_icon(tsl::gfx::Renderer *renderer, ChildCardKind kind,
+        int x, int y, tsl::Color color)
+    {
+        const auto ink = renderer->a(color);
+        if (kind == ChildCardKind::Eye) {
+            for (int row = 0; row < 12; ++row) {
+                const int inset = std::abs(row * 2 - 11) - 1;
+                renderer->drawRect(x + inset, y + row + 4, 2, 1, ink);
+                renderer->drawRect(x + 20 - inset, y + row + 4, 2, 1, ink);
+            }
+            renderer->drawRect(x + 9, y + 8, 4, 6, ink);
+        } else if (kind == ChildCardKind::Bedtime) {
+            for (int row = 0; row < 20; ++row) {
+                const int inset = std::abs(row - 9) / 2;
+                const int width = row < 4 || row > 15 ? 16 - inset * 2 : 4;
+                renderer->drawRect(x + inset + 2, y + row, width, 1, ink);
+            }
+        } else if (kind == ChildCardKind::Dock) {
+            draw_outline(renderer, x, y + 2, 22, 14, 2, color);
+            renderer->drawRect(x + 10, y + 16, 2, 3, ink);
+            renderer->drawRect(x + 5, y + 19, 12, 2, ink);
+        }
+    }
+
+    void dashboard_panel(tsl::gfx::Renderer *renderer,
+        std::initializer_list<OverlayPanelLine> lines, tsl::Color color)
+    {
+        const auto &vp = page_layout_.viewport;
+        const int gap = parent_view_ == ParentView::Child ? 6 : 12;
+        int height = 0;
+        for (const auto &line : lines)
+            height += overlay_text_height(renderer, line.text, vp.w - 36, line.size) + gap;
+        draw_dashboard_surface(renderer, ptc_overlay_rect(vp.x + 4,
+            flow_y_ - static_cast<int>(page_scroll_), vp.w - 8, height + 8),
+            dashboard_soft(color), current_palette().border_decorative);
+        renderer->drawRect(vp.x + 4, flow_y_ + 6 - static_cast<int>(page_scroll_),
+            3, height - 4, renderer->a(color));
+        flow_y_ += 4;
+        for (const auto &line : lines) flow_text(renderer, line.text, line.size, line.color);
+        flow_y_ += 8;
+    }
+
+    void draw_parent_action_icon(tsl::gfx::Renderer *renderer,
+        PtcOverlayParentAction action, int x, int y, tsl::Color color)
+    {
+        if (action == PTC_OVERLAY_PARENT_SKIP_EYE_CARE)
+            draw_child_icon(renderer, ChildCardKind::Eye, x, y, color);
+        else if (action == PTC_OVERLAY_PARENT_WAIVE_DOCK)
+            draw_child_icon(renderer, ChildCardKind::Dock, x, y, color);
+        else if (action == PTC_OVERLAY_PARENT_SKIP_BEDTIME ||
+                 action == PTC_OVERLAY_PARENT_CLEAR_BEDTIME_SKIP || action == PTC_OVERLAY_PARENT_DISABLE_BEDTIME)
+            draw_child_icon(renderer, ChildCardKind::Bedtime, x, y, color);
+        else if (action == PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT) {
+            draw_outline(renderer, x + 4, y + 4, 16, 14, 2, color);
+            renderer->drawRect(x, y + 5, 10, 2, renderer->a(color));
+            for (int step = 0; step < 4; ++step) {
+                renderer->drawRect(x + step, y + 5 - step, 2, 1, renderer->a(color));
+                renderer->drawRect(x + step, y + 6 + step, 2, 1, renderer->a(color));
+            }
+        }
+        else {
+            draw_outline(renderer, x + 1, y + 1, 20, 20, 2, color);
+            renderer->drawRect(x + 10, y + 5, 2, 7, renderer->a(color));
+            renderer->drawRect(x + 10, y + 10, 6, 2, renderer->a(color));
+        }
+    }
+
     static const char *transport_stage(const PtcOverlayBridge *bridge)
     {
         if (bridge->waiting) {

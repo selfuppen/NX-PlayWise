@@ -3,6 +3,7 @@
 #include "renderer.hpp"
 #include <cstring>
 #include <filesystem>
+#include <initializer_list>
 extern "C" {
 #include "../../companion/overlay/bridge.h"
 #include "../../companion/auth.h"
@@ -70,10 +71,126 @@ static void test_text_layout(tsl::gfx::Renderer &renderer)
             "localized primary footer button must fit without shrinking");
 }
 
+static void test_child_cards(tsl::gfx::Renderer &renderer)
+{
+    PtcOverlayBridge bridge{};
+    PtcOverlayInput input{};
+    PreviewView view;
+    view.bridge_ = &bridge;
+    view.input_ = &input;
+    view.page_layout_.viewport = ptc_overlay_rect(16, 100, 416, 400);
+    for (const auto kind : {ChildCardKind::Eye, ChildCardKind::Bedtime, ChildCardKind::Dock}) {
+        for (const bool long_value : {false, true}) {
+            view.flow_y_ = 100;
+            renderer.text_runs.clear();
+            const auto rect = view.child_rule(&renderer, "Rule", long_value ?
+                "A long status explanation that cannot share one line with the rule title" : "Ready",
+                "Supporting note", DARK_OVERLAY_PALETTE.success, kind);
+            const auto &runs = renderer.text_runs;
+            require(runs.front().size == 32 && runs[1].size == 28 && runs.back().size == 24,
+                "all child rules must share 32/28/24 typography");
+            for (const auto &run : runs)
+                require(run.x >= rect.x + 14 && run.x + static_cast<int>(measure_localized(
+                    &renderer, run.text.c_str(), run.size).first) <= rect.x + rect.w - 14,
+                    "rule decorations must leave all measured text inside its padding");
+            if (long_value) require(runs.front().x == rect.x + 14 && runs[1].y > runs.front().y,
+                "long rules must drop icons and stack without shrinking text");
+            else require(runs.front().x == rect.x + 44 && runs[1].x >= runs.front().x +
+                static_cast<int>(measure_localized(&renderer, runs.front().text.c_str(), 32).first) + 12,
+                "short rules must reserve icon space and keep values edge aligned");
+        }
+    }
+    PtcPolicyDisplay policy{};
+    policy.state = PTC_POLICY_ACTIVE;
+    require(view.same_color(view.policy_color(policy), DARK_OVERLAY_PALETTE.danger), "active policy uses danger");
+    for (const auto state : {PTC_POLICY_UNKNOWN, PTC_POLICY_WAITING, PTC_POLICY_EXHAUSTED}) {
+        policy.state = state;
+        require(view.same_color(view.policy_color(policy), DARK_OVERLAY_PALETTE.warning),
+            "unknown, boundary and TV-connected exhaustion must use warning");
+    }
+    policy.state = PTC_POLICY_PENDING;
+    policy.minutes = 15;
+    require(view.same_color(view.policy_color(policy), DARK_OVERLAY_PALETTE.warning), "near bedtime uses warning");
+    policy.minutes = 16;
+    require(view.same_color(view.policy_color(policy), DARK_OVERLAY_PALETTE.text_secondary), "later bedtime stays neutral");
+    policy.state = PTC_POLICY_OFF;
+    require(view.same_color(view.policy_color(policy), DARK_OVERLAY_PALETTE.text_secondary), "disabled rules stay neutral");
+}
+
+static void test_parent_cards(tsl::gfx::Renderer &renderer)
+{
+    PreviewView view;
+    view.parent_view_ = ParentView::Actions;
+    view.page_layout_.viewport = ptc_overlay_rect(16, 100, 416, 400);
+    for (const auto *label : {"Quick grant", "Restore all pre-install settings and deactivate the current configuration"}) {
+        view.flow_y_ = 100;
+        renderer.text_runs.clear();
+        const auto rect = view.flow_card(&renderer, label, "15 min", "A supporting explanation that wraps without losing its content",
+            32, DARK_OVERLAY_PALETTE.text_primary, DARK_OVERLAY_PALETTE.danger,
+            PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT, true);
+        require(rect.h >= 104 && rect.h <= view.page_layout_.viewport.h,
+            "parent action decoration must preserve readable, reachable measured cards");
+        for (const auto &run : renderer.text_runs) {
+            require(run.x >= rect.x + 14 && run.x + static_cast<int>(measure_localized(
+                &renderer, run.text.c_str(), run.size).first) <= rect.x + rect.w - 14,
+                "parent action icons must not overlap or clip measured text");
+            require(run.y <= rect.y + rect.h, "all parent explanations must stay inside their measured card");
+        }
+    }
+}
+
+static void test_surface_outline(tsl::gfx::Renderer &renderer)
+{
+    PreviewView view;
+    const tsl::Color background{1, 2, 3, 15};
+    // Code slots, keypad keys, refresh, footer buttons and both card widths.
+    for (const auto &dimensions : {std::pair<int, int>{44, 64}, {124, 56}, {128, 52},
+        {416, 76}, {408, 114}, {404, 104}}) {
+        for (const bool emphasized : {false, true}) {
+            for (const auto color : {DARK_OVERLAY_PALETTE.border_control,
+                DARK_OVERLAY_PALETTE.accent, DARK_OVERLAY_PALETTE.danger}) {
+                std::fill(renderer.pixels.begin(), renderer.pixels.end(), 17);
+                const auto rect = ptc_overlay_rect(16, 40, dimensions.first, dimensions.second);
+                view.draw_dashboard_surface(&renderer, rect, background, color, emphasized);
+                const auto border_pixel = [&](int x, int y) {
+                    const size_t offset = ((rect.y + y) * renderer.width + rect.x + x) * 3;
+                    return renderer.pixels[offset] == color.r * 17 &&
+                        renderer.pixels[offset + 1] == color.g * 17 && renderer.pixels[offset + 2] == color.b * 17;
+                };
+                std::vector<bool> visited(rect.w * rect.h, false);
+                std::vector<std::pair<int, int>> queue{{3, 0}};
+                visited[3] = true;
+                for (size_t head = 0; head < queue.size(); ++head) {
+                    const auto [x, y] = queue[head];
+                    for (const auto &delta : {std::pair<int, int>{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+                        const int nx = x + delta.first, ny = y + delta.second;
+                        if (nx < 0 || ny < 0 || nx >= rect.w || ny >= rect.h) continue;
+                        const int index = ny * rect.w + nx;
+                        if (!visited[index] && border_pixel(nx, ny)) {
+                            visited[index] = true;
+                            queue.emplace_back(nx, ny);
+                        }
+                    }
+                }
+                for (int y = 0; y < rect.h; ++y)
+                    for (int x = 0; x < rect.w; ++x)
+                        if (border_pixel(x, y)) require(visited[y * rect.w + x],
+                            "every normal and emphasized outline must form one connected border");
+                for (const int x : {0, rect.w - 1})
+                    for (const int y : {3, rect.h - 4}) require(border_pixel(x, y),
+                        "all four chamfered corners must connect to their vertical strokes");
+            }
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc != 3) return 2;
     try {
         tsl::gfx::Renderer renderer(argv[1]);
+        test_child_cards(renderer);
+        test_parent_cards(renderer);
+        test_surface_outline(renderer);
         const PtcUiLanguagePreference languages[] = {PTC_UI_LANGUAGE_SIMPLIFIED,
             PTC_UI_LANGUAGE_ENGLISH, PTC_UI_LANGUAGE_TRADITIONAL};
         const char *folders[] = {"", "en/", "zh_hant/"};
@@ -91,7 +208,8 @@ int main(int argc, char **argv) {
             "overlay-eye-paused", "overlay-eye-stale", "overlay-eye-boundary", "overlay-eye-unknown",
             "overlay-eye-details", "overlay-eye-off", "overlay-eye-multiple-limits",
             "overlay-eye-refresh-failed", "overlay-eye-cross-day", "overlay-eye-partial",
-            "overlay-eye-rest-boundary", "overlay-eye-unlimited", "overlay-quota-unknown"};
+            "overlay-eye-rest-boundary", "overlay-eye-unlimited", "overlay-quota-unknown",
+            "overlay-parent-pending", "overlay-parent-stale", "overlay-parent-busy", "overlay-parent-pin-cooldown"};
         int child_overflows = 0;
         for (int language = 0; language < 3; ++language) {
             ptc_ui_language_set_resolved(languages[language]);
@@ -297,8 +415,52 @@ int main(int argc, char **argv) {
                         std::strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
                         "failed, cross-day, partial or expired eye status requires confirmation");
                 }
+                if (scene >= 52) {
+                    view.parent_view_ = scene == 52 ? ParentView::Result : scene == 55 ? ParentView::Pin : ParentView::Actions;
+                    view.parent_action_ = PTC_OVERLAY_PARENT_ADD_MINUTES;
+                    if (scene == 53) view.last_refresh_tick_ -= 31000000000ULL;
+                    bridge.waiting = scene == 52 || scene == 54;
+                    if (scene == 55) std::snprintf(view.pin_message_, sizeof(view.pin_message_), "%s",
+                        ptc_ui_text(PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR));
+                }
+                renderer.text_runs.clear();
                 view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
                     PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
+                if (view.parent_view_ == ParentView::Result) {
+                    const auto label = bridge.waiting ? PTC_UI_T_PROCESSING_REQUEST : view.parent_action_succeeded_ ?
+                        PTC_UI_T_OPERATION_COMPLETED : PTC_UI_T_OPERATION_INCOMPLETE;
+                    const auto color = bridge.waiting ? DARK_OVERLAY_PALETTE.warning : view.parent_action_succeeded_ ?
+                        DARK_OVERLAY_PALETTE.success : DARK_OVERLAY_PALETTE.danger;
+                    for (const auto &line : overlay_wrap(&renderer, ptc_ui_text(label), 44, 380)) {
+                        bool found = false;
+                        for (const auto &run : renderer.text_runs)
+                            if (run.text == line && run.size == 44 && view.same_color(run.color, color)) found = true;
+                        require(found, "parent pending/success/failure must use distinct visible result colors");
+                    }
+                }
+                if (view.page_identity() == 0 || view.page_identity() == 4) {
+                    const auto policies = view.child_policy_status(view.displayed_summary_);
+                    for (const auto label : {PTC_UI_T_OVERLAY_EYE_LABEL, PTC_UI_T_POLICY_BED_LABEL,
+                        view.page_identity() == 4 || policies.mode == PTC_UI_T_STATUS_TO_CONFIRM ?
+                        PTC_UI_T_POLICY_DOCK_LABEL : policies.mode}) {
+                        const auto title_lines = overlay_wrap(&renderer, ptc_ui_text(label), 32, 380);
+                        bool found = true;
+                        for (const auto &title_line : title_lines) {
+                            bool line_found = false;
+                            for (const auto &run : renderer.text_runs) {
+                                if (run.text == title_line) {
+                                    line_found = true;
+                                    require(run.size == 32, "production child rule titles must all use 32px");
+                                }
+                            }
+                            found = found && line_found;
+                        }
+                        if (view.page_identity() == 0 && !found) {
+                            std::fprintf(stderr, "Missing rule title: %s%s (%s)\n", folders[language], scenes[scene], ptc_ui_text(label));
+                            require(false, "production rule title must remain visible");
+                        }
+                    }
+                }
                 require(view.page_layout_.viewport.h >= 0, "page header must leave a usable viewport");
                 if (view.parent_view_ == ParentView::Child && !view.status_expanded_ && view.page_layout_.scroll_max) {
                     std::fprintf(stderr, "Child overflow: %s%s (%dpx)\n", folders[language], scenes[scene], view.page_layout_.scroll_max);

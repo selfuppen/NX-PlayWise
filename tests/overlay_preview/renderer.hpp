@@ -38,6 +38,8 @@ class Renderer {
         }
     }
 public:
+    struct TextRun { std::string text; float size; int x, y; Color color; };
+    std::vector<TextRun> text_runs;
     static constexpr int width = 448, height = 720;
     std::vector<unsigned char> pixels = std::vector<unsigned char>(width * height * 3, 17);
     void enableScissoring(int x, int y, int w, int h) {
@@ -64,6 +66,7 @@ public:
     }
     std::pair<u32, u32> drawString(const char *text, bool mono, int x, int y,
         float size, Color color, ssize_t max_width = 0) {
+        if (color.a) text_runs.push_back({text, size, x, y, color});
         int pen = x, baseline = y, max_x = x;
         float scale = stbtt_ScaleForPixelHeight(&font_, size);
         const unsigned char *p = reinterpret_cast<const unsigned char *>(text);

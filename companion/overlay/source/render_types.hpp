@@ -272,3 +272,11 @@ enum class ParentView {
     Confirm,
     Result,
 };
+
+enum class ChildCardKind { Plain, Time, Eye, Bedtime, Dock };
+
+struct OverlayPanelLine {
+    const char *text;
+    int size;
+    tsl::Color color;
+};

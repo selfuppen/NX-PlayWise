@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <initializer_list>
 #include <limits>
 
 #include "release_manifest.h"
