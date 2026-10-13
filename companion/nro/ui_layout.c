@@ -131,6 +131,17 @@ PtcUiRect ptc_ui_time_status_bar_rect(void)
     return (PtcUiRect){754, 24, 472, 66};
 }
 
+PtcUiRect ptc_ui_time_status_bar_for_model(const PtcUiModel *model)
+{
+    PtcUiRect rect = ptc_ui_time_status_bar_rect();
+    if (!model) return rect;
+    bool policy = model->bedtime_policy.enabled || model->bedtime_status_enabled ||
+        model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled;
+    rect.h += (model->eye_care_policy.enabled ? 12 : 0) + (policy ? 16 : 0);
+    if (rect.y + rect.h > 104) rect.y = 104 - rect.h;
+    return rect;
+}
+
 PtcUiRect ptc_ui_parent_footer_rect(int index)
 {
     static const int widths[] = {130, 130, 170, 130, 564};
@@ -1609,7 +1620,7 @@ PtcUiRect ptc_ui_today_status_rect(int index)
 {
     PtcUiRect box = ptc_ui_home_summary_rect(true);
     if (index < 8 || index > 10) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){box.x + 22, box.y + 212 + (index - 8) * 58, box.w - 44, 52};
+    return (PtcUiRect){box.x + 22, box.y + 212 + (index - 8) * 58, box.w - 44, index == 10 ? 70 : 52};
 }
 
 PtcUiRect ptc_ui_config_backup_field_rect(int index)

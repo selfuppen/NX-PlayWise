@@ -6,6 +6,7 @@
 extern "C" {
 #endif
 #include "bridge.h"
+#include "../policy_status.h"
 #ifdef __cplusplus
 }
 #endif
@@ -50,7 +51,7 @@ enum {
     PTC_OVERLAY_SUBMIT_H = 36,
     PTC_OVERLAY_STATUS_Y = 420,
     PTC_OVERLAY_STATUS_COLLAPSED_H = 32,
-    PTC_OVERLAY_STATUS_NORMAL_H = 92,
+    PTC_OVERLAY_STATUS_NORMAL_H = 136,
     PTC_OVERLAY_STATUS_DETAIL_H = 136
 };
 
@@ -170,6 +171,16 @@ static inline PtcOverlayRect ptc_overlay_status_rect(
     int height = !expanded ? PTC_OVERLAY_STATUS_COLLAPSED_H :
         (needs_detail ? PTC_OVERLAY_STATUS_DETAIL_H : PTC_OVERLAY_STATUS_NORMAL_H);
     return ptc_overlay_rect(origin_x, origin_y + PTC_OVERLAY_STATUS_Y, width, height);
+}
+
+static inline PtcOverlayRect ptc_overlay_child_policy_rect(int origin_x, int origin_y, int width)
+{
+    return ptc_overlay_rect(origin_x, origin_y + 510, width, 46);
+}
+
+static inline int ptc_overlay_policy_row_y(int origin_y, bool expanded, int row)
+{
+    return origin_y + (expanded ? PTC_OVERLAY_STATUS_Y + 110 : 528) + row * 18;
 }
 
 static inline PtcOverlayRect ptc_overlay_child_buffer_rect(int origin_x, int origin_y)

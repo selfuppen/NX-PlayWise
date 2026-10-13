@@ -171,13 +171,14 @@ static int save_preview(const char *directory, const char *module, const char *n
     PtcUiThemeView theme = ptc_ui_theme_make_view(dark ? PTC_UI_THEME_DARK : PTC_UI_THEME_LIGHT, PTC_UI_SYSTEM_THEME_UNAVAILABLE);
     /* Previews skip update_animations, so render the tweened values at rest. */
     PtcUiModel settled = *model;
+    settled.bedtime_status_enabled = settled.bedtime_policy.enabled;
     settled.displayed_remaining_minutes = settled.remaining_minutes;
     settled.displayed_grant_minutes = settled.grant_minutes;
     settled.last_parent_page = settled.parent_page;
     settled.rendered_overlay = settled.overlay;
     settled.overlay_open_frames = PTC_UI_OVERLAY_OPEN_FRAMES;
     ptc_ui_graphics_draw(&settled, &theme);
-    draw_text(preview_pixels, 1280, 820, 22, "HOST PREVIEW / SAMPLE DATA", 16, UI_RGB(g_palette->text_secondary));
+    draw_text(preview_pixels, 1280, 540, 100, "HOST PREVIEW / SAMPLE DATA", 11, UI_RGB(g_palette->text_secondary));
     n = snprintf(dir_path, sizeof(dir_path), "%s/%s", directory, module);
     if (n < 0 || (size_t)n >= sizeof(dir_path)) return 1;
     ptc_mkdir(dir_path);
@@ -599,7 +600,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.today_override_cleared_in_session = false;
         model.bedtime_policy.enabled = true;
         model.bedtime_active = true;
-        model.bedtime_window_instance_id = 23801260;
+        model.bedtime_window_instance_id = ptc_bedtime_window_instance_id(2380, 1260);
         model.bedtime_start_day_index = 2380;
         model.bedtime_start_minute = 1260;
         model.bedtime_end_minute = 420;
@@ -607,19 +608,19 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         failed |= save_preview(directory, "parent", "bedtime-current", &model, dark);
         model.bedtime_active = false;
         model.bedtime_next_available = true;
-        model.bedtime_next_window_instance_id = 23801260;
+        model.bedtime_next_window_instance_id = ptc_bedtime_window_instance_id(2380, 1260);
         model.bedtime_next_start_day_index = 2380;
         model.bedtime_next_start_minute = 1260;
         model.bedtime_next_end_minute = 420;
         failed |= save_preview(directory, "parent", "bedtime-tonight", &model, dark);
-        model.bedtime_next_window_instance_id = 23821410;
+        model.bedtime_next_window_instance_id = ptc_bedtime_window_instance_id(2382, 1410);
         model.bedtime_next_start_day_index = 2382;
         model.bedtime_next_start_minute = 1410;
         model.bedtime_next_end_minute = 480;
         failed |= save_preview(directory, "parent", "bedtime-future", &model, dark);
         model.bedtime_next_available = false;
         model.bedtime_skipped_window_available = true;
-        model.bedtime_skipped_window_instance_id = 23801260;
+        model.bedtime_skipped_window_instance_id = ptc_bedtime_window_instance_id(2380, 1260);
         model.bedtime_skipped_start_day_index = 2380;
         model.bedtime_skipped_start_minute = 1260;
         model.bedtime_skipped_end_minute = 420;
@@ -1314,6 +1315,60 @@ static int render_dock_previews(const char *directory, const PtcUiModel *baselin
     return failed;
 }
 
+static int render_policy_previews(const char *directory, const PtcUiModel *baseline)
+{
+    int failed = 0;
+    const char *names[] = {"policy-pending", "policy-active", "policy-skipped", "policy-tv-empty", "policy-unknown", "policy-none-today"};
+    for (int dark = 0; dark < 2; ++dark) for (int scene = 0; scene < 6; ++scene) {
+        PtcUiModel model = *baseline;
+        model.overlay = PTC_UI_OVERLAY_NONE;
+        model.bedtime_policy.enabled = true;
+        model.bedtime_next_available = true;
+        model.bedtime_next_start_day_index = model.day_index;
+        model.bedtime_next_start_minute = 540;
+        model.bedtime_next_end_minute = 420;
+        model.bedtime_next_window_instance_id = ptc_bedtime_window_instance_id(model.day_index, 540);
+        model.eye_care_policy.enabled = true;
+        model.eye_care_policy.play_minutes = 40;
+        model.eye_care_policy.rest_minutes = 10;
+        model.eye_care_used_minutes = 10;
+        snprintf(model.eye_care_phase, sizeof(model.eye_care_phase), "playing");
+        model.dock_policy.undocked_limit_enabled = true;
+        model.dock_policy.undocked_daily_minutes = 30;
+        model.undocked_usage_available = true;
+        model.undocked_used_minutes = 12;
+        model.undocked_remaining_minutes = 18;
+        if (scene == 1) {
+            model.bedtime_active = true;
+            model.bedtime_start_day_index = model.day_index - 1;
+            model.bedtime_start_minute = 1260;
+            model.bedtime_end_minute = 526;
+            model.bedtime_window_instance_id = ptc_bedtime_window_instance_id(model.day_index - 1, 1260);
+        } else if (scene == 2) {
+            model.bedtime_skipped_window_available = true;
+            model.bedtime_skipped_start_day_index = model.day_index;
+            model.bedtime_skipped_start_minute = 540;
+            model.bedtime_skipped_end_minute = 420;
+            model.bedtime_skipped_window_instance_id = model.bedtime_next_window_instance_id;
+        } else if (scene == 3) {
+            model.undocked_used_minutes = 30;
+            model.undocked_remaining_minutes = 0;
+            snprintf(model.operation_mode, sizeof(model.operation_mode), "docked");
+        } else if (scene == 4) {
+            model.status_updated_at = 1;
+        } else if (scene == 5) {
+            model.bedtime_next_start_day_index++;
+            model.bedtime_next_window_instance_id = ptc_bedtime_window_instance_id(model.day_index + 1, 540);
+        }
+        model.view = PTC_UI_CHILD;
+        failed |= save_preview(directory, "child", names[scene], &model, dark);
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_TODAY;
+        failed |= save_preview(directory, "parent", names[scene], &model, dark);
+    }
+    return failed;
+}
+
 static int render_config_backup_previews(const char *directory, const PtcUiModel *baseline)
 {
     int failed = 0;
@@ -1369,7 +1424,7 @@ int main(int argc, char **argv)
     memset(&model, 0, sizeof(model));
     model.view = PTC_UI_CHILD;
     model.status_loaded = model.remaining_available = model.played_minutes_available = true;
-    model.dock_available = true;
+    model.dock_available = model.dock_status_available = model.bedtime_status_available = true;
     snprintf(model.operation_mode, sizeof(model.operation_mode), "undocked");
     model.status_updated_at = 998;
     model.remaining_minutes = 51;
@@ -1406,6 +1461,7 @@ int main(int argc, char **argv)
     failed |= render_eye_care_previews(argv[2], &model);
     failed |= render_dock_previews(argv[2], &model);
     failed |= render_config_backup_previews(argv[2], &model);
+    failed |= render_policy_previews(argv[2], &model);
 
     /* Pass 2: English previews */
     char en_dir[1024];
@@ -1417,6 +1473,7 @@ int main(int argc, char **argv)
     failed |= render_eye_care_previews(en_dir, &model);
     failed |= render_dock_previews(en_dir, &model);
     failed |= render_config_backup_previews(en_dir, &model);
+    failed |= render_policy_previews(en_dir, &model);
     /* Traditional Chinese covers the new details and focused health surfaces. */
     char zh_hant_dir[1024];
     snprintf(zh_hant_dir, sizeof(zh_hant_dir), "%s/zh_hant", argv[2]);
@@ -1426,6 +1483,7 @@ int main(int argc, char **argv)
     failed |= render_eye_care_previews(zh_hant_dir, &model);
     failed |= render_dock_previews(zh_hant_dir, &model);
     failed |= render_config_backup_previews(zh_hant_dir, &model);
+    failed |= render_policy_previews(zh_hant_dir, &model);
     for (int dark = 0; dark < 2; ++dark) {
         failed |= render_today_details_previews(zh_hant_dir, &model, dark);
         failed |= render_setup_previews(zh_hant_dir, &model, dark);

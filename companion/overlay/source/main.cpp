@@ -221,11 +221,13 @@ public:
             } else if (ptc_overlay_bridge_status_succeeded(bridge_)) {
                 displayed_summary_ = bridge_->summary;
                 last_refresh_tick_ = armGetSystemTick();
+                last_refresh_wall_time_ = static_cast<long long>(std::time(nullptr));
                 has_status_snapshot_ = true;
                 error_ = false;
             } else if (ptc_overlay_bridge_preview_succeeded(bridge_)) {
                 displayed_summary_ = bridge_->summary;
                 last_refresh_tick_ = armGetSystemTick();
+                last_refresh_wall_time_ = static_cast<long long>(std::time(nullptr));
                 has_status_snapshot_ = true;
                 error_ = false;
                 const bool after_zero = bridge_->summary.remaining_after_available &&
@@ -250,6 +252,7 @@ public:
             } else if (ptc_overlay_bridge_offline_code_succeeded(bridge_)) {
                 displayed_summary_ = bridge_->summary;
                 last_refresh_tick_ = armGetSystemTick();
+                last_refresh_wall_time_ = static_cast<long long>(std::time(nullptr));
                 has_status_snapshot_ = true;
                 error_ = false;
                 success_visible_ = true;
@@ -275,6 +278,7 @@ public:
                     displayed_summary_ = bridge_->summary;
                     has_status_snapshot_ = true;
                     last_refresh_tick_ = armGetSystemTick();
+                    last_refresh_wall_time_ = static_cast<long long>(std::time(nullptr));
                 }
                 parent_view_ = ParentView::Result;
                 parent_action_succeeded_ = bridge_->summary.ok;
@@ -1094,6 +1098,7 @@ private:
     u64 request_started_tick_ = 0;
     u64 last_input_tick_ = 0;
     u64 last_refresh_tick_ = 0;
+    long long last_refresh_wall_time_ = 0;
     int last_elapsed_ms_ = 0;
     bool error_ = false;
     bool has_status_snapshot_ = false;

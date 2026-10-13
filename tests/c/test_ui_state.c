@@ -4110,8 +4110,11 @@ static void test_today_details_navigation(void)
     check_int(m.selected_index, 11, "parent origin preserved");
 }
 
+#include "test_policy_status.inc"
+
 int main(void)
 {
+    test_policy_status();
     test_today_projection();
     test_today_details_navigation();
     test_today_settings_links();

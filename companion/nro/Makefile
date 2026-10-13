@@ -89,6 +89,7 @@ OBJS := \
 	$(BUILD)/switch_ipc_client.o \
 	$(BUILD)/request_client.o \
 	$(BUILD)/result_summary.o \
+	$(BUILD)/policy_status.o \
 	$(BUILD)/sha256.o \
 	$(BUILD)/rules.o \
 	$(BUILD)/holiday_calendar.o \
@@ -313,6 +314,9 @@ $(BUILD)/transport_client.o: ../transport_client.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/switch_ipc_client.o: ../switch_ipc_client.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/policy_status.o: ../policy_status.c ../policy_status.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/result_summary.o: ../result_summary.c | $(BUILD)

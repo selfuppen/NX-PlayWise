@@ -1,3 +1,4 @@
+#define PTC_OVERLAY_PREVIEW_CLOCK
 // Deterministic sample states rendered by the production Overlay methods.
 #include "renderer.hpp"
 #include <cstring>
@@ -42,12 +43,15 @@ int main(int argc, char **argv) {
         const char *folders[] = {"", "en/", "zh_hant/"};
         const char *scenes[] = {"overlay-code-entry", "overlay-code-confirm", "overlay-code-success",
             "overlay-parent-actions", "overlay-bedtime", "overlay-eye-care", "overlay-unknown",
-            "overlay-dock-handheld", "overlay-dock-restricted", "overlay-dock-waiver"};
+            "overlay-dock-handheld", "overlay-dock-restricted", "overlay-dock-waiver",
+            "overlay-policy-pending", "overlay-policy-expanded", "overlay-policy-active",
+            "overlay-policy-tv-empty", "overlay-policy-stale", "overlay-policy-success-detail",
+            "overlay-policy-error-detail"};
         for (int language = 0; language < 3; ++language) {
             ptc_ui_language_set_resolved(languages[language]);
             auto dir = std::filesystem::path(argv[2]) / folders[language] / "overlay";
             std::filesystem::create_directories(dir);
-            for (int scene = 0; scene < 10; ++scene) {
+            for (int scene = 0; scene < 17; ++scene) {
                 PtcOverlayBridge bridge{};
                 PtcOverlayInput input{};
                 ptc_overlay_input_init(&input);
@@ -58,6 +62,7 @@ int main(int argc, char **argv) {
                 status.played_minutes_available = true; status.played_minutes = 35;
                 status.unrestricted_today = 0; status.daily_buffer_available = true;
                 status.day_index = 2469;
+                status.bedtime_available = status.dock_policy_available = true;
                 std::snprintf(status.rule_source, sizeof(status.rule_source), "weekly");
                 std::snprintf(input.symbols, sizeof(input.symbols), "1234"); input.length = 4;
                 if (scene == 1) {
@@ -98,6 +103,42 @@ int main(int argc, char **argv) {
                         view.parent_action_ = PTC_OVERLAY_PARENT_WAIVE_DOCK;
                     }
                 }
+                if (scene >= 10) {
+                    status.dock_restriction_active = false;
+                    status.dock_available = status.undocked_usage_available = true;
+                    status.undocked_limit_enabled = true;
+                    status.undocked_daily_minutes = 30;
+                    status.undocked_used_minutes = 12;
+                    status.undocked_remaining_minutes = 18;
+                    status.bedtime_enabled = status.bedtime_next_available = true;
+                    status.bedtime_next_start_day_index = status.day_index;
+                    status.bedtime_next_start_minute = 540;
+                    status.bedtime_next_end_minute = 420;
+                    status.bedtime_next_window_instance_id = (static_cast<u64>(status.day_index) << 16) | 540;
+                    if (scene == 11) view.status_expanded_ = true;
+                    if (scene == 12) {
+                        status.bedtime_active = true;
+                        status.bedtime_start_day_index = status.day_index - 1;
+                        status.bedtime_start_minute = 1260;
+                        status.bedtime_end_minute = 526;
+                        status.bedtime_window_instance_id = (static_cast<u64>(status.day_index - 1) << 16) | 1260;
+                        status.dock_restriction_active = true;
+                        status.undocked_used_minutes = 30;
+                        status.undocked_remaining_minutes = 0;
+                    }
+                    if (scene == 13) {
+                        status.undocked_remaining_minutes = 0;
+                        status.undocked_used_minutes = 30;
+                        std::snprintf(status.operation_mode, sizeof(status.operation_mode), "docked");
+                    }
+                    if (scene == 14) view.last_refresh_tick_ -= 31000000000ULL;
+                    if (scene >= 15) {
+                        view.status_expanded_ = true;
+                        view.success_visible_ = scene == 15;
+                        view.error_ = scene == 16;
+                        view.last_request_kind_ = OverlayRequestKind::Status;
+                    }
+                }
                 std::fill(renderer.pixels.begin(), renderer.pixels.end(), 17);
                 // Parent views hide the title/subtitle banner and raise the
                 // content top; mirror that here so previews match the device.
@@ -114,7 +155,8 @@ int main(int argc, char **argv) {
                 renderer.save((dir / (std::string(scenes[scene]) + ".ppm")).string());
             }
         }
-        std::puts("PASS: 30 production Overlay previews (3 languages, 10 sample states)");
+        std::printf("PASS: %zu production Overlay previews (3 languages, %zu sample states)\n",
+            3 * (sizeof(scenes) / sizeof(scenes[0])), sizeof(scenes) / sizeof(scenes[0]));
         return 0;
     } catch (const std::exception &error) {
         std::fprintf(stderr, "FAIL: %s\n", error.what()); return 1;

@@ -2,6 +2,10 @@
 #define PTC_COMPANION_UI_STATE_H
 
 #include "ui_model.h"
+#include "../policy_status.h"
+
+void ptc_ui_project_policy_status(const PtcUiModel *model, int64_t now,
+    int local_day_index, int second_of_day, PtcPolicyStatus *out);
 
 #include "ui_input_state.h"
 

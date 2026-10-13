@@ -212,7 +212,10 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     draw_text(pixels, stride, info_shelf.x + 14, info_shelf.y + 42, total_str, 18, UI_INK);
 
     /* 右指标：已消耗估算 */
-    draw_text(pixels, stride, mid_x + 14, info_shelf.y + 18, ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_CONSUMED_ESTIMATED), 12, UI_MUTED);
+    char used_label[128];
+    fit_text(used_label, sizeof(used_label), ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_CONSUMED_ESTIMATED),
+        12, info_shelf.x + info_shelf.width - mid_x - 28);
+    draw_text(pixels, stride, mid_x + 14, info_shelf.y + 18, used_label, 12, UI_MUTED);
     char played_str[64];
     if (!eye_resting && model->played_minutes_available && model->played_minutes >= 0)
         snprintf(played_str, sizeof(played_str), ptc_ui_text(PTC_UI_T_ABOUT_D_MIN), model->played_minutes);
@@ -256,48 +259,21 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     draw_rect_outline(pixels, stride, bedtime_card, 8, bedtime_focused ? 3 : 1,
         bedtime_focused ? UI_FOCUS : bedtime_enforcing ? UI_DANGER : UI_BORDER);
     draw_text(pixels, stride, bedtime_card.x + 12, bedtime_card.y + 20, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), 14, UI_INK);
-    bool bedtime_skip_matches = ptc_ui_bedtime_skip_matches_policy(model, &model->bedtime_policy);
-    const char *bedtime_badge = !model->bedtime_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
-        (bedtime_enforcing ? ptc_ui_text(PTC_UI_T_RESTRICTED) :
-         (bedtime_skip_matches ? ptc_ui_text(PTC_UI_T_SKIPPED) : ptc_ui_text(PTC_UI_T_ENABLED)));
-    uint32_t b_badge_color = !model->bedtime_policy.enabled ? UI_MUTED :
-        (bedtime_enforcing ? UI_DANGER : (bedtime_skip_matches ? UI_SUCCESS : UI_ACCENT));
+    PtcPolicyStatus policies;
+    ptc_ui_render_policy_status(model, &policies);
+    const char *bedtime_badge = ptc_ui_text(policies.bedtime.badge);
+    uint32_t b_badge_color = policy_display_color(policies.bedtime.state);
     int bb_w = measure_text(bedtime_badge, 12) + 16;
-    if (bb_w < 56) bb_w = 56;
     int b_ch_x = bedtime_card.x + bedtime_card.width - 16;
-    int b_ch_y = bedtime_card.y + bedtime_card.height / 2;
-    draw_chevron_right(pixels, stride, b_ch_x, b_ch_y, 5, bedtime_focused ? UI_ACCENT : UI_MUTED);
+    draw_chevron_right(pixels, stride, b_ch_x, bedtime_card.y + bedtime_card.height / 2, 5,
+        bedtime_focused ? UI_ACCENT : UI_MUTED);
     UiRect bb_rect = {b_ch_x - 12 - bb_w, bedtime_card.y + 8, bb_w, 20};
-    fill_round_rect(pixels, stride, bb_rect, 4, b_badge_color == UI_DANGER ? UI_DANGER_SOFT : (b_badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
-    draw_rect_outline(pixels, stride, bb_rect, 4, 1, b_badge_color);
+    fill_round_rect(pixels, stride, bb_rect, 4,
+        policies.bedtime.state == PTC_POLICY_ACTIVE ? UI_DANGER_SOFT : UI_PAGE);
     draw_text_center(pixels, stride, bb_rect, bedtime_badge, 12, b_badge_color);
-
-    char b_detail[128], fitted_bedtime[128];
-    if (!model->bedtime_policy.enabled) {
-        snprintf(b_detail, sizeof(b_detail), "%s", ptc_ui_text(PTC_UI_T_CURRENTLY_OFF));
-    } else if (bedtime_enforcing) {
-        snprintf(b_detail, sizeof(b_detail), "%s (%02u:%02u ~ %02u:%02u)",
-            ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_2),
-            (unsigned int)(model->bedtime_start_minute / 60), (unsigned int)(model->bedtime_start_minute % 60),
-            (unsigned int)(model->bedtime_end_minute / 60), (unsigned int)(model->bedtime_end_minute % 60));
-    } else if (bedtime_skip_matches) {
-        snprintf(b_detail, sizeof(b_detail), "%s", ptc_ui_text(PTC_UI_T_THE_BEDTIME_LIMIT_HAS_BEEN_SKIPPED_TONIGHT));
-    } else if (model->bedtime_next_available) {
-        uint16_t yr; uint8_t mo, da;
-        if (ptc_date_from_day_index(model->bedtime_next_start_day_index, &yr, &mo, &da)) {
-            snprintf(b_detail, sizeof(b_detail), "%02u/%02u  %02u:%02u ~ %02u:%02u", mo, da,
-                (unsigned int)(model->bedtime_next_start_minute / 60), (unsigned int)(model->bedtime_next_start_minute % 60),
-                (unsigned int)(model->bedtime_next_end_minute / 60), (unsigned int)(model->bedtime_next_end_minute % 60));
-        } else {
-            snprintf(b_detail, sizeof(b_detail), "%02u:%02u ~ %02u:%02u",
-                (unsigned int)(model->bedtime_next_start_minute / 60), (unsigned int)(model->bedtime_next_start_minute % 60),
-                (unsigned int)(model->bedtime_next_end_minute / 60), (unsigned int)(model->bedtime_next_end_minute % 60));
-        }
-    } else {
-        snprintf(b_detail, sizeof(b_detail), "%s", ptc_ui_text(PTC_UI_T_ENABLED_WAITING_FOR_WINDOW));
-    }
-    fit_text(fitted_bedtime, sizeof(fitted_bedtime), b_detail, 12, bedtime_card.width - 24);
-    draw_text(pixels, stride, bedtime_card.x + 12, bedtime_card.y + 40, fitted_bedtime, 12, bedtime_enforcing ? UI_DANGER : UI_MUTED);
+    char fitted_bedtime[256];
+    fit_text(fitted_bedtime, sizeof(fitted_bedtime), policies.bedtime.detail, 12, bedtime_card.width - 24);
+    draw_text(pixels, stride, bedtime_card.x + 12, bedtime_card.y + 40, fitted_bedtime, 12, b_badge_color);
 
     /* 周期 4：电视模式规则设置入口卡 */
     UiRect dock_card = to_uirect(ptc_ui_today_status_rect(10));
@@ -307,82 +283,26 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         dock_focused ? UI_FOCUS : model->dock_restriction_active ? UI_DANGER : UI_BORDER);
     draw_text(pixels, stride, dock_card.x + 12, dock_card.y + 20, ptc_ui_text(PTC_UI_T_DOCK_TITLE), 14, UI_INK);
 
-    bool dock_master = model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled;
-    bool dock_fresh = model->dock_available && ptc_ui_status_is_fresh(model, ptc_ui_render_now());
-    const char *dock_badge;
-    uint32_t d_badge_color;
-    if (!dock_fresh) {
-        dock_badge = ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING);
-        d_badge_color = UI_MUTED;
-    } else if (model->dock_waived_today) {
-        dock_badge = ptc_ui_text(PTC_UI_T_SKIPPED);
-        d_badge_color = UI_SUCCESS;
-    } else if (model->dock_restriction_active) {
-        dock_badge = ptc_ui_text(PTC_UI_T_RESTRICTED);
-        d_badge_color = UI_DANGER;
-    } else if (!dock_master) {
-        dock_badge = ptc_ui_text(PTC_UI_T_DISABLED_2);
-        d_badge_color = UI_MUTED;
-    } else if (model->dock_policy.force_docked) {
-        dock_badge = ptc_ui_text(PTC_UI_T_DOCK_FORCE);
-        d_badge_color = UI_ACCENT;
-    } else {
-        dock_badge = ptc_ui_text(PTC_UI_T_DOCK_BADGE_QUOTA);
-        d_badge_color = UI_ACCENT;
-    }
-
+    uint32_t d_badge_color = policy_display_color(policies.dock.state);
+    const char *dock_badge = ptc_ui_text(policies.dock.badge);
     int b2_w = measure_text(dock_badge, 12) + 16;
-    if (b2_w < 50) b2_w = 50;
     int d_ch_x = dock_card.x + dock_card.width - 16;
-    int d_ch_y = dock_card.y + dock_card.height / 2;
-    draw_chevron_right(pixels, stride, d_ch_x, d_ch_y, 5, dock_focused ? UI_ACCENT : UI_MUTED);
+    draw_chevron_right(pixels, stride, d_ch_x, dock_card.y + dock_card.height / 2, 5,
+        dock_focused ? UI_ACCENT : UI_MUTED);
     UiRect b2_rect = {d_ch_x - 12 - b2_w, dock_card.y + 8, b2_w, 20};
-    fill_round_rect(pixels, stride, b2_rect, 4, d_badge_color == UI_DANGER ? UI_DANGER_SOFT : (d_badge_color == UI_SUCCESS ? UI_SUCCESS_SOFT : (d_badge_color == UI_ACCENT ? UI_ACCENT_SOFT : UI_PAGE)));
-    draw_rect_outline(pixels, stride, b2_rect, 4, 1, d_badge_color);
+    fill_round_rect(pixels, stride, b2_rect, 4,
+        policies.dock.state == PTC_POLICY_ACTIVE ? UI_DANGER_SOFT : UI_PAGE);
     draw_text_center(pixels, stride, b2_rect, dock_badge, 12, d_badge_color);
-
-    if (dock_fresh && (dock_master || model->dock_waived_today)) {
-        bool is_docked = (strcmp(model->operation_mode, "docked") == 0);
-        const char *mode_badge = is_docked ? ptc_ui_text(PTC_UI_T_DOCK_TV_BADGE) :
-            strcmp(model->operation_mode, "undocked") == 0 ? ptc_ui_text(PTC_UI_T_DOCK_HANDHELD_BADGE) : ptc_ui_text(PTC_UI_T_ADJUST_BADGE_PENDING);
-        uint32_t mode_color = is_docked ? UI_SUCCESS : UI_ACCENT;
-        int b1_w = measure_text(mode_badge, 12) + 16;
-        if (b1_w < 56) b1_w = 56;
-        UiRect b1_rect = {b2_rect.x - b1_w - 6, dock_card.y + 8, b1_w, 20};
-        fill_round_rect(pixels, stride, b1_rect, 4, mode_color == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_ACCENT_SOFT);
-        draw_rect_outline(pixels, stride, b1_rect, 4, 1, mode_color);
-        draw_text_center(pixels, stride, b1_rect, mode_badge, 12, mode_color);
-    }
-
-    char d_detail[128], fitted_dock[128];
-    if (!dock_fresh) {
-        snprintf(d_detail, sizeof(d_detail), "%s", ptc_ui_text(PTC_UI_T_PRESS_Y_TO_REFRESH_STATUS));
-    } else if (model->dock_waived_today) {
-        snprintf(d_detail, sizeof(d_detail), "%s", ptc_ui_text(PTC_UI_T_DOCK_CARD_WAIVED));
-    } else if (model->dock_restriction_active) {
-        snprintf(d_detail, sizeof(d_detail), "%s", ptc_ui_text(PTC_UI_T_DOCK_BLOCKED_BANNER));
-    } else if (!dock_master) {
-        snprintf(d_detail, sizeof(d_detail), "%s", ptc_ui_text(PTC_UI_T_DOCK_CARD_OFF));
-    } else if (model->dock_policy.force_docked) {
-        snprintf(d_detail, sizeof(d_detail), "%s", ptc_ui_text(PTC_UI_T_DOCK_CARD_FORCE));
-    } else if (model->dock_policy.undocked_limit_enabled) {
-        if (model->undocked_usage_available) {
-            snprintf(d_detail, sizeof(d_detail), ptc_ui_text(PTC_UI_T_DOCK_CARD_LIMIT),
-                     model->dock_policy.undocked_daily_minutes, model->undocked_used_minutes);
-        } else {
-            snprintf(d_detail, sizeof(d_detail), "%s: %u %s", ptc_ui_text(PTC_UI_T_DOCK_LIMIT),
-                     model->dock_policy.undocked_daily_minutes, ptc_ui_text(PTC_UI_T_MINUTES));
-        }
-    } else {
-        snprintf(d_detail, sizeof(d_detail), "%s", ptc_ui_text(PTC_UI_T_DOCK_CARD_OFF));
-    }
-    fit_text(fitted_dock, sizeof(fitted_dock), d_detail, 12, dock_card.width - 24);
-    draw_text(pixels, stride, dock_card.x + 12, dock_card.y + 40, fitted_dock, 12, model->dock_restriction_active ? UI_DANGER : UI_MUTED);
+    char fitted_dock[256];
+    fit_text(fitted_dock, sizeof(fitted_dock), policies.dock.detail, 12, dock_card.width - 24);
+    draw_text(pixels, stride, dock_card.x + 12, dock_card.y + 40, fitted_dock, 12, d_badge_color);
+    fit_text(fitted_dock, sizeof(fitted_dock), policies.dock_rule, 11, dock_card.width - 24);
+    draw_text(pixels, stride, dock_card.x + 12, dock_card.y + 59, fitted_dock, 11, UI_MUTED);
 
     /* 状态同步年龄提示 */
     format_status_age(model, age, sizeof(age));
-    draw_text(pixels, stride, lower.x + 14, lower.y + 248, age, 12, UI_MUTED);
-    draw_text(pixels, stride, lower.x + 14, lower.y + 276, ptc_ui_text(PTC_UI_T_STATUS_OPEN_SETTINGS), 11, UI_ACCENT);
+    draw_text(pixels, stride, lower.x + 14, lower.y + 268, age, 12, UI_MUTED);
+    draw_text(pixels, stride, lower.x + 14, lower.y + 288, ptc_ui_text(PTC_UI_T_STATUS_OPEN_SETTINGS), 11, UI_ACCENT);
 }
 
 static const UiAction *actions_for_page(PtcUiParentPage page, int *count)

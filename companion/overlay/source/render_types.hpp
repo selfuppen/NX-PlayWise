@@ -141,6 +141,24 @@ static inline std::pair<u32, u32> measure_localized(tsl::gfx::Renderer *renderer
     return draw_localized(renderer, value, monospace, 0, 0, font_size, tsl::style::color::ColorTransparent);
 }
 
+static void draw_localized_fitted(tsl::gfx::Renderer *renderer, const char *value,
+    s32 x, s32 y, float size, tsl::Color color, s32 width)
+{
+    char localized[516], fitted[512];
+    ptc_overlay_sanitize_utf8(ptc_ui_localize(value, localized, sizeof(localized)), fitted, sizeof(fitted));
+    size_t length = std::strlen(fitted);
+    if (static_cast<s32>(measure_localized(renderer, fitted, size).first) > width) {
+        do {
+            if (!length) break;
+            --length;
+            while (length && (static_cast<unsigned char>(fitted[length]) & 0xC0) == 0x80) --length;
+            fitted[length] = '\0';
+            std::snprintf(localized, sizeof(localized), "%s...", fitted);
+        } while (static_cast<s32>(measure_localized(renderer, localized, size).first) > width);
+        draw_localized(renderer, localized, false, x, y, size, color);
+    } else draw_localized(renderer, fitted, false, x, y, size, color);
+}
+
 static inline std::pair<u32, u32> draw_localized_center(tsl::gfx::Renderer *renderer,
     const char *value, s32 box_x, s32 box_y, s32 box_w, s32 box_h,
     float font_size, tsl::Color color, bool monospace = false)

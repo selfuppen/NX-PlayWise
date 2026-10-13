@@ -30,6 +30,7 @@ typedef struct {
     bool converts_unlimited_to_limited;
     bool calendar_covered;
     bool calendar_update_warning;
+    bool bedtime_available;
     bool bedtime_enabled;
     bool bedtime_active;
     bool bedtime_skipped;
@@ -60,6 +61,7 @@ typedef struct {
     unsigned long long eye_care_break_id;
     bool eye_care_unlimited_capped;
     bool dock_available;
+    bool dock_policy_available;
     bool force_docked;
     bool undocked_limit_enabled;
     int undocked_daily_minutes;

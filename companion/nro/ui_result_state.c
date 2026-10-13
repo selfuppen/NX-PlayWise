@@ -362,6 +362,8 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         }
         model->play_timer_enabled = summary.play_timer_enabled;
         model->restricted_now = summary.restricted_now;
+        model->bedtime_status_available = summary.bedtime_available;
+        model->bedtime_status_enabled = summary.bedtime_enabled;
         model->bedtime_active = summary.bedtime_active;
         model->bedtime_skipped = summary.bedtime_skipped;
         model->bedtime_window_instance_id = summary.bedtime_window_instance_id;
@@ -384,6 +386,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         model->bedtime_official_setting_confirmed = summary.bedtime_official_setting_confirmed;
         model->bedtime_overlay_verified = summary.bedtime_overlay_verified;
         model->dock_available = summary.dock_available;
+        model->dock_status_available = summary.dock_policy_available;
         model->dock_policy.force_docked = summary.force_docked;
         model->dock_policy.undocked_limit_enabled = summary.undocked_limit_enabled;
         model->dock_policy.undocked_daily_minutes = (uint16_t)summary.undocked_daily_minutes;

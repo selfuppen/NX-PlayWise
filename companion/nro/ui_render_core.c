@@ -32,6 +32,33 @@ uint16_t ptc_ui_render_minute_of_day(int64_t now)
 }
 
 
+void ptc_ui_render_policy_status(const PtcUiModel *model, PtcPolicyStatus *out)
+{
+    int day = -1, second = -1;
+#ifdef PTC_UI_PREVIEW_MINUTE_OF_DAY
+    day = model ? model->day_index : -1;
+    second = PTC_UI_PREVIEW_MINUTE_OF_DAY * 60;
+#else
+    (void)ptc_policy_local_clock(ptc_ui_render_now(), &day, &second);
+#endif
+    ptc_ui_project_policy_status(model, ptc_ui_render_now(), day, second, out);
+}
+
+uint32_t policy_display_color(PtcPolicyDisplayState state)
+{
+    switch (state) {
+    case PTC_POLICY_ACTIVE: return UI_DANGER;
+    case PTC_POLICY_PENDING:
+    case PTC_POLICY_WAITING:
+    case PTC_POLICY_EXHAUSTED: return UI_WARNING;
+    case PTC_POLICY_SKIPPED:
+    case PTC_POLICY_WAIVED: return UI_SUCCESS;
+    case PTC_POLICY_AVAILABLE:
+    case PTC_POLICY_TV_ONLY: return UI_ACCENT;
+    default: return UI_MUTED;
+    }
+}
+
 bool is_docked_mode(void)
 {
 #if defined(__SWITCH__) && !defined(PLAYWISE_EDEN)
@@ -120,14 +147,16 @@ static UiActiveRuleBadge get_active_rule_badge(const PtcUiModel *model)
 void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *model)
 {
     PtcUiTimeProjection status;
-    UiRect box = to_uirect(ptc_ui_time_status_bar_rect());
+    UiRect box = to_uirect(ptc_ui_time_status_bar_for_model(model));
     char fitted_fresh[64];
     bool show_eye_cycle = model && model->eye_care_policy.enabled;
     uint32_t color;
     UiActiveRuleBadge badge;
 
     ptc_ui_project_time_status(model, ptc_ui_render_now(), &status);
-    if (show_eye_cycle) box.height = 78;
+    bool show_bedtime = model && (model->bedtime_policy.enabled || model->bedtime_status_enabled);
+    bool show_dock = model && (model->dock_policy.force_docked || model->dock_policy.undocked_limit_enabled);
+    bool show_policy = show_bedtime || show_dock;
     color = time_projection_color(status.state);
     badge = get_active_rule_badge(model);
     if (!ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
@@ -232,7 +261,25 @@ void draw_time_status_bar(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         draw_text(pixels, stride, box.x + 14, box.y + 61, fitted_cycle, 11,
                   strcmp(model->eye_care_phase, "resting") == 0 ? UI_DANGER : UI_ACCENT);
     }
-    UiRect track = {box.x + 14, box.y + (show_eye_cycle ? 69 : 53), box.width - 28, 5};
+    if (show_policy) {
+        PtcPolicyStatus policies;
+        ptc_ui_render_policy_status(model, &policies);
+        int width = box.width - 28;
+        int column_width = show_bedtime && show_dock ? (width - 10) / 2 : width;
+        int text_y = box.y + (show_eye_cycle ? 77 : 61);
+        int column_x = box.x + 14;
+        for (int index = 0; index < 2; ++index) {
+            if ((index == 0 && !show_bedtime) || (index == 1 && !show_dock)) continue;
+            const PtcPolicyDisplay *policy = index == 0 ? &policies.bedtime : &policies.dock;
+            char text[256], fitted[256];
+            snprintf(text, sizeof(text), "%s: %s", ptc_ui_text(index == 0 ?
+                PTC_UI_T_POLICY_BED_LABEL : PTC_UI_T_POLICY_DOCK_LABEL), policy->compact);
+            fit_text(fitted, sizeof(fitted), text, 11, column_width);
+            draw_text(pixels, stride, column_x, text_y, fitted, 11, policy_display_color(policy->state));
+            column_x += column_width + 10;
+        }
+    }
+    UiRect track = {box.x + 14, box.y + (show_eye_cycle ? 69 : 53) + (show_policy ? 16 : 0), box.width - 28, 5};
     fill_round_rect(pixels, stride, track, 2, UI_RAISED);
     if (status.progress_available && status.progress_per_mille > 0) {
         int width = track.width * status.progress_per_mille / 1000;

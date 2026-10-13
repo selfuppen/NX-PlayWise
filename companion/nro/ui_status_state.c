@@ -849,3 +849,44 @@ void ptc_ui_format_holiday_priority_summary(const PtcUiModel *model, char *out, 
     }
     snprintf(out, out_size, "%s", ptc_ui_text(text_id));
 }
+
+void ptc_ui_project_policy_status(const PtcUiModel *model, int64_t now,
+    int local_day_index, int second_of_day, PtcPolicyStatus *out)
+{
+    PtcCompanionResultSummary summary = {0};
+    if (model) {
+        summary.valid = model->status_loaded;
+        summary.day_index = model->day_index;
+        summary.bedtime_available = model->bedtime_status_available;
+        summary.bedtime_enabled = model->bedtime_status_enabled;
+        summary.dock_policy_available = model->dock_status_available;
+        summary.force_docked = model->dock_policy.force_docked;
+        summary.undocked_limit_enabled = model->dock_policy.undocked_limit_enabled;
+        summary.undocked_daily_minutes = model->dock_policy.undocked_daily_minutes;
+        summary.bedtime_active = model->bedtime_active;
+        summary.bedtime_skipped = model->bedtime_skipped;
+        summary.bedtime_window_instance_id = model->bedtime_window_instance_id;
+        summary.bedtime_start_day_index = model->bedtime_start_day_index;
+        summary.bedtime_start_minute = model->bedtime_start_minute;
+        summary.bedtime_end_minute = model->bedtime_end_minute;
+        summary.bedtime_next_available = model->bedtime_next_available;
+        summary.bedtime_next_start_day_index = model->bedtime_next_start_day_index;
+        summary.bedtime_next_start_minute = model->bedtime_next_start_minute;
+        summary.bedtime_next_end_minute = model->bedtime_next_end_minute;
+        summary.bedtime_next_window_instance_id = model->bedtime_next_window_instance_id;
+        summary.bedtime_skipped_window_available = model->bedtime_skipped_window_available;
+        summary.bedtime_skipped_window_instance_id = model->bedtime_skipped_window_instance_id;
+        summary.bedtime_skipped_start_day_index = model->bedtime_skipped_start_day_index;
+        summary.bedtime_skipped_start_minute = model->bedtime_skipped_start_minute;
+        summary.bedtime_skipped_end_minute = model->bedtime_skipped_end_minute;
+        summary.dock_available = model->dock_available;
+        summary.undocked_usage_available = model->undocked_usage_available;
+        summary.undocked_used_minutes = model->undocked_used_minutes;
+        summary.undocked_remaining_minutes = model->undocked_remaining_minutes;
+        summary.dock_waived_today = model->dock_waived_today;
+        summary.dock_restriction_active = model->dock_restriction_active;
+        snprintf(summary.operation_mode, sizeof(summary.operation_mode), "%s", model->operation_mode);
+    }
+    ptc_policy_status_project(&summary, ptc_ui_status_is_fresh(model, now),
+        local_day_index, second_of_day, out);
+}

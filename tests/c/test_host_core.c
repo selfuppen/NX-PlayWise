@@ -1160,7 +1160,14 @@ static void test_overlay_layout_geometry(void)
         "overlay submit touch stops at its visible edge");
     check_true(!ptc_overlay_rect_contains(collapsed, collapsed.x + 1, collapsed.y + collapsed.h),
         "collapsed status has no invisible touch area");
-    check_int(normal.h, PTC_OVERLAY_STATUS_NORMAL_H, "normal status drops duplicate detail rows");
+    check_int(normal.h, PTC_OVERLAY_STATUS_NORMAL_H, "normal status reserves both policy rows");
+    PtcOverlayRect policy = ptc_overlay_child_policy_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
+    check_true(policy.y > parent.y + parent.h &&
+        policy.y + policy.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
+        "collapsed policy strip stays below controls and above host footer");
+    check_true(ptc_overlay_policy_row_y(PTC_OVERLAY_CONTENT_Y, true, 1) < detail.y + detail.h,
+        "expanded policy rows stay within detail touch rectangle");
     check_int(detail.y + detail.h, 646, "expanded error and success details fill the content area");
     check_true(detail.y + detail.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
         "expanded overlay status remains inside content bounds");

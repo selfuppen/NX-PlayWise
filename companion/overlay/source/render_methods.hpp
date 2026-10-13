@@ -137,6 +137,52 @@
         return armTicksToNs(armGetSystemTick() - last_refresh_tick_) >= 30000000000ULL;
     }
 
+    PtcPolicyStatus child_policy_status(const PtcCompanionResultSummary &summary) const
+    {
+        int day = -1, second = -1;
+        bool clock_fresh = true;
+#ifdef PTC_OVERLAY_PREVIEW_CLOCK
+        day = summary.day_index;
+        second = 496 * 60;
+#else
+        const long long now = static_cast<long long>(std::time(nullptr));
+        (void)ptc_policy_local_clock(now, &day, &second);
+        clock_fresh = last_refresh_wall_time_ > 0 && now >= last_refresh_wall_time_ &&
+            now - last_refresh_wall_time_ < 30;
+#endif
+        PtcPolicyStatus policies;
+        bool fresh = clock_fresh && has_status_snapshot_ && last_refresh_tick_ != 0 && !status_is_stale() &&
+            !(error_ && last_request_kind_ == OverlayRequestKind::Status);
+        ptc_policy_status_project(&summary, fresh, day, second, &policies);
+        return policies;
+    }
+
+    void draw_child_policies(tsl::gfx::Renderer *renderer, s32 cx, s32 cy, s32 cw,
+        const PtcPolicyStatus &policies)
+    {
+        const auto &pal = get_overlay_palette(theme_);
+        if (!status_expanded_) {
+            const auto card = ptc_overlay_child_policy_rect(cx, cy, cw);
+            draw_card(renderer, card.x, card.y, card.w, card.h, pal.card_bg, pal.border_decorative, 1);
+        }
+        for (int row = 0; row < 2; ++row) {
+            const PtcPolicyDisplay &policy = row == 0 ? policies.bedtime : policies.dock;
+            char text[384];
+            const char *label = ptc_ui_text(row == 0 ? PTC_UI_T_POLICY_BED_LABEL :
+                policies.mode == PTC_UI_T_STATUS_TO_CONFIRM ? PTC_UI_T_POLICY_DOCK_LABEL : policies.mode);
+            std::snprintf(text, sizeof(text), "%s: %s", label, policy.detail);
+            if (static_cast<s32>(measure_localized(renderer, text, 11).first) > cw - 24)
+                std::snprintf(text, sizeof(text), "%s: %s", label, policy.compact);
+            const auto color = policy.state == PTC_POLICY_ACTIVE ? pal.danger :
+                policy.state == PTC_POLICY_PENDING || policy.state == PTC_POLICY_WAITING ||
+                policy.state == PTC_POLICY_EXHAUSTED ? pal.warning :
+                policy.state == PTC_POLICY_WAIVED || policy.state == PTC_POLICY_SKIPPED ?
+                pal.success : pal.text_secondary;
+            draw_localized_fitted(renderer, text, cx + 12,
+                ptc_overlay_policy_row_y(cy, status_expanded_, row), 11, renderer->a(color), cw - 24);
+        }
+    }
+
     bool status_needs_detail() const
     {
         return error_ || success_visible_;
@@ -811,16 +857,16 @@
                 draw_localized(renderer, line, false, cx + 12, status_y + 36, 12, renderer->a(pal.text_primary));
                 draw_localized(renderer, ptc_overlay_bridge_transport_label(bridge_), false, cx + 12, status_y + 52, 11, renderer->a(pal.text_secondary));
                 const char *message = ptc_overlay_bridge_error_message_zh(bridge_);
-                draw_localized(renderer, message, false, cx + 12, status_y + 72, 12, renderer->a(pal.danger), 290);
+                draw_localized_fitted(renderer, message, cx + 12, status_y + 72, 12, renderer->a(pal.danger), cw - 24);
                 const bool code_error = last_request_kind_ == OverlayRequestKind::OfflineCode ||
                     last_request_kind_ == OverlayRequestKind::PreviewOfflineCode;
                 if (bridge_->summary.valid && bridge_->summary.error_code > 0) {
                     std::snprintf(line, sizeof(line), code_error ? ptc_ui_text(PTC_UI_T_ERROR_CODE_D_RE_ENTER) :
                                   ptc_ui_text(PTC_UI_T_ERROR_CODE_D_Y_RETRY), bridge_->summary.error_code);
-                    draw_localized(renderer, line, false, cx + 12, status_y + 108, 11, renderer->a(pal.danger));
+                    draw_localized(renderer, line, false, cx + 12, status_y + 92, 11, renderer->a(pal.danger));
                 } else {
                     draw_localized(renderer, code_error ? ptc_ui_text(PTC_UI_T_PLEASE_RE_ENTER_Y_RETURNS_TO_INPUT) : ptc_ui_text(PTC_UI_T_PRESS_Y_TO_TRY_AGAIN),
-                                         false, cx + 12, status_y + 108, 11, renderer->a(pal.danger));
+                                         false, cx + 12, status_y + 92, 11, renderer->a(pal.danger));
                 }
             } else if (success_visible_) {
                 draw_localized(renderer, ptc_ui_text(PTC_UI_T_COMMAND_AND_STATUS_DETAILS_PRESS_TO_CLOSE), false, cx + 12, status_y + 18, 12, renderer->a(pal.accent));
@@ -830,12 +876,6 @@
                 draw_localized(renderer, ptc_ui_text(PTC_UI_T_GRANT_SUCCESSFUL_2), false, cx + 12, status_y + 74, 16, renderer->a(pal.success));
                 std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_D_MIN_LEFT_AFTER_CHANGE), summary.remaining_minutes);
                 draw_localized(renderer, line, false, cx + 12, status_y + 96, 15, renderer->a(pal.success));
-                if (summary.played_minutes_available) {
-                    std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_ESTIMATED_USAGE_D_MIN_CLOSING_SHORTLY), summary.played_minutes);
-                    draw_localized(renderer, line, false, cx + 12, status_y + 116, 12, renderer->a(pal.success));
-                } else {
-                    draw_localized(renderer, ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_BEEN_REFRESHED_AND_WILL), false, cx + 12, status_y + 116, 12, renderer->a(pal.success));
-                }
             } else if (bridge_->waiting) {
                 draw_localized(renderer, ptc_ui_text(PTC_UI_T_COMMAND_AND_STATUS_DETAILS_PRESS_TO_CLOSE), false, cx + 12, status_y + 18, 12, renderer->a(pal.accent));
                 std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_S_COMMAND_S), ptc_ui_text(PTC_UI_T_CURRENT), request_label());
@@ -877,10 +917,6 @@
                 ptc_overlay_format_child_buffer_status(&summary, buffer_buf, sizeof(buffer_buf));
                 std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_SELF_BUFFER_S_S), buffer_buf, ptc_overlay_bridge_transport_label(bridge_));
                 draw_localized(renderer, line, false, cx + 12, status_y + 72, 11, renderer->a(pal.text_secondary));
-                if (summary.dock_available) {
-                    ptc_overlay_format_dock_usage(&summary, line, sizeof(line));
-                    draw_localized(renderer, line, false, cx + 12, status_y + 90, 11, renderer->a(pal.accent), 340);
-                }
             } else {
                 draw_localized(renderer, ptc_ui_text(PTC_UI_T_COMMAND_AND_STATUS_DETAILS_PRESS_TO_CLOSE), false, cx + 12, status_y + 18, 12, renderer->a(pal.accent));
                 draw_localized(renderer, ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_NOT_BEEN_OBTAINED_YET), false, cx + 12, status_y + 36, 12, renderer->a(pal.text_secondary));
@@ -902,5 +938,6 @@
             draw_card(renderer, parent.x, parent.y, parent.w, parent.h, pal.accent_soft, pal.accent, 1);
             draw_localized_center(renderer, ptc_ui_text(PTC_UI_T_R_PARENT_AREA), parent.x, parent.y, parent.w, parent.h, 13,
                 pal.text_primary);
-        }
+        }        draw_child_policies(renderer, cx, cy, cw, child_policy_status(summary));
+
     }

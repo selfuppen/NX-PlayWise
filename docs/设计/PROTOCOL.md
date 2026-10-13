@@ -660,3 +660,11 @@ The read-only status `environment` object also includes optional `atmosphere_ver
 ## In-app troubleshooting guide
 
 Parent Support & recovery adds a read-only four-page FAQ with controller/touch paging and focus preservation. Fresh status availability and controls boolean project on/off/unknown; clock sync is always unchecked and requires manual verification. Help covers system setup, DBI/QuickNTP sync followed by refresh and actual counting/restriction tests, temporary unlock, codes, overlay recovery, backend and diagnostics. Enabled or 0 remaining does not prove actual blocking. Viewing/paging neither writes PCTL nor syncs time nor submits requests; protocol fields and confirmation markers are unchanged.
+
+## Bedtime and TV information in overviews
+
+The NRO child home, parent Today hero, global status bar and child Overlay share a presentation-only projection of backend snapshots, without using unsaved drafts or adding wire fields or control requests. Bedtime shows today's upcoming instance or an overnight instance that started yesterday and remains active today. It includes the start/end clock and a minute countdown, rounding positive partial minutes up. No instance today and a matching skipped instance have explicit labels; future dates are not counted down in overviews. At either boundary, the UI waits for a backend refresh instead of declaring enforcement or release.
+
+TV information separates current TV/handheld-tabletop mode, non-TV allowance, estimated use and remaining usage minutes. The balance updates from backend readings and never decreases with wall time. It remains visible on TV; an empty non-TV balance does not imply an active restriction on TV. TV-only, disabled, waived and unknown states are explicit. Control requests, PIN checks, redemption permissions and policies retain their existing behavior.
+
+The projection uses each client's existing freshness limit (NRO up to 120 seconds; Overlay below 30 seconds) and requires the snapshot date to match current local time. Failed reads, clock rollback, missing required fields or incomplete instances show a refresh placeholder without manufacturing balances or countdowns. Presence flags are client-local and do not change result JSON.

@@ -72,17 +72,22 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->calendar_update_warning = bool_value(state, "calendar_update_warning", false);
     snprintf(out->rule_source, sizeof(out->rule_source), "%s", string_value(state, "rule_source"));
     bedtime = cJSON_GetObjectItemCaseSensitive(state, "bedtime");
+    out->bedtime_available = cJSON_IsObject(bedtime) &&
+        cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(bedtime, "enabled")) &&
+        cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(bedtime, "active")) &&
+        cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(bedtime, "skipped")) &&
+        cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(bedtime, "next_available"));
     out->bedtime_enabled = bool_value(bedtime, "enabled", false);
     out->bedtime_active = bool_value(bedtime, "active", false);
     out->bedtime_skipped = bool_value(bedtime, "skipped", false);
     out->bedtime_window_instance_id = u64_value(bedtime, "window_instance_id");
-    out->bedtime_start_day_index = number_value(bedtime, "start_day_index", 0);
-    out->bedtime_start_minute = number_value(bedtime, "start_minute", 0);
-    out->bedtime_end_minute = number_value(bedtime, "end_minute", 0);
+    out->bedtime_start_day_index = number_value(bedtime, "start_day_index", -1);
+    out->bedtime_start_minute = number_value(bedtime, "start_minute", -1);
+    out->bedtime_end_minute = number_value(bedtime, "end_minute", -1);
     out->bedtime_next_available = bool_value(bedtime, "next_available", false);
-    out->bedtime_next_start_day_index = number_value(bedtime, "next_start_day_index", 0);
-    out->bedtime_next_start_minute = number_value(bedtime, "next_start_minute", 0);
-    out->bedtime_next_end_minute = number_value(bedtime, "next_end_minute", 0);
+    out->bedtime_next_start_day_index = number_value(bedtime, "next_start_day_index", -1);
+    out->bedtime_next_start_minute = number_value(bedtime, "next_start_minute", -1);
+    out->bedtime_next_end_minute = number_value(bedtime, "next_end_minute", -1);
     out->bedtime_next_window_instance_id = u64_value(bedtime, "next_window_instance_id");
     {
         const cJSON *skipped = cJSON_GetObjectItemCaseSensitive(bedtime, "skipped_window");
@@ -116,6 +121,11 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
         !(out->temporary_unlocked_available && out->temporary_unlocked);
     {
         const cJSON *dock = cJSON_GetObjectItemCaseSensitive(state, "dock");
+        out->dock_policy_available = cJSON_IsObject(dock) &&
+            cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(dock, "force_docked")) &&
+            cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(dock, "undocked_limit_enabled")) &&
+            cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(dock, "undocked_daily_minutes")) &&
+            cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(dock, "waived_today"));
         out->dock_available = bool_value(dock, "available", false);
         out->force_docked = bool_value(dock, "force_docked", false);
         out->undocked_limit_enabled = bool_value(dock, "undocked_limit_enabled", false);
@@ -124,8 +134,8 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
         out->dock_supported_available = bool_value(dock, "dock_supported_available", false);
         out->dock_supported = bool_value(dock, "dock_supported", false);
         out->undocked_usage_available = bool_value(dock, "usage_available", false);
-        out->undocked_used_minutes = number_value(dock, "used_minutes", 0);
-        out->undocked_remaining_minutes = number_value(dock, "remaining_minutes", 0);
+        out->undocked_used_minutes = number_value(dock, "used_minutes", -1);
+        out->undocked_remaining_minutes = number_value(dock, "remaining_minutes", -1);
         out->dock_waived_today = bool_value(dock, "waived_today", false);
         out->dock_restriction_active = bool_value(restriction_reasons, "dock", false);
         out->dock_unlimited_capped = bool_value(dock, "unlimited_capped", false);

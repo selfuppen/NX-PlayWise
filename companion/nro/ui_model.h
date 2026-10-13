@@ -435,6 +435,7 @@ typedef struct {
     PtcDockPolicy dock_policy;
     PtcDockPolicy draft_dock_policy;
     bool dock_available;
+    bool dock_status_available;
     bool dock_dirty;
     int dock_field_focus;
     bool eden_mode_controls;
@@ -467,6 +468,8 @@ typedef struct {
     bool daily_restriction_active;
     PtcBedtimePolicy bedtime_policy;
     PtcBedtimePolicy draft_bedtime_policy;
+    bool bedtime_status_available;
+    bool bedtime_status_enabled;
     bool bedtime_active;
     bool bedtime_skipped;
     uint64_t bedtime_window_instance_id;
