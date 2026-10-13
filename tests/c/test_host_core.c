@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../../third_party/cjson/cJSON.h"
 #include <sys/stat.h>
 
 #include "../../common/version.h"
@@ -1196,6 +1197,80 @@ static void test_overlay_layout_geometry(void)
         "zero redemption still requires a hold");
     check_int(ptc_overlay_preview_visual_level(true, 30, false, true), PTC_OVERLAY_PREVIEW_DANGER,
         "unlimited to limited redemption still requires a hold");
+}
+
+static void test_overlay_eye_care_display(void)
+{
+    PtcCompanionResultSummary s = {0};
+    PtcOverlayEyeCareDisplay eye;
+    s.valid = s.eye_care_available = s.eye_care_enabled = true;
+    s.eye_care_play_minutes = 40;
+    s.eye_care_rest_minutes = 10;
+    s.eye_care_used_minutes = 15;
+    snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "playing");
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(strstr(eye.compact, "25") && strstr(eye.detail, "40") && strstr(eye.detail, "10"),
+        "overlay shows confirmed play minutes and configured cycle");
+    char before[160];
+    snprintf(before, sizeof(before), "%s", eye.compact);
+    ptc_overlay_project_eye_care(&s, true, 29, &eye);
+    check_true(strcmp(before, eye.compact) == 0 && !eye.warning,
+        "overlay never decrements play usage with wall clock");
+    snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "resting");
+    s.eye_care_break_id = 123;
+    s.eye_care_rest_remaining_seconds = 65;
+    ptc_overlay_project_eye_care(&s, true, 6, &eye);
+    check_true(eye.rest_seconds == 59 && strstr(eye.compact, "00:59") && eye.warning,
+        "overlay rest countdown subtracts confirmed snapshot age");
+    ptc_overlay_project_eye_care(&s, true, 65, &eye);
+    check_true(eye.rest_seconds == -1 && strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
+        "rest expiry waits for backend instead of claiming unlocked");
+    ptc_overlay_project_eye_care(&s, false, 6, &eye);
+    check_true(eye.rest_seconds == -1 && !eye.detail[0], "stale eye snapshot hides countdown and rule");
+    ptc_overlay_project_eye_care(&s, true, -1, &eye);
+    check_true(eye.rest_seconds == -1, "clock rollback cannot manufacture eye countdown");
+    s.eye_care_break_id = 0;
+    ptc_overlay_project_eye_care(&s, true, 6, &eye);
+    check_true(eye.rest_seconds == -1, "missing rest instance cannot show countdown");
+    snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "paused");
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(strcmp(eye.compact, ptc_ui_text(PTC_UI_T_OVERLAY_EYE_PAUSED)) == 0,
+        "higher priority limits show paused eye cycle");
+    snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "playing");
+    s.eye_care_used_minutes = 40;
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
+        "play boundary needs refresh, not a fabricated rest instance");
+    s.eye_care_enabled = false;
+    snprintf(s.eye_care_phase, sizeof(s.eye_care_phase), "off");
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(strcmp(eye.compact, ptc_ui_text(PTC_UI_T_CURRENTLY_OFF)) == 0 && !eye.warning,
+        "confirmed disabled eye care is explicit");
+    s.eye_care_phase[0] = '\0';
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(eye.warning && strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
+        "legacy missing eye fields are unknown, not disabled");
+
+    PtcResultState state;
+    char json[8192];
+    ptc_result_state_default(&state, 2380);
+    state.day_index = 2380;
+    state.eye_care_enabled = true;
+    state.eye_care_phase = "playing";
+    check_true(ptc_result_ok_json(json, sizeof(json), "eye-display", "status", "release",
+        false, &state, 1000) == 0 && ptc_companion_result_summary_parse(json, &s) && s.eye_care_available,
+        "wire parser records complete eye-care fields");
+    cJSON *root = cJSON_Parse(json);
+    cJSON *wire = cJSON_GetObjectItemCaseSensitive(root, "state");
+    cJSON *cycle = cJSON_GetObjectItemCaseSensitive(wire, "eye_care");
+    cJSON_DeleteItemFromObjectCaseSensitive(cycle, "used_minutes");
+    check_true(cJSON_PrintPreallocated(root, json, sizeof(json), false) &&
+        ptc_companion_result_summary_parse(json, &s) && !s.eye_care_available,
+        "missing cycle usage cannot be treated as zero minutes");
+    ptc_overlay_project_eye_care(&s, true, 0, &eye);
+    check_true(eye.warning && !eye.detail[0] && strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
+        "partial wire cycle suppresses fabricated play countdown");
+    cJSON_Delete(root);
 }
 
 static void test_overlay_child_quota_and_restriction_details(void)
@@ -3787,6 +3862,7 @@ int main(void)
     test_pending_redemption_recovery_marker();
     test_overlay_layout_geometry();
     test_overlay_child_quota_and_restriction_details();
+    test_overlay_eye_care_display();
     test_setup_preflight_and_recovery();
     test_daily_buffer_transactions();
     test_daily_buffer_failure_rollbacks();

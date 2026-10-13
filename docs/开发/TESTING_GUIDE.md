@@ -330,7 +330,9 @@ Calendar UI regression: verify B back, Y refresh, X format help, L/R lists, ZL/Z
 
 ## Overlay previews and troubleshooting regression
 
-Run `python tools/test.py` and `python tools/package_remote.py --with-previews`, including standard package and default Eden validation. Each language gets ten 448x720 production Overlay scenes. Support previews cover four help pages plus unknown, disabled and stale parental controls in light/dark themes. Run `python tools/sync_doc_previews.py --check` to check documentation freshness.
+Child eye-care regression covers backend play minutes independent of wall time, rest seconds, boundary confirmation, paused/disabled states, missing instances or legacy fields, failed refreshes and stale/cross-day/clock-rollback snapshots. Inspect three-language `overlay-eye-*` overview, rest, details and concurrent-limit scenes. Common child pages must fit one screen with fixed entry, buffer and parent controls unobstructed. Run `python tools/package_remote.py --with-previews` with standard Zip and default Eden NRO validation; previews and simulation do not prove device enforcement.
+
+Run `python tools/test.py` and `python tools/package_remote.py --with-previews`, including standard package and default Eden validation. Production Overlay previews are 448x720 in all three languages; documentation includes eye-care play and rest scenes. Support previews cover four help pages plus unknown, disabled and stale parental controls in light/dark themes. Run `python tools/sync_doc_previews.py --check` to check documentation freshness.
 
 Host checks cover guide navigation with zero/three events, touch paging, wraparound, focus preservation, emergency-disable access, input blocking underneath and inactive-guide navigation. Inspect long text, page numbers, check status and buttons in all three languages/themes. Time sync is manual; unknown controls must not appear off. Verify controller/touch and unavailable-backend help on a Switch; manually refresh after DBI/QuickNTP sync and retest restrictions with a non-critical game. Host previews do not prove PCTL effects.
 

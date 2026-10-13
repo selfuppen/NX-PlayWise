@@ -107,6 +107,14 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     restriction_reasons = cJSON_GetObjectItemCaseSensitive(state, "restriction_reasons");
     out->daily_restriction_active = bool_value(restriction_reasons, "daily_allowance", false);
     eye_care = cJSON_GetObjectItemCaseSensitive(state, "eye_care");
+    out->eye_care_available = cJSON_IsObject(eye_care) &&
+        cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(eye_care, "enabled")) &&
+        cJSON_IsString(cJSON_GetObjectItemCaseSensitive(eye_care, "phase")) &&
+        cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(eye_care, "play_minutes")) &&
+        cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(eye_care, "rest_minutes")) &&
+        cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(eye_care, "used_minutes")) &&
+        cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(eye_care, "rest_remaining_seconds")) &&
+        cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(eye_care, "break_id"));
     out->eye_care_enabled = bool_value(eye_care, "enabled", false);
     out->eye_care_play_minutes = number_value(eye_care, "play_minutes", 40);
     out->eye_care_rest_minutes = number_value(eye_care, "rest_minutes", 10);

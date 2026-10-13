@@ -6,6 +6,47 @@
 
 #include "../../common/protocol/error_code.h"
 
+void ptc_overlay_project_eye_care(const PtcCompanionResultSummary *s,
+    bool fresh, int64_t age_seconds, PtcOverlayEyeCareDisplay *out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    out->rest_seconds = -1;
+    out->warning = true;
+    PtcUiTextId text = PTC_UI_T_POLICY_BOUNDARY;
+    if (s && s->valid && s->eye_care_available && fresh && age_seconds >= 0) {
+        if (strcmp(s->eye_care_phase, "off") == 0 && !s->eye_care_enabled) {
+            text = PTC_UI_T_CURRENTLY_OFF;
+            out->warning = false;
+        } else if (s->eye_care_enabled && s->eye_care_play_minutes > 0 &&
+            s->eye_care_play_minutes <= 240 && s->eye_care_rest_minutes > 0 &&
+            s->eye_care_rest_minutes <= 60) {
+            if (strcmp(s->eye_care_phase, "playing") == 0 &&
+                s->eye_care_used_minutes >= 0 && s->eye_care_used_minutes < s->eye_care_play_minutes) {
+                PtcUiTextArg arg = PTC_UI_TEXT_NUMBER("minutes", s->eye_care_play_minutes - s->eye_care_used_minutes);
+                ptc_ui_text_format(PTC_UI_T_OVERLAY_EYE_PLAY, out->compact, sizeof(out->compact), &arg, 1);
+                out->warning = false;
+            } else if (strcmp(s->eye_care_phase, "resting") == 0 && s->eye_care_break_id &&
+                s->eye_care_rest_remaining_seconds > age_seconds &&
+                s->eye_care_rest_remaining_seconds <= s->eye_care_rest_minutes * 60) {
+                out->rest_seconds = s->eye_care_rest_remaining_seconds - (int)age_seconds;
+                char clock[24];
+                snprintf(clock, sizeof(clock), "%02d:%02d", out->rest_seconds / 60, out->rest_seconds % 60);
+                PtcUiTextArg arg = PTC_UI_TEXT_STRING("time", clock);
+                ptc_ui_text_format(PTC_UI_T_OVERLAY_EYE_REST, out->compact, sizeof(out->compact), &arg, 1);
+            } else if (strcmp(s->eye_care_phase, "paused") == 0) {
+                text = PTC_UI_T_OVERLAY_EYE_PAUSED;
+            } else if (strcmp(s->eye_care_phase, "unknown") == 0) {
+                text = PTC_UI_T_STATUS_TO_CONFIRM;
+            }
+            PtcUiTextArg args[] = {PTC_UI_TEXT_NUMBER("play", s->eye_care_play_minutes),
+                PTC_UI_TEXT_NUMBER("rest", s->eye_care_rest_minutes)};
+            ptc_ui_text_format(PTC_UI_T_OVERLAY_EYE_RULE, out->detail, sizeof(out->detail), args, 2);
+        }
+    }
+    if (!out->compact[0]) snprintf(out->compact, sizeof(out->compact), "%s", ptc_ui_text(text));
+}
+
 void ptc_overlay_bridge_init(PtcOverlayBridge *bridge, const char *app_root, PtcStorage *storage)
 {
     if (!bridge) return;

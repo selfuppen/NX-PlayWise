@@ -87,7 +87,11 @@ int main(int argc, char **argv) {
             "overlay-parent-error", "overlay-code-danger", "overlay-code-capped", "overlay-code-pending",
             "overlay-code-failed", "overlay-child-bedtime", "overlay-code-full", "overlay-code-unlimited",
             "overlay-code-busy", "overlay-code-changed", "overlay-max-minutes", "overlay-overview-bottom",
-            "overlay-restriction-bottom", "overlay-code-interrupted"};
+            "overlay-restriction-bottom", "overlay-code-interrupted", "overlay-eye-playing",
+            "overlay-eye-paused", "overlay-eye-stale", "overlay-eye-boundary", "overlay-eye-unknown",
+            "overlay-eye-details", "overlay-eye-off", "overlay-eye-multiple-limits",
+            "overlay-eye-refresh-failed", "overlay-eye-cross-day", "overlay-eye-partial",
+            "overlay-eye-rest-boundary", "overlay-eye-unlimited", "overlay-quota-unknown"};
         int child_overflows = 0;
         for (int language = 0; language < 3; ++language) {
             ptc_ui_language_set_resolved(languages[language]);
@@ -106,6 +110,10 @@ int main(int argc, char **argv) {
                 status.unrestricted_today = 0; status.daily_buffer_available = true;
                 status.day_index = 2469;
                 status.bedtime_available = status.dock_policy_available = true;
+                status.eye_care_available = true;
+                std::snprintf(status.eye_care_phase, sizeof(status.eye_care_phase), "off");
+                status.eye_care_play_minutes = 40;
+                status.eye_care_rest_minutes = 10;
                 std::snprintf(status.rule_source, sizeof(status.rule_source), "weekly");
                 if (scene == 0) {
                     std::snprintf(input.symbols, sizeof(input.symbols), "1234");
@@ -137,6 +145,7 @@ int main(int argc, char **argv) {
                     view.parent_view_ = ParentView::Child;
                 } else if (scene == 5) {
                     status.eye_care_enabled = true; status.eye_care_rest_remaining_seconds = 300;
+                    status.eye_care_break_id = 123;
                     std::snprintf(status.eye_care_phase, sizeof(status.eye_care_phase), "resting");
                 } else if (scene == 6) {
                     status = {}; view.has_status_snapshot_ = false; view.last_refresh_tick_ = 0;
@@ -257,6 +266,37 @@ int main(int argc, char **argv) {
                     }
                 }
                 // First measure the production layout, then render the requested scroll position.
+                if (scene >= 38) {
+                    status.eye_care_enabled = scene != 44;
+                    status.eye_care_used_minutes = 15;
+                    std::snprintf(status.eye_care_phase, sizeof(status.eye_care_phase), "%s",
+                        scene == 39 ? "paused" : scene == 42 ? "unknown" : scene == 44 ? "off" : "playing");
+                    if (scene == 40) view.last_refresh_tick_ -= 31000000000ULL;
+                    if (scene == 41) status.eye_care_used_minutes = 40;
+                    if (scene == 43) view.status_expanded_ = true;
+                    if (scene == 45) {
+                        status.bedtime_active = true;
+                        std::snprintf(status.eye_care_phase, sizeof(status.eye_care_phase), "paused");
+                    }
+                    if (scene == 46) { view.error_ = true; view.last_request_kind_ = OverlayRequestKind::Status; }
+                    if (scene == 47) --status.day_index;
+                    if (scene == 48) status.eye_care_available = false;
+                    if (scene == 49) {
+                        std::snprintf(status.eye_care_phase, sizeof(status.eye_care_phase), "resting");
+                        status.eye_care_break_id = 123;
+                        status.eye_care_rest_remaining_seconds = 0;
+                    }
+                    if (scene == 50) { status.unrestricted_today = 1; status.eye_care_unlimited_capped = true; }
+                    if (scene == 51) status.remaining_available = false;
+                    const auto eye = view.child_eye_care_status(status);
+                    if (scene == 38) require(std::strstr(eye.compact, "25") != nullptr,
+                        "ordinary child overview must project eye play countdown");
+                    if (scene == 40 || scene == 41) require(eye.warning && eye.rest_seconds == -1,
+                        "stale or boundary eye snapshot must wait for confirmation");
+                    if (scene >= 46 && scene <= 49) require(eye.warning && eye.rest_seconds == -1 &&
+                        std::strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
+                        "failed, cross-day, partial or expired eye status requires confirmation");
+                }
                 view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
                     PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
                 require(view.page_layout_.viewport.h >= 0, "page header must leave a usable viewport");

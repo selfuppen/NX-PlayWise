@@ -412,6 +412,10 @@
             ptc_overlay_format_child_buffer_status(&summary, line, sizeof(line));
             flow_text(renderer, line, PTC_OVERLAY_FONT_BODY, pal.text_secondary);
             const auto policies = child_policy_status(summary);
+            const auto eye = child_eye_care_status(summary);
+            child_card(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_EYE_LABEL), eye.compact, eye.detail,
+                PTC_OVERLAY_FONT_BODY, eye.warning ? pal.warning : summary.eye_care_enabled ? pal.success : pal.text_secondary);
+            flow_text(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_FOOTNOTE), PTC_OVERLAY_FONT_BODY, pal.text_secondary);
             child_card(renderer, ptc_ui_text(PTC_UI_T_POLICY_BED_LABEL), policies.bedtime.detail, nullptr, PTC_OVERLAY_FONT_BODY, pal.text_secondary);
             child_card(renderer, ptc_ui_text(PTC_UI_T_POLICY_DOCK_LABEL), policies.dock.detail, nullptr, PTC_OVERLAY_FONT_BODY, pal.text_secondary);
         } else flow_text(renderer, ptc_ui_text(PTC_UI_T_THE_STATUS_HAS_NOT_BEEN_OBTAINED_YET), PTC_OVERLAY_FONT_BODY_LG, pal.text_secondary);
@@ -505,15 +509,22 @@
                 flow_text(renderer, line, PTC_OVERLAY_FONT_DISPLAY, pal.text_primary);
                 flow_text(renderer, ptc_ui_text(PTC_UI_T_FOR_EXCEPTIONS_SELECT_SKIP_TONIGHT_BEDTIME_IN), PTC_OVERLAY_FONT_BODY_LG, pal.text_secondary);
             } else if (eye) {
-                const u64 elapsed = last_refresh_tick_ ? armTicksToNs(armGetSystemTick() - last_refresh_tick_) / 1000000000ULL : 0;
-                const int seconds = elapsed >= static_cast<u64>(summary.eye_care_rest_remaining_seconds) ? 0 : summary.eye_care_rest_remaining_seconds - static_cast<int>(elapsed);
-                std::snprintf(line, sizeof(line), "%02d:%02d", seconds / 60, seconds % 60);
-                flow_text(renderer, line, PTC_OVERLAY_FONT_HERO, pal.warning);
+                const auto status = child_eye_care_status(summary);
+                if (status.rest_seconds >= 0)
+                    std::snprintf(line, sizeof(line), "%02d:%02d", status.rest_seconds / 60, status.rest_seconds % 60);
+                else std::snprintf(line, sizeof(line), "%s", status.compact);
+                flow_text(renderer, line, status.rest_seconds >= 0 ? PTC_OVERLAY_FONT_HERO : PTC_OVERLAY_FONT_BODY, pal.warning);
+                flow_text(renderer, status.detail, PTC_OVERLAY_FONT_BODY, pal.text_secondary);
                 flow_text(renderer, ptc_ui_text(PTC_UI_T_MESSAGE_2), PTC_OVERLAY_FONT_BODY_LG, pal.text_primary);
                 flow_text(renderer, ptc_ui_text(PTC_UI_T_EYE_CARE_SKIP_CONFIRM_BODY), PTC_OVERLAY_FONT_BODY_LG, pal.text_secondary);
             } else {
                 flow_text(renderer, ptc_ui_text(PTC_UI_T_DOCK_CONNECT), PTC_OVERLAY_FONT_BODY_LG, pal.warning);
                 flow_text(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_DOCK_SUMMARY), PTC_OVERLAY_FONT_BODY_LG, pal.text_secondary);
+            }
+            if (!eye && summary.eye_care_enabled) {
+                const auto status = child_eye_care_status(summary);
+                child_card(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_EYE_LABEL), status.compact, nullptr,
+                    PTC_OVERLAY_FONT_BODY, status.warning ? pal.warning : pal.success, PTC_OVERLAY_FONT_SECONDARY);
             }
         } else {
             if (ptc_overlay_remaining_refresh_pending(bridge_->waiting, active_request_kind_ == OverlayRequestKind::OfflineCode))
@@ -522,18 +533,24 @@
             else if (summary.valid && summary.remaining_available) ptc_ui_format_minutes(summary.remaining_minutes, line, sizeof(line));
             else std::snprintf(line, sizeof(line), "%s", ptc_ui_text(PTC_UI_T_UNAVAILABLE));
             format_refresh_age(age, sizeof(age));
-            child_card(renderer, ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY), line, nullptr, PTC_OVERLAY_FONT_HERO,
-                !summary.valid || !summary.remaining_available ? pal.text_disabled : status_is_stale() ? pal.warning : pal.success);
             char label[128], value[128], note[128];
             ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), value, sizeof(value), note, sizeof(note));
-            // Long proxy-timer explanations remain complete in status details.
-            if (summary.eye_care_unlimited_capped) {
-                note[0] = '\0';
-                if (summary.played_minutes_available)
-                    std::snprintf(note, sizeof(note), ptc_ui_text(PTC_UI_T_PLAYED_ABOUT_D_MIN), summary.played_minutes);
-            }
-            child_card(renderer, label, value, note, PTC_OVERLAY_FONT_BODY, pal.text_secondary, PTC_OVERLAY_FONT_BODY);
+            // Keep the quota and usage together so the eye-care row fits without
+            // shrinking text. Full proxy-timer explanations stay in details.
+            char quota[256];
+            const bool used = summary.valid && summary.played_minutes_available && summary.played_minutes >= 0;
+            PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("quota", value),
+                PTC_UI_TEXT_NUMBER("minutes", summary.played_minutes)};
+            if (used && !summary.remaining_available && summary.unrestricted_today != 1 && !summary.eye_care_unlimited_capped)
+                std::snprintf(quota, sizeof(quota), "%s %s", label, value);
+            else ptc_ui_text_format(used ? PTC_UI_T_OVERLAY_QUOTA_USAGE :
+                PTC_UI_T_OVERLAY_QUOTA, quota, sizeof(quota), args, used ? 2 : 1);
+            child_card(renderer, ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY), line, quota, PTC_OVERLAY_FONT_HERO,
+                !summary.valid || !summary.remaining_available ? pal.text_disabled : status_is_stale() ? pal.warning : pal.success);
             const auto policies = child_policy_status(summary);
+            const auto eye = child_eye_care_status(summary);
+            child_card(renderer, ptc_ui_text(PTC_UI_T_OVERLAY_EYE_LABEL), eye.compact, nullptr,
+                PTC_OVERLAY_FONT_BODY, eye.warning ? pal.warning : summary.eye_care_enabled ? pal.success : pal.text_secondary, PTC_OVERLAY_FONT_SECONDARY);
             child_card(renderer, ptc_ui_text(PTC_UI_T_POLICY_BED_LABEL), policies.bedtime.compact, nullptr, PTC_OVERLAY_FONT_BODY,
                 policies.bedtime.state == PTC_POLICY_ACTIVE ? pal.danger : pal.text_secondary);
             child_card(renderer, ptc_ui_text(policies.mode == PTC_UI_T_STATUS_TO_CONFIRM ? PTC_UI_T_POLICY_DOCK_LABEL : policies.mode),

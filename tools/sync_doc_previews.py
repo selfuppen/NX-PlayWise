@@ -67,6 +67,7 @@ PREVIEW_FILES = (
     "overlay/overlay-parent-actions.png",
     "overlay/overlay-bedtime.png",
     "overlay/overlay-eye-care.png",
+    "overlay/overlay-eye-playing.png",
     "overlay/overlay-unknown.png",
     "overlay/overlay-dock-handheld.png",
     "overlay/overlay-dock-restricted.png",

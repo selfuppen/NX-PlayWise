@@ -142,12 +142,12 @@
         return armTicksToNs(armGetSystemTick() - last_refresh_tick_) >= 30000000000ULL;
     }
 
-    PtcPolicyStatus child_policy_status(const PtcCompanionResultSummary &summary) const
+    bool child_status_fresh(const PtcCompanionResultSummary &summary, int &day, int &second) const
     {
-        int day = -1, second = -1;
+        day = second = -1;
         bool clock_fresh = true;
 #ifdef PTC_OVERLAY_PREVIEW_CLOCK
-        day = summary.day_index;
+        day = 2469;
         second = 496 * 60;
 #else
         const long long now = static_cast<long long>(std::time(nullptr));
@@ -155,9 +155,25 @@
         clock_fresh = last_refresh_wall_time_ > 0 && now >= last_refresh_wall_time_ &&
             now - last_refresh_wall_time_ < 30;
 #endif
-        PtcPolicyStatus policies;
-        bool fresh = clock_fresh && has_status_snapshot_ && last_refresh_tick_ != 0 && !status_is_stale() &&
+        return summary.valid && summary.day_index == day && clock_fresh && has_status_snapshot_ && last_refresh_tick_ != 0 && !status_is_stale() &&
             !(error_ && last_request_kind_ == OverlayRequestKind::Status);
+    }
+
+    PtcOverlayEyeCareDisplay child_eye_care_status(const PtcCompanionResultSummary &summary) const
+    {
+        int day, second;
+        const bool fresh = child_status_fresh(summary, day, second);
+        const auto age = last_refresh_tick_ ? armTicksToNs(armGetSystemTick() - last_refresh_tick_) / 1000000000ULL : 0;
+        PtcOverlayEyeCareDisplay eye;
+        ptc_overlay_project_eye_care(&summary, fresh, static_cast<int64_t>(age), &eye);
+        return eye;
+    }
+
+    PtcPolicyStatus child_policy_status(const PtcCompanionResultSummary &summary) const
+    {
+        int day, second;
+        const bool fresh = child_status_fresh(summary, day, second);
+        PtcPolicyStatus policies;
         ptc_policy_status_project(&summary, fresh, day, second, &policies);
         return policies;
     }

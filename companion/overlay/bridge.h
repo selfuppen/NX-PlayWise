@@ -77,6 +77,16 @@ bool ptc_overlay_bridge_offline_code_succeeded(const PtcOverlayBridge *bridge);
 bool ptc_overlay_bridge_preview_succeeded(const PtcOverlayBridge *bridge);
 
 const char *ptc_overlay_rule_source_label(const char *source);
+typedef struct {
+    char compact[160];
+    char detail[256];
+    int rest_seconds; /* -1 means no confirmed rest countdown. */
+    bool warning;
+} PtcOverlayEyeCareDisplay;
+
+/* Only rest uses elapsed time; play minutes always come from the backend. */
+void ptc_overlay_project_eye_care(const PtcCompanionResultSummary *summary,
+    bool fresh, int64_t age_seconds, PtcOverlayEyeCareDisplay *out);
 void ptc_overlay_format_child_quota_parts(
     const PtcCompanionResultSummary *summary,
     char *label_out, size_t label_size,
