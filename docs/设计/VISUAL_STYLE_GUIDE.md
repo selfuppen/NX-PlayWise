@@ -147,17 +147,40 @@ In list rows, health-care cards, and decision cells, content must strictly separ
 * **Fallback Unhit Rules**: 1px border in `UI_BORDER`, canvas-blended background (`UI_PAGE`), muted text.
 * **Priority Arrows**: 2px directional arrows between rule stages illustrating evaluation flow (Temporary $\to$ Specified Date $\to$ Holiday $\to$ Weekly Plan $\to$ Final Balance).
 
-### 4.5 Tesla Overlay Dark Baseline Contract
+### 4.5 Tesla Overlay Architecture & Dark Baseline Contract
 * **Tesla Host Dark Background**: The Tesla menu operates over a translucent dark background (`0x000D` / RGBA(0, 0, 0, 0.85)). To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.
 * **Tuned Overlay Surfaces**:
   * Card Surface: `#131B2A` with high `0xE6` opacity, effectively shielding background game graphics.
   * Decorative Border: `#233047` with subtle `0xB0` opacity, providing restrained, clean edges.
   * Status Pills: Fully aligned with dark semantic rules (e.g. deep warm sepia warning `#332211`, dark jade success `#193C32`).
-* **Font & Emoji Prohibition**:
+* **Font, Glyph & Handheld Legibility Contract**:
   * Due to Tesla sysmodule memory constraints (~6MB heap allocation), overlays cannot bundle external TTF/OTF fonts.
   * **Overlay text must never use Unicode 4-byte Emojis or miscellaneous Dingbats**, preventing mojibake or missing-glyph boxes on hardware.
   * Controller prompts must strictly use Nintendo Switch system font glyphs (e.g., `\uE0E0` for A button, `\uE0E1` for B button, `\uE0E2` for X button, `\uE0E3` for Y button, `\uE0E4` for L button, `\uE0E5` for R button, `\uE0E6` for ZL button, `\uE0EC` for touch/click).
   * The rendering layer includes a built-in UTF-8 runtime sanitizer (`ptc_overlay_sanitize_utf8`) that automatically strips out-of-range symbols before dispatching strings to `libtesla`.
+  * **Unified Typography Scale Tokens**:
+    To eliminate ad-hoc font size fragmentation, all font sizes are centralized in `companion/overlay/layout.h`:
+    * `PTC_OVERLAY_FONT_HERO = 48`: Hero numeric values (glanceable playtime numerals `45 分钟`, eye-care countdown `02:00`);
+    * `PTC_OVERLAY_FONT_DISPLAY = 32`: Prominent card values & key comparisons (grant code slots, before/after values);
+    * `PTC_OVERLAY_FONT_KEYPAD = 30`: Numeric keypad & directional keycaps (3x4 digits, PIN directions);
+    * `PTC_OVERLAY_FONT_TITLE_LG = 28`: Critical alert titles & primary outcomes (restriction cards, success titles);
+    * `PTC_OVERLAY_FONT_TITLE = 26`: Module headers & brand titles (PlayWise brand, parent zone/PIN header, confirm titles);
+    * `PTC_OVERLAY_FONT_BTN = 22`: Primary action buttons (50–56px high buttons: Confirm, Cancel, Redeem banner);
+    * `PTC_OVERLAY_FONT_BODY_LG = 20`: High-emphasis body & card labels (policy card labels, action card titles);
+    * `PTC_OVERLAY_FONT_BODY = 18`: Comfortable body text & secondary actions (policy status details, navigation items);
+    * `PTC_OVERLAY_FONT_SECONDARY = 16`: Ancillary notes & status summaries (hints, card subtitles, warning reasons);
+    * `PTC_OVERLAY_FONT_CAPTION = 15`: Compact captions & minimum legible floor (strictly $\ge 15\text{px}$ to avoid stroke loss).
+* **Scheme A Dual-Mode Architecture (Smart Focus & Adaptive Collapsible Keypad)**:
+  * **Top Title Reclaimed**: Reclaims the 90px header banner occupied by the default frame, placing a compact 34px brand & refresh bar at the top; content starts at $Y=40$ with total content height expanded to 607px.
+  * **Mode 1: Overview Mode (Daily High-Frequency Default)**: Focuses on glanceable status: Hero card with 48px time readout, two rule cards (20px label + 18px detail), grant code trigger banner (22px title + 18px subtitle), autonomous buffer and parent zone buttons (52px high, 18–20px text). Pressing A, D-Pad, Plus, or touching the code trigger card smoothly unfolds Keypad Mode; pressing B closes the overlay.
+  * **Mode 2: Keypad Mode (Comfortable Code Entry)**: Collapses policy cards into a summary bar, displaying a 3x4 spacious numeric keypad ($124\text{px} \times 48\text{px}$, 30px digits) and enlarged 8-slot input ($44\text{px} \times 54\text{px}$, 32px glyphs); pressing B or touching [B Cancel] smoothly returns to Overview Mode.
+  * **Mode 3: Restricted Hero Mode (Scenario-Aware Alert)**: Adapts into a full-height alert hero card (28px title, 48px countdown, 18px explanation) when bedtime, eye care, or dock restrictions are active, with direct one-touch parent area access.
+* **Parent Zone Natural Vertical Scrolling & Scissoring Contract**:
+  * **Expanded Action Cards & Natural Overflow**: Action card heights are enlarged to 50px (58px step), titles to 20px (18px when accompanied by reasons), reasons/descriptions to 15px, and group headings to 18px. The 8 action cards across 3 groups span 588px total height, naturally overflowing the visible viewport height (484px).
+  * **Viewport Scissoring Protection**: Renders within a scissored box ($[Y+72, H=484]$) via `enableScissoring` and `disableScissoring`, completely preventing clipping artifacts onto headers or footers.
+  * **Smooth Auto-Scroll to Focus**: When navigating with D-pad or sticks, `parent_scroll_y_` smoothly interpolates to bring the focused action into view (`ptc_overlay_parent_scroll_for_action`); manual scrolling via the right analog stick is also supported.
+  * **Virtual Touch Hit-Testing**: Touch clicks map virtual coordinates via $vty = ty + parent\_scroll\_y\_$ for pixel-accurate item selection and execution.
+  * **Micro-Geometric Scrollbar Indicator**: A 3px semi-transparent scroll track and thumb dynamically render along the right viewport margin to signal scroll depth and progress.
 
 ---
 

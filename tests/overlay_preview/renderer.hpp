@@ -22,8 +22,14 @@ namespace gfx {
 class Renderer {
     stbtt_fontinfo font_{};
     std::vector<unsigned char> font_bytes_;
+    struct ScissorRect { int x, y, w, h; };
+    std::vector<ScissorRect> scissor_stack_;
     void pixel(int x, int y, Color color, unsigned coverage = 255) {
         if (x < 0 || x >= width || y < 0 || y >= height) return;
+        if (!scissor_stack_.empty()) {
+            const auto &s = scissor_stack_.back();
+            if (x < s.x || x >= s.x + s.w || y < s.y || y >= s.y + s.h) return;
+        }
         unsigned alpha = color.a * 17 * coverage / 255;
         unsigned channels[] = {color.r * 17, color.g * 17, color.b * 17};
         for (int c = 0; c < 3; ++c) {
@@ -34,6 +40,12 @@ class Renderer {
 public:
     static constexpr int width = 448, height = 720;
     std::vector<unsigned char> pixels = std::vector<unsigned char>(width * height * 3, 17);
+    void enableScissoring(int x, int y, int w, int h) {
+        scissor_stack_.push_back({x, y, w, h});
+    }
+    void disableScissoring() {
+        if (!scissor_stack_.empty()) scissor_stack_.pop_back();
+    }
     explicit Renderer(const char *font_path) {
         FILE *file = std::fopen(font_path, "rb");
         if (!file) throw std::runtime_error("missing pinned preview font");

@@ -1126,6 +1126,10 @@ static void test_overlay_layout_geometry(void)
     check_int(action, PTC_OVERLAY_PARENT_ADD_MINUTES, "overlay action traversal wraps");
     check_int(ptc_overlay_parent_action_move(PTC_OVERLAY_PARENT_WAIVE_DOCK, 1),
         PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT, "TV waiver precedes dangerous recovery group");
+    check_int(ptc_overlay_parent_scroll_for_action(PTC_OVERLAY_PARENT_ADD_MINUTES), 0,
+        "first action starts at top of scroll viewport");
+    check_int(ptc_overlay_parent_scroll_for_action(PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT),
+        PTC_OVERLAY_PARENT_SCROLL_MAX, "bottom action scrolls to bottom of scroll viewport");
     PtcOverlayRect submit = ptc_overlay_submit_rect(
         PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
     PtcOverlayRect collapsed = ptc_overlay_status_rect(
@@ -1142,18 +1146,18 @@ static void test_overlay_layout_geometry(void)
         (PTC_OVERLAY_CODE_SYMBOLS - 1) * PTC_OVERLAY_SLOT_GAP;
     int slot_left = PTC_OVERLAY_CONTENT_X + (PTC_OVERLAY_CONTENT_W - slot_group_width) / 2;
 
-    check_int(PTC_OVERLAY_CONTENT_Y, 90, "overlay content reclaims title whitespace");
-    check_int(slot_group_width, 348, "overlay enlarged code slots fit as one group");
-    check_int(slot_left - PTC_OVERLAY_CONTENT_X, 34, "overlay code slots are centered on the left");
-    check_int(PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W - (slot_left + slot_group_width), 34,
+    check_int(PTC_OVERLAY_CONTENT_Y, 40, "overlay content reclaims title whitespace");
+    check_int(slot_group_width, 387, "overlay enlarged code slots fit as one group");
+    check_int(slot_left - PTC_OVERLAY_CONTENT_X, 14, "overlay code slots are centered on the left");
+    check_int(PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W - (slot_left + slot_group_width), 15,
         "overlay code slots are centered on the right");
-    check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H, 242,
+    check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H, 184,
         "overlay enlarged code slots end above input count");
-    check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_KEYPAD_Y, 282,
+    check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_KEYPAD_Y, 216,
         "overlay keypad leaves room below input count");
-    check_int(ptc_overlay_key_rect(0, 0, 1).w, 120, "overlay keypad keys are wider");
-    check_int(ptc_overlay_key_rect(0, 0, 1).h, 44, "overlay keypad rows have no dead vertical gap");
-    check_int(ptc_overlay_refresh_rect(0, 0).h, 36, "overlay refresh target is easier to touch");
+    check_int(ptc_overlay_key_rect(0, 0, 1).w, 124, "overlay keypad keys are wider");
+    check_int(ptc_overlay_key_rect(0, 0, 1).h, 48, "overlay keypad rows have no dead vertical gap");
+    check_int(ptc_overlay_refresh_rect(0, 0).h, 34, "overlay refresh target is easier to touch");
     check_true(ptc_overlay_rect_contains(submit, submit.x + submit.w - 1, submit.y + submit.h - 1),
         "overlay submit touch covers its visible right and bottom edges");
     check_true(!ptc_overlay_rect_contains(submit, submit.x + submit.w, submit.y),
@@ -1168,13 +1172,30 @@ static void test_overlay_layout_geometry(void)
         "collapsed policy strip stays below controls and above host footer");
     check_true(ptc_overlay_policy_row_y(PTC_OVERLAY_CONTENT_Y, true, 1) < detail.y + detail.h,
         "expanded policy rows stay within detail touch rectangle");
-    check_int(detail.y + detail.h, 646, "expanded error and success details fill the content area");
+    check_int(detail.y + detail.h, 632, "expanded error and success details fill the content area");
     check_true(detail.y + detail.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
         "expanded overlay status remains inside content bounds");
     check_true(buffer.x + buffer.w < parent.x &&
         parent.x + parent.w == PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W &&
         buffer.y == parent.y && parent.y + parent.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
         "buffer and parent touch targets fit below collapsed status");
+    PtcOverlayRect hero = ptc_overlay_overview_hero_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
+    PtcOverlayRect pol0 = ptc_overlay_overview_policy_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, 0);
+    PtcOverlayRect pol1 = ptc_overlay_overview_policy_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, 1);
+    PtcOverlayRect redeem = ptc_overlay_overview_redeem_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
+    PtcOverlayRect nav_back = ptc_overlay_keypad_nav_back_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y);
+    PtcOverlayRect nav_par = ptc_overlay_keypad_nav_parent_rect(
+        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
+    check_true(hero.y + hero.h <= pol0.y, "overview hero sits above policy card 0");
+    check_true(pol0.y + pol0.h <= pol1.y, "overview policy 0 sits above policy card 1");
+    check_true(pol1.y + pol1.h <= redeem.y, "overview policy 1 sits above redeem banner");
+    check_true(redeem.y + redeem.h <= buffer.y, "overview redeem banner sits above action buttons");
+    check_true(nav_back.x + nav_back.w < nav_par.x, "keypad nav back sits left of parent button");
     check_true(ptc_overlay_remaining_refresh_pending(true, true),
         "submitted overlay code uses a pending remaining-time presentation");
     check_true(!ptc_overlay_remaining_refresh_pending(true, false),
@@ -1193,6 +1214,18 @@ static void test_overlay_layout_geometry(void)
         PTC_OVERLAY_PREVIEW_DANGER, "unlimited conversion uses danger styling");
     check_int(ptc_overlay_preview_visual_level(true, 0, true, false),
         PTC_OVERLAY_PREVIEW_DANGER, "danger styling takes priority over a capped warning");
+
+    /* Typography scale contract: monotonic hierarchy and strict >= 15px handheld legible floor */
+    check_true(PTC_OVERLAY_FONT_HERO > PTC_OVERLAY_FONT_DISPLAY, "hero font is larger than display font");
+    check_true(PTC_OVERLAY_FONT_DISPLAY >= PTC_OVERLAY_FONT_KEYPAD, "display font is at least keypad font");
+    check_true(PTC_OVERLAY_FONT_KEYPAD > PTC_OVERLAY_FONT_TITLE_LG, "keypad font is larger than title lg");
+    check_true(PTC_OVERLAY_FONT_TITLE_LG > PTC_OVERLAY_FONT_TITLE, "title lg is larger than regular title");
+    check_true(PTC_OVERLAY_FONT_TITLE > PTC_OVERLAY_FONT_BTN, "title is larger than button font");
+    check_true(PTC_OVERLAY_FONT_BTN > PTC_OVERLAY_FONT_BODY_LG, "button font is larger than body lg");
+    check_true(PTC_OVERLAY_FONT_BODY_LG > PTC_OVERLAY_FONT_BODY, "body lg is larger than body regular");
+    check_true(PTC_OVERLAY_FONT_BODY > PTC_OVERLAY_FONT_SECONDARY, "body is larger than secondary font");
+    check_true(PTC_OVERLAY_FONT_SECONDARY > PTC_OVERLAY_FONT_CAPTION, "secondary font is larger than caption");
+    check_true(PTC_OVERLAY_FONT_CAPTION >= 15, "all text fonts strictly satisfy the >= 15px legible floor");
 }
 
 static void test_overlay_child_quota_and_restriction_details(void)

@@ -25,10 +25,13 @@ public:
     bool has_status_snapshot_ = true, status_expanded_ = false, preview_ready_ = false;
     bool preview_changed_ = false, error_ = false, success_visible_ = false;
     bool result_pending_ = false, result_failed_ = false, touch_hold_warning_ = false;
+    bool keypad_active_ = false;
     PtcOverlayHoldState confirm_hold_{};
     ParentView parent_view_ = ParentView::Child;
     bool parent_action_succeeded_ = false;
     int parent_action_ = 0, daily_add_minutes_ = 15;
+    float parent_scroll_y_ = 0.0f;
+    float target_parent_scroll_y_ = 0.0f;
     char pin_[PTC_AUTH_PIN_MAX_LEN + 1]{}, pin_message_[128]{};
     size_t pin_length_ = 0;
 #include "../../companion/overlay/source/render_methods.hpp"
@@ -64,7 +67,15 @@ int main(int argc, char **argv) {
                 status.day_index = 2469;
                 status.bedtime_available = status.dock_policy_available = true;
                 std::snprintf(status.rule_source, sizeof(status.rule_source), "weekly");
-                std::snprintf(input.symbols, sizeof(input.symbols), "1234"); input.length = 4;
+                if (scene == 0) {
+                    std::snprintf(input.symbols, sizeof(input.symbols), "1234");
+                    input.length = 4;
+                    view.keypad_active_ = true;
+                } else {
+                    input.length = 0;
+                    input.symbols[0] = '\0';
+                    view.keypad_active_ = false;
+                }
                 if (scene == 1) {
                     view.preview_ready_ = true;
                     view.preview_summary_ = status;
@@ -80,10 +91,12 @@ int main(int argc, char **argv) {
                     status.dock_available = true;
                     status.undocked_limit_enabled = true;
                     view.parent_action_ = PTC_OVERLAY_PARENT_WAIVE_DOCK;
+                    view.parent_scroll_y_ = static_cast<float>(ptc_overlay_parent_scroll_for_action(view.parent_action_));
                 } else if (scene == 4) {
                     status.bedtime_active = true; status.bedtime_enabled = true;
                     status.bedtime_window_instance_id = 123;
                     view.parent_view_ = ParentView::Actions; view.parent_action_ = 2;
+                    view.parent_scroll_y_ = static_cast<float>(ptc_overlay_parent_scroll_for_action(view.parent_action_));
                 } else if (scene == 5) {
                     status.eye_care_enabled = true; status.eye_care_rest_remaining_seconds = 300;
                     std::snprintf(status.eye_care_phase, sizeof(status.eye_care_phase), "resting");
@@ -140,15 +153,7 @@ int main(int argc, char **argv) {
                     }
                 }
                 std::fill(renderer.pixels.begin(), renderer.pixels.end(), 17);
-                // Parent views hide the title/subtitle banner and raise the
-                // content top; mirror that here so previews match the device.
-                const bool parent_scene = view.access_recovery_visible();
-                const int content_y = parent_scene ? PTC_OVERLAY_PARENT_CONTENT_Y : PTC_OVERLAY_CONTENT_Y;
-                if (!parent_scene) {
-                    renderer.drawString(ptc_ui_text(PTC_UI_T_PLAYWISE), false, 20, 50, 30, TEXT_COLOR);
-                    renderer.drawString(ptc_ui_text(PTC_UI_T_PLAYTIME_BEDTIME_CONTROLS), false, 20, 70, 15, MUTED_COLOR);
-                }
-                view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, content_y,
+                view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
                     PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
                 renderer.drawRect(0, 678, 448, 42, {0, 0, 0, 15});
                 renderer.drawString("HOST PREVIEW / SAMPLE DATA", false, 20, 699, 18, WAITING_COLOR);

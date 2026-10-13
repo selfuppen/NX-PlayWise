@@ -36,7 +36,6 @@ static void load_overlay_config(PtcStorage *storage)
     PtcUiLanguagePreference lang_preference = PTC_UI_LANGUAGE_SYSTEM;
     PtcUiSystemLanguage system_language = PTC_UI_SYSTEM_LANGUAGE_UNKNOWN;
     PtcUiThemePreference theme_preference = PTC_UI_THEME_SYSTEM;
-    PtcUiSystemTheme system_theme = PTC_UI_SYSTEM_THEME_UNAVAILABLE;
     u64 code;
     SetLanguage language;
     if (storage && storage->vtable->read_text(storage, "sdmc:/switch/playwise/config.json",
@@ -125,15 +124,10 @@ public:
 
     void draw(tsl::gfx::Renderer *renderer) override
     {
-        // Mirror tsl::elm::OverlayFrame::draw, but drop the title and subtitle
-        // banner in parent views so the panel can reclaim the top area.
-        const bool parent = is_parent_view_ && is_parent_view_();
+        // PlayWise renders its own compact brand & status bar directly inside draw_overlay.
+        // We bypass drawing the default 90px title/subtitle banner in all views to maximize vertical space.
         renderer->fillScreen(a(tsl::style::color::ColorFrameBackground));
         renderer->drawRect(tsl::cfg::FramebufferWidth - 1, 0, 1, tsl::cfg::FramebufferHeight, a(0xF222));
-        if (!parent) {
-            renderer->drawString(m_title.c_str(), false, 20, 50, 30, a(tsl::style::color::ColorText));
-            renderer->drawString(m_subtitle.c_str(), false, 20, 70, 15, a(tsl::style::color::ColorDescription));
-        }
         renderer->drawRect(15, tsl::cfg::FramebufferHeight - 73, tsl::cfg::FramebufferWidth - 30, 1,
             a(tsl::style::color::ColorText));
         renderer->drawString("  Back       OK", false, 30, 693, 23, a(tsl::style::color::ColorText));
@@ -197,6 +191,12 @@ public:
         if (frame_ != nullptr && parent_layout != content_parent_layout_) {
             content_parent_layout_ = parent_layout;
             frame_->invalidate();
+        }
+        if (access_recovery_visible() && parent_view_ == ParentView::Actions) {
+            parent_scroll_y_ += (target_parent_scroll_y_ - parent_scroll_y_) * 0.35f;
+            if (std::abs(target_parent_scroll_y_ - parent_scroll_y_) < 0.5f) {
+                parent_scroll_y_ = target_parent_scroll_y_;
+            }
         }
         if (recovery_active_) {
             poll_pending_redemption();
@@ -361,6 +361,7 @@ public:
                 const bool terminal = !result_pending_;
                 success_visible_ = false;
                 status_expanded_ = false;
+                keypad_active_ = false;
                 ptc_overlay_input_init(input_);
                 if (terminal) {
                     (void)ptc_companion_pending_redemption_clear(&bridge_->transport.file);
@@ -380,9 +381,9 @@ public:
                 const s32 rel_x = touch.x > 400 ? static_cast<s32>(touch.x) - 880 : static_cast<s32>(touch.x);
                 const s32 rel_y = static_cast<s32>(touch.y);
                 touch_cancel = rel_x >= PTC_OVERLAY_CONTENT_X && rel_x < PTC_OVERLAY_CONTENT_X + 145 &&
-                    rel_y >= PTC_OVERLAY_CONTENT_Y + 500 && rel_y < PTC_OVERLAY_CONTENT_Y + 550;
-                touch_confirm = rel_x >= PTC_OVERLAY_CONTENT_X + 170 && rel_x < PTC_OVERLAY_CONTENT_X + 330 &&
-                    rel_y >= PTC_OVERLAY_CONTENT_Y + 500 && rel_y < PTC_OVERLAY_CONTENT_Y + 550;
+                    rel_y >= PTC_OVERLAY_CONTENT_Y + 490 && rel_y < PTC_OVERLAY_CONTENT_Y + 544;
+                touch_confirm = rel_x >= PTC_OVERLAY_CONTENT_X + 160 && rel_x < PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W &&
+                    rel_y >= PTC_OVERLAY_CONTENT_Y + 490 && rel_y < PTC_OVERLAY_CONTENT_Y + 544;
             }
             const bool dangerous = !preview_summary_.remaining_after_available ||
                 preview_summary_.remaining_after_minutes == 0 ||
@@ -391,6 +392,7 @@ public:
                 preview_ready_ = false;
                 preview_changed_ = false;
                 pending_code_[0] = '\0';
+                keypad_active_ = false;
                 ptc_overlay_hold_reset(&confirm_hold_);
                 ptc_overlay_input_init(input_);
             } else if (touch_confirm && dangerous) {
@@ -425,6 +427,7 @@ public:
 
             constexpr s32 cx = PTC_OVERLAY_CONTENT_X;
             constexpr s32 cy = PTC_OVERLAY_CONTENT_Y;
+            constexpr s32 cw = PTC_OVERLAY_CONTENT_W;
 
             // 顶部刷新按钮；后台忙碌时只禁用新的请求，本地编辑仍可继续。
             if (ptc_overlay_rect_contains(ptc_overlay_refresh_rect(cx, cy), rel_x, rel_y)) {
@@ -433,23 +436,56 @@ public:
                 return true;
             }
 
-            if (!status_expanded_ && ptc_overlay_rect_contains(
-                    ptc_overlay_child_buffer_rect(cx, cy), rel_x, rel_y)) {
-                if (request_actions_enabled && displayed_summary_.valid &&
-                    displayed_summary_.daily_buffer_available && !bedtime_restricted() &&
-                    !eye_care_restricted())
-                    (void)begin_claim_daily_buffer();
-                prev_touch_down_ = touch_down;
-                return true;
-            }
-            if (!status_expanded_ && ptc_overlay_rect_contains(
-                    ptc_overlay_child_parent_rect(cx, cy, PTC_OVERLAY_CONTENT_W), rel_x, rel_y)) {
+            if (is_restricted) {
                 open_parent_pin();
                 prev_touch_down_ = touch_down;
                 return true;
             }
 
-            if (!is_restricted) {
+            if (!is_keypad_mode()) {
+                // --- 概览大字模式下的触控 ---
+                if (ptc_overlay_rect_contains(ptc_overlay_child_buffer_rect(cx, cy), rel_x, rel_y)) {
+                    if (request_actions_enabled && displayed_summary_.valid &&
+                        displayed_summary_.daily_buffer_available && !bedtime_restricted() &&
+                        !eye_care_restricted() && !displayed_summary_.dock_restriction_active)
+                        (void)begin_claim_daily_buffer();
+                    prev_touch_down_ = touch_down;
+                    return true;
+                }
+                if (ptc_overlay_rect_contains(ptc_overlay_child_parent_rect(cx, cy, cw), rel_x, rel_y)) {
+                    open_parent_pin();
+                    prev_touch_down_ = touch_down;
+                    return true;
+                }
+                // 点击输入加时码引导卡片 -> 展开键盘模式
+                if (ptc_overlay_rect_contains(ptc_overlay_overview_redeem_rect(cx, cy, cw), rel_x, rel_y)) {
+                    keypad_active_ = true;
+                    prev_touch_down_ = touch_down;
+                    return true;
+                }
+                // 点击状态与命令栏
+                if (ptc_overlay_rect_contains(
+                        ptc_overlay_status_rect(cx, cy, cw, status_expanded_, status_needs_detail()),
+                        rel_x, rel_y)) {
+                    status_expanded_ = !status_expanded_;
+                    prev_touch_down_ = touch_down;
+                    return true;
+                }
+            } else {
+                // --- 键盘模式下的触控 ---
+                // 点击底部 [B] 取消导航按钮 (退出键盘模式，回到概览)
+                if (ptc_overlay_rect_contains(ptc_overlay_keypad_nav_back_rect(cx, cy), rel_x, rel_y)) {
+                    keypad_active_ = false;
+                    ptc_overlay_input_init(input_);
+                    prev_touch_down_ = touch_down;
+                    return true;
+                }
+                // 点击底部 [R] 家长区导航按钮
+                if (ptc_overlay_rect_contains(ptc_overlay_keypad_nav_parent_rect(cx, cy, cw), rel_x, rel_y)) {
+                    open_parent_pin();
+                    prev_touch_down_ = touch_down;
+                    return true;
+                }
                 // 点击小键盘按键
                 const char *charset = ptc_overlay_input_charset();
                 for (unsigned int index = 0; index < PTC_OVERLAY_KEY_COUNT; ++index) {
@@ -471,7 +507,7 @@ public:
                     return true;
                 }
 
-                // 点击清空（物理 Y 保留给状态刷新）。
+                // 点击清空
                 if (ptc_overlay_rect_contains(ptc_overlay_clear_rect(cx, cy), rel_x, rel_y)) {
                     (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_Y, 0, 0);
                     prev_touch_down_ = touch_down;
@@ -479,32 +515,30 @@ public:
                 }
 
                 // 点击 [+] 提交按钮
-                if (ptc_overlay_rect_contains(ptc_overlay_submit_rect(cx, cy, PTC_OVERLAY_CONTENT_W), rel_x, rel_y)) {
+                if (ptc_overlay_rect_contains(ptc_overlay_submit_rect(cx, cy, cw), rel_x, rel_y)) {
                     if (request_actions_enabled) (void)begin_code_preview();
                     prev_touch_down_ = touch_down;
                     return true;
                 }
-            }
-
-            // 点击状态与命令栏
-            if (ptc_overlay_rect_contains(
-                    ptc_overlay_status_rect(cx, cy, PTC_OVERLAY_CONTENT_W, status_expanded_, status_needs_detail()),
-                    rel_x, rel_y)) {
-                status_expanded_ = !status_expanded_;
-                prev_touch_down_ = touch_down;
-                return true;
             }
         }
         prev_touch_down_ = touch_down;
 
         // 3. 物理按键处理 (Button Handler)
         if (keysDown & HidNpadButton_B) {
+            if (is_keypad_mode()) {
+                keypad_active_ = false;
+                ptc_overlay_input_init(input_);
+                return true;
+            }
             tsl::Overlay::get()->close();
             return true;
         }
 
         if (keysDown & HidNpadButton_Minus) {
-            status_expanded_ = !status_expanded_;
+            if (!is_keypad_mode()) {
+                status_expanded_ = !status_expanded_;
+            }
             return true;
         }
 
@@ -526,7 +560,11 @@ public:
                 open_parent_pin();
                 return true;
             }
-            if (request_actions_enabled) (void)begin_code_preview();
+            if (is_keypad_mode()) {
+                if (request_actions_enabled) (void)begin_code_preview();
+            } else {
+                keypad_active_ = true;
+            }
             return true;
         }
 
@@ -537,6 +575,7 @@ public:
                     error_ = false;
                     status_expanded_ = false;
                     pending_code_[0] = '\0';
+                    keypad_active_ = false;
                     ptc_overlay_input_init(input_);
                 } else {
                     (void)retry_last_request();
@@ -550,6 +589,14 @@ public:
         if (is_restricted) {
             if (keysDown & HidNpadButton_A) {
                 open_parent_pin();
+                return true;
+            }
+            return true;
+        }
+
+        if (!is_keypad_mode()) {
+            if ((keysDown & HidNpadButton_A) || dpad_down || stick_keys) {
+                keypad_active_ = true;
                 return true;
             }
             return true;
@@ -862,6 +909,8 @@ public:
                 if (auth_status == PTC_AUTH_OK) {
                     parent_authorized_ = true;
                     parent_action_ = 0;
+                    parent_scroll_y_ = 0.0f;
+                    target_parent_scroll_y_ = 0.0f;
                     parent_view_ = ParentView::Actions;
                     pin_message_[0] = '\0';
                     action_repeat_ = {};
@@ -889,9 +938,11 @@ public:
                 to_overlay_buttons(keysDown), to_overlay_buttons(keysHeld), elapsed_ms);
             if (touch_pressed) {
                 for (int index = 0; index < PTC_OVERLAY_PARENT_ACTION_COUNT; ++index) {
-                    if (ptc_overlay_rect_contains(ptc_overlay_parent_action_rect(cx, cy, index), tx, ty)) {
+                    const s32 vty = ty + static_cast<s32>(parent_scroll_y_);
+                    if (ptc_overlay_rect_contains(ptc_overlay_parent_action_rect(cx, cy, index), tx, vty)) {
                         const bool was_selected = parent_action_ == index;
                         parent_action_ = index;
+                        target_parent_scroll_y_ = static_cast<float>(ptc_overlay_parent_scroll_for_action(parent_action_));
                         ptc_overlay_hold_reset(&confirm_hold_);
                         action_changed = true;
                         if (was_selected && !parent_action_requires_hold(
@@ -908,13 +959,19 @@ public:
                 daily_add_minutes_ = daily_add_minutes_ >= 120 ? 120 : daily_add_minutes_ + 5;
             if (direction & PTC_OVERLAY_BUTTON_UP) {
                 parent_action_ = ptc_overlay_parent_action_move(parent_action_, -1);
+                target_parent_scroll_y_ = static_cast<float>(ptc_overlay_parent_scroll_for_action(parent_action_));
                 ptc_overlay_hold_reset(&confirm_hold_);
                 action_changed = true;
             }
             if (direction & PTC_OVERLAY_BUTTON_DOWN) {
                 parent_action_ = ptc_overlay_parent_action_move(parent_action_, 1);
+                target_parent_scroll_y_ = static_cast<float>(ptc_overlay_parent_scroll_for_action(parent_action_));
                 ptc_overlay_hold_reset(&confirm_hold_);
                 action_changed = true;
+            }
+            if (std::abs(right.y) > 16000) {
+                float delta = -static_cast<float>(right.y) / 32768.0f * 6.0f;
+                target_parent_scroll_y_ = std::clamp(target_parent_scroll_y_ + delta, 0.0f, static_cast<float>(PTC_OVERLAY_PARENT_SCROLL_MAX));
             }
             if (keysDown & HidNpadButton_B) {
                 parent_authorized_ = false;
@@ -1081,6 +1138,7 @@ private:
     PtcOverlayInput *input_;
     PlayWiseOverlayFrame *frame_ = nullptr;
     bool content_parent_layout_ = false;
+    bool keypad_active_ = false;
     PtcUiResolvedTheme theme_ = PTC_UI_RESOLVED_DARK;
     PtcCompanionAuth auth_{};
     PtcCompanionResultSummary displayed_summary_{};
@@ -1121,6 +1179,8 @@ private:
     bool parent_confirm_armed_ = false;
     bool parent_action_succeeded_ = false;
     int parent_action_ = 0;
+    float parent_scroll_y_ = 0.0f;
+    float target_parent_scroll_y_ = 0.0f;
     int daily_add_minutes_ = 15;
     int left_pin_latched_ = -1;
     int right_pin_latched_ = -1;
