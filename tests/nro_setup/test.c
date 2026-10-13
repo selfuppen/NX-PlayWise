@@ -7,6 +7,8 @@ static int glyph_refreshes;
 static SetLanguage system_language = SetLanguage_ENUS;
 static const char *pin_values[2];
 static int pin_cursor;
+static int pin_opens;
+static bool pin_opened_empty;
 static int64_t fixed_time = 1800000000;
 time_t time(time_t *out) { if (out) *out = (time_t)fixed_time; return (time_t)fixed_time; }
 Result setsysInitialize(void) { return 0; }
@@ -42,10 +44,13 @@ void request_dock_waiver(UiState *ui) { (void)ui; }
 void save_bedtime_from_page(UiState *ui) { (void)ui; }
 bool pin_input(UiState *ui, const char *title, const char *guide, char *out, size_t size)
 {
-    (void)ui; (void)title; (void)guide;
+    ptc_ui_pin_open(&ui->model, title, guide);
+    ++pin_opens;
+    pin_opened_empty = ui->model.pin_text[0] == '\0';
     const char *pin = pin_cursor < 2 ? pin_values[pin_cursor++] : NULL;
-    if (!pin) return false;
+    if (!pin) { ptc_ui_pin_finish(&ui->model); return false; }
     snprintf(out, size, "%s", pin);
+    ptc_ui_pin_finish(&ui->model);
     return true;
 }
 static void check(bool condition, const char *label)
@@ -64,7 +69,144 @@ static void init(UiState *ui, PtcMemStorage *mem)
     ui->model.view = PTC_UI_SETUP;
     ui->model.setup_step = PTC_UI_SETUP_PREPARE;
     pin_cursor = 0;
+    pin_opens = 0;
+    pin_opened_empty = false;
     pin_values[0] = pin_values[1] = NULL;
+}
+
+static void parent_error_action(UiState *ui, bool touch, u64 button)
+{
+    if (!touch) {
+        check(handle_parent_auth_error_input(ui, button), "entry error consumes pad input");
+        return;
+    }
+    PtcUiRect rect = button == HidNpadButton_A ? ptc_ui_confirm_rect(ui->model.overlay)
+        : (button == HidNpadButton_B ? ptc_ui_cancel_rect(ui->model.overlay) : ptc_ui_auth_error_guide_rect());
+    check(handle_parent_auth_error_touch(ui, rect.x + rect.w / 2, rect.y + rect.h / 2),
+          "entry error consumes touch input at the rendered button");
+}
+
+static void init_parent_entry(UiState *ui, PtcMemStorage *mem)
+{
+    init(ui, mem);
+    check(ptc_companion_auth_set_pin(&ui->auth, "1234", fixed_time, switch_random, NULL) == PTC_AUTH_OK,
+          "entry PIN fixture");
+    ui->model.view = PTC_UI_CHILD;
+    ui->model.selected_index = 2;
+    ui->model.setup_pin_ready = true;
+    pin_values[0] = "9999";
+    enter_parent_area(ui);
+}
+
+static void test_parent_pin_error(void)
+{
+    static PtcMemStorage mem; UiState ui;
+    const int64_t start = fixed_time;
+    for (int touch = 0; touch < 2; ++touch) {
+        init_parent_entry(&ui, &mem);
+        check(ui.model.view == PTC_UI_CHILD && ui.model.overlay == PTC_UI_OVERLAY_AUTH_ERROR &&
+              ui.model.auth_error_parent_entry && ui.auth_retry_action == AUTH_RETRY_ENTER_PARENT &&
+              !ui.setup_parent_authorized && !ui.waiting, "wrong PIN shows choices without support navigation or authorization");
+        check(strcmp(ui.model.auth_error_title, ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT)) == 0 &&
+              strcmp(ui.model.auth_error_message, ptc_ui_text(PTC_UI_T_PARENT_PIN_ERROR_CHOICE)) == 0,
+              "entry error uses its own title and choice message");
+        check(ui.model.pin_text[0] == '\0', "failed PIN is cleared");
+        pin_cursor = 0;
+        parent_error_action(&ui, touch, HidNpadButton_A);
+        check(ui.model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && pin_opens == 2 && pin_opened_empty,
+              "repeated wrong PIN returns to choices with an empty input");
+        parent_error_action(&ui, touch, HidNpadButton_B);
+        check(ui.model.view == PTC_UI_CHILD && ui.model.selected_index == 2 && ui.model.overlay == PTC_UI_OVERLAY_NONE &&
+              ui.auth_retry_action == AUTH_RETRY_NONE && !ui.model.auth_error_parent_entry,
+              "return preserves child page and focus and clears retry");
+        pin_cursor = 0; enter_parent_area(&ui);
+        pin_cursor = 0; pin_values[0] = "1234";
+        parent_error_action(&ui, touch, HidNpadButton_A);
+        check(ui.model.view == PTC_UI_PARENT && ui.model.parent_page == PTC_UI_PARENT_TODAY &&
+              ui.setup_parent_authorized && !ui.model.parent_support_only && pin_opened_empty,
+              "correct retry unlocks the normal today page");
+
+        init_parent_entry(&ui, &mem);
+        parent_error_action(&ui, touch, HidNpadButton_X);
+        check(ui.model.view == PTC_UI_PARENT && ui.model.parent_page == PTC_UI_PARENT_SUPPORT &&
+              ui.model.selected_index == 4 && ui.model.parent_support_only && !ui.setup_parent_authorized &&
+              ui.auth_retry_action == AUTH_RETRY_NONE && ui.model.overlay == PTC_UI_OVERLAY_NONE && !ui.waiting,
+              "support choice opens read-only diagnostics and clears retry without a guide overlay");
+        for (int action = 0; action < 4; ++action)
+            check(!ptc_ui_parent_read_only_action(&ui.model, action), "read-only support disallows control actions");
+        export_diagnostics(&ui);
+        check(ui.model.diagnostic_status == PTC_UI_DIAGNOSTIC_SUCCESS, "support choice permits redacted diagnostics");
+
+        init_parent_entry(&ui, &mem);
+        for (int attempt = 1; attempt < 5; ++attempt) {
+            pin_cursor = 0;
+            parent_error_action(&ui, touch, HidNpadButton_A);
+        }
+        check(ui.model.auth_cooldown_seconds == 30 && ui.model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && pin_opens == 5,
+              "fifth wrong PIN starts the existing 30-second cooldown");
+        char before[1024], after[1024];
+        mem.storage.vtable->read_text(&mem.storage, APP_ROOT "/auth.json", before, sizeof(before));
+        pin_cursor = 0; pin_values[0] = "1234";
+        parent_error_action(&ui, touch, HidNpadButton_A);
+        check(pin_opens == 5 && !ui.setup_parent_authorized, "cooldown retry cannot open input or authorize");
+        parent_error_action(&ui, touch, HidNpadButton_B);
+        ptc_companion_auth_init(&ui.auth, APP_ROOT, &mem.storage);
+        pin_cursor = 0; enter_parent_area(&ui);
+        check(ui.model.auth_cooldown_seconds == 30 && ui.model.auth_error_parent_entry && !ui.setup_parent_authorized,
+              "closing and re-entering does not bypass persisted cooldown even with the correct PIN");
+        mem.storage.vtable->read_text(&mem.storage, APP_ROOT "/auth.json", after, sizeof(after));
+        check(strcmp(before, after) == 0, "cooldown re-entry does not alter persisted failure counters");
+        fixed_time = start + 29;
+        refresh_auth_error_cooldown(&ui);
+        check(ui.model.auth_cooldown_seconds == 1, "cooldown countdown uses fixed time");
+        fixed_time = start + 30;
+        refresh_auth_error_cooldown(&ui);
+        check(ui.model.auth_cooldown_seconds == 0 && ui.model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && pin_opens == 6,
+              "cooldown expiry enables retry without opening input automatically");
+        pin_cursor = 0;
+        parent_error_action(&ui, touch, HidNpadButton_A);
+        check(ui.setup_parent_authorized && !ui.model.parent_support_only && pin_opened_empty,
+              "explicit correct retry succeeds at the cooldown boundary");
+        fixed_time = start;
+    }
+    init_parent_entry(&ui, &mem);
+    snprintf(ui.model.setup_phase, sizeof(ui.model.setup_phase), "failed");
+    pin_cursor = 0; pin_values[0] = "1234";
+    parent_error_action(&ui, false, HidNpadButton_A);
+    check(ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.setup_parent_authorized &&
+          !ui.model.parent_support_only && ui.model.result_status[0] == '\0',
+          "successful retry into support clears the previous authentication error feedback");
+    init_parent_entry(&ui, &mem);
+    pin_cursor = 0; pin_values[0] = NULL;
+    parent_error_action(&ui, false, HidNpadButton_A);
+    check(ui.model.view == PTC_UI_CHILD && ui.model.overlay == PTC_UI_OVERLAY_NONE &&
+          ui.auth_retry_action == AUTH_RETRY_NONE && !ui.setup_parent_authorized,
+          "canceling the retry PIN dialog returns without authorization");
+    init_parent_entry(&ui, &mem);
+    close_auth_error(&ui, true);
+    mem.fail_write_path_contains = "/auth.json";
+    pin_cursor = 0; enter_parent_area(&ui);
+    check(ui.model.parent_support_only && ui.model.parent_page == PTC_UI_PARENT_SUPPORT &&
+          !ui.model.auth_error_parent_entry, "authentication persistence failure retains support fallback");
+    mem.fail_write_path_contains = NULL;
+    mem.storage.vtable->write_text_atomic(&mem.storage, APP_ROOT "/auth.json", "{}");
+    enter_parent_area(&ui);
+    check(ui.model.parent_support_only && ui.model.overlay == PTC_UI_OVERLAY_NONE &&
+          ui.auth_retry_action == AUTH_RETRY_NONE, "invalid credentials retain read-only support fallback");
+    init_parent_entry(&ui, &mem);
+    close_auth_error(&ui, true);
+    ui.model.view = PTC_UI_SETUP;
+    pin_cursor = 0; enter_parent_area(&ui);
+    check(ui.model.view == PTC_UI_SETUP && ui.model.overlay == PTC_UI_OVERLAY_NONE &&
+          ui.auth_retry_action == AUTH_RETRY_NONE && !ui.model.auth_error_parent_entry,
+          "setup entry errors retain inline feedback");
+    ui.model.view = PTC_UI_PARENT;
+    ui.auth_retry_action = AUTH_RETRY_CHANGE_PIN;
+    show_auth_error(&ui, ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_FAILED),
+                    ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN), 0);
+    check(!ui.model.auth_error_parent_entry && !handle_parent_auth_error_input(&ui, HidNpadButton_X) &&
+          !handle_parent_auth_error_touch(&ui, 640, 470) && ui.auth_retry_action == AUTH_RETRY_CHANGE_PIN,
+          "sensitive-operation error keeps its existing handlers and retry action");
 }
 static void test_config_backup_ui(void)
 {
@@ -381,6 +523,7 @@ int main(void)
     }
     test_config_backup_ui();
     test_today_detail_refresh();
+    test_parent_pin_error();
     printf("%s: NRO setup integration\n", failures ? "FAIL" : "PASS");
     return failures ? 1 : 0;
 }

@@ -79,13 +79,16 @@ void enter_parent_area(UiState *ui)
         int64_t retry_after = 0;
         state = ptc_companion_auth_verify_pin(&ui->auth, pin, (int64_t)time(NULL), &retry_after);
         if (state == PTC_AUTH_COOLDOWN && retry_after > 0) {
-            show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_TEMPORARILY_LOCKED), ptc_ui_text(PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR), retry_after);
+            show_parent_pin_error(ui, retry_after);
             return;
         }
     }
     if (state != PTC_AUTH_OK) {
-        show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_FAILED),
-                        state == PTC_AUTH_DENIED ? ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN) : auth_status_zh(state), 0);
+        if (state == PTC_AUTH_DENIED) {
+            show_parent_pin_error(ui, 0);
+        } else {
+            show_auth_error(ui, ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_FAILED), auth_status_zh(state), 0);
+        }
         return;
     }
     ui->auth_retry_action = AUTH_RETRY_NONE;

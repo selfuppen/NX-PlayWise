@@ -79,6 +79,8 @@ PREVIEW_FILES = (
     "support/support-guide-3-light.png",
     "support/support-guide-4-light.png",
     "support/support-healthy-dark.png",
+    "support/parent-pin-error-light.png",
+    "support/parent-pin-cooldown-dark.png",
     "support/support-failed-light.png",
     "support/support-event-details-light.png",
 )

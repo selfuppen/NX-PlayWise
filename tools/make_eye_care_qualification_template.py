@@ -18,7 +18,7 @@ OBSERVATION_FIELDS = (
     ("rest_start_observed", "是否肉眼观察到休息开始（浮窗出现、游戏暂停）？"),
     ("rest_end_observed", "是否肉眼观察到休息结束并恢复？"),
     ("overlay_pin_after_rest", "家长 PIN 后浮窗是否正常？"),
-    ("today_schedule_single_skip", "今日调度单次跳过是否生效？"),
+    ("today_schedule_single_skip", "今日安排单次跳过是否生效？"),
     ("daily_allowance_bedtime_handover", "每日额度与就寝交接是否正确？"),
     ("disable_eye_care_restores_unlimited", "关闭护眼后是否恢复原不限时？"),
     ("expired_break_id_reprompts_not_release", "过期 break_id 是否提示重看而不放行？"),

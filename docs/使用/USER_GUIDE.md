@@ -89,6 +89,12 @@ When there is a problem, select **Support & Recovery → Export diagnostics**, c
 
 Use left/right to change language, up/down to select actions, A to activate, and Plus to continue. Step 1 reviews environment and time guidance; on step 2, press X or select with A to edit PIN, or navigate right to switch themes, shortcuts, and toggle eye care / bedtime; on step 3, X enters Support without enabling. PIN entry retains its existing touch, stick and numeric keyboard controls.
 
+When entering the parent area, an incorrect PIN opens a choice dialog: press `A` or tap **Re-enter**, `X` or tap **Support & Recovery** for read-only troubleshooting, or `B` or tap **Back** to return to the previous page. Retry starts with an empty PIN and verifies it again. The fifth consecutive failure starts a cooldown; wait until the seconds reach zero to retry. Closing the dialog or reopening the app does not clear the cooldown. Read-only Support permits help and sanitized diagnostics, but cannot change controls.
+
+![Parent entry PIN error](../images/usage-en/support/parent-pin-error-light.png)
+
+![Parent entry PIN cooldown](../images/usage-en/support/parent-pin-cooldown-dark.png)
+
 <details>
 <summary>Three setup screens and Child Zone preview</summary>
 

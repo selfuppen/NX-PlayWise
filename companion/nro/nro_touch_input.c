@@ -4,6 +4,7 @@
    shared action as its button shortcut so pointer and pad stay in lock-step. */
 void handle_touch(UiState *ui, int x, int y)
 {
+    if (handle_parent_auth_error_touch(ui, x, y)) return;
     PtcUiHit hit = ptc_ui_hit_test(&ui->model, x, y);
     if (ui->waiting && ui->model.view == PTC_UI_PARENT &&
         ui->model.overlay == PTC_UI_OVERLAY_NONE &&

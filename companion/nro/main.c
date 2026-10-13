@@ -4,10 +4,7 @@ __attribute__((used)) static const char PLAYWISE_EMBEDDED_MANIFEST[] = PLAYWISE_
 
 void draw(UiState *ui)
 {
-    if (ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && ui->auth_cooldown_until > 0) {
-        int64_t remaining = ui->auth_cooldown_until - (int64_t)time(NULL);
-        ui->model.auth_cooldown_seconds = remaining > 0 ? (int)remaining : 0;
-    }
+    refresh_auth_error_cooldown(ui);
     ui->model.waiting = ui->waiting;
     snprintf(ui->model.request_id, sizeof(ui->model.request_id), "%s", ui->active_request_id);
     ptc_ui_graphics_draw(&ui->model, &ui->theme_view);

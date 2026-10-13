@@ -46,6 +46,7 @@ static int next_bedtime_preset(const PtcBedtimeWindow *window)
 
 void handle_overlay_input(UiState *ui, u64 down)
 {
+    if (handle_parent_auth_error_input(ui, down)) return;
     if (ui->model.overlay == PTC_UI_OVERLAY_CONFIG_BACKUP) {
         int sel = ui->model.overlay_selection;
         if (down & HidNpadButton_B) {

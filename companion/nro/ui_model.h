@@ -647,6 +647,7 @@ typedef struct {
     char auth_error_title[64];
     char auth_error_message[192];
     int auth_cooldown_seconds;
+    bool auth_error_parent_entry;
     char pending_code[9];
     int code_grant_minutes;
     bool code_preview_after_available;

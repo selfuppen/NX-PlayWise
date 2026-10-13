@@ -1730,6 +1730,17 @@ static void test_release_hit_targets(void)
     model.overlay = PTC_UI_OVERLAY_AUTH_ERROR;
     check_true(!rects_overlap(ptc_ui_confirm_rect(model.overlay), ptc_ui_cancel_rect(model.overlay)),
                "PIN error retry and cancel targets do not overlap");
+    check_true(!rects_overlap(ptc_ui_auth_error_guide_rect(), ptc_ui_confirm_rect(model.overlay)) &&
+               !rects_overlap(ptc_ui_auth_error_guide_rect(), ptc_ui_cancel_rect(model.overlay)),
+               "PIN error support target does not overlap retry or return");
+    model.auth_error_parent_entry = true;
+    model.view = PTC_UI_CHILD;
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "entry PIN error has a retry touch target above the child page");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,
+              "entry PIN error has a return touch target");
+    check_hit(hit_center(&model, ptc_ui_auth_error_guide_rect()), PTC_UI_HIT_SUPPORT_GUIDE, 0,
+              "entry PIN error has a support touch target");
 }
 
 static void test_user_state_mapping(void)

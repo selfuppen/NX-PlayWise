@@ -1405,6 +1405,28 @@ static void localize_preview_baseline(PtcUiModel *model)
     snprintf(model->message, sizeof(model->message), "%s", ptc_ui_text(PTC_UI_T_TODAY_S_STATUS_HAS_BEEN_UPDATED));
 }
 
+static int render_parent_pin_error_previews(const char *directory, const PtcUiModel *base)
+{
+    int failed = 0;
+    for (int dark = 0; dark < 2; ++dark) {
+        PtcUiModel model = *base;
+        model.view = PTC_UI_PARENT;
+        model.parent_page = PTC_UI_PARENT_TODAY;
+        failed |= save_preview(directory, "parent", "today-arrangements", &model, dark);
+        model.view = PTC_UI_CHILD;
+        model.overlay = PTC_UI_OVERLAY_AUTH_ERROR;
+        model.auth_error_parent_entry = true;
+        snprintf(model.auth_error_title, sizeof(model.auth_error_title), "%s", ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT));
+        snprintf(model.auth_error_message, sizeof(model.auth_error_message), "%s", ptc_ui_text(PTC_UI_T_PARENT_PIN_ERROR_CHOICE));
+        failed |= save_preview(directory, "support", "parent-pin-error", &model, dark);
+        model.auth_cooldown_seconds = 30;
+        snprintf(model.auth_error_title, sizeof(model.auth_error_title), "%s", ptc_ui_text(PTC_UI_T_PIN_TEMPORARILY_LOCKED));
+        snprintf(model.auth_error_message, sizeof(model.auth_error_message), "%s", ptc_ui_text(PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR));
+        failed |= save_preview(directory, "support", "parent-pin-cooldown", &model, dark);
+    }
+    return failed;
+}
+
 int main(int argc, char **argv)
 {
     FILE *font;
@@ -1462,6 +1484,7 @@ int main(int argc, char **argv)
     failed |= render_dock_previews(argv[2], &model);
     failed |= render_config_backup_previews(argv[2], &model);
     failed |= render_policy_previews(argv[2], &model);
+    failed |= render_parent_pin_error_previews(argv[2], &model);
 
     /* Pass 2: English previews */
     char en_dir[1024];
@@ -1474,6 +1497,7 @@ int main(int argc, char **argv)
     failed |= render_dock_previews(en_dir, &model);
     failed |= render_config_backup_previews(en_dir, &model);
     failed |= render_policy_previews(en_dir, &model);
+    failed |= render_parent_pin_error_previews(en_dir, &model);
     /* Traditional Chinese covers the new details and focused health surfaces. */
     char zh_hant_dir[1024];
     snprintf(zh_hant_dir, sizeof(zh_hant_dir), "%s/zh_hant", argv[2]);
@@ -1484,6 +1508,7 @@ int main(int argc, char **argv)
     failed |= render_dock_previews(zh_hant_dir, &model);
     failed |= render_config_backup_previews(zh_hant_dir, &model);
     failed |= render_policy_previews(zh_hant_dir, &model);
+    failed |= render_parent_pin_error_previews(zh_hant_dir, &model);
     for (int dark = 0; dark < 2; ++dark) {
         failed |= render_today_details_previews(zh_hant_dir, &model, dark);
         failed |= render_setup_previews(zh_hant_dir, &model, dark);

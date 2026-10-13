@@ -256,9 +256,25 @@ void set_message(UiState *ui, const char *prefix, PtcCompanionStatus status)
     }
 }
 
+static void open_auth_error(UiState *ui, const char *title, const char *message, int64_t retry_after)
+{
+    ui->auth_return_overlay = ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR
+        ? ui->auth_return_overlay : ui->model.overlay;
+    ui->model.overlay = PTC_UI_OVERLAY_AUTH_ERROR;
+    ui->auth_cooldown_until = retry_after > 0 ? (int64_t)time(NULL) + retry_after : 0;
+    ui->model.auth_cooldown_seconds = retry_after > 0 ? (int)retry_after : 0;
+    snprintf(ui->model.auth_error_title, sizeof(ui->model.auth_error_title), "%s",
+             title ? title : ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_FAILED));
+    snprintf(ui->model.auth_error_message, sizeof(ui->model.auth_error_message), "%s",
+             message ? message : ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN));
+    snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->model.auth_error_message);
+    snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
+}
+
 void show_auth_error(UiState *ui, const char *title, const char *message, int64_t retry_after)
 {
     if (!ui) return;
+    ui->model.auth_error_parent_entry = false;
     if (ui->auth_retry_action == AUTH_RETRY_ENTER_PARENT && ui->model.view != PTC_UI_SETUP) {
         ui->model.parent_support_only = true;
         ui->auth_retry_action = AUTH_RETRY_NONE;
@@ -273,17 +289,31 @@ void show_auth_error(UiState *ui, const char *title, const char *message, int64_
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", message ? message : title);
         return;
     }
-    ui->auth_return_overlay = ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR
-        ? ui->auth_return_overlay : ui->model.overlay;
-    ui->model.overlay = PTC_UI_OVERLAY_AUTH_ERROR;
-    ui->auth_cooldown_until = retry_after > 0 ? (int64_t)time(NULL) + retry_after : 0;
-    ui->model.auth_cooldown_seconds = retry_after > 0 ? (int)retry_after : 0;
-    snprintf(ui->model.auth_error_title, sizeof(ui->model.auth_error_title), "%s",
-             title ? title : ptc_ui_text(PTC_UI_T_PIN_VERIFICATION_FAILED));
-    snprintf(ui->model.auth_error_message, sizeof(ui->model.auth_error_message), "%s",
-             message ? message : ptc_ui_text(PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN));
-    snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->model.auth_error_message);
-    snprintf(ui->model.result_status, sizeof(ui->model.result_status), "error");
+    open_auth_error(ui, title, message, retry_after);
+}
+
+void show_parent_pin_error(UiState *ui, int64_t retry_after)
+{
+    if (!ui) return;
+    if (ui->model.view == PTC_UI_SETUP) {
+        show_auth_error(ui, ptc_ui_text(retry_after > 0 ? PTC_UI_T_PIN_TEMPORARILY_LOCKED : PTC_UI_T_PIN_VERIFICATION_FAILED),
+                        ptc_ui_text(retry_after > 0 ? PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR : PTC_UI_T_PIN_IS_INCORRECT_PLEASE_TRY_AGAIN), retry_after);
+        return;
+    }
+    /* Only wrong entry PINs and cooldown use this choice; credential/storage
+     * failures retain the existing read-only support fallback. */
+    ui->model.auth_error_parent_entry = true;
+    ui->setup_parent_authorized = false;
+    open_auth_error(ui, ptc_ui_text(retry_after > 0 ? PTC_UI_T_PIN_TEMPORARILY_LOCKED : PTC_UI_T_PIN_IS_INCORRECT),
+                    ptc_ui_text(retry_after > 0 ? PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR : PTC_UI_T_PARENT_PIN_ERROR_CHOICE), retry_after);
+}
+
+void refresh_auth_error_cooldown(UiState *ui)
+{
+    if (ui && ui->model.overlay == PTC_UI_OVERLAY_AUTH_ERROR && ui->auth_cooldown_until > 0) {
+        int64_t remaining = ui->auth_cooldown_until - (int64_t)time(NULL);
+        ui->model.auth_cooldown_seconds = remaining > 0 ? (int)remaining : 0;
+    }
 }
 
 void close_auth_error(UiState *ui, bool cancelled)
@@ -293,6 +323,7 @@ void close_auth_error(UiState *ui, bool cancelled)
     ui->auth_return_overlay = PTC_UI_OVERLAY_NONE;
     ui->auth_cooldown_until = 0;
     ui->model.auth_cooldown_seconds = 0;
+    ui->model.auth_error_parent_entry = false;
     ui->model.auth_error_title[0] = '\0';
     ui->model.auth_error_message[0] = '\0';
     if (cancelled) {

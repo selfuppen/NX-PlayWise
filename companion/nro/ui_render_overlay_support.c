@@ -578,8 +578,13 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         UiRect sleep = {108, 206, 704, 150};
         detail_panel(pixels, stride, sleep);
         support_draw_calendar(pixels, stride, sleep.x + 24, sleep.y + 24, 10, UI_ACCENT);
-        draw_text_bold(pixels, stride, sleep.x + 40, sleep.y + 30, ptc_ui_text(PTC_UI_T_DETAIL_SLEEP), 16, UI_INK);
-        draw_text(pixels, stride, sleep.x + 120, sleep.y + 30, ptc_ui_text(PTC_UI_T_DETAIL_SCHEDULE_SUB), 12, UI_MUTED);
+        const char *sleep_title = ptc_ui_text(PTC_UI_T_DETAIL_SLEEP);
+        const int sleep_sub_x = sleep.x + 40 + measure_text(sleep_title, 16) + 12;
+        char sleep_sub[128];
+        fit_text(sleep_sub, sizeof(sleep_sub), ptc_ui_text(PTC_UI_T_DETAIL_SCHEDULE_SUB), 12,
+                 sleep.x + sleep.width - 212 - sleep_sub_x);
+        draw_text_bold(pixels, stride, sleep.x + 40, sleep.y + 30, sleep_title, 16, UI_INK);
+        draw_text(pixels, stride, sleep_sub_x, sleep.y + 30, sleep_sub, 12, UI_MUTED);
 
         /* 右上图例 */
         bool is_dark = (g_theme.resolved == PTC_UI_RESOLVED_DARK);
@@ -1258,18 +1263,25 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
     }
 
     /* 顶部标题与面包屑 */
+    const char *details_title = ptc_ui_text(model->home_details_page == 0
+        ? PTC_UI_T_TODAY_S_SCHEDULE_DETAILS : PTC_UI_T_DETAIL_RULES);
+    const int details_sub_x = 114 + measure_text(details_title, 24) + 18;
+    const int details_sub_width = 906 - 18 - details_sub_x;
+    char fitted_sub[128];
+    draw_text_bold(pixels, stride, 114, 82, details_title, 24, UI_INK);
     if (model->home_details_page == 0) {
-        draw_text_bold(pixels, stride, 114, 82, ptc_ui_text(PTC_UI_T_TODAY_S_SCHEDULE_DETAILS), 24, UI_INK);
         char sub[128];
         snprintf(sub, sizeof(sub), "%s / %s", ptc_ui_text(PTC_UI_T_DETAIL_PLANNING), ptc_ui_text(PTC_UI_T_DETAIL_PREVIEW_SAMPLE));
-        draw_text(pixels, stride, 272, 82, sub, 13, UI_MUTED);
+        fit_text(fitted_sub, sizeof(fitted_sub), sub, 13, details_sub_width);
+        draw_text(pixels, stride, details_sub_x, 82, fitted_sub, 13, UI_MUTED);
     } else {
-        draw_text_bold(pixels, stride, 114, 82, ptc_ui_text(PTC_UI_T_DETAIL_RULES), 24, UI_INK);
         char sub[128];
         snprintf(sub, sizeof(sub), "%s / %s",
                  ptc_ui_text(PTC_UI_T_TODAY_S_SCHEDULE_DETAILS), ptc_ui_text(PTC_UI_T_DETAIL_RULES));
-        draw_text(pixels, stride, 240, 72, sub, 12, UI_MUTED);
-        draw_text(pixels, stride, 240, 88, ptc_ui_text(PTC_UI_T_DETAIL_PREVIEW_SAMPLE), 11, UI_MUTED);
+        fit_text(fitted_sub, sizeof(fitted_sub), sub, 12, details_sub_width);
+        draw_text(pixels, stride, details_sub_x, 72, fitted_sub, 12, UI_MUTED);
+        fit_text(fitted_sub, sizeof(fitted_sub), ptc_ui_text(PTC_UI_T_DETAIL_PREVIEW_SAMPLE), 11, details_sub_width);
+        draw_text(pixels, stride, details_sub_x, 88, fitted_sub, 11, UI_MUTED);
     }
 
     format_status_age(model, age, sizeof(age));

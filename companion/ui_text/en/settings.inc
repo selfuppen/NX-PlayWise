@@ -217,3 +217,6 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_CONFIG_BACKUP_NO_FILE_DESC, "Once created, the snapsh
 PTC_UI_TEXT_VALUE(PTC_UI_T_EDEN_SIMULATE_TV, "Simulate TV mode")
 PTC_UI_TEXT_VALUE(PTC_UI_T_EDEN_SIMULATE_NON_TV, "Simulate non-TV mode")
 PTC_UI_TEXT_VALUE(PTC_UI_T_CONFIG_BACKUP_USAGE, "\nPlayed: %u min / Expected left: %u min")
+PTC_UI_TEXT_VALUE(PTC_UI_T_PARENT_PIN_ERROR_CHOICE, "Please re-enter your PIN, or go to Support & Recovery for help.")
+PTC_UI_TEXT_VALUE(PTC_UI_T_X_SUPPORT_RECOVERY, "X Support & Recovery")
+PTC_UI_TEXT_VALUE(PTC_UI_T_PARENT_PIN_SUPPORT_READ_ONLY, "Support offers help and sanitized diagnostics; it does not unlock Parent Zone.")
