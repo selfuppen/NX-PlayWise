@@ -254,49 +254,22 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     format_status_age(model, age, sizeof(age));
     draw_text(pixels, stride, top_box.x + 28, top_box.y + 232, age, 11, UI_RGB(UI_BLENDED(hero_secondary)));
 
-    /* 右列 (x: 374, w: 494)：三周期态势卡片（额度流、护眼周期、就寝计划） */
+    /* 右列 (x: 408, w: 508)：三大守护策略卡片（护眼周期、就寝计划、电视限制） */
     const int c_x = top_box.x + 360;
     const int c_w = top_box.width - 388;
-    const int c_h = 56;
+    const int c_h = 70;
 
-    /* 周期卡 1：今日额度流 */
-    UiRect card1 = {c_x, top_box.y + 18, c_w, c_h};
+    /* 守护卡 1：护眼休息周期 */
+    UiRect card1 = {c_x, top_box.y + 16, c_w, c_h};
     fill_round_rect(pixels, stride, card1, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
-    draw_rect_outline(pixels, stride, card1, 10, 1, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0xFFFFFF, 18)));
-    draw_text(pixels, stride, card1.x + 14, card1.y + 24, ptc_ui_text(PTC_UI_T_TODAY_QUOTA), 14, UI_RGB(UI_BLENDED(on_hero)));
-    char quota_badge[64];
-    if (model->unrestricted_today == 1 || (model->eye_care_unlimited_capped || model->dock_unlimited_capped)) snprintf(quota_badge, sizeof(quota_badge), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
-    else snprintf(quota_badge, sizeof(quota_badge), "%s", model->status_loaded ? ui_rule_source_label(model->rule_source) : ptc_ui_text(PTC_UI_T_RULE_TO_CONFIRM));
-    int qb_w = measure_text(quota_badge, 12) + 14;
-    UiRect qb_rect = {card1.x + card1.width - qb_w - 14, card1.y + 8, qb_w, 20};
-    fill_round_rect(pixels, stride, qb_rect, 4, UI_ACCENT_SOFT);
-    draw_rect_outline(pixels, stride, qb_rect, 4, 1, UI_ACCENT);
-    draw_text_center(pixels, stride, qb_rect, quota_badge, 12, UI_ACCENT);
-
-    char q_detail[128], fitted_quota[128];
-    char q_total[48];
-    ptc_ui_format_home_total_value(model, q_total, sizeof(q_total));
-    if (!eye_resting && model->played_minutes_available && model->played_minutes >= 0) {
-        snprintf(q_detail, sizeof(q_detail), "%s: %s / %s: %d %s",
-            ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE), q_total,
-            ptc_ui_text(PTC_UI_T_USED_QUOTA_EST), model->played_minutes, ptc_ui_text(PTC_UI_T_MIN));
-    } else {
-        snprintf(q_detail, sizeof(q_detail), "%s: %s", ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE), q_total);
-    }
-    fit_text(fitted_quota, sizeof(fitted_quota), q_detail, 12, card1.width - 28);
-    draw_text(pixels, stride, card1.x + 14, card1.y + 44, fitted_quota, 12, UI_RGB(UI_BLENDED(hero_secondary)));
-
-    /* 周期卡 2：护眼休息周期 */
-    UiRect card2 = {c_x, top_box.y + 80, c_w, c_h};
-    fill_round_rect(pixels, stride, card2, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
-    draw_rect_outline(pixels, stride, card2, 10, 1, eye_resting ? UI_DANGER : UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0xFFFFFF, 18)));
-    draw_text(pixels, stride, card2.x + 14, card2.y + 24, ptc_ui_text(PTC_UI_T_EYE_CARE), 14, UI_RGB(UI_BLENDED(on_hero)));
+    draw_rect_outline(pixels, stride, card1, 10, 1, eye_resting ? UI_DANGER : UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0xFFFFFF, 18)));
+    draw_text(pixels, stride, card1.x + 14, card1.y + 24, ptc_ui_text(PTC_UI_T_EYE_CARE), 14, UI_RGB(UI_BLENDED(on_hero)));
 
     const char *eye_b_label = !model->eye_care_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
         (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_RESTING) : ptc_ui_text(PTC_UI_T_ENABLED));
     uint32_t eye_b_col = !model->eye_care_policy.enabled ? UI_MUTED : (eye_resting ? UI_DANGER : UI_SUCCESS);
     int eb_w = measure_text(eye_b_label, 12) + 14;
-    UiRect eb_rect = {card2.x + card2.width - eb_w - 14, card2.y + 8, eb_w, 20};
+    UiRect eb_rect = {card1.x + card1.width - eb_w - 14, card1.y + 10, eb_w, 20};
     uint32_t eb_bd = eye_b_col == UI_DANGER ? UI_DANGER_BORDER : (eye_b_col == UI_SUCCESS ? UI_SUCCESS_BORDER : UI_BORDER);
     fill_round_rect(pixels, stride, eb_rect, 4, eye_b_col == UI_DANGER ? UI_DANGER_SOFT : (eye_b_col == UI_SUCCESS ? UI_SUCCESS_SOFT : UI_PAGE));
     draw_rect_outline(pixels, stride, eb_rect, 4, 1, eb_bd);
@@ -308,43 +281,65 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     } else {
         snprintf(eye_str, sizeof(eye_str), "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_OFF));
     }
-    fit_text(fitted_eye, sizeof(fitted_eye), eye_str, 12, card2.width - 28);
-    draw_text(pixels, stride, card2.x + 14, card2.y + 44, fitted_eye, 12, eye_resting ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
+    fit_text(fitted_eye, sizeof(fitted_eye), eye_str, 13, card1.width - 28);
+    draw_text(pixels, stride, card1.x + 14, card1.y + 48, fitted_eye, 13, eye_resting ? UI_DANGER : UI_RGB(UI_BLENDED(hero_secondary)));
 
     PtcPolicyStatus policies;
     ptc_ui_render_policy_status(model, &policies);
-    for (int index = 0; index < 2; ++index) {
-        const PtcPolicyDisplay *policy = index == 0 ? &policies.bedtime : &policies.dock;
-        UiRect card = {c_x, top_box.y + 142 + index * 62, c_w, c_h};
-        uint32_t fg = policy_display_color(policy->state);
-        uint32_t bg = policy->state == PTC_POLICY_ACTIVE ? UI_DANGER_SOFT :
-            policy->state == PTC_POLICY_PENDING || policy->state == PTC_POLICY_WAITING ||
-            policy->state == PTC_POLICY_EXHAUSTED ? UI_WARNING_SOFT : UI_ACCENT_SOFT;
-        fill_round_rect(pixels, stride, card, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
-        draw_rect_outline(pixels, stride, card, 10, 1, fg);
-        const char *title = ptc_ui_text(index == 0 ? PTC_UI_T_BEDTIME_SCHEDULE : PTC_UI_T_DOCK_TITLE);
-        const char *badge = ptc_ui_text(policy->badge);
-        int badge_w = measure_text(badge, 11) + 14;
-        UiRect pill = {card.x + card.width - badge_w - 12, card.y + 5, badge_w, 18};
-        fill_round_rect(pixels, stride, pill, 4, bg);
-        draw_text_center(pixels, stride, pill, badge, 11, fg);
-        char fitted_title[128], fitted_detail[256];
-        fit_text(fitted_title, sizeof(fitted_title), title, 13, pill.x - card.x - 24);
-        draw_text(pixels, stride, card.x + 12, card.y + 19, fitted_title, 13, UI_RGB(UI_BLENDED(on_hero)));
-        if (index == 1) {
-            int mode_x = card.x + 12 + measure_text(fitted_title, 13) + 8;
-            char mode[96];
-            fit_text(mode, sizeof(mode), ptc_ui_text(policies.mode), 11, pill.x - mode_x - 8);
-            draw_text(pixels, stride, mode_x, card.y + 19, mode, 11, UI_RGB(UI_BLENDED(hero_secondary)));
-        }
-        fit_text(fitted_detail, sizeof(fitted_detail), policy->detail, 12, card.width - 24);
-        draw_text(pixels, stride, card.x + 12, card.y + (index == 0 ? 42 : 34), fitted_detail, 12,
-            policy->state == PTC_POLICY_ACTIVE ? UI_DANGER : UI_RGB(UI_BLENDED(on_hero)));
-        if (index == 1) {
-            fit_text(fitted_detail, sizeof(fitted_detail), policies.dock_rule, 11, card.width - 24);
-            draw_text(pixels, stride, card.x + 12, card.y + 49, fitted_detail, 11, UI_RGB(UI_BLENDED(hero_secondary)));
-        }
-    }
+
+    /* 守护卡 2：就寝计划周期 */
+    const PtcPolicyDisplay *bed_policy = &policies.bedtime;
+    UiRect card2 = {c_x, top_box.y + 96, c_w, c_h};
+    uint32_t bed_fg = policy_display_color(bed_policy->state);
+    uint32_t bed_bg = bed_policy->state == PTC_POLICY_ACTIVE ? UI_DANGER_SOFT :
+        bed_policy->state == PTC_POLICY_PENDING || bed_policy->state == PTC_POLICY_WAITING ||
+        bed_policy->state == PTC_POLICY_EXHAUSTED ? UI_WARNING_SOFT : UI_ACCENT_SOFT;
+    fill_round_rect(pixels, stride, card2, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
+    draw_rect_outline(pixels, stride, card2, 10, 1, bed_fg);
+    draw_text(pixels, stride, card2.x + 14, card2.y + 24, ptc_ui_text(PTC_UI_T_BEDTIME_SCHEDULE), 14, UI_RGB(UI_BLENDED(on_hero)));
+
+    const char *bed_badge = ptc_ui_text(bed_policy->badge);
+    int bed_badge_w = measure_text(bed_badge, 12) + 14;
+    UiRect bed_pill = {card2.x + card2.width - bed_badge_w - 14, card2.y + 10, bed_badge_w, 20};
+    fill_round_rect(pixels, stride, bed_pill, 4, bed_bg);
+    draw_text_center(pixels, stride, bed_pill, bed_badge, 12, bed_fg);
+
+    char fitted_bed[256];
+    fit_text(fitted_bed, sizeof(fitted_bed), bed_policy->detail, 13, card2.width - 28);
+    draw_text(pixels, stride, card2.x + 14, card2.y + 48, fitted_bed, 13,
+        bed_policy->state == PTC_POLICY_ACTIVE ? UI_DANGER : UI_RGB(UI_BLENDED(on_hero)));
+
+    /* 守护卡 3：电视/底座限制 */
+    const PtcPolicyDisplay *dock_policy = &policies.dock;
+    UiRect card3 = {c_x, top_box.y + 176, c_w, c_h};
+    uint32_t dock_fg = policy_display_color(dock_policy->state);
+    uint32_t dock_bg = dock_policy->state == PTC_POLICY_ACTIVE ? UI_DANGER_SOFT :
+        dock_policy->state == PTC_POLICY_PENDING || dock_policy->state == PTC_POLICY_WAITING ||
+        dock_policy->state == PTC_POLICY_EXHAUSTED ? UI_WARNING_SOFT : UI_ACCENT_SOFT;
+    fill_round_rect(pixels, stride, card3, 10, UI_RGB(ui_mix_rgb(UI_BLENDED(hero), 0x000000, 24)));
+    draw_rect_outline(pixels, stride, card3, 10, 1, dock_fg);
+
+    const char *dock_title = ptc_ui_text(PTC_UI_T_DOCK_TITLE);
+    draw_text(pixels, stride, card3.x + 14, card3.y + 20, dock_title, 14, UI_RGB(UI_BLENDED(on_hero)));
+
+    int mode_x = card3.x + 14 + measure_text(dock_title, 14) + 10;
+    char mode[96];
+    const char *dock_badge = ptc_ui_text(dock_policy->badge);
+    int dock_badge_w = measure_text(dock_badge, 11) + 14;
+    UiRect dock_pill = {card3.x + card3.width - dock_badge_w - 14, card3.y + 8, dock_badge_w, 20};
+    fill_round_rect(pixels, stride, dock_pill, 4, dock_bg);
+    draw_text_center(pixels, stride, dock_pill, dock_badge, 11, dock_fg);
+
+    fit_text(mode, sizeof(mode), ptc_ui_text(policies.mode), 12, dock_pill.x - mode_x - 8);
+    draw_text(pixels, stride, mode_x, card3.y + 20, mode, 12, UI_RGB(UI_BLENDED(hero_secondary)));
+
+    char fitted_dock[256];
+    fit_text(fitted_dock, sizeof(fitted_dock), dock_policy->detail, 12, card3.width - 28);
+    draw_text(pixels, stride, card3.x + 14, card3.y + 38, fitted_dock, 12,
+        dock_policy->state == PTC_POLICY_ACTIVE ? UI_DANGER : UI_RGB(UI_BLENDED(on_hero)));
+
+    fit_text(fitted_dock, sizeof(fitted_dock), policies.dock_rule, 11, card3.width - 28);
+    draw_text(pixels, stride, card3.x + 14, card3.y + 54, fitted_dock, 11, UI_RGB(UI_BLENDED(hero_secondary)));
     /* --- 下半部：未来本周每天额度周历预报 (896x222) --- */
     draw_child_forecast_columns(pixels, stride, model, bottom_box);
 }

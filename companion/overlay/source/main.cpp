@@ -149,7 +149,7 @@ public:
             m_contentElement->setBoundaries(
                 parent_x + PTC_OVERLAY_CONTENT_X,
                 parent_y + content_y,
-                parent_width - 85,
+                PTC_OVERLAY_CONTENT_W,
                 parent_height - 73 - content_y);
             m_contentElement->invalidate();
         }
@@ -428,13 +428,6 @@ public:
             // 顶部刷新按钮；后台忙碌时只禁用新的请求，本地编辑仍可继续。
             if (ptc_overlay_rect_contains(ptc_overlay_refresh_rect(cx, cy), rel_x, rel_y)) {
                 if (request_actions_enabled) (void)begin_status_refresh();
-                prev_touch_down_ = touch_down;
-                return true;
-            }
-
-            if (is_restricted && !status_expanded_ && ptc_overlay_rect_contains(
-                    ptc_overlay_rect(cx, cy + 332, PTC_OVERLAY_CONTENT_W, 76), rel_x, rel_y)) {
-                open_parent_pin();
                 prev_touch_down_ = touch_down;
                 return true;
             }

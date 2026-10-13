@@ -1144,14 +1144,14 @@ static void test_overlay_layout_geometry(void)
 
     check_int(PTC_OVERLAY_CONTENT_Y, 90, "overlay content reclaims title whitespace");
     check_int(slot_group_width, 348, "overlay enlarged code slots fit as one group");
-    check_int(slot_left - PTC_OVERLAY_CONTENT_X, 7, "overlay code slots are centered on the left");
-    check_int(PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W - (slot_left + slot_group_width), 8,
+    check_int(slot_left - PTC_OVERLAY_CONTENT_X, 34, "overlay code slots are centered on the left");
+    check_int(PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W - (slot_left + slot_group_width), 34,
         "overlay code slots are centered on the right");
     check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H, 242,
         "overlay enlarged code slots end above input count");
     check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_KEYPAD_Y, 282,
         "overlay keypad leaves room below input count");
-    check_int(ptc_overlay_key_rect(0, 0, 1).w, 105, "overlay keypad keys are wider");
+    check_int(ptc_overlay_key_rect(0, 0, 1).w, 120, "overlay keypad keys are wider");
     check_int(ptc_overlay_key_rect(0, 0, 1).h, 44, "overlay keypad rows have no dead vertical gap");
     check_int(ptc_overlay_refresh_rect(0, 0).h, 36, "overlay refresh target is easier to touch");
     check_true(ptc_overlay_rect_contains(submit, submit.x + submit.w - 1, submit.y + submit.h - 1),

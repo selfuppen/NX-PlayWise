@@ -25,18 +25,18 @@ typedef enum {
 } PtcOverlayPreviewVisualLevel;
 
 enum {
-    PTC_OVERLAY_CONTENT_X = 35,
+    PTC_OVERLAY_CONTENT_X = 16,
     PTC_OVERLAY_CONTENT_Y = 90,
-    PTC_OVERLAY_CONTENT_W = 363,
+    PTC_OVERLAY_CONTENT_W = 416,
     PTC_OVERLAY_CONTENT_H = 557,
     /* Parent views hide the libtesla title/subtitle banner, so their content
        top is raised to reclaim that whitespace (child views keep 90). */
     PTC_OVERLAY_PARENT_CONTENT_Y = 40,
     PTC_OVERLAY_TOP_BANNER_Y = 0,
     PTC_OVERLAY_TOP_BANNER_H = 72,
-    PTC_OVERLAY_REFRESH_X = 220,
-    PTC_OVERLAY_REFRESH_Y = 6,
-    PTC_OVERLAY_REFRESH_W = 88,
+    PTC_OVERLAY_REFRESH_X = 312,
+    PTC_OVERLAY_REFRESH_Y = 18,
+    PTC_OVERLAY_REFRESH_W = 92,
     PTC_OVERLAY_REFRESH_H = 36,
     PTC_OVERLAY_SLOT_Y = 104,
     PTC_OVERLAY_SLOT_W = 40,
@@ -45,7 +45,7 @@ enum {
     PTC_OVERLAY_KEYPAD_Y = 192,
     PTC_OVERLAY_KEYPAD_H = 180,
     PTC_OVERLAY_KEY_ROW_STEP = 44,
-    PTC_OVERLAY_KEY_W = 105,
+    PTC_OVERLAY_KEY_W = 120,
     PTC_OVERLAY_KEY_H = 44,
     PTC_OVERLAY_SUBMIT_Y = 378,
     PTC_OVERLAY_SUBMIT_H = 36,
@@ -103,7 +103,7 @@ static inline PtcOverlayRect ptc_overlay_parent_action_rect(int origin_x, int or
 
 static inline PtcOverlayRect ptc_overlay_parent_refresh_rect(int origin_x, int origin_y)
 {
-    return ptc_overlay_rect(origin_x + 246, origin_y + 30, PTC_OVERLAY_CONTENT_W - 258, 40);
+    return ptc_overlay_rect(origin_x + PTC_OVERLAY_CONTENT_W - 106, origin_y + 24, 96, 38);
 }
 
 static inline PtcOverlayRect ptc_overlay_parent_back_rect(int origin_x, int origin_y)
@@ -141,14 +141,14 @@ static inline PtcOverlayRect ptc_overlay_key_rect(int origin_x, int origin_y, un
 {
     unsigned int row = index == 0 ? 3u : (index - 1u) / 3u;
     unsigned int col = index == 0 ? 1u : (index - 1u) % 3u;
-    return ptc_overlay_rect(origin_x + 12 + (int)col * 117,
+    return ptc_overlay_rect(origin_x + 16 + (int)col * 132,
                             origin_y + PTC_OVERLAY_KEYPAD_Y + 4 + (int)row * PTC_OVERLAY_KEY_ROW_STEP,
                             PTC_OVERLAY_KEY_W, PTC_OVERLAY_KEY_H);
 }
 
 static inline PtcOverlayRect ptc_overlay_backspace_rect(int origin_x, int origin_y)
 {
-    return ptc_overlay_rect(origin_x + 12,
+    return ptc_overlay_rect(origin_x + 16,
                             origin_y + PTC_OVERLAY_KEYPAD_Y + 4 + 3 * PTC_OVERLAY_KEY_ROW_STEP,
                             PTC_OVERLAY_KEY_W, PTC_OVERLAY_KEY_H);
 }
@@ -156,7 +156,7 @@ static inline PtcOverlayRect ptc_overlay_backspace_rect(int origin_x, int origin
 static inline PtcOverlayRect ptc_overlay_clear_rect(int origin_x, int origin_y)
 {
     PtcOverlayRect rect = ptc_overlay_backspace_rect(origin_x, origin_y);
-    rect.x = origin_x + 246;
+    rect.x = origin_x + 16 + 2 * 132;
     return rect;
 }
 
@@ -185,12 +185,12 @@ static inline int ptc_overlay_policy_row_y(int origin_y, bool expanded, int row)
 
 static inline PtcOverlayRect ptc_overlay_child_buffer_rect(int origin_x, int origin_y)
 {
-    return ptc_overlay_rect(origin_x, origin_y + 462, 176, 42);
+    return ptc_overlay_rect(origin_x, origin_y + 462, 202, 42);
 }
 
 static inline PtcOverlayRect ptc_overlay_child_parent_rect(int origin_x, int origin_y, int width)
 {
-    return ptc_overlay_rect(origin_x + 184, origin_y + 462, width - 184, 42);
+    return ptc_overlay_rect(origin_x + 214, origin_y + 462, width - 214, 42);
 }
 
 #endif
