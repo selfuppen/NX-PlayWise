@@ -81,6 +81,26 @@ def main() -> None:
             "vendored libtesla must traverse upward without unsigned-index underflow")
     require("-Wno-type-limits" not in overlay_makefile,
             "the standard Overlay build must not hide unsigned-index diagnostics")
+    require("detail::GlyphCache<Glyph, 512, 256 * 1024> m_glyphCache;" in libtesla,
+            "Overlay bitmap cache must have fixed metadata and a 256 KiB budget")
+    require("std::unordered_map<u64, Glyph>" not in libtesla,
+            "Overlay glyphs must not accumulate in an unbounded map")
+    require("stbtt_FreeBitmap(bitmap, nullptr)" in libtesla and
+            "this->m_glyphCache.clear();" in libtesla,
+            "Overlay glyph ownership and renderer exit must release bitmaps")
+    require("TESLA_DISABLE_EMOJI_FONT" in overlay,
+            "PlayWise must not load unused external emoji fonts on its small heap")
+    require("std::atomic<bool> running" in libtesla and
+            "std::atomic<bool> overlayOpen" in libtesla,
+            "cross-thread Overlay lifecycle flags must be atomic")
+    poller = libtesla[libtesla.index("static void backgroundEventPoller"):libtesla.index("template<typename G, typename ...Args>\n    std::unique_ptr<tsl::Gui>& changeTo")]
+    require("Overlay::get()->hide()" not in poller and "shData->hideRequested = true;" in poller,
+            "the input thread must signal hide instead of modifying GUI state")
+    loop = libtesla[libtesla.index("static inline int loop(int argc, char** argv)"):]
+    require(loop.index("eventCreate(&shData.comboEvent") < loop.index("threadStart(&backgroundThread)"),
+            "combo event must exist before the input thread starts")
+    require(loop.index("threadWaitForExit(&backgroundThread)") < loop.index("eventClose(&shData.comboEvent)"),
+            "combo event must stay alive until the input thread exits")
     require("standard_backend_expected()" in nro_source,
             "standard NRO must skip IPC when Device Lab has disabled its boot flag")
     require("pmshellTerminateProcess" not in hot_reload and "pmshellTerminateProcess" not in nro_source,

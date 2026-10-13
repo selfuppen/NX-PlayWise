@@ -1,4 +1,5 @@
 #define TESLA_INIT_IMPL
+#define TESLA_DISABLE_EMOJI_FONT
 #include <tesla.hpp>
 
 #include <cstdio>

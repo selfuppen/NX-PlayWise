@@ -8,6 +8,10 @@
 
 # Testing Guide
 
+## Overlay memory and lifecycle regression
+
+`test-host` runs `tests/overlay_memory/test.cpp` against the production cache with 100,000 deterministic character/size/language-key changes. It checks the 512-entry/256 KiB bitmap limits, eviction before allocation, replacement, failure/retry, repeated cleanup and zero live bitmaps after destruction. `test_switch_ipc_lifecycle.py` checks atomic thread flags, UI-thread-only hide handling and event lifetime through thread join. Run `python tools/package_remote.py`, which also builds and verifies Eden by default; Host/Eden do not exercise Tesla/VI/HID hardware. See the [Overlay memory and freeze audit (Chinese)](../调研/Overlay内存与死机风险自查.md) for remaining synchronous IPC risks and device A/B evidence requirements.
+
 ## Config import regression
 
 Run `python tools/test.py` and `python tools/package_remote.py --with-previews` (includes the Eden NRO). Host C regressions cover snapshots, selective merge/defaults, expired dates, PIN/key rotation, calendar restore, atomic overwrite, write/PCTL/readback/result failures and interrupted restart rollback. Check eleven selectors, PIN/hold/cancel/failure flows, eight settings cards and four 90px independent plan cards in three languages and both themes. Eden simulation must preserve use while testing TV-only, exhausted non-TV, combined restrictions and restart. Production package gates must exclude simulation controls.

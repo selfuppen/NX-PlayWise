@@ -1,6 +1,7 @@
 Repository: https://github.com/WerWolv/libtesla
 Commit: f766e9b607a05e9756843cbd62b3bfb98be1646c
 Files vendored: include/tesla.hpp, include/stb_truetype.h, LICENSE
+Local support header: include/playwise_glyph_cache.hpp (not an upstream file).
 Local compatibility patch: tesla.hpp replaces its sole dynamic_cast with a
 List-parent static_cast so the overlay can honor -fno-rtti.
 Local Device Lab patch: defining TESLA_FORCE_CHINESE_SIMPLIFIED_FONT makes the
@@ -14,3 +15,11 @@ cache key. This supports Simplified and Traditional UI text on either system
 language without changing the upstream commit recorded above.
 Local overlay memory patch: restrict emoji font search to overlay-specific paths
 and cap maximum file size to 256KB to prevent ovlloader 4MB heap exhaustion.
+Local resource patch (2026-10-13): fixed metadata for at most 512 cached glyphs,
+256KiB bitmap budget, pre-allocation eviction, owning bitmap deleters and
+renderer-exit cleanup. Transparent text measurement never rasterizes a glyph.
+PlayWise defines TESLA_DISABLE_EMOJI_FONT to skip unused SD font loading.
+Local lifecycle patch (2026-10-13): atomic cross-thread flags, UI-thread-only
+hide handling, input snapshots outside IPC/SD work, and event lifetime spanning
+thread startup through join. Parse settings on the main thread before starting
+the 4KiB-stack input poller. The pinned upstream commit remains unchanged.
