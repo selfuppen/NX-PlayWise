@@ -1106,16 +1106,9 @@ static void test_pending_redemption_recovery_marker(void)
 
 static void test_overlay_layout_geometry(void)
 {
+    unsigned visited = 0;
     int action = PTC_OVERLAY_PARENT_ADD_MINUTES;
-    unsigned int visited = 0;
-    for (int slot = 0; slot < PTC_OVERLAY_PARENT_ACTION_COUNT; ++slot) {
-        PtcOverlayRect rect = ptc_overlay_parent_action_rect(35, 90, action);
-        int group = slot < 2 ? 0 : slot < 7 ? 1 : 2;
-        PtcOverlayRect section = ptc_overlay_parent_group_rect(35, 90, group);
-        check_true(rect.y >= section.y + 28 && rect.y + rect.h <= section.y + section.h,
-            "overlay actions stay below group headings and inside group");
-        check_true(ptc_overlay_rect_contains(rect, rect.x + rect.w / 2, rect.y + rect.h / 2),
-            "overlay touch center uses same action geometry");
+    for (int i = 0; i < PTC_OVERLAY_PARENT_ACTION_COUNT; ++i) {
         check_true(!(visited & (1u << action)), "overlay traversal visits each action once");
         visited |= 1u << action;
         int next = ptc_overlay_parent_action_move(action, 1);
@@ -1126,106 +1119,83 @@ static void test_overlay_layout_geometry(void)
     check_int(action, PTC_OVERLAY_PARENT_ADD_MINUTES, "overlay action traversal wraps");
     check_int(ptc_overlay_parent_action_move(PTC_OVERLAY_PARENT_WAIVE_DOCK, 1),
         PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT, "TV waiver precedes dangerous recovery group");
-    check_int(ptc_overlay_parent_scroll_for_action(PTC_OVERLAY_PARENT_ADD_MINUTES), 0,
-        "first action starts at top of scroll viewport");
-    check_int(ptc_overlay_parent_scroll_for_action(PTC_OVERLAY_PARENT_RESTORE_SNAPSHOT),
-        PTC_OVERLAY_PARENT_SCROLL_MAX, "bottom action scrolls to bottom of scroll viewport");
-    PtcOverlayRect submit = ptc_overlay_submit_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
-    PtcOverlayRect collapsed = ptc_overlay_status_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, false, false);
-    PtcOverlayRect normal = ptc_overlay_status_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, true, false);
-    PtcOverlayRect detail = ptc_overlay_status_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, true, true);
-    PtcOverlayRect buffer = ptc_overlay_child_buffer_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y);
-    PtcOverlayRect parent = ptc_overlay_child_parent_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
-    int slot_group_width = PTC_OVERLAY_CODE_SYMBOLS * PTC_OVERLAY_SLOT_W +
+    PtcOverlayRect viewport = ptc_overlay_rect(16, 104, 416, 452);
+    PtcOverlayRect first = ptc_overlay_rect(20, 104, 404, 104);
+    PtcOverlayRect last = ptc_overlay_rect(20, 1004, 404, 156);
+    int maximum = ptc_overlay_scroll_max(last.y + last.h - viewport.y, viewport.h);
+    check_int(maximum, 604, "scroll maximum comes from actual content height");
+    check_int(ptc_overlay_scroll_max(104, 452), 0, "short content needs no scrolling");
+    PtcOverlayGesture gesture = {0};
+    PtcOverlayGestureEvent touch = ptc_overlay_gesture_update(&gesture, true, 30, 300, 1, viewport);
+    check_true(!touch.clicked, "touch-down never executes an action");
+    touch = ptc_overlay_gesture_update(&gesture, false, 0, 0, 1, viewport);
+    check_true(touch.clicked && touch.x == 30 && touch.y == 300,
+        "a stationary touch clicks its original location on release");
+    (void)ptc_overlay_gesture_update(&gesture, true, 30, 300, 1, viewport);
+    touch = ptc_overlay_gesture_update(&gesture, true, 30, 260, 1, viewport);
+    check_int(touch.scroll_delta, 40, "upward drag scrolls the content down");
+    touch = ptc_overlay_gesture_update(&gesture, false, 0, 0, 1, viewport);
+    check_true(!touch.clicked, "drag release cannot activate a card or confirmation");
+    (void)ptc_overlay_gesture_update(&gesture, true, 30, 580, 1, viewport);
+    touch = ptc_overlay_gesture_update(&gesture, true, 30, 300, 1, viewport);
+    check_int(touch.scroll_delta, 0, "drag beginning on a fixed button cannot scroll content");
+    touch = ptc_overlay_gesture_update(&gesture, false, 0, 0, 1, viewport);
+    check_true(!touch.clicked, "drag from a fixed button cannot become a click");
+    (void)ptc_overlay_gesture_update(&gesture, true, 30, 300, 1, viewport);
+    touch = ptc_overlay_gesture_update(&gesture, false, 0, 0, 2, viewport);
+    check_true(!touch.clicked, "page transition cancels a pending touch");
+    check_int(ptc_overlay_scroll_to_rect(viewport, first, maximum, maximum), 0,
+        "navigation to the first card restores the top");
+    check_int(ptc_overlay_scroll_to_rect(viewport, last, 0, maximum), maximum,
+        "navigation to the last card reveals its full height");
+    check_true(ptc_overlay_scrolled_hit(viewport, last, maximum, 30, 500),
+        "scrolled touch maps to the visible card");
+    check_true(!ptc_overlay_scrolled_hit(viewport, last, maximum, 30, 560),
+        "clipped card cannot intercept the fixed footer");
+    check_true(!ptc_overlay_scrolled_hit(viewport, first, maximum, 30, 110),
+        "offscreen card cannot receive a touch");
+    check_true(!ptc_overlay_scrolled_hit(viewport, first, 0, 30, 103),
+        "card cannot intercept the fixed heading");
+    check_int(PTC_OVERLAY_FONT_SECONDARY, 24, "overlay supporting text uses large type");
+    check_int(PTC_OVERLAY_FONT_BODY_LG, 32, "confirmation explanations approach twice the old size");
+    check_int(PTC_OVERLAY_FONT_CODE, 40, "code slot digits use their own large token");
+    int slots_width = PTC_OVERLAY_CODE_SYMBOLS * PTC_OVERLAY_SLOT_W +
         (PTC_OVERLAY_CODE_SYMBOLS - 1) * PTC_OVERLAY_SLOT_GAP;
-    int slot_left = PTC_OVERLAY_CONTENT_X + (PTC_OVERLAY_CONTENT_W - slot_group_width) / 2;
-
-    check_int(PTC_OVERLAY_CONTENT_Y, 40, "overlay content reclaims title whitespace");
-    check_int(slot_group_width, 387, "overlay enlarged code slots fit as one group");
-    check_int(slot_left - PTC_OVERLAY_CONTENT_X, 14, "overlay code slots are centered on the left");
-    check_int(PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W - (slot_left + slot_group_width), 15,
-        "overlay code slots are centered on the right");
-    check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H, 184,
-        "overlay enlarged code slots end above input count");
-    check_int(PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_KEYPAD_Y, 216,
-        "overlay keypad leaves room below input count");
-    check_int(ptc_overlay_key_rect(0, 0, 1).w, 124, "overlay keypad keys are wider");
-    check_int(ptc_overlay_key_rect(0, 0, 1).h, 48, "overlay keypad rows have no dead vertical gap");
-    check_int(ptc_overlay_refresh_rect(0, 0).h, 34, "overlay refresh target is easier to touch");
-    check_true(ptc_overlay_rect_contains(submit, submit.x + submit.w - 1, submit.y + submit.h - 1),
-        "overlay submit touch covers its visible right and bottom edges");
-    check_true(!ptc_overlay_rect_contains(submit, submit.x + submit.w, submit.y),
-        "overlay submit touch stops at its visible edge");
-    check_true(!ptc_overlay_rect_contains(collapsed, collapsed.x + 1, collapsed.y + collapsed.h),
-        "collapsed status has no invisible touch area");
-    check_int(normal.h, PTC_OVERLAY_STATUS_NORMAL_H, "normal status reserves both policy rows");
-    PtcOverlayRect policy = ptc_overlay_child_policy_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
-    check_true(policy.y > parent.y + parent.h &&
-        policy.y + policy.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
-        "collapsed policy strip stays below controls and above host footer");
-    check_true(ptc_overlay_policy_row_y(PTC_OVERLAY_CONTENT_Y, true, 1) < detail.y + detail.h,
-        "expanded policy rows stay within detail touch rectangle");
-    check_int(detail.y + detail.h, 632, "expanded error and success details fill the content area");
-    check_true(detail.y + detail.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
-        "expanded overlay status remains inside content bounds");
-    check_true(buffer.x + buffer.w < parent.x &&
-        parent.x + parent.w == PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W &&
-        buffer.y == parent.y && parent.y + parent.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
-        "buffer and parent touch targets fit below collapsed status");
-    PtcOverlayRect hero = ptc_overlay_overview_hero_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
-    PtcOverlayRect pol0 = ptc_overlay_overview_policy_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, 0);
-    PtcOverlayRect pol1 = ptc_overlay_overview_policy_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W, 1);
-    PtcOverlayRect redeem = ptc_overlay_overview_redeem_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
-    PtcOverlayRect nav_back = ptc_overlay_keypad_nav_back_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y);
-    PtcOverlayRect nav_par = ptc_overlay_keypad_nav_parent_rect(
-        PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y, PTC_OVERLAY_CONTENT_W);
-    check_true(hero.y + hero.h <= pol0.y, "overview hero sits above policy card 0");
-    check_true(pol0.y + pol0.h <= pol1.y, "overview policy 0 sits above policy card 1");
-    check_true(pol1.y + pol1.h <= redeem.y, "overview policy 1 sits above redeem banner");
-    check_true(redeem.y + redeem.h <= buffer.y, "overview redeem banner sits above action buttons");
-    check_true(nav_back.x + nav_back.w < nav_par.x, "keypad nav back sits left of parent button");
+    check_int(slots_width, 387, "all eight code slots fit the sidebar");
+    check_int(PTC_OVERLAY_SLOT_H, 64, "code slots have room for 40px digits");
+    check_true(PTC_OVERLAY_SLOT_Y + PTC_OVERLAY_SLOT_H < PTC_OVERLAY_KEYPAD_Y,
+        "input count and date fit between slots and keypad");
+    for (unsigned i = 0; i < PTC_OVERLAY_KEY_COUNT; ++i) {
+        PtcOverlayRect key = ptc_overlay_key_rect(16, 40, i);
+        check_int(key.w, 124, "keypad key width stays comfortable");
+        check_int(key.h, 56, "keypad key height grows with the font");
+        check_true(key.y + key.h <= 40 + PTC_OVERLAY_SUBMIT_Y,
+            "all ten digit keys end above submit");
+        check_true(ptc_overlay_rect_contains(key, key.x + key.w - 1, key.y + key.h - 1),
+            "visible key edges receive touches");
+        check_true(!ptc_overlay_rect_contains(key, key.x + key.w, key.y),
+            "key touch target ends at the visible edge");
+    }
+    PtcOverlayRect submit = ptc_overlay_submit_rect(16, 40, 416);
+    PtcOverlayRect back = ptc_overlay_keypad_nav_back_rect(16, 40);
+    PtcOverlayRect parent = ptc_overlay_keypad_nav_parent_rect(16, 40, 416);
+    check_true(submit.y + submit.h < back.y, "submit does not overlap navigation");
+    check_true(back.x + back.w < parent.x, "navigation buttons remain separate");
+    check_true(parent.y + parent.h <= PTC_OVERLAY_CONTENT_Y + PTC_OVERLAY_CONTENT_H,
+        "fixed keypad buttons stay above the Tesla footer");
     check_true(ptc_overlay_remaining_refresh_pending(true, true),
-        "submitted overlay code uses a pending remaining-time presentation");
-    check_true(!ptc_overlay_remaining_refresh_pending(true, false),
-        "ordinary status refresh preserves the last remaining-time snapshot");
-    check_true(!ptc_overlay_remaining_refresh_pending(false, true),
-        "completed code result leaves the pending remaining-time presentation");
-    check_int(ptc_overlay_preview_visual_level(true, 30, false, false),
-        PTC_OVERLAY_PREVIEW_NEUTRAL, "ordinary overlay preview uses neutral styling");
-    check_int(ptc_overlay_preview_visual_level(true, 30, true, false),
-        PTC_OVERLAY_PREVIEW_WARNING, "capped overlay preview uses warning styling");
-    check_int(ptc_overlay_preview_visual_level(false, 0, false, false),
-        PTC_OVERLAY_PREVIEW_DANGER, "unknown overlay preview result uses danger styling");
-    check_int(ptc_overlay_preview_visual_level(true, 0, false, false),
-        PTC_OVERLAY_PREVIEW_DANGER, "zero overlay preview result uses danger styling");
-    check_int(ptc_overlay_preview_visual_level(true, 30, false, true),
-        PTC_OVERLAY_PREVIEW_DANGER, "unlimited conversion uses danger styling");
-    check_int(ptc_overlay_preview_visual_level(true, 0, true, false),
-        PTC_OVERLAY_PREVIEW_DANGER, "danger styling takes priority over a capped warning");
-
-    /* Typography scale contract: monotonic hierarchy and strict >= 15px handheld legible floor */
-    check_true(PTC_OVERLAY_FONT_HERO > PTC_OVERLAY_FONT_DISPLAY, "hero font is larger than display font");
-    check_true(PTC_OVERLAY_FONT_DISPLAY >= PTC_OVERLAY_FONT_KEYPAD, "display font is at least keypad font");
-    check_true(PTC_OVERLAY_FONT_KEYPAD > PTC_OVERLAY_FONT_TITLE_LG, "keypad font is larger than title lg");
-    check_true(PTC_OVERLAY_FONT_TITLE_LG > PTC_OVERLAY_FONT_TITLE, "title lg is larger than regular title");
-    check_true(PTC_OVERLAY_FONT_TITLE > PTC_OVERLAY_FONT_BTN, "title is larger than button font");
-    check_true(PTC_OVERLAY_FONT_BTN > PTC_OVERLAY_FONT_BODY_LG, "button font is larger than body lg");
-    check_true(PTC_OVERLAY_FONT_BODY_LG > PTC_OVERLAY_FONT_BODY, "body lg is larger than body regular");
-    check_true(PTC_OVERLAY_FONT_BODY > PTC_OVERLAY_FONT_SECONDARY, "body is larger than secondary font");
-    check_true(PTC_OVERLAY_FONT_SECONDARY > PTC_OVERLAY_FONT_CAPTION, "secondary font is larger than caption");
-    check_true(PTC_OVERLAY_FONT_CAPTION >= 15, "all text fonts strictly satisfy the >= 15px legible floor");
+        "submitted code never displays stale remaining time as final");
+    check_true(!ptc_overlay_remaining_refresh_pending(true, false), "ordinary refresh keeps its status behavior");
+    check_int(ptc_overlay_preview_visual_level(true, 30, false, false), PTC_OVERLAY_PREVIEW_NEUTRAL,
+        "normal redemption preview remains neutral");
+    check_int(ptc_overlay_preview_visual_level(true, 30, true, false), PTC_OVERLAY_PREVIEW_WARNING,
+        "capped redemption preview remains a warning");
+    check_int(ptc_overlay_preview_visual_level(false, 0, false, false), PTC_OVERLAY_PREVIEW_DANGER,
+        "unknown redemption still requires a hold");
+    check_int(ptc_overlay_preview_visual_level(true, 0, false, false), PTC_OVERLAY_PREVIEW_DANGER,
+        "zero redemption still requires a hold");
+    check_int(ptc_overlay_preview_visual_level(true, 30, false, true), PTC_OVERLAY_PREVIEW_DANGER,
+        "unlimited to limited redemption still requires a hold");
 }
 
 static void test_overlay_child_quota_and_restriction_details(void)

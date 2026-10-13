@@ -132,7 +132,7 @@ OVERLAY_PREVIEW_C_SRCS := companion/policy_status.c companion/ui_language.c comp
 $(HOST_BUILD_DIR)/overlay_preview_core.o: $(OVERLAY_PREVIEW_C_SRCS) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -ffunction-sections -fdata-sections -r -o $@ $(OVERLAY_PREVIEW_C_SRCS)
 
-$(HOST_BUILD_DIR)/overlay_preview: tests/overlay_preview/render.cpp tests/overlay_preview/renderer.hpp companion/overlay/source/render_types.hpp companion/overlay/source/render_methods.hpp $(HOST_BUILD_DIR)/overlay_preview_core.o
+$(HOST_BUILD_DIR)/overlay_preview: tests/overlay_preview/render.cpp tests/overlay_preview/renderer.hpp companion/overlay/source/render_types.hpp companion/overlay/source/render_methods.hpp companion/overlay/source/render_pages.hpp companion/overlay/layout.h $(HOST_BUILD_DIR)/overlay_preview_core.o
 	$(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -I. -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ tests/overlay_preview/render.cpp $(HOST_BUILD_DIR)/overlay_preview_core.o -lm
 
 .PHONY: ui-previews

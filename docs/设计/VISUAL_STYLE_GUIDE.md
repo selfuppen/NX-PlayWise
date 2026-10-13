@@ -147,7 +147,7 @@ In list rows, health-care cards, and decision cells, content must strictly separ
 * **Fallback Unhit Rules**: 1px border in `UI_BORDER`, canvas-blended background (`UI_PAGE`), muted text.
 * **Priority Arrows**: 2px directional arrows between rule stages illustrating evaluation flow (Temporary $\to$ Specified Date $\to$ Holiday $\to$ Weekly Plan $\to$ Final Balance).
 
-### 4.5 Tesla Overlay Architecture & Dark Baseline Contract
+### 4.5 Tesla Overlay Current Design & Dark Baseline Contract
 * **Tesla Host Dark Background**: The Tesla menu operates over a translucent dark background (`0x000D` / RGBA(0, 0, 0, 0.85)). To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.
 * **Tuned Overlay Surfaces**:
   * Card Surface: `#131B2A` with high `0xE6` opacity, effectively shielding background game graphics.
@@ -158,29 +158,21 @@ In list rows, health-care cards, and decision cells, content must strictly separ
   * **Overlay text must never use Unicode 4-byte Emojis or miscellaneous Dingbats**, preventing mojibake or missing-glyph boxes on hardware.
   * Controller prompts must strictly use Nintendo Switch system font glyphs (e.g., `\uE0E0` for A button, `\uE0E1` for B button, `\uE0E2` for X button, `\uE0E3` for Y button, `\uE0E4` for L button, `\uE0E5` for R button, `\uE0E6` for ZL button, `\uE0EC` for touch/click).
   * The rendering layer includes a built-in UTF-8 runtime sanitizer (`ptc_overlay_sanitize_utf8`) that automatically strips out-of-range symbols before dispatching strings to `libtesla`.
-  * **Unified Typography Scale Tokens**:
-    To eliminate ad-hoc font size fragmentation, all font sizes are centralized in `companion/overlay/layout.h`:
-    * `PTC_OVERLAY_FONT_HERO = 48`: Hero numeric values (glanceable playtime numerals `45 分钟`, eye-care countdown `02:00`);
-    * `PTC_OVERLAY_FONT_DISPLAY = 32`: Prominent card values & key comparisons (grant code slots, before/after values);
-    * `PTC_OVERLAY_FONT_KEYPAD = 30`: Numeric keypad & directional keycaps (3x4 digits, PIN directions);
-    * `PTC_OVERLAY_FONT_TITLE_LG = 28`: Critical alert titles & primary outcomes (restriction cards, success titles);
-    * `PTC_OVERLAY_FONT_TITLE = 26`: Module headers & brand titles (PlayWise brand, parent zone/PIN header, confirm titles);
-    * `PTC_OVERLAY_FONT_BTN = 22`: Primary action buttons (50–56px high buttons: Confirm, Cancel, Redeem banner);
-    * `PTC_OVERLAY_FONT_BODY_LG = 20`: High-emphasis body & card labels (policy card labels, action card titles);
-    * `PTC_OVERLAY_FONT_BODY = 18`: Comfortable body text & secondary actions (policy status details, navigation items);
-    * `PTC_OVERLAY_FONT_SECONDARY = 16`: Ancillary notes & status summaries (hints, card subtitles, warning reasons);
-    * `PTC_OVERLAY_FONT_CAPTION = 15`: Compact captions & minimum legible floor (strictly $\ge 15\text{px}$ to avoid stroke loss).
-* **Scheme A Dual-Mode Architecture (Smart Focus & Adaptive Collapsible Keypad)**:
-  * **Top Title Reclaimed**: Reclaims the 90px header banner occupied by the default frame, placing a compact 34px brand & refresh bar at the top; content starts at $Y=40$ with total content height expanded to 607px.
-  * **Mode 1: Overview Mode (Daily High-Frequency Default)**: Focuses on glanceable status: Hero card with 48px time readout, two rule cards (20px label + 18px detail), grant code trigger banner (22px title + 18px subtitle), autonomous buffer and parent zone buttons (52px high, 18–20px text). Pressing A, D-Pad, Plus, or touching the code trigger card smoothly unfolds Keypad Mode; pressing B closes the overlay.
-  * **Mode 2: Keypad Mode (Comfortable Code Entry)**: Collapses policy cards into a summary bar, displaying a 3x4 spacious numeric keypad ($124\text{px} \times 48\text{px}$, 30px digits) and enlarged 8-slot input ($44\text{px} \times 54\text{px}$, 32px glyphs); pressing B or touching [B Cancel] smoothly returns to Overview Mode.
-  * **Mode 3: Restricted Hero Mode (Scenario-Aware Alert)**: Adapts into a full-height alert hero card (28px title, 48px countdown, 18px explanation) when bedtime, eye care, or dock restrictions are active, with direct one-touch parent area access.
-* **Parent Zone Natural Vertical Scrolling & Scissoring Contract**:
-  * **Expanded Action Cards & Natural Overflow**: Action card heights are enlarged to 50px (58px step), titles to 20px (18px when accompanied by reasons), reasons/descriptions to 15px, and group headings to 18px. The 8 action cards across 3 groups span 588px total height, naturally overflowing the visible viewport height (484px).
-  * **Viewport Scissoring Protection**: Renders within a scissored box ($[Y+72, H=484]$) via `enableScissoring` and `disableScissoring`, completely preventing clipping artifacts onto headers or footers.
-  * **Smooth Auto-Scroll to Focus**: When navigating with D-pad or sticks, `parent_scroll_y_` smoothly interpolates to bring the focused action into view (`ptc_overlay_parent_scroll_for_action`); manual scrolling via the right analog stick is also supported.
-  * **Virtual Touch Hit-Testing**: Touch clicks map virtual coordinates via $vty = ty + parent\_scroll\_y\_$ for pixel-accurate item selection and execution.
-  * **Micro-Geometric Scrollbar Indicator**: A 3px semi-transparent scroll track and thumb dynamically render along the right viewport margin to signal scroll depth and progress.
+  * **Unified large typography**: Tokens live in `companion/overlay/layout.h`: time/countdown 56px; key values and result titles 44px; page titles 40px; action labels and confirmation/restriction explanations 32px; primary buttons 30px; body 28px; supporting text and disabled reasons 24px; minimum captions 22px. Code slot digits use a separate 40px token; keypad digits use 36px.
+* **Measured layouts prioritize readability**:
+  * Stay inside the 448×720 sidebar, with content starting at Y=40 and ending at or above Y=647. Headers, refresh and bottom actions remain fixed; content scrolls in a separate scissored viewport.
+  * Wrap Chinese at UTF-8 codepoint boundaries and English at word boundaries; split oversized words, preserve explicit newlines and blank lines. Keep important explanations complete instead of shrinking fonts or adding ellipses.
+  * Measure localized text to determine card heights. Parent cards retain stacked text; child cards prefer measured edge-aligned rows and stack only when the texts cannot share a line. Production and Host previews share rendering; input consumes the renderer's `PtcOverlayPageLayout` instead of recreating touch coordinates.
+* **Child overview, entry and explanations**:
+  * Common child pages prioritize a complete single-screen view while preserving primary large type. Use measured heights and 6px card gaps instead of the parent 104px minimum. Combine quota and usage, use compact rule summaries, and remove the duplicate redeem card. Redeem, buffer and parent shortcuts remain fixed. A / Plus or the entry button opens the keypad; B returns or closes.
+  * Eight 44×64px code slots have 5px gaps and 40px digits. The 3×4 keypad uses 124×56px keys, a 64px row step and 36px digits. Count and console date occupy separate lines; digits, submit and navigation remain accessible on one screen.
+  * Confirmation and outcome comparisons prefer measured inline values with reduced repetition and padding. Restriction pages retain large essential instructions, with Back and Parent fixed side by side. Common states fit on one screen in all three languages; full long rule explanations remain in status details, with scrolling reserved for details and oversized exceptional text. Minus opens independent status details from the overview or keypad; B / Minus returns.
+* **Parent zone and scrolling contract**:
+  * Keep all eight actions and their three groups. Measured cards are at least 104px high, with 32px titles and 24px reasons. Quick-grant minutes and adjustment instructions occupy separate lines.
+  * Focus scrolling uses actual card positions and shows the full selected card. Compute the scroll limit from measured content height. Right-stick scrolling is available outside PIN entry; explanatory pages also accept Up/Down.
+  * Resolve taps on release. Movement over 10px cancels the tap and starts dragging. A drag or page transition cannot become a click; scrolled cards only receive touches inside the viewport.
+  * PIN retains both sticks as digit input; touch dragging reads long instructions. Errors and cooldown appear near the entered PIN, and failed verification resets scrolling. Verify and Back remain fixed.
+  * Page transitions reset scrolling; returning to parent actions follows the selected card. A 3px scrollbar indicates position. Existing authorization and one-second controller holds remain mandatory for dangerous actions.
 
 ---
 
@@ -204,4 +196,4 @@ When authoring or updating Companion NRO pages or overlays:
 
 The child hero uses four compact 56px cards for quota, eye care, bedtime and TV, preserving the primary allowance and weekly forecast. Bedtime retains its clock and countdown. TV prioritizes the remaining usage and end-of-allowance guidance, followed by mode, allowance and estimated use. The parent's TV card is 70px high and retains existing touch and focus-return behavior.
 
-The global status bar adapts to eye-care and policy rows, with its bottom no lower than y=104. Bedtime and TV summaries share two columns when both are enabled. The collapsed Overlay adds two policy rows below its bottom controls (content-relative y=510, height 46); expanded status puts those rows inside a 136px detail card. Input, submit, parent access and the Tesla footer must remain unobstructed. Boundary confirmation uses warning colors; active backend restrictions use danger colors. An empty non-TV balance on TV uses warning colors. Existing measured multilingual layouts, overflow handling, NRO themes and the Overlay dark baseline remain mandatory.
+The global status bar adapts to eye-care and policy rows, with its bottom no lower than y=104. Bedtime and TV summaries share two columns when both are enabled. The Overlay displays policies in individual large overview cards and complete scrollable status details. Input, submit, parent access and the Tesla footer must remain unobstructed. Boundary confirmation uses warning colors; active backend restrictions use danger colors. An empty non-TV balance on TV uses warning colors. Existing measured multilingual layouts, overflow handling, NRO themes and the Overlay dark baseline remain mandatory.

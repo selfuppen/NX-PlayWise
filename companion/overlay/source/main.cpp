@@ -130,7 +130,7 @@ public:
         renderer->drawRect(tsl::cfg::FramebufferWidth - 1, 0, 1, tsl::cfg::FramebufferHeight, a(0xF222));
         renderer->drawRect(15, tsl::cfg::FramebufferHeight - 73, tsl::cfg::FramebufferWidth - 30, 1,
             a(tsl::style::color::ColorText));
-        renderer->drawString("  Back       OK", false, 30, 693, 23, a(tsl::style::color::ColorText));
+        renderer->drawString("  Back       OK", false, 30, 693, PTC_OVERLAY_FONT_BTN, a(tsl::style::color::ColorText));
         if (m_contentElement != nullptr)
             m_contentElement->frame(renderer);
     }
@@ -192,12 +192,8 @@ public:
             content_parent_layout_ = parent_layout;
             frame_->invalidate();
         }
-        if (access_recovery_visible() && parent_view_ == ParentView::Actions) {
-            parent_scroll_y_ += (target_parent_scroll_y_ - parent_scroll_y_) * 0.35f;
-            if (std::abs(target_parent_scroll_y_ - parent_scroll_y_) < 0.5f) {
-                parent_scroll_y_ = target_parent_scroll_y_;
-            }
-        }
+        page_scroll_ += (page_scroll_target_ - page_scroll_) * 0.35f;
+        if (std::abs(page_scroll_target_ - page_scroll_) < 0.5f) page_scroll_ = page_scroll_target_;
         if (recovery_active_) {
             poll_pending_redemption();
         }
@@ -248,6 +244,7 @@ public:
                 } else {
                     awaiting_confirm_recheck_ = false;
                     preview_changed_ = material_change;
+                    if (material_change) reset_page_scroll();
                     preview_ready_ = true;
                 }
             } else if (ptc_overlay_bridge_offline_code_succeeded(bridge_)) {
@@ -319,295 +316,7 @@ public:
         if (!bridge_->waiting) active_request_kind_ = OverlayRequestKind::None;
     }
 
-    bool handleInput(
-        u64 keysDown,
-        u64 keysHeld,
-        const HidTouchState &touch,
-        HidAnalogStickState left,
-        HidAnalogStickState right) override
-    {
-        const u64 now = armGetSystemTick();
-        int input_elapsed_ms = 0;
-        if (last_input_tick_ != 0) {
-            const u64 elapsed_ms = armTicksToNs(now - last_input_tick_) / 1000000ULL;
-            input_elapsed_ms = elapsed_ms > static_cast<u64>(std::numeric_limits<int>::max())
-                ? std::numeric_limits<int>::max()
-                : static_cast<int>(elapsed_ms);
-        }
-        last_input_tick_ = now;
-        const bool request_actions_enabled = ptc_overlay_request_action_enabled(bridge_->waiting);
-        const u64 dpad_down = keysDown & (HidNpadButton_Up | HidNpadButton_Right |
-            HidNpadButton_Down | HidNpadButton_Left);
-
-        constexpr s32 STICK_DEADZONE = 16000;
-        u64 stick_keys = 0;
-        if (left.x > STICK_DEADZONE) stick_keys |= HidNpadButton_Right;
-        if (left.x < -STICK_DEADZONE) stick_keys |= HidNpadButton_Left;
-        if (left.y > STICK_DEADZONE) stick_keys |= HidNpadButton_Up;
-        if (left.y < -STICK_DEADZONE) stick_keys |= HidNpadButton_Down;
-        keysDown |= stick_keys & ~prev_stick_keys_;
-        keysHeld |= stick_keys;
-        prev_stick_keys_ = stick_keys;
-
-        if (access_recovery_visible()) {
-            return handle_parent_input(keysDown, keysHeld, dpad_down, touch,
-                left, right, input_elapsed_ms);
-        }
-
-        if (success_visible_) {
-            const bool touch_down = touch.x != 0 || touch.y != 0;
-            if ((touch_down && !prev_touch_down_) ||
-                (keysDown & (HidNpadButton_A | HidNpadButton_B | HidNpadButton_Plus))) {
-                const bool terminal = !result_pending_;
-                success_visible_ = false;
-                status_expanded_ = false;
-                keypad_active_ = false;
-                ptc_overlay_input_init(input_);
-                if (terminal) {
-                    (void)ptc_companion_pending_redemption_clear(&bridge_->transport.file);
-                    std::memset(&pending_redemption_, 0, sizeof(pending_redemption_));
-                    result_failed_ = false;
-                }
-            }
-            prev_touch_down_ = touch_down;
-            return true;
-        }
-
-        if (preview_ready_) {
-            const bool touch_down = touch.x != 0 || touch.y != 0;
-            bool touch_confirm = false;
-            bool touch_cancel = false;
-            if (touch_down && !prev_touch_down_) {
-                const s32 rel_x = touch.x > 400 ? static_cast<s32>(touch.x) - 880 : static_cast<s32>(touch.x);
-                const s32 rel_y = static_cast<s32>(touch.y);
-                touch_cancel = rel_x >= PTC_OVERLAY_CONTENT_X && rel_x < PTC_OVERLAY_CONTENT_X + 145 &&
-                    rel_y >= PTC_OVERLAY_CONTENT_Y + 490 && rel_y < PTC_OVERLAY_CONTENT_Y + 544;
-                touch_confirm = rel_x >= PTC_OVERLAY_CONTENT_X + 160 && rel_x < PTC_OVERLAY_CONTENT_X + PTC_OVERLAY_CONTENT_W &&
-                    rel_y >= PTC_OVERLAY_CONTENT_Y + 490 && rel_y < PTC_OVERLAY_CONTENT_Y + 544;
-            }
-            const bool dangerous = !preview_summary_.remaining_after_available ||
-                preview_summary_.remaining_after_minutes == 0 ||
-                preview_summary_.converts_unlimited_to_limited;
-            if ((keysDown & HidNpadButton_B) || touch_cancel) {
-                preview_ready_ = false;
-                preview_changed_ = false;
-                pending_code_[0] = '\0';
-                keypad_active_ = false;
-                ptc_overlay_hold_reset(&confirm_hold_);
-                ptc_overlay_input_init(input_);
-            } else if (touch_confirm && dangerous) {
-                touch_hold_warning_ = true;
-                ptc_overlay_hold_reset(&confirm_hold_);
-            } else if ((!dangerous && ((keysDown & (HidNpadButton_A | HidNpadButton_Plus)) || touch_confirm))) {
-                touch_hold_warning_ = false;
-                ptc_overlay_hold_reset(&confirm_hold_);
-                (void)begin_preview_request(true);
-            } else if (dangerous && (keysHeld & HidNpadButton_A)) {
-                if (ptc_overlay_hold_update(&confirm_hold_, true, input_elapsed_ms, 1000)) {
-                    touch_hold_warning_ = false;
-                    (void)begin_preview_request(true);
-                }
-            } else {
-                ptc_overlay_hold_reset(&confirm_hold_);
-            }
-            prev_touch_down_ = touch_down;
-            return true;
-        }
-
-        const bool is_restricted = has_status_snapshot_ && !status_is_stale() &&
-            (displayed_summary_.dock_restriction_active || bedtime_restricted() || eye_care_restricted());
-
-        // 触屏交互处理。
-        bool touch_down = (touch.x != 0 || touch.y != 0);
-        if (touch_down && !prev_touch_down_) {
-            s32 tx = static_cast<s32>(touch.x);
-            s32 ty = static_cast<s32>(touch.y);
-            s32 rel_x = tx > 400 ? (tx - 880) : tx;
-            s32 rel_y = ty;
-
-            constexpr s32 cx = PTC_OVERLAY_CONTENT_X;
-            constexpr s32 cy = PTC_OVERLAY_CONTENT_Y;
-            constexpr s32 cw = PTC_OVERLAY_CONTENT_W;
-
-            // 顶部刷新按钮；后台忙碌时只禁用新的请求，本地编辑仍可继续。
-            if (ptc_overlay_rect_contains(ptc_overlay_refresh_rect(cx, cy), rel_x, rel_y)) {
-                if (request_actions_enabled) (void)begin_status_refresh();
-                prev_touch_down_ = touch_down;
-                return true;
-            }
-
-            if (is_restricted) {
-                open_parent_pin();
-                prev_touch_down_ = touch_down;
-                return true;
-            }
-
-            if (!is_keypad_mode()) {
-                // --- 概览大字模式下的触控 ---
-                if (ptc_overlay_rect_contains(ptc_overlay_child_buffer_rect(cx, cy), rel_x, rel_y)) {
-                    if (request_actions_enabled && displayed_summary_.valid &&
-                        displayed_summary_.daily_buffer_available && !bedtime_restricted() &&
-                        !eye_care_restricted() && !displayed_summary_.dock_restriction_active)
-                        (void)begin_claim_daily_buffer();
-                    prev_touch_down_ = touch_down;
-                    return true;
-                }
-                if (ptc_overlay_rect_contains(ptc_overlay_child_parent_rect(cx, cy, cw), rel_x, rel_y)) {
-                    open_parent_pin();
-                    prev_touch_down_ = touch_down;
-                    return true;
-                }
-                // 点击输入加时码引导卡片 -> 展开键盘模式
-                if (ptc_overlay_rect_contains(ptc_overlay_overview_redeem_rect(cx, cy, cw), rel_x, rel_y)) {
-                    keypad_active_ = true;
-                    prev_touch_down_ = touch_down;
-                    return true;
-                }
-                // 点击状态与命令栏
-                if (ptc_overlay_rect_contains(
-                        ptc_overlay_status_rect(cx, cy, cw, status_expanded_, status_needs_detail()),
-                        rel_x, rel_y)) {
-                    status_expanded_ = !status_expanded_;
-                    prev_touch_down_ = touch_down;
-                    return true;
-                }
-            } else {
-                // --- 键盘模式下的触控 ---
-                // 点击底部 [B] 取消导航按钮 (退出键盘模式，回到概览)
-                if (ptc_overlay_rect_contains(ptc_overlay_keypad_nav_back_rect(cx, cy), rel_x, rel_y)) {
-                    keypad_active_ = false;
-                    ptc_overlay_input_init(input_);
-                    prev_touch_down_ = touch_down;
-                    return true;
-                }
-                // 点击底部 [R] 家长区导航按钮
-                if (ptc_overlay_rect_contains(ptc_overlay_keypad_nav_parent_rect(cx, cy, cw), rel_x, rel_y)) {
-                    open_parent_pin();
-                    prev_touch_down_ = touch_down;
-                    return true;
-                }
-                // 点击小键盘按键
-                const char *charset = ptc_overlay_input_charset();
-                for (unsigned int index = 0; index < PTC_OVERLAY_KEY_COUNT; ++index) {
-                    if (ptc_overlay_rect_contains(ptc_overlay_key_rect(cx, cy, index), rel_x, rel_y)) {
-                        input_->cursor = index;
-                        if (input_->length < PTC_OVERLAY_CODE_SYMBOLS) {
-                            input_->symbols[input_->length++] = charset[index];
-                            input_->symbols[input_->length] = '\0';
-                        }
-                        prev_touch_down_ = touch_down;
-                        return true;
-                    }
-                }
-
-                // 点击 [X] 退格 (第四行左侧)
-                if (ptc_overlay_rect_contains(ptc_overlay_backspace_rect(cx, cy), rel_x, rel_y)) {
-                    (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_X, 0, 0);
-                    prev_touch_down_ = touch_down;
-                    return true;
-                }
-
-                // 点击清空
-                if (ptc_overlay_rect_contains(ptc_overlay_clear_rect(cx, cy), rel_x, rel_y)) {
-                    (void)ptc_overlay_input_handle(input_, PTC_OVERLAY_BUTTON_Y, 0, 0);
-                    prev_touch_down_ = touch_down;
-                    return true;
-                }
-
-                // 点击 [+] 提交按钮
-                if (ptc_overlay_rect_contains(ptc_overlay_submit_rect(cx, cy, cw), rel_x, rel_y)) {
-                    if (request_actions_enabled) (void)begin_code_preview();
-                    prev_touch_down_ = touch_down;
-                    return true;
-                }
-            }
-        }
-        prev_touch_down_ = touch_down;
-
-        // 3. 物理按键处理 (Button Handler)
-        if (keysDown & HidNpadButton_B) {
-            if (is_keypad_mode()) {
-                keypad_active_ = false;
-                ptc_overlay_input_init(input_);
-                return true;
-            }
-            tsl::Overlay::get()->close();
-            return true;
-        }
-
-        if (keysDown & HidNpadButton_Minus) {
-            if (!is_keypad_mode()) {
-                status_expanded_ = !status_expanded_;
-            }
-            return true;
-        }
-
-        if (keysDown & HidNpadButton_L) {
-            if (request_actions_enabled && displayed_summary_.valid &&
-                displayed_summary_.daily_buffer_available && !bedtime_restricted() &&
-                !eye_care_restricted() && !displayed_summary_.dock_restriction_active)
-                (void)begin_claim_daily_buffer();
-            return true;
-        }
-
-        if (keysDown & HidNpadButton_R) {
-            open_parent_pin();
-            return true;
-        }
-
-        if (keysDown & HidNpadButton_Plus) {
-            if (is_restricted) {
-                open_parent_pin();
-                return true;
-            }
-            if (is_keypad_mode()) {
-                if (request_actions_enabled) (void)begin_code_preview();
-            } else {
-                keypad_active_ = true;
-            }
-            return true;
-        }
-
-        if (keysDown & HidNpadButton_Y) {
-            if (error_) {
-                if (last_request_kind_ == OverlayRequestKind::OfflineCode ||
-                    last_request_kind_ == OverlayRequestKind::PreviewOfflineCode) {
-                    error_ = false;
-                    status_expanded_ = false;
-                    pending_code_[0] = '\0';
-                    keypad_active_ = false;
-                    ptc_overlay_input_init(input_);
-                } else {
-                    (void)retry_last_request();
-                }
-            } else {
-                if (request_actions_enabled) (void)begin_status_refresh();
-            }
-            return true;
-        }
-
-        if (is_restricted) {
-            if (keysDown & HidNpadButton_A) {
-                open_parent_pin();
-                return true;
-            }
-            return true;
-        }
-
-        if (!is_keypad_mode()) {
-            if ((keysDown & HidNpadButton_A) || dpad_down || stick_keys) {
-                keypad_active_ = true;
-                return true;
-            }
-            return true;
-        }
-
-        return ptc_overlay_input_handle(
-            input_,
-            to_overlay_buttons(keysDown),
-            to_overlay_buttons(keysHeld),
-            input_elapsed_ms);
-    }
+#include "input_pages.hpp"
 
     void apply_pending_preview()
     {
@@ -857,13 +566,9 @@ public:
     {
         const bool touch_down = touch.x != 0 || touch.y != 0;
         const bool touch_pressed = touch_down && !prev_touch_down_;
-        const s32 tx = touch.x > 400 ? static_cast<s32>(touch.x) - 880 : static_cast<s32>(touch.x);
+        const s32 tx = static_cast<s32>(touch.x);
         const s32 ty = static_cast<s32>(touch.y);
         prev_touch_down_ = touch_down;
-        constexpr s32 cx = PTC_OVERLAY_CONTENT_X;
-        // Parent views raise the content top (banner hidden); hit-testing must
-        // use the same origin the frame lays the content element out with.
-        constexpr s32 cy = PTC_OVERLAY_PARENT_CONTENT_Y;
         if (parent_view_ == ParentView::Pin) {
             const int left_digit = ptc_overlay_pin_digit_from_vector(left.x, left.y, 16000);
             const int right_digit = ptc_overlay_pin_digit_from_vector(right.x, right.y, 16000);
@@ -880,12 +585,11 @@ public:
                 to_overlay_buttons(dpad_down));
             if (direction_digit >= 0) append_pin_digit(direction_digit);
             if (touch_pressed) {
-                if (ptc_overlay_rect_contains(ptc_overlay_backspace_rect(cx, cy), tx, ty))
+                if (flow_hit(page_layout_.backspace, tx, ty))
                     keysDown |= HidNpadButton_ZL;
-                else if (tx >= cx && tx < cx + PTC_OVERLAY_CONTENT_W &&
-                         ty >= cy + 390 && ty < cy + 436)
+                else if (page_hit(page_layout_.primary, tx, ty))
                     keysDown |= HidNpadButton_Plus;
-                else if (ty >= cy + 500 && ty < cy + 550)
+                else if (page_hit(page_layout_.secondary, tx, ty))
                     keysDown |= HidNpadButton_B;
             }
             if (keysDown & HidNpadButton_X) append_pin_digit(0);
@@ -909,8 +613,7 @@ public:
                 if (auth_status == PTC_AUTH_OK) {
                     parent_authorized_ = true;
                     parent_action_ = 0;
-                    parent_scroll_y_ = 0.0f;
-                    target_parent_scroll_y_ = 0.0f;
+                    reset_page_scroll();
                     parent_view_ = ParentView::Actions;
                     pin_message_[0] = '\0';
                     action_repeat_ = {};
@@ -925,12 +628,13 @@ public:
                 } else {
                     std::snprintf(pin_message_, sizeof(pin_message_), "%s", ptc_ui_text(PTC_UI_T_PIN_INVALID));
                 }
+                if (auth_status != PTC_AUTH_OK) reset_page_scroll();
             }
             return true;
         }
         if (parent_view_ == ParentView::Actions) {
             bool action_changed = false;
-            if (touch_pressed && ptc_overlay_rect_contains(ptc_overlay_parent_refresh_rect(cx, cy), tx, ty))
+            if (touch_pressed && page_hit(page_layout_.refresh, tx, ty))
                 keysDown |= HidNpadButton_Y;
             if ((keysDown & HidNpadButton_Y) && !bridge_->waiting)
                 (void)begin_status_refresh();
@@ -938,11 +642,10 @@ public:
                 to_overlay_buttons(keysDown), to_overlay_buttons(keysHeld), elapsed_ms);
             if (touch_pressed) {
                 for (int index = 0; index < PTC_OVERLAY_PARENT_ACTION_COUNT; ++index) {
-                    const s32 vty = ty + static_cast<s32>(parent_scroll_y_);
-                    if (ptc_overlay_rect_contains(ptc_overlay_parent_action_rect(cx, cy, index), tx, vty)) {
+                    if (flow_hit(page_layout_.actions[index], tx, ty)) {
                         const bool was_selected = parent_action_ == index;
                         parent_action_ = index;
-                        target_parent_scroll_y_ = static_cast<float>(ptc_overlay_parent_scroll_for_action(parent_action_));
+                        focus_parent_action();
                         ptc_overlay_hold_reset(&confirm_hold_);
                         action_changed = true;
                         if (was_selected && !parent_action_requires_hold(
@@ -950,7 +653,7 @@ public:
                         break;
                     }
                 }
-                if (ptc_overlay_rect_contains(ptc_overlay_parent_back_rect(cx, cy), tx, ty))
+                if (page_hit(page_layout_.primary, tx, ty))
                     keysDown |= HidNpadButton_B;
             }
             if (parent_action_ == PTC_OVERLAY_PARENT_ADD_MINUTES && (direction & PTC_OVERLAY_BUTTON_LEFT))
@@ -959,19 +662,15 @@ public:
                 daily_add_minutes_ = daily_add_minutes_ >= 120 ? 120 : daily_add_minutes_ + 5;
             if (direction & PTC_OVERLAY_BUTTON_UP) {
                 parent_action_ = ptc_overlay_parent_action_move(parent_action_, -1);
-                target_parent_scroll_y_ = static_cast<float>(ptc_overlay_parent_scroll_for_action(parent_action_));
+                focus_parent_action();
                 ptc_overlay_hold_reset(&confirm_hold_);
                 action_changed = true;
             }
             if (direction & PTC_OVERLAY_BUTTON_DOWN) {
                 parent_action_ = ptc_overlay_parent_action_move(parent_action_, 1);
-                target_parent_scroll_y_ = static_cast<float>(ptc_overlay_parent_scroll_for_action(parent_action_));
+                focus_parent_action();
                 ptc_overlay_hold_reset(&confirm_hold_);
                 action_changed = true;
-            }
-            if (std::abs(right.y) > 16000) {
-                float delta = -static_cast<float>(right.y) / 32768.0f * 6.0f;
-                target_parent_scroll_y_ = std::clamp(target_parent_scroll_y_ + delta, 0.0f, static_cast<float>(PTC_OVERLAY_PARENT_SCROLL_MAX));
             }
             if (keysDown & HidNpadButton_B) {
                 parent_authorized_ = false;
@@ -990,7 +689,7 @@ public:
                 }
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
                        parent_action_requires_hold(static_cast<PtcOverlayParentAction>(parent_action_)) &&
-                       !action_changed && (keysHeld & HidNpadButton_A)) {
+                       !action_changed && !(gesture_.active && gesture_.dragged) && (keysHeld & HidNpadButton_A)) {
                 if (ptc_overlay_hold_update(&confirm_hold_, true, elapsed_ms, 1000))
                     (void)submit_parent_action();
             } else {
@@ -1002,9 +701,9 @@ public:
             const bool immediate = parent_action_ != PTC_OVERLAY_PARENT_WAIVE_DOCK && displayed_summary_.bedtime_active &&
                 displayed_summary_.bedtime_skipped;
             if (!(keysHeld & HidNpadButton_A)) parent_confirm_armed_ = true;
-            if (touch_pressed && ty >= cy + 480 && ty < cy + 540) {
-                if (tx < cx + 184) keysDown |= HidNpadButton_B;
-                else if (!immediate && parent_confirm_armed_) keysDown |= HidNpadButton_A;
+            if (touch_pressed) {
+                if (page_hit(page_layout_.secondary, tx, ty)) keysDown |= HidNpadButton_B;
+                else if (page_hit(page_layout_.primary, tx, ty) && !immediate && parent_confirm_armed_) keysDown |= HidNpadButton_A;
             }
             if (keysDown & HidNpadButton_B) {
                 parent_view_ = ParentView::Actions;
@@ -1013,7 +712,7 @@ public:
                        !immediate && parent_confirm_armed_ && (keysDown & HidNpadButton_A)) {
                 (void)submit_parent_action();
             } else if (!parent_action_reason(static_cast<PtcOverlayParentAction>(parent_action_)) &&
-                       immediate && parent_confirm_armed_ && (keysHeld & HidNpadButton_A)) {
+                       immediate && parent_confirm_armed_ && !(gesture_.active && gesture_.dragged) && (keysHeld & HidNpadButton_A)) {
                 if (ptc_overlay_hold_update(&confirm_hold_, true, elapsed_ms, 1000))
                     (void)submit_parent_action();
             } else {
@@ -1021,11 +720,9 @@ public:
             }
             return true;
         }
-        if (touch_pressed && ty >= cy + 480 && ty < cy + 540) {
-            if (last_request_kind_ == OverlayRequestKind::ClaimDailyBuffer || tx >= cx + 184)
-                keysDown |= HidNpadButton_B;
-            else
-                keysDown |= HidNpadButton_Y;
+        if (touch_pressed) {
+            if (page_hit(page_layout_.primary, tx, ty)) keysDown |= HidNpadButton_B;
+            else if (page_hit(page_layout_.secondary, tx, ty)) keysDown |= HidNpadButton_Y;
         }
         if (keysDown & HidNpadButton_B) {
             parent_view_ = ParentView::Child;
@@ -1179,8 +876,6 @@ private:
     bool parent_confirm_armed_ = false;
     bool parent_action_succeeded_ = false;
     int parent_action_ = 0;
-    float parent_scroll_y_ = 0.0f;
-    float target_parent_scroll_y_ = 0.0f;
     int daily_add_minutes_ = 15;
     int left_pin_latched_ = -1;
     int right_pin_latched_ = -1;

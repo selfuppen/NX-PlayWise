@@ -141,22 +141,74 @@ static inline std::pair<u32, u32> measure_localized(tsl::gfx::Renderer *renderer
     return draw_localized(renderer, value, monospace, 0, 0, font_size, tsl::style::color::ColorTransparent);
 }
 
-static void draw_localized_fitted(tsl::gfx::Renderer *renderer, const char *value,
-    s32 x, s32 y, float size, tsl::Color color, s32 width)
+// Word wrapping for Latin text, codepoint wrapping for CJK/long words. Measurement
+// uses the same system font and sanitization as drawing, without bitmap allocation.
+static std::vector<std::string> overlay_wrap(tsl::gfx::Renderer *renderer,
+    const char *value, int size, int width)
 {
-    char localized[516], fitted[512];
-    ptc_overlay_sanitize_utf8(ptc_ui_localize(value, localized, sizeof(localized)), fitted, sizeof(fitted));
-    size_t length = std::strlen(fitted);
-    if (static_cast<s32>(measure_localized(renderer, fitted, size).first) > width) {
-        do {
-            if (!length) break;
-            --length;
-            while (length && (static_cast<unsigned char>(fitted[length]) & 0xC0) == 0x80) --length;
-            fitted[length] = '\0';
-            std::snprintf(localized, sizeof(localized), "%s...", fitted);
-        } while (static_cast<s32>(measure_localized(renderer, localized, size).first) > width);
-        draw_localized(renderer, localized, false, x, y, size, color);
-    } else draw_localized(renderer, fitted, false, x, y, size, color);
+    char localized[2048], sanitized[2048];
+    ptc_overlay_sanitize_utf8(ptc_ui_localize(value, localized, sizeof(localized)),
+        sanitized, sizeof(sanitized));
+    std::vector<std::string> lines;
+    std::string line;
+    const std::string text(sanitized);
+    auto measured = [&](const std::string &s) {
+        return static_cast<int>(renderer->drawString(s.c_str(), false, 0, 0,
+            size, tsl::style::color::ColorTransparent).first);
+    };
+    auto flush = [&] {
+        while (!line.empty() && line.back() == ' ') line.pop_back();
+        lines.push_back(line);
+        line.clear();
+    };
+    for (size_t i = 0; i < text.size();) {
+        if (text[i] == '\n') { flush(); ++i; continue; }
+        if (text[i] == ' ' && line.empty()) { ++i; continue; }
+        size_t end = i + 1;
+        const auto c = static_cast<unsigned char>(text[i]);
+        if (c >= 0xc0) {
+            while (end < text.size() && (static_cast<unsigned char>(text[end]) & 0xc0) == 0x80) ++end;
+        } else if (c != ' ') {
+            while (end < text.size() && static_cast<unsigned char>(text[end]) < 0x80 &&
+                text[end] != ' ' && text[end] != '\n') ++end;
+        }
+        const std::string token = text.substr(i, end - i);
+        if (!line.empty() && measured(line + token) > width) flush();
+        if (token == " " && line.empty()) { i = end; continue; }
+        if (measured(token) > width) {
+            for (size_t j = 0; j < token.size();) {
+                size_t next = j + 1;
+                while (next < token.size() && (static_cast<unsigned char>(token[next]) & 0xc0) == 0x80) ++next;
+                const std::string character = token.substr(j, next - j);
+                if (!line.empty() && measured(line + character) > width) flush();
+                line += character;
+                j = next;
+            }
+        } else line += token;
+        i = end;
+    }
+    if (!line.empty() || lines.empty() || (!text.empty() && text.back() == '\n')) flush();
+    return lines;
+}
+
+static int overlay_text(tsl::gfx::Renderer *renderer, const char *value,
+    int x, int top, int width, int size, tsl::Color color, bool centered = false)
+{
+    const auto lines = overlay_wrap(renderer, value, size, width);
+    const int step = (size * 6 + 4) / 5;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        const auto measured = renderer->drawString(lines[i].c_str(), false, 0, 0,
+            size, tsl::style::color::ColorTransparent);
+        const int left = centered ? x + (width - static_cast<int>(measured.first)) / 2 : x;
+        renderer->drawString(lines[i].c_str(), false, left, top + size + static_cast<int>(i) * step,
+            size, renderer->a(color));
+    }
+    return static_cast<int>(lines.size()) * step;
+}
+
+static int overlay_text_height(tsl::gfx::Renderer *renderer, const char *value, int width, int size)
+{
+    return static_cast<int>(overlay_wrap(renderer, value, size, width).size()) * ((size * 6 + 4) / 5);
 }
 
 static inline std::pair<u32, u32> draw_localized_center(tsl::gfx::Renderer *renderer,

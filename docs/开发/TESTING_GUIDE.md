@@ -8,6 +8,16 @@
 
 # Testing Guide
 
+## Overlay large-text acceptance
+
+Run `python tools/test.py` and `python tools/package_remote.py --with-previews`, including standard package and Eden build/verification. C regression covers measured scroll limits, all eight actions, clipped touch rejection, drag-release cancellation, page-change cancellation and enlarged keypad boundaries. Production rendering previews also check wrapping in three languages, blank lines, oversized words, emoji filtering, fixed-button text fit and full focus visibility of every measured action card.
+
+The Overlay renders 38 scenes / 114 screenshots across Simplified Chinese, Traditional Chinese and English: parent list top/middle/bottom, PIN/errors, restore confirmation/results; child overview, full/unlimited/busy code entry, ordinary/dangerous/capped/changed previews, pending/failed outcomes, bedtime/eye-care/TV restrictions, maximum minute values, scrolled content and restriction activation during code entry. Inspect `build/ui-previews/{overlay,en/overlay,zh_hant/overlay}/`; the unified entrypoint synchronizes documentation images. The fixed Host font cannot replace verification of the Switch system font.
+
+Child single-screen regression: three-language previews assert `scroll_max == 0` for child pages outside explicit details. Coverage includes overview, unknown/stale/maximum values, entry, ordinary/dangerous/capped/changed redemption, pending/failed outcomes and bedtime/eye-care/TV restrictions. Keep compact rule summaries separate from full details; warnings, confirmation and Back must be directly visible.
+
+Hardware acceptance remains pending: handheld/TV readability, focus following, right-stick/touch scrolling, both PIN sticks, error visibility, fixed controls, dangerous holds and reconfirmation after background changes. PCTL and nonce contracts are unchanged; qualification remains `pending`.
+
 ## Overlay memory and lifecycle regression
 
 `test-host` runs `tests/overlay_memory/test.cpp` against the production cache with 100,000 deterministic character/size/language-key changes. It checks the 512-entry/256 KiB bitmap limits, eviction before allocation, replacement, failure/retry, repeated cleanup and zero live bitmaps after destruction. `test_switch_ipc_lifecycle.py` checks atomic thread flags, UI-thread-only hide handling and event lifetime through thread join. Run `python tools/package_remote.py`, which also builds and verifies Eden by default; Host/Eden do not exercise Tesla/VI/HID hardware. See the [Overlay memory and freeze audit (Chinese)](../调研/Overlay内存与死机风险自查.md) for remaining synchronous IPC risks and device A/B evidence requirements.
