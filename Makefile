@@ -195,3 +195,24 @@ device-lab-package: device-lab-sysmodule device-lab-nro device-lab-overlay
 
 clean:
 	$(STAGE_TIMER) global clean -- sh -c 'rm -rf build/host build/generated build/switch build/packages build/device-lab build/ui-previews && if [ "$(CLEAN_EDEN)" = "1" ]; then rm -rf build/eden-test; fi && $(MAKE) -C companion/nro clean || true && rm -rf companion/nro/build-eden companion/nro/pctc-eden.elf companion/nro/pctc-eden.nro companion/nro/pctc-eden.nacp && $(MAKE) -C companion/overlay clean || true && $(MAKE) -C sysmodule clean || true && $(MAKE) -C device_lab/nro clean || true && $(MAKE) -C device_lab/overlay clean || true'
+
+# Explicit independent capability probe; excluded from release targets.
+.PHONY: usage-probe-package test-usage-probe-policy
+test-usage-probe-policy: $(HOST_BUILD_DIR)/test_usage_probe_policy
+	$<
+
+$(HOST_BUILD_DIR)/test_usage_probe_policy: tests/c/test_usage_probe_policy.c usage_probe/boot_policy.h
+	mkdir -p $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $<
+
+usage-probe-package: test-usage-probe-policy
+	python3 tools/package_usage_probe.py prepare
+	$(MAKE) -C usage_probe
+	python3 tools/package_usage_probe.py package
+
+.PHONY: pctl-capture-package
+pctl-capture-package: manifest
+	python3 tools/package_pctl_capture.py prepare
+	python3 tools/package_pctl_capture.py host-test
+	python3 tools/package_pctl_capture.py build
+	python3 tools/package_pctl_capture.py package

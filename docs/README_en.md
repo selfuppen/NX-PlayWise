@@ -37,11 +37,15 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 
 ## Research — `调研/`
 
+For device experiments, see [Stable device probing workflow (Chinese)](开发/真机稳定探测方法.md): bounded same-process capture, transaction recovery, unattended evidence and qualified human observations.
+
 | Record (Chinese only) | Scope | Date |
 | --- | --- | --- |
 | [Enabling system Parental Controls](调研/开启系统家长控制功能调研.md) | Native PIN registration, handover prerequisites and proposed entry point | 2026-10-06 |
 | [Non-PCTL suspension and overlay capabilities](调研/非PCTL暂停与浮窗能力调研.md) | Source-level display, input, process suspension and recovery capabilities | 2026-10-06 |
 | [Bedtime timer activation diagnosis](调研/就寝恢复误启动计时诊断-2026-10-08.md) | SD evidence, version comparison, recovery boundaries and device retest | 2026-10-08 |
+| [PCTL1952 mainline findings](调研/PCTL1952主线探测计划.md) | Usage semantics, first takeover, lifecycle and natural midnight evidence | 2026-10-14 |
+| [PCTL1952 feature impact handoff](调研/PCTL1952功能影响分析交接.md) | Analysis inputs for totals, eye care, bedtime, dock policy and combined state machines | 2026-10-14 |
 
 ## Maintenance
 

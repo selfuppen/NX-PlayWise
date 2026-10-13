@@ -528,6 +528,8 @@ def container_command(
     only: str = "default",
     with_eden: bool = True,
     with_device_lab: bool = False,
+    with_usage_probe: bool = False,
+    with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
     clean: bool = False,
@@ -573,6 +575,11 @@ def container_command(
     else:
         raise PackageError(f"unknown package target: {only}")
 
+    if with_usage_probe:
+        targets.append("usage-probe-package")
+    if with_pctl_capture:
+        targets.append("pctl-capture-package")
+
     targets_str = f"make {job_flag}{' '.join(targets)}"
     test_cmd = f"make {job_flag}test && " if (run_tests and only != "previews") else ""
     preview_cmd = f"make {job_flag}ui-previews && " if (with_previews and (only == "previews" or only == "all" or not test_cmd or with_previews)) else ""
@@ -613,6 +620,8 @@ def ssh_command(
     only: str = "default",
     with_eden: bool = True,
     with_device_lab: bool = False,
+    with_usage_probe: bool = False,
+    with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
     clean: bool = False,
@@ -635,6 +644,8 @@ def ssh_command(
             only=only,
             with_eden=with_eden,
             with_device_lab=with_device_lab,
+            with_usage_probe=with_usage_probe,
+            with_pctl_capture=with_pctl_capture,
             with_complete=with_complete,
             with_previews=with_previews,
             clean=clean,
@@ -658,6 +669,8 @@ def run_container(
     only: str = "default",
     with_eden: bool = True,
     with_device_lab: bool = False,
+    with_usage_probe: bool = False,
+    with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
     clean: bool = False,
@@ -677,6 +690,8 @@ def run_container(
             only=only,
             with_eden=with_eden,
             with_device_lab=with_device_lab,
+            with_usage_probe=with_usage_probe,
+            with_pctl_capture=with_pctl_capture,
             with_complete=with_complete,
             with_previews=with_previews,
             clean=clean,
@@ -723,6 +738,8 @@ def build_and_verify(
     only: str = "default",
     with_eden: bool = True,
     with_device_lab: bool = False,
+    with_usage_probe: bool = False,
+    with_pctl_capture: bool = False,
     with_complete: bool = False,
     with_previews: bool = False,
     clean: bool = False,
@@ -811,6 +828,8 @@ def build_and_verify(
         only=only,
         with_eden=check_eden,
         with_device_lab=with_device_lab or ("device_lab" in target_pkgs),
+        with_usage_probe=with_usage_probe,
+        with_pctl_capture=with_pctl_capture,
         with_complete=with_complete or ("complete" in target_pkgs),
         with_previews=with_previews,
         clean=clean,
@@ -838,6 +857,16 @@ def build_and_verify(
             print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage'}")
             print(f"PASS: synchronized {len(PREVIEW_FILES)} documentation preview images -> {ROOT / 'docs' / 'images' / 'usage-en'}")
     
+    if with_usage_probe:
+        import package_usage_probe
+        package_usage_probe.verify()
+        print(f"PASS: standalone usage probe -> {package_usage_probe.ZIP}")
+
+    if with_pctl_capture:
+        import package_pctl_capture
+        package_pctl_capture.verify()
+        print(f"PASS: internal PCTL capture staging -> {package_pctl_capture.ZIP}")
+
     if only != "previews":
         packages = latest_packages(package_dir, target_pkgs)
 
@@ -939,6 +968,8 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Build full release suite (standard, complete, device-lab, eden, previews) with complete packaging.",
     )
+    parser.add_argument("--with-pctl-capture", action="store_true", help="Build an inert same-process PCTL diagnostic staging zip; never activate automatically.")
+    parser.add_argument("--with-usage-probe", action="store_true", help="Build and verify the independent internal usage probe in the same SSH session.")
     device_lab_group = parser.add_mutually_exclusive_group()
     device_lab_group.add_argument(
         "--with-device-lab",
@@ -1071,6 +1102,8 @@ def main() -> int:
             only=only,
             with_eden=args.with_eden,
             with_device_lab=with_device_lab,
+            with_usage_probe=args.with_usage_probe,
+            with_pctl_capture=args.with_pctl_capture,
             with_complete=with_complete,
             with_previews=with_previews,
             clean=args.clean,
