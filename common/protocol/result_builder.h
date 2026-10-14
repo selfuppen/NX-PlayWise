@@ -20,6 +20,9 @@ typedef struct {
 typedef struct {
     uint16_t day_index;
     bool restriction_enabled_available;
+    bool local_clock_available;
+    uint32_t local_second_of_day;
+    int64_t local_clock_captured_at;
     bool restriction_enabled;
     bool temporary_unlocked_available;
     bool temporary_unlocked;

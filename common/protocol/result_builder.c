@@ -97,6 +97,12 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
     char eye_usage[256] = "";
     char dock_usage[224] = "";
     char history[400] = "";
+    char clock[160] = "";
+    if (state->local_clock_available)
+        (void)snprintf(clock, sizeof(clock),
+            "\"clock\":{\"day_index\":%u,\"second_of_day\":%lu,\"captured_at\":%lld},",
+            state->day_index, (unsigned long)state->local_second_of_day,
+            (long long)state->local_clock_captured_at);
     if (state->usage_direct_present)
         (void)snprintf(history, sizeof(history),
             ",\"direct\":{\"source\":\"pctl_1952\",\"scope\":\"console_usable_time\",\"coverage\":\"partial\","
@@ -123,7 +129,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
     (void)snprintf(
         out + used,
         out_size > used ? out_size - used : 0,
-        "\"state\":{\"day_index\":%u,\"restriction_enabled_available\":%s,\"restriction_enabled\":%s,"
+        "\"state\":{\"day_index\":%u,%s\"restriction_enabled_available\":%s,\"restriction_enabled\":%s,"
         "\"temporary_unlocked_available\":%s,\"temporary_unlocked\":%s,"
         "\"limited_today\":%d,\"blocked_today\":%d,"
         "\"unrestricted_today\":%d,\"remaining_available\":%s,\"remaining_minutes\":%lld,"
@@ -132,6 +138,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"rule_source\":\"%s\",\"calendar_covered\":%s,\"calendar_update_warning\":%s,"
         "\"calendar_option_id\":\"%s\",\"calendar_source\":\"%s\",",
         state->day_index,
+        clock,
         json_bool(state->restriction_enabled_available),
         json_bool(state->restriction_enabled),
         json_bool(state->temporary_unlocked_available),
@@ -245,6 +252,9 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
 {
     unsigned int i;
     state->day_index = day_index;
+    state->local_clock_available = false;
+    state->local_second_of_day = 0;
+    state->local_clock_captured_at = 0;
     state->restriction_enabled_available = false;
     state->restriction_enabled = false;
     state->temporary_unlocked_available = false;

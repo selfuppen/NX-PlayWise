@@ -140,6 +140,62 @@ static void test_policy_status(void)
         "absent policy objects are not presented as disabled");
     cJSON_Delete(root);
 
+    int projected_day, projected_second;
+    check_true(!ptc_policy_local_clock(1035, &projected_day, &projected_second),
+        "positive Overlay uptime is not a policy date");
+    state.local_clock_available = true;
+    state.local_second_of_day = 999;
+    state.local_clock_captured_at = 999;
+    ptc_result_state_default(&state, 2479);
+    check_true(!state.local_clock_available && state.local_second_of_day == 0 &&
+        state.local_clock_captured_at == 0, "default state clears previous civil clock");
+    state.local_clock_available = true;
+    state.local_second_of_day = 23 * 3600;
+    state.local_clock_captured_at = 1792001087;
+    check_true(ptc_result_ok_json(json, sizeof(json), "clock-test", "status", "release",
+        false, &state, 1792001087) == 0 && ptc_companion_result_summary_parse(json, &s),
+        "backend civil clock round trips with bound result timestamp");
+    check_true(ptc_policy_snapshot_clock(&s, 5, &projected_day, &projected_second),
+        "backend policy clock requires no client wall time");
+    check_int(projected_day, 2479, "backend civil date is preserved");
+    check_int(projected_second, 23 * 3600 + 5, "monotonic age advances civil time");
+    ptc_policy_status_project(&s, true, projected_day, projected_second, &p);
+    check_int(p.bedtime.state, PTC_POLICY_OFF, "fresh disabled bedtime is not pending");
+    check_true(ptc_policy_snapshot_clock(&s, 29, &projected_day, &projected_second),
+        "29 second policy clock stays fresh");
+    check_true(!ptc_policy_snapshot_clock(&s, 30, &projected_day, &projected_second) &&
+        !ptc_policy_snapshot_clock(&s, UINT64_MAX, &projected_day, &projected_second),
+        "30 seconds or missing monotonic origin invalidates policy clock");
+    s.local_second_of_day = 86399;
+    check_true(!ptc_policy_snapshot_clock(&s, 1, &projected_day, &projected_second),
+        "crossing midnight requires a new result");
+    root = cJSON_Parse(json);
+    wire_state = cJSON_GetObjectItemCaseSensitive(root, "state");
+    cJSON *clock = cJSON_GetObjectItemCaseSensitive(wire_state, "clock");
+    cJSON_ReplaceItemInObjectCaseSensitive(clock, "second_of_day", cJSON_CreateNumber(0.5));
+    check_true(cJSON_PrintPreallocated(root, json, sizeof(json), false) &&
+        ptc_companion_result_summary_parse(json, &s) && !s.local_clock_available,
+        "fractional civil second is unavailable");
+    cJSON_ReplaceItemInObjectCaseSensitive(clock, "second_of_day", cJSON_CreateNumber(86400));
+    check_true(cJSON_PrintPreallocated(root, json, sizeof(json), false) &&
+        ptc_companion_result_summary_parse(json, &s) && !s.local_clock_available,
+        "out of range civil second is unavailable");
+    cJSON_ReplaceItemInObjectCaseSensitive(clock, "second_of_day", cJSON_CreateNumber(23 * 3600));
+    cJSON_ReplaceItemInObjectCaseSensitive(clock, "day_index", cJSON_CreateNumber(2480));
+    check_true(cJSON_PrintPreallocated(root, json, sizeof(json), false) &&
+        ptc_companion_result_summary_parse(json, &s) && !s.local_clock_available,
+        "civil day must match result day");
+    cJSON_ReplaceItemInObjectCaseSensitive(clock, "day_index", cJSON_CreateNumber(2479));
+    cJSON_ReplaceItemInObjectCaseSensitive(clock, "captured_at", cJSON_CreateNumber(1792001086));
+    check_true(cJSON_PrintPreallocated(root, json, sizeof(json), false) &&
+        ptc_companion_result_summary_parse(json, &s) && !s.local_clock_available,
+        "civil clock cannot bind to another result timestamp");
+    cJSON_DeleteItemFromObjectCaseSensitive(wire_state, "clock");
+    check_true(cJSON_PrintPreallocated(root, json, sizeof(json), false) &&
+        ptc_companion_result_summary_parse(json, &s) && !s.local_clock_available,
+        "legacy result stays parseable without inventing civil time");
+    cJSON_Delete(root);
+
     PtcUiModel model;
     memset(&model, 0, sizeof(model));
     model.status_loaded = model.bedtime_status_available = model.bedtime_status_enabled = true;

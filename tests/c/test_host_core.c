@@ -11,6 +11,7 @@
 #include "../../common/protocol/activity_history.h"
 #include "../../common/protocol/redemption_history.h"
 #include "../../common/protocol/result_builder.h"
+#include "../../common/protocol/ipc_protocol.h"
 #include "../../common/support/support_export.h"
 #include "../../common/security/credential_policy.h"
 #include "../../third_party/qrcodegen/qrcodegen.h"
@@ -1711,7 +1712,7 @@ static void test_setup_preflight_and_recovery(void)
     PtcPctlStub pctl;
     PtcFakeTime fake_time;
     PtcSysmodule sysmodule;
-    char text[4096];
+    char text[PTC_IPC_MAX_RESULT_SIZE];
     char install_snapshot[4096];
     unsigned int apply_calls_after_activation;
 
@@ -1726,6 +1727,7 @@ static void test_setup_preflight_and_recovery(void)
     pctl.status.remaining_minutes = 120;
     pctl.status.play_timer_enabled = true;
     ptc_fake_time_init(&fake_time, 1783526401, 2380, 720);
+    check_int(fake_time.snapshot.second_of_minute, 0, "fake civil clock initializes seconds");
     ptc_sysmodule_init(&sysmodule, "app", &mem.storage, &pctl.pctl, &fake_time.provider);
     seed_release_setup(&mem);
 

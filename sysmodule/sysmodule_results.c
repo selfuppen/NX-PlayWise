@@ -304,6 +304,10 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
 {
     unsigned int i;
     PtcDailySummaryAggregate aggregate;
+    state->local_clock_available = now.unix_seconds > 0 && now.minute_of_day < 1440 &&
+        now.second_of_minute < 60;
+    state->local_second_of_day = (uint32_t)now.minute_of_day * 60u + now.second_of_minute;
+    state->local_clock_captured_at = now.unix_seconds;
     for (i = 0; i < PTC_RESULT_FORECAST_DAYS; ++i) {
         uint16_t forecast_day = (uint16_t)(now.day_index + i);
         PtcEffectiveRule forecast = ptc_rules_resolve(

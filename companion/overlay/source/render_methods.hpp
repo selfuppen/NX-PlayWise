@@ -268,10 +268,10 @@
         day = 2469;
         second = 496 * 60;
 #else
-        const long long now = static_cast<long long>(std::time(nullptr));
-        (void)ptc_policy_local_clock(now, &day, &second);
-        clock_fresh = last_refresh_wall_time_ > 0 && now >= last_refresh_wall_time_ &&
-            now - last_refresh_wall_time_ < 30;
+        const u64 tick = armGetSystemTick();
+        const uint64_t age = usage_snapshot_tick_ != 0 && tick >= usage_snapshot_tick_
+            ? armTicksToNs(tick - usage_snapshot_tick_) / 1000000000ULL : UINT64_MAX;
+        clock_fresh = ptc_policy_snapshot_clock(&summary, age, &day, &second);
 #endif
         return summary.valid && summary.day_index == day && clock_fresh && has_status_snapshot_ && last_refresh_tick_ != 0 && !status_is_stale() &&
             !(error_ && last_request_kind_ == OverlayRequestKind::Status);

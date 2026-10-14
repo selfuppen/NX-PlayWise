@@ -25,6 +25,8 @@ typedef struct {
     bool usage_present;
     int64_t usage_captured_at;
     int64_t completed_at;
+    bool local_clock_available;
+    int local_second_of_day;
     uint64_t usage_ns;
     bool daily_rule_available;
     bool daily_rule_unlimited;

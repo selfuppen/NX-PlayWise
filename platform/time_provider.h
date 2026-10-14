@@ -7,6 +7,7 @@ typedef struct {
     int64_t unix_seconds;
     uint16_t day_index;
     uint16_t minute_of_day;
+    uint8_t second_of_minute;
 } PtcClockSnapshot;
 
 typedef struct PtcTimeProvider PtcTimeProvider;

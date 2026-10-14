@@ -70,6 +70,22 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->disable_flag_present = bool_value(cJSON_GetObjectItemCaseSensitive(root, "setup"),
         "disable_flag_present", false);
     out->day_index = number_value(state, "day_index", -1);
+    {
+        const cJSON *clock = cJSON_GetObjectItemCaseSensitive(state, "clock");
+        const cJSON *day = cJSON_GetObjectItemCaseSensitive(clock, "day_index");
+        const cJSON *second = cJSON_GetObjectItemCaseSensitive(clock, "second_of_day");
+        const cJSON *captured = cJSON_GetObjectItemCaseSensitive(clock, "captured_at");
+        /* Bind civil time to this result; an unrelated timestamp cannot renew it. */
+        if (cJSON_IsNumber(day) && out->day_index >= 0 && out->day_index <= 65535 &&
+            day->valuedouble == out->day_index && cJSON_IsNumber(second) &&
+            second->valuedouble >= 0 && second->valuedouble < 86400 &&
+            second->valuedouble == (double)second->valueint &&
+            cJSON_IsNumber(captured) && out->completed_at > 0 &&
+            captured->valuedouble == (double)out->completed_at) {
+            out->local_clock_available = true;
+            out->local_second_of_day = second->valueint;
+        }
+    }
     out->remaining_available = bool_value(state, "remaining_available", false);
     out->remaining_minutes = number_value(state, "remaining_minutes", -1);
     out->played_minutes_available = bool_value(state, "played_minutes_available", false);

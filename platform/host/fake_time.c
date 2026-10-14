@@ -25,6 +25,7 @@ void ptc_fake_time_init(PtcFakeTime *fake, int64_t unix_seconds, uint16_t day_in
     fake->snapshot.unix_seconds = unix_seconds;
     fake->snapshot.day_index = day_index;
     fake->snapshot.minute_of_day = minute_of_day;
+    fake->snapshot.second_of_minute = 0;
     fake->slept_ms = 0;
 }
 

@@ -31,5 +31,8 @@ typedef struct {
 void ptc_policy_status_project(const PtcCompanionResultSummary *summary,
     bool fresh, int local_day_index, int second_of_day, PtcPolicyStatus *out);
 bool ptc_policy_local_clock(long long now, int *day_index, int *second_of_day);
+/* Overlay has no initialized libc wall clock. Request age is a conservative bound. */
+bool ptc_policy_snapshot_clock(const PtcCompanionResultSummary *summary,
+    uint64_t request_elapsed_seconds, int *day_index, int *second_of_day);
 
 #endif

@@ -18,6 +18,20 @@ bool ptc_policy_local_clock(long long now, int *day_index, int *second_of_day)
     return true;
 }
 
+bool ptc_policy_snapshot_clock(const PtcCompanionResultSummary *s,
+    uint64_t elapsed, int *day, int *second)
+{
+    if (!day || !second) return false;
+    *day = *second = -1;
+    if (!s || !s->valid || !s->local_clock_available || s->completed_at <= 0 ||
+        s->day_index < 0 || s->day_index > 65535 || elapsed >= 30 ||
+        s->local_second_of_day < 0 || s->local_second_of_day >= 86400 ||
+        (uint64_t)s->local_second_of_day + elapsed >= 86400) return false;
+    *day = s->day_index;
+    *second = s->local_second_of_day + (int)elapsed;
+    return true;
+}
+
 static void message(PtcPolicyDisplay *out, PtcPolicyDisplayState state,
     PtcUiTextId badge, PtcUiTextId text)
 {
