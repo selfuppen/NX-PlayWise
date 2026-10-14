@@ -4236,6 +4236,21 @@ static void test_direct_usage_freshness(void)
     summary.completed_at = 1121;
     ptc_companion_result_summary_expire_usage_elapsed(&summary, 0);
     check_true(!summary.played_minutes_available, "already stale backend capture expires at receipt");
+    /* Real r4 reply: the client's positive 772s uptime is not a Unix clock. */
+    state.usage_captured_at = 1791991936;
+    ptc_result_ok_json(json, sizeof(json), "772000-0039", "status", "release", true, &state, 1791991938);
+    check_true(ptc_companion_result_summary_parse(json, &summary), "positive uptime regression reply parses");
+    ptc_companion_result_summary_expire_usage(&summary, 772);
+    check_true(!summary.played_minutes_available, "a positive uninitialized client clock reproduces immediate expiry");
+    check_true(ptc_companion_result_summary_parse(json, &summary), "reset real reply before monotonic projection");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 1);
+    check_true(summary.played_minutes_available && summary.usage_captured_at == 1791991936,
+        "monotonic projection retains real fresh usage across the next frame");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 118);
+    check_true(summary.played_minutes_available, "real reply's two-second capture age keeps the exact 120-second boundary");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 119);
+    check_true(!summary.played_minutes_available && summary.usage_captured_at == 1791991936 && summary.daily_rule_minutes == 60,
+        "real reply expires only consumption after 120 seconds without renewing capture or changing quota");
     state.usage_available = false;
     ptc_result_ok_json(json, sizeof(json), "direct-unknown", "set_today_limit", "release", false, &state, 1121);
     check_true(ptc_ui_apply_result_json(&model, json) && !model.played_minutes_available,

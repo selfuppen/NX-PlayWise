@@ -183,17 +183,19 @@ public:
         return frame;
     }
 
+    void expire_usage_snapshot()
+    {
+        // Tesla bypasses libnx time initialization: even a positive time() can
+        // be uptime rather than Unix time. Use the bound request's monotonic age.
+        const u64 tick = armGetSystemTick();
+        const uint64_t age = usage_snapshot_tick_ != 0 && tick >= usage_snapshot_tick_
+            ? armTicksToNs(tick - usage_snapshot_tick_) / 1000000000ULL : UINT64_MAX;
+        ptc_companion_result_summary_expire_usage_elapsed(&displayed_summary_, age);
+    }
+
     void update() override
     {
-        const int64_t wall_now = static_cast<int64_t>(std::time(nullptr));
-        if (wall_now > 0) {
-            ptc_companion_result_summary_expire_usage(&displayed_summary_, wall_now);
-        } else {
-            const u64 tick = armGetSystemTick();
-            const uint64_t age = usage_snapshot_tick_ != 0 && tick >= usage_snapshot_tick_
-                ? armTicksToNs(tick - usage_snapshot_tick_) / 1000000000ULL : UINT64_MAX;
-            ptc_companion_result_summary_expire_usage_elapsed(&displayed_summary_, age);
-        }
+        expire_usage_snapshot();
         // Parent views use a raised content top (banner hidden); re-layout the
         // frame whenever we cross the child<->parent boundary. Runs every frame
         // before draw, so it must stay ahead of the waiting-only early return.
@@ -206,6 +208,7 @@ public:
         if (std::abs(page_scroll_target_ - page_scroll_) < 0.5f) page_scroll_ = page_scroll_target_;
         if (recovery_active_) {
             poll_pending_redemption();
+            expire_usage_snapshot();
         }
         if (!bridge_->waiting) return;
         const u64 elapsed_ns = armTicksToNs(armGetSystemTick() - request_started_tick_);
@@ -329,6 +332,8 @@ public:
             ptc_overlay_input_init(input_);
             status_expanded_ = true;
         }
+        // Check a newly received snapshot before this frame draws it, too.
+        expire_usage_snapshot();
         if (!bridge_->waiting) active_request_kind_ = OverlayRequestKind::None;
     }
 
