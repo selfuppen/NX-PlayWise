@@ -58,6 +58,14 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     snprintf(out->status, sizeof(out->status), "%s", status);
     snprintf(out->type, sizeof(out->type), "%s", string_value(root, "type"));
     out->ok = strcmp(status, "ok") == 0;
+    {
+        const cJSON *completed = cJSON_GetObjectItemCaseSensitive(root, "completed_at");
+        if (cJSON_IsNumber(completed) && completed->valuedouble > 0 &&
+            completed->valuedouble < (double)INT64_MAX &&
+            completed->valuedouble == (double)(int64_t)completed->valuedouble) {
+            out->completed_at = (int64_t)completed->valuedouble;
+        }
+    }
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
     out->disable_flag_present = bool_value(cJSON_GetObjectItemCaseSensitive(root, "setup"),
         "disable_flag_present", false);
@@ -226,6 +234,20 @@ void ptc_companion_result_summary_expire_usage(PtcCompanionResultSummary *summar
 {
     if (summary && summary->usage_present && (summary->usage_captured_at <= 0 ||
         now < summary->usage_captured_at || now - summary->usage_captured_at > 120)) {
+        summary->played_minutes_available = false;
+        summary->played_minutes = -1;
+    }
+}
+
+void ptc_companion_result_summary_expire_usage_elapsed(PtcCompanionResultSummary *summary,
+    uint64_t request_elapsed_seconds)
+{
+    if (!summary || !summary->usage_present) return;
+    /* Count the whole request interval, including response transit, rather than
+       granting another 120 seconds when a cached observation arrives. */
+    if (!summary->valid || summary->usage_captured_at <= 0 || summary->completed_at <= 0 ||
+        summary->completed_at < summary->usage_captured_at || request_elapsed_seconds > 120 ||
+        (uint64_t)(summary->completed_at - summary->usage_captured_at) > 120 - request_elapsed_seconds) {
         summary->played_minutes_available = false;
         summary->played_minutes = -1;
     }

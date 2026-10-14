@@ -24,6 +24,7 @@ typedef struct {
     bool played_minutes_available;
     bool usage_present;
     int64_t usage_captured_at;
+    int64_t completed_at;
     uint64_t usage_ns;
     bool daily_rule_available;
     bool daily_rule_unlimited;
@@ -101,5 +102,9 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
 bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summary, char *out, size_t out_size);
 /* Expires consumption only; keep runtime flags and the observation timestamp. */
 void ptc_companion_result_summary_expire_usage(PtcCompanionResultSummary *summary, int64_t now);
+/* No client wall clock: combine backend capture age with elapsed request time.
+   UINT64_MAX means the current request's monotonic origin is unavailable. */
+void ptc_companion_result_summary_expire_usage_elapsed(PtcCompanionResultSummary *summary,
+    uint64_t request_elapsed_seconds);
 
 #endif

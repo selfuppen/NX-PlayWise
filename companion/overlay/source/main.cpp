@@ -185,7 +185,15 @@ public:
 
     void update() override
     {
-        ptc_companion_result_summary_expire_usage(&displayed_summary_, static_cast<int64_t>(std::time(nullptr)));
+        const int64_t wall_now = static_cast<int64_t>(std::time(nullptr));
+        if (wall_now > 0) {
+            ptc_companion_result_summary_expire_usage(&displayed_summary_, wall_now);
+        } else {
+            const u64 tick = armGetSystemTick();
+            const uint64_t age = usage_snapshot_tick_ != 0 && tick >= usage_snapshot_tick_
+                ? armTicksToNs(tick - usage_snapshot_tick_) / 1000000000ULL : UINT64_MAX;
+            ptc_companion_result_summary_expire_usage_elapsed(&displayed_summary_, age);
+        }
         // Parent views use a raised content top (banner hidden); re-layout the
         // frame whenever we cross the child<->parent boundary. Runs every frame
         // before draw, so it must stay ahead of the waiting-only early return.
@@ -214,17 +222,20 @@ public:
             if (active_request_kind_ == OverlayRequestKind::OverlayReady &&
                 bridge_->summary.valid && bridge_->summary.ok) {
                 displayed_summary_ = bridge_->summary;
+                usage_snapshot_tick_ = request_started_tick_;
                 has_status_snapshot_ = true;
                 error_ = false;
                 (void)begin_status_refresh();
             } else if (ptc_overlay_bridge_status_succeeded(bridge_)) {
                 displayed_summary_ = bridge_->summary;
+                usage_snapshot_tick_ = request_started_tick_;
                 last_refresh_tick_ = armGetSystemTick();
                 last_refresh_wall_time_ = static_cast<long long>(std::time(nullptr));
                 has_status_snapshot_ = true;
                 error_ = false;
             } else if (ptc_overlay_bridge_preview_succeeded(bridge_)) {
                 displayed_summary_ = bridge_->summary;
+                usage_snapshot_tick_ = request_started_tick_;
                 last_refresh_tick_ = armGetSystemTick();
                 last_refresh_wall_time_ = static_cast<long long>(std::time(nullptr));
                 has_status_snapshot_ = true;
@@ -251,6 +262,7 @@ public:
                 }
             } else if (ptc_overlay_bridge_offline_code_succeeded(bridge_)) {
                 displayed_summary_ = bridge_->summary;
+                usage_snapshot_tick_ = request_started_tick_;
                 last_refresh_tick_ = armGetSystemTick();
                 last_refresh_wall_time_ = static_cast<long long>(std::time(nullptr));
                 has_status_snapshot_ = true;
@@ -265,6 +277,7 @@ public:
             } else if (active_request_kind_ == OverlayRequestKind::OfflineCode &&
                        bridge_->summary.valid && strcmp(bridge_->summary.type, "offline_code") == 0) {
                 displayed_summary_ = bridge_->summary;
+                usage_snapshot_tick_ = request_started_tick_;
                 error_ = false;
                 success_visible_ = true;
                 result_pending_ = false;
@@ -276,6 +289,7 @@ public:
             } else if (is_access_recovery_request(active_request_kind_) && bridge_->summary.valid) {
                 if (bridge_->summary.ok) {
                     displayed_summary_ = bridge_->summary;
+                    usage_snapshot_tick_ = request_started_tick_;
                     has_status_snapshot_ = true;
                     last_refresh_tick_ = armGetSystemTick();
                     last_refresh_wall_time_ = static_cast<long long>(std::time(nullptr));
@@ -392,6 +406,7 @@ public:
         result_pending_ = false;
         result_failed_ = !bridge_->summary.ok;
         displayed_summary_ = bridge_->summary;
+        usage_snapshot_tick_ = 0;
         apply_pending_preview();
         success_visible_ = true;
         error_ = false;
@@ -404,6 +419,7 @@ public:
     bool begin_status_refresh()
     {
         if (!bridge_ || bridge_->waiting) return false;
+        request_started_tick_ = armGetSystemTick();
         PtcCompanionStatus status = ptc_overlay_bridge_submit_status(
             bridge_, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_);
         if (status != PTC_COMPANION_OK) {
@@ -414,7 +430,6 @@ public:
         }
         active_request_kind_ = OverlayRequestKind::Status;
         last_request_kind_ = OverlayRequestKind::Status;
-        request_started_tick_ = armGetSystemTick();
         last_elapsed_ms_ = 0;
         error_ = false;
         return true;
@@ -428,6 +443,7 @@ public:
         environment_fingerprint(bridge_, fingerprint);
         std::snprintf(boot_id, sizeof(boot_id), "overlay-%016llx",
             static_cast<unsigned long long>(armGetSystemTick()));
+        request_started_tick_ = armGetSystemTick();
         PtcCompanionStatus status = ptc_overlay_bridge_submit_overlay_ready(
             bridge_, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_,
             PLAYWISE_BUILD_RELEASE_ID, boot_id, fingerprint);
@@ -438,7 +454,6 @@ public:
         }
         active_request_kind_ = OverlayRequestKind::OverlayReady;
         last_request_kind_ = OverlayRequestKind::OverlayReady;
-        request_started_tick_ = armGetSystemTick();
         last_elapsed_ms_ = 0;
         error_ = false;
         return true;
@@ -460,6 +475,7 @@ public:
     {
         if (!bridge_ || bridge_->waiting) return false;
         const int64_t now = static_cast<int64_t>(std::time(nullptr));
+        request_started_tick_ = armGetSystemTick();
         PtcCompanionStatus status = ptc_overlay_bridge_claim_daily_buffer(
             bridge_, now, ++request_nonce_);
         if (status != PTC_COMPANION_OK) {
@@ -471,7 +487,6 @@ public:
         }
         active_request_kind_ = OverlayRequestKind::ClaimDailyBuffer;
         last_request_kind_ = OverlayRequestKind::ClaimDailyBuffer;
-        request_started_tick_ = armGetSystemTick();
         last_elapsed_ms_ = 0;
         error_ = false;
         parent_view_ = ParentView::Result;
@@ -499,6 +514,7 @@ public:
         const auto action = static_cast<PtcOverlayParentAction>(parent_action_);
         if (parent_action_reason(action)) return false;
         const int64_t now = static_cast<int64_t>(std::time(nullptr));
+        request_started_tick_ = armGetSystemTick();
         PtcCompanionStatus status = PTC_COMPANION_BAD_ARGUMENT;
         OverlayRequestKind kind = OverlayRequestKind::None;
         parent_authorized_ = false;
@@ -548,7 +564,6 @@ public:
         parent_view_ = ParentView::Result;
         parent_action_succeeded_ = false;
         ptc_overlay_hold_reset(&confirm_hold_);
-        request_started_tick_ = armGetSystemTick();
         last_elapsed_ms_ = 0;
         error_ = status != PTC_COMPANION_OK;
         return status == PTC_COMPANION_OK;
@@ -771,6 +786,7 @@ public:
             awaiting_confirm_recheck_ = true;
             preview_ready_ = false;
         }
+        request_started_tick_ = armGetSystemTick();
         PtcCompanionStatus status = ptc_overlay_bridge_preview(
             bridge_, pending_code_, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_);
         if (status != PTC_COMPANION_OK) {
@@ -781,7 +797,6 @@ public:
         }
         active_request_kind_ = OverlayRequestKind::PreviewOfflineCode;
         last_request_kind_ = OverlayRequestKind::PreviewOfflineCode;
-        request_started_tick_ = armGetSystemTick();
         last_elapsed_ms_ = 0;
         error_ = false;
         status_expanded_ = true;
@@ -792,6 +807,7 @@ public:
     {
         if (!bridge_ || bridge_->waiting || pending_code_[0] == '\0' ||
             bedtime_restricted()) return false;
+        request_started_tick_ = armGetSystemTick();
         PtcCompanionStatus status = ptc_overlay_bridge_submit(
             bridge_, pending_code_, static_cast<int64_t>(std::time(nullptr)), ++request_nonce_,
             &redemption_before_);
@@ -815,7 +831,6 @@ public:
         apply_pending_preview();
         active_request_kind_ = OverlayRequestKind::OfflineCode;
         last_request_kind_ = OverlayRequestKind::OfflineCode;
-        request_started_tick_ = armGetSystemTick();
         last_elapsed_ms_ = 0;
         error_ = false;
         status_expanded_ = true;
@@ -847,6 +862,7 @@ private:
     OverlayRequestKind last_request_kind_ = OverlayRequestKind::None;
     unsigned int request_nonce_ = 0;
     u64 request_started_tick_ = 0;
+    u64 usage_snapshot_tick_ = 0;
     u64 last_input_tick_ = 0;
     u64 last_refresh_tick_ = 0;
     long long last_refresh_wall_time_ = 0;

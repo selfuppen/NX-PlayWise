@@ -4212,6 +4212,30 @@ static void test_direct_usage_freshness(void)
     ptc_companion_result_summary_expire_usage(&summary, 1121);
     check_true(!summary.played_minutes_available && summary.played_minutes == -1 && summary.usage_captured_at == 1000,
         "Overlay expires without resetting capture time");
+    check_true(ptc_companion_result_summary_parse(json, &summary) && summary.completed_at == 1005,
+        "typed projection retains backend completion time for clockless Overlay");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 115);
+    check_true(summary.played_minutes_available && summary.played_minutes == 69 && summary.usage_captured_at == 1000,
+        "clockless request interval plus original capture age retains exactly 120 seconds");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 116);
+    check_true(!summary.played_minutes_available && summary.usage_captured_at == 1000,
+        "clockless fallback must include response transit and must not renew the capture");
+    check_true(ptc_companion_result_summary_parse(json, &summary), "reset fresh clockless fixture");
+    summary.completed_at = 999;
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 0);
+    check_true(!summary.played_minutes_available, "capture later than backend reply is unknown");
+    check_true(ptc_companion_result_summary_parse(json, &summary), "reset missing reply clock fixture");
+    summary.completed_at = 0;
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 0);
+    check_true(!summary.played_minutes_available, "missing backend completion cannot promote a fresh counter");
+    check_true(ptc_companion_result_summary_parse(json, &summary), "reset missing monotonic origin fixture");
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, UINT64_MAX);
+    check_true(!summary.played_minutes_available && summary.daily_rule_minutes == 60 && summary.usage_captured_at == 1000,
+        "persisted replies without a current request origin expire consumption only");
+    check_true(ptc_companion_result_summary_parse(json, &summary), "reset already stale reply fixture");
+    summary.completed_at = 1121;
+    ptc_companion_result_summary_expire_usage_elapsed(&summary, 0);
+    check_true(!summary.played_minutes_available, "already stale backend capture expires at receipt");
     state.usage_available = false;
     ptc_result_ok_json(json, sizeof(json), "direct-unknown", "set_today_limit", "release", false, &state, 1121);
     check_true(ptc_ui_apply_result_json(&model, json) && !model.played_minutes_available,
