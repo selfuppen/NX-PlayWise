@@ -8,6 +8,16 @@
 typedef struct {
     PtcPctl pctl;
     Result last_result;
+    bool usage_sampled;
+    bool usage_available;
+    uint64_t usage_sample_tick;
+    uint64_t usage_ns;
+    uint16_t usage_day_index;
+    int64_t usage_captured_at;
+    Result usage_result;
+    bool usage_high_water_available;
+    uint16_t usage_high_water_day;
+    uint64_t usage_high_water_ns;
 #ifdef PLAYWISE_DEVICE_LAB
     Handle suspend_event;
     bool suspend_event_signaled;

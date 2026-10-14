@@ -230,7 +230,16 @@ static inline PtcPctlTargetMode ptc_compose_base_target(bool cap_unlimited,
     *minutes = day_rule.minutes;
     return target_from_day_rule(day_rule);
 }
-uint16_t ptc_pctl_played_minutes(const PtcPctlStatus *status);
+typedef struct {
+    uint16_t played_ceiling_minutes;
+    uint16_t target_minutes;
+    uint16_t effective_minutes;
+    int64_t remaining_after_minutes;
+} PtcGrantPlan;
+PtcErrorCode read_grant_status(PtcSysmodule *sysmodule, PtcClockSnapshot now, PtcPctlStatus *status);
+PtcErrorCode grant_clock_error(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClockSnapshot now);
+PtcErrorCode plan_grant(const PtcRules *rules, PtcClockSnapshot now,
+    const PtcPctlStatus *status, uint16_t minutes, PtcGrantPlan *plan);
 uint16_t accumulate_today_limit(PtcRules *rules, uint16_t day_index, uint8_t weekday, uint16_t add_minutes, uint16_t played_minutes);
 PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest *request, PtcRules *rules, PtcRuntimeState *runtime_state, PtcClockSnapshot now, uint16_t played_minutes);
 void effect_wait(PtcSysmodule *sysmodule, uint32_t milliseconds);

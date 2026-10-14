@@ -72,7 +72,7 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_NO_TIME_LIMIT_TODAY_NO_GRANT_REQUIRED, "No time limit
 PTC_UI_TEXT_VALUE(PTC_UI_T_THIS_CODE_HAS_BEEN_USED_PLEASE_GENERATE, "This code has been used, please generate another code; enter the new code after returning.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_THE_CODE_DATE_IS_INCONSISTENT_WITH_THE, "The code date is inconsistent with the host. Please refresh the host date, and then ask parents to generate a new code based on this day.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_THE_CODE_DOES_NOT_PASS_VERIFICATION_PLEASE, "The code does not pass verification, please check the 8-digit number; if it still fails, please ask parents to check the device and generate a new code.")
-PTC_UI_TEXT_VALUE(PTC_UI_T_THE_CODE_DURATION_EXCEEDS_THE_ALLOWED_LIMIT, "The code duration exceeds the allowed limit. Parents are asked to choose a shorter duration to generate a new code.")
+PTC_UI_TEXT_VALUE(PTC_UI_T_THE_CODE_DURATION_EXCEEDS_THE_ALLOWED_LIMIT, "Extra time is outside the allowed range, or today's allowance is already at the maximum. Ask a parent to check today's allowance and try again.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_THE_LAST_GRANT_RECOVERY_INFORMATION_CANNOT_BE, "The last grant recovery information cannot be read. Please do not re-enter this code.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_SUBMISSION_FAILED_THE_GRANT_CODE_HAS_NOT, "Submission failed; the grant code has not been consumed, please re-enter")
 PTC_UI_TEXT_VALUE(PTC_UI_T_PREVIEW_TODAY_S_GRANT, "Preview today's grant")

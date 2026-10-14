@@ -40,6 +40,20 @@ void result_state_from_pctl(
     state->remaining_minutes = result_remaining_minutes(status);
     state->played_minutes = result_played_minutes(status);
     state->played_minutes_available = state->played_minutes >= 0;
+    state->usage_supported = status->usage_supported;
+    state->usage_available = status->usage_available && status->usage_day_index == day_index;
+    state->usage_ns = state->usage_available ? status->usage_ns : 0;
+    state->usage_captured_at = state->usage_available ? status->usage_captured_at : 0;
+    state->usage_result = status->usage_result;
+    state->signed_remaining_ns_available = status->signed_remaining_ns_available;
+    state->signed_remaining_ns = status->signed_remaining_ns;
+    if (status->usage_supported) {
+        /* Only result projection changes source. The control, history and
+           health-policy baselines keep their explicit legacy contracts. */
+        state->played_minutes_available = state->usage_available;
+        state->played_minutes = state->usage_available
+            ? (int64_t)(state->usage_ns / UINT64_C(60000000000)) : -1;
+    }
     state->play_timer_enabled = result_observed_bool(
         status->play_timer_enabled_available, status->play_timer_enabled);
     state->restricted_now = result_observed_bool(
@@ -224,7 +238,7 @@ static void fill_bedtime_result_state(PtcSysmodule *sysmodule, PtcResultState *s
     state->daily_restriction_active = !runtime_state->eye_care_resting &&
         (!evaluation.active || state->bedtime_skipped) &&
         pctl_status->limited_today &&
-        pctl_status->remaining_available && pctl_status->remaining_minutes == 0u;
+        ptc_pctl_remaining_exhausted(pctl_status);
     if (!rules->bedtime.enabled) return;
     if (runtime_state->bedtime_skipped_instance_id != 0) {
         if (evaluation.active &&
@@ -404,6 +418,7 @@ bool write_current_status_result(
         return false;
     }
     err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
+    if (err == PTC_ERR_OK) err = grant_clock_error(sysmodule, request, now);
     if (err != PTC_ERR_OK) {
         /* An error result is not a successful commit. In particular, callers
            must retain recovery materials when rollback itself failed. */

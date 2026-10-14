@@ -72,6 +72,311 @@ static bool result_has(Fixture *f, const char *id, const char *needle)
     return f->mem->storage.vtable->read_text(&f->mem->storage, path, text, sizeof(text)) && strstr(text, needle);
 }
 
+static void test_direct_usage_projection(void)
+{
+    Fixture f;
+    PtcResultState result;
+    PtcCompanionResultSummary summary;
+    char json[6144];
+    init_fixture(&f);
+    PtcPctlStatus status = f.pctl.status;
+    status.played_minutes_available = false;
+    status.configured_minutes = 60;
+    status.remaining_minutes = 0;
+    status.usage_supported = status.usage_available = true;
+    status.usage_day_index = f.clock.snapshot.day_index;
+    status.usage_captured_at = f.clock.snapshot.unix_seconds;
+    status.usage_ns = UINT64_C(4191000000000);
+    status.signed_remaining_ns_available = true;
+    status.signed_remaining_ns = -INT64_C(591000000000);
+    result_state_from_pctl(&result, f.clock.snapshot.day_index, &status);
+    expect(result.played_minutes == 69 && result.played_minutes_available,
+        "display retains excess usage instead of truncating at quota");
+    PtcRules rules;
+    PtcGrantPlan plan;
+    expect(load_rules(&f.core, &rules) &&
+        plan_grant(&rules, f.clock.snapshot, &status, 15, &plan) == PTC_ERR_OK &&
+        plan.played_ceiling_minutes == 70,
+        "grant rounds true usage up independently from display floor");
+    ptc_result_ok_json(json, sizeof(json), "direct-display", "status", "release", true,
+        &result, f.clock.snapshot.unix_seconds);
+    expect(ptc_companion_result_summary_parse(json, &summary) && summary.usage_present &&
+        summary.played_minutes == 69 && summary.usage_captured_at == status.usage_captured_at,
+        "direct observation survives result serialization and parsing");
+    status.usage_ns = UINT64_C(30133000000000);
+    for (unsigned i = 0; i < 3; ++i) {
+        status.configured_minutes = (uint16_t)(323 + 120 * i);
+        status.remaining_minutes = i == 2 ? 60 : 0;
+        result_state_from_pctl(&result, f.clock.snapshot.day_index, &status);
+        expect(result.played_minutes == 502, "quota changes never change direct displayed use");
+    }
+    status.usage_available = false;
+    result_state_from_pctl(&result, f.clock.snapshot.day_index, &status);
+    expect(!result.played_minutes_available && result.played_minutes == -1,
+        "1952 failure does not fall back to clamped estimate");
+    status.usage_available = true; ++status.usage_day_index;
+    result_state_from_pctl(&result, f.clock.snapshot.day_index, &status);
+    expect(!result.played_minutes_available, "next-day observation cannot populate old-day result");
+    free(f.mem);
+}
+
+static void test_positive_subminute_runtime(void)
+{
+    Fixture f;
+    PtcPctlStatus observed;
+    init_fixture(&f);
+    f.pctl.model_elapsed_time = false;
+    f.pctl.status.remaining_minutes = 0;
+    f.pctl.status.signed_remaining_ns_available = true;
+    f.pctl.status.signed_remaining_ns = INT64_C(40000000000);
+    f.pctl.status.restricted_now = false;
+    PtcErrorCode error = observe_target_with_optional_activation(&f.core, &(PtcRequest){0},
+        f.clock.snapshot, "release", PTC_PCTL_TARGET_LIMIT, 120, "subminute-test", &observed);
+    expect(error == PTC_ERR_OK && f.pctl.start_timer_calls == 0,
+        "positive 40 seconds is ready without redundant 1451 fallback");
+    expect(!ptc_pctl_remaining_exhausted(&observed), "positive subminute is not exhausted");
+    observed.signed_remaining_ns = 0;
+    expect(ptc_pctl_remaining_exhausted(&observed), "zero signed remainder is exhausted");
+    observed.signed_remaining_ns = -1;
+    expect(ptc_pctl_remaining_exhausted(&observed), "negative signed remainder is exhausted");
+    free(f.mem);
+}
+
+static void seed_direct_grant(Fixture *f, uint64_t used_ns, uint16_t quota)
+{
+    PtcRules rules;
+    init_fixture(f);
+    expect(load_rules(&f->core, &rules), "load direct grant rules");
+    for (unsigned i = 0; i < 7; ++i) rules.week[i].minutes = quota;
+    rules.autonomy_policy.daily_buffer_minutes = 15;
+    expect(save_rules(&f->core, &rules), "seed direct grant quota");
+    f->pctl.configured_minutes = f->pctl.status.configured_minutes = quota;
+    f->pctl.played_minutes_today = (uint16_t)(used_ns / UINT64_C(60000000000));
+    f->pctl.usage_fraction_ns = used_ns % UINT64_C(60000000000);
+    f->pctl.status.remaining_minutes = quota > f->pctl.played_minutes_today
+        ? quota - f->pctl.played_minutes_today : 0;
+    f->pctl.status.usage_supported = f->pctl.status.usage_available = true;
+    f->pctl.status.usage_ns = used_ns;
+    f->pctl.status.usage_day_index = f->clock.snapshot.day_index;
+    f->pctl.status.usage_captured_at = f->clock.snapshot.unix_seconds;
+}
+
+static void grant_payload(char *payload, size_t size)
+{
+    char code[16];
+    uint8_t tier;
+    expect(ptc_token_v2_tier_for_minutes(15, &tier) == PTC_ERR_OK &&
+        ptc_token_v2_encode(tier, 42, "kid-switch", SECRET, 2380, code) == PTC_ERR_OK,
+        "encode direct grant code");
+    snprintf(payload, size, "{\"code\":\"%s\"}", code);
+}
+
+static const char *grant_types[] = {
+    "preview_offline_code", "offline_code", "add_today_minutes", "claim_daily_buffer"
+};
+
+static void direct_grant_request(Fixture *f, unsigned surface, const char *id)
+{
+    char payload[64];
+    if (surface < 2) grant_payload(payload, sizeof(payload));
+    else snprintf(payload, sizeof(payload), "%s", surface == 2 ? "{\"minutes\":15}" : "{}");
+    request(f, id, grant_types[surface], payload);
+}
+
+static void test_direct_grants(void)
+{
+    {
+        Fixture f;
+        PtcRules rules;
+        PtcGrantPlan plan;
+        seed_direct_grant(&f, 0, 60);
+        expect(load_rules(&f.core, &rules), "load rounding table rules");
+        const struct { uint64_t ns; uint16_t target, effective; int64_t remaining; } cases[] = {
+            {0, 75, 15, 75},
+            {UINT64_C(6059999999999), 116, 15, 15},
+            {UINT64_C(6060000000000), 116, 15, 15},
+            {UINT64_C(6060000000001), 117, 15, 15},
+            {UINT64_C(14395000000000), 255, 15, 15},
+            {UINT64_C(1435) * UINT64_C(60000000000), 1440, 5, 5},
+            {INT64_MAX, 1440, 0, 0},
+        };
+        for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+            f.pctl.status.usage_ns = cases[i].ns;
+            expect(plan_grant(&rules, f.clock.snapshot, &f.pctl.status, 15, &plan) == PTC_ERR_OK &&
+                plan.target_minutes == cases[i].target && plan.effective_minutes == cases[i].effective &&
+                plan.remaining_after_minutes == cases[i].remaining,
+                "nanosecond boundaries, partial cap and maximum s64 retain safe rounding");
+        }
+        f.pctl.status.usage_supported = false;
+        f.pctl.status.played_minutes_available = true;
+        f.pctl.status.played_minutes = 307445735u;
+        expect(plan_grant(&rules, f.clock.snapshot, &f.pctl.status, 15, &plan) == PTC_ERR_PCTL_READ_FAILED,
+            "legacy minute conversion rejects overflow before multiplication");
+        free(f.mem);
+    }
+    for (unsigned surface = 0; surface < 4; ++surface) {
+        Fixture f;
+        PtcRuntimeState state;
+        PtcGrantPlan plan;
+        PtcRules rules;
+        bool used;
+        seed_direct_grant(&f, UINT64_C(6059000000000), 60); /* 100m59s */
+        expect(load_rules(&f.core, &rules) && plan_grant(&rules, f.clock.snapshot,
+            &f.pctl.status, 15, &plan) == PTC_ERR_OK && plan.target_minutes == 116 &&
+            plan.effective_minutes == 15 && plan.remaining_after_minutes == 15,
+            "overrun adds the full award with ceiling base and floor balance");
+        direct_grant_request(&f, surface, "direct-grant");
+        expect(result_has(&f, "direct-grant", "\"status\":\"ok\""), "all grant surfaces accept true cumulative usage");
+        if (surface == 0) {
+            expect(f.pctl.apply_target_calls == 0 &&
+                result_has(&f, "direct-grant", "\"effective_add_minutes\":15") &&
+                result_has(&f, "direct-grant", "\"remaining_after_minutes\":15"),
+                "preview is non-consuming and uses the same fractional plan");
+        } else {
+            expect(f.pctl.last_target.minutes == 116 && load_rules(&f.core, &rules) &&
+                rules.today_override.rule.minutes == 116,
+                "actual grant matches preview instead of under-awarding from clamped remainder");
+            expect(f.mem->storage.vtable->exists(&f.mem->storage, "app/activity/history.jsonl"),
+                "successful grants write family activity");
+        }
+        expect(check_nonce_used(&f.core, 2380, 42, 2, &used) == PTC_ERR_OK && used == (surface == 1),
+            "only confirmed offline redemption consumes nonce");
+        expect(load_state(&f.core, &state) && state.buffer_claimed == (surface == 3),
+            "only confirmed buffer consumes eligibility");
+        free(f.mem);
+    }
+    for (unsigned surface = 0; surface < 4; ++surface) {
+        for (unsigned invalid = 0; invalid < 7; ++invalid) {
+            Fixture f;
+            PtcRules rules;
+            PtcRuntimeState state;
+            PtcPctlVTable vtable;
+            bool used;
+            seed_direct_grant(&f, UINT64_C(6059000000000), 60);
+            vtable = *f.pctl.pctl.vtable;
+            if (invalid == 0) f.pctl.status.usage_available = false;
+            if (invalid == 1) ++f.pctl.status.usage_day_index;
+            if (invalid == 2) --f.pctl.status.usage_captured_at;
+            if (invalid == 3) ++f.pctl.status.usage_captured_at;
+            if (invalid == 4) f.pctl.status.usage_ns = UINT64_MAX;
+            if (invalid == 5) { vtable.read_grant_status = NULL; f.pctl.pctl.vtable = &vtable; }
+            if (invalid == 6) f.pctl.status.usage_result = 777;
+            direct_grant_request(&f, surface, "unknown-grant");
+            expect(result_has(&f, "unknown-grant", "pctl_read_failed") && f.pctl.apply_target_calls == 0 &&
+                !recovery_path_exists(&f.core), "unknown, stale, invalid or mismatched usage rejects before transaction");
+            expect(load_rules(&f.core, &rules) && !rules.today_override.present &&
+                load_state(&f.core, &state) && !state.buffer_claimed &&
+                check_nonce_used(&f.core, 2380, 42, 2, &used) == PTC_ERR_OK && !used,
+                "rejected grants preserve rules, buffer and nonce");
+            free(f.mem);
+        }
+    }
+    for (unsigned surface = 0; surface < 4; ++surface) {
+        Fixture f;
+        PtcRuntimeState state;
+        bool used;
+        seed_direct_grant(&f, UINT64_C(1440) * UINT64_C(60000000000), 1440);
+        direct_grant_request(&f, surface, "zero-grant");
+        expect(f.pctl.apply_target_calls == 0 &&
+            result_has(&f, "zero-grant", surface == 0 ? "\"effective_add_minutes\":0" : "minutes_exceed_limit"),
+            "zero-effective preview explains cap; actual grants reject without writes");
+        expect(check_nonce_used(&f.core, 2380, 42, 2, &used) == PTC_ERR_OK && !used &&
+            load_state(&f.core, &state) && !state.buffer_claimed,
+            "1440 cap does not consume an unusable award");
+        free(f.mem);
+    }
+    for (unsigned surface = 0; surface < 4; ++surface) {
+        Fixture f;
+        PtcRuntimeState state;
+        char activity[4096];
+        seed_direct_grant(&f, UINT64_C(6059000000000), 1435);
+        direct_grant_request(&f, surface, "partial-grant");
+        expect(result_has(&f, "partial-grant", "\"status\":\"ok\""), "partially capped award succeeds");
+        if (surface == 0) expect(result_has(&f, "partial-grant", "\"effective_add_minutes\":5"),
+            "preview reports partial award rather than face value");
+        else expect(f.pctl.last_target.minutes == 1440 && load_state(&f.core, &state) &&
+            state.summary_grant_minutes == 5 &&
+            f.mem->storage.vtable->read_text(&f.mem->storage, "app/activity/history.jsonl", activity, sizeof(activity)) &&
+            strstr(activity, "\"minutes\":15") && strstr(activity, "\"effective_minutes\":5"),
+            "all actual surfaces record face and effective award separately");
+        free(f.mem);
+    }
+}
+
+static void test_direct_grant_rollbacks(void)
+{
+    const char *failures_at[] = {"rules.json", "state.json", "activity/history.jsonl", "results/direct-fail.json"};
+    for (unsigned surface = 1; surface < 4; ++surface) {
+        for (unsigned stage = 0; stage < 4; ++stage) {
+            Fixture f;
+            PtcRules rules;
+            PtcRuntimeState state;
+            bool used;
+            seed_direct_grant(&f, UINT64_C(6059000000000), 60);
+            f.mem->fail_write_path_contains_once = failures_at[stage];
+            direct_grant_request(&f, surface, "direct-fail");
+            expect(!result_has(&f, "direct-fail", "\"status\":\"ok\""), "failed persistence never reports a committed grant");
+            f.mem->fail_write_path_contains = NULL;
+            expect(load_rules(&f.core, &rules) && !rules.today_override.present &&
+                load_state(&f.core, &state) && !state.buffer_claimed &&
+                f.pctl.configured_minutes == 60 && f.pctl.played_minutes_today == 100 &&
+                check_nonce_used(&f.core, 2380, 42, 2, &used) == PTC_ERR_OK && !used,
+                "rollback restores quota and eligibility without restoring real consumption");
+            direct_grant_request(&f, surface, "direct-retry");
+            expect(result_has(&f, "direct-retry", "\"status\":\"ok\"") &&
+                f.pctl.last_target.minutes == 116, "retry awards once from original quota and true used time");
+            free(f.mem);
+        }
+    }
+}
+
+static Fixture *grant_fault_fixture;
+static unsigned grant_fault_kind;
+static PtcErrorCode (*grant_original_apply)(PtcPctl *, const PtcPctlTarget *);
+
+static PtcErrorCode grant_fault_apply(PtcPctl *pctl, const PtcPctlTarget *target)
+{
+    PtcErrorCode err = grant_original_apply(pctl, target);
+    if (grant_fault_kind == 0) {
+        ++grant_fault_fixture->clock.snapshot.day_index;
+        ++grant_fault_fixture->clock.snapshot.unix_seconds;
+    } else if (grant_fault_kind == 1) --grant_fault_fixture->clock.snapshot.unix_seconds;
+    else grant_fault_fixture->pctl.status.usage_available = false;
+    return err;
+}
+
+static void test_direct_grant_clock_and_field_failures(void)
+{
+    for (unsigned surface = 1; surface < 4; ++surface) {
+        for (unsigned fault = 0; fault < 3; ++fault) {
+            Fixture f;
+            PtcRules rules;
+            PtcRuntimeState state;
+            PtcPctlVTable vtable;
+            bool used;
+            seed_direct_grant(&f, UINT64_C(6059000000000), 60);
+            vtable = *f.pctl.pctl.vtable;
+            grant_original_apply = vtable.apply_target;
+            grant_fault_fixture = &f;
+            grant_fault_kind = fault;
+            vtable.apply_target = grant_fault_apply;
+            f.pctl.pctl.vtable = &vtable;
+            direct_grant_request(&f, surface, "clock-grant");
+            if (fault < 2) {
+                expect(result_has(&f, "clock-grant", "bad_clock") &&
+                    f.pctl.configured_minutes == 60 && load_rules(&f.core, &rules) &&
+                    !rules.today_override.present && load_state(&f.core, &state) && !state.buffer_claimed &&
+                    check_nonce_used(&f.core, 2380, 42, 2, &used) == PTC_ERR_OK && !used,
+                    "day switch or clock reversal during write rolls back and preserves award");
+            } else expect(result_has(&f, "clock-grant", "\"status\":\"ok\"") &&
+                result_has(&f, "clock-grant", "\"played_minutes_available\":false") &&
+                f.pctl.configured_minutes == 116,
+                "display-field failure after a validated grant does not undo a confirmed target");
+            free(f.mem);
+        }
+    }
+}
+
 static void test_ledger(void)
 {
     Fixture f;
@@ -1114,6 +1419,11 @@ static void test_eden_timer_restart(void)
 int ptc_test_control_safety(void)
 {
     failures = 0;
+    test_direct_usage_projection();
+    test_positive_subminute_runtime();
+    test_direct_grants();
+    test_direct_grant_rollbacks();
+    test_direct_grant_clock_and_field_failures();
     test_dock_midnight_allowance_change();
     test_eden_timer_restart();
     test_persisted_eden_mode();

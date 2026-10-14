@@ -753,7 +753,8 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         if (fill_w > 0) fill_round_rect(pixels, stride, (UiRect){pbar.x, pbar.y, fill_w, pbar.height}, 6, UI_ACCENT);
 
         char used_str[64], left_str[64];
-        snprintf(used_str, sizeof(used_str), ptc_ui_text(PTC_UI_T_DETAIL_USED_LABEL), (unsigned)model->played_minutes);
+        snprintf(used_str, sizeof(used_str),
+            ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE_U_MIN : PTC_UI_T_DETAIL_USED_LABEL), (unsigned)model->played_minutes);
         draw_text(pixels, stride, pbar.x, pbar.y + pbar.height + 15, used_str, 11, UI_MUTED);
         detail_balance(p->total_known, p->total_unlimited, p->total_remaining, value, sizeof(value));
         snprintf(left_str, sizeof(left_str), ptc_ui_text(PTC_UI_T_DETAIL_LEFT_LABEL), value);

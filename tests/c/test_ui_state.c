@@ -9,6 +9,8 @@
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/protocol/error_code.h"
+#include "../../common/protocol/result_builder.h"
+#include "../../companion/result_summary.h"
 #include "../../third_party/cjson/cJSON.h"
 
 static int failures;
@@ -4110,8 +4112,60 @@ static void test_today_details_navigation(void)
     check_int(m.selected_index, 11, "parent origin preserved");
 }
 
+static void test_direct_usage_freshness(void)
+{
+    PtcUiModel model;
+    PtcResultState state;
+    char json[6144];
+    memset(&model, 0, sizeof(model));
+    ptc_result_state_default(&state, 2380);
+    state.usage_supported = state.usage_available = true;
+    state.usage_ns = UINT64_C(4191000000000);
+    state.usage_captured_at = 1000;
+    state.played_minutes_available = true;
+    state.played_minutes = 60; /* The typed usage object, not this estimate, wins. */
+    state.forecast[0].minutes = 60;
+    ptc_result_ok_json(json, sizeof(json), "direct-ui", "status", "release", true, &state, 1005);
+    check_true(ptc_ui_apply_result_json(&model, json), "direct usage result accepted by NRO");
+    check_int(model.played_minutes, 69, "typed direct consumption overrides compatibility estimate");
+    model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
+    model.draft_minutes = 15;
+    check_int(ptc_ui_preview_remaining_minutes(&model), 15, "quick preview uses ceiling after overrun");
+    check_int(ptc_ui_preview_effective_add_minutes(&model), 15, "quick preview keeps full award after overrun");
+    model.forecast[0].minutes = 1435;
+    check_int(ptc_ui_preview_effective_add_minutes(&model), 5, "partial cap does not promise the fifteen-minute face value");
+    model.forecast[0].minutes = 1440;
+    check_int(ptc_ui_preview_remaining_minutes(&model), 1370, "quick preview respects cap and fractional usage");
+    check_int(ptc_ui_preview_effective_add_minutes(&model), 0, "cap preview never invents an effective award");
+    model.forecast[0].minutes = 60;
+    ptc_ui_mark_status_updated(&model, 1120);
+    check_true(ptc_ui_status_is_fresh(&model, 1120), "direct observation includes 120-second boundary");
+    check_true(!ptc_ui_status_is_fresh(&model, 1121), "receipt time cannot refresh direct observation");
+    ptc_ui_mark_status_updated(&model, 999);
+    check_true(!ptc_ui_status_is_fresh(&model, 999), "future direct capture is unknown");
+    PtcCompanionResultSummary summary;
+    check_true(ptc_companion_result_summary_parse(json, &summary) && summary.daily_rule_available &&
+        summary.daily_rule_minutes == 60, "forecast determines actual business quota");
+    ptc_companion_result_summary_expire_usage(&summary, 1120);
+    check_true(summary.played_minutes_available, "Overlay retains fresh direct observation");
+    ptc_companion_result_summary_expire_usage(&summary, 1121);
+    check_true(!summary.played_minutes_available && summary.played_minutes == -1 && summary.usage_captured_at == 1000,
+        "Overlay expires without resetting capture time");
+    state.usage_available = false;
+    ptc_result_ok_json(json, sizeof(json), "direct-unknown", "set_today_limit", "release", false, &state, 1121);
+    check_true(ptc_ui_apply_result_json(&model, json) && !model.played_minutes_available,
+        "management reply with explicit unknown clears previous direct use");
+    check_int(ptc_ui_preview_remaining_minutes(&model), -1, "unknown direct use cannot borrow remaining for a grant preview");
+    state.usage_available = true;
+    state.usage_ns = UINT64_MAX;
+    ptc_result_ok_json(json, sizeof(json), "bad-usage", "status", "release", true, &state, 1122);
+    check_true(ptc_companion_result_summary_parse(json, &summary) && !summary.played_minutes_available,
+        "invalid signed wire range cannot fall back to old estimate");
+}
+
 int main(void)
 {
+    test_direct_usage_freshness();
     test_today_projection();
     test_today_details_navigation();
     test_today_settings_links();

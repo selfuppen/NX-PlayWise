@@ -339,6 +339,7 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
     state = cJSON_GetObjectItemCaseSensitive(root, "state");
     if (status_context && cJSON_IsObject(state)) {
         bool preserve_played_minutes = model->played_minutes_available &&
+            !model->usage_present && !summary.usage_present &&
             !summary.played_minutes_available && type && strcmp(type, "status") != 0 &&
             model->day_index == (uint16_t)json_int(state, "day_index", 0);
 
@@ -359,6 +360,9 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
         if (!preserve_played_minutes) {
             model->played_minutes_available = summary.played_minutes_available;
             model->played_minutes = summary.played_minutes;
+            model->usage_present = summary.usage_present;
+            model->usage_captured_at = summary.usage_captured_at;
+            model->usage_ns = summary.usage_ns;
         }
         model->play_timer_enabled = summary.play_timer_enabled;
         model->restricted_now = summary.restricted_now;

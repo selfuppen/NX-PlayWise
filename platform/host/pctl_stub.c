@@ -62,6 +62,7 @@ static PtcErrorCode stub_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStat
         uint64_t used = (uint64_t)stub->played_minutes_today * 60000000000ULL + stub->usage_fraction_ns;
         out->remaining_ns_available = true;
         out->remaining_ns = configured > used ? (int64_t)(configured - used) : 0;
+        out->remaining_minutes = (uint32_t)(out->remaining_ns / UINT64_C(60000000000));
     }
     if (stub->model_elapsed_time) {
         out->played_minutes_available = true;
@@ -365,6 +366,24 @@ static PtcErrorCode stub_poll_suspend_event(PtcPctl *pctl, PtcPctlSuspendEventEv
     return PTC_ERR_OK;
 }
 
+static PtcErrorCode stub_read_grant_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStatus *out)
+{
+    PtcPctlStub *stub = (PtcPctlStub *)pctl->ctx;
+    PtcErrorCode err = stub_read_status(pctl, weekday, out);
+    if (err == PTC_ERR_OK && !out->usage_supported && !out->played_minutes_available) {
+        /* Host/Eden has an explicit simulated cumulative counter. */
+        out->played_minutes_available = true;
+        out->played_minutes = stub->played_minutes_today;
+    }
+    if (err == PTC_ERR_OK && !out->usage_supported) {
+        if (out->played_minutes > (uint64_t)INT64_MAX / UINT64_C(60000000000))
+            return PTC_ERR_PCTL_READ_FAILED;
+        out->played_ns_available = true;
+        out->played_ns = (uint64_t)out->played_minutes * UINT64_C(60000000000) + stub->usage_fraction_ns;
+    }
+    return err;
+}
+
 static const PtcPctlVTable PCTL_STUB_VTABLE = {
     stub_read_status,
     stub_backup,
@@ -379,6 +398,7 @@ static const PtcPctlVTable PCTL_STUB_VTABLE = {
     stub_public_parity,
     stub_arm_suspend_event,
     stub_poll_suspend_event,
+    stub_read_grant_status,
 };
 
 void ptc_pctl_stub_init(PtcPctlStub *stub)

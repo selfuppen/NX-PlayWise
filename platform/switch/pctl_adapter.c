@@ -21,9 +21,7 @@
 #define PTC_PCTL_CMD_SET_PLAY_TIMER_SETTINGS_FOR_DEBUG 195101
 #define PTC_PCTL_CMD_GET_PLAY_TIMER_EVENT_TO_REQUEST_SUSPENSION 1457
 #define PTC_PCTL_CMD_IS_PLAY_TIMER_ALARM_DISABLED 1458
-#ifdef PLAYWISE_DEVICE_LAB
 #define PTC_PCTL_CMD_GET_PLAY_TIMER_SPENT_TIME_FOR_TEST 1952
-#endif
 typedef struct {
     u16 words[PTC_PLAY_TIMER_SETTINGS_WORDS];
 } PtcSwitchPlayTimerSettings;
@@ -165,6 +163,61 @@ static void settings_slots(char *out, size_t out_size, const PtcSwitchPlayTimerS
     ptc_play_timer_settings_summary(out, out_size, settings->words, PTC_PLAY_TIMER_SETTINGS_WORDS);
 }
 
+static bool usage_clock(uint16_t *day_index, int64_t *unix_seconds)
+{
+    u64 timestamp;
+    TimeCalendarTime calendar;
+    TimeCalendarAdditionalInfo additional;
+    if (R_FAILED(timeGetCurrentTime(TimeType_Default, &timestamp)) || timestamp == 0 || timestamp > INT64_MAX ||
+        R_FAILED(timeToCalendarTimeWithMyRule(timestamp, &calendar, &additional)) ||
+        !ptc_day_index_from_date(calendar.year, calendar.month, calendar.day, day_index)) return false;
+    *unix_seconds = (int64_t)timestamp;
+    return true;
+}
+
+static void read_display_usage(PtcSwitchPctl *adapter, Service *service, PtcPctlStatus *out)
+{
+    uint16_t day, after_day;
+    int64_t now, after;
+    uint64_t tick = armGetSystemTick();
+    out->usage_supported = true;
+    if (!usage_clock(&day, &now)) {
+        adapter->usage_sampled = false;
+        return;
+    }
+    /* Bound the additional IPC to one attempt per five seconds, including
+       failures. Cached observations retain their original date and timestamp. */
+    if (!adapter->usage_sampled || adapter->usage_day_index != day ||
+        now < adapter->usage_captured_at || tick < adapter->usage_sample_tick ||
+        armTicksToNs(tick - adapter->usage_sample_tick) >= UINT64_C(5000000000)) {
+        s64 spent = 0;
+        adapter->usage_sampled = true;
+        adapter->usage_sample_tick = tick;
+        adapter->usage_day_index = day;
+        adapter->usage_captured_at = now;
+        adapter->usage_result = dispatch_out(service,
+            PTC_PCTL_CMD_GET_PLAY_TIMER_SPENT_TIME_FOR_TEST, &spent, sizeof(spent));
+        adapter->usage_available = R_SUCCEEDED(adapter->usage_result) && spent >= 0 &&
+            usage_clock(&after_day, &after) && after_day == day && after >= now;
+        /* A same-day decrease is unqualified. Keep the last trusted floor
+           across failures so a subsequent grant cannot silently undercount. */
+        if (adapter->usage_available && adapter->usage_high_water_available &&
+            adapter->usage_high_water_day == day &&
+            (uint64_t)spent < adapter->usage_high_water_ns) adapter->usage_available = false;
+        if (adapter->usage_available) {
+            adapter->usage_high_water_available = true;
+            adapter->usage_high_water_day = day;
+            adapter->usage_high_water_ns = (uint64_t)spent;
+        }
+        adapter->usage_ns = adapter->usage_available ? (uint64_t)spent : 0;
+    }
+    out->usage_available = adapter->usage_available;
+    out->usage_ns = adapter->usage_ns;
+    out->usage_day_index = adapter->usage_day_index;
+    out->usage_captured_at = adapter->usage_captured_at;
+    out->usage_result = adapter->usage_result;
+}
+
 static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStatus *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
@@ -187,6 +240,7 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
     }
     service = &session.service;
     memset(out, 0, sizeof(*out));
+    out->usage_supported = true;
     Result restriction_rc = dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTION_ENABLED, &enabled, sizeof(enabled));
     err = map_result(
         adapter,
@@ -210,10 +264,10 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
         out->remaining_available = true;
         out->remaining_ns_available = true;
         out->remaining_ns = remaining_ns > 0 ? remaining_ns : 0;
+        out->signed_remaining_ns_available = true;
+        out->signed_remaining_ns = remaining_ns;
         out->remaining_minutes = ptc_nonnegative_minutes_from_nanoseconds(remaining_ns);
     }
-    /* Do not use private command 1952 here: device observations show that it can
-       track wall time since Play Timer start instead of foreground game time. */
     Result restricted_rc = dispatch_out(service, PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER, &restricted, sizeof(restricted));
     out->restricted_now_available = R_SUCCEEDED(restricted_rc);
     if (out->restricted_now_available) {
@@ -252,7 +306,12 @@ static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlSt
             out->today_unconfigured = ptc_play_timer_settings_day_is_unconfigured(
                 timer_settings.words, PTC_PLAY_TIMER_SETTINGS_WORDS, weekday);
         }
+        /* Reuse the existing privileged session. Consumption failure is a
+           separate unavailable field, never a settings/transaction failure. */
+        read_display_usage(adapter, &settings_session.service, out);
         close_session(&settings_session);
+    } else {
+        out->usage_result = adapter->last_result;
     }
     if (day_mode == PTC_PLAY_TIMER_DAY_MODE_UNLIMITED) {
         out->unrestricted_today = true;
@@ -595,6 +654,13 @@ static PtcErrorCode switch_poll_suspend_event(PtcPctl *pctl, PtcPctlSuspendEvent
 }
 #endif
 
+static PtcErrorCode switch_read_grant_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStatus *out)
+{
+    PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
+    adapter->usage_sampled = false;
+    return switch_read_status(pctl, weekday, out);
+}
+
 static const PtcPctlVTable SWITCH_PCTL_VTABLE = {
     switch_read_status,
     switch_backup,
@@ -616,6 +682,7 @@ static const PtcPctlVTable SWITCH_PCTL_VTABLE = {
     NULL,
     NULL,
 #endif
+    switch_read_grant_status,
 };
 
 void ptc_switch_pctl_init(PtcSwitchPctl *adapter)

@@ -12,6 +12,32 @@
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
 
+static bool direct_grant_preview(const PtcUiModel *model, uint64_t *base, uint64_t *target)
+{
+    const uint64_t minute_ns = UINT64_C(60000000000);
+    uint64_t used_ceiling;
+    if (!model->played_minutes_available || !model->forecast_available ||
+        model->forecast[0].day_index != model->day_index || model->usage_ns > INT64_MAX ||
+        model->forecast[0].minutes > 1440 ||
+        (model->forecast[0].mode != PTC_RULE_MODE_LIMIT &&
+         model->forecast[0].mode != PTC_RULE_MODE_UNLIMITED)) return false;
+    *base = model->forecast[0].mode == PTC_RULE_MODE_LIMIT ? model->forecast[0].minutes : 0;
+    used_ceiling = model->usage_ns / minute_ns + (model->usage_ns % minute_ns != 0);
+    if (used_ceiling > *base) *base = used_ceiling;
+    if (*base > 1440) *base = 1440;
+    *target = *base + model->draft_minutes;
+    if (*target > 1440) *target = 1440;
+    return true;
+}
+
+int ptc_ui_preview_effective_add_minutes(const PtcUiModel *model)
+{
+    uint64_t base, target;
+    if (!model || model->operation != PTC_UI_OPERATION_ADD_TODAY_MINUTES) return -1;
+    if (!model->usage_present) return model->draft_minutes;
+    return direct_grant_preview(model, &base, &target) ? (int)(target - base) : -1;
+}
+
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model)
 {
     int remaining;
@@ -20,6 +46,13 @@ int ptc_ui_preview_remaining_minutes(const PtcUiModel *model)
     }
 
     if (model->operation == PTC_UI_OPERATION_ADD_TODAY_MINUTES) {
+        if (model->usage_present) {
+            const uint64_t minute_ns = UINT64_C(60000000000);
+            uint64_t base, target;
+            if (!direct_grant_preview(model, &base, &target)) return -1;
+            return target * minute_ns > model->usage_ns
+                ? (int)((target * minute_ns - model->usage_ns) / minute_ns) : 0;
+        }
         if (model->remaining_available && model->remaining_minutes >= 0) {
             return model->remaining_minutes + (int)model->draft_minutes;
         }
@@ -63,6 +96,9 @@ bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now)
 {
     int64_t age = ptc_ui_status_age_seconds(model, now);
     return model && age >= 0 && age <= 120 && model->error_code == 0 &&
+        (!model->usage_present || !model->played_minutes_available ||
+         (model->usage_captured_at > 0 && now >= model->usage_captured_at &&
+          now - model->usage_captured_at <= 120)) &&
         strcmp(model->result_status, "error") != 0;
 }
 

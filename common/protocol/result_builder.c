@@ -128,6 +128,16 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         state->calendar_option_id ? state->calendar_option_id : "builtin-cn",
         state->calendar_source ? state->calendar_source : "builtin");
     used = strlen(out);
+    if (state->usage_supported) {
+        (void)snprintf(out + used, out_size > used ? out_size - used : 0,
+            "\"usage\":{\"source\":\"pctl_1952\",\"scope\":\"console_usable_time\","
+            "\"available\":%s,\"total_ns\":\"%llu\",\"captured_at\":%lld,\"ipc_result\":%lu},"
+            "\"signed_remaining_ns_available\":%s,\"signed_remaining_ns\":\"%lld\",",
+            json_bool(state->usage_available), (unsigned long long)state->usage_ns,
+            (long long)state->usage_captured_at, (unsigned long)state->usage_result,
+            json_bool(state->signed_remaining_ns_available), (long long)state->signed_remaining_ns);
+        used = strlen(out);
+    }
     (void)snprintf(out + used, out_size > used ? out_size - used : 0, "\"forecast\":[");
     for (i = 0; i < PTC_RESULT_FORECAST_DAYS; ++i) {
         used = strlen(out);
@@ -220,6 +230,13 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->remaining_minutes = -1;
     state->played_minutes_available = false;
     state->played_minutes = -1;
+    state->usage_supported = false;
+    state->usage_available = false;
+    state->usage_ns = 0;
+    state->usage_captured_at = 0;
+    state->usage_result = 0;
+    state->signed_remaining_ns_available = false;
+    state->signed_remaining_ns = 0;
     state->play_timer_enabled = -1;
     state->restricted_now = -1;
     state->rule_source = "weekly";

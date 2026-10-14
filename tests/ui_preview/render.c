@@ -560,6 +560,39 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.view = PTC_UI_PARENT;
         model.parent_page = PTC_UI_PARENT_TODAY;
         failed |= save_preview(directory, "parent", "parent", &model, dark);
+        {
+            PtcUiModel direct = model;
+            direct.usage_present = true;
+            direct.usage_captured_at = direct.status_updated_at;
+            direct.usage_ns = UINT64_C(4191000000000);
+            direct.played_minutes_available = true;
+            direct.played_minutes = 69;
+            direct.remaining_minutes = direct.displayed_remaining_minutes = 110;
+            direct.forecast[0].minutes = 180;
+            failed |= save_preview(directory, "parent", "direct-usage", &direct, dark);
+            {
+                PtcUiModel stale = direct;
+                stale.usage_captured_at -= 121;
+                failed |= save_preview(directory, "parent", "direct-usage-stale", &stale, dark);
+            }
+            direct.remaining_minutes = direct.displayed_remaining_minutes = 0;
+            direct.forecast[0].minutes = 60;
+            direct.daily_restriction_active = true;
+            failed |= save_preview(directory, "parent", "direct-usage-overrun", &direct, dark);
+            direct.overlay = PTC_UI_OVERLAY_CONFIRM;
+            direct.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
+            direct.draft_minutes = 15;
+            direct.played_minutes = 100;
+            direct.usage_ns = UINT64_C(6059000000000);
+            snprintf(direct.overlay_title, sizeof(direct.overlay_title), ptc_ui_text(PTC_UI_T_CONFIRM_RAPID_GRANT));
+            failed |= save_preview(directory, "parent", "direct-grant-overrun", &direct, dark);
+            direct.forecast[0].minutes = 1435;
+            direct.remaining_minutes = direct.displayed_remaining_minutes = 1334;
+            failed |= save_preview(directory, "parent", "direct-grant-partial", &direct, dark);
+            direct.forecast[0].minutes = 1440;
+            direct.remaining_minutes = direct.displayed_remaining_minutes = 1339;
+            failed |= save_preview(directory, "parent", "direct-grant-capped", &direct, dark);
+        }
         model.today_override_present = true;
         model.today_override_rule = (PtcDayRule){PTC_RULE_MODE_LIMIT, 90};
         model.forecast[0].minutes = 90;

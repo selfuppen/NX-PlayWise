@@ -30,6 +30,13 @@ typedef struct {
     int64_t remaining_minutes;
     bool played_minutes_available;
     int64_t played_minutes;
+    bool usage_supported;
+    bool usage_available;
+    uint64_t usage_ns;
+    int64_t usage_captured_at;
+    uint32_t usage_result;
+    bool signed_remaining_ns_available;
+    int64_t signed_remaining_ns;
     int play_timer_enabled;
     int restricted_now;
     const char *rule_source;

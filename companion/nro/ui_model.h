@@ -372,6 +372,9 @@ typedef struct {
     bool waiting;
     bool status_loaded;
     int64_t status_updated_at;
+    bool usage_present;
+    int64_t usage_captured_at;
+    uint64_t usage_ns;
     bool restriction_enabled_available;
     bool restriction_enabled;
     bool temporary_unlocked_available;

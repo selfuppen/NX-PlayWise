@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /* Small, UI-safe projection of the result contract. It intentionally omits
    request payloads, secrets, paths and diagnostic evidence. */
@@ -21,6 +22,12 @@ typedef struct {
     bool temporary_unlocked;
     bool remaining_available;
     bool played_minutes_available;
+    bool usage_present;
+    int64_t usage_captured_at;
+    uint64_t usage_ns;
+    bool daily_rule_available;
+    bool daily_rule_unlimited;
+    int daily_rule_minutes;
     bool preview_available;
     int grant_minutes;
     bool remaining_after_available;
@@ -89,5 +96,7 @@ typedef struct {
 
 bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionResultSummary *out);
 bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summary, char *out, size_t out_size);
+/* Expires consumption only; keep runtime flags and the observation timestamp. */
+void ptc_companion_result_summary_expire_usage(PtcCompanionResultSummary *summary, int64_t now);
 
 #endif

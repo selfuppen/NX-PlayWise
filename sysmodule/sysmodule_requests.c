@@ -78,6 +78,7 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     PtcRuntimeState runtime_state;
     PtcErrorCode err;
     PtcDayRule active_rule;
+    PtcGrantPlan grant_plan = {0};
     bool pctl_request = request->type == PTC_REQUEST_SET_TODAY_LIMIT ||
         request->type == PTC_REQUEST_ADD_TODAY_MINUTES ||
         request->type == PTC_REQUEST_RESTORE_TODAY_POLICY ||
@@ -111,17 +112,26 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
     if (dock_policy_enabled(&rules) && !save_state(sysmodule, &runtime_state, now.unix_seconds))
         return finish_with_error(sysmodule, request, "release", false, PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
     before_active_rule = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-    err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, ptc_weekday_from_day_index(now.day_index), &pctl_status);
+    err = request->type == PTC_REQUEST_ADD_TODAY_MINUTES
+        ? read_grant_status(sysmodule, now, &pctl_status)
+        : sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+            ptc_weekday_from_day_index(now.day_index), &pctl_status);
     if (err != PTC_ERR_OK) {
         return finish_with_error(sysmodule, request, "release", true, err, now.day_index);
+    }
+    if (request->type == PTC_REQUEST_ADD_TODAY_MINUTES) {
+        err = plan_grant(&rules, now, &pctl_status, request->minutes, &grant_plan);
+        if (err == PTC_ERR_OK && grant_plan.effective_minutes == 0) err = PTC_ERR_MINUTES_EXCEED_LIMIT;
+        if (err != PTC_ERR_OK) return finish_with_error(sysmodule, request,
+            "release", true, err, now.day_index);
     }
     {
         if (pctl_request && !recovery_begin(sysmodule, request, now)) {
             return finish_with_error(sysmodule, request, "release", false,
                 PTC_ERR_PCTL_BACKUP_FAILED, now.day_index);
         }
-        uint16_t played_minutes = ptc_pctl_played_minutes(&pctl_status);
-        err = update_rules_for_request(sysmodule, request, &rules, &runtime_state, now, played_minutes);
+        err = update_rules_for_request(sysmodule, request, &rules, &runtime_state, now,
+            grant_plan.played_ceiling_minutes);
         if (err != PTC_ERR_OK) {
             if (pctl_request && recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule)) {
                 write_disable_flag(sysmodule, "transaction_restore_failed\n");
@@ -183,6 +193,22 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
                 return finish_with_error(sysmodule, request, "release", false, PTC_ERR_STORAGE_WRITE_FAILED, now.day_index);
         }
         {
+            if (request->type == PTC_REQUEST_ADD_TODAY_MINUTES) {
+                if (runtime_state.summary_day_index != now.day_index) {
+                    runtime_state.summary_day_index = now.day_index;
+                    runtime_state.summary_grant_minutes = 0;
+                }
+                uint32_t sum = (uint32_t)runtime_state.summary_grant_minutes + grant_plan.effective_minutes;
+                runtime_state.summary_grant_minutes = sum > 1440 ? 1440 : (uint16_t)sum;
+                if (!save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+                    err = PTC_ERR_STORAGE_WRITE_FAILED;
+                    if (!recovery_rollback(sysmodule)) {
+                        write_disable_flag(sysmodule, "transaction_restore_failed\n");
+                        err = PTC_ERR_RECOVERY_FAILED;
+                    }
+                    return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
+                }
+            }
             uint16_t activity_minutes = request->minutes;
             if (request->type == PTC_REQUEST_SET_SCHEDULED_OVERRIDE) {
                 activity_minutes = request->scheduled_override.enabled
@@ -193,7 +219,9 @@ static bool process_rule_request(PtcSysmodule *sysmodule, const PtcRequest *requ
                 PtcDayRule today_r = ptc_rules_today_rule(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
                 activity_minutes = today_r.mode == PTC_RULE_MODE_LIMIT ? today_r.minutes : 0u;
             }
-            if (!record_activity(sysmodule, request, now, activity_minutes, activity_minutes)) {
+            uint16_t effective_minutes = request->type == PTC_REQUEST_ADD_TODAY_MINUTES
+                ? grant_plan.effective_minutes : activity_minutes;
+            if (!record_activity(sysmodule, request, now, activity_minutes, effective_minutes)) {
                 append_event(sysmodule, request, "result_write_failed", PTC_ERR_STORAGE_WRITE_FAILED,
                     "activity_history");
                 if (recovery_path_exists(sysmodule) && !recovery_rollback(sysmodule)) {
