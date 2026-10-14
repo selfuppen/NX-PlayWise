@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import hashlib
+import ftplib
 import json
 from pathlib import Path
 import sys
@@ -123,7 +124,64 @@ def test_prepare_and_collect() -> None:
         assert usage.read_json(second[0].with_suffix(".audit.json"))["partial_tail_lines"] == [4]
 
 
+def test_inactive_stage() -> None:
+    class Device:
+        def __init__(self, components: dict, mode: str = "ok"):
+            self.mode = mode
+            self.files = {"/" + name: b"original-live-component" for name in components}
+            self.files.update({"/switch/playwise/build.json": b"original-live-manifest",
+                               "/switch/playwise/rules.json": b"original-public-rules",
+                               "/switch/playwise/handover/runtime-ready.json": b"original-runtime"})
+            self.before = dict(self.files)
+            self.writes = []
+        def __enter__(self): return self
+        def __exit__(self, *args): return None
+        def ftp(self): return self
+        def nlst(self, path):
+            assert path.startswith(evidence.STAGING + "/")
+            if self.mode == "existing": return []
+            if self.mode == "ambiguous": raise ftplib.error_temp("450 Resource busy")
+            raise ftplib.error_temp("450 No such file or directory")
+        def read(self, path): return self.files[path]
+        def write(self, path, data):
+            assert path.startswith(evidence.STAGING + "/") and path not in self.files
+            self.writes.append(path)
+            self.files[path] = b"corrupt" if self.mode == "readback" else data
+            if self.mode == "live_change": self.files["/switch/playwise/rules.json"] = b"changed externally"
+    for mode in ("ok", "existing", "ambiguous", "readback", "live_change"):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); packages = fixtures.prepare_packages(root); set_contract(packages)
+            out = root / "batch"; plan = evidence.prepare(packages, out, 300)
+            device = Device(plan["release_components"], mode)
+            if mode != "ok":
+                try:
+                    evidence.stage(device, out, plan)
+                except usage.UsageQualificationError:
+                    pass
+                else:
+                    raise AssertionError("unsafe staging condition accepted: " + mode)
+                if mode in ("existing", "ambiguous"):
+                    assert not device.writes and not (out / "stage-install.json").exists()
+                else:
+                    assert usage.read_json(out / "stage-install.json")["phase"] == "staging_requires_inspection_no_replay"
+                continue
+            result = evidence.stage(device, out, plan)
+            assert result["phase"] == "inactive_staging_verified" and len(device.writes) == 5
+            assert result["live_before_sha256"] == result["live_after_sha256"]
+            assert not result["candidate_loaded"] and not result["capture_armed"] and not result["qualified"]
+            assert all(device.files[k] == v for k, v in device.before.items())
+            before = len(device.writes)
+            try:
+                evidence.stage(device, out, plan)
+            except usage.UsageQualificationError:
+                pass
+            else:
+                raise AssertionError("existing staging transaction replayed")
+            assert len(device.writes) == before
+
+
 if __name__ == "__main__":
     test_audit()
     test_prepare_and_collect()
+    test_inactive_stage()
     print("PASS production evidence plan, raw identity/errors, signed precision and immutable read-only pulls")

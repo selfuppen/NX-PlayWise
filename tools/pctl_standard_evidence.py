@@ -1,17 +1,20 @@
-"""Prepare and audit production read-only evidence. Never deploy, write PCTL or certify."""
+"""Prepare, stage and audit production evidence. Never activate, write PCTL or certify."""
 from __future__ import annotations
 
 import argparse
+import ftplib
 import hashlib
 import json
 from pathlib import Path
 import re
 import uuid
+import zipfile
 
 import pctl_usage_qualification as usage
 import verify_device_qualification as qualification
 
 REMOTE = "/switch/playwise/support"
+STAGING = "/switch/playwise-qualification-staging"
 RESULT_FIELDS = ("session_result", "timer_result", "remaining_result", "restricted_result",
                  "spent_result", "settings_result", "unlocked_result")
 
@@ -152,6 +155,71 @@ def collect(device: object, out: Path, plan: dict) -> list[Path]:
     return snapshots
 
 
+def stage(device: object, out: Path, plan: dict) -> dict:
+    """Copy an inactive candidate; never replace live files or arm capture."""
+    config = plan["config"]
+    run_id = config["run_id"]
+    usage.require(re.fullmatch(r"[0-9a-f]{32}", run_id) is not None, "invalid staging run_id")
+    packages = Path(plan["packages"])
+    manifest, _, hashes, components = qualification.package_identity(packages)
+    usage.require(hashes == plan["zip_sha256"] and components == plan["release_components"] and
+                  all(manifest[key] == config[key] for key in ("commit", "release_id")),
+                  "prepared candidate changed")
+    journal_path = out / "stage-install.json"
+    usage.require(not journal_path.exists(), "existing staging journal; inspect instead of replaying")
+    remote = STAGING + "/" + run_id
+    with device.ftp() as ftp:
+        try:
+            ftp.nlst(remote)
+        except (ftplib.error_perm, ftplib.error_temp) as exc:
+            # ftpd reports missing directories as 450; ambiguous FTP errors stop.
+            usage.require(str(exc).startswith(("450", "550")) and
+                          "no such file or directory" in str(exc).lower(), "cannot prove staging directory absent")
+        else:
+            raise usage.UsageQualificationError("remote staging directory exists; never overwrite")
+    live_paths = ["/" + member for member in components] + ["/switch/playwise/build.json",
+                  "/switch/playwise/rules.json", "/switch/playwise/handover/runtime-ready.json"]
+    before = {path: hashlib.sha256(device.read(path)).hexdigest() for path in live_paths}
+    with zipfile.ZipFile(packages / qualification.STANDARD_ZIP) as archive:
+        files = {member: archive.read(member) for member in components}
+        files["switch/playwise/build.json"] = archive.read("switch/playwise/build.json")
+    files["switch/playwise/support/usage-evidence.json"] = (out / "usage-evidence.json").read_bytes()
+    usage.require(qualification.read_json_text(files["switch/playwise/support/usage-evidence.json"],
+                  "staging config") == config, "local capture config changed")
+    journal = {"schema_version": 1, "kind": "inactive_candidate_staging", "phase": "prepared",
+               "subject": {key: config[key] for key in ("commit", "release_id")}, "run_id": run_id,
+               "remote": remote, "live_before_sha256": before, "writes": [], "candidate_loaded": False,
+               "capture_armed": False, "qualified": False}
+    save_new(journal_path, journal)
+    # Summary may advance; the operation trail retains every original intent.
+    def event(kind: str, **values: object) -> None:
+        with (out / "stage-events.jsonl").open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps({"event": kind, **values}, ensure_ascii=False) + "\n")
+        from usage_probe import dump
+        dump(journal_path, journal)
+    try:
+        for member, data in files.items():
+            target = remote + "/" + member
+            item = {"path": target, "sha256": hashlib.sha256(data).hexdigest(), "outcome": "intent_no_replay"}
+            journal["writes"].append(item)
+            event("write_intent", **item)
+            device.write(target, data)
+            usage.require(device.read(target) == data, "inactive staging readback mismatch")
+            item["outcome"] = "verified"
+            event("write_verified", path=target, sha256=item["sha256"])
+        for member, data in files.items():
+            usage.require(device.read(remote + "/" + member) == data, "staging bundle changed")
+        after = {path: hashlib.sha256(device.read(path)).hexdigest() for path in live_paths}
+        usage.require(before == after, "live files or runtime changed during staging; inspect")
+        journal.update(phase="inactive_staging_verified", live_after_sha256=after)
+        event("staging_verified_live_unchanged")
+    except Exception as exc:
+        journal.update(phase="staging_requires_inspection_no_replay", error=str(exc))
+        event("staging_exception", error=str(exc))
+        raise
+    return journal
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -167,6 +235,10 @@ def main() -> None:
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--host", required=True)
     p.add_argument("--ftp-port", type=int, default=21)
+    p = commands.add_parser("stage")
+    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--host", required=True)
+    p.add_argument("--ftp-port", type=int, default=21)
     args = parser.parse_args()
     if args.command == "prepare":
         prepare(args.packages, args.out, args.duration_s)
@@ -178,8 +250,13 @@ def main() -> None:
     else:
         from usage_probe import Device
         plan = usage.read_json(args.out / "plan.json")
-        snapshots = collect(Device(args.host, args.ftp_port), args.out, plan)
-        print(f"READ-ONLY: {len(snapshots)} immutable raw snapshots; no status/control requests")
+        device = Device(args.host, args.ftp_port)
+        if args.command == "stage":
+            result = stage(device, args.out, plan)
+            print(f'INACTIVE STAGING VERIFIED: {result["remote"]}; capture unarmed, live identity unchanged')
+        else:
+            snapshots = collect(device, args.out, plan)
+            print(f"READ-ONLY: {len(snapshots)} immutable raw snapshots; no status/control requests")
 
 
 if __name__ == "__main__":
