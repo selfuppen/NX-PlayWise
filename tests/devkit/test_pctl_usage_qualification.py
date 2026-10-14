@@ -29,6 +29,8 @@ def set_contract(packages: Path) -> None:
     with zipfile.ZipFile(archive_path, "w") as archive:
         for name, data in members.items():
             archive.writestr(name, data)
+    with zipfile.ZipFile(packages / verifier.COMPLETE_ZIP, "w") as archive:
+        archive.writestr(verifier.STANDARD_ZIP, archive_path.read_bytes())
 
 
 def sample(phase: str, seconds: int, used: int, mode: str = "limit", minutes: int = 60,

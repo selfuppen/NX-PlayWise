@@ -522,6 +522,25 @@ def latest_packages(package_dir: Path, target_packages: set[str] | None = None) 
     return result
 
 
+def host_git_autocrlf() -> str | None:
+    """Use the checkout's effective normalization, not the container's global Git config."""
+    try:
+        result = subprocess.run(["git", "config", "--get", "core.autocrlf"], cwd=ROOT,
+                                capture_output=True, text=True, check=False)
+    except OSError:
+        return None  # Manifest Git failures still remain dirty, never force clean.
+    if result.returncode == 1:
+        return "false"  # Git's unset default.
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip().lower()
+    aliases = {"yes": "true", "on": "true", "1": "true", "no": "false", "off": "false", "0": "false"}
+    value = aliases.get(value, value)
+    if value not in ("true", "false", "input"):
+        raise PackageError("cannot identify host Git newline policy")
+    return value
+
+
 def container_command(
     container_path: str = DEFAULT_CONTAINER_PATH,
     *,
@@ -538,6 +557,7 @@ def container_command(
     build_image: str | None = None,
     build_image_digest: str | None = None,
     manual_verification: tuple[str, str, str] | None = None,
+    git_autocrlf: str | None = None,
 ) -> str:
     path = "/opt/devkitpro/devkitA64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     job_flag = f"-j{jobs} " if jobs else "-j "
@@ -589,6 +609,10 @@ def container_command(
         identity_exports += f" PLAYWISE_BUILD_IMAGE={shlex.quote(build_image)}"
     if build_image_digest:
         identity_exports += f" PLAYWISE_BUILD_IMAGE_DIGEST={shlex.quote(build_image_digest)}"
+    if git_autocrlf is not None:
+        if git_autocrlf not in ("true", "false", "input"):
+            raise PackageError("invalid host Git newline policy")
+        identity_exports += f" PLAYWISE_GIT_AUTOCRLF={shlex.quote(git_autocrlf)}"
     verification_exports = ""
     if manual_verification is not None:
         model, hos, atmosphere = manual_verification
@@ -630,6 +654,7 @@ def ssh_command(
     build_image: str | None = None,
     build_image_digest: str | None = None,
     manual_verification: tuple[str, str, str] | None = None,
+    git_autocrlf: str | None = None,
 ) -> list[str]:
     command = ["ssh", "-p", str(port), "-o", "ConnectTimeout=10"]
     if host in {"127.0.0.1", "localhost", "::1"}:
@@ -654,6 +679,7 @@ def ssh_command(
             build_image=build_image,
             build_image_digest=build_image_digest,
             manual_verification=manual_verification,
+            git_autocrlf=git_autocrlf,
         ),
     ])
     return command
@@ -700,6 +726,7 @@ def run_container(
             build_image=build_image,
             build_image_digest=build_image_digest,
             manual_verification=manual_verification,
+            git_autocrlf=host_git_autocrlf(),
         ),
         cwd=ROOT,
         stdin=None,

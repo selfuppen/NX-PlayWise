@@ -51,19 +51,46 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def read_json_text(text: str | bytes, label: str) -> dict:
+    def unique_pairs(pairs: list[tuple[str, object]]) -> dict:
+        value = {}
+        for key, item in pairs:
+            require(key not in value, f"{label}: 重复 JSON 字段 {key}")
+            value[key] = item
+        return value
+
+    try:
+        value = json.loads(text, object_pairs_hook=unique_pairs)
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise QualificationError(f"无法读取 JSON：{label}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise QualificationError(f"JSON 顶层必须是对象：{label}")
+    return value
+
+
 def read_json(path: Path) -> dict:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
         raise QualificationError(f"无法读取 JSON：{path}: {exc}") from exc
-    if not isinstance(value, dict):
-        raise QualificationError(f"JSON 顶层必须是对象：{path}")
-    return value
+    return read_json_text(text, str(path))
 
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise QualificationError(message)
+
+
+def unique_archive(archive: zipfile.ZipFile, label: str) -> None:
+    names = archive.namelist()
+    require(len(names) == len(set(names)), f"{label}: 重复 Zip 成员")
+
+
+def archive_read(archive: zipfile.ZipFile, member: str, label: str) -> bytes:
+    try:
+        return archive.read(member)
+    except (KeyError, OSError, RuntimeError, zipfile.BadZipFile) as exc:
+        raise QualificationError(f"{label}: 无法读取 {member}") from exc
 
 
 def package_identity(packages: Path) -> tuple[dict, dict, dict[str, str], dict[str, str]]:
@@ -77,6 +104,7 @@ def package_identity(packages: Path) -> tuple[dict, dict, dict[str, str], dict[s
     require(standard_manifest.get("qualification", {}).get("status") in ("pending", "manual_verified"),
             "候选包资格状态必须是 pending 或 manual_verified")
     require(standard_manifest.get("build", {}).get("source_dirty") is False, "资格候选包含未提交的 tracked 修改")
+    require(lab_manifest.get("build", {}).get("source_dirty") is False, "Device Lab 资格候选包含未提交的 tracked 修改")
     require(standard_manifest.get("build", {}).get("libnx") not in (None, "", "unknown"), "候选包缺少 libnx 身份")
     require(standard_manifest.get("build", {}).get("container_image") not in (None, "", "unknown"),
             "候选包缺少 Docker 镜像标签")
@@ -87,17 +115,23 @@ def package_identity(packages: Path) -> tuple[dict, dict, dict[str, str], dict[s
         require(path.is_file(), f"缺少候选产物：{path}")
         zip_hashes[name] = sha256_file(path)
     component_hashes: dict[str, str] = {}
-    with zipfile.ZipFile(packages / STANDARD_ZIP) as archive:
-        try:
-            embedded_manifest = json.loads(archive.read("switch/playwise/build.json"))
-        except (KeyError, ValueError, UnicodeError) as exc:
-            raise QualificationError("标准包缺少有效的嵌入 manifest") from exc
-        require(embedded_manifest == standard_manifest, "标准包嵌入 manifest 与目录 manifest 不一致")
-        for member in RELEASE_COMPONENTS:
-            try:
-                component_hashes[member] = sha256_bytes(archive.read(member))
-            except KeyError as exc:
-                raise QualificationError(f"标准包缺少发布二进制：{member}") from exc
+    try:
+        with zipfile.ZipFile(packages / STANDARD_ZIP) as archive:
+            unique_archive(archive, STANDARD_ZIP)
+            embedded_manifest = read_json_text(archive_read(archive, "switch/playwise/build.json", STANDARD_ZIP), STANDARD_ZIP)
+            require(embedded_manifest == standard_manifest, "标准包嵌入 manifest 与目录 manifest 不一致")
+            for member in RELEASE_COMPONENTS:
+                component_hashes[member] = sha256_bytes(archive_read(archive, member, STANDARD_ZIP))
+        with zipfile.ZipFile(packages / LAB_ZIP) as archive:
+            unique_archive(archive, LAB_ZIP)
+            embedded_lab = read_json_text(archive_read(archive, "switch/playwise-device-lab/build.json", LAB_ZIP), LAB_ZIP)
+            require(embedded_lab == lab_manifest, "Device Lab 嵌入 manifest 与目录 manifest 不一致")
+        with zipfile.ZipFile(packages / COMPLETE_ZIP) as archive:
+            unique_archive(archive, COMPLETE_ZIP)
+            require(sha256_bytes(archive_read(archive, STANDARD_ZIP, COMPLETE_ZIP)) == zip_hashes[STANDARD_ZIP],
+                    "完整包内嵌标准 Zip 与候选标准包不一致")
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise QualificationError(f"无法读取候选 Zip：{exc}") from exc
     return standard_manifest, lab_manifest, zip_hashes, component_hashes
 
 

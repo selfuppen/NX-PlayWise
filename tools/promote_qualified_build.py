@@ -8,10 +8,10 @@ import json
 from pathlib import Path
 import shutil
 import sys
-import zipfile
 
 from playwise_version import read_playwise_version
 import pctl_usage_qualification as usage_qualification
+import verify_device_qualification as qualification_verifier
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,39 +44,37 @@ def sha256_file(path: Path) -> str:
 
 def promote(packages: Path, verification_path: Path, output: Path) -> dict:
     try:
-        verification = json.loads(verification_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        verification = qualification_verifier.read_json(verification_path)
+    except qualification_verifier.QualificationError as exc:
         raise PromotionError(f"无法读取验证记录：{exc}") from exc
     if verification.get("status") != "passed":
         raise PromotionError("验证记录未通过，禁止晋级")
     expected = verification.get("artifacts", {}).get("packages", {})
-    actual: dict[str, str] = {}
+    try:
+        manifest, _lab_manifest, actual, components = qualification_verifier.package_identity(packages)
+    except qualification_verifier.QualificationError as exc:
+        raise PromotionError(str(exc)) from exc
     for name in PACKAGE_NAMES:
-        path = packages / name
-        if not path.is_file():
-            raise PromotionError(f"缺少候选包：{path}")
-        actual[name] = sha256_file(path)
         if actual[name] != expected.get(name):
             raise PromotionError(f"候选包已变化，哈希不匹配：{name}")
+    if verification.get("subject") != {key: manifest[key] for key in ("commit", "release_id")} or \
+            verification.get("artifacts", {}).get("release_components") != components:
+        raise PromotionError("验证记录的候选身份或生产组件不一致")
     # Recheck usage evidence before creating output. A once-passed record is
     # insufficient when its report or retained sample files have since changed.
-    with zipfile.ZipFile(packages / PACKAGE_NAMES[0]) as archive:
-        manifest = json.loads(archive.read("switch/playwise/build.json"))
-        if "usage_contract" in manifest:
-            attestation = verification.get("pctl_usage")
-            if not isinstance(attestation, dict) or not isinstance(attestation.get("path"), str):
-                raise PromotionError("1952 候选缺少资格证据绑定")
-            baseline = verification.get("baseline", {})
-            try:
-                components = {name: hashlib.sha256(archive.read(name)).hexdigest()
-                              for name in usage_qualification.COMPONENTS}
-                checked = usage_qualification.verify_report(
-                    Path(attestation["path"]).parent, manifest, actual[PACKAGE_NAMES[0]], components,
-                    baseline.get("model", ""), baseline.get("hos", ""), baseline.get("atmosphere", ""))
-            except usage_qualification.UsageQualificationError as exc:
-                raise PromotionError(str(exc)) from exc
-            if checked != attestation or not set(usage_qualification.CHECKS) <= set(verification.get("checks", [])):
-                raise PromotionError("1952 资格证据或检查记录已变化")
+    if "usage_contract" in manifest:
+        attestation = verification.get("pctl_usage")
+        if not isinstance(attestation, dict) or not isinstance(attestation.get("path"), str):
+            raise PromotionError("1952 候选缺少资格证据绑定")
+        baseline = verification.get("baseline", {})
+        try:
+            checked = usage_qualification.verify_report(
+                Path(attestation["path"]).parent, manifest, actual[PACKAGE_NAMES[0]], components,
+                baseline.get("model", ""), baseline.get("hos", ""), baseline.get("atmosphere", ""))
+        except usage_qualification.UsageQualificationError as exc:
+            raise PromotionError(str(exc)) from exc
+        if checked != attestation or not set(usage_qualification.CHECKS) <= set(verification.get("checks", [])):
+            raise PromotionError("1952 资格证据或检查记录已变化")
     if output.exists() and any(output.iterdir()):
         raise PromotionError(f"晋级目录不是空目录：{output}")
     output.mkdir(parents=True, exist_ok=True)
