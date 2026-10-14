@@ -3433,6 +3433,20 @@ static void test_runtime_fingerprint_change_can_be_reconfirmed(void)
         strstr(text, "\"today_override_present\":false"),
         "runtime reconfirmation preserves the configured rules without recapturing today");
 
+    /* Prime the scheduler while setup is still in its grace. The activation
+       happens five seconds later within the same minute, with no queue work,
+       notification, reload or disable transition to trigger Enforce. */
+    (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
+    unsigned int before_activation = pctl.apply_target_calls;
+    fake_time.snapshot.unix_seconds += 5;
+    check_true(ptc_sysmodule_scheduler_tick(&sysmodule, false) > 0,
+        "setup grace activation creates scheduler work without a minute change");
+    check_true(pctl.apply_target_calls > before_activation &&
+        pctl.last_target.mode == PTC_PCTL_TARGET_LIMIT && pctl.last_target.minutes == 60,
+        "setup activation applies the configured weekly policy in the same tick");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/setup.json", text, sizeof(text)) &&
+        strstr(text, "\"phase\":\"active\""), "same-tick policy application leaves setup active");
+
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/setup.json",
         "{\"version\":1,\"phase\":\"protection\",\"compatibility_status\":\"protection\","
         "\"restriction_cleared\":false,\"snapshot_available\":true,\"activate_after\":0,"
@@ -3844,9 +3858,12 @@ done:
 }
 
  #include "test_config_backup.inc"
+ #include "test_result_capacity.inc"
 
 int main(void)
 {
+    test_result_capacity_and_complete_recent_events();
+    test_result_builder_refuses_small_receipts();
     test_config_backup();
     failures += ptc_test_control_safety();
     test_eden_simulated_usage_clock();

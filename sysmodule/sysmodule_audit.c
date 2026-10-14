@@ -33,22 +33,29 @@ void append_event(PtcSysmodule *sysmodule, const PtcRequest *request, const char
         size_t count = 0;
         char *cursor;
         join_path(summary_path, sizeof(summary_path), sysmodule->app_root, "support/recent-events.jsonl");
-        (void)sysmodule->storage->vtable->read_text(sysmodule->storage, summary_path, old, sizeof(old));
+        if (!sysmodule->storage->vtable->read_text(sysmodule->storage, summary_path, old, sizeof(old))) old[0] = '\0';
         cursor = old;
         while (*cursor) {
             char *newline = strchr(cursor, '\n');
+            if (!newline) break;
             if (count == 20) { memmove(lines, lines + 1, 19 * sizeof(lines[0])); count = 19; }
             lines[count++] = cursor;
-            if (!newline) break;
             *newline = '\0';
             cursor = newline + 1;
         }
         if (count == 20) { memmove(lines, lines + 1, 19 * sizeof(lines[0])); count = 19; }
-        for (size_t i = 0; i < count; ++i) {
-            if (lines[i][0]) { strncat(output, lines[i], sizeof(output) - strlen(output) - 1); strncat(output, "\n", sizeof(output) - strlen(output) - 1); }
+        size_t needed = strlen(line) + 1;
+        size_t first = count;
+        /* Retain the newest complete rows that fit; never cut an event mid-JSON. */
+        while (first > 0 && needed + strlen(lines[first - 1]) + 1 < sizeof(output)) {
+            --first;
+            needed += strlen(lines[first]) + 1;
         }
-        strncat(output, line, sizeof(output) - strlen(output) - 1);
-        strncat(output, "\n", sizeof(output) - strlen(output) - 1);
+        for (size_t i = first; i < count; ++i) {
+            if (lines[i][0]) { strcat(output, lines[i]); strcat(output, "\n"); }
+        }
+        strcat(output, line);
+        strcat(output, "\n");
         (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, summary_path, output);
     }
     /* Keep the legacy root log readable for older desktop/self-check tooling during migration. */

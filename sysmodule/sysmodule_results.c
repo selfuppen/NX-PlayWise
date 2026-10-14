@@ -1,4 +1,5 @@
 #include "sysmodule_internal.h"
+#include "../common/protocol/ipc_protocol.h"
 
 static int64_t result_remaining_minutes(const PtcPctlStatus *status)
 {
@@ -76,7 +77,7 @@ static bool write_result_with_setup(
 {
     PtcSetupState setup;
     PtcRuntimeState runtime_state;
-    char json[6144];
+    char json[PTC_IPC_MAX_RESULT_SIZE];
     char path[320];
     char text[1024];
     char disable_reason[48] = "";
@@ -88,7 +89,7 @@ static bool write_result_with_setup(
     bool recovery_active;
     bool disable_present;
     char recent[4096] = "";
-    char recent_json[4096] = "";
+    char recent_json[4098] = "";
     const char *completed_at;
     if (!load_setup_state(sysmodule, &setup) || !load_state(sysmodule, &runtime_state)) return false;
     join_path(path, sizeof(path), sysmodule->app_root, "flags/disable.flag");
@@ -122,7 +123,9 @@ static bool write_result_with_setup(
         snprintf(recent_json, sizeof(recent_json), "[");
         while (*cursor) {
             char *newline = strchr(cursor, '\n');
-            if (newline) *newline = '\0';
+            /* A cut JSONL tail is not a complete event and cannot enter JSON. */
+            if (!newline) break;
+            *newline = '\0';
             if (*cursor) {
                 strncat(recent_json, first ? "" : ",", sizeof(recent_json) - strlen(recent_json) - 1);
                 strncat(recent_json, cursor, sizeof(recent_json) - strlen(recent_json) - 1);
@@ -135,7 +138,7 @@ static bool write_result_with_setup(
     } else snprintf(recent_json, sizeof(recent_json), "[]");
     completed_at = strstr(base, "\"completed_at\"");
     if (!completed_at) return false;
-    snprintf(json, sizeof(json),
+    int written = snprintf(json, sizeof(json),
         "%.*s\"setup\":{\"phase\":\"%s\",\"compatibility_status\":\"%s\",\"restriction_cleared\":%s,"
         "\"snapshot_available\":%s,\"activate_after\":%lld,\"last_error\":\"%s\","
         "\"apply_status\":\"%s\",\"apply_pending_confirmation\":%s,\"recovery_active\":%s,"
@@ -161,6 +164,8 @@ static bool write_result_with_setup(
         atmosphere_version,
         recent_json,
         completed_at);
+    /* A truncated receipt must never become the durable commit record. */
+    if (written < 0 || (size_t)written >= sizeof(json)) return false;
     return write_result(sysmodule, request_id, json);
 }
 
@@ -488,7 +493,8 @@ bool write_current_status_result(
         }
     }
     fill_extended_result_state(sysmodule, &state, &rules, &runtime_state, &pctl_status, now);
-    (void)ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text, mode, dry_run, &state, now.unix_seconds);
+    if (ptc_result_ok_json(json, sizeof(json), request->request_id, request->type_text,
+            mode, dry_run, &state, now.unix_seconds) != 0) return false;
     append_event(sysmodule, request, "result_ok", PTC_ERR_OK, "");
     return write_result_with_setup(sysmodule, request->request_id, json, commits_recovery);
 }

@@ -416,8 +416,9 @@ int ptc_result_ok_json(
         return -1;
     }
     append_state(out, out_size, state);
-    written = (int)snprintf(out + strlen(out), out_size - strlen(out), ",\"completed_at\":%lld}\n", (long long)completed_at);
-    return written < 0 ? -1 : 0;
+    size_t used = strlen(out);
+    written = (int)snprintf(out + used, out_size - used, ",\"completed_at\":%lld}\n", (long long)completed_at);
+    return written < 0 || (size_t)written >= out_size - used ? -1 : 0;
 }
 
 int ptc_result_preview_ok_json(
@@ -485,6 +486,7 @@ int ptc_result_error_json(
         return -1;
     }
     append_state(out, out_size, state);
-    written = (int)snprintf(out + strlen(out), out_size - strlen(out), ",\"completed_at\":%lld}\n", (long long)completed_at);
-    return written < 0 ? -1 : 0;
+    size_t used = strlen(out);
+    written = (int)snprintf(out + used, out_size - used, ",\"completed_at\":%lld}\n", (long long)completed_at);
+    return written < 0 || (size_t)written >= out_size - used ? -1 : 0;
 }

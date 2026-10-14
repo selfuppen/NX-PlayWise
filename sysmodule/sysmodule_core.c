@@ -707,6 +707,7 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     bool minute_changed;
     bool reload;
     int processed;
+    bool setup_changed = false;
     int actions = 0;
     if (!sysmodule) return 0;
 #ifdef PLAYWISE_DEVICE_LAB
@@ -715,6 +716,7 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
 #endif
     {
         int setup_actions = ptc_sysmodule_bootstrap_setup(sysmodule);
+        setup_changed = setup_actions > 0;
         if (setup_actions > 0) actions += setup_actions;
     }
     now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
@@ -743,7 +745,9 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     PtcRules dock_rules;
     bool dock_tick = load_rules(sysmodule, &dock_rules) && dock_policy_enabled(&dock_rules) &&
         (sysmodule->dock_last_sample_at != now.unix_seconds);
-    if (minute_changed || reload || storage_notified || disable_changed || processed > 0 || dock_tick) {
+    /* A completed setup grace changes whether Enforce may run, even when the
+       minute and disable flag stayed unchanged. Apply its policy this tick. */
+    if (setup_changed || minute_changed || reload || storage_notified || disable_changed || processed > 0 || dock_tick) {
         sysmodule->dock_last_sample_at = now.unix_seconds;
 #ifndef PLAYWISE_DEVICE_LAB
         if (sysmodule->minute_initialized) {
