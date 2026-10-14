@@ -1,6 +1,76 @@
 // Included inside the production GUI and deterministic host preview view.
 // Keep drawings here so documentation follows the installed Overlay code.
 
+    // Draws a rounded outline and filled surface using CPU spans for smooth corners.
+    // Decoration stays strictly inside the published rectangle.
+    static void draw_round_rect_surface(tsl::gfx::Renderer *renderer, s32 x, s32 y,
+        s32 w, s32 h, s32 r, tsl::Color bg, tsl::Color border, s32 border_width = 1)
+    {
+        if (w <= 0 || h <= 0) return;
+        if (r > w / 2) r = w / 2;
+        if (r > h / 2) r = h / 2;
+        if (r < 0) r = 0;
+
+        // Radii offsets precomputed for radius 4 (standard overlay corner)
+        // For r = 4, corner offsets per row i in [0..3]:
+        // row 0: inset 3 (dx=3)
+        // row 1: inset 2 (dx=2)
+        // row 2: inset 1 (dx=1)
+        // row 3: inset 0 (dx=0)
+        // For general r, we compute standard circle inset: r - sqrt(r*r - (r-1-i)^2)
+        const auto a_border = renderer->a(border);
+        const auto a_bg = renderer->a(bg);
+        const bool has_border = border_width > 0 && border.a > 0;
+
+        // Middle body (between top and bottom curved bands)
+        if (h > 2 * r) {
+            if (has_border) {
+                renderer->drawRect(x, y + r, border_width, h - 2 * r, a_border);
+                renderer->drawRect(x + w - border_width, y + r, border_width, h - 2 * r, a_border);
+                renderer->drawRect(x + border_width, y + r, w - 2 * border_width, h - 2 * r, a_bg);
+            } else {
+                renderer->drawRect(x, y + r, w, h - 2 * r, a_bg);
+            }
+        }
+
+        // Top and bottom rounded bands
+        for (int i = 0; i < r; ++i) {
+            // Compute horizontal inset from circle equation
+            int dy = r - 1 - i;
+            int dx = 0;
+            if (r == 4) {
+                dx = (i == 0) ? 3 : ((i == 1) ? 2 : ((i == 2) ? 1 : 0));
+            } else if (r == 3) {
+                dx = (i == 0) ? 2 : ((i == 1) ? 1 : 0);
+            } else if (r <= 2) {
+                dx = (i == 0) ? 1 : 0;
+            } else {
+                dx = r - (int)std::round(std::sqrt(std::max(0, r * r - dy * dy)));
+            }
+
+            for (const int row_y : {y + i, y + h - 1 - i}) {
+                int row_w = w - 2 * dx;
+                if (row_w <= 0) continue;
+                if (!has_border) {
+                    renderer->drawRect(x + dx, row_y, row_w, 1, a_bg);
+                } else if (i < border_width || (h - 1 - (row_y - y)) < border_width) {
+                    // Fully border rows at extreme top/bottom
+                    renderer->drawRect(x + dx, row_y, row_w, 1, a_border);
+                } else {
+                    int inner_dx = dx + border_width;
+                    int inner_w = w - 2 * inner_dx;
+                    if (inner_w > 0) {
+                        renderer->drawRect(x + dx, row_y, border_width, 1, a_border);
+                        renderer->drawRect(x + dx + border_width, row_y, inner_w, 1, a_bg);
+                        renderer->drawRect(x + w - dx - border_width, row_y, border_width, 1, a_border);
+                    } else {
+                        renderer->drawRect(x + dx, row_y, row_w, 1, a_border);
+                    }
+                }
+            }
+        }
+    }
+
     static void draw_outline(
         tsl::gfx::Renderer *renderer,
         s32 x,
@@ -26,10 +96,7 @@
         tsl::Color border,
         s32 border_width = 1)
     {
-        renderer->drawRect(x, y, width, height, renderer->a(bg));
-        if (border_width > 0 && border.a > 0) {
-            draw_outline(renderer, x, y, width, height, border_width, border);
-        }
+        draw_round_rect_surface(renderer, x, y, width, height, 4, bg, border, border_width);
     }
 
     static void draw_pill(
@@ -42,10 +109,7 @@
         tsl::Color border,
         s32 border_width = 1)
     {
-        renderer->drawRect(x, y, width, height, renderer->a(bg));
-        if (border_width > 0 && border.a > 0) {
-            draw_outline(renderer, x, y, width, height, border_width, border);
-        }
+        draw_round_rect_surface(renderer, x, y, width, height, height / 2, bg, border, border_width);
     }
 
     const OverlayPalette &current_palette() const
@@ -79,27 +143,44 @@
         return pal.accent_soft;
     }
 
-    // Small chamfered surfaces use only Tesla's drawRect surface. Decoration
-    // stays inside the published rectangle and needs no textures or font glyphs.
+    // Smooth rounded dashboard surface using Tesla's drawRect CPU spans.
+    // Decoration stays strictly inside the published rectangle and needs no textures.
     void draw_dashboard_surface(tsl::gfx::Renderer *renderer, PtcOverlayRect rect,
         tsl::Color bg, tsl::Color border, bool emphasized = false)
     {
+        if (rect.w <= 0 || rect.h <= 0) return;
         const int edge = emphasized ? 2 : 1;
-        renderer->drawRect(rect.x, rect.y + 3, rect.w, rect.h - 6, renderer->a(border));
-        renderer->drawRect(rect.x + edge, rect.y + 4, rect.w - edge * 2,
-            rect.h - 8, renderer->a(bg));
-        // Overlapping stair steps connect horizontal and vertical strokes at
-        // every corner, including a 1px outline (no diagonal-only pixel gaps).
-        for (int row = 0; row <= 3; ++row) {
-            const int inset = 3 - row;
-            for (const int y : {rect.y + row, rect.y + rect.h - 1 - row}) {
-                renderer->drawRect(rect.x + inset, y, rect.w - inset * 2, 1, renderer->a(border));
-                if (row >= edge) {
-                    const int inner = inset + edge + 1;
-                    renderer->drawRect(rect.x + inner, y, rect.w - inner * 2, 1, renderer->a(bg));
-                }
-            }
+
+        // Central body between top and bottom corner bands
+        renderer->drawRect(rect.x, rect.y + 2, rect.w, rect.h - 4, renderer->a(border));
+        renderer->drawRect(rect.x + edge, rect.y + 3, rect.w - edge * 2,
+            rect.h - 6, renderer->a(bg));
+
+        // Smooth rounded corner spans (circular arc: clips (0,0), (1,0), (0,1))
+        // Top and bottom symmetric bands
+        for (const int y : {rect.y, rect.y + rect.h - 1}) {
+            // Row 0 / Row h-1: starts at x+2 to create smooth circular curve
+            renderer->drawRect(rect.x + 2, y, rect.w - 4, 1, renderer->a(border));
         }
+
+        for (const int y : {rect.y + 1, rect.y + rect.h - 2}) {
+            // Row 1 / Row h-2: outer starts at x+1
+            renderer->drawRect(rect.x + 1, y, rect.w - 2, 1, renderer->a(border));
+            if (edge == 1) {
+                // For 1px border, inner starts at x+3 so border is 2px wide (x+1, x+2) to 4-connect to row 0 (x+2)
+                renderer->drawRect(rect.x + 3, y, rect.w - 6, 1, renderer->a(bg));
+            }
+            // For edge == 2, row 1 remains solid border
+        }
+
+        for (const int y : {rect.y + 2, rect.y + rect.h - 3}) {
+            // Row 2 / Row h-3: outer starts at x+0
+            // Border is at x+0, x+1 (inner at x+2 for edge=1, x+3 for edge=2)
+            const int inner = edge == 1 ? 2 : 3;
+            renderer->drawRect(rect.x + inner, y, rect.w - inner * 2, 1, renderer->a(bg));
+        }
+
+        // Subtly recessed top decorative highlight line
         renderer->drawRect(rect.x + 6, rect.y + edge, rect.w - 12, 1,
             renderer->a(current_palette().border_decorative));
     }

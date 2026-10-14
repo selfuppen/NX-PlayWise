@@ -913,6 +913,9 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 560;
         break;
     case PTC_UI_OVERLAY_THEME:
+        *width = 1160;
+        *height = 600;
+        break;
     case PTC_UI_OVERLAY_LANGUAGE:
         *width = 820;
         *height = 360;
@@ -1594,7 +1597,7 @@ PtcUiRect ptc_ui_theme_option_rect(int index)
 {
     PtcUiRect dialog = ptc_ui_dialog_for(PTC_UI_OVERLAY_THEME);
     if (index < 0 || index >= 3) return (PtcUiRect){0, 0, 0, 0};
-    return (PtcUiRect){dialog.x + 40 + index * 250, dialog.y + 154, 230, 100};
+    return (PtcUiRect){dialog.x + 40 + index * 370, dialog.y + 130, 340, 390};
 }
 
 PtcUiRect ptc_ui_language_option_rect(int index)
