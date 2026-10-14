@@ -1,5 +1,6 @@
 // Shared production Overlay colors, text and view types.
 #pragma once
+#include <ctime>
 
 #ifdef __cplusplus
 extern "C" {

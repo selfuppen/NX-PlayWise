@@ -210,7 +210,8 @@ int main(int argc, char **argv) {
             "overlay-eye-refresh-failed", "overlay-eye-cross-day", "overlay-eye-partial",
             "overlay-eye-rest-boundary", "overlay-eye-unlimited", "overlay-quota-unknown",
             "overlay-parent-pending", "overlay-parent-stale", "overlay-parent-busy", "overlay-parent-pin-cooldown",
-            "overlay-console-usage", "overlay-console-unknown"};
+            "overlay-console-usage", "overlay-console-unknown",
+            "overlay-console-details", "overlay-console-details-unknown"};
         int child_overflows = 0;
         for (int language = 0; language < 3; ++language) {
             ptc_ui_language_set_resolved(languages[language]);
@@ -431,14 +432,19 @@ int main(int argc, char **argv) {
                     status.daily_rule_available = true;
                     status.daily_rule_minutes = 60;
                     status.remaining_minutes = 0;
-                    status.played_minutes = scene == 56 ? 69 : -1;
-                    status.played_minutes_available = scene == 56;
-                    status.remaining_available = scene == 56;
+                    status.played_minutes = scene == 56 || scene == 58 ? 69 : -1;
+                    status.played_minutes_available = scene == 56 || scene == 58;
+                    status.remaining_available = scene == 56 || scene == 58;
+                    if (scene >= 58) {
+                        view.status_expanded_ = true;
+                        status.bedtime_active = true;
+                        status.usage_captured_at = scene == 58 ? 1791983569 : 0;
+                    }
                 }
                 renderer.text_runs.clear();
                 view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
                     PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
-                if (scene >= 56) {
+                if (scene == 56 || scene == 57) {
                     std::string drawn;
                     for (const auto &run : renderer.text_runs) drawn += run.text + " ";
                     require(drawn.find("60") != std::string::npos,
@@ -447,6 +453,16 @@ int main(int argc, char **argv) {
                         "merged dashboard must identify direct console consumption only when available");
                     require((drawn.find("69") != std::string::npos) == (scene == 56),
                         "merged dashboard must not retain an unavailable console counter");
+                }
+                if (scene >= 58) {
+                    std::string drawn;
+                    for (const auto &run : renderer.text_runs) drawn += run.text + " ";
+                    require(drawn.find(ptc_ui_text(PTC_UI_T_CONSOLE_USAGE)) != std::string::npos,
+                        "restricted status details must expose the direct console counter");
+                    require((drawn.find("69") != std::string::npos) == (scene == 58),
+                        "unknown details must not show a fabricated counter");
+                    require((drawn.find("2026-10-14 13:12:49 UTC") != std::string::npos) == (scene == 58),
+                        "details must show the original captured timestamp, not the refresh timestamp");
                 }
                 if (view.parent_view_ == ParentView::Result) {
                     const auto label = bridge.waiting ? PTC_UI_T_PROCESSING_REQUEST : view.parent_action_succeeded_ ?

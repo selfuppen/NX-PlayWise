@@ -443,6 +443,21 @@
                 last_request_kind_ == OverlayRequestKind::PreviewOfflineCode ? PTC_UI_T_PLEASE_RE_ENTER_Y_RETURNS_TO_INPUT : PTC_UI_T_PRESS_Y_TO_TRY_AGAIN),
                 PTC_OVERLAY_FONT_BODY, pal.danger);
         } else if (has_status_snapshot_) {
+            if (summary.usage_present) {
+                const bool used = summary.valid && summary.played_minutes_available && summary.played_minutes >= 0;
+                if (used) std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_CONSOLE_USAGE_D_MIN), summary.played_minutes);
+                else std::snprintf(line, sizeof(line), "%s: %s", ptc_ui_text(PTC_UI_T_CONSOLE_USAGE), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+                flow_text(renderer, line, PTC_OVERLAY_FONT_BODY_LG, used ? pal.text_primary : pal.warning);
+                // The backend timestamp belongs to the counter, not this UI refresh.
+                const std::time_t captured = static_cast<std::time_t>(summary.usage_captured_at);
+                const std::tm *utc = summary.usage_captured_at > 0 ? std::gmtime(&captured) : nullptr;
+                char timestamp[64];
+                if (utc && static_cast<int64_t>(captured) == summary.usage_captured_at &&
+                    std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S UTC", utc))
+                    std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_OVERLAY_USAGE_CAPTURE), timestamp);
+                else std::snprintf(line, sizeof(line), ptc_ui_text(PTC_UI_T_OVERLAY_USAGE_CAPTURE), ptc_ui_text(PTC_UI_T_UNAVAILABLE));
+                flow_text(renderer, line, PTC_OVERLAY_FONT_SECONDARY, pal.text_secondary);
+            }
             char label[128], value[128], note[128];
             int day, second;
             ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), value, sizeof(value), note, sizeof(note));
