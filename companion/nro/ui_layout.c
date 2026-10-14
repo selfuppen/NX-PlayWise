@@ -552,14 +552,14 @@ PtcUiRect ptc_ui_day_decision_next_rect(void)
     return (PtcUiRect){852, 66, 44, 30};
 }
 
-PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){108, 108, 1064, 480}; }
+PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){40, 74, 1200, 548}; }
 
 PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
 {
     if (!model) return (PtcUiRect){0, 0, 0, 0};
-    if (index == 1) return (PtcUiRect){342, 606, 180, 44};
-    if (index == 2) return (PtcUiRect){108, 606, 222, 44};
-    if (index == 0 && model->home_details_page == 0) return (PtcUiRect){824, 504, 348, 64};
+    if (index == 1) return (PtcUiRect){276, 628, 170, 44};
+    if (index == 2) return (PtcUiRect){40, 628, 220, 44};
+    if (index == 0 && model->home_details_page == 0) return (PtcUiRect){800, 496, 440, 126};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
@@ -805,8 +805,8 @@ static void dialog_dims(PtcUiOverlay overlay, int *width, int *height)
         *height = 420;
         break;
     case PTC_UI_OVERLAY_HOME_DETAILS:
-        *width = 1120;
-        *height = 640;
+        *width = 1240;
+        *height = 684;
         break;
     case PTC_UI_OVERLAY_MINUTES:
         *width = 720;
