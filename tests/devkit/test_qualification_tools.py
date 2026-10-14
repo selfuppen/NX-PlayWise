@@ -44,6 +44,7 @@ def prepare_packages(root: Path) -> Path:
     release_build.write_text(json.dumps(release_manifest), encoding="utf-8")
     lab_build.write_text(json.dumps(lab_manifest), encoding="utf-8")
     with zipfile.ZipFile(packages / verifier.STANDARD_ZIP, "w") as archive:
+        archive.writestr("switch/playwise/build.json", json.dumps(release_manifest))
         for index, member in enumerate(verifier.RELEASE_COMPONENTS):
             archive.writestr(member, f"component-{index}".encode())
     with zipfile.ZipFile(packages / verifier.COMPLETE_ZIP, "w") as archive:
@@ -221,6 +222,13 @@ def test_manual_status_can_still_enter_full_qualification() -> None:
         build = json.loads(build_path.read_text(encoding="utf-8"))
         build["qualification"].update({"status": "manual_verified", "method": "manual", "scope": "main_features"})
         build_path.write_text(json.dumps(build), encoding="utf-8")
+        zip_path = packages / verifier.STANDARD_ZIP
+        with zipfile.ZipFile(zip_path) as archive:
+            members = {name: archive.read(name) for name in archive.namelist()}
+        members["switch/playwise/build.json"] = json.dumps(build).encode("utf-8")
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            for name, data in members.items():
+                archive.writestr(name, data)
         reports = prepare_reports(root)
         require(verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")["status"] == "passed",
                 "manual status must not block later full qualification")

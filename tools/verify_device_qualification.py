@@ -12,6 +12,7 @@ from playwise_version import read_playwise_version
 # Single source of truth for the eye-care observation contract, shared with the
 # capture tool so the gate and the template can never drift apart.
 import make_eye_care_qualification_template as make_eye_care
+import pctl_usage_qualification as usage_qualification
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,6 +88,11 @@ def package_identity(packages: Path) -> tuple[dict, dict, dict[str, str], dict[s
         zip_hashes[name] = sha256_file(path)
     component_hashes: dict[str, str] = {}
     with zipfile.ZipFile(packages / STANDARD_ZIP) as archive:
+        try:
+            embedded_manifest = json.loads(archive.read("switch/playwise/build.json"))
+        except (KeyError, ValueError, UnicodeError) as exc:
+            raise QualificationError("标准包缺少有效的嵌入 manifest") from exc
+        require(embedded_manifest == standard_manifest, "标准包嵌入 manifest 与目录 manifest 不一致")
         for member in RELEASE_COMPONENTS:
             try:
                 component_hashes[member] = sha256_bytes(archive.read(member))
@@ -461,6 +467,14 @@ def verify(packages: Path, reports: Path, expected_model: str,
     eye_care_report = verify_eye_care_report(
         reports, manifest, expected_model, expected_hos, expected_atmosphere,
         required=require_eye_care)
+    usage_attestation = None
+    if "usage_contract" in manifest or (reports / usage_qualification.REPORT_NAME).exists():
+        try:
+            usage_attestation = usage_qualification.verify_report(
+                reports, manifest, zip_hashes[STANDARD_ZIP], component_hashes,
+                expected_model, expected_hos, expected_atmosphere)
+        except usage_qualification.UsageQualificationError as exc:
+            raise QualificationError(str(exc)) from exc
     checks = [
         "device_lab_schema_v2", "environment_exosphere", "public_raw_libnx_parity",
         "target_bound_activation_fallback", "restriction_matrix", "exact_restore",
@@ -483,6 +497,9 @@ def verify(packages: Path, reports: Path, expected_model: str,
     if eye_care_report is not None:
         result["checks"].extend(["eye_care_rest_cycle", "eye_care_isolation"])
         result["reports"]["eye_care_path"] = str(eye_care_report.resolve())
+    if usage_attestation is not None:
+        result["checks"].extend(usage_qualification.CHECKS)
+        result["pctl_usage"] = usage_attestation
     if observation_source == "vision_ai":
         result["checks"].append("vision_attestation")
         result["vision_attestation"] = attestations
@@ -527,6 +544,10 @@ def main() -> int:
         "eye_care_isolation": "eye-care 休息 0 分钟不计入每日额度且 0x44 精确恢复",
         "artifact_identity": "报告、候选 Zip 与 Switch 二进制身份绑定",
         "vision_attestation": "每个限制槽位的 AI 判定均有哈希绑定的截图旁证",
+        "pctl1952_candidate_identity": "1952 报告、原始样本文件与当前候选二进制绑定",
+        "pctl1952_usage_grant_continuity": "独立累计、超额加时及恢复后一分钟消费一致",
+        "pctl1952_proxy_handover": "1440 代理循环及剩余限制交接证据一致（不证明代理可移除）",
+        "pctl1952_restore": "1952 候选报告记录 0x44 与 timer 精确恢复",
     }
     for check_name in result["checks"]:
         print(f"PASS: {labels[check_name]}")

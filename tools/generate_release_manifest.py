@@ -125,6 +125,9 @@ def make_manifest(profile: str) -> dict:
     }
     if manual_verified:
         data["qualification"].update({"method": "manual", "scope": "main_features"})
+    if profile == "release":
+        from pctl_usage_qualification import CONTRACT
+        data["usage_contract"] = CONTRACT
     return data
 
 

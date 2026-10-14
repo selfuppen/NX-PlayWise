@@ -58,6 +58,8 @@ def test_candidate_defaults_to_pending() -> None:
     require(data["build"]["libnx"] == "libnx 4.12.0-1", "libnx package identity must be recorded")
     require(data["build"]["container_image"] == "devkitpro:v1", "Docker image tag must be recorded")
     require(data["build"]["source_dirty"] is False, "tracked dirty state must be recorded")
+    require(data["usage_contract"] == "pctl1952_v1_proxy1440",
+            "release declares the direct counter contract while retaining the proxy")
 
 
 def test_manual_device_verification_is_explicit_and_scoped() -> None:
@@ -82,6 +84,8 @@ def test_manual_device_verification_is_explicit_and_scoped() -> None:
     }, "release must record the stated device environment")
     require(lab["qualification"]["status"] == "pending" and
             eden["qualification"]["status"] == "pending", "manual status must not leak into test profiles")
+    require("usage_contract" not in lab and "usage_contract" not in eden,
+            "Lab raw and Eden simulation must not claim the release consumption contract")
     with mock.patch.dict(os.environ, {"PLAYWISE_MANUAL_DEVICE_VERIFIED": "1"}, clear=True):
         try:
             manifest.make_manifest("release")
