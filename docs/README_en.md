@@ -25,6 +25,8 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 | [Development Environment Guide](开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md) | Host, devkitPro, unified builds and dependencies | [开发环境指南](开发/开发环境指南.md) |
 | [Developer Guide](开发/DEVELOPER_GUIDE.md) | Module responsibilities, safety boundaries, upstream research and merge requirements | [开发指南](开发/开发指南.md) |
 | [Testing Guide](开发/TESTING_GUIDE.md) | Local regression, CI gate, packaging gates, Eden, UI, hardware acceptance and evidence round-trip | [测试指南](开发/测试指南.md) |
+| [PCTL1952 Candidate Acceptance (Chinese)](开发/PCTL1952候选验收.md) | Independent consumption, grant recovery, 1440 proxy baseline and evidence binding | [PCTL1952候选验收](开发/PCTL1952候选验收.md) |
+| [PCTL1952 Follow-up Checklist (Chinese)](开发/PCTL1952后续工作清单.md) | Clean candidate build, hardware acceptance, promotion, proxy removal and remaining qualification scope | [PCTL1952后续工作清单](开发/PCTL1952后续工作清单.md) |
 
 ## Design — `设计/`
 
@@ -37,12 +39,16 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 
 ## Research — `调研/`
 
+For device experiments, see [Stable device probing workflow (Chinese)](开发/真机稳定探测方法.md): bounded same-process capture, transaction recovery, unattended evidence and qualified human observations.
+
 | Record (Chinese only) | Scope | Date |
 | --- | --- | --- |
 | [Enabling system Parental Controls](调研/开启系统家长控制功能调研.md) | Native PIN registration, handover prerequisites and proposed entry point | 2026-10-06 |
 | [Non-PCTL suspension and overlay capabilities](调研/非PCTL暂停与浮窗能力调研.md) | Source-level display, input, process suspension and recovery capabilities | 2026-10-06 |
 | [Bedtime timer activation diagnosis](调研/就寝恢复误启动计时诊断-2026-10-08.md) | SD evidence, version comparison, recovery boundaries and device retest | 2026-10-08 |
 | [Overlay memory and freeze risk audit](调研/Overlay内存与死机风险自查.md) | Bounded glyph ownership, resource teardown, thread races and hardware evidence limits | 2026-10-13 |
+| [PCTL1952 mainline findings](调研/PCTL1952主线探测计划.md) | Usage semantics, first takeover, lifecycle and natural midnight evidence | 2026-10-14 |
+| [PCTL1952 feature impact handoff](调研/PCTL1952功能影响分析交接.md) | Analysis inputs for totals, eye care, bedtime, dock policy and combined state machines | 2026-10-14 |
 
 ## Maintenance
 

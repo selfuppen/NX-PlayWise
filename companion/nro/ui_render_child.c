@@ -14,18 +14,12 @@ static float child_remaining_fraction(const PtcUiModel *model, bool *available)
         *available = true;
         return 1.0f;
     }
-    if (model->remaining_available && model->played_minutes_available &&
-        model->remaining_minutes >= 0 && model->played_minutes >= 0 &&
-        model->remaining_minutes + model->played_minutes > 0) {
+    if (model->remaining_available && model->remaining_minutes >= 0 &&
+        model->forecast[0].day_index == model->day_index &&
+        model->forecast[0].mode == PTC_RULE_MODE_LIMIT && model->forecast[0].minutes > 0) {
         *available = true;
-        return (float)model->displayed_remaining_minutes /
-               (float)(model->remaining_minutes + model->played_minutes);
-    }
-    if (model->remaining_available && model->remaining_minutes > 0) {
-        int shown = model->displayed_remaining_minutes > 120 ? 120 : model->displayed_remaining_minutes;
-        if (shown < 0) shown = 0;
-        *available = true;
-        return (float)shown / 120.0f;
+        float ratio = (float)model->displayed_remaining_minutes / (float)model->forecast[0].minutes;
+        return ratio < 0.0f ? 0.0f : ratio > 1.0f ? 1.0f : ratio;
     }
     return 0.0f;
 }
@@ -216,7 +210,9 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
     draw_rect_outline(pixels, stride, slot, 4, 1, UI_GAUGE_SLOT_BORDER);
     char gauge_left[64] = "";
     char gauge_right[64] = "";
-    if (bedtime_enforcing) {
+    if (!ptc_ui_status_is_fresh(model, ptc_ui_render_now())) {
+        snprintf(gauge_left, sizeof(gauge_left), "%s", ptc_ui_text(PTC_UI_T_STATUS_TO_CONFIRM));
+    } else if (bedtime_enforcing) {
         snprintf(gauge_left, sizeof(gauge_left), "%s", ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE_2));
         snprintf(gauge_right, sizeof(gauge_right), "%s", ptc_ui_text(PTC_UI_T_PLAY_PAUSED_TODAY));
     } else if (eye_resting) {
@@ -226,15 +222,17 @@ static void draw_child_task_summary(uint32_t *pixels, uint32_t stride, const Ptc
         fill_round_rect(pixels, stride, slot, 4, UI_SUCCESS);
         snprintf(gauge_left, sizeof(gauge_left), "%s", ptc_ui_text(PTC_UI_T_UNLIMITED_TODAY));
         snprintf(gauge_right, sizeof(gauge_right), "%s", ptc_ui_text(PTC_UI_T_REST_AS_PLANNED));
-    } else if (model->remaining_available && model->played_minutes_available &&
-               model->remaining_minutes >= 0 && model->played_minutes >= 0 &&
-               model->remaining_minutes + model->played_minutes > 0) {
-        int total = model->remaining_minutes + model->played_minutes;
+    } else if (model->remaining_available && model->remaining_minutes >= 0 &&
+               model->forecast[0].day_index == model->day_index &&
+               model->forecast[0].mode == PTC_RULE_MODE_LIMIT && model->forecast[0].minutes > 0) {
+        int total = model->forecast[0].minutes;
         int fill_w = (int)((int64_t)slot.width * model->displayed_remaining_minutes / total);
         if (fill_w < 4 && model->remaining_minutes > 0) fill_w = 4;
         if (fill_w > slot.width) fill_w = slot.width;
         if (fill_w > 0) fill_round_rect(pixels, stride, (UiRect){slot.x, slot.y, fill_w, slot.height}, 4, ring_color);
-        snprintf(gauge_left, sizeof(gauge_left), ptc_ui_text(PTC_UI_T_PLAYED_D_MIN), model->played_minutes);
+        if (model->played_minutes_available && model->played_minutes >= 0)
+            snprintf(gauge_left, sizeof(gauge_left),
+                ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE_D_MIN : PTC_UI_T_PLAYED_D_MIN), model->played_minutes);
         snprintf(gauge_right, sizeof(gauge_right), ptc_ui_text(PTC_UI_T_D_MIN_LEFT), model->remaining_minutes);
     }
     if (gauge_left[0]) {

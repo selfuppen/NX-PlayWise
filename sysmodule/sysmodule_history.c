@@ -264,11 +264,13 @@ bool clear_activity_history(PtcSysmodule *sysmodule)
 }
 
 #ifndef PLAYWISE_DEVICE_LAB
-static bool save_daily_summary(PtcSysmodule *sysmodule, const PtcDailySummaryRecord *record)
+static bool save_daily_summary(PtcSysmodule *sysmodule, const PtcDailySummaryRecord *record, bool only_existing)
 {
     char path[320];
-    char existing[PTC_DAILY_SUMMARY_FILE_SIZE];
-    char output[PTC_DAILY_SUMMARY_FILE_SIZE];
+    /* History grows to two source rows per date; keep file buffers off the
+       bounded main-thread stack. Failure remains a best-effort stats failure. */
+    char *existing = calloc(1, PTC_DAILY_SUMMARY_FILE_SIZE);
+    char *output = calloc(1, PTC_DAILY_SUMMARY_FILE_SIZE);
     char formatted[PTC_DAILY_SUMMARY_LINE_SIZE];
     PtcDailySummaryRecord records[PTC_DAILY_SUMMARY_MAX_RECORDS];
     char *cursor;
@@ -276,9 +278,11 @@ static bool save_daily_summary(PtcSysmodule *sysmodule, const PtcDailySummaryRec
     size_t used = 0;
     size_t index;
     bool replaced = false;
+    bool ok = false;
+    if (!existing || !output) goto done;
     join_path(path, sizeof(path), sysmodule->app_root, "stats/daily-summaries.jsonl");
     if (sysmodule->storage->vtable->exists(sysmodule->storage, path)) {
-        if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, existing, sizeof(existing))) return false;
+        if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, existing, PTC_DAILY_SUMMARY_FILE_SIZE)) goto done;
     } else existing[0] = '\0';
     cursor = existing;
     while (*cursor) {
@@ -286,44 +290,67 @@ static bool save_daily_summary(PtcSysmodule *sysmodule, const PtcDailySummaryRec
         size_t length = newline ? (size_t)(newline - cursor) : strlen(cursor);
         char line[PTC_DAILY_SUMMARY_LINE_SIZE];
         if (length == 0) { cursor = newline ? newline + 1 : cursor + length; continue; }
-        if (length >= sizeof(line)) return false;
+        PtcDailySummaryRecord parsed;
+        if (length >= sizeof(line)) goto done;
         memcpy(line, cursor, length);
         line[length] = '\0';
-        if (!ptc_daily_summary_parse_line(line, &records[count])) return false;
-        if (records[count].day_index == record->day_index) {
-            if (record->captured_at >= records[count].captured_at) records[count] = *record;
-            replaced = true;
+        if (!ptc_daily_summary_parse_line(line, &parsed)) goto done;
+        for (index = 0; index < count; ++index)
+            if (records[index].day_index == parsed.day_index && records[index].direct_source == parsed.direct_source) break;
+        if (index < count) ptc_daily_summary_merge(&records[index], &parsed);
+        else {
+            if (count == PTC_DAILY_SUMMARY_MAX_RECORDS) goto done;
+            records[count++] = parsed;
         }
-        if (++count == PTC_DAILY_SUMMARY_MAX_RECORDS) break;
         if (!newline) break;
         cursor = newline + 1;
     }
-    if (!replaced) {
-        if (count == PTC_DAILY_SUMMARY_MAX_RECORDS) {
-            size_t oldest = 0;
-            for (index = 1; index < count; ++index) {
-                if (records[index].day_index < records[oldest].day_index) oldest = index;
-            }
-            if (record->day_index <= records[oldest].day_index) return true;
-            if (oldest + 1u < count) {
-                memmove(records + oldest, records + oldest + 1u,
-                    (count - oldest - 1u) * sizeof(records[0]));
-            }
-            count = PTC_DAILY_SUMMARY_MAX_RECORDS - 1u;
+    for (index = 0; index < count; ++index) {
+        if (records[index].day_index == record->day_index && records[index].direct_source == record->direct_source) {
+            ptc_daily_summary_merge(&records[index], record);
+            replaced = true;
         }
+    }
+    /* Retain 30 distinct dates, including both old estimates and direct rows.
+       Removing a date removes both sources; never silently truncate a file. */
+    if (!replaced) {
+        if (only_existing) goto done;
+        size_t dates = 0;
+        uint16_t oldest = UINT16_MAX;
+        bool date_present = false;
+        for (index = 0; index < count; ++index) {
+            size_t prior;
+            if (records[index].day_index == record->day_index) date_present = true;
+            if (records[index].day_index < oldest) oldest = records[index].day_index;
+            for (prior = 0; prior < index; ++prior)
+                if (records[prior].day_index == records[index].day_index) break;
+            if (prior == index) ++dates;
+        }
+        if (!date_present && dates >= 30u) {
+            size_t kept = 0;
+            if (record->day_index <= oldest) { ok = true; goto done; }
+            for (index = 0; index < count; ++index)
+                if (records[index].day_index != oldest) records[kept++] = records[index];
+            count = kept;
+        }
+        if (count == PTC_DAILY_SUMMARY_MAX_RECORDS) goto done;
         records[count++] = *record;
     }
     for (index = 0; index < count; ++index) {
         size_t length;
-        if (!ptc_daily_summary_format_line(formatted, sizeof(formatted), &records[index])) return false;
+        if (!ptc_daily_summary_format_line(formatted, sizeof(formatted), &records[index])) goto done;
         length = strlen(formatted);
-        if (used + length + 2u > sizeof(output)) return false;
+        if (used + length + 2u > PTC_DAILY_SUMMARY_FILE_SIZE) goto done;
         memcpy(output + used, formatted, length);
         used += length;
         output[used++] = '\n';
     }
     output[used] = '\0';
-    return sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, output);
+    ok = sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, output);
+done:
+    free(existing);
+    free(output);
+    return ok;
 }
 #endif
 
@@ -377,10 +404,13 @@ int usage_summary_tick(PtcSysmodule *sysmodule, PtcClockSnapshot now)
     PtcEffectiveRule effective;
     PtcDailySummaryRecord record;
     int64_t consumed;
+    bool read_failed;
     if (!load_setup_state(sysmodule, &setup) || strcmp(setup.phase, "active") != 0 ||
-        !load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state) ||
-        sysmodule->pctl->vtable->read_status(sysmodule->pctl,
-            ptc_weekday_from_day_index(now.day_index), &pctl_status) != PTC_ERR_OK) return 0;
+        !load_rules(sysmodule, &rules) || !load_state(sysmodule, &runtime_state)) return 0;
+    memset(&pctl_status, 0, sizeof(pctl_status));
+    read_failed = sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+            ptc_weekday_from_day_index(now.day_index), &pctl_status) != PTC_ERR_OK;
+    if (read_failed) memset(&pctl_status, 0, sizeof(pctl_status));
     memset(&record, 0, sizeof(record));
     effective = ptc_rules_resolve(&rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
     record.day_index = now.day_index;
@@ -394,10 +424,23 @@ int usage_summary_tick(PtcSysmodule *sysmodule, PtcClockSnapshot now)
     record.remaining_minutes = record.remaining_available
         ? (uint16_t)pctl_status.remaining_minutes : 0u;
     consumed = result_played_minutes(&pctl_status);
-    record.consumed_available = consumed >= 0;
+    record.consumed_available = consumed >= 0 && consumed <= 1440;
     record.consumed_minutes = consumed >= 0 && consumed <= 1440 ? (uint16_t)consumed : 0u;
     record.granted_minutes = runtime_state.summary_day_index == now.day_index
         ? runtime_state.summary_grant_minutes : 0u;
-    return save_daily_summary(sysmodule, &record) ? 1 : 0;
+    if (pctl_status.usage_supported || read_failed) {
+        PtcUsageCounter sample;
+        PtcClockSnapshot observed = usage_sample_clock(sysmodule, now);
+        record.direct_source = true;
+        record.observed_at = observed.unix_seconds;
+        record.consumed_available = !read_failed && direct_usage_sample(&pctl_status, observed, &sample) &&
+            sample.total_ns <= PTC_DAILY_SUMMARY_DAY_NS;
+        record.latest_available = record.consumed_available;
+        record.total_ns = record.consumed_available ? sample.total_ns : 0;
+        record.captured_at = record.consumed_available ? sample.captured_at : 0;
+        record.consumed_minutes = (uint16_t)(record.total_ns / PTC_USAGE_MINUTE_NS);
+        if (record.observed_at <= 0) return 0;
+    }
+    return save_daily_summary(sysmodule, &record, read_failed) ? 1 : 0;
 }
 #endif

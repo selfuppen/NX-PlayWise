@@ -410,14 +410,12 @@ static PtcErrorCode restore_install_snapshot_now(PtcSysmodule *sysmodule, PtcSet
     }
     rules.bedtime.enabled = false;
     rules.eye_care.enabled = false;
-    runtime_state.eye_care_resting = false;
-    runtime_state.eye_care_rest_deadline = 0;
-    runtime_state.eye_care_break_id = 0;
-    runtime_state.eye_care_usage_known = false;
+    reset_eye_care_cycle(&runtime_state, now.day_index);
     rules.dock_policy.force_docked = false;
     rules.dock_policy.undocked_limit_enabled = false;
     runtime_state.dock_enforced = false;
     runtime_state.dock_baseline_known = false;
+    runtime_state.dock_usage_counter.known = false;
     runtime_state.dock_interval_unknown = true;
     runtime_state.bedtime_enforced = false;
     runtime_state.bedtime_window_instance_id = 0;

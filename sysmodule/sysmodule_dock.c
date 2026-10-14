@@ -3,6 +3,56 @@
 #define DOCK_MINUTE_NS 60000000000ULL
 #define DOCK_DAY_NS (1440ULL * DOCK_MINUTE_NS)
 
+void dock_sample_direct(PtcRuntimeState *state, const PtcPctlStatus *status,
+    PtcClockSnapshot now, PtcOperationMode mode, bool boot_gap)
+{
+    PtcUsageCounter sample;
+    PtcUsageCounter before = state->dock_usage_counter;
+    PtcUsageStep step;
+    uint64_t delta;
+    if (!direct_usage_sample(status, now, &sample)) {
+        state->dock_usage_known = false;
+        state->dock_interval_unknown = true;
+        return;
+    }
+    step = ptc_usage_counter_step(&state->dock_usage_counter, &sample, &delta);
+    if (step == PTC_USAGE_UNKNOWN) {
+        state->dock_usage_known = false;
+        state->dock_interval_unknown = true;
+        return;
+    }
+    if (state->dock_tracking_started && state->dock_day_index != now.day_index) {
+        /* A policy re-enable can intentionally invalidate its baseline. The
+           saved date/time must still prove an ordinary forward day, not a
+           manual date rewind or an unexplained multi-day jump. */
+        bool ordinary_day = (uint32_t)state->dock_day_index + 1 == now.day_index &&
+            before.captured_at > 0 && sample.captured_at > before.captured_at &&
+            sample.captured_at - before.captured_at <= INT64_C(129600);
+        if (step != PTC_USAGE_NEXT_DAY && !ordinary_day) {
+            state->dock_usage_counter = before;
+            state->dock_usage_known = false;
+            state->dock_interval_unknown = true;
+            return;
+        }
+        state->undocked_used_ns = 0;
+        state->dock_usage_incomplete = false;
+    }
+    if (before.source != sample.source && state->dock_tracking_started &&
+        (!state->dock_usage_known || state->dock_interval_unknown)) state->dock_usage_incomplete = true;
+    if (step == PTC_USAGE_NEXT_DAY || boot_gap || state->dock_interval_unknown ||
+        state->dock_last_mode != PTC_OPERATION_MODE_DOCKED || mode != PTC_OPERATION_MODE_DOCKED) {
+        state->undocked_used_ns = delta > DOCK_DAY_NS - state->undocked_used_ns
+            ? DOCK_DAY_NS : state->undocked_used_ns + delta;
+    }
+    state->dock_day_index = now.day_index;
+    state->dock_tracking_started = true;
+    state->dock_baseline_known = true;
+    state->dock_last_used_ns = sample.total_ns > DOCK_DAY_NS ? DOCK_DAY_NS : sample.total_ns;
+    state->dock_usage_known = !state->dock_usage_incomplete;
+    state->dock_last_mode = mode;
+    state->dock_interval_unknown = false;
+}
+
 PtcOperationModeStatus ptc_read_operation_mode(PtcSysmodule *sysmodule)
 {
     PtcOperationModeStatus status = { PTC_OPERATION_MODE_UNKNOWN, false, false };
@@ -66,6 +116,14 @@ void dock_rebaseline(PtcSysmodule *sysmodule, PtcRuntimeState *state, uint8_t we
     PtcRules rules;
     PtcDayRule base;
     bool continuity = state->dock_baseline_known;
+    PtcPctlStatus direct_status = {0};
+    PtcClockSnapshot now = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    (void)sysmodule->pctl->vtable->read_status(sysmodule->pctl, weekday, &direct_status);
+    if (direct_status.usage_supported || state->dock_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952) {
+        dock_sample_direct(state, &direct_status, usage_sample_clock(sysmodule, now),
+            ptc_read_operation_mode(sysmodule).mode, false);
+        return;
+    }
     /* No new baseline can prove the size of an already lost interval. */
     if (!state->dock_usage_known && !continuity) return;
     if (!load_rules(sysmodule, &rules)) return;
@@ -106,7 +164,17 @@ void dock_sample_usage(PtcSysmodule *sysmodule, const PtcRules *rules,
     sysmodule->dock_boot_sampled = true;
     if (!dock_policy_enabled(rules)) {
         /* Disabling a policy never refunds today's accumulated usage. */
+        if (state->dock_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952 && state->dock_tracking_started &&
+            (!state->dock_usage_known || state->dock_interval_unknown)) state->dock_usage_incomplete = true;
         state->dock_baseline_known = false;
+        state->dock_usage_counter.known = false;
+        return;
+    }
+    PtcPctlStatus direct_status = {0};
+    (void)sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+        ptc_weekday_from_day_index(now.day_index), &direct_status);
+    if (direct_status.usage_supported || state->dock_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952) {
+        dock_sample_direct(state, &direct_status, usage_sample_clock(sysmodule, now), mode.mode, boot_gap);
         return;
     }
     if (state->dock_tracking_started && state->dock_day_index != now.day_index) {

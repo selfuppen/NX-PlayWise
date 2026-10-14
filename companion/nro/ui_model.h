@@ -372,6 +372,9 @@ typedef struct {
     bool waiting;
     bool status_loaded;
     int64_t status_updated_at;
+    bool usage_present;
+    int64_t usage_captured_at;
+    uint64_t usage_ns;
     bool restriction_enabled_available;
     bool restriction_enabled;
     bool temporary_unlocked_available;
@@ -495,6 +498,12 @@ typedef struct {
     uint32_t usage_consumed_minutes_7;
     uint16_t usage_known_days_30;
     uint32_t usage_consumed_minutes_30;
+    bool usage_direct_present;
+    uint16_t usage_direct_days_7;
+    uint16_t usage_direct_days_30;
+    uint32_t usage_direct_minutes_7;
+    uint32_t usage_direct_minutes_30;
+    bool usage_latest_available;
     uint16_t day_index;
     char mode[24];
     char request_id[80];

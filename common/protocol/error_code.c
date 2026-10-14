@@ -19,7 +19,7 @@ static const PtcErrorInfo PTC_ERROR_TABLE[] = {
     {PTC_ERR_BAD_CLOCK, "bad_clock", "系统时间不可用"},
     {PTC_ERR_WRONG_DATE, "wrong_date", "授权码不是今天有效"},
     {PTC_ERR_USED_TOKEN, "used_token", "授权码已经使用过"},
-    {PTC_ERR_MINUTES_EXCEED_LIMIT, "minutes_exceed_limit", "授权分钟数超过上限"},
+    {PTC_ERR_MINUTES_EXCEED_LIMIT, "minutes_exceed_limit", "加时时长超出范围或今日额度已达上限"},
     {PTC_ERR_CODE_COOLDOWN, "code_cooldown", "短码错误次数过多，请稍后再试"},
     {PTC_ERR_DISABLED, "disabled", "后台当前已禁用"},
     {PTC_ERR_UNLIMITED_NOT_ALLOWED, "unlimited_not_allowed", "今日不限时，加时码不可用"},

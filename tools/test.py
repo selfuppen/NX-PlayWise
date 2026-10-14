@@ -60,6 +60,7 @@ def run_python_regressions() -> None:
         "tests/devkit/test_release_version.py",
         "tests/devkit/test_release_manifest.py",
         "tests/devkit/test_qualification_tools.py",
+        "tests/devkit/test_pctl_usage_qualification.py",
         "tests/devkit/test_package_remote.py",
         "tests/devkit/test_delivery_package.py",
         "tests/devkit/test_install_script.py",
@@ -81,6 +82,8 @@ def run_python_regressions() -> None:
         "tests/devkit/test_lab_wire_client.py",
         "tests/devkit/test_probe_report.py",
         "tests/devkit/test_capability_probe.py",
+        "tests/devkit/test_usage_probe.py",
+        "tests/devkit/test_pctl_usage_evidence.py",
     ]:
         run([PYTHON, test])
 

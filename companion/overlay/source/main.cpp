@@ -185,6 +185,7 @@ public:
 
     void update() override
     {
+        ptc_companion_result_summary_expire_usage(&displayed_summary_, static_cast<int64_t>(std::time(nullptr)));
         // Parent views use a raised content top (banner hidden); re-layout the
         // frame whenever we cross the child<->parent boundary. Runs every frame
         // before draw, so it must stay ahead of the waiting-only early return.

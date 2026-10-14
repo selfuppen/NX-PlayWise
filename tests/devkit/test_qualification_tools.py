@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import warnings
 import zipfile
 
 
@@ -44,12 +45,14 @@ def prepare_packages(root: Path) -> Path:
     release_build.write_text(json.dumps(release_manifest), encoding="utf-8")
     lab_build.write_text(json.dumps(lab_manifest), encoding="utf-8")
     with zipfile.ZipFile(packages / verifier.STANDARD_ZIP, "w") as archive:
+        archive.writestr("switch/playwise/build.json", json.dumps(release_manifest))
         for index, member in enumerate(verifier.RELEASE_COMPONENTS):
             archive.writestr(member, f"component-{index}".encode())
     with zipfile.ZipFile(packages / verifier.COMPLETE_ZIP, "w") as archive:
-        archive.writestr(verifier.STANDARD_ZIP, b"standard-inner")
+        archive.writestr(verifier.STANDARD_ZIP, (packages / verifier.STANDARD_ZIP).read_bytes())
     with zipfile.ZipFile(packages / verifier.LAB_ZIP, "w") as archive:
         archive.writestr("DEVICE-LAB.txt", "内部取证工具")
+        archive.writestr("switch/playwise-device-lab/build.json", json.dumps(lab_manifest))
     return packages
 
 
@@ -221,6 +224,15 @@ def test_manual_status_can_still_enter_full_qualification() -> None:
         build = json.loads(build_path.read_text(encoding="utf-8"))
         build["qualification"].update({"status": "manual_verified", "method": "manual", "scope": "main_features"})
         build_path.write_text(json.dumps(build), encoding="utf-8")
+        zip_path = packages / verifier.STANDARD_ZIP
+        with zipfile.ZipFile(zip_path) as archive:
+            members = {name: archive.read(name) for name in archive.namelist()}
+        members["switch/playwise/build.json"] = json.dumps(build).encode("utf-8")
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            for name, data in members.items():
+                archive.writestr(name, data)
+        with zipfile.ZipFile(packages / verifier.COMPLETE_ZIP, "w") as archive:
+            archive.writestr(verifier.STANDARD_ZIP, zip_path.read_bytes())
         reports = prepare_reports(root)
         require(verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")["status"] == "passed",
                 "manual status must not block later full qualification")
@@ -514,6 +526,87 @@ def test_eye_care_incomplete_observation_is_rejected() -> None:
             raise AssertionError("an incomplete eye-care observation must not qualify")
 
 
+def test_bundle_identity_and_promotion_rechecks() -> None:
+    def rewrite(path: Path, member: str, data: bytes) -> None:
+        with zipfile.ZipFile(path) as archive:
+            members = {name: archive.read(name) for name in archive.namelist()}
+        members[member] = data
+        with zipfile.ZipFile(path, "w") as archive:
+            for name, value in members.items():
+                archive.writestr(name, value)
+
+    for broken in ("dirty_lab", "stale_lab_zip", "stale_complete", "duplicate_manifest", "duplicate_zip"):
+        with tempfile.TemporaryDirectory(prefix="playwise-bundle-binding-") as tmp:
+            root = Path(tmp)
+            packages = prepare_packages(root)
+            reports = prepare_reports(root)
+            if broken == "dirty_lab":
+                path = packages / "playwise-device-lab/switch/playwise-device-lab/build.json"
+                data = json.loads(path.read_text(encoding="utf-8"))
+                data["build"]["source_dirty"] = True
+                path.write_text(json.dumps(data), encoding="utf-8")
+                rewrite(packages / verifier.LAB_ZIP, "switch/playwise-device-lab/build.json", path.read_bytes())
+            elif broken == "stale_lab_zip":
+                data = manifest("device-lab")
+                data["commit"] = "b" * 40
+                rewrite(packages / verifier.LAB_ZIP, "switch/playwise-device-lab/build.json", json.dumps(data).encode())
+            elif broken == "stale_complete":
+                rewrite(packages / verifier.COMPLETE_ZIP, verifier.STANDARD_ZIP, b"old standard fixture")
+            elif broken == "duplicate_zip":
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    with zipfile.ZipFile(packages / verifier.STANDARD_ZIP, "a") as archive:
+                        archive.writestr("switch/playwise/build.json", json.dumps(manifest("release")))
+                rewrite(packages / verifier.COMPLETE_ZIP, verifier.STANDARD_ZIP, (packages / verifier.STANDARD_ZIP).read_bytes())
+            else:
+                data = json.dumps(manifest("release")).replace('"schema_version": 1', '"schema_version": 1, "schema_version": 1')
+                rewrite(packages / verifier.STANDARD_ZIP, "switch/playwise/build.json", data.encode())
+                rewrite(packages / verifier.COMPLETE_ZIP, verifier.STANDARD_ZIP, (packages / verifier.STANDARD_ZIP).read_bytes())
+            try:
+                verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
+            except verifier.QualificationError:
+                pass
+            else:
+                raise AssertionError(f"{broken} bundle must not qualify")
+
+    with tempfile.TemporaryDirectory(prefix="playwise-promotion-binding-") as tmp:
+        root = Path(tmp)
+        packages = prepare_packages(root)
+        reports = prepare_reports(root)
+        verified = verifier.verify(packages, reports, "oled", "22.5.0", "1.11.2")
+        verification_path = root / "verification.json"
+        verification_path.write_text(json.dumps(verified), encoding="utf-8")
+        lab_path = packages / "playwise-device-lab/switch/playwise-device-lab/build.json"
+        original = lab_path.read_bytes()
+        lab = json.loads(original)
+        lab["build"]["source_dirty"] = True
+        lab_path.write_text(json.dumps(lab), encoding="utf-8")
+        try:
+            promoter.promote(packages, verification_path, root / "rejected")
+        except promoter.PromotionError:
+            require(not (root / "rejected").exists(), "bundle recheck must fail before copying any package")
+        else:
+            raise AssertionError("promotion must recheck directory metadata as well as Zip hashes")
+        lab_path.write_bytes(original)
+        verified["subject"]["commit"] = "b" * 40
+        verification_path.write_text(json.dumps(verified), encoding="utf-8")
+        try:
+            promoter.promote(packages, verification_path, root / "wrong-subject")
+        except promoter.PromotionError:
+            require(not (root / "wrong-subject").exists(), "subject mismatch must fail before copying")
+        else:
+            raise AssertionError("unchanged hashes cannot excuse a different verification subject")
+        verified["subject"]["commit"] = "a" * 40
+        duplicate = json.dumps(verified).replace('"status": "passed"', '"status": "passed", "status": "passed"', 1)
+        verification_path.write_text(duplicate, encoding="utf-8")
+        try:
+            promoter.promote(packages, verification_path, root / "duplicate-record")
+        except promoter.PromotionError:
+            require(not (root / "duplicate-record").exists(), "duplicate verification fields fail before copying")
+        else:
+            raise AssertionError("ambiguous verification JSON cannot promote a bundle")
+
+
 def main() -> int:
     test_verify_and_promote_byte_identical_packages()
     test_manual_status_can_still_enter_full_qualification()
@@ -531,6 +624,7 @@ def main() -> int:
     test_eye_care_required_but_missing_is_rejected()
     test_eye_care_present_but_invalid_fails_closed()
     test_eye_care_incomplete_observation_is_rejected()
+    test_bundle_identity_and_promotion_rechecks()
     print("Qualification verifier and promotion tests passed")
     return 0
 

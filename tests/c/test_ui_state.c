@@ -9,6 +9,8 @@
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
 #include "../../common/protocol/error_code.h"
+#include "../../common/protocol/result_builder.h"
+#include "../../companion/result_summary.h"
 #include "../../third_party/cjson/cJSON.h"
 
 static int failures;
@@ -2002,6 +2004,54 @@ static void test_redemption_history_state(void)
     check_true(!rects_overlap(previous, next) && !rects_overlap(previous, cancel) &&
         !rects_overlap(next, cancel) && !rects_overlap(cancel, clear),
         "history paging, back and clear touch targets do not overlap");
+}
+
+static void test_typed_usage_history(void)
+{
+    PtcUiModel model = {0};
+    char line[256];
+    const char *valid = "{\"version\":1,\"request_id\":\"history-state\",\"type\":\"status\",\"status\":\"ok\",\"state\":{"
+        "\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":40,\"play_timer_enabled\":1,\"restricted_now\":0,"
+        "\"usage_summary\":{\"available\":true,\"known_days_7\":5,\"consumed_minutes_7\":210,"
+        "\"known_days_30\":18,\"consumed_minutes_30\":720,\"direct\":{\"source\":\"pctl_1952\","
+        "\"scope\":\"console_usable_time\",\"coverage\":\"partial\",\"known_days_7\":3,"
+        "\"known_days_30\":8,\"consumed_minutes_7\":234,\"consumed_minutes_30\":901,"
+        "\"latest_available\":false}}},\"completed_at\":1000}";
+    check_true(ptc_ui_apply_result_json(&model, valid) && model.usage_direct_present &&
+        model.usage_direct_days_7 == 3 && model.usage_direct_minutes_30 == 901 &&
+        !model.usage_latest_available && model.usage_consumed_minutes_30 == 720,
+        "UI keeps console partial observations separate from quota estimates");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_ENGLISH);
+    ptc_ui_format_usage_history(&model, true, line, sizeof(line));
+    check_true(strstr(line, "partial") && strstr(line, "234") && strstr(line, "read failed"),
+        "console history discloses partial coverage and read failure");
+    ptc_ui_format_usage_history(&model, false, line, sizeof(line));
+    check_true(strstr(line, "estimate") && strstr(line, "720") && !strstr(line, "read failed"),
+        "legacy history stays labeled as estimate without a mixed total");
+    model.usage_direct_days_7 = model.usage_direct_days_30 = 0;
+    ptc_ui_format_usage_history(&model, true, line, sizeof(line));
+    check_true(strstr(line, "unavailable") && strstr(line, "unknown"), "no observed days never displays known zero");
+    for (unsigned bad = 0; bad < 4; ++bad) {
+        cJSON *root = cJSON_Parse(valid);
+        cJSON *direct = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(root, "state"), "usage_summary"), "direct");
+        if (bad == 0) cJSON_ReplaceItemInObject(direct, "source", cJSON_CreateString("pdm"));
+        if (bad == 1) cJSON_SetNumberValue(cJSON_GetObjectItem(direct, "known_days_7"), 3.5);
+        if (bad == 2) cJSON_SetNumberValue(cJSON_GetObjectItem(direct, "consumed_minutes_30"), -1);
+        if (bad == 3) cJSON_DeleteItemFromObject(direct, "coverage");
+        char *json = cJSON_PrintUnformatted(root);
+        check_true(json && ptc_ui_apply_result_json(&model, json) && !model.usage_direct_present,
+            "UI rejects unknown source, partial metadata and invalid history ranges");
+        cJSON_free(json); cJSON_Delete(root);
+    }
+    cJSON *root = cJSON_Parse(valid);
+    cJSON_DeleteItemFromObject(cJSON_GetObjectItem(root, "state"), "usage_summary");
+    char *old_status = cJSON_PrintUnformatted(root);
+    check_true(old_status && ptc_ui_apply_result_json(&model, old_status) &&
+        !model.usage_direct_present && !model.usage_summary_available && model.usage_consumed_minutes_30 == 0,
+        "new status without history clears earlier summaries");
+    cJSON_free(old_status); cJSON_Delete(root);
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
 }
 
 static void test_balanced_feature_state(void)
@@ -4123,8 +4173,60 @@ static void test_today_details_navigation(void)
 
 #include "test_policy_status.inc"
 
+static void test_direct_usage_freshness(void)
+{
+    PtcUiModel model;
+    PtcResultState state;
+    char json[6144];
+    memset(&model, 0, sizeof(model));
+    ptc_result_state_default(&state, 2380);
+    state.usage_supported = state.usage_available = true;
+    state.usage_ns = UINT64_C(4191000000000);
+    state.usage_captured_at = 1000;
+    state.played_minutes_available = true;
+    state.played_minutes = 60; /* The typed usage object, not this estimate, wins. */
+    state.forecast[0].minutes = 60;
+    ptc_result_ok_json(json, sizeof(json), "direct-ui", "status", "release", true, &state, 1005);
+    check_true(ptc_ui_apply_result_json(&model, json), "direct usage result accepted by NRO");
+    check_int(model.played_minutes, 69, "typed direct consumption overrides compatibility estimate");
+    model.operation = PTC_UI_OPERATION_ADD_TODAY_MINUTES;
+    model.draft_minutes = 15;
+    check_int(ptc_ui_preview_remaining_minutes(&model), 15, "quick preview uses ceiling after overrun");
+    check_int(ptc_ui_preview_effective_add_minutes(&model), 15, "quick preview keeps full award after overrun");
+    model.forecast[0].minutes = 1435;
+    check_int(ptc_ui_preview_effective_add_minutes(&model), 5, "partial cap does not promise the fifteen-minute face value");
+    model.forecast[0].minutes = 1440;
+    check_int(ptc_ui_preview_remaining_minutes(&model), 1370, "quick preview respects cap and fractional usage");
+    check_int(ptc_ui_preview_effective_add_minutes(&model), 0, "cap preview never invents an effective award");
+    model.forecast[0].minutes = 60;
+    ptc_ui_mark_status_updated(&model, 1120);
+    check_true(ptc_ui_status_is_fresh(&model, 1120), "direct observation includes 120-second boundary");
+    check_true(!ptc_ui_status_is_fresh(&model, 1121), "receipt time cannot refresh direct observation");
+    ptc_ui_mark_status_updated(&model, 999);
+    check_true(!ptc_ui_status_is_fresh(&model, 999), "future direct capture is unknown");
+    PtcCompanionResultSummary summary;
+    check_true(ptc_companion_result_summary_parse(json, &summary) && summary.daily_rule_available &&
+        summary.daily_rule_minutes == 60, "forecast determines actual business quota");
+    ptc_companion_result_summary_expire_usage(&summary, 1120);
+    check_true(summary.played_minutes_available, "Overlay retains fresh direct observation");
+    ptc_companion_result_summary_expire_usage(&summary, 1121);
+    check_true(!summary.played_minutes_available && summary.played_minutes == -1 && summary.usage_captured_at == 1000,
+        "Overlay expires without resetting capture time");
+    state.usage_available = false;
+    ptc_result_ok_json(json, sizeof(json), "direct-unknown", "set_today_limit", "release", false, &state, 1121);
+    check_true(ptc_ui_apply_result_json(&model, json) && !model.played_minutes_available,
+        "management reply with explicit unknown clears previous direct use");
+    check_int(ptc_ui_preview_remaining_minutes(&model), -1, "unknown direct use cannot borrow remaining for a grant preview");
+    state.usage_available = true;
+    state.usage_ns = UINT64_MAX;
+    ptc_result_ok_json(json, sizeof(json), "bad-usage", "status", "release", true, &state, 1122);
+    check_true(ptc_companion_result_summary_parse(json, &summary) && !summary.played_minutes_available,
+        "invalid signed wire range cannot fall back to old estimate");
+}
+
 int main(void)
 {
+    test_direct_usage_freshness();
     test_policy_status();
     test_today_projection();
     test_today_details_navigation();
@@ -4160,6 +4262,7 @@ int main(void)
     test_user_state_mapping();
     test_redemption_history_state();
     test_balanced_feature_state();
+    test_typed_usage_history();
     test_forecast_day_decision_and_navigation();
     if (failures) return 1;
     puts("PTC release UI state tests passed");

@@ -591,13 +591,13 @@ static void test_daily_summary_and_read_only_stats_boundary(void)
     char line[PTC_DAILY_SUMMARY_LINE_SIZE];
 
     memset(records, 0, sizeof(records));
-    records[0] = (PtcDailySummaryRecord){2380, 1000, "weekly", true, 60, true, 40, true, 20, 0};
-    records[1] = (PtcDailySummaryRecord){2374, 900, "weekly", true, 60, true, 30, true, 30, 0};
-    records[2] = (PtcDailySummaryRecord){2373, 800, "weekly", true, 60, true, 20, true, 40, 0};
-    records[3] = (PtcDailySummaryRecord){2380, 1100, "today_override", true, 75, true, 35, true, 40, 15};
-    records[4] = (PtcDailySummaryRecord){2381, 1200, "weekly", true, 60, true, 60, true, 0, 0};
-    records[5] = (PtcDailySummaryRecord){2379, 950, "weekly", true, 60, false, 0, false, 0, 0};
-    records[6] = (PtcDailySummaryRecord){2380, 1050, "weekly", true, 60, true, 30, true, 30, 0};
+    records[0] = (PtcDailySummaryRecord){2380, 1000, "weekly", true, 60, true, 40, true, 20, 0, false, 0, 0, false};
+    records[1] = (PtcDailySummaryRecord){2374, 900, "weekly", true, 60, true, 30, true, 30, 0, false, 0, 0, false};
+    records[2] = (PtcDailySummaryRecord){2373, 800, "weekly", true, 60, true, 20, true, 40, 0, false, 0, 0, false};
+    records[3] = (PtcDailySummaryRecord){2380, 1100, "today_override", true, 75, true, 35, true, 40, 15, false, 0, 0, false};
+    records[4] = (PtcDailySummaryRecord){2381, 1200, "weekly", true, 60, true, 60, true, 0, 0, false, 0, 0, false};
+    records[5] = (PtcDailySummaryRecord){2379, 950, "weekly", true, 60, false, 0, false, 0, 0, false, 0, 0, false};
+    records[6] = (PtcDailySummaryRecord){2380, 1050, "weekly", true, 60, true, 30, true, 30, 0, false, 0, 0, false};
 
     check_true(ptc_daily_summary_format_line(line, sizeof(line), &records[3]),
         "daily summary with reliable remaining time formats");
@@ -1317,9 +1317,18 @@ static void test_overlay_child_quota_and_restriction_details(void)
     summary.remaining_available = true;
     summary.remaining_minutes = 45;
     summary.played_minutes = 15;
+    summary.daily_rule_available = true;
+    summary.daily_rule_minutes = 60;
     ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), val, sizeof(val), note, sizeof(note));
     check_true(strcmp(val, "60 分钟") == 0 && strstr(note, "15") != NULL,
-        "total quota derives from remaining plus played minutes");
+        "total quota uses authoritative daily rule");
+    summary.remaining_minutes = 0;
+    summary.played_minutes = 100;
+    ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), val, sizeof(val), note, sizeof(note));
+    check_true(strcmp(val, "60 分钟") == 0, "excess consumption does not inflate displayed quota");
+    summary.dock_unlimited_capped = true;
+    ptc_overlay_format_child_quota_parts(&summary, label, sizeof(label), val, sizeof(val), note, sizeof(note));
+    check_true(strcmp(val, "不限时") == 0, "dock-only proxy remains unlimited in Overlay");
 
     /* 3. 受限时间与护眼提醒 (用于 cy + 94 引导行) */
     memset(&summary, 0, sizeof(summary));
@@ -1523,18 +1532,18 @@ static void test_daily_buffer_transactions(void)
         "{\"version\":1,\"request_id\":\"buffer-cap\",\"type\":\"claim_daily_buffer\","
         "\"created_at\":4,\"payload\":{}}"), "queue capped buffer claim");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "capped buffer claim is processed");
-    check_int(pctl.last_target.minutes, 1440, "buffer target is capped at 1440 minutes");
-    check_true(mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
-        strstr(text, "\"buffer_claimed\":true") && strstr(text, "\"buffer_claim_day_index\":2380") &&
-        strstr(text, "\"buffer_claimed_minutes\":0"),
-        "zero-effective capped claim still persists the claimed day");
+    check_int(pctl.apply_target_calls, 0, "zero-effective buffer performs no PCTL write");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "app/state.json") ||
+        (mem.storage.vtable->read_text(&mem.storage, "app/state.json", text, sizeof(text)) &&
+         strstr(text, "\"buffer_claimed\":false")),
+        "zero-effective capped claim preserves daily eligibility");
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-cap-repeat.json",
         "{\"version\":1,\"request_id\":\"buffer-cap-repeat\",\"type\":\"claim_daily_buffer\","
         "\"created_at\":5,\"payload\":{}}"), "queue repeated capped claim");
     check_int(ptc_sysmodule_process_all(&sysmodule), 1, "repeated capped claim is processed");
     check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/buffer-cap-repeat.json", text, sizeof(text)) &&
-        strstr(text, "\"reason\":\"daily_buffer_already_claimed\""),
-        "a capped claim cannot be repeated to bypass once-per-day semantics");
+        strstr(text, "\"reason\":\"minutes_exceed_limit\""),
+        "repeat at the ceiling still rejects without consuming eligibility");
 
     seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 0, true);
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/buffer-disabled.json",
@@ -2159,6 +2168,7 @@ static void test_setup_direct_takeover_recovers_exhausted_failed_release(void)
         &mem.storage, "app/flags/disable.flag", "setup_release_failed\n"),
         "restore the failed release circuit breaker");
     pctl.status.remaining_minutes = 3;
+    pctl.played_minutes_today = 28; /* Keep the simulated ns counter consistent with 31 - 3. */
     check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/setup-expired-changed.json",
         "{\"version\":1,\"request_id\":\"setup-expired-changed\",\"type\":\"complete_setup\",\"created_at\":3,\"payload\":{}}"),
         "queue retry after the observed allowance changed");

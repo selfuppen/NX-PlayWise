@@ -374,36 +374,32 @@ void ptc_overlay_format_child_quota_parts(
         if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_MINUTES_3));
         return;
     }
-    if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped) {
+    if ((summary->daily_rule_available && summary->daily_rule_unlimited) ||
+        summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped || summary->dock_unlimited_capped) {
         if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
         if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_BASIS_UNLIMITED));
         if (note_out && note_size > 0) {
             if (summary->eye_care_unlimited_capped)
                 snprintf(note_out, note_size, "%s", ptc_ui_text(PTC_UI_T_EYE_CARE_UNLIMITED_CAP));
             else if (summary->played_minutes_available && summary->played_minutes >= 0)
-                snprintf(note_out, note_size, ptc_ui_text(PTC_UI_T_PLAYED_ABOUT_D_MIN),
+                snprintf(note_out, note_size, ptc_ui_text(summary->usage_present ? PTC_UI_T_CONSOLE_USAGE_D_MIN : PTC_UI_T_PLAYED_ABOUT_D_MIN),
                     summary->played_minutes);
         }
         return;
     }
-    if (summary->remaining_available && summary->played_minutes_available &&
-        summary->remaining_minutes >= 0 && summary->played_minutes >= 0) {
-        int total = summary->remaining_minutes + summary->played_minutes;
+    if (summary->daily_rule_available) {
+        int total = summary->daily_rule_minutes;
         if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
         if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_D_MIN), total);
-        if (note_out && note_size > 0) {
-            snprintf(note_out, note_size, ptc_ui_text(PTC_UI_T_PLAYED_ABOUT_D_MIN), summary->played_minutes);
+        if (note_out && note_size > 0 && summary->played_minutes_available && summary->played_minutes >= 0) {
+            snprintf(note_out, note_size, ptc_ui_text(summary->usage_present ? PTC_UI_T_CONSOLE_USAGE_D_MIN : PTC_UI_T_PLAYED_ABOUT_D_MIN), summary->played_minutes);
         }
         return;
     }
     if (summary->played_minutes_available && summary->played_minutes >= 0) {
-        if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_USED_QUOTA_EST));
+        if (label_out && label_size > 0) snprintf(label_out, label_size,
+            ptc_ui_text(summary->usage_present ? PTC_UI_T_CONSOLE_USAGE : PTC_UI_T_USED_QUOTA_EST));
         if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_D_MIN), summary->played_minutes);
-        return;
-    }
-    if (summary->remaining_available && summary->remaining_minutes >= 0) {
-        if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
-        if (val_out && val_size > 0) snprintf(val_out, val_size, ptc_ui_text(PTC_UI_T_D_MIN), summary->remaining_minutes);
         return;
     }
     if (label_out && label_size > 0) snprintf(label_out, label_size, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE));
@@ -521,7 +517,8 @@ void ptc_overlay_format_child_restriction_guidance(
         }
         return;
     }
-    if (summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped) {
+    if ((summary->daily_rule_available && summary->daily_rule_unlimited) ||
+        summary->unrestricted_today == 1 || summary->eye_care_unlimited_capped || summary->dock_unlimited_capped) {
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_NO_TIME_LIMIT_TODAY_NO_BEDTIME_RESTRICTIONS));
         return;
     }
@@ -576,9 +573,8 @@ void ptc_overlay_format_child_restriction_summary(
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RULES_NO_LIMIT_TODAY_NO_BEDTIME_PRESS));
         return;
     }
-    if (summary->remaining_available && summary->played_minutes_available &&
-        summary->remaining_minutes >= 0 && summary->played_minutes >= 0) {
-        int total = summary->remaining_minutes + summary->played_minutes;
+    if (summary->daily_rule_available) {
+        int total = summary->daily_rule_minutes;
         snprintf(out, out_size, ptc_ui_text(PTC_UI_T_RULE_DETAILS_TODAY_QUOTA_D_MIN_PRESS), total);
         return;
     }

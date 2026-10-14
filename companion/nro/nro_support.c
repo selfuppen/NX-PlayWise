@@ -53,6 +53,8 @@ void export_diagnostics(UiState *ui)
         cJSON_AddNumberToObject(runtime, "remaining_minutes", ui->model.remaining_minutes);
         cJSON_AddBoolToObject(runtime, "played_minutes_available", ui->model.played_minutes_available);
         cJSON_AddNumberToObject(runtime, "played_minutes", ui->model.played_minutes);
+        cJSON_AddStringToObject(runtime, "usage_source", ui->model.usage_present ? "pctl_1952" : "legacy_estimate");
+        cJSON_AddNumberToObject(runtime, "usage_captured_at", ui->model.usage_captured_at);
         cJSON_AddNumberToObject(runtime, "play_timer_enabled", ui->model.play_timer_enabled);
         cJSON_AddNumberToObject(runtime, "restricted_now", ui->model.restricted_now);
         cJSON_AddStringToObject(runtime, "rule_source", ui->model.rule_source);

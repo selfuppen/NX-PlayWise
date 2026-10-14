@@ -26,7 +26,8 @@ void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
     uint16_t year = 0;
     uint8_t month = 0;
     uint8_t day = 0;
-    int preview_min = ptc_ui_preview_remaining_minutes(model);
+    int preview_min = ptc_ui_status_is_fresh(model, ptc_ui_render_now())
+        ? ptc_ui_preview_remaining_minutes(model) : -1;
     int played_min = model->played_minutes_available ? model->played_minutes : -1;
     bool quota_unchanged = false;
 
@@ -49,7 +50,8 @@ void draw_minutes_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
         snprintf(date_line, sizeof(date_line), ptc_ui_text(PTC_UI_T_DATE_IMPACTED_TODAY));
     }
     if (played_min >= 0) {
-        snprintf(played_line, sizeof(played_line), ptc_ui_text(PTC_UI_T_ESTIMATED_USED_ABOUT_D_MIN), played_min);
+        snprintf(played_line, sizeof(played_line),
+            ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE_D_MIN : PTC_UI_T_ESTIMATED_USED_ABOUT_D_MIN), played_min);
     } else {
         snprintf(played_line, sizeof(played_line), ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_CONSUMED_ESTIMATED_TEMPORARILY));
     }
@@ -316,7 +318,7 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
             char before_formula[64] = "";
             char after_formula[64] = "";
             if (fresh && model->played_minutes_available) {
-                snprintf(before_formula, sizeof(before_formula), ptc_ui_text(PTC_UI_T_PLAYED_D_MIN_TODAY), model->played_minutes);
+                snprintf(before_formula, sizeof(before_formula), ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE_D_MIN : PTC_UI_T_PLAYED_D_MIN_TODAY), model->played_minutes);
             }
             snprintf(after_formula, sizeof(after_formula), ptc_ui_text(PTC_UI_T_CURRENT_D_MIN), model->code_grant_minutes);
             draw_quota_transition_detailed(pixels, stride,
@@ -399,7 +401,8 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
             char after_formula[64] = "";
             if (fresh && model->played_minutes_available) {
                 snprintf(before_formula, sizeof(before_formula),
-                         ptc_ui_text(PTC_UI_T_PLAYED_D_MIN_TODAY), model->played_minutes);
+                         ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE_D_MIN : PTC_UI_T_PLAYED_D_MIN_TODAY),
+                         model->played_minutes);
                 snprintf(after_formula, sizeof(after_formula),
                          ptc_ui_text(PTC_UI_T_NEW_U_MIN_PLAYED_D_MIN),
                          (unsigned int)model->draft_minutes, model->played_minutes);
@@ -434,7 +437,7 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
             char after_formula[64] = "";
             if (fresh && model->played_minutes_available) {
                 snprintf(before_formula, sizeof(before_formula),
-                         ptc_ui_text(PTC_UI_T_PLAYED_D_MIN_TODAY), model->played_minutes);
+                         ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE_D_MIN : PTC_UI_T_PLAYED_D_MIN_TODAY), model->played_minutes);
             }
             if (unlimited_change) {
                 snprintf(after_formula, sizeof(after_formula), ptc_ui_text(PTC_UI_T_NO_DAILY_LIMIT_CAP));
@@ -513,14 +516,15 @@ void draw_confirm_overlay(uint32_t *pixels, uint32_t stride, const PtcUiModel *m
                              ptc_ui_text(PTC_UI_T_THE_QUOTA_REMAINS_UNCHANGED_TODAY_THE_DAILY), 18, UI_WARNING);
         } else if (direct_quota_change) {
             char impact[144];
-            if (model->confirm_hold_required) {
+            int effective = fresh ? ptc_ui_preview_effective_add_minutes(model) : -1;
+            if (model->confirm_hold_required || (add_change && effective < 0)) {
                 snprintf(impact, sizeof(impact), ptc_ui_text(PTC_UI_T_THE_REAL_TIME_STATUS_NEEDS_TO_BE));
             } else if (unlimited_change) {
                 snprintf(impact, sizeof(impact), ptc_ui_text(PTC_UI_T_AFTER_SAVING_TODAY_WILL_NO_LONGER_BE));
             } else {
                 snprintf(impact, sizeof(impact),
                          ptc_ui_text(PTC_UI_T_ADD_U_MIN_ACTUAL_REMAINING_REFRESHES_ON),
-                         (unsigned int)model->draft_minutes);
+                         (unsigned int)effective);
             }
             draw_text_center(pixels, stride, (UiRect){dialog.x + 54, dialog.y + 252, 652, 54},
                              impact, 18, model->confirm_hold_required ? UI_DANGER : UI_WARNING);

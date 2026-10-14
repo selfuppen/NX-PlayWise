@@ -106,6 +106,7 @@ bool ptc_ui_open_today_settings(PtcUiModel *model, int index);
 bool ptc_ui_return_today_settings(PtcUiModel *model);
 uint16_t ptc_ui_today_limit_start_value(const PtcUiModel *model, uint16_t fallback);
 int ptc_ui_preview_remaining_minutes(const PtcUiModel *model);
+int ptc_ui_preview_effective_add_minutes(const PtcUiModel *model);
 void ptc_ui_mark_status_updated(PtcUiModel *model, int64_t now);
 int64_t ptc_ui_status_age_seconds(const PtcUiModel *model, int64_t now);
 bool ptc_ui_status_is_fresh(const PtcUiModel *model, int64_t now);
@@ -129,6 +130,7 @@ void ptc_ui_project_time_status(
     int64_t now,
     PtcUiTimeProjection *out);
 void ptc_ui_format_status_age(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
+void ptc_ui_format_usage_history(const PtcUiModel *model, bool direct, char *out, size_t out_size);
 void ptc_ui_match_redemption_result(PtcUiModel *model);
 const char *ptc_ui_code_failure_guidance(int error_code);
 void ptc_ui_format_code(const char *code, char *out, size_t out_size);

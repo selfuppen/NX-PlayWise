@@ -30,6 +30,13 @@ typedef struct {
     int64_t remaining_minutes;
     bool played_minutes_available;
     int64_t played_minutes;
+    bool usage_supported;
+    bool usage_available;
+    uint64_t usage_ns;
+    int64_t usage_captured_at;
+    uint32_t usage_result;
+    bool signed_remaining_ns_available;
+    int64_t signed_remaining_ns;
     int play_timer_enabled;
     int restricted_now;
     const char *rule_source;
@@ -47,6 +54,14 @@ typedef struct {
     uint32_t usage_consumed_minutes_7;
     uint16_t usage_known_days_30;
     uint32_t usage_consumed_minutes_30;
+    bool usage_direct_present;
+    uint16_t usage_direct_days_7;
+    uint16_t usage_direct_days_30;
+    uint32_t usage_direct_minutes_7;
+    uint32_t usage_direct_minutes_30;
+    int64_t usage_last_captured_at;
+    int64_t usage_last_observed_at;
+    bool usage_latest_available;
     bool bedtime_enabled;
     bool bedtime_active;
     bool bedtime_skipped;
@@ -78,6 +93,10 @@ typedef struct {
     int64_t eye_care_rest_remaining_seconds;
     uint64_t eye_care_break_id;
     bool eye_care_unlimited_capped;
+    const char *eye_care_usage_source;
+    const char *eye_care_usage_quality;
+    uint64_t eye_care_used_ns;
+    int64_t eye_care_usage_captured_at;
     bool dock_available;
     bool force_docked;
     bool undocked_limit_enabled;
@@ -91,6 +110,9 @@ typedef struct {
     bool dock_waived_today;
     bool dock_restriction_active;
     bool dock_unlimited_capped;
+    const char *dock_usage_source;
+    const char *dock_usage_quality;
+    int64_t dock_usage_captured_at;
 } PtcResultState;
 
 typedef struct {

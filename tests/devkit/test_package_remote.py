@@ -194,6 +194,18 @@ def test_build_identity_detection() -> None:
             "explicit environment identity must take precedence over Docker inspection")
 
 
+def test_git_newline_transport() -> None:
+    with mock.patch.object(package_remote.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "true\n")):
+        require(package_remote.host_git_autocrlf() == "true", "host checkout policy must be discovered")
+    with mock.patch.object(package_remote.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "")):
+        require(package_remote.host_git_autocrlf() == "false", "unset host policy uses Git's default")
+    with mock.patch.object(package_remote.subprocess, "run", side_effect=OSError("Git missing")):
+        require(package_remote.host_git_autocrlf() is None, "missing Git cannot force source clean")
+    command = package_remote.ssh_command(git_autocrlf="true")[-1]
+    require("PLAYWISE_GIT_AUTOCRLF=true" in command and "git config" not in command,
+            "single SSH build transports policy without mutating repo configuration")
+
+
 def test_ssh_command() -> None:
     command = package_remote.ssh_command()
     require(command[0] == "ssh", "build transport must use OpenSSH")
@@ -586,6 +598,7 @@ def main() -> int:
     test_container_command()
     test_build_identity_detection()
     test_ssh_command()
+    test_git_newline_transport()
     test_container_ssh_key_persistence()
     test_zip_verification()
     test_eden_nro_verification()

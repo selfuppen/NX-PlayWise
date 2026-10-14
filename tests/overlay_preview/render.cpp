@@ -209,7 +209,8 @@ int main(int argc, char **argv) {
             "overlay-eye-details", "overlay-eye-off", "overlay-eye-multiple-limits",
             "overlay-eye-refresh-failed", "overlay-eye-cross-day", "overlay-eye-partial",
             "overlay-eye-rest-boundary", "overlay-eye-unlimited", "overlay-quota-unknown",
-            "overlay-parent-pending", "overlay-parent-stale", "overlay-parent-busy", "overlay-parent-pin-cooldown"};
+            "overlay-parent-pending", "overlay-parent-stale", "overlay-parent-busy", "overlay-parent-pin-cooldown",
+            "overlay-console-usage", "overlay-console-unknown"};
         int child_overflows = 0;
         for (int language = 0; language < 3; ++language) {
             ptc_ui_language_set_resolved(languages[language]);
@@ -415,7 +416,7 @@ int main(int argc, char **argv) {
                         std::strcmp(eye.compact, ptc_ui_text(PTC_UI_T_POLICY_BOUNDARY)) == 0,
                         "failed, cross-day, partial or expired eye status requires confirmation");
                 }
-                if (scene >= 52) {
+                if (scene >= 52 && scene <= 55) {
                     view.parent_view_ = scene == 52 ? ParentView::Result : scene == 55 ? ParentView::Pin : ParentView::Actions;
                     view.parent_action_ = PTC_OVERLAY_PARENT_ADD_MINUTES;
                     if (scene == 53) view.last_refresh_tick_ -= 31000000000ULL;
@@ -423,9 +424,30 @@ int main(int argc, char **argv) {
                     if (scene == 55) std::snprintf(view.pin_message_, sizeof(view.pin_message_), "%s",
                         ptc_ui_text(PTC_UI_T_TOO_MANY_PIN_ERRORS_PLEASE_WAIT_FOR));
                 }
+                if (scene >= 56) {
+                    status.usage_present = true;
+                    status.usage_ns = 4191000000000ULL;
+                    status.usage_captured_at = 1000;
+                    status.daily_rule_available = true;
+                    status.daily_rule_minutes = 60;
+                    status.remaining_minutes = 0;
+                    status.played_minutes = scene == 56 ? 69 : -1;
+                    status.played_minutes_available = scene == 56;
+                    status.remaining_available = scene == 56;
+                }
                 renderer.text_runs.clear();
                 view.draw_overlay(&renderer, PTC_OVERLAY_CONTENT_X, PTC_OVERLAY_CONTENT_Y,
                     PTC_OVERLAY_CONTENT_W, PTC_OVERLAY_CONTENT_H);
+                if (scene >= 56) {
+                    std::string drawn;
+                    for (const auto &run : renderer.text_runs) drawn += run.text + " ";
+                    require(drawn.find("60") != std::string::npos,
+                        "merged dashboard must keep the business quota even when consumption exceeds it or is unknown");
+                    require((drawn.find(ptc_ui_text(PTC_UI_T_CONSOLE_USAGE)) != std::string::npos) == (scene == 56),
+                        "merged dashboard must identify direct console consumption only when available");
+                    require((drawn.find("69") != std::string::npos) == (scene == 56),
+                        "merged dashboard must not retain an unavailable console counter");
+                }
                 if (view.parent_view_ == ParentView::Result) {
                     const auto label = bridge.waiting ? PTC_UI_T_PROCESSING_REQUEST : view.parent_action_succeeded_ ?
                         PTC_UI_T_OPERATION_COMPLETED : PTC_UI_T_OPERATION_INCOMPLETE;

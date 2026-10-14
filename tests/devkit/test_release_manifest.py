@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 from unittest import mock
 
@@ -58,6 +59,8 @@ def test_candidate_defaults_to_pending() -> None:
     require(data["build"]["libnx"] == "libnx 4.12.0-1", "libnx package identity must be recorded")
     require(data["build"]["container_image"] == "devkitpro:v1", "Docker image tag must be recorded")
     require(data["build"]["source_dirty"] is False, "tracked dirty state must be recorded")
+    require(data["usage_contract"] == "pctl1952_v1_proxy1440",
+            "release declares the direct counter contract while retaining the proxy")
 
 
 def test_manual_device_verification_is_explicit_and_scoped() -> None:
@@ -82,6 +85,8 @@ def test_manual_device_verification_is_explicit_and_scoped() -> None:
     }, "release must record the stated device environment")
     require(lab["qualification"]["status"] == "pending" and
             eden["qualification"]["status"] == "pending", "manual status must not leak into test profiles")
+    require("usage_contract" not in lab and "usage_contract" not in eden,
+            "Lab raw and Eden simulation must not claim the release consumption contract")
     with mock.patch.dict(os.environ, {"PLAYWISE_MANUAL_DEVICE_VERIFIED": "1"}, clear=True):
         try:
             manifest.make_manifest("release")
@@ -100,6 +105,37 @@ def test_tracked_dirty_uses_content_diff() -> None:
         require(manifest.git_tracked_dirty() is True, "tracked content changes must mark the candidate dirty")
 
 
+def test_host_newline_policy_preserves_real_edits() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-git-normalization-") as tmp_dir:
+        root = Path(tmp_dir)
+        def run(args: list[str]) -> None:
+            subprocess.run(["git", "-c", "core.autocrlf=false", "-c", "commit.gpgsign=false",
+                            "-c", "core.hooksPath=" + str(root / "no-hooks"), *args],
+                           cwd=root, check=True, capture_output=True)
+        run(["init"])
+        tracked = root / "sample.txt"
+        tracked.write_bytes(b"value=1\n")
+        run(["add", "sample.txt"])
+        run(["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "baseline"])
+        tracked.write_bytes(b"value=1\r\n")
+        with mock.patch.object(manifest, "ROOT", root):
+            with mock.patch.dict(os.environ, {"PLAYWISE_GIT_AUTOCRLF": "false"}):
+                require(manifest.git_tracked_dirty(), "mismatched container policy exposes CRLF checkout difference")
+            with mock.patch.dict(os.environ, {"PLAYWISE_GIT_AUTOCRLF": "true"}):
+                require(not manifest.git_tracked_dirty(), "effective host normalization keeps identical source clean")
+                tracked.write_bytes(b"value=2\r\n")
+                require(manifest.git_tracked_dirty(), "normalization cannot hide a real source edit")
+            with mock.patch.dict(os.environ, {"PLAYWISE_GIT_AUTOCRLF": "false; unsafe"}):
+                try:
+                    manifest.git_tracked_dirty()
+                except ValueError:
+                    pass
+                else:
+                    raise AssertionError("invalid Git policy must not reach a command")
+        with mock.patch.object(manifest.subprocess, "run", side_effect=OSError("Git unavailable")):
+            require(manifest.git_tracked_dirty(), "Git failure can never force a clean source identity")
+
+
 def main() -> int:
     test_libnx_package_identity()
     test_libnx_pkgconfig_fallback()
@@ -107,6 +143,7 @@ def main() -> int:
     test_candidate_defaults_to_pending()
     test_manual_device_verification_is_explicit_and_scoped()
     test_tracked_dirty_uses_content_diff()
+    test_host_newline_policy_preserves_real_edits()
     print("Release manifest tests passed")
     return 0
 

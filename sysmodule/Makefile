@@ -65,7 +65,7 @@ SYSMODULE_CFILES := \
 	sysmodule_request_recovery.c \
 	sysmodule_dock.c \
 	sysmodule_core.c
-CFILES := $(foreach dir,$(filter-out .,$(SOURCES)),$(notdir $(wildcard $(dir)/*.c))) $(SYSMODULE_CFILES)
+CFILES := $(foreach dir,$(filter-out .,$(SOURCES)),$(notdir $(wildcard $(dir)/*.c))) $(SYSMODULE_CFILES) $(EXTRA_CFILES)
 SFILES := $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 BINFILES := $(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
 

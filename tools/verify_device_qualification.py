@@ -12,6 +12,7 @@ from playwise_version import read_playwise_version
 # Single source of truth for the eye-care observation contract, shared with the
 # capture tool so the gate and the template can never drift apart.
 import make_eye_care_qualification_template as make_eye_care
+import pctl_usage_qualification as usage_qualification
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,19 +51,46 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def read_json_text(text: str | bytes, label: str) -> dict:
+    def unique_pairs(pairs: list[tuple[str, object]]) -> dict:
+        value = {}
+        for key, item in pairs:
+            require(key not in value, f"{label}: 重复 JSON 字段 {key}")
+            value[key] = item
+        return value
+
+    try:
+        value = json.loads(text, object_pairs_hook=unique_pairs)
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise QualificationError(f"无法读取 JSON：{label}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise QualificationError(f"JSON 顶层必须是对象：{label}")
+    return value
+
+
 def read_json(path: Path) -> dict:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
         raise QualificationError(f"无法读取 JSON：{path}: {exc}") from exc
-    if not isinstance(value, dict):
-        raise QualificationError(f"JSON 顶层必须是对象：{path}")
-    return value
+    return read_json_text(text, str(path))
 
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise QualificationError(message)
+
+
+def unique_archive(archive: zipfile.ZipFile, label: str) -> None:
+    names = archive.namelist()
+    require(len(names) == len(set(names)), f"{label}: 重复 Zip 成员")
+
+
+def archive_read(archive: zipfile.ZipFile, member: str, label: str) -> bytes:
+    try:
+        return archive.read(member)
+    except (KeyError, OSError, RuntimeError, zipfile.BadZipFile) as exc:
+        raise QualificationError(f"{label}: 无法读取 {member}") from exc
 
 
 def package_identity(packages: Path) -> tuple[dict, dict, dict[str, str], dict[str, str]]:
@@ -76,6 +104,7 @@ def package_identity(packages: Path) -> tuple[dict, dict, dict[str, str], dict[s
     require(standard_manifest.get("qualification", {}).get("status") in ("pending", "manual_verified"),
             "候选包资格状态必须是 pending 或 manual_verified")
     require(standard_manifest.get("build", {}).get("source_dirty") is False, "资格候选包含未提交的 tracked 修改")
+    require(lab_manifest.get("build", {}).get("source_dirty") is False, "Device Lab 资格候选包含未提交的 tracked 修改")
     require(standard_manifest.get("build", {}).get("libnx") not in (None, "", "unknown"), "候选包缺少 libnx 身份")
     require(standard_manifest.get("build", {}).get("container_image") not in (None, "", "unknown"),
             "候选包缺少 Docker 镜像标签")
@@ -86,12 +115,23 @@ def package_identity(packages: Path) -> tuple[dict, dict, dict[str, str], dict[s
         require(path.is_file(), f"缺少候选产物：{path}")
         zip_hashes[name] = sha256_file(path)
     component_hashes: dict[str, str] = {}
-    with zipfile.ZipFile(packages / STANDARD_ZIP) as archive:
-        for member in RELEASE_COMPONENTS:
-            try:
-                component_hashes[member] = sha256_bytes(archive.read(member))
-            except KeyError as exc:
-                raise QualificationError(f"标准包缺少发布二进制：{member}") from exc
+    try:
+        with zipfile.ZipFile(packages / STANDARD_ZIP) as archive:
+            unique_archive(archive, STANDARD_ZIP)
+            embedded_manifest = read_json_text(archive_read(archive, "switch/playwise/build.json", STANDARD_ZIP), STANDARD_ZIP)
+            require(embedded_manifest == standard_manifest, "标准包嵌入 manifest 与目录 manifest 不一致")
+            for member in RELEASE_COMPONENTS:
+                component_hashes[member] = sha256_bytes(archive_read(archive, member, STANDARD_ZIP))
+        with zipfile.ZipFile(packages / LAB_ZIP) as archive:
+            unique_archive(archive, LAB_ZIP)
+            embedded_lab = read_json_text(archive_read(archive, "switch/playwise-device-lab/build.json", LAB_ZIP), LAB_ZIP)
+            require(embedded_lab == lab_manifest, "Device Lab 嵌入 manifest 与目录 manifest 不一致")
+        with zipfile.ZipFile(packages / COMPLETE_ZIP) as archive:
+            unique_archive(archive, COMPLETE_ZIP)
+            require(sha256_bytes(archive_read(archive, STANDARD_ZIP, COMPLETE_ZIP)) == zip_hashes[STANDARD_ZIP],
+                    "完整包内嵌标准 Zip 与候选标准包不一致")
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise QualificationError(f"无法读取候选 Zip：{exc}") from exc
     return standard_manifest, lab_manifest, zip_hashes, component_hashes
 
 
@@ -461,6 +501,14 @@ def verify(packages: Path, reports: Path, expected_model: str,
     eye_care_report = verify_eye_care_report(
         reports, manifest, expected_model, expected_hos, expected_atmosphere,
         required=require_eye_care)
+    usage_attestation = None
+    if "usage_contract" in manifest or (reports / usage_qualification.REPORT_NAME).exists():
+        try:
+            usage_attestation = usage_qualification.verify_report(
+                reports, manifest, zip_hashes[STANDARD_ZIP], component_hashes,
+                expected_model, expected_hos, expected_atmosphere)
+        except usage_qualification.UsageQualificationError as exc:
+            raise QualificationError(str(exc)) from exc
     checks = [
         "device_lab_schema_v2", "environment_exosphere", "public_raw_libnx_parity",
         "target_bound_activation_fallback", "restriction_matrix", "exact_restore",
@@ -483,6 +531,9 @@ def verify(packages: Path, reports: Path, expected_model: str,
     if eye_care_report is not None:
         result["checks"].extend(["eye_care_rest_cycle", "eye_care_isolation"])
         result["reports"]["eye_care_path"] = str(eye_care_report.resolve())
+    if usage_attestation is not None:
+        result["checks"].extend(usage_qualification.CHECKS)
+        result["pctl_usage"] = usage_attestation
     if observation_source == "vision_ai":
         result["checks"].append("vision_attestation")
         result["vision_attestation"] = attestations
@@ -527,6 +578,10 @@ def main() -> int:
         "eye_care_isolation": "eye-care 休息 0 分钟不计入每日额度且 0x44 精确恢复",
         "artifact_identity": "报告、候选 Zip 与 Switch 二进制身份绑定",
         "vision_attestation": "每个限制槽位的 AI 判定均有哈希绑定的截图旁证",
+        "pctl1952_candidate_identity": "1952 报告、原始样本文件与当前候选二进制绑定",
+        "pctl1952_usage_grant_continuity": "独立累计、超额加时及恢复后一分钟消费一致",
+        "pctl1952_proxy_handover": "1440 代理循环及剩余限制交接证据一致（不证明代理可移除）",
+        "pctl1952_restore": "1952 候选报告记录 0x44 与 timer 精确恢复",
     }
     for check_name in result["checks"]:
         print(f"PASS: {labels[check_name]}")

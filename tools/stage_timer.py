@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import time
 import unicodedata
 
@@ -107,7 +108,11 @@ def write_timing_record(
     duration: float,
     path: Path = TIMING_FILE,
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"WARNING: timing record skipped: {path.name}: {exc}", file=sys.stderr)
+        return
     # Simple file lock for concurrent make -j safety
     lock_path = path.with_suffix(".lock")
     acquired = False
@@ -122,6 +127,10 @@ def write_timing_record(
         except OSError:
             break
 
+    if not acquired:
+        print(f"WARNING: timing record skipped: lock unavailable for {path.name}", file=sys.stderr)
+        return
+    tmp_path = None
     try:
         records = read_timing_records(path)
         records.append({
@@ -129,10 +138,28 @@ def write_timing_record(
             "stage": stage,
             "duration": max(0.0, float(duration)),
         })
-        tmp_path = path.with_suffix(".tmp")
-        tmp_path.write_text(json.dumps(records, indent=2, ensure_ascii=False), encoding="utf-8")
-        tmp_path.replace(path)
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix=path.name + ".", suffix=".tmp", delete=False) as temporary:
+            tmp_path = Path(temporary.name)
+            temporary.write(json.dumps(records, indent=2, ensure_ascii=False))
+        # Windows readers/antivirus can briefly deny replacing a closed file.
+        # Timing is diagnostic: retain the old record if the bounded retry fails.
+        for attempt in range(6):
+            try:
+                tmp_path.replace(path)
+                break
+            except PermissionError:
+                if attempt == 5:
+                    raise
+                time.sleep(0.02 * (2 ** attempt))
+    except OSError as exc:
+        print(f"WARNING: timing record skipped: {path.name}: {exc}", file=sys.stderr)
     finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
         if acquired:
             try:
                 lock_path.unlink()

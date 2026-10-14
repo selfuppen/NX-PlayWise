@@ -61,7 +61,9 @@ PtcErrorCode apply_target(
     target.minutes = minutes;
     target.weekday = ptc_weekday_from_day_index(now.day_index);
     take_pctl_debug_snapshot(sysmodule, &before);
-    err = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &target);
+    err = grant_clock_error(sysmodule, request, now);
+    if (err == PTC_ERR_OK) err = sysmodule->pctl->vtable->apply_target(sysmodule->pctl, &target);
+    if (err == PTC_ERR_OK) err = grant_clock_error(sysmodule, request, now);
     {
         uint32_t ipc_result = last_pctl_ipc_result(sysmodule);
         take_pctl_debug_snapshot(sysmodule, &after);
@@ -124,28 +126,76 @@ PtcPctlTargetMode target_from_day_rule(PtcDayRule rule)
     return PTC_PCTL_TARGET_LIMIT;
 }
 
-uint16_t ptc_pctl_played_minutes(const PtcPctlStatus *status)
+PtcErrorCode grant_clock_error(PtcSysmodule *sysmodule, const PtcRequest *request, PtcClockSnapshot now)
 {
-    if (!status) {
-        return 0U;
+    PtcClockSnapshot current;
+    if (!request || (request->type != PTC_REQUEST_ADD_TODAY_MINUTES &&
+        request->type != PTC_REQUEST_OFFLINE_CODE &&
+        request->type != PTC_REQUEST_PREVIEW_OFFLINE_CODE &&
+        request->type != PTC_REQUEST_CLAIM_DAILY_BUFFER)) return PTC_ERR_OK;
+    current = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    return current.day_index == now.day_index && current.unix_seconds >= now.unix_seconds
+        ? PTC_ERR_OK : PTC_ERR_BAD_CLOCK;
+}
+
+PtcErrorCode read_grant_status(PtcSysmodule *sysmodule, PtcClockSnapshot now, PtcPctlStatus *status)
+{
+    PtcErrorCode err;
+    PtcClockSnapshot after;
+    memset(status, 0, sizeof(*status));
+    err = sysmodule->pctl->vtable->read_grant_status
+        ? sysmodule->pctl->vtable->read_grant_status(sysmodule->pctl,
+            ptc_weekday_from_day_index(now.day_index), status)
+        : sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+            ptc_weekday_from_day_index(now.day_index), status);
+    if (err != PTC_ERR_OK) return err;
+    after = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    if (after.day_index != now.day_index || after.unix_seconds < now.unix_seconds)
+        return PTC_ERR_BAD_CLOCK;
+    /* A display observation cannot authorize a write. Missing direct fields
+       never fall back to quota minus the clamped remaining value. */
+    if (status->usage_supported && (!sysmodule->pctl->vtable->read_grant_status ||
+        !status->usage_available || status->usage_result != 0 || status->usage_ns > INT64_MAX ||
+        status->usage_day_index != now.day_index || status->usage_captured_at <= 0 ||
+        status->usage_captured_at < now.unix_seconds ||
+        status->usage_captured_at > after.unix_seconds)) return PTC_ERR_PCTL_READ_FAILED;
+    if (!status->usage_supported && !status->played_minutes_available)
+        return PTC_ERR_PCTL_READ_FAILED;
+    return PTC_ERR_OK;
+}
+
+PtcErrorCode plan_grant(const PtcRules *rules, PtcClockSnapshot now,
+    const PtcPctlStatus *status, uint16_t minutes, PtcGrantPlan *plan)
+{
+    const uint64_t minute_ns = UINT64_C(60000000000);
+    PtcDayRule active = ptc_rules_today_rule(rules, now.day_index,
+        ptc_weekday_from_day_index(now.day_index));
+    uint64_t used, ceiling, base, target;
+    if (status->usage_supported) {
+        if (!status->usage_available || status->usage_day_index != now.day_index ||
+            status->usage_ns > INT64_MAX) return PTC_ERR_PCTL_READ_FAILED;
+        used = status->usage_ns;
+    } else {
+        if (!status->played_minutes_available) return PTC_ERR_PCTL_READ_FAILED;
+        if (!status->played_ns_available && status->played_minutes > (uint64_t)INT64_MAX / minute_ns)
+            return PTC_ERR_PCTL_READ_FAILED;
+        used = status->played_ns_available ? status->played_ns : (uint64_t)status->played_minutes * minute_ns;
+        if (used > INT64_MAX) return PTC_ERR_PCTL_READ_FAILED;
     }
-    if (status->played_minutes_available) {
-        return status->played_minutes > UINT16_MAX ? UINT16_MAX : (uint16_t)status->played_minutes;
-    }
-    if (!status->configured_minutes_available || !status->limited_today) {
-        return 0U;
-    }
-    if (status->remaining_available && status->configured_minutes >= status->remaining_minutes) {
-        uint32_t played = (uint32_t)status->configured_minutes - status->remaining_minutes;
-        if (status->restricted_now && played < status->configured_minutes) {
-            return status->configured_minutes;
-        }
-        return (uint16_t)played;
-    }
-    if (status->restricted_now || status->remaining_minutes == 0U) {
-        return status->configured_minutes;
-    }
-    return 0U;
+    /* Ceiling protects the full award; display and remaining projections use
+       floor. Do division first so even the largest valid s64 cannot overflow. */
+    ceiling = used / minute_ns + (used % minute_ns != 0);
+    if (ceiling > PTC_TOKEN_MAX_MINUTES) ceiling = PTC_TOKEN_MAX_MINUTES;
+    base = active.mode == PTC_RULE_MODE_LIMIT ? active.minutes : 0;
+    if (ceiling > base) base = ceiling;
+    target = base + minutes;
+    if (target > PTC_TOKEN_MAX_MINUTES) target = PTC_TOKEN_MAX_MINUTES;
+    plan->played_ceiling_minutes = (uint16_t)ceiling;
+    plan->target_minutes = (uint16_t)target;
+    plan->effective_minutes = (uint16_t)(target - base);
+    plan->remaining_after_minutes = target * minute_ns > used
+        ? (int64_t)((target * minute_ns - used) / minute_ns) : 0;
+    return PTC_ERR_OK;
 }
 
 /* Offline codes and add_today_minutes both stack onto the existing daily limit
@@ -223,14 +273,7 @@ PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest 
         }
         rules->eye_care = request->eye_care_policy;
         if (!rules->eye_care.enabled || !was_enabled) {
-            runtime_state->eye_care_day_index = now.day_index;
-            runtime_state->eye_care_accumulated_minutes = 0;
-            runtime_state->eye_care_last_used_minutes = 0;
-            runtime_state->eye_care_usage_known = false;
-            runtime_state->eye_care_resting = false;
-            runtime_state->eye_care_rest_deadline = 0;
-            runtime_state->eye_care_break_id = 0;
-            runtime_state->eye_care_idle_since = 0;
+            reset_eye_care_cycle(runtime_state, now.day_index);
         } else if (runtime_state->eye_care_resting) {
             runtime_state->eye_care_rest_deadline +=
                 ((int64_t)rules->eye_care.rest_minutes - old_rest_minutes) * 60;
@@ -339,8 +382,8 @@ static bool target_status_observed(
        suspended or exited the affected title. Exact settings readback plus an
        exhausted 1454 value therefore proves the requested target without
        requiring restricted_now to remain latched. */
-    return status->restricted_now || status->remaining_minutes == 0U ||
-        (status->remaining_minutes > 0U && status->play_timer_enabled_available && status->play_timer_enabled);
+    return status->restricted_now || ptc_pctl_remaining_exhausted(status) ||
+        (!ptc_pctl_remaining_exhausted(status) && status->play_timer_enabled_available && status->play_timer_enabled);
 }
 
 bool bedtime_blocks_grants(PtcSysmodule *sysmodule, PtcClockSnapshot now)
@@ -394,10 +437,10 @@ static bool target_runtime_ready(
         return status->restricted_now_available && !status->restricted_now;
     }
     if (mode == PTC_PCTL_TARGET_BLOCKED || minutes == 0U ||
-        (status->remaining_available && status->remaining_minutes == 0U)) {
+        ptc_pctl_remaining_exhausted(status)) {
         return status->restricted_now_available && status->restricted_now;
     }
-    return status->remaining_available && status->remaining_minutes > 0U &&
+    return status->remaining_available && !ptc_pctl_remaining_exhausted(status) &&
         status->play_timer_enabled_available && status->play_timer_enabled &&
         status->restricted_now_available && !status->restricted_now;
 }
@@ -413,7 +456,7 @@ static bool target_runtime_confirmed_after_activation(
        returned to restricted_now=false. Exact settings plus exhausted 1454 is
        sufficient; prompt visibility and software outcome remain Lab observations. */
     if (mode == PTC_PCTL_TARGET_BLOCKED || minutes == 0U ||
-        (status->remaining_available && status->remaining_minutes == 0U)) {
+        ptc_pctl_remaining_exhausted(status)) {
         return target_status_observed(mode, minutes, status);
     }
     return false;
@@ -464,7 +507,10 @@ PtcErrorCode observe_target_with_optional_activation(
     target.weekday = ptc_weekday_from_day_index(now.day_index);
 
     for (i = 0; i < 20U; ++i) {
+        err = grant_clock_error(sysmodule, request, now);
+        if (err != PTC_ERR_OK) return err;
         err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, target.weekday, observed);
+        if (grant_clock_error(sysmodule, request, now) != PTC_ERR_OK) return PTC_ERR_BAD_CLOCK;
         if (err == PTC_ERR_OK && target_settings_observed(target_mode, minutes, observed)) {
             settings_seen = true;
             /* Restriction targets and autonomous recovery never activate 1451. */
@@ -485,6 +531,8 @@ PtcErrorCode observe_target_with_optional_activation(
     }
 
     take_pctl_debug_snapshot(sysmodule, &before);
+    err = grant_clock_error(sysmodule, request, now);
+    if (err != PTC_ERR_OK) return err;
     err = sysmodule->pctl->vtable->start_timer(sysmodule->pctl);
     take_pctl_debug_snapshot(sysmodule, &after);
     append_pctl_debug(sysmodule, request, "start_timer_fallback", mode_name, &target, err,
@@ -495,7 +543,10 @@ PtcErrorCode observe_target_with_optional_activation(
     if (err != PTC_ERR_OK) return err;
 
     for (i = 0; i < 20U; ++i) {
+        err = grant_clock_error(sysmodule, request, now);
+        if (err != PTC_ERR_OK) return err;
         err = sysmodule->pctl->vtable->read_status(sysmodule->pctl, target.weekday, observed);
+        if (grant_clock_error(sysmodule, request, now) != PTC_ERR_OK) return PTC_ERR_BAD_CLOCK;
         if (err == PTC_ERR_OK &&
             target_runtime_confirmed_after_activation(target_mode, minutes, observed)) {
             append_event(sysmodule, request, "effect_observed", PTC_ERR_OK, event_detail);

@@ -1,4 +1,5 @@
 #include "sysmodule_internal.h"
+#include <errno.h>
 
 void join_path(char *out, size_t out_size, const char *a, const char *b)
 {
@@ -1051,6 +1052,61 @@ bool restore_rules(PtcSysmodule *sysmodule, const PtcRules *rules, bool existed)
         sysmodule->storage->vtable->remove_path(sysmodule->storage, path);
 }
 
+static bool usage_u64(const char *text, const char *key, uint64_t limit, uint64_t *out)
+{
+    const char *pos = find_key(text, key);
+    char *end;
+    if (!pos || !(pos = strchr(pos, ':'))) return false;
+    pos = skip_ws(pos + 1);
+    if (*pos < '0' || *pos > '9' || (*pos == '0' && pos[1] >= '0' && pos[1] <= '9')) return false;
+    errno = 0;
+    unsigned long long value = strtoull(pos, &end, 10);
+    if (errno == ERANGE || value > limit || (*skip_ws(end) != ',' && *skip_ws(end) != '}')) return false;
+    *out = (uint64_t)value;
+    return true;
+}
+
+static bool usage_bool(const char *text, const char *key, bool *out)
+{
+    const char *pos = find_key(text, key);
+    if (!pos || !(pos = strchr(pos, ':'))) return false;
+    pos = skip_ws(pos + 1);
+    unsigned length = strncmp(pos, "true", 4) == 0 ? 4 : strncmp(pos, "false", 5) == 0 ? 5 : 0;
+    if (!length || (*skip_ws(pos + length) != ',' && *skip_ws(pos + length) != '}')) return false;
+    *out = length == 4;
+    return true;
+}
+
+static bool load_usage_counter(const char *text, const char *prefix, PtcUsageCounter *counter)
+{
+    char key[40];
+    uint64_t value;
+    snprintf(key, sizeof(key), "%s_source", prefix);
+    if (!find_key(text, key)) {
+        const char *suffixes[] = {"known", "day_index", "total_ns", "captured_at"};
+        for (unsigned i = 0; i < 4; ++i) {
+            snprintf(key, sizeof(key), "%s_%s", prefix, suffixes[i]);
+            if (find_key(text, key)) return false;
+        }
+        return true;
+    }
+    snprintf(key, sizeof(key), "%s_source", prefix);
+    if (!usage_u64(text, key, UINT16_MAX, &value) ||
+        (value != 0 && value != PTC_USAGE_SOURCE_PCTL_1952)) return false;
+    counter->source = (uint16_t)value;
+    snprintf(key, sizeof(key), "%s_known", prefix);
+    if (!usage_bool(text, key, &counter->known)) return false;
+    snprintf(key, sizeof(key), "%s_day_index", prefix);
+    if (!usage_u64(text, key, UINT16_MAX, &value)) return false;
+    counter->day_index = (uint16_t)value;
+    snprintf(key, sizeof(key), "%s_total_ns", prefix);
+    if (!usage_u64(text, key, INT64_MAX, &counter->total_ns)) return false;
+    snprintf(key, sizeof(key), "%s_captured_at", prefix);
+    if (!usage_u64(text, key, INT64_MAX, &value)) return false;
+    counter->captured_at = (int64_t)value;
+    return !counter->known || (counter->source == PTC_USAGE_SOURCE_PCTL_1952 && counter->captured_at > 0);
+}
+
 bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
 {
     char path[320];
@@ -1118,6 +1174,22 @@ bool load_state(PtcSysmodule *sysmodule, PtcRuntimeState *state)
     (void)json_i64(text, "eye_care_rest_deadline", &state->eye_care_rest_deadline);
     (void)json_u64(text, "eye_care_break_id", &state->eye_care_break_id);
     (void)json_i64(text, "eye_care_idle_since", &state->eye_care_idle_since);
+    if (!load_usage_counter(text, "eye_usage", &state->eye_usage_counter) ||
+        !load_usage_counter(text, "dock_counter", &state->dock_usage_counter)) return false;
+    if (find_key(text, "eye_cycle_used_ns") &&
+        !usage_u64(text, "eye_cycle_used_ns", UINT64_C(240) * PTC_USAGE_MINUTE_NS, &state->eye_cycle_used_ns)) return false;
+    if (find_key(text, "eye_usage_migrated") &&
+        !usage_bool(text, "eye_usage_migrated", &state->eye_usage_migrated)) return false;
+    if (find_key(text, "eye_usage_boundary_gap") &&
+        !usage_bool(text, "eye_usage_boundary_gap", &state->eye_usage_boundary_gap)) return false;
+    if (find_key(text, "dock_usage_incomplete") &&
+        !usage_bool(text, "dock_usage_incomplete", &state->dock_usage_incomplete)) return false;
+    if (state->eye_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952 &&
+        (!find_key(text, "eye_cycle_used_ns") || !find_key(text, "eye_usage_migrated") ||
+         !find_key(text, "eye_usage_boundary_gap") ||
+         state->eye_care_accumulated_minutes != state->eye_cycle_used_ns / PTC_USAGE_MINUTE_NS)) return false;
+    if (state->dock_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952 &&
+        !find_key(text, "dock_usage_incomplete")) return false;
     {
         uint16_t mode = 0;
         bool complete = true;
@@ -1176,7 +1248,7 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
     char path[320];
     char text[4096];
     snprintf(path, sizeof(path), "%s/state.json", sysmodule->app_root);
-    snprintf(
+    int written = snprintf(
         text,
         sizeof(text),
         "{\"version\":1,\"last_enforced_day_index\":%u,"
@@ -1192,10 +1264,16 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
         "\"eye_care_last_used_minutes\":%u,\"eye_care_usage_known\":%s,"
         "\"eye_care_resting\":%s,\"eye_care_rest_deadline\":%lld,\"eye_care_break_id\":%llu,"
         "\"eye_care_idle_since\":%lld,"
+        "\"eye_usage_source\":%u,\"eye_usage_known\":%s,\"eye_usage_day_index\":%u,"
+        "\"eye_usage_total_ns\":%llu,\"eye_usage_captured_at\":%lld,"
+        "\"eye_cycle_used_ns\":%llu,\"eye_usage_migrated\":%s,\"eye_usage_boundary_gap\":%s,"
         "\"dock_day_index\":%u,\"undocked_used_ns\":%llu,\"dock_last_used_ns\":%llu,"
         "\"dock_baseline_known\":%s,\"dock_usage_known\":%s,\"dock_tracking_started\":%s,"
         "\"dock_interval_unknown\":%s,\"dock_last_mode\":%u,\"dock_waived_day_index\":%u,"
-        "\"dock_waived\":%s,\"dock_enforced\":%s,\"updated_at\":%lld}\n",
+        "\"dock_waived\":%s,\"dock_enforced\":%s,"
+        "\"dock_counter_source\":%u,\"dock_counter_known\":%s,\"dock_counter_day_index\":%u,"
+        "\"dock_counter_total_ns\":%llu,\"dock_counter_captured_at\":%lld,"
+        "\"dock_usage_incomplete\":%s,\"updated_at\":%lld}\n",
         state->last_enforced_day_index,
         (unsigned int)state->last_enforced_mode,
         state->last_enforced_minutes,
@@ -1223,6 +1301,10 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
         (long long)state->eye_care_rest_deadline,
         (unsigned long long)state->eye_care_break_id,
         (long long)state->eye_care_idle_since,
+        state->eye_usage_counter.source, state->eye_usage_counter.known ? "true" : "false",
+        state->eye_usage_counter.day_index, (unsigned long long)state->eye_usage_counter.total_ns,
+        (long long)state->eye_usage_counter.captured_at, (unsigned long long)state->eye_cycle_used_ns,
+        state->eye_usage_migrated ? "true" : "false", state->eye_usage_boundary_gap ? "true" : "false",
         state->dock_day_index, (unsigned long long)state->undocked_used_ns,
         (unsigned long long)state->dock_last_used_ns,
         state->dock_baseline_known ? "true" : "false",
@@ -1231,7 +1313,11 @@ bool save_state(PtcSysmodule *sysmodule, const PtcRuntimeState *state, int64_t u
         state->dock_interval_unknown ? "true" : "false",
         (unsigned int)state->dock_last_mode, state->dock_waived_day_index,
         state->dock_waived ? "true" : "false", state->dock_enforced ? "true" : "false",
+        state->dock_usage_counter.source, state->dock_usage_counter.known ? "true" : "false",
+        state->dock_usage_counter.day_index, (unsigned long long)state->dock_usage_counter.total_ns,
+        (long long)state->dock_usage_counter.captured_at, state->dock_usage_incomplete ? "true" : "false",
         (long long)updated_at);
+    if (written < 0 || (size_t)written >= sizeof(text)) return false;
     if (!sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, text)) return false;
     snprintf(sysmodule->state_cache_text, sizeof(sysmodule->state_cache_text), "%s", text);
     sysmodule->state_cache_valid = sysmodule->storage->vtable->metadata &&

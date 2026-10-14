@@ -110,7 +110,7 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     char rule_label[64];
     if (bedtime_enforcing) {
         snprintf(rule_label, sizeof(rule_label), "%s", ptc_ui_text(PTC_UI_T_BEDTIME_ACTIVE));
-    } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
+    } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped || model->dock_unlimited_capped) {
         snprintf(rule_label, sizeof(rule_label), "%s", ptc_ui_text(PTC_UI_T_ADJUST_BADGE_UNLIMITED));
     } else {
         snprintf(rule_label, sizeof(rule_label), "%s",
@@ -162,6 +162,7 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
     draw_rect_outline(pixels, stride, gauge_bg, 4, 1, UI_GAUGE_SLOT_BORDER);
 
     uint32_t health_color = UI_SUCCESS;
+    bool status_fresh = ptc_ui_status_is_fresh(model, ptc_ui_render_now());
     int remaining_mins = model->remaining_available ? model->remaining_minutes : -1;
     if (bedtime_enforcing || eye_resting) {
         health_color = UI_DANGER;
@@ -171,25 +172,21 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
         else health_color = UI_SUCCESS;
     }
 
-    if (bedtime_enforcing || eye_resting) {
+    if (!status_fresh) {
+        health_color = UI_MUTED;
+    } else if (bedtime_enforcing || eye_resting) {
         /* 就寝或休息生效时进度槽为空 */
-    } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped) {
+    } else if (model->unrestricted_today == 1 || model->eye_care_unlimited_capped || model->dock_unlimited_capped) {
         fill_round_rect(pixels, stride, gauge_bg, 4, UI_SUCCESS);
-    } else if (model->remaining_available && model->played_minutes_available &&
-               (model->remaining_minutes + model->played_minutes > 0)) {
-        int total_mins = model->remaining_minutes + model->played_minutes;
+    } else if (model->remaining_available && model->forecast[0].day_index == model->day_index &&
+               model->forecast[0].mode == PTC_RULE_MODE_LIMIT && model->forecast[0].minutes > 0) {
+        int total_mins = model->forecast[0].minutes;
         int remain_w = (int)((int64_t)gauge_bg.width * model->displayed_remaining_minutes / total_mins);
         if (remain_w < 6 && model->remaining_minutes > 0) remain_w = 6;
         if (remain_w > gauge_bg.width) remain_w = gauge_bg.width;
         if (remain_w > 0) {
             fill_round_rect(pixels, stride, (UiRect){gauge_bg.x, gauge_bg.y, remain_w, gauge_bg.height}, 4, health_color);
         }
-    } else if (model->remaining_available && model->remaining_minutes > 0) {
-        int displayed_shown = model->displayed_remaining_minutes > 120 ? 120 :
-                              (model->displayed_remaining_minutes < 0 ? 0 : model->displayed_remaining_minutes);
-        int fill_w = (int)((int64_t)gauge_bg.width * displayed_shown / 120);
-        if (fill_w < 6) fill_w = 6;
-        fill_round_rect(pixels, stride, (UiRect){gauge_bg.x, gauge_bg.y, fill_w, gauge_bg.height}, 4, health_color);
     }
 
     /* 下方信息承载面板 (三维时空态势中枢) */
@@ -213,11 +210,11 @@ static void draw_parent_home_summary(uint32_t *pixels, uint32_t stride, const Pt
 
     /* 右指标：已消耗估算 */
     char used_label[128];
-    fit_text(used_label, sizeof(used_label), ptc_ui_text(PTC_UI_T_THE_QUOTA_HAS_BEEN_CONSUMED_ESTIMATED),
+    fit_text(used_label, sizeof(used_label), ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE : PTC_UI_T_THE_QUOTA_HAS_BEEN_CONSUMED_ESTIMATED),
         12, info_shelf.x + info_shelf.width - mid_x - 28);
     draw_text(pixels, stride, mid_x + 14, info_shelf.y + 18, used_label, 12, UI_MUTED);
     char played_str[64];
-    if (!eye_resting && model->played_minutes_available && model->played_minutes >= 0)
+    if (status_fresh && (!eye_resting || model->usage_present) && model->played_minutes_available && model->played_minutes >= 0)
         snprintf(played_str, sizeof(played_str), ptc_ui_text(PTC_UI_T_ABOUT_D_MIN), model->played_minutes);
     else
         snprintf(played_str, sizeof(played_str), "%s", ptc_ui_text(PTC_UI_T_NOT_AVAILABLE));

@@ -589,8 +589,16 @@
             const bool used = summary.valid && summary.played_minutes_available && summary.played_minutes >= 0;
             PtcUiTextArg args[] = {PTC_UI_TEXT_STRING("quota", value),
                 PTC_UI_TEXT_NUMBER("minutes", summary.played_minutes)};
-            if (used && !summary.remaining_available && summary.unrestricted_today != 1 && !summary.eye_care_unlimited_capped)
+            if (used && !summary.remaining_available && !summary.daily_rule_available &&
+                summary.unrestricted_today != 1 && !summary.eye_care_unlimited_capped)
                 std::snprintf(quota, sizeof(quota), "%s %s", label, value);
+            else if (used && summary.usage_present) {
+                char daily_quota[96], console_usage[96];
+                ptc_ui_text_format(PTC_UI_T_OVERLAY_QUOTA, daily_quota, sizeof(daily_quota), args, 1);
+                std::snprintf(console_usage, sizeof(console_usage), ptc_ui_text(PTC_UI_T_CONSOLE_USAGE_D_MIN),
+                    summary.played_minutes);
+                std::snprintf(quota, sizeof(quota), "%s / %s", daily_quota, console_usage);
+            }
             else ptc_ui_text_format(used ? PTC_UI_T_OVERLAY_QUOTA_USAGE :
                 PTC_UI_T_OVERLAY_QUOTA, quota, sizeof(quota), args, used ? 2 : 1);
             child_card(renderer, ptc_ui_text(PTC_UI_T_PLAYTIME_TODAY), line, quota, PTC_OVERLAY_FONT_HERO,

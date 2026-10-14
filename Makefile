@@ -8,6 +8,7 @@ HOST_UI_TEST := $(HOST_BUILD_DIR)/test_ui_state
 HOST_LAB_TEST := $(HOST_BUILD_DIR)/test_device_lab
 HOST_SETUP_TEST := $(HOST_BUILD_DIR)/test_nro_setup
 HOST_OVERLAY_MEMORY_TEST := $(HOST_BUILD_DIR)/test_overlay_memory
+HOST_PCTL_ADAPTER_TEST := $(HOST_BUILD_DIR)/test_pctl_adapter
 PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 
 COMMON_SRCS := \
@@ -114,8 +115,11 @@ $(HOST_SETUP_TEST): $(SETUP_TEST_SRCS) tests/nro_setup/switch.h tests/nro_setup/
 $(HOST_OVERLAY_MEMORY_TEST): tests/overlay_memory/test.cpp companion/overlay/vendor/libtesla/include/playwise_glyph_cache.hpp FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CXX) -std=c++17 -Wall -Wextra -Werror -fno-exceptions -fno-rtti -I. -o $@ $<
 
-test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_OVERLAY_MEMORY_TEST)
-	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_OVERLAY_MEMORY_TEST)'
+$(HOST_PCTL_ADAPTER_TEST): tests/c/test_pctl_adapter.c tests/pctl_adapter/switch.h platform/switch/pctl_adapter.c platform/switch/pctl_adapter.h platform/pctl.h platform/switch/play_timer_settings_layout.c common/time/ptc_time.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -Itests/pctl_adapter -o $@ tests/c/test_pctl_adapter.c platform/switch/pctl_adapter.c platform/switch/play_timer_settings_layout.c common/time/ptc_time.c
+
+test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_OVERLAY_MEMORY_TEST)
+	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_OVERLAY_MEMORY_TEST)'
 
 UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/preview_font.c tests/ui_preview/render.c
 $(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro/ui_graphics.h companion/nro/ui_render_internal.h $(wildcard tests/ui_preview/*.h) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
@@ -200,3 +204,24 @@ device-lab-package: device-lab-sysmodule device-lab-nro device-lab-overlay
 
 clean:
 	$(STAGE_TIMER) global clean -- sh -c 'rm -rf build/host build/generated build/switch build/packages build/device-lab build/ui-previews && if [ "$(CLEAN_EDEN)" = "1" ]; then rm -rf build/eden-test; fi && $(MAKE) -C companion/nro clean || true && rm -rf companion/nro/build-eden companion/nro/pctc-eden.elf companion/nro/pctc-eden.nro companion/nro/pctc-eden.nacp && $(MAKE) -C companion/overlay clean || true && $(MAKE) -C sysmodule clean || true && $(MAKE) -C device_lab/nro clean || true && $(MAKE) -C device_lab/overlay clean || true'
+
+# Explicit independent capability probe; excluded from release targets.
+.PHONY: usage-probe-package test-usage-probe-policy
+test-usage-probe-policy: $(HOST_BUILD_DIR)/test_usage_probe_policy
+	$<
+
+$(HOST_BUILD_DIR)/test_usage_probe_policy: tests/c/test_usage_probe_policy.c usage_probe/boot_policy.h
+	mkdir -p $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $<
+
+usage-probe-package: test-usage-probe-policy
+	python3 tools/package_usage_probe.py prepare
+	$(MAKE) -C usage_probe
+	python3 tools/package_usage_probe.py package
+
+.PHONY: pctl-capture-package
+pctl-capture-package: manifest
+	python3 tools/package_pctl_capture.py prepare
+	python3 tools/package_pctl_capture.py host-test
+	python3 tools/package_pctl_capture.py build
+	python3 tools/package_pctl_capture.py package

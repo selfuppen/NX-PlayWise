@@ -758,7 +758,8 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         if (fill_w > 0) fill_round_rect(pixels, stride, (UiRect){pbar.x, pbar.y, fill_w, pbar.height}, 6, UI_ACCENT);
 
         char used_str[64], left_str[64];
-        snprintf(used_str, sizeof(used_str), ptc_ui_text(PTC_UI_T_DETAIL_USED_LABEL), (unsigned)model->played_minutes);
+        snprintf(used_str, sizeof(used_str),
+            ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE_U_MIN : PTC_UI_T_DETAIL_USED_LABEL), (unsigned)model->played_minutes);
         draw_text(pixels, stride, pbar.x, pbar.y + pbar.height + 15, used_str, 11, UI_MUTED);
         detail_balance(p->total_known, p->total_unlimited, p->total_remaining, value, sizeof(value));
         snprintf(left_str, sizeof(left_str), ptc_ui_text(PTC_UI_T_DETAIL_LEFT_LABEL), value);
@@ -1307,7 +1308,12 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
     /* 底部右侧文字 */
     char footer[384];
-    snprintf(footer, sizeof(footer), "%s%s%s", model->home_details_page == 0 ? ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_NOTE) : "",
+    if (model->usage_direct_present || model->usage_summary_available) {
+        char direct[192], legacy[192];
+        ptc_ui_format_usage_history(model, true, direct, sizeof(direct));
+        ptc_ui_format_usage_history(model, false, legacy, sizeof(legacy));
+        snprintf(footer, sizeof(footer), "%.191s\n%.191s", direct, legacy);
+    } else snprintf(footer, sizeof(footer), "%s%s%s", model->home_details_page == 0 ? ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_NOTE) : "",
         model->home_details_page == 0 ? "\n" : "", ptc_ui_text(PTC_UI_T_DETAIL_ESTIMATE));
     detail_text(pixels, stride, (UiRect){542, 608, 630, 38}, footer, 11, UI_MUTED, 2);
 }

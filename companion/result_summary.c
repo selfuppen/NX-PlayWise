@@ -3,6 +3,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <limits.h>
 
 #include "../common/protocol/result_builder.h"
 #include "../third_party/cjson/cJSON.h"
@@ -63,6 +66,48 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->remaining_minutes = number_value(state, "remaining_minutes", -1);
     out->played_minutes_available = bool_value(state, "played_minutes_available", false);
     out->played_minutes = number_value(state, "played_minutes", -1);
+    {
+        const cJSON *usage = cJSON_GetObjectItemCaseSensitive(state, "usage");
+        out->usage_present = usage != NULL;
+        if (out->usage_present) {
+            const cJSON *captured = cJSON_GetObjectItemCaseSensitive(usage, "captured_at");
+            const char *total = string_value(usage, "total_ns");
+            char *end;
+            unsigned long long ns;
+            out->played_minutes_available = false;
+            out->played_minutes = -1;
+            errno = 0;
+            ns = strtoull(total, &end, 10);
+            if (cJSON_IsObject(usage) && bool_value(usage, "available", false) &&
+                strcmp(string_value(usage, "source"), "pctl_1952") == 0 &&
+                strcmp(string_value(usage, "scope"), "console_usable_time") == 0 &&
+                *total && strspn(total, "0123456789") == strlen(total) && *end == '\0' &&
+                errno != ERANGE && ns <= INT64_MAX && cJSON_IsNumber(captured) &&
+                captured->valuedouble > 0 && captured->valuedouble < (double)INT64_MAX &&
+                captured->valuedouble == (double)(int64_t)captured->valuedouble) {
+                out->played_minutes_available = true;
+                out->played_minutes = (int)(ns / UINT64_C(60000000000));
+                out->usage_captured_at = (int64_t)captured->valuedouble;
+                out->usage_ns = (uint64_t)ns;
+            }
+        }
+    }
+    {
+        const cJSON *forecast = cJSON_GetObjectItemCaseSensitive(state, "forecast");
+        const cJSON *today = cJSON_GetArrayItem(forecast, 0);
+        const cJSON *day = cJSON_GetObjectItemCaseSensitive(today, "day_index");
+        const cJSON *mode = cJSON_GetObjectItemCaseSensitive(today, "mode");
+        const cJSON *minutes = cJSON_GetObjectItemCaseSensitive(today, "minutes");
+        if (cJSON_IsArray(forecast) && cJSON_IsObject(today) && cJSON_IsNumber(day) &&
+            day->valuedouble == out->day_index && out->day_index >= 0 &&
+            cJSON_IsNumber(mode) && (mode->valuedouble == 1 || mode->valuedouble == 2) &&
+            cJSON_IsNumber(minutes) && minutes->valuedouble >= 0 && minutes->valuedouble <= 1440 &&
+            minutes->valuedouble == minutes->valueint) {
+            out->daily_rule_available = true;
+            out->daily_rule_unlimited = mode->valueint == 2;
+            out->daily_rule_minutes = minutes->valueint;
+        }
+    }
     out->play_timer_enabled = number_value(state, "play_timer_enabled", -1);
     out->restricted_now = number_value(state, "restricted_now", -1);
     out->unrestricted_today = number_value(state, "unrestricted_today", -1);
@@ -175,6 +220,15 @@ bool ptc_companion_result_summary_parse(const char *result_json, PtcCompanionRes
     out->valid = true;
     cJSON_Delete(root);
     return true;
+}
+
+void ptc_companion_result_summary_expire_usage(PtcCompanionResultSummary *summary, int64_t now)
+{
+    if (summary && summary->usage_present && (summary->usage_captured_at <= 0 ||
+        now < summary->usage_captured_at || now - summary->usage_captured_at > 120)) {
+        summary->played_minutes_available = false;
+        summary->played_minutes = -1;
+    }
 }
 
 bool ptc_companion_result_summary_format(const PtcCompanionResultSummary *summary, char *out, size_t out_size)

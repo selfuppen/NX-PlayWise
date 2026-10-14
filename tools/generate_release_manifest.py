@@ -30,9 +30,16 @@ def git_commit() -> str:
 
 
 def git_tracked_dirty() -> bool:
+    command = ["git"]
+    autocrlf = os.environ.get("PLAYWISE_GIT_AUTOCRLF")
+    if autocrlf is not None:
+        if autocrlf not in ("true", "false", "input"):
+            raise ValueError("invalid host Git newline policy")
+        command.extend(["-c", f"core.autocrlf={autocrlf}"])
+    command.extend(["diff", "--quiet", "HEAD", "--"])
     try:
         result = subprocess.run(
-            ["git", "diff", "--quiet", "HEAD", "--"],
+            command,
             cwd=ROOT,
             capture_output=True,
             check=False,
@@ -125,6 +132,11 @@ def make_manifest(profile: str) -> dict:
     }
     if manual_verified:
         data["qualification"].update({"method": "manual", "scope": "main_features"})
+    if "PLAYWISE_GIT_AUTOCRLF" in os.environ:
+        data["build"]["git_autocrlf"] = os.environ["PLAYWISE_GIT_AUTOCRLF"]
+    if profile == "release":
+        from pctl_usage_qualification import CONTRACT
+        data["usage_contract"] = CONTRACT
     return data
 
 
