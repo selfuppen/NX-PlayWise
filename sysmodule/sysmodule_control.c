@@ -273,14 +273,7 @@ PtcErrorCode update_rules_for_request(PtcSysmodule *sysmodule, const PtcRequest 
         }
         rules->eye_care = request->eye_care_policy;
         if (!rules->eye_care.enabled || !was_enabled) {
-            runtime_state->eye_care_day_index = now.day_index;
-            runtime_state->eye_care_accumulated_minutes = 0;
-            runtime_state->eye_care_last_used_minutes = 0;
-            runtime_state->eye_care_usage_known = false;
-            runtime_state->eye_care_resting = false;
-            runtime_state->eye_care_rest_deadline = 0;
-            runtime_state->eye_care_break_id = 0;
-            runtime_state->eye_care_idle_since = 0;
+            reset_eye_care_cycle(runtime_state, now.day_index);
         } else if (runtime_state->eye_care_resting) {
             runtime_state->eye_care_rest_deadline +=
                 ((int64_t)rules->eye_care.rest_minutes - old_rest_minutes) * 60;

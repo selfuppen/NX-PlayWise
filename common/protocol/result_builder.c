@@ -94,6 +94,19 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
 {
     size_t used = 0;
     unsigned int i;
+    char eye_usage[256] = "";
+    char dock_usage[224] = "";
+    if (state->eye_care_usage_source && strcmp(state->eye_care_usage_source, "pctl_1952") == 0)
+        (void)snprintf(eye_usage, sizeof(eye_usage),
+            ",\"usage_source\":\"pctl_1952\",\"usage_quality\":\"%s\","
+            "\"used_ns\":\"%llu\",\"usage_captured_at\":%lld",
+            state->eye_care_usage_quality ? state->eye_care_usage_quality : "unknown",
+            (unsigned long long)state->eye_care_used_ns, (long long)state->eye_care_usage_captured_at);
+    if (state->dock_usage_source && strcmp(state->dock_usage_source, "pctl_1952") == 0)
+        (void)snprintf(dock_usage, sizeof(dock_usage),
+            ",\"usage_source\":\"pctl_1952\",\"usage_quality\":\"%s\",\"usage_captured_at\":%lld",
+            state->dock_usage_quality ? state->dock_usage_quality : "unknown",
+            (long long)state->dock_usage_captured_at);
     while (out[used] != '\0' && used < out_size) {
         ++used;
     }
@@ -167,11 +180,11 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "\"overlay_verified\":%s,\"recovery_phase\":\"%s\"},"
         "\"eye_care\":{\"enabled\":%s,\"play_minutes\":%u,\"rest_minutes\":%u,"
         "\"phase\":\"%s\",\"used_minutes\":%u,\"rest_remaining_seconds\":%lld,"
-        "\"break_id\":%llu,\"unlimited_capped\":%s},"
+        "\"break_id\":%llu,\"unlimited_capped\":%s%s},"
         "\"dock\":{\"available\":%s,\"force_docked\":%s,\"undocked_limit_enabled\":%s,"
         "\"undocked_daily_minutes\":%u,\"operation_mode\":\"%s\","
         "\"dock_supported_available\":%s,\"dock_supported\":%s,\"usage_available\":%s,"
-        "\"used_minutes\":%u,\"remaining_minutes\":%u,\"waived_today\":%s,\"unlimited_capped\":%s},"
+        "\"used_minutes\":%u,\"remaining_minutes\":%u,\"waived_today\":%s,\"unlimited_capped\":%s%s},"
         "\"restriction_reasons\":{\"bedtime\":%s,\"daily_allowance\":%s,\"eye_care\":%s,\"dock\":%s}}",
         state->daily_buffer_minutes,
         json_bool(state->daily_buffer_claimed),
@@ -202,6 +215,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         state->eye_care_used_minutes, (long long)state->eye_care_rest_remaining_seconds,
         (unsigned long long)state->eye_care_break_id,
         json_bool(state->eye_care_unlimited_capped),
+        eye_usage,
         json_bool(state->dock_available), json_bool(state->force_docked),
         json_bool(state->undocked_limit_enabled), state->undocked_daily_minutes,
         state->operation_mode ? state->operation_mode : "unknown",
@@ -209,6 +223,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         json_bool(state->undocked_usage_available), state->undocked_used_minutes,
         state->undocked_remaining_minutes, json_bool(state->dock_waived_today),
         json_bool(state->dock_unlimited_capped),
+        dock_usage,
         json_bool(state->bedtime_active && !state->bedtime_skipped),
         json_bool(state->daily_restriction_active),
         json_bool(state->eye_care_enabled && state->eye_care_phase && strcmp(state->eye_care_phase, "resting") == 0),
@@ -291,6 +306,10 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->eye_care_rest_remaining_seconds = 0;
     state->eye_care_break_id = 0;
     state->eye_care_unlimited_capped = false;
+    state->eye_care_usage_source = "allowance_remaining";
+    state->eye_care_usage_quality = "legacy_estimate";
+    state->eye_care_used_ns = 0;
+    state->eye_care_usage_captured_at = 0;
     state->dock_available = false;
     state->force_docked = false;
     state->undocked_limit_enabled = false;
@@ -304,6 +323,9 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->dock_waived_today = false;
     state->dock_restriction_active = false;
     state->dock_unlimited_capped = false;
+    state->dock_usage_source = "allowance_remaining";
+    state->dock_usage_quality = "legacy_estimate";
+    state->dock_usage_captured_at = 0;
 }
 
 PtcErrorCode ptc_result_validate(const char *text)

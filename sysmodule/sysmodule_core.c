@@ -1,6 +1,6 @@
 #include "sysmodule_internal.h"
 
-static void reset_eye_care_cycle(PtcRuntimeState *state, uint16_t day_index)
+void reset_eye_care_cycle(PtcRuntimeState *state, uint16_t day_index)
 {
     state->eye_care_day_index = day_index;
     state->eye_care_accumulated_minutes = 0;
@@ -10,6 +10,92 @@ static void reset_eye_care_cycle(PtcRuntimeState *state, uint16_t day_index)
     state->eye_care_rest_deadline = 0;
     state->eye_care_break_id = 0;
     state->eye_care_idle_since = 0;
+    state->eye_cycle_used_ns = 0;
+    state->eye_usage_counter.known = false;
+    state->eye_usage_migrated = false;
+    state->eye_usage_boundary_gap = false;
+}
+
+PtcClockSnapshot usage_sample_clock(PtcSysmodule *sysmodule, PtcClockSnapshot request_now)
+{
+    PtcClockSnapshot after = sysmodule->time_provider->vtable->now(sysmodule->time_provider);
+    if (after.day_index != request_now.day_index || after.unix_seconds < request_now.unix_seconds)
+        after.unix_seconds = 0;
+    return after;
+}
+
+bool direct_usage_sample(const PtcPctlStatus *status, PtcClockSnapshot now, PtcUsageCounter *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->source = PTC_USAGE_SOURCE_PCTL_1952;
+    if (!status->usage_supported || !status->usage_available || status->usage_result != 0 ||
+        status->usage_ns > INT64_MAX || status->usage_day_index != now.day_index ||
+        status->usage_captured_at <= 0 || now.unix_seconds < status->usage_captured_at ||
+        now.unix_seconds - status->usage_captured_at > 10) return false;
+    out->known = true;
+    out->day_index = status->usage_day_index;
+    out->total_ns = status->usage_ns;
+    out->captured_at = status->usage_captured_at;
+    return true;
+}
+
+bool eye_care_sample_direct(const PtcRules *rules, PtcRuntimeState *state,
+    const PtcPctlStatus *status, PtcClockSnapshot now, bool dock_blocked)
+{
+    PtcUsageCounter sample;
+    PtcUsageStep step;
+    uint64_t delta, total;
+    const uint64_t max_cycle = UINT64_C(240) * PTC_USAGE_MINUTE_NS;
+    PtcDayRule day_rule = ptc_rules_today_rule(rules, now.day_index,
+        ptc_weekday_from_day_index(now.day_index));
+    if (!direct_usage_sample(status, now, &sample)) {
+        state->eye_care_usage_known = false;
+        state->eye_care_idle_since = 0;
+        return false;
+    }
+    if (day_rule.mode == PTC_RULE_MODE_LIMIT &&
+        sample.total_ns >= (uint64_t)day_rule.minutes * PTC_USAGE_MINUTE_NS) {
+        reset_eye_care_cycle(state, now.day_index);
+        state->eye_usage_counter.source = sample.source;
+        return true;
+    }
+    /* A stopped or temporarily unlocked timer cannot prove an eye break.
+       Preserve the trusted baseline so subsequent consumption can recover. */
+    if (dock_blocked || status->blocked_today ||
+        (status->restricted_now_available && status->restricted_now) ||
+        (status->limited_today && ptc_pctl_remaining_exhausted(status)) ||
+        (status->temporary_unlocked_available && status->temporary_unlocked) ||
+        !status->play_timer_enabled_available || !status->play_timer_enabled) {
+        state->eye_care_usage_known = false;
+        state->eye_care_idle_since = 0;
+        return false;
+    }
+    if (state->eye_usage_counter.source != sample.source) {
+        state->eye_cycle_used_ns = (uint64_t)state->eye_care_accumulated_minutes * PTC_USAGE_MINUTE_NS;
+        if (state->eye_cycle_used_ns > max_cycle) state->eye_cycle_used_ns = max_cycle;
+        state->eye_usage_migrated = state->eye_cycle_used_ns != 0;
+    }
+    step = ptc_usage_counter_step(&state->eye_usage_counter, &sample, &delta);
+    if (step == PTC_USAGE_UNKNOWN) {
+        state->eye_care_usage_known = false;
+        state->eye_care_idle_since = 0;
+        return false;
+    }
+    if (step == PTC_USAGE_NEXT_DAY) state->eye_usage_boundary_gap = true;
+    total = delta > max_cycle - state->eye_cycle_used_ns ? max_cycle : state->eye_cycle_used_ns + delta;
+    state->eye_cycle_used_ns = total;
+    if (step == PTC_USAGE_BASELINE || step == PTC_USAGE_NEXT_DAY || delta != 0 || state->eye_care_idle_since == 0 ||
+        state->eye_care_idle_since > sample.captured_at) state->eye_care_idle_since = sample.captured_at;
+    else if (sample.captured_at - state->eye_care_idle_since >= (int64_t)rules->eye_care.rest_minutes * 60) {
+        state->eye_cycle_used_ns = 0;
+        state->eye_usage_migrated = state->eye_usage_boundary_gap = false;
+    }
+    state->eye_care_accumulated_minutes = (uint16_t)(state->eye_cycle_used_ns / PTC_USAGE_MINUTE_NS);
+    uint64_t minutes = sample.total_ns / PTC_USAGE_MINUTE_NS;
+    state->eye_care_last_used_minutes = minutes > UINT16_MAX ? UINT16_MAX : (uint16_t)minutes;
+    state->eye_care_day_index = now.day_index;
+    state->eye_care_usage_known = true;
+    return true;
 }
 
 int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *request)
@@ -21,6 +107,9 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     PtcDayRule active_rule;
     PtcBedtimeEvaluation bedtime;
     PtcPctlStatus observed_status;
+    PtcPctlStatus eye_usage_status;
+    bool eye_direct;
+    PtcErrorCode eye_usage_error = PTC_ERR_PCTL_READ_FAILED;
     PtcPctlTargetMode target_mode;
     uint16_t target_minutes;
     char disable_path[320];
@@ -97,14 +186,23 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     }
     dock_should_enforce = dock_policy_blocks(sysmodule, &rules, &runtime_state, now);
     base_mode = ptc_compose_base_target(rules.eye_care.enabled || dock_policy_enabled(&rules), active_rule, &base_minutes);
+    memset(&eye_usage_status, 0, sizeof(eye_usage_status));
+    if (rules.eye_care.enabled && !runtime_state.eye_care_resting && !bedtime_should_enforce)
+        eye_usage_error = sysmodule->pctl->vtable->read_status(sysmodule->pctl,
+            ptc_weekday_from_day_index(now.day_index), &eye_usage_status);
+    eye_direct = eye_usage_status.usage_supported ||
+        runtime_state.eye_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952;
     /* Daily usage rolls over; the eye-care cycle and rest deadline do not. */
-    if (runtime_state.eye_care_day_index != now.day_index) {
+    if (!eye_direct && runtime_state.eye_care_day_index != now.day_index) {
         runtime_state.eye_care_day_index = now.day_index;
         runtime_state.eye_care_last_used_minutes = 0;
     }
     if (!rules.eye_care.enabled ||
         bedtime_should_enforce ||
-        (active_rule.mode == PTC_RULE_MODE_LIMIT && runtime_state.eye_care_usage_known &&
+        (eye_direct && active_rule.mode == PTC_RULE_MODE_LIMIT && runtime_state.eye_usage_counter.known &&
+         runtime_state.eye_usage_counter.day_index == now.day_index &&
+         runtime_state.eye_usage_counter.total_ns >= (uint64_t)active_rule.minutes * PTC_USAGE_MINUTE_NS) ||
+        (!eye_direct && active_rule.mode == PTC_RULE_MODE_LIMIT && runtime_state.eye_care_usage_known &&
          runtime_state.eye_care_last_used_minutes >= active_rule.minutes)) {
         eye_exit = runtime_state.eye_care_resting;
         reset_eye_care_cycle(&runtime_state, now.day_index);
@@ -124,12 +222,30 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
             reset_eye_care_cycle(&runtime_state, now.day_index);
             eye_state_changed = true;
         }
+    } else if (eye_direct) {
+        bool known = eye_care_sample_direct(&rules, &runtime_state, &eye_usage_status,
+            usage_sample_clock(sysmodule, now), dock_should_enforce);
+        /* Commit consumption before the control transaction preimage. A failed
+           rest write may undo the rest, never the observed consumption. */
+        if (memcmp(&previous_eye_state, &runtime_state, sizeof(runtime_state)) != 0 &&
+            !save_state(sysmodule, &runtime_state, now.unix_seconds)) {
+            write_disable_flag(sysmodule, "eye_care_usage_save_failed\n");
+            return 0;
+        }
+        if (known && runtime_state.eye_cycle_used_ns >=
+                (uint64_t)rules.eye_care.play_minutes * PTC_USAGE_MINUTE_NS) {
+            eye_enter = true;
+            runtime_state.eye_care_resting = true;
+            runtime_state.eye_care_rest_deadline = now.unix_seconds + (int64_t)rules.eye_care.rest_minutes * 60;
+            runtime_state.eye_care_break_id = ((uint64_t)now.day_index << 32) |
+                ((uint64_t)now.unix_seconds & UINT64_C(0xffffffff));
+            if (!runtime_state.eye_care_break_id) runtime_state.eye_care_break_id = 1;
+        }
     } else if (dock_should_enforce) {
         runtime_state.eye_care_idle_since = 0;
     } else {
-        PtcPctlStatus usage;
-        if (sysmodule->pctl->vtable->read_status(sysmodule->pctl,
-                ptc_weekday_from_day_index(now.day_index), &usage) == PTC_ERR_OK &&
+        PtcPctlStatus usage = eye_usage_status;
+        if (eye_usage_error == PTC_ERR_OK &&
             usage.limited_today && usage.configured_minutes_available &&
             usage.configured_minutes == base_minutes && usage.remaining_available &&
             usage.remaining_minutes <= base_minutes &&
@@ -316,7 +432,7 @@ int ptc_sysmodule_enforce_request(PtcSysmodule *sysmodule, const PtcRequest *req
     runtime_state.bedtime_enforced = bedtime_should_enforce;
     runtime_state.bedtime_window_instance_id = bedtime_should_enforce ? bedtime.window_instance_id : 0;
     runtime_state.bedtime_start_day_index = bedtime_should_enforce ? bedtime.start_day_index : 0;
-    if (eye_exit && !bedtime_should_enforce && !dock_should_enforce && err == PTC_ERR_OK &&
+    if (!eye_direct && eye_exit && !bedtime_should_enforce && !dock_should_enforce && err == PTC_ERR_OK &&
         observed_status.configured_minutes_available && observed_status.remaining_available &&
         observed_status.configured_minutes == base_minutes && observed_status.remaining_minutes <= base_minutes) {
         runtime_state.eye_care_usage_known = true;

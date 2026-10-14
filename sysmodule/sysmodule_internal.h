@@ -18,6 +18,7 @@
 #include "../common/rules/holiday_calendar.h"
 #include "../common/time/ptc_time.h"
 #include "../common/usage/daily_summary.h"
+#include "../common/usage/usage_counter.h"
 #include "../common/token/token_v1.h"
 #include "../common/token/token_v2.h"
 #include "../common/version.h"
@@ -55,6 +56,10 @@ typedef struct {
     int64_t eye_care_rest_deadline;
     uint64_t eye_care_break_id;
     int64_t eye_care_idle_since;
+    PtcUsageCounter eye_usage_counter;
+    uint64_t eye_cycle_used_ns;
+    bool eye_usage_migrated;
+    bool eye_usage_boundary_gap;
     uint16_t dock_day_index;
     uint64_t undocked_used_ns;
     uint64_t dock_last_used_ns;
@@ -66,6 +71,8 @@ typedef struct {
     uint16_t dock_waived_day_index;
     bool dock_waived;
     bool dock_enforced;
+    PtcUsageCounter dock_usage_counter;
+    bool dock_usage_incomplete;
 } PtcRuntimeState;
 
 PtcOperationModeStatus ptc_read_operation_mode(PtcSysmodule *sysmodule);
@@ -76,6 +83,13 @@ bool dock_blocks_grants(PtcSysmodule *sysmodule, PtcClockSnapshot now);
 void dock_sample_usage(PtcSysmodule *sysmodule, const PtcRules *rules,
     PtcRuntimeState *state, PtcClockSnapshot now);
 void dock_rebaseline(PtcSysmodule *sysmodule, PtcRuntimeState *state, uint8_t weekday);
+bool direct_usage_sample(const PtcPctlStatus *status, PtcClockSnapshot now, PtcUsageCounter *out);
+PtcClockSnapshot usage_sample_clock(PtcSysmodule *sysmodule, PtcClockSnapshot request_now);
+void reset_eye_care_cycle(PtcRuntimeState *state, uint16_t day_index);
+bool eye_care_sample_direct(const PtcRules *rules, PtcRuntimeState *state,
+    const PtcPctlStatus *status, PtcClockSnapshot now, bool dock_blocked);
+void dock_sample_direct(PtcRuntimeState *state, const PtcPctlStatus *status,
+    PtcClockSnapshot now, PtcOperationMode mode, bool boot_gap);
 bool process_dock_request(PtcSysmodule *sysmodule, const PtcRequest *request,
     bool disabled, PtcClockSnapshot now);
 

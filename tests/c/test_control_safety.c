@@ -7,6 +7,7 @@
 #include "../../companion/result_summary.h"
 #include "../../companion/overlay/bridge.h"
 #include "../../companion/nro/eden_timer.h"
+#include "../../third_party/cjson/cJSON.h"
 
 static int failures;
 static const char *SECRET = "control-safety-fixture-secret";
@@ -1416,6 +1417,246 @@ static void test_eden_timer_restart(void)
     free(f.mem);
 }
 
+static void direct_sample(Fixture *f, uint64_t ns, uint32_t seconds)
+{
+    f->clock.snapshot.unix_seconds += seconds;
+    f->pctl.status.usage_supported = f->pctl.status.usage_available = true;
+    f->pctl.status.usage_result = 0;
+    f->pctl.status.usage_ns = ns;
+    f->pctl.status.usage_day_index = f->clock.snapshot.day_index;
+    f->pctl.status.usage_captured_at = f->clock.snapshot.unix_seconds;
+    f->pctl.played_minutes_today = (uint16_t)(ns / PTC_USAGE_MINUTE_NS);
+    f->pctl.usage_fraction_ns = ns % PTC_USAGE_MINUTE_NS;
+    f->pctl.status.remaining_minutes = f->pctl.configured_minutes > f->pctl.played_minutes_today
+        ? f->pctl.configured_minutes - f->pctl.played_minutes_today : 0;
+}
+
+static void test_usage_counter_epochs(void)
+{
+    PtcUsageCounter baseline = {1, true, 2380, 60 * PTC_USAGE_MINUTE_NS, 1000};
+    PtcUsageCounter sample = {PTC_USAGE_SOURCE_PCTL_1952, true, 2380, 100 * PTC_USAGE_MINUTE_NS, 1001};
+    uint64_t delta;
+    expect(ptc_usage_counter_step(&baseline, &sample, &delta) == PTC_USAGE_BASELINE && delta == 0,
+        "new source establishes epoch without subtracting legacy quota baseline");
+    sample.total_ns += 1; ++sample.captured_at;
+    expect(ptc_usage_counter_step(&baseline, &sample, &delta) == PTC_USAGE_DELTA && delta == 1,
+        "counter preserves a one-nanosecond delta");
+    PtcUsageCounter trusted = baseline;
+    --sample.total_ns; ++sample.captured_at;
+    expect(ptc_usage_counter_step(&baseline, &sample, &delta) == PTC_USAGE_UNKNOWN &&
+        baseline.total_ns == trusted.total_ns && baseline.captured_at == trusted.captured_at,
+        "decrease retains trusted counter rather than refunding usage");
+    sample = trusted; sample.known = false;
+    expect(ptc_usage_counter_step(&baseline, &sample, &delta) == PTC_USAGE_UNKNOWN,
+        "failed sample retains epoch");
+    sample = trusted; ++sample.day_index; ++sample.captured_at; sample.total_ns = 5;
+    expect(ptc_usage_counter_step(&baseline, &sample, &delta) == PTC_USAGE_NEXT_DAY && delta == 5,
+        "ordinary next day charges new-day total independently");
+    --sample.day_index;
+    expect(ptc_usage_counter_step(&baseline, &sample, &delta) == PTC_USAGE_UNKNOWN,
+        "date rewind cannot reset allowance");
+    sample = baseline; sample.day_index += 2; sample.captured_at += 2;
+    expect(ptc_usage_counter_step(&baseline, &sample, &delta) == PTC_USAGE_UNKNOWN,
+        "unexplained multi-day jump cannot create a new epoch");
+    sample = baseline; ++sample.day_index; sample.captured_at += 129601;
+    expect(ptc_usage_counter_step(&baseline, &sample, &delta) == PTC_USAGE_UNKNOWN,
+        "long gap is not an observed natural midnight");
+}
+
+static void test_direct_eye_usage(void)
+{
+    Fixture f;
+    PtcRules rules;
+    PtcRuntimeState state, projected;
+    PtcResultState result;
+    seed_direct_grant(&f, 100 * PTC_USAGE_MINUTE_NS, 180);
+    expect(load_rules(&f.core, &rules) && load_state(&f.core, &state), "load eye migration fixture");
+    rules.eye_care.enabled = true;
+    rules.eye_care.play_minutes = 40;
+    state.eye_care_day_index = f.clock.snapshot.day_index;
+    state.eye_care_accumulated_minutes = 30;
+    state.eye_care_last_used_minutes = 60;
+    state.eye_care_usage_known = true;
+    expect(eye_care_sample_direct(&rules, &state, &f.pctl.status, f.clock.snapshot, false) &&
+        state.eye_care_accumulated_minutes == 30 && state.eye_usage_migrated,
+        "eye migration preserves cycle without inventing forty minutes");
+    direct_sample(&f, 109 * PTC_USAGE_MINUTE_NS + UINT64_C(59000000000), 599);
+    expect(eye_care_sample_direct(&rules, &state, &f.pctl.status, f.clock.snapshot, false) &&
+        state.eye_cycle_used_ns == 39 * PTC_USAGE_MINUTE_NS + UINT64_C(59000000000),
+        "eye cycle retains seconds below its threshold");
+    expect(save_rules(&f.core, &rules) && save_state(&f.core, &state, f.clock.snapshot.unix_seconds),
+        "persist nanosecond cycle before restart");
+    PtcSysmodule restarted;
+    ptc_sysmodule_init(&restarted, "app", &f.mem->storage, &f.pctl.pctl, &f.clock.provider);
+    expect(load_state(&restarted, &projected) && projected.eye_cycle_used_ns == state.eye_cycle_used_ns &&
+        projected.eye_usage_counter.total_ns == state.eye_usage_counter.total_ns,
+        "same-day restart restores counter epoch and fractional cycle");
+    direct_sample(&f, 110 * PTC_USAGE_MINUTE_NS, 1);
+    f.pctl.write_error = PTC_ERR_PCTL_WRITE_FAILED;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && !state.eye_care_resting &&
+        state.eye_cycle_used_ns == 40 * PTC_USAGE_MINUTE_NS &&
+        state.eye_usage_counter.total_ns == 110 * PTC_USAGE_MINUTE_NS,
+        "failed rest write rolls back rest but never observed consumption");
+    f.pctl.write_error = PTC_ERR_OK;
+    unsigned starts_before_retry = f.pctl.start_timer_calls;
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.eye_care_resting && f.pctl.status.blocked_today &&
+        f.pctl.start_timer_calls == starts_before_retry, "retry enters rest at exact threshold without timer activation");
+    uint64_t break_id = state.eye_care_break_id;
+    ++f.clock.snapshot.day_index;
+    direct_sample(&f, 0, 1);
+    (void)ptc_sysmodule_enforce_tick(&f.core);
+    expect(load_state(&f.core, &state) && state.eye_care_resting && state.eye_care_break_id == break_id,
+        "midnight preserves existing rest instance and deadline");
+    free(f.mem);
+
+    seed_direct_grant(&f, 20 * PTC_USAGE_MINUTE_NS, 120);
+    expect(load_rules(&f.core, &rules) && load_state(&f.core, &state), "load eye idle fixture");
+    rules.eye_care.enabled = true;
+    rules.eye_care.rest_minutes = 1;
+    (void)eye_care_sample_direct(&rules, &state, &f.pctl.status, f.clock.snapshot, false);
+    direct_sample(&f, 20 * PTC_USAGE_MINUTE_NS + UINT64_C(1000000000), 1);
+    (void)eye_care_sample_direct(&rules, &state, &f.pctl.status, f.clock.snapshot, false);
+    direct_sample(&f, f.pctl.status.usage_ns, 60);
+    projected = state;
+    result_state_from_pctl(&result, f.clock.snapshot.day_index, &f.pctl.status);
+    fill_extended_result_state(&f.core, &result, &rules, &state, &f.pctl.status, f.clock.snapshot);
+    expect(result.eye_care_used_ns == 0 && state.eye_cycle_used_ns == UINT64_C(1000000000),
+        "status projects natural rest without persisting a baseline");
+    (void)eye_care_sample_direct(&rules, &projected, &f.pctl.status, f.clock.snapshot, false);
+    expect(projected.eye_cycle_used_ns == result.eye_care_used_ns, "status and scheduler use identical idle-reset evaluation");
+    state = projected;
+    direct_sample(&f, f.pctl.status.usage_ns + UINT64_C(1000000000), 1);
+    (void)eye_care_sample_direct(&rules, &state, &f.pctl.status, f.clock.snapshot, false);
+    f.pctl.status.usage_available = false;
+    expect(!eye_care_sample_direct(&rules, &state, &f.pctl.status, f.clock.snapshot, false) &&
+        state.eye_care_idle_since == 0, "unknown interval cannot prove natural rest");
+    direct_sample(&f, f.pctl.status.usage_ns + UINT64_C(1000000000), 60);
+    (void)eye_care_sample_direct(&rules, &state, &f.pctl.status, f.clock.snapshot, false);
+    expect(state.eye_cycle_used_ns == UINT64_C(2000000000), "recovered counter adds missed delta without claiming rest");
+    f.pctl.status.temporary_unlocked = true;
+    direct_sample(&f, f.pctl.status.usage_ns, 60);
+    expect(!eye_care_sample_direct(&rules, &state, &f.pctl.status, f.clock.snapshot, false) &&
+        state.eye_cycle_used_ns == UINT64_C(2000000000), "PIN unlock does not count as eye rest");
+    f.pctl.status.temporary_unlocked = false;
+    ++f.clock.snapshot.day_index;
+    direct_sample(&f, UINT64_C(3000000000), 1);
+    expect(eye_care_sample_direct(&rules, &state, &f.pctl.status, f.clock.snapshot, false) &&
+        state.eye_cycle_used_ns == UINT64_C(5000000000) && state.eye_usage_boundary_gap,
+        "natural midnight retains cycle, adds new use and flags unobserved boundary tail");
+    expect(save_state(&f.core, &state, f.clock.snapshot.unix_seconds) && load_state(&f.core, &projected) &&
+        projected.eye_usage_boundary_gap, "boundary quality survives restart");
+    ++f.clock.snapshot.day_index;
+    direct_sample(&f, 0, 120);
+    expect(eye_care_sample_direct(&rules, &state, &f.pctl.status, f.clock.snapshot, false) &&
+        state.eye_cycle_used_ns == UINT64_C(5000000000) && state.eye_usage_boundary_gap,
+        "midnight zero cannot certify idle time across an unobserved old-day tail");
+    f.pctl.status.usage_supported = false;
+    expect(!eye_care_sample_direct(&rules, &state, &f.pctl.status, f.clock.snapshot, false),
+        "direct epoch never falls back to legacy quota estimate");
+    free(f.mem);
+}
+
+static void test_direct_dock_usage(void)
+{
+    Fixture f;
+    PtcRuntimeState state, restored;
+    seed_direct_grant(&f, 100 * PTC_USAGE_MINUTE_NS, 180);
+    expect(load_state(&f.core, &state), "load direct dock fixture");
+    state.dock_tracking_started = state.dock_usage_known = state.dock_baseline_known = true;
+    state.dock_day_index = f.clock.snapshot.day_index;
+    state.undocked_used_ns = 30 * PTC_USAGE_MINUTE_NS;
+    state.dock_last_used_ns = 60 * PTC_USAGE_MINUTE_NS;
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_UNDOCKED, false);
+    expect(state.undocked_used_ns == 30 * PTC_USAGE_MINUTE_NS && state.dock_usage_known,
+        "dock migration preserves existing amount without subtracting across sources");
+    f.pctl.status.configured_minutes = 0;
+    f.pctl.status.remaining_minutes = 0;
+    direct_sample(&f, 100 * PTC_USAGE_MINUTE_NS + UINT64_C(20000000000), 20);
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_DOCKED, false);
+    expect(state.undocked_used_ns == 30 * PTC_USAGE_MINUTE_NS + UINT64_C(20000000000),
+        "BLOCKED zero quota cannot change the independent counter or refund usage");
+    direct_sample(&f, f.pctl.status.usage_ns + UINT64_C(20000000000), 20);
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_DOCKED, false);
+    expect(state.undocked_used_ns == 30 * PTC_USAGE_MINUTE_NS + UINT64_C(20000000000),
+        "stable TV endpoints exclude new TV delta");
+    expect(save_state(&f.core, &state, f.clock.snapshot.unix_seconds) && load_state(&f.core, &restored) &&
+        restored.dock_usage_counter.total_ns == state.dock_usage_counter.total_ns,
+        "dock counter persists independently from clamped legacy shadow");
+    direct_sample(&f, f.pctl.status.usage_ns + UINT64_C(5000000000), 5);
+    dock_sample_direct(&restored, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_DOCKED, true);
+    expect(restored.undocked_used_ns == state.undocked_used_ns + UINT64_C(5000000000),
+        "restart gap is conservatively charged even between TV endpoints");
+    state = restored;
+    f.pctl.status.usage_available = false;
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_DOCKED, false);
+    expect(!state.dock_usage_known && state.dock_usage_counter.known && state.dock_interval_unknown,
+        "failed read retains trusted counter and blocks uncertain small-screen allowance");
+    direct_sample(&f, f.pctl.status.usage_ns + UINT64_C(5000000000), 5);
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_DOCKED, false);
+    expect(state.dock_usage_known && state.undocked_used_ns == restored.undocked_used_ns + UINT64_C(5000000000),
+        "recovery conservatively charges missed delta");
+    PtcUsageCounter trusted = state.dock_usage_counter;
+    direct_sample(&f, f.pctl.status.usage_ns - UINT64_C(1000000000), 1);
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_UNDOCKED, false);
+    expect(!state.dock_usage_known && state.dock_usage_counter.total_ns == trusted.total_ns,
+        "counter rollback cannot clear accumulated small-screen consumption");
+    ++f.clock.snapshot.day_index;
+    direct_sample(&f, UINT64_C(3000000000), 1);
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_DOCKED, false);
+    expect(state.dock_usage_known && state.undocked_used_ns == UINT64_C(3000000000),
+        "next-day total is conservatively charged without old-day quota alias");
+    f.clock.snapshot.day_index -= 2;
+    direct_sample(&f, 0, 1);
+    dock_sample_direct(&state, &f.pctl.status, f.clock.snapshot, PTC_OPERATION_MODE_UNDOCKED, false);
+    expect(!state.dock_usage_known && state.undocked_used_ns == UINT64_C(3000000000),
+        "date rewind does not refund daily consumption");
+    free(f.mem);
+}
+
+static void test_usage_state_validation(void)
+{
+    Fixture f;
+    PtcRuntimeState state, restored;
+    char json[4096];
+    init_fixture(&f);
+    expect(load_state(&f.core, &state), "load source shape fixture");
+    state.eye_usage_counter = (PtcUsageCounter){PTC_USAGE_SOURCE_PCTL_1952, true, 2380,
+        100 * PTC_USAGE_MINUTE_NS, f.clock.snapshot.unix_seconds};
+    state.eye_cycle_used_ns = 30 * PTC_USAGE_MINUTE_NS;
+    state.eye_care_accumulated_minutes = 30;
+    state.dock_usage_counter = state.eye_usage_counter;
+    state.dock_usage_known = false;
+    state.dock_baseline_known = true;
+    state.dock_usage_incomplete = true;
+    expect(save_state(&f.core, &state, f.clock.snapshot.unix_seconds) &&
+        load_state(&f.core, &restored) && restored.dock_usage_counter.known && !restored.dock_usage_known,
+        "counter continuity and policy availability are distinct persisted booleans");
+    expect(f.mem->storage.vtable->read_text(&f.mem->storage, "app/state.json", json, sizeof(json)),
+        "read serialized source groups");
+    cJSON *root = cJSON_Parse(json);
+    bool unique = root != NULL;
+    for (cJSON *item = root ? root->child : NULL; item; item = item->next)
+        for (cJSON *other = item->next; other; other = other->next)
+            if (strcmp(item->string, other->string) == 0) unique = false;
+    expect(unique, "serialized state has no duplicate keys");
+    cJSON_Delete(root);
+    for (unsigned invalid = 0; invalid < 4; ++invalid) {
+        root = cJSON_Parse(json);
+        if (invalid == 0) cJSON_SetNumberValue(cJSON_GetObjectItem(root, "eye_usage_source"), 2.5);
+        if (invalid == 1) cJSON_DeleteItemFromObject(root, "dock_counter_source");
+        if (invalid == 2) cJSON_DeleteItemFromObject(root, "eye_usage_captured_at");
+        if (invalid == 3) cJSON_SetNumberValue(cJSON_GetObjectItem(root, "eye_cycle_used_ns"), 1);
+        char *bad = cJSON_PrintUnformatted(root);
+        expect(bad && f.mem->storage.vtable->write_text_atomic(&f.mem->storage, "app/state.json", bad) &&
+            !load_state(&f.core, &restored), "partial, fractional or inconsistent epoch state rejects defaults");
+        free(bad);
+        cJSON_Delete(root);
+    }
+    free(f.mem);
+}
+
 int ptc_test_control_safety(void)
 {
     failures = 0;
@@ -1424,6 +1665,10 @@ int ptc_test_control_safety(void)
     test_direct_grants();
     test_direct_grant_rollbacks();
     test_direct_grant_clock_and_field_failures();
+    test_usage_counter_epochs();
+    test_direct_eye_usage();
+    test_direct_dock_usage();
+    test_usage_state_validation();
     test_dock_midnight_allowance_change();
     test_eden_timer_restart();
     test_persisted_eden_mode();

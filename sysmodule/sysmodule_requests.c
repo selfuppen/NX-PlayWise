@@ -284,15 +284,9 @@ static bool process_eye_care_skip(PtcSysmodule *sysmodule, const PtcRequest *req
         if (!recovery_rollback(sysmodule)) write_disable_flag(sysmodule, "eye_care_skip_restore_failed\n");
         return finish_with_error(sysmodule, request, "release", false, err, now.day_index);
     }
-    state.eye_care_resting = false;
-    state.eye_care_rest_deadline = 0;
-    state.eye_care_break_id = 0;
-    state.eye_care_accumulated_minutes = 0;
-    state.eye_care_usage_known = false;
-    state.eye_care_last_used_minutes = 0;
-    state.eye_care_day_index = now.day_index;
-    state.eye_care_idle_since = 0;
-    if (observed.configured_minutes_available && observed.remaining_available &&
+    reset_eye_care_cycle(&state, now.day_index);
+    if (!observed.usage_supported && state.eye_usage_counter.source != PTC_USAGE_SOURCE_PCTL_1952 &&
+        observed.configured_minutes_available && observed.remaining_available &&
         observed.configured_minutes == minutes && observed.remaining_minutes <= minutes) {
         state.eye_care_last_used_minutes = (uint16_t)(minutes - observed.remaining_minutes);
         state.eye_care_usage_known = true;

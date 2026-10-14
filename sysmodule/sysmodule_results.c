@@ -325,6 +325,12 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
     fill_bedtime_result_state(sysmodule, state, rules, runtime_state, pctl_status, now);
     {
         PtcOperationModeStatus mode = ptc_read_operation_mode(sysmodule);
+        PtcRuntimeState projected = *runtime_state;
+        bool direct = pctl_status->usage_supported ||
+            runtime_state->dock_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952;
+        if (direct && dock_policy_enabled(rules)) dock_sample_direct(&projected,
+            pctl_status, usage_sample_clock(sysmodule, now), mode.mode, !sysmodule->dock_boot_sampled);
+        const PtcRuntimeState *dock_view = &projected;
         uint64_t limit_ns = (uint64_t)rules->dock_policy.undocked_daily_minutes * 60000000000ULL;
         state->dock_available = true;
         state->force_docked = rules->dock_policy.force_docked;
@@ -334,18 +340,24 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
             mode.mode == PTC_OPERATION_MODE_UNDOCKED ? "undocked" : "unknown";
         state->dock_supported_available = mode.dock_supported_available;
         state->dock_supported = mode.dock_supported;
-        state->undocked_usage_available = runtime_state->dock_usage_known && runtime_state->dock_day_index == now.day_index;
-        state->undocked_used_minutes = (uint16_t)(runtime_state->undocked_used_ns / 60000000000ULL);
-        state->undocked_remaining_minutes = runtime_state->undocked_used_ns < limit_ns
-            ? (uint16_t)((limit_ns - runtime_state->undocked_used_ns) / 60000000000ULL) : 0;
+        state->undocked_usage_available = dock_view->dock_usage_known && dock_view->dock_day_index == now.day_index;
+        state->undocked_used_minutes = (uint16_t)(dock_view->undocked_used_ns / 60000000000ULL);
+        state->undocked_remaining_minutes = dock_view->undocked_used_ns < limit_ns
+            ? (uint16_t)((limit_ns - dock_view->undocked_used_ns) / 60000000000ULL) : 0;
+        if (direct && dock_policy_enabled(rules)) {
+            state->dock_usage_source = "pctl_1952";
+            state->dock_usage_quality = state->undocked_usage_available ? "conservative_mode_split" : "unknown";
+            state->dock_usage_captured_at = dock_view->dock_usage_counter.captured_at;
+        }
         state->dock_waived_today = runtime_state->dock_waived && runtime_state->dock_waived_day_index == now.day_index;
-        state->dock_restriction_active = dock_policy_blocks(sysmodule, rules, runtime_state, now);
+        state->dock_restriction_active = dock_policy_blocks(sysmodule, rules, dock_view, now);
         state->dock_unlimited_capped = dock_policy_enabled(rules) &&
             ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index)).mode == PTC_RULE_MODE_UNLIMITED;
         if (runtime_state->dock_enforced) {
             PtcDayRule base = ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index));
-            state->daily_restriction_active = base.mode == PTC_RULE_MODE_LIMIT && runtime_state->dock_baseline_known &&
-                runtime_state->dock_last_used_ns >= (uint64_t)base.minutes * 60000000000ULL;
+            state->daily_restriction_active = base.mode == PTC_RULE_MODE_LIMIT && dock_view->dock_baseline_known &&
+                dock_view->dock_day_index == now.day_index &&
+                dock_view->dock_last_used_ns >= (uint64_t)base.minutes * 60000000000ULL;
         }
         if (state->dock_restriction_active) {
             state->daily_buffer_available = false;
@@ -359,6 +371,9 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
         ptc_rules_today_rule(rules, now.day_index, ptc_weekday_from_day_index(now.day_index)).mode ==
             PTC_RULE_MODE_UNLIMITED;
     state->eye_care_used_minutes = runtime_state->eye_care_accumulated_minutes;
+    PtcRuntimeState eye_projected = *runtime_state;
+    bool eye_direct = pctl_status->usage_supported ||
+        runtime_state->eye_usage_counter.source == PTC_USAGE_SOURCE_PCTL_1952;
     state->eye_care_break_id = runtime_state->eye_care_resting ? runtime_state->eye_care_break_id : 0;
     state->eye_care_rest_remaining_seconds = runtime_state->eye_care_resting &&
         runtime_state->eye_care_rest_deadline > now.unix_seconds
@@ -372,24 +387,43 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
         uint16_t base_minutes = day_rule.mode == PTC_RULE_MODE_UNLIMITED
             ? PTC_UNLIMITED_PROXY_LIMIT_MINUTES : day_rule.minutes;
         state->eye_care_phase = "unknown";
-        /* Status precedes the scheduler tick. Project this read without
-           persisting a new baseline or triggering any control writes. */
-        if (!runtime_state->apply_pending_confirmation && pctl_status->limited_today &&
-            pctl_status->configured_minutes_available &&
-            pctl_status->configured_minutes == base_minutes &&
-            pctl_status->remaining_available && pctl_status->remaining_minutes <= base_minutes &&
-            pctl_status->play_timer_enabled_available && pctl_status->play_timer_enabled) {
-            uint16_t used = (uint16_t)(base_minutes - pctl_status->remaining_minutes);
-            uint32_t accumulated = runtime_state->eye_care_accumulated_minutes;
-            if (runtime_state->eye_care_day_index != now.day_index)
-                accumulated += used;
-            if (runtime_state->eye_care_day_index == now.day_index &&
-                runtime_state->eye_care_usage_known && used >= runtime_state->eye_care_last_used_minutes)
-                accumulated += used - runtime_state->eye_care_last_used_minutes;
-            state->eye_care_used_minutes = accumulated > 240u ? 240u : (uint16_t)accumulated;
-            if (day_rule.mode == PTC_RULE_MODE_UNLIMITED || used < day_rule.minutes)
-                state->eye_care_phase = "playing";
+        if (eye_direct) {
+            if (!runtime_state->apply_pending_confirmation)
+                (void)eye_care_sample_direct(rules, &eye_projected, pctl_status,
+                    usage_sample_clock(sysmodule, now), state->dock_restriction_active);
+            state->eye_care_used_minutes = eye_projected.eye_care_accumulated_minutes;
+            if (state->dock_restriction_active ||
+                (pctl_status->temporary_unlocked_available && pctl_status->temporary_unlocked)) state->eye_care_phase = "paused";
+            else if (eye_projected.eye_care_usage_known && !eye_projected.eye_usage_boundary_gap &&
+                !runtime_state->apply_pending_confirmation) state->eye_care_phase = "playing";
+        } else {
+            /* Status precedes the scheduler tick. Project this read without
+               persisting a new baseline or triggering any control writes. */
+            if (!runtime_state->apply_pending_confirmation && pctl_status->limited_today &&
+                pctl_status->configured_minutes_available &&
+                pctl_status->configured_minutes == base_minutes &&
+                pctl_status->remaining_available && pctl_status->remaining_minutes <= base_minutes &&
+                pctl_status->play_timer_enabled_available && pctl_status->play_timer_enabled) {
+                uint16_t used = (uint16_t)(base_minutes - pctl_status->remaining_minutes);
+                uint32_t accumulated = runtime_state->eye_care_accumulated_minutes;
+                if (runtime_state->eye_care_day_index != now.day_index)
+                    accumulated += used;
+                if (runtime_state->eye_care_day_index == now.day_index &&
+                    runtime_state->eye_care_usage_known && used >= runtime_state->eye_care_last_used_minutes)
+                    accumulated += used - runtime_state->eye_care_last_used_minutes;
+                state->eye_care_used_minutes = accumulated > 240u ? 240u : (uint16_t)accumulated;
+                if (day_rule.mode == PTC_RULE_MODE_UNLIMITED || used < day_rule.minutes)
+                    state->eye_care_phase = "playing";
+            }
         }
+    }
+    if (eye_direct && rules->eye_care.enabled) {
+        state->eye_care_usage_source = "pctl_1952";
+        state->eye_care_usage_quality = !eye_projected.eye_care_usage_known ? "unknown" :
+            eye_projected.eye_usage_boundary_gap ? "boundary_gap" :
+            eye_projected.eye_usage_migrated ? "legacy_migrated" : "observed";
+        state->eye_care_used_ns = eye_projected.eye_cycle_used_ns;
+        state->eye_care_usage_captured_at = eye_projected.eye_usage_counter.captured_at;
     }
 }
 
