@@ -26,6 +26,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 | [Developer Guide](开发/DEVELOPER_GUIDE.md) | Module responsibilities, safety boundaries, upstream research and merge requirements | [开发指南](开发/开发指南.md) |
 | [Testing Guide](开发/TESTING_GUIDE.md) | Local regression, CI gate, packaging gates, Eden, UI, hardware acceptance and evidence round-trip | [测试指南](开发/测试指南.md) |
 | [PCTL1952 Candidate Acceptance (Chinese)](开发/PCTL1952候选验收.md) | Independent consumption, grant recovery, 1440 proxy baseline and evidence binding | [PCTL1952候选验收](开发/PCTL1952候选验收.md) |
+| [PCTL1952 Follow-up Checklist (Chinese)](开发/PCTL1952后续工作清单.md) | Clean candidate build, hardware acceptance, promotion, proxy removal and remaining qualification scope | [PCTL1952后续工作清单](开发/PCTL1952后续工作清单.md) |
 
 ## Design — `设计/`
 
