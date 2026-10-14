@@ -572,3 +572,8 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_RULES_EXPLAIN_CORE1, "• 电视模式用量计�
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_RULES_EXPLAIN_CORE2, "• 非电视模式限额不是额外额度；非电视额度用尽后，连接底座使用电视大屏可继续使用当天总额度余量。")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_RULES_EXPLAIN_CORE3, "• 健康与作息规则独立生效：就寝计划、护眼休息与电视模式规则互不冲突；今日不限时亦不会豁免电视模式规则。")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_RULES_EXPLAIN_CORE4, "• 视力保护初衷：引导连接电视大屏；外出小屏应急若受限，家长可在今日调度或规则页验证密码「今日解除限制」。")
+PTC_UI_TEXT_VALUE(PTC_UI_T_HISTORY_CONSOLE_FMT, "本机累计（部分观测）：7天 %lu分/%u日，30天 %lu分/%u日%s")
+PTC_UI_TEXT_VALUE(PTC_UI_T_HISTORY_ESTIMATE_FMT, "旧额度估算：7天 %lu分/%u日，30天 %lu分/%u日%s")
+PTC_UI_TEXT_VALUE(PTC_UI_T_HISTORY_CONSOLE_UNKNOWN, "本机历史暂不可用，缺失日保持未知")
+PTC_UI_TEXT_VALUE(PTC_UI_T_HISTORY_ESTIMATE_UNKNOWN, "暂无旧额度估算记录")
+PTC_UI_TEXT_VALUE(PTC_UI_T_HISTORY_READ_FAILED, " · 最近读取失败")

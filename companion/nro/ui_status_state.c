@@ -12,6 +12,21 @@
 #include "../../common/rules/holiday_calendar.h"
 #include "../../common/time/ptc_time.h"
 
+void ptc_ui_format_usage_history(const PtcUiModel *model, bool direct, char *out, size_t out_size)
+{
+    bool available = direct ? model->usage_direct_present && model->usage_direct_days_30 > 0 : model->usage_summary_available;
+    if (!available) {
+        snprintf(out, out_size, "%s", ptc_ui_text(direct ? PTC_UI_T_HISTORY_CONSOLE_UNKNOWN : PTC_UI_T_HISTORY_ESTIMATE_UNKNOWN));
+        return;
+    }
+    snprintf(out, out_size, ptc_ui_text(direct ? PTC_UI_T_HISTORY_CONSOLE_FMT : PTC_UI_T_HISTORY_ESTIMATE_FMT),
+        (unsigned long)(direct ? model->usage_direct_minutes_7 : model->usage_consumed_minutes_7),
+        (unsigned)(direct ? model->usage_direct_days_7 : model->usage_known_days_7),
+        (unsigned long)(direct ? model->usage_direct_minutes_30 : model->usage_consumed_minutes_30),
+        (unsigned)(direct ? model->usage_direct_days_30 : model->usage_known_days_30),
+        direct && !model->usage_latest_available ? ptc_ui_text(PTC_UI_T_HISTORY_READ_FAILED) : "");
+}
+
 static bool direct_grant_preview(const PtcUiModel *model, uint64_t *base, uint64_t *target)
 {
     const uint64_t minute_ns = UINT64_C(60000000000);

@@ -1296,7 +1296,12 @@ static void draw_home_details(uint32_t *pixels, uint32_t stride, const PtcUiMode
 
     /* 底部右侧文字 */
     char footer[384];
-    snprintf(footer, sizeof(footer), "%s%s%s", model->home_details_page == 0 ? ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_NOTE) : "",
+    if (model->usage_direct_present || model->usage_summary_available) {
+        char direct[192], legacy[192];
+        ptc_ui_format_usage_history(model, true, direct, sizeof(direct));
+        ptc_ui_format_usage_history(model, false, legacy, sizeof(legacy));
+        snprintf(footer, sizeof(footer), "%.191s\n%.191s", direct, legacy);
+    } else snprintf(footer, sizeof(footer), "%s%s%s", model->home_details_page == 0 ? ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_NOTE) : "",
         model->home_details_page == 0 ? "\n" : "", ptc_ui_text(PTC_UI_T_DETAIL_ESTIMATE));
     detail_text(pixels, stride, (UiRect){542, 608, 630, 38}, footer, 11, UI_MUTED, 2);
 }

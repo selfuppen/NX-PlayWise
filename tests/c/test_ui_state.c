@@ -1995,6 +1995,54 @@ static void test_redemption_history_state(void)
         "history paging, back and clear touch targets do not overlap");
 }
 
+static void test_typed_usage_history(void)
+{
+    PtcUiModel model = {0};
+    char line[256];
+    const char *valid = "{\"version\":1,\"request_id\":\"history-state\",\"type\":\"status\",\"status\":\"ok\",\"state\":{"
+        "\"day_index\":2380,\"limited_today\":1,\"blocked_today\":0,\"unrestricted_today\":0,"
+        "\"remaining_available\":true,\"remaining_minutes\":40,\"play_timer_enabled\":1,\"restricted_now\":0,"
+        "\"usage_summary\":{\"available\":true,\"known_days_7\":5,\"consumed_minutes_7\":210,"
+        "\"known_days_30\":18,\"consumed_minutes_30\":720,\"direct\":{\"source\":\"pctl_1952\","
+        "\"scope\":\"console_usable_time\",\"coverage\":\"partial\",\"known_days_7\":3,"
+        "\"known_days_30\":8,\"consumed_minutes_7\":234,\"consumed_minutes_30\":901,"
+        "\"latest_available\":false}}},\"completed_at\":1000}";
+    check_true(ptc_ui_apply_result_json(&model, valid) && model.usage_direct_present &&
+        model.usage_direct_days_7 == 3 && model.usage_direct_minutes_30 == 901 &&
+        !model.usage_latest_available && model.usage_consumed_minutes_30 == 720,
+        "UI keeps console partial observations separate from quota estimates");
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_ENGLISH);
+    ptc_ui_format_usage_history(&model, true, line, sizeof(line));
+    check_true(strstr(line, "partial") && strstr(line, "234") && strstr(line, "read failed"),
+        "console history discloses partial coverage and read failure");
+    ptc_ui_format_usage_history(&model, false, line, sizeof(line));
+    check_true(strstr(line, "estimate") && strstr(line, "720") && !strstr(line, "read failed"),
+        "legacy history stays labeled as estimate without a mixed total");
+    model.usage_direct_days_7 = model.usage_direct_days_30 = 0;
+    ptc_ui_format_usage_history(&model, true, line, sizeof(line));
+    check_true(strstr(line, "unavailable") && strstr(line, "unknown"), "no observed days never displays known zero");
+    for (unsigned bad = 0; bad < 4; ++bad) {
+        cJSON *root = cJSON_Parse(valid);
+        cJSON *direct = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(root, "state"), "usage_summary"), "direct");
+        if (bad == 0) cJSON_ReplaceItemInObject(direct, "source", cJSON_CreateString("pdm"));
+        if (bad == 1) cJSON_SetNumberValue(cJSON_GetObjectItem(direct, "known_days_7"), 3.5);
+        if (bad == 2) cJSON_SetNumberValue(cJSON_GetObjectItem(direct, "consumed_minutes_30"), -1);
+        if (bad == 3) cJSON_DeleteItemFromObject(direct, "coverage");
+        char *json = cJSON_PrintUnformatted(root);
+        check_true(json && ptc_ui_apply_result_json(&model, json) && !model.usage_direct_present,
+            "UI rejects unknown source, partial metadata and invalid history ranges");
+        cJSON_free(json); cJSON_Delete(root);
+    }
+    cJSON *root = cJSON_Parse(valid);
+    cJSON_DeleteItemFromObject(cJSON_GetObjectItem(root, "state"), "usage_summary");
+    char *old_status = cJSON_PrintUnformatted(root);
+    check_true(old_status && ptc_ui_apply_result_json(&model, old_status) &&
+        !model.usage_direct_present && !model.usage_summary_available && model.usage_consumed_minutes_30 == 0,
+        "new status without history clears earlier summaries");
+    cJSON_free(old_status); cJSON_Delete(root);
+    ptc_ui_language_set_resolved(PTC_UI_LANGUAGE_SIMPLIFIED);
+}
+
 static void test_balanced_feature_state(void)
 {
     PtcUiModel model;
@@ -4200,6 +4248,7 @@ int main(void)
     test_user_state_mapping();
     test_redemption_history_state();
     test_balanced_feature_state();
+    test_typed_usage_history();
     test_forecast_day_decision_and_navigation();
     if (failures) return 1;
     puts("PTC release UI state tests passed");

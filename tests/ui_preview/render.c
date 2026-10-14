@@ -500,6 +500,20 @@ static int render_today_details_previews(const char *directory, const PtcUiModel
     }
     today.home_details_page = 1;
     failed |= save_preview(directory, "parent", "today-rules", &today, dark);
+    {
+        PtcUiModel history = today;
+        history.usage_direct_present = true;
+        history.usage_direct_days_7 = 3; history.usage_direct_days_30 = 8;
+        history.usage_direct_minutes_7 = 234; history.usage_direct_minutes_30 = 901;
+        history.usage_latest_available = true;
+        failed |= save_preview(directory, "parent", "history-mixed", &history, dark);
+        history.usage_latest_available = false;
+        failed |= save_preview(directory, "parent", "history-read-failed", &history, dark);
+        history.usage_direct_days_7 = history.usage_direct_days_30 = 0;
+        history.usage_direct_minutes_7 = history.usage_direct_minutes_30 = 0;
+        history.usage_summary_available = false;
+        failed |= save_preview(directory, "parent", "history-unknown", &history, dark);
+    }
     today.home_details_data_expanded = true; today.home_details_scroll = 280;
     failed |= save_preview(directory, "parent", "today-data", &today, dark);
     today.home_details_focus = 6;

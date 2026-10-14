@@ -126,6 +126,7 @@ void ptc_ui_project_time_status(
     int64_t now,
     PtcUiTimeProjection *out);
 void ptc_ui_format_status_age(const PtcUiModel *model, int64_t now, char *out, size_t out_size);
+void ptc_ui_format_usage_history(const PtcUiModel *model, bool direct, char *out, size_t out_size);
 void ptc_ui_match_redemption_result(PtcUiModel *model);
 const char *ptc_ui_code_failure_guidance(int error_code);
 void ptc_ui_format_code(const char *code, char *out, size_t out_size);

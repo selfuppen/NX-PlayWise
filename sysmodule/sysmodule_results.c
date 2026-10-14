@@ -48,8 +48,8 @@ void result_state_from_pctl(
     state->signed_remaining_ns_available = status->signed_remaining_ns_available;
     state->signed_remaining_ns = status->signed_remaining_ns;
     if (status->usage_supported) {
-        /* Only result projection changes source. The control, history and
-           health-policy baselines keep their explicit legacy contracts. */
+        /* Display uses the independent counter; grants, health policies and
+           history validate their own precision, freshness and epoch contracts. */
         state->played_minutes_available = state->usage_available;
         state->played_minutes = state->usage_available
             ? (int64_t)(state->usage_ns / UINT64_C(60000000000)) : -1;
@@ -168,22 +168,28 @@ static bool load_daily_summary_aggregate(PtcSysmodule *sysmodule, uint16_t today
     PtcDailySummaryAggregate *aggregate)
 {
     char path[320];
-    char text[PTC_DAILY_SUMMARY_FILE_SIZE];
+    char *text = calloc(1, PTC_DAILY_SUMMARY_FILE_SIZE);
     PtcDailySummaryRecord records[PTC_DAILY_SUMMARY_MAX_RECORDS];
     char *cursor;
     size_t count = 0;
+    bool ok = false;
+    if (!text) return false;
     join_path(path, sizeof(path), sysmodule->app_root, "stats/daily-summaries.jsonl");
-    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, sizeof(text))) return false;
+    if (!sysmodule->storage->vtable->read_text(sysmodule->storage, path, text, PTC_DAILY_SUMMARY_FILE_SIZE)) goto done;
     cursor = text;
-    while (*cursor && count < PTC_DAILY_SUMMARY_MAX_RECORDS) {
+    while (*cursor) {
         char *newline = strchr(cursor, '\n');
         if (newline) *newline = '\0';
-        if (*cursor && !ptc_daily_summary_parse_line(cursor, &records[count++])) return false;
+        if (*cursor && (count == PTC_DAILY_SUMMARY_MAX_RECORDS ||
+            !ptc_daily_summary_parse_line(cursor, &records[count++]))) goto done;
         if (!newline) break;
         cursor = newline + 1;
     }
     ptc_daily_summary_aggregate(records, count, today, aggregate);
-    return true;
+    ok = true;
+done:
+    free(text);
+    return ok;
 }
 
 bool bedtime_overlay_verified(PtcSysmodule *sysmodule)
@@ -321,6 +327,14 @@ void fill_extended_result_state(PtcSysmodule *sysmodule, PtcResultState *state,
         state->usage_consumed_minutes_7 = aggregate.consumed_minutes_7;
         state->usage_known_days_30 = aggregate.known_days_30;
         state->usage_consumed_minutes_30 = aggregate.consumed_minutes_30;
+        state->usage_direct_present = aggregate.direct_present;
+        state->usage_direct_days_7 = aggregate.direct_days_7;
+        state->usage_direct_days_30 = aggregate.direct_days_30;
+        state->usage_direct_minutes_7 = (uint32_t)(aggregate.direct_ns_7 / PTC_USAGE_MINUTE_NS);
+        state->usage_direct_minutes_30 = (uint32_t)(aggregate.direct_ns_30 / PTC_USAGE_MINUTE_NS);
+        state->usage_last_captured_at = aggregate.last_captured_at;
+        state->usage_last_observed_at = aggregate.last_observed_at;
+        state->usage_latest_available = aggregate.latest_available;
     }
     fill_bedtime_result_state(sysmodule, state, rules, runtime_state, pctl_status, now);
     {

@@ -590,13 +590,13 @@ static void test_daily_summary_and_read_only_stats_boundary(void)
     char line[PTC_DAILY_SUMMARY_LINE_SIZE];
 
     memset(records, 0, sizeof(records));
-    records[0] = (PtcDailySummaryRecord){2380, 1000, "weekly", true, 60, true, 40, true, 20, 0};
-    records[1] = (PtcDailySummaryRecord){2374, 900, "weekly", true, 60, true, 30, true, 30, 0};
-    records[2] = (PtcDailySummaryRecord){2373, 800, "weekly", true, 60, true, 20, true, 40, 0};
-    records[3] = (PtcDailySummaryRecord){2380, 1100, "today_override", true, 75, true, 35, true, 40, 15};
-    records[4] = (PtcDailySummaryRecord){2381, 1200, "weekly", true, 60, true, 60, true, 0, 0};
-    records[5] = (PtcDailySummaryRecord){2379, 950, "weekly", true, 60, false, 0, false, 0, 0};
-    records[6] = (PtcDailySummaryRecord){2380, 1050, "weekly", true, 60, true, 30, true, 30, 0};
+    records[0] = (PtcDailySummaryRecord){2380, 1000, "weekly", true, 60, true, 40, true, 20, 0, false, 0, 0, false};
+    records[1] = (PtcDailySummaryRecord){2374, 900, "weekly", true, 60, true, 30, true, 30, 0, false, 0, 0, false};
+    records[2] = (PtcDailySummaryRecord){2373, 800, "weekly", true, 60, true, 20, true, 40, 0, false, 0, 0, false};
+    records[3] = (PtcDailySummaryRecord){2380, 1100, "today_override", true, 75, true, 35, true, 40, 15, false, 0, 0, false};
+    records[4] = (PtcDailySummaryRecord){2381, 1200, "weekly", true, 60, true, 60, true, 0, 0, false, 0, 0, false};
+    records[5] = (PtcDailySummaryRecord){2379, 950, "weekly", true, 60, false, 0, false, 0, 0, false, 0, 0, false};
+    records[6] = (PtcDailySummaryRecord){2380, 1050, "weekly", true, 60, true, 30, true, 30, 0, false, 0, 0, false};
 
     check_true(ptc_daily_summary_format_line(line, sizeof(line), &records[3]),
         "daily summary with reliable remaining time formats");

@@ -96,6 +96,16 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
     unsigned int i;
     char eye_usage[256] = "";
     char dock_usage[224] = "";
+    char history[400] = "";
+    if (state->usage_direct_present)
+        (void)snprintf(history, sizeof(history),
+            ",\"direct\":{\"source\":\"pctl_1952\",\"scope\":\"console_usable_time\",\"coverage\":\"partial\","
+            "\"known_days_7\":%u,\"consumed_minutes_7\":%lu,\"known_days_30\":%u,\"consumed_minutes_30\":%lu,"
+            "\"last_captured_at\":%lld,\"last_observed_at\":%lld,\"latest_available\":%s}",
+            state->usage_direct_days_7, (unsigned long)state->usage_direct_minutes_7,
+            state->usage_direct_days_30, (unsigned long)state->usage_direct_minutes_30,
+            (long long)state->usage_last_captured_at, (long long)state->usage_last_observed_at,
+            json_bool(state->usage_latest_available));
     if (state->eye_care_usage_source && strcmp(state->eye_care_usage_source, "pctl_1952") == 0)
         (void)snprintf(eye_usage, sizeof(eye_usage),
             ",\"usage_source\":\"pctl_1952\",\"usage_quality\":\"%s\","
@@ -168,7 +178,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         "],\"autonomy\":{\"daily_buffer_minutes\":%u,\"claimed_today\":%s,"
         "\"available\":%s,\"reason\":\"%s\"},"
         "\"usage_summary\":{\"available\":%s,\"known_days_7\":%u,"
-        "\"consumed_minutes_7\":%lu,\"known_days_30\":%u,\"consumed_minutes_30\":%lu},"
+        "\"consumed_minutes_7\":%lu,\"known_days_30\":%u,\"consumed_minutes_30\":%lu%s},"
         "\"bedtime\":{\"enabled\":%s,\"active\":%s,\"skipped\":%s,"
         "\"window_instance_id\":%llu,\"start_day_index\":%u,\"start_minute\":%u,"
         "\"end_minute\":%u,\"source\":\"%s\",\"next_available\":%s,"
@@ -195,6 +205,7 @@ static void append_state(char *out, size_t out_size, const PtcResultState *state
         (unsigned long)state->usage_consumed_minutes_7,
         state->usage_known_days_30,
         (unsigned long)state->usage_consumed_minutes_30,
+        history,
         json_bool(state->bedtime_enabled), json_bool(state->bedtime_active),
         json_bool(state->bedtime_skipped), (unsigned long long)state->bedtime_window_instance_id,
         state->bedtime_start_day_index, state->bedtime_start_minute, state->bedtime_end_minute,
@@ -275,6 +286,11 @@ void ptc_result_state_default(PtcResultState *state, uint16_t day_index)
     state->usage_consumed_minutes_7 = 0;
     state->usage_known_days_30 = 0;
     state->usage_consumed_minutes_30 = 0;
+    state->usage_direct_present = false;
+    state->usage_direct_days_7 = state->usage_direct_days_30 = 0;
+    state->usage_direct_minutes_7 = state->usage_direct_minutes_30 = 0;
+    state->usage_last_captured_at = state->usage_last_observed_at = 0;
+    state->usage_latest_available = false;
     state->bedtime_enabled = false;
     state->bedtime_active = false;
     state->bedtime_skipped = false;

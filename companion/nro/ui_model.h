@@ -495,6 +495,12 @@ typedef struct {
     uint32_t usage_consumed_minutes_7;
     uint16_t usage_known_days_30;
     uint32_t usage_consumed_minutes_30;
+    bool usage_direct_present;
+    uint16_t usage_direct_days_7;
+    uint16_t usage_direct_days_30;
+    uint32_t usage_direct_minutes_7;
+    uint32_t usage_direct_minutes_30;
+    bool usage_latest_available;
     uint16_t day_index;
     char mode[24];
     char request_id[80];

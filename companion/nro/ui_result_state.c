@@ -19,6 +19,14 @@ static int64_t json_int64(const cJSON *object, const char *name, int64_t fallbac
     return cJSON_IsNumber(item) ? (int64_t)item->valuedouble : fallback;
 }
 
+static int history_int(const cJSON *object, const char *name, int max)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, name);
+    if (!cJSON_IsNumber(item) || !(item->valuedouble >= 0 && item->valuedouble <= max) ||
+        item->valuedouble != (int)item->valuedouble) return -1;
+    return (int)item->valuedouble;
+}
+
 static const char *event_label(const char *event)
 {
     if (strcmp(event, "result_ok") == 0) return ptc_ui_text(PTC_UI_T_OPERATION_COMPLETED);
@@ -457,6 +465,30 @@ bool ptc_ui_apply_result_json(PtcUiModel *model, const char *text)
                 ? (uint16_t)json_int(usage, "known_days_30", 0) : 0;
             model->usage_consumed_minutes_30 = cJSON_IsObject(usage)
                 ? (uint32_t)json_int64(usage, "consumed_minutes_30", 0) : 0;
+            const cJSON *direct = cJSON_GetObjectItemCaseSensitive(usage, "direct");
+            model->usage_direct_present = cJSON_IsObject(direct) &&
+                strcmp(json_string(direct, "source"), "pctl_1952") == 0 &&
+                strcmp(json_string(direct, "scope"), "console_usable_time") == 0 &&
+                strcmp(json_string(direct, "coverage"), "partial") == 0;
+            model->usage_direct_days_7 = model->usage_direct_days_30 = 0;
+            model->usage_direct_minutes_7 = model->usage_direct_minutes_30 = 0;
+            model->usage_latest_available = false;
+            if (model->usage_direct_present) {
+                int days7 = history_int(direct, "known_days_7", 7);
+                int days30 = history_int(direct, "known_days_30", 30);
+                int minutes7 = history_int(direct, "consumed_minutes_7", 10080);
+                int minutes30 = history_int(direct, "consumed_minutes_30", 43200);
+                if (days7 < 0 || days7 > 7 || days30 < days7 || days30 > 30 ||
+                    minutes7 < 0 || minutes7 > days7 * 1440 || minutes30 < minutes7 || minutes30 > days30 * 1440) {
+                    model->usage_direct_present = false;
+                } else {
+                    model->usage_direct_days_7 = (uint16_t)days7;
+                    model->usage_direct_days_30 = (uint16_t)days30;
+                    model->usage_direct_minutes_7 = (uint32_t)minutes7;
+                    model->usage_direct_minutes_30 = (uint32_t)minutes30;
+                    model->usage_latest_available = json_bool(direct, "latest_available", false);
+                }
+            }
         }
     }
     if (strcmp(status, "ok") == 0 && type && strcmp(type, "preview_offline_code") == 0 &&

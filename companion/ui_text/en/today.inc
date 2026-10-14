@@ -572,3 +572,8 @@ PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_RULES_EXPLAIN_CORE1, "• TV usage counts toward
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_RULES_EXPLAIN_CORE2, "• Non-TV quota is not extra time; docking to TV allows using the remaining daily total quota.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_RULES_EXPLAIN_CORE3, "• Health rules operate independently: bedtime and eye care apply regardless; unlimited day does not waive TV rules.")
 PTC_UI_TEXT_VALUE(PTC_UI_T_DOCK_RULES_EXPLAIN_CORE4, "• Vision protection intent: encourage large TV screen; parents can waive limit today via PIN for handheld travel.")
+PTC_UI_TEXT_VALUE(PTC_UI_T_HISTORY_CONSOLE_FMT, "Console (partial): 7d %lu min/%u days, 30d %lu min/%u days%s")
+PTC_UI_TEXT_VALUE(PTC_UI_T_HISTORY_ESTIMATE_FMT, "Old quota estimate: 7d %lu min/%u days, 30d %lu min/%u days%s")
+PTC_UI_TEXT_VALUE(PTC_UI_T_HISTORY_CONSOLE_UNKNOWN, "Console history unavailable; missing days stay unknown")
+PTC_UI_TEXT_VALUE(PTC_UI_T_HISTORY_ESTIMATE_UNKNOWN, "No old quota estimates")
+PTC_UI_TEXT_VALUE(PTC_UI_T_HISTORY_READ_FAILED, "; read failed")

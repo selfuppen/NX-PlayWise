@@ -54,6 +54,14 @@ typedef struct {
     uint32_t usage_consumed_minutes_7;
     uint16_t usage_known_days_30;
     uint32_t usage_consumed_minutes_30;
+    bool usage_direct_present;
+    uint16_t usage_direct_days_7;
+    uint16_t usage_direct_days_30;
+    uint32_t usage_direct_minutes_7;
+    uint32_t usage_direct_minutes_30;
+    int64_t usage_last_captured_at;
+    int64_t usage_last_observed_at;
+    bool usage_latest_available;
     bool bedtime_enabled;
     bool bedtime_active;
     bool bedtime_skipped;
