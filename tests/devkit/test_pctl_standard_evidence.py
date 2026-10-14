@@ -147,23 +147,40 @@ def test_inactive_stage() -> None:
             assert path.startswith(evidence.STAGING + "/") and path not in self.files
             self.writes.append(path)
             self.files[path] = b"corrupt" if self.mode == "readback" else data
+            if self.mode == "timeout": raise TimeoutError("server may have saved the file; original outcome unknown")
             if self.mode == "live_change": self.files["/switch/playwise/rules.json"] = b"changed externally"
-    for mode in ("ok", "existing", "ambiguous", "readback", "live_change"):
+    for mode in ("ok", "existing", "ambiguous", "readback", "live_change", "timeout", "plan_changed"):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); packages = fixtures.prepare_packages(root); set_contract(packages)
             out = root / "batch"; plan = evidence.prepare(packages, out, 300)
             device = Device(plan["release_components"], mode)
+            if mode == "plan_changed": plan["zip_sha256"][evidence.qualification.STANDARD_ZIP] = "0" * 64
             if mode != "ok":
                 try:
                     evidence.stage(device, out, plan)
-                except usage.UsageQualificationError:
+                except (usage.UsageQualificationError, TimeoutError):
                     pass
                 else:
                     raise AssertionError("unsafe staging condition accepted: " + mode)
-                if mode in ("existing", "ambiguous"):
+                if mode in ("existing", "ambiguous", "plan_changed"):
                     assert not device.writes and not (out / "stage-install.json").exists()
                 else:
-                    assert usage.read_json(out / "stage-install.json")["phase"] == "staging_requires_inspection_no_replay"
+                    journal = usage.read_json(out / "stage-install.json")
+                    assert journal["phase"] == "staging_requires_inspection_no_replay"
+                    if mode == "timeout":
+                        assert len(device.writes) == 1 and len(journal["writes"]) == 1
+                        assert journal["writes"][0]["outcome"] == "intent_no_replay"
+                        assert device.files[device.writes[0]] != b"corrupt"
+                        assert all(device.files[k] == v for k, v in device.before.items())
+                        original_bytes = (out / "stage-events.jsonl").read_bytes()
+                        try:
+                            evidence.stage(device, out, plan)
+                        except usage.UsageQualificationError:
+                            pass
+                        else:
+                            raise AssertionError("unknown original write was replayed")
+                        assert len(device.writes) == 1
+                        assert (out / "stage-events.jsonl").read_bytes() == original_bytes
                 continue
             result = evidence.stage(device, out, plan)
             assert result["phase"] == "inactive_staging_verified" and len(device.writes) == 5
@@ -180,8 +197,54 @@ def test_inactive_stage() -> None:
             assert len(device.writes) == before
 
 
+def test_rejected_capture_preserves_raw() -> None:
+    class Device:
+        def __init__(self, run_id: str, data: bytes): self.run_id, self.data = run_id, data
+        def __enter__(self): return self
+        def __exit__(self, *args): return None
+        def ftp(self): return self
+        def nlst(self, path):
+            assert path == evidence.REMOTE
+            return [f'usage-evidence-{self.run_id}-{"1" * 16}.jsonl']
+        def read(self, path):
+            assert path.startswith(evidence.REMOTE + "/usage-evidence-")
+            return self.data
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory); packages = fixtures.prepare_packages(root); set_contract(packages)
+        out = root / "batch"; plan = evidence.prepare(packages, out, 300)
+        rows = raw_rows()
+        rows[0].update({k: plan["config"][k] for k in ("run_id", "commit", "release_id")})
+        rows[1]["run_id"] = plan["config"]["run_id"]
+        valid = encode(rows)
+        wrong_identity = deepcopy(rows); wrong_identity[0]["commit"] = "b" * 40
+        legacy = [{"schema_version": 1, "capture_marker": "PCTL1952_CAPTURE_ONLY", "tap_read_only": True}]
+        failures = [encode(wrong_identity), encode(legacy), valid.replace(b'"valid": true', b'"valid": true, "valid": true'),
+                    encode(rows[:2]) + b'{"not_utf8":"\xff"}\n']
+        original_snapshots = {}
+        for data in failures:
+            try:
+                evidence.collect(Device(plan["config"]["run_id"], data), out, plan)
+            except (usage.UsageQualificationError, evidence.qualification.QualificationError, UnicodeError):
+                pass
+            else:
+                raise AssertionError("unqualified or malformed capture accepted")
+            files = list((out / "raw").glob("*.jsonl"))
+            assert any(p.read_bytes() == data for p in files), "audit failure discarded original raw bytes"
+            for p in files:
+                original_snapshots.setdefault(p, p.read_bytes())
+                assert p.read_bytes() == original_snapshots[p]
+                assert not p.with_suffix(".audit.json").exists()
+        snapshots = evidence.collect(Device(plan["config"]["run_id"], valid), out, plan)
+        assert len(snapshots) == 1
+        audit = usage.read_json(snapshots[0].with_suffix(".audit.json"))
+        assert audit["qualified"] is False and audit["stop_record_present"]
+        assert len(list((out / "raw").glob("*.jsonl"))) == len(failures) + 1
+        assert all(p.read_bytes() == data for p, data in original_snapshots.items())
+
+
 if __name__ == "__main__":
     test_audit()
     test_prepare_and_collect()
     test_inactive_stage()
+    test_rejected_capture_preserves_raw()
     print("PASS production evidence plan, raw identity/errors, signed precision and immutable read-only pulls")
