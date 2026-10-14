@@ -218,6 +218,44 @@ static void read_display_usage(PtcSwitchPctl *adapter, Service *service, PtcPctl
     out->usage_result = adapter->usage_result;
 }
 
+bool ptc_switch_pctl_read_evidence(void *ctx, PtcUsageEvidenceSample *out)
+{
+    PtcSwitchPctl *adapter = ctx;
+    PtcSwitchSession session;
+    Result previous_result = adapter->last_result;
+    memset(out, 0, sizeof(*out));
+    out->begin_ns = armTicksToNs(armGetSystemTick());
+    out->clock_before_valid = usage_clock(&out->day_before, &out->unix_before);
+    out->start_timer_calls = adapter->start_timer_calls;
+    out->session_result = open_session(adapter, "pctl:s", &session);
+    out->timer_result = out->remaining_result = out->restricted_result =
+        out->spent_result = out->settings_result = out->unlocked_result = out->session_result;
+    if (R_SUCCEEDED(out->session_result)) {
+        out->timer_result = dispatch_out(&session.service, PTC_PCTL_CMD_IS_PLAY_TIMER_ENABLED,
+            &out->timer_enabled, sizeof(out->timer_enabled));
+        out->remaining_result = dispatch_out(&session.service, PTC_PCTL_CMD_GET_PLAY_TIMER_REMAINING_TIME,
+            &out->remaining_ns, sizeof(out->remaining_ns));
+        out->restricted_result = dispatch_out(&session.service, PTC_PCTL_CMD_IS_RESTRICTED_BY_PLAY_TIMER,
+            &out->restricted, sizeof(out->restricted));
+        out->spent_result = dispatch_out(&session.service, PTC_PCTL_CMD_GET_PLAY_TIMER_SPENT_TIME_FOR_TEST,
+            &out->spent_ns, sizeof(out->spent_ns));
+        out->settings_result = dispatch_out(&session.service, PTC_PCTL_CMD_GET_PLAY_TIMER_SETTINGS,
+            out->settings, sizeof(out->settings));
+        out->unlocked_result = dispatch_out(&session.service, PTC_PCTL_CMD_IS_RESTRICTION_TEMPORARY_UNLOCKED,
+            &out->temporarily_unlocked, sizeof(out->temporarily_unlocked));
+        close_session(&session);
+    }
+    out->clock_after_valid = usage_clock(&out->day_after, &out->unix_after);
+    out->end_ns = armTicksToNs(armGetSystemTick());
+    adapter->last_result = previous_result;
+    return out->clock_before_valid && out->clock_after_valid &&
+        out->day_before == out->day_after && out->unix_before <= out->unix_after &&
+        out->begin_ns <= out->end_ns && out->end_ns - out->begin_ns <= UINT64_C(2000000000) &&
+        !out->session_result && !out->timer_result && !out->remaining_result &&
+        !out->restricted_result && !out->spent_result && !out->settings_result &&
+        !out->unlocked_result && out->spent_ns >= 0;
+}
+
 static PtcErrorCode switch_read_status(PtcPctl *pctl, uint8_t weekday, PtcPctlStatus *out)
 {
     PtcSwitchPctl *adapter = (PtcSwitchPctl *)pctl->ctx;
@@ -424,6 +462,8 @@ static PtcErrorCode switch_start_timer(PtcPctl *pctl)
     if (err != PTC_ERR_OK) {
         return err;
     }
+    /* Count attempts at the actual dispatch, including failed IPC, for the whole boot. */
+    ++adapter->start_timer_calls;
     rc = dispatch_no_io(&session.service, PTC_PCTL_CMD_START_PLAY_TIMER);
     close_session(&session);
     return map_result(adapter, rc, PTC_ERR_PCTL_WRITE_FAILED);

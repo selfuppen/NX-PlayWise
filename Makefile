@@ -9,6 +9,7 @@ HOST_LAB_TEST := $(HOST_BUILD_DIR)/test_device_lab
 HOST_SETUP_TEST := $(HOST_BUILD_DIR)/test_nro_setup
 HOST_OVERLAY_MEMORY_TEST := $(HOST_BUILD_DIR)/test_overlay_memory
 HOST_PCTL_ADAPTER_TEST := $(HOST_BUILD_DIR)/test_pctl_adapter
+HOST_USAGE_EVIDENCE_TEST := $(HOST_BUILD_DIR)/test_usage_evidence
 PACKAGE_TIMESTAMP ?= $(shell date +%Y%m%d-%H%M%S)
 
 COMMON_SRCS := \
@@ -118,8 +119,11 @@ $(HOST_OVERLAY_MEMORY_TEST): tests/overlay_memory/test.cpp companion/overlay/ven
 $(HOST_PCTL_ADAPTER_TEST): tests/c/test_pctl_adapter.c tests/pctl_adapter/switch.h platform/switch/pctl_adapter.c platform/switch/pctl_adapter.h platform/pctl.h platform/switch/play_timer_settings_layout.c common/time/ptc_time.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -Itests/pctl_adapter -o $@ tests/c/test_pctl_adapter.c platform/switch/pctl_adapter.c platform/switch/play_timer_settings_layout.c common/time/ptc_time.c
 
-test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_OVERLAY_MEMORY_TEST)
-	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_OVERLAY_MEMORY_TEST)'
+$(HOST_USAGE_EVIDENCE_TEST): tests/c/test_usage_evidence.c sysmodule/usage_evidence.c sysmodule/usage_evidence.h platform/usage_evidence.h third_party/cjson/cJSON.c FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ tests/c/test_usage_evidence.c sysmodule/usage_evidence.c third_party/cjson/cJSON.c -lm
+
+test-host: $(HOST_TEST) $(HOST_UI_TEST) $(HOST_LAB_TEST) $(HOST_SETUP_TEST) $(HOST_PCTL_ADAPTER_TEST) $(HOST_USAGE_EVIDENCE_TEST) $(HOST_OVERLAY_MEMORY_TEST)
+	$(STAGE_TIMER) global test-host -- sh -c '$(HOST_TEST) && $(HOST_UI_TEST) && $(HOST_LAB_TEST) && $(HOST_SETUP_TEST) && $(HOST_PCTL_ADAPTER_TEST) && $(HOST_USAGE_EVIDENCE_TEST) && $(HOST_OVERLAY_MEMORY_TEST)'
 
 UI_PREVIEW_SRCS := $(filter-out tests/c/test_ui_state.c,$(UI_TEST_SRCS)) third_party/qrcodegen/qrcodegen.c common/security/credential_policy.c companion/album_restriction.c tests/ui_preview/preview_font.c tests/ui_preview/render.c
 $(HOST_BUILD_DIR)/ui_preview: $(UI_PREVIEW_SRCS) $(UI_RENDER_SRCS) companion/nro/ui_graphics.h companion/nro/ui_render_internal.h $(wildcard tests/ui_preview/*.h) FORCE_HOST_REBUILD | $(HOST_BUILD_DIR)

@@ -4,10 +4,12 @@
 #include <switch.h>
 
 #include "../pctl.h"
+#include "../usage_evidence.h"
 
 typedef struct {
     PtcPctl pctl;
     Result last_result;
+    uint64_t start_timer_calls;
     bool usage_sampled;
     bool usage_available;
     uint64_t usage_sample_tick;
@@ -29,5 +31,7 @@ typedef struct {
 void ptc_switch_pctl_init(PtcSwitchPctl *adapter);
 void ptc_switch_pctl_exit(PtcSwitchPctl *adapter);
 PtcPctl *ptc_switch_pctl_as_pctl(PtcSwitchPctl *adapter);
+/* Fresh read-only group; does not alter the UI cache or last transaction Result. */
+bool ptc_switch_pctl_read_evidence(void *ctx, PtcUsageEvidenceSample *out);
 
 #endif

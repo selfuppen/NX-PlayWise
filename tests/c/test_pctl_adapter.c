@@ -10,6 +10,8 @@ static u64 tick = 1, unix_s = 1791914860;
 static s64 spent_ns = INT64_C(4191000000000), remaining_ns = -INT64_C(591000000000);
 static u16 quota = 60;
 static Result spent_result;
+static u32 failed_command;
+static u64 read_delay;
 
 Result smGetService(Service *s, const char *name)
 {
@@ -44,6 +46,8 @@ Result serviceDispatchImpl(Service *s, u32 id, const void *in, u32 in_size, void
     }
     assert((s->handle == 2 || s->handle == 4) && !in && !in_size);
     if (id == 1) return s->handle == 4 && failure == 4 ? 777 : 0;
+    if (id == failed_command) return 778;
+    if (id == 1451) { assert(!out && !size); return 0; }
     if (id == 1031 || id == 1006 || id == 1453 || id == 1455) {
         assert(size == sizeof(bool));
         *(bool *)out = id == 1031 || id == 1453;
@@ -52,6 +56,7 @@ Result serviceDispatchImpl(Service *s, u32 id, const void *in, u32 in_size, void
     } else if (id == 1952) {
         assert(s->handle == 4 && size == sizeof(s64));
         ++spent_reads;
+        tick += read_delay;
         *(s64 *)out = spent_ns;
         if (midnight_during_read) { ++date_day; ++unix_s; midnight_during_read = false; }
         return spent_result;
@@ -135,6 +140,50 @@ int main(void)
     ptc_switch_pctl_init(&adapter); quota = 60; remaining_ns = INT64_C(40000000000);
     status = read_status(&adapter);
     assert(status.remaining_minutes == 0 && !ptc_pctl_remaining_exhausted(&status));
-    puts("PASS release adapter direct usage, signed remainder, bounded reads, date guards and cleanup");
+    /* Execute the production read group, including every failure boundary. */
+    PtcUsageEvidenceSample raw;
+    adapter.last_result = 999;
+    remaining_ns = -INT64_C(591000000000);
+    assert(adapter.pctl.vtable->start_timer(&adapter.pctl) == PTC_ERR_OK);
+    assert(adapter.start_timer_calls == 1);
+    failed_command = 1451;
+    assert(adapter.pctl.vtable->start_timer(&adapter.pctl) == PTC_ERR_PCTL_WRITE_FAILED);
+    assert(adapter.start_timer_calls == 2);
+    failed_command = 0;
+    adapter.last_result = 999;
+    bool was_sampled = adapter.usage_sampled;
+    u64 cached_tick = adapter.usage_sample_tick;
+    read_delay = 100000000;
+    assert(ptc_switch_pctl_read_evidence(&adapter, &raw));
+    assert(raw.remaining_ns == remaining_ns && raw.spent_ns == spent_ns);
+    assert(raw.start_timer_calls == 2 && raw.end_ns - raw.begin_ns == read_delay);
+    assert(raw.timer_enabled && !raw.temporarily_unlocked && handles == 0);
+    assert(adapter.last_result == 999 && adapter.usage_sampled == was_sampled && adapter.usage_sample_tick == cached_tick);
+    const u32 commands[] = {1453, 1454, 1455, 1952, 145601, 1006};
+    for (unsigned i = 0; i < sizeof(commands)/sizeof(commands[0]); ++i) {
+        failed_command = commands[i];
+        assert(!ptc_switch_pctl_read_evidence(&adapter, &raw) && handles == 0 && adapter.last_result == 999);
+        assert(raw.timer_result == (failed_command == 1453 ? 778u : 0u));
+        assert(raw.remaining_result == (failed_command == 1454 ? 778u : 0u));
+        assert(raw.restricted_result == (failed_command == 1455 ? 778u : 0u));
+        assert(raw.spent_result == (failed_command == 1952 ? 778u : 0u));
+        assert(raw.settings_result == (failed_command == 145601 ? 778u : 0u));
+        assert(raw.unlocked_result == (failed_command == 1006 ? 778u : 0u));
+    }
+    failed_command = 0;
+    for (failure = 1; failure <= 4; ++failure) {
+        assert(!ptc_switch_pctl_read_evidence(&adapter, &raw) && handles == 0 && adapter.last_result == 999);
+        assert(raw.session_result == 777 && raw.spent_result == 777);
+    }
+    failure = 0; clock_error = true;
+    assert(!ptc_switch_pctl_read_evidence(&adapter, &raw));
+    clock_error = false; midnight_during_read = true;
+    assert(!ptc_switch_pctl_read_evidence(&adapter, &raw) && raw.day_before != raw.day_after);
+    spent_ns = -1;
+    assert(!ptc_switch_pctl_read_evidence(&adapter, &raw) && raw.spent_ns == -1);
+    spent_ns = 0; read_delay = UINT64_C(2000000001);
+    assert(!ptc_switch_pctl_read_evidence(&adapter, &raw));
+    assert(handles == 0 && peak_handles <= 2);
+    puts("PASS release adapter direct usage, signed remainder, evidence Result/clock guards and cleanup");
     return 0;
 }

@@ -54,6 +54,7 @@ SYSMODULE_CFILES := \
 	lab_selfdrive.c \
 	sysmodule_storage.c \
 	sysmodule_audit.c \
+	usage_evidence.c \
 	sysmodule_history.c \
 	sysmodule_results.c \
 	sysmodule_control.c \

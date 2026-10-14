@@ -1,0 +1,189 @@
+"""Prepare and audit production read-only evidence. Never deploy, write PCTL or certify."""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import re
+import uuid
+
+import pctl_usage_qualification as usage
+import verify_device_qualification as qualification
+
+REMOTE = "/switch/playwise/support"
+RESULT_FIELDS = ("session_result", "timer_result", "remaining_result", "restricted_result",
+                 "spent_result", "settings_result", "unlocked_result")
+
+
+def save_new(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("x", encoding="utf-8", newline="\n") as stream:
+        stream.write(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+
+
+def prepare(packages: Path, out: Path, duration_s: int) -> dict:
+    usage.integer(duration_s, 300, 7200, "duration_s")
+    manifest, _, hashes, components = qualification.package_identity(packages)
+    usage.require(manifest.get("usage_contract") == usage.CONTRACT, "production usage contract missing")
+    usage.require(not out.exists(), "batch directory already exists; preserve previous materials")
+    config = {"schema_version": 1, "run_id": uuid.uuid4().hex, "commit": manifest["commit"],
+              "release_id": manifest["release_id"], "duration_s": duration_s}
+    plan = {"schema_version": 1, "kind": "production_usage_evidence_plan", "config": config,
+            "packages": str(packages.resolve()), "zip_sha256": hashes, "release_components": components,
+            "report_status": "prepared_not_deployed", "manual_observations": None,
+            "remote_config_path": REMOTE + "/usage-evidence.json"}
+    save_new(out / "plan.json", plan)
+    save_new(out / "usage-evidence.json", config)
+    return plan
+
+
+def raw_sample(value: dict) -> bool:
+    """Validate wire shape and recompute validity, retaining failed wire values."""
+    for key in RESULT_FIELDS:
+        usage.integer(value.get(key), 0, (1 << 32) - 1, key)
+    for key in ("clock_before_valid", "clock_after_valid", "timer_enabled", "restricted",
+                "temporarily_unlocked", "valid"):
+        usage.require(type(value.get(key)) is bool, key + ": boolean required")
+    begin = usage.nanoseconds(value.get("begin_ns"), False, "begin_ns")
+    end = usage.nanoseconds(value.get("end_ns"), False, "end_ns")
+    before = usage.integer(value.get("unix_before"), 0, (1 << 63) - 1, "unix_before")
+    after = usage.integer(value.get("unix_after"), 0, (1 << 63) - 1, "unix_after")
+    day = usage.integer(value.get("day_before"), 0, 65535, "day_before")
+    after_day = usage.integer(value.get("day_after"), 0, 65535, "day_after")
+    spent = usage.nanoseconds(value.get("total_ns"), True, "total_ns")
+    usage.nanoseconds(value.get("signed_remaining_ns"), True, "signed_remaining_ns")
+    usage.nanoseconds(value.get("start_timer_calls"), False, "start_timer_calls")
+    usage.require(isinstance(value.get("settings_hex"), str) and
+                  re.fullmatch(r"[0-9a-f]{136}", value["settings_hex"]), "complete raw 0x44 required")
+    usage.require(value.get("source") == "pctl_1952" and value.get("scope") == "console_usable_time",
+                  "unexpected consumption source or scope")
+    valid = (value["clock_before_valid"] and value["clock_after_valid"] and day == after_day and
+             before <= after and 0 <= end - begin <= usage.PAIRING_NS and spent >= 0 and
+             all(value[key] == 0 for key in RESULT_FIELDS))
+    usage.require(value["valid"] is valid, "raw validity flag contradicts wire/clock results")
+    return valid
+
+
+def audit(data: bytes, config: dict) -> dict:
+    rows = data.splitlines(keepends=True)
+    samples, damaged, invalid = [], [], []
+    start = None
+    stopped = False
+    previous = None
+    gaps = []
+    for number, raw in enumerate(rows, 1):
+        # A live FTP snapshot may end mid-write. Preserve that exact byte tail.
+        if number == len(rows) and not raw.endswith(b"\n"):
+            damaged.append(number)
+            continue
+        value = qualification.read_json_text(raw, f"raw line {number}")
+        usage.require(type(value.get("schema_version")) is int and value["schema_version"] == 1,
+                      "unexpected evidence schema")
+        kind = value.get("kind")
+        if kind == "usage_evidence_start":
+            usage.require(start is None and number == 1, "repeated or misplaced start record")
+            usage.require(all(value.get(key) == config[key] for key in ("commit", "release_id", "run_id")),
+                          "production stream identity differs from prepared candidate")
+            usage.require(isinstance(value.get("boot_id"), str) and re.fullmatch(r"[0-9a-f]{16}", value["boot_id"]),
+                          "production boot identity missing")
+            usage.require(value.get("duration_ns") == str(config["duration_s"] * 1_000_000_000) and
+                          value.get("interval_ns") == "5000000000", "lease or frequency differs")
+            usage.nanoseconds(value.get("started_ns"), False, "started_ns")
+            start = value
+        elif kind == "usage_evidence_sample":
+            usage.require(start is not None and not stopped, "sample outside started stream")
+            usage.require(value.get("run_id") == start["run_id"] and value.get("boot_id") == start["boot_id"],
+                          "mixed run/boot identity")
+            valid = raw_sample(value)
+            if not valid:
+                invalid.append(number)
+            if previous:
+                delta = int(value["begin_ns"]) - int(previous["begin_ns"])
+                usage.require(delta > 0 and int(value["start_timer_calls"]) >= int(previous["start_timer_calls"]),
+                              "capture tick or 1451 calls regressed")
+                if delta > 300_000_000_000:
+                    gaps.append({"before_line": samples[-1]["line"], "after_line": number, "span_ns": str(delta)})
+            samples.append({"line": number, "raw": value})
+            previous = value
+        elif kind == "usage_evidence_stop":
+            usage.require(start is not None and not stopped, "misplaced stop record")
+            usage.require(value.get("reason") in ("lease_expired", "failure_limit", "config_removed_or_changed",
+                                                   "monotonic_regression", "process_handoff"), "unknown stop reason")
+            usage.require(type(value.get("samples")) is int and value["samples"] == len(samples), "stop count mismatch")
+            usage.integer(value.get("consecutive_failures"), 0, 3, "consecutive_failures")
+            stopped = True
+        else:
+            raise usage.UsageQualificationError("unknown raw record kind")
+    usage.require(start is not None, "no complete production start record")
+    return {"schema_version": 1, "kind": "production_usage_evidence_audit", "qualified": False,
+            "raw_sha256": hashlib.sha256(data).hexdigest(), "start": start, "stop_record_present": stopped,
+            "partial_tail_lines": damaged, "invalid_sample_lines": invalid, "gaps": gaps, "samples": samples,
+            "note": "Raw audit only; phases, business policy, restoration and actual observations remain separate."}
+
+
+def collect(device: object, out: Path, plan: dict) -> list[Path]:
+    """One read-only pull. Hash-named immutable snapshots never overwrite older raw."""
+    with device.ftp() as ftp:
+        names = ftp.nlst(REMOTE)
+    run_id = plan["config"]["run_id"]
+    usage.require(re.fullmatch(r"[0-9a-f]{32}", run_id) is not None, "invalid planned run_id")
+    snapshots = []
+    for name in names:
+        filename = name.rsplit("/", 1)[-1]
+        if not re.fullmatch(r"usage-evidence-" + run_id + r"-[0-9a-f]{16}\.jsonl", filename):
+            continue
+        data = device.read(REMOTE + "/" + filename)
+        digest = hashlib.sha256(data).hexdigest()
+        path = out / "raw" / (filename[:-6] + "-" + digest + ".jsonl")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            usage.require(path.read_bytes() == data, "snapshot path hash collision")
+        else:
+            with path.open("xb") as stream:
+                stream.write(data)
+        # Raw bytes are preserved even if a subsequent audit fails.
+        result = audit(data, plan["config"])
+        result["remote_path"] = REMOTE + "/" + filename
+        audit_path = path.with_suffix(".audit.json")
+        if not audit_path.exists():
+            save_new(audit_path, result)
+        snapshots.append(path)
+    return snapshots
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    p = commands.add_parser("prepare")
+    p.add_argument("--packages", type=Path, required=True)
+    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--duration-s", type=int, default=3600)
+    p = commands.add_parser("audit")
+    p.add_argument("--raw", type=Path, required=True)
+    p.add_argument("--plan", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
+    p = commands.add_parser("collect")
+    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--host", required=True)
+    p.add_argument("--ftp-port", type=int, default=21)
+    args = parser.parse_args()
+    if args.command == "prepare":
+        prepare(args.packages, args.out, args.duration_s)
+        print(f"PREPARED (not deployed/qualified): {args.out.resolve()}")
+    elif args.command == "audit":
+        plan = usage.read_json(args.plan)
+        save_new(args.output, audit(args.raw.read_bytes(), plan["config"]))
+        print(f"AUDITED (not qualified): {args.output.resolve()}")
+    else:
+        from usage_probe import Device
+        plan = usage.read_json(args.out / "plan.json")
+        snapshots = collect(Device(args.host, args.ftp_port), args.out, plan)
+        print(f"READ-ONLY: {len(snapshots)} immutable raw snapshots; no status/control requests")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (usage.UsageQualificationError, qualification.QualificationError, OSError, ValueError, KeyError) as exc:
+        raise SystemExit(f"FAIL: {exc}") from exc

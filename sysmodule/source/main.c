@@ -17,6 +17,7 @@
 #include "../ipc_server.h"
 #include "../../common/protocol/ipc_protocol.h"
 #include "release_manifest.h"
+#include "../usage_evidence.h"
 #ifdef PLAYWISE_PCTL_CAPTURE
 #include "../pctl_usage_tap.h"
 static void capture_tick(PtcSysmodule *sysmodule, const char *stage, bool force)
@@ -281,6 +282,9 @@ int main(int argc, char **argv)
     static PtcSwitchTimeProvider time_provider;
     static PtcSwitchUsageStats usage_stats;
     static PtcSysmodule sysmodule;
+#ifndef PLAYWISE_DEVICE_LAB
+    static PtcUsageEvidence usage_evidence;
+#endif
     static PtcIpcServer ipc_server;
     PtcStorage *storage;
     bool ipc_available;
@@ -316,6 +320,12 @@ int main(int argc, char **argv)
         ptc_switch_time_provider_as_provider(&time_provider));
     snprintf(boot_id, sizeof(boot_id), "%016llx", (unsigned long long)randomGet64());
     ptc_sysmodule_set_boot_id(&sysmodule, boot_id);
+#ifndef PLAYWISE_DEVICE_LAB
+    (void)ptc_usage_evidence_init(&usage_evidence, storage, PTC_APP_ROOT, boot_id,
+        PLAYWISE_BUILD_COMMIT, PLAYWISE_BUILD_RELEASE_ID, armTicksToNs(armGetSystemTick()),
+        ptc_switch_pctl_read_evidence, &pctl);
+    ptc_usage_evidence_tick(&usage_evidence, armTicksToNs(armGetSystemTick()));
+#endif
 #ifdef PLAYWISE_PCTL_CAPTURE
     pctl_usage_tap_init(boot_id);
     capture_tick(&sysmodule,"before_standard_bootstrap",true);
@@ -349,6 +359,9 @@ int main(int argc, char **argv)
         if (!ipc_available) svcSleepThread((int64_t)wait_ms * 1000000LL);
         if (ipc_available) ptc_ipc_server_lock_storage(&ipc_server);
         (void)ptc_sysmodule_scheduler_tick(&sysmodule, notified);
+#ifndef PLAYWISE_DEVICE_LAB
+        ptc_usage_evidence_tick(&usage_evidence, armTicksToNs(armGetSystemTick()));
+#endif
 #ifdef PLAYWISE_PCTL_CAPTURE
         capture_tick(&sysmodule,"standard_running",false);
 #endif
@@ -357,6 +370,9 @@ int main(int argc, char **argv)
         if (ipc_available) ptc_ipc_server_signal_completed(&ipc_server);
     }
 
+#ifndef PLAYWISE_DEVICE_LAB
+    ptc_usage_evidence_stop(&usage_evidence, "process_handoff");
+#endif
     if (ipc_available) ptc_ipc_server_stop(&ipc_server);
     ptc_switch_pctl_exit(&pctl);
     return 0;
