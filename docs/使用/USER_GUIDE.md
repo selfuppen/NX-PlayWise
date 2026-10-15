@@ -156,6 +156,35 @@ Parent Zone consists of five top-level tabs: **Today's Schedule, Time Plans, Off
 - **Security & Preferences**: Modify PIN, theme, Parent Zone shortcut, and view on-device family activity history;
 - **Support & Recovery**: Independent top-level tab offering playtime management activation, retry repair, emergency disable, restore pre-installation settings, and diagnostic log export.
 
+### Core Time Control Logic
+
+PlayWise employs a robust **two-stage adjudication** pipeline paired with **four independent gates**, seamlessly harmonizing long-term plans, single-day flexibility, healthy habits, and screen modes. Before diving into specific tabs, parents can review the full-screen "Today's Schedule Details" dialog to quickly understand how the system manages playtime:
+
+#### 1. Decision & Rule Pipeline: Quota Calculation & Multi-Gate Enforcement
+
+![Decision and rules preview](../images/usage-en/parent/parent-details-usage-light.png)
+
+- **Step ① Calculate Total Playtime (How long can the child play today?)**:
+  Evaluated strictly from left to right across four priority tiers—**the first matching rule dictates today's total quota**: `[1] Today's Adjustment` > `[2] Specific Date Quota` > `[3] Statutory Holidays` > `[4] Weekly Plan`. A higher-priority rule automatically overrides lower tiers.
+- **Step ② Multi-Gate Enforcement (Can the child play right now?)**:
+  After calculating today's total quota, the session passes through 4 independent verification gates—**all gates must show green to allow play; any red gate immediately halts gameplay**:
+  1. **Daily Total Allowance**: Whether cumulative playtime today has reached the daily limit;
+  2. **Bedtime Window**: Whether current clock falls within the nighttime curfew;
+  3. **Eye Care Breaks**: Whether continuous screen time has reached the limit;
+  4. **TV Mode Rules**: Whether handheld / tabletop small-screen quota is exhausted (encouraging docking to the TV to protect eyesight).
+- **Three Core Principles**:
+  - **Gates Operate Independently**: Triggering any single restriction immediately restricts gameplay; waiving or adjusting one does not bypass the others;
+  - **Grants Only Add Total Time**: Offline grant codes, quick grants, and autonomy buffers only replenish total daily quota; bedtime and eye care breaks still apply at their scheduled times;
+  - **Docked Play Preserves Handheld Quota**: Docking to a TV only consumes total daily allowance without deducting from the handheld quota; undocking resumes counting against the handheld limit.
+
+#### 2. Daily Schedule & Continuous Usage Projection: 24-Hour Horizon at a Glance
+
+![Today's plan and status preview](../images/usage-en/parent/today-planning-light.png)
+
+- **Today's 24-Hour Schedule Timeline**: Visually renders bedtime lockouts across the day (e.g., 00:00–07:00 and 21:30–24:00) alongside the current clock cursor, during which gameplay is prohibited regardless of remaining quota.
+- **Continuous Usage Projection**: Simulates playtime progression based on current mode and eye care intervals (e.g., play starts at 16:00 → 10-minute eye break at 16:15 → gameplay resumes at 16:25 → handheld quota exhausted at 16:28; docking to TV allows using the remaining 33 minutes of total allowance).
+- **Health Management Dashboard**: Synchronously presents total allowance balance, handheld quota remaining, eye care phase/countdown, and bedtime window countdown on a single screen.
+
 ### Today's Schedule
 
 "Today's Schedule" is the central command deck for managing your child's playtime for the current day. Its core design principles are:
@@ -211,8 +240,9 @@ On the Today's Schedule tab, press controller `+` button or tap "+ View Details"
 - Y refreshes either page. B returns from the nested page to planning with entry focus restored, then back to Today. ZL/ZR or touch dragging scrolls expanded data. Child details remain read-only and hide parent execution data.
 - TV counts toward the total; non-TV counts toward both limits. Non-TV is not extra allowance. TV can use the total left; breaks and bedtime still apply. Unlimited use, extra time and buffers do not waive health rules.
 
-![Today: plan and status](../images/usage-en/parent/today-planning-light.png)
-![Decision and rules](../images/usage-en/parent/today-rules-light.png)
+![Decision and rules pipeline preview (two-stage adjudication and four gates)](../images/usage-en/parent/parent-details-usage-light.png)
+![Today: plan and status preview (24-hour horizon and continuous usage projection)](../images/usage-en/parent/today-planning-light.png)
+![Decision and rules active runtime preview](../images/usage-en/parent/today-rules-light.png)
 ![Expanded data and runtime](../images/usage-en/parent/today-data-light.png)
 
 ### Long-Term & Date Plans

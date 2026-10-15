@@ -75,16 +75,16 @@
 - **活动记录**：本机家庭活动记录和 7/30 天额度消耗估算。统计范围是“本机使用”，缺失日期保持未知；按游戏明细尚不可用。
 - **支持与恢复**：诊断导出、紧急停用、恢复安装前设置，以及完整覆盖安装后的安全加载新版。
 
-具体页面使用说明，参见[使用指南](docs/使用/使用指南.md)。
+具体页面使用说明与[时间管控核心逻辑](docs/使用/使用指南.md#时间管控核心逻辑)（四级优先级判定与四大独立关卡把关），参见[使用指南](docs/使用/使用指南.md)。
 
-<details open>
-<summary>查看家长区今日安排与额度规则详情预览</summary>
+<details>
+<summary>时间安排预览</summary>
 
 ![家长区今日安排预览](docs/images/usage/parent/parent-dark.png)
 
-![今日额度规则详情预览](docs/images/usage/parent/parent-details-decision-light.png)
+![当天规划与状态预览](docs/images/usage/parent/today-planning-light.png)
 
-![电视模式视力守护规则预览](docs/images/usage/plan/dock-policy-light.png)
+![决策与规则流程预览](docs/images/usage/parent/parent-details-usage-light.png)
 
 </details>
 

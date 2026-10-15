@@ -142,10 +142,14 @@ In list rows, health-care cards, and decision cells, content must strictly separ
   * Rest Period: Warm amber (`#FFF7E6` bg + `#FA8C16` border), displaying rest duration clearly.
   * Exhaustion Point: Pulsing micro-circle paired with an endpoint time balloon.
 
+![Today: plan and status composite control preview](../images/usage-en/parent/today-planning-light.png)
+
 ### 4.4 Decision & Rule Priority Matrix
 * **Active Selected Rule**: 2px stroke in `UI_SUCCESS`, soft green background (`UI_SUCCESS_SOFT`), embedded "Active" pill.
 * **Fallback Unhit Rules**: 1px border in `UI_BORDER`, canvas-blended background (`UI_PAGE`), muted text.
 * **Priority Arrows**: 2px directional arrows between rule stages illustrating evaluation flow (Temporary $\to$ Specified Date $\to$ Holiday $\to$ Weekly Plan $\to$ Final Balance).
+
+![Decision and rules priority matrix preview](../images/usage-en/parent/parent-details-usage-light.png)
 
 ### 4.5 Tesla Overlay Current Design & Dark Baseline Contract
 * **Tesla Host Dark Background**: The Tesla menu operates over a translucent dark background (`0x000D` / RGBA(0, 0, 0, 0.85)). To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.
