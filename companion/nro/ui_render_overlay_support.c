@@ -97,10 +97,11 @@ static void draw_software_info_overlay(uint32_t *pixels, uint32_t stride, const 
     draw_text(pixels, stride, details.x + 24, details.y + 266, lbl_parent, 18, UI_MUTED);
     fit_text(value, sizeof(value), model->pwa_url, 17, val_max_w);
     draw_text(pixels, stride, details.x + val_offset, details.y + 266, value, 17, UI_SUCCESS);
-    if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING) {
+    if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only) {
         draw_dialog_button(pixels, stride, ptc_ui_cancel_rect(model->overlay), ptc_ui_text(PTC_UI_T_B_NOT_YET),
                            UI_RAISED, UI_INK, false);
-        draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_LOAD_NEW_VERSION),
+        draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(model->hot_reload_capture_restart
+            ? PTC_UI_T_CAPTURE_RESTART_BUTTON : PTC_UI_T_A_LOAD_NEW_VERSION),
                            UI_ACCENT, UI_ON_ACCENT, false);
     } else {
         draw_dialog_button(pixels, stride, ptc_ui_confirm_rect(model->overlay), ptc_ui_text(PTC_UI_T_A_CLOSE),

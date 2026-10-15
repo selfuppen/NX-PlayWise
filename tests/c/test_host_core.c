@@ -194,6 +194,58 @@ static void test_hot_reload_guard(void)
     (void)remove("build/test-hot-reload-guard");
 }
 
+
+static void test_capture_restart_guard(void)
+{
+    const char *config = "{\"schema_version\":1,\"run_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"commit\":\"cccccccccccccccccccccccccccccccccccccccc\",\"release_id\":\"same-build\",\"duration_s\":900}";
+    const char *request = "{\"schema_version\":1,\"purpose\":\"usage_evidence\",\"request_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"source_boot_id\":\"dddddddddddddddd\",\"release_id\":\"same-build\",\"run_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"config_sha256\":\"57c2e610d3935e0d9ae0074f8185594502a8b056423dfa577f8383054796ec35\"}";
+    const char *commit = "cccccccccccccccccccccccccccccccccccccccc";
+    const char *boot = "dddddddddddddddd";
+    PtcCaptureRestartBinding binding;
+    check_true(ptc_hot_reload_capture_request(request, config, commit, "same-build", boot, &binding),
+        "explicit capture restart binds config bytes, run, release and source boot");
+    const char *keys[] = {"purpose", "source_boot_id", "release_id", "run_id", "config_sha256", "request_id"};
+    for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i) {
+        cJSON *root = cJSON_Parse(request);
+        cJSON_ReplaceItemInObjectCaseSensitive(root, keys[i], cJSON_CreateString("changed"));
+        char *changed = cJSON_PrintUnformatted(root);
+        check_true(!ptc_hot_reload_capture_request(changed, config, commit, "same-build", boot, &binding),
+            "capture restart rejects a changed purpose or identity field");
+        cJSON_free(changed); cJSON_Delete(root);
+    }
+    char changed[1024];
+    snprintf(changed, sizeof(changed), "%s ", config);
+    check_true(!ptc_hot_reload_capture_request(request, changed, commit, "same-build", boot, &binding),
+        "semantically equal config with different bytes rejects the prepared hash");
+    snprintf(changed, sizeof(changed), "{\"purpose\":\"usage_evidence\",%s", request + 1);
+    check_true(!ptc_hot_reload_capture_request(changed, config, commit, "same-build", boot, &binding),
+        "duplicate purpose is not an authorization");
+    check_true(!ptc_hot_reload_capture_request(request, config, commit, "same-build", "eeeeeeeeeeeeeeee", &binding),
+        "capture request cannot restart another source boot");
+    check_true(ptc_hot_reload_capture_request(request, config, commit, "same-build", boot, &binding), "restore valid binding");
+    PtcHotReloadJournal journal = {0}, parsed;
+    PtcHotReloadPaths paths = {NULL, NULL, "build/test-capture-restart-journal.json", NULL, NULL};
+    (void)remove(paths.journal); (void)remove("build/test-capture-restart-journal.json.tmp");
+    snprintf(journal.transaction_id, sizeof(journal.transaction_id), "capture-transaction");
+    snprintf(journal.phase, sizeof(journal.phase), "prepared");
+    snprintf(journal.source_release_id, sizeof(journal.source_release_id), "same-build");
+    snprintf(journal.target_release_id, sizeof(journal.target_release_id), "same-build");
+    snprintf(journal.source_boot_id, sizeof(journal.source_boot_id), "%s", boot);
+    journal.source_pid = 41; journal.capture = binding;
+    check_true(ptc_hot_reload_write_journal(&paths, &journal) && ptc_hot_reload_read_journal(&paths, &parsed) &&
+        ptc_hot_reload_capture_binding_equal(&parsed.capture, &binding), "same-candidate recovery retains the capture purpose binding");
+    PtcHotReloadPaths pending = paths;
+    pending.journal = "build/test-capture-restart-journal.json.tmp";
+    journal.capture.config_sha256[0] = journal.capture.config_sha256[0] == '0' ? '1' : '0';
+    check_true(ptc_hot_reload_write_journal(&pending, &journal), "seed contradictory capture generation");
+    check_true(!ptc_hot_reload_read_journal(&paths, &parsed), "recovery refuses a changed config binding across journal generations");
+    (void)remove(paths.journal); (void)remove(pending.journal);
+    memset(&journal.capture, 0, sizeof(journal.capture));
+    check_true(ptc_hot_reload_write_journal(&paths, &journal) && !ptc_hot_reload_read_journal(&paths, &parsed),
+        "same-candidate journal without capture purpose is not recoverable authorization");
+    (void)remove(paths.journal);
+}
+
 typedef struct {
     int failures;
     unsigned int calls;
@@ -4088,6 +4140,7 @@ int main(void)
     failures += ptc_test_control_safety();
     test_eden_simulated_usage_clock();
     test_hot_reload_guard();
+    test_capture_restart_guard();
     test_hot_reload_io();
     test_suspended_transport();
     test_quiescing_scheduler();

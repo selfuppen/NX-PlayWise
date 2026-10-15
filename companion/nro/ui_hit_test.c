@@ -113,7 +113,7 @@ static PtcUiHit hit_test_overlay(const PtcUiModel *model, int x, int y)
     if (model->overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
         if (ptc_ui_rect_contains(ptc_ui_confirm_rect(model->overlay), x, y))
             return make_hit(PTC_UI_HIT_OVERLAY_CONFIRM, 0);
-        if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING &&
+        if (model->hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !model->parent_support_only &&
             ptc_ui_rect_contains(ptc_ui_cancel_rect(model->overlay), x, y))
             return make_hit(PTC_UI_HIT_OVERLAY_CANCEL, 0);
         return make_hit(PTC_UI_HIT_NONE, 0);

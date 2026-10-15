@@ -1664,6 +1664,12 @@ static void test_release_hit_targets(void)
 
     model.overlay = PTC_UI_OVERLAY_SOFTWARE_INFO;
     model.hot_reload_status = PTC_UI_HOT_RELOAD_PENDING;
+    model.parent_support_only = true;
+    check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
+              "read-only support retains only a close action");
+    check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_NONE, 0,
+              "read-only support has no restart/defer controls");
+    model.parent_support_only = false;
     check_hit(hit_center(&model, ptc_ui_confirm_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CONFIRM, 0,
               "pending software information exposes the parent hot reload action");
     check_hit(hit_center(&model, ptc_ui_cancel_rect(model.overlay)), PTC_UI_HIT_OVERLAY_CANCEL, 0,

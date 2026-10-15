@@ -698,6 +698,7 @@ typedef struct {
     char backend_release_id[96];
     char hot_reload_detail[192];
     int hot_reload_status;
+    bool hot_reload_capture_restart;
     char repository_url[128];
     char pwa_url[PTC_PAIRING_BASE_URL_MAX_LEN + 1];
     uint8_t qr_code[qrcodegen_BUFFER_LEN_MAX];

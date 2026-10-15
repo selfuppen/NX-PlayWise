@@ -369,6 +369,16 @@ def test_activation_check() -> None:
     stopped = evidence.activation_check(plan, runtime, encode(raw_rows()))
     assert stopped["route"] == "same_candidate_restart_unsupported"
     assert stopped["capture_state"] == "stopped" and stopped["raw_sha256"]
+    manifest = {"profile": "release", "commit": CONFIG["commit"], "release_id": CONFIG["release_id"],
+                "capture_restart_version": 1}
+    supported = evidence.activation_check(plan, runtime, encode(raw_rows()), manifest)
+    assert supported["route"] == "capture_restart_preflight_required" and not supported["activation_authorized"]
+    try:
+        evidence.activation_check(plan, runtime, encode(raw_rows()), dict(manifest, commit="b" * 40))
+    except usage.UsageQualificationError:
+        pass
+    else:
+        raise AssertionError("different candidate manifest enabled capture restart planning")
     live = evidence.activation_check(plan, runtime, encode(raw_rows()[:2]))
     assert live["route"] == "inspect_existing_stream"
     assert evidence.activation_check(plan, runtime)["route"] == "capture_state_unknown"

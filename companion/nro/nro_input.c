@@ -677,7 +677,7 @@ void handle_overlay_input(UiState *ui, u64 down)
     }
     if (ui->model.overlay == PTC_UI_OVERLAY_SOFTWARE_INFO) {
         if ((down & (HidNpadButton_A | HidNpadButton_Plus)) &&
-            ui->model.hot_reload_status == PTC_UI_HOT_RELOAD_PENDING) {
+            ui->model.hot_reload_status == PTC_UI_HOT_RELOAD_PENDING && !ui->model.parent_support_only) {
 #ifndef PLAYWISE_EDEN
             open_hot_reload_confirmation(ui);
 #endif

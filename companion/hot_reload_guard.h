@@ -29,6 +29,12 @@ typedef struct {
 } PtcHotReloadPaths;
 
 typedef struct {
+    char request_id[33];
+    char run_id[33];
+    char config_sha256[65];
+} PtcCaptureRestartBinding;
+
+typedef struct {
     char transaction_id[48];
     char phase[32];
     char source_release_id[96];
@@ -36,6 +42,7 @@ typedef struct {
     char source_boot_id[32];
     uint64_t source_pid;
     uint64_t target_pid;
+    PtcCaptureRestartBinding capture;
 } PtcHotReloadJournal;
 
 typedef struct {
@@ -53,6 +60,11 @@ typedef enum {
 } PtcHotReloadFlagResult;
 
 bool ptc_hot_reload_parse_identity(const char *json, PtcHotReloadIdentity *identity);
+bool ptc_hot_reload_capture_request(const char *request_json, const char *config_json,
+    const char *commit, const char *release_id, const char *source_boot_id,
+    PtcCaptureRestartBinding *binding);
+bool ptc_hot_reload_capture_binding_equal(const PtcCaptureRestartBinding *a,
+    const PtcCaptureRestartBinding *b);
 bool ptc_hot_reload_identity_matches(const PtcHotReloadIdentity *identity,
     uint64_t pid, const char *profile, const char *release_id);
 bool ptc_hot_reload_read_journal(const PtcHotReloadPaths *paths, PtcHotReloadJournal *journal);

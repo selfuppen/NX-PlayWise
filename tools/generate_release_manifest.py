@@ -169,6 +169,7 @@ def make_manifest(profile: str) -> dict:
         data["build"]["git_autocrlf"] = os.environ["PLAYWISE_GIT_AUTOCRLF"]
     if profile == "release":
         data["hot_reload_events_version"] = 1
+        data["capture_restart_version"] = 1
         from pctl_usage_qualification import CONTRACT
         data["usage_contract"] = CONTRACT
     return data

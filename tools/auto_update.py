@@ -28,6 +28,8 @@ CONTENT = "/atmosphere/contents/4200000000BD2300"
 FLAG = CONTENT + "/flags/boot2.flag"
 RUNTIME = APP + "/handover/runtime-ready.json"
 EVENTS = APP + "/handover/events"
+CAPTURE_CONFIG = APP + "/support/usage-evidence.json"
+CAPTURE_RESTART = APP + "/support/backend-restart.json"
 COMPONENTS = ("switch/playwise/pctc.nro", "switch/.overlays/playwise.ovl",
               "atmosphere/contents/4200000000BD2300/exefs.nsp")
 ALLOWED = set(COMPONENTS) | {"switch/playwise/build.json", "switch/playwise/package-artifacts.json",
@@ -35,6 +37,8 @@ ALLOWED = set(COMPONENTS) | {"switch/playwise/build.json", "switch/playwise/pack
     "switch/playwise/defaults/" + name + ".json" for name in
     ("auth", "compatibility", "config", "rules", "setup", "state")}
 PIN_KEYS = {"0": "X", "1": "DUP", "3": "DRIGHT", "5": "DDOWN", "7": "DLEFT", "9": "Y"}
+CAPTURE_EVENTS = ("prepared", "capture_request_claimed", "quiesce_ready", "boot_disabled",
+                  "source_absent", "boot_restored", "target_launched", "runtime_ready", "status_submitted")
 
 
 class UpdateError(RuntimeError):
@@ -48,6 +52,25 @@ def digest(data: bytes) -> str:
 def require(value: object, message: str) -> None:
     if not value:
         raise UpdateError(message)
+
+
+def capture_event_chain(rows: list[dict], binding: dict, source: dict, target: dict, transaction: str) -> None:
+    for row in rows:
+        require(row.get("transaction_id") == transaction and row.get("source_pid") == source["pid"] and
+                row.get("source_boot_id") == source["boot_id"] and
+                row.get("source_release_id") == source["release_id"] == row.get("target_release_id") and
+                row.get("purpose") == "usage_evidence" and row.get("capture_request_id") == binding["request_id"] and
+                row.get("capture_run_id") == binding["run_id"] and
+                row.get("capture_config_sha256") == binding["config_sha256"] and
+                row.get("event") not in ("failure", "failed", "ipc_unavailable"), "capture handover trace differs")
+    observed = [row.get("event") for row in rows]
+    require(all(observed.count(event) == 1 for event in CAPTURE_EVENTS) and
+            [observed.index(event) for event in CAPTURE_EVENTS] == sorted(observed.index(event) for event in CAPTURE_EVENTS),
+            "capture restart lacks ordered original handover evidence")
+    terminal = rows[observed.index("status_submitted")]
+    require(terminal.get("target_pid") == target["pid"] != source["pid"] and
+            terminal.get("target_boot_id") == target["boot_id"] != source["boot_id"] and
+            target["release_id"] == source["release_id"], "capture handover target differs")
 
 
 def load(out: Path, name: str) -> dict:
@@ -103,13 +126,42 @@ def package_files(package: Path) -> tuple[dict, dict[str, bytes]]:
     return manifest, files
 
 
+def validate_capture_material(manifest: dict, files: dict[str, bytes], capture: dict,
+                              config_bytes: bytes, package_sha256: str, duration_s: int) -> None:
+    from verify_device_qualification import read_json_text
+    config = read_json_text(config_bytes, "capture config")
+    require(type(manifest.get("capture_restart_version")) is int and manifest["capture_restart_version"] == 1 and
+            manifest.get("build", {}).get("source_dirty") is False,
+            "capture restart requires a clean candidate with capture_restart_version:1")
+    require(config == capture.get("config") and set(config) ==
+            {"schema_version", "run_id", "commit", "release_id", "duration_s"} and
+            type(config["schema_version"]) is int and config["schema_version"] == 1 and
+            re.fullmatch(r"[0-9a-f]{32}", config.get("run_id", "")) and
+            re.fullmatch(r"[0-9a-f]{40}", config.get("commit", "")) and
+            config.get("commit") == manifest.get("commit") and
+            config.get("release_id") == manifest["release_id"] and
+            type(config.get("duration_s")) is int and
+            max(300, duration_s + 60) <= config["duration_s"] <= 7200,
+            "capture configuration identity or lease mismatch")
+    require(capture.get("kind") == "production_usage_evidence_plan" and capture.get("qualified") is False and
+            capture.get("release_components") == {name: digest(files[name]) for name in COMPONENTS} and
+            package_sha256 in capture.get("zip_sha256", {}).values(),
+            "capture plan does not bind this exact production package and components")
+
+
 def prepare(package: Path, out: Path, *, host: str, ftp_port: int = 21, bot_port: int = 6000,
-            forwarder: str, duration_s: int = 300) -> dict:
+            forwarder: str, duration_s: int = 300, capture_plan: Path | None = None) -> dict:
     require(not out.exists(), "run directory exists; inspect it rather than replaying")
     require(re.fullmatch(r"[0-9A-Fa-f]{16}", forwarder), "forwarder must be an explicit installed application ID")
     require(60 <= duration_s <= 600, "run lease must be 60..600 seconds")
     require(1 <= ftp_port <= 65535 and 1 <= bot_port <= 65535 and bool(host), "invalid endpoint")
     manifest, files = package_files(package)
+    capture = None
+    if capture_plan is not None:
+        from verify_device_qualification import read_json_text
+        capture = read_json_text(capture_plan.read_bytes(), "capture plan")
+        config_bytes = capture_plan.with_name("usage-evidence.json").read_bytes()
+        validate_capture_material(manifest, files, capture, config_bytes, digest(package.read_bytes()), duration_s)
     out.mkdir(parents=True)
     shutil.copyfile(package, out / "candidate.zip")
     plan = {"version": 1, "run_id": uuid.uuid4().hex, "profile": "child-forwarder-v1",
@@ -121,6 +173,10 @@ def prepare(package: Path, out: Path, *, host: str, ftp_port: int = 21, bot_port
             "requires": ["NRO child page in the specified forwarder; no overlay",
                          "exclusive console and request producers for this bounded run",
                          "same verified input mapping; no game or HOME rearrangement during the run"]}
+    if capture is not None:
+        (out / "capture-config.json").write_bytes(config_bytes)
+        dump(out / "capture-plan.json", capture)
+        plan.update(operation="capture_restart", capture_config_sha256=digest(config_bytes))
     dump(out / "plan.json", plan)
     return plan
 
@@ -130,6 +186,9 @@ class Updater:
                  sleep=time.sleep, input_factory=BoundedInputBatch) -> None:
         self.out, self.plan = out, load(out, "plan.json")
         require(self.plan.get("version") == 1 and self.plan.get("profile") == "child-forwarder-v1", "unknown run plan")
+        require(self.plan.get("operation", "update") in ("update", "capture_restart"), "unknown operation")
+        self.capture_restart = self.plan.get("operation") == "capture_restart"
+        require(re.fullmatch(r"[0-9a-f]{32}", self.plan.get("run_id", "")), "invalid run identifier")
         self.device = device or Device(self.plan["host"], self.plan["ftp_port"], self.plan["bot_port"])
         self.clock, self.sleep, self.input_factory = clock, sleep, input_factory
         self.deadline = clock() + self.plan["duration_s"]
@@ -182,7 +241,10 @@ class Updater:
     def capture_preimage(self, files: dict[str, bytes]) -> None:
         self.source = self.device.json(RUNTIME)
         identity(self.source)
-        require(self.source["release_id"] != self.plan["target_release_id"], "target already loaded; no UI action sent")
+        if self.capture_restart:
+            require(self.source["release_id"] == self.plan["target_release_id"], "capture restart requires the current candidate")
+        else:
+            require(self.source["release_id"] != self.plan["target_release_id"], "target already loaded; no UI action sent")
         require(self.device.json(APP + "/build.json")["release_id"] == self.source["release_id"], "disk/runtime mismatch")
         require(self.device.read(FLAG) == b"", "standard boot flag must be the original empty file")
         require(names(self.device, CONTENT + "/flags") == ["boot2.flag"], "unknown boot flag transaction")
@@ -216,11 +278,34 @@ class Updater:
         require(installed.get("release_id") == self.source["release_id"], "source artifact identity mismatch")
         for name in COMPONENTS:
             require(preimages.get(name) == installed.get("artifacts", {}).get(name), "source component digest mismatch")
+        if self.capture_restart:
+            require(self.device.json(APP + "/build.json").get("capture_restart_version") == 1,
+                    "installed candidate does not support capture restart")
+            require(all(self.device.read("/" + name) == data for name, data in files.items()),
+                    "capture restart never installs or changes candidate files")
+            for path in (CAPTURE_CONFIG, CAPTURE_RESTART):
+                for suffix in ("", ".tmp", ".previous"):
+                    require(optional(self.device, path + suffix) is None, "unowned capture/restart material")
+            claimed = APP + "/support/backend-restart-" + self.plan["run_id"] + ".claimed.json"
+            require(optional(self.device, claimed) is None, "capture restart request already claimed")
+            self.check_stopped_capture()
         status = self.status()
         dump(self.out / "before-status.json", status)
         state = status["state"]
-        require(state.get("restricted_now") == 0 and state.get("unrestricted_today") == 1,
-                "update requires an unrestricted test window; rules will not be changed automatically")
+        if self.capture_restart:
+            safe_remaining = False
+            if state.get("signed_remaining_ns_available") is True:
+                value = state.get("signed_remaining_ns")
+                if isinstance(value, str) and re.fullmatch(r"-?[0-9]+", value):
+                    safe_remaining = int(value) > (self.plan["duration_s"] + 60) * 1_000_000_000
+            require(state.get("restricted_now") == 0 and
+                    state.get("temporary_unlocked_available") is True and state.get("temporary_unlocked") is False and
+                    (state.get("unrestricted_today") == 1 or
+                     state.get("limited_today") == 1 and safe_remaining),
+                    "capture restart needs a reliable usable window covering its whole lease; no rules changed")
+        else:
+            require(state.get("restricted_now") == 0 and state.get("unrestricted_today") == 1,
+                    "update requires an unrestricted test window; rules will not be changed automatically")
         require(state.get("bedtime", {}).get("enabled") is False and
                 state.get("eye_care", {}).get("enabled") is False and
                 state.get("dock", {}).get("force_docked") is False and
@@ -228,6 +313,83 @@ class Updater:
         second = state.get("clock", {}).get("second_of_day")
         require(type(second) is int and 0 <= second < 86400 - self.plan["duration_s"] - 60,
                 "update window must finish before local midnight")
+
+    def check_stopped_capture(self) -> None:
+        """Refuse an active/unknown old stream; never stop one to pass preflight."""
+        import pctl_standard_evidence as evidence
+        from verify_device_qualification import read_json_text
+        config = json.loads((self.out / "capture-config.json").read_bytes())
+        for name in names(self.device, APP + "/support", missing=True):
+            require(not re.fullmatch(r"usage-evidence-" + config["run_id"] + r"-[0-9a-f]{16}\.jsonl", name),
+                    "capture run already used; prepare a fresh run instead of renewing its lease")
+            if not re.fullmatch(r"usage-evidence-[0-9a-f]{32}-" + self.source["boot_id"] + r"\.jsonl", name):
+                continue
+            raw = self.device.read(APP + "/support/" + name)
+            path = self.out / "source-capture" / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(raw)
+            start = read_json_text(raw.splitlines()[0], "source capture start")
+            config = {key: start[key] for key in ("commit", "release_id", "run_id")}
+            require(start["duration_ns"].isdigit() and int(start["duration_ns"]) % 1_000_000_000 == 0,
+                    "source capture lease unknown")
+            config["duration_s"] = int(start["duration_ns"]) // 1_000_000_000
+            audit = evidence.audit(raw, config)
+            require(audit["start"]["boot_id"] == self.source["boot_id"] and
+                    audit["start"]["release_id"] == self.source["release_id"] and
+                    audit["start"]["commit"] == self.device.json(APP + "/build.json")["commit"] and
+                    audit["stop_record_present"] and not audit["invalid_sample_lines"] and
+                    not audit["partial_tail_lines"] and not audit["gaps"],
+                    "source capture active or uncertain; inspect without rearming")
+
+    def arm_capture_restart(self) -> None:
+        config = (self.out / "capture-config.json").read_bytes()
+        require(digest(config) == self.plan["capture_config_sha256"], "prepared capture bytes changed")
+        value = json.loads(config)
+        request = {"schema_version": 1, "purpose": "usage_evidence", "request_id": self.plan["run_id"],
+                   "source_boot_id": self.source["boot_id"], "release_id": self.source["release_id"],
+                   "run_id": value["run_id"], "config_sha256": digest(config)}
+        dump(self.out / "capture-restart-request.json", request)
+        claimed = APP + "/support/backend-restart-" + request["request_id"] + ".claimed.json"
+        require(optional(self.device, claimed) is None, "capture restart request already claimed")
+        for path in (CAPTURE_CONFIG, CAPTURE_RESTART):
+            require(optional(self.device, path) is None, "capture materials appeared during preflight")
+        require(self.device.json(RUNTIME) == self.source, "source changed before capture arm")
+        self.checkpoint("capture_config_pending")
+        self.device.write(CAPTURE_CONFIG, config)
+        require(self.device.read(CAPTURE_CONFIG) == config, "capture configuration readback mismatch")
+        self.checkpoint("capture_restart_pending")
+        self.device.put_json(CAPTURE_RESTART, request)
+        require(self.device.json(CAPTURE_RESTART) == request, "capture restart request readback mismatch")
+        self.checkpoint("capture_restart_armed")
+
+    def verify_capture_started(self) -> None:
+        import pctl_standard_evidence as evidence
+        plan = load(self.out, "capture-plan.json")
+        until = self.clock() + 15
+        while self.clock() < until:
+            self.guard()
+            for path in evidence.collect(self.device, self.out / "target-capture", plan):
+                audit = json.loads(path.with_suffix(".audit.json").read_bytes())
+                require(audit["start"]["boot_id"] == load(self.out, "target-runtime.json")["boot_id"] and
+                        not audit["stop_record_present"] and
+                        not audit["invalid_sample_lines"] and not audit["gaps"], "new capture invalid or stopped")
+                if audit["partial_tail_lines"]:
+                    continue  # Preserve live byte tails and wait for a complete snapshot, never restart.
+                if audit["samples"]:
+                    require(not audit["samples"][-1]["raw"]["temporarily_unlocked"], "capture is temporarily unlocked")
+                    dump(self.out / "capture-started.json", {"path": path.relative_to(self.out).as_posix(),
+                         "sha256": digest(path.read_bytes()), "boot_id": audit["start"]["boot_id"],
+                         "run_id": plan["config"]["run_id"], "qualified": False})
+                    claimed = APP + "/support/backend-restart-" + self.plan["run_id"] + ".claimed.json"
+                    claimed_bytes = self.device.read(claimed)
+                    (self.out / "capture-restart-claimed.json").write_bytes(claimed_bytes)
+                    require(json.loads(claimed_bytes) == load(self.out, "capture-restart-request.json") and
+                            optional(self.device, CAPTURE_RESTART) is None, "restart request consumption unproved")
+                    require(self.device.read(CAPTURE_CONFIG) == (self.out / "capture-config.json").read_bytes(),
+                            "capture config changed after handover")
+                    return
+            self.wait(.5)
+        raise UpdateError("new capture outcome unknown; never repeat restart")
 
     def install(self, files: dict[str, bytes]) -> None:
         # Publish build.json last: the old daemon continuously checks that file.
@@ -299,6 +461,13 @@ class Updater:
                             row.get("source_release_id") == self.source["release_id"] and
                             row.get("source_boot_id") == self.source["boot_id"], "foreign handover audit")
                     require(row.get("event") not in ("failure", "failed", "ipc_unavailable"), "handover failed; recovery required")
+                    if self.capture_restart:
+                        binding = load(self.out, "capture-restart-request.json")
+                        require(row.get("purpose") == "usage_evidence" and
+                                row.get("capture_request_id") == binding["request_id"] and
+                                row.get("capture_run_id") == binding["run_id"] and
+                                row.get("capture_config_sha256") == binding["config_sha256"],
+                                "capture restart event binding differs")
                     if row.get("event") == "status_submitted":
                         runtime = self.device.json(RUNTIME)
                         identity(runtime)
@@ -306,6 +475,8 @@ class Updater:
                                 runtime["boot_id"] == row.get("target_boot_id") and
                                 runtime["boot_id"] != self.source["boot_id"] and
                                 runtime["release_id"] == self.plan["target_release_id"], "new runtime identity mismatch")
+                        if self.capture_restart:
+                            capture_event_chain(rows, binding, self.source, runtime, row["transaction_id"])
                         dump(self.out / "target-runtime.json", runtime)
                         self.checkpoint("loaded", transaction_id=row["transaction_id"])
                         self.receipt(row["request_id"], "status")
@@ -351,6 +522,15 @@ class Updater:
         require(digest((self.out / "candidate.zip").read_bytes()) == self.plan["package_sha256"], "frozen candidate changed")
         manifest, files = package_files(self.out / "candidate.zip")
         require(manifest["release_id"] == self.plan["target_release_id"], "plan target mismatch")
+        if self.capture_restart:
+            validate_capture_material(manifest, files, load(self.out, "capture-plan.json"),
+                                      (self.out / "capture-config.json").read_bytes(), self.plan["package_sha256"],
+                                      self.plan["duration_s"])
+            require(manifest.get("capture_restart_version") == 1 and
+                    manifest.get("build", {}).get("source_dirty") is False and
+                    digest((self.out / "capture-config.json").read_bytes()) == self.plan["capture_config_sha256"] and
+                    json.loads((self.out / "capture-config.json").read_bytes()) == load(self.out, "capture-plan.json")["config"],
+                    "frozen capture restart material differs")
         self.baseline = {"fatal": names(self.device, "/atmosphere/fatal_reports"),
                          "crash": names(self.device, "/atmosphere/crash_reports", missing=True)}
         dump(self.out / "health-baseline.json", self.baseline)
@@ -365,12 +545,15 @@ class Updater:
                 with self.controls("close-source", actions=1) as batch:
                     batch.hold(["B"], settle_s=2)
                 self.foreground("")
-                self.install(files)
+                if self.capture_restart:
+                    self.arm_capture_restart()
+                else:
+                    self.install(files)
                 with self.controls("open-target", actions=1) as batch:
                     batch.hold(["A"], settle_s=10)
                 self.foreground(self.plan["forwarder"])
                 with self.controls("authorize", actions=24) as batch:
-                    batch.hold(["L", "R"], hold_ms=650, settle_s=1)
+                    batch.hold(["MINUS"] if self.capture_restart else ["L", "R"], hold_ms=650, settle_s=1)
                     with batch.sensitive_input():
                         for digit in pin:
                             batch.hold([PIN_KEYS[digit]])
@@ -382,6 +565,8 @@ class Updater:
                 with self.controls("confirm-handover", actions=1) as batch:
                     batch.hold(["A"], settle_s=1)
                 self.audit()
+                if self.capture_restart:
+                    self.verify_capture_started()
                 state = self.reconfirm()
                 require(state["setup"]["phase"] == "active" and not state["setup"]["disable_flag_present"]
                         and not state["setup"]["recovery_active"], "target is loaded but not ready for tests")
@@ -435,6 +620,26 @@ def report(out: Path) -> dict:
                 and target["boot_id"] != source["boot_id"], "offline runtime mismatch")
         require(load(out, "final-installed.json") == plan["files"], "offline installed file mismatch")
         require((out / "final-rules.json").read_bytes() == (out / "before-rules.json").read_bytes(), "offline rules mismatch")
+        if plan.get("operation") == "capture_restart":
+            import pctl_standard_evidence as evidence
+            capture = load(out, "capture-started.json")
+            raw = (out / capture["path"]).read_bytes()
+            audit = evidence.audit(raw, load(out, "capture-plan.json")["config"])
+            require(digest(raw) == capture["sha256"] and audit["start"]["boot_id"] == target["boot_id"] and
+                    audit["samples"] and not audit["stop_record_present"] and not audit["invalid_sample_lines"] and
+                    not audit["partial_tail_lines"] and not audit["gaps"], "offline capture start unproved")
+            require(source["release_id"] == target["release_id"] and
+                    digest((out / "capture-config.json").read_bytes()) == plan["capture_config_sha256"],
+                    "offline capture restart identity differs")
+            require(load(out, "capture-restart-request.json") == load(out, "capture-restart-claimed.json"),
+                    "offline capture request claim differs")
+            traces = []
+            for path in (out / "audit").glob("*.raw"):
+                rows = [json.loads(line) for line in path.read_bytes().splitlines(keepends=True) if line.endswith(b"\n")]
+                if any(row.get("event") == "status_submitted" for row in rows):
+                    capture_event_chain(rows, load(out, "capture-restart-request.json"), source, target, state["transaction_id"])
+                    traces.append(path)
+            require(traces, "offline capture handover trace missing")
         final = load(out, "final-status.json")
         require(final["setup"]["phase"] == "active" and not final["setup"]["disable_flag_present"]
                 and not final["setup"]["recovery_active"], "offline target is not ready")
@@ -488,6 +693,7 @@ def main() -> int:
     prep.add_argument("--bot-port", type=int, default=6000)
     prep.add_argument("--forwarder", required=True)
     prep.add_argument("--duration-s", type=int, default=300)
+    prep.add_argument("--capture-plan", type=Path, help="explicit same-candidate capture restart; no package installation")
     run = sub.add_parser("run", help="apply one bounded child-NRO update; never replay a started run")
     run.add_argument("--out", type=Path, required=True)
     run.add_argument("--pin-env", help="environment variable name; its value is never saved")
@@ -498,7 +704,8 @@ def main() -> int:
     try:
         if args.command == "prepare":
             value = prepare(args.package, args.out, host=args.host, ftp_port=args.ftp_port,
-                            bot_port=args.bot_port, forwarder=args.forwarder, duration_s=args.duration_s)
+                            bot_port=args.bot_port, forwarder=args.forwarder, duration_s=args.duration_s,
+                            capture_plan=args.capture_plan)
             print(json.dumps({"prepared": value["run_id"], "target": value["target_release_id"]}))
         elif args.command == "run":
             require(args.apply, "run changes the test console; pass --apply to execute the prepared run")

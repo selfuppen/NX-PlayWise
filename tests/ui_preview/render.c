@@ -1207,6 +1207,17 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             settings_dlg.hot_reload_status = PTC_UI_HOT_RELOAD_CURRENT;
             snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_SOFTWARE_INFO));
             failed |= save_preview(directory, "settings", "settings-software-info", &settings_dlg, dark);
+            settings_dlg.hot_reload_status = PTC_UI_HOT_RELOAD_PENDING;
+            settings_dlg.hot_reload_capture_restart = true;
+            snprintf(settings_dlg.backend_release_id, sizeof(settings_dlg.backend_release_id), "%s", settings_dlg.app_release_id);
+            snprintf(settings_dlg.hot_reload_detail, sizeof(settings_dlg.hot_reload_detail), "%s", ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_READY));
+            failed |= save_preview(directory, "settings", "settings-capture-restart", &settings_dlg, dark);
+            settings_dlg.overlay = PTC_UI_OVERLAY_CONFIRM;
+            settings_dlg.operation = PTC_UI_OPERATION_HOT_RELOAD;
+            settings_dlg.overlay_selection = 1;
+            snprintf(settings_dlg.overlay_title, sizeof(settings_dlg.overlay_title), "%s", ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_TITLE));
+            snprintf(settings_dlg.overlay_body, sizeof(settings_dlg.overlay_body), "%s", ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_BODY));
+            failed |= save_preview(directory, "settings", "settings-capture-restart-confirm", &settings_dlg, dark);
         }
         model.parent_page = PTC_UI_PARENT_SUPPORT;
         model.selected_index = 4;

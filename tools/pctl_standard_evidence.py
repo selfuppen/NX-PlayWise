@@ -213,7 +213,8 @@ def collect(device: object, out: Path, plan: dict) -> list[Path]:
     return snapshots
 
 
-def activation_check(plan: dict, runtime: dict, raw: bytes | None = None) -> dict:
+def activation_check(plan: dict, runtime: dict, raw: bytes | None = None,
+                     manifest: dict | None = None) -> dict:
     """Classify saved evidence without activating capture or recommending a reboot."""
     config = plan["config"]
     usage.require(runtime.get("profile") == "release" and
@@ -222,6 +223,12 @@ def activation_check(plan: dict, runtime: dict, raw: bytes | None = None) -> dic
                   isinstance(runtime.get("boot_id"), str) and
                   re.fullmatch(r"[0-9a-f]{16}", runtime["boot_id"]), "unverified runtime identity")
     same = runtime["release_id"] == config["release_id"]
+    restart_supported = False
+    if manifest is not None:
+        usage.require(manifest.get("profile") == "release" and manifest.get("commit") == config["commit"] and
+                      manifest.get("release_id") == runtime["release_id"] == config["release_id"],
+                      "activation manifest differs from runtime/capture candidate")
+        restart_supported = type(manifest.get("capture_restart_version")) is int and manifest["capture_restart_version"] == 1
     result = {"schema_version": 1, "kind": "production_capture_activation_check",
               "qualified": False, "device_operations": False, "activation_authorized": False,
               "runtime": runtime, "target_run_id": config["run_id"],
@@ -235,9 +242,13 @@ def activation_check(plan: dict, runtime: dict, raw: bytes | None = None) -> dic
                       not value["gaps"], "capture requires inspection before activation planning")
         result["raw_sha256"] = value["raw_sha256"]
         if value["stop_record_present"]:
-            result.update(route="same_candidate_restart_unsupported", capture_state="stopped",
-                          reason="Backend stop is latched; current NRO and auto_update reject same-candidate handover.",
-                          next_step="Assess an implemented and validated restart mechanism; do not bypass update gates.")
+            if restart_supported:
+                result.update(route="capture_restart_preflight_required", capture_state="stopped",
+                              next_step="Prepare a fresh capture run and use auto_update --capture-plan; all restart preflight gates apply.")
+            else:
+                result.update(route="same_candidate_restart_unsupported", capture_state="stopped",
+                              reason="Backend stop is latched; candidate has no verified capture_restart_version:1 declaration.",
+                              next_step="Assess an implemented and validated restart mechanism; do not bypass update gates.")
         else:
             result.update(route="inspect_existing_stream", capture_state="no_stop_in_snapshot",
                           next_step="Check fresh samples and remaining original lease; do not rearm or extend it.")
@@ -335,6 +346,7 @@ def main() -> None:
     p = commands.add_parser("activation-check")
     p.add_argument("--plan", type=Path, required=True)
     p.add_argument("--runtime", type=Path, required=True)
+    p.add_argument("--manifest", type=Path)
     p.add_argument("--raw", type=Path)
     p.add_argument("--output", type=Path, required=True)
     p = commands.add_parser("collect")
@@ -355,7 +367,8 @@ def main() -> None:
         print(f"AUDITED (not qualified): {args.output.resolve()}")
     elif args.command == "activation-check":
         result = activation_check(usage.read_json(args.plan), usage.read_json(args.runtime),
-                                  args.raw.read_bytes() if args.raw else None)
+                                  args.raw.read_bytes() if args.raw else None,
+                                  usage.read_json(args.manifest) if args.manifest else None)
         save_new(args.output, result)
         print(f'OFFLINE ACTIVATION CHECK: {result["route"]}; no activation authorized')
     else:

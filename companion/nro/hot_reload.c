@@ -23,6 +23,8 @@
 #define RUNTIME_READY_PATH PLAYWISE_RELEASE_SD_ROOT "/handover/runtime-ready.json"
 #define RECOVERY_PATH PLAYWISE_RELEASE_SD_ROOT "/recovery/active/meta.json"
 #define ARTIFACTS_PATH PLAYWISE_RELEASE_SD_ROOT "/package-artifacts.json"
+#define CAPTURE_CONFIG_PATH PLAYWISE_RELEASE_SD_ROOT "/support/usage-evidence.json"
+#define CAPTURE_RESTART_PATH PLAYWISE_RELEASE_SD_ROOT "/support/backend-restart.json"
 #define HANDOFF_TIMEOUT_NS UINT64_C(10000000000)
 #define EXIT_TIMEOUT_NS UINT64_C(10000000000)
 #define READY_TIMEOUT_NS UINT64_C(30000000000)
@@ -62,6 +64,12 @@ void ptc_hot_reload_record_event(PtcHotReloadController *controller, const char 
     cJSON_AddStringToObject(root, "target_release_id", controller->journal.target_release_id);
     cJSON_AddStringToObject(root, "source_boot_id", controller->journal.source_boot_id);
     cJSON_AddStringToObject(root, "target_boot_id", controller->target_boot_id);
+    if (controller->journal.capture.request_id[0]) {
+        cJSON_AddStringToObject(root, "purpose", "usage_evidence");
+        cJSON_AddStringToObject(root, "capture_request_id", controller->journal.capture.request_id);
+        cJSON_AddStringToObject(root, "capture_run_id", controller->journal.capture.run_id);
+        cJSON_AddStringToObject(root, "capture_config_sha256", controller->journal.capture.config_sha256);
+    }
     cJSON_AddNumberToObject(root, "source_pid", (double)controller->journal.source_pid);
     cJSON_AddNumberToObject(root, "target_pid", (double)controller->journal.target_pid);
     cJSON_AddNumberToObject(root, "launch_attempts", controller->launch_attempts);
@@ -118,6 +126,37 @@ static bool read_text(const char *path, char *out, size_t out_size)
     if (fclose(file) != 0 || got == 0 || got >= out_size - 1U) return false;
     out[got] = '\0';
     return true;
+}
+
+static bool absent_path(const char *path)
+{
+    struct stat info;
+    return stat(path, &info) != 0 && errno == ENOENT;
+}
+
+static void capture_claim_path(const char *request_id, char out[384])
+{
+    snprintf(out, 384, PLAYWISE_RELEASE_SD_ROOT "/support/backend-restart-%s.claimed.json", request_id);
+}
+
+static bool capture_binding(PtcHotReloadController *controller, bool claimed,
+    PtcCaptureRestartBinding *binding)
+{
+    char request[1024], config[512], path[384], output[384];
+    if (claimed) capture_claim_path(controller->journal.capture.request_id, path);
+    else snprintf(path, sizeof(path), "%s", CAPTURE_RESTART_PATH);
+    if (!read_text(path, request, sizeof(request)) || !read_text(CAPTURE_CONFIG_PATH, config, sizeof(config)) ||
+        !ptc_hot_reload_capture_request(request, config, PLAYWISE_BUILD_COMMIT, PLAYWISE_BUILD_RELEASE_ID,
+            controller->source_boot_id, binding)) return false;
+    if (controller->journal.capture.request_id[0] &&
+        !ptc_hot_reload_capture_binding_equal(binding, &controller->journal.capture)) return false;
+    if (!claimed) {
+        capture_claim_path(binding->request_id, path);
+        if (!absent_path(path)) return false; /* A claimed request is never replayable. */
+    }
+    snprintf(output, sizeof(output), PLAYWISE_RELEASE_SD_ROOT "/support/usage-evidence-%s-%s.jsonl",
+        binding->run_id, controller->source_boot_id);
+    return absent_path(output); /* Restart cannot extend an already loaded run. */
 }
 
 static bool write_atomic(const char *path, const char *text)
@@ -281,6 +320,7 @@ static bool ack_ready(const PtcHotReloadController *controller)
     valid = cJSON_IsString(transaction) && cJSON_IsString(status) &&
         strcmp(transaction->valuestring, controller->journal.transaction_id) == 0 &&
         strcmp(status->valuestring, "ready") == 0;
+    if (controller->journal.capture.request_id[0] && !handover_version) valid = false;
     if (valid && handover_version) {
         const cJSON *source_pid = cJSON_GetObjectItemCaseSensitive(root, "source_pid");
         const cJSON *profile = cJSON_GetObjectItemCaseSensitive(root, "profile");
@@ -308,6 +348,11 @@ static bool launch_target(PtcHotReloadController *controller)
 {
     NcmProgramLocation location;
     Result rc;
+    if (controller->journal.capture.request_id[0]) {
+        PtcCaptureRestartBinding binding;
+        if (!capture_binding(controller, true, &binding) ||
+            !verify_artifacts(controller->detail, sizeof(controller->detail))) return false;
+    }
     memset(&location, 0, sizeof(location));
     location.program_id = RELEASE_PROGRAM_ID;
     location.storageID = NcmStorageId_None;
@@ -350,6 +395,15 @@ void ptc_hot_reload_recover_startup(PtcHotReloadController *controller)
     controller->journal = journal;
     snprintf(controller->source_boot_id, sizeof(controller->source_boot_id), "%s", journal.source_boot_id);
     clear_handoff();
+    if (journal.capture.request_id[0]) {
+        PtcCaptureRestartBinding binding;
+        if (!capture_binding(controller, true, &binding)) {
+            controller->status = PTC_HOT_RELOAD_RECOVERY_REQUIRED;
+            controller->phase = PTC_HOT_RELOAD_PHASE_FAILED;
+            snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_CHANGED));
+            return;
+        }
+    }
     rc = pmshellInitialize();
     if (R_FAILED(rc)) {
         controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
@@ -410,6 +464,7 @@ void ptc_hot_reload_inspect(PtcHotReloadController *controller)
     Result rc;
     if (!controller || controller->phase > PTC_HOT_RELOAD_PHASE_IDLE) return;
     controller->status = PTC_HOT_RELOAD_UNKNOWN;
+    memset(&controller->journal.capture, 0, sizeof(controller->journal.capture));
     controller->detail[0] = '\0';
     rc = pmshellInitialize();
     if (R_FAILED(rc)) {
@@ -440,6 +495,18 @@ void ptc_hot_reload_inspect(PtcHotReloadController *controller)
     } else if (strcmp(identity.release_id, PLAYWISE_BUILD_RELEASE_ID) == 0) {
         controller->status = PTC_HOT_RELOAD_CURRENT;
         snprintf(controller->detail, sizeof(controller->detail), ptc_ui_text(PTC_UI_T_THE_CURRENT_INSTALLED_VERSION_HAS_BEEN_LOADED));
+        if (!absent_path(CAPTURE_RESTART_PATH)) {
+            PtcCaptureRestartBinding binding;
+            if (capture_binding(controller, false, &binding) &&
+                verify_artifacts(controller->detail, sizeof(controller->detail))) {
+                controller->journal.capture = binding;
+                controller->status = PTC_HOT_RELOAD_PENDING;
+                snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_READY));
+            } else {
+                controller->status = PTC_HOT_RELOAD_UNAVAILABLE;
+                snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_CHANGED));
+            }
+        }
     } else if (!verify_artifacts(controller->detail, sizeof(controller->detail))) {
         controller->status = PTC_HOT_RELOAD_INCOMPLETE;
     } else {
@@ -475,6 +542,13 @@ bool ptc_hot_reload_begin(PtcHotReloadController *controller)
         controller->status = PTC_HOT_RELOAD_INCOMPLETE;
         return false;
     }
+    if (strcmp(controller->journal.source_release_id, controller->journal.target_release_id) == 0) {
+        PtcCaptureRestartBinding binding;
+        if (!controller->journal.capture.request_id[0] || !capture_binding(controller, false, &binding)) {
+            snprintf(controller->detail, sizeof(controller->detail), "%s", ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_CHANGED));
+            return false;
+        }
+    } else if (controller->journal.capture.request_id[0]) return false;
     rc = pmshellInitialize();
     if (R_FAILED(rc)) { fail(controller, ptc_ui_text(PTC_UI_T_PM_SHELL_IS_UNAVAILABLE_THE_OLD_BACKGROUND)); return false; }
     controller->pm_initialized = true;
@@ -493,6 +567,18 @@ bool ptc_hot_reload_begin(PtcHotReloadController *controller)
         fail(controller, ptc_ui_text(PTC_UI_T_UNABLE_TO_SAVE_THE_RECORD_OF_LOADING));
         return false;
     }
+    if (controller->journal.capture.request_id[0]) {
+        char claimed[384];
+        PtcCaptureRestartBinding binding;
+        capture_claim_path(controller->journal.capture.request_id, claimed);
+        /* Consume the purpose request once, after durable intent and before quiesce. */
+        if (!absent_path(claimed) || rename(CAPTURE_RESTART_PATH, claimed) != 0 ||
+            R_FAILED(fsdevCommitDevice("sdmc")) || !capture_binding(controller, true, &binding)) {
+            fail(controller, ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_CHANGED));
+            return false;
+        }
+        ptc_hot_reload_record_event(controller, "capture_request_claimed", NULL, 0);
+    }
     snprintf(intent, sizeof(intent),
         "{\"version\":1,\"transaction_id\":\"%s\",\"action\":\"quiesce\",\"created_at\":%lld}\n",
         controller->journal.transaction_id, (long long)time(NULL));
@@ -510,6 +596,13 @@ bool ptc_hot_reload_begin(PtcHotReloadController *controller)
 void ptc_hot_reload_confirm_ipc_closed(PtcHotReloadController *controller)
 {
     if (!controller || controller->phase != PTC_HOT_RELOAD_PHASE_NEED_IPC_CLOSE) return;
+    if (controller->journal.capture.request_id[0]) {
+        PtcCaptureRestartBinding binding;
+        if (!capture_binding(controller, true, &binding)) {
+            fail(controller, ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_CHANGED));
+            return;
+        }
+    }
     if (ptc_hot_reload_disable_boot(&PATHS, &controller->journal) != PTC_HOT_RELOAD_FLAG_OK) {
         /* A commit can fail after rename succeeded and the source saw absence. */
         controller->boot_disabled = exists(BOOT_FLAG_BACKUP_PATH);

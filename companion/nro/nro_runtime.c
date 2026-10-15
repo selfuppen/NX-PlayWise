@@ -40,6 +40,7 @@ void sync_hot_reload_model(UiState *ui)
 {
     if (!ui) return;
     ui->model.hot_reload_status = (int)ui->hot_reload.status;
+    ui->model.hot_reload_capture_restart = ui->hot_reload.journal.capture.request_id[0] != '\0';
     snprintf(ui->model.app_release_id, sizeof(ui->model.app_release_id), "%s", PLAYWISE_BUILD_RELEASE_ID);
     snprintf(ui->model.backend_release_id, sizeof(ui->model.backend_release_id), "%s",
         ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_COMPLETE
@@ -51,12 +52,15 @@ void sync_hot_reload_model(UiState *ui)
 void open_hot_reload_confirmation(UiState *ui)
 {
     char body[320];
-    if (!ui || ui->model.view != PTC_UI_PARENT ||
+    if (!ui || ui->model.view != PTC_UI_PARENT || ui->model.parent_support_only ||
         ui->hot_reload.status != PTC_HOT_RELOAD_PENDING || ui->waiting || ui->recovering_redemption) return;
-    snprintf(body, sizeof(body),
+    if (ui->model.hot_reload_capture_restart) {
+        snprintf(body, sizeof(body), "%s", ptc_ui_text(PTC_UI_T_CAPTURE_RESTART_BODY));
+    } else snprintf(body, sizeof(body),
         ptc_ui_text(PTC_UI_T_CURRENT_BACKEND_88S_TO_LOAD_88S_REQUESTS),
         ui->hot_reload.journal.source_release_id, PLAYWISE_BUILD_RELEASE_ID);
-    open_confirm_overlay(ui, PTC_UI_OPERATION_HOT_RELOAD, ptc_ui_text(PTC_UI_T_LOADS_THE_NEW_INSTALLED_VERSION), body);
+    open_confirm_overlay(ui, PTC_UI_OPERATION_HOT_RELOAD, ptc_ui_text(ui->model.hot_reload_capture_restart
+        ? PTC_UI_T_CAPTURE_RESTART_TITLE : PTC_UI_T_LOADS_THE_NEW_INSTALLED_VERSION), body);
 }
 
 void poll_hot_reload(UiState *ui)
@@ -82,7 +86,8 @@ void poll_hot_reload(UiState *ui)
         if (ptc_switch_ipc_client_probe(&ui->ipc)) {
             ptc_companion_transport_set_suspended(&ui->transport, false);
             snprintf(ui->model.message, sizeof(ui->model.message),
-                ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_OF_THE_BACKGROUND_HAS));
+                ptc_ui_text(ui->model.hot_reload_capture_restart ? PTC_UI_T_CAPTURE_RESTART_DONE :
+                    PTC_UI_T_THE_NEW_VERSION_OF_THE_BACKGROUND_HAS));
             submit_status(ui);
             ptc_hot_reload_record_event(&ui->hot_reload, "status_submitted", ui->active_request_id, 0);
         } else {
@@ -104,7 +109,8 @@ void poll_hot_reload(UiState *ui)
     }
     if (ui->hot_reload.status == PTC_HOT_RELOAD_PENDING &&
         ui->model.view == PTC_UI_CHILD && !ui->waiting &&
-        ui->model.overlay == PTC_UI_OVERLAY_NONE && !ui->hot_reload_child_notice_shown) {
+        ui->model.overlay == PTC_UI_OVERLAY_NONE && !ui->hot_reload_child_notice_shown &&
+        !ui->model.hot_reload_capture_restart) {
         ui->hot_reload_child_notice_shown = true;
         snprintf(ui->model.message, sizeof(ui->model.message),
             ptc_ui_text(PTC_UI_T_A_NEW_VERSION_HAS_BEEN_INSTALLED_PLEASE));
