@@ -97,6 +97,15 @@ static bool fs_append_line(PtcStorage *storage, const char *path, const char *li
 
     ensure_parent_dirs(path);
     file = fopen(path, "ab");
+#ifdef __SWITCH__
+    /* An FTP reader can temporarily deny opening a live append file. Retry
+       only before any bytes are written; write/close failure is ambiguous. */
+    for (unsigned attempt = 0; !file && attempt < 50U &&
+            (errno == EBUSY || errno == EACCES || errno == EAGAIN); ++attempt) {
+        svcSleepThread(10000000LL);
+        file = fopen(path, "ab");
+    }
+#endif
     if (!file) {
         return false;
     }
