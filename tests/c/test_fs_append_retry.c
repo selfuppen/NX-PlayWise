@@ -9,6 +9,7 @@
 static const char *path = "build/host/fs-append-retry.txt";
 static unsigned opens, writes, closes, sleeps, open_failures;
 static int open_error;
+static uint32_t platform_error;
 static bool write_failure, close_failure;
 
 FILE *ptc_test_fopen(const char *name, const char *mode)
@@ -50,13 +51,14 @@ void svcSleepThread(int64_t nanoseconds)
 }
 
 int fsdevCommitDevice(const char *name) { (void)name; return 0; }
-uint32_t fsdevGetLastResult(void) { return UINT32_C(0x12345678); }
+uint32_t fsdevGetLastResult(void) { return platform_error; }
 
 static void reset(void)
 {
     (void)remove(path);
     opens = writes = closes = sleeps = open_failures = 0;
     open_error = EBUSY;
+    platform_error = UINT32_C(0x12345678);
     write_failure = close_failure = false;
 }
 
@@ -91,6 +93,15 @@ int main(void)
     reset(); open_failures = 1; open_error = EIO;
     assert(!storage->vtable->append_line(storage, path, "one"));
     assert(opens == 1 && sleeps == 0 && writes == 0 && closes == 0);
+    reset(); open_failures = 2; open_error = EIO; platform_error = UINT32_C(0xE02);
+    assert(storage->vtable->append_line(storage, path, "one"));
+    assert(opens == 3 && sleeps == 2 && writes == 1 && closes == 1);
+    contents("one\n");
+    reset(); open_failures = 100; open_error = EIO; platform_error = UINT32_C(0xE02);
+    assert(!storage->vtable->append_line(storage, path, "one"));
+    assert(opens == 51 && sleeps == 50 && writes == 0 && closes == 0);
+    assert(fs.last_append.stage == PTC_STORAGE_APPEND_OPEN && fs.last_append.system_errno == EIO);
+    assert(fs.last_append.platform_result == UINT32_C(0xE02));
     reset(); write_failure = true;
     assert(!storage->vtable->append_line(storage, path, "one"));
     assert(opens == 1 && writes == 1 && closes == 1 && sleeps == 0);

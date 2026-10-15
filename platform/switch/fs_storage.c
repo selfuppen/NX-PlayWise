@@ -100,10 +100,12 @@ static bool fs_append_line(PtcStorage *storage, const char *path, const char *li
     ensure_parent_dirs(path);
     file = fopen(path, "ab");
 #ifdef __SWITCH__
-    /* An FTP reader can temporarily deny opening a live append file. Retry
-       only before any bytes are written; write/close failure is ambiguous. */
+    /* The bounded read-only device run recorded fopen EIO + FS 0xE02.
+       libnx maps unlisted FS Results to EIO. Include this observed pair only;
+       retry before any bytes are written, never after write/close failure. */
     for (unsigned attempt = 0; !file && attempt < 50U &&
-            (errno == EBUSY || errno == EACCES || errno == EAGAIN); ++attempt) {
+            (errno == EBUSY || errno == EACCES || errno == EAGAIN ||
+             (errno == EIO && fsdevGetLastResult() == UINT32_C(0xE02))); ++attempt) {
         svcSleepThread(10000000LL);
         ++fs->last_append.open_attempts;
         file = fopen(path, "ab");
