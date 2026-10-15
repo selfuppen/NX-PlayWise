@@ -362,7 +362,36 @@ def test_rejected_capture_preserves_raw() -> None:
         assert all(p.read_bytes() == data for p, data in original_snapshots.items())
 
 
+def test_activation_check() -> None:
+    plan = {"config": CONFIG}
+    runtime = {"profile": "release", "title_id": "4200000000BD2300",
+               "release_id": CONFIG["release_id"], "boot_id": "1" * 16}
+    stopped = evidence.activation_check(plan, runtime, encode(raw_rows()))
+    assert stopped["route"] == "same_candidate_restart_unsupported"
+    assert stopped["capture_state"] == "stopped" and stopped["raw_sha256"]
+    live = evidence.activation_check(plan, runtime, encode(raw_rows()[:2]))
+    assert live["route"] == "inspect_existing_stream"
+    assert evidence.activation_check(plan, runtime)["route"] == "capture_state_unknown"
+    other = dict(runtime, release_id="another-candidate")
+    update = evidence.activation_check(plan, other)
+    assert update["route"] == "auto_update_preflight_required"
+    for value in (stopped, live, update):
+        assert value["activation_authorized"] is False and value["device_operations"] is False
+        assert value["whole_console_reboot_required"] is None and value["qualified"] is False
+    for bad_runtime, data in ((dict(runtime, boot_id="2" * 16), encode(raw_rows())),
+                              (dict(runtime, profile="device-lab"), encode(raw_rows())),
+                              (other, encode(raw_rows())),
+                              (runtime, encode(raw_rows()[:2]) + b'{')):
+        try:
+            evidence.activation_check(plan, bad_runtime, data)
+        except usage.UsageQualificationError:
+            pass
+        else:
+            raise AssertionError("unbound or partial evidence selected an activation route")
+
+
 if __name__ == "__main__":
+    test_activation_check()
     test_standard_candidate_scope()
     test_audit()
     test_prepare_and_collect()

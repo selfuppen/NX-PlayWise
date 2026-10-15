@@ -213,6 +213,43 @@ def collect(device: object, out: Path, plan: dict) -> list[Path]:
     return snapshots
 
 
+def activation_check(plan: dict, runtime: dict, raw: bytes | None = None) -> dict:
+    """Classify saved evidence without activating capture or recommending a reboot."""
+    config = plan["config"]
+    usage.require(runtime.get("profile") == "release" and
+                  runtime.get("title_id") == "4200000000BD2300" and
+                  isinstance(runtime.get("release_id"), str) and
+                  isinstance(runtime.get("boot_id"), str) and
+                  re.fullmatch(r"[0-9a-f]{16}", runtime["boot_id"]), "unverified runtime identity")
+    same = runtime["release_id"] == config["release_id"]
+    result = {"schema_version": 1, "kind": "production_capture_activation_check",
+              "qualified": False, "device_operations": False, "activation_authorized": False,
+              "runtime": runtime, "target_run_id": config["run_id"],
+              "same_candidate": same, "whole_console_reboot_required": None,
+              "note": "Saved observations only; revalidate live identity, health and lease before use."}
+    if raw is not None:
+        value = audit(raw, config)
+        usage.require(same and value["start"]["boot_id"] == runtime["boot_id"],
+                      "capture does not belong to the current runtime")
+        usage.require(not value["invalid_sample_lines"] and not value["partial_tail_lines"] and
+                      not value["gaps"], "capture requires inspection before activation planning")
+        result["raw_sha256"] = value["raw_sha256"]
+        if value["stop_record_present"]:
+            result.update(route="same_candidate_restart_unsupported", capture_state="stopped",
+                          reason="Backend stop is latched; current NRO and auto_update reject same-candidate handover.",
+                          next_step="Assess an implemented and validated restart mechanism; do not bypass update gates.")
+        else:
+            result.update(route="inspect_existing_stream", capture_state="no_stop_in_snapshot",
+                          next_step="Check fresh samples and remaining original lease; do not rearm or extend it.")
+    elif same:
+        result.update(route="capture_state_unknown", capture_state="unknown",
+                      next_step="Collect this run read-only; a missing stream does not prove capture is stopped.")
+    else:
+        result.update(route="auto_update_preflight_required", capture_state="unknown",
+                      next_step="Use auto_update preflight; restricted-day and all other update gates still apply.")
+    return result
+
+
 def stage(device: object, out: Path, plan: dict) -> dict:
     """Copy an inactive candidate; never replace live files or arm capture."""
     config = plan["config"]
@@ -295,6 +332,11 @@ def main() -> None:
     p.add_argument("--raw", type=Path, required=True)
     p.add_argument("--plan", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
+    p = commands.add_parser("activation-check")
+    p.add_argument("--plan", type=Path, required=True)
+    p.add_argument("--runtime", type=Path, required=True)
+    p.add_argument("--raw", type=Path)
+    p.add_argument("--output", type=Path, required=True)
     p = commands.add_parser("collect")
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--host", required=True)
@@ -311,6 +353,11 @@ def main() -> None:
         plan = usage.read_json(args.plan)
         save_new(args.output, audit(args.raw.read_bytes(), plan["config"]))
         print(f"AUDITED (not qualified): {args.output.resolve()}")
+    elif args.command == "activation-check":
+        result = activation_check(usage.read_json(args.plan), usage.read_json(args.runtime),
+                                  args.raw.read_bytes() if args.raw else None)
+        save_new(args.output, result)
+        print(f'OFFLINE ACTIVATION CHECK: {result["route"]}; no activation authorized')
     else:
         from usage_probe import Device
         plan = usage.read_json(args.out / "plan.json")
