@@ -1,5 +1,7 @@
 [Documentation index](../README_en.md)
 
+The current reboot-free update contract adds source-generation release identities, bounded journal I/O retries, suspended IPC/SD submissions during handover, and append-only transaction events. See the [Chinese protocol section](协议.md) and the [unattended update operating guide (Chinese)](../开发/无人值守更新与测试指南.md) for fields, recovery and qualification boundaries. These additions do not introduce business request types or bypass PIN authorization.
+
 <div align="center">
 
   [English](PROTOCOL.md) | [简体中文](协议.md)

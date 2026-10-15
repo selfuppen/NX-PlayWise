@@ -135,10 +135,13 @@ int main(int argc, char **argv)
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs),
         ptc_eden_runtime_ipc_backend(), &eden_runtime);
 #else
-    backend_expected = standard_backend_expected();
+    backend_expected = standard_backend_expected() && ui.hot_reload.phase != PTC_HOT_RELOAD_PHASE_FAILED &&
+        ui.hot_reload.status != PTC_HOT_RELOAD_RUNNING;
     if (backend_expected) ptc_switch_ipc_client_init(&ui.ipc);
     ptc_companion_transport_init(&ui.transport, APP_ROOT, ptc_fs_storage_as_storage(&fs),
-        backend_expected ? ptc_switch_ipc_backend() : NULL, &ui.ipc);
+        (backend_expected || ui.hot_reload.status == PTC_HOT_RELOAD_RUNNING) ? ptc_switch_ipc_backend() : NULL, &ui.ipc);
+    if (ui.hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED || ui.hot_reload.status == PTC_HOT_RELOAD_RUNNING)
+        ptc_companion_transport_set_suspended(&ui.transport, true);
     if (ui.hot_reload.status == PTC_HOT_RELOAD_UNKNOWN) ptc_hot_reload_inspect(&ui.hot_reload);
     sync_hot_reload_model(&ui);
 #endif
@@ -157,6 +160,10 @@ int main(int argc, char **argv)
     }
 #ifndef PLAYWISE_EDEN
     else if (ui.hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED) {
+        snprintf(ui.model.message, sizeof(ui.model.message), "%s", ui.hot_reload.detail);
+    } else if (ui.hot_reload.status == PTC_HOT_RELOAD_RUNNING) {
+        ui.waiting = true;
+        ui.model.waiting = true;
         snprintf(ui.model.message, sizeof(ui.model.message), "%s", ui.hot_reload.detail);
     } else if (!backend_expected) {
         ptc_ui_setup_record_issue(&ui.model, PTC_UI_SETUP_ISSUE_STATUS, PTC_ERR_PCTL_INIT_FAILED);

@@ -643,10 +643,11 @@ void confirm_operation(UiState *ui)
         break;
 #ifndef PLAYWISE_EDEN
     case PTC_UI_OPERATION_HOT_RELOAD:
-        if (ui->waiting || ui->model.recovery_active) {
+        if (ui->waiting || ui->recovering_redemption || ui->model.recovery_active) {
             snprintf(ui->model.message, sizeof(ui->model.message),
                 ptc_ui_text(PTC_UI_T_THE_CURRENT_OPERATION_OR_RECOVERY_HAS_NOT));
         } else if (ptc_hot_reload_begin(&ui->hot_reload)) {
+            ptc_companion_transport_set_suspended(&ui->transport, true);
             ui->hot_reload_terminal_handled = false;
             ui->waiting = true;
             ui->model.waiting = true;

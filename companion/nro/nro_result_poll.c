@@ -69,6 +69,7 @@ static void sync_setup_wizard(UiState *ui)
 
 void poll_result(UiState *ui, bool force)
 {
+    if (!ui || ui->transport.suspended) return;
     PtcCompanionStatus status;
     PtcDayRule saved_draft[7];
     bool preserve_weekly_draft;

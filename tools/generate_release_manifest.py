@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -51,6 +52,29 @@ def git_tracked_dirty() -> bool:
     return result.returncode != 0
 
 
+def source_fingerprint() -> str:
+    """Hash build inputs, including new non-ignored sources, without timestamps."""
+    result = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+                            cwd=ROOT, capture_output=True, check=True)
+    digest = hashlib.sha256()
+    for name in sorted(set(result.stdout.split(b"\0")) - {b""}):
+        path = ROOT / os.fsdecode(name)
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        if not path.exists():
+            digest.update(b"missing\0")
+            continue
+        if path.is_symlink():
+            digest.update(b"symlink\0" + os.fsencode(os.readlink(path)))
+            continue
+        digest.update(b"file\0")
+        digest.update(path.stat().st_size.to_bytes(8, "big"))
+        with path.open("rb") as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(block)
+    return digest.hexdigest()
+
+
 def toolchain_identity() -> str:
     compiler = Path(os.environ.get("DEVKITA64", "")) / "bin" / "aarch64-none-elf-gcc"
     if os.name == "nt":
@@ -94,6 +118,8 @@ def libtesla_commit() -> str:
 def make_manifest(profile: str) -> dict:
     commit = git_commit()
     libnx = libnx_identity()
+    compiler = toolchain_identity()
+    source_hash = source_fingerprint()
     build_image = os.environ.get("PLAYWISE_BUILD_IMAGE", "unknown")
     build_image_digest = os.environ.get("PLAYWISE_BUILD_IMAGE_DIGEST", "unknown")
     manual_verified = profile == "release" and os.environ.get("PLAYWISE_MANUAL_DEVICE_VERIFIED") == "1"
@@ -112,12 +138,13 @@ def make_manifest(profile: str) -> dict:
         "recovery_version": 1,
         "pctl_layout_version": 1,
         "build": {
-            "devkitpro": toolchain_identity(),
+            "devkitpro": compiler,
             "libnx": libnx,
             "libtesla_commit": libtesla_commit(),
             "container_image": build_image,
             "container_image_digest": build_image_digest,
             "source_dirty": git_tracked_dirty(),
+            "source_fingerprint": source_hash,
         },
         "qualification": {
             "status": "manual_verified" if manual_verified else "pending",
@@ -130,11 +157,18 @@ def make_manifest(profile: str) -> dict:
             "result": "manual_verified" if manual_verified else "pending",
         },
     }
+    # Keep all profiles in the same source/toolchain generation. Exact installed
+    # bytes are still bound separately by package-artifacts.json and Zip SHA-256.
+    identity = {"source": source_hash, "compiler": compiler, "libnx": libnx,
+                "libtesla": data["build"]["libtesla_commit"], "image": build_image_digest}
+    generation = hashlib.sha256(json.dumps(identity, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    data["release_id"] += "." + generation
     if manual_verified:
         data["qualification"].update({"method": "manual", "scope": "main_features"})
     if "PLAYWISE_GIT_AUTOCRLF" in os.environ:
         data["build"]["git_autocrlf"] = os.environ["PLAYWISE_GIT_AUTOCRLF"]
     if profile == "release":
+        data["hot_reload_events_version"] = 1
         from pctl_usage_qualification import CONTRACT
         data["usage_contract"] = CONTRACT
     return data

@@ -42,7 +42,8 @@ void sync_hot_reload_model(UiState *ui)
     ui->model.hot_reload_status = (int)ui->hot_reload.status;
     snprintf(ui->model.app_release_id, sizeof(ui->model.app_release_id), "%s", PLAYWISE_BUILD_RELEASE_ID);
     snprintf(ui->model.backend_release_id, sizeof(ui->model.backend_release_id), "%s",
-        ui->hot_reload.journal.source_release_id);
+        ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_COMPLETE
+            ? ui->hot_reload.journal.target_release_id : ui->hot_reload.journal.source_release_id);
     snprintf(ui->model.hot_reload_detail, sizeof(ui->model.hot_reload_detail), "%s",
         ui->hot_reload.detail);
 }
@@ -51,7 +52,7 @@ void open_hot_reload_confirmation(UiState *ui)
 {
     char body[320];
     if (!ui || ui->model.view != PTC_UI_PARENT ||
-        ui->hot_reload.status != PTC_HOT_RELOAD_PENDING || ui->waiting) return;
+        ui->hot_reload.status != PTC_HOT_RELOAD_PENDING || ui->waiting || ui->recovering_redemption) return;
     snprintf(body, sizeof(body),
         ptc_ui_text(PTC_UI_T_CURRENT_BACKEND_88S_TO_LOAD_88S_REQUESTS),
         ui->hot_reload.journal.source_release_id, PLAYWISE_BUILD_RELEASE_ID);
@@ -79,10 +80,13 @@ void poll_hot_reload(UiState *ui)
         ui->waiting = false;
         ui->model.waiting = false;
         if (ptc_switch_ipc_client_probe(&ui->ipc)) {
+            ptc_companion_transport_set_suspended(&ui->transport, false);
             snprintf(ui->model.message, sizeof(ui->model.message),
                 ptc_ui_text(PTC_UI_T_THE_NEW_VERSION_OF_THE_BACKGROUND_HAS));
             submit_status(ui);
+            ptc_hot_reload_record_event(&ui->hot_reload, "status_submitted", ui->active_request_id, 0);
         } else {
+            ptc_hot_reload_record_event(&ui->hot_reload, "ipc_unavailable", NULL, 0);
             ui->hot_reload.status = PTC_HOT_RELOAD_UNAVAILABLE;
             snprintf(ui->hot_reload.detail, sizeof(ui->hot_reload.detail),
                 ptc_ui_text(PTC_UI_T_THE_BACKGROUND_HAS_BEEN_STARTED_BUT_IPC));
@@ -93,11 +97,9 @@ void poll_hot_reload(UiState *ui)
         ui->hot_reload_terminal_handled = true;
         ui->waiting = false;
         ui->model.waiting = false;
-        if (ui->hot_reload_ipc_closed) {
-            ptc_switch_ipc_client_init(&ui->ipc);
-            (void)ptc_switch_ipc_client_probe(&ui->ipc);
-            ui->hot_reload_ipc_closed = false;
-        }
+        /* A missing service can defer smGetService indefinitely. Keep this
+           client's submissions suspended until a normal reopen/recovery. */
+        ptc_companion_transport_set_suspended(&ui->transport, true);
         snprintf(ui->model.message, sizeof(ui->model.message), "%s", ui->hot_reload.detail);
     }
     if (ui->hot_reload.status == PTC_HOT_RELOAD_PENDING &&

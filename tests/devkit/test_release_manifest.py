@@ -48,6 +48,7 @@ def test_libnx_devkitpro_package_database_fallback() -> None:
 
 def test_candidate_defaults_to_pending() -> None:
     with mock.patch.object(manifest, "git_commit", return_value="a" * 40), \
+            mock.patch.object(manifest, "source_fingerprint", return_value="c" * 64), \
             mock.patch.object(manifest, "git_tracked_dirty", return_value=False), \
             mock.patch.object(manifest, "toolchain_identity", return_value="gcc 15.2.0"), \
             mock.patch.object(manifest, "libnx_identity", return_value="libnx 4.12.0-1"), \
@@ -70,7 +71,8 @@ def test_manual_device_verification_is_explicit_and_scoped() -> None:
         "PLAYWISE_VERIFIED_HOS": "22.5.0",
         "PLAYWISE_VERIFIED_ATMOSPHERE": "1.11.2",
     }
-    with mock.patch.dict(os.environ, verification, clear=True):
+    with mock.patch.dict(os.environ, verification, clear=True), \
+            mock.patch.object(manifest, "source_fingerprint", return_value="c" * 64):
         release = manifest.make_manifest("release")
         lab = manifest.make_manifest("device-lab")
         eden = manifest.make_manifest("eden-test")
@@ -87,7 +89,8 @@ def test_manual_device_verification_is_explicit_and_scoped() -> None:
             eden["qualification"]["status"] == "pending", "manual status must not leak into test profiles")
     require("usage_contract" not in lab and "usage_contract" not in eden,
             "Lab raw and Eden simulation must not claim the release consumption contract")
-    with mock.patch.dict(os.environ, {"PLAYWISE_MANUAL_DEVICE_VERIFIED": "1"}, clear=True):
+    with mock.patch.dict(os.environ, {"PLAYWISE_MANUAL_DEVICE_VERIFIED": "1"}, clear=True), \
+            mock.patch.object(manifest, "source_fingerprint", return_value="c" * 64):
         try:
             manifest.make_manifest("release")
         except ValueError as exc:
@@ -136,6 +139,42 @@ def test_host_newline_policy_preserves_real_edits() -> None:
             require(manifest.git_tracked_dirty(), "Git failure can never force a clean source identity")
 
 
+def test_rebuild_identity_tracks_source_and_toolchain() -> None:
+    with tempfile.TemporaryDirectory(prefix="playwise-build-identity-") as temporary:
+        root = Path(temporary)
+        subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
+        (root / ".gitignore").write_text("build/\n", encoding="utf-8")
+        source = root / "main.c"
+        source.write_text("int value = 1;\n", encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+        with mock.patch.object(manifest, "ROOT", root), \
+                mock.patch.object(manifest, "git_commit", return_value="a" * 40), \
+                mock.patch.object(manifest, "git_tracked_dirty", return_value=True), \
+                mock.patch.object(manifest, "toolchain_identity", return_value="gcc fixture"), \
+                mock.patch.object(manifest, "libnx_identity", return_value="libnx fixture"):
+            first = manifest.make_manifest("release")
+            require(first == manifest.make_manifest("release"), "unchanged input has deterministic build identity")
+            require(first["release_id"] == manifest.make_manifest("eden-test")["release_id"],
+                    "profiles share their source/toolchain generation")
+            source.write_text("int value = 2;\n", encoding="utf-8")
+            second = manifest.make_manifest("release")
+            require(first["release_id"] != second["release_id"], "same-commit dirty rebuild must be reloadable")
+            require(first["commit"] == second["commit"], "source commit remains truthful")
+            new_source = root / "new.c"
+            new_source.write_text("new input 1", encoding="utf-8")
+            third = manifest.make_manifest("release")
+            new_source.write_text("new input 2", encoding="utf-8")
+            require(third["release_id"] != manifest.make_manifest("release")["release_id"],
+                    "editing a new untracked source must not collide")
+            unchanged = manifest.make_manifest("release")
+            (root / "build").mkdir()
+            (root / "build" / "output.bin").write_bytes(b"ignored generated output")
+            require(unchanged == manifest.make_manifest("release"), "ignored build output cannot feed back into identity")
+            with mock.patch.object(manifest, "libnx_identity", return_value="libnx changed"):
+                require(unchanged["release_id"] != manifest.make_manifest("release")["release_id"],
+                        "toolchain identity changes require a reload")
+
+
 def main() -> int:
     test_libnx_package_identity()
     test_libnx_pkgconfig_fallback()
@@ -144,6 +183,7 @@ def main() -> int:
     test_manual_device_verification_is_explicit_and_scoped()
     test_tracked_dirty_uses_content_diff()
     test_host_newline_policy_preserves_real_edits()
+    test_rebuild_identity_tracks_source_and_toolchain()
     print("Release manifest tests passed")
     return 0
 

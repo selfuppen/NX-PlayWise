@@ -67,7 +67,7 @@ void refresh_theme(UiState *ui)
 
 void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms)
 {
-    if (!ui || ui->waiting || ui->recovering_redemption) return;
+    if (!ui || ui->waiting || ui->recovering_redemption || ui->transport.suspended) return;
     ui->status_refresh_pending = false;
     refresh_disable_flag(ui);
     refresh_album_restriction(ui);

@@ -56,7 +56,7 @@ void show_pending_redemption(UiState *ui)
 void poll_pending_redemption(UiState *ui)
 {
     PtcCompanionStatus status;
-    if (!ui || !ui->recovering_redemption) return;
+    if (!ui || !ui->recovering_redemption || ui->transport.suspended) return;
     status = ptc_companion_read_result(
         &ui->client, ui->pending_redemption.request_id, 0, -1,
         ui->last_result, sizeof(ui->last_result));

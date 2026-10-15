@@ -25,6 +25,7 @@ Documents are grouped by purpose. Chinese and English versions share each catego
 | [Development Environment Guide](开发/DEVELOPMENT_ENVIRONMENT_GUIDE.md) | Host, devkitPro, unified builds and dependencies | [开发环境指南](开发/开发环境指南.md) |
 | [Developer Guide](开发/DEVELOPER_GUIDE.md) | Module responsibilities, safety boundaries, upstream research and merge requirements | [开发指南](开发/开发指南.md) |
 | [Testing Guide](开发/TESTING_GUIDE.md) | Local regression, CI gate, packaging gates, Eden, UI, hardware acceptance and evidence round-trip | [测试指南](开发/测试指南.md) |
+| [Unattended Updates and Tests (Chinese)](开发/无人值守更新与测试指南.md) | Bounded deployment, PIN authorization, recovery, evidence and test readiness | [无人值守更新与测试指南](开发/无人值守更新与测试指南.md) |
 | [PCTL1952 Candidate Acceptance (Chinese)](开发/PCTL1952候选验收.md) | Independent consumption, grant recovery, 1440 proxy baseline and evidence binding | [PCTL1952候选验收](开发/PCTL1952候选验收.md) |
 | [PCTL1952 Follow-up Checklist (Chinese)](开发/PCTL1952后续工作清单.md) | Clean candidate build, hardware acceptance, promotion, proxy removal and remaining qualification scope | [PCTL1952后续工作清单](开发/PCTL1952后续工作清单.md) |
 
@@ -49,6 +50,7 @@ For device experiments, see [Stable device probing workflow (Chinese)](开发/�
 | [Overlay memory and freeze risk audit](调研/Overlay内存与死机风险自查.md) | Bounded glyph ownership, resource teardown, thread races and hardware evidence limits | 2026-10-13 |
 | [PCTL1952 mainline findings](调研/PCTL1952主线探测计划.md) | Usage semantics, first takeover, lifecycle and natural midnight evidence | 2026-10-14 |
 | [PCTL1952 feature impact handoff](调研/PCTL1952功能影响分析交接.md) | Analysis inputs for totals, eye care, bedtime, dock policy and combined state machines | 2026-10-14 |
+| [Updates without a system reboot and test automation](调研/免系统重启更新与自动化测试-20261015.md) | Existing hot reload, build identity and takeover gaps, staged deployment coordination and device validation | 2026-10-15 |
 
 ## Maintenance
 

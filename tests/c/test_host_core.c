@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +26,7 @@
 #include "../../companion/file_protocol.h"
 #include "../../companion/hot_reload_guard.h"
 #include "../../companion/request_client.h"
+#include "../../companion/transport_client.h"
 #include "../../companion/result_summary.h"
 #include "../../companion/overlay/bridge.h"
 #include "../../companion/overlay/input_model.h"
@@ -97,6 +99,7 @@ static void test_hot_reload_guard(void)
         "build/test-hot-reload-guard/boot2.flag",
         "build/test-hot-reload-guard/boot2.flag.backup",
         "build/test-hot-reload-guard/reload.json",
+        NULL, NULL,
     };
     static const char *const phases[] = {
         "prepared", "boot_disabled", "boot_restored", "target_launched"
@@ -189,6 +192,126 @@ static void test_hot_reload_guard(void)
         "unknown backup has no trusted transaction identity");
     clear_hot_reload_fixture();
     (void)remove("build/test-hot-reload-guard");
+}
+
+typedef struct {
+    int failures;
+    unsigned int calls;
+    unsigned int waits;
+    uint32_t commit_result;
+} ReloadFault;
+
+static int reload_fault_remove(void *ctx, const char *path)
+{
+    ReloadFault *fault = ctx;
+    ++fault->calls;
+    if (fault->failures != 0) {
+        if (fault->failures > 0) --fault->failures;
+        errno = EBUSY;
+        return -1;
+    }
+    return remove(path);
+}
+
+static uint32_t reload_fault_commit(void *ctx)
+{
+    return ((ReloadFault *)ctx)->commit_result;
+}
+
+static void reload_fault_wait(void *ctx, unsigned int milliseconds)
+{
+    ReloadFault *fault = ctx;
+    check_int(milliseconds, 10, "sharing retry uses a bounded ten millisecond interval");
+    ++fault->waits;
+}
+
+static void test_hot_reload_io(void)
+{
+    ReloadFault fault = {0};
+    const PtcHotReloadIo io = {&fault, reload_fault_remove, NULL, reload_fault_commit, reload_fault_wait};
+    PtcHotReloadIoError error;
+    PtcHotReloadPaths paths = {NULL, NULL, "build/test-hot-reload-io.json", &io, &error};
+    PtcHotReloadJournal journal = {0}, recovered;
+    (void)remove(paths.journal);
+    (void)remove("build/test-hot-reload-io.json.tmp");
+    snprintf(journal.transaction_id, sizeof(journal.transaction_id), "io-case");
+    snprintf(journal.phase, sizeof(journal.phase), "prepared");
+    snprintf(journal.source_release_id, sizeof(journal.source_release_id), "old");
+    snprintf(journal.target_release_id, sizeof(journal.target_release_id), "new");
+    journal.source_pid = 41;
+    check_true(ptc_hot_reload_write_journal(&paths, &journal), "seed journal for injected sharing errors");
+    fault.failures = 2;
+    snprintf(journal.phase, sizeof(journal.phase), "boot_disabled");
+    check_true(ptc_hot_reload_write_journal(&paths, &journal), "transient reader sharing failure recovers");
+    check_int(fault.waits, 2, "only failed mutations are retried");
+    check_int(error.retries, 2, "successful recovery retains retry evidence");
+    fault.failures = -1;
+    unsigned int previous_calls = fault.calls;
+    snprintf(journal.phase, sizeof(journal.phase), "boot_restored");
+    check_true(!ptc_hot_reload_write_journal(&paths, &journal), "persistent reader cannot block indefinitely");
+    check_int(fault.calls - previous_calls, 51, "persistent sharing failure has a finite attempt limit");
+    check_int(error.system_errno, EBUSY, "native sharing errno is retained");
+    check_true(host_file_exists(paths.journal) && host_file_exists("build/test-hot-reload-io.json.tmp"),
+        "old and complete pending journals survive a failed replacement");
+    fault.failures = 0;
+    check_true(ptc_hot_reload_read_journal(&paths, &recovered) && strcmp(recovered.phase, "boot_restored") == 0,
+        "reopening promotes the same owned interrupted transaction");
+    fault.commit_result = 7;
+    check_true(!ptc_hot_reload_write_journal(&paths, &journal), "failed commit cannot report durable success");
+    check_int(error.result, 7, "native commit Result is retained");
+    fault.commit_result = 0;
+    check_true(ptc_hot_reload_read_journal(&paths, &recovered), "commit failure leaves a recoverable pending generation");
+    paths.boot_flag = "build/test-hot-reload-io.flag";
+    paths.boot_flag_backup = "build/test-hot-reload-io.flag.backup";
+    (void)remove(paths.boot_flag);
+    (void)remove(paths.boot_flag_backup);
+    snprintf(journal.phase, sizeof(journal.phase), "prepared");
+    check_true(ptc_hot_reload_write_journal(&paths, &journal), "seed flag transaction before commit failure");
+    check_true(write_host_file(paths.boot_flag, ""), "seed original empty flag");
+    fault.commit_result = 7;
+    check_int(ptc_hot_reload_disable_boot(&paths, &journal), PTC_HOT_RELOAD_FLAG_IO_ERROR,
+        "commit failure after flag rename is not reported as success");
+    check_true(host_file_exists(paths.boot_flag_backup) && !host_file_exists(paths.boot_flag),
+        "post-rename commit failure retains the original flag for recovery");
+    fault.commit_result = 0;
+    check_true(ptc_hot_reload_read_journal(&paths, &recovered), "post-rename failure keeps owned journal");
+    check_int(ptc_hot_reload_restore_boot(&paths, &recovered), PTC_HOT_RELOAD_FLAG_OK,
+        "recovery restores the original flag after a post-rename commit failure");
+    (void)remove(paths.boot_flag);
+    (void)remove(paths.boot_flag_backup);
+    (void)remove(paths.journal);
+    (void)remove("build/test-hot-reload-io.json.tmp");
+}
+
+static int transport_connect_calls;
+static bool suspended_transport_connect(void *ctx)
+{
+    (void)ctx;
+    ++transport_connect_calls;
+    return false;
+}
+
+static void test_suspended_transport(void)
+{
+    static PtcMemStorage mem;
+    PtcCompanionTransportClient client;
+    const PtcCompanionIpcBackend ipc = {suspended_transport_connect, NULL, NULL, NULL, NULL, NULL};
+    ptc_mem_storage_init(&mem);
+    ptc_companion_transport_init(&client, "/transport", &mem.storage, &ipc, NULL);
+    transport_connect_calls = 0;
+    ptc_companion_transport_set_suspended(&client, true);
+    check_int(ptc_companion_transport_submit_status(&client, "reload-status", 1000), PTC_COMPANION_QUIESCING,
+        "lifecycle suspension refuses status without connecting or enqueuing");
+    check_int(transport_connect_calls, 0, "suspension never queries a missing service");
+    check_true(!mem.storage.vtable->exists(&mem.storage, "/transport/inbox/pending/reload-status.json"),
+        "suspension cannot downgrade to SD queue");
+    check_true(!ptc_companion_transport_notify_storage_changed(&client), "suspended notify does not reconnect");
+    ptc_companion_transport_set_suspended(&client, false);
+    check_int(ptc_companion_transport_submit_status(&client, "reload-status", 1000), PTC_COMPANION_OK,
+        "verified lifecycle completion restores normal submission");
+    check_int(transport_connect_calls, 1, "resumption permits one connection attempt");
+    check_true(mem.storage.vtable->exists(&mem.storage, "/transport/inbox/pending/reload-status.json"),
+        "ordinary missing IPC can still use the supported durable queue");
 }
 
 static bool fixed_random(uint8_t *out, size_t out_size, void *ctx)
@@ -3862,6 +3985,30 @@ done:
  #include "test_config_backup.inc"
  #include "test_result_capacity.inc"
 
+static void test_quiescing_scheduler(void)
+{
+    static PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime clock;
+    PtcSysmodule sysmodule;
+    seed_active_buffer_fixture(&mem, &pctl, &clock, &sysmodule, 60, 5, true);
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/quiesce-status.json",
+        "{\"version\":1,\"request_id\":\"quiesce-status\",\"type\":\"status\",\"created_at\":1,\"payload\":{}}"),
+        "queue a durable request at the quiesce boundary");
+    sysmodule.quiescing = true;
+    unsigned int calls = pctl.apply_target_calls;
+    check_int(ptc_sysmodule_scheduler_tick(&sysmodule, true), 0, "quiescing stops scheduler work");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/quiesce-status.json") &&
+        !mem.storage.vtable->exists(&mem.storage, "app/results/quiesce-status.json"),
+        "quiescing preserves the original pending request without acknowledging it");
+    check_int(pctl.apply_target_calls, calls, "quiescing cannot autonomously write PCTL");
+    sysmodule.quiescing = false;
+    check_true(ptc_sysmodule_scheduler_tick(&sysmodule, true) > 0, "cancelled handoff resumes normal work");
+    check_true(mem.storage.vtable->exists(&mem.storage, "app/results/quiesce-status.json") &&
+        !mem.storage.vtable->exists(&mem.storage, "app/inbox/pending/quiesce-status.json"),
+        "resumption processes the same ID instead of inventing a new request");
+}
+
 int main(void)
 {
     test_result_capacity_and_complete_recent_events();
@@ -3870,6 +4017,9 @@ int main(void)
     failures += ptc_test_control_safety();
     test_eden_simulated_usage_clock();
     test_hot_reload_guard();
+    test_hot_reload_io();
+    test_suspended_transport();
+    test_quiescing_scheduler();
     test_result_summary_unlimited_state();
     test_result_summary_access_recovery();
     test_tokens();

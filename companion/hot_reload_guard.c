@@ -1,6 +1,7 @@
 #include "hot_reload_guard.h"
 
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -21,11 +22,47 @@ static bool empty_file(const char *path)
     return path && stat(path, &info) == 0 && info.st_size == 0;
 }
 
-static void commit_storage(void)
+static void io_error(const PtcHotReloadPaths *paths, const char *operation, int err, uint32_t result)
 {
+    if (!paths || !paths->error) return;
+    snprintf(paths->error->operation, sizeof(paths->error->operation), "%s", operation);
+    paths->error->system_errno = err;
+    paths->error->result = result;
+}
+
+static bool commit_storage(const PtcHotReloadPaths *paths)
+{
+    uint32_t result = 0;
+    if (paths->io && paths->io->commit) result = paths->io->commit(paths->io->ctx);
 #ifdef __SWITCH__
-    (void)fsdevCommitDevice("sdmc");
+    else result = fsdevCommitDevice("sdmc");
 #endif
+    if (result) io_error(paths, "commit", 0, result);
+    return result == 0;
+}
+
+static int mutate_path(const PtcHotReloadPaths *paths, const char *from, const char *to)
+{
+    unsigned int attempt;
+    for (attempt = 0; attempt < 51U; ++attempt) {
+        int rc;
+        if (to) rc = paths->io && paths->io->rename_path
+            ? paths->io->rename_path(paths->io->ctx, from, to) : rename(from, to);
+        else rc = paths->io && paths->io->remove_path
+            ? paths->io->remove_path(paths->io->ctx, from) : remove(from);
+        if (rc == 0) return 0;
+        int err = errno;
+        io_error(paths, to ? "rename" : "remove", err, 0);
+        /* FAT readers may briefly hold the old generation. Keep both journal
+           generations on failure; never treat a sharing error as absence. */
+        if ((err != EBUSY && err != EACCES && err != EAGAIN) || attempt == 50U) return -1;
+        if (paths->error) ++paths->error->retries;
+        if (paths->io && paths->io->wait_ms) paths->io->wait_ms(paths->io->ctx, 10);
+#ifdef __SWITCH__
+        else svcSleepThread(10000000LL);
+#endif
+    }
+    return -1;
 }
 
 static bool json_string(const char *json, const char *key, char *out, size_t out_size)
@@ -90,30 +127,33 @@ bool ptc_hot_reload_identity_matches(const PtcHotReloadIdentity *identity,
 
 bool ptc_hot_reload_write_journal(const PtcHotReloadPaths *paths, const PtcHotReloadJournal *journal)
 {
+    if (paths && paths->error) memset(paths->error, 0, sizeof(*paths->error));
     char temporary[384];
     FILE *file;
     bool wrote;
     if (!paths || !journal || !paths->journal) return false;
     if (snprintf(temporary, sizeof(temporary), "%s.tmp", paths->journal) <= 0 || path_exists(temporary)) return false;
     file = fopen(temporary, "wb");
-    if (!file) return false;
+    if (!file) { io_error(paths, "open_journal", errno, 0); return false; }
     wrote = fprintf(file,
             "{\"version\":1,\"transaction_id\":\"%s\",\"phase\":\"%s\","
             "\"source_release_id\":\"%s\",\"target_release_id\":\"%s\","
+            "\"source_boot_id\":\"%s\","
             "\"source_pid\":%llu,\"target_pid\":%llu}\n",
             journal->transaction_id, journal->phase, journal->source_release_id,
-            journal->target_release_id, (unsigned long long)journal->source_pid,
+            journal->target_release_id, journal->source_boot_id, (unsigned long long)journal->source_pid,
             (unsigned long long)journal->target_pid) >= 0;
     if (fclose(file) != 0) wrote = false;
     if (!wrote) {
-        (void)remove(temporary);
+        io_error(paths, "write_journal", errno, 0);
+        (void)mutate_path(paths, temporary, NULL);
         return false;
     }
-    commit_storage();
-    if (path_exists(paths->journal) && remove(paths->journal) != 0) return false;
-    commit_storage();
-    if (rename(temporary, paths->journal) != 0) return false;
-    commit_storage();
+    if (!commit_storage(paths)) return false;
+    if (path_exists(paths->journal) && mutate_path(paths, paths->journal, NULL) != 0) return false;
+    if (!commit_storage(paths)) return false;
+    if (mutate_path(paths, temporary, paths->journal) != 0) return false;
+    if (!commit_storage(paths)) return false;
     return true;
 }
 
@@ -140,11 +180,14 @@ static bool parse_journal_path(const char *path, PtcHotReloadJournal *journal)
         strcmp(journal->phase, "boot_restored") != 0 && strcmp(journal->phase, "target_launched") != 0) return false;
     journal->source_pid = source_pid;
     journal->target_pid = target_pid;
+    /* Optional in existing v1 journals; new writes bind the source instance. */
+    (void)json_string(text, "source_boot_id", journal->source_boot_id, sizeof(journal->source_boot_id));
     return true;
 }
 
 bool ptc_hot_reload_read_journal(const PtcHotReloadPaths *paths, PtcHotReloadJournal *journal)
 {
+    if (paths && paths->error) memset(paths->error, 0, sizeof(*paths->error));
     char temporary[384];
     PtcHotReloadJournal pending;
     bool current_valid;
@@ -155,15 +198,19 @@ bool ptc_hot_reload_read_journal(const PtcHotReloadPaths *paths, PtcHotReloadJou
     if (!path_exists(temporary)) return current_valid;
     pending_valid = parse_journal_path(temporary, &pending);
     if (!pending_valid) {
-        if (!current_valid || remove(temporary) != 0) return false;
-        commit_storage();
+        if (!current_valid || mutate_path(paths, temporary, NULL) != 0) return false;
+        if (!commit_storage(paths)) return false;
         return true;
     }
-    if (current_valid && strcmp(journal->transaction_id, pending.transaction_id) != 0) return false;
-    if (path_exists(paths->journal) && remove(paths->journal) != 0) return false;
-    commit_storage();
-    if (rename(temporary, paths->journal) != 0) return false;
-    commit_storage();
+    if (current_valid && (strcmp(journal->transaction_id, pending.transaction_id) != 0 ||
+        strcmp(journal->source_release_id, pending.source_release_id) != 0 ||
+        strcmp(journal->target_release_id, pending.target_release_id) != 0 ||
+        strcmp(journal->source_boot_id, pending.source_boot_id) != 0 ||
+        journal->source_pid != pending.source_pid)) return false;
+    if (path_exists(paths->journal) && mutate_path(paths, paths->journal, NULL) != 0) return false;
+    if (!commit_storage(paths)) return false;
+    if (mutate_path(paths, temporary, paths->journal) != 0) return false;
+    if (!commit_storage(paths)) return false;
     *journal = pending;
     return true;
 }
@@ -181,15 +228,17 @@ PtcHotReloadFlagResult ptc_hot_reload_disable_boot(
             strcmp(existing.transaction_id, journal->transaction_id) != 0 ||
             strcmp(existing.source_release_id, journal->source_release_id) != 0 ||
             strcmp(existing.target_release_id, journal->target_release_id) != 0 ||
+            strcmp(existing.source_boot_id, journal->source_boot_id) != 0 ||
             existing.source_pid != journal->source_pid) return PTC_HOT_RELOAD_FLAG_CONFLICT;
     } else if (!ptc_hot_reload_write_journal(paths, journal)) {
         return PTC_HOT_RELOAD_FLAG_IO_ERROR;
     }
-    if (rename(paths->boot_flag, paths->boot_flag_backup) != 0) return PTC_HOT_RELOAD_FLAG_IO_ERROR;
-    commit_storage();
+    if (mutate_path(paths, paths->boot_flag, paths->boot_flag_backup) != 0) return PTC_HOT_RELOAD_FLAG_IO_ERROR;
+    if (!commit_storage(paths)) return PTC_HOT_RELOAD_FLAG_IO_ERROR;
     snprintf(journal->phase, sizeof(journal->phase), "boot_disabled");
     if (ptc_hot_reload_write_journal(paths, journal)) return PTC_HOT_RELOAD_FLAG_OK;
-    if (rename(paths->boot_flag_backup, paths->boot_flag) == 0) commit_storage();
+    if (mutate_path(paths, paths->boot_flag_backup, paths->boot_flag) == 0)
+        (void)commit_storage(paths);
     return PTC_HOT_RELOAD_FLAG_IO_ERROR;
 }
 
@@ -200,9 +249,9 @@ PtcHotReloadFlagResult ptc_hot_reload_restore_boot(
         return PTC_HOT_RELOAD_FLAG_IO_ERROR;
     if (path_exists(paths->boot_flag) && path_exists(paths->boot_flag_backup)) return PTC_HOT_RELOAD_FLAG_CONFLICT;
     if (!path_exists(paths->boot_flag)) {
-        if (!empty_file(paths->boot_flag_backup) || rename(paths->boot_flag_backup, paths->boot_flag) != 0)
+        if (!empty_file(paths->boot_flag_backup) || mutate_path(paths, paths->boot_flag_backup, paths->boot_flag) != 0)
             return PTC_HOT_RELOAD_FLAG_CONFLICT;
-        commit_storage();
+        if (!commit_storage(paths)) return PTC_HOT_RELOAD_FLAG_IO_ERROR;
     } else if (!empty_file(paths->boot_flag) || path_exists(paths->boot_flag_backup)) {
         return PTC_HOT_RELOAD_FLAG_CONFLICT;
     }
@@ -217,8 +266,8 @@ bool ptc_hot_reload_finish_journal(const PtcHotReloadPaths *paths)
     if (!paths || !paths->journal || !paths->boot_flag_backup ||
         snprintf(temporary, sizeof(temporary), "%s.tmp", paths->journal) <= 0 ||
         path_exists(paths->boot_flag_backup)) return false;
-    if (path_exists(paths->journal) && remove(paths->journal) != 0) ok = false;
-    if (path_exists(temporary) && remove(temporary) != 0) ok = false;
-    commit_storage();
+    if (path_exists(paths->journal) && mutate_path(paths, paths->journal, NULL) != 0) ok = false;
+    if (path_exists(temporary) && mutate_path(paths, temporary, NULL) != 0) ok = false;
+    if (!commit_storage(paths)) return false;
     return ok;
 }

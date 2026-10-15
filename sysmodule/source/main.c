@@ -208,7 +208,7 @@ static bool handoff_json_string(const char *text, const char *key, char *out, si
     return true;
 }
 
-static void write_runtime_ready(PtcSysmodule *sysmodule)
+static void write_runtime_ready(PtcSysmodule *sysmodule, bool ipc_available)
 {
     uint64_t pid = 0;
     char path[320];
@@ -217,9 +217,9 @@ static void write_runtime_ready(PtcSysmodule *sysmodule)
     snprintf(path, sizeof(path), PTC_APP_ROOT "/handover/runtime-ready.json");
     snprintf(json, sizeof(json),
         "{\"version\":1,\"handover_version\":1,\"profile\":\"%s\",\"title_id\":\"%s\",\"pid\":%llu,"
-        "\"boot_id\":\"%s\",\"release_id\":\"%s\",\"ipc_version\":%u}\n",
+        "\"boot_id\":\"%s\",\"release_id\":\"%s\",\"ipc_version\":%u,\"ipc_available\":%s}\n",
         PLAYWISE_PROFILE_NAME, PLAYWISE_TITLE_ID, (unsigned long long)pid, sysmodule->boot_id,
-        PLAYWISE_BUILD_RELEASE_ID, (unsigned int)PTC_IPC_INTERFACE_VERSION);
+        PLAYWISE_BUILD_RELEASE_ID, (unsigned int)PTC_IPC_INTERFACE_VERSION, ipc_available ? "true" : "false");
     (void)sysmodule->storage->vtable->write_text_atomic(sysmodule->storage, path, json);
 }
 
@@ -243,11 +243,15 @@ static bool handoff_tick(PtcSysmodule *sysmodule, PtcIpcServer *ipc_server,
         !handoff_json_string(text, "transaction_id", transaction_id, sizeof(transaction_id)) ||
         !handoff_json_string(text, "action", action, sizeof(action)) || strcmp(action, "quiesce") != 0) {
         *quiesce_ticks = 0;
+        sysmodule->quiescing = false;
         if (ipc_available) ipc_server->accepting = true;
         return false;
     }
     if (ipc_available) ipc_server->accepting = false;
     if (sysmodule->storage->vtable->exists(sysmodule->storage, recovery_path)) return false;
+    /* The current serial transaction has finished. Freeze both SD consumption
+       and autonomous writes until this handoff exits or its intent is removed. */
+    sysmodule->quiescing = true;
     (void)svcGetProcessId(&source_pid, CUR_PROCESS_HANDLE);
     snprintf(text, sizeof(text),
         "{\"version\":1,\"handover_version\":1,\"transaction_id\":\"%s\",\"status\":\"ready\","
@@ -267,6 +271,7 @@ static bool handoff_tick(PtcSysmodule *sysmodule, PtcIpcServer *ipc_server,
         (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, intent_path);
         (void)sysmodule->storage->vtable->remove_path(sysmodule->storage, ack_path);
         *quiesce_ticks = 0;
+        sysmodule->quiescing = false;
         if (ipc_available) ipc_server->accepting = true;
     }
     return false;
@@ -345,7 +350,7 @@ int main(int argc, char **argv)
     (void)ptc_sysmodule_scheduler_tick(&sysmodule, false);
     ipc_available = ptc_ipc_server_start(&ipc_server, &sysmodule);
     if (!ipc_available) append_boot_log(&sysmodule, PLAYWISE_IPC_SERVICE " unavailable; using file transport only");
-    write_runtime_ready(&sysmodule);
+    write_runtime_ready(&sysmodule, ipc_available);
 #ifdef PLAYWISE_PCTL_CAPTURE
     capture_tick(&sysmodule,"after_standard_bootstrap",true);
 #endif

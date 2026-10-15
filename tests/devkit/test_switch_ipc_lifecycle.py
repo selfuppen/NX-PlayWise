@@ -23,6 +23,7 @@ def main() -> None:
     libtesla = (ROOT / "companion/overlay/vendor/libtesla/include/tesla.hpp").read_text(encoding="utf-8")
     overlay_makefile = (ROOT / "companion/overlay/Makefile").read_text(encoding="utf-8")
     hot_reload = (ROOT / "companion/nro/hot_reload.c").read_text(encoding="utf-8")
+    sysmodule = (ROOT / "sysmodule/source/main.c").read_text(encoding="utf-8")
     nro_main = (ROOT / "companion/nro/main.c").read_text(encoding="utf-8")
     nro_source = "\n".join(
         (ROOT / "companion/nro" / name).read_text(encoding="utf-8")
@@ -118,13 +119,31 @@ def main() -> None:
             "hot reload must launch the installed SD title through PM using storage None")
     require("controller->launch_attempts < 2U" in hot_reload,
             "hot reload may retry an absent target only once")
+    disable_failure = hot_reload[hot_reload.index("void ptc_hot_reload_confirm_ipc_closed"):hot_reload.index("void ptc_hot_reload_tick")]
+    require("controller->boot_disabled = exists(BOOT_FLAG_BACKUP_PATH)" in disable_failure,
+            "a failed commit after flag rename must still restore the original flag")
     recover_pos = nro_main.index("ptc_hot_reload_recover_startup(&ui.hot_reload);")
-    expected_pos = nro_main.index("backend_expected = standard_backend_expected();")
+    expected_pos = nro_main.index("backend_expected = standard_backend_expected()")
     require(recover_pos < expected_pos,
             "standard NRO must restore an interrupted boot flag before deciding whether IPC is expected")
+    recovery = hot_reload[hot_reload.index("void ptc_hot_reload_recover_startup"):hot_reload.index("void ptc_hot_reload_inspect")]
+    require("pmshellLaunchProgram" not in recovery and "PTC_HOT_RELOAD_PHASE_WAIT_SOURCE_EXIT" in recovery
+            and "verify_artifacts" in recovery and "source_boot_id" in recovery,
+            "startup recovery must reuse bounded absence/ready checks and validate the frozen target")
+    require("ui.hot_reload.status != PTC_HOT_RELOAD_RUNNING" in nro_main and
+            "write_runtime_ready(&sysmodule, ipc_available)" in sysmodule,
+            "startup must not connect before recovery and runtime must expose failed IPC registration")
     require("ui->model.view != PTC_UI_PARENT" in nro_source and
             "PTC_UI_OPERATION_HOT_RELOAD" in nro_source,
             "hot reload confirmation must remain reachable only after entering the PIN-protected parent area")
+    runtime = (ROOT / "companion/nro/nro_runtime.c").read_text(encoding="utf-8")
+    failed_branch = runtime[runtime.index("} else if (ui->hot_reload.phase == PTC_HOT_RELOAD_PHASE_FAILED"):]
+    require("ptc_switch_ipc_client_probe" not in failed_branch,
+            "failed handover must never wait for an absent service to register")
+    require("ptc_companion_transport_set_suspended(&ui->transport, true)" in failed_branch,
+            "failed handover must keep both IPC and file submissions suspended")
+    require('"/handover/events/%s.jsonl"' in hot_reload and '"runtime_ready"' in hot_reload,
+            "controller must retain an append-only transaction trace after journal cleanup")
     read_status_start = pctl_adapter.index("static PtcErrorCode switch_read_status")
     read_status_end = pctl_adapter.index("static PtcErrorCode switch_backup", read_status_start)
     read_status = pctl_adapter[read_status_start:read_status_end]

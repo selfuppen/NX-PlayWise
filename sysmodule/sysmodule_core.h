@@ -29,6 +29,7 @@ typedef struct {
     bool startup_recovery_checked;
     bool disable_initialized;
     bool disable_present;
+    bool quiescing;
     char boot_id[24];
     char config_cache_text[4096];
     char rules_cache_text[6144];

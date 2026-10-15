@@ -6,9 +6,26 @@
 #include <stdint.h>
 
 typedef struct {
+    void *ctx;
+    int (*remove_path)(void *ctx, const char *path);
+    int (*rename_path)(void *ctx, const char *from, const char *to);
+    uint32_t (*commit)(void *ctx);
+    void (*wait_ms)(void *ctx, unsigned int milliseconds);
+} PtcHotReloadIo;
+
+typedef struct {
+    char operation[24];
+    int system_errno;
+    uint32_t result;
+    unsigned int retries;
+} PtcHotReloadIoError;
+
+typedef struct {
     const char *boot_flag;
     const char *boot_flag_backup;
     const char *journal;
+    const PtcHotReloadIo *io;
+    PtcHotReloadIoError *error;
 } PtcHotReloadPaths;
 
 typedef struct {
@@ -16,6 +33,7 @@ typedef struct {
     char phase[32];
     char source_release_id[96];
     char target_release_id[96];
+    char source_boot_id[32];
     uint64_t source_pid;
     uint64_t target_pid;
 } PtcHotReloadJournal;

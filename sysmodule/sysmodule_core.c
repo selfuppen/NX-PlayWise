@@ -709,7 +709,7 @@ int ptc_sysmodule_scheduler_tick(PtcSysmodule *sysmodule, bool storage_notified)
     int processed;
     bool setup_changed = false;
     int actions = 0;
-    if (!sysmodule) return 0;
+    if (!sysmodule || sysmodule->quiescing) return 0;
 #ifdef PLAYWISE_DEVICE_LAB
     actions += ptc_lab_scheduler_tick(sysmodule);
     actions += ptc_lab_selfdrive_tick(sysmodule);

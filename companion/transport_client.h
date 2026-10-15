@@ -42,6 +42,7 @@ typedef struct {
     int next_file_poll_ms;
     int file_poll_delay_ms;
     PtcCompanionTransportRoute route;
+    bool suspended;
 } PtcCompanionTransportClient;
 
 void ptc_companion_transport_init(PtcCompanionTransportClient *client, const char *app_root, PtcStorage *storage,
@@ -51,6 +52,7 @@ PtcCompanionStatus ptc_companion_transport_submit_json(PtcCompanionTransportClie
 PtcCompanionStatus ptc_companion_transport_poll(PtcCompanionTransportClient *client, int elapsed_ms,
     int timeout_ms, char *out, size_t out_size);
 void ptc_companion_transport_cancel(PtcCompanionTransportClient *client);
+void ptc_companion_transport_set_suspended(PtcCompanionTransportClient *client, bool suspended);
 bool ptc_companion_transport_notify_storage_changed(PtcCompanionTransportClient *client);
 PtcCompanionTransportRoute ptc_companion_transport_route(const PtcCompanionTransportClient *client);
 const char *ptc_companion_transport_route_label_zh(PtcCompanionTransportRoute route);
