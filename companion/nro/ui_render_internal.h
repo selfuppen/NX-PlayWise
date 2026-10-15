@@ -55,6 +55,9 @@ typedef enum {
     UI_WARNING_BORDER = 0x02000000u + 24,
     UI_DANGER_BORDER = 0x02000000u + 25,
     UI_WARNING_TEXT = 0x02000000u + 26,
+    UI_HERO = 0x02000000u + 27,
+    UI_ON_HERO = 0x02000000u + 28,
+    UI_HERO_SECONDARY = 0x02000000u + 29,
 } UiColor;
 
 typedef struct {
