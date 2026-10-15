@@ -93,11 +93,19 @@ def audit(data: bytes, config: dict) -> dict:
             usage.require(value.get("duration_ns") == str(config["duration_s"] * 1_000_000_000) and
                           value.get("interval_ns") == "5000000000", "lease or frequency differs")
             usage.nanoseconds(value.get("started_ns"), False, "started_ns")
+            diagnostics = value.get("append_diagnostics_version")
+            usage.require(diagnostics is None or (type(diagnostics) is int and diagnostics == 1),
+                          "unknown append diagnostics version")
             start = value
         elif kind == "usage_evidence_sample":
             usage.require(start is not None and not stopped, "sample outside started stream")
             usage.require(value.get("run_id") == start["run_id"] and value.get("boot_id") == start["boot_id"],
                           "mixed run/boot identity")
+            if start.get("append_diagnostics_version") == 1:
+                sequence = usage.integer(value.get("sample_index"), 1, (1 << 32) - 1, "sample_index")
+                usage.require(sequence == len(samples) + 1, "sample sequence gap or duplicate; preserve raw")
+            else:
+                usage.require("sample_index" not in value, "sample sequence missing its declared version")
             valid = raw_sample(value)
             if not valid:
                 invalid.append(number)
@@ -115,6 +123,17 @@ def audit(data: bytes, config: dict) -> dict:
                                                    "monotonic_regression", "process_handoff"), "unknown stop reason")
             usage.require(type(value.get("samples")) is int and value["samples"] == len(samples), "stop count mismatch")
             usage.integer(value.get("consecutive_failures"), 0, 3, "consecutive_failures")
+            if start.get("append_diagnostics_version") == 1:
+                save_failures = usage.integer(value.get("save_failures"), 0, value["samples"], "save_failures")
+                usage.integer(value.get("sample_open_retries"), 0, (1 << 32) - 1, "sample_open_retries")
+                last_failed = usage.integer(value.get("last_failed_sample"), 0, value["samples"], "last_failed_sample")
+                last_errno = usage.integer(value.get("last_save_errno"), 0, (1 << 31) - 1, "last_save_errno")
+                last_result = usage.integer(value.get("last_save_result"), 0, (1 << 32) - 1, "last_save_result")
+                usage.require(value.get("last_save_operation") in ("none", "open", "write", "close"),
+                              "unknown append failure operation")
+                usage.require(save_failures == 0 and last_failed == 0 and last_errno == 0 and
+                              last_result == 0 and value["last_save_operation"] == "none",
+                              "sample append failure recorded; preserve raw even when the row is visible")
             stopped = True
         else:
             raise usage.UsageQualificationError("unknown raw record kind")

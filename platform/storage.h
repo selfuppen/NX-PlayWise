@@ -8,6 +8,22 @@
 typedef struct PtcStorage PtcStorage;
 
 typedef enum {
+    PTC_STORAGE_APPEND_NONE = 0,
+    PTC_STORAGE_APPEND_OPEN,
+    PTC_STORAGE_APPEND_WRITE,
+    PTC_STORAGE_APPEND_CLOSE,
+} PtcStorageAppendStage;
+
+/* Optional diagnostics; errno/result never determine storage success. */
+typedef struct {
+    PtcStorageAppendStage stage;
+    int system_errno;
+    uint32_t platform_result;
+    unsigned open_attempts;
+} PtcStorageAppendDiagnostics;
+typedef PtcStorageAppendDiagnostics (*PtcStorageAppendDiagnosticsReader)(void *ctx);
+
+typedef enum {
     PTC_STORAGE_ENTRY_UNKNOWN = 0,
     PTC_STORAGE_ENTRY_FILE = 1,
     PTC_STORAGE_ENTRY_DIRECTORY = 2,

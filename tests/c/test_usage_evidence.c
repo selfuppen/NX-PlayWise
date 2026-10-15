@@ -27,6 +27,18 @@ static bool append(PtcStorage *s, const char *path, const char *line)
 }
 static const PtcStorageVTable vtable = {.read_text = read_text, .exists = exists, .append_line = append};
 static PtcStorage storage = {&vtable, NULL};
+static PtcStorageAppendDiagnostics append_diagnostics(void *ctx)
+{
+    assert(ctx == &calls);
+    PtcStorageAppendDiagnostics io = {0};
+    io.open_attempts = 3;
+    if (save_failure) {
+        io.stage = PTC_STORAGE_APPEND_CLOSE;
+        io.system_errno = 5;
+        io.platform_result = 1234;
+    }
+    return io;
+}
 static bool sample(void *ctx, PtcUsageEvidenceSample *out)
 {
     assert(ctx == &calls); ++calls;
@@ -97,6 +109,22 @@ int main(void)
     assert(!capture.active && strstr(last_line, "monotonic_regression"));
     reset(); assert(init()); ptc_usage_evidence_stop(&capture, "process_handoff");
     before = lines; ptc_usage_evidence_stop(&capture, "process_handoff"); assert(lines == before);
+    reset(); assert(init());
+    ptc_usage_evidence_set_append_diagnostics(&capture, append_diagnostics, &calls);
+    save_failure = true; ptc_usage_evidence_tick(&capture, 1);
+    save_failure = false; ptc_usage_evidence_tick(&capture, 5000000001ULL);
+    assert(capture.active && capture.failures == 0 && capture.save_failures == 1);
+    assert(capture.last_failed_sample == 1 && capture.sample_open_retries == 4);
+    j = cJSON_Parse(last_line); assert(j);
+    assert(cJSON_GetObjectItemCaseSensitive(j, "sample_index")->valueint == 2);
+    cJSON_Delete(j);
+    ptc_usage_evidence_stop(&capture, "config_removed_or_changed");
+    j = cJSON_Parse(last_line); assert(j);
+    assert(cJSON_GetObjectItemCaseSensitive(j, "save_failures")->valueint == 1);
+    assert(cJSON_GetObjectItemCaseSensitive(j, "last_save_errno")->valueint == 5);
+    assert(cJSON_GetObjectItemCaseSensitive(j, "last_save_result")->valueint == 1234);
+    assert(strcmp(cJSON_GetObjectItemCaseSensitive(j, "last_save_operation")->valuestring, "close") == 0);
+    cJSON_Delete(j);
     puts("PASS standard evidence identity, raw precision, frequency, leases and latched failure stop");
     return 0;
 }

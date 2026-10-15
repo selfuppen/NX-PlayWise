@@ -50,6 +50,7 @@ void svcSleepThread(int64_t nanoseconds)
 }
 
 int fsdevCommitDevice(const char *name) { (void)name; return 0; }
+uint32_t fsdevGetLastResult(void) { return UINT32_C(0x12345678); }
 
 static void reset(void)
 {
@@ -79,21 +80,26 @@ int main(void)
         reset(); open_failures = 2; open_error = temporary[i];
         assert(storage->vtable->append_line(storage, path, "one"));
         assert(opens == 3 && sleeps == 2 && writes == 1 && closes == 1);
+        assert(fs.last_append.stage == PTC_STORAGE_APPEND_NONE && fs.last_append.open_attempts == 3);
         contents("one\n");
     }
     reset(); open_failures = 100;
     assert(!storage->vtable->append_line(storage, path, "one"));
     assert(opens == 51 && sleeps == 50 && writes == 0 && closes == 0);
+    assert(fs.last_append.stage == PTC_STORAGE_APPEND_OPEN && fs.last_append.system_errno == EBUSY);
+    assert(fs.last_append.platform_result == UINT32_C(0x12345678));
     reset(); open_failures = 1; open_error = EIO;
     assert(!storage->vtable->append_line(storage, path, "one"));
     assert(opens == 1 && sleeps == 0 && writes == 0 && closes == 0);
     reset(); write_failure = true;
     assert(!storage->vtable->append_line(storage, path, "one"));
     assert(opens == 1 && writes == 1 && closes == 1 && sleeps == 0);
+    assert(fs.last_append.stage == PTC_STORAGE_APPEND_WRITE && fs.last_append.system_errno == EIO);
     contents("partial"); /* Never replay a possibly partial write. */
     reset(); close_failure = true;
     assert(!storage->vtable->append_line(storage, path, "one"));
     assert(opens == 1 && writes == 1 && closes == 1 && sleeps == 0);
+    assert(fs.last_append.stage == PTC_STORAGE_APPEND_CLOSE && fs.last_append.system_errno == EIO);
     contents("one\n"); /* A failed close may already have persisted the row. */
     (void)remove(path);
     puts("PASS append open contention bounds and no replay after write/close failure");

@@ -329,6 +329,8 @@ int main(int argc, char **argv)
     (void)ptc_usage_evidence_init(&usage_evidence, storage, PTC_APP_ROOT, boot_id,
         PLAYWISE_BUILD_COMMIT, PLAYWISE_BUILD_RELEASE_ID, armTicksToNs(armGetSystemTick()),
         ptc_switch_pctl_read_evidence, &pctl);
+    ptc_usage_evidence_set_append_diagnostics(&usage_evidence,
+        ptc_fs_storage_append_diagnostics, &fs);
     ptc_usage_evidence_tick(&usage_evidence, armTicksToNs(armGetSystemTick()));
 #endif
 #ifdef PLAYWISE_PCTL_CAPTURE

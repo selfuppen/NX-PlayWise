@@ -66,7 +66,7 @@ bool ptc_usage_evidence_init(PtcUsageEvidence *capture, PtcStorage *storage,
     n = snprintf(line, sizeof(line),
         "{\"schema_version\":1,\"kind\":\"usage_evidence_start\",\"commit\":\"%s\","
         "\"release_id\":\"%s\",\"run_id\":\"%s\",\"boot_id\":\"%s\","
-        "\"started_ns\":\"%llu\",\"duration_ns\":\"%llu\",\"interval_ns\":\"5000000000\"}",
+        "\"started_ns\":\"%llu\",\"duration_ns\":\"%llu\",\"interval_ns\":\"5000000000\",\"append_diagnostics_version\":1}",
         commit, release_id, capture->run_id, boot_id,
         (unsigned long long)now_ns, (unsigned long long)capture->duration_ns);
     if (n < 0 || (size_t)n >= sizeof(line) || !storage->vtable->append_line(storage, capture->output_path, line)) return false;
@@ -79,11 +79,25 @@ void ptc_usage_evidence_stop(PtcUsageEvidence *capture, const char *reason)
 {
     if (!capture->active) return;
     capture->active = false; /* Latch before I/O; a failed stop record never restarts reads. */
-    char line[256];
+    char line[512];
+    const char *operation = capture->last_save.stage == PTC_STORAGE_APPEND_OPEN ? "open" :
+        capture->last_save.stage == PTC_STORAGE_APPEND_WRITE ? "write" :
+        capture->last_save.stage == PTC_STORAGE_APPEND_CLOSE ? "close" : "none";
     snprintf(line, sizeof(line),
         "{\"schema_version\":1,\"kind\":\"usage_evidence_stop\",\"reason\":\"%s\","
-        "\"samples\":%u,\"consecutive_failures\":%u}", reason, capture->samples, capture->failures);
+        "\"samples\":%u,\"consecutive_failures\":%u,\"save_failures\":%u,\"last_failed_sample\":%u,"
+        "\"sample_open_retries\":%u,\"last_save_errno\":%d,\"last_save_result\":%u,\"last_save_operation\":\"%s\"}",
+        reason, capture->samples, capture->failures, capture->save_failures,
+        capture->last_failed_sample, capture->sample_open_retries, capture->last_save.system_errno,
+        capture->last_save.platform_result, operation);
     (void)capture->storage->vtable->append_line(capture->storage, capture->output_path, line);
+}
+
+void ptc_usage_evidence_set_append_diagnostics(PtcUsageEvidence *capture,
+    PtcStorageAppendDiagnosticsReader reader, void *ctx)
+{
+    capture->append_diagnostics = reader;
+    capture->append_diagnostics_ctx = ctx;
 }
 
 void ptc_usage_evidence_tick(PtcUsageEvidence *capture, uint64_t now_ns)
@@ -111,14 +125,14 @@ void ptc_usage_evidence_tick(PtcUsageEvidence *capture, uint64_t now_ns)
     char line[2048];
     int n = snprintf(line, sizeof(line),
         "{\"schema_version\":1,\"kind\":\"usage_evidence_sample\",\"source\":\"pctl_1952\","
-        "\"scope\":\"console_usable_time\",\"run_id\":\"%s\",\"boot_id\":\"%s\",\"valid\":%s,"
+        "\"scope\":\"console_usable_time\",\"run_id\":\"%s\",\"boot_id\":\"%s\",\"valid\":%s,\"sample_index\":%u,"
         "\"begin_ns\":\"%llu\",\"end_ns\":\"%llu\",\"unix_before\":%lld,\"unix_after\":%lld,"
         "\"day_before\":%u,\"day_after\":%u,\"clock_before_valid\":%s,\"clock_after_valid\":%s,"
         "\"start_timer_calls\":\"%llu\",\"session_result\":%u,\"timer_result\":%u,\"timer_enabled\":%s,"
         "\"remaining_result\":%u,\"signed_remaining_ns\":\"%lld\",\"restricted_result\":%u,\"restricted\":%s,"
         "\"spent_result\":%u,\"total_ns\":\"%lld\",\"settings_result\":%u,\"settings_hex\":\"%s\","
         "\"unlocked_result\":%u,\"temporarily_unlocked\":%s}",
-        capture->run_id, capture->boot_id, valid ? "true" : "false",
+        capture->run_id, capture->boot_id, valid ? "true" : "false", capture->samples,
         (unsigned long long)sample.begin_ns, (unsigned long long)sample.end_ns,
         (long long)sample.unix_before, (long long)sample.unix_after, sample.day_before, sample.day_after,
         sample.clock_before_valid ? "true" : "false", sample.clock_after_valid ? "true" : "false",
@@ -127,8 +141,18 @@ void ptc_usage_evidence_tick(PtcUsageEvidence *capture, uint64_t now_ns)
         sample.restricted_result, sample.restricted ? "true" : "false", sample.spent_result,
         (long long)sample.spent_ns, sample.settings_result, hex, sample.unlocked_result,
         sample.temporarily_unlocked ? "true" : "false");
-    bool saved = n > 0 && (size_t)n < sizeof(line) &&
+    bool serialized = n > 0 && (size_t)n < sizeof(line);
+    bool saved = serialized &&
         capture->storage->vtable->append_line(capture->storage, capture->output_path, line);
+    PtcStorageAppendDiagnostics io = {0};
+    if (serialized && capture->append_diagnostics)
+        io = capture->append_diagnostics(capture->append_diagnostics_ctx);
+    if (io.open_attempts > 1U) capture->sample_open_retries += io.open_attempts - 1U;
+    if (!saved) {
+        ++capture->save_failures;
+        capture->last_failed_sample = capture->samples;
+        capture->last_save = io;
+    }
     if (!valid || !saved) ++capture->failures; else capture->failures = 0;
     if (capture->failures >= 3) ptc_usage_evidence_stop(capture, "failure_limit");
 }

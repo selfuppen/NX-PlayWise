@@ -78,6 +78,19 @@ def test_audit() -> None:
         pass
     else:
         raise AssertionError("duplicate raw key accepted")
+    rows = raw_rows()
+    rows[0]["append_diagnostics_version"] = 1
+    rows[1]["sample_index"] = 1
+    rows[-1].update(save_failures=0, last_failed_sample=0, sample_open_retries=2,
+                    last_save_errno=0, last_save_result=0, last_save_operation="none")
+    assert evidence.audit(encode(rows), CONFIG)["stop_record_present"]
+    rows[1]["sample_index"] = 2; rejected(rows)
+    rows[1]["sample_index"] = True; rejected(rows)
+    rows[1]["sample_index"] = 1
+    rows[-1].update(save_failures=1, last_failed_sample=1, last_save_errno=5,
+                    last_save_result=1234, last_save_operation="close")
+    rejected(rows)  # A failed close must not become a passed stream because bytes are visible.
+    rows[0]["append_diagnostics_version"] = True; rejected(rows)
 
 
 def test_prepare_and_collect() -> None:

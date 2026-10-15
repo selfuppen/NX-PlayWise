@@ -93,7 +93,9 @@ static bool fs_write_text_atomic(PtcStorage *storage, const char *path, const ch
 static bool fs_append_line(PtcStorage *storage, const char *path, const char *line)
 {
     FILE *file;
-    (void)storage;
+    PtcFsStorage *fs = (PtcFsStorage *)storage->ctx;
+    memset(&fs->last_append, 0, sizeof(fs->last_append));
+    fs->last_append.open_attempts = 1;
 
     ensure_parent_dirs(path);
     file = fopen(path, "ab");
@@ -103,17 +105,38 @@ static bool fs_append_line(PtcStorage *storage, const char *path, const char *li
     for (unsigned attempt = 0; !file && attempt < 50U &&
             (errno == EBUSY || errno == EACCES || errno == EAGAIN); ++attempt) {
         svcSleepThread(10000000LL);
+        ++fs->last_append.open_attempts;
         file = fopen(path, "ab");
     }
 #endif
     if (!file) {
+        fs->last_append.stage = PTC_STORAGE_APPEND_OPEN;
+        fs->last_append.system_errno = errno;
+#ifdef __SWITCH__
+        fs->last_append.platform_result = fsdevGetLastResult();
+#endif
         return false;
     }
     if (fprintf(file, "%s\n", line) < 0) {
+        int write_errno = errno;
+        fs->last_append.stage = PTC_STORAGE_APPEND_WRITE;
+        fs->last_append.system_errno = write_errno;
+#ifdef __SWITCH__
+        fs->last_append.platform_result = fsdevGetLastResult();
+#endif
         fclose(file);
+        errno = write_errno;
         return false;
     }
-    return fclose(file) == 0;
+    if (fclose(file) != 0) {
+        fs->last_append.stage = PTC_STORAGE_APPEND_CLOSE;
+        fs->last_append.system_errno = errno;
+#ifdef __SWITCH__
+        fs->last_append.platform_result = fsdevGetLastResult();
+#endif
+        return false;
+    }
+    return true;
 }
 
 static bool fs_rename_path(PtcStorage *storage, const char *from, const char *to)
@@ -274,6 +297,7 @@ static const PtcStorageVTable FS_STORAGE_VTABLE = {
 
 void ptc_fs_storage_init(PtcFsStorage *fs)
 {
+    memset(&fs->last_append, 0, sizeof(fs->last_append));
     fs->storage.vtable = &FS_STORAGE_VTABLE;
     fs->storage.ctx = fs;
 }
@@ -281,4 +305,9 @@ void ptc_fs_storage_init(PtcFsStorage *fs)
 PtcStorage *ptc_fs_storage_as_storage(PtcFsStorage *fs)
 {
     return &fs->storage;
+}
+
+PtcStorageAppendDiagnostics ptc_fs_storage_append_diagnostics(void *ctx)
+{
+    return ((PtcFsStorage *)ctx)->last_append;
 }
