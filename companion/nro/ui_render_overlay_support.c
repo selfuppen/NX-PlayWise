@@ -515,6 +515,16 @@ static void support_draw_controller(uint32_t *pixels, uint32_t stride, int cx, i
     support_fill_circle_mini(pixels, stride, (float)(cx + hw / 2), (float)(cy + 2), 1.1f, color);
 }
 
+static void support_draw_tv(uint32_t *pixels, uint32_t stride, int cx, int cy, int radius, uint32_t color)
+{
+    int hw = radius * 9 / 10;
+    int hh = radius * 6 / 10;
+    fill_round_rect(pixels, stride, (UiRect){cx - hw, cy - hh - 2, hw * 2, hh * 2}, 3, color);
+    fill_round_rect(pixels, stride, (UiRect){cx - hw + 2, cy - hh, hw * 2 - 4, hh * 2 - 4}, 2, UI_SURFACE);
+    draw_line(pixels, stride, cx, cy + hh - 2, cx, cy + hh + 2, 2, color);
+    draw_line(pixels, stride, cx - hw / 2, cy + hh + 2, cx + hw / 2, cy + hh + 2, 2, color);
+}
+
 static void support_draw_eye(uint32_t *pixels, uint32_t stride, int cx, int cy, int radius, uint32_t color)
 {
     int rx = radius * 9 / 10;
@@ -593,11 +603,15 @@ static void support_draw_heart(uint32_t *pixels, uint32_t stride, int cx, int cy
 static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel *model,
                             const PtcUiTodayProjection *p, const PtcUiTodayDecision *decision)
 {
-    char text[384], value[128];
+    char text[384], value[128], buf[128], fitted[128];
     bool is_avail = detail_available(model, p);
     bool is_dark = (g_theme.resolved == PTC_UI_RESOLVED_DARK);
+    bool is_docked = (strcmp(model->operation_mode, "docked") == 0);
+    bool dock_enabled = (model->dock_policy.undocked_limit_enabled || model->dock_policy.force_docked);
+    bool eye_resting = model->eye_care_policy.enabled &&
+                       strcmp(model->eye_care_phase, "resting") == 0;
 
-    /* 1. 顶部 3 项核心感知卡片 (y = 72, h = 92) */
+    /* 1. 顶部 3 项核心感知卡片 (y = 72, h = 92) - 职责清晰、全屏唯一无冗余 */
     /* 1.1 卡片 0: 当前准入判定 (x = 40, w = 368) */
     {
         UiRect c0 = {40, 72, 368, 92};
@@ -613,20 +627,36 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
                   is_avail ? ptc_ui_text(PTC_UI_T_DETAIL_ALL_LIMITS_CLEAR) : value, 12, UI_MUTED);
     }
 
-    /* 1.2 卡片 1: 今日总额度走势 (x = 428, w = 432) */
+    /* 1.2 卡片 1: 今日总额度走势与规则来源 (x = 428, w = 432) */
     {
         UiRect c1 = {428, 72, 432, 92};
         fill_round_rect(pixels, stride, c1, 10, UI_ACCENT_SOFT);
         draw_rect_outline(pixels, stride, c1, 10, 1, UI_BORDER);
-        support_draw_clock(pixels, stride, c1.x + 24, c1.y + 28, 11, UI_ACCENT);
+        support_draw_clock(pixels, stride, c1.x + 24, c1.y + 26, 11, UI_ACCENT);
         draw_text(pixels, stride, c1.x + 44, c1.y + 24, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE), 12, UI_MUTED);
+
+        /* 右上角规则来源标签胶囊 (全屏统领总额度来源，消除卡片D的重复画图) */
+        char plan_tag[96];
+        if (p->total_unlimited) {
+            snprintf(plan_tag, sizeof(plan_tag), "%s",
+                     ptc_ui_effective_rule_label(decision->effective.source));
+        } else {
+            snprintf(plan_tag, sizeof(plan_tag), "%s / %u min",
+                     ptc_ui_effective_rule_label(decision->effective.source), (unsigned)model->forecast[0].minutes);
+        }
+        int tag_w = measure_text(plan_tag, 11) + 16;
+        UiRect tag_pill = {c1.x + c1.width - tag_w - 16, c1.y + 14, tag_w, 20};
+        fill_round_rect(pixels, stride, tag_pill, 4, UI_PAGE);
+        draw_rect_outline(pixels, stride, tag_pill, 4, 1, UI_BORDER);
+        draw_text_center(pixels, stride, tag_pill, plan_tag, 11, UI_ACCENT);
+
         detail_balance(p->total_known, p->total_unlimited, p->total_remaining, value, sizeof(value));
         char rem_str[64];
         snprintf(rem_str, sizeof(rem_str), ptc_ui_text(PTC_UI_T_DETAIL_LEFT_LABEL), value);
-        draw_text_bold(pixels, stride, c1.x + 44, c1.y + 47, rem_str, 20, UI_ACCENT);
+        draw_text_bold(pixels, stride, c1.x + 44, c1.y + 46, rem_str, 18, UI_ACCENT);
 
         /* 进度条 */
-        UiRect pbar = {c1.x + 44, c1.y + 56, c1.width - 64, 8};
+        UiRect pbar = {c1.x + 44, c1.y + 55, c1.width - 64, 8};
         fill_round_rect(pixels, stride, pbar, 4, UI_RAISED);
         int fill_w = 0;
         if (model->forecast[0].minutes > 0)
@@ -637,39 +667,52 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         char used_str[64], buf_str[64];
         snprintf(used_str, sizeof(used_str),
             ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE_U_MIN : PTC_UI_T_DETAIL_USED_LABEL), (unsigned)model->played_minutes);
-        draw_text(pixels, stride, c1.x + 44, c1.y + 76, used_str, 11, UI_MUTED);
+        draw_text(pixels, stride, c1.x + 44, c1.y + 75, used_str, 11, UI_MUTED);
         snprintf(buf_str, sizeof(buf_str), ptc_ui_text(PTC_UI_T_DETAIL_BUFFER_CLAIMABLE_FMT), (unsigned)model->daily_buffer_minutes);
         int buf_w = measure_text(buf_str, 11);
-        draw_text(pixels, stride, c1.x + c1.width - 20 - buf_w, c1.y + 76, buf_str, 11, UI_INK);
+        draw_text(pixels, stride, c1.x + c1.width - 20 - buf_w, c1.y + 75, buf_str, 11, UI_INK);
     }
 
-    /* 1.3 卡片 2: 模式与用眼实时状态 (x = 880, w = 360) */
+    /* 1.3 卡片 2: 设备环境与游玩模式 (x = 880, w = 360) - 消除与健康管理的掌机/护眼数字重叠 */
     {
         UiRect c2 = {880, 72, 360, 92};
         fill_round_rect(pixels, stride, c2, 10, UI_PAGE);
         draw_rect_outline(pixels, stride, c2, 10, 1, UI_BORDER);
 
-        /* 上行: 掌机限额 */
-        support_draw_controller(pixels, stride, c2.x + 22, c2.y + 23, 8, UI_ACCENT);
-        draw_text(pixels, stride, c2.x + 38, c2.y + 25, ptc_ui_text(PTC_UI_T_DETAIL_UNDOCKED_REMAINING), 12, UI_INK);
-        detail_balance(p->undocked_known, p->undocked_unlimited, p->undocked_remaining, value, sizeof(value));
-        int val_w = measure_text(value, 14);
-        draw_text_bold(pixels, stride, c2.x + c2.width - val_w - 18, c2.y + 25, value, 14, UI_ACCENT);
+        if (is_docked) {
+            support_draw_tv(pixels, stride, c2.x + 22, c2.y + 25, 8, UI_SUCCESS);
+        } else {
+            support_draw_controller(pixels, stride, c2.x + 22, c2.y + 25, 8, UI_ACCENT);
+        }
+        draw_text(pixels, stride, c2.x + 38, c2.y + 25, ptc_ui_text(PTC_UI_T_DOCK_CURRENT_SCREEN), 12, UI_MUTED);
 
-        /* 分隔线 */
-        draw_line(pixels, stride, c2.x + 16, c2.y + 46, c2.x + c2.width - 16, c2.y + 46, 1, UI_BORDER);
+        const char *mode_badge = is_docked
+            ? ptc_ui_text(PTC_UI_T_DOCK_TV_BADGE)
+            : ptc_ui_text(PTC_UI_T_DOCK_HANDHELD_BADGE);
+        uint32_t badge_col = is_docked ? UI_SUCCESS : UI_ACCENT;
+        uint32_t badge_bg = is_docked ? UI_SUCCESS_SOFT : UI_ACCENT_SOFT;
+        int mb_w = measure_text(mode_badge, 10) + 14;
+        UiRect mb_rect = {c2.x + c2.width - mb_w - 16, c2.y + 14, mb_w, 20};
+        fill_round_rect(pixels, stride, mb_rect, 4, badge_bg);
+        draw_rect_outline(pixels, stride, mb_rect, 4, 1, badge_col);
+        draw_text_center(pixels, stride, mb_rect, mode_badge, 10, badge_col);
 
-        /* 下行: 视力保护 */
-        support_draw_eye(pixels, stride, c2.x + 22, c2.y + 62, 8, UI_WARNING);
-        draw_text(pixels, stride, c2.x + 38, c2.y + 66, ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_EYE), 12, UI_INK);
-        unsigned left_continuous = p->continuous_seconds > 0 ? (unsigned)(p->continuous_seconds / 60) : 0;
-        char eye_val[64];
-        snprintf(eye_val, sizeof(eye_val), ptc_ui_text(PTC_UI_T_DETAIL_EYE_CARE_NEED_REST_FMT), left_continuous);
-        int eye_w = measure_text(eye_val, 13);
-        draw_text_bold(pixels, stride, c2.x + c2.width - eye_w - 18, c2.y + 66, eye_val, 13, UI_WARNING_TEXT);
+        /* 核心态势标语 */
+        const char *headline = is_docked
+            ? ptc_ui_text(PTC_UI_T_DOCK_TV_ACTIVE_NOTE)
+            : ptc_ui_text(PTC_UI_T_DOCK_HANDHELD_ACTIVE_NOTE);
+        fit_text(fitted, sizeof(fitted), headline, 13, c2.width - 40);
+        draw_text_bold(pixels, stride, c2.x + 20, c2.y + 48, fitted, 13, UI_INK);
+
+        /* 引导与健康提示行 */
+        const char *guide = is_docked
+            ? ptc_ui_text(PTC_UI_T_DETAIL_RULES_TIP_TV_DOCK)
+            : ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_NOTE_BAR);
+        fit_text(fitted, sizeof(fitted), guide, 11, c2.width - 40);
+        draw_text(pixels, stride, c2.x + 20, c2.y + 70, fitted, 11, is_docked ? UI_SUCCESS : UI_MUTED);
     }
 
-    /* 2. 左侧主栏 (x = 40, w = 736, 占大头) */
+    /* 2. 左侧主栏 (x = 40, w = 736) - 全天作息计划与未来推演 */
     /* 2.1 卡片 A: 今日作息 (y = 180, h = 208) */
     {
         UiRect sleep = {40, 180, 736, 208};
@@ -831,120 +874,149 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         draw_text(pixels, stride, tip2.x + 28, tip2.y + 35, ptc_ui_text(PTC_UI_T_DETAIL_ESTIMATE), 10, UI_MUTED);
     }
 
-    /* 3. 右侧侧栏 (x = 796, w = 444, 占 38%) */
-    /* 3.1 卡片 C: 健康管理 (y = 180, h = 150) */
+    /* 3. 右侧侧栏 (x = 796, w = 444, 占 38%) - 三大守护策略执行细则 + 规则决策总览 */
+    /* 3.1 卡片 C: 健康与安全守护策略看板 (y = 180, h = 302) */
     {
-        UiRect c_health = {796, 180, 444, 150};
+        UiRect c_health = {796, 180, 444, 302};
         detail_panel(pixels, stride, c_health);
-        support_draw_heart(pixels, stride, c_health.x + 20, c_health.y + 22, 6, UI_ACCENT);
-        draw_text_bold(pixels, stride, c_health.x + 36, c_health.y + 27, ptc_ui_text(PTC_UI_T_DETAIL_HEALTH), 15, UI_INK);
+        support_draw_heart(pixels, stride, c_health.x + 20, c_health.y + 20, 6, UI_ACCENT);
+        draw_text_bold(pixels, stride, c_health.x + 36, c_health.y + 25, ptc_ui_text(PTC_UI_T_DETAIL_HEALTH), 15, UI_INK);
+        draw_text(pixels, stride, c_health.x + c_health.width - measure_text(ptc_ui_text(PTC_UI_T_DETAIL_CONDITIONS), 11) - 18,
+                  c_health.y + 25, ptc_ui_text(PTC_UI_T_DETAIL_CONDITIONS), 11, UI_MUTED);
 
-        /* 3 行指标 */
-        const PtcUiTextId h_titles[] = {
-            PTC_UI_T_DETAIL_HEALTH_EYE,
-            PTC_UI_T_DETAIL_HEALTH_BEDTIME,
-            PTC_UI_T_DETAIL_HEALTH_DOCK
-        };
-        const PtcUiTextId h_tags[] = {
-            PTC_UI_T_DETAIL_TAG_ACTIVE,
-            PTC_UI_T_DETAIL_TAG_NOT_STARTED,
-            PTC_UI_T_DETAIL_TAG_HANDHELD
-        };
-        const uint32_t h_tag_colors[] = {UI_SUCCESS, UI_MUTED, UI_MUTED};
-        const uint32_t h_tag_bgs[] = {UI_SUCCESS_SOFT, UI_RAISED, UI_RAISED};
+        /* 3 项守护条目微卡片 (每项高 66px，y = 216, 290, 364) */
+        /* 条目 0: 视力保护 */
+        {
+            UiRect sub0 = {c_health.x + 14, c_health.y + 36, c_health.width - 28, 66};
+            fill_round_rect(pixels, stride, sub0, 6, UI_PAGE);
+            draw_rect_outline(pixels, stride, sub0, 6, 1, UI_BORDER);
+            uint32_t eye_col = !model->eye_care_policy.enabled ? UI_MUTED : (eye_resting ? UI_DANGER : UI_SUCCESS);
+            support_draw_eye(pixels, stride, sub0.x + 18, sub0.y + 18, 7, eye_col);
+            draw_text_bold(pixels, stride, sub0.x + 34, sub0.y + 20, ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_EYE), 13, UI_INK);
 
-        for (int i = 0; i < 3; ++i) {
-            int ry = c_health.y + 40 + i * 25;
-            if (i == 0) support_draw_eye(pixels, stride, c_health.x + 20, ry + 6, 7, UI_INK);
-            else if (i == 1) support_draw_crescent_moon(pixels, stride, c_health.x + 20, ry + 6, 6.0f, 5.0f, 2.0f, -1.0f, UI_INK);
-            else support_draw_controller(pixels, stride, c_health.x + 20, ry + 6, 7, UI_INK);
+            const char *badge = !model->eye_care_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
+                (eye_resting ? ptc_ui_text(PTC_UI_T_EYE_CARE_BADGE_RESTING) : ptc_ui_text(PTC_UI_T_DETAIL_TAG_ACTIVE));
+            uint32_t badge_fg = eye_col;
+            uint32_t badge_bg = !model->eye_care_policy.enabled ? UI_RAISED : (eye_resting ? UI_DANGER_SOFT : UI_SUCCESS_SOFT);
+            int bw = measure_text(badge, 10) + 12;
+            UiRect pill = {sub0.x + sub0.width - bw - 12, sub0.y + 10, bw, 18};
+            fill_round_rect(pixels, stride, pill, 4, badge_bg);
+            draw_text_center(pixels, stride, pill, badge, 10, badge_fg);
 
-            draw_text(pixels, stride, c_health.x + 36, ry + 11, ptc_ui_text(h_titles[i]), 12, UI_INK);
-            int title_w = measure_text(ptc_ui_text(h_titles[i]), 12);
-            int pill_x = c_health.x + 36 + title_w + 8;
-            int pill_txt_w = measure_text(ptc_ui_text(h_tags[i]), 10);
-            int pill_w = pill_txt_w + 12;
-            UiRect pill = {pill_x, ry, pill_w, 18};
-            fill_round_rect(pixels, stride, pill, 4, h_tag_bgs[i]);
-            draw_text_center(pixels, stride, pill, ptc_ui_text(h_tags[i]), 10, h_tag_colors[i]);
-
-            char h_desc[64];
-            if (i == 0) {
-                snprintf(h_desc, sizeof(h_desc), ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_EYE_SUB),
+            if (!model->eye_care_policy.enabled) {
+                fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_EYE_CARE_CYCLE_OFF), 11, sub0.width - 48);
+                draw_text(pixels, stride, sub0.x + 34, sub0.y + 38, fitted, 11, UI_MUTED);
+                fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED_RULES_CAN_BE_PRESET), 11, sub0.width - 48);
+                draw_text(pixels, stride, sub0.x + 34, sub0.y + 54, fitted, 11, UI_MUTED);
+            } else {
+                snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_EYE_SUB),
                          (unsigned)model->eye_care_used_minutes,
                          (unsigned)model->eye_care_policy.play_minutes,
                          (unsigned)model->eye_care_policy.rest_minutes);
-            } else if (i == 1) {
+                fit_text(fitted, sizeof(fitted), buf, 11, sub0.width - 48);
+                draw_text(pixels, stride, sub0.x + 34, sub0.y + 38, fitted, 11, UI_INK);
+
+                unsigned left_c = p->continuous_seconds > 0 ? (unsigned)(p->continuous_seconds / 60) : 0;
+                snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_DETAIL_EYE_CARE_NEED_REST_FMT), left_c);
+                fit_text(fitted, sizeof(fitted), buf, 11, sub0.width - 48);
+                draw_text(pixels, stride, sub0.x + 34, sub0.y + 54, fitted, 11, eye_resting ? UI_DANGER : UI_MUTED);
+            }
+        }
+
+        /* 条目 1: 就寝守护 */
+        {
+            UiRect sub1 = {c_health.x + 14, c_health.y + 110, c_health.width - 28, 66};
+            fill_round_rect(pixels, stride, sub1, 6, UI_PAGE);
+            draw_rect_outline(pixels, stride, sub1, 6, 1, UI_BORDER);
+            uint32_t bed_col = !model->bedtime_policy.enabled ? UI_MUTED :
+                (model->bedtime_skipped ? UI_SUCCESS : (model->bedtime_active ? UI_DANGER : UI_ACCENT));
+            support_draw_crescent_moon(pixels, stride, sub1.x + 18, sub1.y + 18, 6.0f, 5.0f, 2.0f, -1.0f, bed_col);
+            draw_text_bold(pixels, stride, sub1.x + 34, sub1.y + 20, ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_BEDTIME), 13, UI_INK);
+
+            const char *badge = !model->bedtime_policy.enabled ? ptc_ui_text(PTC_UI_T_DISABLED_2) :
+                (model->bedtime_skipped ? ptc_ui_text(PTC_UI_T_DETAIL_SKIPPED) :
+                 (model->bedtime_active ? ptc_ui_text(PTC_UI_T_DETAIL_TAG_ACTIVE) : ptc_ui_text(PTC_UI_T_DETAIL_TAG_NOT_STARTED)));
+            uint32_t badge_fg = bed_col;
+            uint32_t badge_bg = !model->bedtime_policy.enabled ? UI_RAISED :
+                (model->bedtime_skipped ? UI_SUCCESS_SOFT : (model->bedtime_active ? UI_DANGER_SOFT : UI_RAISED));
+            int bw = measure_text(badge, 10) + 12;
+            UiRect pill = {sub1.x + sub1.width - bw - 12, sub1.y + 10, bw, 18};
+            fill_round_rect(pixels, stride, pill, 4, badge_bg);
+            draw_text_center(pixels, stride, pill, badge, 10, badge_fg);
+
+            if (!model->bedtime_policy.enabled) {
+                fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_IS_CURRENTLY_CLOSED_RULES_CAN_BE_PRESET), 11, sub1.width - 48);
+                draw_text(pixels, stride, sub1.x + 34, sub1.y + 38, fitted, 11, UI_MUTED);
+                fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_CLOSED_TODAY_USE_WILL_NOT_BE_RESTRICTED), 11, sub1.width - 48);
+                draw_text(pixels, stride, sub1.x + 34, sub1.y + 54, fitted, 11, UI_MUTED);
+            } else {
                 unsigned b_st = model->bedtime_policy.week[ptc_weekday_from_day_index(model->day_index)].start_minute;
                 unsigned b_en = model->bedtime_policy.week[ptc_weekday_from_day_index(model->day_index)].end_minute;
-                snprintf(h_desc, sizeof(h_desc), ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_BEDTIME_SUB),
+                snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_BEDTIME_SUB),
                          b_st / 60, b_st % 60, b_en / 60, b_en % 60);
+                fit_text(fitted, sizeof(fitted), buf, 11, sub1.width - 48);
+                draw_text(pixels, stride, sub1.x + 34, sub1.y + 38, fitted, 11, UI_INK);
+
+                const char *bed_note = model->bedtime_skipped ? ptc_ui_text(PTC_UI_T_FOR_EXCEPTIONS_SELECT_SKIP_TONIGHT_BEDTIME_IN) :
+                    (model->bedtime_active ? ptc_ui_text(PTC_UI_T_TODAY_S_QUOTA_HAS_BEEN_DETERMINED_CURRENT) :
+                     ptc_ui_text(PTC_UI_T_BEDTIME_OPERATES_INDEPENDENTLY));
+                fit_text(fitted, sizeof(fitted), bed_note, 11, sub1.width - 48);
+                draw_text(pixels, stride, sub1.x + 34, sub1.y + 54, fitted, 11, model->bedtime_active ? UI_DANGER : UI_MUTED);
+            }
+        }
+
+        /* 条目 2: 掌机模式限额 */
+        {
+            UiRect sub2 = {c_health.x + 14, c_health.y + 184, c_health.width - 28, 66};
+            fill_round_rect(pixels, stride, sub2, 6, UI_PAGE);
+            draw_rect_outline(pixels, stride, sub2, 6, 1, UI_BORDER);
+            uint32_t dock_col = is_docked ? UI_SUCCESS : (!dock_enabled ? UI_MUTED : (p->undocked_remaining == 0 ? UI_DANGER : UI_ACCENT));
+            support_draw_controller(pixels, stride, sub2.x + 18, sub2.y + 18, 7, dock_col);
+            draw_text_bold(pixels, stride, sub2.x + 34, sub2.y + 20, ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_DOCK), 13, UI_INK);
+
+            const char *badge = is_docked ? ptc_ui_text(PTC_UI_T_DETAIL_TAG_DOCKED) :
+                (!dock_enabled ? ptc_ui_text(PTC_UI_T_DETAIL_OFF) :
+                 (p->undocked_remaining == 0 ? ptc_ui_text(PTC_UI_T_DETAIL_SIM_UNDOCKED_EXHAUSTED) : ptc_ui_text(PTC_UI_T_DETAIL_TAG_HANDHELD)));
+            uint32_t badge_fg = dock_col;
+            uint32_t badge_bg = is_docked ? UI_SUCCESS_SOFT : (!dock_enabled ? UI_RAISED : (p->undocked_remaining == 0 ? UI_DANGER_SOFT : UI_ACCENT_SOFT));
+            int bw = measure_text(badge, 10) + 12;
+            UiRect pill = {sub2.x + sub2.width - bw - 12, sub2.y + 10, bw, 18};
+            fill_round_rect(pixels, stride, pill, 4, badge_bg);
+            draw_text_center(pixels, stride, pill, badge, 10, badge_fg);
+
+            if (!dock_enabled) {
+                fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_DOCK_OFF), 11, sub2.width - 48);
+                draw_text(pixels, stride, sub2.x + 34, sub2.y + 38, fitted, 11, UI_MUTED);
+                fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_NOTE_BAR), 11, sub2.width - 48);
+                draw_text(pixels, stride, sub2.x + 34, sub2.y + 54, fitted, 11, UI_MUTED);
             } else {
-                snprintf(h_desc, sizeof(h_desc), ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_DOCK_SUB),
+                snprintf(buf, sizeof(buf), ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_DOCK_SUB),
                          (unsigned)model->undocked_used_minutes,
                          (unsigned)model->dock_policy.undocked_daily_minutes,
                          (unsigned)model->undocked_remaining_minutes);
+                fit_text(fitted, sizeof(fitted), buf, 11, sub2.width - 48);
+                draw_text(pixels, stride, sub2.x + 34, sub2.y + 38, fitted, 11, UI_INK);
+
+                const char *dock_note = is_docked ? ptc_ui_text(PTC_UI_T_DOCK_TV_ACTIVE_NOTE) :
+                    ptc_ui_text(PTC_UI_T_DETAIL_RULES_TIP_TV_DOCK);
+                fit_text(fitted, sizeof(fitted), dock_note, 11, sub2.width - 48);
+                draw_text(pixels, stride, sub2.x + 34, sub2.y + 54, fitted, 11, UI_MUTED);
             }
-            int desc_w = measure_text(h_desc, 11);
-            int desc_x = c_health.x + c_health.width - 16 - desc_w;
-            draw_text(pixels, stride, desc_x, ry + 12, h_desc, 11, UI_MUTED);
         }
 
-        /* 底部提示 */
-        UiRect tip3 = {c_health.x + 16, c_health.y + 118, c_health.width - 32, 22};
+        /* 底部规则说明提示栏 */
+        UiRect tip3 = {c_health.x + 14, c_health.y + 258, c_health.width - 28, 30};
         fill_round_rect(pixels, stride, tip3, 5, UI_ACCENT_SOFT);
-        support_draw_info(pixels, stride, tip3.x + 12, tip3.y + 11, 5, UI_ACCENT);
-        draw_text(pixels, stride, tip3.x + 22, tip3.y + 15, ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_NOTE_BAR), 11, UI_INK);
+        support_draw_info(pixels, stride, tip3.x + 14, tip3.y + 15, 6, UI_ACCENT);
+        fit_text(fitted, sizeof(fitted), ptc_ui_text(PTC_UI_T_DETAIL_HEALTH_NOTE_BAR), 11, tip3.width - 34);
+        draw_text(pixels, stride, tip3.x + 26, tip3.y + 19, fitted, 11, UI_INK);
     }
 
-    /* 3.2 卡片 D: 今日额度规则来源 (y = 344, h = 140) */
-    {
-        UiRect c_quota = {796, 344, 444, 140};
-        detail_panel(pixels, stride, c_quota);
-        support_draw_clock(pixels, stride, c_quota.x + 20, c_quota.y + 22, 9, UI_ACCENT);
-        draw_text_bold(pixels, stride, c_quota.x + 36, c_quota.y + 27, ptc_ui_text(PTC_UI_T_TOTAL_DAILY_ALLOWANCE), 15, UI_INK);
-        char plan_tag[96];
-        snprintf(plan_tag, sizeof(plan_tag), "%s / %u min",
-                 ptc_ui_effective_rule_label(decision->effective.source), (unsigned)model->forecast[0].minutes);
-        draw_text(pixels, stride, c_quota.x + c_quota.width - measure_text(plan_tag, 12) - 16, c_quota.y + 27,
-                  plan_tag, 12, UI_ACCENT);
-
-        /* 进度条 */
-        UiRect pbar = {c_quota.x + 16, c_quota.y + 44, c_quota.width - 32, 9};
-        fill_round_rect(pixels, stride, pbar, 4, UI_RAISED);
-        int fill_w = 0;
-        if (model->forecast[0].minutes > 0)
-            fill_w = (int)((int64_t)model->played_minutes * pbar.width / model->forecast[0].minutes);
-        if (fill_w > pbar.width) fill_w = pbar.width;
-        if (fill_w > 0) fill_round_rect(pixels, stride, (UiRect){pbar.x, pbar.y, fill_w, pbar.height}, 4, UI_ACCENT);
-
-        char used_str[64], left_str[64];
-        snprintf(used_str, sizeof(used_str),
-            ptc_ui_text(model->usage_present ? PTC_UI_T_CONSOLE_USAGE_U_MIN : PTC_UI_T_DETAIL_USED_LABEL), (unsigned)model->played_minutes);
-        draw_text(pixels, stride, pbar.x, pbar.y + pbar.height + 15, used_str, 11, UI_MUTED);
-        detail_balance(p->total_known, p->total_unlimited, p->total_remaining, value, sizeof(value));
-        snprintf(left_str, sizeof(left_str), ptc_ui_text(PTC_UI_T_DETAIL_LEFT_LABEL), value);
-        draw_text_bold(pixels, stride, pbar.x + pbar.width - measure_text(left_str, 12), pbar.y + pbar.height + 15,
-                       left_str, 12, UI_ACCENT);
-
-        /* 自主缓冲交互条 */
-        UiRect buf_bar = {c_quota.x + 16, c_quota.y + 84, c_quota.width - 32, 26};
-        fill_round_rect(pixels, stride, buf_bar, 6, UI_ACCENT_SOFT);
-        support_fill_circle_mini(pixels, stride, (float)(buf_bar.x + 14), (float)(buf_bar.y + 13), 6.5f, UI_ACCENT);
-        draw_line(pixels, stride, buf_bar.x + 11, buf_bar.y + 13, buf_bar.x + 17, buf_bar.y + 13, 2, UI_ON_ACCENT);
-        draw_line(pixels, stride, buf_bar.x + 14, buf_bar.y + 10, buf_bar.x + 14, buf_bar.y + 16, 2, UI_ON_ACCENT);
-        snprintf(text, sizeof(text), ptc_ui_text(PTC_UI_T_DETAIL_BUFFER_CLAIMABLE_FMT), (unsigned)model->daily_buffer_minutes);
-        draw_text(pixels, stride, buf_bar.x + 28, buf_bar.y + 18, text, 11, UI_INK);
-        support_draw_chevron_right(pixels, stride, buf_bar.x + buf_bar.width - 14, buf_bar.y + 13, 4, UI_MUTED);
-
-        draw_text(pixels, stride, c_quota.x + 16, c_quota.y + 128, ptc_ui_text(PTC_UI_T_DETAIL_RULES_PRIORITY_NOTE), 10, UI_MUTED);
-    }
-
-    /* 3.3 大按钮卡片: 查看决策与规则 (Action 0) (y = 498, h = 118) */
+    /* 3.2 大卡片: 查看决策与规则 (Action 0) (y = 498, h = 118) - 彻底移除卡片D的自我克隆进度条 */
     {
         PtcUiRect btn_target = ptc_ui_home_details_action_rect(model, 0);
         UiRect btn_r = to_uirect(btn_target);
-        bool focused = model->home_details_focus == 0;
+        bool focused = (model->home_details_focus == 0);
         fill_round_rect(pixels, stride, btn_r, 12, UI_ACCENT);
         if (focused) {
             draw_focus_ring(pixels, stride, btn_r, 12);
@@ -957,9 +1029,22 @@ static void draw_today_plan(uint32_t *pixels, uint32_t stride, const PtcUiModel 
         support_fill_circle_mini(pixels, stride, (float)(btn_r.x + 36), (float)(btn_r.y + btn_r.height / 2), 16.0f, badge_bg);
         draw_text_center(pixels, stride, (UiRect){btn_r.x + 22, btn_r.y + btn_r.height / 2 - 12, 28, 24}, "X", 17, badge_fg);
 
-        /* 主标题与副标题 */
-        draw_text_bold(pixels, stride, btn_r.x + 68, btn_r.y + 40, ptc_ui_text(PTC_UI_T_DETAIL_VIEW_RULES_BTN), 18, UI_ON_ACCENT);
-        draw_text(pixels, stride, btn_r.x + 68, btn_r.y + 72, ptc_ui_text(PTC_UI_T_DETAIL_VIEW_RULES_SUB), 12, UI_ON_ACCENT);
+        /* 主标题 */
+        draw_text_bold(pixels, stride, btn_r.x + 68, btn_r.y + 32, ptc_ui_text(PTC_UI_T_DETAIL_VIEW_RULES_BTN), 18, UI_ON_ACCENT);
+
+        /* 副标题：当前规则溯源判定 */
+        char hit_buf[128];
+        snprintf(hit_buf, sizeof(hit_buf), "%s / %u min",
+                 ptc_ui_effective_rule_label(decision->effective.source),
+                 (unsigned)model->forecast[0].minutes);
+        fit_text(fitted, sizeof(fitted), hit_buf, 12, btn_r.width - 68 - 36);
+        draw_text(pixels, stride, btn_r.x + 68, btn_r.y + 60, fitted, 12, UI_ON_ACCENT);
+
+        /* 底部流水线与规则优先级说明 */
+        char prio_buf[192];
+        snprintf(prio_buf, sizeof(prio_buf), "%s", ptc_ui_text(PTC_UI_T_DETAIL_RULES_PRIORITY_NOTE));
+        fit_text(fitted, sizeof(fitted), prio_buf, 10, btn_r.width - 68 - 36);
+        draw_text(pixels, stride, btn_r.x + 68, btn_r.y + 82, fitted, 10, UI_ON_ACCENT);
 
         /* 向右箭头 */
         support_draw_chevron_right(pixels, stride, btn_r.x + btn_r.width - 24, btn_r.y + btn_r.height / 2, 7, UI_ON_ACCENT);
