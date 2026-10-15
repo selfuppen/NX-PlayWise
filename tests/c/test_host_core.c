@@ -3067,6 +3067,77 @@ static void test_daily_enforce_does_not_start_play_timer(void)
         "result JSON immediately reflects updated remaining minutes for today");
 }
 
+static void test_overlay_handshake_large_manifest(void)
+{
+    PtcMemStorage mem;
+    PtcPctlStub pctl;
+    PtcFakeTime fake_time;
+    PtcSysmodule sysmodule;
+    char manifest[4097];
+    char request[1024];
+    char result[8192];
+    char ready[512], after[512];
+    char fingerprint[65];
+    size_t length;
+    unsigned int writes, starts;
+    static const char ENVIRONMENT[] =
+        "{\"read_ok\":true,\"hos\":\"22.5.0\",\"firmware_hash\":\"test-hash\","
+        "\"model\":\"mariko-oled\",\"atmosphere\":true,\"atmosphere_version\":\"1.11.2\"}";
+
+    seed_active_buffer_fixture(&mem, &pctl, &fake_time, &sysmodule, 60, 10, true);
+    ptc_sysmodule_set_boot_id(&sysmodule, "manifest-capacity-boot");
+    sha256_hex(ENVIRONMENT, fingerprint);
+    writes = pctl.apply_target_calls;
+    starts = pctl.start_timer_calls;
+    snprintf(manifest, sizeof(manifest),
+        "{\"playwise_version\":\"" PLAYWISE_VERSION "\",\"profile\":\"release\","
+        "\"release_id\":\"playwise-" PLAYWISE_VERSION "+test\","
+        "\"build\":{\"source_fingerprint\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"source_dirty\":false}}");
+    length = strlen(manifest);
+    /* A valid JSON manifest at preflight's maximum, beyond the old 1 KiB cap. */
+    memset(manifest + length, ' ', 4095U - length);
+    manifest[4095] = '\0';
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/build.json", manifest),
+        "seed maximum supported source-identity manifest");
+    check_true(ptc_companion_overlay_ready_request_json(request, sizeof(request),
+        "large-ready", 1, "playwise-" PLAYWISE_VERSION "+test", "overlay-large", fingerprint) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/large-ready.json", request),
+        "queue matching Overlay handshake with a manifest larger than 1 KiB");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "large-manifest handshake is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/large-ready.json", result, sizeof(result)) &&
+        strstr(result, "\"status\":\"ok\"") && strstr(result, "\"overlay_verified\":true"),
+        "large manifest is accepted by both handshake and persisted readiness validation");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/overlay/ready.json", ready, sizeof(ready)),
+        "save successful large-manifest readiness preimage");
+
+    check_true(ptc_companion_overlay_ready_request_json(request, sizeof(request),
+        "large-wrong-release", 2, "other-release", "overlay-wrong", fingerprint) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/large-wrong-release.json", request),
+        "queue mismatched release with a readable large manifest");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "mismatched large-manifest handshake is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/large-wrong-release.json", result, sizeof(result)) &&
+        strstr(result, "\"reason\":\"overlay_unverified\""),
+        "larger read capacity does not bypass release identity binding");
+
+    manifest[4095] = ' ';
+    manifest[4096] = '\0';
+    check_true(mem.storage.vtable->write_text_atomic(&mem.storage, "app/build.json", manifest),
+        "seed manifest beyond the preflight capacity");
+    check_true(ptc_companion_overlay_ready_request_json(request, sizeof(request),
+        "large-overflow", 3, "playwise-" PLAYWISE_VERSION "+test", "overlay-overflow", fingerprint) > 0 &&
+        mem.storage.vtable->write_text_atomic(&mem.storage, "app/inbox/pending/large-overflow.json", request),
+        "queue handshake with an oversized manifest");
+    check_int(ptc_sysmodule_process_all(&sysmodule), 1, "oversized manifest handshake is processed");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/results/large-overflow.json", result, sizeof(result)) &&
+        strstr(result, "\"reason\":\"overlay_unverified\"") && strstr(result, "\"overlay_verified\":false"),
+        "oversized reads fail closed instead of accepting a truncated release field");
+    check_true(mem.storage.vtable->read_text(&mem.storage, "app/overlay/ready.json", after, sizeof(after)) &&
+        strcmp(ready, after) == 0, "refused handshakes preserve the successful readiness preimage");
+    check_int(pctl.apply_target_calls, writes, "handshake capacity checks never apply PCTL targets");
+    check_int(pctl.start_timer_calls, starts, "handshake capacity checks never start the timer");
+}
+
 static void test_bedtime_enforcement_and_overlay_recovery(void)
 {
     PtcMemStorage mem;
@@ -4053,6 +4124,7 @@ int main(void)
     test_runtime_fingerprint_change_can_be_reconfirmed();
     test_eye_care_cycle_and_stale_skip();
     test_daily_enforce_does_not_start_play_timer();
+    test_overlay_handshake_large_manifest();
     test_bedtime_enforcement_and_overlay_recovery();
     test_live_enforce_recovery_is_not_startup_recovery();
     test_played_time_status();

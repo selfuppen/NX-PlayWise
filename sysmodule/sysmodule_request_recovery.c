@@ -318,7 +318,8 @@ static bool process_overlay_ready(PtcSysmodule *sysmodule, const PtcRequest *req
 {
     char path[320];
     char text[512];
-    char build[1024];
+    /* Match release preflight: source/toolchain metadata can exceed 1 KiB. */
+    char build[4096];
     char build_release_id[96];
     char fingerprint[65];
     join_path(path, sizeof(path), sysmodule->app_root, "build.json");

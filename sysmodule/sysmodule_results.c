@@ -201,7 +201,7 @@ bool bedtime_overlay_verified(PtcSysmodule *sysmodule)
 {
     char path[320];
     char text[512];
-    char build[1024];
+    char build[4096];
     char boot_id[65];
     char ready_release_id[96];
     char build_release_id[96];
