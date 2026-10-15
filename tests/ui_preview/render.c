@@ -542,7 +542,7 @@ static int render_today_details_previews(const char *directory, const PtcUiModel
     today.eye_care_rest_remaining_seconds = 600; today.eye_care_break_id = 99;
     failed |= save_preview(directory, "parent", "today-multiple-limits", &today, dark);
     today.home_details_page = 1;
-    failed |= save_preview(directory, "parent", "today-rules-multiple-limits", &today, dark);
+    failed |= save_preview(directory, "parent", "parent-details-rules-restricted", &today, dark);
     today = *baseline;
     today.view = PTC_UI_PARENT;
     today.overlay = PTC_UI_OVERLAY_DAY_DECISION;
@@ -568,6 +568,18 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             claimed.daily_buffer_available = false;
             claimed.daily_buffer_claimed = true;
             failed |= save_preview(directory, "child", "child-buffer-claimed", &claimed, dark);
+        }
+        {
+            PtcUiModel exhausted = model;
+            exhausted.remaining_minutes = 0;
+            exhausted.displayed_remaining_minutes = 0;
+            exhausted.played_minutes = 120;
+            exhausted.forecast[0].minutes = 120;
+            exhausted.daily_restriction_active = true;
+            exhausted.restricted_now = 1;
+            exhausted.blocked_today = 1;
+            exhausted.daily_buffer_available = false;
+            failed |= save_preview(directory, "child", "child-exhausted", &exhausted, dark);
         }
         ptc_ui_open_home_details(&model);
         failed |= save_preview(directory, "child", "child-details", &model, dark);
@@ -680,7 +692,7 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
         model.view = PTC_UI_PARENT;
         model.parent_page = PTC_UI_PARENT_TODAY;
         ptc_ui_open_home_details(&model);
-        failed |= save_preview(directory, "parent", "parent-details-decision", &model, dark);
+        failed |= save_preview(directory, "parent", "parent-details-today", &model, dark);
         {
             PtcUiModel active_details = model;
             active_details.bedtime_policy.enabled = true;
@@ -691,9 +703,11 @@ static int render_all_previews(const char *directory, const PtcUiModel *baseline
             active_details.bedtime_end_minute = 420;
             snprintf(active_details.bedtime_source, sizeof(active_details.bedtime_source), "weekly");
             failed |= save_preview(directory, "parent", "parent-details-bedtime-active", &active_details, dark);
+            active_details.home_details_page = 1;
+            failed |= save_preview(directory, "parent", "parent-details-rules-bedtime-active", &active_details, dark);
         }
         model.home_details_page = 1;
-        failed |= save_preview(directory, "parent", "parent-details-usage", &model, dark);
+        failed |= save_preview(directory, "parent", "parent-details-rules", &model, dark);
         failed |= render_today_details_previews(directory, &model, dark);
 
         ptc_ui_cancel_overlay(&model);
@@ -1457,9 +1471,6 @@ static int render_parent_pin_error_previews(const char *directory, const PtcUiMo
     int failed = 0;
     for (int dark = 0; dark < 2; ++dark) {
         PtcUiModel model = *base;
-        model.view = PTC_UI_PARENT;
-        model.parent_page = PTC_UI_PARENT_TODAY;
-        failed |= save_preview(directory, "parent", "today-arrangements", &model, dark);
         model.view = PTC_UI_CHILD;
         model.overlay = PTC_UI_OVERLAY_AUTH_ERROR;
         model.auth_error_parent_entry = true;

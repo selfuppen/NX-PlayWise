@@ -144,12 +144,18 @@ In list rows, health-care cards, and decision cells, content must strictly separ
 
 ![Today: plan and status composite control preview](../images/usage-en/parent/today-planning-light.png)
 
-### 4.4 Decision & Rule Priority Matrix
-* **Active Selected Rule**: 2px stroke in `UI_SUCCESS`, soft green background (`UI_SUCCESS_SOFT`), embedded "Active" pill.
-* **Fallback Unhit Rules**: 1px border in `UI_BORDER`, canvas-blended background (`UI_PAGE`), muted text.
-* **Priority Arrows**: 2px directional arrows between rule stages illustrating evaluation flow (Temporary $\to$ Specified Date $\to$ Holiday $\to$ Weekly Plan $\to$ Final Balance).
+### 4.4 Two-Stage Decision & Rule Matrix
 
-![Decision and rules priority matrix preview](../images/usage-en/parent/parent-details-usage-light.png)
+The page is organized as a two-stage flow — "first the total, then whether you can play" — with numbered badges ① / ② and a mid-flow pill making the causal chain explicit. Section subtitles are phrased as conversational questions.
+
+* **Stage ① "Total first"**: four priority candidate cards (Today → Set Date → Holiday → Weekly) cascade left to right. The winning card uses a 2px `UI_SUCCESS` stroke with a soft green background (`UI_SUCCESS_SOFT`); overridden fallbacks are dimmed with a 1px `UI_BORDER` and `UI_PAGE` background. Each card carries a domain vector icon (calendar / gift / clock) plus a `P1`–`P4` chip, and the winning card shows a one-line "why this one" note in its domain color.
+* **Priority flow**: 2px directional arrows with a single triangular head run between cards (Temporary $\to$ Specified Date $\to$ Holiday $\to$ Weekly Plan); the winning junction draws a red cut-off barrier that truncates the downstream flow, and the active card feeds down into the "today's total = N minutes" result bar (an emphasized soft bar with a leading clock icon).
+* **Stage ② "Can we play"**: four gate cards (Daily Total / Bedtime / Eye Rest / TV·Handheld) each carry a dedicated icon (clock / moon / eye / controller) and a 4px left domain bar in `UI_ACCENT` / `UI_HERO` / `UI_SUCCESS` / `UI_WARNING`. Any block turns the whole card and its bar to `UI_DANGER`. Downward leads from the four cards merge into a bus that feeds a centered master gate bar: success color with "all 4 gates green" when clear, otherwise danger color with a centered "restricted" caption and an optional right-aligned "allowance does not waive health rules" note.
+* **Top banner and footer**: the banner switches between success and warning soft colors (and check / info icons) depending on whether eye care triggers first; the footer has three columns, each a vector icon (info / shield / TV) in `UI_MUTED` / `UI_WARNING` / `UI_ACCENT` paired with one plain-language sentence.
+
+![Decision and rules priority matrix preview](../images/usage-en/parent/parent-details-rules-light.png)
+
+![Decision and rules restriction active preview](../images/usage-en/parent/parent-details-rules-restricted-light.png)
 
 ### 4.5 Tesla Overlay Current Design & Dark Baseline Contract
 * **Tesla Host Dark Background**: The Tesla menu operates over a translucent dark background (`0x000D` / RGBA(0, 0, 0, 0.85)). To guarantee seamless integration without ocular strain, **the Tesla Overlay strictly locks to the Dark palette (`PTC_UI_RESOLVED_DARK`)**, never inheriting or following the Switch system Light theme.

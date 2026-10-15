@@ -16,7 +16,7 @@ Preview the timestamp and source device, then choose among eleven groups. Ordina
 
 Selecting PIN also requires the backup PIN and ends the parent session after success. Selecting pairing restores the device name/URL and generates a fresh grant key: pair the phone again; old codes expire. Environment qualifications, setup authorization, PCTL snapshots, external hbmenu configuration and logs do not migrate. First restriction enable requires local Nintendo-control/overlay confirmation. Invalid files change nothing; write/readback failures roll back the whole import, with recovery materials retained in protection if rollback fails.
 
-![Eleven import groups and preview](../images/usage/en/settings/config-backup-light.png)
+![Eleven import groups and preview](../images/usage-en/settings/config-backup-light.png)
 
 Time Plan's independent column contains four compact cards: bedtime, eye care, TV rules, buffer. Public modes are TV and non-TV, which includes handheld/tabletop. Eden's TV rules page adds simulation buttons; switching keeps today's usage and the mode file survives restart. Daily allowance, bedtime and eye care still apply.
 
@@ -42,6 +42,8 @@ Use is estimated from Nintendo console time; HOME may count, while sleep is neve
 ## Eye care breaks (device validation pending)
 
 In the parent's Time Plan, enable Eye Care and set 1–240 minutes of use and 1–60 minutes of rest. Tap ±1 or ±10 minute buttons, or use the controller's left/right buttons for one-minute steps and ZL/ZR for ten-minute steps. It is off by default, with 40 minutes of use and 10 minutes of rest preset. The Time Plan card's badge shows the Eye Care switch state. Before first enablement, confirm Nintendo Parental Controls is enabled and verify that the overlay is available. Status confirmation checks whether Nintendo Parental Controls is enabled.
+
+![Eye care break schedule settings preview](../images/usage-en/plan/eye-care-switch-on-light.png)
 
 Enabling starts a new cycle at current usage. Reducing the use period may start a break immediately; disabling releases the eye care restriction immediately. Awake HOME use counts, sleep pauses usage accumulation, and sleep counts toward a break. The child view and overlay show remaining use or break time; an unavailable reading is shown as unknown. During a break, a parent can verify their PIN in the overlay or Today's Schedule and choose “Skip this break”; this applies only to the current break and starts a new cycle. Daily allowance and bedtime restrictions take precedence and reset the eye care cycle.
 
@@ -105,6 +107,7 @@ When entering the parent area, an incorrect PIN opens a choice dialog: press `A`
 
 Child Zone home screen preview:
 ![Child Zone home screen preview](../images/usage-en/child/child-light.png)
+![Child Zone exhausted and restricted preview](../images/usage-en/child/child-exhausted-light.png)
 ![Child Zone details panel preview](../images/usage-en/child/child-details-light.png)
 ![Child Zone claimed autonomy buffer preview](../images/usage-en/child/child-buffer-claimed-light.png)
 
@@ -162,7 +165,7 @@ PlayWise employs a robust **two-stage adjudication** pipeline paired with **four
 
 #### 1. Decision & Rule Pipeline: Quota Calculation & Multi-Gate Enforcement
 
-![Decision and rules preview](../images/usage-en/parent/parent-details-usage-light.png)
+![Decision and rules preview](../images/usage-en/parent/parent-details-rules-light.png)
 
 - **Step ① Calculate Total Playtime (How long can the child play today?)**:
   Evaluated strictly from left to right across four priority tiers—**the first matching rule dictates today's total quota**: `[1] Today's Adjustment` > `[2] Specific Date Quota` > `[3] Statutory Holidays` > `[4] Weekly Plan`. A higher-priority rule automatically overrides lower tiers.
@@ -240,10 +243,9 @@ On the Today's Schedule tab, press controller `+` button or tap "+ View Details"
 - Y refreshes either page. B returns from the nested page to planning with entry focus restored, then back to Today. ZL/ZR or touch dragging scrolls expanded data. Child details remain read-only and hide parent execution data.
 - TV counts toward the total; non-TV counts toward both limits. Non-TV is not extra allowance. TV can use the total left; breaks and bedtime still apply. Unlimited use, extra time and buffers do not waive health rules.
 
-![Decision and rules pipeline preview (two-stage adjudication and four gates)](../images/usage-en/parent/parent-details-usage-light.png)
+![Decision and rules pipeline preview (two-stage adjudication and four gates)](../images/usage-en/parent/parent-details-rules-light.png)
+![Decision and rules restriction active preview (independent gate blocking)](../images/usage-en/parent/parent-details-rules-restricted-light.png)
 ![Today: plan and status preview (24-hour horizon and continuous usage projection)](../images/usage-en/parent/today-planning-light.png)
-![Decision and rules active runtime preview](../images/usage-en/parent/today-rules-light.png)
-![Expanded data and runtime](../images/usage-en/parent/today-data-light.png)
 
 ### Long-Term & Date Plans
 
@@ -276,6 +278,7 @@ The "Master Bedtime Switch" controls all bedtime rules across weekly, holiday, a
 ![Bedtime start/end time editor preview](../images/usage-en/bedtime/bedtime-time-editor-dark.png)
 ![Scheduled date custom bedtime rule preview](../images/usage-en/bedtime/bedtime-special-custom-dark.png)
 ![Autonomy buffer policy preview](../images/usage-en/autonomy/autonomy-policy-light.png)
+![Eye care break schedule settings preview](../images/usage-en/plan/eye-care-switch-on-light.png)
 ![TV Mode policy preview](../images/usage-en/plan/dock-policy-light.png)
 
 </details>

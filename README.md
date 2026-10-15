@@ -84,7 +84,9 @@
 
 ![当天规划与状态预览](docs/images/usage/parent/today-planning-light.png)
 
-![决策与规则流程预览](docs/images/usage/parent/parent-details-usage-light.png)
+![决策与规则流程预览](docs/images/usage/parent/parent-details-rules-light.png)
+
+![决策与规则限制触发预览](docs/images/usage/parent/parent-details-rules-restricted-light.png)
 
 </details>
 

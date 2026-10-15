@@ -83,7 +83,9 @@ For detailed walkthroughs and [core time control logic](docs/使用/USER_GUIDE.m
 
 ![Today's plan and status preview](docs/images/usage-en/parent/today-planning-light.png)
 
-![Decision and rules preview](docs/images/usage-en/parent/parent-details-usage-light.png)
+![Decision and rules preview](docs/images/usage-en/parent/parent-details-rules-light.png)
+
+![Decision and rules restriction active preview](docs/images/usage-en/parent/parent-details-rules-restricted-light.png)
 
 </details>
 
