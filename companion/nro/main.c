@@ -180,6 +180,7 @@ int main(int argc, char **argv)
         u64 held;
         u64 stick_buttons;
         bool parent_combo_held;
+        bool parent_minus_released;
         bool custom_combo_held;
         bool custom_combo_triggered;
         bool custom_combo_candidate;
@@ -205,6 +206,9 @@ int main(int argc, char **argv)
         }
         padRepeaterUpdate(&direction_repeater, held & DIRECTION_BUTTON_MASK);
         down |= padRepeaterGetButtons(&direction_repeater);
+        parent_minus_released = ptc_ui_single_button_release_update(
+            &ui.minus_pending, HidNpadButton_Minus, down, held,
+            ui.model.view == PTC_UI_CHILD && ui.model.overlay == PTC_UI_OVERLAY_NONE);
         parent_combo_held = hidden_parent_combo_held(held);
         custom_combo_held = custom_parent_combo_held(&ui, held);
         custom_combo_candidate = ui.model.view == PTC_UI_CHILD &&
@@ -340,19 +344,13 @@ int main(int argc, char **argv)
                 ui.model.duration_scroll_anim_ticks = 0;
             }
         } else if (ui.model.view == PTC_UI_CHILD) {
-            if (down & HidNpadButton_Minus) {
-                /* Preserve the fixed Minus-on-release entrance even when Minus
-                 * is also one member of the configured custom chord. */
-                ui.minus_pending = true;
-            }
             if (custom_combo_candidate) {
                 /* Do not let buttons from an in-progress custom chord reach
                  * ordinary child-area actions before its hold decision. */
             } else if (down & HidNpadButton_B) {
                 ptc_audio_play(PTC_SE_CANCEL);
                 running = false;
-            } else if (ui.minus_pending && !(held & HidNpadButton_Minus)) {
-                ui.minus_pending = false;
+            } else if (parent_minus_released) {
                 ptc_audio_play(PTC_SE_CONFIRM);
                 enter_parent_area(&ui);
             } else if (down & HidNpadButton_A) {

@@ -416,6 +416,62 @@ static void test_setup_advisory_state(void)
     check_int(ptc_ui_migrate_setup_step(5, 5), PTC_UI_SETUP_PREPARE, "invalid v5 progress resets safely");
 }
 
+static void test_standalone_parent_release(void)
+{
+    const uint64_t minus = UINT64_C(1) << 11;
+    const uint64_t zr = UINT64_C(1) << 9;
+    bool pending = false;
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, minus, minus, true),
+               "standalone Minus waits for release");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, minus, true),
+               "held standalone Minus does not enter PIN");
+    check_true(ptc_ui_single_button_release_update(&pending, minus, 0, 0, true) && !pending,
+               "standalone Minus release enters PIN once");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+               "released Minus cannot retrigger PIN");
+    for (int order = 0; order < 2; ++order) {
+        check_true(!ptc_ui_single_button_release_update(&pending, minus, minus | zr, minus | zr, true),
+                   "overlay chord does not arm standalone parent entry");
+        check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, order ? minus : zr, true),
+                   "either first chord release stays outside PIN");
+        check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+                   "final overlay chord release stays outside PIN");
+    }
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, minus, minus, true) && pending,
+               "Minus can arrive before the overlay modifier");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, zr, minus | zr, true) && !pending,
+               "joining modifier cancels the earlier standalone press");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, minus, true) &&
+               !ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+               "modifier-first release cannot revive a cancelled Minus press");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, zr, zr, true) &&
+               !ptc_ui_single_button_release_update(&pending, minus, minus, minus | zr, true) &&
+               !ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+               "modifier-first press cannot fall back to standalone entry");
+    ptc_ui_single_button_release_update(&pending, minus, minus, minus, true);
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, minus, false) && !pending,
+               "leaving the child page or opening a modal cancels a pending press");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+               "returning to the child page does not replay an old release");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, minus, true) && !pending,
+               "a held button seen without its press cannot arm parent entry");
+    check_true(!ptc_ui_single_button_release_update(&pending, minus, minus, minus, true) &&
+               ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+               "a new independent Minus press still works after a cancelled chord");
+    {
+        PtcUiShortcutHoldState custom = {0};
+        for (int sample = 0; sample < 4; ++sample) {
+            check_true(!ptc_ui_single_button_release_update(
+                &pending, minus, sample == 0 ? minus | zr : 0, minus | zr, true),
+                "configured Minus chord never triggers the standalone entrance");
+            check_true(ptc_ui_shortcut_hold_update(&custom, true, 4) == (sample == 3),
+                       "custom chord keeps its independent hold threshold");
+        }
+        check_true(!ptc_ui_single_button_release_update(&pending, minus, 0, 0, true),
+                   "completed custom chord does not trigger another PIN on release");
+    }
+}
+
 static void test_shortcut_hold_and_setup_migration(void)
 {
     PtcUiShortcutHoldState hold = {0};
@@ -4361,6 +4417,7 @@ int main(void)
     test_theme_resolution();
     test_parent_status_summary();
     test_release_navigation();
+    test_standalone_parent_release();
     test_shortcut_hold_and_setup_migration();
     test_setup_advisory_state();
     test_bedtime_save_restriction_projection();

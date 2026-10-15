@@ -39,6 +39,24 @@ bool ptc_ui_shortcut_hold_update(PtcUiShortcutHoldState *state, bool combo_held,
     return true;
 }
 
+bool ptc_ui_single_button_release_update(
+    bool *pending, uint64_t button, uint64_t down, uint64_t held, bool eligible)
+{
+    if (!pending || button == 0) return false;
+    /* A chord must never fall back to the standalone action when its members
+     * are released in different frames, even if the modifier is released first. */
+    if (!eligible || (held & ~button) != 0) {
+        *pending = false;
+        return false;
+    }
+    if ((down & button) != 0 && (held & button) != 0) *pending = true;
+    if (*pending && (held & button) == 0) {
+        *pending = false;
+        return true;
+    }
+    return false;
+}
+
 bool ptc_ui_confirm_hold_update(PtcUiConfirmHoldState *state, bool held, int64_t now_ms, int required_ms)
 {
     int64_t elapsed;

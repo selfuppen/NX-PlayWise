@@ -81,6 +81,9 @@ void trigger_resume_status_refresh(UiState *ui, int *background_poll_elapsed_ms)
 void applet_hook(AppletHookType hook, void *param)
 {
     UiState *ui = (UiState *)param;
+    if (ui && (hook == AppletHookType_OnResume || hook == AppletHookType_OnFocusState)) {
+        ui->minus_pending = false;
+    }
     if (ui && (hook == AppletHookType_OnResume ||
                (hook == AppletHookType_OnFocusState && appletGetFocusState() == AppletFocusState_InFocus))) {
         ui->theme_refresh_pending = true;

@@ -5,6 +5,7 @@
 static int failures;
 static int glyph_refreshes;
 static SetLanguage system_language = SetLanguage_ENUS;
+static int system_focus_state = AppletFocusState_InFocus;
 static const char *pin_values[2];
 static int pin_cursor;
 static int pin_opens;
@@ -18,7 +19,7 @@ Result setInitialize(void) { return 0; }
 Result setGetSystemLanguage(u64 *out) { *out = 1; return 0; }
 Result setMakeLanguage(u64 code, SetLanguage *out) { (void)code; *out = system_language; return 0; }
 void setExit(void) {}
-int appletGetFocusState(void) { return AppletFocusState_InFocus; }
+int appletGetFocusState(void) { return system_focus_state; }
 void randomGet(void *out, size_t size) { memset(out, 0x35, size); }
 void ptc_ui_graphics_language_changed(void) { ++glyph_refreshes; }
 int64_t ptc_ui_anim_now_ms(void) { return fixed_time * 1000; }
@@ -521,6 +522,18 @@ int main(void)
         check(!ui.waiting && ui.model.parent_page == PTC_UI_PARENT_SUPPORT && ui.model.setup_phase[0] == '\0',
               "missing activation evidence cannot reuse an old active phase");
     }
+    ui.minus_pending = true;
+    system_focus_state = 0;
+    applet_hook(AppletHookType_OnFocusState, &ui);
+    check(!ui.minus_pending, "losing focus discards a pending standalone Minus press");
+    ui.minus_pending = true;
+    system_focus_state = AppletFocusState_InFocus;
+    applet_hook(AppletHookType_OnFocusState, &ui);
+    check(!ui.minus_pending && ui.status_refresh_pending,
+          "returning to focus refreshes status without replaying Minus");
+    ui.minus_pending = true;
+    applet_hook(AppletHookType_OnResume, &ui);
+    check(!ui.minus_pending, "resume discards a pending standalone Minus press");
     test_config_backup_ui();
     test_today_detail_refresh();
     test_parent_pin_error();
