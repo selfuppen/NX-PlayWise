@@ -552,14 +552,14 @@ PtcUiRect ptc_ui_day_decision_next_rect(void)
     return (PtcUiRect){852, 66, 44, 30};
 }
 
-PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){40, 74, 1200, 548}; }
+PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){40, 72, 1200, 552}; }
 
 PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
 {
     if (!model) return (PtcUiRect){0, 0, 0, 0};
     if (index == 1) return (PtcUiRect){276, 628, 170, 44};
     if (index == 2) return (PtcUiRect){40, 628, 220, 44};
-    if (index == 0 && model->home_details_page == 0) return (PtcUiRect){800, 496, 440, 126};
+    if (index == 0 && model->home_details_page == 0) return (PtcUiRect){796, 498, 444, 118};
     return (PtcUiRect){0, 0, 0, 0};
 }
 
