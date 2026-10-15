@@ -12,11 +12,49 @@ import zipfile
 
 import pctl_usage_qualification as usage
 import verify_device_qualification as qualification
+from package_remote import PackageError, verify_package_zip
 
 REMOTE = "/switch/playwise/support"
 STAGING = "/switch/playwise-qualification-staging"
 RESULT_FIELDS = ("session_result", "timer_result", "remaining_result", "restricted_result",
                  "spent_result", "settings_result", "unlocked_result")
+IDENTITY_SCOPE = "standard_candidate_only"
+
+
+def standard_candidate_identity(packages: Path) -> tuple[dict, dict[str, str], dict[str, str]]:
+    """Bind production evidence to one clean standard Zip, without certifying it."""
+    manifest = qualification.read_json(packages / "playwise/switch/playwise/build.json")
+    qualification.require(manifest.get("profile") == "release", "standard candidate must be release")
+    qualification.require(manifest.get("playwise_version") == qualification.VERSION, "candidate version mismatch")
+    commit = manifest.get("commit")
+    qualification.require(isinstance(commit, str) and re.fullmatch(r"[0-9a-f]{40}", commit),
+                          "complete candidate commit required")
+    release_id = manifest.get("release_id")
+    qualification.require(isinstance(release_id, str) and
+                          release_id.startswith(f"playwise-{qualification.VERSION}+{commit[:12]}"),
+                          "candidate release/commit mismatch")
+    qualification.require(manifest.get("qualification", {}).get("status") in ("pending", "manual_verified"),
+                          "candidate status must be pending or manual_verified")
+    build = manifest.get("build", {})
+    qualification.require(build.get("source_dirty") is False, "candidate contains tracked source changes")
+    for key in ("libnx", "container_image"):
+        qualification.require(build.get(key) not in (None, "", "unknown"), f"candidate missing {key} identity")
+    path = packages / qualification.STANDARD_ZIP
+    try:
+        # Reuse the public package gate: artifact sizes/digests, embedded frontend
+        # manifests, production markers, defaults and safe unique Zip members.
+        verify_package_zip(path, "playwise", expected_manifest=manifest)
+        with zipfile.ZipFile(path) as archive:
+            qualification.unique_archive(archive, path.name)
+            qualification.read_json_text(archive.read("switch/playwise/build.json"), path.name)
+            qualification.read_json_text(archive.read("switch/playwise/package-artifacts.json"), path.name)
+            qualification.require(archive.read("atmosphere/contents/4200000000BD2300/flags/boot2.flag") == b"",
+                                  "standard candidate boot2.flag must be empty")
+            components = {name: qualification.sha256_bytes(archive.read(name))
+                          for name in qualification.RELEASE_COMPONENTS}
+    except (OSError, KeyError, ValueError, PackageError, zipfile.BadZipFile) as exc:
+        raise qualification.QualificationError(f"invalid standard candidate: {exc}") from exc
+    return manifest, {path.name: qualification.sha256_file(path)}, components
 
 
 def save_new(path: Path, value: dict) -> None:
@@ -27,12 +65,13 @@ def save_new(path: Path, value: dict) -> None:
 
 def prepare(packages: Path, out: Path, duration_s: int) -> dict:
     usage.integer(duration_s, 300, 7200, "duration_s")
-    manifest, _, hashes, components = qualification.package_identity(packages)
+    manifest, hashes, components = standard_candidate_identity(packages)
     usage.require(manifest.get("usage_contract") == usage.CONTRACT, "production usage contract missing")
     usage.require(not out.exists(), "batch directory already exists; preserve previous materials")
     config = {"schema_version": 1, "run_id": uuid.uuid4().hex, "commit": manifest["commit"],
               "release_id": manifest["release_id"], "duration_s": duration_s}
     plan = {"schema_version": 1, "kind": "production_usage_evidence_plan", "config": config,
+            "identity_scope": IDENTITY_SCOPE, "qualified": False,
             "packages": str(packages.resolve()), "zip_sha256": hashes, "release_components": components,
             "report_status": "prepared_not_deployed", "manual_observations": None,
             "remote_config_path": REMOTE + "/usage-evidence.json"}
@@ -180,7 +219,13 @@ def stage(device: object, out: Path, plan: dict) -> dict:
     run_id = config["run_id"]
     usage.require(re.fullmatch(r"[0-9a-f]{32}", run_id) is not None, "invalid staging run_id")
     packages = Path(plan["packages"])
-    manifest, _, hashes, components = qualification.package_identity(packages)
+    scope = plan.get("identity_scope")
+    if scope == IDENTITY_SCOPE:
+        manifest, hashes, components = standard_candidate_identity(packages)
+    else:
+        # Old plans retain their full package binding; never silently narrow it.
+        usage.require(scope is None, "unknown candidate identity scope")
+        manifest, _, hashes, components = qualification.package_identity(packages)
     usage.require(hashes == plan["zip_sha256"] and components == plan["release_components"] and
                   all(manifest[key] == config[key] for key in ("commit", "release_id")),
                   "prepared candidate changed")

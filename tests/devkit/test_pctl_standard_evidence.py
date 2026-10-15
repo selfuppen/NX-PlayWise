@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -15,10 +16,103 @@ import pctl_standard_evidence as evidence
 import pctl_usage_qualification as usage
 import test_qualification_tools as fixtures
 from test_pctl_usage_qualification import set_contract
+from test_package_remote import write_package
 
 
 CONFIG = {"schema_version": 1, "run_id": "0" * 32, "commit": "a" * 40,
           "release_id": "playwise-test+aaaaaaaaaaaa", "duration_s": 300}
+
+
+def rewrite_standard(packages: Path, mutate) -> None:
+    path = packages / evidence.qualification.STANDARD_ZIP
+    with zipfile.ZipFile(path) as archive:
+        members = {name: archive.read(name) for name in archive.namelist()}
+    mutate(members)
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+
+
+def prepare_packages(root: Path) -> Path:
+    packages = fixtures.prepare_packages(root)
+    set_contract(packages)
+    manifest_path = packages / "playwise/switch/playwise/build.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    original = write_package(packages / evidence.qualification.STANDARD_ZIP, True)
+    def replace(members):
+        old = json.dumps(original, ensure_ascii=True, separators=(",", ":")).encode()
+        new = json.dumps(manifest, ensure_ascii=True, separators=(",", ":")).encode()
+        members["switch/playwise/build.json"] = new
+        for name in evidence.qualification.RELEASE_COMPONENTS:
+            members[name] = members[name].replace(old, new)
+        members["switch/playwise/package-artifacts.json"] = json.dumps({
+            "schema_version": 1, "release_id": manifest["release_id"],
+            "artifacts": {name: {"size": len(members[name]), "sha256": hashlib.sha256(members[name]).hexdigest()}
+                          for name in evidence.qualification.RELEASE_COMPONENTS}}).encode()
+    rewrite_standard(packages, replace)
+    # Keep the full qualification fixture internally consistent before each test.
+    with zipfile.ZipFile(packages / evidence.qualification.COMPLETE_ZIP, "w") as archive:
+        archive.writestr(evidence.qualification.STANDARD_ZIP,
+                         (packages / evidence.qualification.STANDARD_ZIP).read_bytes())
+    return packages
+
+
+def test_standard_candidate_scope() -> None:
+    for optional in ("absent", "stale"):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); packages = prepare_packages(root)
+            if optional == "absent":
+                (packages / evidence.qualification.LAB_ZIP).unlink()
+                (packages / evidence.qualification.COMPLETE_ZIP).unlink()
+            else:
+                path = packages / "playwise-device-lab/switch/playwise-device-lab/build.json"
+                value = json.loads(path.read_bytes()); value["commit"] = "b" * 40
+                path.write_text(json.dumps(value), encoding="utf-8")
+            plan = evidence.prepare(packages, root / "batch", 300)
+            assert plan["identity_scope"] == evidence.IDENTITY_SCOPE and plan["qualified"] is False
+            assert set(plan["zip_sha256"]) == {evidence.qualification.STANDARD_ZIP}
+            assert set(plan["release_components"]) == set(evidence.qualification.RELEASE_COMPONENTS)
+            try:
+                evidence.qualification.package_identity(packages)
+            except evidence.qualification.QualificationError:
+                pass
+            else:
+                raise AssertionError("full qualification accepted absent or stale optional packages")
+    for mode in ("dirty", "profile", "manifest", "component", "embedded", "duplicate", "commit"):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); packages = prepare_packages(root)
+            manifest_path = packages / "playwise/switch/playwise/build.json"
+            manifest = json.loads(manifest_path.read_bytes())
+            if mode in ("dirty", "profile", "commit"):
+                if mode == "dirty": manifest["build"]["source_dirty"] = True
+                if mode == "profile": manifest["profile"] = "device-lab"
+                if mode == "commit": manifest["commit"] = "short"
+                manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            elif mode == "duplicate":
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    with zipfile.ZipFile(packages / evidence.qualification.STANDARD_ZIP, "a") as archive:
+                        archive.writestr("switch/playwise/build.json", json.dumps(manifest))
+            else:
+                def corrupt(members):
+                    if mode == "manifest": members["switch/playwise/build.json"] = b'{}'
+                    else:
+                        name = "switch/playwise/pctc.nro"
+                        members[name] = members[name].replace(b'"profile":"release"', b'"profile":"tampered"')
+                        if mode == "embedded":
+                            artifacts = json.loads(members["switch/playwise/package-artifacts.json"])
+                            artifacts["artifacts"][name] = {"size": len(members[name]),
+                                "sha256": hashlib.sha256(members[name]).hexdigest()}
+                            members["switch/playwise/package-artifacts.json"] = json.dumps(artifacts).encode()
+                rewrite_standard(packages, corrupt)
+            try:
+                evidence.prepare(packages, root / "bad", 300)
+            except evidence.qualification.QualificationError:
+                pass
+            else:
+                raise AssertionError("unsafe standard candidate accepted: " + mode)
+            assert not (root / "bad").exists()
 
 
 def raw_rows() -> list[dict]:
@@ -96,7 +190,7 @@ def test_audit() -> None:
 def test_prepare_and_collect() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        packages = fixtures.prepare_packages(root); set_contract(packages)
+        packages = prepare_packages(root)
         out = root / "batch"
         plan = evidence.prepare(packages, out, 300)
         assert plan["manual_observations"] is None and plan["report_status"] == "prepared_not_deployed"
@@ -162,20 +256,33 @@ def test_inactive_stage() -> None:
             self.files[path] = b"corrupt" if self.mode == "readback" else data
             if self.mode == "timeout": raise TimeoutError("server may have saved the file; original outcome unknown")
             if self.mode == "live_change": self.files["/switch/playwise/rules.json"] = b"changed externally"
-    for mode in ("ok", "existing", "ambiguous", "readback", "live_change", "timeout", "plan_changed"):
+    for mode in ("ok", "ok_absent", "ok_stale", "old_plan", "existing", "ambiguous", "readback",
+                 "live_change", "timeout", "plan_changed", "candidate_changed", "scope_changed"):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); packages = fixtures.prepare_packages(root); set_contract(packages)
+            root = Path(directory); packages = prepare_packages(root)
             out = root / "batch"; plan = evidence.prepare(packages, out, 300)
             device = Device(plan["release_components"], mode)
+            if mode == "ok_absent":
+                (packages / evidence.qualification.LAB_ZIP).unlink()
+                (packages / evidence.qualification.COMPLETE_ZIP).unlink()
+            if mode == "ok_stale":
+                path = packages / "playwise-device-lab/switch/playwise-device-lab/build.json"
+                path.write_text('{}', encoding="utf-8")
+            if mode == "old_plan":
+                plan.pop("identity_scope")
+                _, _, plan["zip_sha256"], _ = evidence.qualification.package_identity(packages)
             if mode == "plan_changed": plan["zip_sha256"][evidence.qualification.STANDARD_ZIP] = "0" * 64
-            if mode != "ok":
+            if mode == "candidate_changed":
+                rewrite_standard(packages, lambda members: members.update({"switch/playwise/pctc.nro": b"changed"}))
+            if mode == "scope_changed": plan["identity_scope"] = "unknown_scope"
+            if mode not in ("ok", "ok_absent", "ok_stale", "old_plan"):
                 try:
                     evidence.stage(device, out, plan)
-                except (usage.UsageQualificationError, TimeoutError):
+                except (usage.UsageQualificationError, evidence.qualification.QualificationError, TimeoutError):
                     pass
                 else:
                     raise AssertionError("unsafe staging condition accepted: " + mode)
-                if mode in ("existing", "ambiguous", "plan_changed"):
+                if mode in ("existing", "ambiguous", "plan_changed", "candidate_changed", "scope_changed"):
                     assert not device.writes and not (out / "stage-install.json").exists()
                 else:
                     journal = usage.read_json(out / "stage-install.json")
@@ -223,7 +330,7 @@ def test_rejected_capture_preserves_raw() -> None:
             assert path.startswith(evidence.REMOTE + "/usage-evidence-")
             return self.data
     with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory); packages = fixtures.prepare_packages(root); set_contract(packages)
+        root = Path(directory); packages = prepare_packages(root)
         out = root / "batch"; plan = evidence.prepare(packages, out, 300)
         rows = raw_rows()
         rows[0].update({k: plan["config"][k] for k in ("run_id", "commit", "release_id")})
@@ -256,6 +363,7 @@ def test_rejected_capture_preserves_raw() -> None:
 
 
 if __name__ == "__main__":
+    test_standard_candidate_scope()
     test_audit()
     test_prepare_and_collect()
     test_inactive_stage()
