@@ -205,7 +205,10 @@ void handle_touch(UiState *ui, int x, int y)
         }
         break;
     case PTC_UI_HIT_DAY_DECISION_REFRESH:
-        if (!ui->waiting) {
+        if (hit.index == 1) {
+            ptc_audio_play(PTC_SE_POPUP);
+            ui->model.rules_dialog_open = true;
+        } else if (!ui->waiting) {
             ptc_audio_play(PTC_SE_CONFIRM);
             submit_status(ui);
         }

@@ -616,6 +616,7 @@ typedef struct {
     bool home_details_data_expanded;
     int home_details_scroll;
     bool home_details_refresh_failed;
+    bool rules_dialog_open;
 #ifdef PTC_UI_PREVIEW_ANIM_CLOCK_MS
     int home_details_preview_second;
 #endif

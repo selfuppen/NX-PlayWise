@@ -226,6 +226,10 @@ bool ptc_ui_cancel_overlay(PtcUiModel *model)
     if (!model || model->overlay == PTC_UI_OVERLAY_NONE) {
         return false;
     }
+    if (model->rules_dialog_open) {
+        model->rules_dialog_open = false;
+        return true;
+    }
     if (model->overlay == PTC_UI_OVERLAY_CALENDAR_FORMAT) {
         model->overlay = PTC_UI_OVERLAY_CALENDAR_MANAGER;
         snprintf(model->overlay_title, sizeof(model->overlay_title), "%s",

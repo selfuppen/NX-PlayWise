@@ -554,12 +554,32 @@ PtcUiRect ptc_ui_day_decision_next_rect(void)
 
 PtcUiRect ptc_ui_home_details_body_rect(void) { return (PtcUiRect){40, 72, 1200, 552}; }
 
+PtcUiRect ptc_ui_rules_independent_tip_rect(const PtcUiModel *model)
+{
+    if (model && model->overlay == PTC_UI_OVERLAY_DAY_DECISION)
+        return (PtcUiRect){124, 354, 1032, 26};
+    return (PtcUiRect){56, 358, 1168, 26};
+}
+
+PtcUiRect ptc_ui_rules_dialog_rect(void)
+{
+    return (PtcUiRect){140, 80, 1000, 560};
+}
+
+PtcUiRect ptc_ui_rules_dialog_close_rect(void)
+{
+    return (PtcUiRect){140 + (1000 - 220) / 2, 80 + 560 - 58, 220, 44};
+}
+
 PtcUiRect ptc_ui_home_details_action_rect(const PtcUiModel *model, int index)
 {
     if (!model) return (PtcUiRect){0, 0, 0, 0};
     if (index == 1) return (PtcUiRect){276, 628, 170, 44};
     if (index == 2) return (PtcUiRect){40, 628, 220, 44};
-    if (index == 0 && model->home_details_page == 0) return (PtcUiRect){796, 498, 444, 118};
+    if (index == 0) {
+        if (model->home_details_page == 0) return (PtcUiRect){796, 498, 444, 118};
+        if (model->home_details_page == 1) return ptc_ui_rules_independent_tip_rect(model);
+    }
     return (PtcUiRect){0, 0, 0, 0};
 }
 
@@ -596,12 +616,18 @@ void ptc_ui_home_details_activate(PtcUiModel *model, int index)
     if (index == 0 && model->home_details_page == 0) {
         model->home_details_page = 1;
         model->home_details_focus = 2;
+    } else if (index == 0 && model->home_details_page == 1) {
+        model->rules_dialog_open = true;
     }
 }
 
 void ptc_ui_home_details_back(PtcUiModel *model)
 {
     if (!model) return;
+    if (model->rules_dialog_open) {
+        model->rules_dialog_open = false;
+        return;
+    }
     if (model->home_details_page == 1) {
         if (model->home_details_entry_page == 1) {
             ptc_ui_cancel_overlay(model);

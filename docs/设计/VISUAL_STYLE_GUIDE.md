@@ -147,24 +147,24 @@ In list rows, health-care cards, and decision cells, content must strictly separ
 ### 4.4 Two-Stage Decision & Rule Matrix and Natural Guidance
 The view moves beyond rigid and cramped layouts, adopting conversational, parent-friendly wording and an expansive, breathing visual architecture:
 
-* **Top Verdict Banner**: Height 34px, utilizing soft semantic backgrounds (`UI_SUCCESS_SOFT` / `UI_WARNING_SOFT`) and vector micro-icons (checkmark / info) to provide an immediate plain-language verdict on whether gaming is currently permitted. An adaptive badge on the right highlights the next key milestone (e.g., bedtime at 21:00 or impending eye-care break).
+* **Top Verdict Banner**: Height 34px, utilizing soft semantic backgrounds (`UI_SUCCESS_SOFT` / `UI_WARNING_SOFT`) and full-color vector Emojis (✨ normal / 🌿 eye-care first) to provide an immediate plain-language verdict on whether gaming is currently permitted. An adaptive badge on the right highlights the next key milestone (e.g., bedtime at 21:00 or impending eye-care break).
 * **Stage 1: Where Today's Quota Comes From (Pipeline)**:
   * **Direct Subtitle**: "Checked left to right — the first matching rule sets the daily quota."
-  * **Four Rule Pipeline Cards (98px high)**: "Today's Adjustment (P1)", "Specific Date (P2)", "Holiday (P3)", and "Weekly Plan (P4)". Each card features domain vector icons (calendar / gift / clock) and high-contrast priority tags.
+  * **Four Rule Pipeline Cards**: "Today's Adjustment (P1)", "Specific Date (P2)", "Holiday (P3)", and "Weekly Plan (P4)". Each card features domain full-color vector Emojis (📅 / 📅 / 🎁 / 🕒) and high-contrast priority tags.
   * **Hero Active Rule Card**: The matching rule card stands out prominently with a light-green wash, 2px vivid green border, bold 16px quota digits, and an "Active Rule" badge; downstream overridden cards are cleanly dimmed with subtle borders.
-  * **Cascade Arrows & Result Bar**: Horizontal directional arrows link the pipeline stages; the active card drops an indicator line into a 38px full-width summary bar confirming total approved minutes, rule source, played time, and remaining time.
-* **Stage Transition Linker**: A centered downward arrow connects Stage 1 results into Stage 2 access evaluation.
+  * **Cascade Arrows & Solid Downward Injection Arrow**: Horizontal directional arrows link the pipeline stages, cutting off downstream flow at the matching rule; the active card drops an indicator line and a solid triangle downward arrow (`support_draw_arrow_down`) into a full-width summary bar (with a ⏰ Emoji) confirming total approved minutes, rule source, played time, and remaining time.
+* **Stage Transition Linker (Pipeline Flow Bridge)**: A spacious 68px vertical clearway featuring a centered causal pill (`① Determine daily quota ↓ Pass to ② 4 Guardians`), paired with an emphasized conduit line and a bold 20x14px solid triangle downward arrow with 38px of unobstructed channel beneath the text pill, powerfully injecting the quota into Stage 2 access evaluation without arrow obstruction.
 * **Stage 2: Real-time Access & 4 Health Guardians**:
   * **Direct Subtitle**: "All 4 gates must show green; any trigger means pause and rest."
-  * **Four Guardian Cards (124px high)**:
-    * **Total Daily Allowance** (`UI_ACCENT` blue bar + clock icon + "from Step 1" provenance badge + 15px bold remaining time).
-    * **Bedtime Schedule** (`UI_HERO` navy bar + crescent moon icon + 15px restriction time + overnight schedule).
-    * **Eye-care Break** (`UI_SUCCESS` green bar + eye icon + 15px elapsed/cycle metrics + rest countdown).
-    * **Screen & Dock Mode** (`UI_WARNING` orange bar + controller/TV icon + 15px mode display + remaining time).
-    * Each card terminates in a full-width status pill (green "Pass", red "Restricted now", or gray "Limit off"). Any restriction transforms the entire card border and fill to danger red.
-  * **Convergence Gate Bar**: Downward leads from all four cards converge into a centered 36px master gate bar. Clear states show "All 4 gates green: healthy schedule clear, ready to play!", while any blockage displays a danger warning.
-* **Footer Guidance Tips Bar**: Height 36px, structured as a 3-column micro-card row with vector icons (info, shield, TV) delivering warm parental tips (independent gates, extra time boundaries, TV dock advantages).
-* **Adaptive Multi-Context Scaling**: In tighter modal viewports such as Forecast Day Details, card heights smoothly compress (98px/124px $\to$ 88px/112px) and include an explicit causal transition pill (`① Approved Daily Quota ↓ handed to ② 4 Real-time Guardians`), ensuring consistent visual elegance across all screen modes.
+  * **Embedded Independent Protection Action Row**: An interactive row at the top of the module presenting "🛡️ Independent Protection: the 4 gates evaluate conditions independently without interference", with a `[ Rule Guide ❯ ]` pill button. Clicking or pressing X opens a fullscreen translucent modal dialog detailing the 4 core principles: independent protection, quota pipeline priority, convergence gate, and health baseline rules.
+  * **Four Compact Guardian Cards (Height 76px)**:
+    * **Total Daily Allowance** (`UI_ACCENT` blue bar + ⏰ Emoji + 14px bold remaining time + secondary used summary).
+    * **Bedtime Schedule** (`UI_HERO` navy bar + 🌙 Emoji + 14px restriction time + overnight schedule).
+    * **Eye-care Break** (`UI_SUCCESS` green bar + 🌿 Emoji + 14px elapsed/cycle metrics + rest countdown).
+    * **Screen & Dock Mode** (`UI_WARNING` orange bar + 📺 Emoji + 14px mode display + remaining time).
+    * Each card embeds a compact status pill in the top-right corner (green "✓ Pass", red "✕ Blocked", or gray "Off"), saving 40px of vertical space to accommodate long, clear downstream convergence channels.
+  * **Long Convergence Leads & Master Injector Arrow**: Downward leads from all four cards drop 38px into a horizontal decision bus with status solder nodes. The bus center deploys a 50px vertical main channel and a bold 22x14px solid triangle downward arrow directly injecting into the centered master gate bar. Clear states show "All 4 gates green: healthy schedule clear, ready to play!", while any blockage displays a danger warning.
+* **Adaptive Multi-Context Scaling**: In tighter modal viewports such as Forecast Day Details, card heights smoothly compress, uniformly rendering the `① Determine daily quota ↓ Pass to ② 4 Guardians` bridge pill, solid downward arrow, and independent protection interactive row, with the calendar explanatory card featuring a 📅 Emoji, ensuring consistent visual elegance across all screen modes.
 
 ![Decision and rules priority matrix preview](../images/usage-en/parent/parent-details-rules-light.png)
 
